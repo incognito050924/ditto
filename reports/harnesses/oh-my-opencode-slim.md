@@ -414,3 +414,42 @@
 - `scripts/generate-schema.ts:3-30`: schema generation.
 - `scripts/verify-release-artifact.ts:19-203`: release artifact verification.
 - `scripts/verify-opencode-host-smoke.ts:161-333`: OpenCode host smoke.
+
+## ditto 적용 정리
+
+oh-my-opencode-slim에서 ditto에 적용할 핵심은 “범용 coding agent harness”라는 목적을 강화하되, 사용자의 인지 비용 감소, 근거 기반 출력, Context Rot 완화, 장기 작업 완수, token 비용 절감을 직접 돕는 기능으로 좁힌다. 아래 항목은 보고서 본문에서 확인된 구현/문서 근거와 PURPOSE.md의 목적 및 핵심기능에 연결되는 것만 추렸다.
+
+1. **명시적 agent registry와 delegation contract**
+   - 적용할 기능/가치: orchestrator가 작업을 이해하고, `explorer`, `librarian`, `oracle`, `designer`, `fixer`, `council`, `observer` 같은 전문 agent에 역할별로 위임하는 구조를 차용한다. 단, ditto에서는 전문 agent가 다시 위임하지 않는 leaf 규칙과 권한 범위를 계약으로 고정한다.
+   - 적용 방법: agent별 역할, 사용 시점, 금지 조건, 허용 도구, 산출물 형식을 registry에 선언하고, 오케스트레이션 단계의 정규화된 interface로 노출한다. 이는 PURPOSE.md의 “각 단계의 진입과 출력은 반드시 정규화된 interface 또는 문서 양식”이어야 한다는 핵심기능과 맞는다.
+   - 적용 이후 제공 가치: 사용자는 어떤 agent가 왜 호출됐는지 감사 기록으로 추적할 수 있고, LLM이 사용자 의도와 벗어나 임의로 작업하는 범위를 줄일 수 있다.
+   - 리스크/선행 조건: registry가 prompt 문장으로만 존재하면 실제 권한 통제가 약해진다. agent permission과 위임 가능 여부를 런타임에서 함께 검증해야 한다.
+   - 근거: 보고서는 오케스트레이터가 전문 agent 역할, 권한, 통계, 위임 금지 조건을 구조화한다고 설명한다(`src/agents/orchestrator.ts:27-93`). 기본 agent set과 delegation rules는 constants로 정리되어 있고(`src/config/constants.ts:1-66`), agent permission 계산도 별도 구현되어 있다(`src/agents/index.ts:154-193`).
+
+2. **bounded subtask와 session reuse**
+   - 적용할 기능/가치: `/subtask`, `read_session`, task session manager의 child session, parentID, file context, transcript read limit, summary, stale drop, TTL/cap을 ditto의 서브 에이전트 실행 단위에 적용한다.
+   - 적용 방법: ditto subagent는 작업 디렉터리, 수정 가능 파일, 읽기 가능한 parent transcript 범위, 출력 요약 형식을 실행 전에 받게 한다. session reuse는 동일한 목적의 반복 분석에만 허용하고, max sessions/TTL/read context cap을 기본값으로 둔다.
+   - 적용 이후 제공 가치: PURPOSE.md가 요구하는 Context Rot 해결과 장기 작업 완수에 직접 기여한다. 같은 코드를 반복해서 다시 읽는 비용을 줄이고, 새 세션에서 이어서 작업할 때 필요한 핸드오프 품질도 좋아진다.
+   - 리스크/선행 조건: 재사용 세션이 오래된 판단을 유지하면 오히려 잘못된 가설을 강화할 수 있다. stale drop, 변경 감지, read context cap, 요약 갱신 조건이 선행되어야 한다.
+   - 근거: 보고서는 `/subtask`가 별도 bounded worker session을 만들고 parentID, file context, read_session, summary, abort cleanup 흐름을 갖는다고 정리한다(`docs/subtask.md:31-46`, `src/tools/subtask/tools.ts:73-185`). child session reuse는 alias/read context/stale drop을 제공하고(`docs/session-management.md:1-57`), 코드상 max/TTL/read context 옵션을 가진다(`src/hooks/task-session-manager/index.ts:112-129`).
+
+3. **도구별 안전 보정층**
+   - 적용할 기능/가치: stale `apply_patch` 복구, AST-aware search/replace의 dry-run 기본값, `webfetch`의 redirect/content limit 같은 tool-specific safety shim을 ditto의 액션 실행 계층에 둔다.
+   - 적용 방법: 모든 액션 감사 기록과 연결해 “무엇을 보정했는지, 왜 실패시켰는지, 어떤 근거로 재시도했는지”를 남긴다. 패치, 구조적 검색/치환, 외부 URL fetch처럼 LLM 실패 빈도가 높은 도구부터 좁게 적용한다.
+   - 적용 이후 제공 가치: PURPOSE.md의 “할루시네이션 방지”, “사용자의 의도와 벗어난 추론 및 작업 제한”, “모든 출력과 추론에는 확실한 근거”라는 가치에 맞춰 실행 실패와 잘못된 변경을 하네스 차원에서 줄인다.
+   - 리스크/선행 조건: 자동 복구가 너무 공격적이면 사용자가 의도하지 않은 변경을 만들 수 있다. ambiguity에서는 실패하고, workspace 경계와 dry-run 기본값을 강제해야 한다.
+   - 근거: 보고서는 `apply_patch` 훅이 네이티브 실행 전에 stale patch를 복구하되 workspace 밖 쓰기와 모호한 경우를 안전하게 처리한다고 설명한다(`docs/tools.md:5-8`, `src/hooks/apply-patch/index.ts:61-147`). AST-grep replace는 기본 dry-run이고(`src/tools/ast-grep/tools.ts:74-117`), `webfetch`는 permission, cache, redirect policy, content limit를 가진다(`src/tools/smartfetch/tool.ts:102-320`, `src/tools/smartfetch/network.ts:88-104`).
+
+4. **설정 schema, doctor, host smoke 검증**
+   - 적용할 기능/가치: JSONC 설정, schema generation, `doctor`, release artifact 검증, 실제 host load smoke를 ditto의 기본 검증 표면으로 삼는다.
+   - 적용 방법: 사용자/프로젝트 설정을 schema로 검증하고, doctor는 human/json 결과와 exit code를 제공한다. 배포 검증은 패키지 구성뿐 아니라 ditto가 실제 harness host에서 로드되는지 확인하는 smoke test를 포함한다.
+   - 적용 이후 제공 가치: PURPOSE.md의 “사용자의 인지 비용 최소화”, “완료를 증거 위에 올려두는” 운영 방식, “새 세션에서 이어서 작업할 때를 위한 핸드오프”에 맞게 설정 오류를 조기에 드러내고 검증 가능한 완료 증거를 남길 수 있다.
+   - 리스크/선행 조건: schema와 doctor가 실제 런타임 로딩 규칙과 어긋나면 가짜 안정감을 준다. 설정 loader, schema, doctor, smoke test가 같은 계약을 공유해야 한다.
+   - 근거: 보고서는 JSONC 설정과 Zod schema 검증, prompt override, preset 병합을 확인했다(`docs/configuration.md:7-47`, `src/config/loader.ts:54-101`, `src/config/schema.ts:303-351`). doctor는 설정 오류를 검사해 human/json 결과와 exit code를 내고(`src/cli/doctor.ts:55-144`, `src/cli/doctor.ts:205-281`), release/host smoke는 npm pack/fresh install/import와 OpenCode host load error를 확인한다(`scripts/verify-release-artifact.ts:113-185`, `scripts/verify-opencode-host-smoke.ts:246-305`).
+
+5. **고비용 합의와 외부 지식 접근의 opt-in/allowlist화**
+   - 적용할 기능/가치: Council 같은 multi-model 정반합 검토와 MCP/webfetch 기반 외부 지식 접근을 기본 경로가 아니라 명시 opt-in 기능으로 둔다. agent별 MCP/skill allowlist와 deny syntax도 함께 차용한다.
+   - 적용 방법: ditto의 multi-model 검토는 비용 상한, timeout, 실패 시 partial result 정책, 모델/도구 사용 감사 기록을 필수로 둔다. 외부 네트워크 도구는 agent별 허용 목록, 전역 disable, provider별 privacy/cost label을 갖는다.
+   - 적용 이후 제공 가치: PURPOSE.md가 말하는 멀티 모델 정반합 기반 검토, 할루시네이션 방지, token 비용 절감, 불필요한 사용자 질문 감소를 동시에 지원한다. 필요한 때만 깊은 검토를 쓰고, 일반 구현 경로는 가볍게 유지할 수 있다.
+   - 리스크/선행 조건: Council은 비용과 지연이 크고, 외부 MCP/webfetch는 네트워크/프라이버시 표면을 넓힌다. 기본 비활성, 명시 승인, 비용/지연 가시화, 로그가 선행되어야 한다.
+   - 근거: 보고서는 Council이 여러 councillor를 병렬 실행한 뒤 합성하고, config가 있을 때만 tool/agent로 등록되는 expensive 기능이라고 정리한다(`docs/council.md:21-50`, `src/index.ts:247-259`, `docs/council.md:407-437`). MCP는 agent별 allow/deny와 전역 disable을 지원하고(`docs/mcps.md:31-47`, `docs/mcps.md:73-83`, `src/config/agent-mcps.ts:22-44`), `webfetch`는 URL fetch, 본문 추출, cache, 보조 모델 fallback을 가진 별도 도구다(`src/tools/smartfetch/tool.ts:68-101`, `src/tools/smartfetch/tool.ts:655-825`).

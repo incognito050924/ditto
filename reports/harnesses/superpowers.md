@@ -279,3 +279,43 @@
 - 설계 문서: `docs/superpowers/specs/2026-02-19-visual-brainstorming-refactor-design.md`, `docs/superpowers/specs/2026-03-11-zero-dep-brainstorm-server-design.md`, `docs/superpowers/specs/2026-03-23-codex-app-compatibility-design.md`, `docs/superpowers/specs/2026-04-06-worktree-rototill-design.md`, `docs/README.opencode.md`
 - 릴리스/동기화/버전: `RELEASE-NOTES.md`, `scripts/sync-to-codex-plugin.sh`, `tests/codex-plugin-sync/test-sync-to-codex-plugin.sh`, `scripts/bump-version.sh`, `.version-bump.json`
 - 테스트: `docs/testing.md`, `tests/claude-code/run-skill-tests.sh`, `tests/claude-code/test-subagent-driven-development-integration.sh`, `tests/claude-code/test-requesting-code-review.sh`, `tests/opencode/run-tests.sh`, `tests/opencode/setup.sh`, `tests/opencode/test-bootstrap-caching.mjs`, `tests/opencode/test-priority.sh`, `tests/brainstorm-server/server.test.js`, `tests/brainstorm-server/ws-protocol.test.js`, `tests/brainstorm-server/windows-lifecycle.test.sh`
+
+## ditto 적용 정리
+
+### 적용할 기능/가치
+
+- **세션 시작 부트스트랩과 자동 트리거 검증:** DITTO는 coding agent harness로서 사용자의 인지 비용을 줄이고, LLM이 사용자 의도 밖으로 멋대로 작업하는 것을 구조적으로 제한해야 한다. Superpowers의 핵심 기준처럼 세션 시작 시 작업 규칙이 로드되고 자연어 작업에서 적절한 스킬/단계가 자동 트리거되는지를 하네스 통합의 acceptance test로 삼는다.
+- **스킬/단계 description을 routing metadata로 제한:** DITTO의 오케스트레이션 단계는 정규화된 interface 또는 문서 양식으로 상태 전이를 해야 한다. Superpowers의 `writing-skills`가 지적한 것처럼 description에 절차 요약을 넣으면 본문을 읽지 않고 shortcut이 발생할 수 있으므로, DITTO의 단계 설명은 "언제 쓰는가"만 담고 실제 절차는 본문 contract에 둔다.
+- **서브에이전트 실행과 2단계 검토:** DITTO는 Context Rot 해결을 위해 서브 에이전트를 적극 사용하고, 장기간 작업을 처음 의도대로 완수해야 한다. Superpowers의 fresh subagent 실행, 구현자/스펙 리뷰어/품질 리뷰어 prompt template, 스펙 준수 우선 검토 구조를 DITTO의 subagent contract로 적용한다.
+- **증거 기반 완료 게이트:** DITTO의 핵심 가치는 할루시네이션 방지와 "근거 부족"의 명시다. Superpowers의 `verification-before-completion`처럼 완료/통과/수정 주장은 fresh command output, 요구사항 체크리스트, 실행 로그 같은 감사 가능한 증거가 있을 때만 허용한다.
+- **상태 기반 worktree/lifecycle 감지:** DITTO는 git worktree와 팀 개발 프로세스를 적극 지원해야 한다. Superpowers의 worktree 설계처럼 플랫폼 감지보다 Git 상태 감지를 우선해, harness가 만든 작업공간과 사용자가 관리하는 작업공간의 소유권을 구분한다.
+
+### 적용 방식
+
+- 하네스 adapter마다 "부트스트랩 로드됨"과 "대표 자연어 요청에서 의도한 단계가 자동 트리거됨"을 transcript 기준 테스트로 둔다. Superpowers의 "Let's make a react todo list" 통합 기준을 DITTO의 대표 사용자 시나리오로 치환해 사용한다. [f2cbfbe, `CLAUDE.md:67-87`, `.github/PULL_REQUEST_TEMPLATE.md:53-80`]
+- DITTO의 오케스트레이션 단계 문서에는 `trigger`, `input contract`, `output contract`, `verification evidence`, `handoff/audit record`를 분리한다. description은 trigger만 포함하고, 절차 요약은 본문에 둔다. [f2cbfbe, `skills/writing-skills/SKILL.md:140-158`]
+- subagent에게는 plan 파일을 읽게 하지 않고 controller가 필요한 task 본문과 context를 prompt template으로 전달한다. 구현 후에는 스펙 준수 리뷰를 먼저 통과시키고, 그 다음 코드 품질 리뷰를 수행한다. [f2cbfbe, `skills/subagent-driven-development/SKILL.md:8-14`, `skills/subagent-driven-development/implementer-prompt.md:11-18`, `skills/subagent-driven-development/code-quality-reviewer-prompt.md:5-8`]
+- DITTO의 완료 응답 형식에는 "수행한 변경", "검증 명령/결과", "미검증 항목", "남은 리스크"를 필수 필드로 둔다. 검증하지 못한 경우 완료가 아니라 미검증으로 보고한다. [f2cbfbe, `skills/verification-before-completion/SKILL.md:16-38`, `skills/verification-before-completion/SKILL.md:76-106`]
+- git/worktree 지원은 `GIT_DIR != GIT_COMMON` 같은 상태 기반 판별을 우선하고, cleanup은 DITTO가 생성한 작업공간에만 적용한다. [f2cbfbe, `docs/superpowers/specs/2026-04-06-worktree-rototill-design.md:37-50`, `skills/finishing-a-development-branch/SKILL.md:40-56`]
+
+### 적용 이후 제공 가치
+
+- 사용자는 매번 절차를 지시하지 않아도 DITTO가 의도 파악, 현황 조사, 계획, 실행, 검증을 같은 contract로 진행하므로 인지 비용이 줄어든다.
+- 부트스트랩/스킬/완료 게이트가 transcript와 감사 기록으로 남아, DITTO의 모든 액션 감사 기록과 새 세션 핸드오프 요구에 맞는다.
+- fresh subagent와 스펙 우선 리뷰는 긴 작업에서 Context Rot, 과잉 구현, 요구 누락을 줄이고, DITTO가 처음 의도한 목적대로 끈질기게 완수하는 능력을 강화한다.
+- 증거 기반 완료 게이트는 할루시네이션과 자기 확신 문제를 줄이고, "수정했다"가 아니라 "어떤 근거로 통과했는가"를 사용자에게 제공한다.
+- 상태 기반 worktree 처리는 팀 개발과 여러 저장소/작업공간 사용을 지원하면서 사용자 변경을 되돌리거나 잘못 정리할 위험을 줄인다.
+
+### 리스크와 선행 조건
+
+- Superpowers식 강한 `MUST invoke` 지시는 사용자 명시 지시와 충돌할 수 있다. DITTO는 PURPOSE.md의 "사용자 의도 밖 작업 제한"에 맞게 사용자 지시 우선순위와 자동 단계 트리거의 충돌 해결 규칙을 제품 contract에 명시해야 한다. [f2cbfbe, `skills/using-superpowers/SKILL.md:10-16`, `skills/using-superpowers/SKILL.md:18-27`]
+- 하네스 통합 테스트가 외부 CLI와 긴 실행 시간에 의존하면 항상 실행되는 검증이 약해진다. DITTO는 pure adapter contract tests와 실제 하네스 transcript tests를 분리해야 한다. [f2cbfbe, `docs/testing.md:20-39`, `tests/opencode/run-tests.sh:60-75`]
+- description/frontmatter를 단순 파서로 처리하면 routing contract가 drift할 수 있다. DITTO는 엄격한 schema validation을 선행해야 한다. [f2cbfbe, `skills/writing-skills/SKILL.md:93-104`, `.opencode/plugins/superpowers.js:15-34`]
+- worktree cleanup 소유권은 heuristic이면 false positive가 생길 수 있다. DITTO는 생성 시점의 감사 기록이나 metadata를 남겨 cleanup 판단 근거를 보강해야 한다. [f2cbfbe, `docs/superpowers/specs/2026-04-06-worktree-rototill-design.md:319-322`]
+- 문서/테스트 drift는 하네스 신뢰도를 낮춘다. DITTO는 current contract와 historical design을 구분하고, manifest 경로와 테스트 참조의 정적 무결성 검사를 선행해야 한다. [f2cbfbe, `.cursor-plugin/plugin.json:21-25`, `tests/brainstorm-server/windows-lifecycle.test.sh:19-24`, `skills/brainstorming/scripts/server.cjs:339-347`]
+
+### 근거
+
+- PURPOSE.md는 DITTO를 범용 개발 작업을 돕는 coding agent harness로 정의하고, 사용자 인지 비용 최소화, 할루시네이션 방지, 사용자 의도 밖 추론/작업 제한, Context Rot 해결, 장기 작업 완수, 토큰 비용 절감을 핵심 가치로 둔다.
+- PURPOSE.md의 핵심 기능은 세션 단위 감사 기록과 핸드오프, 주요 결정/변경사항 영속화, 서브 에이전트 활용, 정제된 출력, 사용자 인터뷰, 정규화된 오케스트레이션 interface, 멀티 모델 검토, E2E 테스트, git worktree와 팀 개발 지원을 포함한다.
+- Superpowers 보고서 본문은 세션 시작 부트스트랩, 하네스별 스킬 로딩, 설계-계획-실행-검증 게이트, TDD/체계적 디버깅/증거 우선 원칙, fresh subagent와 스펙 준수 우선 리뷰, 상태 기반 worktree 감지, zero-dependency 보조 서버, marketplace sync의 source-owned/metadata 보존 분리를 확인했다. [f2cbfbe, `README.md:154-170`, `README.md:198-204`, `CLAUDE.md:67-87`, `skills/subagent-driven-development/SKILL.md:6-14`, `skills/verification-before-completion/SKILL.md:16-38`, `docs/superpowers/specs/2026-04-06-worktree-rototill-design.md:37-50`]

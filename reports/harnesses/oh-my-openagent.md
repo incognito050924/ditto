@@ -200,3 +200,40 @@
 - CLI/설치: `src/cli/cli-program.ts:25-222`, `docs/reference/cli.md:1-225`, `docs/guide/installation.md:1-170`, `docs/guide/installation.md:447-499`.
 - 오케스트레이션/에이전트: `docs/guide/orchestration.md:1-100`, `docs/guide/orchestration.md:104-188`, `docs/guide/orchestration.md:192-278`, `docs/guide/orchestration.md:298-383`, `docs/guide/overview.md:48-162`, `src/agents/builtin-agents.ts:32-180`, `src/agents/sisyphus/gpt-5-5.ts:45-240`, `src/agents/atlas/shared-prompt.ts:12-188`, `src/agents/prometheus/gpt.ts:105-230`, `src/agents/explore.ts:1-100`, `src/agents/oracle.ts:1-120`.
 - 명령/스킬/도구/MCP: `src/features/builtin-commands/types.ts:1-9`, `src/features/builtin-commands/commands.ts:1-164`, `src/features/builtin-commands/templates/init-deep.ts:1-270`, `src/features/builtin-skills/skills.ts:1-47`, `src/features/builtin-skills/skills/playwright.ts:1-60`, `src/features/builtin-skills/skills/playwright-cli.ts:1-50`, `src/features/builtin-skills/skills/team-mode.ts:1-184`, `src/features/builtin-skills/skills/review-work.ts:1-115`, `src/mcp/index.ts:1-56`, `src/mcp/lsp.ts:1-167`, `src/mcp/ast-grep.ts:1-129`, `src/mcp/websearch.ts:1-42`, `src/mcp/context7.ts:1-9`, `docs/reference/features.md:468-735`, `docs/guide/team-mode.md:1-151`.
+
+## ditto 적용 정리
+
+1. 하네스 중립 코어와 어댑터 경계를 ditto의 기본 구조로 둔다.
+   - 적용할 기능/가치: OpenCode 전용 이벤트와 도구 조립을 그대로 복제하지 않고, 작업 정의, 에이전트 호출, 도구 등록, 훅 결과, 감사 기록, 핸드오프 기록은 하네스 중립 코어 계약으로 둔다. 이는 ditto가 범용 coding agent harness를 목표로 하고, 단계 간 상태 전이를 정규화된 interface 또는 문서 양식으로 연결해야 한다는 PURPOSE.md의 목적/핵심 기능과 맞다.
+   - 적용 방식: Codex, OpenCode, Claude Code 같은 호스트별 이벤트명과 lifecycle 처리는 어댑터 안에서만 번역하고, 코어는 좁은 interface 위에 깊은 구현을 둔다. oh-my-openagent의 Core/MCP/Skills/Adapters DAG 원칙은 참고하되, 현재 구현처럼 OpenCode plugin surface가 코어로 새지 않게 한다.
+   - 적용 이후 제공 가치: ditto의 오케스트레이션, 감사 기록, 핸드오프, 지식 영속화가 특정 하네스 교체에 흔들리지 않는다. 사용자는 호스트별 세부 차이를 몰라도 같은 작업 언어와 같은 상태 전이로 이어서 작업할 수 있어 인지 비용이 줄어든다.
+   - 주의할 리스크나 선행 조건: 이 보고서는 oh-my-openagent가 아직 OpenCode에 강하게 결합되어 있고 hook injection race, duplicate work, infinite loop, state corruption 위험을 로드맵에서 인정한다고 정리했다. 따라서 ditto는 어댑터 계약과 상태 전이 테스트를 먼저 만들고, hook은 마지막 통합 지점으로 제한해야 한다.
+   - 근거: PURPOSE.md의 범용 coding agent harness, 정규화된 interface, Deep Module 지향. 보고서의 `ROADMAP.md:27-49`, `ROADMAP.md:66-88`, `src/plugin-interface.ts:35-91`, `src/create-hooks.ts:58-90`.
+
+2. delegation prompt contract와 의미 기반 category 라우팅을 ditto 표준 작업 계약으로 채택한다.
+   - 적용할 기능/가치: 모델명이나 provider명이 아니라 `visual-engineering`, `ultrabrain`, `deep`, `quick` 같은 의미 기반 category로 작업을 라우팅하고, 위임 요청은 `TASK`, `EXPECTED OUTCOME`, `REQUIRED TOOLS`, `MUST DO`, `MUST NOT DO`, `CONTEXT` 같은 명시 섹션을 갖게 한다. 이는 PURPOSE.md의 Ubiquitous Language, 사용자 의도 이탈 방지, 불필요한 사용자 질문 금지와 직접 연결된다.
+   - 적용 방식: ditto의 task/subagent 호출 interface에 목표, 기대 산출물, 허용 도구, 금지 사항, 필요한 컨텍스트, 완료 후 검증 조건을 필수 필드로 둔다. category dispatch와 특정 subagent 호출은 한 요청에서 상호 배타적으로 처리하고, fallback 모델 선택은 설정/doctor가 관리하게 한다.
+   - 적용 이후 제공 가치: 사용자는 모델 세부를 판단하지 않고 작업 의미만 말하면 되고, subagent는 같은 계약을 받아 범위 밖 작업과 추측을 줄인다. parent agent도 post-delegation verification을 같은 형식으로 수행할 수 있다.
+   - 주의할 리스크나 선행 조건: category 이름, agent 이름, config schema, 문서가 어긋나면 oh-my-openagent의 `/handoff` schema 누락처럼 실제 disable/config 동작이 깨질 수 있다. ditto는 명령, category, schema, 문서의 single source-of-truth가 필요하다.
+   - 근거: PURPOSE.md의 사용자 인지 비용 최소화, 의도 파악/모호성 해결, 정제된 출력 메시지. 보고서의 `docs/guide/orchestration.md:96-100`, `docs/guide/orchestration.md:298-330`, `docs/reference/configuration.md:290-307`, `src/agents/sisyphus/gpt-5-5.ts:204-216`, `src/agents/atlas/shared-prompt.ts:45-86`.
+
+3. 병렬 탐색, 배경 작업, 구현 후 적대적 검토를 context rot 대응 경로로 적용한다.
+   - 적용할 기능/가치: 초기 현황 파악은 읽기 전용 explore/librarian류 subagent를 병렬로 사용하고, 구현 후에는 목표 적합성, QA, 코드 품질, 보안, 컨텍스트 누락을 분리 검토한다. 이는 PURPOSE.md의 subagent 적극 사용, 멀티 모델 정반합 기반 적대적 검토, 장기 실행 작업 완수, 할루시네이션 방지와 맞다.
+   - 적용 방식: 복잡한 작업의 첫 단계에서 독립적인 조사 단위를 background session으로 fan-out하고, parent agent는 결과를 병합해 최소 변경 계획을 만든다. 구현 후에는 파일 재읽기, diagnostics, 테스트, review subagent 결과를 acceptance criteria별로 묶어 통과/부분 통과/미검증을 기록한다.
+   - 적용 이후 제공 가치: 한 agent의 좁아진 컨텍스트나 자기 확신에 작업 전체가 끌려가지 않는다. 긴 작업에서도 조사 근거, 구현 결과, 검증 결과가 분리되어 남기 때문에 이어받는 세션의 인지 비용과 재조사 비용이 줄어든다.
+   - 주의할 리스크나 선행 조건: 병렬화는 duplicate work와 state corruption을 만들 수 있다. Team Mode 전체를 바로 복제하기보다 bounded background delegation, 소유 파일/출력 범위, 취소/idle 상태, durable task record를 먼저 구현해야 한다.
+   - 근거: PURPOSE.md의 Context Rot 해결, subagent 사용, 멀티 모델 적대적 검토, 장기 실행 완수. 보고서의 `src/agents/sisyphus/gpt-5-5.ts:68-78`, `src/features/builtin-commands/templates/init-deep.ts:38-54`, `src/features/builtin-skills/skills/review-work.ts:61-68`, `docs/guide/team-mode.md:83-147`, `src/plugin/tool-registry.ts:199-261`.
+
+4. 감사 기록, durable task, handoff, run 종료 조건을 하나의 연속성 기능으로 묶는다.
+   - 적용할 기능/가치: 모든 액션의 감사 기록, 주요 결정 및 변경사항 영속화, 새 세션/다른 기기에서 이어서 작업을 ditto의 작업 상태 모델로 구현한다. oh-my-openagent의 task system, session 도구, `/handoff`, `run`의 background idle 대기 조건이 이 요구에 대응된다.
+   - 적용 방식: 각 action record에는 의도, 입력, 사용 도구, 변경 파일, 근거, 검증 결과, 미검증 항목을 저장한다. task/todo가 완료 또는 취소되고 background child session이 idle일 때만 run을 종료하며, handoff는 다음 agent가 바로 판단할 수 있게 남은 위험과 필요한 fresh evidence를 포함한다.
+   - 적용 이후 제공 가치: ditto는 장기 작업을 중간에 잃지 않고, 완료 주장을 감사 가능한 증거 위에 올릴 수 있다. 사용자는 이전 대화나 소스 전체를 다시 읽지 않아도 현재 상태와 다음 검증 대상을 파악할 수 있다.
+   - 주의할 리스크나 선행 조건: 보고서의 task system은 `.omo/tasks/` 파일 저장과 restart persistence를 설명하지만 Claude Code 내부 Task tool 관찰에 기반한 자체 구현이라고 경고한다. ditto는 저장 포맷, lock, crash recovery, 중복 실행 방지를 먼저 정해야 한다.
+   - 근거: PURPOSE.md의 감사 기록, 핸드오프 지원, 주요 결정 영속화, 장기간 실행 완수. 보고서의 `docs/reference/features.md:646-726`, `src/cli/cli-program.ts:74-134`, `docs/reference/cli.md:90-96`, `src/features/builtin-commands/commands.ts:122-137`.
+
+5. 근거 기반 코드 도구와 안전한 설정 경계를 기본값으로 삼는다.
+   - 적용할 기능/가치: LSP diagnostics/rename/reference, AST-grep 구조 검색/치환, hashline edit의 stale-write 방지, user-only `mcp_env_allowlist`, Playwright CLI 계열 브라우저 검증을 ditto의 evidence path로 채택한다. 이는 PURPOSE.md의 할루시네이션 방지, E2E 테스트 도구 필요, 사용자 의도 밖 작업 제한과 맞다.
+   - 적용 방식: 코드 이해와 리팩터링은 grep/glob만으로 닫지 않고 LSP와 AST 구조 검색을 연결한다. 편집 도구에는 line number만이 아니라 content hash나 precondition을 넣고, 프로젝트 config가 비밀 환경변수 allowlist를 확장하지 못하게 한다. 브라우저 검증은 MCP 의존만 두지 않고 CLI 실행 경로를 제공한다.
+   - 적용 이후 제공 가치: agent의 주장은 실제 diagnostics, reference, structural match, browser run 같은 fresh evidence로 닫힌다. stale line edit과 repo-supplied config 공격면이 줄어 사용자의 코드와 비밀값을 덜 위험하게 다룰 수 있다.
+   - 주의할 리스크나 선행 조건: 보고서의 LSP MCP는 런타임에 `git submodule update`, `npm install`, `npm run build`까지 시도할 수 있어 오프라인/기업망/샌드박스에서 예측 불가능하다. ditto는 설치 또는 doctor 단계에서 선검증하고, 실패 시 degraded mode와 미검증 항목을 명확히 표시해야 한다.
+   - 근거: PURPOSE.md의 할루시네이션 방지, E2E 테스트 도구, 사용자 의도 밖 작업 제한. 보고서의 `docs/reference/features.md:604-623`, `src/mcp/lsp.ts:7-33`, `src/mcp/ast-grep.ts:117-129`, `docs/reference/configuration.md:56-58`, `src/plugin-config.ts:430-437`, `docs/reference/configuration.md:952-960`, `src/features/builtin-skills/skills/playwright-cli.ts:3-13`.

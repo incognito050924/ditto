@@ -210,3 +210,43 @@
 - `skills/misc/*`: git guardrails, shoehorn migration, exercise scaffolding, pre-commit setup. 주요 근거: `skills/misc/git-guardrails-claude-code/SKILL.md:1-95`, `skills/misc/git-guardrails-claude-code/scripts/block-dangerous-git.sh:1-25`, `skills/misc/migrate-to-shoehorn/SKILL.md:1-118`, `skills/misc/scaffold-exercises/SKILL.md:1-106`, `skills/misc/setup-pre-commit/SKILL.md:1-91`.
 - `skills/personal/*`, `skills/in-progress/*`, `skills/deprecated/*`: 공개 제외/초안/폐기 skill 근거. 주요 근거: `skills/personal/README.md:1-6`, `skills/in-progress/README.md:1-8`, `skills/deprecated/README.md:1-8`.
 - `.out-of-scope/*`: 저장소 자체의 out-of-scope policy 사례. 주요 근거: `.out-of-scope/mainstream-issue-trackers-only.md:1-25`, `.out-of-scope/question-limits.md:1-18`, `.out-of-scope/setup-skill-verify-mode.md:1-15`.
+
+## ditto 적용 정리
+
+### 적용할 기능/가치
+
+- repo-local setup contract를 ditto의 하네스 실행 전제 고정 장치로 적용한다. mattpocock-skills는 setup skill이 issue tracker, triage labels, domain docs를 `docs/agents/*.md`와 root agent instruction block으로 기록하고 후속 skill이 이를 소비한다(`skills/engineering/setup-matt-pocock-skills/SKILL.md:7-15`, `skills/engineering/setup-matt-pocock-skills/SKILL.md:70-121`). ditto의 PURPOSE.md가 요구하는 사용자 인지 비용 최소화, 불필요한 질문 금지, 단계 간 정규화된 interface와 맞다.
+- hard dependency/soft dependency 구분을 ditto의 스킬/하네스 로딩 정책에 적용한다. 보고서는 `to-issues`, `to-prd`, `triage`처럼 setup 없이는 잘못된 side effect가 나는 skill과, `diagnose`, `tdd`, `improve-codebase-architecture`, `zoom-out`처럼 품질만 낮아지는 skill을 분리한다고 정리한다(`docs/adr/0001-explicit-setup-pointer-only-for-hard-dependencies.md:3-10`). 이는 ditto의 토큰 비용 절감, 사용자 의도 밖 작업 제한, 근거 없는 출력 방지에 직접 연결된다.
+- `CONTEXT.md`와 ADR을 ditto의 ubiquitous language와 의사결정 영속화 장치로 적용한다. mattpocock-skills는 domain glossary를 먼저 읽고 없으면 조용히 진행하되, 용어가 해결되거나 결정 조건이 충족될 때만 `CONTEXT.md`와 ADR을 갱신한다(`skills/engineering/setup-matt-pocock-skills/domain.md:1-12`, `skills/engineering/grill-with-docs/SKILL.md:72-86`). 이는 PURPOSE.md의 상호 합의된 용어 사용, 주요 결정 및 변경사항 영속화, 할루시네이션 방지 요구와 맞다.
+- diagnosis의 feedback-loop-first 절차를 ditto의 검증 하네스 기본 루프로 적용한다. 보고서의 diagnose skill은 deterministic pass/fail signal, flaky reproduction rate, bisection/differential loop, HITL script를 포함한다(`skills/engineering/diagnose/SKILL.md:12-49`, `skills/engineering/diagnose/scripts/hitl-loop.template.sh:1-41`). ditto가 모든 출력과 추론에 확실한 근거를 요구하고 E2E 테스트 도구를 핵심 기능으로 둔 목적에 맞는 실행 검증 패턴이다.
+- AFK-ready agent brief, triage state machine, out-of-scope knowledge base를 ditto의 장기 실행/병렬 subagent 작업 계약으로 적용한다. triage skill은 agent brief를 권위 있는 contract로 두고 behavior, interface, acceptance criteria, scope boundaries를 요구한다(`skills/engineering/triage/AGENT-BRIEF.md:1-37`). out-of-scope 문서는 반복 제안과 반려 사유를 보존한다(`skills/engineering/triage/OUT-OF-SCOPE.md:1-18`, `skills/engineering/triage/OUT-OF-SCOPE.md:70-94`). 이는 PURPOSE.md의 감사 기록, 세션 핸드오프, Context Rot 해결, 장기간 작업 완수 요구와 연결된다.
+- Deep Module 중심 architecture skill과 skill description discipline을 ditto의 agent/skill catalog 품질 기준으로 적용한다. 보고서는 architecture skill이 shared vocabulary, dependency category, interface-design sub-agent pattern, HTML report를 묶어 shallow module을 deep module로 바꾸는 후보를 찾는다고 정리한다(`skills/engineering/improve-codebase-architecture/SKILL.md:6-81`, `skills/engineering/improve-codebase-architecture/INTERFACE-DESIGN.md:19-44`). `write-a-skill`은 description이 skill load 판단의 유일한 입력이라고 보고 1024자 제한과 trigger 작성 규칙을 둔다(`skills/productivity/write-a-skill/SKILL.md:60-89`). 이는 PURPOSE.md의 Deep Module 사고와 사용자 인지 비용 최소화 요구에 맞다.
+
+### 적용 방식
+
+- ditto의 하네스/스킬 매니페스트에 `name`, `description`, `status`, `public surfaces`, `dependencies`, `side effects`, `artifact paths`를 필수 필드로 둔다. setup 결과는 repo-local 설정으로 저장하고, 후속 단계는 사용자에게 재질문하기 전에 이 설정을 먼저 읽게 한다.
+- dependency는 hard/soft로 나누고, hard dependency가 빠진 경우에만 명시적으로 setup 또는 사용자 확인을 요구한다. soft dependency는 `CONTEXT.md`, `CONTEXT-MAP.md`, `docs/adr/`를 먼저 소비하되 없으면 진행하도록 해 토큰과 질문을 줄인다.
+- 보고서/검증 하네스에는 pass/fail signal, 재현 절차, 계측 위치, 회귀 테스트 여부를 산출물 schema에 포함한다. 브라우저 E2E가 필요한 경우도 “사용자 시나리오를 검증하는 자동화 도구”라는 ditto 목적에 맞춰 같은 schema로 결과를 남긴다.
+- 병렬 subagent 지시서는 agent brief 형태로 작성한다. 파일 line number에 과도하게 묶기보다 행동, 인터페이스, acceptance criteria, 제외 범위를 중심으로 쓰고, 완료 후 감사 기록과 핸드오프 자료가 남도록 한다.
+- durable artifact와 throwaway artifact를 분리한다. `CONTEXT.md`, ADR, out-of-scope, issue/brief, 감사 기록은 영속화하고, 임시 HTML report/prototype/handoff 초안은 지정 temp 위치에 둔 뒤 필요한 정보만 durable artifact로 흡수한다.
+
+### 적용 이후 제공 가치
+
+- 사용자가 매 작업마다 issue tracker, 용어, 산출물 위치, 검증 기준을 다시 설명하지 않아도 되어 인지 비용이 줄어든다.
+- setup 전제가 없는 상태에서 issue 생성, triage label 변경, 파일 수정 같은 side effect를 내는 실수를 줄인다.
+- 근거 파일, 재현 로그, 테스트 결과, ADR이 같은 흐름에 묶여 ditto의 “증거 기반 완료” 기준을 강화한다.
+- 장기 실행 작업과 병렬 subagent 작업이 agent brief와 감사 기록으로 이어져 Context Rot과 세션 단절 리스크를 줄인다.
+- Deep Module 기준과 skill description discipline을 통해 하네스 인터페이스는 좁고 명확하게 유지하고, 구현과 참조 문서는 progressive disclosure로 분리할 수 있다.
+
+### 리스크와 선행 조건
+
+- setup contract 자체가 drift의 원인이 될 수 있다. 보고서에서 README는 Linear를 말하지만 setup skill은 GitLab을 first-class로 둔 불일치가 확인됐다(`README.md:35-38`, `skills/engineering/setup-matt-pocock-skills/SKILL.md:40-45`). ditto는 README, manifest, setup template를 같은 source에서 검증하는 lint가 선행되어야 한다.
+- publication gating은 자동 검증이 필요하다. 이 저장소는 `CLAUDE.md`가 `engineering/productivity/misc`의 plugin entry를 요구하지만 plugin manifest에는 misc가 빠져 있다(`CLAUDE.md:10-14`, `.claude-plugin/plugin.json:4-17`, `README.md:169-176`). ditto는 public/private/in-progress/deprecated surface를 매니페스트와 CI로 검증해야 한다.
+- local installer나 hook은 사용자 작업공간을 파괴하지 않아야 한다. `scripts/link-skills.sh`는 충돌 target을 `rm -rf`로 제거하고 deprecated만 제외해 personal/in-progress가 노출될 수 있다(`scripts/link-skills.sh:26-38`). ditto에서는 destructive replacement를 기본 금지하고 `--force` 같은 명시 옵션과 백업/skip/report 정책이 필요하다.
+- command string regex guardrail은 우회와 오탐 가능성이 있다. git guardrail hook은 `.tool_input.command`를 regex blocklist와 대조하고 `jq` 의존성 검증도 없다(`skills/misc/git-guardrails-claude-code/scripts/block-dangerous-git.sh:3-20`). ditto의 안전 정책은 structured command parsing 또는 권한 기반 wrapper를 우선 검토해야 한다.
+- durable artifact가 늘어나면 토큰 비용과 갱신 비용이 증가한다. ditto는 PURPOSE.md의 토큰 비용 절감 목적에 맞게 `CONTEXT.md`/ADR/out-of-scope를 “먼저 소비, 필요할 때만 생성” 원칙으로 제한해야 한다.
+
+### 근거
+
+- PURPOSE.md 근거: ditto는 범용 개발 작업을 돕는 coding agent harness이며, 사용자 인지 비용 절감, 할루시네이션 방지, 사용자 의도 밖 추론/작업 제한, Context Rot 해결, 장기 실행 작업 완수, 토큰 비용 절감을 핵심 가치로 둔다. 핵심 기능으로 감사 기록과 세션 핸드오프, 주요 결정 및 변경사항 영속화, subagent 활용, ubiquitous language, 충분한 컨텍스트를 동반한 질문, 정규화된 interface 기반 오케스트레이션, E2E 테스트 도구, Deep Module 사고를 명시한다.
+- 보고서 근거: 이 문서는 mattpocock-skills의 repo-local setup, hard/soft dependency ADR, `CONTEXT.md`/ADR 운용, diagnosis feedback loop, triage/agent brief/out-of-scope, architecture/deep module skill, skill description discipline을 확인했고 각각의 repo-relative 근거를 본문에 유지하고 있다(`skills/engineering/setup-matt-pocock-skills/SKILL.md:7-15`, `docs/adr/0001-explicit-setup-pointer-only-for-hard-dependencies.md:3-10`, `skills/engineering/grill-with-docs/SKILL.md:72-86`, `skills/engineering/diagnose/SKILL.md:12-49`, `skills/engineering/triage/AGENT-BRIEF.md:1-37`, `skills/engineering/improve-codebase-architecture/SKILL.md:6-81`, `skills/productivity/write-a-skill/SKILL.md:60-89`).

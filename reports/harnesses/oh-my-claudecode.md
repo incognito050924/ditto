@@ -347,3 +347,40 @@
 - `agents/code-reviewer.md:1-181`: code reviewer prompt contract.
 - `agents/security-reviewer.md:1-185`: security reviewer prompt contract.
 - `agents/critic.md:1-220`: critic prompt contract.
+
+## ditto 적용 정리
+
+1. **단계형 오케스트레이션과 stage handoff**
+   - 적용할 기능/가치: OMC의 Team 파이프라인(`team-plan -> team-prd -> team-exec -> team-verify -> team-fix`)과 stage handoff 문서를 ditto의 문제 정의/현황 파악/개발 완료/자동 회고 흐름에 맞춘다.
+   - 적용 방식: ditto의 각 단계에 진입 조건, 출력 문서, 소유자를 둔다. 한 단계의 산출물은 다음 단계가 참조만 하게 하고, 변경이 필요하면 새 handoff나 후속 결정 기록으로 남긴다.
+   - 적용 이후 제공 가치: 장기 작업을 세션 재시작이나 병렬 worker 분리 후에도 이어갈 수 있고, 사용자는 전체 대화나 소스코드를 다시 읽지 않아도 현재 단계와 근거를 파악할 수 있다.
+   - 리스크/선행 조건: handoff schema와 단계별 수정 권한을 먼저 고정해야 한다. OMC처럼 문서와 구현의 count/명칭 drift가 생기면 오히려 인지 비용이 늘어난다.
+   - 근거: PURPOSE.md는 모든 액션 감사 기록, 핸드오프, 정규화된 단계 interface, 장기 작업 완수를 요구한다(`PURPOSE.md:15`, `PURPOSE.md:29-32`). 보고서는 Team을 canonical orchestration surface로 보고 `skills/team/SKILL.md:98-199`, stage handoff 규칙은 `skills/team/SKILL.md:156-181`에 근거를 둔다.
+
+2. **제어 평면/데이터 평면 분리와 작은 상태 저장**
+   - 적용할 기능/가치: OMC의 `.omc/state/**`와 durable artifact 분리를 ditto의 감사 기록, 결정 영속화, Context Rot 대응 구조로 가져온다.
+   - 적용 방식: ditto의 실행 상태에는 queue/session/assignment/status 같은 작은 기계 상태만 두고, 큰 분석 결과, 로그, 검증 결과, 프롬프트는 artifact로 저장한 뒤 descriptor와 요약만 상태에서 참조한다.
+   - 적용 이후 제공 가치: 컨텍스트에 큰 산출물을 반복 주입하지 않아 token 비용을 줄이고, 다음 세션이나 subagent가 필요한 근거만 찾아 재개할 수 있다.
+   - 리스크/선행 조건: 상태 schema version, owner, terminal state, artifact path 규약이 필요하다. schema 변경 시 프롬프트와 도구가 함께 갱신되지 않으면 OMC의 stale 문서 사례처럼 신뢰도가 떨어진다.
+   - 근거: PURPOSE.md는 감사 기록, 주요 결정/변경사항 영속화, Context Rot 해결, token 비용 절감을 요구한다(`PURPOSE.md:10`, `PURPOSE.md:12`, `PURPOSE.md:15-17`). 보고서는 control plane/data plane 분리와 descriptor handoff를 `docs/ARCHITECTURE.md:461-498`, 런타임 저장소를 `docs/REFERENCE.md:253-290`에 연결한다.
+
+3. **실행 권한 gate와 의도 확인 인터뷰**
+   - 적용할 기능/가치: OMC의 작은 작업 heavy mode 억제, 불명확한 실행 요청의 `ralplan` 우회, deep-interview식 ambiguity gate를 ditto의 의도 이탈 방지 장치로 쓴다.
+   - 적용 방식: 자동 실행 키워드는 인용문, 코드 블록, 도움말/참조 문맥을 제거한 뒤 판정한다. 짧거나 불명확한 요청은 곧바로 Autopilot/Team류 실행으로 보내지 않고, 근거 수집 또는 필요한 최소 질문으로 전환한다.
+   - 적용 이후 제공 가치: 사용자의 말과 다른 대형 workflow가 시작되는 일을 줄이고, 답할 수 있는 내용을 사용자에게 다시 묻지 않는 규칙을 도구 차원에서 강제할 수 있다.
+   - 리스크/선행 조건: 한국어/영어 혼합 입력에서 오탐과 미탐이 생길 수 있으므로 실행 gate에는 명시적 override, 감사 로그, dry-run 성격의 판정 출력이 필요하다.
+   - 근거: PURPOSE.md는 사용자 의도 이탈을 구조적으로 제한하고, 필요한 경우에만 의도 확인 질문을 하라고 한다(`PURPOSE.md:8`, `PURPOSE.md:22-28`). 보고서는 Team 키워드 자동 감지 비활성화(`src/hooks/keyword-detector/index.ts:44-63`), sanitizer와 informational suppression(`src/hooks/keyword-detector/index.ts:329-348`, `src/hooks/keyword-detector/index.ts:501-550`), small task/ralplan gate(`src/hooks/keyword-detector/index.ts:743-930`), deep-interview 규칙(`skills/deep-interview/SKILL.md:38-117`)을 근거로 든다.
+
+4. **primary loop authority와 continuation 예외 목록**
+   - 적용할 기능/가치: OMC의 workflow authority ledger와 Stop 훅 continuation 예외 목록을 ditto의 장기 실행 완수 장치로 차용한다.
+   - 적용 방식: 한 세션에는 primary loop authority를 하나만 둔다. nested workflow는 parent authority로 bubble up하고, explicit cancel, user abort, rate limit, auth failure, context compaction, scheduled wakeup, oversized output, pending async work는 자동 continuation에서 제외한다.
+   - 적용 이후 제공 가치: 목표 달성 전 임의 중단을 줄이면서도, 취소/인증/레이트리밋 같은 실패를 무한 재시도하지 않는다. 병렬 subagent가 서로 다른 완료 기준으로 같은 작업을 끌고 가는 문제도 줄일 수 있다.
+   - 리스크/선행 조건: Stop 훅이 모든 workflow를 직접 알면 OMC처럼 복잡도가 급격히 커진다. ditto에서는 authority interface를 좁게 만들고, 각 workflow가 자신의 완료/중단 사유만 표준 상태로 보고해야 한다.
+   - 근거: PURPOSE.md는 처음 의도한 목적대로 장기간 작업을 완수하고, 오케스트레이션이 목표 달성 전 멋대로 중단하지 않아야 한다고 한다(`PURPOSE.md:11`, `PURPOSE.md:29-32`). 보고서는 Stop 훅 continuation과 예외 목록을 `src/hooks/persistent-mode/index.ts:1898-2014`, authority ledger를 `src/hooks/persistent-mode/index.ts:2021-2132`에 연결한다.
+
+5. **독립 검증 lane과 외부 analyzer wrapper**
+   - 적용할 기능/가치: OMC의 read-only reviewer/verifier lane, `omc ask` wrapper, artifact 저장 계약을 ditto의 할루시네이션 방지와 멀티 모델 정반합 검토에 맞춘다.
+   - 적용 방식: 구현 agent와 검증 agent를 권한으로 분리하고, 검증 agent는 acceptance criteria별 fresh evidence만 남기게 한다. Codex/Gemini/Claude 같은 외부 analyzer는 raw CLI 호출을 금지하고, ditto wrapper가 provider, flag, 출력 artifact, 버전 호환성을 통제한다.
+   - 적용 이후 제공 가치: 완료 주장이 테스트/빌드/리뷰 산출물에 묶이고, 외부 모델 의견도 추적 가능한 artifact로 남아 사용자가 근거 부족 답변과 검증된 결론을 구분할 수 있다.
+   - 리스크/선행 조건: 외부 CLI 인증, PATH 신뢰성, wrapper 버전 정책, artifact 보존 기간이 필요하다. 검증 lane을 항상 강제하면 작은 작업의 비용이 커지므로 task size gate와 함께 적용해야 한다.
+   - 근거: PURPOSE.md는 모든 출력과 추론에 확실한 근거가 있어야 하며 멀티 모델 기반 적대적 검토 도구를 요구한다(`PURPOSE.md:7`, `PURPOSE.md:33`). 보고서는 verifier의 fresh evidence 계약(`agents/verifier.md:9-107`), read-only reviewer 권한(`agents/code-reviewer.md:1-7`, `agents/security-reviewer.md:1-7`, `agents/critic.md:1-7`), `omc ask` wrapper와 artifact 저장(`skills/ask/SKILL.md:24-50`), 외부 binary trust check(`src/team/model-contract.ts:51-134`)를 근거로 든다.

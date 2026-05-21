@@ -397,3 +397,52 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 - `get-shit-done/templates/roadmap.md:27-38`: phase detail format.
 - `get-shit-done/templates/state.md:84-121`: STATE lifecycle.
 - `get-shit-done/templates/phase-prompt.md:15-31`: PLAN frontmatter.
+
+## ditto 적용 정리
+
+### ditto에 적용할 기능/가치
+
+1. **얇은 명령 표면과 lazy workflow**
+   ditto는 범용 개발 작업을 돕는 coding agent harness이고, 사용자 인지 비용과 token 비용을 줄이는 것이 핵심 가치다. 이 문서의 GSD처럼 런타임 entrypoint는 짧은 command/skill 계약만 두고, 긴 절차는 workflow 문서로 지연 로드하는 구조를 적용한다(`commands/gsd/plan-phase.md:1-35`, `commands/gsd/execute-phase.md:1-31`, `docs/ARCHITECTURE.md:123-170`).
+
+2. **파일 기반 상태, 감사 기록, 재개 가능한 산출물**
+   PURPOSE.md는 모든 액션의 감사 기록, 주요 결정/변경사항 영속화, 새 세션에서 이어받기, 장기 실행 작업 완수를 요구한다. GSD의 `.planning/PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md`, phase plan, summary, verification artifact 모델을 ditto의 세션/작업 상태 계약으로 축소 적용한다(`docs/ARCHITECTURE.md:85-96`, `docs/ARCHITECTURE.md:481-569`, `get-shit-done/templates/state.md:84-121`).
+
+3. **planner/checker/executor/verifier 역할 분리**
+   PURPOSE.md의 “할루시네이션 방지”, “LLM의 자기 확신을 깨기”, “서브 에이전트를 통한 Context Rot 해결”에는 작성자와 검증자를 분리하는 구조가 직접 맞는다. GSD의 planner, read-only plan-checker, executor, evidence-first verifier 분리를 ditto의 기본 오케스트레이션 단계로 적용한다(`docs/AGENTS.md:3-9`, `agents/gsd-plan-checker.md:1-30`, `agents/gsd-executor.md:15-19`, `agents/gsd-verifier.md:15-26`).
+
+4. **PLAN frontmatter 기반 병렬 실행 통제**
+   ditto가 subagent를 적극 사용하는 경우 병렬성 자체보다 충돌 방지가 먼저다. GSD의 wave, dependency, files, must_haves frontmatter와 same-wave file overlap gate를 사용해 병렬 작업자의 수정 범위와 검증 조건을 실행 전에 고정한다(`agents/gsd-planner.md:421-439`, `agents/gsd-planner.md:1024-1048`, `get-shit-done/workflows/execute-phase.md:440-472`).
+
+5. **SDK query registry와 하네스 품질 게이트**
+   PURPOSE.md의 “정규화된 interface”, “단계 간 상태 전이”, “Token 비용 낭비 방지”를 위해 상태/검증/설정/커밋 조작은 prompt 안의 임의 shell이 아니라 registry command로 중앙화한다. GSD의 `gsd-sdk query`, unknown key fail-fast, inventory/lint/drift-control 패턴을 ditto의 harness 자체 검증 대상으로 둔다(`docs/CLI-TOOLS.md:1-16`, `sdk/src/query/registry.ts:61-67`, `docs/INVENTORY.md:3-9`, `docs/INVENTORY.md:473`, `scripts/lint-command-contract.cjs:39-74`).
+
+### 적용 방식
+
+- 첫 단계는 GSD 전체 복제가 아니라 ditto의 최소 core loop를 `intent/context -> discuss/clarify -> plan -> plan-check -> execute -> verify -> handoff`로 고정하는 것이다. 각 단계는 PURPOSE.md의 오케스트레이션 요구처럼 입력, 출력, 수정 권한, 산출물 위치를 문서 계약으로 가진다.
+- 상태 저장소는 GSD의 `.planning`을 그대로 베끼기보다 ditto 용어에 맞춰 세션 감사 로그, 의도/요구사항, 계획, 실행 summary, 검증 artifact, handoff를 분리한다. 각 파일은 다음 단계가 읽을 수만 있거나 수정할 수 있는 범위를 명확히 둔다.
+- subagent 실행 전에는 PLAN frontmatter에 wave, depends_on, files_modified, must_haves, verification을 요구하고, orchestrator가 같은 wave의 파일 겹침을 감지하면 직렬화한다.
+- verifier는 executor summary를 신뢰하지 않는다는 규칙을 prompt 계약에 넣고, 실제 파일 diff, 테스트 결과, 실행 로그, artifact 존재 여부를 근거로만 완료를 판정한다.
+- command/agent/workflow/hook 목록은 사람이 쓴 문서 숫자에 의존하지 않고 inventory 생성물과 lint로 검증한다. GSD 보고서에서 확인된 수량 drift 리스크를 ditto에서는 초기에 구조적으로 줄인다(`docs/INVENTORY.md:448`, `docs/ARCHITECTURE.md:249-267`, `scripts/lint-command-contract.cjs:5`, `docs/INVENTORY.md:57`).
+
+### 적용 이후 제공 가치
+
+- 사용자는 긴 내부 절차 대신 정제된 상태, 다음 판단에 필요한 근거, 검증 결과만 받게 되어 인지 비용이 줄어든다.
+- 장기 작업 중 context가 약해져도 파일 기반 상태와 handoff artifact가 남아 세션을 이어받을 수 있다.
+- 작성자와 검증자가 분리되어 “수정했다”는 자기보고보다 테스트, diff, artifact 같은 fresh evidence가 완료 판단의 기준이 된다.
+- 병렬 subagent는 PLAN frontmatter와 overlap gate 안에서만 실행되어 다른 작업자의 변경을 되돌리거나 같은 파일을 동시에 수정할 위험이 줄어든다.
+- SDK registry와 inventory/lint는 런타임별 prompt drift와 하네스 문서 drift를 줄여, ditto의 정규화된 인터페이스와 token 절감 목표에 맞는다.
+
+### 리스크와 선행 조건
+
+- GSD의 표면적은 67 commands, 88 workflows, 33 agents, 73 CLI modules, 13 hooks로 크다(`docs/INVENTORY.md:57`, `docs/INVENTORY.md:167`, `docs/INVENTORY.md:13`, `docs/INVENTORY.md:364`, `docs/INVENTORY.md:448`). ditto는 처음부터 이 규모를 가져오면 사용자의 인지 비용과 유지보수 비용을 늘리므로 최소 core loop부터 시작해야 한다.
+- 파일 기반 상태는 schema와 lifecycle이 먼저 고정되어야 한다. 그렇지 않으면 PURPOSE.md의 “주요 결정 및 변경사항 영속화”가 산출물 난립으로 바뀐다.
+- plan 품질이 낮으면 executor가 잘못된 계획을 빠르게 구현할 수 있다. GSD에서도 plan-checker와 coverage gate가 있는 이유가 이 리스크다(`get-shit-done/workflows/plan-phase.md:1200-1249`, `get-shit-done/workflows/plan-phase.md:1307-1555`).
+- advisory/silent-fail hook만으로는 강제 보안 정책이 되지 않는다. ditto가 공급망/프롬프트 인젝션 위험을 강하게 막으려면 local advisory와 CI blocking scan을 분리해야 한다(`hooks/gsd-prompt-guard.js:80-95`, `hooks/gsd-read-injection-scanner.js:130-150`).
+- runtime parity는 초기에 matrix로 관리해야 한다. GSD도 Codex worktree isolation 미지원, sequential fallback, runtime별 설치/호출 차이를 갖는다(`get-shit-done/workflows/execute-phase.md:80-111`, `get-shit-done/workflows/map-codebase.md:130-139`, `docs/COMMANDS.md:7-13`).
+
+### 근거
+
+- PURPOSE.md의 목적은 ditto를 범용 개발 작업용 coding agent harness로 정의하고, 사용자 인지 비용 절감, 근거 없는 출력 방지, 의도 이탈 제한, Context Rot 해결, 장기 작업 완수, token 비용 절감을 핵심 가치로 둔다.
+- PURPOSE.md의 핵심 기능은 감사 기록, 결정/변경사항 영속화, subagent 활용, 사용자에게 충분한 context를 주는 정제된 출력, 불필요한 질문 금지, 정규화된 단계 interface, 끝까지 완수하는 오케스트레이션을 요구한다.
+- 이 보고서의 GSD 분석은 위 가치에 직접 연결되는 구현 근거를 제공한다. 얇은 command와 lazy workflow는 prompt surface와 token 비용을 줄이고(`docs/ARCHITECTURE.md:123-170`), `.planning` 상태 모델은 재개성과 감사 가능성을 만든다(`docs/ARCHITECTURE.md:85-96`). 역할 분리와 evidence-first verifier는 할루시네이션과 자기 확신을 견제한다(`agents/gsd-plan-checker.md:1-30`, `agents/gsd-verifier.md:15-26`). PLAN frontmatter와 overlap gate는 병렬 subagent 실행을 통제한다(`agents/gsd-planner.md:421-439`, `get-shit-done/workflows/execute-phase.md:440-472`). SDK registry와 inventory/lint는 정규화된 interface와 drift control을 하네스 품질 게이트로 만든다(`docs/CLI-TOOLS.md:1-16`, `sdk/src/query/registry.ts:61-67`, `docs/INVENTORY.md:3-9`, `docs/INVENTORY.md:473`).
