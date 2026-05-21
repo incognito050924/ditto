@@ -1,0 +1,65 @@
+# DITTO
+
+Doing It, Tolerably, Through Orchestration
+
+DITTO is another coding harness.
+
+It does not claim to be autonomous, revolutionary, or particularly intelligent.
+It merely attempts to make terminal-driven development slightly more tolerable
+through orchestration, tooling, and a questionable amount of glue code.
+
+Like most systems in this space, DITTO is ultimately composed of:
+
+- shell commands
+- prompts
+- retries
+- subprocesses
+- session state
+- accumulated workarounds
+- optimism
+
+The difference is that DITTO does not pretend otherwise.
+
+If it helps you ship faster, break things less often, or spend fewer hours
+fighting your tooling, then it has already exceeded its design goals.
+
+## What It Is
+
+DITTO is a coding agent harness for running development work through a terminal
+with enough structure to be useful and enough honesty to remain bearable.
+
+It is intended to coordinate:
+
+- command execution
+- workspace inspection
+- prompt and context assembly
+- tool calls
+- subprocess lifecycle
+- retry policy
+- session persistence
+- human handoff
+
+None of this is magic. That is probably for the best.
+
+## Design Posture
+
+DITTO should be:
+
+- boring where possible
+- explicit where it matters
+- composable before it is clever
+- recoverable after failure
+- useful before it is impressive
+
+It should avoid:
+
+- pretending shell commands are a personality
+- hiding important state behind vibes
+- turning retries into denial
+- requiring belief as a dependency
+
+## Status
+
+This repository is just beginning.
+
+The glue code has not yet accumulated, but statistically speaking, it will.
