@@ -250,3 +250,17 @@
 
 - PURPOSE.md 근거: ditto는 범용 개발 작업을 돕는 coding agent harness이며, 사용자 인지 비용 절감, 할루시네이션 방지, 사용자 의도 밖 추론/작업 제한, Context Rot 해결, 장기 실행 작업 완수, 토큰 비용 절감을 핵심 가치로 둔다. 핵심 기능으로 감사 기록과 세션 핸드오프, 주요 결정 및 변경사항 영속화, subagent 활용, ubiquitous language, 충분한 컨텍스트를 동반한 질문, 정규화된 interface 기반 오케스트레이션, E2E 테스트 도구, Deep Module 사고를 명시한다.
 - 보고서 근거: 이 문서는 mattpocock-skills의 repo-local setup, hard/soft dependency ADR, `CONTEXT.md`/ADR 운용, diagnosis feedback loop, triage/agent brief/out-of-scope, architecture/deep module skill, skill description discipline을 확인했고 각각의 repo-relative 근거를 본문에 유지하고 있다(`skills/engineering/setup-matt-pocock-skills/SKILL.md:7-15`, `docs/adr/0001-explicit-setup-pointer-only-for-hard-dependencies.md:3-10`, `skills/engineering/grill-with-docs/SKILL.md:72-86`, `skills/engineering/diagnose/SKILL.md:12-49`, `skills/engineering/triage/AGENT-BRIEF.md:1-37`, `skills/engineering/improve-codebase-architecture/SKILL.md:6-81`, `skills/productivity/write-a-skill/SKILL.md:60-89`).
+
+## ditto 적용 요소 후보 (skills/agents/commands/hooks)
+
+| 우선순위 | 종류 | 요소 | DITTO 적용안 | 효과/주의 |
+| --- | --- | --- | --- | --- |
+| 바로 적용 | skill | `diagnose` | 버그/테스트 실패/예상 밖 동작 처리의 기본 skill로 둔다. 먼저 deterministic pass/fail signal을 만들고, 재현률, 가설, 계측, 수정, 회귀 테스트를 기록한다. | 근거 없는 디버깅을 줄인다. UI 수동 재현은 HITL script나 Playwright trace와 연결해야 한다. |
+| 바로 적용 | skill | `tdd` | 새 기능/버그 수정/리팩터링에서 public behavior 중심 red-green-refactor를 권장 skill로 둔다. DITTO에서는 "항상 강제"가 아니라 검증 가능한 behavior가 있을 때 자동 제안한다. | 완료 증거가 명확해진다. legacy 코드나 탐색성 spike에는 예외가 필요하다. |
+| 바로 적용 | skill | `grill-with-docs` / `grill-me` | 의도/도메인 용어가 불명확할 때 한 질문씩 묻는 interview skill로 이식한다. 코드/문서로 답할 수 있는 질문은 먼저 조사하게 한다. | 사용자 인지 비용을 줄이면서 모호성을 줄인다. 질문은 반드시 판단에 필요한 context와 함께 나가야 한다. |
+| 바로 적용 | skill | `handoff` | 현재 작업 상태를 temp 또는 repo-local handoff artifact로 압축하는 표준 skill로 둔다. 민감정보 제거, 남은 위험, 검증 상태를 필수화한다. | 새 세션 재개에 바로 도움이 된다. 영속 handoff와 임시 handoff의 위치를 구분해야 한다. |
+| 수정 적용 | skill | `setup-matt-pocock-skills` | DITTO repo-local setup skill로 바꿔 issue tracker, domain docs, artifact 위치, team conventions를 기록한다. hard dependency가 있는 skill만 setup 누락 시 멈춘다. | 반복 질문과 side effect 실수를 줄인다. setup 결과와 README/manifest drift를 lint해야 한다. |
+| 수정 적용 | skill | `triage`, `to-prd`, `to-issues` | 백로그/PRD/issue 생성 워크플로를 DITTO team support의 opt-in skill로 둔다. GitHub/GitLab/로컬 markdown backend를 provider adapter로 분리한다. | 제품 작업을 thin slice로 만들 수 있다. issue 생성/label 변경은 명시적 side effect라 감사 기록과 dry-run이 필요하다. |
+| 수정 적용 | skill | `improve-codebase-architecture` | Deep Module 후보 분석 skill로 이식한다. 결과는 temporary HTML보다 DITTO architecture report schema와 ADR 후보로 남긴다. | PURPOSE.md의 Deep Module 개발 기준에 직접 맞다. 분석 보고서가 구현 없이 늘어나지 않도록 후속 action 조건이 필요하다. |
+| 수정 적용 | hook/skill | `git-guardrails-claude-code` | 위험 git 명령 차단 hook으로 차용하되 regex blocklist 대신 structured command parser나 wrapper permission으로 구현한다. | 사용자 변경 보호에 효과적이다. `jq` 의존/regex 우회/오탐을 그대로 가져오면 안 된다. |
+| 수정 적용 | skill | `write-a-skill` | DITTO skill 작성 지침으로 사용한다. description은 routing metadata로 제한하고, references/scripts/assets 분리와 검증을 template화한다. | skill catalog가 커질수록 품질을 지킨다. description parser와 manifest validation이 함께 필요하다. |

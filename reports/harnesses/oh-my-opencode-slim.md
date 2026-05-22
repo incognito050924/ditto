@@ -453,3 +453,17 @@ oh-my-opencode-slim에서 ditto에 적용할 핵심은 “범용 coding agent ha
    - 적용 이후 제공 가치: PURPOSE.md가 말하는 멀티 모델 정반합 기반 검토, 할루시네이션 방지, token 비용 절감, 불필요한 사용자 질문 감소를 동시에 지원한다. 필요한 때만 깊은 검토를 쓰고, 일반 구현 경로는 가볍게 유지할 수 있다.
    - 리스크/선행 조건: Council은 비용과 지연이 크고, 외부 MCP/webfetch는 네트워크/프라이버시 표면을 넓힌다. 기본 비활성, 명시 승인, 비용/지연 가시화, 로그가 선행되어야 한다.
    - 근거: 보고서는 Council이 여러 councillor를 병렬 실행한 뒤 합성하고, config가 있을 때만 tool/agent로 등록되는 expensive 기능이라고 정리한다(`docs/council.md:21-50`, `src/index.ts:247-259`, `docs/council.md:407-437`). MCP는 agent별 allow/deny와 전역 disable을 지원하고(`docs/mcps.md:31-47`, `docs/mcps.md:73-83`, `src/config/agent-mcps.ts:22-44`), `webfetch`는 URL fetch, 본문 추출, cache, 보조 모델 fallback을 가진 별도 도구다(`src/tools/smartfetch/tool.ts:68-101`, `src/tools/smartfetch/tool.ts:655-825`).
+
+## ditto 적용 요소 후보 (skills/agents/commands/hooks)
+
+| 우선순위 | 종류 | 요소 | DITTO 적용안 | 효과/주의 |
+| --- | --- | --- | --- | --- |
+| 바로 적용 | command/tool | `/subtask`, `subtask`, `read_session` | bounded worker session을 DITTO subagent 기본 실행 단위로 삼는다. parentID, file context, transcript read limit, summary, abort cleanup을 contract에 넣는다. | Context Rot 완화에 직접 효과가 있다. source session 외부 접근과 nested depth를 runtime에서 막아야 한다. |
+| 바로 적용 | skill | `codemap` | repo map과 change detection을 DITTO long-session skill로 둔다. 작업 전 state 확인, 초기화, 변경 감지, 업데이트 절차를 명령화한다. | 반복 탐색 비용을 줄인다. codemap이 stale이면 오히려 잘못된 판단을 만들 수 있어 변경 감지가 필수다. |
+| 바로 적용 | command/script | `doctor`, `verify-release-artifact`, `verify-host-smoke` | 설정 schema, package artifact, 실제 host plugin load를 DITTO 검증 표면으로 둔다. 결과는 human/json과 exit code를 모두 제공한다. | 설치/배포 완료의 증거가 명확해진다. host smoke는 느리므로 CI matrix와 로컬 빠른 doctor를 분리한다. |
+| 바로 적용 | agent | `explorer`, `librarian`, `fixer`, `oracle` | DITTO 전문 agent 초기 세트로 차용한다. explorer/librarian/oracle은 read-only, fixer는 좁은 구현 전담으로 두고 각 agent의 도구 allowlist를 제한한다. | 역할별 context와 권한을 줄일 수 있다. agent registry와 permission 계산이 prompt와 분리되어야 한다. |
+| 수정 적용 | hook/tool | `apply_patch` hook, `ast_grep_replace`, `webfetch` | stale patch rescue, AST replace dry-run, fetch redirect/content limit를 DITTO tool safety shim으로 적용한다. ambiguity에서는 자동 복구하지 않고 실패시킨다. | 도구 실패와 위험한 변경을 줄인다. 자동 보정 내용은 audit record에 남겨야 한다. |
+| 수정 적용 | hook | `todo-continuation`, `task-session-manager`, `post-file-tool-nudge`, `phase-reminder` | 자동 계속하기와 session reuse는 goal/todo가 active일 때만 켠다. file tool 후 reminder는 "검증/요약 누락" 같은 특정 위험 상태에서만 주입한다. | 장기 작업 중 놓치는 단계를 줄인다. reminder가 많아지면 prompt noise가 되므로 rate limit이 필요하다. |
+| 수정 적용 | tool/agent | `council_session`, `council`, `councillor` | 멀티 모델 정반합 검토를 opt-in expensive tool로 둔다. council agent 외 호출 금지, 비용 상한, timeout, partial result, 합성 보고서를 필수화한다. | 자기 확신을 깨는 데 유용하다. 기본 경로로 켜면 비용과 지연이 커진다. |
+| 수정 적용 | command | `/interview` | 기능 아이디어를 질문/정제하고 markdown spec을 저장하는 DITTO interview command로 차용한다. 브라우저 UI는 후순위로 두고 먼저 텍스트 spec artifact contract를 만든다. | 제품/요구사항 모호성을 줄인다. 사용자가 답하지 않아도 코드/문서로 확인 가능한 것은 먼저 조사해야 한다. |
+| 수정 적용 | MCP/config | agent별 MCP allow/deny syntax | 외부 research/webfetch/context tool은 agent별 allowlist와 `!name` deny로 제한한다. project config가 secret env allowlist를 확장하지 못하게 한다. | 비용/프라이버시/권한을 줄인다. 설정 schema와 doctor가 같은 규칙을 검증해야 한다. |

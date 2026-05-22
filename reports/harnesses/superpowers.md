@@ -319,3 +319,17 @@
 - PURPOSE.md는 DITTO를 범용 개발 작업을 돕는 coding agent harness로 정의하고, 사용자 인지 비용 최소화, 할루시네이션 방지, 사용자 의도 밖 추론/작업 제한, Context Rot 해결, 장기 작업 완수, 토큰 비용 절감을 핵심 가치로 둔다.
 - PURPOSE.md의 핵심 기능은 세션 단위 감사 기록과 핸드오프, 주요 결정/변경사항 영속화, 서브 에이전트 활용, 정제된 출력, 사용자 인터뷰, 정규화된 오케스트레이션 interface, 멀티 모델 검토, E2E 테스트, git worktree와 팀 개발 지원을 포함한다.
 - Superpowers 보고서 본문은 세션 시작 부트스트랩, 하네스별 스킬 로딩, 설계-계획-실행-검증 게이트, TDD/체계적 디버깅/증거 우선 원칙, fresh subagent와 스펙 준수 우선 리뷰, 상태 기반 worktree 감지, zero-dependency 보조 서버, marketplace sync의 source-owned/metadata 보존 분리를 확인했다. [f2cbfbe, `README.md:154-170`, `README.md:198-204`, `CLAUDE.md:67-87`, `skills/subagent-driven-development/SKILL.md:6-14`, `skills/verification-before-completion/SKILL.md:16-38`, `docs/superpowers/specs/2026-04-06-worktree-rototill-design.md:37-50`]
+
+## ditto 적용 요소 후보 (skills/agents/commands/hooks)
+
+| 우선순위 | 종류 | 요소 | DITTO 적용안 | 효과/주의 |
+| --- | --- | --- | --- | --- |
+| 바로 적용 | skill | `verification-before-completion` | DITTO의 모든 완료 응답 gate로 둔다. 변경 내용, 검증 명령/결과, 미검증 항목, 남은 리스크를 분리하고 fresh evidence 없이 완료라고 말하지 못하게 한다. | 가장 즉시 효과가 크다. 검증 불가 상태를 실패가 아니라 미검증으로 보고하는 표현 규칙이 필요하다. |
+| 바로 적용 | skill | `systematic-debugging` | 버그/테스트 실패/예상 밖 동작에서 원인 추적 전 수정 금지, 가설 검증, 방어적 수정, 회귀 확인을 기본 절차로 둔다. | 잘못된 가설을 깨는 데 유용하다. 간단한 오타 수정까지 과도하게 느려지지 않도록 scope gate가 필요하다. |
+| 바로 적용 | skill + prompt template | `subagent-driven-development`, implementer/spec-reviewer/code-quality reviewer prompts | 독립 task 실행 시 fresh subagent를 쓰고, 구현 후 스펙 준수 리뷰를 먼저 통과한 뒤 코드 품질 리뷰를 돌린다. | Context Rot과 요구 누락을 줄인다. subagent에게 plan 전체 파일을 넘기지 않고 필요한 task/context만 전달해야 한다. |
+| 바로 적용 | skill | `requesting-code-review`, `receiving-code-review` | 완료 전 code review dispatch와 리뷰 수신 후 검증 절차를 DITTO review skill로 둔다. 리뷰는 severity와 재현 근거를 요구하고, agent는 피드백을 맹목 수용하지 않는다. | 리뷰 품질과 적용 안정성이 좋아진다. 리뷰가 의견인지 버그인지 구분하는 출력 schema가 필요하다. |
+| 바로 적용 | skill | `using-git-worktrees` | 구현 시작 전 작업공간 격리와 소유권 확인을 DITTO git workflow에 넣는다. cleanup은 DITTO가 만든 worktree에만 적용한다. | 사용자 변경을 보호한다. worktree 생성/정리는 metadata와 감사 기록 없이는 자동화하지 않는다. |
+| 수정 적용 | skill/script | `brainstorming` + visual companion server | 요구/디자인 정제 skill은 텍스트 contract로 먼저 적용하고, 시각 보조 서버는 UI/UX 의사결정이 필요한 작업의 opt-in 도구로 둔다. | 창의적 요구 정리에 효과적이다. 서버 lifecycle, 포트, cleanup, 보안 경계가 필요하다. |
+| 수정 적용 | skill | `writing-plans`, `executing-plans` | 다단계 작업에서 plan artifact와 execution artifact를 분리한다. executing agent는 plan을 임의 수정하지 않고 완료/차단/검증 상태만 갱신한다. | 오케스트레이션 상태 전이가 명확해진다. 계획 문서가 과도해지지 않도록 작업 크기 gate가 필요하다. |
+| 수정 적용 | hook/test | session-start bootstrap, OpenCode/Codex/Gemini plugin bootstrap tests | 하네스 adapter마다 "부트스트랩 로드됨"과 "대표 자연어 요청에서 의도한 skill이 trigger됨"을 transcript 테스트로 둔다. | 실제 host에서 지침이 적용되는지 확인할 수 있다. 외부 CLI 기반 slow test와 pure contract test를 분리해야 한다. |
+| 수정 적용 | skill/script | `writing-skills`, `sync-to-codex-plugin.sh`, `bump-version.sh` | skill 작성/수정 시 description discipline, reference/script split, graph rendering, plugin marketplace sync, version drift 검증을 DITTO 개발 도구로 차용한다. | skill/manifest drift를 줄인다. sync script는 destination-owned metadata 보존 규칙이 필요하다. |

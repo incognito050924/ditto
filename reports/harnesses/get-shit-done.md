@@ -446,3 +446,16 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 - PURPOSE.md의 목적은 ditto를 범용 개발 작업용 coding agent harness로 정의하고, 사용자 인지 비용 절감, 근거 없는 출력 방지, 의도 이탈 제한, Context Rot 해결, 장기 작업 완수, token 비용 절감을 핵심 가치로 둔다.
 - PURPOSE.md의 핵심 기능은 감사 기록, 결정/변경사항 영속화, subagent 활용, 사용자에게 충분한 context를 주는 정제된 출력, 불필요한 질문 금지, 정규화된 단계 interface, 끝까지 완수하는 오케스트레이션을 요구한다.
 - 이 보고서의 GSD 분석은 위 가치에 직접 연결되는 구현 근거를 제공한다. 얇은 command와 lazy workflow는 prompt surface와 token 비용을 줄이고(`docs/ARCHITECTURE.md:123-170`), `.planning` 상태 모델은 재개성과 감사 가능성을 만든다(`docs/ARCHITECTURE.md:85-96`). 역할 분리와 evidence-first verifier는 할루시네이션과 자기 확신을 견제한다(`agents/gsd-plan-checker.md:1-30`, `agents/gsd-verifier.md:15-26`). PLAN frontmatter와 overlap gate는 병렬 subagent 실행을 통제한다(`agents/gsd-planner.md:421-439`, `get-shit-done/workflows/execute-phase.md:440-472`). SDK registry와 inventory/lint는 정규화된 interface와 drift control을 하네스 품질 게이트로 만든다(`docs/CLI-TOOLS.md:1-16`, `sdk/src/query/registry.ts:61-67`, `docs/INVENTORY.md:3-9`, `docs/INVENTORY.md:473`).
+
+## ditto 적용 요소 후보 (skills/agents/commands/hooks)
+
+| 우선순위 | 종류 | 요소 | DITTO 적용안 | 효과/주의 |
+| --- | --- | --- | --- | --- |
+| 바로 적용 | command + agent | `verify-work` + `gsd-verifier` | DITTO의 완료 직전 검증 command로 축소 이식한다. executor summary를 신뢰하지 않고 diff, test, runtime artifact, acceptance criteria별 상태를 다시 확인한다. | "수정했다"와 "검증했다"를 분리한다. 작은 작업에서는 lightweight verifier로 자동 축소해야 한다. |
+| 바로 적용 | agent | `gsd-plan-checker` | 구현 전 계획을 read-only로 검토하는 agent를 둔다. requirement coverage, dependency, 파일 충돌, 검증 가능성을 확인하고 실패 시 계획으로 되돌린다. | 잘못된 계획을 빠르게 구현하는 문제를 줄인다. planner와 같은 context를 공유하지 않는 것이 중요하다. |
+| 바로 적용 | command + agent | `map-codebase` + `gsd-codebase-mapper` | 새 repo나 큰 모듈 진입 시 read-only mapper가 repo map을 직접 작성하고 parent는 confirmation만 받는다. DITTO에서는 `reports`가 아니라 작업용 knowledge/cache 위치에 둔다. | 반복 탐색 비용과 context rot을 줄인다. secret 파일과 generated 파일 제외 규칙이 필요하다. |
+| 수정 적용 | command | `surface` | 설치된 skill/agent/command 표면과 token budget을 보여주는 DITTO `surface`/`inventory` 명령으로 차용한다. profile별 enabled surface와 이유를 함께 출력한다. | 사용자가 현재 하네스가 무엇을 할 수 있는지 낮은 비용으로 이해한다. 단순 목록이 아니라 실제 로딩 여부와 연결해야 한다. |
+| 수정 적용 | hook/script | `gsd-read-injection-scanner`, `prompt-injection-scan.sh`, `secret-scan.sh` | read-time prompt injection advisory와 CI blocking scan을 분리한다. 런타임 hook은 경고/감사 기록 중심, release/CI에서는 실패시키는 방식으로 둔다. | 안전성에 즉시 도움된다. silent-fail hook만으로 보안 정책을 대체하면 안 된다. |
+| 수정 적용 | hook | `gsd-context-monitor`, `gsd-statusline` | context remaining, active phase, current state를 statusline/telemetry로 노출한다. critical 구간에서는 자동 handoff artifact 생성을 트리거한다. | 장기 작업 중 context rot을 조기에 드러낸다. host별 context metric 신뢰도가 달라 compatibility layer가 필요하다. |
+| 수정 적용 | agent | `gsd-phase-researcher`의 package legitimacy gate | 새 dependency, 외부 패키지, 보안 민감 변경에는 provenance tag와 package legitimacy check를 요구한다. | 공급망 리스크와 hallucinated package 사용을 줄인다. 일반 구현 경로에 항상 강제하면 비용이 크므로 dependency 변경 시에만 켠다. |
+| 수정 적용 | command | `cross-ai-review` | 멀티 모델 적대적 검토를 opt-in command로 둔다. 입력 diff, 목표, acceptance criteria, 비용 상한, output artifact 경로를 wrapper가 통제한다. | PURPOSE.md의 멀티 모델 정반합에 직접 연결된다. raw external CLI 호출은 금지하고 provider/version을 기록해야 한다. |

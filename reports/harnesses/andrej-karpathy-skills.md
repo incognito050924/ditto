@@ -209,10 +209,22 @@
 
 ## ditto 적용 정리
 
-- 적용할 기능/가치: `Think Before Coding`, `Simplicity First`, `Surgical Changes`, `Goal-Driven Execution`을 DITTO의 기본 작업 계약으로 흡수한다. PURPOSE.md가 말하는 “사용자의 의도와 벗어나 LLM이 멋대로 추론 및 작업을 하는 것을 구조적으로 제한”, “할루시네이션 방지”, “사용자의 인지 비용 최소화”와 직접 맞는다. 보고서 본문에서도 이 네 원칙이 잘못된 가정, 과잉 복잡성, 무관한 편집, 검증 가능한 성공 기준 문제를 각각 다룬다고 정리되어 있다(`README.md:23-30`, `CLAUDE.md:7-65`).
-- 어떻게 적용할지: DITTO의 구현/리뷰/문서 작업 단계 진입 시 “가정, 가능한 해석, 가장 단순한 대안, 불확실하면 질문”을 먼저 점검하는 짧은 체크를 둔다. 질문은 PURPOSE.md의 요구처럼 사용자가 판단할 충분한 컨텍스트를 포함할 때만 발생시킨다. 근거는 구현 전 명시적 가정, 여러 해석 제시, 단순 대안 제시, 불명확하면 질문하라는 지침이다(`CLAUDE.md:11-15`, `skills/karpathy-guidelines/SKILL.md:17-21`, `EXAMPLES.md:11-55`).
+- [기본 행동 규범 적용 완료] 적용할 기능/가치: `Think Before Coding`, `Simplicity First`, `Surgical Changes`, `Goal-Driven Execution`을 DITTO의 기본 작업 계약으로 흡수한다. PURPOSE.md가 말하는 “사용자의 의도와 벗어나 LLM이 멋대로 추론 및 작업을 하는 것을 구조적으로 제한”, “할루시네이션 방지”, “사용자의 인지 비용 최소화”와 직접 맞는다. 보고서 본문에서도 이 네 원칙이 잘못된 가정, 과잉 복잡성, 무관한 편집, 검증 가능한 성공 기준 문제를 각각 다룬다고 정리되어 있다(`README.md:23-30`, `CLAUDE.md:7-65`).
+- [기본 행동 규범 적용 완료] 어떻게 적용할지: DITTO의 구현/리뷰/문서 작업 단계 진입 시 “가정, 가능한 해석, 가장 단순한 대안, 불확실하면 질문”을 먼저 점검하는 짧은 체크를 둔다. 질문은 PURPOSE.md의 요구처럼 사용자가 판단할 충분한 컨텍스트를 포함할 때만 발생시킨다. 근거는 구현 전 명시적 가정, 여러 해석 제시, 단순 대안 제시, 불명확하면 질문하라는 지침이다(`CLAUDE.md:11-15`, `skills/karpathy-guidelines/SKILL.md:17-21`, `EXAMPLES.md:11-55`).
 - 어떻게 적용할지: 코드 편집 agent의 감사 기록에 “변경 라인 또는 변경 묶음이 어떤 사용자 요청/성공 기준에 대응하는가”를 남긴다. PURPOSE.md의 “모든 액션에는 감사 기록이 누적된다”와 “주요 결정 및 변경사항 영속화”에 맞추어, surgical change의 traceability test를 DITTO의 diff 검증 항목으로 만든다. 보고서 근거는 요청 밖 기능, 단일사용 추상, 주변 코드/주석/포맷 변경을 금지하고 모든 변경 라인이 사용자 요청으로 추적되어야 한다는 규칙이다(`CLAUDE.md:21-43`, `README.md:59-75`, `EXAMPLES.md:225-292`).
-- 적용 이후 제공 가치: 명령형 요청을 검증 가능한 목표로 바꾸는 루프를 DITTO 오케스트레이션에 넣으면, 장기간 작업에서도 “처음 의도한 바, 목적대로 끈질기게 완수”하고 완료 주장을 테스트/빌드/실행 로그/산출물 diff 같은 증거 위에 둘 수 있다. 보고서는 “Add validation”, “Fix the bug”, “Refactor X”를 테스트와 검증 기준으로 변환하는 패턴을 제시한다(`CLAUDE.md:49-61`, `README.md:77-97`, `EXAMPLES.md:370-452`, `EXAMPLES.md:454-494`).
+- [기본 행동 규범 적용 완료] 적용 이후 제공 가치: 명령형 요청을 검증 가능한 목표로 바꾸는 루프를 DITTO 오케스트레이션에 넣으면, 장기간 작업에서도 “처음 의도한 바, 목적대로 끈질기게 완수”하고 완료 주장을 테스트/빌드/실행 로그/산출물 diff 같은 증거 위에 둘 수 있다. 보고서는 “Add validation”, “Fix the bug”, “Refactor X”를 테스트와 검증 기준으로 변환하는 패턴을 제시한다(`CLAUDE.md:49-61`, `README.md:77-97`, `EXAMPLES.md:370-452`, `EXAMPLES.md:454-494`).
 - 적용 이후 제공 가치: 런타임 prompt는 짧은 원칙으로 유지하고, 실패/수정 예시는 별도 참조 문서로 분리한다. 이는 PURPOSE.md의 “Token 비용을 낭비하지 않는다”, “Context Rot 이슈 해결”, “정제된 출력 메시지” 가치와 맞는다. 보고서 근거는 `CLAUDE.md`가 65줄의 압축 지침이고 예제는 `EXAMPLES.md`로 분리되어 있으며, 나쁜 예와 좋은 예를 pair로 유지한다는 점이다(`CLAUDE.md:1-65`, `EXAMPLES.md:1-4`, `EXAMPLES.md:498-522`).
 - 주의할 리스크나 선행 조건: 이 저장소처럼 `CLAUDE.md`, Cursor rule, skill 본문을 수동 복제하면 DITTO의 하네스/서브에이전트/런타임별 지침도 drift될 수 있다. DITTO는 PURPOSE.md에서 단계별 정규화된 interface와 산출물 계약을 요구하므로, 여러 런타임 엔트리포인트를 둘 경우 단일 원본 또는 drift 검증이 선행되어야 한다. 보고서도 수동 동기화 지침과 자동 검증 부재를 약점으로 기록한다(`CURSOR.md:26-28`, `.cursor/rules/karpathy-guidelines.mdc:1-70`, `skills/karpathy-guidelines/SKILL.md:13-67`).
 - 주의할 리스크나 선행 조건: 이 지침은 “caution over speed”에 편향되어 있고 자동 측정 장치가 없다. 따라서 DITTO에 넣을 때는 trivial task 예외, 보안/데이터 삭제/마이그레이션 같은 high-risk 예외, 그리고 변경 파일 수, 요청 범위 밖 diff 비율, 구현 전 질문 여부, 검증 명령 실행 여부 같은 관찰 지표를 함께 정의해야 한다. 보고서 근거는 작동 여부가 정성 지표로만 제시되고(`README.md:140-147`), tradeoff가 명시되어 있으며(`README.md:163-167`), “impossible scenario” 판단이 위험할 수 있다는 리스크 분석이다(`CLAUDE.md:21-25`).
+
+## ditto 적용 요소 후보 (skills/agents/commands/hooks)
+
+이 저장소는 별도 agent나 hook을 제공하지 않는다. 따라서 DITTO에 가져올 대상은 주로 skill, 런타임별 instruction projection, 예제 기반 평가 자료다.
+
+| 우선순위 | 종류 | 요소 | DITTO 적용안 | 효과/주의 |
+| --- | --- | --- | --- | --- |
+| 바로 적용 | skill | `skills/karpathy-guidelines` | DITTO의 구현/리뷰/리팩터링 공통 skill로 흡수한다. 트리거는 "코드 작성, 코드 리뷰, 리팩터링, 버그 수정 전"으로 좁히고 본문은 현재 AGENTS.md의 행동 헌장과 중복되지 않게 "가정 노출, 단순 해법, 외과적 변경, 검증 가능한 목표"만 남긴다. | 작은 변경에서 바로 효과가 있다. 이미 적용된 기본 행동 규범의 runtime skill 버전으로 보면 된다. |
+| 바로 적용 | reference/eval | `EXAMPLES.md`의 나쁜 예/좋은 예 pair | DITTO 하네스 평가 fixture로 사용한다. "요청 밖 기능 추가", "단일 사용 추상화", "검증 없는 완료" 같은 실패 유형을 regression prompt로 만든다. | 구조 설계가 아니라 실제 agent 행동을 측정하는 자료가 된다. 단, 예제 그대로 runtime prompt에 넣으면 token 비용이 크므로 평가/문서 경로에 둔다. |
+| 수정 적용 | command/packaging | `/plugin install ...`과 `.claude-plugin/plugin.json` | DITTO가 Codex/Claude/Cursor 등 여러 host에 배포될 때 manifest를 한 원본에서 생성하는 packaging contract로만 차용한다. 수동 append 명령은 쓰지 않는다. | host별 설치 표면을 만들 수 있지만, 복제 파일 drift가 생기기 쉬우므로 생성/검증 스크립트가 먼저 필요하다. |
+| 수정 적용 | instruction | `CLAUDE.md`, `.cursor/rules/*.mdc` | DITTO의 agent charter를 host별 projection으로 생성한다. Cursor처럼 root instruction을 자동으로 읽지 않는 host에는 별도 rule 파일을 내보내되 source of truth는 하나로 둔다. | 같은 원칙을 여러 host에 적용할 수 있다. 수동 복제는 금지하고 drift lint가 필요하다. |
+| 수정 적용 | metric | README의 작동 신호 | "불필요 diff 감소", "구현 전 의미 있는 질문", "검증 명령 실행"을 DITTO 하네스 telemetry/리뷰 체크 항목으로 만든다. | 원칙을 선언에 그치지 않고 완료 판단 증거로 연결한다. 정량화 기준은 DITTO 쪽에서 새로 정의해야 한다. |

@@ -237,3 +237,17 @@
    - 적용 이후 제공 가치: agent의 주장은 실제 diagnostics, reference, structural match, browser run 같은 fresh evidence로 닫힌다. stale line edit과 repo-supplied config 공격면이 줄어 사용자의 코드와 비밀값을 덜 위험하게 다룰 수 있다.
    - 주의할 리스크나 선행 조건: 보고서의 LSP MCP는 런타임에 `git submodule update`, `npm install`, `npm run build`까지 시도할 수 있어 오프라인/기업망/샌드박스에서 예측 불가능하다. ditto는 설치 또는 doctor 단계에서 선검증하고, 실패 시 degraded mode와 미검증 항목을 명확히 표시해야 한다.
    - 근거: PURPOSE.md의 할루시네이션 방지, E2E 테스트 도구, 사용자 의도 밖 작업 제한. 보고서의 `docs/reference/features.md:604-623`, `src/mcp/lsp.ts:7-33`, `src/mcp/ast-grep.ts:117-129`, `docs/reference/configuration.md:56-58`, `src/plugin-config.ts:430-437`, `docs/reference/configuration.md:952-960`, `src/features/builtin-skills/skills/playwright-cli.ts:3-13`.
+
+## ditto 적용 요소 후보 (skills/agents/commands/hooks)
+
+| 우선순위 | 종류 | 요소 | DITTO 적용안 | 효과/주의 |
+| --- | --- | --- | --- | --- |
+| 바로 적용 | skill | `review-work` | 구현 후 목표 적합성, QA, 코드 품질, 보안, 컨텍스트 누락을 병렬 read-only review로 나누는 DITTO skill로 둔다. 결과는 acceptance criteria별 pass/partial/missing으로 합친다. | 멀티 관점 검증에 즉시 효과가 있다. 작은 diff에는 lightweight 모드가 필요하다. |
+| 바로 적용 | skill | `playwright-cli` | E2E/브라우저 검증은 MCP에만 의존하지 않고 CLI 실행 경로를 기본으로 둔다. canonical skill 이름은 `playwright`로 유지하고 구현 provider만 교체 가능하게 한다. | PURPOSE.md의 E2E 테스트 요구에 맞다. 브라우저 설치/환경 실패는 미검증으로 명시해야 한다. |
+| 바로 적용 | command | `/handoff` | 세션 종료/전환/compaction 전 DITTO handoff command로 차용한다. 현재 목표, 변경 파일, 결정, 검증 결과, 미검증, 다음 fresh evidence를 구조화한다. | 새 세션 재개 품질이 좋아진다. 민감정보 제거와 artifact 경로 정책이 필요하다. |
+| 바로 적용 | agent | `Explore` | 초기 코드베이스 탐색용 read-only subagent로 둔다. LSP/AST/grep 결과와 파일 근거를 요약해 parent에 반환한다. | context rot과 탐색 비용을 줄인다. 작성 권한과 재위임은 금지해야 한다. |
+| 수정 적용 | command | `/init-deep` | 대규모 repo 진입 시 병렬 explore로 계층형 `AGENTS.md`나 codemap을 만드는 command로 축소 적용한다. DITTO에서는 기존 AGENTS를 덮지 않고 제안/patch artifact로 남긴다. | onboarding과 repo map 생성에 유용하다. 자동 지침 파일 수정은 위험하므로 승인/검증이 필요하다. |
+| 수정 적용 | agent | `Sisyphus`, `Atlas`, `Prometheus` | 이름은 그대로 쓰지 않더라도 역할을 DITTO `orchestrator`, `plan-executor`, `planner/interviewer`로 나눈다. 6-section delegation prompt와 silent exploration/clearance checklist를 계약화한다. | 구조 추상화가 아니라 구체 agent contract 후보가 된다. category와 agent 이름 drift를 schema로 막아야 한다. |
+| 수정 적용 | tool | `task`, `background_output`, `session_*`, task system | background subagent handle, session read/search, durable task 파일을 DITTO subagent 실행 단위에 적용한다. task id, source session, readable range, cancel 상태를 감사 기록에 연결한다. | 긴 작업 재개성과 병렬 탐색에 효과적이다. 중복 실행과 stale session 강화 리스크가 있다. |
+| 수정 적용 | hook | continuation, compaction, todo continuation, babysitter, skill reminder | 자동 계속하기는 todo/background 상태와 primary authority가 있을 때만 허용한다. compaction 전 handoff와 skill reminder는 context가 줄어든 시점에만 넣는다. | 장기 작업 중단을 줄인다. hook 주입이 많아지면 prompt noise가 생기므로 빈도 제한이 필요하다. |
+| 수정 적용 | tool/MCP | LSP, AST-grep, hashline edit | diagnostics/reference/rename/structural search를 code evidence path로 둔다. hashline edit은 stale write 방지용 precondition으로만 사용한다. | 리팩터링 안전성이 좋아진다. 런타임 npm install/build를 자동 실행하지 말고 doctor에서 선검증해야 한다. |

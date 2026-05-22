@@ -384,3 +384,16 @@
    - 적용 이후 제공 가치: 완료 주장이 테스트/빌드/리뷰 산출물에 묶이고, 외부 모델 의견도 추적 가능한 artifact로 남아 사용자가 근거 부족 답변과 검증된 결론을 구분할 수 있다.
    - 리스크/선행 조건: 외부 CLI 인증, PATH 신뢰성, wrapper 버전 정책, artifact 보존 기간이 필요하다. 검증 lane을 항상 강제하면 작은 작업의 비용이 커지므로 task size gate와 함께 적용해야 한다.
    - 근거: PURPOSE.md는 모든 출력과 추론에 확실한 근거가 있어야 하며 멀티 모델 기반 적대적 검토 도구를 요구한다(`PURPOSE.md:7`, `PURPOSE.md:33`). 보고서는 verifier의 fresh evidence 계약(`agents/verifier.md:9-107`), read-only reviewer 권한(`agents/code-reviewer.md:1-7`, `agents/security-reviewer.md:1-7`, `agents/critic.md:1-7`), `omc ask` wrapper와 artifact 저장(`skills/ask/SKILL.md:24-50`), 외부 binary trust check(`src/team/model-contract.ts:51-134`)를 근거로 든다.
+
+## ditto 적용 요소 후보 (skills/agents/commands/hooks)
+
+| 우선순위 | 종류 | 요소 | DITTO 적용안 | 효과/주의 |
+| --- | --- | --- | --- | --- |
+| 바로 적용 | skill | `deep-interview` | 모호한 목표나 제품 판단이 필요한 요청에서 한 질문씩 진행하는 DITTO interview skill로 둔다. 코드/문서로 확인 가능한 질문은 먼저 조사하고, 실행 전에는 artifact path와 승인 기준을 남긴다. | 사용자가 의도를 반복 설명하지 않아도 된다. 자동 실행을 막는 gate로 쓰되, trivial task에는 켜지지 않아야 한다. |
+| 바로 적용 | agent | `verifier`, `code-reviewer`, `security-reviewer`, `critic` | 구현 agent와 분리된 read-only 검증 lane으로 가져온다. verifier는 acceptance criteria별 fresh evidence, reviewer는 버그/보안/품질 risk만 보고한다. | 자기 확신과 완료 과장을 줄인다. 항상 full review를 돌리면 비용이 크므로 변경 규모 gate가 필요하다. |
+| 바로 적용 | command/skill | `ask`, `ccg` | Codex/Gemini/Claude 등 외부 analyzer 호출을 raw CLI가 아니라 DITTO wrapper로 제한한다. provider, prompt, flags, 출력 artifact, version을 기록한다. | 멀티 모델 검토를 추적 가능하게 만든다. 인증/PATH 실패와 비용 제한을 명확히 보여줘야 한다. |
+| 수정 적용 | hook | `keyword-detector` | 자동 workflow trigger 전에 인용문, 코드 블록, 도움말 문맥을 제거하고 small-task/heavy-mode gate를 적용한다. 결과는 dry-run 판정으로 감사 기록에 남긴다. | 사용자 의도와 다른 대형 workflow 실행을 줄인다. 한국어/영어 혼합 입력에 대한 오탐 테스트가 필요하다. |
+| 수정 적용 | hook | `persistent-mode` Stop continuation | DITTO 장기 작업 loop에 primary authority ledger와 자동 continuation 예외 목록을 둔다. user abort, auth/rate limit, oversized output, compaction, pending async work는 자동 재시도하지 않는다. | 목표 전 임의 중단과 무한 반복을 동시에 줄인다. workflow별 완료/중단 사유 표준화가 선행되어야 한다. |
+| 수정 적용 | MCP/tool | `state_*`, `notepad_*`, `project_memory_*`, `trace_*` | 세션 상태, 우선순위 메모, 프로젝트 지식, 실행 trace를 별도 tool surface로 나눈다. DITTO에서는 repo-local audit store와 연결하고, 큰 artifact는 descriptor만 state에 둔다. | Context Rot과 handoff에 효과적이다. 오래된 memory가 stale decision이 되지 않도록 freshness/owner를 가져야 한다. |
+| 수정 적용 | skill | `ultraqa`, `ralph` | 반복 QA와 user story completion loop를 DITTO의 opt-in long-run skill로 차용한다. 같은 실패 3회 조기 종료, regression re-verification, cleanup을 필수로 둔다. | 장기 작업 완수에 맞다. 일반 작업의 기본 경로로 두면 token과 시간이 과해진다. |
+| 수정 적용 | skill | `skillify` | 반복 가능한 성공 workflow를 skill draft로 추출하는 회고 단계에 둔다. frontmatter, trigger, 검증, references/scripts 분리를 강제한다. | DITTO가 스스로 행동 교정을 축적할 수 있다. 자동 등록은 금지하고 review 후 활성화해야 한다. |
