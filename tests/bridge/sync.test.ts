@@ -39,6 +39,19 @@ describe('bridge sync CLI', () => {
     expect(codex.exitCode).toBe(65);
   });
 
+  test('free-area-only edits leave managed block unchanged and preserve user lines', async () => {
+    const first = run(['bridge', 'sync', '--host', 'claude-code', '--output', 'json']);
+    expect(first.exitCode).toBe(0);
+    const beforeUserEdit = await readFile(join(dir, 'CLAUDE.md'), 'utf8');
+    await writeFile(join(dir, 'CLAUDE.md'), `${beforeUserEdit}\n사용자 추가 줄\n`);
+    const second = run(['bridge', 'sync', '--host', 'claude-code', '--output', 'json']);
+    expect(second.exitCode).toBe(0);
+    expect(JSON.parse(second.stdout.toString()).action).toBe('unchanged');
+    const after = await readFile(join(dir, 'CLAUDE.md'), 'utf8');
+    expect(after).toContain('사용자 추가 줄');
+    expect(after).toContain('shared instruction line 1');
+  });
+
   test('refuses sync when CLAUDE.md has multiple managed blocks', async () => {
     await writeFile(
       join(dir, 'CLAUDE.md'),

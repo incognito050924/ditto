@@ -84,6 +84,33 @@ describe('doctor surface', () => {
     ).toBe(false);
   });
 
+  test('--advisory keeps drift exit code at zero for surface', async () => {
+    await mkdir(join(dir, '.ditto'), { recursive: true });
+    await cp(
+      join(
+        repoRoot,
+        'tests',
+        'fixtures',
+        'doctor',
+        'claude-code',
+        'surface-mismatch',
+        'surfaces.json',
+      ),
+      join(dir, '.ditto', 'surfaces.json'),
+    );
+    const proc = run([
+      'doctor',
+      'surface',
+      '--host',
+      'claude-code',
+      '--advisory',
+      '--output',
+      'json',
+    ]);
+    expect(proc.exitCode).toBe(0);
+    expect(JSON.parse(proc.stdout.toString()).mismatch_count).toBeGreaterThan(0);
+  });
+
   test('home-scope skills are inventoried but excluded from mismatch comparison', async () => {
     await mkdir(join(home, '.claude', 'skills', 'extra-a'), { recursive: true });
     await mkdir(join(home, '.claude', 'skills', 'extra-b'), { recursive: true });

@@ -119,4 +119,24 @@ describe('doctor permissions', () => {
     expect(proc.exitCode).toBe(0);
     expect(JSON.parse(proc.stdout.toString()).findings).toHaveLength(0);
   });
+
+  test('--advisory keeps drift exit code at zero for permissions', async () => {
+    await cp(
+      join(repoRoot, 'tests', 'fixtures', 'doctor', 'claude-code', 'permissions-allow-wildcard'),
+      join(dir, '.claude'),
+      { recursive: true },
+    );
+    const proc = run([
+      'doctor',
+      'permissions',
+      '--host',
+      'claude-code',
+      '--advisory',
+      '--output',
+      'json',
+    ]);
+    expect(proc.exitCode).toBe(0);
+    const json = JSON.parse(proc.stdout.toString());
+    expect(json.dangerous_count).toBeGreaterThan(0);
+  });
 });

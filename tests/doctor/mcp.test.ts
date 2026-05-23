@@ -67,6 +67,12 @@ describe('doctor mcp', () => {
     ).toBe(true);
   });
 
+  test('rejects --advisory as usage error (mcp is informational only)', () => {
+    const proc = run(['doctor', 'mcp', '--advisory', '--output', 'json']);
+    expect(proc.exitCode).toBe(65);
+    expect(proc.stderr.toString()).toContain('does not support --advisory');
+  });
+
   test('extracts inline table env keys from codex user config', async () => {
     await mkdir(join(home, '.codex'), { recursive: true });
     await cp(

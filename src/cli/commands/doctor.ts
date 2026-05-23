@@ -138,10 +138,20 @@ const mcpCommand = defineCommand({
   args: {
     host: { type: 'string', required: false, description: 'Host: codex|claude-code' },
     output: { type: 'string', default: 'human', description: 'Output format: human|json' },
-    advisory: { type: 'boolean', default: false, description: 'Report drift but exit 0' },
+    advisory: {
+      type: 'boolean',
+      default: false,
+      description: 'Not supported for mcp (informational only); rejected as usage error',
+    },
   },
   run: async ({ args }) => {
     try {
+      if (args.advisory === true) {
+        writeError(
+          'doctor mcp does not support --advisory; mcp is informational and always exits 0',
+        );
+        process.exit(USAGE_ERROR_EXIT);
+      }
       const { format, adapters } = parseCommon(args);
       const repoRoot = await resolveRepoRootForCreate();
       const report = await collectMcpInventory(adapters, repoRoot);
