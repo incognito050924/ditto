@@ -33,7 +33,7 @@ ditto doctor instructions/permissions/mcp/surface 4개 명령이 host 설정과 
 - ac-5: 모든 명령 human/json + 결정적 exit code + --host 인자 + --advisory + read-only 보장.
 - ac-6: 산출 .ditto 파일이 self-validation 통과.
 - ac-7: bridge sync --host claude-code가 AGENTS.md → CLAUDE.md managed block만 갱신, 자유 영역 보존, --check 는 dry-run, --host codex는 usage error.
-- ac-8: HostAdapter interface가 codex/claude-code 두 구현으로 등록되고, 새 host 추가가 파일 한 개 + registry 등록으로 끝남(mock host로 회귀 검증).
+- ac-8: HostAdapter interface가 codex(primary)/claude-code(compatibility) 두 built-in host 구현으로 등록됨. doctor는 두 built-in host를 registry로 순회하고, host별 구조 차이는 missing/unverified로 드러냄. Codex AGENTS.md는 source of truth, Claude Code CLAUDE.md는 bridge sync projection. 새 host 자동 지원은 v0.2 범위 밖.
 
 ## Current git state
 - main 브랜치, wi_v01implement 완료(done)

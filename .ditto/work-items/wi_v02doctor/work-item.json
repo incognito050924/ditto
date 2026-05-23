@@ -91,7 +91,7 @@
     },
     {
       "id": "ac-8",
-      "statement": "HostAdapter interface가 codex와 claude-code 두 구현으로 등록되어 있고, 다른 host(예: opencode)를 추가하려면 src/core/hosts/<host>.ts 한 파일을 추가하고 registry에 등록하는 것만으로 doctor/bridge가 자동으로 인식한다. 테스트로 mock host adapter를 등록해 doctor 명령이 그 host도 처리하는지 회귀 확인.",
+      "statement": "HostAdapter interface가 codex(primary)와 claude-code(compatibility) 두 built-in host 구현으로 등록되어 있다. doctor는 registry에 등록된 built-in host(codex, claude-code)를 순회해 instructions/permissions/mcp/surface 진단을 수행한다. host별 구조 차이로 동일 진단이 어려운 항목은 missing 또는 unverified로 명시하고 조용히 누락하지 않는다. Codex의 AGENTS.md는 instruction source of truth이며, Claude Code의 CLAUDE.md는 bridge sync로 관리되는 projection이다. v0.2에서 새 host 자동 지원은 범위 밖이다.",
       "verdict": "pass",
       "evidence": [
         {

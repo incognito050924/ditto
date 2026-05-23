@@ -253,7 +253,7 @@ grep -q "사용자 추가 줄" CLAUDE.md
 - sync 후 doctor instructions --host claude-code가 일치 보고
 - `--host codex`는 exit 65 + stderr 메시지(codex는 AGENTS.md를 source로 직접 읽으므로 sync 불필요)
 
-## ac-8: HostAdapter 확장성 (mock host 회귀)
+## ac-8: HostAdapter built-in host 경계
 
 검증 (단위 테스트)
 ```
@@ -262,8 +262,10 @@ bun test tests/core/hosts/registry.test.ts
 
 테스트 내용:
 - 기본 registry에 codex, claude-code 두 host가 등록되어 있음
-- mock host adapter(id='mock')를 등록 후 doctor 명령이 mock도 호출
-- mock에서 의도된 finding을 반환하면 합산된 findings에 포함
+- registry에 등록된 adapter가 공통 interface로 permission 진단 core에 전달됨
+- Codex는 primary host로 AGENTS.md source of truth를 제공
+- Claude Code는 compatibility host로 CLAUDE.md projection과 host별 설정 inventory를 제공
+- 새 host 자동 지원은 v0.2 DoD가 아니며 v0.3+ 설계 대상으로 남김
 
 ## ac-6: 자체 검증 테스트
 
