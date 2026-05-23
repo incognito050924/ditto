@@ -6,6 +6,7 @@ import { commandLogEntry } from '~/schemas/evidence-log';
 import { glossary } from '~/schemas/glossary';
 import { languageLedger } from '~/schemas/language-ledger';
 import { runManifest } from '~/schemas/run-manifest';
+import { surfaceCatalog } from '~/schemas/surface-catalog';
 import { workItem } from '~/schemas/work-item';
 
 const REPO_ROOT = process.env.DITTO_REPO_ROOT ?? join(import.meta.dir, '..', '..');
@@ -95,6 +96,13 @@ describe('repo .ditto self-validation', () => {
       const data = await loadJson(join(dir, 'manifest.json'));
       runManifest.parse(data);
     }
+  });
+
+  test('.ditto/surfaces.json conforms to schema if present', async () => {
+    const path = join(DITTO_DIR, 'surfaces.json');
+    if (!(await Bun.file(path).exists())) return;
+    const data = await loadJson(path);
+    surfaceCatalog.parse(data);
   });
 
   test('every work-items/<id>/evidence/commands.jsonl line conforms to schema if present', async () => {

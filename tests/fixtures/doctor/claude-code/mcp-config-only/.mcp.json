@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "project-server": {
+      "command": "node",
+      "args": ["server.js"],
+      "env": {
+        "TOKEN": "redacted"
+      }
+    }
+  }
+}

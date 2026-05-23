@@ -5,4 +5,5 @@ export * from './glossary';
 export * from './language-ledger';
 export * from './reviewer-output';
 export * from './run-manifest';
+export * from './surface-catalog';
 export * from './work-item';

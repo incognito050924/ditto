@@ -1,4 +1,7 @@
 import { defineCommand, runMain } from 'citty';
+import '~/core/hosts';
+import { bridgeCommand } from './commands/bridge';
+import { doctorCommand } from './commands/doctor';
 import { runCommand } from './commands/run';
 import { verifyCommand } from './commands/verify';
 import { workCommand } from './commands/work';
@@ -13,6 +16,8 @@ const main = defineCommand({
     work: workCommand,
     run: runCommand,
     verify: verifyCommand,
+    doctor: doctorCommand,
+    bridge: bridgeCommand,
   },
 });
 
