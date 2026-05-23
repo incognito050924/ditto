@@ -44,7 +44,14 @@ const workStart = defineCommand({
     },
   },
   run: async ({ args }) => {
-    const format = parseOutputFormat(args.output);
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
     const repoRoot = await resolveRepoRootForCreate();
     const store = new WorkItemStore(repoRoot);
     const profile = args.profile as
@@ -107,7 +114,14 @@ const workStatus = defineCommand({
     },
   },
   run: async ({ args }) => {
-    const format = parseOutputFormat(args.output);
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
     let repoRoot: string;
     try {
       repoRoot = await resolveRepoRootForCreate();
@@ -163,6 +177,12 @@ const workHandoff = defineCommand({
       description: 'Work item id to hand off',
       required: true,
     },
+    base: {
+      type: 'string',
+      description:
+        'Git ref to diff against when collecting changed_files. Default tries origin/main, origin/master, main, master.',
+      required: false,
+    },
     output: {
       type: 'string',
       description: 'Output format: human|json',
@@ -170,22 +190,38 @@ const workHandoff = defineCommand({
     },
   },
   run: async ({ args }) => {
-    const format = parseOutputFormat(args.output);
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
     const repoRoot = await resolveRepoRootForCreate();
     const store = new WorkItemStore(repoRoot);
     try {
-      const result = await writeWorkItemHandoff(repoRoot, store, args.workId);
+      const result = await writeWorkItemHandoff(
+        repoRoot,
+        store,
+        args.workId,
+        args.base ? { base: args.base } : {},
+      );
       if (format === 'json') {
         writeJson({
           work_item_id: args.workId,
           final_verdict: result.completion.final_verdict,
           handoff_path: result.handoffPath,
           completion_path: result.completionPath,
+          base_used: result.baseUsed,
+          changed_files: result.collectedChangedFiles,
         });
       } else {
         writeHuman(`Handoff for ${args.workId}`);
-        writeHuman(`  final_verdict: ${result.completion.final_verdict}`);
-        writeHuman(`  handoff.md:    ${result.handoffPath}`);
+        writeHuman(`  final_verdict:  ${result.completion.final_verdict}`);
+        writeHuman(`  base_used:      ${result.baseUsed ?? '(none)'}`);
+        writeHuman(`  changed_files:  ${result.collectedChangedFiles.length}`);
+        writeHuman(`  handoff.md:     ${result.handoffPath}`);
         writeHuman(`  completion.json: ${result.completionPath}`);
       }
     } catch (err) {

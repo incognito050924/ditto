@@ -2,9 +2,22 @@ import { stderr, stdout } from 'node:process';
 
 export type OutputFormat = 'human' | 'json';
 
+export class InvalidOutputFormatError extends Error {
+  constructor(public readonly value: string) {
+    super(`invalid --output value "${value}"; expected one of: human, json`);
+    this.name = 'InvalidOutputFormatError';
+  }
+}
+
+/**
+ * Strict parser: only "human" or "json" are accepted. Undefined returns
+ * the human default. Any other value throws InvalidOutputFormatError so
+ * the caller can render a usage error and exit 65.
+ */
 export function parseOutputFormat(value: string | undefined): OutputFormat {
-  if (value === 'json') return 'json';
-  return 'human';
+  if (value === undefined) return 'human';
+  if (value === 'human' || value === 'json') return value;
+  throw new InvalidOutputFormatError(value);
 }
 
 export function writeJson(value: unknown): void {

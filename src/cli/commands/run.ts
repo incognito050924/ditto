@@ -77,7 +77,14 @@ const runRecord = defineCommand({
     },
   },
   run: async ({ args }) => {
-    const format = parseOutputFormat(args.output);
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
     const repoRoot = await resolveRepoRootForCreate();
     const workStore = new WorkItemStore(repoRoot);
     const runStore = new RunStore(repoRoot);
