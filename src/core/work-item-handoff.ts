@@ -205,8 +205,10 @@ export async function writeWorkItemHandoff(
     baseUsed = pickBaseRef(repoRoot, candidates);
   }
   const collected = collectChangedFiles(repoRoot, baseUsed);
-  // 기존 item.changed_files와 git에서 수집한 파일의 합집합
-  const merged = Array.from(new Set([...item.changed_files, ...collected]));
+  // collected가 단일 source of truth. 기존 item.changed_files는 무시(replace).
+  // 한 번 잘못된 base로 부풀린 list가 누적되지 않도록(D-2 결정). 수동 추가
+  // 보존이 필요해지면 별도 옵션(--merge 등)으로 v0.3+에서 분리.
+  const merged = collected;
   const unverifiedExtras: { item: string; reason: string; out_of_scope: boolean }[] = [];
   if (
     merged.length === 0 &&

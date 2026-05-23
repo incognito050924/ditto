@@ -168,19 +168,44 @@ describe('writeWorkItemHandoff', () => {
     expect(result.baseUsed).toBe(sha);
   });
 
-  test('handoff renders changed_files section when present', async () => {
+  test('replace (not union): stale changed_files give way to git collected on re-handoff', async () => {
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.email', 't@t'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.name', 't'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '--allow-empty', '-q', '-m', 'init'], {
+      cwd: workDir,
+      stdout: 'pipe',
+    });
+    const initSha = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: workDir, stdout: 'pipe' })
+      .stdout.toString()
+      .trim();
+    await Bun.write(join(workDir, 'real-change.txt'), 'hello\n');
+    Bun.spawnSync(['git', 'add', 'real-change.txt'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '-q', '-m', 'real change'], {
+      cwd: workDir,
+      stdout: 'pipe',
+    });
+
     const created = await store.create(makeInput());
+    // work item에 가짜 entry를 박고 started_at_sha를 init commit으로 박는다.
     await store.update(created.id, (cur) => ({
       ...cur,
-      changed_files: ['src/foo.ts', 'src/bar.ts'],
+      started_at_sha: initSha,
+      changed_files: ['never-existed.txt'],
       acceptance_criteria: cur.acceptance_criteria.map((c) =>
         c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
       ),
     }));
     const result = await writeWorkItemHandoff(workDir, store, created.id);
+    // collected만 남고 가짜 entry는 사라진다.
+    expect(result.completion.changed_files).toContain('real-change.txt');
+    expect(result.completion.changed_files).not.toContain('never-existed.txt');
     const handoffText = await Bun.file(result.handoffPath).text();
     expect(handoffText).toContain('## 변경 파일');
-    expect(handoffText).toContain('src/foo.ts');
-    expect(handoffText).toContain('src/bar.ts');
+    expect(handoffText).toContain('real-change.txt');
+    expect(handoffText).not.toContain('never-existed.txt');
+    // work-item.json도 갱신되어 가짜 entry가 사라져야 한다.
+    const after = await store.get(created.id);
+    expect(after.changed_files).not.toContain('never-existed.txt');
   });
 });
