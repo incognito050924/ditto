@@ -1,0 +1,83 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_v02doctor",
+  "title": "DITTO v0.2 doctor — host instruction/permission/MCP/skill drift 진단",
+  "source_request": "v0.2 doctor: host별 instruction, permission, MCP, skill drift를 실행 전에 드러낸다.",
+  "goal": "ditto doctor instructions/permissions/mcp/surface 4개 명령이 host 설정과 .ditto 기대값의 drift를 정확히 감지하고, human/json 두 형식으로 진단을 보고하며, drift 종류에 따라 일관된 exit code를 낸다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "ditto doctor instructions가 AGENTS.md와 host projection(CLAUDE.md 등)의 drift를 감지한다. 일치 시 exit 0, drift 시 [DECISION NEEDED: exit code]; --output json은 source/projection별 위치/요약/diff hash를 반환한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "ditto doctor permissions가 .claude/settings.json, .codex/config.toml의 위험 표면(dangerous mode, network-on, secrets-read)을 식별해 human/json으로 보고한다. 존재하지 않는 파일은 missing으로 표기하되 fail로 취급하지 않는다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "ditto doctor mcp가 MCP server/tool inventory를 [DECISION NEEDED: 수집 방법]으로 얻어 side effect label(read|write|network|unknown)과 함께 출력한다. inventory를 못 얻으면 정확히 'unavailable' 사유와 함께 unverified로 보고한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "ditto doctor surface가 skill/agent/command manifest와 실제 파일의 일치를 검사한다. manifest 형식과 위치는 [DECISION NEEDED]. 누락/추가/이름 불일치를 종류별로 분류해 출력한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "doctor의 모든 출력은 human/json 두 형식과 결정적 exit code 규약을 따른다. 정상 fixture와 의도적 drift fixture 양쪽을 tests/doctor/*.test.ts에서 검증한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-6",
+      "statement": "본 work item이 만들거나 갱신하는 모든 .ditto 파일이 schema 검증을 통과한다 (work-item.json, completion.json, language-ledger.json, evidence/commands.jsonl 등).",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [
+    {
+      "description": "host CLI(예: claude mcp list, codex setup) 호출 방식이 host 버전에 따라 다를 수 있다.",
+      "severity": "medium",
+      "mitigation": "[DECISION NEEDED: MCP/permissions를 host CLI 호출로 얻을지, 설정 파일 파싱으로 얻을지] 결정 후 호출 실패는 unverified로 보고하고 doctor 자체는 실패하지 않게."
+    },
+    {
+      "description": "drift 감지의 정의 모호: 무엇이 drift인가? 공백/줄 끝 차이도 drift인가?",
+      "severity": "medium",
+      "mitigation": "[DECISION NEEDED: drift 정의 — 정규화 후 비교 / sha256 비교 / managed block만 비교 / 등]"
+    },
+    {
+      "description": "doctor가 자동 fix를 한다면 사용자 변경을 덮을 위험.",
+      "severity": "high",
+      "mitigation": "[DECISION NEEDED: doctor는 read-only 진단만인가, --fix 옵션이 있는가] v0.2 기본은 read-only 권장. --fix는 v0.2 범위 밖으로 두는 안."
+    },
+    {
+      "description": "host projection 파일을 검사할 범위(어떤 host).",
+      "severity": "low",
+      "mitigation": "[DECISION NEEDED: v0.2가 다룰 host — Claude Code 단독 / + Codex / + OpenCode / etc]"
+    }
+  ],
+  "re_entry": {
+    "command": "ditto work resume wi_v02doctor",
+    "fresh_evidence_needed": [
+      "사용자 결정 사항(D-1~D-7) 채택",
+      "각 acceptance criterion 검증 결과"
+    ],
+    "owner": "workspace-write"
+  },
+  "runs": [],
+  "handoff_path": ".ditto/work-items/wi_v02doctor/handoff.md",
+  "created_at": "2026-05-24T17:50:00+09:00",
+  "updated_at": "2026-05-24T17:50:00+09:00"
+}
