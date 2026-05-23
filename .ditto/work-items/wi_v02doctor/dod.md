@@ -27,6 +27,7 @@ TMP=$(mktemp -d)
 cd "$TMP" && git init -q
 
 # 정상 fixture: AGENTS.md + CLAUDE.md (managed block에 AGENTS.md 본문 + 올바른 sha256)
+cp -r "$DITTO_SRC/tests/fixtures/doctor/codex/instructions-ok/." .
 cp -r "$DITTO_SRC/tests/fixtures/doctor/claude-code/instructions-ok/." .
 
 # 1) marker sha256 일치 + 내용 일치 → ok (claude-code)
@@ -97,12 +98,15 @@ test "$(jq -r '[.findings[] | select(.kind=="source_missing")] | length' out.jso
 ```
 cd "$TMP"
 # 정상 fixture (.claude/settings.json 안전 구성)
-cp -r "$DITTO_SRC/tests/fixtures/doctor/permissions-safe/." .
+mkdir -p .codex .claude
+cp "$DITTO_SRC/tests/fixtures/doctor/codex/permissions-safe/config.toml" .codex/config.toml
+cp "$DITTO_SRC/tests/fixtures/doctor/claude-code/permissions-safe/settings.json" .claude/settings.json
 "$DITTO_SRC"/dist/ditto doctor permissions --output json > out.json
 test "$(jq -r '.dangerous_count' out.json)" = "0"
 
 # 위험 fixture
-cp -r "$DITTO_SRC/tests/fixtures/doctor/permissions-dangerous/." . -f
+cp "$DITTO_SRC/tests/fixtures/doctor/codex/permissions-dangerous/config.toml" .codex/config.toml
+cp "$DITTO_SRC/tests/fixtures/doctor/claude-code/permissions-dangerous/settings.json" .claude/settings.json
 "$DITTO_SRC"/dist/ditto doctor permissions --output json > out.json
 test "$(jq -r '[.findings[] | select(.label=="dangerous_mode")] | length' out.json)" -ge 1
 ```
@@ -117,8 +121,8 @@ test "$(jq -r '[.findings[] | select(.label=="dangerous_mode")] | length' out.js
 검증
 ```
 cd "$TMP"
-# D-4=(b) 설정 파일 파싱 가정
-cp -r "$DITTO_SRC/tests/fixtures/doctor/mcp-config-only/." .
+# D-4=(a) 설정 파일 파싱 가정
+cp -r "$DITTO_SRC/tests/fixtures/doctor/claude-code/mcp-config-only/." .
 "$DITTO_SRC"/dist/ditto doctor mcp --output json > out.json
 test "$(jq -r '.servers | length' out.json)" -ge 1
 
@@ -138,13 +142,15 @@ test "$(jq -r '.unavailable_reason' out.json | wc -c)" -gt 1
 검증
 ```
 cd "$TMP"
-# D-5=(c) mock fixture만 lint
-cp -r "$DITTO_SRC/tests/fixtures/doctor/surface-ok/." .
+# D-5=(a) mock fixture만 lint
+mkdir -p .ditto .claude/commands
+cp "$DITTO_SRC/tests/fixtures/doctor/claude-code/surface-ok/surfaces.json" .ditto/surfaces.json
+cp "$DITTO_SRC/tests/fixtures/doctor/claude-code/surface-ok/hello.md" .claude/commands/hello.md
 "$DITTO_SRC"/dist/ditto doctor surface --output json > out.json
 test "$(jq -r '.mismatch_count' out.json)" = "0"
 
 # manifest와 파일 불일치 fixture
-cp -r "$DITTO_SRC/tests/fixtures/doctor/surface-mismatch/." . -f
+cp "$DITTO_SRC/tests/fixtures/doctor/claude-code/surface-mismatch/surfaces.json" .ditto/surfaces.json
 "$DITTO_SRC"/dist/ditto doctor surface --output json > out.json
 test "$(jq -r '[.findings[] | select(.kind=="missing_file")] | length' out.json)" -ge 1
 ```
@@ -165,7 +171,8 @@ done
 
 # read-only 보장 (D-3)
 cd "$TMP"
-cp -r "$DITTO_SRC/tests/fixtures/doctor/instructions-ok/." .
+cp -r "$DITTO_SRC/tests/fixtures/doctor/codex/instructions-ok/." .
+cp -r "$DITTO_SRC/tests/fixtures/doctor/claude-code/instructions-ok/." .
 HASH_BEFORE=$(find . -type f -name "*.md" -exec sha256sum {} \; | sort)
 "$DITTO_SRC"/dist/ditto doctor instructions
 HASH_AFTER=$(find . -type f -name "*.md" -exec sha256sum {} \; | sort)

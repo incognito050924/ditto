@@ -8,56 +8,204 @@
     {
       "id": "ac-1",
       "statement": "ditto doctor instructions가 두 host(codex, claude-code)에 대해 drift를 감지한다. --host 미지정 시 양쪽 모두 검사. claude-code는 CLAUDE.md managed block의 marker sha256/실제 내용 sha256/AGENTS.md 정규화 sha256 셋 비교. codex는 AGENTS.md 존재 + marker 부재 검사. 일치 시 exit 0, drift 시 [DECISION NEEDED: D-7 exit code]. --output json은 host별로 path/markerSource/markerSha256/actualSha256/sourceSha256/findings를 반환.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/doctor/instructions.test.ts",
+          "summary": "exit 0"
+        }
+      ]
     },
     {
       "id": "ac-2",
       "statement": "ditto doctor permissions가 두 host의 위험 표면을 식별한다. codex는 .codex/config.toml의 sandbox_mode/approval_policy/network_access 같은 필드, claude-code는 .claude/settings.json의 permissions/defaultMode/enabledMcpjsonServers 같은 필드를 host adapter로 정규화. 위험 표면 enum: dangerous_mode|network_on|secrets_read|write_outside_workspace|approval_bypass. 파일 미존재는 missing(fail 아님). --host로 좁힘 가능.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/doctor/permissions.test.ts",
+          "summary": "exit 0"
+        }
+      ]
     },
     {
       "id": "ac-3",
       "statement": "ditto doctor mcp가 두 host 설정 파일을 직접 파싱해 server inventory를 출력한다. codex는 ~/.codex/config.toml의 [mcp_servers.*] (scope=user). claude-code는 공식 scope 순서대로: (1) repo 루트의 .mcp.json (scope=project), (2) ~/.claude.json의 현재 project entry mcpServers (scope=local) + user entry mcpServers (scope=user), (3) plugin/managed MCP와 .claude/settings.json의 mcpServers는 scope=unverified로 별도 보고 (합산 카운트 제외). 출력 schema: { servers: [{ host, scope, name, source_file, command?, args?, env_keys?, side_effect_label }] }. host별 수집 불가 시 정확한 unavailable 사유와 함께 unverified.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/doctor/mcp.test.ts",
+          "summary": "exit 0"
+        }
+      ]
     },
     {
       "id": "ac-4",
-      "statement": "ditto doctor surface가 두 host의 skill/agent/command/plugin 디렉터리 인벤토리를 수집한다. v0.2는 manifest schema 검증 없이 발견과 missing/extra/renamed 분류만 보고(Phase 9까지 mock). claude-code는 ~/.claude/skills/, .claude/agents/, .claude/commands/. codex는 ~/.codex/plugins/, .codex/plugins/. --host로 좁힘 가능.",
-      "verdict": "unverified",
-      "evidence": []
+      "statement": "ditto doctor surface가 두 host의 skill/agent/command/plugin 디렉터리 인벤토리를 수집한다. v0.2는 runtime manifest schema 검증 없이 발견과 missing/extra/renamed 분류만 보고(Phase 9까지 mock). expected surface mock catalog는 schema_version=0.1.0인 .ditto/surfaces.json(src/schemas/surface-catalog.ts)로 검증한다. claude-code는 ~/.claude/skills/, .claude/agents/, .claude/commands/. codex는 ~/.codex/plugins/, .codex/plugins/. --host로 좁힘 가능.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/doctor/surface.test.ts",
+          "summary": "exit 0"
+        }
+      ]
     },
     {
       "id": "ac-5",
       "statement": "doctor의 모든 출력은 human/json 두 형식, 결정적 exit code 규약(D-7), --host 인자(D-10), --advisory 옵션을 일관되게 따른다. 정상 fixture와 의도적 drift fixture를 host별로 tests/doctor/*.test.ts에서 검증.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/doctor",
+          "summary": "exit 0"
+        }
+      ]
     },
     {
       "id": "ac-6",
       "statement": "본 work item이 만들거나 갱신하는 모든 .ditto 파일이 schema 검증을 통과한다 (work-item.json, completion.json, language-ledger.json, evidence/commands.jsonl 등).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/repo-self-validation.test.ts",
+          "summary": "exit 0"
+        }
+      ]
     },
     {
       "id": "ac-7",
       "statement": "ditto bridge sync --host claude-code가 AGENTS.md를 source로 CLAUDE.md의 managed block을 갱신한다. marker가 없으면 파일 끝에 새 marker block을 append하고 stderr로 알린다. marker가 있으면 그 안만 교체하고 sha256 속성을 갱신한다. managed block 밖의 사용자 자유 영역은 어떤 경우에도 수정되지 않는다. --check는 dry-run. --host codex는 codex가 AGENTS.md 자체를 source로 읽으므로 sync 대상이 아니라 usage error로 거부(D-11).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/bridge/sync.test.ts",
+          "summary": "exit 0"
+        }
+      ]
     },
     {
       "id": "ac-8",
       "statement": "HostAdapter interface가 codex와 claude-code 두 구현으로 등록되어 있고, 다른 host(예: opencode)를 추가하려면 src/core/hosts/<host>.ts 한 파일을 추가하고 registry에 등록하는 것만으로 doctor/bridge가 자동으로 인식한다. 테스트로 mock host adapter를 등록해 doctor 명령이 그 host도 처리하는지 회귀 확인.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/hosts/registry.test.ts",
+          "summary": "exit 0"
+        }
+      ]
     }
   ],
-  "status": "in_progress",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
-  "changed_files": [],
+  "changed_files": [
+    ".ditto/knowledge/CONTEXT.md",
+    ".ditto/knowledge/adr/ADR-0001-runtime-stack.md",
+    ".ditto/knowledge/adr/ADR-0002-schema-source-of-truth.md",
+    ".ditto/knowledge/glossary.json",
+    ".ditto/work-items/wi_v01bootstrap/completion.json",
+    ".ditto/work-items/wi_v01bootstrap/decisions.md",
+    ".ditto/work-items/wi_v01bootstrap/handoff.md",
+    ".ditto/work-items/wi_v01bootstrap/language-ledger.json",
+    ".ditto/work-items/wi_v01bootstrap/language.md",
+    ".ditto/work-items/wi_v01bootstrap/progress.md",
+    ".ditto/work-items/wi_v01bootstrap/work-item.json",
+    ".ditto/work-items/wi_v01implement/completion.json",
+    ".ditto/work-items/wi_v01implement/context-packet.md",
+    ".ditto/work-items/wi_v01implement/dod.md",
+    ".ditto/work-items/wi_v01implement/handoff.md",
+    ".ditto/work-items/wi_v01implement/language-ledger.json",
+    ".ditto/work-items/wi_v01implement/plan.md",
+    ".ditto/work-items/wi_v01implement/progress.md",
+    ".ditto/work-items/wi_v01implement/rollback.md",
+    ".ditto/work-items/wi_v01implement/work-item.json",
+    ".ditto/work-items/wi_v02doctor/context-packet.md",
+    ".ditto/work-items/wi_v02doctor/dod.md",
+    ".ditto/work-items/wi_v02doctor/language-ledger.json",
+    ".ditto/work-items/wi_v02doctor/plan.md",
+    ".ditto/work-items/wi_v02doctor/progress.md",
+    ".ditto/work-items/wi_v02doctor/rollback.md",
+    ".ditto/work-items/wi_v02doctor/work-item.json",
+    ".gitignore",
+    "biome.json",
+    "bun.lockb",
+    "package.json",
+    "reports/harnesses/ditto-application-plan.md",
+    "schemas/command-log-entry.schema.json",
+    "schemas/completion-contract.schema.json",
+    "schemas/glossary.schema.json",
+    "schemas/language-ledger.schema.json",
+    "schemas/reviewer-output.schema.json",
+    "schemas/run-manifest.schema.json",
+    "schemas/work-item.schema.json",
+    "scripts/export-schemas.ts",
+    "src/cli/commands/run.ts",
+    "src/cli/commands/verify.ts",
+    "src/cli/commands/work.ts",
+    "src/cli/index.ts",
+    "src/cli/util.ts",
+    "src/core/evidence-store.ts",
+    "src/core/fs.ts",
+    "src/core/id.ts",
+    "src/core/run-store.ts",
+    "src/core/work-item-handoff.ts",
+    "src/core/work-item-store.ts",
+    "src/schemas/common.ts",
+    "src/schemas/completion-contract.ts",
+    "src/schemas/evidence-log.ts",
+    "src/schemas/glossary.ts",
+    "src/schemas/index.ts",
+    "src/schemas/language-ledger.ts",
+    "src/schemas/reviewer-output.ts",
+    "src/schemas/run-manifest.ts",
+    "src/schemas/work-item.ts",
+    "tests/core/evidence-store.test.ts",
+    "tests/core/fs.test.ts",
+    "tests/core/id.test.ts",
+    "tests/core/run-store.test.ts",
+    "tests/core/work-item-handoff.test.ts",
+    "tests/core/work-item-store.test.ts",
+    "tests/fixtures/scenarios/password-strength/.ditto/knowledge/CONTEXT.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/knowledge/glossary.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/diff.patch",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/manifest.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/prompt.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/result.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/completion.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/decisions.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/evidence/commands.jsonl",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/handoff.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/language-ledger.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/language.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/progress.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/reviews/rv_pwdcheck1.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/work-item.json",
+    "tests/schemas/fixture-validation.test.ts",
+    "tests/schemas/repo-self-validation.test.ts",
+    "tsconfig.json",
+    "src/cli/commands/bridge.ts",
+    "src/cli/commands/doctor.ts",
+    "src/core/bridge-sync.ts",
+    "src/core/hosts/",
+    "src/core/instruction-bridge.ts",
+    "src/core/mcp-inventory.ts",
+    "src/core/permission-inventory.ts",
+    "src/core/surface-inventory.ts",
+    "src/schemas/surface-catalog.ts",
+    "tests/bridge/",
+    "tests/core/bridge-sync.test.ts",
+    "tests/core/hosts/",
+    "tests/core/instruction-bridge.test.ts",
+    "tests/doctor/",
+    "tests/fixtures/doctor/"
+  ],
   "risks": [
     {
       "description": "host CLI(예: claude mcp list, codex setup) 호출 방식이 host 버전에 따라 다를 수 있다.",
@@ -80,16 +228,9 @@
       "mitigation": "[DECISION NEEDED: v0.2가 다룰 host — Claude Code 단독 / + Codex / + OpenCode / etc]"
     }
   ],
-  "re_entry": {
-    "command": "ditto work resume wi_v02doctor",
-    "fresh_evidence_needed": [
-      "사용자 결정 사항(D-1~D-7) 채택",
-      "각 acceptance criterion 검증 결과"
-    ],
-    "owner": "workspace-write"
-  },
   "runs": [],
   "handoff_path": ".ditto/work-items/wi_v02doctor/handoff.md",
   "created_at": "2026-05-24T17:50:00+09:00",
-  "updated_at": "2026-05-24T18:30:00+09:00"
+  "updated_at": "2026-05-23T19:57:03.033Z",
+  "closed_at": "2026-05-23T19:57:02.974Z"
 }

@@ -161,6 +161,10 @@ Claude Code adapter (P-0의 `loadMcpServers`) 탐색 순서 (공식 https://code
 - D-5 (a) 채택: 두 host adapter의 `loadSurfaceInventory` 결과를 *발견*과 *missing/extra* 분류로만 출력. Phase 9 확정 전엔 schema 검증 없음.
 - 출력 schema: `{ surfaces: [{ host, kind: 'skill'|'agent'|'command'|'plugin', id, path, mismatch?: 'missing_file'|'extra_file'|'renamed' }] }`.
 - 두 host의 디렉터리 구조 차이는 host adapter가 흡수, surface-inventory는 공통 view만.
+- v0.2의 expected surface mock catalog는 repo-local `.ditto/surfaces.json`을 사용한다.
+  - schema: `src/schemas/surface-catalog.ts`
+  - 형식: `{ "schema_version": "0.1.0", "surfaces": [{ "host": "codex"|"claude-code", "kind": "skill"|"agent"|"command"|"plugin", "id": string, "path": repo-relative-path }] }`
+  - 이 catalog는 Phase 9의 실제 skill catalog가 확정될 때 교체 가능한 mock 계약이며, runtime host manifest 형식 검증은 하지 않는다.
 
 ### P-5. doctor CLI 명령 4개 (`src/cli/commands/doctor.ts`)
 - `ditto doctor instructions`
