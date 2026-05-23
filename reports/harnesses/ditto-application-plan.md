@@ -2,7 +2,7 @@
 title: "reports/harnesses 기반 DITTO 적용 계획"
 tier: 1
 repo: ditto
-last_updated: 2026-05-22
+last_updated: 2026-05-23
 kind: implementation-plan
 scope: "PURPOSE.md의 하네스 요구를 기준으로 reports/harnesses 하위 Markdown 분석 문서를 DITTO 구현 계획으로 통합한다."
 inputs:
@@ -51,6 +51,11 @@ PURPOSE.md 기준 DITTO의 성공 기준은 다음으로 정리한다.
 6. 병렬 subagent는 소유 범위, 금지 범위, 예산, merge owner, evidence path를 가진다.
 7. sandbox, permission, network, MCP, external analyzer는 profile과 doctor로 추적된다.
 8. 하네스 자체 변경은 regression evidence 없이 개선으로 간주하지 않는다.
+9. 사용자와 agent가 쓰는 프로젝트별 핵심 용어는 ubiquitous language로 합의하고, `.ditto/knowledge/CONTEXT.md`에 동기화한다.
+10. 사용자 질문 전에는 접근 가능한 코드, 산출물, 기록, 웹 근거로 스스로 답할 수 있는지 먼저 확인한다.
+11. 출력 전에는 약어, 추측, 과대표현, 위치만 언급하는 응답, 미검증 완료 선언을 lightweight self-check로 걸러낸다.
+12. long-running work item은 `partial|unverified` 상태로 조용히 방치하지 않고, 재진입 후보와 handoff 상태를 드러낸다.
+13. token 비용은 multi-model 검토뿐 아니라 context packet, subagent, evidence preview, 재실행 정책의 공통 budget으로 관리한다.
 
 ## 2. 적용하지 않을 것
 
@@ -63,7 +68,7 @@ PURPOSE.md 기준 DITTO의 성공 기준은 다음으로 정리한다.
 | full append-only replay runtime | provider 내부 event를 안정적으로 재현하기 어렵다. | work item/run/evidence ledger부터 둔다. |
 | live token-level ContextAssembler | provider context assembly를 직접 통제하지 못한다. | handoff용 context packet generator부터 만든다. |
 | model-based approval classifier | 감독을 다시 모델에 맡기는 구조가 된다. | deterministic deny, native approval, sandbox, audit를 먼저 쓴다. |
-| 항상 켜진 multi-model council | 비용과 지연이 크고 작은 작업에는 과하다. | opt-in expensive review command로 둔다. |
+| 항상 켜진 multi-model council | 비용과 지연이 크고 작은 작업에는 과하다. | evaluator lane에는 cross-provider reviewer를 1급 기능으로 두고, 다자 council만 opt-in expensive command로 둔다. |
 | 대형 benchmark platform | repo 초기 단계에서는 유지 비용이 더 크다. | smoke/regression/e2e evidence부터 축적한다. |
 
 ## 3. 목표 구조
@@ -84,6 +89,7 @@ DITTO는 대화 transcript를 신뢰 가능한 유일 상태로 두지 않는다
       work-item.json
       progress.md
       decisions.md
+      language.md
       context-packet.md
       handoff.md
       evidence/
@@ -102,6 +108,7 @@ DITTO는 대화 transcript를 신뢰 가능한 유일 상태로 두지 않는다
       eval.md
   knowledge/
     CONTEXT.md
+    glossary.json
     adr/
     out-of-scope.md
 ```
@@ -112,6 +119,9 @@ DITTO는 대화 transcript를 신뢰 가능한 유일 상태로 두지 않는다
 - `progress.md`, `decisions.md`, `handoff.md`는 사람이 이어받기 위한 view다.
 - 큰 출력은 `evidence/`와 `runs/`에 두고, context에는 path, hash, 짧은 요약만 넣는다.
 - summary는 원본을 대체하지 않는다.
+- `language.md`는 해당 work item에서 새로 합의되거나 수정된 용어를 기록한다.
+- `.ditto/knowledge/CONTEXT.md`는 현재 프로젝트의 ubiquitous language와 domain glossary의 사람이 읽는 원본이다.
+- `.ditto/knowledge/glossary.json`은 lint, prompt build, self-check에서 쓰는 기계 판독 view다.
 
 ### 3.2 core interface
 
@@ -127,6 +137,28 @@ v0에서 바로 코드로 크게 만들지는 않더라도, 다음 책임선은 
 | `ContextPacket` | 최신 goal/evidence 중심 run prompt | generated Markdown |
 | `Evaluator` | generator와 분리된 검증 report | reviewer/verifier contract |
 | `InstructionBridge` | AGENTS/CLAUDE/rules/skills drift 관리 | projection + doctor |
+| `LanguageLedger` | 프로젝트 용어 합의, 변경, 적용 범위 추적 | `CONTEXT.md` + `glossary.json` + work item `language.md` |
+| `SelfCheck` | 출력 전 정제, 질문 전 self-answer, 완료 주장 lint | Stop hook + completion contract lint |
+
+DITTO 구현 자체도 Deep Module 원칙을 따른다. public interface는 좁고 안정적으로 유지하고, provider별 실행, evidence 수집, lint, sync 같은 복잡도는 interface 뒤의 깊은 구현으로 숨긴다.
+
+새 interface는 한 번에 전면 적용하지 않고 다음 순서로 통합한다.
+
+| Interface | v0.1 | v0.3 | v0.6 |
+|---|---|---|---|
+| `SelfCheck` | contract fixture와 정적 lint 규칙 | context packet의 expected output contract에 포함 | Stop hook에서 완료/질문/표현 lint 활성화 |
+| `LanguageLedger` | `CONTEXT.md`, `glossary.json`, `language.md` fixture | prompt build와 context packet에 glossary 반영 | doctor/lint와 Stop hook에서 불일치와 미합의 용어 감지 |
+| `PolicyGate` | schema와 preflight fixture | provider wrapper 실행 전 profile 점검 | hook과 safety shim evidence 연결 |
+
+### 3.3 공통 운영 예산
+
+token 비용은 특정 기능의 옵션이 아니라 모든 phase의 공통 제약이다.
+
+- context packet은 target/max token 또는 문자 수 budget을 가진다.
+- subagent는 time cap, output cap, evidence preview cap, 재시도 횟수를 가진다.
+- evaluator는 기본 reviewer와 expensive council을 분리하고, partial result도 artifact로 남긴다.
+- evidence collector는 큰 로그를 context에 직접 넣지 않고 path/hash/preview만 포함한다.
+- 같은 실패를 반복 실행할 때는 새 근거가 생겼는지 기록하고, 없으면 재실행을 막거나 명시적으로 `repeat-without-new-evidence`로 남긴다.
 
 ## 4. 구현 로드맵
 
@@ -139,14 +171,21 @@ v0에서 바로 코드로 크게 만들지는 않더라도, 다음 책임선은 
 - `work-item.json` schema
 - `manifest.json` schema
 - `completion contract`
+- `completion self-check contract`
 - `reviewer/evaluator output contract`
 - `provider profile matrix`
+- ubiquitous language 합의 workflow와 `CONTEXT.md`/`glossary.json` schema
+- ask-user policy: 질문 전 self-answer 가능성 점검 contract
+- persistence policy: `partial|unverified|blocked` work item의 재진입/알림 규칙
+- `.ditto` commit/sync policy: 다른 PC나 새 세션에서 이어받기 위한 포함/제외 범위
 - 샘플 `.ditto/work-items/<id>`와 `.ditto/runs/<id>` fixture
 
 검증:
 
 - fixture만 읽고도 사람이 목표, 진행 상태, 검증 결과, 다음 행동을 설명할 수 있어야 한다.
 - schema validation 실패 사례를 포함한다.
+- 합의되지 않은 용어, 근거 없는 완료 주장, 불필요한 사용자 질문 fixture가 self-check에서 실패해야 한다.
+- `.ditto` sync fixture만으로 다른 clone/session에서 work item 상태와 handoff를 재구성할 수 있어야 한다.
 
 근거:
 
@@ -171,11 +210,14 @@ v0에서 바로 코드로 크게 만들지는 않더라도, 다음 책임선은 
 - 새 work item을 만들 때 source request, goal, acceptance criteria, owner profile을 기록한다.
 - 실행 결과를 run으로 연결한다.
 - handoff는 변경 파일, 결정, 검증, 미검증, 다음 fresh evidence를 포함한다.
+- `partial|unverified|blocked` 상태는 명시적 next evidence 또는 re-entry command를 가져야 한다.
+- commit 대상 `.ditto` 파일과 로컬 전용 artifact를 구분한다.
 
 검증:
 
 - 새 work item 생성, run 연결, handoff 생성까지 golden fixture와 diff로 확인한다.
 - dirty git 상태에서 기존 사용자 변경을 덮거나 삭제하지 않는지 확인한다.
+- 새 clone/session에서 committed `.ditto` 상태만으로 `work status`와 `work handoff`가 동작해야 한다.
 
 근거:
 
@@ -262,6 +304,7 @@ wrapper가 남길 것:
 
 ```text
 intent/context
+  -> self-answer check before asking user
   -> clarify only if necessary
   -> plan
   -> plan-check
@@ -277,11 +320,18 @@ intent/context
 |---|---|---|
 | intent/context | read-only | goal, acceptance criteria, unknowns |
 | plan | read-only | plan artifact, verification plan |
-| plan-check | read-only | coverage/conflict/risk verdict |
+| plan-check | read-only | coverage/conflict/risk/devil's-advocate verdict |
 | execute | scoped write | implementation summary, changed files |
 | verify | read-only 우선 | test/eval/browser evidence |
 | review | read-only | findings with file/path/evidence |
 | handoff | write to `.ditto` only | handoff.md, updated work item state |
+
+plan-check 책임:
+
+- 계획이 acceptance criteria를 빠뜨리지 않았는지 확인한다.
+- 기존 가설을 의도적으로 반박하고, 반례와 더 단순한 대안을 제시한다.
+- 근거가 약한 전제는 `assumption` 또는 `unknown`으로 낮춘다.
+- 실행 전에 충돌, 되돌리기 어려운 결정, 비용이 큰 검증을 드러낸다.
 
 completion contract 필수 필드:
 
@@ -293,10 +343,27 @@ completion contract 필수 필드:
 - 남은 risk
 - 다음 session handoff 위치
 
+사용자 질문 gate:
+
+- 질문 전에 코드, 문서, 기존 `.ditto` artifact, 접근 가능한 외부 근거로 답할 수 있는지 확인한다.
+- 스스로 답할 수 없고 제품 의미나 되돌리기 어려운 판단이 필요한 경우에만 질문한다.
+- 질문에는 사용자가 현재 응답만 보고 판단할 수 있는 충분한 맥락과 선택 결과의 차이를 포함한다.
+- 절차 위임형 질문, 안부성 질문, 자동 꼬리물기 추천은 self-check 실패로 본다.
+
+출력 전 self-check:
+
+- 합의되지 않은 약어와 프로젝트 용어를 `LanguageLedger`와 대조한다.
+- 위치, ID, 제목만 언급하고 판단 맥락을 빠뜨린 응답을 막는다.
+- 추측, 과대표현, 미검증 완료 선언을 completion contract 위반으로 기록한다.
+- 근거 없는 단정을 막고, 확실한 근거가 없으면 `모름`, `근거 부족`, `미검증`으로 표시한다.
+- 사용자가 이전 대화나 코드를 다시 읽지 않아도 판단할 수 있도록 필수 맥락과 근거 요약을 함께 제공한다.
+- 검증하지 못한 항목은 `unverified`로 남기고 완료 문장과 분리한다.
+
 검증:
 
 - 검증 명령이 없으면 완료가 아니라 `unverified`로 기록한다.
 - 일부러 결함 있는 diff를 주고 reviewer가 `partial|fail`로 판정하는지 확인한다.
+- 불필요한 사용자 질문 fixture와 과대표현 응답 fixture가 self-check에서 실패해야 한다.
 
 근거:
 
@@ -357,6 +424,15 @@ evidence collector 원칙:
 - `code-reviewer`
 - `security-reviewer`
 - `e2e-reviewer`
+- `cross-provider-reviewer`
+
+cross-provider reviewer:
+
+- generator와 다른 provider 또는 모델 family를 우선 사용한다.
+- 같은 provider 안에서도 성격이 다른 모델 조합을 reviewer matrix에 둘 수 있다.
+- 비용 budget 안에서 기본 evaluator lane의 1급 선택지로 둔다.
+- multi-model council은 여러 reviewer의 정반합이 필요한 고위험 변경에만 opt-in으로 실행한다.
+- provider unavailable 또는 budget 초과는 `unverified`가 아니라 `review-not-run` 사유와 함께 별도 기록한다.
 
 reviewer output:
 
@@ -382,6 +458,8 @@ E2E 방향:
 
 - 실패하는 테스트/브라우저 시나리오가 `fail` 또는 `partial`로 기록되어야 한다.
 - 브라우저 설치 실패는 성공으로 포장하지 않고 `unverified`로 남긴다.
+- 같은 변경을 generator와 다른 provider/model reviewer가 독립 contract로 평가한 fixture를 포함한다.
+- 최소 두 provider family와 같은 provider 내 대체 model family를 표현하는 reviewer matrix fixture를 둔다.
 
 근거:
 
@@ -405,6 +483,7 @@ child work item contract:
 - merge owner
 - budget/time cap
 - cancel/timeout policy
+- token/output cap
 
 처음 적용할 사용처:
 
@@ -420,6 +499,7 @@ child work item contract:
 - nested delegation은 기본 금지한다.
 - child transcript 전체를 parent context에 넣지 않는다.
 - parent는 answer, evidence, uncertainty만 받는다.
+- child가 `partial|unverified`로 끝나면 parent work item에 재진입 후보로 연결한다.
 
 검증:
 
@@ -442,7 +522,7 @@ child work item contract:
 - SessionStart: work item/context pointer 표시
 - PreToolUse: 위험 command, secret path, workspace 밖 write 감지
 - PostToolUse: command/file/tool result evidence 기록
-- Stop: completion contract 검사와 handoff 생성 유도
+- Stop: completion contract와 self-check 검사, handoff 생성 유도
 
 tool safety shim:
 
@@ -462,6 +542,7 @@ tool safety shim:
 
 - block 대상 command가 실제 차단되거나 명확히 warning/evidence로 남아야 한다.
 - hook 실패가 사용자 작업을 불필요하게 망가뜨리지 않는지 확인한다.
+- Stop hook은 검증 없는 완료 주장, 불필요한 사용자 질문, 합의되지 않은 용어 사용을 lint해야 한다.
 
 근거:
 
@@ -502,11 +583,15 @@ knowledge 규칙:
 - ADR은 되돌리기 어려운 결정만 저장한다.
 - out-of-scope는 반복 제안과 반려 사유를 보존한다.
 - stale memory는 owner, timestamp, freshness check가 있어야 한다.
+- `agent-intelligence-memory-report.md`는 DITTO 자체 지식관리 요구의 source reference로 연결한다.
+- Karpathy LLM Wiki에서 흡수한 원칙은 그대로 복사하지 않고 skill/reference 또는 regression fixture로 분리한다.
+- 외부 reference에서 온 지식은 source, imported_at, freshness policy를 남긴다.
 
 검증:
 
 - skill manifest와 실제 파일의 drift를 lint한다.
 - description만으로 routing은 가능하되 절차 shortcut이 생기지 않는지 fixture로 확인한다.
+- `CONTEXT.md`와 `glossary.json`이 불일치하면 doctor/lint가 실패해야 한다.
 
 근거:
 
@@ -557,6 +642,35 @@ knowledge 규칙:
 - `deepagents.md`: better-harness의 train/holdout/scorecard/proposal artifact.
 - `andrej-karpathy-skills.md`: 나쁜 예/좋은 예 pair를 regression prompt로 사용할 수 있다.
 
+### Phase 11: 팀업 통합
+
+목표: 개인 harness를 팀의 backlog, issue, project, 문서 시스템과 연결하되 v0의 evidence ledger를 흐리지 않는다.
+
+범위:
+
+- GitHub Issues와 GitHub Projects의 work item backlink
+- scrum backlog item과 DITTO work item의 상태 mapping
+- Confluence 또는 지식베이스 저장소로 handoff/decision publish
+- 팀 공유 glossary와 repo-local `CONTEXT.md` 동기화
+- multi-repo workspace에서 공통 work item과 repo별 run/evidence 연결
+
+원칙:
+
+- v0.1-v0.6의 local-first ledger가 먼저다.
+- 외부 도구는 source of truth를 빼앗지 않고 pointer와 sync artifact를 남긴다.
+- 외부 write는 profile과 audit log를 가진 명시 명령으로만 수행한다.
+- 팀 도구 unavailable 상태는 작업 완료 여부와 분리해 기록한다.
+
+검증:
+
+- GitHub/Confluence API 없이도 dry-run fixture로 payload와 mapping을 검증한다.
+- sync 실패가 work item의 local handoff를 손상하지 않아야 한다.
+
+상태:
+
+- v0 구현에서는 deferred다.
+- PURPOSE의 팀업 요구를 추적하기 위해 phase는 남기되, local evidence ledger와 session resume이 안정된 뒤 시작한다.
+
 ## 5. 우선순위별 첫 구현 묶음
 
 ### v0.1: Evidence-bearing work ledger
@@ -567,11 +681,16 @@ knowledge 규칙:
 - `work start/status/handoff`
 - `run record`
 - completion contract
+- completion self-check contract
+- ubiquitous language ledger와 `CONTEXT.md`/`glossary.json` fixture
+- ask-user policy fixture
+- `.ditto` commit/sync policy
 - fixture 기반 schema test
 
 완료 기준:
 
 - 한 작업의 목표, 변경, 검증, 미검증, handoff를 대화 없이 artifact만으로 재구성할 수 있다.
+- 다른 clone/session에서 committed `.ditto` 파일만으로 현재 상태와 다음 fresh evidence를 확인할 수 있다.
 
 ### v0.2: Doctor and instruction bridge
 
@@ -609,10 +728,14 @@ knowledge 규칙:
 - `verify-work`
 - Playwright CLI evidence path
 - review result schema
+- cross-provider reviewer profile
+- reviewer model/provider matrix fixture
+- expensive multi-model council command는 별도 opt-in
 
 완료 기준:
 
 - 구현 agent 결과를 별도 read-only verifier가 acceptance criteria별로 pass/partial/fail/unverified로 판정한다.
+- 고위험 변경은 generator와 다른 provider/model reviewer가 독립 verdict를 남길 수 있다.
 
 ### v0.5: Bounded subagent and skill catalog
 
@@ -621,12 +744,14 @@ knowledge 규칙:
 - child work item contract
 - file overlap gate
 - codemap/explore/review subagents
+- subagent budget envelope
 - 초기 skill pack manifest
 - skill drift lint
 
 완료 기준:
 
 - 독립 조사/검증 작업을 parent context 오염 없이 실행하고, 결과가 evidence summary로 병합된다.
+- child의 `partial|unverified` 상태가 parent handoff와 재진입 후보로 연결된다.
 
 ### v0.6: Hooks and policy safety
 
@@ -634,12 +759,14 @@ knowledge 규칙:
 
 - SessionStart/PostToolUse/Stop evidence hooks
 - PreToolUse advisory guardrail
+- Stop self-check lint
 - patch/git/fetch/dependency safety shim
 - CI blocking scan 분리
 
 완료 기준:
 
 - 위험 action은 native permission과 DITTO policy 양쪽에서 추적되고, hook 결과가 work item/run evidence에 연결된다.
+- 검증 없는 완료 주장과 불필요한 사용자 질문은 Stop hook에서 완료 상태로 통과하지 못한다.
 
 ## 6. 문서별 적용 매핑
 
@@ -662,15 +789,18 @@ knowledge 규칙:
 
 다음은 구현 중 확정해야 한다. 지금 문서 단계에서 사용자에게 결정 책임을 넘길 문제는 아니며, prototype evidence를 보고 좁혀야 한다.
 
-1. `.ditto`를 repo에 commit할 기본 범위: work item/handoff schema는 commit 후보지만 logs/screenshots는 보존 정책이 필요하다.
+1. `.ditto` artifact 보존 정책: commit/sync 대상은 v0.1에서 정하되 logs/screenshots/traces의 용량, 만료, 개인정보 scrub 정책이 필요하다.
 2. Codex와 Claude Code wrapper의 command shape: provider별 CLI 안정성과 output capture 방식이 실제 확인되어야 한다.
 3. host별 hook coverage: PreToolUse가 enforcement인지 advisory인지 provider마다 구분해야 한다.
 4. E2E browser 설치와 cache 위치: local/CI/cloud 실행 환경별 실패 모드를 나눠야 한다.
 5. knowledge freshness: CONTEXT.md와 ADR이 오래된 결정을 강화하지 않도록 owner와 review trigger가 필요하다.
-6. multi-model 검토 비용 정책: opt-in command의 budget cap, timeout, partial result contract가 필요하다.
+6. cross-provider reviewer와 multi-model council의 비용 정책: 기본 reviewer budget, opt-in council budget, timeout, partial result contract가 필요하다.
+7. 팀업 통합의 source of truth: GitHub Issues/Projects, Confluence, 지식베이스 저장소 중 어떤 필드가 DITTO local ledger와 양방향 sync되는지 prototype이 필요하다.
+8. 지식관리 reference 흡수 방식: `agent-intelligence-memory-report.md`와 Karpathy LLM Wiki에서 어떤 내용을 skill, ADR, regression fixture로 나눌지 기준이 필요하다.
+9. workspace-level state: v0.1-v0.6은 single-repo `.ditto`를 기준으로 하고, 여러 repo에 걸친 work item은 Phase 11의 workspace state 설계에서 확정한다.
 
 ## 8. 다음 작업
 
-가장 작은 다음 작업은 v0.1을 구현하기 전에 `schemas/` 또는 `docs/contracts/` 위치를 정하고, work item/run/completion/reviewer contract fixture를 만드는 것이다. 그 다음에야 wrapper, doctor, hook을 붙여도 상태와 evidence가 흩어지지 않는다.
+가장 작은 다음 작업은 v0.1을 구현하기 전에 `schemas/` 또는 `docs/contracts/` 위치를 정하고, work item/run/completion/self-check/reviewer/language contract fixture를 만드는 것이다. 그 다음에야 wrapper, doctor, hook을 붙여도 상태와 evidence가 흩어지지 않는다.
 
 DITTO의 초기 구현은 "많은 agent를 부리는 시스템"보다 "작업과 증거를 잃지 않는 작은 시스템"이어야 한다. 그 기반이 있어야 subagent, E2E, multi-model review, long-running orchestration이 실제로 안전해진다.
