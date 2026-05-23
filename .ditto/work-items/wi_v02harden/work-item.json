@@ -26,7 +26,7 @@
       "statement": "doctor permissions/surface 각각에 --advisory 회귀가 1건씩 추가되어 drift 발생 시에도 exit 0임을 검증한다. doctor mcp는 정보 보고 명령으로 유지하고 --advisory 옵션을 제거해 사용 시 usage error(exit 65)를 낸다. bridge sync의 free-area-only 회귀(자유 영역만 수정 후 action=unchanged + 자유 영역 sha256 보존)가 tests/bridge 또는 tests/core/bridge-sync에 고정된다."
     }
   ],
-  "status": "draft",
+  "status": "in_progress",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
@@ -50,5 +50,5 @@
   "runs": [],
   "handoff_path": ".ditto/work-items/wi_v02harden/handoff.md",
   "created_at": "2026-05-24T18:00:00+09:00",
-  "updated_at": "2026-05-24T18:00:00+09:00"
+  "updated_at": "2026-05-24T19:00:00+09:00"
 }

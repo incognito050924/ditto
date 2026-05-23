@@ -1,5 +1,6 @@
 import { readdir } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { parse as parseTomlText } from 'smol-toml';
 
 export async function fileExists(path: string): Promise<boolean> {
   return Bun.file(path).exists();
@@ -16,45 +17,8 @@ export async function readJsonIfExists(path: string): Promise<unknown | null> {
   return JSON.parse(text);
 }
 
-function parseValue(value: string): unknown {
-  const trimmed = value.trim();
-  if (trimmed === 'true') return true;
-  if (trimmed === 'false') return false;
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed.slice(1, -1).replaceAll('\\"', '"');
-  }
-  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-    const inner = trimmed.slice(1, -1).trim();
-    if (inner.length === 0) return [];
-    return inner
-      .split(',')
-      .map((part) => part.trim())
-      .map((part) => (part.startsWith('"') && part.endsWith('"') ? part.slice(1, -1) : part));
-  }
-  return trimmed;
-}
-
-export function parseTomlSubset(text: string): Record<string, Record<string, unknown>> {
-  const root: Record<string, Record<string, unknown>> = { '': {} };
-  let section = '';
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.replace(/#.*$/, '').trim();
-    if (line.length === 0) continue;
-    const sectionMatch = line.match(/^\[([^\]]+)\]$/);
-    if (sectionMatch) {
-      section = sectionMatch[1] ?? '';
-      root[section] ??= {};
-      continue;
-    }
-    const equal = line.indexOf('=');
-    if (equal === -1) continue;
-    const key = line.slice(0, equal).trim();
-    const value = line.slice(equal + 1);
-    root[section] ??= {};
-    const current = root[section];
-    if (current) current[key] = parseValue(value);
-  }
-  return root;
+export function parseToml(text: string): Record<string, unknown> {
+  return parseTomlText(text) as Record<string, unknown>;
 }
 
 export function asRecord(value: unknown): Record<string, unknown> | null {

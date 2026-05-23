@@ -5,7 +5,7 @@ import {
   asStringArray,
   envKeys,
   listDirectories,
-  parseTomlSubset,
+  parseToml,
   readTextIfExists,
 } from './shared';
 import type {
@@ -18,12 +18,12 @@ import type {
 } from './types';
 
 function mcpServersFromToml(text: string, sourceFile: string): McpServerEntry[] {
-  const parsed = parseTomlSubset(text);
+  const parsed = parseToml(text);
+  const mcpServers = asRecord(parsed.mcp_servers);
+  if (!mcpServers) return [];
   const servers: McpServerEntry[] = [];
-  for (const [section, values] of Object.entries(parsed)) {
-    const match = section.match(/^mcp_servers\.([A-Za-z0-9_.-]+)$/);
-    if (!match) continue;
-    const name = match[1] ?? '';
+  for (const [name, raw] of Object.entries(mcpServers)) {
+    const values = asRecord(raw) ?? {};
     const server: McpServerEntry = {
       host: 'codex',
       scope: 'user',
@@ -72,7 +72,7 @@ export const codexHostAdapter: HostAdapter = {
       host: 'codex',
       source_file: path,
       status: 'ok',
-      raw: asRecord(parseTomlSubset(text)['']) ?? {},
+      raw: parseToml(text),
     };
   },
 
