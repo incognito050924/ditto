@@ -462,3 +462,14 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/jetbrains+all,visualstudiocode,macos,windows,linux,intellij+all,webstorm+all,dbeaver,java,node
+
+### DITTO ###
+# Build output
+dist/
+
+# Bun
+.bun/
+
+# Repo-local DITTO state (per-developer; sync policy TBD in v0.1 design)
+.ditto/runs/
+.ditto/work-items/*/evidence/

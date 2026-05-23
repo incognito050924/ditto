@@ -1,0 +1,29 @@
+{
+  "name": "ditto",
+  "version": "0.0.0",
+  "description": "Coding agent work orchestration layer",
+  "type": "module",
+  "module": "src/cli/index.ts",
+  "bin": {
+    "ditto": "./dist/ditto"
+  },
+  "scripts": {
+    "build": "bun build src/cli/index.ts --compile --outfile dist/ditto",
+    "dev": "bun run src/cli/index.ts",
+    "test": "bun test",
+    "lint": "biome check src tests scripts",
+    "lint:fix": "biome check --write src tests scripts",
+    "format": "biome format --write src tests scripts",
+    "schemas:export": "bun run scripts/export-schemas.ts"
+  },
+  "dependencies": {
+    "citty": "^0.1.6",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@types/bun": "latest",
+    "typescript": "^5.6.0",
+    "zod-to-json-schema": "^3.23.0"
+  }
+}
