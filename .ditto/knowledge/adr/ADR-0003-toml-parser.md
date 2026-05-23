@@ -59,4 +59,4 @@ doctor는 v0.3 provider wrapper preflight의 신뢰 기반이므로, false safet
 
 - `bun add smol-toml` 후 `package.json` dependencies에 등재됨.
 - `bun test tests/doctor/permissions.test.ts tests/doctor/mcp.test.ts` 통과. 특히 nested + inline 회귀 케이스 2건이 신규 추가됨.
-- `bun test` 전체 109 pass(이전 107 + 신규 2).
+- `bun test` 전체 116 pass(wi_v02harden P-1 ~ P-4 누적 회귀 포함; P-1 시점에는 109 pass였음).

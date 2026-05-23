@@ -40,6 +40,32 @@
 - `bun run lint` pass (1차 format issue는 lint:fix로 자동 보정)
 - `bun test` 112 pass / 0 fail (이전 107 + 신규 5)
 
+## 1차 review 통과 (P-1 + P-2)
+- 사용자 review 결과: 진행 OK, findings 0. ADR-0001 cross-reference 보류, WebFetch(*) wildcard 분류 유지. ADR-0003 pass count("전체 109 pass") 오차는 다음 docs commit과 함께 정정.
+
+## P-3 완료 (2026-05-24 20:00)
+- 20:00 (structural) `SurfaceInventory.surfaces`를 `localSurfaces`/`homeSurfaces`로 분리. claude-code/codex adapter 갱신. `collectSurfaceInventory`는 `actual = [...local, ...home]`으로 호환 유지 → 112 pass 회귀 동일. mock host adapter(registry.test, instruction-bridge.test)도 새 타입에 맞춤.
+  - commit 83c752f `refactor(ditto): split SurfaceInventory into local and home (structural)`
+- 20:10 (behavioral) `collectSurfaceInventory`가 catalog 비교 대상을 `localSurfaces`로만 좁힘. 출력 `surfaces`는 합쳐 노출(호환). 회귀 추가: HOME mock에 skill 3개(`extra-a/b/c`) + repo-local command 1개 → `mismatch_count=0`이지만 inventory에 home skill 포함.
+  - commit 620b9db `feat(ditto): exclude home-scope surfaces from catalog mismatch comparison (behavioral)`
+
+## P-4 완료 (2026-05-24 20:30)
+- 20:20 (structural) `MANAGED_BLOCK_RE` → global flag + `matchAll` 기반 collection. `projectionFromSurface`는 첫 매치만 사용해 회귀 동일 → 113 pass.
+  - commit 0dd507a `refactor(ditto): scan managed blocks with matchAll (structural)`
+- 20:25 (behavioral) D-4=(b) 적용:
+  - `InstructionFindingKind` / `ProjectionLoadResult`에 `multiple_markers` 추가
+  - `compareClaudeProjection`이 multiple_markers 분기에서 finding 1건만 보고
+  - `bridge-sync.ts` `refused-multiple-markers` action 신설 + 파일 0 수정
+  - `bridge.ts` CLI: refused 시 exit 1(drift) + stderr 안내(`clean up to exactly one block`)
+  - 회귀 3건: `tests/doctor/instructions.test.ts`, `tests/bridge/sync.test.ts`, `tests/core/instruction-bridge.test.ts`
+  - commit 08eb237 `feat(ditto): report multiple_markers finding and refuse bridge sync (behavioral)`
+
+## 검증 (P-3 + P-4)
+- `bun run tsc --noEmit` pass
+- `bun run lint` pass (format 자동 보정 2회)
+- `bun test` 116 pass / 0 fail (이전 113 + 신규 3)
+- schema self-validation 10/10
+
 ## 다음 동작
-- 사용자 review 시점 (P-1 + P-2 묶음). plan.md Review 합의에 따라 여기서 한 번 review 받기.
-- review 통과 시 P-3(surface scope 분리, D-3=(b)) 시작.
+- 사용자 review 시점 (P-3 + P-4 묶음). plan.md Review 합의에 따라 여기서 한 번 review 받기.
+- review 통과 시 P-5(advisory 회귀 추가 + mcp advisory 제거 + bridge free-area-only) + P-6(self-validation 보강) + P-7(manual smoke) 묶음으로 진행해 마감.
