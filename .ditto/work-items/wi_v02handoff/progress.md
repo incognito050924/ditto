@@ -19,10 +19,26 @@
   - 우선순위 #2: plan.md/dod.md 이미 일치 (`--base` > `started_at_sha` > origin/main fallback). 강조 명문화.
   - 회귀 #3: dod.md ac-2 이미 "가짜 entry가 사라짐" 박힘. 유지.
 
+## P-1 완료 (2026-05-24 23:00)
+- 22:55 work-item.json status draft → in_progress로 직접 편집 (이 시점엔 P-1b hook 코드가 아직 없어 자동 박힘 불가; P-4의 ditto verify 호출 시 hook이 backfill).
+- 23:00 (structural) work-item.ts에 `started_at_sha: gitSha40.optional()` 추가. `writeWorkItemHandoff` base 후보 우선순위: `--base`(별도 분기, 가장 강함) > `started_at_sha` > origin/main 등 fallback. schemas:export로 work-item.schema.json 갱신. 회귀 121 pass(영향 0).
+  - commit af96bbd `refactor(ditto): add started_at_sha field and pipe into handoff base list (structural)`
+- 23:10 (behavioral) `WorkItemStore.update`가 status draft→in_progress 전환 시 `tryGitHeadSha`로 박음. 이미 박혀 있거나 git 실패 시 omit. 회귀 6건: store hook 4(omit/박힘/덮어쓰기 안 함/git 밖 omit) + handoff 우선순위 2(--base가 started_at_sha 이김 / started_at_sha가 fallback 이김). 127 pass.
+  - commit 07eee87 `feat(ditto): backfill started_at_sha on draft→in_progress transition (behavioral)`
+  - **메시지 오타**: 본문에 "wi_v02harden P-1b"로 잘못 적힘. 본 work item은 wi_v02handoff. amend 없이 본 진행 로그로 기록.
+
+## P-2 완료 (2026-05-24 23:20)
+- `writeWorkItemHandoff`의 `merged = union(item.changed_files, collected)` → `merged = collected`. 한 번 잘못 박힌 list가 누적되지 않음.
+- 회귀 1건 교체: 기존 "renders changed_files section when present"는 union 가정이라 D-2 의도에 맞게 교체. 새 회귀 "replace (not union)": git repo + init commit + 실제 파일 변경 + 가짜 entry → handoff 후 가짜 사라지고 collected만 남음을 completion.json/handoff.md/work-item.json 셋에서 확인.
+  - commit d75cccd `feat(ditto): replace work item changed_files with git collected on handoff (behavioral)`
+
+## 검증 (P-1 + P-2)
+- `bun run tsc --noEmit` pass
+- `bun run lint` pass
+- `bun test` 127 pass / 0 fail (이전 121 + 신규 6: store hook 4 + handoff 우선순위 2; union → replace 회귀는 기존 1건 교체로 수 동일)
+- schema self-validation 10/10
+
 ## 다음 동작
-- work-item.json status를 draft → in_progress로 갱신 (이 work item 자체는 v0.2 동안 hook이 적용되지 않으므로 started_at_sha는 P-1 commit 후 backfill 검토).
-- P-1(schema + WorkItemStore.update hook + handoff base 선택) 시작:
-  - (structural) work-item.ts에 started_at_sha optional + handoff base 후보 list에 끼움
-  - (behavioral) work-item-store.update가 status draft→in_progress 전환 시 git rev-parse HEAD로 박음
-  - schemas:export로 work-item.schema.json 갱신
-  - 회귀: work-item-store.test(전환 hook 3 케이스) + work-item-handoff.test(우선순위 2 케이스)
+- 사용자 review 시점 (P-1 + P-2 묶음). plan.md Review 합의대로 여기서 한 번 review 받기.
+- review 통과 시 P-3(wi_v02doctor changed_files 정정) + P-4(self-validation + manual smoke + handoff) 묶음으로 마감.
+- P-4의 ditto verify 호출 시 본 wi_v02handoff의 started_at_sha가 hook으로 자동 backfill됨 (현재 직접 편집한 status 변경 후 첫 store.update가 trigger).

@@ -18,7 +18,7 @@
       "statement": "기존 wi_v02doctor의 부풀려진 changed_files(99 entries, repo-wide)를 wi_v02doctor 시작 시점 기준 실제 diff로 정정한다. 정정 후 completion.json/handoff.md/work-item.json 셋의 changed_files가 일치하고 `git diff --name-only <wi_v02doctor 시작 commit>..<wi_v02doctor 마감 commit>` 와 합리적 범위에서 일치. wi_v02harden은 이미 post-review correction에서 정정됨(34 entries)이므로 재확인만."
     }
   ],
-  "status": "draft",
+  "status": "in_progress",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
@@ -42,5 +42,5 @@
   "runs": [],
   "handoff_path": ".ditto/work-items/wi_v02handoff/handoff.md",
   "created_at": "2026-05-24T22:30:00+09:00",
-  "updated_at": "2026-05-24T22:30:00+09:00"
+  "updated_at": "2026-05-24T22:50:00+09:00"
 }
