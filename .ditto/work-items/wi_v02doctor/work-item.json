@@ -7,31 +7,31 @@
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "ditto doctor instructions가 AGENTS.md(source)와 CLAUDE.md의 managed block(HTML comment marker로 둘러싸인 영역)을 비교해 drift를 감지한다. marker의 sha256 속성과 실제 managed block 내용의 정규화 sha256, AGENTS.md의 정규화 sha256 셋 모두 일치할 때만 ok. 일치 시 exit 0, drift 시 [DECISION NEEDED: D-7 exit code]. --output json은 path/markerSource/markerSha256/actualSha256/sourceSha256/verdict를 반환한다.",
+      "statement": "ditto doctor instructions가 두 host(codex, claude-code)에 대해 drift를 감지한다. --host 미지정 시 양쪽 모두 검사. claude-code는 CLAUDE.md managed block의 marker sha256/실제 내용 sha256/AGENTS.md 정규화 sha256 셋 비교. codex는 AGENTS.md 존재 + marker 부재 검사. 일치 시 exit 0, drift 시 [DECISION NEEDED: D-7 exit code]. --output json은 host별로 path/markerSource/markerSha256/actualSha256/sourceSha256/findings를 반환.",
       "verdict": "unverified",
       "evidence": []
     },
     {
       "id": "ac-2",
-      "statement": "ditto doctor permissions가 .claude/settings.json, .codex/config.toml의 위험 표면(dangerous mode, network-on, secrets-read)을 식별해 human/json으로 보고한다. 존재하지 않는 파일은 missing으로 표기하되 fail로 취급하지 않는다.",
+      "statement": "ditto doctor permissions가 두 host의 위험 표면을 식별한다. codex는 .codex/config.toml의 sandbox_mode/approval_policy/network_access 같은 필드, claude-code는 .claude/settings.json의 permissions/defaultMode/enabledMcpjsonServers 같은 필드를 host adapter로 정규화. 위험 표면 enum: dangerous_mode|network_on|secrets_read|write_outside_workspace|approval_bypass. 파일 미존재는 missing(fail 아님). --host로 좁힘 가능.",
       "verdict": "unverified",
       "evidence": []
     },
     {
       "id": "ac-3",
-      "statement": "ditto doctor mcp가 MCP server/tool inventory를 [DECISION NEEDED: 수집 방법]으로 얻어 side effect label(read|write|network|unknown)과 함께 출력한다. inventory를 못 얻으면 정확히 'unavailable' 사유와 함께 unverified로 보고한다.",
+      "statement": "ditto doctor mcp가 두 host의 MCP 설정 파일을 직접 파싱해 server inventory를 출력한다. codex는 ~/.codex/config.toml의 [mcp_servers.*], claude-code는 ~/.claude의 mcp 설정 또는 .claude/settings.json의 mcpServers. 출력 schema: { servers: [{ host, name, source_file, command?, args?, env_keys?, side_effect_label }] }. host별로 수집 불가 시 정확한 unavailable 사유와 함께 unverified 보고.",
       "verdict": "unverified",
       "evidence": []
     },
     {
       "id": "ac-4",
-      "statement": "ditto doctor surface가 skill/agent/command manifest와 실제 파일의 일치를 검사한다. manifest 형식과 위치는 [DECISION NEEDED]. 누락/추가/이름 불일치를 종류별로 분류해 출력한다.",
+      "statement": "ditto doctor surface가 두 host의 skill/agent/command/plugin 디렉터리 인벤토리를 수집한다. v0.2는 manifest schema 검증 없이 발견과 missing/extra/renamed 분류만 보고(Phase 9까지 mock). claude-code는 ~/.claude/skills/, .claude/agents/, .claude/commands/. codex는 ~/.codex/plugins/, .codex/plugins/. --host로 좁힘 가능.",
       "verdict": "unverified",
       "evidence": []
     },
     {
       "id": "ac-5",
-      "statement": "doctor의 모든 출력은 human/json 두 형식과 결정적 exit code 규약을 따른다. 정상 fixture와 의도적 drift fixture 양쪽을 tests/doctor/*.test.ts에서 검증한다.",
+      "statement": "doctor의 모든 출력은 human/json 두 형식, 결정적 exit code 규약(D-7), --host 인자(D-10), --advisory 옵션을 일관되게 따른다. 정상 fixture와 의도적 drift fixture를 host별로 tests/doctor/*.test.ts에서 검증.",
       "verdict": "unverified",
       "evidence": []
     },
@@ -43,7 +43,13 @@
     },
     {
       "id": "ac-7",
-      "statement": "ditto bridge sync가 AGENTS.md를 source로 CLAUDE.md의 managed block을 갱신한다. marker가 없으면 파일 끝에 새 marker block을 append하고 stderr로 알린다. marker가 있으면 그 안만 교체하고 sha256 속성을 갱신한다. managed block 밖의 사용자 자유 영역은 어떤 경우에도 수정되지 않는다. --check 플래그는 dry-run으로 차이만 보고하고 파일을 수정하지 않는다.",
+      "statement": "ditto bridge sync --host claude-code가 AGENTS.md를 source로 CLAUDE.md의 managed block을 갱신한다. marker가 없으면 파일 끝에 새 marker block을 append하고 stderr로 알린다. marker가 있으면 그 안만 교체하고 sha256 속성을 갱신한다. managed block 밖의 사용자 자유 영역은 어떤 경우에도 수정되지 않는다. --check는 dry-run. --host codex는 codex가 AGENTS.md 자체를 source로 읽으므로 sync 대상이 아니라 usage error로 거부(D-11).",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-8",
+      "statement": "HostAdapter interface가 codex와 claude-code 두 구현으로 등록되어 있고, 다른 host(예: opencode)를 추가하려면 src/core/hosts/<host>.ts 한 파일을 추가하고 registry에 등록하는 것만으로 doctor/bridge가 자동으로 인식한다. 테스트로 mock host adapter를 등록해 doctor 명령이 그 host도 처리하는지 회귀 확인.",
       "verdict": "unverified",
       "evidence": []
     }

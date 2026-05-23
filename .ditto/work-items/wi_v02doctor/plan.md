@@ -21,41 +21,101 @@
   - `sha256` 속성은 source 파일의 정규화된(LF/trailing ws 정규화 후) sha256. bridge sync가 박고 doctor가 검증.
   - 근거: HTML comment는 Markdown 렌더링 결과에 표시되지 않아 사용자 시각 부담이 없고, model이 마커를 메타로 인식해 행동에 영향 적으며, DITTO parser는 결정적 regex로 추출 가능. front-matter는 블록 묶기에 부적합, 섹션 헤더는 사용자가 텍스트 깨면 마커 손상.
 
-- **D-3. doctor의 권한 범위**
-  - (a) read-only 진단만. drift 발견 시 출력만 하고 종료.
-  - (b) `--fix` 옵션으로 자동 수정 허용 (단, dry-run 기본).
-  - 추천: (a) — v0.2 기본은 진단만. fix는 v0.3+로 분리.
+- **D-8. v0.2가 다룰 host 범위**
+  - **[DECIDED: Codex + Claude Code]** 사용자 운영 환경상 Codex가 기본, Claude Code가 보조. v0.2는 두 host를 모두 1급으로 지원.
+  - host adapter 구조가 필요해짐 → D-9 신규.
+  - 두 host가 instruction/permission/MCP/skill을 어떻게 갖는지가 ac에 모두 반영되어야 함.
 
-- **D-4. MCP inventory 수집 방법**
-  - (a) `claude mcp list` 같은 host CLI 호출(실시간).
-  - (b) `~/.claude/.../mcp-config.json`, `.codex/config.toml` 등 설정 파일 직접 파싱.
-  - (c) 둘 다 시도하고 합집합.
-  - 추천: (b) — host CLI 안정성에 덜 의존. 단 (a)도 후속 phase에서 보강.
+본 결정의 다음 영향:
 
-- **D-5. skill manifest 형식과 위치**
-  - (a) `.ditto/skills/<skill>/manifest.json`에 zod schema 적용.
-  - (b) `~/.claude/skills/`나 plugin manifest를 그대로 읽고 ditto는 검증만.
-  - (c) Phase 9 skill catalog가 정의될 때까지 mock fixture만.
-  - 추천: (c) — v0.2 surface 명령은 mock fixture에 대한 lint로 우선 구현, 실제 manifest와의 연동은 Phase 9 합의 후.
+| 표면 | Codex가 읽는 곳 | Claude Code가 읽는 곳 |
+|---|---|---|
+| instructions(공유 system prompt) | `AGENTS.md` 직접 | `CLAUDE.md` managed block 안 (sync로 동기화) |
+| permissions / sandbox | `.codex/config.toml` (예: `approval_policy`, `sandbox_mode`, `network_access`) | `.claude/settings.json` (예: `permissions`, `defaultMode`) |
+| MCP | `~/.codex/config.toml`의 `[mcp_servers.*]` 섹션 | `~/.claude/...mcp.json` 또는 `.claude/settings.json`의 `mcpServers` |
+| skill / agent / command manifest | `~/.codex/plugins/`, `.codex/plugins/` (정확한 구조는 Codex 버전 의존, D-5 확정 시 결정) | `~/.claude/skills/<id>/SKILL.md`, `.claude/agents/`, `.claude/commands/` |
 
-- **D-6. drift 정의(diff 알고리즘)**
-  - (a) sha256 비교 (정확하나 공백 변경에도 trigger).
-  - (b) 정규화(LF/trailing whitespace) 후 sha256.
-  - (c) managed block 내부만 비교.
-  - 추천: (b) + (c)의 조합 — managed block 내부를 정규화 후 sha256.
+- **D-3. doctor의 권한 범위 (재정의: 두 host 적용)**
+  - (a) read-only 진단만. bridge sync로 destructive 동작은 분리.
+  - (b) `--fix` 옵션으로 자동 수정.
+  - 추천: (a) — `ditto bridge sync`가 이미 destructive 영역을 흡수했으므로 doctor는 read-only가 일관됨. fix는 v0.3+ 별도 ADR.
+
+- **D-4. MCP inventory 수집 방법 (재정의: Codex + Claude Code 둘 다)**
+  - (a) 설정 파일 직접 파싱: Codex는 `~/.codex/config.toml`의 `[mcp_servers.*]`, Claude Code는 `~/.claude/.../mcp.json` 또는 `.claude/settings.json`의 `mcpServers`. 두 host adapter가 각자 파일을 읽고 공통 schema(`{ host, name, source_file, command, args?, env_keys?, side_effect_label }`)로 정규화.
+  - (b) host CLI 호출: `codex mcp list`(존재 여부 미확정), `claude mcp list`. host 버전 변동에 취약.
+  - (c) (a) + (b) 합집합.
+  - 추천: (a) — 두 host 모두 설정 파일 형식이 공개되어 있고 안정적. CLI 호출은 v0.3+에서 보강.
+
+- **D-5. skill / surface manifest 검사 범위 (재정의: 두 host)**
+  - (a) v0.2는 두 host의 *디렉터리 인벤토리만* 수집해 출력. 실제 manifest 형식 검증은 Phase 9까지 mock.
+  - (b) Claude Code의 `SKILL.md` frontmatter는 즉시 검증 (이미 형식이 표준), Codex plugin은 mock.
+  - (c) 두 host 모두 즉시 검증 schema 정의.
+  - 추천: (a) — Phase 9 skill catalog 확정 전엔 검증 룰이 임의해질 위험. v0.2는 *발견*과 *missing/extra* 분류까지만.
+
+- **D-6. drift 정의 (재정의: D-2와 일관)**
+  - 정규화: LF 통일 + 줄 끝 trailing whitespace 제거.
+  - managed block 내부의 정규화 sha256 ↔ marker의 sha256 ↔ source(AGENTS.md)의 정규화 sha256, 셋 모두 일치 시 ok.
+  - Codex는 source(AGENTS.md) 자체를 읽으므로 별도 비교 불필요. 단 AGENTS.md에 marker가 잘못 박혀 있으면 codex가 model에 marker text를 그대로 노출 → doctor가 경고: "source must not contain managed marker".
 
 - **D-7. exit code 규약**
-  - (a) drift 0건 → 0, drift 발견 → 1, 사용 오류 → 65, 명령 자체 실패 → 70.
+  - (a) drift 0건 → 0, drift 발견 → 1, 사용 오류(--output 등) → 65, 내부 runtime 오류 → 70.
   - (b) drift는 항상 0(advisory). 오류만 비-0.
-  - 추천: (a) — CI 통합 시 drift가 빌드를 실패시키는 게 자연스러움. `--advisory` 플래그로 (b) 동작 옵트인.
+  - 추천: (a) + `--advisory` 옵트인.
 
-- **D-8. v0.2가 다룰 host 범위**
-  - (a) Claude Code 단독.
-  - (b) Claude Code + Codex.
-  - (c) Claude Code + Codex + OpenCode.
-  - 추천: (a) — v0.2는 단일 host로 시작, Codex/OpenCode는 v0.3+에서 adapter 추가.
+- **D-9. host adapter 구조 (신규, D-8 결정에 따라)**
+  - (a) `interface HostAdapter { id; instructions; permissions; mcp; surface; }` 추상화. `src/core/hosts/codex.ts`, `src/core/hosts/claude-code.ts`.
+  - (b) 각 host별 hard-coded function (확장성 낮음).
+  - 추천: (a) — v0.2부터 두 host를 다루므로 추상화 비용 가치 있음. OpenCode/OpenAgent는 같은 interface로 v0.3+에서 추가.
 
-## 작업 분해 (D-1, D-2는 [DECIDED]; D-3~D-8 결정 후 확정)
+- **D-10. doctor 명령의 host 인자 (신규)**
+  - (a) 인자 없으면 등록된 모든 host 자동 검사. `--host codex|claude-code`로 좁힐 수 있음.
+  - (b) `--host` 필수.
+  - (c) 명령을 host별로 분리: `ditto doctor codex instructions` 등.
+  - 추천: (a) — 가장 사용자 친화적. 기본은 모두 검사, 좁히고 싶으면 `--host`.
+
+- **D-11. Codex의 AGENTS.md는 sync 대상인가 (신규)**
+  - **고정 사실**: Codex는 AGENTS.md를 source 그 자체로 읽음(host가 별도 projection을 만들지 않음).
+  - bridge sync는 **AGENTS.md → CLAUDE.md managed block만** 동기화. Codex의 AGENTS.md는 sync의 *source*이지 *target*이 아님.
+  - doctor instructions가 Codex에 대해 검사할 것:
+    - AGENTS.md가 존재하는지
+    - AGENTS.md 본문에 `<!-- ditto:managed:* -->` marker가 *없는지* (있으면 codex가 marker text를 model에 노출하므로 경고)
+    - AGENTS.md의 정규화 sha256 (모든 host adapter가 이 값을 source로 참조)
+  - 명령: `ditto doctor instructions --host codex`는 위 3개를 검사. drift는 "marker present in source" 1종만.
+
+## D-3 ~ D-11 사용자 결정 요약
+
+| 항목 | 상태 | 추천 |
+|---|---|---|
+| D-3 doctor 권한 | 대기 | read-only (sync 분리로 일관) |
+| D-4 MCP 수집 | 대기 | 설정 파일 파싱 (두 host) |
+| D-5 surface 검사 | 대기 | 두 host 디렉터리 인벤토리만, schema 검증은 Phase 9 |
+| D-6 drift 정의 | 대기 | 정규화 + sha256 (D-2와 일관) |
+| D-7 exit code | 대기 | drift→1, usage→65, runtime→70 + `--advisory` |
+| **D-8 host 범위** | **[DECIDED]** | **Codex + Claude Code** |
+| D-9 host adapter 구조 (신규) | 대기 | `HostAdapter` interface 추상화 |
+| D-10 doctor 명령의 host 인자 (신규) | 대기 | 기본 모든 host, `--host`로 좁힘 |
+| D-11 Codex AGENTS.md sync 대상 (신규) | 대기 | sync source일 뿐 target 아님. doctor instructions --host codex는 marker 부재만 확인 |
+
+## 작업 분해 (D-1, D-2, D-8 [DECIDED]; D-3~D-7, D-9~D-11 결정 후 확정)
+
+### P-0. HostAdapter interface와 두 host 구현 (`src/core/hosts/`)
+- D-8/D-9 결정 기반.
+- `src/core/hosts/types.ts`: `HostAdapter` interface 정의.
+  - `id: 'codex' | 'claude-code'`
+  - `loadInstructions(repoRoot): InstructionSource | InstructionProjection` — Codex는 source 그 자체, Claude Code는 projection.
+  - `loadPermissions(repoRoot): PermissionInventory`
+  - `loadMcpServers(repoRoot): McpInventory`
+  - `loadSurfaceInventory(repoRoot): SurfaceInventory`
+- `src/core/hosts/codex.ts`:
+  - instructions: `AGENTS.md` 그대로 (marker 부재 검사).
+  - permissions: `.codex/config.toml` (`approval_policy`, `sandbox_mode`, `network_access` 등).
+  - mcp: `~/.codex/config.toml`의 `[mcp_servers.*]`.
+  - surface: `.codex/plugins/` (D-5 결정에 따라 인벤토리만).
+- `src/core/hosts/claude-code.ts`:
+  - instructions: `CLAUDE.md` managed block + marker.
+  - permissions: `.claude/settings.json` (`permissions`, `defaultMode`, `enabledMcpjsonServers` 등).
+  - mcp: `.claude/settings.json`의 `mcpServers` 또는 별도 `mcp.json`.
+  - surface: `~/.claude/skills/`, `.claude/agents/`, `.claude/commands/`.
 
 ### P-1. InstructionBridge core (`src/core/instruction-bridge.ts`)
 - D-1=(4a), D-2=(a) 결정 기반.
@@ -83,18 +143,21 @@
 - API: `syncHost(repoRoot, host): { path, action: 'created' | 'updated' | 'unchanged', oldSha256, newSha256 }`
 
 ### P-2. PermissionInventory core (`src/core/permission-inventory.ts`)
-- `.claude/settings.json`, `.codex/config.toml` 위험 표면 식별.
-- 위험 표면 enum: `dangerous_mode | network_on | secrets_read | write_outside_workspace`.
+- 두 host adapter(P-0)의 `loadPermissions` 결과를 받아 공통 위험 표면 enum으로 정규화.
+- 위험 표면 enum: `dangerous_mode | network_on | secrets_read | write_outside_workspace | approval_bypass`.
 - 파일 미존재는 missing으로, fail이 아님.
+- host별 매핑 표를 모듈 상수로 둠 (예: codex `sandbox_mode=danger-full-access` → `dangerous_mode`).
 
 ### P-3. McpInventory core (`src/core/mcp-inventory.ts`)
-- D-4 결정 기반. 추천 (b)면 설정 파일 직접 파싱.
-- 출력: `{ servers: [{ name, source_file, side_effect_label }] }`.
-- 수집 불가 시 정확한 unavailable 사유 반환.
+- D-4 (a) 채택: 두 host adapter의 `loadMcpServers` 결과 합집합.
+- 출력 schema: `{ servers: [{ host: 'codex'|'claude-code', name, source_file, command?, args?, env_keys?, side_effect_label }] }`.
+- 같은 server name이 두 host에 등록되어 있으면 별도 entry로 출력(host 필드로 구분).
+- 수집 불가 시 정확한 unavailable 사유(파일 미존재/파싱 실패 등)를 반환, host 자체는 skip이 아니라 unverified.
 
 ### P-4. SurfaceInventory core (`src/core/surface-inventory.ts`)
-- D-5 결정 기반. 추천 (c)면 mock fixture에 대한 lint만.
-- manifest와 실제 파일 차이를 missing/extra/renamed로 분류.
+- D-5 (a) 채택: 두 host adapter의 `loadSurfaceInventory` 결과를 *발견*과 *missing/extra* 분류로만 출력. Phase 9 확정 전엔 schema 검증 없음.
+- 출력 schema: `{ surfaces: [{ host, kind: 'skill'|'agent'|'command'|'plugin', id, path, mismatch?: 'missing_file'|'extra_file'|'renamed' }] }`.
+- 두 host의 디렉터리 구조 차이는 host adapter가 흡수, surface-inventory는 공통 view만.
 
 ### P-5. doctor CLI 명령 4개 (`src/cli/commands/doctor.ts`)
 - `ditto doctor instructions`
@@ -102,12 +165,13 @@
 - `ditto doctor mcp`
 - `ditto doctor surface`
 - 모두 `--output human|json` 지원.
+- D-10 (a) 채택: `--host codex|claude-code` 옵션. 미지정 시 등록된 모든 host 자동 검사.
 - D-7 exit code 규약 적용.
 
 ### P-5b. bridge CLI 명령 (`src/cli/commands/bridge.ts`)
 - `ditto bridge sync` — D-1/D-2에 따른 AGENTS.md → projection managed block 동기화.
 - 옵션:
-  - `--host claude-code` (기본값; D-8에 따라 v0.2는 claude-code만 지원)
+  - `--host claude-code` (기본값; D-11에 따라 codex는 sync 대상 아님 — `--host codex`는 usage error)
   - `--check`: 실제 쓰기 없이 차이만 보고 (dry-run, exit 0 일치/exit 1 차이)
   - `--output human|json`
 - read-only doctor와 분리해 destructive 동작(파일 쓰기)을 명령 단위로 격리.
@@ -127,8 +191,9 @@
 
 ## 의존성과 실행 순서
 
-P-1, P-1b, P-2, P-3, P-4는 독립적으로 진행 가능(각각 다른 core 파일). 단 P-1b는 P-1의 추출/정규화 함수를 공유 — `src/core/instruction-bridge.ts`에서 helper로 export하고 P-1b가 import.
-P-5는 P-1~P-4 모두 필요.
+P-0(host adapter)이 P-1~P-4의 토대.
+P-1, P-1b, P-2, P-3, P-4는 P-0 위에서 독립적으로 진행. P-1b는 P-1의 추출/정규화 함수를 공유.
+P-5는 P-1, P-2, P-3, P-4 모두 필요.
 P-5b는 P-1, P-1b 필요.
 P-6은 P-5, P-5b 이후.
 P-7은 P-6 후 추가.
@@ -137,6 +202,9 @@ P-8은 사용자가 수행.
 ## 예상 변경 파일
 
 신규 생성 (rollback 시 본 파일 목록만 정리):
+- `src/core/hosts/types.ts`
+- `src/core/hosts/codex.ts`
+- `src/core/hosts/claude-code.ts`
 - `src/core/instruction-bridge.ts`
 - `src/core/bridge-sync.ts`
 - `src/core/permission-inventory.ts`
@@ -144,14 +212,16 @@ P-8은 사용자가 수행.
 - `src/core/surface-inventory.ts`
 - `src/cli/commands/doctor.ts`
 - `src/cli/commands/bridge.ts`
+- `tests/core/hosts/codex.test.ts`
+- `tests/core/hosts/claude-code.test.ts`
 - `tests/core/instruction-bridge.test.ts`
 - `tests/core/bridge-sync.test.ts`
 - `tests/core/permission-inventory.test.ts`
 - `tests/core/mcp-inventory.test.ts`
 - `tests/core/surface-inventory.test.ts`
-- `tests/doctor/*.test.ts` (명령별 1개 이상)
+- `tests/doctor/*.test.ts` (명령별 1개 이상, host별 fixture 분리)
 - `tests/bridge/sync.test.ts`
-- `tests/fixtures/doctor/<scenario>/` (정상/drift 시나리오별)
+- `tests/fixtures/doctor/<host>/<scenario>/` (host별 정상/drift 시나리오)
 - `tests/fixtures/bridge/<scenario>/` (sync 입력/기대 결과 쌍)
 
 기존 파일 수정 (절대 삭제 금지, `git restore <file>`만):

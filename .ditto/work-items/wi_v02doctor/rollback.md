@@ -14,6 +14,9 @@ git status --short
 
 본 work item이 생성하는 신규 파일(이 파일들만 삭제 가능):
 
+- `src/core/hosts/types.ts`
+- `src/core/hosts/codex.ts`
+- `src/core/hosts/claude-code.ts`
 - `src/core/instruction-bridge.ts`
 - `src/core/bridge-sync.ts`
 - `src/core/permission-inventory.ts`
@@ -21,6 +24,8 @@ git status --short
 - `src/core/surface-inventory.ts`
 - `src/cli/commands/doctor.ts`
 - `src/cli/commands/bridge.ts`
+- `tests/core/hosts/codex.test.ts`
+- `tests/core/hosts/claude-code.test.ts`
 - `tests/core/instruction-bridge.test.ts`
 - `tests/core/bridge-sync.test.ts`
 - `tests/core/permission-inventory.test.ts`
@@ -48,6 +53,19 @@ git status --short
 
 각 명령은 *해당 단계가 만든 파일만* 다룬다.
 
+### P-0 (host adapter 신규)
+```
+git restore --staged --worktree src/core/hosts/types.ts
+git restore --staged --worktree src/core/hosts/codex.ts
+git restore --staged --worktree src/core/hosts/claude-code.ts
+test -f src/core/hosts/types.ts && rm src/core/hosts/types.ts
+test -f src/core/hosts/codex.ts && rm src/core/hosts/codex.ts
+test -f src/core/hosts/claude-code.ts && rm src/core/hosts/claude-code.ts
+rmdir src/core/hosts 2>/dev/null || true
+```
+
+P-0이 P-1~P-4의 토대이므로 P-0을 되돌리면 P-1~P-4도 같이 되돌려야 컴파일이 유지됨.
+
 ### P-1 ~ P-1b ~ P-4 (core 신규)
 ```
 git restore --staged --worktree src/core/instruction-bridge.ts
@@ -63,7 +81,7 @@ test -f src/core/mcp-inventory.ts && rm src/core/mcp-inventory.ts
 test -f src/core/surface-inventory.ts && rm src/core/surface-inventory.ts
 ```
 
-각 P-1/P-1b/P-2/P-3/P-4는 독립이므로 자기 파일 한 줄만 처리. P-1b는 P-1의 helper에 의존하므로 P-1만 되돌리려면 P-1b도 같이 되돌려야 컴파일이 유지됨.
+각 P-1/P-1b/P-2/P-3/P-4는 독립이므로 자기 파일 한 줄만 처리. P-1b는 P-1의 helper에 의존하므로 P-1만 되돌리려면 P-1b도 같이 되돌려야 컴파일이 유지됨. 모두 P-0의 HostAdapter import.
 
 ### P-5 ~ P-5b (CLI 신규 + 기존 index.ts 수정)
 ```

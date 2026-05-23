@@ -12,32 +12,43 @@ ditto doctor instructions/permissions/mcp/surface 4개 명령이 host 설정과 
 확정:
 - **D-1 [DECIDED: (4a) full 복사]** AGENTS.md를 source로 CLAUDE.md의 managed block에 본문을 그대로 복사. 동기화는 `ditto bridge sync` (v0.2 포함).
 - **D-2 [DECIDED: (a) HTML comment]** marker는 `<!-- ditto:managed:start source=AGENTS.md sha256=<64hex> -->` ~ `<!-- ditto:managed:end -->`. doctor는 marker의 sha256 + 실제 managed block 내용 sha256 + AGENTS.md 정규화 sha256을 비교.
+- **D-8 [DECIDED: Codex + Claude Code]** v0.2는 두 host를 1급 지원. Codex는 AGENTS.md를 source 그 자체로 읽고, Claude Code는 CLAUDE.md projection을 읽음.
 
 대기 중:
-- D-3 doctor의 권한 범위 (추천: read-only; bridge sync로 분리됐으므로 read-only 채택이 자연스러움)
-- D-4 MCP inventory 수집 방법 (추천: 설정 파일 파싱)
-- D-5 skill manifest 형식과 위치 (추천: v0.2는 mock fixture lint만)
-- D-6 drift 정의 (추천: 정규화 + managed block 내부 sha256 — D-2와 일관)
-- D-7 exit code 규약 (추천: drift→1, 사용오류→65, 명령실패→70)
-- D-8 v0.2가 다룰 host 범위 (추천: Claude Code 단독)
+- D-3 doctor 권한 범위 (추천: read-only; bridge sync로 분리됐으므로 read-only가 일관)
+- D-4 MCP inventory 수집 방법 (추천: 두 host 설정 파일 파싱 합집합)
+- D-5 surface 검사 범위 (추천: 두 host 디렉터리 인벤토리만, schema 검증은 Phase 9)
+- D-6 drift 정의 (추천: 정규화 + sha256, D-2와 일관)
+- D-7 exit code 규약 (추천: drift→1, usage→65, runtime→70 + `--advisory`)
+- D-9 host adapter 구조 (추천: HostAdapter interface 추상화) — 신규
+- D-10 doctor 명령의 host 인자 (추천: 기본 모든 host, `--host`로 좁힘) — 신규
+- D-11 Codex AGENTS.md sync 대상 (추천: sync source만, target 아님) — 신규
 
-상세는 `.ditto/work-items/wi_v02doctor/plan.md#사용자-결정-필요-선결-항목` 참조.
+상세는 `.ditto/work-items/wi_v02doctor/plan.md#d-3--d-11-사용자-결정-요약` 참조.
 
 ## Acceptance criteria
-- ac-1: doctor instructions가 marker sha256/실제 sha256/source sha256 셋 비교로 drift를 4종(content_mismatch/sha256_mismatch/marker_missing/projection_missing)으로 분류
-- ac-2: doctor permissions가 위험 표면 식별, 미존재는 missing
-- ac-3: doctor mcp가 MCP inventory 출력, 수집 불가는 unverified+사유
-- ac-4: doctor surface가 manifest↔파일 차이를 missing/extra/renamed로 분류
-- ac-5: 모든 명령 human/json + 결정적 exit code, read-only 보장
-- ac-6: 산출 .ditto 파일이 self-validation 통과
-- ac-7: bridge sync가 AGENTS.md → CLAUDE.md managed block만 갱신, 자유 영역 보존, --check는 dry-run
+- ac-1: doctor instructions가 두 host에 대해 drift 감지. claude-code는 sha256 3단 비교(content_mismatch/sha256_mismatch/marker_missing/projection_missing), codex는 marker 부재 확인.
+- ac-2: doctor permissions가 두 host의 위험 표면을 공통 enum으로 정규화, 미존재는 missing.
+- ac-3: doctor mcp가 두 host 설정 파일 파싱해 inventory 출력, 수집 불가는 unverified+사유.
+- ac-4: doctor surface가 두 host의 surface 디렉터리 인벤토리 + missing/extra/renamed 분류 (schema 검증은 Phase 9).
+- ac-5: 모든 명령 human/json + 결정적 exit code + --host 인자 + --advisory + read-only 보장.
+- ac-6: 산출 .ditto 파일이 self-validation 통과.
+- ac-7: bridge sync --host claude-code가 AGENTS.md → CLAUDE.md managed block만 갱신, 자유 영역 보존, --check 는 dry-run, --host codex는 usage error.
+- ac-8: HostAdapter interface가 codex/claude-code 두 구현으로 등록되고, 새 host 추가가 파일 한 개 + registry 등록으로 끝남(mock host로 회귀 검증).
 
 ## Current git state
 - main 브랜치, wi_v01implement 완료(done)
 - working tree에 본 work item 문서들만 있어야 함.
 
 ## Relevant files
-- 신규 (생성 대상): `src/core/{instruction-bridge,bridge-sync,permission-inventory,mcp-inventory,surface-inventory}.ts`, `src/cli/commands/{doctor,bridge}.ts`, `tests/core/<module>.test.ts`, `tests/doctor/*.test.ts`, `tests/bridge/sync.test.ts`, `tests/fixtures/{doctor,bridge}/<scenario>/`
+- 신규 (생성 대상):
+  - `src/core/hosts/{types,codex,claude-code}.ts` — HostAdapter interface + 두 host 구현
+  - `src/core/{instruction-bridge,bridge-sync,permission-inventory,mcp-inventory,surface-inventory}.ts`
+  - `src/cli/commands/{doctor,bridge}.ts`
+  - `tests/core/hosts/{codex,claude-code}.test.ts`
+  - `tests/core/<module>.test.ts`
+  - `tests/doctor/*.test.ts`, `tests/bridge/sync.test.ts`
+  - `tests/fixtures/doctor/<host>/<scenario>/`, `tests/fixtures/bridge/<scenario>/`
 - 기존 (수정 대상, 삭제 금지): `src/cli/index.ts` (doctor/bridge subCommand 등록), `tests/schemas/repo-self-validation.test.ts` (케이스 보강)
 - 기존 (읽기만): `src/schemas/`, `src/core/{fs,id,work-item-store,run-store,evidence-store,work-item-handoff}.ts`, `AGENTS.md`, `CLAUDE.md`
 - plan/dod/rollback: 본 work item 디렉터리
