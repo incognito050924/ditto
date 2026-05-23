@@ -32,7 +32,7 @@ export async function collectSurfaceInventory(
   const inventories = await Promise.all(
     adapters.map((adapter) => adapter.loadSurfaceInventory(repoRoot)),
   );
-  const actual = inventories.flatMap((inv) => inv.surfaces);
+  const actual = inventories.flatMap((inv) => [...inv.localSurfaces, ...inv.homeSurfaces]);
   const expected = await loadExpected(repoRoot);
   if (expected.length === 0) {
     return { surfaces: actual, mismatch_count: 0, findings: [] };

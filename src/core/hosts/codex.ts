@@ -102,20 +102,18 @@ export const codexHostAdapter: HostAdapter = {
   async loadSurfaceInventory(repoRoot): Promise<SurfaceInventory> {
     const projectPlugins = join(repoRoot, '.codex', 'plugins');
     const userPlugins = join(homedir(), '.codex', 'plugins');
-    const surfaces: SurfaceEntry[] = [
-      ...(await listDirectories(projectPlugins)).map((entry) => ({
-        host: 'codex' as const,
-        kind: 'plugin' as const,
-        id: entry.id,
-        path: entry.path,
-      })),
-      ...(await listDirectories(userPlugins)).map((entry) => ({
-        host: 'codex' as const,
-        kind: 'plugin' as const,
-        id: entry.id,
-        path: entry.path,
-      })),
-    ];
-    return { host: 'codex', surfaces, unavailable: [] };
+    const localSurfaces: SurfaceEntry[] = (await listDirectories(projectPlugins)).map((entry) => ({
+      host: 'codex' as const,
+      kind: 'plugin' as const,
+      id: entry.id,
+      path: entry.path,
+    }));
+    const homeSurfaces: SurfaceEntry[] = (await listDirectories(userPlugins)).map((entry) => ({
+      host: 'codex' as const,
+      kind: 'plugin' as const,
+      id: entry.id,
+      path: entry.path,
+    }));
+    return { host: 'codex', localSurfaces, homeSurfaces, unavailable: [] };
   },
 };

@@ -83,7 +83,7 @@ describe('instruction bridge', () => {
         return { host: 'mock-projection', servers: [], unavailable: [] };
       },
       async loadSurfaceInventory() {
-        return { host: 'mock-projection', surfaces: [], unavailable: [] };
+        return { host: 'mock-projection', localSurfaces: [], homeSurfaces: [], unavailable: [] };
       },
     };
     try {

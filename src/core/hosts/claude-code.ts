@@ -175,13 +175,15 @@ export const claudeCodeHostAdapter: HostAdapter = {
   },
 
   async loadSurfaceInventory(repoRoot): Promise<SurfaceInventory> {
-    const surfaces: SurfaceEntry[] = [
-      ...(await listDirectories(join(homedir(), '.claude', 'skills'))).map((entry) => ({
-        host: 'claude-code' as const,
-        kind: 'skill' as const,
-        id: entry.id,
-        path: entry.path,
-      })),
+    const homeSurfaces: SurfaceEntry[] = (
+      await listDirectories(join(homedir(), '.claude', 'skills'))
+    ).map((entry) => ({
+      host: 'claude-code' as const,
+      kind: 'skill' as const,
+      id: entry.id,
+      path: entry.path,
+    }));
+    const localSurfaces: SurfaceEntry[] = [
       ...(await listDirectories(join(repoRoot, '.claude', 'agents'))).map((entry) => ({
         host: 'claude-code' as const,
         kind: 'agent' as const,
@@ -205,6 +207,6 @@ export const claudeCodeHostAdapter: HostAdapter = {
           path: entry.path,
         })),
     ];
-    return { host: 'claude-code', surfaces, unavailable: [] };
+    return { host: 'claude-code', localSurfaces, homeSurfaces, unavailable: [] };
   },
 };

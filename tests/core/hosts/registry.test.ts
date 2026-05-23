@@ -29,7 +29,7 @@ describe('host adapter registry', () => {
         return { host: 'codex', servers: [], unavailable: [] };
       },
       async loadSurfaceInventory() {
-        return { host: 'codex', surfaces: [], unavailable: [] };
+        return { host: 'codex', localSurfaces: [], homeSurfaces: [], unavailable: [] };
       },
     };
     registerHostAdapter(mock);

@@ -65,7 +65,8 @@ export interface SurfaceEntry {
 
 export interface SurfaceInventory {
   host: HostId;
-  surfaces: SurfaceEntry[];
+  localSurfaces: SurfaceEntry[];
+  homeSurfaces: SurfaceEntry[];
   unavailable: Array<{ path: string; reason: string }>;
 }
 
