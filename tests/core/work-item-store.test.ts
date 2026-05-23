@@ -143,3 +143,56 @@ describe('WorkItemStore', () => {
     expect(() => workItem.parse(parsed)).not.toThrow();
   });
 });
+
+function initGitRepo(dir: string) {
+  Bun.spawnSync(['git', 'init', '-q'], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
+  Bun.spawnSync(['git', 'config', 'user.email', 't@t'], { cwd: dir, stdout: 'pipe' });
+  Bun.spawnSync(['git', 'config', 'user.name', 't'], { cwd: dir, stdout: 'pipe' });
+  Bun.spawnSync(['git', 'commit', '--allow-empty', '-q', '-m', 'init'], {
+    cwd: dir,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  return Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: dir, stdout: 'pipe' })
+    .stdout.toString()
+    .trim();
+}
+
+describe('WorkItemStore started_at_sha hook', () => {
+  test('create leaves started_at_sha undefined (draft has no start time)', async () => {
+    const created = await store.create(sampleInput());
+    expect(created.started_at_sha).toBeUndefined();
+  });
+
+  test('update draft → in_progress in a git repo backfills started_at_sha', async () => {
+    const headSha = initGitRepo(workDir);
+    const created = await store.create(sampleInput());
+    const updated = await store.update(created.id, (cur) => ({
+      ...cur,
+      status: 'in_progress' as const,
+    }));
+    expect(updated.started_at_sha).toBe(headSha);
+  });
+
+  test('update does not overwrite an existing started_at_sha', async () => {
+    initGitRepo(workDir);
+    const created = await store.create(sampleInput());
+    const fakeSha = 'a'.repeat(40);
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      status: 'in_progress' as const,
+      started_at_sha: fakeSha,
+    }));
+    const final = await store.update(created.id, (cur) => ({ ...cur, title: 'renamed' }));
+    expect(final.started_at_sha).toBe(fakeSha);
+  });
+
+  test('update outside git repo leaves started_at_sha omitted', async () => {
+    const created = await store.create(sampleInput());
+    const updated = await store.update(created.id, (cur) => ({
+      ...cur,
+      status: 'in_progress' as const,
+    }));
+    expect(updated.started_at_sha).toBeUndefined();
+  });
+});

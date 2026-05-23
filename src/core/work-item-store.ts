@@ -6,6 +6,23 @@ import { type WorkItem, workItem } from '~/schemas/work-item';
 import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
 import { generateId } from './id';
 
+/**
+ * Best-effort read of the current git HEAD sha for `repoRoot`.
+ * Returns null if `repoRoot` is not a git work tree, git is missing,
+ * or the rev-parse output is not a 40-char hex sha.
+ */
+function tryGitHeadSha(repoRoot: string): string | null {
+  const proc = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], {
+    cwd: repoRoot,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  if (proc.exitCode !== 0) return null;
+  const sha = (proc.stdout?.toString() ?? '').trim();
+  if (!/^[a-f0-9]{40}$/.test(sha)) return null;
+  return sha;
+}
+
 export interface WorkItemCreateInput {
   title: string;
   source_request: string;
@@ -93,7 +110,20 @@ export class WorkItemStore {
     if (next.id !== current.id) {
       throw new Error(`update mutator changed work item id from ${current.id} to ${next.id}`);
     }
-    const withTouched = { ...next, updated_at: new Date().toISOString() };
+    // draft → in_progress 전환 시점에 한 번만 git HEAD sha를 박는다.
+    // 이미 박혀 있으면 손대지 않음(idempotent). git 실패 시 omit.
+    let withSha: WorkItem = next;
+    if (
+      current.status === 'draft' &&
+      next.status === 'in_progress' &&
+      next.started_at_sha === undefined
+    ) {
+      const sha = tryGitHeadSha(this.repoRoot);
+      if (sha !== null) {
+        withSha = { ...next, started_at_sha: sha };
+      }
+    }
+    const withTouched = { ...withSha, updated_at: new Date().toISOString() };
     return writeJson(this.workItemPath(id), workItem, withTouched);
   }
 

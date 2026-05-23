@@ -114,6 +114,60 @@ describe('writeWorkItemHandoff', () => {
     expect(result.baseUsed).toBeNull();
   });
 
+  test('base priority: --base wins over started_at_sha', async () => {
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.email', 't@t'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.name', 't'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '--allow-empty', '-q', '-m', 'one'], {
+      cwd: workDir,
+      stdout: 'pipe',
+    });
+    const oneSha = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: workDir, stdout: 'pipe' })
+      .stdout.toString()
+      .trim();
+    Bun.spawnSync(['git', 'commit', '--allow-empty', '-q', '-m', 'two'], {
+      cwd: workDir,
+      stdout: 'pipe',
+    });
+    const twoSha = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: workDir, stdout: 'pipe' })
+      .stdout.toString()
+      .trim();
+    const created = await store.create(makeInput());
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      started_at_sha: oneSha,
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
+      ),
+    }));
+    const result = await writeWorkItemHandoff(workDir, store, created.id, { base: twoSha });
+    expect(result.baseUsed).toBe(twoSha);
+  });
+
+  test('base priority: started_at_sha wins over default fallback when --base omitted', async () => {
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.email', 't@t'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.name', 't'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '--allow-empty', '-q', '-m', 'one'], {
+      cwd: workDir,
+      stdout: 'pipe',
+    });
+    const sha = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: workDir, stdout: 'pipe' })
+      .stdout.toString()
+      .trim();
+    const created = await store.create(makeInput());
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      started_at_sha: sha,
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
+      ),
+    }));
+    // origin/main 등 fallback ref가 없는 임시 repo에서도 started_at_sha가 사용됨
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    expect(result.baseUsed).toBe(sha);
+  });
+
   test('handoff renders changed_files section when present', async () => {
     const created = await store.create(makeInput());
     await store.update(created.id, (cur) => ({
