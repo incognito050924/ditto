@@ -132,4 +132,28 @@ describe('doctor instructions', () => {
     expect(proc.exitCode).toBe(65);
     expect(proc.stderr.toString()).toContain('invalid --host value');
   });
+
+  test('detects multiple managed markers in CLAUDE.md', async () => {
+    await writeFile(
+      join(dir, 'CLAUDE.md'),
+      [
+        '<!-- ditto:managed:start source=AGENTS.md sha256=a38d48e293e579a63234dc67dff1b6bcc44fb17acd78f6996fe1cc22bb4444a1 -->',
+        'block 1',
+        '<!-- ditto:managed:end -->',
+        '',
+        'free area',
+        '',
+        '<!-- ditto:managed:start source=AGENTS.md sha256=1111111111111111111111111111111111111111111111111111111111111111 -->',
+        'block 2',
+        '<!-- ditto:managed:end -->',
+        '',
+      ].join('\n'),
+    );
+    const proc = run(['doctor', 'instructions', '--host', 'claude-code', '--output', 'json']);
+    expect(proc.exitCode).toBe(1);
+    const json = JSON.parse(proc.stdout.toString());
+    const finding = json.findings.find((f: { kind: string }) => f.kind === 'multiple_markers');
+    expect(finding).toBeDefined();
+    expect(finding.message).toContain('2');
+  });
 });

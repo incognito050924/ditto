@@ -19,6 +19,7 @@ export type InstructionFindingKind =
   | 'marker_in_source'
   | 'projection_missing'
   | 'marker_missing'
+  | 'multiple_markers'
   | 'source_mismatch'
   | 'sha256_mismatch'
   | 'content_mismatch';
@@ -70,7 +71,8 @@ export type ProjectionLoadResult =
       endIndex: number;
     }
   | { kind: 'missing'; path: string }
-  | { kind: 'no_marker'; path: string; content: string };
+  | { kind: 'no_marker'; path: string; content: string }
+  | { kind: 'multiple_markers'; path: string; content: string; count: number };
 
 export function normalizeInstructionText(text: string): string {
   return text
@@ -107,6 +109,8 @@ function projectionFromSurface(surface: InstructionSurface): ProjectionLoadResul
   const content = surface.content;
   const matches = [...content.matchAll(MANAGED_BLOCK_RE_G)];
   if (matches.length === 0) return { kind: 'no_marker', path: surface.path, content };
+  if (matches.length > 1)
+    return { kind: 'multiple_markers', path: surface.path, content, count: matches.length };
   const match = matches[0];
   if (!match || match.index === undefined)
     return { kind: 'no_marker', path: surface.path, content };
@@ -197,6 +201,17 @@ export function compareClaudeProjection(
         path: projection.path,
         kind: 'marker_missing',
         message: 'CLAUDE.md does not contain a ditto managed block',
+        sourceSha256: source.normalizedSha256,
+      },
+    ];
+  }
+  if (projection.kind === 'multiple_markers') {
+    return [
+      {
+        host: 'claude-code',
+        path: projection.path,
+        kind: 'multiple_markers',
+        message: `CLAUDE.md contains ${projection.count} ditto managed blocks; expected exactly 1`,
         sourceSha256: source.normalizedSha256,
       },
     ];

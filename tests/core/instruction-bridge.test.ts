@@ -63,6 +63,27 @@ describe('instruction bridge', () => {
     expect(report.results[0]?.actualSha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  test('reports multiple_markers finding when CLAUDE.md has more than one block', async () => {
+    await writeFile(
+      join(dir, 'CLAUDE.md'),
+      [
+        '<!-- ditto:managed:start source=AGENTS.md sha256=0000000000000000000000000000000000000000000000000000000000000000 -->',
+        'one',
+        '<!-- ditto:managed:end -->',
+        '',
+        '<!-- ditto:managed:start source=AGENTS.md sha256=1111111111111111111111111111111111111111111111111111111111111111 -->',
+        'two',
+        '<!-- ditto:managed:end -->',
+      ].join('\n'),
+      'utf8',
+    );
+    const report = await checkInstructionsForHosts(['claude-code'], dir);
+    const finding = report.findings.find((f) => f.kind === 'multiple_markers');
+    expect(finding).toBeDefined();
+    expect(finding?.message).toContain('2');
+    expect(report.results[0]?.status).toBe('drift');
+  });
+
   test('projection-only adapters report source_missing without hard-binding codex registry', async () => {
     unregisterHostAdapter('codex');
     const projectionOnly: HostAdapter = {

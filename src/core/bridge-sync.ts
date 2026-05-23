@@ -13,7 +13,8 @@ export type BridgeSyncAction =
   | 'unchanged'
   | 'would-create'
   | 'would-update'
-  | 'would-be-unchanged';
+  | 'would-be-unchanged'
+  | 'refused-multiple-markers';
 
 export interface BridgeSyncResult {
   path: string;
@@ -60,6 +61,16 @@ export async function syncClaudeCodeProjection(
       oldSha256: null,
       newSha256: source.normalizedSha256,
       message: 'appended new managed block',
+    };
+  }
+
+  if (projection.kind === 'multiple_markers') {
+    return {
+      path,
+      action: 'refused-multiple-markers',
+      oldSha256: null,
+      newSha256: source.normalizedSha256,
+      message: `CLAUDE.md contains ${projection.count} ditto managed blocks; clean up to exactly one block before re-running bridge sync`,
     };
   }
 

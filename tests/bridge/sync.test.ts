@@ -38,4 +38,30 @@ describe('bridge sync CLI', () => {
     const codex = run(['bridge', 'sync', '--host', 'codex']);
     expect(codex.exitCode).toBe(65);
   });
+
+  test('refuses sync when CLAUDE.md has multiple managed blocks', async () => {
+    await writeFile(
+      join(dir, 'CLAUDE.md'),
+      [
+        '<!-- ditto:managed:start source=AGENTS.md sha256=0000000000000000000000000000000000000000000000000000000000000000 -->',
+        'block 1',
+        '<!-- ditto:managed:end -->',
+        '',
+        'free area',
+        '',
+        '<!-- ditto:managed:start source=AGENTS.md sha256=1111111111111111111111111111111111111111111111111111111111111111 -->',
+        'block 2',
+        '<!-- ditto:managed:end -->',
+        '',
+      ].join('\n'),
+    );
+    const before = await readFile(join(dir, 'CLAUDE.md'), 'utf8');
+    const proc = run(['bridge', 'sync', '--host', 'claude-code', '--output', 'json']);
+    expect(proc.exitCode).toBe(1);
+    const json = JSON.parse(proc.stdout.toString());
+    expect(json.action).toBe('refused-multiple-markers');
+    expect(proc.stderr.toString()).toContain('clean up to exactly one block');
+    const after = await readFile(join(dir, 'CLAUDE.md'), 'utf8');
+    expect(after).toBe(before);
+  });
 });

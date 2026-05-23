@@ -41,6 +41,9 @@ const bridgeSync = defineCommand({
         writeHuman(`  path: ${result.path}`);
         writeHuman(`  sha256: ${result.newSha256}`);
       }
+      if (result.action === 'refused-multiple-markers') {
+        process.exit(DRIFT_EXIT);
+      }
       if (args.check && (result.action === 'would-create' || result.action === 'would-update')) {
         process.exit(DRIFT_EXIT);
       }
