@@ -15,11 +15,16 @@ wi_v02harden post-review(2026-05-24)에서 두 finding:
 
 기술 결정은 추천값으로 박고, product 결정만 사용자 확인. 본 3건 모두 기술 결정.
 
-### D-1 [DECIDED: (a) started_at_sha를 work-item schema에 optional 필드로 추가]
-- `work-item.ts`에 `started_at_sha: sha (optional)` 추가. 40hex(git short)와 64hex 모두 받게 또는 git의 full 40hex만.
-- `WorkItemStore.create`가 `git rev-parse HEAD`로 자동 채움. git 안 통하면 (예: 새 repo) 필드 비움.
-- `writeWorkItemHandoff`가 `--base` 미지정 시 base 후보 순서: `started_at_sha` → `origin/main` → `origin/master` → `main` → `master`.
-- 근거: 외부 ref 없이 work item 시작 시점이 자기 자신에 박혀 있으면 handoff가 결정적. 별도 store 추가 없이 schema 최소 확장.
+### D-1 [DECIDED: (a) started_at_sha를 work-item schema에 optional 필드로 추가, draft→in_progress 전환 시점에 한 번만 세팅]
+- `work-item.ts`에 `started_at_sha: z.string().regex(/^[a-f0-9]{40}$/).optional()` 추가 (git full 40hex).
+- 세팅 시점: **`WorkItemStore.update`가 status를 draft → in_progress로 전환할 때**, `started_at_sha`가 비어 있으면 `git rev-parse HEAD`로 한 번만 박음. 이미 박혀 있으면 손대지 않음(idempotent). git rev-parse 실패 시 필드 omit.
+- `ditto work start`는 draft 상태로 work item 생성만. `started_at_sha`는 *비어 있음*(아직 전환 전이라 "작업 시작 시점"이 정해지지 않음).
+- 사용자가 work-item.json을 텍스트 에디터로 직접 편집해 status를 바꾸면 hook을 우회 → 그 경우 다음 store.update 호출(verify, handoff 등) 시 정정. 또는 사용자가 직접 sha 박음.
+- `writeWorkItemHandoff` base 후보 우선순위 (위가 강함):
+  1. `--base` 인자 (명시 base는 항상 1순위, 다른 후보를 이김)
+  2. `started_at_sha` (work item 시작 시점, draft→in_progress 시 박힌 sha)
+  3. `origin/main` → `origin/master` → `main` → `master` (기존 fallback)
+- 근거: 외부 ref 없이 work item 시작 시점이 자기 자신에 박혀 있으면 handoff가 결정적. draft 단계는 계획/합의 단계라 "작업 시작 시점"이 아님. start 시점이 아니라 전환 시점에 박는 게 의미론적으로 정확.
 - schema_version=0.1.0 유지(optional 필드 추가는 backward compatible). 기존 work-item.json은 그대로 통과.
 
 ### D-2 [DECIDED: (a) collected를 replace]
@@ -36,12 +41,12 @@ wi_v02harden post-review(2026-05-24)에서 두 finding:
 
 ## 작업 분해
 
-### P-1. schema + work-item-store + handoff base 선택 (ac-1)
+### P-1. schema + WorkItemStore.update hook + handoff base 선택 (ac-1)
 - (structural) `src/schemas/work-item.ts`의 `workItem` zod schema에 `started_at_sha: z.string().regex(/^[a-f0-9]{40}$/).optional()` 추가.
-- (structural) `src/core/work-item-handoff.ts`의 `pickBaseRef`/`writeWorkItemHandoff`가 `started_at_sha`도 후보 list에 포함.
-- (behavioral) `src/core/work-item-store.ts`의 `create`가 `git rev-parse HEAD`로 자동 채움. git 실패 시 필드 omit.
-- (behavioral) `WorkItem.create` 호출자 영향 검토(현재 `ditto work start`만).
-- 회귀: `tests/core/work-item-store.test.ts`에 create 시 started_at_sha 자동 채움 + 없을 때 omit. `tests/core/work-item-handoff.test.ts`에 base 선택 우선순위 회귀.
+- (structural) `src/core/work-item-handoff.ts`의 `writeWorkItemHandoff`가 base 후보 list에 `started_at_sha`를 `origin/main` 위에 끼움. `--base` 명시 인자는 여전히 가장 강함(별도 분기 유지).
+- (behavioral) `src/core/work-item-store.ts`의 `update`가 status 전환(`draft → in_progress`)을 감지하면 `started_at_sha`가 비어 있을 때만 `git rev-parse HEAD`로 박음. git 실패 시 필드 omit.
+- `ditto work start`는 그대로(draft 생성). `started_at_sha` 자동 채움 없음.
+- 회귀: `tests/core/work-item-store.test.ts`에 (i) start 직후 started_at_sha 비어 있음, (ii) update로 status를 in_progress로 바꾸면 자동 박힘, (iii) 이미 박혀 있으면 update가 덮어쓰지 않음. `tests/core/work-item-handoff.test.ts`에 base 선택 우선순위 회귀(--base > started_at_sha > origin/main).
 - `bun run schemas:export`로 `schemas/work-item.schema.json` 갱신(같은 commit).
 
 ### P-2. union → replace (ac-2)

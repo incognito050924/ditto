@@ -20,9 +20,18 @@ DITTO_SRC=/Users/incognito/dev/projects/ditto
 TMP=$(mktemp -d); cd "$TMP" && git init -q && git commit --allow-empty -m "init"
 HEAD_SHA=$(git rev-parse HEAD)
 
-# work start가 started_at_sha를 자동 채움
+# work start: draft 생성. started_at_sha는 비어 있음.
 "$DITTO_SRC"/dist/ditto work start "smoke goal" --request "smoke" --output json > out.json
 WI=$(jq -r '.work_item_id' out.json)
+test "$(jq -r '.started_at_sha // ""' .ditto/work-items/$WI/work-item.json)" = ""
+test "$(jq -r '.status' .ditto/work-items/$WI/work-item.json)" = "draft"
+
+# draft → in_progress 전환 (WorkItemStore.update 경유)
+# v0.2에는 CLI 전환 명령이 없으므로 직접 편집 → 다음 store.update 호출 (verify) 시 hook 발동
+jq '.status = "in_progress"' .ditto/work-items/$WI/work-item.json > /tmp/wi.json
+mv /tmp/wi.json .ditto/work-items/$WI/work-item.json
+# verify가 store.update를 호출하면서 hook이 한 번만 박음
+"$DITTO_SRC"/dist/ditto verify $WI --criterion ac-1 -- true
 test "$(jq -r '.started_at_sha' .ditto/work-items/$WI/work-item.json)" = "$HEAD_SHA"
 
 # 두 번째 commit
@@ -33,14 +42,21 @@ echo "x" > a.txt && git add a.txt && git commit -m "second"
 test "$(jq -r '.base_used' h.json)" = "$HEAD_SHA"
 test "$(jq -r '.changed_files | length' h.json)" -ge 1
 test "$(jq -r '.changed_files[] | select(.=="a.txt")' h.json)" = "a.txt"
+
+# --base 명시는 started_at_sha를 이김
+SECOND=$(git rev-parse HEAD)
+"$DITTO_SRC"/dist/ditto work handoff $WI --base $SECOND --output json > h2.json
+test "$(jq -r '.base_used' h2.json)" = "$SECOND"
 ```
 
 기준
 - `schemas/work-item.schema.json`에 `started_at_sha`가 optional 필드로 노출
-- `ditto work start`가 git 안에서 실행되면 자동으로 HEAD sha를 박음
+- `ditto work start` 직후 started_at_sha는 비어 있음 (draft에선 작업 시작 시점이 정해지지 않음)
+- `WorkItemStore.update`가 status를 draft → in_progress로 전환할 때 `started_at_sha`가 비어 있으면 한 번만 `git rev-parse HEAD`로 박음
+- 이미 박혀 있으면 update가 덮어쓰지 않음(idempotent)
 - git 밖에서 실행되거나 git 명령 실패 시 필드 omit (기존 work-item.json도 무수정 통과)
-- `writeWorkItemHandoff` base 후보 순서: `--base` 인자 > `started_at_sha` > origin/main > origin/master > main > master
-- 회귀: `tests/core/work-item-store.test.ts`(자동 채움 + omit) + `tests/core/work-item-handoff.test.ts`(우선순위)
+- `writeWorkItemHandoff` base 후보 순서: **`--base` 인자(가장 강함) > `started_at_sha` > origin/main > origin/master > main > master**
+- 회귀: `tests/core/work-item-store.test.ts`에 (i) start 직후 omit, (ii) draft→in_progress 전환 시 자동 박힘, (iii) 이미 박힌 sha 덮어쓰지 않음. `tests/core/work-item-handoff.test.ts`에 우선순위(--base가 started_at_sha를 이김 + started_at_sha가 origin/main을 이김)
 
 ## ac-2: collected replace (D-2)
 
