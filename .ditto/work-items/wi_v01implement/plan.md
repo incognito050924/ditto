@@ -44,10 +44,20 @@
 | `run record` | RunStore.create + WorkItemStore.update | `.ditto/runs/<id>/manifest.json`, work item의 runs 배열 갱신 |
 | `verify` | EvidenceStore.appendCommand + WorkItemStore.update | `evidence/commands.jsonl`, work item의 acceptance verdict 갱신 |
 
-### P-7. 자체 검증 테스트 (`tests/schemas/repo-self-validation.test.ts`)
-- `.ditto/work-items/*/work-item.json`, `completion.json`, `language-ledger.json`을 모두 읽어 schema 검증
-- `.ditto/runs/*/manifest.json`도 검증
-- `.ditto/knowledge/glossary.json` 검증
+`verify` 명령은 임의의 사용자 명령을 그대로 실행해야 한다. 현재 골격은 인자가 정의되지 않았으므로 다음 중 하나로 확장한다.
+
+- (A) `process.argv` 직접 처리: citty `run`에 `rawArgs`/`process.argv`에서 `--` 이후 슬라이스를 받아 실행. 명령에 공백/특수문자가 자연스럽게 들어감.
+- (B) `--command` 플래그: `ditto verify $WI --criterion ac-1 --command "echo smoke ok"`. citty 표준 args로 정의 가능. shell escape 필요.
+
+본 work item은 (A)를 채택한다. 이유: 사용자가 평소 사용하는 명령 그대로 verify에 붙일 수 있어 인지 비용이 가장 낮다. citty가 처리하지 않는 `--` 이후 args는 `process.argv.slice(process.argv.indexOf('--') + 1)`로 추출하고, `--`가 없으면 인자 부족으로 exit 65를 낸다. CLI 골격의 `src/cli/commands/verify.ts`는 `args` 정의 외에 별도 tail extractor를 둔다.
+
+`exit_code`가 0이면 해당 acceptance criterion verdict를 `pass`로, 0이 아니면 `fail`로 기록한다. `--criterion`이 생략되면 모든 acceptance에 동일 결과를 적용하지 않고, 단순히 evidence/commands.jsonl에만 append하고 verdict는 갱신하지 않는다(악의적/광범위한 일괄 pass 방지).
+
+### P-7. 자체 검증 테스트 보강 (`tests/schemas/repo-self-validation.test.ts`)
+- **이 파일은 wi_v01bootstrap에서 이미 생성되었다. 본 단계는 기존 파일에 케이스를 추가하는 확장 작업이며, 삭제 대상이 아니다.**
+- 기존: `.ditto/work-items/*/work-item.json`, `completion.json`, `language-ledger.json`, `.ditto/runs/*/manifest.json`, `.ditto/knowledge/glossary.json` 검증과 ditto-src identity describe, `DITTO_REPO_ROOT` env 지원이 이미 들어 있다.
+- 추가할 케이스: 새 store가 만드는 모든 파일이 schema에 부합하는지 검증. 특히 `evidence/commands.jsonl`은 줄별로 `commandLogEntry.parse`로 검증한다(이미 추가됨, 케이스 보강 한정).
+- 단위 테스트 신규: `tests/core/*.test.ts` (store별 1개 이상).
 
 ### P-8. 사용자 manual smoke
 plan 합의 후 사용자에게 다음을 실행 안내:
@@ -56,7 +66,7 @@ plan 합의 후 사용자에게 다음을 실행 안내:
 bun run dev work start "..." --request "..."
 bun run dev work status <wi_id> --output json
 bun run dev run record <wi_id> --provider claude-code
-bun run dev verify <wi_id> --criterion ac-1
+bun run dev verify <wi_id> --criterion ac-1 -- echo "smoke ok"
 bun run dev work handoff <wi_id>
 ```
 
@@ -66,9 +76,28 @@ P-3, P-4, P-5는 P-1, P-2 위에서만 동작. CLI 레이어(P-6)는 P-3~P-5 모
 
 ## 예상 변경 파일
 
-- 신규: `src/core/{fs,id,work-item-store,run-store,evidence-store}.ts`
-- 수정: `src/cli/commands/work.ts`, `src/cli/commands/run.ts`, `src/cli/commands/verify.ts`, `src/cli/util.ts`
-- 신규: `tests/schemas/repo-self-validation.test.ts`, `tests/core/*.test.ts`(store별 1개 이상)
+신규 생성 (rollback 시 본 파일 목록만 정리한다):
+- `src/core/fs.ts`
+- `src/core/id.ts`
+- `src/core/work-item-store.ts`
+- `src/core/run-store.ts`
+- `src/core/evidence-store.ts`
+- `tests/core/fs.test.ts`
+- `tests/core/id.test.ts`
+- `tests/core/work-item-store.test.ts`
+- `tests/core/run-store.test.ts`
+- `tests/core/evidence-store.test.ts`
+
+기존 파일 수정 (절대 삭제 금지, `git restore <file>`만):
+- `src/cli/commands/work.ts`
+- `src/cli/commands/run.ts`
+- `src/cli/commands/verify.ts`
+- `src/cli/util.ts`
+- `tests/schemas/repo-self-validation.test.ts` (케이스 보강 한정)
+
+본 work item이 만들거나 갱신하는 `.ditto/` repo-local 파일:
+- `.ditto/work-items/wi_v01implement/{work-item.json, progress.md, completion.json, handoff.md, language-ledger.json}`
+- 사용자 manual smoke 결과로 생기는 `.ditto/work-items/<smoke-wi-id>/...`와 `.ditto/runs/<smoke-run-id>/...`는 사용자 실험 자산이므로 자동 삭제 대상 아님.
 
 ## 범위 밖
 

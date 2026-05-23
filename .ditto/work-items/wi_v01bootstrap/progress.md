@@ -27,3 +27,11 @@
 - Finding 3: work item schema에 `status in {partial, unverified, blocked}` 시 `re_entry.command` 또는 `re_entry.fresh_evidence_needed` 강제 superRefine 추가.
 - Finding 4: 본 work item의 work-item.json/completion.json에 lint 16 files, bun test 24 pass(fixture 16 + self-validation 5 + source repo identity 3)로 fresh evidence 갱신. source repo identity describe는 Finding 1 처리 과정에서 추가되어 합계가 21→24로 늘었다.
 - Finding 1: 후속 task #12에서 self-validation 테스트의 REPO_ROOT를 env로 받게 변경하고 dod.md를 그에 맞게 수정.
+
+## 후행 review 2차 반영 (2026-05-24 13:50)
+사용자 review에서 wi_v01implement 계획에 대해 추가 5개 finding 제기.
+- Finding 1 (High): AC-6가 evidence/commands.jsonl 검증을 빠뜨림. `src/schemas/evidence-log.ts`에 `commandLogEntry` zod schema를 정의하고 export/검증 테스트에 추가. AC-6 statement를 명시적 파일 목록으로 갱신.
+- Finding 2 (High): rollback의 디렉터리 단위 `git restore src/cli/`와 `rm -rf src/core`가 무관 변경을 훼손할 위험. 파일 단위 명령으로 좁히고 기존 파일은 restore만, 신규 파일만 삭제. `git reset --hard`, `git clean -fd`, 와일드카드 모두 금지.
+- Finding 3 (High): `tests/schemas/repo-self-validation.test.ts`가 wi_v01bootstrap의 자산인데 plan/rollback이 신규/삭제로 취급. 모든 문서에서 "기존 확장 한정, 삭제 금지"로 표기.
+- Finding 4 (Medium): verify의 `-- <command>` tail args가 골격에 없음. plan P-6에 `process.argv` 기반 tail 추출 명시. `--criterion` 생략 시 verdict 변경하지 않도록 일괄 pass 방지 룰 추가. dod ac-5도 일치 갱신.
+- Finding 5 (Medium): AC-3가 pass 경로만 검증. dod ac-3을 경로 A(all pass), B(partial), C(잘못된 pass 주장 reject 회귀) 세 시나리오로 분리.

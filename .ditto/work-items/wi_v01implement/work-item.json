@@ -31,13 +31,13 @@
     },
     {
       "id": "ac-5",
-      "statement": "ditto verify가 지정 명령을 실행해 exit code를 캡처하고, evidence/commands.jsonl에 append하며, 해당 acceptance criterion의 verdict를 갱신한다.",
+      "statement": "ditto verify <wi_id> --criterion <ac-id> -- <command...> 형태가 -- 이후 명령을 실행해 exit code를 캡처하고, evidence/commands.jsonl에 한 줄(commandLogEntry schema 부합: ts, kind=command, command, exit_code, duration_ms?, sha256?)을 append하며, 지정 criterion의 verdict를 exit 0이면 pass, 아니면 fail로 갱신한다. --criterion 생략 시 evidence만 append하고 verdict는 변경하지 않는다. -- 가 없으면 exit 65.",
       "verdict": "unverified",
       "evidence": []
     },
     {
       "id": "ac-6",
-      "statement": "본 work item이 만들어내는 모든 .ditto 파일이 tests/schemas/repo-self-validation.test.ts에서 schema 검증을 통과한다.",
+      "statement": "본 work item이 만들어내거나 갱신하는 모든 .ditto 파일이 schema 검증을 통과한다. 검증 대상: work-item.json, completion.json, language-ledger.json, runs/<id>/manifest.json, knowledge/glossary.json, work-items/<id>/evidence/commands.jsonl(줄별 commandLogEntry).",
       "verdict": "unverified",
       "evidence": []
     }
