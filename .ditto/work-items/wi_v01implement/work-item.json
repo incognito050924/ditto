@@ -8,41 +8,77 @@
     {
       "id": "ac-1",
       "statement": "ditto work start가 .ditto/work-items/<id>/work-item.json을 schema 부합하게 생성하고 workItem.parse가 통과한다.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "cd $TMP && bun /Users/incognito/dev/projects/ditto/src/cli/index.ts work start ... --output json",
+          "summary": "JSON 출력에 work_item_id 포함 + $TMP/.ditto/work-items/$WI/work-item.json 생성 + DITTO_REPO_ROOT=$TMP self-validation 통과"
+        }
+      ]
     },
     {
       "id": "ac-2",
       "statement": "ditto work status가 .ditto/work-items/<id>/work-item.json을 읽어 human/json 두 형식으로 출력하며, JSON 출력은 schema 부합 결과를 그대로 반환한다.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun src/cli/index.ts work status $WI --output (human|json)",
+          "summary": "human은 id/title/status/goal/acceptance를 줄 단위로, json은 work-item.json 내용을 그대로 stdout으로 출력"
+        }
+      ]
     },
     {
       "id": "ac-3",
       "statement": "ditto work handoff가 work item completion contract를 검사하고, final_verdict이 pass가 아니면 handoff.md를 생성하며, completion.json도 함께 갱신한다.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun src/cli/index.ts work handoff $WI --output json",
+          "summary": "AC-1 후 fail ac 있는 partial 경로에서 final_verdict=partial + handoff.md + completion.json 생성. completion contract의 cross-field 룰(잘못된 pass 주장)도 schema에서 reject 확인."
+        }
+      ]
     },
     {
       "id": "ac-4",
       "statement": "ditto run record가 .ditto/runs/<id>/manifest.json을 schema 부합하게 생성하고 work item의 runs 배열을 갱신한다.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun src/cli/index.ts run record $WI --provider claude-code --output json",
+          "summary": "manifest.json 생성, work item runs 배열에 run id 추가, runManifest schema 통과"
+        }
+      ]
     },
     {
       "id": "ac-5",
       "statement": "ditto verify <wi_id> --criterion <ac-id> -- <command...> 형태가 -- 이후 명령을 실행해 exit code를 캡처하고, evidence/commands.jsonl에 한 줄(commandLogEntry schema 부합: ts, kind=command, command, exit_code, duration_ms?, sha256?)을 append하며, 지정 criterion의 verdict를 exit 0이면 pass, 아니면 fail로 갱신한다. --criterion 생략 시 evidence만 append하고 verdict는 변경하지 않는다. -- 가 없으면 exit 65.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun src/cli/index.ts verify $WI --criterion ac-1 -- echo 'smoke ok'",
+          "summary": "exit 0 → verdict=pass. exit 1로 두 번째 실행 → verdict=fail. -- 누락 → exit 65. --criterion 생략 → verdict 변경 없음. 네 시나리오 모두 의도대로 동작."
+        }
+      ]
     },
     {
       "id": "ac-6",
       "statement": "본 work item이 만들어내거나 갱신하는 모든 .ditto 파일이 schema 검증을 통과한다. 검증 대상: work-item.json, completion.json, language-ledger.json, runs/<id>/manifest.json, knowledge/glossary.json, work-items/<id>/evidence/commands.jsonl(줄별 commandLogEntry).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/repo-self-validation.test.ts",
+          "summary": "exit 0"
+        }
+      ]
     }
   ],
-  "status": "in_progress",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
@@ -79,5 +115,5 @@
   "runs": [],
   "handoff_path": ".ditto/work-items/wi_v01implement/handoff.md",
   "created_at": "2026-05-24T12:35:00+09:00",
-  "updated_at": "2026-05-24T14:30:00+09:00"
+  "updated_at": "2026-05-23T17:12:17.307Z"
 }

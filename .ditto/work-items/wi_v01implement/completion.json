@@ -1,0 +1,86 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_v01implement",
+  "declared_by": "workspace-write",
+  "declared_at": "2026-05-23T17:12:17.303Z",
+  "summary": "DITTO v0.1 actual implementation — 5개 CLI 명령의 실제 동작 — 모든 acceptance criterion이 pass로 기록되었다.",
+  "changed_files": [],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "cd $TMP && bun /Users/incognito/dev/projects/ditto/src/cli/index.ts work start ... --output json",
+          "summary": "JSON 출력에 work_item_id 포함 + $TMP/.ditto/work-items/$WI/work-item.json 생성 + DITTO_REPO_ROOT=$TMP self-validation 통과"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun src/cli/index.ts work status $WI --output (human|json)",
+          "summary": "human은 id/title/status/goal/acceptance를 줄 단위로, json은 work-item.json 내용을 그대로 stdout으로 출력"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun src/cli/index.ts work handoff $WI --output json",
+          "summary": "AC-1 후 fail ac 있는 partial 경로에서 final_verdict=partial + handoff.md + completion.json 생성. completion contract의 cross-field 룰(잘못된 pass 주장)도 schema에서 reject 확인."
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun src/cli/index.ts run record $WI --provider claude-code --output json",
+          "summary": "manifest.json 생성, work item runs 배열에 run id 추가, runManifest schema 통과"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-5",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun src/cli/index.ts verify $WI --criterion ac-1 -- echo 'smoke ok'",
+          "summary": "exit 0 → verdict=pass. exit 1로 두 번째 실행 → verdict=fail. -- 누락 → exit 65. --criterion 생략 → verdict 변경 없음. 네 시나리오 모두 의도대로 동작."
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-6",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/repo-self-validation.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [
+    "work item id 충돌: 동시에 여러 세션에서 생성 시 같은 id가 만들어질 수 있음.",
+    "dirty git state에서 사용자 작업을 덮어쓸 위험.",
+    "동시에 두 세션이 같은 work item을 갱신해 race condition 발생.",
+    "atomic write 보장 부재 시 부분 파일 생성."
+  ],
+  "next_handoff_path": ".ditto/work-items/wi_v01implement/handoff.md",
+  "final_verdict": "pass"
+}
