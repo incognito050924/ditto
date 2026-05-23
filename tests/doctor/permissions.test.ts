@@ -72,4 +72,51 @@ describe('doctor permissions', () => {
       ),
     ).toBe(true);
   });
+
+  test('classifies wildcard allow as dangerous_mode + approval_bypass', async () => {
+    await cp(
+      join(repoRoot, 'tests', 'fixtures', 'doctor', 'claude-code', 'permissions-allow-wildcard'),
+      join(dir, '.claude'),
+      { recursive: true },
+    );
+    const proc = run(['doctor', 'permissions', '--host', 'claude-code', '--output', 'json']);
+    expect(proc.exitCode).toBe(1);
+    const findings = JSON.parse(proc.stdout.toString()).findings;
+    expect(findings.some((f: { label: string }) => f.label === 'dangerous_mode')).toBe(true);
+    expect(findings.some((f: { label: string }) => f.label === 'approval_bypass')).toBe(true);
+  });
+
+  test('classifies destructive allow as write_outside_workspace only', async () => {
+    await cp(
+      join(repoRoot, 'tests', 'fixtures', 'doctor', 'claude-code', 'permissions-allow-destructive'),
+      join(dir, '.claude'),
+      { recursive: true },
+    );
+    const proc = run(['doctor', 'permissions', '--host', 'claude-code', '--output', 'json']);
+    expect(proc.exitCode).toBe(1);
+    const findings = JSON.parse(proc.stdout.toString()).findings;
+    expect(findings.some((f: { label: string }) => f.label === 'write_outside_workspace')).toBe(
+      true,
+    );
+    expect(findings.some((f: { label: string }) => f.label === 'dangerous_mode')).toBe(false);
+    expect(findings.some((f: { label: string }) => f.label === 'approval_bypass')).toBe(false);
+  });
+
+  test('conservative allow entries produce no findings', async () => {
+    await cp(
+      join(
+        repoRoot,
+        'tests',
+        'fixtures',
+        'doctor',
+        'claude-code',
+        'permissions-allow-conservative',
+      ),
+      join(dir, '.claude'),
+      { recursive: true },
+    );
+    const proc = run(['doctor', 'permissions', '--host', 'claude-code', '--output', 'json']);
+    expect(proc.exitCode).toBe(0);
+    expect(JSON.parse(proc.stdout.toString()).findings).toHaveLength(0);
+  });
 });

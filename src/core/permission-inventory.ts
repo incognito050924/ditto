@@ -1,5 +1,5 @@
 import type { HostAdapter, HostId, PermissionInventory, PermissionRiskLabel } from './hosts';
-import { asRecord } from './hosts/shared';
+import { asRecord, asStringArray } from './hosts/shared';
 
 export interface PermissionFinding {
   host: HostId;
@@ -8,11 +8,18 @@ export interface PermissionFinding {
   message: string;
 }
 
-function hasDangerousAllow(value: unknown): boolean {
-  if (!Array.isArray(value)) return false;
-  return value.some(
-    (item) => typeof item === 'string' && /Bash\(|Read\(|Write\(|Edit\(|\*/.test(item),
-  );
+const WILDCARD_ALLOW: ReadonlySet<string> = new Set(['*', 'Bash', 'Bash(*)', 'WebFetch(*)']);
+
+const DESTRUCTIVE_ALLOW_PATTERNS: ReadonlyArray<RegExp> = [
+  /^Write\(/,
+  /^Bash\(rm\b/,
+  /^Bash\(sudo\b/,
+];
+
+export function classifyAllowEntry(entry: string): PermissionRiskLabel[] {
+  if (WILDCARD_ALLOW.has(entry)) return ['dangerous_mode', 'approval_bypass'];
+  if (DESTRUCTIVE_ALLOW_PATTERNS.some((re) => re.test(entry))) return ['write_outside_workspace'];
+  return [];
 }
 
 export function findingsFromPermissionInventory(inv: PermissionInventory): PermissionFinding[] {
@@ -93,14 +100,25 @@ export function findingsFromPermissionInventory(inv: PermissionInventory): Permi
         message: 'claude-code bypasses permission prompts',
       });
     }
-    const permissions = inv.raw.permissions as Record<string, unknown> | undefined;
-    if (permissions?.allow && hasDangerousAllow(permissions.allow)) {
-      findings.push({
-        host: inv.host,
-        source_file: inv.source_file,
-        label: 'write_outside_workspace',
-        message: 'claude-code permissions.allow contains broad tool access',
-      });
+    const permissions = asRecord(inv.raw.permissions);
+    const allowList = asStringArray(permissions?.allow);
+    if (allowList) {
+      const seen = new Set<PermissionRiskLabel>();
+      for (const entry of allowList) {
+        for (const label of classifyAllowEntry(entry)) {
+          if (seen.has(label)) continue;
+          seen.add(label);
+          findings.push({
+            host: inv.host,
+            source_file: inv.source_file,
+            label,
+            message:
+              label === 'write_outside_workspace'
+                ? `claude-code permissions.allow contains destructive pattern: ${entry}`
+                : `claude-code permissions.allow contains wildcard entry: ${entry}`,
+          });
+        }
+      }
     }
   }
   return findings;
