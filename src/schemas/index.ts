@@ -1,5 +1,6 @@
 export * from './common';
 export * from './completion-contract';
+export * from './evidence-log';
 export * from './glossary';
 export * from './language-ledger';
 export * from './reviewer-output';

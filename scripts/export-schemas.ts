@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { ZodTypeAny } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { completionContract } from '~/schemas/completion-contract';
+import { commandLogEntry } from '~/schemas/evidence-log';
 import { glossary } from '~/schemas/glossary';
 import { languageLedger } from '~/schemas/language-ledger';
 import { reviewerOutput } from '~/schemas/reviewer-output';
@@ -20,6 +21,7 @@ const exports: Array<{ name: string; schema: ZodTypeAny }> = [
   { name: 'reviewer-output', schema: reviewerOutput },
   { name: 'glossary', schema: glossary },
   { name: 'language-ledger', schema: languageLedger },
+  { name: 'command-log-entry', schema: commandLogEntry },
 ];
 
 await mkdir(outDir, { recursive: true });

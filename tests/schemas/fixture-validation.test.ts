@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { completionContract } from '~/schemas/completion-contract';
+import { commandLogEntry } from '~/schemas/evidence-log';
 import { glossary } from '~/schemas/glossary';
 import { languageLedger } from '~/schemas/language-ledger';
 import { reviewerOutput } from '~/schemas/reviewer-output';
@@ -70,6 +71,18 @@ describe('password-strength golden fixture', () => {
     const parsed = languageLedger.parse(data);
     expect(parsed.work_item_id).toBe('wi_pwdcheck');
     expect(parsed.changes).toEqual([]);
+  });
+
+  test('commands.jsonl lines conform to commandLogEntry schema', async () => {
+    const text = await readFile(
+      join(FIXTURE_ROOT, 'work-items/wi_pwdcheck/evidence/commands.jsonl'),
+      'utf8',
+    );
+    const lines = text.split('\n').filter((line) => line.length > 0);
+    expect(lines.length).toBe(3);
+    for (const line of lines) {
+      commandLogEntry.parse(JSON.parse(line));
+    }
   });
 });
 
@@ -234,5 +247,25 @@ describe('schema rejects invalid documents', () => {
       updated_at: '2026-05-24T00:00:00+09:00',
     };
     expect(() => workItem.parse(ok)).not.toThrow();
+  });
+
+  test('command log entry rejects missing required fields', () => {
+    const bad = {
+      ts: '2026-05-24T00:00:00+09:00',
+      kind: 'command',
+      // command missing
+      exit_code: 0,
+    };
+    expect(() => commandLogEntry.parse(bad)).toThrow();
+  });
+
+  test('command log entry rejects wrong kind discriminator', () => {
+    const bad = {
+      ts: '2026-05-24T00:00:00+09:00',
+      kind: 'note',
+      command: 'echo hi',
+      exit_code: 0,
+    };
+    expect(() => commandLogEntry.parse(bad)).toThrow();
   });
 });

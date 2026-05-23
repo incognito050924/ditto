@@ -1,0 +1,60 @@
+{
+  "$ref": "#/definitions/command-log-entry",
+  "definitions": {
+    "command-log-entry": {
+      "type": "object",
+      "properties": {
+        "ts": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "kind": {
+          "type": "string",
+          "const": "command",
+          "description": "Discriminator; only command entries are currently defined"
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Exact command line as executed"
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Hash of captured output when stored as artifact"
+        },
+        "output_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-relative path to the captured stdout/stderr file if stored separately"
+        },
+        "work_item_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Work item that owns this log entry; redundant with file location but kept for self-contained replay"
+        },
+        "criterion_id": {
+          "type": "string",
+          "description": "Acceptance criterion this command was meant to verify, if any"
+        }
+      },
+      "required": [
+        "ts",
+        "kind",
+        "command",
+        "exit_code"
+      ],
+      "additionalProperties": false,
+      "description": "One line of .ditto/work-items/<id>/evidence/commands.jsonl"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

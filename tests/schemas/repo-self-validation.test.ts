@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { completionContract } from '~/schemas/completion-contract';
+import { commandLogEntry } from '~/schemas/evidence-log';
 import { glossary } from '~/schemas/glossary';
 import { languageLedger } from '~/schemas/language-ledger';
 import { runManifest } from '~/schemas/run-manifest';
@@ -93,6 +94,26 @@ describe('repo .ditto self-validation', () => {
     for (const dir of dirs) {
       const data = await loadJson(join(dir, 'manifest.json'));
       runManifest.parse(data);
+    }
+  });
+
+  test('every work-items/<id>/evidence/commands.jsonl line conforms to schema if present', async () => {
+    const dirs = await listWorkItemDirs();
+    for (const dir of dirs) {
+      const path = join(dir, 'evidence', 'commands.jsonl');
+      const file = Bun.file(path);
+      if (!(await file.exists())) continue;
+      const text = await file.text();
+      const lines = text.split('\n').filter((line) => line.length > 0);
+      lines.forEach((line, idx) => {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(line);
+        } catch (err) {
+          throw new Error(`commands.jsonl ${path}:${idx + 1} is not valid JSON: ${String(err)}`);
+        }
+        commandLogEntry.parse(parsed);
+      });
     }
   });
 });
