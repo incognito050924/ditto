@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeWorkItemHandoff } from '~/core/work-item-handoff';
+import { InvalidBaseRefError, writeWorkItemHandoff } from '~/core/work-item-handoff';
 import { WorkItemStore } from '~/core/work-item-store';
 
 let workDir: string;
@@ -87,6 +87,31 @@ describe('writeWorkItemHandoff', () => {
     );
     expect(hasChangedFilesEntry).toBe(true);
     expect(result.completion.final_verdict).not.toBe('pass');
+  });
+
+  test('explicit --base that does not resolve throws InvalidBaseRefError', async () => {
+    const created = await store.create(makeInput());
+    let thrown: unknown;
+    try {
+      await writeWorkItemHandoff(workDir, store, created.id, {
+        base: '__definitely_missing_ref__',
+      });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(InvalidBaseRefError);
+    // completion.json must not have been written
+    const completionPath = join(workDir, '.ditto', 'work-items', created.id, 'completion.json');
+    expect(await Bun.file(completionPath).exists()).toBe(false);
+  });
+
+  test('default base candidates falling through to null is allowed (no explicit --base)', async () => {
+    const created = await store.create(makeInput());
+    // workDir is not a git repo → all default candidates fail, baseUsed=null,
+    // but this is NOT an error. Handoff still succeeds (partial path due to
+    // unverified ac and changed_files heuristic).
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    expect(result.baseUsed).toBeNull();
   });
 
   test('handoff renders changed_files section when present', async () => {

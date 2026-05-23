@@ -1,6 +1,6 @@
 import { defineCommand } from 'citty';
 import { resolveRepoRootForCreate } from '~/core/fs';
-import { writeWorkItemHandoff } from '~/core/work-item-handoff';
+import { InvalidBaseRefError, writeWorkItemHandoff } from '~/core/work-item-handoff';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
   RUNTIME_ERROR_EXIT,
@@ -201,12 +201,22 @@ const workHandoff = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     const store = new WorkItemStore(repoRoot);
     try {
-      const result = await writeWorkItemHandoff(
-        repoRoot,
-        store,
-        args.workId,
-        args.base ? { base: args.base } : {},
-      );
+      let result: Awaited<ReturnType<typeof writeWorkItemHandoff>>;
+      try {
+        result = await writeWorkItemHandoff(
+          repoRoot,
+          store,
+          args.workId,
+          args.base ? { base: args.base } : {},
+        );
+      } catch (err) {
+        if (err instanceof InvalidBaseRefError) {
+          writeError(err.message);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        throw err;
+      }
       if (format === 'json') {
         writeJson({
           work_item_id: args.workId,

@@ -16,6 +16,13 @@ export interface HandoffOptions {
   base?: string;
 }
 
+export class InvalidBaseRefError extends Error {
+  constructor(public readonly ref: string) {
+    super(`--base "${ref}" is not a valid git ref in this repository`);
+    this.name = 'InvalidBaseRefError';
+  }
+}
+
 /**
  * Try a list of refs in order and return the first one git understands.
  * Returns null when none are valid.
@@ -181,10 +188,17 @@ export async function writeWorkItemHandoff(
   now: Date = new Date(),
 ): Promise<HandoffResult> {
   const item = await store.get(workId);
-  const baseCandidates = options.base
-    ? [options.base]
-    : ['origin/main', 'origin/master', 'main', 'master'];
-  const baseUsed = pickBaseRef(repoRoot, baseCandidates);
+  let baseUsed: string | null;
+  if (options.base !== undefined) {
+    // 사용자가 명시적으로 지정한 ref는 silent fallback 대상이 아니다.
+    const verified = pickBaseRef(repoRoot, [options.base]);
+    if (verified === null) {
+      throw new InvalidBaseRefError(options.base);
+    }
+    baseUsed = verified;
+  } else {
+    baseUsed = pickBaseRef(repoRoot, ['origin/main', 'origin/master', 'main', 'master']);
+  }
   const collected = collectChangedFiles(repoRoot, baseUsed);
   // 기존 item.changed_files와 git에서 수집한 파일의 합집합
   const merged = Array.from(new Set([...item.changed_files, ...collected]));
