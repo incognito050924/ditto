@@ -57,20 +57,33 @@ export const codexHostAdapter: HostAdapter = {
   },
 
   async loadPermissions(repoRoot): Promise<PermissionInventory[]> {
-    const path = join(repoRoot, '.codex', 'config.toml');
-    const text = await readTextIfExists(path);
-    if (text === null) {
-      return [
-        {
-          host: 'codex',
-          source_file: path,
-          status: 'missing',
-          raw: {},
-          unavailable_reason: 'codex repo config not found',
-        },
-      ];
-    }
-    return [{ host: 'codex', source_file: path, status: 'ok', raw: parseToml(text) }];
+    const repoPath = join(repoRoot, '.codex', 'config.toml');
+    const repoText = await readTextIfExists(repoPath);
+    const inventories: PermissionInventory[] = [
+      repoText === null
+        ? {
+            host: 'codex',
+            source_file: repoPath,
+            status: 'missing',
+            raw: {},
+            unavailable_reason: 'codex repo config not found',
+          }
+        : { host: 'codex', source_file: repoPath, status: 'ok', raw: parseToml(repoText) },
+    ];
+    const userPath = join(homedir(), '.codex', 'config.toml');
+    const userText = await readTextIfExists(userPath);
+    inventories.push(
+      userText === null
+        ? {
+            host: 'codex',
+            source_file: userPath,
+            status: 'missing',
+            raw: {},
+            unavailable_reason: 'codex user config not found',
+          }
+        : { host: 'codex', source_file: userPath, status: 'ok', raw: parseToml(userText) },
+    );
+    return inventories;
   },
 
   async loadMcpServers(repoRoot): Promise<McpInventory> {

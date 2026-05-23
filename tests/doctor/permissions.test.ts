@@ -1,22 +1,30 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { cp, mkdtemp, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const repoRoot = join(import.meta.dir, '..', '..');
 const cli = join(repoRoot, 'src', 'cli', 'index.ts');
 let dir: string;
+let home: string;
 
 function run(args: string[]) {
-  return Bun.spawnSync(['bun', 'run', cli, ...args], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
+  return Bun.spawnSync(['bun', 'run', cli, ...args], {
+    cwd: dir,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: { ...process.env, HOME: home },
+  });
 }
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'ditto-doctor-permissions-'));
+  home = await mkdtemp(join(tmpdir(), 'ditto-home-permissions-'));
 });
 
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
+  await rm(home, { recursive: true, force: true });
 });
 
 describe('doctor permissions', () => {
@@ -71,6 +79,22 @@ describe('doctor permissions', () => {
           finding.label === 'network_on' && finding.message.includes('sandbox_workspace_write'),
       ),
     ).toBe(true);
+  });
+
+  test('detects nested network_access from user-scope ~/.codex/config.toml', async () => {
+    await mkdir(join(home, '.codex'), { recursive: true });
+    await cp(
+      join(repoRoot, 'tests', 'fixtures', 'doctor', 'codex', 'permissions-nested', 'config.toml'),
+      join(home, '.codex', 'config.toml'),
+    );
+    const proc = run(['doctor', 'permissions', '--host', 'codex', '--output', 'json']);
+    expect(proc.exitCode).toBe(1);
+    const json = JSON.parse(proc.stdout.toString());
+    const userFinding = json.findings.find(
+      (finding: { label: string; source_file: string }) =>
+        finding.label === 'network_on' && finding.source_file.includes(join(home, '.codex')),
+    );
+    expect(userFinding).toBeDefined();
   });
 
   test('classifies wildcard allow as dangerous_mode + approval_bypass', async () => {
