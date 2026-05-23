@@ -110,14 +110,15 @@ export class WorkItemStore {
     if (next.id !== current.id) {
       throw new Error(`update mutator changed work item id from ${current.id} to ${next.id}`);
     }
-    // draft → in_progress 전환 시점에 한 번만 git HEAD sha를 박는다.
-    // 이미 박혀 있으면 손대지 않음(idempotent). git 실패 시 omit.
+    // started_at_sha backfill:
+    //   work item이 in_progress이면서 started_at_sha가 아직 비어 있을 때만
+    //   git HEAD sha를 한 번 박는다. 첫 draft→in_progress 전환과 legacy
+    //   (이미 in_progress인데 sha 누락) 두 경우 모두 catch. 이미 박혀 있으면
+    //   덮어쓰지 않음(idempotent). done/blocked/partial 등으로 가는 update는
+    //   backfill 대상이 아님 — 마감 자산에 잘못된 현재 sha를 채워 넣는 것을
+    //   막기 위해. git 실패 시 omit.
     let withSha: WorkItem = next;
-    if (
-      current.status === 'draft' &&
-      next.status === 'in_progress' &&
-      next.started_at_sha === undefined
-    ) {
+    if (next.status === 'in_progress' && next.started_at_sha === undefined) {
       const sha = tryGitHeadSha(this.repoRoot);
       if (sha !== null) {
         withSha = { ...next, started_at_sha: sha };

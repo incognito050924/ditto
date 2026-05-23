@@ -195,4 +195,38 @@ describe('WorkItemStore started_at_sha hook', () => {
     }));
     expect(updated.started_at_sha).toBeUndefined();
   });
+
+  test('legacy in_progress without started_at_sha gets backfilled on next update', async () => {
+    const headSha = initGitRepo(workDir);
+    const created = await store.create(sampleInput());
+    // 사용자가 work-item.json을 직접 편집해 in_progress가 된 상태를 시뮬레이트:
+    // 첫 update가 draft→in_progress인 데도 started_at_sha를 hook이 박지 못한 상황으로
+    // 가정. 여기서는 hook이 박은 sha를 먼저 비워 동일 상태를 재현.
+    await store.update(created.id, (cur) => ({ ...cur, status: 'in_progress' as const }));
+    await store.update(created.id, (cur) => ({ ...cur, started_at_sha: undefined }));
+    // 다음 임의의 update에서 hook이 backfill해야 한다.
+    const next = await store.update(created.id, (cur) => ({ ...cur, title: 'renamed' }));
+    expect(next.started_at_sha).toBe(headSha);
+  });
+
+  test('update transitioning to done does not backfill started_at_sha', async () => {
+    initGitRepo(workDir);
+    const created = await store.create(sampleInput());
+    // ac-1을 pass로 만들고 in_progress를 거치지 않고 곧장 done으로 간다.
+    // hook 조건은 `next.status === 'in_progress'`이므로 done 가는 update는
+    // backfill 대상이 아님 — 마감 자산에 잘못된 현재 sha가 박히는 것을 막는다.
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
+      ),
+    }));
+    const done = await store.update(created.id, (cur) => ({
+      ...cur,
+      status: 'done' as const,
+      closed_at: new Date().toISOString(),
+    }));
+    expect(done.status).toBe('done');
+    expect(done.started_at_sha).toBeUndefined();
+  });
 });
