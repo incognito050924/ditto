@@ -85,8 +85,36 @@ ditto doctor instructions/permissions/mcp/surface 4개 명령이 host 설정과 
 
 ```
 git status                                                # 다른 변경 섞임 확인
-bun x tsc --noEmit && bun run lint && bun test            # 기준선 확인
+bun x tsc --noEmit && bun run lint && bun test            # 기준선 확인 (현재 79 pass 예상)
 cat .ditto/work-items/wi_v02doctor/plan.md                # P-0부터 시작
+cat .ditto/work-items/wi_v02doctor/dod.md                 # ac별 검증 명령 숙지
+cat .ditto/work-items/wi_v02doctor/rollback.md            # 신규/수정 파일 분리 + 금지 사항
 ```
 
-D-1~D-11 모두 [DECIDED]. P-0 host adapter부터 순차 진행.
+D-1~D-11 모두 [DECIDED]. P-0 host adapter부터 순차 진행. dod.md의 각 ac 검증 명령을 그대로 실행해 evidence 수집.
+
+## Review 합의 (사용자 ↔ agent)
+
+진행 중 review를 받을 timing이 합의되어 있다. 임의로 묶지 말 것.
+
+| 단계 | review 시점 | 이유 |
+|---|---|---|
+| **P-0 host adapter** | 단독 commit 후 review | HostAdapter interface가 P-1~P-5의 토대. 잘못된 추상화면 cascading. 사용자 환경 가정(.codex/config.toml 필드, .mcp.json, ~/.claude.json 구조)이 실제와 일치하는지도 이 시점에 확인. |
+| P-1 ~ P-5 + P-5b | 묶어서 commit 후 review | core 구현은 P-0 위에서 비교적 독립. 한 번에 review로 충분. |
+| P-6 (fixture/regression) | 묶어서 commit 후 review | doctor/bridge 시나리오 회귀. fixture가 의도된 drift를 모두 잡는지 한 번 확인. |
+| P-7 + P-8 (self-validation + smoke) | 묶어서 마무리 후 work handoff | 자기 검증 + manual smoke로 마감. ditto work handoff wi_v02doctor로 final_verdict 도출. |
+
+총 review 4회. 각 review 사이에 사용자가 finding을 줄 수 있고, 그 finding은 같은 work item progress.md에 회고로 기록.
+
+## 새 세션에서 이어받기
+
+이 work item을 새 세션 또는 다른 PC에서 이어받을 때:
+
+1. `git pull` (origin 최신)
+2. `bun install` (의존성 동기화)
+3. `git status` 확인 (clean이어야 함; 무관 변경 있으면 stash)
+4. 본 context-packet.md 읽기
+5. `cat .ditto/work-items/wi_v02doctor/progress.md`로 진행 로그 확인
+6. plan.md의 다음 P-단계 진행
+
+`.ditto/work-items/wi_v02doctor/` 디렉터리만 committed 되어 있으면 어떤 세션에서든 동일하게 이어받을 수 있다 (PURPOSE의 "세션 이동 보장" 핵심).
