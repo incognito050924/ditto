@@ -1,0 +1,46 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_v02handoff",
+  "title": "DITTO v0.2 work-item-handoff cleanup — accurate changed_files and base ref",
+  "source_request": "wi_v02harden follow-up review에서 두 root cause 식별: (1) ditto work handoff 기본 base가 origin/main(사용자 환경에서 23+ commit 뒤처짐)이라 첫 handoff가 repo-wide 목록을 보고. (2) writeWorkItemHandoff가 기존 item.changed_files와 collected를 union → 한 번 부풀린 list가 영원히 누적. wi_v02doctor와 wi_v02harden 모두 같은 패턴으로 changed_files가 부풀려졌음(wi_v02harden은 post-review에서 reset 후 정정 완료). v0.3 provider wrapper 전에 정리.",
+  "goal": "ditto work start가 work item 생성 시점 git sha를 work-item.json에 저장하고, ditto work handoff가 --base 미지정 시 이 sha를 기본 base로 사용한다. writeWorkItemHandoff가 collected changed_files를 누적 없이 replace해 handoff 재실행이 idempotent하고 마감 산출물이 실제 변경 범위와 정확히 일치한다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "work-item schema에 started_at_sha(optional, 40 또는 64 hex)가 추가되고, ditto work start가 자동으로 `git rev-parse HEAD`로 채운다. writeWorkItemHandoff는 --base 미지정 시 started_at_sha를 1순위 base로 사용하고, 없으면 기존 origin/main → origin/master → main → master fallback. base가 존재하지 않는 ref면 InvalidBaseRefError 그대로 던짐. schema_version은 0.1.0 유지(backward compatible)."
+    },
+    {
+      "id": "ac-2",
+      "statement": "writeWorkItemHandoff가 collected changed_files를 기존 item.changed_files와 union하지 않고 replace한다. 동일 work item에 대해 handoff를 두 번 실행해도 산출물의 changed_files는 두 번째 실행 시점의 git diff 결과와 일치(idempotent). 회귀 테스트가 첫 handoff 후 work-item.json.changed_files에 가짜 entry를 박고 두 번째 handoff 결과에 그것이 사라짐을 확인."
+    },
+    {
+      "id": "ac-3",
+      "statement": "기존 wi_v02doctor의 부풀려진 changed_files(99 entries, repo-wide)를 wi_v02doctor 시작 시점 기준 실제 diff로 정정한다. 정정 후 completion.json/handoff.md/work-item.json 셋의 changed_files가 일치하고 `git diff --name-only <wi_v02doctor 시작 commit>..<wi_v02doctor 마감 commit>` 와 합리적 범위에서 일치. wi_v02harden은 이미 post-review correction에서 정정됨(34 entries)이므로 재확인만."
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [
+    {
+      "description": "schema에 신규 optional 필드 추가가 외부 도구의 strict parser(예: zod-to-json-schema export 후 다른 lang 사용)에서 unknown field로 reject될 수 있다.",
+      "severity": "low",
+      "mitigation": "D-1=(a) optional 필드라 기존 work-item.json은 무수정 통과. schemas:export로 JSONSchema 갱신 + 외부 사용자 없으므로 v0.2 안전."
+    },
+    {
+      "description": "union → replace 전환이 사용자가 수동으로 changed_files에 추가한 entry를 잃게 만들 수 있다.",
+      "severity": "low",
+      "mitigation": "현재 ditto 사용 사례에 수동 추가 사용자가 없음(work item 4개 모두 자동 collect). 수동 추가 보존 옵션(예: --merge)은 v0.3+ 별도 ADR."
+    },
+    {
+      "description": "기존 work item changed_files 정정이 git 기록 차원의 단순 mutation이라 어느 base를 선택할지가 정정 정확도를 결정한다.",
+      "severity": "medium",
+      "mitigation": "D-3=(a)에 따라 wi_v02doctor 시작 commit을 git log로 식별해 그 commit 직전 sha를 base로 사용. wi_v02harden은 이미 4b18c40 base로 정정 완료."
+    }
+  ],
+  "runs": [],
+  "handoff_path": ".ditto/work-items/wi_v02handoff/handoff.md",
+  "created_at": "2026-05-24T22:30:00+09:00",
+  "updated_at": "2026-05-24T22:30:00+09:00"
+}
