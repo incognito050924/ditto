@@ -1,0 +1,80 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_pwdcheck",
+  "declared_by": "workspace-write",
+  "declared_at": "2026-05-24T11:42:00+09:00",
+  "summary": "신규 사용자 등록 경로에 비밀번호 정책을 적용하고 위반 시 400을 반환한다. 위반 메시지는 v0에서는 한 줄 통합 포맷이다.",
+  "changed_files": [
+    "src/api/users.ts",
+    "src/auth/password-policy.ts",
+    "tests/api/users.create.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/api/users.create.test.ts -t weak-password",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/api/users.create.test.ts -t strong-password",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "partial",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/runs/run_pwdcheck1/stdout.log",
+          "summary": "응답 body 메시지가 한 줄로 합쳐져 규칙별 분리되지 않음"
+        }
+      ],
+      "notes": "메시지 포함 자체는 확인되었으나 규칙별 분리 요구는 미충족"
+    }
+  ],
+  "verifications": [
+    {
+      "command": "bun test tests/api/users.create.test.ts -t weak-password",
+      "exit_code": 0,
+      "run_id": "run_pwdcheck1"
+    },
+    {
+      "command": "bun test tests/api/users.create.test.ts -t strong-password",
+      "exit_code": 0,
+      "run_id": "run_pwdcheck1"
+    },
+    {
+      "command": "bun test tests/api/users.create.test.ts -t message-includes",
+      "exit_code": 1,
+      "run_id": "run_pwdcheck1"
+    }
+  ],
+  "unverified": [
+    {
+      "item": "ac-3 응답 메시지의 규칙별 분리",
+      "reason": "현재 메시지가 한 줄로 통합되어 자동 검증 어려움; 별도 fresh evidence 필요"
+    },
+    {
+      "item": "기존 사용자 영향 회귀 테스트",
+      "reason": "회귀용 fixture가 아직 없음"
+    }
+  ],
+  "remaining_risks": [
+    "기존 사용자 정책 미달 처리 정책 미정"
+  ],
+  "next_handoff_path": ".ditto/work-items/wi_pwdcheck/handoff.md",
+  "final_verdict": "partial"
+}
