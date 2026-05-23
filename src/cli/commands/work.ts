@@ -1,6 +1,10 @@
 import { defineCommand } from 'citty';
+import { resolveRepoRootForCreate } from '~/core/fs';
+import { writeWorkItemHandoff } from '~/core/work-item-handoff';
+import { WorkItemStore } from '~/core/work-item-store';
 import {
-  NOT_IMPLEMENTED_EXIT,
+  RUNTIME_ERROR_EXIT,
+  USAGE_ERROR_EXIT,
   parseOutputFormat,
   writeError,
   writeHuman,
@@ -39,27 +43,49 @@ const workStart = defineCommand({
       default: 'human',
     },
   },
-  run: ({ args }) => {
+  run: async ({ args }) => {
     const format = parseOutputFormat(args.output);
-    const payload = {
-      action: 'work.start',
-      status: 'not_implemented',
-      input: {
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    const profile = args.profile as
+      | 'read-only'
+      | 'workspace-write'
+      | 'networked'
+      | 'reviewer'
+      | 'isolated';
+    const title = args.title ?? args.goal.slice(0, 80);
+    try {
+      const created = await store.create({
+        title,
+        source_request: args.request,
         goal: args.goal,
-        request: args.request,
-        title: args.title ?? null,
-        profile: args.profile,
-      },
-    };
-    if (format === 'json') {
-      writeJson(payload);
-    } else {
-      writeHuman('work.start is not implemented yet (v0.1 skeleton).');
-      writeHuman(`goal: ${args.goal}`);
-      writeHuman(`profile: ${args.profile}`);
+        owner_profile: profile,
+        acceptance_criteria: [
+          {
+            id: 'ac-1',
+            statement: '본 work item의 첫 acceptance — verify 명령으로 갱신 대상',
+            verdict: 'unverified',
+            evidence: [],
+          },
+        ],
+      });
+      if (format === 'json') {
+        writeJson({
+          work_item_id: created.id,
+          path: `.ditto/work-items/${created.id}/work-item.json`,
+          status: created.status,
+          repo_root: repoRoot,
+        });
+      } else {
+        writeHuman(`Created work item ${created.id}`);
+        writeHuman(`  goal: ${created.goal}`);
+        writeHuman(`  status: ${created.status}`);
+        writeHuman(`  path: ${repoRoot}/.ditto/work-items/${created.id}/work-item.json`);
+      }
+    } catch (err) {
+      writeError(`work start failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
     }
-    writeError('ditto work start: not implemented in v0.1 skeleton');
-    process.exit(NOT_IMPLEMENTED_EXIT);
   },
 });
 
@@ -80,19 +106,49 @@ const workStatus = defineCommand({
       default: 'human',
     },
   },
-  run: ({ args }) => {
+  run: async ({ args }) => {
     const format = parseOutputFormat(args.output);
-    if (format === 'json') {
-      writeJson({
-        action: 'work.status',
-        status: 'not_implemented',
-        input: { workId: args.workId ?? null },
-      });
-    } else {
-      writeHuman('work.status is not implemented yet (v0.1 skeleton).');
+    let repoRoot: string;
+    try {
+      repoRoot = await resolveRepoRootForCreate();
+    } catch (err) {
+      writeError(`cannot find repo root: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
     }
-    writeError('ditto work status: not implemented in v0.1 skeleton');
-    process.exit(NOT_IMPLEMENTED_EXIT);
+    const store = new WorkItemStore(repoRoot);
+    if (!args.workId) {
+      const list = await store.list();
+      if (format === 'json') {
+        writeJson({ items: list });
+      } else if (list.length === 0) {
+        writeHuman('No work items.');
+      } else {
+        for (const s of list) {
+          writeHuman(`${s.id}\t${s.status}\t${s.updated_at}\t${s.title}`);
+        }
+      }
+      return;
+    }
+    try {
+      const item = await store.get(args.workId);
+      if (format === 'json') {
+        writeJson(item);
+      } else {
+        writeHuman(`id:     ${item.id}`);
+        writeHuman(`title:  ${item.title}`);
+        writeHuman(`status: ${item.status}`);
+        writeHuman(`goal:   ${item.goal}`);
+        writeHuman(`updated_at: ${item.updated_at}`);
+        writeHuman('acceptance:');
+        for (const ac of item.acceptance_criteria) {
+          writeHuman(`  - ${ac.id} [${ac.verdict}] ${ac.statement}`);
+        }
+      }
+    } catch (err) {
+      writeError(`work status failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
   },
 });
 
@@ -113,19 +169,29 @@ const workHandoff = defineCommand({
       default: 'human',
     },
   },
-  run: ({ args }) => {
+  run: async ({ args }) => {
     const format = parseOutputFormat(args.output);
-    if (format === 'json') {
-      writeJson({
-        action: 'work.handoff',
-        status: 'not_implemented',
-        input: { workId: args.workId },
-      });
-    } else {
-      writeHuman(`work.handoff for ${args.workId} is not implemented yet (v0.1 skeleton).`);
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const result = await writeWorkItemHandoff(repoRoot, store, args.workId);
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.workId,
+          final_verdict: result.completion.final_verdict,
+          handoff_path: result.handoffPath,
+          completion_path: result.completionPath,
+        });
+      } else {
+        writeHuman(`Handoff for ${args.workId}`);
+        writeHuman(`  final_verdict: ${result.completion.final_verdict}`);
+        writeHuman(`  handoff.md:    ${result.handoffPath}`);
+        writeHuman(`  completion.json: ${result.completionPath}`);
+      }
+    } catch (err) {
+      writeError(`work handoff failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
     }
-    writeError('ditto work handoff: not implemented in v0.1 skeleton');
-    process.exit(NOT_IMPLEMENTED_EXIT);
   },
 });
 

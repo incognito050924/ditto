@@ -1,11 +1,38 @@
+import { execFileSync } from 'node:child_process';
 import { defineCommand } from 'citty';
-import {
-  NOT_IMPLEMENTED_EXIT,
-  parseOutputFormat,
-  writeError,
-  writeHuman,
-  writeJson,
-} from '../util';
+import { resolveRepoRootForCreate } from '~/core/fs';
+import { RunStore } from '~/core/run-store';
+import { WorkItemStore } from '~/core/work-item-store';
+import { USAGE_ERROR_EXIT, parseOutputFormat, writeError, writeHuman, writeJson } from '../util';
+
+function gitHead(cwd: string): { head: string; branch: string; dirty: boolean; untracked: number } {
+  let head = '0'.repeat(40);
+  let branch = '';
+  let dirty = false;
+  let untracked = 0;
+  try {
+    head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
+  } catch {
+    // not a git repo or no commits; keep zero sha
+  }
+  try {
+    branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      cwd,
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    // ignore
+  }
+  try {
+    const status = execFileSync('git', ['status', '--porcelain'], { cwd, encoding: 'utf8' });
+    const lines = status.split('\n').filter((l) => l.length > 0);
+    dirty = lines.length > 0;
+    untracked = lines.filter((l) => l.startsWith('??')).length;
+  } catch {
+    // ignore
+  }
+  return { head, branch, dirty, untracked };
+}
 
 const runRecord = defineCommand({
   meta: {
@@ -28,6 +55,16 @@ const runRecord = defineCommand({
       description: 'Execution profile',
       default: 'workspace-write',
     },
+    entrypoint: {
+      type: 'string',
+      description: 'How the provider was invoked',
+      required: false,
+    },
+    model: {
+      type: 'string',
+      description: 'Model reported by the provider; "" or omitted → null',
+      required: false,
+    },
     prompt: {
       type: 'string',
       description: 'Path to prompt/context packet file',
@@ -39,24 +76,64 @@ const runRecord = defineCommand({
       default: 'human',
     },
   },
-  run: ({ args }) => {
+  run: async ({ args }) => {
     const format = parseOutputFormat(args.output);
-    if (format === 'json') {
-      writeJson({
-        action: 'run.record',
-        status: 'not_implemented',
-        input: {
-          workId: args.workId,
-          provider: args.provider,
-          profile: args.profile,
-          prompt: args.prompt ?? null,
+    const repoRoot = await resolveRepoRootForCreate();
+    const workStore = new WorkItemStore(repoRoot);
+    const runStore = new RunStore(repoRoot);
+    try {
+      const item = await workStore.get(args.workId);
+      const provider = args.provider as
+        | 'codex'
+        | 'claude-code'
+        | 'opencode'
+        | 'openagent'
+        | 'other';
+      const profile = args.profile as
+        | 'read-only'
+        | 'workspace-write'
+        | 'networked'
+        | 'reviewer'
+        | 'isolated';
+      const git = gitHead(repoRoot);
+      const created = await runStore.create({
+        work_item_id: item.id,
+        provider,
+        entrypoint: args.entrypoint ?? `${provider}`,
+        profile,
+        cwd: '.',
+        model_reported: args.model && args.model.length > 0 ? args.model : null,
+        git_before: {
+          head: git.head,
+          branch: git.branch,
+          dirty: git.dirty,
+          untracked_count: git.untracked,
         },
+        ...(args.prompt ? { prompt_path: args.prompt } : {}),
       });
-    } else {
-      writeHuman('run.record is not implemented yet (v0.1 skeleton).');
+      await workStore.update(item.id, (cur) => ({
+        ...cur,
+        runs: [...cur.runs, created.id],
+      }));
+      if (format === 'json') {
+        writeJson({
+          run_id: created.id,
+          work_item_id: item.id,
+          manifest_path: `.ditto/runs/${created.id}/manifest.json`,
+          provider: created.provider,
+          profile: created.profile,
+        });
+      } else {
+        writeHuman(`Recorded run ${created.id}`);
+        writeHuman(`  work item: ${item.id}`);
+        writeHuman(`  provider:  ${created.provider}`);
+        writeHuman(`  profile:   ${created.profile}`);
+        writeHuman(`  manifest:  ${repoRoot}/.ditto/runs/${created.id}/manifest.json`);
+      }
+    } catch (err) {
+      writeError(`run record failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
     }
-    writeError('ditto run record: not implemented in v0.1 skeleton');
-    process.exit(NOT_IMPLEMENTED_EXIT);
   },
 });
 
