@@ -32,18 +32,20 @@ export async function collectSurfaceInventory(
   const inventories = await Promise.all(
     adapters.map((adapter) => adapter.loadSurfaceInventory(repoRoot)),
   );
-  const actual = inventories.flatMap((inv) => [...inv.localSurfaces, ...inv.homeSurfaces]);
+  const localActual = inventories.flatMap((inv) => inv.localSurfaces);
+  const homeActual = inventories.flatMap((inv) => inv.homeSurfaces);
+  const allInventory = [...localActual, ...homeActual];
   const expected = await loadExpected(repoRoot);
   if (expected.length === 0) {
-    return { surfaces: actual, mismatch_count: 0, findings: [] };
+    return { surfaces: allInventory, mismatch_count: 0, findings: [] };
   }
 
-  const actualByKey = new Map(actual.map((surface) => [keyOf(surface), surface]));
+  const localByKey = new Map(localActual.map((surface) => [keyOf(surface), surface]));
   const expectedByKey = new Map(expected.map((surface) => [keyOf(surface), surface]));
   const findings: SurfaceEntry[] = [];
 
   for (const exp of expected) {
-    const actualSurface = actualByKey.get(keyOf(exp));
+    const actualSurface = localByKey.get(keyOf(exp));
     if (!actualSurface) {
       findings.push({
         host: exp.host,
@@ -59,12 +61,12 @@ export async function collectSurfaceInventory(
     }
   }
 
-  for (const surface of actual) {
+  for (const surface of localActual) {
     if (!expectedByKey.has(keyOf(surface))) findings.push({ ...surface, mismatch: 'extra_file' });
   }
 
   return {
-    surfaces: actual,
+    surfaces: allInventory,
     mismatch_count: findings.length,
     findings,
   };

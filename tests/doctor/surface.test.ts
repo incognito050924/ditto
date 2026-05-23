@@ -83,4 +83,39 @@ describe('doctor surface', () => {
       ),
     ).toBe(false);
   });
+
+  test('home-scope skills are inventoried but excluded from mismatch comparison', async () => {
+    await mkdir(join(home, '.claude', 'skills', 'extra-a'), { recursive: true });
+    await mkdir(join(home, '.claude', 'skills', 'extra-b'), { recursive: true });
+    await mkdir(join(home, '.claude', 'skills', 'extra-c'), { recursive: true });
+    await mkdir(join(dir, '.ditto'), { recursive: true });
+    await mkdir(join(dir, '.claude', 'commands'), { recursive: true });
+    await writeFile(join(dir, '.claude', 'commands', 'hello.md'), '# hello\n', 'utf8');
+    await writeFile(
+      join(dir, '.ditto', 'surfaces.json'),
+      JSON.stringify({
+        schema_version: '0.1.0',
+        surfaces: [
+          {
+            host: 'claude-code',
+            kind: 'command',
+            id: 'hello',
+            path: '.claude/commands/hello.md',
+          },
+        ],
+      }),
+      'utf8',
+    );
+    const proc = run(['doctor', 'surface', '--host', 'claude-code', '--output', 'json']);
+    expect(proc.exitCode).toBe(0);
+    const json = JSON.parse(proc.stdout.toString());
+    expect(json.mismatch_count).toBe(0);
+    expect(
+      json.surfaces.some(
+        (surface: { kind: string; id: string }) =>
+          surface.kind === 'skill' && surface.id === 'extra-a',
+      ),
+    ).toBe(true);
+    expect(json.findings.some((finding: { id: string }) => finding.id === 'extra-a')).toBe(false);
+  });
 });
