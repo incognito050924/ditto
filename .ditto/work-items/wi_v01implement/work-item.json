@@ -42,7 +42,7 @@
       "evidence": []
     }
   ],
-  "status": "draft",
+  "status": "in_progress",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
@@ -79,5 +79,5 @@
   "runs": [],
   "handoff_path": ".ditto/work-items/wi_v01implement/handoff.md",
   "created_at": "2026-05-24T12:35:00+09:00",
-  "updated_at": "2026-05-24T12:35:00+09:00"
+  "updated_at": "2026-05-24T14:30:00+09:00"
 }
