@@ -11,8 +11,8 @@ import {
 export const MANAGED_START_RE =
   /<!--\s*ditto:managed:start\s+source=([^\s]+)\s+sha256=([a-f0-9]{64})\s*-->/;
 export const MANAGED_END = '<!-- ditto:managed:end -->';
-const MANAGED_BLOCK_RE =
-  /<!--\s*ditto:managed:start\s+source=([^\s]+)\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:managed:end\s*-->/;
+const MANAGED_BLOCK_RE_G =
+  /<!--\s*ditto:managed:start\s+source=([^\s]+)\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:managed:end\s*-->/g;
 
 export type InstructionFindingKind =
   | 'source_missing'
@@ -105,7 +105,9 @@ function projectionFromSurface(surface: InstructionSurface): ProjectionLoadResul
     return { kind: 'missing', path: surface.path };
   }
   const content = surface.content;
-  const match = content.match(MANAGED_BLOCK_RE);
+  const matches = [...content.matchAll(MANAGED_BLOCK_RE_G)];
+  if (matches.length === 0) return { kind: 'no_marker', path: surface.path, content };
+  const match = matches[0];
   if (!match || match.index === undefined)
     return { kind: 'no_marker', path: surface.path, content };
   const markerSource = match[1] ?? '';
