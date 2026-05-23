@@ -56,24 +56,21 @@ export const codexHostAdapter: HostAdapter = {
     };
   },
 
-  async loadPermissions(repoRoot): Promise<PermissionInventory> {
+  async loadPermissions(repoRoot): Promise<PermissionInventory[]> {
     const path = join(repoRoot, '.codex', 'config.toml');
     const text = await readTextIfExists(path);
     if (text === null) {
-      return {
-        host: 'codex',
-        source_file: path,
-        status: 'missing',
-        raw: {},
-        unavailable_reason: 'codex repo config not found',
-      };
+      return [
+        {
+          host: 'codex',
+          source_file: path,
+          status: 'missing',
+          raw: {},
+          unavailable_reason: 'codex repo config not found',
+        },
+      ];
     }
-    return {
-      host: 'codex',
-      source_file: path,
-      status: 'ok',
-      raw: parseToml(text),
-    };
+    return [{ host: 'codex', source_file: path, status: 'ok', raw: parseToml(text) }];
   },
 
   async loadMcpServers(repoRoot): Promise<McpInventory> {

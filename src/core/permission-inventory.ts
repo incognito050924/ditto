@@ -128,8 +128,8 @@ export async function collectPermissionFindings(
   adapters: HostAdapter[],
   repoRoot: string,
 ): Promise<PermissionFinding[]> {
-  const inventories = await Promise.all(
+  const inventoryArrays = await Promise.all(
     adapters.map((adapter) => adapter.loadPermissions(repoRoot)),
   );
-  return inventories.flatMap(findingsFromPermissionInventory);
+  return inventoryArrays.flat().flatMap(findingsFromPermissionInventory);
 }

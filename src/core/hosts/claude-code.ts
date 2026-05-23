@@ -82,33 +82,39 @@ export const claudeCodeHostAdapter: HostAdapter = {
     };
   },
 
-  async loadPermissions(repoRoot): Promise<PermissionInventory> {
+  async loadPermissions(repoRoot): Promise<PermissionInventory[]> {
     const path = join(repoRoot, '.claude', 'settings.json');
     try {
       const raw = await readJsonIfExists(path);
       if (raw === null) {
-        return {
+        return [
+          {
+            host: 'claude-code',
+            source_file: path,
+            status: 'missing',
+            raw: {},
+            unavailable_reason: 'claude-code settings not found',
+          },
+        ];
+      }
+      return [
+        {
           host: 'claude-code',
           source_file: path,
-          status: 'missing',
-          raw: {},
-          unavailable_reason: 'claude-code settings not found',
-        };
-      }
-      return {
-        host: 'claude-code',
-        source_file: path,
-        status: 'ok',
-        raw: asRecord(raw) ?? {},
-      };
+          status: 'ok',
+          raw: asRecord(raw) ?? {},
+        },
+      ];
     } catch (err) {
-      return {
-        host: 'claude-code',
-        source_file: path,
-        status: 'unverified',
-        raw: {},
-        unavailable_reason: err instanceof Error ? err.message : String(err),
-      };
+      return [
+        {
+          host: 'claude-code',
+          source_file: path,
+          status: 'unverified',
+          raw: {},
+          unavailable_reason: err instanceof Error ? err.message : String(err),
+        },
+      ];
     }
   },
 

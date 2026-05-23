@@ -23,7 +23,7 @@ describe('host adapter registry', () => {
       },
       async loadPermissions() {
         permissionCalled = true;
-        return { host: 'codex', source_file: '.codex/config.toml', status: 'missing', raw: {} };
+        return [{ host: 'codex', source_file: '.codex/config.toml', status: 'missing', raw: {} }];
       },
       async loadMcpServers() {
         return { host: 'codex', servers: [], unavailable: [] };

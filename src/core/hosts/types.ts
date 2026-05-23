@@ -73,7 +73,7 @@ export interface SurfaceInventory {
 export interface HostAdapter {
   id: HostId;
   loadInstructions(repoRoot: string): Promise<InstructionSurface>;
-  loadPermissions(repoRoot: string): Promise<PermissionInventory>;
+  loadPermissions(repoRoot: string): Promise<PermissionInventory[]>;
   loadMcpServers(repoRoot: string): Promise<McpInventory>;
   loadSurfaceInventory(repoRoot: string): Promise<SurfaceInventory>;
 }

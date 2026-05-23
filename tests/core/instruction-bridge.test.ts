@@ -98,7 +98,7 @@ describe('instruction bridge', () => {
         };
       },
       async loadPermissions() {
-        return { host: 'mock-projection', source_file: 'mock', status: 'missing', raw: {} };
+        return [{ host: 'mock-projection', source_file: 'mock', status: 'missing', raw: {} }];
       },
       async loadMcpServers() {
         return { host: 'mock-projection', servers: [], unavailable: [] };
