@@ -38,7 +38,26 @@
 - `bun test` 127 pass / 0 fail (이전 121 + 신규 6: store hook 4 + handoff 우선순위 2; union → replace 회귀는 기존 1건 교체로 수 동일)
 - schema self-validation 10/10
 
+## 1차 review 결과 (P-1 + P-2)
+- 사용자 review 결과 2 finding:
+  - **High**: hook 조건이 `current.status === 'draft' && next.status === 'in_progress'`이라 본 wi_v02handoff처럼 *이미 in_progress*인 legacy work item에는 backfill 안 됨. dod.md smoke 시나리오("직접 편집 후 verify로 발동")도 실패.
+  - **Medium**: work-item.json ac-1 statement / context-packet.md가 이전 결정값("40 또는 64 hex", "ditto work start 자동 채움")을 유지 — 실제 구현(40 hex, store.update hook)과 어긋남.
+
+## 보정 (2026-05-24 23:45)
+- (behavioral) `WorkItemStore.update` hook 조건을 `current.status === 'draft' && next.status === 'in_progress'` → `next.status === 'in_progress' && next.started_at_sha === undefined`로 확장.
+  - 첫 draft→in_progress 전환과 legacy(직접 편집 후 in_progress) 둘 다 catch.
+  - done/blocked/partial 등으로 가는 update는 backfill 안 함 — 마감 자산이 잘못된 현재 sha를 받지 않도록.
+- 회귀 2건 추가(`tests/core/work-item-store.test.ts`):
+  - `legacy in_progress without started_at_sha gets backfilled on next update`
+  - `update transitioning to done does not backfill started_at_sha`
+- 문서 정정:
+  - `work-item.json` ac-1 statement: "40 또는 64 hex" → "40 hex", "ditto work start 자동 채움" → "WorkItemStore.update가 in_progress + 비어 있을 때 자동 backfill(legacy 포함)"
+  - `plan.md` D-1, P-1 표현 같은 식으로 갱신
+  - `dod.md` ac-1 기준에 (iv)~(vi) 회귀 추가 + done 전환 backfill 금지 명시
+  - `context-packet.md` 결정 표/AC 표 갱신
+- 검증: bun test 129 pass / 0 fail (이전 127 + 신규 2). tsc/lint pass. focused tests/core 24 pass.
+
 ## 다음 동작
-- 사용자 review 시점 (P-1 + P-2 묶음). plan.md Review 합의대로 여기서 한 번 review 받기.
-- review 통과 시 P-3(wi_v02doctor changed_files 정정) + P-4(self-validation + manual smoke + handoff) 묶음으로 마감.
-- P-4의 ditto verify 호출 시 본 wi_v02handoff의 started_at_sha가 hook으로 자동 backfill됨 (현재 직접 편집한 status 변경 후 첫 store.update가 trigger).
+- 사용자 follow-up review 시점. 위 보정이 finding 둘을 닫는지 확인.
+- review OK 시 P-3(wi_v02doctor changed_files 정정) + P-4(self-validation + manual smoke + handoff) 묶음으로 마감.
+- 본 wi_v02handoff의 started_at_sha는 P-4 ditto verify 호출 시 보정된 hook으로 자동 backfill 예정.

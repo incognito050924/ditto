@@ -7,7 +7,7 @@
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "work-item schema에 started_at_sha(optional, 40 또는 64 hex)가 추가되고, ditto work start가 자동으로 `git rev-parse HEAD`로 채운다. writeWorkItemHandoff는 --base 미지정 시 started_at_sha를 1순위 base로 사용하고, 없으면 기존 origin/main → origin/master → main → master fallback. base가 존재하지 않는 ref면 InvalidBaseRefError 그대로 던짐. schema_version은 0.1.0 유지(backward compatible)."
+      "statement": "work-item schema에 started_at_sha(optional, 40 hex git sha)가 추가된다. WorkItemStore.update가 work item이 in_progress이면서 started_at_sha가 비어 있을 때 git rev-parse HEAD로 자동 backfill (첫 draft→in_progress 전환과 legacy 직접 편집 후 in_progress 케이스 둘 다 catch). 이미 박혀 있거나 done/blocked/partial로 전환되는 update에서는 backfill 안 함(idempotent + 마감 자산 보호). ditto work start는 draft 상태로 생성하며 started_at_sha를 채우지 않는다. writeWorkItemHandoff는 --base 미지정 시 started_at_sha를 1순위 base로 사용하고, 없으면 기존 origin/main → origin/master → main → master fallback. --base 명시는 항상 가장 강함. base가 존재하지 않는 ref면 InvalidBaseRefError 그대로 던짐. schema_version은 0.1.0 유지(backward compatible)."
     },
     {
       "id": "ac-2",

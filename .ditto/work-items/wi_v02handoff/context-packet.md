@@ -17,7 +17,7 @@ wi_v02doctor도 같은 패턴으로 99 entries → 본 work item에서 정정.
 
 | ID | 결정 | 근거 |
 |---|---|---|
-| D-1 | (a) work-item schema에 started_at_sha optional 추가. work start가 git rev-parse HEAD로 자동 채움. handoff는 base 후보 순서에서 1순위로 사용. | 외부 ref 없이 work item 시작 시점이 자기 자신에 박혀 결정적. schema_version 유지(backward compatible). |
+| D-1 | (a) work-item schema에 started_at_sha optional(40 hex) 추가. WorkItemStore.update가 in_progress + 비어 있을 때 git rev-parse HEAD로 자동 backfill(첫 전환 + legacy 둘 다 catch). done 전환에선 backfill 안 함. handoff base 후보 우선순위: --base > started_at_sha > origin/main fallback. | 외부 ref 없이 work item 시작 시점이 자기 자신에 박혀 결정적. legacy 직접 편집도 catch. schema_version 유지(backward compatible). |
 | D-2 | (a) collected를 union 없이 replace. | handoff 재실행이 idempotent. 수동 추가 보존은 v0.3+ 별도. |
 | D-3 | 본 work item에서 wi_v02doctor만 정정. wi_v02harden은 이미 fix. wi_v01* 자산은 범위 밖. | 범위 명확화. |
 
@@ -25,7 +25,7 @@ wi_v02doctor도 같은 패턴으로 99 entries → 본 work item에서 정정.
 
 ## Acceptance criteria
 
-- ac-1: started_at_sha schema + work start 자동 채움 + handoff base 우선순위 (work-item-store.test, work-item-handoff.test 회귀)
+- ac-1: started_at_sha schema(40 hex optional) + WorkItemStore.update backfill hook(in_progress + 비어 있을 때, legacy 포함) + handoff base 우선순위 (work-item-store.test 6 케이스 + work-item-handoff.test 우선순위 2 케이스)
 - ac-2: collected replace + 재실행 idempotent (work-item-handoff.test 가짜 entry 회귀)
 - ac-3: wi_v02doctor changed_files 정정 (99 → 합리적 수), wi_v02harden 34 유지
 

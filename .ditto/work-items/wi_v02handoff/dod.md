@@ -50,13 +50,14 @@ test "$(jq -r '.base_used' h2.json)" = "$SECOND"
 ```
 
 기준
-- `schemas/work-item.schema.json`에 `started_at_sha`가 optional 필드로 노출
+- `schemas/work-item.schema.json`에 `started_at_sha`가 optional 필드로 노출 (`^[a-f0-9]{40}$`)
 - `ditto work start` 직후 started_at_sha는 비어 있음 (draft에선 작업 시작 시점이 정해지지 않음)
-- `WorkItemStore.update`가 status를 draft → in_progress로 전환할 때 `started_at_sha`가 비어 있으면 한 번만 `git rev-parse HEAD`로 박음
+- `WorkItemStore.update`가 `next.status === 'in_progress' && next.started_at_sha === undefined`일 때 한 번 `git rev-parse HEAD`로 박음 — 첫 draft→in_progress 전환과 legacy(직접 편집 후 in_progress) 둘 다 catch
 - 이미 박혀 있으면 update가 덮어쓰지 않음(idempotent)
+- done/blocked/partial 등으로 가는 update는 backfill 대상이 아님 — 마감 자산이 잘못된 현재 sha를 받지 않도록
 - git 밖에서 실행되거나 git 명령 실패 시 필드 omit (기존 work-item.json도 무수정 통과)
 - `writeWorkItemHandoff` base 후보 순서: **`--base` 인자(가장 강함) > `started_at_sha` > origin/main > origin/master > main > master**
-- 회귀: `tests/core/work-item-store.test.ts`에 (i) start 직후 omit, (ii) draft→in_progress 전환 시 자동 박힘, (iii) 이미 박힌 sha 덮어쓰지 않음. `tests/core/work-item-handoff.test.ts`에 우선순위(--base가 started_at_sha를 이김 + started_at_sha가 origin/main을 이김)
+- 회귀: `tests/core/work-item-store.test.ts`에 (i) start 직후 omit, (ii) draft→in_progress 시 박힘, (iii) 이미 박힌 sha 덮어쓰지 않음, (iv) git repo 밖 omit, (v) legacy in_progress backfill on next update, (vi) done 전환 시 backfill 안 함. `tests/core/work-item-handoff.test.ts`에 우선순위(--base > started_at_sha + started_at_sha > fallback)
 
 ## ac-2: collected replace (D-2)
 
