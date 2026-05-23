@@ -7,7 +7,7 @@
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "ditto doctor instructions가 AGENTS.md와 host projection(CLAUDE.md 등)의 drift를 감지한다. 일치 시 exit 0, drift 시 [DECISION NEEDED: exit code]; --output json은 source/projection별 위치/요약/diff hash를 반환한다.",
+      "statement": "ditto doctor instructions가 AGENTS.md(source)와 CLAUDE.md의 managed block(HTML comment marker로 둘러싸인 영역)을 비교해 drift를 감지한다. marker의 sha256 속성과 실제 managed block 내용의 정규화 sha256, AGENTS.md의 정규화 sha256 셋 모두 일치할 때만 ok. 일치 시 exit 0, drift 시 [DECISION NEEDED: D-7 exit code]. --output json은 path/markerSource/markerSha256/actualSha256/sourceSha256/verdict를 반환한다.",
       "verdict": "unverified",
       "evidence": []
     },
@@ -38,6 +38,12 @@
     {
       "id": "ac-6",
       "statement": "본 work item이 만들거나 갱신하는 모든 .ditto 파일이 schema 검증을 통과한다 (work-item.json, completion.json, language-ledger.json, evidence/commands.jsonl 등).",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-7",
+      "statement": "ditto bridge sync가 AGENTS.md를 source로 CLAUDE.md의 managed block을 갱신한다. marker가 없으면 파일 끝에 새 marker block을 append하고 stderr로 알린다. marker가 있으면 그 안만 교체하고 sha256 속성을 갱신한다. managed block 밖의 사용자 자유 영역은 어떤 경우에도 수정되지 않는다. --check 플래그는 dry-run으로 차이만 보고하고 파일을 수정하지 않는다.",
       "verdict": "unverified",
       "evidence": []
     }

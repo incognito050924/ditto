@@ -7,15 +7,19 @@
 다음 결정이 plan/dod/rollback 전반에 영향을 준다. 결정 전에는 execute 금지.
 
 - **D-1. AGENTS.md projection의 source of truth**
-  - (a) `AGENTS.md` 자체가 source. host별 projection(`CLAUDE.md`)은 generated.
-  - (b) `.ditto/knowledge/agents-spec.md`가 source. `AGENTS.md`도 projection.
-  - 추천: (a) — 가장 단순하고 기존 관행과 일치.
+  - **[DECIDED: (4a) full 복사]** `AGENTS.md`가 source. host별 projection(`CLAUDE.md`)은 managed block 안에 AGENTS.md 본문을 그대로 복사하는 방식으로 동기화. managed block 밖은 사용자 자유 영역.
+  - 동기화는 별도 명령 `ditto bridge sync`로 수행(v0.2 범위에 포함). doctor는 read-only 검사만.
 
 - **D-2. managed block 마커 형식**
-  - (a) HTML comment: `<!-- ditto:managed:start -->` ~ `<!-- ditto:managed:end -->`.
-  - (b) front-matter 또는 별도 섹션 헤더 (예: `## Managed by DITTO`).
-  - (c) 마커 없이 전체 파일을 managed로 본다 (이 경우 사용자 자유 편집 불가).
-  - 추천: (a) — Markdown 파서를 깨지 않고 grep 가능.
+  - **[DECIDED: (a) HTML comment]** 마커 형식:
+    ```
+    <!-- ditto:managed:start source=AGENTS.md sha256=<64hex> -->
+    [AGENTS.md 본문]
+    <!-- ditto:managed:end -->
+    ```
+  - `source` 속성은 projection이 어느 파일을 source로 두는지 표기. 현재는 `AGENTS.md`만.
+  - `sha256` 속성은 source 파일의 정규화된(LF/trailing ws 정규화 후) sha256. bridge sync가 박고 doctor가 검증.
+  - 근거: HTML comment는 Markdown 렌더링 결과에 표시되지 않아 사용자 시각 부담이 없고, model이 마커를 메타로 인식해 행동에 영향 적으며, DITTO parser는 결정적 regex로 추출 가능. front-matter는 블록 묶기에 부적합, 섹션 헤더는 사용자가 텍스트 깨면 마커 손상.
 
 - **D-3. doctor의 권한 범위**
   - (a) read-only 진단만. drift 발견 시 출력만 하고 종료.
@@ -51,15 +55,32 @@
   - (c) Claude Code + Codex + OpenCode.
   - 추천: (a) — v0.2는 단일 host로 시작, Codex/OpenCode는 v0.3+에서 adapter 추가.
 
-## 작업 분해 (D-1~D-8 결정 후 확정)
+## 작업 분해 (D-1, D-2는 [DECIDED]; D-3~D-8 결정 후 확정)
 
 ### P-1. InstructionBridge core (`src/core/instruction-bridge.ts`)
-- D-1, D-2, D-6 결정 기반.
+- D-1=(4a), D-2=(a) 결정 기반.
+- 책임:
+  - source 파일 읽기: `AGENTS.md` (repo root 기준 고정 경로).
+  - host별 projection 파일 읽기: `CLAUDE.md`(claude-code), 향후 `.codex/AGENTS.md`(codex) 등.
+  - managed block 추출: 정규식으로 `<!-- ditto:managed:start ... -->` ~ `<!-- ditto:managed:end -->`를 잡고 `source=`, `sha256=` 속성 파싱.
+  - 정규화: LF 통일 + trailing whitespace 제거 후 sha256 계산.
+  - 비교: source의 정규화 sha256 ↔ marker의 sha256 값 ↔ 실제 managed block 내용의 정규화 sha256. 세 값이 모두 일치해야 OK.
 - API:
-  - `loadSource(repoRoot): SourceInstruction` — D-1에서 정한 source 파일 읽기.
-  - `loadProjection(repoRoot, host): ProjectionInstruction | null` — host별 projection 파일 읽기.
-  - `compare(source, projection): DriftReport` — D-6 알고리즘으로 비교.
-- 본 단계는 데이터 모델만, 명령 호출은 P-2에서.
+  - `loadSource(repoRoot): { path, content, normalizedSha256 }`
+  - `loadProjection(repoRoot, host): { path, managedBlock, markerSource, markerSha256, freeArea } | { kind: 'missing' } | { kind: 'no_marker' }`
+  - `compare(source, projection): DriftReport` (`ok | sha256_mismatch | source_mismatch | content_mismatch | projection_missing | marker_missing`)
+- 본 단계는 데이터 모델만. 명령 호출은 P-5와 P-6.
+
+### P-1b. BridgeSync core (`src/core/bridge-sync.ts`)
+- AGENTS.md를 읽어 host별 projection의 managed block을 갱신.
+- 동작:
+  1. AGENTS.md 정규화 + sha256 계산.
+  2. projection 파일 읽기 (없으면 새로 생성, marker 영역만 채움).
+  3. marker 영역이 있으면 그 안만 교체. marker가 없으면 파일 끝에 marker block을 append하고 사용자에게 stderr로 알림.
+  4. marker 속성 갱신: `source=AGENTS.md sha256=<new>`.
+  5. atomic write로 projection 파일 저장.
+- sync는 read-only 영역(marker 밖 사용자 자유 영역)은 절대 건드리지 않는다.
+- API: `syncHost(repoRoot, host): { path, action: 'created' | 'updated' | 'unchanged', oldSha256, newSha256 }`
 
 ### P-2. PermissionInventory core (`src/core/permission-inventory.ts`)
 - `.claude/settings.json`, `.codex/config.toml` 위험 표면 식별.
@@ -83,6 +104,14 @@
 - 모두 `--output human|json` 지원.
 - D-7 exit code 규약 적용.
 
+### P-5b. bridge CLI 명령 (`src/cli/commands/bridge.ts`)
+- `ditto bridge sync` — D-1/D-2에 따른 AGENTS.md → projection managed block 동기화.
+- 옵션:
+  - `--host claude-code` (기본값; D-8에 따라 v0.2는 claude-code만 지원)
+  - `--check`: 실제 쓰기 없이 차이만 보고 (dry-run, exit 0 일치/exit 1 차이)
+  - `--output human|json`
+- read-only doctor와 분리해 destructive 동작(파일 쓰기)을 명령 단위로 격리.
+
 ### P-6. host projection fixture와 회귀 테스트 (`tests/doctor/`)
 - 정상 fixture(source=projection 일치): 모든 명령 exit 0.
 - 의도적 drift fixture(공백, 내용, managed block 차이): drift exit code.
@@ -98,9 +127,10 @@
 
 ## 의존성과 실행 순서
 
-P-1, P-2, P-3, P-4는 독립적으로 진행 가능(각각 다른 core 파일).
+P-1, P-1b, P-2, P-3, P-4는 독립적으로 진행 가능(각각 다른 core 파일). 단 P-1b는 P-1의 추출/정규화 함수를 공유 — `src/core/instruction-bridge.ts`에서 helper로 export하고 P-1b가 import.
 P-5는 P-1~P-4 모두 필요.
-P-6은 P-5 이후.
+P-5b는 P-1, P-1b 필요.
+P-6은 P-5, P-5b 이후.
 P-7은 P-6 후 추가.
 P-8은 사용자가 수행.
 
@@ -108,16 +138,21 @@ P-8은 사용자가 수행.
 
 신규 생성 (rollback 시 본 파일 목록만 정리):
 - `src/core/instruction-bridge.ts`
+- `src/core/bridge-sync.ts`
 - `src/core/permission-inventory.ts`
 - `src/core/mcp-inventory.ts`
 - `src/core/surface-inventory.ts`
 - `src/cli/commands/doctor.ts`
+- `src/cli/commands/bridge.ts`
 - `tests/core/instruction-bridge.test.ts`
+- `tests/core/bridge-sync.test.ts`
 - `tests/core/permission-inventory.test.ts`
 - `tests/core/mcp-inventory.test.ts`
 - `tests/core/surface-inventory.test.ts`
 - `tests/doctor/*.test.ts` (명령별 1개 이상)
+- `tests/bridge/sync.test.ts`
 - `tests/fixtures/doctor/<scenario>/` (정상/drift 시나리오별)
+- `tests/fixtures/bridge/<scenario>/` (sync 입력/기대 결과 쌍)
 
 기존 파일 수정 (절대 삭제 금지, `git restore <file>`만):
 - `src/cli/index.ts` (doctor subCommand 등록)

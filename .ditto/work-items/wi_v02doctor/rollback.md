@@ -15,11 +15,14 @@ git status --short
 본 work item이 생성하는 신규 파일(이 파일들만 삭제 가능):
 
 - `src/core/instruction-bridge.ts`
+- `src/core/bridge-sync.ts`
 - `src/core/permission-inventory.ts`
 - `src/core/mcp-inventory.ts`
 - `src/core/surface-inventory.ts`
 - `src/cli/commands/doctor.ts`
+- `src/cli/commands/bridge.ts`
 - `tests/core/instruction-bridge.test.ts`
+- `tests/core/bridge-sync.test.ts`
 - `tests/core/permission-inventory.test.ts`
 - `tests/core/mcp-inventory.test.ts`
 - `tests/core/surface-inventory.test.ts`
@@ -27,7 +30,9 @@ git status --short
 - `tests/doctor/permissions.test.ts`
 - `tests/doctor/mcp.test.ts`
 - `tests/doctor/surface.test.ts`
-- `tests/fixtures/doctor/<scenario>/` 신규 fixture (정확한 디렉터리는 D-결정 후 확정)
+- `tests/bridge/sync.test.ts`
+- `tests/fixtures/doctor/<scenario>/` 신규 fixture (D-3~D-8 결정 후 정확한 디렉터리 목록 확정)
+- `tests/fixtures/bridge/<scenario>/` 신규 fixture (D-1/D-2 결정에 따른 sync 입력/기대 출력 쌍)
 
 본 work item이 수정만 하는 기존 파일(삭제 금지, restore만):
 
@@ -43,45 +48,53 @@ git status --short
 
 각 명령은 *해당 단계가 만든 파일만* 다룬다.
 
-### P-1 ~ P-4 (core 신규)
+### P-1 ~ P-1b ~ P-4 (core 신규)
 ```
 git restore --staged --worktree src/core/instruction-bridge.ts
+git restore --staged --worktree src/core/bridge-sync.ts
 git restore --staged --worktree src/core/permission-inventory.ts
 git restore --staged --worktree src/core/mcp-inventory.ts
 git restore --staged --worktree src/core/surface-inventory.ts
 # 신규 untracked인 경우 파일 단위로 삭제
 test -f src/core/instruction-bridge.ts && rm src/core/instruction-bridge.ts
+test -f src/core/bridge-sync.ts && rm src/core/bridge-sync.ts
 test -f src/core/permission-inventory.ts && rm src/core/permission-inventory.ts
 test -f src/core/mcp-inventory.ts && rm src/core/mcp-inventory.ts
 test -f src/core/surface-inventory.ts && rm src/core/surface-inventory.ts
 ```
 
-각 P-1/P-2/P-3/P-4는 독립이므로 자기 파일 한 줄만 처리.
+각 P-1/P-1b/P-2/P-3/P-4는 독립이므로 자기 파일 한 줄만 처리. P-1b는 P-1의 helper에 의존하므로 P-1만 되돌리려면 P-1b도 같이 되돌려야 컴파일이 유지됨.
 
-### P-5 (doctor CLI 신규 + 기존 index.ts 수정)
+### P-5 ~ P-5b (CLI 신규 + 기존 index.ts 수정)
 ```
-# doctor.ts는 신규
+# doctor.ts, bridge.ts는 신규
 git restore --staged --worktree src/cli/commands/doctor.ts
+git restore --staged --worktree src/cli/commands/bridge.ts
 test -f src/cli/commands/doctor.ts && rm src/cli/commands/doctor.ts
+test -f src/cli/commands/bridge.ts && rm src/cli/commands/bridge.ts
 
 # index.ts는 기존 — restore만, 삭제 금지
 git restore --staged --worktree src/cli/index.ts
 ```
 
-### P-6 (doctor 회귀 테스트 + fixture 신규)
+### P-6 (doctor + bridge 회귀 테스트 + fixture 신규)
 ```
 git restore --staged --worktree tests/doctor/instructions.test.ts
 git restore --staged --worktree tests/doctor/permissions.test.ts
 git restore --staged --worktree tests/doctor/mcp.test.ts
 git restore --staged --worktree tests/doctor/surface.test.ts
+git restore --staged --worktree tests/bridge/sync.test.ts
 test -f tests/doctor/instructions.test.ts && rm tests/doctor/instructions.test.ts
 test -f tests/doctor/permissions.test.ts && rm tests/doctor/permissions.test.ts
 test -f tests/doctor/mcp.test.ts && rm tests/doctor/mcp.test.ts
 test -f tests/doctor/surface.test.ts && rm tests/doctor/surface.test.ts
+test -f tests/bridge/sync.test.ts && rm tests/bridge/sync.test.ts
 rmdir tests/doctor 2>/dev/null || true
+rmdir tests/bridge 2>/dev/null || true
 
 # fixture 디렉터리는 파일 단위 삭제 (디렉터리 단위 rm -rf 금지)
-# [DECISION NEEDED: 정확한 fixture 디렉터리 목록 후 확정]
+# 정확한 fixture 디렉터리 목록은 D-3~D-8 결정 후 확정.
+# tests/fixtures/bridge/<scenario>/ 디렉터리도 동일.
 ```
 
 ### P-7 (self-validation 보강 — 기존 파일 수정만)

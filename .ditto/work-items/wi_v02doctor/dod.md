@@ -16,7 +16,7 @@ bun test
 
 doctor가 검사하는 대상 repo는 cwd 기반으로 자동 탐지. self-validation 테스트는 `DITTO_REPO_ROOT`로 검증 대상 repo 루트를 받음(기본은 ditto 소스 repo). temp repo 시나리오에서는 명시적으로 지정한다.
 
-## ac-1: doctor instructions (D-1, D-2, D-6 결정 의존)
+## ac-1: doctor instructions (D-1, D-2 결정 적용, D-6 의존)
 
 검증
 ```
@@ -24,25 +24,41 @@ DITTO_SRC=/Users/incognito/dev/projects/ditto
 TMP=$(mktemp -d)
 cd "$TMP" && git init -q
 
-# 정상 fixture 복사 (source=projection 일치)
+# 정상 fixture: AGENTS.md + CLAUDE.md (managed block에 AGENTS.md 본문 + 올바른 sha256)
 cp -r "$DITTO_SRC/tests/fixtures/doctor/instructions-ok/." .
 
-# 1) 일치 시 exit 0
+# 1) marker sha256 일치 + 내용 일치 → ok
 "$DITTO_SRC"/dist/ditto doctor instructions --output json > out.json
-test "$(jq -r '.drift_count' out.json)" = "0"
+test "$(jq -r '.findings | length' out.json)" = "0"
 test $? -eq 0
 
-# 2) 의도적 drift 만든 후
-echo "drift" >> CLAUDE.md
+# 2) managed block 내용 변경 → content_mismatch
+sed -i.bak 's/원본 줄/변조된 줄/' CLAUDE.md
 "$DITTO_SRC"/dist/ditto doctor instructions --output json > out.json
-test "$(jq -r '.drift_count' out.json)" != "0"
-# exit code는 D-7 결정에 따라 1 또는 0(--advisory)
+test "$(jq -r '[.findings[] | select(.kind=="content_mismatch")] | length' out.json)" -ge 1
+
+# 3) AGENTS.md 변경 → sha256_mismatch (marker는 옛 sha256을 들고 있음)
+mv CLAUDE.md.bak CLAUDE.md
+echo "new line" >> AGENTS.md
+"$DITTO_SRC"/dist/ditto doctor instructions --output json > out.json
+test "$(jq -r '[.findings[] | select(.kind=="sha256_mismatch")] | length' out.json)" -ge 1
+
+# 4) marker 자체가 없는 projection
+echo "no marker" > CLAUDE.md
+"$DITTO_SRC"/dist/ditto doctor instructions --output json > out.json
+test "$(jq -r '[.findings[] | select(.kind=="marker_missing")] | length' out.json)" -ge 1
+
+# 5) projection 파일 자체가 없음
+rm -f CLAUDE.md
+"$DITTO_SRC"/dist/ditto doctor instructions --output json > out.json
+test "$(jq -r '[.findings[] | select(.kind=="projection_missing")] | length' out.json)" -ge 1
 ```
 
 기준
-- 일치 시 exit 0, drift_count=0
-- drift 시 [DECISION D-7] 결정된 exit code, drift_count>0
-- json 출력에 각 projection별 위치/source/diff hash 포함
+- 일치 시 exit 0, findings=0
+- drift 종류 4가지(content_mismatch / sha256_mismatch / marker_missing / projection_missing)가 각각 fixture로 잡힘
+- drift 발생 시 exit code는 D-7 결정. 정해지면 본 dod의 `test $? -eq <N>` 확인 추가.
+- json 출력 필드: path, markerSource, markerSha256, actualSha256, sourceSha256, kind, message
 
 ## ac-2: doctor permissions
 
@@ -130,6 +146,71 @@ test "$HASH_BEFORE" = "$HASH_AFTER"
 - json 출력은 항상 valid JSON
 - read-only: doctor 실행 후 파일/디렉터리 sha256 동일
 
+## ac-7: bridge sync (D-1, D-2 결정 적용)
+
+검증
+```
+DITTO_SRC=/Users/incognito/dev/projects/ditto
+TMP=$(mktemp -d)
+cd "$TMP" && git init -q
+
+# 1) marker 없는 CLAUDE.md → bridge sync가 marker block을 append
+cat > AGENTS.md <<'AGENTS'
+# AGENTS
+shared instruction line 1
+shared instruction line 2
+AGENTS
+
+cat > CLAUDE.md <<'CLAUDE'
+## Claude 자유 영역
+사용자 자유 편집
+CLAUDE
+
+USER_AREA_BEFORE=$(sha256sum CLAUDE.md | awk '{print $1}')
+"$DITTO_SRC"/dist/ditto bridge sync --host claude-code --output json 2>/tmp/sync.err
+grep -q "appended new managed block" /tmp/sync.err
+# marker가 추가됐는지
+grep -q "ditto:managed:start" CLAUDE.md
+# managed block 안에 AGENTS.md 본문 포함
+grep -q "shared instruction line 1" CLAUDE.md
+# 자유 영역은 보존됨
+grep -q "사용자 자유 편집" CLAUDE.md
+
+# 2) sync 후 doctor instructions가 ok로 통과
+"$DITTO_SRC"/dist/ditto doctor instructions --output json > out.json
+test "$(jq -r '.findings | length' out.json)" = "0"
+
+# 3) AGENTS.md 변경 후 --check는 차이 보고 + 파일 미수정
+echo "new line" >> AGENTS.md
+HASH_BEFORE=$(sha256sum CLAUDE.md | awk '{print $1}')
+"$DITTO_SRC"/dist/ditto bridge sync --host claude-code --check --output json > check.json
+test "$(jq -r '.action' check.json)" = "would-update"
+HASH_AFTER=$(sha256sum CLAUDE.md | awk '{print $1}')
+test "$HASH_BEFORE" = "$HASH_AFTER"
+
+# 4) --check 없이 실행하면 managed block만 갱신, 자유 영역 보존
+"$DITTO_SRC"/dist/ditto bridge sync --host claude-code --output json > sync.json
+test "$(jq -r '.action' sync.json)" = "updated"
+grep -q "new line" CLAUDE.md
+grep -q "사용자 자유 편집" CLAUDE.md
+
+# 5) sync 후 doctor 다시 ok
+"$DITTO_SRC"/dist/ditto doctor instructions --output json > out.json
+test "$(jq -r '.findings | length' out.json)" = "0"
+
+# 6) 자유 영역만 수정한 경우 sync는 unchanged (managed block 동일)
+echo "사용자 추가 줄" >> CLAUDE.md
+"$DITTO_SRC"/dist/ditto bridge sync --host claude-code --output json > sync.json
+test "$(jq -r '.action' sync.json)" = "unchanged"
+grep -q "사용자 추가 줄" CLAUDE.md
+```
+
+기준
+- managed block 외 영역은 어떤 경우에도 sha256 변경 없음
+- `--check`는 read-only(파일 sha256 변경 없음), 결과만 보고
+- action enum: `created | updated | unchanged | would-create | would-update | would-be-unchanged`
+- sync 후 doctor instructions가 일치 보고
+
 ## ac-6: 자체 검증 테스트
 
 ```
@@ -143,7 +224,7 @@ bun test tests/doctor/
 
 ## 전체 done 조건
 
-- ac-1 ~ ac-6 모두 verdict=pass
+- ac-1 ~ ac-7 모두 verdict=pass
 - 공통 게이트 3개 exit 0
 - D-1~D-8 결정 사항이 plan.md에 [DECIDED: <값>]로 명시
 - 새 ADR이 필요한 결정이 있었다면 ADR-NNNN 추가
