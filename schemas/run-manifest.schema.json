@@ -1,0 +1,232 @@
+{
+  "$ref": "#/definitions/run-manifest",
+  "definitions": {
+    "run-manifest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^run_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a single provider run"
+        },
+        "work_item_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a work item"
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "codex",
+            "claude-code",
+            "opencode",
+            "openagent",
+            "other"
+          ],
+          "description": "Provider host that executes the run"
+        },
+        "entrypoint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "How the provider was invoked, e.g., \"codex exec\" or \"claude code\""
+        },
+        "model_reported": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Model name as reported by the provider; null if unknown"
+        },
+        "profile": {
+          "type": "string",
+          "enum": [
+            "read-only",
+            "workspace-write",
+            "networked",
+            "reviewer",
+            "isolated"
+          ],
+          "description": "Execution profile that determines permission and network policy"
+        },
+        "cwd": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-relative working directory of the run"
+        },
+        "prompt_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path to the prompt/context packet handed to the provider"
+        },
+        "git_before": {
+          "type": "object",
+          "properties": {
+            "head": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40}$",
+              "description": "Commit sha at the moment of capture"
+            },
+            "branch": {
+              "type": "string"
+            },
+            "dirty": {
+              "type": "boolean",
+              "description": "Whether the working tree has uncommitted changes"
+            },
+            "untracked_count": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          "required": [
+            "head",
+            "dirty"
+          ],
+          "additionalProperties": false,
+          "description": "Snapshot of git state taken before or after a run"
+        },
+        "git_after": {
+          "type": "object",
+          "properties": {
+            "head": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40}$",
+              "description": "Commit sha at the moment of capture"
+            },
+            "branch": {
+              "type": "string"
+            },
+            "dirty": {
+              "type": "boolean",
+              "description": "Whether the working tree has uncommitted changes"
+            },
+            "untracked_count": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          "required": [
+            "head",
+            "dirty"
+          ],
+          "additionalProperties": false,
+          "description": "Snapshot of git state taken before or after a run"
+        },
+        "changed_files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+          },
+          "default": []
+        },
+        "stdout_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+        },
+        "stderr_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+        },
+        "diff_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null if the provider was killed or crashed"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "ended_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "verifications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact command executed to verify outcome"
+              },
+              "exit_code": {
+                "type": "integer"
+              },
+              "duration_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "output_path": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Where the verification output is stored as evidence"
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "command",
+              "exit_code"
+            ],
+            "additionalProperties": false,
+            "description": "A single verification attempt performed inside or after the run"
+          },
+          "default": []
+        },
+        "unverified": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Items the run could not verify and why, one entry per item"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "work_item_id",
+        "provider",
+        "entrypoint",
+        "model_reported",
+        "profile",
+        "cwd",
+        "git_before",
+        "exit_code",
+        "started_at"
+      ],
+      "additionalProperties": false,
+      "description": "Authoritative record of a single provider invocation"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

@@ -1,0 +1,216 @@
+{
+  "$ref": "#/definitions/reviewer-output",
+  "definitions": {
+    "reviewer-output": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^rv_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a reviewer output"
+        },
+        "work_item_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a work item"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "plan-check",
+            "verifier",
+            "code-reviewer",
+            "security-reviewer",
+            "e2e-reviewer",
+            "cross-provider-reviewer"
+          ],
+          "description": "Which evaluator lane produced this output"
+        },
+        "reviewer": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Identifier of the reviewing profile/agent; not the generator"
+        },
+        "different_provider_than_generator": {
+          "type": "boolean",
+          "description": "True if reviewer ran on a different provider or model family than the generator"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "ended_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "partial",
+            "fail",
+            "unverified"
+          ],
+          "description": "Acceptance verdict for a criterion or review"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "command",
+                  "file",
+                  "artifact",
+                  "url",
+                  "note"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "command": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "description": "Lowercase hex sha256 hash"
+              },
+              "lines": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              },
+              "summary": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false,
+            "description": "Pointer to evidence stored outside the manifest itself"
+          },
+          "default": []
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ],
+                "description": "Finding severity"
+              },
+              "file": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+              },
+              "location": {
+                "type": "string",
+                "description": "Line range or symbol; free-form because not all reviewers are code-based"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              },
+              "suggested_fix": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "severity",
+              "reason"
+            ],
+            "additionalProperties": false,
+            "description": "A single concrete observation from the reviewer"
+          },
+          "default": []
+        },
+        "unverified": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "item",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "recommended_next_action": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A single concrete next step; not a list of options"
+        },
+        "review_not_run_reason": {
+          "type": "string",
+          "description": "Set when verdict could not be produced due to budget/availability"
+        }
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "work_item_id",
+        "kind",
+        "reviewer",
+        "different_provider_than_generator",
+        "started_at",
+        "verdict",
+        "recommended_next_action"
+      ],
+      "additionalProperties": false,
+      "description": "Output contract for any reviewer/evaluator lane"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
