@@ -26,7 +26,7 @@ ditto doctor instructions/permissions/mcp/surface 4개 명령이 host 설정과 
 상세는 `.ditto/work-items/wi_v02doctor/plan.md#d-1--d-11-결정-요약-모두-decided` 참조.
 
 ## Acceptance criteria
-- ac-1: doctor instructions가 두 host에 대해 drift 감지. claude-code는 sha256 3단 비교(content_mismatch/sha256_mismatch/marker_missing/projection_missing), codex는 marker 부재 확인.
+- ac-1: doctor instructions가 두 host에 대해 drift 감지. claude-code는 sha256 3단 비교(content_mismatch/sha256_mismatch/marker_missing/projection_missing), codex는 marker 부재 확인. JSON은 top-level findings와 host별 results[](path/status/sha/findings)를 함께 반환.
 - ac-2: doctor permissions가 두 host의 위험 표면을 공통 enum으로 정규화, 미존재는 missing.
 - ac-3: doctor mcp가 두 host 설정 파일 파싱해 inventory 출력, 수집 불가는 unverified+사유.
 - ac-4: doctor surface가 두 host의 surface 디렉터리 인벤토리 + missing/extra/renamed 분류 (schema 검증은 Phase 9).

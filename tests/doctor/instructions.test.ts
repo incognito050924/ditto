@@ -36,6 +36,19 @@ describe('doctor instructions', () => {
     expect(proc.exitCode).toBe(0);
     const json = JSON.parse(proc.stdout.toString());
     expect(json.findings).toHaveLength(0);
+    expect(json.results).toHaveLength(2);
+    const codex = json.results.find((result: { host: string }) => result.host === 'codex');
+    const claude = json.results.find((result: { host: string }) => result.host === 'claude-code');
+    expect(codex.status).toBe('ok');
+    expect(codex.path).toEndWith('AGENTS.md');
+    expect(codex.sourceSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(claude.status).toBe('ok');
+    expect(claude.path).toEndWith('CLAUDE.md');
+    expect(claude.markerSource).toBe('AGENTS.md');
+    expect(claude.markerSha256).toBe(codex.sourceSha256);
+    expect(claude.actualSha256).toBe(codex.sourceSha256);
+    expect(claude.sourceSha256).toBe(codex.sourceSha256);
+    expect(claude.findings).toHaveLength(0);
   });
 
   test('returns drift exit code and finding when projection is missing', async () => {
@@ -46,6 +59,8 @@ describe('doctor instructions', () => {
     expect(
       json.findings.some((finding: { kind: string }) => finding.kind === 'projection_missing'),
     ).toBe(true);
+    expect(json.results[0].status).toBe('drift');
+    expect(json.results[0].findings[0].kind).toBe('projection_missing');
   });
 
   test('detects content mismatch when managed block body changes', async () => {
@@ -58,6 +73,10 @@ describe('doctor instructions', () => {
     const json = JSON.parse(proc.stdout.toString());
     expect(
       json.findings.some((finding: { kind: string }) => finding.kind === 'content_mismatch'),
+    ).toBe(true);
+    const claude = json.results.find((result: { host: string }) => result.host === 'claude-code');
+    expect(
+      claude.findings.some((finding: { kind: string }) => finding.kind === 'content_mismatch'),
     ).toBe(true);
   });
 

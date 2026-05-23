@@ -70,6 +70,8 @@ const instructionsCommand = defineCommand({
       if (format === 'json') {
         writeJson({
           status: report.findings.length === 0 ? 'ok' : 'drift',
+          sourceSha256: report.sourceSha256,
+          results: report.results,
           findings: report.findings,
         });
       } else if (report.findings.length === 0) {

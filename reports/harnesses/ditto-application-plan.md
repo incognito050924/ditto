@@ -726,12 +726,12 @@ v0.x 진행 중 deferred:
 
 포함:
 
-- `doctor instructions` — AGENTS.md ↔ host projection drift 3단 sha256 비교 (claude-code 5종 finding) + codex 2종 finding (`marker_in_source`, `source_missing`).
+- `doctor instructions` — AGENTS.md ↔ host projection drift 3단 sha256 비교 (claude-code 5종 finding) + codex 2종 finding (`marker_in_source`, `source_missing`). JSON은 top-level findings와 host별 results(path/status/sha/findings)를 함께 제공한다.
 - `doctor permissions` — 두 host 위험 표면을 공통 enum(`dangerous_mode|network_on|secrets_read|write_outside_workspace|approval_bypass`)으로 정규화.
 - `doctor mcp` — 두 host MCP 설정 파일 합산. Claude는 공식 scope 순서(.mcp.json → ~/.claude.json project/user → 그 외 unverified).
 - `doctor surface` — 두 host의 skill/agent/command/plugin 디렉터리 인벤토리. `.ditto/surfaces.json` mock catalog와 missing/extra/renamed 분류.
 - `bridge sync --host claude-code` — AGENTS.md → CLAUDE.md managed block. marker 형식 + sha256. `--check` dry-run. 자유 영역 보존.
-- `HostAdapter` interface + 두 builtin host(codex, claude-code) + registry. v0.3+에서 새 host 추가가 어댑터 파일 + 등록만으로 끝남.
+- `HostAdapter` interface + 두 builtin host(codex primary, claude-code compatibility) + registry. 새 host 자동 지원은 v0.2 범위 밖이며 v0.3+ 설계 대상으로 둔다.
 - `surface-catalog` zod schema와 self-validation.
 
 완료 기준:

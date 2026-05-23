@@ -7,7 +7,7 @@
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "ditto doctor instructions가 두 host(codex, claude-code)에 대해 drift를 감지한다. --host 미지정 시 양쪽 모두 검사. claude-code는 CLAUDE.md managed block의 marker sha256/실제 내용 sha256/AGENTS.md 정규화 sha256 셋 비교. codex는 AGENTS.md 존재 + marker 부재 검사. 일치 시 exit 0, drift 시 [DECISION NEEDED: D-7 exit code]. --output json은 host별로 path/markerSource/markerSha256/actualSha256/sourceSha256/findings를 반환.",
+      "statement": "ditto doctor instructions가 두 host(codex, claude-code)에 대해 drift를 감지한다. --host 미지정 시 양쪽 모두 검사한다. claude-code는 CLAUDE.md managed block의 marker sha256/실제 내용 sha256/AGENTS.md 정규화 sha256 셋을 비교한다. codex는 AGENTS.md 존재 + marker 부재를 검사한다. 일치 시 exit 0, drift 시 exit 1, usage error는 exit 65, runtime error는 exit 70이다. --output json은 top-level status/sourceSha256/findings와 host별 results[]를 반환하며, 각 result는 host/path/status/markerSource?/markerSha256?/actualSha256?/sourceSha256?/findings를 포함한다.",
       "verdict": "pass",
       "evidence": [
         {

@@ -88,8 +88,10 @@ test "$(jq -r '[.findings[] | select(.kind=="source_missing")] | length' out.jso
 - 일치 시 exit 0, findings=0
 - claude-code drift 종류 4가지(content_mismatch / sha256_mismatch / marker_missing / projection_missing)
 - codex drift 종류 2가지(marker_in_source / source_missing)
-- drift 발생 시 exit code는 D-7 결정. 정해지면 본 dod의 `test $? -eq <N>` 확인 추가.
-- json 출력 필드: host, path, markerSource, markerSha256, actualSha256, sourceSha256, kind, message
+- drift 발생 시 exit 1, usage error는 exit 65, runtime error는 exit 70
+- json top-level 필드: status, sourceSha256, results, findings
+- json results[] 필드: host, path, status, markerSource?, markerSha256?, actualSha256?, sourceSha256?, findings
+- json finding 필드: host, path, kind, message, markerSource?, markerSha256?, actualSha256?, sourceSha256?
 - `--host` 미지정 시 두 host 모두 검사하고 findings를 합산
 
 ## ac-2: doctor permissions

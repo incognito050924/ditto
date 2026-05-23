@@ -38,6 +38,11 @@ ditto verify로 ac-1~ac-8 검증 (모두 해당 회귀 테스트 묶음 실행):
 
 전부 exit 0 → verdict=pass. `ditto work handoff wi_v02doctor`로 final_verdict=pass, status=done, closed_at 박힘. changed_files 99개 자동 수집(origin/main 대비).
 
+## post-review correction
+- AC-8 scope 보정: 새 host 자동 지원 claim을 제거하고 codex(primary)/claude-code(compatibility) 두 built-in host 지원으로 정리.
+- AC-1 보강: `doctor instructions --output json`에 host별 `results[]`를 추가해 정상 상태에서도 path/status/sha/findings가 드러나도록 구현.
+- 검증: `bun test` 107 pass / 0 fail, `bun run tsc --noEmit` exit 0, `bun run lint` exit 0.
+
 ## 결과
 - bun x tsc --noEmit 통과
 - bun run lint 통과 (55 files)

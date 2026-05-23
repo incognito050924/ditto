@@ -34,6 +34,23 @@ export interface InstructionFinding {
   sourceSha256?: string;
 }
 
+export interface InstructionHostResult {
+  host: BuiltinHostId;
+  path: string;
+  status: 'ok' | 'drift';
+  markerSource?: string;
+  markerSha256?: string;
+  actualSha256?: string;
+  sourceSha256?: string;
+  findings: InstructionFinding[];
+}
+
+export interface InstructionReport {
+  findings: InstructionFinding[];
+  results: InstructionHostResult[];
+  sourceSha256: string | null;
+}
+
 export interface InstructionSource {
   path: string;
   content: string;
@@ -223,10 +240,49 @@ export function compareClaudeProjection(
   return findings;
 }
 
+function resultStatus(findings: InstructionFinding[]): 'ok' | 'drift' {
+  return findings.length === 0 ? 'ok' : 'drift';
+}
+
+function codexInstructionResult(
+  source: InstructionSource | { kind: 'missing'; path: string },
+): InstructionHostResult {
+  const findings = checkCodexInstructions(source);
+  return {
+    host: 'codex',
+    path: source.path,
+    status: resultStatus(findings),
+    ...('normalizedSha256' in source ? { sourceSha256: source.normalizedSha256 } : {}),
+    findings,
+  };
+}
+
+function claudeInstructionResult(
+  source: InstructionSource | { kind: 'missing'; path: string },
+  projection: ProjectionLoadResult,
+): InstructionHostResult {
+  const findings = compareClaudeProjection(source, projection);
+  const sourceSha256 = 'normalizedSha256' in source ? source.normalizedSha256 : undefined;
+  return {
+    host: 'claude-code',
+    path: projection.path,
+    status: resultStatus(findings),
+    ...(projection.kind === 'ok'
+      ? {
+          markerSource: projection.markerSource,
+          markerSha256: projection.markerSha256,
+          actualSha256: projection.actualSha256,
+        }
+      : {}),
+    ...(sourceSha256 ? { sourceSha256 } : {}),
+    findings,
+  };
+}
+
 export async function checkInstructionsForHosts(
   hosts: BuiltinHostId[],
   repoRoot: string,
-): Promise<{ findings: InstructionFinding[]; sourceSha256: string | null }> {
+): Promise<InstructionReport> {
   return checkInstructionsForAdapters(
     hosts.map((host) => getHostAdapter(host)),
     repoRoot,
@@ -236,7 +292,7 @@ export async function checkInstructionsForHosts(
 export async function checkInstructionsForAdapters(
   adapters: HostAdapter[],
   repoRoot: string,
-): Promise<{ findings: InstructionFinding[]; sourceSha256: string | null }> {
+): Promise<InstructionReport> {
   const surfaces = await Promise.all(adapters.map((adapter) => adapter.loadInstructions(repoRoot)));
   let sourceSurface = surfaces.find((surface) => surface.role === 'source');
   if (!sourceSurface) {
@@ -251,17 +307,19 @@ export async function checkInstructionsForAdapters(
     sourceSurface = { role: 'source', host: 'codex', path: sourcePath, exists: false };
   }
   const source = sourceFromSurface(sourceSurface);
-  const findings: InstructionFinding[] = [];
+  const results: InstructionHostResult[] = [];
   for (const surface of surfaces) {
     if (surface.host === 'codex' && surface.role === 'source') {
-      findings.push(...checkCodexInstructions(source));
+      results.push(codexInstructionResult(source));
     }
     if (surface.host === 'claude-code' && surface.role === 'projection') {
-      findings.push(...compareClaudeProjection(source, projectionFromSurface(surface)));
+      results.push(claudeInstructionResult(source, projectionFromSurface(surface)));
     }
   }
+  const findings = results.flatMap((result) => result.findings);
   return {
     findings,
+    results,
     sourceSha256: 'normalizedSha256' in source ? source.normalizedSha256 : null,
   };
 }

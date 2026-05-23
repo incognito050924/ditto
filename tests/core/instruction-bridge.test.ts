@@ -57,6 +57,10 @@ describe('instruction bridge', () => {
     );
     const report = await checkInstructionsForHosts(['claude-code'], dir);
     expect(report.findings.map((finding) => finding.kind)).toContain('content_mismatch');
+    expect(report.results[0]?.host).toBe('claude-code');
+    expect(report.results[0]?.status).toBe('drift');
+    expect(report.results[0]?.markerSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(report.results[0]?.actualSha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
   test('projection-only adapters report source_missing without hard-binding codex registry', async () => {
@@ -85,6 +89,7 @@ describe('instruction bridge', () => {
     try {
       const report = await checkInstructionsForAdapters([projectionOnly], dir);
       expect(report.findings).toEqual([]);
+      expect(report.results).toEqual([]);
       expect(report.sourceSha256).toBe(null);
     } finally {
       registerHostAdapter(codexHostAdapter);
