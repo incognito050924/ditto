@@ -3,7 +3,7 @@
   "id": "wi_v02handoff",
   "title": "DITTO v0.2 work-item-handoff cleanup — accurate changed_files and base ref",
   "source_request": "wi_v02harden follow-up review에서 두 root cause 식별: (1) ditto work handoff 기본 base가 origin/main(사용자 환경에서 23+ commit 뒤처짐)이라 첫 handoff가 repo-wide 목록을 보고. (2) writeWorkItemHandoff가 기존 item.changed_files와 collected를 union → 한 번 부풀린 list가 영원히 누적. wi_v02doctor와 wi_v02harden 모두 같은 패턴으로 changed_files가 부풀려졌음(wi_v02harden은 post-review에서 reset 후 정정 완료). v0.3 provider wrapper 전에 정리.",
-  "goal": "ditto work start가 work item 생성 시점 git sha를 work-item.json에 저장하고, ditto work handoff가 --base 미지정 시 이 sha를 기본 base로 사용한다. writeWorkItemHandoff가 collected changed_files를 누적 없이 replace해 handoff 재실행이 idempotent하고 마감 산출물이 실제 변경 범위와 정확히 일치한다.",
+  "goal": "WorkItemStore.update가 work item이 in_progress이면서 started_at_sha가 비어 있을 때 git rev-parse HEAD로 자동 backfill해 work item 시작 sha를 work-item.json에 저장하고(첫 draft→in_progress 전환과 legacy 직접 편집 케이스 둘 다 catch, done 전환에선 backfill 안 함), ditto work handoff가 --base 미지정 시 이 sha를 1순위 base로 사용한다. writeWorkItemHandoff가 collected changed_files를 누적 없이 replace해 handoff 재실행이 idempotent하고 마감 산출물이 실제 변경 범위와 정확히 일치한다.",
   "acceptance_criteria": [
     {
       "id": "ac-1",

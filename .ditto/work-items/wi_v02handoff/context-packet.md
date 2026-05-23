@@ -2,7 +2,7 @@
 
 ## Current goal
 
-`ditto work start`가 work item 생성 시점 git sha를 work-item.json에 저장하고, `ditto work handoff`가 그 sha를 기본 base로 사용한다. `writeWorkItemHandoff`가 collected를 누적 없이 replace해 handoff 재실행이 idempotent하고 마감 산출물이 실제 변경 범위와 정확히 일치한다.
+`WorkItemStore.update`가 work item이 in_progress이면서 `started_at_sha`가 비어 있을 때 `git rev-parse HEAD`로 자동 backfill해 work item 시작 sha를 `work-item.json`에 저장한다(첫 draft→in_progress 전환과 legacy 직접 편집 케이스 둘 다 catch, done 전환에선 backfill 안 함). `ditto work handoff`가 `--base` 미지정 시 이 sha를 1순위 base로 사용한다. `writeWorkItemHandoff`가 collected를 누적 없이 replace해 handoff 재실행이 idempotent하고 마감 산출물이 실제 변경 범위와 정확히 일치한다.
 
 ## 배경 (wi_v02harden post-review에서 식별)
 
