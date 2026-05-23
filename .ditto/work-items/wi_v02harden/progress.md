@@ -112,3 +112,28 @@
 ## 다음 동작
 - `ditto work handoff wi_v02harden`로 final_verdict=pass, status=done, closed_at 박고 completion.json/handoff.md 생성.
 - 마감 commit 후 work item 종료. v0.3 provider wrapper 준비로 이행 가능.
+
+## Post-review correction (2026-05-24 22:00)
+
+사용자 follow-up review에서 두 finding 발견. wi_v02harden status=done 유지하면서 fix (wi_v02doctor 패턴).
+
+### F-1 (High): AC-1 user-scope ~/.codex/config.toml permission 케이스 미구현
+- ac-1 statement는 `.codex/config.toml`과 `~/.codex/config.toml` 둘 다 TOML parser 대상으로 명시했으나, `codex.ts` `loadPermissions`는 repo-local만 검사. user-scope에 `[sandbox_workspace_write].network_access=true`가 있어도 `dangerous_count=0`이 나옴 → 사용자가 직접 재현 확인. 첫 P-7 smoke는 repo-local fixture만 사용해 이를 못 잡았음.
+- 22:00 (structural) `HostAdapter.loadPermissions` 시그니처를 `PermissionInventory` → `PermissionInventory[]`로 확장. claude-code/codex/mock 모두 단일 inventory를 array로 wrap. `collectPermissionFindings`는 `flat().flatMap(...)`. 회귀 동일(120 pass).
+  - commit af3098e `refactor(ditto): widen loadPermissions to PermissionInventory array (structural)`
+- 22:10 (behavioral) `codex.ts loadPermissions`가 repo-local + user-scope 두 inventory 반환. `tests/doctor/permissions.test.ts`에 HOME mock 추가 + user-scope nested fixture 회귀 1건 추가.
+  - commit 46a8fed `feat(ditto): include ~/.codex/config.toml in codex permission inventory (behavioral)`
+- 22:15 `ditto verify wi_v02harden --criterion ac-1 -- bun test tests/doctor/permissions.test.ts tests/doctor/mcp.test.ts` 재실행 → exit 0 + verdict pass 유지.
+
+### F-2 (Medium): completion.json/handoff.md changed_files 부풀려짐
+- 첫 `ditto work handoff` 호출이 기본 base(`origin/main`, 23+ commit 뒤처짐)를 사용해 repo-wide 132 파일을 수집. 실제 `4b18c40..HEAD` diff는 34 파일.
+- 추가로 `writeWorkItemHandoff`는 기존 `item.changed_files`와 새 collect를 union하므로 한 번 부풀린 list가 누적되는 부작용 존재. 본 work item 범위에서는 `work-item.json` `changed_files`를 `[]`로 reset 후 `--base 4b18c40`로 재실행해 정확한 34개로 갱신.
+- 22:20 reset + `ditto work handoff wi_v02harden --base 4b18c40` 재실행 → completion.json 132 → 34 파일 정확화 (`.ditto/knowledge/adr/ADR-0003-toml-parser.md`, `.ditto/work-items/wi_v02harden/*`, `src/cli/commands/{bridge,doctor}.ts`, `src/core/{bridge-sync,instruction-bridge,permission-inventory,surface-inventory}.ts`, `src/core/hosts/*`, `src/schemas/surface-catalog.ts`(없음), tests, fixtures, `package.json`, `bun.lockb`).
+- core 동작(union 누적)은 v0.3 별도 work item으로 미룸 — 본 work item이 `work-item-handoff.ts` core 변경은 범위 밖.
+
+## 최종 검증 (post-correction)
+- `bun run tsc --noEmit` pass
+- `bun run lint` pass
+- `bun test` 121 pass / 0 fail (P-7 마감 120 + F-1 user-scope 회귀 +1)
+- schema self-validation 10/10
+- `git diff --name-only 4b18c40..HEAD | wc -l` = 34, completion.json changed_files = 34 일치
