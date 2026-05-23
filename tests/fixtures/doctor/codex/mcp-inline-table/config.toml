@@ -1,0 +1,4 @@
+[mcp_servers.fetch]
+command = "npx"
+args = ["mcp-fetch"]
+env = { TOKEN = "x", REGION = "kr" }

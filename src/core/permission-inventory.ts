@@ -1,4 +1,5 @@
 import type { HostAdapter, HostId, PermissionInventory, PermissionRiskLabel } from './hosts';
+import { asRecord } from './hosts/shared';
 
 export interface PermissionFinding {
   host: HostId;
@@ -58,6 +59,15 @@ export function findingsFromPermissionInventory(inv: PermissionInventory): Permi
         source_file: inv.source_file,
         label: 'network_on',
         message: 'codex network_access=true',
+      });
+    }
+    const sandboxWorkspaceWrite = asRecord(inv.raw.sandbox_workspace_write);
+    if (sandboxWorkspaceWrite?.network_access === true) {
+      findings.push({
+        host: inv.host,
+        source_file: inv.source_file,
+        label: 'network_on',
+        message: 'codex [sandbox_workspace_write].network_access=true',
       });
     }
     if (inv.raw.approval_policy === 'never') {

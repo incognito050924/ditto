@@ -66,4 +66,19 @@ describe('doctor mcp', () => {
       json.unavailable.some((item: { reason: string }) => item.reason.includes('legacy')),
     ).toBe(true);
   });
+
+  test('extracts inline table env keys from codex user config', async () => {
+    await mkdir(join(home, '.codex'), { recursive: true });
+    await cp(
+      join(repoRoot, 'tests', 'fixtures', 'doctor', 'codex', 'mcp-inline-table', 'config.toml'),
+      join(home, '.codex', 'config.toml'),
+    );
+    const proc = run(['doctor', 'mcp', '--host', 'codex', '--output', 'json']);
+    expect(proc.exitCode).toBe(0);
+    const json = JSON.parse(proc.stdout.toString());
+    const fetch = json.servers.find((server: { name: string }) => server.name === 'fetch');
+    expect(fetch).toBeDefined();
+    expect(fetch.env_keys).toEqual(['REGION', 'TOKEN']);
+    expect(fetch.args).toEqual(['mcp-fetch']);
+  });
 });

@@ -55,4 +55,21 @@ describe('doctor permissions', () => {
       ),
     ).toBe(true);
   });
+
+  test('detects nested [sandbox_workspace_write].network_access', async () => {
+    await cp(
+      join(repoRoot, 'tests', 'fixtures', 'doctor', 'codex', 'permissions-nested'),
+      join(dir, '.codex'),
+      { recursive: true },
+    );
+    const proc = run(['doctor', 'permissions', '--host', 'codex', '--output', 'json']);
+    expect(proc.exitCode).toBe(1);
+    const json = JSON.parse(proc.stdout.toString());
+    expect(
+      json.findings.some(
+        (finding: { label: string; message: string }) =>
+          finding.label === 'network_on' && finding.message.includes('sandbox_workspace_write'),
+      ),
+    ).toBe(true);
+  });
 });
