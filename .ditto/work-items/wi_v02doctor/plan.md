@@ -35,66 +35,57 @@
 | MCP | `~/.codex/config.toml`의 `[mcp_servers.*]` 섹션 | `~/.claude/...mcp.json` 또는 `.claude/settings.json`의 `mcpServers` |
 | skill / agent / command manifest | `~/.codex/plugins/`, `.codex/plugins/` (정확한 구조는 Codex 버전 의존, D-5 확정 시 결정) | `~/.claude/skills/<id>/SKILL.md`, `.claude/agents/`, `.claude/commands/` |
 
-- **D-3. doctor의 권한 범위 (재정의: 두 host 적용)**
-  - (a) read-only 진단만. bridge sync로 destructive 동작은 분리.
-  - (b) `--fix` 옵션으로 자동 수정.
-  - 추천: (a) — `ditto bridge sync`가 이미 destructive 영역을 흡수했으므로 doctor는 read-only가 일관됨. fix는 v0.3+ 별도 ADR.
+- **D-3 [DECIDED: read-only]** doctor는 진단만. destructive 영역은 `ditto bridge sync`로 분리. `--fix` 옵션은 v0.3+ 별도 ADR.
 
-- **D-4. MCP inventory 수집 방법 (재정의: Codex + Claude Code 둘 다)**
-  - (a) 설정 파일 직접 파싱: Codex는 `~/.codex/config.toml`의 `[mcp_servers.*]`, Claude Code는 `~/.claude/.../mcp.json` 또는 `.claude/settings.json`의 `mcpServers`. 두 host adapter가 각자 파일을 읽고 공통 schema(`{ host, name, source_file, command, args?, env_keys?, side_effect_label }`)로 정규화.
-  - (b) host CLI 호출: `codex mcp list`(존재 여부 미확정), `claude mcp list`. host 버전 변동에 취약.
-  - (c) (a) + (b) 합집합.
-  - 추천: (a) — 두 host 모두 설정 파일 형식이 공개되어 있고 안정적. CLI 호출은 v0.3+에서 보강.
+- **D-4 [DECIDED: 두 host 설정 파일 직접 파싱, Claude는 공식 scope 순서]**
+  - Codex adapter:
+    - 1차: `~/.codex/config.toml`의 `[mcp_servers.*]` 섹션
+    - 2차(later): repo-local Codex 설정이 있다면 (`.codex/config.toml`); v0.2 범위에서는 unverified로 표기하고 후속 phase에서 보강.
+  - Claude Code adapter (탐색 순서, 공식 https://code.claude.com/docs/en/mcp 기준):
+    1. **project scope**: repo 루트의 `.mcp.json` (commit 대상; 팀 전체에 공유되는 MCP 정의)
+    2. **local + user scope**: `~/.claude.json`을 읽어
+       - 현재 cwd에 매칭되는 project entry의 mcpServers (local scope)
+       - top-level user entry의 mcpServers (user scope)
+    3. **plugin/managed MCP**: 공식 처리 경로가 v0.2에서 결정되지 않음 → `unverified`로 표기하고 v0.3+에서 보강.
+  - `.claude/settings.json`의 `mcpServers`는 **주 경로 아님** (출처 문서에서 명시되지 않음; 임의 추론은 위험). 단 만약 존재한다면 unverified로 보고하되 합산 대상에서 제외.
+  - 공통 schema: `{ host, scope: 'project'|'local'|'user'|'unverified', name, source_file, command?, args?, env_keys?, side_effect_label }`.
+  - 같은 server name이 여러 scope에 있으면 별개 entry로 출력하고 scope 필드로 구분 (덮어쓰기 안 함).
 
-- **D-5. skill / surface manifest 검사 범위 (재정의: 두 host)**
-  - (a) v0.2는 두 host의 *디렉터리 인벤토리만* 수집해 출력. 실제 manifest 형식 검증은 Phase 9까지 mock.
-  - (b) Claude Code의 `SKILL.md` frontmatter는 즉시 검증 (이미 형식이 표준), Codex plugin은 mock.
-  - (c) 두 host 모두 즉시 검증 schema 정의.
-  - 추천: (a) — Phase 9 skill catalog 확정 전엔 검증 룰이 임의해질 위험. v0.2는 *발견*과 *missing/extra* 분류까지만.
+- **D-5 [DECIDED: 두 host 디렉터리 인벤토리만, schema 검증은 Phase 9]** v0.2는 발견과 missing/extra/renamed 분류만. SKILL.md frontmatter 같은 manifest 검증은 Phase 9 skill catalog 확정 후.
 
-- **D-6. drift 정의 (재정의: D-2와 일관)**
+- **D-6 [DECIDED: 정규화 + sha256]**
   - 정규화: LF 통일 + 줄 끝 trailing whitespace 제거.
-  - managed block 내부의 정규화 sha256 ↔ marker의 sha256 ↔ source(AGENTS.md)의 정규화 sha256, 셋 모두 일치 시 ok.
-  - Codex는 source(AGENTS.md) 자체를 읽으므로 별도 비교 불필요. 단 AGENTS.md에 marker가 잘못 박혀 있으면 codex가 model에 marker text를 그대로 노출 → doctor가 경고: "source must not contain managed marker".
+  - managed block 내부 정규화 sha256 ↔ marker의 `sha256=` 속성 ↔ source(AGENTS.md) 정규화 sha256, 셋 모두 일치 시 ok.
+  - Codex는 source 자체를 읽으므로 별도 비교 불필요. 단 AGENTS.md에 marker가 잘못 박혀 있으면 codex가 model에 marker text를 노출 → doctor가 `marker_in_source` finding 발행.
 
-- **D-7. exit code 규약**
-  - (a) drift 0건 → 0, drift 발견 → 1, 사용 오류(--output 등) → 65, 내부 runtime 오류 → 70.
-  - (b) drift는 항상 0(advisory). 오류만 비-0.
-  - 추천: (a) + `--advisory` 옵트인.
+- **D-7 [DECIDED: drift→1, usage→65, runtime→70, `--advisory` 옵션]**
+  - drift 0건 → 0
+  - drift 발견 → 1
+  - `--output` 등 잘못된 인자 → 65 (이미 InvalidOutputFormatError와 일관)
+  - 내부 runtime 오류(파일 IO 실패 등) → 70
+  - `--advisory` 플래그를 주면 drift도 0으로 마무리 (CI 통합 옵트인).
 
-- **D-9. host adapter 구조 (신규, D-8 결정에 따라)**
-  - (a) `interface HostAdapter { id; instructions; permissions; mcp; surface; }` 추상화. `src/core/hosts/codex.ts`, `src/core/hosts/claude-code.ts`.
-  - (b) 각 host별 hard-coded function (확장성 낮음).
-  - 추천: (a) — v0.2부터 두 host를 다루므로 추상화 비용 가치 있음. OpenCode/OpenAgent는 같은 interface로 v0.3+에서 추가.
+- **D-9 [DECIDED: HostAdapter interface 추상화]** `src/core/hosts/types.ts`에 interface 정의, `codex.ts`/`claude-code.ts` 구현. OpenCode/OpenAgent는 같은 interface로 v0.3+에서 추가.
 
-- **D-10. doctor 명령의 host 인자 (신규)**
-  - (a) 인자 없으면 등록된 모든 host 자동 검사. `--host codex|claude-code`로 좁힐 수 있음.
-  - (b) `--host` 필수.
-  - (c) 명령을 host별로 분리: `ditto doctor codex instructions` 등.
-  - 추천: (a) — 가장 사용자 친화적. 기본은 모두 검사, 좁히고 싶으면 `--host`.
+- **D-10 [DECIDED: 기본 모든 host, `--host`로 좁힘]** doctor의 모든 subcommand가 `--host codex|claude-code` 옵션을 받음. 미지정 시 등록된 모든 host 검사. invalid 값은 exit 65.
 
-- **D-11. Codex의 AGENTS.md는 sync 대상인가 (신규)**
-  - **고정 사실**: Codex는 AGENTS.md를 source 그 자체로 읽음(host가 별도 projection을 만들지 않음).
-  - bridge sync는 **AGENTS.md → CLAUDE.md managed block만** 동기화. Codex의 AGENTS.md는 sync의 *source*이지 *target*이 아님.
-  - doctor instructions가 Codex에 대해 검사할 것:
-    - AGENTS.md가 존재하는지
-    - AGENTS.md 본문에 `<!-- ditto:managed:* -->` marker가 *없는지* (있으면 codex가 marker text를 model에 노출하므로 경고)
-    - AGENTS.md의 정규화 sha256 (모든 host adapter가 이 값을 source로 참조)
-  - 명령: `ditto doctor instructions --host codex`는 위 3개를 검사. drift는 "marker present in source" 1종만.
+- **D-11 [DECIDED: codex는 sync source일 뿐 target 아님]** `bridge sync --host codex`는 usage error(exit 65, stderr 메시지). doctor instructions --host codex는 marker 부재(`marker_in_source` finding 부재)와 AGENTS.md 존재만 검사.
 
-## D-3 ~ D-11 사용자 결정 요약
+## D-1 ~ D-11 결정 요약 (모두 [DECIDED])
 
-| 항목 | 상태 | 추천 |
-|---|---|---|
-| D-3 doctor 권한 | 대기 | read-only (sync 분리로 일관) |
-| D-4 MCP 수집 | 대기 | 설정 파일 파싱 (두 host) |
-| D-5 surface 검사 | 대기 | 두 host 디렉터리 인벤토리만, schema 검증은 Phase 9 |
-| D-6 drift 정의 | 대기 | 정규화 + sha256 (D-2와 일관) |
-| D-7 exit code | 대기 | drift→1, usage→65, runtime→70 + `--advisory` |
-| **D-8 host 범위** | **[DECIDED]** | **Codex + Claude Code** |
-| D-9 host adapter 구조 (신규) | 대기 | `HostAdapter` interface 추상화 |
-| D-10 doctor 명령의 host 인자 (신규) | 대기 | 기본 모든 host, `--host`로 좁힘 |
-| D-11 Codex AGENTS.md sync 대상 (신규) | 대기 | sync source일 뿐 target 아님. doctor instructions --host codex는 marker 부재만 확인 |
+| 항목 | 결정 |
+|---|---|
+| D-1 source of truth | AGENTS.md (4a full 복사) + `ditto bridge sync` |
+| D-2 marker 형식 | HTML comment + sha256 메타 |
+| D-3 doctor 권한 | read-only (bridge sync로 destructive 분리) |
+| D-4 MCP 수집 | 두 host 설정 파일 파싱. Claude는 .mcp.json → ~/.claude.json(project entry → user entry) → 그 외는 unverified |
+| D-5 surface 검사 | 두 host 디렉터리 인벤토리만, schema 검증은 Phase 9 |
+| D-6 drift 정의 | 정규화 + sha256 (D-2와 일관) |
+| D-7 exit code | drift→1, usage→65, runtime→70, `--advisory` 옵트인 |
+| D-8 host 범위 | Codex + Claude Code |
+| D-9 host adapter 구조 | `HostAdapter` interface 추상화 |
+| D-10 doctor의 host 인자 | 기본 모든 host, `--host`로 좁힘 |
+| D-11 Codex AGENTS.md sync 대상 | sync source만, target 아님. `bridge sync --host codex`는 usage error |
 
 ## 작업 분해 (D-1, D-2, D-8 [DECIDED]; D-3~D-7, D-9~D-11 결정 후 확정)
 
@@ -149,10 +140,22 @@
 - host별 매핑 표를 모듈 상수로 둠 (예: codex `sandbox_mode=danger-full-access` → `dangerous_mode`).
 
 ### P-3. McpInventory core (`src/core/mcp-inventory.ts`)
-- D-4 (a) 채택: 두 host adapter의 `loadMcpServers` 결과 합집합.
-- 출력 schema: `{ servers: [{ host: 'codex'|'claude-code', name, source_file, command?, args?, env_keys?, side_effect_label }] }`.
-- 같은 server name이 두 host에 등록되어 있으면 별도 entry로 출력(host 필드로 구분).
+- D-4 채택: 두 host adapter의 `loadMcpServers` 결과 합집합. host별 scope 정보 보존.
+- 출력 schema: `{ servers: [{ host: 'codex'|'claude-code', scope: 'project'|'local'|'user'|'unverified', name, source_file, command?, args?, env_keys?, side_effect_label }] }`.
+- 같은 server name이 여러 scope에 있으면 별도 entry로 출력 (host + scope 필드 조합으로 구분, 덮어쓰지 않음).
 - 수집 불가 시 정확한 unavailable 사유(파일 미존재/파싱 실패 등)를 반환, host 자체는 skip이 아니라 unverified.
+
+Codex adapter (P-0의 `loadMcpServers`) 탐색 순서:
+1. `~/.codex/config.toml`의 `[mcp_servers.*]` → scope='user'
+2. (later, v0.2는 unverified) `.codex/config.toml` → scope='project'
+
+Claude Code adapter (P-0의 `loadMcpServers`) 탐색 순서 (공식 https://code.claude.com/docs/en/mcp 기준):
+1. repo 루트의 `.mcp.json` → scope='project' (commit 대상; 팀 공유)
+2. `~/.claude.json` 읽어:
+   - 현재 cwd에 매칭되는 project entry의 `mcpServers` → scope='local'
+   - top-level user entry의 `mcpServers` → scope='user'
+3. plugin/managed MCP는 공식 처리 경로가 v0.2에서 결정 안 됨 → scope='unverified'로 보고 (서버 자체는 발견되어도 합산 결과에는 unverified 표기, 합산 카운트에서 제외).
+4. `.claude/settings.json`의 `mcpServers`는 주 경로가 *아니므로* v0.2 합산 대상 아님. 발견되면 scope='unverified'로 경고만 표기.
 
 ### P-4. SurfaceInventory core (`src/core/surface-inventory.ts`)
 - D-5 (a) 채택: 두 host adapter의 `loadSurfaceInventory` 결과를 *발견*과 *missing/extra* 분류로만 출력. Phase 9 확정 전엔 schema 검증 없음.

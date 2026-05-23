@@ -19,7 +19,7 @@
     },
     {
       "id": "ac-3",
-      "statement": "ditto doctor mcp가 두 host의 MCP 설정 파일을 직접 파싱해 server inventory를 출력한다. codex는 ~/.codex/config.toml의 [mcp_servers.*], claude-code는 ~/.claude의 mcp 설정 또는 .claude/settings.json의 mcpServers. 출력 schema: { servers: [{ host, name, source_file, command?, args?, env_keys?, side_effect_label }] }. host별로 수집 불가 시 정확한 unavailable 사유와 함께 unverified 보고.",
+      "statement": "ditto doctor mcp가 두 host 설정 파일을 직접 파싱해 server inventory를 출력한다. codex는 ~/.codex/config.toml의 [mcp_servers.*] (scope=user). claude-code는 공식 scope 순서대로: (1) repo 루트의 .mcp.json (scope=project), (2) ~/.claude.json의 현재 project entry mcpServers (scope=local) + user entry mcpServers (scope=user), (3) plugin/managed MCP와 .claude/settings.json의 mcpServers는 scope=unverified로 별도 보고 (합산 카운트 제외). 출력 schema: { servers: [{ host, scope, name, source_file, command?, args?, env_keys?, side_effect_label }] }. host별 수집 불가 시 정확한 unavailable 사유와 함께 unverified.",
       "verdict": "unverified",
       "evidence": []
     },
@@ -54,7 +54,7 @@
       "evidence": []
     }
   ],
-  "status": "draft",
+  "status": "in_progress",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
@@ -91,5 +91,5 @@
   "runs": [],
   "handoff_path": ".ditto/work-items/wi_v02doctor/handoff.md",
   "created_at": "2026-05-24T17:50:00+09:00",
-  "updated_at": "2026-05-24T17:50:00+09:00"
+  "updated_at": "2026-05-24T18:30:00+09:00"
 }

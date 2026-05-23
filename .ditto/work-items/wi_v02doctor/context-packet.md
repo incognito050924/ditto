@@ -5,26 +5,25 @@
 ## Current goal
 ditto doctor instructions/permissions/mcp/surface 4개 명령이 host 설정과 .ditto 기대값의 drift를 정확히 감지하고, human/json 두 형식으로 진단을 보고하며, drift 종류에 따라 일관된 exit code를 낸다.
 
-## **선결 사항: 사용자 결정**
+## 결정 사항 (D-1 ~ D-11 모두 [DECIDED])
 
-본 work item은 status=draft다. 일부 결정은 확정됐고, 나머지는 채택 전에는 execute로 들어가지 않는다.
+본 work item은 status=in_progress. 모든 결정 항목이 합의되어 execute 가능.
 
-확정:
-- **D-1 [DECIDED: (4a) full 복사]** AGENTS.md를 source로 CLAUDE.md의 managed block에 본문을 그대로 복사. 동기화는 `ditto bridge sync` (v0.2 포함).
-- **D-2 [DECIDED: (a) HTML comment]** marker는 `<!-- ditto:managed:start source=AGENTS.md sha256=<64hex> -->` ~ `<!-- ditto:managed:end -->`. doctor는 marker의 sha256 + 실제 managed block 내용 sha256 + AGENTS.md 정규화 sha256을 비교.
-- **D-8 [DECIDED: Codex + Claude Code]** v0.2는 두 host를 1급 지원. Codex는 AGENTS.md를 source 그 자체로 읽고, Claude Code는 CLAUDE.md projection을 읽음.
+| ID | 결정 |
+|---|---|
+| D-1 | AGENTS.md → CLAUDE.md managed block 본문 복사 (4a) + `ditto bridge sync` |
+| D-2 | HTML comment marker + sha256 메타 |
+| D-3 | doctor는 read-only (sync 분리) |
+| D-4 | 두 host 설정 파일 파싱. Claude는 .mcp.json → ~/.claude.json(project entry → user entry) → 그 외 unverified |
+| D-5 | 두 host 디렉터리 인벤토리만, schema 검증은 Phase 9 |
+| D-6 | 정규화 + sha256 (D-2와 일관) |
+| D-7 | drift→1, usage→65, runtime→70, `--advisory` 옵트인 |
+| D-8 | Codex + Claude Code 두 host 1급 지원 |
+| D-9 | HostAdapter interface 추상화 |
+| D-10 | 기본 모든 host, `--host`로 좁힘 |
+| D-11 | Codex AGENTS.md는 sync source만, `bridge sync --host codex`는 usage error |
 
-대기 중:
-- D-3 doctor 권한 범위 (추천: read-only; bridge sync로 분리됐으므로 read-only가 일관)
-- D-4 MCP inventory 수집 방법 (추천: 두 host 설정 파일 파싱 합집합)
-- D-5 surface 검사 범위 (추천: 두 host 디렉터리 인벤토리만, schema 검증은 Phase 9)
-- D-6 drift 정의 (추천: 정규화 + sha256, D-2와 일관)
-- D-7 exit code 규약 (추천: drift→1, usage→65, runtime→70 + `--advisory`)
-- D-9 host adapter 구조 (추천: HostAdapter interface 추상화) — 신규
-- D-10 doctor 명령의 host 인자 (추천: 기본 모든 host, `--host`로 좁힘) — 신규
-- D-11 Codex AGENTS.md sync 대상 (추천: sync source만, target 아님) — 신규
-
-상세는 `.ditto/work-items/wi_v02doctor/plan.md#d-3--d-11-사용자-결정-요약` 참조.
+상세는 `.ditto/work-items/wi_v02doctor/plan.md#d-1--d-11-결정-요약-모두-decided` 참조.
 
 ## Acceptance criteria
 - ac-1: doctor instructions가 두 host에 대해 drift 감지. claude-code는 sha256 3단 비교(content_mismatch/sha256_mismatch/marker_missing/projection_missing), codex는 marker 부재 확인.
@@ -87,7 +86,7 @@ ditto doctor instructions/permissions/mcp/surface 4개 명령이 host 설정과 
 ```
 git status                                                # 다른 변경 섞임 확인
 bun x tsc --noEmit && bun run lint && bun test            # 기준선 확인
-cat .ditto/work-items/wi_v02doctor/plan.md                # 결정 사항 D-1~D-8 확인
+cat .ditto/work-items/wi_v02doctor/plan.md                # P-0부터 시작
 ```
 
-D-1~D-8이 모두 [DECIDED] 상태로 박혀 있지 않으면 plan/dod/rollback 합의가 미완. execute 금지.
+D-1~D-11 모두 [DECIDED]. P-0 host adapter부터 순차 진행.
