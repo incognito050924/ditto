@@ -77,7 +77,7 @@ wi_v02doctor가 fixture 기준 ac-1~ac-8 pass로 마감되었으나, 2026-05-24 
 
 ```
 git status                                          # 본 work item 디렉터리 외 변경이 없는지 확인
-bun run tsc --noEmit && bun run lint && bun test    # 기준선 확인 (현재 107 pass)
+bun run tsc --noEmit && bun run lint && bun test    # 기준선 확인 (wi_v02harden 마감 시점 120 pass)
 cat .ditto/work-items/wi_v02harden/plan.md          # D-1~D-5 [DECIDED] + P-1~P-7
 cat .ditto/work-items/wi_v02harden/dod.md           # ac별 검증 명령
 cat .ditto/work-items/wi_v02harden/rollback.md      # 신규/수정 파일 + 금지 사항

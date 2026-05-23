@@ -66,6 +66,49 @@
 - `bun test` 116 pass / 0 fail (이전 113 + 신규 3)
 - schema self-validation 10/10
 
+## 2차 review 통과 (P-3 + P-4)
+- 사용자 review 결과: 진행 OK, findings 0. context-packet.md "현재 107 pass" 오차 지적 → P-5+P-6+P-7 docs commit에서 정정.
+
+## P-5 완료 (2026-05-24 21:00)
+- 21:00 D-5=(a) 적용. `doctor mcp` `--advisory` 사용 시 명시적 usage error(exit 65)로 reject + stderr 안내. args 정의는 유지하되 description으로 의미 명시.
+- 회귀 4건:
+  - `tests/doctor/permissions.test.ts`: --advisory + wildcard fixture → exit 0 (drift 발생에도)
+  - `tests/doctor/surface.test.ts`: --advisory + surface-mismatch → exit 0
+  - `tests/doctor/mcp.test.ts`: --advisory → exit 65 + stderr "does not support --advisory"
+  - `tests/bridge/sync.test.ts`: 자유 영역만 수정 → 두 번째 sync action=unchanged, `사용자 추가 줄` 보존
+- commit 93eae90 `feat(ditto): finalize doctor advisory and bridge free-area regressions (behavioral)`
+
+## P-6 완료 (2026-05-24 21:05)
+- `tests/schemas/repo-self-validation.test.ts`가 wi_v02harden 산출물(work-item.json, language-ledger.json, evidence/commands.jsonl)을 work-items 디렉터리 자동 순회로 검증.
+- 새 finding kind(multiple_markers)와 새 분류 label은 internal type only → schema 노출 없음 → case 추가 불필요.
+- 결과: 29 pass / 0 fail.
+
+## P-7 manual smoke (2026-05-24 21:15)
+- 본 ditto repo:
+  - `doctor instructions`: CLAUDE.md 없음 → `projection_missing`(repo가 Codex primary라 정상 상태, 회귀 아님)
+  - `doctor permissions`: codex/claude 설정 모두 missing → dangerous_count=0 (정상)
+  - `doctor mcp`: `.mcp.json` 없음 → unverified + 사유 명시 (정상)
+  - `doctor surface`: home의 `graphify` skill이 inventory에 보이고 mismatch_count=0 (**P-3 효과 입증**)
+- 임시 HOME mock + 임시 .codex/config.toml로 fixture 직접 검증:
+  - nested `[sandbox_workspace_write].network_access = true` → `network_on` finding + dangerous_count=1 (**P-1 nested 효과 입증**)
+  - inline table `env = { TOKEN = "x", REGION = "kr" }` → `env_keys: ["REGION", "TOKEN"]` (**P-1 inline 효과 입증**)
+- 사용자 환경의 `.codex/`, `.claude/`, `~/.claude.json`, `~/.codex/config.toml`은 어떤 경우에도 수정/삭제하지 않음.
+
+## ditto verify 결과 (ac별 evidence)
+- ac-1 ↔ `bun test tests/doctor/permissions.test.ts tests/doctor/mcp.test.ts` → exit 0
+- ac-2 ↔ `bun test tests/doctor/permissions.test.ts` → exit 0
+- ac-3 ↔ `bun test tests/doctor/surface.test.ts` → exit 0
+- ac-4 ↔ `bun test tests/doctor/instructions.test.ts tests/bridge/sync.test.ts tests/core/instruction-bridge.test.ts` → exit 0
+- ac-5 ↔ `bun test tests/doctor tests/bridge tests/core/bridge-sync.test.ts` → exit 0
+
+모든 ac verdict=pass 박힘. evidence/commands.jsonl에 5개 entry 자동 기록.
+
+## 최종 검증
+- `bun run tsc --noEmit` pass
+- `bun run lint` pass
+- `bun test` 120 pass / 0 fail (wi_v02doctor 마감 시점 107 → wi_v02harden 마감 120, 신규 13건)
+- schema self-validation 29/29 pass
+
 ## 다음 동작
-- 사용자 review 시점 (P-3 + P-4 묶음). plan.md Review 합의에 따라 여기서 한 번 review 받기.
-- review 통과 시 P-5(advisory 회귀 추가 + mcp advisory 제거 + bridge free-area-only) + P-6(self-validation 보강) + P-7(manual smoke) 묶음으로 진행해 마감.
+- `ditto work handoff wi_v02harden`로 final_verdict=pass, status=done, closed_at 박고 completion.json/handoff.md 생성.
+- 마감 commit 후 work item 종료. v0.3 provider wrapper 준비로 이행 가능.
