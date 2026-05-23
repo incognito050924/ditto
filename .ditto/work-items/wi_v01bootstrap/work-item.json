@@ -1,0 +1,141 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_v01bootstrap",
+  "title": "DITTO v0.1 bootstrap — schemas, fixtures, CLI 골격",
+  "source_request": "v0.1을 구현하기 전에 schemas/ 또는 docs/contracts/ 위치를 정하고, work item/run/completion/self-check/reviewer/language contract fixture를 만든다.",
+  "goal": "DITTO 본격 코드 작업 전에 schema/fixture/CLI 골격을 설치하여 이후 단계가 의존할 contract와 검증 기반을 마련한다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "zod schema 6개(work-item, run-manifest, completion-contract, reviewer-output, glossary, language-ledger)와 JSONSchema export가 src/schemas와 schemas/ 디렉터리에 존재한다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/schemas/index.ts",
+          "summary": "6개 schema 모듈 재노출"
+        },
+        {
+          "kind": "command",
+          "command": "bun run schemas:export",
+          "summary": "schemas/*.schema.json 6개 생성 확인"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "golden fixture(password-strength 시나리오)가 모든 schema에 부합하고, 의도된 invalid 케이스가 reject된다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/fixture-validation.test.ts",
+          "summary": "fixture 검증 + invalid reject 테스트 모두 통과"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "citty 기반 CLI 5개 명령(work start|status|handoff, run record, verify)이 --help, --output json/human, exit code 64를 일관되게 제공한다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun run src/cli/index.ts --help",
+          "summary": "subcommand 목록과 도움말 출력 정상"
+        },
+        {
+          "kind": "command",
+          "command": "bun run src/cli/index.ts work start \"...\" --request \"...\" --output json",
+          "summary": "JSON payload + stderr 안내 + exit 64"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "tsc --noEmit, biome check, bun test가 모두 통과한다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun x tsc --noEmit",
+          "summary": "오류 없음 (latest run)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "Checked 16 files, no fixes applied (latest run)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "latest run: fixture-validation 16 + repo-self-validation 5 + source repo identity 3 = 24 pass / 0 fail"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "package.json",
+    "tsconfig.json",
+    "biome.json",
+    ".gitignore",
+    "src/schemas/common.ts",
+    "src/schemas/work-item.ts",
+    "src/schemas/run-manifest.ts",
+    "src/schemas/completion-contract.ts",
+    "src/schemas/reviewer-output.ts",
+    "src/schemas/glossary.ts",
+    "src/schemas/language-ledger.ts",
+    "src/schemas/index.ts",
+    "src/cli/index.ts",
+    "src/cli/util.ts",
+    "src/cli/commands/work.ts",
+    "src/cli/commands/run.ts",
+    "src/cli/commands/verify.ts",
+    "scripts/export-schemas.ts",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/work-item.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/progress.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/decisions.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/handoff.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/completion.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/language.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/language-ledger.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/evidence/commands.jsonl",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/reviews/rv_pwdcheck1.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/manifest.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/prompt.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/result.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/stdout.log",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/stderr.log",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/diff.patch",
+    "tests/fixtures/scenarios/password-strength/.ditto/knowledge/CONTEXT.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/knowledge/glossary.json",
+    "tests/schemas/fixture-validation.test.ts",
+    "schemas/work-item.schema.json",
+    "schemas/run-manifest.schema.json",
+    "schemas/completion-contract.schema.json",
+    "schemas/reviewer-output.schema.json",
+    "schemas/glossary.schema.json",
+    "schemas/language-ledger.schema.json"
+  ],
+  "risks": [
+    {
+      "description": "사용자 환경 Bun 1.0.2는 다소 구버전. 1.1.x 이상 권장.",
+      "severity": "low",
+      "mitigation": "다음 work item 시작 전 업그레이드 권장 안내. 현재 의존성에는 영향 없음."
+    },
+    {
+      "description": "본 부트스트랩은 plan-check 없이 execute로 직접 들어갔다. DITTO의 단계 분리 원칙을 자체 작업에서 위반한 첫 사례.",
+      "severity": "medium",
+      "mitigation": "wi_v01implement부터는 plan/dod/rollback/context-packet을 사전에 작성하고 합의받은 뒤 실행한다."
+    }
+  ],
+  "runs": [],
+  "handoff_path": ".ditto/work-items/wi_v01bootstrap/handoff.md",
+  "created_at": "2026-05-24T11:30:00+09:00",
+  "updated_at": "2026-05-24T13:10:00+09:00",
+  "closed_at": "2026-05-24T13:10:00+09:00"
+}

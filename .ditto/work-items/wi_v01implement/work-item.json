@@ -1,0 +1,83 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_v01implement",
+  "title": "DITTO v0.1 actual implementation — 5개 CLI 명령의 실제 동작",
+  "source_request": "다음 단계는 CLI의 not_implemented를 실제 동작으로 채우는 것이다. WorkItemStore부터 만들면 나머지 4개 명령이 빠르게 따라온다.",
+  "goal": "ditto work start|status|handoff, run record, verify가 .ditto/ 파일을 실제로 읽고 쓰며, 모든 출력 파일이 zod schema 검증을 통과한다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "ditto work start가 .ditto/work-items/<id>/work-item.json을 schema 부합하게 생성하고 workItem.parse가 통과한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "ditto work status가 .ditto/work-items/<id>/work-item.json을 읽어 human/json 두 형식으로 출력하며, JSON 출력은 schema 부합 결과를 그대로 반환한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "ditto work handoff가 work item completion contract를 검사하고, final_verdict이 pass가 아니면 handoff.md를 생성하며, completion.json도 함께 갱신한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "ditto run record가 .ditto/runs/<id>/manifest.json을 schema 부합하게 생성하고 work item의 runs 배열을 갱신한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "ditto verify가 지정 명령을 실행해 exit code를 캡처하고, evidence/commands.jsonl에 append하며, 해당 acceptance criterion의 verdict를 갱신한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-6",
+      "statement": "본 work item이 만들어내는 모든 .ditto 파일이 tests/schemas/repo-self-validation.test.ts에서 schema 검증을 통과한다.",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [
+    {
+      "description": "work item id 충돌: 동시에 여러 세션에서 생성 시 같은 id가 만들어질 수 있음.",
+      "severity": "medium",
+      "mitigation": "id 생성에 timestamp+random 8자 이상 사용. 생성 직전 존재 확인."
+    },
+    {
+      "description": "dirty git state에서 사용자 작업을 덮어쓸 위험.",
+      "severity": "high",
+      "mitigation": "쓰기 명령은 대상 파일이 이미 존재하면 명시적 --force 없이는 거부. .ditto 외부 파일은 어떤 명령도 수정하지 않는다."
+    },
+    {
+      "description": "동시에 두 세션이 같은 work item을 갱신해 race condition 발생.",
+      "severity": "medium",
+      "mitigation": "v0.1에서는 단일 세션 가정. 충돌은 감지만 하고 차단은 후속 phase."
+    },
+    {
+      "description": "atomic write 보장 부재 시 부분 파일 생성.",
+      "severity": "medium",
+      "mitigation": "쓰기는 임시 파일에 작성 후 rename으로 commit."
+    }
+  ],
+  "re_entry": {
+    "command": "ditto work resume wi_v01implement",
+    "fresh_evidence_needed": [
+      "ac-1~ac-5 각각에 대한 실제 .ditto 파일 생성/수정 결과와 schema 검증 결과",
+      "ac-6의 self-validation 테스트 통과 결과"
+    ],
+    "owner": "workspace-write"
+  },
+  "runs": [],
+  "handoff_path": ".ditto/work-items/wi_v01implement/handoff.md",
+  "created_at": "2026-05-24T12:35:00+09:00",
+  "updated_at": "2026-05-24T12:35:00+09:00"
+}
