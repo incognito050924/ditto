@@ -11,6 +11,11 @@ import {
   workItemStatus,
 } from './common';
 
+const gitSha40 = z
+  .string()
+  .regex(/^[a-f0-9]{40}$/, 'git sha must be 40 lowercase hex characters')
+  .describe('Full 40-char git commit sha');
+
 export const acceptanceCriterion = z
   .object({
     id: z.string().min(1).describe('Stable id within the work item (e.g., ac-1)'),
@@ -65,6 +70,11 @@ export const workItem = z
     language_overrides: relativePath
       .optional()
       .describe('Path to language.md if this work item modifies the glossary'),
+    started_at_sha: gitSha40
+      .optional()
+      .describe(
+        'Git HEAD sha at the time this work item transitioned draft → in_progress; used as default base for handoff diff collection',
+      ),
     created_at: isoDateTime,
     updated_at: isoDateTime,
     closed_at: isoDateTime.optional(),

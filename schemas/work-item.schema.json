@@ -251,6 +251,11 @@
           "minLength": 1,
           "description": "Path to language.md if this work item modifies the glossary"
         },
+        "started_at_sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$",
+          "description": "Git HEAD sha at the time this work item transitioned draft → in_progress; used as default base for handoff diff collection"
+        },
         "created_at": {
           "type": "string",
           "format": "date-time",

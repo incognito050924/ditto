@@ -190,14 +190,19 @@ export async function writeWorkItemHandoff(
   const item = await store.get(workId);
   let baseUsed: string | null;
   if (options.base !== undefined) {
-    // 사용자가 명시적으로 지정한 ref는 silent fallback 대상이 아니다.
+    // 사용자가 명시적으로 지정한 ref는 silent fallback 대상이 아니다. 항상 1순위.
     const verified = pickBaseRef(repoRoot, [options.base]);
     if (verified === null) {
       throw new InvalidBaseRefError(options.base);
     }
     baseUsed = verified;
   } else {
-    baseUsed = pickBaseRef(repoRoot, ['origin/main', 'origin/master', 'main', 'master']);
+    // 우선순위: started_at_sha > origin/main > origin/master > main > master.
+    // work item이 자기 시작 시점 sha를 들고 있으면 외부 ref보다 결정적.
+    const candidates: string[] = [];
+    if (item.started_at_sha) candidates.push(item.started_at_sha);
+    candidates.push('origin/main', 'origin/master', 'main', 'master');
+    baseUsed = pickBaseRef(repoRoot, candidates);
   }
   const collected = collectChangedFiles(repoRoot, baseUsed);
   // 기존 item.changed_files와 git에서 수집한 파일의 합집합
