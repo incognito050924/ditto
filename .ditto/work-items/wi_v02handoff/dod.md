@@ -82,38 +82,33 @@ test "$(jq -r '.changed_files[] | select(.=="a.txt")' h.json)" = "a.txt"
 - 가짜 entry가 사라짐 (union이 아니라 replace)
 - 회귀: `tests/core/work-item-handoff.test.ts`에 첫 handoff 후 가짜 entry 박고 두 번째 handoff 결과 확인
 
-## ac-3: wi_v02doctor changed_files 정정
+## ac-3: handoff --head 옵션 + wi_v02doctor changed_files 정정
 
 검증
 ```
-# wi_v02doctor 시작 commit 직전 sha 식별 (git log로)
-# 예: ef9ffab가 wi_v02doctor 마지막 docs commit 직전, e75c7bf가 P-0~P-5 묶음 commit.
-# wi_v02doctor 시작은 plan.md에 따르면 2026-05-23 새 세션. 실제 commit log로 확인:
-git log --oneline --grep="wi_v02doctor" | tail
-# wi_v02doctor seed는 2ee498a (docs(ditto): draft wi_v02doctor plan ...).
-# 그 직전 sha를 base로.
-BASE=$(git rev-parse 2ee498a^)
+# 1) --head 옵션 회귀 (tests/core/work-item-handoff.test.ts 자동 검증)
 
-# wi_v02doctor work-item.json reset + handoff 재실행
+# 2) wi_v02doctor 정정 (시작=2ee498a, 마감=4b18c40)
 jq '.changed_files = []' .ditto/work-items/wi_v02doctor/work-item.json > /tmp/wi.json
 mv /tmp/wi.json .ditto/work-items/wi_v02doctor/work-item.json
-"$DITTO_SRC"/dist/ditto work handoff wi_v02doctor --base $BASE --output json > h.json
+"$DITTO_SRC"/dist/ditto work handoff wi_v02doctor \
+  --base 2ee498a^ --head 4b18c40 --output json > h.json
 
-# 정정 결과 확인
+# 정정 결과: completion.json은 git diff --name-only 2ee498a^..4b18c40 와 합리적 범위에서 일치
 COMPLETION=$(jq -r '.changed_files | length' .ditto/work-items/wi_v02doctor/completion.json)
-GIT_DIFF=$(git diff --name-only $BASE..0a6177d | wc -l)
-# COMPLETION이 GIT_DIFF와 합리적 범위에서 일치 (정확히 같을 필요는 없음 — handoff 시점 status도 포함)
-test $COMPLETION -lt 99  # 99개에서 줄어듦
-test $COMPLETION -ge 30  # 너무 적지도 않음
+GIT_DIFF=$(git diff --name-only 2ee498a^..4b18c40 | wc -l)
+test $COMPLETION -lt 99   # 99개에서 줄어듦
+test $COMPLETION -ge 30   # 너무 적지도 않음
 
-# wi_v02harden은 이미 정정됨 — 확인만
+# 3) wi_v02harden은 이미 정정됨 — 확인만
 test "$(jq -r '.changed_files | length' .ditto/work-items/wi_v02harden/completion.json)" = "34"
 ```
 
 기준
-- wi_v02doctor completion.json/handoff.md/work-item.json의 changed_files가 99 → 합리적 범위로 줄어듦
+- `HandoffOptions.head` 추가 + CLI `--head` arg 추가. 회귀 1건이 head 옵션 적용을 입증.
+- wi_v02doctor completion.json/handoff.md/work-item.json의 changed_files가 99 → ~43 entries로 줄어듦
 - wi_v02harden은 34 entries 유지
-- 정정 commit은 docs commit 한 개로 묶음
+- 정정 commit은 P-3a(structural+회귀) + P-3b(docs) 두 commit으로 분리
 
 ## 전체 done 조건
 

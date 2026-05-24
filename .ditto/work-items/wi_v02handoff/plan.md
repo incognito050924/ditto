@@ -57,12 +57,20 @@ wi_v02harden post-review(2026-05-24)에서 두 finding:
 - (behavioral) `writeWorkItemHandoff`의 `merged = Array.from(new Set([...item.changed_files, ...collected]))` → `merged = collected`.
 - 회귀: `tests/core/work-item-handoff.test.ts`에 첫 handoff 후 work-item.json.changed_files에 가짜 entry 박고 두 번째 handoff에서 사라짐 확인.
 
-### P-3. wi_v02doctor changed_files 정정 (ac-3)
-- git log로 wi_v02doctor 시작 commit + 시작 직전 commit sha 식별.
+### P-3a. handoff에 --head 옵션 추가 (P-3b 선결)
+- 현재 `ditto work handoff`는 `base..HEAD` diff만 지원. wi_v02doctor 마감 commit(4b18c40) 이후 wi_v02harden과 wi_v02handoff 작업이 commit되어 있어, 단순 `--base 2ee498a^`로는 wi_v02doctor 범위를 벗어나는 변경까지 끌어옴.
+- 정정 위해 `--head <ref>` 옵션 추가가 자연스러움: `git diff --name-only base...head`를 그 ref 기준으로 수행.
+- (structural) `HandoffOptions`에 `head?: string` 추가. `writeWorkItemHandoff`가 `--base`와 같은 방식으로 검증(없으면 HEAD fallback). `collectChangedFiles`가 `base...<head>`로 diff.
+- (behavioral) CLI `work handoff`에 `--head` arg 추가. description: "Git ref to diff up to; default HEAD".
+- 회귀 1건: `tests/core/work-item-handoff.test.ts`에 head 옵션이 HEAD를 다른 ref로 좁힘을 확인.
+- v0.3+ provider wrapper 등 후속에도 유용 — base+head 명시는 정정/회귀 분석의 표준.
+
+### P-3b. wi_v02doctor changed_files 정정 (ac-3)
+- git log로 wi_v02doctor 시작 commit(`2ee498a`) + 마감 commit(`4b18c40`) 식별 완료.
 - `.ditto/work-items/wi_v02doctor/work-item.json.changed_files`를 `[]`로 reset.
-- `ditto work handoff wi_v02doctor --base <시작 직전 sha>` 재실행.
-- completion.json/handoff.md/work-item.json 모두 정확한 list로 갱신.
-- wi_v02harden 재확인: `ditto work handoff --base 4b18c40` 재실행 결과가 여전히 34 entries로 동일한지 확인(이미 처리됨, 본 단계는 검증만).
+- `ditto work handoff wi_v02doctor --base 2ee498a^ --head 4b18c40` 재실행.
+- completion.json/handoff.md/work-item.json 모두 wi_v02doctor 범위(`~43 entries`) 안으로 정확화.
+- wi_v02harden 재확인: 이미 처리됨(34 entries), 본 단계는 `jq '.changed_files | length'`로 검증만.
 
 ### P-4. self-validation + manual smoke + handoff (마감)
 - `tests/schemas/repo-self-validation.test.ts`는 schema 확장에 자동 통과(optional 필드).
