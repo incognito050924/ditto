@@ -227,13 +227,11 @@ export async function writeWorkItemHandoff(
     headUsed = verifiedHead;
   }
   const collected = collectChangedFiles(repoRoot, baseUsed, headUsed);
-  // collected가 단일 source of truth. 기존 item.changed_files는 무시(replace).
-  // 한 번 잘못된 base로 부풀린 list가 누적되지 않도록(D-2 결정). 수동 추가
-  // 보존이 필요해지면 별도 옵션(--merge 등)으로 v0.3+에서 분리.
-  const merged = collected;
+  // "changed_files not recorded" 판정은 git이 실제로 본 변경(collected) 기준.
+  // self-artifact union은 그 판정과 별개로 항상 일어남.
   const unverifiedExtras: { item: string; reason: string; out_of_scope: boolean }[] = [];
   if (
-    merged.length === 0 &&
+    collected.length === 0 &&
     (item.runs.length > 0 || item.acceptance_criteria.some((a) => a.evidence.length > 0))
   ) {
     unverifiedExtras.push({
@@ -245,6 +243,16 @@ export async function writeWorkItemHandoff(
       out_of_scope: false,
     });
   }
+  // collected는 git이 본 변경. handoff 자체가 만드는 산출물
+  // (completion.json, handoff.md, work-item.json)은 collect 직후 생성되므로
+  // 첫 handoff에서는 git diff/status에 잡히지 않는다. 마감 산출물이 자기
+  // changed_files를 정확히 보고하도록 명시적으로 union 추가.
+  const selfArtifacts = [
+    `.ditto/work-items/${workId}/completion.json`,
+    `.ditto/work-items/${workId}/handoff.md`,
+    `.ditto/work-items/${workId}/work-item.json`,
+  ];
+  const merged = Array.from(new Set([...collected, ...selfArtifacts])).sort();
   const completion = buildCompletion(item, now.toISOString(), merged, unverifiedExtras);
   const effectiveReEntry: WorkItem['re_entry'] =
     completion.final_verdict === 'pass'

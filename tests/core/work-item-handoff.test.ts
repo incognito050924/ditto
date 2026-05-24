@@ -208,6 +208,32 @@ describe('writeWorkItemHandoff', () => {
     expect(result.completion.changed_files).not.toContain('wave-2.txt');
   });
 
+  test('handoff includes its own outputs (completion.json/handoff.md/work-item.json) in changed_files', async () => {
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.email', 't@t'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.name', 't'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '--allow-empty', '-q', '-m', 'init'], {
+      cwd: workDir,
+      stdout: 'pipe',
+    });
+    const created = await store.create(makeInput());
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
+      ),
+    }));
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    const expectedSelf = [
+      `.ditto/work-items/${created.id}/completion.json`,
+      `.ditto/work-items/${created.id}/handoff.md`,
+      `.ditto/work-items/${created.id}/work-item.json`,
+    ];
+    for (const path of expectedSelf) {
+      expect(result.completion.changed_files).toContain(path);
+    }
+  });
+
   test('--head with invalid ref throws InvalidHeadRefError', async () => {
     const created = await store.create(makeInput());
     let thrown: unknown;
