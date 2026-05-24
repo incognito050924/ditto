@@ -23,4 +23,11 @@ const main = defineCommand({
   },
 });
 
-runMain(main);
+// Pre-slice rawArgs at the first `--` so citty's runMain (which does a flat
+// rawArgs.includes('--help') ignoring the `--` separator) cannot capture
+// provider-side tokens. process.argv is left intact so extractDashDashTail
+// still resolves the tail for commands that opt into pass-through.
+const dashDashIdx = process.argv.indexOf('--', 2);
+const wrapperRawArgs =
+  dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
+runMain(main, { rawArgs: wrapperRawArgs });
