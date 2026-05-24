@@ -8,6 +8,7 @@ import type { HostAdapter, HostRunCompletion } from './hosts';
 import { getHostAdapter } from './hosts';
 import { RunStore } from './run-store';
 import { WorkItemStore } from './work-item-store';
+import { createWorktreeForRun } from './worktree';
 
 type ProviderName = RunManifest['provider'];
 type RunnableProvider = Extract<ProviderName, 'codex' | 'claude-code'>;
@@ -116,7 +117,7 @@ async function streamToFile(stream: ReadableStream<Uint8Array>, path: string): P
 }
 
 async function captureArtifacts(
-  repoRoot: string,
+  runRoot: string,
   runStore: RunStore,
   runId: string,
   adapterProcess: Awaited<ReturnType<NonNullable<HostAdapter['spawnRun']>>>,
@@ -147,7 +148,7 @@ async function captureArtifacts(
     unverified.push('adapter completion promise rejected; this is a HostAdapter contract bug');
   }
 
-  await writeFile(diffPath, captureGitDiff(repoRoot), 'utf8');
+  await writeFile(diffPath, captureGitDiff(runRoot), 'utf8');
   return { completion, unverified };
 }
 
@@ -190,11 +191,34 @@ export async function runWithProvider(
     exit_code: null,
   };
 
+  let runCwd = cwd;
+  let runRoot = repoRoot;
+  let worktreeRelativePath: string | undefined;
+  if (input.profile === 'isolated') {
+    try {
+      const worktree = await createWorktreeForRun(repoRoot, created.id);
+      worktreeRelativePath = worktree.relativePath;
+      runRoot = worktree.absolutePath;
+      runCwd = '.';
+    } catch (err) {
+      const message = `worktree creation failed: ${err instanceof Error ? err.message : String(err)}`;
+      const endedAt = new Date().toISOString();
+      await runStore.update(created.id, (cur) => ({
+        ...cur,
+        exit_code: null,
+        ended_at: endedAt,
+        unverified: [...cur.unverified, message],
+        notes: message,
+      }));
+      throw new RunWithRuntimeError(message, resultBase);
+    }
+  }
+
   let adapterProcess: Awaited<ReturnType<NonNullable<HostAdapter['spawnRun']>>>;
   try {
     adapterProcess = await adapter.spawnRun({
-      repoRoot,
-      cwd,
+      repoRoot: runRoot,
+      cwd: runCwd,
       profile: input.profile,
       args: input.args,
       env: policyEnv(input),
@@ -206,9 +230,10 @@ export async function runWithProvider(
       ...cur,
       exit_code: null,
       ended_at: endedAt,
-      git_after: captureGitState(repoRoot),
+      git_after: captureGitState(runRoot),
       unverified: [...cur.unverified, message],
       notes: message,
+      ...(worktreeRelativePath ? { worktree_path: worktreeRelativePath } : {}),
     }));
     throw new RunWithRuntimeError(message, resultBase);
   }
@@ -219,18 +244,18 @@ export async function runWithProvider(
   }));
 
   const { completion, unverified } = await captureArtifacts(
-    repoRoot,
+    runRoot,
     runStore,
     created.id,
     adapterProcess,
   );
   const endedAt = new Date().toISOString();
-  const changedFiles = listChangedFiles(repoRoot, { excludeDittoRuns: true });
+  const changedFiles = listChangedFiles(runRoot, { excludeDittoRuns: true });
   const profileFindings = profileUnverified(input.profile, changedFiles);
   const updated = await runStore.update(created.id, (cur) => ({
     ...cur,
     model_reported: completion.model_reported,
-    git_after: captureGitState(repoRoot),
+    git_after: captureGitState(runRoot),
     changed_files: changedFiles,
     stdout_path: repoRelative(repoRoot, runStore.pathFor(created.id, 'stdout.log')),
     stderr_path: repoRelative(repoRoot, runStore.pathFor(created.id, 'stderr.log')),
@@ -243,6 +268,7 @@ export async function runWithProvider(
       ...(completion.unverified ?? []),
       ...profileFindings,
     ],
+    ...(worktreeRelativePath ? { worktree_path: worktreeRelativePath } : {}),
     ...(completion.error || completion.signal
       ? {
           notes: [completion.error, completion.signal ? `signal: ${completion.signal}` : null]

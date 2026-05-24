@@ -332,6 +332,42 @@ describe('runWithProvider', () => {
     expect(called).toBe(false);
   });
 
+  test('isolated profile spawns inside a per-run worktree and records worktree_path', async () => {
+    const item = await createWorkItem('isolated worktree');
+    let seenRepoRoot = '';
+    let seenCwd = '';
+    registerMock(async (input) => {
+      seenRepoRoot = input.repoRoot;
+      seenCwd = input.cwd;
+      await writeFile(join(input.repoRoot, 'inside.txt'), 'work\n', 'utf8');
+      return {
+        entrypoint: 'codex mock',
+        stdout: new Blob(['']).stream(),
+        stderr: new Blob(['']).stream(),
+        completion: Promise.resolve({ exit_code: 0, model_reported: null }),
+      };
+    });
+
+    const result = await runWithProvider(dir, {
+      work_item_id: item.id,
+      provider: 'codex',
+      profile: 'isolated',
+      args: ['exec'],
+    });
+
+    const expectedWorktree = `.ditto/worktrees/${result.run_id}`;
+    expect(seenRepoRoot).toBe(join(dir, expectedWorktree));
+    expect(seenCwd).toBe('.');
+    const manifest = await new RunStore(dir).get(result.run_id);
+    expect(manifest.worktree_path).toBe(expectedWorktree);
+    expect(manifest.changed_files).toContain('inside.txt');
+    const mainStatus = execFileSync('git', ['status', '--porcelain'], {
+      cwd: dir,
+      encoding: 'utf8',
+    });
+    expect(mainStatus).not.toContain('inside.txt');
+  });
+
   test.each([
     ['read-only', true, true],
     ['workspace-write', true, false],
