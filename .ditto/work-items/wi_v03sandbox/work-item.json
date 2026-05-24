@@ -1,0 +1,69 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_v03sandbox",
+  "title": "DITTO v0.3 — profile sandbox enforcement",
+  "source_request": "wi_260524qi9 마감 후 application plan line 754-758의 v0.3 완료 기준 중 profile 권한 격리 실제 적용이 미달. provider-native sandbox flag, isolated profile worktree, 비-networked profile의 network-off flag를 보강한다. project_v03_entry_point memory 참고.",
+  "goal": "wi_260524qi9가 도입한 wrapper-level profile policy(2-layer) 위에 provider-native sandbox flag, git worktree 격리(isolated), provider-native network-off flag를 얹어 application plan line 754 '완료 기준 — profile별 권한 격리가 실제로 적용된다'를 충족한다. RunStore/runManifest schema와 wi_260524qi9의 wrapper orchestration은 그대로 재사용한다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "application plan line 743-758의 v0.3 완료 기준 중 wi_260524qi9가 미달한 항목(provider-native sandbox flag, isolated worktree, network-off flag)이 본 work item의 구현 표면과 충돌 없이 정합하는지 점검한다. 재구현 금지 대상은 runWithProvider orchestration, HostAdapter.spawnRun 계약, profile 2-layer(wrapper pre-spawn validation + post-run diff inspection), git helpers로 확정한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "codex와 claude-code adapter의 spawnRun이 input.profile에 따라 provider-native sandbox flag를 args 앞에 명시적으로 prepend한다. workspace-write, reviewer는 read-only가 아닌 sandbox flag(예: codex `--sandbox workspace-write`), networked는 default + network 허용 flag(있다면)로 매핑한다. 매핑 결과는 fixture로 spawn-args 검증되고, 미지원 case는 manifest.unverified에 명시한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "isolated profile spawn은 git worktree를 생성한 뒤 그 path를 input.cwd로 사용한다. worktree 생성/cwd 적용/run 종료 후 정리(기본: 보존하여 evidence로 남김, manifest에 worktree_path 기록)가 wrapper 또는 adapter layer에서 일관되게 처리된다. fixture로 isolated profile run이 worktree 안에서 실행됨을 검증한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "비-networked profile(read-only/workspace-write/reviewer/isolated) spawn 시 provider-native network-off flag를 추가한다. 미지원 provider/profile 조합은 manifest.unverified에 명시한다. 기존 proxy env 4종 scrub은 유지한다. fixture로 profile별 flag 주입을 검증한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "cwd escape 회귀 fixture가 3-case로 manifest 표현을 검증한다: (a) workspace-write에서 cwd가 repo 밖 path로 지정되면 pre-spawn USAGE error로 거부, (b) 정상 cwd 안에서 mock provider가 cwd 밖 write를 시도하는 시나리오는 provider-native sandbox flag에 의한 차단 또는 post-run unverified surface로 표현, (c) read-only/reviewer profile에서 changed_files가 비어 있지 않은 경우 manifest.unverified에 'profile violated: writes detected'가 기록된다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-6",
+      "statement": "DITTO 자체 self-validation, lint, build이 통과하고 wi_v03sandbox가 handoff.md + completion.json과 함께 status=done으로 마감된다. changed_files에 self-artifacts(completion/handoff/progress/work-item)를 포함한다.",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [
+    {
+      "description": "provider CLI 버전 drift — codex `--sandbox` 모드 이름과 claude-code permission flag 시그니처가 release 사이 바뀔 수 있다.",
+      "severity": "medium",
+      "mitigation": "현재 환경에 설치된 codex/claude-code 버전을 smoke test로 lock하고, 미지원 매핑은 manifest.unverified로 surface한다. 매핑 자체는 adapter 내부 상수로 묶어 한 곳에서 수정 가능하게 한다."
+    },
+    {
+      "description": "git worktree 생성/cleanup이 spawn crash 시 orphan worktree를 남길 수 있다.",
+      "severity": "medium",
+      "mitigation": "기본 정책은 worktree 보존(evidence로 사용)이고, 명시적 cleanup은 후속 도구로 분리. 생성 실패는 RunWithRuntimeError로 fail-fast. worktree path를 manifest에 기록해 추적 가능하게 한다."
+    },
+    {
+      "description": "provider-native network-off flag가 모든 provider/버전에 안정적으로 존재하지 않을 수 있다.",
+      "severity": "low",
+      "mitigation": "flag가 있으면 추가하고, 없으면 proxy env scrub + manifest.unverified entry로 surface한다. wi_260524qi9가 도입한 proxy scrub은 유지한다."
+    }
+  ],
+  "runs": [],
+  "created_at": "2026-05-24T11:11:08.000Z",
+  "updated_at": "2026-05-24T11:11:08.000Z"
+}
