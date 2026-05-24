@@ -42,7 +42,7 @@
       "evidence": []
     }
   ],
-  "status": "draft",
+  "status": "in_progress",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
@@ -64,6 +64,7 @@
     }
   ],
   "runs": [],
+  "started_at_sha": "beec7400b11582dce24870ed7526561ff43905ae",
   "created_at": "2026-05-24T04:47:18.779Z",
-  "updated_at": "2026-05-24T04:58:19.000Z"
+  "updated_at": "2026-05-24T09:00:00.000Z"
 }
