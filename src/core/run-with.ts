@@ -25,6 +25,7 @@ export interface RunWithInput {
     set?: Record<string, string>;
     unset?: string[];
   };
+  verify_command?: string;
 }
 
 export interface RunWithResult {
@@ -282,6 +283,11 @@ export async function runWithProvider(
   }));
 
   const result = { ...resultBase, exit_code: updated.exit_code };
+
+  if (input.verify_command !== undefined) {
+    await runVerifyStep(repoRoot, runRoot, runStore, created.id, input.verify_command);
+  }
+
   try {
     await workStore.update(item.id, (cur) => ({
       ...cur,
@@ -295,4 +301,67 @@ export async function runWithProvider(
   }
 
   return result;
+}
+
+async function runVerifyStep(
+  repoRoot: string,
+  runRoot: string,
+  runStore: RunStore,
+  runId: string,
+  rawCommand: string,
+): Promise<void> {
+  const command = rawCommand.trim();
+  const tokens = command.split(/\s+/).filter(Boolean);
+  const logAbsolute = runStore.pathFor(runId, 'verify.log');
+  const logRelative = repoRelative(repoRoot, logAbsolute);
+  await ensureDir(dirname(logAbsolute));
+  if (tokens.length === 0) {
+    await writeFile(logAbsolute, '', 'utf8');
+    const entry = {
+      command,
+      exit_code: -1,
+      duration_ms: 0,
+      output_path: logRelative,
+      notes: 'verify spawn failed: empty command after whitespace split',
+    };
+    await runStore.update(runId, (cur) => ({
+      ...cur,
+      verifications: [...cur.verifications, entry],
+    }));
+    return;
+  }
+  const started = Date.now();
+  let exit_code = -1;
+  let stdoutText = '';
+  let stderrText = '';
+  let spawnError: string | undefined;
+  try {
+    const proc = Bun.spawnSync(tokens, {
+      cwd: runRoot,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      stdin: 'ignore',
+    });
+    exit_code = proc.exitCode ?? -1;
+    stdoutText = proc.stdout?.toString() ?? '';
+    stderrText = proc.stderr?.toString() ?? '';
+  } catch (err) {
+    spawnError = `verify spawn failed: ${err instanceof Error ? err.message : String(err)}`;
+  }
+  const duration_ms = Date.now() - started;
+  const body = spawnError
+    ? `${spawnError}\n`
+    : `${stdoutText}${stderrText.length > 0 ? `\n--- stderr ---\n${stderrText}` : ''}`;
+  await writeFile(logAbsolute, body, 'utf8');
+  const entry = {
+    command,
+    exit_code,
+    duration_ms,
+    output_path: logRelative,
+    ...(spawnError ? { notes: spawnError } : {}),
+  };
+  await runStore.update(runId, (cur) => ({
+    ...cur,
+    verifications: [...cur.verifications, entry],
+  }));
 }

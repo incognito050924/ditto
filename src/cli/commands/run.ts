@@ -151,6 +151,12 @@ const runWith = defineCommand({
       description: 'Repo-relative prompt/context packet path',
       required: false,
     },
+    verify: {
+      type: 'string',
+      description:
+        'Command run after the provider completes; recorded into runManifest.verifications. Whitespace-split, no shell.',
+      required: false,
+    },
     output: {
       type: 'string',
       description: 'Output format: human|json',
@@ -190,6 +196,7 @@ const runWith = defineCommand({
         profile: profile.data,
         args: tail,
         ...(args.prompt ? { prompt_path: args.prompt } : {}),
+        ...(args.verify ? { verify_command: args.verify } : {}),
       });
       if (format === 'json') {
         writeJson(result);

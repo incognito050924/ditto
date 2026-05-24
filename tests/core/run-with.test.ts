@@ -411,4 +411,106 @@ describe('runWithProvider', () => {
       }
     },
   );
+
+  test('--verify command success appends a Verification entry with output_path', async () => {
+    const item = await createWorkItem('verify pass');
+    registerMock(async () => ({
+      entrypoint: 'codex mock',
+      stdout: new Blob(['']).stream(),
+      stderr: new Blob(['']).stream(),
+      completion: Promise.resolve({ exit_code: 0, model_reported: null }),
+    }));
+
+    const result = await runWithProvider(dir, {
+      work_item_id: item.id,
+      provider: 'codex',
+      profile: 'workspace-write',
+      args: ['exec'],
+      verify_command: 'pwd',
+    });
+
+    expect(result.exit_code).toBe(0);
+    const manifest = await new RunStore(dir).get(result.run_id);
+    expect(manifest.verifications).toHaveLength(1);
+    const entry = manifest.verifications[0];
+    expect(entry.command).toBe('pwd');
+    expect(entry.exit_code).toBe(0);
+    expect(entry.output_path).toBe(`.ditto/runs/${result.run_id}/verify.log`);
+    expect(typeof entry.duration_ms).toBe('number');
+    expect(entry.notes).toBeUndefined();
+    const log = await Bun.file(join(dir, entry.output_path ?? '')).text();
+    expect(log.length).toBeGreaterThan(0);
+
+    const updatedItem = await new WorkItemStore(dir).get(item.id);
+    expect(updatedItem.runs).toContain(result.run_id);
+  });
+
+  test('--verify command non-zero exit is recorded without escalating to a run failure', async () => {
+    const item = await createWorkItem('verify fail');
+    registerMock(async () => ({
+      entrypoint: 'codex mock',
+      stdout: new Blob(['']).stream(),
+      stderr: new Blob(['']).stream(),
+      completion: Promise.resolve({ exit_code: 0, model_reported: null }),
+    }));
+
+    const result = await runWithProvider(dir, {
+      work_item_id: item.id,
+      provider: 'codex',
+      profile: 'workspace-write',
+      args: ['exec'],
+      verify_command: 'false',
+    });
+
+    expect(result.exit_code).toBe(0);
+    const manifest = await new RunStore(dir).get(result.run_id);
+    expect(manifest.verifications).toHaveLength(1);
+    expect(manifest.verifications[0].command).toBe('false');
+    expect(manifest.verifications[0].exit_code).not.toBe(0);
+    expect(manifest.verifications[0].notes).toBeUndefined();
+
+    const updatedItem = await new WorkItemStore(dir).get(item.id);
+    expect(updatedItem.runs).toContain(result.run_id);
+  });
+
+  test('--verify spawn failure records exit_code=-1 with notes and preserves run capture', async () => {
+    const item = await createWorkItem('verify spawn fail');
+    registerMock(async () => ({
+      entrypoint: 'codex mock',
+      stdout: new Blob(['']).stream(),
+      stderr: new Blob(['']).stream(),
+      completion: Promise.resolve({ exit_code: 0, model_reported: null }),
+    }));
+
+    const result = await runWithProvider(dir, {
+      work_item_id: item.id,
+      provider: 'codex',
+      profile: 'workspace-write',
+      args: ['exec'],
+      verify_command: 'ditto-no-such-binary-xyz12345',
+    });
+
+    expect(result.exit_code).toBe(0);
+    const manifest = await new RunStore(dir).get(result.run_id);
+    expect(manifest.verifications).toHaveLength(1);
+    expect(manifest.verifications[0].exit_code).toBe(-1);
+    expect(manifest.verifications[0].notes ?? '').toContain('verify spawn failed');
+
+    const updatedItem = await new WorkItemStore(dir).get(item.id);
+    expect(updatedItem.runs).toContain(result.run_id);
+  });
+
+  test('no --verify keeps verifications empty (existing happy-path is unaffected)', async () => {
+    const item = await createWorkItem('no verify');
+    registerMock(async () => ({
+      entrypoint: 'codex mock',
+      stdout: new Blob(['']).stream(),
+      stderr: new Blob(['']).stream(),
+      completion: Promise.resolve({ exit_code: 0, model_reported: null }),
+    }));
+
+    const result = await runFixture(item.id);
+    const manifest = await new RunStore(dir).get(result.run_id);
+    expect(manifest.verifications).toEqual([]);
+  });
 });
