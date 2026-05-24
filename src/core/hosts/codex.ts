@@ -11,6 +11,7 @@ import {
 import { spawnProviderProcess } from './spawn';
 import type {
   HostAdapter,
+  HostRunInput,
   McpInventory,
   McpServerEntry,
   PermissionInventory,
@@ -129,12 +130,10 @@ export const codexHostAdapter: HostAdapter = {
   },
 
   async spawnRun(input) {
-    const profileArgs = input.profile === 'read-only' ? ['--sandbox', 'read-only'] : [];
-    const unverified =
-      input.profile === 'read-only' ? [] : ['profile enforcement deferred to provider'];
+    const { args, unverified } = buildCodexSpawnArgs(input.profile, input.args);
     return spawnProviderProcess({
       binary: 'codex',
-      args: [...profileArgs, ...input.args],
+      args,
       repoRoot: input.repoRoot,
       cwd: input.cwd,
       env: input.env,
@@ -142,3 +141,29 @@ export const codexHostAdapter: HostAdapter = {
     });
   },
 };
+
+const CODEX_PROFILE_SANDBOX_FLAGS: Record<HostRunInput['profile'], string[]> = {
+  'read-only': ['--sandbox', 'read-only'],
+  'workspace-write': ['--sandbox', 'workspace-write'],
+  reviewer: ['--sandbox', 'read-only'],
+  networked: ['--sandbox', 'workspace-write'],
+  isolated: ['--sandbox', 'workspace-write'],
+};
+
+const CODEX_PROFILE_UNVERIFIED: Record<HostRunInput['profile'], string[]> = {
+  'read-only': [],
+  'workspace-write': [],
+  reviewer: [],
+  networked: ['codex network is not forced open by v0.3; sandbox restricts outbound'],
+  isolated: [],
+};
+
+export function buildCodexSpawnArgs(
+  profile: HostRunInput['profile'],
+  userArgs: string[],
+): { args: string[]; unverified: string[] } {
+  return {
+    args: [...CODEX_PROFILE_SANDBOX_FLAGS[profile], ...userArgs],
+    unverified: [...CODEX_PROFILE_UNVERIFIED[profile]],
+  };
+}
