@@ -14,12 +14,20 @@ export interface HandoffResult {
 
 export interface HandoffOptions {
   base?: string;
+  head?: string;
 }
 
 export class InvalidBaseRefError extends Error {
   constructor(public readonly ref: string) {
     super(`--base "${ref}" is not a valid git ref in this repository`);
     this.name = 'InvalidBaseRefError';
+  }
+}
+
+export class InvalidHeadRefError extends Error {
+  constructor(public readonly ref: string) {
+    super(`--head "${ref}" is not a valid git ref in this repository`);
+    this.name = 'InvalidHeadRefError';
   }
 }
 
@@ -40,15 +48,18 @@ function pickBaseRef(repoRoot: string, candidates: string[]): string | null {
 }
 
 /**
- * Collect changed files relative to `base` using `git diff --name-only base...HEAD`
- * and `git status --porcelain` (for uncommitted changes). Returns repo-relative
- * paths with duplicates removed.
+ * Collect changed files relative to `base` using `git diff --name-only base...<head>`.
+ * If `head` is null, defaults to HEAD and also includes `git status --porcelain`
+ * (uncommitted changes). If `head` is an explicit ref (e.g., past commit), the
+ * working tree status is *not* mixed in — the caller is asking about a frozen
+ * commit range. Returns repo-relative paths with duplicates removed.
  */
-function collectChangedFiles(repoRoot: string, base: string | null): string[] {
+function collectChangedFiles(repoRoot: string, base: string | null, head: string | null): string[] {
   const set = new Set<string>();
   if (base !== null) {
+    const headSpec = head ?? 'HEAD';
     const diff = Bun.spawnSync(
-      ['git', 'diff', '--name-only', '--diff-filter=ACMR', `${base}...HEAD`],
+      ['git', 'diff', '--name-only', '--diff-filter=ACMR', `${base}...${headSpec}`],
       { cwd: repoRoot, stdout: 'pipe', stderr: 'pipe' },
     );
     if (diff.exitCode === 0) {
@@ -59,20 +70,23 @@ function collectChangedFiles(repoRoot: string, base: string | null): string[] {
       }
     }
   }
-  const status = Bun.spawnSync(['git', 'status', '--porcelain'], {
-    cwd: repoRoot,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  if (status.exitCode === 0) {
-    const text = status.stdout?.toString() ?? '';
-    for (const line of text.split('\n')) {
-      // porcelain line format: XY <path>  or  XY <orig> -> <new>
-      const trimmed = line.replace(/^..\s*/, '').trim();
-      if (trimmed.length === 0) continue;
-      const arrow = trimmed.indexOf(' -> ');
-      const path = arrow === -1 ? trimmed : trimmed.slice(arrow + 4);
-      set.add(path);
+  // head이 명시되면 working tree status는 의미 없음 (과거 commit 범위 정정 시나리오).
+  if (head === null) {
+    const status = Bun.spawnSync(['git', 'status', '--porcelain'], {
+      cwd: repoRoot,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    if (status.exitCode === 0) {
+      const text = status.stdout?.toString() ?? '';
+      for (const line of text.split('\n')) {
+        // porcelain line format: XY <path>  or  XY <orig> -> <new>
+        const trimmed = line.replace(/^..\s*/, '').trim();
+        if (trimmed.length === 0) continue;
+        const arrow = trimmed.indexOf(' -> ');
+        const path = arrow === -1 ? trimmed : trimmed.slice(arrow + 4);
+        set.add(path);
+      }
     }
   }
   // Filter out paths that escape the repo or are absolute
@@ -204,7 +218,15 @@ export async function writeWorkItemHandoff(
     candidates.push('origin/main', 'origin/master', 'main', 'master');
     baseUsed = pickBaseRef(repoRoot, candidates);
   }
-  const collected = collectChangedFiles(repoRoot, baseUsed);
+  let headUsed: string | null = null;
+  if (options.head !== undefined) {
+    const verifiedHead = pickBaseRef(repoRoot, [options.head]);
+    if (verifiedHead === null) {
+      throw new InvalidHeadRefError(options.head);
+    }
+    headUsed = verifiedHead;
+  }
+  const collected = collectChangedFiles(repoRoot, baseUsed, headUsed);
   // collected가 단일 source of truth. 기존 item.changed_files는 무시(replace).
   // 한 번 잘못된 base로 부풀린 list가 누적되지 않도록(D-2 결정). 수동 추가
   // 보존이 필요해지면 별도 옵션(--merge 등)으로 v0.3+에서 분리.

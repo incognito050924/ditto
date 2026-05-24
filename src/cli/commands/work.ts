@@ -1,6 +1,10 @@
 import { defineCommand } from 'citty';
 import { resolveRepoRootForCreate } from '~/core/fs';
-import { InvalidBaseRefError, writeWorkItemHandoff } from '~/core/work-item-handoff';
+import {
+  InvalidBaseRefError,
+  InvalidHeadRefError,
+  writeWorkItemHandoff,
+} from '~/core/work-item-handoff';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
   RUNTIME_ERROR_EXIT,
@@ -180,7 +184,13 @@ const workHandoff = defineCommand({
     base: {
       type: 'string',
       description:
-        'Git ref to diff against when collecting changed_files. Default tries origin/main, origin/master, main, master.',
+        'Git ref to diff against when collecting changed_files. Default tries started_at_sha, origin/main, origin/master, main, master.',
+      required: false,
+    },
+    head: {
+      type: 'string',
+      description:
+        'Git ref to diff up to when collecting changed_files. Default HEAD. Useful for correcting past handoffs (base...head frozen range).',
       required: false,
     },
     output: {
@@ -203,14 +213,12 @@ const workHandoff = defineCommand({
     try {
       let result: Awaited<ReturnType<typeof writeWorkItemHandoff>>;
       try {
-        result = await writeWorkItemHandoff(
-          repoRoot,
-          store,
-          args.workId,
-          args.base ? { base: args.base } : {},
-        );
+        result = await writeWorkItemHandoff(repoRoot, store, args.workId, {
+          ...(args.base ? { base: args.base } : {}),
+          ...(args.head ? { head: args.head } : {}),
+        });
       } catch (err) {
-        if (err instanceof InvalidBaseRefError) {
+        if (err instanceof InvalidBaseRefError || err instanceof InvalidHeadRefError) {
           writeError(err.message);
           process.exit(USAGE_ERROR_EXIT);
           return;

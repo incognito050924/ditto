@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { InvalidBaseRefError, writeWorkItemHandoff } from '~/core/work-item-handoff';
+import {
+  InvalidBaseRefError,
+  InvalidHeadRefError,
+  writeWorkItemHandoff,
+} from '~/core/work-item-handoff';
 import { WorkItemStore } from '~/core/work-item-store';
 
 let workDir: string;
@@ -166,6 +170,55 @@ describe('writeWorkItemHandoff', () => {
     // origin/main 등 fallback ref가 없는 임시 repo에서도 started_at_sha가 사용됨
     const result = await writeWorkItemHandoff(workDir, store, created.id);
     expect(result.baseUsed).toBe(sha);
+  });
+
+  test('--head narrows diff to a past commit range, excluding later changes', async () => {
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.email', 't@t'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.name', 't'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '--allow-empty', '-q', '-m', 'init'], {
+      cwd: workDir,
+      stdout: 'pipe',
+    });
+    const baseSha = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: workDir, stdout: 'pipe' })
+      .stdout.toString()
+      .trim();
+    await Bun.write(join(workDir, 'wave-1.txt'), 'one\n');
+    Bun.spawnSync(['git', 'add', 'wave-1.txt'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '-q', '-m', 'wave 1'], { cwd: workDir, stdout: 'pipe' });
+    const headSha = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: workDir, stdout: 'pipe' })
+      .stdout.toString()
+      .trim();
+    await Bun.write(join(workDir, 'wave-2.txt'), 'two\n');
+    Bun.spawnSync(['git', 'add', 'wave-2.txt'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '-q', '-m', 'wave 2'], { cwd: workDir, stdout: 'pipe' });
+
+    const created = await store.create(makeInput());
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
+      ),
+    }));
+    const result = await writeWorkItemHandoff(workDir, store, created.id, {
+      base: baseSha,
+      head: headSha,
+    });
+    expect(result.completion.changed_files).toContain('wave-1.txt');
+    expect(result.completion.changed_files).not.toContain('wave-2.txt');
+  });
+
+  test('--head with invalid ref throws InvalidHeadRefError', async () => {
+    const created = await store.create(makeInput());
+    let thrown: unknown;
+    try {
+      await writeWorkItemHandoff(workDir, store, created.id, {
+        head: '__missing_head_ref__',
+      });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(InvalidHeadRefError);
   });
 
   test('replace (not union): stale changed_files give way to git collected on re-handoff', async () => {
