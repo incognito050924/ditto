@@ -99,6 +99,22 @@
 - `bun run lint` pass
 - `bun test` **131 pass / 0 fail** (이전 129 + P-3a 신규 2: --head + invalid-head)
 - schema self-validation 10/10
-- changed_files 정확도: wi_v02doctor 44 / wi_v02harden 34 / wi_v02handoff 17 — 모두 git diff와 일치
+- changed_files 정확도: wi_v02doctor 44 / wi_v02harden 34 / wi_v02handoff 17 — count는 일치
 
 wi_v02handoff 마감. handoff core 정리 완료 — v0.3 provider wrapper 준비.
+
+## Post-close review correction (2026-05-24)
+사용자 follow-up review에서 Medium finding: wi_v02handoff completion.json의 changed_files **count는 git diff와 같지만 list 내용이 다름**. handoff 산출물(`completion.json`, `handoff.md`)이 누락되고, 대신 seed 시점 파일들(`language-ledger.json`, `rollback.md`)이 들어가 있음. 원인은 `collectChangedFiles`가 git diff를 수집한 *후* completion.json/handoff.md가 생성되는 호출 순서 — 첫 close인 work item에서는 자기 산출물이 git에 아직 없어 누락. wi_v02doctor/wi_v02harden은 우연히 마감 base/HEAD 시점 commit에 이미 산출물이 포함돼 있어 가려져 있었음.
+
+### Fix
+- (behavioral) `writeWorkItemHandoff`가 항상 self-artifact 3 경로(`.ditto/work-items/<id>/{completion.json, handoff.md, work-item.json}`)를 collected에 union으로 추가. set으로 dedupe, sort. "changed_files not recorded" unverified 판정은 self-artifact union *전* collected 기준 그대로 유지(체크 위치 분리).
+- 회귀 1건: handoff 산출물 3개가 changed_files에 포함됨 확인.
+  - commit `0ad15c4` `fix(ditto): include handoff self-artifacts in changed_files (behavioral)`
+- wi_v02handoff handoff 재실행(`--base e83bd1d`):
+  - changed_files 17 → **19** (= `git diff --name-only e83bd1d..HEAD` 19와 list 단위로 정확 일치)
+  - self-artifact 3개 모두 포함 확인 (`completion.json`, `handoff.md`, `work-item.json`)
+  - wi_v02doctor 정정 산출물 + P-1/P-2/P-3a/P-3b/self-artifact-fix 코드 변경 모두 포함
+
+### 검증 (post-correction)
+- `bun test` **132 pass / 0 fail** (이전 131 + self-artifact 회귀 1)
+- wi_v02doctor 44 / wi_v02harden 34 (둘 다 self-artifact 이미 포함) / wi_v02handoff 19 (정정 후, list까지 git diff와 일치)

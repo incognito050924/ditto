@@ -15,8 +15,10 @@ DITTO v0.2 work-item-handoff cleanup — accurate changed_files and base ref —
 - .ditto/work-items/wi_v02doctor/completion.json
 - .ditto/work-items/wi_v02doctor/handoff.md
 - .ditto/work-items/wi_v02doctor/work-item.json
+- .ditto/work-items/wi_v02handoff/completion.json
 - .ditto/work-items/wi_v02handoff/context-packet.md
 - .ditto/work-items/wi_v02handoff/dod.md
+- .ditto/work-items/wi_v02handoff/handoff.md
 - .ditto/work-items/wi_v02handoff/language-ledger.json
 - .ditto/work-items/wi_v02handoff/plan.md
 - .ditto/work-items/wi_v02handoff/progress.md

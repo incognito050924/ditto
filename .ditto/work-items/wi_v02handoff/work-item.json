@@ -49,8 +49,10 @@
     ".ditto/work-items/wi_v02doctor/completion.json",
     ".ditto/work-items/wi_v02doctor/handoff.md",
     ".ditto/work-items/wi_v02doctor/work-item.json",
+    ".ditto/work-items/wi_v02handoff/completion.json",
     ".ditto/work-items/wi_v02handoff/context-packet.md",
     ".ditto/work-items/wi_v02handoff/dod.md",
+    ".ditto/work-items/wi_v02handoff/handoff.md",
     ".ditto/work-items/wi_v02handoff/language-ledger.json",
     ".ditto/work-items/wi_v02handoff/plan.md",
     ".ditto/work-items/wi_v02handoff/progress.md",
@@ -85,6 +87,6 @@
   "handoff_path": ".ditto/work-items/wi_v02handoff/handoff.md",
   "started_at_sha": "c7cd8f5f73ab31b08563b381b9bcd24a24cf4f5f",
   "created_at": "2026-05-24T22:30:00+09:00",
-  "updated_at": "2026-05-24T03:49:44.839Z",
-  "closed_at": "2026-05-24T03:49:44.791Z"
+  "updated_at": "2026-05-24T04:03:40.925Z",
+  "closed_at": "2026-05-24T04:03:40.878Z"
 }
