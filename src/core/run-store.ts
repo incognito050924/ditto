@@ -37,7 +37,7 @@ export class RunStore {
 
   pathFor(
     id: string,
-    kind: 'prompt.md' | 'stdout.log' | 'stderr.log' | 'diff.patch' | 'result.md',
+    kind: 'prompt.md' | 'stdout.log' | 'stderr.log' | 'diff.patch' | 'result.md' | 'verify.log',
   ): string {
     return join(this.runDir(id), kind);
   }
