@@ -58,6 +58,9 @@ export const runManifest = z
     stdout_path: relativePath.optional(),
     stderr_path: relativePath.optional(),
     diff_path: relativePath.optional(),
+    worktree_path: relativePath
+      .optional()
+      .describe('Repo-relative path to the per-run git worktree, set when profile=isolated'),
     exit_code: z.number().int().nullable().describe('null if the provider was killed or crashed'),
     started_at: isoDateTime,
     ended_at: isoDateTime.optional(),

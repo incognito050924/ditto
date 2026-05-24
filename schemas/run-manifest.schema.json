@@ -143,6 +143,11 @@
           "minLength": 1,
           "description": "Repo-relative path; absolute paths and .. traversal are rejected"
         },
+        "worktree_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-relative path to the per-run git worktree, set when profile=isolated"
+        },
         "exit_code": {
           "anyOf": [
             {
