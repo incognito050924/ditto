@@ -13,6 +13,7 @@ import {
 import { spawnProviderProcess } from './spawn';
 import type {
   HostAdapter,
+  HostRunInput,
   McpInventory,
   McpServerEntry,
   PermissionInventory,
@@ -218,13 +219,39 @@ export const claudeCodeHostAdapter: HostAdapter = {
   },
 
   async spawnRun(input) {
+    const { args, unverified } = buildClaudeCodeSpawnArgs(input.profile, input.args);
     return spawnProviderProcess({
       binary: 'claude',
-      args: input.args,
+      args,
       repoRoot: input.repoRoot,
       cwd: input.cwd,
       env: input.env,
-      unverified: ['profile enforcement deferred to provider'],
+      unverified,
     });
   },
 };
+
+const CLAUDE_CODE_PROFILE_PERMISSION: Record<HostRunInput['profile'], string> = {
+  'read-only': 'plan',
+  'workspace-write': 'default',
+  reviewer: 'plan',
+  networked: 'default',
+  isolated: 'default',
+};
+
+const CLAUDE_CODE_NETWORK_NOTICE = 'claude-code network is not forced open by v0.3';
+
+export function buildClaudeCodeSpawnArgs(
+  profile: HostRunInput['profile'],
+  userArgs: string[],
+): { args: string[]; unverified: string[] } {
+  const mode = CLAUDE_CODE_PROFILE_PERMISSION[profile];
+  const unverified = [`claude-code --permission-mode ${mode} mapping is best-effort in v0.3`];
+  if (profile === 'networked') {
+    unverified.push(CLAUDE_CODE_NETWORK_NOTICE);
+  }
+  return {
+    args: ['--permission-mode', mode, ...userArgs],
+    unverified,
+  };
+}
