@@ -103,6 +103,8 @@ function failingStream(message: string): ReadableStream<Uint8Array> {
   });
 }
 
+const proxyKeys = ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'ALL_PROXY'];
+
 describe('runWithProvider', () => {
   test('captures a successful provider run into manifest artifacts and work item linkage', async () => {
     const workStore = new WorkItemStore(dir);
@@ -299,4 +301,78 @@ describe('runWithProvider', () => {
     expect(manifest.unverified.join('\n')).toContain('artifact capture failed');
     expect(manifest.unverified.join('\n')).toContain('stdout pipe failed');
   });
+
+  test('rejects cwd outside the repo before provider spawn', async () => {
+    const item = await createWorkItem('cwd outside');
+    let called = false;
+    registerMock(async () => {
+      called = true;
+      return {
+        entrypoint: 'codex mock',
+        stdout: new Blob(['']).stream(),
+        stderr: new Blob(['']).stream(),
+        completion: Promise.resolve({ exit_code: 0, model_reported: null }),
+      };
+    });
+
+    let thrown: unknown;
+    try {
+      await runWithProvider(dir, {
+        work_item_id: item.id,
+        provider: 'codex',
+        profile: 'workspace-write',
+        cwd: '../outside',
+        args: ['exec'],
+      });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect(String(thrown)).toContain('invalid cwd');
+    expect(called).toBe(false);
+  });
+
+  test.each([
+    ['read-only', true, true],
+    ['workspace-write', true, false],
+    ['reviewer', true, true],
+    ['networked', false, false],
+    ['isolated', true, false],
+  ] as const)(
+    'applies profile policy for %s',
+    async (profile, expectProxyUnset, expectWriteViolation) => {
+      const item = await createWorkItem(`profile ${profile}`);
+      let unset: string[] = [];
+      registerMock(async (input) => {
+        unset = input.env.unset;
+        await writeFile(join(input.repoRoot, `${profile}.txt`), 'changed\n', 'utf8');
+        return {
+          entrypoint: 'codex mock',
+          stdout: new Blob(['']).stream(),
+          stderr: new Blob(['']).stream(),
+          completion: Promise.resolve({ exit_code: 0, model_reported: null }),
+        };
+      });
+
+      const result = await runWithProvider(dir, {
+        work_item_id: item.id,
+        provider: 'codex',
+        profile,
+        args: ['exec'],
+      });
+
+      if (expectProxyUnset) {
+        for (const key of proxyKeys) expect(unset).toContain(key);
+      } else {
+        for (const key of proxyKeys) expect(unset).not.toContain(key);
+      }
+      const manifest = await new RunStore(dir).get(result.run_id);
+      expect(manifest.changed_files).toContain(`${profile}.txt`);
+      if (expectWriteViolation) {
+        expect(manifest.unverified).toContain('profile violated: writes detected');
+      } else {
+        expect(manifest.unverified).not.toContain('profile violated: writes detected');
+      }
+    },
+  );
 });
