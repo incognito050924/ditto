@@ -1,3 +1,4 @@
 # Progress
 
 - 2026-05-24: Seed created — wi_v03sandbox 마감 후 application plan line 754 "verification capture를 manifest에 연결" 항목만 남아 본 work item으로 분리. project_v03_entry_point memory의 [DECIDED] plan에 따라 `ditto run with`에 `--verify` 옵션을 추가하는 데 집중한다. 기존 `ditto verify` 명령은 evidence ledger 경로로 그대로 유지하고, 본 work item은 manifest-level의 별도 lightweight 경로를 추가한다.
+- 2026-05-24: Phase 3 진입 — single design note `verify-option.md`로 --verify semantics(whitespace split, single occurrence), Verification entry shape, 실패 모드 표(spawn fail/non-zero/hang), CLI exit policy(provider exit만 반영), test surface(verify pass/fail/spawn-fail fixture)를 한 번에 박음. wi_v03verify status는 in_progress로 전환하고 started_at_sha는 seed commit `ede2c39`을 사용한다.
