@@ -237,7 +237,12 @@ export async function runWithProvider(
     diff_path: repoRelative(repoRoot, runStore.pathFor(created.id, 'diff.patch')),
     exit_code: completion.exit_code,
     ended_at: endedAt,
-    unverified: [...cur.unverified, ...unverified, ...profileFindings],
+    unverified: [
+      ...cur.unverified,
+      ...unverified,
+      ...(completion.unverified ?? []),
+      ...profileFindings,
+    ],
     ...(completion.error || completion.signal
       ? {
           notes: [completion.error, completion.signal ? `signal: ${completion.signal}` : null]

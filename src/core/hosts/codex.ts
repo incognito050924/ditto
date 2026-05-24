@@ -8,6 +8,7 @@ import {
   parseToml,
   readTextIfExists,
 } from './shared';
+import { spawnProviderProcess } from './spawn';
 import type {
   HostAdapter,
   McpInventory,
@@ -125,5 +126,19 @@ export const codexHostAdapter: HostAdapter = {
       path: entry.path,
     }));
     return { host: 'codex', localSurfaces, homeSurfaces, unavailable: [] };
+  },
+
+  async spawnRun(input) {
+    const profileArgs = input.profile === 'read-only' ? ['--sandbox', 'read-only'] : [];
+    const unverified =
+      input.profile === 'read-only' ? [] : ['profile enforcement deferred to provider'];
+    return spawnProviderProcess({
+      binary: 'codex',
+      args: [...profileArgs, ...input.args],
+      repoRoot: input.repoRoot,
+      cwd: input.cwd,
+      env: input.env,
+      unverified,
+    });
   },
 };

@@ -90,6 +90,7 @@ export interface HostRunCompletion {
   model_reported: string | null;
   signal?: string;
   error?: string;
+  unverified?: string[];
 }
 
 export interface HostRunProcess {

@@ -10,6 +10,7 @@ import {
   readTextIfExists,
   samePath,
 } from './shared';
+import { spawnProviderProcess } from './spawn';
 import type {
   HostAdapter,
   McpInventory,
@@ -214,5 +215,16 @@ export const claudeCodeHostAdapter: HostAdapter = {
         })),
     ];
     return { host: 'claude-code', localSurfaces, homeSurfaces, unavailable: [] };
+  },
+
+  async spawnRun(input) {
+    return spawnProviderProcess({
+      binary: 'claude',
+      args: input.args,
+      repoRoot: input.repoRoot,
+      cwd: input.cwd,
+      env: input.env,
+      unverified: ['profile enforcement deferred to provider'],
+    });
   },
 };
