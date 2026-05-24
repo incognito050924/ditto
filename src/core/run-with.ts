@@ -81,7 +81,10 @@ function policyEnv(input: RunWithInput): { set: Record<string, string>; unset: s
   };
 }
 
-function profileUnverified(profile: RunManifest['profile'], changedFiles: string[]): string[] {
+export function profileUnverified(
+  profile: RunManifest['profile'],
+  changedFiles: string[],
+): string[] {
   const unverified: string[] = [];
   const outside = changedFiles.filter((path) => !relativePath.safeParse(path).success);
   if (outside.length > 0) {
