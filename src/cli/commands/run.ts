@@ -1,38 +1,9 @@
-import { execFileSync } from 'node:child_process';
 import { defineCommand } from 'citty';
 import { resolveRepoRootForCreate } from '~/core/fs';
+import { captureGitState } from '~/core/git';
 import { RunStore } from '~/core/run-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import { USAGE_ERROR_EXIT, parseOutputFormat, writeError, writeHuman, writeJson } from '../util';
-
-function gitHead(cwd: string): { head: string; branch: string; dirty: boolean; untracked: number } {
-  let head = '0'.repeat(40);
-  let branch = '';
-  let dirty = false;
-  let untracked = 0;
-  try {
-    head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
-  } catch {
-    // not a git repo or no commits; keep zero sha
-  }
-  try {
-    branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-      cwd,
-      encoding: 'utf8',
-    }).trim();
-  } catch {
-    // ignore
-  }
-  try {
-    const status = execFileSync('git', ['status', '--porcelain'], { cwd, encoding: 'utf8' });
-    const lines = status.split('\n').filter((l) => l.length > 0);
-    dirty = lines.length > 0;
-    untracked = lines.filter((l) => l.startsWith('??')).length;
-  } catch {
-    // ignore
-  }
-  return { head, branch, dirty, untracked };
-}
 
 const runRecord = defineCommand({
   meta: {
@@ -102,7 +73,7 @@ const runRecord = defineCommand({
         | 'networked'
         | 'reviewer'
         | 'isolated';
-      const git = gitHead(repoRoot);
+      const git = captureGitState(repoRoot);
       const created = await runStore.create({
         work_item_id: item.id,
         provider,
@@ -114,7 +85,7 @@ const runRecord = defineCommand({
           head: git.head,
           branch: git.branch,
           dirty: git.dirty,
-          untracked_count: git.untracked,
+          untracked_count: git.untracked_count,
         },
         ...(args.prompt ? { prompt_path: args.prompt } : {}),
       });
