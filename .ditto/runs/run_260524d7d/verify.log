@@ -1,0 +1,14 @@
+
+--- stderr ---
+bun test v1.0.2 (37edd5a6)
+
+tests/cli/run-with-cli-forward.test.ts:
+[0m[32m(pass)[0m ditto run with forwards -- tail to provider without citty consuming it > forwards --help after -- and produces a run manifest [359.68ms]
+[0m[32m(pass)[0m ditto run with forwards -- tail to provider without citty consuming it > forwards --version after -- [358.90ms]
+[0m[32m(pass)[0m ditto run with forwards -- tail to provider without citty consuming it > forwards tokens that collide with wrapper flag names [359.03ms]
+[0m[32m(pass)[0m ditto run with forwards -- tail to provider without citty consuming it > without -- the wrapper-side --help still shows wrapper help and no manifest is created [65.91ms]
+
+ 4 pass
+ 0 fail
+ 21 expect() calls
+Ran 4 tests across 1 files. [1472.00ms]

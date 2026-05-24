@@ -8,38 +8,86 @@
     {
       "id": "ac-1",
       "statement": "phase3-review의 P1/P2/P3 진단, wi_v03verify 마감 상태, 그리고 본 work item이 닫는 표면 사이에 충돌이 없는지 점검한다. 재구현 금지 대상은 `runWithProvider` orchestration, HostAdapter, profile policy, `--verify` wrapper 통합으로 확정한다. P3(networked profile network-explicit enablement)는 본 work item 범위 밖으로 명시한다.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/work-items/wi_v03cliforward/design/cli-argv-forward.md",
+          "summary": "Root cause(citty/dist/index.mjs:435), entry-level fix 위치, 다른 command isolation 분석(verify는 incidental fix), test approach, self-application 규칙이 단일 design note에 박혀 있다."
+        }
+      ]
     },
     {
       "id": "ac-2",
       "statement": "`ditto run with --provider ... --profile ... --workItem ... [--prompt ...] [--verify ...] -- <provider args...>`에서 `--` 뒤 모든 args가 citty의 help/usage 파싱에 가로채지지 않고 `HostRunInput.args`로 전달된다. 특히 `-- --help`, `-- --version`, 그리고 wrapper flag 이름과 겹치는 provider flag(`-- --output ...` 등)도 정확히 provider에 forward되며 `.ditto/runs/<id>/manifest.json`이 생성된다.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/run-with-cli-forward.test.ts",
+          "summary": "pass: --help, --version, wrapper/provider flag collision 3-case 모두 mock codex가 forwarded args를 받고 manifest가 생성됨을 검증."
+        }
+      ]
     },
     {
       "id": "ac-3",
       "statement": "CLI 통합 회귀 fixture가 최소 3-case(`-- --help`, `-- --version`, wrapper flag와 겹치는 provider flag 혼합)에 대해 manifest 생성과 provider args 정확 전달을 검증한다. fixture는 빌드된 `dist/ditto` 또는 동등한 entry point 호출을 통해 process.argv 경로를 끝까지 시뮬레이션한다(단순 `runWithProvider` 호출만으로는 검증되지 않는 CLI layer를 cover).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "tests/cli/run-with-cli-forward.test.ts",
+          "summary": "Bun.spawnSync로 `bun src/cli/index.ts` entry를 실제 spawn하고 PATH-overridden mock 'codex'가 자기 argv를 파일에 dump하는 방식으로 CLI layer 회귀 4-case 검증."
+        }
+      ]
     },
     {
       "id": "ac-4",
       "statement": "P2 운영 규칙을 본 work item부터 즉시 적용한다. wi_v03cliforward 마감 시점에 work-item.json `runs` 배열이 최소 1개 run id를 포함하고, `.ditto/runs/<id>/manifest.json`이 실제로 존재하며, 해당 manifest의 `verifications` 배열에 본 work item 검증 명령(`bun test` 또는 동등)이 entry로 기록되어 있다. 기존 v0.3 세 work item은 retrospective로 보정하지 않는다.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/runs/run_260524d7d/manifest.json",
+          "summary": "Self-application evidence: runs=['run_260524d7d'], manifest.verifications에 entry 1건(bun test tests/cli/run-with-cli-forward.test.ts, exit_code 0, duration 1480ms, output_path verify.log)."
+        }
+      ]
     },
     {
       "id": "ac-5",
       "statement": "DITTO 자체 self-validation, lint, build이 통과하고 wi_v03cliforward가 handoff.md + completion.json과 함께 status=done으로 마감된다. changed_files에 self-artifacts(completion/handoff/progress/work-item)를 포함한다. 마감과 동시에 project_v03_entry_point memory를 'v0.3 fully closed'로 다시 정정할 수 있는 상태가 된다.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test && bun run lint && bun run build",
+          "summary": "pass: 175 tests pass, biome clean, dist/ditto compiled."
+        }
+      ]
     }
   ],
-  "status": "in_progress",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
-  "changed_files": [],
+  "changed_files": [
+    ".ditto/runs/run_260524d7d/diff.patch",
+    ".ditto/runs/run_260524d7d/manifest.json",
+    ".ditto/runs/run_260524d7d/stderr.log",
+    ".ditto/runs/run_260524d7d/stdout.log",
+    ".ditto/runs/run_260524d7d/verify.log",
+    ".ditto/work-items/wi_v03cliforward/completion.json",
+    ".ditto/work-items/wi_v03cliforward/context-packet.md",
+    ".ditto/work-items/wi_v03cliforward/design/cli-argv-forward.md",
+    ".ditto/work-items/wi_v03cliforward/dod.md",
+    ".ditto/work-items/wi_v03cliforward/handoff.md",
+    ".ditto/work-items/wi_v03cliforward/language-ledger.json",
+    ".ditto/work-items/wi_v03cliforward/plan.md",
+    ".ditto/work-items/wi_v03cliforward/progress.md",
+    ".ditto/work-items/wi_v03cliforward/rollback.md",
+    ".ditto/work-items/wi_v03cliforward/work-item.json",
+    "src/cli/index.ts",
+    "tests/cli/run-with-cli-forward.test.ts"
+  ],
   "risks": [
     {
       "description": "citty의 help parsing은 library default이므로 우회 방법이 CLI entry layer의 raw argv pre-processing 형태로만 가능하다. 잘못 손대면 다른 command(run record, verify, doctor 등)의 help 동작이 깨질 수 있다.",
@@ -57,8 +105,12 @@
       "mitigation": "self-application용 verify는 짧은 sanity command(`bun test tests/cli/run-with-cli-forward.test.ts` 같은 좁은 fixture)로 한정. 전체 `bun test`는 별도 handoff 검증으로 분리."
     }
   ],
-  "runs": [],
+  "runs": [
+    "run_260524d7d"
+  ],
+  "handoff_path": ".ditto/work-items/wi_v03cliforward/handoff.md",
   "started_at_sha": "a32d3c26dd45d44896cebd14e3020e80c53c3dec",
   "created_at": "2026-05-24T13:57:19.000Z",
-  "updated_at": "2026-05-24T14:18:00.000Z"
+  "updated_at": "2026-05-24T14:25:00.000Z",
+  "closed_at": "2026-05-24T14:25:00.000Z"
 }
