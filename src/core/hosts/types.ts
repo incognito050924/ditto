@@ -1,3 +1,5 @@
+import type { RunManifest } from '~/schemas/run-manifest';
+
 export type BuiltinHostId = 'codex' | 'claude-code';
 export type HostId = BuiltinHostId | (string & {});
 
@@ -70,12 +72,40 @@ export interface SurfaceInventory {
   unavailable: Array<{ path: string; reason: string }>;
 }
 
+export interface HostRunEnv {
+  set: Record<string, string>;
+  unset: string[];
+}
+
+export interface HostRunInput {
+  repoRoot: string;
+  cwd: string;
+  profile: RunManifest['profile'];
+  args: string[];
+  env: HostRunEnv;
+}
+
+export interface HostRunCompletion {
+  exit_code: number | null;
+  model_reported: string | null;
+  signal?: string;
+  error?: string;
+}
+
+export interface HostRunProcess {
+  entrypoint: string;
+  stdout: ReadableStream<Uint8Array>;
+  stderr: ReadableStream<Uint8Array>;
+  completion: Promise<HostRunCompletion>;
+}
+
 export interface HostAdapter {
   id: HostId;
   loadInstructions(repoRoot: string): Promise<InstructionSurface>;
   loadPermissions(repoRoot: string): Promise<PermissionInventory[]>;
   loadMcpServers(repoRoot: string): Promise<McpInventory>;
   loadSurfaceInventory(repoRoot: string): Promise<SurfaceInventory>;
+  spawnRun?(input: HostRunInput): Promise<HostRunProcess>;
 }
 
 const registry = new Map<HostId, HostAdapter>();

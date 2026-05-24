@@ -6,3 +6,4 @@
 - 2026-05-24: Sharpened HostAdapter execution contract around completion resolve policy, model reporting timing, args/env semantics, wrapper git/diff responsibility, profile enforcement limits, provider narrowing, and wrapper exit behavior.
 - 2026-05-24: Added wrapper UX note for `ditto run with`, requiring explicit `--work-item`, optional repo-relative `--prompt`, and forwarded provider args after `--`.
 - 2026-05-24: Sharpened `run with` CLI note with linkage failure policy and `--prompt` pre-spawn existence check.
+- 2026-05-24: Added HostAdapter run execution types and optional `spawnRun` to `src/core/hosts/types.ts`.
