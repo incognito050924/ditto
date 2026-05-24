@@ -1,0 +1,122 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260524qi9",
+  "declared_by": "workspace-write",
+  "declared_at": "2026-05-24T10:02:57.500Z",
+  "summary": "DITTO v0.3 seed — provider wrapper and context packet — 모든 acceptance criterion이 pass로 기록되었다.",
+  "changed_files": [
+    ".ditto/work-items/wi_260524qi9/completion.json",
+    ".ditto/work-items/wi_260524qi9/context-packet.md",
+    ".ditto/work-items/wi_260524qi9/design/host-adapter-contract.md",
+    ".ditto/work-items/wi_260524qi9/design/run-with-cli.md",
+    ".ditto/work-items/wi_260524qi9/handoff.md",
+    ".ditto/work-items/wi_260524qi9/progress.md",
+    ".ditto/work-items/wi_260524qi9/work-item.json",
+    "src/cli/commands/context.ts",
+    "src/cli/commands/run.ts",
+    "src/cli/index.ts",
+    "src/core/context-packet.ts",
+    "src/core/git.ts",
+    "src/core/hosts/claude-code.ts",
+    "src/core/hosts/codex.ts",
+    "src/core/hosts/spawn.ts",
+    "src/core/hosts/types.ts",
+    "src/core/run-with.ts",
+    "tests/core/context-packet.test.ts",
+    "tests/core/hosts/claude-code-spawn.smoke.test.ts",
+    "tests/core/hosts/codex-spawn.smoke.test.ts",
+    "tests/core/run-with.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/work-items/wi_260524qi9/design/host-adapter-contract.md",
+          "summary": "Phase 3 provider wrapper scope, HostAdapter execution contract, failure taxonomy, profile policy, provider narrowing, and mock boundary fixed before implementation."
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/work-items/wi_260524qi9/design/run-with-cli.md",
+          "summary": "`ditto run with` UX fixed with explicit --work-item, optional --prompt, provider args after --, and exit semantics."
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/run-with.test.ts",
+          "summary": "pass: success path plus provider non-zero, completion reject, spawn throw, signal kill, and mid-pipe failure fixtures validate manifest evidence fields."
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/hosts/codex-spawn.smoke.test.ts tests/core/hosts/claude-code-spawn.smoke.test.ts tests/core/hosts/registry.test.ts",
+          "summary": "pass: built-in adapters expose spawnRun and smoke tests spawned codex/claude in this environment."
+        },
+        {
+          "kind": "file",
+          "path": "src/core/hosts/types.ts",
+          "summary": "HostAdapter keeps doctor methods and adds optional spawnRun execution contract."
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/run-with.test.ts",
+          "summary": "pass: cwd escape rejected before spawn; five profile fixtures validate proxy env scrub and read-only/reviewer write detection via manifest.unverified."
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-5",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/context-packet.test.ts",
+          "summary": "pass: context packet markdown includes title/goal, acceptance verdicts, git state, and related run exit codes."
+        },
+        {
+          "kind": "command",
+          "command": "bun run src/cli/index.ts context build --work-item wi_260524qi9",
+          "summary": "updates .ditto/work-items/wi_260524qi9/context-packet.md using the new CLI."
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-6",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/run-store.test.ts tests/core/run-with.test.ts",
+          "summary": "pass: manual RunStore schema round-trip remains intact and automatic run manifests validate against runManifest schema."
+        }
+      ]
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [
+    "profile별 권한 격리는 provider CLI 자체 기능과 OS sandbox 지원에 따라 완전 차단이 어려울 수 있다.",
+    "context packet은 Phase 5에도 별도 주제로 남아 있어 v0.3에서 과도하게 확장될 위험이 있다.",
+    "실제 Codex/Claude CLI 호출은 로컬 설치 여부와 버전에 의존한다."
+  ],
+  "next_handoff_path": ".ditto/work-items/wi_260524qi9/handoff.md",
+  "final_verdict": "pass"
+}

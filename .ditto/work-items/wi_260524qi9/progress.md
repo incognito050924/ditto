@@ -9,3 +9,4 @@
 - 2026-05-24: Added HostAdapter run execution types and optional `spawnRun` to `src/core/hosts/types.ts`.
 - 2026-05-24: Extracted shared git state, changed-files, and diff helpers into `src/core/git.ts` and applied them to `run record`.
 - 2026-05-24: Implemented first `run with` happy-path with mock adapter fixture, manifest artifact capture, diff capture covering staged changes via `git diff HEAD`, work item run linkage, schema-validated provider/profile, and CLI runtime-error exit on null capture.
+- 2026-05-24: Closed v0.3 implementation scope: AC-2 failure fixtures, AC-5 context build, AC-4 profile policy, and Codex/Claude spawn adapters are implemented and verified.
