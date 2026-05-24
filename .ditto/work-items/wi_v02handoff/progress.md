@@ -57,7 +57,48 @@
   - `context-packet.md` 결정 표/AC 표 갱신
 - 검증: bun test 129 pass / 0 fail (이전 127 + 신규 2). tsc/lint pass. focused tests/core 24 pass.
 
-## 다음 동작
-- 사용자 follow-up review 시점. 위 보정이 finding 둘을 닫는지 확인.
-- review OK 시 P-3(wi_v02doctor changed_files 정정) + P-4(self-validation + manual smoke + handoff) 묶음으로 마감.
-- 본 wi_v02handoff의 started_at_sha는 P-4 ditto verify 호출 시 보정된 hook으로 자동 backfill 예정.
+## 2/3차 review 통과
+- 2차: High(hook 조건) + Medium(stale AC/context) 모두 fix.
+- 3차: 잔여 Medium(goal/context summary stale) fix (commit `96350b1`).
+- 사용자 OK 후 P-3 + P-4 진행.
+
+## P-3a 완료 (2026-05-24)
+- ditto work handoff가 base..HEAD diff만 지원하는 한계 발견. wi_v02doctor 마감(4b18c40) 이후 wi_v02harden/wi_v02handoff 작업이 commit되어 단순 `--base 2ee498a^`로는 wi_v02doctor 범위 밖까지 끌어옴. plan에 `--head` 옵션 추가가 자연스러워 P-3을 P-3a/P-3b로 분해.
+- (structural+behavioral) `HandoffOptions.head` + `InvalidHeadRefError` + CLI `--head` arg + `collectChangedFiles(repoRoot, base, head)`. head 명시 시 working tree status 수집 안 함(과거 commit 범위 의미).
+- 회귀 2건: --head로 좁힌 diff에서 later commit 제외, invalid head ref reject.
+  - commit a784b61 `feat(ditto): add --head option to work handoff for past commit ranges (behavioral)`
+
+## P-3b 완료 (2026-05-24)
+- wi_v02doctor work-item.json reset → `ditto work handoff wi_v02doctor --base 2ee498a^ --head 4b18c40` 재실행.
+- 결과: changed_files **99 → 44** (= `git diff --name-only 2ee498a^..4b18c40` 결과와 정확히 일치).
+- wi_v02harden은 34 entries 유지 확인.
+  - commit dde2296 `docs(ditto): correct wi_v02doctor changed_files (99 → 44)`
+
+## P-4 manual smoke
+임시 git repo + mktemp HOME에서:
+- `ditto work start`: started_at_sha **omitted**, status=draft ✓
+- jq로 status=in_progress 직접 편집: started_at_sha 그대로 omitted (hook 우회) ✓
+- `ditto verify` 호출: store.update 첫 trigger → hook이 **legacy backfill**로 HEAD sha 박음 ✓
+- 두 번째 commit 후 handoff: started_at_sha를 1순위 base로 사용(`base_used` 일치) ✓
+- changed_files: 4 (a.txt + work item 파일들)
+- 사용자 환경 `.codex/`, `.claude/`는 수정/삭제 없음.
+
+## ditto verify (ac 별 evidence)
+- ac-1 ↔ `bun test tests/core/work-item-store.test.ts tests/core/work-item-handoff.test.ts` → exit 0
+- ac-2 ↔ `bun test tests/core/work-item-handoff.test.ts` → exit 0
+- ac-3 ↔ `bash -c '... test "$COMPLETION" = "44" && test "$HARDEN" = "34"'` → exit 0
+
+본 verify 호출 시점에 hook이 wi_v02handoff.started_at_sha를 P-3b commit sha(dde2296)로 backfill. 의미적 정확성을 위해 실제 시작 sha(c7cd8f5)로 수동 정정.
+
+## ditto work handoff (마감)
+- `ditto work handoff wi_v02handoff --base e83bd1d`로 wi_v02harden 마감 직후~현재 HEAD 범위 diff 수집.
+- 결과: status=done, final_verdict=pass, changed_files **17** (`git diff --name-only e83bd1d..HEAD` 17과 정확 일치), closed_at 박힘.
+
+## 최종 검증
+- `bun run tsc --noEmit` pass
+- `bun run lint` pass
+- `bun test` **131 pass / 0 fail** (이전 129 + P-3a 신규 2: --head + invalid-head)
+- schema self-validation 10/10
+- changed_files 정확도: wi_v02doctor 44 / wi_v02harden 34 / wi_v02handoff 17 — 모두 git diff와 일치
+
+wi_v02handoff 마감. handoff core 정리 완료 — v0.3 provider wrapper 준비.
