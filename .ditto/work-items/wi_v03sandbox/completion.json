@@ -1,0 +1,131 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_v03sandbox",
+  "declared_by": "workspace-write",
+  "declared_at": "2026-05-24T11:55:00.000Z",
+  "summary": "DITTO v0.3 profile sandbox enforcement — application plan line 754의 '실제로 적용' 기준을 충족. codex/claude-code 5 profile 매핑 + isolated worktree 격리 + defense-in-depth profile fixture가 들어가고 모든 AC가 pass로 기록되었다.",
+  "changed_files": [
+    ".ditto/work-items/wi_v03sandbox/completion.json",
+    ".ditto/work-items/wi_v03sandbox/context-packet.md",
+    ".ditto/work-items/wi_v03sandbox/design/profile-sandbox-enforcement.md",
+    ".ditto/work-items/wi_v03sandbox/dod.md",
+    ".ditto/work-items/wi_v03sandbox/handoff.md",
+    ".ditto/work-items/wi_v03sandbox/language-ledger.json",
+    ".ditto/work-items/wi_v03sandbox/plan.md",
+    ".ditto/work-items/wi_v03sandbox/progress.md",
+    ".ditto/work-items/wi_v03sandbox/rollback.md",
+    ".ditto/work-items/wi_v03sandbox/work-item.json",
+    "schemas/run-manifest.schema.json",
+    "src/core/hosts/claude-code.ts",
+    "src/core/hosts/codex.ts",
+    "src/core/run-with.ts",
+    "src/core/worktree.ts",
+    "src/schemas/run-manifest.ts",
+    "tests/core/hosts/claude-code-profile.test.ts",
+    "tests/core/hosts/codex-profile.test.ts",
+    "tests/core/run-with-profile-policy.test.ts",
+    "tests/core/run-with.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/work-items/wi_v03sandbox/design/profile-sandbox-enforcement.md",
+          "summary": "Sandbox flag matrix, worktree lifecycle, network-off layering, schema extension, and regression fixture layout pinned in a single design note before implementation."
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/hosts/codex-profile.test.ts tests/core/hosts/claude-code-profile.test.ts",
+          "summary": "pass: codex maps to --sandbox per profile (read-only, workspace-write, reviewer, isolated mapped; networked surfaces network limitation). claude-code maps to --permission-mode per profile with best-effort caveat surface."
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/hosts/codex-spawn.smoke.test.ts tests/core/hosts/claude-code-spawn.smoke.test.ts",
+          "summary": "pass: real codex/claude binaries spawn successfully under the new args."
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/run-with.test.ts",
+          "summary": "pass: isolated profile fixture confirms mock adapter sees the .ditto/worktrees/<runId>/ path as repoRoot, manifest.worktree_path is set, and the main repo working tree is not touched."
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "summary": "createWorktreeForRun helper uses git worktree add --detach to materialize a per-run worktree under .ditto/worktrees/<runId>."
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/hosts/codex-profile.test.ts tests/core/hosts/claude-code-profile.test.ts tests/core/run-with.test.ts",
+          "summary": "pass: codex sandbox modes restrict outbound as a byproduct (networked profile surfaces 'network is not forced open' unverified); claude-code surfaces 'network is not forced open' unverified for networked; wrapper proxy env scrub (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY) still applied for every non-networked profile."
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-5",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/run-with.test.ts",
+          "summary": "pass: case (a) cwd escape rejected before spawn; case (c) read-only/reviewer writes flagged via parameterized profile policy fixture."
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/run-with-profile-policy.test.ts",
+          "summary": "pass: case (b) defense-in-depth — profileUnverified surfaces escape paths as a separate unverified entry. git status does not produce such paths naturally, so verification is at the helper boundary; provider-native sandbox enforcement is the in-flight layer and is covered by AC-2 matrix tests."
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-6",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "pass: 167 pass / 0 fail across 23 files."
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "pass."
+        },
+        {
+          "kind": "command",
+          "command": "bun run build",
+          "summary": "pass — dist/ditto compiled."
+        }
+      ]
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [
+    "provider CLI 버전 drift — codex `--sandbox` 모드 이름과 claude-code permission flag 시그니처가 release 사이 바뀔 수 있다.",
+    "git worktree 생성/cleanup이 spawn crash 시 orphan worktree를 남길 수 있다.",
+    "provider-native network-off flag가 모든 provider/버전에 안정적으로 존재하지 않을 수 있다."
+  ],
+  "next_handoff_path": ".ditto/work-items/wi_v03sandbox/handoff.md",
+  "final_verdict": "pass"
+}
