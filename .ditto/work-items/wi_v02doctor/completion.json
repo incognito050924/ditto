@@ -1,0 +1,153 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_v02doctor",
+  "declared_by": "workspace-write",
+  "declared_at": "2026-05-24T03:47:51.632Z",
+  "summary": "DITTO v0.2 doctor — host instruction/permission/MCP/skill drift 진단 — 모든 acceptance criterion이 pass로 기록되었다.",
+  "changed_files": [
+    ".ditto/work-items/wi_v02doctor/completion.json",
+    ".ditto/work-items/wi_v02doctor/context-packet.md",
+    ".ditto/work-items/wi_v02doctor/dod.md",
+    ".ditto/work-items/wi_v02doctor/handoff.md",
+    ".ditto/work-items/wi_v02doctor/language-ledger.json",
+    ".ditto/work-items/wi_v02doctor/plan.md",
+    ".ditto/work-items/wi_v02doctor/progress.md",
+    ".ditto/work-items/wi_v02doctor/rollback.md",
+    ".ditto/work-items/wi_v02doctor/work-item.json",
+    "reports/harnesses/ditto-application-plan.md",
+    "src/cli/commands/bridge.ts",
+    "src/cli/commands/doctor.ts",
+    "src/cli/index.ts",
+    "src/core/bridge-sync.ts",
+    "src/core/hosts/claude-code.ts",
+    "src/core/hosts/codex.ts",
+    "src/core/hosts/index.ts",
+    "src/core/hosts/shared.ts",
+    "src/core/hosts/types.ts",
+    "src/core/instruction-bridge.ts",
+    "src/core/mcp-inventory.ts",
+    "src/core/permission-inventory.ts",
+    "src/core/surface-inventory.ts",
+    "src/schemas/index.ts",
+    "src/schemas/surface-catalog.ts",
+    "tests/bridge/sync.test.ts",
+    "tests/core/bridge-sync.test.ts",
+    "tests/core/hosts/registry.test.ts",
+    "tests/core/instruction-bridge.test.ts",
+    "tests/doctor/instructions.test.ts",
+    "tests/doctor/mcp.test.ts",
+    "tests/doctor/permissions.test.ts",
+    "tests/doctor/surface.test.ts",
+    "tests/fixtures/doctor/claude-code/instructions-ok/CLAUDE.md",
+    "tests/fixtures/doctor/claude-code/mcp-config-only/.mcp.json",
+    "tests/fixtures/doctor/claude-code/permissions-dangerous/settings.json",
+    "tests/fixtures/doctor/claude-code/permissions-safe/settings.json",
+    "tests/fixtures/doctor/claude-code/surface-mismatch/surfaces.json",
+    "tests/fixtures/doctor/claude-code/surface-ok/hello.md",
+    "tests/fixtures/doctor/claude-code/surface-ok/surfaces.json",
+    "tests/fixtures/doctor/codex/instructions-ok/AGENTS.md",
+    "tests/fixtures/doctor/codex/permissions-dangerous/config.toml",
+    "tests/fixtures/doctor/codex/permissions-safe/config.toml",
+    "tests/schemas/repo-self-validation.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/doctor/instructions.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/doctor/permissions.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/doctor/mcp.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/doctor/surface.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-5",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/doctor",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-6",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/repo-self-validation.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-7",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/bridge/sync.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-8",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/hosts/registry.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [
+    "host CLI(예: claude mcp list, codex setup) 호출 방식이 host 버전에 따라 다를 수 있다.",
+    "drift 감지의 정의 모호: 무엇이 drift인가? 공백/줄 끝 차이도 drift인가?",
+    "doctor가 자동 fix를 한다면 사용자 변경을 덮을 위험.",
+    "host projection 파일을 검사할 범위(어떤 host)."
+  ],
+  "next_handoff_path": ".ditto/work-items/wi_v02doctor/handoff.md",
+  "final_verdict": "pass"
+}

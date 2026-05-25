@@ -1,0 +1,290 @@
+{
+  "$ref": "#/definitions/work-item",
+  "definitions": {
+    "work-item": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a work item"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "source_request": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Verbatim or close-paraphrase of the original user request"
+        },
+        "goal": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Observable outcome stated in project terms; not a list of steps"
+        },
+        "acceptance_criteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Stable id within the work item (e.g., ac-1)"
+              },
+              "statement": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Single observable behavior in user-facing terms"
+              },
+              "verdict": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "partial",
+                  "fail",
+                  "unverified"
+                ],
+                "description": "Acceptance verdict for a criterion or review",
+                "default": "unverified"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "command",
+                        "file",
+                        "artifact",
+                        "url",
+                        "note"
+                      ]
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "description": "Lowercase hex sha256 hash"
+                    },
+                    "lines": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "end": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Pointer to evidence stored outside the manifest itself"
+                },
+                "default": []
+              }
+            },
+            "required": [
+              "id",
+              "statement"
+            ],
+            "additionalProperties": false,
+            "description": "One acceptance criterion with its verification verdict"
+          },
+          "minItems": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "in_progress",
+            "blocked",
+            "partial",
+            "unverified",
+            "done",
+            "abandoned"
+          ],
+          "description": "Current lifecycle status of a work item",
+          "default": "draft"
+        },
+        "owner_profile": {
+          "type": "string",
+          "enum": [
+            "read-only",
+            "workspace-write",
+            "networked",
+            "reviewer",
+            "isolated"
+          ],
+          "description": "Execution profile that determines permission and network policy",
+          "default": "workspace-write"
+        },
+        "parent_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Parent work item if this is a child task"
+        },
+        "child_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^wi_[a-z0-9]{8,}$",
+            "description": "Stable identifier for a work item"
+          },
+          "default": []
+        },
+        "changed_files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+          },
+          "default": []
+        },
+        "risks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string",
+                "minLength": 1
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ],
+                "default": "low"
+              },
+              "mitigation": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "description"
+            ],
+            "additionalProperties": false,
+            "description": "Outstanding risk that did not block completion but remains relevant"
+          },
+          "default": []
+        },
+        "re_entry": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Concrete next command to resume work"
+            },
+            "fresh_evidence_needed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "What new evidence must be gathered before the next attempt"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Profile or human handle expected to resume"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Instructions for resuming a partial/unverified/blocked work item"
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^run_[a-z0-9]{8,}$",
+            "description": "Stable identifier for a single provider run"
+          },
+          "default": []
+        },
+        "handoff_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+        },
+        "language_overrides": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path to language.md if this work item modifies the glossary"
+        },
+        "started_at_sha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$",
+          "description": "Git HEAD sha at the time this work item transitioned draft → in_progress; used as default base for handoff diff collection"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "closed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        }
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "title",
+        "source_request",
+        "goal",
+        "acceptance_criteria",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": false,
+      "description": "Authoritative state for a single DITTO work item"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

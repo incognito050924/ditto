@@ -1,0 +1,11 @@
+{
+  "schema_version": "0.1.0",
+  "surfaces": [
+    {
+      "host": "claude-code",
+      "kind": "command",
+      "id": "hello",
+      "path": ".claude/commands/hello.md"
+    }
+  ]
+}

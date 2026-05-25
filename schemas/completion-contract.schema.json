@@ -1,0 +1,291 @@
+{
+  "$ref": "#/definitions/completion-contract",
+  "definitions": {
+    "completion-contract": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "work_item_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a work item"
+        },
+        "declared_by": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Profile or agent that produced this completion claim"
+        },
+        "declared_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "What changed, in user-facing terms; no implementation jargon"
+        },
+        "changed_files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+          },
+          "default": []
+        },
+        "acceptance": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "criterion_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "verdict": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "partial",
+                  "fail",
+                  "unverified"
+                ],
+                "description": "Acceptance verdict for a criterion or review"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "command",
+                        "file",
+                        "artifact",
+                        "url",
+                        "note"
+                      ]
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "description": "Lowercase hex sha256 hash"
+                    },
+                    "lines": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "end": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Pointer to evidence stored outside the manifest itself"
+                },
+                "default": []
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "criterion_id",
+              "verdict"
+            ],
+            "additionalProperties": false,
+            "description": "Per-criterion result included in the completion claim"
+          },
+          "minItems": 1,
+          "description": "Every acceptance criterion must appear here; absence is a contract violation"
+        },
+        "verifications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "minLength": 1
+              },
+              "exit_code": {
+                "type": "integer"
+              },
+              "run_id": {
+                "type": "string",
+                "pattern": "^run_[a-z0-9]{8,}$",
+                "description": "Stable identifier for a single provider run"
+              },
+              "evidence": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "command",
+                      "file",
+                      "artifact",
+                      "url",
+                      "note"
+                    ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "description": "Lowercase hex sha256 hash"
+                  },
+                  "lines": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "end": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "description": "Pointer to evidence stored outside the manifest itself"
+              }
+            },
+            "required": [
+              "command",
+              "exit_code"
+            ],
+            "additionalProperties": false
+          },
+          "default": [],
+          "description": "Commands actually executed; not aspirational"
+        },
+        "unverified": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "minLength": 1,
+                "description": "What was not verified"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Why verification did not happen"
+              },
+              "out_of_scope": {
+                "type": "boolean",
+                "default": false,
+                "description": "True when the item is intentionally outside acceptance scope; only such items are allowed when final_verdict=pass"
+              }
+            },
+            "required": [
+              "item",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          "default": [],
+          "description": "Anything the implementer could not verify; explicit not-knowing is required"
+        },
+        "remaining_risks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "next_handoff_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where the next session/agent should pick up; required if status is not done"
+        },
+        "final_verdict": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "partial",
+            "fail",
+            "unverified"
+          ],
+          "description": "Aggregate verdict; \"pass\" requires every acceptance verdict to be pass"
+        }
+      },
+      "required": [
+        "schema_version",
+        "work_item_id",
+        "declared_by",
+        "declared_at",
+        "summary",
+        "acceptance",
+        "final_verdict"
+      ],
+      "additionalProperties": false,
+      "description": "Contract that gates work item completion; absence of fields is a failure"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

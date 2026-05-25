@@ -1,0 +1,10 @@
+# Progress
+
+- 2026-05-24: Seed created after wi_260524qi9 마감 검토에서 v0.3 완료 기준 미달 항목(provider-native sandbox flag, isolated worktree, network-off flag)이 확인되어 후속 work item으로 분리. wi_v03sandbox는 wi_260524qi9가 도입한 wrapper-level profile policy 위에 provider-native enforcement layer를 얹는 데 집중한다.
+- 2026-05-24: Phase 3 진입 — single design note `profile-sandbox-enforcement.md`로 profile→flag matrix(codex/claude-code), worktree lifecycle(isolated), network-off layering, schema에 worktree_path optional 추가, regression fixture 배치를 한 번에 박음. wi_v03sandbox status는 in_progress로 전환하고 started_at_sha는 seed commit `e806ed6`을 사용한다.
+- 2026-05-24: runManifest schema에 optional `worktree_path` 필드를 추가하고 exported JSON schema를 재생성. 기존 manifest는 optional이라 회귀 없음.
+- 2026-05-24: codex adapter에 profile→sandbox flag matrix(5 profile) 적용. read-only/workspace-write/reviewer/isolated는 `--sandbox` 매핑, networked는 workspace-write + 'network is not forced open' unverified. `buildCodexSpawnArgs` pure function 분리 + 6 unit test.
+- 2026-05-24: claude-code adapter에 profile→permission-mode matrix(5 profile) 적용. read-only/reviewer는 `plan`, 나머지는 `default`. 모든 profile에 best-effort caveat unverified, networked는 추가로 'network is not forced open' surface. `buildClaudeCodeSpawnArgs` pure function 분리 + 6 unit test.
+- 2026-05-24: isolated profile에 git worktree 격리 적용. `src/core/worktree.ts`의 `createWorktreeForRun`이 `.ditto/worktrees/<runId>/`에 detached HEAD worktree를 생성, wrapper가 `runRoot`/`runCwd`를 worktree로 substitute하고 git capture(diff/state/changed_files)도 worktree 기준. manifest에 worktree_path 기록. fixture로 mock이 worktree 안에서 동작하고 main repo는 영향 없음을 검증.
+- 2026-05-24: AC-5 case (b)/(c) defense-in-depth 증거로 `profileUnverified`를 export해서 unit test 6건 추가. outside-repo path는 git status로는 surface되지 않지만 wrapper의 defense-in-depth 분기는 별도 unverified entry로 surface함을 검증.
+- 2026-05-24: wi_v03sandbox 마감. 6 AC 모두 pass, 167 tests / 0 fail, lint / build 통과. handoff.md + completion.json 작성, work-item.json status=done + changed_files self-artifacts 포함.

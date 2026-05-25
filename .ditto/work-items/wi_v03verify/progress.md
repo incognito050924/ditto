@@ -1,0 +1,7 @@
+# Progress
+
+- 2026-05-24: Seed created — wi_v03sandbox 마감 후 application plan line 754 "verification capture를 manifest에 연결" 항목만 남아 본 work item으로 분리. project_v03_entry_point memory의 [DECIDED] plan에 따라 `ditto run with`에 `--verify` 옵션을 추가하는 데 집중한다. 기존 `ditto verify` 명령은 evidence ledger 경로로 그대로 유지하고, 본 work item은 manifest-level의 별도 lightweight 경로를 추가한다.
+- 2026-05-24: Phase 3 진입 — single design note `verify-option.md`로 --verify semantics(whitespace split, single occurrence), Verification entry shape, 실패 모드 표(spawn fail/non-zero/hang), CLI exit policy(provider exit만 반영), test surface(verify pass/fail/spawn-fail fixture)를 한 번에 박음. wi_v03verify status는 in_progress로 전환하고 started_at_sha는 seed commit `ede2c39`을 사용한다.
+- 2026-05-24: `RunStore.pathFor`의 kind union에 `'verify.log'` 추가. 동작 변화 없음.
+- 2026-05-24: `--verify` wrapper + CLI flag 구현. `runWithProvider`가 provider run 종료 후 `runVerifyStep`에서 whitespace-split된 command를 Bun.spawnSync로 실행, stdout/stderr를 `.ditto/runs/<id>/verify.log`에 저장하고 `{command, exit_code, duration_ms, output_path}` Verification entry를 manifest.verifications에 append한다. spawn 실패는 exit_code=-1 + notes로 surface. verify 결과는 RunWithRuntimeError로 escalate하지 않고 CLI exit은 provider exit_code만 반영. 4개 fixture(verify pass with output, verify fail, verify spawn-fail, no --verify) 추가.
+- 2026-05-24: wi_v03verify 마감. 4 AC 모두 pass, 171 tests / 0 fail, lint / build 통과. handoff.md + completion.json 작성, work-item.json status=done + changed_files self-artifacts 포함. **wi_v03verify done과 동시에 application plan line 754-758 v0.3 완료 기준 3개가 모두 충족되어 v0.3 version 마감.**

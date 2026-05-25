@@ -1,0 +1,195 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_v01implement",
+  "title": "DITTO v0.1 actual implementation — 5개 CLI 명령의 실제 동작",
+  "source_request": "다음 단계는 CLI의 not_implemented를 실제 동작으로 채우는 것이다. WorkItemStore부터 만들면 나머지 4개 명령이 빠르게 따라온다.",
+  "goal": "ditto work start|status|handoff, run record, verify가 .ditto/ 파일을 실제로 읽고 쓰며, 모든 출력 파일이 zod schema 검증을 통과한다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "ditto work start가 .ditto/work-items/<id>/work-item.json을 schema 부합하게 생성하고 workItem.parse가 통과한다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "cd $TMP && bun /Users/incognito/dev/projects/ditto/src/cli/index.ts work start ... --output json",
+          "summary": "JSON 출력에 work_item_id 포함 + $TMP/.ditto/work-items/$WI/work-item.json 생성 + DITTO_REPO_ROOT=$TMP self-validation 통과"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "ditto work status가 .ditto/work-items/<id>/work-item.json을 읽어 human/json 두 형식으로 출력하며, JSON 출력은 schema 부합 결과를 그대로 반환한다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun src/cli/index.ts work status $WI --output (human|json)",
+          "summary": "human은 id/title/status/goal/acceptance를 줄 단위로, json은 work-item.json 내용을 그대로 stdout으로 출력"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "ditto work handoff가 work item completion contract를 검사하고, final_verdict이 pass가 아니면 handoff.md를 생성하며, completion.json도 함께 갱신한다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun src/cli/index.ts work handoff $WI --output json",
+          "summary": "AC-1 후 fail ac 있는 partial 경로에서 final_verdict=partial + handoff.md + completion.json 생성. completion contract의 cross-field 룰(잘못된 pass 주장)도 schema에서 reject 확인."
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "ditto run record가 .ditto/runs/<id>/manifest.json을 schema 부합하게 생성하고 work item의 runs 배열을 갱신한다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun src/cli/index.ts run record $WI --provider claude-code --output json",
+          "summary": "manifest.json 생성, work item runs 배열에 run id 추가, runManifest schema 통과"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "ditto verify <wi_id> --criterion <ac-id> -- <command...> 형태가 -- 이후 명령을 실행해 exit code를 캡처하고, evidence/commands.jsonl에 한 줄(commandLogEntry schema 부합: ts, kind=command, command, exit_code, duration_ms?, sha256?)을 append하며, 지정 criterion의 verdict를 exit 0이면 pass, 아니면 fail로 갱신한다. --criterion 생략 시 evidence만 append하고 verdict는 변경하지 않는다. -- 가 없으면 exit 65.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun src/cli/index.ts verify $WI --criterion ac-1 -- echo 'smoke ok'",
+          "summary": "exit 0 → verdict=pass. exit 1로 두 번째 실행 → verdict=fail. -- 누락 → exit 65. --criterion 생략 → verdict 변경 없음. 네 시나리오 모두 의도대로 동작."
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "본 work item이 만들어내거나 갱신하는 모든 .ditto 파일이 schema 검증을 통과한다. 검증 대상: work-item.json, completion.json, language-ledger.json, runs/<id>/manifest.json, knowledge/glossary.json, work-items/<id>/evidence/commands.jsonl(줄별 commandLogEntry).",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/repo-self-validation.test.ts",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/knowledge/CONTEXT.md",
+    ".ditto/knowledge/adr/ADR-0001-runtime-stack.md",
+    ".ditto/knowledge/adr/ADR-0002-schema-source-of-truth.md",
+    ".ditto/knowledge/glossary.json",
+    ".ditto/work-items/wi_v01bootstrap/completion.json",
+    ".ditto/work-items/wi_v01bootstrap/decisions.md",
+    ".ditto/work-items/wi_v01bootstrap/handoff.md",
+    ".ditto/work-items/wi_v01bootstrap/language-ledger.json",
+    ".ditto/work-items/wi_v01bootstrap/language.md",
+    ".ditto/work-items/wi_v01bootstrap/progress.md",
+    ".ditto/work-items/wi_v01bootstrap/work-item.json",
+    ".ditto/work-items/wi_v01implement/completion.json",
+    ".ditto/work-items/wi_v01implement/context-packet.md",
+    ".ditto/work-items/wi_v01implement/dod.md",
+    ".ditto/work-items/wi_v01implement/handoff.md",
+    ".ditto/work-items/wi_v01implement/language-ledger.json",
+    ".ditto/work-items/wi_v01implement/plan.md",
+    ".ditto/work-items/wi_v01implement/progress.md",
+    ".ditto/work-items/wi_v01implement/rollback.md",
+    ".ditto/work-items/wi_v01implement/work-item.json",
+    ".gitignore",
+    "biome.json",
+    "bun.lockb",
+    "package.json",
+    "reports/harnesses/ditto-application-plan.md",
+    "schemas/command-log-entry.schema.json",
+    "schemas/completion-contract.schema.json",
+    "schemas/glossary.schema.json",
+    "schemas/language-ledger.schema.json",
+    "schemas/reviewer-output.schema.json",
+    "schemas/run-manifest.schema.json",
+    "schemas/work-item.schema.json",
+    "scripts/export-schemas.ts",
+    "src/cli/commands/run.ts",
+    "src/cli/commands/verify.ts",
+    "src/cli/commands/work.ts",
+    "src/cli/index.ts",
+    "src/cli/util.ts",
+    "src/core/evidence-store.ts",
+    "src/core/fs.ts",
+    "src/core/id.ts",
+    "src/core/run-store.ts",
+    "src/core/work-item-handoff.ts",
+    "src/core/work-item-store.ts",
+    "src/schemas/common.ts",
+    "src/schemas/completion-contract.ts",
+    "src/schemas/evidence-log.ts",
+    "src/schemas/glossary.ts",
+    "src/schemas/index.ts",
+    "src/schemas/language-ledger.ts",
+    "src/schemas/reviewer-output.ts",
+    "src/schemas/run-manifest.ts",
+    "src/schemas/work-item.ts",
+    "tests/core/evidence-store.test.ts",
+    "tests/core/fs.test.ts",
+    "tests/core/id.test.ts",
+    "tests/core/run-store.test.ts",
+    "tests/core/work-item-store.test.ts",
+    "tests/fixtures/scenarios/password-strength/.ditto/knowledge/CONTEXT.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/knowledge/glossary.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/diff.patch",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/manifest.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/prompt.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/runs/run_pwdcheck1/result.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/completion.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/decisions.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/evidence/commands.jsonl",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/handoff.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/language-ledger.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/language.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/progress.md",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/reviews/rv_pwdcheck1.json",
+    "tests/fixtures/scenarios/password-strength/.ditto/work-items/wi_pwdcheck/work-item.json",
+    "tests/schemas/fixture-validation.test.ts",
+    "tests/schemas/repo-self-validation.test.ts",
+    "tsconfig.json",
+    "tests/core/work-item-handoff.test.ts"
+  ],
+  "risks": [
+    {
+      "description": "work item id 충돌: 동시에 여러 세션에서 생성 시 같은 id가 만들어질 수 있음.",
+      "severity": "medium",
+      "mitigation": "id 생성에 timestamp+random 8자 이상 사용. 생성 직전 존재 확인."
+    },
+    {
+      "description": "dirty git state에서 사용자 작업을 덮어쓸 위험.",
+      "severity": "high",
+      "mitigation": "쓰기 명령은 대상 파일이 이미 존재하면 명시적 --force 없이는 거부. .ditto 외부 파일은 어떤 명령도 수정하지 않는다."
+    },
+    {
+      "description": "동시에 두 세션이 같은 work item을 갱신해 race condition 발생.",
+      "severity": "medium",
+      "mitigation": "v0.1에서는 단일 세션 가정. 충돌은 감지만 하고 차단은 후속 phase."
+    },
+    {
+      "description": "atomic write 보장 부재 시 부분 파일 생성.",
+      "severity": "medium",
+      "mitigation": "쓰기는 임시 파일에 작성 후 rename으로 commit."
+    }
+  ],
+  "runs": [],
+  "handoff_path": ".ditto/work-items/wi_v01implement/handoff.md",
+  "created_at": "2026-05-24T12:35:00+09:00",
+  "updated_at": "2026-05-23T18:13:47.209Z",
+  "closed_at": "2026-05-23T18:13:47.155Z"
+}

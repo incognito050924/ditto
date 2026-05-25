@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.1.0",
+  "id": "rv_pwdcheck1",
+  "work_item_id": "wi_pwdcheck",
+  "kind": "cross-provider-reviewer",
+  "reviewer": "codex/gpt-5-4",
+  "different_provider_than_generator": true,
+  "started_at": "2026-05-24T11:50:00+09:00",
+  "ended_at": "2026-05-24T11:55:30+09:00",
+  "verdict": "partial",
+  "evidence": [
+    {
+      "kind": "file",
+      "path": ".ditto/runs/run_pwdcheck1/diff.patch",
+      "summary": "정책 모듈과 API 호출 변경 확인"
+    },
+    {
+      "kind": "command",
+      "command": "bun test tests/api/users.create.test.ts",
+      "summary": "전체 3개 중 2개 pass, 1개 fail (message-includes)"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "medium",
+      "file": "src/auth/password-policy.ts",
+      "location": "violationMessage",
+      "reason": "위반 종류 배열을 받아 한 줄 문자열로만 환원하여 ac-3의 규칙별 분리 요구를 충족하지 못함",
+      "suggested_fix": "violations를 JSON 배열로 반환하거나, 응답 객체에 'violations' 필드를 별도로 노출"
+    },
+    {
+      "severity": "low",
+      "file": "src/api/users.ts",
+      "location": "createUser",
+      "reason": "정책 위반 응답에 status 코드 외에 details 객체가 없어 클라이언트가 사용자에게 안내할 정보가 부족함"
+    }
+  ],
+  "unverified": [
+    {
+      "item": "기존 사용자에 대한 회귀 영향",
+      "reason": "회귀 fixture가 본 PR에 포함되지 않음"
+    }
+  ],
+  "recommended_next_action": "violationMessage를 string에서 string[] 또는 객체 배열로 변경하고, API 응답에 details 필드를 추가한 뒤 ac-3 테스트를 다시 실행한다."
+}
