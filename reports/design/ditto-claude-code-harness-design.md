@@ -753,9 +753,17 @@ DITTO에서의 기본 호출:
   commands.jsonl
   tests.md
   browser.md
-  reviews/
   logs/
   screenshots/
+```
+
+dialectic/verifier 리뷰 산출물은 evidence가 아니라 work-item 최상위 `reviews/`에 둔다(§6.6 경로와 일치):
+
+```text
+.ditto/work-items/<id>/reviews/
+  dialectic-<n>.json
+  dialectic-<n>.md
+  verifier.md
 ```
 
 규칙:
@@ -1009,6 +1017,8 @@ v0에서는 marketplace-ready packaging보다 local plugin install(`claude --plu
 
 ### 7.2 Hook design
 
+이 표는 전체 hook 설계 카탈로그다. **v0 동작 표면은 §12 Scope Authority의 4개(`UserPromptSubmit`/`Stop`/`PreCompact`/`PostToolUse`)로 제한되며**, 나머지(`SessionStart`/`PreToolUse`/`PostToolUseFailure`/`SubagentStart`/`SubagentStop`/`SessionEnd`)는 post-v0다. hook 이벤트 가용성은 설치된 Claude Code 버전에 따라 다르므로 doctor가 런타임 확인한다.
+
 | Hook | DITTO 역할 | 실패 정책 |
 |---|---|---|
 | `UserPromptSubmit` | 사용자 입력 분류, 질문 억제, deep interview 필요성 판단, work item 연결 | 구현 오류는 fail-open, 정책 판단은 advisory로 시작 |
@@ -1103,13 +1113,14 @@ DITTO 상태는 repo-local `.ditto/`에 둔다.
       evidence-index.json
       delegations/
         <delegation-id>.json
+      reviews/
+        dialectic-<n>.md
+        dialectic-<n>.json
+        verifier.md
       evidence/
         commands.jsonl
         tests.md
         browser.md
-        reviews/
-          dialectic-<n>.md
-          dialectic-<n>.json
         logs/
         screenshots/
   knowledge/
