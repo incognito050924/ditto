@@ -985,7 +985,7 @@ commands/
   handoff.md
 ```
 
-post-v0 placeholders (Milestone 3~6, v0 skeleton에는 빈 placeholder로만 둔다):
+post-v0 placeholders (Milestone 3~6). 이 중 무엇을 v0 skeleton에 빈 placeholder로 두고 무엇을 미생성으로 둘지는 §12 Scope Authority가 명시한 것만 따른다(예: E2E는 placeholder도 post-v0라 v0 skeleton에 두지 않는다):
 
 ```text
 skills/
@@ -1261,14 +1261,15 @@ v0 범위는 Milestone 0, Milestone 1, Milestone 2의 최소 skeleton까지다. 
 
 - 설계 문서 확정
 - 기존 work item/completion/evidence schema 매핑 확정
-- intent/question/orchestration/dialectic/handoff sidecar schema
+- intent/question/orchestration/dialectic/handoff/convergence sidecar schema
 - dialectic review schema
+- `ConvergenceContract` schema(`convergence.json`)
 - opponent model routing policy
 - Claude plugin skeleton 계획
 
 완료 기준:
 
-- contract fixture가 있다.
+- contract fixture가 있다(convergence fixture 포함).
 - 예시 work item이 있다.
 - 예시 dialectic review artifact가 있다.
 - verifier가 fixture를 판정할 수 있다.
@@ -1401,12 +1402,13 @@ v0 범위는 Milestone 0, Milestone 1, Milestone 2의 최소 skeleton까지다. 
 
 ## 15. 다음 구현 후보
 
-가장 먼저 만들 후보는 다음 다섯 개다.
+가장 먼저 만들 후보는 다음 여섯 개다.
 
 1. `QuestionGate` contract와 fixture
 2. `OneShotOrchestrationContract` contract와 fixture
 3. `DialecticDeliberationContract` contract와 fixture
 4. `CompletionContract` contract와 fixture
-5. Claude Code plugin skeleton: `UserPromptSubmit`, `Stop`, `/ditto:deep-interview`, `/ditto:dialectic`, `/ditto:dialectic-review` alias, `/ditto:verify`, `/ditto:handoff`
+5. `ConvergenceContract` contract와 fixture (CompletionContract의 쌍대)
+6. Claude Code plugin skeleton: `UserPromptSubmit`, `Stop`, `/ditto:deep-interview`, `/ditto:dialectic`, `/ditto:dialectic-review` alias, `/ditto:verify`, `/ditto:handoff`
 
-이 다섯 개가 만들어지면 DITTO는 "Claude Code 위의 프롬프트 모음"이 아니라 "의도와 완료를 검열하는 최소 하네스"가 된다.
+이 여섯 개가 만들어지면 DITTO는 "Claude Code 위의 프롬프트 모음"이 아니라 "의도와 완료를 검열하는 최소 하네스"가 된다.
