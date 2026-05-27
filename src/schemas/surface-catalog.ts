@@ -3,7 +3,7 @@ import { relativePath, schemaVersion } from './common';
 
 export const surfaceCatalogEntry = z.object({
   host: z.enum(['codex', 'claude-code']),
-  kind: z.enum(['skill', 'agent', 'command', 'plugin']),
+  kind: z.enum(['skill', 'agent', 'command', 'plugin', 'hook']),
   id: z.string().min(1),
   path: relativePath,
 });

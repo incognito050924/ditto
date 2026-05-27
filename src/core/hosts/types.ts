@@ -54,7 +54,7 @@ export interface McpInventory {
   unavailable: Array<{ scope: McpScope; source_file: string; reason: string }>;
 }
 
-export type SurfaceKind = 'skill' | 'agent' | 'command' | 'plugin';
+export type SurfaceKind = 'skill' | 'agent' | 'command' | 'plugin' | 'hook';
 export type SurfaceMismatch = 'missing_file' | 'extra_file' | 'renamed';
 
 export interface SurfaceEntry {

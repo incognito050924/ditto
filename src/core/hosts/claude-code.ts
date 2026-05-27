@@ -4,6 +4,7 @@ import {
   asRecord,
   asStringArray,
   envKeys,
+  fileExists,
   listDirectories,
   listFiles,
   readJsonIfExists,
@@ -66,6 +67,60 @@ function projectMcpFromClaudeJson(
   }
   servers.push(...serversFromObject('claude-code', 'user', sourceFile, root.mcpServers));
   return servers;
+}
+
+/**
+ * Scan a Claude Code *plugin* root (skills/, agents/, commands/, hooks/hooks.json,
+ * .claude-plugin/plugin.json) into surface entries. This is the actual side of the
+ * surface-inventory drift check (M1.6); the declared side is the checked-in
+ * `.ditto/surfaces.json` catalog.
+ */
+async function scanPluginRoot(repoRoot: string): Promise<SurfaceEntry[]> {
+  const out: SurfaceEntry[] = [];
+
+  for (const dir of await listDirectories(join(repoRoot, 'skills'))) {
+    const skillPath = join(dir.path, 'SKILL.md');
+    if (await fileExists(skillPath)) {
+      out.push({ host: 'claude-code', kind: 'skill', id: dir.id, path: skillPath });
+    }
+  }
+
+  for (const file of await listFiles(join(repoRoot, 'agents'))) {
+    if (!file.id.endsWith('.md')) continue;
+    out.push({
+      host: 'claude-code',
+      kind: 'agent',
+      id: file.id.replace(/\.md$/, ''),
+      path: file.path,
+    });
+  }
+
+  for (const file of await listFiles(join(repoRoot, 'commands'))) {
+    if (!file.id.endsWith('.md')) continue;
+    out.push({
+      host: 'claude-code',
+      kind: 'command',
+      id: file.id.replace(/\.md$/, ''),
+      path: file.path,
+    });
+  }
+
+  const hooksPath = join(repoRoot, 'hooks', 'hooks.json');
+  const hooksRaw = asRecord(await readJsonIfExists(hooksPath).catch(() => null));
+  const hookEvents = asRecord(hooksRaw?.hooks);
+  if (hookEvents) {
+    for (const event of Object.keys(hookEvents)) {
+      out.push({ host: 'claude-code', kind: 'hook', id: event, path: hooksPath });
+    }
+  }
+
+  const pluginPath = join(repoRoot, '.claude-plugin', 'plugin.json');
+  const pluginRaw = asRecord(await readJsonIfExists(pluginPath).catch(() => null));
+  if (pluginRaw && typeof pluginRaw.name === 'string') {
+    out.push({ host: 'claude-code', kind: 'plugin', id: pluginRaw.name, path: pluginPath });
+  }
+
+  return out;
 }
 
 export const claudeCodeHostAdapter: HostAdapter = {
@@ -214,6 +269,7 @@ export const claudeCodeHostAdapter: HostAdapter = {
           id: entry.id.replace(/\.md$/, ''),
           path: entry.path,
         })),
+      ...(await scanPluginRoot(repoRoot)),
     ];
     return { host: 'claude-code', localSurfaces, homeSurfaces, unavailable: [] };
   },
