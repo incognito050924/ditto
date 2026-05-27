@@ -1,7 +1,128 @@
-import type { HookHandler } from './runtime';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { ZodTypeAny, z } from 'zod';
+import { completionGate, convergenceGate } from '~/core/gates';
+import { SessionPointerStore } from '~/core/session-pointer';
+import { WorkItemStore } from '~/core/work-item-store';
+import { type Autopilot, autopilot as autopilotSchema } from '~/schemas/autopilot';
+import { completionContract } from '~/schemas/completion-contract';
+import { convergence as convergenceSchema } from '~/schemas/convergence';
+import type { HookHandler, HookInput } from './runtime';
+
+type ArtifactRead<T> =
+  | { status: 'absent' }
+  | { status: 'malformed'; name: string }
+  | { status: 'ok'; data: T };
+
+async function readArtifact<S extends ZodTypeAny>(
+  path: string,
+  schema: S,
+  name: string,
+): Promise<ArtifactRead<z.infer<S>>> {
+  let text: string;
+  try {
+    text = await readFile(path, 'utf8');
+  } catch {
+    return { status: 'absent' };
+  }
+  // File exists → from here on, a parse/validation failure is a gate-input
+  // violation (fail-closed), NOT a hook crash. (D4 two-layer distinction.)
+  try {
+    const parsed = schema.safeParse(JSON.parse(text));
+    if (!parsed.success) return { status: 'malformed', name };
+    return { status: 'ok', data: parsed.data };
+  } catch {
+    return { status: 'malformed', name };
+  }
+}
+
+function hasRunnableNode(a: Autopilot): boolean {
+  const byId = new Map(a.nodes.map((n) => [n.id, n]));
+  const depsPassed = (n: Autopilot['nodes'][number]) =>
+    n.depends_on.every((d) => byId.get(d)?.status === 'passed');
+  return a.nodes.some((n) => n.status === 'running' || (n.status === 'pending' && depsPassed(n)));
+}
 
 /**
- * Stop hook handler (M1.4 fills the body).
- * M1.2: registered surface with a no-op pass-through.
+ * Does the autopilot graph force continuation? (plan M1.4 branch 나)
+ * Continuation only when a node is actually runnable AND approval is not pending.
+ * approval_gate.status==='pending' yields (exit 0) so M2.3 can surface the plan;
+ * a graph with only blocked/terminal nodes also yields.
  */
-export const stopHandler: HookHandler = () => ({ exitCode: 0 });
+export function autopilotForcesContinuation(a: Autopilot): boolean {
+  if (a.approval_gate.status === 'pending') return false;
+  return hasRunnableNode(a);
+}
+
+export const stopHandler: HookHandler = async (input: HookInput) => {
+  const raw = (input.raw ?? {}) as Record<string, unknown>;
+
+  // (1) 8-iteration guard: once we have forced a continuation, let Claude stop.
+  if (raw.stop_hook_active === true) return { exitCode: 0 };
+
+  // Stop only branches on what it actually sees. API/rate-limit/auth/max-output
+  // arrive as the separate StopFailure event whose output is ignored — not here.
+  const sessionId = typeof raw.session_id === 'string' ? raw.session_id : undefined;
+  if (!sessionId) return { exitCode: 0 };
+
+  const pointer = await new SessionPointerStore(input.repoRoot).get(sessionId);
+  if (!pointer) return { exitCode: 0 };
+
+  let workItem: Awaited<ReturnType<WorkItemStore['get']>>;
+  try {
+    workItem = await new WorkItemStore(input.repoRoot).get(pointer);
+  } catch {
+    return { exitCode: 0 }; // no loadable work item → nothing to judge
+  }
+
+  const dir = join(input.repoRoot, '.ditto', 'work-items', pointer);
+  const completion = await readArtifact(
+    join(dir, 'completion.json'),
+    completionContract,
+    'completion.json',
+  );
+  const conv = await readArtifact(
+    join(dir, 'convergence.json'),
+    convergenceSchema,
+    'convergence.json',
+  );
+  const pilot = await readArtifact(join(dir, 'autopilot.json'), autopilotSchema, 'autopilot.json');
+
+  // Malformed artifact = gate-input violation → fail CLOSED (exit 2).
+  const malformed = [completion, conv, pilot].find((a) => a.status === 'malformed');
+  if (malformed && malformed.status === 'malformed') {
+    return {
+      exitCode: 2,
+      stderr: `DITTO Stop gate: ${malformed.name} is malformed (cannot verify completion). Fix or remove it before stopping.\n`,
+    };
+  }
+
+  // Yield precedence: an autopilot waiting on approval/blocker stops the loop so
+  // the plan/decision can surface (plan M1.4 branch 나 exceptions).
+  if (pilot.status === 'ok' && pilot.data.approval_gate.status === 'pending') {
+    return { exitCode: 0 };
+  }
+
+  const reasons: string[] = [];
+  if (completion.status === 'ok') {
+    const g = completionGate(workItem, completion.data);
+    if (!g.pass) reasons.push(...g.reasons);
+  }
+  if (conv.status === 'ok') {
+    const g = convergenceGate(conv.data);
+    if (!g.pass) reasons.push(...g.reasons);
+  }
+  if (pilot.status === 'ok' && autopilotForcesContinuation(pilot.data)) {
+    reasons.push('autopilot has runnable node(s); the work item is not complete yet');
+  }
+
+  if (reasons.length > 0) {
+    return {
+      exitCode: 2,
+      stderr: `DITTO Stop gate: keep going — ${reasons.length} item(s) remain:\n- ${reasons.join('\n- ')}\n`,
+    };
+  }
+
+  // (가) nothing left to force.
+  return { exitCode: 0 };
+};

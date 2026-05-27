@@ -1,8 +1,141 @@
-import type { HookHandler } from './runtime';
+import { join } from 'node:path';
+import { type CharterContext, charterProjection } from '~/core/charter';
+import { atomicWriteText, ensureDir } from '~/core/fs';
+import { SessionPointerStore } from '~/core/session-pointer';
+import { type WorkItem, WorkItemStore } from '~/core/work-item-store';
+import type { HookHandler, HookInput } from './runtime';
+
+const NON_TERMINAL: ReadonlyArray<WorkItem['status']> = [
+  'draft',
+  'in_progress',
+  'blocked',
+  'partial',
+  'unverified',
+];
+
+/** Advisory-only classification (D2: a hint, not a keyword gate; real judgment is the skill's). */
+export function classifyPromptAdvisory(prompt: string): 'question' | 'execution' {
+  const t = prompt.trim().toLowerCase();
+  if (t.endsWith('?') || /^(what|why|how|when|where|who|which|is|are|does|can|should)\b/.test(t)) {
+    return 'question';
+  }
+  return 'execution';
+}
+
+export interface ActiveResolution {
+  workItem?: WorkItem;
+  /** Set when the active work item is ambiguous and the user must choose (no arbitrary pick). */
+  advisory?: string;
+  action: 'loaded' | 'created' | 'ask';
+}
 
 /**
- * UserPromptSubmit hook handler (M1.3 fills the body).
- * M1.2: registered surface with a no-op pass-through so the manifest is fixed
- * and M1.3 only has to fill the projection/classification logic.
+ * Resolve the single active work item for a session (plan §3 F3).
+ *  - pointer present → load it (pointer wins even if other drafts exist)
+ *  - pointer absent + open work items exist → ASK which to resume (never auto-pick)
+ *  - pointer absent + no open work items → create a draft and set the pointer
  */
-export const userPromptSubmitHandler: HookHandler = () => ({ exitCode: 0 });
+export async function resolveActiveWorkItem(
+  repoRoot: string,
+  sessionId: string,
+  prompt: string,
+  now: Date = new Date(),
+): Promise<ActiveResolution> {
+  const items = new WorkItemStore(repoRoot);
+  const pointers = new SessionPointerStore(repoRoot);
+
+  const pointed = await pointers.get(sessionId);
+  if (pointed && (await items.exists(pointed))) {
+    return { workItem: await items.get(pointed), action: 'loaded' };
+  }
+
+  const open = (await items.list()).filter((s) => NON_TERMINAL.includes(s.status));
+  if (open.length > 0) {
+    const ids = open.map((s) => s.id).join(', ');
+    return {
+      action: 'ask',
+      advisory: `No active work item pointer for this session and ${open.length} open work item(s) exist (${ids}). Resume one explicitly or start a new work item — not picking arbitrarily.`,
+    };
+  }
+
+  const title = prompt.trim().slice(0, 80) || 'untitled request';
+  const created = await items.create(
+    {
+      title,
+      source_request: prompt || title,
+      goal: prompt || title,
+      acceptance_criteria: [
+        {
+          id: 'ac-1',
+          statement: 'TBD — derive observable criteria during interview/planning',
+          verdict: 'unverified',
+          evidence: [],
+        },
+      ],
+    },
+    now,
+  );
+  await pointers.set(sessionId, created.id, now);
+  return { workItem: created, action: 'created' };
+}
+
+function pendingHandoffHint(item: WorkItem): string | undefined {
+  if (item.re_entry?.command) return item.re_entry.command;
+  if (item.handoff_path) return `see ${item.handoff_path}`;
+  return undefined;
+}
+
+async function logClassification(repoRoot: string, entry: Record<string, unknown>): Promise<void> {
+  const dir = join(repoRoot, '.ditto', 'logs');
+  await ensureDir(dir);
+  const path = join(dir, 'user-prompt.jsonl');
+  const file = Bun.file(path);
+  const existing = (await file.exists()) ? await file.text() : '';
+  const prefix = existing.length === 0 || existing.endsWith('\n') ? existing : `${existing}\n`;
+  await atomicWriteText(path, `${prefix}${JSON.stringify(entry)}\n`);
+}
+
+export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => {
+  const raw = (input.raw ?? {}) as Record<string, unknown>;
+  const sessionId = typeof raw.session_id === 'string' ? raw.session_id : undefined;
+  const prompt = typeof raw.prompt === 'string' ? raw.prompt : '';
+  const classification = classifyPromptAdvisory(prompt);
+
+  // Without a session id we cannot track the single-active pointer; still inject charter.
+  if (!sessionId) {
+    return contextOutput(charterProjection());
+  }
+
+  const resolved = await resolveActiveWorkItem(input.repoRoot, sessionId, prompt);
+
+  await logClassification(input.repoRoot, {
+    ts: new Date().toISOString(),
+    session_id: sessionId,
+    classification,
+    action: resolved.action,
+    work_item_id: resolved.workItem?.id ?? null,
+  });
+
+  const ctx: CharterContext = {};
+  const item = resolved.workItem;
+  if (item) {
+    ctx.workItemId = item.id;
+    ctx.workItemTitle = item.title;
+    ctx.workItemStatus = item.status;
+    const handoff = pendingHandoffHint(item);
+    if (handoff) ctx.pendingHandoff = handoff;
+  }
+  if (resolved.advisory) ctx.advisory = resolved.advisory;
+
+  // UserPromptSubmit is advisory: never blocks (exit 0 + additionalContext).
+  return contextOutput(charterProjection(ctx));
+};
+
+function contextOutput(text: string) {
+  return {
+    exitCode: 0,
+    stdout: JSON.stringify({
+      hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: text },
+    }),
+  };
+}

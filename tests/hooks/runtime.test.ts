@@ -41,7 +41,10 @@ describe('runHook fail-open wrapper (D4)', () => {
   });
 
   test('an exit-2 verdict from the handler is NOT swallowed (fail-closed verdicts survive)', async () => {
-    const out = await runHook(() => ({ exitCode: 2, stderr: 'gate: 2 criteria unverified\n' }), baseInput());
+    const out = await runHook(
+      () => ({ exitCode: 2, stderr: 'gate: 2 criteria unverified\n' }),
+      baseInput(),
+    );
     expect(out.exitCode).toBe(2);
   });
 });
