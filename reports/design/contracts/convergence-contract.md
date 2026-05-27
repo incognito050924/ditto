@@ -7,7 +7,7 @@ parent: reports/design/ditto-claude-code-harness-design.md
 owns: "§6.9 Convergence Contract의 'how' (admissibility 게이트 메커니즘 · ratchet · decision ledger · 정직 라벨 · convergence.json 스키마)"
 inputs:
   - reports/design/ditto-claude-code-harness-design.md  # §0 제1원칙, §3.3 권위, §6.8 Completion(쌍대), §6.9 Convergence(what), §11 원칙 10, §12 Milestone 3
-  - reports/design/contracts/one-shot-orchestration-contract.md  # §4.3 노드 retry/fix 정련 루프가 ConvergenceGate에 묶임
+  - reports/design/contracts/autopilot-contract.md  # §4.3 노드 retry/fix 정련 루프가 ConvergenceGate에 묶임
   - reports/harnesses/ouroboros.md                      # 주 참조 — deterministic_floor · backend∧ledger 쌍대 게이트 · cap≠converged · closure 분기 (기준 커밋 d47b1431)
   - reports/harnesses/hannes.md                          # Convergence는 HANNES 선행구현이 없는 유일한 신규 계약(count 기반 escalation만 존재)
   - src/schemas/common.ts, src/schemas/completion-contract.ts  # 재사용 스키마 (authoritative)
@@ -15,7 +15,7 @@ inputs:
 
 # DITTO Convergence Contract (상세 설계)
 
-> **이 문서의 위치.** 이것은 메인 설계문서(`ditto-claude-code-harness-design.md`)의 §6.9를 대체하지 않고 **확장**한다. 메인은 "무엇(what)" — 두 게이트 교집합으로서의 수렴 정의, admissibility·ratchet·정직 라벨의 *원칙* — 만 두고 "어떻게(how)"는 열어둔다. 이 문서가 그 how — admissibility 게이트의 판정 메커니즘, ratchet(최선본 보존·decision ledger)의 구조, 정직 라벨의 스키마화, `convergence.json` 사이드카 — 를 소유한다. per-contract 상세 문서의 **네 번째 사례**다(앞선 사례: [`deep-interview-contract.md`](deep-interview-contract.md), [`one-shot-orchestration-contract.md`](one-shot-orchestration-contract.md), [`dialectic-deliberation-contract.md`](dialectic-deliberation-contract.md)).
+> **이 문서의 위치.** 이것은 메인 설계문서(`ditto-claude-code-harness-design.md`)의 §6.9를 대체하지 않고 **확장**한다. 메인은 "무엇(what)" — 두 게이트 교집합으로서의 수렴 정의, admissibility·ratchet·정직 라벨의 *원칙* — 만 두고 "어떻게(how)"는 열어둔다. 이 문서가 그 how — admissibility 게이트의 판정 메커니즘, ratchet(최선본 보존·decision ledger)의 구조, 정직 라벨의 스키마화, `convergence.json` 사이드카 — 를 소유한다. per-contract 상세 문서의 **네 번째 사례**다(앞선 사례: [`deep-interview-contract.md`](deep-interview-contract.md), [`autopilot-contract.md`](autopilot-contract.md), [`dialectic-deliberation-contract.md`](dialectic-deliberation-contract.md)).
 
 ## 0. 권위 규칙 (메인 ↔ 상세 ↔ 스키마)
 
@@ -40,7 +40,7 @@ Convergence는 **반복 정련(review→edit, verify→fix, dialectic 라운드)
 | 계약 | 다루는 것 | Convergence와의 차이 (쌍대성) |
 |---|---|---|
 | **§6.8 Completion** | `final_verdict` 판정, AC별 증거 충족, work item status 결정 | **본 계약의 쌍대(dual).** Completion=`CompletionGate`(조기 멈춤·거짓 done 차단, *적극* 충족 시 STOP 가능). Convergence=`ConvergenceGate`(treadmill·트집 무한루프 차단, admissible 반론 있어야 CONTINUE 가능). **`done`은 두 게이트 동시 만족으로만 정의.** verdict·status는 §6.8이 결정, 정련 *지속*은 본 계약이 결정. `convergence.json`은 `completion.json`을 대체하지 않는 additive 쌍대 사이드카(§0). |
-| §6.5 One-Shot Orchestration | 그래프 진행, 노드별 retry/switch 결정 | 오케스트레이션은 *그래프 진행*, Convergence는 *한 지점의 정련*. 노드의 retry/fix 정련 루프 *내부* 종료를 본 계약이 admissibility·ratchet으로 지배하고, 오케스트레이션은 그 결과(passed/failed)만 받는다([`one-shot-orchestration-contract.md`](one-shot-orchestration-contract.md) §4.3). `cap-reached ≠ converged`를 공유. |
+| §6.5 Autopilot | 그래프 진행, 노드별 retry/switch 결정 | autopilot은 *그래프 진행*, Convergence는 *한 지점의 정련*. 노드의 retry/fix 정련 루프 *내부* 종료를 본 계약이 admissibility·ratchet으로 지배하고, autopilot은 그 결과(passed/failed)만 받는다([`autopilot-contract.md`](autopilot-contract.md) §4.3). `cap-reached ≠ converged`를 공유. |
 | §6.6 DialecticDeliberation | Producer/Opponent/Synthesizer 적대 라운드 | Dialectic은 반론을 *생성*, Convergence는 그 반론이 *행동할 자격*(admissibility)이 있는지와 라운드를 *언제 멈출지*를 판정. 둘은 같은 정련 루프의 생성기↔게이트. |
 | §6.3 Deep Interview | intent 층위 readiness 게이트 | intent의 readiness 쌍대 게이트(critical-resolved ∧ score)와 *동형*이지만 층위가 다르다. Deep Interview는 intent 모호성, Convergence는 산출물 정련. `cap_reached ≠ ready`(deep-interview §4.3)와 `cap-reached ≠ converged`는 같은 원칙의 두 적용. |
 
@@ -115,7 +115,7 @@ ratchet은 정련이 *나아지기만* 하고 퇴행하지 않게 만드는 두 
 
 - 라운드 캡(`round_cap`)은 **안전 정지**이지 성공 조건이 아니다(메인 §6.9). 캡 도달이 "충분히 정련했다"가 아니다.
 - 캡에서 두 게이트(완료↔수렴)를 만족 못 했으면 그건 `done`이 아니라 **non-pass**다 — 그 정련 지점(노드)을 닫고, 전체 verdict는 CompletionContract가 `partial|fail|unverified`로 결정(`completion-contract.ts`의 `final_verdict`), `next_handoff_path` 요구(같은 스키마 refine: non-pass ⇒ handoff 필수) + handoff한다(§6.8, §6.10).
-- 이는 [`one-shot-orchestration-contract.md`](one-shot-orchestration-contract.md) §4.3과 정합 — 노드별 `caps.fix_per_node`/`switch_per_node` 도달 시 노드를 `failed`로 닫고 verdict를 §6.8에 위임하는 것과 동일 규칙. deep-interview §4.3의 `cap_reached ≠ ready`와도 동형.
+- 이는 [`autopilot-contract.md`](autopilot-contract.md) §4.3과 정합 — 노드별 `caps.fix_per_node`/`switch_per_node` 도달 시 노드를 `failed`로 닫고 verdict를 §6.8에 위임하는 것과 동일 규칙. deep-interview §4.3의 `cap_reached ≠ ready`와도 동형.
 
 > **ouroboros 레퍼런스 — closure 분기.** `cap-reached ≠ converged`는 ouroboros의 `max_rounds` 후 분기가 그대로다(`auto/interview_driver.py:339-555`, `state.py:378-379`, [`ouroboros.md`](../../harnesses/ouroboros.md) §2): backend∧ledger 동의 → `mutual_agreement`; ledger만 done → `ledger_only`(advisory); 안전 기본값만 남음 → `safe_default`(실패 시 롤백); 안전하지 않은 gap → **blocked**. 캡 도달 자체가 성공 라벨이 아니라 closure mode로 정직하게 기록된다.
 
@@ -224,7 +224,7 @@ ratchet은 정련이 *나아지기만* 하고 퇴행하지 않게 만드는 두 
 | 최선본 보존·롤백 invariant (SSOT 비손상) | ouroboros safe-default 롤백 (`auto/interview_driver.py:805-833`) | §4.1, §4.2 |
 | source×status provenance = finding vs hypothesis | ouroboros Seed Ledger (`auto/ledger.py:11-103`) | §3.3, §6.1 정직 라벨 |
 | 모델 자기보고를 코드 바닥으로 누름 | ouroboros `deterministic_floor` + `max(llm, floor)` (`auto/grading.py:401-425`, `auto/pipeline.py:642-651`) | §4.3 |
-| 노드 retry/fix 정련 루프가 ConvergenceGate에 묶임 | DITTO [`one-shot-orchestration-contract.md`](one-shot-orchestration-contract.md) §4.3 | §1.2, §5 |
+| 노드 retry/fix 정련 루프가 ConvergenceGate에 묶임 | DITTO [`autopilot-contract.md`](autopilot-contract.md) §4.3 | §1.2, §5 |
 | **선행구현 부재 (신규 발상)** | HANNES (`reports/harnesses/hannes.md` §3.1) | §9 — count 기반 escalation만 있던 자리를 두 게이트 교집합으로 대체 |
 
 ## 9. 구현 참조 — Convergence는 HANNES 선행구현이 없는 유일한 신규 계약
