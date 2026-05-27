@@ -88,6 +88,7 @@ inputs:
 ### M1.1 — plugin.json + 레이아웃 + doctor
 
 - **동작**: `.claude-plugin/plugin.json`(name=`ditto`, description, version) 작성. 루트에 `hooks/`·`skills/`·`agents/`·`commands/`. doctor 커맨드가 hook 이벤트 가용성·`claude plugin validate`·plugin root 스캔을 런타임 확인(D6).
+  - **`commands/` 빈 디렉터리 주의**: M1.5 shadowing 정책상 v0엔 동명 command wrapper가 없어 `commands/`가 **빈 채로 남을 수 있다**. layout에 디렉터리는 두되, ① 빈 `commands/`로 `claude plugin validate`가 깨지지 않는지 확인(깨지면 디렉터리 생성을 command 첫 추가 시점으로 미룸), ② surface inventory(M1.6)는 빈 `commands/`를 "command surface 0개"로 정상 처리하고 drift로 오판하지 않게 한다(F3 false-green 처리와 일관 — 부재 catalog는 fail이되 빈 *실제* 표면은 정상).
 - **대상 계약/스키마**: 설계서 §7.1 layout. `surface-catalog.ts`(이미 존재 — inventory 타입).
 - **acceptance**: `claude --plugin-dir ./` 로드 성공, `claude plugin validate` 통과. skill/command가 `/ditto:<name>`으로 노출.
 - **참고**: claude-code-guide(plugin.json 필드·`--plugin-dir`·validate·네임스페이싱).
@@ -109,24 +110,34 @@ inputs:
 ### M1.4 — Stop hook 최소 동작 (완료/수렴 게이트)
 
 - **동작(control-flow)**: Claude 응답 완료 → Stop hook이 (1) `stop_hook_active==true`면 즉시 exit 0(8회 무한루프 가드), (2) active work item의 `completion.json`/`convergence.json` 읽어 M0.4 게이트 적용, (3) 미충족(예: final_verdict=pass인데 unverified AC 존재, 또는 admissible 열린 반론 존재)이면 **exit 2 + stderr에 "무엇이 남았는지"** → Claude 계속 강제, (4) 예외 목록(context-limit·explicit cancel·user abort·rate limit·auth error)은 즉시 통과.
-- **artifact 부재 분기(M2↔M3 순서 명시)**: `completion.json`/`convergence.json`은 **runtime 생성이 M3**이므로(§5) M1·M2 동안엔 보통 *없다*. 부재 시 동작은 두 갈래로 명세한다 — **(가) active autopilot이 없으면**(autopilot.json 부재 또는 모든 노드 종결): 판정할 게 없으므로 **exit 0 통과**(fixture 테스트 경로는 명시적으로 artifact를 주입). **(나) active autopilot에 pending/ready/running 노드가 남아 있으면**: 완료 artifact가 없어도 "끝난 게 아니다" → **exit 2로 continuation 강제**. 즉 M2의 지속 실행은 *완료 artifact가 아니라 `autopilot.json` 노드 상태*를 1차 신호로 삼는다(완료/수렴 게이트 판정은 artifact가 생기는 M3 경로). 이 분기는 M1에서 stub로 두되(autopilot.json 없으면 항상 (가)), 실 노드-상태 판정은 M2.2에서 채운다.
+- **artifact 부재 분기(M2↔M3 순서 명시)**: `completion.json`/`convergence.json`은 **runtime 생성이 M3**이므로(§5) M1·M2 동안엔 보통 *없다*. 부재 시 동작은 두 갈래로 명세한다 — **(가) active autopilot이 없으면**(autopilot.json 부재 또는 모든 노드 종결): 판정할 게 없으므로 **exit 0 통과**(fixture 테스트 경로는 명시적으로 artifact를 주입). **(나) active autopilot에 *지금 실행 가능한* 노드가 남아 있으면**(ready·running, 아래 예외 미해당): 완료 artifact가 없어도 "끝난 게 아니다" → **exit 2로 continuation 강제**. 즉 M2의 지속 실행은 *완료 artifact가 아니라 `autopilot.json` 노드 상태*를 1차 신호로 삼는다(완료/수렴 게이트 판정은 artifact가 생기는 M3 경로). 이 분기는 M1에서 stub로 두되(autopilot.json 없으면 항상 (가)), 실 노드-상태 판정은 M2.2에서 채운다.
+  - **(나) continuation 예외 — 사용자/외부에 양보(즉시 exit 0)**: 노드가 남아 있어도 autopilot이 stop_condition에 걸렸으면 루프를 *멈춰* 사용자/plan이 표면화되게 한다(autopilot 상세 §6.1·§6.2). 곧 ① `approval_gate.status==pending`(M2.3이 plan을 제시할 차례 — Stop이 막으면 승인 요청 자체가 안 나간다), ② user-owned decision 대기(§6.2 QuestionGate), ③ external blocker, ④ safety boundary. 이 넷은 "ready 노드 존재" 여부와 무관하게 (가)처럼 exit 0. (M1.4의 기존 예외 (4)는 *인프라* 사유, 본 예외는 *정책* stop_condition — 둘을 구분해 설계.) pending approval의 mutation 노드는 애초에 "실행 가능"으로 치지 않는다(gate 미통과).
 - **대상 계약/스키마**: §6.8 Completion, §6.9 Convergence, §6.5 Autopilot(노드 상태). `completion-contract.ts`, 신규 `convergence.ts`·`autopilot.ts`.
-- **acceptance**: 미검증 완료 fixture → Stop이 continue 강제(exit 2). 완료 fixture → 통과(exit 0). **완료 artifact 부재 + autopilot.json에 pending 노드 → continue(exit 2); 부재 + active autopilot 없음 → 통과(exit 0).** 예외 사유 → 즉시 통과. `stop_hook_active` 가드 동작.
+- **acceptance**: 미검증 완료 fixture → Stop이 continue 강제(exit 2). 완료 fixture → 통과(exit 0). **완료 artifact 부재 + autopilot.json에 ready 노드 → continue(exit 2); 부재 + active autopilot 없음 → 통과(exit 0).** **approval_gate.status==pending fixture(+ 남은 노드) → 통과(exit 0, continuation 강제 안 함); user-owned decision/external/safety stop_condition fixture → 통과(exit 0).** 인프라 예외 사유 → 즉시 통과. `stop_hook_active` 가드 동작.
 - **참고**: claude-code-guide(Stop exit 2 = 계속, `stop_hook_active` 최대 8회). OMC persistent-mode 예외 목록(`oh-my-claudecode.md:160-162,236-238`) — **예외 목록을 먼저 설계**. 단일 primary authority(`:164-166`)로 시작.
 
 ### M1.5 — skill skeleton 4종 + alias
 
-- **동작**: `skills/{deep-interview,verify,handoff,dialectic}/SKILL.md` + `dialectic-review`(= `/ditto:dialectic --mode review` alias). frontmatter(name/description/argument-hint) + 본문은 절차·출력 계약. command wrapper는 thin shim(본문 on-demand 로드 = progressive disclosure). `/ditto:plan`은 비노출(autopilot 내부 호출).
+- **동작**: `skills/{deep-interview,verify,handoff,dialectic}/SKILL.md` + `dialectic-review`(= `/ditto:dialectic --mode review` alias). frontmatter(name/description/argument-hint) + 본문은 절차·출력 계약. `/ditto:plan`은 비노출(autopilot 내부 호출).
+- **shadowing 정책(동명 skill ↔ command)**: Claude Code에서 custom command와 skill이 **같은 이름이면 skill이 우선**한다(공식 skills 문서). 따라서 v0는 skill과 동명의 `commands/<name>.md` wrapper를 **만들지 않는다** — 명령 표면(`/ditto:<name>`)은 **skill이 authoritative**. command는 skill로 표현 불가능한 별도 표면이 필요할 때만(다른 이름으로) 둔다. 이로써 죽은 shim·이중 정의를 원천 차단(M1.1 acceptance의 "/ditto:<name> 노출"도 skill 경유로 읽는다).
 - **대상 계약/스키마**: 설계서 §7.3 skill 표. deep-interview·dialectic 상세문서가 본문 근거.
 - **acceptance**: 각 skill이 `/ditto:<name>`으로 호출됨. dialectic-review가 dialectic --mode review로 라우팅.
 - **참고**: claude-code-guide(SKILL.md frontmatter·네임스페이싱). OMC progressive disclosure·thin shim(`oh-my-claudecode.md:67-68,180-182`), deepagents(`deepagents.md:76-77`). interview 프롬프트 계약은 ouroboros socratic-interviewer(`ouroboros.md:84-93`).
+
+### M1.5b — owner subagent skeleton (M2.2 spawn 대상)
+
+- **동작**: M2.2가 spawn할 **owner 에이전트의 최소 skeleton**을 만든다. autopilot 상세 §2.2의 kind→owner 매핑 중 **v0 owner 5종**: `agents/{researcher,planner,implementer,reviewer,verifier}.md`. 각 `.md`는 frontmatter(name·description·allowed `tools`·필요 시 `skills:`) + 본문은 §6.4 delegation packet 수신 계약(받는 것: TASK·file_scope·done_when / 안 받는 것: 드라이버 가설)만. content 생성 로직은 v0에서 비우고 역할·권한 경계만 고정. **post-v0 owner**(architect·playwright-e2e·knowledge-curator)와 dialectic 3역 에이전트는 해당 milestone(M5/M6/dialectic)에서.
+- **대상 계약/스키마**: 설계서 §7.4 subagent 표, autopilot 상세 §2.2(kind→owner)·§3.3(Context Isolation). 신규 `agents/*.md`.
+- **acceptance**: 5개 agent가 `claude plugin validate` 통과 + Task `subagent_type`으로 호출 가능. M2.2 spawn 대상이 실제로 존재함을 surface inventory(M1.6)가 확인. orchestrator는 main role이라 agent 파일 없음(D3).
+- **참고**: 설계서 §7.4, autopilot §2.2. Sisyphus/Atlas owner 분리(`oh-my-openagent.md`), HANNES stage→owner(`hannes.md` §1). **주의**: 이 unit이 없으면 M2.2 acceptance("ready 노드 selection→spawn")가 spawn 대상 부재로 실행 불가 — M2.2 선결.
 
 ### M1.6 — surface inventory 테스트
 
 - **동작**: plugin root(`skills/`·`commands/`·`agents/`·`hooks/hooks.json`·`.claude-plugin/plugin.json`)를 스캔해 실제 파일 ↔ 문서 인벤토리 일치를 CI로 검증. 현 어댑터가 repo `.claude/`·home `~/.claude/`만 보면 plugin root 스캔 추가.
 - **선결(현 표현력 gap — 착수 전 닫기)**: 현재 타입·어댑터는 이 acceptance를 실행할 수 없다. ① `SurfaceKind`(`src/core/hosts/types.ts:57`)에 `hook`(필요 시 `plugin-manifest`) 추가 — 지금은 `skill|agent|command|plugin`뿐이라 `hooks.json`을 표현 못 함. ② Claude Code 어댑터(`src/core/hosts/claude-code.ts:185`)는 현재 repo `.claude/{agents,commands}`+home skills만 스캔하므로 **plugin-root scanner**(`hooks/hooks.json` 파싱 + `skills/`·`commands/`·`agents/` 디렉터리)와 **`.claude-plugin/plugin.json` discovery**를 추가. 이 셋이 닫혀야 drift 판정이 실제로 돈다.
 - **대상 계약/스키마**: `surface-catalog.ts`(기존), `src/core/hosts/types.ts`(`SurfaceKind` 확장), `src/core/hosts/claude-code.ts`(plugin-root 스캔).
-- **acceptance**: `bun test`에서 인벤토리 drift 감지. 누락/잉여 surface 시 fail. **hook surface(`hooks.json`)와 `plugin.json`도 inventory에 포함**돼 drift 대상이 됨.
+- **false-green 차단(필수)**: `collectSurfaceInventory`는 expected catalog(`.ditto/surfaces.json`)가 **부재/빈 목록이면 mismatch 0으로 통과**한다(`src/core/surface-inventory.ts:39-41`) — 현재 repo엔 그 파일이 없어 지금 그대로면 항상 green(거짓). 따라서 M1.6은 ① expected catalog를 **생성/갱신하는 단계**(known-good 소스에서 카탈로그 산출)를 포함하고, ② **catalog 부재 또는 빈 목록 자체를 fail로 판정**(통과 아님)해야 drift 검증이 실제 검증이 된다.
+- **acceptance**: `bun test`에서 인벤토리 drift 감지. 누락/잉여 surface 시 fail. **`.ditto/surfaces.json` 부재·빈 목록 → fail**(통과 금지). **hook surface(`hooks.json`)와 `plugin.json`도 inventory에 포함**돼 drift 대상이 됨.
 - **참고**: OMC 문서 drift(skill count 31/38/39 불일치, `oh-my-claudecode.md:201`) 반면교사 — inventory를 코드 생성 + CI 비교(`:219,223-226`).
 
 ---
@@ -137,15 +148,15 @@ inputs:
 
 ### M2.1 — autopilot.json 스키마 + AutopilotStore (glue)
 
-- **동작**: `autopilot.json` Zod 스키마(nodes[]·approval_gate·caps·continue_policy·stop_conditions, autopilot §8.2) + `AutopilotStore`(읽기/노드 상태 갱신 — 그래프 mutation의 유일 경로, glue). `autopilot-decisions.jsonl` append-only 결정 로그.
-- **대상 계약/스키마**: §6.5, autopilot 상세 §8. 신규 `autopilot.ts`.
-- **acceptance**: store를 통해서만 노드 상태 변경. 직접 파일 덮어쓰기 차단(인터페이스로). fixture graph parse 통과.
+- **동작**: **autopilot 스키마는 M0.2에서 이미 신설**(`src/schemas/autopilot.ts`: nodes[]·approval_gate·caps·continue_policy·stop_conditions, autopilot §8.2)했으므로 M2.1은 그것을 **소비만** 한다(재정의 금지 — 스키마 소유권은 M0.2 단일). M2.1이 *신규로* 짓는 것은 glue뿐: `AutopilotStore`(읽기/노드 상태 갱신 — 그래프 mutation의 유일 경로) + `autopilot-decisions.jsonl` append-only 결정 로그.
+- **대상 계약/스키마**: §6.5, autopilot 상세 §8. **소비**: `src/schemas/autopilot.ts`(M0.2). **신규**: `AutopilotStore`(glue).
+- **acceptance**: store를 통해서만 노드 상태 변경. 직접 파일 덮어쓰기 차단(인터페이스로). M0.2 스키마로 fixture graph parse 통과(M2.1이 스키마를 다시 정의하지 않음).
 - **참고**: autopilot 상세 §8.2(nodes canonical), 설계서 §11 AutopilotStore.
 
 ### M2.2 — autopilot skill (main agent 구동) + ReAct 루프
 
-- **동작(control-flow)**: main agent가 `autopilot` skill을 따라 ReAct 루프 구동(D3 — 전용 subagent 아님). `LOOP`: (1) `autopilot.json` re-read(컨텍스트 누적 최소화), (2) ready 노드 선택(pending ∧ depends_on passed), (3) kind→owner 매핑 + 6-section packet 구성(Context Isolation §3.3), (4) owner stage subagent를 Task로 직접 spawn(1-레벨), (5) evidence 수집·노드 상태 갱신(AutopilotStore 경유), (6) 실패면 §4 분류 → retry/switch/escalate, (7) stop_conditions 평가. 루프 지속은 **Stop hook**이 조기 종료를 막아 보장(M1.4) — 이때 **M1.4 Stop hook의 노드-상태 분기(나)를 여기서 실구현**한다: Stop hook이 `autopilot.json`을 읽어 pending/ready/running 노드가 있으면 continuation(exit 2). 완료 artifact(completion/convergence.json)는 M3에서 생기므로 M2 단계의 continuation 신호는 *노드 상태*다. autopilot skill은 content 생성 안 함 — stage subagent에 위임.
-- **대상 계약/스키마**: autopilot §2.2(kind→owner)·§3.2(루프)·§3.4(호스팅=main role). `skills/autopilot/SKILL.md`(신규).
+- **동작(control-flow)**: main agent가 `autopilot` skill을 따라 ReAct 루프 구동(D3 — 전용 subagent 아님). `LOOP`: (1) `autopilot.json` re-read(컨텍스트 누적 최소화), (2) ready 노드 선택(pending ∧ depends_on passed), (3) kind→owner 매핑 + 6-section packet 구성(Context Isolation §3.3), (4) owner stage subagent를 Task로 직접 spawn(1-레벨), (5) evidence 수집·노드 상태 갱신(AutopilotStore 경유), (6) 실패면 §4 분류 → retry/switch/escalate, (7) stop_conditions 평가. 루프 지속은 **Stop hook**이 조기 종료를 막아 보장(M1.4) — 이때 **M1.4 Stop hook의 노드-상태 분기(나)를 여기서 실구현**한다: Stop hook이 `autopilot.json`을 읽어 *실행 가능한* 노드가 있으면 continuation(exit 2). **단 M1.4 (나) 예외 — approval pending·user-owned decision·external·safety stop_condition이면 exit 0으로 사용자/plan에 양보**(그래야 M2.3 plan 제시와 §6.2 질문이 실제로 표면화된다). 완료 artifact(completion/convergence.json)는 M3에서 생기므로 M2 단계의 continuation 신호는 *노드 상태*다. autopilot skill은 content 생성 안 함 — stage subagent에 위임.
+- **대상 계약/스키마**: autopilot §2.2(kind→owner)·§3.2(루프)·§3.4(호스팅=main role). `skills/autopilot/SKILL.md`(신규). **선결**: spawn 대상 owner 에이전트는 M1.5b가 생성한 `agents/{researcher,planner,implementer,reviewer,verifier}.md`.
 - **acceptance**: fixture graph에서 ready 노드 선택→spawn→상태 갱신→다음 노드 루프 동작. 내부 checkpoint만으로 final answer 안 나감. autopilot skill이 content 직접 생성 안 함(위임).
 - **참고**: 주류 일치 — Sisyphus primary orchestrator(`oh-my-openagent.md:130`), OMC Ralph + persistent Stop(`oh-my-claudecode.md:25,160-166`), HANNES Autopilot Loop(`hannes.md` §1). 결정 격리 필요 시 (b) 추출은 autopilot §3.5.
 
@@ -201,13 +212,14 @@ inputs:
 M0.1 → M0.2 ─────────────────┘ → M0.3 → M0.4   (스키마·fixture·게이트가 먼저; 코드 없이 검증 가능)
   └─ M0.4(게이트) 가 M1.4 Stop hook의 호출 대상
                                       ┌─[§8-6 turn 경계]
-M1.1 → M1.2 → {M1.3, M1.4 ───────────┘, M1.5} → M1.6   (plugin 골격 → hook glue → 동작 → inventory)
+M1.1 → M1.2 → {M1.3, M1.4 ───────────┘, M1.5, M1.5b} → M1.6   (plugin 골격 → hook glue → 동작 → skill·agent 골격 → inventory)
        ┌─[§8-2 락]   ┌─[§8-6 turn 경계]   ┌─[§8-1 승인 채널]      ┌─[§8-3 재진입 경계]
 M2.1 ──┘ → M2.2 ─────┘ → {M2.3 ──────────┘, M2.4} → M2.5 ────────┘   (store → 드라이버 → gate·dispatch → continuation)
+  └─ M2.2 spawn 대상 = M1.5b agent skeleton (선결)
 ```
 
 - M0이 M1·M2의 토대(스키마·게이트). M1 Stop hook(M1.4)은 M0.4 게이트를 호출한다.
-- M2 orchestrator(M2.2)는 M1 plugin·skill·subagent 골격 위에서 돈다.
+- M2 orchestrator(M2.2)는 M1 plugin·skill(M1.5)·subagent(M1.5b) 골격 위에서 돈다.
 - **선결 게이트**: 그래프의 `[§8-N]` 엣지가 통과하지 않으면 해당 노드 착수 금지 — 이게 계획/실행 불일치를 막는 메커니즘. §8 본문이 처리 시점을 글로 적었다면, 위 그래프는 그것을 *엣지*로 고정한다. (단, §8-4·§8-5는 특정 노드의 선결이 아니라 *구현 중 교차검증* 항목 → 그래프 밖, §8 하단 별도 분류.)
 - 설계서 §15 "다음 구현 후보" 6개 = M0.2~M0.4 + M1.1~M1.5의 첫 슬라이스에 대응.
 
