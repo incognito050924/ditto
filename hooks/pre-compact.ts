@@ -1,5 +1,4 @@
 import { executeHook } from '../src/hooks/io';
-import { noOpHandler } from '../src/hooks/runtime';
+import { preCompactHandler } from '../src/hooks/pre-compact';
 
-// PreCompact runtime (handoff projection) is post-v0 (M4); registered no-op stub.
-await executeHook(noOpHandler);
+await executeHook(preCompactHandler);
