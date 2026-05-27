@@ -1,7 +1,7 @@
 ---
 title: "DITTO v0 구현 계획 (M0–M2)"
 kind: plan
-last_updated: 2026-05-26 KST
+last_updated: 2026-05-27 KST
 status: draft
 parent: reports/design/ditto-claude-code-harness-design.md
 scope: "v0 = Milestone 0~2. build unit별 런타임 동작(control-flow) · 구현 대상 계약/스키마 · acceptance · 참고자료. post-v0(M3–M6)는 §5 개요만."
@@ -38,7 +38,7 @@ inputs:
 | D1 | **스택 = Bun + TypeScript + Zod + Biome.** 스키마는 `src/schemas/*.ts`(Zod), JSON export는 `zod-to-json-schema`(`scripts/export-schemas.ts`), 테스트는 `bun test`, lint는 biome. | `package.json` 실측. 설계서 §11 원칙 11(TS/JS 통일). 연구 gap #4(러너 미정) 해소. |
 | D2 | **3층 분리**(설계서 §11 원칙 10): **schema**(Zod = 바 정의) / **glue**(얇은 결정론 코드 = 라우팅·IO·검증) / **judgment**(skill·agent 프롬프트 = 맥락 판단). 판단을 hook 키워드·임계치로 굳히지 않는다. | HANNES (B)형 누출 반면교사(`hannes.md` §5). |
 | D3 | **orchestrator = main agent가 `orchestrate` skill 실행(결정+spawn 인라인) + Stop hook 루프 + 1-레벨 fan-out.** subagent는 subagent를 spawn 못 하므로 spawn 루프는 main에만 살 수 있다 → main이 직접 결정하고 stage subagent를 Task로 spawn, Stop hook이 조기 종료를 막아 루프 유지. **주류 일치**: OMOA Sisyphus=primary, OMC Ralph+persistent Stop, OMX `$ralph`/`$autopilot` 모두 orchestrator=main+Stop hook. 결정 로직을 별도 결정자 subagent로 떼는 분리(HANNES harness 패턴)는 **v0 후 결정 context 오염 증거 시 `context: fork`로 추출하는 future refinement**(one-shot §3.5) — v0엔 과잉. | claude-code-guide(중첩 spawn 불가) + 하네스 4종 조사(주류=orchestrator on main). |
-| D4 | **hook fail-open = 기본.** exit 0 = 이의 없음(stdout JSON 파싱), exit 2 = block(stderr=Claude 피드백), 기타 = 비블로킹 오류. hook 시작에 kill-switch(`DITTO_SKIP_HOOKS`) 확인, try/catch로 오류는 로그만. | claude-code-guide(exit code 규약) + OMC fail-open(`oh-my-claudecode.md:55,144-146,213`). |
+| D4 | **hook fail-open = 기본 — 단 *인프라 오류*에만.** exit 0 = 이의 없음(stdout JSON 파싱), exit 2 = block(stderr=Claude 피드백), 기타 = 비블로킹 오류. hook 시작에 kill-switch(`DITTO_SKIP_HOOKS`) 확인, try/catch로 오류는 로그만. **두 층위 구분(§8-4)**: hook 자체의 크래시/예외만 fail-open(exit 0)이고, 게이트가 정상 실행돼 미충족을 *판정*하면 exit 2(fail-closed). 정책 미정의 게이트(§8-4 safe-default 등)도 fail-closed가 기본 — fail-open은 "코드가 죽었을 때"지 "게이트가 막을 때"가 아니다. | claude-code-guide(exit code 규약) + OMC fail-open(`oh-my-claudecode.md:55,144-146,213`). |
 | D5 | **결정론 1차 / LLM 2차.** 게이트(완료·수렴·모호성)는 정규식·상수·산술 검사를 1차로 통과시키고 LLM 자기보고는 2차로 제한. | ouroboros `deterministic_floor`(`ouroboros.md:27-34`), LLM 비용 경고(`ouroboros.md:141`). |
 | D6 | **버전 가용성 → doctor.** 일부 hook 이벤트·기능은 최신 Claude Code에만 존재(예: hook `if` 필드 v2.1.85+, fork subagent v2.1.117+). doctor가 런타임에 이벤트 가용성·`claude plugin validate`를 확인하고 미지원이면 graceful degrade. | claude-code-guide(버전 표). |
 | D7 | **hook 실행체 = Node `.mjs` + plugin-root 경유.** Bash hook 회피(cross-platform). 개발 중엔 TS를 bun으로 실행, 배포 패키지는 `.mjs` 번들 + `$CLAUDE_PROJECT_DIR`/`CLAUDE_PLUGIN_ROOT` 기준 경로. | OMC(`oh-my-claudecode.md:44,136-142`) + claude-code-guide. |
@@ -48,7 +48,7 @@ inputs:
 
 ## 2. Milestone 0 — 계약·스키마·fixture
 
-목표: 코드 한 줄 없이도 게이트가 fixture를 판정 가능하게 한다. 계약을 "글"이 아니라 *검증 가능한 데이터*로.
+목표: **플러그인 런타임(hook·skill·agent) 표면 없이도** 게이트가 fixture를 판정 가능하게 한다 — 게이트는 순수 함수(M0.4)로 짓되 플러그인 표면에 묶이지 않는다(그 표면은 M1에서 게이트를 *호출*만 한다). 계약을 "글"이 아니라 *검증 가능한 데이터*로.
 
 ### M0.1 — 기존 스키마 매핑 확정
 
@@ -73,7 +73,7 @@ inputs:
 
 ### M0.4 — 결정론 게이트 + fixture 판정 (verifier가 판정)
 
-- **동작(control-flow)**: 게이트 함수들을 순수 TS로 구현 — `deterministicFloor(ledger)`(열린 필수 섹션·CONFLICTING·assumption 비율 산술 → ambiguity 하한), `acceptanceTestable(ac)`(VAGUE_TERMS 상수 + observable 정규식), `completionGate(completion)`(final_verdict=pass ⇒ 모든 AC pass), `convergenceGate(convergence)`(두 게이트 교집합 + admissibility). 각 게이트는 fixture를 입력받아 PASS/FAIL + 사유 반환. LLM 호출 없음(D5).
+- **동작(control-flow)**: 게이트 함수들을 순수 TS로 구현 — `deterministicFloor(ledger)`(열린 필수 섹션·CONFLICTING·assumption 비율 산술 → ambiguity 하한), `acceptanceTestable(ac)`(VAGUE_TERMS 상수 + observable 정규식), `completionGate(completion)`(final_verdict=pass ⇒ 모든 AC pass), `convergenceGate(convergence)`(두 게이트 교집합 + admissibility), `highRiskAssumption(assumption)`(non-local ∨ irreversible ∨ unaudited 중 하나라도 참이면 high-risk → M2.3 approval gate 자동 트리거 신호 반환; 셋 다 거짓이면 safe). 각 게이트는 fixture를 입력받아 PASS/FAIL + 사유 반환. LLM 호출 없음(D5).
 - **대상 계약/스키마**: §6.8 Completion, §6.9 Convergence, deep-interview §4.2 게이트.
 - **acceptance**: M0.3 fixture에 게이트 적용 → 기대 판정과 일치(`bun test`). "verifier가 fixture를 판정"(설계서 §12 M0 완료기준) = 이 게이트 테스트가 그린.
 - **참고**: ouroboros `deterministic_floor`·등급 게이트·검증가능성 기계 판정(`ouroboros.md:27-34,72-81,116`) — 정규식·상수 거의 그대로 차용. high-risk assumption 차단(`ouroboros.md:78`).
@@ -93,7 +93,7 @@ inputs:
 
 ### M1.2 — hooks.json manifest + fail-open glue
 
-- **동작**: `hooks/hooks.json`에 UserPromptSubmit·Stop·PreCompact·PostToolUse 등록(matcher). 각 hook은 `.mjs`로 plugin-root 경유 실행(D7). 공통 wrapper: kill-switch 확인 → try/catch → 오류 시 로그만 + exit 0(D4).
+- **동작**: `hooks/hooks.json`에 UserPromptSubmit·Stop·PreCompact·PostToolUse 등록(matcher). **등록 ≠ 실동작**: v0에서 *실동작*은 UserPromptSubmit(M1.3)·Stop(M1.4) 둘뿐이고, PreCompact·PostToolUse는 **manifest 등록 + no-op stub**만(exit 0 즉시 반환) — 실로직은 post-v0(PostToolUse=M3 evidence 수집, PreCompact=M4 handoff; D8). stub을 v0에 두는 이유는 manifest 표면을 고정해 M3/M4가 등록 변경 없이 본문만 채우게 하기 위함. 각 hook은 `.mjs`로 plugin-root 경유 실행(D7). 공통 wrapper: kill-switch 확인 → try/catch → 오류 시 로그만 + exit 0(D4).
 - **대상 계약/스키마**: 설계서 §7.2 hook 표(v0 표면 4개).
 - **acceptance**: hook 오류 주입 시 세션 안 깨짐(fail-open) 테스트. hook이 `$CLAUDE_PROJECT_DIR`로 `.ditto/` 접근.
 - **참고**: claude-code-guide(hooks.json·exit code) + OMC fail-open·Node hook(`oh-my-claudecode.md:55,136-146`).
@@ -148,7 +148,7 @@ inputs:
 
 ### M2.3 — plan approval gate
 
-- **동작(control-flow)**: 큰 mutation(migration·외부·보안·대량 파일) 노드 진입 전 approval_gate 확인 — `pending`이면 draft work item + plan artifact만 남기고 mutation 중단, 사용자에게 plan 제시. `approved`/`not_required` 후엔 checkpoint마다 재승인 안 함. high-risk assumption(M0.4)이 gate를 자동 트리거.
+- **동작(control-flow)**: 큰 mutation 노드 진입 전 approval_gate 확인 — "큰"의 판정은 `highRiskAssumption`(M0.4)의 3축으로 닫는다: **non-local**(repo-wide·외부 호출), **irreversible**(migration·삭제·배포), **unaudited**(보안 경계·미검증 가정) 중 하나라도 참이면 gate 자동 트리거. `pending`이면 draft work item + plan artifact만 남기고 mutation 중단, 사용자에게 plan 제시. `approved`/`not_required` 후엔 checkpoint마다 재승인 안 함.
 - **대상 계약/스키마**: §5.4, one-shot 상세 §5.
 - **acceptance**: pending gate에서 mutation 노드 미실행. 승인 후 무중단 진행.
 - **참고**: superpowers brainstorming 승인 게이트(`superpowers.md:23,53`), GSD plan-checker read-only 검증(`get-shit-done.md:46,83,139`).
@@ -190,20 +190,26 @@ inputs:
 
 ## 7. 빌드 순서·의존
 
+`[§8-N]`는 그 노드 진입 전 닫아야 하는 선결 결정(§8의 미해결 항목을 빌드 엣지로 승격).
+
 ```text
-M0.1 → M0.2 → M0.3 → M0.4          (스키마·fixture·게이트가 먼저; 코드 없이 검증 가능)
+                              ┌─[§8-2 락 전략]
+M0.1 → M0.2 ─────────────────┘ → M0.3 → M0.4   (스키마·fixture·게이트가 먼저; 코드 없이 검증 가능)
   └─ M0.4(게이트) 가 M1.4 Stop hook의 호출 대상
-M1.1 → M1.2 → {M1.3, M1.4, M1.5} → M1.6   (plugin 골격 → hook glue → 동작 → inventory)
-M2.1 → M2.2 → {M2.3, M2.4} → M2.5         (store → 드라이버 → gate·dispatch → continuation)
+                                      ┌─[§8-6 turn 경계]
+M1.1 → M1.2 → {M1.3, M1.4 ───────────┘, M1.5} → M1.6   (plugin 골격 → hook glue → 동작 → inventory)
+       ┌─[§8-2 락]   ┌─[§8-6 turn 경계]   ┌─[§8-1 승인 채널]      ┌─[§8-3 재진입 경계]
+M2.1 ──┘ → M2.2 ─────┘ → {M2.3 ──────────┘, M2.4} → M2.5 ────────┘   (store → 드라이버 → gate·dispatch → continuation)
 ```
 
 - M0이 M1·M2의 토대(스키마·게이트). M1 Stop hook(M1.4)은 M0.4 게이트를 호출한다.
 - M2 orchestrator(M2.2)는 M1 plugin·skill·subagent 골격 위에서 돈다.
+- **선결 게이트**: 그래프의 `[§8-N]` 엣지가 통과하지 않으면 해당 노드 착수 금지 — 이게 계획/실행 불일치를 막는 메커니즘. §8 본문이 처리 시점을 글로 적었다면, 위 그래프는 그것을 *엣지*로 고정한다. (단, §8-4·§8-5는 특정 노드의 선결이 아니라 *구현 중 교차검증* 항목 → 그래프 밖, §8 하단 별도 분류.)
 - 설계서 §15 "다음 구현 후보" 6개 = M0.2~M0.4 + M1.1~M1.5의 첫 슬라이스에 대응.
 
 ## 8. 미해결 / 추가 조사 필요
 
-연구가 다 못 닫은 지점(구현 착수 전 처리):
+연구가 다 못 닫은 지점. 두 부류로 나뉜다 — **(A) 노드 선결**(특정 노드 진입 전 닫아야 함 → §7 빌드 그래프에 `[§8-N]` 엣지로 승격: 항목 1·2·3·6) / **(B) 구현 중 교차검증**(특정 노드의 선결이 아니라 구현하며 검증·정책화: 항목 4·5).
 
 1. **plan approval gate의 사용자 승인 채널** — hook/skill이 사용자 입력을 블로킹 대기하는 정확한 메커니즘(PreToolUse 권한 프롬프트 활용 여부). M2.3 착수 전 Claude Code 확인.
 2. **상태 파일 동시성/락** — `orchestration.json`·`interview-state.json`의 단일 writer 강제·crash recovery. M2.1·M0.2에서 락 전략 결정(GSD 단일 writer 언급은 디테일 없음).
