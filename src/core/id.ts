@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-export type IdPrefix = 'wi' | 'run' | 'rv';
+export type IdPrefix = 'wi' | 'run' | 'rv' | 'orch';
 
 const SUFFIX_LENGTH = 9;
 const SUFFIX_CHARSET = 'abcdefghijklmnopqrstuvwxyz0123456789';

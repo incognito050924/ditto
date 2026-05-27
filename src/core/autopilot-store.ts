@@ -1,0 +1,88 @@
+import { join } from 'node:path';
+import { type Autopilot, type AutopilotNode, autopilot } from '~/schemas/autopilot';
+import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
+
+/**
+ * AutopilotStore (M2.1) — the ONLY path that mutates the autopilot graph.
+ * Callers never write `autopilot.json` directly; they go through `write` /
+ * `updateNode` so every mutation is schema-validated and atomic. Driver
+ * decisions are appended to an append-only `autopilot-decisions.jsonl`.
+ */
+export interface AutopilotDecision {
+  ts: string;
+  node_id: string;
+  failure_class: 'fixable' | 'wrong_approach' | 'blocked_external' | 'user_decision_needed';
+  decision: 'retry' | 'switch_approach' | 'escalate' | 'continue';
+  reason: string;
+  attempts: { fix: number; switch: number };
+}
+
+export class AutopilotStore {
+  constructor(public readonly repoRoot: string) {}
+
+  private dir(workItemId: string): string {
+    return join(this.repoRoot, '.ditto', 'work-items', workItemId);
+  }
+
+  private graphPath(workItemId: string): string {
+    return join(this.dir(workItemId), 'autopilot.json');
+  }
+
+  private decisionsPath(workItemId: string): string {
+    return join(this.dir(workItemId), 'autopilot-decisions.jsonl');
+  }
+
+  async exists(workItemId: string): Promise<boolean> {
+    return Bun.file(this.graphPath(workItemId)).exists();
+  }
+
+  async get(workItemId: string): Promise<Autopilot> {
+    return readJson(this.graphPath(workItemId), autopilot);
+  }
+
+  /** Initial create / full replace (used by bootstrap). Validated against the schema. */
+  async write(workItemId: string, graph: Autopilot): Promise<Autopilot> {
+    await ensureDir(this.dir(workItemId));
+    return writeJson(this.graphPath(workItemId), autopilot, graph);
+  }
+
+  /** Mutate exactly one node by id. The node id cannot change. */
+  async updateNode(
+    workItemId: string,
+    nodeId: string,
+    mutator: (node: AutopilotNode) => AutopilotNode,
+  ): Promise<Autopilot> {
+    const graph = await this.get(workItemId);
+    let found = false;
+    const nodes = graph.nodes.map((node) => {
+      if (node.id !== nodeId) return node;
+      found = true;
+      const next = mutator(node);
+      if (next.id !== node.id) {
+        throw new Error(`updateNode mutator changed node id from ${node.id} to ${next.id}`);
+      }
+      return next;
+    });
+    if (!found) throw new Error(`node ${nodeId} not found in autopilot graph for ${workItemId}`);
+    return writeJson(this.graphPath(workItemId), autopilot, { ...graph, nodes });
+  }
+
+  async appendDecision(workItemId: string, decision: AutopilotDecision): Promise<void> {
+    await ensureDir(this.dir(workItemId));
+    const path = this.decisionsPath(workItemId);
+    const file = Bun.file(path);
+    const existing = (await file.exists()) ? await file.text() : '';
+    const prefix = existing.length === 0 || existing.endsWith('\n') ? existing : `${existing}\n`;
+    await atomicWriteText(path, `${prefix}${JSON.stringify(decision)}\n`);
+  }
+
+  async readDecisions(workItemId: string): Promise<AutopilotDecision[]> {
+    const file = Bun.file(this.decisionsPath(workItemId));
+    if (!(await file.exists())) return [];
+    const text = await file.text();
+    return text
+      .split('\n')
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line) as AutopilotDecision);
+  }
+}
