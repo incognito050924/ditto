@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_convok00",
+  "target_ref": "AC-set",
+  "round_cap": 3,
+  "rounds_run": 2,
+  "versions": [
+    { "version": 1, "score": 0.71, "evidence_refs": [] },
+    { "version": 2, "score": 0.88, "evidence_refs": [] }
+  ],
+  "selected_version": 2,
+  "decision_ledger": [
+    {
+      "id": "OBJ-1",
+      "round": 1,
+      "objection": "AC-2 empty-input boundary has a counterexample",
+      "kind": "finding",
+      "criterion_id": "AC-2",
+      "severity": "high",
+      "admissible": true,
+      "status": "acted",
+      "confidence": "high",
+      "backed_by": [
+        { "kind": "command", "command": "bun test -- empty-input", "summary": "1 failed" }
+      ],
+      "reason": "criterion-linked, novel, major -> admissible; triggered next-round edit",
+      "supersedes": null
+    },
+    {
+      "id": "OBJ-2",
+      "round": 2,
+      "objection": "variable name could be nicer",
+      "kind": "taste",
+      "criterion_id": null,
+      "severity": "low",
+      "admissible": false,
+      "status": "dismissed",
+      "confidence": "low",
+      "backed_by": [],
+      "reason": "no criterion (taste); surfaced but does not trigger action",
+      "supersedes": null
+    }
+  ],
+  "open_admissible_count": 0,
+  "gate": {
+    "completion_gate": "pass",
+    "convergence_gate": "no_open_admissible",
+    "converged": true
+  },
+  "exit": {
+    "reason": "converged",
+    "verdict_delegated_to_completion": true,
+    "next_handoff_path": null
+  }
+}

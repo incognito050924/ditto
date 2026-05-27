@@ -1,0 +1,705 @@
+{
+  "$ref": "#/definitions/dialectic",
+  "definitions": {
+    "dialectic": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "review_id": {
+          "type": "string",
+          "pattern": "^rv_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a reviewer output"
+        },
+        "input": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "create",
+                "review",
+                "decision",
+                "proposal",
+                "document",
+                "final-answer"
+              ],
+              "description": "What the three roles work on and produce"
+            },
+            "target_artifact": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Path or inline brief under deliberation"
+            },
+            "question": {
+              "type": "string",
+              "minLength": 1,
+              "description": "What must be agreed on"
+            },
+            "intent_refs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "acceptance_refs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "evidence_refs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "command",
+                      "file",
+                      "artifact",
+                      "url",
+                      "note"
+                    ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "description": "Lowercase hex sha256 hash"
+                  },
+                  "lines": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "end": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "description": "Pointer to evidence stored outside the manifest itself"
+              },
+              "default": []
+            },
+            "constraints": {
+              "type": "object",
+              "properties": {
+                "scope_guard": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "non_goals": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "review_budget": {
+                  "type": "string",
+                  "enum": [
+                    "small",
+                    "standard",
+                    "thorough"
+                  ],
+                  "default": "standard"
+                },
+                "max_rounds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "default": 1
+                }
+              },
+              "additionalProperties": false,
+              "default": {}
+            },
+            "model_policy": {
+              "type": "object",
+              "properties": {
+                "producer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "default": "current-host"
+                },
+                "opponent_preferred": {
+                  "type": "string",
+                  "minLength": 1,
+                  "default": "codex"
+                },
+                "opponent_fallback": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "synthesizer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "default": "claude-opus"
+                }
+              },
+              "additionalProperties": false,
+              "default": {}
+            }
+          },
+          "required": [
+            "mode",
+            "target_artifact",
+            "question"
+          ],
+          "additionalProperties": false,
+          "description": "Dialectic input (§5.2)"
+        },
+        "producer": {
+          "type": "object",
+          "properties": {
+            "position": {
+              "type": "string",
+              "minLength": 1
+            },
+            "proposal": {
+              "type": "string",
+              "minLength": 1
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "command",
+                      "file",
+                      "artifact",
+                      "url",
+                      "note"
+                    ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "description": "Lowercase hex sha256 hash"
+                  },
+                  "lines": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "end": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "description": "Pointer to evidence stored outside the manifest itself"
+              },
+              "default": []
+            },
+            "assumptions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "known_limits": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "position",
+            "proposal"
+          ],
+          "additionalProperties": false,
+          "description": "Producer output: best argument for the draft (§5.3)"
+        },
+        "opponent": {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "codex",
+                    "claude-code",
+                    "opencode",
+                    "openagent",
+                    "other"
+                  ],
+                  "description": "Provider host that executes the run"
+                },
+                "model": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "command": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "timestamp": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+                },
+                "fallback_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "codex",
+                        "claude-code",
+                        "opencode",
+                        "openagent",
+                        "other"
+                      ],
+                      "description": "Provider host that executes the run"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Provider host that executes the run",
+                  "default": null
+                },
+                "fallback_reason": {
+                  "type": "string",
+                  "enum": [
+                    "auth",
+                    "network",
+                    "cost",
+                    "runtime",
+                    "none"
+                  ],
+                  "description": "Why the opponent fell back from the preferred model",
+                  "default": "none"
+                }
+              },
+              "required": [
+                "provider",
+                "model",
+                "command",
+                "timestamp"
+              ],
+              "additionalProperties": false
+            },
+            "objections": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "severity": {
+                    "type": "string",
+                    "enum": [
+                      "info",
+                      "low",
+                      "medium",
+                      "high",
+                      "critical"
+                    ],
+                    "description": "Finding severity"
+                  },
+                  "claim": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "command",
+                            "file",
+                            "artifact",
+                            "url",
+                            "note"
+                          ]
+                        },
+                        "path": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                        },
+                        "url": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "command": {
+                          "type": "string"
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$",
+                          "description": "Lowercase hex sha256 hash"
+                        },
+                        "lines": {
+                          "type": "object",
+                          "properties": {
+                            "start": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            },
+                            "end": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "summary": {
+                          "type": "string",
+                          "maxLength": 2000
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Pointer to evidence stored outside the manifest itself"
+                    },
+                    "default": []
+                  },
+                  "maps_to": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "AC, file:line, intent, or doc the objection links to"
+                  },
+                  "failure_mode": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "required_fix": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "severity",
+                  "claim",
+                  "maps_to",
+                  "failure_mode",
+                  "required_fix"
+                ],
+                "additionalProperties": false,
+                "description": "One opponent objection, linked to an oracle (§5.3, §6)"
+              },
+              "default": []
+            },
+            "missing_alternatives": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "scope_creep_risks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "verification_gaps": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "run"
+          ],
+          "additionalProperties": false,
+          "description": "Opponent output with run provenance (§5.3)"
+        },
+        "synthesizer": {
+          "type": "object",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "enum": [
+                "accept",
+                "revise",
+                "reject",
+                "blocked"
+              ],
+              "description": "Synthesizer verdict on the deliberation"
+            },
+            "synthesis": {
+              "type": "string",
+              "minLength": 1
+            },
+            "accepted_objections": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "rejected_objections": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "objection": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Why not accepted; as much grounding as a raise"
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "command",
+                            "file",
+                            "artifact",
+                            "url",
+                            "note"
+                          ]
+                        },
+                        "path": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                        },
+                        "url": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "command": {
+                          "type": "string"
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$",
+                          "description": "Lowercase hex sha256 hash"
+                        },
+                        "lines": {
+                          "type": "object",
+                          "properties": {
+                            "start": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            },
+                            "end": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "summary": {
+                          "type": "string",
+                          "maxLength": 2000
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Pointer to evidence stored outside the manifest itself"
+                    },
+                    "default": []
+                  }
+                },
+                "required": [
+                  "objection",
+                  "reason"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            },
+            "required_edits": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "remaining_open_questions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "evidence_refs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "command",
+                      "file",
+                      "artifact",
+                      "url",
+                      "note"
+                    ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "description": "Lowercase hex sha256 hash"
+                  },
+                  "lines": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "end": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "description": "Pointer to evidence stored outside the manifest itself"
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "verdict",
+            "synthesis"
+          ],
+          "additionalProperties": false,
+          "description": "Synthesizer output: agreed final position (§5.3)"
+        }
+      },
+      "required": [
+        "schema_version",
+        "review_id",
+        "input",
+        "producer",
+        "opponent",
+        "synthesizer"
+      ],
+      "additionalProperties": false,
+      "description": "Full three-role dialectic deliberation artifact (§6.6)"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

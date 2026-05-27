@@ -1,0 +1,51 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_intready",
+  "status": "converged",
+  "started_at": "2026-05-26T00:00:00.000Z",
+  "updated_at": "2026-05-26T01:00:00.000Z",
+  "dimensions": [
+    {
+      "id": "acceptance_testability",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.05,
+      "resolved_by": ["Q-1"],
+      "notes": ""
+    },
+    {
+      "id": "scope_boundary",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": ["Q-2"],
+      "notes": ""
+    }
+  ],
+  "readiness": {
+    "score": 0.9,
+    "threshold": 0.85,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "Q-1",
+      "asked_at": "2026-05-26T00:10:00.000Z",
+      "dimension": "acceptance_testability",
+      "question": "What exit code marks success?",
+      "why_matters": "Determines the verifier oracle",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [{ "source": "code", "result": "no convention found" }],
+      "answer": "exit 0 on pass",
+      "answer_kind": "user",
+      "ambiguity_delta": -0.4
+    }
+  ],
+  "assumptions": [],
+  "exit": {
+    "reason": "readiness_met",
+    "question_cap": 7,
+    "questions_asked": 2
+  }
+}

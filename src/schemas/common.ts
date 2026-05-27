@@ -26,6 +26,14 @@ export const reviewId = z
   )
   .describe('Stable identifier for a reviewer output');
 
+export const autopilotId = z
+  .string()
+  .regex(
+    /^orch_[a-z0-9]{8,}$/,
+    'autopilot id must start with orch_ followed by 8+ lowercase alphanumerics',
+  )
+  .describe('Stable identifier for an autopilot graph (orchestrator run)');
+
 export const profileName = z
   .enum(['read-only', 'workspace-write', 'networked', 'reviewer', 'isolated'])
   .describe('Execution profile that determines permission and network policy');

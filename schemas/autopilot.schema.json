@@ -1,0 +1,412 @@
+{
+  "$ref": "#/definitions/autopilot",
+  "definitions": {
+    "autopilot": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "autopilot_id": {
+          "type": "string",
+          "pattern": "^orch_[a-z0-9]{8,}$",
+          "description": "Stable identifier for an autopilot graph (orchestrator run)"
+        },
+        "work_item_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a work item"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "autopilot"
+          ],
+          "description": "Driver mode; only autopilot in v0",
+          "default": "autopilot"
+        },
+        "root_goal": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Whole requested goal; never split, only nodes are"
+        },
+        "completion_boundary": {
+          "type": "string",
+          "enum": [
+            "entire_work_item"
+          ],
+          "description": "Scope the autopilot must complete; never narrowed mid-run",
+          "default": "entire_work_item"
+        },
+        "approval_gate": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "not_required",
+                "rejected"
+              ],
+              "description": "Plan approval gate state for mutating work"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "approved_spec",
+                    "issue",
+                    "prd",
+                    "small_reversible_policy"
+                  ],
+                  "description": "Where the approval (or its waiver) comes from"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Where the approval (or its waiver) comes from",
+              "default": null
+            },
+            "approved_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "RFC 3339 / ISO 8601 datetime with timezone offset",
+              "default": null
+            },
+            "approved_by": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "evidence_refs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "command",
+                      "file",
+                      "artifact",
+                      "url",
+                      "note"
+                    ]
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "description": "Lowercase hex sha256 hash"
+                  },
+                  "lines": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "end": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "description": "Pointer to evidence stored outside the manifest itself"
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "research",
+                  "design",
+                  "implement",
+                  "review",
+                  "verify",
+                  "fix",
+                  "e2e",
+                  "docs",
+                  "knowledge"
+                ],
+                "description": "Kind of work a node represents"
+              },
+              "owner": {
+                "type": "string",
+                "enum": [
+                  "researcher",
+                  "planner",
+                  "implementer",
+                  "reviewer",
+                  "verifier",
+                  "architect",
+                  "playwright-e2e",
+                  "knowledge-curator"
+                ],
+                "description": "Subagent role that owns the node"
+              },
+              "purpose": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "running",
+                  "passed",
+                  "failed",
+                  "blocked"
+                ],
+                "description": "Execution state of a node"
+              },
+              "depends_on": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "acceptance_refs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "evidence_refs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "command",
+                        "file",
+                        "artifact",
+                        "url",
+                        "note"
+                      ]
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "description": "Lowercase hex sha256 hash"
+                    },
+                    "lines": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "end": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Pointer to evidence stored outside the manifest itself"
+                },
+                "default": []
+              },
+              "attempts": {
+                "type": "object",
+                "properties": {
+                  "fix": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "switch": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "fix",
+                  "switch"
+                ],
+                "additionalProperties": false,
+                "default": {
+                  "fix": 0,
+                  "switch": 0
+                }
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "owner",
+              "purpose",
+              "status"
+            ],
+            "additionalProperties": false,
+            "description": "One node in the autopilot graph"
+          },
+          "default": []
+        },
+        "caps": {
+          "type": "object",
+          "properties": {
+            "fix_per_node": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "switch_per_node": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fix_per_node",
+            "switch_per_node"
+          ],
+          "additionalProperties": false
+        },
+        "continue_policy": {
+          "type": "object",
+          "properties": {
+            "continue_after_approval": {
+              "type": "boolean",
+              "default": true
+            },
+            "continue_after_checkpoint": {
+              "type": "boolean",
+              "default": true
+            },
+            "continue_after_fixable_failure": {
+              "type": "boolean",
+              "default": true
+            },
+            "ask_user_only_for_user_owned_decisions": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "stop_conditions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "all_acceptance_criteria_passed_or_explicitly_closed",
+              "blocked_by_user_owned_decision",
+              "blocked_by_external_system",
+              "safety_boundary_hit"
+            ],
+            "description": "Condition that yields control back to the user/plan"
+          },
+          "default": []
+        },
+        "user_interrupt_policy": {
+          "type": "string",
+          "enum": [
+            "ask_only_for_user_owned_decisions"
+          ],
+          "default": "ask_only_for_user_owned_decisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "autopilot_id",
+        "work_item_id",
+        "root_goal",
+        "approval_gate",
+        "caps",
+        "continue_policy"
+      ],
+      "additionalProperties": false,
+      "description": "Autopilot graph state; mutated only through AutopilotStore (§6.5)"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

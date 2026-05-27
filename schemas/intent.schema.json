@@ -1,0 +1,193 @@
+{
+  "$ref": "#/definitions/intent",
+  "definitions": {
+    "intent": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "work_item_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a work item"
+        },
+        "source_request": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Verbatim original user request"
+        },
+        "goal": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Verifiable goal in project terms"
+        },
+        "in_scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "out_of_scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "acceptance_criteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Stable id within the work item (e.g., ac-1)"
+              },
+              "statement": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Single observable behavior in user-facing terms"
+              },
+              "verdict": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "partial",
+                  "fail",
+                  "unverified"
+                ],
+                "description": "Acceptance verdict for a criterion or review",
+                "default": "unverified"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "command",
+                        "file",
+                        "artifact",
+                        "url",
+                        "note"
+                      ]
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "description": "Lowercase hex sha256 hash"
+                    },
+                    "lines": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "end": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Pointer to evidence stored outside the manifest itself"
+                },
+                "default": []
+              },
+              "evidence_required": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "test",
+                    "diff",
+                    "browser",
+                    "doc",
+                    "log"
+                  ],
+                  "description": "Kind of evidence required to verify an acceptance criterion"
+                },
+                "default": []
+              }
+            },
+            "required": [
+              "id",
+              "statement"
+            ],
+            "additionalProperties": false,
+            "description": "Acceptance criterion in the intent sidecar; reuses work-item criterion shape"
+          },
+          "minItems": 1
+        },
+        "unknowns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "follow_up_candidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Out-of-scope improvement ideas captured but not acted on (§6.1)"
+        },
+        "question_policy": {
+          "type": "string",
+          "enum": [
+            "ask_only_if_user_only_can_answer",
+            "ask_freely",
+            "never_ask"
+          ],
+          "default": "ask_only_if_user_only_can_answer",
+          "description": "How freely the agent may ask the user questions for this work item"
+        }
+      },
+      "required": [
+        "schema_version",
+        "work_item_id",
+        "source_request",
+        "goal",
+        "acceptance_criteria"
+      ],
+      "additionalProperties": false,
+      "description": "Sidecar that preserves original intent and guards against scope creep (§6.1)"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

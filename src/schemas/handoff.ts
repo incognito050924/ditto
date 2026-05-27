@@ -1,0 +1,43 @@
+import { z } from 'zod';
+import {
+  autopilotId,
+  evidenceRef,
+  isoDateTime,
+  relativePath,
+  schemaVersion,
+  workItemId,
+} from './common';
+
+export const handoff = z
+  .object({
+    schema_version: schemaVersion,
+    work_item_id: workItemId,
+    autopilot_id: autopilotId
+      .optional()
+      .describe('Same autopilot_id the next session resumes under (§6.10)'),
+    from_context: z
+      .string()
+      .min(1)
+      .describe('Where this handoff is written from: session/agent and its state'),
+    to_owner: z.string().min(1).optional().describe('Profile or handle expected to pick up'),
+    original_intent: z.string().min(1).describe('Original user intent'),
+    current_state: z.string().min(1).describe('Where things stand now'),
+    decisions_made: z.array(z.string()).default([]),
+    changed_files: z.array(relativePath).default([]),
+    evidence_refs: z
+      .array(evidenceRef)
+      .default([])
+      .describe('Inline summaries/hashes/commands, not raw artifacts'),
+    failed_or_unverified: z.array(z.string()).default([]),
+    open_threads: z.array(z.string()).default([]),
+    next_first_check: z.string().min(1).describe('What the next agent checks first'),
+    forbidden_scope_creep: z.array(z.string()).default([]),
+    artifact_available: z
+      .boolean()
+      .default(true)
+      .describe('False when raw artifacts are absent from this clone/session (§6.10)'),
+    created_at: isoDateTime,
+  })
+  .describe('Minimal context for resuming across session/context/agent boundaries (§6.10)');
+
+export type Handoff = z.infer<typeof handoff>;

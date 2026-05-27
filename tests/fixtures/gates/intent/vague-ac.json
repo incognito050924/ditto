@@ -1,0 +1,23 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_intvague",
+  "source_request": "Make the password feature better",
+  "goal": "Improve password handling",
+  "in_scope": [],
+  "out_of_scope": [],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "statement": "The password feature should be robust and user-friendly",
+      "evidence_required": []
+    },
+    {
+      "id": "AC-2",
+      "statement": "Improve performance properly",
+      "evidence_required": []
+    }
+  ],
+  "unknowns": ["what robust means"],
+  "follow_up_candidates": [],
+  "question_policy": "ask_only_if_user_only_can_answer"
+}

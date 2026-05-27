@@ -1,0 +1,374 @@
+{
+  "$ref": "#/definitions/convergence",
+  "definitions": {
+    "convergence": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "work_item_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a work item"
+        },
+        "target_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Node id, review id, or AC-set this refinement targets"
+        },
+        "round_cap": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "rounds_run": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "score": {
+                "type": "number"
+              },
+              "evidence_refs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "command",
+                        "file",
+                        "artifact",
+                        "url",
+                        "note"
+                      ]
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "description": "Lowercase hex sha256 hash"
+                    },
+                    "lines": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "end": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Pointer to evidence stored outside the manifest itself"
+                },
+                "default": []
+              }
+            },
+            "required": [
+              "version",
+              "score"
+            ],
+            "additionalProperties": false,
+            "description": "One scored version of the refined artifact"
+          },
+          "minItems": 1
+        },
+        "selected_version": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "decision_ledger": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "round": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "objection": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "finding",
+                  "hypothesis",
+                  "taste"
+                ],
+                "description": "What the item is; backing-less claims are hypothesis, not finding"
+              },
+              "criterion_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ],
+                "description": "Finding severity"
+              },
+              "admissible": {
+                "type": "boolean"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "acted",
+                  "deferred",
+                  "dismissed"
+                ],
+                "description": "What was done with the item; deferred/dismissed require a reason"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ],
+                "description": "Confidence in a claim; backing-less claims must be low"
+              },
+              "backed_by": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "command",
+                        "file",
+                        "artifact",
+                        "url",
+                        "note"
+                      ]
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "description": "Lowercase hex sha256 hash"
+                    },
+                    "lines": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "end": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Pointer to evidence stored outside the manifest itself"
+                },
+                "default": []
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Why acted/dismissed; required for symmetry (§3.2)"
+              },
+              "supersedes": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "id",
+              "round",
+              "objection",
+              "kind",
+              "severity",
+              "admissible",
+              "status",
+              "confidence",
+              "reason"
+            ],
+            "additionalProperties": false,
+            "description": "Append-only decision ledger entry with honesty labels (§4.1, §6.1)"
+          },
+          "default": []
+        },
+        "open_admissible_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gate": {
+          "type": "object",
+          "properties": {
+            "completion_gate": {
+              "type": "string",
+              "enum": [
+                "pass",
+                "partial",
+                "fail",
+                "unverified"
+              ],
+              "description": "Acceptance verdict for a criterion or review"
+            },
+            "convergence_gate": {
+              "type": "string",
+              "enum": [
+                "no_open_admissible",
+                "open_admissible"
+              ]
+            },
+            "converged": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "completion_gate",
+            "convergence_gate",
+            "converged"
+          ],
+          "additionalProperties": false
+        },
+        "exit": {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "enum": [
+                "converged",
+                "cap_reached",
+                "blocked"
+              ]
+            },
+            "verdict_delegated_to_completion": {
+              "type": "boolean",
+              "default": true
+            },
+            "next_handoff_path": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repo-relative path; absolute paths and .. traversal are rejected",
+              "default": null
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "work_item_id",
+        "target_ref",
+        "round_cap",
+        "rounds_run",
+        "versions",
+        "selected_version",
+        "open_admissible_count",
+        "gate",
+        "exit"
+      ],
+      "additionalProperties": false,
+      "description": "Convergence sidecar; records refinement closure, does not set verdict (§6.9)"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

@@ -3,18 +3,27 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ZodTypeAny } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
+import { autopilot } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
+import { convergence } from '~/schemas/convergence';
+import { dialectic } from '~/schemas/dialectic';
 import { commandLogEntry } from '~/schemas/evidence-log';
 import { glossary } from '~/schemas/glossary';
+import { handoff } from '~/schemas/handoff';
+import { intentContract } from '~/schemas/intent';
+import { interviewState } from '~/schemas/interview-state';
 import { languageLedger } from '~/schemas/language-ledger';
+import { questionGate } from '~/schemas/question-gate';
 import { reviewerOutput } from '~/schemas/reviewer-output';
 import { runManifest } from '~/schemas/run-manifest';
 import { workItem } from '~/schemas/work-item';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const outDir = resolve(here, '..', 'schemas');
-
-const exports: Array<{ name: string; schema: ZodTypeAny }> = [
+/**
+ * Authoritative export registry. Kept manual (one entry per exported JSON
+ * schema) but consumed by both the exporter below and the registration test
+ * so a schema missing here is caught instead of silently skipped.
+ */
+export const schemaExports: ReadonlyArray<{ name: string; schema: ZodTypeAny }> = [
   { name: 'work-item', schema: workItem },
   { name: 'run-manifest', schema: runManifest },
   { name: 'completion-contract', schema: completionContract },
@@ -22,17 +31,26 @@ const exports: Array<{ name: string; schema: ZodTypeAny }> = [
   { name: 'glossary', schema: glossary },
   { name: 'language-ledger', schema: languageLedger },
   { name: 'command-log-entry', schema: commandLogEntry },
+  { name: 'intent', schema: intentContract },
+  { name: 'question-gate', schema: questionGate },
+  { name: 'interview-state', schema: interviewState },
+  { name: 'autopilot', schema: autopilot },
+  { name: 'dialectic', schema: dialectic },
+  { name: 'convergence', schema: convergence },
+  { name: 'handoff', schema: handoff },
 ];
 
-await mkdir(outDir, { recursive: true });
+export async function exportSchemas(outDir: string): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  for (const { name, schema } of schemaExports) {
+    const json = zodToJsonSchema(schema, { name, $refStrategy: 'none', target: 'jsonSchema7' });
+    const path = join(outDir, `${name}.schema.json`);
+    await writeFile(path, `${JSON.stringify(json, null, 2)}\n`, 'utf8');
+    console.log(`wrote ${path}`);
+  }
+}
 
-for (const { name, schema } of exports) {
-  const json = zodToJsonSchema(schema, {
-    name,
-    $refStrategy: 'none',
-    target: 'jsonSchema7',
-  });
-  const path = join(outDir, `${name}.schema.json`);
-  await writeFile(path, `${JSON.stringify(json, null, 2)}\n`, 'utf8');
-  console.log(`wrote ${path}`);
+if (import.meta.main) {
+  const here = dirname(fileURLToPath(import.meta.url));
+  await exportSchemas(resolve(here, '..', 'schemas'));
 }

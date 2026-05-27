@@ -1,0 +1,18 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_crosschk",
+  "declared_by": "workspace-write",
+  "declared_at": "2026-05-26T02:30:00.000Z",
+  "summary": "Reports an extra ac-4 not in the work item (gate must FAIL)",
+  "changed_files": ["src/password.ts"],
+  "acceptance": [
+    { "criterion_id": "ac-1", "verdict": "pass", "evidence": [] },
+    { "criterion_id": "ac-2", "verdict": "pass", "evidence": [] },
+    { "criterion_id": "ac-3", "verdict": "pass", "evidence": [] },
+    { "criterion_id": "ac-4", "verdict": "pass", "evidence": [] }
+  ],
+  "verifications": [{ "command": "bun test", "exit_code": 0 }],
+  "unverified": [],
+  "remaining_risks": [],
+  "final_verdict": "pass"
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_intobserv",
+  "source_request": "Add a password strength endpoint",
+  "goal": "POST /password/check returns a strength score",
+  "in_scope": ["scoring endpoint"],
+  "out_of_scope": ["UI"],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "statement": "POST /password/check returns 200 with a numeric score for a valid body",
+      "evidence_required": ["test"]
+    },
+    {
+      "id": "AC-2",
+      "statement": "Empty password rejects with exit code 1 and an error message",
+      "evidence_required": ["test"]
+    }
+  ],
+  "unknowns": [],
+  "follow_up_candidates": [],
+  "question_policy": "ask_only_if_user_only_can_answer"
+}

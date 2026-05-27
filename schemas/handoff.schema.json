@@ -1,0 +1,173 @@
+{
+  "$ref": "#/definitions/handoff",
+  "definitions": {
+    "handoff": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "work_item_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a work item"
+        },
+        "autopilot_id": {
+          "type": "string",
+          "pattern": "^orch_[a-z0-9]{8,}$",
+          "description": "Same autopilot_id the next session resumes under (§6.10)"
+        },
+        "from_context": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where this handoff is written from: session/agent and its state"
+        },
+        "to_owner": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Profile or handle expected to pick up"
+        },
+        "original_intent": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Original user intent"
+        },
+        "current_state": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where things stand now"
+        },
+        "decisions_made": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "changed_files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+          },
+          "default": []
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "command",
+                  "file",
+                  "artifact",
+                  "url",
+                  "note"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "command": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "description": "Lowercase hex sha256 hash"
+              },
+              "lines": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              },
+              "summary": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false,
+            "description": "Pointer to evidence stored outside the manifest itself"
+          },
+          "default": [],
+          "description": "Inline summaries/hashes/commands, not raw artifacts"
+        },
+        "failed_or_unverified": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "open_threads": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "next_first_check": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the next agent checks first"
+        },
+        "forbidden_scope_creep": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "artifact_available": {
+          "type": "boolean",
+          "default": true,
+          "description": "False when raw artifacts are absent from this clone/session (§6.10)"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        }
+      },
+      "required": [
+        "schema_version",
+        "work_item_id",
+        "from_context",
+        "original_intent",
+        "current_state",
+        "next_first_check",
+        "created_at"
+      ],
+      "additionalProperties": false,
+      "description": "Minimal context for resuming across session/context/agent boundaries (§6.10)"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_intblock",
+  "status": "active",
+  "started_at": "2026-05-26T00:00:00.000Z",
+  "updated_at": "2026-05-26T00:30:00.000Z",
+  "dimensions": [
+    {
+      "id": "acceptance_testability",
+      "critical": true,
+      "state": "unknown",
+      "ambiguity": 0.8,
+      "resolved_by": [],
+      "notes": "no observable success condition yet"
+    },
+    {
+      "id": "scope_boundary",
+      "critical": false,
+      "state": "partial",
+      "ambiguity": 0.4,
+      "resolved_by": [],
+      "notes": ""
+    }
+  ],
+  "readiness": {
+    "score": 0.5,
+    "threshold": 0.85,
+    "critical_unresolved": ["acceptance_testability"],
+    "gate": "blocked"
+  },
+  "questions": [],
+  "assumptions": [
+    {
+      "statement": "assume latest-first sort by default",
+      "label": "hypothesis",
+      "confidence": "low",
+      "because_no_answer_to": "Q-5"
+    }
+  ],
+  "exit": {
+    "reason": "cap_reached",
+    "question_cap": 7,
+    "questions_asked": 7
+  }
+}

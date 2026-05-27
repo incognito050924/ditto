@@ -1,0 +1,15 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_crosschk",
+  "title": "Password strength endpoint",
+  "source_request": "Add a password strength endpoint",
+  "goal": "POST /password/check returns a strength score",
+  "acceptance_criteria": [
+    { "id": "ac-1", "statement": "Returns 200 with a numeric score" },
+    { "id": "ac-2", "statement": "Empty password rejects with error" },
+    { "id": "ac-3", "statement": "Score is between 0 and 100" }
+  ],
+  "status": "in_progress",
+  "created_at": "2026-05-26T00:00:00.000Z",
+  "updated_at": "2026-05-26T02:00:00.000Z"
+}

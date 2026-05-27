@@ -1,0 +1,14 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_complunv",
+  "declared_by": "workspace-write",
+  "declared_at": "2026-05-26T02:00:00.000Z",
+  "summary": "Implementation done but not verified",
+  "changed_files": ["src/password.ts"],
+  "acceptance": [{ "criterion_id": "ac-1", "verdict": "unverified", "evidence": [] }],
+  "verifications": [],
+  "unverified": [{ "item": "test suite", "reason": "could not run tests", "out_of_scope": false }],
+  "remaining_risks": [],
+  "next_handoff_path": ".ditto/work-items/wi_complunv/handoff.md",
+  "final_verdict": "unverified"
+}
