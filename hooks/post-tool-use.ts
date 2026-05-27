@@ -1,5 +1,4 @@
 import { executeHook } from '../src/hooks/io';
-import { noOpHandler } from '../src/hooks/runtime';
+import { postToolUseHandler } from '../src/hooks/post-tool-use';
 
-// PostToolUse runtime (evidence collection) is post-v0 (M3); registered no-op stub.
-await executeHook(noOpHandler);
+await executeHook(postToolUseHandler);
