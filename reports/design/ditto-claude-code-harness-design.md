@@ -821,11 +821,10 @@ agents/
   dialectic-opponent.md
   dialectic-synthesizer.md
 commands/
-  deep-interview.md
-  verify.md
-  dialectic.md
-  dialectic-review.md
-  handoff.md
+  # v0: 동명 command wrapper를 만들지 않는다 — 같은 이름이면 skill이 command를
+  #     shadow하므로(아래 Skill 원칙) wrapper가 죽는다. 명령 표면(/ditto:<name>)은
+  #     skill이 authoritative. 빈 디렉터리이며, skill로 표현 못 하는 별도 surface가
+  #     필요할 때만 *다른 이름*으로 command를 추가한다.
 ```
 
 post-v0 placeholders (Milestone 3~6). 이 중 무엇을 v0 skeleton에 빈 placeholder로 두고 무엇을 미생성으로 둘지는 §12 Scope Authority가 명시한 것만 따른다(예: E2E는 placeholder도 post-v0라 v0 skeleton에 두지 않는다):
@@ -841,8 +840,8 @@ agents/
   playwright-e2e.md
   knowledge-curator.md
 commands/
-  e2e.md
-  knowledge-update.md
+  # post-v0도 동일 정책: 동명 skill이 있으면 wrapper 미생성(skill이 shadow).
+  # e2e·knowledge-update는 skill로 노출하며, 별도 command 표면이 꼭 필요하면 다른 이름.
 .mcp.json          # MCP bridge는 post-v0 보조 integration
 bridge/
   mcp-server.cjs
@@ -894,7 +893,7 @@ Skill 작성 원칙:
 
 - SKILL 본문은 절차와 출력 계약을 포함한다.
 - 큰 설명을 항상 context에 넣지 않는다.
-- command wrapper는 skill 본문을 읽으라는 얇은 shim으로 둔다.
+- 동명 skill ↔ command는 **skill이 command를 shadow**한다(Claude Code 공식 동작) — 따라서 v0는 skill과 동명의 command wrapper를 **만들지 않는다**(죽은 shim·이중 정의 방지). 명령 표면(`/ditto:<name>`)은 skill이 authoritative. command는 skill로 표현 못 하는 별도 표면이 필요할 때만 *다른 이름*으로 둔다.
 - skill이 다른 skill을 무단으로 chain하지 않는다. 다만 autopilot 안에서는 `autopilot.json`에 내부 checkpoint로 기록하고 계속 진행한다.
 - unnamespaced UX(`/deep-interview` 등)를 원하면 plugin이 아니라 standalone `.claude/commands` 표면이 필요하다. 이는 post-v0 후보로만 기록하고 v0는 plugin namespace로 통일한다.
 - `/ditto:plan`은 v0 skill이지만 주로 autopilot이 내부 호출한다. §9의 노출 command 목록에 의도적으로 넣지 않으며(비노출), 필요 시 직접 호출만 가능하다.
@@ -1139,7 +1138,7 @@ v0 범위는 Milestone 0, Milestone 1, Milestone 2의 최소 skeleton까지다. 
 완료 기준:
 
 - Claude Code session에서 plugin이 로드된다(`claude --plugin-dir`).
-- `claude plugin validate`가 plugin manifest와 표면을 통과한다.
+- `claude plugin validate .`가 plugin manifest와 표면을 통과한다.
 - surface inventory가 plugin root(`skills/`, `commands/`, `agents/`, `hooks/hooks.json`, `.claude-plugin/plugin.json`)까지 스캔한다. 현재 어댑터는 repo `.claude/`와 home `~/.claude/`만 보므로 plugin root 스캔을 추가한다.
 - hook이 work item을 찾거나 생성한다.
 - Stop hook이 unverified completion을 감지한다.
