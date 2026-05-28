@@ -24,7 +24,8 @@ export interface BootstrapInput {
 
 export type BootstrapResult =
   | { status: 'created'; graph: Autopilot }
-  | { status: 'intent_not_ready'; reasons: string[] };
+  | { status: 'intent_not_ready'; reasons: string[] }
+  | { status: 'work_item_mismatch'; reasons: string[] };
 
 function approvalGate(input: BootstrapInput): Autopilot['approval_gate'] {
   const base = { approved_at: null, approved_by: null, evidence_refs: [] as never[] };
@@ -47,6 +48,18 @@ export async function bootstrapAutopilot(
   repoRoot: string,
   input: BootstrapInput,
 ): Promise<BootstrapResult> {
+  // Intent must belong to the same work item — otherwise the gate (intent AC
+  // testability) and the score (graph nodes carrying those AC) would split
+  // across two work items. Block before any state is written.
+  if (input.intent.work_item_id !== input.workItem.id) {
+    return {
+      status: 'work_item_mismatch',
+      reasons: [
+        `intent.work_item_id=${input.intent.work_item_id} does not match workItem.id=${input.workItem.id}`,
+      ],
+    };
+  }
+
   // Intent must be ready: at least one criterion, and none vague (§6.3 gate).
   const reasons: string[] = [];
   if (input.intent.acceptance_criteria.length === 0) {
@@ -62,7 +75,10 @@ export async function bootstrapAutopilot(
   const autopilotId = await generateId('orch', async () => false, {
     ...(input.now ? { now: input.now } : {}),
   });
-  const acceptanceIds = input.workItem.acceptance_criteria.map((c) => c.id);
+  // Build nodes from the *intent* AC (the readied set the gate validated), not
+  // the work item AC (which may still hold draft placeholders from earlier
+  // UserPromptSubmit). plan §4 M2.1b — gate ↔ score consistency.
+  const acceptanceIds = input.intent.acceptance_criteria.map((c) => c.id);
 
   const graph: Autopilot = {
     schema_version: '0.1.0',

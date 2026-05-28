@@ -68,6 +68,51 @@ describe('bootstrapAutopilot', () => {
     expect(result.status === 'created' && result.graph.approval_gate.status).toBe('approved');
   });
 
+  test('nodes carry intent.acceptance_criteria ids (not workItem placeholders)', async () => {
+    // plan §4 M2.1b — bootstrap reads AC from the ready *intent*, so that the
+    // testability gate (intent AC) and the graph nodes (acceptance_refs) share
+    // the same source. A draft work item may carry different placeholder AC.
+    const wi = await new WorkItemStore(repo).create({
+      title: 'pw',
+      source_request: 'add endpoint',
+      goal: 'POST /pw returns a score',
+      acceptance_criteria: [
+        { id: 'wi-only', statement: 'placeholder', verdict: 'unverified', evidence: [] },
+      ],
+    });
+    const intent = intentContract.parse({
+      schema_version: '0.1.0',
+      work_item_id: wi.id,
+      source_request: 'add endpoint',
+      goal: 'POST /pw returns a score',
+      acceptance_criteria: [
+        {
+          id: 'intent-1',
+          statement: 'POST /pw returns 200 with a numeric score',
+          evidence_required: ['test'],
+        },
+      ],
+      question_policy: 'ask_only_if_user_only_can_answer',
+    });
+    const result = await bootstrapAutopilot(repo, { workItem: wi, intent, risk: safeRisk });
+    if (result.status !== 'created') throw new Error(`expected created, got ${result.status}`);
+    for (const node of result.graph.nodes) {
+      expect(node.acceptance_refs).toEqual(['intent-1']);
+    }
+  });
+
+  test('intent.work_item_id ≠ workItem.id => work_item_mismatch, no graph created', async () => {
+    const { wi, intent } = await setup('POST /pw returns 200 with a numeric score');
+    const foreign = { ...intent, work_item_id: 'orch_foreign_0001' as typeof intent.work_item_id };
+    const result = await bootstrapAutopilot(repo, {
+      workItem: wi,
+      intent: foreign,
+      risk: safeRisk,
+    });
+    expect(result.status).toBe('work_item_mismatch');
+    expect(await new AutopilotStore(repo).exists(wi.id)).toBe(false);
+  });
+
   test('vague intent => intent_not_ready, no graph created', async () => {
     const { wi, intent } = await setup('make the password feature more robust and user-friendly');
     const result = await bootstrapAutopilot(repo, { workItem: wi, intent, risk: safeRisk });
