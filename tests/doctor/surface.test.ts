@@ -67,6 +67,23 @@ describe('doctor surface', () => {
     await mkdir(join(dir, '.claude', 'agents'), { recursive: true });
     await writeFile(join(dir, '.claude', 'agents', 'reviewer.md'), '# reviewer\n', 'utf8');
     await writeFile(join(dir, '.claude', 'agents', '.DS_Store'), 'noise\n', 'utf8');
+    // Seed a matching catalog — absent catalog now fails strictly (M1.6); this
+    // test asserts *discovery* (reviewer surfaced, .DS_Store filtered), not drift.
+    await mkdir(join(dir, '.ditto'), { recursive: true });
+    await writeFile(
+      join(dir, '.ditto', 'surfaces.json'),
+      JSON.stringify({
+        schema_version: '0.1.0',
+        surfaces: [
+          {
+            host: 'claude-code',
+            kind: 'agent',
+            id: 'reviewer',
+            path: '.claude/agents/reviewer.md',
+          },
+        ],
+      }),
+    );
     const proc = run(['doctor', 'surface', '--host', 'claude-code', '--output', 'json']);
     expect(proc.exitCode).toBe(0);
     const json = JSON.parse(proc.stdout.toString());

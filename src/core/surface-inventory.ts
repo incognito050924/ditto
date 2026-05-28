@@ -20,7 +20,12 @@ async function loadExpected(repoRoot: string): Promise<ExpectedSurface[]> {
     // silently (M1.6 false-green fix); surface it as an explicit error.
     throw new Error(`surface catalog is malformed JSON: ${path}`);
   }
-  if (raw === null) return []; // absent catalog: nothing declared to compare against
+  if (raw === null) {
+    // Absent catalog is a false-green trap (M1.6, plan §3): the inventory has
+    // nothing to compare actual surfaces against, which would silently pass on a
+    // catalog deletion. Fail loudly — symmetric with the present-but-empty case.
+    throw new Error(`surface catalog is missing: ${path}`);
+  }
   const parsed = surfaceCatalog.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`surface catalog failed schema validation: ${path}`);
