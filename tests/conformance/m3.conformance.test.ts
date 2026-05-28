@@ -1,0 +1,393 @@
+/**
+ * v0 구현 계획 적합성(conformance) 테스트 — Milestone 3 (Evidence·verifier 런타임).
+ *
+ * 권위 출처:
+ *  - reports/design/ditto-v0-implementation-plan.md §5 (M3 한 줄 요약)
+ *  - reports/design/ditto-claude-code-harness-design.md §12 Milestone 3
+ *  - feat(M3) 커밋 메시지(44d8f2c)의 sub-unit 분해(M3.1/M3.2/M3.3)
+ *
+ * 검증 원칙: 결정론 런타임만 단언 (LLM 판단부 — verifier 실행, admissibility 결정 —
+ * 는 skill/agent 본문이라 단위 검증 대상 아님; 입력으로 들어온 결과의 *결정론적
+ * 조립/재계산*만 본다). M0.4 게이트를 통과하는 산출을 produce 해야 한다.
+ */
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { readFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { CompletionStore, buildCompletion } from '~/core/completion-store';
+import { ConvergenceStore, buildConvergence } from '~/core/convergence-store';
+import { completionGate, convergenceGate } from '~/core/gates';
+import { SessionPointerStore } from '~/core/session-pointer';
+import { WorkItemStore } from '~/core/work-item-store';
+import { postToolUseHandler } from '~/hooks/post-tool-use';
+import type { DecisionLedgerEntry } from '~/schemas/convergence';
+import { commandLogEntry } from '~/schemas/evidence-log';
+import type { WorkItem } from '~/schemas/work-item';
+
+let tmp: string;
+let store: WorkItemStore;
+let wi: WorkItem;
+const SESSION = 'sess-m3';
+beforeEach(async () => {
+  tmp = await mkdtemp(join(tmpdir(), 'ditto-conf-m3-'));
+  store = new WorkItemStore(tmp);
+  wi = await store.create({
+    title: 'pw endpoint',
+    source_request: 'add endpoint',
+    goal: 'endpoint returns score',
+    acceptance_criteria: [
+      { id: 'AC-1', statement: 'returns 200', verdict: 'unverified', evidence: [] },
+      { id: 'AC-2', statement: 'rejects empty', verdict: 'unverified', evidence: [] },
+    ],
+  });
+  await new SessionPointerStore(tmp).set(SESSION, wi.id);
+});
+afterEach(async () => {
+  await rm(tmp, { recursive: true, force: true });
+});
+
+const commandsPath = () => join(tmp, '.ditto', 'work-items', wi.id, 'evidence', 'commands.jsonl');
+
+const readLog = async () => {
+  const text = await readFile(commandsPath(), 'utf8');
+  return text
+    .split('\n')
+    .filter((l) => l.length > 0)
+    .map((l) => JSON.parse(l));
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+describe('M3.1 — PostToolUse evidence (테스트/빌드/브라우저 명령 결과를 evidence 로 남김)', () => {
+  const run = (raw: Record<string, unknown>) =>
+    postToolUseHandler({ raw: { session_id: SESSION, ...raw }, repoRoot: tmp, env: {} });
+
+  test('Bash 실행 → commands.jsonl 에 commandLogEntry 한 줄 append', async () => {
+    const out = await run({
+      tool_name: 'Bash',
+      tool_input: { command: 'bun test' },
+      tool_response: { exit_code: 0 },
+    });
+    expect(out.exitCode).toBe(0);
+    const log = await readLog();
+    expect(log.length).toBe(1);
+    // Schema 검증: 저장된 라인은 commandLogEntry 로 parse 통과해야 한다.
+    expect(commandLogEntry.safeParse(log[0]).success).toBe(true);
+    expect(log[0].command).toBe('bun test');
+    expect(log[0].exit_code).toBe(0);
+    expect(log[0].work_item_id).toBe(wi.id);
+  });
+
+  test('best-effort exit code: exit_code / exitCode / is_error 모든 형태 처리', async () => {
+    await run({ tool_name: 'Bash', tool_input: { command: 'a' }, tool_response: { exit_code: 7 } });
+    await run({ tool_name: 'Bash', tool_input: { command: 'b' }, tool_response: { exitCode: 3 } });
+    await run({
+      tool_name: 'Bash',
+      tool_input: { command: 'c' },
+      tool_response: { is_error: true },
+    });
+    const log = await readLog();
+    expect(log.map((e) => e.exit_code)).toEqual([7, 3, 1]);
+  });
+
+  test('비차단 — 다음 조건에서 절대 block 안 함(항상 exit 0): Bash 아닌 도구·세션 없음·포인터 없음', async () => {
+    expect((await run({ tool_name: 'Edit', tool_input: {}, tool_response: {} })).exitCode).toBe(0);
+    expect(
+      (
+        await postToolUseHandler({
+          raw: { tool_name: 'Bash', tool_input: { command: 'x' } },
+          repoRoot: tmp,
+          env: {},
+        })
+      ).exitCode,
+    ).toBe(0);
+    expect(
+      (
+        await postToolUseHandler({
+          raw: { session_id: 'unknown-sess', tool_name: 'Bash', tool_input: { command: 'x' } },
+          repoRoot: tmp,
+          env: {},
+        })
+      ).exitCode,
+    ).toBe(0);
+  });
+
+  test('포인터 없는 세션 → evidence 파일을 만들지 않는다(active work item 없음)', async () => {
+    await postToolUseHandler({
+      raw: {
+        session_id: 'no-pointer',
+        tool_name: 'Bash',
+        tool_input: { command: 'x' },
+        tool_response: {},
+      },
+      repoRoot: tmp,
+      env: {},
+    });
+    expect(await Bun.file(commandsPath()).exists()).toBe(false);
+  });
+
+  test('append-only: 여러 호출이 라인을 추가하고 순서를 보존한다', async () => {
+    for (const cmd of ['one', 'two', 'three']) {
+      await run({
+        tool_name: 'Bash',
+        tool_input: { command: cmd },
+        tool_response: { exit_code: 0 },
+      });
+    }
+    const log = await readLog();
+    expect(log.map((e) => e.command)).toEqual(['one', 'two', 'three']);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+describe('M3.2 — completion 빌더/store (verifier 판정 → 결정론 조립, completionGate 통과물)', () => {
+  // 설계서 §12 M3 완료기준: "verifier가 acceptance criteria별 pass/fail/unverified를 기록한다."
+  test('work item AC당 정확히 1 entry — 집합 정합 보장 (completionGate 누락/잉여/중복 회피)', () => {
+    const completion = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 'all green',
+      verdicts: [
+        { criterion_id: 'AC-1', verdict: 'pass' },
+        { criterion_id: 'AC-2', verdict: 'pass' },
+      ],
+    });
+    const ids = completion.acceptance.map((a) => a.criterion_id);
+    expect(ids).toEqual(['AC-1', 'AC-2']);
+    expect(new Set(ids).size).toBe(ids.length); // duplicate 없음
+    // M0.4 cross-check: completionGate 가 PASS 여야 한다(빌더의 첫째 의무).
+    expect(completionGate(wi, completion).pass).toBe(true);
+  });
+
+  test('verifier 가 기록하지 않은 criterion → unverified 로 채움 (결정론적 default)', () => {
+    const completion = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 'partial',
+      verdicts: [{ criterion_id: 'AC-1', verdict: 'pass' }],
+    });
+    const ac2 = completion.acceptance.find((a) => a.criterion_id === 'AC-2');
+    expect(ac2?.verdict).toBe('unverified');
+  });
+
+  test('final_verdict 도출: 모든 pass + in-scope unverified 0 → pass, fail 하나라도 → fail', () => {
+    const allPass = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 's',
+      verdicts: [
+        { criterion_id: 'AC-1', verdict: 'pass' },
+        { criterion_id: 'AC-2', verdict: 'pass' },
+      ],
+    });
+    expect(allPass.final_verdict).toBe('pass');
+
+    const oneFail = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 's',
+      verdicts: [
+        { criterion_id: 'AC-1', verdict: 'fail' },
+        { criterion_id: 'AC-2', verdict: 'pass' },
+      ],
+    });
+    expect(oneFail.final_verdict).toBe('fail');
+  });
+
+  test('in-scope unverified 가 남으면 final_verdict 는 pass 가 아니다', () => {
+    const result = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 's',
+      verdicts: [
+        { criterion_id: 'AC-1', verdict: 'pass' },
+        { criterion_id: 'AC-2', verdict: 'pass' },
+      ],
+      unverified: [{ item: 'edge case', reason: 'no test infra', out_of_scope: false }],
+    });
+    expect(result.final_verdict).not.toBe('pass');
+  });
+
+  test('CompletionStore: write → exists → get 라운드트립', async () => {
+    const c = buildCompletion({
+      workItem: wi,
+      declaredBy: 'v',
+      summary: 's',
+      verdicts: [
+        { criterion_id: 'AC-1', verdict: 'pass' },
+        { criterion_id: 'AC-2', verdict: 'pass' },
+      ],
+    });
+    const s = new CompletionStore(tmp);
+    await s.write(c);
+    expect(await s.exists(wi.id)).toBe(true);
+    const back = await s.get(wi.id);
+    expect(back.final_verdict).toBe('pass');
+    expect(back.acceptance.map((a) => a.criterion_id)).toEqual(['AC-1', 'AC-2']);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+describe('M3.3 — convergence 빌더/store (admissibility 입력, 결정론 재계산, ratchet)', () => {
+  // 설계서 §12 M3 완료기준: "반복 정련이 두 게이트(완료↔수렴)로 종료되고,
+  //                         캡 도달은 non-pass로 닫힌다."
+  const ledger = (overrides: Partial<DecisionLedgerEntry>): DecisionLedgerEntry => ({
+    id: 'OBJ-1',
+    round: 1,
+    objection: 'objection text',
+    kind: 'hypothesis',
+    criterion_id: null,
+    severity: 'medium',
+    admissible: true,
+    status: 'deferred',
+    confidence: 'medium',
+    backed_by: [],
+    reason: 'r',
+    supersedes: null,
+    ...overrides,
+  });
+
+  test('argmax 선택: selected_version 은 최고 score 의 version (ratchet — 최선본 보존)', () => {
+    const c = buildConvergence({
+      workItemId: wi.id,
+      targetRef: 'AC-set',
+      roundCap: 3,
+      roundsRun: 2,
+      versions: [
+        { version: 1, score: 0.7, evidence_refs: [] },
+        { version: 2, score: 0.9, evidence_refs: [] },
+        { version: 3, score: 0.8, evidence_refs: [] },
+      ],
+      ledger: [],
+      completionGateVerdict: 'pass',
+    });
+    expect(c.selected_version).toBe(2);
+  });
+
+  test('open_admissible_count = ledger 의 (admissible ∧ status=deferred) 수', () => {
+    const c = buildConvergence({
+      workItemId: wi.id,
+      targetRef: 'AC-set',
+      roundCap: 3,
+      roundsRun: 1,
+      versions: [{ version: 1, score: 0.8, evidence_refs: [] }],
+      ledger: [
+        ledger({ id: 'A', admissible: true, status: 'deferred' }),
+        ledger({ id: 'B', admissible: true, status: 'acted' }),
+        ledger({ id: 'C', admissible: false, status: 'deferred' }),
+      ],
+      completionGateVerdict: 'partial',
+    });
+    expect(c.open_admissible_count).toBe(1);
+  });
+
+  test('converged = completion_gate=pass ∧ open_admissible=0 (두 게이트 결합)', () => {
+    const converged = buildConvergence({
+      workItemId: wi.id,
+      targetRef: 'AC-set',
+      roundCap: 3,
+      roundsRun: 1,
+      versions: [{ version: 1, score: 0.9, evidence_refs: [] }],
+      ledger: [],
+      completionGateVerdict: 'pass',
+    });
+    expect(converged.gate.converged).toBe(true);
+    expect(converged.exit.reason).toBe('converged');
+
+    const open = buildConvergence({
+      workItemId: wi.id,
+      targetRef: 'AC-set',
+      roundCap: 3,
+      roundsRun: 1,
+      versions: [{ version: 1, score: 0.9, evidence_refs: [] }],
+      ledger: [ledger({ admissible: true, status: 'deferred' })],
+      completionGateVerdict: 'pass',
+    });
+    expect(open.gate.converged).toBe(false);
+  });
+
+  test('캡 도달 → exit.reason=cap_reached, converged=false (non-pass 로 닫힘)', () => {
+    const c = buildConvergence({
+      workItemId: wi.id,
+      targetRef: 'AC-set',
+      roundCap: 2,
+      roundsRun: 2,
+      versions: [{ version: 1, score: 0.5, evidence_refs: [] }],
+      ledger: [],
+      completionGateVerdict: 'partial',
+    });
+    expect(c.gate.converged).toBe(false);
+    expect(c.exit.reason).toBe('cap_reached');
+    // non-converged → handoff path 가 채워져야 한다(§5 cap_reached/blocked 처리).
+    expect(c.exit.next_handoff_path).not.toBeNull();
+  });
+
+  test('빌더 산출은 M0.4 convergenceGate 를 통과 (수렴 시)', () => {
+    const c = buildConvergence({
+      workItemId: wi.id,
+      targetRef: 'AC-set',
+      roundCap: 3,
+      roundsRun: 1,
+      versions: [
+        { version: 1, score: 0.7, evidence_refs: [] },
+        { version: 2, score: 0.95, evidence_refs: [] },
+      ],
+      ledger: [
+        ledger({
+          id: 'X',
+          admissible: true,
+          status: 'acted',
+          backed_by: [{ kind: 'command', command: 't', summary: 'ok' }],
+          kind: 'finding',
+        }),
+      ],
+      completionGateVerdict: 'pass',
+    });
+    expect(convergenceGate(c).pass).toBe(true);
+  });
+
+  test('admissibility 는 *입력*이고 *판정* 아님 — 같은 ledger 에 admissible flag 만 바꿔도 빌더 결과가 따른다', () => {
+    const base = {
+      workItemId: wi.id,
+      targetRef: 'AC-set',
+      roundCap: 3,
+      roundsRun: 1,
+      versions: [{ version: 1, score: 0.9, evidence_refs: [] }],
+      completionGateVerdict: 'pass' as const,
+    };
+    const withAdmissible = buildConvergence({
+      ...base,
+      ledger: [ledger({ admissible: true, status: 'deferred' })],
+    });
+    const withDismissed = buildConvergence({
+      ...base,
+      ledger: [ledger({ admissible: false, status: 'deferred' })],
+    });
+    expect(withAdmissible.open_admissible_count).toBe(1);
+    expect(withDismissed.open_admissible_count).toBe(0);
+    // 빌더는 admissibility 를 *결정*하지 않고 *기록된 값으로* 카운트만 한다.
+  });
+
+  test('append-only ratchet: appendLedgerEntry 가 새 entry 만 추가하고 gate 를 재계산 (in-place edit 아님)', async () => {
+    const s = new ConvergenceStore(tmp);
+    const initial = buildConvergence({
+      workItemId: wi.id,
+      targetRef: 'AC-set',
+      roundCap: 3,
+      roundsRun: 1,
+      versions: [{ version: 1, score: 0.8, evidence_refs: [] }],
+      ledger: [],
+      completionGateVerdict: 'pass',
+    });
+    await s.write(initial);
+    const updated = await s.appendLedgerEntry(
+      wi.id,
+      ledger({ id: 'NEW', admissible: true, status: 'deferred' }),
+    );
+    // 기존 entry 유지 + 새 entry 추가 (length += 1).
+    expect(updated.decision_ledger.length).toBe(initial.decision_ledger.length + 1);
+    // gate 재계산: 새 admissible deferred 가 추가됐으므로 converged false 로 바뀐다.
+    expect(updated.gate.converged).toBe(false);
+    expect(updated.open_admissible_count).toBe(1);
+  });
+});
