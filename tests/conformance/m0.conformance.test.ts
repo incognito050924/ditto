@@ -24,14 +24,8 @@ import {
 import * as barrel from '~/schemas';
 import { verdict as completionVerdict } from '~/schemas/common';
 import { completionContract } from '~/schemas/completion-contract';
-import { convergence } from '~/schemas/convergence';
-import {
-  dialectic,
-  dialecticVerdict,
-  honestyKind,
-  ledgerStatus,
-  opponentObjection,
-} from '~/schemas/dialectic';
+import { convergence, honestyKind, ledgerStatus } from '~/schemas/convergence';
+import { dialectic, dialecticVerdict, opponentObjection } from '~/schemas/dialectic';
 import { handoff } from '~/schemas/handoff';
 import { intentContract } from '~/schemas/intent';
 import { interviewState } from '~/schemas/interview-state';
