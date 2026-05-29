@@ -1,0 +1,11 @@
+{
+  "name": "ditto-local",
+  "owner": { "name": "ecoletree" },
+  "plugins": [
+    {
+      "name": "ditto",
+      "source": "./",
+      "description": "Intent / verification / completion harness for Claude Code (deep interview, autopilot graph, dialectic review, convergence gates)."
+    }
+  ]
+}
