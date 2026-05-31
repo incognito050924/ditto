@@ -28,16 +28,16 @@ bun test tests/conformance              # 전체 v0 적합성
 bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 ```
 
-**현재 판정: 130 케이스 전부 ✅ CONFORMS — v0(M0~M4) closed. wi_v04evidence_record_sidecar (2026-06-01): M3 EvidenceRecord sidecar(freshness·portability·artifact_available) + evidence-index.json 커밋 가능 ledger + completion evidence_records(backward-compat). (직전: wi_v04verifier_body_and_declared_by 2026-06-01 declared_by→declarerRole + verifier.md 본문화; wi_v04intent_autopilot_entry 2026-06-01 deep-interview directive; wi_v04runtimewiring 2026-05-31 strong-block/autopilot_id.)**
+**현재 판정: 138 케이스 전부 ✅ CONFORMS — v0(M0~M4) closed. wi_v04dialectic_runtime (2026-06-01): M3 dialectic 런타임 — 3역 agent 본문 + /ditto:dialectic skill driver + OpponentModelRouter(codex→claude fallback provenance) + Stop hook dialectic ledger admissibility cross-check. 결정: dialectic은 새 nodeKind 아니라 review/high-impact 노드 메커니즘(권위 문서). (직전: wi_v04evidence_record_sidecar 2026-06-01 EvidenceRecord sidecar + evidence-index.json ledger; wi_v04verifier_body_and_declared_by declared_by→declarerRole.)**
 
 | milestone | unit count | 적합성 케이스 | 판정 |
 |---|---|---:|---|
 | M0 (계약·스키마·게이트) | 4 | 17 | ✅ |
 | M1 (plugin·hook·skill·agent·inventory) | 6 | 46 | ✅ |
 | M2 (autopilot skeleton) | 6 | 30 | ✅ |
-| M3 (Evidence·verifier 런타임) | 4 | 24 | ✅ |
+| M3 (Evidence·verifier 런타임) | 5 | 32 | ✅ |
 | M4 (Context rot 방지) | 2 + cross | 13 | ✅ |
-| **v0 합계** | **22** | **130** | **✅** |
+| **v0 합계** | **23** | **138** | **✅** |
 
 **M5(Playwright E2E)·M6(Knowledge/PM)는 미구현 — v0 closure 범위 밖**(plan §0 / 설계서 §12.5 "v0 범위는 M0~M2 skeleton, M3 이후는 hardening/확장"; M3·M4는 본 closure에 포함, M5·M6은 별도 milestone).
 
@@ -128,6 +128,11 @@ bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 | **M3.4** | cross-field: stale⇒stale_reason 필수 / fresh⇒stale_reason null / committed⇒artifact_available=true (위반 reject) | ✅ |
 | **M3.4** | clone 환경 fallback: local-artifact+artifact_available=false 라도 summary/exit_code/sha256/key_lines 로 판정 가능 | ✅ |
 | **M3.4** | evidence-index.json ledger: appendRecord→readIndex append-only 라운드트립 (커밋 대상, evidence/ gitignore 와 분리) | ✅ |
+| **M3.5** | OpponentModelRouter: Codex 우선, 가용 시 fallback 없음(provenance none) | ✅ |
+| **M3.5** | OpponentModelRouter: Codex 불가 → claude fallback + 사유 기록(침묵 금지, §3.2/§3.5) | ✅ |
+| **M3.5** | dialectic admissibility: maps_to∧critical\|high 해결+accept→통과 / 미해결→continuation | ✅ |
+| **M3.5** | dialectic verdict reject\|blocked → continuation; taste(medium·oracle 없음)는 non-blocker | ✅ |
+| **M3.5** | Stop hook 통합: reviews/dialectic-*.json verdict=blocked → exit 2, malformed → fail-closed | ✅ |
 
 ### Milestone 4 — Context rot 방지 (`m4.conformance.test.ts`)
 
