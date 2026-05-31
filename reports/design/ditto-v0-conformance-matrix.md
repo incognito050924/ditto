@@ -28,16 +28,16 @@ bun test tests/conformance              # 전체 v0 적합성
 bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 ```
 
-**현재 판정: 126 케이스 전부 ✅ CONFORMS — v0(M0~M4) closed. wi_v04verifier_body_and_declared_by (2026-06-01): M3 declared_by를 declarerRole enum으로 좁혀 판정 주체 명시 + 사칭 차단, verifier.md 본문화. (직전: wi_v04intent_autopilot_entry 2026-06-01 M1.3 deep-interview directive + QuestionGate hint + M2.1b finalize→bootstrap 자동 호출; wi_v04runtimewiring 2026-05-31 M1.3 placeholder advisory + M1.4 strong-block + M4.2 autopilot_id 연속성.)**
+**현재 판정: 130 케이스 전부 ✅ CONFORMS — v0(M0~M4) closed. wi_v04evidence_record_sidecar (2026-06-01): M3 EvidenceRecord sidecar(freshness·portability·artifact_available) + evidence-index.json 커밋 가능 ledger + completion evidence_records(backward-compat). (직전: wi_v04verifier_body_and_declared_by 2026-06-01 declared_by→declarerRole + verifier.md 본문화; wi_v04intent_autopilot_entry 2026-06-01 deep-interview directive; wi_v04runtimewiring 2026-05-31 strong-block/autopilot_id.)**
 
 | milestone | unit count | 적합성 케이스 | 판정 |
 |---|---|---:|---|
 | M0 (계약·스키마·게이트) | 4 | 17 | ✅ |
 | M1 (plugin·hook·skill·agent·inventory) | 6 | 46 | ✅ |
 | M2 (autopilot skeleton) | 6 | 30 | ✅ |
-| M3 (Evidence·verifier 런타임) | 3 | 20 | ✅ |
+| M3 (Evidence·verifier 런타임) | 4 | 24 | ✅ |
 | M4 (Context rot 방지) | 2 + cross | 13 | ✅ |
-| **v0 합계** | **21** | **126** | **✅** |
+| **v0 합계** | **22** | **130** | **✅** |
 
 **M5(Playwright E2E)·M6(Knowledge/PM)는 미구현 — v0 closure 범위 밖**(plan §0 / 설계서 §12.5 "v0 범위는 M0~M2 skeleton, M3 이후는 hardening/확장"; M3·M4는 본 closure에 포함, M5·M6은 별도 milestone).
 
@@ -124,6 +124,10 @@ bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 | **M3.3** | 빌더 산출이 M0.4 convergenceGate 통과 | ✅ |
 | **M3.3** | admissibility 는 *입력*(판정 아님) — 같은 ledger 에 flag 만 바꿔도 결과가 따른다 | ✅ |
 | **M3.3** | appendLedgerEntry: append-only ratchet + gate 재계산 (in-place 아님) | ✅ |
+| **M3.4** | EvidenceRecord 유효 레코드 default(stale_reason null·key_lines []) 적용 | ✅ |
+| **M3.4** | cross-field: stale⇒stale_reason 필수 / fresh⇒stale_reason null / committed⇒artifact_available=true (위반 reject) | ✅ |
+| **M3.4** | clone 환경 fallback: local-artifact+artifact_available=false 라도 summary/exit_code/sha256/key_lines 로 판정 가능 | ✅ |
+| **M3.4** | evidence-index.json ledger: appendRecord→readIndex append-only 라운드트립 (커밋 대상, evidence/ gitignore 와 분리) | ✅ |
 
 ### Milestone 4 — Context rot 방지 (`m4.conformance.test.ts`)
 
