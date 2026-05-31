@@ -1,0 +1,60 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260531fa0",
+  "title": "v0.4 dialectic runtime — 3역 본문 + skill driver + OpponentModelRouter + Stop cross-check",
+  "source_request": "사용자: '자율적으로 계속해. 남은 outcome 전체. 브라우저 E2E 상세 설계까지'. ③=wi_v04dialectic_runtime",
+  "goal": "DialecticDeliberationContract schema(이미 존재)에 런타임 살을 붙인다: 3역 agent 본문 + /ditto:dialectic skill driver 절차 + OpponentModelRouter(codex→claude-opus→claude-sonnet fallback provenance 결정론 해석) + Stop hook의 dialectic ledger admissibility cross-check. 핵심 결정(권위 문서): dialectic은 새 nodeKind가 아니라 review/high-impact 노드에서 호출되는 검증 메커니즘 — nodeKind/owner enum 미변경.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "OpponentModelRouter (src/core/opponent-router.ts) 신규: resolveOpponentCandidates(model_policy)는 opponent_preferred + opponent_fallback을 순서 보존 후보 리스트로 만들고 각 token('codex'/'claude-opus'/'claude-sonnet'/...)을 {provider(providerName enum), model} 로 매핑한다. selectOpponent(candidates, isAvailable)는 첫 가용 후보를 고르고, preferred가 아니면 fallback_from=preferred.provider + fallback_reason(auth|network|cost|runtime) 기록, preferred면 fallback_from=null·reason='none'. 가용 후보 0건이면 명시적 에러. 결과는 dialecticOpponent.run schema와 정합.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "dialectic 3역(producer/opponent/synthesizer) agent .md의 'v0 skeleton' 문구 제거 + 본문: 각 역의 입력/금지(다른 역 결과 미리 보지 말 것 — Context Isolation)/출력 schema 필드 + Opponent의 oracle-linked objection(maps_to 없으면 taste, blocker 아님) + Synthesizer의 admissible(maps_to ∧ critical|major) objection만 action gate. dialectic-contract §2·§5.3 정합.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "/ditto:dialectic SKILL.md 본문에 운영 절차 추가: producer → opponent → synthesizer를 별도 spawn(겸임 금지), Opponent는 OpponentModelRouter로 provider 결정 + run provenance 기록, 산출물 reviews/dialectic-<n>.json(dialectic schema) + .md 작성, max_rounds/admissibility는 ConvergenceGate 규율 아래. driver는 high-impact review/design 노드에서 호출(autopilot-contract §2.2).",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "Stop hook이 reviews/dialectic-*.json ledger를 cross-check한다: synthesizer.verdict ∈ {reject, blocked} 이면 continuation(exit 2). admissibility 규칙(maps_to 비어있지 않음 ∧ severity ∈ {critical, high}) 적용 — admissible objection이 accepted_objections에도 rejected_objections에도 없으면(미해결) continuation. maps_to 없는 objection은 taste로 분류해 blocker 아님. malformed dialectic-*.json은 fail-closed(exit 2). 기존 completion/convergence/autopilot 분기와 공존.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "conformance(m3) + 회귀: OpponentModelRouter candidate 순서·fallback provenance·가용0 에러, admissibility 분류(taste vs blocker), Stop dialectic cross-check(verdict reject/blocked → continuation, 미해결 admissible → continuation, 모두 해결 + accept → 양보). bun test 전체 + lint 통과. matrix/plan 갱신.",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "in_progress",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [
+    {
+      "id": "r-1",
+      "description": "메모리 ③ 노트는 'nodeKind enum에 dialectic 추가'를 제안했으나, 권위 문서(autopilot-contract §2.2 line 67 'review owner=reviewer, high-impact는 dialectic 3역', dialectic-contract §1.2 line 47)는 dialectic을 review/high-impact 노드의 메커니즘으로 규정. 헌장 §2 우선순위(도메인/저장소 규칙 > 메모리)에 따라 문서를 따르고 nodeKind/owner enum 미변경. 이로써 범위가 메모리 추정(1500-2500)보다 작아짐."
+    },
+    {
+      "id": "r-2",
+      "description": "OpponentModelRouter는 결정론 정책 해석 + provenance 기록만 — 실제 Codex CLI 호출 glue는 별도 얇은 층(§3.4 'run with 재사용 금지'), v0에서 호출은 skill/runtime 책임. Codex 불가 자체는 실패 아니고 fallback이 정상 경로(§3.2)."
+    },
+    {
+      "id": "r-3",
+      "description": "Stop hook이 dialectic-*.json을 새로 읽음 → reviews/ 디렉터리 스캔. 부재/빈 디렉터리는 no-op(기존 동작 보존). malformed는 fail-closed."
+    }
+  ],
+  "runs": [],
+  "created_at": "2026-05-31T16:07:49.964Z",
+  "updated_at": "2026-05-31T16:07:49.964Z"
+}
