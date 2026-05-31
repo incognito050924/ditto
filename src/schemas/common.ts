@@ -38,6 +38,12 @@ export const profileName = z
   .enum(['read-only', 'workspace-write', 'networked', 'reviewer', 'isolated'])
   .describe('Execution profile that determines permission and network policy');
 
+export const declarerRole = z
+  .enum(['main', 'planner', 'implementer', 'verifier', 'reviewer', 'researcher', 'synthesizer'])
+  .describe(
+    'Agent role that authored a completion claim (who judged), distinct from the execution profile (how it ran)',
+  );
+
 export const providerName = z
   .enum(['codex', 'claude-code', 'opencode', 'openagent', 'other'])
   .describe('Provider host that executes the run');
