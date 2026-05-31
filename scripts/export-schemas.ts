@@ -7,6 +7,7 @@ import { autopilot } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
 import { convergence } from '~/schemas/convergence';
 import { dialectic } from '~/schemas/dialectic';
+import { e2eJourney } from '~/schemas/e2e-journey';
 import { commandLogEntry } from '~/schemas/evidence-log';
 import { evidenceIndex, evidenceRecord } from '~/schemas/evidence-record';
 import { glossary } from '~/schemas/glossary';
@@ -36,6 +37,7 @@ export const schemaExports: ReadonlyArray<{ name: string; schema: ZodTypeAny }> 
   { name: 'evidence-record', schema: evidenceRecord },
   { name: 'evidence-index', schema: evidenceIndex },
   { name: 'knowledge-record', schema: knowledgeRecord },
+  { name: 'e2e-journey', schema: e2eJourney },
   { name: 'intent', schema: intentContract },
   { name: 'question-gate', schema: questionGate },
   { name: 'interview-state', schema: interviewState },

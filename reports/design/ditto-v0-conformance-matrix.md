@@ -43,13 +43,14 @@ bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 
 ### post-v0 design-locked contracts (schema + 설계문서, runtime은 M5/M6)
 
-v0 합계(138)에 **포함하지 않는다**(post-v0). 2026-06-01 wi_v04knowledge_curator가 contract를 design-lock:
+v0 합계(138)에 **포함하지 않는다**(post-v0). 2026-06-01 wi_v04knowledge_curator + wi_v05_e2e_playwright가 contract를 design-lock:
 
 | contract | schema | 설계문서 | runtime(보류) | agent invariant |
 |---|---|---|---|---|
 | **KnowledgeContract**(M6) | `knowledge-record.ts`(`knowledgeRecord`, cross-field superseded⇒superseded_by) | `contracts/knowledge-contract.md` | knowledge-curator agent·`/ditto:knowledge-update`·CLAUDE.md projection | M1.5b: `knowledge-curator.md` v0 부재 유지 ✅ |
+| **E2EJourneyContract**(M5) | `e2e-journey.ts`(설계서 §10 정합; cross-field fail⇒reproduction, pass⇒모든 assertion 만족) | `contracts/e2e-journey-contract.md` | playwright-e2e agent·`/ditto:e2e`·실제 Playwright/Chromium capture | M1.5b: `playwright-e2e.md` v0 부재 유지 ✅ |
 
-schema parse/reject·등록(barrel/registry/sidecar-registration)은 `tests/schemas/knowledge-record.test.ts`로 검증(v0 합계 무관).
+schema parse/reject·등록(barrel/registry/sidecar-registration)은 `tests/schemas/{knowledge-record,e2e-journey}.test.ts`로 검증(v0 합계 무관).
 
 ## 1. 매핑표 (build unit → 적합성 케이스 → 판정)
 

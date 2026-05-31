@@ -14,5 +14,6 @@ export * from './question-gate';
 export * from './interview-state';
 export * from './autopilot';
 export * from './dialectic';
+export * from './e2e-journey';
 export * from './convergence';
 export * from './handoff';
