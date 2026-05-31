@@ -8,9 +8,9 @@ import {
   interviewQuestion,
 } from '~/schemas/interview-state';
 import { bootstrapAutopilot } from './autopilot-bootstrap';
+import { type GateResult, type RiskAxes, interviewReadinessGate } from './gates';
 import { IntentStore } from './intent-store';
 import { InterviewStore } from './interview-store';
-import { type GateResult, type RiskAxes, interviewReadinessGate } from './gates';
 import { WorkItemStore } from './work-item-store';
 
 /**
@@ -37,10 +37,7 @@ export interface StartInput {
   now?: Date;
 }
 
-export async function startInterview(
-  repoRoot: string,
-  input: StartInput,
-): Promise<InterviewState> {
+export async function startInterview(repoRoot: string, input: StartInput): Promise<InterviewState> {
   const now = (input.now ?? new Date()).toISOString();
   const initial: InterviewState = {
     schema_version: '0.1.0',

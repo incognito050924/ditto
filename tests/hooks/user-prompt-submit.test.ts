@@ -168,7 +168,10 @@ describe('userPromptSubmitHandler', () => {
     });
 
     test('placeholder-only + question prompt → directive NOT injected', async () => {
-      const out = await run({ session_id: 'sess-dir-2', prompt: 'what does the bridge command do?' });
+      const out = await run({
+        session_id: 'sess-dir-2',
+        prompt: 'what does the bridge command do?',
+      });
       const ctx = additionalContext(out.stdout);
       expect(ctx).not.toContain('Run /ditto:deep-interview now');
     });

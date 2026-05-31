@@ -3,9 +3,9 @@
 // Patches ~/.claude/settings.json so the local plugin loads in every session.
 // Pure Node — no external deps; runs identically under `node` or `bun`.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
-import { homedir, platform } from 'node:os';
-import { dirname, join, resolve, sep } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const MARKETPLACE = 'ditto-local';
@@ -21,7 +21,7 @@ function resolveRepo() {
   const guess = resolve(here, '..');
   if (existsSync(join(guess, '.claude-plugin', 'plugin.json'))) return guess;
   throw new Error(
-    `Could not locate DITTO repo. Set DITTO_HOME to the repo root (containing .claude-plugin/plugin.json).`,
+    'Could not locate DITTO repo. Set DITTO_HOME to the repo root (containing .claude-plugin/plugin.json).',
   );
 }
 
@@ -76,7 +76,7 @@ function write(path, settings) {
 function main() {
   const mode = process.argv[2] ?? 'install';
   if (!['install', 'uninstall', 'status'].includes(mode)) {
-    console.error(`usage: install-plugin.mjs [install|uninstall|status]`);
+    console.error('usage: install-plugin.mjs [install|uninstall|status]');
     process.exit(64);
   }
 
@@ -105,12 +105,12 @@ function main() {
   if (mode === 'install') {
     console.log(`  added:    extraKnownMarketplaces.${MARKETPLACE} (url → marketplace.json)`);
     console.log(`  enabled:  ${PLUGIN_NAME}@${MARKETPLACE}`);
-    console.log(``);
-    console.log(`Next: start a new Claude Code session, then verify with`);
-    console.log(`  /plugin                       # list installed plugins`);
-    console.log(`  /ditto:verify --help          # any /ditto:* skill is reachable`);
-    console.log(``);
-    console.log(`Per-session fallback (no settings.json change):`);
+    console.log('');
+    console.log('Next: start a new Claude Code session, then verify with');
+    console.log('  /plugin                       # list installed plugins');
+    console.log('  /ditto:verify --help          # any /ditto:* skill is reachable');
+    console.log('');
+    console.log('Per-session fallback (no settings.json change):');
     console.log(`  claude --plugin-dir "${repo}"`);
   }
 }

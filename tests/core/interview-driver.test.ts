@@ -2,15 +2,15 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { AutopilotStore } from '~/core/autopilot-store';
 import { IntentStore } from '~/core/intent-store';
-import { InterviewStore } from '~/core/interview-store';
 import {
   checkReadiness,
   finalizeInterview,
   recordTurn,
   startInterview,
 } from '~/core/interview-driver';
-import { AutopilotStore } from '~/core/autopilot-store';
+import { InterviewStore } from '~/core/interview-store';
 import { WorkItemStore } from '~/core/work-item-store';
 
 let repo: string;
@@ -65,7 +65,13 @@ describe('recordTurn', () => {
     const state = await recordTurn(repo, {
       workItemId: wiId,
       payload: {
-        dimension: { id: 'd-score-formula', critical: true, state: 'partial', ambiguity: 0.6, notes: '' },
+        dimension: {
+          id: 'd-score-formula',
+          critical: true,
+          state: 'partial',
+          ambiguity: 0.6,
+          notes: '',
+        },
         question: {
           text: 'How is the score computed?',
           why_matters: 'Determines the response shape and edge cases.',
@@ -141,7 +147,13 @@ describe('checkReadiness', () => {
     await recordTurn(repo, {
       workItemId: wiId,
       payload: {
-        dimension: { id: 'd-critical', critical: true, state: 'partial', ambiguity: 0.6, notes: '' },
+        dimension: {
+          id: 'd-critical',
+          critical: true,
+          state: 'partial',
+          ambiguity: 0.6,
+          notes: '',
+        },
         question: { text: 'critical?', why_matters: 'load-bearing', info_gain_estimate: 'high' },
         readiness_score: 0.95,
       },
@@ -155,7 +167,13 @@ describe('checkReadiness', () => {
     await recordTurn(repo, {
       workItemId: wiId,
       payload: {
-        dimension: { id: 'd-critical', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
+        dimension: {
+          id: 'd-critical',
+          critical: true,
+          state: 'resolved',
+          ambiguity: 0.05,
+          notes: '',
+        },
         question: { text: 'critical?', why_matters: 'load-bearing', info_gain_estimate: 'high' },
         answer: { text: 'agreed on 0..100 integer', kind: 'user' },
         readiness_score: 0.85,
@@ -295,7 +313,9 @@ describe('finalizeInterview', () => {
     if (first.status === 'finalized' && second.status === 'finalized') {
       // Same structure, different autopilot_id (generateId is random).
       expect(second.autopilot.autopilot_id).not.toBe(first.autopilot.autopilot_id);
-      expect(second.autopilot.nodes.map((n) => n.id)).toEqual(first.autopilot.nodes.map((n) => n.id));
+      expect(second.autopilot.nodes.map((n) => n.id)).toEqual(
+        first.autopilot.nodes.map((n) => n.id),
+      );
     }
   });
 });

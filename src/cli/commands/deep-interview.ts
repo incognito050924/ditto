@@ -22,7 +22,9 @@ function parseJsonArg(raw: string): unknown {
   try {
     return JSON.parse(raw);
   } catch (err) {
-    throw new Error(`--json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(
+      `--json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
@@ -55,16 +57,16 @@ const startCmd = defineCommand({
       return;
     }
     const threshold = args.threshold === undefined ? undefined : Number(args.threshold);
-    if (threshold !== undefined && (!Number.isFinite(threshold) || threshold < 0 || threshold > 1)) {
+    if (
+      threshold !== undefined &&
+      (!Number.isFinite(threshold) || threshold < 0 || threshold > 1)
+    ) {
       writeError(`--threshold must be a number in [0, 1]; got "${args.threshold}"`);
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
     const questionCap = args.questionCap === undefined ? undefined : Number(args.questionCap);
-    if (
-      questionCap !== undefined &&
-      (!Number.isInteger(questionCap) || questionCap <= 0)
-    ) {
+    if (questionCap !== undefined && (!Number.isInteger(questionCap) || questionCap <= 0)) {
       writeError(`--question-cap must be a positive integer; got "${args.questionCap}"`);
       process.exit(USAGE_ERROR_EXIT);
       return;
@@ -130,7 +132,7 @@ const recordTurnCmd = defineCommand({
     }
     const parsed = recordTurnPayload.safeParse(raw);
     if (!parsed.success) {
-      writeError(`--json failed schema validation:`);
+      writeError('--json failed schema validation:');
       for (const issue of parsed.error.issues) {
         writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
       }
@@ -154,9 +156,15 @@ const recordTurnCmd = defineCommand({
         });
       } else {
         writeHuman(`Recorded turn for ${state.work_item_id}`);
-        writeHuman(`  questions_asked:     ${state.exit.questions_asked}/${state.exit.question_cap}`);
-        writeHuman(`  readiness:           ${state.readiness.score.toFixed(2)} (${state.readiness.gate})`);
-        writeHuman(`  critical_unresolved: ${state.readiness.critical_unresolved.join(', ') || '(none)'}`);
+        writeHuman(
+          `  questions_asked:     ${state.exit.questions_asked}/${state.exit.question_cap}`,
+        );
+        writeHuman(
+          `  readiness:           ${state.readiness.score.toFixed(2)} (${state.readiness.gate})`,
+        );
+        writeHuman(
+          `  critical_unresolved: ${state.readiness.critical_unresolved.join(', ') || '(none)'}`,
+        );
       }
     } catch (err) {
       writeError(`record-turn failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -197,7 +205,9 @@ const checkReadinessCmd = defineCommand({
           readiness_score: result.state.readiness.score,
         });
       } else {
-        writeHuman(`Readiness for ${result.state.work_item_id}: ${result.gate.pass ? 'READY' : 'BLOCKED'}`);
+        writeHuman(
+          `Readiness for ${result.state.work_item_id}: ${result.gate.pass ? 'READY' : 'BLOCKED'}`,
+        );
         for (const r of result.gate.reasons) writeHuman(`  - ${r}`);
         if (result.cap_reached) writeHuman('  (question cap reached)');
       }
@@ -242,7 +252,7 @@ const finalizeCmd = defineCommand({
     }
     const parsed = finalizePayload.safeParse(raw);
     if (!parsed.success) {
-      writeError(`--json failed schema validation:`);
+      writeError('--json failed schema validation:');
       for (const issue of parsed.error.issues) {
         writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
       }
@@ -256,7 +266,7 @@ const finalizeCmd = defineCommand({
         payload: parsed.data,
       });
       if (result.status === 'not_ready') {
-        writeError(`interview is not ready; cannot finalize:`);
+        writeError('interview is not ready; cannot finalize:');
         for (const r of result.gate.reasons) writeError(`  - ${r}`);
         process.exit(RUNTIME_ERROR_EXIT);
         return;
@@ -276,7 +286,9 @@ const finalizeCmd = defineCommand({
         writeHuman(`  intent:        .ditto/work-items/${result.intent.work_item_id}/intent.json`);
         writeHuman(`  autopilot:     ${result.autopilot.autopilot_id}`);
         writeHuman(`  approval_gate: ${result.autopilot.approval_gate.status}`);
-        writeHuman(`  acceptance:    ${result.intent.acceptance_criteria.map((ac) => ac.id).join(', ')}`);
+        writeHuman(
+          `  acceptance:    ${result.intent.acceptance_criteria.map((ac) => ac.id).join(', ')}`,
+        );
         writeHuman(`  nodes:         ${result.autopilot.nodes.map((n) => n.id).join(' -> ')}`);
       }
     } catch (err) {
@@ -289,7 +301,8 @@ const finalizeCmd = defineCommand({
 export const deepInterviewCommand = defineCommand({
   meta: {
     name: 'deep-interview',
-    description: 'Drive the deep-interview state machine (start/record-turn/check-readiness/finalize)',
+    description:
+      'Drive the deep-interview state machine (start/record-turn/check-readiness/finalize)',
   },
   subCommands: {
     start: startCmd,
