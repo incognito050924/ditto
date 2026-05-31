@@ -16,6 +16,7 @@ const NEW_SIDECARS: Array<{ exportName: string; barrelConst: keyof typeof barrel
   { exportName: 'handoff', barrelConst: 'handoff' },
   { exportName: 'evidence-record', barrelConst: 'evidenceRecord' },
   { exportName: 'evidence-index', barrelConst: 'evidenceIndex' },
+  { exportName: 'knowledge-record', barrelConst: 'knowledgeRecord' },
 ];
 
 describe('new sidecar schemas are registered in both lists', () => {

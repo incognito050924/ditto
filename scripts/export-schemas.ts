@@ -13,6 +13,7 @@ import { glossary } from '~/schemas/glossary';
 import { handoff } from '~/schemas/handoff';
 import { intentContract } from '~/schemas/intent';
 import { interviewState } from '~/schemas/interview-state';
+import { knowledgeRecord } from '~/schemas/knowledge-record';
 import { languageLedger } from '~/schemas/language-ledger';
 import { questionGate } from '~/schemas/question-gate';
 import { reviewerOutput } from '~/schemas/reviewer-output';
@@ -34,6 +35,7 @@ export const schemaExports: ReadonlyArray<{ name: string; schema: ZodTypeAny }> 
   { name: 'command-log-entry', schema: commandLogEntry },
   { name: 'evidence-record', schema: evidenceRecord },
   { name: 'evidence-index', schema: evidenceIndex },
+  { name: 'knowledge-record', schema: knowledgeRecord },
   { name: 'intent', schema: intentContract },
   { name: 'question-gate', schema: questionGate },
   { name: 'interview-state', schema: interviewState },

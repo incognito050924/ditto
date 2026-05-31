@@ -1,0 +1,247 @@
+{
+  "$ref": "#/definitions/knowledge-record",
+  "definitions": {
+    "knowledge-record": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "project_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "context_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Prose project context",
+          "default": ".ditto/knowledge/CONTEXT.md"
+        },
+        "glossary_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Ubiquitous-language glossary; validated by the separate glossary schema",
+          "default": ".ditto/knowledge/glossary.json"
+        },
+        "project_map_path": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Repo-relative path; absolute paths and .. traversal are rejected",
+          "default": null
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^ADR-\\d{4}$",
+                "description": "Architecture decision record id, e.g. ADR-0001"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "proposed",
+                  "accepted",
+                  "superseded",
+                  "deprecated"
+                ],
+                "description": "Lifecycle of an architecture decision"
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Why the decision was made (근거)"
+              },
+              "change_condition": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Under what conditions the decision should be revisited (변경 조건, 설계서 line 786)"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Repo-relative path to the ADR document"
+              },
+              "superseded_by": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^ADR-\\d{4}$",
+                    "description": "Architecture decision record id, e.g. ADR-0001"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Architecture decision record id, e.g. ADR-0001",
+                "default": null
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "status",
+              "rationale",
+              "change_condition",
+              "path"
+            ],
+            "additionalProperties": false,
+            "description": "One durable technical decision with rationale and change condition"
+          },
+          "default": []
+        },
+        "patterns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "description": "What the reusable pattern is and when it applies"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+              }
+            },
+            "required": [
+              "name",
+              "summary"
+            ],
+            "additionalProperties": false,
+            "description": "A reusable implementation/process pattern promoted to durable knowledge"
+          },
+          "default": []
+        },
+        "learnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "description": "What was learned, in reusable terms"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "command",
+                        "file",
+                        "artifact",
+                        "url",
+                        "note"
+                      ]
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$",
+                      "description": "Lowercase hex sha256 hash"
+                    },
+                    "lines": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "end": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Pointer to evidence stored outside the manifest itself"
+                },
+                "default": []
+              },
+              "learned_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+              }
+            },
+            "required": [
+              "summary",
+              "learned_at"
+            ],
+            "additionalProperties": false,
+            "description": "A repeated learning worth carrying across work items (반복 학습)"
+          },
+          "default": []
+        },
+        "projected_to_claude_md": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this knowledge has been projected into CLAUDE.md (M6 runtime)"
+        }
+      },
+      "required": [
+        "schema_version",
+        "project_name",
+        "updated_at"
+      ],
+      "additionalProperties": false,
+      "description": "Index of durable project knowledge (.ditto/knowledge/), excluding the glossary body"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
