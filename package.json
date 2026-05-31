@@ -8,6 +8,7 @@
     "ditto": "./dist/ditto"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
     "build": "bun build src/cli/index.ts --compile --outfile dist/ditto",
     "dev": "bun run src/cli/index.ts",
     "test": "bun test",

@@ -1,0 +1,20 @@
+name: CI
+
+# push(main)와 모든 PR에서 lint + test 게이트를 강제한다.
+# pre-commit hook(.githooks)은 로컬·우회 가능 방어선, 이 CI는 서버 측 강제 방어선이다.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Lint (biome)
+        run: bun run lint
+      - name: Test (bun test)
+        run: bun test
