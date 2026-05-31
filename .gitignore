@@ -474,5 +474,3 @@ dist/
 .ditto/runs/
 .ditto/work-items/*/evidence/
 
-# Claude Code per-machine local settings (dogfood 등)
-.claude/settings.local.json

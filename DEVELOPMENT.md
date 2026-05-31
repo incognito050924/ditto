@@ -9,32 +9,18 @@ ditto는 두 얼굴을 가진다. dogfood도 두 갈래다.
 
 ---
 
-## 1. 플러그인 dogfood
+## 1. 플러그인 dogfood — `claude --plugin-dir .`
 
-ditto repo는 ditto를 *개발하는* 곳이므로, 이 repo(또는 하위)에서 Claude Code를 열면 **자동으로** 개발 중인 플러그인이 켜지는 게 기본이다. 배포 설치본에는 영향이 없다.
-
-### 1-a. 자동 (터미널, 권장)
-
-`scripts/dogfood.zsh`가 `claude` 셸 함수를 정의한다 — ditto repo 안에서 `claude`를 치면 자동으로 `--plugin-dir <repo>`가 붙고(캐시 없이 즉시반영), repo 밖에서는 평범한 `claude`로 동작한다. 클론당 1회, `~/.zshrc`에 한 줄만 추가하면 적용된다(경로는 본인 클론에 맞게):
+ditto repo 루트에서 Claude Code를 **이 플래그로 직접** 연다:
 
 ```bash
-# ~/.zshrc
-[ -f /path/to/ditto/scripts/dogfood.zsh ] && source /path/to/ditto/scripts/dogfood.zsh
+cd /path/to/ditto
+claude --plugin-dir .
 ```
 
-이후 `cd /path/to/ditto && claude` 만 하면 dogfood 세션이다. 확인: repo 안에서 `type claude`가 함수로 뜨면 적용된 것.
+이 repo를 플러그인 소스로 직접 지정해 세션을 연다. 그 세션 안에서 개발 중인 ditto의 skills·agents·hooks가 켜진다. 배포 설치본·다른 프로젝트에는 영향이 없다(세션 단위).
 
-> Claude Code를 IDE 확장이나 데스크톱 앱으로 연다면 셸 함수가 안 먹는다 — 그 경우 아래 1-b의 `bun run dogfood`를 쓰거나, 프로젝트 `.claude/settings.local.json`에 marketplace를 등록(자동이지만 캐시 방식이라 코드 변경은 `/reload-plugins` 필요)한다.
-
-### 1-b. 수동 / 일회성 — `bun run dogfood`
-
-자동 셋업 없이 한 번만 띄우거나 IDE 사용자가 쓰는 경로:
-
-```bash
-bun run dogfood        # = claude --plugin-dir .
-```
-
-이 repo를 **플러그인 소스로 직접 지정**해 Claude Code 세션을 연다. 그 세션 안에서 개발 중인 ditto의 skills·agents·hooks가 켜진다.
+bun 스크립트나 셸 함수로 감싸지 않는다 — claude는 claude로 직접 실행한다(빌드/테스트/lint 같은 bun 스크립트와 분리). 자주 쓰면 본인 셸 alias로 줄이는 건 개인 취향.
 
 - **변경 즉시 반영**: `--plugin-dir`은 repo를 *직접 참조*한다(복사·캐시 없음). `hooks/*.ts`, `skills/`, `agents/`를 고친 뒤
   - hook/agent/skill 변경 → 세션 안에서 `/reload-plugins`
