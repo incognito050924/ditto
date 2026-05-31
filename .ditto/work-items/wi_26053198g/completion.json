@@ -1,0 +1,94 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_26053198g",
+  "declared_by": "main",
+  "declared_at": "2026-05-31T16:28:15.665Z",
+  "summary": "v0.4 E2EJourneyContract 상세 설계 — schema + 설계문서 (M5 runtime 보존) — 모든 acceptance criterion이 pass로 기록되었다.",
+  "changed_files": [
+    ".ditto/work-items/wi_26053198g/completion.json",
+    ".ditto/work-items/wi_26053198g/handoff.md",
+    ".ditto/work-items/wi_26053198g/language-ledger.json",
+    ".ditto/work-items/wi_26053198g/plan.md",
+    ".ditto/work-items/wi_26053198g/work-item.json",
+    "reports/design/contracts/e2e-journey-contract.md",
+    "reports/design/ditto-v0-conformance-matrix.md",
+    "schemas/e2e-journey.schema.json",
+    "scripts/export-schemas.ts",
+    "src/schemas/e2e-journey.ts",
+    "src/schemas/index.ts",
+    "tests/schemas/e2e-journey.test.ts",
+    "tests/schemas/sidecar-registration.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/schemas/e2e-journey.ts",
+          "summary": "e2eJourney + e2eStep/e2eAssertion/e2eArtifacts. 설계서 §10 JSON 정합, artifactRef=path+optional sha256"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/e2e-journey.test.ts",
+          "summary": "fail 무 reproduction→reject, pass+불만족 단언→reject, blocked→pass, artifact path+sha 참조"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/sidecar-registration.test.ts",
+          "summary": "e2e-journey registry+barrel 등록 확인; JSON schema 생성"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "reports/design/contracts/e2e-journey-contract.md",
+          "summary": "6개 절 상세 설계. MCP 아님·artifact .ditto/runs·playwright-e2e 책임·/ditto:e2e·nodeKind=e2e 통합. agent 미생성 명시"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-5",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test && bun run lint",
+          "summary": "bun test 0 fail (M1.5b playwright-e2e 부재 단언 유지); lint green"
+        },
+        {
+          "kind": "file",
+          "path": "reports/design/ditto-v0-conformance-matrix.md",
+          "summary": "post-v0 design-lock 섹션에 E2EJourneyContract 행 추가; v0 합계 138 불변"
+        }
+      ],
+      "evidence_records": []
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [],
+  "next_handoff_path": ".ditto/work-items/wi_26053198g/handoff.md",
+  "final_verdict": "pass"
+}
