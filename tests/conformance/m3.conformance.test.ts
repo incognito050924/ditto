@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CompletionStore, buildCompletion } from '~/core/completion-store';
 import { ConvergenceStore, buildConvergence } from '~/core/convergence-store';
+import { EvidenceStore } from '~/core/evidence-store';
 import { completionGate, convergenceGate } from '~/core/gates';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -24,6 +25,7 @@ import { postToolUseHandler } from '~/hooks/post-tool-use';
 import { completionContract } from '~/schemas/completion-contract';
 import type { DecisionLedgerEntry } from '~/schemas/convergence';
 import { commandLogEntry } from '~/schemas/evidence-log';
+import { evidenceRecord } from '~/schemas/evidence-record';
 import type { WorkItem } from '~/schemas/work-item';
 
 let tmp: string;
@@ -425,5 +427,74 @@ describe('M3.3 — convergence 빌더/store (admissibility 입력, 결정론 재
     // gate 재계산: 새 admissible deferred 가 추가됐으므로 converged false 로 바뀐다.
     expect(updated.gate.converged).toBe(false);
     expect(updated.open_admissible_count).toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+describe('M3.4 — EvidenceRecord sidecar + evidence-index.json ledger (freshness·portability)', () => {
+  // 설계서 §6.7 line 633-645: "증거가 있다" 와 "이 clone/세션에서 raw 를 열 수 있다" 를
+  // freshness/portability/artifact_available 로 분리. raw 없이도 summary/sha/exit_code 로 판정.
+  const fresh = (over: Record<string, unknown> = {}) => ({
+    ref: { kind: 'command' as const, command: 'bun test', summary: 'passed' },
+    captured_at: '2026-05-26T00:00:00.000Z',
+    freshness: 'fresh' as const,
+    portability: 'committed' as const,
+    artifact_available: true,
+    exit_code: 0,
+    ...over,
+  });
+
+  test('유효 레코드: fresh+committed+available 는 CONFORMS, default(stale_reason null·key_lines []) 적용', () => {
+    const r = evidenceRecord.parse(fresh());
+    expect(r.stale_reason).toBe(null);
+    expect(r.key_lines).toEqual([]);
+  });
+
+  test('cross-field (a): freshness=stale 인데 stale_reason 없으면 reject', () => {
+    expect(evidenceRecord.safeParse(fresh({ freshness: 'stale' })).success).toBe(false);
+    // stale_reason 채우면 통과
+    expect(
+      evidenceRecord.safeParse(fresh({ freshness: 'stale', stale_reason: 'rebuilt since capture' }))
+        .success,
+    ).toBe(true);
+  });
+
+  test('cross-field (b): freshness=fresh 인데 stale_reason 이 있으면 reject', () => {
+    expect(evidenceRecord.safeParse(fresh({ stale_reason: 'x' })).success).toBe(false);
+  });
+
+  test('cross-field (c): portability=committed 인데 artifact_available=false 면 reject', () => {
+    expect(evidenceRecord.safeParse(fresh({ artifact_available: false })).success).toBe(false);
+  });
+
+  test('clone 환경 fallback: local-artifact + artifact_available=false 라도 summary/exit_code/sha 로 판정 가능 (CONFORMS)', () => {
+    const r = evidenceRecord.parse({
+      ref: {
+        kind: 'command' as const,
+        command: 'bun test',
+        summary: '460 pass',
+        sha256: 'a'.repeat(64),
+      },
+      captured_at: '2026-05-26T00:00:00.000Z',
+      freshness: 'fresh' as const,
+      portability: 'local-artifact' as const,
+      artifact_available: false,
+      exit_code: 0,
+      key_lines: ['460 pass', '0 fail'],
+    });
+    // raw 가 없어도(artifact_available=false) 판정 메타가 살아있다.
+    expect(r.artifact_available).toBe(false);
+    expect(r.exit_code).toBe(0);
+    expect(r.ref.sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(r.key_lines.length).toBeGreaterThan(0);
+  });
+
+  test('evidence-index.json ledger: appendRecord → readIndex 라운드트립 + append-only', async () => {
+    const es = new EvidenceStore(tmp);
+    await es.appendRecord(wi.id, fresh({ ref: { kind: 'note', summary: 'first' } }));
+    await es.appendRecord(wi.id, fresh({ ref: { kind: 'note', summary: 'second' } }));
+    const idx = await es.readIndex(wi.id);
+    expect(idx.work_item_id).toBe(wi.id);
+    expect(idx.records.map((r) => r.ref.summary)).toEqual(['first', 'second']);
   });
 });
