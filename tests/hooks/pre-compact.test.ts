@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { AutopilotStore } from '~/core/autopilot-store';
 import { HandoffStore } from '~/core/handoff-store';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import { preCompactHandler } from '~/hooks/pre-compact';
+import type { Autopilot } from '~/schemas/autopilot';
 
 let repo: string;
 let wiId: string;
@@ -46,5 +48,81 @@ describe('preCompactHandler', () => {
     });
     expect(out.exitCode).toBe(0);
     expect(await new HandoffStore(repo).exists(wiId)).toBe(false);
+  });
+
+  test('autopilot present => handoff.autopilot_id matches autopilot.autopilot_id (§6.10)', async () => {
+    const graph: Autopilot = {
+      schema_version: '0.1.0',
+      autopilot_id: 'orch_260531abc',
+      work_item_id: wiId,
+      mode: 'autopilot',
+      root_goal: 'g',
+      completion_boundary: 'entire_work_item',
+      approval_gate: {
+        status: 'not_required',
+        source: 'small_reversible_policy',
+        approved_at: null,
+        approved_by: null,
+        evidence_refs: [],
+      },
+      nodes: [
+        {
+          id: 'N1',
+          kind: 'design',
+          owner: 'planner',
+          purpose: 'design',
+          acceptance_refs: ['ac-1'],
+          depends_on: [],
+          status: 'pending',
+          evidence_refs: [],
+          attempts: { fix: 0, switch: 0 },
+        },
+      ],
+      caps: { fix_per_node: 2, switch_per_node: 1 },
+      continue_policy: {
+        continue_after_approval: true,
+        continue_after_checkpoint: true,
+        continue_after_fixable_failure: true,
+        ask_user_only_for_user_owned_decisions: true,
+      },
+      stop_conditions: ['all_acceptance_criteria_passed_or_explicitly_closed'],
+      user_interrupt_policy: 'ask_only_for_user_owned_decisions',
+    };
+    await new AutopilotStore(repo).write(wiId, graph);
+
+    const out = await preCompactHandler({
+      raw: { session_id: SESSION, trigger: 'auto' },
+      repoRoot: repo,
+      env: {},
+    });
+    expect(out.exitCode).toBe(0);
+    const handoff = await new HandoffStore(repo).get(wiId);
+    expect(handoff.autopilot_id).toBe('orch_260531abc');
+  });
+
+  test('autopilot absent => handoff.autopilot_id omitted (backward compat)', async () => {
+    const out = await preCompactHandler({
+      raw: { session_id: SESSION, trigger: 'auto' },
+      repoRoot: repo,
+      env: {},
+    });
+    expect(out.exitCode).toBe(0);
+    const handoff = await new HandoffStore(repo).get(wiId);
+    expect(handoff.autopilot_id).toBeUndefined();
+  });
+
+  test('autopilot.json malformed => fail-open, handoff written without autopilot_id', async () => {
+    await writeFile(
+      join(repo, '.ditto', 'work-items', wiId, 'autopilot.json'),
+      '{ this is not valid json',
+    );
+    const out = await preCompactHandler({
+      raw: { session_id: SESSION, trigger: 'auto' },
+      repoRoot: repo,
+      env: {},
+    });
+    expect(out.exitCode).toBe(0); // PreCompact must never block (§M4.2)
+    const handoff = await new HandoffStore(repo).get(wiId);
+    expect(handoff.autopilot_id).toBeUndefined();
   });
 });

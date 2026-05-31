@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { AutopilotStore } from '~/core/autopilot-store';
 import { HandoffStore, buildHandoff } from '~/core/handoff-store';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -165,6 +166,56 @@ describe('M4.2 — PreCompact 핸들러 (압축 전 handoff 작성, 비차단·f
     await run();
     const refreshed = await items.get(wi.id);
     expect(refreshed.handoff_path).toBe(`.ditto/work-items/${wi.id}/handoff.json`);
+  });
+
+  test('autopilot 연속성: active autopilot 의 autopilot_id 가 handoff 에 전달된다 (§AC-1, wi_v04runtimewiring 2026-05-31)', async () => {
+    const graph = {
+      schema_version: '0.1.0' as const,
+      autopilot_id: 'orch_2605310c1' as const,
+      work_item_id: wi.id,
+      mode: 'autopilot' as const,
+      root_goal: wi.goal,
+      completion_boundary: 'entire_work_item' as const,
+      approval_gate: {
+        status: 'not_required' as const,
+        source: 'small_reversible_policy' as const,
+        approved_at: null,
+        approved_by: null,
+        evidence_refs: [],
+      },
+      nodes: [
+        {
+          id: 'N1',
+          kind: 'design' as const,
+          owner: 'planner' as const,
+          purpose: 'design',
+          acceptance_refs: ['ac-1'],
+          depends_on: [],
+          status: 'pending' as const,
+          evidence_refs: [],
+          attempts: { fix: 0, switch: 0 },
+        },
+      ],
+      caps: { fix_per_node: 2, switch_per_node: 1 },
+      continue_policy: {
+        continue_after_approval: true,
+        continue_after_checkpoint: true,
+        continue_after_fixable_failure: true,
+        ask_user_only_for_user_owned_decisions: true,
+      },
+      stop_conditions: ['all_acceptance_criteria_passed_or_explicitly_closed' as const],
+      user_interrupt_policy: 'ask_only_for_user_owned_decisions' as const,
+    };
+    await new AutopilotStore(tmp).write(wi.id, graph);
+    await run();
+    const h = await new HandoffStore(tmp).get(wi.id);
+    expect(h.autopilot_id).toBe('orch_2605310c1');
+  });
+
+  test('autopilot 부재 → handoff.autopilot_id 미포함 (backward compat)', async () => {
+    await run();
+    const h = await new HandoffStore(tmp).get(wi.id);
+    expect(h.autopilot_id).toBeUndefined();
   });
 });
 
