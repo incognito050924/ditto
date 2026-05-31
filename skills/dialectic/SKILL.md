@@ -15,7 +15,22 @@ How (role separation, model routing, Codex Opponent bridge, round policy, admiss
 - **Opponent** (Codex preferred, Claude fallback recorded) — objections, each linked to an oracle (acceptance criterion, file:line, doc, or user intent); plus missing alternatives, scope-creep risks, verification gaps.
 - **Synthesizer** — verdict (`accept|revise|reject|blocked`) + agreed final position; rejections carry as much grounding as a raise.
 
+## Procedure (driver)
+Run as the main agent; spawn each role as its own Task (1-level). The roles are **separate spawns even within one turn** — never simulate three voices in one prompt (dialectic-contract §2).
+
+1. **Build `input`** (dialectic schema §5.2) from the node/decision: `mode`, `target_artifact`, `question`, `intent_refs`, `acceptance_refs`, `evidence_refs`, `constraints`, `model_policy`.
+2. **Producer** — spawn `dialectic-producer` with the input only. Capture its `position`/`proposal`/`evidence`/`assumptions`/`known_limits`.
+3. **Opponent** — resolve the provider with `OpponentModelRouter` (`src/core/opponent-router.ts`): `resolveOpponentCandidates(model_policy)` → `selectOpponent(candidates, isAvailable)`. `isAvailable` checks Codex reachability (doctor/CLI); Codex unavailable is the normal path → fall back to claude-opus → claude-sonnet. Spawn `dialectic-opponent` (on the selected provider) with the input + Producer output. Record the selection into `opponent.run` (`provider`/`model`/`command`/`timestamp`/`fallback_from`/`fallback_reason`).
+4. **Synthesizer** — spawn `dialectic-synthesizer` with input + Producer + Opponent outputs. Capture the `verdict` + agreed position.
+5. **Write** `reviews/dialectic-<n>.json` (full `dialectic` schema) + a `.md` view. `<n>` increments per deliberation on the work item.
+
+The driver constructs packets and spawns; it does not produce any role's content (autopilot-contract §3.4). Invoke this at **high-impact `review`/`design` nodes** (autopilot-contract §2.2 — review owner = reviewer, high-impact 산출물 = dialectic 3역), not on every node.
+
+## Rounds (under ConvergenceGate)
+`constraints.max_rounds` bounds re-deliberation. Rounds run *under* the ConvergenceContract admissibility/ratchet/decision-ledger discipline (§6) — `cap_reached ≠ converged`: hitting `max_rounds` without resolving admissible objections closes non-pass (the CompletionContract decides the verdict), it is not a silent `accept`.
+
 ## Output contract
 - `reviews/dialectic-<n>.json` + `.md` conforming to the dialectic schema (§6.6).
-- Objections gate *action* only when admissible (criterion-linked ∧ novel ∧ critical|major); inadmissible objections are still surfaced in the ledger.
-- The Opponent run records provider/model/command/timestamp/fallback.
+- Objections gate *action* only when **admissible = `maps_to` non-empty ∧ novel ∧ severity `critical|high`**; inadmissible (taste / no-oracle / `medium`-below) objections are still surfaced in the ledger but do not block.
+- The Opponent run records provider/model/command/timestamp/fallback (never fabricated).
+- The Stop hook reads these ledgers: a `reject`/`blocked` verdict or an unresolved admissible objection forces continuation (see `stop.ts`).
