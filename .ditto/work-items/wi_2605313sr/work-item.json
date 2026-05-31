@@ -8,53 +8,129 @@
     {
       "id": "ac-1",
       "statement": "src/schemas/evidence-record.ts 신규: evidenceRecord = { ref: evidenceRef(기존 재사용, 미변경), captured_at: isoDateTime, freshness: 'fresh'|'stale', stale_reason: string|null, portability: 'committed'|'local-artifact', artifact_available: boolean, exit_code: int|null, key_lines: string[] }. 설계서 line 633-645 shape 정합. 더불어 커밋 파일 envelope evidenceIndex = { schema_version, work_item_id, records: evidenceRecord[] } 정의.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/schemas/evidence-record.ts",
+          "summary": "evidenceRecord(ref=evidenceRef 재사용 + captured_at/freshness/stale_reason/portability/artifact_available/exit_code/key_lines) + evidenceIndex envelope. 설계서 line 633-645 shape 정합"
+        },
+        {
+          "kind": "file",
+          "path": "schemas/evidence-record.schema.json",
+          "summary": "생성된 JSON schema (evidence-index.schema.json도 함께)"
+        }
+      ]
     },
     {
       "id": "ac-2",
       "statement": "evidenceRecord 교차 필드 규칙(superRefine): (a) freshness='stale' ⇒ stale_reason 비어있지 않아야 함, (b) freshness='fresh' ⇒ stale_reason=null, (c) portability='committed' ⇒ artifact_available=true(커밋된 증거는 항상 열람 가능). 위반 fixture는 schema reject.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/conformance/m3.conformance.test.ts",
+          "summary": "M3.4 cross-field 3규칙 reject 단언 통과 (stale 무reason / fresh+reason / committed+unavailable 모두 safeParse false)"
+        }
+      ]
     },
     {
       "id": "ac-3",
       "statement": "evidence-record/evidence-index 두 schema가 barrel(src/schemas/index.ts) + export registry(scripts/export-schemas.ts) + sidecar-registration.test.ts NEW_SIDECARS 세 곳 모두에 등록되고, schemas/evidence-record.schema.json·evidence-index.schema.json JSON schema가 생성된다(등록 누락 감지 테스트 통과).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/sidecar-registration.test.ts",
+          "summary": "18 pass — evidence-record·evidence-index가 registry + barrel 양쪽에 등록 확인"
+        },
+        {
+          "kind": "command",
+          "command": "bun run schemas:export",
+          "summary": "wrote schemas/evidence-record.schema.json + evidence-index.schema.json (drift 0)"
+        }
+      ]
     },
     {
       "id": "ac-4",
       "statement": "EvidenceStore에 evidence-index.json ledger 확장: appendRecord(workItemId, record)는 work-item 루트(.ditto/work-items/<id>/evidence-index.json, evidence/ 하위 아님 → 커밋 대상)에 EvidenceRecord를 append-only로 누적하고 evidenceIndex schema로 atomic write, readIndex(workItemId)는 부재 시 빈 index 반환. 기존 appendCommand(commands.jsonl)와 독립.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/evidence-store.ts",
+          "summary": "appendRecord/readIndex + evidenceIndexPath(work-item 루트). readIndex 부재→빈 index(파일 미생성), appendRecord atomic + schema 검증"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/evidence-store.test.ts",
+          "summary": "12 pass — 루트 경로(evidence/ 아님)·append-only 순서·default·cross-field reject 라운드트립"
+        }
+      ]
     },
     {
       "id": "ac-5",
       "statement": "CompletionContract acceptanceVerdict에 optional evidence_records: evidenceRecord[] default [] 추가(backward compat — 기존 evidenceRef 'evidence' 배열 폐기 X, 기존 fixture 마이그레이션 불필요). conformance(m3): cross-field 3규칙 + ledger append→read round-trip + clone 환경(artifact_available=false, portability=local-artifact) fixture가 summary/exit_code/sha로 판정 가능함. bun test 전체 + lint 통과. matrix/plan §M3 갱신.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/schemas/completion-contract.ts",
+          "summary": "acceptanceVerdict.evidence_records optional default []. 기존 evidence(bare ref) 유지 → 기존 completion 마이그레이션 0건"
+        },
+        {
+          "kind": "command",
+          "command": "bun test && bun run lint",
+          "summary": "477 pass / 0 fail; lint 'No fixes applied'(green). M3.4에 clone fallback(local-artifact+artifact_available=false→summary/exit_code/sha 판정) 포함"
+        },
+        {
+          "kind": "file",
+          "path": "reports/design/ditto-v0-conformance-matrix.md",
+          "summary": "M3 20→24, v0 합계 126→130; plan §5 M3 갱신"
+        }
+      ]
     }
   ],
-  "status": "in_progress",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
-  "changed_files": [],
+  "changed_files": [
+    ".ditto/work-items/wi_2605313sr/completion.json",
+    ".ditto/work-items/wi_2605313sr/handoff.md",
+    ".ditto/work-items/wi_2605313sr/language-ledger.json",
+    ".ditto/work-items/wi_2605313sr/plan.md",
+    ".ditto/work-items/wi_2605313sr/work-item.json",
+    "reports/design/ditto-v0-conformance-matrix.md",
+    "reports/design/ditto-v0-implementation-plan.md",
+    "schemas/completion-contract.schema.json",
+    "schemas/evidence-index.schema.json",
+    "schemas/evidence-record.schema.json",
+    "scripts/export-schemas.ts",
+    "src/core/evidence-store.ts",
+    "src/schemas/completion-contract.ts",
+    "src/schemas/evidence-record.ts",
+    "src/schemas/index.ts",
+    "tests/conformance/m3.conformance.test.ts",
+    "tests/core/evidence-store.test.ts",
+    "tests/schemas/sidecar-registration.test.ts"
+  ],
   "risks": [
     {
-      "id": "r-1",
-      "description": "acceptanceVerdict에 evidence_records 추가 시 default [] 이므로 기존 completion fixture/artifact는 마이그레이션 불필요(absent→[]). buildCompletion(completion-store/work-item-handoff)도 미설정→default []. backward compat 유지."
+      "description": "acceptanceVerdict에 evidence_records 추가 시 default [] 이므로 기존 completion fixture/artifact는 마이그레이션 불필요(absent→[]). buildCompletion(completion-store/work-item-handoff)도 미설정→default []. backward compat 유지.",
+      "severity": "low"
     },
     {
-      "id": "r-2",
-      "description": "evidence(bare evidenceRef[])와 evidence_records(freshness 래핑) 두 배열 공존 → 표면상 중복. 그러나 설계서 §6.7 line 698 + [DECIDED]가 backward compat 위해 명시적으로 요구. evidence=legacy bare ref, evidence_records=freshness/portability 래핑으로 역할 분리, evidenceRef 폐기 안 함."
+      "description": "evidence(bare evidenceRef[])와 evidence_records(freshness 래핑) 두 배열 공존 → 표면상 중복. 그러나 설계서 §6.7 line 698 + [DECIDED]가 backward compat 위해 명시적으로 요구. evidence=legacy bare ref, evidence_records=freshness/portability 래핑으로 역할 분리, evidenceRef 폐기 안 함.",
+      "severity": "low"
     },
     {
-      "id": "r-3",
-      "description": "evidence-index.json은 커밋 대상(.gitignore는 evidence/ 하위만 무시). raw artifact는 계속 gitignore. ledger가 raw 없이 판정 가능한 메타(summary/sha256/exit_code/key_lines)를 담음."
+      "description": "evidence-index.json은 커밋 대상(.gitignore는 evidence/ 하위만 무시). raw artifact는 계속 gitignore. ledger가 raw 없이 판정 가능한 메타(summary/sha256/exit_code/key_lines)를 담음.",
+      "severity": "low"
     }
   ],
   "runs": [],
+  "handoff_path": ".ditto/work-items/wi_2605313sr/handoff.md",
   "created_at": "2026-05-31T15:53:22.033Z",
-  "updated_at": "2026-05-31T15:53:22.033Z"
+  "updated_at": "2026-05-31T16:00:37.295Z",
+  "closed_at": "2026-05-31T16:00:37.226Z"
 }
