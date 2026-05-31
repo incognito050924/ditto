@@ -1,0 +1,79 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260531b0c",
+  "title": "v0.4 intent/autopilot entry — deep-interview driver + bootstrapAutopilot 자동 호출",
+  "source_request": "사용자: '①부터 시작해'. ①=wi_v04intent_autopilot_entry. wi_v04runtimewiring의 placeholder advisory가 hint 수준에 머무름 → 자동 진행 부재가 outcome 갭. IntentContract entry + AutopilotContract entry + QuestionGate advisory를 하나의 의도로 묶음.",
+  "goal": "deep-interview 자동 진입으로 IntentContract(intent.json) 작성 + bootstrapAutopilot 호출로 autopilot.json 자동 생성. placeholder-only + execution 의도 교집합 조건으로 진입 보수성 유지. QuestionGate advisory 추가.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "UserPromptSubmit이 (allAcceptancePlaceholders(active_work_item) AND classifyPromptAdvisory(prompt)=='execution') 교집합 만족 시 charter projection에 deep-interview 진입 directive 한 줄을 inject한다. 두 조건 중 하나라도 불만족이면 directive 미inject — 작은 요청을 heavy workflow로 자동 승격하지 않는다(설계서 §2 #3).",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "ditto deep-interview CLI 서브 명령 4개 추가: start(interview-state.json 초기화), record-turn(dimension/question/answer 한 건 append, schema-validated), check-readiness(interviewReadinessGate 호출 → pass + 부족 dimension 반환), finalize(ready 상태에서 intent.json을 IntentContract schema로 작성 + work item.acceptance_criteria를 intent.acceptance_criteria로 mirror update). 모든 서브 명령은 atomic write + JSON output 지원.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "ditto deep-interview finalize가 성공한 직후 같은 명령이 bootstrapAutopilot을 호출해 .ditto/work-items/<id>/autopilot.json을 schema에 맞게 작성한다. autopilot.work_item_id == work_item.id, autopilot.root_goal == intent.goal, autopilot.nodes는 buildInitialNodes(intent.acceptance_criteria.id)로 design→implement→verify 체인. approval_gate는 finalize에 전달된 risk axes에 따라 pending(high-risk)/not_required(safe). 별도 ditto autopilot bootstrap 명령도 idempotent하게 제공해 manual bootstrap 가능.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "skills/deep-interview/SKILL.md 본문이 ditto deep-interview CLI 4개 서브 명령 호출을 명시한 절차로 채워진다: (1) charter directive 또는 사용자 placeholder 감지 시 start로 진입, (2) 모호한 dimension 식별 + 사용자에게 1개씩 질문(설계서 §11 한 번에 1개 원칙), (3) record-turn으로 응답 기록, (4) 매 turn check-readiness 호출, (5) ready 시 finalize. ditto CLI 인자 예시 포함. v0 skeleton 'TBD' 본문 제거.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "charter projection에 QuestionGate advisory 추가. classifyPromptAdvisory의 'question' 분류 + prompt가 'codebase로 답 가능한 형태'(file/path/function/error/test 키워드 포함) 휴리스틱 통과 시 charter에 'self-answer from code/docs/web first before asking (QuestionGate)' 한 줄 inject. 강제 차단 없음 — exit 0 advisory(설계서 §11 원칙 10 '키워드 표 금지'와 호환되는 hint 수준).",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-6",
+      "statement": "기존 conformance 5개 milestone(M0~M4) + 기존 unit/hook test 모두 회귀 zero. 신규 unit test가 AC-1~AC-5 각각을 보호. m1.3 conformance에 deep-interview directive inject case + QuestionGate advisory case 추가, m2.1b conformance(bootstrap)에 finalize 자동 호출 path case 추가. v0 합계 매트릭스 업데이트(119 → 신규 케이스 수 반영).",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [
+    {
+      "description": "deep-interview CLI 서브 명령 4개 추가로 CLI 표면이 늘어남. 각 명령이 schema-validated 산출물을 update하므로 invalid 인자에 강건성 필요.",
+      "severity": "low",
+      "mitigation": "각 서브 명령에 unit test + invalid 인자 reject fixture"
+    },
+    {
+      "description": "AC-3의 bootstrapAutopilot 자동 호출 path와 manual ditto autopilot bootstrap 명령이 둘 다 존재 — 동일 결과 보장 필요(idempotent).",
+      "severity": "info",
+      "mitigation": "둘 다 같은 bootstrapAutopilot 코어 함수를 호출. CLI에서 work_item_id 일치 + intent ready 두 invariant만 강제."
+    },
+    {
+      "description": "AC-1의 자동 진입 directive를 사용자가 무시하고 싶을 수 있음(예: 빠른 prototype). hook은 advisory만이라 강제 못 함 — 그러나 directive 문구가 LLM을 강하게 끌어당길 수 있어 trade-off 존재.",
+      "severity": "info",
+      "mitigation": "directive 문구에 'recommended; may be skipped if the request is small or reversible' 명시. 또한 사용자가 acceptance_criteria를 손으로 박으면 placeholder 조건이 깨져 directive 미inject."
+    },
+    {
+      "description": "AC-5 휴리스틱(file/path/function/error/test 키워드)이 false-positive 가능 — 'function'을 일반 단어로 쓴 prompt도 trigger.",
+      "severity": "low",
+      "mitigation": "advisory 수준이라 false-positive 비용 작음. 단어 boundary 매칭으로 보수적 설정 + LLM이 따를 의무 없음 명시."
+    },
+    {
+      "description": "본 work item이 deep-interview의 LLM 자율 영역(어떤 질문을 할지·dimension 식별·응답 해석)을 코드로 강제하지 않음. driver는 산출물 schema만 강제하고 내용은 LLM에 위임.",
+      "severity": "info",
+      "mitigation": "out_of_scope 명시. wall-clock 인터뷰 품질은 별도 평가 사이클(post-v0 evaluator lane)에서."
+    }
+  ],
+  "runs": [],
+  "created_at": "2026-05-31T14:56:20.233Z",
+  "updated_at": "2026-05-31T14:56:20.233Z"
+}
