@@ -110,4 +110,50 @@ describe('userPromptSubmitHandler', () => {
     expect(out.exitCode).toBe(0);
     expect(additionalContext(out.stdout)).toContain('prime directive');
   });
+
+  test('auto-created work item (all-placeholder AC) emits placeholder advisory', async () => {
+    const out = await run({ session_id: 'sess-ph', prompt: 'do the thing' });
+    expect(out.exitCode).toBe(0);
+    const ctx = additionalContext(out.stdout);
+    expect(ctx).toContain('acceptance criteria are placeholders');
+    expect(ctx).toContain('/ditto:deep-interview');
+  });
+
+  test('work item with at least one real AC does NOT emit placeholder advisory', async () => {
+    const items = new WorkItemStore(repo);
+    const created = await items.create({
+      title: 'real',
+      source_request: 'r',
+      goal: 'r',
+      acceptance_criteria: [
+        { id: 'ac-1', statement: 'returns 200 on /health', verdict: 'unverified', evidence: [] },
+      ],
+    });
+    await new SessionPointerStore(repo).set('sess-real', created.id);
+    const out = await run({ session_id: 'sess-real', prompt: 'continue' });
+    expect(out.exitCode).toBe(0);
+    expect(additionalContext(out.stdout)).not.toContain('acceptance criteria are placeholders');
+  });
+
+  test('mixed AC (one placeholder + one real) does NOT emit placeholder advisory', async () => {
+    const items = new WorkItemStore(repo);
+    const created = await items.create({
+      title: 'mixed',
+      source_request: 'm',
+      goal: 'm',
+      acceptance_criteria: [
+        {
+          id: 'ac-1',
+          statement: 'TBD — derive observable criteria during interview/planning',
+          verdict: 'unverified',
+          evidence: [],
+        },
+        { id: 'ac-2', statement: 'logs request id', verdict: 'unverified', evidence: [] },
+      ],
+    });
+    await new SessionPointerStore(repo).set('sess-mix', created.id);
+    const out = await run({ session_id: 'sess-mix', prompt: 'continue' });
+    expect(out.exitCode).toBe(0);
+    expect(additionalContext(out.stdout)).not.toContain('acceptance criteria are placeholders');
+  });
 });

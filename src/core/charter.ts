@@ -14,6 +14,18 @@ const PRIME_DIRECTIVE = [
   '- Internal checkpoint completion is not a final answer; the whole work item is the bar.',
 ].join('\n');
 
+/**
+ * Statement used when UserPromptSubmit auto-creates a draft work item before any
+ * interview has happened. Single source of truth — both the writer (the hook)
+ * and the reader (the placeholder advisory) reference this constant so the
+ * detection cannot silently drift.
+ */
+export const PLACEHOLDER_AC_STATEMENT =
+  'TBD — derive observable criteria during interview/planning';
+
+const PLACEHOLDER_AC_ADVISORY =
+  'acceptance criteria are placeholders — narrow them via /ditto:deep-interview before acting (IntentContract)';
+
 export interface CharterContext {
   workItemId?: string;
   workItemTitle?: string;
@@ -22,6 +34,13 @@ export interface CharterContext {
   pendingHandoff?: string;
   /** Advisory note when the active work item is ambiguous and must be resolved by the user. */
   advisory?: string;
+  /**
+   * True when every acceptance criterion of the active work item is the
+   * auto-generated placeholder (wi_v04runtimewiring AC-3). Surfaces a one-line
+   * advisory urging an interview before any action, so the IntentContract
+   * outcome ("narrow the goal into observable criteria") gets a runtime nudge.
+   */
+  placeholderAcceptanceCriteria?: boolean;
 }
 
 /** Build the additionalContext text injected on UserPromptSubmit. */
@@ -38,6 +57,7 @@ export function charterProjection(ctx: CharterContext = {}): string {
     lines.push('', detail ? `${head} (${detail})` : head);
   }
   if (ctx.pendingHandoff) lines.push(`Pending handoff/re-entry: ${ctx.pendingHandoff}`);
+  if (ctx.placeholderAcceptanceCriteria) lines.push('', `⚠ ${PLACEHOLDER_AC_ADVISORY}`);
   if (ctx.advisory) lines.push('', `⚠ ${ctx.advisory}`);
   return lines.join('\n');
 }

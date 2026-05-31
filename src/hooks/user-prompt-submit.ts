@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { type CharterContext, charterProjection } from '~/core/charter';
+import { type CharterContext, PLACEHOLDER_AC_STATEMENT, charterProjection } from '~/core/charter';
 import { atomicWriteText, ensureDir } from '~/core/fs';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { type WorkItem, WorkItemStore } from '~/core/work-item-store';
@@ -67,7 +67,7 @@ export async function resolveActiveWorkItem(
       acceptance_criteria: [
         {
           id: 'ac-1',
-          statement: 'TBD — derive observable criteria during interview/planning',
+          statement: PLACEHOLDER_AC_STATEMENT,
           verdict: 'unverified',
           evidence: [],
         },
@@ -77,6 +77,12 @@ export async function resolveActiveWorkItem(
   );
   await pointers.set(sessionId, created.id, now);
   return { workItem: created, action: 'created' };
+}
+
+/** True iff every acceptance criterion of the work item is the placeholder. */
+export function allAcceptancePlaceholders(item: WorkItem): boolean {
+  if (item.acceptance_criteria.length === 0) return false;
+  return item.acceptance_criteria.every((ac) => ac.statement === PLACEHOLDER_AC_STATEMENT);
 }
 
 function pendingHandoffHint(item: WorkItem): string | undefined {
@@ -124,6 +130,7 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
     ctx.workItemStatus = item.status;
     const handoff = pendingHandoffHint(item);
     if (handoff) ctx.pendingHandoff = handoff;
+    if (allAcceptancePlaceholders(item)) ctx.placeholderAcceptanceCriteria = true;
   }
   if (resolved.advisory) ctx.advisory = resolved.advisory;
 

@@ -167,6 +167,39 @@ describe('M1.3 — UserPromptSubmit hook 최소 동작 (단일 active invariant)
     const stopPointer = await new SessionPointerStore(tmp).get(SESSION);
     expect(stopPointer).toBe(upsPointer);
   });
+
+  test('자동 생성된 placeholder-only work item → placeholder advisory inject (§AC-3, wi_v04runtimewiring 2026-05-31)', async () => {
+    const out = await run({ prompt: 'do something' });
+    const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
+    // IntentContract outcome ("좁혀라"): 자동 생성 직후 advisory 발화.
+    expect(ctx).toContain('acceptance criteria are placeholders');
+    expect(ctx).toContain('/ditto:deep-interview');
+  });
+
+  test('real AC가 있는 work item → placeholder advisory 미발화 (false-positive 차단)', async () => {
+    const items = new WorkItemStore(tmp);
+    const created = await items.create({
+      title: 'real',
+      source_request: 'r',
+      goal: 'r',
+      acceptance_criteria: [
+        {
+          id: 'ac-1',
+          statement: '/health endpoint returns 200',
+          verdict: 'unverified',
+          evidence: [],
+        },
+      ],
+    });
+    await new SessionPointerStore(tmp).set('s-real', created.id);
+    const out = await userPromptSubmitHandler({
+      raw: { session_id: 's-real', prompt: 'continue' },
+      repoRoot: tmp,
+      env: {},
+    });
+    const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
+    expect(ctx).not.toContain('acceptance criteria are placeholders');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -263,7 +296,25 @@ describe('M1.4 — Stop hook 최소 동작 (완료/수렴/노드상태 게이트
     expect((await run()).exitCode).toBe(2);
   });
 
-  test('완료 artifact 부재 + active autopilot 없음 → exit 0', async () => {
+  test('완료 artifact 부재 + active autopilot 없음 + NON_TERMINAL → exit 2 (§M1.4 strong-block 2026-05-31)', async () => {
+    // Default work item from beforeEach is status=draft → NON_TERMINAL.
+    // plan §M1.4 line 117 originally specified exit 0 here; that was a stub
+    // outcome carrying over to v0 closure as the "verify 안 한 채 그냥 종료"
+    // gap surfaced in the 2026-05-31 outcome matrix. Strong-block update
+    // closes it: NON_TERMINAL work item + all three ledgers absent → exit 2.
+    const out = await run();
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('no completion.json');
+  });
+
+  test('완료 artifact 부재 + active autopilot 없음 + terminal(done) → exit 0', async () => {
+    const store = new WorkItemStore(tmp);
+    await store.update(wiId, (current) => ({ ...current, status: 'in_progress' }));
+    await store.update(wiId, (current) => ({
+      ...current,
+      status: 'done',
+      closed_at: '2026-05-31T00:00:00.000Z',
+    }));
     expect((await run()).exitCode).toBe(0);
   });
 
