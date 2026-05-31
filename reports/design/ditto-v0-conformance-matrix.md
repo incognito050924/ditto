@@ -39,7 +39,17 @@ bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 | M4 (Context rot 방지) | 2 + cross | 13 | ✅ |
 | **v0 합계** | **23** | **138** | **✅** |
 
-**M5(Playwright E2E)·M6(Knowledge/PM)는 미구현 — v0 closure 범위 밖**(plan §0 / 설계서 §12.5 "v0 범위는 M0~M2 skeleton, M3 이후는 hardening/확장"; M3·M4는 본 closure에 포함, M5·M6은 별도 milestone).
+**M5(Playwright E2E)·M6(Knowledge/PM)는 runtime 미구현 — v0 closure 범위 밖**(plan §0 / 설계서 §12.5 "v0 범위는 M0~M2 skeleton, M3 이후는 hardening/확장"; M3·M4는 본 closure에 포함, M5·M6 runtime은 별도 milestone). 단 아래 **post-v0 design-lock** 참조 — M5/M6의 contract schema는 박혔고 agent runtime만 보존된다.
+
+### post-v0 design-locked contracts (schema + 설계문서, runtime은 M5/M6)
+
+v0 합계(138)에 **포함하지 않는다**(post-v0). 2026-06-01 wi_v04knowledge_curator가 contract를 design-lock:
+
+| contract | schema | 설계문서 | runtime(보류) | agent invariant |
+|---|---|---|---|---|
+| **KnowledgeContract**(M6) | `knowledge-record.ts`(`knowledgeRecord`, cross-field superseded⇒superseded_by) | `contracts/knowledge-contract.md` | knowledge-curator agent·`/ditto:knowledge-update`·CLAUDE.md projection | M1.5b: `knowledge-curator.md` v0 부재 유지 ✅ |
+
+schema parse/reject·등록(barrel/registry/sidecar-registration)은 `tests/schemas/knowledge-record.test.ts`로 검증(v0 합계 무관).
 
 ## 1. 매핑표 (build unit → 적합성 케이스 → 판정)
 
