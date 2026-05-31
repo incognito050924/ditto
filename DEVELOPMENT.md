@@ -32,6 +32,7 @@ bun run dogfood        # = claude --plugin-dir .
 
   `Source: ditto@inline` 과 함께 Skills(7: autopilot·deep-interview·dialectic·dialectic-review·handoff·plan·verify),
   Agents(8), Hooks(4) 인벤토리가 나오면 정상이다. 각 skill이 `/ditto:<skill>` 명령으로 뜬다.
+- 비대화형으로 skill까지 끝까지 돌리려면 `claude --plugin-dir . --dangerously-skip-permissions -p "/ditto:verify <id>"` (print 모드는 권한 프롬프트에 답할 수 없어 권한 스킵이 없으면 도구 사용 skill에서 멈춘다). **주의**: 권한 스킵은 일회성 데모/자동화용이고, 실제 work item에 돌리면 `completion.json`이 갱신되니 데모 후 `git restore`로 되돌릴 것.
 
 > hook은 `bun run "${CLAUDE_PLUGIN_ROOT}/hooks/*.ts"`로 **소스를 직접 실행**한다. 그래서 hook 동작을 바꿔도 `bun build`가 필요 없다.
 
