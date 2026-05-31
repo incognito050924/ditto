@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ZodTypeAny, z } from 'zod';
 import { completionGate, convergenceGate } from '~/core/gates';
@@ -7,8 +7,39 @@ import { WorkItemStore } from '~/core/work-item-store';
 import { type Autopilot, autopilot as autopilotSchema } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
 import { convergence as convergenceSchema } from '~/schemas/convergence';
+import { type Dialectic, dialectic as dialecticSchema } from '~/schemas/dialectic';
 import type { WorkItem } from '~/schemas/work-item';
 import type { HookHandler, HookInput } from './runtime';
+
+/** Opponent severities that make an oracle-linked objection an admissible blocker (§6). */
+const ADMISSIBLE_SEVERITIES: ReadonlySet<string> = new Set(['critical', 'high']);
+
+/**
+ * Cross-check one dialectic ledger (reviews/dialectic-<n>.json) against the
+ * convergence honesty discipline. Returns continuation reasons:
+ * - a synthesizer verdict of reject/blocked is an unresolved deliberation;
+ * - an admissible objection (oracle-linked `maps_to` ∧ severity critical|high)
+ *   that the synthesizer neither accepted nor grounded-rejected is unresolved.
+ * Objections without an oracle are *taste* — surfaced, never a blocker.
+ */
+export function dialecticForcesContinuation(d: Dialectic): string[] {
+  const reasons: string[] = [];
+  const verdict = d.synthesizer.verdict;
+  if (verdict === 'reject' || verdict === 'blocked') {
+    reasons.push(`dialectic ${d.review_id} verdict=${verdict}; deliberation not resolved`);
+  }
+  const resolved = new Set<string>([
+    ...d.synthesizer.accepted_objections,
+    ...d.synthesizer.rejected_objections.map((r) => r.objection),
+  ]);
+  for (const obj of d.opponent.objections) {
+    const admissible = obj.maps_to.trim().length > 0 && ADMISSIBLE_SEVERITIES.has(obj.severity);
+    if (admissible && !resolved.has(obj.claim)) {
+      reasons.push(`dialectic ${d.review_id}: admissible objection unresolved — ${obj.claim}`);
+    }
+  }
+  return reasons;
+}
 
 /**
  * Work item statuses that still owe a verdict; a stop with all three ledgers
@@ -48,6 +79,32 @@ async function readArtifact<S extends ZodTypeAny>(
   } catch {
     return { status: 'malformed', name };
   }
+}
+
+/**
+ * Read every reviews/dialectic-*.json ledger for a work item. A file that
+ * exists but fails schema parse is a gate-input violation (malformed → fail
+ * closed), exactly like the single-artifact reads. An absent reviews/ dir is a
+ * no-op (empty list) so work items that never ran a deliberation are unaffected.
+ */
+async function readDialecticLedgers(
+  dir: string,
+): Promise<{ status: 'ok'; items: Dialectic[] } | { status: 'malformed'; name: string }> {
+  const reviewsDir = join(dir, 'reviews');
+  let names: string[];
+  try {
+    names = await readdir(reviewsDir);
+  } catch {
+    return { status: 'ok', items: [] };
+  }
+  const files = names.filter((n) => /^dialectic-.*\.json$/.test(n)).sort();
+  const items: Dialectic[] = [];
+  for (const name of files) {
+    const read = await readArtifact(join(reviewsDir, name), dialecticSchema, `reviews/${name}`);
+    if (read.status === 'malformed') return { status: 'malformed', name: read.name };
+    if (read.status === 'ok') items.push(read.data);
+  }
+  return { status: 'ok', items };
 }
 
 function hasRunnableNode(a: Autopilot): boolean {
@@ -101,9 +158,10 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     'convergence.json',
   );
   const pilot = await readArtifact(join(dir, 'autopilot.json'), autopilotSchema, 'autopilot.json');
+  const dialectics = await readDialecticLedgers(dir);
 
   // Malformed artifact = gate-input violation → fail CLOSED (exit 2).
-  const malformed = [completion, conv, pilot].find((a) => a.status === 'malformed');
+  const malformed = [completion, conv, pilot, dialectics].find((a) => a.status === 'malformed');
   if (malformed && malformed.status === 'malformed') {
     return {
       exitCode: 2,
@@ -128,6 +186,9 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   }
   if (pilot.status === 'ok' && autopilotForcesContinuation(pilot.data)) {
     reasons.push('autopilot has runnable node(s); the work item is not complete yet');
+  }
+  if (dialectics.status === 'ok') {
+    for (const d of dialectics.items) reasons.push(...dialecticForcesContinuation(d));
   }
 
   if (reasons.length > 0) {
