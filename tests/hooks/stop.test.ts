@@ -40,7 +40,7 @@ const run = (raw: Record<string, unknown>) =>
 const completion = (overrides: Record<string, unknown>) => ({
   schema_version: '0.1.0',
   work_item_id: wiId,
-  declared_by: 'workspace-write',
+  declared_by: 'main',
   declared_at: '2026-05-26T02:00:00.000Z',
   summary: 'claim',
   changed_files: [],

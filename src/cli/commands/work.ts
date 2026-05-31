@@ -6,6 +6,7 @@ import {
   writeWorkItemHandoff,
 } from '~/core/work-item-handoff';
 import { WorkItemStore } from '~/core/work-item-store';
+import { declarerRole } from '~/schemas/common';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -193,6 +194,12 @@ const workHandoff = defineCommand({
         'Git ref to diff up to when collecting changed_files. Default HEAD. Useful for correcting past handoffs (base...head frozen range).',
       required: false,
     },
+    'declared-by': {
+      type: 'string',
+      description:
+        'Agent role that declares this completion (who judged): main|planner|implementer|verifier|reviewer|researcher|synthesizer. Default main.',
+      default: 'main',
+    },
     output: {
       type: 'string',
       description: 'Output format: human|json',
@@ -208,6 +215,14 @@ const workHandoff = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
+    const declaredBy = declarerRole.safeParse(args['declared-by']);
+    if (!declaredBy.success) {
+      writeError(
+        `--declared-by must be one of ${declarerRole.options.join('|')}; got "${args['declared-by']}"`,
+      );
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
     const repoRoot = await resolveRepoRootForCreate();
     const store = new WorkItemStore(repoRoot);
     try {
@@ -216,6 +231,7 @@ const workHandoff = defineCommand({
         result = await writeWorkItemHandoff(repoRoot, store, args.workId, {
           ...(args.base ? { base: args.base } : {}),
           ...(args.head ? { head: args.head } : {}),
+          declaredBy: declaredBy.data,
         });
       } catch (err) {
         if (err instanceof InvalidBaseRefError || err instanceof InvalidHeadRefError) {

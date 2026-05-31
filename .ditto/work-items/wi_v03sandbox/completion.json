@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "work_item_id": "wi_v03sandbox",
-  "declared_by": "workspace-write",
+  "declared_by": "main",
   "declared_at": "2026-05-24T11:55:00.000Z",
   "summary": "DITTO v0.3 profile sandbox enforcement — application plan line 754의 '실제로 적용' 기준을 충족. codex/claude-code 5 profile 매핑 + isolated worktree 격리 + defense-in-depth profile fixture가 들어가고 모든 AC가 pass로 기록되었다.",
   "changed_files": [

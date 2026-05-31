@@ -1,6 +1,10 @@
 import { join } from 'node:path';
+import type { z } from 'zod';
+import type { declarerRole } from '~/schemas/common';
 import { type CompletionContract, completionContract } from '~/schemas/completion-contract';
 import type { WorkItem } from '~/schemas/work-item';
+
+type DeclarerRole = z.infer<typeof declarerRole>;
 import { atomicWriteText, writeJson } from './fs';
 import type { WorkItemStore } from './work-item-store';
 
@@ -15,6 +19,12 @@ export interface HandoffResult {
 export interface HandoffOptions {
   base?: string;
   head?: string;
+  /**
+   * Agent role that declares this completion. `declared_by` records *who judged*,
+   * not the execution profile. The `ditto work handoff` path is driven by the main
+   * agent, so the default is 'main'; a verifier-owned closure can override.
+   */
+  declaredBy?: DeclarerRole;
 }
 
 export class InvalidBaseRefError extends Error {
@@ -97,6 +107,7 @@ function buildCompletion(
   item: WorkItem,
   declaredAt: string,
   changedFiles: string[],
+  declaredBy: DeclarerRole,
   unverifiedExtras: { item: string; reason: string; out_of_scope: boolean }[] = [],
 ): CompletionContract {
   const acceptance = item.acceptance_criteria.map((ac) => ({
@@ -111,7 +122,7 @@ function buildCompletion(
   const base = {
     schema_version: '0.1.0' as const,
     work_item_id: item.id,
-    declared_by: item.owner_profile,
+    declared_by: declaredBy,
     declared_at: declaredAt,
     summary: allPass
       ? `${item.title} — 모든 acceptance criterion이 pass로 기록되었다.`
@@ -253,7 +264,13 @@ export async function writeWorkItemHandoff(
     `.ditto/work-items/${workId}/work-item.json`,
   ];
   const merged = Array.from(new Set([...collected, ...selfArtifacts])).sort();
-  const completion = buildCompletion(item, now.toISOString(), merged, unverifiedExtras);
+  const completion = buildCompletion(
+    item,
+    now.toISOString(),
+    merged,
+    options.declaredBy ?? 'main',
+    unverifiedExtras,
+  );
   const effectiveReEntry: WorkItem['re_entry'] =
     completion.final_verdict === 'pass'
       ? undefined

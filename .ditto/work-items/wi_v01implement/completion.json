@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "work_item_id": "wi_v01implement",
-  "declared_by": "workspace-write",
+  "declared_by": "main",
   "declared_at": "2026-05-23T18:13:47.155Z",
   "summary": "DITTO v0.1 actual implementation — 5개 CLI 명령의 실제 동작 — 모든 acceptance criterion이 pass로 기록되었다.",
   "changed_files": [

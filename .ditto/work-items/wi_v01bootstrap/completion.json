@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "work_item_id": "wi_v01bootstrap",
-  "declared_by": "workspace-write",
+  "declared_by": "main",
   "declared_at": "2026-05-24T13:10:00+09:00",
   "summary": "DITTO v0.1 부트스트랩: TypeScript+Bun+citty+Biome+zod 스택 위에 schema 6개, JSONSchema export, golden fixture, schema 검증 테스트 11개, citty 기반 CLI 5개 명령 골격을 설치했다. tsc/biome/bun test 모두 통과.",
   "changed_files": [

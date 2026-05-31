@@ -211,7 +211,7 @@ describe('M3.2 — completion 빌더/store (verifier 판정 → 결정론 조립
   test('CompletionStore: write → exists → get 라운드트립', async () => {
     const c = buildCompletion({
       workItem: wi,
-      declaredBy: 'v',
+      declaredBy: 'verifier',
       summary: 's',
       verdicts: [
         { criterion_id: 'AC-1', verdict: 'pass' },

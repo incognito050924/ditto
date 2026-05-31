@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "work_item_id": "wi_v02handoff",
-  "declared_by": "workspace-write",
+  "declared_by": "main",
   "declared_at": "2026-05-24T04:03:40.878Z",
   "summary": "DITTO v0.2 work-item-handoff cleanup — accurate changed_files and base ref — 모든 acceptance criterion이 pass로 기록되었다.",
   "changed_files": [

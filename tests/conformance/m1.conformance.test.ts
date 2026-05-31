@@ -256,7 +256,7 @@ describe('M1.4 — Stop hook 최소 동작 (완료/수렴/노드상태 게이트
   const completion = (over: Record<string, unknown>) => ({
     schema_version: '0.1.0',
     work_item_id: wiId,
-    declared_by: 'workspace-write',
+    declared_by: 'main',
     declared_at: '2026-05-26T02:00:00.000Z',
     summary: 's',
     changed_files: [],

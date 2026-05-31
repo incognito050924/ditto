@@ -16,8 +16,16 @@
         },
         "declared_by": {
           "type": "string",
-          "minLength": 1,
-          "description": "Profile or agent that produced this completion claim"
+          "enum": [
+            "main",
+            "planner",
+            "implementer",
+            "verifier",
+            "reviewer",
+            "researcher",
+            "synthesizer"
+          ],
+          "description": "Agent role that judged this completion (who declared), not the execution profile; impersonation is rejected at the schema"
         },
         "declared_at": {
           "type": "string",

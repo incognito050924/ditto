@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "work_item_id": "wi_pwdcheck",
-  "declared_by": "workspace-write",
+  "declared_by": "main",
   "declared_at": "2026-05-24T11:42:00+09:00",
   "summary": "신규 사용자 등록 경로에 비밀번호 정책을 적용하고 위반 시 400을 반환한다. 위반 메시지는 v0에서는 한 줄 통합 포맷이다.",
   "changed_files": [

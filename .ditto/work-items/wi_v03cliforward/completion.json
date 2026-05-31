@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "work_item_id": "wi_v03cliforward",
-  "declared_by": "workspace-write",
+  "declared_by": "main",
   "declared_at": "2026-05-24T14:25:00.000Z",
   "summary": "phase3-review의 release-blocker P1 해결. `ditto run with --provider ... -- <args>`가 citty help parser에 가로채지지 않고 provider로 forward된다. 본 work item 자체가 `ditto run with --verify`로 capture된 run manifest(run_260524d7d)를 evidence로 남기면서 P2 운영 규칙을 즉시 적용했다. 본 work item이 done이 되면서 project_v03_entry_point memory를 'v0.3 fully closed'로 다시 정정한다.",
   "changed_files": [

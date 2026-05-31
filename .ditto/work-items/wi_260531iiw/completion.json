@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "work_item_id": "wi_260531iiw",
-  "declared_by": "workspace-write",
+  "declared_by": "main",
   "declared_at": "2026-05-31T14:30:00.000Z",
   "summary": "v0 closure 후 outcome 매트릭스가 지적한 'runtime entry 공백' 중 3건을 동작화: PreCompact가 autopilot_id를 handoff에 전달(M4.2), Stop hook이 NON_TERMINAL + 세 ledger absent를 차단(M1.4 strong-block, plan 본문 업데이트 동반), UserPromptSubmit이 placeholder-only AC에 advisory를 발화(M1.3). 신규 outcome 4건이 conformance(M1.3 +2, M1.4 net+1, M4.2 +2)로 보호됨.",
   "changed_files": [

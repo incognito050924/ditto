@@ -91,7 +91,7 @@ describe('schema rejects invalid documents', () => {
     const bad = {
       schema_version: '0.1.0',
       work_item_id: 'wi_bad0001',
-      declared_by: 'workspace-write',
+      declared_by: 'main',
       declared_at: '2026-05-24T11:00:00+09:00',
       summary: '실패한 acceptance로 pass를 주장하는 잘못된 contract',
       changed_files: [],
@@ -108,7 +108,7 @@ describe('schema rejects invalid documents', () => {
     const bad = {
       schema_version: '0.1.0',
       work_item_id: 'wi_bad0002',
-      declared_by: 'workspace-write',
+      declared_by: 'main',
       declared_at: '2026-05-24T11:00:00+09:00',
       summary: 'partial을 주장하면서 handoff 경로를 빠뜨림',
       changed_files: [],
@@ -172,7 +172,7 @@ describe('schema rejects invalid documents', () => {
     const bad = {
       schema_version: '0.1.0',
       work_item_id: 'wi_unverif1',
-      declared_by: 'workspace-write',
+      declared_by: 'main',
       declared_at: '2026-05-24T11:00:00+09:00',
       summary: 'pass를 주장하면서 in-scope unverified가 남아 있음',
       changed_files: [],
@@ -189,7 +189,7 @@ describe('schema rejects invalid documents', () => {
     const ok = {
       schema_version: '0.1.0',
       work_item_id: 'wi_outscop1',
-      declared_by: 'workspace-write',
+      declared_by: 'main',
       declared_at: '2026-05-24T11:00:00+09:00',
       summary: 'out_of_scope unverified만 남기고 pass 주장',
       changed_files: [],

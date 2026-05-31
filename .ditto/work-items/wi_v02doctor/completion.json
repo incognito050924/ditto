@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "work_item_id": "wi_v02doctor",
-  "declared_by": "workspace-write",
+  "declared_by": "main",
   "declared_at": "2026-05-24T03:47:51.632Z",
   "summary": "DITTO v0.2 doctor — host instruction/permission/MCP/skill drift 진단 — 모든 acceptance criterion이 pass로 기록되었다.",
   "changed_files": [

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  declarerRole,
   evidenceRef,
   isoDateTime,
   relativePath,
@@ -22,7 +23,9 @@ export const completionContract = z
   .object({
     schema_version: schemaVersion,
     work_item_id: workItemId,
-    declared_by: z.string().min(1).describe('Profile or agent that produced this completion claim'),
+    declared_by: declarerRole.describe(
+      'Agent role that judged this completion (who declared), not the execution profile; impersonation is rejected at the schema',
+    ),
     declared_at: isoDateTime,
     summary: z
       .string()

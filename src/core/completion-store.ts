@@ -1,12 +1,13 @@
 import { join } from 'node:path';
 import type { z } from 'zod';
-import type { evidenceRef, verdict } from '~/schemas/common';
+import type { declarerRole, evidenceRef, verdict } from '~/schemas/common';
 import { type CompletionContract, completionContract } from '~/schemas/completion-contract';
 import type { WorkItem } from '~/schemas/work-item';
 import { readJson, writeJson } from './fs';
 
 type Verdict = z.infer<typeof verdict>;
 type EvidenceRef = z.infer<typeof evidenceRef>;
+type DeclarerRole = z.infer<typeof declarerRole>;
 
 /**
  * Build a completion contract from verifier output (M3.2). Deterministic
@@ -17,7 +18,7 @@ type EvidenceRef = z.infer<typeof evidenceRef>;
  */
 export interface CompletionInput {
   workItem: WorkItem;
-  declaredBy: string;
+  declaredBy: DeclarerRole;
   summary: string;
   /** Per-criterion verdicts keyed by criterion id; missing ids default to unverified. */
   verdicts: Array<{

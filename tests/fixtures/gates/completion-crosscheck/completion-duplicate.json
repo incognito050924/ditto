@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "work_item_id": "wi_crosschk",
-  "declared_by": "workspace-write",
+  "declared_by": "main",
   "declared_at": "2026-05-26T02:30:00.000Z",
   "summary": "Lists ac-1 twice and omits ac-3 by count (gate must FAIL on duplicate)",
   "changed_files": ["src/password.ts"],

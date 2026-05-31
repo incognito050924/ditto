@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "work_item_id": "wi_260531b0c",
-  "declared_by": "workspace-write",
+  "declared_by": "main",
   "declared_at": "2026-06-01T00:00:00.000Z",
   "summary": "v0 outcome 매트릭스의 가장 큰 갭(runtime entry 자동 진행 부재)을 닫는다. ditto deep-interview CLI 4개 서브 명령 + IntentStore + InterviewStore + interview-driver 추가, finalize 가 한 호출 안에 intent.json/AC mirror/bootstrapAutopilot/autopilot.json 까지 결정론으로 처리. UserPromptSubmit 이 placeholder-only AC + execution prompt 교집합 시 `▶ Run /ditto:deep-interview now` directive 를, question + codebase-locatable 휴리스틱 시 `⚠ self-answer first (QuestionGate)` hint 를 charter 에 inject. skill 본문이 CLI 절차로 채워져 LLM 이 절차 → ditto CLI → schema-validated 산출물 흐름을 따른다. 회귀 zero, conformance 119 → 124.",
   "changed_files": [
