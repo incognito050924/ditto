@@ -28,16 +28,16 @@ bun test tests/conformance              # 전체 v0 적합성
 bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 ```
 
-**현재 판정: 124 케이스 전부 ✅ CONFORMS — v0(M0~M4) closed. wi_v04intent_autopilot_entry (2026-06-01): M1.3 deep-interview directive + QuestionGate hint + M2.1b finalize→bootstrap 자동 호출 outcome 보강. (직전: wi_v04runtimewiring 2026-05-31 M1.3 placeholder advisory + M1.4 strong-block + M4.2 autopilot_id 연속성.)**
+**현재 판정: 126 케이스 전부 ✅ CONFORMS — v0(M0~M4) closed. wi_v04verifier_body_and_declared_by (2026-06-01): M3 declared_by를 declarerRole enum으로 좁혀 판정 주체 명시 + 사칭 차단, verifier.md 본문화. (직전: wi_v04intent_autopilot_entry 2026-06-01 M1.3 deep-interview directive + QuestionGate hint + M2.1b finalize→bootstrap 자동 호출; wi_v04runtimewiring 2026-05-31 M1.3 placeholder advisory + M1.4 strong-block + M4.2 autopilot_id 연속성.)**
 
 | milestone | unit count | 적합성 케이스 | 판정 |
 |---|---|---:|---|
 | M0 (계약·스키마·게이트) | 4 | 17 | ✅ |
 | M1 (plugin·hook·skill·agent·inventory) | 6 | 46 | ✅ |
 | M2 (autopilot skeleton) | 6 | 30 | ✅ |
-| M3 (Evidence·verifier 런타임) | 3 | 18 | ✅ |
+| M3 (Evidence·verifier 런타임) | 3 | 20 | ✅ |
 | M4 (Context rot 방지) | 2 + cross | 13 | ✅ |
-| **v0 합계** | **21** | **124** | **✅** |
+| **v0 합계** | **21** | **126** | **✅** |
 
 **M5(Playwright E2E)·M6(Knowledge/PM)는 미구현 — v0 closure 범위 밖**(plan §0 / 설계서 §12.5 "v0 범위는 M0~M2 skeleton, M3 이후는 hardening/확장"; M3·M4는 본 closure에 포함, M5·M6은 별도 milestone).
 
@@ -115,6 +115,8 @@ bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 | **M3.2** | 미기록 criterion → unverified 결정론 default | ✅ |
 | **M3.2** | final_verdict 도출: 모든 pass∧in-scope unverified 0→pass, fail 있으면→fail | ✅ |
 | **M3.2** | CompletionStore write→exists→get 라운드트립 | ✅ |
+| **M3.2** | declared_by='verifier' completion CONFORMS (설계서 line 700 판정 주체) | ✅ |
+| **M3.2** | declared_by에 실행 프로파일(workspace-write 등)/빈 문자열 → declarerRole reject (사칭 차단) | ✅ |
 | **M3.3** | argmax: selected_version = max(score) (ratchet — 최선본 보존) | ✅ |
 | **M3.3** | open_admissible_count = (admissible ∧ deferred) 수 — 결정론 재계산 | ✅ |
 | **M3.3** | converged = completion_gate=pass ∧ open_admissible=0 (두 게이트 결합) | ✅ |

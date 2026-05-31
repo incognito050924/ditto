@@ -128,7 +128,7 @@ inputs:
 
 ### M1.5b — agent skeleton (v0 8종)
 
-- **동작**: v0 skeleton 에이전트를 만든다 — **설계서 §7.1 layout의 v0 agents/ 8종과 정합**: ① autopilot owner 5종(M2.2 spawn 대상) `agents/{researcher,planner,implementer,reviewer,verifier}.md`(autopilot 상세 §2.2 kind→owner), ② dialectic 3역 `agents/{dialectic-producer,dialectic-opponent,dialectic-synthesizer}.md`(dialectic 상세 §2.2 — `/ditto:dialectic` skill이 spawn하는 host). 각 `.md`는 frontmatter(name·description·allowed `tools`·필요 시 `skills:`) + 본문은 §6.4 delegation packet 수신 계약(받는 것: TASK·file_scope·done_when / 안 받는 것: 드라이버 가설)만. content 생성 로직은 v0에서 비우고 역할·권한 경계만 고정. **post-v0 agent**(architect·playwright-e2e·knowledge-curator)는 해당 milestone(M5/M6)에서(설계서 §7.1 post-v0 placeholder 블록).
+- **동작**: v0 skeleton 에이전트를 만든다 — **설계서 §7.1 layout의 v0 agents/ 8종과 정합**: ① autopilot owner 5종(M2.2 spawn 대상) `agents/{researcher,planner,implementer,reviewer,verifier}.md`(autopilot 상세 §2.2 kind→owner), ② dialectic 3역 `agents/{dialectic-producer,dialectic-opponent,dialectic-synthesizer}.md`(dialectic 상세 §2.2 — `/ditto:dialectic` skill이 spawn하는 host). 각 `.md`는 frontmatter(name·description·allowed `tools`·필요 시 `skills:`) + 본문은 §6.4 delegation packet 수신 계약(받는 것: TASK·file_scope·done_when / 안 받는 것: 드라이버 가설)만. content 생성 로직은 v0에서 비우고 역할·권한 경계만 고정. **예외 — verifier.md 본문(wi_v04verifier_body_and_declared_by, 2026-06-01)**: M3 판정 주체 outcome과 함께 `agents/verifier.md` skeleton을 채움(acceptance_refs별 evidence kind 선택·실행 절차, verdict 부여, `declared_by='verifier'` 반환 규칙). 나머지 7종 본문은 여전히 v0 skeleton. **post-v0 agent**(architect·playwright-e2e·knowledge-curator)는 해당 milestone(M5/M6)에서(설계서 §7.1 post-v0 placeholder 블록).
 - **대상 계약/스키마**: 설계서 §7.1 layout(v0 agents 8종)·§7.4 subagent 표, autopilot 상세 §2.2·§3.3(Context Isolation), dialectic 상세 §2.2(3역 host). 신규 `agents/*.md`.
 - **acceptance**: 8개 agent가 `claude plugin validate .` 통과 + Task `subagent_type`으로 호출 가능. M2.2 spawn 대상(owner 5종)·dialectic 3역이 실제로 존재함을 surface inventory(M1.6)가 확인(설계서 §7.1과 1:1). orchestrator는 main role이라 agent 파일 없음(D3).
 - **참고**: 설계서 §7.1·§7.4, autopilot §2.2, dialectic §2.2. Sisyphus/Atlas owner 분리(`oh-my-openagent.md`), HANNES stage→owner(`hannes.md` §1). **주의**: 이 unit이 없으면 M2.2 acceptance("ready 노드 selection→spawn")가 spawn 대상 부재로 실행 불가 — M2.2 선결. dialectic 3역도 같이 두어 parent §7.1 v0 skeleton과 어긋나지 않게 한다(구현자가 parent를 따라도 동일).
@@ -196,7 +196,7 @@ inputs:
 
 ## 5. post-v0 개요 (M3–M6 — 상세는 해당 milestone에서)
 
-- **M3 Evidence·verifier 런타임**: PostToolUse evidence 수집, verifier output contract, completion.json 생성, convergence gate 런타임(admissibility·ratchet·decision ledger). v0의 계약/스키마/게이트(M0)에 *런타임 살*을 붙임.
+- **M3 Evidence·verifier 런타임**: PostToolUse evidence 수집, verifier output contract, completion.json 생성, convergence gate 런타임(admissibility·ratchet·decision ledger). v0의 계약/스키마/게이트(M0)에 *런타임 살*을 붙임. **wi_v04verifier_body_and_declared_by (2026-06-01)**: `CompletionContract.declared_by`를 자유 문자열에서 `declarerRole` enum(`main|planner|implementer|verifier|reviewer|researcher|synthesizer`)으로 좁혀 *판정 주체*(설계서 line 700)를 실행 프로파일(`profileName`)과 분리 — implementer가 verifier를 사칭하거나 실행 프로파일 문자열(`workspace-write`)을 declarer로 박는 것을 schema 단에서 reject. `ditto work handoff --declared-by`(default `main`)로 main이 자기 완료를 선언하는 path 명시. `declared_by`를 읽어 권한 결정하는 소비처 없음 → permission 무영향.
 - **M4 Context rot 방지**: subagent-first delegation packet, PreCompact handoff, active work item context injection.
 - **M5 Playwright E2E**: `/ditto:e2e`, `playwright-e2e` agent, browser artifact(MCP 아님, 직접 Playwright).
 - **M6 Knowledge·PM**: `.ditto/knowledge` 승격, GitHub Issues/Projects bridge.
