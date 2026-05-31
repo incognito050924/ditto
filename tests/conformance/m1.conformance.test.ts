@@ -200,6 +200,35 @@ describe('M1.3 — UserPromptSubmit hook 최소 동작 (단일 active invariant)
     const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
     expect(ctx).not.toContain('acceptance criteria are placeholders');
   });
+
+  test('placeholder-only + execution prompt → deep-interview directive inject (§AC-1, wi_v04intent_autopilot_entry 2026-06-01)', async () => {
+    // Fresh session auto-creates a placeholder-only work item; execution-shape prompt.
+    const out = await run({ prompt: 'build the password endpoint' });
+    const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
+    expect(ctx).toContain('Run /ditto:deep-interview now');
+    expect(ctx).toContain('IntentContract entry');
+  });
+
+  test('placeholder-only + question prompt → directive NOT injected (보수성)', async () => {
+    const out = await run({ prompt: 'what does the bridge command do?' });
+    const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
+    expect(ctx).not.toContain('Run /ditto:deep-interview now');
+  });
+
+  test('question + codebase-locatable prompt → QuestionGate self-answer hint (§AC-5, wi_v04intent_autopilot_entry 2026-06-01)', async () => {
+    const out = await run({
+      prompt: 'what does the function handleRequest in src/api.ts do?',
+    });
+    const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
+    expect(ctx).toContain('self-answer from code/docs/web first');
+    expect(ctx).toContain('QuestionGate');
+  });
+
+  test('question without codebase mention → no QuestionGate hint (false-positive 차단)', async () => {
+    const out = await run({ prompt: 'what should we name it?' });
+    const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
+    expect(ctx).not.toContain('self-answer from code/docs/web first');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────

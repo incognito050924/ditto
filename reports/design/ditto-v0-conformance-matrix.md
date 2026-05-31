@@ -28,16 +28,16 @@ bun test tests/conformance              # 전체 v0 적합성
 bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 ```
 
-**현재 판정: 119 케이스 전부 ✅ CONFORMS — v0(M0~M4) closed. wi_v04runtimewiring (2026-05-31): M1.3 placeholder advisory + M1.4 strong-block + M4.2 autopilot_id 연속성 outcome 보강.**
+**현재 판정: 124 케이스 전부 ✅ CONFORMS — v0(M0~M4) closed. wi_v04intent_autopilot_entry (2026-06-01): M1.3 deep-interview directive + QuestionGate hint + M2.1b finalize→bootstrap 자동 호출 outcome 보강. (직전: wi_v04runtimewiring 2026-05-31 M1.3 placeholder advisory + M1.4 strong-block + M4.2 autopilot_id 연속성.)**
 
 | milestone | unit count | 적합성 케이스 | 판정 |
 |---|---|---:|---|
 | M0 (계약·스키마·게이트) | 4 | 17 | ✅ |
-| M1 (plugin·hook·skill·agent·inventory) | 6 | 42 | ✅ |
-| M2 (autopilot skeleton) | 6 | 29 | ✅ |
+| M1 (plugin·hook·skill·agent·inventory) | 6 | 46 | ✅ |
+| M2 (autopilot skeleton) | 6 | 30 | ✅ |
 | M3 (Evidence·verifier 런타임) | 3 | 18 | ✅ |
 | M4 (Context rot 방지) | 2 + cross | 13 | ✅ |
-| **v0 합계** | **21** | **119** | **✅** |
+| **v0 합계** | **21** | **124** | **✅** |
 
 **M5(Playwright E2E)·M6(Knowledge/PM)는 미구현 — v0 closure 범위 밖**(plan §0 / 설계서 §12.5 "v0 범위는 M0~M2 skeleton, M3 이후는 hardening/확장"; M3·M4는 본 closure에 포함, M5·M6은 별도 milestone).
 
@@ -67,6 +67,10 @@ bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 | **M1.3** | UPS 절대 block 안 함; Stop과 같은 포인터 공유 | ✅ |
 | **M1.3** | 자동 생성 placeholder-only AC → charter에 placeholder advisory inject (§AC-3, wi_v04runtimewiring 2026-05-31) | ✅ |
 | **M1.3** | real AC 1개 이상 → placeholder advisory 미발화 (false-positive 차단) | ✅ |
+| **M1.3** | placeholder-only + execution prompt → `▶ Run /ditto:deep-interview now` directive inject (§AC-1, wi_v04intent_autopilot_entry 2026-06-01) | ✅ |
+| **M1.3** | placeholder-only + question prompt → directive NOT injected (보수성) | ✅ |
+| **M1.3** | question + codebase-locatable surface → `⚠ self-answer from code/docs/web first … QuestionGate` hint (§AC-5, wi_v04intent_autopilot_entry 2026-06-01) | ✅ |
+| **M1.3** | question without codebase mention → no QuestionGate hint (false-positive 차단) | ✅ |
 | **M1.4** | 미검증 완료→exit 2 / 완료→exit 0 | ✅ |
 | **M1.4** | 완료 부재 + ready 노드→exit 2 | ✅ |
 | **M1.4** | 완료 부재 + active autopilot 없음 + NON_TERMINAL→exit 2 (§M1.4 strong-block 2026-05-31, wi_v04runtimewiring) | ✅ |
@@ -88,6 +92,7 @@ bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 | **M2.1b** | ready intent→graph(root_goal·design→implement→verify) | ✅ |
 | **M2.1b** | high-risk→pending / safe→not_required / approved 입력→approved | ✅ |
 | **M2.1b** | vague intent→graph 미생성(intent_not_ready); 루프 입력으로 동작 | ✅ |
+| **M2.1b** | `ditto deep-interview finalize` 가 ready 상태에서 bootstrapAutopilot 자동 호출 → intent.json + autopilot.json 동시 생성 (§AC-3, wi_v04intent_autopilot_entry 2026-06-01) | ✅ |
 | **M2.2** | kind→owner; depends_on; N1→N2→N3 루프; terminal | ✅ |
 | **M2.2** | ready 노드+approval 아님→Stop continuation 강제 | ✅ |
 | **M2.3** | pending→present_plan / approved·not_required→proceed / rejected→blocked | ✅ |

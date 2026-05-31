@@ -181,6 +181,64 @@ describe('M2.1b — autopilot 그래프 bootstrap (intent → graph → approval
     if (res.status !== 'created') throw new Error('expected created');
     expect(selectReadyNode(res.graph.nodes)?.id).toBe('N1');
   });
+
+  test('ditto deep-interview finalize 가 bootstrapAutopilot 을 자동 호출한다 (§AC-3, wi_v04intent_autopilot_entry 2026-06-01)', async () => {
+    const { startInterview, recordTurn, finalizeInterview } = await import(
+      '~/core/interview-driver'
+    );
+    const { AutopilotStore } = await import('~/core/autopilot-store');
+    const { IntentStore } = await import('~/core/intent-store');
+    await startInterview(tmp, { workItemId: wi.id });
+    await recordTurn(tmp, {
+      workItemId: wi.id,
+      payload: {
+        dimension: {
+          id: 'd-shape',
+          critical: true,
+          state: 'resolved',
+          ambiguity: 0.05,
+          notes: '',
+        },
+        question: {
+          text: 'shape?',
+          why_matters: 'response contract',
+          info_gain_estimate: 'high',
+        },
+        answer: { text: 'integer 0..100', kind: 'user' },
+        readiness_score: 0.85,
+      },
+    });
+    const result = await finalizeInterview(tmp, {
+      workItemId: wi.id,
+      payload: {
+        goal: 'returns integer score 0..100',
+        in_scope: [],
+        out_of_scope: [],
+        acceptance_criteria: [
+          {
+            id: 'ac-1',
+            statement: 'returns integer 0..100',
+            verdict: 'unverified',
+            evidence: [],
+            evidence_required: ['test'],
+          },
+        ],
+        unknowns: [],
+        follow_up_candidates: [],
+        question_policy: 'ask_only_if_user_only_can_answer',
+        risk: { non_local: false, irreversible: false, unaudited: false },
+      },
+    });
+    expect(result.status).toBe('finalized');
+    // 한 호출로 intent.json + autopilot.json 둘 다 생성됨.
+    expect(await new IntentStore(tmp).exists(wi.id)).toBe(true);
+    expect(await new AutopilotStore(tmp).exists(wi.id)).toBe(true);
+    if (result.status === 'finalized') {
+      expect(result.autopilot.work_item_id).toBe(wi.id);
+      expect(result.autopilot.root_goal).toBe('returns integer score 0..100');
+      expect(result.autopilot.approval_gate.status).toBe('not_required');
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────
