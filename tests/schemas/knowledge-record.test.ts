@@ -47,6 +47,14 @@ describe('knowledgeRecord schema', () => {
     expect(knowledgeRecord.safeParse(ok).success).toBe(true);
   });
 
+  test('cross-field: superseded_by must be a different ADR (no self-supersession)', () => {
+    const selfRef = realistic();
+    selfRef.decisions[0].status = 'superseded';
+    // @ts-expect-error augmenting the fixture: ADR points at itself → reject
+    selfRef.decisions[0].superseded_by = selfRef.decisions[0].id;
+    expect(knowledgeRecord.safeParse(selfRef).success).toBe(false);
+  });
+
   test('learnings carry evidence + learned_at; patterns are optional path', () => {
     const r = knowledgeRecord.parse({
       ...realistic(),

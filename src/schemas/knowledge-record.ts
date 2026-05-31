@@ -46,6 +46,14 @@ export const knowledgeDecision = z
         path: ['superseded_by'],
       });
     }
+    // superseded_by must point at *another* ADR — an ADR cannot supersede itself.
+    if (value.superseded_by !== null && value.superseded_by === value.id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'superseded_by must be a different ADR id, not the decision itself',
+        path: ['superseded_by'],
+      });
+    }
   })
   .describe('One durable technical decision with rationale and change condition');
 
