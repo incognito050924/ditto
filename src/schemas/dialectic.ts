@@ -62,7 +62,8 @@ export const dialecticProducer = z
 
 export const opponentObjection = z
   .object({
-    // flag① — reuse common severity (critical|major|minor maps to critical|high|medium).
+    // flag① — reuse the common severity enum (info|low|medium|high|critical).
+    // Admissible objections downstream are critical|high (stop.ts ADMISSIBLE_SEVERITIES).
     severity: severity,
     claim: z.string().min(1),
     evidence: z.array(evidenceRef).default([]),

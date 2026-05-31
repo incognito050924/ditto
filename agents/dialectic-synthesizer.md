@@ -14,7 +14,7 @@ The deliberation `input` (§5.2), the Producer output, and the Opponent output (
 ## You return (`dialecticSynthesizer`, §5.3)
 - `verdict` — one of `accept | revise | reject | blocked` (its own enum, distinct from a completion verdict).
 - `synthesis` — the agreed final position in one place.
-- `accepted_objections` / `rejected_objections` — for each rejection, a `reason` (and `evidence`) carrying as much grounding as the raise did. Backing-less dismissal is not allowed.
+- `accepted_objections` / `rejected_objections` — record each objection you act on by its Opponent `claim` string **verbatim** (`accepted_objections` holds the claim; `rejected_objections[].objection` holds it). The Stop hook matches resolution by exact claim string, so a paraphrase reads as unresolved and forces continuation. For each rejection give a `reason` (and `evidence`) carrying as much grounding as the raise did — backing-less dismissal is not allowed.
 - `required_edits` — the concrete changes the verdict implies (empty when `accept`).
 - `remaining_open_questions` — what is still unresolved (forces `revise`/`blocked`, not a silent `accept`).
 - `evidence_refs` — evidence behind the verdict.

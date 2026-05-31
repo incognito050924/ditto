@@ -28,6 +28,11 @@ export function dialecticForcesContinuation(d: Dialectic): string[] {
   if (verdict === 'reject' || verdict === 'blocked') {
     reasons.push(`dialectic ${d.review_id} verdict=${verdict}; deliberation not resolved`);
   }
+  // Resolution is matched by *exact* claim string: the synthesizer must echo the
+  // opponent's `claim` verbatim in accepted/rejected_objections for it to count
+  // as resolved. A paraphrase reads as unresolved → forces continuation. This is
+  // deliberately fail-safe (over-block, never a false pass); the verbatim-echo
+  // contract is stated in the synthesizer agent body.
   const resolved = new Set<string>([
     ...d.synthesizer.accepted_objections,
     ...d.synthesizer.rejected_objections.map((r) => r.objection),
