@@ -87,7 +87,9 @@ function main() {
     const cur = readSettings(sp);
     const market = cur.extraKnownMarketplaces?.[MARKETPLACE];
     const on = cur.enabledPlugins?.[`${PLUGIN_NAME}@${MARKETPLACE}`] === true;
-    console.log(JSON.stringify({ repo, settings: sp, marketplace: market ?? null, enabled: on }, null, 2));
+    console.log(
+      JSON.stringify({ repo, settings: sp, marketplace: market ?? null, enabled: on }, null, 2),
+    );
     return;
   }
 
