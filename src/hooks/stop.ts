@@ -7,7 +7,21 @@ import { WorkItemStore } from '~/core/work-item-store';
 import { type Autopilot, autopilot as autopilotSchema } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
 import { convergence as convergenceSchema } from '~/schemas/convergence';
+import type { WorkItem } from '~/schemas/work-item';
 import type { HookHandler, HookInput } from './runtime';
+
+/**
+ * Work item statuses that still owe a verdict; a stop with all three ledgers
+ * absent is a contract violation in these states (§M1.4 strong-block update,
+ * 2026-05-31). 'done'/'abandoned' are terminal — nothing further to verify.
+ */
+const NON_TERMINAL_STATUSES: ReadonlyArray<WorkItem['status']> = [
+  'draft',
+  'in_progress',
+  'blocked',
+  'partial',
+  'unverified',
+];
 
 type ArtifactRead<T> =
   | { status: 'absent' }
@@ -120,6 +134,24 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     return {
       exitCode: 2,
       stderr: `DITTO Stop gate: keep going — ${reasons.length} item(s) remain:\n- ${reasons.join('\n- ')}\n`,
+    };
+  }
+
+  // Strong-block update (§M1.4, 2026-05-31): a NON_TERMINAL work item that
+  // stops with completion/convergence/autopilot ALL absent is the "verify 안
+  // 한 채 그냥 종료" outcome gap. Force a continuation that demands either a
+  // verdict artifact or an explicit terminal transition. Terminal work items
+  // (done/abandoned) and any work item with at least one ledger present go
+  // through the existing gate paths above.
+  if (
+    completion.status === 'absent' &&
+    conv.status === 'absent' &&
+    pilot.status === 'absent' &&
+    NON_TERMINAL_STATUSES.includes(workItem.status)
+  ) {
+    return {
+      exitCode: 2,
+      stderr: `DITTO Stop gate: work item ${workItem.id} is ${workItem.status} but no completion.json / convergence.json / autopilot.json exists. Run /ditto:verify (writes completion.json) or transition the work item to done/abandoned before stopping.\n`,
     };
   }
 

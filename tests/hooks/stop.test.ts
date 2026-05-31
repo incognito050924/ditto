@@ -134,7 +134,28 @@ describe('stopHandler', () => {
     expect((await run({ stop_hook_active: false })).exitCode).toBe(2);
   });
 
-  test('no completion artifact + no active autopilot => exit 0', async () => {
+  test('all three ledgers absent + NON_TERMINAL work item => exit 2 (§M1.4 strong-block 2026-05-31)', async () => {
+    // Default work item from beforeEach is status=draft → NON_TERMINAL.
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('no completion.json');
+    expect(out.stderr).toContain('done/abandoned');
+  });
+
+  test('all three ledgers absent + terminal work item (done) => exit 0', async () => {
+    // Take the draft work item to in_progress (re_entry not needed for that)
+    // then directly to done. Avoids the partial/unverified/blocked guards.
+    await store.update(wiId, (current) => ({ ...current, status: 'in_progress' }));
+    await store.update(wiId, (current) => ({
+      ...current,
+      status: 'done',
+      closed_at: '2026-05-31T00:00:00.000Z',
+    }));
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('all three ledgers absent + terminal work item (abandoned) => exit 0', async () => {
+    await store.update(wiId, (current) => ({ ...current, status: 'abandoned' }));
     expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
   });
 
