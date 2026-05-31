@@ -24,6 +24,14 @@ bun run dogfood        # = claude --plugin-dir .
   - 더 확실하게는 세션을 새로 시작
 - **이 repo에서만**: 다른 프로젝트에는 영향을 주지 않는다(세션 단위, 설정 파일을 건드리지 않음).
 - 동작 확인: 세션에서 `/` 입력 시 `/ditto:` 목록이 보이거나 `/plugin`으로 `ditto`가 로드됐는지 확인.
+- 세션을 열지 않고 비대화형으로 로드 검증:
+
+  ```bash
+  claude --plugin-dir . plugin details ditto
+  ```
+
+  `Source: ditto@inline` 과 함께 Skills(7: autopilot·deep-interview·dialectic·dialectic-review·handoff·plan·verify),
+  Agents(8), Hooks(4) 인벤토리가 나오면 정상이다. 각 skill이 `/ditto:<skill>` 명령으로 뜬다.
 
 > hook은 `bun run "${CLAUDE_PLUGIN_ROOT}/hooks/*.ts"`로 **소스를 직접 실행**한다. 그래서 hook 동작을 바꿔도 `bun build`가 필요 없다.
 
