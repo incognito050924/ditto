@@ -1,0 +1,104 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260531iiw",
+  "declared_by": "workspace-write",
+  "declared_at": "2026-05-31T14:30:00.000Z",
+  "summary": "v0 closure 후 outcome 매트릭스가 지적한 'runtime entry 공백' 중 3건을 동작화: PreCompact가 autopilot_id를 handoff에 전달(M4.2), Stop hook이 NON_TERMINAL + 세 ledger absent를 차단(M1.4 strong-block, plan 본문 업데이트 동반), UserPromptSubmit이 placeholder-only AC에 advisory를 발화(M1.3). 신규 outcome 4건이 conformance(M1.3 +2, M1.4 net+1, M4.2 +2)로 보호됨.",
+  "changed_files": [
+    "src/core/charter.ts",
+    "src/hooks/pre-compact.ts",
+    "src/hooks/stop.ts",
+    "src/hooks/user-prompt-submit.ts",
+    "tests/hooks/pre-compact.test.ts",
+    "tests/hooks/stop.test.ts",
+    "tests/hooks/user-prompt-submit.test.ts",
+    "tests/conformance/m1.conformance.test.ts",
+    "tests/conformance/m4.conformance.test.ts",
+    "reports/design/ditto-v0-implementation-plan.md",
+    "reports/design/ditto-v0-conformance-matrix.md"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/pre-compact.test.ts tests/conformance/m4.conformance.test.ts",
+          "summary": "19/19 pass — handoff.autopilot_id가 active autopilot의 id와 일치, autopilot 부재/malformed 시 omit"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/stop.test.ts tests/conformance/m1.conformance.test.ts",
+          "summary": "51/51 pass — NON_TERMINAL + 세 absent → exit 2 + 회피 안내; terminal(done/abandoned) → exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "reports/design/ditto-v0-implementation-plan.md",
+          "lines": { "start": 114, "end": 115 },
+          "summary": "plan §M1.4 (가) strong-block 단서 추가 — silent plan-vs-outcome divergence 해소"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/user-prompt-submit.test.ts tests/conformance/m1.conformance.test.ts",
+          "summary": "47/47 pass — placeholder-only AC → advisory inject; real AC 1개 이상 → 미발화; mixed → 미발화"
+        }
+      ]
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "430/430 pass (baseline 417 + 13 신규, 회귀 zero)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "src/tests 신규 lint errors zero (scripts/install-plugin.mjs의 pre-existing은 별도 chore commit으로 분리)"
+        }
+      ]
+    }
+  ],
+  "verifications": [
+    {
+      "command": "bun test",
+      "exit_code": 0
+    },
+    {
+      "command": "bun run lint",
+      "exit_code": 1
+    }
+  ],
+  "unverified": [
+    {
+      "item": "Claude Code 실세션에서 hook이 실제로 advisory를 inject하고 모델이 그걸 따르는지 (real session integration)",
+      "reason": "unit test 환경에서만 검증; 실제 PreCompact/Stop hook이 Claude Code runtime에서 발화하는 wall-clock outcome은 별도 self-application evidence 필요",
+      "out_of_scope": true
+    },
+    {
+      "item": "PreCompact의 autopilot 연속성이 실제 압축 후 새 session에서 같은 autopilot graph로 resume 시키는지",
+      "reason": "현재 작업은 autopilot_id가 handoff에 전달되는 데까지. resume reader 경로(handoff.autopilot_id → autopilot.json reload)는 별도 work item.",
+      "out_of_scope": true
+    }
+  ],
+  "remaining_risks": [
+    "AC-3 placeholder 매칭은 PLACEHOLDER_AC_STATEMENT 상수에 의존; 미래에 다른 곳에서 같은 placeholder를 다른 문자열로 만들면 false-negative 가능 (현재는 charter.ts single source로 risk 낮음)",
+    "Stop strong-block의 stderr 메시지는 모델 응답을 받아 다음 turn을 트리거; Claude Code wall-clock에서 이 메시지가 어떻게 표시되는지는 manual 확인 필요"
+  ],
+  "final_verdict": "pass"
+}
