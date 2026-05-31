@@ -103,6 +103,74 @@ describe('EvidenceStore', () => {
   });
 });
 
+const sampleRecord = (overrides: Record<string, unknown> = {}) => ({
+  ref: { kind: 'command' as const, command: 'bun test', summary: 'passed' },
+  captured_at: '2026-05-26T00:00:00.000Z',
+  freshness: 'fresh' as const,
+  portability: 'committed' as const,
+  artifact_available: true,
+  exit_code: 0,
+  ...overrides,
+});
+
+describe('EvidenceStore evidence-index.json ledger', () => {
+  const indexPath = (wi: string) =>
+    join(workDir, '.ditto', 'work-items', wi, 'evidence-index.json');
+
+  test('readIndex returns an empty index when the file does not exist', async () => {
+    const idx = await store.readIndex('wi_noindex001');
+    expect(idx.records).toEqual([]);
+    expect(idx.work_item_id).toBe('wi_noindex001');
+    // 부재 read 는 파일을 만들지 않는다.
+    expect(await Bun.file(indexPath('wi_noindex001')).exists()).toBe(false);
+  });
+
+  test('appendRecord writes a committable ledger at the work-item root (not under evidence/)', async () => {
+    await store.appendRecord('wi_idx00001', sampleRecord());
+    expect(await Bun.file(indexPath('wi_idx00001')).exists()).toBe(true);
+    // evidence/ 하위가 아님 — 커밋 대상 경로
+    const underEvidence = join(
+      workDir,
+      '.ditto',
+      'work-items',
+      'wi_idx00001',
+      'evidence',
+      'evidence-index.json',
+    );
+    expect(await Bun.file(underEvidence).exists()).toBe(false);
+  });
+
+  test('appendRecord is append-only (preserves order across calls)', async () => {
+    await store.appendRecord('wi_idx00002', sampleRecord({ ref: { kind: 'note', summary: 'a' } }));
+    const idx = await store.appendRecord(
+      'wi_idx00002',
+      sampleRecord({ ref: { kind: 'note', summary: 'b' } }),
+    );
+    expect(idx.records.map((r) => r.ref.summary)).toEqual(['a', 'b']);
+    expect((await store.readIndex('wi_idx00002')).records.length).toBe(2);
+  });
+
+  test('appendRecord applies record defaults (stale_reason null, key_lines [])', async () => {
+    const idx = await store.appendRecord('wi_idx00003', sampleRecord());
+    expect(idx.records[0]?.stale_reason).toBe(null);
+    expect(idx.records[0]?.key_lines).toEqual([]);
+  });
+
+  test('appendRecord rejects a record violating cross-field rules (stale without reason)', async () => {
+    let thrown: unknown;
+    try {
+      await store.appendRecord(
+        'wi_idx00004',
+        sampleRecord({ freshness: 'stale' }), // stale_reason 누락
+      );
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect(await Bun.file(indexPath('wi_idx00004')).exists()).toBe(false);
+  });
+});
+
 describe('sha256Hex', () => {
   test('produces 64-char lowercase hex', () => {
     const h = sha256Hex('hello');
