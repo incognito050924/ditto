@@ -14,6 +14,8 @@ const NEW_SIDECARS: Array<{ exportName: string; barrelConst: keyof typeof barrel
   { exportName: 'dialectic', barrelConst: 'dialectic' },
   { exportName: 'convergence', barrelConst: 'convergence' },
   { exportName: 'handoff', barrelConst: 'handoff' },
+  { exportName: 'evidence-record', barrelConst: 'evidenceRecord' },
+  { exportName: 'evidence-index', barrelConst: 'evidenceIndex' },
 ];
 
 describe('new sidecar schemas are registered in both lists', () => {

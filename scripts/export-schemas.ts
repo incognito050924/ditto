@@ -8,6 +8,7 @@ import { completionContract } from '~/schemas/completion-contract';
 import { convergence } from '~/schemas/convergence';
 import { dialectic } from '~/schemas/dialectic';
 import { commandLogEntry } from '~/schemas/evidence-log';
+import { evidenceIndex, evidenceRecord } from '~/schemas/evidence-record';
 import { glossary } from '~/schemas/glossary';
 import { handoff } from '~/schemas/handoff';
 import { intentContract } from '~/schemas/intent';
@@ -31,6 +32,8 @@ export const schemaExports: ReadonlyArray<{ name: string; schema: ZodTypeAny }> 
   { name: 'glossary', schema: glossary },
   { name: 'language-ledger', schema: languageLedger },
   { name: 'command-log-entry', schema: commandLogEntry },
+  { name: 'evidence-record', schema: evidenceRecord },
+  { name: 'evidence-index', schema: evidenceIndex },
   { name: 'intent', schema: intentContract },
   { name: 'question-gate', schema: questionGate },
   { name: 'interview-state', schema: interviewState },
