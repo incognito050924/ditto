@@ -22,6 +22,35 @@ export function classifyPromptAdvisory(prompt: string): 'question' | 'execution'
   return 'execution';
 }
 
+/**
+ * QuestionGate advisory heuristic (§AC-5, wi_v04intent_autopilot_entry). True
+ * when the prompt is question-shaped AND mentions concrete code-locatable
+ * surface (file/path/function/error/test/log). Conservative on purpose:
+ * single-word boundaries only, and the result is advisory — the LLM is not
+ * required to follow it. Aligns with plan §11 "advisory only, no keyword gate".
+ */
+const CODEBASE_ANSWERABLE_PATTERNS = [
+  /\bfile\b/i,
+  /\bfiles\b/i,
+  /\bpath\b/i,
+  /\bfunction\b/i,
+  /\bmethod\b/i,
+  /\berror\b/i,
+  /\bexception\b/i,
+  /\btest\b/i,
+  /\btests\b/i,
+  /\blog\b/i,
+  /\blogs\b/i,
+  /\bclass\b/i,
+  /\bmodule\b/i,
+  /\bschema\b/i,
+  /\.(ts|js|tsx|jsx|json|md|sh|py)\b/i,
+];
+
+export function looksCodebaseAnswerable(prompt: string): boolean {
+  return CODEBASE_ANSWERABLE_PATTERNS.some((re) => re.test(prompt));
+}
+
 export interface ActiveResolution {
   workItem?: WorkItem;
   /** Set when the active work item is ambiguous and the user must choose (no arbitrary pick). */
@@ -130,7 +159,18 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
     ctx.workItemStatus = item.status;
     const handoff = pendingHandoffHint(item);
     if (handoff) ctx.pendingHandoff = handoff;
-    if (allAcceptancePlaceholders(item)) ctx.placeholderAcceptanceCriteria = true;
+    const placeholderOnly = allAcceptancePlaceholders(item);
+    if (placeholderOnly) ctx.placeholderAcceptanceCriteria = true;
+    // §AC-1 deep-interview directive: only when BOTH conditions hold —
+    // placeholder-only AC AND execution-intent prompt. The conjunction guards
+    // against the §2#3 non-goal of auto-promoting small requests into a heavy
+    // interview workflow.
+    if (placeholderOnly && classification === 'execution') ctx.deepInterviewDirective = true;
+  }
+  // §AC-5 QuestionGate advisory: question-shaped + code-locatable surface
+  // mention → hint to self-answer first. Independent of work item state.
+  if (classification === 'question' && looksCodebaseAnswerable(prompt)) {
+    ctx.selfAnswerHint = true;
   }
   if (resolved.advisory) ctx.advisory = resolved.advisory;
 

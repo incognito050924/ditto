@@ -156,4 +156,75 @@ describe('userPromptSubmitHandler', () => {
     expect(out.exitCode).toBe(0);
     expect(additionalContext(out.stdout)).not.toContain('acceptance criteria are placeholders');
   });
+
+  // §AC-1 deep-interview directive matrix (4 cases) — only the conjunction
+  // (placeholder-only + execution) triggers; the other three are silent.
+  describe('§AC-1 deep-interview directive', () => {
+    test('placeholder-only + execution prompt → directive inject (the conjunction)', async () => {
+      // Fresh session, fresh work item: auto-create yields placeholder-only.
+      const out = await run({ session_id: 'sess-dir-1', prompt: 'build a password endpoint' });
+      const ctx = additionalContext(out.stdout);
+      expect(ctx).toContain('Run /ditto:deep-interview now');
+    });
+
+    test('placeholder-only + question prompt → directive NOT injected', async () => {
+      const out = await run({ session_id: 'sess-dir-2', prompt: 'what does the bridge command do?' });
+      const ctx = additionalContext(out.stdout);
+      expect(ctx).not.toContain('Run /ditto:deep-interview now');
+    });
+
+    test('real AC + execution prompt → directive NOT injected', async () => {
+      const items = new WorkItemStore(repo);
+      const created = await items.create({
+        title: 'real-ex',
+        source_request: 'r',
+        goal: 'r',
+        acceptance_criteria: [
+          { id: 'ac-1', statement: 'returns 200', verdict: 'unverified', evidence: [] },
+        ],
+      });
+      await new SessionPointerStore(repo).set('sess-dir-3', created.id);
+      const out = await run({ session_id: 'sess-dir-3', prompt: 'implement the endpoint' });
+      expect(additionalContext(out.stdout)).not.toContain('Run /ditto:deep-interview now');
+    });
+
+    test('real AC + question prompt → directive NOT injected', async () => {
+      const items = new WorkItemStore(repo);
+      const created = await items.create({
+        title: 'real-q',
+        source_request: 'r',
+        goal: 'r',
+        acceptance_criteria: [
+          { id: 'ac-1', statement: 'returns 200', verdict: 'unverified', evidence: [] },
+        ],
+      });
+      await new SessionPointerStore(repo).set('sess-dir-4', created.id);
+      const out = await run({ session_id: 'sess-dir-4', prompt: 'what is the goal?' });
+      expect(additionalContext(out.stdout)).not.toContain('Run /ditto:deep-interview now');
+    });
+  });
+
+  // §AC-5 QuestionGate self-answer hint (advisory, no enforcement).
+  describe('§AC-5 QuestionGate self-answer hint', () => {
+    test('question prompt mentioning code surface → self-answer hint', async () => {
+      const out = await run({
+        session_id: 'sess-qg-1',
+        prompt: 'what does the function handleRequest in src/api.ts do?',
+      });
+      expect(additionalContext(out.stdout)).toContain('self-answer from code/docs/web first');
+    });
+
+    test('question prompt with no code surface → no self-answer hint', async () => {
+      const out = await run({ session_id: 'sess-qg-2', prompt: 'what should we name it?' });
+      expect(additionalContext(out.stdout)).not.toContain('self-answer from code/docs/web first');
+    });
+
+    test('execution prompt mentioning code surface → no self-answer hint (only question-shaped)', async () => {
+      const out = await run({
+        session_id: 'sess-qg-3',
+        prompt: 'fix the error in src/api.ts',
+      });
+      expect(additionalContext(out.stdout)).not.toContain('self-answer from code/docs/web first');
+    });
+  });
 });
