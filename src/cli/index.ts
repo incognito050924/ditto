@@ -3,6 +3,7 @@ import '~/core/hosts';
 import { autopilotCommand } from './commands/autopilot';
 import { bridgeCommand } from './commands/bridge';
 import { contextCommand } from './commands/context';
+import { deepInterviewCommand } from './commands/deep-interview';
 import { doctorCommand } from './commands/doctor';
 import { runCommand } from './commands/run';
 import { verifyCommand } from './commands/verify';
@@ -22,6 +23,7 @@ const main = defineCommand({
     bridge: bridgeCommand,
     context: contextCommand,
     autopilot: autopilotCommand,
+    'deep-interview': deepInterviewCommand,
   },
 });
 
