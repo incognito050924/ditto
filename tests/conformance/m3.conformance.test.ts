@@ -21,6 +21,7 @@ import { completionGate, convergenceGate } from '~/core/gates';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import { postToolUseHandler } from '~/hooks/post-tool-use';
+import { completionContract } from '~/schemas/completion-contract';
 import type { DecisionLedgerEntry } from '~/schemas/convergence';
 import { commandLogEntry } from '~/schemas/evidence-log';
 import type { WorkItem } from '~/schemas/work-item';
@@ -224,6 +225,41 @@ describe('M3.2 — completion 빌더/store (verifier 판정 → 결정론 조립
     const back = await s.get(wi.id);
     expect(back.final_verdict).toBe('pass');
     expect(back.acceptance.map((a) => a.criterion_id)).toEqual(['AC-1', 'AC-2']);
+  });
+
+  // 설계서 line 700 "판정 주체(verifier)": declared_by 는 판정한 *역할*이지 실행 프로파일이 아니다.
+  test('declared_by=verifier 인 completion 은 CONFORMS (판정 주체가 verifier)', () => {
+    const c = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 'verifier가 직접 검증해 박은 판정',
+      verdicts: [
+        { criterion_id: 'AC-1', verdict: 'pass' },
+        { criterion_id: 'AC-2', verdict: 'pass' },
+      ],
+    });
+    expect(c.declared_by).toBe('verifier');
+    // 빌더 산출이 schema 를 통과 (declarerRole enum 정합)
+    expect(() => completionContract.parse(c)).not.toThrow();
+  });
+
+  test('declared_by 에 실행 프로파일/비역할 문자열을 박으면 schema reject (사칭 차단)', () => {
+    const valid = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 's',
+      verdicts: [
+        { criterion_id: 'AC-1', verdict: 'pass' },
+        { criterion_id: 'AC-2', verdict: 'pass' },
+      ],
+    });
+    // 실행 프로파일 값(owner_profile 류)은 declarer 가 아니다 → reject
+    for (const impostor of ['workspace-write', 'read-only', 'networked', 'isolated', '', 'v']) {
+      expect(
+        () => completionContract.parse({ ...valid, declared_by: impostor }),
+        `declared_by="${impostor}" must be rejected`,
+      ).toThrow();
+    }
   });
 });
 
