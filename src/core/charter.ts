@@ -26,6 +26,22 @@ export const PLACEHOLDER_AC_STATEMENT =
 const PLACEHOLDER_AC_ADVISORY =
   'acceptance criteria are placeholders — narrow them via /ditto:deep-interview before acting (IntentContract)';
 
+/**
+ * Stronger nudge surfaced when the placeholder situation coincides with an
+ * execution-intent prompt (wi_v04intent_autopilot_entry AC-1). Points at the
+ * concrete next command. Recommended but not enforced — the hook is advisory.
+ */
+const DEEP_INTERVIEW_DIRECTIVE =
+  'Run /ditto:deep-interview now — placeholder acceptance criteria + execution intent detected. Recommended; may be skipped if the request is small or reversible (IntentContract entry).';
+
+/**
+ * Soft nudge attached to a question-shaped prompt that looks answerable from
+ * code/docs (wi_v04intent_autopilot_entry AC-5, QuestionGate). Advisory only —
+ * the LLM is not required to follow it, but the heuristic surfaces the option.
+ */
+const SELF_ANSWER_HINT =
+  'self-answer from code/docs/web first before asking — this prompt looks answerable without user input (QuestionGate).';
+
 export interface CharterContext {
   workItemId?: string;
   workItemTitle?: string;
@@ -41,6 +57,19 @@ export interface CharterContext {
    * outcome ("narrow the goal into observable criteria") gets a runtime nudge.
    */
   placeholderAcceptanceCriteria?: boolean;
+  /**
+   * True when the prompt is execution-intent AND the active work item still
+   * has placeholder-only acceptance criteria (wi_v04intent_autopilot_entry AC-1).
+   * Surfaces the concrete `/ditto:deep-interview` directive. The hook computes
+   * the conjunction; charter rendering just attaches the directive line.
+   */
+  deepInterviewDirective?: boolean;
+  /**
+   * True when the prompt looks answerable from code/docs (QuestionGate
+   * advisory, wi_v04intent_autopilot_entry AC-5). Advisory only; the hook
+   * never blocks based on this flag.
+   */
+  selfAnswerHint?: boolean;
 }
 
 /** Build the additionalContext text injected on UserPromptSubmit. */
@@ -58,6 +87,8 @@ export function charterProjection(ctx: CharterContext = {}): string {
   }
   if (ctx.pendingHandoff) lines.push(`Pending handoff/re-entry: ${ctx.pendingHandoff}`);
   if (ctx.placeholderAcceptanceCriteria) lines.push('', `⚠ ${PLACEHOLDER_AC_ADVISORY}`);
+  if (ctx.deepInterviewDirective) lines.push('', `▶ ${DEEP_INTERVIEW_DIRECTIVE}`);
+  if (ctx.selfAnswerHint) lines.push('', `⚠ ${SELF_ANSWER_HINT}`);
   if (ctx.advisory) lines.push('', `⚠ ${ctx.advisory}`);
   return lines.join('\n');
 }
