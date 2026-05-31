@@ -11,7 +11,7 @@
  * 조립/재계산*만 본다). M0.4 게이트를 통과하는 산출을 produce 해야 한다.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -19,11 +19,14 @@ import { CompletionStore, buildCompletion } from '~/core/completion-store';
 import { ConvergenceStore, buildConvergence } from '~/core/convergence-store';
 import { EvidenceStore } from '~/core/evidence-store';
 import { completionGate, convergenceGate } from '~/core/gates';
+import { resolveOpponentCandidates, selectOpponent } from '~/core/opponent-router';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import { postToolUseHandler } from '~/hooks/post-tool-use';
+import { dialecticForcesContinuation, stopHandler } from '~/hooks/stop';
 import { completionContract } from '~/schemas/completion-contract';
 import type { DecisionLedgerEntry } from '~/schemas/convergence';
+import { type Dialectic, dialectic as dialecticSchema } from '~/schemas/dialectic';
 import { commandLogEntry } from '~/schemas/evidence-log';
 import { evidenceRecord } from '~/schemas/evidence-record';
 import type { WorkItem } from '~/schemas/work-item';
@@ -496,5 +499,163 @@ describe('M3.4 — EvidenceRecord sidecar + evidence-index.json ledger (freshnes
     const idx = await es.readIndex(wi.id);
     expect(idx.work_item_id).toBe(wi.id);
     expect(idx.records.map((r) => r.ref.summary)).toEqual(['first', 'second']);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+describe('M3.5 — dialectic runtime (OpponentModelRouter + admissibility + Stop cross-check)', () => {
+  // 권위: dialectic-deliberation-contract.md §3(라우팅)·§6(admissibility), autopilot-contract §2.2.
+  // 결정: dialectic 은 새 nodeKind 가 아니라 review/high-impact 노드의 검증 메커니즘.
+
+  const policy = (over: Record<string, unknown> = {}) => ({
+    producer: 'current-host',
+    opponent_preferred: 'codex',
+    opponent_fallback: ['claude-opus', 'claude-sonnet'],
+    synthesizer: 'claude-opus',
+    ...over,
+  });
+
+  test('OpponentModelRouter: Codex 우선, 가용 시 fallback 없음 (provenance none)', () => {
+    const sel = selectOpponent(resolveOpponentCandidates(policy()), () => ({ available: true }));
+    expect(sel.provider).toBe('codex');
+    expect(sel.fallback_from).toBe(null);
+    expect(sel.fallback_reason).toBe('none');
+  });
+
+  test('OpponentModelRouter: Codex 불가 → claude fallback + 사유 기록 (침묵 금지, §3.2/§3.5)', () => {
+    const sel = selectOpponent(resolveOpponentCandidates(policy()), (c) =>
+      c.token === 'codex' ? { available: false, reason: 'auth' } : { available: true },
+    );
+    expect(sel.provider).toBe('claude-code');
+    expect(sel.fallback_from).toBe('codex');
+    expect(sel.fallback_reason).toBe('auth');
+  });
+
+  // admissibility: maps_to(oracle) ∧ severity critical|high. medium 이하·oracle 없음 = taste.
+  const baseObjection = (over: Record<string, unknown> = {}) => ({
+    severity: 'critical' as const,
+    claim: 'AC-1 fails on empty input',
+    evidence: [],
+    maps_to: 'AC-1',
+    failure_mode: 'returns 500',
+    required_fix: 'guard empty',
+    ...over,
+  });
+
+  const buildDialectic = (over: Partial<Dialectic> = {}): Dialectic =>
+    dialecticSchema.parse({
+      schema_version: '0.1.0',
+      review_id: 'rv_dia00001',
+      input: { mode: 'review', target_artifact: 'src/api.ts', question: 'is it correct?' },
+      producer: { position: 'looks correct', proposal: 'ship' },
+      opponent: {
+        run: {
+          provider: 'codex',
+          model: 'codex',
+          command: 'codex review',
+          timestamp: '2026-05-26T00:00:00.000Z',
+        },
+        objections: [baseObjection()],
+      },
+      synthesizer: {
+        verdict: 'accept',
+        synthesis: 'agreed',
+        accepted_objections: ['AC-1 fails on empty input'],
+      },
+      ...over,
+    });
+
+  test('admissible objection resolved + verdict accept → continuation 없음', () => {
+    expect(dialecticForcesContinuation(buildDialectic())).toEqual([]);
+  });
+
+  test('verdict reject/blocked → continuation', () => {
+    const reject = buildDialectic({
+      synthesizer: {
+        verdict: 'reject',
+        synthesis: 'no',
+        accepted_objections: [],
+        rejected_objections: [],
+        required_edits: [],
+        remaining_open_questions: [],
+        evidence_refs: [],
+      },
+    });
+    expect(dialecticForcesContinuation(reject).length).toBeGreaterThan(0);
+  });
+
+  test('admissible objection 미해결(accept verdict라도) → continuation', () => {
+    const unresolved = buildDialectic({
+      synthesizer: {
+        verdict: 'accept',
+        synthesis: 'agreed',
+        accepted_objections: [],
+        rejected_objections: [],
+        required_edits: [],
+        remaining_open_questions: [],
+        evidence_refs: [],
+      },
+    });
+    expect(dialecticForcesContinuation(unresolved).some((r) => r.includes('admissible'))).toBe(
+      true,
+    );
+  });
+
+  test('taste(medium severity) 미해결은 blocker 아님 (continuation 없음)', () => {
+    const taste = buildDialectic({
+      opponent: {
+        run: {
+          provider: 'codex',
+          model: 'codex',
+          command: 'c',
+          timestamp: '2026-05-26T00:00:00.000Z',
+          fallback_from: null,
+          fallback_reason: 'none',
+        },
+        objections: [baseObjection({ severity: 'medium' })],
+        missing_alternatives: [],
+        scope_creep_risks: [],
+        verification_gaps: [],
+      },
+      synthesizer: {
+        verdict: 'accept',
+        synthesis: 'agreed',
+        accepted_objections: [],
+        rejected_objections: [],
+        required_edits: [],
+        remaining_open_questions: [],
+        evidence_refs: [],
+      },
+    });
+    expect(dialecticForcesContinuation(taste)).toEqual([]);
+  });
+
+  test('Stop hook 통합: reviews/dialectic-*.json verdict=reject → exit 2 + dialectic 사유', async () => {
+    const reviewsDir = join(tmp, '.ditto', 'work-items', wi.id, 'reviews');
+    await mkdir(reviewsDir, { recursive: true });
+    const reject = buildDialectic({
+      synthesizer: {
+        verdict: 'blocked',
+        synthesis: 'blocked',
+        accepted_objections: [],
+        rejected_objections: [],
+        required_edits: [],
+        remaining_open_questions: ['needs decision'],
+        evidence_refs: [],
+      },
+    });
+    await writeFile(join(reviewsDir, 'dialectic-1.json'), JSON.stringify(reject));
+    const res = await stopHandler({ raw: { session_id: SESSION }, repoRoot: tmp, env: {} });
+    expect(res.exitCode).toBe(2);
+    expect(res.stderr).toContain('dialectic');
+  });
+
+  test('Stop hook 통합: malformed reviews/dialectic-*.json → exit 2 (fail-closed)', async () => {
+    const reviewsDir = join(tmp, '.ditto', 'work-items', wi.id, 'reviews');
+    await mkdir(reviewsDir, { recursive: true });
+    await writeFile(join(reviewsDir, 'dialectic-1.json'), '{"schema_version":"0.1.0"}');
+    const res = await stopHandler({ raw: { session_id: SESSION }, repoRoot: tmp, env: {} });
+    expect(res.exitCode).toBe(2);
+    expect(res.stderr).toContain('malformed');
   });
 });
