@@ -8,54 +8,185 @@
     {
       "id": "ac-1",
       "statement": "UserPromptSubmit이 (allAcceptancePlaceholders(active_work_item) AND classifyPromptAdvisory(prompt)=='execution') 교집합 만족 시 charter projection에 deep-interview 진입 directive 한 줄을 inject한다. 두 조건 중 하나라도 불만족이면 directive 미inject — 작은 요청을 heavy workflow로 자동 승격하지 않는다(설계서 §2 #3).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/user-prompt-submit.test.ts",
+          "summary": "18/18 pass — §AC-1 directive 4-case matrix (placeholder+execution → inject; 나머지 3 case → 미inject)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/conformance/m1.conformance.test.ts",
+          "summary": "M1.3 conformance에 directive inject + 보수성 단언 2건 추가"
+        },
+        {
+          "kind": "file",
+          "path": "src/hooks/user-prompt-submit.ts",
+          "lines": { "start": 130, "end": 138 },
+          "summary": "placeholderOnly && classification==='execution' 교집합 → ctx.deepInterviewDirective=true"
+        },
+        {
+          "kind": "note",
+          "summary": "commit d8e6419 feat(M1.3): UserPromptSubmit injects deep-interview directive + QuestionGate hint"
+        }
+      ]
     },
     {
       "id": "ac-2",
       "statement": "ditto deep-interview CLI 서브 명령 4개 추가: start(interview-state.json 초기화), record-turn(dimension/question/answer 한 건 append, schema-validated), check-readiness(interviewReadinessGate 호출 → pass + 부족 dimension 반환), finalize(ready 상태에서 intent.json을 IntentContract schema로 작성 + work item.acceptance_criteria를 intent.acceptance_criteria로 mirror update). 모든 서브 명령은 atomic write + JSON output 지원.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts",
+          "summary": "12/12 pass — start default/explicit, recordTurn upsert/idempotent/assumption/cap, checkReadiness blocked/ready, finalize not_ready/ready/idempotent, bootstrap CLI 동일 결과"
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/deep-interview.ts",
+          "summary": "4개 서브 명령. invalid 인자 reject (threshold 0..1, questionCap positive int, --json schema parse)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "startInterview/recordTurn/checkReadiness/finalizeInterview 함수. InterviewStore + IntentStore + WorkItemStore atomic 조합"
+        },
+        {
+          "kind": "note",
+          "summary": "commit 6351c7a feat(M6.3): ditto deep-interview CLI + finalize bootstraps autopilot"
+        }
+      ]
     },
     {
       "id": "ac-3",
       "statement": "ditto deep-interview finalize가 성공한 직후 같은 명령이 bootstrapAutopilot을 호출해 .ditto/work-items/<id>/autopilot.json을 schema에 맞게 작성한다. autopilot.work_item_id == work_item.id, autopilot.root_goal == intent.goal, autopilot.nodes는 buildInitialNodes(intent.acceptance_criteria.id)로 design→implement→verify 체인. approval_gate는 finalize에 전달된 risk axes에 따라 pending(high-risk)/not_required(safe). 별도 ditto autopilot bootstrap 명령도 idempotent하게 제공해 manual bootstrap 가능.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts tests/conformance/m2.conformance.test.ts",
+          "summary": "finalize ready → intent.json + autopilot.json 동시 생성 + idempotent 단언 통과. M2.1b conformance에 AC-3 단언 추가."
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "lines": { "start": 252, "end": 295 },
+          "summary": "finalizeInterview 가 readiness gate 통과 후 IntentStore.write + WorkItemStore.update(AC mirror) + bootstrapAutopilot 한 in-process call"
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/autopilot.ts",
+          "summary": "별도 manual bootstrap surface (idempotent). 동일 bootstrapAutopilot 코어 함수 호출"
+        },
+        {
+          "kind": "note",
+          "summary": "commits 085d20a refactor(M2.1b) autopilot CLI + 6351c7a feat(M6.3) finalize → bootstrap"
+        }
+      ]
     },
     {
       "id": "ac-4",
       "statement": "skills/deep-interview/SKILL.md 본문이 ditto deep-interview CLI 4개 서브 명령 호출을 명시한 절차로 채워진다: (1) charter directive 또는 사용자 placeholder 감지 시 start로 진입, (2) 모호한 dimension 식별 + 사용자에게 1개씩 질문(설계서 §11 한 번에 1개 원칙), (3) record-turn으로 응답 기록, (4) 매 turn check-readiness 호출, (5) ready 시 finalize. ditto CLI 인자 예시 포함. v0 skeleton 'TBD' 본문 제거.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "skills/deep-interview/SKILL.md",
+          "summary": "'When to enter' (charter directive + 진입 조건) + 6 단계 Procedure (start → dimension 식별 → record-turn → pre-mortem → check-readiness → finalize) + 각 단계마다 ditto CLI 호출 예시 + Hard rules"
+        },
+        {
+          "kind": "note",
+          "summary": "commit 29c4f6f docs(M1.5): deep-interview SKILL.md body — CLI procedure + lifecycle"
+        }
+      ]
     },
     {
       "id": "ac-5",
       "statement": "charter projection에 QuestionGate advisory 추가. classifyPromptAdvisory의 'question' 분류 + prompt가 'codebase로 답 가능한 형태'(file/path/function/error/test 키워드 포함) 휴리스틱 통과 시 charter에 'self-answer from code/docs/web first before asking (QuestionGate)' 한 줄 inject. 강제 차단 없음 — exit 0 advisory(설계서 §11 원칙 10 '키워드 표 금지'와 호환되는 hint 수준).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/user-prompt-submit.test.ts",
+          "summary": "§AC-5 3-case: question + codebase mention → hint; question without code → no hint; execution + code → no hint (question-shape 만)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/conformance/m1.conformance.test.ts",
+          "summary": "M1.3 conformance에 QuestionGate hint inject + 보수성 단언 2건 추가"
+        },
+        {
+          "kind": "file",
+          "path": "src/hooks/user-prompt-submit.ts",
+          "lines": { "start": 25, "end": 50 },
+          "summary": "looksCodebaseAnswerable 휴리스틱 — 15개 word-boundary 패턴(file/path/function/method/error/exception/test/log/class/module/schema + .ts/.js/.tsx/.jsx/.json/.md/.sh/.py). advisory only."
+        },
+        {
+          "kind": "note",
+          "summary": "commit d8e6419 feat(M1.3): UserPromptSubmit injects deep-interview directive + QuestionGate hint"
+        }
+      ]
     },
     {
       "id": "ac-6",
       "statement": "기존 conformance 5개 milestone(M0~M4) + 기존 unit/hook test 모두 회귀 zero. 신규 unit test가 AC-1~AC-5 각각을 보호. m1.3 conformance에 deep-interview directive inject case + QuestionGate advisory case 추가, m2.1b conformance(bootstrap)에 finalize 자동 호출 path case 추가. v0 합계 매트릭스 업데이트(119 → 신규 케이스 수 반영).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "460/460 pass (baseline 430 + 신규 30: charter 6 + interview-driver 12 + ups 7 + m1.3 4 + m2.1b 1). 회귀 zero."
+        },
+        {
+          "kind": "file",
+          "path": "reports/design/ditto-v0-conformance-matrix.md",
+          "summary": "v0 합계 119 → 124, M1 42 → 46, M2 29 → 30. 모두 ✅."
+        },
+        {
+          "kind": "file",
+          "path": "reports/design/ditto-v0-implementation-plan.md",
+          "lines": { "start": 108, "end": 108 },
+          "summary": "plan §M1.3 acceptance 본문에 directive/QuestionGate 추가; §M2.1b 본문에 finalize→bootstrap 자동 호출 path 추가"
+        },
+        {
+          "kind": "note",
+          "summary": "commit 4b95053 docs(v0): conformance matrix + plan §M1.3 / §M2.1b reflect wi_v04intent_autopilot_entry"
+        }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
-  "changed_files": [],
+  "changed_files": [
+    "src/core/charter.ts",
+    "src/core/intent-store.ts",
+    "src/core/interview-store.ts",
+    "src/core/interview-driver.ts",
+    "src/hooks/user-prompt-submit.ts",
+    "src/cli/commands/autopilot.ts",
+    "src/cli/commands/deep-interview.ts",
+    "src/cli/index.ts",
+    "skills/deep-interview/SKILL.md",
+    "tests/core/charter.test.ts",
+    "tests/core/interview-driver.test.ts",
+    "tests/hooks/user-prompt-submit.test.ts",
+    "tests/conformance/m1.conformance.test.ts",
+    "tests/conformance/m2.conformance.test.ts",
+    "reports/design/ditto-v0-implementation-plan.md",
+    "reports/design/ditto-v0-conformance-matrix.md"
+  ],
   "risks": [
     {
       "description": "deep-interview CLI 서브 명령 4개 추가로 CLI 표면이 늘어남. 각 명령이 schema-validated 산출물을 update하므로 invalid 인자에 강건성 필요.",
       "severity": "low",
-      "mitigation": "각 서브 명령에 unit test + invalid 인자 reject fixture"
+      "mitigation": "각 서브 명령에 unit test + invalid 인자 reject (threshold 범위, questionCap positive int, --json zod parse). 완료."
     },
     {
       "description": "AC-3의 bootstrapAutopilot 자동 호출 path와 manual ditto autopilot bootstrap 명령이 둘 다 존재 — 동일 결과 보장 필요(idempotent).",
       "severity": "info",
-      "mitigation": "둘 다 같은 bootstrapAutopilot 코어 함수를 호출. CLI에서 work_item_id 일치 + intent ready 두 invariant만 강제."
+      "mitigation": "둘 다 같은 bootstrapAutopilot 코어 함수 호출. interview-driver.test.ts의 idempotent test와 m2.conformance.test.ts의 동일 결과 단언으로 보호."
     },
     {
       "description": "AC-1의 자동 진입 directive를 사용자가 무시하고 싶을 수 있음(예: 빠른 prototype). hook은 advisory만이라 강제 못 함 — 그러나 directive 문구가 LLM을 강하게 끌어당길 수 있어 trade-off 존재.",
@@ -65,7 +196,7 @@
     {
       "description": "AC-5 휴리스틱(file/path/function/error/test 키워드)이 false-positive 가능 — 'function'을 일반 단어로 쓴 prompt도 trigger.",
       "severity": "low",
-      "mitigation": "advisory 수준이라 false-positive 비용 작음. 단어 boundary 매칭으로 보수적 설정 + LLM이 따를 의무 없음 명시."
+      "mitigation": "word boundary 매칭으로 보수적 설정. advisory 수준이라 false-positive 비용 작음 + LLM이 따를 의무 없음."
     },
     {
       "description": "본 work item이 deep-interview의 LLM 자율 영역(어떤 질문을 할지·dimension 식별·응답 해석)을 코드로 강제하지 않음. driver는 산출물 schema만 강제하고 내용은 LLM에 위임.",
@@ -74,6 +205,8 @@
     }
   ],
   "runs": [],
+  "started_at_sha": "8c7848e2e1fceda47bf1063afcc5f52292e96f8f",
   "created_at": "2026-05-31T14:56:20.233Z",
-  "updated_at": "2026-05-31T14:56:20.233Z"
+  "updated_at": "2026-06-01T00:00:00.000Z",
+  "closed_at": "2026-06-01T00:00:00.000Z"
 }
