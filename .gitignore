@@ -473,3 +473,6 @@ dist/
 # Repo-local DITTO state (per-developer; sync policy TBD in v0.1 design)
 .ditto/runs/
 .ditto/work-items/*/evidence/
+
+# Claude Code per-machine local settings (dogfood 등)
+.claude/settings.local.json

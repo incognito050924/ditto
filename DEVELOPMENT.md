@@ -9,9 +9,26 @@ ditto는 두 얼굴을 가진다. dogfood도 두 갈래다.
 
 ---
 
-## 1. 플러그인 dogfood — `bun run dogfood`
+## 1. 플러그인 dogfood
 
-repo 루트에서:
+ditto repo는 ditto를 *개발하는* 곳이므로, 이 repo(또는 하위)에서 Claude Code를 열면 **자동으로** 개발 중인 플러그인이 켜지는 게 기본이다. 배포 설치본에는 영향이 없다.
+
+### 1-a. 자동 (터미널, 권장)
+
+`scripts/dogfood.zsh`가 `claude` 셸 함수를 정의한다 — ditto repo 안에서 `claude`를 치면 자동으로 `--plugin-dir <repo>`가 붙고(캐시 없이 즉시반영), repo 밖에서는 평범한 `claude`로 동작한다. 클론당 1회, `~/.zshrc`에 한 줄만 추가하면 적용된다(경로는 본인 클론에 맞게):
+
+```bash
+# ~/.zshrc
+[ -f /path/to/ditto/scripts/dogfood.zsh ] && source /path/to/ditto/scripts/dogfood.zsh
+```
+
+이후 `cd /path/to/ditto && claude` 만 하면 dogfood 세션이다. 확인: repo 안에서 `type claude`가 함수로 뜨면 적용된 것.
+
+> Claude Code를 IDE 확장이나 데스크톱 앱으로 연다면 셸 함수가 안 먹는다 — 그 경우 아래 1-b의 `bun run dogfood`를 쓰거나, 프로젝트 `.claude/settings.local.json`에 marketplace를 등록(자동이지만 캐시 방식이라 코드 변경은 `/reload-plugins` 필요)한다.
+
+### 1-b. 수동 / 일회성 — `bun run dogfood`
+
+자동 셋업 없이 한 번만 띄우거나 IDE 사용자가 쓰는 경로:
 
 ```bash
 bun run dogfood        # = claude --plugin-dir .
