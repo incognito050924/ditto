@@ -28,16 +28,16 @@ bun test tests/conformance              # 전체 v0 적합성
 bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 ```
 
-**현재 판정: 114 케이스 전부 ✅ CONFORMS — v0(M0~M4) closed.**
+**현재 판정: 119 케이스 전부 ✅ CONFORMS — v0(M0~M4) closed. wi_v04runtimewiring (2026-05-31): M1.3 placeholder advisory + M1.4 strong-block + M4.2 autopilot_id 연속성 outcome 보강.**
 
 | milestone | unit count | 적합성 케이스 | 판정 |
 |---|---|---:|---|
 | M0 (계약·스키마·게이트) | 4 | 17 | ✅ |
-| M1 (plugin·hook·skill·agent·inventory) | 6 | 39 | ✅ |
+| M1 (plugin·hook·skill·agent·inventory) | 6 | 42 | ✅ |
 | M2 (autopilot skeleton) | 6 | 29 | ✅ |
 | M3 (Evidence·verifier 런타임) | 3 | 18 | ✅ |
-| M4 (Context rot 방지) | 2 + cross | 11 | ✅ |
-| **v0 합계** | **21** | **114** | **✅** |
+| M4 (Context rot 방지) | 2 + cross | 13 | ✅ |
+| **v0 합계** | **21** | **119** | **✅** |
 
 **M5(Playwright E2E)·M6(Knowledge/PM)는 미구현 — v0 closure 범위 밖**(plan §0 / 설계서 §12.5 "v0 범위는 M0~M2 skeleton, M3 이후는 hardening/확장"; M3·M4는 본 closure에 포함, M5·M6은 별도 milestone).
 
@@ -65,8 +65,12 @@ bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 | **M1.2** | v0 표면 4개 hook 등록; 크래시→fail-open; kill-switch; no-op stub; exit 2 전달 | ✅ |
 | **M1.3** | 빈→create+pointer, 기존→load, 다중 draft+포인터 없음→ask, 포인터 존재→1개 active | ✅ |
 | **M1.3** | UPS 절대 block 안 함; Stop과 같은 포인터 공유 | ✅ |
+| **M1.3** | 자동 생성 placeholder-only AC → charter에 placeholder advisory inject (§AC-3, wi_v04runtimewiring 2026-05-31) | ✅ |
+| **M1.3** | real AC 1개 이상 → placeholder advisory 미발화 (false-positive 차단) | ✅ |
 | **M1.4** | 미검증 완료→exit 2 / 완료→exit 0 | ✅ |
-| **M1.4** | 완료 부재 + ready 노드→exit 2 / 없음→exit 0 | ✅ |
+| **M1.4** | 완료 부재 + ready 노드→exit 2 | ✅ |
+| **M1.4** | 완료 부재 + active autopilot 없음 + NON_TERMINAL→exit 2 (§M1.4 strong-block 2026-05-31, wi_v04runtimewiring) | ✅ |
+| **M1.4** | 완료 부재 + active autopilot 없음 + terminal(done/abandoned)→exit 0 | ✅ |
 | **M1.4** | approval pending(+노드)→exit 0; blocked 노드만→exit 0 | ✅ |
 | **M1.4** | malformed artifact→exit 2; `stop_hook_active`→exit 0 | ✅ |
 | **M1.5** | v0 skill 7표면; plan/autopilot `user-invocable:false`; 노출 4종 무제한 | ✅ |
@@ -128,6 +132,8 @@ bun test tests/conformance/m{N}.conformance.test.ts   # 특정 milestone
 | **M4.2** | trigger 메타가 from_context 에 반영 | ✅ |
 | **M4.2** | re_entry.command → handoff open_threads 운반 | ✅ |
 | **M4.2** | invariant: PreCompact 후 work item handoff_path 가 artifact 가리킴 | ✅ |
+| **M4.2** | active autopilot 존재 → handoff.autopilot_id = autopilot.autopilot_id (§AC-1, wi_v04runtimewiring 2026-05-31) | ✅ |
+| **M4.2** | autopilot 부재 → handoff.autopilot_id 미포함 (backward compat) | ✅ |
 | **M4 cross** | UserPromptSubmit charter projection 으로 active work item 식별자 매 턴 주입 | ✅ |
 
 ## 2. 적합성 테스트가 의도적으로 *다루지 않는* 것
