@@ -1,0 +1,9 @@
+#!/bin/sh
+# pre-commit: biome lint 미통과 코드의 커밋을 차단한다.
+# 재발 방지 — F5(과거 lint 미통과 코드가 커밋된 뒤 0d0f4aa가 청소) 후속.
+# 활성화(클론당 1회): git config core.hooksPath .githooks
+if ! bun run lint; then
+  echo "" >&2
+  echo "✗ biome lint 실패 — 커밋을 중단했다. 'bun run lint:fix' 로 고친 뒤 다시 커밋하라." >&2
+  exit 1
+fi
