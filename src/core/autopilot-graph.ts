@@ -28,14 +28,23 @@ export function kindToOwner(kind: AutopilotNode['kind']): AutopilotNode['owner']
  * current status is an illegal transition that fails loudly. `rollback` undoes a
  * speculative dispatch (running/failed → pending) — used when a plan is rejected.
  */
-export type NodeEvent = 'dispatch' | 'pass' | 'fail' | 'block' | 'rollback';
+export type NodeEvent = 'dispatch' | 'pass' | 'fail' | 'block' | 'rollback' | 'retry';
 
 const NODE_TRANSITIONS: Record<
   AutopilotNode['status'],
   Partial<Record<NodeEvent, AutopilotNode['status']>>
 > = {
+  // `retry` re-arms a running node to pending so the pending-only selector
+  // (`selectReadyNode`) re-picks it next round — a retryable/switch failure is
+  // not terminal. Terminal failure (cap exceeded) uses `fail` → failed.
   pending: { dispatch: 'running', block: 'blocked' },
-  running: { pass: 'passed', fail: 'failed', block: 'blocked', rollback: 'pending' },
+  running: {
+    pass: 'passed',
+    fail: 'failed',
+    block: 'blocked',
+    rollback: 'pending',
+    retry: 'pending',
+  },
   failed: { dispatch: 'running', rollback: 'pending' }, // retry re-dispatches
   blocked: { dispatch: 'running' }, // unblocked → re-dispatch
   passed: {}, // terminal within a run

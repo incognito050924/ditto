@@ -67,6 +67,12 @@ describe('nodeTransition (G3: explicit transition table, not implicit rules)', (
     expect(nodeTransition('failed', 'rollback')).toBe('pending');
   });
 
+  test('retry re-arms a running node to pending (retryable failure, not terminal)', () => {
+    // A retryable/switch failure re-arms the node so selectReadyNode (pending-only)
+    // re-picks it on the next round. Terminal failure (cap exceeded) uses `fail`.
+    expect(nodeTransition('running', 'retry')).toBe('pending');
+  });
+
   test('illegal transitions throw (fail loud, not a silent no-op)', () => {
     expect(() => nodeTransition('passed', 'fail')).toThrow();
     expect(() => nodeTransition('pending', 'pass')).toThrow();
