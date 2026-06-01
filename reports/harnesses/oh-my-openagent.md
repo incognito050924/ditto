@@ -4,8 +4,9 @@
 
 - 대상 저장소: `https://github.com/code-yeongyu/oh-my-openagent`
 - 로컬 분석 경로: `/private/tmp/ditto-harness-analysis/oh-my-openagent`
-- 기준 브랜치/커밋: `dev` / `94d6d5b49530a0c066bb84426fb7983132b70244`
-- 이 보고서의 모든 repo-relative 경로와 라인 번호는 위 커밋 기준이다.
+- 기준 브랜치/커밋: `dev` / `7afa4d08ffe9de7189a12ba871884b1023392e22` (갱신: 2026-06-01)
+- 이전 기준: `94d6d5b49530a0c066bb84426fb7983132b70244`, 갱신: `7afa4d08f` @ 2026-06-01
+- 이 보고서의 모든 repo-relative 경로와 라인 번호는 위 커밋 기준이다. 단, 아래 “기준 커밋 이후 변경” 절에서 명시적으로 신규 해시를 표기한 항목은 새 커밋 기준이다.
 - 저장소 자체가 현재 “Multi-Harness Agent OS Refactor in Progress” 상태이며 OpenCode, Codex, Pi 등 여러 하네스를 지원하도록 재구조화 중이라고 밝힌다. 다만 현재 구현은 OpenCode 플러그인 어댑터에 강하게 묶여 있고, 순수 로직을 하네스 중립 계층으로 빼는 작업이 전제 조건이라고 명시한다. 근거: `README.md:1-4`, `README.md:138-142`, `ROADMAP.md:66-76`, `ROADMAP.md:78-88`.
 
 ## 조사 방법
@@ -89,11 +90,11 @@
 
 ### 내장 명령
 
-구현상 내장 명령은 `/init-deep`, `/ralph-loop`, `/ulw-loop`, `/cancel-ralph`, `/refactor`, `/start-work`, `/stop-continuation`, `/remove-ai-slops`, `/handoff`, `/hyperplan`이다. 근거: `src/features/builtin-commands/types.ts:3`, `src/features/builtin-commands/commands.ts:41-164`.
+구현상 내장 명령은 `/ralph-loop`, `/ulw-loop`, `/cancel-ralph`, `/refactor`, `/start-work`, `/stop-continuation`, `/remove-ai-slops`, `/handoff`, `/hyperplan`이다. `/init-deep`은 커맨드에서 제거되어 스킬로 이동했다 (`src/features/builtin-skills/skills/init-deep.ts @ 7afa4d08f`). 근거: `src/features/builtin-commands/types.ts:3 @ 7afa4d08f`, `src/features/builtin-commands/commands.ts:38+ @ 7afa4d08f`.
 
 주요 명령 성격:
 
-- `/init-deep`: 병렬 `explore`와 LSP/구조 분석으로 계층형 `AGENTS.md`를 생성한다. 근거: `src/features/builtin-commands/templates/init-deep.ts:1-23`, `src/features/builtin-commands/templates/init-deep.ts:38-54`, `src/features/builtin-commands/templates/init-deep.ts:184-257`.
+- `/init-deep`: 커맨드에서 **제거됨** (7afa4d08f). 동일 기능이 `init-deep` **스킬**로 이동했다. 스킬은 `packages/shared-skills/skills/init-deep/SKILL.md`에서 로드된다. 커맨드 앵커 (`src/features/builtin-commands/templates/init-deep.ts`) 는 현재 파일이 존재하지 않으므로 무효다(삭제 확정, 검증 완료 2026-06-01 @ `7afa4d08f`). 근거: `src/features/builtin-skills/skills/init-deep.ts @ 7afa4d08f`, `src/features/builtin-skills/skill-file-loader.ts @ 7afa4d08f`.
 - `/ralph-loop`, `/ulw-loop`: 완료 조건까지 계속하는 self-referential loop/ultrawork loop다. 근거: `src/features/builtin-commands/commands.ts:53-74`, `docs/reference/features.md:506-532`.
 - `/refactor`: LSP, AST-grep, architecture analysis, TDD verification을 포함한 리팩터링 워크플로다. 근거: `src/features/builtin-commands/commands.ts:81-88`, `docs/reference/features.md:534-550`.
 - `/start-work`: Prometheus plan에서 Atlas 또는 Sisyphus 작업 세션을 시작한다. 근거: `src/features/builtin-commands/commands.ts:89-105`, `docs/guide/orchestration.md:7-14`.
@@ -102,12 +103,14 @@
 
 ### 내장 스킬
 
-기본 내장 스킬은 browser provider에 따라 `playwright`/`agent-browser`/`dev-browser`/`playwright-cli` 중 하나, 그리고 `frontend-ui-ux`, `git-master`, `review-work`, `ai-slop-remover`다. Team Mode가 켜지고 비활성화되지 않았을 때 `team-mode` 스킬이 추가된다. 근거: `src/features/builtin-skills/skills.ts:22-47`.
+기본 내장 스킬은 browser provider에 따라 `playwright`/`agent-browser`/`dev-browser`/`playwright-cli` 중 하나, 그리고 `frontend-ui-ux`, `git-master`, `review-work`, `remove-ai-slops`, `init-deep`, `security-research`, `security-review`다. Team Mode가 켜지고 비활성화되지 않았을 때 `team-mode` 스킬이 추가된다. `ai-slop-remover` 스킬은 `remove-ai-slops`로 리네임·교체됐다 (7afa4d08f). `init-deep`과 `review-work`는 `packages/shared-skills/` 패키지 기반 파일 로더로 외부화됐다. 근거: `src/features/builtin-skills/skills.ts:28-52 @ 7afa4d08f`, `src/features/builtin-skills/skill-file-loader.ts @ 7afa4d08f`.
 
 - `playwright`: Playwright MCP 기반 브라우저 자동화 스킬이며 `npx @playwright/mcp@latest`를 MCP config로 둔다. 근거: `src/features/builtin-skills/skills/playwright.ts:3-15`.
 - `playwright-cli`: 에이전트가 canonical browser skill 이름 `playwright`를 하드코딩하므로 스킬 이름은 유지하고 구현만 CLI로 바꾼다고 주석에 명시한다. 근거: `src/features/builtin-skills/skills/playwright-cli.ts:3-13`.
 - `team-mode`: docs-only skill이며 `team_*` 도구는 `team_mode.enabled=true`일 때 전역 등록된다고 설명한다. 근거: `src/features/builtin-skills/skills/team-mode.ts:3-9`, `src/features/builtin-skills/skills/team-mode.ts:181-182`.
-- `review-work`: 구현 후 5개 병렬 sub-agent가 목표/QA/코드품질/보안/컨텍스트 누락을 검토하고 모두 통과해야 pass라고 규정한다. 근거: `src/features/builtin-skills/skills/review-work.ts:3-19`, `src/features/builtin-skills/skills/review-work.ts:61-68`.
+- `review-work`: 구현 후 5개 병렬 sub-agent가 목표/QA/코드품질/보안/컨텍스트 누락을 검토하고 모두 통과해야 pass라고 규정한다. 7afa4d08f 이후 스킬 본문이 `packages/shared-skills/skills/review-work/SKILL.md`로 외부화됐고, `src/features/builtin-skills/skills/review-work.ts`는 `loadSharedSkillTemplate("review-work")` 래퍼만 남는다. 근거: `src/features/builtin-skills/skills/review-work.ts @ 7afa4d08f`, `src/features/builtin-skills/skill-file-loader.ts @ 7afa4d08f`.
+- `security-research` / `security-review` (신규 @ 7afa4d08f): Team Mode 기반 보안 리서치 스킬. 3명의 취약점 헌터와 2명의 PoC 엔지니어를 병렬로 오케스트레이션해 코드베이스를 감사한다. `security-review`는 `security-research`의 alias 스킬이다. 스킬 본문은 `src/features/builtin-skills/security-research/SKILL.md`에서 로드된다. 근거: `src/features/builtin-skills/skills/security-research.ts @ 7afa4d08f`, `src/features/builtin-skills/skills/security-review.ts @ 7afa4d08f`.
+- `init-deep` (신규 스킬 등록 @ 7afa4d08f): 커맨드에서 스킬로 이동. `packages/shared-skills/skills/init-deep/SKILL.md` 기반. 근거: `src/features/builtin-skills/skills/init-deep.ts @ 7afa4d08f`.
 
 ### MCP
 
@@ -163,10 +166,10 @@
 
 - 현재 OpenCode 플러그인 API에 강하게 결합되어 있다. 로드맵도 이를 인정하며, prompt injection race, duplicate work, infinite loop, state corruption, frequent breaking changes를 이유로 OpenCode-native 접근을 경계한다. 근거: `ROADMAP.md:66-88`.
 - 이름 전환이 복잡하다. 패키지/CLI는 여전히 `oh-my-opencode`가 중심이고, plugin/config는 `oh-my-openagent`를 선호하며 레거시 config가 같은 디렉터리에 있으면 legacy가 이긴다는 문서가 있다. 근거: `README.md:123-125`, `docs/reference/configuration.md:56-59`, `src/shared/plugin-identity.ts:1-8`.
-- 문서/스키마 드리프트가 보인다. 구현 타입과 명령 등록에는 `handoff`, `remove-ai-slops`, `hyperplan`이 모두 있지만, `docs/reference/features.md`의 built-in command 표에는 `/remove-ai-slops`와 `/hyperplan`이 없고, config schema의 `BuiltinCommandNameSchema`에는 `handoff`가 빠져 있다. 이 스키마는 `disabled_commands`에 사용된다. 근거: `src/features/builtin-commands/types.ts:3`, `src/features/builtin-commands/commands.ts:112-144`, `docs/reference/features.md:472-484`, `src/config/schema/commands.ts:3-13`, `src/config/schema/oh-my-opencode-config.ts:12`, `src/config/schema/oh-my-opencode-config.ts:45`.
+- 문서/스키마 드리프트가 일부 해소되었으나 여전히 남아 있다. `init-deep`은 커맨드에서 스킬로 이동하면서 `BuiltinCommandNameSchema`에서도 제거됐다 (7afa4d08f). 그러나 `handoff`는 여전히 `BuiltinCommandName` 타입(`src/features/builtin-commands/types.ts:3 @ 7afa4d08f`)에 있지만 `BuiltinCommandNameSchema`(`src/config/schema/commands.ts @ 7afa4d08f`)에는 없다. `disabled_commands` 설정으로 `handoff`를 비활성화할 수 없는 버그가 지속된다. `docs/reference/features.md`의 built-in command 표에도 `/remove-ai-slops`, `/hyperplan`은 여전히 누락 상태다. 근거: `src/features/builtin-commands/types.ts:3 @ 7afa4d08f`, `src/config/schema/commands.ts @ 7afa4d08f`, `docs/reference/features.md:472-484`.
 - LSP MCP bootstrap은 런타임에 `git submodule update`, `npm install`, `npm run build`까지 시도할 수 있다. 엄밀한 추론: 오프라인/제한된 샌드박스/기업망에서는 LSP 도구 활성화가 예측 불가능하게 실패하거나 지연될 수 있다. 근거: `src/mcp/lsp.ts:11-33`, `src/mcp/lsp.ts:116-127`.
 - 배포 경로가 두 갈래다. workflow는 11개 플랫폼과 `oh-my-opencode`/`oh-my-openagent` dual publish를 처리하지만, `script/publish.ts`의 `PLATFORM_PACKAGE_IDS`에는 `windows-x64-baseline`이 없다. 엄밀한 추론: 공식 workflow가 주 경로라면 실제 릴리스 문제는 아닐 수 있으나, 수동 publish script를 쓰면 누락 위험이 있다. 근거: `script/publish.ts:13-24`, `script/build-binaries.ts:18-30`, `.github/workflows/publish.yml:89-94`, `.github/workflows/publish-platform.yml:43-47`.
-- 설치 문서가 LLM agent에게 마케팅/스타 요청까지 지시한다. 명시적 동의 없이 star command를 실행하지 말라고 제한하지만, 설치 UX와 하네스 기술 설정이 홍보 지시와 섞여 있다. 근거: `docs/guide/installation.md:447-481`.
+- 설치 시 star 요청이 일부 개선됐다 (7afa4d08f). `src/cli/star-request.ts`가 추가되어 `gh api`를 직접 실행하기 전에 `"Star the repos on GitHub? [y/N]"`를 묻도록 변경됐다. 그러나 `docs/guide/installation.md` 문서에서는 여전히 star 명령을 에이전트가 직접 실행하는 형태로 기술하며 LLM agent 지시에 홍보 요청이 남아 있다. 근거: `src/cli/star-request.ts @ 7afa4d08f`, `src/cli/cli-installer.ts @ 7afa4d08f`, `docs/guide/installation.md:604-611`.
 - 익명 telemetry가 기본 enabled다. 문서는 opt-out 환경변수를 제공하지만, 하네스 평가/도입 시 기본 네트워크 이벤트 정책을 별도로 검토해야 한다. 근거: `README.md:125`, `docs/reference/cli.md:61`, `docs/guide/installation.md:28`.
 - Team Mode는 기능 범위가 크고 상태 저장/메일박스/라이브 delivery reservation이 복잡하다. 문서는 dotfile reservation, TTL reclaim, processed 이동까지 설명한다. 엄밀한 추론: crash recovery와 중복 주입 방지 테스트가 충분하지 않으면 state corruption이 발생하기 쉬운 영역이다. 근거: `docs/guide/team-mode.md:133-147`, `src/create-managers.ts:75-96`.
 
@@ -191,6 +194,75 @@
 6. 모델 capability/fallback은 차용하되, fallback chain을 문서/코드/doctor가 모두 같은 데이터를 보게 만든다. 근거: `docs/reference/configuration.md:331-361`, `docs/reference/configuration.md:663-789`, `src/cli/cli-program.ts:185-198`.
 7. 배포 스크립트는 workflow와 수동 script가 같은 platform manifest를 import하도록 한다. 이 저장소처럼 `build-binaries.ts`와 `publish.ts`가 별도 플랫폼 목록을 갖는 구조는 피한다. 근거: `script/build-binaries.ts:18-30`, `script/publish.ts:13-24`, `.github/workflows/publish-platform.yml:43-47`.
 
+## 기준 커밋 이후 변경 (2026-06-01 갱신)
+
+HEAD: `7afa4d08ffe9de7189a12ba871884b1023392e22`, 이전 기준: `94d6d5b`. 기간: 약 230+ 커밋. `dev` 브랜치 유지 중.
+
+### 1. `/init-deep` 커맨드 제거 → `init-deep` 스킬로 이동
+
+커밋 `ab0244386` 계통. `src/features/builtin-commands/templates/init-deep.ts` 파일 삭제, `src/features/builtin-commands/commands.ts`에서 `"init-deep"` 항목 제거, `src/features/builtin-commands/types.ts:3`에서 union 타입에서 제거, `src/config/schema/commands.ts`에서 `BuiltinCommandNameSchema` enum에서도 제거됐다. 대신 `src/features/builtin-skills/skills/init-deep.ts`가 `packages/shared-skills/skills/init-deep/SKILL.md`를 로드하는 새 스킬로 등록됐다.
+
+DITTO 영향: 보고서 내 `/init-deep` 커맨드 앵커(`src/features/builtin-commands/templates/init-deep.ts:*`)는 무효다(검증 완료 2026-06-01, `7afa4d08f`에서 파일 부재 확인 — 삭제 확정). 기능은 `src/features/builtin-skills/skills/init-deep.ts`(스킬 래퍼) + `packages/shared-skills/skills/init-deep/SKILL.md`로 이동. "수정 적용" 후보 테이블의 `/init-deep` 항목도 커맨드가 아닌 스킬로 재분류해야 한다.
+
+근거: `src/features/builtin-commands/types.ts:3 @ 7afa4d08f`, `src/features/builtin-skills/skills/init-deep.ts @ 7afa4d08f`, `src/features/builtin-skills/skill-file-loader.ts @ 7afa4d08f`.
+
+### 2. `ai-slop-remover` 스킬 → `remove-ai-slops`로 교체
+
+`src/features/builtin-skills/skills/ai-slop-remover.ts` 삭제, `src/features/builtin-skills/skills/remove-ai-slops.ts`로 교체됐다. 스킬 본문도 `packages/shared-skills/skills/remove-ai-slops/SKILL.md`로 외부화됐다. features.md 스킬 표에서도 이름이 `$omo:remove-ai-slops`로 변경됐다.
+
+근거: `src/features/builtin-skills/skills/remove-ai-slops.ts @ 7afa4d08f`, `docs/reference/features.md @ 7afa4d08f`.
+
+### 3. 신규 스킬 추가: `security-research`, `security-review`
+
+커밋 `2bfad4909`. 보안 리서치 특화 스킬이다. 3개 취약점 헌터 + 2개 PoC 엔지니어를 Team Mode로 병렬 실행해 코드베이스 감사, 익스플로잇 가능성 검증, 심각도 분류를 수행한다. `security-review`는 `security-research`의 alias다. `src/features/builtin-skills/security-research/SKILL.md` (198줄)에 구현체가 있고 `createBuiltinSkills`에 기본 포함됐다.
+
+DITTO 영향: 멀티-에이전트 보안 감사 패턴이 명시적 스킬로 구체화됐다. ditto 적용 후보 테이블의 `review-work` 항목 옆에 `security-research`를 별도 "바로 적용" 후보로 추가할 수 있다.
+
+근거: `src/features/builtin-skills/skills/security-research.ts @ 7afa4d08f`, `src/features/builtin-skills/security-research/SKILL.md @ 7afa4d08f`, `src/features/builtin-skills/skills.ts:46-47 @ 7afa4d08f`.
+
+### 4. Atlas / Prometheus 프롬프트가 `prompts-core` 패키지로 이전
+
+커밋 `4385~4390` 계통. `src/agents/atlas/shared-prompt.ts`, `default-prompt-sections.ts`, `gemini-prompt-sections.ts`, `gpt-prompt-sections.ts`, `kimi-prompt-sections.ts`, `opus-4-7-prompt-sections.ts` 등 Atlas 프롬프트 TypeScript 파일 전부 삭제됐다. 프롬프트 본문은 `packages/prompts-core/prompts/atlas/{default,gpt,gemini,kimi,opus-4-7}.md` markdown 파일로 이동했다. Prometheus도 동일하게 `packages/prompts-core/prompts/prometheus/{default,gpt,gemini}.md`로 이전됐다.
+
+이에 따라 이 보고서에서 인용한 다음 앵커들은 **파일이 삭제되어 무효**다(검증 완료 2026-06-01, `7afa4d08f`에서 삭제·이동 확정):
+- `src/agents/atlas/shared-prompt.ts:12-188` — 삭제됨. 본문 이동: `packages/prompts-core/prompts/atlas/{default,gemini,gpt,kimi,opus-4-7}.md`
+- `src/agents/atlas/default-prompt-sections.ts`, `gemini-prompt-sections.ts`, `gpt-prompt-sections.ts`, `kimi-prompt-sections.ts`, `opus-4-7-prompt-sections.ts` — 5개 전부 삭제됨(위 markdown으로 통합)
+- `src/agents/prometheus/gpt.ts:105-230` — 해당 라인 무효. 현재 파일은 7줄짜리 `loadPromptSync` 래퍼만 남고 본문은 `packages/prompts-core/prompts/prometheus/{default,gemini,gpt}.md`로 이동
+
+Atlas 프롬프트 라우팅(모델별 variant 선택)은 `src/agents/atlas/agent.ts`의 `getAtlasPromptSource`가 담당하며 `@oh-my-opencode/prompts-core`의 `resolveVariant`를 사용한다. 위임 계약 6-section 구조 자체는 유지되지만 마크다운에 있어 직접 라인 인용이 불가능하다.
+
+근거: `src/agents/atlas/agent.ts:1-60 @ 7afa4d08f`, `packages/prompts-core/prompts/atlas/ @ 7afa4d08f`, `packages/prompts-core/src/atlas-prompts.ts @ 7afa4d08f`.
+
+### 5. `context-window-monitor` 훅 제거
+
+커밋 `1432a1141`. `createContextWindowMonitorHook`이 `src/plugin/hooks/create-session-hooks.ts`에서 제거됐다. features.md 훅 목록에서도 `context-window-monitor` 행이 삭제됐다.
+
+DITTO 영향: 보고서 훅 인벤토리에서 이 훅을 언급한 부분이 있다면 해당 항목을 삭제해야 한다.
+
+근거: `src/plugin/hooks/create-session-hooks.ts @ 7afa4d08f`, `docs/reference/features.md:785 @ 7afa4d08f`.
+
+### 6. `omo-codex` Light Edition 도입 (Codex CLI용 경량 버전)
+
+커밋 `ab0244386` 계통. OpenAI Codex CLI용 경량 플러그인 패키지가 추가됐다. `rules`, `comment-checker`, `lsp`, `ultrawork`, `ulw-loop`, `start-work-continuation`, `telemetry`만 포함하며 에이전트 오케스트레이션, `team_*` 도구, 내장 웹/코드 검색 MCP는 없다. `lazycodex`라는 npm alias로 배포되며 `docs/guide/installation.md`에 별도 설치 절차가 추가됐다.
+
+DITTO 영향: oh-my-openagent의 하네스 중립 설계 방향이 실제로 진행 중임을 나타낸다. 핵심 기능(lsp, ulw-loop, start-work-continuation)이 별도 패키지로 추출됐다는 점이 "어댑터 분리" 로드맵과 일치한다.
+
+근거: `docs/guide/installation.md:1-65 @ 7afa4d08f`, `packages/ @ 7afa4d08f`.
+
+### 7. 스킬 본문 외부화 (`shared-skills` 패키지)
+
+`review-work`, `init-deep`, `remove-ai-slops` 등 대형 스킬 본문이 `packages/shared-skills/skills/{name}/SKILL.md`로 이전됐다. `src/features/builtin-skills/skill-file-loader.ts`가 런타임에 파일을 로드하는 로더 유틸리티다.
+
+DITTO 영향: `review-work.ts:3-19`, `review-work.ts:61-68` 등 기존 TypeScript 앵커는 현재 내용이 없는 래퍼만 가리킨다. 실제 검증 규칙 라인은 `packages/shared-skills/skills/review-work/SKILL.md`에 있다.
+
+근거: `src/features/builtin-skills/skill-file-loader.ts @ 7afa4d08f`, `src/features/builtin-skills/skills/review-work.ts @ 7afa4d08f`.
+
+### 8. 설치 시 star 요청에 사용자 확인 추가
+
+커밋 `799a17bc2`. `src/cli/star-request.ts`가 추가되고 `cli-installer.ts`가 `gh api`를 직접 실행하기 전에 `"Star the repos on GitHub? [y/N]"` 인터랙티브 프롬프트를 보여주도록 변경됐다. 기존 보고서의 "명시적 동의 없이 star command를 실행하지 말라는 제한만 있다"는 분석은 더 이상 정확하지 않다. 단, `docs/guide/installation.md:604-611`에서 LLM agent에게 gh star를 직접 실행하도록 지시하는 텍스트는 여전히 존재한다.
+
+근거: `src/cli/star-request.ts @ 7afa4d08f`, `src/cli/cli-installer.ts @ 7afa4d08f`.
+
 ## 근거 목록
 
 - 목표/방향: `README.md:1-4`, `README.md:93-125`, `README.md:138-142`, `ROADMAP.md:11-20`, `ROADMAP.md:21-49`, `ROADMAP.md:53-88`.
@@ -198,7 +270,7 @@
 - 플러그인 조립: `src/testing/create-plugin-module.ts:77-181`, `src/plugin-interface.ts:35-91`, `src/create-managers.ts:41-161`, `src/create-tools.ts:22-52`, `src/create-hooks.ts:35-98`, `src/plugin/tool-registry.ts:177-375`.
 - 설정: `docs/reference/configuration.md:44-59`, `docs/reference/configuration.md:172-361`, `docs/reference/configuration.md:621-960`, `docs/reference/configuration.md:962-1023`, `src/plugin-config.ts:65-450`, `src/shared/plugin-identity.ts:1-8`.
 - CLI/설치: `src/cli/cli-program.ts:25-222`, `docs/reference/cli.md:1-225`, `docs/guide/installation.md:1-170`, `docs/guide/installation.md:447-499`.
-- 오케스트레이션/에이전트: `docs/guide/orchestration.md:1-100`, `docs/guide/orchestration.md:104-188`, `docs/guide/orchestration.md:192-278`, `docs/guide/orchestration.md:298-383`, `docs/guide/overview.md:48-162`, `src/agents/builtin-agents.ts:32-180`, `src/agents/sisyphus/gpt-5-5.ts:45-240`, `src/agents/atlas/shared-prompt.ts:12-188`, `src/agents/prometheus/gpt.ts:105-230`, `src/agents/explore.ts:1-100`, `src/agents/oracle.ts:1-120`.
+- 오케스트레이션/에이전트: `docs/guide/orchestration.md:1-100`, `docs/guide/orchestration.md:104-188`, `docs/guide/orchestration.md:192-278`, `docs/guide/orchestration.md:298-383`, `docs/guide/overview.md:48-162`, `src/agents/builtin-agents.ts:32-180`, `src/agents/sisyphus/gpt-5-5.ts:45-240`, `src/agents/atlas/shared-prompt.ts:12-188 (삭제됨 @ 7afa4d08f — packages/prompts-core/prompts/atlas/*.md로 이전)`, `src/agents/prometheus/gpt.ts:105-230 (삭제됨 @ 7afa4d08f — packages/prompts-core/prompts/prometheus/*.md로 이전)`, `src/agents/explore.ts:1-100`, `src/agents/oracle.ts:1-120`.
 - 명령/스킬/도구/MCP: `src/features/builtin-commands/types.ts:1-9`, `src/features/builtin-commands/commands.ts:1-164`, `src/features/builtin-commands/templates/init-deep.ts:1-270`, `src/features/builtin-skills/skills.ts:1-47`, `src/features/builtin-skills/skills/playwright.ts:1-60`, `src/features/builtin-skills/skills/playwright-cli.ts:1-50`, `src/features/builtin-skills/skills/team-mode.ts:1-184`, `src/features/builtin-skills/skills/review-work.ts:1-115`, `src/mcp/index.ts:1-56`, `src/mcp/lsp.ts:1-167`, `src/mcp/ast-grep.ts:1-129`, `src/mcp/websearch.ts:1-42`, `src/mcp/context7.ts:1-9`, `docs/reference/features.md:468-735`, `docs/guide/team-mode.md:1-151`.
 
 ## ditto 적용 정리

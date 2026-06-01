@@ -4,10 +4,11 @@
 
 - 대상 저장소: `https://github.com/Yeachan-Heo/oh-my-codex`
 - 로컬 분석 경로: `/private/tmp/ditto-harness-analysis/oh-my-codex`
-- 기준 커밋: `6d438dac53da6bae9c4f5558a5b47f3661be69f9`
-- npm 패키지명/버전: `oh-my-codex` `0.18.0`이며, 실행 바이너리는 `omx`로 노출된다. 근거: `package.json:2-8` at `6d438dac53da6bae9c4f5558a5b47f3661be69f9`.
-- Rust 워크스페이스도 `0.18.0`, edition 2021, MSRV `1.73`로 설정되어 있고, `omx-api`, `omx-explore`, `omx-mux`, `omx-runtime-core`, `omx-runtime`, `omx-sparkshell` 크레이트를 포함한다. 근거: `Cargo.toml:1-18` at `6d438dac53da6bae9c4f5558a5b47f3661be69f9`.
-- 이하 모든 `repo-relative/path:line` 근거는 기준 커밋 `6d438dac53da6bae9c4f5558a5b47f3661be69f9` 기준이다.
+- 이전 기준 커밋: `6d438dac53da6bae9c4f5558a5b47f3661be69f9` (0.18.0)
+- **갱신 기준 커밋: `ff17267baa3a69b7b3578c64edf8cc78a03e2456` @ 2026-06-01** (0.18.7, 2026-05-30)
+- npm 패키지명/버전: `oh-my-codex` `0.18.7`이며, 실행 바이너리는 `omx`로 노출된다. 근거: `package.json:2-3` at `ff17267b`.
+- Rust 워크스페이스도 `0.18.7`로 버전이 올랐다. edition 2021, MSRV `1.73` 유지. 근거: `Cargo.toml:14` at `ff17267b`.
+- 이하 기존 분석의 `repo-relative/path:line` 근거는 기준 커밋 `6d438dac53da6bae9c4f5558a5b47f3661be69f9` 기준이다. 갱신 이후 변경된 앵커는 아래 "기준 커밋 이후 변경" 섹션에 별도 표시한다.
 
 ## 조사 방법
 
@@ -210,6 +211,121 @@
 6. **doctor 결과를 "설치 증명", "실행 증명", "운영 증명"으로 나눈다.** oh-my-codex 문서는 hook proof와 plugin proof와 fallback proof를 구분한다. DITTO도 같은 레벨 구분을 채택해야 한다. 근거: `docs/codex-native-hooks.md:168-181`.
 
 7. **문서/코드 SSOT를 릴리스 전에 검증한다.** skill 추가/변경 시 root skill, catalog manifest, plugin mirror, manifest/MCP metadata를 검증하는 release gate를 DITTO에도 둔다. 근거: `docs/plugin-bundle-ssot.md:13-30`, `src/scripts/sync-plugin-mirror.ts:105-175`.
+
+## 기준 커밋 이후 변경 (2026-06-01 갱신)
+
+> 기간: `6d438dac` → `ff17267b` (0.18.0 → 0.18.7), 226 커밋, 307 파일 변경.  
+> 아래 각 항목은 해당 커밋 hash와 `path:line` 또는 파일 경로로 근거를 표시한다.
+
+### 1. 버전 범프
+
+- npm/Cargo 모두 `0.18.0` → `0.18.7`. 중간 릴리스: 0.18.2~0.18.7. 근거: `package.json:3 @ ff17267b`, `Cargo.toml:14 @ ff17267b`.
+
+### 2. `$autopilot` 루프 계약 대폭 변경 — ralph 강등, ultragoal 기본화
+
+기존 문서의 핵심 특징 4, 구조/아키텍처 "autopilot" 설명, "각 도구가 왜 그렇게 작성되어야 했는지" `$autopilot` 항목, "DITTO에서 차용할 점" 5번, ditto 적용 정리 표의 관련 셀이 영향받는다.
+
+- **변경 전**: `$autopilot` = `$ralplan → $ralph → $code-review` 고정 loop.
+- **변경 후**: `$autopilot` = `$deep-interview → $ralplan → $ultragoal (+ $team if needed) → $code-review → $ultraqa` 권장/기본 loop. Ralph는 "레거시/명시 대체 실행 경로"로 강등되었다. 근거: `skills/autopilot/SKILL.md:description @ ff17267b`.
+- `$code-review` 미통과 시 phase 전이도 변경: 이전에는 `autopilot → ralplan` peer transition이었으나, 이제 `autopilot-state.json`을 유지하면서 `current_phase: "ralplan"`을 업데이트하는 방식으로 바뀌었다. State model에서도 `autopilot → ralplan` 독립 peer transition이 denied로 전환되었다. 근거: `skills/autopilot/SKILL.md:45-62 @ ff17267b`, `docs/STATE_MODEL.md:142-173 @ ff17267b`.
+- **UltraQA** 단계가 새로 추가되었다. `$ultraqa`는 code-review 통과 후 런타임/CLI 동작·회귀 위험이 있을 때 실행된다. docs-only 변경이면 명시적 스킵+근거로 대체 가능하다. 근거: `skills/autopilot/SKILL.md:58-61 @ ff17267b`(검증됨 2026-06-01).
+- `$ultragoal`이 autopilot의 기본 구현 실행 경로로 명시되었다. 근거: `skills/autopilot/SKILL.md:46-50, :82 @ ff17267b`(검증됨 2026-06-01).
+
+**기존 분석 수정**: "각 도구가 왜 그렇게 작성되어야 했는지" `$autopilot` 항목의 "strict loop `$ralplan -> $ralph -> $code-review`" 표현은 현재 틀림. 권장 loop에 `$deep-interview`, `$ultragoal`, `$ultraqa`가 포함된다. Ralph는 deprecated 경로는 아니지만 default가 아님.
+
+### 3. `$ralplan` 계약 강화 — 서브에이전트 순서 강제 및 planning/execution 경계 명시
+
+- Architect/Critic를 "동일 parallel batch에서 동시 호출 불가"로 명시되어 있었으나, 이제 각각 `agent_type: "architect"`, `agent_type: "critic"` 서브에이전트로 순차 launch해야 하며, 임시 reviewer prompt 대체 불가 조건이 명시되었다. 근거: `skills/ralplan/SKILL.md:49-60 @ ff17267b`.
+- **Durable Consensus Handoff Contract** 신설: PRD/test-spec 파일의 존재만으로 ralplan 완료 또는 execution handoff 허용이 안 된다. `ralplan_architect_review`, `ralplan_critic_review`, `ralplan_consensus_gate.complete:true` 모두 영속화해야 handoff 가능. 근거: `skills/ralplan/SKILL.md:68-94 @ ff17267b`.
+- **Planning/Execution 경계** 섹션 신설: ralplan은 planning mode이며, planning artifact (`.omx/context/`, `.omx/plans/`, `.omx/specs/`, `.omx/state/` 레코드)만 작성 가능하다. 합의 완료 전에 코드 편집 금지. 근거: `skills/ralplan/SKILL.md:56-67 @ ff17267b`.
+- `--interactive` approval 선택지에서 ralph가 "Explicit Ralph fallback" 항목으로 재분류되었고, `$ultragoal`이 default durable goal execution으로 승격되었다. 근거: `skills/ralplan/SKILL.md:79-91 @ ff17267b`.
+- **Scholastic** advisory agent 언급 추가: ontology-heavy planning에서 자문 역할. 근거: `skills/ralplan/SKILL.md:8 @ ff17267b`.
+
+**기존 분석 수정**: "각 도구가 왜 그렇게 작성되어야 했는지" `$ralplan` 항목의 "alias `$plan --consensus`" 설명은 여전히 유효하나, handoff 조건에 consensus gate 영속화가 추가되었다는 점을 보완해야 한다.
+
+### 4. 신규 스킬/에이전트: `$prometheus-strict` (Metis / Momus / Oracle)
+
+기존 분석의 스킬 인벤토리와 catalog 목록이 영향받는다.
+
+- `skills/prometheus-strict/SKILL.md`가 새로 추가되었다. clean-room interview-driven planner로, Metis(요구 명확화), Momus(가정/리스크 비판), Oracle(handoff 준비 검증)의 세 역할이 순차적으로 동작한다. 출력은 실행 스킬이 아닌 계획 전용 artifact(`.omx/plans/prometheus-strict/`)다. 근거: `skills/prometheus-strict/SKILL.md @ ff17267b`.
+- 대응 native agent 3종 신설: `prometheus-strict-metis`, `prometheus-strict-momus`, `prometheus-strict-oracle`. metis/momus는 frontier·high reasoning, **oracle은 `modelClass:'standard'`**(검증됨 2026-06-01: `definitions.ts:345`). 근거: `src/agents/definitions.ts:320-349 @ ff17267b`.
+- catalog에 active 비-core 스킬로 등록. 근거: `src/catalog/manifest.json @ ff17267b`.
+- **Scholastic** native agent 신설: 온톨로지 우선 추론 리뷰어. category mistake, 숨겨진 가정, modality 분리, scholastic critique, minimal-repair 제안 역할. read-only tools, frontier, high reasoning. 근거: `src/agents/definitions.ts @ ff17267b`, `src/catalog/manifest.json @ ff17267b`.
+- DITTO 함의: `$deep-interview`와 유사한 목적이나, prometheus-strict는 Metis/Momus/Oracle 역할 분리가 명시적이고 planning artifact가 별도 경로에 남는다. `$deep-interview` 대안 또는 보완 경로로 검토할 수 있다.
+
+### 5. 경량 팀 조정 프로토콜 (Team Big Five / ATEM-inspired) 추가
+
+기존 분석의 팀 런타임 계층 설명이 영향받는다.
+
+- `docs/team-coordination-protocol.md` 신설: 독립 fan-out은 기존 가벼운 프로토콜(ACK, claim-safe lifecycle) 유지. 의존성/공유 파일/cross-boundary ownership/handoff/통합작업이 있을 때는 Team Big Five + ATEM 조정 게이트 활성화. 근거: `docs/team-coordination-protocol.md @ d2100490`.
+- `skills/team/SKILL.md`에 동일 프로토콜 체크리스트 추가: shared mental model (task JSON/inbox/mailbox가 canonical), closed-loop ACK handoff, mutual performance monitoring, backup/reassignment 보고, adaptability checkpoint, team orientation (통합 결과 최적화). 근거: `skills/team/SKILL.md @ d2100490`.
+- `skills/worker/SKILL.md`에 조정 프로토콜 안내 추가: 14줄 추가. 근거: `skills/worker/SKILL.md @ d2100490`.
+- 런타임 상태 파일 지원: `src/team/coordination-protocol.ts` 신설(351줄), `src/team/state.ts` 45줄 추가. 근거: `src/team/coordination-protocol.ts @ d2100490`.
+- DITTO 함의: 단순 fan-out과 복잡 상호의존 작업 구분 기준이 생겼다. "차용할 점" 4번(state-first team API)에 이 조정 프로토콜 계층을 추가로 검토해야 한다.
+
+### 6. `OMX_LORE_COMMIT_GUARD` 기본값 변경 — opt-out → opt-in
+
+기존 분석의 native hooks 설명("각 도구가 왜 그렇게 작성되어야 했는지" native hooks 항목)과 `docs/codex-native-hooks.md` 앵커가 영향받는다.
+
+- **변경 전**: Lore commit guard는 기본 활성화, `OMX_LORE_COMMIT_GUARD=0`으로 비활성화.
+- **변경 후**: Lore commit guard는 기본 비활성화, `OMX_LORE_COMMIT_GUARD=1`로 명시적 활성화(opt-in). 근거: `docs/codex-native-hooks.md:74-90 @ ff17267b`.
+- inline git commit 차단이 "opted in일 때만" 작동한다는 점으로 PreToolUse hook 설명도 변경. 근거: `docs/codex-native-hooks.md:45 @ ff17267b`.
+
+**기존 분석 수정**: 기존 분석에는 이 동작이 명시적으로 언급되지 않았지만, 향후 DITTO hook 설계에서 참고 시 opt-in 기본값을 전제해야 한다.
+
+### 7. 플러그인 범위 hook 지원 추가 (plugin_hooks feature)
+
+기존 분석의 "핵심 특징 7", "setup/config/hook 계층", `docs/plugin-bundle-ssot.md` 앵커가 영향받는다.
+
+- Codex가 `[features].plugin_hooks`를 보고할 경우, hook 등록 표면이 `.codex/hooks.json`에서 `plugins/oh-my-codex/hooks/hooks.json`(+ `${PLUGIN_ROOT}`)으로 이동한다. 기존 `.codex/hooks.json` 경로는 legacy/fallback 설치로 재분류. 근거: `docs/codex-native-hooks.md:6-24 @ ff17267b`, `docs/plugin-bundle-ssot.md:8 @ ff17267b`.
+- `plugin-bundle-ssot.md`의 공식 plugin manifest 제약도 갱신: `agents`와 `prompts`는 여전히 plugin에서 제외하지만, `hooks`는 이제 plugin 범위 hook(`./hooks/hooks.json`)으로 공식 포함. 근거: `docs/plugin-bundle-ssot.md:52 @ ff17267b`.
+- DITTO 함의: "차용할 점" 8번(hook trust state, user hook preservation)에서 plugin_hooks 지원 환경과 legacy 환경을 구분해야 한다.
+
+### 8. `omx auth` 명령 신설 — auth slot hot-swap
+
+- `src/cli/auth.ts` 신설(93줄): `omx auth add <slot>`, `omx auth list [--json]`, `omx auth use <slot>`으로 named auth slot 등록/전환 지원. `~/.omx/auth/<slot>.json`에 owner-only 권한으로 저장. 근거: `src/cli/auth.ts @ 7f0a3fa1`.
+- Ultragoal의 auth blocker 재시도 루프 수정과 연동되어 있다. 근거: `38fa4847`.
+- DITTO 함의: DITTO가 멀티 provider/session 환경을 지원할 경우 참고.
+
+### 9. hook payload 크기 제한 신설
+
+- `src/scripts/hook-payload-guard.ts` 신설(113줄): notify argv JSON 최대 64KB, native stdin JSON 최대 1MB, raw field scan 최대 64KB. hook event name 타입 열거도 포함. 근거: `src/scripts/hook-payload-guard.ts:1-3 @ 34bef2bc`.
+- Stop hook payload 과부하 차단, malformed Stop hook input Codex teardown 방지 패치와 함께 적용. 근거: `0d19e5e5`, `be45c48b`.
+
+### 10. `$deep-interview` 설정 파일 지원 추가
+
+- `src/config/deep-interview.ts` 신설(230줄): profile(`quick` / `standard` / `deep`), threshold, maxRounds, enableChallengeModes를 TOML 설정 파일에서 읽는 런타임 설정 계층 추가. project-omx > project-root > user 우선순위. 근거: `src/config/deep-interview.ts @ ff17267b`.
+- `deep-interview` plan_then_execute downstream-authority를 binding gate로 강제하는 패치도 포함. 근거: `38b41f32`.
+
+### 11. `$ultragoal` dynamic steering API 추가
+
+- `omx ultragoal steer`가 명시적 구조화 지시문(`OMX_ULTRAGOAL_STEER`, `omx.ultragoal.steer` 형태)으로만 story decomposition을 변경한다. 허용 mutation: `add_subgoal`, `split_subgoal`, `reorder_pending`, `revise_pending_wording`, `annotate_ledger`, `mark_blocked_superseded`. 모든 시도는 `ledger.jsonl`에 감사 기록. 근거: `skills/ultragoal/SKILL.md @ ff17267b`.
+- Aggregate Codex goal은 stable pointer 방식으로 변경: 최초 brief 제약을 유지하면서 `.omx/ultragoal/goals.json`과 `ledger.jsonl`을 가리키는 stable pointer. 열거식 objective 레거시 포맷은 read 시 마이그레이션. 근거: `skills/ultragoal/SKILL.md @ ff17267b`.
+- UserPromptSubmit hook에서 ultragoal steering 지시문 처리 추가. 근거: `docs/codex-native-hooks.md:48 @ ff17267b`.
+
+### 12. HUD 관련 다수의 안정화 패치
+
+- HUD watch pane 중복 spawn, cwd 소실, dead-leader pane 정리, ownership 보존, authority tick 실패 표시, autopilot session mirror fallback 등 10개 이상의 HUD 버그픽스. 근거: `ec850b7a`, `b58ab34f`, `5e9892d7`, `8bc492d4`, `a9c2ae8e`, `7658ad84`, `a1f8507b`, `33f622ba`.
+- 기존 분석(약한 점/리스크의 "팀 런타임 운영 실패 모드" 관련)에서 HUD가 복잡한 실패 모드를 가진다고 언급한 점이 이번 패치군으로 일부 개선되었으나, 패치 수 자체가 복잡도를 시사한다.
+
+### 앵커 드리프트 점검 (검증 완료 2026-06-01, `ff17267b` 직접 대조)
+
+아래 앵커는 2026-06-01에 `ff17267b` 체크아웃을 직접 읽어 핵심 claim을 확인했다. 확정된 정확한 위치를 함께 적는다(보고서 본문 인용은 위 각 항목에서 정정됨).
+
+| 앵커 | 검증 결과 | 확정 위치 |
+|---|---|---|
+| `skills/autopilot/SKILL.md` 권장 loop·ralph 강등·UltraQA | VERIFIED | loop `:7-13`, ralph 강등 `:13,:88`, ultraqa `:58-61`, ultragoal `:46-50,:82` |
+| `skills/ralplan/SKILL.md` Durable Consensus·planning 경계·architect/critic 순차 | VERIFIED | consensus `:79-90`, 경계 `:67-77`, 순차 `:52-53,:65` |
+| `docs/codex-native-hooks.md` Lore guard opt-in·plugin_hooks | VERIFIED | opt-in `:49,:80-91`, plugin_hooks `:9-14,:33` |
+| `docs/STATE_MODEL.md` autopilot→ralplan transition denied | VERIFIED | `:162, :170-173` |
+| `src/catalog/manifest.json` prometheus-strict/scholastic 등록 | VERIFIED | `:449-471` |
+| `src/agents/definitions.ts` prometheus-strict-*/scholastic | VERIFIED(정정) | metis/momus/oracle `:320-349`, scholastic `:361-369`. oracle=standard |
+| `skills/prometheus-strict/SKILL.md` Metis/Momus/Oracle | VERIFIED | `:3, :13-16` |
+| `docs/team-coordination-protocol.md` Big Five/ATEM | VERIFIED | `:3, :7, :9, :13-22` (+ `src/team/coordination-protocol.ts` 실재) |
+| `src/scripts/hook-payload-guard.ts` payload 가드 | VERIFIED | `:1-13` (64KB/1MB/64KB) |
+| `src/cli/doctor.ts`, `src/cli/setup.ts` doctor 경계·plugin_hooks 분기 | VERIFIED | doctor `:182-260`, smoke `:1216`; setup 분기 `:1488,:1502-1535` |
+
+`ff17267b` 기준 BROKEN 앵커는 없었다. 유일한 내용 정정은 prometheus-strict `oracle`의 modelClass(frontier→standard, 위 §4 반영).
 
 ## 근거 목록
 

@@ -4,8 +4,9 @@
 
 - 대상 저장소: `https://github.com/mattpocock/skills`
 - 로컬 분석 경로: `/private/tmp/ditto-harness-analysis/mattpocock-skills`
-- 기준 커밋: `b8be62ffacb0118fa3eaa29a0923c87c8c11985c` (`b8be62f`, `main`, `origin/main`)
-- 기준 커밋 메시지: `Merge branch 'main' of https://github.com/mattpocock/skills`
+- 기준 커밋: `aaf2453fbdfe7a15c07f11d861224f34ab4b53cb` (`aaf2453`, `main`, `origin/main`)
+- 기준 커밋 메시지: `Refine teaching skill documentation to enhance clarity and interactivity of explainers`
+- 이전 기준: `b8be62ffacb0118fa3eaa29a0923c87c8c11985c`, 갱신: `aaf2453fbdfe7a15c07f11d861224f34ab4b53cb` @ 2026-06-01
 - 이 보고서의 모든 `repo-relative/path:line` 근거는 위 기준 커밋을 기준으로 한다.
 
 ## 조사 방법
@@ -16,6 +17,38 @@
 - `find . -maxdepth 3 -name package.json -o -name pyproject.toml -o -name Cargo.toml -o -name go.mod -o -name pnpm-lock.yaml -o -name package-lock.json -o -name yarn.lock` 결과가 비어 있었다. 따라서 이 저장소는 실행 앱/라이브러리 패키지가 아니라 에이전트 스킬과 설치 보조 스크립트 저장소로 분석한다. 이는 추적 파일 목록에 패키지 매니저 메타데이터가 없고, 공개 진입점이 `.claude-plugin/plugin.json`의 `skills` 배열인 점에서 나온 엄밀한 추론이다(`.claude-plugin/plugin.json:1-18`).
 - `nl -ba`로 README, 루트 지침, 컨텍스트 문서, 플러그인 매니페스트, ADR, 스크립트, 모든 `SKILL.md`, 주요 참조 문서를 라인 번호와 함께 읽었다.
 - 스크립트는 구조와 안전성을 정적으로 분석했다. 이 분석 목적상 `scripts/link-skills.sh`, git guardrail hook, pre-commit 설치 skill 등은 실제 사용자 홈/저장소를 변경할 수 있어 실행하지 않았다.
+
+## 기준 커밋 이후 변경 (2026-06-01 갱신)
+
+최신 확인: 2026-06-01, HEAD=`aaf2453fbdfe7a15c07f11d861224f34ab4b53cb`. 이전 기준 `b8be62f` 대비 4개 커밋, 7개 파일 변경.
+
+### 추가된 `/teach` skill (in-progress)
+
+- `fadf11d`에서 `/teach` skill이 추가됐다가 `bd96a9f`에서 즉시 `in-progress` bucket으로 이동됐다. 현재 위치는 `skills/in-progress/teach/`다.
+- skill 목적: "사용자에게 새 기술이나 개념을 가르친다"는 지속 학습 지원 스킬이다. 현재 디렉터리를 teaching workspace로 취급하고 `MISSION.md`, `GLOSSARY.md`, `RESOURCES.md`, `./learning-records/*.md`를 상태 파일로 유지한다(`skills/in-progress/teach/SKILL.md:8-17` @ `aaf2453`).
+- 핵심 패턴: Knowledge/Skills/Wisdom 세 층위 모델. Knowledge는 외부 trusted resource에서 수집해 HTML explainer로 전달하고, Skills는 피드백 루프가 있는 인터랙티브 exercises로 가르치며, Wisdom은 커뮤니티에 위임한다(`skills/in-progress/teach/SKILL.md:19-91` @ `aaf2453`).
+- zone of proximal development: `learning-records/`를 읽어 사용자의 현재 수준을 추적하고, mission과 연결해 다음에 가르칠 항목을 결정한다. learning record는 ADR과 동형이며 `0001-<slug>.md` 순번 형식을 쓴다(`skills/in-progress/teach/LEARNING-RECORD-FORMAT.md:1-5` @ `aaf2453`).
+- GLOSSARY.md 운용 원칙: 사용자가 용어를 실제로 이해했을 때만 추가한다. `CONTEXT.md` 포맷과 유사하게 `_Avoid_` 별칭을 두고, 용어를 정의 안에서도 자기-참조하라고 지시한다(`skills/in-progress/teach/GLOSSARY-FORMAT.md:29-33` @ `aaf2453`).
+- MISSION.md 운용 원칙: 워크스페이스당 하나, 추상적 목표보다 구체적 결과를 요구하며, 사용자가 명확히 말 못 하면 작성 전에 인터뷰한다(`skills/in-progress/teach/MISSION-FORMAT.md:26-30` @ `aaf2453`).
+- DITTO 함의: 이 skill은 engineering bucket이 아닌 `in-progress`이며 plugin/README에 노출되지 않는다. 구조 자체는 DITTO의 "세션 간 학습 상태 추적" 패턴을 시험하는 사례로, mission-driven context grounding, learning record ↔ ADR 동형, knowledge/skills/wisdom 분리 등이 DITTO의 세션 핸드오프와 zone-of-context 관리에 직접 참고할 수 있다.
+
+### `CONTEXT-FORMAT.md` 규칙 간소화
+
+- `e3b90b5`에서 `skills/engineering/grill-with-docs/CONTEXT-FORMAT.md`의 Rules 섹션이 변경됐다.
+  - 삭제된 규칙: "Flag conflicts explicitly" (Flagged ambiguities 섹션 권고)와 "Show relationships" (bold term name + cardinality 표현), "Write an example dialogue" (개발자-도메인 전문가 대화 예시).
+  - 변경된 규칙: "Be opinionated"의 표현이 `list the others as aliases to avoid` → `list the others under _Avoid_`로 명확해졌다.
+  - 남은 규칙: tight definition, project-specific terms only, subheadings grouping.
+- 현재 Rules는 4개 항목이다(`skills/engineering/grill-with-docs/CONTEXT-FORMAT.md:27-30` @ `aaf2453`).
+- DITTO 함의: CONTEXT.md 포맷이 단순해졌다. "Flag conflicts explicitly" 규칙이 삭제됐으므로 이 보고서 내 `약한 점/리스크` 섹션에서 해당 필드를 특별히 언급할 필요가 없다. "_Avoid_" 별칭 관행은 유지된다.
+
+### `/to-prd` Step 2 교체: deep module sketch → seam sketch
+
+- `0288510` 포함 범위에서 `skills/engineering/to-prd/SKILL.md`의 Step 2가 교체됐다.
+  - 이전: "Sketch out the major modules you will need to build or modify" + deep module 정의 + "Check with the user which modules they want tests written for."
+  - 이후: "Sketch out the seams at which you're going to test the feature. Existing seams should be preferred to new ones. Use the highest seam possible. If new seams are needed, propose them at the highest point you can." + "Check with the user that these seams match their expectations."
+- 현재 to-prd Step 2는 `skills/engineering/to-prd/SKILL.md:14-16` @ `aaf2453`.
+- 설계 의도: PRD 단계에서 deep module 설계 용어보다 테스트 seam 위치를 먼저 잡는 것이 구현 계획과 더 직접 연결된다. "highest seam possible" 원칙은 `/tdd`의 public interface 우선 원칙과 일치한다.
+- DITTO 함의: 기존 보고서 `도구/명령/스크립트/프롬프트 인벤토리`의 `to-prd` 행과 `각 도구가 왜 그렇게 작성되어야 했는지` 섹션의 to-prd 설명 일부가 old Step 2를 참조한다. 아래에서 해당 앵커를 수정한다.
 
 ## 핵심 특징
 
@@ -81,7 +114,7 @@
 | `setup-matt-pocock-skills` | `skills/engineering/setup-matt-pocock-skills/SKILL.md` | repo별 issue tracker/triage/domain docs 설정을 질문 후 기록 | `CLAUDE.md`/`AGENTS.md` block, `docs/agents/*.md` | `skills/engineering/setup-matt-pocock-skills/SKILL.md:7-15`, `skills/engineering/setup-matt-pocock-skills/SKILL.md:70-121` |
 | `tdd` | `skills/engineering/tdd/SKILL.md` | behavior/public interface 중심 red-green-refactor, vertical tracer bullet | tests, implementation, refactor | `skills/engineering/tdd/SKILL.md:8-17`, `skills/engineering/tdd/SKILL.md:18-41`, `skills/engineering/tdd/SKILL.md:43-109` |
 | `to-issues` | `skills/engineering/to-issues/SKILL.md` | plan/PRD를 thin vertical slice issue로 분해 | issue tracker issues | `skills/engineering/to-issues/SKILL.md:6-32`, `skills/engineering/to-issues/SKILL.md:52-83` |
-| `to-prd` | `skills/engineering/to-prd/SKILL.md` | 현재 대화와 코드 이해를 PRD로 합성하고 issue tracker에 publish | PRD issue, `ready-for-agent` label | `skills/engineering/to-prd/SKILL.md:6-20`, `skills/engineering/to-prd/SKILL.md:22-76` |
+| `to-prd` | `skills/engineering/to-prd/SKILL.md` | 현재 대화와 코드 이해를 PRD로 합성하고 issue tracker에 publish. Step 2는 deep module sketch 대신 테스트 seam sketch로 교체됨 (2026-06-01 갱신) | PRD issue, `ready-for-agent` label | `skills/engineering/to-prd/SKILL.md:6-18`, `skills/engineering/to-prd/SKILL.md:20-76` @ `aaf2453` |
 | `zoom-out` | `skills/engineering/zoom-out/SKILL.md` | 추상화 레벨을 올려 관련 모듈/호출자 지도를 요구 | 설명 응답 | `skills/engineering/zoom-out/SKILL.md:1-7` |
 | `prototype` | `skills/engineering/prototype/SKILL.md` | logic prototype 또는 UI prototype으로 설계 질문을 검증 | throwaway TUI/route, notes/ADR/issue | `skills/engineering/prototype/SKILL.md:6-30`, `skills/engineering/prototype/LOGIC.md:1-79`, `skills/engineering/prototype/UI.md:1-112` |
 
@@ -116,7 +149,7 @@
 ### 비공개/초안/폐기 프롬프트
 
 - `personal`에는 article editing과 Obsidian vault 관리 skill이 있다(`skills/personal/README.md:1-6`). Obsidian skill은 개인 vault 절대경로와 wikilink 규약을 담으므로 공개 plugin에는 부적합하다(`skills/personal/obsidian-vault/SKILL.md:8-24`).
-- `in-progress`에는 review, writing-beats, writing-fragments, writing-shape가 있다. README는 이들이 rough edge, breaking change, abandoned experiment 가능성이 있어 plugin/top-level README에서 제외된다고 말한다(`skills/in-progress/README.md:1-8`).
+- `in-progress`에는 review, writing-beats, writing-fragments, writing-shape, teach가 있다. README는 이들이 rough edge, breaking change, abandoned experiment 가능성이 있어 plugin/top-level README에서 제외된다고 말한다(`skills/in-progress/README.md:1-8`). `teach`는 2026-06-01 갱신 시 추가됐다(`skills/in-progress/teach/SKILL.md:1-91` @ `aaf2453`). Knowledge/Skills/Wisdom 세 층위 모델, mission-driven zone of proximal development, ADR과 동형인 learning record 패턴을 사용한다.
 - `deprecated`에는 design-an-interface, qa, request-refactor-plan, ubiquitous-language가 있다(`skills/deprecated/README.md:1-8`). 이 중 `ubiquitous-language`는 `UBIQUITOUS_LANGUAGE.md`에 저장하는 예전 vocabulary 흐름을 쓰며(`skills/deprecated/ubiquitous-language/SKILL.md:1-20`), active 흐름은 `CONTEXT.md`와 ADR 중심으로 바뀌었다(`skills/engineering/grill-with-docs/SKILL.md:18-86`).
 
 ## 각 도구가 왜 그렇게 작성되어야 했는지에 대한 근거 또는 엄밀한 추론
@@ -129,7 +162,7 @@
 - `/diagnose`의 hypothesis와 instrumentation 단계가 ranked/falsifiable/one variable로 제한되는 이유는 single-hypothesis anchoring과 noisy logging을 막기 위해서다. skill은 3-5개 가설과 prediction을 요구하고, debug probe가 prediction에 매핑되어야 하며 “log everything and grep”을 금지한다(`skills/engineering/diagnose/SKILL.md:65-89`).
 - `/tdd`가 horizontal test batch를 금지하고 tracer bullet vertical loop를 쓰는 이유는 테스트가 imagined behavior와 implementation shape에 고정되는 것을 막기 위해서다. skill은 horizontal slicing이 “crap tests”를 만든다고 설명하고, 한 테스트-한 구현 반복으로 배운 내용에 반응하라고 한다(`skills/engineering/tdd/SKILL.md:18-41`, `skills/engineering/tdd/SKILL.md:62-88`).
 - `/tdd`의 public interface 중심 원칙은 refactor-resilient tests를 만들기 위해서다. skill은 good tests가 public API를 통해 real code path를 exercise하고 bad tests는 internals/mock/private methods에 결합된다고 설명한다(`skills/engineering/tdd/SKILL.md:8-17`). 보조 문서도 internal collaborator mocking을 금지하고 system boundary만 mock하라고 한다(`skills/engineering/tdd/mocking.md:1-15`).
-- `/to-prd`가 인터뷰하지 말고 기존 context를 합성하라고 하는 이유는 이미 대화에서 결정된 내용을 issue tracker에 durable artifact로 옮기는 역할이기 때문이다. skill은 “Do NOT interview the user”라고 쓰고, repo 탐색/모듈 sketch/user confirmation 후 PRD template를 publish하라고 한다(`skills/engineering/to-prd/SKILL.md:6-20`).
+- `/to-prd`가 인터뷰하지 말고 기존 context를 합성하라고 하는 이유는 이미 대화에서 결정된 내용을 issue tracker에 durable artifact로 옮기는 역할이기 때문이다. skill은 “Do NOT interview the user”라고 쓰고, repo 탐색/seam sketch/user confirmation 후 PRD template를 publish하라고 한다(`skills/engineering/to-prd/SKILL.md:6-18` @ `aaf2453`). 2026-06-01 갱신: Step 2가 deep module 설계 sketch에서 테스트 seam sketch로 교체됐다. “existing seams preferred, use the highest seam possible”이 핵심 원칙으로, `/tdd`의 public interface 우선 원칙과 일치한다(`skills/engineering/to-prd/SKILL.md:14-16` @ `aaf2453`).
 - `/to-issues`가 vertical slices와 dependency order를 강제하는 이유는 각 issue를 독립적으로 잡아 구현 가능한 AFK 단위로 만들기 위해서다. skill은 slice가 schema/API/UI/tests를 관통하는 complete path여야 하고, blocker를 먼저 publish해 실제 issue id를 참조하라고 한다(`skills/engineering/to-issues/SKILL.md:22-32`, `skills/engineering/to-issues/SKILL.md:52-83`).
 - `/triage`가 state machine과 canonical roles를 쓰는 이유는 issue tracker마다 label string은 달라도 triage 상태 의미는 고정하기 위해서다. skill은 category 2개와 state 5개를 정의하고 실제 label string은 setup mapping을 쓰라고 한다(`skills/engineering/triage/SKILL.md:21-40`). template도 canonical role과 tracker label을 분리한다(`skills/engineering/setup-matt-pocock-skills/triage-labels.md:1-15`).
 - `/triage`가 모든 issue/comment에 AI disclaimer를 요구하는 이유는 triage 중 생성된 외부-facing 텍스트가 AI 산출물임을 명확히 하기 위해서다(`skills/engineering/triage/SKILL.md:10-15`). 엄밀한 추론: issue tracker는 사람과 외부 기여자가 읽는 표면이므로 provenance 표시가 필요하다.
@@ -199,7 +232,7 @@
 - `scripts/link-skills.sh`: local symlink installer. 주요 근거: `scripts/link-skills.sh:4-8`, `scripts/link-skills.sh:13-18`, `scripts/link-skills.sh:26-38`.
 - `scripts/list-skills.sh`: skill listing script. 주요 근거: `scripts/list-skills.sh:1-7`.
 - `skills/engineering/setup-matt-pocock-skills/SKILL.md` 및 seed templates: repo-local setup bootstrapper. 주요 근거: `skills/engineering/setup-matt-pocock-skills/SKILL.md:7-15`, `skills/engineering/setup-matt-pocock-skills/SKILL.md:19-121`, `skills/engineering/setup-matt-pocock-skills/issue-tracker-github.md:1-22`, `skills/engineering/setup-matt-pocock-skills/issue-tracker-gitlab.md:1-23`, `skills/engineering/setup-matt-pocock-skills/issue-tracker-local.md:1-19`, `skills/engineering/setup-matt-pocock-skills/domain.md:1-51`, `skills/engineering/setup-matt-pocock-skills/triage-labels.md:1-15`.
-- `skills/engineering/grill-with-docs/*`: grilling, `CONTEXT.md`, ADR format. 주요 근거: `skills/engineering/grill-with-docs/SKILL.md:6-86`, `skills/engineering/grill-with-docs/CONTEXT-FORMAT.md:1-63`, `skills/engineering/grill-with-docs/ADR-FORMAT.md:1-47`.
+- `skills/engineering/grill-with-docs/*`: grilling, `CONTEXT.md`, ADR format. 주요 근거: `skills/engineering/grill-with-docs/SKILL.md:6-86`, `skills/engineering/grill-with-docs/CONTEXT-FORMAT.md:1-60` @ `aaf2453` (이전 1-63, 규칙 3개 삭제로 축소), `skills/engineering/grill-with-docs/ADR-FORMAT.md:1-47`.
 - `skills/engineering/diagnose/*`: debugging feedback-loop harness와 HITL template. 주요 근거: `skills/engineering/diagnose/SKILL.md:12-117`, `skills/engineering/diagnose/scripts/hitl-loop.template.sh:1-41`.
 - `skills/engineering/tdd/*`: behavior/interface 중심 TDD. 주요 근거: `skills/engineering/tdd/SKILL.md:8-109`, `skills/engineering/tdd/tests.md:1-61`, `skills/engineering/tdd/mocking.md:1-59`, `skills/engineering/tdd/interface-design.md:1-31`, `skills/engineering/tdd/deep-modules.md:1-33`, `skills/engineering/tdd/refactoring.md:1-10`.
 - `skills/engineering/to-prd/SKILL.md`, `skills/engineering/to-issues/SKILL.md`: PRD/issue generation. 주요 근거: `skills/engineering/to-prd/SKILL.md:6-76`, `skills/engineering/to-issues/SKILL.md:6-83`.

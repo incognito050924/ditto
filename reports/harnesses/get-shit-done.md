@@ -2,19 +2,24 @@
 
 ## 분석 대상 및 기준 커밋
 
-- 대상 저장소: `https://github.com/gsd-build/get-shit-done`
-- 로컬 분석 경로: `/private/tmp/ditto-harness-analysis/get-shit-done`
-- 기준 커밋: `c22e869becc88819cca5d428a314ff782dcd27d7`
+- 대상 저장소: `https://github.com/open-gsd/gsd-core`
+- 추적 브랜치: `next` (활성 개발 브랜치; `main`은 npm `@latest` 기준)
+- 로컬 분석 경로: `/private/tmp/ditto-harness-refresh/gsd-core`
+- 기준 커밋: `9b5ee37364b5bf204f920850a0f3c57e1394b47d` (2026-05-31, `chore(#556): retire orphaned CJS↔SDK hand-sync tooling`)
 - 이 문서의 모든 `repo-relative/path:line` 근거는 위 기준 커밋을 기준으로 한다.
+- **추적 이력**: 이전 추적: `gsd-build/get-shit-done @ bdcaab2c` (2026-06-01 아카이브됨) → 신규 추적: `open-gsd/gsd-core @ 9b5ee373` (브랜치 `next`, 2026-06-01 기준)
 
-분석 대상은 일반 애플리케이션이 아니라 Claude Code, OpenCode, Gemini, Codex 등 여러 에이전트 런타임에 설치되는 메타 프롬프팅/컨텍스트 엔지니어링/스펙 기반 개발 하네스다. 패키지 메타데이터는 이름을 `get-shit-done-cc`, 설명을 “meta-prompting, context engineering and spec-driven development system”으로 두고, 실행 파일을 `get-shit-done-cc`, `gsd-sdk`, `gsd-tools`로 노출한다(`package.json:2`, `package.json:5`, `package.json:7-9`). README도 동일하게 다중 런타임용 경량 메타 프롬프팅/컨텍스트 엔지니어링 시스템이라고 설명한다(`README.md:7-9`).
+> **[저장소 추적 전환 완료]**  
+> `gsd-build/get-shit-done`은 2026-05-22 공식 아카이브 처리되어 README가 `open-gsd/gsd-core`로 리디렉션되었다. 이 문서는 2026-06-01부터 `open-gsd/gsd-core`를 신규 분석 기준으로 삼는다. 이전 저장소의 분석 이력은 이 문서 하단 “기준 커밋 이후 변경” 섹션에 보존된다.
+
+분석 대상은 일반 애플리케이션이 아니라 Claude Code, OpenCode, Gemini, Codex 등 여러 에이전트 런타임에 설치되는 메타 프롬프팅/컨텍스트 엔지니어링/스펙 기반 개발 하네스다. 패키지 메타데이터는 이름을 `@opengsd/gsd-core`(구 `get-shit-done-cc`에서 개명), 설명을 “GSD Core is a meta-prompting, context engineering, and spec-driven development system for AI coding agents”로 두고, 실행 파일을 `gsd-core`(설치기)와 `gsd-tools`로 노출한다(`package.json:2`, `package.json:6-9` @ `9b5ee373`). README도 동일하게 다중 런타임용 경량 메타 프롬프팅/컨텍스트 엔지니어링 시스템이라고 설명한다(`README.md:9-11` @ `9b5ee373`). npm 게시 패키지명은 `@opengsd/get-shit-done-redux`가 아니라 `@opengsd/gsd-core`로 확정되었다(`package.json:2` @ `9b5ee373`).
 
 ## 조사 방법
 
-- 저장소를 지정된 임시 경로에 클론한 뒤 `git rev-parse HEAD`로 기준 커밋을 확정했다.
-- README, 아키텍처 문서, 명령 문서, 에이전트 문서, 설정 문서, 인벤토리 문서, 루트 및 SDK `package.json`, 런타임 명령 파일, 워크플로 파일, 에이전트 프롬프트, CLI/SDK 구현, 설치기, 후크, 템플릿, 린트/보안 스크립트를 정적 분석했다.
+- `gh repo clone open-gsd/gsd-core /private/tmp/ditto-harness-refresh/gsd-core`로 클론 후 `git rev-parse HEAD`로 기준 커밋을 확정했다.
+- README, ARCHITECTURE.md, COMMANDS.md, AGENTS.md, CLI-TOOLS.md, CONFIGURATION.md, INVENTORY.md, package.json, 런타임 명령 파일, 워크플로 파일, 에이전트 프롬프트, CLI 구현, 설치기, 후크, 템플릿, ADR, 린트/보안 스크립트를 정적 분석했다. 구 저장소에서 참조하던 `sdk/package.json`과 `sdk/src/`는 ADR-0174에 의해 삭제되었으므로 분석 대상에서 제외했다.
 - 전체 테스트는 실행하지 않았다. 이 보고서의 목적이 하네스 구조 분석이고, 저장소 자체는 테스트 실행보다 문서/설정/프롬프트/도구 정의의 설계 근거를 수집하는 것이 핵심이기 때문이다.
-- 핵심 수량은 사람이 작성한 설명보다 `docs/INVENTORY.md`를 우선했다. 해당 문서는 “authoritative roster”라고 명시하고, drift-control 테스트가 선적 파일 누락을 검증한다고 설명한다(`docs/INVENTORY.md:3-9`, `docs/INVENTORY.md:473`).
+- 핵심 수량은 사람이 작성한 설명보다 `docs/INVENTORY.md`를 우선했다. 해당 문서는 “authoritative roster”라고 명시하고, drift-control 테스트가 선적 파일 누락을 검증한다고 설명한다(`docs/INVENTORY.md:3-9` @ `9b5ee373`). 구 저장소 기준 앵커(`docs/INVENTORY.md:473`)는 신규 저장소에서 같은 파일 내 동일 위치에서 유효함을 확인했다.
 
 ## 핵심 특징
 
@@ -30,8 +35,8 @@
 4. **런타임별 설치 표면과 토큰 예산 관리**  
    Claude, Codex, Gemini 등은 명령/스킬/후크 설치 위치와 호출 문법이 다르다. 명령 문서는 Claude/OpenCode/Kilo/Copilot은 `/gsd-command`, Gemini는 `/gsd:command`, Codex는 `$gsd-command`를 쓴다고 정리한다(`docs/COMMANDS.md:7-13`). 런타임 artifact layout 구현은 허용 런타임과 각 런타임의 명령/스킬/에이전트 설치 표면을 코드로 정의한다(`get-shit-done/bin/lib/runtime-artifact-layout.cjs:147-151`, `get-shit-done/bin/lib/runtime-artifact-layout.cjs:214-299`). 네임스페이스 라우터는 eager listing 비용을 약 2150 토큰에서 약 120 토큰으로 줄이기 위해 존재한다(`docs/ARCHITECTURE.md:123-128`).
 
-5. **SDK/CLI가 상태 조작과 검증을 중앙화**  
-   워크플로는 `gsd-sdk query init.*`, `state.*`, `phase.*`, `verify.*` 같은 구조화된 명령을 호출한다. CLI 도구 문서는 워크플로가 legacy CJS보다 `gsd-sdk query`와 SDK registry를 우선해야 한다고 설명한다(`docs/CLI-TOOLS.md:1-16`). SDK registry는 등록되지 않은 key를 unknown으로 실패시키고, dotted/longest-prefix resolution을 제공한다(`sdk/src/query/registry.ts:1-8`, `sdk/src/query/registry.ts:61-67`, `sdk/src/query/registry.ts:130-142`).
+5. **CJS 도구가 상태 조작과 검증을 중앙화**  
+   워크플로는 `gsd_run query init.*`, `state.*`, `phase.*`, `verify.*` 같은 구조화된 명령을 `gsd-tools.cjs`를 통해 호출한다. 구 저장소에서 `gsd-sdk query`를 우선하던 dual-runtime 패턴은 ADR-0174에 의해 단일 CJS 경로로 통합되었다. CLI 도구 문서는 `gsd-tools.cjs`를 단일 primary runtime surface로 설명한다(`docs/CLI-TOOLS.md:1-20` @ `9b5ee373`). `CommandRoutingHub`가 unknown command를 fail-fast 처리하는 closed errorKind enum을 유지한다(`get-shit-done/bin/lib/command-routing-hub.cjs:39-47` @ `9b5ee373`).
 
 6. **검증과 보안이 단계별로 중첩된다**  
    방어선은 plan verification, atomic commit, post-execution verification, UAT로 구성된다(`docs/ARCHITECTURE.md:97-105`). plan 단계에는 패키지 legitimacy gate가 포함되고(`docs/COMMANDS.md:167-175`), 아키텍처 문서는 slopsquatting 위협을 연구/계획/실행 레이어에서 다룬다고 설명한다(`docs/ARCHITECTURE.md:682-703`). prompt injection/read guard/secret scan도 별도 스크립트와 후크로 존재한다(`hooks/gsd-prompt-guard.js:3-12`, `hooks/gsd-read-injection-scanner.js:3-17`, `scripts/secret-scan.sh:1-13`).
@@ -45,13 +50,13 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 - **Command layer**: 각 런타임에서 호출되는 짧은 entrypoint다. 예를 들어 `commands/gsd/plan-phase.md`는 frontmatter에 이름, description, allowed tools, required skill을 두고, 본문은 objective와 `execution_context` 참조를 제공한다(`commands/gsd/plan-phase.md:1-16`, `commands/gsd/plan-phase.md:17-35`). `execute-phase`도 비슷하게 얇은 orchestration role과 context budget만 선언한다(`commands/gsd/execute-phase.md:1-15`, `commands/gsd/execute-phase.md:17-31`).
 - **Workflow layer**: 실제 절차와 gate가 들어 있다. `plan-phase` workflow는 research -> plan -> verify, 최대 3회 revision loop를 수행한다고 선언한다(`get-shit-done/workflows/plan-phase.md:2`). `execute-phase` workflow는 wave 기반 병렬 실행과 verification을 수행한다고 선언한다(`get-shit-done/workflows/execute-phase.md:2-6`).
 - **Agent layer**: 전문 역할별 프롬프트다. 인벤토리는 33개 agent가 선적된다고 기록한다(`docs/INVENTORY.md:13`). planner, executor, plan-checker, verifier, codebase-mapper는 각각 다른 도구 권한과 산출물 책임을 갖는다(`docs/AGENTS.md:154-162`, `docs/AGENTS.md:198-206`, `docs/AGENTS.md:221-229`, `docs/AGENTS.md:276-284`, `docs/AGENTS.md:340-348`).
-- **SDK/CLI layer**: SDK registry와 CJS bridge가 상태/검증/템플릿/commit/graphify 등 반복 조작을 구현한다. CLI 문서는 `gsd-tools.cjs`를 legacy CJS surface로 두고, `gsd-sdk query`를 워크플로 우선 경로로 둔다(`docs/CLI-TOOLS.md:1-16`). CJS 파일 자체도 supported programmatic surface는 SDK라고 주석 처리되어 있다(`get-shit-done/bin/gsd-tools.cjs:3-13`).
+- **CJS 도구 layer**: `gsd-tools.cjs`와 `CommandRoutingHub`가 상태/검증/템플릿/commit/graphify 등 반복 조작을 구현한다. CLI 문서는 `gsd-tools.cjs`를 단일 primary runtime surface로 설명한다(`docs/CLI-TOOLS.md:1-20` @ `9b5ee373`). 구 저장소의 `gsd-sdk query` 우선 경로와 legacy CJS/SDK 이중 레이어는 ADR-0174에 의해 CJS 단일 경로로 통합되었다.
 - **State/template layer**: `.planning` 문서와 template이 계약이다. `project.md`, `requirements.md`, `roadmap.md`, `state.md`, `phase-prompt.md` 템플릿은 프로젝트 개요, 요구사항, 로드맵, 상태, 실행 계획 형식을 규정한다(`get-shit-done/templates/project.md:1-4`, `get-shit-done/templates/requirements.md:1-4`, `get-shit-done/templates/roadmap.md:14-20`, `get-shit-done/templates/state.md:1-4`, `get-shit-done/templates/phase-prompt.md:1-8`).
 - **Install/hook layer**: 설치기는 런타임별 config dir, artifact copy, settings/hook 등록, rollback을 처리한다. Codex 설치는 pre-install snapshot과 rollback plan을 만들고(`bin/install.js:8809-8844`), Codex hook config 실패를 fatal로 처리해 snapshot restore를 수행한다(`bin/install.js:9121-9145`).
 
 ### 상태 모델
 
-`.planning/config.json`은 absent-as-enabled 설정 모델을 사용한다. 아키텍처 문서는 설정 항목이 없으면 enabled라고 설명하고(`docs/ARCHITECTURE.md:85-96`), 설정 문서는 workflow toggles도 absent=enabled라고 설명한다(`docs/CONFIGURATION.md:217-247`). canonical schema와 defaults는 manifest로 관리된다(`sdk/shared/config-schema.manifest.json:1-3`, `sdk/shared/config-defaults.manifest.json:1-2`). 기본값에는 `model_profile`, `context_window`, workflow toggles, hook toggles, graphify 기본값이 포함된다(`sdk/shared/config-defaults.manifest.json:3-75`).
+`.planning/config.json`은 absent-as-enabled 설정 모델을 사용한다. 아키텍처 문서는 설정 항목이 없으면 enabled라고 설명하고(`docs/ARCHITECTURE.md:85-96` @ `9b5ee373`), 설정 문서는 workflow toggles도 absent=enabled라고 설명한다(검증 완료 2026-06-01: `docs/CONFIGURATION.md:217` "## Workflow Toggles", `:219` "All workflow toggles follow the **absent = enabled** pattern" @ `9b5ee373`). canonical schema와 defaults는 manifest로 관리된다. 구 저장소의 `sdk/shared/config-schema.manifest.json`, `sdk/shared/config-defaults.manifest.json`은 `get-shit-done/bin/shared/`로 이동되었다(`get-shit-done/bin/shared/config-schema.manifest.json:1-3` @ `9b5ee373`, `get-shit-done/bin/shared/config-defaults.manifest.json:1-2` @ `9b5ee373`). 기본값에는 `model_profile`, `context_window`, workflow toggles, hook toggles, graphify 기본값이 포함된다(`get-shit-done/bin/shared/config-defaults.manifest.json` @ `9b5ee373`).
 
 ### 병렬 실행 모델
 
@@ -61,26 +66,27 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 
 ### 패키지 및 실행 파일
 
-- 루트 패키지는 `get-shit-done-cc`이며 Node `>=22`를 요구하고, 런타임 의존성으로 `@anthropic-ai/claude-agent-sdk`와 `ws`를 사용한다(`package.json:2`, `package.json:47-53`).
-- 배포 파일에는 `bin`, `commands`, `get-shit-done`, `agents`, `hooks`, `scripts`, `sdk/src`, `sdk/shared`, `sdk/prompts`, `sdk/dist`가 포함된다(`package.json:10-24`).
-- NPM script는 hook/sdk build, generated freshness check, description/skill dependency/docs lint, 테스트 suite, coverage를 포함한다(`package.json:60-93`).
-- SDK 패키지는 `@gsd-build/sdk`이고 `dist/index.js`와 `dist/bin/gsd-sdk.js`를 노출한다(`sdk/package.json:1-16`).
+- 루트 패키지는 `@opengsd/gsd-core`(구 `get-shit-done-cc`에서 개명)이며 Node `>=22`를 요구하고, 런타임 의존성으로 `@anthropic-ai/claude-agent-sdk`와 `ws`를 사용한다(`package.json:2`, `package.json:43-50` @ `9b5ee373`).
+- 실행 파일은 `gsd-core`(설치기, `bin/install.js`)와 `gsd-tools`(`get-shit-done/bin/gsd-tools.cjs`) 두 개다. 구 저장소의 `get-shit-done-cc`, `gsd-sdk` bin은 없어졌다(`package.json:6-9` @ `9b5ee373`).
+- 배포 파일에는 `bin`, `commands`, `get-shit-done`, `assets`, `agents`, `hooks`, `scripts`가 포함된다. 구 저장소의 `sdk/src`, `sdk/shared`, `sdk/prompts`, `sdk/dist`는 ADR-0174(SDK 패키지 경계 폐기)에 따라 삭제되었다(`package.json:10-17` @ `9b5ee373`, `docs/adr/0174-retire-gsd-sdk-package-boundary.md` @ `9b5ee373`).
+- NPM script는 hook build, lib build(`tsc`), identity/alias/integrity drift check, 린트/테스트 suite를 포함한다. SDK build 스크립트는 단일 `tsc`로 통합되었다(`package.json:scripts` @ `9b5ee373`).
+- `@gsd-build/sdk` 분리 패키지는 ADR-0174에 의해 폐기되었다. `src/`가 TypeScript 단일 소스가 되고 `tsc prepublishOnly`로 `dist/` CJS를 생성한다. 별도 `sdk/package.json`은 존재하지 않는다.
 
 ### 명령
 
-- 인벤토리는 67개 command가 선적된다고 기록한다(`docs/INVENTORY.md:57`).
-- 네임스페이스 router는 6개이며 workflow, analysis, quality, research, operations, hooks/help surface로 나뉜다(`docs/COMMANDS.md:17-30`, `docs/INVENTORY.md:67-72`).
-- core workflow command는 `new-project`, `discuss-phase`, `plan-phase`, `execute-phase`, `verify-work`, `ship`, `complete-milestone` 계열이다. `new-project`는 project/requirements/roadmap/state/config/research/CLAUDE.md를 만든다고 문서화되어 있고(`docs/COMMANDS.md:44-45`), `plan-phase`는 research/plans/validation을 만든다(`docs/COMMANDS.md:159-160`), `execute-phase`는 summaries/commits/verification을 만든다(`docs/COMMANDS.md:242-245`), `verify-work`는 UAT와 fix plan을 만든다(`docs/COMMANDS.md:264-265`).
-- `map-codebase`는 전체 모드에서 4개 parallel mapper를 쓰고, `--fast`에서는 1개 agent를 쓴다(`docs/COMMANDS.md:999-1021`). 실제 command도 mapper agent가 `.planning/codebase`에 직접 쓰고 orchestrator는 확인만 받는다고 설명한다(`commands/gsd/map-codebase.md:15-21`, `commands/gsd/map-codebase.md:63-75`).
-- `surface`는 reinstall 없이 runtime skill surface를 관리하며, token usage와 budget cap을 표시한다(`commands/gsd/surface.md:12-18`, `commands/gsd/surface.md:39-52`).
-- `code-review`, `cross-ai-review`, `secure`, `docs-update`, `fast` 같은 보조 명령도 존재한다. 명령 문서는 code-review의 depth/fix/fallow 옵션, cross-AI external CLI review, secure phase, docs-update agent workflow, fast inline execution을 각각 정의한다(`docs/COMMANDS.md:1097-1125`, `docs/COMMANDS.md:1171-1209`, `docs/COMMANDS.md:1230-1250`, `docs/COMMANDS.md:1254-1272`, `docs/COMMANDS.md:1152-1167`).
+- 인벤토리는 67개 command가 선적된다고 기록한다(`docs/INVENTORY.md:57` @ `9b5ee373`). 수량은 구 저장소 `bdcaab2c` 기준과 동일하다.
+- 네임스페이스 router는 6개이며 workflow, project, quality, context, manage, ideate surface로 나뉜다. 구 저장소의 "analysis, operations, hooks/help" 분류에서 명칭이 바뀌었다(`docs/INVENTORY.md:67-72` @ `9b5ee373`). v1.40 이후 네임스페이스 router는 `gsd-workflow`, `gsd-project`, `gsd-quality`, `gsd-context`, `gsd-manage`, `gsd-ideate`로 확정되었다(`docs/ARCHITECTURE.md:123-135` @ `9b5ee373`).
+- core workflow command는 `new-project`, `discuss-phase`, `plan-phase`, `execute-phase`, `verify-work`, `ship`, `complete-milestone` 계열이 유지된다. 신규 추가된 명령으로는 `mvp-phase`(수직 MVP 슬라이스), `spec-phase`(소크라테스식 스펙 정제), `ui-phase`, `ai-integration-phase`, `plan-review-convergence`, `ultraplan-phase`(BETA), `spike`, `sketch` 등이 있다(`docs/INVENTORY.md:81-89` @ `9b5ee373`).
+- `map-codebase`는 전체 모드에서 4개 parallel mapper를 쓰고, `--fast`에서는 mapper 1개만 spawn하는 경량 스캔 모드를 사용한다(sequential이 아님). mapper agent가 `.planning/codebase`에 직접 쓰고 orchestrator는 확인만 받는다는 구조는 유지된다. 검증 완료 2026-06-01(`9b5ee373`): objective(직접 쓰기/확인만) `commands/gsd/map-codebase.md:15-21`, `--fast` 경량 모드 `:28`, 4 parallel mapper + 확인 수집 `:66-71`.
+- `surface`는 reinstall 없이 runtime skill surface를 관리하며, token usage와 budget cap을 표시한다. 검증 완료 2026-06-01(`9b5ee373`): reinstall 없는 surface 관리 `commands/gsd/surface.md:12-18`, budget cap(~500 tokens) `:51`.
+- `code-review`(depth/fix 옵션), `review`(cross-AI 외부 CLI 리뷰, `--agy`/`--antigravity` 포함 신규), `secure-phase`, `docs-update`, `fast`, `quick` 같은 보조 명령이 존재한다. 구 `cross-ai-review` 명령은 `review`로 통합되었고, Antigravity peer reviewer(`--agy`) 플래그가 추가되었다(`commands/gsd/review.md:4,36` @ `9b5ee373`, `docs/COMMANDS.md:1204` @ `9b5ee373`).
 
 ### 워크플로 프롬프트
 
 - 인벤토리는 88개 workflow가 선적된다고 기록한다(`docs/INVENTORY.md:167`).
 - `new-project` workflow는 config 초기화, optional commit, 4개 project researcher, synthesizer, roadmapper, roadmap commit을 수행한다(`get-shit-done/workflows/new-project.md:60-67`, `get-shit-done/workflows/new-project.md:262-275`, `get-shit-done/workflows/new-project.md:793-803`, `get-shit-done/workflows/new-project.md:966-988`, `get-shit-done/workflows/new-project.md:1209-1240`, `get-shit-done/workflows/new-project.md:1343-1346`).
 - `discuss-phase` workflow는 mode별 본문, template, advisor를 lazy-load하고 CONTEXT/DISCUSSION-LOG를 작성한다(`get-shit-done/workflows/discuss-phase.md:14-31`, `get-shit-done/workflows/discuss-phase.md:128-148`, `get-shit-done/workflows/discuss-phase.md:370-390`).
-- `plan-phase` workflow는 `gsd-sdk query init.plan-phase`로 context를 로드하고, researcher/planner/plan-checker를 spawn하며, revision loop와 requirement/context coverage gate를 실행한다(`get-shit-done/workflows/plan-phase.md:31-40`, `get-shit-done/workflows/plan-phase.md:482-529`, `get-shit-done/workflows/plan-phase.md:859-993`, `get-shit-done/workflows/plan-phase.md:1200-1249`, `get-shit-done/workflows/plan-phase.md:1307-1366`, `get-shit-done/workflows/plan-phase.md:1447-1555`).
+- `plan-phase` workflow는 `gsd_run query init.plan-phase`(=`gsd-tools.cjs query init.plan-phase`)로 context를 로드하고, researcher/planner/plan-checker를 spawn하며, revision loop와 requirement/context coverage gate를 실행한다. 구 `gsd-sdk query` 호출은 `gsd_run query`로 통합되었다(검증 완료 2026-06-01: `get-shit-done/workflows/plan-phase.md:35` "gsd_run query init.plan-phase" @ `9b5ee373`; 파일은 1810줄). 구 저장소(아카이브된 `gsd-build/get-shit-done`)의 라인 앵커 482-529 등은 신규 저장소에 적용되지 않으므로 폐기한다.
 - `execute-phase` workflow는 runtime/worktree config, partial commit resume gate, checkpoint heartbeat, post-wave test failure gate, verification spawn, phase completion commit을 포함한다(`get-shit-done/workflows/execute-phase.md:80-111`, `get-shit-done/workflows/execute-phase.md:161-172`, `get-shit-done/workflows/execute-phase.md:415-435`, `get-shit-done/workflows/execute-phase.md:955-981`, `get-shit-done/workflows/execute-phase.md:1450-1485`, `get-shit-done/workflows/execute-phase.md:1588-1611`).
 - `verify-work` workflow는 UAT 파일을 만들고, checkpoint를 렌더링하고, 문제 진단용 parallel debug agent와 gap closure planner/checker를 사용한다(`get-shit-done/workflows/verify-work.md:206-259`, `get-shit-done/workflows/verify-work.md:267-274`, `get-shit-done/workflows/verify-work.md:524-539`, `get-shit-done/workflows/verify-work.md:554-639`).
 
@@ -94,18 +100,19 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 - `gsd-phase-researcher`는 claim provenance tag, package provenance, WebSearch 검증, package legitimacy gate를 포함한다(`agents/gsd-phase-researcher.md:28-35`, `agents/gsd-phase-researcher.md:147-159`, `agents/gsd-phase-researcher.md:202-226`, `agents/gsd-phase-researcher.md:267-293`).
 - `gsd-codebase-mapper`는 구조화 문서를 직접 쓰고 confirmation만 반환하며, secret 파일을 읽거나 quote하지 말라고 지시한다(`agents/gsd-codebase-mapper.md:18-23`, `agents/gsd-codebase-mapper.md:809-827`).
 
-### SDK, CJS 도구, 설치기
+### CJS 도구, 설치기
 
-- CLI 인벤토리는 73개 module이 선적된다고 기록한다(`docs/INVENTORY.md:364`).
-- `query-runtime-bridge.ts`는 dispatch routing, hotpath/native fallback, strictSdk, observability를 담당한다(`sdk/src/query-runtime-bridge.ts:46-56`, `sdk/src/query-runtime-bridge.ts:73-78`, `sdk/src/query-runtime-bridge.ts:81-147`).
-- `gsd-tools.cjs`는 SDK bridge loader를 사용하고, SDK dispatch 실패 시 fallback과 structured error를 처리한다(`get-shit-done/bin/gsd-tools.cjs:202-214`, `get-shit-done/bin/gsd-tools.cjs:233-276`, `get-shit-done/bin/gsd-tools.cjs:323-339`).
-- `runtime-artifact-layout.cjs`는 런타임별 artifact layout의 source of truth로, unknown runtime을 loudly fail한다고 주석 처리한다(`get-shit-done/bin/lib/runtime-artifact-layout.cjs:1-9`).
-- `install-profiles.cjs`는 66 skills + 33 agents가 예산의 약 60%를 소비한다고 설명하고, core/standard/full profile 및 transitive closure staging을 구현한다(`get-shit-done/bin/lib/install-profiles.cjs:1-30`, `get-shit-done/bin/lib/install-profiles.cjs:58-89`, `get-shit-done/bin/lib/install-profiles.cjs:179-257`, `get-shit-done/bin/lib/install-profiles.cjs:311-403`).
-- 설치기는 `--claude`, `--codex`, `--gemini`, `--all`, `--profile`류 플래그를 제공하고(`bin/install.js:180-240`), 런타임별 config dir을 `--config-dir`, `CODEX_HOME`, `~/.codex`, `CLAUDE_CONFIG_DIR` 등으로 해석한다(`bin/install.js:396-552`).
+- CLI 인벤토리는 79개 module이 선적된다고 기록한다(`docs/INVENTORY.md:365` @ `9b5ee373`). 구 저장소 bdcaab2c 기준 74개에서 증가했다. 실제 `get-shit-done/bin/lib/` 파일 수는 80개로 INVENTORY.md 수량(79)과 1개 차이가 있다(subdirectory `installer-migrations/`, `observability/` 계산 방식 차이 추정; drift-guard 테스트가 확인 기준).
+- `query-runtime-bridge.ts`와 `sdk/src/query/registry.ts`는 ADR-0174에 의해 삭제되었다. SDK 패키지 경계가 폐기되어 별도의 TypeScript SDK runtime이 없다. `gsd-sdk query` 호출 패턴은 `gsd-tools.cjs query`(또는 `gsd_run query`) 단일 경로로 통합되었다(`docs/adr/0174-retire-gsd-sdk-package-boundary.md` @ `9b5ee373`).
+- `gsd-tools.cjs`는 단일 CJS 진입점으로, SDK bridge loader나 dual-runtime fallback 없이 `get-shit-done/bin/lib/` domain module을 직접 require한다(`get-shit-done/bin/gsd-tools.cjs:1-20` @ `9b5ee373`).
+- `runtime-artifact-layout.cjs`는 런타임별 artifact layout의 source of truth로, unknown runtime을 loudly fail한다는 설계는 유지된다. 허용 런타임에 Antigravity, Windsurf, Augment, Trae, Qwen, Hermes, CodeBuddy, Cline, OpenCode, Kilo 등이 추가되었다(`get-shit-done/bin/lib/runtime-artifact-layout.cjs:147-155` @ `9b5ee373`).
+- `install-profiles.cjs`는 66 skills + 33 agents가 예산의 약 60%를 소비한다고 설명하고, core/standard/full profile 및 transitive closure staging을 구현한다. 구조는 유지된다(`get-shit-done/bin/lib/install-profiles.cjs:1-30` @ `9b5ee373`).
+- 설치기는 `--claude`, `--codex`, `--gemini`, `--antigravity`, `--all`, `--profile`류 플래그를 제공한다. Antigravity 런타임 지원이 명시적으로 추가되었다(`docs/ARCHITECTURE.md:594` @ `9b5ee373`).
+- SDK query registry(`sdk/src/query/registry.ts`)와 query-runtime-bridge의 strictSdk/fallback policy 설계는 단일 CJS runtime으로 단순화되면서 사라졌다. 대신 `CommandRoutingHub`가 단일 오류 분류 계약을 유지한다(아래 `기준 커밋 이후 변경` 섹션 참조).
 
 ### 후크와 보안 스크립트
 
-- 인벤토리는 13개 hook이 선적된다고 기록한다(`docs/INVENTORY.md:448`).
+- 인벤토리는 13개 hook이 선적된다고 기록한다(`docs/INVENTORY.md:455` @ `9b5ee373`). ARCHITECTURE.md는 "11-hook roster"라고 참조하지만(`docs/ARCHITECTURE.md:267`), 이는 알려진 drift다. 파일시스템 실제 수는 13개이며, `docs/INVENTORY.md`가 authoritative다.
 - `gsd-context-monitor.js`는 statusline bridge metrics를 읽어 context remaining 35/25 기준으로 경고하고, session id path traversal을 거부하며, critical 상태에서 detached `gsd-tools`로 session을 기록한다(`hooks/gsd-context-monitor.js:1-19`, `hooks/gsd-context-monitor.js:49-54`, `hooks/gsd-context-monitor.js:129-155`).
 - `gsd-prompt-guard.js`는 `.planning` Write/Edit에 대한 prompt injection advisory scanner이며, 3초 timeout과 silent failure를 갖는다(`hooks/gsd-prompt-guard.js:3-12`, `hooks/gsd-prompt-guard.js:35-37`, `hooks/gsd-prompt-guard.js:80-95`).
 - `gsd-read-guard.js`는 non-Claude runtime의 read-before-edit advisory hook이고, Claude Code에서는 session/env signal로 skip한다(`hooks/gsd-read-guard.js:3-19`, `hooks/gsd-read-guard.js:39-61`, `hooks/gsd-read-guard.js:84-99`).
@@ -146,11 +153,11 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 
 엄밀한 추론: 병렬 에이전트가 같은 파일을 수정하면 merge conflict나 semantic conflict가 생긴다. GSD는 dependency와 파일 touch set을 PLAN frontmatter에 기입하게 하고, 실행 workflow가 이를 검사해 병렬성을 안전한 경우로 제한한다. 이 추론은 planner frontmatter 요구와 execute overlap gate에서 나온다(`agents/gsd-planner.md:1024-1048`, `get-shit-done/workflows/execute-phase.md:440-472`).
 
-### SDK query registry는 prompt 내 임의 shell 조작을 줄이기 위한 도구다
+### gsd-tools query registry는 prompt 내 임의 shell 조작을 줄이기 위한 도구다
 
-근거: CLI 문서는 workflows should prefer `gsd-sdk query`라고 설명하고, registry는 unknown key를 fail-fast 처리한다(`docs/CLI-TOOLS.md:1-16`, `sdk/src/query/registry.ts:1-8`, `sdk/src/query/registry.ts:61-67`). bridge는 strictSdk, fallback policy, observability를 갖는다(`sdk/src/query-runtime-bridge.ts:46-56`, `sdk/src/query-runtime-bridge.ts:81-147`).
+근거: `gsd-tools.cjs query <command>` 패턴이 워크플로 전반에서 상태 조작의 단일 경로다. `CommandRoutingHub`는 unknown command를 `UnknownCommand` errorKind로 fail-fast 처리하고, handler 예외를 `HandlerFailure`로 변환해 no-throw 계약을 유지한다(`get-shit-done/bin/lib/command-routing-hub.cjs:39-47` @ `9b5ee373`, `docs/ARCHITECTURE.md:271` @ `9b5ee373`).
 
-엄밀한 추론: 여러 workflow가 `.planning` 파일과 git commit, validation artifact를 직접 shell로 조작하면 런타임별 quoting/path/JSON 차이가 누적된다. SDK query registry는 반복 상태 조작을 typed command처럼 만들고, unknown command를 즉시 실패시켜 prompt drift를 줄인다. 이 추론은 `gsd-sdk query` 우선 문서와 registry fail-fast 구현에서 나온다(`docs/CLI-TOOLS.md:325-354`, `sdk/src/query/registry.ts:61-67`).
+엄밀한 추론: 여러 workflow가 `.planning` 파일과 git commit, validation artifact를 직접 shell로 조작하면 런타임별 quoting/path/JSON 차이가 누적된다. GSD는 반복 상태 조작을 `gsd_run query` 명령으로 중앙화하고, unknown command를 즉시 실패시켜 prompt drift를 줄인다. SDK 경계 폐기 후에도 이 추론의 근거는 유효하다. 단지 구현 경로가 TypeScript SDK registry에서 CJS hub로 단순화되었다(`docs/CLI-TOOLS.md:1-20` @ `9b5ee373`, `get-shit-done/bin/lib/command-routing-hub.cjs:39-47` @ `9b5ee373`).
 
 ### 설치 profile과 surface 명령은 skill budget 때문에 필요하다
 
@@ -199,7 +206,7 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 ## 약한 점/리스크
 
 1. **표면적이 매우 크다**  
-   현재 선적 수량은 67 commands, 88 workflows, 33 agents, 73 CLI modules, 13 hooks다(`docs/INVENTORY.md:57`, `docs/INVENTORY.md:167`, `docs/INVENTORY.md:13`, `docs/INVENTORY.md:364`, `docs/INVENTORY.md:448`). 엄밀한 추론: 이 규모는 기능 발견성, 설치 profile closure, runtime별 회귀 테스트 비용을 키운다. profile/surface 기능 자체가 이 리스크를 줄이기 위한 장치로 보인다(`get-shit-done/bin/lib/install-profiles.cjs:1-30`, `commands/gsd/surface.md:39-52`).
+   현재 선적 수량은 67 commands, 88 workflows, 33 agents, 79 CLI modules, 13 hooks다(`docs/INVENTORY.md:57`, `docs/INVENTORY.md:167`, `docs/INVENTORY.md:13`, `docs/INVENTORY.md:365`, `docs/INVENTORY.md:455` @ `9b5ee373`). 엄밀한 추론: 이 규모는 기능 발견성, 설치 profile closure, runtime별 회귀 테스트 비용을 키운다. profile/surface 기능 자체가 이 리스크를 줄이기 위한 장치로 보인다(`get-shit-done/bin/lib/install-profiles.cjs:1-30` @ `9b5ee373`, `commands/gsd/surface.md` @ `9b5ee373`).
 
 2. **문서 수량 drift가 일부 보인다**  
    인벤토리는 13 hooks를 authoritative로 기록하지만(`docs/INVENTORY.md:448`), 아키텍처 문서의 hook section은 “11 hooks”라고 쓰고 표를 제시한다(`docs/ARCHITECTURE.md:249-267`). command contract lint 파일의 주석도 “65 command files”라고 쓰지만 현재 인벤토리는 67 commands다(`scripts/lint-command-contract.cjs:5`, `docs/INVENTORY.md:57`). 엄밀한 추론: 자동 인벤토리 검사가 있더라도 설명 문서의 사람이 쓴 수량은 별도 drift 관리가 필요하다.
@@ -222,7 +229,7 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
    DITTO도 prompt surface를 줄이려면 runtime entrypoint에는 routing과 계약만 두고, 긴 절차는 lazy-loaded workflow로 분리하는 구조를 차용할 수 있다. 근거는 GSD의 execution_context 참조와 라우터 토큰 절감 설계다(`commands/gsd/plan-phase.md:32-35`, `docs/ARCHITECTURE.md:123-170`).
 
 2. **파일 기반 프로젝트 기억과 manifest 기반 schema/defaults**  
-   `.planning`처럼 프로젝트 기억을 파일로 고정하고, config schema/default를 manifest로 둔 점은 DITTO의 재개성과 감사 가능성에 유리하다(`docs/ARCHITECTURE.md:85-96`, `sdk/shared/config-schema.manifest.json:1-3`, `sdk/shared/config-defaults.manifest.json:1-2`).
+   `.planning`처럼 프로젝트 기억을 파일로 고정하고, config schema/default를 manifest로 둔 점은 DITTO의 재개성과 감사 가능성에 유리하다(`docs/ARCHITECTURE.md:85-96` @ `9b5ee373`, `get-shit-done/bin/shared/config-schema.manifest.json` @ `9b5ee373`, `get-shit-done/bin/shared/config-defaults.manifest.json` @ `9b5ee373`).
 
 3. **planner/checker/executor/verifier 역할 분리**  
    작성, 검증, 실행, 사후 검증을 다른 agent contract로 나누는 패턴은 DITTO의 병렬 하네스에도 적합하다. GSD는 plan-checker read-only, verifier evidence-first, executor commit protocol을 명확히 분리한다(`agents/gsd-plan-checker.md:1-5`, `agents/gsd-verifier.md:15-26`, `agents/gsd-executor.md:409-528`).
@@ -230,8 +237,8 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 4. **PLAN frontmatter 기반 병렬 wave 스케줄링**  
    DITTO가 여러 subagent를 병렬로 돌린다면 wave, dependency, files_modified, must_haves를 계획 파일에 넣고 실행 전 overlap gate를 두는 방식이 재사용 가능하다(`agents/gsd-planner.md:421-439`, `agents/gsd-planner.md:1024-1048`, `get-shit-done/workflows/execute-phase.md:440-472`).
 
-5. **SDK query registry로 상태 조작 중앙화**  
-   prompt 안의 adhoc shell을 줄이고, state/phase/verify/config/commit 조작을 SDK command로 모으면 runtime 차이와 prompt drift를 줄일 수 있다(`docs/CLI-TOOLS.md:1-16`, `sdk/src/query/registry.ts:61-67`, `sdk/src/query-runtime-bridge.ts:81-147`).
+5. **gsd-tools query로 상태 조작 중앙화**  
+   prompt 안의 adhoc shell을 줄이고, state/phase/verify/config/commit 조작을 `gsd_run query` command로 모으면 runtime 차이와 prompt drift를 줄일 수 있다. SDK 분리 경계는 불필요함이 실증되었다. `CommandRoutingHub`의 no-throw pure-result 계약과 closed errorKind enum을 참고한다(`docs/CLI-TOOLS.md:1-20` @ `9b5ee373`, `get-shit-done/bin/lib/command-routing-hub.cjs:39-47` @ `9b5ee373`).
 
 6. **인벤토리와 lint를 하네스 자체의 품질 게이트로 사용**  
    DITTO도 commands/agents/workflows/hooks 수량과 참조 관계를 inventory로 만들고 CI에서 검증해야 한다. GSD는 authoritative inventory와 command contract, skill dependency, description budget lint를 둔다(`docs/INVENTORY.md:3-9`, `docs/INVENTORY.md:473`, `scripts/lint-command-contract.cjs:39-74`, `scripts/lint-skill-deps.cjs:69-139`).
@@ -248,10 +255,10 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
    GSD 전체를 복제하지 말고 `new/discuss/plan/execute/verify`에 해당하는 최소 core loop와 4개 agent contract부터 만든다. GSD의 현재 규모가 67 commands와 88 workflows이므로 초기부터 전체 표면을 가져오면 profile과 drift 비용이 커진다(`docs/INVENTORY.md:57`, `docs/INVENTORY.md:167`).
 
 2. **상태 schema와 template을 먼저 고정한다**  
-   `.planning`에 대응하는 DITTO 상태 디렉터리, `PROJECT/REQUIREMENTS/ROADMAP/STATE/PLAN/SUMMARY/VERIFICATION` 템플릿을 먼저 정의하고, schema/default manifest를 만든다. GSD는 templates와 canonical config manifest를 상태 계약으로 사용한다(`get-shit-done/templates/state.md:84-121`, `get-shit-done/templates/phase-prompt.md:15-31`, `sdk/shared/config-schema.manifest.json:1-3`).
+   `.planning`에 대응하는 DITTO 상태 디렉터리, `PROJECT/REQUIREMENTS/ROADMAP/STATE/PLAN/SUMMARY/VERIFICATION` 템플릿을 먼저 정의하고, schema/default manifest를 만든다. GSD는 templates와 canonical config manifest를 상태 계약으로 사용한다(검증 완료 2026-06-01, `9b5ee373`: `get-shit-done/templates/state.md:84-121`(STATE 상태 계약, 파일 195줄), `get-shit-done/templates/phase-prompt.md:15-31`(PLAN frontmatter — wave/depends_on/files_modified/must_haves, 파일 610줄), `get-shit-done/bin/shared/config-schema.manifest.json`).
 
-3. **SDK registry를 shell wrapper보다 먼저 만든다**  
-   DITTO도 `state.*`, `phase.*`, `verify.*`, `config.*`, `commit.*` 같은 query registry를 만들고 unknown command fail-fast를 넣는다. GSD는 workflow가 `gsd-sdk query`를 우선하고 registry가 unknown key를 실패시킨다(`docs/CLI-TOOLS.md:1-16`, `sdk/src/query/registry.ts:61-67`).
+3. **query registry를 shell wrapper보다 먼저 만든다**  
+   DITTO도 `state.*`, `phase.*`, `verify.*`, `config.*`, `commit.*` 같은 query registry를 만들고 unknown command fail-fast를 넣는다. GSD는 `CommandRoutingHub`가 unknown command를 `UnknownCommand` errorKind로 즉시 실패시킨다. SDK 분리 경계가 불필요했다는 것이 gsd-core의 실증이다(`docs/CLI-TOOLS.md:1-20` @ `9b5ee373`, `get-shit-done/bin/lib/command-routing-hub.cjs:39-47` @ `9b5ee373`).
 
 4. **계획 frontmatter와 overlap gate를 실행 전에 검증한다**  
    DITTO planner가 만든 plan에는 wave, dependency, 파일 touch set, test/must-have를 넣고, execute orchestrator가 병렬 실행 전 same-wave overlap을 거부하거나 직렬화하게 한다. GSD는 이 계약을 planner와 execute workflow 양쪽에 둔다(`agents/gsd-planner.md:421-439`, `get-shit-done/workflows/execute-phase.md:440-472`).
@@ -267,6 +274,53 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 
 8. **런타임 parity matrix를 초기에 만든다**  
    GSD는 runtime artifact layout과 config dir resolution을 코드로 관리한다(`get-shit-done/bin/lib/runtime-artifact-layout.cjs:214-299`, `bin/install.js:396-552`). DITTO도 Codex/Claude/Gemini 등 지원 범위를 명확히 하고, 병렬 agent, worktree isolation, hook support의 차이를 matrix로 관리해야 한다.
+
+## 구 저장소 → 신규 저장소 전환 기록 (2026-06-01)
+
+이 섹션은 구 저장소(`gsd-build/get-shit-done @ bdcaab2c`)에서 신규 저장소(`open-gsd/gsd-core @ 9b5ee373`)로 추적을 전환하면서 발견한 주요 변경 사항을 기록한다.
+
+### 1. 저장소 이전 이력 (보존)
+
+`gsd-build/get-shit-done`은 2026-05-22 공식 아카이브 처리되었다. 커밋 `da024a02`에서 README를 "GSD Has Moved" 리디렉션으로 교체했고 활성 저장소를 `https://github.com/open-gsd/gsd-core`로 안내했다. 이 문서의 모든 이후 분석은 `open-gsd/gsd-core`를 기준으로 한다.
+
+### 2. CommandRoutingHub — gsd-core에서의 현재 상태
+
+CommandRoutingHub(`get-shit-done/bin/lib/command-routing-hub.cjs`)는 구 저장소 `bdcaab2c` 시점에 초기 도입되었고, gsd-core에서 ADR-0174에 의해 단순화되었다.
+
+**현재 설계 계약** (`command-routing-hub.cjs:1-47` @ `9b5ee373`):
+- `createHub({ cjsRegistry, manifest }) → hub` — `mode`, `sdkLoader`가 제거되었다. CJS 단일 경로만 있다.
+- `hub.dispatch({ family, subcommand, args, cwd, raw }) → Result`
+- `Result = { ok: true, data } | { ok: false, kind: 'UnknownCommand', command } | { ok: false, kind: 'InvalidArgs', arg, reason } | { ok: false, kind: 'HandlerRefusal', reason } | { ok: false, kind: 'HandlerFailure', message, cause? }`
+- hub는 절대 throw하지 않는다. 모든 예외는 `{ ok: false, kind: 'HandlerFailure' }`로 변환한다.
+- `ERROR_KINDS` 4-값 closed enum: `UnknownCommand`, `InvalidArgs`, `HandlerRefusal`, `HandlerFailure`. 구 저장소의 `SdkLoadFailed`, `SdkDispatchFailed`는 ADR-0174 #175에 의해 삭제되었다. field명도 `errorKind` → `kind`로 변경되었다(ADR-0174 #176).
+
+**DITTO 함의**: no-throw pure-result 계약과 closed errorKind enum은 여전히 DITTO의 subagent result 표준화에 참고할 만하다. SDK 이중 경로는 불필요하다는 것이 gsd-core의 실증이다.
+
+### 3. SDK 패키지 폐기 (ADR-0174, 최대 구조적 변경)
+
+`@opengsd/gsd-sdk`(구 `@gsd-build/sdk`) 분리 패키지가 ADR-0174(accepted 2026-05-23)에 의해 완전 폐기되었다. 이에 따른 변경:
+
+- `sdk/` 디렉터리 전체 삭제 (`sdk/src/`, `sdk/shared/`, `sdk/package.json`, `sdk/dist/`)
+- `query-runtime-bridge.ts`, `sdk/src/query/registry.ts` 삭제
+- config manifests는 `sdk/shared/` → `get-shit-done/bin/shared/`로 이동(`config-schema.manifest.json`, `config-defaults.manifest.json`)
+- `gsd-sdk query` 호출 패턴은 `gsd_run query`(=`gsd-tools.cjs query`)로 일원화
+- CommandRoutingHub에서 `mode`, `sdkLoader`, `SdkLoadFailed`, `SdkDispatchFailed` 삭제
+- CLI modules 수량: 74(bdcaab2c) → 79(9b5ee373)로 증가
+
+### 4. 패키지명 최종 확정
+
+구 저장소 `bdcaab2c` 시점의 문서에는 `@opengsd/get-shit-done-redux`로 변경 예정이라고 기록했으나, gsd-core의 실제 패키지명은 `@opengsd/gsd-core`로 확정되었다(`package.json:2` @ `9b5ee373`). `@opengsd/get-shit-done-redux`는 중간 과도기 이름이었다.
+
+### 5. 신규 추가된 주요 표면
+
+gsd-core에서 새로 추가된 주요 명령/기능:
+- `mvp-phase`, `spec-phase`, `ui-phase`, `ai-integration-phase`: 특화된 계획 단계 지원
+- `plan-review-convergence`: cross-AI 계획 수렴 루프
+- `ultraplan-phase` (BETA): Claude Code ultraplan cloud 오프로드
+- `spike`, `sketch`: 탐색 작업과 UI 스케치
+- `review` 명령의 `--agy`/`--antigravity` 플래그: Antigravity peer reviewer 통합
+- `quick`, `gsd-do`: 경량 실행 경로
+- Antigravity, Windsurf, Augment, Trae, Qwen, Hermes, CodeBuddy, Cline 런타임 지원 추가
 
 ## 근거 목록
 
@@ -366,18 +420,18 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 
 ### SDK, 설치기, 후크, 스크립트, 템플릿
 
-- `docs/CLI-TOOLS.md:1-16`: SDK query 우선.
-- `docs/CLI-TOOLS.md:41-52`: registry/bridge/fallback/observability.
-- `docs/CLI-TOOLS.md:325-354`: init compound context loading.
-- `docs/CLI-TOOLS.md:386-431`: git commit helper와 `--no-verify`.
-- `sdk/src/query/registry.ts:1-8`: registry 목적.
-- `sdk/src/query/registry.ts:61-67`: unknown key fail.
-- `sdk/src/query/registry.ts:130-142`: longest-prefix/dotted resolution.
-- `sdk/src/query-runtime-bridge.ts:46-56`: bridge options와 responsibility.
-- `get-shit-done/bin/gsd-tools.cjs:3-13`: legacy CJS와 SDK surface.
-- `get-shit-done/bin/lib/runtime-artifact-layout.cjs:1-9`: runtime artifact layout source of truth.
-- `get-shit-done/bin/lib/install-profiles.cjs:1-30`: skill budget.
-- `get-shit-done/bin/lib/install-profiles.cjs:58-89`: core/standard/full profiles.
+- `docs/CLI-TOOLS.md:1-20`: gsd-tools.cjs primary surface (`9b5ee373`).
+- `docs/CLI-TOOLS.md:291-319` (검증 완료 2026-06-01, `9b5ee373`; 구 저장소 325-354에서 이동): init compound context loading.
+- `docs/CLI-TOOLS.md:411-416` (검증 완료 2026-06-01, `9b5ee373`; 구 저장소 386-431에서 이동): git commit helper와 `--no-verify`.
+- `sdk/src/query/registry.ts`: ADR-0174에 의해 삭제됨. gsd-core에 없음.
+- `sdk/src/query-runtime-bridge.ts`: ADR-0174에 의해 삭제됨. gsd-core에 없음.
+- `get-shit-done/bin/lib/command-routing-hub.cjs:39-47`: 4-값 closed errorKind enum (`9b5ee373`).
+- `get-shit-done/bin/gsd-tools.cjs:1-20`: CJS 단일 진입점 (`9b5ee373`).
+- `get-shit-done/bin/lib/runtime-artifact-layout.cjs:1-9`: runtime artifact layout source of truth (`9b5ee373`).
+- `get-shit-done/bin/lib/install-profiles.cjs:1-30`: skill budget (`9b5ee373`).
+- `get-shit-done/bin/lib/install-profiles.cjs:58-89`: core/standard/full profiles (`9b5ee373`).
+- `get-shit-done/bin/shared/config-schema.manifest.json`: 구 `sdk/shared/config-schema.manifest.json`에서 이동됨 (`9b5ee373`).
+- `get-shit-done/bin/shared/config-defaults.manifest.json`: 구 `sdk/shared/config-defaults.manifest.json`에서 이동됨 (`9b5ee373`).
 - `bin/install.js:180-240`: runtime/profile flags.
 - `bin/install.js:396-552`: config dir resolution.
 - `bin/install.js:8809-8844`: Codex snapshot/rollback.
@@ -414,8 +468,8 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 4. **PLAN frontmatter 기반 병렬 실행 통제**
    ditto가 subagent를 적극 사용하는 경우 병렬성 자체보다 충돌 방지가 먼저다. GSD의 wave, dependency, files, must_haves frontmatter와 same-wave file overlap gate를 사용해 병렬 작업자의 수정 범위와 검증 조건을 실행 전에 고정한다(`agents/gsd-planner.md:421-439`, `agents/gsd-planner.md:1024-1048`, `get-shit-done/workflows/execute-phase.md:440-472`).
 
-5. **SDK query registry와 하네스 품질 게이트**
-   PURPOSE.md의 “정규화된 interface”, “단계 간 상태 전이”, “Token 비용 낭비 방지”를 위해 상태/검증/설정/커밋 조작은 prompt 안의 임의 shell이 아니라 registry command로 중앙화한다. GSD의 `gsd-sdk query`, unknown key fail-fast, inventory/lint/drift-control 패턴을 ditto의 harness 자체 검증 대상으로 둔다(`docs/CLI-TOOLS.md:1-16`, `sdk/src/query/registry.ts:61-67`, `docs/INVENTORY.md:3-9`, `docs/INVENTORY.md:473`, `scripts/lint-command-contract.cjs:39-74`).
+5. **gsd-tools query registry와 하네스 품질 게이트**
+   PURPOSE.md의 “정규화된 interface”, “단계 간 상태 전이”, “Token 비용 낭비 방지”를 위해 상태/검증/설정/커밋 조작은 prompt 안의 임의 shell이 아니라 `gsd_run query` command로 중앙화한다. GSD의 `CommandRoutingHub` unknown command fail-fast, inventory/lint/drift-control 패턴을 ditto의 harness 자체 검증 대상으로 둔다(`docs/CLI-TOOLS.md:1-20` @ `9b5ee373`, `get-shit-done/bin/lib/command-routing-hub.cjs:39-47` @ `9b5ee373`, `docs/INVENTORY.md:3-9` @ `9b5ee373`, `scripts/lint-command-contract.cjs:39-74` @ `9b5ee373`).
 
 ### 적용 방식
 
@@ -435,7 +489,7 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 
 ### 리스크와 선행 조건
 
-- GSD의 표면적은 67 commands, 88 workflows, 33 agents, 73 CLI modules, 13 hooks로 크다(`docs/INVENTORY.md:57`, `docs/INVENTORY.md:167`, `docs/INVENTORY.md:13`, `docs/INVENTORY.md:364`, `docs/INVENTORY.md:448`). ditto는 처음부터 이 규모를 가져오면 사용자의 인지 비용과 유지보수 비용을 늘리므로 최소 core loop부터 시작해야 한다.
+- GSD의 표면적은 67 commands, 88 workflows, 33 agents, 79 CLI modules, 13 hooks로 크다(`docs/INVENTORY.md:57`, `docs/INVENTORY.md:167`, `docs/INVENTORY.md:13`, `docs/INVENTORY.md:365`, `docs/INVENTORY.md:455` @ `9b5ee373`). ditto는 처음부터 이 규모를 가져오면 사용자의 인지 비용과 유지보수 비용을 늘리므로 최소 core loop부터 시작해야 한다.
 - 파일 기반 상태는 schema와 lifecycle이 먼저 고정되어야 한다. 그렇지 않으면 PURPOSE.md의 “주요 결정 및 변경사항 영속화”가 산출물 난립으로 바뀐다.
 - plan 품질이 낮으면 executor가 잘못된 계획을 빠르게 구현할 수 있다. GSD에서도 plan-checker와 coverage gate가 있는 이유가 이 리스크다(`get-shit-done/workflows/plan-phase.md:1200-1249`, `get-shit-done/workflows/plan-phase.md:1307-1555`).
 - advisory/silent-fail hook만으로는 강제 보안 정책이 되지 않는다. ditto가 공급망/프롬프트 인젝션 위험을 강하게 막으려면 local advisory와 CI blocking scan을 분리해야 한다(`hooks/gsd-prompt-guard.js:80-95`, `hooks/gsd-read-injection-scanner.js:130-150`).
@@ -445,7 +499,7 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 
 - PURPOSE.md의 목적은 ditto를 범용 개발 작업용 coding agent harness로 정의하고, 사용자 인지 비용 절감, 근거 없는 출력 방지, 의도 이탈 제한, Context Rot 해결, 장기 작업 완수, token 비용 절감을 핵심 가치로 둔다.
 - PURPOSE.md의 핵심 기능은 감사 기록, 결정/변경사항 영속화, subagent 활용, 사용자에게 충분한 context를 주는 정제된 출력, 불필요한 질문 금지, 정규화된 단계 interface, 끝까지 완수하는 오케스트레이션을 요구한다.
-- 이 보고서의 GSD 분석은 위 가치에 직접 연결되는 구현 근거를 제공한다. 얇은 command와 lazy workflow는 prompt surface와 token 비용을 줄이고(`docs/ARCHITECTURE.md:123-170`), `.planning` 상태 모델은 재개성과 감사 가능성을 만든다(`docs/ARCHITECTURE.md:85-96`). 역할 분리와 evidence-first verifier는 할루시네이션과 자기 확신을 견제한다(`agents/gsd-plan-checker.md:1-30`, `agents/gsd-verifier.md:15-26`). PLAN frontmatter와 overlap gate는 병렬 subagent 실행을 통제한다(`agents/gsd-planner.md:421-439`, `get-shit-done/workflows/execute-phase.md:440-472`). SDK registry와 inventory/lint는 정규화된 interface와 drift control을 하네스 품질 게이트로 만든다(`docs/CLI-TOOLS.md:1-16`, `sdk/src/query/registry.ts:61-67`, `docs/INVENTORY.md:3-9`, `docs/INVENTORY.md:473`).
+- 이 보고서의 GSD 분석은 위 가치에 직접 연결되는 구현 근거를 제공한다. 얇은 command와 lazy workflow는 prompt surface와 token 비용을 줄이고(`docs/ARCHITECTURE.md:123-135` @ `9b5ee373`), `.planning` 상태 모델은 재개성과 감사 가능성을 만든다(`docs/ARCHITECTURE.md:85-96` @ `9b5ee373`). 역할 분리와 evidence-first verifier는 할루시네이션과 자기 확신을 견제한다(`agents/gsd-plan-checker.md:1-30` @ `9b5ee373`, `agents/gsd-verifier.md:15-26` @ `9b5ee373`). PLAN frontmatter와 overlap gate는 병렬 subagent 실행을 통제한다(`agents/gsd-planner.md:421-439` @ `9b5ee373`, `get-shit-done/workflows/execute-phase.md:440-472` @ `9b5ee373`). `CommandRoutingHub`와 inventory/lint는 정규화된 interface와 drift control을 하네스 품질 게이트로 만든다(`docs/CLI-TOOLS.md:1-20` @ `9b5ee373`, `get-shit-done/bin/lib/command-routing-hub.cjs:39-47` @ `9b5ee373`, `docs/INVENTORY.md:3-9` @ `9b5ee373`).
 
 ## ditto 적용 요소 후보 (skills/agents/commands/hooks)
 
@@ -458,4 +512,4 @@ GSD의 명시적 레이어는 `Command Layer -> Workflow Layer -> Agent Layer ->
 | 수정 적용 | hook/script | `gsd-read-injection-scanner`, `prompt-injection-scan.sh`, `secret-scan.sh` | read-time prompt injection advisory와 CI blocking scan을 분리한다. 런타임 hook은 경고/감사 기록 중심, release/CI에서는 실패시키는 방식으로 둔다. | 안전성에 즉시 도움된다. silent-fail hook만으로 보안 정책을 대체하면 안 된다. |
 | 수정 적용 | hook | `gsd-context-monitor`, `gsd-statusline` | context remaining, active phase, current state를 statusline/telemetry로 노출한다. critical 구간에서는 자동 handoff artifact 생성을 트리거한다. | 장기 작업 중 context rot을 조기에 드러낸다. host별 context metric 신뢰도가 달라 compatibility layer가 필요하다. |
 | 수정 적용 | agent | `gsd-phase-researcher`의 package legitimacy gate | 새 dependency, 외부 패키지, 보안 민감 변경에는 provenance tag와 package legitimacy check를 요구한다. | 공급망 리스크와 hallucinated package 사용을 줄인다. 일반 구현 경로에 항상 강제하면 비용이 크므로 dependency 변경 시에만 켠다. |
-| 수정 적용 | command | `cross-ai-review` | 멀티 모델 적대적 검토를 opt-in command로 둔다. 입력 diff, 목표, acceptance criteria, 비용 상한, output artifact 경로를 wrapper가 통제한다. | PURPOSE.md의 멀티 모델 정반합에 직접 연결된다. raw external CLI 호출은 금지하고 provider/version을 기록해야 한다. |
+| 수정 적용 | command | `review`(`--agy`/`--antigravity` 포함) | 멀티 모델 적대적 검토를 opt-in command로 둔다. 구 `cross-ai-review`는 `review`로 통합되었고 Antigravity peer reviewer 플래그가 추가되었다. 입력 diff, 목표, acceptance criteria, 비용 상한, output artifact 경로를 wrapper가 통제한다(`commands/gsd/review.md:4,36` @ `9b5ee373`). | PURPOSE.md의 멀티 모델 정반합에 직접 연결된다. raw external CLI 호출은 금지하고 provider/version을 기록해야 한다. |

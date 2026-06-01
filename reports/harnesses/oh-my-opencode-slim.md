@@ -4,9 +4,10 @@
 
 - 대상 저장소: `https://github.com/alvinunreal/oh-my-opencode-slim`
 - 로컬 분석 경로: `/private/tmp/ditto-harness-analysis/oh-my-opencode-slim`
-- 기준 커밋: `24dc4b535aabf296679cabe7092f6eab815c93f3`
-- 기준 커밋 시각/제목: `2026-05-20T06:45:41Z`, `docs: update contributors [skip ci]`
-- 이 보고서의 모든 `repo-relative/path:line` 근거는 위 커밋 기준이다.
+- 기준 커밋: `9c28674da61c834c91498c2867043f613326b1dd` (갱신: 2026-06-01)
+- 이전 기준: `24dc4b535aabf296679cabe7092f6eab815c93f3` (`2026-05-20T06:45:41Z`, `docs: update contributors [skip ci]`)
+- 최신 확인: 2026-06-01, HEAD=`9c28674da61c834c91498c2867043f613326b1dd`
+- 이 보고서의 기준 커밋 이후 변경 섹션(`path:line`)은 `9c28674` 기준이다. 나머지 기존 분석의 `path:line`은 `24dc4b5` 기준이며, 해당 파일에 변경이 없는 경우 그대로 유효하다.
 
 ## 조사 방법
 
@@ -92,7 +93,7 @@
 | `ast_grep_search` | `docs/tools.md:23-33`, `src/tools/ast-grep/tools.ts:18-71` | AST-aware 패턴 검색. 패턴은 완전한 AST node여야 한다는 설명과 empty-result hint를 제공한다. |
 | `ast_grep_replace` | `src/tools/ast-grep/tools.ts:74-117` | AST-aware 치환. 기본은 dry-run이고 `dryRun === false`일 때만 전체 업데이트를 적용한다. |
 | `council_session` | `src/tools/council.ts:27-42`, `src/tools/council.ts:52-69` | council agent만 호출 가능한 다중 councillor 실행 도구다. 비-council agent가 호출하면 guard가 거부한다. |
-| `subtask` | `src/tools/subtask/tools.ts:48-64`, `src/tools/subtask/tools.ts:73-155` | bounded worker child session을 만들고, nested subtask와 depth를 제한하며, summary를 추출한다. |
+| `subtask` | `src/tools/subtask/tools.ts:48-64`, `src/tools/subtask/tools.ts:73-155` | bounded worker child session을 만들고, nested subtask와 depth를 제한하며, summary를 추출한다. 타임아웃은 기본 5분이며 `subtask.timeoutMs` config로 조정 가능하다(0으로 disable 시에도 부모 abort signal은 동작). (`9c28674` 갱신) |
 | `read_session` | `docs/subtask.md:75-90`, `src/tools/subtask/tools.ts:267-320` | subtask worker가 source session transcript를 제한적으로 읽는 도구다. source session 외부 접근과 과도한 읽기를 막는다. |
 | `auto_continue` | `src/hooks/todo-continuation/index.ts:444-464` | todo continuation 상태를 제어하는 tool surface다. |
 
@@ -279,6 +280,38 @@
 7. Host API coupling은 compatibility shim과 smoke matrix로 관리한다. 근거: background subagents는 실험 flag가 필요하고(`README.md:48-59`), host smoke는 현재도 한 host load 경로를 검증한다(`scripts/verify-opencode-host-smoke.ts:246-305`). DITTO에서는 host version matrix를 추가하는 편이 안전하다.
 8. 멀티플렉서는 core logic과 분리된 observability plugin으로 둔다. 근거: multiplexer factory는 환경에 따라 null이 되고(`src/multiplexer/factory.ts:18-65`), tmux/zellij 구현은 terminal layout과 attach command에 의존한다(`src/multiplexer/tmux/index.ts:42-120`, `src/multiplexer/zellij/index.ts:51-97`).
 
+## 기준 커밋 이후 변경 (2026-06-01 갱신)
+
+기준: `24dc4b5` → HEAD `9c28674`. 기능 관련 커밋은 3개다: `925cde0` (Node ESM 패키징 수정), `486e353`+`0f077a6` (subtask 타임아웃 설정 가능화). 나머지는 문서 번역(Korean/Japanese README) 및 기여자 목록 갱신이다.
+
+### 1. Node ESM 플러그인 패키징 수정 (`925cde0`)
+
+**변경 파일**: `package.json`, `src/tools/ast-grep/tools.ts`, `src/hooks/todo-continuation/index.ts`, `scripts/verify-release-artifact.ts`
+
+- `build:plugin`, `build:cli` 스크립트의 `--external` 목록에 `@opencode-ai/plugin/*`, `@opencode-ai/sdk/*` 와일드카드가 추가됐다 (`package.json:50-51` @ `9c28674`). 이전에는 패키지 루트만 external 처리되어 서브패스 import가 번들에 포함될 수 있었다.
+- `src/tools/ast-grep/tools.ts`와 `src/hooks/todo-continuation/index.ts`에서 `@opencode-ai/plugin/tool` 서브패스 import가 `@opencode-ai/plugin`으로 통합됐다 (`src/tools/ast-grep/tools.ts:1` @ `9c28674`, `src/hooks/todo-continuation/index.ts:2` @ `9c28674`).
+- `scripts/verify-release-artifact.ts`에 `vscode-jsonrpc/node` 서브패스 import를 탐지하는 `suspiciousImportPatterns` 검사가 추가됐다 (`scripts/verify-release-artifact.ts:23` @ `9c28674`). Node ESM 환경에서 vscode-jsonrpc가 번들에 포함되면 패키징 오류 증거가 된다.
+
+**기존 분석 영향**: 보고서 `빌드/검증 스크립트와 CI` 표의 `bun run verify:release` 행에서 언급한 `scripts/verify-release-artifact.ts:19-44`의 suspicious path leak 검사 범위가 import pattern으로 확장됐다. 해당 설명은 여전히 정확하되, "suspicious path leak"이 "suspicious path or import leak"으로 넓어진 것으로 이해해야 한다.
+
+### 2. Subtask worker 타임아웃 설정 가능화 (`486e353`, `0f077a6`)
+
+**변경 파일**: `src/config/schema.ts`, `src/config/loader.ts`, `src/tools/subtask/tools.ts`, `src/utils/session.ts`, `src/index.ts`, `docs/subtask.md`
+
+- `src/config/schema.ts:255-270` @ `9c28674`에 `SubtaskConfigSchema`가 추가됐다. `timeoutMs`는 0~86400000 범위의 optional integer이며, `.default()`를 의도적으로 쓰지 않는다(빈 `subtask: {}` 블록이 config merge 시 상속값을 덮어쓰지 않도록). `PluginConfigSchema`에 `subtask: SubtaskConfigSchema.optional()`이 추가됐다 (`src/config/schema.ts:355` @ `9c28674`).
+- `src/config/loader.ts:207` @ `9c28674`에서 `mergePluginConfigs`가 `subtask` 필드를 deepMerge 대상으로 추가했다.
+- `src/tools/subtask/tools.ts`에서 상수 `SUBTASK_TIMEOUT_MS`가 export `DEFAULT_SUBTASK_TIMEOUT_MS = 5 * 60 * 1000`으로 이름이 바뀌었고, `CreateSubtaskToolOptions` 인터페이스와 options 파라미터가 추가됐다 (`src/tools/subtask/tools.ts:21-60` @ `9c28674`). 기본값은 여전히 5분이다.
+- `src/utils/session.ts`의 `promptWithTimeout`이 `timeoutMs <= 0` 조건으로 timeout을 무시하던 방식에서, `hasTimeout = timeoutMs > 0`으로 racers 배열을 조건부 구성하도록 리팩터됐다 (`src/utils/session.ts:111-146` @ `9c28674`). 이로써 `timeoutMs=0`일 때 부모 abort signal이 여전히 정상 작동한다 (`0f077a6` 수정의 핵심).
+- `src/index.ts:403-406` @ `9c28674`에서 `createSubtaskTool` 호출에 `{ timeoutMs: config.subtask?.timeoutMs }` options가 전달된다.
+- `docs/subtask.md:92-112` @ `9c28674`에 `## Timeout` 섹션이 추가됐다. 기본 5분(300000 ms), `subtask.timeoutMs` config 키, `0`으로 disable, 최대 24시간 제약을 문서화한다.
+
+**기존 분석 영향**:
+- 보고서 `도구/명령/스크립트/프롬프트 인벤토리 > OpenCode 도구` 표의 `subtask` 행 (`src/tools/subtask/tools.ts:48-64`, `src/tools/subtask/tools.ts:73-155`)은 라인 번호가 새 커밋에서 약간 이동했지만 내용은 유효하다. 단 "bounded worker child session을 만들고"에 이제 타임아웃이 config로 설정 가능하다는 사실을 추가해야 한다.
+- `각 도구가 왜 그렇게 작성되어야 했는지 > subtask와 read_session` 분석은 여전히 정확하다. 변경 없음.
+- `ditto 적용 요소 후보` 표의 `/subtask` 행에서 "parentID, file context, transcript read limit, summary, abort cleanup을 contract에 넣는다"에 **configurable timeout (기본 5분, 0으로 disable 가능)** 을 추가해야 한다.
+
+**DITTO 함의**: subtask 타임아웃이 config로 노출되면 DITTO의 분석/검증 서브에이전트 실행 시간 예산을 작업 유형별로 조정할 수 있다. 특히 `timeoutMs=0`으로 disable할 때도 부모 abort signal이 동작하도록 수정된 점은 장기 실행 작업에서 사용자가 수동으로 중단할 때 cleanly exit하는 데 중요하다.
+
 ## 근거 목록
 
 ### 최상위 문서와 메타데이터
@@ -458,7 +491,7 @@ oh-my-opencode-slim에서 ditto에 적용할 핵심은 “범용 coding agent ha
 
 | 우선순위 | 종류 | 요소 | DITTO 적용안 | 효과/주의 |
 | --- | --- | --- | --- | --- |
-| 바로 적용 | command/tool | `/subtask`, `subtask`, `read_session` | bounded worker session을 DITTO subagent 기본 실행 단위로 삼는다. parentID, file context, transcript read limit, summary, abort cleanup을 contract에 넣는다. | Context Rot 완화에 직접 효과가 있다. source session 외부 접근과 nested depth를 runtime에서 막아야 한다. |
+| 바로 적용 | command/tool | `/subtask`, `subtask`, `read_session` | bounded worker session을 DITTO subagent 기본 실행 단위로 삼는다. parentID, file context, transcript read limit, summary, abort cleanup, configurable timeout(기본 5분, `subtask.timeoutMs`로 조정, 0으로 disable 가능)을 contract에 넣는다. | Context Rot 완화에 직접 효과가 있다. source session 외부 접근과 nested depth를 runtime에서 막아야 한다. |
 | 바로 적용 | skill | `codemap` | repo map과 change detection을 DITTO long-session skill로 둔다. 작업 전 state 확인, 초기화, 변경 감지, 업데이트 절차를 명령화한다. | 반복 탐색 비용을 줄인다. codemap이 stale이면 오히려 잘못된 판단을 만들 수 있어 변경 감지가 필수다. |
 | 바로 적용 | command/script | `doctor`, `verify-release-artifact`, `verify-host-smoke` | 설정 schema, package artifact, 실제 host plugin load를 DITTO 검증 표면으로 둔다. 결과는 human/json과 exit code를 모두 제공한다. | 설치/배포 완료의 증거가 명확해진다. host smoke는 느리므로 CI matrix와 로컬 빠른 doctor를 분리한다. |
 | 바로 적용 | agent | `explorer`, `librarian`, `fixer`, `oracle` | DITTO 전문 agent 초기 세트로 차용한다. explorer/librarian/oracle은 read-only, fixer는 좁은 구현 전담으로 두고 각 agent의 도구 allowlist를 제한한다. | 역할별 context와 권한을 줄일 수 있다. agent registry와 permission 계산이 prompt와 분리되어야 한다. |

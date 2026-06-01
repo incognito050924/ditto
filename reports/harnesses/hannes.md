@@ -5,6 +5,7 @@
 - 대상 저장소(로컬): `/Users/ecoletree/dev/project/boxwood-with-hannes`
 - 성격: DITTO의 **직접 전신**. Claude Code 위에 "9-agent 7-stage 자가진화 사이클"을 구현한 제품 개발 하네스.
 - 분석 시점 상태: registry 기준 closed project 37건, `lessons.jsonl` 132건, applied mutation 29건 누적(실제 dogfooding 흔적).
+- **최신 확인: 2026-06-01, HEAD=46ad7c5 (기준과 동일, 관련 변경 없음)** — 문서 작성(2026-05-26) 이후 boxwood 저장소에 신규 커밋 없음. 전체 수치 및 파일 참조 현행 유효.
 - 이하 `path:대상`은 위 로컬 경로 기준이며, 제품 저장소 폴더(`frontend`/`portal-backend`/`automation-engine`/`external-client`/`boxwood-packages`)는 하네스와 무관하므로 분석에서 제외했다.
 
 **범위 한정(의도적).** 이 보고서는 HANNES 전체(bootstrap npm·recipe·21개 Python hook·wiki·measurement)를 감사하지 않는다. **DITTO 설계서가 필요로 하는 것**(`reports/design/ditto-claude-code-harness-design.md` §6 Core Contracts)을 렌즈로 삼아, (1) HANNES가 이미 dogfooding한 선행 구현과의 매핑, (2) DITTO가 의도적으로 도려낸 HANNES의 실패 양식, (3) v0 구현에서 회수 가능한 자산만 본다. MVP 공리에 따라 "DITTO가 차용·반면교사로 쓸 부분만" 조사한 결과다.

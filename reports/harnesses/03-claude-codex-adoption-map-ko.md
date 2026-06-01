@@ -2,7 +2,7 @@
 title: "Claude Code/Codex 사용 전제 DITTO 적용 분류"
 tier: 1
 repo: all
-last_updated: 2026-05-22
+last_updated: 2026-06-01
 scope: "reports/harnesses/01-anthropic-engineering-survey.md와 reports/harnesses/02-managed-agents-annotated-ko.md의 제안을 Claude Code와 Codex를 기본 실행 엔진으로 쓰는 전제로 재분류한 적용 문서"
 kind: ditto-design
 inputs:
@@ -863,3 +863,96 @@ ditto/skills/<skill-name>/
 따라서 우선순위는 다음 한 문장으로 정리된다.
 
 DITTO는 Codex/Claude Code를 더 똑똑하게 만드는 것이 아니라, 그들이 한 일을 잃어버리지 않고, 검증 없이 완료라고 말하지 않게 하며, 다음 실행자가 바로 이어받을 수 있게 만드는 계층부터 구현한다.
+
+---
+
+## 최신 확인 / 변경 (2026-06-01 갱신)
+
+### 검토 범위
+
+이 섹션은 2026-06-01 기준으로 upstream 두 저장소를 fresh clone하여 점검한 결과다. Claude Code와 Codex product claim은 단일 pinnable repo가 없어 버전 검증이 불가하므로 별도 처리한다.
+
+| 저장소 | 스냅샷 기준 (문서 작성 시) | 2026-06-01 HEAD | 신규 커밋 수 |
+|---|---|---|---|
+| `Yeachan-Heo/oh-my-claudecode` (OMC) | 2026-05-22 `f28516c9` (v4.14.x 이전) | `ed7800dd` (v4.14.4) | 28개 |
+| `Yeachan-Heo/oh-my-codex` (OMX) | 2026-05-22 `02efaa7b` (v0.18.1 근방) | `ff17267b` (v0.18.7) | 137개 |
+
+### 유지된 사실 (hold)
+
+아래 항목은 이번 검토에서 upstream 변경으로 훼손되지 않았음을 확인했다.
+
+**OMC (oh-my-claudecode v4.14.4)**
+
+- `AGENTS.md`를 global/project scope로 읽고 병합하는 구조: 유지. OMC의 plugin-mode `omx setup`이 symlinked user-scope `AGENTS.md`를 보존하도록 수정되었으나(PR #2477 대응, `92a37bb7`), 이는 기존 discovery 구조가 유지되면서 user 소유 파일을 덮어쓰지 않도록 안전성이 강화된 것이다. DITTO 문서의 주장(3.4절 instruction bridge)에 반하지 않는다.
+- `PreToolUse`는 보조 guardrail이며 완전한 enforcement boundary가 아니라는 주장: 유지. OMC docs/HOOKS.md 현행 기준으로도 `pre-tool-enforcer.mjs`는 "Validates rules before tool use"로 기술되며, permission enforcement는 Claude Code runtime이 담당한다는 구조가 변하지 않았다.
+- hooks lifecycle이 `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop` 등 주요 지점을 커버한다는 구조: 유지.
+- skills progressive disclosure 원칙: 유지. OMC skills 목록(40개)과 OMX skills 목록(46개)이 존재하며 각각 `SKILL.md`로 분리된 구조다.
+- `bypassPermissions` 위험 모드 경고: 제품 문서 claim이므로 별도 pin 불가. 아래 참조.
+
+**OMX (oh-my-codex v0.18.7)**
+
+- Codex subagent가 parent sandbox policy를 상속한다는 구조: OMX team/worker 구조에서 유지 확인.
+- `AGENTS.md`를 global/project/nested scope로 읽는 구조: 유지 (OMX templates/AGENTS.md 현행 확인).
+- skills/hooks가 native Codex lifecycle에 붙는 구조: 유지. `codex-native-hooks.md`의 mapping matrix가 현행 실제 구현과 일치.
+
+### 변경된 사실 (changed)
+
+#### OMC: `ultragoal` 모드가 Stop-blocking 및 PreToolUse enforcement에 추가됨
+
+- 커밋: `567e39ff` (2026-05-25, OMC v4.14.x)
+- 변경 내용: `.omc/state/` 기반 Stop continuation 목록에 `ralph`, `autopilot`, `ultrawork` 등 기존 모드에 더해 `ultragoal`이 공식 추가되었다. 더 나아가 `ultragoal` 활성 상태에서는 `PreToolUse` hook이 matching Claude `/goal` snapshot 없이 도구 사용을 차단한다(`pre-tool-enforcer.mjs`).
+- DITTO 문서 영향: 4.3절("Codex `PreToolUse`는 완전한 enforcement boundary가 아니라고 문서화되어 있다")은 여전히 Codex product 수준에서 유효하다. 그러나 OMC 수준에서 `$ultragoal` 모드는 PreToolUse를 실질적 blocking gate로 쓰는 패턴이 추가된 것을 인지해야 한다. 이는 "hook을 보안의 유일한 경계로 삼지 않는다"는 DITTO의 원칙과 충돌하지 않지만, OMC의 PreToolUse가 단순 advisory가 아닌 blocking enforcement로도 쓰인다는 구체적 사례다.
+- 채택 권고 변화: 없음. DITTO의 "Delegate and verify" 분류는 유지된다. 단, Phase 4 hook 구현 시 OMC `pre-tool-enforcer.mjs`의 blocking 패턴(ultragoal PreToolUse guard)을 참고 구현 사례로 활용할 수 있다는 점을 추가한다.
+- 근거: `Yeachan-Heo/oh-my-claudecode` @ `567e39ff` `docs/HOOKS.md`, `scripts/persistent-mode.mjs`, `scripts/pre-tool-enforcer.mjs`
+
+#### OMC: `ralplan` 스킬이 read-only/planning 전용 경계로 강화됨
+
+- 커밋: `b007dfb0` (2026-05-26, OMC v4.14.3)
+- 변경 내용: `/ralplan` 실행 시 compact continuation 이후 구현, 파일 편집, 커밋, PR 생성으로 자동 진행하지 않도록 Stop hook이 강화되었다. pending-approval 상태가 terminal phase로 처리된다.
+- DITTO 문서 영향: 직접적인 영향 없음. 이는 evaluator lane(3.6절)의 reviewer를 read-only로 제한하는 DITTO 방향과 일치하는 변화다.
+
+#### OMX: `omx explore` 명령이 deprecated 처리됨
+
+- 커밋: `bfbc2cab` (2026-05-25, OMX v0.18.3)
+- 변경 내용: `omx explore` 명령이 deprecated 처리되어, 신규 lookup에는 normal Codex repository inspection 또는 `omx sparkshell`을 사용하도록 안내가 변경되었다. 기존 호환성은 유지되나 기본 진입점에서 제거되었다.
+- DITTO 문서 영향: 직접 언급 없음. OMX skill catalog 참고 시 `explore` 대신 일반 tool 사용을 전제로 해야 한다.
+
+#### OMX: plugin-scoped Codex hooks 구조 공식화
+
+- 커밋: `92a37bb7` (2026-05-23, OMX v0.18.2)
+- 변경 내용: Plugin-mode OMX는 Codex plugin cache를 통해 hooks를 등록하며(`plugins/oh-my-codex/.codex-plugin/plugin.json` → `./hooks/hooks.json`), setup-owned `hooks.json`은 legacy/fallback 경로가 되었다. `omx doctor`가 plugin cache를 먼저 확인한 후 missing OMX coverage를 판단하도록 변경되었다.
+- DITTO 문서 영향: 4.3절(Hooks lifecycle: Delegate and verify) 및 4.5절(Skills/plugins/MCP: Delegate and verify) 방향과 일치. DITTO의 `ditto doctor` 구현 시 OMX의 plugin-scoped hook validation 패턴을 참고할 수 있다.
+- 근거: `Yeachan-Heo/oh-my-codex` @ `92a37bb7` `src/cli/doctor.ts`, `src/config/generator.ts`, `docs/codex-native-hooks.md`
+
+#### OMX: OMX `$team` 스킬에 lightweight coordination protocol 추가
+
+- 커밋: `d2100490` (2026-05-28, OMX v0.18.7)
+- 변경 내용: `$team` 스킬이 Task Big Five + ATEM-inspired coordination gate를 도입했다. 독립 fan-out은 기존 경량 프로토콜을 유지하되, 의존성/공유 파일/handoff가 있는 경우 coordinated protocol(shared mental model, closed-loop ACK, 경계 감시, backup 행동, 적응 체크포인트)을 활성화한다.
+- DITTO 문서 영향: 3.10절(Light parallel coordination) "parent context는 child transcript가 아니라 evidence summary만 받는다"는 주장과 일치. OMX의 coordination protocol이 DITTO의 parallel coordination contract 설계 시 참고 구현으로 유효하다.
+
+#### OMX: PreToolUse hook의 Bash-only 제한이 명문화됨
+
+- 문서: `docs/codex-native-hooks.md` (현행 기준, 2026-05-22 이후 갱신)
+- 내용: OMX `pre-tool-use` native hook의 현행 scope는 "Bash-only"로 명시되어 있다. 비-Bash tool interception은 `runtime-fallback`으로 분류되어 있다.
+- DITTO 문서 영향: 4.3절의 "Codex `PreToolUse`는 완전한 enforcement boundary가 아니다" 주장이 OMX 공식 문서에 의해 추가로 뒷받침됨. Bash 이외 tool에 대한 hook enforcement는 현재도 제한적이다. 이 사실은 DITTO Phase 4(Hooks를 통한 guardrail) 구현 시 범위 제한 근거로 명시해야 한다.
+
+### Claude Code / Codex 제품 claim 처리
+
+아래 항목은 단일 pinnable repo가 없는 제품 수준 claim이라 이전엔 미검증으로 남겼으나, **2026-06-01 공식 문서로 검증 완료**했다(repo commit이 아닌 공식 문서 기준이므로 향후 제품 버전 변경 시 재확인 필요).
+
+- `bypassPermissions` 모드 (1.2절): **검증됨** — "full, autonomous system access without approval prompts. 단 deny rule이 매칭되면 그 도구는 bypassPermissions에서도 차단". 출처: `docs.claude.com/en/docs/claude-code/settings`.
+- Claude Code permission mode 목록 (1.2절): **검증됨** — 공식 모드는 `default`, `acceptEdits`, `bypassPermissions`, `plan`, `dontAsk`(미승인 시 deny), `auto`(model classifier로 승인/거부)로 보고서 목록과 일치. 출처: `docs.claude.com/en/docs/claude-code/sdk/sdk-permissions`.
+- Codex cloud의 setup/agent phase 분리, network off 기본값, cloud secret 제거 (1.1절): **검증됨** — "Setup scripts run with internet access. Agent internet access is off by default" + "Secrets are only available to setup scripts. For security reasons, secrets are removed before the agent phase starts". 출처: `developers.openai.com/codex/cloud/environments`.
+- Codex CLI/IDE의 OS-level sandbox, network off 기본값 (1.1절): **검증됨** — workspace-write에서 network는 기본 off(`[sandbox_workspace_write].network_access=true`로만 허용), 기본값은 no network + workspace 한정 write, OS-level sandbox. 출처: `developers.openai.com/codex/concepts/sandboxing`, `developers.openai.com/codex/agent-approvals-security`.
+
+이 항목들은 DITTO의 "Delegate and verify" 전략적 분류 근거로 쓰이는 것이고, 위 공식 문서 검증으로 그 전제가 뒷받침된다.
+
+### 채택 권고 변화 요약
+
+이번 갱신으로 Apply now / Delegate and verify / Defer / Avoid 분류가 바뀐 항목은 없다.
+
+추가된 구현 참고사항:
+
+- **Phase 4 (Hooks)**: OMC `pre-tool-enforcer.mjs`의 ultragoal PreToolUse blocking 패턴을 참고 가능. 단, Bash-only 제한을 인지하고 적용 범위를 명시할 것.
+- **Phase 3 (Evaluator lane)**: OMC의 `ralplan` read-only 경계 강화(`b007dfb0`) 패턴이 DITTO reviewer subagent의 write-block 구현 참고가 된다.
+- **3.10절 (Light parallel coordination)**: OMX `$team` coordination protocol(`d2100490`)이 DITTO child task contract 설계 시 검증된 참고 구현으로 활용 가능하다.

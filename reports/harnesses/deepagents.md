@@ -4,9 +4,12 @@
 
 - 대상 저장소: `https://github.com/langchain-ai/deepagents`
 - 로컬 분석 경로: `/private/tmp/ditto-harness-analysis/deepagents`
-- 기준 커밋: `84daa1a2e27963a6d7694dc9278de83782b4a7b7`
+- 최초 기준 커밋: `84daa1a2e27963a6d7694dc9278de83782b4a7b7`
+- **갱신된 기준 커밋: `1906af985906369b6ab5bfbee039c9dabc1dd840` @ 2026-06-01**
+  - 이전 기준: `84daa1a`, 갱신: `1906af98` @ 2026-06-01
+  - 관련 SDK 커밋 수: 22건 (libs/deepagents/ 변경 기준)
 - 분석 범위: 루트 README, `libs/deepagents` 패키지 메타데이터/소스/테스트/Makefile, `examples/better-harness` 예제, 루트 개발 지침과 Makefile.
-- 아래의 모든 `repo-relative/path:line` 근거는 별도 표기가 없으면 기준 커밋 `84daa1a2e27963a6d7694dc9278de83782b4a7b7`에서 확인한 것이다.
+- 아래의 모든 `repo-relative/path:line` 근거는 별도 표기가 없으면 최초 기준 커밋 `84daa1a2e27963a6d7694dc9278de83782b4a7b7`에서 확인한 것이다. "@ 1906af98" 표기가 있는 근거는 갱신된 HEAD에서 확인한 것이다.
 
 ## 조사 방법
 
@@ -39,7 +42,7 @@
 
 ### `create_deep_agent` 조립 흐름
 
-- `_DeepAgentState`의 `messages`는 LangGraph `DeltaChannel`을 사용한다. 주석은 체크포인트 성장률을 O(N^2)에서 O(N)으로 줄이기 위한 선택이라고 설명한다. 근거: `libs/deepagents/deepagents/graph.py:63-67`.
+- `DeepAgentState`(구 `_DeepAgentState`, `1906af98`에서 공개 이름으로 변경·export됨)의 `messages`는 LangGraph `DeltaChannel`을 사용한다. 주석은 체크포인트 성장률을 O(N^2)에서 O(N)으로 줄이기 위한 선택이라고 설명한다. 근거: `libs/deepagents/deepagents/graph.py:63-67` (갱신 HEAD에서 line 63-66 @ `1906af98`).
 - 기본 에이전트 프롬프트는 "concise and direct", "understand, act, verify", "keep working", "ask the minimum necessary follow-up questions" 같은 작업 방식 규칙을 포함한다. 근거: `libs/deepagents/deepagents/graph.py:69-111`.
 - 프롬프트 조립은 `USER -> BASE/CUSTOM -> SUFFIX` 순서를 가진다. 코드 주석은 호출자가 가장 먼저, 하네스/커스텀 본문이 중간, 프로파일 suffix가 마지막이라고 설명한다. `SystemMessage`의 `cache_control` 블록도 보존한다. 근거: `libs/deepagents/deepagents/graph.py:112-141`.
 - 기본 모델은 `anthropic:claude-sonnet-4-6`이나, 기본 모델 사용은 0.5.3부터 deprecated이며 1.0.0에서 제거 예정이라고 표시되어 있다. 근거: `libs/deepagents/deepagents/graph.py:145-184`.
@@ -74,7 +77,7 @@
 - `create_summarization_middleware` 문서는 LangChain 기본 요약과 달리 backend offload, pre-summarization tool-arg truncation, `ContextOverflowError` fallback, non-mutating message state, model-aware thresholds를 제공한다고 설명한다. 근거: `libs/deepagents/deepagents/middleware/summarization.py:1170-1201`.
 - `compact_conversation`은 기본 자동 요약 미들웨어와 별도인 `SummarizationToolMiddleware`가 제공하는 수동 도구다. 문서는 `create_deep_agent`가 자동 요약을 기본 추가하고, `create_summarization_tool_middleware(...)`를 사용자 미들웨어에 넣으면 도구 레이어가 추가된다고 설명한다. 근거: `libs/deepagents/deepagents/middleware/summarization.py:1241-1322`, `libs/deepagents/deepagents/middleware/summarization.py:1325-1420`.
 - 스킬은 `SKILL.md` YAML frontmatter를 가진 디렉터리 단위이며, 시스템 프롬프트는 필요할 때 `read_file(..., limit=1000)`로 해당 스킬 설명을 읽도록 지시한다. 이것은 progressive disclosure 구조다. 근거: `libs/deepagents/deepagents/middleware/skills.py:1-15`, `libs/deepagents/deepagents/middleware/skills.py:21-53`, `libs/deepagents/deepagents/middleware/skills.py:783-823`.
-- 스킬 로더는 여러 source를 순서대로 로드하고, 뒤 source가 앞 source를 덮어쓴다. 경로는 POSIX 상대 경로이며 `module` 엔트리포인트는 검증만 하고 실행하지 않는다. 근거: `libs/deepagents/deepagents/middleware/skills.py:232-301`, `libs/deepagents/deepagents/middleware/skills.py:651-708`, `libs/deepagents/deepagents/middleware/skills.py:826-910`, `libs/deepagents/deepagents/graph.py:384-391`.
+- 스킬 로더는 여러 source를 순서대로 로드하고, 뒤 source가 앞 source를 덮어쓴다. 경로는 POSIX 상대 경로이며, ~~`module` 엔트리포인트는 검증만 하고 실행하지 않는다~~ **[수정 @ 1906af98]** `module` 필드가 `SkillMetadata`에서 완전 제거되어 파싱·검증도 수행하지 않는다. 근거: `libs/deepagents/deepagents/middleware/skills.py:232-301`, `libs/deepagents/deepagents/middleware/skills.py:651-708`, `libs/deepagents/deepagents/middleware/skills.py:826-910`, `libs/deepagents/deepagents/graph.py:384-391`.
 - 메모리는 스킬과 달리 항상 로드되는 `AGENTS.md`식 지속 컨텍스트다. 시스템 프롬프트는 메모리가 hidden system이 아니라 파일 데이터이며, 충돌 시 검증하고, 자격증명은 저장하지 말라고 지시한다. 근거: `libs/deepagents/deepagents/middleware/memory.py:2-12`, `libs/deepagents/deepagents/middleware/memory.py:104-169`.
 
 ### 프로파일 구조
@@ -238,7 +241,7 @@
 - 기본 모델 사용은 deprecated다. 기본값이 남아 있지만 1.0.0 제거 예정이므로, 하네스를 그대로 차용하면 모델을 명시하지 않은 사용자가 향후 breaking change를 맞을 수 있다. 근거: `libs/deepagents/deepagents/graph.py:145-184`.
 - HarnessProfile은 beta API로 표시되어 있다. 하네스 동작 제어에는 유용하지만, DITTO가 외부 plugin/profile 호환성을 약속하기에는 API 안정성 리스크가 있다. 근거: `libs/deepagents/deepagents/profiles/harness/harness_profiles.py:1-18`.
 - profile의 tool description override는 강력하지만, task override는 `{available_agents}` placeholder 요구 같은 형식 제약이 있다. 잘못된 override는 도구 발견성을 망칠 수 있다. 근거: `libs/deepagents/deepagents/profiles/harness/harness_profiles.py:583-614`.
-- skills의 `module` entrypoint는 parse/validate만 하고 실행하지 않는다. 즉 skill metadata는 실행 가능 extension 시스템이 아니라 prompt/disclosure 계층에 가깝다. DITTO가 스킬 실행을 기대한다면 별도 런타임 설계가 필요하다. 근거: `libs/deepagents/deepagents/middleware/skills.py:232-301`, `libs/deepagents/deepagents/middleware/skills.py:478-532`.
+- ~~skills의 `module` entrypoint는 parse/validate만 하고 실행하지 않는다.~~ **[수정 @ 1906af98]** `module` 필드 자체가 `SkillMetadata`에서 완전히 제거되었다. 커밋 `1fe90943`이 "공식 agent skills 명세에 포함되지 않는 top-level module 프로퍼티"를 삭제했다. `_validate_module_path`, `_MODULE_EXTENSIONS` 헬퍼도 함께 제거되었다. skill metadata는 오직 prompt/disclosure 계층이며, JS/TS 런타임 연결은 `langchain-quickjs` 파트너 패키지 등 별도 파트너 통합이 담당하도록 정책이 명확해졌다. DITTO가 스킬 실행을 기대한다면 여전히 별도 런타임 설계가 필요하다. 근거: `libs/deepagents/deepagents/middleware/skills.py:232-301` @ `1906af98` (현재 `SkillMetadata`에 `module` 필드 없음), 커밋 `1fe90943`.
 - better-harness의 visible/private split은 "hard sandbox boundary"가 아니라고 문서가 명시한다. 평가 데이터 보안을 위해서는 별도 프로세스/파일시스템/권한 격리가 필요하다. 근거: `examples/better-harness/README.md:108-119`.
 - better-harness의 candidate 수락 기준은 train+holdout pass count의 strict improvement다. 이 기준은 단순하고 재현 가능하지만, 품질 점수/회귀 severity/비결정성 평가를 반영하지 못할 수 있다. 근거: `examples/better-harness/better_harness/core.py:935-948`.
 - pytest runner는 variant 적용을 `sitecustomize`와 임시 workspace file override로 처리한다. 파일 override는 finally에서 복구되지만, 실행 중 프로세스 실패나 외부 동시 접근이 있으면 isolation 한계가 있다. 근거: `examples/better-harness/better_harness/patching.py:51-109`, `examples/better-harness/better_harness/runners.py:66-225`.
@@ -266,6 +269,71 @@
 7. DITTO skill/memory를 분리한다. memory는 항상 로드되는 프로젝트 지식, skill은 필요 시 펼치는 절차 지식으로 나누고, skill metadata validation과 경로 traversal 방지를 구현한다. 참고 근거: `libs/deepagents/deepagents/middleware/memory.py:2-12`, `libs/deepagents/deepagents/middleware/skills.py:324-532`.
 8. eval-driven harness improvement 루프를 별도 실험 패키지로 만든다. `better-harness`처럼 surface, train/holdout/scorecard split, proposer workspace, proposal artifact, acceptance decision을 저장하되, private split을 진짜 sandbox boundary로 보호한다. 참고 근거: `examples/better-harness/README.md:108-119`, `examples/better-harness/better_harness/core.py:653-720`, `examples/better-harness/better_harness/core.py:864-1002`.
 9. 테스트를 위험 경계 중심으로 작성한다. tool override immutability, profile exclusion, file edit errors, skill path validation, subagent parallel execution, execute unsupported backend filtering을 우선 고정한다. 참고 근거: `libs/deepagents/tests/unit_tests/test_graph.py:179-348`, `libs/deepagents/tests/unit_tests/test_file_system_tools.py:79-295`, `libs/deepagents/tests/unit_tests/middleware/test_skills_middleware.py:221-315`, `libs/deepagents/tests/unit_tests/test_subagents.py:211-329`.
+
+## 기준 커밋 이후 변경 (2026-06-01 갱신)
+
+갱신 범위: `84daa1a..1906af98`. libs/deepagents/ 기준 22개 SDK 관련 커밋. 아래 항목은 이 분석 문서가 다루는 테마(skills, graph, subagent/tool 아키텍처)와 직접 관련된 변경이다.
+
+### 1. `_DeepAgentState` → `DeepAgentState` 공개 export (커밋 `14a90475`)
+
+`_DeepAgentState`가 `DeepAgentState`로 이름이 바뀌고 패키지 `__init__.py`에 export되었다. 기존 분석이 `_DeepAgentState`라고 표기했던 모든 부분은 이제 `DeepAgentState`가 맞다.
+
+- 근거: `libs/deepagents/deepagents/graph.py:63` @ `1906af98` — `class DeepAgentState(AgentState):`
+- 근거: `libs/deepagents/deepagents/__init__.py:31` @ `1906af98` — `"DeepAgentState"` export 목록 포함.
+
+**DITTO 함의**: DITTO가 이 타입을 참조하거나 subclass할 때 공개 이름 `DeepAgentState`를 써야 한다. semver-stable 이름으로 바뀐 것이므로 외부 확장이 더 안전해졌다.
+
+### 2. `create_deep_agent`에 `state_schema` 파라미터 추가 (커밋 `37839bd7`)
+
+`create_deep_agent(..., state_schema: type[DeepAgentState] | None = None, ...)`가 추가되었다. 호출자가 `DeepAgentState`의 subclass를 넘겨 그래프 상태를 커스텀 필드로 확장할 수 있다. 기본값은 `DeepAgentState` 그대로이므로 기존 동작 변화 없음.
+
+- 근거: `libs/deepagents/deepagents/graph.py:230` @ `1906af98` — `state_schema: type[DeepAgentState] | None = None`
+- 근거: `libs/deepagents/deepagents/graph.py:818` @ `1906af98` — `state_schema=state_schema if state_schema is not None else DeepAgentState`
+- 설계 제약: `TypedDict`는 `issubclass` 검사를 허용하지 않으므로 subclass 제약은 런타임이 아니라 타입 시스템으로만 강제된다고 코드 주석이 명시한다. 근거: `libs/deepagents/deepagents/graph.py:513-514` @ `1906af98`.
+- `SubAgentMiddleware`도 `state_schema`를 받고, 선언형 `SubAgent` 스펙을 컴파일할 때 이 스키마를 전달한다. 단, `CompiledSubAgent` 런어블은 이미 컴파일된 상태이므로 상속되지 않는다. 근거: `libs/deepagents/deepagents/middleware/subagents.py:683` @ `1906af98`.
+
+**DITTO 함의**: DITTO가 page_url, file_url, work-item ID 같은 런 스코프 필드를 그래프 상태에 넣으려 할 때 커스텀 `state_schema`로 선언할 수 있다. `context_schema`(불변 런 스코프)와 목적이 다르므로 용도에 따라 선택해야 한다.
+
+### 3. `RubricMiddleware` 신규 추가 (커밋 `5b8d44d6`)
+
+`libs/deepagents/deepagents/middleware/rubric.py`(813 LOC)가 신규 추가되어 `deepagents` 패키지에 export되었다. self-evaluated 반복 실행을 위한 미들웨어다.
+
+동작 요약:
+- 호출자가 invocation state에 `rubric` 문자열을 넘기면 미들웨어가 활성화된다. `rubric`이 없으면 완전히 no-op이므로 스택에 무조건 포함해도 안전하다.
+- 에이전트가 한 차례 응답(도구 호출 없는 AIMessage)을 완료하면, 별도 grader sub-agent가 트랜스크립트를 평가해 `GraderVerdict`(`satisfied`/`needs_revision`/`failed`)를 반환한다.
+- `needs_revision`이면 grader의 피드백을 `HumanMessage(name="rubric_grader")`로 주입하고 에이전트를 다시 실행한다. `satisfied`/`failed`/`max_iterations` 도달/`grader_error`면 종료한다.
+- `max_iterations`는 기본 3, 하드 상한 20. `on_evaluation` 콜백으로 각 평가 결과를 수신할 수 있다.
+
+- 근거: `libs/deepagents/deepagents/middleware/rubric.py:1-10` @ `1906af98` — 모듈 docstring.
+- 근거: `libs/deepagents/deepagents/middleware/rubric.py:56-83` @ `1906af98` — `GraderVerdict`, `RubricResult` 타입.
+- 근거: `libs/deepagents/deepagents/middleware/rubric.py:297-370` @ `1906af98` — `RubricMiddleware` 클래스 정의와 `__init__` 시그니처.
+
+**DITTO 함의**: DITTO의 검증 루프(특히 ditto:verify 역할)에 직접 대응한다. main agent가 완료를 선언하면 grader가 acceptance criteria 충족 여부를 평가하고 부족하면 재실행하는 구조를 하네스 계층에서 구현한다. 단, grader도 별도 모델 호출이므로 토큰 비용과 `max_iterations` 설정에 주의가 필요하다.
+
+### 4. `SkillMetadata.module` 필드 완전 제거 (커밋 `1fe90943`)
+
+`SkillMetadata`의 `module` NotRequired 필드, `_validate_module_path` 함수, `_MODULE_EXTENSIONS` 상수가 모두 제거되었다. 이유는 "공식 agent skills 명세에 포함되지 않는 프로퍼티"이기 때문이다. `allowed-tools` 파싱도 `_parse_allowed_tools` 헬퍼로 분리·리팩터링되었다.
+
+- 근거: `libs/deepagents/deepagents/middleware/skills.py:232` @ `1906af98` — `SkillMetadata`에 `module` 필드 없음.
+- 근거: `libs/deepagents/deepagents/middleware/skills.py:353-366` @ `1906af98` — `_parse_allowed_tools` 신규 헬퍼.
+
+기존 분석 중 "module entrypoint는 parse/validate만 하고 실행하지 않는다"(약한 점/리스크 섹션) 및 "module 엔트리포인트는 검증만 하고 실행하지 않는다"(구조/스킬 로더 섹션) 두 곳을 이 갱신에서 수정했다.
+
+### 5. `read_file` 버그 수정 — pagination/base64 처리 (커밋 `390551d6`, `9857a08b`, `97946ee0`)
+
+- `read_file` 페이지네이션에서 긴 줄이 continuation row로 분할될 때 실제 소스 라인이 잘리는 버그 수정(`390551d6`). `limit`은 이제 소스 라인 기준이고 continuation row는 한도를 소비하지 않는다. 근거: `libs/deepagents/deepagents/middleware/filesystem.py:353` @ `1906af98`.
+- 알 수 없는 확장자의 base64 파일을 텍스트로 처리하려다 실패하던 버그 수정(`9857a08b`). 인코딩 힌트를 확장자보다 먼저 검사해 binary 파일을 `"file"` 블록으로 올바르게 처리한다.
+- `read_file` 도구 설명 예시가 `path` → `file_path` 키워드 인자로 업데이트되었다(`97946ee0`). 근거: `libs/deepagents/deepagents/middleware/filesystem.py:348-351` @ `1906af98`.
+
+**DITTO 함의**: `read_file` 도구 설명 및 내부 동작이 변경되었으므로 DITTO가 이 도구 계약을 참조할 때 `file_path` 키워드를 써야 한다.
+
+### 6. `Command.goto`/`graph` 전파 수정 (커밋 `d92aef68`)
+
+tool이 반환하는 `Command` 객체에 `goto`와 `graph` 필드가 있을 때 `FilesystemMiddleware`가 이를 버리던 버그를 수정했다. 이제 `Command(goto=..., graph=..., update=...)` 형태로 전파된다.
+
+- 근거: `libs/deepagents/deepagents/middleware/filesystem.py` diff @ `d92aef68`.
+
+**DITTO 함의**: LangGraph 라우팅 명령을 tool에서 반환할 때 상위 그래프로 올바르게 전파되는 것이 보장된다. 기존 분석에서 다루지 않은 동작이었지만, DITTO가 graph routing을 tool에서 제어하려 할 때 직접 관련된다.
 
 ## 근거 목록
 

@@ -7,6 +7,7 @@
 - 기준 커밋: `2c606141936f1eeef17fa3043a72095b4765b9c2` (`2c60614`, `main`, `origin/main`)
 - 기준 커밋 메시지: `Sync Chinese README with English version (add Cursor section) (#95)`
 - 이 보고서의 모든 `repo-relative/path:line` 근거는 위 기준 커밋을 기준으로 한다.
+- 최신 확인: 2026-06-01, HEAD=2c606141936f1eeef17fa3043a72095b4765b9c2 (기준 커밋과 동일, 변경 없음)
 
 ## 조사 방법
 

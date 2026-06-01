@@ -4,9 +4,11 @@
 
 - 담당 저장소: `https://github.com/obra/superpowers`
 - 로컬 분석 경로: `/private/tmp/ditto-harness-analysis/superpowers`
-- 기준 커밋: `f2cbfbefebbfef77321e4c9abc9e949826bea9d7` (`Release v5.1.0 (#1468)`, 2026-05-04)
+- 기준 커밋: `6fd4507659784c351abbd2bc264c7162cfd386dc` (2026-05-29, contributor 자기 신원 공개 + dev 브랜치 타겟 정책 추가)
+  - 이전 기준: `f2cbfbe` (v5.1.0, 2026-05-04), 갱신: `6fd4507` (v5.1.0, 릴리스 태그 변동 없음) @ 2026-06-01
 - 패키지/플러그인 버전: `5.1.0`. 루트 `package.json`은 `name=superpowers`, `version=5.1.0`, `type=module`, OpenCode 엔트리포인트 `.opencode/plugins/superpowers.js`를 선언한다. [f2cbfbe, `package.json:1-5`]
-- 이 보고서의 모든 `path:line` 근거는 위 기준 커밋 `f2cbfbefebbfef77321e4c9abc9e949826bea9d7` 기준이다.
+- 최신 확인: 2026-06-01, HEAD=`6fd4507659784c351abbd2bc264c7162cfd386dc` (기준 커밋 f2cbfbe 이후 커밋 1개)
+- 이 보고서의 모든 `path:line` 근거는 달리 표시하지 않는 한 기준 커밋 `f2cbfbefebbfef77321e4c9abc9e949826bea9d7` 기준이다. `6fd4507` 이후 변경은 "## 기준 커밋 이후 변경" 섹션에 별도 표기한다.
 
 ## 조사 방법
 
@@ -182,6 +184,30 @@
 - 구현은 `skills/*/agents/openai.yaml`을 destination에서 source overlay로 복사해 보존한다. [f2cbfbe, `scripts/sync-to-codex-plugin.sh:321-347`]
 - 테스트도 OpenAI agent metadata 삭제가 preview에 나타나지 않아야 한다고 검증한다. [f2cbfbe, `tests/codex-plugin-sync/test-sync-to-codex-plugin.sh:534-549`]
 
+## 기준 커밋 이후 변경 (2026-06-01 갱신)
+
+HEAD: `6fd4507659784c351abbd2bc264c7162cfd386dc` (2026-05-29). 이전 기준 `f2cbfbe` (v5.1.0) 대비 커밋 1개. 릴리스 태그 변동 없음 — 여전히 v5.1.0.
+
+### 변경 내용: contributor 자기 신원 공개 의무 + `dev` 브랜치 타겟 정책
+
+**변경된 파일**: `CLAUDE.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `.github/ISSUE_TEMPLATE/platform_support.md`
+
+**변경 요약**:
+
+- `CLAUDE.md`에 contributor 자기 신원 공개가 5번 항목으로 추가됐다 (이전 5번 "diff 검토"는 6번으로 밀렸다). 공개 항목은 모델, 하네스, 하네스 버전, 설치된 전체 플러그인이다. [6fd4507, `CLAUDE.md:17`]
+- `CLAUDE.md`에 "Submitters MUST identify themselves" 단락이 신규 추가됐다. agent가 작성한 기여물과 실제 세션에 기반한 기여물을 다른 기준으로 평가한다고 명시한다. [6fd4507, `CLAUDE.md:30`]
+- `CLAUDE.md`에 "All PRs MUST target the `dev` branch, not `main`" 규칙이 추가됐다. [6fd4507, `CLAUDE.md:32`]
+- PR 템플릿에 "This PR MUST target the `dev` branch" 배너와 "Who is submitting this PR? (required)" 테이블(모델+버전, 하네스+버전, 설치 플러그인, 인간 리뷰어)이 추가됐다. PR을 omit하면 close한다고 명시한다. [6fd4507, `.github/PULL_REQUEST_TEMPLATE.md:7-22`]
+- 세 개의 이슈 템플릿에도 동일한 "Environment (required)" 테이블이 추가됐다 (모델+버전, 하네스+버전, 설치 플러그인). [6fd4507, `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `.github/ISSUE_TEMPLATE/platform_support.md`]
+
+**기능 영향**: 없음. skills, hooks, 플러그인 소스, 스크립트, 테스트는 변경되지 않았다.
+
+**DITTO 함의**:
+
+- 이 변경은 Superpowers가 agent-generated 기여물과 실제 사용 기반 기여물을 명시적으로 구분하기 시작했다는 신호다. "문서에서 추론한 기여"와 "실제 세션에서 발생한 기여"를 다른 신뢰도로 취급하는 정책이 공식화됐다.
+- DITTO에서 외부 harness 기여를 받거나 skill 제안을 평가할 때, 동일한 authoring environment disclosure 요건을 product contract에 포함할 수 있다.
+- `dev` 브랜치 분리 정책은 DITTO 자체 릴리스 브랜치 전략에 참고할 수 있다.
+
 ## 장점
 
 - **하네스 독립성:** 같은 `skills/` 컨텐츠를 Claude Code, Codex, Gemini, OpenCode, Cursor, Copilot CLI에 맞게 로딩/도구 매핑한다. [f2cbfbe, `README.md:63-152`, `skills/using-superpowers/SKILL.md:28-40`]
@@ -190,7 +216,7 @@
 - **스킬 자체를 테스트 가능한 행동 코드로 취급한다:** `writing-skills`는 baseline pressure scenario, red-green-refactor, rationalization 수집을 요구한다. [f2cbfbe, `skills/writing-skills/SKILL.md:10-18`, `skills/writing-skills/SKILL.md:533-560`, `skills/writing-skills/SKILL.md:596-634`]
 - **실제 하네스 transcript 기반 테스트 전략이 있다:** SDD와 code review는 실제 Claude Code 세션/서브에이전트/커밋/테스트 결과를 확인한다. [f2cbfbe, `docs/testing.md:40-65`, `tests/claude-code/test-subagent-driven-development-integration.sh:118-187`, `tests/claude-code/test-requesting-code-review.sh:95-149`]
 - **런타임 의존성을 줄이는 방향이 일관된다:** OpenCode 플러그인은 Node built-in 기반으로 bootstrap을 읽고, 브레인스토밍 서버도 built-in만 사용한다. [f2cbfbe, `.opencode/plugins/superpowers.js:8-11`, `skills/brainstorming/scripts/server.cjs:1-5`, `docs/superpowers/specs/2026-03-11-zero-dep-brainstorm-server-design.md:1-8`]
-- **기여 기준이 엄격하다:** AI agent PR에 대해 PR 템플릿, 중복 PR 검색, 실제 문제 확인, core 적합성, 인간 diff 리뷰를 요구한다. [f2cbfbe, `CLAUDE.md:11-19`, `.github/PULL_REQUEST_TEMPLATE.md:1-13`, `.github/PULL_REQUEST_TEMPLATE.md:92-115`]
+- **기여 기준이 엄격하다:** AI agent PR에 대해 PR 템플릿, 중복 PR 검색, 실제 문제 확인, core 적합성, 자기 신원 공개(모델/하네스/버전/설치 플러그인), 인간 diff 리뷰를 요구한다. 모든 PR은 `dev` 브랜치를 타겟해야 한다. [6fd4507, `CLAUDE.md:11-32`, `.github/PULL_REQUEST_TEMPLATE.md:1-22`]
 
 ## 약한 점/리스크
 
@@ -270,7 +296,7 @@
 ## 근거 목록
 
 - README/제품 개요: `README.md:1-4`, `README.md:154-204`
-- AI agent 기여/하네스 acceptance: `CLAUDE.md:3-19`, `CLAUDE.md:67-87`, `.github/PULL_REQUEST_TEMPLATE.md:53-80`
+- AI agent 기여/하네스 acceptance: `CLAUDE.md:3-32` [6fd4507], `CLAUDE.md:67-87`, `.github/PULL_REQUEST_TEMPLATE.md:1-22` [6fd4507], `.github/PULL_REQUEST_TEMPLATE.md:53-80` (행 번호는 6fd4507 기준으로 약 17행 뒤로 밀림 — 실제 하네스 acceptance 체크리스트는 원래 위치 유지)
 - 패키징 메타데이터: `.claude-plugin/plugin.json:1-20`, `.codex-plugin/plugin.json:1-47`, `.cursor-plugin/plugin.json:1-25`, `gemini-extension.json:1-6`, `GEMINI.md:1-2`, `package.json:1-5`
 - 부트스트랩/훅: `hooks/hooks.json:1-16`, `hooks/hooks-cursor.json:1-10`, `hooks/session-start:17-55`, `hooks/run-hook.cmd:1-46`, `.opencode/plugins/superpowers.js:49-133`
 - 핵심 스킬: `skills/using-superpowers/SKILL.md`, `skills/brainstorming/SKILL.md`, `skills/writing-plans/SKILL.md`, `skills/subagent-driven-development/SKILL.md`, `skills/test-driven-development/SKILL.md`, `skills/systematic-debugging/SKILL.md`, `skills/verification-before-completion/SKILL.md`, `skills/using-git-worktrees/SKILL.md`, `skills/finishing-a-development-branch/SKILL.md`

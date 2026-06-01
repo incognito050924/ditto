@@ -4,10 +4,11 @@
 
 - 대상 저장소: `https://github.com/Yeachan-Heo/oh-my-claudecode`
 - 로컬 분석 경로: `/private/tmp/ditto-harness-analysis/oh-my-claudecode`
-- 기준 커밋: `1fe17f0e19ec9e24c5964d4363a9f53aab45c73f`
-- 기준 패키지/플러그인 버전: npm 패키지 `oh-my-claude-sisyphus` `4.14.1`, Claude Code 플러그인 `oh-my-claudecode` `4.14.1`. npm 패키지명과 플러그인/브랜드명이 다르다는 점은 `package.json`과 README가 함께 확인한다. 근거: `package.json:2-4`, `.claude-plugin/plugin.json:2-4`, `README.md:187-197` @ `1fe17f0e19ec9e24c5964d4363a9f53aab45c73f`.
+- 기준 커밋: `1fe17f0e19ec9e24c5964d4363a9f53aab45c73f` (이전 기준)
+- **갱신 커밋**: `ed7800dd73b9ef1811b6f777b2017baabda9962a` @ 2026-06-01 (이전 기준: `1fe17f0`, 갱신 사유: 48개 신규 커밋, v4.14.4 릴리스)
+- 기준 패키지/플러그인 버전: npm 패키지 `oh-my-claude-sisyphus` `4.14.4`, Claude Code 플러그인 `oh-my-claudecode` `4.14.4`. 근거: `package.json:2-4`, `.claude-plugin/plugin.json:2-4` @ `ed7800dd`.
 
-이 보고서의 모든 `repo-relative/path:line` 근거는 위 기준 커밋에서 확인한 것이다.
+이 보고서의 `repo-relative/path:line` 근거는 섹션별로 명시된 커밋 기준이다. 기준 커밋 이후 변경 섹션의 근거는 `ed7800dd`에서 확인했다. 갱신 이전 섹션의 근거는 원래 기준 `1fe17f0`에서 확인한 것이며, 갱신 섹션에서 수정한 내용은 별도 주기했다.
 
 ## 조사 방법
 
@@ -200,7 +201,7 @@
 1. **문서와 실제 구현의 drift가 보인다.** README는 npm CLI/runtime path를 안내하지만 Reference는 direct npm/bun global installs가 not supported라고 한다. 근거: `README.md:67-71`, `docs/REFERENCE.md:31-45`.
 2. **카운트/명칭 문서가 불일치한다.** Architecture는 31 skills라고 쓰지만 실제 `skills/*/SKILL.md`와 plugin manifest는 39개이고, Reference는 38 Total이라고 쓴다. 근거: `docs/ARCHITECTURE.md:174-179`, `.claude-plugin/plugin.json:18-58`, `docs/REFERENCE.md:603-608`.
 3. **훅 파일명 문서가 stale이다.** 실제 hooks manifest는 `persistent-mode.mjs`를 쓰지만 Reference hook table은 `persistent-mode.cjs`라고 쓴다. 근거: `hooks/hooks.json:181-184`, `docs/REFERENCE.md:737-740`.
-4. **플랫폼 설명도 일부 오래되었다.** installer/source는 Bash hooks가 제거되고 Node hooks가 기본이라고 말하지만 Reference는 Bash hooks가 macOS/Linux에서 portable하고 `OMC_USE_NODE_HOOKS=1`로 Node hooks를 쓰라고 설명한다. 근거: `src/installer/index.ts:1-9`, `src/installer/hooks.ts:1-9`, `docs/REFERENCE.md:851-859`.
+4. **플랫폼 설명도 일부 오래되었다.** installer/source는 Bash hooks가 제거되고 Node hooks가 기본이라고 말하지만 Reference는 Bash hooks가 macOS/Linux에서 portable하고 `OMC_USE_NODE_HOOKS=1`로 Node hooks를 쓰라고 설명한다. 근거: `src/installer/index.ts:1-9`, `src/installer/hooks.ts:1-9`, `docs/REFERENCE.md:851-859`. **부분 해소**: v4.14.3에서 Windows는 setup-time에 direct-node로 rewrite, Unix는 find-node.sh 유지로 구분이 명확해졌다(`10d32f26` @ `ed7800dd`). **Reference 문서 미반영 확인됨**(검증 완료 2026-06-01, `ed7800dd`): `docs/REFERENCE.md:846-859`는 여전히 Bash(.sh)를 macOS/Linux 기본으로 설명하나 `OMC_USE_NODE_HOOKS`는 `src/`에 구현 0건(doc-only)이고 source는 Bash hooks가 v3.9.0에서 제거됐다고 명시 — 문서가 stale 상태로 남아있다.
 5. **MCP 서버 주석이 실제 tool surface와 맞지 않는다.** `src/mcp/omc-tools-server.ts` 상단 주석은 18 custom tools라고 하지만 실제 aggregate는 state/notepad/memory/trace/shared-memory/deepinit/wiki/interop까지 훨씬 많다. 근거: `src/mcp/omc-tools-server.ts:1-6`, `src/mcp/omc-tools-server.ts:96-109`.
 6. **복잡도가 높다.** Stop 훅 하나가 Autopilot, Ralph, Autoresearch, Ralplan, Team, Ultrawork, skill-active-state, todo continuation을 모두 우선순위로 다루며, ledger/tombstone/session state까지 조합한다. 근거: `src/hooks/persistent-mode/index.ts:2021-2159`.
 7. **외부 런타임 의존성이 크다.** `omc team`, `omc wait`는 tmux가 필요하고, Codex/Gemini worker는 별도 CLI 설치와 인증이 필요하다. 근거: `README.md:183`, `README.md:378-388`, `README.md:507-536`.
@@ -244,6 +245,81 @@
 6. **문서 drift 방지**
    - 설치 정책, 플랫폼 정책, 파일명, tool count, skill count는 코드에서 생성하고 문서에는 generated block으로 삽입한다.
    - 필요 근거: OMC 문서에는 npm/plugin 지원 정책, Bash/Node hooks, persistent-mode 확장자, count 차이가 존재한다. 근거: `README.md:67-71`, `docs/REFERENCE.md:31-45`, `src/installer/hooks.ts:1-9`, `docs/REFERENCE.md:851-859`.
+
+## 기준 커밋 이후 변경 (2026-06-01 갱신)
+
+베이스라인 `1fe17f0` → HEAD `ed7800dd` 사이에 48개 커밋이 있었고 v4.14.2, v4.14.3, v4.14.4 세 번의 릴리스가 포함되어 있다. 문서와 관련된 변경만 선별한다.
+
+### 1. ralplan Stop continuation이 read-only 계획 루프로 강제됨
+
+`persistent-mode/index.ts`의 ralplan continuation 메시지가 변경되었다. 이전에는 "consensus에 도달할 때까지 계속하라"는 일반 지시였지만, 이제는 "계획 루프만 계속하고 구현·수정·커밋·PR을 하지 말라, consensus 후 `pending-approval` handoff에서 멈추고 사용자 승인 후에만 실행하라"고 명시한다.
+
+아울러 `RALPLAN_TERMINAL_PHASES` Set에 `pending approval`, `pending-approval`, `pending_approval`, `awaiting approval`, `awaiting-approval`, `awaiting_approval`, `approval-required`, `approval_required` 8개 phase 변형이 추가되었다. 이 phase에 있으면 ralplan continuation이 멈춘다.
+
+`skills/ralplan/SKILL.md`도 동기화되어 "Approve execution after clearing context" 옵션이 "Compact then return for execution approval"로 교체되었다.
+
+근거: `src/hooks/persistent-mode/index.ts:618-626`, `src/hooks/persistent-mode/index.ts:1703-1712`, `skills/ralplan/SKILL.md:58` @ `ed7800dd`.
+
+**DITTO 시사점**: ralplan(계획) → 실행 전환에 명시적 사용자 승인 gate를 두는 패턴이 강화되었다. DITTO의 의도 확인 인터뷰와 실행 억제 설계에 동일한 방향의 근거가 생겼다.
+
+### 2. ultragoal에 Stop 지속 실행 + PreToolUse /goal 검증이 추가됨
+
+`feat: persist ultragoal and enforce Claude goal activation (#3102)` 커밋(`567e39ff`)으로 ultragoal이 ralph와 대칭적인 Stop 지속 실행 경로를 갖게 되었다.
+
+구체적으로:
+- ultragoal 활성 상태가 `.omc/state/sessions/<session>/ultragoal-state.json`에 기록된다. 근거: `src/hooks/persistent-mode/__tests__/ultragoal-persistence.test.ts:32-44` @ `ed7800dd`.
+- PreToolUse 훅이 active ultragoal 상태이면서 Claude `/goal` 스냅숏이 없거나 목표가 일치하지 않으면 tool 실행을 deny한다. 단, `omc ultragoal create-goals`, `omc ultragoal complete-goals` 같은 CLI 부트스트랩 명령은 `/goal` 존재 전에도 허용된다. 근거: `src/hooks/persistent-mode/__tests__/ultragoal-persistence.test.ts:72-105` @ `ed7800dd`.
+
+**DITTO 시사점**: 에이전트 루프 권한과 외부 goal 상태를 일치시키는 enforcement 패턴이다. DITTO에서 primary authority ledger와 실행 gate를 설계할 때 "루프 상태 ↔ 외부 승인 state 매핑"의 구체적 구현 사례다.
+
+### 3. cmux(Claude Multiplexer) Team 런타임 지원 추가
+
+`src/team/tmux-session.ts`에 cmux 백엔드 지원이 추가되었다. `detectTeamMultiplexerContext()`가 `'cmux'`를 반환하면 tmux API 대신 `cmux` CLI를 사용한다:
+- `cmuxSplitSurface`, `cmuxSendSurface`, `cmuxSendSurfaceKey`, `cmuxCaptureSurface`, `cmuxCloseSurface` 함수가 내부적으로 추가.
+- 공개 API `captureTeamPane(paneId)`, `sendTeamPaneKey(paneId, key)`가 추가되어 `runtime-v2.ts`가 이를 통해 tmux/cmux를 추상화한다. 근거: `src/team/tmux-session.ts:763-778` @ `ed7800dd`.
+- CMUX_SURFACE_ID 환경변수가 없으면 cmux team session 시작이 오류로 실패한다. 근거: `src/team/tmux-session.ts:580-582` @ `ed7800dd`.
+
+**DITTO 시사점**: Team 런타임이 tmux 단일 의존성에서 cmux(Claude Multiplexer)로 확장되고 있다. "외부 런타임 의존성이 크다"는 기존 약점 항목이 더 복잡해졌다. DITTO에서 팀 실행 표면을 차용할 경우 multiplexer 추상화 레이어를 고려해야 한다.
+
+### 4. Windows 플랫폼 Hook 호환성 수정 — 기존 문서 오류 부분 해소
+
+기존 약점 항목 4("플랫폼 설명도 일부 오래되었다")에서 지적한 Bash hooks vs Node hooks 불일치가 이번 릴리스 사이클에서 직접 다루어졌다.
+
+`Keep Windows plugin hooks off sh (#3118)` 커밋(`10d32f26`)은 "Unix hook 명령은 nvm/fnm Node 탐색을 위해 `find-node.sh`를 유지해야 하고, Windows는 직접 node 호출로 재작성해야 한다"고 명시한다. 즉 `hooks/hooks.json`의 sh 형식은 Unix 전용으로 의도된 것이고, Windows에서는 setup-time에 direct-node로 rewrite된다. 이는 Reference 문서가 "Bash hooks가 macOS/Linux에서 portable"이라고 쓴 것과 실제 동작이 부분적으로 일치하게 되었음을 의미한다.
+
+근거: `src/hooks/setup/index.ts` 변경, `src/__tests__/hooks-command-escaping.test.ts` 확장 @ `ed7800dd`.
+
+**기존 문서 항목 상태** (검증 완료 2026-06-01, `ed7800dd` 직접 대조): 약점 4의 "플랫폼 설명 일부 오래되었다" 지적은 **여전히 유효하며 모순이 유지된다**. `docs/REFERENCE.md:846-859`는 아직도 Bash(.sh)를 macOS/Linux 기본으로, `OMC_USE_NODE_HOOKS=1`을 opt-in으로 설명하지만, 소스(`src/installer/hooks.ts:8`, `src/installer/index.ts:8`)는 "Bash hooks가 v3.9.0에서 제거됨"이라고 하고 `.mjs` Node 스크립트를 cross-platform 기본으로 제공한다. 결정적으로 `OMC_USE_NODE_HOOKS`는 `src/` 전체에 구현이 0건(doc-only)이고 `*hook*` 이름의 `.sh` 템플릿도 0건이다. 즉 REFERENCE.md의 해당 섹션은 stale 상태 그대로다.
+
+### 5. HUD payload 압력 경고 추가
+
+새 모듈 `src/hud/payload-estimate.ts`가 추가되어 HUD에 API 요청 payload 압력 추정치를 표시한다. Anthropic API 요청 payload 한도는 32 MB로 하드코딩되어 있고, 22 MB(warning), 26 MB(critical) 임계값으로 색상 경고를 렌더링한다. HUD는 transcript JSONL 파일 크기를 보수적 추정치로 사용한다(정확한 API body 바이트가 아님). 근거: `src/hud/payload-estimate.ts:13-16`, `src/hud/elements/context-warning.ts:1-60` @ `ed7800dd`.
+
+**DITTO 시사점**: HUD/상태 표면에 컨텍스트 크기뿐 아니라 API payload 압력을 별도 지표로 표시하는 패턴. DITTO의 Context Rot 대응 설계에 참고할 수 있다.
+
+### 6. worktree 파괴적 삭제 안전장치 추가
+
+`src/lib/worktree-cleanup-safety.ts`가 새로 추가되어 worktree 삭제 대상이 OMC 소유 경로 하위인지 검증한다. filesystem root, home directory, NUL 포함 경로를 모두 거부한다. `git-worktree.ts`의 `checkWorkerWorktreeRemovalSafety`와 `removeWorkerWorktree` 두 곳에서 이 검증을 호출한다. 근거: `src/lib/worktree-cleanup-safety.ts:1-118`, `src/team/git-worktree.ts:541-553`, `src/team/git-worktree.ts:629-637` @ `ed7800dd`.
+
+**DITTO 시사점**: 파괴적 path 조작에 대한 외부 safety helper 분리 패턴. OMC의 "외부 런타임 의존성이 크다" 약점을 보완하는 방향의 변경이다.
+
+### 7. 새 문서: model × agent 호환성 매트릭스 추가
+
+`docs/agents/model-compatibility.md`가 추가되어 7개 에이전트(Prometheus, Hyperplan, Sisyphus, Hephaestus, Oracle, Aletheia, Hermes)별 권장 모델을 표로 정리했다. Premium/Balanced/Budget 세 가지 preset config 블록을 제공한다.
+
+주요 설계 규칙: Planning/Review는 비싼 모델, Implementation(Sisyphus)은 저렴한 모델; Hephaestus는 GPT 계열 금지; Sisyphus가 총 token 비용의 최대 레버. 근거: `docs/agents/model-compatibility.md:1-80` @ `ed7800dd`.
+
+**주의** (검증 완료 2026-06-01, `ed7800dd` 전수 grep): 이 문서의 에이전트 이름(Prometheus, Hyperplan, Sisyphus, Hephaestus 등 7개)은 **OMC의 19개 로컬 agent 파일과 매핑되지 않는다**. `agents/`·`skills/` 전수 검색에서 이 코드네임은 0건이며(로컬 19개는 analyst/architect/planner/executor 등 기존 이름 그대로), `docs/agents/model-compatibility.md`는 OMC가 inspired-by한 oh-my-opencode(문서가 "OMO"로 지칭) 계열 에이전트 명칭을 가져온 논리적 역할 라벨이다. "Hephaestus"는 `research/hephaestus-vs-deep-executor-comparison.md:4`에서 oh-my-opencode 에이전트로 명시된다. "Sisyphus"는 OMC의 npm 패키지명(`oh-my-claude-sisyphus`)과 철자만 겹칠 뿐 별개 용법이다. 즉 개명/내부 별칭이 아니라 **외부 하네스(OMO) 역할 라벨**이다. (약어 OMO의 정식 풀네임을 한 줄로 풀어쓴 정의는 저장소에 없음 — inspired-by/런타임 패밀리 표기에 근거한 강한 추정.)
+
+### 8. Codex/Gemini MCP delegation 공식 deprecated 처리
+
+`src/features/delegation-routing/resolver.ts`에서 `isDeprecatedMcpProvider()` 함수가 추출되어 codex/gemini provider를 명시적 deprecated set으로 관리한다. 이전에는 `provider === 'codex' || provider === 'gemini'` 인라인 체크였다. deprecated provider의 `route.model`은 이제 Claude subagent role로 전달되지 않고 reason 텍스트에만 diagnostic으로 포함된다. 근거: `src/features/delegation-routing/resolver.ts:17-24`, `src/features/delegation-routing/resolver.ts:81-99` @ `ed7800dd`.
+
+**DITTO 시사점**: MCP를 통한 Codex/Gemini 위임이 deprecated되고 `/team` CLI worker 방식이 권장된다. DITTO에서 외부 analyzer wrapper 패턴을 설계할 때 MCP 경로 대신 CLI worker 경로가 OMC의 현재 방향임을 확인.
+
+### 9. 자동 업데이트: native Claude Code 설치 탐지 추가
+
+`src/features/auto-update.ts`에 `detectClaudeCodeFromBinary()` 함수가 추가되어 npm 메타데이터가 없는 native Windows 설치를 `installMethod: 'native'`로 식별한다. npm 복구 경로는 `installMethod === 'npm'`으로 확인된 설치에만 실행된다. 이는 native 설치가 npm restore를 잘못 트리거하는 버그를 수정한다. 근거: `src/features/auto-update.ts` @ `ed7800dd` (commit `c2e587d5`).
 
 ## 근거 목록
 
