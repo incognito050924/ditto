@@ -1,0 +1,150 @@
+import { describe, expect, test } from 'bun:test';
+import { preToolUseHandler } from '~/hooks/pre-tool-use';
+import { type HookInput, KILL_SWITCH, runHook } from '~/hooks/runtime';
+
+const REPO = '/tmp/ditto-repo';
+
+const call = (raw: Record<string, unknown>, repoRoot = REPO) =>
+  preToolUseHandler({ raw, repoRoot, env: {} });
+
+const bash = (command: string, repoRoot = REPO) =>
+  call({ tool_name: 'Bash', tool_input: { command } }, repoRoot);
+
+const file = (tool_name: string, file_path: string, repoRoot = REPO) =>
+  call({ tool_name, tool_input: { file_path } }, repoRoot);
+
+describe('preToolUseHandler — ac-1 wrapper guarantees (via runHook)', () => {
+  const input = (
+    raw: Record<string, unknown>,
+    env: Record<string, string | undefined> = {},
+  ): HookInput => ({ raw, repoRoot: REPO, env });
+
+  test('DITTO_SKIP_HOOKS set => exit 0, handler not run (no checks)', async () => {
+    const out = await runHook(
+      preToolUseHandler,
+      input({ tool_name: 'Bash', tool_input: { command: 'rm -rf /' } }, { [KILL_SWITCH]: '1' }),
+    );
+    expect(out.exitCode).toBe(0);
+    expect(out.stderr).toBeUndefined();
+  });
+
+  test('a handler self-error fails open (exit 0)', async () => {
+    // raw shaped so the handler throws inside (tool_input forced non-object access).
+    const boom: HookInput = {
+      raw: {
+        tool_name: 'Bash',
+        get tool_input(): never {
+          throw new Error('boom');
+        },
+      },
+      repoRoot: REPO,
+      env: {},
+    };
+    const out = await runHook(preToolUseHandler, boom);
+    expect(out.exitCode).toBe(0);
+    expect(out.stderr).toContain('fail-open');
+  });
+
+  test('conforms to HookHandler: unmatched tool => allow (exit 0)', async () => {
+    expect((await call({ tool_name: 'Read', tool_input: {} })).exitCode).toBe(0);
+    expect((await call({})).exitCode).toBe(0);
+    expect((await call({ tool_name: 'Bash', tool_input: {} })).exitCode).toBe(0);
+  });
+});
+
+describe('preToolUseHandler — ac-2 destructive Bash', () => {
+  test.each([
+    'rm -rf /',
+    'rm -rf ~',
+    'rm -rf /*',
+    'rm -rf ~/',
+    'rm -rf /etc',
+    'rm -fr /usr/local',
+    'git push --force origin main',
+    'git push --force-with-lease origin master',
+    'git push -f origin main',
+    'mkfs.ext4 /dev/sda1',
+    'dd if=/dev/zero of=/dev/sda',
+    'echo x > /dev/sda',
+    ':(){ :|:& };:',
+    'sudo rm -rf /var',
+  ])('blocks: %s', async (cmd) => {
+    const out = await bash(cmd);
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('DITTO PreToolUse: blocked');
+  });
+
+  test.each([
+    'git status',
+    'rm -rf ./build',
+    'rm -rf node_modules',
+    'rm -rf dist',
+    'git push origin feature-branch',
+    'git push origin main', // no force flag
+    'bun test',
+    'ls -la',
+    'dd if=a.img of=b.img',
+  ])('allows: %s', async (cmd) => {
+    expect((await bash(cmd)).exitCode).toBe(0);
+  });
+});
+
+describe('preToolUseHandler — ac-3 secret files', () => {
+  test.each([
+    '.env',
+    '.env.production',
+    'config/.env',
+    'server.pem',
+    'private.key',
+    'id_rsa',
+    '.ssh/known_hosts',
+    'home/.ssh/config',
+    'credentials',
+    '.aws/credentials',
+    'credentials.json',
+    'credential.txt',
+  ])('blocks file_path: %s', async (p) => {
+    expect((await file('Read', p)).exitCode).toBe(2);
+    expect((await file('Write', p)).exitCode).toBe(2);
+  });
+
+  test('blocks a secret file referenced in a Bash command', async () => {
+    expect((await bash('cat .env')).exitCode).toBe(2);
+    expect((await bash('cp id_rsa /tmp/x')).exitCode).toBe(2);
+  });
+
+  test.each(['src/index.ts', 'README.md', 'environment.ts', 'keyboard.ts', 'package.json'])(
+    'allows non-secret file: %s',
+    async (p) => {
+      expect((await file('Read', p)).exitCode).toBe(0);
+      expect((await file('Write', p)).exitCode).toBe(0);
+    },
+  );
+});
+
+describe('preToolUseHandler — ac-4 scope-out write', () => {
+  test.each(['/etc/passwd', '/tmp/elsewhere/x.txt', '../outside.txt', '../../escape.ts'])(
+    'blocks write outside repo: %s',
+    async (p) => {
+      expect((await file('Write', p)).exitCode).toBe(2);
+      expect((await file('Edit', p)).exitCode).toBe(2);
+      expect((await file('MultiEdit', p)).exitCode).toBe(2);
+    },
+  );
+
+  test.each(['src/x.ts', './nested/y.ts', 'a/b/c.md'])(
+    'allows write inside repo: %s',
+    async (p) => {
+      expect((await file('Write', p)).exitCode).toBe(0);
+    },
+  );
+
+  test('Read outside repo is NOT a scope-out block (only writes)', async () => {
+    expect((await file('Read', '/tmp/elsewhere/x.txt')).exitCode).toBe(0);
+  });
+
+  test('Bash redirect outside repo is blocked; inside repo allowed', async () => {
+    expect((await bash('echo hi > /tmp/elsewhere/out.txt')).exitCode).toBe(2);
+    expect((await bash('echo hi > ./build/out.txt')).exitCode).toBe(0);
+  });
+});

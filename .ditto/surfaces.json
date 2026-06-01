@@ -13,6 +13,7 @@
     { "host": "claude-code", "kind": "agent", "id": "verifier", "path": "agents/verifier.md" },
     { "host": "claude-code", "kind": "hook", "id": "PostToolUse", "path": "hooks/hooks.json" },
     { "host": "claude-code", "kind": "hook", "id": "PreCompact", "path": "hooks/hooks.json" },
+    { "host": "claude-code", "kind": "hook", "id": "PreToolUse", "path": "hooks/hooks.json" },
     { "host": "claude-code", "kind": "hook", "id": "Stop", "path": "hooks/hooks.json" },
     { "host": "claude-code", "kind": "hook", "id": "UserPromptSubmit", "path": "hooks/hooks.json" },
     { "host": "claude-code", "kind": "plugin", "id": "ditto", "path": ".claude-plugin/plugin.json" },
