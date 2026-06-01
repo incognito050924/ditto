@@ -1,5 +1,7 @@
 import { defineCommand } from 'citty';
 import { bootstrapAutopilot } from '~/core/autopilot-bootstrap';
+import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-loop';
+import { AutopilotStore } from '~/core/autopilot-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { IntentStore } from '~/core/intent-store';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -129,12 +131,136 @@ const autopilotBootstrap = defineCommand({
   },
 });
 
+/**
+ * `ditto autopilot next-node` / `record-result` — surface the deterministic loop
+ * steps (G9) so the `autopilot` skill calls them instead of re-describing the
+ * logic in prose. Same shape as the deep-interview step CLI: resolve repo root,
+ * require an existing autopilot graph, call the core step function, render
+ * human/json. The driver (main agent) loops by calling these repeatedly.
+ */
+async function requireGraph(workItem: string): Promise<string> {
+  const repoRoot = await resolveRepoRootForCreate();
+  if (!(await new AutopilotStore(repoRoot).exists(workItem))) {
+    writeError(
+      `autopilot.json missing for ${workItem}. Run ditto autopilot bootstrap (or deep-interview finalize) first.`,
+    );
+    process.exit(RUNTIME_ERROR_EXIT);
+  }
+  return repoRoot;
+}
+
+const autopilotNextNode = defineCommand({
+  meta: {
+    name: 'next-node',
+    description:
+      'Compute the next loop action (select ready node, consume approval gate, dispatch)',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    try {
+      const res = await nextNode(repoRoot, args.workItem);
+      if (format === 'json') {
+        writeJson(res);
+      } else if (res.action === 'spawn') {
+        writeHuman(`Next: spawn ${res.owner} on ${res.node_id}`);
+        writeHuman(`  task:       ${res.packet.task}`);
+        writeHuman(`  done_when:  ${res.packet.context.done_when}`);
+        writeHuman(`  file_scope: ${res.packet.context.file_scope.join(', ') || '(none)'}`);
+      } else {
+        writeHuman(`Next: ${res.action} — ${res.reason}`);
+        if (res.action === 'rollback') {
+          writeHuman(`  rolled_back: ${res.rolled_back_node_ids.join(', ') || '(none)'}`);
+        }
+      }
+    } catch (err) {
+      writeError(`next-node failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+const autopilotRecordResult = defineCommand({
+  meta: {
+    name: 'record-result',
+    description: "Record an owner subagent's result: G7 guard, classify, decide, persist",
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    json: {
+      type: 'string',
+      description: 'JSON payload matching recordResultPayload schema',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw: unknown;
+    try {
+      raw = JSON.parse(args.json);
+    } catch (err) {
+      writeError(`--json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = recordResultPayload.safeParse(raw);
+    if (!parsed.success) {
+      writeError('--json failed schema validation:');
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    try {
+      const res = await recordResult(repoRoot, { workItemId: args.workItem, payload: parsed.data });
+      if (format === 'json') {
+        writeJson(res);
+      } else {
+        writeHuman(`Recorded ${res.node_id}: ${res.outcome} → status=${res.status}`);
+        if (!res.guard_contentful) {
+          writeHuman('  (G7: non-contentful result — claimed outcome overridden to fixable)');
+        }
+        if (res.decision) {
+          writeHuman(`  decision: ${res.decision}${res.cap_exceeded ? ' (cap exceeded)' : ''}`);
+        }
+      }
+    } catch (err) {
+      writeError(`record-result failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const autopilotCommand = defineCommand({
   meta: {
     name: 'autopilot',
-    description: 'Manage the autopilot graph (bootstrap)',
+    description:
+      'Manage the autopilot graph (bootstrap) and drive the loop (next-node/record-result)',
   },
   subCommands: {
     bootstrap: autopilotBootstrap,
+    'next-node': autopilotNextNode,
+    'record-result': autopilotRecordResult,
   },
 });
