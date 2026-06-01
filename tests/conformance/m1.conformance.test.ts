@@ -464,9 +464,22 @@ describe('M1.5b — agent skeleton (v0 8종, post-v0 부재)', () => {
     expect(existsSync(join(REPO, 'agents', 'orchestrator.md'))).toBe(false);
   });
 
-  test('post-v0 agent(architect/playwright-e2e/knowledge-curator) 는 v0에 부재', () => {
-    for (const a of ['architect', 'playwright-e2e', 'knowledge-curator']) {
-      expect(existsSync(join(REPO, 'agents', `${a}.md`)), `${a}.md should not exist in v0`).toBe(
+  test('playwright-e2e agent .md 존재 + frontmatter (M5 runtime)', () => {
+    const p = join(REPO, 'agents', 'playwright-e2e.md');
+    expect(existsSync(p), 'agents/playwright-e2e.md missing').toBe(true);
+    const text = readFileSync(p, 'utf8');
+    const m = text.match(/^---\n([\s\S]*?)\n---/);
+    const f = m ? m[1] : '';
+    expect(f, 'playwright-e2e frontmatter name').toMatch(/name:\s*\S/);
+    expect(f, 'playwright-e2e frontmatter description').toMatch(/description:\s*\S/);
+    expect(f, 'playwright-e2e frontmatter tools').toMatch(/tools:\s*\S/);
+    // body covers the §3 responsibilities (browser/artifact/reproduction)
+    expect(text).toMatch(/Playwright\/Chromium/);
+  });
+
+  test('post-v0 agent(architect/knowledge-curator) 는 부재 (M5 미도달)', () => {
+    for (const a of ['architect', 'knowledge-curator']) {
+      expect(existsSync(join(REPO, 'agents', `${a}.md`)), `${a}.md should not exist yet`).toBe(
         false,
       );
     }

@@ -6,6 +6,7 @@
     { "host": "claude-code", "kind": "agent", "id": "dialectic-synthesizer", "path": "agents/dialectic-synthesizer.md" },
     { "host": "claude-code", "kind": "agent", "id": "implementer", "path": "agents/implementer.md" },
     { "host": "claude-code", "kind": "agent", "id": "planner", "path": "agents/planner.md" },
+    { "host": "claude-code", "kind": "agent", "id": "playwright-e2e", "path": "agents/playwright-e2e.md" },
     { "host": "claude-code", "kind": "agent", "id": "researcher", "path": "agents/researcher.md" },
     { "host": "claude-code", "kind": "agent", "id": "reviewer", "path": "agents/reviewer.md" },
     { "host": "claude-code", "kind": "agent", "id": "verifier", "path": "agents/verifier.md" },
@@ -18,6 +19,7 @@
     { "host": "claude-code", "kind": "skill", "id": "deep-interview", "path": "skills/deep-interview/SKILL.md" },
     { "host": "claude-code", "kind": "skill", "id": "dialectic", "path": "skills/dialectic/SKILL.md" },
     { "host": "claude-code", "kind": "skill", "id": "dialectic-review", "path": "skills/dialectic-review/SKILL.md" },
+    { "host": "claude-code", "kind": "skill", "id": "e2e", "path": "skills/e2e/SKILL.md" },
     { "host": "claude-code", "kind": "skill", "id": "handoff", "path": "skills/handoff/SKILL.md" },
     { "host": "claude-code", "kind": "skill", "id": "plan", "path": "skills/plan/SKILL.md" },
     { "host": "claude-code", "kind": "skill", "id": "verify", "path": "skills/verify/SKILL.md" }
