@@ -37,6 +37,49 @@ export function selectReadyNode(nodes: AutopilotNode[]): AutopilotNode | null {
 }
 
 /**
+ * All ready nodes (the candidate concurrent wave), not just the first. The
+ * orchestrator runs one owner at a time in v0, but a wave of independent ready
+ * nodes must still pass the file-overlap gate before any are dispatched together.
+ */
+export function selectReadyNodes(nodes: AutopilotNode[]): AutopilotNode[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  return nodes.filter((n) => isNodeReady(n, byId));
+}
+
+/**
+ * file-overlap serialization gate (W4-1). Two owners that write the same file
+ * must not run concurrently or they clobber each other. Greedily admit nodes
+ * whose `file_scope` is disjoint from every already-admitted node's scope;
+ * defer (serialize) the rest to a later wave. Deterministic in input order.
+ * A node with an empty scope (read-only) claims nothing and is never deferred.
+ */
+export interface ScopedNode {
+  id: string;
+  file_scope: string[];
+}
+
+export function fileOverlapGate<T extends ScopedNode>(
+  wave: T[],
+): {
+  dispatch: T[];
+  serialized: T[];
+} {
+  const claimed = new Set<string>();
+  const dispatch: T[] = [];
+  const serialized: T[] = [];
+  for (const node of wave) {
+    const overlaps = node.file_scope.some((f) => claimed.has(f));
+    if (overlaps) {
+      serialized.push(node);
+    } else {
+      dispatch.push(node);
+      for (const f of node.file_scope) claimed.add(f);
+    }
+  }
+  return { dispatch, serialized };
+}
+
+/**
  * Minimal initial node chain for a ready intent: design (plan) → implement →
  * verify. The verify node carries every acceptance criterion as its refs so the
  * graph terminates only when all criteria are addressed.
