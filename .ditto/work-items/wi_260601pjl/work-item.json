@@ -1,0 +1,47 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260601pjl",
+  "title": "PreToolUse safety hook (block-by-default: destructive/secret/scope-out)",
+  "source_request": "PreToolUse safety work item을 다음으로 열어줘 — 정책: block-by-default, 범위는 destructive/secret/scope-out만(package provenance 제외)",
+  "goal": "DITTO가 PreToolUse 훅으로 고확신 안전 위반(파괴적 명령·비밀 파일 접근·repo scope 밖 쓰기)을 기본 차단해 작업공간을 보호한다 — block-by-default, DITTO_SKIP_HOOKS escape, 기존 fail-open 런타임 정합 (post-v0 safety)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "src/hooks/pre-tool-use.ts 핸들러가 HookHandler 인터페이스에 정합하고, 자체 에러는 fail-open(exit 0)이며, DITTO_SKIP_HOOKS가 설정되면 검사 없이 exit 0으로 통과한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "파괴적 명령(repo/home 밖 rm -rf, 기본 브랜치 force-push 등 보수적 셋)을 담은 PreToolUse 입력에 대해 핸들러가 exit 2(block)를 반환하고, 회복 가능한 일반 명령은 exit 0으로 통과시킨다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "비밀 파일 패턴(.env·credentials·*.pem·id_rsa·.ssh/) 읽기/쓰기 입력은 exit 2(block)로, 그 외 일반 파일 접근은 exit 0으로 처리한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "repo root 밖·시스템 경로 쓰기(scope-out) 입력은 exit 2(block)로, repo 내부 경로 쓰기는 exit 0으로 처리한다.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "hooks/hooks.json에 PreToolUse matcher가 등록되고 surface 카탈로그가 재생성되어 drift가 0이며, 기존 v0 훅(Stop/UserPromptSubmit 등) 회귀 0으로 전체 테스트가 통과한다.",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-01T15:45:59.448Z",
+  "updated_at": "2026-06-01T15:45:59.448Z"
+}
