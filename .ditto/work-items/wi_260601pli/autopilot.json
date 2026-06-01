@@ -1,0 +1,98 @@
+{
+  "schema_version": "0.1.0",
+  "autopilot_id": "orch_26060191e",
+  "work_item_id": "wi_260601pli",
+  "mode": "autopilot",
+  "root_goal": "DITTO autopilot이 high-impact 웹 변경을 실제 브라우저 여정(Playwright/Chromium)으로 검증한다 — playwright-e2e agent 본문 + /ditto:e2e skill + 실제 실행/artifact capture가 e2eJourney 계약을 산출해 acceptance를 닫는 evidence로 쓰인다 (post-v0 M5 runtime).",
+  "completion_boundary": "entire_work_item",
+  "approval_gate": {
+    "status": "pending",
+    "source": null,
+    "approved_at": null,
+    "approved_by": null,
+    "evidence_refs": []
+  },
+  "nodes": [
+    {
+      "id": "N1",
+      "kind": "design",
+      "owner": "planner",
+      "purpose": "Plan the change against the acceptance criteria",
+      "status": "pending",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N2",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "Implement the planned change",
+      "status": "pending",
+      "depends_on": [
+        "N1"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N3",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Verify every acceptance criterion with evidence",
+      "status": "pending",
+      "depends_on": [
+        "N2"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    }
+  ],
+  "caps": {
+    "fix_per_node": 2,
+    "switch_per_node": 1
+  },
+  "continue_policy": {
+    "continue_after_approval": true,
+    "continue_after_checkpoint": true,
+    "continue_after_fixable_failure": true,
+    "ask_user_only_for_user_owned_decisions": true
+  },
+  "stop_conditions": [
+    "all_acceptance_criteria_passed_or_explicitly_closed",
+    "blocked_by_user_owned_decision",
+    "blocked_by_external_system",
+    "safety_boundary_hit"
+  ],
+  "user_interrupt_policy": "ask_only_for_user_owned_decisions"
+}
