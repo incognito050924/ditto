@@ -41,7 +41,7 @@ G1~G8(508→532 pass): G4(`41cafc9`)·G1(`7e40c64`)·G7(`1bcd4c0`)·G5(`2671ba4`
 
 ## failed_or_unverified
 - tsc --noEmit는 사전 존재 에러 다수(completion-store·opponent-router·m1/m2·run-with — **내 수정 파일 아님**). 프로젝트 게이트는 biome+bun test이며 둘 다 green. 내 신규 파일(autopilot-loop.ts 등)은 type-clean.
-- **루프 자동 지속**은 여전히 미배선: G9는 per-round step CLI만 노출했고, 이를 반복 호출하는 주체는 main agent(skill 산문)다. Stop hook과 결선한 무중단 자동 루프는 별도 작업(§next_first_check ①).
+- **(정정)** 앞서 "루프 자동 지속 미배선"이라 적었으나 과장이었다. 루프는 이미 end-to-end 결선됨: ① Stop hook(`stop.ts` `autopilotForcesContinuation`)이 runnable 노드가 있고 승인 pending 아니면 stop 차단=지속력, ② SKILL.md가 next-node/record-result 호출 지시, ③ G9 step CLI. contract §3.4상 "완전 무인 CLI 루프"는 의도적 비도입(spawn은 main agent만). 통합 테스트(`tests/integration/autopilot-loop-drive.test.ts`, `5553514`)가 N1→N2→N3 done 구동 + Stop hook 정렬을 증명 → **v0 closure**.
 
 ## open_threads
 - G1 closure_mode 저장이 (reason,gate)에서 파생 가능한 약한 redundancy — producer가 항상 derive로 세팅해 drift 억제하나 consistency 게이트는 없음(3-값이라 과설계 회피 판단).
@@ -50,7 +50,7 @@ G1~G8(508→532 pass): G4(`41cafc9`)·G1(`7e40c64`)·G7(`1bcd4c0`)·G5(`2671ba4`
 - `reports/harnesses/codeql-research-ko.md` — `88b2f4c`로 커밋됨(더는 untracked 아님).
 
 ## next_first_check
-`git push origin main`으로 G9 4개 커밋(`c509295`~`dc02635`) 푸시. 그다음 후보(§8/§9 범위 밖, 사용자 결정): ① 루프 자동 오케스트레이션 배선(현재 step CLI만 있고 반복 호출은 main agent skill 수동 — Stop hook과 결선해 무중단 루프 완성) ② G10(dialectic 부분 중복, 낮음) ③ G2(GradeGate 필요성 선행) ④ post-v0(E2E·parity).
+G9 + 루프 E2E 통합 검증까지 푸시 완료 → **wi_harnessgap 스레드 closed(v0 루프 결선·검증 끝)**. 다음 후보(전부 이 스레드 밖, 사용자 결정): ① **post-v0 마일스톤**(E2E user journey·PreToolUse safety·provider parity — 새 챕터, `e2e-journey-contract.md` 존재) ② G10(dialectic opponent-routing 부분 중복, 낮음·LLM 입력 의존이라 부분만 코드화) ③ G2(GradeGate 필요성 선행 분석). 새 작업은 정식 .ditto work item으로 열 것.
 
 ## forbidden_scope_creep
 - G2·G10·post-v0를 다음 범위에 임의로 끌어와 착수 금지(어느 것을 열지는 사용자 결정). **G9는 마감됨.**

@@ -2,6 +2,9 @@
 title: "하네스 이식(흡수) 계획 — DITTO"
 kind: absorption-plan
 repo: ditto
+status: superseded
+superseded_by: reports/harnesses/ditto-harness-absorption-gap.md
+superseded_reason: "디렉터리 목록만 보고 작성돼 실제 구현 상태(M0~M4 + 테스트)를 반영 못 함. 진짜 갭·증거·구현(G1~G9)은 gap 문서에 있음. 본 문서 wave/WI 구조를 그대로 실행하면 재구현이 됨."
 last_updated: 2026-06-01
 scope: "통합 보고서가 추출한 적용 항목을 'native-first 필터 → DITTO 계약 단위 work item'으로 흡수하는 방법·순서·작업 단위를 정의한다."
 inputs:
