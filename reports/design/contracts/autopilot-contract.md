@@ -111,6 +111,8 @@ LOOP (stop_condition 충족까지):
 
 이 루프는 **사용자 개입 없이** 모든 노드가 처리되거나 stop condition에 닿을 때까지 돈다. 루프 *지속력*은 **Stop hook**이 집행한다(§11 원칙 10) — 내부 checkpoint 완료를 final answer로 오인한 조기 종료를 막아 다음 라운드로 잇는다(주류 OMC persistent-mode 패턴). 멈춤은 §6.1의 stop condition일 때만. 행동강령 신선도는 hook 재주입(UserPromptSubmit projection)으로 유지한다(plan §1 D8).
 
+**CLI step 경계 (G9 — 결정론을 산문에서 분리).** step 1~5(re-read → 승인게이트 소비 → ready 노드 선택+file-overlap gate → dispatch(pending→running, persist) → delegation packet)는 `ditto autopilot next-node`가, step 6(결과 수렴 — G7 content-free 가드 → 분류 입력 → `decideOnFailure` → 명시 transition table 전이 → `appendDecision`)은 `ditto autopilot record-result --json`이 한 호출로 수행한다(`autopilot-loop.ts`의 `nextNode`/`recordResult`, deep-interview step CLI와 동형). **이 결정론 로직은 코드 한 곳에만 산다** — skill(`autopilot` SKILL.md)은 두 CLI를 호출하고 *판단*(어느 결과가 pass인가, fixable vs wrong_approach, escalate 시점)만 `--json` payload로 주입한다. spawn 자체(owner stage subagent를 Task로 1-레벨)는 main agent만 할 수 있어 CLI 밖에 남는다. 승인게이트는 mutating(owner=implementer) 노드 앞에서만 적용하고(§5.3 — design/research는 승인 전 진행), rejected는 전역 rollback이다.
+
 ### 3.3 Context Isolation (fan-out 시 — HANNES harness 차용)
 
 복수 ready 노드를 병렬 spawn할 때 강제한다(`hannes.md` §1 "Fan-out & Context Isolation").
