@@ -4,6 +4,7 @@ import {
   buildContinuationSignal,
   mutationGate,
   nextReadyNodeId,
+  rollbackOnRejection,
 } from '~/core/autopilot-driver';
 import { buildInitialNodes } from '~/core/autopilot-graph';
 import type { Autopilot } from '~/schemas/autopilot';
@@ -104,5 +105,37 @@ describe('continuation signal (M2.5 — signal only, no artifact)', () => {
     expect(sig.resume.autopilot_id).toBe('orch_driver01');
     expect(sig.resume.work_item_id).toBe('wi_driver001');
     expect(sig.reason).toBe('context pressure');
+  });
+});
+
+describe('rollbackOnRejection (G3: denied plan → rollback in-flight nodes)', () => {
+  const rejected = {
+    status: 'rejected' as const,
+    source: null,
+    approved_at: null,
+    approved_by: null,
+    evidence_refs: [],
+  };
+
+  test('rejected approval rolls running nodes back to pending and stops', () => {
+    const nodes = buildInitialNodes(['ac-1']).map((n, i) =>
+      i === 1 ? { ...n, status: 'running' as const } : n,
+    );
+    const result = rollbackOnRejection(graph({ approval_gate: rejected, nodes }));
+    expect(result.stopped).toBe(true);
+    expect(result.nodes.some((n) => n.status === 'running')).toBe(false);
+    expect(result.nodes[1]?.status).toBe('pending');
+  });
+
+  test('passed nodes are left intact (only in-flight work rolls back)', () => {
+    const nodes = buildInitialNodes(['ac-1']).map((n, i) =>
+      i === 0 ? { ...n, status: 'passed' as const } : n,
+    );
+    const result = rollbackOnRejection(graph({ approval_gate: rejected, nodes }));
+    expect(result.nodes[0]?.status).toBe('passed');
+  });
+
+  test('throws when called and approval is not rejected (guard the precondition)', () => {
+    expect(() => rollbackOnRejection(graph())).toThrow();
   });
 });

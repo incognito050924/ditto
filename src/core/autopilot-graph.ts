@@ -21,6 +21,35 @@ export function kindToOwner(kind: AutopilotNode['kind']): AutopilotNode['owner']
   return KIND_TO_OWNER[kind];
 }
 
+/**
+ * Explicit node transition table (W4-1 / G3). The node lifecycle is no longer an
+ * implicit set of rules scattered across the driver: every legal status change
+ * is an (status × event) → status entry here, and an event with no entry for the
+ * current status is an illegal transition that fails loudly. `rollback` undoes a
+ * speculative dispatch (running/failed → pending) — used when a plan is rejected.
+ */
+export type NodeEvent = 'dispatch' | 'pass' | 'fail' | 'block' | 'rollback';
+
+const NODE_TRANSITIONS: Record<
+  AutopilotNode['status'],
+  Partial<Record<NodeEvent, AutopilotNode['status']>>
+> = {
+  pending: { dispatch: 'running', block: 'blocked' },
+  running: { pass: 'passed', fail: 'failed', block: 'blocked', rollback: 'pending' },
+  failed: { dispatch: 'running', rollback: 'pending' }, // retry re-dispatches
+  blocked: { dispatch: 'running' }, // unblocked → re-dispatch
+  passed: {}, // terminal within a run
+};
+
+export function nodeTransition(
+  from: AutopilotNode['status'],
+  event: NodeEvent,
+): AutopilotNode['status'] {
+  const to = NODE_TRANSITIONS[from][event];
+  if (!to) throw new Error(`illegal node transition: ${from} --${event}-->`);
+  return to;
+}
+
 /** A node is runnable/ready when it is pending and every dependency has passed. */
 export function isNodeReady(node: AutopilotNode, byId: Map<string, AutopilotNode>): boolean {
   if (node.status !== 'pending') return false;

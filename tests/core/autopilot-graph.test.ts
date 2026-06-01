@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { buildInitialNodes, fileOverlapGate, selectReadyNodes } from '~/core/autopilot-graph';
+import {
+  buildInitialNodes,
+  fileOverlapGate,
+  nodeTransition,
+  selectReadyNodes,
+} from '~/core/autopilot-graph';
 
 describe('selectReadyNodes (the candidate concurrent wave)', () => {
   test('returns every pending node whose deps have passed', () => {
@@ -44,5 +49,27 @@ describe('fileOverlapGate (G5: serialize same-wave nodes that touch the same fil
     ]);
     expect(dispatch.map((n) => n.id)).toEqual(['a', 'reviewer']);
     expect(serialized.map((n) => n.id)).toEqual(['b']);
+  });
+});
+
+describe('nodeTransition (G3: explicit transition table, not implicit rules)', () => {
+  test('legal lifecycle transitions follow the table', () => {
+    expect(nodeTransition('pending', 'dispatch')).toBe('running');
+    expect(nodeTransition('running', 'pass')).toBe('passed');
+    expect(nodeTransition('running', 'fail')).toBe('failed');
+    expect(nodeTransition('running', 'block')).toBe('blocked');
+    expect(nodeTransition('failed', 'dispatch')).toBe('running'); // retry re-dispatches
+    expect(nodeTransition('blocked', 'dispatch')).toBe('running'); // unblocked
+  });
+
+  test('rollback returns an in-flight node to pending (undo speculative dispatch)', () => {
+    expect(nodeTransition('running', 'rollback')).toBe('pending');
+    expect(nodeTransition('failed', 'rollback')).toBe('pending');
+  });
+
+  test('illegal transitions throw (fail loud, not a silent no-op)', () => {
+    expect(() => nodeTransition('passed', 'fail')).toThrow();
+    expect(() => nodeTransition('pending', 'pass')).toThrow();
+    expect(() => nodeTransition('passed', 'rollback')).toThrow();
   });
 });
