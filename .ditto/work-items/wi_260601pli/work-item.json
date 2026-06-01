@@ -8,40 +8,69 @@
     {
       "id": "ac-1",
       "statement": "agents/playwright-e2e.md 본문이 존재하고 계약 §3의 책임 6개(browser/test execution 권한, dev server 기동/URL 확인, steps 수행, artifact 수집→.ditto/runs, 실패 시 reproduction 기록, e2eJourney 요약+path 렌더)를 모두 명시한다.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": "agents/playwright-e2e.md", "summary": "§3 책임 6개 본문, frontmatter name/description/tools" },
+        { "kind": "command", "command": "bun test tests/conformance/m1.conformance.test.ts", "summary": "M1.5b 부재→본문존재 flip 통과" }
+      ]
     },
     {
       "id": "ac-2",
       "statement": "/ditto:e2e skill이 playwright-e2e를 spawn해 1개 journey를 수행하고 reviews/ 또는 run 디렉터리에 e2eJourney 산출물 1건을 작성한다(파일 존재로 확인).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "partial",
+      "evidence": [
+        { "kind": "file", "path": "skills/e2e/SKILL.md", "summary": "spawn→1 journey→1 artifact 절차 정의" },
+        { "kind": "note", "summary": "절차·builder는 단위 테스트로 검증되나 실제 spawn-and-write 실행 산출물(.ditto/runs/<id>/journey.json) 없음 — end-to-end 미실행" }
+      ]
     },
     {
       "id": "ac-3",
       "statement": "실제 Playwright/Chromium 드라이버가 dev server/URL 확인 후 steps를 수행하고 artifact 4종(screenshot·trace·console·network)을 .ditto/runs/<id>/에 capture하며 e2eJourney가 각 path(+선택 sha256)로 참조한다(raw는 gitignore).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "fail",
+      "evidence": [
+        { "kind": "note", "summary": "실제 캡처 글루 부재: grep chromium.launch/newPage/tracing = 0 hits. browser.ts는 기존 파일 수집만 하고 outcome.json+artifact를 생성하는 코드가 없음. 환경에 Playwright 1.60.0+Chromium 존재(bunx playwright --version exit 0)라 no-install 제약이 면죄 아님 — 구현 갭." }
+      ]
     },
     {
       "id": "ac-4",
       "statement": "산출 e2eJourney가 schema 검증을 0 error로 통과하고, result=fail이면 reproduction이 채워지며 result=pass이면 모든 assertion의 satisfied가 true인 cross-field 불변식이 런타임에 성립한다.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "command": "bun test tests/core/e2e-browser.test.ts tests/schemas/e2e-journey.test.ts", "summary": "59 pass/0 fail; buildJourney가 schema parse, fail-no-repro·pass-unsatisfied 런타임 reject" }
+      ]
     },
     {
       "id": "ac-5",
       "statement": "autopilot의 nodeKind=e2e 노드 1개를 /ditto:e2e 흐름이 수행하고, 산출 e2eJourney가 그 acceptance를 닫는 EvidenceRecord 1건으로 CompletionContract에 참조된다(end-to-end 한 사례).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "fail",
+      "evidence": [
+        { "kind": "note", "summary": "end-to-end 사례 부재: kind:e2e 노드·completion.json·실제 journey.json 없음. owner 매핑(autopilot-graph.ts:15)과 EvidenceRecord wrap 단위 테스트(합성 blocked journey)만 존재 — 실제 실행 미수행." }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "partial",
   "owner_profile": "workspace-write",
   "child_ids": [],
-  "changed_files": [],
+  "changed_files": [
+    "agents/playwright-e2e.md",
+    "skills/e2e/SKILL.md",
+    "src/core/e2e/browser.ts",
+    "tests/core/e2e-browser.test.ts",
+    "tests/conformance/m1.conformance.test.ts",
+    "tests/core/surface-inventory.plugin.test.ts",
+    ".ditto/surfaces.json"
+  ],
   "risks": [],
   "runs": [],
+  "re_entry": {
+    "command": "ditto autopilot next-node --workItem wi_260601pli",
+    "fresh_evidence_needed": [
+      "ac-3: src/core/e2e/에 실제 Playwright runner 작성 — chromium.launch로 spec.steps 수행, screenshot/trace/console/network 4종 + outcome.json을 .ditto/runs/<id>/에 생성. 환경에 Playwright 1.60.0+Chromium 있으므로 실제 실행·검증 가능.",
+      "ac-2: /ditto:e2e를 실제 1회 실행해 .ditto/runs/<id>/journey.json(e2eJourney) 1건 산출.",
+      "ac-5: kind:e2e autopilot 노드를 만들어 흐름으로 구동하고, 산출 e2eJourney를 completion.json의 acceptance evidence_records에 EvidenceRecord 1건으로 참조(실제 end-to-end)."
+    ],
+    "owner": "implementer"
+  },
   "created_at": "2026-06-01T13:30:57.563Z",
-  "updated_at": "2026-06-01T13:30:57.563Z"
+  "updated_at": "2026-06-01T13:51:05.000Z"
 }
