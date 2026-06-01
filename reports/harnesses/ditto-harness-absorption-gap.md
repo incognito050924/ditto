@@ -136,3 +136,19 @@ supersedes_premise_of:
 | **G10 dialectic opponent-routing 부분 중복** | 부분 갭 (후보) | `opponent-router.ts` 로직이 SKILL.md step3에 산문 재기술, CLI 브리지 없음. 단 plugin-존재 판단이 LLM 런타임 입력이라 완전 코드화는 부분만 가능. 우선순위 낮음 |
 
 **결론**: 진짜(backstop 없는) skill↔core 중복은 **autopilot 하나(G9)**. dialectic은 부분(G10), plan/verify는 backstop 있는 경미 중복(조치 불요), 나머지 3개는 깨끗. G9는 §5 G7·앞선 "루프 미배선" 지적과 **동일 뿌리**이며, 루프를 CLI로 결선하면 셋이 함께 닫힌다. 본 절은 읽기 전용 대조이며 코드를 수정하지 않았다.
+
+## 8. 구현 완료 (2026-06-01)
+
+사용자 지시("진짜 v0 갭만") 범위로 G1·G3·G4·G5·G6·G7·G8을 TDD(red→green)·갭별 커밋으로 구현. **G2(필요성 판단 선행)·G9(구조 변경)·G10·post-v0(§2.2)는 제외.** 전체 테스트 508→532 pass / 0 fail, biome lint clean.
+
+| 갭 | 구현 | 증거 (커밋) |
+|---|---|---|
+| **G4** reviewer 본문 | `agents/reviewer.md` v0 skeleton → verifier 수준 절차·reviewer-output 정합 | `41cafc9` |
+| **G1** closure_mode | `deriveClosureMode(reason, gatePassed)` 단일 출처 + interview/convergence exit 기록(`gates.ts`·두 스키마·producer 3·fixture 7) | `7e40c64` |
+| **G7** content-free 가드 | `guardChildResult` — 빈/ack-only child 결과 → non-contentful → fixable(respawn), PASS 금지. SKILL.md step6 | `1bcd4c0` |
+| **G5** file-overlap gate | `fileOverlapGate`(greedy 직렬화) + `selectReadyNodes` | `2671ba4` |
+| **G3** transition table + rollback | `nodeTransition`(명시 테이블, 불법 throw) + `rollbackOnRejection`(rejected→running 노드 pending 복원) | `539b18a` |
+| **G8** ack≠verification | `completionEvidenceGate` — pass인데 runnable 증거 전무 시 거부 + fixture `ack-only-pass.json`(스키마 통과 ∧ 게이트 거부) | `94ed875` |
+| **G6** 생성형 inventory | `generateSurfaceCatalog` + `scripts/gen-surfaces.ts`(surfaces:gen) + 재생성==커밋본 drift-guard 테스트. catalog=생성 산출물 | `89f9c42` |
+
+**미구현(의도적):** G2(GradeGate A/B/C — DITTO는 high-risk+completionGate로 이미 실행 차단, 추가 가치 판단 선행 필요), G9(autopilot 루프 CLI 결선 — 큰 구조 변경, skill↔core 중복·미배선·G7을 한 단위로 닫는 별도 work item), G10(dialectic 부분 중복, 낮음), post-v0(E2E·PreToolUse safety·parity — 별개 마일스톤). 어느 것을 열지는 사용자 결정.
