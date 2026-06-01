@@ -45,6 +45,7 @@
   "assumptions": [],
   "exit": {
     "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
     "question_cap": 7,
     "questions_asked": 2
   }

@@ -8,7 +8,7 @@ import {
   interviewQuestion,
 } from '~/schemas/interview-state';
 import { bootstrapAutopilot } from './autopilot-bootstrap';
-import { type GateResult, type RiskAxes, interviewReadinessGate } from './gates';
+import { type GateResult, type RiskAxes, deriveClosureMode, interviewReadinessGate } from './gates';
 import { IntentStore } from './intent-store';
 import { InterviewStore } from './interview-store';
 import { WorkItemStore } from './work-item-store';
@@ -56,6 +56,8 @@ export async function startInterview(repoRoot: string, input: StartInput): Promi
     assumptions: [],
     exit: {
       reason: 'readiness_met',
+      // placeholder until a terminal closure; gate starts blocked (score 0).
+      closure_mode: deriveClosureMode('readiness_met', false),
       question_cap: input.questionCap ?? DEFAULT_QUESTION_CAP,
       questions_asked: 0,
     },
@@ -212,6 +214,9 @@ export async function recordTurn(
   if (capReached && updated.status === 'active') {
     updated.exit.reason = 'cap_reached';
   }
+  // Keep closure_mode consistent with the current (reason, gate): a cap hit
+  // while the gate is still blocked is ledger_only, not mutual_agreement.
+  updated.exit.closure_mode = deriveClosureMode(updated.exit.reason, gateResult.pass);
   return store.write(updated);
 }
 
@@ -339,7 +344,11 @@ export async function finalizeInterview(
     status: 'converged',
     updated_at: (input.now ?? new Date()).toISOString(),
     readiness: { ...state.readiness, gate: 'ready' },
-    exit: { ...state.exit, reason: 'readiness_met' },
+    exit: {
+      ...state.exit,
+      reason: 'readiness_met',
+      closure_mode: deriveClosureMode('readiness_met', true),
+    },
   });
 
   const refreshedItem = await items.get(input.workItemId);

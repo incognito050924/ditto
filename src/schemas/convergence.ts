@@ -14,6 +14,14 @@ export const ledgerStatus = z
   .enum(['acted', 'deferred', 'dismissed'])
   .describe('What was done with the item; deferred/dismissed require a reason');
 
+// How a closure was reached (ledger-primary, §W1-2). Single source; reused by
+// interview-state. mutual_agreement = the gate genuinely passed; ledger_only =
+// the deterministic floor/cap forced closure without the gate passing;
+// safe_default = closed by deferring to a conservative stance.
+export const closureMode = z
+  .enum(['mutual_agreement', 'ledger_only', 'safe_default'])
+  .describe('How the closure was reached, not why (that is exit.reason)');
+
 export const convergenceVersion = z
   .object({
     version: z.number().int().positive(),
@@ -66,6 +74,7 @@ export const convergence = z
     }),
     exit: z.object({
       reason: z.enum(['converged', 'cap_reached', 'blocked']),
+      closure_mode: closureMode,
       verdict_delegated_to_completion: z.boolean().default(true),
       next_handoff_path: relativePath.nullable().default(null),
     }),
@@ -74,3 +83,4 @@ export const convergence = z
 
 export type Convergence = z.infer<typeof convergence>;
 export type DecisionLedgerEntry = z.infer<typeof decisionLedgerEntry>;
+export type ClosureMode = z.infer<typeof closureMode>;

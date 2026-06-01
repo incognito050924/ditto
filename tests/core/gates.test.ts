@@ -5,6 +5,7 @@ import {
   acceptanceTestable,
   completionGate,
   convergenceGate,
+  deriveClosureMode,
   deterministicFloor,
   highRiskAssumption,
   interviewReadinessGate,
@@ -136,5 +137,36 @@ describe('highRiskAssumption / safeDefaultable are two sides of one predicate', 
     };
     expect(highRiskAssumption(a)).toBe(false);
     expect(safeDefaultable(a)).toBe(true);
+  });
+});
+
+describe('deriveClosureMode records HOW closure was reached (ledger-primary)', () => {
+  test('gate-passing closure is mutual_agreement', () => {
+    expect(deriveClosureMode('readiness_met', true)).toBe('mutual_agreement');
+    expect(deriveClosureMode('converged', true)).toBe('mutual_agreement');
+  });
+
+  test('cap/diminishing with gate NOT passing is ledger_only (floor/cap forced closure)', () => {
+    expect(deriveClosureMode('cap_reached', false)).toBe('ledger_only');
+    expect(deriveClosureMode('diminishing_returns', false)).toBe('ledger_only');
+  });
+
+  test('cap reached WHILE gate passes is mutual_agreement, not ledger_only', () => {
+    expect(deriveClosureMode('cap_reached', true)).toBe('mutual_agreement');
+  });
+
+  test('user-deferred / blocked closures are safe_default', () => {
+    expect(deriveClosureMode('user_deferred', false)).toBe('safe_default');
+    expect(deriveClosureMode('user_owned_decision', false)).toBe('safe_default');
+    expect(deriveClosureMode('blocked', false)).toBe('safe_default');
+  });
+
+  test('recorded closure_mode on fixtures matches the derivation', () => {
+    const ready = interviewState.parse(load('interview-state/ready.json'));
+    expect(ready.exit.closure_mode).toBe(
+      deriveClosureMode(ready.exit.reason, ready.readiness.gate === 'ready'),
+    );
+    const conv = convergence.parse(load('convergence/converged.json'));
+    expect(conv.exit.closure_mode).toBe(deriveClosureMode(conv.exit.reason, conv.gate.converged));
   });
 });

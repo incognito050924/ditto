@@ -33,6 +33,7 @@
   },
   "exit": {
     "reason": "converged",
+    "closure_mode": "mutual_agreement",
     "verdict_delegated_to_completion": true,
     "next_handoff_path": null
   }

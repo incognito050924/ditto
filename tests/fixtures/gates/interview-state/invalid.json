@@ -24,6 +24,7 @@
   "assumptions": [],
   "exit": {
     "reason": "cap_reached",
+    "closure_mode": "ledger_only",
     "question_cap": 7,
     "questions_asked": 7
   }

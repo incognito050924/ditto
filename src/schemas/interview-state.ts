@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { isoDateTime, schemaVersion, workItemId } from './common';
-import { confidenceLevel, honestyKind } from './convergence';
+import { closureMode, confidenceLevel, honestyKind } from './convergence';
 import { selfAnswerAttempt } from './question-gate';
 
 export const interviewStatus = z
@@ -74,6 +74,7 @@ export const interviewState = z
         'user_owned_decision',
         'cap_reached',
       ]),
+      closure_mode: closureMode,
       question_cap: z.number().int().positive(),
       questions_asked: z.number().int().nonnegative(),
     }),

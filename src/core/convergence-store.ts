@@ -7,6 +7,7 @@ import {
   convergence as convergenceSchema,
 } from '~/schemas/convergence';
 import { readJson, writeJson } from './fs';
+import { deriveClosureMode } from './gates';
 
 type Verdict = z.infer<typeof verdict>;
 
@@ -63,6 +64,7 @@ function recompute(
     },
     exit: {
       reason,
+      closure_mode: deriveClosureMode(reason, converged),
       verdict_delegated_to_completion: true,
       // cap_reached/blocked without convergence requires a handoff path (§5).
       next_handoff_path: converged

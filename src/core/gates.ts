@@ -1,5 +1,6 @@
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { Convergence } from '~/schemas/convergence';
+import type { ClosureMode } from '~/schemas/convergence';
 import type { InterviewState } from '~/schemas/interview-state';
 import type { WorkItem } from '~/schemas/work-item';
 
@@ -65,6 +66,33 @@ export function interviewReadinessGate(state: InterviewState): GateResult {
     );
   }
   return gate(reasons);
+}
+
+// ── closure mode (ledger-primary §W1-2: HOW closure was reached) ────────────
+
+/**
+ * Classify HOW a closure was reached (distinct from exit.reason, which says
+ * *why*). Depends on both the reason and whether the gate genuinely passed:
+ * a cap/diminishing closure with the gate still blocked is `ledger_only` (the
+ * deterministic floor/cap forced it), but the same reason with a passing gate
+ * is `mutual_agreement` (the cap merely coincided with genuine readiness).
+ */
+export function deriveClosureMode(
+  reason: InterviewState['exit']['reason'] | Convergence['exit']['reason'],
+  gatePassed: boolean,
+): ClosureMode {
+  switch (reason) {
+    case 'readiness_met':
+    case 'converged':
+      return 'mutual_agreement';
+    case 'cap_reached':
+    case 'diminishing_returns':
+      return gatePassed ? 'mutual_agreement' : 'ledger_only';
+    case 'user_deferred':
+    case 'user_owned_decision':
+    case 'blocked':
+      return 'safe_default';
+  }
 }
 
 // ── acceptance criterion testability (VAGUE_TERMS + observable predicate) ────
