@@ -66,6 +66,42 @@ export type FailureClass =
   | 'blocked_external'
   | 'user_decision_needed';
 
+/**
+ * Guard a child subagent's returned result before it can be counted as PASS
+ * (G7: a completion *signal* is not completion *proof*). A native Task returns
+ * the subagent's final text synchronously, but that text can be empty or a bare
+ * acknowledgement ("done") carrying no evidence of the work. Such a result is
+ * non-contentful and must be treated as inconclusive — routed back through the
+ * failure pipeline as `fixable` (respawn, typically smaller), never as PASS.
+ *
+ * This is a deterministic floor on the orchestrator's collect step; it does not
+ * judge evidence *depth* (that is the verifier's job) — only that there is
+ * something to judge at all.
+ */
+export type ChildResultGuard =
+  | { contentful: true }
+  | { contentful: false; failure_class: 'fixable'; reason: string };
+
+// The whole trimmed message is one short acknowledgement token — a claim of
+// completion with no accompanying work or evidence.
+const ACK_ONLY =
+  /^(done|ok|okay|complete|completed|finished|fixed|pass|passed|success|succeeded|yes|ack|acknowledged|✓|✅|👍)[\s.!]*$/i;
+
+export function guardChildResult(text: string): ChildResultGuard {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    return { contentful: false, failure_class: 'fixable', reason: 'empty child result' };
+  }
+  if (ACK_ONLY.test(trimmed)) {
+    return {
+      contentful: false,
+      failure_class: 'fixable',
+      reason: `ack-only child result ("${trimmed}") — acknowledgement is not evidence`,
+    };
+  }
+  return { contentful: true };
+}
+
 export type FailureDecision = 'retry' | 'switch_approach' | 'escalate' | 'continue';
 
 /**

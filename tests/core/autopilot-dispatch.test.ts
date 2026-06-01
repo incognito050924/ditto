@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { buildDelegationPacket, decideOnFailure } from '~/core/autopilot-dispatch';
+import {
+  buildDelegationPacket,
+  decideOnFailure,
+  guardChildResult,
+} from '~/core/autopilot-dispatch';
 import { buildInitialNodes } from '~/core/autopilot-graph';
 import type { WorkItem } from '~/schemas/work-item';
 
@@ -72,6 +76,35 @@ describe('decideOnFailure (caps automatic; escalate to user beyond)', () => {
     );
     expect(decideOnFailure('user_decision_needed', { fix: 0, switch: 0 }, caps).decision).toBe(
       'escalate',
+    );
+  });
+});
+
+describe('guardChildResult (G7: completion signal ≠ completion proof)', () => {
+  test('an empty / whitespace-only child result is non-contentful (not PASS)', () => {
+    expect(guardChildResult('')).toMatchObject({ contentful: false, failure_class: 'fixable' });
+    expect(guardChildResult('   \n\t  ')).toMatchObject({ contentful: false });
+  });
+
+  test('a bare ack ("done"/"ok"/"completed") is non-contentful (ack ≠ proof)', () => {
+    for (const ack of ['done', 'Done.', 'ok', 'okay!', 'completed', 'passed', '✓', '👍']) {
+      expect(guardChildResult(ack).contentful).toBe(false);
+    }
+  });
+
+  test('a result carrying actual work/evidence is contentful', () => {
+    expect(guardChildResult('ran `bun test` → 513 pass / 0 fail').contentful).toBe(true);
+    expect(guardChildResult('edited src/gates.ts:80 to add deriveClosureMode').contentful).toBe(
+      true,
+    );
+  });
+
+  test('non-contentful routes through the existing failure pipeline as fixable (respawn)', () => {
+    const guard = guardChildResult('');
+    if (guard.contentful) throw new Error('expected non-contentful');
+    // a fixable classification under cap retries (respawn smaller), never PASS.
+    expect(decideOnFailure(guard.failure_class, { fix: 0, switch: 0 }, caps).decision).toBe(
+      'retry',
     );
   });
 });
