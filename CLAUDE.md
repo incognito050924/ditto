@@ -285,3 +285,38 @@ agent는 사용자 작업공간을 공유한다.
 
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
+
+<!-- ditto:knowledge:start sha256=409c542a8a5f1003ceb57382a43165a3d6fe740c4687ad8db04a2d77d2e90eb8 -->
+# DITTO Knowledge (projected — do not edit by hand)
+
+Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
+
+- context: `.ditto/knowledge/CONTEXT.md`
+- glossary: `.ditto/knowledge/glossary.json`
+- decisions: `.ditto/knowledge/adr/`
+
+## Glossary terms
+- ADR
+- completion contract
+- context packet
+- doctor
+- evidence
+- handoff
+- language ledger
+- profile
+- provider
+- request
+- reviewer output
+- run
+- run manifest
+- self-check
+- unverified
+- verdict
+- work item
+
+## Architecture decisions
+- ADR-0001 · accepted · 런타임 및 구현 스택
+- ADR-0002 · accepted · Schema의 source of truth
+- ADR-0003 · accepted · Codex 설정용 TOML 파서
+
+<!-- ditto:knowledge:end -->

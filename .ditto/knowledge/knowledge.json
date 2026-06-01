@@ -1,0 +1,77 @@
+{
+  "schema_version": "0.1.0",
+  "project_name": "ditto",
+  "updated_at": "2026-06-01T14:35:00.000Z",
+  "context_path": ".ditto/knowledge/CONTEXT.md",
+  "glossary_path": ".ditto/knowledge/glossary.json",
+  "project_map_path": null,
+  "decisions": [
+    {
+      "id": "ADR-0001",
+      "title": "런타임 및 구현 스택",
+      "status": "accepted",
+      "rationale": "TypeScript+zod로 runtime 검증과 타입을 단일 소스로 관리하고, Bun이 Node 호환을 유지하면서 hook 환경의 빠른 startup 제약을 충족하며, bun build --compile로 single binary 배포를 단순화한다. citty는 ESM/TS-first declarative 정의로 schema-driven 코드와 결합되고 번들이 작다(~10KB). Biome가 포맷+린트 통합으로 설정 비용을 줄인다.",
+      "change_condition": "Bun 생태계의 native module 비호환이 실제 의존성에 발생하거나, startup/single-binary 제약을 다른 런타임이 더 잘 충족하면 재검토. 런타임 Bun→Node 전환 비용은 작음(bun:test→vitest/node:test 마이그레이션), 언어 자체 변경 비용은 매우 큼.",
+      "path": ".ditto/knowledge/adr/ADR-0001-runtime-stack.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0002",
+      "title": "Schema의 source of truth",
+      "status": "accepted",
+      "rationale": "zod schema(src/schemas/*.ts)를 단일 source of truth로 두고 scripts/export-schemas.ts가 JSONSchema를 export한다. zod는 runtime 검증과 TS 타입 추론을 한 정의로 제공해 drift 위험이 가장 작고, superRefine으로 cross-field 룰(예: completion-contract의 final_verdict=pass)을 표현하기 쉬우며, zod-to-json-schema로 JSONSchema 7 export가 안정적이다.",
+      "change_condition": "외부 도구가 zod view로 충분치 않거나 JSONSchema-first가 필요해지면 재검토. JSONSchema-first 전환 비용은 중간(superRefine 룰 별도 처리), zod 라이브러리 자체 교체 비용은 큼. schemas:export를 잊으면 외부 도구와 drift가 생기므로 doctor schemas 검증을 강제한다.",
+      "path": ".ditto/knowledge/adr/ADR-0002-schema-source-of-truth.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0003",
+      "title": "Codex 설정용 TOML 파서",
+      "status": "accepted",
+      "rationale": "자체 parseTomlSubset(평탄 key=value 파싱)이 nested section과 inline table을 못 봐서 doctor가 위험 설정을 '안전'으로 잘못 보고하는 false safety가 wi_v02harden 리뷰에서 드러났다. smol-toml v1.6.1을 도입해 TOML 1.0 spec 전체(nested section, inline table 등)를 처리하고, transitive dep 0·minified ~10KB로 ADR-0001의 빠른 startup 제약과 충돌하지 않는다. 자체 파서는 제거하고 shared.ts의 parseToml wrapper 하나만 유지한다.",
+      "change_condition": "smol-toml 유지보수가 정지하거나 TOML spec 호환 회귀가 생기면 다른 lib로 교체(사용 지점이 shared.ts:parseToml과 codex.ts 두 호출자뿐이라 비용 작음). 자체 파서로 복귀하면 false safety가 회귀하므로 비용 매우 큼.",
+      "path": ".ditto/knowledge/adr/ADR-0003-toml-parser.md",
+      "superseded_by": null
+    }
+  ],
+  "patterns": [
+    {
+      "name": "fix 사이클",
+      "summary": "verify 노드가 acceptance를 partial로 판정하면, 완료를 조작하지 않고 fix 노드를 추가해 미완 항목만 닫은 뒤 re-verify로 fresh evidence를 다시 수집한다. ack/approval은 verification이 아니다."
+    }
+  ],
+  "learnings": [
+    {
+      "summary": "autopilot 루프는 verify 노드가 완료를 조작하지 않고 evidence로 미완(partial)을 드러낸다 — M5 ac-3·M6 ac-3/5가 implement 후 partial로 잡혀 fix 사이클로 닫혔다.",
+      "evidence": [
+        {
+          "kind": "note",
+          "summary": "M5 ac-3과 M6 ac-3/5가 implement 직후 verify에서 partial로 판정되어 fix→re-verify 사이클로 닫힌 work item 기록 (wi_260601g4t M5/M6 세션)."
+        }
+      ],
+      "learned_at": "2026-06-01T14:35:00.000Z"
+    },
+    {
+      "summary": "host 지침 projection은 마커 family를 분리해야 한다 — instruction-bridge가 복수 ditto:managed 블록을 하드 거부하므로 knowledge projection은 ditto:knowledge:* 별도 마커를 쓴다.",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/instruction-bridge.ts",
+          "summary": "MANAGED_BLOCK_RE_G로 ditto:managed:start/end 블록을 전수 매칭하고, 2개 이상이면 'multiple_markers'로 거부한다(line 113). 따라서 knowledge projection은 같은 family를 재사용하지 않고 ditto:knowledge:* 별도 마커가 필요하다."
+        }
+      ],
+      "learned_at": "2026-06-01T14:35:00.000Z"
+    },
+    {
+      "summary": "orchestrator의 잘못된 환경 가정(M5의 'no browser')은 verify의 fresh evidence가 교정한다 — 작성자 자기보고를 믿지 않는 독립 검증의 가치.",
+      "evidence": [
+        {
+          "kind": "note",
+          "summary": "M5에서 orchestrator가 'no browser' 환경을 가정했으나 verify 노드가 fresh evidence를 수집해 그 가정을 교정함. 작성자 자기평가를 그대로 믿지 않는 독립 검증 원칙(charter 5-4)의 실제 사례."
+        }
+      ],
+      "learned_at": "2026-06-01T14:35:00.000Z"
+    }
+  ],
+  "projected_to_claude_md": true
+}

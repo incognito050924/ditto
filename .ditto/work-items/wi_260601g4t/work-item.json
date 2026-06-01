@@ -8,40 +8,64 @@
     {
       "id": "ac-1",
       "statement": "agents/knowledge-curator.md 본문이 존재하고 계약 §3의 책임 4개(합의된 용어만 glossary 승격, 기술 결정을 ADR로 근거+변경조건과 함께 기록, 반복 학습·패턴을 durable knowledge로 승격하며 runtime log와 분리, 권한 docs-write-only로 코드 변경 금지)를 모두 명시한다.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": "agents/knowledge-curator.md", "summary": "§3 책임 4개 본문, tools docs-write-only(no Bash)" },
+        { "kind": "command", "command": "bun test tests/conformance/m1.conformance.test.ts", "summary": "M1.5b knowledge-curator 본문존재 단언 통과(architect 부재 유지)" }
+      ]
     },
     {
       "id": "ac-2",
       "statement": "/ditto:knowledge-update skill이 knowledge-curator를 spawn해 knowledgeRecord 1건을 갱신하고 ADR·패턴·학습을 append하는 절차를 정의한다.",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": "skills/knowledge-update/SKILL.md", "summary": "curator spawn→knowledgeRecord 1건→ADR/패턴/학습 append→projection 절차" }
+      ]
     },
     {
       "id": "ac-3",
       "statement": ".ditto/knowledge의 CONTEXT·glossary·ADR 요약을 host 지침(CLAUDE.md)으로 projection하고 knowledgeRecord.projected_to_claude_md를 true로 기록하며, 원본과 projection의 drift가 0이다(bridge-sync.ts 확장, AGENTS.md projection과 동형).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": "CLAUDE.md", "summary": "실 CLAUDE.md에 ditto:knowledge 블록(별도 마커, sha 409c542a) 작성 — summary-only, path refs" },
+        { "kind": "command", "command": "knowledgeProjectionDrift(repo)", "summary": "drift=0(검증자 독립 실행), projected_to_claude_md=true" }
+      ]
     },
     {
       "id": "ac-4",
       "statement": "knowledgeRecord가 schema 검증을 0 error로 통과하고, ADR 생애주기 cross-field가 런타임에 성립한다(status=superseded이면 superseded_by가 필수).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "command": "bun test tests/core/knowledge-bridge.test.ts", "summary": "knowledgeRecord.parse 0 error + superseded-without-superseded_by 런타임 reject" }
+      ]
     },
     {
       "id": "ac-5",
       "statement": "autopilot의 nodeKind=knowledge 노드 1개를 /ditto:knowledge-update 흐름이 수행해 실제 knowledgeRecord 1건을 산출한다(work item closure 직전 end-to-end 한 사례).",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": ".ditto/knowledge/knowledge.json", "summary": "kind=knowledge 노드(N4) 흐름이 산출한 실 knowledgeRecord(decisions 3·patterns 1·learnings 3), safeParse success" },
+        { "kind": "command", "command": "knowledgeRecord.safeParse", "summary": "success — fixture 아닌 실 working-tree 파일" }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
-  "changed_files": [],
+  "changed_files": [
+    "agents/knowledge-curator.md",
+    "skills/knowledge-update/SKILL.md",
+    "src/core/knowledge-bridge.ts",
+    "tests/core/knowledge-bridge.test.ts",
+    "tests/conformance/m1.conformance.test.ts",
+    "tests/core/surface-inventory.plugin.test.ts",
+    ".ditto/surfaces.json",
+    "CLAUDE.md",
+    ".ditto/knowledge/knowledge.json"
+  ],
   "risks": [],
   "runs": [],
   "created_at": "2026-06-01T14:26:48.184Z",
-  "updated_at": "2026-06-01T14:26:48.184Z"
+  "updated_at": "2026-06-01T14:40:00.000Z",
+  "closed_at": "2026-06-01T14:40:00.000Z"
 }

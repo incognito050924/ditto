@@ -6,11 +6,16 @@
   "root_goal": "DITTO가 재사용 가능한 프로젝트 지식(용어·기술결정·반복학습·패턴)을 .ditto/knowledge에 durable하게 누적하고 요약을 CLAUDE.md로 projection해 다음 세션이 별도 조회 없이 쓰게 한다 (post-v0 M6 runtime).",
   "completion_boundary": "entire_work_item",
   "approval_gate": {
-    "status": "pending",
-    "source": null,
-    "approved_at": null,
-    "approved_by": null,
-    "evidence_refs": []
+    "status": "approved",
+    "source": "user",
+    "approved_at": "2026-06-01T14:32:08.000Z",
+    "approved_by": "user (delegated to orchestrator)",
+    "evidence_refs": [
+      {
+        "kind": "note",
+        "summary": "계획 승인(위임). 네트워크/설치 의존 없음. 유일한 host 영향: CLAUDE.md에 별도 ditto:knowledge:* 마커 블록 추가(기존 ditto:managed AGENTS.md 블록 불변, 되돌리기는 git checkout 또는 블록 제거)."
+      }
+    ]
   },
   "nodes": [
     {
@@ -18,7 +23,7 @@
       "kind": "design",
       "owner": "planner",
       "purpose": "Plan the change against the acceptance criteria",
-      "status": "pending",
+      "status": "passed",
       "depends_on": [],
       "acceptance_refs": [
         "ac-1",
@@ -27,7 +32,22 @@
         "ac-4",
         "ac-5"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        {
+          "kind": "note",
+          "summary": "6-step acceptance-mapped 계획, ac-1..5 전부 커버, unknowns 3개 DECIDED, R1(복수 ditto:managed 거부) 함정 사전 식별"
+        },
+        {
+          "kind": "file",
+          "path": "reports/design/contracts/knowledge-contract.md",
+          "summary": "권위 출처 §2~§5"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/instruction-bridge.ts",
+          "summary": "복수 마커 하드거부(:112-113) — projection 분리 마커 근거"
+        }
+      ],
       "attempts": {
         "fix": 0,
         "switch": 0
@@ -38,7 +58,7 @@
       "kind": "implement",
       "owner": "implementer",
       "purpose": "Implement the planned change",
-      "status": "pending",
+      "status": "passed",
       "depends_on": [
         "N1"
       ],
@@ -49,7 +69,28 @@
         "ac-4",
         "ac-5"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "grep -c ditto:managed:start CLAUDE.md / ditto:knowledge:start",
+          "summary": "1 / 0 — R1 지켜짐, AGENTS.md 블록 불변"
+        },
+        {
+          "kind": "command",
+          "command": "ditto doctor instructions",
+          "summary": "instructions: ok — AGENTS.md projection drift 안 깨짐"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "570 pass/0 fail, lint 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/knowledge-bridge.ts",
+          "summary": "별도 마커 family projection + drift"
+        }
+      ],
       "attempts": {
         "fix": 0,
         "switch": 0
@@ -60,7 +101,7 @@
       "kind": "verify",
       "owner": "verifier",
       "purpose": "Verify every acceptance criterion with evidence",
-      "status": "pending",
+      "status": "passed",
       "depends_on": [
         "N2"
       ],
@@ -71,7 +112,95 @@
         "ac-4",
         "ac-5"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "grep -c ditto:knowledge:start CLAUDE.md",
+          "summary": "0 — 실제 projection 미실행(tmp만)"
+        },
+        {
+          "kind": "command",
+          "command": "find knowledge.json",
+          "summary": "부재 — 실제 knowledgeRecord 산출물 없음"
+        },
+        {
+          "kind": "command",
+          "command": "ditto doctor instructions / bun test",
+          "summary": "instructions ok(R1 clean), 570 pass/0 fail"
+        },
+        {
+          "kind": "note",
+          "summary": "ac-1/2/4 pass, ac-3/5 partial → work item partial. 외부 의존 없어 잔여는 이 환경서 실행 가능."
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N4",
+      "kind": "knowledge",
+      "owner": "knowledge-curator",
+      "purpose": "Run /ditto:knowledge-update for real: produce a real .ditto/knowledge/knowledge.json + project a ditto:knowledge block into the real CLAUDE.md (close ac-3/ac-5; no external dependency)",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-3",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "file",
+          "path": ".ditto/knowledge/knowledge.json",
+          "summary": "실 knowledgeRecord(decisions 3·patterns 1·learnings 3, projected=true), schema VALID"
+        },
+        {
+          "kind": "command",
+          "command": "syncKnowledgeProjection + knowledgeProjectionDrift",
+          "summary": "updated, drift=0"
+        },
+        {
+          "kind": "command",
+          "command": "grep -c ditto:managed/ditto:knowledge CLAUDE.md + doctor instructions",
+          "summary": "1/1, instructions ok — R1 불변"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N5",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Re-verify ac-3/ac-5 with fresh evidence from the real run (real knowledge.json + real CLAUDE.md ditto:knowledge block, drift 0, R1 intact)",
+      "status": "passed",
+      "depends_on": [
+        "N4"
+      ],
+      "acceptance_refs": [
+        "ac-3",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "knowledgeProjectionDrift(repo)",
+          "summary": "0 — 실 CLAUDE.md drift 없음, sha 409c542a 일치"
+        },
+        {
+          "kind": "command",
+          "command": "knowledgeRecord.safeParse(.ditto/knowledge/knowledge.json)",
+          "summary": "success, decisions 3·patterns 1·learnings 3, 실파일"
+        },
+        {
+          "kind": "command",
+          "command": "grep ditto:managed + doctor instructions",
+          "summary": "1개·ok — R1 불변"
+        }
+      ],
       "attempts": {
         "fix": 0,
         "switch": 0
