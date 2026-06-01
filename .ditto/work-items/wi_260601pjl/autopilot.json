@@ -6,11 +6,16 @@
   "root_goal": "DITTO가 PreToolUse 훅으로 고확신 안전 위반(파괴적 명령·비밀 파일 접근·repo scope 밖 쓰기)을 기본 차단해 작업공간을 보호한다 — block-by-default, DITTO_SKIP_HOOKS escape, 기존 fail-open 런타임 정합 (post-v0 safety).",
   "completion_boundary": "entire_work_item",
   "approval_gate": {
-    "status": "pending",
-    "source": null,
-    "approved_at": null,
-    "approved_by": null,
-    "evidence_refs": []
+    "status": "approved",
+    "source": "user",
+    "approved_at": "2026-06-01T15:52:26.000Z",
+    "approved_by": "user (delegated to orchestrator)",
+    "evidence_refs": [
+      {
+        "kind": "note",
+        "summary": "block-by-default 정책은 사용자 확정. 결과 인지: hooks.json 등록 후 이 repo 세션에서 PreToolUse 게이트 활성(파괴적 명령·secret·repo밖 쓰기·main force-push 차단). 되돌리기=manifest 키 제거+surfaces:gen. 우회=DITTO_SKIP_HOOKS. 네트워크/설치 의존 없음."
+      }
+    ]
   },
   "nodes": [
     {
@@ -18,7 +23,7 @@
       "kind": "design",
       "owner": "planner",
       "purpose": "Plan the change against the acceptance criteria",
-      "status": "pending",
+      "status": "passed",
       "depends_on": [],
       "acceptance_refs": [
         "ac-1",
@@ -27,7 +32,22 @@
         "ac-4",
         "ac-5"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        {
+          "kind": "note",
+          "summary": "7-step, ac-1..5 매핑, 차단셋 DECIDED, count 25 target, 자기차단 risk 정밀 식별(Step4 활성화)"
+        },
+        {
+          "kind": "file",
+          "path": "src/hooks/runtime.ts",
+          "summary": ":37 kill-switch + :38-44 fail-open — ac-1 무료 제공"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/hosts/claude-code.ts",
+          "summary": ":108-115 event명 키당 hook surface 1개 — 4→5"
+        }
+      ],
       "attempts": {
         "fix": 0,
         "switch": 0
@@ -38,7 +58,7 @@
       "kind": "implement",
       "owner": "implementer",
       "purpose": "Implement the planned change",
-      "status": "pending",
+      "status": "passed",
       "depends_on": [
         "N1"
       ],
@@ -49,7 +69,28 @@
         "ac-4",
         "ac-5"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/pre-tool-use.test.ts",
+          "summary": "53 pass — block/allow 양면 ac-1..4"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full) + lint",
+          "summary": "623 pass/0 fail, lint 0, 활성 훅이 내 명령 차단 안 함"
+        },
+        {
+          "kind": "command",
+          "command": "grep PreToolUse hooks.json / hook count surfaces.json",
+          "summary": "등록 1, hook surface 5(drift 0)"
+        },
+        {
+          "kind": "file",
+          "path": "src/hooks/pre-tool-use.ts",
+          "summary": "block 로직(파괴적/secret/scope-out), default-allow"
+        }
+      ],
       "attempts": {
         "fix": 0,
         "switch": 0
@@ -60,7 +101,7 @@
       "kind": "verify",
       "owner": "verifier",
       "purpose": "Verify every acceptance criterion with evidence",
-      "status": "pending",
+      "status": "passed",
       "depends_on": [
         "N2"
       ],
@@ -71,7 +112,22 @@
         "ac-4",
         "ac-5"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "검증자 throwaway 스크립트(preToolUseHandler+runHook)",
+          "summary": "9개 payload exit 코드 전부 기대치 일치"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full) + lint",
+          "summary": "623 pass/0 fail, lint 0, drift 0"
+        },
+        {
+          "kind": "note",
+          "summary": "ac-1~5 전부 pass, transport 한계 무영향 → work item done"
+        }
+      ],
       "attempts": {
         "fix": 0,
         "switch": 0

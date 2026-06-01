@@ -1,0 +1,34 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260601pjl",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-01T15:55:00.000Z",
+  "summary": "PreToolUse safety 훅 구현 완료. block-by-default로 고확신 안전 위반(파괴적 명령·비밀 파일·repo scope 밖 쓰기)을 차단하고, 자체 에러 fail-open + DITTO_SKIP_HOOKS escape는 기존 runHook wrapper가 제공. autopilot 루프(N1 design→승인→N2 implement→N3 verify)로 구동, 독립 검증으로 5/5 acceptance pass(fix 사이클 불요). 좁은 차단셋이라 활성 훅이 정상 dev 명령을 막지 않음(오탐 0).",
+  "changed_files": [
+    "src/hooks/pre-tool-use.ts",
+    "hooks/pre-tool-use.ts",
+    "tests/hooks/pre-tool-use.test.ts",
+    "hooks/hooks.json",
+    ".ditto/surfaces.json",
+    "tests/core/surface-inventory.plugin.test.ts"
+  ],
+  "acceptance": [
+    { "criterion_id": "ac-1", "verdict": "pass", "evidence": [ { "kind": "file", "path": "src/hooks/pre-tool-use.ts", "summary": "block 로직만, fail-open/kill-switch는 runHook 위임" } ] },
+    { "criterion_id": "ac-2", "verdict": "pass", "evidence": [ { "kind": "command", "command": "검증자 스크립트", "summary": "rm -rf /→2, ./build→0, force-push main→2, 일반 push→0" } ] },
+    { "criterion_id": "ac-3", "verdict": "pass", "evidence": [ { "kind": "command", "command": "검증자 스크립트", "summary": ".env/.pem read+write→2, src/x.ts→0" } ] },
+    { "criterion_id": "ac-4", "verdict": "pass", "evidence": [ { "kind": "command", "command": "검증자 스크립트", "summary": "/etc/passwd·../→2, repo내부→0" } ] },
+    { "criterion_id": "ac-5", "verdict": "pass", "evidence": [ { "kind": "command", "command": "bun test + surfaces", "summary": "PreToolUse 등록, drift 0, 623 pass/0 fail" } ] }
+  ],
+  "verifications": [
+    { "command": "bun test tests/hooks/pre-tool-use.test.ts", "exit_code": 0 },
+    { "command": "bun test", "exit_code": 0 },
+    { "command": "bun run lint", "exit_code": 0 }
+  ],
+  "unverified": [],
+  "remaining_risks": [
+    "piped stdin이 이 sandbox의 bun run 자식에 안 닿아 live end-to-end 차단 시연은 불가(기존 4개 훅과 공유하는 transport 한계, 결함 아님) — 핸들러 로직은 52 단위테스트 + 검증자 재현으로 증명.",
+    "차단셋은 보수적 고확신만 — 정교한 회피(난독화된 명령 등)는 막지 못함(의도된 false-negative 우선, 오탐 최소화). warn-mode/entropy 스캐너는 follow-up.",
+    "이 repo 세션에서 PreToolUse 활성 — 정상 in-repo dev는 allow이나, repo 밖 쓰기·main force-push는 이제 차단됨. 우회 DITTO_SKIP_HOOKS=1."
+  ],
+  "final_verdict": "pass"
+}
