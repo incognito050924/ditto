@@ -126,6 +126,14 @@ async function scanPluginRoot(repoRoot: string): Promise<SurfaceEntry[]> {
 export const claudeCodeHostAdapter: HostAdapter = {
   id: 'claude-code',
 
+  capabilities: {
+    hooks: ['UserPromptSubmit', 'Stop', 'PreCompact', 'PostToolUse', 'PreToolUse'],
+    instructions: true,
+    permissions: true,
+    mcp: true,
+    surface: true,
+  },
+
   async loadInstructions(repoRoot) {
     const path = join(repoRoot, 'CLAUDE.md');
     const content = await readTextIfExists(path);

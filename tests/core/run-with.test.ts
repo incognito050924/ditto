@@ -43,6 +43,7 @@ afterEach(async () => {
 
 function baseAdapter(): Omit<HostAdapter, 'id' | 'spawnRun'> {
   return {
+    capabilities: { hooks: [], instructions: true, permissions: true, mcp: true, surface: true },
     async loadInstructions() {
       return { role: 'source', host: 'codex', path: 'AGENTS.md', exists: false };
     },

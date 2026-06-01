@@ -100,8 +100,32 @@ export interface HostRunProcess {
   completion: Promise<HostRunCompletion>;
 }
 
+export type HookEventId = 'UserPromptSubmit' | 'Stop' | 'PreCompact' | 'PostToolUse' | 'PreToolUse';
+
+export const HOOK_EVENT_IDS: readonly HookEventId[] = [
+  'UserPromptSubmit',
+  'Stop',
+  'PreCompact',
+  'PostToolUse',
+  'PreToolUse',
+];
+
+export interface HostCapabilities {
+  /** Hook events this host can actually run; [] = hooks unsupported. */
+  hooks: HookEventId[];
+  /** loadInstructions is a real loader. */
+  instructions: boolean;
+  /** loadPermissions is a real loader. */
+  permissions: boolean;
+  /** loadMcpServers is a real loader. */
+  mcp: boolean;
+  /** loadSurfaceInventory is a real loader. */
+  surface: boolean;
+}
+
 export interface HostAdapter {
   id: HostId;
+  capabilities: HostCapabilities;
   loadInstructions(repoRoot: string): Promise<InstructionSurface>;
   loadPermissions(repoRoot: string): Promise<PermissionInventory[]>;
   loadMcpServers(repoRoot: string): Promise<McpInventory>;

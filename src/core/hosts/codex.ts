@@ -46,6 +46,14 @@ function mcpServersFromToml(text: string, sourceFile: string): McpServerEntry[] 
 export const codexHostAdapter: HostAdapter = {
   id: 'codex',
 
+  capabilities: {
+    hooks: [],
+    instructions: true,
+    permissions: true,
+    mcp: true,
+    surface: true,
+  },
+
   async loadInstructions(repoRoot) {
     const path = join(repoRoot, 'AGENTS.md');
     const content = await readTextIfExists(path);

@@ -1,4 +1,5 @@
 import { defineCommand } from 'citty';
+import { collectCapabilityInventory } from '~/core/capability-inventory';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   type BuiltinHostId,
@@ -203,15 +204,56 @@ const surfaceCommand = defineCommand({
   },
 });
 
+const capabilityCommand = defineCommand({
+  meta: {
+    name: 'capability',
+    description: 'Check host capability parity (required capabilities + hook drift)',
+  },
+  args: {
+    host: { type: 'string', required: false, description: 'Host: codex|claude-code' },
+    output: { type: 'string', default: 'human', description: 'Output format: human|json' },
+    advisory: { type: 'boolean', default: false, description: 'Report findings but exit 0' },
+  },
+  run: async ({ args }) => {
+    try {
+      const { format, adapters } = parseCommon(args);
+      const repoRoot = await resolveRepoRootForCreate();
+      const report = await collectCapabilityInventory(adapters, repoRoot);
+      if (format === 'json') {
+        writeJson({
+          status: report.finding_count === 0 ? 'ok' : 'drift',
+          hosts: report.hosts.map((host) => ({
+            host: host.host,
+            capabilities: host.capabilities,
+            hook_events: host.hook_events,
+          })),
+          findings: report.findings,
+        });
+      } else if (report.finding_count === 0) {
+        writeHuman(`capability: ok (${report.hosts.length} hosts)`);
+      } else {
+        for (const finding of report.findings) {
+          writeHuman(`${finding.host}\t${finding.kind}\t${finding.capability}\t${finding.message}`);
+        }
+      }
+      exitForFindings(report.finding_count, args.advisory);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  },
+});
+
 export const doctorCommand = defineCommand({
   meta: {
     name: 'doctor',
-    description: 'Diagnose host instruction, permission, MCP, and surface drift',
+    description: 'Diagnose host instruction, permission, MCP, surface, and capability drift',
   },
   subCommands: {
     instructions: instructionsCommand,
     permissions: permissionsCommand,
     mcp: mcpCommand,
     surface: surfaceCommand,
+    capability: capabilityCommand,
   },
 });

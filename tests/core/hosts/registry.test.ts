@@ -18,6 +18,7 @@ describe('host adapter registry', () => {
     let permissionCalled = false;
     const mock: HostAdapter = {
       id: 'mock',
+      capabilities: { hooks: [], instructions: true, permissions: true, mcp: true, surface: true },
       async loadInstructions() {
         return { role: 'source', host: 'codex', path: 'AGENTS.md', exists: false };
       },

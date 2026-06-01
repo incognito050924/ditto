@@ -88,6 +88,7 @@ describe('instruction bridge', () => {
     unregisterHostAdapter('codex');
     const projectionOnly: HostAdapter = {
       id: 'mock-projection',
+      capabilities: { hooks: [], instructions: true, permissions: true, mcp: true, surface: true },
       async loadInstructions() {
         return {
           role: 'projection',
