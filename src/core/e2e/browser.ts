@@ -1,8 +1,13 @@
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { dirname, join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { type E2EJourney, e2eJourney } from '~/schemas/e2e-journey';
 import { spawnProviderProcess } from '../hosts/spawn';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const RUNNER_SCRIPT = join(HERE, 'playwright-runner.mjs');
 
 /**
  * E2E browser thin layer (설계서 §10, e2e-journey-contract §3/§4). The M5 runtime
@@ -29,6 +34,76 @@ export interface E2EJourneySpec {
 export interface BrowserProbe {
   available: boolean;
   reason: string;
+  /** Resolved playwright-core entry (for the node runner) when a real launch is possible. */
+  playwrightCore?: string;
+  /** Path to an already-cached Chromium executable (no download) when present. */
+  executablePath?: string;
+}
+
+/**
+ * Resolve the `playwright-core` module entry without adding it to package.json.
+ * It lives in bun's global install cache (where `bunx playwright` resolves it);
+ * createRequire cannot reach it from inside this repo (no local dep), so we glob
+ * the bun cache and hand the explicit ESM entry to the node runner — which also
+ * cannot resolve bun's cache on its own. Highest cached version wins.
+ */
+async function resolvePlaywrightCore(): Promise<string | null> {
+  const bunInstall = process.env.BUN_INSTALL ?? join(homedir(), '.bun');
+  const cacheDir = join(bunInstall, 'install', 'cache');
+  let entries: string[];
+  try {
+    entries = await readdir(cacheDir);
+  } catch {
+    return null;
+  }
+  const versions = entries
+    .filter((e) => /^playwright-core@\d+\.\d+\.\d+$/.test(e))
+    .sort((a, b) => compareSemver(b.split('@')[1], a.split('@')[1]));
+  for (const v of versions) {
+    const mjs = join(cacheDir, v, 'index.mjs');
+    if (await pathExists(mjs)) return mjs;
+  }
+  return null;
+}
+
+function compareSemver(a: string, b: string): number {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
+  }
+  return 0;
+}
+
+/**
+ * Find an ALREADY-CACHED Chromium executable under the Playwright browser cache.
+ * We never download: if no cached full-Chromium build is present we return null
+ * and the caller degrades to blocked. Headless-shell builds are skipped because
+ * the cached ones use a CDP transport incompatible with the resolved playwright.
+ */
+async function findCachedChromium(): Promise<string | null> {
+  const cacheRoot = join(homedir(), 'Library', 'Caches', 'ms-playwright');
+  let entries: string[];
+  try {
+    entries = await readdir(cacheRoot);
+  } catch {
+    return null;
+  }
+  // Highest build number first so we use the newest cached full-Chromium.
+  const chromiumDirs = entries
+    .filter((e) => /^chromium-\d+$/.test(e))
+    .sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]));
+  const candidates = [
+    'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+    'chrome-mac/Chromium.app/Contents/MacOS/Chromium',
+  ];
+  for (const dir of chromiumDirs) {
+    for (const rel of candidates) {
+      const abs = join(cacheRoot, dir, rel);
+      if (await pathExists(abs)) return abs;
+    }
+  }
+  return null;
 }
 
 function repoRelative(repoRoot: string, path: string): string {
@@ -72,12 +147,27 @@ export async function probePlaywright(repoRoot: string): Promise<BrowserProbe> {
     };
   }
   const completion = await proc.completion;
-  if (completion.exit_code === 0) {
-    return { available: true, reason: 'playwright --version succeeded' };
+  if (completion.exit_code !== 0) {
+    return {
+      available: false,
+      reason: `Playwright/Chromium not available (bunx --no-install playwright --version exit=${completion.exit_code ?? 'null'}); not auto-installing per orchestrator hard constraint`,
+    };
+  }
+  // playwright package is present; for a REAL launch we also need a resolvable
+  // playwright-core module and an already-cached Chromium executable.
+  const playwrightCore = await resolvePlaywrightCore();
+  const executablePath = await findCachedChromium();
+  if (!playwrightCore || !executablePath) {
+    return {
+      available: false,
+      reason: `Playwright CLI present but no real-launch inputs (playwright-core=${playwrightCore ? 'ok' : 'unresolved'}, cachedChromium=${executablePath ? 'ok' : 'absent'}); not auto-installing per orchestrator hard constraint`,
+    };
   }
   return {
-    available: false,
-    reason: `Playwright/Chromium not available (bunx --no-install playwright --version exit=${completion.exit_code ?? 'null'}); not auto-installing per orchestrator hard constraint`,
+    available: true,
+    reason: 'playwright --version succeeded; cached Chromium + playwright-core resolved',
+    playwrightCore,
+    executablePath,
   };
 }
 
@@ -138,15 +228,60 @@ export async function runJourney(
   spec: E2EJourneySpec,
 ): Promise<RunJourneyResult> {
   const probe = await probePlaywright(repoRoot);
-  if (!probe.available) {
+  if (!probe.available || !probe.playwrightCore || !probe.executablePath) {
     return { journey: blockedJourney(spec, probe.reason), run_id: runId, probe };
   }
 
-  // Browser present: artifacts land under .ditto/runs/<id>/. The actual capture
-  // glue (a Playwright script driving spec.steps) writes these files; here we
-  // collect whatever the driver produced and reference it by path (+ sha256 for
-  // screenshots only — trace.zip is large/opaque, skip its hash per §4).
+  // Browser present: artifacts land under .ditto/runs/<id>/. We spawn the node
+  // capture runner (bun cannot drive Playwright's launcher) through the host
+  // primitive; it launches the cached Chromium, drives spec.steps, and writes the
+  // artifacts + outcome.json. Then we collect what it produced and reference it by
+  // path (+ sha256 for screenshots only — trace.zip is large/opaque, skip its hash).
   const runDir = join(repoRoot, '.ditto', 'runs', runId);
+  await mkdir(runDir, { recursive: true });
+  const configAbs = join(runDir, 'runner-config.json');
+  await writeFile(
+    configAbs,
+    JSON.stringify({
+      playwrightCore: probe.playwrightCore,
+      executablePath: probe.executablePath,
+      url: spec.url,
+      steps: spec.steps,
+      assertions: spec.assertions.map((a) => ({ description: a.description })),
+      runDir,
+    }),
+  );
+  let runnerExit: number | null;
+  try {
+    const runner = spawnProviderProcess({
+      binary: 'node',
+      args: [RUNNER_SCRIPT, configAbs],
+      repoRoot,
+      cwd: '.',
+      env: { set: {}, unset: [] },
+    });
+    runnerExit = (await runner.completion).exit_code;
+  } catch (err) {
+    return {
+      journey: blockedJourney(
+        spec,
+        `capture runner could not spawn: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+      run_id: runId,
+      probe,
+    };
+  }
+  if (runnerExit !== 0) {
+    return {
+      journey: blockedJourney(
+        spec,
+        `capture runner exited non-zero (exit=${runnerExit ?? 'null'}); treating as blocked rather than asserting an unobserved pass`,
+      ),
+      run_id: runId,
+      probe,
+    };
+  }
+
   const screenshotAbs = join(runDir, 'journey.png');
   const traceAbs = join(runDir, 'trace.zip');
   const consoleAbs = join(runDir, 'console.log');
