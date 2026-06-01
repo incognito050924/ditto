@@ -167,6 +167,32 @@ export function completionGate(item: WorkItem, completion: CompletionContract): 
   return gate(reasons);
 }
 
+// ── completion evidence gate (G8: ack/approval ≠ verification) ──────────────
+
+/**
+ * A `final_verdict=pass` must be backed by *some* runnable verification, not a
+ * light acknowledgement ("approved", "ok", "looks good"). The schema accepts a
+ * pass whose only per-criterion evidence is a `note` and whose `verifications`
+ * are empty — that is the ack≠verification failure mode. This gate rejects it:
+ * a passing completion needs at least one executed command (`verifications`) or
+ * at least one non-`note` evidence / evidence_record on some criterion. It does
+ * not judge per-criterion evidence *depth* (the verifier's job) — only that the
+ * pass is not resting on an ack alone.
+ */
+export function completionEvidenceGate(completion: CompletionContract): GateResult {
+  if (completion.final_verdict !== 'pass') return gate([]);
+  const ranCommand = completion.verifications.length > 0;
+  const hasRealCriterionEvidence = completion.acceptance.some(
+    (a) => a.evidence.some((e) => e.kind !== 'note') || a.evidence_records.length > 0,
+  );
+  if (!ranCommand && !hasRealCriterionEvidence) {
+    return gate([
+      'final_verdict=pass with no runnable verification evidence (ack/approval is not verification)',
+    ]);
+  }
+  return gate([]);
+}
+
 // ── convergence gate (reads recorded fields only; no admissibility inference) ─
 
 export function convergenceGate(c: Convergence): GateResult {

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   acceptanceTestable,
+  completionEvidenceGate,
   completionGate,
   convergenceGate,
   deriveClosureMode,
@@ -137,6 +138,28 @@ describe('highRiskAssumption / safeDefaultable are two sides of one predicate', 
     };
     expect(highRiskAssumption(a)).toBe(false);
     expect(safeDefaultable(a)).toBe(true);
+  });
+});
+
+describe('completionEvidenceGate (G8: ack/approval is not verification)', () => {
+  test('a pass with a real verification command passes', () => {
+    const c = completionContract.parse(load('completion/pass.json'));
+    expect(completionEvidenceGate(c).pass).toBe(true);
+  });
+
+  test('an ack-only pass (schema-legal, note evidence, no commands) is rejected', () => {
+    const raw = load('completion/ack-only-pass.json');
+    // the schema itself ACCEPTS it — the ack≠verification gap is not a schema gap.
+    expect(completionContract.safeParse(raw).success).toBe(true);
+    const c = completionContract.parse(raw);
+    const r = completionEvidenceGate(c);
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => x.includes('ack'))).toBe(true);
+  });
+
+  test('a non-pass verdict is not subject to the evidence gate', () => {
+    const c = completionContract.parse(load('completion/pass.json'));
+    expect(completionEvidenceGate({ ...c, final_verdict: 'partial' }).pass).toBe(true);
   });
 });
 
