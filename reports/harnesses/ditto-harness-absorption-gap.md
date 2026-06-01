@@ -152,3 +152,18 @@ supersedes_premise_of:
 | **G6** 생성형 inventory | `generateSurfaceCatalog` + `scripts/gen-surfaces.ts`(surfaces:gen) + 재생성==커밋본 drift-guard 테스트. catalog=생성 산출물 | `89f9c42` |
 
 **미구현(의도적):** G2(GradeGate A/B/C — DITTO는 high-risk+completionGate로 이미 실행 차단, 추가 가치 판단 선행 필요), G9(autopilot 루프 CLI 결선 — 큰 구조 변경, skill↔core 중복·미배선·G7을 한 단위로 닫는 별도 work item), G10(dialectic 부분 중복, 낮음), post-v0(E2E·PreToolUse safety·parity — 별개 마일스톤). 어느 것을 열지는 사용자 결정.
+
+## 9. G9 구현 완료 (2026-06-01)
+
+사용자가 §8 미구현 목록 중 **G9를 다음 work item으로 선택**. autopilot 루프 step을 `ditto autopilot {next-node, record-result}` CLI로 노출(deep-interview step CLI 패턴 동형) → §7이 지목한 3곳 중복(core TS / contract §3.2 / SKILL.md 산문)의 동기화 강제 부재 + 루프 런타임 미배선 + §5 G7 실효성을 **한 단위로 마감**. 기존 helper는 전부 존재·테스트 고정이라 신규 로직이 아니라 결선. TDD red→green, 갭별 분리 커밋, 532→550 pass / 0 fail, biome clean.
+
+| 단계 | 구현 | 증거 (커밋) |
+|---|---|---|
+| transition `retry` 이벤트 | `running--retry-->pending` 재무장 entry(G3 명시테이블 유지) | `c509295`(구조적) |
+| 코어 결선 | `autopilot-loop.ts` `nextNode`(re-read→승인게이트(mutating 한정)→select+file-overlap→dispatch persist→packet; rejected=전역 rollback, read-only=승인 전 진행, done/waiting) + `recordResult`(G7 backstop override→`decideOnFailure`→transition→`appendDecision`) + `recordResultPayload` zod. 13 테스트 | `8e1609d`(동작적) |
+| CLI 결선 | `ditto autopilot next-node`·`record-result --json`(payload 스키마 검증). 실제 spawn 테스트 4종 | `44b9685`(동작적) |
+| 문서 | SKILL.md ReAct 루프 산문 중복 제거→CLI 위임, contract §3.2 CLI step 경계 | `dc02635`(구조적) |
+
+**책임 분할(결선의 핵심):** 결정론(선택·게이트·packet·G7 가드·전이·decideOnFailure·persist)은 CLI 코드 한 곳에만, 판단(pass/fail·분류·escalate 시점)은 skill이 `--json` payload로 주입. **G7이 이제 deterministic 호출 경로에 올라감** — record-result가 빈/ack-only 결과를 pass 주장에도 fixable로 강제 override(E2E 확인: `done`→fail/retry/pending, decisions.jsonl 기록).
+
+**여전히 범위 밖:** 루프를 자동으로 도는 상위 오케스트레이터 배선(이번은 step CLI만; main agent가 skill 따라 반복 호출), 다중 ready 노드 병렬 spawn(v0=직렬), `autopilot.md` 사람용 뷰 자동 생성. G2·G10·post-v0는 §8대로 별개.
