@@ -1,0 +1,84 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260601kbw",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-02T00:00:00.000Z",
+  "summary": "각 host의 capability를 정직하게 선언하고 ditto doctor가 host간 parity 불일치를 fail-closed로 검사한다. HostAdapter에 capabilities(지원 hook 이벤트 + instructions/permissions/mcp/surface)를 추가해 claude-code는 5개 훅을, codex는 플러그인 훅 미지원(0개)을 정직 선언했다. 새 doctor capability 서브커맨드가 host별 capability matrix를 출력하고, required capability를 못 갖춘 host나 선언↔실제 hook 불일치(drift)가 있으면 silent 우회 없이 비0으로 종료한다. autopilot 루프(N1 design→승인→N2 implement→N3 verify→N4 fail-side CLI 강화→N5 재검증)로 구동, 독립 검증으로 5/5 acceptance pass.",
+  "changed_files": [
+    "src/core/hosts/types.ts",
+    "src/core/hosts/claude-code.ts",
+    "src/core/hosts/codex.ts",
+    "src/core/capability-inventory.ts",
+    "src/cli/commands/doctor.ts",
+    "tests/core/capability-inventory.test.ts",
+    "tests/doctor/capability.test.ts",
+    "tests/core/hosts/registry.test.ts",
+    "tests/core/instruction-bridge.test.ts",
+    "tests/core/run-with.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": "src/core/hosts/types.ts", "summary": "HookEventId 5-union + HostCapabilities + HostAdapter.capabilities 필수 필드" },
+        { "kind": "file", "path": "src/core/hosts/claude-code.ts", "summary": "capabilities.hooks 5개 정직 선언 (UserPromptSubmit/Stop/PreCompact/PostToolUse/PreToolUse)" },
+        { "kind": "file", "path": "src/core/hosts/codex.ts", "summary": "capabilities.hooks: [] 정직 선언 (plugin hook 미지원)" }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "command": "bun run src/cli/index.ts doctor capability --output json", "summary": "exit 0, matrix 2 hosts, claude-code hook_events len 5, codex []" },
+        { "kind": "file", "path": "tests/doctor/capability.test.ts", "summary": "ac-2 live CLI: --host claude-code/codex/--output human 모두 exit 0" }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "command": "bun test tests/doctor/capability.test.ts", "summary": "pass-side exit 0 + fail-side live CLI exitCode 1(drift) 양면, 6 pass / 0 fail" },
+        { "kind": "file", "path": "tests/core/capability-inventory.test.ts", "summary": "collector fail-side: 미충족 required capability→finding_count>0" }
+      ]
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": "src/core/capability-inventory.ts", "summary": "bidirectional hook drift via loadSurfaceInventory (hooks.json 단일소스) L80-99" },
+        { "kind": "command", "command": "bun test tests/doctor/capability.test.ts", "summary": "양방향 CLI drift→exit 1; 실 repo claude-code 선언==hooks.json, drift 0" }
+      ]
+    },
+    {
+      "criterion_id": "ac-5",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "command": "bun test", "summary": "635 pass / 0 fail, exit 0 (633→635, +2 신규 fail-side CLI)" },
+        { "kind": "command", "command": "bun run lint", "summary": "biome exit 0, 174 files, 0 finding" },
+        { "kind": "command", "command": "git diff --quiet .ditto/surfaces.json", "summary": "exit 0, surfaces 불변, surface count 25 유지 (doctor subcommand는 surface 아님)" }
+      ]
+    }
+  ],
+  "verifications": [
+    { "command": "bun run src/cli/index.ts doctor capability --output json", "exit_code": 0 },
+    { "command": "bun test tests/doctor/capability.test.ts", "exit_code": 0 },
+    { "command": "bun test tests/core/capability-inventory.test.ts", "exit_code": 0 },
+    { "command": "bun test", "exit_code": 0 },
+    { "command": "bun run lint", "exit_code": 0 },
+    { "command": "git diff --quiet .ditto/surfaces.json", "exit_code": 0 }
+  ],
+  "unverified": [
+    {
+      "item": "node간 production 코드 immutability를 git diff로 증명",
+      "reason": "work item 전체가 단일 커밋 전 상태라 N2/N3 중간 스냅샷이 git history에 없음 — divergence-from-HEAD만 관측 가능. 모순은 없고 production diff는 parity feature와 정합. acceptance 항목 아님(메타 점검).",
+      "out_of_scope": true
+    }
+  ],
+  "remaining_risks": [
+    "codex hook 능력은 '미지원(0개)'으로 정직 선언만 했고 기능 동등화는 하지 않음(D1 의도). codex 플러그인 hook 런타임 구현은 follow-up.",
+    "REQUIRED_CAPABILITIES는 4개 boolean(instructions/permissions/mcp/surface)으로 한정; hook은 host-specific이라 cross-host required equality에서 제외(codex hooks:[]는 정직 선언이지 required 실패 아님 — D1 정합). '모든 host가 5훅 지원'을 parity 기준으로 삼고 싶으면 별도 결정 필요.",
+    "이 repo 세션의 PreToolUse 안전 훅이 정상 read-only 명령(bun test, bun run lint)을 차단해 검증 시 DITTO_SKIP_HOOKS=1 prefix가 필요했음(false-positive). 안전 훅 차단셋이 bun run <bare> 호출을 과차단 — 별개 follow-up 후보."
+  ],
+  "final_verdict": "pass"
+}

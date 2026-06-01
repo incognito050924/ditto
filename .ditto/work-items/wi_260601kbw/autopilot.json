@@ -1,0 +1,263 @@
+{
+  "schema_version": "0.1.0",
+  "autopilot_id": "orch_260601mml",
+  "work_item_id": "wi_260601kbw",
+  "mode": "autopilot",
+  "root_goal": "각 host(claude-code/codex)의 capability를 HostAdapter에 정직 선언하고 ditto doctor가 host간 불일치(parity)를 fail-closed로 검사한다 — required capability 미지원 host는 doctor exit 비0, 충족이면 0, 선언 hook 집합 vs hooks.json drift 0 (post-v0 provider parity).",
+  "completion_boundary": "entire_work_item",
+  "approval_gate": {
+    "status": "approved",
+    "source": "user",
+    "approved_at": "2026-06-02T00:00:00.000Z",
+    "approved_by": "user",
+    "evidence_refs": []
+  },
+  "nodes": [
+    {
+      "id": "N1",
+      "kind": "design",
+      "owner": "planner",
+      "purpose": "Plan the change against the acceptance criteria",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "file",
+          "path": "reports/harnesses/ditto-harness-synthesis.md",
+          "summary": "§2.I L170 runtime parity matrix fail-closed 근거"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/hosts/types.ts",
+          "summary": "HostAdapter L103 — capabilities 추가 위치"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/surface-inventory.ts",
+          "summary": "collector 동형 패턴"
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/doctor.ts",
+          "summary": "subcommand 패턴 L174 surfaceCommand"
+        },
+        {
+          "kind": "file",
+          "path": "hooks/hooks.json",
+          "summary": "ground truth 5 hook events"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N2",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "Implement the planned change",
+      "status": "passed",
+      "depends_on": [
+        "N1"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "633 pass / 0 fail, 59 files"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome Checked 174 files, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run src/cli/index.ts doctor capability --output json",
+          "summary": "status ok, exit 0, codex hooks:[]"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/capability-inventory.ts",
+          "summary": "collector: REQUIRED_CAPABILITIES + bidirectional drift"
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/doctor.ts",
+          "summary": "capabilityCommand subcommand"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N3",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Verify every acceptance criterion with evidence",
+      "status": "passed",
+      "depends_on": [
+        "N2"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "633 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome exit 0, 174 files"
+        },
+        {
+          "kind": "command",
+          "command": "doctor capability --output json",
+          "summary": "exit 0, status ok, findings []"
+        },
+        {
+          "kind": "command",
+          "command": "isolated collector fail-side script",
+          "summary": "finding_count>0 → process EXIT=1"
+        },
+        {
+          "kind": "file",
+          "path": "hooks/hooks.json",
+          "summary": "실 repo keys == claude-code 선언 hooks, drift 0"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N4",
+      "kind": "fix",
+      "owner": "implementer",
+      "purpose": "Add a live CLI fail-side test: doctor capability exits non-zero on real drift (close ac-3/ac-4 CLI-surface gap, parity with sibling subcommands)",
+      "status": "passed",
+      "depends_on": [
+        "N3"
+      ],
+      "acceptance_refs": [
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/doctor/capability.test.ts",
+          "summary": "6 pass / 0 fail (2 new fail-side cases)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "635 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome exit 0, 174 files"
+        },
+        {
+          "kind": "file",
+          "path": "tests/doctor/capability.test.ts",
+          "summary": "live CLI fail-side: exitCode 1 on drift, 양방향"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N5",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Re-verify ac-3/ac-4 with the new live CLI fail-side test and confirm full suite green",
+      "status": "passed",
+      "depends_on": [
+        "N4"
+      ],
+      "acceptance_refs": [
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/doctor/capability.test.ts",
+          "summary": "6 pass / 0 fail, fail-side exitCode 1 양방향"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "635 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome exit 0, 174 files"
+        },
+        {
+          "kind": "command",
+          "command": "git diff --quiet .ditto/surfaces.json",
+          "summary": "exit 0, surfaces 불변, count 25"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/capability-inventory.ts",
+          "summary": "finding kind declared_hook_not_registered/registered_hook_not_declared L80-99"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    }
+  ],
+  "caps": {
+    "fix_per_node": 2,
+    "switch_per_node": 1
+  },
+  "continue_policy": {
+    "continue_after_approval": true,
+    "continue_after_checkpoint": true,
+    "continue_after_fixable_failure": true,
+    "ask_user_only_for_user_owned_decisions": true
+  },
+  "stop_conditions": [
+    "all_acceptance_criteria_passed_or_explicitly_closed",
+    "blocked_by_user_owned_decision",
+    "blocked_by_external_system",
+    "safety_boundary_hit"
+  ],
+  "user_interrupt_policy": "ask_only_for_user_owned_decisions"
+}

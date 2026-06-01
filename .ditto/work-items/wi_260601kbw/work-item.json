@@ -1,0 +1,76 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260601kbw",
+  "title": "provider parity (capability matrix+fail-closed)",
+  "source_request": "provider parity (post-v0 마지막 deliverable): 각 host의 capability를 HostAdapter에 정직 선언하고 ditto doctor가 host간 불일치를 fail-closed로 검사. 근거: reports/harnesses/ditto-harness-synthesis.md §2.I(L164-174) runtime parity matrix—미지원 조합 fail-closed.",
+  "goal": "각 host(claude-code/codex)의 capability를 HostAdapter에 정직 선언하고 ditto doctor가 host간 불일치(parity)를 fail-closed로 검사한다 — required capability 미지원 host는 doctor exit 비0, drift 0 (post-v0 provider parity).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "HostAdapter에 capabilities 선언이 추가되고, claude-code adapter는 5개 hook 이벤트(UserPromptSubmit/Stop/PreCompact/PostToolUse/PreToolUse)를 지원으로, codex adapter는 플러그인 hook 이벤트 0개(미지원)로 정직 선언한다.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": "src/core/hosts/types.ts", "summary": "HookEventId 5-union + HostCapabilities + HostAdapter.capabilities 필수 필드" },
+        { "kind": "file", "path": "src/core/hosts/claude-code.ts", "summary": "capabilities.hooks 5개 정직 선언 (L130)" },
+        { "kind": "file", "path": "src/core/hosts/codex.ts", "summary": "capabilities.hooks: [] 정직 선언 (plugin hook 미지원)" }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "ditto doctor capability [--host <id>] [--output human|json] 명령이 host별 capability matrix를 출력하고, 불일치가 없을 때 exit code 0으로 종료한다.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "command": "bun run src/cli/index.ts doctor capability --output json", "summary": "exit 0, matrix 2 hosts, claude-code hook_events len 5, codex []" },
+        { "kind": "file", "path": "tests/doctor/capability.test.ts", "summary": "ac-2 live CLI: --host claude-code/codex/--output human 모두 exit 0" }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "fail-closed: required capability를 미지원하는 host를 대상으로 doctor capability가 exit code 비0(1)을 반환하고, 모든 required capability를 충족하는 host에는 exit code 0을 반환한다(양면 테스트).",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "command": "bun test tests/doctor/capability.test.ts", "summary": "pass-side exit 0 + fail-side live CLI exitCode 1 (drift) 양면, 6 pass" },
+        { "kind": "file", "path": "tests/core/capability-inventory.test.ts", "summary": "collector fail-side: 미충족 required→finding_count>0" }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "정직성 drift 0: claude-code가 선언한 hook capability 집합이 hooks/hooks.json에 실제 등록된 이벤트 집합과 정확히 일치하며(drift 0), 어긋나면 doctor capability가 exit 비0으로 fail한다.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": "src/core/capability-inventory.ts", "summary": "bidirectional drift via loadSurfaceInventory (hooks.json 단일소스) L80-99" },
+        { "kind": "command", "command": "bun test tests/doctor/capability.test.ts", "summary": "양방향 CLI drift→exit 1; 실 repo claude-code drift 0" }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "전체 bun test가 exit code 0(green)이고 biome lint finding이 0이며 기존 v0 동작 회귀가 0이다. 새 surface(agent/skill/hook/plugin) 추가 시에만 surface 카탈로그 재생성+count 갱신(doctor subcommand는 surface 아님).",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "command": "bun test", "summary": "635 pass / 0 fail, exit 0 (633→635, +2 신규)" },
+        { "kind": "command", "command": "bun run lint", "summary": "biome exit 0, 174 files" },
+        { "kind": "command", "command": "git diff --quiet .ditto/surfaces.json", "summary": "exit 0, surfaces 불변, count 25 유지" }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/hosts/types.ts",
+    "src/core/hosts/claude-code.ts",
+    "src/core/hosts/codex.ts",
+    "src/core/capability-inventory.ts",
+    "src/cli/commands/doctor.ts",
+    "tests/core/capability-inventory.test.ts",
+    "tests/doctor/capability.test.ts",
+    "tests/core/hosts/registry.test.ts",
+    "tests/core/instruction-bridge.test.ts",
+    "tests/core/run-with.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-01T16:16:11.402Z",
+  "updated_at": "2026-06-02T00:00:00.000Z",
+  "closed_at": "2026-06-02T00:00:00.000Z"
+}
