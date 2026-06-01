@@ -137,6 +137,85 @@
         "fix": 0,
         "switch": 0
       }
+    },
+    {
+      "id": "N4",
+      "kind": "fix",
+      "owner": "implementer",
+      "purpose": "Implement the real Playwright runner + run a journey + wire an e2e node end-to-end (close ac-2/ac-3/ac-5; browser is present)",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-2",
+        "ac-3",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/e2e-browser.test.ts",
+          "summary": "9 pass; REAL Chromium 기동 2859ms/2793ms(skip 아님)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "563 pass/0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/e2e/playwright-runner.mjs",
+          "summary": "node 기반 실제 캡처 runner(chromium 기동→steps→4 artifact+outcome.json)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/e2e/browser.ts",
+          "summary": "resolvePlaywrightCore/findCachedChromium/runJourney 실제 spawn"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N5",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Re-verify ac-2/ac-3/ac-5 with fresh evidence including a real browser run",
+      "status": "passed",
+      "depends_on": [
+        "N4"
+      ],
+      "acceptance_refs": [
+        "ac-2",
+        "ac-3",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/e2e-browser.test.ts",
+          "summary": "9 pass; REAL 테스트 2784ms/2780ms 실제 기동(검증자 독립 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "독립 runJourney 드라이브",
+          "summary": "2593ms 실 Chromium 기동, 4 artifact 디스크 생성, sha256 재계산 일치"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full) + lint",
+          "summary": "563 pass/0 fail, biome 0"
+        },
+        {
+          "kind": "note",
+          "summary": "ac-2 pass, ac-3 pass, ac-5 pass — real-run 증거. 환경 조건부(브라우저 있을 때)."
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
     }
   ],
   "caps": {
