@@ -5,6 +5,7 @@
     { "host": "claude-code", "kind": "agent", "id": "dialectic-producer", "path": "agents/dialectic-producer.md" },
     { "host": "claude-code", "kind": "agent", "id": "dialectic-synthesizer", "path": "agents/dialectic-synthesizer.md" },
     { "host": "claude-code", "kind": "agent", "id": "implementer", "path": "agents/implementer.md" },
+    { "host": "claude-code", "kind": "agent", "id": "knowledge-curator", "path": "agents/knowledge-curator.md" },
     { "host": "claude-code", "kind": "agent", "id": "planner", "path": "agents/planner.md" },
     { "host": "claude-code", "kind": "agent", "id": "playwright-e2e", "path": "agents/playwright-e2e.md" },
     { "host": "claude-code", "kind": "agent", "id": "researcher", "path": "agents/researcher.md" },
@@ -21,6 +22,7 @@
     { "host": "claude-code", "kind": "skill", "id": "dialectic-review", "path": "skills/dialectic-review/SKILL.md" },
     { "host": "claude-code", "kind": "skill", "id": "e2e", "path": "skills/e2e/SKILL.md" },
     { "host": "claude-code", "kind": "skill", "id": "handoff", "path": "skills/handoff/SKILL.md" },
+    { "host": "claude-code", "kind": "skill", "id": "knowledge-update", "path": "skills/knowledge-update/SKILL.md" },
     { "host": "claude-code", "kind": "skill", "id": "plan", "path": "skills/plan/SKILL.md" },
     { "host": "claude-code", "kind": "skill", "id": "verify", "path": "skills/verify/SKILL.md" }
   ]

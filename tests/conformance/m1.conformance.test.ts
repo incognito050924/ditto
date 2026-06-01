@@ -477,12 +477,25 @@ describe('M1.5b — agent skeleton (v0 8종, post-v0 부재)', () => {
     expect(text).toMatch(/Playwright\/Chromium/);
   });
 
-  test('post-v0 agent(architect/knowledge-curator) 는 부재 (M5 미도달)', () => {
-    for (const a of ['architect', 'knowledge-curator']) {
-      expect(existsSync(join(REPO, 'agents', `${a}.md`)), `${a}.md should not exist yet`).toBe(
-        false,
-      );
-    }
+  test('knowledge-curator agent .md 존재 + frontmatter (M6 runtime)', () => {
+    const p = join(REPO, 'agents', 'knowledge-curator.md');
+    expect(existsSync(p), 'agents/knowledge-curator.md missing').toBe(true);
+    const text = readFileSync(p, 'utf8');
+    const m = text.match(/^---\n([\s\S]*?)\n---/);
+    const f = m ? m[1] : '';
+    expect(f, 'knowledge-curator frontmatter name').toMatch(/name:\s*\S/);
+    expect(f, 'knowledge-curator frontmatter description').toMatch(/description:\s*\S/);
+    expect(f, 'knowledge-curator frontmatter tools').toMatch(/tools:\s*\S/);
+    // body covers the §3 responsibilities (glossary / ADR)
+    expect(text).toMatch(/glossary/);
+    expect(text).toMatch(/ADR/);
+  });
+
+  test('post-v0 agent(architect) 는 부재 (M5 미도달)', () => {
+    expect(
+      existsSync(join(REPO, 'agents', 'architect.md')),
+      'architect.md should not exist yet',
+    ).toBe(false);
   });
 });
 

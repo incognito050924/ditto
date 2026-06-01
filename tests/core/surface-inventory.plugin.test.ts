@@ -13,7 +13,7 @@ describe('DITTO plugin surface inventory (M1.6)', () => {
   test('checked-in .ditto/surfaces.json exists and is non-empty (no false-green)', () => {
     const raw = JSON.parse(readFileSync(join(REPO_ROOT, '.ditto', 'surfaces.json'), 'utf8'));
     const parsed = surfaceCatalog.parse(raw);
-    expect(parsed.surfaces.length).toBe(22); // 8 skills + 9 agents + 4 hooks + 1 plugin (M5: +e2e skill, +playwright-e2e agent)
+    expect(parsed.surfaces.length).toBe(24); // 9 skills + 10 agents + 4 hooks + 1 plugin (M6: +knowledge-update skill, +knowledge-curator agent)
   });
 
   test('declared catalog matches the actual plugin-root scan (no drift)', async () => {
