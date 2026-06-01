@@ -1,5 +1,5 @@
-import { join, resolve } from 'node:path';
-import { surfaceCatalog } from '~/schemas/surface-catalog';
+import { join, relative, resolve } from 'node:path';
+import { type SurfaceCatalog, surfaceCatalog } from '~/schemas/surface-catalog';
 import type { HostAdapter, HostId, SurfaceEntry, SurfaceKind } from './hosts';
 import { readJsonIfExists } from './hosts/shared';
 
@@ -39,6 +39,33 @@ async function loadExpected(repoRoot: string): Promise<ExpectedSurface[]> {
 
 function keyOf(surface: Pick<SurfaceEntry, 'host' | 'kind' | 'id'>): string {
   return `${surface.host}:${surface.kind}:${surface.id}`;
+}
+
+/**
+ * Generate the surface catalog from the code itself (W4-2 / G6) instead of
+ * hand-maintaining `.ditto/surfaces.json`. Discovers every *local* surface via
+ * the host adapters, relativises paths to the repo root, and sorts
+ * deterministically so the output is stable. The committed catalog is this
+ * generator's output; a test regenerates and compares, so a surface added
+ * without regenerating fails loudly rather than silently drifting.
+ */
+export async function generateSurfaceCatalog(
+  adapters: HostAdapter[],
+  repoRoot: string,
+): Promise<SurfaceCatalog> {
+  const inventories = await Promise.all(
+    adapters.map((adapter) => adapter.loadSurfaceInventory(repoRoot)),
+  );
+  const surfaces = inventories
+    .flatMap((inv) => inv.localSurfaces)
+    .map((s) => ({
+      host: s.host,
+      kind: s.kind,
+      id: s.id,
+      path: relative(repoRoot, s.path),
+    }))
+    .sort((a, b) => keyOf(a).localeCompare(keyOf(b)) || a.path.localeCompare(b.path));
+  return surfaceCatalog.parse({ schema_version: '0.1.0', surfaces });
 }
 
 export async function collectSurfaceInventory(

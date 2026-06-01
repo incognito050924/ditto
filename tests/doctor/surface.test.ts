@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { listHostAdapters } from '~/core/hosts';
+import { generateSurfaceCatalog } from '~/core/surface-inventory';
 
 const repoRoot = join(import.meta.dir, '..', '..');
 const cli = join(repoRoot, 'src', 'cli', 'index.ts');
@@ -161,5 +164,15 @@ describe('doctor surface', () => {
       ),
     ).toBe(true);
     expect(json.findings.some((finding: { id: string }) => finding.id === 'extra-a')).toBe(false);
+  });
+});
+
+describe('generated surface catalog (G6: code-generated, no hand drift)', () => {
+  test('regenerating from code equals the committed .ditto/surfaces.json', async () => {
+    const committed = JSON.parse(readFileSync(join(repoRoot, '.ditto', 'surfaces.json'), 'utf8'));
+    const generated = await generateSurfaceCatalog(listHostAdapters(), repoRoot);
+    // committed catalog IS the generator's output; a surface added without
+    // running scripts/gen-surfaces.ts makes this fail (drift caught, not silent).
+    expect(generated).toEqual(committed);
   });
 });
