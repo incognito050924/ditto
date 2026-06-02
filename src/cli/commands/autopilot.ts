@@ -1,7 +1,9 @@
 import { defineCommand } from 'citty';
 import { bootstrapAutopilot } from '~/core/autopilot-bootstrap';
+import { assembleCompletionFromGraph } from '~/core/autopilot-complete';
 import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
+import { CompletionStore } from '~/core/completion-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { IntentStore } from '~/core/intent-store';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -258,15 +260,86 @@ const autopilotRecordResult = defineCommand({
   },
 });
 
+/**
+ * `ditto autopilot complete` — assemble a completion contract from the finished
+ * graph (done→completion bridge). Maps each acceptance criterion to the evidence
+ * the nodes collected and derives its verdict, evidence-gated (a pass needs a
+ * passed addressing node WITH evidence; otherwise unverified). Not auto-pass —
+ * `final_verdict=pass` still demands every AC closed with real evidence (§6.8).
+ */
+const autopilotComplete = defineCommand({
+  meta: {
+    name: 'complete',
+    description:
+      'Assemble a completion contract from the finished autopilot graph (evidence-gated)',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    summary: {
+      type: 'string',
+      description: 'Completion narrative; a terse default is derived when omitted',
+      required: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    try {
+      const graph = await new AutopilotStore(repoRoot).get(args.workItem);
+      const workItem = await new WorkItemStore(repoRoot).get(args.workItem);
+      const completion = assembleCompletionFromGraph(graph, workItem, {
+        ...(args.summary ? { summary: args.summary } : {}),
+      });
+      await new CompletionStore(repoRoot).write(completion);
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.workItem,
+          final_verdict: completion.final_verdict,
+          acceptance: completion.acceptance.map((a) => ({
+            criterion_id: a.criterion_id,
+            verdict: a.verdict,
+            evidence_count: a.evidence.length,
+          })),
+          path: `.ditto/work-items/${args.workItem}/completion.json`,
+        });
+      } else {
+        writeHuman(
+          `Assembled completion for ${args.workItem}: final_verdict=${completion.final_verdict}`,
+        );
+        for (const a of completion.acceptance) {
+          writeHuman(`  ${a.criterion_id}: ${a.verdict} (${a.evidence.length} evidence)`);
+        }
+        if (completion.final_verdict !== 'pass') {
+          writeHuman(
+            '  (non-pass: criteria without evidence stay unverified — close them, then re-run)',
+          );
+        }
+      }
+    } catch (err) {
+      writeError(`complete failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const autopilotCommand = defineCommand({
   meta: {
     name: 'autopilot',
     description:
-      'Manage the autopilot graph (bootstrap) and drive the loop (next-node/record-result)',
+      'Manage the autopilot graph (bootstrap) and drive the loop (next-node/record-result/complete)',
   },
   subCommands: {
     bootstrap: autopilotBootstrap,
     'next-node': autopilotNextNode,
     'record-result': autopilotRecordResult,
+    complete: autopilotComplete,
   },
 });
