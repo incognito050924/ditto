@@ -116,6 +116,37 @@ describe('assembleCompletionFromGraph (deterministic completion from the graph; 
     expect(c.final_verdict).not.toBe('pass'); // ac-2 unverified
   });
 
+  test('a non-terminal node is surfaced as a remaining risk naming the node ids', () => {
+    const graph = graphWith([
+      node({ id: 'N3', acceptance_refs: ['ac-1'], status: 'passed', evidence_refs: [ev('t')] }),
+      node({ id: 'N4', acceptance_refs: ['ac-1'], status: 'blocked', evidence_refs: [] }),
+    ]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), { now: NOW });
+    const risk = c.remaining_risks.find((r) => r.includes('non-terminal graph nodes'));
+    expect(risk).toBeDefined();
+    expect(risk).toContain('N4');
+    expect(risk).not.toContain('N3'); // terminal nodes are not listed
+  });
+
+  test('caller-supplied remaining risks are preserved alongside the non-terminal entry', () => {
+    const graph = graphWith([node({ id: 'N4', status: 'pending', evidence_refs: [] })]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+      now: NOW,
+      remainingRisks: ['caller risk'],
+    });
+    expect(c.remaining_risks).toContain('caller risk');
+    expect(c.remaining_risks.some((r) => r.includes('non-terminal graph nodes'))).toBe(true);
+  });
+
+  test('a graph where every node is terminal has no non-terminal-node entry', () => {
+    const graph = graphWith([
+      node({ id: 'N3', acceptance_refs: ['ac-1'], status: 'passed', evidence_refs: [ev('t')] }),
+      node({ id: 'N4', acceptance_refs: ['ac-1'], status: 'failed', evidence_refs: [ev('f')] }),
+    ]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), { now: NOW });
+    expect(c.remaining_risks.some((r) => r.includes('non-terminal graph nodes'))).toBe(false);
+  });
+
   test('a default summary is derived when none is supplied', () => {
     const graph = graphWith([
       node({ id: 'N3', acceptance_refs: ['ac-1'], evidence_refs: [ev('t')] }),

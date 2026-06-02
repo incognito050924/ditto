@@ -67,12 +67,21 @@ export function assembleCompletionFromGraph(
   const summary =
     opts.summary ??
     `Completion assembled from autopilot ${graph.autopilot_id} (${graph.nodes.length} nodes) for "${workItem.goal}".`;
+  // Non-terminal nodes ({pending, running, blocked}) mean graph work is unfinished;
+  // surface them as a remaining risk after preserving any caller-supplied risks.
+  const nonTerminal = graph.nodes.filter((n) => n.status !== 'passed' && n.status !== 'failed');
+  const remainingRisks = [
+    ...(opts.remainingRisks ?? []),
+    ...(nonTerminal.length > 0
+      ? [`non-terminal graph nodes (work unfinished): ${nonTerminal.map((n) => n.id).join(', ')}`]
+      : []),
+  ];
   return buildCompletion({
     workItem,
     declaredBy: 'verifier',
     summary,
     verdicts,
-    ...(opts.remainingRisks ? { remainingRisks: opts.remainingRisks } : {}),
+    ...(remainingRisks.length > 0 ? { remainingRisks } : {}),
     ...(opts.now ? { now: opts.now } : {}),
   });
 }
