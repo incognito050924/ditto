@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ZodTypeAny, z } from 'zod';
-import { completionGate, convergenceGate } from '~/core/gates';
+import { completionEvidenceGate, completionGate, convergenceGate } from '~/core/gates';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import { type Autopilot, autopilot as autopilotSchema } from '~/schemas/autopilot';
@@ -184,6 +184,8 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   if (completion.status === 'ok') {
     const g = completionGate(workItem, completion.data);
     if (!g.pass) reasons.push(...g.reasons);
+    const e = completionEvidenceGate(completion.data);
+    if (!e.pass) reasons.push(...e.reasons);
   }
   if (conv.status === 'ok') {
     const g = convergenceGate(conv.data);

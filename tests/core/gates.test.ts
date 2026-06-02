@@ -66,6 +66,27 @@ describe('acceptanceTestable', () => {
       expect(acceptanceTestable({ statement: ac.statement }).pass).toBe(false);
     }
   });
+
+  test('word-boundary: substrings of vague terms do not false-positive', () => {
+    const noFast = acceptanceTestable({ statement: 'serve breakfast within 200ms' });
+    expect(noFast.reasons.some((r) => /vague/.test(r))).toBe(false);
+    const steadfast = acceptanceTestable({ statement: 'steadfast retries return 200' });
+    expect(steadfast.reasons.some((r) => /vague/.test(r))).toBe(false);
+    const improvement = acceptanceTestable({ statement: 'reduce improvement lag to under 5' });
+    expect(improvement.reasons.some((r) => /vague/.test(r))).toBe(false);
+  });
+
+  test('word-boundary: standalone vague terms still flag (incl. multi-word)', () => {
+    expect(acceptanceTestable({ statement: 'response must be fast' }).reasons.join()).toContain(
+      'fast',
+    );
+    expect(acceptanceTestable({ statement: 'user-friendly output' }).reasons.join()).toContain(
+      'user-friendly',
+    );
+    expect(acceptanceTestable({ statement: 'be more user friendly' }).reasons.join()).toContain(
+      'user friendly',
+    );
+  });
 });
 
 describe('completionGate cross-checks against the work item', () => {

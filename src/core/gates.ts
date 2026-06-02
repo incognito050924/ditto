@@ -122,10 +122,16 @@ const VAGUE_TERMS = [
 const OBSERVABLE =
   /\b(returns?|rejects?|responds?|displays?|shows?|exits?|equals?|matches?|contains?|within|less than|greater than|at most|at least|status|code|\d)/i;
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export function acceptanceTestable(ac: { statement: string }): GateResult {
   const reasons: string[] = [];
   const lower = ac.statement.toLowerCase();
-  const vague = VAGUE_TERMS.filter((t) => lower.includes(t));
+  // Word-boundary match: 'breakfast' must not hit 'fast', 'improvement' must not
+  // hit 'improve'. Multi-word phrases ('user friendly') keep \b around the whole.
+  const vague = VAGUE_TERMS.filter((t) => new RegExp(`\\b${escapeRegex(t)}\\b`).test(lower));
   if (vague.length > 0) reasons.push(`vague term(s): ${[...new Set(vague)].join(', ')}`);
   if (!OBSERVABLE.test(ac.statement)) reasons.push('no observable/measurable predicate found');
   return gate(reasons);

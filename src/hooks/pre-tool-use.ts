@@ -31,8 +31,132 @@ const SECRET_PATTERNS = [
   /(^|\/)\.ssh\//,
   /(^|\/)credentials?($|[._-])/,
 ];
+/** Template/example suffixes: a `*.env.example` etc. holds no real secret. */
+const TEMPLATE_SUFFIXES = ['.example', '.sample', '.template', '.dist', '.tmpl'];
+function isTemplatePath(p: string): boolean {
+  return TEMPLATE_SUFFIXES.some((s) => p.endsWith(s));
+}
 function isSecretPath(p: string): boolean {
+  // Template/example files are excluded here so every consumer (file-tool path,
+  // Bash operand scan) treats `.env.example` / `credentials.sample` as harmless.
+  if (isTemplatePath(p)) return false;
   return SECRET_PATTERNS.some((re) => re.test(p));
+}
+
+// --- (b) Bash secret exposure: default-deny ---------------------------------
+// Invariant: a secret file's CONTENTS must not be able to leave via this
+// command; block any secret path used as a readable file operand or stdin
+// source, allowing only name-only metadata verbs, template-suffixed example
+// files, and grep/rg search-pattern positions.
+//
+// This is DEFAULT-DENY: an UNKNOWN verb with a bare secret file operand BLOCKS
+// (e.g. `sort .env`, `jq . .env`, `dd if=id_rsa`). The previous expose-verb
+// allowlist was under-inclusive and let ~30 real exfil commands through.
+
+/** Verbs that only list/stat a name without reading its contents → allowed. */
+const METADATA_VERBS: ReadonlySet<string> = new Set([
+  'ls',
+  'find',
+  'stat',
+  'file',
+  'basename',
+  'dirname',
+  'realpath',
+  'test',
+  '[',
+  'which',
+  'type',
+]);
+/** Verbs whose first non-flag operand is a SEARCH PATTERN, not a file. */
+const SEARCH_VERBS: ReadonlySet<string> = new Set(['grep', 'rg', 'egrep', 'fgrep']);
+/** Flags after which the next token is a pattern/file source, not the pattern. */
+const SEARCH_PATTERN_FLAGS: ReadonlySet<string> = new Set(['-e', '--regexp', '-f', '--file']);
+
+/** Split a command into pipeline / sequence segments. */
+function commandSegments(cmd: string): string[] {
+  return cmd.split(/\|\||&&|[;&|]/).map((s) => s.trim());
+}
+
+/**
+ * Tokens of a segment. Splits on whitespace / quotes / `=` (so `if=id_rsa` and
+ * `-d=...` decompose, exposing the secret operand) and isolates a leading
+ * redirect operator (`<`, `0<`) as its own `<` marker token so the stdin source
+ * that follows can be detected. A glued `<.env` becomes `<` then `.env`.
+ */
+function segmentTokens(seg: string): string[] {
+  const out: string[] = [];
+  for (const raw of seg.split(/[\s'"=]+/)) {
+    if (raw.length === 0) continue;
+    const redir = raw.match(/^([0-9]*<)(.*)$/);
+    if (redir) {
+      out.push('<');
+      if (redir[2] && redir[2].length > 0) out.push(redir[2]);
+    } else {
+      out.push(raw);
+    }
+  }
+  return out;
+}
+
+/** Strip operand decorations: leading `@` (curl body file) for the path test. */
+function asPath(t: string): string {
+  return t.startsWith('@') ? t.slice(1) : t;
+}
+
+/**
+ * Default-deny secret scan. Returns the offending secret token (for the block
+ * message), or undefined when no segment leaks a secret.
+ */
+function bashSecretExposure(cmd: string): string | undefined {
+  for (const seg of commandSegments(cmd)) {
+    const tokens = segmentTokens(seg);
+    if (tokens.length === 0) continue;
+    const verb = tokens[0] ?? '';
+    const args = tokens.slice(1);
+
+    // 1. stdin redirection: `… < .env` exfiltrates a secret's contents.
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '<') {
+        const src = args[i + 1] ?? '';
+        if (isSecretPath(asPath(src))) return asPath(src);
+      }
+    }
+
+    // grep/rg: the first non-flag operand is the search PATTERN (allowed even if
+    // secret-shaped); any later non-flag operand is a FILE operand and blocks.
+    if (SEARCH_VERBS.has(verb)) {
+      let seenPattern = false;
+      for (let i = 0; i < args.length; i++) {
+        const a = args[i] ?? '';
+        if (a === '<') {
+          i++; // redirect already handled above
+          continue;
+        }
+        if (a.startsWith('-')) {
+          if (SEARCH_PATTERN_FLAGS.has(a)) i++; // its argument is not a file
+          continue;
+        }
+        if (!seenPattern) {
+          seenPattern = true; // this operand is the search pattern, not a file
+          continue;
+        }
+        if (isSecretPath(asPath(a))) return asPath(a);
+      }
+      continue;
+    }
+
+    // 2. default-deny: any secret token used as a file operand blocks, with
+    //    only metadata-verb and template-suffix exceptions.
+    const secretToken = args.find(
+      (t) => t !== '<' && !t.startsWith('-') && isSecretPath(asPath(t)),
+    );
+    if (secretToken === undefined) continue;
+    // (b) metadata-only verbs list/stat the name without reading contents.
+    if (METADATA_VERBS.has(verb)) continue;
+    // (a) template suffixes are already excluded inside isSecretPath.
+    return asPath(secretToken);
+  }
+  return undefined;
 }
 
 // --- (c) scope-out write ----------------------------------------------------
@@ -127,11 +251,12 @@ export const preToolUseHandler: HookHandler = (input: HookInput) => {
     const destructive = checkDestructive(command);
     if (destructive.exitCode === 2) return destructive;
 
-    // (b) secret-file reference inside a Bash command (basename-style tokens)
-    for (const token of command.split(/[\s'"=]+/)) {
-      if (token.length > 0 && isSecretPath(token)) {
-        return block('secret', `command references a secret file (${token})`);
-      }
+    // (b) secret-file exposure inside a Bash command — verb-aware (a secret-shaped
+    // name under a non-exposing verb like `git log` / `ls` / `grep -r … src/` is
+    // not a leak and must not block).
+    const exposed = bashSecretExposure(command);
+    if (exposed !== undefined) {
+      return block('secret', `command exposes a secret file (${exposed})`);
     }
 
     // (c) best-effort static redirect / copy destination

@@ -44,7 +44,7 @@ const completion = (overrides: Record<string, unknown>) => ({
   declared_at: '2026-05-26T02:00:00.000Z',
   summary: 'claim',
   changed_files: [],
-  verifications: [],
+  verifications: [{ command: 'bun test', exit_code: 0 }],
   unverified: [],
   remaining_risks: [],
   final_verdict: 'pass',
@@ -127,6 +127,23 @@ describe('stopHandler', () => {
       }),
     );
     expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('final_verdict=pass with all-AC-pass but no runnable verification evidence => exit 2 (G8 ack≠verification)', async () => {
+    await writeArtifact(
+      'completion.json',
+      completion({
+        acceptance: [
+          { criterion_id: 'ac-1', verdict: 'pass', evidence: [{ kind: 'note', summary: 'ok' }] },
+          { criterion_id: 'ac-2', verdict: 'pass' },
+          { criterion_id: 'ac-3', verdict: 'pass' },
+        ],
+        verifications: [],
+      }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('ack');
   });
 
   test('no completion artifact + active autopilot has a ready node => exit 2', async () => {

@@ -109,6 +109,7 @@ function buildCompletion(
   changedFiles: string[],
   declaredBy: DeclarerRole,
   unverifiedExtras: { item: string; reason: string; out_of_scope: boolean }[] = [],
+  prior?: CompletionContract,
 ): CompletionContract {
   const acceptance = item.acceptance_criteria.map((ac) => ({
     criterion_id: ac.id,
@@ -119,19 +120,32 @@ function buildCompletion(
   const blockedByUnverified = unverifiedExtras.some((u) => !u.out_of_scope);
   const final = allPass && !blockedByUnverified ? ('pass' as const) : ('partial' as const);
   const handoffPath = `.ditto/work-items/${item.id}/handoff.md`;
+  const builtSummary = allPass
+    ? `${item.title} — 모든 acceptance criterion이 pass로 기록되었다.`
+    : `${item.title} — 일부 acceptance criterion이 비-pass 상태로 partial 핸드오프된다.`;
+  // Merge-preserve a prior completion's non-empty fields ONLY when the freshly
+  // built value is empty/default — a re-handoff must not clobber verifications /
+  // remaining_risks the verifier already recorded. Summary is preserved only
+  // within the same verdict class (a verdict flip means the prior summary is
+  // now stale).
+  const verifications = prior && prior.verifications.length > 0 ? prior.verifications : [];
+  const builtRisks = item.risks.map((r) => r.description);
+  const remaining_risks =
+    builtRisks.length === 0 && prior && prior.remaining_risks.length > 0
+      ? prior.remaining_risks
+      : builtRisks;
+  const summary = prior && prior.final_verdict === final ? prior.summary : builtSummary;
   const base = {
     schema_version: '0.1.0' as const,
     work_item_id: item.id,
     declared_by: declaredBy,
     declared_at: declaredAt,
-    summary: allPass
-      ? `${item.title} — 모든 acceptance criterion이 pass로 기록되었다.`
-      : `${item.title} — 일부 acceptance criterion이 비-pass 상태로 partial 핸드오프된다.`,
+    summary,
     changed_files: changedFiles,
     acceptance,
-    verifications: [],
+    verifications,
     unverified: unverifiedExtras,
-    remaining_risks: item.risks.map((r) => r.description),
+    remaining_risks,
     final_verdict: final,
     next_handoff_path: handoffPath,
   };
@@ -264,12 +278,27 @@ export async function writeWorkItemHandoff(
     `.ditto/work-items/${workId}/work-item.json`,
   ];
   const merged = Array.from(new Set([...collected, ...selfArtifacts])).sort();
+  const completionPath = join(repoRoot, '.ditto', 'work-items', workId, 'completion.json');
+  // Tolerant prior read: a malformed / absent prior must NOT block a fresh
+  // handoff. It's only used to preserve verifier-recorded fields (verifications,
+  // remaining_risks, summary) that the from-scratch build would otherwise drop.
+  let prior: CompletionContract | undefined;
+  const priorFile = Bun.file(completionPath);
+  if (await priorFile.exists()) {
+    try {
+      const parsed = completionContract.safeParse(JSON.parse(await priorFile.text()));
+      if (parsed.success) prior = parsed.data;
+    } catch {
+      prior = undefined;
+    }
+  }
   const completion = buildCompletion(
     item,
     now.toISOString(),
     merged,
     options.declaredBy ?? 'main',
     unverifiedExtras,
+    prior,
   );
   const effectiveReEntry: WorkItem['re_entry'] =
     completion.final_verdict === 'pass'
@@ -278,7 +307,6 @@ export async function writeWorkItemHandoff(
           command: `ditto work resume ${item.id}`,
           fresh_evidence_needed: ['미pass acceptance에 대한 검증 결과'],
         });
-  const completionPath = join(repoRoot, '.ditto', 'work-items', workId, 'completion.json');
   await writeJson(completionPath, completionContract, completion);
   const handoffPath = join(repoRoot, '.ditto', 'work-items', workId, 'handoff.md');
   await atomicWriteText(handoffPath, renderHandoffMarkdown(item, completion, effectiveReEntry));

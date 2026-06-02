@@ -234,6 +234,46 @@ describe('writeWorkItemHandoff', () => {
     }
   });
 
+  test('re-handoff preserves a prior completion.json verifications/remaining_risks/summary (same verdict)', async () => {
+    const created = await store.create(makeInput());
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
+      ),
+    }));
+    // First handoff → pass verdict, completion.json written.
+    await writeWorkItemHandoff(workDir, store, created.id);
+    // A verifier enriches the completion.json with real verifications + risks + summary.
+    const completionPath = join(workDir, '.ditto', 'work-items', created.id, 'completion.json');
+    const enriched = JSON.parse(await Bun.file(completionPath).text());
+    enriched.verifications = [{ command: 'bun test', exit_code: 0 }];
+    enriched.remaining_risks = ['r1'];
+    enriched.summary = 'verifier-authored richer summary';
+    await Bun.write(completionPath, JSON.stringify(enriched));
+    // Re-handoff: prior non-empty fields must survive (built defaults are empty).
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    expect(result.completion.final_verdict).toBe('pass');
+    expect(result.completion.verifications.length).toBeGreaterThan(0);
+    expect(result.completion.remaining_risks).toContain('r1');
+    expect(result.completion.summary).toBe('verifier-authored richer summary');
+  });
+
+  test('re-handoff with a malformed prior completion.json still succeeds with built defaults', async () => {
+    const created = await store.create(makeInput());
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
+      ),
+    }));
+    const completionPath = join(workDir, '.ditto', 'work-items', created.id, 'completion.json');
+    await Bun.write(completionPath, '{ this is not valid json');
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    expect(result.completion.final_verdict).toBe('pass');
+    expect(result.completion.verifications).toEqual([]);
+  });
+
   test('--head with invalid ref throws InvalidHeadRefError', async () => {
     const created = await store.create(makeInput());
     let thrown: unknown;

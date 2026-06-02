@@ -5,7 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
-import { resolveActiveWorkItem, userPromptSubmitHandler } from '~/hooks/user-prompt-submit';
+import {
+  classifyPromptAdvisory,
+  resolveActiveWorkItem,
+  userPromptSubmitHandler,
+} from '~/hooks/user-prompt-submit';
 
 let repo: string;
 beforeEach(async () => {
@@ -21,6 +25,19 @@ function additionalContext(stdout: string | undefined): string {
   const parsed = JSON.parse(stdout ?? '{}');
   return parsed.hookSpecificOutput?.additionalContext ?? '';
 }
+
+describe('classifyPromptAdvisory', () => {
+  test.each(['what does this do?', '이게 맞나요?', '왜 이렇게 했어', '무엇을 해야 하는가'])(
+    'question: %s',
+    (p) => {
+      expect(classifyPromptAdvisory(p)).toBe('question');
+    },
+  );
+
+  test.each(['build X', '이거 구현해줘', '비밀번호 검증 추가'])('execution: %s', (p) => {
+    expect(classifyPromptAdvisory(p)).toBe('execution');
+  });
+});
 
 describe('resolveActiveWorkItem (single-active invariant)', () => {
   test('empty state creates a draft work item and sets the pointer', async () => {

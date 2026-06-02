@@ -16,6 +16,19 @@ const NON_TERMINAL: ReadonlyArray<WorkItem['status']> = [
 /** Advisory-only classification (D2: a hint, not a keyword gate; real judgment is the skill's). */
 export function classifyPromptAdvisory(prompt: string): 'question' | 'execution' {
   const t = prompt.trim().toLowerCase();
+  // Korean execution-intent first: an explicit order ("…해줘", "구현", "수정"…)
+  // must stay 'execution' even when it ends with a question-ish particle, so the
+  // deep-interview directive still fires. (Korean is unaffected by toLowerCase.)
+  if (/(해\s*줘|해\s*주세요|해라|하라|구현|수정|추가|만들어|고쳐|바꿔|적용|삭제|제거)/.test(t)) {
+    return 'execution';
+  }
+  // Korean question: terminal interrogative particle OR an interrogative word.
+  if (
+    /(까|나요|는가|인가|니|냐|을까|ㄹ까|ㄴ가)\s*[?？]?\s*$/.test(t) ||
+    /(무엇|뭐|왜|어떻게|어떤|언제|어디|누가|누구|어느|몇)/.test(t)
+  ) {
+    return 'question';
+  }
   if (t.endsWith('?') || /^(what|why|how|when|where|who|which|is|are|does|can|should)\b/.test(t)) {
     return 'question';
   }

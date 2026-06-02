@@ -260,7 +260,7 @@ describe('M1.4 — Stop hook 최소 동작 (완료/수렴/노드상태 게이트
     declared_at: '2026-05-26T02:00:00.000Z',
     summary: 's',
     changed_files: [],
-    verifications: [],
+    verifications: [{ command: 'bun test', exit_code: 0 }],
     unverified: [],
     remaining_risks: [],
     final_verdict: 'pass',
