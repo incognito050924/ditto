@@ -1,0 +1,87 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2606022dw",
+  "status": "converged",
+  "started_at": "2026-06-02T05:50:16.660Z",
+  "updated_at": "2026-06-02T06:07:23.967Z",
+  "dimensions": [
+    {
+      "id": "d-skill-surface",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": "D1 §5#9: plan/dialectic-review 처리"
+    },
+    {
+      "id": "d-charter-injection",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q002"
+      ],
+      "notes": "D2 §4#10: charter advisory 주입"
+    },
+    {
+      "id": "d-failopen-surface",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q003"
+      ],
+      "notes": "D3 §4#9: session pointer fail-open"
+    }
+  ],
+  "readiness": {
+    "score": 0.85,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-02T06:05:08.994Z",
+      "dimension": "d-skill-surface",
+      "question": "plan·dialectic-review skill을 삭제할지/유지할지/개선할지?",
+      "why_matters": "사용자 surface 계약·comprehension debt에 직접 영향, 제거 시 conformance·doctor·문서 동반 수정",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "둘 다 skill-creator로 먼저 개선한다. 개선 후에도 plan/SKILL.md 효과가 미미하면 plan은 삭제. dialectic-review는 frontmatter를 잘 설계해 dialectic과 분리된 사용 가치를 살려 유지·강화.",
+      "answer_kind": "user"
+    },
+    {
+      "id": "q002",
+      "asked_at": "2026-06-02T06:05:24.030Z",
+      "dimension": "d-charter-injection",
+      "question": "매 턴 PRIME_DIRECTIVE(8줄) 재주입을 유지/축소/제거할지?",
+      "why_matters": "토큰 비용 vs 긴 컨텍스트 drift 방지; CLAUDE.md 본문은 CC native 유지",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "유지. 매 턴 ~150토큰은 소액이고 drift 방지 가치가 실재하므로 charter advisory 주입을 그대로 둔다(이 항목은 work item 없음).",
+      "answer_kind": "user"
+    },
+    {
+      "id": "q003",
+      "asked_at": "2026-06-02T06:05:24.120Z",
+      "dimension": "d-failopen-surface",
+      "question": "session_id 부재 시 게이트 no-op을 표면화(경고/차단)할지 현행 유지할지?",
+      "why_matters": "조용한 게이트 무력화 vs 정상 컨텍스트 마찰",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "경고로 표면화하되 비차단. session_id 부재로 완료 게이트가 no-op일 때 stderr 경고를 내보내 조용한 무력화를 드러낸다. exit는 0 유지(세션 마찰 방지).",
+      "answer_kind": "user"
+    }
+  ],
+  "assumptions": [],
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 3
+  }
+}

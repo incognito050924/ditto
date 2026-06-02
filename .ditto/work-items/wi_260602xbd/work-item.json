@@ -1,0 +1,23 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260602xbd",
+  "title": "§5#8 dialectic id",
+  "source_request": "[캠페인 wi_2606022dw 항목] 평가보고서 §5#8. objection 안정 id, synthesizer가 id로 해소 매칭.",
+  "goal": "dialectic objection에 안정 id를 도입해 synthesizer paraphrase 해소를 허용하고 verbatim 하위호환을 유지한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "본 work item의 첫 acceptance — verify 명령으로 갱신 대상",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-02T06:08:45.446Z",
+  "updated_at": "2026-06-02T06:08:45.446Z"
+}

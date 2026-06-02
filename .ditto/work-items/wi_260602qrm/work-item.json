@@ -1,0 +1,23 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260602qrm",
+  "title": "§5#9 skill 개선",
+  "source_request": "[캠페인 wi_2606022dw 항목] 평가보고서 §5#9 + D1 결정. skill-creator 개선 우선, 조건부 plan 삭제.",
+  "goal": "plan·dialectic-review skill을 skill-creator로 개선하고 plan은 가치 미미 시 삭제(동반 수정) dialectic-review는 frontmatter 강화로 유지한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "본 work item의 첫 acceptance — verify 명령으로 갱신 대상",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-02T06:08:45.726Z",
+  "updated_at": "2026-06-02T06:08:45.726Z"
+}

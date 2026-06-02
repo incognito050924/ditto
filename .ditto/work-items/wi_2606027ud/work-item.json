@@ -1,0 +1,23 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2606027ud",
+  "title": "§4#11 boolean 검증",
+  "source_request": "[캠페인 wi_2606022dw 항목] 평가보고서 §4#11. non_local·different_provider·agreed_with_user·admissible 근거 필드.",
+  "goal": "자기선언 boolean 4종을 빈 근거 true 거부로 검증가능화하고 기존 산출물 하위호환을 유지한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "본 work item의 첫 acceptance — verify 명령으로 갱신 대상",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-02T06:08:45.537Z",
+  "updated_at": "2026-06-02T06:08:45.537Z"
+}

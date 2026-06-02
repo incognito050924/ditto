@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602rls",
+  "status": "converged",
+  "started_at": "2026-06-02T06:14:15.014Z",
+  "updated_at": "2026-06-02T06:15:05.393Z",
+  "dimensions": [
+    {
+      "id": "d-scope",
+      "critical": false,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": "템플릿=reviewer/verifier, 대상=implementer/planner/researcher"
+    }
+  ],
+  "readiness": {
+    "score": 0.85,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-02T06:14:15.111Z",
+      "dimension": "d-scope",
+      "question": "owner 본문 보강 범위와 깊이?",
+      "why_matters": "dispatch 품질, dispatch 코드 불변 제약",
+      "info_gain_estimate": "low",
+      "self_answer_attempts": [],
+      "answer": "implementer/planner/researcher 본문을 reviewer/verifier 수준(You do not receive·Procedure·You return·Contract)으로. 각 You return은 실제 출력 계약(schema/record-result 경로)에 근거. frontmatter 불변, v0 skeleton 마커 제거, dispatch 코드 불변.",
+      "answer_kind": "user"
+    }
+  ],
+  "assumptions": [],
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 1
+  }
+}

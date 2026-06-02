@@ -1,0 +1,23 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260602nkj",
+  "title": "§4#9 fail-open 경고",
+  "source_request": "[캠페인 wi_2606022dw 항목] 평가보고서 §4#9 + D3 결정. fail-open 경고 표면화.",
+  "goal": "session_id 부재로 Stop 완료 게이트가 no-op일 때 stderr 경고를 출력하고 exit 0을 유지한다 (평가보고서 §4#9)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "session_id 부재 시 Stop 훅이 stderr로 게이트 비활성 경고를 1회 출력하고 exit 0을 유지하며, session_id가 있으면 경고를 출력하지 않는다",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-02T06:08:45.815Z",
+  "updated_at": "2026-06-02T06:10:28.265Z"
+}
