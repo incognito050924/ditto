@@ -115,7 +115,7 @@ ditto는 사용자 직접 호출 CLI를 일부만 노출하고, 핵심 워크플
 | 7 | 빈 autopilot.json 우회 | approval=pending yield에 'mutating 노드 실재 ∧ root_goal 미충족' 조건 추가 | **G3/G5** 종료 게이트 우회 차단 | 낮음 |
 | 8 | dialectic verbatim-echo | objection에 안정 id 부여, synthesizer가 id로 해소 매칭(paraphrase 허용) | **G5** false-continuation 제거 | 중간 |
 | 9 | 죽은/얇은 추상화 정리 | plan skill·dialectic-review skill·~~selectReadyNode(단수)~~ **(삭제됨, #6)**·FailureDecision.continue 제거/흡수 | **G6** comprehension debt↓ | 낮음 |
-| 10 | owner skeleton 미완 | implementer/planner/researcher 본문을 reviewer/verifier 수준으로 | **G3** dispatch 품질 | 중간~높음 |
+| 10 | ~~owner skeleton 미완~~ **[해소 2026-06-02]** | implementer/planner/researcher 본문에 You-do-not-receive·Procedure·You-return 추가(reviewer/verifier 수준), v0 skeleton 마커 제거, frontmatter·dispatch 코드 불변. You-return은 실제 계약 인용(recordResultPayload+G7·approvalGate+RiskAxes·evidenceRecord). autopilot(wi_260602rls) N1→N2→N3 독립검증 703 pass. | **G3** dispatch 품질 | 중간~높음 |
 
 ## 6. 냉정한 종합 판단
 
