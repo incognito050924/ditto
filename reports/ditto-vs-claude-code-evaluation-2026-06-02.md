@@ -98,7 +98,7 @@ ditto는 사용자 직접 호출 CLI를 일부만 노출하고, 핵심 워크플
 6. **[중간·✓확인·해소 2026-06-02]** 죽은 코드/미런타임 — ~~buildContinuationSignal·nextReadyNodeId·ContinuationSignal 호출처 0(삭제, selectReadyNode 단수 포함)~~; ~~FailureDecision 'continue' unreachable(두 union에서 제거)~~; ~~e2e/knowledge 독립 CLI 미등록 → `ditto e2e run`·`ditto bridge knowledge` 배선~~. 배선 중 노출된 잠복 버그 2건 동반 수정: index.ts `await runMain`(미await 시 spawn 명령이 완료 전 exit 0), browser.ts lazy `runnerScriptPath`(compiled 바이너리 startup crash).
 7. **[중간]** NON_TERMINAL strong-block 우회 — 세 ledger 전부 absent일 때만 발동하므로, 빈 autopilot.json 하나만 두면 stop.ts:179에서 곧장 exit0 — verify 없이 종료 구조적 가능.
 8. **[중간]** dialecticForcesContinuation verbatim-echo 취약 — synthesizer가 opponent.claim을 paraphrase하면 미해결로 읽혀 false-continuation.
-9. **[낮음]** 광범위 fail-open — session pointer 없는 세션에서 게이트·증거·handoff 통째 no-op이나 표면화 안 됨.
+9. **[낮음·해소 2026-06-02]** 광범위 fail-open — ~~session pointer 없는 세션에서 게이트 no-op이나 표면화 안 됨~~ → D3 결정대로 stop.ts의 session_id 부재 branch가 stderr 경고를 내보냄(비차단, exit 0). autopilot wi_260602nkj 독립검증 704 pass.
 10. **[낮음·중복]** G1/G2가 CC 네이티브와 중복 — output-style/auto mode/subagent 격리가 이미 동일 방향. charter advisory 주입은 강제력 0+영구 토큰 비용.
 11. **[낮음]** 자기선언 boolean — RiskAxes.non_local, reviewerOutput.different_provider, languageChange.agreed_with_user, decisionLedger.admissible 모두 schema 검증 불가.
 

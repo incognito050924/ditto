@@ -18,7 +18,7 @@
       "kind": "design",
       "owner": "planner",
       "purpose": "Plan the change against the acceptance criteria",
-      "status": "running",
+      "status": "passed",
       "depends_on": [],
       "acceptance_refs": [
         "ac-1"
@@ -34,7 +34,7 @@
       "kind": "implement",
       "owner": "implementer",
       "purpose": "Implement the planned change",
-      "status": "pending",
+      "status": "passed",
       "depends_on": [
         "N1"
       ],
@@ -52,7 +52,7 @@
       "kind": "verify",
       "owner": "verifier",
       "purpose": "Verify every acceptance criterion with evidence",
-      "status": "pending",
+      "status": "passed",
       "depends_on": [
         "N2"
       ],

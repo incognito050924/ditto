@@ -139,7 +139,12 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   // Stop only branches on what it actually sees. API/rate-limit/auth/max-output
   // arrive as the separate StopFailure event whose output is ignored — not here.
   const sessionId = typeof raw.session_id === 'string' ? raw.session_id : undefined;
-  if (!sessionId) return { exitCode: 0 };
+  if (!sessionId)
+    return {
+      exitCode: 0,
+      stderr:
+        'DITTO Stop completion gate did not run: no session_id was provided, so the completion/convergence gates could not be checked.\n',
+    };
 
   const pointer = await new SessionPointerStore(input.repoRoot).get(sessionId);
   if (!pointer) return { exitCode: 0 };

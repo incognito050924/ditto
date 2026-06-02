@@ -95,9 +95,17 @@ describe('stopHandler', () => {
     expect((await run({ stop_hook_active: true })).exitCode).toBe(0);
   });
 
-  test('no session pointer => exit 0', async () => {
+  test('no session_id => exit 0 but warns the Stop completion gate did not run', async () => {
+    const out = await stopHandler({ raw: {}, repoRoot: repo, env: {} });
+    expect(out.exitCode).toBe(0);
+    expect(out.stderr).toContain('session_id');
+    expect(out.stderr).toContain('did not run');
+  });
+
+  test('no session pointer => exit 0 and no session_id warning', async () => {
     const out = await stopHandler({ raw: { session_id: 'unknown' }, repoRoot: repo, env: {} });
     expect(out.exitCode).toBe(0);
+    expect(out.stderr ?? '').not.toContain('session_id');
   });
 
   test('completion claims pass but misses a criterion => exit 2 with reasons', async () => {
