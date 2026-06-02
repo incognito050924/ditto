@@ -1,0 +1,93 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602qax",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-02T04:30:00.000Z",
+  "summary": "ditto 자기평가 보고서가 코드로 확정한 회귀·미배선 5건을 외과적으로 수정했다. (1) completionEvidenceGate를 Stop 완료 게이트에 배선 — 증거 없는 final_verdict=pass(빈 verifications + note-only evidence)를 exit 2로 차단해 '승인≠검증' 약속을 코드로 되살림. (2) handoff가 기존 completion.json의 verifications·remaining_risks·summary를 보존(무조건 clobber 차단). (3) classifyPromptAdvisory가 한국어 의문 프롬프트를 question으로 인식. (4) PreToolUse secret 차단을 default-deny로 재설계 — secret 파일 operand·stdin< 리다이렉션을 기본 차단하고 메타데이터 동사·검색패턴·템플릿 접미사만 좁게 예외(첫 expose-verb allowlist 시도는 적대검증에서 ~30개 유출 경로가 드러나 폐기). (5) gates VAGUE_TERMS를 단어경계 매칭으로. autopilot 루프(N1 design→승인→N2 implement→N3 verify[ac-4 FAIL]→N4 fix[default-deny]→N3 재검증)로 구동, 독립 적대검증으로 6/6 acceptance pass.",
+  "changed_files": [
+    "src/hooks/stop.ts",
+    "src/core/work-item-handoff.ts",
+    "src/hooks/user-prompt-submit.ts",
+    "src/hooks/pre-tool-use.ts",
+    "src/core/gates.ts",
+    "tests/hooks/stop.test.ts",
+    "tests/core/work-item-handoff.test.ts",
+    "tests/hooks/user-prompt-submit.test.ts",
+    "tests/hooks/pre-tool-use.test.ts",
+    "tests/core/gates.test.ts",
+    "tests/conformance/m1.conformance.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": "src/hooks/stop.ts", "summary": "completionEvidenceGate import L4 + 호출 L187 (completionGate와 같은 경로, reasons 병합)" },
+        { "kind": "command", "command": "bun test tests/hooks/stop.test.ts", "summary": "note-only-pass→exit2 신규 테스트 green; factory runnable verification 기본값(faithful, gate 마스킹 아님 — 독립 확인)" }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": "src/core/work-item-handoff.ts", "summary": "buildCompletion(prior?) tolerant read+merge: built 빈 경우만 prior verifications/remaining_risks 보존, summary는 동일 verdict일 때만" },
+        { "kind": "command", "command": "bun test tests/core/work-item-handoff.test.ts", "summary": "same-verdict 보존 + malformed-prior 무throw; completion-store.ts 미변경(git diff 확인)" }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": "src/hooks/user-prompt-submit.ts", "summary": "L16-31 한국어 execution-override 우선 + 의문 종결/의문사 패턴" },
+        { "kind": "command", "command": "bun test tests/hooks/user-prompt-submit.test.ts", "summary": "한국어 question/execution + 영어 회귀 25/25 (deep-interview directive 정합 유지)" }
+      ]
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": "src/hooks/pre-tool-use.ts", "summary": "default-deny: secret 파일 operand + stdin < secret 기본 차단, 메타데이터 동사/grep 검색패턴/템플릿 접미사만 예외; file-tool isSecretPath·bashWriteTargets 미변경" },
+        { "kind": "command", "command": "handler probe leak set 19 + 자체변형 10(tac/nl/strings/od/tar|nc/cat|curl 등)", "summary": "전부 exit 2 차단; 의도된 오탐 10/10 exit 0; 잔여 누출 0 (독립 재검증 2차)" }
+      ]
+    },
+    {
+      "criterion_id": "ac-5",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "path": "src/core/gates.ts", "summary": "VAGUE_TERMS \\b 단어경계 regex + escapeRegex (substring includes 폐기)" },
+        { "kind": "command", "command": "bun test tests/core/gates.test.ts", "summary": "breakfast/steadfast/improvement 무탐 + standalone fast/user-friendly 탐지; vague-ac.json fixture 회귀 0" }
+      ]
+    },
+    {
+      "criterion_id": "ac-6",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "command": "bun test", "summary": "702 pass / 0 fail, exit 0 (635→702, +67 신규)" },
+        { "kind": "command", "command": "bun run lint", "summary": "biome exit 0, 174 files, 0 finding" },
+        { "kind": "command", "command": "git diff --quiet .ditto/surfaces.json", "summary": "exit 0, surfaces 불변, count 25 유지" }
+      ]
+    }
+  ],
+  "verifications": [
+    { "command": "bun test", "exit_code": 0 },
+    { "command": "bun run lint", "exit_code": 0 },
+    { "command": "bun test tests/hooks/stop.test.ts", "exit_code": 0 },
+    { "command": "bun test tests/hooks/pre-tool-use.test.ts", "exit_code": 0 },
+    { "command": "bun test tests/core/work-item-handoff.test.ts", "exit_code": 0 },
+    { "command": "git diff --quiet .ditto/surfaces.json", "exit_code": 0 }
+  ],
+  "unverified": [
+    {
+      "item": "보고서 #6 continuation signal 배선 vs 삭제, #7 빈 autopilot.json 종료 정책, #8 dialectic objection id, #9 얇은 skill 제거, #10 owner 본문, #11 self-declared boolean 검증가능화",
+      "reason": "이번 work item 범위 밖(설계 판단/구조적·product 결정/대규모) — 의도적으로 follow-up으로 분리, intent.json out_of_scope에 명시.",
+      "out_of_scope": true
+    }
+  ],
+  "remaining_risks": [
+    "ac-4 default-deny는 단순형(single-segment) 유출을 모두 막지만, 복잡한 난독화(예: 변수 치환으로 secret 경로 조립, base64 인코딩된 경로, eval) 등은 isSecretPath 토큰 매칭을 우회할 수 있음 — 보수적 고확신 셋이라 의도된 false-negative 우선(엔트로피 스캐너는 follow-up).",
+    "ac-2 summary 보존은 prior와 final_verdict가 같을 때만 — verdict가 바뀌는 re-handoff에서는 stale 방지 위해 fresh summary 사용(설계 선택). handoff CLI의 두 buildCompletion 통일(완전 리팩터)은 안 함(외과적 변경 우선, completion-store.ts는 dead path).",
+    "ac-3 한국어 분류는 보수적 패턴 셋 — 드문 의문 종결어미나 혼합문은 놓칠 수 있음(execution-override 우선이라 directive 오발은 방지).",
+    "이번 세션의 PreToolUse 훅이 정상 read-only 명령(bun test/lint, .env 토큰 포함 테스트 명령)을 차단해 검증 시 DITTO_SKIP_HOOKS=1 prefix 필요(false-positive). ac-4 수정으로 일부 완화됐으나 훅 자체 활성 마찰은 잔존."
+  ],
+  "final_verdict": "pass"
+}

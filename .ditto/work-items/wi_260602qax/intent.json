@@ -1,0 +1,81 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602qax",
+  "source_request": "딥리서치 평가 보고서(reports/ditto-vs-claude-code-evaluation-2026-06-02.md)의 확정 회귀 #1~#5 수정까지 진행",
+  "goal": "ditto 자기평가 보고서가 코드(grep)로 확정한 회귀·미배선 5건을 외과적으로 수정한다 — (1) completionEvidenceGate를 Stop 완료 게이트에 배선해 증거 없는 final_verdict=pass를 exit 2로 차단, (2) handoff가 기존 completion.json의 verifications·remaining_risks를 보존(무조건 clobber 차단), (3) classifyPromptAdvisory가 한국어 의문 프롬프트를 question으로 인식, (4) PreToolUse secret 토큰 오탐 축소(노출 동사 컨텍스트로 한정), (5) gates VAGUE_TERMS를 단어경계 매칭으로. 전체 bun test green + biome lint 0 + 기존 동작 회귀 0.",
+  "in_scope": [
+    "src/hooks/stop.ts: completionEvidenceGate를 import해 completion final_verdict=pass 경로에서 completionGate와 함께 평가, runnable verification 없는 pass(note-only evidence + 빈 verifications)면 exit 2 차단 (기존 completionGate/convergenceGate와 동일 경로)",
+    "src/core/work-item-handoff.ts: buildCompletion이 기존 completion.json을 읽어 비어있지 않은 verifications·remaining_risks·summary를 보존/merge (무조건 빈 배열로 덮어쓰지 않음)",
+    "src/hooks/user-prompt-submit.ts classifyPromptAdvisory: 한국어 의문 신호(…까/…나요/…는가/…ㄴ가, 무엇/왜/어떻게/언제/어디/누가/어느) 인식해 question 분류 추가",
+    "src/hooks/pre-tool-use.ts: secret 토큰 차단을 모든 Bash 토큰이 아니라 파일 내용을 노출/유출하는 동사 컨텍스트(cat/less/more/head/tail/grep 대상·cp/scp/curl --upload 등)로 한정 — git log/ls/grep -r 패턴인자 등 비노출 메타 명령 오탐 제거",
+    "src/core/gates.ts VAGUE_TERMS 매칭: substring includes를 단어경계(\\b) 매칭으로 전환해 Breakfast/steadfast/improvement 류 false-positive 제거",
+    "각 수정에 대응하는 단위/CLI 테스트 추가 또는 갱신(양면: 차단해야 할 입력 차단 + 정상 입력 통과)"
+  ],
+  "out_of_scope": [
+    "보고서 #6 continuation signal(buildContinuationSignal 등) 배선 vs 삭제 — 설계 판단 필요, follow-up",
+    "보고서 #7 빈 autopilot.json pending-approval 종료 — pending=사용자 승인 대기는 의도된 동작일 여지가 커 별도 결정 필요, follow-up",
+    "보고서 #8 dialectic verbatim-echo objection id — follow-up",
+    "보고서 #9 plan/dialectic-review skill 등 얇은 추상화 제거 — 사용자 surface 제거(구조적/product 결정), 별도 work item",
+    "보고서 #10 implementer/planner/researcher owner 본문 채우기 — 대규모, 별도",
+    "보고서 #11 self-declared boolean 스키마 재설계 — follow-up",
+    "completion-contract superRefine에 'pass면 verifications>0' 조항 추가 — 과거 커밋된 completion.json fixture 회귀 위험이 있어 제외; 런타임 구멍은 stop.ts 배선으로 충분히 닫힘"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "src/hooks/stop.ts가 completionEvidenceGate를 호출하여, completion.json의 final_verdict=pass인데 verifications가 비어있고 모든 acceptance evidence가 note-kind뿐인 경우 exit 2(차단)를 반환한다. runnable verification(verifications>0 또는 non-note evidence)이 있는 pass는 exit 2를 발생시키지 않는다. 단위 테스트로 양면 검증.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": ["diff", "test"]
+    },
+    {
+      "id": "ac-2",
+      "statement": "ditto work handoff가 기존 completion.json에 비어있지 않은 verifications가 있을 때 그것을 빈 배열로 덮어쓰지 않는다(보존 또는 merge). 기존 verifications=[N>0]인 completion.json에 handoff를 실행한 뒤 verifications 길이가 N으로 유지됨을 테스트로 확인.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": ["diff", "test"]
+    },
+    {
+      "id": "ac-3",
+      "statement": "classifyPromptAdvisory가 한국어 의문 프롬프트 3종(예: '이게 맞나요?', '왜 이렇게 했어', '무엇을 해야 하는가')에 대해 'question'을 반환하고(returns), 한국어 실행 지시 2종(예: '이거 구현해줘')에는 'execution'을 반환한다. 단위 테스트 5케이스로 한국어 question/execution 양면 검증.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": ["test"]
+    },
+    {
+      "id": "ac-4",
+      "statement": "PreToolUse 핸들러가 secret 파일을 실제로 읽거나 유출하는 Bash 명령(예: cat .env, grep KEY .env 대상)은 exit 2로 차단하되, secret 파일을 노출하지 않는 메타/문서 명령(예: 'git log credentials.example', 'ls .ssh.bak', 'grep -r credential src/')은 exit 0으로 통과시킨다. 단위 테스트로 차단/통과 양면 검증.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": ["test"]
+    },
+    {
+      "id": "ac-5",
+      "statement": "acceptanceTestable의 VAGUE_TERMS 탐지가 단어경계(\\b) 기반으로 동작하여, 모호어를 부분문자열로만 품은 합성 단어 2개를 든 AC는 vague 카운트 0으로 통과하고(returns testable), 동일 모호어를 독립 단어로 품은 AC는 vague 카운트 1 이상으로 탐지된다. 단위 테스트 2케이스로 양면 검증.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": ["test"]
+    },
+    {
+      "id": "ac-6",
+      "statement": "전체 bun test가 exit code 0(green)이고 biome lint finding이 0이며 기존 v0/post-v0 동작 회귀가 0이다. 새 surface 추가 없음(surfaces.json 불변, count 25 유지).",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": ["test"]
+    }
+  ],
+  "unknowns": [
+    "ac-1: stop.ts에서 completionGate가 현재 호출되는 정확한 위치/조건을 implementer가 읽고 completionEvidenceGate를 같은 final_verdict=pass 경로에 합류(reasons 병합). 기존 stop hook 테스트 회귀 0 확인.",
+    "ac-2: buildCompletion이 completion.json을 생성하는 시점에 기존 파일을 read해 merge할지, 아니면 completion-store의 verifier-aware 경로로 통일할지 — 최소 변경(read+보존)으로. 기존 completion.json이 없으면 현행대로 생성.",
+    "ac-4: '노출 동사' 화이트리스트/컨텍스트 판정의 정확한 셋 — 보수적으로(실제 노출 명령은 계속 차단, 비노출만 풀기). 과도하게 풀어 실제 secret 유출을 놓치지 않도록 양면 테스트.",
+    "ac-3: 한국어 의문 종결/의문사 패턴의 범위 — 오탐(실행 지시를 question으로) 최소화하는 보수적 셋."
+  ],
+  "follow_up_candidates": [
+    "#6 continuation signal 배선(G3 자동 handoff 실현) 또는 죽은 export 삭제",
+    "#7 빈 autopilot.json 종료 게이트 정책 결정",
+    "#9 plan/dialectic-review 등 얇은 skill 정리(surface 제거)",
+    "#10 implementer/planner/researcher owner 본문 작성",
+    "#11 self-declared boolean 검증 가능화"
+  ],
+  "question_policy": "ask_only_if_user_only_can_answer"
+}

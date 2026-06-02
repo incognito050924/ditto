@@ -1,0 +1,215 @@
+{
+  "schema_version": "0.1.0",
+  "autopilot_id": "orch_260602t7f",
+  "work_item_id": "wi_260602qax",
+  "mode": "autopilot",
+  "root_goal": "ditto 자기평가 보고서가 코드(grep)로 확정한 회귀·미배선 5건을 외과적으로 수정한다 — (1) completionEvidenceGate를 Stop 완료 게이트에 배선해 증거 없는 final_verdict=pass를 exit 2로 차단, (2) handoff가 기존 completion.json의 verifications·remaining_risks를 보존(무조건 clobber 차단), (3) classifyPromptAdvisory가 한국어 의문 프롬프트를 question으로 인식, (4) PreToolUse secret 토큰 오탐 축소(노출 동사 컨텍스트로 한정), (5) gates VAGUE_TERMS를 단어경계 매칭으로. 전체 bun test green + biome lint 0 + 기존 동작 회귀 0.",
+  "completion_boundary": "entire_work_item",
+  "approval_gate": {
+    "status": "approved",
+    "source": "user",
+    "approved_at": "2026-06-02T04:10:00.000Z",
+    "approved_by": "user",
+    "evidence_refs": []
+  },
+  "nodes": [
+    {
+      "id": "N1",
+      "kind": "design",
+      "owner": "planner",
+      "purpose": "Plan the change against the acceptance criteria",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5",
+        "ac-6"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "file",
+          "path": "src/hooks/stop.ts",
+          "summary": "completionGate 블록 L184-187 = evidenceGate 합류점"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/work-item-handoff.ts",
+          "summary": "buildCompletion L106, verifications:[] L132, writeJson L282"
+        },
+        {
+          "kind": "file",
+          "path": "src/hooks/user-prompt-submit.ts",
+          "summary": "classifyPromptAdvisory L17-23 영어전용"
+        },
+        {
+          "kind": "file",
+          "path": "src/hooks/pre-tool-use.ts",
+          "summary": "secret 토큰 flat 루프 L130-135"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "VAGUE_TERMS substring L128"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N2",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "Implement the planned change",
+      "status": "passed",
+      "depends_on": [
+        "N1"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5",
+        "ac-6"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "664 pass / 0 fail, +29 신규"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome exit 0, 174 files"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/stop.test.ts",
+          "summary": "ac-1 note-only-pass→exit2"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/pre-tool-use.test.ts",
+          "summary": "ac-4 9 block+8 allow 양면"
+        },
+        {
+          "kind": "file",
+          "path": "src/hooks/pre-tool-use.ts",
+          "summary": "bashSecretExposure expose-verb 모델"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N4",
+      "kind": "fix",
+      "owner": "implementer",
+      "purpose": "Redesign ac-4 secret-exposure to default-deny (block secret file operands + stdin < secret redirection) with narrow metadata/search-pattern/template exceptions, closing the exfil regression the verifier found",
+      "status": "passed",
+      "depends_on": [
+        "N2"
+      ],
+      "acceptance_refs": [
+        "ac-4",
+        "ac-6"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "handler probe: sort .env / dd if=id_rsa / nc<.env / git diff .env",
+          "summary": "전부 exit 2(차단 복구)"
+        },
+        {
+          "kind": "command",
+          "command": "handler probe: git log credentials.example / ls .ssh.bak / grep -r credential src/",
+          "summary": "전부 exit 0(의도된 오탐 유지)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "702 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome 0, 174 files"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N3",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Verify every acceptance criterion with evidence",
+      "status": "passed",
+      "depends_on": [
+        "N2",
+        "N4"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5",
+        "ac-6"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "handler probe leak set (19 cmds)",
+          "summary": "19/19 exit 2 차단 복구, 잔여 누출 0"
+        },
+        {
+          "kind": "command",
+          "command": "handler probe 오탐 10 + 자체변형 10",
+          "summary": "오탐 10/10 exit0, 변형 10/10 exit2"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "702 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint + git diff surfaces",
+          "summary": "biome 0, surfaces 25 불변"
+        }
+      ],
+      "attempts": {
+        "fix": 1,
+        "switch": 0
+      }
+    }
+  ],
+  "caps": {
+    "fix_per_node": 2,
+    "switch_per_node": 1
+  },
+  "continue_policy": {
+    "continue_after_approval": true,
+    "continue_after_checkpoint": true,
+    "continue_after_fixable_failure": true,
+    "ask_user_only_for_user_owned_decisions": true
+  },
+  "stop_conditions": [
+    "all_acceptance_criteria_passed_or_explicitly_closed",
+    "blocked_by_user_owned_decision",
+    "blocked_by_external_system",
+    "safety_boundary_hit"
+  ],
+  "user_interrupt_policy": "ask_only_for_user_owned_decisions"
+}
