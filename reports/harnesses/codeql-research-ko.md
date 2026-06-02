@@ -1,106 +1,105 @@
 ---
-title: "GitHub CodeQL 조사 보고서"
+title: "CodeQL 통합 연구 보고서 — 플랫폼 기초 + 코딩 에이전트 통합"
 kind: research
-last_updated: 2026-06-01 KST
-scope: "github/codeql, CodeQL CLI, code scanning, query packs, model packs"
-evidence_level: "공식 문서 + 공개 GitHub 저장소/API 스냅샷"
+last_updated: 2026-06-02 KST
+scope: "github/codeql, CodeQL CLI, code scanning, query/model packs, MCP/CLI 통합, LLM-friendly 지식 그래프 전달"
+evidence_level: "공식 문서 + 공개 GitHub 저장소/API 스냅샷 + 다중 소스 적대적 검증(deep-research)"
+merged_from:
+  - "codeql-research-ko.md (2026-06-01, 플랫폼 기초 조사)"
+  - "2026-06-02-codeql-coding-agents.md (deep-research, 에이전트 통합 패턴)"
+note: "BPMN/Camunda 활용 절은 본 통합 시 의도적으로 제외함"
 ---
 
-# GitHub CodeQL 조사 보고서
+# CodeQL 통합 연구 보고서 — 플랫폼 기초 + 코딩 에이전트 통합
 
-## 요약
+> **검증 표기 규칙**(메모리: harness-verify-marker-convention)
+> - 1차 소스로 확인된 사실은 그대로 기술한다.
+> - 추론·미실증 항목은 `[VERIFY]` 토큰으로 표시한다(`grep '\[VERIFY\]'`로 조회).
+> - 적대적 검증(deep-research)을 통과한 주장은 `[✓검증]`과 투표 결과를 병기한다.
+> - 본 보고서 작성 중 공식 문서로 재확인한 항목은 `[✓2026-06-02 재확인]`으로 표시한다.
 
-CodeQL은 단순한 라이브러리라기보다 **코드를 데이터베이스로 추출하고, QL이라는 질의 언어로 그 데이터베이스를 분석하는 정적 분석 플랫폼**이다. 사용자가 링크한 `github/codeql` 저장소는 그 플랫폼 전체가 아니라, GitHub Advanced Security와 CodeQL code scanning에 쓰이는 **표준 CodeQL 라이브러리, 쿼리, 테스트, 언어별 팩**의 공개 저장소다. CLI와 분석 엔진은 별도 배포/라이선스 체계를 가진다.
+---
 
-핵심 작동 모델은 세 단계다.
+## 0. 이 문서의 구성
 
-1. 언어별 extractor가 소스코드와 빌드 정보를 읽어 **언어별 CodeQL database**를 만든다.
-2. `.ql` 쿼리 또는 query suite/query pack을 그 데이터베이스에 실행한다.
-3. 결과를 SARIF, VS Code UI, GitHub code scanning alert, 또는 원시 BQRS 결과로 해석한다.
+두 개의 선행 보고서를 하나로 통합했다.
 
-CodeQL의 강점은 정규식 기반 검색이 아니라, AST, 타입/이름 바인딩, 제어 흐름, 데이터 흐름, taint tracking 위에서 "이 입력이 저 위험 sink까지 흐르는가", "이 API는 특정 조건 없이 호출되는가", "이 아키텍처 경계를 넘는 import/call이 있는가" 같은 질문을 질의로 만들 수 있다는 점이다.
+- **Part A — CodeQL 플랫폼 기초**: CodeQL이 무엇이고 어떻게 동작하는가, 저장소 구조, 분석 범위, 커스텀 룰. (2026-06-01 조사, 본 통합 시 버전·상태 재검증)
+- **Part B — 코딩 에이전트 통합**: CodeQL을 코딩 에이전트 워크플로우에 통합하는 검증된 패턴, MCP/CLI 통합, LLM-friendly 지식 그래프 전달, 실제 사례와 한계. (deep-research, 다중 소스 적대적 검증)
+- **Part C — 창의적 활용 + 실증 여부 주석**: 플랫폼 기능 위에 올린 활용 아이디어를, Part B에서 확인된 실제 선례와 대조해 "실증/추론/투기"로 등급화.
 
-커스텀 룰은 가능하다. `.ql` 파일로 직접 쓸 수 있고, 반복 사용하려면 `qlpack.yml` 기반 query pack, `.qls` query suite, model pack, data extension으로 배포할 수 있다. GitHub Actions code scanning에서는 advanced setup 또는 외부 CI/CodeQL CLI 경로가 필요하다.
+핵심 한 줄 요약:
 
-## 조사 기준과 한계
+> CodeQL의 본질은 "코드 검색기"가 아니라 **코드 의미 그래프에 대한 재사용 가능한 질의 시스템**이다. 코딩 에이전트 관점에서 증거가 가장 탄탄한 통합 형태는 **CodeQL을 결정론적 사실(데이터플로우 경로) 생성기로 쓰고, LLM은 그 위에서 판단(fuzzy reasoning)만 하며, 검증 가능한 작업은 MCP 서버에 남기는** 구조다.
 
-조사 기준일은 2026-06-01 KST다.
+---
 
-확인한 공개 스냅샷:
+## 1. 조사 기준과 한계
 
 | 항목 | 값 |
 |---|---|
-| 저장소 | `github/codeql` |
-| 기본 브랜치 | `main` |
-| 조사 기준 HEAD | `a16f1c555cea339ef5c8b4c7c9285b6e578c396c` |
-| GitHub API 기준 pushed_at | 2026-05-30T06:28:47Z |
-| GitHub API 기준 updated_at | 2026-05-31T12:50:42Z |
+| 통합 기준일 | 2026-06-02 KST |
+| github/codeql 조사 기준 HEAD | `a16f1c555cea339ef5c8b4c7c9285b6e578c396c` (2026-05-30 pushed) |
+| Part A 검증 | 공식 문서 확인, GitHub API 조회, 저장소 구조 확인 |
+| Part B 검증 | deep-research — 6개 각도 · 소스 20개 · 주장 99개 추출 → 25개 적대적 검증(24 확정 / 1 기각) |
 | 라이선스 | 저장소 코드 MIT, CodeQL CLI/engine은 별도 라이선스 |
 
-한계:
+공통 한계:
 
-- CodeQL 엔진 내부 구현은 공개 저장소의 대부분 범위 밖이다. 이 문서는 공식 문서, 공개 저장소 구조, CodeQL query/library pack 규약에 기반한다.
-- 실제로 이 저장소에 CodeQL을 설치해 로컬 분석을 실행하지는 않았다. 보고서 검증은 공식 문서 확인, GitHub API 조회, Markdown 산출물 확인으로 제한된다.
-- "창의적 활용" 절은 공식 기능 위에 올린 실무적 추론이다. 공식 지원 기능이라고 단정하지 않는다.
+- CodeQL 엔진 내부 구현은 공개 저장소 범위 밖이다. 본 문서는 공식 문서, 공개 저장소 구조, pack 규약, 공개 1차 소스에 기반한다.
+- **이 저장소에 CodeQL을 실제 설치해 로컬 분석을 실행하지는 않았다.** 검증은 문서 확인·API 조회·산출물 확인·다중 소스 교차검증으로 제한된다.
+- Part B의 통합 도구(MCP 서버, mrva, graphify, QLCoder, Vulnhalla 등)는 대부분 2025말~2026초 산출물로 변동이 빠르다. **착수 전 재확인 필수.**
 
-## 1. CodeQL은 어떤 라이브러리인가
+---
 
-정확히 말하면 CodeQL은 다음 네 가지가 결합된 분석 생태계다.
+# Part A — CodeQL 플랫폼 기초
+
+## A-1. CodeQL은 어떤 라이브러리인가
+
+CodeQL은 **코드를 데이터베이스로 추출하고, QL 질의 언어로 그 데이터베이스를 분석하는 정적 분석 플랫폼**이다. 링크된 `github/codeql` 저장소는 플랫폼 전체가 아니라, GitHub Advanced Security와 code scanning에 쓰이는 **표준 라이브러리·쿼리·테스트·언어별 팩**의 공개 저장소다. CLI와 엔진은 별도 저장소·별도 라이선스다.
+
+네 가지 구성:
 
 | 구성 요소 | 역할 |
 |---|---|
 | CodeQL CLI/engine | 데이터베이스 생성, 쿼리 컴파일/실행, 결과 해석, SARIF 출력 |
 | extractor | 언어별 소스/빌드 정보를 CodeQL database로 추출 |
-| QL language | CodeQL database를 질의하는 선언형, 객체지향적 논리 질의 언어 |
-| standard libraries/queries | 언어별 AST/CFG/DFG 추상화, 보안/품질 쿼리, 테스트, query suite |
+| QL language | database를 질의하는 선언형·객체지향 논리 질의 언어(의미론은 Datalog 계열) |
+| standard libraries/queries | 언어별 AST/CFG/DFG 추상화, 보안/품질 쿼리, suite |
 
-사용자가 링크한 `github/codeql` 저장소의 README는 이 저장소가 GitHub Advanced Security와 GitHub의 application security 제품에 쓰이는 표준 CodeQL 라이브러리와 쿼리를 담고 있다고 설명한다. 같은 README는 CLI와 엔진은 다른 저장소에 있고 별도 라이선스라고 명시한다.
+두 층을 구분해야 한다.
 
-따라서 "CodeQL 라이브러리"라고 부를 때는 보통 두 층을 구분해야 한다.
+- **분석 플랫폼으로서 CodeQL**: CLI, engine, extractor, database, VS Code 확장, Actions integration 포함.
+- **`github/codeql` 저장소로서 CodeQL**: 표준 query/library pack의 소스(`codeql/javascript-queries`, `codeql/java-all` 등). 코드는 MIT지만 CLI는 별도 조건(public repo 무료, private은 GitHub Code Security 라이선스).
 
-- **분석 플랫폼으로서 CodeQL**: CLI, engine, extractor, database, VS Code 확장, GitHub Actions integration까지 포함한다.
-- **`github/codeql` 저장소로서 CodeQL**: 표준 query pack과 library pack의 소스다. 예를 들어 `codeql/javascript-queries`, `codeql/javascript-all`, `codeql/python-queries`, `codeql/java-all` 같은 팩이 여기에 있다.
+## A-2. 어떻게 동작하는가
 
-이 구분은 라이선스와 운영에도 중요하다. 공개 저장소의 코드는 MIT지만, CodeQL CLI는 공개 저장소와 별도 조건을 가진다. 공식 문서 기준으로 CLI는 public repository에서 무료로 사용할 수 있고, private repository에서는 GitHub Code Security 라이선스 조건을 봐야 한다.
+**핵심 3단계**: ① extractor가 소스+빌드 정보로 언어별 CodeQL database 생성(AST·DFG·CFG 포함) → ② `.ql` 쿼리 또는 suite/pack 실행 → ③ 결과를 SARIF, VS Code UI, code scanning alert, 원시 BQRS로 해석.
 
-## 2. 어떻게 동작하는가
-
-### 2.1 데이터베이스 생성
-
-CodeQL 분석은 먼저 코드베이스를 언어별 database로 만든다. 공식 문서는 CodeQL database가 특정 시점의 단일 언어 코드베이스에서 추출된 질의 가능한 데이터이며, AST, data flow graph, control flow graph를 포함한다고 설명한다.
-
-컴파일 언어의 경우 extractor는 보통 정상 빌드 과정을 감시한다. 컴파일러가 소스 파일을 처리할 때 구문 정보, 이름 바인딩, 타입 정보 등 분석에 필요한 의미 정보를 수집한다. 다만 최근 CodeQL code scanning은 일부 컴파일 언어에서 build 없이 database를 만드는 `none` build mode도 지원한다.
-
-빌드 모드는 크게 세 가지다.
+**빌드 모드 3종**:
 
 | build mode | 의미 | 대표 사용 |
 |---|---|---|
-| `none` | 빌드 없이 소스에서 database 생성 | 해석 언어 전체, 추가로 C/C++, C#, Java, Rust |
-| `autobuild` | CodeQL이 가장 가능성 높은 빌드 방법을 감지해 실행 | C/C++, C#, Go, Java/Kotlin, Swift 등 |
-| `manual` | 사용자가 명시한 빌드 명령을 실행 | 복잡한 mono-repo, custom build, 정확한 coverage 필요 |
+| `none` | 빌드 없이 소스에서 database 생성 | 해석 언어 전체, 추가로 C/C++·C#·Java·Rust |
+| `autobuild` | 가장 가능성 높은 빌드 방법 자동 감지·실행 | C/C++·C#·Go·Java/Kotlin·Swift 등 |
+| `manual` | 사용자가 명시한 빌드 명령 실행 | 복잡 mono-repo, custom build, 정확한 coverage |
 
-실무적으로는 `manual`이 가장 통제 가능하다. 빌드되는 파일만 분석 대상으로 잡히는 언어에서는 빌드 명령이 곧 분석 범위가 된다.
+> `[✓2026-06-02 재확인]` 공식 supported-languages 페이지는 GitHub Actions·JavaScript·Python·Ruby·TypeScript를 "컴파일러 불필요(Not applicable)"로 명시한다. C/C++·C#·Java·Rust의 build-mode `none` 지원은 code scanning 기능 차원의 별도 사실이다(두 진술 양립).
 
-### 2.2 쿼리 실행
+**쿼리 유형 4부류**:
 
-database가 만들어지면 CodeQL query를 실행한다. 쿼리는 `.ql` 파일이며 `import`, class/predicate 정의, `from`, `where`, `select`로 구성된다. QL은 SQL처럼 보이는 부분이 있지만, 의미론은 Datalog 계열의 선언형 논리 질의 언어에 가깝다.
-
-CodeQL 라이브러리는 database table을 직접 만지게 하지 않고 언어별 객체 모델을 제공한다. 예를 들어 JavaScript 분석에서는 함수 호출, 표현식, 모듈 import, data-flow node 같은 개념을 클래스와 predicate로 다룬다. 그래서 단순 문자열 검색보다 높은 수준의 질문을 표현할 수 있다.
-
-분석 쿼리는 대략 네 부류로 나눌 수 있다.
-
-| 쿼리 유형 | 예 |
+| 유형 | 예 |
 |---|---|
-| 구조 쿼리 | 특정 API 호출, 특정 import, 특정 annotation/decorator 사용 찾기 |
-| 제어 흐름 쿼리 | check 없이 dangerous operation에 도달하는 경로 찾기 |
-| 데이터 흐름 쿼리 | user input이 sanitizer를 거치지 않고 sink로 흐르는 경로 찾기 |
-| 메트릭/진단 쿼리 | 복잡도, 사용 패턴, extractor 진단, custom inventory 생성 |
+| 구조 쿼리 | 특정 API 호출/import/annotation 사용 찾기 |
+| 제어 흐름 쿼리 | check 없이 dangerous operation에 도달하는 경로 |
+| 데이터 흐름 쿼리 | user input이 sanitizer 없이 sink로 흐르는 경로 |
+| 메트릭/진단 쿼리 | 복잡도, 사용 패턴, extractor 진단, custom inventory |
 
-보안 연구에서 가장 중요한 것은 data flow와 taint tracking이다. source는 오염된 입력의 시작점, sink는 위험한 사용 지점, sanitizer/barrier는 흐름을 끊는 지점이다. CodeQL path query는 source에서 sink까지의 경로를 alert와 함께 보여줄 수 있다.
+보안 분석의 핵심은 **data flow와 taint tracking**: source(오염 입력 시작점) → sink(위험 사용 지점), sanitizer/barrier(흐름 차단). path query는 source→sink 경로를 alert와 함께 보여준다.
 
-### 2.3 결과 해석
+> `[✓검증 2-1]` (deep-research) 공식 docs: 데이터플로우 그래프의 **노드 = 런타임 값을 운반하는 의미적 요소**(구문적 AST 아님), **엣지 = 값 전파**. 보안 쿼리는 "잠재적으로 악의적이거나 안전하지 않은 데이터의 행로"를 추적. 단 "이 그래프를 곧바로 KG로 변환 가능"이라는 추론 부분에서 1표 반대. (출처 [7])
 
-CodeQL CLI의 일반적인 파이프라인은 다음과 같다.
+**결과 해석 파이프라인**:
 
 ```bash
 codeql database create codeql-dbs --source-root=src --db-cluster --language=java,python --command=./build
@@ -108,410 +107,289 @@ codeql database analyze codeql-dbs/java java-code-scanning.qls --format=sarif-la
 codeql github upload-results --sarif=java.sarif
 ```
 
-GitHub Actions에서는 `github/codeql-action/init`, `autobuild`, `analyze` 단계가 이 작업을 감싼다. GitHub code scanning은 SARIF를 읽어 repository의 Security and quality 탭, PR check, alert UI에 표시한다.
+쿼리 metadata가 결과 해석에 중요: code scanning alert로 보이려면 `@id`, `@kind`, severity, precision, tags 필요. `@kind`에는 단일 위치 `problem`, 경로 표시 `path-problem`, 진단 `diagnostic`, 메트릭 `metric` 등이 있다.
 
-쿼리 metadata가 결과 해석에 중요하다. code scanning alert로 보여주려면 보통 `@id`, `@kind`, severity, precision, tags 같은 metadata를 갖춰야 한다. `@kind`에는 단일 위치 문제인 `problem`, 경로를 보여주는 `path-problem`, extractor 진단용 `diagnostic`, 요약 metric용 `metric` 등이 있다.
+> **에이전트 통합 관점(Part B 연결)**: `path-problem` 쿼리가 내보내는 SARIF `codeFlow`→`threadFlow` 구조가 "source→sink를 LLM이 읽기 좋은 사실 단위"로 만드는 핵심 변환점이다. → B-3 참조.
 
-## 3. `github/codeql` 저장소 구조
+## A-3. `github/codeql` 저장소 구조
 
-조사 기준 HEAD의 top-level tree는 언어별 디렉터리와 공통 모듈로 구성되어 있다.
-
-주요 디렉터리:
+조사 기준 HEAD의 top-level은 언어별 디렉터리 + 공통 모듈:
 
 | 경로 | 역할 |
 |---|---|
-| `cpp`, `csharp`, `go`, `java`, `javascript`, `python`, `ruby`, `rust`, `swift` | 언어별 extractor 관련 파일, library pack, query pack, suite, tests |
-| `actions` | GitHub Actions workflow/action metadata 분석용 CodeQL 팩 |
-| `shared`, `unified`, `config` | 공통 라이브러리, 설정, cross-pack 구성 |
-| `ql` | QL 자체를 분석하는 "QL for QL" 실험적 분석 |
-| `docs`, `change-notes` | 저장소 내부 문서와 변경 기록 |
-| `codeql-workspace.yml` | 여러 CodeQL pack을 함께 개발하기 위한 workspace 설정 |
+| `cpp` `csharp` `go` `java` `javascript` `python` `ruby` `rust` `swift` | 언어별 extractor 관련 파일, library/query pack, suite, tests |
+| `actions` | GitHub Actions workflow/action metadata 분석 팩 |
+| `shared` `unified` `config` | 공통 라이브러리, 설정, cross-pack 구성 |
+| `ql` | "QL for QL" 실험적 분석 |
+| `docs` `change-notes` | 저장소 내부 문서·변경 기록 |
+| `codeql-workspace.yml` | 다중 pack 동시 개발 workspace 설정 |
 
-언어별 구조는 조금씩 다르지만 일반적으로 다음 패턴을 갖는다.
+언어별 일반 패턴:
 
 | 하위 경로 | 의미 |
 |---|---|
-| `ql/lib` | 언어별 CodeQL library pack. 예: `codeql/javascript-all` |
-| `ql/src` | query pack. 예: `codeql/javascript-queries` |
-| `ql/src/Security/CWE-*` | CWE별 보안 쿼리 묶음 |
-| `ql/src/codeql-suites` | `*-code-scanning.qls`, `*-security-extended.qls`, `*-security-and-quality.qls` 등 suite |
-| `extractor` | 언어별 extraction 관련 구성 또는 구현 |
-| `config/suites` | suite 구성 |
+| `ql/lib` | library pack (예: `codeql/javascript-all`) |
+| `ql/src` | query pack (예: `codeql/javascript-queries`) |
+| `ql/src/Security/CWE-*` | CWE별 보안 쿼리 |
+| `ql/src/codeql-suites` | `*-code-scanning.qls`, `*-security-extended.qls`, `*-security-and-quality.qls` |
+| `extractor` | 언어별 extraction 구성/구현 |
 
-예를 들어 조사 기준 HEAD에서 `javascript/ql/src/qlpack.yml`은 `codeql/javascript-queries` query pack이고, 기본 suite를 `codeql-suites/javascript-code-scanning.qls`로 지정한다. `javascript/ql/lib/qlpack.yml`은 `codeql/javascript-all` library pack이고, `codeql/dataflow`, `codeql/ssa`, `codeql/threat-models`, `codeql/yaml` 같은 공통 라이브러리에 의존한다. 또한 JavaScript library pack에는 framework/security model YAML을 주입하는 `dataExtensions`가 정의되어 있다.
+CodeQL의 "룰"은 단순 JSON 설정이 아니라, 언어별 semantic library 위에 작성된 재사용 가능한 프로그램이다.
 
-이 구조가 의미하는 바는 명확하다. CodeQL의 "룰"은 단순 JSON 설정이 아니라, 언어별 semantic library 위에 작성된 재사용 가능한 프로그램이다.
+## A-4. 어디까지 분석 가능한가
 
-## 4. 어디까지 분석 가능한가
+### A-4.1 지원 언어 — `[✓2026-06-02 재확인]` 공식 supported-languages 페이지와 전 항목 일치
 
-### 4.1 지원 언어
-
-공식 문서 기준 CodeQL은 다음 언어군을 지원한다.
-
-| 언어군 | 비고 |
+| 언어군 | 버전 |
 |---|---|
-| C/C++ | C89-C23, C++98-C++23 일부. Objective-C, C++/CLI 등은 제외 |
-| C# | C# 14, .NET Framework/Core/5-10 계열 |
-| Go | Go 1.26까지 |
-| Java/Kotlin | Java 7-26 빌드, Kotlin 1.8.0-2.3.2 |
+| C/C++ | C89/99/11/17/23, C++98/03/11/14/17/20/23 |
+| C# | C# up to 14, .NET 5-10 (+ VS up to 2019 / .NET up to 4.8) |
+| Go | up to 1.26 |
+| Java/Kotlin | Java 7-26, Kotlin 1.8.0-2.3.2 |
 | JavaScript/TypeScript | ECMAScript 2022 이하, TypeScript 2.6-5.9 |
-| Python | Python 2.7, 3.5-3.13 |
-| Ruby | Ruby 3.3까지 |
-| Rust | 2021/2024 edition, nightly feature 제외 |
-| Swift | Swift 5.4-6.3, host는 macOS 필요 |
+| Python | 2.7, 3.5-3.13 |
+| Ruby | up to 3.3 |
+| Rust | editions 2021, 2024 |
+| Swift | 5.4-6.3 (host macOS 필요) |
 | GitHub Actions | workflow YAML, action metadata YAML |
 
-공식 문서는 PHP, Scala 등 목록에 없는 언어는 지원하지 않는다고 못 박고 있다. "파일은 읽을 수 있나"와 "정확한 언어 의미 분석을 지원하나"는 다르다.
+PHP, Scala 등 목록에 없는 언어는 **미지원**(공식 명시). "파일을 읽을 수 있나"와 "정확한 의미 분석을 지원하나"는 다르다.
+참고: CodeQL 2.24.0 changelog(2026-01-29)가 Swift 6.2 / .NET 10 지원을 추가 — 버전 목록은 최신 상태로 유지되고 있음.
 
-### 4.2 지원 프레임워크와 라이브러리
+### A-4.2 지원 프레임워크/라이브러리
 
-CodeQL은 언어만 보는 것이 아니라 주요 프레임워크와 라이브러리 모델을 갖는다. 예를 들어 JavaScript/TypeScript 쪽에는 Express, Fastify, Koa, React, Vue, Nest.js, Electron, axios, node, SQL/DB client 등이 포함된다. Python 쪽에는 Django, FastAPI, Flask, Starlette, Tornado, requests/httpx, SQLAlchemy, Pydantic, PyYAML, 주요 DB driver 등이 있다. Java/Kotlin은 Spring MVC/JDBC, JPA, Hibernate, Jackson, MyBatis, JDBC 등을 모델링한다.
+CodeQL은 언어뿐 아니라 주요 프레임워크 모델을 갖는다(데이터플로우의 source/sink 의미를 알기 위해 필수).
+- JS/TS: Express, Fastify, Koa, React, Vue, Nest.js, Electron, axios, node, DB client
+- Python: Django, FastAPI, Flask, Starlette, Tornado, requests/httpx, SQLAlchemy, Pydantic, PyYAML, DB driver
+- Java/Kotlin: Spring MVC/JDBC, JPA, Hibernate, Jackson, MyBatis
 
-이 모델이 중요한 이유는 data flow 분석 때문이다. `req.body`가 source이고 `db.query`가 sink라는 사실은 언어 문법만으로 충분하지 않다. 프레임워크별 API 의미를 알아야 한다.
+`req.body`가 source이고 `db.query`가 sink라는 사실은 문법만으로 부족하고 프레임워크 API 의미를 알아야 한다.
 
-### 4.3 분석할 수 있는 질문의 범위
+### A-4.3 잘하는 질문 / 약한 질문
 
-CodeQL이 잘하는 질문:
+**잘함**: 입력 검증 없이 user data가 SQL/shell/path/template/SSRF/deserialization sink로 흐르는가; 암호·random·TLS·cookie·CORS·redirect API의 위험 사용; deprecated/금지 API; 위험 조합; Actions workflow의 injection/unsafe checkout/secrets exposure; call/import/inheritance/annotation 위치; 여러 저장소의 같은 취약 variant.
 
-- 입력 검증 없이 user-controlled data가 SQL, shell, path, template, SSRF, deserialization sink로 흐르는가
-- 암호화, random, TLS, cookie, header, CORS, redirect 같은 보안 API가 위험하게 사용되는가
-- 특정 API가 deprecated 되었거나 조직 정책상 금지되었는가
-- React/Vue/Angular template, server framework handler, DB driver 호출이 위험하게 조합되는가
-- GitHub Actions workflow에서 shell injection, unsafe checkout, untrusted PR context, secrets exposure 위험이 있는가
-- 특정 call graph, import graph, inheritance relation, decorator/annotation 사용 위치가 어디인가
-- 같은 취약 패턴의 variant가 여러 저장소에 존재하는가
+**약함**: 런타임 설정·DB 상태·네트워크 응답·feature flag 의존 동작; reflection/dynamic import/metaprogramming 다수; 소스 없는 binary dependency 내부; extractor가 모르는 custom framework 의미; build 재현 안 되는 compiled 프로젝트; 타입 정보 약하거나 generated code 누락; "좋은 설계인가" 같은 가치 판단.
 
-CodeQL이 애매하거나 약한 질문:
+정리: **"정확한 의미 그래프 위의 반복 가능한 질문"에 강하고, "실행해야 알 수 있는 사실"에 약하다.**
 
-- 런타임 설정, DB 상태, 네트워크 응답, feature flag에 의존하는 동작
-- reflection, dynamic import, monkey patching, metaprogramming이 많이 섞인 코드
-- 소스가 없는 closed binary dependency 내부 동작
-- extractor가 모르는 custom framework의 source/sink/sanitizer 의미
-- build가 재현되지 않는 compiled language 프로젝트
-- 타입 정보가 약하거나 generated code가 분석에 포함되지 않는 경우
-- "좋은 설계인가" 같은 가치 판단 자체
+## A-5. 커스텀 룰 — 4단계
 
-정리하면 CodeQL은 "정확한 의미 그래프 위의 반복 가능한 질문"에 강하고, "실행해야만 알 수 있는 사실"에는 약하다.
+1. **단일 `.ql`** — metadata 붙여 작성. 개념 예시:
+   ```ql
+   /**
+    * @name Direct eval call
+    * @kind problem
+    * @problem.severity warning
+    * @id js/custom/direct-eval
+    * @tags security
+    */
+   import javascript
+   from CallExpr call
+   where call.getCalleeName() = "eval"
+   select call, "Avoid direct eval."
+   ```
+   `codeql test run` 또는 test fixture로 검증 필요(쿼리는 프로그램이라 오탐/미탐·성능 문제 발생).
 
-## 5. 커스텀 룰 지정은 가능한가
+2. **Query suite `.qls`** — 자주 함께 실행할 쿼리 묶음. built-in: `default`(정밀도 우선), `security-extended`(넓은 보안, 오탐↑), `security-and-quality`(+유지보수성).
 
-가능하다. 수준별로 네 가지 선택지가 있다.
+3. **Query pack** — 재사용 위해 `qlpack.yml`로 패키징. Actions advanced setup에서 `packs:`로 추가, `.github/codeql/codeql-config.yml`로 query/filter 지정.
 
-### 5.1 단일 `.ql` 쿼리
+4. **Model pack / data extension** — 기존 쿼리의 source/sink/summary/barrier 모델 확장. "우리 프레임워크의 어떤 함수가 request source인가" 등을 YAML tuple로 주입.
+   > `[✓2026-06-02 재확인]` 공식: model pack은 **public preview**이며 C/C++·C#·Java/Kotlin·Python·Ruby·Rust 분석에 지원. VS Code model editor는 C#·Java/Kotlin·Python·Ruby dependency modeling 지원. **custom framework가 많은 조직은 query를 늘리기 전에 model pack을 먼저 만드는 것이 standard query 탐지력을 더 끌어올린다.**
 
-가장 작은 단위는 `.ql` 파일이다. 예를 들어 특정 함수 호출, 특정 import, 특정 데이터 흐름을 찾는 쿼리를 만든다. code scanning UI에 제대로 표시하려면 metadata를 붙인다.
+## A-6. 알려진 활용 (공식 기능)
 
-개념 예시:
+- **GitHub code scanning** — default setup(자동 언어/suite) 또는 advanced setup(build command, suite, pack, model pack, paths, filter 조정).
+- **외부 CI / 로컬 CLI** — Actions 밖에서 database 생성→`database analyze`→SARIF, GitHub 업로드 없이 SARIF/CSV/BQRS를 내부 도구에 연결.
+- **VS Code query development** — database 선택, 실행, quick eval, path 탐색, model editor, query test.
+- **Multi-repository variant analysis (MRVA)** — VS Code에서 작성한 쿼리를 다수 저장소에 실행. `[✓2026-06-02 재확인]` 최대 **1,000개 repository**, Actions dynamic workflow로 병렬 실행. "같은 variant가 다른 저장소에도 있는가"에 적합.
 
-```ql
-/**
- * @name Direct eval call
- * @description Finds direct calls to eval.
- * @kind problem
- * @problem.severity warning
- * @id js/custom/direct-eval
- * @tags security
- */
-import javascript
+---
 
-from CallExpr call
-where call.getCalleeName() = "eval"
-select call, "Avoid direct eval."
-```
+# Part B — 코딩 에이전트 통합 (deep-research, 적대적 검증)
 
-실무에서는 이 정도 쿼리도 `codeql test run` 또는 작은 test fixture로 검증해야 한다. CodeQL 쿼리는 프로그램이라서, 오탐/미탐과 성능 문제가 생긴다.
+**연구 질문**: CodeQL의 정적 분석/데이터플로우/변종 분석을 코딩 에이전트 워크플로우(코드 이해, 취약점/버그 탐지, 테스트 설계, 리팩토링 안전성 검증)에 어떻게 통합하는가. 결과를 LLM-friendly 지식 그래프(graphify / karpathy LLM Wiki 개념)로 변환해 에이전트 컨텍스트로 줄 수 있는가. MCP/CLI 패턴, 실제 사례, 한계는?
 
-### 5.2 Query suite `.qls`
+지배적 아키텍처(증거 기반):
 
-자주 같이 실행할 쿼리는 `.qls` suite로 묶는다. suite는 파일 위치, metadata, query id, tag, kind 등을 기준으로 쿼리를 선택하거나 제외할 수 있다.
+> **CodeQL/MRVA가 구조화된 발견을 생성 → SARIF/CSV/그래프 변환 → MCP로 노출된 구조화 도구 → LLM은 fuzzy reasoning만, 결정론적 검증은 MCP 서버에 잔류.**
 
-GitHub의 built-in suite는 대표적으로 다음이 있다.
+통합은 3개 상보적 패턴으로 정리된다.
 
-| suite | 의미 |
-|---|---|
-| `default` | 기본 code scanning 쿼리. 정밀도 우선 |
-| `security-extended` | default + 더 넓은 보안 쿼리. 오탐 가능성 증가 |
-| `security-and-quality` | security-extended + 유지보수성/신뢰성 쿼리 |
+## B-1. 패턴 1 — MCP 서버로 CodeQL 스택을 에이전트에 연결
 
-### 5.3 Query pack
+- **공식 MCP 서버 존재** `[✓검증 3-0/일부 2-1]`: `advanced-security/codeql-development-mcp-server`가 임의 LLM을 CodeQL 스택(AST/CFG/CLI/LSP)에 stdio/HTTP로 브리지. MCP tools·prompts·resources 제공. README: "designed specifically for agentic AI development of CodeQL (QL) code". (출처 [1])
+  - ⚠️ **함정**: 이 서버는 **CodeQL 쿼리(QL 코드) 작성·검증·최적화용**이지, *대상 코드를 분석해 에이전트 컨텍스트로 주는 용도가 아니다*. 흔한 오해. 대상 코드 질의용은 별도 커뮤니티 서버(`JordyZomer/codeql-mcp` 계열). ("recommended client" 특성화에서만 1표 반대, 존재·전송·목적은 만장일치.)
+- **연구급 사례 — QLCoder** `[✓검증 3-0]`: LLM을 synthesis loop + execution feedback에 넣고 LSP(문법)+RAG 벡터DB(쿼리·문서 의미검색)를 커스텀 MCP로 결합해 **CVE별 맞춤 CodeQL 쿼리 자동 생성**. 176 CVE / 111 Java 프로젝트에서 **53.4% 정확**(Claude Code 단독 10%), F1 0.7(CodeQL/IRIS 일반 스위트 0.073/0.048). (출처 [2])
+  - `[VERIFY]` 비교가 "CVE-맞춤 합성 쿼리 vs 기본 일반 스위트"라 apples-to-oranges. 미공개 preprint(2025-11), n 제한적. QLCoder조차 CVE의 ~47%를 놓침.
 
-조직이나 프로젝트에서 custom rule을 재사용하려면 query pack으로 만든다. `qlpack.yml`은 pack 이름, 버전, 의존 library pack, default suite를 정의한다.
+## B-2. 패턴 2 — CodeQL=결정론적 생성기, LLM=트리아지 (가장 검증된 패턴)
 
-예:
+- **GitHub Security Lab Taskflow Agent** `[✓검증 3-0]`: "We have **not** used any static or dynamic code analysis tools other than to generate alerts from CodeQL." CodeQL은 오직 alert 생성기. 트리아지는 YAML 정의 독립 task로 분해, **각 task는 fresh context**(복잡 멀티스텝은 제대로 안 끝남). 설계 원칙 **"Delegate to MCP server whenever possible"** — 검증 가능한 건 MCP에, 복잡 추론만 LLM. (출처 [3])
+- **Vulnhalla (CyberArk)** `[✓검증 3-0]`: CodeQL DB 생성 → 쿼리 → 모든 alert을 LLM에 넘겨 진짜/오탐 분류. **최대 96% 오탐 감소**(유형별, 100개 C 저장소). 컨텍스트 구성이 시사적:
+  - 줄 번호 대신 **함수 전체** 추출 — *모든 함수를 CSV로 덤프하는 단일 CodeQL 쿼리*
+  - CodeQL 번들 `src.zip` 사용 → repo clone 불필요, 평균 **~3초** 검색. (출처 [4])
+  - `[VERIFY]` 벤더 블로그 "up to" 최선값. recall은 90% 아래로 떨어질 수 있고 CWE/모델 의존. 방향성(오탐 감소)은 독립 연구(ZeroFalse, Datadog)로 확인.
+- **GitHub 자체 선례** `[✓검증 3-0]`: CodeQL 팀이 LLM으로 API를 source/sink/propagator로 **자동 모델링**(수천 OSS 프레임워크, 수작업 대체) → MRVA 변종 분석과 결합해 **신규 CVE-2023-35947**(Gradle path traversal) 발견. LLM↔CodeQL 양방향 시너지 실제 선례. NVD 독립 확인. (출처 [5])
 
-```yaml
-name: my-org/ditto-js-queries
-version: 0.0.1
-dependencies:
-  codeql/javascript-all: "*"
-```
+## B-3. 패턴 3 — 지식 그래프 전달 (graphify / LLM Wiki 직결)
 
-GitHub Actions advanced setup에서는 다음 식으로 pack을 추가할 수 있다.
+- **CodeQL 데이터플로우는 그 자체가 그래프** (A-2 참조): path-problem 쿼리는 **SARIF v2.1.0**의 `codeFlow`→`threadFlow`로 **source→sink 추적**을 표준 JSON으로 방출. `[✓검증 3-0]` SARIF v2.1.0(OASIS 표준 JSON, `--format=sarifv2.1.0`/`sarif-latest`)이 구조화 진입점. (출처 [6][7])
+- **graphify (지정 도구)** `[✓검증 3-0]`: 임의 입력(코드/SQL 스키마/문서/논문/이미지/영상)을 자연어 질의 가능한 지식 그래프로 변환, **MCP 서버로 노출** — `query_graph`, `get_node`, `get_neighbors`, `shortest_path` 등 7개 도구. KG-via-MCP 전달 메커니즘 실증. (출처 [8])
+- **Codebase-Memory (대조 증거)** `[✓검증 2-1]`: Tree-Sitter 구조 그래프를 MCP로 노출 → 답변 품질 83%(파일탐색 92%)지만 **토큰 ~10배, 도구호출 ~2.1배 절감**. (출처 [9])
+  - ⚠️ **결정적 한계**: 구문 구조(정의/콜그래프/import)만 추출, CodeQL의 dataflow/taint/변종 분석 안 함. 오히려 CodeQL을 *"heavyweight, LLM 소비용 설계 아님"*이라 **명시적 거부**. → KG-MCP 전달 *방식*은 검증하나, "CodeQL 의미 그래프를 통째로 graphify"에는 반대 증거.
 
-```yaml
-- uses: github/codeql-action/init@v4
-  with:
-    languages: javascript-typescript
-    queries: security-extended
-    packs: my-org/ditto-js-queries@0.0.1
-```
+## B-4. LLM Wiki 개념과의 연결
 
-또는 `.github/codeql/codeql-config.yml`에 query pack과 query file을 지정한다.
+karpathy LLM Wiki 핵심(지식을 LLM 소비용으로 미리 정제, 결정론/판단 분리)이 모든 패턴을 관통:
+- **결정론 vs fuzzy 분리**: CodeQL(사실) ↔ LLM(판단) — Taskflow "MCP 위임" 원칙과 동형
+- **구조화된 진입점**: SARIF codeFlow = "LLM이 읽기 좋은 사실 단위"
+- **컨텍스트 절약**: Vulnhalla 함수 단위 추출, Codebase-Memory 10배 토큰 절감 = 필요한 사실만 정제 제공
 
-```yaml
-packs:
-  - my-org/ditto-js-queries@0.0.1
+## B-5. CLI 통합 — mrva (Trail of Bits)
 
-queries:
-  - uses: ./codeql/custom
+`[✓검증 3-0]` CodeQL MRVA를 **터미널 우선·로컬**로 돌리는 composable CLI. GitHub VS Code 기반 MRVA의 대안으로 결과를 stdout/SARIF로 출력 → 스크립트화·파이프라인화 용이. 3-커맨드 워크플로우: `mrva download`(GitHub API로 사전 빌드 DB) → `mrva analyze`(쿼리/팩) → `mrva pprint`(결과), `--` 뒤 플래그는 CodeQL 바이너리로 전달. (출처 [10])
+- 뉘앙스: "entirely local"은 분석 *실행*이 로컬이란 뜻. DB는 GitHub API로 다운로드. 벤더 발표(2025-12).
 
-query-filters:
-  - exclude:
-      id: js/redundant-assignment
-```
+---
 
-### 5.4 Model pack과 data extension
+# Part C — 창의적 활용 + 실증 여부 주석
 
-커스텀 룰보다 더 중요한 확장 방식이 model pack이다. 기존 쿼리의 source/sink/summary/barrier 모델을 확장해서 "우리 회사 프레임워크에서 어떤 함수가 request source인가", "이 sanitizer는 어떤 taint를 제거하는가", "이 wrapper 함수는 데이터 흐름을 어떻게 전달하는가"를 알려줄 수 있다.
+> 아래는 플랫폼 기능 위에 올린 활용 아이디어다. Part B에서 확인된 실제 선례와 대조해 등급화했다: **[실증]** 실제 시스템 확인 / **[추론]** 기능상 가능하나 에이전트 사용 사례 미확인 / **[투기]** 실증 0.
+> (선행 문서의 BPMN/Camunda 활용 절은 본 통합에서 제외.)
 
-공식 문서 기준 model pack은 public preview 성격이고, C/C++, C#, Java/Kotlin, Python, Ruby, Rust 분석에 지원된다. VS Code model editor는 C#, Java/Kotlin, Python, Ruby dependency modeling을 지원한다. Go 등 일부 언어는 data extension 문서가 따로 있고 source/sink/summary/barrier 모델을 YAML tuple로 확장한다.
+| # | 활용 | 등급 | 근거 |
+|---|---|---|---|
+| C-1 | **아키텍처 정책 엔진** (`ui/**`→`db/**` import 금지 등 경계 lint) | [추론] | call graph/class hierarchy/dataflow까지 엮어 ESLint보다 깊은 경계 검사 가능. 에이전트 사용 사례 미확인. |
+| C-2 | **Agentic coding guardrail** (권한 우회 옵션/shell·file write sink/schema validation 누락 탐지) | **[실증]** | Taskflow Agent·Vulnhalla가 동형 패턴(B-2). agent runtime 성격 저장소에 일반 SAST보다 값짐. |
+| C-3 | **LLM 코드리뷰 근거 그래프** (변경 함수 도달 sink, 새 source→sink path를 "review context bundle"로) — CodeQL을 agent용 semantic retriever로 | [추론] · `[VERIFY]` | 방향은 B-3과 정확히 일치하나, **CodeQL 의미 그래프→LLM KG→컨텍스트 서빙의 완전·벤치마크된 단일 시스템은 1차 소스에 없음**(아래 D-1). 빌딩블록은 검증됨, end-to-end는 미실증. |
+| C-4 | **Privacy/data lineage** (PII/token이 log·analytics·LLM provider sink로 흐르는가) | [추론] | CodeQL dataflow로 표현 가능. 에이전트가 이 용도로 쓴다는 증거 미발견. |
+| C-5 | **Migration acceptance gate** (deprecated API 간접호출, legacy config 잔존 path) | [추론] | 기능상 가능. 실증 사례 미발견. |
+| C-6 | **내부 framework model pack** (request source/SQL sink/sanitizer 모델) | **[실증]**(기능) | model pack public preview 확인(A-5). GitHub 팀의 LLM 자동 API 모델링(B-2)이 같은 방향. |
+| C-7 | **보안 사고 후 variant hunt** | **[실증]** | GitHub의 CVE-2023-35947 발견이 정확히 이 패턴(B-2). MRVA/mrva로 실행. |
+| C-8 | **테스트 생성 타깃 찾기** (테스트 없는 source→sink path 추출) | **[투기]** · `[VERIFY]` | **실증 0.** deep-research에서 에이전트가 dataflow로 테스트 설계한다는 증거 전혀 미발견(D-3). 가장 투기적. |
+| C-9 | **GitHub Actions 공급망 정책** (SHA pin 안 됨, `pull_request_target` 후 untrusted 실행 등) | [추론]→일부 공식 | CodeQL actions 분석 공식 지원(A-4.1). 조직 보안 효과 큼(권한·secret 집중 경계). |
+| C-10 | **코드베이스 질의 API** (config key 읽는 runtime path, MCP tool schema 도달 handler 등) | [추론] · 메커니즘 [실증] | graphify/Codebase-Memory가 KG-via-MCP 메커니즘 실증(B-3). 단 Codebase-Memory가 CodeQL을 "너무 무겁다"고 거부 — CodeQL을 직접 그래프화할 때 비용 검증 필요. |
 
-실무 의미는 크다. custom framework가 많은 조직에서는 새 query를 무작정 쓰는 것보다, 먼저 내부 framework 모델을 잘 만드는 것이 standard query의 탐지력을 끌어올린다.
+---
 
-## 6. 알려진 활용 방법
+# Part D — 한계와 미해결 질문
 
-### 6.1 GitHub code scanning
+1. **`[VERIFY]` End-to-end 시스템 부재 (최대 갭)**: *CodeQL dataflow/SARIF codeFlow를 LLM-friendly KG로 변환해 에이전트 컨텍스트로 서빙하는* 완전·벤치마크된 단일 시스템은 1차 소스에 없음. 본 보고서의 그 아키텍처는 검증된 조각들의 **합성 추론**이지 문서화된 단일 시스템이 아니다. (C-3 직결)
+2. **`[VERIFY]` 비용 미지**: 인터랙티브 에이전트 루프 안에서 CodeQL DB 생성·질의의 토큰/지연 비용 불명. 리팩토링 안전성 같은 비보안 작업에 prohibitive한지 미확인. (Codebase-Memory가 "너무 무겁다"고 거부한 이유)
+3. **`[VERIFY]` 용도 편중**: 검증 증거는 거의 전부 취약점/버그 탐지. 질문의 **테스트 설계**·**리팩토링 안전성 검증**(전후 dataflow 동등성)을 에이전트가 실제로 쓴다는 증거 미발견. (C-8 직결)
+4. **`[VERIFY]` 합성 쿼리 신뢰성**: QLCoder조차 CVE의 ~47% 놓침. 에이전트 자동생성 쿼리 의존 시 false-negative/recall 위험 미해결.
+5. **시간 민감도**: 통합 도구 대부분 2025말~2026초(mrva 2025-12, graphify v5-v8, MCP 서버 open issue 다수). 도구명·전송방식·벤치마크 수치 변동 가능.
 
-가장 일반적인 사용법이다. GitHub default setup은 언어와 기본 query suite를 자동 선택한다. advanced setup은 workflow 파일을 직접 관리하면서 build command, 언어, suite, query pack, model pack, paths, query filter를 조정한다.
+**기각된 주장 1건** (deep-research 투표 1-2): repo-level codegen을 semantic sub-graph 검색으로 한다는 arXiv 2505.14394 주장 — 핵심 아키텍처 근거로 채택하지 않음.
 
-### 6.2 외부 CI와 로컬 CLI
+---
 
-CodeQL CLI는 GitHub Actions 밖에서도 쓸 수 있다. 외부 CI에서 database를 만들고 `database analyze`로 SARIF를 만든 뒤 GitHub에 업로드할 수 있다. GitHub에 업로드하지 않고도 SARIF, CSV, BQRS 등을 내부 도구에 연결할 수 있다.
+# Part E — 실무 도입 판단 + 실행 제언
 
-### 6.3 VS Code query development
+## E-1. 도입 가치가 높은 조건 / 맞지 않는 목적
 
-CodeQL for VS Code 확장은 database 선택, query 실행, quick evaluation, result path 탐색, model editor, query test 개발에 쓰인다. 보안 연구자나 custom rule 작성자는 보통 이 경로로 시작한다.
+**높음**: 지원 언어군 / 규칙을 semantic relation으로 표현 가능 / FP triage 인력 또는 precision 조정 시간 / custom framework면 model pack 작성 가능 / CI build 재현성 확보.
 
-### 6.4 Multi-repository variant analysis
+**맞지 않음**: 임의 언어 빠른 grep / runtime exploitability 단독 판정 / dependency CVE 관리 대체 / formatter·linter 수준 style rule 대량 집행 / source 거의 없고 generated·binary 의존이 대부분.
 
-MRVA는 VS Code에서 작성한 CodeQL query를 GitHub의 다수 저장소에 실행하는 방식이다. 공식 문서 기준 최대 1,000개 repository 목록에 대해 실행할 수 있고, GitHub Actions dynamic workflow를 통해 병렬 실행된다. 이미 하나의 취약 패턴을 발견한 뒤 "같은 variant가 다른 저장소에도 있는가"를 찾는 용도에 잘 맞는다.
+## E-2. DITTO 맥락 권장 순서
 
-## 7. 창의적 활용 아이디어
+증거가 가장 탄탄한 진입점 순 (Part B 우선):
 
-아래는 공식 기능을 바탕으로 한 활용 아이디어다. 바로 제품 기능으로 보장된다는 뜻은 아니며, custom query/model/test를 만들어 검증해야 한다.
+1. **CodeQL을 결정론적 생성기로 채택** — 에이전트 안에서 CodeQL DB → path-problem 쿼리 → **SARIF codeFlow를 구조화 사실로 추출** (B-2, 최검증).
+2. **트리아지/판단만 LLM 위임**, 검증 가능한 건 MCP 도구 (Taskflow 원칙).
+3. **컨텍스트는 함수 단위 + src.zip** (Vulnhalla, ~3초).
+4. **GitHub Actions workflow + JS/TS 분석부터** 켠다(A-6). suite는 `security-extended`까지, noise 크면 filter.
+5. **agent runtime 특화 custom query 3-5개**(C-2): 권한 우회 옵션, shell/file write sink, hook/plugin schema validation 누락. query pack + `qltest` fixture.
+6. **모델 부족한 내부 abstraction 발견 시 query 늘리기 전에 model/data extension 검토** (A-5, C-6).
+7. **graphify는 codeFlow→KG 변환 레이어로 실험** — 단 "CodeQL 통째 graphify"는 비용 검증 후(D-2). Codebase-Memory 경고 반영.
+8. **CLI 파이프라이닝은 mrva**(B-5, terminal-first, stdout/SARIF).
 
-### 7.1 아키텍처 정책 엔진
+## E-3. 결론
 
-CodeQL을 보안 도구가 아니라 architecture lint로 쓸 수 있다.
+CodeQL은 단순 SAST를 넘어 **코드베이스에 대한 검증 가능한 지식층**으로 쓸 수 있다. 도입의 핵심은 query 수를 늘리는 것이 아니라 다음 질문에 답하는 것이다: 우리가 반복해서 놓치는 위험은 무엇인가 / 그것이 AST·call graph·data flow·type relation으로 표현 가능한가 / custom framework 모델이 필요한가 / 결과를 alert로 막을 것인가 report·context로 활용할 것인가.
 
-예:
+코딩 에이전트 관점의 최선 진입점은 분명하다: **CodeQL을 결정론적 사실 생성기로, LLM을 판단자로 분리하고, 그 사이를 SARIF codeFlow / MCP 구조화 도구로 잇는다.** end-to-end KG 서빙은 아직 미실증 영역이므로 PoC로 직접 검증해야 한다.
 
-- `ui/**`가 `db/**`를 직접 import하면 실패
-- CLI layer가 HTTP handler 내부 타입을 참조하면 실패
-- domain model이 framework-specific decorator를 가지면 실패
-- plugin runtime이 core state store를 직접 mutate하면 실패
-
-ESLint로도 일부 가능하지만, CodeQL은 import path뿐 아니라 call graph, class hierarchy, annotation, data flow까지 엮어 볼 수 있다. "이 경계 밖으로 데이터가 실제로 흐르는가"를 확인할 수 있다는 점이 차이다.
-
-### 7.2 Agentic coding guardrail
-
-코딩 에이전트가 코드를 수정하는 저장소에서는 "리뷰어가 놓치기 쉬운 위험 패턴"을 CodeQL custom query로 고정할 수 있다.
-
-예:
-
-- shell command builder에 user prompt나 model output이 sanitizer 없이 들어가는 경로
-- `danger-full-access`, `--yolo`, `bypass` 같은 권한 완화 옵션이 테스트/문서가 아닌 runtime path에서 활성화되는 위치
-- hook, MCP, plugin 설정을 로드하면서 schema validation 없이 실행 경로로 넘기는 코드
-- secret-like value를 로그/trace/telemetry sink로 보내는 경로
-- `apply_patch`, `exec`, file write wrapper가 approval policy 확인 없이 호출되는 경로
-
-이 저장소처럼 agent runtime/하네스 성격이 있는 프로젝트에서는 일반 SAST보다 이런 domain-specific query가 더 값질 수 있다.
-
-### 7.3 LLM 코드리뷰의 근거 그래프
-
-LLM 리뷰는 종종 파일을 많이 읽고도 정확한 call chain을 놓친다. CodeQL query 결과를 "근거 그래프"로 만들어 LLM에게 제공하면, 모델이 추측 대신 검증된 관계 위에서 리뷰할 수 있다.
-
-활용 방식:
-
-- 변경된 함수에서 도달 가능한 sink 목록 생성
-- 변경된 타입을 사용하는 public API 목록 생성
-- PR에서 새로 생긴 source-to-sink path만 추출
-- alert가 아니라 "review context bundle"로 SARIF/BQRS를 변환
-
-즉 CodeQL을 최종 보안 스캐너가 아니라 agent용 semantic retriever로 쓰는 방식이다.
-
-### 7.4 Privacy/data lineage 검사
-
-보안 sink를 DB나 shell에만 두지 않고, 개인정보/민감정보 흐름을 추적한다.
-
-예:
-
-- `email`, `phone`, `token`, `authorization`, `cookie` 계열 값이 analytics/log/metrics sink로 흐르는가
-- user prompt가 external LLM provider call로 흐르기 전에 redaction을 거치는가
-- 내부 trace 파일에 secret-like 값이 기록되는가
-- local file content가 network call로 흐르는 경로가 있는가
-
-이는 보통 DLP나 runtime logging 규칙으로 다루지만, CodeQL은 "코드상 가능한 흐름"을 사전에 잡는 데 유리하다.
-
-### 7.5 Migration acceptance gate
-
-대규모 API migration에서 "검색해서 바꾸기"의 마지막 10%를 CodeQL로 잡을 수 있다.
-
-예:
-
-- deprecated API가 wrapper를 통해 간접 호출되는 경로
-- legacy config key가 runtime parser까지 살아 있는 경로
-- old auth context가 new permission model을 우회하는 경로
-- migration 후에도 old data model field가 serialization sink로 노출되는 경로
-
-이런 query를 CI gate로 걸면 "마이그레이션 완료"를 정량화할 수 있다.
-
-### 7.6 내부 framework model pack
-
-조직 내부 프레임워크가 많으면, 매번 custom query를 늘리기보다 model pack을 먼저 만든다.
-
-예:
-
-- 내부 HTTP framework의 request source 모델
-- 내부 ORM/query builder의 SQL sink 모델
-- 내부 sanitizer/validator/barrier 모델
-- 내부 job queue, RPC, event bus의 flow summary 모델
-
-이렇게 하면 GitHub가 제공하는 표준 query도 내부 framework를 더 잘 이해하게 된다.
-
-### 7.7 보안 사고 후 variant hunt
-
-특정 취약점이 발견된 뒤, 같은 패턴이 다른 저장소/서비스에 있는지 찾는 데 CodeQL이 잘 맞는다. 하나의 incident-specific query를 만들고, MRVA나 조직 CI를 통해 여러 저장소에 실행한다. Semgrep보다 작성 난도는 높지만, data flow와 type-aware relation이 필요한 variant에는 더 강하다.
-
-### 7.8 테스트 생성 타깃 찾기
-
-CodeQL 자체는 coverage tool이 아니지만, coverage 결과와 결합하면 테스트 생성의 우선순위를 정할 수 있다.
-
-예:
-
-- public endpoint에서 DB write sink까지 가는 path 중 테스트가 없는 path
-- error handling branch가 없는 external call wrapper
-- sanitizer를 거치지 않는 입력 path 중 현재 alert는 아니지만 위험한 경계
-
-LLM에게 "테스트를 써라"라고 하는 대신, CodeQL query로 테스트가 필요한 semantic path를 뽑아 줄 수 있다.
-
-### 7.9 GitHub Actions 공급망 정책
-
-CodeQL은 GitHub Actions workflow도 분석할 수 있다. 기본 쿼리 외에 조직 정책을 추가할 수 있다.
-
-예:
-
-- action version이 SHA로 pin되지 않은 경우
-- `pull_request_target`에서 checkout 후 untrusted script를 실행하는 경우
-- secrets가 노출될 수 있는 env forwarding
-- self-hosted runner label과 untrusted trigger 조합
-- release workflow에서 provenance/signing step이 빠진 경우
-
-이는 일반 애플리케이션 코드보다 조직 보안 효과가 클 수 있다. workflow는 권한과 secret이 집중되는 경계이기 때문이다.
-
-### 7.10 코드베이스 질의 API
-
-CodeQL database를 "보안 스캔 산출물"이 아니라 "코드베이스 질의 API"로 보면 다른 응용이 열린다.
-
-예:
-
-- "이 config key를 읽는 모든 runtime path" 질의
-- "이 command가 실제로 쓰는 file write sink" 질의
-- "이 MCP tool schema가 도달하는 handler와 permission check" 질의
-- "이 public API가 transitively 의존하는 package set" 질의
-
-정적 분석 결과를 Markdown report, PR bot comment, architecture dashboard, agent memory로 변환할 수 있다.
-
-### 7.11 BPMN/Camunda 프로세스 실행기 분석
-
-BPMN 기반 프로세스 실행기는 일반 코드와 다른 "실행 그래프"를 갖는다. Camunda 7.24 기준으로 BPMN XML은 `org.camunda.bpm.model.bpmn`의 BPMN Model API로 파싱할 수 있고, `BpmnModelInstance`는 BPMN 2.0 모델을 나타낸다. 따라서 CodeQL식 접근을 그대로 빌리면 `BPMN XML -> process graph -> query/rule -> report` 구조를 만들 수 있다.
-
-단, BPMN 해석기만 붙이는 것으로는 충분하지 않다. 실무 가치는 BPMN 그래프를 Java/Spring delegate, external task worker, DMN, form, process variable read/write 지점과 연결할 때 커진다.
-
-분석할 수 있는 질문:
-
-- 도달 불가능한 task/event, 종료 이벤트 없는 경로, gateway split/join 불균형이 있는가
-- timer/error/escalation boundary event가 필요한 장기 user task나 service task에 누락되어 있는가
-- `asyncBefore`, `asyncAfter`, retry, compensation, multi-instance 설정이 운영 실패를 키우는 방식으로 조합되어 있는가
-- `camunda:class`, `delegateExpression`, `expression`, listener, script task, connector가 어떤 코드 또는 외부 호출로 이어지는가
-- external task `topic`은 있는데 worker 구현이 없거나, worker는 있는데 BPMN에서 참조되지 않는가
-- process variable이 validation 없이 결제, 승인, SQL, HTTP, file, log, LLM 호출 sink까지 흐르는가
-- exclusive gateway condition이 중복, 누락, 순서 의존, 기본 경로 부재 같은 위험을 갖는가
-- subprocess 내부 business error가 상위 프로세스에서 catch되지 않고 incident로만 떨어지는가
-
-권장 구현은 CodeQL 자체에 BPMN 언어를 억지로 넣기보다, BPMN 전용 analyzer를 만들고 Java/TypeScript 쪽 CodeQL 결과와 조인하는 방식이다.
-
-```text
-BPMN XML
-  -> Camunda BPMN Model API
-  -> Process graph
-       nodes: start, task, gateway, event, subprocess
-       edges: sequenceFlow, message, error, escalation, compensation
-       metadata: delegate, expression, topic, variable mapping
-  -> CodeQL / Java parser / runtime inventory
-  -> Cross-reference graph
-       BPMN task -> Java delegate / Spring bean / external topic handler
-       process variable -> read/write site
-       process path -> security or reliability sink
-  -> custom rules and reports
-```
-
-이 방식은 보안 SAST보다 넓다. 프로세스 운영 리스크, 누락된 worker, 쓸모없는 delegate, migration 영향 범위, 특정 업무 경로에서만 발생하는 권한/검증 누락까지 확인할 수 있다. BPMN을 "문서"가 아니라 "실행 가능한 정책 그래프"로 취급하는 활용이다.
-
-## 8. 실무 도입 판단
-
-CodeQL은 다음 조건에서 도입 가치가 높다.
-
-- 저장소가 지원 언어군에 들어간다.
-- 취약점/정책/아키텍처 규칙을 semantic relation으로 표현할 수 있다.
-- false positive를 triage할 사람이 있거나, query precision을 조정할 시간이 있다.
-- custom framework가 있다면 model pack을 만들 수 있다.
-- CI에서 build 재현성이 확보된다.
-
-반대로 다음 목적에는 맞지 않다.
-
-- 임의 언어를 빠르게 grep하듯 검사
-- runtime exploitability를 단독 판정
-- dependency CVE 관리를 대체
-- formatter/linter 수준의 단순 style rule만 대량 집행
-- source가 거의 없고 generated/binary dependency가 대부분인 시스템 분석
-
-이 저장소 `ditto` 관점에서 시작한다면 가장 현실적인 순서는 다음이다.
-
-1. GitHub Actions workflow 분석과 JavaScript/TypeScript 분석을 켠다.
-2. 기본 suite는 `security-extended`까지 사용하고, noise가 크면 query filter로 줄인다.
-3. agent runtime 특화 custom query 후보를 3-5개만 만든다. 예: 권한 우회 옵션, shell/file write sink, hook/plugin schema validation 누락.
-4. 커스텀 쿼리는 query pack으로 묶고 `qltest` fixture를 둔다.
-5. 모델/데이터 흐름이 부족한 내부 abstraction이 발견되면 query를 늘리기 전에 model/data extension을 검토한다.
-
-## 9. 결론
-
-CodeQL의 본질은 "코드 검색기"가 아니라 **코드 의미 그래프에 대한 재사용 가능한 질의 시스템**이다. 알려진 보안 취약점 탐지뿐 아니라, 조직별 아키텍처 규칙, agent runtime trust boundary, 개인정보 흐름, workflow 공급망 정책, migration 완료 기준, LLM 리뷰 근거 생성에 활용할 수 있다.
-
-도입의 핵심은 query 수를 많이 늘리는 것이 아니다. 먼저 다음 질문을 골라야 한다.
-
-- 우리가 반복해서 놓치는 위험은 무엇인가
-- 그 위험이 AST, call graph, data flow, type relation으로 표현 가능한가
-- custom framework 의미를 CodeQL에 알려줄 source/sink/summary/barrier 모델이 필요한가
-- 결과를 alert로 막을 것인가, report/context로 활용할 것인가
-
-이 질문에 답할 수 있으면 CodeQL은 단순 SAST를 넘어 "코드베이스에 대한 검증 가능한 지식층"으로 쓸 수 있다.
+---
 
 ## 참고 자료
 
-- GitHub `github/codeql` repository: https://github.com/github/codeql
-- GitHub CodeQL repository tree at 조사 기준 HEAD: https://github.com/github/codeql/tree/a16f1c555cea339ef5c8b4c7c9285b6e578c396c
-- CodeQL overview, About CodeQL: https://codeql.github.com/docs/codeql-overview/about-codeql/
-- Supported languages and frameworks: https://codeql.github.com/docs/codeql-overview/supported-languages-and-frameworks/
+### Part A (플랫폼, 공식)
+- `github/codeql`: https://github.com/github/codeql — HEAD `a16f1c5...`: https://github.com/github/codeql/tree/a16f1c555cea339ef5c8b4c7c9285b6e578c396c
+- About CodeQL: https://codeql.github.com/docs/codeql-overview/about-codeql/
+- Supported languages and frameworks: https://codeql.github.com/docs/codeql-overview/supported-languages-and-frameworks/ — `[✓2026-06-02 재확인]`
 - System requirements: https://codeql.github.com/docs/codeql-overview/system-requirements/
 - About code scanning with CodeQL: https://docs.github.com/en/enterprise-cloud@latest/code-security/concepts/code-scanning/codeql/about-code-scanning-with-codeql
 - About the CodeQL CLI: https://docs.github.com/en/code-security/concepts/code-scanning/codeql/about-the-codeql-cli
-- CodeQL code scanning for compiled languages: https://docs.github.com/en/code-security/concepts/code-scanning/codeql/about-codeql-code-scanning-for-compiled-languages
+- Code scanning for compiled languages: https://docs.github.com/en/code-security/concepts/code-scanning/codeql/about-codeql-code-scanning-for-compiled-languages
 - Custom CodeQL queries: https://docs.github.com/en/code-security/concepts/code-scanning/codeql/custom-codeql-queries
 - Creating and working with CodeQL packs: https://docs.github.com/en/code-security/tutorials/customize-code-scanning/creating-and-working-with-codeql-packs
-- Workflow configuration options for code scanning: https://docs.github.com/en/enterprise-cloud@latest/code-security/reference/code-scanning/workflow-configuration-options
-- Using the CodeQL model editor: https://docs.github.com/en/enterprise-server@3.21/code-security/how-tos/find-and-fix-code-vulnerabilities/scan-from-vs-code/using-the-codeql-model-editor
+- Workflow configuration options: https://docs.github.com/en/enterprise-cloud@latest/code-security/reference/code-scanning/workflow-configuration-options
+- Using the CodeQL model editor: https://docs.github.com/en/code-security/how-tos/scan-code-for-vulnerabilities/scan-from-vs-code/using-the-codeql-model-editor — `[✓2026-06-02 재확인]` (model pack public preview, 6개 언어)
 - Customizing library models for Go: https://codeql.github.com/docs/codeql-language-guides/customizing-library-models-for-go/
-- Multi-repository variant analysis: https://docs.github.com/en/enterprise-cloud@latest/code-security/concepts/code-scanning/multi-repository-variant-analysis
-- Camunda 7.24 BPMN Model API Javadoc: https://docs.camunda.org/javadoc/camunda-bpm-platform/7.24/org/camunda/bpm/model/bpmn/package-summary.html
-- Camunda 7.24 REST API, process definition XML: https://docs.camunda.org/manual/develop/reference/rest/specification/
+- Multi-repository variant analysis: https://docs.github.com/en/enterprise-cloud@latest/code-security/concepts/code-scanning/multi-repository-variant-analysis — `[✓2026-06-02 재확인]` (최대 1,000 repo)
+- CodeQL 2.24.0 changelog (2026-01-29): https://github.blog/changelog/2026-01-29-codeql-2-24-0-adds-swift-6-2-support-net-10-compatibility-and-file-handling-for-minified-javascript/
+
+### Part B (에이전트 통합, deep-research 적대적 검증)
+- [1] codeql-development-mcp-server: https://github.com/advanced-security/codeql-development-mcp-server — *primary, QL 작성용임에 주의*
+- [2] QLCoder: arXiv 2511.08462 / https://github.com/neuralprogram/qlcoder — *preprint*
+- [3] Taskflow Agent: https://github.blog/security/ai-supported-vulnerability-triage-with-the-github-security-lab-taskflow-agent/ + https://github.com/GitHubSecurityLab/seclab-taskflow-agent
+- [4] Vulnhalla: https://www.cyberark.com/resources/threat-research-blog/vulnhalla-picking-the-true-vulnerabilities-from-the-codeql-haystack + https://github.com/cyberark/Vulnhalla — *벤더 블로그*
+- [5] CodeQL 팀 AI 모델링: https://github.blog/security/vulnerability-research/codeql-team-uses-ai-to-power-vulnerability-detection-in-code/ + NVD CVE-2023-35947
+- [6] SARIF output: https://docs.github.com/en/code-security/codeql-cli/using-the-advanced-functionality-of-the-codeql-cli/sarif-output
+- [7] Data flow / path queries: https://codeql.github.com/docs/writing-codeql-queries/about-data-flow-analysis/ (+ creating-path-queries, exploring-data-flow-with-path-queries)
+- [8] graphify: https://github.com/safishamsi/graphify
+- [9] Codebase-Memory: arXiv 2603.27277 — *CodeQL을 명시적 거부*
+- [10] mrva: https://blog.trailofbits.com/2025/12/11/introducing-mrva-a-terminal-first-approach-to-codeql-multi-repo-variant-analysis/ + https://github.com/trailofbits/mrva
+
+---
+
+## 부록 — 검증 로그
+
+**deep-research 통계**: 6개 각도 · 소스 20개 fetch · 주장 99개 추출 → 25개 적대적 검증 (24 확정 / 1 기각) · 에이전트 103개 호출 · 약 9.3분.
+
+**통합 시 추가 검증 (2026-06-02, 공식 문서 직접 재확인)**:
+
+| 항목 | 검증 전 상태 | 재확인 결과 | 출처 |
+|---|---|---|---|
+| §A-4.1 언어 버전 전 항목 | 미검증(드리프트 민감) | 공식 supported-languages와 **전부 일치** | supported-languages 페이지 |
+| §A-6 MRVA 1,000 repo 한계 | 미검증 | "up to 1,000 repositories from VS Code" **확정** | MRVA 페이지 |
+| §A-5 model pack public preview + 6개 언어, 모델에디터 4개 언어 | 미검증 | "currently in public preview" + 언어 목록 **일치** | model editor 페이지 + 검색 교차 |
+
+`[VERIFY]` 잔존 항목(추가 검증으로 해소 불가, PoC 필요): D-1(end-to-end KG 서빙 미실증), D-2(에이전트 루프 내 CodeQL 비용), D-3(테스트 설계/리팩토링 안전성 용도 실증 0), QLCoder/Vulnhalla 수치의 best-case 성격.
+
+---
+
+## 부록 2 — PoC 실행 결과 (2026-06-02, 실측 fresh evidence)
+
+DITTO 저장소(143개 TS)에서 CodeQL CLI **2.25.5**(gh extension)로 직접 실행. 산출물은 `.codeql-poc/`(gitignore).
+
+| PoC | 검증 대상 | 결과 | 판정 |
+|---|---|---|---|
+| **PoC-0** | DITTO에서 CodeQL 작동 | DB 생성→`security-extended`(104쿼리, 148파일+1 Actions)→SARIF v2.1.0. alert 1건(`js/biased-cryptographic-random`) | ✅ 통과. 저장소 대체로 깨끗 |
+| **PoC-1** (D-1) | SARIF codeFlow→에이전트 컨텍스트 | 취약 fixture(CWE-078)로 `js/command-line-injection` codeFlow 트리거 → 컨버터로 **source→sink 10단계 dataflow 사실** 추출(file:line+변수명) | ✅ 통과. codeFlow는 LLM 컨텍스트로 쓸만함. 단 snippet/severity는 SARIF 기본 미포함 → source 파일에서 보강 필요(Vulnhalla 방식) |
+| **PoC-2** (C-2) | 결정론적 가드레일 custom query | `js/ditto/direct-exec`(.ql)+qltest. 위험 케이스(execSync/exec) 탐지·안전 케이스 무시, 회귀 통과 | ✅ 통과. **단 구조 쿼리는 noisy**(아래) |
+| **PoC-3** (D-2) | 에이전트 루프 내 비용 | 아래 실측 표 | ⚠️ 조건부 feasible(캐싱 전제) |
+
+**PoC-3 실측 비용**:
+
+| 항목 | 비용 | 성격 |
+|---|---|---|
+| CLI 번들 설치 | 1.025GB 다운로드 ~70초 / 디스크 **2.7GB** | 1회성 |
+| 팩 캐시(queries+all+의존성) | 60MB | 1회성 |
+| DB 생성 (143 TS) | **13.8초** / 디스크 77MB | 코드 변경 시마다 |
+| 전체 `security-extended` (104쿼리) | **34초** | |
+| **증분: DB 캐시 후 단일 custom 쿼리 재실행** | **~3.9초** (eval 310ms + 오버헤드) | 인터랙티브 가능 |
+
+→ **결론**: 매 턴 DB 재생성(13~34초)은 에이전트 루프에 부담. **세션 시작 시 DB 1회 생성·캐시 → 쿼리만 증분 실행(~0.3~4초)** 패턴이면 실용적. Codebase-Memory의 "heavyweight" 지적은 사실이나 캐싱으로 완화 가능. D-2 부분 해소.
+
+**부수 발견 (가드레일 정밀도 교훈)**: PoC-2 가드레일 쿼리를 DITTO 실코드에 돌리니 **56건** 탐지 — 대부분 test 파일, 핵심은 `src/core/hosts/spawn.ts:26`, `src/core/run-with.ts:339`, `src/core/work-item-handoff.ts` 등. 이는 **구조 쿼리(호출 존재만 탐지)는 noisy**함을 실증한다. 실용화하려면 ① test 경로 제외, ② **dataflow 쿼리로 좁혀** untrusted input이 실제로 sink에 흐르는 것만 탐지(PoC-1 방식), ③ 남은 noise는 LLM triage(Vulnhalla 패턴, B-2). 즉 **C-2 가드레일의 진짜 가치는 구조 쿼리가 아니라 taint 쿼리 + LLM triage 조합**에 있다.
+
+**갱신된 `[VERIFY]` 상태**:
+- D-1: **부분 해소** — codeFlow→구조화 사실 변환 실증(PoC-1). 단 MCP 서빙 레이어 + 자동 KG화는 미구현(컨버터 스크립트 수준까지만).
+- D-2: **부분 해소** — 비용 실측 확보, 캐싱 전제로 feasible.
+- D-3(테스트 설계/리팩토링 안전성): **미해소** — 본 PoC 범위 밖.
+- 다음 PoC 후보: ① 컨버터를 MCP 서버로 노출(D-1 완결), ② taint 쿼리+test제외로 가드레일 정밀화, ③ 리팩토링 전후 dataflow diff(D-3).
