@@ -540,3 +540,35 @@ CodeQL은 **언어당 1 DB**이고 **dataflow는 단일 DB 안에서만** 추적
 1. **언어별 DB 분리** + cross-service dataflow는 자동 안 됨 → **URL 계약 매칭으로 합성**.
 2. **컴파일 언어(Kotlin)는 build 재현이 필수**. 해석/소스 언어(TS)와 난이도·비용이 크게 다름.
 3. DITTO 하네스 관점: target별로 (a) 언어 판정 (b) **build 재현성 판정**을 `doctor capability`로 선행해야 reviewer 레인에서 실패 없이 돌릴 수 있다. backend는 `run-with`가 격리 환경에서 clean build를 수행하는 전제 필요.
+
+---
+
+## 부록 5 — 독립 서브에이전트 창발 연구 (2026-06-02, fresh perspective)
+
+PoC 진행 중 형성된 편향을 배제하기 위해, **컨텍스트를 공유하지 않은 독립 서브에이전트**가 본 보고서와 DITTO 코드를 직접 읽고 "DITTO 특유 구조에서 비로소 가능한" 접목을 연구한 결과. baseline(Part F: security-reviewer 증거원)을 넘어서는 아이디어 위주.
+
+### 관통 진단
+> CodeQL의 가치는 "alert을 더 만드는 것"이 아니라 **DITTO 게이트가 현재 못 보는 빈칸을 채우는 것**이다.
+
+핵심 근거: `completionEvidenceGate`(`src/core/gates.ts:188-200`)는 "verification이 *존재*하는가"(`length>0`)만 보고 **내용은 안 본다** → "테스트 돌렸으니 통과"의 빈 증거를 못 막음. CodeQL이 게이트에 처음으로 *의미*를 준다.
+
+### 창발 아이디어
+
+| # | 아이디어 | 왜 창발적(baseline 너머) | DITTO 접점 | 난이도/위험 |
+|---|---|---|---|---|
+| **E** ⭐ | **`doctor codeql` target 적합성 사전판정** (fail-closed) | 부록4 실증 "Kotlin build-mode none → 6클래스만 추출"은 게이트가 **빈 분석을 '깨끗함'으로 오판**하는 최악의 거짓통과. 이를 분석 전 차단 | `src/cli/commands/doctor.ts` 서브커맨드 + `capability-inventory.ts` 패턴 | 낮음 / 낮음 |
+| **B** ⭐ | **CodeQL을 dialectic의 결정론 opponent로** | LLM opponent만 있던 변증법에 "기계가 든 objection". CodeQL finding이 `kind=finding,maps_to,backed_by` 모양에 **스키마 변경 0**으로 맞음. synthesizer가 명시 반박/수정해야만 종료 | `src/schemas/dialectic.ts:63-81`, `src/hooks/stop.ts:43-49` | 중 / 무한루프(taint+round_cap 필수) |
+| C | 언어원장 → CodeQL model pack 컴파일 | 사용자와 *합의된* 도메인 용어(`agreed_with_user`)를 model pack 진실원으로 — standalone엔 없는 자산 | `src/schemas/language-ledger.ts` | 높음 / false negative |
+| D | 핸드오프 패킷에 "도달성 델타(blast radius)" | 변경이 새로 연 sink를 다음 세션에. 핸드오프는 DITTO 고유 메커니즘 | `context-packet.ts:57-85` | 중 / 큰 target 비용 |
+| G | convergence score에 도달성 델타를 결정론 입력 | "가장 적게 위험 늘린 버전"을 결정론 선택 | `src/core/gates.ts:204-213` | 중 / 과적용 주의 |
+| H | cross-service 매칭(부록4)을 evidence sidecar로 승격 | `freshness/portability` 설계가 raw 없는 cross-repo 증거에 정확히 맞음 | `evidence-record.ts:43-46` | 낮음 / 매칭 정밀도 |
+
+### 명시적 비판/기각
+- **PreToolUse + CodeQL = 안티패턴** — PreToolUse는 동기·고빈도라 초 단위 CodeQL과 상극. 정규식 가드(`src/hooks/pre-tool-use.ts`)가 더 싸고 충분. **기각.**
+- **stop hook 내 직접 CodeQL 호출 금지** — 비용 구조 불일치. reviewer lane 1회 캐시, stop은 산출물만 read.
+- **DITTO가 CodeQL 쿼리/pack 직접 소유 금지** — "자동차는 안 만든다" 경계 침범. pack/model은 target 자산.
+
+### 권고
+1순위 **E**(전제조건·최저비용), 2순위 **B**(최고 창발성·스키마 변경 0). 둘 다 DITTO의 fail-closed/dialectic 구조와 동형. 상세 실행은 → `codeql-ditto-integration-plan.md`.
+
+> 연구 한계: 어떤 아이디어도 구현·실행 검증 안 됨(연구·설계 범위). B의 무한루프 위험, C의 용어→tuple 매핑 정확도는 별도 PoC 필요.
