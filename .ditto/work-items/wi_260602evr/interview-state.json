@@ -1,0 +1,100 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602evr",
+  "status": "converged",
+  "started_at": "2026-06-02T10:39:21.706Z",
+  "updated_at": "2026-06-02T10:39:21.716Z",
+  "dimensions": [
+    {
+      "id": "scope",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": "사용자 확정: security·refactor·retro 3개를 전용 owner로 신규 제작. cleanup은 결정적 git/temp 작업이라 LLM owner가 아니라 드라이버 스텝 — 형태가 달라 별도 증분으로 분리. nodeKind/nodeOwner enum·KIND_TO_OWNER·OWNER_TOOLS 확장 + agents/* 3개."
+    },
+    {
+      "id": "owner-shape",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q002"
+      ],
+      "notes": "security-reviewer=read-only 깊은 보안 패스(reviewer-output kind=security-reviewer 공유), refactorer=mutating Tidy First(구조≠동작·전후 green), retrospective=read-only 회고. refactor가 mutating이므로 approval-gate 대상. isMutatingOwner는 OWNER_TOOLS의 Edit 포함 여부에서 도출 → gate↔tools 단일 소스(드리프트 차단)."
+    },
+    {
+      "id": "dispatchability",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q003"
+      ],
+      "notes": "배선 전: nodeKind enum이 security/refactor/retro를 reject → planner가 generated_nodes에 담아도 schema가 막아 디스패치 불가. 배선 후: kind parse·kindToOwner 매핑·OWNER_TOOLS·agents/* 존재 → planner 생성 노드가 새 owner로 dispatch. live 증거 = 이 WI autopilot 실행에서 design 노드가 security/retro kind 노드를 generated_nodes로 emit→접합→next-node action=spawn(새 owner)."
+    }
+  ],
+  "readiness": {
+    "score": 0.9,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-02T10:39:21.710Z",
+      "dimension": "scope",
+      "question": "[VERIFY] kind 4개 중 무엇을 이번에 어떤 형태로 배선하나?",
+      "why_matters": "cleanup은 결정적 작업이라 LLM owner와 형태가 근본적으로 다르다(비가역 git 승인 게이트 필요). 범위를 임의 축소하지 않으려면 확정 필요.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "security/refactor/retro 3개 전용 owner 에이전트 신규. cleanup 분리(드라이버 결정적 스텝, 후속).",
+      "answer_kind": "user"
+    },
+    {
+      "id": "q002",
+      "asked_at": "2026-06-02T10:39:21.711Z",
+      "dimension": "owner-shape",
+      "question": "refactor가 mutating인데 approval-gate·packet read-only 가드를 어떻게 일관 처리하나?",
+      "why_matters": "isMutatingNode가 owner===implementer 하드코딩이면 refactorer가 게이트를 우회한다. gate와 packet tools가 별도 리스트면 드리프트.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "isMutatingOwner(owner)=OWNER_TOOLS[owner].includes(Edit)로 중앙화. isMutatingNode·buildDelegationPacket 둘 다 이를 사용 → refactorer는 자동으로 mutating(approval-gated, read-only 가드 없음), security/retro는 read-only.",
+      "answer_kind": "assumption"
+    },
+    {
+      "id": "q003",
+      "asked_at": "2026-06-02T10:39:21.713Z",
+      "dimension": "dispatchability",
+      "question": "\"이제 디스패치 가능\"을 무엇으로 증거하나?",
+      "why_matters": "이전엔 schema가 kind를 reject해 생성조차 불가. 배선이 실제로 디스패치 경로를 연다는 fresh evidence 필요.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "스키마/매핑/툴/에이전트 단위 테스트 + 이 WI autopilot 실행에서 design 노드가 새 kind 노드를 생성→addNodes 접합→next-node가 새 owner로 action=spawn dispatch.",
+      "answer_kind": "assumption"
+    }
+  ],
+  "assumptions": [
+    {
+      "statement": "isMutatingOwner(owner)=OWNER_TOOLS[owner].includes(Edit)로 중앙화. isMutatingNode·buildDelegationPacket 둘 다 이를 사용 → refactorer는 자동으로 mutating(approval-gated, read-only 가드 없음), security/retro는 read-only.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q002"
+    },
+    {
+      "statement": "스키마/매핑/툴/에이전트 단위 테스트 + 이 WI autopilot 실행에서 design 노드가 새 kind 노드를 생성→addNodes 접합→next-node가 새 owner로 action=spawn dispatch.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q003"
+    }
+  ],
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 3
+  }
+}

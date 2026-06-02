@@ -1,0 +1,100 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602evr",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-02T10:41:00.824Z",
+  "summary": "[VERIFY] owner 제작(3 신규, cleanup 분리): security·refactor·retro kind를 nodeKind/nodeOwner 스키마·KIND_TO_OWNER·OWNER_TOOLS에 배선하고 security-reviewer·refactorer·retrospective 전용 owner 에이전트를 제작. refactor는 mutating이라 approval-gate 대상 — isMutatingOwner(owner)=OWNER_TOOLS[owner].includes(Edit)로 중앙화하여 isMutatingNode·buildDelegationPacket이 공유(gate↔tools 드리프트 차단). cleanup은 결정적 git/temp 작업이라 LLM owner가 아니라 드라이버 스텝 — 의도적 미배선(별도 증분). 5 AC 전부 fresh evidence로 pass. dogfood live: design 노드가 generated_nodes로 security·retro kind 노드를 emit→addNodes 접합(그래프 3→5)→next-node가 G1(security)을 새 owner security-reviewer로 action=spawn dispatch(배선 전엔 schema가 kind를 reject해 불가).",
+  "changed_files": [
+    "src/schemas/autopilot.ts",
+    "src/core/autopilot-graph.ts",
+    "src/core/autopilot-dispatch.ts",
+    "src/core/autopilot-loop.ts",
+    "agents/security-reviewer.md",
+    "agents/refactorer.md",
+    "agents/retrospective.md",
+    "tests/core/autopilot-graph.test.ts",
+    "tests/core/autopilot-dispatch.test.ts",
+    "tests/core/surface-inventory.plugin.test.ts",
+    ".ditto/surfaces.json"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core (nodeKind/nodeOwner parse via kindToOwner + dispatch)",
+          "summary": "security·refactor·retro kind, security-reviewer·refactorer·retrospective owner가 enum에 추가되어 parse·dispatch 됨(배선 전 reject)"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-graph.test.ts -t \"kindToOwner\"",
+          "summary": "security→security-reviewer, refactor→refactorer, retro→retrospective + 기존 매핑 불변, exit 0"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-dispatch.test.ts -t \"mutating\" -t \"read-only owners\"",
+          "summary": "refactor packet Edit 보유·read-only 가드 없음·isMutatingOwner=true; security·retro Edit 없음·read-only 가드 있음·isMutatingOwner=false, exit 0"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/surface-inventory.plugin.test.ts",
+          "summary": "agents/security-reviewer·refactorer·retrospective.md 존재(name=owner) + surfaces.json 27 surfaces drift 0(declared↔scan 일치), exit 0"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-5",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "ditto autopilot (wi_260602evr 실행)",
+          "summary": "design 노드 generated_nodes=[G1 security, G2 retro]→addNodes 접합 그래프 3→5→next-node action=spawn node=G1 owner=security-reviewer(신규 [VERIFY] owner) dispatch. G1·G2 pass→done."
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "754 pass, 0 fail across 62 files (planner 지능 750 대비 +4, 무회귀)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome check 179 files, 0 error"
+        }
+      ],
+      "evidence_records": []
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [
+    "cleanup [VERIFY] kind는 의도적 미배선 — 결정적 드라이버 스텝 + 비가역 git 승인 게이트로 별도 증분.",
+    "security 노드의 forward 재확장(A-2)은 아직 review kind만 — §2.4가 security를 포함하므로 security findings 루프는 후속(현재 security 노드 findings는 has_findings 무시).",
+    "security-reviewer가 reviewer의 인라인 보안 레인과 출력 계약(reviewer-output kind=security-reviewer)을 공유 — 깊이/트리거가 다르나 장기 통합 여지."
+  ],
+  "final_verdict": "pass"
+}

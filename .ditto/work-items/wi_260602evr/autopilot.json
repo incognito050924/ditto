@@ -1,0 +1,169 @@
+{
+  "schema_version": "0.1.0",
+  "autopilot_id": "orch_260602o2m",
+  "work_item_id": "wi_260602evr",
+  "mode": "autopilot",
+  "root_goal": "security·refactor·retro 세 [VERIFY] kind를 nodeKind/nodeOwner 스키마·KIND_TO_OWNER·OWNER_TOOLS에 배선하고 security-reviewer·refactorer·retrospective 전용 owner 에이전트를 제작하여 planner 생성 해당 kind 노드를 엔진이 새 owner로 dispatch 한다. refactor는 mutating이라 approval-gate 대상(isMutatingOwner=owner 툴셋 Edit 도출). cleanup은 결정적 드라이버 스텝이라 의도적 미배선.",
+  "completion_boundary": "entire_work_item",
+  "approval_gate": {
+    "status": "not_required",
+    "source": "small_reversible_policy",
+    "approved_at": null,
+    "approved_by": null,
+    "evidence_refs": []
+  },
+  "nodes": [
+    {
+      "id": "N1",
+      "kind": "design",
+      "owner": "planner",
+      "purpose": "Plan the change against the acceptance criteria",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N2",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "Implement the planned change",
+      "status": "passed",
+      "depends_on": [
+        "N1"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "file",
+          "path": "src/schemas/autopilot.ts",
+          "summary": "nodeKind/nodeOwner enum 확장"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-dispatch.ts",
+          "summary": "OWNER_TOOLS + isMutatingOwner 중앙화"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N3",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Verify every acceptance criterion with evidence",
+      "status": "passed",
+      "depends_on": [
+        "N2"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "754 pass, 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bunx biome check src tests agents",
+          "summary": "0 error"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "G1",
+      "kind": "security",
+      "owner": "security-reviewer",
+      "purpose": "새 owner 배선 변경의 보안 표면(권한·sink) 점검",
+      "status": "passed",
+      "depends_on": [
+        "N2"
+      ],
+      "acceptance_refs": [
+        "ac-3"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "grep -n Edit src/core/autopilot-dispatch.ts",
+          "summary": "refactorer만 Edit 보유, isMutatingOwner로 게이트"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "G2",
+      "kind": "retro",
+      "owner": "retrospective",
+      "purpose": "이번 [VERIFY] owner 증분 회고 — 무엇이 잘 됐고 다음 [VERIFY](cleanup)에 무엇을 넘길지",
+      "status": "passed",
+      "depends_on": [
+        "N3"
+      ],
+      "acceptance_refs": [
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "git diff --stat .ditto/surfaces.json",
+          "summary": "+3 agent surfaces"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    }
+  ],
+  "caps": {
+    "fix_per_node": 2,
+    "switch_per_node": 1,
+    "converge_rounds": 3
+  },
+  "continue_policy": {
+    "continue_after_approval": true,
+    "continue_after_checkpoint": true,
+    "continue_after_fixable_failure": true,
+    "ask_user_only_for_user_owned_decisions": true
+  },
+  "stop_conditions": [
+    "all_acceptance_criteria_passed_or_explicitly_closed",
+    "blocked_by_user_owned_decision",
+    "blocked_by_external_system",
+    "safety_boundary_hit"
+  ],
+  "user_interrupt_policy": "ask_only_for_user_owned_decisions"
+}
