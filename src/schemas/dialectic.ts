@@ -65,6 +65,13 @@ export const opponentObjection = z
     // flag① — reuse the common severity enum (info|low|medium|high|critical).
     // Admissible objections downstream are critical|high (stop.ts ADMISSIBLE_SEVERITIES).
     severity: severity,
+    id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Stable objection id; lets the synthesizer resolve by id instead of echoing claim verbatim',
+      ),
     claim: z.string().min(1),
     evidence: z.array(evidenceRef).default([]),
     maps_to: z.string().min(1).describe('AC, file:line, intent, or doc the objection links to'),

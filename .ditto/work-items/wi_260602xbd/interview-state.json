@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602xbd",
+  "status": "converged",
+  "started_at": "2026-06-02T06:42:01.910Z",
+  "updated_at": "2026-06-02T06:42:02.247Z",
+  "dimensions": [
+    {
+      "id": "d-scope",
+      "critical": false,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": "optional id + id-or-claim 매칭"
+    }
+  ],
+  "readiness": {
+    "score": 0.85,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-02T06:42:02.075Z",
+      "dimension": "d-scope",
+      "question": "objection id 필수/선택?",
+      "why_matters": "하위호환",
+      "info_gain_estimate": "low",
+      "self_answer_attempts": [],
+      "answer": "optional id. dialecticForcesContinuation은 id OR verbatim claim 매칭 → 기존 verbatim 유지 + paraphrase는 id로 해소. synthesizer agent body에 id 참조 안내.",
+      "answer_kind": "user"
+    }
+  ],
+  "assumptions": [],
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 1
+  }
+}

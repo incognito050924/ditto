@@ -630,6 +630,95 @@ describe('M3.5 — dialectic runtime (OpponentModelRouter + admissibility + Stop
     expect(dialecticForcesContinuation(taste)).toEqual([]);
   });
 
+  test('admissible objection을 id로 해결(claim 의역) → continuation 없음', () => {
+    const byId = buildDialectic({
+      opponent: {
+        run: {
+          provider: 'codex',
+          model: 'codex',
+          command: 'c',
+          timestamp: '2026-05-26T00:00:00.000Z',
+          fallback_from: null,
+          fallback_reason: 'none',
+        },
+        objections: [baseObjection({ id: 'obj-1' })],
+        missing_alternatives: [],
+        scope_creep_risks: [],
+        verification_gaps: [],
+      },
+      synthesizer: {
+        verdict: 'accept',
+        synthesis: 'agreed',
+        // claim 문자열은 echo하지 않고 의역만; id로만 해결.
+        accepted_objections: ['obj-1'],
+        rejected_objections: [],
+        required_edits: [],
+        remaining_open_questions: [],
+        evidence_refs: [],
+      },
+    });
+    expect(dialecticForcesContinuation(byId)).toEqual([]);
+  });
+
+  test('admissible objection에 id 있으나 id도 claim도 echo 안 됨 → continuation', () => {
+    const neither = buildDialectic({
+      opponent: {
+        run: {
+          provider: 'codex',
+          model: 'codex',
+          command: 'c',
+          timestamp: '2026-05-26T00:00:00.000Z',
+          fallback_from: null,
+          fallback_reason: 'none',
+        },
+        objections: [baseObjection({ id: 'obj-1' })],
+        missing_alternatives: [],
+        scope_creep_risks: [],
+        verification_gaps: [],
+      },
+      synthesizer: {
+        verdict: 'accept',
+        synthesis: 'agreed',
+        accepted_objections: ['something else'],
+        rejected_objections: [],
+        required_edits: [],
+        remaining_open_questions: [],
+        evidence_refs: [],
+      },
+    });
+    expect(dialecticForcesContinuation(neither).some((r) => r.includes('admissible'))).toBe(true);
+  });
+
+  test('verbatim claim echo는 id가 있어도 여전히 해결로 인정 (backward-compat)', () => {
+    const verbatim = buildDialectic({
+      opponent: {
+        run: {
+          provider: 'codex',
+          model: 'codex',
+          command: 'c',
+          timestamp: '2026-05-26T00:00:00.000Z',
+          fallback_from: null,
+          fallback_reason: 'none',
+        },
+        objections: [baseObjection({ id: 'obj-1' })],
+        missing_alternatives: [],
+        scope_creep_risks: [],
+        verification_gaps: [],
+      },
+      synthesizer: {
+        verdict: 'accept',
+        synthesis: 'agreed',
+        // id 대신 claim 문자열 verbatim echo.
+        accepted_objections: ['AC-1 fails on empty input'],
+        rejected_objections: [],
+        required_edits: [],
+        remaining_open_questions: [],
+        evidence_refs: [],
+      },
+    });
+    expect(dialecticForcesContinuation(verbatim)).toEqual([]);
+  });
+
   test('Stop hook 통합: reviews/dialectic-*.json verdict=reject → exit 2 + dialectic 사유', async () => {
     const reviewsDir = join(tmp, '.ditto', 'work-items', wi.id, 'reviews');
     await mkdir(reviewsDir, { recursive: true });

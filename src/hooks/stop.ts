@@ -28,18 +28,22 @@ export function dialecticForcesContinuation(d: Dialectic): string[] {
   if (verdict === 'reject' || verdict === 'blocked') {
     reasons.push(`dialectic ${d.review_id} verdict=${verdict}; deliberation not resolved`);
   }
-  // Resolution is matched by *exact* claim string: the synthesizer must echo the
-  // opponent's `claim` verbatim in accepted/rejected_objections for it to count
-  // as resolved. A paraphrase reads as unresolved → forces continuation. This is
-  // deliberately fail-safe (over-block, never a false pass); the verbatim-echo
-  // contract is stated in the synthesizer agent body.
+  // Resolution is matched by an explicit echo in accepted/rejected_objections:
+  // the synthesizer counts an objection as resolved by referencing its stable
+  // `id` OR its `claim` string verbatim. Resolving by `id` is paraphrase-tolerant
+  // (the claim text need not be echoed); verbatim claim echo remains a backward-
+  // compatible fallback for objections/ledgers without an id. Anything not
+  // explicitly echoed reads as unresolved → forces continuation. This is
+  // deliberately fail-safe (over-block, never a false pass); the id-or-claim
+  // resolution contract is stated in the synthesizer agent body.
   const resolved = new Set<string>([
     ...d.synthesizer.accepted_objections,
     ...d.synthesizer.rejected_objections.map((r) => r.objection),
   ]);
   for (const obj of d.opponent.objections) {
     const admissible = obj.maps_to.trim().length > 0 && ADMISSIBLE_SEVERITIES.has(obj.severity);
-    if (admissible && !resolved.has(obj.claim)) {
+    const idResolved = obj.id !== undefined && resolved.has(obj.id);
+    if (admissible && !resolved.has(obj.claim) && !idResolved) {
       reasons.push(`dialectic ${d.review_id}: admissible objection unresolved — ${obj.claim}`);
     }
   }
