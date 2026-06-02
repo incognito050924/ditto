@@ -1,0 +1,91 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602s66",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-02T09:31:15.344Z",
+  "summary": "A-2: forward 재확장(findings→fix+review, 단방향 엣지) + 수렴 예산(caps.converge_rounds) 2층 탈출 — 결정론 순수 planner planForwardReexpansion + 스키마 필드. 5 AC 전부 fresh evidence로 pass. live 루프 배선은 의도적 out_of_scope(후속).",
+  "changed_files": [
+    "src/schemas/autopilot.ts",
+    "src/core/autopilot-converge.ts",
+    "src/core/autopilot-bootstrap.ts",
+    "tests/core/autopilot-converge.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-converge.test.ts -t \"missing converge_rounds parses to the default\"",
+          "summary": "legacy autopilot.json(필드 부재) → caps.converge_rounds default>0, exit 0"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-converge.test.ts -t \"expands forward\"",
+          "summary": "findings>0 → 새 fix+review 단방향 depends_on, validateNodeAddition accepts, exit 0"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-converge.test.ts -t \"round-trips through the store\"",
+          "summary": "addNodes 접합 후 재읽기 deep-equals (3→5 노드), exit 0"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-converge.test.ts -t \"closes the loop\" -t \"escalates\"",
+          "summary": "findings=0→close(노드 0), round≥budget→escalate(user_decision_needed), pass 미반환, exit 0"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-5",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "737 pass, 0 fail across 62 files (무회귀)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome check 179 files, no fixes"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-bootstrap.ts",
+          "summary": "bootstrapAutopilot/buildInitialNodes/addNodes 시그니처 보존"
+        }
+      ],
+      "evidence_records": []
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [
+    "forward 재확장은 순수 planner로만 존재 — live recordResult/next-node 루프 호출 배선은 후속 증분(엔진이 review 노드를 만들 수 있게 된 뒤)."
+  ],
+  "final_verdict": "pass"
+}
