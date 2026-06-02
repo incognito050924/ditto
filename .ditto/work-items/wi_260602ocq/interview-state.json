@@ -1,0 +1,106 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602ocq",
+  "status": "converged",
+  "started_at": "2026-06-02T00:00:00.000Z",
+  "updated_at": "2026-06-02T00:00:00.000Z",
+  "dimensions": [
+    {
+      "id": "source-of-truth",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": "changed_files lives on the work item; buildCompletion reads it. The reporter is the owner subagent via record-result."
+    },
+    {
+      "id": "approach-flag-vs-node",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q002"
+      ],
+      "notes": "Two candidates (handoff #1): --changed-files flag vs node reports. Flag only relocates the manual pin; node-report removes the friction."
+    },
+    {
+      "id": "gate-and-dedup",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q003"
+      ],
+      "notes": "Union is pass-only (failed partial edits reported on eventual pass). Dedup preserves existing order. No node-kind gate — work-item-level metadata any node may contribute."
+    }
+  ],
+  "readiness": {
+    "score": 0.9,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-02T00:00:00.000Z",
+      "dimension": "source-of-truth",
+      "question": "Where do changed_files accumulate so `autopilot complete` reads them automatically?",
+      "why_matters": "Determines the write target and which surface owns the field.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "Union into work-item.changed_files inside recordResult on a contentful pass; complete already reads it.",
+      "answer_kind": "assumption"
+    },
+    {
+      "id": "q002",
+      "asked_at": "2026-06-02T00:00:00.000Z",
+      "dimension": "approach-flag-vs-node",
+      "question": "Should the operator pass changed_files at complete time, or should the mutating node report them as it runs?",
+      "why_matters": "Only the node-report path actually removes the per-run manual pin friction.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "Node reports via record-result payload (approach a). The owner that changed files names them; they accumulate.",
+      "answer_kind": "assumption"
+    },
+    {
+      "id": "q003",
+      "asked_at": "2026-06-02T00:00:00.000Z",
+      "dimension": "gate-and-dedup",
+      "question": "On which outcomes does the union apply and how are duplicates handled?",
+      "why_matters": "Pass-only + dedup keeps the field a faithful, stable record of the run.",
+      "info_gain_estimate": "medium",
+      "self_answer_attempts": [],
+      "answer": "Pass-only; dedup against existing, append new in order. Not gated on node kind.",
+      "answer_kind": "assumption"
+    }
+  ],
+  "assumptions": [
+    {
+      "statement": "Union into work-item.changed_files inside recordResult on a contentful pass; complete already reads it.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q001"
+    },
+    {
+      "statement": "Node reports via record-result payload (approach a). The owner that changed files names them; they accumulate.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q002"
+    },
+    {
+      "statement": "Pass-only; dedup against existing, append new in order. Not gated on node kind.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q003"
+    }
+  ],
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 3
+  }
+}

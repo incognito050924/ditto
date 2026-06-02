@@ -1,0 +1,52 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602ocq",
+  "source_request": "다음 후보 #1은 changed_files 자동 수집(complete가 work-item.changed_files를 읽는데 수동 dogfood선 비어 핀이 필요 — implementer 노드가 갱신하게 하거나 --changed-files 추가).",
+  "goal": "record-result unions an owner-reported changed_files into the work item so `autopilot complete` reads it without a manual pin",
+  "in_scope": [
+    "recordResultPayload gains an optional changed_files field",
+    "recordResult unions changed_files into the work item on a contentful pass",
+    "autopilot complete reads the accumulated changed_files (no code change needed there)"
+  ],
+  "out_of_scope": [
+    "a --changed-files CLI flag on complete (relocates the manual pin; rejected)",
+    "auto-collecting changed_files from git at complete time",
+    "gating the union on node kind"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "record-result with a changed_files payload on a contentful pass updates the work item changed_files to contain the union of prior and reported paths, deduplicated.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "autopilot complete then produces a completion contract whose changed_files equals the work item changed_files, with no manual pin.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "A record-result with outcome fail leaves the work item changed_files equal to its prior value.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    }
+  ],
+  "unknowns": [],
+  "follow_up_candidates": [
+    "cleanup node wiring (handoff #2)",
+    "security node forward re-expansion (handoff #3)",
+    "real owner subagent spawn (handoff #4)"
+  ],
+  "question_policy": "ask_only_if_user_only_can_answer"
+}
