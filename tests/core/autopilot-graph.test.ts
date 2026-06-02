@@ -4,7 +4,9 @@ import {
   fileOverlapGate,
   nodeTransition,
   selectReadyNodes,
+  validateNodeAddition,
 } from '~/core/autopilot-graph';
+import type { AutopilotNode } from '~/schemas/autopilot';
 
 describe('selectReadyNodes (the candidate concurrent wave)', () => {
   test('returns every pending node whose deps have passed', () => {
@@ -49,6 +51,52 @@ describe('fileOverlapGate (G5: serialize same-wave nodes that touch the same fil
     ]);
     expect(dispatch.map((n) => n.id)).toEqual(['a', 'reviewer']);
     expect(serialized.map((n) => n.id)).toEqual(['b']);
+  });
+});
+
+describe('validateNodeAddition (A-1: integrity gate for node-add)', () => {
+  const node = (id: string, depends_on: string[] = []): AutopilotNode => ({
+    id,
+    kind: 'implement',
+    owner: 'implementer',
+    purpose: 'p',
+    status: 'pending',
+    depends_on,
+    acceptance_refs: [],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  });
+
+  test('accepts a valid forward-only addition', () => {
+    const existing = buildInitialNodes(['ac-1']);
+    expect(() => validateNodeAddition(existing, [node('N4', ['N3'])])).not.toThrow();
+  });
+
+  test('rejects a duplicate id against the existing graph', () => {
+    const existing = buildInitialNodes(['ac-1']);
+    expect(() => validateNodeAddition(existing, [node('N1')])).toThrow(/duplicate node id/);
+  });
+
+  test('rejects a duplicate id within the batch', () => {
+    const existing = buildInitialNodes(['ac-1']);
+    expect(() => validateNodeAddition(existing, [node('N4'), node('N4')])).toThrow(
+      /duplicate node id/,
+    );
+  });
+
+  test('rejects a dangling depends_on', () => {
+    const existing = buildInitialNodes(['ac-1']);
+    expect(() => validateNodeAddition(existing, [node('N4', ['Nx'])])).toThrow(
+      /dangling depends_on/,
+    );
+  });
+
+  test('rejects a cycle-introducing addition', () => {
+    const existing = buildInitialNodes(['ac-1']);
+    // N4 depends on N5, N5 depends on N4 → cycle within the batch.
+    expect(() => validateNodeAddition(existing, [node('N4', ['N5']), node('N5', ['N4'])])).toThrow(
+      /cycle/,
+    );
   });
 });
 

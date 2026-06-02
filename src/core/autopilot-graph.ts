@@ -138,3 +138,52 @@ export function buildInitialNodes(acceptanceIds: string[]): AutopilotNode[] {
     mk('N3', 'verify', 'Verify every acceptance criterion with evidence', ['N2'], acceptanceIds),
   ];
 }
+
+/**
+ * Node generation seam (A-1). The bootstrap no longer hardcodes a node literal;
+ * it calls a `NodeGenerator`. The default keeps the current 3-node seed so the
+ * observable autopilot behavior is unchanged — the seam only removes the
+ * structural ceiling (no way to grow the graph), not the default shape.
+ */
+export type NodeGenerator = (acceptanceIds: string[]) => AutopilotNode[];
+export const defaultNodeGenerator: NodeGenerator = buildInitialNodes;
+
+/**
+ * Integrity gate for a node-add (A-1). Pure, no I/O — `addNodes` calls this
+ * before any write. Throws on a duplicate id (against the existing graph or
+ * within the batch), a dangling `depends_on` reference, or a `depends_on` edge
+ * that introduces a cycle. Error messages carry stable markers so callers/tests
+ * can assert on them: `duplicate node id` / `dangling depends_on` / `cycle`.
+ */
+export function validateNodeAddition(existing: AutopilotNode[], newNodes: AutopilotNode[]): void {
+  const seen = new Set<string>();
+  for (const node of existing) seen.add(node.id);
+  for (const node of newNodes) {
+    if (seen.has(node.id)) throw new Error(`duplicate node id: ${node.id}`);
+    seen.add(node.id);
+  }
+
+  const merged = [...existing, ...newNodes];
+  const byId = new Map(merged.map((n) => [n.id, n]));
+  for (const node of newNodes) {
+    for (const dep of node.depends_on) {
+      if (!byId.has(dep)) {
+        throw new Error(`dangling depends_on: node ${node.id} references unknown ${dep}`);
+      }
+    }
+  }
+
+  // Cycle detection over the merged depends_on edges (DFS with a recursion
+  // stack). The pre-existing graph is acyclic by construction, but a new edge
+  // can close a loop, so we check the whole merged graph.
+  const state = new Map<string, 'visiting' | 'done'>();
+  const visit = (id: string): void => {
+    const status = state.get(id);
+    if (status === 'done') return;
+    if (status === 'visiting') throw new Error(`cycle introduced over depends_on at node ${id}`);
+    state.set(id, 'visiting');
+    for (const dep of byId.get(id)?.depends_on ?? []) visit(dep);
+    state.set(id, 'done');
+  };
+  for (const node of merged) visit(node.id);
+}
