@@ -201,6 +201,87 @@ describe('stopHandler', () => {
     expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
   });
 
+  test('approval_gate pending but NO pending implementer node => does not yield; completion gate runs (exit 2)', async () => {
+    // Bypass/empty autopilot.json: approval marked pending but no real mutating
+    // plan awaits. The yield branch must NOT swallow the completion gate.
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({
+        approval_gate: {
+          status: 'pending',
+          source: null,
+          approved_at: null,
+          approved_by: null,
+          evidence_refs: [],
+        },
+        // only a verify node (owner=verifier), no pending implementer-owned node
+        nodes: [node({ kind: 'verify', owner: 'verifier', status: 'pending' })],
+      }),
+    );
+    // completion claims pass but misses a criterion → completion gate must block.
+    await writeArtifact(
+      'completion.json',
+      completion({
+        acceptance: [
+          { criterion_id: 'ac-1', verdict: 'pass' },
+          { criterion_id: 'ac-2', verdict: 'pass' },
+        ],
+      }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('missing');
+  });
+
+  test('degenerate pending autopilot present, NO completion/convergence, NON_TERMINAL => exit 2 (§5#7 pure bypass blocked)', async () => {
+    // Pure §5#7: autopilot.json PRESENT, approval_gate pending, but ZERO pending
+    // implementer nodes, and NO completion.json / convergence.json. Default work
+    // item is draft (NON_TERMINAL). Must hit the strong-block, not exit 0.
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({
+        approval_gate: {
+          status: 'pending',
+          source: null,
+          approved_at: null,
+          approved_by: null,
+          evidence_refs: [],
+        },
+        nodes: [node({ kind: 'verify', owner: 'verifier', status: 'pending' })],
+      }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('no real verification path');
+  });
+
+  test('approval_gate pending WITH a pending implementer node => still yields (exit 0)', async () => {
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({
+        approval_gate: {
+          status: 'pending',
+          source: null,
+          approved_at: null,
+          approved_by: null,
+          evidence_refs: [],
+        },
+        nodes: [node({ kind: 'implement', owner: 'implementer', status: 'pending' })],
+      }),
+    );
+    // Even with a failing completion present, a legitimate approval wait yields.
+    await writeArtifact(
+      'completion.json',
+      completion({
+        acceptance: [
+          { criterion_id: 'ac-1', verdict: 'pass' },
+          { criterion_id: 'ac-2', verdict: 'pass' },
+        ],
+      }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
   test('only blocked node remains (external/user/safety) => exit 0', async () => {
     await writeArtifact('autopilot.json', autopilot({ nodes: [node({ status: 'blocked' })] }));
     expect((await run({ stop_hook_active: false })).exitCode).toBe(0);

@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_26060206h",
+  "status": "converged",
+  "started_at": "2026-06-02T06:32:15.535Z",
+  "updated_at": "2026-06-02T06:32:15.733Z",
+  "dimensions": [
+    {
+      "id": "d-scope",
+      "critical": false,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": "mutating=owner implementer"
+    }
+  ],
+  "readiness": {
+    "score": 0.85,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-02T06:32:15.629Z",
+      "dimension": "d-scope",
+      "question": "pending-yield 우회 차단 조건?",
+      "why_matters": "정당 승인대기 보존 vs 빈 그래프 우회",
+      "info_gain_estimate": "low",
+      "self_answer_attempts": [],
+      "answer": "stop.ts pending-yield는 owner=implementer인 pending 노드가 실재할 때만 발동. 없으면 완료 게이트로 fall-through.",
+      "answer_kind": "user"
+    }
+  ],
+  "assumptions": [],
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 1
+  }
+}

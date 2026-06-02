@@ -112,6 +112,26 @@ async function readDialecticLedgers(
   return { status: 'ok', items };
 }
 
+/**
+ * Does a real mutating plan await approval? A mutating node is one owned by the
+ * implementer (kinds implement/fix/docs → owner 'implementer', autopilot §2.2)
+ * that is still pending. Without one, an `approval_gate.status==='pending'` is an
+ * empty/bypass autopilot.json with no plan to surface — it must not yield past
+ * the completion gate.
+ */
+function hasPendingMutatingNode(a: Autopilot): boolean {
+  return a.nodes.some((n) => n.owner === 'implementer' && n.status === 'pending');
+}
+
+/**
+ * A degenerate-pending autopilot is PRESENT but provides no verification path:
+ * approval_gate.status==='pending' yet there is no pending mutating node to
+ * surface. Treated as "no real plan" so the strong-block fires (§5#7 bypass).
+ */
+function isDegeneratePendingAutopilot(a: Autopilot): boolean {
+  return a.approval_gate.status === 'pending' && !hasPendingMutatingNode(a);
+}
+
 function hasRunnableNode(a: Autopilot): boolean {
   const byId = new Map(a.nodes.map((n) => [n.id, n]));
   const depsPassed = (n: Autopilot['nodes'][number]) =>
@@ -181,7 +201,11 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
 
   // Yield precedence: an autopilot waiting on approval/blocker stops the loop so
   // the plan/decision can surface (plan M1.4 branch 나 exceptions).
-  if (pilot.status === 'ok' && pilot.data.approval_gate.status === 'pending') {
+  if (
+    pilot.status === 'ok' &&
+    pilot.data.approval_gate.status === 'pending' &&
+    hasPendingMutatingNode(pilot.data)
+  ) {
     return { exitCode: 0 };
   }
 
@@ -219,12 +243,13 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   if (
     completion.status === 'absent' &&
     conv.status === 'absent' &&
-    pilot.status === 'absent' &&
+    (pilot.status === 'absent' ||
+      (pilot.status === 'ok' && isDegeneratePendingAutopilot(pilot.data))) &&
     NON_TERMINAL_STATUSES.includes(workItem.status)
   ) {
     return {
       exitCode: 2,
-      stderr: `DITTO Stop gate: work item ${workItem.id} is ${workItem.status} but no completion.json / convergence.json / autopilot.json exists. Run /ditto:verify (writes completion.json) or transition the work item to done/abandoned before stopping.\n`,
+      stderr: `DITTO Stop gate: work item ${workItem.id} is ${workItem.status} but has no real verification path (no completion.json / convergence.json, and no autopilot.json with a plan to run). Run /ditto:verify (writes completion.json) or transition the work item to done/abandoned before stopping.\n`,
     };
   }
 

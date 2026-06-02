@@ -96,7 +96,7 @@ ditto는 사용자 직접 호출 CLI를 일부만 노출하고, 핵심 워크플
 4. **[중간·실측]** PreToolUse secret-token false-positive — Bash 모든 토큰을 isSecretPath 검사해 'git log credentials.example', 'grep -r credential .', 'cat docs/credentials.md' 등 메타/문서 명령도 차단[pre-tool-use.ts:131-135]. *(이번 세션에 bun test/lint가 막혀 DITTO_SKIP_HOOKS=1 prefix 필요했던 것과 동류.)*
 5. **[중간·실측]** VAGUE_TERMS substring 오탐 — testable AC를 bootstrap에서 잘못 차단.
 6. **[중간·✓확인·해소 2026-06-02]** 죽은 코드/미런타임 — ~~buildContinuationSignal·nextReadyNodeId·ContinuationSignal 호출처 0(삭제, selectReadyNode 단수 포함)~~; ~~FailureDecision 'continue' unreachable(두 union에서 제거)~~; ~~e2e/knowledge 독립 CLI 미등록 → `ditto e2e run`·`ditto bridge knowledge` 배선~~. 배선 중 노출된 잠복 버그 2건 동반 수정: index.ts `await runMain`(미await 시 spawn 명령이 완료 전 exit 0), browser.ts lazy `runnerScriptPath`(compiled 바이너리 startup crash).
-7. **[중간]** NON_TERMINAL strong-block 우회 — 세 ledger 전부 absent일 때만 발동하므로, 빈 autopilot.json 하나만 두면 stop.ts:179에서 곧장 exit0 — verify 없이 종료 구조적 가능.
+7. **[중간·해소 2026-06-02]** ~~NON_TERMINAL strong-block 우회 — 빈 autopilot.json 하나로 stop.ts:179 exit0~~ → pending-yield를 `hasPendingMutatingNode`로 가드(정당 승인대기 보존) + strong-block을 `isDegeneratePendingAutopilot`(pending ∧ mutating 노드 0)에도 발동하도록 확장. autopilot wi_26060206h 독립검증 707 pass(§5#7).
 8. **[중간]** dialecticForcesContinuation verbatim-echo 취약 — synthesizer가 opponent.claim을 paraphrase하면 미해결로 읽혀 false-continuation.
 9. **[낮음·해소 2026-06-02]** 광범위 fail-open — ~~session pointer 없는 세션에서 게이트 no-op이나 표면화 안 됨~~ → D3 결정대로 stop.ts의 session_id 부재 branch가 stderr 경고를 내보냄(비차단, exit 0). autopilot wi_260602nkj 독립검증 704 pass.
 10. **[낮음·중복]** G1/G2가 CC 네이티브와 중복 — output-style/auto mode/subagent 격리가 이미 동일 방향. charter advisory 주입은 강제력 0+영구 토큰 비용.
@@ -112,7 +112,7 @@ ditto는 사용자 직접 호출 CLI를 일부만 노출하고, 핵심 워크플
 | 4 | PreToolUse secret 오탐 | secret 토큰 차단을 노출 동사(cat/less/grep -·cp/scp/curl --upload) 컨텍스트로 한정, log/ls/git log 제외 | **G2/G5** 정상작업 차단 해소 | 낮음 |
 | 5 | VAGUE_TERMS substring 오탐 | 단어 경계(\b) 매칭 전환 + 한국어 모호어(견고/적절히/제대로) 추가 | **G4** 정밀도 | 낮음 |
 | 6 | ~~continuation signal 미배선~~ **[해소 2026-06-02]** | **죽은 export 삭제 채택**(사용자 승인): buildContinuationSignal·nextReadyNodeId·ContinuationSignal·selectReadyNode(단수) + 전용 테스트 제거. cap 초과→escalate→node fail→graceful stop 은 기존대로 유지(배선 불필요). | **G6** 부채 제거 | 중간 |
-| 7 | 빈 autopilot.json 우회 | approval=pending yield에 'mutating 노드 실재 ∧ root_goal 미충족' 조건 추가 | **G3/G5** 종료 게이트 우회 차단 | 낮음 |
+| 7 | ~~빈 autopilot.json 우회~~ **[해소 2026-06-02]** | pending-yield를 hasPendingMutatingNode로 가드 + strong-block을 degenerate pending autopilot에 확장 | **G3/G5** 종료 게이트 우회 차단 | 낮음 |
 | 8 | dialectic verbatim-echo | objection에 안정 id 부여, synthesizer가 id로 해소 매칭(paraphrase 허용) | **G5** false-continuation 제거 | 중간 |
 | 9 | 죽은/얇은 추상화 정리 | plan skill·dialectic-review skill·~~selectReadyNode(단수)~~ **(삭제됨, #6)**·FailureDecision.continue 제거/흡수 | **G6** comprehension debt↓ | 낮음 |
 | 10 | ~~owner skeleton 미완~~ **[해소 2026-06-02]** | implementer/planner/researcher 본문에 You-do-not-receive·Procedure·You-return 추가(reviewer/verifier 수준), v0 skeleton 마커 제거, frontmatter·dispatch 코드 불변. You-return은 실제 계약 인용(recordResultPayload+G7·approvalGate+RiskAxes·evidenceRecord). autopilot(wi_260602rls) N1→N2→N3 독립검증 703 pass. | **G3** dispatch 품질 | 중간~높음 |

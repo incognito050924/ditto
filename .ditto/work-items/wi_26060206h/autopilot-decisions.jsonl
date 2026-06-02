@@ -1,0 +1,1 @@
+{"ts":"2026-06-02T06:35:36.989Z","node_id":"N2","failure_class":"fixable","decision":"retry","reason":"§5#7 pure-bypass(빈 autopilot present, no completion) 여전히 exit0 — strong-block을 degenerate autopilot(pending ∧ mutating 노드 0개)에도 발동하도록 확장 필요","attempts":{"fix":1,"switch":0}}
