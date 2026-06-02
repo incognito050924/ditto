@@ -1,0 +1,100 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602cfg",
+  "status": "converged",
+  "started_at": "2026-06-02T10:19:35.226Z",
+  "updated_at": "2026-06-02T10:19:35.236Z",
+  "dimensions": [
+    {
+      "id": "intelligence-locus",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": "사용자 확정: 계약 우선. 지능(무슨 노드)은 LLM planner, DITTO는 결정론적 요청·검증 floor. 코드 휴리스틱 노드 선택은 mental model(지능=LLM, 자동차는 안 만든다)과 충돌하므로 배제."
+    },
+    {
+      "id": "gap-surface",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q002"
+      ],
+      "notes": "A-3가 수용(recordResult→addNodes)·driver 지침(SKILL.md)은 깔았으나, planner subagent 계약은 generated_nodes를 요청·지시하지 않음. 공백 = buildDelegationPacket(planner 노드 packet) + agents/planner.md. 스키마(nodeProposal)·접합(addNodes)은 불변."
+    },
+    {
+      "id": "evidence-strategy",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q003"
+      ],
+      "notes": "진짜 LLM 생성은 엔진이 planner subagent를 spawn해야 실측 — 수동 TDD로 불가. 계약(packet/planner.md)은 테스트로 검증; end-to-end는 이 WI 자체 autopilot 실행에서 design 노드가 goal/AC로 generated_nodes를 emit→그래프 성장→next-node dispatch로 live 시연(에이전트가 planner 지능 역할)."
+    }
+  ],
+  "readiness": {
+    "score": 0.9,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-02T10:19:35.229Z",
+      "dimension": "intelligence-locus",
+      "question": "\"무슨 노드를 만들지\" 결정 지능은 코드(휴리스틱)에 두나, LLM planner에 두나?",
+      "why_matters": "DITTO 철학의 분기점. 코드에 두면 자동차의 뇌를 만드는 것. 계약에 두면 LLM이 지능을 공급하고 DITTO는 floor만 댄다.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "LLM planner에 둔다(계약 우선). DITTO는 packet으로 서브그래프를 요청하고 addNodes/validateNodeAddition로 검증·접합만.",
+      "answer_kind": "user"
+    },
+    {
+      "id": "q002",
+      "asked_at": "2026-06-02T10:19:35.231Z",
+      "dimension": "gap-surface",
+      "question": "계약 우선에서 정확히 무엇을 바꾸는가?",
+      "why_matters": "외과적 변경 보장. 메커니즘은 이미 있으므로 요청·계약 표면만이 범위.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "buildDelegationPacket: planner 노드 packet의 must_do에 generated_nodes 서브그래프 생성 지시 + expected_outcome에 subgraph 추가. agents/planner.md: graph-generator 계약(§2.2 라이프사이클 선택·AC 매핑·scale-to-size·forward DAG) 지시. 비-planner 노드·스키마·접합 경로 불변.",
+      "answer_kind": "assumption"
+    },
+    {
+      "id": "q003",
+      "asked_at": "2026-06-02T10:19:35.232Z",
+      "dimension": "evidence-strategy",
+      "question": "\"planner가 지능적이다\"를 수동 TDD에서 어떻게 증거로 보이나?",
+      "why_matters": "부트스트랩 역설: 엔진이 3노드 씨앗이라 진짜 LLM 노드 생성은 결정론적으로 실측 불가. 계약+live dogfood로 분리 증거.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "계약은 packet/planner.md 단위 테스트로 검증. end-to-end는 이 WI autopilot 실행에서 design 노드가 generated_nodes를 반환→record-result가 addNodes 접합(노드 수 증가)→next-node가 생성 노드를 action=spawn으로 dispatch 함을 산출물로 보임.",
+      "answer_kind": "assumption"
+    }
+  ],
+  "assumptions": [
+    {
+      "statement": "buildDelegationPacket: planner 노드 packet의 must_do에 generated_nodes 서브그래프 생성 지시 + expected_outcome에 subgraph 추가. agents/planner.md: graph-generator 계약(§2.2 라이프사이클 선택·AC 매핑·scale-to-size·forward DAG) 지시. 비-planner 노드·스키마·접합 경로 불변.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q002"
+    },
+    {
+      "statement": "계약은 packet/planner.md 단위 테스트로 검증. end-to-end는 이 WI autopilot 실행에서 design 노드가 generated_nodes를 반환→record-result가 addNodes 접합(노드 수 증가)→next-node가 생성 노드를 action=spawn으로 dispatch 함을 산출물로 보임.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q003"
+    }
+  ],
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 3
+  }
+}
