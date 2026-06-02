@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bootstrapAutopilot } from '~/core/autopilot-bootstrap';
-import { kindToOwner, selectReadyNodes } from '~/core/autopilot-graph';
+import { buildInitialNodes, kindToOwner, selectReadyNodes } from '~/core/autopilot-graph';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import { intentContract } from '~/schemas/intent';
@@ -99,6 +99,42 @@ describe('bootstrapAutopilot', () => {
     for (const node of result.graph.nodes) {
       expect(node.acceptance_refs).toEqual(['intent-1']);
     }
+  });
+
+  test('default generator yields the 3-node seed kinds (behavior invariant)', async () => {
+    const { wi, intent } = await setup('POST /pw returns 200 with a numeric score');
+    const result = await bootstrapAutopilot(repo, { workItem: wi, intent, risk: safeRisk });
+    if (result.status !== 'created') throw new Error('expected created');
+    expect(result.graph.nodes.map((n) => n.kind)).toEqual(['design', 'implement', 'verify']);
+  });
+
+  test('a custom generateNodes seam is used by bootstrap (>3-node valid chain)', async () => {
+    const { wi, intent } = await setup('POST /pw returns 200 with a numeric score');
+    const generateNodes = (acceptanceIds: string[]) => {
+      const base = buildInitialNodes(acceptanceIds);
+      return [
+        ...base,
+        {
+          id: 'N4',
+          kind: 'review' as const,
+          owner: 'reviewer' as const,
+          purpose: 'review',
+          status: 'pending' as const,
+          depends_on: ['N3'],
+          acceptance_refs: acceptanceIds,
+          evidence_refs: [],
+          attempts: { fix: 0, switch: 0 },
+        },
+      ];
+    };
+    const result = await bootstrapAutopilot(repo, {
+      workItem: wi,
+      intent,
+      risk: safeRisk,
+      generateNodes,
+    });
+    if (result.status !== 'created') throw new Error('expected created');
+    expect(result.graph.nodes.map((n) => n.id)).toEqual(['N1', 'N2', 'N3', 'N4']);
   });
 
   test('intent.work_item_id ≠ workItem.id => work_item_mismatch, no graph created', async () => {

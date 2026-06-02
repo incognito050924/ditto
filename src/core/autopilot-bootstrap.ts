@@ -1,7 +1,7 @@
 import type { Autopilot } from '~/schemas/autopilot';
 import type { IntentContract } from '~/schemas/intent';
 import type { WorkItem } from '~/schemas/work-item';
-import { buildInitialNodes } from './autopilot-graph';
+import { type NodeGenerator, defaultNodeGenerator } from './autopilot-graph';
 import { AutopilotStore } from './autopilot-store';
 import { type RiskAxes, acceptanceTestable, highRiskAssumption } from './gates';
 import { generateId } from './id';
@@ -20,6 +20,8 @@ export interface BootstrapInput {
   /** Pre-approved input source (approved_spec/issue/prd/user), if any. */
   approvedSource?: 'approved_spec' | 'issue' | 'prd' | 'user';
   now?: Date;
+  /** Node generation seam (A-1); defaults to the 3-node seed when omitted. */
+  generateNodes?: NodeGenerator;
 }
 
 export type BootstrapResult =
@@ -88,7 +90,7 @@ export async function bootstrapAutopilot(
     root_goal: input.intent.goal,
     completion_boundary: 'entire_work_item',
     approval_gate: approvalGate(input),
-    nodes: buildInitialNodes(acceptanceIds),
+    nodes: (input.generateNodes ?? defaultNodeGenerator)(acceptanceIds),
     caps: { fix_per_node: 2, switch_per_node: 1 },
     continue_policy: {
       continue_after_approval: true,
