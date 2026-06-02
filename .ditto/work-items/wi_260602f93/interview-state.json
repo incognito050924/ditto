@@ -1,0 +1,100 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602f93",
+  "status": "converged",
+  "started_at": "2026-06-02T10:53:01.714Z",
+  "updated_at": "2026-06-02T10:53:01.724Z",
+  "dimensions": [
+    {
+      "id": "scope",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": "사용자 확정 작은 고정 2건 = nextNode terminal 분기 정확화 한 단위. (1) blocked 노드를 waiting과 구분해 action=blocked surface, (2) done에 all_passed disposition + 완료 판정 필요 명시. 둘 다 nextNode 종단 신호 정확성."
+    },
+    {
+      "id": "no-auto-close",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q002"
+      ],
+      "notes": "계약 §6.8: graph 상태 ≠ 완료 판정. done에서 AC를 auto-pass하면 prime directive(증거 기반 완료) 위반(false-green). 따라서 done은 disposition(all_passed)만 surface하고 work-item AC는 건드리지 않음 — completion이 증거로 판정. 핸드오프의 \"auto 클로징\" 표현보다 계약이 우선."
+    },
+    {
+      "id": "blocked-boundary",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q003"
+      ],
+      "notes": "ready 0 & 미terminal: running 노드 있으면 transient → waiting. running 없고 blocked 노드 있으면 user-owned decision(§4.3) → action=blocked(blocked_node_ids + decisions 로그 마지막 reason). 둘을 섞지 않음."
+    }
+  ],
+  "readiness": {
+    "score": 0.9,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-02T10:53:01.717Z",
+      "dimension": "scope",
+      "question": "\"작은 고정 2건\"의 정확한 두 항목과 변경 표면은?",
+      "why_matters": "핸드오프가 지정한 §6.8 + escalate blocked surfacing. 외과적으로 nextNode 종단 분기만 건드려야 함.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "①A-2 escalate blocked 노드 surfacing(waiting→blocked) ②§6.8 done all_passed disposition. 둘 다 nextNode 종단 분기 + NextNodeResult 타입 + CLI/SKILL 일관성.",
+      "answer_kind": "user"
+    },
+    {
+      "id": "q002",
+      "asked_at": "2026-06-02T10:53:01.719Z",
+      "dimension": "no-auto-close",
+      "question": "done이 work-item AC를 자동으로 닫아야 하나?",
+      "why_matters": "핸드오프는 \"AC 자동 클로징\"이라 적었으나 §6.8·prime directive는 증거 없는 클로징을 금지. 잘못 구현하면 false-green.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "아니다. done은 all_passed disposition과 \"completion 필요\" reason만 surface. work-item AC verdict는 done 후에도 unverified 유지 — completion(verifier)이 증거로 판정. auto-close 금지.",
+      "answer_kind": "assumption"
+    },
+    {
+      "id": "q003",
+      "asked_at": "2026-06-02T10:53:01.721Z",
+      "dimension": "blocked-boundary",
+      "question": "blocked와 waiting을 어떻게 구분하나?",
+      "why_matters": "blocked(escalated, 사용자 결정 필요)를 waiting으로 표면화하면 루프가 영원히 폴링하며 사용자에게 yield 못 함.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "running 있으면 waiting(진행 중). running 없고 blocked 있으면 action=blocked로 blocked_node_ids + decisions 로그 reason surface. 그 외 deps 미충족은 waiting fallback.",
+      "answer_kind": "assumption"
+    }
+  ],
+  "assumptions": [
+    {
+      "statement": "아니다. done은 all_passed disposition과 \"completion 필요\" reason만 surface. work-item AC verdict는 done 후에도 unverified 유지 — completion(verifier)이 증거로 판정. auto-close 금지.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q002"
+    },
+    {
+      "statement": "running 있으면 waiting(진행 중). running 없고 blocked 있으면 action=blocked로 blocked_node_ids + decisions 로그 reason surface. 그 외 deps 미충족은 waiting fallback.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q003"
+    }
+  ],
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 3
+  }
+}

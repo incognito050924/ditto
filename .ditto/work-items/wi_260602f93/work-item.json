@@ -1,0 +1,52 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260602f93",
+  "title": "작은 고정 2건 — blocked surfacing + §6.8 done disposition",
+  "source_request": "ditto self-dogfooding 작은 고정 2건: ①escalate blocked 노드 surfacing(A-2: waiting 대신 blocked로 user_decision_needed surface) ②§6.8 done→완료 surfacing(all_passed disposition, graph done ≠ AC 자동 클로징; 증거 기반 완료 원칙 유지). 사용자 확정: 작은 고정 2건.",
+  "goal": "nextNode terminal surfacing을 정확화한다: (1) blocked(escalated) 노드가 runnable 없을 때 action=blocked로 blocked_node_ids와 decisions 로그 reason을 surface 하여 waiting과 구분, (2) done이 all_passed disposition을 carry 하고 reason이 완료 판정 필요(graph done ≠ acceptance criteria closed §6.8)를 명시 — done은 AC를 auto-close 하지 않고 completion이 증거로 판정.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "blocked 노드가 runnable 없을 때 nextNode가 action=blocked를 returns 하고 blocked_node_ids가 그 노드를 contains 하며 reason이 decisions 로그의 escalate 사유를 contains 한다; running 노드가 있으면 action=waiting을 returns 한다(구분)",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "전 노드 passed 시 nextNode가 action=done과 all_passed=true를 returns 하고 reason이 completion을 contains 하며, failed 노드 포함 terminal 시 all_passed=false를 returns 한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "nextNode가 done을 returns 한 직후에도 work-item의 acceptance_criteria verdict가 unverified로 유지되어 done이 AC를 auto-close 하지 않음을 shows 한다(증거 기반 완료, §6.8)",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "skills/autopilot/SKILL.md의 action 목록이 blocked와 done의 all_passed disposition을 contains 하고, CLI next-node human 출력이 blocked 시 blocked_node_ids를, done 시 run completion 안내를 shows 한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "NextNodeResult 기존 action(spawn·present_plan·rollback·waiting·done)이 보존되고 전체 테스트 스위트가 758 pass·0 fail(exit 0)·lint 0 error 한다",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/autopilot-loop.ts",
+    "src/cli/commands/autopilot.ts",
+    "skills/autopilot/SKILL.md",
+    "tests/core/autopilot-loop.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-02T10:52:15.208Z",
+  "updated_at": "2026-06-02T10:54:09.889Z"
+}
