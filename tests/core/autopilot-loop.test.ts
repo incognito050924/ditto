@@ -673,4 +673,81 @@ describe('recordResult forward re-expansion (A-2: review findings → fix+review
     expect(res.promoted_node_ids).toEqual([]);
     expect((await aps.get(WI)).nodes).toHaveLength(1);
   });
+
+  const securityGraph = (secId: string, converge = 3): Autopilot =>
+    graph({
+      nodes: [
+        {
+          id: secId,
+          kind: 'security',
+          owner: 'security-reviewer',
+          purpose: 'security pass over the change',
+          status: 'running',
+          depends_on: [],
+          acceptance_refs: ['ac-1'],
+          evidence_refs: [],
+          attempts: { fix: 0, switch: 0 },
+        },
+      ],
+      caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: converge },
+    });
+
+  test('security with findings splices a fix + security re-check (same lane, not generic review)', async () => {
+    await seed(securityGraph('S0'));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'S0',
+        result_text:
+          'security pass on ac-1; found 1 injection sink that must be fixed before close',
+        outcome: 'pass',
+        has_findings: true,
+      },
+    });
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual(['S0.fix.r0', 'S0.rev.r0']);
+    const g = await aps.get(WI);
+    const fix = g.nodes.find((n) => n.id === 'S0.fix.r0');
+    expect(fix?.kind).toBe('fix');
+    expect(fix?.owner).toBe('implementer');
+    const recheck = g.nodes.find((n) => n.id === 'S0.rev.r0');
+    expect(recheck?.kind).toBe('security'); // re-check stays in the security lane
+    expect(recheck?.owner).toBe('security-reviewer');
+    expect(recheck?.depends_on).toEqual(['S0.fix.r0']);
+  });
+
+  test('security with findings at the convergence budget escalates (blocked, never passes)', async () => {
+    await seed(securityGraph('S0.rev.r0', 1)); // one forward marker → round 1 ≥ budget 1
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'S0.rev.r0',
+        result_text: 'the injection sink is still reachable after the fix round; cannot close',
+        outcome: 'pass',
+        has_findings: true,
+      },
+    });
+    expect(res.status).toBe('blocked');
+    expect(res.failure_class).toBe('user_decision_needed');
+    expect((await aps.get(WI)).nodes).toHaveLength(1); // no splice past budget
+  });
+
+  test('security with no findings closes the loop (plain pass, no splice)', async () => {
+    await seed(securityGraph('S0'));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'S0',
+        result_text: 'security pass on ac-1; zero findings, no exploitable sink',
+        outcome: 'pass',
+        has_findings: false,
+      },
+    });
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual([]);
+    expect((await aps.get(WI)).nodes).toHaveLength(1);
+  });
 });

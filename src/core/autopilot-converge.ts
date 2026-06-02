@@ -96,8 +96,11 @@ export function planForwardReexpansion(outcome: ReviewOutcome): ForwardReexpansi
     };
   }
 
-  // (3) Expand: one fix round then a fresh review, edges pointing only backward in
-  // time (fix→reviewNode, review→fix), so the merged graph stays acyclic.
+  // (3) Expand: one fix round then a fresh re-check, edges pointing only backward
+  // in time (fix→reviewNode, review→fix), so the merged graph stays acyclic. The
+  // re-check preserves the originating node's kind — a `security` finding is
+  // re-verified by another `security` pass, not a generic `review` — so the loop
+  // stays in the same lifecycle lane until that lane's findings reach zero.
   const fixId = `${reviewNode.id}${FORWARD_FIX_MARKER}${round}`;
   const reviewId = `${reviewNode.id}${FORWARD_REVIEW_MARKER}${round}`;
   const fix = mkNode(
@@ -109,8 +112,8 @@ export function planForwardReexpansion(outcome: ReviewOutcome): ForwardReexpansi
   );
   const review = mkNode(
     reviewId,
-    'review',
-    `Re-review after ${fixId}; close the loop only on a findings=0 verdict`,
+    reviewNode.kind,
+    `Re-check after ${fixId}; close the loop only on a findings=0 verdict`,
     [fixId],
     reviewNode.acceptance_refs,
   );

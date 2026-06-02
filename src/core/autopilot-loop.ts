@@ -192,9 +192,9 @@ export const recordResultPayload = z
       .boolean()
       .optional()
       .describe(
-        'Reviewer verdict that findings remain (A-2). On a contentful review-node pass, ' +
-          'true splices a forward fix+review round (§2.4) under the convergence budget, ' +
-          'false/absent closes the loop. Ignored for non-review nodes.',
+        'Reviewer/security verdict that findings remain (A-2). On a contentful review- or ' +
+          'security-node pass, true splices a forward fix+re-check round (§2.4) under the ' +
+          'convergence budget, false/absent closes the loop. Ignored for other node kinds.',
       ),
   })
   .superRefine((value, ctx) => {
@@ -265,13 +265,18 @@ export async function recordResult(
   }
 
   if (outcome === 'pass') {
-    // Forward re-expansion (A-2 · §2.4): a contentful review node that still has
-    // findings does NOT close the loop — it splices a fix+review round *forward*
-    // (a new pair of nodes, not a back-edge to the review), governed by the
-    // convergence budget (§4.3). This is the node-*between* loop, kept distinct
-    // from generated_nodes (free-form planner growth) and attempts (node-internal
-    // retry). Only a review node opts in, and only when findings remain.
-    if (node.kind === 'review' && input.payload.has_findings === true) {
+    // Forward re-expansion (A-2 · §2.4): a contentful findings-bearing node that
+    // still has findings does NOT close the loop — it splices a fix+re-check round
+    // *forward* (a new pair of nodes, not a back-edge, governed by the convergence
+    // budget §4.3). This is the node-*between* loop, kept distinct from
+    // generated_nodes (free-form planner growth) and attempts (node-internal
+    // retry). Both `review` and `security` opt in — each produces a findings list
+    // that needs fix-then-recheck; the splice keeps the originating kind so a
+    // security finding is re-verified by security, not a generic review.
+    if (
+      (node.kind === 'review' || node.kind === 'security') &&
+      input.payload.has_findings === true
+    ) {
       const plan = planForwardReexpansion({
         reviewNode: node,
         hasFindings: true,
