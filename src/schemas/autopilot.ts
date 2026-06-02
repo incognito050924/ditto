@@ -80,6 +80,10 @@ export const autopilot = z
     caps: z.object({
       fix_per_node: z.number().int().nonnegative(),
       switch_per_node: z.number().int().nonnegative(),
+      // Forward re-expansion budget (§4.3): max forward fix↔review rounds before
+      // the node-*between* convergence loop escalates. `.default` so a legacy
+      // graph written before this field parses without regression.
+      converge_rounds: z.number().int().positive().default(3),
     }),
     continue_policy: z.object({
       continue_after_approval: z.boolean().default(true),

@@ -91,7 +91,7 @@ export async function bootstrapAutopilot(
     completion_boundary: 'entire_work_item',
     approval_gate: approvalGate(input),
     nodes: (input.generateNodes ?? defaultNodeGenerator)(acceptanceIds),
-    caps: { fix_per_node: 2, switch_per_node: 1 },
+    caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 },
     continue_policy: {
       continue_after_approval: true,
       continue_after_checkpoint: true,
