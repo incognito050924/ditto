@@ -95,7 +95,7 @@ ditto는 사용자 직접 호출 CLI를 일부만 노출하고, 핵심 워크플
 3. **[중간·실측]** classifyPromptAdvisory 한국어 오분류 — 한국어가 거의 항상 'execution', QuestionGate nudge·self-answer hint 죽음[user-prompt-submit.ts:17-23].
 4. **[중간·실측]** PreToolUse secret-token false-positive — Bash 모든 토큰을 isSecretPath 검사해 'git log credentials.example', 'grep -r credential .', 'cat docs/credentials.md' 등 메타/문서 명령도 차단[pre-tool-use.ts:131-135]. *(이번 세션에 bun test/lint가 막혀 DITTO_SKIP_HOOKS=1 prefix 필요했던 것과 동류.)*
 5. **[중간·실측]** VAGUE_TERMS substring 오탐 — testable AC를 bootstrap에서 잘못 차단.
-6. **[중간·✓확인]** 죽은 코드/미런타임 — buildContinuationSignal·nextReadyNodeId·ContinuationSignal 호출처 0; FailureDecision 'continue' unreachable; e2e/knowledge 독립 CLI 미등록.
+6. **[중간·✓확인·해소 2026-06-02]** 죽은 코드/미런타임 — ~~buildContinuationSignal·nextReadyNodeId·ContinuationSignal 호출처 0(삭제, selectReadyNode 단수 포함)~~; ~~FailureDecision 'continue' unreachable(두 union에서 제거)~~; ~~e2e/knowledge 독립 CLI 미등록 → `ditto e2e run`·`ditto bridge knowledge` 배선~~. 배선 중 노출된 잠복 버그 2건 동반 수정: index.ts `await runMain`(미await 시 spawn 명령이 완료 전 exit 0), browser.ts lazy `runnerScriptPath`(compiled 바이너리 startup crash).
 7. **[중간]** NON_TERMINAL strong-block 우회 — 세 ledger 전부 absent일 때만 발동하므로, 빈 autopilot.json 하나만 두면 stop.ts:179에서 곧장 exit0 — verify 없이 종료 구조적 가능.
 8. **[중간]** dialecticForcesContinuation verbatim-echo 취약 — synthesizer가 opponent.claim을 paraphrase하면 미해결로 읽혀 false-continuation.
 9. **[낮음]** 광범위 fail-open — session pointer 없는 세션에서 게이트·증거·handoff 통째 no-op이나 표면화 안 됨.
@@ -111,10 +111,10 @@ ditto는 사용자 직접 호출 CLI를 일부만 노출하고, 핵심 워크플
 | 3 | 한국어 프롬프트 오분류 | classifyPromptAdvisory에 한국어 의문 신호(까/나요/는가, 무엇/왜/어떻게) 추가, 최소 '한국어면 execution 단정 금지' | **G4/G1** 회귀 제거 | 낮음 |
 | 4 | PreToolUse secret 오탐 | secret 토큰 차단을 노출 동사(cat/less/grep -·cp/scp/curl --upload) 컨텍스트로 한정, log/ls/git log 제외 | **G2/G5** 정상작업 차단 해소 | 낮음 |
 | 5 | VAGUE_TERMS substring 오탐 | 단어 경계(\b) 매칭 전환 + 한국어 모호어(견고/적절히/제대로) 추가 | **G4** 정밀도 | 낮음 |
-| 6 | continuation signal 미배선 | recordResult cap_exceeded 경로에 buildContinuationSignal 배선+handoff emit, 또는 죽은 export 삭제 | **G3** 자동 handoff 실현 또는 부채 제거 | 중간 |
+| 6 | ~~continuation signal 미배선~~ **[해소 2026-06-02]** | **죽은 export 삭제 채택**(사용자 승인): buildContinuationSignal·nextReadyNodeId·ContinuationSignal·selectReadyNode(단수) + 전용 테스트 제거. cap 초과→escalate→node fail→graceful stop 은 기존대로 유지(배선 불필요). | **G6** 부채 제거 | 중간 |
 | 7 | 빈 autopilot.json 우회 | approval=pending yield에 'mutating 노드 실재 ∧ root_goal 미충족' 조건 추가 | **G3/G5** 종료 게이트 우회 차단 | 낮음 |
 | 8 | dialectic verbatim-echo | objection에 안정 id 부여, synthesizer가 id로 해소 매칭(paraphrase 허용) | **G5** false-continuation 제거 | 중간 |
-| 9 | 죽은/얇은 추상화 정리 | plan skill·dialectic-review skill·selectReadyNode(단수)·FailureDecision.continue 제거/흡수 | **G6** comprehension debt↓ | 낮음 |
+| 9 | 죽은/얇은 추상화 정리 | plan skill·dialectic-review skill·~~selectReadyNode(단수)~~ **(삭제됨, #6)**·FailureDecision.continue 제거/흡수 | **G6** comprehension debt↓ | 낮음 |
 | 10 | owner skeleton 미완 | implementer/planner/researcher 본문을 reviewer/verifier 수준으로 | **G3** dispatch 품질 | 중간~높음 |
 
 ## 6. 냉정한 종합 판단
@@ -140,6 +140,6 @@ ditto는 사용자 직접 호출 CLI를 일부만 노출하고, 핵심 워크플
 |---|---|---|
 | #1 completionEvidenceGate 미배선 | `grep -rn completionEvidenceGate src/ tests/` | src 호출처 **0**(gates.ts 정의 1 + gates.test.ts 5). stop.ts:4 = `import { completionGate, convergenceGate }`만. **확정** |
 | #2 handoff clobber | `grep -n "buildCompletion\|writeJson\|verifications" src/core/work-item-handoff.ts` | :106 local buildCompletion, :132 `verifications: []`, :282 무조건 `writeJson`. **확정**(이번 세션 실측 회귀의 구조적 원인) |
-| #6 continuation 죽은 코드 | `grep -rn "buildContinuationSignal\|nextReadyNodeId\|ContinuationSignal" src/` | driver 정의부 외 호출처 **0**. **확정** |
+| #6 continuation 죽은 코드 | `grep -rn "buildContinuationSignal\|nextReadyNodeId\|ContinuationSignal" src/` | driver 정의부 외 호출처 **0**. **확정** → **2026-06-02 삭제 해소**(grep 0, 698 pass·lint clean) |
 
 > 방법론 한계: 웹 인용 url 일부는 워크플로 에이전트가 수집한 것으로 본 보고서 작성자가 개별 재검증하지 않음(코드 근거는 재확인함). arxiv 미래 날짜(2604.xxxxx) 등은 에이전트 환각 가능성이 있어 url 자체보다 코드 근거를 우선 신뢰할 것.

@@ -1,6 +1,7 @@
 import { defineCommand } from 'citty';
 import { syncClaudeCodeProjection } from '~/core/bridge-sync';
 import { resolveRepoRootForCreate } from '~/core/fs';
+import { syncKnowledgeProjection } from '~/core/knowledge-bridge';
 import {
   InvalidOutputFormatError,
   USAGE_ERROR_EXIT,
@@ -56,6 +57,44 @@ const bridgeSync = defineCommand({
   },
 });
 
+const bridgeKnowledge = defineCommand({
+  meta: {
+    name: 'knowledge',
+    description:
+      'Project durable knowledge (CONTEXT/glossary/ADR) into the CLAUDE.md knowledge block',
+  },
+  args: {
+    check: { type: 'boolean', default: false, description: 'Dry-run drift check (no write)' },
+    output: { type: 'string', default: 'human', description: 'Output format: human|json' },
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const result = await syncKnowledgeProjection(repoRoot, { check: args.check });
+      if (result.message) writeError(result.message);
+      if (format === 'json') {
+        writeJson(result);
+      } else {
+        writeHuman(`bridge knowledge: ${result.action}`);
+        writeHuman(`  path: ${result.path}`);
+        writeHuman(`  sha256: ${result.newSha256}`);
+      }
+      if (result.action === 'refused-multiple-markers') {
+        process.exit(DRIFT_EXIT);
+      }
+      if (args.check && (result.action === 'would-create' || result.action === 'would-update')) {
+        process.exit(DRIFT_EXIT);
+      }
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(
+        err instanceof InvalidOutputFormatError ? USAGE_ERROR_EXIT : BRIDGE_RUNTIME_ERROR_EXIT,
+      );
+    }
+  },
+});
+
 export const bridgeCommand = defineCommand({
   meta: {
     name: 'bridge',
@@ -63,5 +102,6 @@ export const bridgeCommand = defineCommand({
   },
   subCommands: {
     sync: bridgeSync,
+    knowledge: bridgeKnowledge,
   },
 });

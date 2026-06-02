@@ -6,8 +6,16 @@ import { fileURLToPath } from 'node:url';
 import { type E2EJourney, e2eJourney } from '~/schemas/e2e-journey';
 import { spawnProviderProcess } from '../hosts/spawn';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const RUNNER_SCRIPT = join(HERE, 'playwright-runner.mjs');
+/**
+ * Resolve the sibling capture runner path lazily. Computing it at module load
+ * would call `fileURLToPath(import.meta.url)` eagerly, which throws under a
+ * `bun build --compile` binary (where `import.meta.url` is `compiled://…`, not a
+ * file URL) and would crash the whole CLI at startup. It is only needed on the
+ * real-browser spawn path (inside runJourney's try → degrades to `blocked`).
+ */
+function runnerScriptPath(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), 'playwright-runner.mjs');
+}
 
 /**
  * E2E browser thin layer (설계서 §10, e2e-journey-contract §3/§4). The M5 runtime
@@ -255,7 +263,7 @@ export async function runJourney(
   try {
     const runner = spawnProviderProcess({
       binary: 'node',
-      args: [RUNNER_SCRIPT, configAbs],
+      args: [runnerScriptPath(), configAbs],
       repoRoot,
       cwd: '.',
       env: { set: {}, unset: [] },

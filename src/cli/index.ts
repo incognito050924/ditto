@@ -5,6 +5,7 @@ import { bridgeCommand } from './commands/bridge';
 import { contextCommand } from './commands/context';
 import { deepInterviewCommand } from './commands/deep-interview';
 import { doctorCommand } from './commands/doctor';
+import { e2eCommand } from './commands/e2e';
 import { runCommand } from './commands/run';
 import { verifyCommand } from './commands/verify';
 import { workCommand } from './commands/work';
@@ -24,6 +25,7 @@ const main = defineCommand({
     context: contextCommand,
     autopilot: autopilotCommand,
     'deep-interview': deepInterviewCommand,
+    e2e: e2eCommand,
   },
 });
 
@@ -34,4 +36,8 @@ const main = defineCommand({
 const dashDashIdx = process.argv.indexOf('--', 2);
 const wrapperRawArgs =
   dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
-runMain(main, { rawArgs: wrapperRawArgs });
+// Top-level await so the process stays alive until the whole command chain
+// settles. A pending promise alone does not ref Bun's event loop, and a spawned
+// subprocess's `.exited` does not keep it alive — without this await, commands
+// that spawn (e.g. `e2e run` → Playwright probe/runner) exit 0 mid-flight.
+await runMain(main, { rawArgs: wrapperRawArgs });
