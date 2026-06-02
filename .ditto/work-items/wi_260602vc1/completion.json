@@ -1,0 +1,126 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602vc1",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-02T13:54:31.796Z",
+  "summary": "forward 재확장 게이트를 review→(review||security)로 확장; 재검 노드가 원 kind 보존(security→security). 라이브 dogfood: N2가 3개 변경파일 자동 수집.",
+  "changed_files": [
+    "src/core/autopilot-loop.ts",
+    "src/core/autopilot-converge.ts",
+    "tests/core/autopilot-loop.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "note",
+          "summary": "gate review→(review||security); re-check preserves kind; verify excluded"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "summary": "gate review→(review||security)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-converge.ts",
+          "summary": "re-check node preserves originating kind"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "782 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop.test.ts",
+          "summary": "security forward re-expansion suite pass (ac-1/2/3)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 782 pass / 0 fail"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "note",
+          "summary": "gate review→(review||security); re-check preserves kind; verify excluded"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "summary": "gate review→(review||security)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-converge.ts",
+          "summary": "re-check node preserves originating kind"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "782 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop.test.ts",
+          "summary": "security forward re-expansion suite pass (ac-1/2/3)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 782 pass / 0 fail"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "note",
+          "summary": "gate review→(review||security); re-check preserves kind; verify excluded"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "summary": "gate review→(review||security)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-converge.ts",
+          "summary": "re-check node preserves originating kind"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "782 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop.test.ts",
+          "summary": "security forward re-expansion suite pass (ac-1/2/3)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 782 pass / 0 fail"
+        }
+      ],
+      "evidence_records": []
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [],
+  "final_verdict": "pass"
+}

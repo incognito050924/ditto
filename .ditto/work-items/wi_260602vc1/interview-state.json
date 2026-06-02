@@ -1,0 +1,79 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602vc1",
+  "status": "converged",
+  "started_at": "2026-06-02T02:00:00.000Z",
+  "updated_at": "2026-06-02T02:00:00.000Z",
+  "dimensions": [
+    {
+      "id": "gate-scope",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": "recordResult forward-reexpansion gate was kind===review only. Widen to review||security; verify stays out (pass/fail on AC, not a findings-to-fix list)."
+    },
+    {
+      "id": "recheck-lane",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q002"
+      ],
+      "notes": "The spliced re-check node must preserve the originating kind: a security finding is re-verified by a security pass, not a generic review. planForwardReexpansion uses reviewNode.kind for the re-check node; fix node stays implementer-owned."
+    }
+  ],
+  "readiness": {
+    "score": 0.9,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-02T02:00:00.000Z",
+      "dimension": "gate-scope",
+      "question": "Which node kinds opt into forward re-expansion when findings remain?",
+      "why_matters": "security produces a findings list needing fix-then-recheck, same shape as review; verify does not.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "review and security. verify excluded (different semantics).",
+      "answer_kind": "assumption"
+    },
+    {
+      "id": "q002",
+      "asked_at": "2026-06-02T02:00:00.000Z",
+      "dimension": "recheck-lane",
+      "question": "What kind is the re-check node spliced after a security fix?",
+      "why_matters": "A generic review would drop the security specificity after round 0.",
+      "info_gain_estimate": "medium",
+      "self_answer_attempts": [],
+      "answer": "Same kind as the originating node (security→security); fix stays fix/implementer.",
+      "answer_kind": "assumption"
+    }
+  ],
+  "assumptions": [
+    {
+      "statement": "review and security. verify excluded (different semantics).",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q001"
+    },
+    {
+      "statement": "Same kind as the originating node (security→security); fix stays fix/implementer.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q002"
+    }
+  ],
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 2
+  }
+}
