@@ -75,7 +75,7 @@ autopilot은 linear phase list가 아니라 **작업 그래프**다(메인 §5.3
 
 **planner가 전개하는 표준 라이프사이클(전체 전개 시).** 현황파악(`research`) → 기획·설계(`design`) → 계획·DoD·테스트케이스 설계(`design`) → 설계·DoD·테스트케이스 검증(`review`, 고임팩트는 dialectic 3역 §6.6) → 구현(`implement`) → 리뷰(`review`) → 수정+재리뷰 수렴(`fix`↔`review`, forward 재확장 §2.4) + 보안리뷰(`security` `[VERIFY]`) → [리팩토링(`refactor` `[VERIFY]`)] → 회고(`retro` `[VERIFY]`) → 정리(`cleanup` `[VERIFY]`) → 지식(`knowledge`). planner는 작업 규모에 따라 이 중 **필요한 노드만** 고른다 — 작은 작업이 회고·보안리뷰까지 강제되지 않는다(MINIMUM VIABLE은 *각 노드의 구현 방식*에 적용되지 라이프사이클 *커버리지*에는 적용되지 않는다; 적용 층위가 다르다).
 
-`[VERIFY]` 표시 kind는 **owner 에이전트가 아직 미배선**이다(현 `agents/`: researcher·planner·implementer·reviewer·verifier·dialectic 3역·knowledge-curator·playwright-e2e). 위 표(§2.2) 확장 + 해당 owner 제작이 선행되어야 디스패치 가능하다 — 이는 구현 평면(plane A)이며 본 설계 합의의 범위 밖이다. 특히 `cleanup`(git 커밋/브랜치/워크트리/임시파일)은 결정적 작업이라 에이전트 owner 대신 **드라이버 결정적 스텝**으로 둘지 미정이며, git 비가역 작업은 명시 승인 게이트를 둔다 — 구현 시 확정.
+`security`·`refactor`·`retro` kind는 전용 owner(security-reviewer·refactorer·retrospective)로 배선됐다. `cleanup`(git 커밋/브랜치/워크트리/임시파일)은 결정적 작업이라 에이전트 owner 대신 **`driver` pseudo-owner의 드라이버 결정적 스텝**으로 확정됐다: `nextNode`가 `owner==='driver'` 노드를 spawn 경로에서 가로채 `action:'cleanup'`을 내고, `ditto autopilot cleanup`이 결정적 정리를 실행한다. git 비가역 작업(워크트리 teardown)은 **명시 승인 게이트**로 막는다 — `--approve` 또는 `approval_gate.status==='approved'`만 인가하며, small-reversible 자동 면제(`not_required`)는 불충분하다. v0 정리 대상은 누수 중인 per-run 워크트리(`.ditto/worktrees/*`)로 한정한다(commit은 사용자 몫, branch는 미생성, temp는 임의라 제외). 코드 seam: `src/core/autopilot-cleanup.ts`(`planCleanup`·`cleanupApprovalGate`·`runCleanup`), `src/core/worktree.ts`(`listRunWorktrees`·`removeRunWorktree`).
 
 ### 2.3 그래프 불변식
 

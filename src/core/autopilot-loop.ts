@@ -45,6 +45,9 @@ export type NextNodeResult =
   | { action: 'present_plan'; reason: string }
   | { action: 'rollback'; reason: string; rolled_back_node_ids: string[] }
   | { action: 'waiting'; reason: string }
+  // A `driver`-owned node (cleanup): deterministic engine step, no LLM to spawn.
+  // The caller runs `autopilot cleanup` to execute the gated teardown.
+  | { action: 'cleanup'; node_id: string; reason: string }
   // A blocked (escalated) node with nothing else runnable is a user-owned
   // decision, not a transient wait (§4.3). Surfaced distinctly so the driver
   // yields to the user instead of polling `waiting` forever.
@@ -119,6 +122,23 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   const chosen = ready.find((n) => n.id === dispatch[0]?.id);
   if (!chosen) {
     return { action: 'waiting', reason: 'all ready nodes deferred by the file-overlap gate' };
+  }
+
+  // A `driver`-owned node (cleanup, §2.2) is a deterministic engine step, not an
+  // LLM owner: there is nothing to spawn. Dispatch it to running and signal the
+  // caller to run `autopilot cleanup` (which clears the explicit irreversible-git
+  // gate and tears down the run worktrees), keeping the no-LLM step off the spawn
+  // path entirely.
+  if (chosen.owner === 'driver') {
+    await aps.updateNode(workItemId, chosen.id, (n) => ({
+      ...n,
+      status: nodeTransition(n.status, 'dispatch'),
+    }));
+    return {
+      action: 'cleanup',
+      node_id: chosen.id,
+      reason: `deterministic cleanup step (${chosen.kind}): run \`autopilot cleanup\` (irreversible git → explicit approval)`,
+    };
   }
 
   // Approval gate applies only before a mutating node (contract §5.3).

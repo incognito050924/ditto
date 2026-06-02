@@ -15,11 +15,13 @@ const KIND_TO_OWNER: Record<AutopilotNode['kind'], AutopilotNode['owner']> = {
   e2e: 'playwright-e2e',
   docs: 'implementer',
   knowledge: 'knowledge-curator',
-  // [VERIFY] lifecycle owners (contract §2.2). `cleanup` is intentionally absent —
-  // it is a deterministic driver step, not an LLM-owned node.
+  // [VERIFY] lifecycle owners (contract §2.2).
   security: 'security-reviewer',
   refactor: 'refactorer',
   retro: 'retrospective',
+  // `cleanup` maps to the `driver` pseudo-owner: deterministic git/worktree work
+  // the engine runs in-process (intercepted before spawn), not an LLM subagent.
+  cleanup: 'driver',
 };
 
 export function kindToOwner(kind: AutopilotNode['kind']): AutopilotNode['owner'] {

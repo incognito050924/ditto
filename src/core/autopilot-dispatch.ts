@@ -36,6 +36,10 @@ const OWNER_TOOLS: Record<AutopilotNode['owner'], string[]> = {
   'security-reviewer': ['Read', 'Grep', 'Glob', 'Bash'],
   refactorer: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash'],
   retrospective: ['Read', 'Grep', 'Glob', 'Bash'],
+  // The driver pseudo-owner is never spawned (nextNode intercepts it), so it has
+  // no LLM toolset. Its irreversible git work is gated by a dedicated explicit
+  // approval gate in autopilot-cleanup, not the Edit-derived mutation gate.
+  driver: [],
 };
 
 /**

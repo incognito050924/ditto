@@ -12,12 +12,14 @@ export const nodeKind = z
     'e2e',
     'docs',
     'knowledge',
-    // [VERIFY] lifecycle kinds, now wired to dedicated owners (contract §2.2).
-    // `cleanup` stays unwired on purpose: it is deterministic git/temp work, so it
-    // belongs to a driver step (+irreversible-git approval gate), not an LLM owner.
+    // [VERIFY] lifecycle kinds, wired to dedicated owners (contract §2.2).
     'security',
     'refactor',
     'retro',
+    // `cleanup` is wired to the `driver` owner, not an LLM owner: it is
+    // deterministic git/worktree work, so the engine runs it as a driver step
+    // behind an explicit irreversible-git approval gate (contract §2.2).
+    'cleanup',
   ])
   .describe('Kind of work a node represents');
 
@@ -36,6 +38,9 @@ export const nodeOwner = z
     'security-reviewer',
     'refactorer',
     'retrospective',
+    // Not an LLM subagent: the deterministic engine itself. Owns `cleanup` nodes
+    // (git/worktree teardown) that the driver runs in-process, never spawns.
+    'driver',
   ])
   .describe('Subagent role that owns the node');
 

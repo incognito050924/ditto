@@ -1,5 +1,6 @@
 import { defineCommand } from 'citty';
 import { bootstrapAutopilot } from '~/core/autopilot-bootstrap';
+import { runCleanup } from '~/core/autopilot-cleanup';
 import { assembleCompletionFromGraph } from '~/core/autopilot-complete';
 import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
@@ -190,6 +191,9 @@ const autopilotNextNode = defineCommand({
           writeHuman(
             `  → run completion (${res.all_passed ? 'expect pass' : 'expect partial/fail'})`,
           );
+        } else if (res.action === 'cleanup') {
+          writeHuman(`  node:        ${res.node_id}`);
+          writeHuman(`  → run: ditto autopilot cleanup --workItem <wi> --node ${res.node_id}`);
         }
       }
     } catch (err) {
@@ -330,16 +334,77 @@ const autopilotComplete = defineCommand({
   },
 });
 
+/**
+ * `ditto autopilot cleanup` — run the deterministic cleanup step for a
+ * `driver`-owned (cleanup) node: tear down the per-run git worktrees (§2.2).
+ * Worktree removal is irreversible git work, so it is gated by an EXPLICIT
+ * approval — pass `--approve` to authorize. Without it (and with worktrees to
+ * remove) the node is blocked and the teardown plan is surfaced for a decision.
+ */
+const autopilotCleanup = defineCommand({
+  meta: {
+    name: 'cleanup',
+    description:
+      'Run the deterministic cleanup step for a driver-owned node (gated worktree teardown)',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    node: { type: 'string', description: 'Cleanup node id', required: true },
+    approve: {
+      type: 'boolean',
+      description: 'Explicit approval for the irreversible git (worktree removal) step',
+      default: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    try {
+      const res = await runCleanup(repoRoot, {
+        workItemId: args.workItem,
+        nodeId: args.node,
+        approve: args.approve,
+      });
+      if (format === 'json') {
+        writeJson(res);
+      } else if (res.status === 'blocked') {
+        writeHuman(`Cleanup ${res.node_id}: blocked — ${res.reason}`);
+        writeHuman(`  plan (${res.plan.length}): ${res.plan.join(', ') || '(none)'}`);
+        writeHuman('  → re-run with --approve to authorize the irreversible git step');
+      } else {
+        writeHuman(
+          `Cleanup ${res.node_id}: passed — removed ${res.removed.length}/${res.plan.length} worktree(s)`,
+        );
+        if (res.skipped.length > 0) {
+          for (const s of res.skipped) writeHuman(`  skipped: ${s.path} (${s.reason})`);
+        }
+      }
+    } catch (err) {
+      writeError(`cleanup failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const autopilotCommand = defineCommand({
   meta: {
     name: 'autopilot',
     description:
-      'Manage the autopilot graph (bootstrap) and drive the loop (next-node/record-result/complete)',
+      'Manage the autopilot graph (bootstrap) and drive the loop (next-node/record-result/complete/cleanup)',
   },
   subCommands: {
     bootstrap: autopilotBootstrap,
     'next-node': autopilotNextNode,
     'record-result': autopilotRecordResult,
     complete: autopilotComplete,
+    cleanup: autopilotCleanup,
   },
 });
