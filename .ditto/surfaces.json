@@ -24,7 +24,6 @@
     { "host": "claude-code", "kind": "skill", "id": "e2e", "path": "skills/e2e/SKILL.md" },
     { "host": "claude-code", "kind": "skill", "id": "handoff", "path": "skills/handoff/SKILL.md" },
     { "host": "claude-code", "kind": "skill", "id": "knowledge-update", "path": "skills/knowledge-update/SKILL.md" },
-    { "host": "claude-code", "kind": "skill", "id": "plan", "path": "skills/plan/SKILL.md" },
     { "host": "claude-code", "kind": "skill", "id": "verify", "path": "skills/verify/SKILL.md" }
   ]
 }

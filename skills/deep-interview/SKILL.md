@@ -119,7 +119,7 @@ This single call (atomic, per AC-2 + AC-3):
 4. Calls `bootstrapAutopilot`, producing `.ditto/work-items/<wi>/autopilot.json` with a `design → implement → verify` graph for each criterion.
 5. Returns `autopilot_id`, `approval_gate.status`, and `node_ids`.
 
-If `approval_gate.status === 'pending'` (any `risk.*` flag set), the autopilot pauses on the approval node; `/ditto:plan` surfaces it to the user. If `not_required`, autopilot proceeds.
+If `approval_gate.status === 'pending'` (any `risk.*` flag set), the autopilot pauses on the approval node and the driver surfaces the pending plan to the user for approval. If `not_required`, autopilot proceeds.
 
 ## Output contract
 

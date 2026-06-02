@@ -387,31 +387,30 @@ describe('M1.4 — Stop hook 최소 동작 (완료/수렴/노드상태 게이트
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-describe('M1.5 — skill skeleton 7 표면 + 노출 정책', () => {
+describe('M1.5 — skill skeleton 6 표면 + 노출 정책', () => {
   // acceptance: 노출 4종(deep-interview/verify/handoff/dialectic) + dialectic-review alias +
-  //             비노출 2종(plan/autopilot, user-invocable:false, disable-model-invocation 미사용).
+  //             비노출 1종(autopilot, user-invocable:false, disable-model-invocation 미사용).
   const front = (name: string): string => {
     const text = readText(`skills/${name}/SKILL.md`);
     const m = text.match(/^---\n([\s\S]*?)\n---/);
     return m ? m[1] : '';
   };
 
-  test('v0 skill 7 표면 SKILL.md 전부 존재', () => {
+  test('v0 skill 6 표면 SKILL.md 전부 존재', () => {
     for (const s of [
       'deep-interview',
       'verify',
       'handoff',
       'dialectic',
       'dialectic-review',
-      'plan',
       'autopilot',
     ]) {
       expect(existsSync(join(REPO, 'skills', s, 'SKILL.md')), `${s}/SKILL.md missing`).toBe(true);
     }
   });
 
-  test('비노출 plan/autopilot: user-invocable:false 강제, disable-model-invocation 미사용', () => {
-    for (const s of ['plan', 'autopilot']) {
+  test('비노출 autopilot: user-invocable:false 강제, disable-model-invocation 미사용', () => {
+    for (const s of ['autopilot']) {
       const f = front(s);
       expect(f, `${s} must be user-invocable:false`).toMatch(/user-invocable:\s*false/);
       expect(f, `${s} must NOT disable model invocation (내부 호출 경로 보존)`).not.toMatch(

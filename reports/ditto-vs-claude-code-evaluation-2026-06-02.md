@@ -114,7 +114,7 @@ ditto는 사용자 직접 호출 CLI를 일부만 노출하고, 핵심 워크플
 | 6 | ~~continuation signal 미배선~~ **[해소 2026-06-02]** | **죽은 export 삭제 채택**(사용자 승인): buildContinuationSignal·nextReadyNodeId·ContinuationSignal·selectReadyNode(단수) + 전용 테스트 제거. cap 초과→escalate→node fail→graceful stop 은 기존대로 유지(배선 불필요). | **G6** 부채 제거 | 중간 |
 | 7 | ~~빈 autopilot.json 우회~~ **[해소 2026-06-02]** | pending-yield를 hasPendingMutatingNode로 가드 + strong-block을 degenerate pending autopilot에 확장 | **G3/G5** 종료 게이트 우회 차단 | 낮음 |
 | 8 | ~~dialectic verbatim-echo~~ **[해소 2026-06-02]** | opponentObjection optional id + dialecticForcesContinuation id-or-claim 매칭, synthesizer agent body 갱신 | **G5** false-continuation 제거 | 중간 |
-| 9 | 죽은/얇은 추상화 정리 | plan skill·dialectic-review skill·~~selectReadyNode(단수)~~ **(삭제됨, #6)**·FailureDecision.continue 제거/흡수 | **G6** comprehension debt↓ | 낮음 |
+| 9 | ~~죽은/얇은 추상화 정리~~ **[해소 2026-06-02]** | plan skill 삭제(surface/conformance/docs 정리)·dialectic-review frontmatter 강화 유지(D1)·~~selectReadyNode(단수)·FailureDecision.continue~~(#6). autopilot wi_260602qrm 독립검증 719 pass | **G6** comprehension debt↓ | 낮음 |
 | 10 | ~~owner skeleton 미완~~ **[해소 2026-06-02]** | implementer/planner/researcher 본문에 You-do-not-receive·Procedure·You-return 추가(reviewer/verifier 수준), v0 skeleton 마커 제거, frontmatter·dispatch 코드 불변. You-return은 실제 계약 인용(recordResultPayload+G7·approvalGate+RiskAxes·evidenceRecord). autopilot(wi_260602rls) N1→N2→N3 독립검증 703 pass. | **G3** dispatch 품질 | 중간~높음 |
 
 ## 6. 냉정한 종합 판단
