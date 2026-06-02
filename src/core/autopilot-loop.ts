@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
-import { evidenceRef } from '~/schemas/common';
+import { evidenceRef, relativePath } from '~/schemas/common';
 import { forwardRound, planForwardReexpansion } from './autopilot-converge';
 import {
   type DelegationPacket,
@@ -152,6 +152,14 @@ export const recordResultPayload = z
       .optional()
       .describe('Required when outcome=fail; the caller-supplied classification'),
     evidence_refs: z.array(evidenceRef).optional().describe('Evidence pointers gathered on pass'),
+    changed_files: z
+      .array(relativePath)
+      .optional()
+      .describe(
+        'Repo-relative paths this node changed (#1). On a contentful pass they are unioned ' +
+          'into the work item changed_files so `autopilot complete` reads them without a manual ' +
+          'pin. The expected reporter is a mutating node (implementer/refactorer).',
+      ),
     reason: z.string().optional().describe('2–3 line rationale recorded in the decision log'),
     generated_nodes: z
       .array(nodeProposal)
@@ -318,6 +326,21 @@ export async function recordResult(
       status: nodeTransition(n.status, 'pass'),
       evidence_refs: input.payload.evidence_refs ?? n.evidence_refs,
     }));
+    // changed_files accumulation (#1): a mutating node reports the files it
+    // changed; union them into the work item so `autopilot complete` reads
+    // changed_files from the graph run instead of a manual pin. Union is
+    // pass-only (a failed attempt's partial edits are reported on the eventual
+    // pass) and dedup-preserves existing order.
+    const reported = input.payload.changed_files ?? [];
+    if (reported.length > 0) {
+      await new WorkItemStore(repoRoot).update(input.workItemId, (w) => {
+        const existing = new Set(w.changed_files);
+        const additions = reported.filter((p) => !existing.has(p));
+        return additions.length > 0
+          ? { ...w, changed_files: [...w.changed_files, ...additions] }
+          : w;
+      });
+    }
     return {
       node_id: node.id,
       status: 'passed',

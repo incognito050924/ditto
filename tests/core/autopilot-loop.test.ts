@@ -371,6 +371,59 @@ describe('recordResult (loop step 6: G7 guard → classify → decide → persis
   });
 });
 
+describe('recordResult changed_files union (#1: owner reports → work-item accumulation)', () => {
+  async function dispatchN1(): Promise<void> {
+    await seed(graph());
+    await nextNode(repo, WI); // N1 -> running
+  }
+
+  test('a contentful pass with changed_files unions them into the work item (deduped, existing first)', async () => {
+    // beforeEach pins changed_files = ['src/x.ts']; the node reports x.ts (dup) + y.ts.
+    await dispatchN1();
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text: 'Edited src/y.ts to add the union helper; src/x.ts already touched.',
+        outcome: 'pass',
+        evidence_refs: [{ kind: 'file', path: 'src/y.ts', summary: 'edit' }],
+        changed_files: ['src/y.ts', 'src/x.ts'],
+      },
+    });
+    const wi = await wis.get(WI);
+    expect(wi.changed_files).toEqual(['src/x.ts', 'src/y.ts']);
+  });
+
+  test('a pass without changed_files leaves the work item changed_files unchanged', async () => {
+    await dispatchN1();
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: { node_id: 'N1', result_text: 'Wrote the plan mapping to ac-1.', outcome: 'pass' },
+    });
+    const wi = await wis.get(WI);
+    expect(wi.changed_files).toEqual(['src/x.ts']);
+  });
+
+  test('changed_files on a non-pass (fixable fail) does NOT touch the work item (union is pass-only)', async () => {
+    await dispatchN1();
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text: 'partial edit then hit a local error; retrying the fix next round',
+        outcome: 'fail',
+        failure_class: 'fixable',
+        changed_files: ['src/half-done.ts'],
+      },
+    });
+    const wi = await wis.get(WI);
+    expect(wi.changed_files).toEqual(['src/x.ts']);
+  });
+});
+
 describe('recordResult node promotion (A-3: planner 콘텐츠 승격 — addNodes의 첫 live 호출자)', () => {
   const designOnly = (): Autopilot =>
     graph({
