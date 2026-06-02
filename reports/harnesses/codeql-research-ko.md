@@ -315,62 +315,68 @@ CodeQL은 단순 SAST를 넘어 **코드베이스에 대한 검증 가능한 지
 
 ---
 
-# Part F — 도입 평가 (DITTO 특화, 2026-06-02 PoC 후속)
+# Part F — 도입 평가 (DITTO는 하네스, 분석 대상은 외부 target repo)
 
-> 평가 근거: Explore로 파악한 DITTO 아키텍처(file:line) + Part B 검증 + 부록2 PoC 실측. DITTO 핵심 흐름은 **Evidence → Verdict → Gate → Stop/Continue**.
+> **관점 정정(중요)**: CodeQL의 분석 대상은 **DITTO 자체가 아니라, DITTO가 감독하는 코딩 에이전트가 실제로 수정하는 외부 서비스 코드(target repo)**다. DITTO 멘탈 모델("자율주행 시스템을 자동차에 이식, 자동차는 안 만든다")대로, DITTO는 **오케스트레이터**이고 CodeQL은 DITTO가 에이전트에게 **제공하는 capability**다. 이 관점이 Part A~E의 원래 연구질문(coding agents가 코드를 분석/테스트/설계)과 일치한다.
+>
+> 평가 근거: Explore로 파악한 DITTO 아키텍처(file:line) + Part B 검증 + 부록2 PoC 실측.
 
 ## F-1. 한 줄 평가
 
-CodeQL의 DITTO에서의 진짜 가치는 "보안 스캐너"가 아니라 **completion contract의 verdict를 뒷받침하는, 에이전트가 조작 불가능한 결정론적 증거원(evidence source)**이다. DITTO 철학(charter 4-5 "완료는 증거로만")의 가장 약한 고리를 메운다.
+DITTO가 제공하는 CodeQL의 가치는, **에이전트가 외부 target repo를 다룰 때 "조작 불가능한 결정론적 사실"을 공급**해, 에이전트의 이해·변경·검증을 LLM 추측이 아닌 검증된 dataflow 위에 올리는 것이다. DITTO는 그 사실을 증거/리뷰/게이트로 **오케스트레이션**한다.
 
-## F-2. 도입 효과 — DITTO의 어디에 가치를 더하나
+## F-2. 도입 효과 — 에이전트 워크플로우 4단계에 주는 가치 (target repo 대상)
 
-**구조적 약점 진단**: DITTO는 "에이전트의 자기평가를 못 믿는다"는 시스템인데, 정작 핵심 판정이 **boolean 자기선언**이라 근거 검증이 안 된다 — `RiskAxes.non_local`, `reviewer-output.ts:47 different_provider_than_generator`, `convergence admissible` 등(eval goal A3). `completionEvidenceGate`(`src/core/gates.ts:188-200`)가 "note(acknowledgement)는 verification이 아니다"라고 막지만 증거 공급원이 부족하다.
-
-CodeQL은 이 고리에 **기계 검증 가능한 외부 사실**을 주입한다:
-
-| DITTO 컴포넌트 | 현재 상태 | CodeQL 도입 효과 | 근거 |
+| 워크플로우 | 현재(LLM 단독) | CodeQL 공급 시 | 검증 |
 |---|---|---|---|
-| **Evidence 등급** | note/command 출력 다수, 신뢰도 약함 | SARIF finding = `evidenceRef{kind:'artifact'}`+sha256 → freshness/portability까지 결정론 | `src/schemas/evidence-record.ts:22-47` |
-| **ReviewerOutput(security-reviewer)** | LLM 리뷰어 — 환각·누락 위험 | CodeQL findings가 `findings{severity,file,location,reason}`에 **거의 1:1 매핑**(F-3 실증). LLM 환각 보완 | `src/schemas/reviewer-output.ts:37-87` |
-| **completionEvidenceGate** | "실행 명령 또는 비note 증거" 요구 | CodeQL 실행이 그 **검증 증거** — verdict=pass의 결정론 근거 | `src/core/gates.ts:188-200` |
-| **doctor capability** | instructions/permissions/mcp/surface | `codeql` capability 추가 → provider별 정적분석 가능 여부 검증 | `src/core/capability-inventory.ts:9` |
+| **코드 이해** | 파일 읽고 call chain 추측, 누락·환각 | target의 call graph / source→sink dataflow를 결정론 사실로 제공 | PoC-1 실증(codeFlow→구조화) |
+| **취약점/버그 탐지** | LLM 패턴 매칭, 재현성 낮음 | taint 쿼리로 source→sink 경로 확정, LLM은 triage만(B-2 Vulnhalla) | PoC-1 + B-2 |
+| **테스트 설계** | 커버리지 감 없이 생성 | 테스트 없는 source→sink path를 우선순위로 추출(C-8) | `[VERIFY]` 미실증(D-3) |
+| **리팩토링 안전성** | "동작 동등" 자기선언 | 변경 전후 dataflow diff로 동등성 기계 검증(C-3/D-3) | `[VERIFY]` 미실증(D-3) |
 
-**가장 큰 효과**: `security-reviewer` 레인의 LLM 환각을 결정론 finding으로 교정. ReviewerOutput 스키마가 이미 SARIF result와 구조가 같아 **추가 추상화 없이** 들어간다.
+핵심: **에이전트가 target을 수정한 뒤 "새로 생긴 source→sink path = 0"을 CodeQL로 확정**하면, DITTO completion gate의 acceptance 증거가 된다. LLM의 "안전하게 고쳤습니다"를 결정론으로 대체.
 
-## F-3. 실증 결과 — PoC 4건을 DITTO 접점으로 재판정
+## F-3. DITTO 오케스트레이션 매핑 — 하네스가 결과를 담는 그릇 (이미 준비됨)
 
-| PoC | DITTO 관점 판정 | 의미 |
+CodeQL이 target repo를 분석한 결과를, DITTO의 기존 스키마/게이트가 **추가 추상화 없이** 수용한다:
+
+| DITTO 메커니즘 | 역할 (target repo 대상) | 근거 |
 |---|---|---|
-| PoC-0 (작동) | ✅ DITTO TS 스캔, alert 1건 | 도입 자체 문제없음 |
-| PoC-1 (codeFlow→사실) | ✅ **결정적** — source→sink 10단계를 `findings`/`evidenceRef`로 변환, ReviewerOutput에 그대로 투입 가능 | CodeQL→DITTO 증거 변환 경로 실증 |
-| PoC-2 (가드레일) | ⚠️ **재평가** — DITTO 실코드 56건 탐지(대부분 test). 구조 쿼리 noisy | CodeQL은 **PreToolUse hook(런타임 단일명령)이 아니라 reviewer 레인(코드베이스 정적)에 맞다** — 시점이 다름 |
-| PoC-3 (비용) | ⚠️ 매 work-item DB 재생성 13~34초 부담 / DB 캐시 후 증분 ~4초 | **`run-with` reviewer profile에서 1회 생성·재사용**(`src/core/run-with.ts:159`), 매 게이트마다 X |
+| **`run-with` (reviewer profile)** | target repo에서 CodeQL CLI를 spawn하는 실행 단위. DB 생성·쿼리를 여기서 1회 수행·캐시 | `src/core/run-with.ts:159`, `src/core/hosts/spawn.ts:18` |
+| **EvidenceStore** | target 분석 SARIF → `evidenceRef{kind:'artifact'}`+sha256 → evidence-index | `src/schemas/evidence-record.ts:22-47` |
+| **ReviewerOutput(security-reviewer)** | target의 CodeQL findings가 `findings{severity,file,location,reason}`에 **거의 1:1 매핑** | `src/schemas/reviewer-output.ts:37-87` |
+| **completionEvidenceGate** | "target 변경 후 CodeQL 검증" = verdict=pass의 결정론 증거(note 아님) | `src/core/gates.ts:188-200` |
+| **handoff context packet** | target의 변경 함수 도달 sink 목록을 다음 세션에 전달(C-3/C-10) | work-item-handoff |
+| **doctor capability** | **target repo의 언어**에 CodeQL 지원되는지 검증(빌드 재현성 포함) | `src/core/capability-inventory.ts:9` |
 
-**핵심 교훈(PoC-2 부수발견)**: DITTO가 spawn을 많이 씀(`src/core/hosts/spawn.ts:26`, `run-with.ts:339`, `work-item-handoff.ts`). 구조 쿼리는 noise → **taint 쿼리(PoC-1) + test 제외 + LLM triage(Vulnhalla, B-2)** 조합이라야 review lane에서 쓸모.
+ReviewerOutput에 `security-reviewer`/`cross-provider-reviewer` kind가 이미 있어, CodeQL은 **provider 중립 결정론 리뷰어**로 자연스럽게 들어간다(LLM 리뷰어 간 불일치 중재).
 
-## F-4. 또 다른 활용 방안 (Part C → DITTO 구조 매핑)
+## F-4. PoC 실증 재해석 — 메커니즘은 target-무관하게 검증됨
 
-1. **cross-provider-reviewer를 결정론 리뷰어로** — `reviewer-output.ts` kind에 이미 `cross-provider-reviewer` 존재. CodeQL을 provider-중립 결정론 기준으로 추가해 LLM 리뷰어 간 불일치 중재.
-2. **handoff context packet 강화** — 변경 함수가 도달하는 sink 목록을 packet에 첨부(C-3/C-10). 다음 세션이 추측 대신 검증된 call chain 위에서 작업.
-3. **`[VERIFY]` 리팩토링 안전성 게이트 (D-3, 미실증이나 DITTO에 최적)** — "리팩토링 work-item은 before/after CodeQL dataflow diff 무변화"를 acceptance evidence로. Tidy First "구조변경=동작동등" 원칙을 기계 검증.
-4. **doctor capability matrix 확장** — `codeql` capability를 provider parity에 추가. fail-closed doctor(커밋 wi_260601kbw)와 동일 패턴.
+PoC는 DITTO 저장소를 **우연한 샘플 target**으로 썼을 뿐, 검증된 메커니즘은 임의 target repo에 동일 적용된다:
 
-## F-5. 한계·위험
+| PoC | target-무관 실증 결과 | 임의 target에의 함의 |
+|---|---|---|
+| PoC-0 | TS repo DB 생성→분석→SARIF v2.1.0 | target이 지원 언어면 작동 |
+| PoC-1 | command-injection codeFlow → source→sink 10단계 구조화 | **target의 취약 경로를 에이전트 컨텍스트로 변환 가능** (핵심) |
+| PoC-2 | custom 쿼리 작동, **구조 쿼리는 noisy(56건)** | target에도 동일 — **taint 쿼리+triage라야 게이트에 쓸모** |
+| PoC-3 | DB생성 13.8초(143파일)/증분 ~4초/CLI 2.7GB | **target이 크면 비용 증가** — reviewer profile 1회 생성·캐시 필수 |
 
-- **비용**: 매 게이트 DB 재생성 비현실적. reviewer 레인 한정 + 세션 캐시 필수.
-- **언어 한정**: DITTO는 순수 TS라 OK(build-mode none). 단 다루는 *대상* work-item이 비지원 언어면 무용.
-- **self-declaration 전부 대체 불가**: `different_provider_than_generator` 같은 **메타데이터**는 CodeQL 영역 밖 — A3 일부만 해소.
-- **`[VERIFY]` end-to-end 미실증**: SARIF→MCP→KG 자동화는 컨버터 스크립트까지만(D-1). 완전체는 추가 PoC 필요.
+## F-5. 한계·위험 (target repo 관점에서 재평가)
+
+- **target 다양성**: target 언어가 CodeQL 미지원(PHP/Scala 등)이거나 build 재현 안 되는 compiled 프로젝트면 무용. doctor capability로 **target별 사전 판정** 필요.
+- **target 규모 비용**: 작은 PoC(143파일)는 13.8초였으나 대형 target은 DB 생성이 수분~수십분. reviewer 레인 한정 + per-target DB 캐시 전략 필수.
+- **`[VERIFY]` 테스트 설계·리팩토링 안전성 미실증**: F-2의 가장 차별적인 두 가치(D-3)는 PoC 범위 밖. target에 대한 before/after dataflow diff PoC가 다음 과제.
 - **구조 쿼리 noise**: PoC-2 실증. taint 쿼리로 좁히지 않으면 게이트가 거짓 차단.
+- **`[VERIFY]` end-to-end 미실증**: SARIF→MCP→KG 자동화는 컨버터 스크립트까지만(D-1).
 
-## F-6. 권고 — 최소 진입점
+## F-6. 권고 — 최소 진입점 (하네스가 target에 가치 주는 가장 작은 경로)
 
 charter "가장 간단하되 검증된 최소 구현" 기준:
 
-> **1단계**: `codeql` capability + `run-with` reviewer profile에서 CodeQL CLI를 spawn → SARIF를 `EvidenceStore.appendRecord(kind:'artifact')`로 기록 → `security-reviewer` ReviewerOutput으로 변환(PoC-1 컨버터 재사용). **새 추상화 없음, 기존 스키마 재사용.**
+> **1단계**: `doctor capability`로 target repo 언어의 CodeQL 지원 판정 → `run-with` reviewer profile에서 **target repo**에 CodeQL DB 생성·taint 쿼리 실행(1회 캐시) → SARIF를 `EvidenceStore.appendRecord(kind:'artifact')`로 기록 → `security-reviewer` ReviewerOutput으로 변환(PoC-1 컨버터 재사용) → completion gate 증거로 연결. **새 추상화 없음, 기존 스키마 재사용.**
 
-가장 검증된 패턴(B-2)이자 PoC 실증 경로. MCP/KG/리팩토링 게이트는 그 다음 단계. (ADR 승격 후보: "CodeQL을 security-reviewer 결정론 증거원으로 도입".)
+가장 검증된 패턴(B-2)이자 PoC 실증 경로. 그 다음: target 대상 리팩토링 안전성 dataflow diff(D-3 PoC), handoff dataflow context, MCP/KG. (ADR 승격 후보: "CodeQL을 target repo의 결정론 증거원으로 하네스에 통합".)
 
 ---
 
