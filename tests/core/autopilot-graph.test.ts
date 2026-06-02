@@ -3,6 +3,7 @@ import {
   buildInitialNodes,
   fileOverlapGate,
   nodeTransition,
+  proposalsToNodes,
   selectReadyNodes,
   validateNodeAddition,
 } from '~/core/autopilot-graph';
@@ -97,6 +98,28 @@ describe('validateNodeAddition (A-1: integrity gate for node-add)', () => {
     expect(() => validateNodeAddition(existing, [node('N4', ['N5']), node('N5', ['N4'])])).toThrow(
       /cycle/,
     );
+  });
+});
+
+describe('proposalsToNodes (A-3: intent-level proposal → full node)', () => {
+  test('fills owner (kindToOwner), status, attempts and evidence from a proposal', () => {
+    const nodes = proposalsToNodes([
+      {
+        id: 'G1',
+        kind: 'review',
+        purpose: 're-review',
+        depends_on: ['N1'],
+        acceptance_refs: ['ac-1'],
+      },
+    ]);
+    expect(nodes).toHaveLength(1);
+    const n = nodes[0];
+    expect(n?.owner).toBe('reviewer'); // derived, not supplied
+    expect(n?.status).toBe('pending');
+    expect(n?.attempts).toEqual({ fix: 0, switch: 0 });
+    expect(n?.evidence_refs).toEqual([]);
+    expect(n?.depends_on).toEqual(['N1']);
+    expect(n?.acceptance_refs).toEqual(['ac-1']);
   });
 });
 

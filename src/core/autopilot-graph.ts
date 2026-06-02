@@ -1,4 +1,4 @@
-import type { AutopilotNode } from '~/schemas/autopilot';
+import type { AutopilotNode, NodeProposal } from '~/schemas/autopilot';
 
 /**
  * kind → owner mapping (autopilot §2.2). The node kind names the activity; the
@@ -137,6 +137,27 @@ export function buildInitialNodes(acceptanceIds: string[]): AutopilotNode[] {
     mk('N2', 'implement', 'Implement the planned change', ['N1'], acceptanceIds),
     mk('N3', 'verify', 'Verify every acceptance criterion with evidence', ['N2'], acceptanceIds),
   ];
+}
+
+/**
+ * Promote intent-level proposals to full nodes (A-3 "planner 콘텐츠 승격"). A
+ * planner emits *what* (kind/purpose/edges/AC); the mechanical fields are derived
+ * here — owner from `kindToOwner`, plus the fresh-node defaults — so the planner
+ * never hand-supplies redundant state. The caller splices the result through
+ * `AutopilotStore.addNodes`, whose `validateNodeAddition` is the integrity gate.
+ */
+export function proposalsToNodes(proposals: NodeProposal[]): AutopilotNode[] {
+  return proposals.map((p) => ({
+    id: p.id,
+    kind: p.kind,
+    owner: kindToOwner(p.kind),
+    purpose: p.purpose,
+    status: 'pending',
+    depends_on: p.depends_on,
+    acceptance_refs: p.acceptance_refs,
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  }));
 }
 
 /**

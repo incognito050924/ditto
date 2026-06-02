@@ -293,3 +293,124 @@ describe('recordResult (loop step 6: G7 guard → classify → decide → persis
     expect((err as Error)?.message).toContain('not running');
   });
 });
+
+describe('recordResult node promotion (A-3: planner 콘텐츠 승격 — addNodes의 첫 live 호출자)', () => {
+  const designOnly = (): Autopilot =>
+    graph({
+      nodes: [
+        {
+          id: 'N1',
+          kind: 'design',
+          owner: 'planner',
+          purpose: 'plan the change',
+          status: 'pending',
+          depends_on: [],
+          acceptance_refs: ['ac-1'],
+          evidence_refs: [],
+          attempts: { fix: 0, switch: 0 },
+        },
+      ],
+    });
+
+  const proposal = (id: string, kind: 'implement' | 'review', depends_on: string[]) => ({
+    id,
+    kind,
+    purpose: `p-${id}`,
+    depends_on,
+    acceptance_refs: ['ac-1'],
+  });
+
+  test('contentful design pass splices generated_nodes via addNodes (1→3) and returns promoted ids', async () => {
+    await seed(designOnly());
+    await nextNode(repo, WI); // dispatch N1 (pending → running)
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text:
+          'plan: the change needs an implement node then a review node; generated the subgraph',
+        outcome: 'pass',
+        generated_nodes: [proposal('G1', 'implement', ['N1']), proposal('G2', 'review', ['G1'])],
+      },
+      now: NOW,
+    });
+    expect(res.promoted_node_ids).toEqual(['G1', 'G2']);
+    const g = await aps.get(WI);
+    expect(g.nodes.map((n) => n.id)).toEqual(['N1', 'G1', 'G2']);
+    expect(g.nodes.find((n) => n.id === 'G1')?.owner).toBe('implementer'); // kindToOwner filled
+    expect(g.nodes.find((n) => n.id === 'G1')?.status).toBe('pending');
+  });
+
+  test('promoted node becomes the next dispatched node (engine runs beyond the 1-node seed)', async () => {
+    await seed(designOnly());
+    await nextNode(repo, WI);
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text: 'plan: one implement node suffices; generated it',
+        outcome: 'pass',
+        generated_nodes: [proposal('G1', 'implement', ['N1'])],
+      },
+      now: NOW,
+    });
+    const next = await nextNode(repo, WI);
+    expect(next.action).toBe('spawn');
+    if (next.action === 'spawn') expect(next.node_id).toBe('G1');
+  });
+
+  test('no generated_nodes leaves the graph unchanged (default 3-node path invariant)', async () => {
+    await seed(graph()); // default 3-node chain
+    await nextNode(repo, WI);
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text: 'planned the change against the acceptance criteria; no extra nodes needed',
+        outcome: 'pass',
+      },
+      now: NOW,
+    });
+    expect(res.promoted_node_ids).toEqual([]);
+    expect((await aps.get(WI)).nodes).toHaveLength(3);
+  });
+
+  test('invalid promotion (duplicate id) is rejected by addNodes (existing nodes stay stable)', async () => {
+    await seed(designOnly());
+    await nextNode(repo, WI);
+    let err: unknown;
+    try {
+      await recordResult(repo, {
+        workItemId: WI,
+        payload: {
+          node_id: 'N1',
+          result_text: 'plan with a colliding node id',
+          outcome: 'pass',
+          generated_nodes: [proposal('N1', 'implement', [])],
+        },
+        now: NOW,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect((err as Error)?.message).toContain('duplicate node id');
+  });
+
+  test('non-contentful pass promotes nothing (G7 floor overrides claimed pass)', async () => {
+    await seed(designOnly());
+    await nextNode(repo, WI);
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text: 'done',
+        outcome: 'pass',
+        generated_nodes: [proposal('G1', 'implement', ['N1'])],
+      },
+      now: NOW,
+    });
+    expect(res.guard_contentful).toBe(false);
+    expect(res.promoted_node_ids).toEqual([]);
+    expect((await aps.get(WI)).nodes).toHaveLength(1);
+  });
+});

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AutopilotNode } from '~/schemas/autopilot';
+import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
 import { evidenceRef } from '~/schemas/common';
 import {
   type DelegationPacket,
@@ -10,7 +10,12 @@ import {
   guardChildResult,
 } from './autopilot-dispatch';
 import { allNodesTerminal, mutationGate, rollbackOnRejection } from './autopilot-driver';
-import { fileOverlapGate, nodeTransition, selectReadyNodes } from './autopilot-graph';
+import {
+  fileOverlapGate,
+  nodeTransition,
+  proposalsToNodes,
+  selectReadyNodes,
+} from './autopilot-graph';
 import { AutopilotStore } from './autopilot-store';
 import { WorkItemStore } from './work-item-store';
 
@@ -105,6 +110,13 @@ export const recordResultPayload = z
       .describe('Required when outcome=fail; the caller-supplied classification'),
     evidence_refs: z.array(evidenceRef).optional().describe('Evidence pointers gathered on pass'),
     reason: z.string().optional().describe('2–3 line rationale recorded in the decision log'),
+    generated_nodes: z
+      .array(nodeProposal)
+      .optional()
+      .describe(
+        'Subgraph this node generated (A-3). Promoted to the graph via addNodes on a ' +
+          'contentful pass; a planner/design node uses this to grow the graph past the seed.',
+      ),
   })
   .superRefine((value, ctx) => {
     if (value.outcome === 'fail' && value.failure_class === undefined) {
@@ -135,6 +147,8 @@ export interface RecordResultOutcome {
   failure_class: FailureClass | null;
   cap_exceeded: boolean;
   reason: string;
+  /** Ids of nodes promoted from `generated_nodes` on this pass; [] otherwise (A-3). */
+  promoted_node_ids: string[];
 }
 
 export async function recordResult(
@@ -172,6 +186,18 @@ export async function recordResult(
   }
 
   if (outcome === 'pass') {
+    // Node promotion (A-3): a contentful pass may carry the subgraph this node
+    // generated. Splice it *before* marking pass so a rejected splice (cycle /
+    // dup / dangling — addNodes throws) leaves the node still running and
+    // re-recordable, rather than passed-with-no-graph-growth. validateNodeAddition
+    // is status-agnostic, so depending on the still-running node id is valid.
+    const proposals = input.payload.generated_nodes ?? [];
+    let promotedNodeIds: string[] = [];
+    if (proposals.length > 0) {
+      const promoted = proposalsToNodes(proposals);
+      await aps.addNodes(input.workItemId, promoted);
+      promotedNodeIds = promoted.map((n) => n.id);
+    }
     await aps.updateNode(input.workItemId, node.id, (n) => ({
       ...n,
       status: nodeTransition(n.status, 'pass'),
@@ -186,6 +212,7 @@ export async function recordResult(
       failure_class: null,
       cap_exceeded: false,
       reason: guardReason,
+      promoted_node_ids: promotedNodeIds,
     };
   }
 
@@ -236,5 +263,6 @@ export async function recordResult(
     failure_class: klass,
     cap_exceeded,
     reason: guardReason,
+    promoted_node_ids: [],
   };
 }

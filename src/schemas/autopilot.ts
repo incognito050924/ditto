@@ -61,6 +61,20 @@ export const autopilotNode = z
   })
   .describe('One node in the autopilot graph');
 
+export const nodeProposal = z
+  .object({
+    id: z.string().min(1),
+    kind: nodeKind,
+    purpose: z.string().min(1),
+    depends_on: z.array(z.string()).default([]),
+    acceptance_refs: z.array(z.string()).default([]),
+  })
+  .describe(
+    'Intent-level node a planner emits (A-3). The mechanical fields (owner/status/' +
+      'attempts/evidence) are derived on promotion via proposalsToNodes; the integrity ' +
+      'gate (validateNodeAddition) then guards the splice.',
+  );
+
 export const autopilot = z
   .object({
     schema_version: schemaVersion,
@@ -100,3 +114,4 @@ export const autopilot = z
 
 export type Autopilot = z.infer<typeof autopilot>;
 export type AutopilotNode = z.infer<typeof autopilotNode>;
+export type NodeProposal = z.infer<typeof nodeProposal>;
