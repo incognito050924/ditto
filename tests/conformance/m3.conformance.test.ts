@@ -278,7 +278,9 @@ describe('M3.3 — convergence 빌더/store (admissibility 입력, 결정론 재
     objection: 'objection text',
     kind: 'hypothesis',
     criterion_id: null,
-    severity: 'medium',
+    // admissible=true requires high/critical severity (ADMISSIBLE_SEVERITIES);
+    // the prior 'medium' default contradicted that and is now schema-rejected.
+    severity: 'high',
     admissible: true,
     status: 'deferred',
     confidence: 'medium',

@@ -53,6 +53,16 @@ export const decisionLedgerEntry = z
         path: ['backed_by'],
       });
     }
+    // Derivable consistency: an admissible objection must carry a high/critical
+    // severity (mirrors stop.ts ADMISSIBLE_SEVERITIES). Only bites when the
+    // self-declared admissible flag is true.
+    if (value.admissible === true && value.severity !== 'high' && value.severity !== 'critical') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'admissible=true requires severity high or critical (ADMISSIBLE_SEVERITIES)',
+        path: ['admissible'],
+      });
+    }
   })
   .describe('Append-only decision ledger entry with honesty labels (§4.1, §6.1)');
 

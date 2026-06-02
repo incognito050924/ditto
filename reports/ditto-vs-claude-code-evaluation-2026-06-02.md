@@ -100,7 +100,7 @@ ditto는 사용자 직접 호출 CLI를 일부만 노출하고, 핵심 워크플
 8. **[중간·해소 2026-06-02]** ~~dialecticForcesContinuation verbatim-echo 취약~~ → opponentObjection에 optional stable id + id-or-claim 매칭(paraphrase 허용, verbatim 하위호환). autopilot wi_260602xbd 독립검증 710 pass.
 9. **[낮음·해소 2026-06-02]** 광범위 fail-open — ~~session pointer 없는 세션에서 게이트 no-op이나 표면화 안 됨~~ → D3 결정대로 stop.ts의 session_id 부재 branch가 stderr 경고를 내보냄(비차단, exit 0). autopilot wi_260602nkj 독립검증 704 pass.
 10. **[낮음·중복]** G1/G2가 CC 네이티브와 중복 — output-style/auto mode/subagent 격리가 이미 동일 방향. charter advisory 주입은 강제력 0+영구 토큰 비용.
-11. **[낮음]** 자기선언 boolean — RiskAxes.non_local, reviewerOutput.different_provider, languageChange.agreed_with_user, decisionLedger.admissible 모두 schema 검증 불가.
+11. **[낮음·해소 2026-06-02]** ~~자기선언 boolean — 4종 schema 검증 불가~~ → admissible→severity·agreed_with_user→decided_at·different_provider→evidence superRefine로 backing 강제(true일 때만, 하위호환); RiskAxes는 persisted schema 부재로 input-only 주석 명시. autopilot wi_2606027ud 독립검증 719 pass.
 
 ## 5. 우선순위 수정 제안
 

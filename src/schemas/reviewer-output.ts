@@ -81,6 +81,15 @@ export const reviewerOutput = z
         path: ['review_not_run_reason'],
       });
     }
+    // A cross-provider claim must be backed by evidence; only bites when the
+    // self-declared cross-provider flag is true.
+    if (value.different_provider_than_generator === true && value.evidence.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'different_provider_than_generator=true requires non-empty evidence',
+        path: ['evidence'],
+      });
+    }
   })
   .describe('Output contract for any reviewer/evaluator lane');
 

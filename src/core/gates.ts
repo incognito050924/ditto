@@ -235,6 +235,15 @@ export function convergenceGate(c: Convergence): GateResult {
 
 // ── high-risk assumption / safe-default (§8-4: two sides of one predicate) ──
 
+/**
+ * Input-only risk judgment consumed by `highRiskAssumption` / `safeDefaultable`
+ * and, at the producing boundary, by `finalizePayload.risk` in interview-driver
+ * to drive the approval gate in bootstrapAutopilot. These axes are NOT persisted
+ * to any artifact (intent.json / work-item.json / autopilot.json carry no such
+ * field), so there is no persisted schema to validate. Verifiability of these
+ * booleans is therefore enforced at the producing boundary (the finalize payload
+ * and planner), not by a stored schema's superRefine.
+ */
 export interface RiskAxes {
   non_local: boolean;
   irreversible: boolean;

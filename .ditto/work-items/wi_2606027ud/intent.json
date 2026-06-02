@@ -1,29 +1,40 @@
 {
   "schema_version": "0.1.0",
-  "id": "wi_2606027ud",
-  "title": "§4#11 boolean 검증",
+  "work_item_id": "wi_2606027ud",
   "source_request": "[캠페인 wi_2606022dw 항목] 평가보고서 §4#11. non_local·different_provider·agreed_with_user·admissible 근거 필드.",
   "goal": "자기선언 boolean 4종을 빈 근거 true 거부로 검증가능화하고 기존 산출물 하위호환을 유지한다 (평가보고서 §4#11)",
+  "in_scope": [
+    "src/schemas/convergence.ts",
+    "src/schemas/language-ledger.ts",
+    "src/schemas/reviewer-output.ts",
+    "src/core/gates.ts",
+    "tests"
+  ],
+  "out_of_scope": [
+    "boolean 의미/소비 로직 변경",
+    "기존 fixture 데이터 변경"
+  ],
   "acceptance_criteria": [
     {
       "id": "ac-1",
       "statement": "convergence decisionLedgerEntry.admissible·languageChange.agreed_with_user·reviewerOutput.different_provider_than_generator 3개 boolean이 true일 때 schema superRefine이 검증가능한 backing/consistency를 요구해 빈 근거 true 입력 1건 이상을 reject하고, 기존 fixtures 0건이 깨지지 않는다",
       "verdict": "unverified",
-      "evidence": []
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
     },
     {
       "id": "ac-2",
       "statement": "RiskAxes high-risk 1개 이상 true에 대해 검증 경계에서 rationale을 요구하거나 persisted schema 부재로 input-only임을 코드 주석 1곳에 명시한다",
       "verdict": "unverified",
-      "evidence": []
+      "evidence": [],
+      "evidence_required": [
+        "doc"
+      ]
     }
   ],
-  "status": "draft",
-  "owner_profile": "workspace-write",
-  "child_ids": [],
-  "changed_files": [],
-  "risks": [],
-  "runs": [],
-  "created_at": "2026-06-02T06:08:45.537Z",
-  "updated_at": "2026-06-02T06:49:47.053Z"
+  "unknowns": [],
+  "follow_up_candidates": [],
+  "question_policy": "ask_only_if_user_only_can_answer"
 }

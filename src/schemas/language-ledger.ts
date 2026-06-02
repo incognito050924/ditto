@@ -19,6 +19,17 @@ export const languageChange = z
       .describe('True only after explicit user confirmation; defaults to false on creation'),
     decided_at: isoDateTime.optional(),
   })
+  .superRefine((value, ctx) => {
+    // A confirmed change must carry a verifiable confirmation timestamp; only
+    // bites when the self-declared agreement flag is true.
+    if (value.agreed_with_user === true && value.decided_at === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'agreed_with_user=true requires decided_at (confirmation timestamp)',
+        path: ['decided_at'],
+      });
+    }
+  })
   .describe('One change to project language as observed during a work item');
 
 export const languageLedger = z

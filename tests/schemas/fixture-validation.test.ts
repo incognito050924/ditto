@@ -2,9 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { completionContract } from '~/schemas/completion-contract';
+import { decisionLedgerEntry } from '~/schemas/convergence';
 import { commandLogEntry } from '~/schemas/evidence-log';
 import { glossary } from '~/schemas/glossary';
-import { languageLedger } from '~/schemas/language-ledger';
+import { languageChange, languageLedger } from '~/schemas/language-ledger';
 import { reviewerOutput } from '~/schemas/reviewer-output';
 import { runManifest } from '~/schemas/run-manifest';
 import { workItem } from '~/schemas/work-item';
@@ -267,5 +268,110 @@ describe('schema rejects invalid documents', () => {
       exit_code: 0,
     };
     expect(() => commandLogEntry.parse(bad)).toThrow();
+  });
+});
+
+describe('self-declared booleans require backing', () => {
+  // ── decisionLedgerEntry.admissible ──────────────────────────────────────
+  const baseLedger = {
+    id: 'obj-1',
+    round: 0,
+    objection: 'o',
+    kind: 'hypothesis' as const,
+    severity: 'low' as const,
+    admissible: false,
+    status: 'dismissed' as const,
+    confidence: 'low' as const,
+    backed_by: [],
+    reason: 'r',
+  };
+
+  test('decision ledger rejects admissible=true with non-high/critical severity', () => {
+    expect(() =>
+      decisionLedgerEntry.parse({ ...baseLedger, admissible: true, severity: 'low' }),
+    ).toThrow();
+    expect(() =>
+      decisionLedgerEntry.parse({ ...baseLedger, admissible: true, severity: 'medium' }),
+    ).toThrow();
+  });
+
+  test('decision ledger allows admissible=true with high or critical severity', () => {
+    expect(() =>
+      decisionLedgerEntry.parse({ ...baseLedger, admissible: true, severity: 'high' }),
+    ).not.toThrow();
+    expect(() =>
+      decisionLedgerEntry.parse({ ...baseLedger, admissible: true, severity: 'critical' }),
+    ).not.toThrow();
+  });
+
+  test('decision ledger allows admissible=false regardless of severity', () => {
+    expect(() =>
+      decisionLedgerEntry.parse({ ...baseLedger, admissible: false, severity: 'low' }),
+    ).not.toThrow();
+  });
+
+  // ── languageChange.agreed_with_user ─────────────────────────────────────
+  const baseChange = {
+    op: 'add' as const,
+    term: 't',
+    rationale: 'r',
+    proposed_by: 'user',
+    agreed_with_user: false,
+  };
+
+  test('language change rejects agreed_with_user=true without decided_at', () => {
+    expect(() => languageChange.parse({ ...baseChange, agreed_with_user: true })).toThrow();
+  });
+
+  test('language change allows agreed_with_user=true with decided_at', () => {
+    expect(() =>
+      languageChange.parse({
+        ...baseChange,
+        agreed_with_user: true,
+        decided_at: '2026-05-24T00:00:00+09:00',
+      }),
+    ).not.toThrow();
+  });
+
+  test('language change allows agreed_with_user=false without decided_at', () => {
+    expect(() => languageChange.parse({ ...baseChange, agreed_with_user: false })).not.toThrow();
+  });
+
+  // ── reviewerOutput.different_provider_than_generator ─────────────────────
+  const baseReview = {
+    schema_version: '0.1.0',
+    id: 'rv_xprov001',
+    work_item_id: 'wi_xprov001',
+    kind: 'cross-provider-reviewer' as const,
+    reviewer: 'codex/gpt',
+    different_provider_than_generator: false,
+    started_at: '2026-05-24T00:00:00+09:00',
+    verdict: 'pass' as const,
+    evidence: [],
+    findings: [],
+    unverified: [],
+    recommended_next_action: 'next',
+  };
+
+  test('reviewer output rejects different_provider=true with empty evidence', () => {
+    expect(() =>
+      reviewerOutput.parse({ ...baseReview, different_provider_than_generator: true }),
+    ).toThrow();
+  });
+
+  test('reviewer output allows different_provider=true with non-empty evidence', () => {
+    expect(() =>
+      reviewerOutput.parse({
+        ...baseReview,
+        different_provider_than_generator: true,
+        evidence: [{ kind: 'command', command: 'bun test', summary: 'all pass' }],
+      }),
+    ).not.toThrow();
+  });
+
+  test('reviewer output allows different_provider=false with empty evidence', () => {
+    expect(() =>
+      reviewerOutput.parse({ ...baseReview, different_provider_than_generator: false }),
+    ).not.toThrow();
   });
 });
