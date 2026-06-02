@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2606020ud",
+  "title": "cleanup 배선 (driver step + irreversible-git 승인 게이트)",
+  "source_request": "다음 후보 #1 cleanup 배선대로 진행",
+  "goal": "wire cleanup as a driver-owned deterministic step that tears down per-run git worktrees behind an explicit irreversible-git approval gate",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "nextNode on a ready driver-owned (cleanup) node returns action equals cleanup and dispatches the node to running, with no spawn.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "runCleanup without approval and with worktrees present returns status blocked and leaves the worktrees intact; with --approve it removes them and returns status passed.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "cleanupApprovalGate returns allowed false for a not_required gate and allowed true for an approved gate or an explicit approve.",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/schemas/autopilot.ts",
+    "src/core/autopilot-graph.ts",
+    "src/core/autopilot-dispatch.ts",
+    "src/core/worktree.ts",
+    "src/core/autopilot-cleanup.ts",
+    "src/core/autopilot-loop.ts",
+    "src/cli/commands/autopilot.ts",
+    "tests/core/autopilot-cleanup.test.ts",
+    "reports/design/contracts/autopilot-contract.md"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-02T13:18:34.303Z",
+  "updated_at": "2026-06-02T13:19:43.535Z"
+}

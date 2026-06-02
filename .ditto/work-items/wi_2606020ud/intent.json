@@ -1,0 +1,54 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2606020ud",
+  "source_request": "다음 후보 #1 cleanup 배선대로 진행",
+  "goal": "wire cleanup as a driver-owned deterministic step that tears down per-run git worktrees behind an explicit irreversible-git approval gate",
+  "in_scope": [
+    "nodeKind gains `cleanup`; nodeOwner gains `driver` (no LLM)",
+    "nextNode intercepts owner===driver and returns action:cleanup (no spawn)",
+    "autopilot-cleanup: planCleanup / cleanupApprovalGate / runCleanup",
+    "worktree.ts: listRunWorktrees / removeRunWorktree",
+    "ditto autopilot cleanup --workItem --node [--approve]"
+  ],
+  "out_of_scope": [
+    "auto-commit (user job)",
+    "branch teardown (no per-run branch created)",
+    "temp-file deletion (no non-arbitrary system-created pattern)",
+    "forced worktree removal (dirty worktrees are skipped, never destroyed)"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "nextNode on a ready driver-owned (cleanup) node returns action equals cleanup and dispatches the node to running, with no spawn.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "runCleanup without approval and with worktrees present returns status blocked and leaves the worktrees intact; with --approve it removes them and returns status passed.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "cleanupApprovalGate returns allowed false for a not_required gate and allowed true for an approved gate or an explicit approve.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    }
+  ],
+  "unknowns": [],
+  "follow_up_candidates": [
+    "security node forward re-expansion (§2.4)",
+    "real owner subagent spawn integration"
+  ],
+  "question_policy": "ask_only_if_user_only_can_answer"
+}

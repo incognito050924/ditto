@@ -1,0 +1,106 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2606020ud",
+  "status": "converged",
+  "started_at": "2026-06-02T01:00:00.000Z",
+  "updated_at": "2026-06-02T01:00:00.000Z",
+  "dimensions": [
+    {
+      "id": "owner-form",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": "cleanup is not an LLM owner. New `driver` pseudo-owner; nextNode intercepts owner===driver before spawn and returns action:cleanup."
+    },
+    {
+      "id": "gate",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q002"
+      ],
+      "notes": "Worktree removal is irreversible git. Explicit approval only: --approve or approval_gate=approved. not_required (small-reversible waiver) is insufficient."
+    },
+    {
+      "id": "scope",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q003"
+      ],
+      "notes": "Target = leaking per-run worktrees (.ditto/worktrees/*), the only thing DITTO creates and never reclaims. commit=user job, branch=none created, temp=arbitrary → excluded. Non-forced removal: dirty worktrees skipped, never destroyed."
+    }
+  ],
+  "readiness": {
+    "score": 0.9,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-02T01:00:00.000Z",
+      "dimension": "owner-form",
+      "question": "How is a deterministic cleanup node dispatched if it has no LLM owner?",
+      "why_matters": "It must not go through the spawn/delegation-packet path meant for LLM owners.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "driver pseudo-owner; nextNode intercepts and emits action:cleanup; `autopilot cleanup` runs it.",
+      "answer_kind": "assumption"
+    },
+    {
+      "id": "q002",
+      "asked_at": "2026-06-02T01:00:00.000Z",
+      "dimension": "gate",
+      "question": "What authorizes the irreversible git step?",
+      "why_matters": "The contract mandates an explicit approval gate for irreversible git, not the auto-waiver.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "Explicit only: --approve flag or approval_gate=approved; not_required does not authorize.",
+      "answer_kind": "assumption"
+    },
+    {
+      "id": "q003",
+      "asked_at": "2026-06-02T01:00:00.000Z",
+      "dimension": "scope",
+      "question": "What exactly does v0 cleanup remove?",
+      "why_matters": "Scope is irreversible; must be the non-arbitrary, real accumulating artifact.",
+      "info_gain_estimate": "medium",
+      "self_answer_attempts": [],
+      "answer": "Per-run worktrees only; non-forced (dirty skipped). commit/branch/temp out of scope.",
+      "answer_kind": "assumption"
+    }
+  ],
+  "assumptions": [
+    {
+      "statement": "driver pseudo-owner; nextNode intercepts and emits action:cleanup; `autopilot cleanup` runs it.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q001"
+    },
+    {
+      "statement": "Explicit only: --approve flag or approval_gate=approved; not_required does not authorize.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q002"
+    },
+    {
+      "statement": "Per-run worktrees only; non-forced (dirty skipped). commit/branch/temp out of scope.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q003"
+    }
+  ],
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 3
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2606020ud",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-02T13:20:13.255Z",
+  "summary": "cleanup을 driver pseudo-owner 결정적 드라이버 스텝으로 배선: nextNode intercept(action:cleanup) + ditto autopilot cleanup(명시 승인 게이트 worktree teardown). 라이브: design이 cleanup 노드 생성→intercept→실 repo cleanup(worktree 0개 trivial pass). N2가 9개 변경파일 자동 수집.",
+  "changed_files": [
+    "src/schemas/autopilot.ts",
+    "src/core/autopilot-graph.ts",
+    "src/core/autopilot-dispatch.ts",
+    "src/core/worktree.ts",
+    "src/core/autopilot-cleanup.ts",
+    "src/core/autopilot-loop.ts",
+    "src/cli/commands/autopilot.ts",
+    "tests/core/autopilot-cleanup.test.ts",
+    "reports/design/contracts/autopilot-contract.md"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "note",
+          "summary": "driver pseudo-owner intercept + explicit irreversible-git gate; scope=per-run worktrees"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-cleanup.ts",
+          "summary": "planCleanup/cleanupApprovalGate/runCleanup driver step"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "summary": "listRunWorktrees + removeRunWorktree (non-forced, realpath-safe)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "779 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-cleanup.test.ts",
+          "summary": "10 pass / 0 fail covering ac-1/ac-2/ac-3"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 779 pass / 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/autopilot-cleanup.test.ts",
+          "summary": "cleanup behavior tests"
+        },
+        {
+          "kind": "note",
+          "summary": "no run worktrees to clean"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "note",
+          "summary": "driver pseudo-owner intercept + explicit irreversible-git gate; scope=per-run worktrees"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-cleanup.ts",
+          "summary": "planCleanup/cleanupApprovalGate/runCleanup driver step"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "summary": "listRunWorktrees + removeRunWorktree (non-forced, realpath-safe)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "779 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-cleanup.test.ts",
+          "summary": "10 pass / 0 fail covering ac-1/ac-2/ac-3"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 779 pass / 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/autopilot-cleanup.test.ts",
+          "summary": "cleanup behavior tests"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "note",
+          "summary": "driver pseudo-owner intercept + explicit irreversible-git gate; scope=per-run worktrees"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-cleanup.ts",
+          "summary": "planCleanup/cleanupApprovalGate/runCleanup driver step"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "summary": "listRunWorktrees + removeRunWorktree (non-forced, realpath-safe)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "779 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-cleanup.test.ts",
+          "summary": "10 pass / 0 fail covering ac-1/ac-2/ac-3"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 779 pass / 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/autopilot-cleanup.test.ts",
+          "summary": "cleanup behavior tests"
+        }
+      ],
+      "evidence_records": []
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [],
+  "final_verdict": "pass"
+}
