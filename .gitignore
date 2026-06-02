@@ -474,4 +474,3 @@ dist/
 .ditto/runs/
 .ditto/work-items/*/evidence/
 
-.codeql-poc/
