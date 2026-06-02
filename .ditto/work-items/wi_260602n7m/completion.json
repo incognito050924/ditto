@@ -1,0 +1,170 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602n7m",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-02T14:07:31.581Z",
+  "summary": "real-spawn 데모: design(ditto:planner)→implement(ditto:implementer)→verify(ditto:verifier) 전부 실제 spawn된 subagent가 수행, 오케스트레이터는 select/spawn/judge/record만. complete 자신이 새 기능으로 non-terminal 노드를 surfacing(이 그래프는 done이라 해당 risk 없음).",
+  "changed_files": [
+    "src/core/autopilot-complete.ts",
+    "tests/core/autopilot-complete.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "summary": "seam: assembleCompletionFromGraph L60-78"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/completion-contract.ts",
+          "summary": "remaining_risks already exists L74 (no schema change)"
+        },
+        {
+          "kind": "note",
+          "summary": "planner subgraph implement→verify == seed N2/N3; orchestrator declines promotion to avoid duplicate lifecycle nodes"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "summary": "non-terminal nodes → remaining_risks (caller risks preserved, pass-only-none-on-terminal)"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/autopilot-complete.test.ts",
+          "summary": "3 new tests: ac-1 surface+name ids / caller-risk preserved / ac-2 all-terminal none"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "785 pass / 0 fail (independently re-run by orchestrator)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-complete.test.ts",
+          "summary": "11 pass / 0 fail, exit 0 (ac-1, ac-2 non-vacuous)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "785 pass / 0 fail, exit 0 (ac-3)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "summary": "non-terminal surfacing L72-78 verified against impl"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "summary": "seam: assembleCompletionFromGraph L60-78"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/completion-contract.ts",
+          "summary": "remaining_risks already exists L74 (no schema change)"
+        },
+        {
+          "kind": "note",
+          "summary": "planner subgraph implement→verify == seed N2/N3; orchestrator declines promotion to avoid duplicate lifecycle nodes"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "summary": "non-terminal nodes → remaining_risks (caller risks preserved, pass-only-none-on-terminal)"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/autopilot-complete.test.ts",
+          "summary": "3 new tests: ac-1 surface+name ids / caller-risk preserved / ac-2 all-terminal none"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "785 pass / 0 fail (independently re-run by orchestrator)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-complete.test.ts",
+          "summary": "11 pass / 0 fail, exit 0 (ac-1, ac-2 non-vacuous)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "785 pass / 0 fail, exit 0 (ac-3)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "summary": "non-terminal surfacing L72-78 verified against impl"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "summary": "seam: assembleCompletionFromGraph L60-78"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/completion-contract.ts",
+          "summary": "remaining_risks already exists L74 (no schema change)"
+        },
+        {
+          "kind": "note",
+          "summary": "planner subgraph implement→verify == seed N2/N3; orchestrator declines promotion to avoid duplicate lifecycle nodes"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "summary": "non-terminal nodes → remaining_risks (caller risks preserved, pass-only-none-on-terminal)"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/autopilot-complete.test.ts",
+          "summary": "3 new tests: ac-1 surface+name ids / caller-risk preserved / ac-2 all-terminal none"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "785 pass / 0 fail (independently re-run by orchestrator)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-complete.test.ts",
+          "summary": "11 pass / 0 fail, exit 0 (ac-1, ac-2 non-vacuous)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "785 pass / 0 fail, exit 0 (ac-3)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "summary": "non-terminal surfacing L72-78 verified against impl"
+        }
+      ],
+      "evidence_records": []
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [],
+  "final_verdict": "pass"
+}

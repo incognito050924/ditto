@@ -1,0 +1,46 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602n7m",
+  "source_request": "남은 후보 #2 owner subagent 실제 spawn 라이브 실행 — 데모용 작은 실제 task(complete done-guard surfacing)를 실제 spawn된 subagent로 구동",
+  "goal": "assembleCompletionFromGraph records non-terminal graph nodes as a remaining risk so a completion contract surfaces that graph work is unfinished",
+  "in_scope": [
+    "assembleCompletionFromGraph adds a remaining_risk listing non-terminal (pending/running/blocked) node ids",
+    "a fully-terminal graph adds no such risk"
+  ],
+  "out_of_scope": [
+    "refusing to assemble (partial assembly stays allowed)",
+    "changing AC verdict derivation"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "assembleCompletionFromGraph on a graph with a non-terminal node returns a completion whose remaining_risks contains an entry naming the non-terminal node ids.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "assembleCompletionFromGraph on a graph where every node is passed returns a completion whose remaining_risks contains no non-terminal-node entry.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "the full existing test suite returns 0 failures after the change.",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    }
+  ],
+  "unknowns": [],
+  "follow_up_candidates": [],
+  "question_policy": "ask_only_if_user_only_can_answer"
+}

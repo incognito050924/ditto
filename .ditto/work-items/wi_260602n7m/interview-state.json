@@ -1,0 +1,52 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602n7m",
+  "status": "converged",
+  "started_at": "2026-06-02T03:00:00.000Z",
+  "updated_at": "2026-06-02T03:00:00.000Z",
+  "dimensions": [
+    {
+      "id": "surface-mechanism",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": "Known issue: assembleCompletionFromGraph can assemble from a non-terminal graph (running/pending/blocked nodes) silently. Surface non-terminal node ids in completion.remaining_risks rather than refusing (preserve existing partial-assembly behavior)."
+    }
+  ],
+  "readiness": {
+    "score": 0.85,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-02T03:00:00.000Z",
+      "dimension": "surface-mechanism",
+      "question": "How should complete signal that the graph is not fully terminal?",
+      "why_matters": "Silent assembly hides that work is unfinished; refusing would break partial-assembly flows.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "Add a remaining_risk naming the non-terminal node ids; do not refuse.",
+      "answer_kind": "assumption"
+    }
+  ],
+  "assumptions": [
+    {
+      "statement": "Add a remaining_risk naming the non-terminal node ids; do not refuse.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q001"
+    }
+  ],
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 1
+  }
+}
