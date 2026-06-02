@@ -1,0 +1,160 @@
+{
+  "schema_version": "0.1.0",
+  "autopilot_id": "orch_260602585",
+  "work_item_id": "wi_260602a0y",
+  "mode": "autopilot",
+  "root_goal": "AutopilotStore가 노드-추가 연산(비순환·id안정·schema 검증)을 제공하고, autopilot 부트스트랩이 노드 집합을 하드코딩 리터럴이 아니라 생성 seam으로 만든다 — 기본 생성기는 현 최소 씨앗(3노드)을 유지해 관찰 동작은 불변, 노드-추가 API 부재라는 구조적 천장만 제거",
+  "completion_boundary": "entire_work_item",
+  "approval_gate": {
+    "status": "not_required",
+    "source": "small_reversible_policy",
+    "approved_at": null,
+    "approved_by": null,
+    "evidence_refs": []
+  },
+  "nodes": [
+    {
+      "id": "N1",
+      "kind": "design",
+      "owner": "planner",
+      "purpose": "Plan the change against the acceptance criteria",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N2",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "Implement the planned change",
+      "status": "passed",
+      "depends_on": [
+        "N1"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test (9-file autopilot regression set)",
+          "summary": "102 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome exit 0, no errors"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-store.ts",
+          "lines": {
+            "start": 79,
+            "end": 91
+          },
+          "summary": "addNodes node-add API (ac-1,ac-5)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-graph.ts",
+          "lines": {
+            "start": 142,
+            "end": 189
+          },
+          "summary": "validateNodeAddition + generation seam (ac-2,ac-3)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-bootstrap.ts",
+          "lines": {
+            "start": 24,
+            "end": 25
+          },
+          "summary": "optional generateNodes seam (ac-3,ac-4)"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N3",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Verify every acceptance criterion with evidence",
+      "status": "passed",
+      "depends_on": [
+        "N2"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test (9-file autopilot regression set), fresh re-run by verifier",
+          "summary": "102 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git diff on buildInitialNodes/bootstrapAutopilot",
+          "summary": "no signature +/- ; optional field + alias only (ac-4)"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/autopilot-store.test.ts",
+          "lines": {
+            "start": 107,
+            "end": 113
+          },
+          "summary": ">3-node round-trip via disk re-read store.get (ac-5)"
+        },
+        {
+          "kind": "note",
+          "summary": "tsc errors pre-existing/unrelated (stash-comparison identical), none in touched files — out_of_scope"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    }
+  ],
+  "caps": {
+    "fix_per_node": 2,
+    "switch_per_node": 1
+  },
+  "continue_policy": {
+    "continue_after_approval": true,
+    "continue_after_checkpoint": true,
+    "continue_after_fixable_failure": true,
+    "ask_user_only_for_user_owned_decisions": true
+  },
+  "stop_conditions": [
+    "all_acceptance_criteria_passed_or_explicitly_closed",
+    "blocked_by_user_owned_decision",
+    "blocked_by_external_system",
+    "safety_boundary_hit"
+  ],
+  "user_interrupt_policy": "ask_only_for_user_owned_decisions"
+}
