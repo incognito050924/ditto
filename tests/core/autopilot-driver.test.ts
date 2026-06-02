@@ -1,11 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  allNodesTerminal,
-  buildContinuationSignal,
-  mutationGate,
-  nextReadyNodeId,
-  rollbackOnRejection,
-} from '~/core/autopilot-driver';
+import { allNodesTerminal, mutationGate, rollbackOnRejection } from '~/core/autopilot-driver';
 import { buildInitialNodes } from '~/core/autopilot-graph';
 import type { Autopilot } from '~/schemas/autopilot';
 
@@ -83,28 +77,15 @@ describe('mutationGate (M2.3 consumes approval status)', () => {
   });
 });
 
-describe('automatic continuation (M2.5)', () => {
-  test('plan→implement→verify chains without intervention, then terminates', () => {
-    let g = graph();
-    expect(nextReadyNodeId(g)).toBe('N1');
-    g = { ...g, nodes: g.nodes.map((n) => (n.id === 'N1' ? { ...n, status: 'passed' } : n)) };
-    expect(nextReadyNodeId(g)).toBe('N2');
-    g = { ...g, nodes: g.nodes.map((n) => (n.id === 'N2' ? { ...n, status: 'passed' } : n)) };
-    expect(nextReadyNodeId(g)).toBe('N3');
-    g = { ...g, nodes: g.nodes.map((n) => (n.id === 'N3' ? { ...n, status: 'passed' } : n)) };
-    expect(nextReadyNodeId(g)).toBeNull();
-    expect(allNodesTerminal(g)).toBe(true);
-  });
-});
-
-describe('continuation signal (M2.5 — signal only, no artifact)', () => {
-  test('carries handoff/re-entry flags and resume target with same autopilot_id', () => {
-    const sig = buildContinuationSignal(graph(), 'context pressure');
-    expect(sig.handoff_required).toBe(true);
-    expect(sig.re_entry_required).toBe(true);
-    expect(sig.resume.autopilot_id).toBe('orch_driver01');
-    expect(sig.resume.work_item_id).toBe('wi_driver001');
-    expect(sig.reason).toBe('context pressure');
+describe('allNodesTerminal (M2.5 — continuation stops only when nothing is left)', () => {
+  test('false while any node is non-terminal, true once all passed/failed', () => {
+    const g = graph();
+    expect(allNodesTerminal(g)).toBe(false);
+    const allPassed = {
+      ...g,
+      nodes: g.nodes.map((n) => ({ ...n, status: 'passed' as const })),
+    };
+    expect(allNodesTerminal(allPassed)).toBe(true);
   });
 });
 

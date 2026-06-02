@@ -35,7 +35,7 @@ const NODE_TRANSITIONS: Record<
   Partial<Record<NodeEvent, AutopilotNode['status']>>
 > = {
   // `retry` re-arms a running node to pending so the pending-only selector
-  // (`selectReadyNode`) re-picks it next round — a retryable/switch failure is
+  // (`selectReadyNodes`) re-picks it next round — a retryable/switch failure is
   // not terminal. Terminal failure (cap exceeded) uses `fail` → failed.
   pending: { dispatch: 'running', block: 'blocked' },
   running: {
@@ -63,15 +63,6 @@ export function nodeTransition(
 export function isNodeReady(node: AutopilotNode, byId: Map<string, AutopilotNode>): boolean {
   if (node.status !== 'pending') return false;
   return node.depends_on.every((dep) => byId.get(dep)?.status === 'passed');
-}
-
-/**
- * Select the next ready node to run (autopilot loop step 2). Returns the first
- * ready node in graph order, or null when none is runnable right now.
- */
-export function selectReadyNode(nodes: AutopilotNode[]): AutopilotNode | null {
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  return nodes.find((n) => isNodeReady(n, byId)) ?? null;
 }
 
 /**

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bootstrapAutopilot } from '~/core/autopilot-bootstrap';
-import { kindToOwner, selectReadyNode } from '~/core/autopilot-graph';
+import { kindToOwner, selectReadyNodes } from '~/core/autopilot-graph';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import { intentContract } from '~/schemas/intent';
@@ -128,14 +128,14 @@ describe('graph helpers', () => {
     expect(kindToOwner('verify')).toBe('verifier');
   });
 
-  test('selectReadyNode picks the first runnable node, respecting deps', async () => {
+  test('selectReadyNodes picks the first runnable node, respecting deps', async () => {
     const { wi, intent } = await setup('POST /pw returns 200 with a numeric score');
     const result = await bootstrapAutopilot(repo, { workItem: wi, intent, risk: safeRisk });
     if (result.status !== 'created') throw new Error('expected created');
     const nodes = result.graph.nodes;
-    expect(selectReadyNode(nodes)?.id).toBe('N1'); // design has no deps
+    expect(selectReadyNodes(nodes)[0]?.id).toBe('N1'); // design has no deps
     // mark N1 passed → N2 becomes ready
     const advanced = nodes.map((n) => (n.id === 'N1' ? { ...n, status: 'passed' as const } : n));
-    expect(selectReadyNode(advanced)?.id).toBe('N2');
+    expect(selectReadyNodes(advanced)[0]?.id).toBe('N2');
   });
 });

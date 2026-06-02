@@ -12,7 +12,7 @@ export interface AutopilotDecision {
   ts: string;
   node_id: string;
   failure_class: 'fixable' | 'wrong_approach' | 'blocked_external' | 'user_decision_needed';
-  decision: 'retry' | 'switch_approach' | 'escalate' | 'continue';
+  decision: 'retry' | 'switch_approach' | 'escalate';
   reason: string;
   attempts: { fix: number; switch: number };
 }

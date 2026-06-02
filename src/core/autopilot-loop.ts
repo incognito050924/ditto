@@ -207,7 +207,7 @@ export async function recordResult(
       event = 'retry';
       attempts = { ...node.attempts, switch: node.attempts.switch + 1 };
       break;
-    default: // escalate (and the unreachable 'continue')
+    default: // escalate
       event = cap_exceeded ? 'fail' : 'block';
       break;
   }

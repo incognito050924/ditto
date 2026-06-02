@@ -8,13 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bootstrapAutopilot } from '~/core/autopilot-bootstrap';
 import { buildDelegationPacket, decideOnFailure } from '~/core/autopilot-dispatch';
-import {
-  allNodesTerminal,
-  buildContinuationSignal,
-  mutationGate,
-  nextReadyNodeId,
-} from '~/core/autopilot-driver';
-import { buildInitialNodes, kindToOwner, selectReadyNode } from '~/core/autopilot-graph';
+import { allNodesTerminal, mutationGate } from '~/core/autopilot-driver';
+import { buildInitialNodes, kindToOwner, selectReadyNodes } from '~/core/autopilot-graph';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import { autopilotForcesContinuation } from '~/hooks/stop';
@@ -179,7 +174,7 @@ describe('M2.1b — autopilot 그래프 bootstrap (intent → graph → approval
   test('생성된 graph 가 M2.2 루프 입력으로 동작 (첫 ready 노드 선택 가능)', async () => {
     const res = await bootstrapAutopilot(tmp, { workItem: wi, intent: readyIntent(), risk: SAFE });
     if (res.status !== 'created') throw new Error('expected created');
-    expect(selectReadyNode(res.graph.nodes)?.id).toBe('N1');
+    expect(selectReadyNodes(res.graph.nodes)[0]?.id).toBe('N1');
   });
 
   test('ditto deep-interview finalize 가 bootstrapAutopilot 을 자동 호출한다 (§AC-3, wi_v04intent_autopilot_entry 2026-06-01)', async () => {
@@ -254,19 +249,19 @@ describe('M2.2 — autopilot 드라이버 ReAct 루프 (ready 선택·depends_on
 
   test('depends_on 미충족 노드는 선택되지 않는다', () => {
     const nodes = chain(); // N1(design) ← N2 ← N3
-    expect(selectReadyNode(nodes)?.id).toBe('N1'); // N2/N3 deps not passed
+    expect(selectReadyNodes(nodes)[0]?.id).toBe('N1'); // N2/N3 deps not passed
   });
 
-  test('N1 passed → N2 ready → N3 ready → 모두 passed 시 null + terminal', () => {
+  test('N1 passed → N2 ready → N3 ready → 모두 passed 시 없음 + terminal', () => {
     let nodes = chain();
     const pass = (id: string) =>
       nodes.map((n) => (n.id === id ? { ...n, status: 'passed' as const } : n));
     nodes = pass('N1');
-    expect(selectReadyNode(nodes)?.id).toBe('N2');
+    expect(selectReadyNodes(nodes)[0]?.id).toBe('N2');
     nodes = pass('N2');
-    expect(selectReadyNode(nodes)?.id).toBe('N3');
+    expect(selectReadyNodes(nodes)[0]?.id).toBe('N3');
     nodes = pass('N3');
-    expect(selectReadyNode(nodes)).toBeNull();
+    expect(selectReadyNodes(nodes)).toHaveLength(0);
     expect(allNodesTerminal({ nodes } as Autopilot)).toBe(true);
   });
 
@@ -380,33 +375,8 @@ describe('M2.4 — 노드 dispatch(6-section packet) + 실패 분류', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-describe('M2.5 — checkpoint 자동 continuation + handoff 신호 (artifact 생성은 M4)', () => {
-  // acceptance: plan→implement→verify 개입 없이 연결; context pressure/cap 시 handoff_required/
-  //             re_entry_required 신호만 남기고(같은 autopilot_id resume) continuation 멈춤.
-  test('passed 노드 후 다음 ready 노드 자동 선택 (nextReadyNodeId)', () => {
-    const nodes = buildInitialNodes(['AC-1']).map((n) =>
-      n.id === 'N1' ? { ...n, status: 'passed' as const } : n,
-    );
-    expect(nextReadyNodeId({ nodes } as Autopilot)).toBe('N2');
-  });
-
-  test('buildContinuationSignal: handoff/re_entry 신호 + 같은 autopilot_id resume(scope 불변)', async () => {
-    const res = await bootstrapAutopilot(tmp, { workItem: wi, intent: readyIntent(), risk: SAFE });
-    if (res.status !== 'created') throw new Error('expected created');
-    const sig = buildContinuationSignal(res.graph, 'context pressure');
-    expect(sig.handoff_required).toBe(true);
-    expect(sig.re_entry_required).toBe(true);
-    expect(sig.resume.autopilot_id).toBe(res.graph.autopilot_id); // 같은 id 로 이어받음
-    expect(sig.resume.work_item_id).toBe(wi.id);
-  });
-
-  test('M2.5 단계는 handoff artifact 파일을 만들지 않는다 (그것은 M4 runtime)', async () => {
-    const res = await bootstrapAutopilot(tmp, { workItem: wi, intent: readyIntent(), risk: SAFE });
-    if (res.status !== 'created') throw new Error('expected created');
-    buildContinuationSignal(res.graph, 'cap exceeded');
-    // 신호 생성은 순수 함수 — handoff.md 같은 아티팩트가 디스크에 생기면 안 된다.
-    expect(await Bun.file(join(tmp, '.ditto', 'work-items', wi.id, 'handoff.md')).exists()).toBe(
-      false,
-    );
-  });
-});
+// M2.5 의 handoff/re-entry 신호(buildContinuationSignal·nextReadyNodeId·
+// ContinuationSignal)는 호출처 0의 미배선 죽은 코드여서 삭제됨
+// (평가 보고서 §5 follow-up #6, 사용자 승인). cap 초과 시 동작은 escalate→node fail
+// →graceful stop 로 이미 실현되어 있다. checkpoint 자동 continuation 선택은 위
+// 'M2.2' 블록(selectReadyNodes)과 autopilot-driver.test.ts(allNodesTerminal)에서 검증.

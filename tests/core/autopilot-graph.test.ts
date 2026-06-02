@@ -68,7 +68,7 @@ describe('nodeTransition (G3: explicit transition table, not implicit rules)', (
   });
 
   test('retry re-arms a running node to pending (retryable failure, not terminal)', () => {
-    // A retryable/switch failure re-arms the node so selectReadyNode (pending-only)
+    // A retryable/switch failure re-arms the node so selectReadyNodes (pending-only)
     // re-picks it on the next round. Terminal failure (cap exceeded) uses `fail`.
     expect(nodeTransition('running', 'retry')).toBe('pending');
   });

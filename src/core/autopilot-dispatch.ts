@@ -102,7 +102,7 @@ export function guardChildResult(text: string): ChildResultGuard {
   return { contentful: true };
 }
 
-export type FailureDecision = 'retry' | 'switch_approach' | 'escalate' | 'continue';
+export type FailureDecision = 'retry' | 'switch_approach' | 'escalate';
 
 /**
  * Deterministic failure-decision policy (the *classification* is a judgment made
