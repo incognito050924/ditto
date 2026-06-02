@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
 import { evidenceRef } from '~/schemas/common';
+import { forwardRound, planForwardReexpansion } from './autopilot-converge';
 import {
   type DelegationPacket,
   type FailureClass,
@@ -117,6 +118,14 @@ export const recordResultPayload = z
         'Subgraph this node generated (A-3). Promoted to the graph via addNodes on a ' +
           'contentful pass; a planner/design node uses this to grow the graph past the seed.',
       ),
+    has_findings: z
+      .boolean()
+      .optional()
+      .describe(
+        'Reviewer verdict that findings remain (A-2). On a contentful review-node pass, ' +
+          'true splices a forward fix+review round (§2.4) under the convergence budget, ' +
+          'false/absent closes the loop. Ignored for non-review nodes.',
+      ),
   })
   .superRefine((value, ctx) => {
     if (value.outcome === 'fail' && value.failure_class === undefined) {
@@ -186,6 +195,70 @@ export async function recordResult(
   }
 
   if (outcome === 'pass') {
+    // Forward re-expansion (A-2 · §2.4): a contentful review node that still has
+    // findings does NOT close the loop — it splices a fix+review round *forward*
+    // (a new pair of nodes, not a back-edge to the review), governed by the
+    // convergence budget (§4.3). This is the node-*between* loop, kept distinct
+    // from generated_nodes (free-form planner growth) and attempts (node-internal
+    // retry). Only a review node opts in, and only when findings remain.
+    if (node.kind === 'review' && input.payload.has_findings === true) {
+      const plan = planForwardReexpansion({
+        reviewNode: node,
+        hasFindings: true,
+        round: forwardRound(node.id),
+        budget: graph.caps.converge_rounds,
+      });
+      if (plan.decision === 'expand') {
+        // Splice the fix+review pair before marking the review passed, mirroring
+        // A-3: a rejected splice (addNodes throws) leaves the node still running.
+        await aps.addNodes(input.workItemId, plan.nodes);
+        await aps.updateNode(input.workItemId, node.id, (n) => ({
+          ...n,
+          status: nodeTransition(n.status, 'pass'),
+          evidence_refs: input.payload.evidence_refs ?? n.evidence_refs,
+        }));
+        return {
+          node_id: node.id,
+          status: 'passed',
+          outcome: 'pass',
+          guard_contentful: true,
+          decision: null,
+          failure_class: null,
+          cap_exceeded: false,
+          reason: guardReason,
+          promoted_node_ids: plan.nodes.map((n) => n.id),
+        };
+      }
+      // escalate: convergence budget exhausted with findings still open. STOP
+      // without closing — block the node and log user_decision_needed
+      // (cap-reached ≠ converged; never a pass, §4.3). hasFindings=true rules out
+      // `close`, so this branch is the escalate case.
+      const reason = plan.decision === 'escalate' ? plan.reason : guardReason;
+      await aps.updateNode(input.workItemId, node.id, (n) => ({
+        ...n,
+        status: nodeTransition(n.status, 'block'),
+      }));
+      await aps.appendDecision(input.workItemId, {
+        ts: (input.now ?? new Date()).toISOString(),
+        node_id: node.id,
+        failure_class: 'user_decision_needed',
+        decision: 'escalate',
+        reason,
+        attempts: node.attempts,
+      });
+      return {
+        node_id: node.id,
+        status: 'blocked',
+        outcome: 'fail',
+        guard_contentful: true,
+        decision: 'escalate',
+        failure_class: 'user_decision_needed',
+        cap_exceeded: true,
+        reason,
+        promoted_node_ids: [],
+      };
+    }
+
     // Node promotion (A-3): a contentful pass may carry the subgraph this node
     // generated. Splice it *before* marking pass so a rejected splice (cycle /
     // dup / dangling — addNodes throws) leaves the node still running and

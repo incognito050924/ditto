@@ -43,6 +43,23 @@ export type ForwardReexpansion =
   | { decision: 'expand'; nodes: AutopilotNode[] }
   | { decision: 'escalate'; reason: string };
 
+// Single source of truth for the forward-node id scheme. The REVIEW marker also
+// encodes the loop's forward depth, so `forwardRound` derives `round` from a
+// node id without any extra stored state (the driver must not be trusted to keep
+// a counter — the deterministic floor reconstructs it from the graph).
+const FORWARD_FIX_MARKER = '.fix.r';
+const FORWARD_REVIEW_MARKER = '.rev.r';
+
+/**
+ * Forward-chain depth of a review node, read off its id (mirrors the id scheme in
+ * `planForwardReexpansion`): a root review has round 0; each forward re-expansion
+ * appends one REVIEW marker (`R → R.rev.r0 → R.rev.r0.rev.r1 → …`), so the marker
+ * count is the round to splice next.
+ */
+export function forwardRound(reviewNodeId: string): number {
+  return reviewNodeId.split(FORWARD_REVIEW_MARKER).length - 1;
+}
+
 function mkNode(
   id: string,
   kind: AutopilotNode['kind'],
@@ -81,8 +98,8 @@ export function planForwardReexpansion(outcome: ReviewOutcome): ForwardReexpansi
 
   // (3) Expand: one fix round then a fresh review, edges pointing only backward in
   // time (fix→reviewNode, review→fix), so the merged graph stays acyclic.
-  const fixId = `${reviewNode.id}.fix.r${round}`;
-  const reviewId = `${reviewNode.id}.rev.r${round}`;
+  const fixId = `${reviewNode.id}${FORWARD_FIX_MARKER}${round}`;
+  const reviewId = `${reviewNode.id}${FORWARD_REVIEW_MARKER}${round}`;
   const fix = mkNode(
     fixId,
     'fix',

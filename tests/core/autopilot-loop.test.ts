@@ -414,3 +414,133 @@ describe('recordResult node promotion (A-3: planner 콘텐츠 승격 — addNode
     expect((await aps.get(WI)).nodes).toHaveLength(1);
   });
 });
+
+describe('recordResult forward re-expansion (A-2: review findings → fix+review splice · §2.4/§4.3)', () => {
+  const reviewGraph = (reviewId: string, converge = 3): Autopilot =>
+    graph({
+      nodes: [
+        {
+          id: reviewId,
+          kind: 'review',
+          owner: 'reviewer',
+          purpose: 'review the change against the acceptance criteria',
+          status: 'running',
+          depends_on: [],
+          acceptance_refs: ['ac-1'],
+          evidence_refs: [],
+          attempts: { fix: 0, switch: 0 },
+        },
+      ],
+      caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: converge },
+    });
+
+  const findingsResult =
+    'reviewed the diff against ac-1; found 2 issues that must be fixed before this can close';
+
+  test('review with findings (within budget) splices a fix+review round via addNodes', async () => {
+    await seed(reviewGraph('R0'));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: { node_id: 'R0', result_text: findingsResult, outcome: 'pass', has_findings: true },
+    });
+    // the review node did its job (contentful findings) → it passes; the loop keeps
+    // going through the spliced forward round, not a back-edge to R0.
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual(['R0.fix.r0', 'R0.rev.r0']);
+    const g = await aps.get(WI);
+    expect(g.nodes.map((n) => n.id)).toEqual(['R0', 'R0.fix.r0', 'R0.rev.r0']);
+    const fix = g.nodes.find((n) => n.id === 'R0.fix.r0');
+    expect(fix?.kind).toBe('fix');
+    expect(fix?.owner).toBe('implementer');
+    expect(fix?.depends_on).toEqual(['R0']); // forward edge only
+    const rev = g.nodes.find((n) => n.id === 'R0.rev.r0');
+    expect(rev?.kind).toBe('review');
+    expect(rev?.depends_on).toEqual(['R0.fix.r0']);
+  });
+
+  test('the spliced fix node is the next dispatchable node (loop continues forward)', async () => {
+    await seed(reviewGraph('R0'));
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: { node_id: 'R0', result_text: findingsResult, outcome: 'pass', has_findings: true },
+    });
+    const next = await nextNode(repo, WI);
+    expect(next.action).toBe('spawn');
+    if (next.action === 'spawn') expect(next.node_id).toBe('R0.fix.r0');
+  });
+
+  test('review with no findings closes the loop (plain pass, no splice)', async () => {
+    await seed(reviewGraph('R0'));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'R0',
+        result_text: 'reviewed against ac-1; zero findings, the change is correct',
+        outcome: 'pass',
+        has_findings: false,
+      },
+    });
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual([]);
+    expect((await aps.get(WI)).nodes).toHaveLength(1);
+  });
+
+  test('review with findings at the convergence budget escalates (blocked, never passes)', async () => {
+    // 'R0.rev.r0' carries one forward-review marker → round 1; converge_rounds 1 ⇒ 1≥1 escalate.
+    await seed(reviewGraph('R0.rev.r0', 1));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'R0.rev.r0',
+        result_text: 'still 1 issue open after the fix round; cannot close',
+        outcome: 'pass',
+        has_findings: true,
+      },
+    });
+    expect(res.status).toBe('blocked');
+    expect(res.outcome).toBe('fail');
+    expect(res.failure_class).toBe('user_decision_needed');
+    expect(res.promoted_node_ids).toEqual([]);
+    expect((await aps.get(WI)).nodes).toHaveLength(1); // no splice past budget
+    const decisions = await aps.readDecisions(WI);
+    expect(decisions.at(-1)?.decision).toBe('escalate');
+    expect(decisions.at(-1)?.failure_class).toBe('user_decision_needed');
+  });
+
+  test('has_findings on a non-review node is ignored (normal pass path)', async () => {
+    await seed(
+      graph({
+        nodes: [
+          {
+            id: 'N1',
+            kind: 'design',
+            owner: 'planner',
+            purpose: 'plan the change',
+            status: 'running',
+            depends_on: [],
+            acceptance_refs: ['ac-1'],
+            evidence_refs: [],
+            attempts: { fix: 0, switch: 0 },
+          },
+        ],
+      }),
+    );
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text: 'planned the change against ac-1 with a 3-step plan',
+        outcome: 'pass',
+        has_findings: true,
+      },
+    });
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual([]);
+    expect((await aps.get(WI)).nodes).toHaveLength(1);
+  });
+});
