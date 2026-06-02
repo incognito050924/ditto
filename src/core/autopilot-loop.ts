@@ -45,7 +45,15 @@ export type NextNodeResult =
   | { action: 'present_plan'; reason: string }
   | { action: 'rollback'; reason: string; rolled_back_node_ids: string[] }
   | { action: 'waiting'; reason: string }
-  | { action: 'done'; reason: string };
+  // A blocked (escalated) node with nothing else runnable is a user-owned
+  // decision, not a transient wait (§4.3). Surfaced distinctly so the driver
+  // yields to the user instead of polling `waiting` forever.
+  | { action: 'blocked'; reason: string; blocked_node_ids: string[] }
+  // Graph terminal. `all_passed` is the completion *disposition*, not a verdict:
+  // graph done ≠ acceptance closed (§6.8). Completion still judges each AC with
+  // evidence; this only tells the driver completion is owed and whether it can
+  // pass. It never auto-closes an AC.
+  | { action: 'done'; reason: string; all_passed: boolean };
 
 export async function nextNode(repoRoot: string, workItemId: string): Promise<NextNodeResult> {
   const aps = new AutopilotStore(repoRoot);
@@ -64,12 +72,45 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   // serializes any same-scope wave). v0 runs one owner at a time.
   const ready = selectReadyNodes(graph.nodes);
   if (ready.length === 0) {
-    return allNodesTerminal(graph)
-      ? { action: 'done', reason: 'all nodes terminal (passed/failed)' }
-      : {
-          action: 'waiting',
-          reason: 'no ready node: dependencies unmet or a node is still running',
+    // Terminal: every node passed/failed. Surface the completion disposition —
+    // graph done is not acceptance closing (§6.8); completion judges with evidence.
+    if (allNodesTerminal(graph)) {
+      const all_passed = graph.nodes.every((n) => n.status === 'passed');
+      return {
+        action: 'done',
+        all_passed,
+        reason: all_passed
+          ? 'all nodes passed — completion judgment owed: graph done ≠ acceptance criteria closed; run completion to close each AC with the collected evidence (§6.8)'
+          : 'all nodes terminal but ≥1 node failed — completion will judge partial/fail; run completion judgment (§6.8)',
+      };
+    }
+    // Not terminal and nothing ready: a running node is transient (still working);
+    // a blocked node with nothing else runnable is an escalated, user-owned
+    // decision (§4.3) — surface it distinctly with the decision-log reason.
+    const running = graph.nodes.some((n) => n.status === 'running');
+    if (!running) {
+      const blocked = graph.nodes.filter((n) => n.status === 'blocked');
+      if (blocked.length > 0) {
+        const decisions = await aps.readDecisions(workItemId);
+        const lastReason = (id: string): string | undefined =>
+          decisions.filter((d) => d.node_id === id).at(-1)?.reason;
+        const detail = blocked
+          .map((n) => {
+            const why = lastReason(n.id);
+            return why ? `${n.id} — ${why}` : n.id;
+          })
+          .join('; ');
+        return {
+          action: 'blocked',
+          blocked_node_ids: blocked.map((n) => n.id),
+          reason: `blocked on a user-owned decision (§4.3): ${detail}`,
         };
+      }
+    }
+    return {
+      action: 'waiting',
+      reason: 'no ready node: dependencies unmet or a node is still running',
+    };
   }
   const workItem = await new WorkItemStore(repoRoot).get(workItemId);
   const { dispatch } = fileOverlapGate(

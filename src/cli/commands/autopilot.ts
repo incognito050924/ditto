@@ -182,6 +182,12 @@ const autopilotNextNode = defineCommand({
         writeHuman(`Next: ${res.action} — ${res.reason}`);
         if (res.action === 'rollback') {
           writeHuman(`  rolled_back: ${res.rolled_back_node_ids.join(', ') || '(none)'}`);
+        } else if (res.action === 'blocked') {
+          writeHuman(`  blocked:     ${res.blocked_node_ids.join(', ') || '(none)'}`);
+        } else if (res.action === 'done') {
+          writeHuman(
+            `  → run completion (${res.all_passed ? 'expect pass' : 'expect partial/fail'})`,
+          );
         }
       }
     } catch (err) {

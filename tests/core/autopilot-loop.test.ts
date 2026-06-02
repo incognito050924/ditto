@@ -162,6 +162,83 @@ describe('nextNode (loop step 1-5: select → approval → dispatch → packet)'
   });
 });
 
+describe('nextNode terminal surfacing (작은 고정: §6.8 done disposition + A-2 escalate blocked)', () => {
+  // Fix 2 (§6.8): graph `done` is NOT acceptance closing — completion judges with
+  // evidence (graph 상태 ≠ 완료 판정). `done` surfaces the disposition so the driver
+  // knows completion is owed and whether it can pass; it never auto-closes an AC.
+  test('all passed → done with all_passed=true and a completion-owed reason', async () => {
+    await seed(
+      graph({
+        nodes: buildInitialNodes(['ac-1']).map((n) => ({ ...n, status: 'passed' as const })),
+      }),
+    );
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('done');
+    if (res.action !== 'done') throw new Error('expected done');
+    expect(res.all_passed).toBe(true);
+    expect(res.reason.toLowerCase()).toContain('completion');
+  });
+
+  test('terminal with a failed node → done with all_passed=false', async () => {
+    await seed(
+      graph({
+        nodes: buildInitialNodes(['ac-1']).map((n) => ({
+          ...n,
+          status: n.id === 'N3' ? ('failed' as const) : ('passed' as const),
+        })),
+      }),
+    );
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('done');
+    if (res.action !== 'done') throw new Error('expected done');
+    expect(res.all_passed).toBe(false);
+  });
+
+  // Fix 1 (A-2 surfacing): a blocked node with nothing runnable is an escalated,
+  // user-owned decision — not a transient `waiting`. Surface it as `blocked` with
+  // the node ids and the decision-log reason that escalated it.
+  test('a blocked node with nothing runnable → action=blocked surfacing the decision (not waiting)', async () => {
+    const blockedReview = {
+      id: 'N3',
+      kind: 'review' as const,
+      owner: 'reviewer' as const,
+      purpose: 'review the change',
+      status: 'blocked' as const,
+      depends_on: [] as string[],
+      acceptance_refs: ['ac-1'],
+      evidence_refs: [],
+      attempts: { fix: 0, switch: 0 },
+    };
+    await seed(graph({ nodes: [blockedReview] }));
+    await aps.appendDecision(WI, {
+      ts: NOW.toISOString(),
+      node_id: 'N3',
+      failure_class: 'user_decision_needed',
+      decision: 'escalate',
+      reason: 'forward re-expansion budget reached with findings still open',
+      attempts: { fix: 0, switch: 0 },
+    });
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('blocked');
+    if (res.action !== 'blocked') throw new Error('expected blocked');
+    expect(res.blocked_node_ids).toEqual(['N3']);
+    expect(res.reason).toContain('N3');
+    expect(res.reason.toLowerCase()).toContain('budget'); // surfaced the decision reason
+  });
+
+  test('a running node still surfaces as waiting, not blocked (transient, in progress)', async () => {
+    await seed(
+      graph({
+        nodes: buildInitialNodes(['ac-1']).map((n) =>
+          n.id === 'N1' ? { ...n, status: 'running' as const } : n,
+        ),
+      }),
+    );
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('waiting');
+  });
+});
+
 describe('recordResult (loop step 6: G7 guard → classify → decide → persist)', () => {
   async function dispatchN1(g = graph()): Promise<void> {
     await seed(g);
