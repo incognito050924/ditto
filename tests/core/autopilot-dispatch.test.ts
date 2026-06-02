@@ -15,6 +15,7 @@ const byKind = (kind: string) => {
 };
 const implementNode = byKind('implement');
 const verifyNode = byKind('verify');
+const designNode = byKind('design'); // owner: planner
 
 const workItem = {
   id: 'wi_dispatch1',
@@ -38,6 +39,30 @@ describe('buildDelegationPacket (6-section, Context Isolation)', () => {
     const p = buildDelegationPacket(verifyNode, workItem);
     expect(p.required_tools).not.toContain('Edit');
     expect(p.must_not_do.some((m) => m.includes('read-only'))).toBe(true);
+  });
+
+  // Planner-intelligence contract (계약 우선): the planner is the graph generator
+  // (contract §2.4). Its packet must *request* a generated_nodes lifecycle
+  // subgraph so the intelligence (which nodes this task needs) is a contracted
+  // responsibility, not an ad-hoc driver choice. The acceptance/splice path is
+  // already wired (A-3 recordResult → addNodes); this closes the request side.
+  test('a planner node packet requests a generated_nodes lifecycle subgraph', () => {
+    const p = buildDelegationPacket(designNode, workItem);
+    const directive = p.must_do.find((m) => m.includes('generated_nodes'));
+    expect(directive).toBeTruthy();
+    // names the schema field and the AC mapping the planner must honor.
+    expect(directive).toContain('generated_nodes');
+    expect(directive?.toLowerCase()).toContain('acceptance');
+    // surfaces it in the expected outcome too, so done_when reflects the subgraph.
+    expect(p.expected_outcome.toLowerCase()).toContain('subgraph');
+  });
+
+  test('non-planner nodes carry no subgraph-generation directive (surgical)', () => {
+    for (const node of [implementNode, verifyNode]) {
+      const p = buildDelegationPacket(node, workItem);
+      expect(p.must_do.some((m) => m.includes('generated_nodes'))).toBe(false);
+      expect(p.expected_outcome.toLowerCase()).not.toContain('subgraph');
+    }
   });
 });
 

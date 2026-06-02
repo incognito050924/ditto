@@ -32,18 +32,36 @@ const OWNER_TOOLS: Record<AutopilotNode['owner'], string[]> = {
   'knowledge-curator': ['Read', 'Grep', 'Glob', 'Write'],
 };
 
+// Planner-intelligence contract (계약 우선 · §2.4): a planner node is the graph
+// generator, so its packet *requests* a `generated_nodes` lifecycle subgraph.
+// DITTO supplies the deterministic request + the validation floor (addNodes /
+// validateNodeAddition on splice); the LLM planner supplies which §2.2 stages the
+// task needs. The acceptance side is already wired (A-3 recordResult promotion).
+const PLANNER_GENERATE_DIRECTIVE =
+  'Emit a `generated_nodes` subgraph: pick the §2.2 lifecycle stages this task ' +
+  'actually needs (research·design·implement·review·verify·…), each node ' +
+  '{id, kind, purpose, depends_on, acceptance_refs} mapped to its acceptance ' +
+  'criteria; scale to task size (small tasks stay minimal — do not force a stage).';
+
 export function buildDelegationPacket(node: AutopilotNode, workItem: WorkItem): DelegationPacket {
+  const isPlanner = node.owner === 'planner';
   const doneWhen =
     node.acceptance_refs.length > 0
       ? `acceptance criteria satisfied with evidence: ${node.acceptance_refs.join(', ')}`
       : node.purpose;
+  // A planner closes on a generated subgraph, not just prose; surface it in the
+  // expected outcome so done_when reflects the graph-generation responsibility.
+  const expectedOutcome = isPlanner
+    ? `${doneWhen} (return the plan as a generated_nodes subgraph)`
+    : doneWhen;
   return {
     task: node.purpose,
-    expected_outcome: doneWhen,
+    expected_outcome: expectedOutcome,
     required_tools: OWNER_TOOLS[node.owner],
     must_do: [
       'Work only from this packet.',
       'Return a single result with evidence (command + exit code, file:line).',
+      ...(isPlanner ? [PLANNER_GENERATE_DIRECTIVE] : []),
       `Stop when done_when is met: ${doneWhen}.`,
     ],
     must_not_do: [
