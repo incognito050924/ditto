@@ -572,3 +572,35 @@ PoC 진행 중 형성된 편향을 배제하기 위해, **컨텍스트를 공유
 1순위 **E**(전제조건·최저비용), 2순위 **B**(최고 창발성·스키마 변경 0). 둘 다 DITTO의 fail-closed/dialectic 구조와 동형. 상세 실행은 → `codeql-ditto-integration-plan.md`.
 
 > 연구 한계: 어떤 아이디어도 구현·실행 검증 안 됨(연구·설계 범위). B의 무한루프 위험, C의 용어→tuple 매핑 정확도는 별도 PoC 필요.
+
+---
+
+## 부록 6 — C-8 PoC: dataflow → DoD·테스트 케이스 도출 (2026-06-02, 사용자 포인트1)
+
+**목적**: "DoD/테스트를 데이터 흐름 관점으로 확장"(사용자 포인트1, 보고서 C-8)이 실제로 가능한지 실증. frontend(부록3)의 codeFlow 11건을 입력으로, 테스트 명세 + DoD 술어를 결정론 도출.
+
+### 결과 — ✅ 도출 성공 (11건)
+codeFlow → 다음을 결정론으로 생성:
+- **테스트 명세** (GIVEN/WHEN/THEN): rule이 곧 위협모델 → 테스트 입력 패턴 제공
+  - `js/prototype-pollution-utility` → GIVEN `__proto__`/`constructor` 키, THEN Object.prototype 미오염
+  - `js/polynomial-redos` → GIVEN 백트래킹 유발 긴 문자열, THEN 평가시간 상한
+  - `js/remote-property-injection` → GIVEN 동적 속성 키 주입, THEN 예약 속성 거부
+- **DoD 술어**: `acceptance: "path src→sink 가 sanitizer로 차단됨"` — **11건 전부 현재 verdict=FAIL(alert 존재)**. completion contract acceptance로 그대로 투입 가능.
+
+예시 (실제 도출):
+```
+■ [js/prototype-pollution-utility]  target: packages/bpmn/src/utils/ioParameterUtils.ts
+  GIVEN 키 경로에 "__proto__"/"constructor" 포함
+  WHEN  source :246 → sink :260
+  THEN  Object.prototype 오염 없음
+  DoD   "path :246→:260 가 sanitizer로 차단됨" — verdict=FAIL
+```
+
+### 실증된 것 / 한계
+- ✅ **dataflow → DoD/테스트 명세 결정론 도출 가능** (포인트1 핵심). DoD가 "테스트 통과" 같은 빈 증거 대신 **검증 가능한 dataflow 명제**가 됨.
+- ✅ **rule = 위협모델 = 테스트 입력 패턴**. CodeQL이 "무엇을 테스트할지"를 결정론으로 지정.
+- ⚠️ **명세까지가 CodeQL 몫**. 실제 테스트 *코드 작성*은 LLM 몫(GIVEN/WHEN/THEN 명세 → 코드). 입력 패턴은 rule 기반 일반 힌트지 구체 값 자동생성은 아님.
+- ⚠️ **부수 발견 — dist/ 빌드 산출물 noise**: 11건 중 6건이 `apps/automation/dist/.../css.worker.bundle.js`(monaco 번들). **진짜 소스는 5건.** → 분석에서 `dist/`·번들 제외 필요. 단 `LGTM_INDEX_FILTERS`는 JS autobuild를 깨뜨리므로(부록4), analyze 단계 `--paths-ignore` 또는 source-root 조정으로 해결해야 함(WI-1 구현 디테일).
+
+### 결론
+포인트1(dataflow DoD/테스트)은 **명세·DoD 도출 수준에서 실증됨** → 계획서 WI-5 전제 충족. 다음 단계는 (a) dist 제외로 noise 제거, (b) 명세→테스트 코드 생성을 LLM에 위임하는 흐름 검증.
