@@ -1,0 +1,76 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2606022n3",
+  "source_request": "ditto self-dogfooding A-3: planner 콘텐츠 승격. design 노드 pass 시 generated_nodes를 addNodes로 접합 — A-1 addNodes seam의 첫 live 호출자. 현 3노드 엔진/수동 TDD로 구현·검증 가능, 승격 없으면 기존 동작 불변.",
+  "goal": "recordResult가 contentful pass 노드의 payload.generated_nodes(intent-level proposal)를 완전 노드로 매핑해 addNodes로 그래프에 접합한다 — A-1 addNodes seam의 첫 live 호출자. 접합 후 next-node가 승격된 ready 노드를 dispatch 하여 엔진이 3노드 씨앗을 넘어 노드를 생성·실행함을 보인다. generated_nodes 부재 시 기존 동작 불변.",
+  "in_scope": [
+    "nodeProposal 스키마(id/kind/purpose/depends_on/acceptance_refs) + proposalsToNodes 매퍼: owner=kindToOwner(kind), status=pending, attempts/evidence default 채움",
+    "recordResultPayload에 optional generated_nodes 추가 + recordResult가 contentful pass 시 addNodes로 접합(부재 시 동작 불변)",
+    "접합 후 next-node가 승격된 ready 노드 1개를 dispatch 함을 테스트가 shows(3노드 초과 실행 = 역설 탈출 증거)",
+    "잘못된 승격(중복 id/dangling/cycle)은 addNodes가 reject; 빈 결과는 G7로 승격 0",
+    "기존 recordResult/recordResultPayload 공개 필드 보존 + 전체 autopilot/conformance 스위트 exit 0 무회귀"
+  ],
+  "out_of_scope": [
+    "planner 지능(무슨 노드를 생성할지 결정) — LLM planner 콘텐츠는 후속",
+    "A-2 forward 재확장 live 배선(review 노드 생성 이후)",
+    "부트스트랩 씨앗 형태 변경(관찰 동작 불변 유지)",
+    "[VERIFY] owner 제작"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "proposalsToNodes 매퍼가 intent-level proposal 1개를 owner=kindToOwner(kind)·status=pending·attempts/evidence default로 채운 완전 AutopilotNode로 returns 한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "recordResult가 contentful pass 노드의 generated_nodes를 addNodes로 접합하여 그래프 노드 수가 3에서 5로 증가하고 재읽기 시 승격 노드를 contains 한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "승격 직후 next-node가 승격된 ready 노드 1개를 dispatch(action=spawn) 하여 엔진이 3노드 씨앗을 넘어 생성된 노드를 실행함을 shows 한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "generated_nodes 부재 시 recordResult가 그래프 노드 수를 3으로 보존하고(동작 불변), 잘못된 승격(중복 id 1개)은 addNodes가 throw 하여 rejects 한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "recordResultPayload 기존 필드와 recordResult 공개 시그니처가 보존되고, 기존 autopilot·conformance 테스트 스위트가 exit 0(0 실패)로 통과한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    }
+  ],
+  "unknowns": [
+    "proposal id를 planner가 명시 공급할지 자동 생성할지는 구현 시 확정(명시 공급 + addNodes 충돌 검증이 기본; 구현 세부)"
+  ],
+  "follow_up_candidates": [
+    "planner 지능: LLM이 root_goal/AC를 보고 실제 노드 서브그래프를 생성",
+    "A-2 forward 재확장 live 배선(같은 generated_nodes/addNodes 경로 재사용)",
+    "§6.8 autopilot done→work-item AC 자동 클로징",
+    "handoff changed_files 과대산출 버그"
+  ],
+  "question_policy": "ask_only_if_user_only_can_answer"
+}

@@ -1,0 +1,127 @@
+{
+  "schema_version": "0.1.0",
+  "autopilot_id": "orch_260602ivn",
+  "work_item_id": "wi_2606022n3",
+  "mode": "autopilot",
+  "root_goal": "recordResult가 contentful pass 노드의 payload.generated_nodes(intent-level proposal)를 완전 노드로 매핑해 addNodes로 그래프에 접합한다 — A-1 addNodes seam의 첫 live 호출자. 접합 후 next-node가 승격된 ready 노드를 dispatch 하여 엔진이 3노드 씨앗을 넘어 노드를 생성·실행함을 보인다. generated_nodes 부재 시 기존 동작 불변.",
+  "completion_boundary": "entire_work_item",
+  "approval_gate": {
+    "status": "not_required",
+    "source": "small_reversible_policy",
+    "approved_at": null,
+    "approved_by": null,
+    "evidence_refs": []
+  },
+  "nodes": [
+    {
+      "id": "N1",
+      "kind": "design",
+      "owner": "planner",
+      "purpose": "Plan the change against the acceptance criteria",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "file",
+          "path": ".ditto/work-items/wi_2606022n3/intent.json",
+          "summary": "5 AC + 메커니즘/지능 분리 경계"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N2",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "Implement the planned change",
+      "status": "passed",
+      "depends_on": [
+        "N1"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-graph.test.ts tests/core/autopilot-loop.test.ts",
+          "summary": "33 pass, 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "summary": "recordResult 승격 분기(splice-then-pass)"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N3",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Verify every acceptance criterion with evidence",
+      "status": "passed",
+      "depends_on": [
+        "N2"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "743 pass, 0 fail across 62 files"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome check 179 files, no errors"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    }
+  ],
+  "caps": {
+    "fix_per_node": 2,
+    "switch_per_node": 1,
+    "converge_rounds": 3
+  },
+  "continue_policy": {
+    "continue_after_approval": true,
+    "continue_after_checkpoint": true,
+    "continue_after_fixable_failure": true,
+    "ask_user_only_for_user_owned_decisions": true
+  },
+  "stop_conditions": [
+    "all_acceptance_criteria_passed_or_explicitly_closed",
+    "blocked_by_user_owned_decision",
+    "blocked_by_external_system",
+    "safety_boundary_hit"
+  ],
+  "user_interrupt_policy": "ask_only_for_user_owned_decisions"
+}

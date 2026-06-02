@@ -1,0 +1,54 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2606022n3",
+  "title": "A-3 planner 콘텐츠 승격",
+  "source_request": "ditto self-dogfooding A-3: planner 콘텐츠 승격. design 노드 pass 시 generated_nodes를 addNodes로 접합 — A-1 addNodes seam의 첫 live 호출자. 현 3노드 엔진/수동 TDD로 구현·검증 가능, 승격 없으면 기존 동작 불변.",
+  "goal": "recordResult가 contentful pass 노드의 payload.generated_nodes(intent-level proposal)를 완전 노드로 매핑해 addNodes로 그래프에 접합한다 — A-1 addNodes seam의 첫 live 호출자. 접합 후 next-node가 승격된 ready 노드를 dispatch 하여 엔진이 3노드 씨앗을 넘어 노드를 생성·실행함을 보인다. generated_nodes 부재 시 기존 동작 불변.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "proposalsToNodes 매퍼가 intent-level proposal 1개를 owner=kindToOwner(kind)·status=pending·attempts/evidence default로 채운 완전 AutopilotNode로 returns 한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "recordResult가 contentful pass 노드의 generated_nodes를 addNodes로 접합하여 그래프 노드 수가 3에서 5로 증가하고 재읽기 시 승격 노드를 contains 한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "승격 직후 next-node가 승격된 ready 노드 1개를 dispatch(action=spawn) 하여 엔진이 3노드 씨앗을 넘어 생성된 노드를 실행함을 shows 한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "generated_nodes 부재 시 recordResult가 그래프 노드 수를 3으로 보존하고(동작 불변), 잘못된 승격(중복 id 1개)은 addNodes가 throw 하여 rejects 한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "recordResultPayload 기존 필드와 recordResult 공개 시그니처가 보존되고, 기존 autopilot·conformance 테스트 스위트가 exit 0(0 실패)로 통과한다",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/schemas/autopilot.ts",
+    "src/core/autopilot-graph.ts",
+    "src/core/autopilot-loop.ts",
+    "skills/autopilot/SKILL.md",
+    "tests/core/autopilot-graph.test.ts",
+    "tests/core/autopilot-loop.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-02T09:38:19.186Z",
+  "updated_at": "2026-06-02T09:43:48.608Z"
+}

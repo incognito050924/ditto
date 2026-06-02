@@ -1,0 +1,106 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2606022n3",
+  "status": "converged",
+  "started_at": "2026-06-02T09:39:04.981Z",
+  "updated_at": "2026-06-02T09:39:04.992Z",
+  "dimensions": [
+    {
+      "id": "promotion-home",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "intelligence-vs-mechanism",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q002"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "premortem",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q003"
+      ],
+      "notes": ""
+    }
+  ],
+  "readiness": {
+    "score": 0.85,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-02T09:39:04.985Z",
+      "dimension": "promotion-home",
+      "question": "승격은 어디서 일어나는가 — recordResult 확장인가, 별도 promote-plan 스텝인가?",
+      "why_matters": "핵심 함수 회귀 위험 vs 자동 발화 신뢰성의 트레이드오프.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "recordResult 확장. generated_nodes는 optional이라 부재 시 기존 경로 완전 불변(737 테스트가 회귀 가드). 노드 결과에 승격 노드가 포함되는 것은 cohesive하고, 별도 스텝보다 자동 발화라 skill이 빠뜨릴 여지가 없다. addNodes가 이미 비순환/중복/dangling을 막으므로 추가 무결성 코드 불필요.",
+      "answer_kind": "assumption"
+    },
+    {
+      "id": "q002",
+      "asked_at": "2026-06-02T09:39:04.987Z",
+      "dimension": "intelligence-vs-mechanism",
+      "question": "이번 증분이 planner의 *지능*(무슨 노드를 만들지)까지 포함하는가?",
+      "why_matters": "부트스트랩 역설상 구동 엔진이 3노드라 지능형 planner를 지금 실행·검증할 수 없다.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "아니오. 이번 증분은 *승격 메커니즘*(intent-level proposal → 완전 노드 매핑 → addNodes 접합 → next-node가 dispatch)까지다. proposal은 수동 TDD에서 내가 planner로서 공급하고, LLM이 무슨 노드를 만들지 결정하는 지능은 후속. 메커니즘과 지능은 적용 층위가 다르다.",
+      "answer_kind": "assumption"
+    },
+    {
+      "id": "q003",
+      "asked_at": "2026-06-02T09:39:04.988Z",
+      "dimension": "premortem",
+      "question": "이 증분이 실패한다면 가장 큰 원인은?",
+      "why_matters": "되돌리기 어렵거나 회귀를 부르는 위험을 착수 전 차단.",
+      "info_gain_estimate": "medium",
+      "self_answer_attempts": [],
+      "answer": "(1) recordResult 확장이 기존 pass/fail 경로를 깨는 것 → generated_nodes optional + 기존 필드 불변 + 전체 스위트 무회귀로 가드. (2) 승격 노드가 default 3노드 경로와 충돌 → 승격은 forward 엣지로 append만, 기존 노드 id 불변(addNodes 보장). (3) 승격이 검증 없이 새는 것 → addNodes의 validateNodeAddition(중복/dangling/cycle)이 접합 전 거부. (4) 빈 결과로 가짜 승격 → G7 content 가드가 non-contentful pass를 fixable로 강등하므로 승격은 contentful pass에서만.",
+      "answer_kind": "assumption"
+    }
+  ],
+  "assumptions": [
+    {
+      "statement": "recordResult 확장. generated_nodes는 optional이라 부재 시 기존 경로 완전 불변(737 테스트가 회귀 가드). 노드 결과에 승격 노드가 포함되는 것은 cohesive하고, 별도 스텝보다 자동 발화라 skill이 빠뜨릴 여지가 없다. addNodes가 이미 비순환/중복/dangling을 막으므로 추가 무결성 코드 불필요.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q001"
+    },
+    {
+      "statement": "아니오. 이번 증분은 *승격 메커니즘*(intent-level proposal → 완전 노드 매핑 → addNodes 접합 → next-node가 dispatch)까지다. proposal은 수동 TDD에서 내가 planner로서 공급하고, LLM이 무슨 노드를 만들지 결정하는 지능은 후속. 메커니즘과 지능은 적용 층위가 다르다.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q002"
+    },
+    {
+      "statement": "(1) recordResult 확장이 기존 pass/fail 경로를 깨는 것 → generated_nodes optional + 기존 필드 불변 + 전체 스위트 무회귀로 가드. (2) 승격 노드가 default 3노드 경로와 충돌 → 승격은 forward 엣지로 append만, 기존 노드 id 불변(addNodes 보장). (3) 승격이 검증 없이 새는 것 → addNodes의 validateNodeAddition(중복/dangling/cycle)이 접합 전 거부. (4) 빈 결과로 가짜 승격 → G7 content 가드가 non-contentful pass를 fixable로 강등하므로 승격은 contentful pass에서만.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q003"
+    }
+  ],
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 3
+  }
+}
