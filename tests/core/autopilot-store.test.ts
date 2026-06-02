@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildInitialNodes } from '~/core/autopilot-graph';
 import { AutopilotStore } from '~/core/autopilot-store';
-import type { Autopilot } from '~/schemas/autopilot';
+import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
 
 let repo: string;
 let store: AutopilotStore;
@@ -82,6 +82,68 @@ describe('AutopilotStore', () => {
       err = e;
     }
     expect((err as Error)?.message).toContain('changed node id');
+  });
+
+  const extraNode = (id: string, depends_on: string[]): AutopilotNode => ({
+    id,
+    kind: 'implement',
+    owner: 'implementer',
+    purpose: 'p',
+    status: 'pending',
+    depends_on,
+    acceptance_refs: [],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  });
+
+  test('addNodes appends and persists via the store (3 → 4 nodes)', async () => {
+    await store.write(WI, graph());
+    await store.addNodes(WI, [extraNode('N4', ['N3'])]);
+    const read = await store.get(WI);
+    expect(read.nodes).toHaveLength(4);
+    expect(read.nodes.find((n) => n.id === 'N4')?.depends_on).toEqual(['N3']);
+  });
+
+  test('>3-node custom subgraph round-trips (re-read deep-equals merged)', async () => {
+    await store.write(WI, graph());
+    const added = await store.addNodes(WI, [extraNode('N4', ['N3']), extraNode('N5', ['N4'])]);
+    const read = await store.get(WI);
+    expect(read.nodes).toHaveLength(5);
+    expect(read.nodes).toEqual(added.nodes);
+  });
+
+  test('addNodes throws on a duplicate id (existing node ids stay stable)', async () => {
+    await store.write(WI, graph());
+    let err: unknown;
+    try {
+      await store.addNodes(WI, [extraNode('N1', [])]);
+    } catch (e) {
+      err = e;
+    }
+    expect((err as Error)?.message).toContain('duplicate node id');
+    expect((await store.get(WI)).nodes).toHaveLength(3);
+  });
+
+  test('addNodes throws on a dangling depends_on', async () => {
+    await store.write(WI, graph());
+    let err: unknown;
+    try {
+      await store.addNodes(WI, [extraNode('N4', ['Nx'])]);
+    } catch (e) {
+      err = e;
+    }
+    expect((err as Error)?.message).toContain('dangling depends_on');
+  });
+
+  test('addNodes throws on a cycle-introducing addition', async () => {
+    await store.write(WI, graph());
+    let err: unknown;
+    try {
+      await store.addNodes(WI, [extraNode('N4', ['N5']), extraNode('N5', ['N4'])]);
+    } catch (e) {
+      err = e;
+    }
+    expect((err as Error)?.message).toContain('cycle');
   });
 
   test('decisions log is append-only', async () => {

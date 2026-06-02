@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { type Autopilot, type AutopilotNode, autopilot } from '~/schemas/autopilot';
+import { validateNodeAddition } from './autopilot-graph';
 import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
 
 /**
@@ -65,6 +66,21 @@ export class AutopilotStore {
     });
     if (!found) throw new Error(`node ${nodeId} not found in autopilot graph for ${workItemId}`);
     return writeJson(this.graphPath(workItemId), autopilot, { ...graph, nodes });
+  }
+
+  /**
+   * Append one or more schema-valid nodes to the graph (A-1). The integrity gate
+   * (`validateNodeAddition`) rejects duplicate id / dangling depends_on / cycle
+   * *before* any write, so existing node ids stay byte-identical. The final
+   * `writeJson` re-validates the whole merged graph against the schema.
+   */
+  async addNodes(workItemId: string, newNodes: AutopilotNode[]): Promise<Autopilot> {
+    const graph = await this.get(workItemId);
+    validateNodeAddition(graph.nodes, newNodes);
+    return writeJson(this.graphPath(workItemId), autopilot, {
+      ...graph,
+      nodes: [...graph.nodes, ...newNodes],
+    });
   }
 
   async appendDecision(workItemId: string, decision: AutopilotDecision): Promise<void> {
