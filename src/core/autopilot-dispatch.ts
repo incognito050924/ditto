@@ -30,7 +30,23 @@ const OWNER_TOOLS: Record<AutopilotNode['owner'], string[]> = {
   architect: ['Read', 'Grep', 'Glob'],
   'playwright-e2e': ['Read', 'Grep', 'Glob', 'Bash'],
   'knowledge-curator': ['Read', 'Grep', 'Glob', 'Write'],
+  // [VERIFY] lifecycle owners (§2.2). security-reviewer/retrospective are read-only
+  // analysis (run checks, no mutation); refactorer mutates code (Tidy First) so it
+  // carries Edit/Write — which is also what marks it approval-gated (isMutatingOwner).
+  'security-reviewer': ['Read', 'Grep', 'Glob', 'Bash'],
+  refactorer: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash'],
+  retrospective: ['Read', 'Grep', 'Glob', 'Bash'],
 };
+
+/**
+ * An owner mutates the workspace iff its toolset grants Edit. Deriving the
+ * mutating signal from the one toolset table keeps the approval gate and the
+ * packet's tools from ever drifting apart (gate ↔ tools consistency): adding a
+ * mutating owner is a single edit here, not two lists to keep in sync.
+ */
+export function isMutatingOwner(owner: AutopilotNode['owner']): boolean {
+  return OWNER_TOOLS[owner].includes('Edit');
+}
 
 // Planner-intelligence contract (계약 우선 · §2.4): a planner node is the graph
 // generator, so its packet *requests* a `generated_nodes` lifecycle subgraph.
@@ -67,7 +83,7 @@ export function buildDelegationPacket(node: AutopilotNode, workItem: WorkItem): 
     must_not_do: [
       "Do not assume the orchestrator's hypotheses or other nodes' internal state (Context Isolation).",
       'Do not grow or shrink the goal scope; no unrequested refactors or extra features.',
-      ...(node.owner === 'implementer' ? [] : ['Do not mutate files (read-only role).']),
+      ...(isMutatingOwner(node.owner) ? [] : ['Do not mutate files (read-only role).']),
     ],
     context: {
       work_item_id: workItem.id,

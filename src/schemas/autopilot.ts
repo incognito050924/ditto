@@ -2,7 +2,23 @@ import { z } from 'zod';
 import { autopilotId, evidenceRef, isoDateTime, schemaVersion, workItemId } from './common';
 
 export const nodeKind = z
-  .enum(['research', 'design', 'implement', 'review', 'verify', 'fix', 'e2e', 'docs', 'knowledge'])
+  .enum([
+    'research',
+    'design',
+    'implement',
+    'review',
+    'verify',
+    'fix',
+    'e2e',
+    'docs',
+    'knowledge',
+    // [VERIFY] lifecycle kinds, now wired to dedicated owners (contract §2.2).
+    // `cleanup` stays unwired on purpose: it is deterministic git/temp work, so it
+    // belongs to a driver step (+irreversible-git approval gate), not an LLM owner.
+    'security',
+    'refactor',
+    'retro',
+  ])
   .describe('Kind of work a node represents');
 
 export const nodeOwner = z
@@ -15,6 +31,11 @@ export const nodeOwner = z
     'architect',
     'playwright-e2e',
     'knowledge-curator',
+    // [VERIFY] lifecycle owners (contract §2.2): a dedicated deep security pass,
+    // a Tidy-First restructurer (mutating), and a retrospective writer.
+    'security-reviewer',
+    'refactorer',
+    'retrospective',
   ])
   .describe('Subagent role that owns the node');
 

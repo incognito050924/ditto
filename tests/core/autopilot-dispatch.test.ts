@@ -3,8 +3,10 @@ import {
   buildDelegationPacket,
   decideOnFailure,
   guardChildResult,
+  isMutatingOwner,
 } from '~/core/autopilot-dispatch';
 import { buildInitialNodes } from '~/core/autopilot-graph';
+import type { AutopilotNode } from '~/schemas/autopilot';
 import type { WorkItem } from '~/schemas/work-item';
 
 const nodes = buildInitialNodes(['ac-1', 'ac-2']);
@@ -62,6 +64,41 @@ describe('buildDelegationPacket (6-section, Context Isolation)', () => {
       const p = buildDelegationPacket(node, workItem);
       expect(p.must_do.some((m) => m.includes('generated_nodes'))).toBe(false);
       expect(p.expected_outcome.toLowerCase()).not.toContain('subgraph');
+    }
+  });
+
+  // [VERIFY] lifecycle owners: a refactor node mutates code (Tidy First) so it is
+  // approval-gated like the implementer; security/retro are read-only analysis.
+  // The mutating signal is derived from the owner's toolset (Edit ⇒ mutates), so
+  // the approval gate and the packet's tools can never drift apart.
+  const node = (owner: AutopilotNode['owner'], kind: AutopilotNode['kind']): AutopilotNode => ({
+    id: 'NX',
+    kind,
+    owner,
+    purpose: `${kind} the change`,
+    status: 'pending',
+    depends_on: [],
+    acceptance_refs: ['ac-1'],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  });
+
+  test('a refactor node is mutating: gets Edit/Write and no read-only guard', () => {
+    const p = buildDelegationPacket(node('refactorer', 'refactor'), workItem);
+    expect(p.required_tools).toContain('Edit');
+    expect(p.must_not_do.some((m) => m.includes('read-only'))).toBe(false);
+    expect(isMutatingOwner('refactorer')).toBe(true);
+  });
+
+  test('security and retro nodes are read-only owners', () => {
+    for (const owner of ['security-reviewer', 'retrospective'] as const) {
+      const p = buildDelegationPacket(
+        node(owner, owner === 'retrospective' ? 'retro' : 'security'),
+        workItem,
+      );
+      expect(p.required_tools).not.toContain('Edit');
+      expect(p.must_not_do.some((m) => m.includes('read-only'))).toBe(true);
+      expect(isMutatingOwner(owner)).toBe(false);
     }
   });
 });

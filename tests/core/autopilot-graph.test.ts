@@ -2,12 +2,27 @@ import { describe, expect, test } from 'bun:test';
 import {
   buildInitialNodes,
   fileOverlapGate,
+  kindToOwner,
   nodeTransition,
   proposalsToNodes,
   selectReadyNodes,
   validateNodeAddition,
 } from '~/core/autopilot-graph';
 import type { AutopilotNode } from '~/schemas/autopilot';
+
+describe('kindToOwner ([VERIFY] lifecycle owners wired: security · refactor · retro)', () => {
+  test('the newly-wired [VERIFY] kinds map to their dedicated owners', () => {
+    expect(kindToOwner('security')).toBe('security-reviewer');
+    expect(kindToOwner('refactor')).toBe('refactorer');
+    expect(kindToOwner('retro')).toBe('retrospective');
+  });
+
+  test('the pre-existing kind→owner mappings are unchanged', () => {
+    expect(kindToOwner('design')).toBe('planner');
+    expect(kindToOwner('implement')).toBe('implementer');
+    expect(kindToOwner('review')).toBe('reviewer');
+  });
+});
 
 describe('selectReadyNodes (the candidate concurrent wave)', () => {
   test('returns every pending node whose deps have passed', () => {

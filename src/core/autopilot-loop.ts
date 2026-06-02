@@ -9,6 +9,7 @@ import {
   buildDelegationPacket,
   decideOnFailure,
   guardChildResult,
+  isMutatingOwner,
 } from './autopilot-dispatch';
 import { allNodesTerminal, mutationGate, rollbackOnRejection } from './autopilot-driver';
 import {
@@ -36,7 +37,7 @@ import { WorkItemStore } from './work-item-store';
  * graph and rolls back in-flight work regardless of which node is next.
  */
 function isMutatingNode(node: AutopilotNode): boolean {
-  return node.owner === 'implementer';
+  return isMutatingOwner(node.owner);
 }
 
 export type NextNodeResult =
