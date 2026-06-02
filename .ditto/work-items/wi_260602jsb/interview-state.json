@@ -1,0 +1,106 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260602jsb",
+  "status": "converged",
+  "started_at": "2026-06-02T10:04:52.118Z",
+  "updated_at": "2026-06-02T10:04:52.129Z",
+  "dimensions": [
+    {
+      "id": "scope",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": "A-2는 이미 구현·테스트된 순수 planner planForwardReexpansion을 recordResult의 live 경로에 배선한다. review 노드가 findings(has_findings=true) 신고 시 fix+review 라운드를 addNodes로 접합. 부트스트랩 씨앗/스키마 형태 변경 없음."
+    },
+    {
+      "id": "mechanism",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q002"
+      ],
+      "notes": "A-3와 동일한 addNodes 접합 경로 재사용. round는 review 노드 id의 forward 마커(.rev.r) 수로 결정론적 도출(드라이버 카운터 불신). budget=caps.converge_rounds(default 3)."
+    },
+    {
+      "id": "escalation",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q003"
+      ],
+      "notes": "budget 소진 시 노드를 blocked로 전이 + decision 로그 user_decision_needed/escalate. 닫지 않음(cap-reached ≠ converged, §4.3). 접합 0. review 외 kind는 has_findings 무시(계약 §2.4 review 한정)."
+    }
+  ],
+  "readiness": {
+    "score": 0.9,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-02T10:04:52.122Z",
+      "dimension": "scope",
+      "question": "A-2 증분의 변경 표면은 정확히 무엇인가?",
+      "why_matters": "범위가 좁아야 외과적 변경과 무회귀를 보장한다. planForwardReexpansion은 이미 존재하므로 배선만이 범위다.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "recordResultPayload에 optional has_findings 추가 + recordResult가 contentful review pass에서 planForwardReexpansion(expand→addNodes, escalate→blocked)을 호출. converge.ts에 forwardRound 도출 추가. 순수 planner와 스키마는 불변.",
+      "answer_kind": "assumption"
+    },
+    {
+      "id": "q002",
+      "asked_at": "2026-06-02T10:04:52.124Z",
+      "dimension": "mechanism",
+      "question": "forward 라운드 수(round)와 budget은 어디서 오는가?",
+      "why_matters": "수렴 종료는 budget(§4.3)이 지배해야 한다. round를 에이전트가 공급하면 deterministic floor가 무너진다.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "round = forwardRound(node.id) = id의 .rev.r 마커 수(그래프 상태에서 도출). budget = caps.converge_rounds. round≥budget이면 escalate.",
+      "answer_kind": "assumption"
+    },
+    {
+      "id": "q003",
+      "asked_at": "2026-06-02T10:04:52.125Z",
+      "dimension": "escalation",
+      "question": "budget 소진(round≥budget) 시 노드 상태는 어떻게 처리하는가?",
+      "why_matters": "§4.3은 budget 소진이 절대 pass로 닫히면 안 된다고 못박는다. 잘못 처리하면 미수렴이 완료로 위장된다.",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "review 노드를 blocked로 전이(passed 아님)하고 escalate·user_decision_needed를 decision 로그에 append. 새 노드 접합 없음. 비-review 노드의 has_findings는 무시.",
+      "answer_kind": "assumption"
+    }
+  ],
+  "assumptions": [
+    {
+      "statement": "recordResultPayload에 optional has_findings 추가 + recordResult가 contentful review pass에서 planForwardReexpansion(expand→addNodes, escalate→blocked)을 호출. converge.ts에 forwardRound 도출 추가. 순수 planner와 스키마는 불변.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q001"
+    },
+    {
+      "statement": "round = forwardRound(node.id) = id의 .rev.r 마커 수(그래프 상태에서 도출). budget = caps.converge_rounds. round≥budget이면 escalate.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q002"
+    },
+    {
+      "statement": "review 노드를 blocked로 전이(passed 아님)하고 escalate·user_decision_needed를 decision 로그에 append. 새 노드 접합 없음. 비-review 노드의 has_findings는 무시.",
+      "label": "hypothesis",
+      "confidence": "medium",
+      "because_no_answer_to": "q003"
+    }
+  ],
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 3
+  }
+}
