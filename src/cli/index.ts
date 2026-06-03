@@ -8,6 +8,7 @@ import { contextCommand } from './commands/context';
 import { deepInterviewCommand } from './commands/deep-interview';
 import { doctorCommand } from './commands/doctor';
 import { e2eCommand } from './commands/e2e';
+import { fitnessCommand } from './commands/fitness';
 import { impactCommand } from './commands/impact';
 import { runCommand } from './commands/run';
 import { verifyCommand } from './commands/verify';
@@ -32,6 +33,7 @@ const main = defineCommand({
     'acg-review': acgReviewCommand,
     codeql: codeqlCommand,
     impact: impactCommand,
+    fitness: fitnessCommand,
   },
 });
 
