@@ -164,6 +164,9 @@ export function proposalsToNodes(proposals: NodeProposal[]): AutopilotNode[] {
     acceptance_refs: p.acceptance_refs,
     evidence_refs: [],
     attempts: { fix: 0, switch: 0 },
+    // Carry the optional planner variant hint through promotion (omit when absent
+    // so the field stays undefined rather than an explicit `undefined`).
+    ...(p.agent_hint !== undefined ? { agent_hint: p.agent_hint } : {}),
   }));
 }
 

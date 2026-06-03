@@ -181,6 +181,11 @@ const autopilotNextNode = defineCommand({
         writeHuman(`  task:       ${res.packet.task}`);
         writeHuman(`  done_when:  ${res.packet.context.done_when}`);
         writeHuman(`  file_scope: ${res.packet.context.file_scope.join(', ') || '(none)'}`);
+      } else if (res.action === 'spawn_wave') {
+        writeHuman(`Next: spawn wave (${res.spawns.length} parallel nodes)`);
+        for (const s of res.spawns) {
+          writeHuman(`  - ${s.owner} on ${s.node_id}: ${s.packet.task}`);
+        }
       } else {
         writeHuman(`Next: ${res.action} — ${res.reason}`);
         if (res.action === 'rollback') {

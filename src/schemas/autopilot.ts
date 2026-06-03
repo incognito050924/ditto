@@ -84,6 +84,10 @@ export const autopilotNode = z
     attempts: z
       .object({ fix: z.number().int().nonnegative(), switch: z.number().int().nonnegative() })
       .default({ fix: 0, switch: 0 }),
+    // Optional planner suggestion of a specialized variant name. Late binding:
+    // it only orders/ensures that variant in the dispatch candidates; the driver
+    // still makes the final selection. Survives promotion from nodeProposal.
+    agent_hint: z.string().optional(),
   })
   .describe('One node in the autopilot graph');
 
@@ -94,6 +98,10 @@ export const nodeProposal = z
     purpose: z.string().min(1),
     depends_on: z.array(z.string()).default([]),
     acceptance_refs: z.array(z.string()).default([]),
+    // Optional: a planner MAY suggest a specialized variant for this node. The
+    // hint is late-bound — it only orders the dispatch candidates; the driver
+    // still selects. Copied onto the promoted node by proposalsToNodes.
+    agent_hint: z.string().optional(),
   })
   .describe(
     'Intent-level node a planner emits (A-3). The mechanical fields (owner/status/' +

@@ -41,8 +41,18 @@ function isMutatingNode(node: AutopilotNode): boolean {
   return isMutatingOwner(node.owner);
 }
 
+export type WaveSpawn = {
+  node_id: string;
+  owner: AutopilotNode['owner'];
+  packet: DelegationPacket;
+};
+
 export type NextNodeResult =
   | { action: 'spawn'; node_id: string; owner: AutopilotNode['owner']; packet: DelegationPacket }
+  // 2+ independent ready nodes (file-overlap-gate-admitted, non-driver, and
+  // either non-mutating or already past the approval gate). The driver spawns
+  // them in parallel. The single-ready path keeps the `spawn` shape unchanged.
+  | { action: 'spawn_wave'; spawns: WaveSpawn[] }
   | { action: 'present_plan'; reason: string }
   | { action: 'rollback'; reason: string; rolled_back_node_ids: string[] }
   | { action: 'waiting'; reason: string }
@@ -120,7 +130,64 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   const { dispatch } = fileOverlapGate(
     ready.map((n) => ({ id: n.id, file_scope: workItem.changed_files })),
   );
-  const chosen = ready.find((n) => n.id === dispatch[0]?.id);
+  // The file-overlap-gate-admitted wave (nodes whose file_scope is mutually
+  // disjoint), mapped back to graph nodes in admit order.
+  const admitted = dispatch
+    .map((d) => ready.find((n) => n.id === d.id))
+    .filter((n): n is AutopilotNode => n !== undefined);
+  if (admitted.length === 0) {
+    return { action: 'waiting', reason: 'all ready nodes deferred by the file-overlap gate' };
+  }
+
+  // A node may run in a *parallel* wave only if it neither needs special
+  // single-node handling (the `driver` cleanup pseudo-owner, which has no LLM to
+  // spawn) nor is gated (a mutating node still behind the approval gate). When in
+  // doubt, fall back to the conservative single-node path.
+  const gate = mutationGate(graph);
+  const isWaveEligible = (n: AutopilotNode): boolean =>
+    n.owner !== 'driver' && (!isMutatingNode(n) || gate.allowed);
+  // F1: file_scope is the shared workItem.changed_files (often empty at implement
+  // time), so the file-overlap gate can't actually keep two mutating nodes off the
+  // same real files. To preserve the no-same-file-concurrency invariant, a parallel
+  // wave admits AT MOST ONE mutating node; any further mutating node is dropped from
+  // this wave (it stays pending and is picked up on a later next-node call). Keep
+  // every eligible non-mutating node, and the first eligible mutating node.
+  let mutatingAdmitted = false;
+  const waveEligible = admitted.filter((n) => {
+    if (!isWaveEligible(n)) return false;
+    if (!isMutatingNode(n)) return true;
+    if (mutatingAdmitted) return false;
+    mutatingAdmitted = true;
+    return true;
+  });
+
+  if (waveEligible.length >= 2) {
+    const catalog = await loadVariantCatalog(repoRoot);
+    const spawns: WaveSpawn[] = [];
+    for (const node of waveEligible) {
+      // Dispatch each admitted node: pending → running via the explicit
+      // transition table, persisted — same as the single-node path.
+      await aps.updateNode(workItemId, node.id, (n) => ({
+        ...n,
+        status: nodeTransition(n.status, 'dispatch'),
+      }));
+      const candidates = selectVariantCandidates(
+        catalog,
+        node.owner,
+        workItem.changed_files,
+        node.agent_hint,
+      );
+      spawns.push({
+        node_id: node.id,
+        owner: node.owner,
+        packet: buildDelegationPacket(node, workItem, candidates),
+      });
+    }
+    return { action: 'spawn_wave', spawns };
+  }
+
+  // Single-node path (byte-for-byte unchanged): the first admitted node.
+  const chosen = admitted[0];
   if (!chosen) {
     return { action: 'waiting', reason: 'all ready nodes deferred by the file-overlap gate' };
   }
@@ -142,10 +209,10 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
     };
   }
 
-  // Approval gate applies only before a mutating node (contract §5.3).
-  if (isMutatingNode(chosen)) {
-    const gate = mutationGate(graph);
-    if (!gate.allowed) return { action: 'present_plan', reason: gate.reason };
+  // Approval gate applies only before a mutating node (contract §5.3). Reuses the
+  // `gate` computed above for the wave-eligibility check (same `graph`).
+  if (isMutatingNode(chosen) && !gate.allowed) {
+    return { action: 'present_plan', reason: gate.reason };
   }
 
   // Dispatch: pending → running through the explicit transition table, persisted.
@@ -158,7 +225,12 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   // of the fixed owner. With no `.ditto/agents/` the catalog is empty, so
   // candidates is [] and behavior is unchanged (ac-4).
   const catalog = await loadVariantCatalog(repoRoot);
-  const candidates = selectVariantCandidates(catalog, chosen.owner, workItem.changed_files);
+  const candidates = selectVariantCandidates(
+    catalog,
+    chosen.owner,
+    workItem.changed_files,
+    chosen.agent_hint,
+  );
   return {
     action: 'spawn',
     node_id: chosen.id,

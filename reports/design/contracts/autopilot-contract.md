@@ -98,7 +98,9 @@ autopilot은 linear phase list가 아니라 **작업 그래프**다(메인 §5.3
 
 ### 3.1 드라이버 정체성
 
-드라이버는 **main agent가 실행하는 `autopilot` skill**이다(§3.4). **"orchestrator, not implementer"**(Sisyphus 정체성, `oh-my-openagent.md`). content(설계·코드·리뷰·문서)를 직접 생성하지 않는다 — 다음 노드 선택, stage subagent spawn(1-레벨), evidence 종합, 실패 분류·결정, stop 평가만 한다. content는 owner 에이전트의 몫이다.
+드라이버는 **main agent가 실행하는 `autopilot` skill**이다(§3.4). **"orchestrator, not implementer"**(Sisyphus 정체성, `oh-my-openagent.md`). content(설계·코드·리뷰·문서)를 직접 생성하지 않는다 — 다음 노드(들) 선택, stage subagent spawn(1-레벨), evidence 종합, 실패 분류·결정, stop 평가만 한다. content는 owner 에이전트의 몫이다. 이 select/spawn/classify/evaluate 정체성은 단일 owner든 병렬 wave든 불변이다 — 드라이버는 어느 경우에도 content를 생성하지 않는다.
+
+**단일 owner가 아니라 wave를 dispatch한다(다중 owner 동시 발사).** `nextNode`는 ready 노드들에 file-overlap gate를 적용한 뒤 인가된 wave를 반환한다. file_scope가 서로 disjoint한 ready 노드가 2개 이상이면 이들을 동시에 dispatch하고 병렬 spawn한다(`spawn_wave`); 인가된 노드가 하나면 기존 단일 `spawn` 모양을 그대로 유지한다(하위 호환). 단, `cleanup`(`driver` pseudo-owner) 노드와 승인 게이트가 안 열린 mutating 노드는 wave에 접지 않고 단일-노드 경로로만 처리한다(§2.2·§5.3) — 전자는 spawn할 LLM이 없는 결정적 스텝이고, 후자는 승인 전 mutation 금지 불변식(§2.3) 때문이다. file-overlap 직렬화 게이트(§3.3·§5.3)는 같은 파일을 쓰는 두 owner가 동시에 도는 것을 여전히 막는다.
 
 **전용 subagent가 아닌 이유.** subagent는 subagent를 spawn 못 하므로 spawn 루프는 main agent에만 살 수 있다(§3.4). 그래서 v0 orchestrator는 전용 subagent가 아니라 main이 `autopilot` skill로 구동하는 role이며, 주류 하네스(Sisyphus=primary, OMC Ralph)와 일치한다. 결정 로직을 별도 결정자 subagent로 떼는 HANNES harness식 분리는 future refinement로 보존한다(§3.5).
 

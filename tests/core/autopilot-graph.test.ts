@@ -135,6 +135,21 @@ describe('proposalsToNodes (A-3: intent-level proposal → full node)', () => {
     expect(n?.evidence_refs).toEqual([]);
     expect(n?.depends_on).toEqual(['N1']);
     expect(n?.acceptance_refs).toEqual(['ac-1']);
+    expect(n?.agent_hint).toBeUndefined(); // absent on the proposal → absent on the node
+  });
+
+  test('carries an optional agent_hint from the proposal onto the promoted node', () => {
+    const nodes = proposalsToNodes([
+      {
+        id: 'G2',
+        kind: 'implement',
+        purpose: 'specialized impl',
+        depends_on: [],
+        acceptance_refs: ['ac-2'],
+        agent_hint: 'sql-implementer',
+      },
+    ]);
+    expect(nodes[0]?.agent_hint).toBe('sql-implementer');
   });
 });
 

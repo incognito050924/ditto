@@ -787,3 +787,122 @@ describe('recordResult forward re-expansion (A-2: review findings → fix+review
     expect((await aps.get(WI)).nodes).toHaveLength(1);
   });
 });
+
+describe('nextNode parallel wave (ac-3: spawn the whole file-overlap-admitted wave)', () => {
+  // file_scope per node comes from workItem.changed_files (loop.ts). An empty
+  // changed_files makes every node's scope disjoint (empty claims nothing), so the
+  // file-overlap gate admits the whole ready wave.
+  const node = (
+    id: string,
+    kind: 'research' | 'implement' | 'cleanup',
+    owner: 'researcher' | 'implementer' | 'driver',
+    depends_on: string[] = [],
+  ) => ({
+    id,
+    kind,
+    owner,
+    purpose: `${kind} ${id}`,
+    status: 'pending' as const,
+    depends_on,
+    acceptance_refs: ['ac-1'],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  });
+
+  beforeEach(async () => {
+    // disjoint scopes for every node — admit the whole wave
+    await wis.update(WI, (w) => ({ ...w, changed_files: [] }));
+  });
+
+  test('2 disjoint ready non-mutating nodes → spawn_wave with both dispatched', async () => {
+    await seed(
+      graph({
+        nodes: [node('R1', 'research', 'researcher'), node('R2', 'research', 'researcher')],
+      }),
+    );
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('spawn_wave');
+    if (res.action !== 'spawn_wave') throw new Error('expected spawn_wave');
+    expect(res.spawns.map((s) => s.node_id).sort()).toEqual(['R1', 'R2']);
+    expect(res.spawns.every((s) => s.owner === 'researcher')).toBe(true);
+    expect(res.spawns.every((s) => s.packet.task.length > 0)).toBe(true);
+    // both dispatched to running, persisted
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'R1')?.status).toBe('running');
+    expect(after.nodes.find((n) => n.id === 'R2')?.status).toBe('running');
+  });
+
+  test('1 ready node → single spawn (unchanged), node running', async () => {
+    await seed(graph({ nodes: [node('R1', 'research', 'researcher')] }));
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('spawn');
+    if (res.action !== 'spawn') throw new Error('expected spawn');
+    expect(res.node_id).toBe('R1');
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'R1')?.status).toBe('running');
+  });
+
+  test('a driver (cleanup) node is not folded into a wave — single cleanup path', async () => {
+    await seed(
+      graph({
+        nodes: [node('C1', 'cleanup', 'driver'), node('R2', 'research', 'researcher')],
+      }),
+    );
+    const res = await nextNode(repo, WI);
+    // only R2 is wave-eligible (driver excluded) → fall back to single-node path,
+    // and the first admitted node (C1) is the deterministic cleanup step.
+    expect(res.action).toBe('cleanup');
+    if (res.action !== 'cleanup') throw new Error('expected cleanup');
+    expect(res.node_id).toBe('C1');
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'R2')?.status).toBe('pending');
+  });
+
+  test('F1: 2 approved mutating nodes are NOT both dispatched in one wave (≤1 mutating per wave)', async () => {
+    // Both implementer nodes are otherwise wave-eligible (approval allowed, empty
+    // changed_files → disjoint scopes). file_scope can't actually separate their real
+    // writes, so the wave admits at most one mutating node; the other stays pending.
+    await seed(
+      graph({
+        approval_gate: {
+          status: 'approved',
+          source: 'user',
+          approved_at: NOW.toISOString(),
+          approved_by: 'user',
+          evidence_refs: [],
+        },
+        nodes: [node('I1', 'implement', 'implementer'), node('I2', 'implement', 'implementer')],
+      }),
+    );
+    const res = await nextNode(repo, WI);
+    // only one mutating node is eligible → single spawn path, the other stays pending.
+    expect(res.action).toBe('spawn');
+    if (res.action !== 'spawn') throw new Error('expected spawn');
+    const after = await aps.get(WI);
+    const running = after.nodes.filter((n) => n.status === 'running');
+    expect(running).toHaveLength(1); // at most one mutating node dispatched
+    expect(after.nodes.filter((n) => n.status === 'pending')).toHaveLength(1);
+  });
+
+  test('approval-gated mutating nodes are not folded into a wave — single present_plan path', async () => {
+    await seed(
+      graph({
+        approval_gate: {
+          status: 'pending',
+          source: null,
+          approved_at: null,
+          approved_by: null,
+          evidence_refs: [],
+        },
+        nodes: [node('I1', 'implement', 'implementer'), node('I2', 'implement', 'implementer')],
+      }),
+    );
+    const res = await nextNode(repo, WI);
+    // both mutating + gate pending → neither wave-eligible → single-node path,
+    // which surfaces the approval gate rather than dispatching.
+    expect(res.action).toBe('present_plan');
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'I1')?.status).toBe('pending');
+    expect(after.nodes.find((n) => n.id === 'I2')?.status).toBe('pending');
+  });
+});

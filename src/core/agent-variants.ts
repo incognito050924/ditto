@@ -42,13 +42,19 @@ export async function loadVariantCatalog(repoRoot: string): Promise<AgentVariant
  * Deterministic, pure candidate filter. Keep variants whose role equals the
  * chosen owner AND (match is empty OR some file in scope matches some glob).
  * 0 matches → empty array (ac-2).
+ *
+ * An optional planner `hint` (late binding): if a variant with that name exists
+ * in the (already filtered) candidates, it is moved FIRST so the driver sees the
+ * suggestion at the head of the list. The hint never selects and never crashes —
+ * a hint absent from the catalog is ignored, and selection stays the driver's job.
  */
 export function selectVariantCandidates(
   catalog: AgentVariant[],
   owner: string,
   fileScope: string[],
+  hint?: string,
 ): { name: string; description: string }[] {
-  return catalog
+  const candidates = catalog
     .filter(
       (v) =>
         v.role === owner &&
@@ -56,6 +62,11 @@ export function selectVariantCandidates(
           v.match.some((glob) => fileScope.some((path) => globMatch(glob, path)))),
     )
     .map((v) => ({ name: v.name, description: v.description }));
+
+  if (hint === undefined) return candidates;
+  const hinted = candidates.find((c) => c.name === hint);
+  if (!hinted) return candidates; // hint not in catalog → ignore
+  return [hinted, ...candidates.filter((c) => c.name !== hint)];
 }
 
 /**

@@ -20,6 +20,7 @@ You are the **graph generator** for this work item (contract §2.4): your plan i
 ## You return
 - A **`generated_nodes` subgraph** — an array of intent-level nodes `{id, kind, purpose, depends_on, acceptance_refs}`, each mapped to its acceptance refs, edges acyclic and forward-only. The driver forwards it on `record-result`; on a contentful pass the engine promotes it via `addNodes` (`proposalsToNodes` fills owner/status/attempts; `validateNodeAddition` rejects dup/dangling/cycle), so the next `next-node` runs the grown graph. The mechanical fields (owner/status/evidence) are derived on promotion — do not hand-supply them.
 - An approval/risk signal — `pending` when any high-risk axis holds, else `not_required` (or `approved` when the input was pre-approved).
+- Optionally, a node MAY carry an `agent_hint` (a specialized variant name) to *suggest* which variant should run it. The hint is late-bound: it only orders/ensures that variant in the dispatch candidates — final selection still belongs to the driver/dispatch, and an unknown hint is ignored. Omit it when you have no preference.
 
 The subgraph *is* the autopilot graph's growth past the seed, and the approval signal gates mutating nodes: while approval is `pending`, mutating nodes do not run (`approvalGate` in `src/core/autopilot-bootstrap.ts`, driven by `RiskAxes`/`highRiskAssumption` in `src/core/gates.ts`; promotion path in `src/core/autopilot-loop.ts` → `src/core/autopilot-graph.ts`).
 
