@@ -1,0 +1,57 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2606035fj",
+  "declared_by": "main",
+  "declared_at": "2026-06-04T06:30:00.000Z",
+  "summary": "ADR-0004 fast-follow #4(최저 우선): ArchitectureSpec agent candidate 경로. buildCandidateSpec(비권위 불변식: produced_by=agent, forbidden_dependencies 항상 빈, can_call 빈) + observeArchitecture(import 그래프로 layers/cross-layer public surface 관찰, TsEdgeAnalyzer 재사용) + ditto architecture propose CLI. 사람이 비준하는 비권위 후보.",
+  "changed_files": [
+    "src/acg/architecture/propose.ts",
+    "src/cli/commands/architecture.ts",
+    "src/cli/index.ts",
+    "tests/acg/architecture-propose.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "bun test architecture-propose.test.ts → 불변식 테스트 pass: produced_by=agent, forbidden_dependencies=[], can_call 전부 [], layers/public_surfaces 중복제거·정렬, schema-valid" },
+        { "kind": "file", "summary": "propose.ts:buildCandidateSpec가 입력 무관 forbidden_dependencies:[] 강제(ADR-0004 자동 박제 금지 불변식)" }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "observeArchitecture 2 테스트 pass: fixture(cli가 core import)에서 layers=[cli,core]·public_surfaces에 src/core/fs 포함. layerOf 매핑 테스트 pass" },
+        { "kind": "file", "summary": "propose.ts:observeArchitecture가 TsEdgeAnalyzer로 import 그래프 추출 후 cross-layer 대상을 public surface로" }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "bun run dev architecture propose: 실 ditto에서 produced_by=agent, forbidden_dependencies=[], 5 layer(cli/core/schemas/...) 산출" },
+        { "kind": "command", "summary": "bun test 987 pass/0 fail, bun run lint clean" }
+      ]
+    }
+  ],
+  "verifications": [
+    { "command": "bun test tests/acg/architecture-propose.test.ts", "exit_code": 0 },
+    { "command": "bun run dev architecture propose --output json", "exit_code": 0 },
+    { "command": "bun test", "exit_code": 0 },
+    { "command": "bun run lint", "exit_code": 0 }
+  ],
+  "unverified": [
+    {
+      "item": "path-alias(~/...) import의 cross-layer surface 검출, layers 분류 정밀도 PoC",
+      "reason": "edge analyzer가 bare specifier(~/...)를 그대로 둬서 src/ 경로로 안 잡힘 → alias 다용 repo(ditto)에선 public surface 0. ADR-0004상 agent 경로는 기본 비활성·PoC 선결이라 v0는 후보 산출 메커니즘까지. alias 해석·분류 PoC는 활성 선결(후속).",
+      "out_of_scope": true
+    }
+  ],
+  "remaining_risks": [
+    "public surface 검출이 relative import만 — path-alias(~/) 미해석이라 alias 다용 repo에선 과소검출(known-limit). tsconfig paths 해석은 후속.",
+    "ADR-0004상 agent candidate 경로는 기본 비활성·layers 분류 정밀도 PoC가 활성 선결 — 이 work item은 후보 산출 메커니즘까지, 권위 spec 자동 대체 안 함(사람 비준 전제)."
+  ],
+  "final_verdict": "pass"
+}
