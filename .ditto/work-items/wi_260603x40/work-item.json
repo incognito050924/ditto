@@ -1,0 +1,42 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260603x40",
+  "title": "FF-1: ImpactGraph 생산기 (단계3 토대)",
+  "source_request": "ACG fast-follow: ImpactGraph 생산기",
+  "goal": "ADR-0004 fast-follow #4. 변경된 심볼의 영향을 심볼해석(텍스트검색 아님)으로 분석해 acg.impact-graph.v1을 산출하는 생산기. 거버넌스 코어(default-deny journey)는 언어무관, 분석기는 DITTO=TS 바인딩(TS 컴파일러). Q4 안전 불변식·단계3 게이트의 입력원.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "거버넌스 코어 buildImpactGraph가 default-deny journey 불변식 집행: 사용자노출 변경이 journey_id 매핑되면 user_journey 노드, 없으면 journey_unknown unresolved(둘 다 없는 사용자노출 diff는 통과불가). 비노출은 강제 안 함. analyzer unresolved 보존(은닉 안 함). schema-valid",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "TsImpactAnalyzer가 심볼해석(TS 컴파일러 checker, alias-aware)으로 실제 caller/test/external_surface 분류하고 같은 이름의 다른 로컬 심볼(decoy) 오매칭 안 함(텍스트검색 금지 입증). 미상 심볼은 false-clean 빈 그래프가 아니라 unresolved",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "ditto impact CLI 등록·실 ditto 소스에서 동작(affected node 산출, impact-graph.json 영속화). 전체 테스트 회귀 0·biome clean·스키마 drift 없음",
+      "verdict": "pass",
+      "evidence": []
+    }
+  ],
+  "status": "done",
+  "closed_at": "2026-06-04T05:00:00.000Z",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/acg/impact/impact-graph.ts",
+    "src/acg/impact/ts-analyzer.ts",
+    "src/cli/commands/impact.ts",
+    "src/cli/index.ts",
+    "tests/acg/impact-graph.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-03T17:48:54.717Z",
+  "updated_at": "2026-06-04T05:00:00.000Z"
+}
