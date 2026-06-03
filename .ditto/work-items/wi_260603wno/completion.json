@@ -1,0 +1,375 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260603wno",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-03T03:07:21.936Z",
+  "summary": "오케스트레이션 청사진 완성: ② driver variant 선택 SKILL 명문화 · ③ planner agent_hint override · ① fileOverlapGate wave 병렬 spawn(mutating 1개 cap). real-spawn dogfooding(planner→implementer×N 병렬→reviewer→fix→re-review→verify), forward 수렴 1라운드.",
+  "changed_files": [
+    "src/core/autopilot-loop.ts",
+    "src/cli/commands/autopilot.ts",
+    "tests/core/autopilot-loop.test.ts",
+    "skills/autopilot/SKILL.md",
+    "src/schemas/autopilot.ts",
+    "src/core/autopilot-graph.ts",
+    "src/core/agent-variants.ts",
+    "agents/planner.md",
+    "tests/core/agent-variants.test.ts",
+    "tests/core/autopilot-graph.test.ts",
+    "reports/design/contracts/autopilot-contract.md"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 800 pass / 0 fail (65 files)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 119,
+            "end": 175
+          },
+          "summary": "wave admit + spawn_wave return; single-node fallback unchanged"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 804 pass / 0 fail (65 files)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git diff HEAD src/schemas/autopilot.ts",
+          "summary": "no owner enum widening; only optional agent_hint"
+        },
+        {
+          "kind": "file",
+          "path": "skills/autopilot/SKILL.md",
+          "lines": {
+            "start": 25,
+            "end": 33
+          },
+          "summary": "ac-1: variant selection + spawn_wave documented"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 130,
+            "end": 187
+          },
+          "summary": "ac-3: wave + mutating cap + single-node fallback"
+        },
+        {
+          "kind": "file",
+          "path": "skills/autopilot/SKILL.md",
+          "summary": "step 2 documents the 2+/1/0 variant selection rule (late binding)"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 800 pass / 0 fail (65 files)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 119,
+            "end": 175
+          },
+          "summary": "wave admit + spawn_wave return; single-node fallback unchanged"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 804 pass / 0 fail (65 files)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git diff HEAD src/schemas/autopilot.ts",
+          "summary": "no owner enum widening; only optional agent_hint"
+        },
+        {
+          "kind": "file",
+          "path": "skills/autopilot/SKILL.md",
+          "lines": {
+            "start": 25,
+            "end": 33
+          },
+          "summary": "ac-1: variant selection + spawn_wave documented"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 130,
+            "end": 187
+          },
+          "summary": "ac-3: wave + mutating cap + single-node fallback"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 803 pass / 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/autopilot.ts",
+          "lines": {
+            "start": 84,
+            "end": 100
+          },
+          "summary": "agent_hint optional on autopilotNode + nodeProposal"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/agent-variants.ts",
+          "summary": "selectVariantCandidates hint param: present->first, absent->ignored"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 800 pass / 0 fail (65 files)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 119,
+            "end": 175
+          },
+          "summary": "wave admit + spawn_wave return; single-node fallback unchanged"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 804 pass / 0 fail (65 files)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git diff HEAD src/schemas/autopilot.ts",
+          "summary": "no owner enum widening; only optional agent_hint"
+        },
+        {
+          "kind": "file",
+          "path": "skills/autopilot/SKILL.md",
+          "lines": {
+            "start": 25,
+            "end": 33
+          },
+          "summary": "ac-1: variant selection + spawn_wave documented"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 130,
+            "end": 187
+          },
+          "summary": "ac-3: wave + mutating cap + single-node fallback"
+        },
+        {
+          "kind": "file",
+          "path": "reports/design/contracts/autopilot-contract.md",
+          "summary": "§3.1 multi-owner concurrent wave dispatch, single-node carve-outs intact"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 803 pass / 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 130,
+            "end": 149
+          },
+          "summary": "F1: wave eligibility admits 2+ mutating nodes on empty shared scope (clobber risk)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 804 pass / 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 147,
+            "end": 163
+          },
+          "summary": "F1: at most one mutating node per wave; extra mutating stays pending"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 804 pass / 0 fail; F1/F2 closed"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 155,
+            "end": 162
+          },
+          "summary": "verified: at most one mutating node per wave"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 800 pass / 0 fail (65 files)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 119,
+            "end": 175
+          },
+          "summary": "wave admit + spawn_wave return; single-node fallback unchanged"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 804 pass / 0 fail (65 files)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git diff HEAD src/schemas/autopilot.ts",
+          "summary": "no owner enum widening; only optional agent_hint"
+        },
+        {
+          "kind": "file",
+          "path": "skills/autopilot/SKILL.md",
+          "lines": {
+            "start": 25,
+            "end": 33
+          },
+          "summary": "ac-1: variant selection + spawn_wave documented"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 130,
+            "end": 187
+          },
+          "summary": "ac-3: wave + mutating cap + single-node fallback"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 803 pass / 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 130,
+            "end": 149
+          },
+          "summary": "F1: wave eligibility admits 2+ mutating nodes on empty shared scope (clobber risk)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 804 pass / 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 147,
+            "end": 163
+          },
+          "summary": "F1: at most one mutating node per wave; extra mutating stays pending"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 804 pass / 0 fail; F1/F2 closed"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 155,
+            "end": 162
+          },
+          "summary": "verified: at most one mutating node per wave"
+        }
+      ],
+      "evidence_records": []
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [],
+  "final_verdict": "pass"
+}

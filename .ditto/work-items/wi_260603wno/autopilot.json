@@ -1,0 +1,340 @@
+{
+  "schema_version": "0.1.0",
+  "autopilot_id": "orch_260603rb2",
+  "work_item_id": "wi_260603wno",
+  "mode": "autopilot",
+  "root_goal": "autopilot 오케스트레이션 청사진 완성: driver가 variant_candidates를 description으로 최종 선택하는 절차 명문화(②), planner generated_nodes의 optional agent_hint override(③), fileOverlapGate를 통과한 독립 ready 노드의 wave 병렬 spawn(①)",
+  "completion_boundary": "entire_work_item",
+  "approval_gate": {
+    "status": "approved",
+    "source": "user",
+    "approved_at": "2026-06-03T02:38:02.655Z",
+    "approved_by": null,
+    "evidence_refs": []
+  },
+  "nodes": [
+    {
+      "id": "N1",
+      "kind": "design",
+      "owner": "planner",
+      "purpose": "Plan the change against the acceptance criteria",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4"
+      ],
+      "evidence_refs": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N2",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "Implement the planned change",
+      "status": "passed",
+      "depends_on": [
+        "N1"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 800 pass / 0 fail (65 files)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 119,
+            "end": 175
+          },
+          "summary": "wave admit + spawn_wave return; single-node fallback unchanged"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N3",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Verify every acceptance criterion with evidence",
+      "status": "passed",
+      "depends_on": [
+        "N2"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 804 pass / 0 fail (65 files)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git diff HEAD src/schemas/autopilot.ts",
+          "summary": "no owner enum widening; only optional agent_hint"
+        },
+        {
+          "kind": "file",
+          "path": "skills/autopilot/SKILL.md",
+          "lines": {
+            "start": 25,
+            "end": 33
+          },
+          "summary": "ac-1: variant selection + spawn_wave documented"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 130,
+            "end": 187
+          },
+          "summary": "ac-3: wave + mutating cap + single-node fallback"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N4",
+      "kind": "docs",
+      "owner": "implementer",
+      "purpose": "Piece 2 (ac-1): in skills/autopilot/SKILL.md step 2, document driver final variant selection — 2+ candidates pick subagent_type by description, exactly 1 use it, 0 fall back to node owner. SKILL.md only.",
+      "status": "passed",
+      "depends_on": [
+        "N1"
+      ],
+      "acceptance_refs": [
+        "ac-1"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "file",
+          "path": "skills/autopilot/SKILL.md",
+          "summary": "step 2 documents the 2+/1/0 variant selection rule (late binding)"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N5",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "Piece 3 (ac-2): add optional agent_hint to nodeProposal (src/schemas/autopilot.ts), thread via proposalsToNodes so dispatch surfaces the hinted variant in variant_candidates, document in agents/planner.md, add a test.",
+      "status": "passed",
+      "depends_on": [
+        "N1"
+      ],
+      "acceptance_refs": [
+        "ac-2"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 803 pass / 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/autopilot.ts",
+          "lines": {
+            "start": 84,
+            "end": 100
+          },
+          "summary": "agent_hint optional on autopilotNode + nodeProposal"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/agent-variants.ts",
+          "summary": "selectVariantCandidates hint param: present->first, absent->ignored"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N6",
+      "kind": "docs",
+      "owner": "implementer",
+      "purpose": "Piece 1 contract (ac-3): revise reports/design/contracts/autopilot-contract.md 3.1 from single-owner to multi-owner concurrent dispatch of the fileOverlapGate-admitted wave. contract md only.",
+      "status": "passed",
+      "depends_on": [
+        "N2"
+      ],
+      "acceptance_refs": [
+        "ac-3"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "file",
+          "path": "reports/design/contracts/autopilot-contract.md",
+          "summary": "§3.1 multi-owner concurrent wave dispatch, single-node carve-outs intact"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N7",
+      "kind": "review",
+      "owner": "reviewer",
+      "purpose": "Review piece 1 (ac-3/ac-4): audit wave-return change for regressions in dispatch/approval/cleanup/driver-owner paths, file-overlap serialization, single-owner back-compat.",
+      "status": "passed",
+      "depends_on": [
+        "N2",
+        "N5",
+        "N6"
+      ],
+      "acceptance_refs": [
+        "ac-3",
+        "ac-4"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 803 pass / 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 130,
+            "end": 149
+          },
+          "summary": "F1: wave eligibility admits 2+ mutating nodes on empty shared scope (clobber risk)"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N7.fix.r0",
+      "kind": "fix",
+      "owner": "implementer",
+      "purpose": "Resolve findings raised by N7 (round 0)",
+      "status": "passed",
+      "depends_on": [
+        "N7"
+      ],
+      "acceptance_refs": [
+        "ac-3",
+        "ac-4"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 804 pass / 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 147,
+            "end": 163
+          },
+          "summary": "F1: at most one mutating node per wave; extra mutating stays pending"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N7.rev.r0",
+      "kind": "review",
+      "owner": "reviewer",
+      "purpose": "Re-check after N7.fix.r0; close the loop only on a findings=0 verdict",
+      "status": "passed",
+      "depends_on": [
+        "N7.fix.r0"
+      ],
+      "acceptance_refs": [
+        "ac-3",
+        "ac-4"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 804 pass / 0 fail; F1/F2 closed"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 155,
+            "end": 162
+          },
+          "summary": "verified: at most one mutating node per wave"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    }
+  ],
+  "caps": {
+    "fix_per_node": 2,
+    "switch_per_node": 1,
+    "converge_rounds": 3
+  },
+  "continue_policy": {
+    "continue_after_approval": true,
+    "continue_after_checkpoint": true,
+    "continue_after_fixable_failure": true,
+    "ask_user_only_for_user_owned_decisions": true
+  },
+  "stop_conditions": [
+    "all_acceptance_criteria_passed_or_explicitly_closed",
+    "blocked_by_user_owned_decision",
+    "blocked_by_external_system",
+    "safety_boundary_hit"
+  ],
+  "user_interrupt_policy": "ask_only_for_user_owned_decisions"
+}
