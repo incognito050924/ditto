@@ -8,6 +8,7 @@ import { contextCommand } from './commands/context';
 import { deepInterviewCommand } from './commands/deep-interview';
 import { doctorCommand } from './commands/doctor';
 import { e2eCommand } from './commands/e2e';
+import { impactCommand } from './commands/impact';
 import { runCommand } from './commands/run';
 import { verifyCommand } from './commands/verify';
 import { workCommand } from './commands/work';
@@ -30,6 +31,7 @@ const main = defineCommand({
     e2e: e2eCommand,
     'acg-review': acgReviewCommand,
     codeql: codeqlCommand,
+    impact: impactCommand,
   },
 });
 
