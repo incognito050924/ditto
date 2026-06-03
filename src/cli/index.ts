@@ -1,6 +1,7 @@
 import { defineCommand, runMain } from 'citty';
 import '~/core/hosts';
 import { acgReviewCommand } from './commands/acg-review';
+import { architectureCommand } from './commands/architecture';
 import { autopilotCommand } from './commands/autopilot';
 import { boundaryCommand } from './commands/boundary';
 import { bridgeCommand } from './commands/bridge';
@@ -36,6 +37,7 @@ const main = defineCommand({
     impact: impactCommand,
     fitness: fitnessCommand,
     boundary: boundaryCommand,
+    architecture: architectureCommand,
   },
 });
 
