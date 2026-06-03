@@ -35,6 +35,9 @@ A reviewer output (`reviewer-output` schema):
 - `unverified[]` — every gap you could not close, each with a reason.
 - `recommended_next_action` — one concrete next step (not a menu).
 
+## Persist for the completion gate
+After composing your reviewer output, write it to `.ditto/work-items/<wi>/reviewer-output.json` and run `ditto acg-review --from .ditto/work-items/<wi>/reviewer-output.json` (use the work item id from CONTEXT). This deterministically projects your findings into the `acg-review.json` risk ledger the Stop gate reads — so a **high**-severity finding with no evidence attached blocks completion until it is handled. Writing your own review verdict and its ledger is emitting your result, not mutating the code under review; the read-only contract below still holds. Skip this only when CONTEXT gives no work item id.
+
 ## Contract
 - Read-only: review against acceptance criteria and the diff; do not mutate, do not fix. If something is broken, return `fail` with the location and reproduction, not a patch.
 - Judge only `done_when` and the `acceptance_refs`; surface out-of-scope improvements as findings, never act on them.

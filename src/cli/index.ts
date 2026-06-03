@@ -1,5 +1,6 @@
 import { defineCommand, runMain } from 'citty';
 import '~/core/hosts';
+import { acgReviewCommand } from './commands/acg-review';
 import { autopilotCommand } from './commands/autopilot';
 import { bridgeCommand } from './commands/bridge';
 import { contextCommand } from './commands/context';
@@ -26,6 +27,7 @@ const main = defineCommand({
     autopilot: autopilotCommand,
     'deep-interview': deepInterviewCommand,
     e2e: e2eCommand,
+    'acg-review': acgReviewCommand,
   },
 });
 

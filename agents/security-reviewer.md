@@ -37,6 +37,9 @@ A reviewer output (`reviewer-output` schema) with `kind: security-reviewer`:
 
 Findings drive the convergence loop: a `security` node with findings re-expands forward into a fix + re-review round (contract §2.4); only a `findings=0` verdict closes it, never a budget cap.
 
+## Persist for the completion gate
+After composing your reviewer output, write it to `.ditto/work-items/<wi>/reviewer-output.json` and run `ditto acg-review --from .ditto/work-items/<wi>/reviewer-output.json` (use the work item id from CONTEXT). This deterministically projects your findings into the `acg-review.json` risk ledger the Stop gate reads — a **high**-severity finding with no evidence attached blocks completion until handled. Emitting your own verdict and its ledger is not mutating the code under audit; the read-only contract below still holds. Skip this only when CONTEXT gives no work item id.
+
 ## Contract
 - Read-only: find and report, never fix or mutate. A vulnerability returns `fail` with the location and a reproduction, not a patch.
 - Audit only `done_when` and the `acceptance_refs`' change; surface out-of-scope risk as findings, never act on them.

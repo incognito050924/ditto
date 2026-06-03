@@ -345,8 +345,8 @@ const passingAcceptance = [
   { criterion_id: 'ac-3', verdict: 'pass' },
 ];
 
-describe('stopHandler — ACG review ledger (WU-6, D5)', () => {
-  test('acc-a: unresolved high-risk in acg-review.json => exit 2 (continuation forced)', async () => {
+describe('stopHandler — ACG review ledger (high-risk needs evidence)', () => {
+  test('acc-a: high-risk change without evidence => exit 2 (continuation forced)', async () => {
     await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
     await writeArtifact('acg-review.json', {
       kind: 'acg.review-graph.v1',
@@ -355,18 +355,18 @@ describe('stopHandler — ACG review ledger (WU-6, D5)', () => {
           path: 'src/payment/charge.ts',
           risk: 'high',
           risk_reason: 'no idempotency key',
-          unresolved: true,
+          unresolved: false,
         },
       ],
       human_review_set: ['src/payment/charge.ts'],
     });
     const out = await run({ stop_hook_active: false });
     expect(out.exitCode).toBe(2);
-    expect(out.stderr).toContain('unresolved high-risk');
+    expect(out.stderr).toContain('high-risk change without evidence');
     expect(out.stderr).toContain('src/payment/charge.ts');
   });
 
-  test('acc-b: high-risk WITH evidence (resolved) + clear ledger => exit 0', async () => {
+  test('high-risk WITH evidence attached => exit 0 (cleared)', async () => {
     await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
     await writeArtifact('acg-review.json', {
       kind: 'acg.review-graph.v1',
@@ -399,7 +399,7 @@ describe('stopHandler — ACG review ledger (WU-6, D5)', () => {
     expect(out.stderr).toContain('malformed');
   });
 
-  test('acc-c: completion carrying the optional acg_governance slot still passes (no regression)', async () => {
+  test('completion carrying the optional acg_governance slot still passes (no regression)', async () => {
     await writeArtifact(
       'completion.json',
       completion({
@@ -413,7 +413,7 @@ describe('stopHandler — ACG review ledger (WU-6, D5)', () => {
     expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
   });
 
-  test('unresolved high-risk on a journey role uses journey_id identity', async () => {
+  test('un-evidenced high-risk on a journey role uses journey_id identity', async () => {
     await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
     await writeArtifact('acg-review.json', {
       kind: 'acg.review-graph.v1',
@@ -423,7 +423,7 @@ describe('stopHandler — ACG review ledger (WU-6, D5)', () => {
           role: 'user_journey',
           risk: 'high',
           risk_reason: 'checkout regressed',
-          unresolved: true,
+          unresolved: false,
         },
       ],
       human_review_set: ['jrn-checkout'],
@@ -435,12 +435,12 @@ describe('stopHandler — ACG review ledger (WU-6, D5)', () => {
 });
 
 describe('acgReviewForcesContinuation', () => {
-  test('high-risk + unresolved forces continuation (one reason per file)', () => {
+  test('high-risk without evidence forces continuation (one reason per file)', () => {
     const reasons = acgReviewForcesContinuation({
       kind: 'acg.review-graph.v1',
       files: [
-        { path: 'a.ts', risk: 'high', risk_reason: 'r1', unresolved: true },
-        { path: 'b.ts', risk: 'high', risk_reason: 'r2', unresolved: true },
+        { path: 'a.ts', risk: 'high', risk_reason: 'r1', unresolved: false },
+        { path: 'b.ts', risk: 'high', risk_reason: 'r2', unresolved: false },
       ],
       human_review_set: [],
     } as never);
@@ -448,17 +448,25 @@ describe('acgReviewForcesContinuation', () => {
     expect(reasons[0]).toContain('a.ts');
   });
 
-  test('high-risk but resolved (unresolved=false) is not a blocker', () => {
+  test('high-risk WITH evidence is not a blocker (cleared)', () => {
     expect(
       acgReviewForcesContinuation({
         kind: 'acg.review-graph.v1',
-        files: [{ path: 'a.ts', risk: 'high', risk_reason: 'r', unresolved: false }],
+        files: [
+          {
+            path: 'a.ts',
+            risk: 'high',
+            risk_reason: 'r',
+            evidence: { kind: 'test' },
+            unresolved: false,
+          },
+        ],
         human_review_set: [],
       } as never),
     ).toHaveLength(0);
   });
 
-  test('low/medium unresolved gaps are not blockers (only high-risk)', () => {
+  test('low/medium-risk files never block (only high-risk needs evidence)', () => {
     expect(
       acgReviewForcesContinuation({
         kind: 'acg.review-graph.v1',

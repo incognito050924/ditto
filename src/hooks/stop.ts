@@ -156,19 +156,26 @@ export function autopilotForcesContinuation(a: Autopilot): boolean {
 }
 
 /**
- * Does an ACG ReviewGraph ledger force continuation? (WU-6, D5 — Review by
- * Exception). A file classified `risk: 'high'` that is still `unresolved` is a
- * high-risk change a human has not judged → the work item is not done. Returns
- * one continuation reason per such file (path|journey_id identity). High-risk
- * files WITH evidence (unresolved=false) and low/medium unresolved gaps are NOT
- * blockers here — only the unresolved high-risk exception set blocks (§5).
+ * Does an ACG ReviewGraph ledger force continuation? (WU-6 / producer wiring —
+ * Review by Exception, §5). A file classified `risk: 'high'` that carries NO
+ * evidence is a risky change nobody has shown to be handled → the work item is
+ * not done. Attaching an `evidence` object (a test, a human's review note)
+ * clears it. Returns one continuation reason per such file (path|journey_id
+ * identity). Low/medium-risk files never block here, and a high-risk file WITH
+ * evidence passes — only un-evidenced high-risk changes block.
+ *
+ * Why evidence-absence, not the `unresolved` flag: per 20-contracts §5 the
+ * `unresolved` marker maps from reviewer-output `unverified[]` (and the adapter
+ * fixes those at risk=low), so `high ∧ unresolved` is never produced and would
+ * make this gate inert. Keying on "high-risk without evidence" is what makes the
+ * gate actually fire on the exception set a human must judge.
  */
 export function acgReviewForcesContinuation(graph: AcgReviewGraph): string[] {
   const reasons: string[] = [];
   for (const file of graph.files) {
-    if (file.risk === 'high' && file.unresolved === true) {
+    if (file.risk === 'high' && file.evidence === undefined) {
       const id = file.path ?? file.journey_id ?? '(unidentified)';
-      reasons.push(`acg review: unresolved high-risk change — ${id} (${file.risk_reason})`);
+      reasons.push(`acg review: high-risk change without evidence — ${id} (${file.risk_reason})`);
     }
   }
   return reasons;
