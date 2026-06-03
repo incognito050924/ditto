@@ -36,7 +36,12 @@ A reviewer output (`reviewer-output` schema):
 - `recommended_next_action` — one concrete next step (not a menu).
 
 ## Persist for the completion gate
-After composing your reviewer output, write it to `.ditto/work-items/<wi>/reviewer-output.json` and run `ditto acg-review --from .ditto/work-items/<wi>/reviewer-output.json` (use the work item id from CONTEXT). This deterministically projects your findings into the `acg-review.json` risk ledger the Stop gate reads — so a **high**-severity finding with no evidence attached blocks completion until it is handled. Writing your own review verdict and its ledger is emitting your result, not mutating the code under review; the read-only contract below still holds. Skip this only when CONTEXT gives no work item id.
+Two steps, in order, using the work item id from CONTEXT:
+
+1. Write your `reviewer-output` (the schema object above) verbatim to `.ditto/work-items/<wi>/reviewer-output.json`. This is the ONLY file you author by hand.
+2. Run `ditto acg-review --from .ditto/work-items/<wi>/reviewer-output.json`.
+
+That command does the projection deterministically (severity→risk, findings→ledger) and writes `acg-review.json` — the risk ledger the Stop gate reads, where a **high**-severity finding with no evidence blocks completion until handled. **Do NOT construct or write `acg-review.json` yourself, and do not hand-map severities** — the CLI is the single source of that projection; a hand-built ledger defeats its determinism. Emitting your own verdict and running the producer is not mutating the code under review; the read-only contract below still holds. Skip both steps only when CONTEXT gives no work item id.
 
 ## Contract
 - Read-only: review against acceptance criteria and the diff; do not mutate, do not fix. If something is broken, return `fail` with the location and reproduction, not a patch.

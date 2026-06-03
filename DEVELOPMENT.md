@@ -58,6 +58,18 @@ bun run dev doctor
 alias dittod='bun run --cwd /Users/incognito/dev/projects/ditto dev'
 ```
 
+### `ditto`를 전역 명령으로 (skills/agents가 부르는 bare `ditto`)
+
+skills·agents 본문은 `ditto autopilot next-node`, `ditto acg-review --from …`처럼 **bare `ditto`**를 호출한다(플러그인은 임의 프로젝트 cwd에서 돌므로 `bun run dev`로 못 부른다 — `dev` 스크립트가 그 프로젝트엔 없다). 이 호출이 실제로 우리 CLI로 가려면 `ditto`가 전역에 설치돼 있어야 한다:
+
+```bash
+bun run build && bun link    # dist/ditto 빌드 후 ~/.bun/bin/ditto 로 link
+which ditto                  # → ~/.bun/bin/ditto (프로젝트 CLI)
+```
+
+- **macOS 주의**: `/usr/bin/ditto`는 시스템 파일복사 유틸이다. `~/.bun/bin`이 PATH상 `/usr/bin`보다 앞서야 우리 `ditto`가 이긴다(`bun`의 기본 PATH 설정이면 그렇다). link 전에는 bare `ditto`가 macOS 유틸로 가서 skill/agent의 CLI 호출이 조용히 깨진다.
+- **link는 `dist/ditto`(컴파일본)를 가리킨다.** CLI 소스를 고쳤으면 `bun run build`로 다시 빌드해야 전역 `ditto`에 반영된다. 개발 중 단발 호출은 `bun run dev`가 항상 최신이라 더 편하다.
+
 ---
 
 ## marketplace 설치(`install-plugin.mjs`)를 dogfood에 쓰지 않는 이유
