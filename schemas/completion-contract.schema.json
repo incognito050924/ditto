@@ -402,6 +402,29 @@
           },
           "default": []
         },
+        "acg_governance": {
+          "type": "object",
+          "properties": {
+            "review_graph": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Path to the acg.review-graph.v1 ledger consulted"
+            },
+            "unresolved_high_risk": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "Identities (path|journey_id) still unresolved at high risk; empty = clear"
+            }
+          },
+          "required": [
+            "review_graph"
+          ],
+          "additionalProperties": false,
+          "description": "Optional ACG review-by-exception governance state (D5)"
+        },
         "next_handoff_path": {
           "type": "string",
           "minLength": 1,

@@ -72,6 +72,21 @@ export const completionContract = z
       .default([])
       .describe('Anything the implementer could not verify; explicit not-knowing is required'),
     remaining_risks: z.array(z.string()).default([]),
+    // ACG governance slot (WU-6, D5). Optional: absent → current completion flow
+    // unchanged (acc-c). When present, records the acg.review-graph.v1 ledger the
+    // completion was judged against and any identities still unresolved at high
+    // risk (empty = governance gate clear). Enforcement lives in the Stop hook
+    // (it reads the ledger directly); this is the recording surface on completion.
+    acg_governance: z
+      .object({
+        review_graph: relativePath.describe('Path to the acg.review-graph.v1 ledger consulted'),
+        unresolved_high_risk: z
+          .array(z.string())
+          .default([])
+          .describe('Identities (path|journey_id) still unresolved at high risk; empty = clear'),
+      })
+      .optional()
+      .describe('Optional ACG review-by-exception governance state (D5)'),
     next_handoff_path: relativePath
       .optional()
       .describe('Where the next session/agent should pick up; required if status is not done'),

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { relativePath, schemaVersion, sha256 } from './common';
+import { relativePath, schemaVersion, sha256, workItemId } from './common';
 
 /**
  * E2EJourneyContract (설계서 §6 line 145, §10 "E2E 테스트 설계 (post-v0)").
@@ -53,6 +53,15 @@ export const e2eJourney = z
   .object({
     schema_version: schemaVersion,
     journey: z.string().min(1).describe('User journey name'),
+    // ACG binding (WU-5, D4): link an e2eJourney to its ACG JourneySpec and work
+    // item WITHOUT overloading `journey` (the human name). Both optional, so every
+    // pre-ACG e2eJourney stays valid and existing consumers see no change (acc-b).
+    journey_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('ACG JourneySpec.id this run realizes (D4; distinct from `journey` name)'),
+    work_item_id: workItemId.optional().describe('Work item this journey run belongs to (D4)'),
     url: z.string().min(1).describe('Target URL or dev-server entry under test'),
     steps: z.array(e2eStep).default([]),
     assertions: z.array(e2eAssertion).default([]),

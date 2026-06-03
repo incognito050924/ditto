@@ -4,6 +4,7 @@ import type { ZodTypeAny, z } from 'zod';
 import { completionEvidenceGate, completionGate, convergenceGate } from '~/core/gates';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
+import { type AcgReviewGraph, acgReviewGraph } from '~/schemas/acg-review-graph';
 import { type Autopilot, autopilot as autopilotSchema } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
 import { convergence as convergenceSchema } from '~/schemas/convergence';
@@ -154,6 +155,25 @@ export function autopilotForcesContinuation(a: Autopilot): boolean {
   return hasRunnableNode(a);
 }
 
+/**
+ * Does an ACG ReviewGraph ledger force continuation? (WU-6, D5 — Review by
+ * Exception). A file classified `risk: 'high'` that is still `unresolved` is a
+ * high-risk change a human has not judged → the work item is not done. Returns
+ * one continuation reason per such file (path|journey_id identity). High-risk
+ * files WITH evidence (unresolved=false) and low/medium unresolved gaps are NOT
+ * blockers here — only the unresolved high-risk exception set blocks (§5).
+ */
+export function acgReviewForcesContinuation(graph: AcgReviewGraph): string[] {
+  const reasons: string[] = [];
+  for (const file of graph.files) {
+    if (file.risk === 'high' && file.unresolved === true) {
+      const id = file.path ?? file.journey_id ?? '(unidentified)';
+      reasons.push(`acg review: unresolved high-risk change — ${id} (${file.risk_reason})`);
+    }
+  }
+  return reasons;
+}
+
 export const stopHandler: HookHandler = async (input: HookInput) => {
   const raw = (input.raw ?? {}) as Record<string, unknown>;
 
@@ -193,9 +213,22 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   );
   const pilot = await readArtifact(join(dir, 'autopilot.json'), autopilotSchema, 'autopilot.json');
   const dialectics = await readDialecticLedgers(dir);
+  // ACG ReviewGraph ledger (WU-6, D5). Lives in the work-item dir alongside the
+  // other ledgers (stop reads one directory); absent → no-op, malformed → fail
+  // closed, exactly like the others. D5 names `.ditto/runs/<wi>/`, but that tree
+  // is run-id keyed (run manifests); the work-item dir is the work-item-keyed
+  // home every other stop ledger already uses, so the ReviewGraph ledger lands
+  // here too (the locked spec 00~50 does not pin the path).
+  const acgReview = await readArtifact(
+    join(dir, 'acg-review.json'),
+    acgReviewGraph,
+    'acg-review.json',
+  );
 
   // Malformed artifact = gate-input violation → fail CLOSED (exit 2).
-  const malformed = [completion, conv, pilot, dialectics].find((a) => a.status === 'malformed');
+  const malformed = [completion, conv, pilot, dialectics, acgReview].find(
+    (a) => a.status === 'malformed',
+  );
   if (malformed && malformed.status === 'malformed') {
     return {
       exitCode: 2,
@@ -229,6 +262,9 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   }
   if (dialectics.status === 'ok') {
     for (const d of dialectics.items) reasons.push(...dialecticForcesContinuation(d));
+  }
+  if (acgReview.status === 'ok') {
+    reasons.push(...acgReviewForcesContinuation(acgReview.data));
   }
 
   if (reasons.length > 0) {

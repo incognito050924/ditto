@@ -14,6 +14,16 @@
           "minLength": 1,
           "description": "User journey name"
         },
+        "journey_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ACG JourneySpec.id this run realizes (D4; distinct from `journey` name)"
+        },
+        "work_item_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Work item this journey run belongs to (D4)"
+        },
         "url": {
           "type": "string",
           "minLength": 1,

@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
-import { autopilotForcesContinuation, stopHandler } from '~/hooks/stop';
+import {
+  acgReviewForcesContinuation,
+  autopilotForcesContinuation,
+  stopHandler,
+} from '~/hooks/stop';
 
 let repo: string;
 let store: WorkItemStore;
@@ -332,5 +336,148 @@ describe('autopilotForcesContinuation', () => {
     expect(
       autopilotForcesContinuation({ ...base, nodes: [node({ status: 'passed' })] } as never),
     ).toBe(false);
+  });
+});
+
+const passingAcceptance = [
+  { criterion_id: 'ac-1', verdict: 'pass' },
+  { criterion_id: 'ac-2', verdict: 'pass' },
+  { criterion_id: 'ac-3', verdict: 'pass' },
+];
+
+describe('stopHandler — ACG review ledger (WU-6, D5)', () => {
+  test('acc-a: unresolved high-risk in acg-review.json => exit 2 (continuation forced)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact('acg-review.json', {
+      kind: 'acg.review-graph.v1',
+      files: [
+        {
+          path: 'src/payment/charge.ts',
+          risk: 'high',
+          risk_reason: 'no idempotency key',
+          unresolved: true,
+        },
+      ],
+      human_review_set: ['src/payment/charge.ts'],
+    });
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('unresolved high-risk');
+    expect(out.stderr).toContain('src/payment/charge.ts');
+  });
+
+  test('acc-b: high-risk WITH evidence (resolved) + clear ledger => exit 0', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact('acg-review.json', {
+      kind: 'acg.review-graph.v1',
+      files: [
+        {
+          path: 'src/payment/charge.ts',
+          risk: 'high',
+          risk_reason: 'idempotency verified',
+          evidence: { kind: 'test' },
+          unresolved: false,
+        },
+        { path: 'src/util/log.ts', risk: 'low', risk_reason: 'noisy log', unresolved: true },
+      ],
+      human_review_set: ['src/payment/charge.ts'],
+    });
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('no-op: absent acg-review.json does not change a passing completion (exit 0)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('malformed acg-review.json => exit 2 (fail-closed)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact('acg-review.json', '{ not valid json');
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('acg-review.json');
+    expect(out.stderr).toContain('malformed');
+  });
+
+  test('acc-c: completion carrying the optional acg_governance slot still passes (no regression)', async () => {
+    await writeArtifact(
+      'completion.json',
+      completion({
+        acceptance: passingAcceptance,
+        acg_governance: {
+          review_graph: '.ditto/work-items/wi/acg-review.json',
+          unresolved_high_risk: [],
+        },
+      }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('unresolved high-risk on a journey role uses journey_id identity', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact('acg-review.json', {
+      kind: 'acg.review-graph.v1',
+      files: [
+        {
+          journey_id: 'jrn-checkout',
+          role: 'user_journey',
+          risk: 'high',
+          risk_reason: 'checkout regressed',
+          unresolved: true,
+        },
+      ],
+      human_review_set: ['jrn-checkout'],
+    });
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('jrn-checkout');
+  });
+});
+
+describe('acgReviewForcesContinuation', () => {
+  test('high-risk + unresolved forces continuation (one reason per file)', () => {
+    const reasons = acgReviewForcesContinuation({
+      kind: 'acg.review-graph.v1',
+      files: [
+        { path: 'a.ts', risk: 'high', risk_reason: 'r1', unresolved: true },
+        { path: 'b.ts', risk: 'high', risk_reason: 'r2', unresolved: true },
+      ],
+      human_review_set: [],
+    } as never);
+    expect(reasons).toHaveLength(2);
+    expect(reasons[0]).toContain('a.ts');
+  });
+
+  test('high-risk but resolved (unresolved=false) is not a blocker', () => {
+    expect(
+      acgReviewForcesContinuation({
+        kind: 'acg.review-graph.v1',
+        files: [{ path: 'a.ts', risk: 'high', risk_reason: 'r', unresolved: false }],
+        human_review_set: [],
+      } as never),
+    ).toHaveLength(0);
+  });
+
+  test('low/medium unresolved gaps are not blockers (only high-risk)', () => {
+    expect(
+      acgReviewForcesContinuation({
+        kind: 'acg.review-graph.v1',
+        files: [
+          { path: 'a.ts', risk: 'low', risk_reason: 'r', unresolved: true },
+          { path: 'b.ts', risk: 'medium', risk_reason: 'r', unresolved: true },
+        ],
+        human_review_set: [],
+      } as never),
+    ).toHaveLength(0);
+  });
+
+  test('empty ledger => no continuation', () => {
+    expect(
+      acgReviewForcesContinuation({
+        kind: 'acg.review-graph.v1',
+        files: [],
+        human_review_set: [],
+      } as never),
+    ).toHaveLength(0);
   });
 });
