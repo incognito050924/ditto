@@ -58,6 +58,18 @@ It should avoid:
 - turning retries into denial
 - requiring belief as a dependency
 
+## Configuring agent variants
+
+By default one agent runs each role — a single `implementer` for all
+implementation, and so on. If you want a role specialized per area (a frontend
+implementer, a backend implementer), drop subagent definitions under
+`.ditto/agents/` and DITTO routes to them by role and file scope, letting the
+driver pick among candidates by description. No `.ditto/agents/` directory means
+nothing changes.
+
+See [docs/agent-variants.md](docs/agent-variants.md) for the frontmatter fields
+and routing rules.
+
 ## Status
 
 This repository is just beginning.
