@@ -269,6 +269,15 @@
                 "cap_reached"
               ]
             },
+            "closure_mode": {
+              "type": "string",
+              "enum": [
+                "mutual_agreement",
+                "ledger_only",
+                "safe_default"
+              ],
+              "description": "How the closure was reached, not why (that is exit.reason)"
+            },
             "question_cap": {
               "type": "integer",
               "exclusiveMinimum": 0
@@ -280,6 +289,7 @@
           },
           "required": [
             "reason",
+            "closure_mode",
             "question_cap",
             "questions_asked"
           ],

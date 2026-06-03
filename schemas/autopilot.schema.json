@@ -188,7 +188,11 @@
                   "fix",
                   "e2e",
                   "docs",
-                  "knowledge"
+                  "knowledge",
+                  "security",
+                  "refactor",
+                  "retro",
+                  "cleanup"
                 ],
                 "description": "Kind of work a node represents"
               },
@@ -202,7 +206,11 @@
                   "verifier",
                   "architect",
                   "playwright-e2e",
-                  "knowledge-curator"
+                  "knowledge-curator",
+                  "security-reviewer",
+                  "refactorer",
+                  "retrospective",
+                  "driver"
                 ],
                 "description": "Subagent role that owns the node"
               },
@@ -319,6 +327,17 @@
                   "fix": 0,
                   "switch": 0
                 }
+              },
+              "agent_hint": {
+                "type": "string"
+              },
+              "file_scope": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Repo-relative path; absolute paths and .. traversal are rejected"
+                }
               }
             },
             "required": [
@@ -343,6 +362,11 @@
             "switch_per_node": {
               "type": "integer",
               "minimum": 0
+            },
+            "converge_rounds": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "default": 3
             }
           },
           "required": [

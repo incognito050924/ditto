@@ -329,6 +329,15 @@
                 "blocked"
               ]
             },
+            "closure_mode": {
+              "type": "string",
+              "enum": [
+                "mutual_agreement",
+                "ledger_only",
+                "safe_default"
+              ],
+              "description": "How the closure was reached, not why (that is exit.reason)"
+            },
             "verdict_delegated_to_completion": {
               "type": "boolean",
               "default": true
@@ -349,7 +358,8 @@
             }
           },
           "required": [
-            "reason"
+            "reason",
+            "closure_mode"
           ],
           "additionalProperties": false
         }

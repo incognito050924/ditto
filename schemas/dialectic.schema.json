@@ -372,6 +372,11 @@
                     ],
                     "description": "Finding severity"
                   },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Stable objection id; lets the synthesizer resolve by id instead of echoing claim verbatim"
+                  },
                   "claim": {
                     "type": "string",
                     "minLength": 1
