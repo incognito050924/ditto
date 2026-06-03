@@ -3,6 +3,7 @@ import '~/core/hosts';
 import { acgReviewCommand } from './commands/acg-review';
 import { autopilotCommand } from './commands/autopilot';
 import { bridgeCommand } from './commands/bridge';
+import { codeqlCommand } from './commands/codeql';
 import { contextCommand } from './commands/context';
 import { deepInterviewCommand } from './commands/deep-interview';
 import { doctorCommand } from './commands/doctor';
@@ -28,6 +29,7 @@ const main = defineCommand({
     'deep-interview': deepInterviewCommand,
     e2e: e2eCommand,
     'acg-review': acgReviewCommand,
+    codeql: codeqlCommand,
   },
 });
 
