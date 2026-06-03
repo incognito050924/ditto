@@ -2,6 +2,7 @@ import { defineCommand, runMain } from 'citty';
 import '~/core/hosts';
 import { acgReviewCommand } from './commands/acg-review';
 import { autopilotCommand } from './commands/autopilot';
+import { boundaryCommand } from './commands/boundary';
 import { bridgeCommand } from './commands/bridge';
 import { codeqlCommand } from './commands/codeql';
 import { contextCommand } from './commands/context';
@@ -34,6 +35,7 @@ const main = defineCommand({
     codeql: codeqlCommand,
     impact: impactCommand,
     fitness: fitnessCommand,
+    boundary: boundaryCommand,
   },
 });
 
