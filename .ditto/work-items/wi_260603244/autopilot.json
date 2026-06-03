@@ -1,0 +1,340 @@
+{
+  "schema_version": "0.1.0",
+  "autopilot_id": "orch_260603s4g",
+  "work_item_id": "wi_260603244",
+  "mode": "autopilot",
+  "root_goal": "ACG v0 DITTO 바인딩의 WU-2~4(ACG 내부, 공유 런타임 미변경)를 구현한다. WU-5/6은 사용자 결정(공유런타임 분리)으로 별도 승인 work item에 둔다",
+  "completion_boundary": "entire_work_item",
+  "approval_gate": {
+    "status": "not_required",
+    "source": "small_reversible_policy",
+    "approved_at": null,
+    "approved_by": null,
+    "evidence_refs": []
+  },
+  "nodes": [
+    {
+      "id": "N1",
+      "kind": "design",
+      "owner": "planner",
+      "purpose": "Plan the change against the acceptance criteria",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4"
+      ],
+      "evidence_refs": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N2",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "Implement the planned change",
+      "status": "passed",
+      "depends_on": [
+        "N1"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4"
+      ],
+      "evidence_refs": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N3",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Verify every acceptance criterion with evidence",
+      "status": "passed",
+      "depends_on": [
+        "N2"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4"
+      ],
+      "evidence_refs": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "wi_260603244-n-wu2-impl",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "WU-2 cross-ref conformance 테스트: evidence_kind 7/fitness_kind 9/scope_kind→public_surface 매핑이 코드 상수와 문서 enum 일치, journey_id 참조 무결성, user_journey/ui 노드 path 없이 journey_id만으로 valid·둘 다 없으면 invalid. 기존 acg-*.ts에 conformance assertion만 추가.",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-4"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/acg-conformance.test.ts",
+          "summary": "7 pass 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx biome check tests/schemas/acg-conformance.test.ts",
+          "summary": "clean exit 0"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      },
+      "file_scope": [
+        "tests/schemas/acg-conformance.test.ts"
+      ]
+    },
+    {
+      "id": "wi_260603244-n-wu2-verify",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "WU-2 테스트 green을 fresh evidence로 확인(bun test acg-conformance). enum/참조/path-optional 세 축 실행·통과 verdict.",
+      "status": "passed",
+      "depends_on": [
+        "wi_260603244-n-wu2-impl"
+      ],
+      "acceptance_refs": [
+        "ac-1"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/acg-conformance.test.ts",
+          "summary": "7 pass 0 fail exit 0 (fresh)"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      },
+      "file_scope": []
+    },
+    {
+      "id": "wi_260603244-n-wu3-design",
+      "kind": "design",
+      "owner": "planner",
+      "purpose": "WU-3 ICL 얇은 변환기(D6) 형태 확정: 30 §2 EBNF 중 ChangeContract(+FitnessFunction) 컴파일 최소 표면, §3 매핑(surface→public_surface·as/#→note·cmd/query→deterministic·judge→llm_judged+reproducibility 기본값·when→cadence), 정적검사 4종, 모듈 경계 src/acg/icl/. 거대 런타임·코드생성·집행·Change Map 범위 밖 명시.",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-2"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "file",
+          "path": "reports/design/agentic-governance/30-intent-change-dsl.md",
+          "summary": "§2 EBNF·§3 매핑·§5 boxwood"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/acg-change-contract.ts",
+          "summary": "컴파일 타깃 Zod"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      },
+      "file_scope": []
+    },
+    {
+      "id": "wi_260603244-n-wu3-impl",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "WU-3 컴파일러: .icl 파서 + ChangeContract/FitnessFunction 방출. 출력은 acgChangeContract/acgFitnessFunction Zod로 검증(D2, 새 JSON Schema 손작성 금지). boxwood retry-policy.icl fixture 컴파일, 매핑·정적검사 음성케이스 에러. 신규 모듈만, 공유 런타임 불변.",
+      "status": "passed",
+      "depends_on": [
+        "wi_260603244-n-wu3-design"
+      ],
+      "acceptance_refs": [
+        "ac-2",
+        "ac-4"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/acg/icl-compiler.test.ts",
+          "summary": "14 pass 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx biome check src/acg/icl tests/acg/icl-compiler.test.ts",
+          "summary": "clean exit 0"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      },
+      "file_scope": [
+        "src/acg/icl/compiler.ts",
+        "src/acg/icl/parser.ts",
+        "tests/acg/icl-compiler.test.ts",
+        "tests/acg/fixtures/retry-policy.icl"
+      ]
+    },
+    {
+      "id": "wi_260603244-n-wu3-verify",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "WU-3 검증: boxwood .icl이 schema-valid ChangeContract로 컴파일·매핑 정확·음성케이스 에러가 acceptance별 pass/fail 구분되어 green인지 fresh 실행 확인.",
+      "status": "passed",
+      "depends_on": [
+        "wi_260603244-n-wu3-impl"
+      ],
+      "acceptance_refs": [
+        "ac-2"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/acg/icl-compiler.test.ts",
+          "summary": "14 pass 0 fail exit 0 (fresh)"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      },
+      "file_scope": []
+    },
+    {
+      "id": "wi_260603244-n-wu4-impl",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "WU-4 acg_review 어댑터: reviewer-output finding↔acg_review file 왕복 무손실, unresolved는 marker로(OBJ-53), role∈{ui,user_journey}는 journey_id 식별(OBJ-52). D3: reviewer-output.ts 불변, acg_review 별도 확장객체, additionalProperties 정책 불변. 출력 acgReviewGraph Zod 검증.",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-3",
+        "ac-4"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/acg/acg-review-adapter.test.ts",
+          "summary": "5 pass 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx biome check src/acg/review/acg-review-adapter.ts tests/acg/acg-review-adapter.test.ts",
+          "summary": "clean exit 0"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      },
+      "file_scope": [
+        "src/acg/review/acg-review-adapter.ts",
+        "tests/acg/acg-review-adapter.test.ts"
+      ]
+    },
+    {
+      "id": "wi_260603244-n-wu4-verify",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "WU-4 검증: 왕복 무손실·unresolved marker·journey_id 식별 green, reviewer-output.ts diff 0 확인.",
+      "status": "passed",
+      "depends_on": [
+        "wi_260603244-n-wu4-impl"
+      ],
+      "acceptance_refs": [
+        "ac-3"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/acg/acg-review-adapter.test.ts",
+          "summary": "5 pass 0 fail exit 0 (fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "git diff --stat HEAD -- src/schemas/reviewer-output.ts",
+          "summary": "empty diff — reviewer-output 불변"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      },
+      "file_scope": []
+    },
+    {
+      "id": "wi_260603244-n-suite-verify",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "ac-4 통합 게이트: 전체 스위트 회귀 0 + biome clean + 공유 런타임 미변경(변경이 tests/·src/acg/ 신규에 한정, reviewer-output.ts·기존 acg-*.ts 불변)을 fresh evidence로 확정.",
+      "status": "passed",
+      "depends_on": [
+        "wi_260603244-n-wu2-verify",
+        "wi_260603244-n-wu3-verify",
+        "wi_260603244-n-wu4-verify"
+      ],
+      "acceptance_refs": [
+        "ac-4"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "918 pass 1 skip 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx biome check src tests scripts",
+          "summary": "clean exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git status --short src/schemas src/hooks",
+          "summary": "공유 런타임 미변경(출력 없음)"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      },
+      "file_scope": []
+    }
+  ],
+  "caps": {
+    "fix_per_node": 2,
+    "switch_per_node": 1,
+    "converge_rounds": 3
+  },
+  "continue_policy": {
+    "continue_after_approval": true,
+    "continue_after_checkpoint": true,
+    "continue_after_fixable_failure": true,
+    "ask_user_only_for_user_owned_decisions": true
+  },
+  "stop_conditions": [
+    "all_acceptance_criteria_passed_or_explicitly_closed",
+    "blocked_by_user_owned_decision",
+    "blocked_by_external_system",
+    "safety_boundary_hit"
+  ],
+  "user_interrupt_policy": "ask_only_for_user_owned_decisions"
+}

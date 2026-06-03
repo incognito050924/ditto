@@ -1,0 +1,53 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260603244",
+  "title": "ACG v0 WU-2~6 (DITTO 바인딩 구현)",
+  "source_request": "deep-interview + 오케스트레이션으로 v0 나머지(WU-2~6) 할게",
+  "goal": "ACG v0 DITTO 바인딩의 WU-2~4(ACG 내부, 공유 런타임 미변경)를 구현한다. WU-5/6은 사용자 결정(공유런타임 분리)으로 별도 승인 work item에 둔다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "WU-2 conformance 테스트가 cross-ref enum 일치·journey_id 참조 무결성·user_journey 노드 path 없이 유효를 검증하며 green",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "WU-3 ICL 컴파일러가 boxwood 예시 .icl을 schema-valid ChangeContract로 컴파일하고 surface→public_surface·cmd/query→deterministic·judge→llm_judged 매핑, forbid 빈블록 등 음성케이스는 에러",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "WU-4 acg_review 어댑터가 reviewer-output↔ReviewGraph를 왕복 무손실 투영하고 reviewer-output 스키마/additionalProperties 정책이 불변(신규 모듈만 추가)",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "WU-2~4가 전부 ACG 내부 신규 모듈로 공유 런타임을 변경하지 않으며 전체 테스트 스위트 회귀 0·biome clean",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "tests/schemas/acg-conformance.test.ts",
+    "src/acg/review/acg-review-adapter.ts",
+    "tests/acg/acg-review-adapter.test.ts",
+    "src/acg/icl/ast.ts",
+    "src/acg/icl/tokenizer.ts",
+    "src/acg/icl/parser.ts",
+    "src/acg/icl/static-check.ts",
+    "src/acg/icl/compile.ts",
+    "src/acg/icl/index.ts",
+    "tests/acg/fixtures/retry-policy.icl",
+    "tests/acg/icl-compiler.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-03T14:17:09.721Z",
+  "updated_at": "2026-06-03T14:36:25.414Z"
+}

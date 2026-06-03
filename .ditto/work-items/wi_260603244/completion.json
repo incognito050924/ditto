@@ -1,0 +1,159 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260603244",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-03T14:40:34.781Z",
+  "summary": "ACG v0 WU-2~4(conformance 테스트·ICL→ChangeContract 컴파일러·acg_review 어댑터) 구현. 공유 런타임 미변경, 전체 918 pass 회귀 0. WU-5/6은 사용자 결정으로 별도 승인 work item.",
+  "changed_files": [
+    "tests/schemas/acg-conformance.test.ts",
+    "src/acg/review/acg-review-adapter.ts",
+    "tests/acg/acg-review-adapter.test.ts",
+    "src/acg/icl/ast.ts",
+    "src/acg/icl/tokenizer.ts",
+    "src/acg/icl/parser.ts",
+    "src/acg/icl/static-check.ts",
+    "src/acg/icl/compile.ts",
+    "src/acg/icl/index.ts",
+    "tests/acg/fixtures/retry-policy.icl",
+    "tests/acg/icl-compiler.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/acg-conformance.test.ts",
+          "summary": "7 pass 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx biome check tests/schemas/acg-conformance.test.ts",
+          "summary": "clean exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/acg-conformance.test.ts",
+          "summary": "7 pass 0 fail exit 0 (fresh)"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "reports/design/agentic-governance/30-intent-change-dsl.md",
+          "summary": "§2 EBNF·§3 매핑·§5 boxwood"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/acg-change-contract.ts",
+          "summary": "컴파일 타깃 Zod"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/acg/icl-compiler.test.ts",
+          "summary": "14 pass 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx biome check src/acg/icl tests/acg/icl-compiler.test.ts",
+          "summary": "clean exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/acg/icl-compiler.test.ts",
+          "summary": "14 pass 0 fail exit 0 (fresh)"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/acg/acg-review-adapter.test.ts",
+          "summary": "5 pass 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx biome check src/acg/review/acg-review-adapter.ts tests/acg/acg-review-adapter.test.ts",
+          "summary": "clean exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/acg/acg-review-adapter.test.ts",
+          "summary": "5 pass 0 fail exit 0 (fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "git diff --stat HEAD -- src/schemas/reviewer-output.ts",
+          "summary": "empty diff — reviewer-output 불변"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/acg-conformance.test.ts",
+          "summary": "7 pass 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx biome check tests/schemas/acg-conformance.test.ts",
+          "summary": "clean exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/acg/icl-compiler.test.ts",
+          "summary": "14 pass 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx biome check src/acg/icl tests/acg/icl-compiler.test.ts",
+          "summary": "clean exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/acg/acg-review-adapter.test.ts",
+          "summary": "5 pass 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx biome check src/acg/review/acg-review-adapter.ts tests/acg/acg-review-adapter.test.ts",
+          "summary": "clean exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "918 pass 1 skip 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx biome check src tests scripts",
+          "summary": "clean exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git status --short src/schemas src/hooks",
+          "summary": "공유 런타임 미변경(출력 없음)"
+        }
+      ],
+      "evidence_records": []
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [],
+  "final_verdict": "pass"
+}
