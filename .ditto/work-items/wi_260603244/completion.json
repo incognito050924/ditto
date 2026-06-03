@@ -1,159 +1,93 @@
 {
   "schema_version": "0.1.0",
   "work_item_id": "wi_260603244",
-  "declared_by": "verifier",
-  "declared_at": "2026-06-03T14:40:34.781Z",
-  "summary": "ACG v0 WU-2~4(conformance 테스트·ICL→ChangeContract 컴파일러·acg_review 어댑터) 구현. 공유 런타임 미변경, 전체 918 pass 회귀 0. WU-5/6은 사용자 결정으로 별도 승인 work item.",
+  "declared_by": "main",
+  "declared_at": "2026-06-03T14:45:12.720Z",
+  "summary": "ACG v0 WU-2~6 (DITTO 바인딩 구현) — 일부 acceptance criterion이 비-pass 상태로 partial 핸드오프된다.",
   "changed_files": [
-    "tests/schemas/acg-conformance.test.ts",
-    "src/acg/review/acg-review-adapter.ts",
-    "tests/acg/acg-review-adapter.test.ts",
+    ".ditto/work-items/wi_260603244/autopilot.json",
+    ".ditto/work-items/wi_260603244/completion.json",
+    ".ditto/work-items/wi_260603244/handoff.md",
+    ".ditto/work-items/wi_260603244/intent.json",
+    ".ditto/work-items/wi_260603244/interview-state.json",
+    ".ditto/work-items/wi_260603244/language-ledger.json",
+    ".ditto/work-items/wi_260603244/work-item.json",
+    "reports/design/agentic-governance/00-framework.md",
+    "reports/design/agentic-governance/10-methodology.md",
+    "reports/design/agentic-governance/20-contracts.md",
+    "reports/design/agentic-governance/30-intent-change-dsl.md",
+    "reports/design/agentic-governance/reviews/dialectic-4.json",
+    "reports/design/agentic-governance/reviews/dialectic-4.md",
+    "reports/design/agentic-governance/reviews/dialectic-5.json",
+    "reports/design/agentic-governance/v0-implementation-plan.md",
+    "schemas/acg-architecture-spec.schema.json",
+    "schemas/acg-assurance-snapshot.schema.json",
+    "schemas/acg-change-contract.schema.json",
+    "schemas/acg-fitness-function.schema.json",
+    "schemas/acg-impact-graph.schema.json",
+    "schemas/acg-journey-run.schema.json",
+    "schemas/acg-journey-spec.schema.json",
+    "schemas/acg-review-graph.schema.json",
+    "schemas/acg-semantic-compatibility.schema.json",
+    "schemas/autopilot.schema.json",
+    "schemas/convergence.schema.json",
+    "schemas/dialectic.schema.json",
+    "schemas/interview-state.schema.json",
+    "scripts/export-schemas.ts",
     "src/acg/icl/ast.ts",
-    "src/acg/icl/tokenizer.ts",
-    "src/acg/icl/parser.ts",
-    "src/acg/icl/static-check.ts",
     "src/acg/icl/compile.ts",
     "src/acg/icl/index.ts",
+    "src/acg/icl/parser.ts",
+    "src/acg/icl/static-check.ts",
+    "src/acg/icl/tokenizer.ts",
+    "src/acg/review/acg-review-adapter.ts",
+    "src/schemas/acg-architecture-spec.ts",
+    "src/schemas/acg-assurance-snapshot.ts",
+    "src/schemas/acg-change-contract.ts",
+    "src/schemas/acg-common.ts",
+    "src/schemas/acg-fitness-function.ts",
+    "src/schemas/acg-impact-graph.ts",
+    "src/schemas/acg-journey-run.ts",
+    "src/schemas/acg-journey-spec.ts",
+    "src/schemas/acg-review-graph.ts",
+    "src/schemas/acg-semantic-compatibility.ts",
+    "src/schemas/index.ts",
+    "tests/acg/acg-review-adapter.test.ts",
     "tests/acg/fixtures/retry-policy.icl",
-    "tests/acg/icl-compiler.test.ts"
+    "tests/acg/icl-compiler.test.ts",
+    "tests/schemas/acg-conformance.test.ts",
+    "tests/schemas/acg-schemas.test.ts",
+    "tests/schemas/sidecar-registration.test.ts"
   ],
   "acceptance": [
     {
       "criterion_id": "ac-1",
-      "verdict": "pass",
-      "evidence": [
-        {
-          "kind": "command",
-          "command": "bun test tests/schemas/acg-conformance.test.ts",
-          "summary": "7 pass 0 fail exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "bunx biome check tests/schemas/acg-conformance.test.ts",
-          "summary": "clean exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "bun test tests/schemas/acg-conformance.test.ts",
-          "summary": "7 pass 0 fail exit 0 (fresh)"
-        }
-      ],
+      "verdict": "unverified",
+      "evidence": [],
       "evidence_records": []
     },
     {
       "criterion_id": "ac-2",
-      "verdict": "pass",
-      "evidence": [
-        {
-          "kind": "file",
-          "path": "reports/design/agentic-governance/30-intent-change-dsl.md",
-          "summary": "§2 EBNF·§3 매핑·§5 boxwood"
-        },
-        {
-          "kind": "file",
-          "path": "src/schemas/acg-change-contract.ts",
-          "summary": "컴파일 타깃 Zod"
-        },
-        {
-          "kind": "command",
-          "command": "bun test tests/acg/icl-compiler.test.ts",
-          "summary": "14 pass 0 fail exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "bunx biome check src/acg/icl tests/acg/icl-compiler.test.ts",
-          "summary": "clean exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "bun test tests/acg/icl-compiler.test.ts",
-          "summary": "14 pass 0 fail exit 0 (fresh)"
-        }
-      ],
+      "verdict": "unverified",
+      "evidence": [],
       "evidence_records": []
     },
     {
       "criterion_id": "ac-3",
-      "verdict": "pass",
-      "evidence": [
-        {
-          "kind": "command",
-          "command": "bun test tests/acg/acg-review-adapter.test.ts",
-          "summary": "5 pass 0 fail exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "bunx biome check src/acg/review/acg-review-adapter.ts tests/acg/acg-review-adapter.test.ts",
-          "summary": "clean exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "bun test tests/acg/acg-review-adapter.test.ts",
-          "summary": "5 pass 0 fail exit 0 (fresh)"
-        },
-        {
-          "kind": "command",
-          "command": "git diff --stat HEAD -- src/schemas/reviewer-output.ts",
-          "summary": "empty diff — reviewer-output 불변"
-        }
-      ],
+      "verdict": "unverified",
+      "evidence": [],
       "evidence_records": []
     },
     {
       "criterion_id": "ac-4",
-      "verdict": "pass",
-      "evidence": [
-        {
-          "kind": "command",
-          "command": "bun test tests/schemas/acg-conformance.test.ts",
-          "summary": "7 pass 0 fail exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "bunx biome check tests/schemas/acg-conformance.test.ts",
-          "summary": "clean exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "bun test tests/acg/icl-compiler.test.ts",
-          "summary": "14 pass 0 fail exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "bunx biome check src/acg/icl tests/acg/icl-compiler.test.ts",
-          "summary": "clean exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "bun test tests/acg/acg-review-adapter.test.ts",
-          "summary": "5 pass 0 fail exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "bunx biome check src/acg/review/acg-review-adapter.ts tests/acg/acg-review-adapter.test.ts",
-          "summary": "clean exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "bun test",
-          "summary": "918 pass 1 skip 0 fail exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "bunx biome check src tests scripts",
-          "summary": "clean exit 0"
-        },
-        {
-          "kind": "command",
-          "command": "git status --short src/schemas src/hooks",
-          "summary": "공유 런타임 미변경(출력 없음)"
-        }
-      ],
+      "verdict": "unverified",
+      "evidence": [],
       "evidence_records": []
     }
   ],
   "verifications": [],
   "unverified": [],
   "remaining_risks": [],
-  "final_verdict": "pass"
+  "next_handoff_path": ".ditto/work-items/wi_260603244/handoff.md",
+  "final_verdict": "partial"
 }
