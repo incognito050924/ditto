@@ -1,0 +1,217 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2606034pd",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-03T01:46:35.767Z",
+  "summary": "dispatch variant 라우팅 신설: .ditto/agents/ 카탈로그 로더 + 결정론 role+file_scope 필터 + nextNode spawn action에 variant_candidates 노출. real-spawn dogfooding (planner/implementer/verifier).",
+  "changed_files": [
+    "src/core/agent-variants.ts",
+    "src/core/autopilot-dispatch.ts",
+    "src/core/autopilot-loop.ts",
+    "tests/core/agent-variants.test.ts",
+    "tests/core/autopilot-dispatch.test.ts",
+    "tests/core/autopilot-loop.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 796 pass / 0 fail (65 files); covers ac-4 + new ac-1/2/3 tests"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git diff --stat src/schemas/",
+          "summary": "empty — owner enum/schema untouched"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/agent-variants.ts",
+          "lines": {
+            "start": 23,
+            "end": 59
+          },
+          "summary": "loadVariantCatalog missing-dir->[]; selectVariantCandidates pure role+glob filter 0-match->[] (ac-1, ac-2)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-dispatch.ts",
+          "lines": {
+            "start": 25,
+            "end": 106
+          },
+          "summary": "DelegationPacket.variant_candidates; buildDelegationPacket defaults [] (ac-3, ac-4)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 160,
+            "end": 167
+          },
+          "summary": "nextNode loads catalog + selects + passes to spawn packet (ac-3)"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 796 pass / 0 fail (65 files); covers ac-4 + new ac-1/2/3 tests"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git diff --stat src/schemas/",
+          "summary": "empty — owner enum/schema untouched"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/agent-variants.ts",
+          "lines": {
+            "start": 23,
+            "end": 59
+          },
+          "summary": "loadVariantCatalog missing-dir->[]; selectVariantCandidates pure role+glob filter 0-match->[] (ac-1, ac-2)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-dispatch.ts",
+          "lines": {
+            "start": 25,
+            "end": 106
+          },
+          "summary": "DelegationPacket.variant_candidates; buildDelegationPacket defaults [] (ac-3, ac-4)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 160,
+            "end": 167
+          },
+          "summary": "nextNode loads catalog + selects + passes to spawn packet (ac-3)"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 796 pass / 0 fail (65 files); covers ac-4 + new ac-1/2/3 tests"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git diff --stat src/schemas/",
+          "summary": "empty — owner enum/schema untouched"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/agent-variants.ts",
+          "lines": {
+            "start": 23,
+            "end": 59
+          },
+          "summary": "loadVariantCatalog missing-dir->[]; selectVariantCandidates pure role+glob filter 0-match->[] (ac-1, ac-2)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-dispatch.ts",
+          "lines": {
+            "start": 25,
+            "end": 106
+          },
+          "summary": "DelegationPacket.variant_candidates; buildDelegationPacket defaults [] (ac-3, ac-4)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 160,
+            "end": 167
+          },
+          "summary": "nextNode loads catalog + selects + passes to spawn packet (ac-3)"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0 — 796 pass / 0 fail (65 files); covers ac-4 + new ac-1/2/3 tests"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git diff --stat src/schemas/",
+          "summary": "empty — owner enum/schema untouched"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/agent-variants.ts",
+          "lines": {
+            "start": 23,
+            "end": 59
+          },
+          "summary": "loadVariantCatalog missing-dir->[]; selectVariantCandidates pure role+glob filter 0-match->[] (ac-1, ac-2)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-dispatch.ts",
+          "lines": {
+            "start": 25,
+            "end": 106
+          },
+          "summary": "DelegationPacket.variant_candidates; buildDelegationPacket defaults [] (ac-3, ac-4)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-loop.ts",
+          "lines": {
+            "start": 160,
+            "end": 167
+          },
+          "summary": "nextNode loads catalog + selects + passes to spawn packet (ac-3)"
+        }
+      ],
+      "evidence_records": []
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [],
+  "final_verdict": "pass"
+}

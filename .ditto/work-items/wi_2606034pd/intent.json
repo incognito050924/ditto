@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2606034pd",
+  "source_request": "line 159에 variant 라우팅 단계 신설하는 설계 + 구현까지 해줘. ditto 의 오케스트레이션으로 dogfooding 해",
+  "goal": "autopilot dispatch가 spawn 직전(line 159)에 프로젝트 agent variant를 라우팅 후보로 packet에 실어, driver가 고정 owner 대신 specialized subagent를 선택해 spawn할 수 있게 한다",
+  "in_scope": [
+    ".ditto/agents/*.md frontmatter(name/role/description/match)를 읽는 variant 카탈로그 로더",
+    "buildDelegationPacket의 variant_candidates 필드 + dispatch 결정론 필터(role 일치 + file_scope match)",
+    "next-node spawn action에 variant_candidates 노출",
+    "후보 0일 때 기존 동작 보존(하위호환)"
+  ],
+  "out_of_scope": [
+    "planner가 variant를 early-binding으로 고르는 경로",
+    "owner enum/스키마 확장",
+    "description 기반 LLM 선택 로직을 코드에 구현(최종 선택은 driver/main agent 책임)",
+    "approval gate 변경"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": ".ditto/agents/*.md의 frontmatter(name/role/description/match)를 파싱해 variant 카탈로그를 로드하고, 디렉토리가 없으면 항목 0개의 빈 카탈로그를 returns 한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": ["test"]
+    },
+    {
+      "id": "ac-2",
+      "statement": "dispatch가 chosen.owner(role)와 노드 file_scope로 variant 후보를 결정론적으로 필터해 packet.variant_candidates 에 싣고, 일치 후보가 0개면 빈 배열을 returns 한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": ["test"]
+    },
+    {
+      "id": "ac-3",
+      "statement": "next-node의 spawn action이 variant_candidates 필드를 contains 하여 driver가 owner 대신 specialized subagent_type을 선택할 수 있다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": ["test"]
+    },
+    {
+      "id": "ac-4",
+      "statement": ".ditto/agents/가 없는 현재 ditto에서 기존 autopilot 동작이 불변이고 bun test 가 exit code 0 으로 통과한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": ["test", "log"]
+    }
+  ],
+  "unknowns": [],
+  "follow_up_candidates": [
+    "planner optional agent_hint override (early-binding 보강)",
+    "description 기반 LLM 라우팅 가이드를 autopilot SKILL.md step 2에 명문화",
+    "OBSERVABLE 게이트(gates.ts:122)가 한국어 술어를 인식하도록 확장"
+  ],
+  "question_policy": "ask_only_if_user_only_can_answer"
+}

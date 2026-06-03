@@ -1,0 +1,48 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2606034pd",
+  "title": "dispatch variant 라우팅",
+  "source_request": "line 159에 variant 라우팅 단계 신설하는 설계 + 구현까지 해줘. ditto 의 오케스트레이션으로 dogfooding 해",
+  "goal": "autopilot dispatch가 spawn 직전(line 159)에 프로젝트 agent variant를 라우팅 후보로 packet에 실어, driver가 고정 owner 대신 specialized subagent를 선택해 spawn할 수 있게 한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": ".ditto/agents/*.md의 frontmatter(name/role/description/match)를 파싱해 variant 카탈로그를 로드하고, 디렉토리가 없으면 항목 0개의 빈 카탈로그를 returns 한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "dispatch가 chosen.owner(role)와 노드 file_scope로 variant 후보를 결정론적으로 필터해 packet.variant_candidates 에 싣고, 일치 후보가 0개면 빈 배열을 returns 한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "next-node의 spawn action이 variant_candidates 필드를 contains 하여 driver가 owner 대신 specialized subagent_type을 선택할 수 있다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": ".ditto/agents/가 없는 현재 ditto에서 기존 autopilot 동작이 불변이고 bun test 가 exit code 0 으로 통과한다",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/agent-variants.ts",
+    "src/core/autopilot-dispatch.ts",
+    "src/core/autopilot-loop.ts",
+    "tests/core/agent-variants.test.ts",
+    "tests/core/autopilot-dispatch.test.ts",
+    "tests/core/autopilot-loop.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-03T01:28:58.242Z",
+  "updated_at": "2026-06-03T01:42:48.365Z"
+}
