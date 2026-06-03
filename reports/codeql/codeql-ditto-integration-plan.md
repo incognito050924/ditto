@@ -4,11 +4,26 @@ kind: plan
 last_updated: 2026-06-02 KST
 depends_on:
   - "codeql-research-ko.md (연구·PoC·창발 연구 부록2~5)"
-status: draft (착수 전, 사용자 승인 대기)
+status: in-progress — WI-1/2/3 구현·커밋 완료(2026-06-03), WI-4 advisory-first 대기
 scope: "DITTO 하네스가 target repo를 CodeQL로 분석한 결과를 게이트·증거·변증법에 결정론 입력으로 주입"
 ---
 
 # CodeQL × DITTO 접목 실행 계획
+
+## 진척 상태 (2026-06-03) — 잊지 말 것
+
+| WI | 상태 | 커밋 | 잔여 |
+|---|---|---|---|
+| **WI-1** runner | ✅ 완료 | `eee57c8` | Kotlin e2e 미실행(clean build 환경 필요; runner 컴파일 경로는 단위검증됨) |
+| **WI-2** doctor codeql | ✅ 완료 | `efe06ea` | **`--probe`** 미구현 — 실제 추출량 검증으로 `buildVerified` 자동 전환(현재는 정적 fail-closed + 수동 `--build-verified`) |
+| **WI-3** SARIF→objection/finding 어댑터 | ✅ 완료 | `0c10ed7` | — |
+| **WI-4** dialectic 결정론 opponent | ⏳ **미착수** | — | 아래 ⚠️ 조건 |
+| **WI-5** dataflow DoD/테스트 | ⏳ 미착수 | — | 부록6 PoC 완료, 구현 남음 |
+| **reviewer lane 자동 배선** | ⏳ 미착수 | — | `runCodeqlReview`(review.ts)는 호출가능 단위로 존재. **doctor(WI-2) 게이트 뒤에서** reviewer profile이 자동 호출하도록 배선. doctor 없이 무조건 실행 금지(부록4 빈추출 오판) |
+
+> **⚠️ WI-4 착수 조건(무한루프 방지 — 통합계획 §6, §5 준수).** WI-4는 stop hook 종료 차단을 건드리는 최고위험 작업이다. 반드시 **advisory-first**로: ① 처음엔 비차단(ledger 기록만), ② taint(path-problem) objection만, ③ delta(순증)만 objection화, ④ round_cap 강제. **차단 모드 전환은 advisory 관측에서 false-positive율 확인 후 별도 결정**. WI-3의 `toObjection`(id=`codeql:` prefix)이 입력이고, stop.ts `dialecticForcesContinuation`(admissibility 재사용)이 소비처다.
+
+> **재개 지점.** "이어서 진행"하려면 WI-4를 advisory-first로 착수(stop hook 영향 없이 ledger 주입 경로부터). 또는 reviewer lane 자동 배선(doctor 게이트 뒤)이 다음 합류점.
 
 > 계획 원칙(charter §5-2): 각 단계는 **검증 가능한 목표**다. 변경 대상 + done_when + 검증 방법 + 위험/되돌리기를 함께 둔다. Tidy First — 구조적/동작적 변경 별도 커밋, 구조 먼저. schema first(ADR-0002) — 스키마 필요 시 zod 먼저. 의도를 조용히 축소하지 않는다.
 
