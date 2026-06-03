@@ -1,0 +1,24 @@
+{
+  "schema": "ditto.dialectic.v1",
+  "n": 3,
+  "mode": "review",
+  "target_artifact": "reports/design/agentic-governance/ (6 docs)",
+  "question": "방금 추가된 CodeQL 연결이 ACG를 특정 도구에 과결합(over-coupling)시켰는가.",
+  "produced_at": "2026-06-03 KST",
+  "producer": { "verdict_proposed": "accept", "position": "과결합 아님. 스키마 기계검증부 도구중립(mode enum·spec 자유문자열, JSON Schema required/enum/const에 codeql 0건), 추상 그대로·CodeQL은 한 인스턴스, 경계 매 인용지점 반복, cross_repo는 한계 교차검증(강점 의존 아님).", "known_limits": ["인용 밀도 비대칭 — CodeQL이 deterministic 유일 실증 레퍼런스, 대안 부재가 framing 약한 고리", "경계는 prose 수준이지 스키마 강제 아님(오용위험, 과결합 아님)", "codeql 연구문서 본문 정확성 미대조"] },
+  "opponent": { "run": { "provider": "codex", "model": "codex-plugin-cc adversarial", "command": "Agent codex:codex-rescue (read-only)", "fallback_from": null, "fallback_reason": null }, "objection_count": 6 },
+  "synthesizer": { "verdict": "revise", "rationale": "과결합(설계 종속)은 없음 — 양측 수렴(스키마 무결성 입증 + Opponent도 '구조적 broken 아님' 동의). 그러나 framing 결함 2건(OBJ-28 실증 과장=자기원칙 위반, OBJ-29 정규화 누락=오구현 유발)이 1차자료 grounding된 admissible이라 accept 막음. 2 edit 후 accept." },
+  "objections": [
+    { "id": "OBJ-25", "severity": "medium", "category": "stack_agnostic", "admissible": false, "oracle": "20 §6 line561", "finding": "deterministic '레퍼런스=CodeQL taint' + .ql/codeql analyze 예시가 대표형태 고정", "disposition": "rejected", "fix": "기각 — line561이 도구중립 일반정의(ArchitectureSpec위반·의존성·버전·커버리지)를 선행 제시 후 CodeQL을 한 인스턴스로 듦. 'deterministic=CodeQL' 독해 본문구조상 불성립" },
+    { "id": "OBJ-26", "severity": "low", "category": "stack_agnostic", "admissible": false, "oracle": "20 §2 line182", "finding": "cross_repo description에 CodeQL 단일DB 한계 임베드", "disposition": "rejected", "fix": "기각 — Opponent도 cosmetic·enum무결 인정. 한계 교차검증(자기한계로 인용)이지 강점의존 아님" },
+    { "id": "OBJ-27", "severity": "medium", "category": "dependency_direction", "admissible": false, "oracle": "00 §3.1·§10", "finding": "추상→구체(DITTO-specific draft) 의존방향, 부록/커밋 앵커 변동 시 ACG 주장 썩음", "disposition": "partial", "fix": "OBJ-28 수정에 흡수 — 경계 (3)에 'status: draft·도구 변동 빠름·CodeQL 없이도 추상 성립' 명시로 의존 약화. 별도 snapshot 식별자 분리까지는 불요(과결합 아님 수렴)" },
+    { "id": "OBJ-28", "severity": "high", "category": "evidence_overreach", "admissible": true, "oracle": "00 §3.1 line118 ↔ §1.1(1)(3) 자기원칙; codeql-research-ko.md:369,427 [VERIFY]", "finding": "'실증된 레퍼런스 구현' header가 추론(C-1)·draft(통합계획) 칸까지 일괄 실증 포장 → ACG '근거없는 완료주장=SLOP' 자기원칙 위반", "disposition": "fixed", "fix": "header '실증된'→'PoC로 일부 검증된 예시 provider', 표 3열 '실증'→'근거 수준'(실증/부분실증/추론 칸별). dataflow diff·codeFlow·cross_repo=실증, taint게이트·delta=부분실증, boundary=추론. 경계 (3)에 draft/volatility+대안 provider" },
+    { "id": "OBJ-29", "severity": "high", "category": "correctness", "admissible": true, "oracle": "20 §4 line351·40 §5 line101 ↔ codeql-research-ko.md:482,487", "finding": "dataflow diff 동등성을 'source→sink 집합 불변'으로만 정의 — 인용 PoC 자신이 'raw line diff=noise, 정규화 필요' 경고했는데 ACG 본문 누락 → raw file:line 비교 오구현 유발", "disposition": "fixed", "fix": "20 §4·40 §5에 동등성 key = rule id + source/sink semantic symbol + enclosing function + normalized path hash 명시, line은 표시용·비-key. 라인이동 거짓 NEW/REMOVED 경고(부록3 4/4=0 순변화)" },
+    { "id": "OBJ-30", "severity": "medium", "category": "balance", "admissible": false, "oracle": "00 §3.1 line116", "finding": "ACG 전체 유일 명명 도구가 CodeQL → vendor 기본값처럼 읽힘. Semgrep/Joern/ESLint·depcruise·ArchUnit/TS compiler 무언급", "disposition": "open_question+partial", "fix": "action gate 기각(line120 '필수의존 아님' 명시, 과결합 재탕). 단 OBJ-28 경계 (3)에 '다른 deterministic provider도 같은 칸에 들어감' 1줄로 부분 완화. 도구 클래스 전면 병기는 열린질문(저자 판단)" }
+  ],
+  "remaining_open_questions": [
+    "레퍼런스 다양성(OBJ-30 + Producer known_limit ①): deterministic 실증 레퍼런스가 CodeQL 단일. 설계 건전성 무해(필수의존 명시+일반정의 선행)하나 §3.1에 도구 클래스 전면 병기 여부는 저자 판단. OBJ-28 경계 (3) 1줄로 부분 완화됨",
+    "codeql 연구문서 본문 1차 정확성: 인용 line(482·487·369·427·480-484)은 ACG 주장과 정합 대조했으나 연구 전반 정확성은 본 심의 범위 밖"
+  ],
+  "outcome": "revise → 과결합 없음(양측 수렴). admissible 2건(OBJ-28 실증과장·OBJ-29 정규화누락) 반영, OBJ-27 흡수, OBJ-25/26/30 기각(+OBJ-30 부분완화·열린질문). Synthesizer accept 도달 조건 충족."
+}

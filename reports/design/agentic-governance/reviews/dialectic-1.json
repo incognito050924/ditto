@@ -1,0 +1,37 @@
+{
+  "schema": "ditto.dialectic.v1",
+  "n": 1,
+  "mode": "review",
+  "target_artifact": "reports/design/agentic-governance/ (00-framework, 10-methodology, 20-contracts, 30-intent-change-dsl, 40-refactoring-criteria, 50-change-map)",
+  "question": "ACG 설계 문서군의 공학적 정합성·내부 모순·과잉설계·빈 곳을 적대적으로 검증한다. 코드/파서 구현은 범위 밖.",
+  "produced_at": "2026-06-03 KST",
+  "producer": {
+    "verdict_proposed": "accept",
+    "position": "design-stage 산출물로서 4축 커버·공학적 뿌리·스키마/DSL 실증·중복없음을 충족. framing(인간저자 전제 붕괴)과 단일출처 컴파일 골격이 견고. deferred를 정직하게 명시.",
+    "known_limits": ["컴파일 경로 실행 증명 없음(hand-authored)", "가장 어려운 열린질문(비용·incremental·재현성)이 deferred", "boxwood 예시 일부 aspirational(현재 violation)", "ReviewGraph 재사용을 실제 reviewer-output과 diff 안 함", "stage-skip/risk-default는 미검증 휴리스틱"]
+  },
+  "opponent": {
+    "run": { "provider": "codex", "model": "codex (codex-plugin-cc adversarial)", "command": "Agent codex:codex-rescue (read-only opponent)", "fallback_from": null, "fallback_reason": null },
+    "objection_count": 14
+  },
+  "synthesizer": { "verdict": "revise", "rationale": "개념 reject 사유 없음. 내부 모순 3건(OBJ-01/05/10) + 중심 차별점 스키마 공백(OBJ-02) + 게이트 기계적 정의 미비로 design-lock 보류. 전부 edit으로 닫힘 → revise. 7개 required_edit 반영 + 2개 열린질문 유지 시 accept 도달." },
+  "objections": [
+    { "id": "OBJ-01", "severity": "high", "category": "internal_consistency", "admissible": true, "oracle": "00 §6 ↔ 20 §0", "finding": "신설 범위 모순: 00은 '2개만 신설', 20은 ImpactGraph/ArchitectureSpec/SemanticCompatibility도 신설", "disposition": "fixed", "fix": "00 §6 표에 3행 추가 + 결론을 '중복 신설 안 하는 것=완료/수렴/지식 계약'으로 정정, 20 §0과 일치" },
+    { "id": "OBJ-02", "severity": "high", "category": "gap", "admissible": true, "oracle": "00 §4·§8 ↔ 20 §6", "finding": "Assurance Graph가 5그래프 중심인데 시계열 스키마 부재", "disposition": "fixed", "fix": "20 §6.5 AssuranceSnapshot 시계열 스키마 신설 + 드리프트 파생 정의, 00 §4 Assurance Graph를 '평가 이력 시계열 집계 뷰'로 명확화, 20 §0/§7 반영" },
+    { "id": "OBJ-03", "severity": "high", "category": "engineering_soundness", "admissible": true, "oracle": "20 §3·§6, 00 §7", "finding": "baseline debt 미표현 → '새 분기만 차단' 점진집행이 prose 주장", "disposition": "fixed", "fix": "FitnessFunction에 baseline.snapshot/delta_only 필드 추가, SB-version 예시에 적용해 기계적 정의화" },
+    { "id": "OBJ-04", "severity": "high", "category": "gap", "admissible": true, "oracle": "00 §2.2·§9, 20 §6", "finding": "per-change fitness 비용 미해결(선택 메커니즘·incremental·budget 없음)", "disposition": "open_question", "fix": "00 §9 Q4로 이미 명시. baseline 추가로 부분 구체화. 비용·incremental은 구현 단계 이월" },
+    { "id": "OBJ-05", "severity": "high", "category": "internal_consistency", "admissible": true, "oracle": "30 §2 ↔ 20 §6", "finding": "ICL cadence(per_change|periodic|both) ↔ schema periodic enum 무손실 컴파일 불가", "disposition": "fixed", "fix": "EBNF cadence에 frequency 인자 필수화 + §3에 cadence 컴파일 매핑 표 추가" },
+    { "id": "OBJ-06", "severity": "high", "category": "over_engineering", "admissible": true, "oracle": "30 §4·§6, 10 §2", "finding": "ICL 우회 허용 → anti-drift가 optional path에만 성립", "disposition": "fixed", "fix": "30 §4에 정직한 단서: 드리프트 부재 조건은 'ICL 사용'이 아니라 '단일 출처 자동 파생'. ChangeContract 직접 작성도 단일 출처면 무드리프트" },
+    { "id": "OBJ-07", "severity": "high", "category": "engineering_soundness", "admissible": true, "oracle": "20 §6, 30 §5, 40 §5", "finding": "llm_judged 재현성 부족(pinned model/prompt hash/split 규칙 없음)", "disposition": "open_question", "fix": "20 §6 reproducibility를 object로 구조화(model_version/prompt_hash/votes/tie_break/input_fixing). 재현성 자체의 경험적 보장은 00 §9 Q1 열린질문 유지" },
+    { "id": "OBJ-08", "severity": "high", "category": "engineering_soundness", "admissible": true, "oracle": "20 §4, 40 §2·§5", "finding": "Characterization Test가 candidate/LLM 판정으로 약화", "disposition": "rejected", "fix": "기각. 40 §5가 증거를 서열화(#1 실제 test, #2 생성 characterization test=실행가능, #3 llm_judged=warn-only no-block, #4 unverified→partial). 문서는 LLM 판정을 동작보존 증명으로 격상하지 않음 → objection이 §5를 오독" },
+    { "id": "OBJ-09", "severity": "medium", "category": "engineering_soundness", "admissible": false, "oracle": "00 §3, 10 §2, 20 §1", "finding": "DbC 용어 오적용: allowed/forbidden_scope는 frame condition이지 pre/invariant 아님", "disposition": "fixed", "fix": "20 §1 '용어 정밀화' 단서 추가: scope=frame condition, invariants=postcondition, precondition=Intent. 1:1 강제 대응 안 함을 명시" },
+    { "id": "OBJ-10", "severity": "high", "category": "internal_consistency", "admissible": true, "oracle": "10 §2·§4, 40 §2", "finding": "리팩토링 생략 매트릭스(2,3,4,7 생략)가 게이트 소비 산출물(단계2 ChangeContract, 단계4 plan)을 빼버림", "disposition": "fixed", "fix": "10 §4 리팩토링 행을 1,2(얇게),5,6,8로 수정(2 유지) + 단계5 입력에 '단계4 생략 시 ChangeContract scope' 명시" },
+    { "id": "OBJ-11", "severity": "medium", "category": "engineering_soundness", "admissible": false, "oracle": "40 §3", "finding": "Deep Module 게이트 과환원(caller≥2가 valid 단일사용 deep 기각, 표면/복잡도 측정법 미정)", "disposition": "open_question", "fix": "00 §9 Q7 신설 + 40 §3 caller 규칙에 복잡도 은닉 예외 단서" },
+    { "id": "OBJ-12", "severity": "medium", "category": "gap", "admissible": false, "oracle": "00 §3, 20 §1, 10 §2", "finding": "ADR linkage 미강제(decision_ref nullable, 게이트 미검사)", "disposition": "fixed", "fix": "20 §1 decision_ref를 'risk medium↑이면 필수' + 10 §2 단계2 게이트에 동일 조건 추가" },
+    { "id": "OBJ-13", "severity": "high", "category": "gap", "admissible": true, "oracle": "10 §2, 20 §2, 00 §8", "finding": "'direct caller 누락 0건' 게이트가 동적/config/cross-repo unresolved와 충돌 → 측정 불가", "disposition": "fixed", "fix": "10 §3 게이트를 '정적 해소 가능 누락 0 ∧ 해소 불가분 unresolved 전수 표기'로 재정의 + 측정 가능성 단서" },
+    { "id": "OBJ-14", "severity": "medium", "category": "gap", "admissible": false, "oracle": "50 §0·§2·§5", "finding": "Change Map '파싱 가능 정본' 주장하나 grammar 없음", "disposition": "fixed", "fix": "50 §2.1b 최소 EBNF 추가 → 거버넌스 산출물(grammar 기반 파싱)로 격상" }
+  ],
+  "missing_alternatives": ["baseline-and-waiver(OBJ-03으로 반영)", "policy-as-code(OPA/Spectral) vs bespoke ICL", "risk-tiered sampling(OBJ-04)", "생성 characterization test로 deterministic guard 선행", "ADR-lite 태그(OBJ-12)"],
+  "scope_creep_risks": ["ICL이 제2 설정언어화", "FitnessFunction 잡탕화", "ArchitectureSpec 현상/목표 혼재", "Change Map 수동유지", "llm_judged가 deterministic 자리 잠식"],
+  "outcome": "revise → 7 required_edit 전부 반영 + 4 medium 반영(OBJ-09/11/12/14) + OBJ-08 기각 + OBJ-04/07 열린질문 유지. Synthesizer의 accept 도달 조건 충족."
+}
