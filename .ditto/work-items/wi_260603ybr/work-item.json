@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260603ybr",
+  "title": "후속 백로그 일괄 해결",
+  "source_request": "커밋, 푸시하고 후속 백로그도 전부 진행해줘",
+  "goal": "후속 백로그 일괄 해결: OBSERVABLE 게이트가 한국어 관찰 술어를 인식(B1), AutopilotNode per-node file_scope로 fileOverlapGate를 정밀화하고 같은 파일을 쓰는 mutating 노드의 동시 실행을 방지(B2, cross-call 포함), bootstrap seed와 planner 확장의 중복·조기실행을 정리(B3, design에서 해법 선택)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "the OBSERVABLE gate in src/core/gates.ts recognizes Korean observable predicates so a Korean-language acceptance statement passes acceptanceTestable; an input like a Korean AC ending in 반환한다/거부한다/통과한다/포함한다 returns a passing gate",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "AutopilotNode accepts an optional file_scope; fileOverlapGate uses each node's own file_scope and falls back to workItem.changed_files when a node omits it; a 2-node graph with disjoint per-node file_scope admits both nodes",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "two mutating nodes whose file_scope overlaps are never dispatched concurrently — not within one wave and not across next-node calls while one is still running; the nextNode result excludes the second overlapping mutating node",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "the bootstrap seed no longer produces a premature or duplicate verify node; the design node selects a fix and the existing autopilot bootstrap and loop tests stay green (exit 0)",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "bun test exits 0 with the full suite green and existing autopilot behavior remains backward compatible",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/gates.ts",
+    "tests/core/gates.test.ts",
+    "src/schemas/autopilot.ts",
+    "src/core/autopilot-graph.ts",
+    "src/core/autopilot-loop.ts",
+    "tests/core/autopilot-loop.test.ts",
+    "tests/core/autopilot-graph.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-03T03:12:34.283Z",
+  "updated_at": "2026-06-03T03:28:28.019Z"
+}
