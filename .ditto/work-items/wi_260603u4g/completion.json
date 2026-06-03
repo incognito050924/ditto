@@ -1,0 +1,85 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260603u4g",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-04T00:00:00.000Z",
+  "summary": "ACG v0 WU-5/6 완료. e2eJourney에 옵셔널 journey_id/work_item_id를 더하고 JourneyRun 어댑터(result→outcome, blocked→skipped, flaky 미산출)를 추가했으며, Stop 훅이 acg-review.json ledger의 미해소 high-risk를 읽어 continuation을 강제하고, CompletionContract에 옵셔널 거버넌스 슬롯을 더했다. 공유 런타임 회귀 0.",
+  "changed_files": [
+    "src/schemas/e2e-journey.ts",
+    "src/acg/journey/journey-run-adapter.ts",
+    "src/hooks/stop.ts",
+    "src/schemas/completion-contract.ts",
+    "tests/acg/journey-run-adapter.test.ts",
+    "tests/hooks/stop.test.ts",
+    "schemas/e2e-journey.schema.json",
+    "schemas/completion-contract.schema.json"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "bun test tests/acg/journey-run-adapter.test.ts → 10 pass/0 fail; acc-a result→outcome·blocked→skipped·schema-valid 통과" },
+        { "kind": "file", "summary": "journey-run-adapter.ts:42-53 e2eResultToOutcome blocked→'skipped'; projectE2EJourneyToJourneyRun이 acgJourneyRun.parse로 검증 후 반환" }
+      ],
+      "notes": "독립 검증자가 코드 판독 + 테스트 실행으로 확인"
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "e2e-journey.ts journey_id/work_item_id 둘 다 .optional(); superRefine(fail→reproduction 등) 신규 필드와 무관하게 불변" },
+        { "kind": "command", "summary": "acc-b regression describe 3개 통과 — pre-ACG e2eJourney 유효·필드 undefined·fail-requires-reproduction 여전히 throw" }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "journey-run-adapter.ts 반환타입 Exclude<AcgJourneyRun['outcome'],'flaky'>; acg-journey-run.ts:25 outcome enum에 flaky 존재 → Exclude가 load-bearing" },
+        { "kind": "command", "summary": "acc-c never emits flaky 통과 (pass/fail/blocked 전부 not.toBe('flaky'))" }
+      ]
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "stop.ts:166-175 acgReviewForcesContinuation이 risk==='high' && unresolved===true만 차단, id=path??journey_id를 reason에 포함" },
+        { "kind": "command", "summary": "stop.test.ts: unresolved high-risk → exit 2 + stderr 식별자(src/payment/charge.ts·jrn-checkout) 노출 통과" }
+      ]
+    },
+    {
+      "criterion_id": "ac-5",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "stop.ts acg-review.json을 readArtifact로 읽음 → absent=no-op, malformed=fail-closed(exit 2); resolved high-risk(unresolved=false) 미차단" },
+        { "kind": "command", "summary": "no-op absent→exit 0, resolved+clear→exit 0, malformed→exit 2(stderr acg-review.json+malformed) 통과" }
+      ]
+    },
+    {
+      "criterion_id": "ac-6",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "completion-contract.ts acg_governance .optional(); final_verdict superRefine이 슬롯 미참조 → 기존 게이트 불변" },
+        { "kind": "command", "summary": "bun test 전체 938 pass/1 skip/0 fail (exit 0); acg_governance 슬롯 존재 시 still passes 통과" },
+        { "kind": "command", "summary": "bun run lint(biome) 219 files clean; git status --short schemas/ → e2e-journey+completion-contract 두 JSON만 변경(export 동기화)" }
+      ]
+    }
+  ],
+  "verifications": [
+    { "command": "bun test tests/acg/journey-run-adapter.test.ts", "exit_code": 0 },
+    { "command": "bun test tests/hooks/stop.test.ts", "exit_code": 0 },
+    { "command": "bun test", "exit_code": 0 },
+    { "command": "bun run lint", "exit_code": 0 },
+    { "command": "bun run schemas:export", "exit_code": 0 }
+  ],
+  "unverified": [],
+  "remaining_risks": [
+    "ReviewGraph ledger를 실제로 .ditto/work-items/<wi>/acg-review.json에 떨구는 producer는 v0 범위 밖(reviewer 어댑터 산출물의 영속화 배선은 후속). 현재는 Stop 훅의 소비 경로만 배선·검증됨."
+  ],
+  "acg_governance": {
+    "review_graph": ".ditto/work-items/wi_260603u4g/acg-review.json",
+    "unresolved_high_risk": []
+  },
+  "final_verdict": "pass"
+}
