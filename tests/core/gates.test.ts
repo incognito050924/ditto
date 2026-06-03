@@ -76,6 +76,18 @@ describe('acceptanceTestable', () => {
     expect(improvement.reasons.some((r) => /vague/.test(r))).toBe(false);
   });
 
+  test('Korean observable predicate passes (no missing-predicate reason)', () => {
+    const r = acceptanceTestable({ statement: '사용자가 없으면 빈 목록을 반환한다' });
+    expect(r.pass).toBe(true);
+    expect(r.reasons.some((x) => /observable/.test(x))).toBe(false);
+  });
+
+  test('Korean statement without an observable predicate still fails', () => {
+    const r = acceptanceTestable({ statement: '비밀번호 기능을 더 좋게 만든다' });
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => /observable/.test(x))).toBe(true);
+  });
+
   test('word-boundary: standalone vague terms still flag (incl. multi-word)', () => {
     expect(acceptanceTestable({ statement: 'response must be fast' }).reasons.join()).toContain(
       'fast',

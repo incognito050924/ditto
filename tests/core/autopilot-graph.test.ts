@@ -38,6 +38,45 @@ describe('selectReadyNodes (the candidate concurrent wave)', () => {
     const extra = { ...first, id: 'N1b' };
     expect(selectReadyNodes([...nodes, extra]).map((n) => n.id)).toEqual(['N1', 'N1b']);
   });
+
+  test('B3: seed verify is held while an appended implement node is still pending', () => {
+    const seed = buildInitialNodes(['ac-1']);
+    const passed = seed.map((n) =>
+      n.id === 'N1' || n.id === 'N2' ? ({ ...n, status: 'passed' } as AutopilotNode) : n,
+    );
+    // Append-only planner splices a further implement node; its depends_on cannot
+    // reference the already-frozen seed verify, so without the guard both N3 and
+    // G1 would go ready in the same wave.
+    const g1: AutopilotNode = {
+      id: 'G1',
+      kind: 'implement',
+      owner: 'implementer',
+      purpose: 'planner-appended implement',
+      status: 'pending',
+      depends_on: ['N1'],
+      acceptance_refs: ['ac-1'],
+      evidence_refs: [],
+      attempts: { fix: 0, switch: 0 },
+    };
+    const nodes = [...passed, g1];
+
+    // N3 (seed verify) is held while G1 implement is non-terminal.
+    expect(selectReadyNodes(nodes).map((n) => n.id)).toEqual(['G1']);
+
+    // Once G1 passes the implement frontier clears and N3 becomes ready.
+    const after = nodes.map((n) =>
+      n.id === 'G1' ? ({ ...n, status: 'passed' } as AutopilotNode) : n,
+    );
+    expect(selectReadyNodes(after).map((n) => n.id)).toEqual(['N3']);
+  });
+
+  test('B3 no-op: pure seed makes N3 ready once N2 passes (single implement, terminal)', () => {
+    const seed = buildInitialNodes(['ac-1']);
+    const nodes = seed.map((n) =>
+      n.id === 'N1' || n.id === 'N2' ? ({ ...n, status: 'passed' } as AutopilotNode) : n,
+    );
+    expect(selectReadyNodes(nodes).map((n) => n.id)).toEqual(['N3']);
+  });
 });
 
 describe('fileOverlapGate (G5: serialize same-wave nodes that touch the same files)', () => {
@@ -150,6 +189,25 @@ describe('proposalsToNodes (A-3: intent-level proposal → full node)', () => {
       },
     ]);
     expect(nodes[0]?.agent_hint).toBe('sql-implementer');
+  });
+
+  test('carries an optional file_scope from the proposal onto the promoted node (B2 ac-2)', () => {
+    const nodes = proposalsToNodes([
+      {
+        id: 'G3',
+        kind: 'implement',
+        purpose: 'scoped impl',
+        depends_on: [],
+        acceptance_refs: ['ac-2'],
+        file_scope: ['src/a.ts'],
+      },
+    ]);
+    expect(nodes[0]?.file_scope).toEqual(['src/a.ts']);
+    // absent on the proposal → absent on the node
+    const bare = proposalsToNodes([
+      { id: 'G4', kind: 'review', purpose: 'r', depends_on: [], acceptance_refs: ['ac-1'] },
+    ]);
+    expect(bare[0]?.file_scope).toBeUndefined();
   });
 });
 

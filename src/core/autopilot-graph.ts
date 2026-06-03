@@ -79,7 +79,19 @@ export function isNodeReady(node: AutopilotNode, byId: Map<string, AutopilotNode
  */
 export function selectReadyNodes(nodes: AutopilotNode[]): AutopilotNode[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  return nodes.filter((n) => isNodeReady(n, byId));
+  // Implement-frontier guard (B3): an append-only planner can splice further
+  // `implement` nodes that the seed verify's `depends_on` cannot reference. Hold
+  // every `verify` node while ANY `implement` node is still non-terminal, so
+  // verify never fires ahead of the implement frontier. No-op when no implement
+  // node is in flight (pure seed: the single implement node is terminal).
+  const implementPending = nodes.some(
+    (n) => n.kind === 'implement' && n.status !== 'passed' && n.status !== 'failed',
+  );
+  return nodes.filter((n) => {
+    if (!isNodeReady(n, byId)) return false;
+    if (n.kind === 'verify' && implementPending) return false;
+    return true;
+  });
 }
 
 /**
@@ -167,6 +179,8 @@ export function proposalsToNodes(proposals: NodeProposal[]): AutopilotNode[] {
     // Carry the optional planner variant hint through promotion (omit when absent
     // so the field stays undefined rather than an explicit `undefined`).
     ...(p.agent_hint !== undefined ? { agent_hint: p.agent_hint } : {}),
+    // Carry the optional per-node file scope through promotion, same way.
+    ...(p.file_scope !== undefined ? { file_scope: p.file_scope } : {}),
   }));
 }
 

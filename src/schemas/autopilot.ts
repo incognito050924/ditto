@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { autopilotId, evidenceRef, isoDateTime, schemaVersion, workItemId } from './common';
+import {
+  autopilotId,
+  evidenceRef,
+  isoDateTime,
+  relativePath,
+  schemaVersion,
+  workItemId,
+} from './common';
 
 export const nodeKind = z
   .enum([
@@ -88,6 +95,11 @@ export const autopilotNode = z
     // it only orders/ensures that variant in the dispatch candidates; the driver
     // still makes the final selection. Survives promotion from nodeProposal.
     agent_hint: z.string().optional(),
+    // Optional per-node file scope: the repo-relative files this node may touch.
+    // Drives the file-overlap gate so two mutating nodes with overlapping scope
+    // never run concurrently (within a wave and across next-node calls). Optional
+    // + additive: a node without it falls back to the work item's changed_files.
+    file_scope: z.array(relativePath).optional(),
   })
   .describe('One node in the autopilot graph');
 
@@ -102,6 +114,10 @@ export const nodeProposal = z
     // hint is late-bound — it only orders the dispatch candidates; the driver
     // still selects. Copied onto the promoted node by proposalsToNodes.
     agent_hint: z.string().optional(),
+    // Optional per-node file scope a planner MAY declare so the promoted node
+    // serializes against overlapping mutating nodes. Copied onto the node by
+    // proposalsToNodes when present, like agent_hint.
+    file_scope: z.array(relativePath).optional(),
   })
   .describe(
     'Intent-level node a planner emits (A-3). The mechanical fields (owner/status/' +

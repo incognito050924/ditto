@@ -127,11 +127,24 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
     };
   }
   const workItem = await new WorkItemStore(repoRoot).get(workItemId);
-  const { dispatch } = fileOverlapGate(
-    ready.map((n) => ({ id: n.id, file_scope: workItem.changed_files })),
-  );
+  // Per-node file scope: each node uses its OWN `file_scope` when declared,
+  // falling back to the shared work-item changed_files when absent (B2 ac-2).
+  const scopeOf = (n: AutopilotNode): string[] => n.file_scope ?? workItem.changed_files;
+  // Cross-call overlap guard (B2 ac-3): files claimed by a currently-RUNNING
+  // mutating node are already taken. Seed the gate with those claims (as
+  // synthetic, filtered-out wave entries that run first in admit order) so a
+  // ready mutating node whose scope overlaps a running mutating node is NOT
+  // dispatched — it serializes to a later next-node call.
+  const runningClaims = graph.nodes
+    .filter((n) => n.status === 'running' && isMutatingNode(n))
+    .map((n) => ({ id: `__running__${n.id}`, file_scope: scopeOf(n) }));
+  const { dispatch } = fileOverlapGate([
+    ...runningClaims,
+    ...ready.map((n) => ({ id: n.id, file_scope: scopeOf(n) })),
+  ]);
   // The file-overlap-gate-admitted wave (nodes whose file_scope is mutually
-  // disjoint), mapped back to graph nodes in admit order.
+  // disjoint), mapped back to graph nodes in admit order. Synthetic running
+  // claims are dropped here — `ready.find` returns undefined for them.
   const admitted = dispatch
     .map((d) => ready.find((n) => n.id === d.id))
     .filter((n): n is AutopilotNode => n !== undefined);
@@ -146,18 +159,22 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   const gate = mutationGate(graph);
   const isWaveEligible = (n: AutopilotNode): boolean =>
     n.owner !== 'driver' && (!isMutatingNode(n) || gate.allowed);
-  // F1: file_scope is the shared workItem.changed_files (often empty at implement
-  // time), so the file-overlap gate can't actually keep two mutating nodes off the
-  // same real files. To preserve the no-same-file-concurrency invariant, a parallel
-  // wave admits AT MOST ONE mutating node; any further mutating node is dropped from
-  // this wave (it stays pending and is picked up on a later next-node call). Keep
-  // every eligible non-mutating node, and the first eligible mutating node.
-  let mutatingAdmitted = false;
+  // F1 conservative cap (the unknown-scope fallback): a mutating node WITHOUT a
+  // declared `file_scope` falls back to the shared workItem.changed_files (often
+  // empty at implement time), so the file-overlap gate can't actually keep two
+  // such nodes off the same real files. To preserve the no-same-file-concurrency
+  // invariant, the wave admits AT MOST ONE scope-unknown mutating node; further
+  // ones stay pending for a later next-node call. A mutating node that DECLARES
+  // its own file_scope is handled precisely by the file-overlap gate above (the
+  // two layers compose — per-node scope is precise, the cap covers the unknown
+  // case), so it is not subject to this cap.
+  let unknownMutatingAdmitted = false;
   const waveEligible = admitted.filter((n) => {
     if (!isWaveEligible(n)) return false;
     if (!isMutatingNode(n)) return true;
-    if (mutatingAdmitted) return false;
-    mutatingAdmitted = true;
+    if (n.file_scope !== undefined) return true;
+    if (unknownMutatingAdmitted) return false;
+    unknownMutatingAdmitted = true;
     return true;
   });
 

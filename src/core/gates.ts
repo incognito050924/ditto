@@ -119,8 +119,11 @@ const VAGUE_TERMS = [
   'nice',
 ];
 
+// English predicates are word-bounded (\b); the \d digit branch is the
+// language-neutral measurable signal. The Korean alternation matches verb stems
+// (no \b — Korean is not an ASCII \w sequence) so conjugations (한다/된다/하면 …) hit.
 const OBSERVABLE =
-  /\b(returns?|rejects?|responds?|displays?|shows?|exits?|equals?|matches?|contains?|within|less than|greater than|at most|at least|status|code|\d)/i;
+  /\b(returns?|rejects?|responds?|displays?|shows?|exits?|equals?|matches?|contains?|within|less than|greater than|at most|at least|status|code)\b|\d|반환|거부|응답|표시|노출|종료|같음|일치|포함|통과|실패|생성|갱신|호출/i;
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

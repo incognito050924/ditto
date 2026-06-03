@@ -906,3 +906,109 @@ describe('nextNode parallel wave (ac-3: spawn the whole file-overlap-admitted wa
     expect(after.nodes.find((n) => n.id === 'I2')?.status).toBe('pending');
   });
 });
+
+describe('nextNode per-node file_scope + cross-call overlap (B2 ac-2/ac-3)', () => {
+  const APPROVED = {
+    status: 'approved' as const,
+    source: 'user' as const,
+    approved_at: NOW.toISOString(),
+    approved_by: 'user',
+    evidence_refs: [],
+  };
+  const mut = (id: string, file_scope?: string[], status: 'pending' | 'running' = 'pending') => ({
+    id,
+    kind: 'implement' as const,
+    owner: 'implementer' as const,
+    purpose: `implement ${id}`,
+    status,
+    depends_on: [] as string[],
+    acceptance_refs: ['ac-1'],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+    ...(file_scope !== undefined ? { file_scope } : {}),
+  });
+
+  test('ac-2: 2 mutating nodes with DISJOINT per-node file_scope → both admitted into a wave (per-node scope used, not the shared changed_files)', async () => {
+    // changed_files is non-empty AND shared — if the loop used the shared list both
+    // would collide. Disjoint per-node file_scope proves the per-node scope is used.
+    await wis.update(WI, (w) => ({ ...w, changed_files: ['src/shared.ts'] }));
+    await seed(
+      graph({
+        approval_gate: APPROVED,
+        nodes: [mut('I1', ['src/a.ts']), mut('I2', ['src/b.ts'])],
+      }),
+    );
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('spawn_wave');
+    if (res.action !== 'spawn_wave') throw new Error('expected spawn_wave');
+    expect(res.spawns.map((s) => s.node_id).sort()).toEqual(['I1', 'I2']);
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'I1')?.status).toBe('running');
+    expect(after.nodes.find((n) => n.id === 'I2')?.status).toBe('running');
+  });
+
+  test('ac-2 fallback: a node WITHOUT file_scope falls back to workItem.changed_files', async () => {
+    // I1 (scope ['src/a.ts']) and I2 (no scope → falls back to changed_files
+    // ['src/a.ts']) overlap → not both in one wave (the fallback put them on the
+    // same file). Proves the absent-scope branch uses changed_files.
+    await wis.update(WI, (w) => ({ ...w, changed_files: ['src/a.ts'] }));
+    await seed(
+      graph({
+        approval_gate: APPROVED,
+        nodes: [mut('I1', ['src/a.ts']), mut('I2')],
+      }),
+    );
+    await nextNode(repo, WI);
+    const after = await aps.get(WI);
+    const running = after.nodes.filter((n) => n.status === 'running');
+    expect(running).toHaveLength(1); // overlap via fallback → only one dispatched
+    expect(after.nodes.filter((n) => n.status === 'pending')).toHaveLength(1);
+  });
+
+  test('ac-3 cross-call: a running mutating node claims its file_scope — a ready mutating node with OVERLAPPING scope is NOT dispatched (serializes to a later call)', async () => {
+    await wis.update(WI, (w) => ({ ...w, changed_files: [] }));
+    await seed(
+      graph({
+        approval_gate: APPROVED,
+        nodes: [mut('A', ['src/x.ts'], 'running'), mut('B', ['src/x.ts'])],
+      }),
+    );
+    const res = await nextNode(repo, WI);
+    // B overlaps the running A's claim → gate serializes it → nothing to dispatch.
+    expect(res.action).toBe('waiting');
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'B')?.status).toBe('pending');
+    expect(after.nodes.find((n) => n.id === 'A')?.status).toBe('running');
+  });
+
+  test('ac-3 cross-call: a ready mutating node with DISJOINT scope from a running mutating node MAY dispatch', async () => {
+    await wis.update(WI, (w) => ({ ...w, changed_files: [] }));
+    await seed(
+      graph({
+        approval_gate: APPROVED,
+        nodes: [mut('A', ['src/x.ts'], 'running'), mut('B', ['src/y.ts'])],
+      }),
+    );
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('spawn');
+    if (res.action !== 'spawn') throw new Error('expected spawn');
+    expect(res.node_id).toBe('B');
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'B')?.status).toBe('running');
+  });
+
+  test('ac-3 within-wave: 2 ready mutating nodes with OVERLAPPING per-node file_scope are NOT both in one wave', async () => {
+    await wis.update(WI, (w) => ({ ...w, changed_files: [] }));
+    await seed(
+      graph({
+        approval_gate: APPROVED,
+        nodes: [mut('I1', ['src/x.ts']), mut('I2', ['src/x.ts'])],
+      }),
+    );
+    await nextNode(repo, WI);
+    const after = await aps.get(WI);
+    const running = after.nodes.filter((n) => n.status === 'running');
+    expect(running).toHaveLength(1); // overlap → gate serializes the second
+    expect(after.nodes.filter((n) => n.status === 'pending')).toHaveLength(1);
+  });
+});
