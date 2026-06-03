@@ -19,6 +19,13 @@
     }
   ],
   "status": "partial",
+  "re_entry": {
+    "fresh_evidence_needed": [
+      "재실행 e2e: reviewer가 손으로 ledger 구성하지 않고 ditto acg-review CLI(결정론 경로)로 acg-review.json을 떨구는지 확인",
+      "ditto 명령이 macOS /usr/bin/ditto가 아닌 프로젝트 CLI로 해석되는지 확인"
+    ],
+    "owner": "main"
+  },
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],

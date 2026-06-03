@@ -1,0 +1,46 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2606032rz",
+  "title": "reviewer 결정론 배선 교정(①) + ditto CLI 충돌 해소(②)",
+  "source_request": "①② 둘 다 고쳐줘",
+  "goal": "wi_260603s5r e2e가 드러낸 두 결함을 고친다. ① reviewer가 위험목록을 손으로 구성(결정론 어댑터 우회)하던 것을 막고, reviewer-output만 쓰고 ledger는 CLI가 결정론으로 만들도록 지시를 airtight하게. ② bare `ditto`가 macOS /usr/bin/ditto와 충돌하던 것을, 프로젝트 CLI를 빌드·전역설치해 `ditto`가 프로젝트 CLI로 해석되게 하고 설치 절차를 문서화.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "② `ditto`가 이 머신에서 프로젝트 CLI로 해석된다: which ditto가 프로젝트 경로(~/.bun/bin 등)를 가리키고, `ditto acg-review --help`가 macOS util이 아닌 우리 CLI 도움말 출력. 설치 절차가 DEVELOPMENT.md에 기록됨",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "① reviewer.md·security-reviewer.md persist 지시가 airtight: reviewer-output.json만 손으로 쓰고 ledger는 CLI가 결정론 어댑터로 생성, acg-review.json 직접 작성 금지 명시",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "재실행 e2e: 실제 reviewer가 결함 fixture 검토 시 이번엔 ditto acg-review CLI(결정론 경로)로 ledger를 떨군다(손으로 구성 안 함). 떨어진 ledger가 high finding을 risk=high·evidence부재로 싣고 Stop 게이트가 continuation 강제",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "전체 테스트 회귀 0·biome clean. 빌드된 dist/ditto에 acg-review 명령 포함",
+      "verdict": "pass",
+      "evidence": []
+    }
+  ],
+  "status": "done",
+  "closed_at": "2026-06-04T02:30:00.000Z",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "agents/reviewer.md",
+    "agents/security-reviewer.md",
+    "DEVELOPMENT.md"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-03T16:14:48.262Z",
+  "updated_at": "2026-06-03T16:14:48.262Z"
+}
