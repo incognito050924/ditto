@@ -18,6 +18,15 @@ const NEW_SIDECARS: Array<{ exportName: string; barrelConst: keyof typeof barrel
   { exportName: 'evidence-index', barrelConst: 'evidenceIndex' },
   { exportName: 'knowledge-record', barrelConst: 'knowledgeRecord' },
   { exportName: 'e2e-journey', barrelConst: 'e2eJourney' },
+  { exportName: 'acg-change-contract', barrelConst: 'acgChangeContract' },
+  { exportName: 'acg-impact-graph', barrelConst: 'acgImpactGraph' },
+  { exportName: 'acg-architecture-spec', barrelConst: 'acgArchitectureSpec' },
+  { exportName: 'acg-semantic-compatibility', barrelConst: 'acgSemanticCompatibility' },
+  { exportName: 'acg-review-graph', barrelConst: 'acgReviewGraph' },
+  { exportName: 'acg-fitness-function', barrelConst: 'acgFitnessFunction' },
+  { exportName: 'acg-assurance-snapshot', barrelConst: 'acgAssuranceSnapshot' },
+  { exportName: 'acg-journey-spec', barrelConst: 'acgJourneySpec' },
+  { exportName: 'acg-journey-run', barrelConst: 'acgJourneyRun' },
 ];
 
 describe('new sidecar schemas are registered in both lists', () => {

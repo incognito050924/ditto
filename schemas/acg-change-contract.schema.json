@@ -1,0 +1,193 @@
+{
+  "$ref": "#/definitions/acg-change-contract",
+  "definitions": {
+    "acg-change-contract": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "kind": {
+          "type": "string",
+          "const": "acg.change-contract.v1"
+        },
+        "work_item_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a work item"
+        },
+        "produced_by": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "description": "Who produced this ACG artifact"
+        },
+        "produced_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The result the change pursues (intent, not code)"
+        },
+        "allowed_scope": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "path",
+                  "glob",
+                  "symbol",
+                  "public_surface",
+                  "layer"
+                ]
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "note": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "ref"
+            ],
+            "additionalProperties": false,
+            "description": "A scope reference (frame condition target)"
+          },
+          "default": [],
+          "description": "Frame condition: only paths/symbols here may be modified"
+        },
+        "forbidden_scope": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "path",
+                  "glob",
+                  "symbol",
+                  "public_surface",
+                  "layer"
+                ]
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "note": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "ref"
+            ],
+            "additionalProperties": false,
+            "description": "A scope reference (frame condition target)"
+          },
+          "minItems": 1,
+          "description": "Must stay untouched. Non-empty — an empty forbid = unbounded change"
+        },
+        "invariants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "statement": {
+                "type": "string",
+                "minLength": 1
+              },
+              "promotable": {
+                "type": "boolean",
+                "description": "True if a codebase-wide property → FitnessFunction promotion candidate"
+              }
+            },
+            "required": [
+              "statement",
+              "promotable"
+            ],
+            "additionalProperties": false,
+            "description": "A property that must still hold after the change"
+          },
+          "default": []
+        },
+        "acceptance": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "criterion": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evidence_kind": {
+                "type": "string",
+                "enum": [
+                  "test",
+                  "build",
+                  "log",
+                  "diff",
+                  "screen",
+                  "manual",
+                  "e2e"
+                ],
+                "description": "ACG acceptance/evidence kind; binds to DITTO evidenceRef.kind per 20-contracts §0.2"
+              }
+            },
+            "required": [
+              "criterion",
+              "evidence_kind"
+            ],
+            "additionalProperties": false,
+            "description": "One acceptance criterion with the evidence kind that closes it"
+          },
+          "minItems": 1
+        },
+        "decision_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "ADR/decision id. Required when risk_default ≥ medium (stage-2 gate)"
+        },
+        "risk_default": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "default": "low"
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "work_item_id",
+        "produced_by",
+        "produced_at",
+        "purpose",
+        "forbidden_scope",
+        "acceptance"
+      ],
+      "additionalProperties": false,
+      "description": "ACG ChangeContract — allowed/forbidden frame + invariants + acceptance"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

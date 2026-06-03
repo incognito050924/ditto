@@ -3,6 +3,15 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ZodTypeAny } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
+import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
+import { acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
+import { acgChangeContract } from '~/schemas/acg-change-contract';
+import { acgFitnessFunction } from '~/schemas/acg-fitness-function';
+import { acgImpactGraph } from '~/schemas/acg-impact-graph';
+import { acgJourneyRun } from '~/schemas/acg-journey-run';
+import { acgJourneySpec } from '~/schemas/acg-journey-spec';
+import { acgReviewGraph } from '~/schemas/acg-review-graph';
+import { acgSemanticCompatibility } from '~/schemas/acg-semantic-compatibility';
 import { autopilot } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
 import { convergence } from '~/schemas/convergence';
@@ -45,6 +54,15 @@ export const schemaExports: ReadonlyArray<{ name: string; schema: ZodTypeAny }> 
   { name: 'dialectic', schema: dialectic },
   { name: 'convergence', schema: convergence },
   { name: 'handoff', schema: handoff },
+  { name: 'acg-change-contract', schema: acgChangeContract },
+  { name: 'acg-impact-graph', schema: acgImpactGraph },
+  { name: 'acg-architecture-spec', schema: acgArchitectureSpec },
+  { name: 'acg-semantic-compatibility', schema: acgSemanticCompatibility },
+  { name: 'acg-review-graph', schema: acgReviewGraph },
+  { name: 'acg-fitness-function', schema: acgFitnessFunction },
+  { name: 'acg-assurance-snapshot', schema: acgAssuranceSnapshot },
+  { name: 'acg-journey-spec', schema: acgJourneySpec },
+  { name: 'acg-journey-run', schema: acgJourneyRun },
 ];
 
 export async function exportSchemas(outDir: string): Promise<void> {

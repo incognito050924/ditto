@@ -1,0 +1,98 @@
+{
+  "$ref": "#/definitions/acg-journey-run",
+  "definitions": {
+    "acg-journey-run": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "kind": {
+          "type": "string",
+          "const": "acg.journey-run.v1"
+        },
+        "work_item_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a work item"
+        },
+        "produced_by": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "description": "Who produced this ACG artifact"
+        },
+        "produced_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "journey_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "JourneySpec.id"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "flaky",
+            "skipped"
+          ]
+        },
+        "step_results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "step_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail"
+                ]
+              }
+            },
+            "required": [
+              "step_id",
+              "outcome"
+            ],
+            "additionalProperties": false,
+            "description": "Per-step result"
+          },
+          "default": []
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": [],
+          "description": "screenshot/trace/console/network paths"
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "work_item_id",
+        "produced_by",
+        "produced_at",
+        "journey_id",
+        "outcome"
+      ],
+      "additionalProperties": false,
+      "description": "ACG JourneyRun — executed user-journey evidence (binds to e2eJourney)"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

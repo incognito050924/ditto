@@ -1,0 +1,146 @@
+{
+  "$ref": "#/definitions/acg-impact-graph",
+  "definitions": {
+    "acg-impact-graph": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "kind": {
+          "type": "string",
+          "const": "acg.impact-graph.v1"
+        },
+        "work_item_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a work item"
+        },
+        "produced_by": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "description": "Who produced this ACG artifact"
+        },
+        "produced_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "change_target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "change_type": {
+          "type": "string",
+          "enum": [
+            "rename",
+            "signature",
+            "behavior",
+            "delete",
+            "add",
+            "move"
+          ]
+        },
+        "affected_nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "direct_caller",
+                  "transitive_caller",
+                  "type_contract",
+                  "generated_client",
+                  "test",
+                  "doc",
+                  "external_surface",
+                  "ui_surface",
+                  "user_journey"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Code location; required unless kind is a journey"
+              },
+              "symbol": {
+                "type": "string"
+              },
+              "journey_id": {
+                "type": "string",
+                "description": "JourneySpec.id; required when kind is ui_surface/user_journey (OBJ-31)"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "handled": {
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false,
+            "description": "One affected node; journey kinds use journey_id, others use path"
+          },
+          "default": []
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "dynamic_call",
+                  "reflection",
+                  "string_dispatch",
+                  "config_driven",
+                  "cross_repo",
+                  "journey_unknown"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "kind",
+              "path",
+              "reason"
+            ],
+            "additionalProperties": false,
+            "description": "Statically unresolvable impact — left as unverified risk"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "work_item_id",
+        "produced_by",
+        "produced_at",
+        "change_target",
+        "change_type"
+      ],
+      "additionalProperties": false,
+      "description": "ACG ImpactGraph — affected nodes + unresolved impact"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

@@ -1,0 +1,114 @@
+{
+  "$ref": "#/definitions/acg-review-graph",
+  "definitions": {
+    "acg-review-graph": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "acg.review-graph.v1"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Code location; required unless role is a journey"
+              },
+              "journey_id": {
+                "type": "string",
+                "description": "JourneySpec.id; required when role is ui/user_journey (OBJ-52)"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "test_fixture",
+                  "private_helper",
+                  "service_logic",
+                  "public_api",
+                  "migration",
+                  "auth",
+                  "payment",
+                  "data_deletion",
+                  "config",
+                  "ui",
+                  "user_journey"
+                ]
+              },
+              "risk": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "risk_reason": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Empty reason = invalid classification"
+              },
+              "evidence": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "test",
+                      "build",
+                      "log",
+                      "diff",
+                      "screen",
+                      "manual",
+                      "e2e"
+                    ],
+                    "description": "ACG acceptance/evidence kind; binds to DITTO evidenceRef.kind per 20-contracts §0.2"
+                  },
+                  "ref": {
+                    "type": "string",
+                    "description": "e2e → JourneyRun (acg.journey-run.v1) reference"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "description": "Evidence; may be omitted when unresolved=true"
+              },
+              "unresolved": {
+                "type": "boolean",
+                "default": false,
+                "description": "Evidence-absence marker (OBJ-53). NOT an evidenceRef.kind — a separate flag"
+              }
+            },
+            "required": [
+              "risk",
+              "risk_reason"
+            ],
+            "additionalProperties": false,
+            "description": "One risk-classified file/flow in the review graph"
+          },
+          "default": []
+        },
+        "human_review_set": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": [],
+          "description": "Exceptions a human must judge — not the whole diff"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "description": "ACG ReviewGraph — acg_review extension object on reviewer-output (D3)"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
