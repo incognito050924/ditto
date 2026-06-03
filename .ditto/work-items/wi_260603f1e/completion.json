@@ -1,0 +1,66 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260603f1e",
+  "declared_by": "synthesizer",
+  "declared_at": "2026-06-04T04:30:00.000Z",
+  "summary": "ACG 열린질문 Q3(ArchitectureSpec 출처)·Q4(적합성 함수 비용)를 3역 적대적 숙의(Opponent=codex)로 닫았다. 양 트랙 verdict=revise로 수렴, Opponent objection 14건 전부 처리(미해소 admissible 0). 결정을 ADR-0004 + 00-framework §9 Q3/Q4 갱신(Q6 목표상태 형식) + dialectic-1 ledger로 기록. 스키마 변경 없음. 게이트/러너 구현은 명명된 fast-follow work item으로 분리.",
+  "changed_files": [
+    "reports/design/agentic-governance/00-framework.md",
+    ".ditto/knowledge/adr/ADR-0004-q3-q4-architecture-fitness.md",
+    ".ditto/knowledge/knowledge.json",
+    "CLAUDE.md",
+    ".ditto/work-items/wi_260603f1e/reviews/dialectic-1.json",
+    ".ditto/work-items/wi_260603f1e/reviews/dialectic-1.md"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "ADR-0004 Q3: produced_by=user 권위 기본 하이브리드, forbidden_dependencies 자동박제 금지(boxwood SB=부채지 규칙 아님), boundary 게이트 미구현→deferred 명시. Opponent OBJ-2/3/4 accepted as 활성 선결조건" },
+        { "kind": "file", "summary": "dialectic-1.json: Q3 trade-off(자동추출 박제 vs 수동 낙후, 소비처 미구현) 수렴, accepted_objections에 OBJ-1~14 echo" }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "ADR-0004 Q4: 실측 3구간(~3.9s 캐시DB+단일쿼리/cold 13~34s/스위트 34s~1분), mode별 스케줄, 안전 불변식(ImpactGraph 부재→high-risk escalate, sample down 금지), incremental 정직 한정(쿼리=증분·추출=언어당 전역), violation_identity 정규화. OBJ-6/7/8/9/11 accepted" }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "00-framework §9 Q3/Q4를 open question→결정(Q6 목표상태/현재상태 2단 형식)으로 재서술. ADR-0004 신규 + knowledge.json 등재 + CLAUDE.md projection(bridge knowledge drift 0). 스키마 변경 없음(produced_by/execution.selection/baseline.delta_only 기존 affordance)" },
+        { "kind": "command", "summary": "bun run dev bridge knowledge --check → would-be-unchanged (projection 일관). bun test 953 pass/0 fail(스키마·self-validation 회귀 없음)" }
+      ]
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "dialectic.safeParse(dialectic-1.json)=valid, verdict=revise(reject/blocked 아님), dialecticForcesContinuation→[] (STOP_FORCES_CONTINUATION false). admissible objection 11건 전부 accepted_objections에 id echo → 미해소 0" }
+      ]
+    }
+  ],
+  "verifications": [
+    { "command": "bun run <dialectic.safeParse + dialecticForcesContinuation>", "exit_code": 0 },
+    { "command": "bun run dev bridge knowledge --check", "exit_code": 0 },
+    { "command": "bun test", "exit_code": 0 },
+    { "command": "bun run lint", "exit_code": 0 }
+  ],
+  "unverified": [
+    {
+      "item": "결정의 활성 선결조건(타입드 invariant 표현, layers 분류 PoC, violation_identity recipe, ImpactGraph 생산기)과 실제 게이트/러너 동작",
+      "reason": "이 work item은 설계 결정 숙의·기록까지가 범위. 구현·활성은 명명된 fast-follow work item으로 분리됨(ADR-0004 §Fast-follow). verdict=revise가 이 미구현을 정직하게 반영.",
+      "out_of_scope": true
+    }
+  ],
+  "remaining_risks": [
+    "dialectic verdict=revise: 결정은 수렴·기록됐으나 '구현된 사실'이 아니라 '활성 선결조건 붙은 목표상태'다. boundary 게이트/fitness runner/ImpactGraph 생산기가 생기기 전엔 도는 동작 없음.",
+    "fast-follow 4건(boundary 게이트+타입드 invariant / agent candidate 경로+분류 PoC / fitness runner+violation_identity recipe / ImpactGraph 생산기)은 별도 work item으로 만들어야 함 — 아직 미생성(사용자 우선순위 결정 대기).",
+    "boxwood 경계 사실은 in-repo 미확인 가정(OBJ-5) — load-bearing 아님, ADR에 가정으로 표기."
+  ],
+  "final_verdict": "pass"
+}
