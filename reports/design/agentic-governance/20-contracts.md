@@ -3,28 +3,43 @@ title: "ACG Contracts — Schema Specification"
 kind: schema
 last_updated: 2026-06-03 KST
 status: draft
-scope: "ACG의 6개 산출물 스키마를 JSON Schema + 필드 정의 + 예시로 명세한다. boxwood를 예시 소재로 인용한다."
+scope: "ACG 스펙 계층의 9개 산출물 스키마를 JSON Schema + 필드 정의 + 예시로 명세하고, 각 산출물의 DITTO 바인딩(실현체) 매핑을 §0에 둔다. boxwood를 두 번째 바인딩 소재로 인용한다."
 parent: 00-framework.md
 ---
 
 # ACG Contracts — Schema Specification
 
-> **이 문서의 위치.** [10-methodology.md](10-methodology.md)의 각 단계가 만드는 산출물을 형식 스키마로 고정한다. 목적은 두 가지다: (1) agent가 만든 산출물을 기계가 검증할 수 있게 하고, (2) reviewer/verifier가 같은 구조를 다시 검사할 수 있게 한다. 여섯 스키마 중 **실제로 신설하는 것은 `ChangeContract`(얇게)와 `FitnessFunction`뿐**이고, 나머지는 기존 DITTO 자산에 매핑된다([00](00-framework.md) §6).
+> **이 문서의 위치.** [10-methodology.md](10-methodology.md)의 각 단계가 만드는 산출물을 형식 스키마로 고정한다. 목적은 두 가지다: (1) agent가 만든 산출물을 기계가 검증할 수 있게 하고, (2) reviewer/verifier가 같은 구조를 다시 검사할 수 있게 한다.
+>
+> **스펙 계층임을 명시한다.** 이 문서의 9개 스키마는 [00](00-framework.md)의 stack-agnostic 노트(스펙/바인딩 분리)가 말하는 **스펙 계층**이다 — 각 산출물이 실어야 할 *정보*를 정의하지, 특정 저장소의 wire format을 정의하지 않는다. `$id`의 `acg.<name>.v1`은 추상 스펙 식별자이며, 실제 저장된 파일은 그 저장소의 바인딩이 정한 형식을 따른다. **DITTO 바인딩**(첫 번째 바인딩)에서 각 스펙 산출물이 어떤 DITTO 스키마로 실현되고 필드/머리표(envelope)/evidence 종류가 어떻게 매핑되는지는 아래 §0의 *DITTO 바인딩 표*가 가진다. boxwood 바인딩은 같은 정보를 boxwood 자산으로 다르게 실현한다.
 
-## 0. 스키마 목록과 신설 여부
+## 0. 스키마 목록과 DITTO 바인딩
 
-| 스키마 | 단계 | 신설/재사용 | 기존 매핑 |
+스펙 산출물 9종과, 각각이 **DITTO 바인딩**에서 실현되는 방식이다. "실현 방식": **확장**=DITTO 기존 스키마에 필드 추가, **투영**=기존 계약의 변경 시점 부분 뷰, **신설**=DITTO에 대응물이 없어 새 스키마.
+
+| 스키마 | 단계 | DITTO 실현 방식 | DITTO 실현체 |
 |---|---|---|---|
-| `ChangeContract` | 2 | **신설(얇게)** | IntentContract의 변경 시점 투영 |
-| `ImpactGraph` | 3 | 신설 | (DITTO에 없음) |
-| `ArchitectureSpec` | 3 | 신설(저장소당 1회) | `.ditto/knowledge`에 보관 |
-| `SemanticCompatibility` | 6 | 신설 | reviewer/verifier가 소비 |
-| `ReviewGraph` | 7 | 재사용 | reviewer output 스키마 확장 |
+| `ChangeContract` | 2 | **투영(얇게)** | `IntentContract`의 변경 시점 투영 (work item sidecar) |
+| `ImpactGraph` | 3 | **신설** | (DITTO에 대응물 없음) |
+| `ArchitectureSpec` | 3 | **신설(저장소당 1회)** | `.ditto/knowledge`에 보관 |
+| `SemanticCompatibility` | 6 | **신설** | reviewer/verifier가 소비 |
+| `ReviewGraph` | 7 | **확장** | `reviewer-output` 스키마 확장 (§0.2 바인딩 표) |
 | `FitnessFunction` | 8 | **신설** | (DITTO·boxwood 모두 없음) |
 | `AssuranceSnapshot` | 8(지속) | **신설** | Assurance Graph의 시계열 단위 |
 | `JourneySpec` | 0(저장소 카탈로그) | **신설** | 사용자 여정의 1급 명세. ImpactGraph·ReviewGraph·FitnessFunction이 `journey_id`로 참조 |
+| `JourneyRun` | 6 | **확장** | DITTO `e2eJourney`(`e2e` 스킬 산출물)로 실현 (§0.2 바인딩 표) |
 
-모든 스키마는 공통 envelope를 갖는다:
+### 0.1 공통 envelope — 스펙이 요구하는 정보 (필드명 아님)
+
+스펙 계층은 모든 산출물이 **다음 정보를 실어야 한다**고만 요구한다. *칸 이름*은 바인딩이 정한다 — 같은 정보를 어느 이름으로 싣는가는 저장소 약속의 문제이지 스펙의 문제가 아니다(OBJ-35).
+
+| 스펙이 요구하는 정보 | 의미 |
+|---|---|
+| 산출물 종류 | 어떤 스키마인지 |
+| 소속 work item | 어느 작업에서 나왔는지 |
+| provenance | 누가(agent/user)·언제 만들었는지 |
+
+이 문서의 JSON 예시 블록은 가독성을 위해 `schema`/`work_item`/`produced_by`/`produced_at`라는 *스펙 표기*를 쓴다. 이는 wire format이 아니라 위 정보의 자리표시이며, 실제 저장 형식은 §0.2의 바인딩이 정한다.
 
 ```json
 {
@@ -36,6 +51,52 @@ parent: 00-framework.md
 ```
 
 > 예시의 `produced_at` 등 타임스탬프는 산출 시점에 런타임이 채운다.
+
+### 0.2 DITTO 바인딩 표 (필드·envelope·evidence·재사용 매핑)
+
+스펙 표기가 DITTO 실제 스키마로 내려가는 방식의 단일 출처다. v0 구현은 이 표를 코드로 옮긴다.
+
+**envelope 매핑:**
+
+| 스펙 정보 | DITTO 필드 | 비고 |
+|---|---|---|
+| 산출물 종류 | `schema_version`(const) + 스키마별 `kind`/`$id` | DITTO는 버전을 `schema_version`으로 분리 |
+| 소속 work item | `work_item_id` (`^wi_…`) | 스펙 `work_item` → DITTO `work_item_id` |
+| provenance(누구) | `produced_by` 또는 산출물별 행위자 필드(reviewer 등) | 스키마별 기존 필드 우선 |
+| provenance(언제) | 기존 타임스탬프 필드 | 런타임이 채움 |
+| 산출물 식별자 | `id` (`^rv_…` 등 prefix) | DITTO 산출물은 자체 id 보유 |
+
+**`ReviewGraph` ← `reviewer-output` 확장 (OBJ-36):** ReviewGraph는 별도 wire format이 아니라 reviewer-output에 거버넌스 분류를 더한 뷰다.
+
+| ReviewGraph(스펙) | reviewer-output(DITTO) 바인딩 |
+|---|---|
+| `files[].path` | finding의 위치(파일) |
+| `files[].role`/`risk`/`risk_reason` | finding에 거버넌스 분류 필드로 추가(확장점) |
+| `files[].evidence` | reviewer-output `evidence[]` 재사용 |
+| 미해소 항목 | reviewer-output `unverified[]` 재사용 |
+| `human_review_set` | high-risk·unresolved 집계 뷰(파생) |
+
+> reviewer-output이 `additionalProperties:false`면, 거버넌스 필드는 별도 확장 객체(예: `acg_review`) 또는 reviewer-output 스키마에 옵셔널 필드 추가로 싣는다 — 어느 쪽인지는 v0에서 확정.
+
+**evidence 종류 매핑 (OBJ-38):** 스펙 `evidence_kind`(test/build/log/diff/screen/manual/e2e) ↔ DITTO `evidenceRef.kind`(command/file/artifact/url/note).
+
+| 스펙 evidence_kind | DITTO evidenceRef.kind |
+|---|---|
+| test / build | `command` (실행 명령 + 결과) |
+| log / diff / screen | `artifact` 또는 `file` |
+| manual | `note` |
+| e2e | `artifact`, ref는 `JourneyRun`(아래) |
+
+> ReviewGraph evidence의 `unresolved`는 evidenceRef.kind가 아니다 — 증거 부재 표식이므로 evidence 칸을 비우고 별도 unresolved marker로 싣는다.
+
+**`JourneyRun` ← `e2eJourney` 매핑 (OBJ-39):**
+
+| JourneyRun(스펙) | e2eJourney(DITTO) 바인딩 |
+|---|---|
+| `journey_id` | `journey`(이름)에 JourneySpec.id를 싣거나 신규 `journey_id` 필드 추가 |
+| `outcome`: pass/fail/flaky/skipped | `result`: pass/fail/blocked → pass=pass, fail=fail, **blocked→skipped**. `flaky`는 스펙 outcome이나 **현 e2eJourney는 산출하지 않는다**(result enum에 없음) — 향후 e2e가 재시도 탐지를 추가하면 매핑, 그 전까지 DITTO 바인딩은 pass/fail/skipped만 낸다 |
+| `step_results` | e2eJourney `steps[]` |
+| `artifacts` | e2eJourney `artifacts.{screenshots,trace,console,network}` |
 
 ---
 
@@ -166,15 +227,22 @@ parent: 00-framework.md
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["kind", "path"],
+        "required": ["kind"],
         "properties": {
           "kind": { "enum": ["direct_caller", "transitive_caller", "type_contract", "generated_client", "test", "doc", "external_surface", "ui_surface", "user_journey"] },
-          "path": { "type": "string" },
+          "path": { "type": "string", "description": "코드 위치. kind가 ui_surface/user_journey가 아니면 필수." },
           "symbol": { "type": "string" },
-          "journey_id": { "type": "string", "description": "kind가 ui_surface/user_journey면 JourneySpec.id 참조(§2.5). path가 아니라 journey 정체성으로 가리킨다" },
+          "journey_id": { "type": "string", "description": "JourneySpec.id 참조(§2.5). kind가 ui_surface/user_journey면 필수 — journey는 파일이 아니라 흐름이므로 path 대신 이것으로 가리킨다(OBJ-31)." },
           "reason": { "type": "string" },
           "handled": { "type": "boolean", "default": false }
-        }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "enum": ["ui_surface", "user_journey"] } } },
+            "then": { "required": ["kind", "journey_id"] },
+            "else": { "required": ["kind", "path"] }
+          }
+        ]
       }
     },
     "unresolved": {
@@ -438,20 +506,30 @@ conventions:
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["path", "risk", "risk_reason", "evidence"],
+        "required": ["risk", "risk_reason"],
         "properties": {
-          "path": { "type": "string" },
+          "path": { "type": "string", "description": "코드 위치. role이 ui/user_journey가 아니면 필수." },
+          "journey_id": { "type": "string", "description": "JourneySpec.id 참조(§2.5). role이 ui/user_journey면 필수 — journey는 파일이 아니라 흐름이므로 path 대신 이것으로 가리킨다(OBJ-52)." },
           "role": { "enum": ["test_fixture", "private_helper", "service_logic", "public_api", "migration", "auth", "payment", "data_deletion", "config", "ui", "user_journey"] },
           "risk": { "enum": ["low", "medium", "high"] },
           "risk_reason": { "type": "string", "description": "비면 분류 무효" },
           "evidence": {
             "type": "object",
+            "description": "증거. unresolved=true면 비울 수 있다.",
             "properties": {
-              "kind": { "enum": ["test", "build", "log", "diff", "screen", "manual", "e2e", "unresolved"] },
+              "kind": { "enum": ["test", "build", "log", "diff", "screen", "manual", "e2e"] },
               "ref": { "type": "string", "description": "e2e면 JourneyRun(acg.journey-run.v1) 참조" }
             }
+          },
+          "unresolved": { "type": "boolean", "default": false, "description": "증거 부재 표식(OBJ-53). evidenceRef.kind가 *아니라* 별도 marker다 — §0.2 바인딩에서 evidence를 비우고 이 플래그로 싣는다. high-risk인데 evidence 없이 이 플래그만 있으면 human_review_set에 오른다." }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "role": { "enum": ["ui", "user_journey"] } }, "required": ["role"] },
+            "then": { "required": ["journey_id"] },
+            "else": { "required": ["path"] }
           }
-        }
+        ]
       }
     },
     "human_review_set": {
@@ -619,8 +697,10 @@ conventions:
         "properties": {
           "function_id": { "type": "string", "description": "FitnessFunction.id" },
           "outcome": { "enum": ["pass", "fail", "skip"] },
-          "violations": { "type": "integer", "description": "위반 건수(baseline 대비 비교용)" },
-          "new_violations": { "type": "integer", "description": "baseline.snapshot에 없던 신규 위반 — delta_only 함수의 차단 판정 근거" }
+          "violations": { "type": "integer", "description": "위반 건수(baseline 대비 비교용, 표시/추세용)" },
+          "new_violations": { "type": "integer", "description": "baseline.snapshot에 없던 신규 위반 건수 — delta_only 함수의 차단 판정 근거" },
+          "violation_ids": { "type": "array", "items": { "type": "string" }, "description": "현 시점 위반의 violation_identity 집합(FitnessFunction.baseline.violation_identity로 산출한 키). 카운트가 아니라 *집합*이라야 시점 간 동일 위반을 식별하고 delta를 재계산·감사할 수 있다(OBJ-32)." },
+          "new_violation_ids": { "type": "array", "items": { "type": "string" }, "description": "violation_ids 중 baseline.snapshot에 없던 키 — 레거시 부채와 신규 위반을 기계적으로 가른다. delta_only 차단은 이 집합이 비지 않을 때만 발동." }
         }
       }
     }
@@ -632,7 +712,7 @@ conventions:
 
 Assurance Graph는 함수별로 `results[].outcome`과 `violations`를 시점순으로 모은 시계열이다. 두 가지를 파생한다:
 - **통과율 기울기**: 최근 N개 스냅샷에서 함수별 pass 비율의 추세. 음의 기울기 = 침식.
-- **위반 추세**: `violations` 시계열. baseline 대비 증가 = 부채 누적(boxwood SB 버전이 늘고 있는가).
+- **위반 추세**: `violations` 시계열. baseline 대비 증가 = 부채 누적(boxwood SB 버전이 늘고 있는가). 신규 vs 레거시 구분은 `new_violation_ids`(violation_identity 집합)로 감사한다 — 카운트만으로는 레거시가 신규로 오독될 수 있다(OBJ-32).
 
 이로써 "한 번에 깨지지 않고 서서히 침식되는" 품질([00](00-framework.md) §2.2)이 측정 가능해진다 — 단일 스냅샷의 pass/fail이 아니라 시계열의 기울기로 본다.
 

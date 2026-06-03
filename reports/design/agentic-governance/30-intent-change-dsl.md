@@ -105,6 +105,28 @@ string         = '"' , { character } , '"' ;
 | `meta { rationale: }` | (Change Map 주석) | 형식화하지 않는 도메인 맥락 |
 | `fitness "..." { ... }` | `FitnessFunction` | 직접 적합성 함수 선언 |
 
+**scope_ref 매핑** (OBJ-33 — ICL `scope_kind` → `ChangeContract.scopeRef.kind`):
+
+| ICL `scope_kind` | → `scopeRef.kind` |
+|---|---|
+| `path` | `path` |
+| `glob` | `glob` |
+| `symbol` | `symbol` |
+| `surface` | `public_surface` |
+| `layer` | `layer` |
+
+`scope_ref`의 `as "<별칭>"`은 `scopeRef`에 대응 필드가 없으므로 `scopeRef.note`로 싣는다(표시용 별칭이 유실되지 않게). `# <note>`도 같은 `scopeRef.note`로 합쳐진다.
+
+**fitness check 매핑** (OBJ-34 — ICL `check` → `FitnessFunction.evaluator.mode`/`spec`):
+
+| ICL `check` | → `evaluator.mode` | → `evaluator.spec` |
+|---|---|---|
+| `cmd "<명령>"` | `deterministic` | 명령 문자열 |
+| `query "<쿼리>"` | `deterministic` | 쿼리(예: CodeQL `.ql`) |
+| `judge "<프롬프트>"` | `llm_judged` | 판정 프롬프트 |
+
+`evaluator.mode: executed`(e2e 등 실행 증거)는 **ICL로 선언하지 않는다** — 실행 정책(env·retries·selection)이 ICL 표현력 경계(§1) 밖이므로, executed fitness는 `FitnessFunction`을 직접 작성한다. `judge`로 컴파일되는 `llm_judged`는 `reproducibility` **object**(20 §6: model_version/prompt_hash/votes/tie_break/input_fixing)가 필요하며, ICL 해석기는 그 기본값(diff 고정·3회 다수결·fail_closed)을 채워 컴파일한다.
+
 **정적 검사 규칙** (해석기가 컴파일 전 검증):
 1. `forbid` 블록이 비어 있으면 에러(무제한 변경 방지).
 2. `allow`와 `forbid`의 scope_ref가 겹치면 에러(모순).
@@ -215,7 +237,11 @@ fitness "tenant 격리 불변" {
   "id": "ff-retry-tenant-isolation",
   "statement": "재시도 경로에서 TenantContext가 항상 전파된다",
   "kind": "semantic",
-  "evaluator": { "mode": "llm_judged", "spec": "재시도 핸들러 diff에서 TenantContext 전파 누락 여부 판정", "reproducibility": "diff 고정 + 3회 다수결 + 근거 산출물 강제" },
+  "evaluator": {
+    "mode": "llm_judged",
+    "spec": "재시도 핸들러 diff에서 TenantContext 전파 누락 여부 판정",
+    "reproducibility": { "model_version": "claude-opus-4-8", "votes": 3, "tie_break": "fail_closed", "input_fixing": "변경 diff 전체" }
+  },
   "cadence": { "per_change": true, "periodic": "none" },
   "on_violation": "warn",
   "source_change": "<work_item>"
