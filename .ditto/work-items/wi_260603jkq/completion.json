@@ -1,0 +1,67 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260603jkq",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-04T03:00:00.000Z",
+  "summary": "CodeQL을 결정론 provider로 ACG 완료-게이트에 연결했다. 빠진 중간 조각인 SARIF findings→완전한 reviewer-output 어셈블러를 만들고, doctor先행 게이트 뒤에서 runner→어셈블러→producer→acg-review.json까지 끝단 실행하는 turnkey `ditto codeql review`를 배선했다. deps 주입형이라 codeql 바이너리 없이 fixture로 전 파이프라인을 검증하고, 실 CLI로 doctor先행 gated 경로(분석·ledger 미생성)를 확인했다. 자율 stop-루프 자동실행은 명시적으로 범위 밖(advisory-first 보류).",
+  "changed_files": [
+    "src/core/codeql/sarif-adapter.ts",
+    "src/core/codeql/review-to-ledger.ts",
+    "src/cli/commands/codeql.ts",
+    "src/cli/index.ts",
+    "tests/core/codeql-review-to-ledger.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "sarif-adapter.ts:113-140 assembleReviewerOutput가 envelope+kind=security-reviewer+reviewer=codeql+different_provider=false, verdict=findings0?pass:hasHigh?fail:partial로 도출" },
+        { "kind": "command", "summary": "bun test codeql-review-to-ledger.test.ts → assembleReviewerOutput 3 테스트 pass(high→fail·note→partial·0→pass, reviewerOutput.parse 성공)" }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "review-to-ledger.ts:58-108 doctorBlocks(high)→early return(분석·persist 없음), 통과 시 runCodeqlReview→assemble→reviewerOutput.parse→projectReviewerOutputToAcgReview→persistLedger 순서" },
+        { "kind": "command", "summary": "runCodeqlReviewToLedger 4 테스트 pass: high SARIF→ledger 떨어지고 acgReviewForcesContinuation 1건(src/exec.ts); cli부재→gated·0 ledger; java build미입증→gated; clean→pass·미차단" }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "bun run dev codeql review --help → 우리 CLI 도움말; index.ts:32 codeql 등록. CODEQL_BIN=/nonexistent로 실 CLI 실행 → gated=true·ledgerWritten=false·exit 65, .ditto/work-items/<wi>/ 미생성" },
+        { "kind": "file", "summary": "codeql.ts:36-73 defaultLedgerDeps(Bun spawn 등), run이 runCodeqlReviewToLedger(input, defaultLedgerDeps) 호출·res.gated→exit65. deps 주입형이라 fixture 테스트 가능" }
+      ]
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "bun test → 953 pass/1 skip/0 fail; bun run lint clean" },
+        { "kind": "file", "summary": "review-to-ledger.ts:17-18 '자율 Stop 루프 자동실행은 deliberately out of scope' 명시(advisory-first 보류)" }
+      ]
+    }
+  ],
+  "verifications": [
+    { "command": "bun test tests/core/codeql-review-to-ledger.test.ts", "exit_code": 0 },
+    { "command": "bun run dev codeql review --help", "exit_code": 0 },
+    { "command": "CODEQL_BIN=/nonexistent/codeql bun run dev codeql review --work-item <wi> --output json", "exit_code": 65 },
+    { "command": "bun test", "exit_code": 0 },
+    { "command": "bun run lint", "exit_code": 0 }
+  ],
+  "unverified": [
+    {
+      "item": "실제 codeql 바이너리가 설치된 환경에서 runner→SARIF→ledger 끝단 happy-path 실행",
+      "reason": "이 머신엔 bare codeql 미설치(gh codeql 경유). runner의 실 분석은 기존 codeql-e2e.test.ts(opt-in)가 별도로 커버하고, 내 추가분(assemble→ledger)은 결정론이라 fixture로 완전 검증. 조합 e2e는 codeql 설치 환경 필요.",
+      "out_of_scope": true
+    }
+  ],
+  "remaining_risks": [
+    "이 머신은 bare `codeql`이 PATH에 없고 gh codeql 확장 경유 — doctor cliAvailable은 gh 확장을 감지(true)하나 runner는 bare codeql을 spawn해 실패할 수 있음. fail-closed(ledger 미생성)는 지켜지나, gh 경유 환경에선 --binary로 실제 codeql 바이너리 경로를 줘야 happy-path가 돈다.",
+    "turnkey 경로는 차단형(high→완료 차단)이라 사람/리뷰어가 의도적으로 호출하는 용도. 자율 stop-루프 자동실행(dialectic opponent 자동 CodeQL)은 무한루프 위험으로 범위 밖(계획서 WI-4 advisory-first 미착수)."
+  ],
+  "final_verdict": "pass"
+}

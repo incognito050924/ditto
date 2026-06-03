@@ -1,0 +1,48 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260603jkq",
+  "title": "CodeQL provider를 ACG 게이트에 연결 (turnkey ditto codeql review)",
+  "source_request": "CodeQL provider 연결",
+  "goal": "CodeQL을 결정론 provider로 ACG 완료-게이트에 연결한다. SARIF→reviewer-output 어셈블러(빠진 중간 조각)를 만들고, doctor先행 게이트 뒤에서 runner→어셈블러→producer→acg-review.json까지 끝단 실행하는 turnkey `ditto codeql review`를 배선한다. 자율 stop-루프 자동실행은 범위 밖(무한루프 위험, advisory-first 보류).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "어셈블러 assembleReviewerOutput가 CodeQL findings를 완전한 reviewer-output(envelope 포함, kind=security-reviewer)으로 조립하고 verdict를 severity로 도출(high→fail, low만→partial, 0→pass). schema-valid",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "runCodeqlReviewToLedger가 doctor先행 게이트→runner→어셈블러→projectReviewerOutputToAcgReview→AcgReviewStore까지 잇는다. high SARIF finding이면 acg-review.json이 떨어지고 acgReviewForcesContinuation이 continuation 강제. doctor high(cli부재·컴파일언어 build미입증)면 분석 안 하고 ledger 미생성(fail-closed)",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "ditto codeql review CLI가 등록되고, 실 CLI에서 doctor先행 gated 경로가 작동(cli 미가용→exit 65, ledger 미생성). deps 주입형이라 codeql 바이너리 없이 fixture SARIF로 전 파이프라인 테스트됨",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "전체 테스트 회귀 0·biome clean. 자율 stop-루프 자동실행은 범위 밖으로 명시(advisory-first 보류)",
+      "verdict": "pass",
+      "evidence": []
+    }
+  ],
+  "status": "done",
+  "closed_at": "2026-06-04T03:00:00.000Z",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/codeql/sarif-adapter.ts",
+    "src/core/codeql/review-to-ledger.ts",
+    "src/cli/commands/codeql.ts",
+    "src/cli/index.ts",
+    "tests/core/codeql-review-to-ledger.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-03T16:59:53.386Z",
+  "updated_at": "2026-06-03T16:59:53.386Z"
+}
