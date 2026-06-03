@@ -1,5 +1,7 @@
+import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { collectCapabilityInventory } from '~/core/capability-inventory';
+import { defaultDoctorDeps, inspectCodeqlTarget } from '~/core/codeql/doctor';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   type BuiltinHostId,
@@ -244,6 +246,54 @@ const capabilityCommand = defineCommand({
   },
 });
 
+const codeqlCommand = defineCommand({
+  meta: {
+    name: 'codeql',
+    description: 'Check target repo CodeQL suitability before analysis (fail-closed)',
+  },
+  args: {
+    output: { type: 'string', description: 'Output format: human (default) or json' },
+    'source-root': {
+      type: 'string',
+      description: 'Analysis source root (default: <repo>/src)',
+    },
+    'build-verified': {
+      type: 'boolean',
+      default: false,
+      description: 'Assert that a clean build was reproduced (unblocks compiled languages)',
+    },
+    advisory: { type: 'boolean', default: false, description: 'Report findings but exit 0' },
+  },
+  async run({ args }) {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const sourceRoot = args['source-root'] ?? join(repoRoot, 'src');
+      const report = await inspectCodeqlTarget(
+        { sourceRoot, buildVerified: args['build-verified'] },
+        defaultDoctorDeps,
+      );
+      if (format === 'json') {
+        writeJson({
+          status: report.finding_count === 0 ? 'ok' : 'unsuitable',
+          ...report,
+        });
+      } else if (report.finding_count === 0) {
+        const langs = report.detected_languages.map((l) => `${l.language}(${l.files})`).join(', ');
+        writeHuman(`codeql: ok — ${langs || 'no source'}`);
+      } else {
+        for (const finding of report.findings) {
+          writeHuman(`${finding.severity}\t${finding.kind}\t${finding.message}`);
+        }
+      }
+      exitForFindings(report.finding_count, args.advisory);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  },
+});
+
 export const doctorCommand = defineCommand({
   meta: {
     name: 'doctor',
@@ -255,5 +305,6 @@ export const doctorCommand = defineCommand({
     mcp: mcpCommand,
     surface: surfaceCommand,
     capability: capabilityCommand,
+    codeql: codeqlCommand,
   },
 });
