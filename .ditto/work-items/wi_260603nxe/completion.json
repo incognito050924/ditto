@@ -1,0 +1,76 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260603nxe",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-04T01:00:00.000Z",
+  "summary": "검토 결과를 위험 목록 파일(acg-review.json)로 저장하는 producer를 배선하고, 완료-차단 안전 검사가 실제로 작동하도록 교정했다. 이제 위험(high)으로 찍힌 변경에 확인 증거가 없으면 완료가 막히고, 증거를 붙이면 풀린다. 저장기·CLI·검토 담당 배선 추가, 공유 런타임 검사 한 줄 의미 교정.",
+  "changed_files": [
+    "src/hooks/stop.ts",
+    "src/core/acg-review-store.ts",
+    "src/cli/commands/acg-review.ts",
+    "src/cli/index.ts",
+    "tests/hooks/stop.test.ts",
+    "tests/acg/acg-review-producer.test.ts",
+    "agents/reviewer.md",
+    "agents/security-reviewer.md"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "stop.ts:176 acgReviewForcesContinuation 조건 = risk==='high' && file.evidence===undefined; low/medium·high-with-evidence는 미차단" },
+        { "kind": "command", "summary": "bun test tests/hooks/stop.test.ts → 30 pass/0 fail; high+증거없음→exit2, 증거붙으면 exit0, low/medium 통과로 갱신됨" }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "acg-review-store.ts 경로 .ditto/work-items/<wi>/acg-review.json, write=writeJson(atomic+schema), get=readJson, exists=Bun.file (CompletionStore 패턴)" },
+        { "kind": "command", "summary": "acg-review-producer.test.ts의 AcgReviewStore describe 2개 통과 (write→get 왕복, on-disk 경로/kind)" }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "acg-review.ts가 reviewerOutput 검증→projectReviewerOutputToAcgReview(결정론 순수함수, LLM 무관)→AcgReviewStore 저장; index.ts에 등록" },
+        { "kind": "command", "summary": "bun test tests/acg/acg-review-producer.test.ts → 8 pass; CLI가 high finding 입력→high_risk_without_evidence=1, 산출 ledger를 실제 acgReviewForcesContinuation에 먹여 charge.ts 1건 차단 확인(producer→gate)" }
+      ]
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "acg-review.ts try/catch가 store.write 전에 process.exit(USAGE_ERROR_EXIT) — 구조적 fail-closed" },
+        { "kind": "command", "summary": "missing/invalid input→non-zero exit·ledger 미생성, 같은 입력→byte-identical ledger 테스트 통과" }
+      ]
+    },
+    {
+      "criterion_id": "ac-5",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "agents/reviewer.md·security-reviewer.md에 'Persist for the completion gate' 문단 추가, read-only 계약과 모순 없음 명시" },
+        { "kind": "command", "summary": "전체 bun test 946 pass/1 skip/0 fail; bun run lint clean; git status --short schemas/ 비어있음(스키마 drift 없음)" }
+      ]
+    }
+  ],
+  "verifications": [
+    { "command": "bun test tests/hooks/stop.test.ts", "exit_code": 0 },
+    { "command": "bun test tests/acg/acg-review-producer.test.ts", "exit_code": 0 },
+    { "command": "bun test", "exit_code": 0 },
+    { "command": "bun run lint", "exit_code": 0 },
+    { "command": "git status --short schemas/", "exit_code": 0 }
+  ],
+  "unverified": [],
+  "remaining_risks": [
+    "검토 담당(reviewer/security-reviewer) agent가 producer CLI를 실제로 호출하는지는 런타임 agent 행동이라 코드 테스트로는 못 막음(문서 배선까지가 v0). 실제 autopilot 런에서 acg-review.json이 떨어지는지는 향후 e2e/런 관찰로 확인 필요.",
+    "high finding을 해소(evidence 첨부)하는 경로는 현재 reviewer-output 재생성을 통함(어댑터가 finding에 evidence를 싣지 않음) — 세분화된 finding별 evidence 첨부는 후속."
+  ],
+  "acg_governance": {
+    "review_graph": ".ditto/work-items/wi_260603nxe/acg-review.json",
+    "unresolved_high_risk": []
+  },
+  "final_verdict": "pass"
+}

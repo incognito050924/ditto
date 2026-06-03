@@ -1,0 +1,57 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260603nxe",
+  "title": "ReviewGraph producer 배선 + 안전 검사 작동 교정",
+  "source_request": "ReviewGraph producer 배선",
+  "goal": "검토 결과를 위험 목록 파일(.ditto/work-items/<wi>/acg-review.json)로 저장하는 producer를 배선하고, 완료-차단 안전 검사가 실제로 작동하도록 교정한다. 방침(사용자 결정): 위험(high)으로 찍힌 변경에 확인 증거가 없으면 완료를 막고, 증거가 붙으면 풀린다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "안전 검사 교정: Stop 훅의 acgReviewForcesContinuation이 'risk=high ∧ evidence 부재'면 continuation 강제(exit 2), evidence가 붙으면 통과. 기존 WU-6 테스트도 새 의미로 갱신되어 green",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "AcgReviewStore(src/core/acg-review-store.ts)가 acgReviewGraph를 .ditto/work-items/<wi>/acg-review.json에 schema-valid atomic write하고 get/exists 왕복 (CompletionStore 패턴)",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "CLI 'ditto acg-review --from <reviewer-output.json> --work-item <wi>'가 reviewerOutput을 검증→projectReviewerOutputToAcgReview로 투영→AcgReviewStore로 저장. high finding 있는 입력이면 stop이 읽어 막을 수 있는 ledger 산출",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "잘못된/부재 reviewer-output 입력 → CLI non-zero exit(fail-closed), acg-review.json 미생성. 같은 입력은 같은 ledger(결정론)",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "end-to-end: CLI로 생성한 ledger를 Stop 훅이 읽어 high+증거없음이면 exit 2, 증거 붙으면 exit 0. reviewer/security-reviewer agent 문서에 저장 배선 한 줄 추가(기존 지시 모순 없음). 전체 테스트 회귀 0·biome clean·JSON 스키마 export 동기화",
+      "verdict": "pass",
+      "evidence": []
+    }
+  ],
+  "status": "done",
+  "closed_at": "2026-06-04T01:00:00.000Z",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/hooks/stop.ts",
+    "src/core/acg-review-store.ts",
+    "src/cli/commands/acg-review.ts",
+    "src/cli/index.ts",
+    "tests/hooks/stop.test.ts",
+    "tests/acg/acg-review-producer.test.ts",
+    "agents/reviewer.md",
+    "agents/security-reviewer.md"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-03T15:45:17.950Z",
+  "updated_at": "2026-06-03T15:45:17.950Z"
+}
