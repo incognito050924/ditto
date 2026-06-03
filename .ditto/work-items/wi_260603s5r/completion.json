@@ -1,0 +1,43 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260603s5r",
+  "declared_by": "verifier",
+  "declared_at": "2026-06-04T02:00:00.000Z",
+  "summary": "실제 reviewer 서브에이전트를 결함 있는 fixture에 돌린 결과: 위험 목록 파일(acg-review.json)이 .ditto/work-items/<wi>/에 실제로 떨어졌고, 독립 검증에서 schema valid + 완료-차단 검사가 실제로 걸림(FORCES_CONTINUATION true)을 확인했다. 다만 reviewer가 문서에 배선된 'ditto acg-review --from reviewer-output.json' 경로를 쓰지 않고, 직접 store를 호출해 ledger를 손으로 구성했다(결정론 어댑터 우회). 또한 ditto 명령이 macOS 시스템 바이너리(/usr/bin/ditto)와 충돌한다.",
+  "changed_files": [],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "partial",
+      "evidence": [
+        { "kind": "command", "summary": "ls .ditto/work-items/wi_260603s5r/ → acg-review.json(360B) 실재. 독립 검증 스크립트: SCHEMA_VALID true, high finding(.scratch-review/payment.ts, command injection) 포함" }
+      ],
+      "notes": "파일 드롭+schema valid+high finding = 충족. 그러나 '배선된 절차대로'는 미충족: reviewer가 documented `ditto acg-review --from reviewer-output.json`(reviewer-output→결정론 어댑터 projectReviewerOutputToAcgReview→store) 경로를 쓰지 않고, ledger를 손으로 구성해 AcgReviewStore.write를 직접 호출(스크래치 스크립트). unresolved:true도 손으로 박음(어댑터라면 finding은 false). 결정론 투영이 우회됨."
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "떨어진 실제 ledger를 acgReviewGraph.safeParse → valid, acgReviewForcesContinuation에 먹임 → FORCES_CONTINUATION true, REASONS=['acg review: high-risk change without evidence — .scratch-review/payment.ts (...)']" }
+      ]
+    }
+  ],
+  "verifications": [
+    { "command": "ls -la .ditto/work-items/wi_260603s5r/", "exit_code": 0 },
+    { "command": "bun run <독립 검증: acgReviewGraph.safeParse + acgReviewForcesContinuation>", "exit_code": 0 }
+  ],
+  "unverified": [
+    {
+      "item": "stopHandler 전체 경로(live session_id + SessionPointerStore)로의 end-to-end continuation",
+      "reason": "ac-2는 load-bearing 결정 함수 acgReviewForcesContinuation을 실제 ledger로 직접 검증함. 전체 훅 경로는 별도 stop 단위테스트가 이미 커버.",
+      "out_of_scope": true
+    }
+  ],
+  "remaining_risks": [
+    "결함①(배선 미준수): reviewer agent가 documented `ditto acg-review --from` CLI 경로를 따르지 않고 ledger를 손으로 구성→직접 store 호출. 결정론 어댑터(projectReviewerOutputToAcgReview)가 우회되어, LLM이 severity→risk·unresolved를 손계산함(설계가 막으려던 바로 그 형태). 이번엔 우연히 맞았으나 신뢰 불가.",
+    "결함②(ditto PATH 충돌): `which ditto` → /usr/bin/ditto (macOS 시스템 파일복사 유틸). 따라서 문서의 bare `ditto acg-review`는 이 환경에서 macOS 유틸로 가서 실패. 이는 acg-review뿐 아니라 모든 skill/agent의 bare `ditto ...` 호출에 공통되는 잠재 문제(autopilot SKILL.md 등).",
+    "후속 수정 방향: (a) agent 지시를 reviewer-output.json 기록 → 결정론 CLI 호출 순서로 더 강제하고, (b) bare `ditto` 대신 이 repo에서 실제 동작하는 호출형(bun run dev / dist 바이너리 / 명시 alias)으로 통일하거나 ditto 충돌을 문서화."
+  ],
+  "next_handoff_path": ".ditto/work-items/wi_260603s5r/completion.json",
+  "final_verdict": "partial"
+}

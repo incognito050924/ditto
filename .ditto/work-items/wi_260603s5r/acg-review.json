@@ -1,0 +1,15 @@
+{
+  "kind": "acg.review-graph.v1",
+  "files": [
+    {
+      "path": ".scratch-review/payment.ts",
+      "role": "payment",
+      "risk": "high",
+      "risk_reason": "command injection: untrusted userId interpolated into execSync shell string at payment.ts:8",
+      "unresolved": true
+    }
+  ],
+  "human_review_set": [
+    ".scratch-review/payment.ts"
+  ]
+}
