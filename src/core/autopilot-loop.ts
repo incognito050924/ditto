@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
 import { evidenceRef, relativePath } from '~/schemas/common';
+import { loadVariantCatalog, selectVariantCandidates } from './agent-variants';
 import { forwardRound, planForwardReexpansion } from './autopilot-converge';
 import {
   type DelegationPacket,
@@ -152,11 +153,17 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
     ...n,
     status: nodeTransition(n.status, 'dispatch'),
   }));
+  // Variant routing (ac-3): filter specialized-subagent candidates by the chosen
+  // owner (role) and file scope so the driver can pick a `subagent_type` instead
+  // of the fixed owner. With no `.ditto/agents/` the catalog is empty, so
+  // candidates is [] and behavior is unchanged (ac-4).
+  const catalog = await loadVariantCatalog(repoRoot);
+  const candidates = selectVariantCandidates(catalog, chosen.owner, workItem.changed_files);
   return {
     action: 'spawn',
     node_id: chosen.id,
     owner: chosen.owner,
-    packet: buildDelegationPacket(chosen, workItem),
+    packet: buildDelegationPacket(chosen, workItem, candidates),
   };
 }
 

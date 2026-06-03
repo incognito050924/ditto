@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildInitialNodes } from '~/core/autopilot-graph';
@@ -79,9 +79,45 @@ describe('nextNode (loop step 1-5: select → approval → dispatch → packet)'
     expect(res.owner).toBe('planner');
     expect(res.packet.task).toBeTruthy();
     expect(res.packet.context.file_scope).toEqual(['src/x.ts']);
+    // Variant routing (ac-3/ac-4): the spawn packet exposes variant_candidates;
+    // with no .ditto/agents/ present the catalog is empty so it is [].
+    expect(res.packet.variant_candidates).toEqual([]);
     // dispatch persisted: N1 is now running
     const after = await aps.get(WI);
     expect(after.nodes.find((n) => n.id === 'N1')?.status).toBe('running');
+  });
+
+  test('spawn packet exposes matching variant_candidates from .ditto/agents (ac-3)', async () => {
+    await seed(graph());
+    const dir = join(repo, '.ditto', 'agents');
+    await mkdir(dir, { recursive: true });
+    await Bun.write(
+      join(dir, 'planner-variant.md'),
+      `---
+name: deep-planner
+role: planner
+description: deep planning specialist
+match: [src/**]
+---
+`,
+    );
+    await Bun.write(
+      join(dir, 'impl-variant.md'),
+      `---
+name: impl-specialist
+role: implementer
+description: impl
+match: [src/**]
+---
+`,
+    );
+    const res = await nextNode(repo, WI);
+    if (res.action !== 'spawn') throw new Error('expected spawn');
+    // N1 is the planner node; only the planner-role variant matches the owner.
+    expect(res.owner).toBe('planner');
+    expect(res.packet.variant_candidates).toEqual([
+      { name: 'deep-planner', description: 'deep planning specialist' },
+    ]);
   });
 
   test('is idempotent: a dispatched (running) node is not re-selected', async () => {

@@ -59,6 +59,19 @@ describe('buildDelegationPacket (6-section, Context Isolation)', () => {
     expect(p.expected_outcome.toLowerCase()).toContain('subgraph');
   });
 
+  // Variant routing (ac-2/ac-3): candidates passed in surface on the packet;
+  // omitting the 3rd arg defaults to [] so every existing caller is unchanged (ac-4).
+  test('variant_candidates default to [] when no 3rd arg is passed', () => {
+    const p = buildDelegationPacket(implementNode, workItem);
+    expect(p.variant_candidates).toEqual([]);
+  });
+
+  test('variant_candidates carry the passed specialized-subagent candidates', () => {
+    const candidates = [{ name: 'sql-impl', description: 'sql migrations' }];
+    const p = buildDelegationPacket(implementNode, workItem, candidates);
+    expect(p.variant_candidates).toEqual(candidates);
+  });
+
   test('non-planner nodes carry no subgraph-generation directive (surgical)', () => {
     for (const node of [implementNode, verifyNode]) {
       const p = buildDelegationPacket(node, workItem);

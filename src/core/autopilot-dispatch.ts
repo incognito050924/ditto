@@ -19,6 +19,10 @@ export interface DelegationPacket {
     done_when: string;
     acceptance_refs: string[];
   };
+  // Variant routing: deterministically filtered specialized-subagent candidates
+  // (role + file_scope match). The driver picks a `subagent_type` from these
+  // instead of the fixed owner; [] means no variant catalog applied.
+  variant_candidates: { name: string; description: string }[];
 }
 
 const OWNER_TOOLS: Record<AutopilotNode['owner'], string[]> = {
@@ -63,7 +67,11 @@ const PLANNER_GENERATE_DIRECTIVE =
   '{id, kind, purpose, depends_on, acceptance_refs} mapped to its acceptance ' +
   'criteria; scale to task size (small tasks stay minimal — do not force a stage).';
 
-export function buildDelegationPacket(node: AutopilotNode, workItem: WorkItem): DelegationPacket {
+export function buildDelegationPacket(
+  node: AutopilotNode,
+  workItem: WorkItem,
+  variantCandidates: { name: string; description: string }[] = [],
+): DelegationPacket {
   const isPlanner = node.owner === 'planner';
   const doneWhen =
     node.acceptance_refs.length > 0
@@ -95,6 +103,7 @@ export function buildDelegationPacket(node: AutopilotNode, workItem: WorkItem): 
       done_when: doneWhen,
       acceptance_refs: node.acceptance_refs,
     },
+    variant_candidates: variantCandidates,
   };
 }
 
