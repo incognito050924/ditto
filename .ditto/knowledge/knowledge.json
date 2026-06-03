@@ -32,6 +32,15 @@
       "change_condition": "smol-toml 유지보수가 정지하거나 TOML spec 호환 회귀가 생기면 다른 lib로 교체(사용 지점이 shared.ts:parseToml과 codex.ts 두 호출자뿐이라 비용 작음). 자체 파서로 복귀하면 false safety가 회귀하므로 비용 매우 큼.",
       "path": ".ditto/knowledge/adr/ADR-0003-toml-parser.md",
       "superseded_by": null
+    },
+    {
+      "id": "ADR-0004",
+      "title": "ACG Q3·Q4 — ArchitectureSpec 출처 & 적합성 함수 비용 정책",
+      "status": "accepted",
+      "rationale": "3역 적대적 숙의(Opponent=codex)로 ACG 열린질문 Q3/Q4를 닫았다. Q3: ArchitectureSpec=produced_by=user 권위 기본 하이브리드 부트스트랩 — agent는 관측가능 layers/public_surfaces만 비권위 candidate로 제안, forbidden_dependencies 자동 박제 금지(현재 위반 동결 방지). Q4: evaluator.mode별 비용 차등(deterministic 싼가드 per_change·캐시DB+쿼리증분 ~3.9s, executed risk_tiered+periodic 매변경전수금지) + 안전 불변식(ImpactGraph/boundary 입력 부재·journey_unknown 시 high-risk escalate, sample down 금지) + incremental 정직 한정(쿼리=증분·추출=언어당 전역). 두 결정 모두 스키마 변경 없이 기존 affordance(produced_by/execution.selection/baseline.delta_only/cadence) 위에서. dialectic verdict=revise.",
+      "change_condition": "per-file 증분 DB 추출 실증 시 incremental 단위 한정 완화. ImpactGraph 생산기·boundary 게이트 구현 시 risk base를 risk_default→ImpactGraph 승급하고 Q3 agent candidate 경로 활성. 타입드 invariant 표현 도입 시 module_invariants 주석 규약 대체.",
+      "path": ".ditto/knowledge/adr/ADR-0004-q3-q4-architecture-fitness.md",
+      "superseded_by": null
     }
   ],
   "patterns": [
