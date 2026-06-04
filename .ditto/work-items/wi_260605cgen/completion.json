@@ -1,0 +1,47 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260605cgen",
+  "declared_by": "main",
+  "declared_at": "2026-06-05T02:00:00.000Z",
+  "summary": "ChangeContract 생성·저장 CLI(`ditto change-contract --work-item <wi> --file <a.icl>`)를 추가했다. ICL을 compileIcl로 컴파일해 ChangeContract를 ChangeContractStore(.ditto/work-items/<wi>/change-contract.json)에 저장한다. 이로써 forbidden_scope 집행(wi_260605scp)의 입력 경로가 생겨 'ICL 생성→계약 저장→PreToolUse 차단' 전 사슬이 처음으로 끝까지 돈다. 컴파일 실패는 IclError 메시지 + exit 1. fitnessFunctions는 개수만 보고(별도 store 후속), symbol kind 해소 후속.",
+  "changed_files": [
+    "src/cli/commands/change-contract.ts",
+    "src/cli/index.ts",
+    "tests/acg/change-contract-chain.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "retry-policy.icl → change-contract.json 저장(forbidden 3·allowed 2·fitness 1). 잘못된 .icl → '[parse] unexpected character (line 1)' + exit 1" }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "change-contract-chain.test.ts: compileIcl(forbid glob src/locked/**)→store.write→SessionPointer.set→preToolUseHandler. src/locked/x.ts→exit 2, src/free/y.ts→exit 0. 생성→저장→집행 전 사슬 동작" }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "src/cli/index.ts subCommands에 change-contract 등록. 전체 회귀 1021 pass / 3 skip / 0 fail, biome 248 files clean" }
+      ]
+    }
+  ],
+  "verifications": [
+    { "command": "bun test", "exit_code": 0 },
+    { "command": "bunx biome check src tests", "exit_code": 0 },
+    { "command": "bun run dev change-contract --work-item wi_x --file tests/acg/fixtures/retry-policy.icl", "exit_code": 0 }
+  ],
+  "unverified": [],
+  "remaining_risks": [
+    "fitnessFunctions는 저장 안 함(개수만) — fitness 저장소/집행은 별도(#4).",
+    "symbol kind forbidden_scope는 여전히 미집행 — 계약에 symbol이 있어도 PreToolUse가 못 막음(#8b 후속: 저장 시점 impact 해소).",
+    "layer/public_surface forbidden은 .ditto/architecture-spec.json 관례 위치가 있어야 집행됨(retry-policy.icl의 layer/surface는 boxwood 도메인이라 DITTO에선 미집행)."
+  ],
+  "final_verdict": "pass"
+}
