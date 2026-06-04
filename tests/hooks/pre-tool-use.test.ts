@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ChangeContractStore } from '~/core/change-contract-store';
+import { SessionPointerStore } from '~/core/session-pointer';
 import { preToolUseHandler } from '~/hooks/pre-tool-use';
 import { type HookInput, KILL_SWITCH, runHook } from '~/hooks/runtime';
+import { acgChangeContract } from '~/schemas/acg-change-contract';
 
 const REPO = '/tmp/ditto-repo';
 
@@ -224,5 +230,63 @@ describe('preToolUseHandler — ac-4 scope-out write', () => {
   test('Bash redirect outside repo is blocked; inside repo allowed', async () => {
     expect((await bash('echo hi > /tmp/elsewhere/out.txt')).exitCode).toBe(2);
     expect((await bash('echo hi > ./build/out.txt')).exitCode).toBe(0);
+  });
+});
+
+describe('preToolUseHandler — (d) forbidden_scope 집행', () => {
+  function contract(workItemId: string, forbidden: string) {
+    return acgChangeContract.parse({
+      schema_version: '0.1.0',
+      kind: 'acg.change-contract.v1',
+      work_item_id: workItemId,
+      produced_by: 'agent',
+      produced_at: '2026-06-05T00:00:00Z',
+      purpose: 'forbidden_scope 집행',
+      allowed_scope: [],
+      forbidden_scope: [{ kind: 'path', ref: forbidden }],
+      invariants: [],
+      acceptance: [{ criterion: 'green', evidence_kind: 'test' }],
+      risk_default: 'low',
+      decision_ref: null,
+    });
+  }
+  const edit = (dir: string, rel: string, sessionId?: string) =>
+    preToolUseHandler({
+      raw: {
+        tool_name: 'Edit',
+        tool_input: { file_path: join(dir, rel) },
+        ...(sessionId ? { session_id: sessionId } : {}),
+      },
+      repoRoot: dir,
+      env: {},
+    });
+
+  test('forbidden_scope 파일 편집은 block, 다른 파일은 allow', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-fsenf-'));
+    try {
+      await new SessionPointerStore(dir).set('sess-fs', 'wi_fsenforce1');
+      await new ChangeContractStore(dir).write(
+        'wi_fsenforce1',
+        contract('wi_fsenforce1', 'src/core/locked.ts'),
+      );
+
+      expect((await edit(dir, 'src/core/locked.ts', 'sess-fs')).exitCode).toBe(2);
+      expect((await edit(dir, 'src/core/free.ts', 'sess-fs')).exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('fail-open: 세션 없음 / 계약 없음 → allow', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-fsenf-'));
+    try {
+      // 세션 포인터는 있으나 계약 파일 없음 → allow
+      await new SessionPointerStore(dir).set('sess-nc', 'wi_fsnocontr1');
+      expect((await edit(dir, 'src/core/locked.ts', 'sess-nc')).exitCode).toBe(0);
+      // session_id 자체가 없음 → allow
+      expect((await edit(dir, 'src/core/locked.ts')).exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -1,4 +1,9 @@
 import { isAbsolute, relative, resolve } from 'node:path';
+import { matchForbiddenScope } from '~/acg/scope/resolve';
+import { ChangeContractStore } from '~/core/change-contract-store';
+import { readJson } from '~/core/fs';
+import { SessionPointerStore } from '~/core/session-pointer';
+import { type AcgArchitectureSpec, acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import type { HookHandler, HookInput } from './runtime';
 
 /**
@@ -237,7 +242,50 @@ function checkDestructive(cmd: string) {
   return ALLOW;
 }
 
-export const preToolUseHandler: HookHandler = (input: HookInput) => {
+// --- (d) ChangeContract forbidden_scope enforcement -------------------------
+// 현재 work item의 계약을 읽어, 편집 대상 파일이 forbidden_scope의 해소 집합에 들면 막는다.
+// 모든 전제 부재(세션 없음·계약 없음·빈 forbidden)는 undefined를 돌려 ALLOW로 떨어진다.
+
+/** `.ditto/architecture-spec.json`을 optional 로드(부재·위반 시 undefined → layer/surface skip). */
+async function loadArchSpec(repoRoot: string): Promise<AcgArchitectureSpec | undefined> {
+  try {
+    return await readJson(
+      resolve(repoRoot, '.ditto', 'architecture-spec.json'),
+      acgArchitectureSpec,
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+/** 편집 대상 file_path가 현재 work item 계약의 forbidden_scope에 들면 block, 아니면 undefined. */
+async function checkForbiddenScope(
+  input: HookInput,
+  filePath: string,
+): Promise<ReturnType<typeof block> | undefined> {
+  const raw = (input.raw ?? {}) as Record<string, unknown>;
+  const sessionId = typeof raw.session_id === 'string' ? raw.session_id : undefined;
+  if (!sessionId) return undefined;
+
+  const workItemId = await new SessionPointerStore(input.repoRoot).get(sessionId);
+  if (!workItemId) return undefined;
+
+  const contract = await new ChangeContractStore(input.repoRoot).read(workItemId);
+  if (!contract || contract.forbidden_scope.length === 0) return undefined;
+
+  const repoRel = relative(input.repoRoot, resolve(input.repoRoot, filePath));
+  const archSpec = await loadArchSpec(input.repoRoot);
+  const hit = matchForbiddenScope(contract.forbidden_scope, repoRel, archSpec);
+  if (hit) {
+    return block(
+      'forbidden-scope',
+      `${repoRel} is in this work item's forbidden_scope (${hit.kind}:${hit.ref})`,
+    );
+  }
+  return undefined;
+}
+
+export const preToolUseHandler: HookHandler = async (input: HookInput) => {
   const raw = (input.raw ?? {}) as Record<string, unknown>;
   const toolName = raw.tool_name;
   const toolInput = (raw.tool_input ?? {}) as Record<string, unknown>;
@@ -283,6 +331,9 @@ export const preToolUseHandler: HookHandler = (input: HookInput) => {
     if (isOutsideRepo(repoRoot, filePath)) {
       return block('scope-out', `write outside repo (${filePath})`);
     }
+    // (d) forbidden_scope: 계약이 보호하는 파일을 건드리면 막는다.
+    const forbidden = await checkForbiddenScope(input, filePath);
+    if (forbidden) return forbidden;
   }
 
   return ALLOW;
