@@ -5,6 +5,7 @@ import { compileIcl } from '~/acg/icl';
 import { expandForbiddenSymbols } from '~/acg/scope/symbol-expand';
 import { ChangeContractStore } from '~/core/change-contract-store';
 import { codeqlCacheDir, makeRelationDeps } from '~/core/codeql/host-deps';
+import { FitnessFunctionStore } from '~/core/fitness-function-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   RUNTIME_ERROR_EXIT,
@@ -90,6 +91,8 @@ export const changeContractCommand = defineCommand({
       deps: makeRelationDeps(),
     });
     await new ChangeContractStore(repoRoot).write(args['work-item'], expanded.contract);
+    // fitness function도 저장해 `ditto fitness run`이 읽을 수 있게 한다(deterministic 전 사슬).
+    await new FitnessFunctionStore(repoRoot).write(args['work-item'], result.fitnessFunctions);
 
     const summary = {
       work_item_id: args['work-item'],

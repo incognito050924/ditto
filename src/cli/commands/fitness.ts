@@ -6,6 +6,7 @@ import {
   type FitnessContext,
   runFitness,
 } from '~/acg/fitness/fitness-runner';
+import { FitnessFunctionStore } from '~/core/fitness-function-store';
 import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
 import { acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
 import { type AcgFitnessFunction, acgFitnessFunction } from '~/schemas/acg-fitness-function';
@@ -84,8 +85,8 @@ export const fitnessCommand = defineCommand({
         'work-item': { type: 'string', description: 'Work item id', required: true },
         from: {
           type: 'string',
-          description: 'Path to a fitness-function JSON (or array)',
-          required: true,
+          description:
+            "Path to a fitness-function JSON (or array). Omit to load the work item's stored fitness-functions.json",
         },
         trigger: { type: 'string', description: 'per_change|periodic (default per_change)' },
         period: { type: 'string', description: 'daily|weekly|on_release (for trigger=periodic)' },
@@ -109,17 +110,30 @@ export const fitnessCommand = defineCommand({
         }
         try {
           const repoRoot = await resolveRepoRootForCreate();
+          const fromPath = typeof args.from === 'string' ? args.from : undefined;
           let functions: AcgFitnessFunction[];
-          try {
-            functions = parseFunctions(JSON.parse(await Bun.file(args.from).text()));
-          } catch (err) {
-            writeError(
-              `fitness run: cannot read valid fitness-function(s) from ${args.from}: ${
-                err instanceof Error ? err.message : String(err)
-              }`,
-            );
-            process.exit(USAGE_ERROR_EXIT);
-            return;
+          if (fromPath) {
+            try {
+              functions = parseFunctions(JSON.parse(await Bun.file(fromPath).text()));
+            } catch (err) {
+              writeError(
+                `fitness run: cannot read valid fitness-function(s) from ${fromPath}: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              );
+              process.exit(USAGE_ERROR_EXIT);
+              return;
+            }
+          } else {
+            const stored = await new FitnessFunctionStore(repoRoot).read(args['work-item']);
+            if (stored === null) {
+              writeError(
+                `fitness run: no --from and no stored fitness-functions.json for ${args['work-item']} (run \`ditto change-contract\` first, or pass --from)`,
+              );
+              process.exit(USAGE_ERROR_EXIT);
+              return;
+            }
+            functions = stored;
           }
           const ctx: FitnessContext = {
             trigger: args.trigger === 'periodic' ? 'periodic' : 'per_change',
