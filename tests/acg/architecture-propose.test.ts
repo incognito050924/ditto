@@ -3,7 +3,17 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildCandidateSpec, layerOf, observeArchitecture } from '~/acg/architecture/propose';
+import type { EdgeAnalyzer } from '~/acg/boundary/boundary';
 import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
+
+/**
+ * Edge 추출은 분석기(CodeQL)의 책임이라 별도 e2e로 검증한다. 여기서는 fixture가 표현하는
+ * cross-layer import(cli/run → core/fs)를 돌려주는 mock을 주입해 observeArchitecture의
+ * 변환 로직(edges → layers/public surfaces)만 in-process로 검증한다.
+ */
+const mockEdgeAnalyzer: EdgeAnalyzer = {
+  edges: async () => [{ from: 'src/cli/run.ts', to: 'src/core/fs' }],
+};
 
 describe('buildCandidateSpec — non-authoritative candidate invariants', () => {
   test('produced_by=agent, NEVER forbidden_dependencies, layer can_call empty', () => {
@@ -48,13 +58,13 @@ describe('observeArchitecture — layers + cross-layer public surfaces from impo
   });
 
   test('detects both layers and the cross-layer surface', async () => {
-    const obs = await observeArchitecture(dir, join(dir, 'src'));
+    const obs = await observeArchitecture(dir, join(dir, 'src'), mockEdgeAnalyzer);
     expect(obs.layers.sort()).toEqual(['cli', 'core']);
     expect(obs.publicSurfaces).toContain('src/core/fs');
   });
 
   test('the candidate built from observation still has no auto-rules', async () => {
-    const obs = await observeArchitecture(dir, join(dir, 'src'));
+    const obs = await observeArchitecture(dir, join(dir, 'src'), mockEdgeAnalyzer);
     const spec = buildCandidateSpec(obs, '2026-06-04T00:00:00Z');
     expect(spec.forbidden_dependencies).toEqual([]);
     expect(spec.produced_by).toBe('agent');

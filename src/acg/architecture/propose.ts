@@ -1,6 +1,6 @@
 import { readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { TsEdgeAnalyzer } from '~/acg/boundary/ts-edges';
+import type { EdgeAnalyzer } from '~/acg/boundary/boundary';
 import type { AcgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 
@@ -75,10 +75,11 @@ async function walkTsFiles(repoRoot: string, dir: string, acc: string[]): Promis
 export async function observeArchitecture(
   repoRoot: string,
   sourceRoot: string,
+  edgeAnalyzer: EdgeAnalyzer,
 ): Promise<ArchObservation> {
   const files: string[] = [];
   await walkTsFiles(repoRoot, sourceRoot, files);
-  const edges = await new TsEdgeAnalyzer(repoRoot).edges({ changedFiles: files, sourceRoot });
+  const edges = await edgeAnalyzer.edges({ changedFiles: files, sourceRoot });
 
   const layers = new Set<string>();
   for (const f of files) {

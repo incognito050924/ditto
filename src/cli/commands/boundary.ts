@@ -1,8 +1,9 @@
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { type BoundaryViolation, checkBoundary } from '~/acg/boundary/boundary';
-import { TsEdgeAnalyzer } from '~/acg/boundary/ts-edges';
+import { CodeqlEdgeAnalyzer } from '~/acg/boundary/codeql-edges';
 import { AcgReviewStore } from '~/core/acg-review-store';
+import { codeqlCacheDir, makeRelationDeps } from '~/core/codeql/host-deps';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import { acgReviewGraph } from '~/schemas/acg-review-graph';
@@ -91,7 +92,11 @@ export const boundaryCommand = defineCommand({
             .split(',')
             .map((s) => s.trim())
             .filter((s) => s.length > 0);
-          const edges = await new TsEdgeAnalyzer(repoRoot).edges({
+          const edgeAnalyzer = new CodeqlEdgeAnalyzer(
+            { language: 'javascript', repoRoot, cacheDir: codeqlCacheDir(repoRoot, 'javascript') },
+            makeRelationDeps(),
+          );
+          const edges = await edgeAnalyzer.edges({
             changedFiles,
             sourceRoot: join(repoRoot, 'src'),
           });

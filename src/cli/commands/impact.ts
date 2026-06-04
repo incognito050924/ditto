@@ -1,7 +1,8 @@
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
+import { CodeqlImpactAnalyzer } from '~/acg/impact/codeql-analyzer';
 import { produceImpactGraph } from '~/acg/impact/impact-graph';
-import { TsImpactAnalyzer } from '~/acg/impact/ts-analyzer';
+import { codeqlCacheDir, makeRelationDeps } from '~/core/codeql/host-deps';
 import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
 import type { AcgImpactGraph } from '~/schemas/acg-impact-graph';
 import { acgImpactGraph } from '~/schemas/acg-impact-graph';
@@ -57,7 +58,16 @@ export const impactCommand = defineCommand({
     try {
       const repoRoot = await resolveRepoRootForCreate();
       const sourceRoot = args['source-root'] ?? join(repoRoot, 'src');
-      const analyzer = new TsImpactAnalyzer({ file: args.file, symbol: args.symbol });
+      const analyzer = new CodeqlImpactAnalyzer(
+        {
+          symbol: args.symbol,
+          declFile: args.file,
+          language: 'javascript',
+          repoRoot,
+          cacheDir: codeqlCacheDir(repoRoot, 'javascript'),
+        },
+        makeRelationDeps(),
+      );
       const graph = await produceImpactGraph(
         {
           workItemId: args['work-item'],

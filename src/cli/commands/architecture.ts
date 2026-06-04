@@ -1,6 +1,8 @@
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { buildCandidateSpec, observeArchitecture } from '~/acg/architecture/propose';
+import { CodeqlEdgeAnalyzer } from '~/acg/boundary/codeql-edges';
+import { codeqlCacheDir, makeRelationDeps } from '~/core/codeql/host-deps';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { USAGE_ERROR_EXIT, parseOutputFormat, writeError, writeHuman, writeJson } from '../util';
 
@@ -39,7 +41,11 @@ export const architectureCommand = defineCommand({
         }
         const repoRoot = await resolveRepoRootForCreate();
         const sourceRoot = args['source-root'] ?? join(repoRoot, 'src');
-        const obs = await observeArchitecture(repoRoot, sourceRoot);
+        const edgeAnalyzer = new CodeqlEdgeAnalyzer(
+          { language: 'javascript', repoRoot, cacheDir: codeqlCacheDir(repoRoot, 'javascript') },
+          makeRelationDeps(),
+        );
+        const obs = await observeArchitecture(repoRoot, sourceRoot, edgeAnalyzer);
         const candidate = buildCandidateSpec(obs, new Date().toISOString());
         if (format === 'json') {
           writeJson(candidate);
