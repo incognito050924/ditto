@@ -1,7 +1,7 @@
 ---
 title: "ICL — Intent-Change Language"
 kind: dsl
-last_updated: 2026-06-03 KST
+last_updated: 2026-06-04 KST
 status: draft
 scope: "사용자/agent의 변경 의도를 선언적으로 표현하고, 단일 출처에서 agent 제약·자동 게이트·사람용 변경지도를 일관 파생하는 DSL의 문법·의미론·컴파일 명세."
 parent: 00-framework.md
@@ -270,4 +270,4 @@ fitness "tenant 격리 불변" {
 
 - 컴파일 타깃 (A)(B)의 스키마 → [20-contracts.md](20-contracts.md)
 - 컴파일 타깃 (C)의 전체 표기법 → [50-change-map.md](50-change-map.md)
-- ICL이 강제하는 리팩토링 경계 → [40-refactoring-criteria.md](40-refactoring-criteria.md)
+- ICL이 강제하는 리팩토링·모듈 설계 경계 → [40-refactoring-criteria.md](40-refactoring-criteria.md)

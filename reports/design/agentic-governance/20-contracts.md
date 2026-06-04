@@ -1,7 +1,7 @@
 ---
 title: "ACG Contracts — Schema Specification"
 kind: schema
-last_updated: 2026-06-03 KST
+last_updated: 2026-06-04 KST
 status: draft
 scope: "ACG 스펙 계층의 9개 산출물 스키마를 JSON Schema + 필드 정의 + 예시로 명세하고, 각 산출물의 DITTO 바인딩(실현체) 매핑을 §0에 둔다. boxwood를 두 번째 바인딩 소재로 인용한다."
 parent: 00-framework.md
@@ -400,13 +400,15 @@ conventions:
   naming:    { rule: "service 클래스는 *Service 접미사", evaluator: deterministic }
   approved_patterns:                                                # 신규 추상화가 따라야 할 local 패턴
     - "repository 접근은 Exposed DSL, 직접 JDBC 금지"
+    - "public API는 내부 순서/상태 파라미터를 받지 않고 domain intent만 받는다"
+    - "retry/cache/transaction orchestration은 caller가 아니라 모듈 내부에 숨긴다"
   exceptions:                                                       # 정책 예외는 명시적으로만
     - { rule: "naming", path: "legacy/**", reason: "마이그레이션 전 레거시" }
 ```
 
 `module_invariants`는 단계 8에서 `FitnessFunction`으로 승격되는 후보다. boxwood의 두 항목은 현재 **위반 상태** — ArchitectureSpec이 현실을 기술하면서 동시에 적합성 목표를 드러낸다.
 
-> **§1.1(1) 일관성의 집행 substrate(OBJ-22 반영).** [00](00-framework.md) §1.1(1)이 "스타일·품질 일관성은 코드베이스가 강제한다"고 한 것의 실체가 이 `conventions`다. 핵심은 **deterministic 평가자**(formatter·linter·naming 규칙·승인 패턴)로 집행한다는 것이다 — 생성 모델은 매번 일관되지 않으므로, 일관성을 모델이 아니라 결정적 도구에 맡긴다. `llm_judged`는 일탈을 *주석*할 수는 있으나 집행 substrate가 아니다(§6에서 llm_judged는 warn 기본). 즉 "당위성 없는 생성"(§1.1(1))은 LLM 판단이 아니라 formatter/linter라는 결정적 게이트가 막는다. [40](40-refactoring-criteria.md) §3의 "기존 local 패턴과 일치"도 이 `approved_patterns`를 근거로 판정한다.
+> **§1.1(1) 일관성의 집행 substrate(OBJ-22 반영).** [00](00-framework.md) §1.1(1)이 "스타일·품질 일관성은 코드베이스가 강제한다"고 한 것의 실체가 이 `conventions`다. 핵심은 **deterministic 평가자**(formatter·linter·naming 규칙·승인 패턴)로 집행한다는 것이다 — 생성 모델은 매번 일관되지 않으므로, 일관성을 모델이 아니라 결정적 도구에 맡긴다. `llm_judged`는 일탈을 *주석*할 수는 있으나 집행 substrate가 아니다(§6에서 llm_judged는 warn 기본). 즉 "당위성 없는 생성"(§1.1(1))은 LLM 판단이 아니라 formatter/linter라는 결정적 게이트가 막는다. [40](40-refactoring-criteria.md) §3의 "기존 local 패턴과 일치"도 이 `approved_patterns`를 근거로 판정한다. Deep Module 기준도 여기에 들어올 수 있다 — 저장소가 "좋은 인터페이스"로 인정하는 반복 패턴을 `approved_patterns`에 두면, agent의 새 모듈/API 설계가 같은 기준을 재사용한다.
 
 ---
 
