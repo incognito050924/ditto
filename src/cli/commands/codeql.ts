@@ -131,6 +131,20 @@ const reviewSubcommand = defineCommand({
       const sourceRoot = args['source-root'] ?? join(repoRoot, 'src');
       const commitSha = await gitHeadSha(repoRoot);
       const key = cacheKey(commitSha, language);
+      const dbPath = join(repoRoot, '.ditto', 'cache', 'codeql', key, 'db');
+      const sarifPath = join(
+        repoRoot,
+        '.ditto',
+        'work-items',
+        args['work-item'],
+        'evidence',
+        `codeql-${key}.sarif`,
+      );
+      // `codeql database create` makes the db leaf but NOT its parent chain, and
+      // `analyze --output` will not create the sarif's parent either. Ensure both
+      // exist before the spawn or create fails with "<dir> does not exist".
+      await ensureDir(join(repoRoot, '.ditto', 'cache', 'codeql', key));
+      await ensureDir(join(repoRoot, '.ditto', 'work-items', args['work-item'], 'evidence'));
       const res = await runCodeqlReviewToLedger(
         {
           workItemId: args['work-item'],
@@ -138,15 +152,8 @@ const reviewSubcommand = defineCommand({
           sourceRoot,
           language,
           commitSha,
-          dbPath: join(repoRoot, '.ditto', 'cache', 'codeql', key, 'db'),
-          sarifPath: join(
-            repoRoot,
-            '.ditto',
-            'work-items',
-            args['work-item'],
-            'evidence',
-            `codeql-${key}.sarif`,
-          ),
+          dbPath,
+          sarifPath,
           suite: args.suite ?? defaultSuite(language),
           buildCommand: args['build-command'],
           buildVerified: args['build-verified'],

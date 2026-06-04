@@ -473,4 +473,6 @@ dist/
 # Repo-local DITTO state (per-developer; sync policy TBD in v0.1 design)
 .ditto/runs/
 .ditto/work-items/*/evidence/
+# Regenerable analyzer caches (CodeQL databases, keyed by commit sha)
+.ditto/cache/
 
