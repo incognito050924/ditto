@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-06-01T14:35:00.000Z",
+  "updated_at": "2026-06-04T10:05:47.000Z",
   "context_path": ".ditto/knowledge/CONTEXT.md",
   "glossary_path": ".ditto/knowledge/glossary.json",
   "project_map_path": null,
@@ -40,6 +40,15 @@
       "rationale": "3역 적대적 숙의(Opponent=codex)로 ACG 열린질문 Q3/Q4를 닫았다. Q3: ArchitectureSpec=produced_by=user 권위 기본 하이브리드 부트스트랩 — agent는 관측가능 layers/public_surfaces만 비권위 candidate로 제안, forbidden_dependencies 자동 박제 금지(현재 위반 동결 방지). Q4: evaluator.mode별 비용 차등(deterministic 싼가드 per_change·캐시DB+쿼리증분 ~3.9s, executed risk_tiered+periodic 매변경전수금지) + 안전 불변식(ImpactGraph/boundary 입력 부재·journey_unknown 시 high-risk escalate, sample down 금지) + incremental 정직 한정(쿼리=증분·추출=언어당 전역). 두 결정 모두 스키마 변경 없이 기존 affordance(produced_by/execution.selection/baseline.delta_only/cadence) 위에서. dialectic verdict=revise.",
       "change_condition": "per-file 증분 DB 추출 실증 시 incremental 단위 한정 완화. ImpactGraph 생산기·boundary 게이트 구현 시 risk base를 risk_default→ImpactGraph 승급하고 Q3 agent candidate 경로 활성. 타입드 invariant 표현 도입 시 module_invariants 주석 규약 대체.",
       "path": ".ditto/knowledge/adr/ADR-0004-q3-q4-architecture-fitness.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0005",
+      "title": "런타임 산출물 저장 — per-entity 파일 + 수동 명령 아카이빙",
+      "status": "accepted",
+      "rationale": "런타임 산출물(work-item/completion/review JSON, run/evidence/log)을 공유 SQLite RDB로 옮기는 안을 기각하고 per-entity 파일을 SoT로 결정. (D1) git diff/blame/merge 감사와 동시작업 무충돌 머지(one-file-per-entity)·단일 writer 락 회피가 RDB보다 우월 — cross-run 질의 needs 시엔 JSON-SoT 위 gitignored rebuildable read-model만 additive로 추가. (D2) knowledge/(glossary·ADR·learning)=영구 경량 결정 메모리는 아카이빙 안 함; work-items/=원시 트레일은 ditto:knowledge-update 승격 후 아카이빙 가능. (D3) 아카이빙은 사용자 호출 수동 CLI 명령(자동 트리거 아님), 주동기=agent-context 경량화(git 크기 절감 아님), 닫힌 work-item만 .ditto/archive/<label>/로 move(삭제·history rewrite 금지). 측정(2026-06-04): .git 9.4M·git-tracked .ditto 1.8M/333파일, 객체 23%가 .ditto — 절대크기 사소(자동화 YAGNI)지만 추세는 트레일 우세.",
+      "change_condition": "cross-run 질의·시계열 needs 실증 시 파생 rebuildable SQLite read-model 추가(SoT는 파일 유지). .git이 clone/CI 부담 되면 git bundle cold 보관 검토. 활성 work-item 비대가 반복 부담이면 임계치 자동 제안(여전히 move·사용자 확인). 명령 구현(ditto archive)은 별도 fast-follow work item.",
+      "path": ".ditto/knowledge/adr/ADR-0005-runtime-artifact-storage-archiving.md",
       "superseded_by": null
     }
   ],
