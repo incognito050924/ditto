@@ -1,6 +1,10 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ZodTypeAny, z } from 'zod';
+import { commandProvider } from '~/acg/fitness/command-provider';
+import { type FitnessContext, runFitness } from '~/acg/fitness/fitness-runner';
+import { FitnessFunctionStore } from '~/core/fitness-function-store';
+import { ensureDir, writeJson } from '~/core/fs';
 import { completionEvidenceGate, completionGate, convergenceGate } from '~/core/gates';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -214,6 +218,33 @@ export function impactForcesContinuation(graph: AcgImpactGraph): string[] {
   return graph.unresolved.map((u) => `impact: unresolved ${u.kind} — ${u.path} (${u.reason})`);
 }
 
+/**
+ * fitness 자동 트리거 — 정의된 fitness가 있으면 stop 시점에 평가해 assurance-snapshot.json을
+ * 최신화한다(stale 없음). deterministic만 실제 평가; llm_judged/executed는 provider가 skip.
+ * fail-open: 정의 없음·실행 에러는 조용히 반환해 기존 게이트(이전 snapshot/없음)로 폴백한다.
+ */
+export async function maybeRunFitness(
+  repoRoot: string,
+  workItemId: string,
+  dir: string,
+): Promise<void> {
+  try {
+    const fns = await new FitnessFunctionStore(repoRoot).read(workItemId);
+    if (!fns || fns.length === 0) return;
+    const ctx: FitnessContext = {
+      trigger: 'per_change',
+      changeRef: workItemId,
+      riskKnown: false,
+      producedAt: new Date().toISOString(),
+    };
+    const snapshot = await runFitness(fns, ctx, commandProvider(repoRoot));
+    await ensureDir(dir);
+    await writeJson(join(dir, 'assurance-snapshot.json'), acgAssuranceSnapshot, snapshot);
+  } catch {
+    // fail-open
+  }
+}
+
 export const stopHandler: HookHandler = async (input: HookInput) => {
   const raw = (input.raw ?? {}) as Record<string, unknown>;
 
@@ -241,6 +272,8 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   }
 
   const dir = join(input.repoRoot, '.ditto', 'work-items', pointer);
+  // fitness 자동 트리거: 게이트가 snapshot을 읽기 전에 정의된 fitness를 최신 평가한다.
+  await maybeRunFitness(input.repoRoot, pointer, dir);
   const completion = await readArtifact(
     join(dir, 'completion.json'),
     completionContract,
