@@ -4,6 +4,8 @@ import type { ZodTypeAny, z } from 'zod';
 import { completionEvidenceGate, completionGate, convergenceGate } from '~/core/gates';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
+import { type AcgAssuranceSnapshot, acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
+import { type AcgImpactGraph, acgImpactGraph } from '~/schemas/acg-impact-graph';
 import { type AcgReviewGraph, acgReviewGraph } from '~/schemas/acg-review-graph';
 import { type Autopilot, autopilot as autopilotSchema } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
@@ -181,6 +183,37 @@ export function acgReviewForcesContinuation(graph: AcgReviewGraph): string[] {
   return reasons;
 }
 
+/**
+ * Does an AssuranceSnapshot (fitness evaluation, 단계8) force continuation? A
+ * fitness function result with `outcome: 'fail'` is a blocking property the
+ * change broke — the runner already applied the cadence + delta_only policy when
+ * it set the outcome (a `warn`/`track` function never lands as 'fail'). One
+ * continuation reason per failed function; pass/skip never block.
+ */
+export function assuranceSnapshotForcesContinuation(snapshot: AcgAssuranceSnapshot): string[] {
+  const reasons: string[] = [];
+  for (const r of snapshot.results) {
+    if (r.outcome === 'fail') {
+      const n = r.new_violations ?? r.violations ?? 0;
+      reasons.push(`fitness: ${r.function_id} failed — ${n} blocking violation(s)`);
+    }
+  }
+  return reasons;
+}
+
+/**
+ * Does an ImpactGraph (단계3) force continuation? `unresolved[]` is impact the
+ * analyzer could not statically settle and explicitly recorded rather than hide
+ * (dynamic dispatch, reflection, cross-repo, journey_unknown / default-deny).
+ * Each entry is unverified risk a human must map or dismiss → one continuation
+ * reason per unresolved entry. Resolved `affected_nodes` never block here; once
+ * the impact is mapped, re-running the producer yields a clean graph that clears
+ * the gate (same shape as `acgReviewForcesContinuation`).
+ */
+export function impactForcesContinuation(graph: AcgImpactGraph): string[] {
+  return graph.unresolved.map((u) => `impact: unresolved ${u.kind} — ${u.path} (${u.reason})`);
+}
+
 export const stopHandler: HookHandler = async (input: HookInput) => {
   const raw = (input.raw ?? {}) as Record<string, unknown>;
 
@@ -231,9 +264,22 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     acgReviewGraph,
     'acg-review.json',
   );
+  // ACG fitness (AssuranceSnapshot, 단계8) + impact (ImpactGraph, 단계3) ledgers.
+  // Same work-item-dir home + absent/malformed discipline as the other ledgers;
+  // each fail-closes on malform and is a no-op when absent.
+  const assurance = await readArtifact(
+    join(dir, 'assurance-snapshot.json'),
+    acgAssuranceSnapshot,
+    'assurance-snapshot.json',
+  );
+  const impact = await readArtifact(
+    join(dir, 'impact-graph.json'),
+    acgImpactGraph,
+    'impact-graph.json',
+  );
 
   // Malformed artifact = gate-input violation → fail CLOSED (exit 2).
-  const malformed = [completion, conv, pilot, dialectics, acgReview].find(
+  const malformed = [completion, conv, pilot, dialectics, acgReview, assurance, impact].find(
     (a) => a.status === 'malformed',
   );
   if (malformed && malformed.status === 'malformed') {
@@ -272,6 +318,12 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   }
   if (acgReview.status === 'ok') {
     reasons.push(...acgReviewForcesContinuation(acgReview.data));
+  }
+  if (assurance.status === 'ok') {
+    reasons.push(...assuranceSnapshotForcesContinuation(assurance.data));
+  }
+  if (impact.status === 'ok') {
+    reasons.push(...impactForcesContinuation(impact.data));
   }
 
   if (reasons.length > 0) {

@@ -6,7 +6,9 @@ import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
   acgReviewForcesContinuation,
+  assuranceSnapshotForcesContinuation,
   autopilotForcesContinuation,
+  impactForcesContinuation,
   stopHandler,
 } from '~/hooks/stop';
 
@@ -487,5 +489,145 @@ describe('acgReviewForcesContinuation', () => {
         human_review_set: [],
       } as never),
     ).toHaveLength(0);
+  });
+});
+
+const assuranceSnapshot = (results: unknown[]) => ({
+  schema_version: '0.1.0',
+  kind: 'acg.assurance-snapshot.v1',
+  produced_by: 'agent',
+  produced_at: '2026-06-04T00:00:00.000Z',
+  at: '2026-06-04T00:00:00.000Z',
+  trigger: 'per_change',
+  change_ref: null,
+  results,
+});
+
+const impactGraph = (overrides: Record<string, unknown>) => ({
+  schema_version: '0.1.0',
+  kind: 'acg.impact-graph.v1',
+  work_item_id: wiId,
+  produced_by: 'agent',
+  produced_at: '2026-06-04T00:00:00.000Z',
+  change_target: 'src/x.ts: foo (signature)',
+  change_type: 'signature',
+  affected_nodes: [],
+  unresolved: [],
+  ...overrides,
+});
+
+describe('stopHandler — ACG fitness (AssuranceSnapshot) ledger', () => {
+  test('a failed fitness function forces continuation (exit 2)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact(
+      'assurance-snapshot.json',
+      assuranceSnapshot([
+        { function_id: 'ff-sb-version', outcome: 'fail', violations: 2, new_violations: 1 },
+      ]),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('fitness');
+    expect(out.stderr).toContain('ff-sb-version');
+  });
+
+  test('all-pass/skip snapshot does not block a passing completion (exit 0)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact(
+      'assurance-snapshot.json',
+      assuranceSnapshot([
+        { function_id: 'ff-a', outcome: 'pass' },
+        { function_id: 'ff-b', outcome: 'skip' },
+      ]),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('malformed assurance-snapshot.json => exit 2 (fail-closed)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact('assurance-snapshot.json', '{ not valid');
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('assurance-snapshot.json');
+    expect(out.stderr).toContain('malformed');
+  });
+});
+
+describe('stopHandler — ACG impact (ImpactGraph) ledger', () => {
+  test('an unresolved impact forces continuation (exit 2)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact(
+      'impact-graph.json',
+      impactGraph({
+        unresolved: [
+          { kind: 'cross_repo', path: 'src/api/client.ts', reason: 'consumed by another repo' },
+        ],
+      }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('impact: unresolved');
+    expect(out.stderr).toContain('src/api/client.ts');
+  });
+
+  test('a graph with only resolved affected_nodes (no unresolved) does not block (exit 0)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact(
+      'impact-graph.json',
+      impactGraph({
+        affected_nodes: [
+          { kind: 'direct_caller', path: 'src/y.ts', symbol: 'bar', handled: false },
+        ],
+        unresolved: [],
+      }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('malformed impact-graph.json => exit 2 (fail-closed)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact('impact-graph.json', '{ not valid');
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('impact-graph.json');
+    expect(out.stderr).toContain('malformed');
+  });
+});
+
+describe('assuranceSnapshotForcesContinuation', () => {
+  test('one reason per failed function; pass/skip ignored', () => {
+    const reasons = assuranceSnapshotForcesContinuation({
+      results: [
+        { function_id: 'a', outcome: 'fail', new_violations: 3 },
+        { function_id: 'b', outcome: 'pass' },
+        { function_id: 'c', outcome: 'skip' },
+        { function_id: 'd', outcome: 'fail' },
+      ],
+    } as never);
+    expect(reasons).toHaveLength(2);
+    expect(reasons[0]).toContain('a');
+    expect(reasons[0]).toContain('3');
+  });
+
+  test('empty results => no continuation', () => {
+    expect(assuranceSnapshotForcesContinuation({ results: [] } as never)).toHaveLength(0);
+  });
+});
+
+describe('impactForcesContinuation', () => {
+  test('one reason per unresolved entry', () => {
+    const reasons = impactForcesContinuation({
+      unresolved: [
+        { kind: 'journey_unknown', path: 'src/route.ts', reason: 'no journey map' },
+        { kind: 'reflection', path: 'src/dyn.ts', reason: 'reflective call' },
+      ],
+    } as never);
+    expect(reasons).toHaveLength(2);
+    expect(reasons[0]).toContain('journey_unknown');
+    expect(reasons[1]).toContain('src/dyn.ts');
+  });
+
+  test('no unresolved => no continuation', () => {
+    expect(impactForcesContinuation({ unresolved: [] } as never)).toHaveLength(0);
   });
 });
