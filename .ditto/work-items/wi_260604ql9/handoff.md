@@ -19,7 +19,7 @@ bun test                       # green 확인 (직전 세션 ~1005 pass / 1 skip
 직전 세션이 이 PC(x86_64 mac)에 설치한 방식 — 새 PC에서 동일 재현:
 ```bash
 # 1) 공식 번들(CLI + 표준 쿼리팩 포함). arch에 맞는 자산 선택:
-#    osx64(인텔) / osx-arm64(애플실리콘) / linux64
+#    macOS = codeql-bundle-osx64.tar.gz 단일 universal 자산(arm64·인텔 공용). 'osx-arm64' 자산은 없음 → 그 이름이면 404. linux는 linux64.
 gh api repos/github/codeql-action/releases/latest --jq '.tag_name'   # 최신 태그 확인
 curl -fsSL https://github.com/github/codeql-action/releases/download/codeql-bundle-vX.Y.Z/codeql-bundle-osx64.tar.gz -o /tmp/cq.tar.gz
 rm -rf ~/codeql-home && mkdir -p ~/codeql-home && tar -xzf /tmp/cq.tar.gz -C ~/codeql-home
@@ -88,6 +88,17 @@ rm -f /tmp/cq.tar.gz           # 1.3G tarball 정리
 - **(신규) completion.json은 evidenceRef.kind가 command/file/artifact/url/note**(ACG의 test/build/log 아님).
 - **(신규) completion.json final_verdict=pass면 in-scope unverified 금지** — 의도적 범위 밖이면 `out_of_scope: true` 표시(안 하면 repo self-validation의 schema superRefine이 거부). 이번 세션에 한 번 걸림.
 - **(신규) CodeQL은 로컬 설치(§0-1), .ditto/cache/는 gitignored.**
+- **(신규, 2026-06-04 ②) macOS CodeQL 번들 자산 = `codeql-bundle-osx64.tar.gz` 단일 universal(§0-1 정정). `osx-arm64`는 존재하지 않음 → 404. arm64 mac도 osx64 받음.**
+- **(신규, 2026-06-04 ②) 새 PC에서 `bun link`된 `ditto`는 dist를 가리킴 → 빌드 전이면 새 명령(예: `impact`)이 'Unknown command'. `bun run build` 하거나 `bun run dev <cmd>`로 소스 직접 실행.**
 
 ## 7. 이 work item(wi_260604ql9) 상태
 CodeQL 설치 + codeql.ts 버그수정 완료(final_verdict=pass, ac-1~4). 재개 대상 아님. 이 핸드오프는 thread 문서로 여기 얹음.
+
+### 7-1. 후속 thread (2026-06-04 ②): ADR-0006 — 정적 분석 엔진 CodeQL 통일 (wi_260604cqe, **status=done, final_verdict=pass**)
+"ImpactGraph가 CodeQL/AST냐, LLM 추론은 규모 비례로 부정확"이라는 사용자 문제제기 → **ADR-0006 accepted**(impact/boundary analyzer를 CodeQL 단일로 통일, TS 컴파일러 분석기 제거, fast-path 폴백 없음, boxwood 2번째 바인딩으로 검증). 사용자 결정: accept 대신 **실증 데이터로 판정**.
+- **슬라이스1 실증 완료**(ac-2 pass): DITTO src를 CodeQL JS DB로 빌드(real 9.51s), `parseSarif` 영향집합을 TS type checker 정답지(`ditto impact`, 14노드)와 비교 → **위치 14/14 완전 일치, 차이 0**. custom .ql(`callers/all-refs/imports/decl.ql`)→BQRS decode. CodeQL이 import/call/decl 분리로 TS보다 세밀. 증거 스크래치 `/tmp/cq-proof/`(gitignored, PC 재부팅 시 소멸 — 재현은 §0-1 설치 후 `codeql database create --language=javascript` + 그 4쿼리).
+- **ac-2~6 전부 pass(실측)**: type_contract 25/25(ac-3)·boundary import-edge diff 0(ac-4)·boxwood Java call graph(ac-6). **ac-5 마이그레이션 완료**: CodeqlImpact/EdgeAnalyzer 구현(`src/acg/{impact,boundary}/codeql-*.ts`, 실행부 `src/core/codeql/relations.ts`·`host-deps.ts`) + 호출처 교체(impact/boundary/architecture, observeArchitecture는 EdgeAnalyzer DI) + ts-analyzer/ts-edges **삭제**. 전체 회귀 1011 pass/0 fail.
+- **신규 gotcha(ac-5)**: ① CodeQL CLI에서 결과는 stdout 캡처 말고 `--output` 파일로 받아라(stdout 파이프 풀이면 `database create`가 교착 — drain은 stderr/stdout 동시에 `Promise.all`). ② 이름기반 쿼리(`VarAccess/Function.getName()`)는 동명이인(decoy) 과검출 → `getResolvedCallee()`+선언 target-file 제한으로 정밀화해야 ts-analyzer의 symbol-resolution과 동등. ③ CodeQL DB는 `--output`/create 모두 **부모 디렉터리 선재 필요**(ensureDir). ④ macOS codeql 번들 = `osx64`(arm64도), `osx-arm64` 자산 없음.
+- e2e는 opt-in: `CODEQL_E2E=1 CODEQL_BIN=~/.local/bin/codeql bun test tests/acg/codeql-analyzer-e2e.test.ts`(decoy 배제 검증).
+- boxwood 실체: Java/Camunda automation-engine 코어 + JS/TS 모델러 혼재 모노레포(§4 해소). 로컬 소스 `~/Downloads/Boxwwo_workspace_sk/boxwood-engine`(read-only 관측에 사용). **clone된 repo 아님** — 실제 바인딩(autobuild build-mode) 구현 시 정식 클론.
+- **잔여 한계(완료, 후속 선택)**: import/type 참조는 아직 이름기반(동명 모듈/타입 과검출 여지, 단일심볼에선 미발생). 비호출 value 참조는 getResolvedCallee 미포착(드묾). 캐시는 commit-sha 키라 working-tree dirty면 stale 여지.

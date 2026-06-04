@@ -1,0 +1,160 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260604cqe",
+  "title": "정적 분석 엔진 CodeQL 통일 (ADR-0006) — impact/boundary analyzer를 CodeQL로 교체, TS 분석기 제거",
+  "source_request": "ImpactGraph 등 계약이 CodeQL/AST를 쓰는 게 맞는지? LLM 추론은 코드베이스가 커지면 정확히 파악 못한다. ditto 전용이 아닌데 TS만 쓰면 안 되고, 코드의 정적 분석·구조·데이터 흐름을 파악하는 모든 곳에 CodeQL을 적용해야 한다.",
+  "goal": "ACG가 정적 사실을 추출하는 모든 지점(impact=call graph, boundary=import/dependency graph, fitness/security=dataflow)의 결정론 엔진을 CodeQL 단일로 통일한다. analyzer 인터페이스(ImpactAnalyzer/EdgeAnalyzer)는 유지하고 TS 컴파일러 직접의존 구현체(TsImpactAnalyzer/TsEdgeAnalyzer)를 CodeQL 구현체로 교체 후 제거한다(fast-path 폴백 없음). boxwood 2번째 바인딩(Java/Camunda+JS/TS, read-only)으로 스펙 저장소독립성을 검증한다. 결정은 ADR-0006으로 lock.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "ADR-0006(분석엔진=CodeQL 통일, D1~D4)을 작성하고 status=accepted로 lock. knowledge.json 등록 + CLAUDE.md projection(bridge knowledge) 갱신.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "ref": ".ditto/knowledge/adr/ADR-0006-static-analysis-engine-codeql.md",
+          "note": "상태 accepted, D1~D4 + 검증 섹션"
+        },
+        {
+          "kind": "file",
+          "ref": "CLAUDE.md",
+          "note": "ditto:knowledge projection에 'ADR-0006 · accepted' 반영, sha a794021"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "슬라이스1 실증: CodeQL JS 관계추출(custom .ql→BQRS)이 TS type checker 정답지(ditto impact)와 동등 정밀도임을 데이터로 입증. parseSarif 영향집합 위치 일치.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "codeql database create (javascript) → query run callers/all-refs/imports/decl.ql → bqrs decode",
+          "note": "DB빌드 real 9.51s, 쿼리 5.6s→~200ms"
+        },
+        {
+          "kind": "artifact",
+          "ref": "/tmp/cq-proof/",
+          "note": "TS 14노드 vs CodeQL 14노드 위치 14/14 완전 일치, 차이 0. CodeQL은 import/call/decl 분리로 더 세밀"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "슬라이스2: type_contract(타입/인터페이스 참조) 동등성 검증 — CodeQL JS 타입 모델이 TS type checker만큼 정밀한지. (CodeqlImpactAnalyzer 클래스 구현 자체는 ac-5 마이그레이션에 포함; 여기선 추출 동등성 입증.)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "ditto impact CodeqlFinding(interface) vs CodeQL LocalTypeAccess+ImportSpecifier+InterfaceDefinition",
+          "note": "TS 25노드(type_contract 18·direct_caller 3·test 3·external_surface 1)"
+        },
+        {
+          "kind": "artifact",
+          "ref": "/tmp/cq-proof/types.csv",
+          "note": "위치 25/25 완전 일치, 차이 0. CodeQL LocalTypeAccess가 타입참조 18을 type checker와 동일하게 추출 — JS 타입모델 정밀도 우려 해소"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "슬라이스3: boundary import-edge graph 동등성 — CodeQL import 해소가 TsEdgeAnalyzer와 동등(tsconfig alias 해소 포함). (CodeqlEdgeAnalyzer 클래스 구현은 ac-5에 포함.)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "TsEdgeAnalyzer.edges(sarif-adapter.ts) vs CodeQL Import.getImportedModule()",
+          "note": "alias ~/schemas/* 3 + 상대 ./sarif + 패키지 zod"
+        },
+        {
+          "kind": "artifact",
+          "ref": "/tmp/cq-proof/cq-edges.txt vs ts-edges.txt",
+          "note": "diff 0. CodeQL이 alias ~/schemas/common→src/schemas/common.ts로 TsEdgeAnalyzer와 동일 해소 — false-clean 위험 없음"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "슬라이스4: ac-3·ac-4 동등성 green 후 TsImpactAnalyzer/TsEdgeAnalyzer 제거 + 호출처 교체. ACG 회귀 스위트 green.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "ref": "src/core/codeql/relations.ts, host-deps.ts, src/acg/impact/codeql-analyzer.ts, src/acg/boundary/codeql-edges.ts",
+          "note": "CodeqlImpactAnalyzer/CodeqlEdgeAnalyzer 신규(ImpactAnalyzer/EdgeAnalyzer 구현) + relations 실행부(query run→bqrs decode --output, 동시 drain). 호출처 교체: impact.ts·boundary.ts·architecture.ts(observeArchitecture는 EdgeAnalyzer 주입 DI로 리팩터). ts-analyzer.ts·ts-edges.ts 삭제, 참조 0."
+        },
+        {
+          "kind": "command",
+          "ref": "bun test 전체 + biome check src tests",
+          "note": "전체 회귀 1010 pass / 1 skip / 0 fail, biome 241 files clean. 신규 단위테스트 codeql-relations.test.ts(순수부+분류 mock) 커버리지 복구."
+        },
+        {
+          "kind": "command",
+          "ref": "CODEQL_E2E=1 bun test tests/acg/codeql-analyzer-e2e.test.ts (실제 CodeQL)",
+          "note": "2 pass — symbol resolution(not text search) 회귀 검증: 동명이인 decoy 배제 통과. 초기 이름기반 쿼리가 decoy 과검출→getResolvedCallee+선언 target-file 제한으로 정밀화. parseSarif 14·CodeqlFinding 25·edges 5 동등성은 정밀화 후에도 유지(재검증)."
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "슬라이스5: java 관계추출 + boxwood read-only 관측으로 다언어 동작 실증(산출 비어있지 않음 = 스펙 저장소독립성).",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "codeql database create --language=java --build-mode=none --source-root=~/Downloads/Boxwwo_workspace_sk/boxwood-engine (read-only) → j-top.ql(Call/Callable)",
+          "note": "DB빌드 real 23.38s, 95 java 파일. boxwood 커밋/푸시 없음(read-only)"
+        },
+        {
+          "kind": "artifact",
+          "ref": "/tmp/cq-proof/jqueries/j-top.ql 결과",
+          "note": "Java call graph 추출 성공·비어있지 않음: MapBuilder.createBuilder 23 callers, BoxwoodElasticSearchHelper.requestElasticsearchRestApiPost 13, FileVariable.getFile 11 등. 동일 .ql 패턴이 java-all로 동작 = 거버넌스 개념 저장소독립성 입증"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/codeql/relations.ts",
+    "src/core/codeql/host-deps.ts",
+    "src/acg/impact/codeql-analyzer.ts",
+    "src/acg/boundary/codeql-edges.ts",
+    "tests/core/codeql-relations.test.ts",
+    "tests/acg/codeql-analyzer-e2e.test.ts",
+    "src/cli/commands/impact.ts",
+    "src/cli/commands/boundary.ts",
+    "src/cli/commands/architecture.ts",
+    "src/acg/architecture/propose.ts",
+    "tests/acg/impact-graph.test.ts",
+    "tests/acg/boundary.test.ts",
+    "tests/acg/architecture-propose.test.ts",
+    "src/acg/impact/ts-analyzer.ts (deleted)",
+    "src/acg/boundary/ts-edges.ts (deleted)",
+    ".ditto/knowledge/adr/ADR-0006-static-analysis-engine-codeql.md",
+    ".ditto/knowledge/knowledge.json",
+    "CLAUDE.md"
+  ],
+  "risks": [
+    {
+      "description": "DB build 캐시미스 비용(JS 9.5s·Java 23.4s 실측). 매 게이트 반복 시 누적.",
+      "severity": "medium",
+      "mitigation": "commit-sha DB 캐시 + 변경파일 한정 분석"
+    },
+    {
+      "description": "ac-6 boxwood Java DB는 build-mode=none — 소스 call graph는 추출되나 외부 의존(Camunda 등) 호출은 unresolved일 수 있음(부록4: 컴파일언어 build 미입증 시 추출 불완전). 동작 증명엔 충분하나 완전성은 autobuild 필요.",
+      "severity": "medium",
+      "mitigation": "실제 boxwood 바인딩 구현 시 doctor fail-closed + autobuild build-mode"
+    },
+    {
+      "description": "TS 분석기 제거(ac-5)는 실제 코드 마이그레이션 — analyzer 클래스 신규 구현 + 호출처 교체 + 회귀.",
+      "severity": "high",
+      "mitigation": "ac-3·ac-4 동등성 green 충족됨(전제 해소). impact·boundary·type 모두 위치단위 동등 실증 완료 후 진행"
+    }
+  ],
+  "runs": [],
+  "created_at": "2026-06-04T13:30:00.000Z",
+  "updated_at": "2026-06-04T15:30:00.000Z",
+  "closed_at": "2026-06-04T15:30:00.000Z"
+}

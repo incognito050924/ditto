@@ -50,6 +50,15 @@
       "change_condition": "cross-run 질의·시계열 needs 실증 시 파생 rebuildable SQLite read-model 추가(SoT는 파일 유지). .git이 clone/CI 부담 되면 git bundle cold 보관 검토. 활성 work-item 비대가 반복 부담이면 임계치 자동 제안(여전히 move·사용자 확인). 명령 구현(ditto archive)은 별도 fast-follow work item.",
       "path": ".ditto/knowledge/adr/ADR-0005-runtime-artifact-storage-archiving.md",
       "superseded_by": null
+    },
+    {
+      "id": "ADR-0006",
+      "title": "정적 분석 엔진 통일 — CodeQL 단일, 바인딩별 언어-컴파일러 분석기 제거",
+      "status": "accepted",
+      "rationale": "ACG 스펙은 저장소 중립이나 impact/boundary analyzer 구현체가 TS 컴파일러 API에 직접 결합(ts-analyzer.ts/ts-edges.ts)된 leak(핸드오프 §4) — boxwood 등 비-TS 저장소에 거버넌스 불가. LLM 구조추론은 규모 비례로 부정확(사용자 관찰). (D1) call graph(impact)·import graph(boundary)·dataflow 전부 CodeQL 단일 결정론 엔진으로 통일, analyzer 인터페이스 유지·구현체만 교체. (D2) TsImpactAnalyzer/TsEdgeAnalyzer 제거, fast-path 폴백 없음(2경로 동등성 부담·leak 재발 차단), 속도는 commit-sha DB 캐시로 완화. (D3) 관계 추출은 SARIF alert이 아니라 custom .ql→BQRS decode 사실 추출 경로 신설(보안/dataflow는 기존 SARIF 유지). (D4) 검증 단위=boxwood read-only 2번째 바인딩(Java/Camunda+JS/TS 혼재 모노레포, 커밋/푸시 금지·산출물은 .ditto·/tmp). 실증(2026-06-04): DITTO src를 CodeQL 2.25.6 JS DB로 빌드(9.51s), parseSarif 영향집합을 TS type checker 정답지(14노드)와 비교 → 위치 14/14 완전일치·차이 0, CodeQL이 import/call/decl 분리로 더 세밀. D1·D3 성립, D2 회귀위험 해소(함수 심볼).",
+      "change_condition": "슬라이스1에서 CodeQL이 관계를 실용 비용에 추출 못하면 D1/D3 재검토. DB build 비용이 캐시로도 게이트 UX 해치면 D2(폴백 금지) 한정 완화. 남은 실증: type_contract(타입참조) 동등성=슬라이스2, boundary import-edge=슬라이스3, 다언어(java/kotlin)=슬라이스5(boxwood).",
+      "path": ".ditto/knowledge/adr/ADR-0006-static-analysis-engine-codeql.md",
+      "superseded_by": null
     }
   ],
   "patterns": [
