@@ -1,0 +1,31 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260605fat",
+  "declared_by": "main",
+  "declared_at": "2026-06-05T05:00:00.000Z",
+  "summary": "fitness를 stop 시점에 자동 평가하게 했다. (구조적) commandProvider(deterministic)를 src/acg/fitness/command-provider.ts로 추출해 fitness CLI와 stop 훅이 공유. (동작적) stop 훅이 완료 게이트 직전에 maybeRunFitness를 호출 — work item의 fitness-functions.json이 있으면 runFitness를 자동 실행해 assurance-snapshot.json을 최신화한 뒤 기존 게이트(assuranceSnapshotForcesContinuation)가 읽는다. stale 없음(매 stop 최신 평가). 정의 없음·실행 에러는 fail-open. 이로써 fitness는 수동 호출 없이 완료 시점에 자동 평가·게이트된다.",
+  "changed_files": [
+    "src/acg/fitness/command-provider.ts",
+    "src/cli/commands/fitness.ts",
+    "src/hooks/stop.ts",
+    "tests/hooks/stop-fitness.test.ts"
+  ],
+  "acceptance": [
+    { "criterion_id": "ac-1", "verdict": "pass", "evidence": [{ "kind": "command", "summary": "commandProvider 추출(동작 불변). fitness 테스트 0 fail, fitness.ts tsc 6(추출 전 동일)" }] },
+    { "criterion_id": "ac-2", "verdict": "pass", "evidence": [{ "kind": "file", "summary": "stop.ts maybeRunFitness: FitnessFunctionStore.read→runFitness(commandProvider)→assurance-snapshot.json write, dir 확정 후 assurance read 전 호출. try/catch fail-open" }] },
+    { "criterion_id": "ac-3", "verdict": "pass", "evidence": [{ "kind": "command", "summary": "stop-fitness.test.ts 3 pass(true→pass, echo violation→fail, 미정의→미작성). 기존 stop.test.ts 40 pass(배선 회귀 0)" }] },
+    { "criterion_id": "ac-4", "verdict": "pass", "evidence": [{ "kind": "command", "summary": "전체 1029 pass / 3 skip / 0 fail, biome 254 clean" }] }
+  ],
+  "verifications": [
+    { "command": "bun test", "exit_code": 0 },
+    { "command": "bunx biome check src tests", "exit_code": 0 }
+  ],
+  "unverified": [],
+  "remaining_risks": [
+    "stop 훅이 매 완료 시도마다 fitness shell을 실행(8-iteration guard 내 최대 8회). deterministic이라 보통 빠르나, 무거운 cmd면 stop 지연. DITTO_SKIP_HOOKS로 우회 가능.",
+    "fitness deterministic spec이 shell이면 stop 훅 머신에서 실행됨(검증 명령은 read-only 기대) — 사용자 ICL 정의라 신뢰, 기존 fitness CLI와 동일 실행 정책.",
+    "llm_judged/executed는 여전히 provider가 skip — 자동 트리거해도 평가 안 됨(후속).",
+    "stopHandler 통합 e2e(자동 실행→continuation exit 2)는 maybeRunFitness 단위 + 기존 stop 게이트 회귀로 갈음(통합 fixture 미작성)."
+  ],
+  "final_verdict": "pass"
+}
