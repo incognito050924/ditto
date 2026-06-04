@@ -1,0 +1,48 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260604ck1",
+  "title": "impact/fitness 완료게이트 배선 + CodeQL fitness deterministic provider",
+  "source_request": "codeql 설정 체크 + 남은 일 1(impact/fitness 완료게이트 배선) & 3(CodeQL→fitness deterministic provider) 진행",
+  "goal": "(1) Stop 완료게이트가 assurance-snapshot.json(fitness fail)·impact-graph.json(unresolved 미해소)를 읽어 미해결 시 완료를 차단(기존 acg-review 패턴 재사용). (2) CodeQL SARIF findings를 normalizeViolationIdentity로 정규화해 fitness deterministic provider 입력으로 연결(현재 command provider만).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "Stop 게이트가 assurance-snapshot.json을 읽어 outcome=fail인 fitness 결과당 1개의 continuation reason을 만든다. fail 없으면 차단 안 함. 파일 absent=no-op, malformed=fail-closed(exit 2).",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "Stop 게이트가 impact-graph.json을 읽어 unresolved 항목당 1개의 continuation reason을 만든다(미해소=unresolved). unresolved 비면 차단 안 함. absent=no-op, malformed=fail-closed.",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "CodeQL SARIF findings → RawViolation(rule+path, line 제외=OBJ-11) → normalizeViolationIdentity → violation identity set. fitness deterministic provider가 spec 'codeql-sarif:<path>'를 인식해 SARIF를 violationIds로 사용. SARIF 부재 시 fail-closed skip(+reason).",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "전체 테스트 회귀 0, biome clean. 신규 단위 테스트(stop assurance/impact, codeql fitness provider) 통과.",
+      "verdict": "pass",
+      "evidence": []
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/hooks/stop.ts",
+    "src/acg/fitness/codeql-provider.ts",
+    "src/cli/commands/fitness.ts",
+    "tests/hooks/stop.test.ts",
+    "tests/acg/fitness-codeql-provider.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-04T08:00:00.000Z",
+  "updated_at": "2026-06-04T08:30:00.000Z",
+  "closed_at": "2026-06-04T08:30:00.000Z"
+}
