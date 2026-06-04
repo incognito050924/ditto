@@ -5,6 +5,7 @@ import { architectureCommand } from './commands/architecture';
 import { autopilotCommand } from './commands/autopilot';
 import { boundaryCommand } from './commands/boundary';
 import { bridgeCommand } from './commands/bridge';
+import { changeContractCommand } from './commands/change-contract';
 import { codeqlCommand } from './commands/codeql';
 import { contextCommand } from './commands/context';
 import { deepInterviewCommand } from './commands/deep-interview';
@@ -38,6 +39,7 @@ const main = defineCommand({
     fitness: fitnessCommand,
     boundary: boundaryCommand,
     architecture: architectureCommand,
+    'change-contract': changeContractCommand,
   },
 });
 
