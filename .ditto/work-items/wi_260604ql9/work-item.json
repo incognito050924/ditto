@@ -1,0 +1,42 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260604ql9",
+  "title": "CodeQL CLI 설치 + ditto codeql review 누락 부모디렉터리 버그 수정",
+  "source_request": "codeql 설치해줘",
+  "goal": "CodeQL CLI를 로컬에 설치해 bare `codeql`가 PATH에서 실행되고, ditto codeql review가 doctor 'no CLI' 차단 없이 실제 SARIF 분석을 수행하게 한다. 설치 과정에서 표면화된, CLI가 codeql DB 부모 디렉터리를 생성하지 않아 create가 실패하던 잠복 버그도 함께 수정한다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "`codeql version`이 PATH에서 성공 실행(번들 v2.25.5 osx64, 디렉터리 구조 보존, ~/.local/bin/codeql symlink).",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "`codeql resolve languages`가 javascript 등 표준 언어팩을 해석(번들 쿼리팩 javascript-queries 2.3.10 포함).",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "`ditto codeql review`가 doctor cli_available=true로 GATED되지 않고 실제 분석 수행(SARIF 생성·ledger 기록). CODEQL_E2E opt-in 테스트도 통과(cold+cached).",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "잠복 버그 수정: ditto codeql review가 spawn 전에 codeql DB 부모(.ditto/cache/codeql/<key>/)와 sarif 부모(evidence/)를 ensureDir. .ditto/cache/는 재생성 캐시이므로 .gitignore 추가. 전체 테스트 회귀 0·biome clean.",
+      "verdict": "pass",
+      "evidence": []
+    }
+  ],
+  "status": "done",
+  "closed_at": "2026-06-04T09:15:00.000Z",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": ["src/cli/commands/codeql.ts", ".gitignore"],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-04T09:00:00.000Z",
+  "updated_at": "2026-06-04T09:15:00.000Z"
+}

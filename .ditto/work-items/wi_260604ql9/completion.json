@@ -1,0 +1,62 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260604ql9",
+  "declared_by": "main",
+  "declared_at": "2026-06-04T09:15:00.000Z",
+  "summary": "CodeQL CLI(공식 번들 v2.25.5 osx64, 표준 쿼리팩 포함)를 ~/codeql-home에 풀고 ~/.local/bin/codeql symlink로 PATH 연결. 설치 검증 중 ditto codeql review가 codeql DB 부모 디렉터리를 만들지 않아 'database create failed'로 죽던 잠복 버그를 표면화·수정(spawn 전 ensureDir). codeql가 설치된 적이 없어 아무도 이 경로를 실행하지 못해 가려져 있던 버그. .ditto/cache/는 재생성 캐시라 .gitignore에 추가.",
+  "changed_files": ["src/cli/commands/codeql.ts", ".gitignore"],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "which codeql → /Users/ecoletree/.local/bin/codeql; codeql version → 'CodeQL command-line toolchain release 2.25.5', Unpacked in: /Users/ecoletree/codeql-home/codeql (symlink 너머 실제 경로 해석 확인)" }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "codeql resolve languages → javascript/python/java/go/ruby/... 15종 해석. resolve qlpacks → codeql/javascript-queries 2.3.10 번들 포함" }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "ditto codeql review --work-item ... → doctor cli_available=true, detected javascript(121 files), 0 doctor findings(GATED 아님), analysis 수행: findings=1, verdict=partial, ledgerWritten=true, highRiskWithoutEvidence=0" },
+        { "kind": "command", "summary": "CODEQL_E2E=1 CODEQL_BIN=~/.local/bin/codeql bun test codeql-e2e.test.ts → 1 pass (31.8s): 실제 ditto src DB 생성 → analyze(security-extended) → SARIF → 파싱 findings, cold then cached" }
+      ]
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "codeql.ts: runCodeqlReviewToLedger 호출 전 ensureDir(.ditto/cache/codeql/<key>) + ensureDir(work-items/<wi>/evidence). 근거 주석: create는 db 리프만, analyze --output은 sarif 부모를 안 만든다" },
+        { "kind": "command", "summary": "수정 전 재현: codeql database create → 'Cannot create database ... because <dir> does not exist' (exit 2). 수정 후 동일 명령 정상(ac-3 증거). e2e가 mkdir로 가렸던 버그" },
+        { "kind": "file", "summary": ".gitignore: '.ditto/cache/' 추가(commit-sha 키 codeql DB 캐시, 재생성). 75M 캐시 + 검증 byproduct(acg-review/reviewer-output/evidence/sarif) + 1.3G tarball 정리" },
+        { "kind": "command", "summary": "bun test 1005 pass/1 skip/0 fail, bun run lint clean(241 files)" }
+      ]
+    }
+  ],
+  "verifications": [
+    { "command": "codeql version", "exit_code": 0 },
+    { "command": "codeql resolve languages", "exit_code": 0 },
+    { "command": "ditto codeql review --work-item wi_260604ql9 --output json", "exit_code": 0 },
+    { "command": "CODEQL_E2E=1 CODEQL_BIN=~/.local/bin/codeql bun test tests/core/codeql-e2e.test.ts", "exit_code": 0 },
+    { "command": "bun test", "exit_code": 0 },
+    { "command": "bun run lint", "exit_code": 0 }
+  ],
+  "unverified": [
+    {
+      "item": "javascript 외 컴파일 언어(java/csharp 등)의 build-mode 추출 e2e",
+      "reason": "설치·검증은 javascript(ditto 자체 언어)로 수행. 컴파일 언어는 doctor가 build 재현성을 fail-closed 게이트하므로 별도 환경 필요. 본 요청(설치) 범위 밖.",
+      "out_of_scope": true
+    }
+  ],
+  "remaining_risks": [
+    "codeql는 ~/.local/bin/codeql symlink → ~/codeql-home/codeql/codeql. ~/codeql-home를 옮기거나 지우면 깨짐(번들 자체완결, ~1.3G on disk).",
+    "ac-4 수정은 CLI glue의 ensureDir(fitness/impact 커맨드와 동일 패턴)이라 전용 단위테스트 없이 실 명령 실행으로 검증. CLI 커맨드 단위테스트 부재는 기존 리포 관행과 일치."
+  ],
+  "final_verdict": "pass"
+}
