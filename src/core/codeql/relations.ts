@@ -98,6 +98,26 @@ export function renderEdgeQuery(changedFiles: string[]): string {
   return EDGE_QUERY_JS.replaceAll('{{FILE_FILTER}}', filter);
 }
 
+/**
+ * Symbol 선언 위치 쿼리 — 이름이 SYMBOL인 선언(function/class/interface)이 든 파일 경로.
+ * impact 쿼리와 달리 declFile 제한이 없다: forbidden_scope의 symbol은 선언 파일을 모르고
+ * "그 이름의 선언을 건드리지 마라"는 의미라, 이름으로 선언 파일을 찾아 path로 편다.
+ * 동명이인은 모두 반환한다(forbidden = 보호이므로 과보호가 안전).
+ */
+export const SYMBOL_DECL_QUERY_JS = `/**
+ * @name ditto symbol decl
+ * @id ditto/symbol-decl
+ * @kind table
+ */
+import javascript
+from string p
+where
+  exists(Function d | d.getName() = "{{SYMBOL}}" and p = d.getFile().getRelativePath())
+  or exists(ClassDefinition d | d.getName() = "{{SYMBOL}}" and p = d.getFile().getRelativePath())
+  or exists(InterfaceDefinition d | d.getName() = "{{SYMBOL}}" and p = d.getFile().getRelativePath())
+select p
+`;
+
 /** 언어별 표준 라이브러리 팩(번들 내장; pack install은 no-op). */
 function qlpackYml(language: CodeqlLanguage): string {
   return `name: ditto/acg-relations\nversion: 0.0.1\ndependencies:\n  codeql/${language}-all: "*"\n`;
@@ -259,4 +279,27 @@ export async function runRelationQuery(
   }
 
   return parseCsvRows(await deps.readText(csvOut));
+}
+
+export interface SymbolDeclInput {
+  symbol: string;
+  repoRoot: string;
+  sourceRoot: string;
+  language: CodeqlLanguage;
+  dbPath: string;
+  workDir: string;
+  binary?: string;
+}
+
+/** 이름이 symbol인 선언이 든 파일 경로 집합(중복 제거). 없으면 빈 배열. */
+export async function resolveSymbolDeclFiles(
+  input: SymbolDeclInput,
+  deps: RelationDeps,
+): Promise<string[]> {
+  const rows = await runRelationQuery(
+    { ...input, query: renderQuery(SYMBOL_DECL_QUERY_JS, input.symbol) },
+    deps,
+  );
+  const files = rows.map((r) => r[0]).filter((p): p is string => p !== undefined && p.length > 0);
+  return [...new Set(files)];
 }

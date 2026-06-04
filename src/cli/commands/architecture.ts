@@ -3,7 +3,8 @@ import { defineCommand } from 'citty';
 import { buildCandidateSpec, observeArchitecture } from '~/acg/architecture/propose';
 import { CodeqlEdgeAnalyzer } from '~/acg/boundary/codeql-edges';
 import { codeqlCacheDir, makeRelationDeps } from '~/core/codeql/host-deps';
-import { resolveRepoRootForCreate } from '~/core/fs';
+import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
+import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import { USAGE_ERROR_EXIT, parseOutputFormat, writeError, writeHuman, writeJson } from '../util';
 
 /**
@@ -29,6 +30,12 @@ export const architectureCommand = defineCommand({
       args: {
         'source-root': { type: 'string', description: 'Analysis source root (default <repo>/src)' },
         output: { type: 'string', description: 'Output format: human|json', default: 'json' },
+        write: {
+          type: 'boolean',
+          default: false,
+          description:
+            'Also save to .ditto/architecture-spec.json (forbidden_scope layer/surface 집행 입력)',
+        },
       },
       run: async ({ args }) => {
         let format: ReturnType<typeof parseOutputFormat>;
@@ -47,6 +54,14 @@ export const architectureCommand = defineCommand({
         );
         const obs = await observeArchitecture(repoRoot, sourceRoot, edgeAnalyzer);
         const candidate = buildCandidateSpec(obs, new Date().toISOString());
+        if (args.write) {
+          await ensureDir(join(repoRoot, '.ditto'));
+          await writeJsonFile(
+            join(repoRoot, '.ditto', 'architecture-spec.json'),
+            acgArchitectureSpec,
+            candidate,
+          );
+        }
         if (format === 'json') {
           writeJson(candidate);
         } else {

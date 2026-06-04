@@ -1,7 +1,10 @@
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { compileIcl } from '~/acg/icl';
+import { expandForbiddenSymbols } from '~/acg/scope/symbol-expand';
 import { ChangeContractStore } from '~/core/change-contract-store';
+import { codeqlCacheDir, makeRelationDeps } from '~/core/codeql/host-deps';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   RUNTIME_ERROR_EXIT,
@@ -76,22 +79,39 @@ export const changeContractCommand = defineCommand({
     }
 
     const repoRoot = await resolveRepoRootForCreate();
-    await new ChangeContractStore(repoRoot).write(args['work-item'], result.changeContract);
+
+    // symbol kind forbidden_scope를 선언 파일 path로 펴서 PreToolUse가 집행할 수 있게 한다
+    // (저장 시점 1회 CodeQL; symbol이 없으면 미호출).
+    const expanded = await expandForbiddenSymbols(result.changeContract, {
+      repoRoot,
+      sourceRoot: join(repoRoot, 'src'),
+      language: 'javascript',
+      cacheDir: codeqlCacheDir(repoRoot, 'javascript'),
+      deps: makeRelationDeps(),
+    });
+    await new ChangeContractStore(repoRoot).write(args['work-item'], expanded.contract);
 
     const summary = {
       work_item_id: args['work-item'],
-      forbidden_scope: result.changeContract.forbidden_scope.length,
-      allowed_scope: result.changeContract.allowed_scope.length,
+      forbidden_scope: expanded.contract.forbidden_scope.length,
+      allowed_scope: expanded.contract.allowed_scope.length,
       fitness_functions: result.fitnessFunctions.length,
+      symbols_resolved: expanded.resolved,
+      symbols_unresolved: expanded.unresolved,
       warnings: result.warnings?.length ?? 0,
     };
     if (format === 'json') {
       writeJson(summary);
     } else {
+      const unresolvedNote =
+        summary.symbols_unresolved.length > 0
+          ? `, unresolved symbols [${summary.symbols_unresolved.join(', ')}]`
+          : '';
       writeHuman(
         `change-contract: saved → .ditto/work-items/${args['work-item']}/change-contract.json ` +
           `(forbidden ${summary.forbidden_scope}, allowed ${summary.allowed_scope}, ` +
-          `fitness ${summary.fitness_functions}, warnings ${summary.warnings})`,
+          `fitness ${summary.fitness_functions}, symbols→path ${summary.symbols_resolved}${unresolvedNote}, ` +
+          `warnings ${summary.warnings})`,
       );
     }
   },
