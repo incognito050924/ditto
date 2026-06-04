@@ -31,7 +31,7 @@ parent: 00-framework.md
 
 전수 번역 결과: **core_ingest 31, binding 8, reject 28**.
 
-핵심은 정직하게 말하면 이렇다. **core_ingest 31개 중 다수는 "신규 흡수"가 아니라 이미 ACG에 있는 게이트의 출처 확인·정밀화(confirmatory grounding)다.** Evidence Quality 등급, Deep Module Gate, `decision_ref`, `forbidden_scope` minItems, `acceptance` minItems은 이미 스펙에 있다 — 이번 정독은 그것들이 어떤 원천 규칙에서 왔는지를 확정하고 표현을 날카롭게 했다.
+핵심은 정직하게 말하면 이렇다. **core_ingest 31개 중 다수는 "신규 흡수"가 아니라 이미 ACG에 있는 게이트의 출처 확인·정밀화(confirmatory grounding)다.** Deep Module Gate, `decision_ref`, `forbidden_scope` minItems, `acceptance` minItems은 이미 스펙에 있다 — 이번 정독은 그것들이 어떤 원천 규칙에서 왔는지를 확정하고 표현을 날카롭게 했다. (단 Evidence Quality 등급은 아직 별도 스키마 필드가 아니라 `ReviewGraph.files[].evidence`·`SemanticCompatibility.characterization` 위에 얹는 후보 어휘다 — 착지 슬롯은 §3.1·열린질문 Q1.)
 
 **진짜로 새로 흡수 가능한 표면은 네 곳에 집중된다.**
 
@@ -83,7 +83,7 @@ parent: 00-framework.md
 | Interface Design for Testability | [`interface-design.md`](https://github.com/mattpocock/skills/blob/main/skills/engineering/tdd/interface-design.md) | DI·반환값 검증·작은 표면 |
 | Dependency 분류 | [`improve.../DEEPENING.md`](https://github.com/mattpocock/skills/blob/main/skills/engineering/improve-codebase-architecture/DEEPENING.md) | "boundary"의 조작적 정의 |
 
-**증거 품질 3등급(이미 초안, 출처 확정).**
+**증거 품질 3등급(후보 어휘 — 아직 별도 스키마 필드가 아니라 `ReviewGraph.files[].evidence`·`SemanticCompatibility.characterization` 위에 얹는 판정 라벨, 출처 확정).**
 
 - `behavior_public`: public API/사용자 observable behavior 검증. 강한 증거.
 - `boundary_mocked`: 외부 API·시간·랜덤·파일시스템 등 system boundary만 mock. 허용.
@@ -148,7 +148,7 @@ parent: 00-framework.md
 - **재현 우선(`unreproduced_fix`).** "빠르고 결정론적인 agent-runnable pass/fail 신호를 만드는 것 — 이것이 전부다." 버그픽스 ChangeContract(`evidence_kind: test|log`)는 *고치기 전에* 재현 신호를 가져야 한다. 없으면 `SemanticCompatibility.characterization{exists:false, candidate}` + `verdict.semantic_safe='unverified'`로 남긴다. 단계 6, `warn`(저커버리지 영역은 loop 구성 불가가 흔함 — 40 §G-R1과 같은 입장).
 - **증상 기준선(`symptom_mismatch`).** "잘못된 버그 = 잘못된 수정." acceptance criterion은 *사용자가 본 증상*을 가리켜야 하고, 단계 6은 그 포착된 증상이 뒤집힐 때만 닫힌다. 단계 1 의도-우선(Charter §4-1)의 버그픽스 특화. 새 필드 없이 acceptance 형태 규칙.
 - **correct-seam 품질(`no_correct_seam`).** 회귀 테스트는 *올바른 seam*(실제 호출 지점에서 진짜 버그 패턴을 재현)에 쓴다. 단일 호출 unit이 다중 호출 버그를 흉내 내면 거짓 확신 → `implementation_coupled`. correct seam이 없다는 사실 자체가 보고할 finding(아키텍처가 버그를 못 가둠)이지 증거 생략 핑계가 아니다 → 명시적 unresolved marker.
-- **(신규 — 드문 결정론 block) 정리 게이트(`leftover_debug_instrumentation`).** Phase 6 완료 체크리스트 중 두 항목은 기계 판정이라 정당하게 `block`이다: ① `grep '[DEBUG-'` 0건(계측 잔존 없음), ② 원래 repro 재실행이 green. ACG §4-4("내 변경이 만든 고아 코드는 정리한다")·증거-완료 원칙과 정확히 일치. 단계 6/CompletionContract done 술어.
+- **(신규 — 드문 결정론 block) 정리 게이트(`leftover_debug_instrumentation`).** Phase 6 완료 체크리스트 중 두 항목은 기계 판정이라 정당하게 `block`이다: ① `grep '[DEBUG-'` 0건(계측 잔존 없음), ② 원래 repro 재실행이 green. Charter §4-4("내 변경이 만든 고아 코드는 정리한다")·증거-완료 원칙과 정확히 일치. 단계 6/CompletionContract done 술어 **후보** — 단 `ReviewGraph`→`CompletionContract` 배선은 [10](10-methodology.md) 단계 7 노트대로 v0 목표 상태이며 아직 미가동이다(이 게이트도 흡수 후보).
 - **post-mortem → 단계 8.** "무엇이 이 버그를 막았을까"의 답이 구조적(seam 부재, 숨은 결합)이면 일반화 가능한 불변식으로 `FitnessFunction` 승격(`ChangeContract.invariants[promotable=true]`). 단 *수정 후에* 권고하고 *수정 diff에 섞지 않는다*(Tidy First, 40 §G-R2) — handoff/escalate로 분리.
 
 ### 3.5 Domain / Decision Alignment Gate
@@ -194,7 +194,7 @@ parent: 00-framework.md
 | handoff | binding | 이미 [10](10-methodology.md) §5가 DITTO `handoff` 재사용으로 흡수. reference-not-duplicate·secret redact·temp-dir는 skill 정책 |
 | grill-me / grill-with-docs 인터뷰 루프 | binding | 단계 1 실패 처리 → DITTO `deep-interview`. "code-first, 한 번에 하나" 규칙만 인용 |
 | HITL/AFK 라우팅 | binding(track) | `ReviewGraph.human_review_set` + `risk_default`의 계획시점 투영. autopilot이 이미 구현. enum 신설하면 risk enum 중복([§8](#8-열린-질문) Q3) |
-| Shoehorn 타입 안전 | binding | DITTO/TS `FitnessFunction(kind=type-safety)`: test 파일 unsafe `as` 카운트, `baseline.delta_only=true`. Java엔 `as` 없음 → stack 결합 |
+| Shoehorn 타입 안전 | binding | DITTO/TS `FitnessFunction(kind=consistency)`: test 파일 unsafe `as` 카운트를 `baseline.metric`+`delta_only=true`로. "type-safety"는 core kind가 아니라 binding 측정 라벨 — 20 §6 enum은 stack-agnostic이라 `type-safety`를 두지 않는다. Java엔 `as` 없음 → stack 결합 |
 | ubiquitous-language / CONTEXT.md | binding | glossary는 `.ditto/knowledge/glossary.json` + `ditto:knowledge-update`. core 잔여물은 `domain_drift` 토큰 + "용어 점검됨" 증거뿐 |
 | prototype 검증 결과 capture | binding | **아래 정정 참조** — 새 artifact가 아니라 `decision_ref` + ADR/knowledge로 |
 | CONTEXT.md / ADR 파일 포맷 | binding | 문서 작성 규약(§5). DITTO는 glossary.json + adr/로 동일 정보 바인딩 |
@@ -225,7 +225,7 @@ parent: 00-framework.md
 ## 7. 핵심 설계 결정 (이번 개정에서 확정)
 
 - **confirmatory vs new를 구분한다.** core_ingest 31 중 다수는 이미 있는 게이트의 출처 확정이다(Evidence 등급, Deep Module Gate, `decision_ref`, `forbidden_scope`/`acceptance` minItems). 이것들은 "신규 커버리지"로 이중 집계하지 않는다.
-- **`EvidenceContract` 폐기**(§4 정정).
+- **프로토타입용 신규 `EvidenceContract` 폐기**(§4 정정 — 기존 재사용 `EvidenceRecord`와 무관).
 - **block은 결정론에만.** 전체 흡수에서 `block`은 `unverified_refactor`·`leftover_debug_instrumentation`·빈 `forbidden_scope`·`acceptance` 부재뿐 — 전부 기계 판정. 휴리스틱은 예외 없이 `warn`/`track`.
 - **risk_reason는 vocabulary 먼저, enum은 나중.** boxwood 검증 전 core enum 동결 금지.
 
@@ -286,7 +286,7 @@ parent: 00-framework.md
 | CONTEXT.md(framework) | 공유 언어 | `glossary.json` + `domain_drift` 토큰 |
 | CONTEXT-FORMAT | glossary 위생 | knowledge-curator 정책 |
 | to-issues HITL/AFK | 라우팅 라벨 | autopilot risk 라우팅(track) |
-| migrate-to-shoehorn | 타입 안전 | DITTO/TS `FitnessFunction(type-safety)` |
+| migrate-to-shoehorn | 타입 안전 | DITTO/TS `FitnessFunction(kind=consistency)` — unsafe `as` 카운트(라벨: type-safety) |
 | prototype | 검증결과 capture | `decision_ref` + ADR(EvidenceContract 아님) |
 
 ### reject (28)

@@ -404,7 +404,7 @@ core 데이터는 불변으로 다룬다.
 
 | 대상 문서 | 흡수 내용 |
 |---|---|
-| [40-refactoring-criteria.md](40-refactoring-criteria.md) | Deep Module Gate 뒤에 `Functional Core Gate`, `State Discipline Gate`, `Effect Visibility Gate` 추가 |
+| [40-refactoring-criteria.md](40-refactoring-criteria.md) | Deep Module Gate 뒤에 `Functional Core Gate`(G-F1), `Effect Visibility Gate`(G-F2), `Immutability Gate`(G-F3), `Declarative Bias Gate`(G-F4), `State Discipline Gate`(G-F5) 추가 — §4 다섯 게이트 전부 |
 | [20-contracts.md](20-contracts.md) | `ArchitectureSpec.conventions`에 effect boundary/purity convention 추가, `ReviewGraph.risk_reason` vocabulary 후보 추가 |
 | [10-methodology.md](10-methodology.md) | 단계 4 Plan과 단계 6 Validate에 purity/effect/state 검증 질문 추가 |
 | [30-intent-change-dsl.md](30-intent-change-dsl.md) | ICL에서 `pure`, `effect`, `state_transition`, `immutable` 같은 constraint target 후보 추가 |

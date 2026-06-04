@@ -14,6 +14,7 @@ documents:
   - 40-refactoring-criteria.md
   - 50-change-map.md         # UML 대체 의사소통 표기
   - 60-practice-ingestion-map.md # 외부 engineering practice 흡수 후보 지도(non-normative)
+  - 70-effect-visible-functional-core-pattern.md # effect-visible functional core 디자인 패턴 후보(non-normative, 흡수 전)
 ---
 
 # ACG — Agentic Change Governance
@@ -194,7 +195,7 @@ Assurance Graph     코드베이스 전역 적합성 함수의 평가 이력을 
 | `SemanticCompatibility` | reviewer/verifier가 소비 | **신설**. 의미 호환성 판정 |
 | Review Graph | `Reviewer`/`Verifier` 출력, reviewer output 스키마 | **재사용/확장**. risk 분류·exception 라우팅을 구조화 |
 | `FitnessFunction` + Assurance Graph | — | **신설**. 지속 적합성. boxwood harness에도 없는 능력 |
-| 완료 verdict | `CompletionContract`, `EvidenceContract` | **재사용**. change governance 실패를 completion gate에 연결 |
+| 완료 verdict | `CompletionContract`, `EvidenceRecord` | **재사용**. change governance 실패를 completion gate에 연결 |
 | premature closure 억제 | `ConvergenceContract` | **재사용**. 적합성 미검증을 unverified로 남김 |
 | 패턴/결정 지식 | `KnowledgeContract`, ADR, `.ditto/knowledge` | **재사용**. 모듈 설계/리팩토링 기준·decision_ref의 저장소 |
 

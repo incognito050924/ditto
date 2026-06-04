@@ -1,0 +1,145 @@
+{
+  "schema_version": "0.1.0",
+  "review_id": "rv_acg6cohere",
+  "mode": "review",
+  "target_artifact": "reports/design/agentic-governance/{00-framework,10-methodology,20-contracts,30-intent-change-dsl,40-refactoring-criteria,50-change-map,60-practice-ingestion-map,70-effect-visible-functional-core-pattern}.md",
+  "question": "통합 커밋 62f09f3 이후 ACG 설계 문서 8종이 문서 간 정합성(용어·교차참조·개념 연관성·스키마 일치)을 유지하는가? 행동을 요구하는 비일관성이 있는가?",
+  "intent_refs": [],
+  "acceptance_refs": [],
+  "evidence_refs": [
+    "git:62f09f3 (통합 후)",
+    "git:66d0160 (통합 전 baseline)"
+  ],
+  "constraints": {
+    "scope_guard": ["문서 간 정합성만 — 용어/교차참조/스키마 일치/개념 연관성"],
+    "non_goals": ["개별 설계 결정의 재심", "코드 동작 검증(작성 품질 검증)"],
+    "review_budget": "standard",
+    "max_rounds": 1
+  },
+  "model_policy": {
+    "producer": "current-host",
+    "opponent_preferred": "codex",
+    "opponent_fallback": ["claude-opus", "claude-sonnet"],
+    "synthesizer": "claude-opus"
+  },
+  "producer": {
+    "position": "통합 후 8문서는 정합성을 실질 유지. 권위 계층(20=schema SoT, ADR-0002) 지켜지고 60·70은 자신을 흡수후보/패턴후보로 격하(60:6,12; 70:14,19,412) 후 기존 산출물로만 번역. risk_reason(20:517 자유 string vs 60:45-47,230 vocabulary-first staging)·Deep Module(40:72-74,90,95 일치)·decision_ref(20:158 일치)·단계6/7(10:112,128 정합)·70(새 kind 발명 안 함) 모두 정합.",
+    "proposal": "단 한 곳 외과 교정: 60:197·289 'FitnessFunction(kind=type-safety)'가 20:578 enum 밖. (A) 기존 kind(consistency/dependency)+baseline.metric으로 재표현하고 type-safety는 라벨로 강등(minimum-viable 권장) 또는 (B) 20 enum에 type-safety 추가. 그 외 reconciliation 불요.",
+    "evidence": ["60:197", "60:289", "20:578", "20:517", "60:45-47", "60:230", "60:88-90,107", "40:72-74,90,95", "20:158", "10:112,128", "70:343,346,407-410", "00:197", "50:36", "60:202,228,290"],
+    "assumptions": ["ADR-0002(20=schema SoT) 유효 전제", "60:197 type-safety를 비공식 라벨로 해석", "git diff 미실행, packet 진술 수용"],
+    "known_limits": [
+      "REAL SEAM 인정: 60:197,289 type-safety는 20:578 enum과 문자 그대로 불일치 → 행동 요구",
+      "EvidenceContract(60:202,228,290 vs 00:197,50:36)는 scope 차이로 모순 아니나 같은 이름이 '기존 재사용'과 '신설 거부'로 동시 사용돼 독자 혼란 위험",
+      "Evidence Quality 3등급·risk_reason 어휘·70 토큰은 아직 vocabulary지 enum 아님 — 승격 시 3문서 동기화 부채",
+      "개별 설계 옳음은 미검증(인용 정확성만 봄)"
+    ]
+  },
+  "opponent": {
+    "run": {
+      "provider": "codex",
+      "model": "codex (codex-plugin-cc)",
+      "command": "Agent subagent_type=codex:codex-rescue (read-only adversarial consistency audit)",
+      "timestamp": "2026-06-04T08:37:55.000Z",
+      "fallback_from": "none",
+      "fallback_reason": "none"
+    },
+    "objections": [
+      {
+        "severity": "critical",
+        "claim": "60 cites FitnessFunction(kind=type-safety) but 20 §6 enum and 30 DSL fitness_kind lack type-safety.",
+        "evidence": ["60:197", "60:289", "20:578", "30:81", "30:82"],
+        "maps_to": "20:578",
+        "failure_mode": "A binding following 60 creates a FitnessFunction rejected by schema SoT and ICL compilation.",
+        "required_fix": "Use an existing kind with a type-safety statement/evaluator, or add type-safety consistently to 20 and 30 before citing it."
+      },
+      {
+        "severity": "critical",
+        "claim": "60 claims Evidence Quality grades already in spec, but 20 has no ReviewGraph/ChangeContract field/enum for behavior_public|boundary_mocked|implementation_coupled.",
+        "evidence": ["60:34", "60:86", "60:88", "60:90", "20:518", "20:523", "20:445", "20:450"],
+        "maps_to": "20:518",
+        "failure_mode": "Implementer looks for an evidence-quality field, emits invalid schema or hides grades in free text with no contract.",
+        "required_fix": "Add an explicit evidence-quality field/sidecar contract to 20, OR reword 60 so grades are candidate/binding-sidecar vocabulary."
+      },
+      {
+        "severity": "major",
+        "claim": "EvidenceContract used with incompatible meanings: 60 폐기 vs 00:197/50:36 bare EvidenceContract를 재사용 산출물로 참조.",
+        "evidence": ["60:202", "60:228", "00:197", "50:36", "20:81", "20:90"],
+        "maps_to": "doc",
+        "failure_mode": "Naming collision → implementer removes a reused DITTO evidence mechanism or reintroduces the rejected prototype artifact.",
+        "required_fix": "Disambiguate 'new prototype EvidenceContract' vs existing DITTO evidence artifact; change 50:36 source to ChangeContract.acceptance + ReviewGraph.files[].evidence."
+      },
+      {
+        "severity": "major",
+        "claim": "60 describes pre-Apply characterization·leftover_debug as Stage 4/6 + CompletionContract predicates, but 10's gates don't include them and 10:132 marks ReviewGraph→CompletionContract wiring as v0/not running.",
+        "evidence": ["60:140", "60:151", "60:222", "10:90", "10:112", "10:132"],
+        "maps_to": "10:132",
+        "failure_mode": "Reader assumes these blocks are already lifecycle/completion behavior while the methodology lacks the gates and flags wiring as future.",
+        "required_fix": "Wire predicates into 10/20, OR mark 60 references with the same 'not yet wired' caveat as 10."
+      },
+      {
+        "severity": "major",
+        "claim": "70 defines G-F1..G-F5 but its 40-absorption plan (§8) lists only Functional Core/State Discipline/Effect Visibility, omitting Immutability(G-F3) and Declarative Bias(G-F4).",
+        "evidence": ["70:278", "70:289", "70:300", "70:311", "70:321", "70:407"],
+        "maps_to": "70:407",
+        "failure_mode": "Implementer absorbs only 3 of 5 gates, silently dropping mutation + declarative-bias checks.",
+        "required_fix": "Add G-F3,G-F4 to the absorption plan, or state which gate subsumes each omitted one."
+      },
+      {
+        "severity": "minor",
+        "claim": "60:151 cites 'ACG §4-4' for orphan-code cleanup, but 00 §4 is the five-graph core model — the rule is Charter §4-4.",
+        "evidence": ["60:151", "00:139"],
+        "maps_to": "00:139",
+        "failure_mode": "Broken anchor → wrong section.",
+        "required_fix": "Cite 'Charter §4-4' or the actual section."
+      },
+      {
+        "severity": "minor",
+        "claim": "70 has parent:00 but 00's document index lists 60 and omits 70.",
+        "evidence": ["70:7", "00:9", "00:16"],
+        "maps_to": "00:9",
+        "failure_mode": "70 discoverable only by filesystem, unlike 60.",
+        "required_fix": "Add 70 to 00 as non-normative candidate, or state in 70 it is intentionally unindexed until absorbed."
+      }
+    ],
+    "missing_alternatives": [
+      "No schema-valid kind given for Shoehorn/type-safety FitnessFunction",
+      "60 names an Evidence Quality sidecar target but no shape/ownership",
+      "70 doesn't say whether G-F3/G-F4 are separate or folded"
+    ],
+    "scope_creep_risks": [
+      "60·70 use some normative gate language (block, done predicate, absorption plan) mistakable for current 10/20 behavior",
+      "70 risk_reason tokens should stay vocabulary candidates until reconciled with 60 vocabulary-first staging"
+    ],
+    "verification_gaps": []
+  },
+  "synthesizer": {
+    "verdict": "revise",
+    "synthesis": "통합 후 8문서의 권위 계층(20=schema SoT, ADR-0002)과 거시 정합은 유지된다 — 00 다섯그래프, 10 lifecycle, 20 스키마, 30 DSL이 모순 없이 맞물리고 60/70은 스스로를 흡수후보/non-normative로 격하한다. 그러나 행동을 요구하는 정합성 결함 5건(critical 1 + major 4)이 남아 accept 불가. (1 critical) 60:197·289가 SoT에 없는 'FitnessFunction(kind=type-safety)'를 인용 — 20:578·30:81 어디에도 없음. (major) 60:34가 Evidence Quality 3등급을 기존 스펙 필드처럼 과장(20:518에 등급 필드 없음); 50:36 bare EvidenceContract가 60:202 신설폐기와 이름 충돌; 60:151·222가 leftover_debug/pre-Apply characterization을 done 술어로 단정하나 10:132는 배선 v0 미가동; 70:407 §8이 G-F3/G-F4 누락. minor 2건은 표면화하되 verdict 비강제. 모두 문서 편집으로 reconcile 가능, 외부/사용자 blocker 없음 → revise.",
+    "accepted_objections": [
+      { "objection": "FitnessFunction(kind=type-safety) not in 20:578/30:81 enum", "severity": "critical", "maps_to": "20:578", "why_admissible": "oracle(enum 부재 직접 확인)+novel+critical(존재하지 않는 스키마 요소 인용 → schema-invalid·ICL 거부). Producer도 REAL SEAM 인정." },
+      { "objection": "Evidence Quality grades over-claimed as already-present spec field", "severity": "major", "maps_to": "20:518", "why_admissible": "oracle(20:518-526 등급 필드 부재)+novel+major. critical 아님: 60:107·234가 sidecar/열린질문으로 정직 착지, 핵심은 60:34 표현 과장 → reword." },
+      { "objection": "EvidenceContract naming collision (60 폐기 vs 00:197/50:36 재사용)", "severity": "major", "maps_to": "doc", "why_admissible": "oracle(3곳 직접 확인)+novel+major. 오독 위험. Producer도 각주 권장." },
+      { "objection": "pre-Apply characterization·leftover_debug done 술어 단정 vs 10:132 v0 미배선", "severity": "major", "maps_to": "10:132", "why_admissible": "oracle(10:112 게이트·10:132 caveat·60 단정 확인)+novel+major → caveat 부착 reword." },
+      { "objection": "70 §8 absorption plan omits G-F3/G-F4", "severity": "major", "maps_to": "70:407", "why_admissible": "oracle(70:407 vs 70:300,311)+novel+major. §8대로면 mutation·declarative-bias 검사 침묵 탈락." },
+      { "objection": "60:151 'ACG §4-4' = Charter §4-4 오참조", "severity": "minor", "maps_to": "00:139", "why_admissible": "oracle 확인 — minor라 단독 비강제이나 obj4 편집과 같은 줄이라 동반 교정." }
+    ],
+    "rejected_objections": [
+      { "objection": "70 parent:00이나 00 인덱스에 70 누락 (minor)", "reason": "사실은 맞으나 severity minor라 admissible 아님. 70:412-415가 스스로 '실행 증거 없는 패턴 후보, 00~50 미수정'으로 명시해 권위 혼선 없음(60도 non-normative 표시). 표면화하되 verdict 비강제, optional edit으로만 둠.", "evidence": ["00:9", "00:16", "70:7", "70:412-415"] }
+    ],
+    "required_edits": [
+      { "doc": "60-practice-ingestion-map.md", "edit": "60:197·289 'FitnessFunction(kind=type-safety)'를 SoT enum 안으로 재표현: 기존 kind(consistency 또는 dependency)+statement='test 파일 unsafe `as` 0건'+baseline.delta_only=true, 'type-safety'는 비공식 라벨 강등. (enum 확장은 minimum-viable 위반이므로 지양.)", "reconciles": "obj-1 critical type-safety", "deterministic": true },
+      { "doc": "60-practice-ingestion-map.md", "edit": "60:34 'Evidence Quality 등급 ... 이미 ACG에 있는'을 '20 evidence 필드/SemanticCompatibility 위에 얹는 후보 어휘(등급 자체는 아직 별도 스키마 필드 아님 — §3.1·열린질문 Q1 참조)'로 약화.", "reconciles": "obj-2 major evidence-quality over-claim", "deterministic": true },
+      { "doc": "50-change-map.md", "edit": "50:36 '증거 뱃지' 행 출처 'EvidenceContract'를 ChangeContract.acceptance + ReviewGraph.files[].evidence(또는 명시적 DITTO 재사용 산출물)로 교체 — 60 폐기 신설 프로토타입과 이름 충돌 제거.", "reconciles": "obj-3 major EvidenceContract collision", "deterministic": true },
+      { "doc": "60-practice-ingestion-map.md", "edit": "60:151·222 leftover_debug/pre-Apply characterization done 술어 문장에 10:132와 동일한 'ReviewGraph→CompletionContract 배선은 v0 목표 상태이며 아직 미가동 — 흡수 후보' caveat 1줄 부착.", "reconciles": "obj-4 major not-yet-wired", "deterministic": true },
+      { "doc": "70-effect-visible-functional-core-pattern.md", "edit": "70:407 §8 40-흡수 표에 Immutability Gate(G-F3)·Declarative Bias Gate(G-F4) 추가하거나 어느 게이트가 포섭하는지 명시(예: G-F3→State Discipline, G-F4→Functional Core).", "reconciles": "obj-5 major G-F3/G-F4 omission", "deterministic": true },
+      { "doc": "60-practice-ingestion-map.md", "edit": "60:151 'ACG §4-4'를 'Charter §4-4'로 정정. obj-4 편집과 같은 줄 동반 처리.", "reconciles": "obj-6 minor anchor", "deterministic": true },
+      { "doc": "00-framework.md (optional)", "edit": "선택: 00:16 인덱스에 '70-...md # 흡수 전 비인덱스 패턴 후보(non-normative)' 추가, 또는 70 머리말에 '흡수 전까지 의도적 비등재' 명시. minor·verdict 비강제.", "reconciles": "obj-7 minor (rejected as gating)", "deterministic": true }
+    ],
+    "remaining_open_questions": [
+      "Evidence Quality 등급 최종 착지 슬롯(ChangeContract.acceptance vs ReviewGraph.evidence sidecar)은 60:234 Q1로 열려 있음 — reword는 '미정·후보'로 표기할 뿐 확정 아님.",
+      "risk_reason 표준 어휘·Evidence Quality 3등급·70 토큰은 vocabulary 단계 — enum 승격 시 20·30·60·70 동기화 부채(boxwood 2차 바인딩 검증 후).",
+      "개별 게이트 설계 타당성은 이번 정합성 심사 범위 밖."
+    ],
+    "evidence_refs": ["20:578", "30:81", "60:197", "60:289", "20:518", "60:34", "60:107", "60:234", "00:197", "50:36", "60:202", "10:112", "10:132", "60:151", "60:222", "70:300", "70:311", "70:407", "00:139", "00:9", "00:16"]
+  }
+}
