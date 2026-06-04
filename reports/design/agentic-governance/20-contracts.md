@@ -71,12 +71,12 @@ parent: 00-framework.md
 | ReviewGraph(스펙) | reviewer-output(DITTO) 바인딩 |
 |---|---|
 | `files[].path` | finding의 위치(파일) |
-| `files[].role`/`risk`/`risk_reason` | finding에 거버넌스 분류 필드로 추가(확장점) |
+| `files[].role`/`risk`/`risk_reason` | 별도 `acg_review` 객체로 투영(reviewer-output 불변, D3·구현됨) |
 | `files[].evidence` | reviewer-output `evidence[]` 재사용 |
 | 미해소 항목 | reviewer-output `unverified[]` 재사용 |
 | `human_review_set` | high-risk·unresolved 집계 뷰(파생) |
 
-> reviewer-output이 `additionalProperties:false`면, 거버넌스 필드는 별도 확장 객체(예: `acg_review`) 또는 reviewer-output 스키마에 옵셔널 필드 추가로 싣는다 — 어느 쪽인지는 v0에서 확정.
+> reviewer-output이 `additionalProperties:false`면, 거버넌스 필드는 별도 확장 객체로 싣는다. **v0 확정(구현됨)**: 별도 `acg_review` 객체(`src/schemas/acg-review-graph.ts`)로 투영하고 reviewer-output은 mutate하지 않는다(D3).
 
 **evidence 종류 매핑 (OBJ-38):** 스펙 `evidence_kind`(test/build/log/diff/screen/manual/e2e) ↔ DITTO `evidenceRef.kind`(command/file/artifact/url/note).
 
@@ -93,9 +93,9 @@ parent: 00-framework.md
 
 | JourneyRun(스펙) | e2eJourney(DITTO) 바인딩 |
 |---|---|
-| `journey_id` | `journey`(이름)에 JourneySpec.id를 싣거나 신규 `journey_id` 필드 추가 |
+| `journey_id` | 신규 `journey_id` 옵셔널 필드 추가 — `journey` 이름 오버로드 안 함(D4·구현됨) |
 | `outcome`: pass/fail/flaky/skipped | `result`: pass/fail/blocked → pass=pass, fail=fail, **blocked→skipped**. `flaky`는 스펙 outcome이나 **현 e2eJourney는 산출하지 않는다**(result enum에 없음) — 향후 e2e가 재시도 탐지를 추가하면 매핑, 그 전까지 DITTO 바인딩은 pass/fail/skipped만 낸다 |
-| `step_results` | e2eJourney `steps[]` |
+| `step_results` | v0 미매핑 — e2eJourney `steps[]`에 안정적 `step_id`가 없어 빈 배열로 둔다(`src/acg/journey/journey-run-adapter.ts`) |
 | `artifacts` | e2eJourney `artifacts.{screenshots,trace,console,network}` |
 
 ---

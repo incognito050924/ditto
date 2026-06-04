@@ -124,12 +124,12 @@ Impact Analysis를 한다(아이디어 베이스 Pattern 2). 텍스트 검색이
 |---|---|
 | 입력 | 검증 결과, diff |
 | 산출물 | `ReviewGraph`(위험도 분류), `Change Map`(사람용 표기) |
-| 게이트 | **모든 high-risk 항목에 evidence 또는 explicit unresolved marker가 있는가.** risk reason 없는 분류는 무효 |
+| 게이트 | **모든 high-risk 항목에 evidence 또는 explicit unresolved marker가 있는가.** risk reason 없는 분류는 무효 (구현 바인딩: high-risk는 *evidence 부재*로 막힌다 — `unresolved` 단독으로는 안 풀린다; adapter가 미검증을 risk=low로 고정해 high∧unresolved를 생성하지 않으므로 — `src/hooks/stop.ts`) |
 | 실패 처리 | high-risk가 미해소면 CompletionContract를 pass로 닫지 않는다(아이디어 베이스 Pattern 5) |
 
 Review by Exception이다. agent가 변경을 위험도로 분류하고, 사람은 전체 diff가 아니라 [50-change-map.md](50-change-map.md)의 exception만 본다. public API·migration·auth·payment·data deletion은 기본 high-risk.
 
-> **완료 게이트 연결은 바인딩 결정([00](00-framework.md) §9 Q6).** "high-risk 미해소가 완료를 막는다"는 스펙이 요구하는 *성질*이고, 그것을 어디에 배선하는지는 바인딩이 정한다. **DITTO 바인딩(목표 상태)**: 별도 gate 없이 `ReviewGraph`의 high-risk/unresolved 집계를 `CompletionContract`가 소비하는 슬롯으로 잇고, Stop 훅이 그 ledger를 읽어 미해소 시 continuation을 강제하도록 한다. 현재 Stop 훅·CompletionContract에는 그 슬롯이 없으므로 이 배선은 **v0 작업**이다(아직 도는 동작이 아님).
+> **완료 게이트 연결은 바인딩 결정([00](00-framework.md) §9 Q6).** "high-risk 미해소가 완료를 막는다"는 스펙이 요구하는 *성질*이고, 그것을 어디에 배선하는지는 바인딩이 정한다. **DITTO 바인딩(구현·가동됨, WU-6)**: 별도 gate 없이 `ReviewGraph`의 high-risk/unresolved 집계를 `CompletionContract`가 소비하는 슬롯으로 잇고, Stop 훅이 그 ledger를 읽어 미해소 시 continuation을 강제한다. **현재 가동 중**: Stop 훅이 `.ditto/work-items/<wi>/acg-review.json`을 읽어 증거 없는 high-risk 발견 시 `exit 2`로 continuation을 강제하고, `CompletionContract`에 옵셔널 `acg_governance` 슬롯이 있다(`src/hooks/stop.ts`·`src/schemas/completion-contract.ts`, `tests/hooks/stop.test.ts`).
 
 ### 단계 8 — Assure
 

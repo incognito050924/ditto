@@ -19,7 +19,7 @@ parent: 00-framework.md
 | **exception만 강조** | 사람은 전체 diff가 아니라 봐야 할 것만 본다(Review by Exception). 저위험은 접힘 |
 | **증거가 1급 시각요소** | 각 acceptance/영향에 증거 상태(닫힘/열림/미검증)가 뱃지로 붙는다 |
 | **텍스트가 정본** | 다이어그램은 파생. 정본은 파싱·diff·버전관리 가능한 텍스트 |
-| **단일 출처** | ICL/ReviewGraph에서 자동 생성. 손으로 그리지 않는다([30](30-intent-change-dsl.md) 컴파일 타깃 C) |
+| **단일 출처** | ICL/ReviewGraph에서 자동 생성(설계 목표, [30](30-intent-change-dsl.md) 컴파일 타깃 C). **타깃 C 렌더러는 v0 OUT** — 현재 텍스트 정본만, 자동 렌더 미구현(D6, `src/acg/icl/compile.ts`) |
 
 UML과의 대비를 한 줄로: **UML은 "시스템이 어떻게 생겼나"를, Change Map은 "이 변경이 무엇을 하나"를 그린다.**
 

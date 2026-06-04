@@ -145,7 +145,7 @@ string         = '"' , { character } , '"' ;
 
 ## 4. 컴파일 — 단일 출처에서 세 타깃
 
-ICL 해석기는 하나의 `.icl`을 세 산출물로 컴파일한다. 이것이 ICL의 핵심 가치다.
+ICL 해석기는 하나의 `.icl`을 세 타깃으로 컴파일하는 *설계*다(B=ChangeContract+FitnessFunction, A=agent 제약 텍스트, C=Change Map). 단일 출처 원칙이 ICL의 핵심 가치다. **단 v0 구현은 B만이다** — A·C는 현재 OUT(D6, `src/acg/icl/compile.ts`).
 
 ```text
                           ┌──────────────────────────────┐
@@ -230,6 +230,8 @@ fitness "tenant 격리 불변" {
 ```
 
 ### 출력 (B) — Fitness Gate (= [20](20-contracts.md) FitnessFunction)
+
+> 아래 예시는 **스펙-form envelope**(`schema` 리터럴) 표기다. v0 컴파일러는 DITTO 바인딩 wire-form(`schema_version` + `kind: "acg.fitness-function.v1"` + `fitness_kind`)으로 방출한다(`src/acg/icl/compile.ts`, §0.2 envelope 매핑) — 예시는 산출 형식 자체가 아니다.
 
 ```json
 {
