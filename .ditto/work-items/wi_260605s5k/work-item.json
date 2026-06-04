@@ -1,0 +1,96 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260605s5k",
+  "title": "forbidden_scope 5 kind 완성 — symbol→path 해소(#8b) + archSpec 관례 위치",
+  "source_request": "핸드오프 §7-2 후속: forbidden_scope 집행은 현재 path/glob만 끝까지 동작한다. symbol(#8b)과 layer/public_surface(archSpec 관례 위치)를 메워 5 kind 전부 PreToolUse가 집행하게 한다.",
+  "goal": "(a) symbol: change-contract 저장 시점에 forbidden_scope의 symbol kind를 CodeQL 선언 파일 path로 치환해 저장한다(비용상 저장 시 1회, symbol 있을 때만 DB 빌드). PreToolUse는 변환된 path로 빠르게 집행. (b) archSpec: `ditto architecture propose --write`가 .ditto/architecture-spec.json에 저장 → pre-tool-use.loadArchSpec(이미 그 경로 읽음)이 layer/public_surface forbidden을 집행. 결과: forbidden_scope path/glob/layer/public_surface/symbol 5종 전부 끝까지 집행.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "resolveSymbolDeclFiles(symbol, …): 이름이 symbol인 선언(function/class/interface)의 파일 path를 CodeQL로 추출(declFile 제한 없는 SYMBOL_DECL_QUERY). 단위(mock deps CSV) + e2e(parseSarif→src/core/codeql/sarif.ts).",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "bun test tests/acg/symbol-expand.test.ts",
+          "note": "SYMBOL_DECL_QUERY+resolveSymbolDeclFiles. 단위(mock CSV): symbol→선언 path 치환(동명 다중), symbol 없으면 미호출, 못찾으면 원본 유지"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "change-contract CLI: forbidden_scope의 symbol kind를 선언 파일 path scopeRef로 치환 저장(note에 원본 symbol). forbidden에 symbol이 없으면 CodeQL 미호출(비용 0). 해소 0건이면 경고.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "bun run dev change-contract --file <symbol forbid .icl>",
+          "note": "forbid symbol 'parseSarif' → forbidden_scope에 path 'src/core/codeql/sarif.ts'(note: resolved from symbol). repo-relative 환산(source-root→repo). symbols→path 1"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "architecture propose --write: candidate ArchitectureSpec을 .ditto/architecture-spec.json에 저장. 기존 stdout 출력은 유지.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "bun run dev architecture propose --write",
+          "note": ".ditto/architecture-spec.json 생성(layers acg/cli/core/hooks/schemas). pre-tool-use.loadArchSpec이 이 경로 읽음"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "집행 e2e: (a) symbol forbidden → change-contract가 path로 치환 → preToolUseHandler가 그 선언 파일 편집 차단(exit 2). (b) layer/public_surface forbidden + .ditto/architecture-spec.json → preToolUseHandler 차단.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "bun test tests/acg/change-contract-chain.test.ts",
+          "note": "(a) symbol→repo-relative path 치환(스모크) + path 집행. (b) layer/public_surface forbidden + .ditto/architecture-spec.json → preToolUseHandler: src/core/x.ts(layer)·api/external.ts(surface) exit 2, src/other/y.ts exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "전체 회귀 green + biome clean.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "bun test 전체 + biome",
+          "note": "1025 pass / 3 skip / 0 fail, biome 250 clean"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/codeql/relations.ts",
+    "src/acg/scope/symbol-expand.ts",
+    "src/cli/commands/change-contract.ts",
+    "src/cli/commands/architecture.ts",
+    "tests/acg/symbol-expand.test.ts",
+    "tests/acg/change-contract-chain.test.ts"
+  ],
+  "risks": [
+    {
+      "description": "symbol 동명이인이면 선언 파일이 여럿 → 전부 path로 치환(과보호 방향, 보수적).",
+      "severity": "low",
+      "mitigation": "forbidden은 보호이므로 과보호가 안전. note로 원본 symbol 추적."
+    },
+    {
+      "description": "symbol 해소가 change-contract에 CodeQL DB 빌드(~9s)를 더함 — symbol 있을 때만.",
+      "severity": "low",
+      "mitigation": "symbol 없으면 미호출. change-contract는 1회 실행이라 게이트 비용 아님."
+    }
+  ],
+  "runs": [],
+  "created_at": "2026-06-05T02:30:00.000Z",
+  "updated_at": "2026-06-05T03:00:00.000Z",
+  "closed_at": "2026-06-05T03:00:00.000Z"
+}
