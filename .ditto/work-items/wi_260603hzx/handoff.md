@@ -1,3 +1,5 @@
+> **⚠️ 대체됨(2026-06-04):** 최신 thread 핸드오프는 `.ditto/work-items/wi_260604ql9/handoff.md`. 새 PC 셋업·남은 일·CodeQL 로컬설치는 거기를 먼저 읽을 것. 아래는 배경 참고용.
+
 # Handoff — ACG 거버넌스 구현 (다른 PC에서 이어받기)
 
 > 이 핸드오프는 repo에 커밋되어 git으로 따라간다(로컬 메모리 `~/.claude/.../project_acg_governance.md`는 이 PC에만 있으니 다른 PC엔 없다). 새 PC에서 `git pull` 후 이 파일부터 읽으면 된다.
