@@ -1,0 +1,94 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260605fit",
+  "title": "fitness 저장 + deterministic 전 사슬 — FitnessFunctionStore + change-contract 저장 + fitness 자동 로드",
+  "source_request": "핸드오프 §2 #4 후속: deterministic fitness provider와 AssuranceSnapshot→stop 게이트는 이미 동작하나, change-contract가 만든 fitnessFunctions가 저장되지 않아(개수만 보고) deterministic fitness조차 죽어 있다. forbidden_scope가 저장 없으면 죽던 것과 동일 구조. fitness 저장을 메워 deterministic fitness를 끝까지 동작시킨다.",
+  "goal": "(1) FitnessFunctionStore: .ditto/work-items/<wi>/fitness-functions.json read/write. (2) change-contract CLI가 compileIcl의 fitnessFunctions를 store에 저장. (3) fitness run --from을 optional로 — 없으면 work item의 fitness-functions.json 자동 로드. 결과: ICL(deterministic fitness) → change-contract 저장 → fitness run → AssuranceSnapshot → stop 게이트 전 사슬 동작. executed/llm_judged provider는 범위 밖(후속).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "FitnessFunctionStore: .ditto/work-items/<wi>/fitness-functions.json write(AcgFitnessFunction[])·read(→배열|null). 빈 배열도 저장. 단위(왕복, 부재 null).",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "bun test tests/core/fitness-function-store.test.ts",
+          "note": "FitnessFunctionStore write→read 왕복(id 순서 보존), 부재 null, 빈 배열 저장"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "change-contract CLI가 compileIcl의 fitnessFunctions를 FitnessFunctionStore.write로 저장(저장본 개수 = 보고 개수).",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "bun run dev change-contract --file <fitness ICL>",
+          "note": "compileIcl fitnessFunctions를 .ditto/work-items/<wi>/fitness-functions.json 저장(1 fn). 보고 fitness 1 = 저장 1"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "fitness run: --from을 optional로. --from 있으면 그 파일, 없으면 FitnessFunctionStore.read(work-item) 자동 로드. 둘 다 없으면 명확한 에러.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "bun run dev fitness run --work-item <wi> (--from 없이)",
+          "note": "--from optional. 없으면 FitnessFunctionStore.read 자동 로드. 둘 다 없으면 명확한 에러"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "전 사슬 e2e: deterministic fitness(cmd) ICL → change-contract(fitness 저장) → fitness run(자동 로드) → assurance-snapshot.json 산출. deterministic provider가 실제 실행해 outcome 결정.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "전 사슬 스모크: change-contract→fitness run→assurance-snapshot.json",
+          "note": "deterministic fitness(cmd 'true') ICL→저장→자동로드→runFitness(commandProvider 실제 실행)→snapshot. outcome 'smoke pass'=pass. stop 게이트가 읽는 assurance-snapshot.json 산출"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "전체 회귀 green + biome clean.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "bun test 전체 + biome",
+          "note": "1026 pass / 3 skip / 0 fail, biome 252 clean. fitness.ts tsc 6(HEAD 동일, citty 노이즈)"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/fitness-function-store.ts",
+    "src/cli/commands/change-contract.ts",
+    "src/cli/commands/fitness.ts",
+    "tests/core/fitness-function-store.test.ts"
+  ],
+  "risks": [
+    {
+      "description": "ICL judge fitness는 llm_judged라 fitness run에서 skip(provider 미배선) — deterministic(cmd/query)만 실제 실행.",
+      "severity": "low",
+      "mitigation": "범위 명시. llm_judged/executed provider는 후속."
+    },
+    {
+      "description": "deterministic spec이 shell command면 게이트 머신에서 실행 — 신뢰 경계.",
+      "severity": "low",
+      "mitigation": "기존 deterministic provider 동작 유지(이번 작업은 저장·로드만). 실행 정책 변경 없음."
+    }
+  ],
+  "runs": [],
+  "created_at": "2026-06-05T03:30:00.000Z",
+  "updated_at": "2026-06-05T04:00:00.000Z",
+  "closed_at": "2026-06-05T04:00:00.000Z"
+}
