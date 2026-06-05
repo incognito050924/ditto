@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { commandProvider } from '~/acg/fitness/command-provider';
+import { computeDrift, loadAssuranceSnapshots } from '~/acg/fitness/drift';
 import { type FitnessContext, runFitness } from '~/acg/fitness/fitness-runner';
 import { compositeProvider } from '~/acg/fitness/injected-provider';
 import { FitnessFunctionStore } from '~/core/fitness-function-store';
@@ -129,6 +130,51 @@ export const fitnessCommand = defineCommand({
           if (failed > 0) process.exit(RUNTIME_ERROR_EXIT);
         } catch (err) {
           writeError(`fitness run failed: ${err instanceof Error ? err.message : String(err)}`);
+          process.exit(RUNTIME_ERROR_EXIT);
+        }
+      },
+    }),
+    drift: defineCommand({
+      meta: {
+        name: 'drift',
+        description:
+          'Aggregate AssuranceSnapshots across work items into a per-function SLOP trend (단계8)',
+      },
+      args: {
+        output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+      },
+      run: async ({ args }) => {
+        let format: ReturnType<typeof parseOutputFormat>;
+        try {
+          format = parseOutputFormat(args.output);
+        } catch (err) {
+          writeError(err instanceof Error ? err.message : String(err));
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        try {
+          const repoRoot = await resolveRepoRootForCreate();
+          const report = computeDrift(await loadAssuranceSnapshots(repoRoot));
+          if (format === 'json') {
+            writeJson(report);
+            return;
+          }
+          if (report.snapshots === 0) {
+            writeHuman('drift: no AssuranceSnapshots across work items yet (nothing to trend)');
+            return;
+          }
+          writeHuman(
+            `drift: ${report.functions.length} function(s) across ${report.snapshots} snapshot(s)`,
+          );
+          for (const f of report.functions) {
+            const v =
+              f.first_violations === null ? '—' : `${f.first_violations}→${f.last_violations}`;
+            writeHuman(
+              `  ${f.direction.padEnd(12)} ${f.function_id} (violations ${v}, +${f.cumulative_new_violations} new across changes, ${f.fail_count} fail)`,
+            );
+          }
+        } catch (err) {
+          writeError(`fitness drift failed: ${err instanceof Error ? err.message : String(err)}`);
           process.exit(RUNTIME_ERROR_EXIT);
         }
       },
