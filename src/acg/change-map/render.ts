@@ -6,8 +6,8 @@ import type { AcgReviewFile, AcgReviewGraph } from '~/schemas/acg-review-graph';
  * Change Map 텍스트 렌더러 (50-change-map §2.1 정본).
  *
  * read-only producer: ChangeContract(필수)·ImpactGraph(선택)·ReviewGraph(선택)을
- * §2.1b EBNF의 단일 change_node 텍스트로 그린다. 토큰은 스키마 enum과 정확히 일치하며,
- * Mermaid(§3)·ICL 자동연결은 범위 밖이다.
+ * §2.1b EBNF의 단일 change_node 텍스트로 그린다. 토큰은 스키마 enum과 정확히 일치한다.
+ * 텍스트가 정본이고, Mermaid 다이어그램(§3)은 같은 입력에서 파생한다(renderMermaid).
  */
 
 const RISK_BADGE = {
@@ -112,4 +112,62 @@ export function render(
   }
 
   return `${lines.join('\n')}\n`;
+}
+
+/** Mermaid 라벨 안전 처리: 따옴표는 작은따옴표로, 개행은 `<br/>`로(라벨 깨짐 방지). */
+function label(text: string): string {
+  return text.replaceAll('"', "'").replaceAll('\n', ' ');
+}
+
+/** 변경노드 외 노드 ID는 인덱스 기반(ref에 경로·점·슬래시가 섞여도 Mermaid id 안전). */
+function nodeId(prefix: string, index: number): string {
+  return `${prefix}${index}`;
+}
+
+const RISK_CLASSDEF: Record<Risk, string> = {
+  low: 'classDef low fill:#dcfce7,stroke:#16a34a;',
+  medium: 'classDef medium fill:#fef9c3,stroke:#ca8a04;',
+  high: 'classDef high fill:#fee2e2,stroke:#dc2626;',
+};
+
+/**
+ * Change Map Mermaid 렌더러 (50-change-map §3, 파생). render()와 같은 입력에서:
+ *   ◆ 변경 노드 = 위험색 중심 노드,
+ *   → impact(affected) = 실선 + `<kind> <증거뱃지>` 라벨,
+ *   ✕ forbid(forbidden_scope) = 점선(red) + forbid 스타일,
+ *   ⚠ unresolved = 점선(grey) + unresolved 스타일.
+ * 텍스트 정본과 불일치하면 텍스트가 이긴다(§3 주). 순수.
+ */
+export function renderMermaid(
+  contract: AcgChangeContract,
+  impact?: AcgImpactGraph,
+  review?: AcgReviewGraph,
+): string {
+  const risk = resolveRisk(contract, review);
+  const lines: string[] = ['graph LR'];
+  lines.push(`  C["◆ ${label(contract.work_item_id)}<br/>${risk}"]:::${risk}`);
+
+  contract.forbidden_scope.forEach((s, i) => {
+    const id = nodeId('F', i);
+    lines.push(`  C -.->|✕ forbid| ${id}["${label(s.ref)}"]:::forbid`);
+  });
+
+  if (impact) {
+    impact.affected_nodes.forEach((node, i) => {
+      const ref = nodeRef(node);
+      const id = nodeId('A', i);
+      lines.push(`  C -->|${node.kind} ${evidenceBadge(ref, review)}| ${id}["${label(ref)}"]`);
+    });
+    impact.unresolved.forEach((u, i) => {
+      const id = nodeId('U', i);
+      lines.push(`  C -.->|⚠ unresolved| ${id}["${label(`${u.kind}: ${u.path}`)}"]:::unresolved`);
+    });
+  }
+
+  lines.push('');
+  lines.push(`  ${RISK_CLASSDEF[risk]}`);
+  lines.push('  classDef forbid fill:#fee2e2,stroke:#dc2626,stroke-dasharray:4;');
+  lines.push('  classDef unresolved fill:#f3f4f6,stroke:#6b7280,stroke-dasharray:2;');
+
+  return `\`\`\`mermaid\n${lines.join('\n')}\n\`\`\`\n`;
 }

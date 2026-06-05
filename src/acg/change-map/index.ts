@@ -1,1 +1,1 @@
-export { render, summarize } from './render';
+export { render, renderMermaid, summarize } from './render';

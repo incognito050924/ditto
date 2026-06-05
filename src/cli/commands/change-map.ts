@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
-import { render, summarize } from '~/acg/change-map';
+import { render, renderMermaid, summarize } from '~/acg/change-map';
 import { AcgReviewStore } from '~/core/acg-review-store';
 import { ChangeContractStore } from '~/core/change-contract-store';
 import { readJson, resolveRepoRootForCreate } from '~/core/fs';
@@ -21,16 +21,24 @@ export const changeMapCommand = defineCommand({
   },
   args: {
     'work-item': { type: 'string', description: 'Work item id', required: true },
-    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+    output: {
+      type: 'string',
+      description: 'Output format: human|json|mermaid',
+      default: 'human',
+    },
   },
   run: async ({ args }) => {
-    let format: ReturnType<typeof parseOutputFormat>;
-    try {
-      format = parseOutputFormat(args.output);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
+    // mermaid는 텍스트 정본의 파생 다이어그램(§3) — human/json과 별도 분기.
+    const isMermaid = args.output === 'mermaid';
+    let format: ReturnType<typeof parseOutputFormat> = 'human';
+    if (!isMermaid) {
+      try {
+        format = parseOutputFormat(args.output);
+      } catch (err) {
+        writeError(err instanceof Error ? err.message : String(err));
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
     }
 
     const repoRoot = await resolveRepoRootForCreate();
@@ -59,7 +67,9 @@ export const changeMapCommand = defineCommand({
       ? await reviewStore.get(workItem)
       : undefined;
 
-    if (format === 'json') {
+    if (isMermaid) {
+      writeHuman(renderMermaid(contract, impact, review));
+    } else if (format === 'json') {
       writeJson(summarize(contract, impact, review));
     } else {
       writeHuman(render(contract, impact, review));
