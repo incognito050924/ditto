@@ -70,7 +70,7 @@ export const boundaryCommand = defineCommand({
         },
         language: {
           type: 'string',
-          description: 'CodeQL language: javascript|java (default javascript)',
+          description: 'CodeQL language: javascript|java|python (default javascript)',
         },
         'source-root': { type: 'string', description: 'Analysis source root (default <repo>/src)' },
         'build-command': {

@@ -23,8 +23,8 @@ describe('relationQueries — 언어별 템플릿 선택', () => {
   test('javascript는 여전히 js 템플릿', () => {
     expect(relationQueries('javascript').impact).toContain('import javascript');
   });
-  test('미등록 언어(python)는 명시적 throw', () => {
-    expect(() => relationQueries('python')).toThrow(/not bound for language 'python'/);
+  test('미등록 언어(ruby)는 명시적 throw', () => {
+    expect(() => relationQueries('ruby')).toThrow(/not bound for language 'ruby'/);
   });
 });
 

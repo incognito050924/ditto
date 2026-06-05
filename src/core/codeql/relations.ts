@@ -203,6 +203,68 @@ select p
 `;
 
 /**
+ * Impact(Python) — wi_260605py1 probe에서 합성 DB로 검증(호출 3+decl 1, decoy 제외).
+ * Python은 동적 타이핑이라 JS/Java의 getResolvedCallee/getMethod 같은 선언-동일성 해소가
+ * best-effort다 — 여기서는 AST 이름기반(Call.getFunc().Name.getId())으로 value 참조를 잡고
+ * 선언은 target 파일로 핀한다. 결과: 같은 이름의 함수가 '다른 파일'에 또 있으면 그 호출도
+ * 섞일 수 있는 한계(homonym; JS/Java보다 정밀도 낮음)를 감수한다. type kind는 Python에서
+ * 신뢰도가 낮아 생략(value+decl만). decoy(이름이 다른 함수)는 정확히 배제된다.
+ */
+export const IMPACT_QUERY_PY = `/**
+ * @name ditto impact python
+ * @id ditto/impact-relations-py
+ * @kind table
+ */
+import python
+
+predicate inTargetFile(File f) {
+  f.getRelativePath() = "{{FILE}}" or f.getRelativePath().matches("%/{{FILE}}")
+}
+
+from string p, int ln, string k
+where
+  (exists(Call call |
+     call.getFunc().(Name).getId() = "{{SYMBOL}}"
+     and p = call.getLocation().getFile().getRelativePath() and ln = call.getLocation().getStartLine()) and k = "value")
+  or (k = "decl" and exists(Function d |
+     d.getName() = "{{SYMBOL}}" and inTargetFile(d.getLocation().getFile())
+     and p = d.getLocation().getFile().getRelativePath() and ln = d.getLocation().getStartLine()))
+  or (k = "decl" and exists(Class d |
+     d.getName() = "{{SYMBOL}}" and inTargetFile(d.getLocation().getFile())
+     and p = d.getLocation().getFile().getRelativePath() and ln = d.getLocation().getStartLine()))
+select p, ln, k
+`;
+
+/** Boundary(Python) — import 엣지(ImportExpr → 해소된 source 모듈 파일). probe 검증. */
+export const EDGE_QUERY_PY = `/**
+ * @name ditto edges python
+ * @id ditto/edge-relations-py
+ * @kind table
+ */
+import python
+from ImportExpr ie, Module m, string fromPath, string target
+where fromPath = ie.getLocation().getFile().getRelativePath()
+  and ({{FILE_FILTER}})
+  and m.getName() = ie.getImportedModuleName()
+  and m.getFile().fromSource()
+  and target = m.getFile().getRelativePath()
+select fromPath, target
+`;
+
+/** Symbol 선언 위치(Python) — 이름이 SYMBOL인 function/class 선언이 든 파일. 동명이인 전부. */
+export const SYMBOL_DECL_QUERY_PY = `/**
+ * @name ditto symbol decl python
+ * @id ditto/symbol-decl-py
+ * @kind table
+ */
+import python
+from string p
+where exists(Function d | d.getName() = "{{SYMBOL}}" and p = d.getLocation().getFile().getRelativePath())
+  or exists(Class d | d.getName() = "{{SYMBOL}}" and p = d.getLocation().getFile().getRelativePath())
+select p
+`;
+
+/**
  * 한 언어 바인딩의 관계쿼리 3종. 결과 형식(impact: p,ln,k / edge: from,to /
  * symbol-decl: p)은 언어 무관이고, 쿼리 본문만 언어별로 다르다 — "바인딩이 분석기를
  * 꽂는다"(10-methodology §6)의 실현체. 새 언어 바인딩은 여기 한 항목만 추가한다.
@@ -220,6 +282,7 @@ export interface RelationQueryTemplates {
 export const RELATION_QUERIES: Partial<Record<CodeqlLanguage, RelationQueryTemplates>> = {
   javascript: { impact: IMPACT_QUERY_JS, edge: EDGE_QUERY_JS, symbolDecl: SYMBOL_DECL_QUERY_JS },
   java: { impact: IMPACT_QUERY_JAVA, edge: EDGE_QUERY_JAVA, symbolDecl: SYMBOL_DECL_QUERY_JAVA },
+  python: { impact: IMPACT_QUERY_PY, edge: EDGE_QUERY_PY, symbolDecl: SYMBOL_DECL_QUERY_PY },
 };
 
 /** 언어 바인딩 템플릿을 가져온다. 미등록이면 명시적 에러(빈 결과로 오판 금지). */

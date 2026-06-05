@@ -40,7 +40,7 @@ export const impactCommand = defineCommand({
     'source-root': { type: 'string', description: 'Analysis source root (default <repo>/src)' },
     language: {
       type: 'string',
-      description: 'CodeQL language: javascript|java (default javascript)',
+      description: 'CodeQL language: javascript|java|python (default javascript)',
     },
     'build-command': {
       type: 'string',
