@@ -52,6 +52,15 @@
           },
           "default": []
         },
+        "internal_packages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": [],
+          "description": "Internal module package/import prefixes (e.g. \"kr.co.ecoletree.boxwood\"). A statically unresolved dependency (NOT fromSource) whose package matches one of these is a sibling module absent from this single-module DB → recorded as ImpactGraph.unresolved{cross_repo}; non-matching prefixes are third-party (Spring/JDK) and ignored."
+        },
         "forbidden_dependencies": {
           "type": "array",
           "items": {

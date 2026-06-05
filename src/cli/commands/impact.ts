@@ -4,7 +4,13 @@ import { CodeqlImpactAnalyzer } from '~/acg/impact/codeql-analyzer';
 import { produceImpactGraph } from '~/acg/impact/impact-graph';
 import { codeqlCacheDir, makeRelationDeps } from '~/core/codeql/host-deps';
 import type { BuildMode, CodeqlLanguage } from '~/core/codeql/runner';
-import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
+import {
+  ensureDir,
+  readArchitectureSpec,
+  resolveRepoRootForCreate,
+  writeJson as writeJsonFile,
+} from '~/core/fs';
+import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import type { AcgImpactGraph } from '~/schemas/acg-impact-graph';
 import { acgImpactGraph } from '~/schemas/acg-impact-graph';
 import {
@@ -53,6 +59,11 @@ export const impactCommand = defineCommand({
       description: 'Diff touches a user-facing surface (triggers default-deny journey check)',
     },
     'journey-id': { type: 'string', description: 'JourneySpec.id when the surface is mapped' },
+    spec: {
+      type: 'string',
+      description:
+        'ArchitectureSpec (.yaml/.yml/.json) — its internal_packages drive cross_repo unresolved recording for sibling-module deps absent from a single-module DB',
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
@@ -74,6 +85,11 @@ export const impactCommand = defineCommand({
       // manual(selectBuildMode가 처리)로 두고, 아니면 Java는 none을 강제한다.
       const buildMode: BuildMode | undefined =
         !buildCommand && language === 'java' ? 'none' : undefined;
+      // ArchitectureSpec이 주어지면 internal_packages를 읽어 형제모듈(cross_repo) 식별 신호로
+      // 쓴다. 없으면 빈 목록 → 분석기가 cross_repo 수집을 건너뛴다(기존 동작 보존).
+      const internalPackages = args.spec
+        ? (await readArchitectureSpec(args.spec, acgArchitectureSpec)).internal_packages
+        : [];
       const analyzer = new CodeqlImpactAnalyzer(
         {
           symbol: args.symbol,
@@ -81,6 +97,7 @@ export const impactCommand = defineCommand({
           language,
           repoRoot,
           cacheDir: codeqlCacheDir(repoRoot, language),
+          internalPackages,
           ...(buildMode ? { buildMode } : {}),
           ...(buildCommand ? { buildCommand } : {}),
         },
@@ -108,6 +125,7 @@ export const impactCommand = defineCommand({
           affected: graph.affected_nodes.length,
           unresolved: graph.unresolved.length,
           journey_unknown: graph.unresolved.filter((u) => u.kind === 'journey_unknown').length,
+          cross_repo: graph.unresolved.filter((u) => u.kind === 'cross_repo').length,
         });
       } else {
         writeHuman(

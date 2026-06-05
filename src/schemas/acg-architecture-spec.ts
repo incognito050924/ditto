@@ -35,6 +35,15 @@ export const acgArchitectureSpec = z
       .default({})
       .describe('Layer name → allowed call targets'),
     public_surfaces: z.array(z.string().min(1)).default([]),
+    internal_packages: z
+      .array(z.string().min(1))
+      .default([])
+      .describe(
+        'Internal module package/import prefixes (e.g. "kr.co.ecoletree.boxwood"). A statically ' +
+          'unresolved dependency (NOT fromSource) whose package matches one of these is a sibling ' +
+          'module absent from this single-module DB → recorded as ImpactGraph.unresolved{cross_repo}; ' +
+          'non-matching prefixes are third-party (Spring/JDK) and ignored.',
+      ),
     forbidden_dependencies: z
       .array(
         z.object({ from: z.string().min(1), to: z.string().min(1), reason: z.string().min(1) }),

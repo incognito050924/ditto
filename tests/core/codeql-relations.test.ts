@@ -1,12 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { CodeqlEdgeAnalyzer } from '~/acg/boundary/codeql-edges';
 import { CodeqlImpactAnalyzer } from '~/acg/impact/codeql-analyzer';
+import { matchesInternalPrefix } from '~/acg/impact/codeql-analyzer';
 import {
   type RelationDeps,
   buildBqrsDecodeArgs,
   buildQueryRunArgs,
   parseCsvLine,
   parseCsvRows,
+  relationQueries,
   renderEdgeQuery,
   renderQuery,
 } from '~/core/codeql/relations';
@@ -119,6 +121,90 @@ describe('CodeqlImpactAnalyzer — CSV raw_kind → AcgAffectedNode 분류', () 
     expect(byKind('test').sort()).toEqual(['src/a.test.ts', 'src/b.spec.ts']);
     expect(byKind('direct_caller')).toEqual(['src/b.ts']);
     expect(byKind('external_surface')).toEqual(['src/lib.ts']);
+    expect(res.unresolved).toEqual([]);
+  });
+});
+
+describe('matchesInternalPrefix — 세그먼트 경계 매칭', () => {
+  test('정확 일치/세그먼트 하위(. 와 /)는 매칭, prefix만 겹치는 다른 토큰은 비매칭', () => {
+    const prefixes = ['kr.co.ecoletree.boxwood', '@myorg/shared'];
+    expect(matchesInternalPrefix('kr.co.ecoletree.boxwood', prefixes)).toBe(true); // 정확
+    expect(matchesInternalPrefix('kr.co.ecoletree.boxwood.domain', prefixes)).toBe(true); // 하위(.)
+    expect(matchesInternalPrefix('@myorg/shared/sub', prefixes)).toBe(true); // 하위(/)
+    expect(matchesInternalPrefix('kr.co.ecoletree.boxwoodX', prefixes)).toBe(false); // 경계 아님
+    expect(matchesInternalPrefix('org.springframework.stereotype', prefixes)).toBe(false); // 써드파티
+  });
+  test('빈 prefix 목록이면 항상 false', () => {
+    expect(matchesInternalPrefix('anything.at.all', [])).toBe(false);
+  });
+});
+
+describe('relationQueries.unresolved — 언어별 cross_repo 후보 쿼리', () => {
+  test('java/kotlin은 NOT fromSource RefType 패키지, python은 import python, js는 import javascript', () => {
+    expect(relationQueries('java').unresolved).toContain('not used.fromSource()');
+    expect(relationQueries('kotlin').unresolved).toContain('not used.fromSource()');
+    expect(relationQueries('python').unresolved).toContain('import python');
+    expect(relationQueries('javascript').unresolved).toContain(
+      'not exists(imp.getImportedModule())',
+    );
+  });
+});
+
+describe('CodeqlImpactAnalyzer — cross_repo unresolved (internal_packages prefix)', () => {
+  /** impact 쿼리(q-impact*)와 unresolved 쿼리(q-xrepo)에 서로 다른 CSV를 주입하는 mock. */
+  function twoQueryDeps(impactCsv: string, unresolvedCsv: string): RelationDeps {
+    return {
+      ...mockDeps(''),
+      readText: async (p) => {
+        if (!p.endsWith('.csv')) return '';
+        return p.includes('q-xrepo') ? unresolvedCsv : impactCsv;
+      },
+    };
+  }
+
+  test('internal_packages 매칭 후보만 cross_repo로, 써드파티는 무시·(path,pkg) 중복 제거', async () => {
+    const impactCsv = '"p","ln","k"\n"src/A.java",10,"value"';
+    const unresolvedCsv =
+      '"from","pkg"\n' +
+      '"src/A.java","kr.co.ecoletree.boxwood.domain"\n' + // 형제모듈 → cross_repo
+      '"src/A.java","kr.co.ecoletree.boxwood.domain"\n' + // 중복 → 1개
+      '"src/B.java","kr.co.ecoletree.boxwood.error"\n' + // 형제모듈 → cross_repo
+      '"src/A.java","org.springframework.stereotype"\n' + // 써드파티 → 무시
+      '"src/A.java","java.lang"'; // JDK → 무시
+    const analyzer = new CodeqlImpactAnalyzer(
+      {
+        symbol: 'foo',
+        declFile: 'src/A.java',
+        language: 'java',
+        repoRoot: '/r',
+        cacheDir: '/r/.cache',
+        internalPackages: ['kr.co.ecoletree.boxwood'],
+      },
+      twoQueryDeps(impactCsv, unresolvedCsv),
+    );
+    const res = await analyzer.analyze({ changeTarget: 'foo', sourceRoot: '/r' });
+    expect(res.unresolved.every((u) => u.kind === 'cross_repo')).toBe(true);
+    expect(res.unresolved.map((u) => u.path).sort()).toEqual(['src/A.java', 'src/B.java']);
+    expect(res.unresolved.find((u) => u.path === 'src/A.java')?.reason).toContain(
+      'kr.co.ecoletree.boxwood.domain',
+    );
+  });
+
+  test('internal_packages 미지정이면 unresolved 쿼리를 건너뛰고 빈 배열(기존 동작 보존)', async () => {
+    const analyzer = new CodeqlImpactAnalyzer(
+      {
+        symbol: 'foo',
+        declFile: 'src/A.java',
+        language: 'java',
+        repoRoot: '/r',
+        cacheDir: '/r/.cache',
+      },
+      twoQueryDeps(
+        '"p","ln","k"\n"src/A.java",10,"value"',
+        '"from","pkg"\n"src/A.java","kr.co.ecoletree.boxwood.x"',
+      ),
+    );
+    const res = await analyzer.analyze({ changeTarget: 'foo', sourceRoot: '/r' });
     expect(res.unresolved).toEqual([]);
   });
 });

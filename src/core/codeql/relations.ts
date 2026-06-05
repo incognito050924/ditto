@@ -252,6 +252,64 @@ where fromPath = ie.getLocation().getFile().getRelativePath()
 select fromPath, target
 `;
 
+/**
+ * Cross-repo unresolved(JS) — 해소되지 않은 import specifier(raw)를 (fromPath, specifier)로.
+ * 형제 패키지(workspace 내부 패키지)와 써드파티를 구분하는 신호는 소비처(분석기)의
+ * internal_packages prefix 매칭이 쥔다. 여기선 "해소 실패한 import"만 후보로 넘긴다.
+ */
+export const UNRESOLVED_QUERY_JS = `/**
+ * @name ditto unresolved js
+ * @id ditto/unresolved-relations
+ * @kind table
+ */
+import javascript
+from Import imp, string fromPath, string spec
+where fromPath = imp.getFile().getRelativePath()
+  and not exists(imp.getImportedModule())
+  and spec = imp.getImportedPath().getValue()
+select fromPath, spec
+`;
+
+/**
+ * Cross-repo unresolved(Java) — source에서 쓰지만 DB에 없는(NOT fromSource) RefType 참조를
+ * (fromPath, package)로. 형제모듈 JAR 타입(예: kr.co.ecoletree.boxwood.domain.Requester)이
+ * 단일모듈 DB에선 fromSource가 아니라 edge 쿼리에서 조용히 빠진다 — 그 손실을 여기서 후보로
+ * 표면화한다. java.lang/org.springframework 같은 써드파티도 같이 나오지만, cross_repo 판정은
+ * 분석기가 internal_packages prefix로 좁힌다(써드파티 무시). 결과 튜플은 QL set 의미로 자동
+ * 중복 제거되어 (파일 × 외부 패키지)로 제한된다.
+ */
+export const UNRESOLVED_QUERY_JAVA = `/**
+ * @name ditto unresolved java
+ * @id ditto/unresolved-relations-java
+ * @kind table
+ */
+import java
+from TypeAccess ta, RefType used, string fromPath, string pkg
+where fromPath = ta.getFile().getRelativePath()
+  and used = ta.getType()
+  and not used.fromSource()
+  and pkg = used.getPackage().getName()
+select fromPath, pkg
+`;
+
+/**
+ * Cross-repo unresolved(Python) — source 모듈로 해소되지 않는 import 대상 모듈명을
+ * (fromPath, moduleName)로. 형제 패키지(같은 모노레포의 다른 distribution)와 써드파티의
+ * 구분은 분석기의 internal_packages prefix가 쥔다.
+ */
+export const UNRESOLVED_QUERY_PY = `/**
+ * @name ditto unresolved python
+ * @id ditto/unresolved-relations-py
+ * @kind table
+ */
+import python
+from ImportExpr ie, string fromPath, string mod
+where fromPath = ie.getLocation().getFile().getRelativePath()
+  and mod = ie.getImportedModuleName()
+  and not exists(Module m | m.getName() = mod and m.getFile().fromSource())
+select fromPath, mod
+`;
+
 /** Symbol 선언 위치(Python) — 이름이 SYMBOL인 function/class 선언이 든 파일. 동명이인 전부. */
 export const SYMBOL_DECL_QUERY_PY = `/**
  * @name ditto symbol decl python
@@ -277,15 +335,37 @@ export interface RelationQueryTemplates {
   edge: string;
   /** `{{SYMBOL}}` 치환. 이름으로 선언 파일을 찾는다(forbidden_scope symbol kind). */
   symbolDecl: string;
+  /** 치환 없음. NOT fromSource인 import/type 참조 후보(fromPath, package/specifier). cross_repo 분류 입력. */
+  unresolved: string;
 }
 
 /** 언어 → 관계쿼리 템플릿. 미등록 언어는 바인딩 미구현(throw로 드러냄). */
 export const RELATION_QUERIES: Partial<Record<CodeqlLanguage, RelationQueryTemplates>> = {
-  javascript: { impact: IMPACT_QUERY_JS, edge: EDGE_QUERY_JS, symbolDecl: SYMBOL_DECL_QUERY_JS },
-  java: { impact: IMPACT_QUERY_JAVA, edge: EDGE_QUERY_JAVA, symbolDecl: SYMBOL_DECL_QUERY_JAVA },
+  javascript: {
+    impact: IMPACT_QUERY_JS,
+    edge: EDGE_QUERY_JS,
+    symbolDecl: SYMBOL_DECL_QUERY_JS,
+    unresolved: UNRESOLVED_QUERY_JS,
+  },
+  java: {
+    impact: IMPACT_QUERY_JAVA,
+    edge: EDGE_QUERY_JAVA,
+    symbolDecl: SYMBOL_DECL_QUERY_JAVA,
+    unresolved: UNRESOLVED_QUERY_JAVA,
+  },
   // Kotlin은 java(java-kotlin) 추출기로 분석되어 동일 Java AST/쿼리를 그대로 재사용한다.
-  kotlin: { impact: IMPACT_QUERY_JAVA, edge: EDGE_QUERY_JAVA, symbolDecl: SYMBOL_DECL_QUERY_JAVA },
-  python: { impact: IMPACT_QUERY_PY, edge: EDGE_QUERY_PY, symbolDecl: SYMBOL_DECL_QUERY_PY },
+  kotlin: {
+    impact: IMPACT_QUERY_JAVA,
+    edge: EDGE_QUERY_JAVA,
+    symbolDecl: SYMBOL_DECL_QUERY_JAVA,
+    unresolved: UNRESOLVED_QUERY_JAVA,
+  },
+  python: {
+    impact: IMPACT_QUERY_PY,
+    edge: EDGE_QUERY_PY,
+    symbolDecl: SYMBOL_DECL_QUERY_PY,
+    unresolved: UNRESOLVED_QUERY_PY,
+  },
 };
 
 /** 언어 바인딩 템플릿을 가져온다. 미등록이면 명시적 에러(빈 결과로 오판 금지). */

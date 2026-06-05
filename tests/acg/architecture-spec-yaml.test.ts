@@ -77,4 +77,13 @@ describe('parseArchitectureSpecText', () => {
     const parsed = parseArchitectureSpecText(JSON_TEXT, 'architecture.json');
     expect(acgArchitectureSpec.parse(parsed).layers.repository.can_call).toEqual([]);
   });
+
+  test('internal_packages — 미지정 시 기본 빈 배열, 지정 시 그대로 보존', () => {
+    expect(acgArchitectureSpec.parse(SPEC_OBJECT).internal_packages).toEqual([]);
+    const withInternal = acgArchitectureSpec.parse({
+      ...SPEC_OBJECT,
+      internal_packages: ['kr.co.ecoletree.boxwood'],
+    });
+    expect(withInternal.internal_packages).toEqual(['kr.co.ecoletree.boxwood']);
+  });
 });
