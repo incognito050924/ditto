@@ -1,0 +1,62 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260605cr1",
+  "title": "cross_repo unresolved emitter — 단일모듈 DB의 형제모듈 의존을 ImpactGraph.unresolved(cross_repo)로 기록",
+  "source_request": "wi_260605mm1 핸드오프 §3: cross_repo emitter 착수",
+  "goal": "단일모듈 CodeQL DB로 impact 분석 시 형제모듈(JAR) 타입 의존이 fromSource()에서 빠져 조용히 사라지는 것을, internal_packages prefix로 식별해 ImpactGraph.unresolved{kind:cross_repo}로 기록한다. 써드파티(Spring/JDK)는 cross_repo로 잡지 않는다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "acgArchitectureSpec에 internal_packages: string[] (default []) 추가 + JSON 스키마 갱신. 단위 테스트로 기본값/파싱 확인.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "src/schemas/acg-architecture-spec.ts: internal_packages z.array(z.string().min(1)).default([]). schemas/acg-architecture-spec.schema.json 갱신(bun run schemas:export)" },
+        { "kind": "command", "summary": "bun test architecture-spec-yaml.test.ts: 미지정→[], 지정→그대로 보존 (5 pass)" }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "relations.ts에 언어별 unresolved 쿼리(NOT fromSource인 type/import 참조 → (fromPath, pkg))를 RelationQueryTemplates.unresolved로 추가. CodeqlImpactAnalyzer가 internalPackages를 받아 prefix 매칭되는 후보만 cross_repo로 emit(써드파티 무시, 빈 internalPackages면 쿼리 건너뜀). mock CSV 단위 테스트.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "relations.ts: UNRESOLVED_QUERY_JAVA(TypeAccess→RefType not fromSource→getPackage().getName()), _PY(import python, 모듈 미해소), _JS(not exists getImportedModule, raw specifier). RELATION_QUERIES 4언어 unresolved 등록. codeql-analyzer.ts: matchesInternalPrefix(세그먼트 경계 ./ 매칭) + crossRepoUnresolved(prefix 필터, (path,pkg) dedup, 빈 prefix면 skip)" },
+        { "kind": "command", "summary": "bun test codeql-relations.test.ts: matchesInternalPrefix 경계매칭, relationQueries.unresolved 언어별, cross_repo 분류(매칭만·써드파티 무시·dedup), internalPackages 미지정→빈배열 (17 pass)" }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "impact CLI가 --spec(선택)으로 ArchitectureSpec을 읽어 internal_packages를 분석기에 전달. 단일모듈 DB + internal_packages로 impact 분석 시 형제모듈 타입이 cross_repo로 기록되고 써드파티는 안 잡힘. 멀티모듈 reactor DB에선 source로 해소돼 cross_repo 0.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "src/cli/commands/impact.ts: --spec 옵션 → readArchitectureSpec → internal_packages를 analyzer.internalPackages로 전달(없으면 []→skip). json 출력에 cross_repo 카운트 추가" },
+        { "kind": "command", "summary": "실 boxwood automation-engine DB(mvn -o compile 추적, java extractor): UNRESOLVED_QUERY_JAVA → NOT-fromSource 188 패키지 중 internal_packages=[kr.co.ecoletree.boxwood.domain]에 9개 매칭(...domain.runtime.processing 포함 — StructuredErrorInfo 패키지). org.springframework/java.* 무매칭. AC①✓ AC②✓" },
+        { "kind": "command", "summary": "합성 Java probe(통제 ground truth): 단일모듈(sibling=JAR, classpath)→com.sibling.domain cross_repo·java.util 무시; 멀티모듈(sibling=source)→fromSource→cross_repo 0. AC①②③ PROBE PASS" }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "전체 bun test·lint·build green. 기존 분석기 동작(internal_packages 미지정 시) 무변화.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "bun test 전체: 1071 pass / 3 skip / 0 fail. biome check clean. bun run build clean. 기존 impact 분류 테스트(internalPackages 미지정)는 unresolved [] 그대로." }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/schemas/acg-architecture-spec.ts",
+    "schemas/acg-architecture-spec.schema.json",
+    "src/core/codeql/relations.ts",
+    "src/acg/impact/codeql-analyzer.ts",
+    "src/cli/commands/impact.ts",
+    "tests/acg/architecture-spec-yaml.test.ts",
+    "tests/core/codeql-relations.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-05T06:00:00.000Z",
+  "updated_at": "2026-06-05T06:10:00.000Z",
+  "closed_at": "2026-06-05T06:10:00.000Z"
+}

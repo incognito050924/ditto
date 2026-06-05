@@ -1,0 +1,48 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260605cr1",
+  "declared_by": "main",
+  "declared_at": "2026-06-05T06:10:00.000Z",
+  "summary": "cross_repo unresolved emitter. ArchitectureSpec.internal_packages(prefix 카탈로그) 신규 필드 + JSON 스키마 갱신. relations.ts에 언어별 UNRESOLVED 쿼리(NOT fromSource인 type/import 참조 → (fromPath, package/specifier); Java RefType.getPackage, Python 미해소 모듈, JS raw specifier) + RELATION_QUERIES.unresolved 4언어 등록(kotlin=java 재사용). CodeqlImpactAnalyzer가 internalPackages를 받아 unresolved 쿼리를 돌리고 matchesInternalPrefix(세그먼트 경계 매칭)로 형제모듈만 cross_repo로 표면화(써드파티 무시, (path,pkg) dedup, 빈 prefix면 쿼리 자체 skip→기존 동작 보존). impact CLI에 --spec 추가(readArchitectureSpec→internal_packages 전달). 검증: 합성 Java probe로 단일/멀티모듈 통제 ground truth, 실 boxwood automation-engine DB로 domain-model JAR 9패키지 cross_repo·Spring/JDK 무시 실증.",
+  "changed_files": [
+    "src/schemas/acg-architecture-spec.ts",
+    "schemas/acg-architecture-spec.schema.json",
+    "src/core/codeql/relations.ts",
+    "src/acg/impact/codeql-analyzer.ts",
+    "src/cli/commands/impact.ts",
+    "tests/acg/architecture-spec-yaml.test.ts",
+    "tests/core/codeql-relations.test.ts"
+  ],
+  "acceptance": [
+    { "criterion_id": "ac-1", "verdict": "pass", "evidence": [
+      { "kind": "file", "summary": "acg-architecture-spec.ts internal_packages default []; schema.json 갱신" },
+      { "kind": "command", "summary": "bun test architecture-spec-yaml: 기본값/보존 (5 pass)" }
+    ] },
+    { "criterion_id": "ac-2", "verdict": "pass", "evidence": [
+      { "kind": "file", "summary": "relations.ts UNRESOLVED_QUERY_{JAVA,PY,JS} + RELATION_QUERIES.unresolved; codeql-analyzer.ts matchesInternalPrefix + crossRepoUnresolved" },
+      { "kind": "command", "summary": "bun test codeql-relations: 경계매칭·언어별쿼리·cross_repo분류·dedup·skip (17 pass)" }
+    ] },
+    { "criterion_id": "ac-3", "verdict": "pass", "evidence": [
+      { "kind": "file", "summary": "impact.ts --spec→readArchitectureSpec→internalPackages; cross_repo 카운트 출력" },
+      { "kind": "command", "summary": "실 boxwood automation-engine DB: internal_packages=[kr.co.ecoletree.boxwood.domain] → cross_repo 9패키지(domain.runtime.processing 등 StructuredErrorInfo 소속), org.springframework/java.* 무시" },
+      { "kind": "command", "summary": "합성 Java probe: 단일모듈(JAR)→cross_repo·JDK무시, 멀티모듈(source)→0. PROBE PASS" }
+    ] },
+    { "criterion_id": "ac-4", "verdict": "pass", "evidence": [
+      { "kind": "command", "summary": "bun test 전체 1071 pass/3 skip/0 fail; biome clean; build clean" }
+    ] }
+  ],
+  "verifications": [
+    { "command": "bun test (전체)", "exit_code": 0 },
+    { "command": "bun run biome check src tests scripts", "exit_code": 0 },
+    { "command": "bun run build", "exit_code": 0 },
+    { "command": "합성 Java probe (real codeql, 단일/멀티모듈)", "exit_code": 0 },
+    { "command": "boxwood automation-engine probe (real codeql, mvn -o compile 추적)", "exit_code": 0 }
+  ],
+  "unverified": [],
+  "remaining_risks": [
+    "internal_packages는 ArchitectureSpec에 선언돼야 작동(미선언 시 cross_repo 미수집 — 형제/써드파티 구분 신호가 없으므로 의도된 fail-safe). prefix가 너무 넓으면(예: kr.co.ecoletree.boxwood) automation-engine이 의존하는 모든 boxwood 사이드카 JAR(runtime/bpmn/portal 등)이 cross_repo로 묶임 — 의도면 OK, 도메인 모델만 추적하려면 좁은 prefix 권장.",
+    "Java/Kotlin은 JAR가 classpath에 있어야 RefType.getPackage()가 패키지를 안다(빌드 추적 필요). buildless(none) 추출이나 JAR 누락 시 해당 타입은 미해소조차 안 돼 누락 가능. Python/JS는 import 문 텍스트라 빌드 무관.",
+    "unresolved 쿼리는 NOT-fromSource 전체를 후보로 내므로(QL set으로 (file,pkg) 자동 dedup) 대형 DB에서 행 수가 큼(boxwood 1373행/188패키지) — 분류는 TS prefix 필터라 부담 없으나 매우 큰 모노레포면 쿼리 시간 고려."
+  ],
+  "final_verdict": "pass"
+}
