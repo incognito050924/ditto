@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { commandProvider } from '~/acg/fitness/command-provider';
 import { type FitnessContext, runFitness } from '~/acg/fitness/fitness-runner';
+import { compositeProvider } from '~/acg/fitness/injected-provider';
 import { FitnessFunctionStore } from '~/core/fitness-function-store';
 import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
 import { acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
@@ -45,6 +46,11 @@ export const fitnessCommand = defineCommand({
           default: false,
           description:
             'Risk tier is known (from ImpactGraph). Default false → fail-closed escalate',
+        },
+        verdicts: {
+          type: 'string',
+          description:
+            'Path to an agent-produced acg.fitness-verdict.v1 file. Routes llm_judged/executed functions to the injected provider; deterministic still runs commands',
         },
         output: { type: 'string', description: 'Output format: human|json', default: 'human' },
       },
@@ -92,7 +98,11 @@ export const fitnessCommand = defineCommand({
             riskKnown: args['risk-known'],
             producedAt: new Date().toISOString(),
           };
-          const snapshot = await runFitness(functions, ctx, commandProvider(repoRoot));
+          const verdictsPath = typeof args.verdicts === 'string' ? args.verdicts : undefined;
+          const provider = verdictsPath
+            ? compositeProvider(repoRoot, verdictsPath)
+            : commandProvider(repoRoot);
+          const snapshot = await runFitness(functions, ctx, provider);
           const path = join(
             repoRoot,
             '.ditto',

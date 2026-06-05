@@ -24,6 +24,7 @@ export * from './acg-architecture-spec';
 export * from './acg-semantic-compatibility';
 export * from './acg-review-graph';
 export * from './acg-fitness-function';
+export * from './acg-fitness-verdict';
 export * from './acg-assurance-snapshot';
 export * from './acg-journey-spec';
 export * from './acg-journey-run';
