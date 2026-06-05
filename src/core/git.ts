@@ -48,29 +48,6 @@ export function listChangedFiles(
   }
 }
 
-/** Files changed in the working tree vs a git ref (committed + uncommitted). */
-export function listChangedFilesVsRef(cwd: string, ref: string): string[] {
-  try {
-    const out = execFileSync('git', ['diff', '--name-only', ref, '--'], { cwd, encoding: 'utf8' });
-    return out
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((p) => p.length > 0)
-      .sort();
-  } catch {
-    return [];
-  }
-}
-
-/** File content at a git ref, or null when the path did not exist there. */
-export function gitShowFile(cwd: string, ref: string, path: string): string | null {
-  try {
-    return execFileSync('git', ['show', `${ref}:${path}`], { cwd, encoding: 'utf8' });
-  } catch {
-    return null;
-  }
-}
-
 export function captureGitDiff(cwd: string): string {
   try {
     return execFileSync('git', ['diff', '--binary', 'HEAD'], { cwd, encoding: 'utf8' });
