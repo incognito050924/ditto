@@ -1,3 +1,5 @@
+> ⛔ SUPERSEDED → 최신 핸드오프는 `.ditto/work-items/wi_260605dg2/handoff.md`. cross_repo emitter(§3)는 wi_260605cr1로 완료됨. 아래는 이력용.
+
 # Handoff — ACG 후속 (cross_repo emitter 구체화 + 세션 상태, 2026-06-05)
 
 > 최신 thread 핸드오프. 이전(`wi_260604ql9/handoff.md`)을 대체. 기준 커밋 **main = fd90c5f**.
