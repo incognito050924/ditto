@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { CodeqlEdgeAnalyzer } from '~/acg/boundary/codeql-edges';
 import { CodeqlImpactAnalyzer } from '~/acg/impact/codeql-analyzer';
-import { matchesInternalPrefix } from '~/acg/impact/codeql-analyzer';
+import { matchesInternalGlob } from '~/acg/impact/codeql-analyzer';
 import {
   type RelationDeps,
   buildBqrsDecodeArgs,
@@ -125,17 +125,23 @@ describe('CodeqlImpactAnalyzer — CSV raw_kind → AcgAffectedNode 분류', () 
   });
 });
 
-describe('matchesInternalPrefix — 세그먼트 경계 매칭', () => {
-  test('정확 일치/세그먼트 하위(. 와 /)는 매칭, prefix만 겹치는 다른 토큰은 비매칭', () => {
-    const prefixes = ['kr.co.ecoletree.boxwood', '@myorg/shared'];
-    expect(matchesInternalPrefix('kr.co.ecoletree.boxwood', prefixes)).toBe(true); // 정확
-    expect(matchesInternalPrefix('kr.co.ecoletree.boxwood.domain', prefixes)).toBe(true); // 하위(.)
-    expect(matchesInternalPrefix('@myorg/shared/sub', prefixes)).toBe(true); // 하위(/)
-    expect(matchesInternalPrefix('kr.co.ecoletree.boxwoodX', prefixes)).toBe(false); // 경계 아님
-    expect(matchesInternalPrefix('org.springframework.stereotype', prefixes)).toBe(false); // 써드파티
+describe('matchesInternalGlob — glob 엔트리 매칭(path 엔트리는 무시)', () => {
+  test('glob `domain.**`는 하위 패키지 매칭, 정확 glob은 그 패키지만, 써드파티 비매칭', () => {
+    const entries = [
+      { type: 'glob' as const, value: 'kr.co.ecoletree.boxwood.domain.**' },
+      { type: 'glob' as const, value: 'kr.co.ecoletree.boxwood.domain' },
+      { type: 'path' as const, value: '**/libs/*.jar' }, // 분류에 영향 없어야 함
+    ];
+    expect(matchesInternalGlob('kr.co.ecoletree.boxwood.domain', entries)).toBe(true); // 정확
+    expect(matchesInternalGlob('kr.co.ecoletree.boxwood.domain.runtime.processing', entries)).toBe(
+      true,
+    ); // **
+    expect(matchesInternalGlob('kr.co.ecoletree.boxwoodX', entries)).toBe(false); // 앵커 — 비매칭
+    expect(matchesInternalGlob('org.springframework.stereotype', entries)).toBe(false); // 써드파티
   });
-  test('빈 prefix 목록이면 항상 false', () => {
-    expect(matchesInternalPrefix('anything.at.all', [])).toBe(false);
+  test('glob 엔트리 없으면(빈 목록·path만) 항상 false', () => {
+    expect(matchesInternalGlob('anything.at.all', [])).toBe(false);
+    expect(matchesInternalGlob('x.y', [{ type: 'path', value: 'libs/*.jar' }])).toBe(false);
   });
 });
 
@@ -178,7 +184,7 @@ describe('CodeqlImpactAnalyzer — cross_repo unresolved (internal_packages pref
         language: 'java',
         repoRoot: '/r',
         cacheDir: '/r/.cache',
-        internalPackages: ['kr.co.ecoletree.boxwood'],
+        internalPackages: [{ type: 'glob', value: 'kr.co.ecoletree.boxwood.**' }],
       },
       twoQueryDeps(impactCsv, unresolvedCsv),
     );

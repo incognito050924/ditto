@@ -78,12 +78,22 @@ describe('parseArchitectureSpecText', () => {
     expect(acgArchitectureSpec.parse(parsed).layers.repository.can_call).toEqual([]);
   });
 
-  test('internal_packages — 미지정 시 기본 빈 배열, 지정 시 그대로 보존', () => {
+  test('internal_packages — 미지정 시 기본 빈 배열, 타입드 엔트리(glob/path) 보존', () => {
     expect(acgArchitectureSpec.parse(SPEC_OBJECT).internal_packages).toEqual([]);
-    const withInternal = acgArchitectureSpec.parse({
-      ...SPEC_OBJECT,
-      internal_packages: ['kr.co.ecoletree.boxwood'],
-    });
-    expect(withInternal.internal_packages).toEqual(['kr.co.ecoletree.boxwood']);
+    const entries = [
+      { type: 'glob', value: 'kr.co.ecoletree.boxwood.domain.**' },
+      { type: 'path', value: '**/libs/*.jar' },
+    ];
+    const withInternal = acgArchitectureSpec.parse({ ...SPEC_OBJECT, internal_packages: entries });
+    expect(withInternal.internal_packages).toEqual(entries);
+  });
+
+  test('internal_packages — 잘못된 type은 거부', () => {
+    expect(() =>
+      acgArchitectureSpec.parse({
+        ...SPEC_OBJECT,
+        internal_packages: [{ type: 'prefix', value: 'x' }],
+      }),
+    ).toThrow();
   });
 });

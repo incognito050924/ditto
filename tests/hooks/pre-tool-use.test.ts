@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ChangeContractStore } from '~/core/change-contract-store';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { preToolUseHandler } from '~/hooks/pre-tool-use';
 import { type HookInput, KILL_SWITCH, runHook } from '~/hooks/runtime';
+import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import { acgChangeContract } from '~/schemas/acg-change-contract';
 
 const REPO = '/tmp/ditto-repo';
@@ -55,6 +56,78 @@ describe('preToolUseHandler — ac-1 wrapper guarantees (via runHook)', () => {
     expect((await call({ tool_name: 'Read', tool_input: {} })).exitCode).toBe(0);
     expect((await call({})).exitCode).toBe(0);
     expect((await call({ tool_name: 'Bash', tool_input: {} })).exitCode).toBe(0);
+  });
+});
+
+describe('preToolUseHandler — JVM CodeQL internal_packages guard', () => {
+  async function repoWith(opts: { jar?: boolean; internal?: object[] }): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-ipguard-'));
+    if (opts.jar) {
+      await mkdir(join(dir, 'libs'), { recursive: true });
+      await writeFile(join(dir, 'libs', 'domain.jar'), '');
+    }
+    if (opts.internal) {
+      await mkdir(join(dir, '.ditto'), { recursive: true });
+      const spec = acgArchitectureSpec.parse({
+        schema_version: '0.1.0',
+        kind: 'acg.architecture-spec.v1',
+        produced_by: 'user',
+        produced_at: '2026-06-05T06:30:00.000Z',
+        internal_packages: opts.internal,
+      });
+      await writeFile(join(dir, '.ditto', 'architecture-spec.json'), JSON.stringify(spec));
+    }
+    return dir;
+  }
+
+  test('java + 로컬 JAR + 선언 없음 → block (exit 2)', async () => {
+    const dir = await repoWith({ jar: true });
+    try {
+      const out = await bash('ditto impact --work-item w --file F --symbol s --language java', dir);
+      expect(out.exitCode).toBe(2);
+      expect(out.stderr).toContain('internal_packages');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('java + 로컬 JAR + glob/path 선언(커버) → allow (exit 0)', async () => {
+    const dir = await repoWith({
+      jar: true,
+      internal: [
+        { type: 'glob', value: 'kr.co.ecoletree.boxwood.domain.**' },
+        { type: 'path', value: 'libs/*.jar' },
+      ],
+    });
+    try {
+      const out = await bash('ditto impact --work-item w --file F --symbol s --language java', dir);
+      expect(out.exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('java + 로컬 JAR 없음 + 선언 없음 → allow (warn은 CLI가 처리, 훅은 block만)', async () => {
+    const dir = await repoWith({});
+    try {
+      const out = await bash('ditto impact --work-item w --file F --symbol s --language java', dir);
+      expect(out.exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('non-JVM(javascript)은 JAR 있어도 allow', async () => {
+    const dir = await repoWith({ jar: true });
+    try {
+      const out = await bash(
+        'ditto impact --work-item w --file F --symbol s --language javascript',
+        dir,
+      );
+      expect(out.exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

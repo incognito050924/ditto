@@ -1,4 +1,5 @@
 import { isAbsolute, relative, resolve } from 'node:path';
+import { parseJvmCodeqlCommand, runInternalPackagesGuard } from '~/acg/internal-packages';
 import { matchForbiddenScope } from '~/acg/scope/resolve';
 import { ChangeContractStore } from '~/core/change-contract-store';
 import { readArchitectureSpec } from '~/core/fs';
@@ -311,6 +312,24 @@ export const preToolUseHandler: HookHandler = async (input: HookInput) => {
     for (const dest of bashWriteTargets(command)) {
       if (isOutsideRepo(repoRoot, dest)) {
         return block('scope-out', `write outside repo (${dest})`);
+      }
+    }
+
+    // (e) JVM CodeQL cross_repo guard — a `ditto impact|boundary --language java|kotlin`
+    // run on a single-module DB silently drops sibling-module (JAR) impact unless
+    // internal_packages is declared. Block (only) when local JARs exist with a
+    // declaration gap, so the agent declares it before the expensive CodeQL build.
+    const jvm = parseJvmCodeqlCommand(command);
+    if (jvm) {
+      const spec = await loadArchSpec(repoRoot);
+      const sourceRoot = jvm.sourceRoot ? resolve(repoRoot, jvm.sourceRoot) : repoRoot;
+      const guard = await runInternalPackagesGuard({
+        language: 'java',
+        entries: spec?.internal_packages ?? [],
+        sourceRoot,
+      });
+      if (guard.decision === 'block') {
+        return block('internal-packages', guard.reason);
       }
     }
 

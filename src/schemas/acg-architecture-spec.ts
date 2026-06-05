@@ -27,6 +27,18 @@ export const acgConventions = z
   })
   .describe('Style/quality consistency policy — deterministic enforcement substrate (§1.1(1))');
 
+export const acgInternalPackage = z
+  .object({
+    type: z.enum(['glob', 'path']),
+    value: z.string().min(1),
+  })
+  .describe(
+    'Internal sibling-module descriptor — `glob`: package-name glob for cross_repo classification; ' +
+      '`path`: repo-relative glob locating the local sibling artifact (JAR) for the JVM guard',
+  );
+
+export type AcgInternalPackage = z.infer<typeof acgInternalPackage>;
+
 export const acgArchitectureSpec = z
   .object({
     ...acgCatalogEnvelope('acg.architecture-spec.v1'),
@@ -36,13 +48,16 @@ export const acgArchitectureSpec = z
       .describe('Layer name → allowed call targets'),
     public_surfaces: z.array(z.string().min(1)).default([]),
     internal_packages: z
-      .array(z.string().min(1))
+      .array(acgInternalPackage)
       .default([])
       .describe(
-        'Internal module package/import prefixes (e.g. "kr.co.ecoletree.boxwood"). A statically ' +
-          'unresolved dependency (NOT fromSource) whose package matches one of these is a sibling ' +
-          'module absent from this single-module DB → recorded as ImpactGraph.unresolved{cross_repo}; ' +
-          'non-matching prefixes are third-party (Spring/JDK) and ignored.',
+        'Internal sibling-module descriptors. `glob` entries are package-name globs (e.g. ' +
+          '"kr.co.ecoletree.boxwood.domain.**"): a statically unresolved dep (NOT fromSource) whose ' +
+          'package matches one is a sibling module absent from this single-module DB → recorded as ' +
+          'ImpactGraph.unresolved{cross_repo}; non-matching packages are third-party (Spring/JDK) and ' +
+          'ignored. `path` entries are repo-relative globs locating the local sibling artifacts ' +
+          '(e.g. "**/libs/*.jar"): the JVM guard blocks when such a JAR exists but the declaration ' +
+          'has a gap (no glob, or a JAR not covered by a path entry).',
       ),
     forbidden_dependencies: z
       .array(

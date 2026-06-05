@@ -55,11 +55,29 @@
         "internal_packages": {
           "type": "array",
           "items": {
-            "type": "string",
-            "minLength": 1
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "glob",
+                  "path"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "additionalProperties": false,
+            "description": "Internal sibling-module descriptor — `glob`: package-name glob for cross_repo classification; `path`: repo-relative glob locating the local sibling artifact (JAR) for the JVM guard"
           },
           "default": [],
-          "description": "Internal module package/import prefixes (e.g. \"kr.co.ecoletree.boxwood\"). A statically unresolved dependency (NOT fromSource) whose package matches one of these is a sibling module absent from this single-module DB → recorded as ImpactGraph.unresolved{cross_repo}; non-matching prefixes are third-party (Spring/JDK) and ignored."
+          "description": "Internal sibling-module descriptors. `glob` entries are package-name globs (e.g. \"kr.co.ecoletree.boxwood.domain.**\"): a statically unresolved dep (NOT fromSource) whose package matches one is a sibling module absent from this single-module DB → recorded as ImpactGraph.unresolved{cross_repo}; non-matching packages are third-party (Spring/JDK) and ignored. `path` entries are repo-relative globs locating the local sibling artifacts (e.g. \"**/libs/*.jar\"): the JVM guard blocks when such a JAR exists but the declaration has a gap (no glob, or a JAR not covered by a path entry)."
         },
         "forbidden_dependencies": {
           "type": "array",

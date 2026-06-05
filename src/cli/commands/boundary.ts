@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { type BoundaryViolation, checkBoundary } from '~/acg/boundary/boundary';
 import { CodeqlEdgeAnalyzer } from '~/acg/boundary/codeql-edges';
+import { runInternalPackagesGuard } from '~/acg/internal-packages';
 import { AcgReviewStore } from '~/core/acg-review-store';
 import { codeqlCacheDir, makeRelationDeps } from '~/core/codeql/host-deps';
 import type { BuildMode, CodeqlLanguage } from '~/core/codeql/runner';
@@ -108,6 +109,22 @@ export const boundaryCommand = defineCommand({
             .map((s) => s.trim())
             .filter((s) => s.length > 0);
           const language = (args.language ?? 'javascript') as CodeqlLanguage;
+          const sourceRoot = args['source-root'] ?? join(repoRoot, 'src');
+          // JVM 가드: 로컬 JAR이 있는데 internal_packages 선언에 누락이 있으면 차단(형제모듈
+          // 경계/영향이 침묵 손실되지 않게), 그 외 미선언은 경고 후 진행.
+          const guard = await runInternalPackagesGuard({
+            language,
+            entries: spec.internal_packages,
+            sourceRoot,
+          });
+          if (guard.decision === 'block') {
+            writeError(`internal_packages guard: ${guard.reason}`);
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          if (guard.decision === 'warn') {
+            writeError(`internal_packages guard (warning): ${guard.reason}`);
+          }
           const buildCommand = args['build-command'];
           const buildMode: BuildMode | undefined =
             !buildCommand && language === 'java' ? 'none' : undefined;
@@ -121,10 +138,7 @@ export const boundaryCommand = defineCommand({
             },
             makeRelationDeps(),
           );
-          const edges = await edgeAnalyzer.edges({
-            changedFiles,
-            sourceRoot: args['source-root'] ?? join(repoRoot, 'src'),
-          });
+          const edges = await edgeAnalyzer.edges({ changedFiles, sourceRoot });
           const violations = checkBoundary(spec, edges);
 
           if (violations.length > 0 && !args['no-ledger']) {

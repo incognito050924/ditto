@@ -2,15 +2,10 @@ import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { CodeqlImpactAnalyzer } from '~/acg/impact/codeql-analyzer';
 import { produceImpactGraph } from '~/acg/impact/impact-graph';
+import { loadInternalPackages, runInternalPackagesGuard } from '~/acg/internal-packages';
 import { codeqlCacheDir, makeRelationDeps } from '~/core/codeql/host-deps';
 import type { BuildMode, CodeqlLanguage } from '~/core/codeql/runner';
-import {
-  ensureDir,
-  readArchitectureSpec,
-  resolveRepoRootForCreate,
-  writeJson as writeJsonFile,
-} from '~/core/fs';
-import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
+import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
 import type { AcgImpactGraph } from '~/schemas/acg-impact-graph';
 import { acgImpactGraph } from '~/schemas/acg-impact-graph';
 import {
@@ -85,11 +80,26 @@ export const impactCommand = defineCommand({
       // manual(selectBuildMode가 처리)로 두고, 아니면 Java는 none을 강제한다.
       const buildMode: BuildMode | undefined =
         !buildCommand && language === 'java' ? 'none' : undefined;
-      // ArchitectureSpec이 주어지면 internal_packages를 읽어 형제모듈(cross_repo) 식별 신호로
-      // 쓴다. 없으면 빈 목록 → 분석기가 cross_repo 수집을 건너뛴다(기존 동작 보존).
-      const internalPackages = args.spec
-        ? (await readArchitectureSpec(args.spec, acgArchitectureSpec)).internal_packages
-        : [];
+      // ArchitectureSpec.internal_packages를 형제모듈(cross_repo) 식별 신호로 쓴다. --spec이
+      // 있으면 그 경로, 없으면 기본 .ditto/architecture-spec.json을 optional 로드(부재면 빈 목록
+      // → cross_repo 수집/가드 비활성, 기존 동작 보존).
+      const internalPackages = await loadInternalPackages(repoRoot, args.spec);
+
+      // JVM 가드: 로컬 JAR이 있는데 선언에 누락이 있으면 차단(형제모듈 impact 침묵 손실 방지),
+      // 그 외 미선언은 경고 후 진행.
+      const guard = await runInternalPackagesGuard({
+        language,
+        entries: internalPackages,
+        sourceRoot,
+      });
+      if (guard.decision === 'block') {
+        writeError(`internal_packages guard: ${guard.reason}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      if (guard.decision === 'warn') {
+        writeError(`internal_packages guard (warning): ${guard.reason}`);
+      }
       const analyzer = new CodeqlImpactAnalyzer(
         {
           symbol: args.symbol,
