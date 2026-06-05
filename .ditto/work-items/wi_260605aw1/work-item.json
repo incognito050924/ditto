@@ -1,0 +1,26 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260605aw1",
+  "title": "semantic scan 자동배선 (O2/O8) — 설계 확정",
+  "source_request": "B 후속 중 autowiring 트랙 시작. 휴면 파이프라인(sv1 게이트 + de1 scan)을 거버넌스 루프에 자동 발동.",
+  "goal": "에이전트 수동 호출 없이 semantic 생산이 자동 발동해 게이트가 살아나게 한다. 비용(scan=CodeQL DB 2회 빌드)·생명주기 통합·advisory vs blocking이 코드보다 결정 선행이라, /ditto:dialectic으로 설계를 먼저 확정한다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "dialectic 3역으로 autowiring 설계 쟁점(어디서/언제 발동, 비용 회피, base ref, advisory vs blocking, opt-in 여부)에 verdict+합의안을 reviews/dialectic-1.json/md로 영속화.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "artifact", "summary": "reviews/dialectic-1.json — verdict=revise. 초안(Stop 훅 배선)이 OBJ-8(ADR-0001 위반)·OBJ-3(advisory 모순)으로 기계적 반증. admissible 8건 전부 수용. Opponent=Codex." },
+        { "kind": "file", "summary": "reviews/dialectic-1.md — 재설계 5쟁점 결론·required_edits 10개·열린질문 3개." }
+      ]
+    }
+  ],
+  "status": "in_progress",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-05T11:30:00.000Z",
+  "updated_at": "2026-06-05T11:30:00.000Z"
+}
