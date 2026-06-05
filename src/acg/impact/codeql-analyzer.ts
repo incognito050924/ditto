@@ -20,11 +20,17 @@ import {
   renderQuery,
   runRelationQuery,
 } from '~/core/codeql/relations';
-import type { CodeqlLanguage } from '~/core/codeql/runner';
+import type { BuildMode, CodeqlLanguage } from '~/core/codeql/runner';
 import type { AnalyzerResult, ImpactAnalyzer } from './impact-graph';
 
-/** 테스트 파일 판정(.test/.spec, js·ts 공통). ts-analyzer와 동일 의미. */
-function isTestFile(path: string): boolean {
+/**
+ * 테스트 파일 판정. JS/TS는 .test/.spec 접미사, Java는 src/test 경로 또는 *Test/*Tests/*IT.
+ * 분류 의미(test vs direct_caller)는 ts-analyzer와 동일하게 유지.
+ */
+function isTestFile(path: string, language: CodeqlLanguage): boolean {
+  if (language === 'java') {
+    return path.includes('/test/') || /(Test|Tests|IT)\.java$/.test(path);
+  }
   return /\.(test|spec)\.[cm]?[jt]sx?$/.test(path);
 }
 
@@ -39,6 +45,10 @@ export interface CodeqlImpactTarget {
   repoRoot: string;
   /** commit-sha + 언어로 키된 캐시 디렉터리(절대). DB·쿼리 작업물이 여기 산다. */
   cacheDir: string;
+  /** build-mode 강제(컴파일 언어 buildless 등). 미지정이면 언어 기본. */
+  buildMode?: BuildMode;
+  /** manual build-mode 빌드 명령(컴파일 언어). */
+  buildCommand?: string;
   /** codeql 실행 바이너리(기본 'codeql'). */
   binary?: string;
 }
@@ -62,6 +72,8 @@ export class CodeqlImpactAnalyzer implements ImpactAnalyzer {
           this.target.symbol,
           this.target.declFile,
         ),
+        ...(this.target.buildMode ? { buildMode: this.target.buildMode } : {}),
+        ...(this.target.buildCommand ? { buildCommand: this.target.buildCommand } : {}),
         ...(this.target.binary ? { binary: this.target.binary } : {}),
       },
       this.deps,
@@ -75,7 +87,7 @@ export class CodeqlImpactAnalyzer implements ImpactAnalyzer {
       let kind: 'type_contract' | 'test' | 'direct_caller' | 'external_surface';
       if (raw === 'type') kind = 'type_contract';
       else if (raw === 'decl') kind = 'external_surface';
-      else kind = isTestFile(path) ? 'test' : 'direct_caller'; // import | value
+      else kind = isTestFile(path, this.target.language) ? 'test' : 'direct_caller'; // import | value
       affected.push({
         kind,
         path,

@@ -3,6 +3,7 @@ import { defineCommand } from 'citty';
 import { CodeqlImpactAnalyzer } from '~/acg/impact/codeql-analyzer';
 import { produceImpactGraph } from '~/acg/impact/impact-graph';
 import { codeqlCacheDir, makeRelationDeps } from '~/core/codeql/host-deps';
+import type { BuildMode, CodeqlLanguage } from '~/core/codeql/runner';
 import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
 import type { AcgImpactGraph } from '~/schemas/acg-impact-graph';
 import { acgImpactGraph } from '~/schemas/acg-impact-graph';
@@ -37,6 +38,14 @@ export const impactCommand = defineCommand({
       description: 'rename|signature|behavior|delete|add|move (default signature)',
     },
     'source-root': { type: 'string', description: 'Analysis source root (default <repo>/src)' },
+    language: {
+      type: 'string',
+      description: 'CodeQL language: javascript|java (default javascript)',
+    },
+    'build-command': {
+      type: 'string',
+      description: 'Build command for manual build-mode (compiled langs; else buildless)',
+    },
     'user-exposed': {
       type: 'boolean',
       default: false,
@@ -58,13 +67,21 @@ export const impactCommand = defineCommand({
     try {
       const repoRoot = await resolveRepoRootForCreate();
       const sourceRoot = args['source-root'] ?? join(repoRoot, 'src');
+      const language = (args.language ?? 'javascript') as CodeqlLanguage;
+      const buildCommand = args['build-command'];
+      // 관계추출은 컴파일 언어도 buildless(none)로 충분(probe 실증). 빌드명령이 주어지면
+      // manual(selectBuildMode가 처리)로 두고, 아니면 Java는 none을 강제한다.
+      const buildMode: BuildMode | undefined =
+        !buildCommand && language === 'java' ? 'none' : undefined;
       const analyzer = new CodeqlImpactAnalyzer(
         {
           symbol: args.symbol,
           declFile: args.file,
-          language: 'javascript',
+          language,
           repoRoot,
-          cacheDir: codeqlCacheDir(repoRoot, 'javascript'),
+          cacheDir: codeqlCacheDir(repoRoot, language),
+          ...(buildMode ? { buildMode } : {}),
+          ...(buildCommand ? { buildCommand } : {}),
         },
         makeRelationDeps(),
       );

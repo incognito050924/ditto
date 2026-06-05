@@ -11,7 +11,13 @@
  * 확인된 것을 상수로 들고 온다(번들 경로 문제 회피 — dist에 .ql을 싣지 않는다).
  */
 import { dirname, join } from 'node:path';
-import { type CodeqlDeps, type CodeqlLanguage, buildCreateArgs, selectBuildMode } from './runner';
+import {
+  type BuildMode,
+  type CodeqlDeps,
+  type CodeqlLanguage,
+  buildCreateArgs,
+  selectBuildMode,
+} from './runner';
 
 /** symbol 식별자 화이트리스트(쿼리 주입 방지). JS/TS 식별자 문법만 허용. */
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -125,6 +131,78 @@ select p
 `;
 
 /**
+ * Impact(Java) — JS impact의 Java 바인딩. 동일한 (p,ln,k) 형식·동일한 정밀도 기법
+ * (선언 동일성: 선언은 target 파일로 제한, 호출은 `getMethod()`로 해소된 것만 → decoy 배제,
+ * wi_260605bxw probe에서 extractRequesterName 7/7 정확·동명이인 947 배제 실증). JS의 `import`
+ * kind는 빼고 type 참조로 흡수한다 — Java는 미사용 import가 흔해(TypeAccess가 실사용만 잡음).
+ *   value = 호출 참조(resolved callee가 target 선언 메서드)
+ *   type  = 타입 위치 참조(TypeAccess가 target 선언 타입)
+ *   decl  = 선언 위치(method/class/interface, target 파일) → external_surface로 매핑
+ */
+export const IMPACT_QUERY_JAVA = `/**
+ * @name ditto impact java
+ * @id ditto/impact-relations-java
+ * @kind table
+ */
+import java
+
+predicate inTargetFile(File f) {
+  f.getRelativePath() = "{{FILE}}" or f.getRelativePath().matches("%/{{FILE}}")
+}
+
+from string p, int ln, string k
+where
+  (exists(MethodCall mc, Method m |
+     m.getName() = "{{SYMBOL}}" and inTargetFile(m.getFile()) and mc.getMethod() = m
+     and p = mc.getFile().getRelativePath() and ln = mc.getLocation().getStartLine()) and k = "value")
+  or (exists(TypeAccess t, RefType rt |
+     rt.getName() = "{{SYMBOL}}" and inTargetFile(rt.getFile()) and t.getType() = rt
+     and p = t.getFile().getRelativePath() and ln = t.getLocation().getStartLine()) and k = "type")
+  or (k = "decl" and (
+      exists(Method d | d.getName() = "{{SYMBOL}}" and inTargetFile(d.getFile()) and p = d.getFile().getRelativePath() and ln = d.getLocation().getStartLine())
+      or exists(RefType d | d.getName() = "{{SYMBOL}}" and d.fromSource() and inTargetFile(d.getFile()) and p = d.getFile().getRelativePath() and ln = d.getLocation().getStartLine())
+  ))
+select p, ln, k
+`;
+
+/**
+ * Boundary(Java) — cross-file 타입 의존 edge를 usage 기반으로(TypeAccess → 선언 파일).
+ * import-문이 아니라 실사용을 보므로 미사용 import를 배제한다(probe 실증: ActivityType
+ * unused import 제외). 형제모듈 JAR 의존은 `fromSource()`에서 빠진다 → 단일모듈 DB면
+ * cross-module은 안 잡히고(멀티모듈 reactor DB면 잡힘), 이는 ImpactGraph.unresolved
+ * cross_repo가 받는 스펙 예견 케이스.
+ */
+export const EDGE_QUERY_JAVA = `/**
+ * @name ditto edges java
+ * @id ditto/edge-relations-java
+ * @kind table
+ */
+import java
+from TypeAccess ta, RefType used, string fromPath, string target
+where fromPath = ta.getFile().getRelativePath()
+  and ({{FILE_FILTER}})
+  and used = ta.getType()
+  and used.fromSource()
+  and used.getFile() != ta.getFile()
+  and target = used.getFile().getRelativePath()
+select fromPath, target
+`;
+
+/** Symbol 선언 위치(Java) — 이름이 SYMBOL인 method/type 선언이 든 파일. 동명이인 전부(과보호). */
+export const SYMBOL_DECL_QUERY_JAVA = `/**
+ * @name ditto symbol decl java
+ * @id ditto/symbol-decl-java
+ * @kind table
+ */
+import java
+from string p
+where
+  exists(Method d | d.getName() = "{{SYMBOL}}" and p = d.getFile().getRelativePath())
+  or exists(RefType d | d.getName() = "{{SYMBOL}}" and d.fromSource() and p = d.getFile().getRelativePath())
+select p
+`;
+
+/**
  * 한 언어 바인딩의 관계쿼리 3종. 결과 형식(impact: p,ln,k / edge: from,to /
  * symbol-decl: p)은 언어 무관이고, 쿼리 본문만 언어별로 다르다 — "바인딩이 분석기를
  * 꽂는다"(10-methodology §6)의 실현체. 새 언어 바인딩은 여기 한 항목만 추가한다.
@@ -141,6 +219,7 @@ export interface RelationQueryTemplates {
 /** 언어 → 관계쿼리 템플릿. 미등록 언어는 바인딩 미구현(throw로 드러냄). */
 export const RELATION_QUERIES: Partial<Record<CodeqlLanguage, RelationQueryTemplates>> = {
   javascript: { impact: IMPACT_QUERY_JS, edge: EDGE_QUERY_JS, symbolDecl: SYMBOL_DECL_QUERY_JS },
+  java: { impact: IMPACT_QUERY_JAVA, edge: EDGE_QUERY_JAVA, symbolDecl: SYMBOL_DECL_QUERY_JAVA },
 };
 
 /** 언어 바인딩 템플릿을 가져온다. 미등록이면 명시적 에러(빈 결과로 오판 금지). */
@@ -230,6 +309,11 @@ export interface RunRelationInput {
   /** 렌더 완료된 쿼리 소스(symbol/filter 치환 끝난 상태). */
   query: string;
   buildCommand?: string;
+  /**
+   * build-mode 강제. 미지정이면 selectBuildMode(언어/빌드명령)로 자동. 관계추출은
+   * 컴파일 언어도 buildless(none)로 충분(probe 실증)하므로 Java 바인딩은 'none'을 넣는다.
+   */
+  buildMode?: BuildMode;
   binary?: string;
 }
 
@@ -250,7 +334,7 @@ export async function runRelationQuery(
   // 1. DB — commit-sha 캐시 디렉터리가 없으면 생성. create는 부모 디렉터리가 선재해야 한다.
   if (!(await deps.dirExists(input.dbPath))) {
     await deps.ensureDir(dirname(input.dbPath));
-    const buildMode = selectBuildMode(input.language, input.buildCommand);
+    const buildMode = input.buildMode ?? selectBuildMode(input.language, input.buildCommand);
     const create = deps.spawn({
       binary,
       args: buildCreateArgs({
@@ -325,6 +409,7 @@ export interface SymbolDeclInput {
   language: CodeqlLanguage;
   dbPath: string;
   workDir: string;
+  buildMode?: BuildMode;
   binary?: string;
 }
 
