@@ -6,6 +6,7 @@ import { autopilotCommand } from './commands/autopilot';
 import { boundaryCommand } from './commands/boundary';
 import { bridgeCommand } from './commands/bridge';
 import { changeContractCommand } from './commands/change-contract';
+import { changeMapCommand } from './commands/change-map';
 import { codeqlCommand } from './commands/codeql';
 import { contextCommand } from './commands/context';
 import { deepInterviewCommand } from './commands/deep-interview';
@@ -40,6 +41,7 @@ const main = defineCommand({
     boundary: boundaryCommand,
     architecture: architectureCommand,
     'change-contract': changeContractCommand,
+    'change-map': changeMapCommand,
   },
 });
 
