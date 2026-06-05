@@ -1,6 +1,9 @@
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { applySemanticVerdict, buildSemanticSeed } from '~/acg/semantic/semantic-produce';
+import { scanSignatureChanges } from '~/acg/semantic/signature-codeql';
+import { makeRelationDeps } from '~/core/codeql/host-deps';
+import type { CodeqlLanguage } from '~/core/codeql/runner';
 import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
 import { acgSemanticCompatibility } from '~/schemas/acg-semantic-compatibility';
 import {
@@ -16,12 +19,14 @@ import {
  * `ditto semantic` — 단계6 SemanticCompatibility producer (OBJ-43, wi_260605sv1).
  *
  * The consumer gate (stop.ts semanticForcesContinuation) was already wired by
- * wi_260605sg1; this is the missing producer. Two subcommands split the work the
- * dialectic separated:
- *   - `detect`: STATIC layer. Explicit signature pair in → an `unverified` seed.
- *     The seed alone forces continuation, so a signature change cannot silently
- *     clear. MVP is one pair per work item (diff auto-extraction is a follow-up,
- *     wi-semantic-diff-extractor); a second pair fail-closes rather than clobber.
+ * wi_260605sg1; this is the missing producer. Three subcommands split the work
+ * the dialectic separated:
+ *   - `scan`: STATIC layer, automated (O7, wi_260605de1). Diffs exported
+ *     signatures between a base ref and the working tree via CodeQL (ADR-0006
+ *     fact extraction, not a language compiler) and auto-seeds the single-change
+ *     case. Zero is a no-op; multiple fail-close (one pair per artifact — O1).
+ *   - `detect`: STATIC layer, manual. Explicit signature pair in → an `unverified`
+ *     seed (the escape hatch when scan can't infer the pair, e.g. an unbound language).
  *   - `verdict`: RESOLVER layer. An agent runs the meaning judgment (ditto never
  *     calls an LLM — ADR-0001) and injects it, clearing the deadlock the seed
  *     would otherwise leave (dialectic-1 O3). yes requires a pinned model_version.
@@ -176,13 +181,122 @@ const verdictCommand = defineCommand({
   },
 });
 
+const scanCommand = defineCommand({
+  meta: {
+    name: 'scan',
+    description:
+      'Auto-detect changed exported signatures vs a git ref via CodeQL and seed (O7, ADR-0006)',
+  },
+  args: {
+    'work-item': { type: 'string', description: 'Work item id', required: true },
+    base: {
+      type: 'string',
+      description: 'Git ref to diff against (e.g. HEAD, a sha)',
+      required: true,
+    },
+    language: {
+      type: 'string',
+      description: 'CodeQL language (default javascript). Unbound languages fail loud.',
+    },
+    'source-root': { type: 'string', description: 'Source root relative to repo (default src)' },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    try {
+      const repoRoot = await resolveRepoRootForCreate();
+      const language = (args.language ?? 'javascript') as CodeqlLanguage;
+      // 컴파일 언어의 관계추출은 buildless로 충분(relations probe 실증) — Java는 none 강제.
+      const buildMode = language === 'java' ? ('none' as const) : undefined;
+      const changes = await scanSignatureChanges(
+        {
+          repoRoot,
+          baseRef: args.base,
+          language,
+          sourceRootRel: args['source-root'] ?? 'src',
+          ...(buildMode ? { buildMode } : {}),
+        },
+        makeRelationDeps(),
+      );
+
+      if (changes.length === 0) {
+        if (format === 'json') {
+          writeJson({
+            work_item_id: args['work-item'],
+            base: args.base,
+            changes: 0,
+            seeded: false,
+          });
+        } else {
+          writeHuman(`semantic scan: no exported signature changes vs ${args.base}`);
+        }
+        return;
+      }
+      // Multi-pair fail-closed: the artifact holds ONE change pair (dialectic-1 O1).
+      if (changes.length > 1) {
+        const list = changes.map((c) => `  - ${c.file}: ${c.before} → ${c.after}`).join('\n');
+        writeError(
+          `semantic scan: ${changes.length} exported signature changes vs ${args.base}; MVP seeds one pair per work item. Narrow the change or seed one explicitly with \`ditto semantic detect\`.\n${list}`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+
+      const only = changes[0];
+      const path = semanticPath(repoRoot, args['work-item']);
+      if (await Bun.file(path).exists()) {
+        writeError(
+          `semantic scan: ${args['work-item']} already has semantic-compatibility.json. Remove it or resolve it with \`ditto semantic verdict\` first.`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const seed = buildSemanticSeed({
+        workItemId: args['work-item'],
+        file: only.file,
+        symbol: only.symbol,
+        before: only.before,
+        after: only.after,
+        producedAt: new Date().toISOString(),
+      });
+      await ensureDir(join(repoRoot, '.ditto', 'work-items', args['work-item']));
+      await writeJsonFile(path, acgSemanticCompatibility, seed);
+
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args['work-item'],
+          base: args.base,
+          changes: 1,
+          seeded: true,
+          symbol: only.symbol,
+        });
+      } else {
+        writeHuman(
+          `semantic scan: ${only.file} ${only.symbol} "${only.before}" → "${only.after}" seeded (unverified) → semantic-compatibility.json`,
+        );
+      }
+    } catch (err) {
+      writeError(`semantic scan failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const semanticCommand = defineCommand({
   meta: {
     name: 'semantic',
     description:
-      'SemanticCompatibility producer — detect (seed) / verdict (resolve) (단계6, OBJ-43)',
+      'SemanticCompatibility producer — scan/detect (seed) / verdict (resolve) (단계6, OBJ-43)',
   },
   subCommands: {
+    scan: scanCommand,
     detect: detectCommand,
     verdict: verdictCommand,
   },

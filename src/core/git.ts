@@ -48,6 +48,40 @@ export function listChangedFiles(
   }
 }
 
+/** Resolve a ref to its 40-char sha, or throw when it does not resolve. */
+export function gitRevParse(cwd: string, ref: string): string {
+  return execFileSync('git', ['rev-parse', ref], { cwd, encoding: 'utf8' }).trim();
+}
+
+/** Is the working tree clean (no staged/unstaged/untracked changes)? */
+export function isWorkingTreeClean(cwd: string): boolean {
+  try {
+    return execFileSync('git', ['status', '--porcelain'], { cwd, encoding: 'utf8' }).trim() === '';
+  } catch {
+    return false;
+  }
+}
+
+/** Add a detached worktree at `ref` under `path` (for analyzing a past state). */
+export function addDetachedWorktree(cwd: string, path: string, ref: string): void {
+  execFileSync('git', ['worktree', 'add', '--detach', '--force', path, ref], {
+    cwd,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+}
+
+/** Remove a worktree previously added (best effort, force). */
+export function removeWorktree(cwd: string, path: string): void {
+  try {
+    execFileSync('git', ['worktree', 'remove', '--force', path], {
+      cwd,
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+  } catch {
+    // best effort — a leftover worktree dir is harmless scratch
+  }
+}
+
 export function captureGitDiff(cwd: string): string {
   try {
     return execFileSync('git', ['diff', '--binary', 'HEAD'], { cwd, encoding: 'utf8' });

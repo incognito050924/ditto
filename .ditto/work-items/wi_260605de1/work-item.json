@@ -1,0 +1,71 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260605de1",
+  "title": "semantic diff-extractor (O7) — CodeQL 기반 export 시그니처 변경 자동추출 → 자동 seed",
+  "source_request": "B의 분리 후속 diff-extractor 트랙. 1차 TS-AST 구현이 ADR-0006 위반이라 revert 후 CodeQL로 재구현.",
+  "goal": "wi_260605sv1 MVP의 '명시입력 단일 pair만' 한계를 ADR-0006 정합 방식으로 제거한다. CodeQL 사실추출(D3)로 base ref/after 두 시점의 export 시그니처를 추출·diff해, 단일 변경이면 semantic-compatibility.json 자동 seed(unverified), 다중 fail-closed(O1), 0 no-op. 다언어: 언어별 쿼리 바인딩 + 미바인딩 언어 fail-loud(비-TS에서 조용히 false-clean 하던 1차 버그의 근본 교정).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-0",
+      "statement": "CodeQL이 소스 시그니처를 복원 가능한가(핵심 가정) probe로 실증.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "probe(/tmp/cq-sig-probe, codeql 2.25.5): JS DB에서 getUser→'string'/'User | null', add(arrow)→'number,number'/'number', map(generic)→'T,(t:T)=>U'/'U', noArgs→''/'void', untyped→'?,?'/'number', hidden(비export) 제외. exportsAs로 export 판정." }
+      ]
+    },
+    {
+      "id": "ac-1",
+      "statement": "순수: signatureQuery(language)는 javascript 바인딩 반환, 미바인딩 언어는 throw(fail-loud). formatSignature/rowsToSignatureMap/diffSignatureMaps — rows(path,name,params,ret)→정규화맵→상이 심볼만 SignatureChange. 단위테스트.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "src/acg/semantic/signature-codeql.ts: SIGNATURE_QUERY_JS + signatureQuery(fail-loud) + formatSignature/rowsToSignatureMap/diffSignatureMaps." },
+        { "kind": "command", "summary": "bun test tests/acg/signature-codeql.test.ts: 9 pass(fail-loud ruby throw, format, file::symbol 키, diff changed-only/deleted 제외)." }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "ditto semantic scan --work-item --base <ref> [--language]: base ref worktree DB(sha캐시)/after worktree DB의 export 시그니처 diff → 단일=자동 seed(detect와 동일 산출물), 0=no-op, 다중=fail-closed exit65. 미바인딩 언어 fail-loud. cli 등록.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "scanSignatureChanges(signature-codeql.ts): base=worktree+sha캐시 DB, after=fresh DB(미커밋 반영) diff. src/cli/commands/semantic.ts scanCommand(단일seed/0no-op/다중fail-closed) + git.ts worktree 헬퍼." },
+        { "kind": "command", "summary": "bun run build clean(215 modules), lint clean. cli/index.ts semantic 등록." }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "실 CodeQL e2e(CODEQL_E2E 게이트): 실 git repo에서 시그니처 변경 → scan이 자동 seed. 순수부는 CLI 없이, 추출부는 실 CodeQL로 검증.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "CODEQL_E2E=1 bun test tests/acg/signature-codeql-e2e.test.ts: 2 pass — 미커밋 시그니처 변경 'getUser(string): User | null'→'getUser(string): User' 정확 탐지, body-only 변경은 0(무오탐). 실 codeql 2.25.5, before=worktree DB·after=fresh DB." }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "전체 bun test·lint·build green, ADR-0006 정합(src에 typescript 런타임 import 0), 무회귀.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "bun test 1154 pass/5 skip/0 fail. biome clean. build clean. src에 typescript import 0(CodeQL 사실추출만, ADR-0006 정합). e2e는 CODEQL_E2E 미설정 시 skip." }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/acg/semantic/signature-codeql.ts",
+    "src/cli/commands/semantic.ts",
+    "src/core/git.ts",
+    "tests/acg/signature-codeql.test.ts",
+    "tests/acg/signature-codeql-e2e.test.ts"
+  ],
+  "risks": [
+    { "description": "정규화 시그니처는 파라미터 '타입'만(이름 제외) — CodeQL JS가 그렇게 줌. 호환성 판정엔 타입이 정본이라 의도된 동작(이름 변경은 시그니처 변경 아님).", "severity": "low" },
+    { "description": "다언어: javascript 바인딩만 구현. java/kotlin/python은 signatureQuery에서 fail-loud throw(조용한 false-clean 아님). 각 언어 시그니처 쿼리는 후속 바인딩.", "severity": "medium" },
+    { "description": "scan은 CodeQL DB를 base(worktree)·after 2회 빌드 → 비용 큼(opt-in). after는 미커밋 반영 위해 매번 fresh(캐시 안 함), base는 sha 캐시. .ditto/cache는 gitignore.", "severity": "low" },
+    { "description": "type param 선언목록(<T,U>)은 시그니처 텍스트에 미포함(CodeQL이 파라미터/반환만 줌). 파라미터·반환 타입 변경은 잡고, 순수 type-param 리네임은 못 잡음. 실용상 미미.", "severity": "low" }
+  ],
+  "runs": [],
+  "created_at": "2026-06-05T10:30:00.000Z",
+  "updated_at": "2026-06-05T11:00:00.000Z",
+  "closed_at": "2026-06-05T11:00:00.000Z"
+}
