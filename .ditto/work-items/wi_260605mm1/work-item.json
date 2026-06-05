@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260605mm1",
+  "title": "multi-module reactor DB — 능력 확인 + cross_repo emitter 연기 결정 (codeql 트리오 3/3)",
+  "source_request": "백로그 codeql 트리오(직렬) 3번: multi-module-db",
+  "goal": "멀티모듈 reactor DB로 cross-module 의존을 source로 잡는 능력이 신규 코드 없이 이미 존재함을 확인·문서화하고, 유일한 신규 기능인 cross_repo unresolved emitter는 설계 필요로 다음 세션에 연기한다(사용자 결정).",
+  "acceptance_criteria": [
+    { "id": "ac-1", "statement": "멀티모듈 reactor DB가 신규 코드 없이 동작함 확인: buildCreateArgs가 임의 source-root 수용 + impact/boundary CLI가 --source-root 노출 → --source-root=<모듈 상위>면 cross-module 의존이 source로 해소(probe wi_260605bxg 실증, 엣지 10→12).", "verdict": "pass", "evidence": [] },
+    { "id": "ac-2", "statement": "cross_repo unresolved emitter는 별도 신규 기능(내부 패키지 prefix 신호 필요)으로 다음 세션에 연기. 핸드오프에 구체 스펙 적재.", "verdict": "pass", "evidence": [] }
+  ],
+  "status": "done",
+  "closed_at": "2026-06-05T06:30:00.000Z",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-05T06:30:00.000Z",
+  "updated_at": "2026-06-05T06:30:00.000Z"
+}

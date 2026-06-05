@@ -1,3 +1,5 @@
+> **⚠️ 대체됨(2026-06-05):** 최신 thread 핸드오프는 `.ditto/work-items/wi_260605mm1/handoff.md`(main fd90c5f, 다음 작업=cross_repo emitter). 아래는 배경.
+
 # Handoff — ACG 거버넌스 후속 (다른 PC 이어받기, 2026-06-04)
 
 > 이 파일이 최신 thread 핸드오프다. 이전 핸드오프 `.ditto/work-items/wi_260603hzx/handoff.md`를 **대체**한다(거기 0~5장은 여전히 유효한 배경; 달라진 점만 아래에 적는다).
