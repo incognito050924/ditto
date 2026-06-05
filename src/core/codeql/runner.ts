@@ -19,6 +19,7 @@ export type CodeqlLanguage =
   | 'python'
   | 'ruby'
   | 'java'
+  | 'kotlin'
   | 'csharp'
   | 'go'
   | 'cpp'
@@ -28,7 +29,17 @@ export type CodeqlLanguage =
 
 export type BuildMode = 'none' | 'autobuild' | 'manual';
 
-/** 해석/소스 언어는 빌드 없이 추출된다. 컴파일 언어는 추출에 빌드가 필요. */
+/**
+ * 우리 언어 라벨 → CodeQL 추출기 언어. Kotlin은 CodeQL의 'java'(java-kotlin) 추출기로
+ * 분석된다(전용 추출기 없음). 그래서 라벨은 'kotlin'으로 두되 codeql `--language=`와
+ * qlpack 의존은 'java'로 매핑한다. 라벨을 분리하는 이유: Kotlin은 buildless가 빈 추출을
+ * 내므로(false-clean) NO_BUILD_LANGUAGES에서 빠져 반드시 빌드(autobuild/manual)되어야 한다.
+ */
+export function codeqlExtractorLanguage(language: CodeqlLanguage): CodeqlLanguage {
+  return language === 'kotlin' ? 'java' : language;
+}
+
+/** 해석/소스 언어는 빌드 없이 추출된다. 컴파일 언어(java/kotlin 등)는 추출에 빌드가 필요. */
 const NO_BUILD_LANGUAGES: ReadonlySet<CodeqlLanguage> = new Set([
   'javascript',
   'python',
@@ -62,7 +73,7 @@ export function buildCreateArgs(input: CreateArgsInput): string[] {
     'database',
     'create',
     input.dbPath,
-    `--language=${input.language}`,
+    `--language=${codeqlExtractorLanguage(input.language)}`,
     `--source-root=${input.sourceRoot}`,
     '--overwrite',
   ];

@@ -31,6 +31,9 @@ function isTestFile(path: string, language: CodeqlLanguage): boolean {
   if (language === 'java') {
     return path.includes('/test/') || /(Test|Tests|IT)\.java$/.test(path);
   }
+  if (language === 'kotlin') {
+    return path.includes('/test/') || /(Test|Tests|IT)\.kt$/.test(path);
+  }
   if (language === 'python') {
     return /(^|\/)(test_[^/]+|[^/]+_test)\.py$/.test(path) || path.includes('/tests/');
   }

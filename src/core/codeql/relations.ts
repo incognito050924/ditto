@@ -16,6 +16,7 @@ import {
   type CodeqlDeps,
   type CodeqlLanguage,
   buildCreateArgs,
+  codeqlExtractorLanguage,
   selectBuildMode,
 } from './runner';
 
@@ -282,6 +283,8 @@ export interface RelationQueryTemplates {
 export const RELATION_QUERIES: Partial<Record<CodeqlLanguage, RelationQueryTemplates>> = {
   javascript: { impact: IMPACT_QUERY_JS, edge: EDGE_QUERY_JS, symbolDecl: SYMBOL_DECL_QUERY_JS },
   java: { impact: IMPACT_QUERY_JAVA, edge: EDGE_QUERY_JAVA, symbolDecl: SYMBOL_DECL_QUERY_JAVA },
+  // Kotlin은 java(java-kotlin) 추출기로 분석되어 동일 Java AST/쿼리를 그대로 재사용한다.
+  kotlin: { impact: IMPACT_QUERY_JAVA, edge: EDGE_QUERY_JAVA, symbolDecl: SYMBOL_DECL_QUERY_JAVA },
   python: { impact: IMPACT_QUERY_PY, edge: EDGE_QUERY_PY, symbolDecl: SYMBOL_DECL_QUERY_PY },
 };
 
@@ -297,9 +300,9 @@ export function relationQueries(language: CodeqlLanguage): RelationQueryTemplate
   return q;
 }
 
-/** 언어별 표준 라이브러리 팩(번들 내장; pack install은 no-op). */
+/** 언어별 표준 라이브러리 팩(번들 내장; pack install은 no-op). kotlin→java-all 매핑. */
 function qlpackYml(language: CodeqlLanguage): string {
-  return `name: ditto/acg-relations\nversion: 0.0.1\ndependencies:\n  codeql/${language}-all: "*"\n`;
+  return `name: ditto/acg-relations\nversion: 0.0.1\ndependencies:\n  codeql/${codeqlExtractorLanguage(language)}-all: "*"\n`;
 }
 
 /** `codeql query run ...` 인자(순수). */
