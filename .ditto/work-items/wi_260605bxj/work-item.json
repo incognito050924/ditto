@@ -1,0 +1,49 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260605bxj",
+  "title": "leak#1 정식 바인딩 — relations 쿼리 언어 템플릿화 + Java 분석 (impact/boundary)",
+  "source_request": "boxwood probe가 진단한 leak#1(relations.ts 쿼리 JS 하드코딩) 수정 = automation-engine Java를 ditto가 실제로 분석하도록 정식 바인딩",
+  "goal": "src/core/codeql/relations.ts의 JS 전용 관계쿼리(impact/edge/symbol-decl)를 언어별 템플릿 레지스트리로 분리하고, probe에서 검증한 Java QL 템플릿을 추가하며, impact/boundary 분석기·CLI가 language를 받아 Java를 first-class로 분석하게 한다. JS 동작은 불변(Tidy First: 구조 먼저).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "구조적: relations 쿼리 3종이 언어별 템플릿 레지스트리로 분리되고 impact/edge/symbol-decl 선택이 language로 이뤄짐. javascript 경로 동작·기존 테스트 전부 불변(green).",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "Java 템플릿(impact: resolved-callee+선언파일 핀 value/type/decl, edge: usage TypeAccess, symbol-decl)이 추가되고 renderQuery/renderEdgeQuery가 java로 올바른 쿼리를 방출. 단위 테스트로 검증.",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "언어별 후처리: isTestFile(Java=src/test 또는 *Test.java)·edge 경로 정규화(.java strip)가 language로 분기. CLI impact/boundary가 --language(+컴파일언어 build-mode) 받아 Java 분석 수행.",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "실 end-to-end: ditto impact --language java가 automation-engine의 extractRequesterName에 대해 probe와 동일(caller 6+decl)을 산출. ditto boundary도 Java 엣지 산출. 전체 테스트 회귀 0·biome clean. boxwood read-only.",
+      "verdict": "pass",
+      "evidence": []
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/codeql/relations.ts",
+    "src/acg/impact/codeql-analyzer.ts",
+    "src/acg/boundary/codeql-edges.ts",
+    "src/cli/commands/impact.ts",
+    "src/cli/commands/boundary.ts",
+    "tests/acg/codeql-java-binding.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-05T02:30:00.000Z",
+  "updated_at": "2026-06-05T03:00:00.000Z",
+  "closed_at": "2026-06-05T03:00:00.000Z"
+}
