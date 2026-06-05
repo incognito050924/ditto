@@ -1,6 +1,19 @@
 import { sha256Hex } from '~/core/evidence-store';
 import type { AcgSemanticScanObservation } from '~/schemas/acg-semantic-scan-observation';
+import type { WorkItem } from '~/schemas/work-item';
 import type { SignatureChange } from './signature-codeql';
+
+/**
+ * Base ref candidates for a work item, in priority order: the work item's start
+ * sha, then the usual remote/local mains. Mirrors the handoff fallback chain
+ * (dialectic-1 OBJ-4). Pure — resolution (pickBaseRef) is the caller's.
+ */
+export function workItemBaseCandidates(workItem: Pick<WorkItem, 'started_at_sha'>): string[] {
+  const candidates: string[] = [];
+  if (workItem.started_at_sha) candidates.push(workItem.started_at_sha);
+  candidates.push('origin/main', 'origin/master', 'main', 'master');
+  return candidates;
+}
 
 /**
  * O2/O8 (wi_260605aw1 S2) — pure helpers for the non-gated scan observation.

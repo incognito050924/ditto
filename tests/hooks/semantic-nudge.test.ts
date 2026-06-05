@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { filterSourceFiles, semanticScanNudge } from '~/hooks/semantic-nudge';
 
-// S1 (wi_260605aw1) — Stop-time AX nudge decision logic (pure, no git/CodeQL).
-// The nudge is the ACG direction-keeping signal: when an in-progress work item
-// is allowed to stop but touched source without any semantic artifact, remind
-// (non-blocking) to run `ditto semantic scan`. Cheap: no CodeQL in this path.
+// S1+S3 (wi_260605aw1) — Stop-time AX nudge decision logic (pure, no git/CodeQL).
+// The nudge reflects the observe flow: no fresh observation → run observe; a
+// fresh observation with changes (not yet promoted to a blocking verdict) →
+// promote the breaking ones; a fresh observation with zero changes → silent.
 
 describe('filterSourceFiles', () => {
   test('keeps ACG-supported source extensions, drops the rest', () => {
@@ -34,17 +34,32 @@ describe('semanticScanNudge', () => {
     semanticPresent: false,
     base: 'abc123',
     changedSourceFiles: ['src/user.ts'],
+    observationChangeCount: null as number | null,
   };
 
-  test('nudges when in-progress, source changed, no semantic artifact', () => {
+  test('no fresh observation → nudge to run `ditto semantic observe`', () => {
     const msg = semanticScanNudge(base);
-    expect(msg).toContain('ditto semantic scan');
+    expect(msg).toContain('ditto semantic observe');
     expect(msg).toContain('wi_abcd1234');
     expect(msg).toContain('abc123');
   });
 
-  test('no nudge when a semantic artifact already exists', () => {
+  test('fresh observation with changes → nudge to promote (detect/verdict)', () => {
+    const msg = semanticScanNudge({ ...base, observationChangeCount: 2 });
+    expect(msg).toContain('2');
+    expect(msg).toMatch(/detect|verdict|promote/i);
+    expect(msg).not.toContain('semantic observe');
+  });
+
+  test('fresh observation with zero changes → silent', () => {
+    expect(semanticScanNudge({ ...base, observationChangeCount: 0 })).toBeNull();
+  });
+
+  test('no nudge when a blocking semantic-compatibility.json already exists', () => {
     expect(semanticScanNudge({ ...base, semanticPresent: true })).toBeNull();
+    expect(
+      semanticScanNudge({ ...base, semanticPresent: true, observationChangeCount: 3 }),
+    ).toBeNull();
   });
 
   test('no nudge for a terminal work item', () => {

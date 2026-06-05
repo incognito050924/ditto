@@ -31,9 +31,18 @@
         { "kind": "file", "summary": "src/schemas/acg-semantic-scan-observation.ts(비-게이트, stop 미소비) + src/acg/semantic/scan-observation.ts(computeScanFingerprint/buildScanObservation 순수) + semantic.ts observeCommand + git.ts diffVsRef + skills/verify/SKILL.md 배선 + schemas:export 등록." },
         { "kind": "command", "summary": "bun test scan-observation.test.ts 5 pass(순수). CODEQL_E2E=1 semantic-observe-e2e.test.ts 2 pass(실git+CodeQL: 변경 기록+blocking 미작성, fingerprint skip). 전체 1169 pass/7 skip/0 fail, lint·build clean." }
       ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "S3 마감: (a) nudge↔observation 통합 — nudge가 fresh observation(fingerprint 일치)을 읽어 분기(없음→observe 권유 / 0변경→침묵 / >0→detect·verdict 승격 권유), S2의 noise 제거. (b) observe --base 옵션화 — handoff fallback 체인(started_at_sha>origin/main>main), base_used=resolved 기록(OBJ-4).",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "semantic-nudge.ts: observationChangeCount 분기 + freshObservationChangeCount(fingerprint 일치 검사). scan-observation.ts workItemBaseCandidates. semantic.ts observe base fallback(WorkItemStore+pickBaseRef)." },
+        { "kind": "command", "summary": "bun test semantic-nudge.test.ts 8 + semantic-nudge-integration.test.ts 5(실git: observe권유/promote/0침묵/seed미발동/terminal) + scan-observation.test.ts workItemBaseCandidates 2 pass. 전체 1175 pass/7 skip/0 fail, observe e2e 무회귀(실 CodeQL), lint·build clean." }
+      ]
     }
   ],
-  "status": "in_progress",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [
@@ -53,11 +62,12 @@
     "tests/cli/semantic-observe-e2e.test.ts"
   ],
   "risks": [
-    { "description": "S3(opt-in typed 홈, semantic-scan-status.json, 1-change diagnostic, base fallback baseUsed 영속)는 미구현. S1(nudge)·S2(observe)는 완료.", "severity": "medium" },
-    { "description": "observation은 비-게이트라 stop이 안 읽음 — 현재 소비처는 에이전트/사람 가시성뿐. observation→blocking 승격은 명시(detect/verdict). nudge가 observation을 읽어 더 정밀해지는 건 후속.", "severity": "low" },
-    { "description": "nudge는 'source 파일 변경 + semantic 산출물 없음'만 봄(시그니처 변경 여부는 안 봄, 그건 scan이 판정). 약간의 over-nudge 가능하나 advisory라 무해. untracked 새 파일은 git diff에 안 잡힘(기존 심볼 시그니처 변경이 주 대상이라 수용).", "severity": "low" }
+    { "description": "재조정(최종 설계 기준): OBJ-5 다중 diagnostic은 S2 observation(durable 변경 list)이 충족. OBJ-6 opt-in은 moot(게이팅할 비싼 auto-scan 없음; nudge는 값싸고 self-limiting) — nudge 침묵용 opt-out은 저가치라 보류. OBJ-7 semantic-scan-status.json(failed 가시화)은 observe가 exit code/stderr로 즉시 노출하므로 refinement로 보류. 이상 3건은 out-of-scope 후속.", "severity": "medium" },
+    { "description": "nudge는 source 변경 시 fresh observation 유무로 분기 — untracked 새 파일은 git diff에 안 잡힘(기존 심볼 시그니처 변경이 주 대상이라 수용). observe 실패 시 status 산출물이 없어 nudge가 'observe 권유'를 반복할 수 있음(observe가 실패 원인을 즉시 노출하므로 루프는 에이전트가 끊음).", "severity": "low" },
+    { "description": "다언어: signature 추출은 javascript 바인딩만(de1) — java/kotlin/python은 fail-loud. observe/nudge는 언어중립이나 실제 추출은 js만.", "severity": "low" }
   ],
   "runs": [],
   "created_at": "2026-06-05T11:30:00.000Z",
-  "updated_at": "2026-06-05T11:30:00.000Z"
+  "updated_at": "2026-06-05T12:30:00.000Z",
+  "closed_at": "2026-06-05T12:30:00.000Z"
 }

@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { buildScanObservation, computeScanFingerprint } from '~/acg/semantic/scan-observation';
+import {
+  buildScanObservation,
+  computeScanFingerprint,
+  workItemBaseCandidates,
+} from '~/acg/semantic/scan-observation';
 import { acgSemanticScanObservation } from '~/schemas/acg-semantic-scan-observation';
 
 // O2/O8 (wi_260605aw1 S2) — pure observation helpers.
@@ -45,5 +49,26 @@ describe('buildScanObservation', () => {
     const obs = buildScanObservation({ ...base, changes: [] });
     expect(acgSemanticScanObservation.safeParse(obs).success).toBe(true);
     expect(obs.change_count).toBe(0);
+  });
+});
+
+describe('workItemBaseCandidates (OBJ-4 fallback chain)', () => {
+  test('started_at_sha first, then the usual mains', () => {
+    expect(workItemBaseCandidates({ started_at_sha: 'abc123' })).toEqual([
+      'abc123',
+      'origin/main',
+      'origin/master',
+      'main',
+      'master',
+    ]);
+  });
+
+  test('omits the start sha when absent', () => {
+    expect(workItemBaseCandidates({ started_at_sha: undefined })).toEqual([
+      'origin/main',
+      'origin/master',
+      'main',
+      'master',
+    ]);
   });
 });

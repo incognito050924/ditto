@@ -1,12 +1,18 @@
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
-import { buildScanObservation, computeScanFingerprint } from '~/acg/semantic/scan-observation';
+import {
+  buildScanObservation,
+  computeScanFingerprint,
+  workItemBaseCandidates,
+} from '~/acg/semantic/scan-observation';
 import { applySemanticVerdict, buildSemanticSeed } from '~/acg/semantic/semantic-produce';
 import { scanSignatureChanges } from '~/acg/semantic/signature-codeql';
 import { makeRelationDeps } from '~/core/codeql/host-deps';
 import type { CodeqlLanguage } from '~/core/codeql/runner';
 import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
 import { diffVsRef, gitRevParse } from '~/core/git';
+import { pickBaseRef } from '~/core/work-item-handoff';
+import { WorkItemStore } from '~/core/work-item-store';
 import { acgSemanticCompatibility } from '~/schemas/acg-semantic-compatibility';
 import { acgSemanticScanObservation } from '~/schemas/acg-semantic-scan-observation';
 import {
@@ -304,7 +310,10 @@ const observeCommand = defineCommand({
   },
   args: {
     'work-item': { type: 'string', description: 'Work item id', required: true },
-    base: { type: 'string', description: 'Git ref to diff against', required: true },
+    base: {
+      type: 'string',
+      description: 'Git ref to diff against (default: work item start sha → origin/main → main)',
+    },
     language: { type: 'string', description: 'CodeQL language (default javascript)' },
     'source-root': { type: 'string', description: 'Source root relative to repo (default src)' },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
@@ -322,8 +331,23 @@ const observeCommand = defineCommand({
       const repoRoot = await resolveRepoRootForCreate();
       const language = (args.language ?? 'javascript') as CodeqlLanguage;
       const sourceRootRel = args['source-root'] ?? 'src';
-      const baseSha = gitRevParse(repoRoot, args.base);
-      const fingerprint = computeScanFingerprint(baseSha, diffVsRef(repoRoot, args.base));
+      // base fallback (dialectic-1 OBJ-4): explicit --base, else the work item's
+      // start sha, else origin/main → main. base_used records the resolved ref.
+      let base = args.base;
+      if (!base) {
+        const workItem = await new WorkItemStore(repoRoot).get(args['work-item']);
+        const resolved = pickBaseRef(repoRoot, workItemBaseCandidates(workItem));
+        if (!resolved) {
+          writeError(
+            `semantic observe: no --base and no fallback ref resolved for ${args['work-item']} (started_at_sha/origin/main/main). Pass --base explicitly.`,
+          );
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        base = resolved;
+      }
+      const baseSha = gitRevParse(repoRoot, base);
+      const fingerprint = computeScanFingerprint(baseSha, diffVsRef(repoRoot, base));
       const path = observationPath(repoRoot, args['work-item']);
 
       // Fingerprint skip: an unchanged tree (vs the same base) reuses the prior
@@ -334,7 +358,7 @@ const observeCommand = defineCommand({
           if (format === 'json') {
             writeJson({ work_item_id: args['work-item'], skipped: true, reason: 'unchanged' });
           } else {
-            writeHuman(`semantic observe: unchanged vs ${args.base} (fingerprint match) — skipped`);
+            writeHuman(`semantic observe: unchanged vs ${base} (fingerprint match) — skipped`);
           }
           return;
         }
@@ -344,7 +368,7 @@ const observeCommand = defineCommand({
       const changes = await scanSignatureChanges(
         {
           repoRoot,
-          baseRef: args.base,
+          baseRef: base,
           language,
           sourceRootRel,
           ...(buildMode ? { buildMode } : {}),
@@ -355,7 +379,7 @@ const observeCommand = defineCommand({
       // single-`change` blocking artifact). Stop never reads this (dialectic-1 O3/O5).
       const observation = buildScanObservation({
         workItemId: args['work-item'],
-        baseUsed: args.base,
+        baseUsed: base,
         language,
         sourceRoot: sourceRootRel,
         fingerprint,
@@ -368,13 +392,13 @@ const observeCommand = defineCommand({
       if (format === 'json') {
         writeJson({
           work_item_id: args['work-item'],
-          base: args.base,
+          base,
           change_count: observation.change_count,
           seeded: false,
         });
       } else {
         writeHuman(
-          `semantic observe: ${observation.change_count} exported signature change(s) vs ${args.base} → semantic-scan-observation.json (non-blocking)`,
+          `semantic observe: ${observation.change_count} exported signature change(s) vs ${base} → semantic-scan-observation.json (non-blocking)`,
         );
       }
     } catch (err) {

@@ -3,6 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { computeScanFingerprint } from '~/acg/semantic/scan-observation';
+import { diffVsRef, gitRevParse } from '~/core/git';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import { stopHandler } from '~/hooks/stop';
@@ -68,15 +70,54 @@ afterEach(async () => {
   await rm(repo, { recursive: true, force: true });
 });
 
-describe('Stop semantic-scan nudge (S1)', () => {
-  test('nudges (non-blocking) when source changed and no semantic artifact', async () => {
+// Build an observation whose fingerprint matches the current tree vs base.
+async function writeFreshObservation(base: string, changeCount: number): Promise<void> {
+  const baseSha = gitRevParse(repo, base);
+  const fingerprint = computeScanFingerprint(baseSha, diffVsRef(repo, base));
+  await writeWi('semantic-scan-observation.json', {
+    schema_version: '0.1.0',
+    kind: 'acg.semantic-scan-observation.v1',
+    work_item_id: wiId,
+    produced_by: 'agent',
+    produced_at: '2026-06-05T00:00:00Z',
+    base_used: base,
+    language: 'javascript',
+    source_root: '.',
+    fingerprint,
+    change_count: changeCount,
+    changes: Array.from({ length: changeCount }, (_, i) => ({
+      file: `f${i}.ts`,
+      symbol: `s${i}`,
+      before: 'a',
+      after: 'b',
+    })),
+  });
+}
+
+describe('Stop semantic-scan nudge (S1+S3)', () => {
+  test('no fresh observation → nudge to run `ditto semantic observe`', async () => {
     const out = await run();
     expect(out.exitCode).toBe(0);
-    expect(out.stderr).toContain('ditto semantic scan');
+    expect(out.stderr).toContain('ditto semantic observe');
     expect(out.stderr).toContain(wiId);
   });
 
-  test('no nudge once a semantic-compatibility.json exists', async () => {
+  test('fresh observation with changes → nudge to promote (detect/verdict)', async () => {
+    await writeFreshObservation('HEAD', 2);
+    const out = await run();
+    expect(out.exitCode).toBe(0);
+    expect(out.stderr).toContain('detect');
+    expect(out.stderr).not.toContain('semantic observe');
+  });
+
+  test('fresh observation with zero changes → silent', async () => {
+    await writeFreshObservation('HEAD', 0);
+    const out = await run();
+    expect(out.exitCode).toBe(0);
+    expect(out.stderr ?? '').not.toContain('DITTO semantic check');
+  });
+
+  test('no nudge once a blocking semantic-compatibility.json exists', async () => {
     await writeWi('semantic-compatibility.json', {
       schema_version: '0.1.0',
       kind: 'acg.semantic-compatibility.v1',
@@ -90,12 +131,12 @@ describe('Stop semantic-scan nudge (S1)', () => {
     });
     const out = await run();
     expect(out.exitCode).toBe(0);
-    expect(out.stderr ?? '').not.toContain('ditto semantic scan');
+    expect(out.stderr ?? '').not.toContain('DITTO semantic check');
   });
 
   test('no nudge for a terminal (done) work item', async () => {
     await store.update(wiId, (c) => ({ ...c, status: 'done' }));
     const out = await run();
-    expect(out.stderr ?? '').not.toContain('ditto semantic scan');
+    expect(out.stderr ?? '').not.toContain('DITTO semantic check');
   });
 });
