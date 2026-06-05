@@ -9,6 +9,7 @@ import {
   assuranceSnapshotForcesContinuation,
   autopilotForcesContinuation,
   impactForcesContinuation,
+  semanticForcesContinuation,
   stopHandler,
 } from '~/hooks/stop';
 
@@ -516,6 +517,19 @@ const impactGraph = (overrides: Record<string, unknown>) => ({
   ...overrides,
 });
 
+const semanticCompat = (verdict: Record<string, unknown>) => ({
+  schema_version: '0.1.0',
+  kind: 'acg.semantic-compatibility.v1',
+  work_item_id: wiId,
+  produced_by: 'agent',
+  produced_at: '2026-06-05T00:00:00.000Z',
+  change: { before: 'getUser(): User | null', after: 'getUser(): User' },
+  old_meaning: 'absent user returns null',
+  business_assumptions: [],
+  compatibility: 'breaking',
+  verdict,
+});
+
 describe('stopHandler — ACG fitness (AssuranceSnapshot) ledger', () => {
   test('a failed fitness function forces continuation (exit 2)', async () => {
     await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
@@ -629,5 +643,81 @@ describe('impactForcesContinuation', () => {
 
   test('no unresolved => no continuation', () => {
     expect(impactForcesContinuation({ unresolved: [] } as never)).toHaveLength(0);
+  });
+});
+
+describe('stopHandler — ACG semantic (SemanticCompatibility) ledger', () => {
+  test('unintended meaning break (semantic_safe=no, not intended) forces continuation (exit 2)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact(
+      'semantic-compatibility.json',
+      semanticCompat({ type_safe: true, semantic_safe: 'no', intended_breaking: false }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('semantic: unintended meaning break');
+  });
+
+  test('unverified meaning forces continuation (exit 2)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact(
+      'semantic-compatibility.json',
+      semanticCompat({ type_safe: true, semantic_safe: 'unverified' }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('semantic: meaning compatibility unverified');
+  });
+
+  test('declared-intended break (semantic_safe=no, intended_breaking) does not block (exit 0)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact(
+      'semantic-compatibility.json',
+      semanticCompat({ type_safe: true, semantic_safe: 'no', intended_breaking: true }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('verified-safe meaning (semantic_safe=yes) does not block (exit 0)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact(
+      'semantic-compatibility.json',
+      semanticCompat({ type_safe: true, semantic_safe: 'yes' }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('malformed semantic-compatibility.json => exit 2 (fail-closed)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
+    await writeArtifact('semantic-compatibility.json', '{ not valid');
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('semantic-compatibility.json');
+    expect(out.stderr).toContain('malformed');
+  });
+});
+
+describe('semanticForcesContinuation', () => {
+  const sem = (verdict: Record<string, unknown>) =>
+    ({
+      change: { before: 'a', after: 'b' },
+      old_meaning: 'm',
+      verdict,
+    }) as never;
+
+  test('semantic_safe=no without intended_breaking → one reason', () => {
+    expect(
+      semanticForcesContinuation(sem({ semantic_safe: 'no', intended_breaking: false })),
+    ).toHaveLength(1);
+    expect(semanticForcesContinuation(sem({ semantic_safe: 'no' }))).toHaveLength(1); // intended_breaking absent
+  });
+  test('semantic_safe=unverified → one reason', () => {
+    expect(semanticForcesContinuation(sem({ semantic_safe: 'unverified' }))).toHaveLength(1);
+  });
+  test('semantic_safe=no with intended_breaking, or =yes → no reason', () => {
+    expect(
+      semanticForcesContinuation(sem({ semantic_safe: 'no', intended_breaking: true })),
+    ).toHaveLength(0);
+    expect(semanticForcesContinuation(sem({ semantic_safe: 'yes' }))).toHaveLength(0);
   });
 });

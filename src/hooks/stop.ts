@@ -12,6 +12,10 @@ import { WorkItemStore } from '~/core/work-item-store';
 import { type AcgAssuranceSnapshot, acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
 import { type AcgImpactGraph, acgImpactGraph } from '~/schemas/acg-impact-graph';
 import { type AcgReviewGraph, acgReviewGraph } from '~/schemas/acg-review-graph';
+import {
+  type AcgSemanticCompatibility,
+  acgSemanticCompatibility,
+} from '~/schemas/acg-semantic-compatibility';
 import { type Autopilot, autopilot as autopilotSchema } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
 import { convergence as convergenceSchema } from '~/schemas/convergence';
@@ -220,6 +224,31 @@ export function impactForcesContinuation(graph: AcgImpactGraph): string[] {
 }
 
 /**
+ * Does a SemanticCompatibility (단계6) force continuation? Type safety ≠ meaning
+ * safety (20-contracts §4); the verdict gates 단계6 통과/차단 (§4 line 489, line 730).
+ * Two verdicts block, mirroring the default-deny of the impact/journey gates and
+ * DITTO's "completion is gated by evidence":
+ *   - `semantic_safe: 'no'` WITHOUT `intended_breaking` → an UNINTENDED meaning
+ *     regression (the `User|null → User` class, §4 example). The methodology §6
+ *     failure path returns this to 단계5.
+ *   - `semantic_safe: 'unverified'` → meaning could not be checked (no behavior
+ *     test); an evidence gap a human must close (verify or declare intended).
+ * A declared-intended break (`'no' ∧ intended_breaking`) and a verified-safe
+ * change (`'yes'`) clear. One verdict per artifact ⇒ at most one reason.
+ */
+export function semanticForcesContinuation(sem: AcgSemanticCompatibility): string[] {
+  const v = sem.verdict;
+  const where = `${sem.change.before} → ${sem.change.after}`;
+  if (v.semantic_safe === 'unverified') {
+    return [`semantic: meaning compatibility unverified for ${where} — verify or declare intended`];
+  }
+  if (v.semantic_safe === 'no' && v.intended_breaking !== true) {
+    return [`semantic: unintended meaning break ${where} (was: ${sem.old_meaning})`];
+  }
+  return [];
+}
+
+/**
  * fitness 자동 트리거 — 정의된 fitness가 있으면 stop 시점에 평가해 assurance-snapshot.json을
  * 최신화한다(stale 없음). deterministic은 commandProvider가 실제 평가한다.
  * llm_judged/executed는 에이전트가 미리 산출한 표준 경로 verdict 파일
@@ -318,11 +347,25 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     acgImpactGraph,
     'impact-graph.json',
   );
+  // ACG semantic compatibility (단계6) ledger — same work-item-dir home + absent/
+  // malformed discipline; gates an unintended/unverified meaning change.
+  const semantic = await readArtifact(
+    join(dir, 'semantic-compatibility.json'),
+    acgSemanticCompatibility,
+    'semantic-compatibility.json',
+  );
 
   // Malformed artifact = gate-input violation → fail CLOSED (exit 2).
-  const malformed = [completion, conv, pilot, dialectics, acgReview, assurance, impact].find(
-    (a) => a.status === 'malformed',
-  );
+  const malformed = [
+    completion,
+    conv,
+    pilot,
+    dialectics,
+    acgReview,
+    assurance,
+    impact,
+    semantic,
+  ].find((a) => a.status === 'malformed');
   if (malformed && malformed.status === 'malformed') {
     return {
       exitCode: 2,
@@ -365,6 +408,9 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   }
   if (impact.status === 'ok') {
     reasons.push(...impactForcesContinuation(impact.data));
+  }
+  if (semantic.status === 'ok') {
+    reasons.push(...semanticForcesContinuation(semantic.data));
   }
 
   if (reasons.length > 0) {
