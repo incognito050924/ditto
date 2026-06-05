@@ -1,0 +1,44 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260605py1",
+  "title": "Python 바인딩 — relations 쿼리 + impact/boundary Python 분석 (codeql 트리오 1/3)",
+  "source_request": "백로그 codeql 트리오(직렬) 1번: Python 바인딩",
+  "goal": "relations.ts에 Python QL 관계쿼리 3종(impact/edge/symbol-decl, import python)을 추가하고 RELATION_QUERIES.python 등록. impact/boundary 분석기·CLI가 --language python을 받아 Python을 분석(python은 buildless 자동). Java 바인딩 패턴 미러링.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "Python 템플릿(impact: Call 이름기반+decl 파일핀 value/decl, edge: ImportExpr 모듈→파일, symbol-decl)이 추가되고 relationQueries('python')/renderEdgeQuery(python)가 import python 쿼리 방출. 단위 테스트.",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "언어별 후처리: isTestFile(python=test_*.py/*_test.py)·stripModuleExt(.py)가 python으로 분기. CLI 도움말 javascript|java|python. python은 NO_BUILD_LANGUAGES라 buildMode 자동 none.",
+      "verdict": "pass",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "실 CodeQL DB(합성 Python 샘플)에서 impact 쿼리가 known 호출 3 + decl 1을 산출하고 동명이인 decoy(extract_requester_from_history)를 제외. edge가 import 엣지 산출. 기존 java-binding 테스트의 python-throws 단언 수정. 전체 테스트·lint green.",
+      "verdict": "pass",
+      "evidence": []
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/codeql/relations.ts",
+    "src/acg/impact/codeql-analyzer.ts",
+    "src/acg/boundary/codeql-edges.ts",
+    "src/cli/commands/impact.ts",
+    "src/cli/commands/boundary.ts",
+    "tests/acg/codeql-java-binding.test.ts",
+    "tests/acg/codeql-python-binding.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-05T04:30:00.000Z",
+  "updated_at": "2026-06-05T05:00:00.000Z",
+  "closed_at": "2026-06-05T05:00:00.000Z"
+}

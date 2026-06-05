@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260605py1",
+  "declared_by": "main",
+  "declared_at": "2026-06-05T05:00:00.000Z",
+  "summary": "Python 바인딩(codeql 트리오 1/3). relations.ts에 IMPACT/EDGE/SYMBOL_DECL_QUERY_PY(import python) 추가·RELATION_QUERIES.python 등록. impact는 AST 이름기반 Call+decl 파일핀(Python 동적특성상 resolved-callee가 best-effort라 JS/Java보다 정밀도 낮음 — homonym 한계 문서화), edge는 ImportExpr→source 모듈 파일. 후처리 isTestFile(test_*.py/*_test.py/tests/)·stripModuleExt(.py)·CLI 도움말 python. 합성 Python DB로 probe 검증 후 실 e2e 확인. boxwood/외부 무수정.",
+  "changed_files": ["src/core/codeql/relations.ts", "src/acg/impact/codeql-analyzer.ts", "src/acg/boundary/codeql-edges.ts", "src/cli/commands/impact.ts", "src/cli/commands/boundary.ts", "tests/acg/codeql-java-binding.test.ts", "tests/acg/codeql-python-binding.test.ts"],
+  "acceptance": [
+    { "criterion_id": "ac-1", "verdict": "pass", "evidence": [{ "kind": "file", "summary": "relations.ts: IMPACT_QUERY_PY(Call.getFunc().Name.getId 이름기반 + Function/Class decl 파일핀), EDGE_QUERY_PY(ImportExpr+Module.getFile fromSource), SYMBOL_DECL_QUERY_PY. python 등록" }, { "kind": "command", "summary": "bun test codeql-python-binding.test.ts: relationQueries('python')=import python, renderEdgeQuery python, renderQuery 치환 (5 pass)" }] },
+    { "criterion_id": "ac-2", "verdict": "pass", "evidence": [{ "kind": "file", "summary": "isTestFile python 분기(test_*.py/*_test.py/tests/), stripModuleExt python(.py). impact/boundary CLI 도움말 javascript|java|python. python ∈ NO_BUILD_LANGUAGES → selectBuildMode 자동 none(코드추가 불필요)" }, { "kind": "command", "summary": "bun test: CodeqlImpactAnalyzer(python) test_/_test/tests→test 분류, CodeqlEdgeAnalyzer(python) .py strip (pass)" }] },
+    { "criterion_id": "ac-3", "verdict": "pass", "evidence": [{ "kind": "command", "summary": "합성 Python DB probe: impact 쿼리 → 호출 3(handler.py:4,5·service.py:12)+decl 1(service.py:1), decoy extract_requester_from_history 제외(이름기반 정확 배제). edge → handler.py→app/service.py. symbol-decl → app/service.py" }, { "kind": "command", "summary": "실 e2e: ditto impact --language python --source-root <pysample> → affected 4 = direct_caller 3 + external_surface 1. ditto boundary --language python → import 엣지 forbidden_dependency 검출(.py strip)" }, { "kind": "command", "summary": "java-binding 테스트 python-throws→ruby-throws 수정. 전체 bun test 1060 pass/0 fail(+5), lint·build clean" }] }
+  ],
+  "verifications": [
+    { "command": "codeql query run (합성 Python DB): impact/edge/symbol-decl", "exit_code": 0 },
+    { "command": "ditto impact --language python (pysample)", "exit_code": 0 },
+    { "command": "ditto boundary check --language python (pysample)", "exit_code": 1 },
+    { "command": "bun test (전체)", "exit_code": 0 },
+    { "command": "bun run lint / build", "exit_code": 0 }
+  ],
+  "unverified": [
+    { "item": "boxwood 실 Python 코드베이스 e2e", "reason": "boxwood python은 응집 패키지 없이 흩어진 스크립트뿐이라 통제된 합성 샘플로 검증(grep보다 정확한 ground truth). 실 대형 Python repo probe는 후속.", "out_of_scope": true }
+  ],
+  "remaining_risks": ["Python impact는 AST 이름기반이라 '같은 이름 함수가 다른 파일에도 있고 호출됨'이면 그 호출도 섞일 수 있음(homonym; JS/Java의 resolved-callee보다 정밀도 낮음). 이름이 다른 decoy는 정확 배제. type_contract kind는 Python 신뢰도 낮아 생략(value+decl만).", "Python 동적 import(importlib 등)는 ImportExpr로 안 잡힘 → edge 누락 가능(정적 분석 공통 한계)."],
+  "final_verdict": "pass"
+}
