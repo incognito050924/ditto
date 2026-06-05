@@ -15,6 +15,7 @@ import { e2eCommand } from './commands/e2e';
 import { fitnessCommand } from './commands/fitness';
 import { impactCommand } from './commands/impact';
 import { runCommand } from './commands/run';
+import { semanticCommand } from './commands/semantic';
 import { verifyCommand } from './commands/verify';
 import { workCommand } from './commands/work';
 
@@ -42,6 +43,7 @@ const main = defineCommand({
     architecture: architectureCommand,
     'change-contract': changeContractCommand,
     'change-map': changeMapCommand,
+    semantic: semanticCommand,
   },
 });
 

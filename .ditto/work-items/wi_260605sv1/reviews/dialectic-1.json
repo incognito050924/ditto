@@ -1,0 +1,117 @@
+{
+  "schema_version": "0.1.0",
+  "review_id": "rv_260605sv1d1",
+  "input": {
+    "mode": "design",
+    "target_artifact": "semantic verdict 생산 파이프라인(OBJ-43) 설계 — sg1이 소비 준비를 마친 semantic-compatibility.json의 생산자",
+    "question": "OBJ-43 생산 파이프라인 구조 5쟁점: (1)정적부 별도명령 vs impact흡수, (2)LLM판정 파일주입 vs CLI직접호출(ADR-0001), (3)트리거 change_type=signature 강제 vs 좁힘, (4)characterization 이 work item vs 분리, (5)수용기준 골격",
+    "intent_refs": ["핸드오프 §2 B 트랙 — dialectic으로 생산 파이프라인 설계 확정"],
+    "acceptance_refs": ["ac-1"],
+    "evidence_refs": [],
+    "constraints": {
+      "scope_guard": ["설계 결정 + MVP 경계 확정까지", "스키마 변경은 필요 시에만 정당화"],
+      "non_goals": ["설계 없이 LLM 호출 코드 직행", "이미 닫힌 sg1 게이트 재작업"],
+      "review_budget": "thorough",
+      "max_rounds": 1
+    },
+    "model_policy": {
+      "producer": "current-host",
+      "opponent_preferred": "codex",
+      "opponent_fallback": ["claude-opus", "claude-sonnet"],
+      "synthesizer": "claude-opus"
+    }
+  },
+  "producer": {
+    "position": "초안 4축(정적 시드 별도명령 `ditto semantic detect`/LLM 파일주입/트리거=시드파일 생성시 자동발동/재현성 동형)은 저장소의 이미 검증된 패턴(injected-provider, acgFitnessVerdictReproducibility)을 1:1 복제하는 최소·정합 설계다. 소비처(stop.ts:239-249)와 계약(스키마)이 이미 존재하므로 OBJ-43은 빈 생산자 슬롯을 채우는 일이다. 정적/의미 분리가 '정적 위장' 위험을 구조적으로 차단하고, unverified 시드는 게이트가 자동 차단(stop.ts:242)하므로 '에이전트가 안 채우면 통과'하는 구멍이 없다.",
+    "proposal": "(1) `ditto semantic detect --work-item <wi>` 신설(impact 흡수 안 함 — change_type은 유저 인자라 책임 혼합). git diff에서 시그니처 쌍 추출, semantic_safe='unverified' 시드. (2) 에이전트가 후보마다 판정해 verdict+reproducibility(model_version) 파일주입. CLI는 LLM 직접호출 안 함. (3) stop 신규 배선 0 — 시드 파일 생성=게이트 발동. (4) characterization(c)은 분리. (5) AC: 결정론적 seed 생산 / unverified만으로 stop exit2 / reproducibility 없으면 스키마 거부 / 무회귀.",
+    "evidence": [
+      { "kind": "file", "summary": "semanticForcesContinuation: unverified·no&&!intended_breaking 차단 — src/hooks/stop.ts:239-249" },
+      { "kind": "file", "summary": "게이트는 semantic.status==='ok'(파일 존재) 시에만 발동 — src/hooks/stop.ts:412-414" },
+      { "kind": "file", "summary": "change{before,after}·verdict·characterization? 이미 정의(스키마 변경 불필요 주장) — src/schemas/acg-semantic-compatibility.ts:10-39" },
+      { "kind": "file", "summary": "파일주입+fail-closed 동형 패턴 운영 중 — src/acg/fitness/injected-provider.ts:19-80" },
+      { "kind": "file", "summary": "reproducibility{model_version 필수}+superRefine 거부 — src/schemas/acg-fitness-verdict.ts:15-21,36-42" },
+      { "kind": "file", "summary": "change_type은 유저 CLI 인자, diff 탐지 아님 — src/cli/commands/impact.ts:37-40,73" },
+      { "kind": "file", "summary": "생산은 범위 밖(OBJ-43 미정) — .ditto/work-items/wi_260605sg1/work-item.json:6" }
+    ],
+    "assumptions": [
+      "git diff에서 함수/메서드 시그니처 쌍을 준-결정론 추출이 실현 가능(추출기 부재, 미검증)",
+      "compatibility 시드값을 정적 보수 추정 가능(미정)",
+      "old_meaning(min(1) 필수)을 정적부가 placeholder로 채워야 함(스키마 통과 문제)",
+      "에이전트가 시드 후보를 빠짐없이 판정(강제는 unverified 차단뿐)"
+    ],
+    "known_limits": [
+      "정적 시드 추출기가 가장 무거운 미검증 부분 — 언어 바인딩별 난이도 상이, MVP는 TS 단일로 좁혀야 현실적이나 impact 다언어와 어긋남",
+      "old_meaning·business_assumptions는 정적부가 못 채움 — placeholder 규약 필요(설계 공백)",
+      "트리거 자동화 없음 — '어떤 diff에 detect를 돌릴지'를 호출자에 전가",
+      "characterization 분리 시 의미변경 증거간극 자동축소 경로 없음",
+      "스키마 change 단일객체(line 13) vs 다중 시그니처 변경 충돌 — 변경당 파일 1개 또는 스키마 확장 필요('스키마 변경 없이'와 충돌 가능, 가장 실질적 위험)"
+    ]
+  },
+  "opponent": {
+    "run": {
+      "provider": "codex",
+      "model": "codex-plugin-cc:codex-rescue",
+      "command": "Agent(subagent_type=codex:codex-rescue) — adversarial opponent, read-only",
+      "timestamp": "2026-06-05T08:10:00.000Z",
+      "fallback_from": null,
+      "fallback_reason": "none"
+    },
+    "objections": [
+      { "id": "OBJ43-O1", "severity": "critical", "claim": "signature 변경 복수 생산이 단일 객체/단일 파일 게이트와 충돌", "maps_to": "src/schemas/acg-semantic-compatibility.ts:13; src/hooks/stop.ts:241,352-355", "failure_mode": "배열로 쓰면 malformed exit2, 하나만 쓰면 나머지 누락 또는 overwrite로 false pass", "required_fix": "MVP는 단일 signature-pair만 허용, 다중은 fail-closed 거부. 다중 지원은 schema 배열화+stop loop+테스트 필요", "evidence": [] },
+      { "id": "OBJ43-O2", "severity": "high", "claim": "'stop 0줄'은 파일이 이미 있을 때만 참 — 트리거 자동화 없음", "maps_to": "src/cli/index.ts:27-45; src/hooks/stop.ts:90-93,412-414", "failure_mode": "signature change 있어도 seed 안 만들면 passing completion이 통과", "required_fix": "detect를 verify/autopilot/handoff에 배선하거나 수용기준에 'seed 존재'를 완료 전 필수 절차로 박기", "evidence": [] },
+      { "id": "OBJ43-O3", "severity": "high", "claim": "unverified seed가 stop을 막지만 verify/autopilot가 해소 못함 — 영구 데드락", "maps_to": "src/hooks/stop.ts:242-243; src/cli/commands/verify.ts:103-123; src/core/autopilot-complete.ts:20-50", "failure_mode": "검증 다 끝나도 semantic 파일 수정 안 하면 stop loop 영구 차단. stop 메시지의 'verify'가 실제 resolver 아님", "required_fix": "`ditto semantic verdict` resolver 신설 또는 verify/autopilot가 semantic 파일 갱신하는 표준 절차", "evidence": [] },
+      { "id": "OBJ43-O4", "severity": "high", "claim": "old_meaning placeholder 규약 없음 — 비면 malformed, TODO면 통과", "maps_to": "src/schemas/acg-semantic-compatibility.ts:14; src/hooks/stop.ts:97-99,358-373", "failure_mode": "빈 값=malformed exit2, non-empty TODO=schema-valid라 나중에 semantic_safe=yes와 결합", "required_fix": "sentinel 명시 + semantic_safe='unverified'일 때만 허용하는 superRefine, yes/no엔 실제 old_meaning 요구", "evidence": [] },
+      { "id": "OBJ43-O5", "severity": "high", "claim": "semantic verdict엔 reproducibility 필드 자체가 없음 — 동형 요구 미집행", "maps_to": "src/schemas/acg-semantic-compatibility.ts:31-35; schemas/acg-semantic-compatibility.schema.json:126-137; src/schemas/acg-fitness-verdict.ts:15-21,36-42", "failure_mode": "LLM이 yes 써도 model_version 없이 stop 통과 — 'fitness 동형'이 실제 집행 안 됨", "required_fix": "SemanticCompatibility에 reproducibility 추가, agent-produced non-unverified엔 model_version 필수화", "evidence": [] },
+      { "id": "OBJ43-O6", "severity": "high", "claim": "characterization optional이고 stop이 안 봄", "maps_to": "src/schemas/acg-semantic-compatibility.ts:20-30; src/hooks/stop.ts:239-248; tests/hooks/stop.test.ts:681-687", "failure_mode": "candidate 생성은 문서필드일 뿐 게이트 증거 아님 — behavior test 부재에도 yes만으로 통과", "required_fix": "semantic_safe=yes 수용조건 정의(characterization.exists+test_ref 또는 reproducible verdict 필수)", "evidence": [] },
+      { "id": "OBJ43-O7", "severity": "high", "claim": "diff→signature extractor가 설계 핵심인데 기존 impact primitive와 동형 아님", "maps_to": "src/cli/commands/impact.ts:35-40; src/core/codeql/relations.ts:40-48; reports/design/agentic-governance/10-methodology.md:110", "failure_mode": "[추측] overload/method/type alias/re-export/generic 변경을 ad hoc diff로 놓치면 seed 부재 또는 오생성", "required_fix": "MVP는 명시인자 기반 시작 또는 TS checker extractor 별도 검증. overload/re-export/default/generic fixture 필요", "evidence": [] },
+      { "id": "OBJ43-O8", "severity": "medium", "claim": "signature-only 트리거는 semantic 호환성 전체를 대표 못함", "maps_to": "src/cli/commands/impact.ts:39; reports/design/agentic-governance/10-methodology.md:112-113; src/hooks/stop.ts:412-414", "failure_mode": "동일 signature의 behavior/도메인 의미 변경은 seed 안 만들어져 게이트 밖", "required_fix": "MVP 범위를 'exported signature shape changes only'로 명시 또는 ChangeContract behavior도 입력 연결", "evidence": [] },
+      { "id": "OBJ43-O9", "severity": "medium", "claim": "상태 문서가 코드와 drift", "maps_to": "reports/design/agentic-governance/v0-implementation-plan.md:56; src/hooks/stop.ts:352-355; tests/hooks/stop.test.ts:649", "failure_mode": "구현자가 이미 있는 stop gate를 중복 배선하거나 설계 상태를 오판", "required_fix": "설계초안에 현상태를 'schema+stop consumer 존재, producer/resolver 미구현'으로 갱신", "evidence": [] }
+    ],
+    "missing_alternatives": [
+      "단일 변경 MVP: `--file --symbol --before --after` 명시입력으로 시작, git diff extractor는 후속",
+      "fitness처럼 별도 semantic-verdicts.json 배열 파일 + change_id별 verdict 소비",
+      "seed와 verdict resolver 분리: detect는 unverified만, verdict는 reproducibility 포함 판정만",
+      "advisory-first: stop 차단 전 seed 생성/오탐률 관측 단계"
+    ],
+    "scope_creep_risks": [
+      "git diff signature extractor가 TS 문법/overload/re-export까지 가면 MVP 초과",
+      "old_meaning/business_assumptions 자동추론은 정적분석 아니라 도메인이해 문제",
+      "characterization candidate 생성 포함하면 테스트 생성/실행 파이프라인으로 비대",
+      "stop에서 직접 detect 돌리면 hook 비용+ADR-0001 startup 제약"
+    ],
+    "verification_gaps": [
+      "`ditto semantic detect` CLI 등록/출력 테스트 없음",
+      "다중 signature change/array malformed/overwrite 방지 테스트 없음",
+      "old_meaning sentinel이 unverified에서만 허용되는지 테스트 없음",
+      "semantic reproducibility(model_version) required 테스트 없음",
+      "seed→stop block→LLM verdict 주입→stop clear e2e 없음",
+      "verify/autopilot이 semantic seed를 해소 못하는 deadlock 회귀 테스트 없음"
+    ]
+  },
+  "synthesizer": {
+    "verdict": "revise",
+    "synthesis": "accept 불가 — O3·O4·O5가 admissible(critical/high+oracle+novel)이며 초안의 핵심 전제('스키마/stop 변경 없이 기존 패턴 복제만으로 저리스크')를 실제 파일 증거로 반증한다. 결정적 증거: acgFitnessVerdictReproducibility(acg-fitness-verdict.ts:15-42)는 model_version 필수+superRefine로 실제 집행하나, acgSemanticCompatibility(acg-semantic-compatibility.ts:31-35)엔 reproducibility 필드 자체가 없다 — Producer가 인용한 '동형 패턴'이 오히려 '스키마 변경 없음' 전제를 깬다. 또 semanticForcesContinuation은 verdict만 보고(stop.ts:239-248) verify(verify.ts:103-123)·autopilot(autopilot-complete.ts:20-50)이 모두 AC verdict만 갱신해 semantic 파일을 만지는 경로가 없다 → unverified seed 영구 차단(O3 데드락) 사실. reject/blocked는 아님 — 반증 내용은 설계 폐기가 아니라 MVP 경계 축소+최소 스키마/배선 변경 2개로 닫힌다. 5쟁점 결론: (1)정적부 별도명령 유지하되 MVP detect는 `--file --symbol --before --after` 명시입력 seed만, diff 자동추출은 분리(O7). (2)파일주입 확정(불변식 acg-fitness-verdict.ts:6-8), 단 reproducibility 집행은 schema 책임. (3)MVP 범위 'exported signature shape changes only' 명시(O8), 수용기준에 'signature 변경 시 seed 존재'를 완료 전 필수 절차로 박음(O2). (4)characterization 분리, 단 이 work item에선 semantic_safe=yes를 금지하거나 reproducible verdict 요구해 무근거 yes 차단(O4·O6 봉합). (5)아래 required_edits로 확정.",
+    "accepted_objections": ["OBJ43-O1", "OBJ43-O2", "OBJ43-O3", "OBJ43-O4", "OBJ43-O5", "OBJ43-O6", "OBJ43-O7", "OBJ43-O8", "OBJ43-O9"],
+    "rejected_objections": [],
+    "required_edits": [
+      "src/schemas/acg-semantic-compatibility.ts:31-35 — verdict에 reproducibility: acgFitnessVerdictReproducibility.optional() 추가(재사용, 신규 추상 아님) + superRefine: semantic_safe∈{yes,no}∧agent-produced이면 model_version 필수 (O5)",
+      "src/schemas/acg-semantic-compatibility.ts:14 — old_meaning sentinel 명시 + superRefine: unverified일 때만 sentinel 허용, yes/no엔 실제 old_meaning 요구 (O4)",
+      "ditto semantic detect 신규 — --file --symbol --before --after 명시입력, unverified seed만, 다중 pair fail-closed 거부, cli/index.ts subCommands 등록 (O1·O2)",
+      "ditto semantic verdict resolver 신규 — agent 판정을 semantic-compatibility.json에 주입해 unverified seed 해소 (O3 데드락)",
+      "수용기준 골격 — (a)detect/verdict CLI 등록·출력 (b)다중변경 malformed/단일 fail-closed (c)old_meaning sentinel superRefine (d)reproducibility required (e)seed→block→주입→clear e2e (f)verify/autopilot deadlock 회귀",
+      "설계 현상태 갱신 — 'schema+stop consumer 존재, producer/resolver 미구현' drift 정정 (O9)"
+    ],
+    "remaining_open_questions": [
+      "resolver(semantic verdict)를 별도 명령 vs 기존 verify 서브경로로 흡수 — verify 책임 경계는 사용자 가치 판단(절차 결정 아님)",
+      "MVP에서 semantic_safe=yes를 금지(unverified/no만)할지 reproducible verdict 동반 시 허용할지 — characterization 분리(O6)와 결합",
+      "분리 후속 work item 3개 명명: wi-semantic-diff-extractor(O7)/wi-semantic-characterization(O6)/wi-semantic-autowiring(O2자동화·O8 behavior) — 생성은 사용자 승인 후"
+    ],
+    "evidence_refs": [
+      { "kind": "file", "summary": "change 단일객체·old_meaning min(1) sentinel 없음·verdict에 reproducibility 부재 — src/schemas/acg-semantic-compatibility.ts:13-35" },
+      { "kind": "file", "summary": "reproducibility+model_version superRefine 집행 실재(Producer 동형 주장이 오히려 schema 변경 필요 입증) — src/schemas/acg-fitness-verdict.ts:15-42" },
+      { "kind": "file", "summary": "verdict만·파일 1개만·status ok시만 게이트 — src/hooks/stop.ts:239-248,352-356,412-414" },
+      { "kind": "file", "summary": "verify·autopilot이 AC verdict만 갱신, semantic 파일 미해소(데드락) — src/cli/commands/verify.ts:103-123; src/core/autopilot-complete.ts:20-50" },
+      { "kind": "file", "summary": "impact는 file/symbol 명시인자, diff→signature 추출 아님 — src/cli/commands/impact.ts:35-40" }
+    ]
+  }
+}

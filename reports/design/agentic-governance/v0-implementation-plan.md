@@ -53,7 +53,7 @@ reviews: [reviews/dialectic-4.json, reviews/dialectic-5.json, reviews/dialectic-
 |---|---|---|
 | FitnessFunction `executed` mode **실행** | 스케줄(`scheduleDecision`)은 됨, e2e 실행 provider 미구현 | Q4 |
 | Assurance 주기 평가 / drift 집계 뷰 | snapshot 생산은 됨, 시계열 drift 소비처 미구현 | Q4 |
-| 단계 6 semantic 게이트 *강제* | SemanticCompatibility↔acceptance 연결 규칙 미정(스키마만 존재) | OBJ-43 |
+| ~~단계 6 semantic 게이트 *강제*~~ | **DONE** — 게이트 소비(sg1) + 생산자 MVP(wi_260605sv1, `ditto semantic detect`/`verdict`) 구현. diff 자동추출/characterization 게이트/자동배선은 분리 후속(reviews/dialectic-1.md) | ~~OBJ-43~~ |
 | PreToolUse forbidden_scope 집행 | ICL은 텍스트 산출까지(D6), 런타임 집행 미구현 | OBJ-44 |
 | Change Map 렌더러(Mermaid) | 텍스트 정본만, 다이어그램 후속 | — |
 

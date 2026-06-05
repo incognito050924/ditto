@@ -678,11 +678,17 @@ describe('stopHandler — ACG semantic (SemanticCompatibility) ledger', () => {
     expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
   });
 
-  test('verified-safe meaning (semantic_safe=yes) does not block (exit 0)', async () => {
+  test('verified-safe meaning (semantic_safe=yes, reproducible) does not block (exit 0)', async () => {
     await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
     await writeArtifact(
       'semantic-compatibility.json',
-      semanticCompat({ type_safe: true, semantic_safe: 'yes' }),
+      // yes now requires reproducibility (OBJ-43 O5) — without it the artifact is
+      // malformed and fail-closes; with a pinned model it clears.
+      semanticCompat({
+        type_safe: true,
+        semantic_safe: 'yes',
+        reproducibility: { model_version: 'claude-opus-4-8' },
+      }),
     );
     expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
   });

@@ -114,6 +114,28 @@
             },
             "intended_breaking": {
               "type": "boolean"
+            },
+            "reproducibility": {
+              "type": "object",
+              "properties": {
+                "model_version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Pinned judge model id (e.g. claude-opus-4-8)"
+                },
+                "prompt_hash": {
+                  "type": "string"
+                },
+                "votes": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "model_version"
+              ],
+              "additionalProperties": false,
+              "description": "Pinned judge model for an LLM meaning judgment; required when semantic_safe=yes"
             }
           },
           "required": [
