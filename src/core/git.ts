@@ -62,6 +62,15 @@ export function listChangedFilesVsRef(cwd: string, ref: string): string[] {
   }
 }
 
+/** Full working-tree diff vs a ref (text). Empty string on any error. */
+export function diffVsRef(cwd: string, ref: string): string {
+  try {
+    return execFileSync('git', ['diff', ref, '--'], { cwd, encoding: 'utf8' });
+  } catch {
+    return '';
+  }
+}
+
 /** Resolve a ref to its 40-char sha, or throw when it does not resolve. */
 export function gitRevParse(cwd: string, ref: string): string {
   return execFileSync('git', ['rev-parse', ref], { cwd, encoding: 'utf8' }).trim();

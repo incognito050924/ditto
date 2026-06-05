@@ -1,11 +1,14 @@
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
+import { buildScanObservation, computeScanFingerprint } from '~/acg/semantic/scan-observation';
 import { applySemanticVerdict, buildSemanticSeed } from '~/acg/semantic/semantic-produce';
 import { scanSignatureChanges } from '~/acg/semantic/signature-codeql';
 import { makeRelationDeps } from '~/core/codeql/host-deps';
 import type { CodeqlLanguage } from '~/core/codeql/runner';
 import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
+import { diffVsRef, gitRevParse } from '~/core/git';
 import { acgSemanticCompatibility } from '~/schemas/acg-semantic-compatibility';
+import { acgSemanticScanObservation } from '~/schemas/acg-semantic-scan-observation';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -34,6 +37,10 @@ import {
 
 function semanticPath(repoRoot: string, workItem: string): string {
   return join(repoRoot, '.ditto', 'work-items', workItem, 'semantic-compatibility.json');
+}
+
+function observationPath(repoRoot: string, workItem: string): string {
+  return join(repoRoot, '.ditto', 'work-items', workItem, 'semantic-scan-observation.json');
 }
 
 const detectCommand = defineCommand({
@@ -289,14 +296,103 @@ const scanCommand = defineCommand({
   },
 });
 
+const observeCommand = defineCommand({
+  meta: {
+    name: 'observe',
+    description:
+      'Record changed exported signatures vs a ref to a NON-gated observation (O2/O8, S2)',
+  },
+  args: {
+    'work-item': { type: 'string', description: 'Work item id', required: true },
+    base: { type: 'string', description: 'Git ref to diff against', required: true },
+    language: { type: 'string', description: 'CodeQL language (default javascript)' },
+    'source-root': { type: 'string', description: 'Source root relative to repo (default src)' },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    try {
+      const repoRoot = await resolveRepoRootForCreate();
+      const language = (args.language ?? 'javascript') as CodeqlLanguage;
+      const sourceRootRel = args['source-root'] ?? 'src';
+      const baseSha = gitRevParse(repoRoot, args.base);
+      const fingerprint = computeScanFingerprint(baseSha, diffVsRef(repoRoot, args.base));
+      const path = observationPath(repoRoot, args['work-item']);
+
+      // Fingerprint skip: an unchanged tree (vs the same base) reuses the prior
+      // observation rather than rebuilding CodeQL DBs (dialectic-1 OBJ-1).
+      if (await Bun.file(path).exists()) {
+        const prior = acgSemanticScanObservation.safeParse(JSON.parse(await Bun.file(path).text()));
+        if (prior.success && prior.data.fingerprint === fingerprint) {
+          if (format === 'json') {
+            writeJson({ work_item_id: args['work-item'], skipped: true, reason: 'unchanged' });
+          } else {
+            writeHuman(`semantic observe: unchanged vs ${args.base} (fingerprint match) — skipped`);
+          }
+          return;
+        }
+      }
+
+      const buildMode = language === 'java' ? ('none' as const) : undefined;
+      const changes = await scanSignatureChanges(
+        {
+          repoRoot,
+          baseRef: args.base,
+          language,
+          sourceRootRel,
+          ...(buildMode ? { buildMode } : {}),
+        },
+        makeRelationDeps(),
+      );
+      // Non-gated: records ALL changes (multi-change OK — this is a list, not the
+      // single-`change` blocking artifact). Stop never reads this (dialectic-1 O3/O5).
+      const observation = buildScanObservation({
+        workItemId: args['work-item'],
+        baseUsed: args.base,
+        language,
+        sourceRoot: sourceRootRel,
+        fingerprint,
+        changes,
+        producedAt: new Date().toISOString(),
+      });
+      await ensureDir(join(repoRoot, '.ditto', 'work-items', args['work-item']));
+      await writeJsonFile(path, acgSemanticScanObservation, observation);
+
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args['work-item'],
+          base: args.base,
+          change_count: observation.change_count,
+          seeded: false,
+        });
+      } else {
+        writeHuman(
+          `semantic observe: ${observation.change_count} exported signature change(s) vs ${args.base} → semantic-scan-observation.json (non-blocking)`,
+        );
+      }
+    } catch (err) {
+      writeError(`semantic observe failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const semanticCommand = defineCommand({
   meta: {
     name: 'semantic',
     description:
-      'SemanticCompatibility producer — scan/detect (seed) / verdict (resolve) (단계6, OBJ-43)',
+      'SemanticCompatibility producer — scan/observe (produce) / detect / verdict (단계6, OBJ-43)',
   },
   subCommands: {
     scan: scanCommand,
+    observe: observeCommand,
     detect: detectCommand,
     verdict: verdictCommand,
   },

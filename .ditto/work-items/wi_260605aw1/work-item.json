@@ -22,6 +22,15 @@
         { "kind": "file", "summary": "src/hooks/semantic-nudge.ts(순수 semanticScanNudge/filterSourceFiles + impure computeSemanticNudge) + stop.ts 최종 exit-0 경로 배선. git.ts listChangedFilesVsRef, work-item-handoff pickBaseRef export." },
         { "kind": "command", "summary": "bun test semantic-nudge.test.ts 7 pass(순수 분기) + semantic-nudge-integration.test.ts 3 pass(실git: 발동/semantic있음 미발동/terminal 미발동, exit0 유지). 전체 1164 pass/0 fail, lint·build clean." }
       ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "S2 scan-at-verify: 비-게이트 semantic-scan-observation 스키마 + `ditto semantic observe --base <ref>` — fingerprint(base sha+diff) 일치 시 CodeQL skip, 아니면 scanSignatureChanges→observation 기록(전체 변경 list, multi-change OK, blocking artifact 미작성=O3 분리). verify 스킬에 observe 지시 배선. 순수+실 CodeQL e2e.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "src/schemas/acg-semantic-scan-observation.ts(비-게이트, stop 미소비) + src/acg/semantic/scan-observation.ts(computeScanFingerprint/buildScanObservation 순수) + semantic.ts observeCommand + git.ts diffVsRef + skills/verify/SKILL.md 배선 + schemas:export 등록." },
+        { "kind": "command", "summary": "bun test scan-observation.test.ts 5 pass(순수). CODEQL_E2E=1 semantic-observe-e2e.test.ts 2 pass(실git+CodeQL: 변경 기록+blocking 미작성, fingerprint skip). 전체 1169 pass/7 skip/0 fail, lint·build clean." }
+      ]
     }
   ],
   "status": "in_progress",
@@ -33,10 +42,19 @@
     "src/core/git.ts",
     "src/core/work-item-handoff.ts",
     "tests/hooks/semantic-nudge.test.ts",
-    "tests/hooks/semantic-nudge-integration.test.ts"
+    "tests/hooks/semantic-nudge-integration.test.ts",
+    "src/schemas/acg-semantic-scan-observation.ts",
+    "src/acg/semantic/scan-observation.ts",
+    "src/cli/commands/semantic.ts",
+    "scripts/export-schemas.ts",
+    "schemas/acg-semantic-scan-observation.schema.json",
+    "skills/verify/SKILL.md",
+    "tests/acg/scan-observation.test.ts",
+    "tests/cli/semantic-observe-e2e.test.ts"
   ],
   "risks": [
-    { "description": "S2(scan-at-verify, observation 산출물)·S3(opt-in typed 홈, scan-status, 1-change diagnostic, base fallback 영속)는 미구현. 이 turn은 S1까지.", "severity": "medium" },
+    { "description": "S3(opt-in typed 홈, semantic-scan-status.json, 1-change diagnostic, base fallback baseUsed 영속)는 미구현. S1(nudge)·S2(observe)는 완료.", "severity": "medium" },
+    { "description": "observation은 비-게이트라 stop이 안 읽음 — 현재 소비처는 에이전트/사람 가시성뿐. observation→blocking 승격은 명시(detect/verdict). nudge가 observation을 읽어 더 정밀해지는 건 후속.", "severity": "low" },
     { "description": "nudge는 'source 파일 변경 + semantic 산출물 없음'만 봄(시그니처 변경 여부는 안 봄, 그건 scan이 판정). 약간의 over-nudge 가능하나 advisory라 무해. untracked 새 파일은 git diff에 안 잡힘(기존 심볼 시그니처 변경이 주 대상이라 수용).", "severity": "low" }
   ],
   "runs": [],

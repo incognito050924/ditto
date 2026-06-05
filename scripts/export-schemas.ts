@@ -12,6 +12,7 @@ import { acgJourneyRun } from '~/schemas/acg-journey-run';
 import { acgJourneySpec } from '~/schemas/acg-journey-spec';
 import { acgReviewGraph } from '~/schemas/acg-review-graph';
 import { acgSemanticCompatibility } from '~/schemas/acg-semantic-compatibility';
+import { acgSemanticScanObservation } from '~/schemas/acg-semantic-scan-observation';
 import { autopilot } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
 import { convergence } from '~/schemas/convergence';
@@ -58,6 +59,7 @@ export const schemaExports: ReadonlyArray<{ name: string; schema: ZodTypeAny }> 
   { name: 'acg-impact-graph', schema: acgImpactGraph },
   { name: 'acg-architecture-spec', schema: acgArchitectureSpec },
   { name: 'acg-semantic-compatibility', schema: acgSemanticCompatibility },
+  { name: 'acg-semantic-scan-observation', schema: acgSemanticScanObservation },
   { name: 'acg-review-graph', schema: acgReviewGraph },
   { name: 'acg-fitness-function', schema: acgFitnessFunction },
   { name: 'acg-assurance-snapshot', schema: acgAssuranceSnapshot },

@@ -1,0 +1,106 @@
+{
+  "$ref": "#/definitions/acg-semantic-scan-observation",
+  "definitions": {
+    "acg-semantic-scan-observation": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "kind": {
+          "type": "string",
+          "const": "acg.semantic-scan-observation.v1"
+        },
+        "work_item_id": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Stable identifier for a work item"
+        },
+        "produced_by": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "description": "Who produced this ACG artifact"
+        },
+        "produced_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "base_used": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Git ref the scan diffed against"
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fingerprint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "sha256(base sha + diff) — re-run skips when unchanged"
+        },
+        "change_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string",
+                "minLength": 1
+              },
+              "symbol": {
+                "type": "string",
+                "minLength": 1
+              },
+              "before": {
+                "type": "string",
+                "minLength": 1
+              },
+              "after": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "file",
+              "symbol",
+              "before",
+              "after"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "work_item_id",
+        "produced_by",
+        "produced_at",
+        "base_used",
+        "language",
+        "source_root",
+        "fingerprint",
+        "change_count"
+      ],
+      "additionalProperties": false,
+      "description": "ACG SemanticScanObservation — non-gated record of observed signature changes"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
