@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { commandProvider } from '~/acg/fitness/command-provider';
 import { computeDrift, loadAssuranceSnapshots } from '~/acg/fitness/drift';
+import { executingProvider } from '~/acg/fitness/executed-provider';
 import { type FitnessContext, runFitness } from '~/acg/fitness/fitness-runner';
 import { compositeProvider } from '~/acg/fitness/injected-provider';
 import { FitnessFunctionStore } from '~/core/fitness-function-store';
@@ -53,6 +54,12 @@ export const fitnessCommand = defineCommand({
           description:
             'Path to an agent-produced acg.fitness-verdict.v1 file. Routes llm_judged/executed functions to the injected provider; deterministic still runs commands',
         },
+        execute: {
+          type: 'boolean',
+          default: false,
+          description:
+            'Run executed-mode functions directly (spec + execution policy: timeout/retries/flake) instead of consuming injected verdicts. Costly — opt-in (ADR-0004 Q4). llm_judged still needs --verdicts',
+        },
         output: { type: 'string', description: 'Output format: human|json', default: 'human' },
       },
       run: async ({ args }) => {
@@ -100,9 +107,13 @@ export const fitnessCommand = defineCommand({
             producedAt: new Date().toISOString(),
           };
           const verdictsPath = typeof args.verdicts === 'string' ? args.verdicts : undefined;
-          const provider = verdictsPath
-            ? compositeProvider(repoRoot, verdictsPath)
-            : commandProvider(repoRoot);
+          // --execute: executed-mode를 직접 실행(executingProvider). 미지정이면 기존 경로
+          // (verdicts→injected 합성, 아니면 deterministic-only command) 그대로(무회귀).
+          const provider = args.execute
+            ? executingProvider(repoRoot, verdictsPath)
+            : verdictsPath
+              ? compositeProvider(repoRoot, verdictsPath)
+              : commandProvider(repoRoot);
           const snapshot = await runFitness(functions, ctx, provider);
           const path = join(
             repoRoot,
