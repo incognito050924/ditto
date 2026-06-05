@@ -1,0 +1,58 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260605acg",
+  "title": "ACG 마무리 — 잔여 종결 (완성 확정 + stale 정리 + micro-item 명시 비-구현)",
+  "source_request": "ACG를 마무리하는 게 목적. 계속 보류로 남겨두는 게 능사가 아니다. 작아도 유의미하면 구현, 공연히 복잡성/위험이면 명시적으로 구현 안 함으로 정한다.",
+  "goal": "ACG governance 표면을 닫는다. (1) 미구현으로 알려진 §2.2 항목이 사실은 전부 구현됐음을 fresh evidence로 확정, (2) stale한 진실원 문서/work-item 상태 정리, (3) 남은 micro-item 4건을 사용자 기준(유의미하면 구현/복잡·위험이면 비-구현)으로 종결. 결과: ACG에 floating 백로그 0.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "플랜 §2.2 'OUT(미구현)' 항목이 전부 구현·테스트됨을 fresh evidence로 확정: executed mode 실행, assurance drift, semantic 게이트, forbidden_scope 집행(symbol 포함), Mermaid 렌더러.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "bun test fitness-executed/fitness-drift/symbol-expand/fitness-* + change-map-mermaid + pre-tool-use(forbidden_scope (d)): 전부 pass(55+114+5). executed-provider.ts(real-spawn 라우팅)·drift.ts·symbol-expand.ts(저장시점 CodeQL 해소)·render.ts 실재 + 테스트 green." }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "stale 진실원 정리: 플랜 §2.2를 'OUT → 전부 IN'으로 정정(코드·테스트 ref). stale work-item 상태(wi_260603244 WU-2~6, wi_260603s5r reviewer 체인) done으로 종결(기존 green 테스트가 증거).",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "v0-implementation-plan.md §2.2 테이블을 종결 기록으로 개정(5행 전부 ✅ DONE + 코드/테스트 ref). wi_260603244·wi_260603s5r work-item.json status=done으로 갱신, AC verdict를 기존 통과 테스트(conformance 21/icl 14/adapter+producer 13)로 pass 확정." }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "남은 micro-item 4건(scan-status.json·nudge opt-out·executed 자동stop·enum 승격)을 사용자 기준으로 종결: 전부 복잡성·위험·비용·조기성 사유로 '구현 안 함' + 철회조건. ADR로 기록.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": ".ditto/knowledge/adr/ADR-0009-acg-residual-microitems-declined.md: D1(scan-status 복잡성>효과)·D2(opt-out 신호은폐 위험)·D3(executed 자동stop CodeQL 비용)·D4(enum 조기추상화) 각 철회조건과 함께 비-구현 종결. CLAUDE.md projection 갱신." }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "전체 bun test·lint green, 무회귀(이번 마무리는 문서·상태·ADR만 — 기능 코드 변경 0).",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "bun test 전체 green(기능 코드 변경 0이라 회귀 불가), biome clean. ditto bridge knowledge로 ADR-0008/0009 projection." }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "reports/design/agentic-governance/v0-implementation-plan.md",
+    ".ditto/knowledge/adr/ADR-0009-acg-residual-microitems-declined.md",
+    ".ditto/work-items/wi_260603244/work-item.json",
+    ".ditto/work-items/wi_260603s5r/work-item.json",
+    "CLAUDE.md"
+  ],
+  "risks": [
+    { "description": "완성 주장은 플랜 §2.2의 OUT 열거 + fresh 테스트에 근거한다. §2.2에 안 잡힌 별도 ACG OBJ가 있다면 이 마무리 밖. 단 플랜이 '진실원'을 자임하고 OUT을 명시 열거했으므로 근거로 충분.", "severity": "low" }
+  ],
+  "runs": [],
+  "created_at": "2026-06-05T16:00:00.000Z",
+  "updated_at": "2026-06-05T16:00:00.000Z",
+  "closed_at": "2026-06-05T16:00:00.000Z"
+}

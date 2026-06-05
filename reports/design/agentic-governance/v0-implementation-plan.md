@@ -47,17 +47,22 @@ reviews: [reviews/dialectic-4.json, reviews/dialectic-5.json, reviews/dialectic-
 | 단계 8 FitnessFunction 실행/스케줄러 | `src/acg/fitness/fitness-runner.ts`(`scheduleDecision` 비용정책·fail-closed escalate, `runFitness`→AssuranceSnapshot) + `cli/commands/fitness.ts` + Stop 게이트 | `tests/acg/fitness-runner.test.ts` — 13 pass | Q4, OBJ-41/47 |
 | CodeQL deterministic provider | `src/acg/fitness/codeql-provider.ts`(SARIF→정규화 violation identity, raw line 제외) + `cli` `codeql-sarif:<path>` | `tests/acg/fitness-codeql-provider.test.ts` — 7 pass(line 이동 동일성 보존) | — |
 
-### 2.2 여전히 OUT (미구현 — 정확)
+### 2.2 ~~여전히 OUT (미구현)~~ → 전부 IN (2026-06-05 마무리, wi_260605acg 코드 대조)
 
-| 제외 항목 | 이유 | 의존 |
+> **갱신.** 2026-06-04 기준 OUT이던 항목이 이후 전부 구현·테스트되어 IN으로 이동했다.
+> ACG v0 governance 표면에 **미구현 항목 없음**(아래 표는 폐지된 OUT 목록의 종결 기록).
+
+| 과거 OUT 항목 | 현재 상태 | 구현·증거 |
 |---|---|---|
-| FitnessFunction `executed` mode **실행** | 스케줄(`scheduleDecision`)은 됨, e2e 실행 provider 미구현 | Q4 |
-| Assurance 주기 평가 / drift 집계 뷰 | snapshot 생산은 됨, 시계열 drift 소비처 미구현 | Q4 |
-| ~~단계 6 semantic 게이트 *강제*~~ | **DONE** — 게이트 소비(sg1) + 생산자 MVP(wi_260605sv1, `ditto semantic detect`/`verdict`) 구현. diff 자동추출/characterization 게이트/자동배선은 분리 후속(reviews/dialectic-1.md) | ~~OBJ-43~~ |
-| PreToolUse forbidden_scope 집행 | ICL은 텍스트 산출까지(D6), 런타임 집행 미구현 | OBJ-44 |
-| Change Map 렌더러(Mermaid) | 텍스트 정본만, 다이어그램 후속 | — |
+| FitnessFunction `executed` mode **실행** | ✅ DONE | `src/acg/fitness/executed-provider.ts`(flake/timeout/retry, real-spawn 라우팅) · `tests/acg/fitness-executed.test.ts` |
+| Assurance drift 집계 | ✅ DONE | `src/acg/fitness/drift.ts` · `tests/acg/fitness-drift.test.ts` |
+| 단계 6 semantic 게이트 *강제* | ✅ DONE | 소비(sg1)+생산자(sv1)+diff 자동추출(de1)+characterization 게이트(ch1)+다언어 바인딩(ml1)+자동배선(aw1). `tests/hooks/stop.test.ts`·`tests/acg/signature-codeql*` |
+| PreToolUse forbidden_scope 집행 | ✅ DONE | path/glob/layer/public_surface는 hot-path 즉시 집행(`src/acg/scope/resolve.ts`), `symbol`은 계약 저장 시점 CodeQL 해소(`src/acg/scope/symbol-expand.ts`→path 치환). `tests/hooks/pre-tool-use.test.ts`·`tests/acg/symbol-expand.test.ts` |
+| Change Map 렌더러(Mermaid) | ✅ DONE | `src/acg/change-map/render.ts` · `tests/acg/change-map-mermaid.test.ts` |
 
-> 스키마(SemanticCompatibility·FitnessFunction·AssuranceSnapshot·ArchitectureSpec·ImpactGraph·JourneySpec)는 전부 WU-1에 포함되어 정의·검증됨. 위 2.2는 그 일부를 *추가로 실행·집행하는 러너/게이트*가 남았다는 뜻이다.
+> **남은 micro-item은 "구현 안 함"으로 명시 종결**(ADR-0009): semantic-scan-status.json(복잡성>효과), nudge opt-out(실 신호 은폐 위험), executed 자동-stop 트리거(CodeQL 비용 — opt-in 유지), 어휘 enum 승격(표본 1 — premature). 각 철회조건은 ADR-0009.
+>
+> 스키마(SemanticCompatibility·FitnessFunction·AssuranceSnapshot·ArchitectureSpec·ImpactGraph·JourneySpec)는 전부 WU-1에 정의·검증됨. 그 실행·집행 러너/게이트도 위와 같이 전부 IN이다.
 
 ## 3. [DECIDED] 기술 결정 (구현으로 확정됨)
 

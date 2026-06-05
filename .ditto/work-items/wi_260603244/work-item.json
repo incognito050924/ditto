@@ -8,29 +8,37 @@
     {
       "id": "ac-1",
       "statement": "WU-2 conformance 테스트가 cross-ref enum 일치·journey_id 참조 무결성·user_journey 노드 path 없이 유효를 검증하며 green",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "wi_260605acg 종결 검증: bun test tests/schemas/acg-conformance.test.ts green(21 pass) — cross-ref enum 정합·journey_id 무결성." }
+      ]
     },
     {
       "id": "ac-2",
       "statement": "WU-3 ICL 컴파일러가 boxwood 예시 .icl을 schema-valid ChangeContract로 컴파일하고 surface→public_surface·cmd/query→deterministic·judge→llm_judged 매핑, forbid 빈블록 등 음성케이스는 에러",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "bun test tests/acg/icl-compiler.test.ts green(14 pass) — src/acg/icl/{tokenizer,parser,ast,compile,static-check}.ts 실재." }
+      ]
     },
     {
       "id": "ac-3",
       "statement": "WU-4 acg_review 어댑터가 reviewer-output↔ReviewGraph를 왕복 무손실 투영하고 reviewer-output 스키마/additionalProperties 정책이 불변(신규 모듈만 추가)",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "bun test tests/acg/acg-review-adapter.test.ts + acg-review-producer.test.ts green(13 pass) — src/acg/review/acg-review-adapter.ts 왕복 투영." }
+      ]
     },
     {
       "id": "ac-4",
       "statement": "WU-2~4가 전부 ACG 내부 신규 모듈로 공유 런타임을 변경하지 않으며 전체 테스트 스위트 회귀 0·biome clean",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "전체 bun test green·biome clean(wi_260605acg 시점 대조). WU-2~4 산출이 src/acg/{icl,review}/ 신규 모듈로 존재, 공유 런타임 미변경." }
+      ]
     }
   ],
-  "status": "partial",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [
@@ -89,14 +97,9 @@
     "tests/schemas/sidecar-registration.test.ts"
   ],
   "risks": [],
-  "re_entry": {
-    "command": "ditto work resume wi_260603244",
-    "fresh_evidence_needed": [
-      "미pass acceptance에 대한 검증 결과"
-    ]
-  },
   "runs": [],
   "handoff_path": ".ditto/work-items/wi_260603244/handoff.md",
   "created_at": "2026-06-03T14:17:09.721Z",
-  "updated_at": "2026-06-03T14:45:12.788Z"
+  "updated_at": "2026-06-05T16:00:00.000Z",
+  "closed_at": "2026-06-05T16:00:00.000Z"
 }

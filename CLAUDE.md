@@ -286,7 +286,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=ad04d2ff01aaa56742bcd5e3015dfbd1fb03ec2bc3730d2271d04660ece8e718 -->
+<!-- ditto:knowledge:start sha256=8e0fe0b47ffa0d51b5a1cbcb7532638acb3fbb78f247677f4c79cd3bd8a0ea41 -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -325,5 +325,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-0006 · accepted · 정적 분석 엔진 통일 — CodeQL 단일, 바인딩별 언어-컴파일러 분석기 제거
 - ADR-0007 · accepted · cross_repo 처리 정책 — 명시 선언(internal_packages) + JVM 가드
 - ADR-0008 · accepted · 호스트-추상 기계 보류 — provider 슬롯이 이미 stack-agnostic
+- ADR-0009 · accepted · ACG 잔여 micro-item 명시 종결 — 4건 "구현 안 함" + 철회조건
 
 <!-- ditto:knowledge:end -->
