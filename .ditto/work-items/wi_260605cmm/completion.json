@@ -1,0 +1,32 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260605cmm",
+  "declared_by": "main",
+  "declared_at": "2026-06-05T08:30:00.000Z",
+  "summary": "Change Map Mermaid 렌더러(50-change-map §3). render.ts에 renderMermaid 추가 — render()와 동일 입력·동일 헬퍼(resolveRisk/nodeRef/evidenceBadge)로 ```mermaid graph LR 다이어그램 파생: ◆ 중심노드=위험색 classDef, forbidden_scope=점선 ✕ forbid(:::forbid), affected=실선 →|kind 증거뱃지|, unresolved=점선 ⚠(:::unresolved). 라벨 따옴표→'·개행→공백, 노드 id 인덱스 기반(경로 안전). ditto change-map --output mermaid로 노출(human/json 무변경, parseOutputFormat 우회). 텍스트가 정본, 다이어그램은 파생.",
+  "changed_files": ["src/acg/change-map/render.ts", "src/acg/change-map/index.ts", "src/cli/commands/change-map.ts", "tests/acg/change-map-mermaid.test.ts"],
+  "acceptance": [
+    { "criterion_id": "ac-1", "verdict": "pass", "evidence": [
+      { "kind": "file", "summary": "renderMermaid + label/nodeId 안전 처리" },
+      { "kind": "command", "summary": "단위 5 pass(코드펜스·노드·forbid·affected·unresolved·high·특수문자)" }
+    ] },
+    { "criterion_id": "ac-2", "verdict": "pass", "evidence": [
+      { "kind": "file", "summary": "change-map --output mermaid 분기" },
+      { "kind": "command", "summary": "e2e mermaid 블록 산출, human 무회귀" }
+    ] },
+    { "criterion_id": "ac-3", "verdict": "pass", "evidence": [
+      { "kind": "command", "summary": "전체 1120 pass/0 fail, biome clean, build clean" }
+    ] }
+  ],
+  "verifications": [
+    { "command": "bun test tests/acg/change-map-mermaid.test.ts", "exit_code": 0 },
+    { "command": "ditto change-map --output mermaid (e2e)", "exit_code": 0 },
+    { "command": "bun test (전체)", "exit_code": 0 },
+    { "command": "bun run lint / build", "exit_code": 0 }
+  ],
+  "unverified": [],
+  "remaining_risks": [
+    "노드 라벨은 따옴표→'·개행→공백만 처리. Mermaid 특수문자(예: 대괄호 [], 파이프 |)가 ref에 들어가면 깨질 수 있음 — 현재 ref는 경로/글로브/journey_id라 실무상 드물지만, 필요 시 추가 escape. §3.1 예시는 unresolved를 실선으로 그렸으나 §3.2 렌더규칙 표('점선+회색')를 따라 점선으로 구현(텍스트 정본 우선 원칙상 다이어그램 스타일은 파생이라 무방)."
+  ],
+  "final_verdict": "pass"
+}
