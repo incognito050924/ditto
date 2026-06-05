@@ -48,6 +48,20 @@ export function listChangedFiles(
   }
 }
 
+/** Tracked files changed in the working tree vs a git ref. Empty on any error. */
+export function listChangedFilesVsRef(cwd: string, ref: string): string[] {
+  try {
+    const out = execFileSync('git', ['diff', '--name-only', ref, '--'], { cwd, encoding: 'utf8' });
+    return out
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((p) => p.length > 0)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 /** Resolve a ref to its 40-char sha, or throw when it does not resolve. */
 export function gitRevParse(cwd: string, ref: string): string {
   return execFileSync('git', ['rev-parse', ref], { cwd, encoding: 'utf8' }).trim();

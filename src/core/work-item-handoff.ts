@@ -45,7 +45,7 @@ export class InvalidHeadRefError extends Error {
  * Try a list of refs in order and return the first one git understands.
  * Returns null when none are valid.
  */
-function pickBaseRef(repoRoot: string, candidates: string[]): string | null {
+export function pickBaseRef(repoRoot: string, candidates: string[]): string | null {
   for (const ref of candidates) {
     const proc = Bun.spawnSync(['git', 'rev-parse', '--verify', '--quiet', `${ref}^{commit}`], {
       cwd: repoRoot,

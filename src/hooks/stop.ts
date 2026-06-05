@@ -22,6 +22,7 @@ import { convergence as convergenceSchema } from '~/schemas/convergence';
 import { type Dialectic, dialectic as dialecticSchema } from '~/schemas/dialectic';
 import type { WorkItem } from '~/schemas/work-item';
 import type { HookHandler, HookInput } from './runtime';
+import { computeSemanticNudge } from './semantic-nudge';
 
 /** Opponent severities that make an oracle-linked objection an admissible blocker (§6). */
 const ADMISSIBLE_SEVERITIES: ReadonlySet<string> = new Set(['critical', 'high']);
@@ -439,6 +440,13 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     };
   }
 
-  // (가) nothing left to force.
-  return { exitCode: 0 };
+  // (가) nothing left to force. The work item may stop — but if it touched source
+  // without any semantic-compatibility artifact, surface a non-blocking AX nudge
+  // (S1, wi_260605aw1) to run `ditto semantic scan`. Cheap (git only, no CodeQL),
+  // advisory (exit 0 unchanged), self-limiting (gone once a semantic artifact exists).
+  const nudge = computeSemanticNudge(input.repoRoot, workItem, {
+    semanticPresent: semantic.status === 'ok',
+    isNonTerminal: NON_TERMINAL_STATUSES.includes(workItem.status),
+  });
+  return nudge ? { exitCode: 0, stderr: nudge } : { exitCode: 0 };
 };
