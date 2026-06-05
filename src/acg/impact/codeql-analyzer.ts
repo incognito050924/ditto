@@ -15,8 +15,8 @@
  */
 import { join } from 'node:path';
 import {
-  IMPACT_QUERY_JS,
   type RelationDeps,
+  relationQueries,
   renderQuery,
   runRelationQuery,
 } from '~/core/codeql/relations';
@@ -57,7 +57,11 @@ export class CodeqlImpactAnalyzer implements ImpactAnalyzer {
         language: this.target.language,
         dbPath: join(this.target.cacheDir, 'db'),
         workDir: join(this.target.cacheDir, `q-impact-${this.target.symbol}`),
-        query: renderQuery(IMPACT_QUERY_JS, this.target.symbol, this.target.declFile),
+        query: renderQuery(
+          relationQueries(this.target.language).impact,
+          this.target.symbol,
+          this.target.declFile,
+        ),
         ...(this.target.binary ? { binary: this.target.binary } : {}),
       },
       this.deps,

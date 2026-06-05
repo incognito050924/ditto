@@ -88,14 +88,20 @@ where fromPath = imp.getFile().getRelativePath()
 select fromPath, target
 `;
 
-/** EDGE_QUERY_JS의 `{{FILE_FILTER}}`을 구성한다(순수). 빈 목록 ⇒ 전체(any). */
-export function renderEdgeQuery(changedFiles: string[]): string {
+/**
+ * edge 템플릿의 `{{FILE_FILTER}}`을 구성한다(순수). 빈 목록 ⇒ 전체(any).
+ * 필터는 `fromPath = "..."` 형식으로 모든 언어 edge 템플릿이 공유한다.
+ */
+export function renderEdgeQuery(
+  changedFiles: string[],
+  language: CodeqlLanguage = 'javascript',
+): string {
   const files = changedFiles.map((f) => f.trim()).filter((f) => f.length > 0);
   const filter =
     files.length === 0
       ? 'any()'
       : files.map((f) => `fromPath = "${f.replaceAll('"', '')}"`).join(' or ');
-  return EDGE_QUERY_JS.replaceAll('{{FILE_FILTER}}', filter);
+  return relationQueries(language).edge.replaceAll('{{FILE_FILTER}}', filter);
 }
 
 /**
@@ -117,6 +123,37 @@ where
   or exists(InterfaceDefinition d | d.getName() = "{{SYMBOL}}" and p = d.getFile().getRelativePath())
 select p
 `;
+
+/**
+ * 한 언어 바인딩의 관계쿼리 3종. 결과 형식(impact: p,ln,k / edge: from,to /
+ * symbol-decl: p)은 언어 무관이고, 쿼리 본문만 언어별로 다르다 — "바인딩이 분석기를
+ * 꽂는다"(10-methodology §6)의 실현체. 새 언어 바인딩은 여기 한 항목만 추가한다.
+ */
+export interface RelationQueryTemplates {
+  /** `{{SYMBOL}}`·`{{FILE}}` 치환. impact 영향집합(value/type/decl). */
+  impact: string;
+  /** `{{FILE_FILTER}}` 치환. cross-file import/type 의존 edge. */
+  edge: string;
+  /** `{{SYMBOL}}` 치환. 이름으로 선언 파일을 찾는다(forbidden_scope symbol kind). */
+  symbolDecl: string;
+}
+
+/** 언어 → 관계쿼리 템플릿. 미등록 언어는 바인딩 미구현(throw로 드러냄). */
+export const RELATION_QUERIES: Partial<Record<CodeqlLanguage, RelationQueryTemplates>> = {
+  javascript: { impact: IMPACT_QUERY_JS, edge: EDGE_QUERY_JS, symbolDecl: SYMBOL_DECL_QUERY_JS },
+};
+
+/** 언어 바인딩 템플릿을 가져온다. 미등록이면 명시적 에러(빈 결과로 오판 금지). */
+export function relationQueries(language: CodeqlLanguage): RelationQueryTemplates {
+  const q = RELATION_QUERIES[language];
+  if (!q) {
+    const supported = Object.keys(RELATION_QUERIES).join(', ');
+    throw new Error(
+      `CodeQL relation queries not bound for language '${language}' (supported: ${supported})`,
+    );
+  }
+  return q;
+}
 
 /** 언어별 표준 라이브러리 팩(번들 내장; pack install은 no-op). */
 function qlpackYml(language: CodeqlLanguage): string {
@@ -297,7 +334,7 @@ export async function resolveSymbolDeclFiles(
   deps: RelationDeps,
 ): Promise<string[]> {
   const rows = await runRelationQuery(
-    { ...input, query: renderQuery(SYMBOL_DECL_QUERY_JS, input.symbol) },
+    { ...input, query: renderQuery(relationQueries(input.language).symbolDecl, input.symbol) },
     deps,
   );
   const files = rows.map((r) => r[0]).filter((p): p is string => p !== undefined && p.length > 0);
