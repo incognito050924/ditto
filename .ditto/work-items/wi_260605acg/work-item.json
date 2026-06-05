@@ -40,6 +40,7 @@
   ],
   "status": "done",
   "owner_profile": "workspace-write",
+  "handoff_path": ".ditto/work-items/wi_260605acg/handoff.md",
   "child_ids": [],
   "changed_files": [
     "reports/design/agentic-governance/v0-implementation-plan.md",
