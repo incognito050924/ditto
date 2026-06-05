@@ -1,0 +1,66 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260605bxw",
+  "declared_by": "main",
+  "declared_at": "2026-06-05T01:00:00.000Z",
+  "summary": "boxwood automation-engine(Java17/Camunda)에 ACG 분석기 파이프라인이 이식되는지 read-only probe로 실증. CodeQL Java DB(buildless)에서 JS 관계쿼리를 미러링한 Java QL로 impact/boundary를 산출하고 ground truth와 대조: impact 7/7 정확(decoy 배제), boundary 10 엣지(미사용 import·JAR 정확 제외). 결론: 스펙·분석기 추상화는 Java에 이식 가능, 유일한 실질 결합은 relations.ts의 JS 쿼리 본문 하드코딩(얕은 leak). cross-module JAR은 스펙이 이미 unresolved로 예견. boxwood 무수정, ditto src 무변경.",
+  "changed_files": [],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "codeql database create --language=java --build-mode=none --source-root=<automation-engine> 성공(~50s), relations 10.44 MiB. DB는 /tmp/boxwood-cq-db(휘발), boxwood 무수정" },
+        { "kind": "command", "summary": "추출 밀도 실측: source method 5012·method call 14429·boxwood class 462 → buildless로 관계추출 충분" }
+      ]
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "probe/impact-java.ql(IMPACT_QUERY_JS 미러, resolved-callee+선언파일 핀), probe/edge-java.ql(EDGE_QUERY_JS 미러, usage 기반 TypeAccess)" },
+        { "kind": "command", "summary": "impact: BoxwoodHistoryEventHandler.extractRequesterName → caller 6 + decl 1 = 7행 산출. boundary: 동 파일 → cross-file SOURCE 타입 엣지 10개 산출(BQRS→table)" }
+      ]
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "impact 대조: grep ground truth(호출 468·498·528·559·590·621 + 선언 928)와 위치 7/7 완전일치, 차이 0. decoy(line 947 extractRequesterNameFromHistory)는 정밀쿼리가 제외 확인" },
+        { "kind": "command", "summary": "boundary 대조: 파일 import 13개 = JAR 2(Requester·StructuredErrorInfo, source 아님 제외) + source 11. 이 중 ActivityType은 본문 미사용 import(grep 확인)라 usage 쿼리가 제외 → 산출 10 = 실사용 10 일치" }
+      ]
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "probe-findings.md: leak#1 relations.ts 쿼리 본문 JS 하드코딩(얕음, 언어별 템플릿화로 해소)·#2 buildless 충분·#3 cross-module JAR=스펙 예견 unresolved·#4 엣지 의미(import vs usage)·#5 정밀도 기법 이식 확인" },
+        { "kind": "command", "summary": "boxwood read-only 확인: git -C boxwood status에 automation-engine 경로 변경 0(수정은 .claude/state/*뿐, probe 무관). boxwood git 쓰기/커밋/푸시 일절 안 함" },
+        { "kind": "command", "summary": "ditto src 무변경: git status에 .ditto/ 외 변경 0" }
+      ]
+    }
+  ],
+  "verifications": [
+    { "command": "codeql database create --language=java --build-mode=none (automation-engine)", "exit_code": 0 },
+    { "command": "codeql query run impact-java.ql / edge-java.ql", "exit_code": 0 },
+    { "command": "grep ground truth 대조 (extractRequesterName, imports)", "exit_code": 0 }
+  ],
+  "unverified": [
+    {
+      "item": "dataflow/taint 기반 분석(보안 fitness)의 Java buildless 충분성",
+      "reason": "probe는 impact/boundary(call/type 관계)만 검증. taint는 classpath/빌드가 필요할 수 있어 미검증. 이 probe 범위 밖(impact/boundary 이식성 실증이 목표).",
+      "out_of_scope": true
+    },
+    {
+      "item": "멀티모듈 reactor DB로 cross-module(JAR) 의존을 source 엣지로 잡는 것",
+      "reason": "단일모듈 DB로 충분히 leak 판정. 멀티모듈 빌드는 정식 바인딩(후속)의 일이며 probe 결론(JAR=unresolved, 스펙 예견)에 영향 없음.",
+      "out_of_scope": true
+    }
+  ],
+  "remaining_risks": [
+    "결론은 단일 심볼/단일 파일 probe에 근거(impact 1 심볼, boundary 1 파일). 정밀도 일치는 강하나 N=1 규모 — 정식 바인딩 시 다수 심볼로 재확인 권장.",
+    "DB는 /tmp(휘발) — 재현은 probe-findings.md의 절차로 CodeQL 설치 후 재빌드.",
+    "leak#1(쿼리 본문 JS 하드코딩) 해소는 정식 바인딩 작업으로 남음(이 probe는 진단만, ditto 코드 미수정)."
+  ],
+  "final_verdict": "pass"
+}
