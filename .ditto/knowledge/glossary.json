@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-05-24T12:00:00+09:00",
+  "updated_at": "2026-06-05T07:00:00.000Z",
   "entries": [
     {
       "term": "request",
@@ -172,6 +172,26 @@
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-05-24T12:00:00+09:00"
+    },
+    {
+      "term": "cross_repo",
+      "aliases": [],
+      "definition": "단일모듈 CodeQL DB 분석에서 형제모듈(로컬 JAR) 의존이 정적으로 해소되지 않아 ImpactGraph.unresolved에 남는 kind. internal_packages의 glob에 매칭돼야 기록되며, 써드파티(Spring/JDK)와 구분된다.",
+      "examples": ["kr.co.ecoletree.boxwood.domain.runtime.processing.StructuredErrorInfo (automation-engine이 libs의 domain-model JAR를 참조)"],
+      "not_to_be_confused_with": ["journey_unknown", "third-party dependency"],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-05T07:00:00.000Z"
+    },
+    {
+      "term": "internal_packages",
+      "aliases": [],
+      "definition": "ArchitectureSpec의 형제모듈 디스크립터 배열. {type:'glob'} 엔트리는 cross_repo 분류 대상 패키지 글로브, {type:'path'} 엔트리는 로컬 sibling JAR 위치 글로브(JVM 가드 입력)다.",
+      "examples": ["{type:'glob', value:'kr.co.ecoletree.boxwood.domain.**'}", "{type:'path', value:'libs/*.jar'}"],
+      "not_to_be_confused_with": ["public_surfaces", "forbidden_dependencies"],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-05T07:00:00.000Z"
     }
   ]
 }

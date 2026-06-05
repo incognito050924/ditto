@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-06-04T10:05:47.000Z",
+  "updated_at": "2026-06-05T07:00:00.000Z",
   "context_path": ".ditto/knowledge/CONTEXT.md",
   "glossary_path": ".ditto/knowledge/glossary.json",
   "project_map_path": null,
@@ -58,6 +58,15 @@
       "rationale": "ACG 스펙은 저장소 중립이나 impact/boundary analyzer 구현체가 TS 컴파일러 API에 직접 결합(ts-analyzer.ts/ts-edges.ts)된 leak(핸드오프 §4) — boxwood 등 비-TS 저장소에 거버넌스 불가. LLM 구조추론은 규모 비례로 부정확(사용자 관찰). (D1) call graph(impact)·import graph(boundary)·dataflow 전부 CodeQL 단일 결정론 엔진으로 통일, analyzer 인터페이스 유지·구현체만 교체. (D2) TsImpactAnalyzer/TsEdgeAnalyzer 제거, fast-path 폴백 없음(2경로 동등성 부담·leak 재발 차단), 속도는 commit-sha DB 캐시로 완화. (D3) 관계 추출은 SARIF alert이 아니라 custom .ql→BQRS decode 사실 추출 경로 신설(보안/dataflow는 기존 SARIF 유지). (D4) 검증 단위=boxwood read-only 2번째 바인딩(Java/Camunda+JS/TS 혼재 모노레포, 커밋/푸시 금지·산출물은 .ditto·/tmp). 실증(2026-06-04): DITTO src를 CodeQL 2.25.6 JS DB로 빌드(9.51s), parseSarif 영향집합을 TS type checker 정답지(14노드)와 비교 → 위치 14/14 완전일치·차이 0, CodeQL이 import/call/decl 분리로 더 세밀. D1·D3 성립, D2 회귀위험 해소(함수 심볼).",
       "change_condition": "슬라이스1에서 CodeQL이 관계를 실용 비용에 추출 못하면 D1/D3 재검토. DB build 비용이 캐시로도 게이트 UX 해치면 D2(폴백 금지) 한정 완화. 남은 실증: type_contract(타입참조) 동등성=슬라이스2, boundary import-edge=슬라이스3, 다언어(java/kotlin)=슬라이스5(boxwood).",
       "path": ".ditto/knowledge/adr/ADR-0006-static-analysis-engine-codeql.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0007",
+      "title": "cross_repo 처리 정책 — 명시 선언(internal_packages) + JVM 가드",
+      "status": "accepted",
+      "rationale": "단일모듈 CodeQL DB로 JVM(Java/Kotlin)을 분석하면 형제모듈 JAR 타입 의존이 fromSource() 필터에서 빠져 ImpactGraph에서 침묵 손실된다(wi_260605cr1). 형제모듈과 써드파티(Spring/JDK)를 구분할 신호가 필요. (D1) source-root를 늘 상위로 올리는 자동 추론(reactor 전체 빌드)에 의존하지 않고 형제모듈을 ArchitectureSpec.internal_packages에 명시 선언 — 타입드 엔트리 {type:'glob'}=cross_repo 분류 대상 패키지 글로브(globToRegExp, ^…$ 앵커), {type:'path'}=로컬 sibling JAR 위치 글로브(가드 입력). (D2) NOT-fromSource type/import 참조를 (fromPath,package)로 뽑아(UNRESOLVED_QUERY_*) glob 매칭된 것만 ImpactGraph.unresolved{kind:cross_repo}로 기록, glob 미선언이면 분류 skip(잘못된 cross_repo 노이즈보다 미수집을 택하고 가드로 드러냄), 써드파티는 무시. (D3) fail-loud 가드를 CLI 내장 + PreToolUse 훅 둘 다에: JVM·로컬 JAR 존재·선언 누락이면 block(CLI exit 65/훅 exit 2), JVM·glob 미선언·로컬 JAR 없음이면 warn(CLI만), 선언 완비 또는 비JVM이면 ok. 실증(2026-06-05): 실 boxwood automation-engine DB에서 UNRESOLVED_QUERY_JAVA가 NOT-fromSource 188 패키지 산출→glob kr.co.ecoletree.boxwood.domain.**가 9개 domain-model 패키지 매칭(org.springframework/java.* 무매칭), scanLocalJars가 libs/boxwood-*.jar 10개 탐지→미선언 block·glob+path ok, 합성 Java probe로 단일모듈→cross_repo·멀티모듈→손실 0 통제, 전체 bun test green.",
+      "change_condition": "멀티모듈 reactor 빌드가 기본 워크플로가 되면 형제모듈이 source로 해소돼 가드가 무의미 → 재검토. JAR 내부 패키지 단위 정밀 커버리지가 필요해지면 unzip 도입 검토. 훅 텍스트 매칭이 새는 호출 형태가 늘면 CLI 가드 의존도를 명문화.",
+      "path": ".ditto/knowledge/adr/ADR-0007-cross-repo-handling-policy.md",
       "superseded_by": null
     }
   ],

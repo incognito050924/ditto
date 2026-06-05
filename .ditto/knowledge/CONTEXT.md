@@ -58,6 +58,12 @@ run에 넘기는 prompt. goal, acceptance, git state, relevant files, last failu
 ### unverified
 "검증하지 못함"의 명시적 표기. 모름은 모름으로 표기해야 하며 완료 주장과 섞지 않는다.
 
+### cross_repo
+단일모듈 CodeQL DB 분석에서 형제모듈(로컬 JAR) 의존이 정적으로 해소되지 않아 `ImpactGraph.unresolved`에 남는 kind. `internal_packages`의 glob에 매칭돼야 기록되며, 써드파티(Spring/JDK)와 구분된다. 결정 근거는 ADR-0007.
+
+### internal_packages
+`ArchitectureSpec`의 형제모듈 디스크립터 배열. `{type:'glob'}`=cross_repo 분류 대상 패키지 글로브, `{type:'path'}`=로컬 sibling JAR 위치 글로브(JVM 가드 입력). `public_surfaces`·`forbidden_dependencies`와 혼동하지 않는다.
+
 ## 금지 표현
 
 다음 표현은 사용자 응답에서 self-check가 reject한다.
