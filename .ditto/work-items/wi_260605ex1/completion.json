@@ -1,0 +1,38 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260605ex1",
+  "declared_by": "main",
+  "declared_at": "2026-06-05T08:10:00.000Z",
+  "summary": "FitnessFunction executed 모드 실행 엔진(단계8, ADR-0004 Q4/OBJ-18). src/acg/fitness/executed-provider.ts: decideExecutedOutcome(순수 flake 판정 — 전부 errored→skip fail-closed, 일치→stable, flaky→ quarantine=skip/retry=최소위반/fail=union), executedProvider(execution.retries로 1+retries회 실행·timeout_s 적용·spawn 주입형), defaultRunOnce(Bun.spawn+setTimeout kill, stdout 라인=위반 — deterministic과 동일 출력 계약, exit code 무시·timeout/spawn 실패만 errored), executingProvider(deterministic→command, executed→executed, llm_judged→injected/skip). ditto fitness run --execute로 opt-in(비용 큰 모드라 자동 stop 트리거 아님). 미지정 시 기존 경로 무변경.",
+  "changed_files": ["src/acg/fitness/executed-provider.ts", "src/cli/commands/fitness.ts", "tests/acg/fitness-executed.test.ts"],
+  "acceptance": [
+    { "criterion_id": "ac-1", "verdict": "pass", "evidence": [
+      { "kind": "file", "summary": "decideExecutedOutcome + executedProvider(retries/timeout/flake)" },
+      { "kind": "command", "summary": "단위: flake 5분기 + provider deps 주입 3케이스 pass" }
+    ] },
+    { "criterion_id": "ac-2", "verdict": "pass", "evidence": [
+      { "kind": "file", "summary": "defaultRunOnce(spawn+timeout) + executingProvider 라우팅" },
+      { "kind": "command", "summary": "real spawn: printf→위반, true→[], sleep5+timeout1→errored skip; 라우팅 3모드 pass" }
+    ] },
+    { "criterion_id": "ac-3", "verdict": "pass", "evidence": [
+      { "kind": "file", "summary": "fitness run --execute → executingProvider" },
+      { "kind": "command", "summary": "e2e: --execute 없으면 executed skip(무회귀), 있으면 실행→2위반→block→fail, snapshot 기록" }
+    ] },
+    { "criterion_id": "ac-4", "verdict": "pass", "evidence": [
+      { "kind": "command", "summary": "전체 1115 pass/0 fail, biome clean, build clean" }
+    ] }
+  ],
+  "verifications": [
+    { "command": "bun test tests/acg/fitness-executed.test.ts", "exit_code": 0 },
+    { "command": "ditto fitness run --execute (합성 executed fitness e2e)", "exit_code": 1 },
+    { "command": "bun test (전체)", "exit_code": 0 },
+    { "command": "bun run lint / build", "exit_code": 0 }
+  ],
+  "unverified": [],
+  "remaining_risks": [
+    "출력 계약은 deterministic과 동일(stdout 라인=위반, exit code 무시). 테스트 러너가 exit code로만 pass/fail를 알리고 stdout에 위반을 안 찍으면 위반 0(=pass)으로 보일 수 있음 — executed spec은 위반 식별자를 stdout으로 방출해야 한다(문서화). 더 풍부한 파서(JUnit XML 등)는 후속.",
+    "executed는 임의 shell spec을 spawn한다(deterministic command-provider와 동일 신뢰 모델 — fitness function은 repo 저작 거버넌스 설정). 자동 stop 트리거가 아니라 --execute opt-in이라 의도치 않은 실행은 막힌다.",
+    "flake 판정은 attempt들의 위반셋 일치/불일치만 본다(통계적 flake율 추적 아님). retry는 '최소 위반 attempt 채택'이라 한 번이라도 깨끗하면 통과 — 엄격함이 필요하면 flake_policy=fail."
+  ],
+  "final_verdict": "pass"
+}
