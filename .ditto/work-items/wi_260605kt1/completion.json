@@ -1,0 +1,24 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260605kt1",
+  "declared_by": "main",
+  "declared_at": "2026-06-05T06:00:00.000Z",
+  "summary": "Kotlin 바인딩(codeql 트리오 2/3). Kotlin은 CodeQL java(java-kotlin) 추출기로 분석되므로 java AST/쿼리를 그대로 재사용. --language kotlin 라벨을 추가하되 codeqlExtractorLanguage(kotlin→java)로 codeql --language·qlpack을 java로 매핑. 안전 핵심: Kotlin buildless(none)는 빈 추출(false-clean)이라 kotlin을 NO_BUILD_LANGUAGES에서 빼 selectBuildMode가 autobuild/manual을 강제. 후처리 isTestFile(.kt)·stripModuleExt(.kt). 단위 6 pass + 실측으로 안전동작 확인(autobuild 라우팅 → 빌드 실패가 loud, 빈 추출 silent-pass 아님). 라이브 Kotlin impact e2e는 portal-backend Gradle 빌드가 이 환경에서 실패해 미실시(조건부).",
+  "changed_files": ["src/core/codeql/runner.ts", "src/core/codeql/relations.ts", "src/acg/impact/codeql-analyzer.ts", "src/acg/boundary/codeql-edges.ts", "src/cli/commands/impact.ts", "src/cli/commands/boundary.ts", "tests/acg/codeql-kotlin-binding.test.ts"],
+  "acceptance": [
+    { "criterion_id": "ac-1", "verdict": "pass", "evidence": [{ "kind": "file", "summary": "runner.ts codeqlExtractorLanguage(kotlin→java) + buildCreateArgs --language=codeqlExtractorLanguage(...). relations.ts RELATION_QUERIES.kotlin=java 템플릿, qlpackYml kotlin→java-all" }, { "kind": "command", "summary": "bun test codeql-kotlin-binding.test.ts: relationQueries('kotlin').impact===java.impact, buildCreateArgs(kotlin)→--language=java (6 pass)" }] },
+    { "criterion_id": "ac-2", "verdict": "pass", "evidence": [{ "kind": "command", "summary": "단위: selectBuildMode('kotlin')='autobuild', ('kotlin', gradle)='manual' — none 절대 없음. CLI buildMode 'none' 강제는 language==='java'만 해당(kotlin 비해당)" }, { "kind": "command", "summary": "실측 안전동작: 합성 .kt를 build-mode=none으로 빌드 시 'could not process Kotlin' 빈 추출 확인 → kotlin이 autobuild로 라우팅되어 portal-backend 빌드 실패가 exit 1·fatal로 loud 표면화(false-clean=silent empty pass 차단)" }] },
+    { "criterion_id": "ac-3", "verdict": "pass", "evidence": [{ "kind": "file", "summary": "codeql-analyzer.ts isTestFile kotlin(/test/·*Test/Tests/IT.kt), codeql-edges.ts stripModuleExt kotlin(.kt). impact/boundary CLI 도움말 kotlin" }, { "kind": "command", "summary": "전체 bun test 1066 pass/3 skip/0 fail(+6), lint·build clean. boxwood portal-backend 무수정" }] }
+  ],
+  "verifications": [
+    { "command": "bun test tests/acg/codeql-kotlin-binding.test.ts", "exit_code": 0 },
+    { "command": "codeql database create --language=java --build-mode=none (합성 .kt) → empty extraction 확인", "exit_code": 0 },
+    { "command": "codeql database create --build-mode=autobuild (portal-backend) → Gradle BUILD FAILED (환경)", "exit_code": 1 },
+    { "command": "bun test (전체) / lint / build", "exit_code": 0 }
+  ],
+  "unverified": [
+    { "item": "라이브 Kotlin impact/boundary e2e(portal-backend 실 심볼)", "reason": "portal-backend Gradle autobuild가 이 환경에서 실패(BUILD FAILED 3m39s — 내부 의존/구성 미충족). 사용자 합의가 'e2e는 Gradle 가능 시'였고 가능하지 않았음. 코드 바인딩·안전·후처리는 단위+실측으로 검증됐고, 안전수정 덕에 빌드 실패가 loud(빈 추출 silent-pass 아님)라 미실시여도 false-clean 위험 없음. Gradle 빌더블 환경에서 재현은 ditto impact --language kotlin --build-command './gradlew compileKotlin'.", "out_of_scope": true }
+  ],
+  "remaining_risks": ["라이브 Kotlin 관계 정밀도(java 추출기가 Kotlin 심볼을 Java AST로 보는 동등성)는 실 DB e2e 전까지 미실증 — java AST 재사용이라 가설은 강하나 Java probe 같은 N/N 실측은 Gradle 가능 환경에서 필요.", "kotlin은 항상 빌드(autobuild/manual) 필요 → CodeQL DB 생성 비용이 JS/Python보다 큼(빌드 환경 의존)."],
+  "final_verdict": "pass"
+}
