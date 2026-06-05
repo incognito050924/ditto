@@ -1,0 +1,34 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260605dg2",
+  "declared_by": "main",
+  "declared_at": "2026-06-05T08:45:00.000Z",
+  "summary": "Assurance drift 소비처(C2). drift.ts에 assessDrift(순수) — rising 추세이면서 변경을 가로지른 누적 신규위반이 임계(min_new_violations) 이상인 function을 concerning으로 판정. ditto fitness drift --gate [--min-new-violations N]가 concerning이 있으면 exit 1(RUNTIME_ERROR_EXIT)로 종료해 CI가 SLOP 가속에 빌드를 실패시킬 수 있게 함(단계8을 정보 뷰→게이트 승격). json은 gate{concerning,min_new_violations} 포함. --gate 미지정 시 기존 뷰·exit 0 무변경. C1(주기 스케줄러)은 CI cron 몫이라 in-repo 범위 밖(설계상 데몬 아님).",
+  "changed_files": ["src/acg/fitness/drift.ts", "src/cli/commands/fitness.ts", "tests/acg/fitness-drift.test.ts"],
+  "acceptance": [
+    { "criterion_id": "ac-1", "verdict": "pass", "evidence": [
+      { "kind": "file", "summary": "assessDrift(rising && cumulative>=임계)" },
+      { "kind": "command", "summary": "단위 3 pass(rising만·임계·빈)" }
+    ] },
+    { "criterion_id": "ac-2", "verdict": "pass", "evidence": [
+      { "kind": "file", "summary": "drift --gate/--min-new-violations + exit 1" },
+      { "kind": "command", "summary": "e2e: --gate rising→exit1, 임계 미달→exit0, no-gate→exit0, json gate" }
+    ] },
+    { "criterion_id": "ac-3", "verdict": "pass", "evidence": [
+      { "kind": "command", "summary": "전체 1123 pass/0 fail, biome clean, build clean" }
+    ] }
+  ],
+  "verifications": [
+    { "command": "bun test tests/acg/fitness-drift.test.ts", "exit_code": 0 },
+    { "command": "ditto fitness drift --gate (rising e2e)", "exit_code": 1 },
+    { "command": "ditto fitness drift --gate --min-new-violations 5 (임계 미달)", "exit_code": 0 },
+    { "command": "bun test (전체)", "exit_code": 0 },
+    { "command": "bun run lint / build", "exit_code": 0 }
+  ],
+  "unverified": [],
+  "remaining_risks": [
+    "게이트 기준은 direction==='rising'(violations 첫·끝 단순 비교) + 누적 신규위반 임계. 비단조 추세(올랐다 내렸다)나 선형 회귀 기울기는 안 봄 — 노이즈가 문제면 --min-new-violations로 완화. 한 변경의 신규위반은 이미 fitness run이 게이팅하므로 이 게이트는 '변경 가로지른 누적'만 추가로 본다.",
+    "C1(주기 평가 스케줄러)은 의도적으로 미구현 — DITTO는 데몬이 아니라 CLI/hook(ADR-0001)이고 스케줄은 CI cron/harness 몫(예: 0 0 * * 1 ditto fitness drift --gate). periodic 트리거 자체는 fitness run이 이미 지원."
+  ],
+  "final_verdict": "pass"
+}
