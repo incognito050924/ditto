@@ -48,7 +48,7 @@ describe('acgSemanticCompatibility — OBJ-43 producer rules', () => {
     expect(acgSemanticCompatibility.safeParse(seed).success).toBe(true);
   });
 
-  test("semantic_safe='yes' WITHOUT reproducibility rejected (no unsubstantiated yes)", () => {
+  test("agent semantic_safe='yes' WITHOUT reproducibility rejected (no unsubstantiated machine yes)", () => {
     const r = acgSemanticCompatibility.safeParse({
       ...base(),
       old_meaning: 'null = 미존재',
@@ -100,16 +100,15 @@ describe('acgSemanticCompatibility — OBJ-43 producer rules', () => {
     expect(r.success).toBe(false);
   });
 
-  test("user-produced semantic_safe='yes' is exempt from characterization (human attestation)", () => {
+  // wi_260605ur1 — a user `yes` is a full human attestation: exempt from BOTH
+  // reproducibility AND characterization (mirrors intended_breaking). The agent
+  // still owes both; only the produced_by axis differs.
+  test("user-produced semantic_safe='yes' parses with NO reproducibility and NO characterization (human attestation)", () => {
     const r = acgSemanticCompatibility.safeParse({
       ...base(),
       produced_by: 'user' as const,
       old_meaning: 'null = 미존재',
-      verdict: {
-        type_safe: true,
-        semantic_safe: 'yes' as const,
-        reproducibility: { model_version: 'claude-opus-4-8' },
-      },
+      verdict: { type_safe: true, semantic_safe: 'yes' as const },
     });
     expect(r.success).toBe(true);
   });

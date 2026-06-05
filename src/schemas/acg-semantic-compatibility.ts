@@ -45,26 +45,27 @@ export const acgSemanticCompatibility = z
       reproducibility: acgFitnessVerdictReproducibility
         .optional()
         .describe(
-          'Pinned judge model for an LLM meaning judgment; required when semantic_safe=yes',
+          'Pinned judge model for an LLM meaning judgment; required for an agent-produced semantic_safe=yes (a user yes is a human attestation, exempt)',
         ),
     }),
   })
   .superRefine((value, ctx) => {
-    // A meaning-safe pass must cite a reproducible judge model — no unsubstantiated
-    // `yes` clears the gate (dialectic-1 O5; mirrors acg-fitness-verdict llm_judged).
-    if (value.verdict.semantic_safe === 'yes' && !value.verdict.reproducibility) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "semantic_safe='yes' requires verdict.reproducibility (model_version)",
-        path: ['verdict', 'reproducibility'],
-      });
-    }
-    // An AGENT-produced `yes` must additionally cite a passing characterization
-    // (behavior) test — an LLM meaning judgment alone is not assurance (sv1
-    // dialectic O6). The judge model says "I think the meaning holds"; the test is
-    // the witness that it actually does. A USER-produced `yes` is a human
-    // attestation and is exempt (mirrors the intended_breaking human override).
+    // An AGENT-produced `yes` carries two machine-evidence obligations; a
+    // USER-produced `yes` is a human attestation, exempt from BOTH (mirrors the
+    // intended_breaking human override). The split is on produced_by:
+    //   1. reproducibility — a pinned judge model, so the LLM verdict is
+    //      reproducible (dialectic-1 O5; mirrors acg-fitness-verdict llm_judged).
+    //   2. characterization — a passing behavior test that WITNESSES the meaning
+    //      holds; the judge says "I think it holds", the test proves it (sv1 O6).
     if (value.produced_by === 'agent' && value.verdict.semantic_safe === 'yes') {
+      if (!value.verdict.reproducibility) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "agent-produced semantic_safe='yes' requires verdict.reproducibility (model_version)",
+          path: ['verdict', 'reproducibility'],
+        });
+      }
       const ref = value.characterization?.test_ref;
       const witnessed =
         value.characterization?.exists === true && typeof ref === 'string' && ref.length > 0;

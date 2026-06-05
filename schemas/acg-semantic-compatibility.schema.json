@@ -135,7 +135,7 @@
                 "model_version"
               ],
               "additionalProperties": false,
-              "description": "Pinned judge model for an LLM meaning judgment; required when semantic_safe=yes"
+              "description": "Pinned judge model for an LLM meaning judgment; required for an agent-produced semantic_safe=yes (a user yes is a human attestation, exempt)"
             }
           },
           "required": [
