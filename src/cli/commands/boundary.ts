@@ -5,7 +5,7 @@ import { CodeqlEdgeAnalyzer } from '~/acg/boundary/codeql-edges';
 import { AcgReviewStore } from '~/core/acg-review-store';
 import { codeqlCacheDir, makeRelationDeps } from '~/core/codeql/host-deps';
 import type { BuildMode, CodeqlLanguage } from '~/core/codeql/runner';
-import { resolveRepoRootForCreate } from '~/core/fs';
+import { readArchitectureSpec, resolveRepoRootForCreate } from '~/core/fs';
 import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import { acgReviewGraph } from '~/schemas/acg-review-graph';
 import {
@@ -53,7 +53,11 @@ export const boundaryCommand = defineCommand({
       },
       args: {
         'work-item': { type: 'string', description: 'Work item id', required: true },
-        spec: { type: 'string', description: 'Path to ArchitectureSpec JSON', required: true },
+        spec: {
+          type: 'string',
+          description: 'Path to ArchitectureSpec (.yaml/.yml or .json)',
+          required: true,
+        },
         file: {
           type: 'string',
           description: 'Changed file (repeatable; comma-separated)',
@@ -88,7 +92,7 @@ export const boundaryCommand = defineCommand({
           const repoRoot = await resolveRepoRootForCreate();
           let spec: ReturnType<typeof acgArchitectureSpec.parse>;
           try {
-            spec = acgArchitectureSpec.parse(JSON.parse(await Bun.file(args.spec).text()));
+            spec = await readArchitectureSpec(args.spec, acgArchitectureSpec);
           } catch (err) {
             writeError(
               `boundary check: cannot read a valid ArchitectureSpec from ${args.spec}: ${

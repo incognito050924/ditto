@@ -1,6 +1,7 @@
 import { readdir } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { parse as parseTomlText } from 'smol-toml';
+import { parse as parseYamlText } from 'yaml';
 
 export async function fileExists(path: string): Promise<boolean> {
   return Bun.file(path).exists();
@@ -19,6 +20,11 @@ export async function readJsonIfExists(path: string): Promise<unknown | null> {
 
 export function parseToml(text: string): Record<string, unknown> {
   return parseTomlText(text) as Record<string, unknown>;
+}
+
+/** YAML 텍스트를 파싱하는 wrapper(`yaml` 패키지). 사람이 손으로 쓰는 산출물용. */
+export function parseYaml(text: string): unknown {
+  return parseYamlText(text);
 }
 
 export function asRecord(value: unknown): Record<string, unknown> | null {

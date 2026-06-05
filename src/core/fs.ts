@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
-import { dirname, join, parse, resolve } from 'node:path';
+import { dirname, extname, join, parse, resolve } from 'node:path';
 import type { ZodTypeAny, z } from 'zod';
+import { parseYaml } from './hosts/shared';
 
 export class RepoRootNotFoundError extends Error {
   constructor(start: string) {
@@ -107,6 +108,26 @@ export async function readJson<S extends ZodTypeAny>(
   const result = schema.safeParse(raw);
   if (!result.success) throw new SchemaValidationError(path, result.error);
   return result.data;
+}
+
+/**
+ * ArchitectureSpec 본문을 파싱한다 — 확장자로 형식 분기.
+ * `.yaml`/`.yml`이면 YAML, 그 외(기존 `.json` 포함)는 JSON.parse.
+ * 스키마 검증은 호출부에서 `acgArchitectureSpec`으로 한다(스키마 불변).
+ */
+export function parseArchitectureSpecText(text: string, path: string): unknown {
+  const ext = extname(path).toLowerCase();
+  if (ext === '.yaml' || ext === '.yml') return parseYaml(text);
+  return JSON.parse(text);
+}
+
+/** 확장자 분기로 ArchitectureSpec을 읽어 `schema`로 검증한다. */
+export async function readArchitectureSpec<S extends ZodTypeAny>(
+  path: string,
+  schema: S,
+): Promise<z.output<S>> {
+  const text = await Bun.file(path).text();
+  return schema.parse(parseArchitectureSpecText(text, path));
 }
 
 export async function writeJson<S extends ZodTypeAny>(

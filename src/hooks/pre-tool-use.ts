@@ -1,7 +1,7 @@
 import { isAbsolute, relative, resolve } from 'node:path';
 import { matchForbiddenScope } from '~/acg/scope/resolve';
 import { ChangeContractStore } from '~/core/change-contract-store';
-import { readJson } from '~/core/fs';
+import { readArchitectureSpec } from '~/core/fs';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { type AcgArchitectureSpec, acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import type { HookHandler, HookInput } from './runtime';
@@ -249,7 +249,7 @@ function checkDestructive(cmd: string) {
 /** `.ditto/architecture-spec.json`을 optional 로드(부재·위반 시 undefined → layer/surface skip). */
 async function loadArchSpec(repoRoot: string): Promise<AcgArchitectureSpec | undefined> {
   try {
-    return await readJson(
+    return await readArchitectureSpec(
       resolve(repoRoot, '.ditto', 'architecture-spec.json'),
       acgArchitectureSpec,
     );
