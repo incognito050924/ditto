@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { computeDrift, loadAssuranceSnapshots } from '~/acg/fitness/drift';
+import { assessDrift, computeDrift, loadAssuranceSnapshots } from '~/acg/fitness/drift';
 import { WorkItemStore } from '~/core/work-item-store';
 import { type AcgAssuranceSnapshot, acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
 
@@ -84,6 +84,37 @@ describe('computeDrift — function_id별 시계열 추세', () => {
       ]),
     ]);
     expect(r.functions.map((f) => f.function_id)).toEqual(['up', 'down']); // rising 먼저
+  });
+});
+
+describe('assessDrift — rising 추세 게이트 판정', () => {
+  const report = computeDrift([
+    snap('2026-06-01T00:00:00.000Z', [
+      { function_id: 'up', outcome: 'pass', violations: 1, new_violations: 1 },
+      { function_id: 'down', outcome: 'pass', violations: 9 },
+      { function_id: 'flat', outcome: 'pass', violations: 2 },
+    ]),
+    snap('2026-06-02T00:00:00.000Z', [
+      { function_id: 'up', outcome: 'fail', violations: 5, new_violations: 3 },
+      { function_id: 'down', outcome: 'pass', violations: 1 },
+      { function_id: 'flat', outcome: 'pass', violations: 2 },
+    ]),
+  ]);
+
+  test('rising만 concerning(falling/flat 제외)', () => {
+    const a = assessDrift(report);
+    expect(a.concerning.map((f) => f.function_id)).toEqual(['up']);
+    expect(a.reasons[0]).toContain('up rising');
+  });
+
+  test('min_new_violations 임계로 사소한 상승 노이즈 거름', () => {
+    // up 누적 신규위반 = 1+3 = 4.
+    expect(assessDrift(report, 4).concerning.map((f) => f.function_id)).toEqual(['up']); // 4>=4
+    expect(assessDrift(report, 5).concerning).toHaveLength(0); // 4>=5 거짓 → 제외
+  });
+
+  test('빈 리포트 → concerning 없음', () => {
+    expect(assessDrift(computeDrift([])).concerning).toEqual([]);
   });
 });
 

@@ -40,6 +40,34 @@ export interface DriftReport {
   functions: DriftSeries[];
 }
 
+export interface DriftAssessment {
+  /** rising 추세이면서 누적 신규위반이 임계 이상인 function들(SLOP 가속). */
+  concerning: DriftSeries[];
+  min_new_violations: number;
+  reasons: string[];
+}
+
+/**
+ * drift 리포트를 게이트 판정으로 접는다(순수). rising 추세이면서 변경을 가로지른 누적 신규위반
+ * (cumulative_new_violations)이 임계 이상인 function이 '주의'다 — CI가 SLOP 가속에 빌드를
+ * 실패시킬 근거(단계8을 정보 뷰에서 게이트로 승격). minNewViolations로 사소한 상승의 노이즈를
+ * 거른다(기본 0 = 모든 rising). 한 변경 내 신규위반은 이미 fitness run이 게이팅하므로, 여기선
+ * '변경을 가로지른 추세'만 본다.
+ */
+export function assessDrift(report: DriftReport, minNewViolations = 0): DriftAssessment {
+  const concerning = report.functions.filter(
+    (f) => f.direction === 'rising' && f.cumulative_new_violations >= minNewViolations,
+  );
+  return {
+    concerning,
+    min_new_violations: minNewViolations,
+    reasons: concerning.map(
+      (f) =>
+        `drift: ${f.function_id} rising (violations ${f.first_violations}→${f.last_violations}, +${f.cumulative_new_violations} new across changes)`,
+    ),
+  };
+}
+
 /** 주의 우선순위: rising > flat > insufficient > falling, 동순위는 누적 신규위반 내림차순. */
 const DIRECTION_RANK: Record<DriftDirection, number> = {
   rising: 0,

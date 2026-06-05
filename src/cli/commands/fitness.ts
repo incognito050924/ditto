@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { commandProvider } from '~/acg/fitness/command-provider';
-import { computeDrift, loadAssuranceSnapshots } from '~/acg/fitness/drift';
+import { assessDrift, computeDrift, loadAssuranceSnapshots } from '~/acg/fitness/drift';
 import { executingProvider } from '~/acg/fitness/executed-provider';
 import { type FitnessContext, runFitness } from '~/acg/fitness/fitness-runner';
 import { compositeProvider } from '~/acg/fitness/injected-provider';
@@ -152,6 +152,17 @@ export const fitnessCommand = defineCommand({
           'Aggregate AssuranceSnapshots across work items into a per-function SLOP trend (단계8)',
       },
       args: {
+        gate: {
+          type: 'boolean',
+          default: false,
+          description:
+            'Exit non-zero when a function is on a rising SLOP trend (CI gate on accumulation across changes). C1 scheduler is a CI/cron concern, not in-repo',
+        },
+        'min-new-violations': {
+          type: 'string',
+          description:
+            'Gate threshold: only flag rising functions with at least N cumulative new violations across changes (default 0 = any rising)',
+        },
         output: { type: 'string', description: 'Output format: human|json', default: 'human' },
       },
       run: async ({ args }) => {
@@ -166,24 +177,43 @@ export const fitnessCommand = defineCommand({
         try {
           const repoRoot = await resolveRepoRootForCreate();
           const report = computeDrift(await loadAssuranceSnapshots(repoRoot));
+          const minNew = Number.parseInt(args['min-new-violations'] ?? '0', 10);
+          const assessment = args.gate
+            ? assessDrift(report, Number.isNaN(minNew) ? 0 : minNew)
+            : null;
+
           if (format === 'json') {
-            writeJson(report);
-            return;
-          }
-          if (report.snapshots === 0) {
-            writeHuman('drift: no AssuranceSnapshots across work items yet (nothing to trend)');
-            return;
-          }
-          writeHuman(
-            `drift: ${report.functions.length} function(s) across ${report.snapshots} snapshot(s)`,
-          );
-          for (const f of report.functions) {
-            const v =
-              f.first_violations === null ? '—' : `${f.first_violations}→${f.last_violations}`;
-            writeHuman(
-              `  ${f.direction.padEnd(12)} ${f.function_id} (violations ${v}, +${f.cumulative_new_violations} new across changes, ${f.fail_count} fail)`,
+            writeJson(
+              assessment
+                ? {
+                    ...report,
+                    gate: {
+                      concerning: assessment.concerning.map((f) => f.function_id),
+                      min_new_violations: assessment.min_new_violations,
+                    },
+                  }
+                : report,
             );
+          } else if (report.snapshots === 0) {
+            writeHuman('drift: no AssuranceSnapshots across work items yet (nothing to trend)');
+          } else {
+            writeHuman(
+              `drift: ${report.functions.length} function(s) across ${report.snapshots} snapshot(s)`,
+            );
+            for (const f of report.functions) {
+              const v =
+                f.first_violations === null ? '—' : `${f.first_violations}→${f.last_violations}`;
+              writeHuman(
+                `  ${f.direction.padEnd(12)} ${f.function_id} (violations ${v}, +${f.cumulative_new_violations} new across changes, ${f.fail_count} fail)`,
+              );
+            }
+            if (assessment && assessment.concerning.length > 0) {
+              writeHuman(`\nGATE: ${assessment.concerning.length} function(s) on a rising trend:`);
+              for (const r of assessment.reasons) writeHuman(`  ${r}`);
+            }
           }
+          // 게이트: 주의 추세가 있으면 비정상 종료(CI가 SLOP 가속에 빌드 실패).
+          if (assessment && assessment.concerning.length > 0) process.exit(RUNTIME_ERROR_EXIT);
         } catch (err) {
           writeError(`fitness drift failed: ${err instanceof Error ? err.message : String(err)}`);
           process.exit(RUNTIME_ERROR_EXIT);
