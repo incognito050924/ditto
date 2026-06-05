@@ -25,6 +25,11 @@
 1. in-hook CodeQL 빌드 제거, Stop은 observation read-only 소비 / 2. scan을 verify·autopilot node로 / 3. fingerprint unchanged skip / 4. after DB fresh(HEAD sha 금지) / 5. 비-게이트 observation 스키마 신규 / 6. handoff base fallback + baseUsed / 7. 1-change만, 다중 diagnostic / 8. opt-in typed 홈·명시출력 / 9. typed scan-status(ok|skipped|failed) / 10. "Stop은 prewritten 소비, in-hook 빌드 안 함" 경계 ADR/주석 명시
 
 ## 남은 열린 질문 (사용자/후속)
-1. **발동점 단일화**: `/ditto:verify`만 vs autopilot node도 — 둘 다면 중복실행 방지 필요. (가치·우선순위 결정)
+1. ~~**발동점 단일화**~~ → **해소(사용자 2026-06-05)**: scan 실행은 `/ditto:verify`(수동 호출 OK). 핵심 추가 요건 = **AX**: Stop은 CodeQL을 돌리지 않고 **값싼 advisory nudge**만 띄워 "지금 `ditto semantic scan`을 돌리라"고 능동 안내(침묵 의존 금지). [[ditto-primary-lifecycle]] 단계(구현~리뷰)에 매핑. 이는 Codex missing_alternative("opt-in인데 산출물 없으면 Stop diagnostic만")와 정합.
 2. impact DB 형식 공유 가정 미검증 → 후속 분리.
 3. observation→blocking 승격 UX 진입점 미정.
+
+## 구현 슬라이스 (해소된 설계 기준)
+- **S1 (AX nudge, 값쌈·우선)**: Stop에서 CodeQL 미실행. base(handoff fallback) 대비 변경 source 파일이 있고 semantic 산출물이 없으면 **non-blocking 리마인더** stderr 출력("`ditto semantic scan --base <…>` 권장"). exit code 불변.
+- **S2 (scan-at-verify)**: `/ditto:verify`가 scan 실행 → 비-게이트 `semantic-scan-observation.json` 기록. fingerprint로 unchanged skip, after-DB fresh.
+- **S3 (나머지 required_edits)**: opt-in typed 홈, scan-status, 1-change diagnostic, base fallback 영속.
