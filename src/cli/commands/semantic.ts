@@ -128,6 +128,11 @@ const verdictCommand = defineCommand({
       type: 'string',
       description: 'Pinned judge model id — required when semantic-safe=yes',
     },
+    'characterization-test': {
+      type: 'string',
+      description:
+        'Ref to a passing behavior/characterization test — required for an agent yes (witnesses the preserved meaning)',
+    },
     'type-safe': { type: 'boolean', description: 'Override the type-safety judgment' },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
@@ -170,6 +175,7 @@ const verdictCommand = defineCommand({
         intendedBreaking: args['intended-breaking'],
         typeSafe: args['type-safe'],
         modelVersion: args['model-version'],
+        characterizationTestRef: args['characterization-test'],
       });
       // writeJson re-validates → an unsubstantiated yes (no model_version) or a
       // left-over sentinel old_meaning fails closed here (dialectic-1 O4/O5).

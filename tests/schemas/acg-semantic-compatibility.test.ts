@@ -29,6 +29,13 @@ const base = () => ({
   verdict: { type_safe: true, semantic_safe: 'no' as const },
 });
 
+// A passing behavior test that witnesses the preserved meaning (B / sv1 O6).
+const charz = {
+  exists: true,
+  test_ref: 'tests/user.test.ts::getUser keeps null-absence semantics',
+  candidate: null,
+};
+
 describe('acgSemanticCompatibility — OBJ-43 producer rules', () => {
   test('unverified seed with sentinel old_meaning parses (detect output)', () => {
     const seed = {
@@ -50,9 +57,53 @@ describe('acgSemanticCompatibility — OBJ-43 producer rules', () => {
     expect(r.success).toBe(false);
   });
 
-  test("semantic_safe='yes' WITH reproducibility(model_version) parses", () => {
+  test("agent semantic_safe='yes' WITH reproducibility + characterization parses", () => {
     const r = acgSemanticCompatibility.safeParse({
       ...base(),
+      old_meaning: 'null = 미존재',
+      characterization: charz,
+      verdict: {
+        type_safe: true,
+        semantic_safe: 'yes' as const,
+        reproducibility: { model_version: 'claude-opus-4-8' },
+      },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  // B (wi_260605ch1 / sv1 O6) — an agent `yes` must cite a passing behavior test;
+  // a pinned judge model says "I think it holds", the test is the witness it does.
+  test("agent semantic_safe='yes' WITHOUT characterization rejected (LLM judgment alone is not assurance)", () => {
+    const r = acgSemanticCompatibility.safeParse({
+      ...base(),
+      old_meaning: 'null = 미존재',
+      verdict: {
+        type_safe: true,
+        semantic_safe: 'yes' as const,
+        reproducibility: { model_version: 'claude-opus-4-8' },
+      },
+    });
+    expect(r.success).toBe(false);
+  });
+
+  test("agent semantic_safe='yes' with characterization.exists but EMPTY test_ref rejected (candidate is not a passing test)", () => {
+    const r = acgSemanticCompatibility.safeParse({
+      ...base(),
+      old_meaning: 'null = 미존재',
+      characterization: { exists: true, test_ref: null, candidate: 'def test_get_user(): ...' },
+      verdict: {
+        type_safe: true,
+        semantic_safe: 'yes' as const,
+        reproducibility: { model_version: 'claude-opus-4-8' },
+      },
+    });
+    expect(r.success).toBe(false);
+  });
+
+  test("user-produced semantic_safe='yes' is exempt from characterization (human attestation)", () => {
+    const r = acgSemanticCompatibility.safeParse({
+      ...base(),
+      produced_by: 'user' as const,
       old_meaning: 'null = 미존재',
       verdict: {
         type_safe: true,
@@ -73,9 +124,11 @@ describe('acgSemanticCompatibility — OBJ-43 producer rules', () => {
   });
 
   test("sentinel old_meaning with 'yes' verdict rejected (real meaning required)", () => {
+    // characterization present so the ONLY rejection reason is the sentinel meaning.
     const r = acgSemanticCompatibility.safeParse({
       ...base(),
       old_meaning: SEMANTIC_UNVERIFIED_SENTINEL,
+      characterization: charz,
       verdict: {
         type_safe: true,
         semantic_safe: 'yes' as const,

@@ -104,6 +104,7 @@ describe('semantic pipeline e2e — seed → block → resolve → clear', () =>
       oldMeaning: 'null 은 부재이나 호출부가 의존하지 않음',
       compatibility: 'additive',
       modelVersion: 'claude-opus-4-8',
+      characterizationTestRef: 'tests/user.test.ts::getUser absence not relied upon',
     });
     await writeSemantic(resolved);
     expect((await run()).exitCode).toBe(0);

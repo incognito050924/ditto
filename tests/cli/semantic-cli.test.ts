@@ -110,7 +110,7 @@ describe('ditto semantic verdict (resolver, O3 deadlock)', () => {
     expect((await readSemantic()).verdict.semantic_safe).toBe('unverified');
   });
 
-  test('yes WITH model-version resolves', async () => {
+  test('yes WITH model-version but WITHOUT characterization fail-closes (agent yes needs a witness test, B)', async () => {
     seed();
     const r = ditto([
       'semantic',
@@ -124,10 +124,31 @@ describe('ditto semantic verdict (resolver, O3 deadlock)', () => {
       '--model-version',
       'claude-opus-4-8',
     ]);
+    expect(r.exitCode).toBe(1);
+    expect((await readSemantic()).verdict.semantic_safe).toBe('unverified');
+  });
+
+  test('yes WITH model-version + characterization-test resolves', async () => {
+    seed();
+    const r = ditto([
+      'semantic',
+      'verdict',
+      '--work-item',
+      WI,
+      '--semantic-safe',
+      'yes',
+      '--old-meaning',
+      'null = 미존재',
+      '--model-version',
+      'claude-opus-4-8',
+      '--characterization-test',
+      'tests/user.test.ts::keeps null-absence',
+    ]);
     expect(r.exitCode).toBe(0);
     const out = await readSemantic();
     expect(out.verdict.semantic_safe).toBe('yes');
     expect(out.verdict.reproducibility.model_version).toBe('claude-opus-4-8');
+    expect(out.characterization.test_ref).toBe('tests/user.test.ts::keeps null-absence');
   });
 
   test('verdict without a prior seed fail-closes', async () => {

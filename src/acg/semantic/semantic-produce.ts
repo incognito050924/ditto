@@ -52,6 +52,12 @@ export interface SemanticVerdictInput {
   intendedBreaking?: boolean;
   typeSafe?: boolean;
   modelVersion?: string;
+  /**
+   * Ref to a passing characterization (behavior) test that witnesses the meaning
+   * is preserved. Schema requires it for an agent-produced `yes` (B / sv1 O6);
+   * this is a citation of an EXISTING test, not a generation pipeline.
+   */
+  characterizationTestRef?: string;
 }
 
 /**
@@ -67,6 +73,15 @@ export function applySemanticVerdict(
     ...seed,
     old_meaning: v.oldMeaning ?? seed.old_meaning,
     compatibility: v.compatibility ?? seed.compatibility,
+    ...(v.characterizationTestRef
+      ? {
+          characterization: {
+            exists: true,
+            test_ref: v.characterizationTestRef,
+            candidate: null,
+          },
+        }
+      : {}),
     verdict: {
       type_safe: v.typeSafe ?? seed.verdict.type_safe,
       semantic_safe: v.semanticSafe,

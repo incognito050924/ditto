@@ -517,7 +517,10 @@ const impactGraph = (overrides: Record<string, unknown>) => ({
   ...overrides,
 });
 
-const semanticCompat = (verdict: Record<string, unknown>) => ({
+const semanticCompat = (
+  verdict: Record<string, unknown>,
+  characterization?: Record<string, unknown>,
+) => ({
   schema_version: '0.1.0',
   kind: 'acg.semantic-compatibility.v1',
   work_item_id: wiId,
@@ -527,6 +530,7 @@ const semanticCompat = (verdict: Record<string, unknown>) => ({
   old_meaning: 'absent user returns null',
   business_assumptions: [],
   compatibility: 'breaking',
+  ...(characterization ? { characterization } : {}),
   verdict,
 });
 
@@ -682,13 +686,17 @@ describe('stopHandler — ACG semantic (SemanticCompatibility) ledger', () => {
     await writeArtifact('completion.json', completion({ acceptance: passingAcceptance }));
     await writeArtifact(
       'semantic-compatibility.json',
-      // yes now requires reproducibility (OBJ-43 O5) — without it the artifact is
-      // malformed and fail-closes; with a pinned model it clears.
-      semanticCompat({
-        type_safe: true,
-        semantic_safe: 'yes',
-        reproducibility: { model_version: 'claude-opus-4-8' },
-      }),
+      // yes now requires reproducibility (OBJ-43 O5) AND, for an agent, a cited
+      // characterization test (B / sv1 O6) — without either the artifact is
+      // malformed and fail-closes; with both it clears.
+      semanticCompat(
+        {
+          type_safe: true,
+          semantic_safe: 'yes',
+          reproducibility: { model_version: 'claude-opus-4-8' },
+        },
+        { exists: true, test_ref: 'tests/user.test.ts::keeps null-absence', candidate: null },
+      ),
     );
     expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
   });

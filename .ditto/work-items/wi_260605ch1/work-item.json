@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260605ch1",
+  "title": "characterization 게이트 (B) — agent-produced semantic_safe=yes에 behavior test 증거 강제",
+  "source_request": "핸드오프 wi_260605aw1 §2-B [중상]. semantic_safe='yes'가 LLM 판정만으로 통과하는 assurance 갭 해소(sv1 dialectic O6 후속).",
+  "goal": "에이전트가 semantic_safe='yes'(의미 안전)를 선언하면 characterization(behavior test) 증거 인용을 강제한다 — 지금은 reproducibility(model_version)만 요구해 LLM 판정만으로 게이트를 통과한다. 스키마 superRefine에 'produced_by=agent ∧ yes → characterization.exists==true ∧ test_ref 존재' 규칙을 추가하고, resolver/CLI에 증거 인용 통로를 연다(테스트 생성이 아니라 기존 테스트 참조). user-produced yes는 인간 attestation이라 면제(intended_breaking 선례).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "스키마: produced_by=agent ∧ semantic_safe=yes → characterization.exists==true ∧ test_ref(비어있지 않음) 강제. 미충족 시 fail-closed. user-produced yes는 면제. reproducibility 규칙은 불변. 단위테스트.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "src/schemas/acg-semantic-compatibility.ts superRefine: produced_by==='agent' ∧ semantic_safe==='yes' → characterization.exists===true ∧ test_ref(string, length>0) 아니면 addIssue. reproducibility 규칙 불변." },
+        { "kind": "command", "summary": "bun test tests/schemas/acg-semantic-compatibility.test.ts: agent yes+repro+characterization parses, agent yes WITHOUT characterization rejected, candidate-only(test_ref null) rejected, user-produced yes 면제 parses, sentinel 격리 등 전부 pass." }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "resolver/CLI 통로: applySemanticVerdict가 characterizationTestRef를 받아 characterization{exists:true,test_ref} 주입. `ditto semantic verdict --characterization-test <ref>` 플래그. 테스트 생성 아님(기존 테스트 참조).",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "semantic-produce.ts: SemanticVerdictInput.characterizationTestRef 추가, applySemanticVerdict가 제공 시 characterization{exists:true,test_ref,candidate:null} 주입. cli/commands/semantic.ts verdictCommand --characterization-test 플래그 배선." },
+        { "kind": "command", "summary": "bun test semantic-produce.test.ts + semantic-cli.test.ts: yes+model+characterization-test resolves(exit0, test_ref 기록), yes+model WITHOUT characterization fail-closes(exit1, seed unverified 유지) 전부 pass." }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "schemas:export로 JSON 파생 갱신(ADR-0002). 영향 fixture(스키마/producer/cli/stop/e2e의 agent yes) 갱신. 전체 bun test·lint·build green, 무회귀.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "bun run schemas:export 실행(superRefine은 JSON Schema 직렬화 대상 아니라 출력 불변, characterization 구조는 기존부터 존재). 영향 fixture 5곳(schema/produce/cli/stop/pipeline-e2e) 갱신. bun test 1184 pass/9 skip/0 fail, biome 291 files clean, build clean(217 modules)." }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/schemas/acg-semantic-compatibility.ts",
+    "src/acg/semantic/semantic-produce.ts",
+    "src/cli/commands/semantic.ts",
+    "tests/schemas/acg-semantic-compatibility.test.ts",
+    "tests/acg/semantic-produce.test.ts",
+    "tests/acg/semantic-pipeline-e2e.test.ts",
+    "tests/hooks/stop.test.ts",
+    "tests/cli/semantic-cli.test.ts"
+  ],
+  "risks": [
+    { "description": "user-produced yes는 characterization 면제(인간 attestation). agent/user 비대칭이나 intended_breaking 인간-오버라이드 선례와 결이 같다. reproducibility는 기존대로 모든 yes에 요구(B 범위 밖이라 불변).", "severity": "low" },
+    { "description": "characterization.candidate만 있고 test_ref 없으면 agent yes는 여전히 fail-closed(후보는 통과 테스트가 아님). 의도된 동작 — yes는 실제 통과 테스트 인용만 인정.", "severity": "low" }
+  ],
+  "runs": [],
+  "created_at": "2026-06-05T13:00:00.000Z",
+  "updated_at": "2026-06-05T13:30:00.000Z",
+  "closed_at": "2026-06-05T13:30:00.000Z"
+}

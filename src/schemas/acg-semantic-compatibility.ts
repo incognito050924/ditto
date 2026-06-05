@@ -59,6 +59,24 @@ export const acgSemanticCompatibility = z
         path: ['verdict', 'reproducibility'],
       });
     }
+    // An AGENT-produced `yes` must additionally cite a passing characterization
+    // (behavior) test — an LLM meaning judgment alone is not assurance (sv1
+    // dialectic O6). The judge model says "I think the meaning holds"; the test is
+    // the witness that it actually does. A USER-produced `yes` is a human
+    // attestation and is exempt (mirrors the intended_breaking human override).
+    if (value.produced_by === 'agent' && value.verdict.semantic_safe === 'yes') {
+      const ref = value.characterization?.test_ref;
+      const witnessed =
+        value.characterization?.exists === true && typeof ref === 'string' && ref.length > 0;
+      if (!witnessed) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "agent-produced semantic_safe='yes' requires characterization.exists=true with a non-empty test_ref (a passing behavior test must witness the preserved meaning)",
+          path: ['characterization', 'test_ref'],
+        });
+      }
+    }
     // The unverified sentinel is a seed placeholder only; yes/no must carry the
     // real domain meaning (dialectic-1 O4).
     if (

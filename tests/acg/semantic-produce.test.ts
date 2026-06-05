@@ -40,16 +40,20 @@ describe('buildSemanticSeed — static unverified seed', () => {
 describe('applySemanticVerdict — resolver injects agent judgment', () => {
   const seed = buildSemanticSeed(seedInput);
 
-  test('yes verdict with real meaning + model_version clears (schema-valid)', () => {
+  test('yes verdict with real meaning + model_version + characterization clears (schema-valid)', () => {
     const resolved = applySemanticVerdict(seed, {
       semanticSafe: 'yes',
       oldMeaning: 'null = 사용자 미존재',
       compatibility: 'additive',
       modelVersion: 'claude-opus-4-8',
+      characterizationTestRef: 'tests/user.test.ts::getUser keeps null-absence',
     });
     expect(acgSemanticCompatibility.safeParse(resolved).success).toBe(true);
     expect(resolved.verdict.semantic_safe).toBe('yes');
     expect(resolved.verdict.reproducibility?.model_version).toBe('claude-opus-4-8');
+    expect(resolved.characterization?.test_ref).toBe(
+      'tests/user.test.ts::getUser keeps null-absence',
+    );
     expect(resolved.old_meaning).toBe('null = 사용자 미존재');
   });
 
@@ -57,6 +61,17 @@ describe('applySemanticVerdict — resolver injects agent judgment', () => {
     const resolved = applySemanticVerdict(seed, {
       semanticSafe: 'yes',
       oldMeaning: 'null = 미존재',
+      characterizationTestRef: 'tests/user.test.ts::x',
+    });
+    expect(acgSemanticCompatibility.safeParse(resolved).success).toBe(false);
+  });
+
+  // B (wi_260605ch1) — an agent yes without a cited behavior test fails closed.
+  test('yes verdict WITHOUT characterization is schema-rejected (LLM judgment alone insufficient)', () => {
+    const resolved = applySemanticVerdict(seed, {
+      semanticSafe: 'yes',
+      oldMeaning: 'null = 미존재',
+      modelVersion: 'claude-opus-4-8',
     });
     expect(acgSemanticCompatibility.safeParse(resolved).success).toBe(false);
   });
