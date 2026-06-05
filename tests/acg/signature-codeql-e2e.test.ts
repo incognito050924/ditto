@@ -103,3 +103,99 @@ d('scanSignatureChanges — real CodeQL', () => {
     }
   }, 120_000);
 });
+
+/**
+ * wi_260605ml1 (A) — multi-language signature bindings. Same scanSignatureChanges
+ * path, language-bound CodeQL query. Java extracts buildless (build-mode none);
+ * Kotlin reuses the java query and is proven on a real kotlinc-built DB in the
+ * ac-0 probe (no build-system dependency dragged into the test suite).
+ */
+d('scanSignatureChanges — java (real CodeQL, build-mode none)', () => {
+  test('detects a public-method return-type change', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-sigcq-java-'));
+    const git = (args: string[]) =>
+      execFileSync('git', args, { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
+    try {
+      await mkdir(join(dir, 'src'), { recursive: true });
+      git(['init']);
+      git(['config', 'user.email', 't@t.t']);
+      git(['config', 'user.name', 't']);
+      await writeFile(
+        join(dir, 'src/Svc.java'),
+        'public class Svc {\n  public int compute(int n) { return n; }\n}\n',
+      );
+      git(['add', '-A']);
+      git(['commit', '-m', 'base']);
+
+      // Uncommitted change: widen the return type int → long.
+      await writeFile(
+        join(dir, 'src/Svc.java'),
+        'public class Svc {\n  public long compute(int n) { return n; }\n}\n',
+      );
+
+      const changes = await scanSignatureChanges(
+        {
+          repoRoot: dir,
+          baseRef: 'HEAD',
+          language: 'java',
+          sourceRootRel: 'src',
+          buildMode: 'none',
+          binary: CODEQL_BIN,
+        },
+        makeRelationDeps(),
+      );
+      expect(changes).toEqual([
+        {
+          file: 'Svc.java',
+          symbol: 'compute',
+          before: 'compute(int): int',
+          after: 'compute(int): long',
+        },
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
+});
+
+d('scanSignatureChanges — python (real CodeQL)', () => {
+  test('detects an added parameter on a module-level function', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-sigcq-py-'));
+    const git = (args: string[]) =>
+      execFileSync('git', args, { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
+    try {
+      await mkdir(join(dir, 'src'), { recursive: true });
+      git(['init']);
+      git(['config', 'user.email', 't@t.t']);
+      git(['config', 'user.name', 't']);
+      await writeFile(join(dir, 'src/svc.py'), 'def get_user(id):\n    return id\n');
+      git(['add', '-A']);
+      git(['commit', '-m', 'base']);
+
+      // Uncommitted change: add a parameter — arity/name shift breaks callers.
+      await writeFile(join(dir, 'src/svc.py'), 'def get_user(id, active):\n    return id\n');
+
+      const changes = await scanSignatureChanges(
+        {
+          repoRoot: dir,
+          baseRef: 'HEAD',
+          language: 'python',
+          sourceRootRel: 'src',
+          binary: CODEQL_BIN,
+        },
+        makeRelationDeps(),
+      );
+      // Python signature = name(param-names); return type omitted (dynamic typing).
+      expect(changes).toEqual([
+        {
+          file: 'svc.py',
+          symbol: 'get_user',
+          before: 'get_user(id)',
+          after: 'get_user(id, active)',
+        },
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
+});

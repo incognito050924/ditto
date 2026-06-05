@@ -18,8 +18,9 @@ import { addDetachedWorktree, gitRevParse, removeWorktree } from '~/core/git';
  * signature from the AST, run on a base-ref DB and an after DB, then diffed.
  *
  * Multi-language is structural: a per-language query binding + fail-loud on an
- * unbound language (never the silent empty result that read as "clean"). The JS
- * binding is probed/verified (ac-0); other languages plug into SIGNATURE_QUERIES.
+ * unbound language (never the silent empty result that read as "clean"). The
+ * javascript/java/kotlin/python bindings are probed against real DBs; further
+ * languages plug into SIGNATURE_QUERIES (wi_260605ml1).
  */
 
 export interface SignatureChange {
@@ -68,9 +69,77 @@ where isExportedFn(f) and f.getName() != ""
 select f.getFile().getRelativePath(), f.getName(), paramText(f), retText(f)
 `;
 
+/**
+ * Exported-signature extraction (Java/Kotlin). `name(paramTypes): returnType` for
+ * every public method of a public source type (the API surface). Parameter and
+ * return types are reconstructed via `Callable.getParameterType` /
+ * `Method.getReturnType`, so generics survive (`List<String>`). Probed against a
+ * real DB (wi_260605ml1 ac-0): getUser → String / String, listAll → "int, boolean"
+ * / "List<String>", noArgs → "" / void, private `hidden` excluded. Kotlin reuses
+ * this query — the java(java-kotlin) extractor yields the same AST (probe: same
+ * three rows on a kotlinc-built DB, Int→int / Boolean→boolean JVM mapping).
+ *
+ * Overloads collide under the file::name signature key (rowsToSignatureMap keeps
+ * the last) — a best-effort gap shared with the JS binding's name keying.
+ */
+export const SIGNATURE_QUERY_JAVA = `/**
+ * @name ditto signatures java
+ * @id ditto/signature-relations-java
+ * @kind table
+ */
+import java
+
+string paramText(Callable c) {
+  result = concat(int i | exists(c.getParameter(i)) | c.getParameterType(i).toString(), ", " order by i)
+  or (c.getNumberOfParameters() = 0 and result = "")
+}
+
+predicate isExportedMethod(Method m) {
+  m.isPublic() and m.fromSource() and m.getDeclaringType().isPublic()
+}
+
+from Method m
+where isExportedMethod(m)
+select m.getFile().getRelativePath(), m.getName(), paramText(m), m.getReturnType().toString()
+`;
+
+/**
+ * Exported-signature extraction (Python). Python is dynamically typed, so the
+ * runtime-compatibility-relevant shape is the ordered parameter NAMES (arity +
+ * names — what a positional/keyword call binds to), NOT type annotations, which
+ * are advisory and don't break callers. Return type is omitted for the same
+ * reason (and forward-ref string annotations collapse to an indistinct node,
+ * which would read as "no change" — a false negative we avoid). Module-level
+ * functions whose name is not `_`-prefixed are the public surface. Probed
+ * (wi_260605ml1 ac-0): get_user → "id", list_all → "n, active", no_args → "",
+ * `_hidden` and non-module functions excluded.
+ */
+export const SIGNATURE_QUERY_PY = `/**
+ * @name ditto signatures python
+ * @id ditto/signature-relations-py
+ * @kind table
+ */
+import python
+
+string paramText(Function f) {
+  result = concat(int i | exists(f.getArg(i)) | f.getArg(i).asName().getId(), ", " order by i)
+  or (not exists(f.getArg(0)) and result = "")
+}
+
+predicate isModuleLevel(Function f) { f.getScope() instanceof Module }
+
+from Function f
+where isModuleLevel(f) and not f.getName().prefix(1) = "_"
+select f.getLocation().getFile().getRelativePath(), f.getName(), paramText(f), ""
+`;
+
 /** language → exported-signature query. Unbound languages fail loud (see below). */
 export const SIGNATURE_QUERIES: Partial<Record<CodeqlLanguage, string>> = {
   javascript: SIGNATURE_QUERY_JS,
+  java: SIGNATURE_QUERY_JAVA,
+  // Kotlin is analyzed by the java(java-kotlin) extractor → identical AST/query.
+  kotlin: SIGNATURE_QUERY_JAVA,
+  python: SIGNATURE_QUERY_PY,
 };
 
 /**

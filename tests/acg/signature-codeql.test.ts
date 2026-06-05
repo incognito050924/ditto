@@ -19,6 +19,31 @@ describe('signatureQuery — fail-loud language binding', () => {
     // The 1차 bug was a silent TS-only false-clean; an unbound language must fail.
     expect(() => signatureQuery('ruby')).toThrow(/not bound for language 'ruby'/);
   });
+
+  // wi_260605ml1 (A) — multi-language signature bindings.
+  test('java is bound (public-method API surface, type reconstruction)', () => {
+    const q = signatureQuery('java');
+    expect(q).toContain('import java');
+    expect(q).toContain('isExportedMethod');
+    expect(q).toContain('getParameterType'); // reconstructs types, not text
+  });
+
+  test('kotlin reuses the java query (java-kotlin extractor, identical AST)', () => {
+    expect(signatureQuery('kotlin')).toBe(signatureQuery('java'));
+  });
+
+  test('python is bound (param-names model — dynamic typing, no return type)', () => {
+    const q = signatureQuery('python');
+    expect(q).toContain('import python');
+    expect(q).toContain('isModuleLevel');
+    expect(q).toContain('asName().getId()'); // param names, not annotations
+  });
+
+  test('a still-unbound language (go) fails loud with the supported set', () => {
+    expect(() => signatureQuery('go')).toThrow(
+      /not bound for language 'go'.*javascript, java, kotlin, python/,
+    );
+  });
 });
 
 describe('formatSignature', () => {

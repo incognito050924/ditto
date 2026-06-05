@@ -1,0 +1,59 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260605ml1",
+  "title": "다언어 signature 바인딩 (A) — java/kotlin/python export-시그니처 CodeQL 쿼리 추가",
+  "source_request": "핸드오프 wi_260605aw1 §2-A [최우선]. semantic 거버넌스가 JS/TS 저장소에서만 작동하는 커버리지 0 문제 해소.",
+  "goal": "signature-codeql.ts의 SIGNATURE_QUERIES에 java/kotlin/python export-시그니처 CodeQL 쿼리를 추가해, 시그니처 변경 거버넌스를 JS/TS 외 다언어 저장소로 확장한다. relations.ts의 '바인딩이 분석기를 꽂는다' 패턴을 따른다(쿼리 상수 + 언어별 등록, 미바인딩은 fail-loud 유지). ADR-0006 정합(CodeQL 사실추출만, 언어 컴파일러 직접 분석 금지).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-0",
+      "statement": "probe 선행: java/kotlin/python CodeQL이 export 시그니처를 합성 DB로 복원 가능한지 실증(핵심 가정).",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "probe(/tmp/sigprobe, codeql 2.25.5): Java(build-mode none) getUser(String):String, listAll(int,boolean):List<String>(제네릭 보존), noArgs():void, private hidden 제외. Kotlin(manual kotlinc, 동일 Java 쿼리) 동일 3행(Int→int/Boolean→boolean JVM 매핑). Python(none, 파라미터-이름) get_user(id)/list_all(n, active)/no_args(), _hidden·비모듈 제외." }
+      ]
+    },
+    {
+      "id": "ac-1",
+      "statement": "SIGNATURE_QUERY_JAVA·SIGNATURE_QUERY_PY 쿼리 상수 추가 + SIGNATURE_QUERIES에 java/kotlin/python 등록(kotlin=java 쿼리 재사용). 미바인딩 언어는 여전히 fail-loud throw. 단위테스트.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "file", "summary": "src/acg/semantic/signature-codeql.ts: SIGNATURE_QUERY_JAVA(Callable.getParameterType/getReturnType, public-method surface), SIGNATURE_QUERY_PY(파라미터 이름+arity, 모듈레벨·비-_ 함수). SIGNATURE_QUERIES에 javascript/java/kotlin(=java)/python 등록." },
+        { "kind": "command", "summary": "bun test tests/acg/signature-codeql.test.ts: 13 pass(java 바인딩 getParameterType, kotlin=java 쿼리 동일, python asName().getId(), 미바인딩 go fail-loud throw + supported set 노출)." }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "실 CodeQL e2e(CODEQL_E2E 게이트): java(build-mode none)·python 합성 git repo에서 scanSignatureChanges가 시그니처 변경을 정확 탐지, body-only 변경은 0(무오탐). kotlin은 java 쿼리 재사용이라 probe(ac-0)가 실DB 증거.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "CODEQL_E2E=1 bun test tests/acg/signature-codeql-e2e.test.ts: 4 pass — JS getUser 변경 탐지+body-only 0, Java compute(int):int→long 정확 탐지(실경로 scanSignatureChanges, build-mode none), Python get_user(id)→get_user(id, active) 정확 탐지. 실 codeql 2.25.5." }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "전체 bun test·lint·build green, ADR-0006 정합(src에 언어 컴파일러 런타임 import 0), 무회귀.",
+      "verdict": "pass",
+      "evidence": [
+        { "kind": "command", "summary": "bun test 1178 pass/9 skip/0 fail(e2e 2개 신규 skip). biome check 288 files clean. build clean(217 modules). src 변경은 CodeQL 쿼리 문자열만 — 언어 컴파일러 import 0, ADR-0006 정합." }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/acg/semantic/signature-codeql.ts",
+    "tests/acg/signature-codeql.test.ts",
+    "tests/acg/signature-codeql-e2e.test.ts"
+  ],
+  "risks": [
+    { "description": "Python은 동적 타이핑이라 시그니처=파라미터 이름+arity(타입 아님). 타입 annotation은 advisory라 런타임 호환 신호가 아니므로 의도적 제외. forward-ref 문자열 annotation이 StringLiteral로 뭉개지는 거짓음성도 회피.", "severity": "low" },
+    { "description": "Java/Kotlin 오버로딩: 시그니처 맵 키가 file::name이라 같은 파일 동명 오버로드는 충돌(마지막만 생존). JS 모델 일관성 유지 + best-effort MVP. 오버로드 파라미터-타입 변경은 커버리지 갭(문서화).", "severity": "low" },
+    { "description": "Kotlin은 buildless 빈 추출이라 실DB는 manual(kotlinc)/autobuild 필요. scanSignatureChanges는 buildCommand 미배선 → 실repo는 autobuild로 동작, kotlin e2e는 probe(ac-0)가 실DB 증거. relations.ts kotlin 선례 동일.", "severity": "low" }
+  ],
+  "runs": [],
+  "created_at": "2026-06-05T12:00:00.000Z",
+  "updated_at": "2026-06-05T12:30:00.000Z",
+  "closed_at": "2026-06-05T12:30:00.000Z"
+}
