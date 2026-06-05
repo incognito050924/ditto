@@ -1,0 +1,37 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260605ad1",
+  "declared_by": "main",
+  "declared_at": "2026-06-05T07:50:00.000Z",
+  "summary": "Assurance drift 집계 뷰(단계8). src/acg/fitness/drift.ts: computeDrift(순수) — work-item을 가로지른 AssuranceSnapshot들을 function_id별 시계열로 모아 at 오름차순 정렬, violations 정의된 첫·끝 점으로 추세(rising/falling/flat/insufficient) 판정, 변경별 누적 new_violations(SLOP 증식 총량)·fail_count 집계, 주의순(rising 먼저) 정렬. loadAssuranceSnapshots: WorkItemStore.list()로 각 work item의 assurance-snapshot.json 로드(부재·malformed skip). ditto fitness drift 서브커맨드(human 표 + json). 10-methodology §8 'SLOP 증식을 기울기로 드러냄' 실현. fitness run 무회귀.",
+  "changed_files": ["src/acg/fitness/drift.ts", "src/cli/commands/fitness.ts", "tests/acg/fitness-drift.test.ts"],
+  "acceptance": [
+    { "criterion_id": "ac-1", "verdict": "pass", "evidence": [
+      { "kind": "file", "summary": "computeDrift 추세·집계 로직" },
+      { "kind": "command", "summary": "단위 5 케이스 pass(빈/rising/falling/flat·insufficient/정렬)" }
+    ] },
+    { "criterion_id": "ac-2", "verdict": "pass", "evidence": [
+      { "kind": "file", "summary": "loadAssuranceSnapshots(WorkItemStore.list + readJson skip)" },
+      { "kind": "command", "summary": "단위: valid/malformed/absent 중 1개만 로드" }
+    ] },
+    { "criterion_id": "ac-3", "verdict": "pass", "evidence": [
+      { "kind": "file", "summary": "fitness drift 서브커맨드 human/json" },
+      { "kind": "command", "summary": "e2e: rising(1→4,+4 new,1 fail) 먼저·insufficient 뒤, json 구조 확인" }
+    ] },
+    { "criterion_id": "ac-4", "verdict": "pass", "evidence": [
+      { "kind": "command", "summary": "전체 1103 pass/0 fail, biome clean, build clean" }
+    ] }
+  ],
+  "verifications": [
+    { "command": "bun test tests/acg/fitness-drift.test.ts", "exit_code": 0 },
+    { "command": "ditto fitness drift (합성 스냅샷 e2e)", "exit_code": 0 },
+    { "command": "bun test (전체)", "exit_code": 0 },
+    { "command": "bun run lint / build", "exit_code": 0 }
+  ],
+  "unverified": [],
+  "remaining_risks": [
+    "스냅샷은 work item당 1개(maybeRunFitness가 매 Stop 덮어씀)라 시계열의 점=work item이다. 한 work item 내 여러 평가 이력은 보존되지 않음(최신만). 변경을 가로지른 추세는 보이나, 한 변경 내 시계열은 안 보임 — 본 작업 범위는 'cross-change SLOP 추세'(10-methodology §8)라 의도된 한계.",
+    "direction은 violations 첫·끝 점의 단순 비교(선형 회귀 기울기 아님). 중간 변동은 cumulative_new_violations로 보완하나, 정밀 기울기·이상치는 미반영(MVP). periodic vs per_change trigger 구분 없이 모두 한 시계열로 본다."
+  ],
+  "final_verdict": "pass"
+}
