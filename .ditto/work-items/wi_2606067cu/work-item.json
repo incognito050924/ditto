@@ -8,11 +8,17 @@
     {
       "id": "ac-1",
       "statement": "본 work item의 첫 acceptance — verify 명령으로 갱신 대상",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "summary": "설치·배포 작업 기록 md + 실증기반 4축 재평가·재설계 출하",
+          "command": "git show 2a8a0e3"
+        }
+      ]
     }
   ],
-  "status": "partial",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [
@@ -116,5 +122,5 @@
   "runs": [],
   "handoff_path": ".ditto/handoff/wi_2606067cu.md",
   "created_at": "2026-06-06T07:05:37.357Z",
-  "updated_at": "2026-06-06T07:09:34.458Z"
+  "updated_at": "2026-06-06T13:43:59.000Z"
 }

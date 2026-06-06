@@ -8,23 +8,41 @@
     {
       "id": "ac-1",
       "statement": "DITTO 4축의 canonical 정의와 경계 4개가 .ditto/knowledge(glossary 또는 ADR)와 CONTEXT.md에 기록되어 포함된다",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "summary": "4축 canonical 정의·경계 정식화",
+          "path": ".ditto/knowledge/adr/ADR-0010-ditto-functional-four-axes.md"
+        }
+      ]
     },
     {
       "id": "ac-2",
       "statement": "ditto-four-axis-reassessment.md가 기능 4축 기준으로 재작성되고 Hooks/Skills/Agents/State를 배달 기층으로 명시 포함한다",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "summary": "기능4축 기준 재작성, Hooks/Skills/Agents/State=기층 명시",
+          "path": "reports/design/ditto-four-axis-reassessment.md"
+        }
+      ]
     },
     {
       "id": "ac-3",
       "statement": "4축 각 축의 실행 증거 4건이 수집되어 기록에 포함된다",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "summary": "'4축 전부 실제 실증 후 재평가' 커밋 — 축별 실행증거 출하",
+          "command": "git show ca29168"
+        }
+      ]
     }
   ],
-  "status": "partial",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [
@@ -137,5 +155,5 @@
   "runs": [],
   "handoff_path": ".ditto/handoff/wi_260606e43.md",
   "created_at": "2026-06-06T07:17:02.898Z",
-  "updated_at": "2026-06-06T07:46:13.365Z"
+  "updated_at": "2026-06-06T13:43:59.000Z"
 }

@@ -8,16 +8,22 @@
     {
       "id": "ac-1",
       "statement": "session_id 부재 시 Stop 훅이 stderr로 게이트 비활성 경고를 1회 출력하고 exit 0을 유지하며, session_id가 있으면 경고를 출력하지 않는다",
-      "verdict": "unverified",
-      "evidence": []
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "summary": "session_id 부재→stderr 경고 1회+exit0, 존재 시 미출력(L314/319)",
+          "path": "src/hooks/stop.ts"
+        }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
   "risks": [],
   "runs": [],
   "created_at": "2026-06-02T06:08:45.815Z",
-  "updated_at": "2026-06-02T06:10:28.265Z"
+  "updated_at": "2026-06-06T13:43:59.000Z"
 }
