@@ -107,13 +107,16 @@ ditto deep-interview finalize --work-item <wi> --json '{
   "unknowns": ["<remaining unknown>"],
   "follow_up_candidates": ["<post-ship idea>"],
   "question_policy": "ask_only_if_user_only_can_answer",
-  "risk": {"non_local": false, "irreversible": false, "unaudited": false}
+  "risk": {"non_local": false, "irreversible": false, "unaudited": false},
+  "user_confirmation": {"confirmed": true, "statement": "<the user's own words confirming the intent matches their understanding>"}
 }' --output json
 ```
 
+축1 종료 게이트는 **AND 두 조건**이다: readiness 게이트(1차, 시스템) ∧ 사용자 확인(2차, 휴먼). `user_confirmation.confirmed`는 빈 boolean이 아니라 사용자가 직접 말한 확인 문구(`statement`)를 증거로 들고 와야 한다 — 사용자가 의도가 맞다고 확인하지 않았다면 `confirmed: false`로 두고, finalize는 `not_confirmed`로 닫히며 어떤 산출물도 쓰지 않는다(의도를 사용자 대신 단정하지 말 것).
+
 This single call (atomic, per AC-2 + AC-3):
 
-1. Validates against the readiness gate one more time (rejects with `not_ready` if the gate fails — fix the interview, do not bypass it).
+1. Enforces the **축1 종료 AND**: the readiness gate (1차) AND the user confirmation (2차). Rejects with `not_ready` when the readiness gate fails, or `not_confirmed` when the gate passed but `user_confirmation.confirmed` is not true — fix the interview / capture the confirmation, never bypass either.
 2. Writes `.ditto/work-items/<wi>/intent.json` (IntentContract).
 3. Mirrors `acceptance_criteria` and `goal` into the work item itself.
 4. Calls `bootstrapAutopilot`, producing `.ditto/work-items/<wi>/autopilot.json` with a `design → implement → verify` graph for each criterion.

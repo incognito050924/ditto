@@ -214,6 +214,7 @@ describe('finalizeInterview', () => {
         follow_up_candidates: [],
         question_policy: 'ask_only_if_user_only_can_answer',
         risk: { non_local: false, irreversible: false, unaudited: false },
+        user_confirmation: { confirmed: true, statement: '맞아요' },
       },
     });
     expect(result.status).toBe('not_ready');
@@ -258,6 +259,7 @@ describe('finalizeInterview', () => {
         follow_up_candidates: ['rate limiting'],
         question_policy: 'ask_only_if_user_only_can_answer',
         risk: { non_local: false, irreversible: false, unaudited: false },
+        user_confirmation: { confirmed: true, statement: '네, 이 의도가 맞습니다' },
       },
     });
     expect(result.status).toBe('finalized');
@@ -305,6 +307,7 @@ describe('finalizeInterview', () => {
       follow_up_candidates: [],
       question_policy: 'ask_only_if_user_only_can_answer' as const,
       risk: { non_local: false, irreversible: false, unaudited: false },
+      user_confirmation: { confirmed: true, statement: '확인했습니다' },
     };
     const first = await finalizeInterview(repo, { workItemId: wiId, payload });
     const second = await finalizeInterview(repo, { workItemId: wiId, payload });
@@ -317,6 +320,67 @@ describe('finalizeInterview', () => {
         first.autopilot.nodes.map((n) => n.id),
       );
     }
+  });
+
+  // 4b: 축1 종료 = readiness(1차) ∧ user confirmation(2차). The readiness gate
+  // passing is NOT enough — without the user confirmation finalize must fail closed
+  // and write no artifact. (Old behavior: gate-pass alone → finalized.)
+  async function driveToReady(): Promise<void> {
+    await startInterview(repo, { workItemId: wiId });
+    await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
+        question: { text: 'shape?', why_matters: 'response', info_gain_estimate: 'high' },
+        answer: { text: 'integer', kind: 'user' },
+        readiness_score: 0.85,
+      },
+    });
+  }
+  const readyPayload = (over: Record<string, unknown>) => ({
+    goal: 'returns integer 0..100',
+    in_scope: [],
+    out_of_scope: [],
+    acceptance_criteria: [
+      {
+        id: 'ac-1',
+        statement: 'returns integer 0..100',
+        verdict: 'unverified' as const,
+        evidence: [],
+        evidence_required: ['test'],
+      },
+    ],
+    unknowns: [],
+    follow_up_candidates: [],
+    question_policy: 'ask_only_if_user_only_can_answer' as const,
+    risk: { non_local: false, irreversible: false, unaudited: false },
+    ...over,
+  });
+
+  test('readiness gate passes but user has NOT confirmed → not_confirmed, no artifact written', async () => {
+    await driveToReady();
+    const result = await finalizeInterview(repo, {
+      workItemId: wiId,
+      payload: readyPayload({ user_confirmation: { confirmed: false, statement: '' } }),
+    });
+    expect(result.status).toBe('not_confirmed');
+    expect(await new IntentStore(repo).exists(wiId)).toBe(false);
+    expect(await new AutopilotStore(repo).exists(wiId)).toBe(false);
+  });
+
+  test('readiness ∧ user confirmation both met → finalized, confirmation persisted on state', async () => {
+    await driveToReady();
+    const result = await finalizeInterview(repo, {
+      workItemId: wiId,
+      payload: readyPayload({
+        user_confirmation: { confirmed: true, statement: '네, 이 의도가 제가 원한 것입니다' },
+      }),
+    });
+    expect(result.status).toBe('finalized');
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.user_confirmation?.confirmed).toBe(true);
+    expect(state.user_confirmation?.statement).toBe('네, 이 의도가 제가 원한 것입니다');
+    expect(state.user_confirmation?.confirmed_at).toBeDefined();
   });
 });
 

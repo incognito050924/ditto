@@ -6,6 +6,7 @@ import {
   dimensionState,
   infoGain,
   interviewQuestion,
+  userConfirmation,
 } from '~/schemas/interview-state';
 import { bootstrapAutopilot } from './autopilot-bootstrap';
 import { type GateResult, type RiskAxes, deriveClosureMode, interviewReadinessGate } from './gates';
@@ -266,6 +267,10 @@ export const finalizePayload = z
       })
       .default({ non_local: false, irreversible: false, unaudited: false }),
     approved_source: z.enum(['approved_spec', 'issue', 'prd', 'user']).optional(),
+    // 축1 종료의 2차 게이트. Required so the AND (readiness ∧ user confirmation) is
+    // impossible to bypass by omission: finalize fails closed when this is absent
+    // or confirmed=false, even if the readiness gate passed.
+    user_confirmation: userConfirmation,
   })
   .describe('Intent fields synthesized after the interview is ready');
 
@@ -279,6 +284,13 @@ export type FinalizeResult =
     }
   | {
       status: 'not_ready';
+      gate: GateResult;
+    }
+  // Readiness gate passed (1차) but the user has not confirmed (2차). Distinct from
+  // not_ready: the system is ready, the human AND-condition is missing. No artifact
+  // is written — the axis-1 closure needs both halves (charter §4-8: value to user).
+  | {
+      status: 'not_confirmed';
       gate: GateResult;
     };
 
@@ -304,9 +316,15 @@ export async function finalizeInterview(
   const items = new WorkItemStore(repoRoot);
 
   const state = await interviewStoreInstance.get(input.workItemId);
+  // 축1 종료 게이트 = readiness(1차) ∧ user confirmation(2차) — both required, made
+  // explicit here. The readiness gate is the system half; the user confirmation is
+  // the human half. Either missing fails closed and writes no artifact.
   const gate = interviewReadinessGate(state);
   if (!gate.pass) {
     return { status: 'not_ready', gate };
+  }
+  if (!input.payload.user_confirmation.confirmed) {
+    return { status: 'not_confirmed', gate };
   }
 
   const workItem = await items.get(input.workItemId);
@@ -338,12 +356,19 @@ export async function finalizeInterview(
     goal: input.payload.goal,
   }));
 
-  // Mark interview converged.
+  // Mark interview converged and record the user confirmation as durable evidence
+  // of the 2차 gate (who confirmed, in their own words, when).
+  const nowIso = (input.now ?? new Date()).toISOString();
   await interviewStoreInstance.write({
     ...state,
     status: 'converged',
-    updated_at: (input.now ?? new Date()).toISOString(),
+    updated_at: nowIso,
     readiness: { ...state.readiness, gate: 'ready' },
+    user_confirmation: {
+      confirmed: true,
+      statement: input.payload.user_confirmation.statement,
+      confirmed_at: input.payload.user_confirmation.confirmed_at ?? nowIso,
+    },
     exit: {
       ...state.exit,
       reason: 'readiness_met',

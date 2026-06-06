@@ -222,6 +222,7 @@ describe('M2.1b — autopilot 그래프 bootstrap (intent → graph → approval
         follow_up_candidates: [],
         question_policy: 'ask_only_if_user_only_can_answer',
         risk: { non_local: false, irreversible: false, unaudited: false },
+        user_confirmation: { confirmed: true, statement: '맞습니다' },
       },
     });
     expect(result.status).toBe('finalized');

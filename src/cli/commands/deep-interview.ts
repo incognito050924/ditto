@@ -271,6 +271,14 @@ const finalizeCmd = defineCommand({
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
+      if (result.status === 'not_confirmed') {
+        writeError(
+          'readiness gate passed (1차) but the user has not confirmed the intent (2차 게이트): ' +
+            'capture the user confirmation (user_confirmation.confirmed=true with their statement) and re-run finalize',
+        );
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
       if (format === 'json') {
         writeJson({
           work_item_id: result.intent.work_item_id,

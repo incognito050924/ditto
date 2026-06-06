@@ -50,6 +50,32 @@ export const interviewAssumption = z
   })
   .describe('Assumption recorded when a question was not answered (§6.9)');
 
+// 축1 종료 = readiness 게이트(1차, 시스템) ∧ 사용자 확인(2차, 휴먼). The second
+// condition: the user confirmed the synthesized intent matches their understanding.
+// Carries the user's own words (`statement`) as evidence — `confirmed=true` is not
+// a bare self-declared boolean (claim ≠ proof). finalize enforces both as an AND.
+export const userConfirmation = z
+  .object({
+    confirmed: z
+      .boolean()
+      .describe('The user confirmed the synthesized intent matches their understanding'),
+    statement: z
+      .string()
+      .default('')
+      .describe("The user's own words confirming; required (non-empty) when confirmed=true"),
+    confirmed_at: isoDateTime.optional().describe('When the confirmation was captured'),
+  })
+  .superRefine((value, ctx) => {
+    if (value.confirmed && value.statement.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'confirmed=true requires the user statement (evidence, not a bare boolean)',
+        path: ['statement'],
+      });
+    }
+  })
+  .describe('축1 2차 게이트: explicit, evidence-bearing user confirmation of the intent');
+
 export const interviewState = z
   .object({
     schema_version: schemaVersion,
@@ -66,6 +92,10 @@ export const interviewState = z
     }),
     questions: z.array(interviewQuestion).default([]),
     assumptions: z.array(interviewAssumption).default([]),
+    // The 2차 (user-confirmation) half of the axis-1 closure gate, recorded when
+    // the interview is finalized. Optional so an active/pre-confirmation interview
+    // and every pre-existing interview-state.json parse unchanged.
+    user_confirmation: userConfirmation.optional(),
     exit: z.object({
       reason: z.enum([
         'readiness_met',
