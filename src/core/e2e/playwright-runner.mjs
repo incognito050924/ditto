@@ -15,12 +15,14 @@
  *     assertions:[{description}], runDir }
  *
  * Outputs into runDir: journey.png, trace.zip, console.log, network.log, outcome.json.
- * Exit 0 = capture completed (outcome.json written, with result pass|fail).
+ * Exit 0 = capture completed (outcome.json written, result pass|fail|unverified;
+ *   `unverified` = ran but ≥1 assertion was not a mechanically-checkable predicate).
  * Non-zero = capture itself failed (no outcome.json); caller degrades to blocked.
  */
 import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { classifyAssertion, summarizeResult } from './assertion.mjs';
 
 const configPath = process.argv[2];
 if (!configPath) {
@@ -41,7 +43,10 @@ try {
 
 const consoleLines = [];
 const networkLines = [];
-const satisfied = [];
+// Per-assertion evaluation: { satisfied, checkable }. checkable=false marks an
+// assertion the runner could not mechanically evaluate (free-text NL), which maps
+// to `unverified` — never a fabricated `fail`.
+const evaluations = [];
 let result = 'pass';
 let reproduction = null;
 
@@ -66,31 +71,37 @@ try {
     // other actions: no-op drive; goto already loaded the page
   }
 
-  // Evaluate assertions. Convention: description "<selector> contains <text>" or
-  // "<selector> visible"; otherwise we assert the selector (if it looks like one)
-  // is present. A heading-text assertion is enough for ac-3.
+  // Evaluate assertions against the live page. A predicate the runner understands
+  // (`<sel> contains <text>` / `<sel> visible` / `<sel> hidden` / a bare selector
+  // present-check) is evaluated and marked checkable; anything else (free-text NL)
+  // is left UNCHECKED (checkable=false) instead of being forced through
+  // `locator(NL)`, which would throw and fabricate a fail.
   for (const a of cfg.assertions ?? []) {
+    const plan = classifyAssertion(a.description);
+    if (plan.kind === 'unverifiable') {
+      evaluations.push({ satisfied: false, checkable: false });
+      continue;
+    }
     let ok = false;
-    const containsMatch = a.description.match(/^(.+?) contains (.+)$/);
-    const visibleMatch = a.description.match(/^(.+?) visible$/);
     try {
-      if (containsMatch) {
-        const text = await page.textContent(containsMatch[1].trim());
-        ok = (text ?? '').includes(containsMatch[2].trim());
-      } else if (visibleMatch) {
-        ok = await page.isVisible(visibleMatch[1].trim());
+      if (plan.kind === 'contains') {
+        const text = await page.textContent(plan.selector);
+        ok = (text ?? '').includes(plan.text);
+      } else if (plan.kind === 'visible') {
+        ok = await page.isVisible(plan.selector);
+      } else if (plan.kind === 'hidden') {
+        ok = !(await page.isVisible(plan.selector));
       } else {
-        // Fallback: treat the whole description as a selector to locate.
-        ok = (await page.locator(a.description).count()) > 0;
+        ok = (await page.locator(plan.selector).count()) > 0;
       }
     } catch {
       ok = false;
     }
-    satisfied.push(ok);
+    evaluations.push({ satisfied: ok, checkable: true });
   }
-  if (satisfied.some((s) => !s)) {
-    result = 'fail';
-    reproduction = `1) open ${cfg.url} 2) run the journey steps 3) one or more assertions did not hold (see console.log/network.log/trace.zip)`;
+  result = summarizeResult(evaluations);
+  if (result === 'fail') {
+    reproduction = `1) open ${cfg.url} 2) run the journey steps 3) a checkable assertion did not hold (see console.log/network.log/trace.zip)`;
   }
 
   await page.screenshot({ path: join(cfg.runDir, 'journey.png') });
@@ -107,7 +118,12 @@ await writeFile(join(cfg.runDir, 'console.log'), `${consoleLines.join('\n')}\n`)
 await writeFile(join(cfg.runDir, 'network.log'), `${networkLines.join('\n')}\n`);
 await writeFile(
   join(cfg.runDir, 'outcome.json'),
-  JSON.stringify({ result, satisfied, ...(reproduction ? { reproduction } : {}) }),
+  JSON.stringify({
+    result,
+    satisfied: evaluations.map((e) => e.satisfied),
+    checkable: evaluations.map((e) => e.checkable),
+    ...(reproduction ? { reproduction } : {}),
+  }),
 );
-console.error(`runner: outcome result=${result} assertions=${satisfied.length}`);
+console.error(`runner: outcome result=${result} assertions=${evaluations.length}`);
 process.exit(0);

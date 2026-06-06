@@ -316,7 +316,12 @@ export async function runJourney(
     };
   }
 
-  let outcome: { result: E2EJourney['result']; satisfied: boolean[]; reproduction?: string };
+  let outcome: {
+    result: E2EJourney['result'];
+    satisfied: boolean[];
+    checkable?: boolean[];
+    reproduction?: string;
+  };
   try {
     outcome = JSON.parse(await readFile(outcomeAbs, 'utf8'));
   } catch (err) {
@@ -333,6 +338,9 @@ export async function runJourney(
   const assertions = spec.assertions.map((a, i) => ({
     description: a.description,
     satisfied: outcome.satisfied[i] ?? false,
+    // A free-text NL assertion the runner could not mechanically evaluate is
+    // checkable=false → it lands the journey on `unverified`, not a fabricated fail.
+    checkable: outcome.checkable?.[i] ?? true,
   }));
   const journey = buildJourney({
     journey: spec.journey,

@@ -15,8 +15,13 @@ import { relativePath, schemaVersion, sha256, workItemId } from './common';
  */
 
 export const e2eResult = z
-  .enum(['pass', 'fail', 'blocked'])
-  .describe('Journey outcome: pass, fail (assertion/step failed), or blocked (could not run)');
+  .enum(['pass', 'fail', 'unverified', 'blocked'])
+  .describe(
+    'Journey outcome: pass (every assertion checkable and held), fail (a checkable ' +
+      'assertion was contradicted), unverified (ran, but ≥1 assertion was not a ' +
+      'mechanically-checkable predicate — honest "could not evaluate", not a fail), ' +
+      'or blocked (could not run at all)',
+  );
 
 export const e2eStep = z
   .object({
@@ -30,6 +35,17 @@ export const e2eAssertion = z
   .object({
     description: z.string().min(1).describe('What is being asserted about the journey'),
     satisfied: z.boolean().describe('Whether the assertion held when the journey ran'),
+    // Whether the runner could mechanically evaluate the assertion as a predicate
+    // (selector/text-presence). `false` = free-text NL the runner cannot check, so
+    // it is `unverified`, not a contradiction. Optional + default true so every
+    // pre-existing journey artifact parses unchanged (claim ≠ proof: an unchecked
+    // assertion cannot be `satisfied`).
+    checkable: z
+      .boolean()
+      .default(true)
+      .describe(
+        'Whether the runner could mechanically evaluate this assertion (false ⇒ unverified)',
+      ),
   })
   .describe('A checked assertion about the journey outcome');
 
@@ -82,12 +98,42 @@ export const e2eJourney = z
         path: ['reproduction'],
       });
     }
-    if (value.result === 'pass' && value.assertions.some((a) => !a.satisfied)) {
+    // pass demands every assertion be a checkable predicate that held — an
+    // unchecked (NL) assertion can never sit under a pass (claim ≠ proof).
+    if (value.result === 'pass' && value.assertions.some((a) => !a.checkable || !a.satisfied)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'result=pass but an assertion is not satisfied',
+        message: 'result=pass but an assertion is unchecked or not satisfied',
         path: ['result'],
       });
+    }
+    // Honesty: an assertion the runner could not evaluate cannot be `satisfied`.
+    const claimedUnchecked = value.assertions.find((a) => !a.checkable && a.satisfied);
+    if (claimedUnchecked) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'an unchecked assertion (checkable=false) cannot be satisfied=true',
+        path: ['assertions'],
+      });
+    }
+    // unverified is only honest when nothing actually failed (a contradicted
+    // checkable assertion is a `fail`, not `unverified`) and ≥1 assertion is
+    // genuinely unchecked (otherwise the result should be pass).
+    if (value.result === 'unverified') {
+      if (value.assertions.some((a) => a.checkable && !a.satisfied)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'result=unverified but a checkable assertion was not satisfied (that is a fail)',
+          path: ['result'],
+        });
+      }
+      if (!value.assertions.some((a) => !a.checkable)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'result=unverified requires at least one unchecked (checkable=false) assertion',
+          path: ['result'],
+        });
+      }
     }
   })
   .describe('A browser user-journey verification result (§10)');

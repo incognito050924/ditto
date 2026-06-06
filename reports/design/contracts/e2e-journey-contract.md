@@ -44,10 +44,10 @@ status: design-locked (schema 등록 완료, runtime post-v0/M5)
     { "action": "fill email", "target": "#email", "expectation": "value set" },
     { "action": "click submit", "target": "button[type=submit]" }
   ],
-  "assertions": [                          // 여정 결과에 대한 단언
-    { "description": "redirected to dashboard", "satisfied": true }
+  "assertions": [                          // 여정 결과에 대한 단언(검사 가능한 술어)
+    { "description": "#dashboard visible", "satisfied": true, "checkable": true }
   ],
-  "result": "pass|fail|blocked",
+  "result": "pass|fail|unverified|blocked",
   "artifacts": {                           // 캡처물(§10) — path(+sha256) 참조, raw는 .ditto/runs
     "screenshots": [ { "path": ".ditto/runs/run_e2e0001/login.png", "sha256": "…" } ],
     "trace": { "path": ".ditto/runs/run_e2e0001/trace.zip" },
@@ -58,9 +58,13 @@ status: design-locked (schema 등록 완료, runtime post-v0/M5)
 }
 ```
 
+단언은 **검사 가능한 술어**로 받는다(러너가 페이지와 대조): `<selector> contains <text>` · `<selector> visible` · `<selector> hidden` · 단독 CSS selector(존재 확인). 자유텍스트 NL은 selector가 아니라 러너가 기계적으로 평가 불가 → `checkable=false`로 분리되어 `result=unverified`가 된다(부당한 `fail`이 아니라 정직한 "평가 못 함"). 재설계 #2(축3 어설션 자동평가).
+
 cross-field(schema 강제):
 - `result=fail` ⇒ `reproduction` 필수(설계서 §10 "실패 시 재현 절차와 artifact path 기록").
-- `result=pass` ⇒ 모든 `assertions[].satisfied=true`(불만족 단언이 있으면서 pass는 모순).
+- `result=pass` ⇒ 모든 `assertions[]`가 `checkable=true ∧ satisfied=true`(미검사·불만족 단언이 있으면서 pass는 모순; claim ≠ proof).
+- `result=unverified` ⇒ 검사 가능한 단언 중 불만족(=실패)은 없고, `checkable=false`(NL) 단언이 1개 이상.
+- `checkable=false`인 단언은 `satisfied=true`일 수 없다(검사 안 한 것을 만족이라 주장 불가).
 - `result=blocked`(여정을 못 돌림 — dev server 부재 등)은 reproduction 없이 허용.
 
 artifact 정책([DECIDED], ④ EvidenceRecord와 동형): screenshot·trace·console·network는 **path + 선택적 sha256**만 박고 raw는 `.ditto/runs/<id>/` 안에 둔다(gitignore). 다른 clone/세션에서 raw가 없으면 `artifact_available=false`인 EvidenceRecord로 감싸 판정한다(④ 연계).

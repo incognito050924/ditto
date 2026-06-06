@@ -59,4 +59,62 @@ describe('e2eJourney schema (설계서 §10)', () => {
     const blocked = { ...passing(), result: 'blocked' as const, assertions: [] };
     expect(e2eJourney.safeParse(blocked).success).toBe(true);
   });
+
+  test('assertion.checkable defaults to true (pre-checkable artifacts parse unchanged)', () => {
+    const j = e2eJourney.parse(passing());
+    expect(j.assertions[0]?.checkable).toBe(true);
+  });
+
+  // 재설계 #2: an unchecked NL assertion lands on `unverified`, not a fabricated fail.
+  test('result=unverified with an unchecked assertion (no failure) parses', () => {
+    const unverified = {
+      ...passing(),
+      result: 'unverified' as const,
+      assertions: [
+        {
+          description: '페이지에 Example Domain 텍스트가 보인다',
+          satisfied: false,
+          checkable: false,
+        },
+      ],
+    };
+    expect(e2eJourney.safeParse(unverified).success).toBe(true);
+  });
+
+  test('result=unverified requires at least one unchecked assertion', () => {
+    const allChecked = {
+      ...passing(),
+      result: 'unverified' as const,
+      assertions: [{ description: '#title contains X', satisfied: true, checkable: true }],
+    };
+    expect(e2eJourney.safeParse(allChecked).success).toBe(false);
+  });
+
+  test('result=unverified is rejected when a checkable assertion actually failed (that is a fail)', () => {
+    const hiddenFail = {
+      ...passing(),
+      result: 'unverified' as const,
+      assertions: [
+        { description: '#title contains X', satisfied: false, checkable: true },
+        { description: 'free text', satisfied: false, checkable: false },
+      ],
+    };
+    expect(e2eJourney.safeParse(hiddenFail).success).toBe(false);
+  });
+
+  test('an unchecked assertion cannot claim satisfied=true', () => {
+    const dishonest = {
+      ...passing(),
+      assertions: [{ description: 'free text', satisfied: true, checkable: false }],
+    };
+    expect(e2eJourney.safeParse(dishonest).success).toBe(false);
+  });
+
+  test('result=pass with an unchecked assertion is rejected (claim ≠ proof)', () => {
+    const passUnchecked = {
+      ...passing(),
+      assertions: [{ description: 'free text', satisfied: false, checkable: false }],
+    };
+    expect(e2eJourney.safeParse(passUnchecked).success).toBe(false);
+  });
 });
