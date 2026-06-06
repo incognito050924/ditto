@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
-import { evidenceRef, relativePath } from '~/schemas/common';
+import { evidenceRef, relativePath, verdict } from '~/schemas/common';
 import { loadVariantCatalog, selectVariantCandidates } from './agent-variants';
 import { forwardRound, planForwardReexpansion } from './autopilot-converge';
 import {
@@ -269,6 +269,15 @@ export const recordResultPayload = z
       .optional()
       .describe('Required when outcome=fail; the caller-supplied classification'),
     evidence_refs: z.array(evidenceRef).optional().describe('Evidence pointers gathered on pass'),
+    ac_verdicts: z
+      .array(z.object({ criterion_id: z.string().min(1), verdict, notes: z.string().optional() }))
+      .optional()
+      .describe(
+        "A judging node's per-AC verdicts (verifier/e2e). The node still records a single " +
+          'pass/fail outcome, but a verify node can pass *as a node* while judging one criterion ' +
+          'partial/fail; persisting the per-AC verdicts here keeps `autopilot complete` from ' +
+          'over-closing that criterion to pass (false-green; claim ≠ proof).',
+      ),
     changed_files: z
       .array(relativePath)
       .optional()
@@ -462,6 +471,9 @@ export async function recordResult(
       ...n,
       status: nodeTransition(n.status, 'pass'),
       evidence_refs: input.payload.evidence_refs ?? n.evidence_refs,
+      // Persist a judging node's per-AC verdicts so the completion bridge consumes
+      // them directly (a node-level pass cannot absorb a per-AC partial/fail).
+      ac_verdicts: input.payload.ac_verdicts ?? n.ac_verdicts,
     }));
     // changed_files accumulation (#1): a mutating node reports the files it
     // changed; union them into the work item so `autopilot complete` reads

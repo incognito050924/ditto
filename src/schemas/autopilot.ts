@@ -5,6 +5,7 @@ import {
   isoDateTime,
   relativePath,
   schemaVersion,
+  verdict,
   workItemId,
 } from './common';
 
@@ -88,6 +89,17 @@ export const autopilotNode = z
     depends_on: z.array(z.string()).default([]),
     acceptance_refs: z.array(z.string()).default([]),
     evidence_refs: z.array(evidenceRef).default([]),
+    // Per-AC verdicts a judging node (verifier/e2e) emits for the criteria it
+    // addresses. A node carries a single status, but a verification node can pass
+    // *as a node* (it ran, produced evidence) while judging a specific criterion
+    // partial/fail/unverified. Recording the per-AC judgment here keeps the
+    // completion bridge (deriveAcVerdicts) from letting the node-level pass absorb
+    // a per-AC non-pass (false-green at the completion gate; claim ≠ proof, §6.8).
+    // Optional + default [] — a legacy graph and any non-judging node parse
+    // unchanged. criterion_ids outside `acceptance_refs` are ignored downstream.
+    ac_verdicts: z
+      .array(z.object({ criterion_id: z.string().min(1), verdict, notes: z.string().optional() }))
+      .default([]),
     attempts: z
       .object({ fix: z.number().int().nonnegative(), switch: z.number().int().nonnegative() })
       .default({ fix: 0, switch: 0 }),

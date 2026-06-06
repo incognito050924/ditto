@@ -302,6 +302,27 @@ describe('recordResult (loop step 6: G7 guard → classify → decide → persis
     expect(n1?.evidence_refs).toHaveLength(1);
   });
 
+  test('a pass carrying per-AC verdicts persists them on the node (verifier judgment survives)', async () => {
+    await dispatchN1();
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text: 'Verified ac-1: holds for the success path but the error path is unmet.',
+        outcome: 'pass',
+        evidence_refs: [{ kind: 'file', path: 'verify.log', summary: 'run' }],
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'partial', notes: 'error path unmet' }],
+      },
+    });
+    const after = await aps.get(WI);
+    const n1 = after.nodes.find((n) => n.id === 'N1');
+    expect(n1?.status).toBe('passed'); // the node passed as a node
+    expect(n1?.ac_verdicts).toEqual([
+      { criterion_id: 'ac-1', verdict: 'partial', notes: 'error path unmet' },
+    ]);
+  });
+
   test('G7: an ack-only result claimed as pass is overridden to fixable (never passes)', async () => {
     await dispatchN1();
     const res = await recordResult(repo, {

@@ -13,6 +13,7 @@ const node = (over: Partial<AutopilotNode> & Pick<AutopilotNode, 'id'>): Autopil
   depends_on: [],
   acceptance_refs: [],
   evidence_refs: [],
+  ac_verdicts: [],
   attempts: { fix: 0, switch: 0 },
   ...over,
 });
@@ -88,6 +89,71 @@ describe('deriveAcVerdicts (evidence-gated: pass only with evidence; never auto-
     expect(v?.verdict).toBe('pass');
     expect(v?.evidence).toEqual([ev('a'), ev('b')]);
   });
+
+  // False-green repro (wi_260606e43 N3): the verifier judged ac-3 PARTIAL, but the
+  // node passed *as a node* (its verification ran, evidence present) addressing all
+  // three ACs. The node-level pass must NOT absorb the per-AC partial.
+  test('a per-AC partial verdict overrides a node-level pass (no false-green; claim ≠ proof)', () => {
+    const graph = graphWith([
+      node({
+        id: 'N3',
+        acceptance_refs: ['ac-1', 'ac-2', 'ac-3'],
+        status: 'passed',
+        evidence_refs: [ev('verify.log')],
+        ac_verdicts: [{ criterion_id: 'ac-3', verdict: 'partial' }],
+      }),
+    ]);
+    const [a1, a2, a3] = deriveAcVerdicts(graph, ['ac-1', 'ac-2', 'ac-3']);
+    expect(a1?.verdict).toBe('pass');
+    expect(a2?.verdict).toBe('pass');
+    expect(a3?.verdict).toBe('partial'); // not pass — the verifier judged it partial
+  });
+
+  test('a per-AC fail verdict overrides a node-level pass', () => {
+    const graph = graphWith([
+      node({
+        id: 'N3',
+        acceptance_refs: ['ac-1'],
+        status: 'passed',
+        evidence_refs: [ev('verify.log')],
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'fail' }],
+      }),
+    ]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1']);
+    expect(v?.verdict).toBe('fail');
+  });
+
+  // The fold only ever LOWERS: an explicit pass cannot upgrade an evidence-less
+  // structural unverified (the evidence gate still holds; claim ≠ proof).
+  test('an explicit pass cannot raise a verdict above the evidence-gated structural floor', () => {
+    const graph = graphWith([
+      node({
+        id: 'N3',
+        acceptance_refs: ['ac-1'],
+        status: 'passed',
+        evidence_refs: [],
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'pass' }],
+      }),
+    ]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1']);
+    expect(v?.verdict).toBe('unverified');
+  });
+
+  // A per-AC verdict for an AC the node does not address is ignored (it is not an
+  // addressing node for that criterion).
+  test('a per-AC verdict on a non-addressed criterion is ignored', () => {
+    const graph = graphWith([
+      node({
+        id: 'N3',
+        acceptance_refs: ['ac-1'],
+        status: 'passed',
+        evidence_refs: [ev('t.log')],
+        ac_verdicts: [{ criterion_id: 'ac-2', verdict: 'fail' }],
+      }),
+    ]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1']);
+    expect(v?.verdict).toBe('pass'); // ac-2's fail does not touch ac-1
+  });
 });
 
 describe('assembleCompletionFromGraph (deterministic completion from the graph; final_verdict derived)', () => {
@@ -105,6 +171,23 @@ describe('assembleCompletionFromGraph (deterministic completion from the graph; 
     expect(c.declared_by).toBe('verifier');
     expect(c.acceptance.map((a) => a.verdict)).toEqual(['pass', 'pass']);
     expect(c.changed_files).toEqual(['src/x.ts']); // from the work item
+  });
+
+  test('a per-AC partial keeps final_verdict off pass even when the node passed with evidence (false-green fix)', () => {
+    const graph = graphWith([
+      node({
+        id: 'N3',
+        acceptance_refs: ['ac-1', 'ac-2', 'ac-3'],
+        status: 'passed',
+        evidence_refs: [ev('t.log')],
+        ac_verdicts: [{ criterion_id: 'ac-3', verdict: 'partial' }],
+      }),
+    ]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1', 'ac-2', 'ac-3']), {
+      now: NOW,
+    });
+    expect(c.final_verdict).toBe('partial');
+    expect(c.acceptance.find((a) => a.criterion_id === 'ac-3')?.verdict).toBe('partial');
   });
 
   test('an AC passed without evidence keeps final_verdict off pass (evidence-gated)', () => {

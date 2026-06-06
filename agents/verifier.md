@@ -41,6 +41,8 @@ A completion claim for this node:
 - `unverified[]` — everything you could not establish, each with a reason. If you mark the node `pass`, every unverified item must be `out_of_scope: true`.
 - `final_verdict` — `pass` only when every criterion is `pass` and no in-scope item is unverified.
 
+Return the **per-AC verdicts explicitly** — one `{criterion_id, verdict, notes?}` per `acceptance_ref`, not just a single node-level pass/fail. The node passes *as a node* when your verification ran, but a criterion you judged `partial`/`fail`/`unverified` must be reported as such: the driver records these as `ac_verdicts` on `record-result`, and the completion bridge consumes them so a node-level pass cannot over-close a per-AC non-pass (false-green; claim ≠ proof).
+
 ## Contract
 - Verify by running the actual evidence (tests, commands, behavior); never assert "should pass".
 - Do not fix; report. Fixing is a separate node — if a criterion fails, return `fail` with the reproduction, not a patch.
