@@ -42,7 +42,7 @@ bun run lint && bun run adr:guard    # green 기대
 목표: **설치 스크립트 1회 실행으로 타겟 프로젝트(macOS/Linux/Windows)에서 DITTO 완전 동작**.
 - ✅ **increment 1**: hook self-contained `b5596d7` — `ditto hook <event>` 커맨드(`src/cli/commands/hook.ts`, HANDLERS 맵). hooks.json이 `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" hook <event>` 호출. **bun·src·node_modules 불필요**. 고아 hooks/*.ts 래퍼 5개 삭제.
 - ✅ **bun 1.3.14 재검증** `4f2f1ff` — `build:bin:win` → `bin/ditto.exe`(PE32+) 생성 확인. 회귀 1건은 bun-in-bun 테스트 하네스 문제(바이너리 호출로 수정).
-- ⬜ **increment 2**: `ditto init` 커맨드 — 타겟에 `.ditto/` scaffold(멱등). 현재는 lazy init만.
+- ✅ **increment 2**: `ditto init` 커맨드 `802fe95` — `src/core/init-scaffold.ts`(core, 테스트 가능) + `src/cli/commands/init.ts`(thin: `--dir`, `--output`). 타겟에 `.ditto/` 골격 멱등 생성: 런타임 디렉토리(work-items/runs/handoff/sessions/logs/cache/agents/knowledge/adr) + 빈 knowledge 시드(스키마 유효 glossary.json, CONTEXT.md) + `.ditto/.gitignore`(휘발성 상태 제외). 기존 파일 미덮어씀(alreadyInitialized 마커=glossary.json). **surfaces.json은 의도적으로 미시드**(설치된 플러그인 자신의 표면 카탈로그라 repoRoot==플러그인인 self-host에서만 의미; 타겟 시드 시 전부 missing_file 드리프트). 검증: 클린 `/tmp` git 타겟에서 init→`work start`까지 구동, repo_root가 타겟으로 해석·ditto repo 누출 0 확인. 유닛 4 pass(`tests/core/init-scaffold.test.ts`).
 - ⬜ **increment 3**: 설치 오케스트레이터 — 기존 `scripts/install.{sh,ps1,mjs}`(plugin 등록만) 확장: plugin 등록 + `ditto init` + 권한 allowlist(PreToolUse가 ditto 명령 안 막게) + 플랫폼별 바이너리 빌드/배치(bin/ditto, ditto.exe) + 멱등/언인스톨.
 - ⬜ **increment 4**: CodeQL 자동 설치·설정 — 플랫폼별 다운로드 + `CODEQL_BIN`/PATH. graceful(실패 시 안내). 탐지: `src/core/codeql/doctor.ts:227`(CODEQL_BIN→which→gh ext).
 - ⬜ **increment 5**: playwright/chromium 설치 — 플랫폼별 캐시(`~/Library/Caches/ms-playwright` 등). graceful. `src/core/e2e/browser.ts`(자동 다운로드 금지 hard constraint는 런타임용; 설치 스크립트는 별도로 설치).
@@ -61,4 +61,6 @@ bun run lint && bun run adr:guard    # green 기대
 - DITTO_SKIP_HOOKS=1 로 hook 우회 가능.
 
 ## 5. 다음 명령 (새 세션 첫 프롬프트로)
-> "이 핸드오프(`.ditto/work-items/wi_2606068sy/handoff.md`) 읽고, DITTO 설치 스크립트(wi_2606068sy) **increment 2(ditto init)** 부터 이어서 진행해. 검증은 self-host 말고 임시 clean 타겟에서."
+> "이 핸드오프(`.ditto/work-items/wi_2606068sy/handoff.md`) 읽고, DITTO 설치 스크립트(wi_2606068sy) **increment 3(설치 오케스트레이터)** 부터 이어서 진행해. 검증은 self-host 말고 임시 clean 타겟에서."
+
+increment 3 메모: 기존 `scripts/install.{sh,ps1}` + `scripts/install-plugin.mjs`(plugin 등록만) 확장 — plugin 등록 + `ditto init` 호출 + 권한 allowlist(PreToolUse가 ditto 명령·타겟 .ditto 쓰기 안 막게; inc2 검증 중 `> /tmp/...` 리다이렉트가 훅에 막힌 것 참고) + 플랫폼별 prebuilt 바이너리 빌드/배치 + 멱등/언인스톨. `ditto init`은 이제 오케스트레이터가 호출만 하면 됨.
