@@ -1,0 +1,123 @@
+{
+  "schema_version": "0.1.0",
+  "autopilot_id": "orch_260606umt",
+  "work_item_id": "wi_260606e43",
+  "mode": "autopilot",
+  "root_goal": "DITTO 기능 4축(의도파악·동기화 / 자율실행 오케스트레이션 / 브라우저 E2E 검증 / 지식베이스)을 인터뷰로 확정된 경계대로 지식베이스·설계문서에 정식화하고 실증 기반으로 재평가한다",
+  "completion_boundary": "entire_work_item",
+  "approval_gate": {
+    "status": "not_required",
+    "source": "small_reversible_policy",
+    "approved_at": null,
+    "approved_by": null,
+    "evidence_refs": []
+  },
+  "nodes": [
+    {
+      "id": "N1",
+      "kind": "design",
+      "owner": "planner",
+      "purpose": "Plan the change against the acceptance criteria",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3"
+      ],
+      "evidence_refs": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N2",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "Implement the planned change",
+      "status": "passed",
+      "depends_on": [
+        "N1"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "file",
+          "path": "reports/design/ditto-four-axis-reassessment.md",
+          "summary": "기능 4축 재작성+실증표"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/knowledge/adr/ADR-0010-ditto-functional-four-axes.md",
+          "summary": "canonical 정의+경계4"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N3",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Verify every acceptance criterion with evidence",
+      "status": "passed",
+      "depends_on": [
+        "N2"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "file",
+          "path": "reports/design/ditto-four-axis-reassessment.md",
+          "lines": {
+            "start": 60,
+            "end": 67
+          },
+          "summary": "실증 커버리지 표 fresh 검증"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/knowledge/adr/ADR-0010-ditto-functional-four-axes.md",
+          "lines": {
+            "start": 21,
+            "end": 33
+          },
+          "summary": "4축+경계4 fresh 검증"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    }
+  ],
+  "caps": {
+    "fix_per_node": 2,
+    "switch_per_node": 1,
+    "converge_rounds": 3
+  },
+  "continue_policy": {
+    "continue_after_approval": true,
+    "continue_after_checkpoint": true,
+    "continue_after_fixable_failure": true,
+    "ask_user_only_for_user_owned_decisions": true
+  },
+  "stop_conditions": [
+    "all_acceptance_criteria_passed_or_explicitly_closed",
+    "blocked_by_user_owned_decision",
+    "blocked_by_external_system",
+    "safety_boundary_hit"
+  ],
+  "user_interrupt_policy": "ask_only_for_user_owned_decisions"
+}

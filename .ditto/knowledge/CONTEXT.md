@@ -64,6 +64,18 @@ run에 넘기는 prompt. goal, acceptance, git state, relevant files, last failu
 ### internal_packages
 `ArchitectureSpec`의 형제모듈 디스크립터 배열. `{type:'glob'}`=cross_repo 분류 대상 패키지 글로브, `{type:'path'}`=로컬 sibling JAR 위치 글로브(JVM 가드 입력). `public_surfaces`·`forbidden_dependencies`와 혼동하지 않는다.
 
+### DITTO 기능 4축
+DITTO가 사용자를 위해 무엇을 하는가를 정의하는 canonical 목적 기둥. 완전 순차 파이프라인 1→2→3→4로 동작한다.
+
+1. **사용자 의도 파악 및 동기화** — 변증론적·경계 질문을 반복해 사용자가 놓친 부분까지 드러내고, 사용자 이해와 완전히 일치할 때까지 인터뷰해 산출물을 작성한다.
+2. **자율 실행 오케스트레이션** — 사용자 의도를 스스로 구체화해 실제 코드베이스를 만들어 나간다(의도 왜곡 없이, 대규모·장시간이라도 끝까지).
+3. **E2E 테스트** — 사용자 의도대로, 최초 계획대로 구현됐는지 확인한다.
+4. **지식 베이스** — 매 변경마다 추가·변경된 코드베이스·컨텍스트를 문서화해 프로젝트 메모리를 획득한다.
+
+경계: (a) 축3=진짜 브라우저 E2E only, 웹 없는 프로젝트는 N/A; (b) 축4=가치 있는 durable 변경만(에이전트 판단), 자동강제 아님; (c) 축1 종료=readiness 게이트(1차)+사용자 확인(2차) 둘 다; (d) 4축=완전 순차 파이프라인.
+
+기능 4축은 목적 기둥이고, 기층 4축(Hooks/Skills/Agents/State)은 그것을 타겟에서 살아있게 배달하는 구현 substrate다(둘을 혼동하지 않는다). 정식 정의·근거는 ADR-0010.
+
 ## 금지 표현
 
 다음 표현은 사용자 응답에서 self-check가 reject한다.

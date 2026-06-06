@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-06-05T07:00:00.000Z",
+  "updated_at": "2026-06-06T00:00:00.000Z",
   "entries": [
     {
       "term": "request",
@@ -192,6 +192,16 @@
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-06-05T07:00:00.000Z"
+    },
+    {
+      "term": "DITTO 기능 4축",
+      "aliases": ["기능 4축", "functional four axes"],
+      "definition": "DITTO가 사용자를 위해 무엇을 하는가를 정의하는 canonical 목적 기둥. (1) 사용자 의도 파악 및 동기화, (2) 자율 실행 오케스트레이션, (3) E2E 테스트, (4) 지식 베이스. 완전 순차 파이프라인 1→2→3→4로 동작한다. 경계: 축3=진짜 브라우저 E2E only(웹 없는 프로젝트는 N/A), 축4=가치 있는 durable 변경만(자동강제 아님), 축1 종료=readiness 게이트+사용자 확인 둘 다. 근거는 ADR-0010.",
+      "examples": ["축1=deep-interview skill", "축2=autopilot skill", "축3=e2e skill", "축4=knowledge-update skill"],
+      "not_to_be_confused_with": ["기층 4축 (Hooks/Skills/Agents/State)"],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-06T00:00:00.000Z"
     }
   ]
 }
