@@ -47,7 +47,9 @@ bun run lint && bun run adr:guard    # green 기대
   - **gotcha(커밋)**: 커밋 메시지에 `<target>/.claude/...`처럼 `>`+경로가 있으면 PreToolUse가 scope-out 리다이렉트로 오인 차단. 메시지에서 `<...>/` 패턴 회피.
 - ✅ **increment 4**: CodeQL 자동 설치 `1280f21` — install-plugin.mjs에 `installCodeql` step(build/place와 동일 패턴). `detectCodeql`=CODEQL_BIN→PATH(which)→gh-ext→ditto-managed(`~/.local/share/ditto/codeql/codeql/codeql`), `doctor.ts:227` 탐지와 정렬. 없으면 플랫폼 번들(`codeql-{osx64,linux64,win64}.zip`, latest 릴리스, 현재 v2.25.6) 다운로드→unzip(tar fallback)→추출→POSIX는 `~/.local/bin/codeql` 심링크 배치, Win은 PATH 안내. **graceful**: curl/unzip 부재·실패 시 정확한 URL+절차 안내하고 install 계속(non-fatal). `--no-codeql`, status에 codeql 노출. uninstall 미관여(host 공유 도구). **검증**: reuse·graceful(PATH 비움)·ditto-managed 탐지 실증, 릴리스 URL HEAD 도달성 확인. **미실증**: 실제 번들 다운로드(대용량 의도적 비실행).
 - ✅ **increment 5**: Playwright/Chromium 설치 `abfc41f` — install-plugin.mjs에 `installPlaywright` step(inc4 동일 패턴). `detectPlaywright`=playwright-core in bun 캐시(`~/.bun/install/cache`, `browser.ts resolvePlaywrightCore`와 정렬) + Chromium in 플랫폼별 ms-playwright 캐시(macOS `~/Library/Caches`, linux `~/.cache`, win `AppData\Local`). 둘 다 있어야 available. 없으면 `bun x playwright install chromium`(playwright-core+Chromium 동시 충족) 후 재탐지. **graceful**: bun 부재·실패 시 `bunx playwright install chromium`+캐시경로 안내하고 install 계속. `--no-playwright`, status 노출, uninstall 미관여. 런타임 hard constraint(auto-download 금지)는 e2e 실행용이라 설치와 무충돌. **검증**: status reuse 탐지·install흐름 reuse(심링크)·graceful(PATH 비움) 실증. **미실증**: 실제 Chromium 다운로드(대용량 의도적 비실행).
-- ⬜ **increment 6**: 최종 검증(`ditto doctor`) + **clean 타겟에서 설치→autopilot e2e**(self-host 함정 회피; boxwood 레포 1개 권장).
+- ✅ **increment 6**: 통합 실증 (커밋 대기 — boxwood는 사용자 레포라 ditto repo에 코드 변경 없음, 이 핸드오프만 갱신) — **클린 boxwood 레포(`java/workspace/boxwood-domain-model-java`, Kotlin/Gradle)에 `scripts/install.sh install --target <boxwood>` 실제 실행**: register(실글로벌 settings, 백업됨)·build·place(`~/.local/bin/ditto`, `which -a ditto` 첫 항목=우리것)·codeql reuse·playwright reuse·init·allowlist 전부 ok. `ditto doctor`(capability/permissions) 타겟에서 동작. **autopilot e2e 완주**: work start(repo_root=boxwood)→deep-interview(threshold0)+finalize(3노드 부트스트랩 N1 design/N2 implement/N3 verify)→next-node 디스패치→record-result(N1 plan, N2 docs/DITTO-SMOKE.md 생성+file 증거, N3 독립검증 command+file 증거)→complete=**evidence-gated `final_verdict: pass`**(ac-1 verdict=pass, 증거 3개). §1-C의 "DITTO가 실타겟에 구동된 적 없음" 해소. **데모 throwaway(docs/)는 정리**, boxwood엔 `.ditto`/`.claude`(실제 설치)만 잔존. **한계**: 이 세션이 ditto repo에 루트돼 있어 boxwood로 spawn한 subagent는 scope-out 훅에 막힘 → 충실한 subagent 루프는 boxwood-루트 세션 필요(엔진/CLI 루프 자체는 실증됨; subagent spawn은 self-host ed075a1에서 기실증).
+
+**→ work item wi_2606068sy: 6/6 increment 완료. 설치 스크립트 1회 실행으로 타겟에서 DITTO 완전 동작(register/build/place/codeql/playwright/init/allowlist + autopilot e2e) 달성.**
 
 ## 3. 설계 결정 (DECIDED — 사용자 합의)
 - hook = self-contained 컴파일 바이너리 호출 (완료). "트리거는 Claude Code가 이벤트로 결정, hooks.json이 `ditto hook <event>` 매핑, 바이너리는 받은 이름대로 디스패치(추측 분기 없음)."
@@ -61,11 +63,18 @@ bun run lint && bun run adr:guard    # green 기대
 - autopilot 수동 구동 순서(실증에서 확인): `ditto work start` → `ditto deep-interview start/record-turn/finalize`(intent+bootstrap) → `ditto autopilot next-node`(1회 호출=dispatch+packet, **packet 놓치지 말 것**) → 해당 owner를 `ditto:<owner>` subagent로 Task spawn → `ditto autopilot record-result` → 반복 → `ditto autopilot complete`. work item 마감은 `ditto work handoff`로 별도.
 - DITTO_SKIP_HOOKS=1 로 hook 우회 가능.
 
-## 5. 다음 명령 (새 세션 첫 프롬프트로)
-> "이 핸드오프(`.ditto/work-items/wi_2606068sy/handoff.md`) 읽고, DITTO 설치 스크립트(wi_2606068sy) **increment 6(최종 검증 + 클린 타겟 autopilot e2e)** 부터 이어서 진행해. self-host 금지."
+## 5. work item 상태 — 완료 (6/6)
+설치 스크립트 work item(wi_2606068sy)의 6개 increment 전부 done. 다음 세션은 새 요청을 받거나, 아래 후속 백로그를 처리.
 
-increment 6 메모(마지막): 오케스트레이터 5단계가 이미 완성(register/build/place/codeql/playwright + init/allowlist). 남은 건 **실제 통합 실증**:
-1. 진짜 클린 타겟(boxwood 레포 1개 권장: `/Users/incognito/dev/projects/{java,javascript,js}/workspace/boxwood-*`)에 `scripts/install.sh install --target <boxwood>` 실행 → 5단계+init+allowlist 통과 확인.
-2. `ditto doctor`(+`doctor capability`/`surface`)로 런타임 reachable 확인.
-3. 그 타겟에서 autopilot 1바퀴(work start → deep-interview → autopilot next-node → owner subagent spawn → record-result → complete) 실제 구동 = self-host 함정 없이 임의 코드베이스 거버넌스 실증(boxwood 발견의 원래 목표, §1-C).
-주의: install이 실제로 글로벌 `~/.claude/settings.json`·`~/.local/bin`을 건드리므로(샌드박스 아님) 사용자 확인 후 진행하거나 dry-run(HOME 오버라이드)로 먼저 점검. surfaces.json은 타겟에서 self-host 전용이라 `doctor surface`는 보조 도구임(§inc2 참고).
+### 잔여 상태 (사용자 환경에 남은 실제 변경 — 되돌리려면)
+inc6 실제 설치가 글로벌/타겟을 건드림:
+- 글로벌 `~/.claude/settings.json`: `ditto-local` 마켓플레이스 + `ditto@ditto-local` enabled (백업 `.bak.2026-06-06T06-26-31*`).
+- `~/.local/bin/ditto` 심링크 → `<repo>/bin/ditto`.
+- `boxwood-domain-model-java/{.ditto,.claude}` (실제 설치; git untracked).
+- **전체 되돌리기**: `DITTO_HOME=<repo> bash scripts/install.sh uninstall --target <boxwood>` (register/place/allowlist 역행, `.ditto` 데이터는 보존 — 수동 `rm -rf` 필요).
+
+### 후속 백로그 (이 work item 범위 밖, 별도 요청 시)
+- **push 대기**: 이 세션 inc2~inc6 커밋(802fe95~) + 이전 세션 커밋 전부 로컬. 다른 PC/공유 전 `git push` 필요.
+- Windows 경로(build:bin:win, ditto.exe, PATH 안내) 코드만 작성, macOS에서 미실증.
+- 실제 CodeQL/Chromium 대용량 다운로드 경로 미실행(reuse/graceful/ URL·레이아웃은 입증).
+- boxwood-루트 세션에서 subagent autopilot 루프 충실 실증(이 세션은 cross-repo scope-out 제약).
