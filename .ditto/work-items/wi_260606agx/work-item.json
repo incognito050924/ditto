@@ -1,0 +1,84 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260606agx",
+  "title": "e2e 소비 배선",
+  "source_request": "e2e 브라우저 연결되어 있나 (일전에 커밋? 브랜치를 만들고 구현은 하다가 만것으로 기억)",
+  "goal": "e2e journey 산출물이 acceptance criterion을 evidence로 닫는 경로와, planner/autopilot이 high-impact web 변경에 e2e 노드를 제안하는 배선을 명확히 한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "planner 계약(autopilot-contract §2.2 + agents/planner.md)에 e2e 노드 트리거 규칙(high-impact web/user-journey 변경)이 명시되고 ditto:e2e skill 트리거 기준과 일관된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "command": "reports/design/contracts/autopilot-contract.md §2.2 + agents/planner.md",
+          "summary": "contract와 planner.md에 'e2e 트리거: high-impact web/user-journey' 규칙 추가. skill description('Use for high-impact web changes that affect a user journey')과 문구 일치"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "e2e journey→evidence_refs→completion acceptance 경로가 이미 코드로 배선되어 있음을 확인한다(추가 코드 불필요) — 끊긴 것은 planner의 트리거 규칙뿐이었다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "command": "src/core/autopilot-complete.ts:23",
+          "summary": "deriveAcVerdicts가 addressing.flatMap(n => n.evidence_refs)로 AC를 evidence-gated 판정. e2e 노드(KIND_TO_OWNER→playwright-e2e)의 journey 산출물도 동일 경로. 추가 코드 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "회귀 없음 — 문서/프롬프트 변경, bun test green 유지. evidence kind 'journey' 신설은 의도된 설계(artifact 일반화)이므로 하지 않는다(scope 규율)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "1199 tests, 9 skip, 0 fail. 코드 변경 0(contract·planner.md·work-item만), evidence kind 미신설"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/handoff/archive/wi_260605wf3__2026-06-06T01-51-18-617Z.md",
+    ".ditto/handoff/archive/wi_260606f4r__2026-06-06T02-12-48-148Z.md",
+    ".ditto/work-items/wi_260605wf3/completion.json",
+    ".ditto/work-items/wi_260605wf3/language-ledger.json",
+    ".ditto/work-items/wi_260605wf3/work-item.json",
+    ".ditto/work-items/wi_260606agx/",
+    ".ditto/work-items/wi_260606agx/completion.json",
+    ".ditto/work-items/wi_260606agx/work-item.json",
+    ".ditto/work-items/wi_260606f4r/completion.json",
+    ".ditto/work-items/wi_260606f4r/language-ledger.json",
+    ".ditto/work-items/wi_260606f4r/work-item.json",
+    "agents/planner.md",
+    "reports/design/contracts/autopilot-contract.md",
+    "skills/handoff/SKILL.md",
+    "src/cli/commands/work.ts",
+    "src/core/charter.ts",
+    "src/core/e2e/browser.ts",
+    "src/core/fs.ts",
+    "src/core/handoff-store.ts",
+    "src/core/hosts/shared.ts",
+    "src/core/work-item-handoff.ts",
+    "src/hooks/user-prompt-submit.ts",
+    "tests/conformance/m4.conformance.test.ts",
+    "tests/core/fs.test.ts",
+    "tests/core/handoff-store.test.ts",
+    "tests/core/work-item-handoff.test.ts",
+    "tests/hooks/user-prompt-submit.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "handoff_path": ".ditto/handoff/archive/wi_260606agx__2026-06-06T02-27-50-806Z.md",
+  "started_at_sha": "8e0d46194e9451bf8e922e73735129b0c4eeb0ef",
+  "created_at": "2026-06-06T02:13:50.075Z",
+  "updated_at": "2026-06-06T02:27:50.875Z",
+  "closed_at": "2026-06-06T02:27:50.806Z"
+}
