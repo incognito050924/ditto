@@ -30,14 +30,11 @@ bun run lint && bun run adr:guard
 
 재평가 문서의 제안은 **전부 소진**됐다(§1 gap #1·#2·4a·4b·4c·4e·#4d, §3.5 #3 모두 구현). 재평가 thread는 closed.
 
-남은 **명확한 단일 follow-up**(이 세션 dialectic이 [HIGH]로 짚고 ADR-0011 D1이 "4e 후속"으로 명문화):
-
-### doctor plugin-root / target-root 분리
-- 문제: `ditto doctor distribution`(`src/core/distribution-doctor.ts`, `src/cli/commands/doctor.ts`)이 plugin-root 아티팩트(`bin/ditto`, `hooks/hooks.json`)와 target-root 아티팩트(`.ditto`, 프로젝트 `.claude/settings.json`)를 **같은 `repoRoot` 하나로** 점검한다.
-- 함의: ADR-0011 D2의 session-rooting(타겟에 루트된 세션) 하에서 doctor를 돌리면 **plugin-root 아티팩트가 missing으로 오판**된다. 현재 점검은 self-host/병치(co-located) 레이아웃에서만 정확.
-- 수정 방향: doctor에 `pluginRoot`(= `${CLAUDE_PLUGIN_ROOT}`) 와 `targetRoot`(= 세션 repoRoot)를 분리 입력해 각 atomic check를 올바른 위치에서 읽게. install-plugin.mjs는 이미 `repo`/`target`을 분리 추적하므로 그 분리를 doctor로 가져오면 됨.
-- 관련 근거: `scripts/install-plugin.mjs`(doStatus가 repo/target 분리), `src/core/distribution-doctor.ts`(현재 단일 repoRoot), `tests/core/distribution-doctor.test.ts`(주입IO 단위테스트).
-- 성격: 코드 변경(behavioral) + 단위테스트. 가치 결정 없음 → 임의 진행 가능.
+### doctor plugin-root / target-root 분리 — **완료(`5215c21`, behavioral)**
+- 이 세션에 마감. `DistributionDeps.repoRoot`를 `pluginRoot`+`targetRoot`로 분리: `binary_built`/`hooks_registered`는 pluginRoot, `target_initialized`/`allowlisted`는 targetRoot, `binary_on_path`/`plugin_enabled`는 루트 무관.
+- `defaultDistributionDeps(targetRoot, pluginRoot)` 시그니처. CLI(`doctor.ts`)가 경계에서 `CLAUDE_PLUGIN_ROOT`를 해석하고 미설정 시 targetRoot 폴백 → self-host/병치 레이아웃 기존 동작 보존. `doctor distribution` JSON에 `plugin_root`/`target_root` 노출.
+- 검증: 단위테스트 13(=기존10+신규3, 루트별 위치 점검·session-rooting 오판 부재) pass. 전체 1286 pass/0 fail, lint·adr:guard 통과. CLI 실행으로 `CLAUDE_PLUGIN_ROOT` 분리 실증(plugin 다른 곳 가리키면 binary/hooks만 false, target_initialized는 true 유지).
+- 재평가 thread 후속까지 **전부 소진**. 다음 진입점은 아래 백로그에서 사용자 판단.
 
 ### 더 넓은 백로그(이 thread 밖, 우선순위는 사용자 판단)
 - 메모리 `project_self_eval_2026_06_02`의 미착수 #6~#11.
