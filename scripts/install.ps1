@@ -1,16 +1,24 @@
-# DITTO plugin install (Windows 11 / PowerShell 5+).
+# DITTO install orchestrator (Windows 11 / PowerShell 5+).
 #
 # Usage:
-#   .\scripts\install.ps1                 # install (uses $env:DITTO_HOME or script location)
-#   .\scripts\install.ps1 uninstall       # remove from %USERPROFILE%\.claude\settings.json
-#   .\scripts\install.ps1 status          # show current state as JSON
+#   .\scripts\install.ps1                              # install into the CURRENT directory
+#   .\scripts\install.ps1 install -Target <dir>        # install into a specific project
+#   .\scripts\install.ps1 uninstall [-Target <dir>]
+#   .\scripts\install.ps1 status   [-Target <dir>]
+#
+# Beyond plugin registration this also builds the self-contained binary
+# (bin\ditto.exe), scaffolds the target's .ditto\, and allowlists `ditto …` in
+# the target's .claude\settings.json. On Windows the binary is NOT symlinked;
+# add bin\ to PATH so `ditto` resolves. Pass -NoBuild to skip the rebuild.
 #
 # Env:
 #   DITTO_HOME   absolute path to the ditto repo (auto-detected if unset)
 
 param(
   [ValidateSet('install', 'uninstall', 'status')]
-  [string]$Mode = 'install'
+  [string]$Mode = 'install',
+  [string]$Target,
+  [switch]$NoBuild
 )
 
 $ErrorActionPreference = 'Stop'
@@ -37,7 +45,10 @@ if (Get-Command bun -ErrorAction SilentlyContinue) {
 }
 
 $installer = Join-Path $repoRoot 'scripts\install-plugin.mjs'
-& $runner[0] @($runner[1..($runner.Length - 1)]) $installer $Mode
+$extra = @()
+if ($Target) { $extra += @('--target', $Target) }
+if ($NoBuild) { $extra += '--no-build' }
+& $runner[0] @($runner[1..($runner.Length - 1)]) $installer $Mode @extra
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 if ($Mode -eq 'install') {

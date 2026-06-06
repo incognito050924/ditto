@@ -1,17 +1,29 @@
 #!/usr/bin/env bash
-# DITTO plugin install (macOS / Linux / WSL).
+# DITTO install orchestrator (macOS / Linux / WSL).
 #
 # Usage:
-#   ./scripts/install.sh                  # install (uses DITTO_HOME or script location)
-#   ./scripts/install.sh uninstall        # remove from ~/.claude/settings.json
-#   ./scripts/install.sh status           # show current state as JSON
+#   ./scripts/install.sh                          # install into the CURRENT directory
+#   ./scripts/install.sh install --target <dir>   # install into a specific project
+#   ./scripts/install.sh uninstall [--target <dir>]
+#   ./scripts/install.sh status   [--target <dir>]
+#
+# Beyond plugin registration this also builds the self-contained binary,
+# symlinks it onto PATH, scaffolds the target's .ditto/, and allowlists
+# `ditto …` in the target's .claude/settings.json. Pass --no-build to skip the
+# binary rebuild. Run from inside the target project (or pass --target).
 #
 # Env:
 #   DITTO_HOME   absolute path to the ditto repo (auto-detected if unset)
 
 set -euo pipefail
 
-MODE="${1:-install}"
+# First positional arg is the mode (default install); the rest pass through to
+# the orchestrator (--target <dir>, --no-build).
+MODE="install"
+if [[ $# -gt 0 && "$1" != --* ]]; then
+  MODE="$1"
+  shift
+fi
 
 # Locate repo root (env var wins, else infer from this script's location).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,7 +46,7 @@ else
   exit 2
 fi
 
-"${RUNNER[@]}" "$REPO_ROOT/scripts/install-plugin.mjs" "$MODE"
+"${RUNNER[@]}" "$REPO_ROOT/scripts/install-plugin.mjs" "$MODE" "$@"
 
 # Print shell-rc snippets for the per-session wrapper alias (install mode only).
 if [[ "$MODE" == "install" ]]; then
