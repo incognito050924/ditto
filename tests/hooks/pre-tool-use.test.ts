@@ -144,6 +144,7 @@ describe('preToolUseHandler — ac-2 destructive Bash', () => {
     'git push --force origin main',
     'git push --force-with-lease origin master',
     'git push -f origin main',
+    'git status && git push --force origin main', // force-push in a later segment still blocks
     'mkfs.ext4 /dev/sda1',
     'dd if=/dev/zero of=/dev/sda',
     'echo x > /dev/sda',
@@ -162,6 +163,8 @@ describe('preToolUseHandler — ac-2 destructive Bash', () => {
     'rm -rf dist',
     'git push origin feature-branch',
     'git push origin main', // no force flag
+    'rm -rf ./build && git push origin main', // unrelated `-rf` (relative target) must not synthesize a force-push
+    'git push -f origin feature', // force-push to a NON-default branch is allowed
     'bun test',
     'ls -la',
     'dd if=a.img of=b.img',

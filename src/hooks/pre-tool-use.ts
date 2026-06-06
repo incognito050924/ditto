@@ -215,11 +215,20 @@ function checkDestructive(cmd: string) {
     return block('destructive', 'sudo with a destructive command');
   }
 
-  // force-push to a default branch
+  // force-push to a default branch. Confine all three signals (git push, a
+  // force flag, a default-branch name) to the SAME command segment, so an
+  // unrelated flag/branch token elsewhere in a compound command cannot
+  // synthesize a false positive — e.g. `rm -rf x && git push origin main`,
+  // where `rm -rf` supplies the `-…f` the whole-string test mistook for `-f`.
+  const pushSegments = normalized
+    .split(/[;&|]+/)
+    .map((seg) => seg.trim())
+    .filter((seg) => /\bgit\b.*\bpush\b/.test(seg));
   if (
-    /\bgit\b[^;&|]*\bpush\b/.test(normalized) &&
-    /(--force-with-lease|--force|(^|\s)-\w*f)/.test(normalized) &&
-    /\b(main|master)\b/.test(normalized)
+    pushSegments.some(
+      (seg) =>
+        /(--force-with-lease|--force|(^|\s)-\w*f)/.test(seg) && /\b(main|master)\b/.test(seg),
+    )
   ) {
     return block('destructive', 'force-push to a default branch');
   }
