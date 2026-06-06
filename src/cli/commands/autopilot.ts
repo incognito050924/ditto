@@ -6,6 +6,7 @@ import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-lo
 import { AutopilotStore } from '~/core/autopilot-store';
 import { CompletionStore } from '~/core/completion-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
+import { intentDriftGate } from '~/core/gates';
 import { IntentStore } from '~/core/intent-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
@@ -399,6 +400,78 @@ const autopilotCleanup = defineCommand({
   },
 });
 
+/**
+ * `ditto autopilot intent-drift` — surface the axis-2 intent-conservation gate
+ * (`intentDriftGate`). At finalize the chain (intent → work-item → autopilot →
+ * completion) is written consistently from one payload; this re-checks that the
+ * two intent-bearing keys (goal string, AC id set) stay conserved hop by hop as
+ * the graph grows over a long run. It is the deterministic floor — a node's prose
+ * fidelity to an AC's meaning stays with the reviewer (code-level) and verifier
+ * (per-AC evidence). A non-zero exit means the run drifted from the frozen intent:
+ * a drifted graph cannot be a final pass. Completion is folded in only if present.
+ */
+const autopilotIntentDrift = defineCommand({
+  meta: {
+    name: 'intent-drift',
+    description:
+      'Check intent conservation across the contract chain (goal + AC id set, hop by hop vs frozen intent)',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const intents = new IntentStore(repoRoot);
+    const items = new WorkItemStore(repoRoot);
+    const graphs = new AutopilotStore(repoRoot);
+    const completions = new CompletionStore(repoRoot);
+    try {
+      for (const [label, exists] of [
+        ['intent.json', await intents.exists(args.workItem)],
+        ['work-item.json', await items.exists(args.workItem)],
+        ['autopilot.json', await graphs.exists(args.workItem)],
+      ] as const) {
+        if (!exists) {
+          writeError(`${label} missing for ${args.workItem}; cannot check intent drift`);
+          process.exit(RUNTIME_ERROR_EXIT);
+          return;
+        }
+      }
+      const intent = await intents.get(args.workItem);
+      const workItem = await items.get(args.workItem);
+      const graph = await graphs.get(args.workItem);
+      const completion = (await completions.exists(args.workItem))
+        ? await completions.get(args.workItem)
+        : undefined;
+      const result = intentDriftGate({
+        intent,
+        workItem,
+        graph,
+        ...(completion ? { completion } : {}),
+      });
+      if (format === 'json') {
+        writeJson({ pass: result.pass, reasons: result.reasons });
+      } else {
+        writeHuman(`intent drift: ${result.pass ? 'PASS (conserved)' : 'FAIL (drift detected)'}`);
+        for (const r of result.reasons) writeHuman(`  - ${r}`);
+      }
+      if (!result.pass) process.exit(RUNTIME_ERROR_EXIT);
+    } catch (err) {
+      writeError(`intent-drift failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const autopilotCommand = defineCommand({
   meta: {
     name: 'autopilot',
@@ -411,5 +484,6 @@ export const autopilotCommand = defineCommand({
     'record-result': autopilotRecordResult,
     complete: autopilotComplete,
     cleanup: autopilotCleanup,
+    'intent-drift': autopilotIntentDrift,
   },
 });

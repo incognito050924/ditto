@@ -1,6 +1,8 @@
+import type { Autopilot } from '~/schemas/autopilot';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { Convergence } from '~/schemas/convergence';
 import type { ClosureMode } from '~/schemas/convergence';
+import type { IntentContract } from '~/schemas/intent';
 import type { InterviewState } from '~/schemas/interview-state';
 import type { WorkItem } from '~/schemas/work-item';
 
@@ -319,5 +321,123 @@ export function knowledgeUpdateGate(t: KnowledgeTriggers, d: KnowledgeRecordDelt
       'repeated_pattern trigger fired but no pattern/learning recorded (under-recording)',
     );
   }
+  return gate(reasons);
+}
+
+// ── intent-conservation gate (axis-2 intent drift across the contract chain) ──
+
+/**
+ * The intent-bearing contracts a work item threads, frozen `intent` first. At
+ * `finalizeInterview` time these are written *consistently from one payload*
+ * (intent.goal === workItem.goal, workItem.AC === intent.AC, autopilot.root_goal
+ * === intent.goal, nodes built from intent AC ids) — so the chain is conserved by
+ * construction at birth. Drift is *post-finalize* divergence: the planner appends
+ * nodes over waves, work-item.json can be edited, completion is assembled later.
+ * `completion` is optional — it does not exist mid-run (the H3 hop is skipped).
+ */
+export interface IntentChainArtifacts {
+  intent: IntentContract;
+  workItem: WorkItem;
+  graph: Autopilot;
+  completion?: CompletionContract;
+}
+
+function idSet(items: { id: string }[]): Set<string> {
+  return new Set(items.map((i) => i.id));
+}
+
+/** Members of `a` not in `b`, stable order. */
+function missingFrom(a: Iterable<string>, b: Set<string>): string[] {
+  return [...a].filter((x) => !b.has(x));
+}
+
+/**
+ * Detect intent drift by checking conservation of the two intent-bearing keys —
+ * the goal string and the acceptance-criterion id set — hop by hop along the
+ * contract chain, against the frozen `intent`. This is the axis-2 internal check
+ * the four-axis reassessment (§1 축2 gap) names: "장시간·대규모에서 본래 목적을
+ * 잃지 않음" operationalized as a deterministic tripwire that fires at the hop
+ * where divergence is introduced, the moment it is introduced.
+ *
+ * It is DETERMINISTIC (ids + string identity, never free-text semantics), so it
+ * is distinct from and complementary to the reviewer's code-level regression and
+ * the verifier's per-AC evidence judgment (the LLM "semantic ceiling"). Whether a
+ * node's prose `purpose` actually serves an AC's *meaning*, or whether an impl
+ * semantically wandered into `intent.out_of_scope`, is NOT checkable here and
+ * stays with reviewer/verifier.
+ *
+ * Hops (reasons carry stable markers H1/H2/H3 for callers/tests to assert on):
+ *  - H1 intent → work-item: goal identity, source_request identity, AC id-set
+ *    equality (an added id is scope grow; a dropped id is scope shrink — the two
+ *    physical copies are the most-missed seam). AC *statements* may be refined.
+ *  - H2 intent → autopilot: root_goal === intent.goal; no-shrink (every intent AC
+ *    id covered by ≥1 node acceptance_refs); no-grow (every node acceptance_refs
+ *    id ∈ intent AC id set).
+ *  - H3 work-item → completion (only when a completion exists): acceptance
+ *    criterion_id set === work-item AC id set. Conservation regardless of
+ *    verdict; the verdict-level pass-gating stays in `completionGate`.
+ */
+export function intentDriftGate(a: IntentChainArtifacts): GateResult {
+  const reasons: string[] = [];
+  const intentGoal = a.intent.goal.trim();
+  const intentAcIds = idSet(a.intent.acceptance_criteria);
+
+  // ── H1 intent → work-item ──
+  if (a.workItem.goal.trim() !== intentGoal) {
+    reasons.push('H1: work-item goal diverges from intent goal (goal silently rewritten)');
+  }
+  if (a.workItem.source_request.trim() !== a.intent.source_request.trim()) {
+    reasons.push('H1: work-item source_request diverges from intent (origin rewritten)');
+  }
+  const wiAcIds = idSet(a.workItem.acceptance_criteria);
+  const wiAdded = missingFrom(wiAcIds, intentAcIds);
+  if (wiAdded.length > 0) {
+    reasons.push(`H1: work-item AC id(s) not in intent (scope grow): ${wiAdded.join(', ')}`);
+  }
+  const wiDropped = missingFrom(intentAcIds, wiAcIds);
+  if (wiDropped.length > 0) {
+    reasons.push(
+      `H1: intent AC id(s) missing from work-item (scope shrink): ${wiDropped.join(', ')}`,
+    );
+  }
+
+  // ── H2 intent → autopilot ──
+  if (a.graph.root_goal.trim() !== intentGoal) {
+    reasons.push('H2: autopilot root_goal diverges from intent goal (goal silently rewritten)');
+  }
+  const covered = new Set<string>();
+  for (const node of a.graph.nodes) {
+    for (const ref of node.acceptance_refs) covered.add(ref);
+  }
+  const uncovered = missingFrom(intentAcIds, covered);
+  if (uncovered.length > 0) {
+    reasons.push(
+      `H2: intent AC id(s) addressed by no node (scope shrink): ${uncovered.join(', ')}`,
+    );
+  }
+  const invented = missingFrom(covered, intentAcIds);
+  if (invented.length > 0) {
+    reasons.push(
+      `H2: node acceptance_refs id(s) not in intent (scope grow): ${invented.join(', ')}`,
+    );
+  }
+
+  // ── H3 work-item → completion (only when present) ──
+  if (a.completion) {
+    const compIds = new Set(a.completion.acceptance.map((c) => c.criterion_id));
+    const compAdded = missingFrom(compIds, wiAcIds);
+    if (compAdded.length > 0) {
+      reasons.push(
+        `H3: completion criterion_id(s) not in work-item (scope grow): ${compAdded.join(', ')}`,
+      );
+    }
+    const compDropped = missingFrom(wiAcIds, compIds);
+    if (compDropped.length > 0) {
+      reasons.push(
+        `H3: work-item AC id(s) missing from completion (scope shrink): ${compDropped.join(', ')}`,
+      );
+    }
+  }
+
   return gate(reasons);
 }

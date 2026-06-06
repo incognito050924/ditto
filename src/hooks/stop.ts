@@ -6,7 +6,12 @@ import { type FitnessContext, runFitness } from '~/acg/fitness/fitness-runner';
 import { compositeProvider } from '~/acg/fitness/injected-provider';
 import { FitnessFunctionStore } from '~/core/fitness-function-store';
 import { ensureDir, writeJson } from '~/core/fs';
-import { completionEvidenceGate, completionGate, convergenceGate } from '~/core/gates';
+import {
+  completionEvidenceGate,
+  completionGate,
+  convergenceGate,
+  intentDriftGate,
+} from '~/core/gates';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import { type AcgAssuranceSnapshot, acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
@@ -20,6 +25,7 @@ import { type Autopilot, autopilot as autopilotSchema } from '~/schemas/autopilo
 import { completionContract } from '~/schemas/completion-contract';
 import { convergence as convergenceSchema } from '~/schemas/convergence';
 import { type Dialectic, dialectic as dialecticSchema } from '~/schemas/dialectic';
+import { intentContract } from '~/schemas/intent';
 import type { WorkItem } from '~/schemas/work-item';
 import type { HookHandler, HookInput } from './runtime';
 import { computeSemanticNudge } from './semantic-nudge';
@@ -337,6 +343,10 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     'convergence.json',
   );
   const pilot = await readArtifact(join(dir, 'autopilot.json'), autopilotSchema, 'autopilot.json');
+  // Frozen intent — the source of truth the chain must stay conserved against
+  // (axis-2 intent drift). Absent → no intent flow to check; malformed → fail
+  // closed like every other ledger.
+  const intent = await readArtifact(join(dir, 'intent.json'), intentContract, 'intent.json');
   const dialectics = await readDialecticLedgers(dir);
   // ACG ReviewGraph ledger (WU-6, D5). Lives in the work-item dir alongside the
   // other ledgers (stop reads one directory); absent → no-op, malformed → fail
@@ -375,6 +385,7 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     completion,
     conv,
     pilot,
+    intent,
     dialectics,
     acgReview,
     assurance,
@@ -411,6 +422,19 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   }
   if (pilot.status === 'ok' && autopilotForcesContinuation(pilot.data)) {
     reasons.push('autopilot has runnable node(s); the work item is not complete yet');
+  }
+  // Axis-2 intent drift: the chain (intent → work-item → autopilot → completion)
+  // is conserved by construction at finalize; this catches post-finalize
+  // divergence (goal rewrite, AC grow/shrink, invented refs) before the work item
+  // can close. Deterministic floor — semantic fidelity stays with reviewer.
+  if (intent.status === 'ok' && pilot.status === 'ok') {
+    const d = intentDriftGate({
+      intent: intent.data,
+      workItem,
+      graph: pilot.data,
+      ...(completion.status === 'ok' ? { completion: completion.data } : {}),
+    });
+    if (!d.pass) reasons.push(...d.reasons.map((r) => `intent drift — ${r}`));
   }
   if (dialectics.status === 'ok') {
     for (const d of dialectics.items) reasons.push(...dialecticForcesContinuation(d));

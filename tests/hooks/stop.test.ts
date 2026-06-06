@@ -93,6 +93,33 @@ const node = (overrides: Record<string, unknown>) => ({
   ...overrides,
 });
 
+// A frozen intent conserved with the beforeEach work item (same goal/source/AC ids).
+const intent = (overrides: Record<string, unknown>) => ({
+  schema_version: '0.1.0',
+  work_item_id: wiId,
+  source_request: 'add endpoint',
+  goal: 'endpoint returns score',
+  in_scope: [],
+  out_of_scope: [],
+  acceptance_criteria: [
+    { id: 'ac-1', statement: 'returns 200' },
+    { id: 'ac-2', statement: 'rejects empty' },
+    { id: 'ac-3', statement: 'score 0..100' },
+  ],
+  unknowns: [],
+  follow_up_candidates: [],
+  ...overrides,
+});
+
+// Three passing AC + a terminal node covering them; the chain-conserved baseline
+// the intent-drift tests perturb a single field of.
+const PASSING_ACCEPTANCE = [
+  { criterion_id: 'ac-1', verdict: 'pass' },
+  { criterion_id: 'ac-2', verdict: 'pass' },
+  { criterion_id: 'ac-3', verdict: 'pass' },
+];
+const coveringNode = node({ status: 'passed', acceptance_refs: ['ac-1', 'ac-2', 'ac-3'] });
+
 describe('stopHandler', () => {
   test('stop_hook_active=true short-circuits to exit 0 (8-iter guard)', async () => {
     await writeArtifact(
@@ -142,6 +169,52 @@ describe('stopHandler', () => {
       }),
     );
     expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('intent drift: a conserved chain (intent+autopilot+completion) does not block => exit 0', async () => {
+    await writeArtifact('intent.json', intent({}));
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({ root_goal: 'endpoint returns score', nodes: [coveringNode] }),
+    );
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('intent drift: autopilot root_goal silently rewritten => exit 2 with intent drift reason', async () => {
+    await writeArtifact('intent.json', intent({}));
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({ root_goal: 'do something else entirely', nodes: [coveringNode] }),
+    );
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('intent drift');
+    expect(out.stderr).toContain('root_goal');
+  });
+
+  test('intent drift: intent declares an AC the work item dropped => exit 2 (scope shrink)', async () => {
+    await writeArtifact(
+      'intent.json',
+      intent({
+        acceptance_criteria: [
+          { id: 'ac-1', statement: 'returns 200' },
+          { id: 'ac-2', statement: 'rejects empty' },
+          { id: 'ac-3', statement: 'score 0..100' },
+          { id: 'ac-4', statement: 'logs the request' },
+        ],
+      }),
+    );
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({ root_goal: 'endpoint returns score', nodes: [coveringNode] }),
+    );
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('intent drift');
+    expect(out.stderr).toContain('ac-4');
   });
 
   test('final_verdict=pass with all-AC-pass but no runnable verification evidence => exit 2 (G8 ack≠verification)', async () => {

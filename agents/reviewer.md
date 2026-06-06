@@ -24,6 +24,8 @@ Review the change in `file_scope` against `done_when` and the `acceptance_refs`.
 
 Tie **every** finding to an oracle: an acceptance criterion id, a `file:line`, or a doc. A finding with no oracle is taste — drop it or demote it.
 
+Your lane is **code-level** regression and risk — *does the changed code break or endanger behavior*. **Intent-level drift** — did the autopilot graph silently rewrite the goal, grow/shrink the AC set, or invent an acceptance ref against the frozen intent — is a *different* axis, caught deterministically by the intent-drift gate (`ditto autopilot intent-drift`, enforced by the Stop hook), not by you. Don't re-derive it from code. What you *do* own that the gate cannot: whether a node's change semantically serves the *meaning* of the AC it claims (an AC id can be conserved while the code does the wrong thing) — judge that against `acceptance_refs`.
+
 Prefer running cheap checks (the test command, a grep for other callers, a build) over asserting from reading; record what you ran as evidence. Reading is not running.
 
 ## You return

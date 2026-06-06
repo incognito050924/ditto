@@ -9,11 +9,13 @@ import {
   deriveClosureMode,
   deterministicFloor,
   highRiskAssumption,
+  intentDriftGate,
   interviewReadinessGate,
   knowledgeTriggerFired,
   knowledgeUpdateGate,
   safeDefaultable,
 } from '~/core/gates';
+import { autopilot } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
 import { convergence } from '~/schemas/convergence';
 import { intentContract } from '~/schemas/intent';
@@ -265,5 +267,183 @@ describe('knowledgeUpdateGate (axis-4 durable-change triggers: under ∧ over-re
     const t = { adr_worthy_decision: true, new_agreed_term: true, repeated_pattern: true };
     const d = { decisions: 1, glossary_terms: 2, patterns: 0, learnings: 1 };
     expect(knowledgeUpdateGate(t, d).pass).toBe(true);
+  });
+});
+
+describe('intentDriftGate (axis-2 intent conservation across the contract chain)', () => {
+  const GOAL = 'the endpoint returns 200';
+  const REQUEST = 'add a health endpoint';
+  const acList = (ids: string[]) => ids.map((id) => ({ id, statement: `${id} returns 200` }));
+
+  const mkIntent = (ids: string[]) =>
+    intentContract.parse({
+      schema_version: '0.1.0',
+      work_item_id: 'wi_drift001',
+      source_request: REQUEST,
+      goal: GOAL,
+      acceptance_criteria: acList(ids),
+    });
+  const mkWorkItem = (ids: string[], over: Record<string, unknown> = {}) =>
+    workItem.parse({
+      schema_version: '0.1.0',
+      id: 'wi_drift001',
+      title: 'drift',
+      source_request: REQUEST,
+      goal: GOAL,
+      acceptance_criteria: acList(ids),
+      created_at: '2026-06-06T00:00:00Z',
+      updated_at: '2026-06-06T00:00:00Z',
+      ...over,
+    });
+  const mkGraph = (refs: string[], over: Record<string, unknown> = {}) =>
+    autopilot.parse({
+      schema_version: '0.1.0',
+      autopilot_id: 'orch_drift001',
+      work_item_id: 'wi_drift001',
+      root_goal: GOAL,
+      approval_gate: { status: 'not_required' },
+      caps: { fix_per_node: 2, switch_per_node: 1 },
+      continue_policy: {},
+      nodes: [
+        {
+          id: 'N3',
+          kind: 'verify',
+          owner: 'verifier',
+          purpose: 'verify every criterion',
+          status: 'pending',
+          acceptance_refs: refs,
+        },
+      ],
+      ...over,
+    });
+
+  const IDS = ['ac-1', 'ac-2'];
+
+  test('a chain conserved from one finalize payload passes (no completion yet)', () => {
+    const r = intentDriftGate({
+      intent: mkIntent(IDS),
+      workItem: mkWorkItem(IDS),
+      graph: mkGraph(IDS),
+    });
+    expect(r.pass).toBe(true);
+    expect(r.reasons).toEqual([]);
+  });
+
+  test('H1: work-item goal silently rewritten → fail', () => {
+    const r = intentDriftGate({
+      intent: mkIntent(IDS),
+      workItem: mkWorkItem(IDS, { goal: 'the endpoint returns 404' }),
+      graph: mkGraph(IDS),
+    });
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => x.startsWith('H1') && x.includes('goal'))).toBe(true);
+  });
+
+  test('H1: work-item adds an AC id not in intent → scope grow', () => {
+    const r = intentDriftGate({
+      intent: mkIntent(IDS),
+      workItem: mkWorkItem(['ac-1', 'ac-2', 'ac-3']),
+      graph: mkGraph(IDS),
+    });
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => x.includes('scope grow') && x.includes('ac-3'))).toBe(true);
+  });
+
+  test('H1: work-item drops an intent AC id → scope shrink', () => {
+    const r = intentDriftGate({
+      intent: mkIntent(IDS),
+      workItem: mkWorkItem(['ac-1']),
+      graph: mkGraph(['ac-1']),
+    });
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => x.includes('scope shrink') && x.includes('ac-2'))).toBe(true);
+  });
+
+  test('H1: AC statement may be refined while the id is conserved → pass', () => {
+    const intent = mkIntent(IDS);
+    const wi = mkWorkItem(IDS);
+    const first = wi.acceptance_criteria[0];
+    if (first) first.statement = 'the /health endpoint returns HTTP 200 within 50ms';
+    const r = intentDriftGate({ intent, workItem: wi, graph: mkGraph(IDS) });
+    expect(r.pass).toBe(true);
+  });
+
+  test('H2: autopilot root_goal diverges from intent goal → fail', () => {
+    const r = intentDriftGate({
+      intent: mkIntent(IDS),
+      workItem: mkWorkItem(IDS),
+      graph: mkGraph(IDS, { root_goal: 'do something else entirely' }),
+    });
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => x.startsWith('H2') && x.includes('root_goal'))).toBe(true);
+  });
+
+  test('H2: an intent AC addressed by no node → scope shrink', () => {
+    const r = intentDriftGate({
+      intent: mkIntent(IDS),
+      workItem: mkWorkItem(IDS),
+      graph: mkGraph(['ac-1']),
+    });
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => x.startsWith('H2') && x.includes('ac-2'))).toBe(true);
+  });
+
+  test('H2: a node references an AC id not in intent → scope grow (invented)', () => {
+    const r = intentDriftGate({
+      intent: mkIntent(IDS),
+      workItem: mkWorkItem(IDS),
+      graph: mkGraph(['ac-1', 'ac-2', 'ac-9']),
+    });
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => x.startsWith('H2') && x.includes('ac-9'))).toBe(true);
+  });
+
+  test('H3: completion conserves the work-item AC id set → pass; the full chain passes', () => {
+    const completion = completionContract.parse({
+      schema_version: '0.1.0',
+      work_item_id: 'wi_drift001',
+      declared_by: 'verifier',
+      declared_at: '2026-06-06T01:00:00Z',
+      summary: 'done',
+      acceptance: IDS.map((id) => ({ criterion_id: id, verdict: 'pass' })),
+      final_verdict: 'pass',
+    });
+    const r = intentDriftGate({
+      intent: mkIntent(IDS),
+      workItem: mkWorkItem(IDS),
+      graph: mkGraph(IDS),
+      completion,
+    });
+    expect(r.pass).toBe(true);
+  });
+
+  test('H3: completion drops a work-item AC id → scope shrink', () => {
+    const completion = completionContract.parse({
+      schema_version: '0.1.0',
+      work_item_id: 'wi_drift001',
+      declared_by: 'verifier',
+      declared_at: '2026-06-06T01:00:00Z',
+      summary: 'done',
+      acceptance: [{ criterion_id: 'ac-1', verdict: 'partial' }],
+      final_verdict: 'partial',
+      next_handoff_path: '.ditto/handoff/x.md',
+    });
+    const r = intentDriftGate({
+      intent: mkIntent(IDS),
+      workItem: mkWorkItem(IDS),
+      graph: mkGraph(IDS),
+      completion,
+    });
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => x.startsWith('H3') && x.includes('ac-2'))).toBe(true);
+  });
+
+  test('whitespace-only goal difference is not drift (trimmed compare)', () => {
+    const r = intentDriftGate({
+      intent: mkIntent(IDS),
+      workItem: mkWorkItem(IDS, { goal: `  ${GOAL}  ` }),
+      graph: mkGraph(IDS),
+    });
+    expect(r.pass).toBe(true);
   });
 });
