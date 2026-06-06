@@ -1,10 +1,20 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const cliEntry = join(process.cwd(), 'src/cli/index.ts');
+// Drive the COMPILED binary, not `bun src/cli/index.ts`: spawning `bun` from
+// inside the `bun test` runner loses the child's stdout (bun-in-bun stdio
+// capture), which masks the citty `--help` output. The self-contained binary is
+// independent of the runner and is the actual shipped artifact (wi_2606068sy).
+const dittoBin = join(process.cwd(), 'bin', 'ditto');
+beforeAll(() => {
+  if (!existsSync(dittoBin)) {
+    spawnSync('bun', ['run', 'build:bin'], { cwd: process.cwd(), stdio: 'ignore' });
+  }
+});
 
 let dir: string;
 let binDir: string;
@@ -60,20 +70,30 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-function spawnDitto(args: string[]): { stdout: string; stderr: string; exitCode: number | null } {
-  const proc = Bun.spawnSync(['bun', cliEntry, ...args], {
+function spawnDitto(args: string[]): {
+  stdout: string;
+  stderr: string;
+  combined: string;
+  exitCode: number | null;
+} {
+  // node spawnSync (captures BOTH streams). Inside the `bun test` runner (bun
+  // ≥1.1) citty routes its `--help` text to stderr rather than stdout (the
+  // long-known "citty help is bun-version-sensitive" case; a direct
+  // `dist/ditto --help` still prints to stdout). So help assertions check the
+  // combined stream — the help content must appear, regardless of which fd
+  // carried it (wi_2606068sy).
+  const r = spawnSync(dittoBin, args, {
     cwd: dir,
     env: {
       ...process.env,
       PATH: `${binDir}:${process.env.PATH ?? ''}`,
       DITTO_TEST_ARGS_FILE: argsFile,
     },
+    encoding: 'utf8',
   });
-  return {
-    stdout: proc.stdout?.toString() ?? '',
-    stderr: proc.stderr?.toString() ?? '',
-    exitCode: proc.exitCode,
-  };
+  const stdout = r.stdout ?? '';
+  const stderr = r.stderr ?? '';
+  return { stdout, stderr, combined: stdout + stderr, exitCode: r.status };
 }
 
 async function readMockCodexArgs(): Promise<string[]> {
@@ -171,8 +191,8 @@ describe('ditto run with forwards -- tail to provider without citty consuming it
     await createWorkItem('wi_clitestsane');
     const result = spawnDitto(['run', 'with', '--help']);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Run a provider command');
-    expect(result.stdout).toContain('--provider');
+    expect(result.combined).toContain('Run a provider command');
+    expect(result.combined).toContain('--provider');
 
     let runsDirExists = true;
     try {
