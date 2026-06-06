@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { completionContract } from '~/schemas/completion-contract';
+import { e2eJourney } from '~/schemas/e2e-journey';
 import { commandLogEntry } from '~/schemas/evidence-log';
 import { glossary } from '~/schemas/glossary';
 import { languageLedger } from '~/schemas/language-ledger';
@@ -93,8 +94,27 @@ describe('repo .ditto self-validation', () => {
   test('every runs/<id>/manifest.json conforms to schema if present', async () => {
     const dirs = await listRunDirs();
     for (const dir of dirs) {
-      const data = await loadJson(join(dir, 'manifest.json'));
+      // `.ditto/runs/<id>/` is shared by two run kinds: a provider/command run
+      // (`ditto run`) writes `manifest.json` (a runManifest), while an e2e capture
+      // run (`ditto e2e run`) writes `journey.json` + captures and NO manifest.
+      // Honor this test's own "if present" contract — skip a run dir without a
+      // manifest (an e2e capture), exactly like the sibling completion.json check.
+      const path = join(dir, 'manifest.json');
+      if (!(await Bun.file(path).exists())) continue;
+      const data = await loadJson(path);
       runManifest.parse(data);
+    }
+  });
+
+  test('every runs/<id>/journey.json conforms to schema if present', async () => {
+    // The other run kind: an e2e capture run writes `journey.json` (an e2eJourney).
+    // Validate it so e2e run dirs are covered, not a self-validation blind spot.
+    const dirs = await listRunDirs();
+    for (const dir of dirs) {
+      const path = join(dir, 'journey.json');
+      if (!(await Bun.file(path).exists())) continue;
+      const data = await loadJson(path);
+      e2eJourney.parse(data);
     }
   });
 
