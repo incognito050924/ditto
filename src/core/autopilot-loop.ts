@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
 import { evidenceRef, relativePath, verdict } from '~/schemas/common';
+import { ActiveNodeLeaseStore } from './active-node-lease';
 import { loadVariantCatalog, selectVariantCandidates } from './agent-variants';
 import { forwardRound, planForwardReexpansion } from './autopilot-converge';
 import {
@@ -180,6 +181,8 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
     return true;
   });
 
+  const leases = new ActiveNodeLeaseStore(repoRoot);
+  const now = new Date();
   if (waveEligible.length >= 2) {
     const catalog = await loadVariantCatalog(repoRoot);
     const spawns: WaveSpawn[] = [];
@@ -190,6 +193,14 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
         ...n,
         status: nodeTransition(n.status, 'dispatch'),
       }));
+      // Active-node lease (wi_26060678y): a node is in flight while it runs; the
+      // lease is the FLOW signal PreToolUse reads to allow only in-scope edits.
+      await leases.set({
+        node_id: node.id,
+        work_item_id: workItemId,
+        file_scope: scopeOf(node),
+        created_at: now.toISOString(),
+      });
       const candidates = selectVariantCandidates(
         catalog,
         node.owner,
@@ -239,6 +250,15 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
     ...n,
     status: nodeTransition(n.status, 'dispatch'),
   }));
+  // Active-node lease (wi_26060678y): created at LLM-owner dispatch (the driver
+  // cleanup pseudo-owner above is excluded — it is an in-process engine step, not
+  // a spawned subagent that edits files). record-result removes it on terminal.
+  await leases.set({
+    node_id: chosen.id,
+    work_item_id: workItemId,
+    file_scope: scopeOf(chosen),
+    created_at: now.toISOString(),
+  });
   // Variant routing (ac-3): filter specialized-subagent candidates by the chosen
   // owner (role) and file scope so the driver can pick a `subagent_type` instead
   // of the fixed owner. With no `.ditto/agents/` the catalog is empty, so
@@ -363,6 +383,14 @@ export async function recordResult(
       `node ${node.id} is not running (status=${node.status}); call next-node first to dispatch it`,
     );
   }
+
+  // Active-node lease release (wi_26060678y): every recordResult exit path moves
+  // the node OUT of `running` (pass→passed, block→blocked, fail→failed,
+  // retry→pending — see autopilot-graph transition table), so the in-flight lease
+  // is always released here. A retry re-creates a fresh lease at re-dispatch. This
+  // single removal guarantees the active-lease count returns to 0 on any exit,
+  // with no leak on the findings-expand / escalate / pass / fail branches below.
+  await new ActiveNodeLeaseStore(repoRoot).removeByNode(input.workItemId, node.id);
 
   // G7 floor: a completion *signal* is not completion *proof*. An empty or
   // ack-only result is non-contentful and is forced to a fixable failure even if

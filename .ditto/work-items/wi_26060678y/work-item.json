@@ -3,21 +3,84 @@
   "id": "wi_26060678y",
   "title": "autopilot 경로 강제",
   "source_request": "autopilot 경로를 타도록 강제하는 트랙 잡아줘. DITTO 의 4가지 축을 살리는 방법이어야만 해",
-  "goal": "mutating 변경(Edit/Write)이 autopilot 노드 컨텍스트를 거치도록 PreToolUse에서 강제하여, DITTO 4축(의도→자율실행→e2e→지식) 경로를 우회한 직접 구현을 막는다",
+  "goal": "mutating 변경(Edit/Write/MultiEdit)을 work item→autopilot 노드 경로의 기본값으로 만든다: autopilot 그래프가 있는 활성 WI에서 활성 노드 lease 밖 편집은 PreToolUse가 차단하고, 명시적 bypass로만 우회하며, WI가 없으면 차단 대신 생성을 유도한다. 관측 천장상 spawn 증명이 아니라 흐름 강제다.",
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "본 work item의 첫 acceptance — verify 명령으로 갱신 대상",
-      "verdict": "unverified",
-      "evidence": []
+      "statement": "비terminal autopilot 그래프가 있는 활성 WI에서 활성 노드 lease의 file_scope 밖 Edit/Write/MultiEdit는 PreToolUse가 exit 2로 차단하고, file_scope 안의 편집은 허용한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/work-items/wi_26060678y/completion.json",
+          "summary": "완료계약 final_verdict=pass, ac-1 증거 8건(N3 검증 ac_verdicts + bun test/lint/adr:guard)"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "autopilot next-node가 노드를 running으로 dispatch할 때 active-node lease(node_id+file_scope)를 생성하고, record-result가 노드 종료 시 그 lease를 제거하여 0건으로 만든다 (단위테스트로 생성·제거 검증)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/work-items/wi_26060678y/completion.json",
+          "summary": "완료계약 final_verdict=pass, ac-2 증거 8건(N3 검증 ac_verdicts + bun test/lint/adr:guard)"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "명시적 bypass가 활성인 동안에는 lease file_scope 밖 Edit/Write가 차단되지 않고 exit 0으로 허용되며, 그 우회 1건이 로그에 생성된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/work-items/wi_26060678y/completion.json",
+          "summary": "완료계약 final_verdict=pass, ac-3 증거 8건(N3 검증 ac_verdicts + bun test/lint/adr:guard)"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "활성 WI가 없는 세션에서 실행의도 프롬프트가 오면 UserPromptSubmit이 open WI 중복검색 결과를 표시하고 WI 생성을 유도하되 exit 0으로 Edit을 차단하지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/work-items/wi_26060678y/completion.json",
+          "summary": "완료계약 final_verdict=pass, ac-4 증거 8건(N3 검증 ac_verdicts + bun test/lint/adr:guard)"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "강제 로직에 DITTO self-host 전용 예외 분기가 0개여서 DITTO repo의 work item에도 동일한 차단(exit 2)이 발생한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/work-items/wi_26060678y/completion.json",
+          "summary": "완료계약 final_verdict=pass, ac-5 증거 8건(N3 검증 ac_verdicts + bun test/lint/adr:guard)"
+        }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
-  "changed_files": [],
+  "changed_files": [
+    "src/core/active-node-lease.ts",
+    "src/core/autopilot-loop.ts",
+    "src/hooks/pre-tool-use.ts",
+    "src/hooks/user-prompt-submit.ts",
+    "tests/core/autopilot-loop.test.ts",
+    "tests/hooks/pre-tool-use.test.ts",
+    "tests/hooks/user-prompt-submit.test.ts"
+  ],
   "risks": [],
   "runs": [],
   "created_at": "2026-06-06T03:04:56.543Z",
-  "updated_at": "2026-06-06T03:04:56.543Z"
+  "updated_at": "2026-06-06T14:36:27.000Z",
+  "closed_at": "2026-06-06T14:36:27.000Z"
 }

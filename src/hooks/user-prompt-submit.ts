@@ -65,6 +65,37 @@ export function looksCodebaseAnswerable(prompt: string): boolean {
   return CODEBASE_ANSWERABLE_PATTERNS.some((re) => re.test(prompt));
 }
 
+/** Significant tokens of a string for duplicate-search overlap (len ≥ 3). */
+function tokens(s: string): Set<string> {
+  return new Set(
+    s
+      .toLowerCase()
+      .split(/[^a-z0-9가-힣]+/)
+      .filter((t) => t.length >= 3),
+  );
+}
+
+/**
+ * Rank open work items whose title shares tokens with the prompt (ac-4). Returns
+ * the overlapping items best-first; empty when nothing meaningfully overlaps.
+ * Title-only (the list summary carries no goal); cheap and advisory.
+ */
+export function duplicateSearch(
+  prompt: string,
+  open: ReadonlyArray<{ id: string; title: string }>,
+): Array<{ id: string; title: string; overlap: number }> {
+  const promptTokens = tokens(prompt);
+  if (promptTokens.size === 0) return [];
+  return open
+    .map((s) => {
+      let overlap = 0;
+      for (const t of tokens(s.title)) if (promptTokens.has(t)) overlap++;
+      return { id: s.id, title: s.title, overlap };
+    })
+    .filter((m) => m.overlap > 0)
+    .sort((a, b) => b.overlap - a.overlap);
+}
+
 export interface ActiveResolution {
   workItem?: WorkItem;
   /** Set when the active work item is ambiguous and the user must choose (no arbitrary pick). */
@@ -95,9 +126,21 @@ export async function resolveActiveWorkItem(
   const open = (await items.list()).filter((s) => NON_TERMINAL.includes(s.status));
   if (open.length > 0) {
     const ids = open.map((s) => s.id).join(', ');
+    // Execution-intent + no active pointer (ac-4): surface a duplicate-search over
+    // open work items by title token overlap so the user reuses an existing WI
+    // instead of opening a near-duplicate, and nudge WI creation when nothing
+    // matches. Advisory only — the caller stays exit 0 and never blocks.
+    const matches =
+      classifyPromptAdvisory(prompt) === 'execution' ? duplicateSearch(prompt, open) : [];
+    const dupLine =
+      matches.length > 0
+        ? ` Possible duplicates by title overlap: ${matches
+            .map((m) => `${m.id} ("${m.title}")`)
+            .join('; ')}.`
+        : '';
     return {
       action: 'ask',
-      advisory: `No active work item pointer for this session and ${open.length} open work item(s) exist (${ids}). Resume one explicitly or start a new work item — not picking arbitrarily.`,
+      advisory: `No active work item pointer for this session and ${open.length} open work item(s) exist (${ids}).${dupLine} Resume one explicitly, or create a NEW work item before acting — not picking arbitrarily.`,
     };
   }
 

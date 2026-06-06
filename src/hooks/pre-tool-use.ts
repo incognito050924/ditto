@@ -1,8 +1,11 @@
+import { join } from 'node:path';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { parseJvmCodeqlCommand, runInternalPackagesGuard } from '~/acg/internal-packages';
-import { matchForbiddenScope } from '~/acg/scope/resolve';
+import { matchForbiddenScope, scopeRefMatches } from '~/acg/scope/resolve';
+import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
+import { AutopilotStore } from '~/core/autopilot-store';
 import { ChangeContractStore } from '~/core/change-contract-store';
-import { readArchitectureSpec } from '~/core/fs';
+import { atomicWriteText, ensureDir, readArchitectureSpec } from '~/core/fs';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { type AcgArchitectureSpec, acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import type { HookHandler, HookInput } from './runtime';
@@ -286,6 +289,98 @@ async function checkForbiddenScope(
   return undefined;
 }
 
+// --- autopilot 경로 강제: active-node lease allow-list ----------------------
+// FLOW enforcement (wi_26060678y): while an autopilot node is in flight it holds
+// an active-node lease (node_id + file_scope). A file edit is ALLOWED only when
+// its path falls inside SOME active lease's file_scope (an allow-list). This is
+// not spawn proof (PreToolUse cannot observe spawn, SKILL.md:33) — the lease is
+// the observable in-flight signal. There is NO repo-name / self-host branch: a
+// DITTO-repo edit out of lease hits the same block as any other repo (ac-5).
+
+/** Explicit bypass affordance, DISTINCT from DITTO_SKIP_HOOKS (ac-3). */
+function autopilotBypassActive(input: HookInput): boolean {
+  const env = input.env ?? {};
+  return env.DITTO_AUTOPILOT_BYPASS === '1' || process.env.DITTO_AUTOPILOT_BYPASS === '1';
+}
+
+/** Append exactly one bypass record per bypassed out-of-scope edit (ac-3). */
+async function appendBypassRecord(repoRoot: string, entry: Record<string, unknown>): Promise<void> {
+  const dir = join(repoRoot, '.ditto');
+  await ensureDir(dir);
+  const path = join(dir, 'autopilot-bypass.jsonl');
+  const file = Bun.file(path);
+  const existing = (await file.exists()) ? await file.text() : '';
+  const prefix = existing.length === 0 || existing.endsWith('\n') ? existing : `${existing}\n`;
+  await atomicWriteText(path, `${prefix}${JSON.stringify(entry)}\n`);
+}
+
+/** A lease file_scope string → AcgScopeRef so the EXISTING matcher decides containment. */
+function fileScopeContains(scope: string[], repoRelPath: string): boolean {
+  return scope.some((s) =>
+    scopeRefMatches(
+      /[*?[\]]/.test(s) ? { kind: 'glob', ref: s } : { kind: 'path', ref: s },
+      repoRelPath,
+    ),
+  );
+}
+
+/**
+ * Allow-list lease check. Returns a block when the edit is OUTSIDE every active
+ * lease's file_scope under an autopilot graph; undefined (ALLOW) otherwise. All
+ * preconditions fail OPEN (no session / no active WI / no graph / no non-terminal
+ * node / no active lease) — a lease only exists while a node runs, so a graph with
+ * no active lease means nothing is dispatched and we must not false-block.
+ */
+async function checkAutopilotLease(
+  input: HookInput,
+  filePath: string,
+): Promise<ReturnType<typeof block> | undefined> {
+  const raw = (input.raw ?? {}) as Record<string, unknown>;
+  const sessionId = typeof raw.session_id === 'string' ? raw.session_id : undefined;
+  if (!sessionId) return undefined; // fail-open: untracked session
+
+  const workItemId = await new SessionPointerStore(input.repoRoot).get(sessionId);
+  if (!workItemId) return undefined; // fail-open: no active work item
+
+  const aps = new AutopilotStore(input.repoRoot);
+  if (!(await aps.exists(workItemId))) return undefined; // fail-open: not under autopilot
+  let hasNonTerminal: boolean;
+  try {
+    const graph = await aps.get(workItemId);
+    hasNonTerminal = graph.nodes.some(
+      (n) => n.status === 'pending' || n.status === 'running' || n.status === 'blocked',
+    );
+  } catch {
+    return undefined; // fail-open: unreadable graph
+  }
+  if (!hasNonTerminal) return undefined; // fail-open: graph fully terminal
+
+  const leases = await new ActiveNodeLeaseStore(input.repoRoot).listActive(workItemId);
+  if (leases.length === 0) return undefined; // fail-open: nothing dispatched (no in-flight node)
+
+  const repoRel = relative(input.repoRoot, resolve(input.repoRoot, filePath));
+  const inScope = leases.some((l) => fileScopeContains(l.file_scope, repoRel));
+  if (inScope) return undefined; // allow-list hit
+
+  // Out of every active lease scope. Bypass (ac-3) overrides the block and logs.
+  if (autopilotBypassActive(input)) {
+    await appendBypassRecord(input.repoRoot, {
+      ts: new Date().toISOString(),
+      session_id: sessionId,
+      work_item_id: workItemId,
+      file_path: repoRel,
+      active_leases: leases.map((l) => l.node_id),
+    });
+    return undefined;
+  }
+  return block(
+    'autopilot-path',
+    `${repoRel} is outside every active autopilot node's file_scope (${leases
+      .map((l) => l.node_id)
+      .join(', ')}); edit inside the dispatched node's scope or set DITTO_AUTOPILOT_BYPASS=1`,
+  );
+}
+
 export const preToolUseHandler: HookHandler = async (input: HookInput) => {
   const raw = (input.raw ?? {}) as Record<string, unknown>;
   const toolName = raw.tool_name;
@@ -353,6 +448,9 @@ export const preToolUseHandler: HookHandler = async (input: HookInput) => {
     // (d) forbidden_scope: 계약이 보호하는 파일을 건드리면 막는다.
     const forbidden = await checkForbiddenScope(input, filePath);
     if (forbidden) return forbidden;
+    // (f) autopilot 경로 강제: 진행 중 노드의 lease file_scope 밖 편집을 막는다(allow-list).
+    const offPath = await checkAutopilotLease(input, filePath);
+    if (offPath) return offPath;
   }
 
   return ALLOW;

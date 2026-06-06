@@ -1,0 +1,74 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_26060678y",
+  "source_request": "autopilot 경로를 타도록 강제하는 트랙 잡아줘. DITTO 의 4가지 축을 살리는 방법이어야만 해",
+  "goal": "mutating 변경(Edit/Write/MultiEdit)을 work item→autopilot 노드 경로의 기본값으로 만든다: autopilot 그래프가 있는 활성 WI에서 활성 노드 lease 밖 편집은 PreToolUse가 차단하고, 명시적 bypass로만 우회하며, WI가 없으면 차단 대신 생성을 유도한다. 관측 천장상 spawn 증명이 아니라 흐름 강제다.",
+  "in_scope": [
+    "PreToolUse: 활성 WI + 비terminal autopilot 그래프 존재 시, 활성 노드 lease(file_scope) 밖 Edit/Write/MultiEdit를 exit 2 차단; lease 안은 허용",
+    "autopilot next-node가 노드 dispatch 시 active-node lease(node_id+file_scope)를 세션 스코프로 생성하고, record-result가 노드 종료 시 제거",
+    "명시적·로그되는 bypass affordance: 활성 동안 lease 밖 Edit 허용",
+    "UserPromptSubmit: 실행의도 요청 + 활성 WI 없음 → open WI 중복검색 표면화 + WI 생성 유도, Edit 미차단(exit 0)",
+    "DITTO self-host 포함 전체 적용 — 예외 분기 없음"
+  ],
+  "out_of_scope": [
+    "spawn된 implementer vs main-agent 직접편집의 증명 (PreToolUse 관측 천장상 불가)",
+    "활성 WI 없을 때 Edit 하드 차단 (유도만)",
+    "read-only/git/컨설팅 등 비-mutating 작업 게이팅",
+    "title/goal 매칭을 넘는 의미적 중복검색"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "비terminal autopilot 그래프가 있는 활성 WI에서 활성 노드 lease의 file_scope 밖 Edit/Write/MultiEdit는 PreToolUse가 exit 2로 차단하고, file_scope 안의 편집은 허용한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "autopilot next-node가 노드를 running으로 dispatch할 때 active-node lease(node_id+file_scope)를 생성하고, record-result가 노드 종료 시 그 lease를 제거하여 0건으로 만든다 (단위테스트로 생성·제거 검증)",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "명시적 bypass가 활성인 동안에는 lease file_scope 밖 Edit/Write가 차단되지 않고 exit 0으로 허용되며, 그 우회 1건이 로그에 생성된다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "활성 WI가 없는 세션에서 실행의도 프롬프트가 오면 UserPromptSubmit이 open WI 중복검색 결과를 표시하고 WI 생성을 유도하되 exit 0으로 Edit을 차단하지 않는다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "강제 로직에 DITTO self-host 전용 예외 분기가 0개여서 DITTO repo의 work item에도 동일한 차단(exit 2)이 발생한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": [
+        "test"
+      ]
+    }
+  ],
+  "unknowns": [
+    "관측 천장: PreToolUse는 동일 session_id를 공유하는 spawn된 implementer와 main-agent 직접편집을 구분/증명할 수 없다 (SKILL.md:33). 흐름 강제이지 spawn 증명이 아니며 DITTO_SKIP_HOOKS로 의식적 우회 가능 — 수용된 한계."
+  ],
+  "follow_up_candidates": [
+    "lease 만료/스테일 정리 정책 (세션 비정상 종료 시 lease 잔존)",
+    "bypass 사용 통계의 self-eval 환류"
+  ],
+  "question_policy": "ask_only_if_user_only_can_answer"
+}

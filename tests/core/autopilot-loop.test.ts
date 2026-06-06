@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
 import { buildInitialNodes } from '~/core/autopilot-graph';
 import { nextNode, recordResult } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
@@ -1031,5 +1032,49 @@ describe('nextNode per-node file_scope + cross-call overlap (B2 ac-2/ac-3)', () 
     const running = after.nodes.filter((n) => n.status === 'running');
     expect(running).toHaveLength(1); // overlap → gate serializes the second
     expect(after.nodes.filter((n) => n.status === 'pending')).toHaveLength(1);
+  });
+});
+
+// ac-2 (wi_26060678y): next-node dispatch creates an active-node lease; the matching
+// record-result removes it on node termination so the active-lease count returns to 0.
+describe('active-node lease lifecycle (ac-2: create on dispatch, remove on terminate)', () => {
+  test('single-node dispatch creates a lease with node_id + file_scope', async () => {
+    await seed(graph()); // N1 (planner) ready; changed_files = ['src/x.ts']
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('spawn');
+    const leases = await new ActiveNodeLeaseStore(repo).listActive(WI);
+    expect(leases).toHaveLength(1);
+    expect(leases[0]?.node_id).toBe('N1');
+    expect(leases[0]?.file_scope).toEqual(['src/x.ts']);
+    expect(leases[0]?.work_item_id).toBe(WI);
+  });
+
+  test('record-result on a pass removes the lease (→ 0 active leases)', async () => {
+    await seed(graph());
+    await nextNode(repo, WI); // creates the N1 lease
+    expect(await new ActiveNodeLeaseStore(repo).listActive(WI)).toHaveLength(1);
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text: 'Wrote the plan: 3 steps mapping to ac-1, see plan.md.',
+        outcome: 'pass',
+        evidence_refs: [{ kind: 'file', path: 'plan.md', summary: 'plan' }],
+      },
+    });
+    expect(await new ActiveNodeLeaseStore(repo).listActive(WI)).toHaveLength(0);
+  });
+
+  test('record-result on a (non-contentful) fail→retry also releases the lease', async () => {
+    await seed(graph());
+    await nextNode(repo, WI);
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: { node_id: 'N1', result_text: 'done', outcome: 'pass' }, // ack-only → fixable retry
+    });
+    // node re-armed to pending; no lease should leak while it is not running.
+    expect(await new ActiveNodeLeaseStore(repo).listActive(WI)).toHaveLength(0);
   });
 });

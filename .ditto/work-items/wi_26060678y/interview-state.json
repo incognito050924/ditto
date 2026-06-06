@@ -1,0 +1,92 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_26060678y",
+  "status": "converged",
+  "started_at": "2026-06-06T13:48:11.382Z",
+  "updated_at": "2026-06-06T14:14:48.171Z",
+  "dimensions": [
+    {
+      "id": "d-enforce-strength",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.2,
+      "resolved_by": [
+        "q001"
+      ],
+      "notes": "WI는 기본 autopilot 경로로 처리. autopilot 그래프가 있는 WI에서 노드(lease) 밖 mutating Edit은 기본 차단, 단 명시적·로그되는 bypass로 우회 가능. 우회 예시(리뷰/컨설팅/git)는 애초 Edit 아님 → 강제 대상은 구현 Edit."
+    },
+    {
+      "id": "d-self-apply",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.1,
+      "resolved_by": [
+        "q002"
+      ],
+      "notes": "DITTO self-host 예외 없음. 모든 work item에 적용. 이 구현 자체도 일단 autopilot 부트스트랩되면 implementer 노드 lease로 on-path가 됨(일관)."
+    },
+    {
+      "id": "d-no-wi",
+      "critical": true,
+      "state": "resolved",
+      "ambiguity": 0.15,
+      "resolved_by": [
+        "q003"
+      ],
+      "notes": "활성 WI 없으면 Edit 차단 안 함(강제X). 대신 UserPromptSubmit이 실행의도 요청에 대해 open WI 중복검색→매치 표면화, 없으면 WI 생성 여부 질문(유도). exit 0."
+    }
+  ],
+  "readiness": {
+    "score": 0.8,
+    "threshold": 0.7,
+    "critical_unresolved": [],
+    "gate": "ready"
+  },
+  "questions": [
+    {
+      "id": "q001",
+      "asked_at": "2026-06-06T14:11:09.946Z",
+      "dimension": "d-enforce-strength",
+      "question": "관측 천장(spawn 비관측)+SKIP_HOOKS 우회 가능 하에서 강제 강도는?",
+      "why_matters": "hard-block vs advisory가 기능의 실효성과 마찰을 가른다",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "기본 autopilot 처리, 명시적 의도로 우회 가능",
+      "answer_kind": "user"
+    },
+    {
+      "id": "q002",
+      "asked_at": "2026-06-06T14:11:10.021Z",
+      "dimension": "d-self-apply",
+      "question": "DITTO repo 자체에도 적용? 아니면 대상만?",
+      "why_matters": "이 구현 작업과 DITTO 일상개발이 자기차단될 수 있음",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "굳이 구분 의문, 모든 work-item에 적용",
+      "answer_kind": "user"
+    },
+    {
+      "id": "q003",
+      "asked_at": "2026-06-06T14:11:10.099Z",
+      "dimension": "d-no-wi",
+      "question": "활성 WI 없는 세션의 Edit은?",
+      "why_matters": "강제 시작점을 WI 존재로 둘지 결정",
+      "info_gain_estimate": "high",
+      "self_answer_attempts": [],
+      "answer": "요청 오면 중복검색 후 WI 생성 유도, 강제는 안 함",
+      "answer_kind": "user"
+    }
+  ],
+  "assumptions": [],
+  "user_confirmation": {
+    "confirmed": true,
+    "statement": "Q1: work-item은 기본 autopilot 처리, 명확한 의도로 우회 가능. Q2: 모든 work-item에 적용. Q3: 중복검색 후 생성 유도하되 강제는 안 함. + autopilot으로 이어서 처리.",
+    "confirmed_at": "2026-06-06T14:14:48.171Z"
+  },
+  "exit": {
+    "reason": "readiness_met",
+    "closure_mode": "mutual_agreement",
+    "question_cap": 8,
+    "questions_asked": 3
+  }
+}

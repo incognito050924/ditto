@@ -8,6 +8,7 @@ import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
   classifyPromptAdvisory,
+  duplicateSearch,
   resolveActiveWorkItem,
   userPromptSubmitHandler,
 } from '~/hooks/user-prompt-submit';
@@ -94,6 +95,35 @@ describe('resolveActiveWorkItem (single-active invariant)', () => {
     expect(r.advisory).toContain('Resume one explicitly');
     expect((await items.list()).length).toBe(before); // nothing created
     expect(await new SessionPointerStore(repo).get('fresh-session')).toBeNull();
+  });
+
+  // ac-4 (wi_26060678y): no active work item + execution-intent prompt → surface a
+  // duplicate-search over open WIs and nudge WI creation, while staying advisory.
+  test('execution-intent + no pointer surfaces duplicate matches and nudges WI creation', async () => {
+    const items = new WorkItemStore(repo);
+    await items.create({
+      title: 'autopilot path enforcement lease',
+      source_request: 'x',
+      goal: 'x',
+      acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+    });
+    const r = await resolveActiveWorkItem(repo, 'fresh', 'autopilot lease 구현해줘');
+    expect(r.action).toBe('ask');
+    expect(r.advisory).toContain('Possible duplicates by title overlap');
+    expect(r.advisory).toContain('autopilot path enforcement lease');
+    expect(r.advisory).toContain('create a NEW work item');
+  });
+});
+
+describe('duplicateSearch (ac-4 token overlap)', () => {
+  test('ranks title-overlapping open items best-first; none → empty', () => {
+    const open = [
+      { id: 'wi_aaaaaaaa', title: 'autopilot lease enforcement' },
+      { id: 'wi_bbbbbbbb', title: 'unrelated docs cleanup' },
+    ];
+    const hits = duplicateSearch('add autopilot lease path', open);
+    expect(hits[0]?.id).toBe('wi_aaaaaaaa');
+    expect(duplicateSearch('completely orthogonal request', open)).toEqual([]);
   });
 });
 

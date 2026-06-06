@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
+import { AutopilotStore } from '~/core/autopilot-store';
 import { ChangeContractStore } from '~/core/change-contract-store';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { preToolUseHandler } from '~/hooks/pre-tool-use';
@@ -358,6 +360,166 @@ describe('preToolUseHandler — (d) forbidden_scope 집행', () => {
       expect((await edit(dir, 'src/core/locked.ts', 'sess-nc')).exitCode).toBe(0);
       // session_id 자체가 없음 → allow
       expect((await edit(dir, 'src/core/locked.ts')).exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease allow-list)', () => {
+  const WI = 'wi_autopath01';
+  const SESS = 'sess-ap';
+
+  function graphWith(
+    nodeStatus: 'pending' | 'running' | 'passed',
+  ): Parameters<AutopilotStore['write']>[1] {
+    return {
+      schema_version: '0.1.0',
+      autopilot_id: 'orch_appath01',
+      work_item_id: WI,
+      mode: 'autopilot',
+      root_goal: 'goal',
+      completion_boundary: 'entire_work_item',
+      approval_gate: {
+        status: 'not_required',
+        source: 'small_reversible_policy',
+        approved_at: null,
+        approved_by: null,
+        evidence_refs: [],
+      },
+      nodes: [
+        {
+          id: 'N1',
+          kind: 'implement',
+          owner: 'implementer',
+          purpose: 'edit src/core',
+          status: nodeStatus,
+          depends_on: [],
+          acceptance_refs: [],
+          evidence_refs: [],
+          ac_verdicts: [],
+          attempts: { fix: 0, switch: 0 },
+        },
+      ],
+      caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 },
+      continue_policy: {
+        continue_after_approval: true,
+        continue_after_checkpoint: true,
+        continue_after_fixable_failure: true,
+        ask_user_only_for_user_owned_decisions: true,
+      },
+      stop_conditions: [],
+      user_interrupt_policy: 'ask_only_for_user_owned_decisions',
+    } as Parameters<AutopilotStore['write']>[1];
+  }
+
+  const edit = (
+    dir: string,
+    rel: string,
+    env: Record<string, string | undefined> = {},
+    tool_name = 'Edit',
+  ) =>
+    preToolUseHandler({
+      raw: { tool_name, tool_input: { file_path: join(dir, rel) }, session_id: SESS },
+      repoRoot: dir,
+      env,
+    });
+
+  async function setup(opts: {
+    leaseScope?: string[];
+    nodeStatus?: 'pending' | 'running' | 'passed';
+  }): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-appath-'));
+    await new SessionPointerStore(dir).set(SESS, WI);
+    await new AutopilotStore(dir).write(WI, graphWith(opts.nodeStatus ?? 'running'));
+    if (opts.leaseScope) {
+      await new ActiveNodeLeaseStore(dir).set({
+        node_id: 'N1',
+        work_item_id: WI,
+        file_scope: opts.leaseScope,
+        created_at: '2026-06-06T00:00:00.000Z',
+      });
+    }
+    return dir;
+  }
+
+  test('ac-1: out-of-scope edit blocks (exit 2); in-scope edit allows (exit 0)', async () => {
+    const dir = await setup({ leaseScope: ['src/core/'] });
+    try {
+      expect((await edit(dir, 'src/core/active-node-lease.ts')).exitCode).toBe(0); // in scope
+      const out = await edit(dir, 'src/hooks/elsewhere.ts'); // out of scope
+      expect(out.exitCode).toBe(2);
+      expect(out.stderr).toContain('autopilot-path');
+      // Write/MultiEdit covered by the same branch
+      expect((await edit(dir, 'src/hooks/elsewhere.ts', {}, 'Write')).exitCode).toBe(2);
+      expect((await edit(dir, 'src/hooks/elsewhere.ts', {}, 'MultiEdit')).exitCode).toBe(2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('ac-1 glob lease scope matches via the existing matcher', async () => {
+    const dir = await setup({ leaseScope: ['src/**/*.ts'] });
+    try {
+      expect((await edit(dir, 'src/core/x.ts')).exitCode).toBe(0);
+      expect((await edit(dir, 'docs/readme.md')).exitCode).toBe(2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('fail-open: graph present but NO active lease → allow (nothing dispatched)', async () => {
+    const dir = await setup({ nodeStatus: 'running' }); // no lease written
+    try {
+      expect((await edit(dir, 'src/hooks/elsewhere.ts')).exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('fail-open: graph fully terminal → allow even with a stale lease', async () => {
+    const dir = await setup({ leaseScope: ['src/core/'], nodeStatus: 'passed' });
+    try {
+      expect((await edit(dir, 'src/hooks/elsewhere.ts')).exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('fail-open: no autopilot graph → allow', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-appath-'));
+    try {
+      await new SessionPointerStore(dir).set(SESS, WI); // pointer but no graph
+      expect((await edit(dir, 'src/hooks/elsewhere.ts')).exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('ac-3: DITTO_AUTOPILOT_BYPASS=1 allows the out-of-scope edit and logs exactly one record', async () => {
+    const dir = await setup({ leaseScope: ['src/core/'] });
+    try {
+      const out = await edit(dir, 'src/hooks/elsewhere.ts', { DITTO_AUTOPILOT_BYPASS: '1' });
+      expect(out.exitCode).toBe(0);
+      const log = await readFile(join(dir, '.ditto', 'autopilot-bypass.jsonl'), 'utf8');
+      const lines = log.split('\n').filter((l) => l.trim().length > 0);
+      expect(lines).toHaveLength(1);
+      const rec = JSON.parse(lines[0] ?? '{}');
+      expect(rec.work_item_id).toBe(WI);
+      expect(rec.file_path).toBe('src/hooks/elsewhere.ts');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('ac-5: a DITTO-repo work item edit out of lease still hits the same exit-2 block (no self-host branch)', async () => {
+    // The enforcement keys on the lease, not the repo identity. Same logic regardless
+    // of repo name — an out-of-scope edit blocks identically here as anywhere.
+    const dir = await setup({ leaseScope: ['src/core/'] });
+    try {
+      const out = await edit(dir, 'src/cli/commands/autopilot.ts');
+      expect(out.exitCode).toBe(2);
+      expect(out.stderr).toContain('autopilot-path');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
