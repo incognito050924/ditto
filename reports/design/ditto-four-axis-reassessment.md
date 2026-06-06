@@ -122,7 +122,7 @@ inputs:
 - 운영 함의: 타겟을 autopilot으로 돌리려면 **그 타겟에 루트된 세션을 띄운다**.
 - 이 invariant는 PreToolUse scope-out의 설계 의도(repo 경계 보호)와 정합적이다 — 버그가 아니라 경계다.
 
-**(C) 기타 substrate-레벨 제안(미구현).** surfaces↔State 분리(§3.4에서 코드 적용 완료), doctor를 "축별 배포 계약 점검기"로 정렬(install `status` 5플래그를 doctor로 승격 — 제안).
+**(C) 기타 substrate-레벨 제안.** surfaces↔State 분리(§3.4에서 코드 적용 완료). doctor를 "축별 배포 계약 점검기"로 정렬 — **구현됨(4e)**: `ditto doctor distribution`이 install `status` 5플래그(binary_built/binary_on_path/plugin_enabled/hooks_registered/target_initialized + allowlisted)를 런타임 시점에서 재점검해 (A) 표의 4 기층축(Hooks/Skills/Agents/State) 배포 계약 충족 여부로 매핑한다(`src/core/distribution-doctor.ts`).
 
 ## 4. 무엇이 바뀌고 무엇이 그대로인가
 

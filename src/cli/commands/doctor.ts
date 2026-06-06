@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { collectCapabilityInventory } from '~/core/capability-inventory';
 import { defaultDoctorDeps, inspectCodeqlTarget } from '~/core/codeql/doctor';
+import { collectDistributionReport, defaultDistributionDeps } from '~/core/distribution-doctor';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   type BuiltinHostId,
@@ -294,10 +295,50 @@ const codeqlCommand = defineCommand({
   },
 });
 
+const distributionCommand = defineCommand({
+  meta: {
+    name: 'distribution',
+    description:
+      'Check per-substrate-axis deployment contracts (Hooks/Skills/Agents/State) — install-status flags promoted to doctor',
+  },
+  args: {
+    output: { type: 'string', default: 'human', description: 'Output format: human|json' },
+    advisory: { type: 'boolean', default: false, description: 'Report findings but exit 0' },
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const report = collectDistributionReport(defaultDistributionDeps(repoRoot));
+      if (format === 'json') {
+        writeJson({
+          status: report.finding_count === 0 ? 'ok' : 'drift',
+          checks: report.checks,
+          axes: report.axes,
+        });
+      } else if (report.finding_count === 0) {
+        writeHuman('distribution: ok — all substrate-axis deployment contracts satisfied');
+      } else {
+        for (const axis of report.axes) {
+          const mark = axis.satisfied ? 'ok' : 'DRIFT';
+          writeHuman(
+            `${axis.axis}\t${mark}\t${axis.contract}${axis.missing.length > 0 ? ` (missing: ${axis.missing.join(', ')})` : ''}`,
+          );
+        }
+      }
+      exitForFindings(report.finding_count, args.advisory);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  },
+});
+
 export const doctorCommand = defineCommand({
   meta: {
     name: 'doctor',
-    description: 'Diagnose host instruction, permission, MCP, surface, and capability drift',
+    description:
+      'Diagnose host instruction, permission, MCP, surface, capability, and distribution drift',
   },
   subCommands: {
     instructions: instructionsCommand,
@@ -306,5 +347,6 @@ export const doctorCommand = defineCommand({
     surface: surfaceCommand,
     capability: capabilityCommand,
     codeql: codeqlCommand,
+    distribution: distributionCommand,
   },
 });
