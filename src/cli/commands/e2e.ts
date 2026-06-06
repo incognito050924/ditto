@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { z } from 'zod';
+import { defaultApplicabilityDeps, evaluateAxis3FromRepo } from '~/core/e2e/applicability';
 import { runJourney } from '~/core/e2e/browser';
 import { atomicWriteText, resolveRepoRootForCreate } from '~/core/fs';
 import { e2eStep } from '~/schemas/e2e-journey';
@@ -90,6 +91,42 @@ const e2eRun = defineCommand({
   },
 });
 
+const e2eApplicable = defineCommand({
+  meta: {
+    name: 'applicable',
+    description:
+      'Decide whether axis-3 (browser E2E) applies to this target, or is N/A (no web UI)',
+  },
+  args: {
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    try {
+      const repoRoot = await resolveRepoRootForCreate();
+      const result = evaluateAxis3FromRepo(defaultApplicabilityDeps(repoRoot));
+      if (format === 'json') {
+        writeJson(result);
+      } else {
+        writeHuman(`axis-3 e2e: ${result.applicable ? 'APPLICABLE' : 'N/A'} — ${result.reason}`);
+        if (!result.applicable) {
+          writeHuman(`  covered by: ${result.covered_by.join('; ')}`);
+        }
+      }
+    } catch (err) {
+      writeError(`e2e applicable failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const e2eCommand = defineCommand({
   meta: {
     name: 'e2e',
@@ -97,5 +134,6 @@ export const e2eCommand = defineCommand({
   },
   subCommands: {
     run: e2eRun,
+    applicable: e2eApplicable,
   },
 });

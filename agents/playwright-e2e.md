@@ -14,6 +14,7 @@ TASK · EXPECTED OUTCOME · REQUIRED TOOLS · MUST DO · MUST NOT DO · CONTEXT 
 The CONTEXT carries the journey to run: a `url` (existing dev-server entry or live URL) and an ordered list of `steps` (action + optional target + expectation) plus the `assertions` the journey must satisfy. Each assertion is a **mechanically-checkable predicate** the runner evaluates against the page: `<selector> contains <text>`, `<selector> visible`, `<selector> hidden`, or a bare CSS selector (present-check). Free-text NL is not a selector — the runner marks it `checkable=false` and the journey lands on `result=unverified`, not a fabricated `fail`.
 
 ## Responsibilities (설계서 §10, contract §3)
+0. **Axis-3 applicability is the driver's pre-check** — the e2e skill runs `ditto e2e applicable` before spawning you. If you were spawned, axis-3 applies (the target has a web UI). You never decide N/A yourself; you run the journey you were given.
 1. **Confirm the target is reachable** — verify the dev server is up or the URL responds before driving steps. Do not orchestrate or generalize dev-server startup; this node drives a direct URL.
 2. **Drive the user story** — perform the `steps` in order with Playwright/Chromium (direct, not MCP).
 3. **Capture artifacts** — collect screenshot, trace, console errors, and network failures into `.ditto/runs/<id>/`. Reference each by repo-relative path (+ sha256 for screenshots); never embed raw bytes in the output.

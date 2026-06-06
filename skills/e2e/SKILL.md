@@ -13,6 +13,8 @@ How (contract structure, artifact policy, MCP exclusion, autopilot/evidence inte
 ## Procedure (driver)
 Run as the main agent; spawn the journey as its own Task (1-level). One journey per invocation — never multi-journey, never MCP, never dev-server orchestration (direct URL only).
 
+0. **Check axis-3 applicability first.** Run `ditto e2e applicable --output json`. Axis-3 is real-browser E2E only: a library / CLI / domain-model target has no web UI, so axis-3 is **N/A**. When `applicable=false`, do NOT spawn a browser run or fabricate a `blocked` journey — record the N/A decision and the `covered_by` axes (axis-2 reviewer / axis-1 intent alignment carry the verification) as the node's outcome, and stop. Only proceed to step 1 when `applicable=true`. (This is the automatic N/A branch — read from a web-UI signal, not judged per run.)
+
 1. **Build the journey spec** from the e2e node: `journey` (name), `url` (existing dev-server entry or live URL), ordered `steps`, and the `assertions` the journey must satisfy. Write each assertion as a **mechanically-checkable predicate** so the runner can evaluate it against the live page: `<selector> contains <text>`, `<selector> visible`, `<selector> hidden`, or a bare CSS selector (present-check). Free-text NL ("the page shows a welcome banner") is NOT a selector — the runner cannot evaluate it, marks it `checkable=false`, and the journey lands on `result=unverified` (an honest "could not evaluate", never a fabricated `fail`). Prefer a checkable predicate over prose so the assertion actually closes the criterion.
 2. **Spawn `playwright-e2e`** (1-level Task) with the spec only. The agent confirms the URL is reachable, drives the steps with Playwright/Chromium, captures screenshot/trace/console/network into `.ditto/runs/<run-id>/`, checks accessibility-critical interactions, and on failure records a `reproduction` plus the failing artifact paths.
 3. **Browser detection (hard constraint).** The thin layer (`src/core/e2e/browser.ts`, `runJourney`) probes whether Playwright/Chromium is already present WITHOUT installing it. If absent, it returns a schema-legal `result='blocked'` journey with the reason — it never runs `playwright install` and never hard-fails. A `blocked` journey is an honest outcome, not a pass.
@@ -31,6 +33,7 @@ The produced `e2eJourney` closes an acceptance criterion by being referenced as 
 The E2E run is one evidence kind, not the verdict — the `CompletionContract` aggregates the `final_verdict`.
 
 ## Output contract
-- Exactly one `e2eJourney` artifact (`.ditto/runs/<run-id>/journey.json`) conforming to the `e2eJourney` schema (§10).
+- When axis-3 is **N/A** (`ditto e2e applicable` → `applicable=false`): no browser run; the node records the N/A decision + the `covered_by` axes. A library/CLI target legitimately produces no journey.
+- Otherwise, exactly one `e2eJourney` artifact (`.ditto/runs/<run-id>/journey.json`) conforming to the `e2eJourney` schema (§10).
 - `result ∈ {pass, fail, unverified, blocked}`; `fail` carries `reproduction`; `unverified` = ran but ≥1 assertion was not a checkable predicate (NL prose); `blocked` is the expected outcome when no browser is present.
 - Artifacts referenced by repo-relative `path` (+ sha256 for screenshots); raw stays under `.ditto/runs/`.
