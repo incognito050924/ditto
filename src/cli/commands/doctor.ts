@@ -308,11 +308,17 @@ const distributionCommand = defineCommand({
   run: async ({ args }) => {
     try {
       const format = parseOutputFormat(args.output);
-      const repoRoot = await resolveRepoRootForCreate();
-      const report = collectDistributionReport(defaultDistributionDeps(repoRoot));
+      const targetRoot = await resolveRepoRootForCreate();
+      // Under session-rooting (ADR-0011 D2) the session is rooted at the target;
+      // the plugin lives at ${CLAUDE_PLUGIN_ROOT}. Fall back to targetRoot when the
+      // env is unset (self-host / co-located layout), preserving prior behavior.
+      const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? targetRoot;
+      const report = collectDistributionReport(defaultDistributionDeps(targetRoot, pluginRoot));
       if (format === 'json') {
         writeJson({
           status: report.finding_count === 0 ? 'ok' : 'drift',
+          plugin_root: pluginRoot,
+          target_root: targetRoot,
           checks: report.checks,
           axes: report.axes,
         });

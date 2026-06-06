@@ -49,7 +49,8 @@ describe('evaluateDistribution (atomic checks → per-axis deployment contracts)
 
 describe('collectDistributionChecks (injected IO; runtime vantage)', () => {
   const deps = (over: Partial<DistributionDeps>): DistributionDeps => ({
-    repoRoot: '/repo',
+    pluginRoot: '/plugin',
+    targetRoot: '/target',
     whichDitto: () => '/usr/local/bin/ditto',
     readGlobalSettings: () => ({ enabledPlugins: { 'ditto@ditto-local': true } }),
     readProjectSettings: () => ({ permissions: { allow: ['Bash(ditto:*)'] } }),
@@ -80,5 +81,53 @@ describe('collectDistributionChecks (injected IO; runtime vantage)', () => {
   test('project allowlist missing the rule → allowlisted false', () => {
     const c = collectDistributionChecks(deps({ readProjectSettings: () => ({}) }));
     expect(c.allowlisted).toBe(false);
+  });
+
+  test('plugin-root artifacts are read from pluginRoot, not targetRoot', () => {
+    // session-rooting layout: plugin and target are distinct dirs.
+    const checked: string[] = [];
+    const c = collectDistributionChecks(
+      deps({
+        exists: (p) => {
+          checked.push(p);
+          return true;
+        },
+      }),
+    );
+    expect(c.binary_built).toBe(true);
+    expect(c.hooks_registered).toBe(true);
+    // bin/ditto and hooks/hooks.json must be probed under /plugin, never /target.
+    expect(checked.some((p) => p.startsWith('/plugin/bin/'))).toBe(true);
+    expect(checked.some((p) => p.startsWith('/plugin/hooks/'))).toBe(true);
+    expect(checked.some((p) => p.startsWith('/target/bin/'))).toBe(false);
+    expect(checked.some((p) => p.startsWith('/target/hooks/'))).toBe(false);
+  });
+
+  test('target-root artifacts are read from targetRoot, not pluginRoot', () => {
+    const checked: string[] = [];
+    collectDistributionChecks(
+      deps({
+        exists: (p) => {
+          checked.push(p);
+          return true;
+        },
+      }),
+    );
+    // .ditto State is probed under /target, never /plugin.
+    expect(checked.some((p) => p.startsWith('/target/.ditto/'))).toBe(true);
+    expect(checked.some((p) => p.startsWith('/plugin/.ditto/'))).toBe(false);
+  });
+
+  test('session-rooting: a built plugin with an uninitialized target is not misjudged', () => {
+    // The exact bug ADR-0011 D1 flagged: plugin artifacts present at pluginRoot,
+    // target not yet scaffolded. binary/hooks must stay true; only State fails.
+    const c = collectDistributionChecks(
+      deps({
+        exists: (p) => p.startsWith('/plugin/'),
+      }),
+    );
+    expect(c.binary_built).toBe(true);
+    expect(c.hooks_registered).toBe(true);
+    expect(c.target_initialized).toBe(false);
   });
 });

@@ -91,7 +91,18 @@ export function evaluateDistribution(checks: DistributionChecks): DistributionRe
 }
 
 export interface DistributionDeps {
-  repoRoot: string;
+  /**
+   * Where the plugin's own artifacts live (`bin/ditto`, `hooks/hooks.json`) —
+   * `${CLAUDE_PLUGIN_ROOT}` at runtime. Distinct from `targetRoot`: under
+   * session-rooting (ADR-0011 D2) the session is rooted at the target, so the
+   * plugin install dir is elsewhere and must be checked at its own root.
+   */
+  pluginRoot: string;
+  /**
+   * The session's target repo root carrying `.ditto/` State and the project
+   * `.claude/settings.json` allowlist.
+   */
+  targetRoot: string;
   /** Resolve `ditto` on PATH; returns a path or null. */
   whichDitto: () => string | null;
   readGlobalSettings: () => Record<string, unknown>;
@@ -111,12 +122,13 @@ function readJsonObject(path: string): Record<string, unknown> {
   }
 }
 
-export function defaultDistributionDeps(repoRoot: string): DistributionDeps {
+export function defaultDistributionDeps(targetRoot: string, pluginRoot: string): DistributionDeps {
   return {
-    repoRoot,
+    pluginRoot,
+    targetRoot,
     whichDitto: () => Bun.which('ditto'),
     readGlobalSettings: () => readJsonObject(join(homedir(), '.claude', 'settings.json')),
-    readProjectSettings: () => readJsonObject(join(repoRoot, '.claude', 'settings.json')),
+    readProjectSettings: () => readJsonObject(join(targetRoot, '.claude', 'settings.json')),
     exists: (p) => existsSync(p),
   };
 }
@@ -143,11 +155,14 @@ function allowlisted(settings: Record<string, unknown>): boolean {
 export function collectDistributionChecks(deps: DistributionDeps): DistributionChecks {
   const binaryName = IS_WIN ? 'ditto.exe' : 'ditto';
   return {
-    binary_built: deps.exists(join(deps.repoRoot, 'bin', binaryName)),
+    // plugin-root artifacts: the plugin ships these at its own install dir.
+    binary_built: deps.exists(join(deps.pluginRoot, 'bin', binaryName)),
+    hooks_registered: deps.exists(join(deps.pluginRoot, 'hooks', 'hooks.json')),
+    // root-independent: PATH resolution and global Claude settings.
     binary_on_path: deps.whichDitto() !== null,
     plugin_enabled: pluginEnabled(deps.readGlobalSettings()),
-    hooks_registered: deps.exists(join(deps.repoRoot, 'hooks', 'hooks.json')),
-    target_initialized: deps.exists(join(deps.repoRoot, '.ditto', 'knowledge', 'glossary.json')),
+    // target-root artifacts: scaffolded into the session's target project.
+    target_initialized: deps.exists(join(deps.targetRoot, '.ditto', 'knowledge', 'glossary.json')),
     allowlisted: allowlisted(deps.readProjectSettings()),
   };
 }
