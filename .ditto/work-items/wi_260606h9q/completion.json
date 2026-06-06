@@ -1,0 +1,121 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260606h9q",
+  "declared_by": "main",
+  "declared_at": "2026-06-06T02:45:11.216Z",
+  "summary": "서브에이전트 실가동 관측 — 모든 acceptance criterion이 pass로 기록되었다.",
+  "changed_files": [
+    ".ditto/handoff/archive/wi_260605wf3__2026-06-06T01-51-18-617Z.md",
+    ".ditto/handoff/archive/wi_260606agx__2026-06-06T02-27-50-806Z.md",
+    ".ditto/handoff/archive/wi_260606e7k__2026-06-06T02-35-08-478Z.md",
+    ".ditto/handoff/archive/wi_260606f4r__2026-06-06T02-12-48-148Z.md",
+    ".ditto/work-items/wi_260605wf3/completion.json",
+    ".ditto/work-items/wi_260605wf3/language-ledger.json",
+    ".ditto/work-items/wi_260605wf3/work-item.json",
+    ".ditto/work-items/wi_260606agx/completion.json",
+    ".ditto/work-items/wi_260606agx/language-ledger.json",
+    ".ditto/work-items/wi_260606agx/work-item.json",
+    ".ditto/work-items/wi_260606e7k/completion.json",
+    ".ditto/work-items/wi_260606e7k/language-ledger.json",
+    ".ditto/work-items/wi_260606e7k/work-item.json",
+    ".ditto/work-items/wi_260606f4r/completion.json",
+    ".ditto/work-items/wi_260606f4r/language-ledger.json",
+    ".ditto/work-items/wi_260606f4r/work-item.json",
+    ".ditto/work-items/wi_260606h9q/",
+    ".ditto/work-items/wi_260606h9q/completion.json",
+    ".ditto/work-items/wi_260606h9q/work-item.json",
+    ".githooks/pre-commit",
+    ".github/workflows/ci.yml",
+    "agents/planner.md",
+    "package.json",
+    "reports/design/contracts/autopilot-contract.md",
+    "scripts/adr-guard.ts",
+    "skills/autopilot/SKILL.md",
+    "skills/handoff/SKILL.md",
+    "src/cli/commands/work.ts",
+    "src/core/autopilot-dispatch.ts",
+    "src/core/autopilot-loop.ts",
+    "src/core/charter.ts",
+    "src/core/e2e/browser.ts",
+    "src/core/fs.ts",
+    "src/core/handoff-store.ts",
+    "src/core/hosts/shared.ts",
+    "src/core/work-item-handoff.ts",
+    "src/hooks/user-prompt-submit.ts",
+    "tests/conformance/m4.conformance.test.ts",
+    "tests/core/autopilot-dispatch.test.ts",
+    "tests/core/fs.test.ts",
+    "tests/core/handoff-store.test.ts",
+    "tests/core/work-item-handoff.test.ts",
+    "tests/hooks/user-prompt-submit.test.ts",
+    "tests/integration/autopilot-loop-drive.test.ts",
+    "tests/scripts/adr-guard.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "command": "src/core/autopilot-dispatch.ts guardMutatingEvidence + src/core/autopilot-loop.ts record-result",
+          "summary": "guardMutatingEvidence(owner,outcome,changedFiles) 신설(isMutatingOwner 재사용). record-result에서 contentful+pass일 때 호출 → 변경 0이면 contentful=false·outcome=fail·fixable"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-dispatch.test.ts tests/integration/autopilot-loop-drive.test.ts",
+          "summary": "guardMutatingEvidence 단위 4케이스 통과. 통합 테스트가 changed_files 없는 mutating pass를 실제로 잡아(2건 fail) → passNode가 changed_files 반환하도록 현실화"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "command": "skills/autopilot/SKILL.md step 2",
+          "summary": "'do NOT implement the node in the main agent … spawning the role subagent is the whole point (D3)' + mutating pass는 changed_files 필수 + 'Task spawn 자체는 runtime이 관측 불가' 명시"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "command": "guardMutatingEvidence docstring + SKILL.md",
+          "summary": "'does NOT verify that a Task subagent actually ran (main-agent behaviour the harness owns and code cannot observe)' 명시. spawn-events.jsonl 미구현 — status=running으로 이미 관측되어 중복"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-5",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test && bun run lint && bun run adr:guard",
+          "summary": "1199 pass / 9 skip / 0 fail, biome clean, adr 가드 위반 0"
+        }
+      ],
+      "evidence_records": []
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [],
+  "next_handoff_path": ".ditto/handoff/wi_260606h9q.md",
+  "final_verdict": "pass"
+}

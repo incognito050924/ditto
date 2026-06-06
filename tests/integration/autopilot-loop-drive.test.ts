@@ -63,6 +63,9 @@ async function passNode(nodeId: string): Promise<void> {
       node_id: nodeId,
       result_text: `Completed ${nodeId}: did the work and recorded evidence against ac-1.`,
       outcome: 'pass',
+      // A mutating node's pass must carry changed_files (G7 확장, wi_260606h9q);
+      // harmless for read-only nodes. Mirrors a real owner that touched files.
+      changed_files: ['src/x.ts'],
       evidence_refs: [{ kind: 'note', summary: `${nodeId} done` }],
     },
   });

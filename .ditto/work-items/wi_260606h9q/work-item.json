@@ -1,0 +1,126 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260606h9q",
+  "title": "서브에이전트 실가동 관측",
+  "source_request": "서브에이전트로 동작하는가, 터미널에 서브에이전트는 콘솔에 배경 색깔이 깔려서 출력되는게 보통인데, 이런게 안 보임. 아무 배경색도 없음. 대부분 Bash (…) 출력됨",
+  "goal": "autopilot이 owner subagent를 실제로 spawn했는지 관측 가능하게 만들고, spawn 없는 진행(main 직접 구현)을 감지/표면화한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "G7 floor 확장 — mutating 노드(implementer/refactorer)가 pass를 주장하면 changed_files 증거가 필수다. 변경 0인 pass 주장은 fixable로 강등된다(claim≠proof의 노드 레벨 강제). spawn 없이 지어낸 빈 결과를 차단한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "command": "src/core/autopilot-dispatch.ts guardMutatingEvidence + src/core/autopilot-loop.ts record-result",
+          "summary": "guardMutatingEvidence(owner,outcome,changedFiles) 신설(isMutatingOwner 재사용). record-result에서 contentful+pass일 때 호출 → 변경 0이면 contentful=false·outcome=fail·fixable"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "가드가 실제로 동작한다 — mutating+pass+changed_files=0 → fixable, non-mutating이나 changed_files≥1이면 통과(테스트로 고정)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-dispatch.test.ts tests/integration/autopilot-loop-drive.test.ts",
+          "summary": "guardMutatingEvidence 단위 4케이스 통과. 통합 테스트가 changed_files 없는 mutating pass를 실제로 잡아(2건 fail) → passNode가 changed_files 반환하도록 현실화"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "autopilot SKILL.md step 2의 규율을 강화한다 — 직접 구현 금지, 반드시 Task spawn, 결과에 증거 동반",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "command": "skills/autopilot/SKILL.md step 2",
+          "summary": "'do NOT implement the node in the main agent … spawning the role subagent is the whole point (D3)' + mutating pass는 changed_files 필수 + 'Task spawn 자체는 runtime이 관측 불가' 명시"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "정직성 — Task spawn 발생 자체는 main agent 행동(하네스 영역)이라 코드로 강제·관측 불가함을 명시한다. spawn-events 로그는 중복(노드 status=running으로 이미 관측)·over-engineering이라 만들지 않는다(scope 규율)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "command": "guardMutatingEvidence docstring + SKILL.md",
+          "summary": "'does NOT verify that a Task subagent actually ran (main-agent behaviour the harness owns and code cannot observe)' 명시. spawn-events.jsonl 미구현 — status=running으로 이미 관측되어 중복"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "회귀 없음 — bun test green, biome clean, adr:guard green",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test && bun run lint && bun run adr:guard",
+          "summary": "1199 pass / 9 skip / 0 fail, biome clean, adr 가드 위반 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/handoff/archive/wi_260605wf3__2026-06-06T01-51-18-617Z.md",
+    ".ditto/handoff/archive/wi_260606agx__2026-06-06T02-27-50-806Z.md",
+    ".ditto/handoff/archive/wi_260606e7k__2026-06-06T02-35-08-478Z.md",
+    ".ditto/handoff/archive/wi_260606f4r__2026-06-06T02-12-48-148Z.md",
+    ".ditto/work-items/wi_260605wf3/completion.json",
+    ".ditto/work-items/wi_260605wf3/language-ledger.json",
+    ".ditto/work-items/wi_260605wf3/work-item.json",
+    ".ditto/work-items/wi_260606agx/completion.json",
+    ".ditto/work-items/wi_260606agx/language-ledger.json",
+    ".ditto/work-items/wi_260606agx/work-item.json",
+    ".ditto/work-items/wi_260606e7k/completion.json",
+    ".ditto/work-items/wi_260606e7k/language-ledger.json",
+    ".ditto/work-items/wi_260606e7k/work-item.json",
+    ".ditto/work-items/wi_260606f4r/completion.json",
+    ".ditto/work-items/wi_260606f4r/language-ledger.json",
+    ".ditto/work-items/wi_260606f4r/work-item.json",
+    ".ditto/work-items/wi_260606h9q/",
+    ".ditto/work-items/wi_260606h9q/completion.json",
+    ".ditto/work-items/wi_260606h9q/work-item.json",
+    ".githooks/pre-commit",
+    ".github/workflows/ci.yml",
+    "agents/planner.md",
+    "package.json",
+    "reports/design/contracts/autopilot-contract.md",
+    "scripts/adr-guard.ts",
+    "skills/autopilot/SKILL.md",
+    "skills/handoff/SKILL.md",
+    "src/cli/commands/work.ts",
+    "src/core/autopilot-dispatch.ts",
+    "src/core/autopilot-loop.ts",
+    "src/core/charter.ts",
+    "src/core/e2e/browser.ts",
+    "src/core/fs.ts",
+    "src/core/handoff-store.ts",
+    "src/core/hosts/shared.ts",
+    "src/core/work-item-handoff.ts",
+    "src/hooks/user-prompt-submit.ts",
+    "tests/conformance/m4.conformance.test.ts",
+    "tests/core/autopilot-dispatch.test.ts",
+    "tests/core/fs.test.ts",
+    "tests/core/handoff-store.test.ts",
+    "tests/core/work-item-handoff.test.ts",
+    "tests/hooks/user-prompt-submit.test.ts",
+    "tests/integration/autopilot-loop-drive.test.ts",
+    "tests/scripts/adr-guard.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "handoff_path": ".ditto/handoff/archive/wi_260606h9q__2026-06-06T02-45-11-216Z.md",
+  "started_at_sha": "434438577067e1f877a5ce4927d53392db8f1ffe",
+  "created_at": "2026-06-06T02:35:47.991Z",
+  "updated_at": "2026-06-06T02:45:11.291Z",
+  "closed_at": "2026-06-06T02:45:11.216Z"
+}

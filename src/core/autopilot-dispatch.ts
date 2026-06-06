@@ -149,6 +149,32 @@ export function guardChildResult(text: string): ChildResultGuard {
   return { contentful: true };
 }
 
+/**
+ * G7 floor 확장 (wi_260606h9q): a mutating node (implementer/refactorer) that
+ * claims `pass` must carry actual change evidence — at least one `changed_files`
+ * entry. A mutation that touched zero files is a completion *claim* with no
+ * *proof* (prime directive), which is exactly the shape a spawn-skipping or
+ * fabricated result takes. Force it back through the failure pipeline as fixable.
+ *
+ * This does NOT verify that a Task subagent actually ran (that is a main-agent
+ * behaviour the harness owns and code cannot observe) — it only refuses to let a
+ * mutating node close as pass with no file-change evidence at all.
+ */
+export function guardMutatingEvidence(
+  owner: AutopilotNode['owner'],
+  outcome: 'pass' | 'fail',
+  changedFiles: string[],
+): ChildResultGuard {
+  if (outcome === 'pass' && isMutatingOwner(owner) && changedFiles.length === 0) {
+    return {
+      contentful: false,
+      failure_class: 'fixable',
+      reason: `mutating node (${owner}) claimed pass with no changed_files — a mutation with zero file changes is not evidence of work (claim ≠ proof)`,
+    };
+  }
+  return { contentful: true };
+}
+
 export type FailureDecision = 'retry' | 'switch_approach' | 'escalate';
 
 /**

@@ -3,6 +3,7 @@ import {
   buildDelegationPacket,
   decideOnFailure,
   guardChildResult,
+  guardMutatingEvidence,
   isMutatingOwner,
 } from '~/core/autopilot-dispatch';
 import { buildInitialNodes } from '~/core/autopilot-graph';
@@ -181,5 +182,28 @@ describe('guardChildResult (G7: completion signal ≠ completion proof)', () => 
     expect(decideOnFailure(guard.failure_class, { fix: 0, switch: 0 }, caps).decision).toBe(
       'retry',
     );
+  });
+});
+
+describe('guardMutatingEvidence (G7 확장: mutating pass needs changed_files)', () => {
+  test('a mutating node claiming pass with zero changed_files is non-contentful (fixable)', () => {
+    expect(guardMutatingEvidence('implementer', 'pass', [])).toMatchObject({
+      contentful: false,
+      failure_class: 'fixable',
+    });
+    expect(guardMutatingEvidence('refactorer', 'pass', [])).toMatchObject({ contentful: false });
+  });
+
+  test('a mutating pass that carries changed_files is contentful', () => {
+    expect(guardMutatingEvidence('implementer', 'pass', ['src/x.ts']).contentful).toBe(true);
+  });
+
+  test('a non-mutating node (read-only owner) is never blocked by this guard', () => {
+    expect(guardMutatingEvidence('verifier', 'pass', []).contentful).toBe(true);
+    expect(guardMutatingEvidence('reviewer', 'pass', []).contentful).toBe(true);
+  });
+
+  test('a fail outcome is untouched (the guard only constrains a pass claim)', () => {
+    expect(guardMutatingEvidence('implementer', 'fail', []).contentful).toBe(true);
   });
 });

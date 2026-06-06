@@ -10,6 +10,7 @@ import {
   buildDelegationPacket,
   decideOnFailure,
   guardChildResult,
+  guardMutatingEvidence,
   isMutatingOwner,
 } from './autopilot-dispatch';
 import { allNodesTerminal, mutationGate, rollbackOnRejection } from './autopilot-driver';
@@ -348,7 +349,7 @@ export async function recordResult(
   // ack-only result is non-contentful and is forced to a fixable failure even if
   // the caller claimed pass — acknowledgement is not evidence.
   const guard = guardChildResult(input.payload.result_text);
-  const contentful = guard.contentful;
+  let contentful = guard.contentful;
 
   // Effective outcome/class after the guard override.
   let outcome: 'pass' | 'fail' = input.payload.outcome;
@@ -358,6 +359,21 @@ export async function recordResult(
     outcome = 'fail';
     failureClass = 'fixable';
     guardReason = guard.reason;
+  }
+  // G7 확장 (wi_260606h9q): mutating 노드는 pass 주장 시 changed_files 증거가 필수.
+  // 변경 0인 pass 는 fixable 로 강등 — spawn 없이 지어낸 빈 결과를 차단(claim ≠ proof).
+  if (contentful && outcome === 'pass') {
+    const mut = guardMutatingEvidence(
+      node.owner,
+      input.payload.outcome,
+      input.payload.changed_files ?? [],
+    );
+    if (!mut.contentful) {
+      contentful = false;
+      outcome = 'fail';
+      failureClass = 'fixable';
+      guardReason = mut.reason;
+    }
   }
 
   if (outcome === 'pass') {
