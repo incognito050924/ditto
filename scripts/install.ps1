@@ -7,10 +7,11 @@
 #   .\scripts\install.ps1 status   [-Target <dir>]
 #
 # Beyond plugin registration this also builds the self-contained binary
-# (bin\ditto.exe), installs the CodeQL CLI (graceful), scaffolds the target's
-# .ditto\, and allowlists `ditto …` in the target's .claude\settings.json. On
-# Windows the binaries are NOT symlinked; add bin\ (and the CodeQL dir) to PATH
-# so they resolve. Pass -NoBuild / -NoCodeql to skip those steps.
+# (bin\ditto.exe), installs the CodeQL CLI and Playwright/Chromium (graceful),
+# scaffolds the target's .ditto\, and allowlists `ditto …` in the target's
+# .claude\settings.json. On Windows the binaries are NOT symlinked; add bin\
+# (and the CodeQL dir) to PATH so they resolve. Pass -NoBuild / -NoCodeql /
+# -NoPlaywright to skip those steps.
 #
 # Env:
 #   DITTO_HOME   absolute path to the ditto repo (auto-detected if unset)
@@ -20,7 +21,8 @@ param(
   [string]$Mode = 'install',
   [string]$Target,
   [switch]$NoBuild,
-  [switch]$NoCodeql
+  [switch]$NoCodeql,
+  [switch]$NoPlaywright
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,6 +53,7 @@ $extra = @()
 if ($Target) { $extra += @('--target', $Target) }
 if ($NoBuild) { $extra += '--no-build' }
 if ($NoCodeql) { $extra += '--no-codeql' }
+if ($NoPlaywright) { $extra += '--no-playwright' }
 & $runner[0] @($runner[1..($runner.Length - 1)]) $installer $Mode @extra
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

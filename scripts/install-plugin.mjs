@@ -23,6 +23,7 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   readlinkSync,
   rmSync,
   symlinkSync,
@@ -49,13 +50,14 @@ const codeqlUrl = (asset) =>
 
 // ---------------------------------------------------------------- arg parsing
 function parseArgs(argv) {
-  const out = { mode: 'install', target: null, build: true, codeql: true };
+  const out = { mode: 'install', target: null, build: true, codeql: true, playwright: true };
   const positional = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--target') out.target = argv[++i];
     else if (a === '--no-build') out.build = false;
     else if (a === '--no-codeql') out.codeql = false;
+    else if (a === '--no-playwright') out.playwright = false;
     else positional.push(a);
   }
   if (positional[0]) out.mode = positional[0];
@@ -276,6 +278,51 @@ function installCodeql() {
   return { ok: true, message: `installed ${bin} → ${link}` };
 }
 
+// ------------------------------------------------------- (3c) playwright (host)
+// The /ditto:e2e runtime drives one journey with Playwright/Chromium. It NEVER
+// auto-downloads at runtime (degrades to blocked) — so the installer pre-seeds
+// both halves the runtime probes for: playwright-core in bun's global cache
+// (src/core/e2e/browser.ts resolvePlaywrightCore) and a full Chromium build in
+// the platform ms-playwright cache (findCachedChromium). Graceful like CodeQL.
+function playwrightCacheRoot() {
+  if (IS_WIN) return join(homedir(), 'AppData', 'Local', 'ms-playwright');
+  if (platform() === 'darwin') return join(homedir(), 'Library', 'Caches', 'ms-playwright');
+  return join(homedir(), '.cache', 'ms-playwright'); // linux
+}
+function anyMatch(dir, re) {
+  try {
+    return readdirSync(dir).some((e) => re.test(e));
+  } catch {
+    return false;
+  }
+}
+function detectPlaywright() {
+  const bunCache = join(process.env.BUN_INSTALL ?? join(homedir(), '.bun'), 'install', 'cache');
+  const core = anyMatch(bunCache, /^playwright-core@\d+\.\d+\.\d+$/);
+  const chromium = anyMatch(playwrightCacheRoot(), /^chromium-\d+$/);
+  return { core, chromium, available: core && chromium };
+}
+function manualPlaywright(why) {
+  return {
+    ok: false,
+    message: `${why} — run \`bunx playwright install chromium\` (downloads Chromium to ${playwrightCacheRoot()})`,
+  };
+}
+function installPlaywright() {
+  const before = detectPlaywright();
+  if (before.available) return { ok: true, message: 'reuse (playwright-core + cached chromium)' };
+
+  // `bun x playwright install chromium` fetches the playwright package into
+  // bun's cache (bringing playwright-core) and downloads Chromium to the cache.
+  const r = spawnSync('bun', ['x', 'playwright', 'install', 'chromium'], { stdio: 'inherit' });
+  if (r.error && r.error.code === 'ENOENT') return manualPlaywright('bun not found');
+  if (r.status !== 0) return manualPlaywright(`install failed (exit ${r.status})`);
+
+  const after = detectPlaywright();
+  if (!after.available) return manualPlaywright('ran install but cache probe still negative');
+  return { ok: true, message: `installed Chromium → ${playwrightCacheRoot()}` };
+}
+
 // ------------------------------------------------------------------- (4) init
 function initTarget(repo, target) {
   const binary = binaryPath(repo);
@@ -318,7 +365,7 @@ function unallowlistTarget(target) {
 }
 
 // ----------------------------------------------------------------------- modes
-function doInstall(repo, target, selfHost, build, codeql) {
+function doInstall(repo, target, selfHost, build, codeql, playwright) {
   const log = [];
   const gsp = globalSettingsPath();
   const before = readSettings(gsp);
@@ -341,6 +388,13 @@ function doInstall(repo, target, selfHost, build, codeql) {
     log.push(`codeql:    ${c.ok ? 'ok' : 'SKIPPED (graceful)'} — ${c.message}`);
   } else {
     log.push('codeql:    skipped (--no-codeql)');
+  }
+
+  if (playwright) {
+    const w = installPlaywright();
+    log.push(`playwright:${w.ok ? 'ok' : 'SKIPPED (graceful)'} — ${w.message}`);
+  } else {
+    log.push('playwright:skipped (--no-playwright)');
   }
 
   if (selfHost) {
@@ -390,16 +444,17 @@ function doStatus(repo, target, selfHost) {
     binary_built: existsSync(binaryPath(repo)),
     binary_on_path: IS_WIN ? null : linksTo(link, binaryPath(repo)),
     codeql: detectCodeql(),
+    playwright: detectPlaywright(),
     target_initialized: existsSync(join(target, '.ditto', 'knowledge', 'glossary.json')),
     allowlisted: !selfHost && Array.isArray(projAllow) && projAllow.includes(ALLOW_RULE),
   };
 }
 
 function main() {
-  const { mode, target: targetArg, build, codeql } = parseArgs(process.argv.slice(2));
+  const { mode, target: targetArg, build, codeql, playwright } = parseArgs(process.argv.slice(2));
   if (!['install', 'uninstall', 'status'].includes(mode)) {
     console.error(
-      'usage: install-plugin.mjs [install|uninstall|status] [--target <dir>] [--no-build] [--no-codeql]',
+      'usage: install-plugin.mjs [install|uninstall|status] [--target <dir>] [--no-build] [--no-codeql] [--no-playwright]',
     );
     process.exit(64);
   }
@@ -413,7 +468,7 @@ function main() {
 
   const log =
     mode === 'install'
-      ? doInstall(repo, target, selfHost, build, codeql)
+      ? doInstall(repo, target, selfHost, build, codeql, playwright)
       : doUninstall(repo, target, selfHost);
   console.log(`[ditto] ${mode} OK`);
   console.log(`  repo:   ${repo}`);
