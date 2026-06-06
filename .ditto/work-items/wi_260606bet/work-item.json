@@ -1,0 +1,30 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260606bet",
+  "title": "라이브 반영이 뭐야? 지금 세션에 적용한다는건가? 적용해",
+  "source_request": "라이브 반영이 뭐야? 지금 세션에 적용한다는건가? 적용해",
+  "goal": "라이브 반영이 뭐야? 지금 세션에 적용한다는건가? 적용해",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun run build:bin + live hook test",
+          "summary": "bin/ditto 재빌드(sha 8bf13f3->6937d35), 라이브 훅 테스트: out-of-scope exit2, in-scope exit0, BYPASS exit0+로그1"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-06T15:02:13.088Z",
+  "updated_at": "2026-06-06T15:07:33.000Z",
+  "closed_at": "2026-06-06T15:07:33.000Z"
+}

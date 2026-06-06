@@ -476,6 +476,8 @@ dist/
 # Ephemeral autopilot-path runtime state (active-node leases + bypass audit log)
 .ditto/work-items/*/active-leases.json
 .ditto/autopilot-bypass.jsonl
+# Per-session pointers (session_id → active work item; per-developer runtime state)
+.ditto/sessions/
 # Regenerable analyzer caches (CodeQL databases, keyed by commit sha)
 .ditto/cache/
 
