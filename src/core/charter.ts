@@ -48,6 +48,13 @@ export interface CharterContext {
   workItemStatus?: string;
   /** Concrete resume hint from a pending handoff / re_entry, if any. */
   pendingHandoff?: string;
+  /**
+   * Bodies of active handoffs auto-loaded this turn (wi_260605wf3). The
+   * UserPromptSubmit hook reads `.ditto/handoff/` without the user naming a
+   * file, injects the bodies here, then archives them — so a handoff is picked
+   * up exactly once and never accumulates.
+   */
+  handoffBodies?: string[];
   /** Advisory note when the active work item is ambiguous and must be resolved by the user. */
   advisory?: string;
   /**
@@ -84,6 +91,10 @@ export function charterProjection(ctx: CharterContext = {}): string {
       .filter(Boolean)
       .join(', ');
     lines.push('', detail ? `${head} (${detail})` : head);
+  }
+  if (ctx.handoffBodies && ctx.handoffBodies.length > 0) {
+    lines.push('', '== Pending handoff (auto-loaded from .ditto/handoff/, now archived) ==');
+    for (const body of ctx.handoffBodies) lines.push('', body);
   }
   if (ctx.pendingHandoff) lines.push(`Pending handoff/re-entry: ${ctx.pendingHandoff}`);
   if (ctx.placeholderAcceptanceCriteria) lines.push('', `⚠ ${PLACEHOLDER_AC_ADVISORY}`);

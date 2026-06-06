@@ -255,7 +255,7 @@ const workHandoff = defineCommand({
         writeHuman(`  final_verdict:  ${result.completion.final_verdict}`);
         writeHuman(`  base_used:      ${result.baseUsed ?? '(none)'}`);
         writeHuman(`  changed_files:  ${result.collectedChangedFiles.length}`);
-        writeHuman(`  handoff.md:     ${result.handoffPath}`);
+        writeHuman(`  handoff:        ${result.handoffPath}`);
         writeHuman(`  completion.json: ${result.completionPath}`);
       }
     } catch (err) {

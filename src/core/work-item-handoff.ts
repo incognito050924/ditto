@@ -5,7 +5,8 @@ import { type CompletionContract, completionContract } from '~/schemas/completio
 import type { WorkItem } from '~/schemas/work-item';
 
 type DeclarerRole = z.infer<typeof declarerRole>;
-import { atomicWriteText, writeJson } from './fs';
+import { writeJson } from './fs';
+import { HandoffStore, buildHandoff } from './handoff-store';
 import type { WorkItemStore } from './work-item-store';
 
 export interface HandoffResult {
@@ -119,7 +120,7 @@ function buildCompletion(
   const allPass = acceptance.every((a) => a.verdict === 'pass');
   const blockedByUnverified = unverifiedExtras.some((u) => !u.out_of_scope);
   const final = allPass && !blockedByUnverified ? ('pass' as const) : ('partial' as const);
-  const handoffPath = `.ditto/work-items/${item.id}/handoff.md`;
+  const handoffPath = `.ditto/handoff/${item.id}.md`;
   const builtSummary = allPass
     ? `${item.title} — 모든 acceptance criterion이 pass로 기록되었다.`
     : `${item.title} — 일부 acceptance criterion이 비-pass 상태로 partial 핸드오프된다.`;
@@ -151,72 +152,6 @@ function buildCompletion(
   };
   // completionContract.parse는 default/superRefine을 적용한 output을 반환
   return completionContract.parse(base);
-}
-
-function renderHandoffMarkdown(
-  item: WorkItem,
-  completion: CompletionContract,
-  effectiveReEntry: WorkItem['re_entry'],
-): string {
-  const lines: string[] = [];
-  lines.push(`# Handoff: ${item.id}`);
-  lines.push('');
-  lines.push('## 최종 verdict');
-  lines.push(completion.final_verdict);
-  lines.push('');
-  lines.push('## acceptance');
-  for (const ac of completion.acceptance) {
-    lines.push(`- ${ac.criterion_id} [${ac.verdict}]`);
-  }
-  lines.push('');
-  lines.push('## 무엇이 끝났나');
-  lines.push(completion.summary);
-  lines.push('');
-  if (completion.changed_files.length > 0) {
-    lines.push('## 변경 파일');
-    for (const f of completion.changed_files) {
-      lines.push(`- ${f}`);
-    }
-    lines.push('');
-  }
-  if (completion.unverified.length > 0) {
-    lines.push('## unverified');
-    for (const u of completion.unverified) {
-      lines.push(`- ${u.item} — ${u.reason}${u.out_of_scope ? ' (out_of_scope)' : ''}`);
-    }
-    lines.push('');
-  }
-  if (completion.remaining_risks.length > 0) {
-    lines.push('## remaining risks');
-    for (const r of completion.remaining_risks) {
-      lines.push(`- ${r}`);
-    }
-    lines.push('');
-  }
-  // pass 상태에서는 resume 지시를 렌더링하지 않는다. 완료된 work item에
-  // "다음 명령"이 남아 있으면 다음 agent가 상태를 잘못 판단할 수 있다.
-  if (completion.final_verdict !== 'pass') {
-    lines.push('## 다음 fresh evidence');
-    if (
-      effectiveReEntry?.fresh_evidence_needed &&
-      effectiveReEntry.fresh_evidence_needed.length > 0
-    ) {
-      for (const e of effectiveReEntry.fresh_evidence_needed) {
-        lines.push(`- ${e}`);
-      }
-    } else {
-      lines.push('- (없음)');
-    }
-    lines.push('');
-    lines.push('## 다음 명령');
-    if (effectiveReEntry?.command) {
-      lines.push(`\`${effectiveReEntry.command}\``);
-    } else {
-      lines.push('- (없음)');
-    }
-    lines.push('');
-  }
-  return lines.join('\n');
 }
 
 export async function writeWorkItemHandoff(
@@ -269,12 +204,13 @@ export async function writeWorkItemHandoff(
     });
   }
   // collected는 git이 본 변경. handoff 자체가 만드는 산출물
-  // (completion.json, handoff.md, work-item.json)은 collect 직후 생성되므로
-  // 첫 handoff에서는 git diff/status에 잡히지 않는다. 마감 산출물이 자기
-  // changed_files를 정확히 보고하도록 명시적으로 union 추가.
+  // (completion.json, work-item.json)은 collect 직후 생성되므로 첫 handoff에서는
+  // git diff/status에 잡히지 않는다. 마감 산출물이 자기 changed_files를 정확히
+  // 보고하도록 명시적으로 union 추가. handoff 본문은 work-item 밖
+  // (.ditto/handoff/)으로 옮겨졌고 소비되면 archive로 이동하므로 stale 경로가
+  // 되지 않도록 changed_files union에 넣지 않는다.
   const selfArtifacts = [
     `.ditto/work-items/${workId}/completion.json`,
-    `.ditto/work-items/${workId}/handoff.md`,
     `.ditto/work-items/${workId}/work-item.json`,
   ];
   const merged = Array.from(new Set([...collected, ...selfArtifacts])).sort();
@@ -308,15 +244,44 @@ export async function writeWorkItemHandoff(
           fresh_evidence_needed: ['미pass acceptance에 대한 검증 결과'],
         });
   await writeJson(completionPath, completionContract, completion);
-  const handoffPath = join(repoRoot, '.ditto', 'work-items', workId, 'handoff.md');
-  await atomicWriteText(handoffPath, renderHandoffMarkdown(item, completion, effectiveReEntry));
+
+  // handoff 본문 → 통일 독립 store(.ditto/handoff/). pass면 픽업 불필요 → archive
+  // 직행(active 소음 0), 비-pass면 active(다음 세션이 자동으로 읽고 archive로 옮긴다).
+  const failedOrUnverified = [
+    ...completion.acceptance
+      .filter((a) => a.verdict !== 'pass')
+      .map((a) => `${a.criterion_id} [${a.verdict}]`),
+    ...completion.unverified.map(
+      (u) => `${u.item} — ${u.reason}${u.out_of_scope ? ' (out_of_scope)' : ''}`,
+    ),
+  ];
+  const handoffArtifact = buildHandoff({
+    workItem: item,
+    fromContext: `ditto work handoff (declared_by=${options.declaredBy ?? 'main'})`,
+    currentState: `final_verdict=${completion.final_verdict}; ${completion.summary}`,
+    changedFiles: merged,
+    failedOrUnverified,
+    ...(effectiveReEntry?.command ? { openThreads: [effectiveReEntry.command] } : {}),
+    nextFirstCheck:
+      effectiveReEntry?.fresh_evidence_needed?.[0] ??
+      'work item과 acceptance를 재확인하고 열린 노드를 재개한다.',
+    now,
+  });
+  const hstore = new HandoffStore(repoRoot);
+  const handoffRel =
+    completion.final_verdict === 'pass'
+      ? await hstore.writeArchived(handoffArtifact, now)
+      : await hstore.write(handoffArtifact);
+  const handoffPath = join(repoRoot, handoffRel);
+
+  // status/changed_files/re_entry만 갱신. handoff_path는 위 store가 이미 링크했으므로
+  // 여기서 건드리지 않는다(...rest로 보존).
   await store.update(workId, (cur) => {
     const { re_entry: _existingReEntry, ...rest } = cur;
     if (completion.final_verdict === 'pass') {
       // pass 시점에는 resume 지시를 남기지 않는다 (stale handoff 방지).
       return {
         ...rest,
-        handoff_path: `.ditto/work-items/${cur.id}/handoff.md`,
         changed_files: merged,
         status: 'done' as const,
         closed_at: now.toISOString(),
@@ -324,7 +289,6 @@ export async function writeWorkItemHandoff(
     }
     return {
       ...rest,
-      handoff_path: `.ditto/work-items/${cur.id}/handoff.md`,
       changed_files: merged,
       status: 'partial' as const,
       re_entry: effectiveReEntry,

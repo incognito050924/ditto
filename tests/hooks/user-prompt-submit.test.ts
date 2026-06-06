@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { HandoffStore, buildHandoff } from '~/core/handoff-store';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
@@ -245,6 +246,45 @@ describe('userPromptSubmitHandler', () => {
         prompt: 'fix the error in src/api.ts',
       });
       expect(additionalContext(out.stdout)).not.toContain('self-answer from code/docs/web first');
+    });
+  });
+
+  // wi_260605wf3 — active handoff 를 파일명 명시 없이 자동으로 읽어 컨텍스트에
+  // 주입하고, 주입 직후 archive 로 옮겨 정확히 1회만 픽업한다(누적 0).
+  describe('active handoff auto-load', () => {
+    async function seedActiveHandoff(currentState: string): Promise<void> {
+      const items = new WorkItemStore(repo);
+      const wi = await items.create({
+        title: 'prev',
+        source_request: 'do the prior thing',
+        goal: 'g',
+        acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+      });
+      await new HandoffStore(repo).write(
+        buildHandoff({
+          workItem: wi,
+          fromContext: 'prev session',
+          currentState,
+          nextFirstCheck: 'run bun test',
+        }),
+      );
+    }
+
+    test('injects the active handoff body without the user naming a file', async () => {
+      await seedActiveHandoff('N2 implement midway, ac-1 pending');
+      const ctx = additionalContext(
+        (await run({ session_id: 'sess-ho', prompt: '계속 해줘' })).stdout,
+      );
+      expect(ctx).toContain('Pending handoff (auto-loaded');
+      expect(ctx).toContain('N2 implement midway, ac-1 pending'); // 본문이 주입됨
+    });
+
+    test('archives on pickup — a second prompt no longer sees it (no accumulation)', async () => {
+      await seedActiveHandoff('one-shot body marker');
+      await run({ session_id: 'sess-ho2', prompt: '계속' });
+      expect(await new HandoffStore(repo).listActive()).toHaveLength(0);
+      const ctx2 = additionalContext((await run({ session_id: 'sess-ho2', prompt: '또' })).stdout);
+      expect(ctx2).not.toContain('one-shot body marker');
     });
   });
 });

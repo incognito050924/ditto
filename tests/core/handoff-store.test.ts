@@ -41,7 +41,7 @@ describe('buildHandoff', () => {
 });
 
 describe('HandoffStore', () => {
-  test('write persists handoff.json and links work item handoff_path', async () => {
+  test('write persists an active handoff (.ditto/handoff/) and links work item handoff_path', async () => {
     const wi = await workItem();
     const h = buildHandoff({
       workItem: wi,
@@ -54,6 +54,22 @@ describe('HandoffStore', () => {
     expect(await store.exists(wi.id)).toBe(true);
     expect((await store.get(wi.id)).current_state).toBe('midway');
     const reloaded = await new WorkItemStore(repo).get(wi.id);
-    expect(reloaded.handoff_path).toBe(`.ditto/work-items/${wi.id}/handoff.json`);
+    expect(reloaded.handoff_path).toBe(`.ditto/handoff/${wi.id}.md`);
+  });
+
+  test('consume moves active handoffs to archive (picked up once, no accumulation)', async () => {
+    const wi = await workItem();
+    const store = new HandoffStore(repo);
+    await store.write(
+      buildHandoff({ workItem: wi, fromContext: 'ctx', currentState: 's', nextFirstCheck: 'c' }),
+    );
+    const active = await store.listActive();
+    expect(active).toHaveLength(1);
+    expect(active[0]?.body).toContain('# Handoff');
+    const consumed = await store.consume();
+    expect(consumed).toHaveLength(1);
+    // active is now empty — a second turn picks up nothing.
+    expect(await store.listActive()).toHaveLength(0);
+    expect(await store.exists(wi.id)).toBe(false);
   });
 });

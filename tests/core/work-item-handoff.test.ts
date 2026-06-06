@@ -63,7 +63,8 @@ describe('writeWorkItemHandoff', () => {
     expect(updated.status).toBe('partial');
     expect(updated.re_entry).toBeDefined();
     const handoffText = await Bun.file(result.handoffPath).text();
-    expect(handoffText).toContain('## 다음 명령');
+    // partial → active handoff; re_entry 명령은 open_threads 로 운반된다.
+    expect(handoffText).toContain('## 열린 스레드');
     expect(handoffText).toContain('ditto work resume');
   });
 
@@ -208,7 +209,7 @@ describe('writeWorkItemHandoff', () => {
     expect(result.completion.changed_files).not.toContain('wave-2.txt');
   });
 
-  test('handoff includes its own outputs (completion.json/handoff.md/work-item.json) in changed_files', async () => {
+  test('handoff includes its own outputs (completion.json/work-item.json) in changed_files', async () => {
     Bun.spawnSync(['git', 'init', '-q'], { cwd: workDir, stdout: 'pipe' });
     Bun.spawnSync(['git', 'config', 'user.email', 't@t'], { cwd: workDir, stdout: 'pipe' });
     Bun.spawnSync(['git', 'config', 'user.name', 't'], { cwd: workDir, stdout: 'pipe' });
@@ -224,9 +225,10 @@ describe('writeWorkItemHandoff', () => {
       ),
     }));
     const result = await writeWorkItemHandoff(workDir, store, created.id);
+    // handoff 본문은 work-item 밖(.ditto/handoff/)으로 옮겨졌고 소비되면 archive로
+    // 이동하므로, stale 경로가 되지 않도록 changed_files self-union에서 제외한다.
     const expectedSelf = [
       `.ditto/work-items/${created.id}/completion.json`,
-      `.ditto/work-items/${created.id}/handoff.md`,
       `.ditto/work-items/${created.id}/work-item.json`,
     ];
     for (const path of expectedSelf) {

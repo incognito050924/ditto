@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { type CharterContext, PLACEHOLDER_AC_STATEMENT, charterProjection } from '~/core/charter';
 import { atomicWriteText, ensureDir } from '~/core/fs';
+import { HandoffStore } from '~/core/handoff-store';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { type WorkItem, WorkItemStore } from '~/core/work-item-store';
 import type { HookHandler, HookInput } from './runtime';
@@ -127,10 +128,11 @@ export function allAcceptancePlaceholders(item: WorkItem): boolean {
   return item.acceptance_criteria.every((ac) => ac.statement === PLACEHOLDER_AC_STATEMENT);
 }
 
+// re_entry 명령만 보조 힌트로 남긴다. handoff 본문은 더 이상 "see {path}" 로
+// 가리키지 않고, 아래 handler 가 .ditto/handoff/ 에서 본문을 자동으로 주입한다
+// (wi_260605wf3: 파일명 명시 없는 자동 읽기).
 function pendingHandoffHint(item: WorkItem): string | undefined {
-  if (item.re_entry?.command) return item.re_entry.command;
-  if (item.handoff_path) return `see ${item.handoff_path}`;
-  return undefined;
+  return item.re_entry?.command;
 }
 
 async function logClassification(repoRoot: string, entry: Record<string, unknown>): Promise<void> {
@@ -165,6 +167,21 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
   });
 
   const ctx: CharterContext = {};
+
+  // Active handoff 자동 로드 (wi_260605wf3): 파일명을 명시하지 않아도 본문을
+  // 컨텍스트로 주입한 뒤 archive 로 옮긴다 → 정확히 1회 픽업, active 누적 0.
+  // fail-open: handoff 읽기/이동 실패가 프롬프트 훅을 막지 않는다.
+  try {
+    const hstore = new HandoffStore(input.repoRoot);
+    const active = await hstore.listActive();
+    if (active.length > 0) {
+      ctx.handoffBodies = active.map((a) => a.body);
+      await hstore.consume();
+    }
+  } catch {
+    // handoff 자동 로드 실패는 무시 (관측적, non-blocking)
+  }
+
   const item = resolved.workItem;
   if (item) {
     ctx.workItemId = item.id;

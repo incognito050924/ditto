@@ -1,0 +1,118 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260605wf3",
+  "title": "handoff 독립화·자동읽기·자동정리",
+  "source_request": "handoff 만드는 방법? 관리 방법 개선 필요. (work-item 과 독립적으로 생겨야 함, 또한 파일명 명시없이 자동으로 읽고 읽은 뒤에 정리하여 계속 쌓이지 않도록 관리 필요)",
+  "goal": "handoff를 work-item에서 독립시켜 .ditto/handoff/ 단일 위치에 두고, 다음 세션이 파일명 명시 없이 자동으로 읽고, 읽으면 archive로 옮겨 누적되지 않게 한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "handoff 생성이 .ditto/handoff/ (work-items 밖)로 통일된다 — pre-compact 자동 경로와 ditto work handoff CLI 경로가 같은 독립 store를 쓴다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/handoff-store.test.ts tests/conformance/m4.conformance.test.ts",
+          "summary": "HandoffStore 단일화 → .ditto/handoff/<wi>.md 기록; pre-compact·writeWorkItemHandoff 둘 다 이 store 사용. handoff_path 링크가 .ditto/handoff/<wi>.md 로 검증됨"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "UserPromptSubmit 훅이 파일명 명시 없이 active handoff 본문을 컨텍스트로 자동 주입한다 (현재의 'see {path}' 힌트를 본문 주입으로 대체)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/user-prompt-submit.test.ts",
+          "summary": "'injects the active handoff body without the user naming a file' 통과 — listActive 본문이 additionalContext 로 주입됨"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "주입(소비) 시 active handoff가 archive로 이동하여 active 디렉토리에 누적되지 않는다 (다음 턴 재주입 0, 누적 0)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/user-prompt-submit.test.ts tests/core/handoff-store.test.ts",
+          "summary": "'archives on pickup — a second prompt no longer sees it' + 'consume moves active handoffs to archive' 통과 → listActive 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "기존 json(HandoffStore)·md(writeWorkItemHandoff) 두 갈래가 하나로 통일되어 중복이 제거되고, 기존 work-items 밑 handoff.md 24개가 정리/마이그레이션된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "git status -s | grep -c 'D .*handoff.md'",
+          "summary": "기존 handoff.md 24개 삭제(D); renderHandoffMarkdown 중복 렌더러 제거; 두 경로가 buildHandoff+HandoffStore 단일 API로 통일"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "회귀 없음 — bun test green, 동작 변경으로 깨지는 m4 conformance·pre-compact·work-item-handoff 테스트는 새 동작 기준으로 갱신된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "1187 pass / 9 skip / 0 fail (이전 1184 pass에서 신규 테스트 3개 추가). biome lint clean"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/work-items/wi_260524qi9/handoff.md",
+    ".ditto/work-items/wi_2605312nt/handoff.md",
+    ".ditto/work-items/wi_2605313sr/handoff.md",
+    ".ditto/work-items/wi_26053198g/handoff.md",
+    ".ditto/work-items/wi_260531fa0/handoff.md",
+    ".ditto/work-items/wi_260531vdw/handoff.md",
+    ".ditto/work-items/wi_260601kbw/handoff.md",
+    ".ditto/work-items/wi_260602a0y/handoff.md",
+    ".ditto/work-items/wi_260602qax/handoff.md",
+    ".ditto/work-items/wi_260603244/handoff.md",
+    ".ditto/work-items/wi_260603hzx/handoff.md",
+    ".ditto/work-items/wi_260604ql9/handoff.md",
+    ".ditto/work-items/wi_260605acg/handoff.md",
+    ".ditto/work-items/wi_260605aw1/handoff.md",
+    ".ditto/work-items/wi_260605dg2/handoff.md",
+    ".ditto/work-items/wi_260605mm1/handoff.md",
+    ".ditto/work-items/wi_260605wf3/",
+    ".ditto/work-items/wi_260605wf3/completion.json",
+    ".ditto/work-items/wi_260605wf3/work-item.json",
+    ".ditto/work-items/wi_v01bootstrap/handoff.md",
+    ".ditto/work-items/wi_v01implement/handoff.md",
+    ".ditto/work-items/wi_v02doctor/handoff.md",
+    ".ditto/work-items/wi_v02handoff/handoff.md",
+    ".ditto/work-items/wi_v02harden/handoff.md",
+    ".ditto/work-items/wi_v03cliforward/handoff.md",
+    ".ditto/work-items/wi_v03sandbox/handoff.md",
+    ".ditto/work-items/wi_v03verify/handoff.md",
+    "skills/handoff/SKILL.md",
+    "src/cli/commands/work.ts",
+    "src/core/charter.ts",
+    "src/core/handoff-store.ts",
+    "src/core/work-item-handoff.ts",
+    "src/hooks/user-prompt-submit.ts",
+    "tests/conformance/m4.conformance.test.ts",
+    "tests/core/handoff-store.test.ts",
+    "tests/core/work-item-handoff.test.ts",
+    "tests/hooks/user-prompt-submit.test.ts"
+  ],
+  "risks": [],
+  "runs": [],
+  "handoff_path": ".ditto/handoff/archive/wi_260605wf3__2026-06-06T01-51-18-617Z.md",
+  "started_at_sha": "cde5e8ca6eaf7e0ff65d688106dec3ceca69a320",
+  "created_at": "2026-06-05T16:48:43.752Z",
+  "updated_at": "2026-06-06T01:51:18.680Z",
+  "closed_at": "2026-06-06T01:51:18.617Z"
+}
