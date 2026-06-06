@@ -46,7 +46,7 @@ bun run lint && bun run adr:guard    # green 기대
 - ✅ **increment 3**: 설치 오케스트레이터 `f4ea316` — `scripts/install-plugin.mjs`를 5단계로 확장(install 모드): ①register(글로벌 settings plugin 등록) ②build(`bun run build:bin`→bin/ditto) ③place(바이너리를 `~/.local/bin/ditto` 심링크로 PATH 배치 — **스킬이 bare `ditto …` 호출하므로 PATH 해석 필수**; foreign ditto 미덮어씀) ④init(`ditto init --dir <target>` 호출=inc2 재사용) ⑤allowlist(타겟 `.claude/settings.json` `permissions.allow`에 `Bash(ditto:*)`). `--target`(기본 cwd)·`--no-build`. **target==repo면 self-host로 판정→init/allowlist skip**(자기 자신 관리타겟 함정 차단). 멱등(already-linked/allowlisted, 중복0). uninstall=①③⑤ 역행, 타겟 `.ditto/` 데이터 보존. status=5개 상태 플래그. 모든 경로 `homedir()` 기반→`HOME` 오버라이드로 dry-run 샌드박싱. install.sh/ps1은 mode 뒤 인자(--target/--no-build) 포워딩. **검증**: 샌드박스 HOME+클린 `/tmp` git 타겟에서 install(5단계 ok)→배치 심링크로 bare `ditto` 실행→멱등 재설치→status 전부 true→uninstall(역행, .ditto 보존)→self-host 가드→foreign 미덮어씀→.sh 포워딩 전부 실증.
   - **gotcha(커밋)**: 커밋 메시지에 `<target>/.claude/...`처럼 `>`+경로가 있으면 PreToolUse가 scope-out 리다이렉트로 오인 차단. 메시지에서 `<...>/` 패턴 회피.
 - ✅ **increment 4**: CodeQL 자동 설치 `1280f21` — install-plugin.mjs에 `installCodeql` step(build/place와 동일 패턴). `detectCodeql`=CODEQL_BIN→PATH(which)→gh-ext→ditto-managed(`~/.local/share/ditto/codeql/codeql/codeql`), `doctor.ts:227` 탐지와 정렬. 없으면 플랫폼 번들(`codeql-{osx64,linux64,win64}.zip`, latest 릴리스, 현재 v2.25.6) 다운로드→unzip(tar fallback)→추출→POSIX는 `~/.local/bin/codeql` 심링크 배치, Win은 PATH 안내. **graceful**: curl/unzip 부재·실패 시 정확한 URL+절차 안내하고 install 계속(non-fatal). `--no-codeql`, status에 codeql 노출. uninstall 미관여(host 공유 도구). **검증**: reuse·graceful(PATH 비움)·ditto-managed 탐지 실증, 릴리스 URL HEAD 도달성 확인. **미실증**: 실제 번들 다운로드(대용량 의도적 비실행).
-- ⬜ **increment 5**: playwright/chromium 설치 — 플랫폼별 캐시(`~/Library/Caches/ms-playwright` 등). graceful. `src/core/e2e/browser.ts`(자동 다운로드 금지 hard constraint는 런타임용; 설치 스크립트는 별도로 설치).
+- ✅ **increment 5**: Playwright/Chromium 설치 `abfc41f` — install-plugin.mjs에 `installPlaywright` step(inc4 동일 패턴). `detectPlaywright`=playwright-core in bun 캐시(`~/.bun/install/cache`, `browser.ts resolvePlaywrightCore`와 정렬) + Chromium in 플랫폼별 ms-playwright 캐시(macOS `~/Library/Caches`, linux `~/.cache`, win `AppData\Local`). 둘 다 있어야 available. 없으면 `bun x playwright install chromium`(playwright-core+Chromium 동시 충족) 후 재탐지. **graceful**: bun 부재·실패 시 `bunx playwright install chromium`+캐시경로 안내하고 install 계속. `--no-playwright`, status 노출, uninstall 미관여. 런타임 hard constraint(auto-download 금지)는 e2e 실행용이라 설치와 무충돌. **검증**: status reuse 탐지·install흐름 reuse(심링크)·graceful(PATH 비움) 실증. **미실증**: 실제 Chromium 다운로드(대용량 의도적 비실행).
 - ⬜ **increment 6**: 최종 검증(`ditto doctor`) + **clean 타겟에서 설치→autopilot e2e**(self-host 함정 회피; boxwood 레포 1개 권장).
 
 ## 3. 설계 결정 (DECIDED — 사용자 합의)
@@ -62,7 +62,10 @@ bun run lint && bun run adr:guard    # green 기대
 - DITTO_SKIP_HOOKS=1 로 hook 우회 가능.
 
 ## 5. 다음 명령 (새 세션 첫 프롬프트로)
-> "이 핸드오프(`.ditto/work-items/wi_2606068sy/handoff.md`) 읽고, DITTO 설치 스크립트(wi_2606068sy) **increment 5(playwright/chromium 설치)** 부터 이어서 진행해. 검증은 self-host 말고 임시 clean 타겟에서."
+> "이 핸드오프(`.ditto/work-items/wi_2606068sy/handoff.md`) 읽고, DITTO 설치 스크립트(wi_2606068sy) **increment 6(최종 검증 + 클린 타겟 autopilot e2e)** 부터 이어서 진행해. self-host 금지."
 
-increment 5 메모: install-plugin.mjs에 `installPlaywright` step을 inc4(CodeQL)와 동일 패턴으로 추가 — detect(이미 캐시 있으면 reuse) → 없으면 설치 시도 → graceful 안내. `src/core/e2e/browser.ts` 확인 필수: 런타임의 "자동 다운로드 금지" hard constraint는 e2e 실행용이고, **설치 스크립트는 별도로 미리 설치**하는 것(충돌 아님). chromium 캐시 위치 플랫폼별(`~/Library/Caches/ms-playwright` 등). `--no-playwright` 플래그·status 노출·uninstall 미관여(host 공유). 검증도 inc4처럼 reuse/graceful 우선(대용량 브라우저 다운로드 비실행).
-그다음 inc6: 최종 검증(`ditto doctor`) + 클린 타겟 install→autopilot e2e(boxwood 레포 1개 권장).
+increment 6 메모(마지막): 오케스트레이터 5단계가 이미 완성(register/build/place/codeql/playwright + init/allowlist). 남은 건 **실제 통합 실증**:
+1. 진짜 클린 타겟(boxwood 레포 1개 권장: `/Users/incognito/dev/projects/{java,javascript,js}/workspace/boxwood-*`)에 `scripts/install.sh install --target <boxwood>` 실행 → 5단계+init+allowlist 통과 확인.
+2. `ditto doctor`(+`doctor capability`/`surface`)로 런타임 reachable 확인.
+3. 그 타겟에서 autopilot 1바퀴(work start → deep-interview → autopilot next-node → owner subagent spawn → record-result → complete) 실제 구동 = self-host 함정 없이 임의 코드베이스 거버넌스 실증(boxwood 발견의 원래 목표, §1-C).
+주의: install이 실제로 글로벌 `~/.claude/settings.json`·`~/.local/bin`을 건드리므로(샌드박스 아님) 사용자 확인 후 진행하거나 dry-run(HOME 오버라이드)로 먼저 점검. surfaces.json은 타겟에서 self-host 전용이라 `doctor surface`는 보조 도구임(§inc2 참고).
