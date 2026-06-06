@@ -41,6 +41,20 @@ export function dialecticForcesContinuation(d: Dialectic): string[] {
   if (verdict === 'reject' || verdict === 'blocked') {
     reasons.push(`dialectic ${d.review_id} verdict=${verdict}; deliberation not resolved`);
   }
+  // Multi-round convergence (wi_260606ezn): a `revise` verdict is NOT a close
+  // while rounds remain. If round < max_rounds and required_edits are still open,
+  // force another round — apply the required_edits, then re-deliberate at round+1.
+  // With the default max_rounds=1 this never fires (round 1 = max → revise closes),
+  // preserving the "one small deliberation, no infinite debate" default.
+  if (
+    verdict === 'revise' &&
+    d.round < d.input.constraints.max_rounds &&
+    d.synthesizer.required_edits.length > 0
+  ) {
+    reasons.push(
+      `dialectic ${d.review_id}: verdict=revise at round ${d.round}/${d.input.constraints.max_rounds} with ${d.synthesizer.required_edits.length} required_edits open — re-deliberate next round`,
+    );
+  }
   // Resolution is matched by an explicit echo in accepted/rejected_objections:
   // the synthesizer counts an objection as resolved by referencing its stable
   // `id` OR its `claim` string verbatim. Resolving by `id` is paraphrase-tolerant

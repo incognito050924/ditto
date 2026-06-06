@@ -571,6 +571,51 @@ describe('M3.5 — dialectic runtime (OpponentModelRouter + admissibility + Stop
     expect(dialecticForcesContinuation(buildDialectic())).toEqual([]);
   });
 
+  // wi_260606ezn — multi-round convergence: a `revise` with rounds remaining is
+  // not a close; it re-deliberates. Default max_rounds=1 preserves the 1-round default.
+  const reviseSynth = (edits: string[]) => ({
+    verdict: 'revise' as const,
+    synthesis: 'fix then re-deliberate',
+    accepted_objections: ['AC-1 fails on empty input'], // objection resolved → only the revise-round branch is under test
+    rejected_objections: [],
+    required_edits: edits,
+    remaining_open_questions: [],
+    evidence_refs: [],
+  });
+
+  test('revise + round < max_rounds + required_edits → 재심의 continuation (다회차 수렴)', () => {
+    const d = buildDialectic({
+      round: 1,
+      input: {
+        mode: 'review',
+        target_artifact: 'src/api.ts',
+        question: 'q',
+        constraints: { max_rounds: 3 },
+      },
+      synthesizer: reviseSynth(['add empty-input guard']),
+    });
+    expect(dialecticForcesContinuation(d).length).toBeGreaterThan(0);
+  });
+
+  test('revise + round = max_rounds(기본 1) → 종료 (무한 debate 금지 기본 보존)', () => {
+    const d = buildDialectic({ round: 1, synthesizer: reviseSynth(['x']) }); // max_rounds default 1
+    expect(dialecticForcesContinuation(d)).toEqual([]);
+  });
+
+  test('revise + round = max_rounds>1 → 종료 (cap 도달 = non-pass 종결, ≠ silent accept)', () => {
+    const d = buildDialectic({
+      round: 3,
+      input: {
+        mode: 'review',
+        target_artifact: 'src/api.ts',
+        question: 'q',
+        constraints: { max_rounds: 3 },
+      },
+      synthesizer: reviseSynth(['x']),
+    });
+    expect(dialecticForcesContinuation(d)).toEqual([]);
+  });
+
   test('verdict reject/blocked → continuation', () => {
     const reject = buildDialectic({
       synthesizer: {

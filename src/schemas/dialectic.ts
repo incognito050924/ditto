@@ -121,6 +121,14 @@ export const dialectic = z
   .object({
     schema_version: schemaVersion,
     review_id: reviewId,
+    round: z
+      .number()
+      .int()
+      .positive()
+      .default(1)
+      .describe(
+        'Which deliberation round this artifact is (1-based). A revise verdict with round < input.constraints.max_rounds re-deliberates next round (wi_260606ezn).',
+      ),
     input: dialecticInput,
     producer: dialecticProducer,
     opponent: dialecticOpponent,

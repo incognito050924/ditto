@@ -14,6 +14,12 @@
           "pattern": "^rv_[a-z0-9]{8,}$",
           "description": "Stable identifier for a reviewer output"
         },
+        "round": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "default": 1,
+          "description": "Which deliberation round this artifact is (1-based). A revise verdict with round < input.constraints.max_rounds re-deliberates next round (wi_260606ezn)."
+        },
         "input": {
           "type": "object",
           "properties": {
