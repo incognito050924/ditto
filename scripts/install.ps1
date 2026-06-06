@@ -7,9 +7,10 @@
 #   .\scripts\install.ps1 status   [-Target <dir>]
 #
 # Beyond plugin registration this also builds the self-contained binary
-# (bin\ditto.exe), scaffolds the target's .ditto\, and allowlists `ditto …` in
-# the target's .claude\settings.json. On Windows the binary is NOT symlinked;
-# add bin\ to PATH so `ditto` resolves. Pass -NoBuild to skip the rebuild.
+# (bin\ditto.exe), installs the CodeQL CLI (graceful), scaffolds the target's
+# .ditto\, and allowlists `ditto …` in the target's .claude\settings.json. On
+# Windows the binaries are NOT symlinked; add bin\ (and the CodeQL dir) to PATH
+# so they resolve. Pass -NoBuild / -NoCodeql to skip those steps.
 #
 # Env:
 #   DITTO_HOME   absolute path to the ditto repo (auto-detected if unset)
@@ -18,7 +19,8 @@ param(
   [ValidateSet('install', 'uninstall', 'status')]
   [string]$Mode = 'install',
   [string]$Target,
-  [switch]$NoBuild
+  [switch]$NoBuild,
+  [switch]$NoCodeql
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,6 +50,7 @@ $installer = Join-Path $repoRoot 'scripts\install-plugin.mjs'
 $extra = @()
 if ($Target) { $extra += @('--target', $Target) }
 if ($NoBuild) { $extra += '--no-build' }
+if ($NoCodeql) { $extra += '--no-codeql' }
 & $runner[0] @($runner[1..($runner.Length - 1)]) $installer $Mode @extra
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

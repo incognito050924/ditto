@@ -37,14 +37,25 @@ const PLUGIN_NAME = 'ditto';
 const ALLOW_RULE = 'Bash(ditto:*)';
 const IS_WIN = platform() === 'win32';
 
+// Official CodeQL CLI bundle (CLI-only, not the action bundle). `latest`
+// redirects to the current versioned asset; verified reachable per platform.
+const CODEQL_ASSET = {
+  darwin: 'codeql-osx64.zip',
+  linux: 'codeql-linux64.zip',
+  win32: 'codeql-win64.zip',
+};
+const codeqlUrl = (asset) =>
+  `https://github.com/github/codeql-cli-binaries/releases/latest/download/${asset}`;
+
 // ---------------------------------------------------------------- arg parsing
 function parseArgs(argv) {
-  const out = { mode: 'install', target: null, build: true };
+  const out = { mode: 'install', target: null, build: true, codeql: true };
   const positional = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--target') out.target = argv[++i];
     else if (a === '--no-build') out.build = false;
+    else if (a === '--no-codeql') out.codeql = false;
     else positional.push(a);
   }
   if (positional[0]) out.mode = positional[0];
@@ -190,6 +201,81 @@ function unplaceBinary(repo) {
   return { ok: false, message: `left ${link} (not ours or absent)` };
 }
 
+// ----------------------------------------------------------- (3b) codeql (host)
+// CodeQL powers ditto impact/boundary/acg-review. Detection mirrors
+// src/core/codeql/doctor.ts cliAvailable (CODEQL_BIN → PATH → gh extension),
+// plus a ditto-managed copy. Install is graceful: a download/extract failure
+// reports the exact manual step and never fails the overall install.
+function whichCmd(name) {
+  const r = spawnSync(IS_WIN ? 'where' : 'which', [name], { encoding: 'utf8' });
+  if (r.status === 0 && typeof r.stdout === 'string' && r.stdout.trim()) {
+    return r.stdout.split(/\r?\n/)[0].trim();
+  }
+  return null;
+}
+function codeqlInstallDir() {
+  return join(homedir(), '.local', 'share', 'ditto', 'codeql');
+}
+function codeqlBinaryPath() {
+  // The bundle extracts to a top-level `codeql/` dir holding the launcher.
+  return join(codeqlInstallDir(), 'codeql', IS_WIN ? 'codeql.exe' : 'codeql');
+}
+function detectCodeql() {
+  const env = process.env.CODEQL_BIN;
+  if (env && existsSync(env)) return { source: 'CODEQL_BIN', path: env };
+  const onPath = whichCmd('codeql');
+  if (onPath) return { source: 'PATH', path: onPath };
+  const gh = join(homedir(), '.local', 'share', 'gh', 'extensions', 'gh-codeql');
+  if (existsSync(gh)) return { source: 'gh-extension', path: gh };
+  if (existsSync(codeqlBinaryPath())) return { source: 'ditto-managed', path: codeqlBinaryPath() };
+  return null;
+}
+function manualCodeql(url, why) {
+  return {
+    ok: false,
+    message: `${why} — download ${url}, unzip it, and put its codeql/ dir on PATH (or set CODEQL_BIN)`,
+  };
+}
+function installCodeql() {
+  const found = detectCodeql();
+  if (found) return { ok: true, message: `reuse ${found.source} (${found.path})` };
+
+  const asset = CODEQL_ASSET[platform()];
+  if (!asset) return { ok: false, message: `no CodeQL asset for ${platform()}; install manually` };
+  const url = codeqlUrl(asset);
+  const dir = codeqlInstallDir();
+  mkdirSync(dir, { recursive: true });
+  const zip = join(dir, asset);
+
+  const dl = spawnSync('curl', ['-fsSL', '-o', zip, url], { stdio: 'inherit' });
+  if (dl.error && dl.error.code === 'ENOENT') return manualCodeql(url, 'curl not found');
+  if (dl.status !== 0) return manualCodeql(url, `download failed (curl exit ${dl.status})`);
+
+  // unzip preferred; fall back to tar (bsdtar reads zip) when absent.
+  const ex = spawnSync('unzip', ['-q', '-o', zip, '-d', dir], { stdio: 'inherit' });
+  if (ex.error && ex.error.code === 'ENOENT') {
+    const tx = spawnSync('tar', ['-xf', zip, '-C', dir], { stdio: 'inherit' });
+    if (tx.error || tx.status !== 0) return manualCodeql(url, 'need unzip or tar to extract');
+  } else if (ex.status !== 0) {
+    return manualCodeql(url, `extract failed (unzip exit ${ex.status})`);
+  }
+  rmSync(zip, { force: true });
+
+  const bin = codeqlBinaryPath();
+  if (!existsSync(bin)) return manualCodeql(url, 'extracted but codeql launcher not found');
+  if (IS_WIN) {
+    return { ok: true, message: `installed ${bin}; add ${dirname(bin)} to PATH` };
+  }
+  // Place on PATH like the ditto binary; the launcher resolves the symlink to
+  // find its toolchain, so a single link is enough.
+  const link = join(placeDir(), 'codeql');
+  if (!lstatSafe(link)) {
+    mkdirSync(placeDir(), { recursive: true });
+    symlinkSync(bin, link);
+  }
+  return { ok: true, message: `installed ${bin} → ${link}` };
+}
+
 // ------------------------------------------------------------------- (4) init
 function initTarget(repo, target) {
   const binary = binaryPath(repo);
@@ -232,7 +318,7 @@ function unallowlistTarget(target) {
 }
 
 // ----------------------------------------------------------------------- modes
-function doInstall(repo, target, selfHost, build) {
+function doInstall(repo, target, selfHost, build, codeql) {
   const log = [];
   const gsp = globalSettingsPath();
   const before = readSettings(gsp);
@@ -249,6 +335,13 @@ function doInstall(repo, target, selfHost, build) {
 
   const p = placeBinary(repo);
   log.push(`place:     ${p.ok ? 'ok' : 'SKIPPED'} — ${p.message}`);
+
+  if (codeql) {
+    const c = installCodeql();
+    log.push(`codeql:    ${c.ok ? 'ok' : 'SKIPPED (graceful)'} — ${c.message}`);
+  } else {
+    log.push('codeql:    skipped (--no-codeql)');
+  }
 
   if (selfHost) {
     log.push('init:      skipped (self-host: target IS the ditto repo)');
@@ -296,16 +389,17 @@ function doStatus(repo, target, selfHost) {
     plugin_enabled: cur.enabledPlugins?.[`${PLUGIN_NAME}@${MARKETPLACE}`] === true,
     binary_built: existsSync(binaryPath(repo)),
     binary_on_path: IS_WIN ? null : linksTo(link, binaryPath(repo)),
+    codeql: detectCodeql(),
     target_initialized: existsSync(join(target, '.ditto', 'knowledge', 'glossary.json')),
     allowlisted: !selfHost && Array.isArray(projAllow) && projAllow.includes(ALLOW_RULE),
   };
 }
 
 function main() {
-  const { mode, target: targetArg, build } = parseArgs(process.argv.slice(2));
+  const { mode, target: targetArg, build, codeql } = parseArgs(process.argv.slice(2));
   if (!['install', 'uninstall', 'status'].includes(mode)) {
     console.error(
-      'usage: install-plugin.mjs [install|uninstall|status] [--target <dir>] [--no-build]',
+      'usage: install-plugin.mjs [install|uninstall|status] [--target <dir>] [--no-build] [--no-codeql]',
     );
     process.exit(64);
   }
@@ -319,7 +413,7 @@ function main() {
 
   const log =
     mode === 'install'
-      ? doInstall(repo, target, selfHost, build)
+      ? doInstall(repo, target, selfHost, build, codeql)
       : doUninstall(repo, target, selfHost);
   console.log(`[ditto] ${mode} OK`);
   console.log(`  repo:   ${repo}`);

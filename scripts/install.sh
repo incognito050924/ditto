@@ -8,9 +8,10 @@
 #   ./scripts/install.sh status   [--target <dir>]
 #
 # Beyond plugin registration this also builds the self-contained binary,
-# symlinks it onto PATH, scaffolds the target's .ditto/, and allowlists
-# `ditto …` in the target's .claude/settings.json. Pass --no-build to skip the
-# binary rebuild. Run from inside the target project (or pass --target).
+# symlinks it onto PATH, installs the CodeQL CLI (graceful — reuses an existing
+# one, else downloads the platform bundle), scaffolds the target's .ditto/, and
+# allowlists `ditto …` in the target's .claude/settings.json. Pass --no-build /
+# --no-codeql to skip those. Run from inside the target project (or --target).
 #
 # Env:
 #   DITTO_HOME   absolute path to the ditto repo (auto-detected if unset)
