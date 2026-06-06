@@ -459,11 +459,16 @@ const autopilotIntentDrift = defineCommand({
         ...(completion ? { completion } : {}),
       });
       if (format === 'json') {
-        writeJson({ pass: result.pass, reasons: result.reasons });
+        writeJson({ pass: result.pass, reasons: result.reasons, advisories: result.advisories });
       } else {
         writeHuman(`intent drift: ${result.pass ? 'PASS (conserved)' : 'FAIL (drift detected)'}`);
         for (const r of result.reasons) writeHuman(`  - ${r}`);
+        // Advisories are non-blocking (goal-string divergence — a re-statement or
+        // real drift the user judges); they never change the exit code.
+        for (const a of result.advisories) writeHuman(`  ~ (advisory) ${a}`);
       }
+      // Exit reflects BLOCKING reasons only (AC id-set conservation). Advisories
+      // are surfaced above but do not fail the command.
       if (!result.pass) process.exit(RUNTIME_ERROR_EXIT);
     } catch (err) {
       writeError(`intent-drift failed: ${err instanceof Error ? err.message : String(err)}`);

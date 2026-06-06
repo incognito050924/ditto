@@ -74,9 +74,13 @@ export class AutopilotStore {
    * *before* any write, so existing node ids stay byte-identical. The final
    * `writeJson` re-validates the whole merged graph against the schema.
    */
-  async addNodes(workItemId: string, newNodes: AutopilotNode[]): Promise<Autopilot> {
+  async addNodes(
+    workItemId: string,
+    newNodes: AutopilotNode[],
+    allowedAcceptanceIds?: ReadonlySet<string>,
+  ): Promise<Autopilot> {
     const graph = await this.get(workItemId);
-    validateNodeAddition(graph.nodes, newNodes);
+    validateNodeAddition(graph.nodes, newNodes, allowedAcceptanceIds);
     return writeJson(this.graphPath(workItemId), autopilot, {
       ...graph,
       nodes: [...graph.nodes, ...newNodes],

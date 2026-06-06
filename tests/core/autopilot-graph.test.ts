@@ -153,6 +153,31 @@ describe('validateNodeAddition (A-1: integrity gate for node-add)', () => {
       /cycle/,
     );
   });
+
+  // dialectic P2: scope-grow caught at node-introduction time, not only at Stop.
+  const refNode = (id: string, refs: string[]): AutopilotNode => ({
+    ...node(id, ['N3']),
+    acceptance_refs: refs,
+  });
+
+  test('with an allowed AC id set: a node referencing only known criteria passes', () => {
+    const existing = buildInitialNodes(['ac-1', 'ac-2']);
+    const allowed = new Set(['ac-1', 'ac-2']);
+    expect(() => validateNodeAddition(existing, [refNode('N4', ['ac-1'])], allowed)).not.toThrow();
+  });
+
+  test('with an allowed AC id set: a node inventing an AC ref is rejected at introduction', () => {
+    const existing = buildInitialNodes(['ac-1', 'ac-2']);
+    const allowed = new Set(['ac-1', 'ac-2']);
+    expect(() => validateNodeAddition(existing, [refNode('N4', ['ac-9'])], allowed)).toThrow(
+      /acceptance_ref not in intent/,
+    );
+  });
+
+  test('without an allowed AC id set: invented refs are NOT checked (legacy/no-intent path)', () => {
+    const existing = buildInitialNodes(['ac-1']);
+    expect(() => validateNodeAddition(existing, [refNode('N4', ['ac-9'])])).not.toThrow();
+  });
 });
 
 describe('proposalsToNodes (A-3: intent-level proposal → full node)', () => {

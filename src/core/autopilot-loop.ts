@@ -21,6 +21,7 @@ import {
   selectReadyNodes,
 } from './autopilot-graph';
 import { AutopilotStore } from './autopilot-store';
+import { IntentStore } from './intent-store';
 import { WorkItemStore } from './work-item-store';
 
 /**
@@ -342,6 +343,15 @@ export async function recordResult(
 ): Promise<RecordResultOutcome> {
   const aps = new AutopilotStore(repoRoot);
   const graph = await aps.get(input.workItemId);
+  // Frozen intent AC id set — passed to addNodes so a planner-generated node that
+  // invents an acceptance_ref not in the intent is rejected at introduction time
+  // (fail-fast scope-grow guard, dialectic P2), not only at Stop. Best-effort: a
+  // work item with no intent.json (legacy / non-finalize path) yields undefined,
+  // which addNodes treats as "no check" — preserving prior behavior.
+  const intents = new IntentStore(repoRoot);
+  const allowedAcceptanceIds = (await intents.exists(input.workItemId))
+    ? new Set((await intents.get(input.workItemId)).acceptance_criteria.map((c) => c.id))
+    : undefined;
   const node = graph.nodes.find((n) => n.id === input.payload.node_id);
   if (!node) {
     throw new Error(
@@ -407,7 +417,7 @@ export async function recordResult(
       if (plan.decision === 'expand') {
         // Splice the fix+review pair before marking the review passed, mirroring
         // A-3: a rejected splice (addNodes throws) leaves the node still running.
-        await aps.addNodes(input.workItemId, plan.nodes);
+        await aps.addNodes(input.workItemId, plan.nodes, allowedAcceptanceIds);
         await aps.updateNode(input.workItemId, node.id, (n) => ({
           ...n,
           status: nodeTransition(n.status, 'pass'),
@@ -464,7 +474,7 @@ export async function recordResult(
     let promotedNodeIds: string[] = [];
     if (proposals.length > 0) {
       const promoted = proposalsToNodes(proposals);
-      await aps.addNodes(input.workItemId, promoted);
+      await aps.addNodes(input.workItemId, promoted, allowedAcceptanceIds);
       promotedNodeIds = promoted.map((n) => n.id);
     }
     await aps.updateNode(input.workItemId, node.id, (n) => ({

@@ -327,16 +327,30 @@ describe('intentDriftGate (axis-2 intent conservation across the contract chain)
     });
     expect(r.pass).toBe(true);
     expect(r.reasons).toEqual([]);
+    expect(r.advisories).toEqual([]);
   });
 
-  test('H1: work-item goal silently rewritten → fail', () => {
+  test('H1: work-item goal divergence is ADVISORY (non-blocking), not a fail', () => {
     const r = intentDriftGate({
       intent: mkIntent(IDS),
       workItem: mkWorkItem(IDS, { goal: 'the endpoint returns 404' }),
       graph: mkGraph(IDS),
     });
-    expect(r.pass).toBe(false);
-    expect(r.reasons.some((x) => x.startsWith('H1') && x.includes('goal'))).toBe(true);
+    // Goal-string divergence is a re-statement-or-drift judgment ACG assigns to
+    // review → surfaced as advisory, does NOT block (pass stays true).
+    expect(r.pass).toBe(true);
+    expect(r.reasons).toEqual([]);
+    expect(r.advisories.some((x) => x.startsWith('H1') && x.includes('goal'))).toBe(true);
+  });
+
+  test('H1: source_request divergence is ADVISORY (non-blocking)', () => {
+    const r = intentDriftGate({
+      intent: mkIntent(IDS),
+      workItem: mkWorkItem(IDS, { source_request: 'totally different request' }),
+      graph: mkGraph(IDS),
+    });
+    expect(r.pass).toBe(true);
+    expect(r.advisories.some((x) => x.startsWith('H1') && x.includes('source_request'))).toBe(true);
   });
 
   test('H1: work-item adds an AC id not in intent → scope grow', () => {
@@ -368,14 +382,15 @@ describe('intentDriftGate (axis-2 intent conservation across the contract chain)
     expect(r.pass).toBe(true);
   });
 
-  test('H2: autopilot root_goal diverges from intent goal → fail', () => {
+  test('H2: autopilot root_goal divergence is ADVISORY (non-blocking)', () => {
     const r = intentDriftGate({
       intent: mkIntent(IDS),
       workItem: mkWorkItem(IDS),
       graph: mkGraph(IDS, { root_goal: 'do something else entirely' }),
     });
-    expect(r.pass).toBe(false);
-    expect(r.reasons.some((x) => x.startsWith('H2') && x.includes('root_goal'))).toBe(true);
+    expect(r.pass).toBe(true);
+    expect(r.reasons).toEqual([]);
+    expect(r.advisories.some((x) => x.startsWith('H2') && x.includes('root_goal'))).toBe(true);
   });
 
   test('H2: an intent AC addressed by no node → scope shrink', () => {
@@ -398,15 +413,16 @@ describe('intentDriftGate (axis-2 intent conservation across the contract chain)
     expect(r.reasons.some((x) => x.startsWith('H2') && x.includes('ac-9'))).toBe(true);
   });
 
-  test('H3: completion conserves the work-item AC id set → pass; the full chain passes', () => {
+  test('H3: a conserved non-pass completion passes; the full chain passes', () => {
     const completion = completionContract.parse({
       schema_version: '0.1.0',
       work_item_id: 'wi_drift001',
       declared_by: 'verifier',
       declared_at: '2026-06-06T01:00:00Z',
       summary: 'done',
-      acceptance: IDS.map((id) => ({ criterion_id: id, verdict: 'pass' })),
-      final_verdict: 'pass',
+      acceptance: IDS.map((id) => ({ criterion_id: id, verdict: 'partial' })),
+      final_verdict: 'partial',
+      next_handoff_path: '.ditto/handoff/x.md',
     });
     const r = intentDriftGate({
       intent: mkIntent(IDS),
@@ -417,7 +433,7 @@ describe('intentDriftGate (axis-2 intent conservation across the contract chain)
     expect(r.pass).toBe(true);
   });
 
-  test('H3: completion drops a work-item AC id → scope shrink', () => {
+  test('H3: a non-pass completion dropping an intent AC id → scope shrink (blocks)', () => {
     const completion = completionContract.parse({
       schema_version: '0.1.0',
       work_item_id: 'wi_drift001',
@@ -436,6 +452,28 @@ describe('intentDriftGate (axis-2 intent conservation across the contract chain)
     });
     expect(r.pass).toBe(false);
     expect(r.reasons.some((x) => x.startsWith('H3') && x.includes('ac-2'))).toBe(true);
+  });
+
+  test('H3: a PASS completion is NOT re-checked here (de-dup; completionGate owns it)', () => {
+    // A pass completion that dropped ac-2 would be caught by completionGate; H3
+    // skips on pass so the two gates do not double-emit the same missing id.
+    const completion = completionContract.parse({
+      schema_version: '0.1.0',
+      work_item_id: 'wi_drift001',
+      declared_by: 'verifier',
+      declared_at: '2026-06-06T01:00:00Z',
+      summary: 'done',
+      acceptance: [{ criterion_id: 'ac-1', verdict: 'pass' }],
+      final_verdict: 'pass',
+    });
+    const r = intentDriftGate({
+      intent: mkIntent(IDS),
+      workItem: mkWorkItem(IDS),
+      graph: mkGraph(IDS),
+      completion,
+    });
+    expect(r.pass).toBe(true);
+    expect(r.reasons.some((x) => x.startsWith('H3'))).toBe(false);
   });
 
   test('whitespace-only goal difference is not drift (trimmed compare)', () => {

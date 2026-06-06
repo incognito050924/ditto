@@ -410,6 +410,11 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   }
 
   const reasons: string[] = [];
+  // Non-blocking intent-drift advisories (goal/source_request string divergence):
+  // surfaced so the user can judge a re-statement vs real drift, but they never
+  // force continuation (dialectic P1 — ACG assigns goal-wording judgment to
+  // human/LLM review, not a deterministic block).
+  const advisories: string[] = [];
   if (completion.status === 'ok') {
     const g = completionGate(workItem, completion.data);
     if (!g.pass) reasons.push(...g.reasons);
@@ -435,6 +440,7 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
       ...(completion.status === 'ok' ? { completion: completion.data } : {}),
     });
     if (!d.pass) reasons.push(...d.reasons.map((r) => `intent drift — ${r}`));
+    advisories.push(...d.advisories.map((r) => `intent drift (advisory) — ${r}`));
   }
   if (dialectics.status === 'ok') {
     for (const d of dialectics.items) reasons.push(...dialecticForcesContinuation(d));
@@ -452,10 +458,17 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     reasons.push(...semanticForcesContinuation(semantic.data));
   }
 
+  // Advisory suffix — appended to whatever this handler returns (blocking or not),
+  // so a non-blocking goal-divergence note reaches the user even on exit 0.
+  const advisoryBlock =
+    advisories.length > 0
+      ? `DITTO Stop advisory (non-blocking) — ${advisories.length} item(s):\n- ${advisories.join('\n- ')}\n`
+      : '';
+
   if (reasons.length > 0) {
     return {
       exitCode: 2,
-      stderr: `DITTO Stop gate: keep going — ${reasons.length} item(s) remain:\n- ${reasons.join('\n- ')}\n`,
+      stderr: `DITTO Stop gate: keep going — ${reasons.length} item(s) remain:\n- ${reasons.join('\n- ')}\n${advisoryBlock}`,
     };
   }
 
@@ -486,5 +499,6 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     semanticPresent: semantic.status === 'ok',
     isNonTerminal: NON_TERMINAL_STATUSES.includes(workItem.status),
   });
-  return nudge ? { exitCode: 0, stderr: nudge } : { exitCode: 0 };
+  const tail = `${advisoryBlock}${nudge ?? ''}`;
+  return tail.length > 0 ? { exitCode: 0, stderr: tail } : { exitCode: 0 };
 };

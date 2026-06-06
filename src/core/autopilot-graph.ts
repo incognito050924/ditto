@@ -199,13 +199,37 @@ export const defaultNodeGenerator: NodeGenerator = buildInitialNodes;
  * within the batch), a dangling `depends_on` reference, or a `depends_on` edge
  * that introduces a cycle. Error messages carry stable markers so callers/tests
  * can assert on them: `duplicate node id` / `dangling depends_on` / `cycle`.
+ *
+ * `allowedAcceptanceIds` (optional, the frozen intent's AC id set) moves the
+ * axis-2 scope-grow check UPSTREAM (dialectic P2): a planner-generated node that
+ * references an `acceptance_refs` id not in the intent is rejected the moment it
+ * is introduced — fail-fast — instead of being caught only at Stop (intentDrift
+ * H2 stays as the backstop). Omitted → no check (legacy / no-intent path), so a
+ * caller without the intent set keeps the prior behavior. Stable marker:
+ * `acceptance_ref not in intent`.
  */
-export function validateNodeAddition(existing: AutopilotNode[], newNodes: AutopilotNode[]): void {
+export function validateNodeAddition(
+  existing: AutopilotNode[],
+  newNodes: AutopilotNode[],
+  allowedAcceptanceIds?: ReadonlySet<string>,
+): void {
   const seen = new Set<string>();
   for (const node of existing) seen.add(node.id);
   for (const node of newNodes) {
     if (seen.has(node.id)) throw new Error(`duplicate node id: ${node.id}`);
     seen.add(node.id);
+  }
+
+  if (allowedAcceptanceIds) {
+    for (const node of newNodes) {
+      for (const ref of node.acceptance_refs) {
+        if (!allowedAcceptanceIds.has(ref)) {
+          throw new Error(
+            `acceptance_ref not in intent: node ${node.id} references unknown criterion ${ref} (scope grow)`,
+          );
+        }
+      }
+    }
   }
 
   const merged = [...existing, ...newNodes];

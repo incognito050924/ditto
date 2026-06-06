@@ -181,7 +181,9 @@ describe('stopHandler', () => {
     expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
   });
 
-  test('intent drift: autopilot root_goal silently rewritten => exit 2 with intent drift reason', async () => {
+  test('intent drift: root_goal divergence is ADVISORY => exit 0 with non-blocking advisory in stderr', async () => {
+    // goal-string divergence is a re-statement-or-drift judgment → surfaced, not
+    // blocked (a legitimate reworded re-finalize must still be able to close).
     await writeArtifact('intent.json', intent({}));
     await writeArtifact(
       'autopilot.json',
@@ -189,9 +191,21 @@ describe('stopHandler', () => {
     );
     await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
     const out = await run({ stop_hook_active: false });
-    expect(out.exitCode).toBe(2);
-    expect(out.stderr).toContain('intent drift');
+    expect(out.exitCode).toBe(0);
+    expect(out.stderr).toContain('advisory');
     expect(out.stderr).toContain('root_goal');
+  });
+
+  test('intent drift: malformed intent.json => exit 2 (fail-closed governance floor)', async () => {
+    await writeArtifact('intent.json', '{ not valid json');
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({ root_goal: 'endpoint returns score', nodes: [coveringNode] }),
+    );
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('intent.json');
   });
 
   test('intent drift: intent declares an AC the work item dropped => exit 2 (scope shrink)', async () => {

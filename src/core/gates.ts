@@ -342,6 +342,23 @@ export interface IntentChainArtifacts {
   completion?: CompletionContract;
 }
 
+/**
+ * intentDriftGate's result splits two severities the dialectic review (ACG fit)
+ * established as belonging on opposite sides of ACG's deterministic→block /
+ * judgment→warn boundary (practice-ingestion-map §spec-drift):
+ *  - `reasons` (blocking, `pass=false`): AC id-set conservation — grow/shrink/
+ *    invented refs. An id appearing or vanishing is a deterministic correctness
+ *    fact, so it hard-blocks, exactly like the other deterministic gates.
+ *  - `advisories` (non-blocking, never flips `pass`): goal / source_request /
+ *    root_goal *string* divergence. Whether a reworded goal is genuine drift or a
+ *    legitimate re-statement is a semantic judgment ACG assigns to human/LLM
+ *    review — so it is surfaced (not silently dropped) but does not block a
+ *    legitimate re-finalize from closing. The user sees it and decides.
+ */
+export interface IntentDriftResult extends GateResult {
+  advisories: string[];
+}
+
 function idSet(items: { id: string }[]): Set<string> {
   return new Set(items.map((i) => i.id));
 }
@@ -366,28 +383,39 @@ function missingFrom(a: Iterable<string>, b: Set<string>): string[] {
  * semantically wandered into `intent.out_of_scope`, is NOT checkable here and
  * stays with reviewer/verifier.
  *
- * Hops (reasons carry stable markers H1/H2/H3 for callers/tests to assert on):
- *  - H1 intent → work-item: goal identity, source_request identity, AC id-set
- *    equality (an added id is scope grow; a dropped id is scope shrink — the two
- *    physical copies are the most-missed seam). AC *statements* may be refined.
- *  - H2 intent → autopilot: root_goal === intent.goal; no-shrink (every intent AC
- *    id covered by ≥1 node acceptance_refs); no-grow (every node acceptance_refs
- *    id ∈ intent AC id set).
- *  - H3 work-item → completion (only when a completion exists): acceptance
- *    criterion_id set === work-item AC id set. Conservation regardless of
- *    verdict; the verdict-level pass-gating stays in `completionGate`.
+ * Severity split (see `IntentDriftResult`): AC id-set conservation → `reasons`
+ * (blocking); goal/source_request/root_goal string divergence → `advisories`
+ * (non-blocking, surfaced for the user to judge).
+ *
+ * Hops (reasons/advisories carry stable markers H1/H2/H3 for callers/tests):
+ *  - H1 intent → work-item: AC id-set equality [block] + goal/source_request
+ *    string identity [advisory]. An added id is scope grow; a dropped id is
+ *    scope shrink (the two physical copies are the most-missed seam). AC
+ *    *statements* may be refined freely; only ids are conserved.
+ *  - H2 intent → autopilot: no-shrink (every intent AC id covered by ≥1 node
+ *    acceptance_refs) + no-grow (every node acceptance_refs id ∈ intent AC id
+ *    set) [block]; root_goal === intent.goal [advisory].
+ *  - H3 intent → completion: criterion_id set === intent AC id set [block], but
+ *    ONLY when `final_verdict !== 'pass'` — on a pass `completionGate` already
+ *    cross-checks completion vs work-item ids, so gating here too would
+ *    double-emit (dialectic P3). On a non-pass `completionGate` is silent, so H3
+ *    is the only check that a partial/blocked completion still names every
+ *    criterion.
  */
-export function intentDriftGate(a: IntentChainArtifacts): GateResult {
+export function intentDriftGate(a: IntentChainArtifacts): IntentDriftResult {
   const reasons: string[] = [];
+  const advisories: string[] = [];
   const intentGoal = a.intent.goal.trim();
   const intentAcIds = idSet(a.intent.acceptance_criteria);
 
   // ── H1 intent → work-item ──
   if (a.workItem.goal.trim() !== intentGoal) {
-    reasons.push('H1: work-item goal diverges from intent goal (goal silently rewritten)');
+    advisories.push(
+      'H1: work-item goal diverges from intent goal (re-statement or drift — review)',
+    );
   }
   if (a.workItem.source_request.trim() !== a.intent.source_request.trim()) {
-    reasons.push('H1: work-item source_request diverges from intent (origin rewritten)');
+    advisories.push('H1: work-item source_request diverges from intent (review)');
   }
   const wiAcIds = idSet(a.workItem.acceptance_criteria);
   const wiAdded = missingFrom(wiAcIds, intentAcIds);
@@ -403,7 +431,9 @@ export function intentDriftGate(a: IntentChainArtifacts): GateResult {
 
   // ── H2 intent → autopilot ──
   if (a.graph.root_goal.trim() !== intentGoal) {
-    reasons.push('H2: autopilot root_goal diverges from intent goal (goal silently rewritten)');
+    advisories.push(
+      'H2: autopilot root_goal diverges from intent goal (re-statement or drift — review)',
+    );
   }
   const covered = new Set<string>();
   for (const node of a.graph.nodes) {
@@ -422,22 +452,23 @@ export function intentDriftGate(a: IntentChainArtifacts): GateResult {
     );
   }
 
-  // ── H3 work-item → completion (only when present) ──
-  if (a.completion) {
+  // ── H3 intent → completion (only on a non-pass completion; pass-case owned by
+  // completionGate to avoid double-emission) ──
+  if (a.completion && a.completion.final_verdict !== 'pass') {
     const compIds = new Set(a.completion.acceptance.map((c) => c.criterion_id));
-    const compAdded = missingFrom(compIds, wiAcIds);
+    const compAdded = missingFrom(compIds, intentAcIds);
     if (compAdded.length > 0) {
       reasons.push(
-        `H3: completion criterion_id(s) not in work-item (scope grow): ${compAdded.join(', ')}`,
+        `H3: completion criterion_id(s) not in intent (scope grow): ${compAdded.join(', ')}`,
       );
     }
-    const compDropped = missingFrom(wiAcIds, compIds);
+    const compDropped = missingFrom(intentAcIds, compIds);
     if (compDropped.length > 0) {
       reasons.push(
-        `H3: work-item AC id(s) missing from completion (scope shrink): ${compDropped.join(', ')}`,
+        `H3: intent AC id(s) missing from completion (scope shrink): ${compDropped.join(', ')}`,
       );
     }
   }
 
-  return gate(reasons);
+  return { ...gate(reasons), advisories };
 }
