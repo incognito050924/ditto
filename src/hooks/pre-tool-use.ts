@@ -231,27 +231,72 @@ const WIN_REMOVE_CMDS: ReadonlySet<string> = new Set([
   'rm',
 ]);
 
+/** A Windows-absolute path: drive-qualified (`c:\`, `c:/`), UNC (`\\`), or
+ * drive-root-relative (`\foo`). Pure regex — independent of the runtime's
+ * `node:path` flavor, so it judges Windows paths correctly even on POSIX. */
+function isWinAbsolute(p: string): boolean {
+  return /^([a-z]:[\\/]|\\\\|[\\/])/i.test(p);
+}
+/** Normalize a Windows path for case-insensitive containment: `/`→`\`, drop a
+ * trailing separator, lowercase. */
+function winNorm(p: string): string {
+  return p.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
+}
+/** True when `child` is `parent` or sits under it (Windows is case-insensitive). */
+function winInside(child: string, parent: string): boolean {
+  if (!parent) return false;
+  const c = winNorm(child);
+  const par = winNorm(parent);
+  return c === par || c.startsWith(`${par}\\`);
+}
+/** Candidate path operands of a delete segment: tokens that are neither flags
+ * (`/s`, `-Recurse`) nor the command word, de-quoted. */
+function winDeleteTargets(seg: string): string[] {
+  return seg
+    .split(/\s+/)
+    .map((t) => t.replace(/^["']+|["']+$/g, ''))
+    .filter(
+      (t) =>
+        t.length > 0 &&
+        !t.startsWith('/') &&
+        !t.startsWith('-') &&
+        t.toLowerCase() !== 'format' &&
+        !WIN_REMOVE_CMDS.has(t.toLowerCase()),
+    );
+}
+
 /**
  * Reason a Windows command is a destructive footgun, or null. Pure + OS-agnostic
- * (callers gate it on `IS_WIN`). Conservative: requires the segment's OPERATIVE
- * command to be a removal/format command AND the target to be a whole drive root
- * or system/home location — so a scoped delete or a quoted mention never matches.
+ * (callers gate it on `IS_WIN`). Conservative, mirrors the POSIX rm policy:
+ * requires the segment's OPERATIVE command to be a removal/format command AND
+ * a recursive intent (`/s`, or `-Recurse -Force`), then flags either a whole
+ * drive root / system location, OR — like `rm -rf` outside home — an absolute
+ * path that is not inside `home`. A scoped relative path (assumed in-repo), a
+ * glob/env-var target (unresolvable, skipped), or a quoted mention never match.
  */
-export function windowsDestructiveReason(normalized: string): string | null {
+export function windowsDestructiveReason(normalized: string, home = ''): string | null {
   for (const seg of commandSegments(normalized)) {
     const cmd = leadingCommand(seg).toLowerCase();
     // `format <drive>:` wipes an entire volume.
     if (cmd === 'format' && /(^|\s)[a-z]:/i.test(seg)) {
       return 'format of a Windows drive';
     }
-    // Recursive delete of a drive root / system location: `rd /s /q c:\`,
-    // `del /s /q c:\*`, or PowerShell `Remove-Item -Recurse -Force c:\`.
-    if (WIN_REMOVE_CMDS.has(cmd) && WIN_ROOT.test(seg)) {
-      const recursive =
-        /(^|\s)\/s\b/i.test(seg) || (/-recurse\b/i.test(seg) && /-force\b/i.test(seg));
-      if (recursive) {
-        return 'recursive delete of a Windows drive root or system location';
-      }
+    if (!WIN_REMOVE_CMDS.has(cmd)) continue;
+    const recursive =
+      /(^|\s)\/s\b/i.test(seg) || (/-recurse\b/i.test(seg) && /-force\b/i.test(seg));
+    if (!recursive) continue;
+    // Drive root / system location: `rd /s /q c:\`, `Remove-Item -Recurse -Force c:\`.
+    if (WIN_ROOT.test(seg)) {
+      return 'recursive delete of a Windows drive root or system location';
+    }
+    // Arbitrary absolute path outside home (relative targets are assumed in-repo
+    // and allowed; `*`/`%env%` targets are unresolvable and skipped — same
+    // conservative stance as the POSIX rm target check).
+    const outside = winDeleteTargets(seg).find(
+      (t) => isWinAbsolute(t) && !/[*%]/.test(t) && !winInside(t, home),
+    );
+    if (outside) {
+      return 'recursive delete of an absolute Windows path outside home';
     }
   }
   return null;
@@ -263,7 +308,7 @@ function checkDestructive(cmd: string) {
   // Windows destructive primitives (only meaningful on Windows; gated so a word
   // like `format` in a POSIX shell can't false-positive).
   if (IS_WIN) {
-    const winReason = windowsDestructiveReason(normalized);
+    const winReason = windowsDestructiveReason(normalized, HOME);
     if (winReason) return block('destructive', winReason);
   }
 

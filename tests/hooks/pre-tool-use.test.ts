@@ -208,6 +208,28 @@ describe('windowsDestructiveReason (Windows footgun matcher; pure, OS-agnostic)'
   ])('allows: %s', (cmd) => {
     expect(windowsDestructiveReason(cmd.replace(/\s+/g, ' ').trim())).toBeNull();
   });
+
+  // Arbitrary absolute path outside home (mirrors the POSIX `rm -rf` policy).
+  const HOME = 'C:\\Users\\me';
+  test.each([
+    'rd /s /q C:\\Windows', // system dir, not a bare root, but outside home
+    'rmdir /s /q D:\\data', // another volume, outside home
+    'Remove-Item -Recurse -Force C:\\Windows\\System32',
+    'del /f /s /q E:\\backups', // absolute on another drive
+    'rd /s /q \\\\server\\share', // UNC path
+  ])('flags (outside home): %s', (cmd) => {
+    expect(windowsDestructiveReason(cmd.replace(/\s+/g, ' ').trim(), HOME)).not.toBeNull();
+  });
+
+  test.each([
+    'rd /s /q C:\\Users\\me\\projects\\app\\build', // under home -> allowed
+    'Remove-Item -Recurse -Force C:\\Users\\me\\dist', // under home -> allowed
+    'rd /s /q .\\build', // relative -> assumed in-repo
+    'rd /s /q C:\\data\\*', // glob target -> unresolvable, skipped
+    'rd /s /q %TEMP%\\x', // env-var target -> unresolvable, skipped
+  ])('allows (in home / relative / unresolvable): %s', (cmd) => {
+    expect(windowsDestructiveReason(cmd.replace(/\s+/g, ' ').trim(), HOME)).toBeNull();
+  });
 });
 
 describe('preToolUseHandler — ac-3 secret files', () => {
