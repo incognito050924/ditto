@@ -2,7 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ADR_RULES, type AdrRule, scanAdrViolations, scanText } from '../../scripts/adr-guard';
+import {
+  ADR_RULES,
+  type AdrRule,
+  countScannedFiles,
+  scanAdrViolations,
+  scanText,
+} from '../../scripts/adr-guard';
 
 const adr0006Forbidden = ADR_RULES.find((r) => r.adr === 'ADR-0006')?.forbidden ?? [];
 
@@ -27,6 +33,22 @@ describe('scanText (pure)', () => {
 describe('scanAdrViolations (repo scan)', () => {
   test('current repo passes the guard (0 violations)', async () => {
     expect(await scanAdrViolations(process.cwd())).toEqual([]);
+  });
+
+  test('the pass message includes the scanned .ts file count', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'adr-guard-'));
+    try {
+      await mkdir(join(repo, 'src'), { recursive: true });
+      await writeFile(join(repo, 'src', 'a.ts'), 'export const x = 1;\n');
+      await writeFile(join(repo, 'src', 'b.ts'), 'export const y = 2;\n');
+      await writeFile(join(repo, 'src', 'c.txt'), 'not typescript\n');
+      const rules: AdrRule[] = [
+        { adr: 'ADR-0006', description: 't', targets: ['src'], forbidden: adr0006Forbidden },
+      ];
+      expect(await countScannedFiles(repo, rules)).toBe(2);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
   });
 
   test('detects an injected ADR-0006 violation under a directory target', async () => {

@@ -1,0 +1,112 @@
+{
+  "schema_version": "0.1.0",
+  "autopilot_id": "orch_260606njx",
+  "work_item_id": "wi_260606jo1",
+  "mode": "autopilot",
+  "root_goal": "adr:guard 통과 메시지에 스캔한 .ts 파일 총수를 표시한다",
+  "completion_boundary": "entire_work_item",
+  "approval_gate": {
+    "status": "not_required",
+    "source": "small_reversible_policy",
+    "approved_at": null,
+    "approved_by": null,
+    "evidence_refs": []
+  },
+  "nodes": [
+    {
+      "id": "N1",
+      "kind": "design",
+      "owner": "planner",
+      "purpose": "Plan the change against the acceptance criteria",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2"
+      ],
+      "evidence_refs": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N2",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "Implement the planned change",
+      "status": "passed",
+      "depends_on": [
+        "N1"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/scripts/adr-guard.test.ts",
+          "summary": "6 pass 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun run adr:guard",
+          "summary": "exit 0, 143개 .ts 스캔"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N3",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Verify every acceptance criterion with evidence",
+      "status": "passed",
+      "depends_on": [
+        "N2"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun run adr:guard",
+          "summary": "exit 0, 143개 .ts 스캔 — 정수 파일수 포함"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "1203 pass / 9 skip / 0 fail"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    }
+  ],
+  "caps": {
+    "fix_per_node": 2,
+    "switch_per_node": 1,
+    "converge_rounds": 3
+  },
+  "continue_policy": {
+    "continue_after_approval": true,
+    "continue_after_checkpoint": true,
+    "continue_after_fixable_failure": true,
+    "ask_user_only_for_user_owned_decisions": true
+  },
+  "stop_conditions": [
+    "all_acceptance_criteria_passed_or_explicitly_closed",
+    "blocked_by_user_owned_decision",
+    "blocked_by_external_system",
+    "safety_boundary_hit"
+  ],
+  "user_interrupt_policy": "ask_only_for_user_owned_decisions"
+}

@@ -106,6 +106,20 @@ async function filesForTarget(repoRoot: string, target: string): Promise<string[
   return s.isDirectory() ? walkTs(repoRoot, target) : [target];
 }
 
+/** Count the distinct repo-relative `.ts` files the given rules would scan. */
+export async function countScannedFiles(
+  repoRoot: string,
+  rules: AdrRule[] = ADR_RULES,
+): Promise<number> {
+  const seen = new Set<string>();
+  for (const rule of rules) {
+    for (const target of rule.targets) {
+      for (const rel of await filesForTarget(repoRoot, target)) seen.add(rel);
+    }
+  }
+  return seen.size;
+}
+
 /** Scan the whole repo against all rules. Returns every violation found. */
 export async function scanAdrViolations(
   repoRoot: string,
@@ -136,6 +150,7 @@ export async function scanAdrViolations(
 
 if (import.meta.main) {
   const violations = await scanAdrViolations(process.cwd());
+  const scanned = await countScannedFiles(process.cwd());
   if (violations.length > 0) {
     console.error(`✗ ADR 위반 ${violations.length}건 — 커밋/CI 차단:\n`);
     for (const v of violations) {
@@ -145,6 +160,6 @@ if (import.meta.main) {
     process.exit(1);
   }
   console.log(
-    `✓ ADR 가드 통과 — ${ADR_RULES.length}개 규칙(${ADR_RULES.map((r) => r.adr).join(', ')}), 위반 0`,
+    `✓ ADR 가드 통과 — ${ADR_RULES.length}개 규칙(${ADR_RULES.map((r) => r.adr).join(', ')}), 위반 0, ${scanned}개 .ts 스캔`,
   );
 }
