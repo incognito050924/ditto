@@ -6,7 +6,7 @@ import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { ChangeContractStore } from '~/core/change-contract-store';
 import { SessionPointerStore } from '~/core/session-pointer';
-import { preToolUseHandler } from '~/hooks/pre-tool-use';
+import { preToolUseHandler, windowsDestructiveReason } from '~/hooks/pre-tool-use';
 import { type HookInput, KILL_SWITCH, runHook } from '~/hooks/runtime';
 import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import { acgChangeContract } from '~/schemas/acg-change-contract';
@@ -176,6 +176,37 @@ describe('preToolUseHandler — ac-2 destructive Bash', () => {
     'dd if=a.img of=b.img',
   ])('allows: %s', async (cmd) => {
     expect((await bash(cmd)).exitCode).toBe(0);
+  });
+});
+
+describe('windowsDestructiveReason (Windows footgun matcher; pure, OS-agnostic)', () => {
+  test.each([
+    'format c:',
+    'format /q /fs:ntfs d:',
+    'rd /s /q c:\\',
+    'rmdir /s /q c:\\*',
+    'del /f /s /q c:\\*',
+    'erase /s c:\\',
+    'Remove-Item -Recurse -Force C:\\',
+    'rm -Recurse -Force C:\\', // PowerShell alias for Remove-Item
+    'ri -Recurse -Force %SystemRoot%',
+    'rd /s /q %USERPROFILE%',
+    'git status && rd /s /q c:\\', // destructive in a later segment
+  ])('flags: %s', (cmd) => {
+    expect(windowsDestructiveReason(cmd.replace(/\s+/g, ' ').trim())).not.toBeNull();
+  });
+
+  test.each([
+    'del report.txt', // single-file delete
+    'rd /s /q .\\build', // scoped relative subfolder
+    'Remove-Item -Recurse -Force .\\dist', // scoped relative subfolder
+    'del /f /s /q c:\\users\\me\\app\\*', // specific subpath, not a drive root
+    'Format-Table -AutoSize', // PowerShell cmdlet, not `format`
+    'git commit -m "run rd /s /q c:\\ to wipe"', // destructive words quoted in a message
+    'echo "format c: wipes the disk"', // echoed string is inert
+    'rd /s /q', // no target
+  ])('allows: %s', (cmd) => {
+    expect(windowsDestructiveReason(cmd.replace(/\s+/g, ' ').trim())).toBeNull();
   });
 });
 

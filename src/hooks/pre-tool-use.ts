@@ -24,6 +24,7 @@ import type { HookHandler, HookInput } from './runtime';
 // Windows has no $HOME; it exposes the home directory as %USERPROFILE%. Fall back
 // so the rm-outside-home exemption keys on the real home dir on every platform.
 const HOME = process.env.HOME ?? process.env.USERPROFILE ?? '';
+const IS_WIN = process.platform === 'win32';
 
 function block(category: string, reason: string) {
   return {
@@ -212,8 +213,59 @@ function rmTargets(cmd: string): string[] {
     .filter((t) => t.length > 0 && !t.startsWith('-'));
 }
 
+// A catastrophic Windows location: a bare drive root (`c:`, `c:\`, `c:\*`), a UNC
+// root (`\\`), or a system/home environment variable — NOT a specific subpath
+// (`c:\users\me\app`), so wiping a whole drive/system is caught while a scoped
+// delete is left alone (footgun line, mirrors the POSIX root/home logic).
+const WIN_ROOT =
+  /(^|\s)[a-z]:\\?\*?(\s|$)|\\\\|%systemdrive%|%systemroot%|%userprofile%|%homepath%|%homedrive%|%windir%|%programfiles%/i;
+// Removal commands across cmd.exe and PowerShell (incl. PowerShell aliases for
+// Remove-Item: ri, rm, rd, del, rmdir, erase).
+const WIN_REMOVE_CMDS: ReadonlySet<string> = new Set([
+  'rd',
+  'rmdir',
+  'del',
+  'erase',
+  'remove-item',
+  'ri',
+  'rm',
+]);
+
+/**
+ * Reason a Windows command is a destructive footgun, or null. Pure + OS-agnostic
+ * (callers gate it on `IS_WIN`). Conservative: requires the segment's OPERATIVE
+ * command to be a removal/format command AND the target to be a whole drive root
+ * or system/home location — so a scoped delete or a quoted mention never matches.
+ */
+export function windowsDestructiveReason(normalized: string): string | null {
+  for (const seg of commandSegments(normalized)) {
+    const cmd = leadingCommand(seg).toLowerCase();
+    // `format <drive>:` wipes an entire volume.
+    if (cmd === 'format' && /(^|\s)[a-z]:/i.test(seg)) {
+      return 'format of a Windows drive';
+    }
+    // Recursive delete of a drive root / system location: `rd /s /q c:\`,
+    // `del /s /q c:\*`, or PowerShell `Remove-Item -Recurse -Force c:\`.
+    if (WIN_REMOVE_CMDS.has(cmd) && WIN_ROOT.test(seg)) {
+      const recursive =
+        /(^|\s)\/s\b/i.test(seg) || (/-recurse\b/i.test(seg) && /-force\b/i.test(seg));
+      if (recursive) {
+        return 'recursive delete of a Windows drive root or system location';
+      }
+    }
+  }
+  return null;
+}
+
 function checkDestructive(cmd: string) {
   const normalized = cmd.replace(/\s+/g, ' ').trim();
+
+  // Windows destructive primitives (only meaningful on Windows; gated so a word
+  // like `format` in a POSIX shell can't false-positive).
+  if (IS_WIN) {
+    const winReason = windowsDestructiveReason(normalized);
+    if (winReason) return block('destructive', winReason);
+  }
 
   // fork bomb
   if (normalized.replace(/\s/g, '').includes(':(){:|:&};:')) {
