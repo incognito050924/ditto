@@ -1,9 +1,15 @@
 #!/bin/sh
-# pre-commit: biome lint 미통과 코드의 커밋을 차단한다.
+# pre-commit: biome lint + ADR 가드 미통과 코드의 커밋을 차단한다.
 # 재발 방지 — F5(과거 lint 미통과 코드가 커밋된 뒤 0d0f4aa가 청소) 후속.
 # 활성화(클론당 1회): git config core.hooksPath .githooks
 if ! bun run lint; then
   echo "" >&2
   echo "✗ biome lint 실패 — 커밋을 중단했다. 'bun run lint:fix' 로 고친 뒤 다시 커밋하라." >&2
+  exit 1
+fi
+# ADR 집행 가드 (wi_260606e7k): grep 가능한 ADR 위반(예: ADR-0006 TS컴파일러 직접사용)을 차단.
+if ! bun run adr:guard; then
+  echo "" >&2
+  echo "✗ ADR 가드 실패 — 커밋을 중단했다. 위 ADR 위반을 해소하거나 해당 ADR을 개정하라." >&2
   exit 1
 fi

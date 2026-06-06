@@ -18,3 +18,5 @@ jobs:
       - run: bun install
       - name: Lint (biome)
         run: bun run lint
+      - name: ADR guard (grep-able ADR enforcement)
+        run: bun run adr:guard

@@ -15,6 +15,7 @@
     "lint": "biome check src tests scripts",
     "lint:fix": "biome check --write src tests scripts",
     "format": "biome format --write src tests scripts",
+    "adr:guard": "bun run scripts/adr-guard.ts",
     "schemas:export": "bun run scripts/export-schemas.ts",
     "surfaces:gen": "bun run scripts/gen-surfaces.ts"
   },
