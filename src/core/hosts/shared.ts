@@ -1,10 +1,21 @@
-import { readdir } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { parse as parseTomlText } from 'smol-toml';
 import { parse as parseYamlText } from 'yaml';
 
+/**
+ * Whether `path` exists — file OR directory. Single source of truth for
+ * existence checks (wi_260606f4r). stat-based on purpose: `Bun.file(p).exists()`
+ * reports false for directories, so callers that probe `.ditto`/`.git` dirs
+ * (e.g. findRepoRoot) need stat. For a plain file probe the result is identical.
+ */
 export async function fileExists(path: string): Promise<boolean> {
-  return Bun.file(path).exists();
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function readTextIfExists(path: string): Promise<string | null> {

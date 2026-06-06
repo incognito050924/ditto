@@ -13,6 +13,7 @@ import {
   resolveRepoRootForCreate,
   writeJson,
 } from '~/core/fs';
+import { fileExists } from '~/core/hosts/shared';
 
 let workDir: string;
 
@@ -22,6 +23,26 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(workDir, { recursive: true, force: true });
+});
+
+// wi_260606f4r — single existence check, stat-based so directories are detected
+// (the old fs.ts/e2e pathExists used stat; shared.fileExists used Bun.file which
+// reports false for directories — findRepoRoot relies on the directory case).
+describe('fileExists (unified existence check)', () => {
+  test('true for a regular file', async () => {
+    const p = join(workDir, 'f.txt');
+    await Bun.write(p, 'x');
+    expect(await fileExists(p)).toBe(true);
+  });
+
+  test('true for a directory (stat-based; Bun.file().exists() would be false)', async () => {
+    await ensureDir(join(workDir, 'd'));
+    expect(await fileExists(join(workDir, 'd'))).toBe(true);
+  });
+
+  test('false for a missing path', async () => {
+    expect(await fileExists(join(workDir, 'nope'))).toBe(false);
+  });
 });
 
 describe('findRepoRoot', () => {

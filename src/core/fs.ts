@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, parse, resolve } from 'node:path';
 import type { ZodTypeAny, z } from 'zod';
-import { parseYaml } from './hosts/shared';
+import { fileExists, parseYaml } from './hosts/shared';
 
 export class RepoRootNotFoundError extends Error {
   constructor(start: string) {
@@ -21,15 +21,6 @@ export class SchemaValidationError extends Error {
   }
 }
 
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Walk upward from `start` until a directory containing `.ditto` is found.
  * If none exists, fall back to the nearest directory containing `.git`.
@@ -42,8 +33,8 @@ export async function findRepoRoot(start: string = process.cwd()): Promise<strin
   let firstGitMatch: string | null = null;
   const root = parse(current).root;
   while (true) {
-    if (await pathExists(join(current, '.ditto'))) return current;
-    if (firstGitMatch === null && (await pathExists(join(current, '.git')))) {
+    if (await fileExists(join(current, '.ditto'))) return current;
+    if (firstGitMatch === null && (await fileExists(join(current, '.git')))) {
       firstGitMatch = current;
     }
     if (current === root) break;
@@ -82,7 +73,7 @@ export async function atomicWriteText(path: string, content: string): Promise<vo
     await writeFile(tmp, content, 'utf8');
     await rename(tmp, path);
   } catch (err) {
-    if (await pathExists(tmp)) {
+    if (await fileExists(tmp)) {
       try {
         await unlink(tmp);
       } catch {

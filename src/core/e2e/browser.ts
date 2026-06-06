@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type E2EJourney, e2eJourney } from '~/schemas/e2e-journey';
+import { fileExists } from '../hosts/shared';
 import { spawnProviderProcess } from '../hosts/spawn';
 
 /**
@@ -69,7 +70,7 @@ async function resolvePlaywrightCore(): Promise<string | null> {
     .sort((a, b) => compareSemver(b.split('@')[1], a.split('@')[1]));
   for (const v of versions) {
     const mjs = join(cacheDir, v, 'index.mjs');
-    if (await pathExists(mjs)) return mjs;
+    if (await fileExists(mjs)) return mjs;
   }
   return null;
 }
@@ -108,7 +109,7 @@ async function findCachedChromium(): Promise<string | null> {
   for (const dir of chromiumDirs) {
     for (const rel of candidates) {
       const abs = join(cacheRoot, dir, rel);
-      if (await pathExists(abs)) return abs;
+      if (await fileExists(abs)) return abs;
     }
   }
   return null;
@@ -121,15 +122,6 @@ function repoRelative(repoRoot: string, path: string): string {
 async function sha256OfFile(path: string): Promise<string> {
   const bytes = await readFile(path);
   return createHash('sha256').update(bytes).digest('hex');
-}
-
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -296,24 +288,24 @@ export async function runJourney(
   const networkAbs = join(runDir, 'network.log');
 
   const screenshots: E2EJourney['artifacts']['screenshots'] = [];
-  if (await pathExists(screenshotAbs)) {
+  if (await fileExists(screenshotAbs)) {
     screenshots.push({
       path: repoRelative(repoRoot, screenshotAbs),
       sha256: await sha256OfFile(screenshotAbs),
     });
   }
-  const trace = (await pathExists(traceAbs)) ? { path: repoRelative(repoRoot, traceAbs) } : null;
-  const consoleArtifact = (await pathExists(consoleAbs))
+  const trace = (await fileExists(traceAbs)) ? { path: repoRelative(repoRoot, traceAbs) } : null;
+  const consoleArtifact = (await fileExists(consoleAbs))
     ? { path: repoRelative(repoRoot, consoleAbs) }
     : null;
-  const network = (await pathExists(networkAbs))
+  const network = (await fileExists(networkAbs))
     ? { path: repoRelative(repoRoot, networkAbs) }
     : null;
 
   // The capture script (M5 glue) records assertion outcomes; absent that, treat
   // the run as blocked rather than fabricating a pass.
   const outcomeAbs = join(runDir, 'outcome.json');
-  if (!(await pathExists(outcomeAbs))) {
+  if (!(await fileExists(outcomeAbs))) {
     return {
       journey: blockedJourney(
         spec,

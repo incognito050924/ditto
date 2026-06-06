@@ -1,0 +1,73 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260606f4r",
+  "declared_by": "main",
+  "declared_at": "2026-06-06T02:12:48.148Z",
+  "summary": "공통 유틸 중복 정의 통일 — 모든 acceptance criterion이 pass로 기록되었다.",
+  "changed_files": [
+    ".ditto/handoff/archive/wi_260605wf3__2026-06-06T01-51-18-617Z.md",
+    ".ditto/work-items/wi_260605wf3/completion.json",
+    ".ditto/work-items/wi_260605wf3/language-ledger.json",
+    ".ditto/work-items/wi_260605wf3/work-item.json",
+    ".ditto/work-items/wi_260606f4r/",
+    ".ditto/work-items/wi_260606f4r/completion.json",
+    ".ditto/work-items/wi_260606f4r/work-item.json",
+    "skills/handoff/SKILL.md",
+    "src/cli/commands/work.ts",
+    "src/core/charter.ts",
+    "src/core/e2e/browser.ts",
+    "src/core/fs.ts",
+    "src/core/handoff-store.ts",
+    "src/core/hosts/shared.ts",
+    "src/core/work-item-handoff.ts",
+    "src/hooks/user-prompt-submit.ts",
+    "tests/conformance/m4.conformance.test.ts",
+    "tests/core/fs.test.ts",
+    "tests/core/handoff-store.test.ts",
+    "tests/core/work-item-handoff.test.ts",
+    "tests/hooks/user-prompt-submit.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "grep -rn pathExists src --include=*.ts",
+          "summary": "잔여 pathExists 0건. fs.ts·e2e/browser.ts private 정의 제거, 둘 다 hosts/shared.fileExists 단일 정의 재사용. 순환 없음(fs→shared 기존 방향)"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/fs.test.ts",
+          "summary": "신규 'true for a directory (stat-based)' + 기존 findRepoRoot(.ditto 디렉토리 감지) 테스트 통과, 20 pass"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test && bun run lint",
+          "summary": "1187 pass / 9 skip / 0 fail (+신규 fileExists 단위 3건), biome clean. readJson 우회·CodeQL 변환 미손댐(scope 규율)"
+        }
+      ],
+      "evidence_records": []
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [],
+  "next_handoff_path": ".ditto/handoff/wi_260606f4r.md",
+  "final_verdict": "pass"
+}
