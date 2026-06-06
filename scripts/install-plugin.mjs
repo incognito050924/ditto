@@ -375,7 +375,17 @@ function doInstall(repo, target, selfHost, build, codeql, playwright) {
 
   if (build) {
     const b = buildBinary(repo);
-    log.push(`build:     ${b.ok ? 'ok' : 'SKIPPED'} — ${b.message}`);
+    log.push(`build:     ${b.ok ? 'ok' : 'FAILED'} — ${b.message}`);
+    // The hook/CLI binary is REQUIRED (hooks invoke ${CLAUDE_PLUGIN_ROOT}/bin/ditto);
+    // a failed build must abort with a non-zero exit, not silently continue.
+    // (codeql/playwright stay graceful — they are optional features.)
+    if (!b.ok) {
+      const err = new Error(
+        `build failed — the hook/CLI binary is required for DITTO to work; aborting install. Fix the cause (e.g. install bun ≥1.3) and re-run. Global plugin registration was already applied; a re-run is idempotent. (${b.message})`,
+      );
+      err.partialLog = log;
+      throw err;
+    }
   } else {
     log.push('build:     skipped (--no-build)');
   }
@@ -466,10 +476,20 @@ function main() {
     return;
   }
 
-  const log =
-    mode === 'install'
-      ? doInstall(repo, target, selfHost, build, codeql, playwright)
-      : doUninstall(repo, target, selfHost);
+  let log;
+  try {
+    log =
+      mode === 'install'
+        ? doInstall(repo, target, selfHost, build, codeql, playwright)
+        : doUninstall(repo, target, selfHost);
+  } catch (err) {
+    console.error(`[ditto] ${mode} FAILED`);
+    console.error(`  repo:   ${repo}`);
+    console.error(`  target: ${target}${selfHost ? ' (self-host)' : ''}`);
+    for (const line of err.partialLog ?? []) console.error(`  ${line}`);
+    console.error(`  error:  ${err.message}`);
+    process.exit(1);
+  }
   console.log(`[ditto] ${mode} OK`);
   console.log(`  repo:   ${repo}`);
   console.log(`  target: ${target}${selfHost ? ' (self-host — project steps skipped)' : ''}`);
