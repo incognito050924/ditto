@@ -77,6 +77,14 @@ autopilot은 linear phase list가 아니라 **작업 그래프**다(메인 §5.3
 
 **planner가 전개하는 표준 라이프사이클(전체 전개 시).** 현황파악(`research`) → 기획·설계(`design`) → 계획·DoD·테스트케이스 설계(`design`) → 설계·DoD·테스트케이스 검증(`review`, 고임팩트는 dialectic 3역 §6.6) → 구현(`implement`) → 리뷰(`review`) → 수정+재리뷰 수렴(`fix`↔`review`, forward 재확장 §2.4) + 보안리뷰(`security` `[VERIFY]`) → [리팩토링(`refactor` `[VERIFY]`)] → 회고(`retro` `[VERIFY]`) → 정리(`cleanup` `[VERIFY]`) → 지식(`knowledge`). planner는 작업 규모에 따라 이 중 **필요한 노드만** 고른다 — 작은 작업이 회고·보안리뷰까지 강제되지 않는다(MINIMUM VIABLE은 *각 노드의 구현 방식*에 적용되지 라이프사이클 *커버리지*에는 적용되지 않는다; 적용 층위가 다르다).
 
+**ACG 게이트와의 연계 (wi_2606060bt).** ACG(agentic change governance)와 autopilot은 **분리된 두 책임**이다 — autopilot은 그래프를 진행(§2.3–2.4)하고, ACG는 지속적 적합성을 본다. 둘은 **노드 hot-path가 아니라 경계 시점**에서 연계된다:
+- **Stop 훅(completion 시점)**: `acgReviewForcesContinuation`·`assuranceSnapshotForcesContinuation`·`impactForcesContinuation`·`semanticForcesContinuation` 4게이트가 그래프가 `done`에 도달해도 ACG 위반이 남으면 completion을 차단한다(`src/hooks/stop.ts`). fitness 자동 평가도 여기서 돈다.
+- **PreToolUse 훅(편집 시점)**: `forbidden_scope`가 Edit/Write 전에 차단한다(`src/hooks/pre-tool-use.ts`).
+- **reviewer 노드 → ACG ReviewGraph**: reviewer-output가 `acg.review-graph.v1`로 변환돼 Stop 훅이 읽는다(`src/acg/review/acg-review-adapter.ts`, `src/core/codeql/review-to-ledger.ts`).
+- **drift(누적 관측)**: `src/acg/fitness/drift.ts`는 AssuranceSnapshot 시계열을 SLOP 추세로 투영한다. 단발 게이트가 *아니라* "변경을 가로질러 누적되는 침식"을 드러내는 관측 도구다(fitness CLI로 노출).
+
+노드 실행 흐름 안에서 ACG 게이트를 직접 호출하지 않는 것은 **의도된 분리**다 — Stop hot-path에 CodeQL을 넣지 않는 ADR-0001 성능계약과 동형으로, 게이트는 Stop/completion 경계에서만 돈다. autopilot 루프는 스케줄링만, ACG는 경계 게이트만 책임진다.
+
 `security`·`refactor`·`retro` kind는 전용 owner(security-reviewer·refactorer·retrospective)로 배선됐다. `cleanup`(git 커밋/브랜치/워크트리/임시파일)은 결정적 작업이라 에이전트 owner 대신 **`driver` pseudo-owner의 드라이버 결정적 스텝**으로 확정됐다: `nextNode`가 `owner==='driver'` 노드를 spawn 경로에서 가로채 `action:'cleanup'`을 내고, `ditto autopilot cleanup`이 결정적 정리를 실행한다. git 비가역 작업(워크트리 teardown)은 **명시 승인 게이트**로 막는다 — `--approve` 또는 `approval_gate.status==='approved'`만 인가하며, small-reversible 자동 면제(`not_required`)는 불충분하다. v0 정리 대상은 누수 중인 per-run 워크트리(`.ditto/worktrees/*`)로 한정한다(commit은 사용자 몫, branch는 미생성, temp는 임의라 제외). 코드 seam: `src/core/autopilot-cleanup.ts`(`planCleanup`·`cleanupApprovalGate`·`runCleanup`), `src/core/worktree.ts`(`listRunWorktrees`·`removeRunWorktree`).
 
 ### 2.3 그래프 불변식
