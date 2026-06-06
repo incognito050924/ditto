@@ -10,6 +10,8 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
     "build": "bun build src/cli/index.ts --compile --outfile dist/ditto",
+    "build:bin": "bun build src/cli/index.ts --compile --outfile bin/ditto",
+    "build:bin:win": "bun build src/cli/index.ts --compile --target=bun-windows-x64 --outfile bin/ditto.exe",
     "dev": "bun run src/cli/index.ts",
     "test": "bun test",
     "lint": "biome check src tests scripts",

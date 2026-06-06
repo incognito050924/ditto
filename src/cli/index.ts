@@ -13,6 +13,7 @@ import { deepInterviewCommand } from './commands/deep-interview';
 import { doctorCommand } from './commands/doctor';
 import { e2eCommand } from './commands/e2e';
 import { fitnessCommand } from './commands/fitness';
+import { hookCommand } from './commands/hook';
 import { impactCommand } from './commands/impact';
 import { runCommand } from './commands/run';
 import { semanticCommand } from './commands/semantic';
@@ -33,6 +34,7 @@ const main = defineCommand({
     bridge: bridgeCommand,
     context: contextCommand,
     autopilot: autopilotCommand,
+    hook: hookCommand,
     'deep-interview': deepInterviewCommand,
     e2e: e2eCommand,
     'acg-review': acgReviewCommand,

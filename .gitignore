@@ -476,3 +476,6 @@ dist/
 # Regenerable analyzer caches (CodeQL databases, keyed by commit sha)
 .ditto/cache/
 
+
+# DITTO compiled CLI/hook binary (built at install; cross-targets in install step)
+bin/
