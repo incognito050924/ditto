@@ -13,12 +13,13 @@ How (contract structure, glossary ownership, ADR cross-field, runtime-log separa
 ## Procedure (driver)
 Run as the main agent; spawn the curation as its own Task (1-level). One knowledge update per invocation — never multi-record, never code mutation.
 
-1. **Build the curation input** from the work item: candidate terms agreed with the user, technical decisions made (with rationale + change condition), and repeated learnings/patterns worth carrying forward.
+1. **Build the curation input** from the work item: candidate terms agreed with the user, technical decisions made (with rationale + change condition), and repeated learnings/patterns worth carrying forward. **Declare which of the three axis-4 triggers fired** — `adr_worthy_decision` (a durable decision worth an ADR), `new_agreed_term` (a new ubiquitous-language term agreed with the user), `repeated_pattern` (a reusable pattern or repeated learning). A work item where none fired records nothing — that is a valid, explicit skip, not a silent omission.
 2. **Spawn `knowledge-curator`** (1-level Task) with the input only. The agent is docs-write-only under `.ditto/knowledge/` (tools: Read, Grep, Glob, Write, Edit — NO Bash, NO code mutation). It:
    - promotes agreed terms into `.ditto/knowledge/CONTEXT.md` + `glossary.json` (agreed terms only — its judgment, no heuristic extractor);
    - appends a technical decision as `.ditto/knowledge/adr/ADR-NNNN-<slug>.md` and a `decisions[]` entry (rationale + change_condition; `status=superseded` ⇒ `superseded_by`);
    - carries repeated learnings/patterns in `learnings[]` / `patterns[]`, kept SEPARATE from `hooks/runtime-log.jsonl` (no auto-promotion of runtime-log lines).
 3. **Write exactly one `knowledgeRecord`** (`src/schemas/knowledge-record.ts`) to `.ditto/knowledge/knowledge.json`, validated through `knowledgeRecord.parse` (0 errors). The schema enforces the ADR cross-field invariants at runtime.
+   - **Gate the recording decision** against the declared triggers: `ditto knowledge gate --json '{"triggers":{"adr_worthy_decision":…,"new_agreed_term":…,"repeated_pattern":…},"delta":{"decisions":N,"glossary_terms":N,"patterns":N,"learnings":N}}'` where `delta` is what THIS update recorded. The gate fails (non-zero) on **under-recording** (a fired trigger with no matching content) and **over-recording** (content with no trigger) — fix the curation until it passes before closing the node. This makes "valuable durable change" an explicit, checkable surface, not a curator-only heuristic.
 4. **Project the summary into CLAUDE.md** via `syncKnowledgeProjection` (`src/core/knowledge-bridge.ts`): a summary of CONTEXT/glossary term headlines + ADR decision headlines + paths goes into the SEPARATE `ditto:knowledge:*` managed block — NOT a second `ditto:managed` block. Then set `knowledgeRecord.projected_to_claude_md = true`. The existing AGENTS.md `ditto:managed` block stays single and unchanged. Use `{ check: true }` for a dry-run drift check (drift 0 ⇒ projection current).
 
 The driver curates and spawns; it does not invent terms or decisions the work item never produced. Promotion is a deliberate act, not a heuristic.
@@ -28,5 +29,6 @@ The produced record is the node's evidence: exactly one schema-valid `knowledgeR
 
 ## Output contract
 - Exactly one `knowledgeRecord` (`.ditto/knowledge/knowledge.json`) conforming to the schema (0 validation errors).
-- At least one of: a promoted agreed term, an appended ADR, or a recorded pattern/learning.
+- `ditto knowledge gate` passes: every declared trigger has matching recorded content, and no content was recorded without a trigger (no under/over-recording).
+- When ≥1 trigger fired, at least one of: a promoted agreed term, an appended ADR, or a recorded pattern/learning (a no-trigger work item correctly records none).
 - `projected_to_claude_md=true`; the CLAUDE.md `ditto:knowledge:*` block sha256 matches the sources (drift 0); the AGENTS.md `ditto:managed` block is unchanged.

@@ -260,3 +260,64 @@ export function highRiskAssumption(a: RiskAxes): boolean {
 export function safeDefaultable(a: RiskAxes): boolean {
   return !highRiskAssumption(a);
 }
+
+// ── knowledge-update trigger gate (durable-change recording: under ∧ over) ───
+
+/**
+ * The three triggers that make a change worth durable knowledge (axis-4). A
+ * curator declares which fired this work item; the gate then checks the produced
+ * record matches. This turns "valuable durable change" from pure curator
+ * heuristic into an explicit, checkable surface.
+ */
+export interface KnowledgeTriggers {
+  /** A durable decision worth an ADR (carries rationale + change condition). */
+  adr_worthy_decision: boolean;
+  /** A new ubiquitous-language term agreed with the user this work item. */
+  new_agreed_term: boolean;
+  /** A reusable pattern or a repeated learning seen again. */
+  repeated_pattern: boolean;
+}
+
+/** Counts the curator declares it recorded this update (per-update delta). */
+export interface KnowledgeRecordDelta {
+  decisions: number;
+  glossary_terms: number;
+  patterns: number;
+  learnings: number;
+}
+
+export function knowledgeTriggerFired(t: KnowledgeTriggers): boolean {
+  return t.adr_worthy_decision || t.new_agreed_term || t.repeated_pattern;
+}
+
+/**
+ * Gate the durable-knowledge recording against the three triggers, cutting BOTH
+ * failure modes the axis-4 gap names:
+ *  - under-recording (놓침): a declared trigger with no matching record content;
+ *  - over-recording (노이즈): record content with no trigger declared.
+ * A no-trigger work item that records nothing is the valid, EXPLICIT skip — the
+ * gate passes (recording nothing is correct), it just must be a real no-trigger,
+ * not silent omission while a trigger fired. The per-trigger→content mapping:
+ * decision→decisions, term→glossary_terms, pattern→patterns∪learnings.
+ */
+export function knowledgeUpdateGate(t: KnowledgeTriggers, d: KnowledgeRecordDelta): GateResult {
+  const reasons: string[] = [];
+  const recorded = d.decisions + d.glossary_terms + d.patterns + d.learnings;
+  if (!knowledgeTriggerFired(t) && recorded > 0) {
+    reasons.push('durable content recorded but no trigger declared (over-recording: noise)');
+  }
+  if (t.adr_worthy_decision && d.decisions === 0) {
+    reasons.push(
+      'adr_worthy_decision trigger fired but no decision/ADR recorded (under-recording)',
+    );
+  }
+  if (t.new_agreed_term && d.glossary_terms === 0) {
+    reasons.push('new_agreed_term trigger fired but no glossary term added (under-recording)');
+  }
+  if (t.repeated_pattern && d.patterns + d.learnings === 0) {
+    reasons.push(
+      'repeated_pattern trigger fired but no pattern/learning recorded (under-recording)',
+    );
+  }
+  return gate(reasons);
+}

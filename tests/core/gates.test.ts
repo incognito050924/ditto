@@ -10,6 +10,8 @@ import {
   deterministicFloor,
   highRiskAssumption,
   interviewReadinessGate,
+  knowledgeTriggerFired,
+  knowledgeUpdateGate,
   safeDefaultable,
 } from '~/core/gates';
 import { completionContract } from '~/schemas/completion-contract';
@@ -224,5 +226,44 @@ describe('deriveClosureMode records HOW closure was reached (ledger-primary)', (
     );
     const conv = convergence.parse(load('convergence/converged.json'));
     expect(conv.exit.closure_mode).toBe(deriveClosureMode(conv.exit.reason, conv.gate.converged));
+  });
+});
+
+describe('knowledgeUpdateGate (axis-4 durable-change triggers: under ∧ over-recording)', () => {
+  const NONE = { adr_worthy_decision: false, new_agreed_term: false, repeated_pattern: false };
+  const ZERO = { decisions: 0, glossary_terms: 0, patterns: 0, learnings: 0 };
+
+  test('no trigger + nothing recorded → pass (valid explicit skip)', () => {
+    expect(knowledgeUpdateGate(NONE, ZERO).pass).toBe(true);
+    expect(knowledgeTriggerFired(NONE)).toBe(false);
+  });
+
+  test('over-recording: content with no trigger declared → fail (noise)', () => {
+    const r = knowledgeUpdateGate(NONE, { ...ZERO, decisions: 1 });
+    expect(r.pass).toBe(false);
+    expect(r.reasons.join(' ')).toContain('over-recording');
+  });
+
+  test('under-recording: adr trigger fired but no decision recorded → fail', () => {
+    const r = knowledgeUpdateGate({ ...NONE, adr_worthy_decision: true }, ZERO);
+    expect(r.pass).toBe(false);
+    expect(r.reasons.join(' ')).toContain('under-recording');
+  });
+
+  test('under-recording: term trigger fired but no glossary term → fail', () => {
+    expect(knowledgeUpdateGate({ ...NONE, new_agreed_term: true }, ZERO).pass).toBe(false);
+  });
+
+  test('repeated_pattern is satisfied by EITHER a pattern OR a learning', () => {
+    const t = { ...NONE, repeated_pattern: true };
+    expect(knowledgeUpdateGate(t, { ...ZERO, patterns: 1 }).pass).toBe(true);
+    expect(knowledgeUpdateGate(t, { ...ZERO, learnings: 1 }).pass).toBe(true);
+    expect(knowledgeUpdateGate(t, ZERO).pass).toBe(false);
+  });
+
+  test('every fired trigger backed by matching content → pass', () => {
+    const t = { adr_worthy_decision: true, new_agreed_term: true, repeated_pattern: true };
+    const d = { decisions: 1, glossary_terms: 2, patterns: 0, learnings: 1 };
+    expect(knowledgeUpdateGate(t, d).pass).toBe(true);
   });
 });

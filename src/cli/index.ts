@@ -16,6 +16,7 @@ import { fitnessCommand } from './commands/fitness';
 import { hookCommand } from './commands/hook';
 import { impactCommand } from './commands/impact';
 import { initCommand } from './commands/init';
+import { knowledgeCommand } from './commands/knowledge';
 import { runCommand } from './commands/run';
 import { semanticCommand } from './commands/semantic';
 import { verifyCommand } from './commands/verify';
@@ -39,6 +40,7 @@ const main = defineCommand({
     hook: hookCommand,
     'deep-interview': deepInterviewCommand,
     e2e: e2eCommand,
+    knowledge: knowledgeCommand,
     'acg-review': acgReviewCommand,
     codeql: codeqlCommand,
     impact: impactCommand,
