@@ -42,26 +42,38 @@ describe('classifyPromptAdvisory', () => {
 });
 
 describe('resolveActiveWorkItem (single-active invariant)', () => {
-  test('empty state creates a draft work item and sets the pointer', async () => {
+  test('empty state guides (no auto-create, pointer unset)', async () => {
+    const items = new WorkItemStore(repo);
     const r = await resolveActiveWorkItem(repo, 'sess-1', 'add a feature');
-    expect(r.action).toBe('created');
-    expect(r.workItem?.status).toBe('draft');
-    const pointer = await new SessionPointerStore(repo).get('sess-1');
-    expect(pointer).toBe(r.workItem?.id ?? null);
+    expect(r.action).toBe('guide');
+    expect(r.workItem).toBeUndefined();
+    expect((await items.list()).length).toBe(0); // nothing created
+    expect(await new SessionPointerStore(repo).get('sess-1')).toBeNull();
   });
 
-  test('existing pointer loads the same work item', async () => {
-    const first = await resolveActiveWorkItem(repo, 'sess-1', 'add a feature');
-    const second = await resolveActiveWorkItem(repo, 'sess-1', 'follow-up prompt');
-    expect(second.action).toBe('loaded');
-    expect(second.workItem?.id).toBe(first.workItem?.id);
+  test('existing pointer loads the work item it points at', async () => {
+    const items = new WorkItemStore(repo);
+    const created = await items.create({
+      title: 'mine',
+      source_request: 'r',
+      goal: 'r',
+      acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+    });
+    await new SessionPointerStore(repo).set('sess-1', created.id);
+    const r = await resolveActiveWorkItem(repo, 'sess-1', 'follow-up prompt');
+    expect(r.action).toBe('loaded');
+    expect(r.workItem?.id).toBe(created.id);
   });
 
   test('pointer present wins even when other open drafts exist (ignores the rest)', async () => {
     const items = new WorkItemStore(repo);
-    // establish sess-1's pointer first (clean state)
-    const active = await resolveActiveWorkItem(repo, 'sess-1', 'mine');
-    expect(active.action).toBe('created');
+    const mine = await items.create({
+      title: 'mine',
+      source_request: 'm',
+      goal: 'm',
+      acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+    });
+    await new SessionPointerStore(repo).set('sess-1', mine.id);
     // now add unrelated open drafts
     await items.create({
       title: 'other-a',
@@ -77,7 +89,7 @@ describe('resolveActiveWorkItem (single-active invariant)', () => {
     });
     const again = await resolveActiveWorkItem(repo, 'sess-1', 'mine again');
     expect(again.action).toBe('loaded');
-    expect(again.workItem?.id).toBe(active.workItem?.id);
+    expect(again.workItem?.id).toBe(mine.id);
   });
 
   test('no pointer + open work items exist => ask, never auto-pick or create', async () => {
@@ -133,16 +145,35 @@ describe('userPromptSubmitHandler', () => {
     expect(out.exitCode).toBe(0);
     const ctx = additionalContext(out.stdout);
     expect(ctx).toContain('prime directive');
-    expect(ctx).toContain('Active work item: wi_');
+    // empty state: no active work item, but the work-item guide is surfaced
+    expect(ctx).not.toContain('Active work item: wi_');
+    expect(ctx).toContain('ditto work start');
+  });
+
+  test('empty-state prompt does not auto-create a work item or set a pointer', async () => {
+    const items = new WorkItemStore(repo);
+    const out = await run({ session_id: 'sess-1', prompt: 'build X' });
+    expect(out.exitCode).toBe(0);
+    expect((await items.list()).length).toBe(0);
+    expect(await new SessionPointerStore(repo).get('sess-1')).toBeNull();
   });
 
   test('Stop and UserPromptSubmit read the same pointer (one work item)', async () => {
-    await run({ session_id: 'sess-1', prompt: 'build X' });
-    const fromHook = await new SessionPointerStore(repo).get('sess-1');
-    expect(fromHook).toMatch(/^wi_/);
-    // a second prompt resolves to the same id
+    const items = new WorkItemStore(repo);
+    const created = await items.create({
+      title: 'mine',
+      source_request: 'build X',
+      goal: 'build X',
+      acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+    });
+    await new SessionPointerStore(repo).set('sess-1', created.id);
+    const fromPointer = await new SessionPointerStore(repo).get('sess-1');
+    expect(fromPointer).toMatch(/^wi_/);
+    // the hook (and a direct resolve) load the same pointed work item
+    const out = await run({ session_id: 'sess-1', prompt: 'next' });
+    expect(additionalContext(out.stdout)).toContain(`Active work item: ${created.id}`);
     const r = await resolveActiveWorkItem(repo, 'sess-1', 'next');
-    expect(r.workItem?.id ?? null).toBe(fromHook);
+    expect(r.workItem?.id ?? null).toBe(fromPointer);
   });
 
   test('classification + action are logged, never block', async () => {
@@ -150,7 +181,7 @@ describe('userPromptSubmitHandler', () => {
     const log = await readFile(join(repo, '.ditto', 'logs', 'user-prompt.jsonl'), 'utf8');
     const entry = JSON.parse(log.trim().split('\n')[0] ?? '{}');
     expect(entry.classification).toBe('question');
-    expect(entry.action).toBe('created');
+    expect(entry.action).toBe('guide');
   });
 
   test('missing session_id still injects charter (degrade gracefully)', async () => {
@@ -159,12 +190,33 @@ describe('userPromptSubmitHandler', () => {
     expect(additionalContext(out.stdout)).toContain('prime directive');
   });
 
-  test('auto-created work item (all-placeholder AC) emits placeholder advisory', async () => {
+  test('loaded placeholder-only work item emits placeholder advisory', async () => {
+    const items = new WorkItemStore(repo);
+    const created = await items.create({
+      title: 'ph',
+      source_request: 'do the thing',
+      goal: 'do the thing',
+      acceptance_criteria: [
+        {
+          id: 'ac-1',
+          statement: 'TBD — derive observable criteria during interview/planning',
+          verdict: 'unverified',
+          evidence: [],
+        },
+      ],
+    });
+    await new SessionPointerStore(repo).set('sess-ph', created.id);
     const out = await run({ session_id: 'sess-ph', prompt: 'do the thing' });
     expect(out.exitCode).toBe(0);
     const ctx = additionalContext(out.stdout);
     expect(ctx).toContain('acceptance criteria are placeholders');
     expect(ctx).toContain('/ditto:deep-interview');
+  });
+
+  test('empty-state guide does NOT auto-create, so no placeholder advisory', async () => {
+    const out = await run({ session_id: 'sess-noph', prompt: 'do the thing' });
+    expect(out.exitCode).toBe(0);
+    expect(additionalContext(out.stdout)).not.toContain('acceptance criteria are placeholders');
   });
 
   test('work item with at least one real AC does NOT emit placeholder advisory', async () => {
@@ -208,14 +260,34 @@ describe('userPromptSubmitHandler', () => {
   // §AC-1 deep-interview directive matrix (4 cases) — only the conjunction
   // (placeholder-only + execution) triggers; the other three are silent.
   describe('§AC-1 deep-interview directive', () => {
+    async function seedPlaceholderOnly(sessionId: string): Promise<void> {
+      const items = new WorkItemStore(repo);
+      const created = await items.create({
+        title: 'ph',
+        source_request: 'r',
+        goal: 'r',
+        acceptance_criteria: [
+          {
+            id: 'ac-1',
+            statement: 'TBD — derive observable criteria during interview/planning',
+            verdict: 'unverified',
+            evidence: [],
+          },
+        ],
+      });
+      await new SessionPointerStore(repo).set(sessionId, created.id);
+    }
+
     test('placeholder-only + execution prompt → directive inject (the conjunction)', async () => {
-      // Fresh session, fresh work item: auto-create yields placeholder-only.
+      // A loaded placeholder-only work item (e.g. from `work start`) + execution intent.
+      await seedPlaceholderOnly('sess-dir-1');
       const out = await run({ session_id: 'sess-dir-1', prompt: 'build a password endpoint' });
       const ctx = additionalContext(out.stdout);
       expect(ctx).toContain('Run /ditto:deep-interview now');
     });
 
     test('placeholder-only + question prompt → directive NOT injected', async () => {
+      await seedPlaceholderOnly('sess-dir-2');
       const out = await run({
         session_id: 'sess-dir-2',
         prompt: 'what does the bridge command do?',

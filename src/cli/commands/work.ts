@@ -93,6 +93,9 @@ const workStart = defineCommand({
         writeHuman(`  goal: ${created.goal}`);
         writeHuman(`  status: ${created.status}`);
         writeHuman(`  path: ${repoRoot}/.ditto/work-items/${created.id}/work-item.json`);
+        writeHuman('Next steps:');
+        writeHuman(`  1. ditto deep-interview start --workItem ${created.id}`);
+        writeHuman(`  2. ditto autopilot bootstrap --workItem ${created.id}`);
       }
     } catch (err) {
       writeError(`work start failed: ${err instanceof Error ? err.message : String(err)}`);

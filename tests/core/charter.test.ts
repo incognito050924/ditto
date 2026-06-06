@@ -22,6 +22,23 @@ describe('charterProjection (D8)', () => {
     expect(out).toContain('IntentContract entry');
   });
 
+  test('base prime directive reflects the agent-judged, agent-registered work-item model', () => {
+    const out = charterProjection();
+    // The hook does not blindly auto-create on every prompt; the agent decides.
+    expect(out).toContain('does not blindly auto-create a work item on every prompt');
+    expect(out).toContain('1st-pass judgment');
+    // Creation is agent-driven (the agent runs the command), not user-manual.
+    expect(out).toContain('register it YOURSELF');
+    expect(out).toContain('ditto work start');
+  });
+
+  test('workItemGuide → empty-state work-item guide advisory (⚠)', () => {
+    const out = charterProjection({ workItemGuide: true });
+    expect(out).toContain('No active work item');
+    expect(out).toContain('1st-pass judgment');
+    expect(out).toContain('ditto work start');
+  });
+
   test('selfAnswerHint → QuestionGate advisory (⚠)', () => {
     const out = charterProjection({ selfAnswerHint: true });
     expect(out).toContain('self-answer from code/docs/web first');

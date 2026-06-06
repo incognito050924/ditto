@@ -1,0 +1,285 @@
+{
+  "schema_version": "0.1.0",
+  "autopilot_id": "orch_260606u5j",
+  "work_item_id": "wi_260606di2",
+  "mode": "autopilot",
+  "root_goal": "DITTO의 work item 생성 모델을 '모든 요청 자동 생성'에서 'agent 1차 판단 + 수동 생성 command + 사용자 의도 확인'으로 전환하고, UserPromptSubmit hook을 가이드-only로 바꾸며, 수동 생성 진입점을 deep-interview/autopilot과 연계하고, prime directive 본문을 새 모델과 일치시킨다.",
+  "completion_boundary": "entire_work_item",
+  "approval_gate": {
+    "status": "approved",
+    "source": "user",
+    "approved_at": "2026-06-06T17:04:23.000Z",
+    "approved_by": "user",
+    "evidence_refs": []
+  },
+  "nodes": [
+    {
+      "id": "N1",
+      "kind": "design",
+      "owner": "planner",
+      "purpose": "Plan the change against the acceptance criteria",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "file",
+          "path": "src/hooks/user-prompt-submit.ts",
+          "lines": {
+            "start": 147,
+            "end": 165
+          },
+          "summary": "auto-create branch to remove"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/charter.ts",
+          "lines": {
+            "start": 8,
+            "end": 24
+          },
+          "summary": "PRIME_DIRECTIVE + stale placeholder doc"
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/work.ts",
+          "lines": {
+            "start": 84,
+            "end": 96
+          },
+          "summary": "work start output (entry point)"
+        },
+        {
+          "kind": "file",
+          "path": "tests/hooks/user-prompt-submit.test.ts",
+          "lines": {
+            "start": 45,
+            "end": 216
+          },
+          "summary": "old-contract tests to rewrite"
+        }
+      ],
+      "ac_verdicts": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N2",
+      "kind": "implement",
+      "owner": "implementer",
+      "purpose": "Implement the planned change",
+      "status": "passed",
+      "depends_on": [
+        "N1"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/user-prompt-submit.test.ts tests/core/charter.test.ts",
+          "summary": "39 pass / 0 fail, exit 0 (ac-1, ac-2, ac-4 charter half)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/stop-fitness.test.ts tests/hooks/stop.test.ts tests/core/handoff-store.test.ts tests/core/work-item-handoff.test.ts",
+          "summary": "71 pass / 0 fail, exit 0 (ac-5 regression guard)"
+        },
+        {
+          "kind": "command",
+          "command": "npx tsc --noEmit",
+          "summary": "exit 0; only pre-existing unrelated src/acg/* errors"
+        },
+        {
+          "kind": "command",
+          "command": "ditto work start ... then ditto deep-interview start --workItem <id>",
+          "summary": "ac-3 chain works end-to-end, exit 0, Next steps printed"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/charter.ts",
+          "summary": "PRIME_DIRECTIVE rewrite + WORK_ITEM_GUIDE_ADVISORY"
+        },
+        {
+          "kind": "file",
+          "path": "src/hooks/user-prompt-submit.ts",
+          "summary": "auto-create branch removed; action guide"
+        }
+      ],
+      "ac_verdicts": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N3",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "Verify every acceptance criterion with evidence",
+      "status": "passed",
+      "depends_on": [
+        "N2"
+      ],
+      "acceptance_refs": [
+        "ac-1",
+        "ac-2",
+        "ac-3",
+        "ac-4",
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test (full suite)",
+          "summary": "1335 pass / 5 fail exit 1: 4 = m1.conformance regression (this change), 1 = pre-existing repo-self-validation"
+        },
+        {
+          "kind": "file",
+          "path": "tests/conformance/m1.conformance.test.ts",
+          "lines": {
+            "start": 107,
+            "end": 208
+          },
+          "summary": "stale auto-create assertions L107,115,175,208"
+        },
+        {
+          "kind": "command",
+          "command": "git stash && bun test tests/schemas/repo-self-validation.test.ts",
+          "summary": "still 10 pass/1 fail without change → repo-self-validation failure pre-existing"
+        }
+      ],
+      "ac_verdicts": [
+        {
+          "criterion_id": "ac-1",
+          "verdict": "pass",
+          "notes": "empty-state guide branch, 0 creates; tests green"
+        },
+        {
+          "criterion_id": "ac-2",
+          "verdict": "pass",
+          "notes": "exit 0 + guide advisory rendered; tests green"
+        },
+        {
+          "criterion_id": "ac-3",
+          "verdict": "pass",
+          "notes": "live work start chain to deep-interview/autopilot, exit 0"
+        },
+        {
+          "criterion_id": "ac-4",
+          "verdict": "pass",
+          "notes": "charter.ts rewritten; CLAUDE.md has no auto-create target (verified by grep)"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N4",
+      "kind": "fix",
+      "owner": "implementer",
+      "purpose": "tests/conformance/m1.conformance.test.ts: 옛 자동생성 계약을 단언하는 4개 케이스(L107 'pointer must be set on create', L115 action==='created', L175 auto-create placeholder advisory, L208 directive on auto-created placeholder)를 새 수동생성 모델로 갱신/은퇴 — 빈 상태→guide(생성 0건·pointer unset), action='created' 기대 제거, 자동생성 placeholder 의존 단언 제거. ac-1/ac-2와 정합. 무관한 변경 금지.",
+      "status": "passed",
+      "depends_on": [],
+      "acceptance_refs": [
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/conformance/m1.conformance.test.ts",
+          "summary": "42 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "1339 pass / 9 skip / 1 fail exit 1; residual = pre-existing repo-self-validation (out of scope)"
+        },
+        {
+          "kind": "file",
+          "path": "tests/conformance/m1.conformance.test.ts",
+          "summary": "4 M1.3 auto-create cases rewritten to manual-create/guide model"
+        }
+      ],
+      "ac_verdicts": [],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    },
+    {
+      "id": "N5",
+      "kind": "verify",
+      "owner": "verifier",
+      "purpose": "전체 `bun test` 재실행: m1.conformance 회귀 4건 해소 확인, repo-self-validation(기존·out-of-scope)을 제외한 스위트 green 확인. ac-5 재판정.",
+      "status": "passed",
+      "depends_on": [
+        "N4"
+      ],
+      "acceptance_refs": [
+        "ac-5"
+      ],
+      "evidence_refs": [
+        {
+          "kind": "command",
+          "command": "bun test tests/conformance/m1.conformance.test.ts",
+          "summary": "42 pass / 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/stop.test.ts tests/hooks/stop-fitness.test.ts tests/core/handoff-store.test.ts tests/core/work-item-handoff.test.ts tests/hooks/user-prompt-submit.test.ts tests/core/charter.test.ts",
+          "summary": "110 pass / 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full) + git stash isolation",
+          "summary": "1339 pass/1 fail; residual = pre-existing repo-self-validation on untracked wi_260606hiw, independent of di2"
+        }
+      ],
+      "ac_verdicts": [
+        {
+          "criterion_id": "ac-5",
+          "verdict": "pass",
+          "notes": "m1.conformance 42 pass; guard suites 110 pass; residual repo-self-validation failure proven out-of-scope (wi_260606hiw untracked, di2-stash isolation)"
+        }
+      ],
+      "attempts": {
+        "fix": 0,
+        "switch": 0
+      }
+    }
+  ],
+  "caps": {
+    "fix_per_node": 2,
+    "switch_per_node": 1,
+    "converge_rounds": 3
+  },
+  "continue_policy": {
+    "continue_after_approval": true,
+    "continue_after_checkpoint": true,
+    "continue_after_fixable_failure": true,
+    "ask_user_only_for_user_owned_decisions": true
+  },
+  "stop_conditions": [
+    "all_acceptance_criteria_passed_or_explicitly_closed",
+    "blocked_by_user_owned_decision",
+    "blocked_by_external_system",
+    "safety_boundary_hit"
+  ],
+  "user_interrupt_policy": "ask_only_for_user_owned_decisions"
+}

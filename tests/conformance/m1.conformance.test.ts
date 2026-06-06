@@ -100,22 +100,30 @@ describe('M1.3 — UserPromptSubmit hook 최소 동작 (단일 active invariant)
   const run = (raw: Record<string, unknown>) =>
     userPromptSubmitHandler({ raw: { session_id: SESSION, ...raw }, repoRoot: tmp, env: {} });
 
-  test('빈 상태 → work item 생성 + 포인터 set + charter context 주입', async () => {
+  test('빈 상태 → 자동 생성 안 함, 포인터 unset, work-item 가이드 + charter context 주입', async () => {
+    const items = new WorkItemStore(tmp);
     const out = await run({ prompt: 'add a password endpoint' });
     expect(out.exitCode).toBe(0); // advisory: 절대 block 안 함
-    const pointer = await new SessionPointerStore(tmp).get(SESSION);
-    expect(pointer, 'pointer must be set on create').not.toBeNull();
+    // 새 모델(manual-create): 빈 상태에서 work item 도 포인터도 만들지 않는다.
+    expect((await items.list()).length, 'must not auto-create a work item').toBe(0);
+    expect(await new SessionPointerStore(tmp).get(SESSION), 'pointer must stay unset').toBeNull();
     const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
     expect(ctx).toContain('prime directive'); // charter projection
-    expect(ctx).toContain(pointer ?? '∅'); // active work item id 주입
+    expect(ctx).toContain('ditto work start'); // work-item 가이드 발화
   });
 
   test('기존 포인터 있으면 그 work item 로드(action=loaded)', async () => {
-    const created = await resolveActiveWorkItem(tmp, SESSION, 'first prompt');
-    expect(created.action).toBe('created');
+    const items = new WorkItemStore(tmp);
+    const created = await items.create({
+      title: 'mine',
+      source_request: 'first prompt',
+      goal: 'first prompt',
+      acceptance_criteria: [ac('ac-1')],
+    });
+    await new SessionPointerStore(tmp).set(SESSION, created.id);
     const again = await resolveActiveWorkItem(tmp, SESSION, 'second prompt');
     expect(again.action).toBe('loaded');
-    expect(again.workItem?.id).toBe(created.workItem?.id);
+    expect(again.workItem?.id).toBe(created.id);
   });
 
   test('다중 draft + 포인터 없음 → ask (임의 선택 금지, 신규 생성도 안 함)', async () => {
@@ -168,10 +176,30 @@ describe('M1.3 — UserPromptSubmit hook 최소 동작 (단일 active invariant)
     expect(stopPointer).toBe(upsPointer);
   });
 
-  test('자동 생성된 placeholder-only work item → placeholder advisory inject (§AC-3, wi_v04runtimewiring 2026-05-31)', async () => {
-    const out = await run({ prompt: 'do something' });
+  test('로드된 placeholder-only work item → placeholder advisory inject (§AC-3, wi_v04runtimewiring 2026-05-31)', async () => {
+    // 새 모델(manual-create): 자동 생성은 더 이상 없다. placeholder-only WI 는
+    // `work start` 등으로 명시 생성되어 포인터로 로드된 상태에서 advisory 가 발화한다.
+    const items = new WorkItemStore(tmp);
+    const created = await items.create({
+      title: 'ph',
+      source_request: 'do something',
+      goal: 'do something',
+      acceptance_criteria: [
+        {
+          id: 'ac-1',
+          statement: 'TBD — derive observable criteria during interview/planning',
+          verdict: 'unverified',
+          evidence: [],
+        },
+      ],
+    });
+    await new SessionPointerStore(tmp).set('s-ph', created.id);
+    const out = await userPromptSubmitHandler({
+      raw: { session_id: 's-ph', prompt: 'do something' },
+      repoRoot: tmp,
+      env: {},
+    });
     const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
-    // IntentContract outcome ("좁혀라"): 자동 생성 직후 advisory 발화.
     expect(ctx).toContain('acceptance criteria are placeholders');
     expect(ctx).toContain('/ditto:deep-interview');
   });
@@ -201,16 +229,40 @@ describe('M1.3 — UserPromptSubmit hook 최소 동작 (단일 active invariant)
     expect(ctx).not.toContain('acceptance criteria are placeholders');
   });
 
+  // 새 모델(manual-create): 자동 생성이 없으므로 directive 는 *로드된* placeholder-only
+  // work item 에서만 발화한다. 명시 생성된 placeholder-only WI 를 포인터로 로드해서 검증.
+  const seedPlaceholderOnly = async (sessionId: string): Promise<void> => {
+    const items = new WorkItemStore(tmp);
+    const created = await items.create({
+      title: 'ph',
+      source_request: 'r',
+      goal: 'r',
+      acceptance_criteria: [
+        {
+          id: 'ac-1',
+          statement: 'TBD — derive observable criteria during interview/planning',
+          verdict: 'unverified',
+          evidence: [],
+        },
+      ],
+    });
+    await new SessionPointerStore(tmp).set(sessionId, created.id);
+  };
+  const runWith = (sessionId: string, prompt: string) =>
+    userPromptSubmitHandler({ raw: { session_id: sessionId, prompt }, repoRoot: tmp, env: {} });
+
   test('placeholder-only + execution prompt → deep-interview directive inject (§AC-1, wi_v04intent_autopilot_entry 2026-06-01)', async () => {
-    // Fresh session auto-creates a placeholder-only work item; execution-shape prompt.
-    const out = await run({ prompt: 'build the password endpoint' });
+    // Loaded placeholder-only work item (e.g. from `work start`); execution-shape prompt.
+    await seedPlaceholderOnly('s-dir');
+    const out = await runWith('s-dir', 'build the password endpoint');
     const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
     expect(ctx).toContain('Run /ditto:deep-interview now');
     expect(ctx).toContain('IntentContract entry');
   });
 
   test('placeholder-only + question prompt → directive NOT injected (보수성)', async () => {
-    const out = await run({ prompt: 'what does the bridge command do?' });
+    await seedPlaceholderOnly('s-dir-q');
+    const out = await runWith('s-dir-q', 'what does the bridge command do?');
     const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
     expect(ctx).not.toContain('Run /ditto:deep-interview now');
   });

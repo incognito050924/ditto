@@ -100,20 +100,20 @@ export interface ActiveResolution {
   workItem?: WorkItem;
   /** Set when the active work item is ambiguous and the user must choose (no arbitrary pick). */
   advisory?: string;
-  action: 'loaded' | 'created' | 'ask';
+  action: 'loaded' | 'ask' | 'guide';
 }
 
 /**
  * Resolve the single active work item for a session (plan §3 F3).
  *  - pointer present → load it (pointer wins even if other drafts exist)
  *  - pointer absent + open work items exist → ASK which to resume (never auto-pick)
- *  - pointer absent + no open work items → create a draft and set the pointer
+ *  - pointer absent + no open work items → GUIDE only (no auto-create, no pointer):
+ *    the agent makes the 1st-pass WI judgment; creation is manual + confirmed.
  */
 export async function resolveActiveWorkItem(
   repoRoot: string,
   sessionId: string,
   prompt: string,
-  now: Date = new Date(),
 ): Promise<ActiveResolution> {
   const items = new WorkItemStore(repoRoot);
   const pointers = new SessionPointerStore(repoRoot);
@@ -144,25 +144,11 @@ export async function resolveActiveWorkItem(
     };
   }
 
-  const title = prompt.trim().slice(0, 80) || 'untitled request';
-  const created = await items.create(
-    {
-      title,
-      source_request: prompt || title,
-      goal: prompt || title,
-      acceptance_criteria: [
-        {
-          id: 'ac-1',
-          statement: PLACEHOLDER_AC_STATEMENT,
-          verdict: 'unverified',
-          evidence: [],
-        },
-      ],
-    },
-    now,
-  );
-  await pointers.set(sessionId, created.id, now);
-  return { workItem: created, action: 'created' };
+  // Empty state (no active pointer + no open work items): GUIDE only. The hook
+  // no longer auto-creates a draft. The agent makes the 1st-pass WI judgment;
+  // if a work item is warranted it is created manually after confirming intent
+  // (`ditto work start`). No create, no pointer set, exit 0.
+  return { action: 'guide' };
 }
 
 /** True iff every acceptance criterion of the work item is the placeholder. */
@@ -246,6 +232,9 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
     ctx.selfAnswerHint = true;
   }
   if (resolved.advisory) ctx.advisory = resolved.advisory;
+  // Empty-state: inject the work-item guide (1st-pass judgment + creation-intent
+  // confirmation + how-to-create). Guidance only — no auto-create, no block.
+  if (resolved.action === 'guide') ctx.workItemGuide = true;
 
   // UserPromptSubmit is advisory: never blocks (exit 0 + additionalContext).
   return contextOutput(charterProjection(ctx));

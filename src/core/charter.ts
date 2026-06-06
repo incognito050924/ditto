@@ -8,20 +8,31 @@
 const PRIME_DIRECTIVE = [
   'DITTO prime directive:',
   '- Preserve the original request. Do not grow scope (IntentContract); do not shrink it or split one request into many work items without user approval.',
-  '- One request = one work item. Every task leaves a work item and a completion contract.',
+  '- The hook does not blindly auto-create a work item on every prompt — YOU do the deciding. Make a 1st-pass judgment per request: a request that produces an artifact OR makes an irreversible codebase change should become a work item; simple tasks, handoff, and git operations are exceptions (no work item). When it should, confirm the creation intent with the user, then register it YOURSELF by running `ditto work start` — you (the agent) create it automatically; the user does not type the command.',
+  '- If a request slips past this judgment, just handle it as normal work; you may still register one with `ditto work start` if it turns out to warrant tracking. There is no hard backstop.',
   '- Ask the user only what only the user can answer (QuestionGate); answer the rest from code/docs/web yourself.',
   '- Completion is gated by evidence, not by claim: every acceptance criterion must be closed with evidence before final_verdict=pass.',
   '- Internal checkpoint completion is not a final answer; the whole work item is the bar.',
 ].join('\n');
 
 /**
- * Statement used when UserPromptSubmit auto-creates a draft work item before any
- * interview has happened. Single source of truth — both the writer (the hook)
- * and the reader (the placeholder advisory) reference this constant so the
- * detection cannot silently drift.
+ * Statement used for placeholder acceptance criteria on a work item created
+ * before any interview has happened (e.g. via `ditto work start` or manual
+ * create). Single source of truth — both the writer and the reader (the
+ * placeholder advisory) reference this constant so the detection cannot
+ * silently drift. NOTE: UserPromptSubmit no longer auto-creates work items.
  */
 export const PLACEHOLDER_AC_STATEMENT =
   'TBD — derive observable criteria during interview/planning';
+
+/**
+ * Advisory the hook injects in the empty-state (no active pointer + no open
+ * work items). Guidance only — the hook itself does NOT create a work item and
+ * does NOT block. It restates the 1st-pass judgment so the AGENT decides and,
+ * when warranted, registers the work item itself by running the command.
+ */
+const WORK_ITEM_GUIDE_ADVISORY =
+  'No active work item. Make the 1st-pass judgment yourself: if this request produces an artifact or makes an irreversible codebase change, it should become a work item (simple tasks, handoff, git ops are exceptions). If so, confirm the intent with the user, then register it YOURSELF by running `ditto work start "<goal>" --request "<verbatim request>"` — you create it automatically, the user does not type the command. Otherwise just proceed as normal work.';
 
 const PLACEHOLDER_AC_ADVISORY =
   'acceptance criteria are placeholders — narrow them via /ditto:deep-interview before acting (IntentContract)';
@@ -57,6 +68,13 @@ export interface CharterContext {
   handoffBodies?: string[];
   /** Advisory note when the active work item is ambiguous and must be resolved by the user. */
   advisory?: string;
+  /**
+   * True in the empty-state (no active pointer + no open work items). Surfaces
+   * the work-item guide advisory: 1st-pass judgment + creation-intent
+   * confirmation + the concrete `ditto work start` command. Guidance only — the
+   * hook never creates a work item or blocks based on this flag.
+   */
+  workItemGuide?: boolean;
   /**
    * True when every acceptance criterion of the active work item is the
    * auto-generated placeholder (wi_v04runtimewiring AC-3). Surfaces a one-line
@@ -100,6 +118,7 @@ export function charterProjection(ctx: CharterContext = {}): string {
   if (ctx.placeholderAcceptanceCriteria) lines.push('', `⚠ ${PLACEHOLDER_AC_ADVISORY}`);
   if (ctx.deepInterviewDirective) lines.push('', `▶ ${DEEP_INTERVIEW_DIRECTIVE}`);
   if (ctx.selfAnswerHint) lines.push('', `⚠ ${SELF_ANSWER_HINT}`);
+  if (ctx.workItemGuide) lines.push('', `⚠ ${WORK_ITEM_GUIDE_ADVISORY}`);
   if (ctx.advisory) lines.push('', `⚠ ${ctx.advisory}`);
   return lines.join('\n');
 }
