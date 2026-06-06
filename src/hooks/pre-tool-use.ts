@@ -21,7 +21,9 @@ import type { HookHandler, HookInput } from './runtime';
  * blocks. We only block when a pattern matches with confidence.
  */
 
-const HOME = process.env.HOME ?? '';
+// Windows has no $HOME; it exposes the home directory as %USERPROFILE%. Fall back
+// so the rm-outside-home exemption keys on the real home dir on every platform.
+const HOME = process.env.HOME ?? process.env.USERPROFILE ?? '';
 
 function block(category: string, reason: string) {
   return {
@@ -84,6 +86,18 @@ const SEARCH_PATTERN_FLAGS: ReadonlySet<string> = new Set(['-e', '--regexp', '-f
 /** Split a command into pipeline / sequence segments. */
 function commandSegments(cmd: string): string[] {
   return cmd.split(/\|\||&&|[;&|]/).map((s) => s.trim());
+}
+
+/**
+ * The operative command word of a segment: the first token after any leading
+ * `VAR=value` environment assignments. Lets a destructive-primitive check key on
+ * what the segment actually RUNS (`sudo …`) rather than a token that merely
+ * appears inside a quoted argument (e.g. `git commit -m "… sudo rm …"`). Pure
+ * string work — OS-independent (works under cmd/PowerShell/bash alike).
+ */
+function leadingCommand(seg: string): string {
+  const afterEnv = seg.replace(/^(?:\s*[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|\S+)\s+)*\s*/, '');
+  return afterEnv.split(/\s+/)[0] ?? '';
 }
 
 /**
@@ -210,8 +224,15 @@ function checkDestructive(cmd: string) {
   if (/\bdd\b[^;&|]*\bof=\/dev\//.test(normalized)) return block('destructive', 'dd to a device');
   if (/>\s*\/dev\/sd/.test(normalized)) return block('destructive', 'overwrite of a block device');
 
-  // sudo + dangerous primitive
-  if (/\bsudo\b/.test(normalized) && /\bsudo\b[^;&|]*\b(rm|dd|mkfs\.?\w*)\b/.test(normalized)) {
+  // sudo + dangerous primitive. Confine to segments whose operative command is
+  // actually `sudo`, so a destructive word merely quoted in another command's
+  // argument (e.g. `git commit -m "… sudo rm …"`) can't synthesize a false
+  // positive — the same narrowing applied to force-push detection.
+  if (
+    commandSegments(normalized)
+      .filter((seg) => leadingCommand(seg) === 'sudo')
+      .some((seg) => /\b(rm|dd|mkfs\.?\w*)\b/.test(seg))
+  ) {
     return block('destructive', 'sudo with a destructive command');
   }
 

@@ -150,6 +150,10 @@ describe('preToolUseHandler — ac-2 destructive Bash', () => {
     'echo x > /dev/sda',
     ':(){ :|:& };:',
     'sudo rm -rf /var',
+    'sudo rm -rf ./build', // relative target: only the sudo check can block this
+    'sudo dd if=a.img of=b.img', // non-/dev dd: only the sudo check blocks
+    'FOO=bar sudo rm -rf ./build', // env-prefixed sudo still detected
+    'git status && sudo rm -rf ./build', // sudo as a later segment's command still blocks
   ])('blocks: %s', async (cmd) => {
     const out = await bash(cmd);
     expect(out.exitCode).toBe(2);
@@ -165,6 +169,8 @@ describe('preToolUseHandler — ac-2 destructive Bash', () => {
     'git push origin main', // no force flag
     'rm -rf ./build && git push origin main', // unrelated `-rf` (relative target) must not synthesize a force-push
     'git push -f origin feature', // force-push to a NON-default branch is allowed
+    'git commit -m "sudo rm cleanup notes"', // destructive words quoted in a commit message are not a sudo command
+    'echo "run sudo rm -rf to wipe"', // destructive words echoed as a string are inert
     'bun test',
     'ls -la',
     'dd if=a.img of=b.img',
