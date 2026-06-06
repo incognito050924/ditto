@@ -15,6 +15,7 @@ import { e2eCommand } from './commands/e2e';
 import { fitnessCommand } from './commands/fitness';
 import { hookCommand } from './commands/hook';
 import { impactCommand } from './commands/impact';
+import { initCommand } from './commands/init';
 import { runCommand } from './commands/run';
 import { semanticCommand } from './commands/semantic';
 import { verifyCommand } from './commands/verify';
@@ -27,6 +28,7 @@ const main = defineCommand({
     description: 'Coding agent work orchestration layer',
   },
   subCommands: {
+    init: initCommand,
     work: workCommand,
     run: runCommand,
     verify: verifyCommand,
