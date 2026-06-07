@@ -58,6 +58,19 @@ It should avoid:
 - turning retries into denial
 - requiring belief as a dependency
 
+## Installing
+
+DITTO installs as a local Claude Code plugin via one idempotent script. See the
+install guide for prerequisites, commands, options, verification, and uninstall:
+
+- English: [docs/install.md](docs/install.md)
+- 한국어: [docs/install.ko.md](docs/install.ko.md)
+
+```bash
+# install into the project you want DITTO to manage
+/path/to/ditto/scripts/install.sh --target /path/to/your/project
+```
+
 ## Configuring agent variants
 
 By default one agent runs each role — a single `implementer` for all

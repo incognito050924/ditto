@@ -1,0 +1,133 @@
+# DITTO 설치
+
+> English guide: [install.md](install.md)
+
+DITTO는 로컬 Claude Code 플러그인으로 설치됩니다. 오케스트레이터 스크립트
+하나가 플러그인 등록, 자체 포함형 CLI/훅 바이너리 빌드, `PATH` 등록, 그리고
+지정한 프로젝트의 스캐폴딩까지 처리합니다. 모든 단계는 멱등(idempotent)이라
+다시 실행해도 안전합니다.
+
+## 사전 요구사항
+
+| 요구사항 | 이유 | 비고 |
+|----------|------|------|
+| **bun ≥ 1.3** | 자체 포함형 `ditto` 바이너리 빌드(`bun --compile`)에 필요. | `node`만으로도 설치 스크립트는 돌지만, 바이너리 빌드에는 bun이 필요합니다. <https://bun.sh> |
+| **Claude Code** | DITTO는 Claude Code 플러그인입니다. | 플러그인은 `~/.claude/settings.json`에 등록됩니다. |
+| **git** | DITTO가 저장소 상태를 읽습니다. | 개발 환경이면 이미 있습니다. |
+| curl + unzip *(선택)* | CodeQL CLI 자동 설치에 사용. | `ditto impact` / `boundary` / `acg-review`에서 사용. 이 단계는 graceful이라 설치를 실패시키지 않습니다. |
+
+CodeQL과 Playwright/Chromium은 가능하면 자동 설치됩니다. 둘 다 graceful로
+동작하므로, 다운로드가 실패하면 설치 스크립트가 정확한 수동 단계를 출력하고
+계속 진행합니다.
+
+## 빠른 시작
+
+저장소를 클론한 뒤, **DITTO로 관리할 프로젝트에** 설치합니다:
+
+```bash
+git clone <ditto-repo-url> ditto
+cd /path/to/your/project           # DITTO가 관리할 프로젝트
+/path/to/ditto/scripts/install.sh  # 현재 디렉터리에 설치
+```
+
+디렉터리를 옮기지 않고 대상을 직접 지정할 수도 있습니다:
+
+```bash
+/path/to/ditto/scripts/install.sh install --target /path/to/your/project
+```
+
+**Windows (PowerShell 5+)** 에서는 `.ps1` 진입점을 사용합니다:
+
+```powershell
+\path\to\ditto\scripts\install.ps1
+\path\to\ditto\scripts\install.ps1 install -Target C:\path\to\your\project
+```
+
+## 설치 스크립트가 하는 일
+
+| 단계 | 범위 | 동작 |
+|------|------|------|
+| 1. register | 전역 | `~/.claude/settings.json`을 패치해 로컬 플러그인을 로드. |
+| 2. build | 저장소 | `bun run build:plugin` → `dist/plugin/` (배포 단위, `bin/ditto` 포함). |
+| 3. place | 전역 | 바이너리를 `PATH`에 심링크(`~/.local/bin/ditto`)해 맨손 `ditto …` 사용 가능. **Windows에서는 심링크하지 않습니다** — 아래 노트 참고. |
+| 3b. codeql | 호스트 | 기존 CodeQL CLI 재사용 또는 다운로드(graceful). |
+| 3c. playwright | 호스트 | `/ditto:e2e`용 Playwright + Chromium 사전 준비(graceful). |
+| 4. init | 프로젝트 | `ditto init`이 대상의 `.ditto/`를 스캐폴딩. |
+| 5. allowlist | 프로젝트 | 대상 `.claude/settings.json`에 `Bash(ditto:*)`를 추가해 `ditto …`가 매번 묻지 않도록 함. |
+
+> 대상이 DITTO 저장소 **자기 자신**일 때(self-host)는 프로젝트 단계(init /
+> allowlist)를 건너뜁니다 — 저장소는 자기 자신을 관리 대상으로 삼지 않습니다.
+
+### Windows 참고
+
+심링크 배치(3단계)는 POSIX 전용입니다. Windows에서는 설치 스크립트가
+바이너리를 빌드하지만 `PATH`에 **자동으로 올리지 않습니다.** 설치 후 아래
+디렉터리를 `PATH`에 추가해야 `ditto`(및 CodeQL)가 인식됩니다:
+
+- `<ditto-repo>\dist\plugin\bin` — `ditto.exe` 바이너리
+- 설치 스크립트가 알려주는 CodeQL 디렉터리 (CodeQL을 다운로드한 경우)
+
+추가할 정확한 디렉터리는 설치 스크립트가 출력합니다. 이 경로들이 `PATH`에
+오르기 전까지는 훅과 맨손 `ditto …` 명령이 동작하지 않습니다.
+
+### 옵션
+
+| 플래그 | 효과 |
+|--------|------|
+| `--target <dir>` (Windows: `-Target`) | 설치할 프로젝트. 기본값은 현재 디렉터리. |
+| `--no-build` (`-NoBuild`) | 바이너리 빌드 건너뛰기(기존 것 재사용). |
+| `--no-codeql` (`-NoCodeql`) | CodeQL 설치 건너뛰기. |
+| `--no-playwright` (`-NoPlaywright`) | Playwright/Chromium 설치 건너뛰기. |
+
+DITTO 저장소를 자동 감지하지 못하면 `DITTO_HOME`을 저장소 루트
+(`.claude-plugin/plugin.json`이 있는 디렉터리)로 지정하세요.
+
+## 확인
+
+대상 프로젝트에서 **새** Claude Code 세션을 시작한 뒤:
+
+```text
+/plugin            # ditto@ditto-local 가 목록에 있고 enabled 인지
+```
+
+```bash
+ditto doctor       # 바이너리가 PATH에 있고 런타임이 닿는지
+```
+
+정상 설치라면 `distribution`, `capability`, `surface`가 `ok`로 나옵니다.
+DITTO 저장소 안에서 실행하면 `permissions` / `mcp`가 `missing` /
+`unverified`로 나올 수 있는데, 저장소는 관리 대상이 아니므로 정상입니다.
+
+## 세션 단위 래퍼 (설정 영구 변경 없이)
+
+`settings.json`을 영구적으로 바꾸지 않으려면, 조립된 제품 표면을 통해 한
+세션만 DITTO를 로드할 수 있습니다:
+
+```bash
+# bash/zsh — ~/.bashrc 또는 ~/.zshrc 에 추가
+export DITTO_HOME="/path/to/ditto"
+alias ditto-claude='claude --plugin-dir "$DITTO_HOME/dist/plugin"'
+```
+
+```powershell
+# PowerShell 프로필 ($PROFILE)
+$env:DITTO_HOME = 'C:\path\to\ditto'
+function ditto-claude { claude --plugin-dir $env:DITTO_HOME\dist\plugin $args }
+```
+
+이후 `ditto-claude`를 실행하면 그 세션에서만 DITTO가 로드된 Claude Code가
+뜹니다. `dist/plugin`이 없으면 먼저 `bun run build:plugin`을 실행하세요.
+`--plugin-dir`는 저장소 루트가 아니라 `dist/plugin`(조립된 제품 표면)을
+가리키므로, 소스나 dogfooding 상태가 새어 들어가지 않습니다.
+
+## 상태 확인 및 제거
+
+```bash
+/path/to/ditto/scripts/install.sh status                        # JSON 상태 보고
+/path/to/ditto/scripts/install.sh uninstall                     # 현재 디렉터리
+/path/to/ditto/scripts/install.sh uninstall --target /the/project
+```
+
+uninstall은 등록, 바이너리 배치, allowlist를 되돌립니다. 대상의 `.ditto/`
+런타임 데이터는 그대로 둡니다 — 이것이 work-item 이력이며, 완전히 지우려면
+수동으로 제거하세요.
