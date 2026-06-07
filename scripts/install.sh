@@ -59,10 +59,13 @@ Optional per-session wrapper (skips persistent settings):
 
   # bash/zsh — add to ~/.bashrc or ~/.zshrc
   export DITTO_HOME="$REPO_ROOT"
-  alias ditto-claude='claude --plugin-dir "\$DITTO_HOME"'
+  alias ditto-claude='claude --plugin-dir "\$DITTO_HOME/dist/plugin"'
 
 Then \`ditto-claude\` launches Claude Code with DITTO loaded for that
-session only, regardless of settings.json state.
+session only, regardless of settings.json state. The plugin-dir is the
+assembled product surface (\`dist/plugin\`, tier ①) — NOT the repo root, so
+source and dogfooding state never leak in. Run \`bun run build:plugin\` first
+if \`dist/plugin\` is absent.
 ────────────────────────────────────────────────────────────────────
 EOF
 fi
