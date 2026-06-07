@@ -185,6 +185,21 @@ describe('guardChildResult (G7: completion signal ≠ completion proof)', () => 
   });
 });
 
+describe('buildDelegationPacket per-node file_scope (V2)', () => {
+  test('uses the explicit fileScope arg (node.file_scope) over workItem.changed_files', () => {
+    const scoped: AutopilotNode = { ...implementNode, file_scope: ['src/ui/Button.tsx'] };
+    const p = buildDelegationPacket(scoped, workItem, [], scoped.file_scope);
+    expect(p.context.file_scope).toEqual(['src/ui/Button.tsx']);
+    // not the shared work-item scope — that mismatch was the V2 leak
+    expect(p.context.file_scope).not.toEqual(workItem.changed_files);
+  });
+
+  test('falls back to workItem.changed_files when fileScope is omitted', () => {
+    const p = buildDelegationPacket(implementNode, workItem);
+    expect(p.context.file_scope).toEqual(workItem.changed_files);
+  });
+});
+
 describe('guardMutatingEvidence (G7 확장: mutating pass needs changed_files)', () => {
   test('a mutating node claiming pass with zero changed_files is non-contentful (fixable)', () => {
     expect(guardMutatingEvidence('implementer', 'pass', [])).toMatchObject({

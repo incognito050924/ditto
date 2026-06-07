@@ -204,13 +204,13 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
       const candidates = selectVariantCandidates(
         catalog,
         node.owner,
-        workItem.changed_files,
+        scopeOf(node),
         node.agent_hint,
       );
       spawns.push({
         node_id: node.id,
         owner: node.owner,
-        packet: buildDelegationPacket(node, workItem, candidates),
+        packet: buildDelegationPacket(node, workItem, candidates, scopeOf(node)),
       });
     }
     return { action: 'spawn_wave', spawns };
@@ -267,14 +267,14 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   const candidates = selectVariantCandidates(
     catalog,
     chosen.owner,
-    workItem.changed_files,
+    scopeOf(chosen),
     chosen.agent_hint,
   );
   return {
     action: 'spawn',
     node_id: chosen.id,
     owner: chosen.owner,
-    packet: buildDelegationPacket(chosen, workItem, candidates),
+    packet: buildDelegationPacket(chosen, workItem, candidates, scopeOf(chosen)),
   };
 }
 

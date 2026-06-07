@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import { postToolUseHandler } from '~/hooks/post-tool-use';
-import { commandLogEntry } from '~/schemas/evidence-log';
+import { commandLogEntry, editLogEntry } from '~/schemas/evidence-log';
 
 let repo: string;
 let wiId: string;
@@ -84,5 +84,33 @@ describe('postToolUseHandler', () => {
     await run({ tool_name: 'Bash', tool_input: { command: 'echo a' }, tool_response: {} });
     await run({ tool_name: 'Bash', tool_input: { command: 'echo b' }, tool_response: {} });
     expect(await logLines()).toHaveLength(2);
+  });
+
+  // V6: Edit/Write/MultiEdit recorded to edits.jsonl so evidence is not command-only.
+  const editsPath = () =>
+    join(repo, '.ditto', 'local', 'work-items', wiId, 'evidence', 'edits.jsonl');
+  async function editLines(): Promise<string[]> {
+    const text = await readFile(editsPath(), 'utf8');
+    return text.split('\n').filter((l) => l.trim().length > 0);
+  }
+
+  test.each(['Edit', 'Write', 'MultiEdit'])(
+    'records a %s tool use to edits.jsonl (schema-valid), exit 0',
+    async (tool) => {
+      const out = await run({ tool_name: tool, tool_input: { file_path: 'src/x.ts' } });
+      expect(out.exitCode).toBe(0);
+      const lines = await editLines();
+      expect(lines).toHaveLength(1);
+      const entry = editLogEntry.parse(JSON.parse(lines[0] ?? '{}'));
+      expect(entry.tool).toBe(tool as 'Edit' | 'Write' | 'MultiEdit');
+      expect(entry.file_path).toBe('src/x.ts');
+      expect(entry.work_item_id).toBe(wiId);
+    },
+  );
+
+  test('a file-mutation tool without file_path records nothing', async () => {
+    const out = await run({ tool_name: 'Edit', tool_input: {} });
+    expect(out.exitCode).toBe(0);
+    expect(await Bun.file(editsPath()).exists()).toBe(false);
   });
 });

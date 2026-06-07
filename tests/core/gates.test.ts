@@ -131,6 +131,20 @@ describe('completionGate cross-checks against the work item', () => {
     expect(r.pass).toBe(false);
     expect(r.reasons.some((x) => x.includes('duplicate'))).toBe(true);
   });
+
+  test('V5: a NON-pass completion that omits a criterion is still blocked', () => {
+    // The AC-set cross-check used to run only for pass completions; a non-pass
+    // completion could silently drop a criterion and slip the Stop gate.
+    expect(item.acceptance_criteria.length).toBeGreaterThan(1);
+    const firstId = item.acceptance_criteria[0]?.id;
+    const partial = {
+      acceptance: [{ criterion_id: firstId, verdict: 'partial' }],
+      final_verdict: 'partial',
+    } as unknown as Parameters<typeof completionGate>[1];
+    const r = completionGate(item, partial);
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => x.includes('missing'))).toBe(true);
+  });
 });
 
 describe('convergenceGate reads recorded fields only', () => {

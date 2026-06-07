@@ -18,7 +18,7 @@ import { completionContract } from '~/schemas/completion-contract';
 import { convergence } from '~/schemas/convergence';
 import { dialectic } from '~/schemas/dialectic';
 import { e2eJourney } from '~/schemas/e2e-journey';
-import { commandLogEntry } from '~/schemas/evidence-log';
+import { commandLogEntry, editLogEntry } from '~/schemas/evidence-log';
 import { evidenceIndex, evidenceRecord } from '~/schemas/evidence-record';
 import { glossary } from '~/schemas/glossary';
 import { handoff } from '~/schemas/handoff';
@@ -44,6 +44,7 @@ export const schemaExports: ReadonlyArray<{ name: string; schema: ZodTypeAny }> 
   { name: 'glossary', schema: glossary },
   { name: 'language-ledger', schema: languageLedger },
   { name: 'command-log-entry', schema: commandLogEntry },
+  { name: 'edit-log-entry', schema: editLogEntry },
   { name: 'evidence-record', schema: evidenceRecord },
   { name: 'evidence-index', schema: evidenceIndex },
   { name: 'knowledge-record', schema: knowledgeRecord },

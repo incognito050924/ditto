@@ -9,6 +9,7 @@ import { WorkItemStore } from '~/core/work-item-store';
 import {
   classifyPromptAdvisory,
   duplicateSearch,
+  looksCodebaseAnswerable,
   resolveActiveWorkItem,
   userPromptSubmitHandler,
 } from '~/hooks/user-prompt-submit';
@@ -38,6 +39,22 @@ describe('classifyPromptAdvisory', () => {
 
   test.each(['build X', '이거 구현해줘', '비밀번호 검증 추가'])('execution: %s', (p) => {
     expect(classifyPromptAdvisory(p)).toBe('execution');
+  });
+});
+
+describe('looksCodebaseAnswerable Korean code surface (V4)', () => {
+  test.each([
+    '이 함수 왜 실패해?',
+    '테스트 로그 어디에 있어?',
+    '이 파일은 왜 깨져?',
+    '이 메서드에서 오류가 나는 이유는?',
+    '이 모듈 스키마 어디서 정의돼?',
+  ])('detects code-surface vocabulary: %s', (p) => {
+    expect(looksCodebaseAnswerable(p)).toBe(true);
+  });
+
+  test('a Korean prompt with no code surface stays false', () => {
+    expect(looksCodebaseAnswerable('오늘 일정이 어떻게 돼?')).toBe(false);
   });
 });
 

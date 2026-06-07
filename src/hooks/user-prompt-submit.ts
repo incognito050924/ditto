@@ -60,6 +60,11 @@ const CODEBASE_ANSWERABLE_PATTERNS = [
   /\bmodule\b/i,
   /\bschema\b/i,
   /\.(ts|js|tsx|jsx|json|md|sh|py)\b/i,
+  // Korean code-surface vocabulary (V4): `\b` word boundaries do not apply to
+  // Hangul, so these match as substrings. Mirrors the English set so a Korean
+  // question like "이 함수 왜 실패해?" / "테스트 로그 어디 있어?" gets the same
+  // self-answer hint instead of silently missing it.
+  /파일|경로|디렉터리|디렉토리|함수|메서드|메소드|오류|에러|예외|버그|테스트|로그|클래스|모듈|스키마|코드|커밋|타입/,
 ];
 
 export function looksCodebaseAnswerable(prompt: string): boolean {

@@ -1,4 +1,5 @@
 import { defineCommand } from 'citty';
+import { PLACEHOLDER_AC_STATEMENT } from '~/core/charter';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   InvalidBaseRefError,
@@ -75,7 +76,11 @@ const workStart = defineCommand({
         acceptance_criteria: [
           {
             id: 'ac-1',
-            statement: '본 work item의 첫 acceptance — verify 명령으로 갱신 대상',
+            // Single source of truth (V1): the placeholder detector in
+            // user-prompt-submit matches this exact string to fire the
+            // deep-interview directive, so the CLI must emit the same constant
+            // rather than a hand-written sibling that silently bypasses it.
+            statement: PLACEHOLDER_AC_STATEMENT,
             verdict: 'unverified',
             evidence: [],
           },
@@ -94,8 +99,12 @@ const workStart = defineCommand({
         writeHuman(`  status: ${created.status}`);
         writeHuman(`  path: ${repoRoot}/.ditto/local/work-items/${created.id}/work-item.json`);
         writeHuman('Next steps:');
-        writeHuman(`  1. ditto deep-interview start --workItem ${created.id}`);
-        writeHuman(`  2. ditto autopilot bootstrap --workItem ${created.id}`);
+        writeHuman(
+          '  1. /ditto:deep-interview (or: ditto deep-interview start → record-turn → check-readiness → finalize) — writes intent.json',
+        );
+        writeHuman(
+          `  2. ditto autopilot bootstrap --workItem ${created.id} (requires intent.json from finalize)`,
+        );
       }
     } catch (err) {
       writeError(`work start failed: ${err instanceof Error ? err.message : String(err)}`);

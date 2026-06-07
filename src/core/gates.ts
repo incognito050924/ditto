@@ -146,28 +146,34 @@ export function acceptanceTestable(ac: { statement: string }): GateResult {
 
 export function completionGate(item: WorkItem, completion: CompletionContract): GateResult {
   const reasons: string[] = [];
-  // The AC-set cross-check applies when a completion claims success (plan §2 M0.4).
-  if (completion.final_verdict === 'pass') {
-    const expected = item.acceptance_criteria.map((c) => c.id);
-    const expectedSet = new Set(expected);
-    const reported = completion.acceptance.map((a) => a.criterion_id);
-    const reportedSet = new Set(reported);
+  // The AC-set cross-check (duplicate/missing/extra) applies to EVERY completion,
+  // not just pass ones (V5). The charter requires each AC to carry a per-AC
+  // verdict regardless of the overall verdict; a non-pass completion that simply
+  // omits criteria would otherwise slip through here (Stop then sees a present
+  // completion and stops treating it as a no-verification-path). The pass-only
+  // `notPass` check below stays gated on pass — a non-pass completion is *expected*
+  // to carry not-pass criteria.
+  const expected = item.acceptance_criteria.map((c) => c.id);
+  const expectedSet = new Set(expected);
+  const reported = completion.acceptance.map((a) => a.criterion_id);
+  const reportedSet = new Set(reported);
 
-    // duplicate (count-based, not Set-based — Set comparison hides duplicates)
-    if (reported.length !== reportedSet.size) {
-      const seen = new Set<string>();
-      const dupes = new Set<string>();
-      for (const id of reported) {
-        if (seen.has(id)) dupes.add(id);
-        seen.add(id);
-      }
-      reasons.push(`duplicate criterion_id(s): ${[...dupes].join(', ')}`);
+  // duplicate (count-based, not Set-based — Set comparison hides duplicates)
+  if (reported.length !== reportedSet.size) {
+    const seen = new Set<string>();
+    const dupes = new Set<string>();
+    for (const id of reported) {
+      if (seen.has(id)) dupes.add(id);
+      seen.add(id);
     }
-    const missing = expected.filter((id) => !reportedSet.has(id));
-    if (missing.length > 0) reasons.push(`missing criteria: ${missing.join(', ')}`);
-    const extra = [...reportedSet].filter((id) => !expectedSet.has(id));
-    if (extra.length > 0) reasons.push(`extra criteria not in work item: ${extra.join(', ')}`);
+    reasons.push(`duplicate criterion_id(s): ${[...dupes].join(', ')}`);
+  }
+  const missing = expected.filter((id) => !reportedSet.has(id));
+  if (missing.length > 0) reasons.push(`missing criteria: ${missing.join(', ')}`);
+  const extra = [...reportedSet].filter((id) => !expectedSet.has(id));
+  if (extra.length > 0) reasons.push(`extra criteria not in work item: ${extra.join(', ')}`);
 
+  if (completion.final_verdict === 'pass') {
     const notPass = completion.acceptance
       .filter((a) => a.verdict !== 'pass')
       .map((a) => a.criterion_id);
