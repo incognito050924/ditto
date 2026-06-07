@@ -14,6 +14,7 @@
     "build:bin:win": "bun build src/cli/index.ts --compile --target=bun-windows-x64 --outfile bin/ditto.exe",
     "build:plugin": "node scripts/build-plugin.mjs",
     "dev": "bun run src/cli/index.ts",
+    "dev:plugin": "bun run build:plugin && claude --plugin-dir dist/plugin",
     "test": "bun test",
     "lint": "biome check src tests scripts",
     "lint:fix": "biome check --write src tests scripts",

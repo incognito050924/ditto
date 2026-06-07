@@ -120,6 +120,34 @@ only. Run `bun run build:plugin` first if `dist/plugin` is absent. The
 `--plugin-dir` points at `dist/plugin` (the assembled product surface), never
 the repo root, so source and dogfooding state never leak in.
 
+## Updating & dogfooding
+
+The installed plugin reads `dist/plugin/` — a **copy** of the source assembled
+by `build:plugin`, not the source tree itself. And Claude Code loads plugins
+only at **session start** (no hot reload). So two things are always true:
+
+1. After changing source, `dist/plugin` must be **rebuilt**.
+2. A **new Claude Code session** is needed to pick up the rebuild.
+
+DITTO automates step 1 so you rarely run it by hand:
+
+- **Git hooks (multi-PC sync).** `post-merge` and `post-checkout` rebuild
+  `dist/plugin` automatically after `git pull` / merge / branch switch. They are
+  graceful (a build failure never blocks git) and activate via `bun install`
+  (the `prepare` script points `core.hooksPath` at `.githooks/`). So on any PC:
+  `git pull` → auto-rebuild → start a new session.
+- **Dev launcher (local loop).** `bun run dev:plugin` rebuilds and launches
+  Claude Code with the fresh `dist/plugin` in one step. The optional
+  `ditto-claude` wrapper (below) does the same as a shell function.
+
+Either way the rebuild lands at session start — there is no in-session reload.
+If you ever need it manually: `bun run build:plugin`.
+
+> **Verified.** The auto-rebuild firing on real `git merge` and `git checkout`
+> (and the skip guard for file checkouts / same-commit switches) was confirmed
+> by running them. Not yet verified on Windows (`install.ps1`); and a new
+> session is still required to actually load the rebuilt plugin.
+
 ## Status & uninstall
 
 ```bash

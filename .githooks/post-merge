@@ -1,0 +1,20 @@
+#!/bin/sh
+# post-merge: `git pull`/merge 후 dist/plugin(배포 단위)을 자동 재조립한다.
+# dogfooding 자연화 (wi_260607fs7) — dist/plugin은 소스의 복사 스냅샷이라
+# 손으로 build:plugin을 돌리지 않으면 다른 PC에서 pull해도 런타임이 옛것이다.
+# graceful: 빌드 실패/도구 부재가 git 작업을 막지 않는다(항상 exit 0).
+# 주의: Claude Code는 세션 시작 시에만 플러그인을 로드한다 — 반영하려면
+#       새 세션을 시작해야 한다(이 훅이 바꿀 수 없는 외부 제약).
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$ROOT/scripts/build-plugin.mjs" ] || exit 0
+if command -v bun >/dev/null 2>&1; then
+  echo "[ditto] merge 감지 — dist/plugin 재조립 중…" >&2
+  if (cd "$ROOT" && bun run build:plugin >/dev/null 2>&1); then
+    echo "[ditto] dist/plugin 갱신 완료. 새 Claude Code 세션부터 반영된다." >&2
+  else
+    echo "[ditto] build:plugin 실패 — 'bun run build:plugin'을 수동 실행하라." >&2
+  fi
+else
+  echo "[ditto] bun 없음 — 자동 재빌드 건너뜀. 'bun run build:plugin'을 수동 실행하라." >&2
+fi
+exit 0

@@ -120,6 +120,34 @@ function ditto-claude { claude --plugin-dir $env:DITTO_HOME\dist\plugin $args }
 `--plugin-dir`는 저장소 루트가 아니라 `dist/plugin`(조립된 제품 표면)을
 가리키므로, 소스나 dogfooding 상태가 새어 들어가지 않습니다.
 
+## 업데이트 & dogfooding
+
+설치된 플러그인은 `dist/plugin/`을 읽습니다 — 이것은 `build:plugin`이 조립한
+소스의 **복사본**이지 소스 트리 자체가 아닙니다. 그리고 Claude Code는 플러그인을
+**세션 시작 시점에만** 로드합니다(핫리로드 없음). 그래서 항상 두 가지가 참입니다:
+
+1. 소스를 바꾸면 `dist/plugin`을 **다시 빌드**해야 한다.
+2. 재빌드를 반영하려면 **새 Claude Code 세션**이 필요하다.
+
+DITTO는 1번을 자동화해 손으로 빌드할 일을 거의 없앱니다:
+
+- **Git 훅 (멀티 PC 동기화).** `post-merge`와 `post-checkout`이 `git pull` /
+  merge / 브랜치 전환 후 `dist/plugin`을 자동 재빌드합니다. graceful이라 빌드
+  실패가 git 작업을 막지 않으며, `bun install`로 활성화됩니다(`prepare`
+  스크립트가 `core.hooksPath`를 `.githooks/`로 지정). 즉 어느 PC에서든:
+  `git pull` → 자동 재빌드 → 새 세션 시작.
+- **Dev 런처 (로컬 루프).** `bun run dev:plugin`이 재빌드 후 갓 만든
+  `dist/plugin`으로 Claude Code를 띄우는 것까지 한 번에 합니다. 아래의 선택적
+  `ditto-claude` 래퍼도 셸 함수로 동일하게 동작합니다.
+
+어느 경우든 재빌드는 세션 시작 시점에 반영됩니다 — 세션 도중 리로드는 없습니다.
+수동이 필요하면: `bun run build:plugin`.
+
+> **검증됨.** 자동 재빌드가 실제 `git merge`·`git checkout`에서 발동하는 것(과
+> 파일 체크아웃·동일 커밋 전환의 skip 가드)을 직접 실행해 확인했습니다. Windows
+> (`install.ps1`)는 아직 미검증이며, 재빌드를 실제로 로드하려면 새 세션이
+> 필요합니다.
+
 ## 상태 확인 및 제거
 
 ```bash

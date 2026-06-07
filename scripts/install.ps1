@@ -65,10 +65,17 @@ Optional per-session wrapper (skips persistent settings):
 
   # Add to PowerShell profile: $PROFILE
   `$env:DITTO_HOME = '$repoRoot'
-  function ditto-claude { claude --plugin-dir `$env:DITTO_HOME `$args }
+  function ditto-claude {
+    Push-Location `$env:DITTO_HOME
+    bun run build:plugin
+    claude --plugin-dir "`$env:DITTO_HOME\dist\plugin" `$args
+    Pop-Location
+  }
 
-Then ``ditto-claude`` launches Claude Code with DITTO loaded for that
-session only, regardless of settings.json state.
+Then ``ditto-claude`` rebuilds dist\plugin from current source and launches
+Claude Code with DITTO loaded for that session only — each launch carries your
+latest changes. The plugin-dir is the assembled product surface (dist\plugin),
+not the repo root.
 ────────────────────────────────────────────────────────────────────
 "@ | Write-Host
 }
