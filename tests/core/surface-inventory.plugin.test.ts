@@ -10,8 +10,10 @@ import { surfaceCatalog } from '~/schemas/surface-catalog';
 const REPO_ROOT = join(import.meta.dir, '..', '..');
 
 describe('DITTO plugin surface inventory (M1.6)', () => {
-  test('checked-in .ditto/surfaces.json exists and is non-empty (no false-green)', () => {
-    const raw = JSON.parse(readFileSync(join(REPO_ROOT, '.ditto', 'surfaces.json'), 'utf8'));
+  test('checked-in .ditto/local/surfaces.json exists and is non-empty (no false-green)', () => {
+    const raw = JSON.parse(
+      readFileSync(join(REPO_ROOT, '.ditto', 'local', 'surfaces.json'), 'utf8'),
+    );
     const parsed = surfaceCatalog.parse(raw);
     expect(parsed.surfaces.length).toBe(27); // 8 skills + 13 agents + 5 hooks + 1 plugin ([VERIFY] owners: +security-reviewer, +refactorer, +retrospective agents)
   });
@@ -31,13 +33,14 @@ describe('catalog false-green guards', () => {
   let repo: string;
   beforeEach(async () => {
     repo = await mkdtemp(join(tmpdir(), 'ditto-surf-'));
-    await mkdir(join(repo, '.ditto'), { recursive: true });
+    await mkdir(join(repo, '.ditto', 'local'), { recursive: true });
   });
   afterEach(async () => {
     await rm(repo, { recursive: true, force: true });
   });
 
-  const writeCatalog = (text: string) => writeFile(join(repo, '.ditto', 'surfaces.json'), text);
+  const writeCatalog = (text: string) =>
+    writeFile(join(repo, '.ditto', 'local', 'surfaces.json'), text);
 
   async function caught(): Promise<Error | undefined> {
     try {

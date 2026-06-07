@@ -1,10 +1,10 @@
-import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { commandProvider } from '~/acg/fitness/command-provider';
 import { assessDrift, computeDrift, loadAssuranceSnapshots } from '~/acg/fitness/drift';
 import { executingProvider } from '~/acg/fitness/executed-provider';
 import { type FitnessContext, runFitness } from '~/acg/fitness/fitness-runner';
 import { compositeProvider } from '~/acg/fitness/injected-provider';
+import { localDir } from '~/core/ditto-paths';
 import { FitnessFunctionStore } from '~/core/fitness-function-store';
 import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
 import { acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
@@ -115,14 +115,13 @@ export const fitnessCommand = defineCommand({
               ? compositeProvider(repoRoot, verdictsPath)
               : commandProvider(repoRoot);
           const snapshot = await runFitness(functions, ctx, provider);
-          const path = join(
+          const path = localDir(
             repoRoot,
-            '.ditto',
             'work-items',
             args['work-item'],
             'assurance-snapshot.json',
           );
-          await ensureDir(join(repoRoot, '.ditto', 'work-items', args['work-item']));
+          await ensureDir(localDir(repoRoot, 'work-items', args['work-item']));
           await writeJsonFile(path, acgAssuranceSnapshot, snapshot);
 
           const failed = snapshot.results.filter((r) => r.outcome === 'fail').length;

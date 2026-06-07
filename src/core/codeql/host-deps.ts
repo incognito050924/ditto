@@ -6,7 +6,7 @@
  * ensureDir·dirExists)를 더한다.
  */
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { localDir } from '~/core/ditto-paths';
 import { ensureDir } from '~/core/fs';
 import type { HostRunProcess } from '~/core/hosts/types';
 import type { RelationDeps } from './relations';
@@ -56,12 +56,12 @@ export function makeRelationDeps(): RelationDeps {
 }
 
 /**
- * 현재 커밋·언어로 키된 CodeQL 캐시 디렉터리(.ditto/cache/codeql/<sha>-<lang>).
+ * 현재 커밋·언어로 키된 CodeQL 캐시 디렉터리(.ditto/local/cache/codeql/<sha>-<lang>).
  * DB·쿼리 작업물이 여기 산다. working tree가 커밋과 다르면 DB가 stale일 수 있다(알려진
  * 한계 — 같은 커밋 내 재실행 절감이 목적).
  */
 export function codeqlCacheDir(repoRoot: string, language: CodeqlLanguage): string {
   const res = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: repoRoot });
   const sha = res.exitCode === 0 ? new TextDecoder().decode(res.stdout).trim() : 'working-tree';
-  return join(repoRoot, '.ditto', 'cache', 'codeql', cacheKey(sha, language));
+  return localDir(repoRoot, 'cache', 'codeql', cacheKey(sha, language));
 }

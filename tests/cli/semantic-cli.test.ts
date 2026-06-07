@@ -21,7 +21,8 @@ function ditto(args: string[]): { stdout: string; stderr: string; exitCode: numb
   };
 }
 
-const semanticFile = () => join(dir, '.ditto', 'work-items', WI, 'semantic-compatibility.json');
+const semanticFile = () =>
+  join(dir, '.ditto', 'local', 'work-items', WI, 'semantic-compatibility.json');
 const readSemantic = async () => JSON.parse(await readFile(semanticFile(), 'utf8'));
 
 beforeEach(async () => {

@@ -470,16 +470,13 @@ dist/
 # Bun
 .bun/
 
-# Repo-local DITTO state (per-developer; sync policy TBD in v0.1 design)
-.ditto/runs/
-.ditto/work-items/*/evidence/
-# Ephemeral autopilot-path runtime state (active-node leases + bypass audit log)
-.ditto/work-items/*/active-leases.json
+# DITTO 3-tier isolation: tier ③ per-developer runtime lives under .ditto/local/
+# (work-items, runs, sessions, cache, logs, worktrees, handoff, surfaces.json) —
+# gitignored. Tier ② project-global (.ditto/knowledge, .ditto/agents,
+# .ditto/architecture-spec.json) stays tracked.
+.ditto/local/
+# Bypass audit log stays at .ditto root (not part of the local/ runtime tier).
 .ditto/autopilot-bypass.jsonl
-# Per-session pointers (session_id → active work item; per-developer runtime state)
-.ditto/sessions/
-# Regenerable analyzer caches (CodeQL databases, keyed by commit sha)
-.ditto/cache/
 
 
 # DITTO compiled CLI/hook binary (built at install; cross-targets in install step)

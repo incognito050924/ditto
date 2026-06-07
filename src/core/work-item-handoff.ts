@@ -7,6 +7,7 @@ import type { WorkItem } from '~/schemas/work-item';
 type DeclarerRole = z.infer<typeof declarerRole>;
 import { deriveAcVerdicts } from './autopilot-complete';
 import { AutopilotStore } from './autopilot-store';
+import { localDir } from './ditto-paths';
 import { writeJson } from './fs';
 import { HandoffStore, buildHandoff } from './handoff-store';
 import type { WorkItemStore } from './work-item-store';
@@ -135,7 +136,7 @@ function buildCompletion(
   const allPass = acceptance.every((a) => a.verdict === 'pass');
   const blockedByUnverified = unverifiedExtras.some((u) => !u.out_of_scope);
   const final = allPass && !blockedByUnverified ? ('pass' as const) : ('partial' as const);
-  const handoffPath = `.ditto/handoff/${item.id}.md`;
+  const handoffPath = `.ditto/local/handoff/${item.id}.md`;
   const builtSummary = allPass
     ? `${item.title} — 모든 acceptance criterion이 pass로 기록되었다.`
     : `${item.title} — 일부 acceptance criterion이 비-pass 상태로 partial 핸드오프된다.`;
@@ -222,14 +223,14 @@ export async function writeWorkItemHandoff(
   // (completion.json, work-item.json)은 collect 직후 생성되므로 첫 handoff에서는
   // git diff/status에 잡히지 않는다. 마감 산출물이 자기 changed_files를 정확히
   // 보고하도록 명시적으로 union 추가. handoff 본문은 work-item 밖
-  // (.ditto/handoff/)으로 옮겨졌고 소비되면 archive로 이동하므로 stale 경로가
+  // (.ditto/local/handoff/)으로 옮겨졌고 소비되면 archive로 이동하므로 stale 경로가
   // 되지 않도록 changed_files union에 넣지 않는다.
   const selfArtifacts = [
-    `.ditto/work-items/${workId}/completion.json`,
-    `.ditto/work-items/${workId}/work-item.json`,
+    `.ditto/local/work-items/${workId}/completion.json`,
+    `.ditto/local/work-items/${workId}/work-item.json`,
   ];
   const merged = Array.from(new Set([...collected, ...selfArtifacts])).sort();
-  const completionPath = join(repoRoot, '.ditto', 'work-items', workId, 'completion.json');
+  const completionPath = localDir(repoRoot, 'work-items', workId, 'completion.json');
   // Tolerant prior read: a malformed / absent prior must NOT block a fresh
   // handoff. It's only used to preserve verifier-recorded fields (verifications,
   // remaining_risks, summary) that the from-scratch build would otherwise drop.
@@ -277,7 +278,7 @@ export async function writeWorkItemHandoff(
         });
   await writeJson(completionPath, completionContract, completion);
 
-  // handoff 본문 → 통일 독립 store(.ditto/handoff/). pass면 픽업 불필요 → archive
+  // handoff 본문 → 통일 독립 store(.ditto/local/handoff/). pass면 픽업 불필요 → archive
   // 직행(active 소음 0), 비-pass면 active(다음 세션이 자동으로 읽고 archive로 옮긴다).
   const failedOrUnverified = [
     ...completion.acceptance

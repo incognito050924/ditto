@@ -26,6 +26,6 @@ export const commandLogEntry = z
       .optional()
       .describe('Acceptance criterion this command was meant to verify, if any'),
   })
-  .describe('One line of .ditto/work-items/<id>/evidence/commands.jsonl');
+  .describe('One line of .ditto/local/work-items/<id>/evidence/commands.jsonl');
 
 export type CommandLogEntry = z.infer<typeof commandLogEntry>;

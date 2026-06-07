@@ -17,7 +17,7 @@ import {
  *
  * Reads a reviewer-output JSON, projects it to the `acg_review` ledger with the
  * existing DETERMINISTIC adapter (severity→risk is code, never an LLM's hand
- * calculation), and persists it to `.ditto/work-items/<wi>/acg-review.json` so
+ * calculation), and persists it to `.ditto/local/work-items/<wi>/acg-review.json` so
  * the Stop gate can block completion on un-evidenced high-risk changes.
  *
  * Fail-closed: a missing/invalid reviewer-output exits non-zero and writes
@@ -28,7 +28,7 @@ export const acgReviewCommand = defineCommand({
   meta: {
     name: 'acg-review',
     description:
-      'Project a reviewer-output into the acg_review ledger (.ditto/work-items/<wi>/acg-review.json)',
+      'Project a reviewer-output into the acg_review ledger (.ditto/local/work-items/<wi>/acg-review.json)',
   },
   args: {
     from: {

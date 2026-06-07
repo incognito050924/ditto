@@ -1,5 +1,6 @@
-import { join, relative, resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { type SurfaceCatalog, surfaceCatalog } from '~/schemas/surface-catalog';
+import { localDir } from './ditto-paths';
 import type { HostAdapter, HostId, SurfaceEntry, SurfaceKind } from './hosts';
 import { readJsonIfExists } from './hosts/shared';
 
@@ -11,7 +12,7 @@ interface ExpectedSurface {
 }
 
 async function loadExpected(repoRoot: string): Promise<ExpectedSurface[]> {
-  const path = join(repoRoot, '.ditto', 'surfaces.json');
+  const path = localDir(repoRoot, 'surfaces.json');
   let raw: unknown;
   try {
     raw = await readJsonIfExists(path);
@@ -43,7 +44,7 @@ function keyOf(surface: Pick<SurfaceEntry, 'host' | 'kind' | 'id'>): string {
 
 /**
  * Generate the surface catalog from the code itself (W4-2 / G6) instead of
- * hand-maintaining `.ditto/surfaces.json`. Discovers every *local* surface via
+ * hand-maintaining `.ditto/local/surfaces.json`. Discovers every *local* surface via
  * the host adapters, relativises paths to the repo root, and sorts
  * deterministically so the output is stable. The committed catalog is this
  * generator's output; a test regenerates and compares, so a surface added

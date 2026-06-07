@@ -5,7 +5,8 @@
 //
 // Five steps (install mode):
 //   1. register     patch ~/.claude/settings.json so the local plugin loads
-//   2. build        `bun run build:bin` → <repo>/bin/ditto (hooks + CLI binary)
+//   2. build        `bun run build:plugin` → <repo>/dist/plugin/ (product surface
+//                   incl. bin/ditto). dist/plugin is the deploy unit (axis ①).
 //   3. place        symlink the binary onto PATH so skills' bare `ditto …` work
 //   4. init         `ditto init --dir <target>` scaffolds the target's .ditto/
 //   5. allowlist    patch <target>/.claude/settings.json so `ditto …` never prompts
@@ -132,11 +133,13 @@ function unregisterPlugin(settings) {
 }
 
 // ------------------------------------------------------------------ (2) build
+// The product surface (incl. the binary the hooks invoke) is assembled under
+// dist/plugin by `build:plugin`; that IS the deploy unit the marketplace points at.
 function binaryPath(repo) {
-  return join(repo, 'bin', IS_WIN ? 'ditto.exe' : 'ditto');
+  return join(repo, 'dist', 'plugin', 'bin', IS_WIN ? 'ditto.exe' : 'ditto');
 }
 function buildBinary(repo) {
-  const r = spawnSync('bun', ['run', IS_WIN ? 'build:bin:win' : 'build:bin'], {
+  const r = spawnSync('bun', ['run', 'build:plugin'], {
     cwd: repo,
     stdio: 'inherit',
   });

@@ -29,7 +29,7 @@ export interface CodeqlLedgerDeps extends CodeqlReviewDeps, CodeqlDoctorDeps {
   genReviewId: () => Promise<string>;
   /** Persist the assembled reviewer-output (audit trail; input to the producer). */
   persistReviewerOutput: (workItemId: string, output: ReviewerOutput) => Promise<void>;
-  /** Persist the projected acg_review ledger (.ditto/work-items/<wi>/acg-review.json). */
+  /** Persist the projected acg_review ledger (.ditto/local/work-items/<wi>/acg-review.json). */
   persistLedger: (workItemId: string, graph: AcgReviewGraph) => Promise<void>;
 }
 

@@ -4,6 +4,7 @@ import type { z } from 'zod';
 import type { evidenceRef } from '~/schemas/common';
 import { type Handoff, handoff as handoffSchema } from '~/schemas/handoff';
 import type { WorkItem } from '~/schemas/work-item';
+import { localDir } from './ditto-paths';
 import { atomicWriteText, ensureDir } from './fs';
 import { WorkItemStore } from './work-item-store';
 
@@ -14,11 +15,11 @@ type EvidenceRef = z.infer<typeof evidenceRef>;
  *
  * 단일 독립 store. 이전엔 두 갈래가 따로 존재했다 — pre-compact 훅의 json
  * (`HandoffStore`) 과 `ditto work handoff` 의 md (`writeWorkItemHandoff`). 둘 다
- * `.ditto/work-items/<wi>/` 에 종속이었다. 이제 둘 다 이 store 로 모이고, 위치는
- * work-item 밖의 `.ditto/handoff/` 다.
+ * `.ditto/local/work-items/<wi>/` 에 종속이었다. 이제 둘 다 이 store 로 모이고, 위치는
+ * work-item 밖의 `.ditto/local/handoff/` 다.
  *
- *  - active:  `.ditto/handoff/<wi>.md`           — 다음 세션이 자동으로 읽고(소비) archive 로 옮김
- *  - archive: `.ditto/handoff/archive/<wi>__<ts>.md` — 소비됨 / 픽업 불필요한 완료 handoff
+ *  - active:  `.ditto/local/handoff/<wi>.md`           — 다음 세션이 자동으로 읽고(소비) archive 로 옮김
+ *  - archive: `.ditto/local/handoff/archive/<wi>__<ts>.md` — 소비됨 / 픽업 불필요한 완료 handoff
  *
  * 형식 = 1줄 JSON frontmatter(기계 복원용) + 사람용 markdown 본문. frontmatter 로
  * round-trip(write→read 동일 객체)이 보장되고, 본문은 UserPromptSubmit 이 컨텍스트로
@@ -141,16 +142,16 @@ export class HandoffStore {
   constructor(public readonly repoRoot: string) {}
 
   private dir(): string {
-    return join(this.repoRoot, '.ditto', 'handoff');
+    return localDir(this.repoRoot, 'handoff');
   }
   private activePath(workItemId: string): string {
     return join(this.dir(), `${workItemId}.md`);
   }
   private activeRel(workItemId: string): string {
-    return `.ditto/handoff/${workItemId}.md`;
+    return `.ditto/local/handoff/${workItemId}.md`;
   }
   private archiveRel(workItemId: string, ts: string): string {
-    return `.ditto/handoff/archive/${workItemId}__${ts}.md`;
+    return `.ditto/local/handoff/archive/${workItemId}__${ts}.md`;
   }
 
   private async link(workItemId: string, rel: string): Promise<void> {

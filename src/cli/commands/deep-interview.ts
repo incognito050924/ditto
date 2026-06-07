@@ -88,13 +88,15 @@ const startCmd = defineCommand({
         status: state.status,
         threshold: state.readiness.threshold,
         question_cap: state.exit.question_cap,
-        path: `.ditto/work-items/${state.work_item_id}/interview-state.json`,
+        path: `.ditto/local/work-items/${state.work_item_id}/interview-state.json`,
       });
     } else {
       writeHuman(`Started interview for ${state.work_item_id}`);
       writeHuman(`  threshold:    ${state.readiness.threshold}`);
       writeHuman(`  question_cap: ${state.exit.question_cap}`);
-      writeHuman(`  path:         .ditto/work-items/${state.work_item_id}/interview-state.json`);
+      writeHuman(
+        `  path:         .ditto/local/work-items/${state.work_item_id}/interview-state.json`,
+      );
     }
   },
 });
@@ -282,16 +284,18 @@ const finalizeCmd = defineCommand({
       if (format === 'json') {
         writeJson({
           work_item_id: result.intent.work_item_id,
-          intent_path: `.ditto/work-items/${result.intent.work_item_id}/intent.json`,
+          intent_path: `.ditto/local/work-items/${result.intent.work_item_id}/intent.json`,
           autopilot_id: result.autopilot.autopilot_id,
-          autopilot_path: `.ditto/work-items/${result.intent.work_item_id}/autopilot.json`,
+          autopilot_path: `.ditto/local/work-items/${result.intent.work_item_id}/autopilot.json`,
           approval_gate: result.autopilot.approval_gate.status,
           node_ids: result.autopilot.nodes.map((n) => n.id),
           acceptance_criteria: result.intent.acceptance_criteria.map((ac) => ac.id),
         });
       } else {
         writeHuman(`Finalized interview for ${result.intent.work_item_id}`);
-        writeHuman(`  intent:        .ditto/work-items/${result.intent.work_item_id}/intent.json`);
+        writeHuman(
+          `  intent:        .ditto/local/work-items/${result.intent.work_item_id}/intent.json`,
+        );
         writeHuman(`  autopilot:     ${result.autopilot.autopilot_id}`);
         writeHuman(`  approval_gate: ${result.autopilot.approval_gate.status}`);
         writeHuman(

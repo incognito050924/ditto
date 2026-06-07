@@ -49,7 +49,7 @@ const reviewerOutputFixture = (overrides: Partial<ReviewerOutput> = {}): Reviewe
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'ditto-acgprod-'));
   git(['init']);
-  await mkdir(join(dir, '.ditto', 'work-items', WI), { recursive: true });
+  await mkdir(join(dir, '.ditto', 'local', 'work-items', WI), { recursive: true });
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
@@ -69,13 +69,16 @@ describe('AcgReviewStore', () => {
     expect(await store.get(WI)).toEqual(graph);
   });
 
-  test('writes to .ditto/work-items/<wi>/acg-review.json', async () => {
+  test('writes to .ditto/local/work-items/<wi>/acg-review.json', async () => {
     const store = new AcgReviewStore(dir);
     await store.write(
       WI,
       acgReviewGraph.parse({ kind: 'acg.review-graph.v1', files: [], human_review_set: [] }),
     );
-    const onDisk = await readFile(join(dir, '.ditto', 'work-items', WI, 'acg-review.json'), 'utf8');
+    const onDisk = await readFile(
+      join(dir, '.ditto', 'local', 'work-items', WI, 'acg-review.json'),
+      'utf8',
+    );
     expect(JSON.parse(onDisk).kind).toBe('acg.review-graph.v1');
   });
 });
@@ -94,7 +97,7 @@ describe('ditto acg-review CLI (producer)', () => {
 
     // The on-disk ledger is acg.review-graph.v1 valid AND trips the real Stop gate.
     const onDisk = JSON.parse(
-      await readFile(join(dir, '.ditto', 'work-items', WI, 'acg-review.json'), 'utf8'),
+      await readFile(join(dir, '.ditto', 'local', 'work-items', WI, 'acg-review.json'), 'utf8'),
     );
     const ledger = acgReviewGraph.parse(onDisk);
     const reasons = acgReviewForcesContinuation(ledger);
@@ -113,7 +116,7 @@ describe('ditto acg-review CLI (producer)', () => {
   test('deterministic: same reviewer-output → byte-identical ledger', async () => {
     const from = join(dir, 'reviewer-output.json');
     await writeFile(from, JSON.stringify(reviewerOutputFixture()), 'utf8');
-    const ledgerPath = join(dir, '.ditto', 'work-items', WI, 'acg-review.json');
+    const ledgerPath = join(dir, '.ditto', 'local', 'work-items', WI, 'acg-review.json');
 
     spawnDitto(['acg-review', '--from', from, '--work-item', WI]);
     const first = await readFile(ledgerPath, 'utf8');
@@ -152,7 +155,9 @@ describe('ditto acg-review CLI (producer)', () => {
     expect(res.exitCode).toBe(0);
     expect(JSON.parse(res.stdout).high_risk_without_evidence).toBe(0);
     const ledger = acgReviewGraph.parse(
-      JSON.parse(await readFile(join(dir, '.ditto', 'work-items', WI, 'acg-review.json'), 'utf8')),
+      JSON.parse(
+        await readFile(join(dir, '.ditto', 'local', 'work-items', WI, 'acg-review.json'), 'utf8'),
+      ),
     );
     expect(acgReviewForcesContinuation(ledger)).toHaveLength(0);
   });

@@ -1,8 +1,8 @@
-import { join } from 'node:path';
 import type { z } from 'zod';
 import type { declarerRole, evidenceRef, verdict } from '~/schemas/common';
 import { type CompletionContract, completionContract } from '~/schemas/completion-contract';
 import type { WorkItem } from '~/schemas/work-item';
+import { localDir } from './ditto-paths';
 import { readJson, writeJson } from './fs';
 
 type Verdict = z.infer<typeof verdict>;
@@ -75,7 +75,7 @@ export function buildCompletion(input: CompletionInput): CompletionContract {
       ? {}
       : {
           next_handoff_path:
-            input.nextHandoffPath ?? `.ditto/work-items/${input.workItem.id}/handoff.md`,
+            input.nextHandoffPath ?? `.ditto/local/work-items/${input.workItem.id}/handoff.md`,
         }),
     final_verdict: finalVerdict,
   };
@@ -86,7 +86,7 @@ export class CompletionStore {
   constructor(public readonly repoRoot: string) {}
 
   private path(workItemId: string): string {
-    return join(this.repoRoot, '.ditto', 'work-items', workItemId, 'completion.json');
+    return localDir(this.repoRoot, 'work-items', workItemId, 'completion.json');
   }
 
   async exists(workItemId: string): Promise<boolean> {

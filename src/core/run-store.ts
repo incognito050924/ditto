@@ -1,6 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type RunManifest, runManifest } from '~/schemas/run-manifest';
+import { localDir } from './ditto-paths';
 import { ensureDir, readJson, writeJson } from './fs';
 import { generateId } from './id';
 
@@ -19,7 +20,7 @@ export class RunStore {
   constructor(public readonly repoRoot: string) {}
 
   private runDir(id: string): string {
-    return join(this.repoRoot, '.ditto', 'runs', id);
+    return localDir(this.repoRoot, 'runs', id);
   }
 
   private manifestPath(id: string): string {

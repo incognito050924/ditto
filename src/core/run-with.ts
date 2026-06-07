@@ -185,7 +185,7 @@ export async function runWithProvider(
     git_before: gitBefore,
     ...(input.prompt_path ? { prompt_path: input.prompt_path } : {}),
   });
-  const manifestPath = `.ditto/runs/${created.id}/manifest.json`;
+  const manifestPath = `.ditto/local/runs/${created.id}/manifest.json`;
   const resultBase: RunWithResult = {
     run_id: created.id,
     work_item_id: item.id,

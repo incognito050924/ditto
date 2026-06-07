@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { computeScanFingerprint, workItemBaseCandidates } from '~/acg/semantic/scan-observation';
+import { localDir } from '~/core/ditto-paths';
 import { diffVsRef, gitRevParse, listChangedFilesVsRef } from '~/core/git';
 import { pickBaseRef } from '~/core/work-item-handoff';
 import { acgSemanticScanObservation } from '~/schemas/acg-semantic-scan-observation';
@@ -89,13 +89,7 @@ function freshObservationChangeCount(
   base: string,
 ): number | null {
   try {
-    const path = join(
-      repoRoot,
-      '.ditto',
-      'work-items',
-      workItemId,
-      'semantic-scan-observation.json',
-    );
+    const path = localDir(repoRoot, 'work-items', workItemId, 'semantic-scan-observation.json');
     const parsed = acgSemanticScanObservation.safeParse(JSON.parse(readFileSync(path, 'utf8')));
     if (!parsed.success) return null;
     const fingerprintNow = computeScanFingerprint(

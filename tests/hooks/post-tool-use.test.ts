@@ -30,7 +30,8 @@ afterEach(async () => {
 const run = (raw: Record<string, unknown>) =>
   postToolUseHandler({ raw: { session_id: SESSION, ...raw }, repoRoot: repo, env: {} });
 
-const logPath = () => join(repo, '.ditto', 'work-items', wiId, 'evidence', 'commands.jsonl');
+const logPath = () =>
+  join(repo, '.ditto', 'local', 'work-items', wiId, 'evidence', 'commands.jsonl');
 async function logLines(): Promise<string[]> {
   const text = await readFile(logPath(), 'utf8');
   return text.split('\n').filter((l) => l.trim().length > 0);

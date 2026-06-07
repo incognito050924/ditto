@@ -4,6 +4,7 @@ import { AcgReviewStore } from '~/core/acg-review-store';
 import { defaultDoctorDeps } from '~/core/codeql/doctor';
 import { type CodeqlLedgerDeps, runCodeqlReviewToLedger } from '~/core/codeql/review-to-ledger';
 import { type CodeqlLanguage, cacheKey } from '~/core/codeql/runner';
+import { localDir } from '~/core/ditto-paths';
 import { EvidenceStore, sha256Hex } from '~/core/evidence-store';
 import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
 import type { HostRunProcess } from '~/core/hosts/types';
@@ -62,8 +63,8 @@ function defaultLedgerDeps(repoRoot: string): CodeqlLedgerDeps {
     cliAvailable: defaultDoctorDeps.cliAvailable,
     genReviewId: () => generateId('rv', async () => false),
     persistReviewerOutput: async (workItemId, output) => {
-      const path = join(repoRoot, '.ditto', 'work-items', workItemId, 'reviewer-output.json');
-      await ensureDir(join(repoRoot, '.ditto', 'work-items', workItemId));
+      const path = localDir(repoRoot, 'work-items', workItemId, 'reviewer-output.json');
+      await ensureDir(localDir(repoRoot, 'work-items', workItemId));
       await writeJsonFile(path, reviewerOutput, output);
     },
     persistLedger: async (workItemId, graph) => {
@@ -131,10 +132,9 @@ const reviewSubcommand = defineCommand({
       const sourceRoot = args['source-root'] ?? join(repoRoot, 'src');
       const commitSha = await gitHeadSha(repoRoot);
       const key = cacheKey(commitSha, language);
-      const dbPath = join(repoRoot, '.ditto', 'cache', 'codeql', key, 'db');
-      const sarifPath = join(
+      const dbPath = localDir(repoRoot, 'cache', 'codeql', key, 'db');
+      const sarifPath = localDir(
         repoRoot,
-        '.ditto',
         'work-items',
         args['work-item'],
         'evidence',
@@ -143,8 +143,8 @@ const reviewSubcommand = defineCommand({
       // `codeql database create` makes the db leaf but NOT its parent chain, and
       // `analyze --output` will not create the sarif's parent either. Ensure both
       // exist before the spawn or create fails with "<dir> does not exist".
-      await ensureDir(join(repoRoot, '.ditto', 'cache', 'codeql', key));
-      await ensureDir(join(repoRoot, '.ditto', 'work-items', args['work-item'], 'evidence'));
+      await ensureDir(localDir(repoRoot, 'cache', 'codeql', key));
+      await ensureDir(localDir(repoRoot, 'work-items', args['work-item'], 'evidence'));
       const res = await runCodeqlReviewToLedger(
         {
           workItemId: args['work-item'],

@@ -38,7 +38,7 @@ afterEach(async () => {
   await rm(repo, { recursive: true, force: true });
 });
 
-const artifactPath = (name: string) => join(repo, '.ditto', 'work-items', wiId, name);
+const artifactPath = (name: string) => join(repo, '.ditto', 'local', 'work-items', wiId, name);
 const writeArtifact = (name: string, obj: unknown) =>
   writeFile(artifactPath(name), typeof obj === 'string' ? obj : JSON.stringify(obj));
 const run = (raw: Record<string, unknown>) =>
@@ -495,7 +495,7 @@ describe('stopHandler — ACG review ledger (high-risk needs evidence)', () => {
       completion({
         acceptance: passingAcceptance,
         acg_governance: {
-          review_graph: '.ditto/work-items/wi/acg-review.json',
+          review_graph: '.ditto/local/work-items/wi/acg-review.json',
           unresolved_high_risk: [],
         },
       }),

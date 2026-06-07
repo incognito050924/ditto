@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { languageLedger } from '~/schemas/language-ledger';
 import { type WorkItem, workItem } from '~/schemas/work-item';
+import { localDir } from './ditto-paths';
 import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
 import { generateId } from './id';
 
@@ -43,7 +44,7 @@ export class WorkItemStore {
   constructor(public readonly repoRoot: string) {}
 
   private workItemDir(id: string): string {
-    return join(this.repoRoot, '.ditto', 'work-items', id);
+    return localDir(this.repoRoot, 'work-items', id);
   }
 
   private workItemPath(id: string): string {
@@ -129,7 +130,7 @@ export class WorkItemStore {
   }
 
   async list(): Promise<WorkItemSummary[]> {
-    const base = join(this.repoRoot, '.ditto', 'work-items');
+    const base = localDir(this.repoRoot, 'work-items');
     let entries: string[];
     try {
       entries = await readdir(base);

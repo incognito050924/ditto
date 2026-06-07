@@ -23,7 +23,7 @@ import {
  *
  * Loads the ArchitectureSpec, extracts the changed files' dependency edges, and
  * flags Dependency-Rule violations. Each violation is projected as a HIGH-risk,
- * un-evidenced entry into `.ditto/work-items/<wi>/acg-review.json` so the EXISTING
+ * un-evidenced entry into `.ditto/local/work-items/<wi>/acg-review.json` so the EXISTING
  * Stop gate (`acgReviewForcesContinuation`) blocks completion — no new wiring; a
  * boundary violation is a high-risk change a human must resolve.
  */

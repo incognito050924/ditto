@@ -30,6 +30,7 @@ describe('EvidenceStore', () => {
     const path = join(
       workDir,
       '.ditto',
+      'local',
       'work-items',
       'wi_demo00001',
       'evidence',
@@ -65,6 +66,7 @@ describe('EvidenceStore', () => {
     const path = join(
       workDir,
       '.ditto',
+      'local',
       'work-items',
       'wi_demo00003',
       'evidence',
@@ -83,6 +85,7 @@ describe('EvidenceStore', () => {
     const path = join(
       workDir,
       '.ditto',
+      'local',
       'work-items',
       'wi_corrupt001',
       'evidence',
@@ -115,7 +118,7 @@ const sampleRecord = (overrides: Record<string, unknown> = {}) => ({
 
 describe('EvidenceStore evidence-index.json ledger', () => {
   const indexPath = (wi: string) =>
-    join(workDir, '.ditto', 'work-items', wi, 'evidence-index.json');
+    join(workDir, '.ditto', 'local', 'work-items', wi, 'evidence-index.json');
 
   test('readIndex returns an empty index when the file does not exist', async () => {
     const idx = await store.readIndex('wi_noindex001');
@@ -132,6 +135,7 @@ describe('EvidenceStore evidence-index.json ledger', () => {
     const underEvidence = join(
       workDir,
       '.ditto',
+      'local',
       'work-items',
       'wi_idx00001',
       'evidence',

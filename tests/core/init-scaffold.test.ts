@@ -20,12 +20,16 @@ describe('initScaffold', () => {
       const result = await initScaffold(repo, NOW);
 
       expect(result.alreadyInitialized).toBe(false);
-      // .ditto + 9 subdirs all freshly created.
+      // .ditto + subdirs all freshly created. Per-developer runtime → local/.
       expect(result.createdDirs).toContain('.ditto');
-      expect(result.createdDirs).toContain(join('.ditto', 'work-items'));
+      expect(result.createdDirs).toContain(join('.ditto', 'local', 'work-items'));
       expect(result.createdDirs).toContain(join('.ditto', 'knowledge', 'adr'));
 
-      for (const sub of ['work-items', 'runs', 'handoff', 'sessions', 'logs', 'cache', 'agents']) {
+      for (const sub of ['work-items', 'runs', 'handoff', 'sessions', 'logs', 'cache']) {
+        expect(await fileExists(join(repo, '.ditto', 'local', sub))).toBe(true);
+      }
+      // Project-global tier stays directly under .ditto/.
+      for (const sub of ['agents', 'knowledge']) {
         expect(await fileExists(join(repo, '.ditto', sub))).toBe(true);
       }
       // After init, findRepoRoot resolves deterministically to the target.
@@ -52,8 +56,9 @@ describe('initScaffold', () => {
 
       expect(await fileExists(join(repo, '.ditto', 'knowledge', 'CONTEXT.md'))).toBe(true);
       const gitignore = await readFile(join(repo, '.ditto', '.gitignore'), 'utf8');
-      expect(gitignore).toContain('runs/');
-      expect(gitignore).toContain('work-items/*/evidence/');
+      // Tier ③ per-developer: local/ is ignored; tier ② knowledge/agents tracked.
+      expect(gitignore).toContain('local/');
+      expect(gitignore).toContain('!knowledge/');
     } finally {
       await rm(repo, { recursive: true, force: true });
     }

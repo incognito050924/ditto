@@ -3,13 +3,14 @@ import { join } from 'node:path';
 import type { z } from 'zod';
 import { type CommandLogEntry, commandLogEntry } from '~/schemas/evidence-log';
 import { type EvidenceIndex, evidenceIndex, evidenceRecord } from '~/schemas/evidence-record';
+import { localDir } from './ditto-paths';
 import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
 
 export class EvidenceStore {
   constructor(public readonly repoRoot: string) {}
 
   private workItemDir(workItemId: string): string {
-    return join(this.repoRoot, '.ditto', 'work-items', workItemId);
+    return localDir(this.repoRoot, 'work-items', workItemId);
   }
 
   private evidenceDir(workItemId: string): string {

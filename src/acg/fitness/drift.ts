@@ -6,7 +6,7 @@
  * 누적되면 "서서히 감당 불가"가 된다 — 단발 검증으로는 안 보이는 그 기울기를 function_id별
  * 시계열로 드러낸다. 순수부(집계)는 단위 테스트로, 로더(work-item 디렉터리 스캔)는 deps IO다.
  */
-import { join } from 'node:path';
+import { localDir } from '~/core/ditto-paths';
 import { readJson } from '~/core/fs';
 import { WorkItemStore } from '~/core/work-item-store';
 import { type AcgAssuranceSnapshot, acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
@@ -139,7 +139,7 @@ export function computeDrift(snapshots: AcgAssuranceSnapshot[]): DriftReport {
 
 /**
  * work-item을 가로지른 AssuranceSnapshot 시계열을 로드한다(impure). 각 work item의
- * `.ditto/work-items/<id>/assurance-snapshot.json`을 읽되, 부재·malformed는 건너뛴다
+ * `.ditto/local/work-items/<id>/assurance-snapshot.json`을 읽되, 부재·malformed는 건너뛴다
  * (drift는 있는 점들로만 추세를 본다 — 빠진 점은 침묵 손실이 아니라 그 변경이 fitness를
  * 안 돌린 것).
  */
@@ -150,7 +150,7 @@ export async function loadAssuranceSnapshots(repoRoot: string): Promise<AcgAssur
     try {
       out.push(
         await readJson(
-          join(repoRoot, '.ditto', 'work-items', it.id, 'assurance-snapshot.json'),
+          localDir(repoRoot, 'work-items', it.id, 'assurance-snapshot.json'),
           acgAssuranceSnapshot,
         ),
       );

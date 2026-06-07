@@ -109,7 +109,14 @@ describe('writeWorkItemHandoff', () => {
     }
     expect(thrown).toBeInstanceOf(InvalidBaseRefError);
     // completion.json must not have been written
-    const completionPath = join(workDir, '.ditto', 'work-items', created.id, 'completion.json');
+    const completionPath = join(
+      workDir,
+      '.ditto',
+      'local',
+      'work-items',
+      created.id,
+      'completion.json',
+    );
     expect(await Bun.file(completionPath).exists()).toBe(false);
   });
 
@@ -228,11 +235,11 @@ describe('writeWorkItemHandoff', () => {
       ),
     }));
     const result = await writeWorkItemHandoff(workDir, store, created.id);
-    // handoff 본문은 work-item 밖(.ditto/handoff/)으로 옮겨졌고 소비되면 archive로
+    // handoff 본문은 work-item 밖(.ditto/local/handoff/)으로 옮겨졌고 소비되면 archive로
     // 이동하므로, stale 경로가 되지 않도록 changed_files self-union에서 제외한다.
     const expectedSelf = [
-      `.ditto/work-items/${created.id}/completion.json`,
-      `.ditto/work-items/${created.id}/work-item.json`,
+      `.ditto/local/work-items/${created.id}/completion.json`,
+      `.ditto/local/work-items/${created.id}/work-item.json`,
     ];
     for (const path of expectedSelf) {
       expect(result.completion.changed_files).toContain(path);
@@ -250,7 +257,14 @@ describe('writeWorkItemHandoff', () => {
     // First handoff → pass verdict, completion.json written.
     await writeWorkItemHandoff(workDir, store, created.id);
     // A verifier enriches the completion.json with real verifications + risks + summary.
-    const completionPath = join(workDir, '.ditto', 'work-items', created.id, 'completion.json');
+    const completionPath = join(
+      workDir,
+      '.ditto',
+      'local',
+      'work-items',
+      created.id,
+      'completion.json',
+    );
     const enriched = JSON.parse(await Bun.file(completionPath).text());
     enriched.verifications = [{ command: 'bun test', exit_code: 0 }];
     enriched.remaining_risks = ['r1'];
@@ -272,7 +286,14 @@ describe('writeWorkItemHandoff', () => {
         c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
       ),
     }));
-    const completionPath = join(workDir, '.ditto', 'work-items', created.id, 'completion.json');
+    const completionPath = join(
+      workDir,
+      '.ditto',
+      'local',
+      'work-items',
+      created.id,
+      'completion.json',
+    );
     await Bun.write(completionPath, '{ this is not valid json');
     const result = await writeWorkItemHandoff(workDir, store, created.id);
     expect(result.completion.final_verdict).toBe('pass');

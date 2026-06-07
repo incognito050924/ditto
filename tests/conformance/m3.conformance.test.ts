@@ -53,7 +53,8 @@ afterEach(async () => {
   await rm(tmp, { recursive: true, force: true });
 });
 
-const commandsPath = () => join(tmp, '.ditto', 'work-items', wi.id, 'evidence', 'commands.jsonl');
+const commandsPath = () =>
+  join(tmp, '.ditto', 'local', 'work-items', wi.id, 'evidence', 'commands.jsonl');
 
 const readLog = async () => {
   const text = await readFile(commandsPath(), 'utf8');
@@ -767,7 +768,7 @@ describe('M3.5 — dialectic runtime (OpponentModelRouter + admissibility + Stop
   });
 
   test('Stop hook 통합: reviews/dialectic-*.json verdict=reject → exit 2 + dialectic 사유', async () => {
-    const reviewsDir = join(tmp, '.ditto', 'work-items', wi.id, 'reviews');
+    const reviewsDir = join(tmp, '.ditto', 'local', 'work-items', wi.id, 'reviews');
     await mkdir(reviewsDir, { recursive: true });
     const reject = buildDialectic({
       synthesizer: {
@@ -787,7 +788,7 @@ describe('M3.5 — dialectic runtime (OpponentModelRouter + admissibility + Stop
   });
 
   test('Stop hook 통합: malformed reviews/dialectic-*.json → exit 2 (fail-closed)', async () => {
-    const reviewsDir = join(tmp, '.ditto', 'work-items', wi.id, 'reviews');
+    const reviewsDir = join(tmp, '.ditto', 'local', 'work-items', wi.id, 'reviews');
     await mkdir(reviewsDir, { recursive: true });
     await writeFile(join(reviewsDir, 'dialectic-1.json'), '{"schema_version":"0.1.0"}');
     const res = await stopHandler({ raw: { session_id: SESSION }, repoRoot: tmp, env: {} });

@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import {
   buildScanObservation,
@@ -9,6 +8,7 @@ import { applySemanticVerdict, buildSemanticSeed } from '~/acg/semantic/semantic
 import { scanSignatureChanges } from '~/acg/semantic/signature-codeql';
 import { makeRelationDeps } from '~/core/codeql/host-deps';
 import type { CodeqlLanguage } from '~/core/codeql/runner';
+import { localDir } from '~/core/ditto-paths';
 import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
 import { diffVsRef, gitRevParse } from '~/core/git';
 import { pickBaseRef } from '~/core/work-item-handoff';
@@ -42,11 +42,11 @@ import {
  */
 
 function semanticPath(repoRoot: string, workItem: string): string {
-  return join(repoRoot, '.ditto', 'work-items', workItem, 'semantic-compatibility.json');
+  return localDir(repoRoot, 'work-items', workItem, 'semantic-compatibility.json');
 }
 
 function observationPath(repoRoot: string, workItem: string): string {
-  return join(repoRoot, '.ditto', 'work-items', workItem, 'semantic-scan-observation.json');
+  return localDir(repoRoot, 'work-items', workItem, 'semantic-scan-observation.json');
 }
 
 const detectCommand = defineCommand({
@@ -91,7 +91,7 @@ const detectCommand = defineCommand({
         after: args.after,
         producedAt: new Date().toISOString(),
       });
-      await ensureDir(join(repoRoot, '.ditto', 'work-items', args['work-item']));
+      await ensureDir(localDir(repoRoot, 'work-items', args['work-item']));
       await writeJsonFile(path, acgSemanticCompatibility, seed);
 
       if (format === 'json') {
@@ -285,7 +285,7 @@ const scanCommand = defineCommand({
         after: only.after,
         producedAt: new Date().toISOString(),
       });
-      await ensureDir(join(repoRoot, '.ditto', 'work-items', args['work-item']));
+      await ensureDir(localDir(repoRoot, 'work-items', args['work-item']));
       await writeJsonFile(path, acgSemanticCompatibility, seed);
 
       if (format === 'json') {
@@ -392,7 +392,7 @@ const observeCommand = defineCommand({
         changes,
         producedAt: new Date().toISOString(),
       });
-      await ensureDir(join(repoRoot, '.ditto', 'work-items', args['work-item']));
+      await ensureDir(localDir(repoRoot, 'work-items', args['work-item']));
       await writeJsonFile(path, acgSemanticScanObservation, observation);
 
       if (format === 'json') {

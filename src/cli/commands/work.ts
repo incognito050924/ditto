@@ -84,7 +84,7 @@ const workStart = defineCommand({
       if (format === 'json') {
         writeJson({
           work_item_id: created.id,
-          path: `.ditto/work-items/${created.id}/work-item.json`,
+          path: `.ditto/local/work-items/${created.id}/work-item.json`,
           status: created.status,
           repo_root: repoRoot,
         });
@@ -92,7 +92,7 @@ const workStart = defineCommand({
         writeHuman(`Created work item ${created.id}`);
         writeHuman(`  goal: ${created.goal}`);
         writeHuman(`  status: ${created.status}`);
-        writeHuman(`  path: ${repoRoot}/.ditto/work-items/${created.id}/work-item.json`);
+        writeHuman(`  path: ${repoRoot}/.ditto/local/work-items/${created.id}/work-item.json`);
         writeHuman('Next steps:');
         writeHuman(`  1. ditto deep-interview start --workItem ${created.id}`);
         writeHuman(`  2. ditto autopilot bootstrap --workItem ${created.id}`);

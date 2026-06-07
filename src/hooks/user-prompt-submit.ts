@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { type CharterContext, PLACEHOLDER_AC_STATEMENT, charterProjection } from '~/core/charter';
+import { localDir } from '~/core/ditto-paths';
 import { atomicWriteText, ensureDir } from '~/core/fs';
 import { HandoffStore } from '~/core/handoff-store';
 import { SessionPointerStore } from '~/core/session-pointer';
@@ -158,14 +159,14 @@ export function allAcceptancePlaceholders(item: WorkItem): boolean {
 }
 
 // re_entry 명령만 보조 힌트로 남긴다. handoff 본문은 더 이상 "see {path}" 로
-// 가리키지 않고, 아래 handler 가 .ditto/handoff/ 에서 본문을 자동으로 주입한다
+// 가리키지 않고, 아래 handler 가 .ditto/local/handoff/ 에서 본문을 자동으로 주입한다
 // (wi_260605wf3: 파일명 명시 없는 자동 읽기).
 function pendingHandoffHint(item: WorkItem): string | undefined {
   return item.re_entry?.command;
 }
 
 async function logClassification(repoRoot: string, entry: Record<string, unknown>): Promise<void> {
-  const dir = join(repoRoot, '.ditto', 'logs');
+  const dir = localDir(repoRoot, 'logs');
   await ensureDir(dir);
   const path = join(dir, 'user-prompt.jsonl');
   const file = Bun.file(path);

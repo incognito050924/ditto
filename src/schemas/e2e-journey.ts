@@ -6,7 +6,7 @@ import { relativePath, schemaVersion, sha256, workItemId } from './common';
  *
  * Real-browser user-journey verification — distinct from code-level tests. The
  * executor is direct Playwright/Chromium (not MCP, §10). Artifacts (screenshots,
- * trace, console, network) live under `.ditto/runs/<id>/` (gitignored raw) and
+ * trace, console, network) live under `.ditto/local/runs/<id>/` (gitignored raw) and
  * are referenced here by path + optional sha256 — never embedded.
  *
  * v0 status: *design-locked contract*. The `playwright-e2e` agent / `/ditto:e2e`
@@ -51,10 +51,12 @@ export const e2eAssertion = z
 
 const artifactRef = z
   .object({
-    path: relativePath.describe('Repo-relative path under .ditto/runs/<id>/'),
+    path: relativePath.describe('Repo-relative path under .ditto/local/runs/<id>/'),
     sha256: sha256.optional(),
   })
-  .describe('Pointer to a captured artifact (path + optional hash; raw stays under .ditto/runs)');
+  .describe(
+    'Pointer to a captured artifact (path + optional hash; raw stays under .ditto/local/runs)',
+  );
 
 export const e2eArtifacts = z
   .object({

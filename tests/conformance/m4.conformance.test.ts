@@ -85,7 +85,7 @@ describe('M4.1 — handoff artifact 결정론 조립 + 링크 (HandoffStore.writ
     await s.write(h);
     expect(await s.exists(wi.id)).toBe(true);
     const linked = await items.get(wi.id);
-    expect(linked.handoff_path).toBe(`.ditto/handoff/${wi.id}.md`);
+    expect(linked.handoff_path).toBe(`.ditto/local/handoff/${wi.id}.md`);
     // 라운드트립: parse 가능한 handoff 가 디스크에 있어야 한다.
     const back = await s.get(wi.id);
     expect(back.work_item_id).toBe(wi.id);
@@ -165,7 +165,7 @@ describe('M4.2 — PreCompact 핸들러 (압축 전 handoff 작성, 비차단·f
   test('일관성 invariant: PreCompact 후 work item 의 handoff_path 가 작성된 artifact 를 가리킨다', async () => {
     await run();
     const refreshed = await items.get(wi.id);
-    expect(refreshed.handoff_path).toBe(`.ditto/handoff/${wi.id}.md`);
+    expect(refreshed.handoff_path).toBe(`.ditto/local/handoff/${wi.id}.md`);
   });
 
   test('autopilot 연속성: active autopilot 의 autopilot_id 가 handoff 에 전달된다 (§AC-1, wi_v04runtimewiring 2026-05-31)', async () => {

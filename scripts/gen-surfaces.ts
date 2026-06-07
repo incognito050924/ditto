@@ -1,12 +1,12 @@
 import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { findRepoRoot } from '~/core/fs';
+import { localDir } from '~/core/ditto-paths';
+import { ensureDir, findRepoRoot } from '~/core/fs';
 // Importing the hosts barrel registers the codex + claude-code adapters.
 import { listHostAdapters } from '~/core/hosts';
 import { generateSurfaceCatalog } from '~/core/surface-inventory';
 
 /**
- * Regenerate `.ditto/surfaces.json` from the code (G6). The catalog is a build
+ * Regenerate `.ditto/local/surfaces.json` from the code (G6). The catalog is a build
  * artifact, not a hand-maintained file: run this after adding/removing a skill,
  * agent, command, plugin, or hook. CI regenerates and compares (see
  * tests/doctor/surface.test.ts) so a stale catalog fails loudly.
@@ -14,7 +14,8 @@ import { generateSurfaceCatalog } from '~/core/surface-inventory';
 async function main(): Promise<void> {
   const repoRoot = await findRepoRoot();
   const catalog = await generateSurfaceCatalog(listHostAdapters(), repoRoot);
-  const out = join(repoRoot, '.ditto', 'surfaces.json');
+  const out = localDir(repoRoot, 'surfaces.json');
+  await ensureDir(localDir(repoRoot));
   // One surface per line keeps the generated catalog reviewable in diffs.
   const body = catalog.surfaces
     .map(

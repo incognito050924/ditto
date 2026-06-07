@@ -122,7 +122,10 @@ describe('runWithProvider', () => {
         },
       ],
     });
-    await writeFile(join(dir, '.ditto', 'work-items', item.id, 'context-packet.md'), 'prompt\n');
+    await writeFile(
+      join(dir, '.ditto', 'local', 'work-items', item.id, 'context-packet.md'),
+      'prompt\n',
+    );
     await commitAll('work item');
 
     let seenArgs: string[] = [];
@@ -151,7 +154,7 @@ describe('runWithProvider', () => {
       work_item_id: item.id,
       provider: 'codex',
       profile: 'workspace-write',
-      prompt_path: `.ditto/work-items/${item.id}/context-packet.md`,
+      prompt_path: `.ditto/local/work-items/${item.id}/context-packet.md`,
       args: ['exec', '--help'],
     });
 
@@ -163,13 +166,13 @@ describe('runWithProvider', () => {
     expect(manifest.provider).toBe('codex');
     expect(manifest.entrypoint).toBe('codex mock');
     expect(manifest.model_reported).toBe('codex-test-model');
-    expect(manifest.prompt_path).toBe(`.ditto/work-items/${item.id}/context-packet.md`);
+    expect(manifest.prompt_path).toBe(`.ditto/local/work-items/${item.id}/context-packet.md`);
     expect(manifest.exit_code).toBe(0);
     expect(manifest.git_after).toBeDefined();
     expect(manifest.changed_files).toContain('README.md');
-    expect(manifest.stdout_path).toBe(`.ditto/runs/${result.run_id}/stdout.log`);
-    expect(manifest.stderr_path).toBe(`.ditto/runs/${result.run_id}/stderr.log`);
-    expect(manifest.diff_path).toBe(`.ditto/runs/${result.run_id}/diff.patch`);
+    expect(manifest.stdout_path).toBe(`.ditto/local/runs/${result.run_id}/stdout.log`);
+    expect(manifest.stderr_path).toBe(`.ditto/local/runs/${result.run_id}/stderr.log`);
+    expect(manifest.diff_path).toBe(`.ditto/local/runs/${result.run_id}/diff.patch`);
 
     await expect(Bun.file(join(dir, manifest.stdout_path ?? '')).text()).resolves.toBe(
       'stdout text\n',
@@ -196,7 +199,7 @@ describe('runWithProvider', () => {
 
     const result = await runFixture(item.id);
     const raw = JSON.parse(
-      await Bun.file(join(dir, '.ditto', 'runs', result.run_id, 'manifest.json')).text(),
+      await Bun.file(join(dir, '.ditto', 'local', 'runs', result.run_id, 'manifest.json')).text(),
     );
     expect(() => runManifest.parse(raw)).not.toThrow();
   });
@@ -283,7 +286,7 @@ describe('runWithProvider', () => {
     expect(result.exit_code).toBeNull();
     expect(manifest.exit_code).toBeNull();
     expect(manifest.notes).toContain('signal: SIGTERM');
-    expect(manifest.stdout_path).toBe(`.ditto/runs/${result.run_id}/stdout.log`);
+    expect(manifest.stdout_path).toBe(`.ditto/local/runs/${result.run_id}/stdout.log`);
   });
 
   test('captures mid-pipe stream failure as unverified artifact evidence', async () => {
@@ -356,7 +359,7 @@ describe('runWithProvider', () => {
       args: ['exec'],
     });
 
-    const expectedWorktree = `.ditto/worktrees/${result.run_id}`;
+    const expectedWorktree = `.ditto/local/worktrees/${result.run_id}`;
     expect(seenRepoRoot).toBe(join(dir, expectedWorktree));
     expect(seenCwd).toBe('.');
     const manifest = await new RunStore(dir).get(result.run_id);
@@ -436,7 +439,7 @@ describe('runWithProvider', () => {
     const entry = manifest.verifications[0];
     expect(entry.command).toBe('pwd');
     expect(entry.exit_code).toBe(0);
-    expect(entry.output_path).toBe(`.ditto/runs/${result.run_id}/verify.log`);
+    expect(entry.output_path).toBe(`.ditto/local/runs/${result.run_id}/verify.log`);
     expect(typeof entry.duration_ms).toBe('number');
     expect(entry.notes).toBeUndefined();
     const log = await Bun.file(join(dir, entry.output_path ?? '')).text();

@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import type { z } from 'zod';
 import type { verdict } from '~/schemas/common';
 import {
@@ -6,6 +5,7 @@ import {
   type DecisionLedgerEntry,
   convergence as convergenceSchema,
 } from '~/schemas/convergence';
+import { localDir } from './ditto-paths';
 import { readJson, writeJson } from './fs';
 import { deriveClosureMode } from './gates';
 
@@ -69,7 +69,7 @@ function recompute(
       // cap_reached/blocked without convergence requires a handoff path (§5).
       next_handoff_path: converged
         ? null
-        : (nextHandoffPath ?? `.ditto/work-items/${workItemId}/handoff.md`),
+        : (nextHandoffPath ?? `.ditto/local/work-items/${workItemId}/handoff.md`),
     },
   };
 }
@@ -96,7 +96,7 @@ export class ConvergenceStore {
   constructor(public readonly repoRoot: string) {}
 
   private path(workItemId: string): string {
-    return join(this.repoRoot, '.ditto', 'work-items', workItemId, 'convergence.json');
+    return localDir(this.repoRoot, 'work-items', workItemId, 'convergence.json');
   }
 
   async exists(workItemId: string): Promise<boolean> {

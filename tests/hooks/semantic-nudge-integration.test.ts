@@ -37,7 +37,7 @@ const completion = () => ({
 
 const run = () => stopHandler({ raw: { session_id: SESSION }, repoRoot: repo, env: {} });
 const writeWi = (name: string, obj: unknown) =>
-  writeFile(join(repo, '.ditto', 'work-items', wiId, name), JSON.stringify(obj));
+  writeFile(join(repo, '.ditto', 'local', 'work-items', wiId, name), JSON.stringify(obj));
 
 beforeEach(async () => {
   repo = await mkdtemp(join(tmpdir(), 'ditto-nudge-'));

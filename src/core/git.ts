@@ -41,7 +41,7 @@ export function listChangedFiles(
       .filter((line) => line.length > 0)
       .map((line) => line.slice(3).trim())
       .filter((path) => path.length > 0)
-      .filter((path) => !options.excludeDittoRuns || !path.startsWith('.ditto/runs/'))
+      .filter((path) => !options.excludeDittoRuns || !path.startsWith('.ditto/local/runs/'))
       .sort();
   } catch {
     return [];

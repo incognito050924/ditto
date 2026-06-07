@@ -123,14 +123,14 @@ const autopilotBootstrap = defineCommand({
         autopilot_id: result.graph.autopilot_id,
         approval_gate: result.graph.approval_gate.status,
         node_ids: result.graph.nodes.map((n) => n.id),
-        path: `.ditto/work-items/${args.workItem}/autopilot.json`,
+        path: `.ditto/local/work-items/${args.workItem}/autopilot.json`,
       });
     } else {
       writeHuman(`Bootstrapped autopilot ${result.graph.autopilot_id}`);
       writeHuman(`  work_item:     ${args.workItem}`);
       writeHuman(`  approval_gate: ${result.graph.approval_gate.status}`);
       writeHuman(`  nodes:         ${result.graph.nodes.map((n) => n.id).join(' -> ')}`);
-      writeHuman(`  path:          .ditto/work-items/${args.workItem}/autopilot.json`);
+      writeHuman(`  path:          .ditto/local/work-items/${args.workItem}/autopilot.json`);
     }
   },
 });
@@ -318,7 +318,7 @@ const autopilotComplete = defineCommand({
             verdict: a.verdict,
             evidence_count: a.evidence.length,
           })),
-          path: `.ditto/work-items/${args.workItem}/completion.json`,
+          path: `.ditto/local/work-items/${args.workItem}/completion.json`,
         });
       } else {
         writeHuman(

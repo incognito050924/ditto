@@ -4,6 +4,7 @@ import type { ZodTypeAny, z } from 'zod';
 import { commandProvider } from '~/acg/fitness/command-provider';
 import { type FitnessContext, runFitness } from '~/acg/fitness/fitness-runner';
 import { compositeProvider } from '~/acg/fitness/injected-provider';
+import { localDir } from '~/core/ditto-paths';
 import { FitnessFunctionStore } from '~/core/fitness-function-store';
 import { ensureDir, writeJson } from '~/core/fs';
 import {
@@ -273,7 +274,7 @@ export function semanticForcesContinuation(sem: AcgSemanticCompatibility): strin
  * fitness 자동 트리거 — 정의된 fitness가 있으면 stop 시점에 평가해 assurance-snapshot.json을
  * 최신화한다(stale 없음). deterministic은 commandProvider가 실제 평가한다.
  * llm_judged/executed는 에이전트가 미리 산출한 표준 경로 verdict 파일
- * (.ditto/work-items/<wi>/fitness-verdicts.json)이 있으면 합성 provider가 그 판정을 소비하고,
+ * (.ditto/local/work-items/<wi>/fitness-verdicts.json)이 있으면 합성 provider가 그 판정을 소비하고,
  * 없으면 기존 동작(provider가 skip → fail-open)을 유지한다.
  * fail-open: 정의 없음·실행 에러는 조용히 반환해 기존 게이트(이전 snapshot/없음)로 폴백한다.
  */
@@ -329,7 +330,7 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     return { exitCode: 0 }; // no loadable work item → nothing to judge
   }
 
-  const dir = join(input.repoRoot, '.ditto', 'work-items', pointer);
+  const dir = localDir(input.repoRoot, 'work-items', pointer);
   // fitness 자동 트리거: 게이트가 snapshot을 읽기 전에 정의된 fitness를 최신 평가한다.
   await maybeRunFitness(input.repoRoot, pointer, dir);
   const completion = await readArtifact(
@@ -350,7 +351,7 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   const dialectics = await readDialecticLedgers(dir);
   // ACG ReviewGraph ledger (WU-6, D5). Lives in the work-item dir alongside the
   // other ledgers (stop reads one directory); absent → no-op, malformed → fail
-  // closed, exactly like the others. D5 names `.ditto/runs/<wi>/`, but that tree
+  // closed, exactly like the others. D5 names `.ditto/local/runs/<wi>/`, but that tree
   // is run-id keyed (run manifests); the work-item dir is the work-item-keyed
   // home every other stop ledger already uses, so the ReviewGraph ledger lands
   // here too (the locked spec 00~50 does not pin the path).

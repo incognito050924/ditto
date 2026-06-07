@@ -25,7 +25,7 @@ function git(args: string[]): void {
 }
 
 async function createWorkItem(id: string): Promise<void> {
-  const wiDir = join(dir, '.ditto', 'work-items', id);
+  const wiDir = join(dir, '.ditto', 'local', 'work-items', id);
   await mkdir(wiDir, { recursive: true });
   const body = {
     schema_version: '0.1.0',
@@ -196,7 +196,7 @@ describe('ditto run with forwards -- tail to provider without citty consuming it
 
     let runsDirExists = true;
     try {
-      execFileSync('ls', [join(dir, '.ditto', 'runs')], { stdio: 'ignore' });
+      execFileSync('ls', [join(dir, '.ditto', 'local', 'runs')], { stdio: 'ignore' });
     } catch {
       runsDirExists = false;
     }

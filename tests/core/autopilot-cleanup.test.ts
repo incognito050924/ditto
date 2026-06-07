@@ -96,7 +96,7 @@ describe('planCleanup / listRunWorktrees (deterministic plan)', () => {
     await createWorktreeForRun(repo, 'run_aaa');
     await createWorktreeForRun(repo, 'run_bbb');
     const found = planCleanup(repo).worktrees.sort();
-    expect(found).toEqual(['.ditto/worktrees/run_aaa', '.ditto/worktrees/run_bbb']);
+    expect(found).toEqual(['.ditto/local/worktrees/run_aaa', '.ditto/local/worktrees/run_bbb']);
     // the main worktree is never in the teardown plan
     expect(found).not.toContain('.');
   });
@@ -122,9 +122,9 @@ describe('runCleanup (gated deterministic teardown)', () => {
     const res = await runCleanup(repo, { workItemId: WI, nodeId: 'C1', approve: false, now: NOW });
     expect(res.status).toBe('blocked');
     if (res.status !== 'blocked') throw new Error('expected blocked');
-    expect(res.plan).toEqual(['.ditto/worktrees/run_keep']);
+    expect(res.plan).toEqual(['.ditto/local/worktrees/run_keep']);
     // worktree NOT destroyed
-    expect(listRunWorktrees(repo)).toEqual(['.ditto/worktrees/run_keep']);
+    expect(listRunWorktrees(repo)).toEqual(['.ditto/local/worktrees/run_keep']);
     const node = (await aps.get(WI)).nodes.find((n) => n.id === 'C1');
     expect(node?.status).toBe('blocked');
     const decisions = await aps.readDecisions(WI);
@@ -138,7 +138,10 @@ describe('runCleanup (gated deterministic teardown)', () => {
     const res = await runCleanup(repo, { workItemId: WI, nodeId: 'C1', approve: true, now: NOW });
     expect(res.status).toBe('passed');
     if (res.status !== 'passed') throw new Error('expected passed');
-    expect(res.removed.sort()).toEqual(['.ditto/worktrees/run_x', '.ditto/worktrees/run_y']);
+    expect(res.removed.sort()).toEqual([
+      '.ditto/local/worktrees/run_x',
+      '.ditto/local/worktrees/run_y',
+    ]);
     expect(res.skipped).toEqual([]);
     expect(listRunWorktrees(repo)).toEqual([]); // actually gone
     const node = (await aps.get(WI)).nodes.find((n) => n.id === 'C1');

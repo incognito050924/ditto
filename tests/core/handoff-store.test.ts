@@ -41,7 +41,7 @@ describe('buildHandoff', () => {
 });
 
 describe('HandoffStore', () => {
-  test('write persists an active handoff (.ditto/handoff/) and links work item handoff_path', async () => {
+  test('write persists an active handoff (.ditto/local/handoff/) and links work item handoff_path', async () => {
     const wi = await workItem();
     const h = buildHandoff({
       workItem: wi,
@@ -54,7 +54,7 @@ describe('HandoffStore', () => {
     expect(await store.exists(wi.id)).toBe(true);
     expect((await store.get(wi.id)).current_state).toBe('midway');
     const reloaded = await new WorkItemStore(repo).get(wi.id);
-    expect(reloaded.handoff_path).toBe(`.ditto/handoff/${wi.id}.md`);
+    expect(reloaded.handoff_path).toBe(`.ditto/local/handoff/${wi.id}.md`);
   });
 
   test('consume moves active handoffs to archive (picked up once, no accumulation)', async () => {

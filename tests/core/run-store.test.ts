@@ -75,12 +75,12 @@ describe('RunStore', () => {
 
   test('pathFor returns paths under the run directory', () => {
     const p = store.pathFor('run_demo000001', 'stdout.log');
-    expect(p.endsWith('.ditto/runs/run_demo000001/stdout.log')).toBe(true);
+    expect(p.endsWith('.ditto/local/runs/run_demo000001/stdout.log')).toBe(true);
   });
 
   test('written manifest conforms to schema (round-trip)', async () => {
     const created = await store.create(sampleInput());
-    const path = join(workDir, '.ditto', 'runs', created.id, 'manifest.json');
+    const path = join(workDir, '.ditto', 'local', 'runs', created.id, 'manifest.json');
     const text = await Bun.file(path).text();
     expect(() => runManifest.parse(JSON.parse(text))).not.toThrow();
   });

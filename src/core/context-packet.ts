@@ -24,7 +24,7 @@ export class ContextBuildUsageError extends Error {
 }
 
 function defaultOutputPath(workItemId: string): string {
-  return `.ditto/work-items/${workItemId}/context-packet.md`;
+  return `.ditto/local/work-items/${workItemId}/context-packet.md`;
 }
 
 function validateOutputPath(path: string): string {

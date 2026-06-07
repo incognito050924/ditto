@@ -20,7 +20,7 @@ import {
  * `ditto change-contract` — ICL(.icl)을 ChangeContract로 컴파일해 저장한다.
  *
  * forbidden_scope 집행(pre-tool-use.ts)이 읽는 진실원
- * `.ditto/work-items/<wi>/change-contract.json`을 만드는 생성 경로다. 이게 있어야
+ * `.ditto/local/work-items/<wi>/change-contract.json`을 만드는 생성 경로다. 이게 있어야
  * "ICL 생성 → 계약 저장 → PreToolUse 집행"의 전 사슬이 돈다. fitnessFunctions는 개수만
  * 보고하고 저장하지 않는다(별도 store는 후속).
  */
@@ -111,7 +111,7 @@ export const changeContractCommand = defineCommand({
           ? `, unresolved symbols [${summary.symbols_unresolved.join(', ')}]`
           : '';
       writeHuman(
-        `change-contract: saved → .ditto/work-items/${args['work-item']}/change-contract.json ` +
+        `change-contract: saved → .ditto/local/work-items/${args['work-item']}/change-contract.json ` +
           `(forbidden ${summary.forbidden_scope}, allowed ${summary.allowed_scope}, ` +
           `fitness ${summary.fitness_functions}, symbols→path ${summary.symbols_resolved}${unresolvedNote}, ` +
           `warnings ${summary.warnings})`,

@@ -12,6 +12,9 @@ import { workItem } from '~/schemas/work-item';
 
 const REPO_ROOT = process.env.DITTO_REPO_ROOT ?? join(import.meta.dir, '..', '..');
 const DITTO_DIR = join(REPO_ROOT, '.ditto');
+// Per-developer runtime (work-items, runs, surfaces) lives under .ditto/local;
+// knowledge stays at .ditto/ direct (project-global tier).
+const LOCAL_DIR = join(DITTO_DIR, 'local');
 
 async function loadJson(path: string): Promise<unknown> {
   const text = await readFile(path, 'utf8');
@@ -19,7 +22,7 @@ async function loadJson(path: string): Promise<unknown> {
 }
 
 async function listWorkItemDirs(): Promise<string[]> {
-  const base = join(DITTO_DIR, 'work-items');
+  const base = join(LOCAL_DIR, 'work-items');
   let entries: string[];
   try {
     entries = await readdir(base);
@@ -36,7 +39,7 @@ async function listWorkItemDirs(): Promise<string[]> {
 }
 
 async function listRunDirs(): Promise<string[]> {
-  const base = join(DITTO_DIR, 'runs');
+  const base = join(LOCAL_DIR, 'runs');
   try {
     const entries = await readdir(base);
     const result: string[] = [];
@@ -119,7 +122,7 @@ describe('repo .ditto self-validation', () => {
   });
 
   test('.ditto/surfaces.json conforms to schema if present', async () => {
-    const path = join(DITTO_DIR, 'surfaces.json');
+    const path = join(LOCAL_DIR, 'surfaces.json');
     if (!(await Bun.file(path).exists())) return;
     const data = await loadJson(path);
     surfaceCatalog.parse(data);

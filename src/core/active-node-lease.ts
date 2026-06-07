@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { z } from 'zod';
 import { isoDateTime, relativePath, workItemId } from '~/schemas/common';
+import { localDir } from './ditto-paths';
 import { ensureDir, readJson, writeJson } from './fs';
 
 /**
@@ -16,7 +17,7 @@ import { ensureDir, readJson, writeJson } from './fs';
  *
  * Keyed by `node_id` (per work item) so removal at record-result is a direct
  * lookup and a leaked lease cannot accumulate. Co-located with the graph under
- * `.ditto/work-items/<wi>/active-leases.json`, so PreToolUse needs only the
+ * `.ditto/local/work-items/<wi>/active-leases.json`, so PreToolUse needs only the
  * work_item_id (resolved session→work_item via SessionPointerStore) to read it —
  * the lease never needs a session_id, which next-node does not have.
  */
@@ -42,7 +43,7 @@ export class ActiveNodeLeaseStore {
   constructor(public readonly repoRoot: string) {}
 
   private dir(workItemId: string): string {
-    return join(this.repoRoot, '.ditto', 'work-items', workItemId);
+    return localDir(this.repoRoot, 'work-items', workItemId);
   }
 
   private path(workItemId: string): string {

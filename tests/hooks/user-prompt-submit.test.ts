@@ -178,7 +178,7 @@ describe('userPromptSubmitHandler', () => {
 
   test('classification + action are logged, never block', async () => {
     await run({ session_id: 'sess-1', prompt: 'what does this do?' });
-    const log = await readFile(join(repo, '.ditto', 'logs', 'user-prompt.jsonl'), 'utf8');
+    const log = await readFile(join(repo, '.ditto', 'local', 'logs', 'user-prompt.jsonl'), 'utf8');
     const entry = JSON.parse(log.trim().split('\n')[0] ?? '{}');
     expect(entry.classification).toBe('question');
     expect(entry.action).toBe('guide');

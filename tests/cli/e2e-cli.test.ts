@@ -45,9 +45,9 @@ describe('ditto e2e run CLI', () => {
     expect(res.exitCode).toBe(0);
     const payload = JSON.parse(res.stdout);
     expect(payload.run_id).toBe('r-cli-01');
-    // artifact persisted under .ditto/runs/<runId>/journey.json and re-parses through the schema
+    // artifact persisted under .ditto/local/runs/<runId>/journey.json and re-parses through the schema
     const artifact = JSON.parse(
-      await Bun.file(join(dir, '.ditto', 'runs', 'r-cli-01', 'journey.json')).text(),
+      await Bun.file(join(dir, '.ditto', 'local', 'runs', 'r-cli-01', 'journey.json')).text(),
     );
     expect(e2eJourney.safeParse(artifact).success).toBe(true);
     expect(artifact.journey).toBe('login flow');

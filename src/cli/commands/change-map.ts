@@ -1,8 +1,8 @@
-import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { render, renderMermaid, summarize } from '~/acg/change-map';
 import { AcgReviewStore } from '~/core/acg-review-store';
 import { ChangeContractStore } from '~/core/change-contract-store';
+import { localDir } from '~/core/ditto-paths';
 import { readJson, resolveRepoRootForCreate } from '~/core/fs';
 import { type AcgImpactGraph, acgImpactGraph } from '~/schemas/acg-impact-graph';
 import { USAGE_ERROR_EXIT, parseOutputFormat, writeError, writeHuman, writeJson } from '../util';
@@ -10,7 +10,7 @@ import { USAGE_ERROR_EXIT, parseOutputFormat, writeError, writeHuman, writeJson 
 /**
  * `ditto change-map` — Change Map 텍스트 정본 렌더러 (50-change-map §2.1).
  *
- * read-only producer. `.ditto/work-items/<wi>/`의 change-contract.json(필수)·
+ * read-only producer. `.ditto/local/work-items/<wi>/`의 change-contract.json(필수)·
  * impact-graph.json(선택)·acg-review.json(선택)을 읽어 §2.1 텍스트(human) 또는
  * 요약(json)을 낸다. change-contract.json 부재면 USAGE_ERROR로 종료한다.
  */
@@ -55,7 +55,7 @@ export const changeMapCommand = defineCommand({
     let impact: AcgImpactGraph | undefined;
     try {
       impact = await readJson(
-        join(repoRoot, '.ditto', 'work-items', workItem, 'impact-graph.json'),
+        localDir(repoRoot, 'work-items', workItem, 'impact-graph.json'),
         acgImpactGraph,
       );
     } catch {

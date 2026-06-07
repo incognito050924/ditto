@@ -7,6 +7,7 @@ import {
   runRelationQuery,
 } from '~/core/codeql/relations';
 import type { BuildMode, CodeqlLanguage } from '~/core/codeql/runner';
+import { localDir } from '~/core/ditto-paths';
 import { addDetachedWorktree, gitRevParse, removeWorktree } from '~/core/git';
 
 /**
@@ -261,7 +262,7 @@ export async function scanSignatureChanges(
   deps: RelationDeps,
 ): Promise<SignatureChange[]> {
   const baseSha = gitRevParse(input.repoRoot, input.baseRef);
-  const cacheBase = join(input.repoRoot, '.ditto', 'cache', 'codeql');
+  const cacheBase = localDir(input.repoRoot, 'cache', 'codeql');
   const baseCache = join(cacheBase, `${baseSha}-${input.language}`);
   const baseDb = join(baseCache, 'db');
 

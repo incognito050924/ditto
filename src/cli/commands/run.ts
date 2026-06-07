@@ -107,7 +107,7 @@ const runRecord = defineCommand({
         writeJson({
           run_id: created.id,
           work_item_id: item.id,
-          manifest_path: `.ditto/runs/${created.id}/manifest.json`,
+          manifest_path: `.ditto/local/runs/${created.id}/manifest.json`,
           provider: created.provider,
           profile: created.profile,
         });
@@ -116,7 +116,7 @@ const runRecord = defineCommand({
         writeHuman(`  work item: ${item.id}`);
         writeHuman(`  provider:  ${created.provider}`);
         writeHuman(`  profile:   ${created.profile}`);
-        writeHuman(`  manifest:  ${repoRoot}/.ditto/runs/${created.id}/manifest.json`);
+        writeHuman(`  manifest:  ${repoRoot}/.ditto/local/runs/${created.id}/manifest.json`);
       }
     } catch (err) {
       writeError(`run record failed: ${err instanceof Error ? err.message : String(err)}`);

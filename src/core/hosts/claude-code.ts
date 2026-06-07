@@ -73,7 +73,7 @@ function projectMcpFromClaudeJson(
  * Scan a Claude Code *plugin* root (skills/, agents/, commands/, hooks/hooks.json,
  * .claude-plugin/plugin.json) into surface entries. This is the actual side of the
  * surface-inventory drift check (M1.6); the declared side is the checked-in
- * `.ditto/surfaces.json` catalog.
+ * `.ditto/local/surfaces.json` catalog.
  */
 async function scanPluginRoot(repoRoot: string): Promise<SurfaceEntry[]> {
   const out: SurfaceEntry[] = [];

@@ -61,7 +61,7 @@ export interface CharterContext {
   pendingHandoff?: string;
   /**
    * Bodies of active handoffs auto-loaded this turn (wi_260605wf3). The
-   * UserPromptSubmit hook reads `.ditto/handoff/` without the user naming a
+   * UserPromptSubmit hook reads `.ditto/local/handoff/` without the user naming a
    * file, injects the bodies here, then archives them — so a handoff is picked
    * up exactly once and never accumulates.
    */
@@ -111,7 +111,7 @@ export function charterProjection(ctx: CharterContext = {}): string {
     lines.push('', detail ? `${head} (${detail})` : head);
   }
   if (ctx.handoffBodies && ctx.handoffBodies.length > 0) {
-    lines.push('', '== Pending handoff (auto-loaded from .ditto/handoff/, now archived) ==');
+    lines.push('', '== Pending handoff (auto-loaded from .ditto/local/handoff/, now archived) ==');
     for (const body of ctx.handoffBodies) lines.push('', body);
   }
   if (ctx.pendingHandoff) lines.push(`Pending handoff/re-entry: ${ctx.pendingHandoff}`);

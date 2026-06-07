@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { relative } from 'node:path';
+import { localDir } from './ditto-paths';
 import { ensureDir } from './fs';
 
 export interface WorktreeHandle {
@@ -12,9 +13,9 @@ export async function createWorktreeForRun(
   repoRoot: string,
   runId: string,
 ): Promise<WorktreeHandle> {
-  const relativePath = `.ditto/worktrees/${runId}`;
-  const absolutePath = join(repoRoot, relativePath);
-  await ensureDir(join(repoRoot, '.ditto', 'worktrees'));
+  const relativePath = `${RUN_WORKTREE_PREFIX}${runId}`;
+  const absolutePath = localDir(repoRoot, 'worktrees', runId);
+  await ensureDir(localDir(repoRoot, 'worktrees'));
   execFileSync('git', ['worktree', 'add', '--detach', absolutePath, 'HEAD'], {
     cwd: repoRoot,
     stdio: ['ignore', 'ignore', 'pipe'],
@@ -22,13 +23,13 @@ export async function createWorktreeForRun(
   return { absolutePath, relativePath };
 }
 
-const RUN_WORKTREE_PREFIX = '.ditto/worktrees/';
+const RUN_WORKTREE_PREFIX = '.ditto/local/worktrees/';
 
 /**
- * Repo-relative paths of the per-run worktrees DITTO created (`.ditto/worktrees/*`),
+ * Repo-relative paths of the per-run worktrees DITTO created (`.ditto/local/worktrees/*`),
  * parsed from `git worktree list --porcelain`. Read-only and deterministic — the
  * cleanup planner uses it to know what teardown work exists. Other worktrees
- * (the main one, anything outside `.ditto/worktrees/`) are never listed.
+ * (the main one, anything outside `.ditto/local/worktrees/`) are never listed.
  */
 export function listRunWorktrees(repoRoot: string): string[] {
   const out = execFileSync('git', ['worktree', 'list', '--porcelain'], {

@@ -32,7 +32,7 @@ For `<wi>` = the active work item id (see charter `Active work item:` line).
 ditto deep-interview start --work-item <wi> --output json
 ```
 
-Initializes `.ditto/work-items/<wi>/interview-state.json` with `readiness.threshold=0.7` and `exit.question_cap=8` (override with `--threshold` and `--question-cap` if the request justifies it; do not lower the threshold to escape the gate).
+Initializes `.ditto/local/work-items/<wi>/interview-state.json` with `readiness.threshold=0.7` and `exit.question_cap=8` (override with `--threshold` and `--question-cap` if the request justifies it; do not lower the threshold to escape the gate).
 
 ### 2. Identify ambiguity dimensions
 
@@ -117,9 +117,9 @@ ditto deep-interview finalize --work-item <wi> --json '{
 This single call (atomic, per AC-2 + AC-3):
 
 1. Enforces the **축1 종료 AND**: the readiness gate (1차) AND the user confirmation (2차). Rejects with `not_ready` when the readiness gate fails, or `not_confirmed` when the gate passed but `user_confirmation.confirmed` is not true — fix the interview / capture the confirmation, never bypass either.
-2. Writes `.ditto/work-items/<wi>/intent.json` (IntentContract).
+2. Writes `.ditto/local/work-items/<wi>/intent.json` (IntentContract).
 3. Mirrors `acceptance_criteria` and `goal` into the work item itself.
-4. Calls `bootstrapAutopilot`, producing `.ditto/work-items/<wi>/autopilot.json` with a `design → implement → verify` graph for each criterion.
+4. Calls `bootstrapAutopilot`, producing `.ditto/local/work-items/<wi>/autopilot.json` with a `design → implement → verify` graph for each criterion.
 5. Returns `autopilot_id`, `approval_gate.status`, and `node_ids`.
 
 If `approval_gate.status === 'pending'` (any `risk.*` flag set), the autopilot pauses on the approval node and the driver surfaces the pending plan to the user for approval. If `not_required`, autopilot proceeds.
@@ -148,5 +148,5 @@ Do not echo the full payload. The artifacts are authoritative.
 - Never silently exit. Always set `exit.reason`.
 - Never finalize past `not_ready` — fix the gate or hand off.
 - Never lower the readiness threshold to escape the gate.
-- Never paste raw command output into the chat — the artifacts in `.ditto/work-items/<wi>/` are the record.
+- Never paste raw command output into the chat — the artifacts in `.ditto/local/work-items/<wi>/` are the record.
 - Never invent acceptance criteria the user did not validate; if you must, label them `assumption` answers in the interview, not as a finalize statement.

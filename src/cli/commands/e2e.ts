@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { z } from 'zod';
+import { localDir } from '~/core/ditto-paths';
 import { defaultApplicabilityDeps, evaluateAxis3FromRepo } from '~/core/e2e/applicability';
 import { runJourney } from '~/core/e2e/browser';
 import { atomicWriteText, resolveRepoRootForCreate } from '~/core/fs';
@@ -34,7 +35,7 @@ const e2eRun = defineCommand({
     description: 'Run one browser user journey and write its e2eJourney artifact',
   },
   args: {
-    runId: { type: 'string', description: 'Run id → .ditto/runs/<runId>/', required: true },
+    runId: { type: 'string', description: 'Run id → .ditto/local/runs/<runId>/', required: true },
     json: {
       type: 'string',
       description: 'JSON spec: {journey,url,steps,assertions}',
@@ -71,7 +72,7 @@ const e2eRun = defineCommand({
     try {
       const repoRoot = await resolveRepoRootForCreate();
       const result = await runJourney(repoRoot, args.runId, parsed.data);
-      const runDir = join(repoRoot, '.ditto', 'runs', args.runId);
+      const runDir = localDir(repoRoot, 'runs', args.runId);
       await mkdir(runDir, { recursive: true });
       await atomicWriteText(
         join(runDir, 'journey.json'),
@@ -81,7 +82,7 @@ const e2eRun = defineCommand({
         writeJson(result);
       } else {
         writeHuman(`e2e run ${result.run_id}: ${result.journey.result}`);
-        writeHuman(`  artifact: .ditto/runs/${result.run_id}/journey.json`);
+        writeHuman(`  artifact: .ditto/local/runs/${result.run_id}/journey.json`);
         if (!result.probe.available) writeHuman(`  (blocked: ${result.probe.reason})`);
       }
     } catch (err) {

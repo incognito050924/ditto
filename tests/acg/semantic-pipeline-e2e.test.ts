@@ -36,7 +36,7 @@ beforeEach(async () => {
   // completion claims pass on every acceptance criterion — so the ONLY thing that
   // can still force continuation is the semantic gate.
   await writeFile(
-    join(repo, '.ditto', 'work-items', wiId, 'completion.json'),
+    join(repo, '.ditto', 'local', 'work-items', wiId, 'completion.json'),
     JSON.stringify({
       schema_version: '0.1.0',
       work_item_id: wiId,
@@ -56,7 +56,8 @@ afterEach(async () => {
   await rm(repo, { recursive: true, force: true });
 });
 
-const semPath = () => join(repo, '.ditto', 'work-items', wiId, 'semantic-compatibility.json');
+const semPath = () =>
+  join(repo, '.ditto', 'local', 'work-items', wiId, 'semantic-compatibility.json');
 const run = () => stopHandler({ raw: { session_id: SESSION }, repoRoot: repo, env: {} });
 const writeSemantic = (sem: AcgSemanticCompatibility) =>
   writeJson(semPath(), acgSemanticCompatibility, sem);

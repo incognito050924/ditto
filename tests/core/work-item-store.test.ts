@@ -46,7 +46,14 @@ describe('WorkItemStore', () => {
 
   test('create also writes language-ledger.json', async () => {
     const created = await store.create(sampleInput());
-    const ledgerPath = join(workDir, '.ditto', 'work-items', created.id, 'language-ledger.json');
+    const ledgerPath = join(
+      workDir,
+      '.ditto',
+      'local',
+      'work-items',
+      created.id,
+      'language-ledger.json',
+    );
     const text = await Bun.file(ledgerPath).text();
     const parsed = JSON.parse(text);
     expect(parsed.work_item_id).toBe(created.id);
@@ -127,7 +134,15 @@ describe('WorkItemStore', () => {
     });
     await store.appendCommandLogLine(created.id, line1);
     await store.appendCommandLogLine(created.id, line2);
-    const path = join(workDir, '.ditto', 'work-items', created.id, 'evidence', 'commands.jsonl');
+    const path = join(
+      workDir,
+      '.ditto',
+      'local',
+      'work-items',
+      created.id,
+      'evidence',
+      'commands.jsonl',
+    );
     const text = await Bun.file(path).text();
     const lines = text.split('\n').filter((l) => l.length > 0);
     expect(lines.length).toBe(2);
@@ -137,7 +152,7 @@ describe('WorkItemStore', () => {
 
   test('written file conforms to workItem schema (round-trip)', async () => {
     const created = await store.create(sampleInput());
-    const path = join(workDir, '.ditto', 'work-items', created.id, 'work-item.json');
+    const path = join(workDir, '.ditto', 'local', 'work-items', created.id, 'work-item.json');
     const text = await Bun.file(path).text();
     const parsed = JSON.parse(text);
     expect(() => workItem.parse(parsed)).not.toThrow();

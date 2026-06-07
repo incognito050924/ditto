@@ -32,11 +32,11 @@ afterEach(async () => {
 
 describe('doctor surface', () => {
   test('passes matching surface inventory', async () => {
-    await mkdir(join(dir, '.ditto'), { recursive: true });
+    await mkdir(join(dir, '.ditto', 'local'), { recursive: true });
     await mkdir(join(dir, '.claude', 'commands'), { recursive: true });
     await cp(
       join(repoRoot, 'tests', 'fixtures', 'doctor', 'claude-code', 'surface-ok', 'surfaces.json'),
-      join(dir, '.ditto', 'surfaces.json'),
+      join(dir, '.ditto', 'local', 'surfaces.json'),
     );
     await cp(
       join(repoRoot, 'tests', 'fixtures', 'doctor', 'claude-code', 'surface-ok', 'hello.md'),
@@ -48,7 +48,7 @@ describe('doctor surface', () => {
   });
 
   test('reports missing surface inventory entries', async () => {
-    await mkdir(join(dir, '.ditto'), { recursive: true });
+    await mkdir(join(dir, '.ditto', 'local'), { recursive: true });
     await cp(
       join(
         repoRoot,
@@ -59,7 +59,7 @@ describe('doctor surface', () => {
         'surface-mismatch',
         'surfaces.json',
       ),
-      join(dir, '.ditto', 'surfaces.json'),
+      join(dir, '.ditto', 'local', 'surfaces.json'),
     );
     const proc = run(['doctor', 'surface', '--host', 'claude-code', '--output', 'json']);
     expect(proc.exitCode).toBe(1);
@@ -72,9 +72,9 @@ describe('doctor surface', () => {
     await writeFile(join(dir, '.claude', 'agents', '.DS_Store'), 'noise\n', 'utf8');
     // Seed a matching catalog — absent catalog now fails strictly (M1.6); this
     // test asserts *discovery* (reviewer surfaced, .DS_Store filtered), not drift.
-    await mkdir(join(dir, '.ditto'), { recursive: true });
+    await mkdir(join(dir, '.ditto', 'local'), { recursive: true });
     await writeFile(
-      join(dir, '.ditto', 'surfaces.json'),
+      join(dir, '.ditto', 'local', 'surfaces.json'),
       JSON.stringify({
         schema_version: '0.1.0',
         surfaces: [
@@ -105,7 +105,7 @@ describe('doctor surface', () => {
   });
 
   test('--advisory keeps drift exit code at zero for surface', async () => {
-    await mkdir(join(dir, '.ditto'), { recursive: true });
+    await mkdir(join(dir, '.ditto', 'local'), { recursive: true });
     await cp(
       join(
         repoRoot,
@@ -116,7 +116,7 @@ describe('doctor surface', () => {
         'surface-mismatch',
         'surfaces.json',
       ),
-      join(dir, '.ditto', 'surfaces.json'),
+      join(dir, '.ditto', 'local', 'surfaces.json'),
     );
     const proc = run([
       'doctor',
@@ -135,11 +135,11 @@ describe('doctor surface', () => {
     await mkdir(join(home, '.claude', 'skills', 'extra-a'), { recursive: true });
     await mkdir(join(home, '.claude', 'skills', 'extra-b'), { recursive: true });
     await mkdir(join(home, '.claude', 'skills', 'extra-c'), { recursive: true });
-    await mkdir(join(dir, '.ditto'), { recursive: true });
+    await mkdir(join(dir, '.ditto', 'local'), { recursive: true });
     await mkdir(join(dir, '.claude', 'commands'), { recursive: true });
     await writeFile(join(dir, '.claude', 'commands', 'hello.md'), '# hello\n', 'utf8');
     await writeFile(
-      join(dir, '.ditto', 'surfaces.json'),
+      join(dir, '.ditto', 'local', 'surfaces.json'),
       JSON.stringify({
         schema_version: '0.1.0',
         surfaces: [
@@ -168,8 +168,10 @@ describe('doctor surface', () => {
 });
 
 describe('generated surface catalog (G6: code-generated, no hand drift)', () => {
-  test('regenerating from code equals the committed .ditto/surfaces.json', async () => {
-    const committed = JSON.parse(readFileSync(join(repoRoot, '.ditto', 'surfaces.json'), 'utf8'));
+  test('regenerating from code equals the committed .ditto/local/surfaces.json', async () => {
+    const committed = JSON.parse(
+      readFileSync(join(repoRoot, '.ditto', 'local', 'surfaces.json'), 'utf8'),
+    );
     const generated = await generateSurfaceCatalog(listHostAdapters(), repoRoot);
     // committed catalog IS the generator's output; a surface added without
     // running scripts/gen-surfaces.ts makes this fail (drift caught, not silent).

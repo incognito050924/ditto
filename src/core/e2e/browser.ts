@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type E2EJourney, e2eJourney } from '~/schemas/e2e-journey';
+import { localDir } from '../ditto-paths';
 import { fileExists } from '../hosts/shared';
 import { spawnProviderProcess } from '../hosts/spawn';
 
@@ -21,7 +22,7 @@ function runnerScriptPath(): string {
 /**
  * E2E browser thin layer (설계서 §10, e2e-journey-contract §3/§4). The M5 runtime
  * that the `playwright-e2e` agent / `/ditto:e2e` skill use to drive ONE direct-URL
- * journey with Playwright/Chromium and capture artifacts under `.ditto/runs/<id>/`.
+ * journey with Playwright/Chromium and capture artifacts under `.ditto/local/runs/<id>/`.
  *
  * It reuses the host-adapter spawn primitive (`spawnProviderProcess`) — the same
  * way the dialectic Codex path is a separate thin layer over spawn. It is NOT MCP
@@ -232,12 +233,12 @@ export async function runJourney(
     return { journey: blockedJourney(spec, probe.reason), run_id: runId, probe };
   }
 
-  // Browser present: artifacts land under .ditto/runs/<id>/. We spawn the node
+  // Browser present: artifacts land under .ditto/local/runs/<id>/. We spawn the node
   // capture runner (bun cannot drive Playwright's launcher) through the host
   // primitive; it launches the cached Chromium, drives spec.steps, and writes the
   // artifacts + outcome.json. Then we collect what it produced and reference it by
   // path (+ sha256 for screenshots only — trace.zip is large/opaque, skip its hash).
-  const runDir = join(repoRoot, '.ditto', 'runs', runId);
+  const runDir = localDir(repoRoot, 'runs', runId);
   await mkdir(runDir, { recursive: true });
   const configAbs = join(runDir, 'runner-config.json');
   await writeFile(

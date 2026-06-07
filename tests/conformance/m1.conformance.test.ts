@@ -297,7 +297,7 @@ describe('M1.4 — Stop hook 최소 동작 (완료/수렴/노드상태 게이트
       acceptance_criteria: [ac('ac-1'), ac('ac-2')],
     });
     wiId = created.id;
-    dir = join(tmp, '.ditto', 'work-items', wiId);
+    dir = join(tmp, '.ditto', 'local', 'work-items', wiId);
     await new SessionPointerStore(tmp).set(SESSION, wiId);
   });
   const run = (raw: Record<string, unknown> = {}) =>
@@ -560,7 +560,7 @@ describe('M1.6 — surface inventory 테스트 (drift·false-green 차단)', () 
   });
 
   test('catalog 에 hook · plugin surface 포함 (skill/agent만이 아님)', () => {
-    const raw = JSON.parse(readText('.ditto/surfaces.json'));
+    const raw = JSON.parse(readText('.ditto/local/surfaces.json'));
     const parsed = surfaceCatalog.parse(raw);
     const kinds = new Set(parsed.surfaces.map((s) => s.kind));
     expect(kinds.has('hook')).toBe(true);
@@ -568,8 +568,8 @@ describe('M1.6 — surface inventory 테스트 (drift·false-green 차단)', () 
   });
 
   const writeCatalog = async (obj: unknown) => {
-    await mkdir(join(tmp, '.ditto'), { recursive: true });
-    await writeFile(join(tmp, '.ditto', 'surfaces.json'), JSON.stringify(obj));
+    await mkdir(join(tmp, '.ditto', 'local'), { recursive: true });
+    await writeFile(join(tmp, '.ditto', 'local', 'surfaces.json'), JSON.stringify(obj));
   };
 
   test('선언 surface 가 디스크에 없으면 missing drift 로 보고', async () => {
@@ -596,7 +596,7 @@ describe('M1.6 — surface inventory 테스트 (drift·false-green 차단)', () 
   });
 
   test('[plan 요구] 부재 catalog → fail 이어야 한다 (통과 금지)', async () => {
-    // plan §3 M1.6 acceptance: ".ditto/surfaces.json 부재·빈 목록 → fail".
+    // plan §3 M1.6 acceptance: ".ditto/local/surfaces.json 부재·빈 목록 → fail".
     // 빈 목록은 throw 로 fail 하지만, *부재*도 fail 이어야 한다는 것이 문서 요구.
     // 구현이 부재를 mismatch 0(통과)으로 처리하면 이 테스트가 편차를 드러낸다.
     await mkdir(join(tmp, '.ditto'), { recursive: true });

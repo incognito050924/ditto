@@ -1,11 +1,12 @@
 /**
  * ChangeContractStore — work item별 ChangeContract를 per-entity 파일로 저장한다
- * (ADR-0005 저장 정책). `.ditto/work-items/<wi>/change-contract.json`.
+ * (ADR-0005 저장 정책). `.ditto/local/work-items/<wi>/change-contract.json`.
  *
  * forbidden_scope 집행(PreToolUse)이 현재 work item의 계약을 읽는 진실원이다. ICL
  * 컴파일러(src/acg/icl/compile.ts)의 산출물이 이 store로 저장되어야 게이트가 집행할 수 있다.
  */
 import { join } from 'node:path';
+import { localDir } from '~/core/ditto-paths';
 import { ensureDir, readJson, writeJson } from '~/core/fs';
 import { type AcgChangeContract, acgChangeContract } from '~/schemas/acg-change-contract';
 
@@ -13,7 +14,7 @@ export class ChangeContractStore {
   constructor(private readonly repoRoot: string) {}
 
   private dir(workItemId: string): string {
-    return join(this.repoRoot, '.ditto', 'work-items', workItemId);
+    return localDir(this.repoRoot, 'work-items', workItemId);
   }
 
   private path(workItemId: string): string {

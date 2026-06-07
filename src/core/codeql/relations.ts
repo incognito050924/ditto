@@ -448,7 +448,7 @@ export interface RunRelationInput {
   repoRoot: string;
   sourceRoot: string;
   language: CodeqlLanguage;
-  /** DB 캐시 디렉터리(예: .ditto/cache/codeql/<sha>-<lang>). 존재하면 create 생략. */
+  /** DB 캐시 디렉터리(예: .ditto/local/cache/codeql/<sha>-<lang>). 존재하면 create 생략. */
   dbPath: string;
   /** 쿼리·BQRS를 둘 작업 디렉터리(임시·gitignored). */
   workDir: string;

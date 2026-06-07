@@ -72,7 +72,7 @@ export const evidenceRecord = z
   .describe('Evidence freshness/portability sidecar wrapping an evidenceRef');
 
 /**
- * Committable evidence ledger written to `.ditto/work-items/<id>/evidence-index.json`
+ * Committable evidence ledger written to `.ditto/local/work-items/<id>/evidence-index.json`
  * (설계서 §8 layout). Append-only set of EvidenceRecords. Unlike the raw
  * `evidence/` directory (gitignored), this file is committed so other
  * clones/sessions can judge completion from metadata alone.
@@ -83,7 +83,7 @@ export const evidenceIndex = z
     work_item_id: workItemId,
     records: z.array(evidenceRecord).default([]),
   })
-  .describe('Committable evidence ledger (.ditto/work-items/<id>/evidence-index.json)');
+  .describe('Committable evidence ledger (.ditto/local/work-items/<id>/evidence-index.json)');
 
 export type EvidenceRecord = z.infer<typeof evidenceRecord>;
 export type EvidenceIndex = z.infer<typeof evidenceIndex>;

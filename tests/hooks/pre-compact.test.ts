@@ -113,7 +113,7 @@ describe('preCompactHandler', () => {
 
   test('autopilot.json malformed => fail-open, handoff written without autopilot_id', async () => {
     await writeFile(
-      join(repo, '.ditto', 'work-items', wiId, 'autopilot.json'),
+      join(repo, '.ditto', 'local', 'work-items', wiId, 'autopilot.json'),
       '{ this is not valid json',
     );
     const out = await preCompactHandler({

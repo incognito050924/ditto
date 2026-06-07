@@ -23,32 +23,31 @@ export interface InitScaffoldResult {
  * skeleton — not every leaf a store might create.
  */
 const SCAFFOLD_DIRS = [
-  'work-items',
-  'runs',
-  'handoff',
-  'sessions',
-  'logs',
-  'cache',
+  join('local', 'work-items'),
+  join('local', 'runs'),
+  join('local', 'handoff'),
+  join('local', 'sessions'),
+  join('local', 'logs'),
+  join('local', 'cache'),
   'agents',
   'knowledge',
   join('knowledge', 'adr'),
 ] as const;
 
 /**
- * Seeded into `.ditto/.gitignore` so volatile runtime state stays out of the
- * target's version control while durable artifacts (work-item metadata,
- * knowledge, handoff) remain committable. Mirrors the ditto repo's own
- * `.gitignore` `.ditto/*` rules, scoped to `.ditto/` so init never touches the
- * target's root `.gitignore`.
+ * Seeded into `.ditto/.gitignore` so the per-developer runtime tier (`local/`)
+ * stays out of the target's version control while the project-global tier
+ * (`knowledge/`, `agents/`) remains committable. 3-tier isolation: everything
+ * under `local/` is per-developer; knowledge/agents are git-shared. Scoped to
+ * `.ditto/` so init never touches the target's root `.gitignore`.
  */
-const DITTO_GITIGNORE = `# DITTO runtime state — volatile, not for version control.
+const DITTO_GITIGNORE = `# DITTO per-developer runtime — volatile, not for version control.
 # Managed by \`ditto init\`; safe to edit.
-runs/
-cache/
-sessions/
-logs/
-worktrees/
-work-items/*/evidence/
+# Tier ③ per-developer (gitignored): everything under local/.
+local/
+# Tier ② project-global (git-shared): knowledge/ and agents/ stay tracked.
+!knowledge/
+!agents/
 `;
 
 function emptyContext(projectName: string): string {

@@ -135,7 +135,7 @@ describe('loadAssuranceSnapshots — work-item 디렉터리 스캔', () => {
       const a = await mk();
       const b = await mk();
       await mk(); // c: 스냅샷 없음 → skip
-      const dir = (id: string) => join(repo, '.ditto', 'work-items', id);
+      const dir = (id: string) => join(repo, '.ditto', 'local', 'work-items', id);
       await writeFile(
         join(dir(a.id), 'assurance-snapshot.json'),
         JSON.stringify(

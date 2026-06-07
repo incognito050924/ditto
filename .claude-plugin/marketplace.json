@@ -4,7 +4,7 @@
   "plugins": [
     {
       "name": "ditto",
-      "source": "./",
+      "source": "./dist/plugin",
       "description": "Intent / verification / completion harness for Claude Code (deep interview, autopilot graph, dialectic review, convergence gates)."
     }
   ]

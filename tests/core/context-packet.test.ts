@@ -69,7 +69,7 @@ describe('buildContextPacket', () => {
     await workStore.update(item.id, (cur) => ({ ...cur, runs: [run.id] }));
 
     const result = await buildContextPacket(dir, { work_item_id: item.id });
-    expect(result.output_path).toBe(`.ditto/work-items/${item.id}/context-packet.md`);
+    expect(result.output_path).toBe(`.ditto/local/work-items/${item.id}/context-packet.md`);
     const text = await Bun.file(join(dir, result.output_path)).text();
     expect(text).toContain('# Context packet sample');
     expect(text).toContain('Build a markdown packet');

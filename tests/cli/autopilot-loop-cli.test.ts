@@ -37,7 +37,7 @@ function node(id: string, kind: string, owner: string, depends_on: string[]) {
 }
 
 async function seed(): Promise<void> {
-  const wiDir = join(dir, '.ditto', 'work-items', WI);
+  const wiDir = join(dir, '.ditto', 'local', 'work-items', WI);
   await mkdir(wiDir, { recursive: true });
   await writeFile(
     join(wiDir, 'work-item.json'),
@@ -127,7 +127,7 @@ describe('ditto autopilot next-node / record-result (G9 loop step CLI)', () => {
     expect(payload.packet.context.file_scope).toEqual(['src/x.ts']);
     // persisted: N1 now running
     const graph = JSON.parse(
-      await Bun.file(join(dir, '.ditto', 'work-items', WI, 'autopilot.json')).text(),
+      await Bun.file(join(dir, '.ditto', 'local', 'work-items', WI, 'autopilot.json')).text(),
     );
     expect(graph.nodes.find((n: { id: string }) => n.id === 'N1').status).toBe('running');
   });
@@ -150,7 +150,7 @@ describe('ditto autopilot next-node / record-result (G9 loop step CLI)', () => {
     expect(payload.outcome).toBe('fail');
     expect(payload.status).toBe('pending');
     const graph = JSON.parse(
-      await Bun.file(join(dir, '.ditto', 'work-items', WI, 'autopilot.json')).text(),
+      await Bun.file(join(dir, '.ditto', 'local', 'work-items', WI, 'autopilot.json')).text(),
     );
     expect(graph.nodes.find((n: { id: string }) => n.id === 'N1').status).toBe('pending');
   });

@@ -1,9 +1,9 @@
-import { join } from 'node:path';
 import { type AcgReviewGraph, acgReviewGraph } from '~/schemas/acg-review-graph';
+import { localDir } from './ditto-paths';
 import { readJson, writeJson } from './fs';
 
 /**
- * Persists the ACG ReviewGraph ledger to `.ditto/work-items/<wi>/acg-review.json`
+ * Persists the ACG ReviewGraph ledger to `.ditto/local/work-items/<wi>/acg-review.json`
  * — the file the Stop gate reads (`acgReviewForcesContinuation`). Mirrors the
  * CompletionStore pattern: atomic, schema-validated writes via `writeJson`.
  *
@@ -15,7 +15,7 @@ export class AcgReviewStore {
   constructor(public readonly repoRoot: string) {}
 
   private path(workItemId: string): string {
-    return join(this.repoRoot, '.ditto', 'work-items', workItemId, 'acg-review.json');
+    return localDir(this.repoRoot, 'work-items', workItemId, 'acg-review.json');
   }
 
   async exists(workItemId: string): Promise<boolean> {

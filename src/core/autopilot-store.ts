@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { type Autopilot, type AutopilotNode, autopilot } from '~/schemas/autopilot';
 import { validateNodeAddition } from './autopilot-graph';
+import { localDir } from './ditto-paths';
 import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
 
 /**
@@ -22,7 +23,7 @@ export class AutopilotStore {
   constructor(public readonly repoRoot: string) {}
 
   private dir(workItemId: string): string {
-    return join(this.repoRoot, '.ditto', 'work-items', workItemId);
+    return localDir(this.repoRoot, 'work-items', workItemId);
   }
 
   private graphPath(workItemId: string): string {

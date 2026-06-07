@@ -5,6 +5,7 @@ import { produceImpactGraph } from '~/acg/impact/impact-graph';
 import { loadInternalPackages, runInternalPackagesGuard } from '~/acg/internal-packages';
 import { codeqlCacheDir, makeRelationDeps } from '~/core/codeql/host-deps';
 import type { BuildMode, CodeqlLanguage } from '~/core/codeql/runner';
+import { localDir } from '~/core/ditto-paths';
 import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
 import type { AcgImpactGraph } from '~/schemas/acg-impact-graph';
 import { acgImpactGraph } from '~/schemas/acg-impact-graph';
@@ -22,7 +23,7 @@ import {
  *
  * Resolves the changed symbol through the TypeScript checker (not text search),
  * classifies affected nodes, applies the default-deny journey invariant, and
- * writes `.ditto/work-items/<wi>/impact-graph.json`. The caller-graph analyzer
+ * writes `.ditto/local/work-items/<wi>/impact-graph.json`. The caller-graph analyzer
  * is the TS binding's; other-language impact is left `unresolved` (never hidden).
  */
 export const impactCommand = defineCommand({
@@ -125,8 +126,8 @@ export const impactCommand = defineCommand({
         analyzer,
         sourceRoot,
       );
-      const path = join(repoRoot, '.ditto', 'work-items', args['work-item'], 'impact-graph.json');
-      await ensureDir(join(repoRoot, '.ditto', 'work-items', args['work-item']));
+      const path = localDir(repoRoot, 'work-items', args['work-item'], 'impact-graph.json');
+      await ensureDir(localDir(repoRoot, 'work-items', args['work-item']));
       await writeJsonFile(path, acgImpactGraph, graph);
 
       if (format === 'json') {

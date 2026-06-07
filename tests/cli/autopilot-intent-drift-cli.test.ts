@@ -27,7 +27,7 @@ const REQUEST = 'add a health endpoint';
 
 async function write(name: string, obj: unknown): Promise<void> {
   await writeFile(
-    join(dir, '.ditto', 'work-items', WI, name),
+    join(dir, '.ditto', 'local', 'work-items', WI, name),
     `${JSON.stringify(obj, null, 2)}\n`,
     'utf8',
   );
@@ -109,7 +109,7 @@ async function seedGraph(refs: string[], rootGoal = GOAL): Promise<void> {
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'ditto-driftcli-'));
   git(['init']);
-  await mkdir(join(dir, '.ditto', 'work-items', WI), { recursive: true });
+  await mkdir(join(dir, '.ditto', 'local', 'work-items', WI), { recursive: true });
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
