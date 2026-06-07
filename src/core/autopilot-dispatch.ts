@@ -71,6 +71,13 @@ export function buildDelegationPacket(
   node: AutopilotNode,
   workItem: WorkItem,
   variantCandidates: { name: string; description: string }[] = [],
+  // The actual dispatch scope for this node (V2). Defaults to the shared
+  // work-item changed_files so existing callers are unchanged, but the
+  // orchestrator passes `scopeOf(node)` (node.file_scope ?? changed_files) so the
+  // packet the subagent receives matches the active-node lease PreToolUse
+  // enforces — otherwise a node that declares its own file_scope gets a packet
+  // scoped to a different (often empty) file set.
+  fileScope: string[] = workItem.changed_files,
 ): DelegationPacket {
   const isPlanner = node.owner === 'planner';
   const doneWhen =
@@ -99,7 +106,7 @@ export function buildDelegationPacket(
     ],
     context: {
       work_item_id: workItem.id,
-      file_scope: workItem.changed_files,
+      file_scope: fileScope,
       done_when: doneWhen,
       acceptance_refs: node.acceptance_refs,
     },

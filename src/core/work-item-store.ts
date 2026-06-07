@@ -164,15 +164,29 @@ export class WorkItemStore {
     return summaries;
   }
 
-  async appendCommandLogLine(workItemId: string, jsonLine: string): Promise<void> {
+  private async appendEvidenceJsonl(
+    workItemId: string,
+    filename: string,
+    jsonLine: string,
+  ): Promise<void> {
     const dir = join(this.workItemDir(workItemId), 'evidence');
     await ensureDir(dir);
-    const path = join(dir, 'commands.jsonl');
+    const path = join(dir, filename);
     const file = Bun.file(path);
     const existing = (await file.exists()) ? await file.text() : '';
     const trimmedExisting =
       existing.endsWith('\n') || existing.length === 0 ? existing : `${existing}\n`;
     await atomicWriteText(path, `${trimmedExisting}${jsonLine}\n`);
+  }
+
+  async appendCommandLogLine(workItemId: string, jsonLine: string): Promise<void> {
+    return this.appendEvidenceJsonl(workItemId, 'commands.jsonl', jsonLine);
+  }
+
+  // V6: file-mutation tool use (Edit/Write/MultiEdit) recorded alongside commands
+  // so the evidence trail is not command-only.
+  async appendEditLogLine(workItemId: string, jsonLine: string): Promise<void> {
+    return this.appendEvidenceJsonl(workItemId, 'edits.jsonl', jsonLine);
   }
 }
 
