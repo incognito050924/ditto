@@ -116,7 +116,12 @@ function writeSettings(path, settings) {
 
 // --------------------------------------------------------------- (1) register
 function registerPlugin(settings, repo) {
-  const manifest = join(repo, '.claude-plugin', 'marketplace.json');
+  // Register the ASSEMBLED dist/plugin marketplace, not the repo one. dist/plugin
+  // is its own marketplace root with plugin source "./" (build:plugin emits it),
+  // which dodges Claude Code bug #11278 (a relative plugin SUBPATH in a file-source
+  // marketplace fails to resolve, so hooks never load). The repo marketplace.json
+  // stays source "./" for dev/self-host (claude --plugin-dir <repo>).
+  const manifest = join(repo, 'dist', 'plugin', '.claude-plugin', 'marketplace.json');
   const url = pathToFileURL(manifest).href; // cross-OS, handles Windows drive letters
   const markets = settings.extraKnownMarketplaces ?? {};
   markets[MARKETPLACE] = { source: { source: 'url', url } };

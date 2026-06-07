@@ -17,7 +17,7 @@
 //   ③ per-developer (.ditto/local) — only ① is the deploy unit.
 
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -70,9 +70,26 @@ function main() {
     if (existsSync(join(REPO, d))) copyInto(d);
   }
 
+  // 4. Make dist/plugin its OWN marketplace root with a self-referential
+  // plugin source ("./"). Claude Code bug #11278: a relative plugin SUBPATH
+  // (e.g. "./dist/plugin") in a file-source marketplace resolves against the
+  // marketplace.json FILE path, not its directory, so it never loads — only
+  // source "./" (the marketplace root itself) works. By emitting a marketplace
+  // here and registering THIS file, the plugin dir == marketplace root, so the
+  // relative source resolves and hooks fire. Reuse the repo marketplace's
+  // name/owner/description; force source to "./".
+  const mkt = JSON.parse(readFileSync(join(REPO, '.claude-plugin', 'marketplace.json'), 'utf8'));
+  for (const p of mkt.plugins ?? []) p.source = './';
+  writeFileSync(
+    join(OUT, '.claude-plugin', 'marketplace.json'),
+    `${JSON.stringify(mkt, null, 2)}\n`,
+  );
+
   console.log(`[ditto] build:plugin OK → ${OUT}`);
   const shipped = [...ALWAYS_DIRS, ...OPTIONAL_DIRS.filter((d) => existsSync(join(OUT, d)))];
-  console.log(`  surface: .claude-plugin/plugin.json, ${shipped.join('/, ')}/, bin/${binName}`);
+  console.log(
+    `  surface: .claude-plugin/{plugin,marketplace}.json, ${shipped.join('/, ')}/, bin/${binName}`,
+  );
 }
 
 try {
