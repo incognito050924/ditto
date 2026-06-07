@@ -1,4 +1,4 @@
-import type { Autopilot } from '~/schemas/autopilot';
+import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { WorkItem } from '~/schemas/work-item';
 import { type CompletionInput, buildCompletion } from './completion-store';
@@ -26,46 +26,105 @@ type Verdict = DerivedVerdict['verdict'];
 const SEVERITY: Record<Verdict, number> = { fail: 0, partial: 1, unverified: 2, pass: 3 };
 const worst = (a: Verdict, b: Verdict): Verdict => (SEVERITY[a] <= SEVERITY[b] ? a : b);
 
+/**
+ * The verdict a single addressing node contributes for ONE criterion: its
+ * evidence-gated structural verdict (status + evidence) lowered by any per-AC
+ * verdict that node emitted for this criterion. This is the old flat fold,
+ * evaluated per node so supersession can reason about *which* node failed vs.
+ * which later node re-passed.
+ */
+function nodeVerdictFor(node: AutopilotNode, acId: string): { verdict: Verdict; notes?: string } {
+  let verdict: Verdict;
+  let notes: string | undefined;
+  if (node.status === 'failed') {
+    verdict = 'fail';
+    notes = 'an addressing node failed';
+  } else if (node.status === 'passed' && node.evidence_refs.length > 0) {
+    verdict = 'pass';
+  } else if (node.status === 'passed') {
+    verdict = 'unverified';
+    notes = 'addressing node passed without evidence (claim ≠ proof)';
+  } else {
+    verdict = 'unverified';
+    notes = 'addressing node not terminal';
+  }
+  for (const e of node.ac_verdicts.filter((v) => v.criterion_id === acId)) {
+    const folded = worst(verdict, e.verdict);
+    if (SEVERITY[folded] < SEVERITY[verdict]) {
+      verdict = folded;
+      notes =
+        e.notes ?? `verifier judged ${acId} ${e.verdict} (per-AC verdict caps the node-level pass)`;
+    }
+  }
+  return { verdict, ...(notes ? { notes } : {}) };
+}
+
+/**
+ * Does `node` transitively depend on a PASSED `fix` node? A re-verify that runs
+ * *after* a fix landed (depends on it) is allowed to supersede an earlier fail
+ * for the same AC — that is the find→fix→reverify convergence. A passing node
+ * that does NOT sit behind a fix is just a parallel/earlier verification and
+ * cannot mask a sibling fail (preserves the worst() false-green protection).
+ * DFS over depends_on with a recursion-stack guard (cycles are rejected at
+ * graph-mutation time, but guard defensively so a malformed graph can't loop).
+ */
+function dependsOnPassedFix(node: AutopilotNode, byId: Map<string, AutopilotNode>): boolean {
+  const seen = new Set<string>();
+  const visit = (id: string): boolean => {
+    if (seen.has(id)) return false;
+    seen.add(id);
+    const cur = byId.get(id);
+    if (!cur) return false;
+    for (const dep of cur.depends_on) {
+      const depNode = byId.get(dep);
+      if (depNode && depNode.kind === 'fix' && depNode.status === 'passed') return true;
+      if (visit(dep)) return true;
+    }
+    return false;
+  };
+  return visit(node.id);
+}
+
 export function deriveAcVerdicts(graph: Autopilot, acIds: string[]): DerivedVerdict[] {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   return acIds.map((acId) => {
     const addressing = graph.nodes.filter((n) => n.acceptance_refs.includes(acId));
     const evidence = addressing.flatMap((n) => n.evidence_refs);
-    const anyFailed = addressing.some((n) => n.status === 'failed');
-    const anyPassed = addressing.some((n) => n.status === 'passed');
 
-    // 1) Structural verdict from node status + evidence presence (unchanged).
-    let verdict: Verdict;
-    let notes: string | undefined;
-    if (anyFailed) {
-      verdict = 'fail';
-      notes = 'an addressing node failed';
-    } else if (anyPassed && evidence.length > 0) {
-      verdict = 'pass';
-    } else if (anyPassed) {
-      verdict = 'unverified';
-      notes = 'addressing node passed without evidence (claim ≠ proof)';
-    } else {
-      verdict = 'unverified';
-      notes =
-        addressing.length === 0
-          ? 'no node addressed this criterion'
-          : 'addressing node not terminal';
+    if (addressing.length === 0) {
+      return {
+        criterion_id: acId,
+        verdict: 'unverified' as const,
+        evidence,
+        notes: 'no node addressed this criterion',
+      };
     }
 
-    // 2) Fold in any per-AC verdicts a judging node emitted for THIS criterion.
-    // worst() only lowers, so a verifier's `partial` for an AC the node otherwise
-    // passed survives to the completion gate instead of being over-closed to pass.
-    const explicit = addressing.flatMap((n) =>
-      n.ac_verdicts.filter((v) => v.criterion_id === acId),
+    // Per-node verdicts for this AC. Supersession: a later re-verify node that
+    // PASSES this AC *and* transitively depends on a passed fix node cancels any
+    // earlier fail for the same AC (find→fix→reverify converged). A pass that is
+    // NOT behind a fix cannot supersede — so an unfixed fail still wins (no
+    // false-green). After supersession, fold the survivors with worst().
+    const supersedingFix = addressing.some(
+      (n) => nodeVerdictFor(n, acId).verdict === 'pass' && dependsOnPassedFix(n, byId),
     );
-    for (const e of explicit) {
-      const folded = worst(verdict, e.verdict);
-      if (SEVERITY[folded] < SEVERITY[verdict]) {
-        verdict = folded;
-        notes =
-          e.notes ??
-          `verifier judged ${acId} ${e.verdict} (per-AC verdict caps the node-level pass)`;
+
+    let verdict: Verdict = 'pass';
+    let notes: string | undefined;
+    let folded = false;
+    for (const n of addressing) {
+      const nv = nodeVerdictFor(n, acId);
+      // A fail that a later fix-backed re-verify supersedes is dropped from the fold.
+      if (nv.verdict === 'fail' && supersedingFix) continue;
+      const next = worst(verdict, nv.verdict);
+      if (!folded || SEVERITY[next] < SEVERITY[verdict]) {
+        verdict = next;
+        notes = nv.notes;
+        folded = true;
       }
+    }
+    if (supersedingFix && verdict === 'pass') {
+      notes = `earlier fail superseded by a re-verify behind a passed fix (${acId})`;
     }
 
     return { criterion_id: acId, verdict, evidence, ...(notes ? { notes } : {}) };

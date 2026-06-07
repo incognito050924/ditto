@@ -2,12 +2,15 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { assembleCompletionFromGraph } from '~/core/autopilot-complete';
+import { AutopilotStore } from '~/core/autopilot-store';
 import {
   InvalidBaseRefError,
   InvalidHeadRefError,
   writeWorkItemHandoff,
 } from '~/core/work-item-handoff';
 import { WorkItemStore } from '~/core/work-item-store';
+import { autopilot } from '~/schemas/autopilot';
 
 let workDir: string;
 let store: WorkItemStore;
@@ -287,6 +290,56 @@ describe('writeWorkItemHandoff', () => {
       thrown = err;
     }
     expect(thrown).toBeInstanceOf(InvalidHeadRefError);
+  });
+
+  test('graph exists: handoff uses graph-derived verdicts and AGREES with autopilot complete (no clobber to partial)', async () => {
+    const created = await store.create(makeInput());
+    // Work item AC stays `unverified` — the stale source that used to drag the
+    // handoff completion to `partial`. The graph, however, closes ac-1 with a
+    // passed addressing node carrying evidence.
+    const graph = autopilot.parse({
+      schema_version: '0.1.0',
+      autopilot_id: 'orch_handofftest',
+      work_item_id: created.id,
+      root_goal: 'goal',
+      approval_gate: { status: 'not_required', source: 'small_reversible_policy' },
+      nodes: [
+        {
+          id: 'N3',
+          kind: 'verify',
+          owner: 'verifier',
+          purpose: 'verify ac-1',
+          status: 'passed',
+          acceptance_refs: ['ac-1'],
+          evidence_refs: [{ kind: 'file', path: 't.log', summary: 'verify log' }],
+        },
+      ],
+      caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 },
+      continue_policy: {},
+      stop_conditions: [],
+    });
+    await new AutopilotStore(workDir).write(created.id, graph);
+
+    // The graph-based path (what `ditto autopilot complete` produces).
+    const fromComplete = assembleCompletionFromGraph(graph, await store.get(created.id));
+    expect(fromComplete.final_verdict).toBe('pass');
+
+    // The handoff path must now derive from the SAME graph → also pass.
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    expect(result.completion.final_verdict).toBe('pass');
+    // Per-AC verdicts agree between the two paths.
+    expect(result.completion.acceptance.map((a) => a.verdict)).toEqual(
+      fromComplete.acceptance.map((a) => a.verdict),
+    );
+    const updated = await store.get(created.id);
+    expect(updated.status).toBe('done');
+  });
+
+  test('no graph: handoff still uses work-item AC verdicts (unchanged fallback)', async () => {
+    const created = await store.create(makeInput());
+    // ac-1 stays unverified, no graph → fallback path → partial (regression guard).
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    expect(result.completion.final_verdict).toBe('partial');
   });
 
   test('replace (not union): stale changed_files give way to git collected on re-handoff', async () => {

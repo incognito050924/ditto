@@ -139,6 +139,89 @@ describe('deriveAcVerdicts (evidence-gated: pass only with evidence; never auto-
     expect(v?.verdict).toBe('unverified');
   });
 
+  // find→fix→reverify convergence (ac-2): an earlier verify recorded ac-1 fail,
+  // a fix node passed, and a LATER re-verify that depends on that fix recorded
+  // ac-1 pass. The later fix-backed re-verify supersedes the earlier fail.
+  test('a fix-backed re-verify supersedes an earlier fail for the same AC → pass', () => {
+    const graph = graphWith([
+      node({ id: 'N3', kind: 'verify', acceptance_refs: ['ac-1'], status: 'failed' }),
+      node({ id: 'N4', kind: 'fix', owner: 'implementer', status: 'passed', depends_on: ['N3'] }),
+      node({
+        id: 'N5',
+        kind: 'verify',
+        acceptance_refs: ['ac-1'],
+        status: 'passed',
+        depends_on: ['N4'],
+        evidence_refs: [ev('reverify.log')],
+      }),
+    ]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1']);
+    expect(v?.verdict).toBe('pass');
+  });
+
+  // ac-2 via a per-AC verdict: the same AC failed on an early node (ac_verdict fail)
+  // then re-passed on a later fix-backed re-verify.
+  test('supersession also works when the earlier fail is a per-AC verdict', () => {
+    const graph = graphWith([
+      node({
+        id: 'N3',
+        kind: 'verify',
+        acceptance_refs: ['ac-1'],
+        status: 'passed',
+        evidence_refs: [ev('v1.log')],
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'fail' }],
+      }),
+      node({ id: 'N4', kind: 'fix', owner: 'implementer', status: 'passed', depends_on: ['N3'] }),
+      node({
+        id: 'N5',
+        kind: 'verify',
+        acceptance_refs: ['ac-1'],
+        status: 'passed',
+        depends_on: ['N4'],
+        evidence_refs: [ev('reverify.log')],
+      }),
+    ]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1']);
+    expect(v?.verdict).toBe('pass');
+  });
+
+  // ac-3 guard: an UNFIXED fail (no later passing re-verify behind a fix) must
+  // still report fail — supersession must NOT mask a real failure.
+  test('an unfixed fail (no fix-backed re-verify) still reports fail (no false-green)', () => {
+    const graph = graphWith([
+      node({ id: 'N3', kind: 'verify', acceptance_refs: ['ac-1'], status: 'failed' }),
+      // A later re-verify PASSES but does NOT depend on any fix node → cannot supersede.
+      node({
+        id: 'N5',
+        kind: 'verify',
+        acceptance_refs: ['ac-1'],
+        status: 'passed',
+        evidence_refs: [ev('reverify.log')],
+      }),
+    ]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1']);
+    expect(v?.verdict).toBe('fail');
+  });
+
+  // ac-3 guard variant: a fix node exists but is NOT passed → its re-verify cannot
+  // supersede (the fix did not land).
+  test('a re-verify behind an unpassed fix cannot supersede a fail', () => {
+    const graph = graphWith([
+      node({ id: 'N3', kind: 'verify', acceptance_refs: ['ac-1'], status: 'failed' }),
+      node({ id: 'N4', kind: 'fix', owner: 'implementer', status: 'failed', depends_on: ['N3'] }),
+      node({
+        id: 'N5',
+        kind: 'verify',
+        acceptance_refs: ['ac-1'],
+        status: 'passed',
+        depends_on: ['N4'],
+        evidence_refs: [ev('reverify.log')],
+      }),
+    ]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1']);
+    expect(v?.verdict).toBe('fail');
+  });
+
   // A per-AC verdict for an AC the node does not address is ignored (it is not an
   // addressing node for that criterion).
   test('a per-AC verdict on a non-addressed criterion is ignored', () => {

@@ -1,0 +1,336 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260606h5l",
+  "declared_by": "main",
+  "declared_at": "2026-06-07T03:50:49.965Z",
+  "summary": "autopilot 완료 경로 2결함 수정: (A) ditto work handoff가 그래프 존재 시 deriveAcVerdicts(complete와 동일 출처) 기반으로 verdict를 도출해 complete의 completion을 덮어쓰지 않음; (B) deriveAcVerdicts가 fix-backed re-verify의 transitive-dep(dependsOnPassedFix DFS)로 선행 fail을 supersede하되, 미수정 fail은 worst()로 보존.",
+  "changed_files": [
+    ".ditto/work-items/wi_260606eg4/",
+    ".ditto/work-items/wi_260606h5l/",
+    ".ditto/work-items/wi_260606h5l/completion.json",
+    ".ditto/work-items/wi_260606h5l/work-item.json",
+    "src/core/autopilot-complete.ts",
+    "src/core/work-item-handoff.ts",
+    "tests/core/autopilot-complete.test.ts",
+    "tests/core/work-item-handoff.test.ts"
+  ],
+  "acceptance": [
+    {
+      "criterion_id": "ac-1",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/work-item-handoff.ts",
+          "lines": {
+            "start": 107,
+            "end": 154
+          },
+          "summary": "buildCompletion uses item.acceptance_criteria verdicts (Bug A)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "lines": {
+            "start": 27,
+            "end": 73
+          },
+          "summary": "worst() flat fold ignores supersession (Bug B)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-graph.ts",
+          "lines": {
+            "start": 248,
+            "end": 257
+          },
+          "summary": "DFS cycle-detect pattern to reuse for transitive-dep"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test (full suite) = 1346 pass, 9 skip, 0 fail, exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "summary": "deriveAcVerdicts supersession via dependsOnPassedFix DFS"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/work-item-handoff.ts",
+          "summary": "handoff uses graph-derived verdicts when graph exists"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test (full) exit 0: 1346 pass, 9 skip, 0 fail"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test -t charter exit 0: 13 pass"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test tests/core/autopilot-complete.test.ts tests/core/work-item-handoff.test.ts exit 0: 35 pass"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/work-item-handoff.ts",
+          "lines": {
+            "start": 250,
+            "end": 261
+          },
+          "summary": "handoff uses deriveAcVerdicts when graph exists (ac-1)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "lines": {
+            "start": 109,
+            "end": 119
+          },
+          "summary": "supersedingFix drops earlier fail (ac-2/ac-3)"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-2",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/work-item-handoff.ts",
+          "lines": {
+            "start": 107,
+            "end": 154
+          },
+          "summary": "buildCompletion uses item.acceptance_criteria verdicts (Bug A)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "lines": {
+            "start": 27,
+            "end": 73
+          },
+          "summary": "worst() flat fold ignores supersession (Bug B)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-graph.ts",
+          "lines": {
+            "start": 248,
+            "end": 257
+          },
+          "summary": "DFS cycle-detect pattern to reuse for transitive-dep"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test (full suite) = 1346 pass, 9 skip, 0 fail, exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "summary": "deriveAcVerdicts supersession via dependsOnPassedFix DFS"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/work-item-handoff.ts",
+          "summary": "handoff uses graph-derived verdicts when graph exists"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test (full) exit 0: 1346 pass, 9 skip, 0 fail"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test -t charter exit 0: 13 pass"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test tests/core/autopilot-complete.test.ts tests/core/work-item-handoff.test.ts exit 0: 35 pass"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/work-item-handoff.ts",
+          "lines": {
+            "start": 250,
+            "end": 261
+          },
+          "summary": "handoff uses deriveAcVerdicts when graph exists (ac-1)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "lines": {
+            "start": 109,
+            "end": 119
+          },
+          "summary": "supersedingFix drops earlier fail (ac-2/ac-3)"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-3",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/work-item-handoff.ts",
+          "lines": {
+            "start": 107,
+            "end": 154
+          },
+          "summary": "buildCompletion uses item.acceptance_criteria verdicts (Bug A)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "lines": {
+            "start": 27,
+            "end": 73
+          },
+          "summary": "worst() flat fold ignores supersession (Bug B)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-graph.ts",
+          "lines": {
+            "start": 248,
+            "end": 257
+          },
+          "summary": "DFS cycle-detect pattern to reuse for transitive-dep"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test (full suite) = 1346 pass, 9 skip, 0 fail, exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "summary": "deriveAcVerdicts supersession via dependsOnPassedFix DFS"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/work-item-handoff.ts",
+          "summary": "handoff uses graph-derived verdicts when graph exists"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test (full) exit 0: 1346 pass, 9 skip, 0 fail"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test -t charter exit 0: 13 pass"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test tests/core/autopilot-complete.test.ts tests/core/work-item-handoff.test.ts exit 0: 35 pass"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/work-item-handoff.ts",
+          "lines": {
+            "start": 250,
+            "end": 261
+          },
+          "summary": "handoff uses deriveAcVerdicts when graph exists (ac-1)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "lines": {
+            "start": 109,
+            "end": 119
+          },
+          "summary": "supersedingFix drops earlier fail (ac-2/ac-3)"
+        }
+      ],
+      "evidence_records": []
+    },
+    {
+      "criterion_id": "ac-4",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/work-item-handoff.ts",
+          "lines": {
+            "start": 107,
+            "end": 154
+          },
+          "summary": "buildCompletion uses item.acceptance_criteria verdicts (Bug A)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "lines": {
+            "start": 27,
+            "end": 73
+          },
+          "summary": "worst() flat fold ignores supersession (Bug B)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-graph.ts",
+          "lines": {
+            "start": 248,
+            "end": 257
+          },
+          "summary": "DFS cycle-detect pattern to reuse for transitive-dep"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test (full suite) = 1346 pass, 9 skip, 0 fail, exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "summary": "deriveAcVerdicts supersession via dependsOnPassedFix DFS"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/work-item-handoff.ts",
+          "summary": "handoff uses graph-derived verdicts when graph exists"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test (full) exit 0: 1346 pass, 9 skip, 0 fail"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test -t charter exit 0: 13 pass"
+        },
+        {
+          "kind": "command",
+          "summary": "bun test tests/core/autopilot-complete.test.ts tests/core/work-item-handoff.test.ts exit 0: 35 pass"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/work-item-handoff.ts",
+          "lines": {
+            "start": 250,
+            "end": 261
+          },
+          "summary": "handoff uses deriveAcVerdicts when graph exists (ac-1)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/autopilot-complete.ts",
+          "lines": {
+            "start": 109,
+            "end": 119
+          },
+          "summary": "supersedingFix drops earlier fail (ac-2/ac-3)"
+        }
+      ],
+      "evidence_records": []
+    }
+  ],
+  "verifications": [],
+  "unverified": [],
+  "remaining_risks": [],
+  "next_handoff_path": ".ditto/handoff/wi_260606h5l.md",
+  "final_verdict": "pass"
+}

@@ -5,6 +5,8 @@ import { type CompletionContract, completionContract } from '~/schemas/completio
 import type { WorkItem } from '~/schemas/work-item';
 
 type DeclarerRole = z.infer<typeof declarerRole>;
+import { deriveAcVerdicts } from './autopilot-complete';
+import { AutopilotStore } from './autopilot-store';
 import { writeJson } from './fs';
 import { HandoffStore, buildHandoff } from './handoff-store';
 import type { WorkItemStore } from './work-item-store';
@@ -111,12 +113,25 @@ function buildCompletion(
   declaredBy: DeclarerRole,
   unverifiedExtras: { item: string; reason: string; out_of_scope: boolean }[] = [],
   prior?: CompletionContract,
+  graphAcceptance?: Array<{
+    criterion_id: string;
+    verdict: WorkItem['acceptance_criteria'][number]['verdict'];
+    evidence: WorkItem['acceptance_criteria'][number]['evidence'];
+    notes?: string;
+  }>,
 ): CompletionContract {
-  const acceptance = item.acceptance_criteria.map((ac) => ({
-    criterion_id: ac.id,
-    verdict: ac.verdict,
-    evidence: ac.evidence,
-  }));
+  // When an autopilot graph exists for this work item, `ditto autopilot complete`
+  // derives the per-AC verdicts from the graph (evidence-gated). The handoff path
+  // must use that SAME source so a re-handoff cannot overwrite a good graph-based
+  // completion with a stale work-item-AC `partial`. Fall back to the work-item AC
+  // verdicts only when no graph exists.
+  const acceptance =
+    graphAcceptance ??
+    item.acceptance_criteria.map((ac) => ({
+      criterion_id: ac.id,
+      verdict: ac.verdict,
+      evidence: ac.evidence,
+    }));
   const allPass = acceptance.every((a) => a.verdict === 'pass');
   const blockedByUnverified = unverifiedExtras.some((u) => !u.out_of_scope);
   const final = allPass && !blockedByUnverified ? ('pass' as const) : ('partial' as const);
@@ -228,6 +243,22 @@ export async function writeWorkItemHandoff(
       prior = undefined;
     }
   }
+  // If an autopilot graph exists for this work item, derive the per-AC verdicts
+  // from the graph (same evidence-gated source as `ditto autopilot complete`) so
+  // the two completion paths AGREE — handoff cannot clobber a graph-based pass
+  // with a stale work-item-AC partial. No graph → keep work-item-AC behavior.
+  let graphAcceptance: Parameters<typeof buildCompletion>[6] | undefined;
+  const autopilotStore = new AutopilotStore(repoRoot);
+  if (await autopilotStore.exists(workId)) {
+    const graph = await autopilotStore.get(workId);
+    const acIds = item.acceptance_criteria.map((c) => c.id);
+    graphAcceptance = deriveAcVerdicts(graph, acIds).map((v) => ({
+      criterion_id: v.criterion_id,
+      verdict: v.verdict,
+      evidence: v.evidence ?? [],
+      ...(v.notes ? { notes: v.notes } : {}),
+    }));
+  }
   const completion = buildCompletion(
     item,
     now.toISOString(),
@@ -235,6 +266,7 @@ export async function writeWorkItemHandoff(
     options.declaredBy ?? 'main',
     unverifiedExtras,
     prior,
+    graphAcceptance,
   );
   const effectiveReEntry: WorkItem['re_entry'] =
     completion.final_verdict === 'pass'
