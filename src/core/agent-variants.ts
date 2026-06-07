@@ -2,7 +2,8 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 /**
- * Agent variant catalog (variant routing). A variant is a specialized subagent
+ * Agent variant catalog (variant routing). See docs/agent-variants.md for the
+ * user-facing overview. A variant is a specialized subagent
  * profile declared under `.ditto/agents/*.md` frontmatter. DITTO loads the
  * catalog and deterministically filters candidates by the chosen node's owner
  * (role) and file scope; *selecting* among 2+ candidates is the driver's job,

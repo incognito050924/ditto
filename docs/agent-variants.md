@@ -1,5 +1,7 @@
 # Agent Variants — project-specialized subagent routing
 
+> Implementation: `src/core/agent-variants.ts`.
+
 DITTO's autopilot runs each node through a fixed **role** (the node `owner`):
 `researcher`, `planner`, `implementer`, `reviewer`, `verifier`, `architect`,
 `playwright-e2e`, `knowledge-curator`, `security-reviewer`, `refactorer`,

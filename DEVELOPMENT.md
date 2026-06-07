@@ -55,7 +55,7 @@ bun run dev doctor
 
 ```bash
 # ~/.zshrc
-alias dittod='bun run --cwd /Users/incognito/dev/projects/ditto dev'
+alias dittod='bun run --cwd <repo-root> dev'   # <repo-root> = 이 저장소를 clone한 절대경로
 ```
 
 ### `ditto`를 전역 명령으로 (skills/agents가 부르는 bare `ditto`)
