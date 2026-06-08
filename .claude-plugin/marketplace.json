@@ -1,6 +1,7 @@
 {
   "name": "ditto-local",
   "owner": { "name": "ecoletree" },
+  "description": "Local marketplace hosting the ditto plugin — an intent / verification / completion harness for Claude Code (deep interview, autopilot graph, dialectic review, convergence gates).",
   "plugins": [
     {
       "name": "ditto",
