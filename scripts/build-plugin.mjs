@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // DITTO deploy assembler (axis ①). Pure Node — no external deps; runs under
-// `node` or `bun`. Spawns `bun` only for the binary build (--compile needs bun).
+// `node` or `bun`. Spawns `bun` only for the binary build (--target=bun needs bun).
 //
 // Assembles `dist/plugin/` containing ONLY the product surface that a Claude
 // Code plugin needs at runtime:
@@ -16,11 +16,11 @@
 //   ① product (this dist/plugin) ② project-global (.ditto/knowledge,agents)
 //   ③ per-developer (.ditto/local) — only ① is the deploy unit.
 
-import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildBinInto } from './build-bin.mjs';
 
 const IS_WIN = platform() === 'win32';
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,18 +30,10 @@ const OUT = join(REPO, 'dist', 'plugin');
 const ALWAYS_DIRS = ['hooks', 'agents', 'skills'];
 const OPTIONAL_DIRS = ['commands'];
 
-// Compile straight into dist/plugin/bin so assembly never clobbers the live
-// repo `bin/ditto` (which the running session's hooks invoke).
-function buildBinInto(outFile) {
-  const args = ['build', 'src/cli/index.ts', '--compile'];
-  if (IS_WIN) args.push('--target=bun-windows-x64');
-  args.push('--outfile', outFile);
-  const r = spawnSync('bun', args, { cwd: REPO, stdio: 'inherit' });
-  if (r.error && r.error.code === 'ENOENT') {
-    throw new Error('bun not found on PATH — install bun ≥1.3 to compile the binary');
-  }
-  if (r.status !== 0) throw new Error(`bin compile failed (exit ${r.status})`);
-}
+// Bundle straight into dist/plugin/bin so assembly never clobbers the live
+// repo `bin/ditto` (which the running session's hooks invoke). `buildBinInto`
+// (shared with scripts/build-bin.mjs) emits a small JS bundle (~1MB) that runs
+// under bun via a `#!/usr/bin/env bun` shebang.
 
 function copyInto(rel) {
   cpSync(join(REPO, rel), join(OUT, rel), { recursive: true });

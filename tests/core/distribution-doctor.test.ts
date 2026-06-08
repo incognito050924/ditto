@@ -9,7 +9,7 @@ import {
 const ALL_OK: DistributionChecks = {
   binary_built: true,
   binary_on_path: true,
-  plugin_enabled: true,
+  plugin_surface_present: true,
   hooks_registered: true,
   target_initialized: true,
   allowlisted: true,
@@ -28,6 +28,13 @@ describe('evaluateDistribution (atomic checks → per-axis deployment contracts)
     const bad = r.axes.filter((a) => !a.satisfied).map((a) => a.axis);
     expect(bad).toEqual(['Skills', 'Agents']);
     expect(r.axes.find((a) => a.axis === 'Skills')?.missing).toContain('binary_on_path');
+  });
+
+  test('missing plugin surface breaks Skills and Agents (the axes that ship from it)', () => {
+    const r = evaluateDistribution({ ...ALL_OK, plugin_surface_present: false });
+    const bad = r.axes.filter((a) => !a.satisfied).map((a) => a.axis);
+    expect(bad).toEqual(['Skills', 'Agents']);
+    expect(r.axes.find((a) => a.axis === 'Agents')?.missing).toContain('plugin_surface_present');
   });
 
   test('uninitialized target breaks Agents and State only', () => {
@@ -52,7 +59,6 @@ describe('collectDistributionChecks (injected IO; runtime vantage)', () => {
     pluginRoot: '/plugin',
     targetRoot: '/target',
     whichDitto: () => '/usr/local/bin/ditto',
-    readGlobalSettings: () => ({ enabledPlugins: { 'ditto@ditto-local': true } }),
     readProjectSettings: () => ({ permissions: { allow: ['Bash(ditto:*)'] } }),
     exists: () => true,
     ...over,
@@ -68,9 +74,33 @@ describe('collectDistributionChecks (injected IO; runtime vantage)', () => {
     expect(c.binary_on_path).toBe(false);
   });
 
-  test('plugin not enabled in global settings → plugin_enabled false', () => {
-    const c = collectDistributionChecks(deps({ readGlobalSettings: () => ({}) }));
-    expect(c.plugin_enabled).toBe(false);
+  test('a healthy new-model install has plugin_surface_present (no enabledPlugins key)', () => {
+    // The regression guard: the new model loads the plugin from "./" and never
+    // writes enabledPlugins['ditto@ditto-local']. Surface presence at pluginRoot,
+    // not a global settings flag, must satisfy the check.
+    const c = collectDistributionChecks(deps({}));
+    expect(c.plugin_surface_present).toBe(true);
+  });
+
+  test('plugin surface absent at pluginRoot → plugin_surface_present false', () => {
+    const c = collectDistributionChecks(deps({ exists: (p) => !p.startsWith('/plugin/skills') }));
+    expect(c.plugin_surface_present).toBe(false);
+  });
+
+  test('plugin surface is probed under pluginRoot, never targetRoot', () => {
+    const checked: string[] = [];
+    collectDistributionChecks(
+      deps({
+        exists: (p) => {
+          checked.push(p);
+          return true;
+        },
+      }),
+    );
+    expect(checked.some((p) => p.startsWith('/plugin/.claude-plugin/plugin.json'))).toBe(true);
+    expect(checked.some((p) => p === '/plugin/skills')).toBe(true);
+    expect(checked.some((p) => p === '/plugin/agents')).toBe(true);
+    expect(checked.some((p) => p.startsWith('/target/skills'))).toBe(false);
   });
 
   test('glossary seed absent → target_initialized false', () => {

@@ -29,7 +29,7 @@ For `<wi>` = the active work item id (see charter `Active work item:` line).
 ### 1. Start
 
 ```
-ditto deep-interview start --work-item <wi> --output json
+"${CLAUDE_PLUGIN_ROOT}/bin/ditto" deep-interview start --work-item <wi> --output json
 ```
 
 Initializes `.ditto/local/work-items/<wi>/interview-state.json` with `readiness.threshold=0.7` and `exit.question_cap=8` (override with `--threshold` and `--question-cap` if the request justifies it; do not lower the threshold to escape the gate).
@@ -57,7 +57,7 @@ Before asking, run the QuestionGate self-answer check (`⚠ self-answer from cod
 Record every turn with:
 
 ```
-ditto deep-interview record-turn --work-item <wi> --json '{
+"${CLAUDE_PLUGIN_ROOT}/bin/ditto" deep-interview record-turn --work-item <wi> --json '{
   "dimension": {"id": "d-<short-id>", "critical": true, "state": "partial", "ambiguity": 0.6, "notes": ""},
   "question": {"text": "…?", "why_matters": "…", "info_gain_estimate": "high"},
   "answer": {"text": "…", "kind": "user"},
@@ -82,7 +82,7 @@ For each candidate acceptance criterion, ask: "If this shipped and broke in 3 da
 ### 5. Check readiness
 
 ```
-ditto deep-interview check-readiness --work-item <wi> --output json
+"${CLAUDE_PLUGIN_ROOT}/bin/ditto" deep-interview check-readiness --work-item <wi> --output json
 ```
 
 `gate.pass=true` requires:
@@ -97,7 +97,7 @@ If `cap_reached=true` but the gate is still blocked, do NOT pretend success. Rec
 Synthesize the intent fields and lock the interview:
 
 ```
-ditto deep-interview finalize --work-item <wi> --json '{
+"${CLAUDE_PLUGIN_ROOT}/bin/ditto" deep-interview finalize --work-item <wi> --json '{
   "goal": "<verifiable goal in project terms>",
   "in_scope": ["<concrete in-scope item>", "…"],
   "out_of_scope": ["<concrete excluded item>", "…"],

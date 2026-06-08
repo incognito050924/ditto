@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 /**
@@ -14,8 +13,6 @@ import { join } from 'node:path';
  */
 
 // Mirrored from scripts/install-plugin.mjs (the canonical installer).
-const MARKETPLACE = 'ditto-local';
-const PLUGIN_NAME = 'ditto';
 const ALLOW_RULE = 'Bash(ditto:*)';
 const IS_WIN = process.platform === 'win32';
 
@@ -25,8 +22,14 @@ export interface DistributionChecks {
   binary_built: boolean;
   /** `ditto` resolves on PATH (skills/agents call the bare command). */
   binary_on_path: boolean;
-  /** The plugin is enabled in the global Claude settings. */
-  plugin_enabled: boolean;
+  /**
+   * The plugin's loadable surface is present at the plugin root
+   * (`.claude-plugin/plugin.json` + `skills/` + `agents/`). The new model loads
+   * the plugin from "./" via a github-source marketplace or `claude --plugin-dir`
+   * — neither writes an `enabledPlugins` key — so surface presence, not a global
+   * settings flag, is what backs the Skills/Agents axes (skills/agents ship here).
+   */
+  plugin_surface_present: boolean;
   /** The plugin hooks manifest (hooks/hooks.json) is present. */
   hooks_registered: boolean;
   /** The target carries an initialized `.ditto/` State (glossary seed present). */
@@ -56,13 +59,13 @@ const AXIS_CONTRACTS: Array<Pick<AxisContract, 'axis' | 'contract' | 'requires'>
   },
   {
     axis: 'Skills',
-    contract: 'plugin enabled + CLI on PATH',
-    requires: ['plugin_enabled', 'binary_on_path'],
+    contract: 'plugin surface present + CLI on PATH',
+    requires: ['plugin_surface_present', 'binary_on_path'],
   },
   {
     axis: 'Agents',
-    contract: 'plugin enabled + CLI on PATH + target State',
-    requires: ['plugin_enabled', 'binary_on_path', 'target_initialized'],
+    contract: 'plugin surface present + CLI on PATH + target State',
+    requires: ['plugin_surface_present', 'binary_on_path', 'target_initialized'],
   },
   {
     axis: 'State',
@@ -105,7 +108,6 @@ export interface DistributionDeps {
   targetRoot: string;
   /** Resolve `ditto` on PATH; returns a path or null. */
   whichDitto: () => string | null;
-  readGlobalSettings: () => Record<string, unknown>;
   readProjectSettings: () => Record<string, unknown>;
   exists: (path: string) => boolean;
 }
@@ -127,18 +129,20 @@ export function defaultDistributionDeps(targetRoot: string, pluginRoot: string):
     pluginRoot,
     targetRoot,
     whichDitto: () => Bun.which('ditto'),
-    readGlobalSettings: () => readJsonObject(join(homedir(), '.claude', 'settings.json')),
     readProjectSettings: () => readJsonObject(join(targetRoot, '.claude', 'settings.json')),
     exists: (p) => existsSync(p),
   };
 }
 
-function pluginEnabled(settings: Record<string, unknown>): boolean {
-  const enabled = settings.enabledPlugins;
+/**
+ * The plugin's loadable surface lives at the plugin root and loads from "./":
+ * the manifest plus the skills/ and agents/ dirs the Skills/Agents axes ship.
+ */
+function pluginSurfacePresent(pluginRoot: string, exists: (p: string) => boolean): boolean {
   return (
-    typeof enabled === 'object' &&
-    enabled !== null &&
-    (enabled as Record<string, unknown>)[`${PLUGIN_NAME}@${MARKETPLACE}`] === true
+    exists(join(pluginRoot, '.claude-plugin', 'plugin.json')) &&
+    exists(join(pluginRoot, 'skills')) &&
+    exists(join(pluginRoot, 'agents'))
   );
 }
 
@@ -158,9 +162,10 @@ export function collectDistributionChecks(deps: DistributionDeps): DistributionC
     // plugin-root artifacts: the plugin ships these at its own install dir.
     binary_built: deps.exists(join(deps.pluginRoot, 'bin', binaryName)),
     hooks_registered: deps.exists(join(deps.pluginRoot, 'hooks', 'hooks.json')),
-    // root-independent: PATH resolution and global Claude settings.
+    // plugin-root surface: the loadable plugin ("./") ships skills/ + agents/.
+    plugin_surface_present: pluginSurfacePresent(deps.pluginRoot, deps.exists),
+    // root-independent: PATH resolution.
     binary_on_path: deps.whichDitto() !== null,
-    plugin_enabled: pluginEnabled(deps.readGlobalSettings()),
     // target-root artifacts: scaffolded into the session's target project.
     target_initialized: deps.exists(join(deps.targetRoot, '.ditto', 'knowledge', 'glossary.json')),
     allowlisted: allowlisted(deps.readProjectSettings()),

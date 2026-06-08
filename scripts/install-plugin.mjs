@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 // DITTO install orchestrator (cross-platform). Pure Node — no external deps;
 // runs identically under `node` or `bun`. Spawns `bun` only for the binary
-// build (the self-contained hook/CLI binary requires bun's --compile).
+// build (the hook/CLI bundle is emitted with bun's --target=bun).
 //
-// Five steps (install mode):
-//   1. register     patch ~/.claude/settings.json so the local plugin loads
-//   2. build        `bun run build:plugin` → <repo>/dist/plugin/ (product surface
+// Four steps (install mode):
+//   1. build        `bun run build:plugin` → <repo>/dist/plugin/ (product surface
 //                   incl. bin/ditto). dist/plugin is the deploy unit (axis ①).
-//   3. place        symlink the binary onto PATH so skills' bare `ditto …` work
-//   4. init         `ditto init --dir <target>` scaffolds the target's .ditto/
-//   5. allowlist    patch <target>/.claude/settings.json so `ditto …` never prompts
+//   2. place        symlink the binary onto PATH so skills' bare `ditto …` work
+//   3. init         `ditto init --dir <target>` scaffolds the target's .ditto/
+//   4. allowlist    patch <target>/.claude/settings.json so `ditto …` never prompts
 //
-// Steps 4–5 are project-level and need a target; 1–3 are global/repo-level.
-// Everything is idempotent; `uninstall` reverses 1/3/5 and leaves the target's
+// Plugin registration is NOT done here: install is github-source (the repo root
+// is the plugin) and local dev loads it via `claude --plugin-dir dist/plugin` —
+// neither path needs a persistent file:// marketplace in ~/.claude/settings.json.
+// Steps 3–4 are project-level and need a target; 1–2 are global/repo-level.
+// Everything is idempotent; `uninstall` reverses 2/4 and leaves the target's
 // .ditto/ runtime data intact (it is the user's work-item history).
 //
 // Paths derive from homedir() so a `HOME` override fully sandboxes a dry run.
@@ -32,10 +34,8 @@ import {
 } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
-const MARKETPLACE = 'ditto-local';
-const PLUGIN_NAME = 'ditto';
 const ALLOW_RULE = 'Bash(ditto:*)';
 const IS_WIN = platform() === 'win32';
 
@@ -90,10 +90,6 @@ function resolveTarget(repo, targetArg) {
 }
 
 // ------------------------------------------------------------- settings helpers
-function globalSettingsPath() {
-  // Claude Code uses ~/.claude/settings.json on every OS (homedir() = %USERPROFILE% on Windows).
-  return join(homedir(), '.claude', 'settings.json');
-}
 function projectSettingsPath(target) {
   return join(target, '.claude', 'settings.json');
 }
@@ -112,29 +108,6 @@ function backup(path) {
 function writeSettings(path, settings) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
-}
-
-// --------------------------------------------------------------- (1) register
-function registerPlugin(settings, repo) {
-  // Register the ASSEMBLED dist/plugin marketplace, not the repo one. dist/plugin
-  // is its own marketplace root with plugin source "./" (build:plugin emits it),
-  // which dodges Claude Code bug #11278 (a relative plugin SUBPATH in a file-source
-  // marketplace fails to resolve, so hooks never load). The repo marketplace.json
-  // stays source "./" for dev/self-host (claude --plugin-dir <repo>).
-  const manifest = join(repo, 'dist', 'plugin', '.claude-plugin', 'marketplace.json');
-  const url = pathToFileURL(manifest).href; // cross-OS, handles Windows drive letters
-  const markets = settings.extraKnownMarketplaces ?? {};
-  markets[MARKETPLACE] = { source: { source: 'url', url } };
-  settings.extraKnownMarketplaces = markets;
-  const enabled = settings.enabledPlugins ?? {};
-  enabled[`${PLUGIN_NAME}@${MARKETPLACE}`] = true;
-  settings.enabledPlugins = enabled;
-  return settings;
-}
-function unregisterPlugin(settings) {
-  if (settings.extraKnownMarketplaces) delete settings.extraKnownMarketplaces[MARKETPLACE];
-  if (settings.enabledPlugins) delete settings.enabledPlugins[`${PLUGIN_NAME}@${MARKETPLACE}`];
-  return settings;
 }
 
 // ------------------------------------------------------------------ (2) build
@@ -375,11 +348,6 @@ function unallowlistTarget(target) {
 // ----------------------------------------------------------------------- modes
 function doInstall(repo, target, selfHost, build, codeql, playwright) {
   const log = [];
-  const gsp = globalSettingsPath();
-  const before = readSettings(gsp);
-  const gbak = backup(gsp);
-  writeSettings(gsp, registerPlugin({ ...before }, repo));
-  log.push(`register:  ${PLUGIN_NAME}@${MARKETPLACE} → ${gsp}${gbak ? ` (backup ${gbak})` : ''}`);
 
   if (build) {
     const b = buildBinary(repo);
@@ -429,11 +397,6 @@ function doInstall(repo, target, selfHost, build, codeql, playwright) {
 
 function doUninstall(repo, target, selfHost) {
   const log = [];
-  const gsp = globalSettingsPath();
-  const before = readSettings(gsp);
-  const gbak = backup(gsp);
-  writeSettings(gsp, unregisterPlugin({ ...before }));
-  log.push(`unregister: ${PLUGIN_NAME}@${MARKETPLACE} ← ${gsp}${gbak ? ` (backup ${gbak})` : ''}`);
 
   const up = unplaceBinary(repo);
   log.push(`unplace:    ${up.message}`);
@@ -449,16 +412,12 @@ function doUninstall(repo, target, selfHost) {
 }
 
 function doStatus(repo, target, selfHost) {
-  const cur = readSettings(globalSettingsPath());
   const link = join(placeDir(), 'ditto');
   const projAllow = readSettings(projectSettingsPath(target)).permissions?.allow;
   return {
     repo,
     target,
     self_host: selfHost,
-    global_settings: globalSettingsPath(),
-    marketplace: cur.extraKnownMarketplaces?.[MARKETPLACE] ?? null,
-    plugin_enabled: cur.enabledPlugins?.[`${PLUGIN_NAME}@${MARKETPLACE}`] === true,
     binary_built: existsSync(binaryPath(repo)),
     binary_on_path: IS_WIN ? null : linksTo(link, binaryPath(repo)),
     codeql: detectCodeql(),
@@ -505,9 +464,9 @@ function main() {
 
   if (mode === 'install') {
     console.log('');
-    console.log('Next: start a new Claude Code session in the target, then verify with');
-    console.log('  /plugin                 # ditto@ditto-local listed & enabled');
-    console.log('  ditto doctor            # binary on PATH, runtime reachable');
+    console.log('Next: load the plugin, then verify in a new session');
+    console.log('  claude --plugin-dir dist/plugin   # local dev (no marketplace needed)');
+    console.log('  ditto doctor                      # binary on PATH, runtime reachable');
   }
 }
 

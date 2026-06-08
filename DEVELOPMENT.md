@@ -58,17 +58,15 @@ bun run dev doctor
 alias dittod='bun run --cwd <repo-root> dev'   # <repo-root> = 이 저장소를 clone한 절대경로
 ```
 
-### `ditto`를 전역 명령으로 (skills/agents가 부르는 bare `ditto`)
+### skills/agents의 CLI 호출 — `${CLAUDE_PLUGIN_ROOT}/bin/ditto`
 
-skills·agents 본문은 `ditto autopilot next-node`, `ditto acg-review --from …`처럼 **bare `ditto`**를 호출한다(플러그인은 임의 프로젝트 cwd에서 돌므로 `bun run dev`로 못 부른다 — `dev` 스크립트가 그 프로젝트엔 없다). 이 호출이 실제로 우리 CLI로 가려면 `ditto`가 전역에 설치돼 있어야 한다:
+skills·agents 본문의 **실행되는** CLI 호출은 `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" autopilot next-node`처럼 **플러그인 루트 절대경로**를 쓴다(`hooks/hooks.json`과 동일 패턴). `${CLAUDE_PLUGIN_ROOT}`는 셸 환경변수가 **아니라** Claude Code가 skill/agent 본문을 모델에 넘기기 **전에 inline 치환**하는 토큰이다(로드 시점에 로드된 플러그인 루트의 절대경로로 교체됨 — `--plugin-dir` 이든 github 설치든 동일). 그래서 모델은 절대경로를 그대로 Bash에 실행한다.
 
-```bash
-bun run build && bun link    # dist/ditto 빌드 후 ~/.bun/bin/ditto 로 link
-which ditto                  # → ~/.bun/bin/ditto (프로젝트 CLI)
-```
+> 산문 언급(예: "intent-drift 게이트(`ditto autopilot intent-drift`)")은 실행되지 않으므로 브랜드명 bare `ditto`로 남긴다 — 실행 라인만 절대경로다.
 
-- **macOS 주의**: `/usr/bin/ditto`는 시스템 파일복사 유틸이다. `~/.bun/bin`이 PATH상 `/usr/bin`보다 앞서야 우리 `ditto`가 이긴다(`bun`의 기본 PATH 설정이면 그렇다). link 전에는 bare `ditto`가 macOS 유틸로 가서 skill/agent의 CLI 호출이 조용히 깨진다.
-- **link는 `dist/ditto`(컴파일본)를 가리킨다.** CLI 소스를 고쳤으면 `bun run build`로 다시 빌드해야 전역 `ditto`에 반영된다. 개발 중 단발 호출은 `bun run dev`가 항상 최신이라 더 편하다.
+**왜 bare `ditto`가 아닌가 (중요):** Claude Code는 설치된 플러그인의 `bin/`을 PATH **끝에 append**한다(바이너리 `ZF7`: `[기존PATH, ...플러그인bin]`, prepend 없음·설정 불가). macOS에는 `/usr/bin/ditto`(OS 아카이브 유틸)가 있어 `/usr/bin`(PATH 앞쪽)이 append된 플러그인 bin을 **이긴다** → 깨끗한 macOS 사용자에게 bare `ditto`는 OS 유틸로 가서 조용히 깨진다. `${CLAUDE_PLUGIN_ROOT}/bin/ditto` 절대경로는 PATH 순서와 무관하므로 이 충돌을 원천 회피한다. (codex 플러그인도 skills/agents에서 동일하게 `${CLAUDE_PLUGIN_ROOT}/scripts/...`를 쓴다.)
+
+**로컬 dev:** `claude --plugin-dir .`(repo 루트 = 플러그인 루트, alias `ccd`)로 띄우면 `${CLAUDE_PLUGIN_ROOT}`가 repo 루트로 치환된다. `src/`(CLI/훅 로직)를 고쳤으면 `bun run build:bin`으로 repo 루트 `bin/ditto` 번들을 갱신한다(skills/agents/hooks 편집은 소스 그 자체라 빌드 불필요).
 
 ---
 

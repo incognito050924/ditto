@@ -41,7 +41,7 @@ Findings drive the convergence loop: a `security` node with findings re-expands 
 Two steps, in order, using the work item id from CONTEXT:
 
 1. Write your `reviewer-output` (the schema object above, `kind: security-reviewer`) verbatim to `.ditto/work-items/<wi>/reviewer-output.json`. This is the ONLY file you author by hand.
-2. Run `ditto acg-review --from .ditto/work-items/<wi>/reviewer-output.json`.
+2. Run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" acg-review --from .ditto/work-items/<wi>/reviewer-output.json`.
 
 That command projects your findings deterministically (severity→risk) and writes `acg-review.json` — the risk ledger the Stop gate reads, where a **high**-severity finding with no evidence blocks completion until handled. **Do NOT construct or write `acg-review.json` yourself, and do not hand-map severities** — the CLI is the single source of that projection. Emitting your own verdict and running the producer is not mutating the code under audit; the read-only contract below still holds. Skip both steps only when CONTEXT gives no work item id.
 

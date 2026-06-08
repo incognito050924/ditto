@@ -6,7 +6,7 @@
     {
       "name": "ditto",
       "source": "./",
-      "description": "Intent / verification / completion harness for Claude Code (deep interview, autopilot graph, dialectic review, convergence gates). source=\"./\" — the repo IS the plugin root for dev/self-host (claude --plugin-dir <repo>). The DEPLOY marketplace is generated at dist/plugin/.claude-plugin/marketplace.json by build:plugin and is what install registers (Claude Code bug #11278: a relative plugin subpath here would not resolve)."
+      "description": "Intent / verification / completion harness for Claude Code (deep interview, autopilot graph, dialectic review, convergence gates). source=\"./\" — the repo root IS the plugin root. Install is github-source: this marketplace is registered from the repo and the plugin loads from \"./\". Local dev loads the same surface without a marketplace via `claude --plugin-dir dist/plugin`."
     }
   ]
 }

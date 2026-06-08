@@ -41,7 +41,7 @@ A reviewer output (`reviewer-output` schema):
 Two steps, in order, using the work item id from CONTEXT:
 
 1. Write your `reviewer-output` (the schema object above) verbatim to `.ditto/work-items/<wi>/reviewer-output.json`. This is the ONLY file you author by hand.
-2. Run `ditto acg-review --from .ditto/work-items/<wi>/reviewer-output.json`.
+2. Run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" acg-review --from .ditto/work-items/<wi>/reviewer-output.json`.
 
 That command does the projection deterministically (severity→risk, findings→ledger) and writes `acg-review.json` — the risk ledger the Stop gate reads, where a **high**-severity finding with no evidence blocks completion until handled. **Do NOT construct or write `acg-review.json` yourself, and do not hand-map severities** — the CLI is the single source of that projection; a hand-built ledger defeats its determinism. Emitting your own verdict and running the producer is not mutating the code under review; the read-only contract below still holds. Skip both steps only when CONTEXT gives no work item id.
 
