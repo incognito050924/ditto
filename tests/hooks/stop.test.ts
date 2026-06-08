@@ -231,6 +231,50 @@ describe('stopHandler', () => {
     expect(out.stderr).toContain('ac-4');
   });
 
+  test('intent drift (P3): the drift verdict is persisted to metrics.jsonl, de-duped on re-run, exit unchanged', async () => {
+    // Same scope-shrink fixture as above → a blocking H1 drift the Stop gate records.
+    await writeArtifact(
+      'intent.json',
+      intent({
+        acceptance_criteria: [
+          { id: 'ac-1', statement: 'returns 200' },
+          { id: 'ac-2', statement: 'rejects empty' },
+          { id: 'ac-3', statement: 'score 0..100' },
+          { id: 'ac-4', statement: 'logs the request' },
+        ],
+      }),
+    );
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({ root_goal: 'endpoint returns score', nodes: [coveringNode] }),
+    );
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+
+    const first = await run({ stop_hook_active: false });
+    expect(first.exitCode).toBe(2); // gate verdict unchanged by the side effect
+    const afterFirst = await store.readMetrics(wiId);
+    expect(afterFirst.length).toBe(1);
+    expect(afterFirst[0]?.kind).toBe('intent_drift');
+    expect(afterFirst[0]?.source).toBe('stop_hook');
+    expect(afterFirst[0]?.hops).toContain('H1');
+
+    // Re-run on the identical state: de-dup keeps it at one record, exit unchanged.
+    const second = await run({ stop_hook_active: false });
+    expect(second.exitCode).toBe(2);
+    expect((await store.readMetrics(wiId)).length).toBe(1);
+  });
+
+  test('intent drift (P3): a conserved chain (no drift) writes no metrics record', async () => {
+    await writeArtifact('intent.json', intent({}));
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({ root_goal: 'endpoint returns score', nodes: [coveringNode] }),
+    );
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+    await run({ stop_hook_active: false });
+    expect(await store.readMetrics(wiId)).toEqual([]);
+  });
+
   test('final_verdict=pass with all-AC-pass but no runnable verification evidence => exit 2 (G8 ack≠verification)', async () => {
     await writeArtifact(
       'completion.json',

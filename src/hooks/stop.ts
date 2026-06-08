@@ -27,6 +27,7 @@ import { completionContract } from '~/schemas/completion-contract';
 import { convergence as convergenceSchema } from '~/schemas/convergence';
 import { type Dialectic, dialectic as dialecticSchema } from '~/schemas/dialectic';
 import { intentContract } from '~/schemas/intent';
+import { intentMetric } from '~/schemas/intent-metric';
 import type { WorkItem } from '~/schemas/work-item';
 import type { HookHandler, HookInput } from './runtime';
 import { computeSemanticNudge } from './semantic-nudge';
@@ -304,6 +305,52 @@ export async function maybeRunFitness(
   }
 }
 
+const DRIFT_HOPS = ['H1', 'H2', 'H3'] as const;
+
+/** Distinct intent-chain hops named in the drift reason/advisory strings. */
+function driftHops(lines: string[]): Array<(typeof DRIFT_HOPS)[number]> {
+  return DRIFT_HOPS.filter((h) => lines.some((l) => l.includes(`${h}:`)));
+}
+
+/**
+ * Persist the intentDriftGate verdict to metrics.jsonl as a SIDE EFFECT of the
+ * Stop gate (measurement-infra P3). This is the only thing P3 adds to Stop —
+ * exit code / blocking / advisory logic is untouched. Fail-open: a measurement
+ * write must never break the gate. De-dup against the last record (Stop fires
+ * repeatedly on the same state; without de-dup the drift incidence would be
+ * polluted by the Stop count, D2/§7). Clean (no drift) stops record nothing.
+ */
+async function recordIntentDriftMetric(
+  repoRoot: string,
+  workItemId: string,
+  drift: { reasons: string[]; advisories: string[] },
+): Promise<void> {
+  if (drift.reasons.length === 0 && drift.advisories.length === 0) return;
+  try {
+    const store = new WorkItemStore(repoRoot);
+    const last = (await store.readMetrics(workItemId)).at(-1);
+    if (
+      last &&
+      JSON.stringify(last.blocking_reasons) === JSON.stringify(drift.reasons) &&
+      JSON.stringify(last.advisories) === JSON.stringify(drift.advisories)
+    ) {
+      return; // identical to the previous record → de-dup
+    }
+    const record = intentMetric.parse({
+      ts: new Date().toISOString(),
+      work_item_id: workItemId,
+      kind: 'intent_drift',
+      source: 'stop_hook',
+      blocking_reasons: drift.reasons,
+      advisories: drift.advisories,
+      hops: driftHops([...drift.reasons, ...drift.advisories]),
+    });
+    await store.appendMetricLine(workItemId, JSON.stringify(record));
+  } catch {
+    // measurement is best-effort; never let it affect the Stop verdict
+  }
+}
+
 export const stopHandler: HookHandler = async (input: HookInput) => {
   const raw = (input.raw ?? {}) as Record<string, unknown>;
 
@@ -442,6 +489,11 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     });
     if (!d.pass) reasons.push(...d.reasons.map((r) => `intent drift — ${r}`));
     advisories.push(...d.advisories.map((r) => `intent drift (advisory) — ${r}`));
+    // P3 side effect only — does not touch reasons/advisories/exit above.
+    await recordIntentDriftMetric(input.repoRoot, pointer, {
+      reasons: d.reasons,
+      advisories: d.advisories,
+    });
   }
   if (dialectics.status === 'ok') {
     for (const d of dialectics.items) reasons.push(...dialecticForcesContinuation(d));

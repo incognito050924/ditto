@@ -3,6 +3,7 @@ import type { AutopilotDecision } from '~/core/autopilot-store';
 import { type IntentQualityDeps, collectIntentQualityReport } from '~/core/intent-quality-doctor';
 import type { WorkItemSummary } from '~/core/work-item-store';
 import type { Autopilot } from '~/schemas/autopilot';
+import type { IntentMetric } from '~/schemas/intent-metric';
 import type { InterviewState } from '~/schemas/interview-state';
 
 function summary(id: string, over: Partial<WorkItemSummary> = {}): WorkItemSummary {
@@ -42,6 +43,18 @@ function decision(d: AutopilotDecision['decision']): AutopilotDecision {
   };
 }
 
+function driftMetric(hops: ('H1' | 'H2' | 'H3')[]): IntentMetric {
+  return {
+    ts: '2026-06-08T00:00:00Z',
+    work_item_id: 'wi_aaaaaaaa',
+    kind: 'intent_drift',
+    source: 'stop_hook',
+    blocking_reasons: hops.map((h) => `${h}: scope grow`),
+    advisories: [],
+    hops,
+  };
+}
+
 function deps(over: Partial<IntentQualityDeps> = {}): IntentQualityDeps {
   return {
     listWorkItems: async () => [],
@@ -49,6 +62,7 @@ function deps(over: Partial<IntentQualityDeps> = {}): IntentQualityDeps {
     readAutopilot: async () => null,
     readDecisions: async () => [],
     countHandoffRounds: async () => 0,
+    readMetrics: async () => [],
     ...over,
   };
 }
@@ -73,6 +87,7 @@ describe('collectIntentQualityReport', () => {
           decision('escalate'),
         ],
         countHandoffRounds: async () => 1,
+        readMetrics: async () => [driftMetric(['H1']), driftMetric(['H2'])],
       }),
     );
     const row = report.rows[0];
@@ -84,6 +99,8 @@ describe('collectIntentQualityReport', () => {
     expect(row.rework_attempts).toBe(3); // 0 + 1 + 2
     expect(row.retry_switch_decisions).toBe(2); // retry + switch_approach, not escalate
     expect(row.handoff_rounds).toBe(1);
+    expect(row.drift_events).toBe(2);
+    expect(row.post_cost).toBe(8); // drift 2 + rework 3 + retry/switch 2 + handoff 1
   });
 
   test('item without an interview → null process metrics, not counted in with_interview', async () => {
@@ -121,5 +138,42 @@ describe('collectIntentQualityReport', () => {
     expect(report.totals.total_fix_nodes).toBe(3); // 1 + 2
     expect(report.totals.total_rework_attempts).toBe(5); // 3 + 1 + 1
     expect(report.totals.total_handoff_rounds).toBe(2);
+  });
+
+  test('correlation buckets interviewed items by questions tercile (post_cost = drift here)', async () => {
+    // q=1 → 3 drift, q=3 → 1 drift, q=9 → 0 drift: fewer questions carry more cost.
+    const q: Record<string, number> = { wi_aaaaaaaa: 1, wi_bbbbbbbb: 3, wi_cccccccc: 9 };
+    const drift: Record<string, IntentMetric[]> = {
+      wi_aaaaaaaa: [driftMetric(['H1']), driftMetric(['H2']), driftMetric(['H3'])],
+      wi_bbbbbbbb: [driftMetric(['H1'])],
+      wi_cccccccc: [],
+    };
+    const report = await collectIntentQualityReport(
+      deps({
+        listWorkItems: async () => [
+          summary('wi_aaaaaaaa'),
+          summary('wi_bbbbbbbb'),
+          summary('wi_cccccccc'),
+        ],
+        readInterview: async (id) => interview({ questions_asked: q[id] }),
+        readMetrics: async (id) => drift[id] ?? [],
+      }),
+    );
+    const [low, mid, high] = report.correlation;
+    expect(low.quantile).toBe('low');
+    expect(low.questions_range).toEqual([1, 1]);
+    expect(low.avg_post_cost).toBe(3);
+    expect(mid.avg_post_cost).toBe(1);
+    expect(high.avg_post_cost).toBe(0);
+    expect(report.totals.total_drift_events).toBe(4);
+  });
+
+  test('correlation emits three empty buckets when no item was interviewed', async () => {
+    const report = await collectIntentQualityReport(
+      deps({ listWorkItems: async () => [summary('wi_aaaaaaaa')] }),
+    );
+    expect(report.correlation.map((b) => b.quantile)).toEqual(['low', 'mid', 'high']);
+    expect(report.correlation.every((b) => b.work_items === 0)).toBe(true);
+    expect(report.correlation.every((b) => b.questions_range === null)).toBe(true);
   });
 });

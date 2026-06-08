@@ -388,13 +388,28 @@ const intentQualityCommand = defineCommand({
       } else if (rows.length === 0) {
         writeHuman('intent-quality: no work items');
       } else {
-        writeHuman('work_item\tquestions\tclosure\treadiness\tfix\trework\tretry/switch\thandoff');
+        writeHuman(
+          'work_item\tquestions\tclosure\treadiness\tfix\trework\tretry/switch\thandoff\tdrift\tpost_cost',
+        );
         for (const r of rows) {
           writeHuman(
             `${r.work_item_id}\t${r.questions_asked ?? '-'}\t${r.closure_mode ?? '-'}\t${
               r.readiness_score ?? '-'
-            }\t${r.fix_nodes}\t${r.rework_attempts}\t${r.retry_switch_decisions}\t${r.handoff_rounds}`,
+            }\t${r.fix_nodes}\t${r.rework_attempts}\t${r.retry_switch_decisions}\t${r.handoff_rounds}\t${r.drift_events}\t${r.post_cost}`,
           );
+        }
+        // D4 correlation only makes sense over the full interviewed set, so it is
+        // omitted when the readout is scoped to a single work item.
+        if (!args['work-item']) {
+          writeHuman('\nquestions-quantile × avg post-cost (interviewed items):');
+          for (const b of report.correlation) {
+            const range = b.questions_range
+              ? `${b.questions_range[0]}–${b.questions_range[1]}q`
+              : '-';
+            writeHuman(
+              `  ${b.quantile}\t${b.work_items} items\t${range}\tavg_q=${b.avg_questions.toFixed(1)}\tavg_post_cost=${b.avg_post_cost.toFixed(1)}`,
+            );
+          }
         }
       }
       // Informational measurement readout; never a drift exit.
