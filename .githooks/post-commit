@@ -1,0 +1,22 @@
+#!/bin/sh
+# post-commit: 로컬 커밋 후 dist/plugin(배포 단위)을 자동 재조립한다.
+# post-merge/post-checkout(둘 다 wi_260607fs7)과 짝 — 그 둘은 pull/브랜치
+# 전환을 덮지만, "소스 편집→커밋" 경로는 빈틈이었다. 소스를 고쳐 커밋해도
+# dist/plugin이 옛것으로 남아 다음 Claude Code 세션이 stale 코드를 로드하던
+# 문제를 메운다(이번 세션의 setup fix 후 수동 build:plugin이 필요했던 그 빈틈).
+# graceful: 빌드 실패/도구 부재가 git 작업을 막지 않는다(항상 exit 0).
+# 루프 없음: build:plugin은 gitignored dist/만 쓰므로 새 커밋을 만들지 않는다.
+# 주의: 반영하려면 새 Claude Code 세션이 필요하다(세션 시작 시에만 로드).
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$ROOT/scripts/build-plugin.mjs" ] || exit 0
+if command -v bun >/dev/null 2>&1; then
+  echo "[ditto] 커밋 감지 — dist/plugin 재조립 중…" >&2
+  if (cd "$ROOT" && bun run build:plugin >/dev/null 2>&1); then
+    echo "[ditto] dist/plugin 갱신 완료. 새 Claude Code 세션부터 반영된다." >&2
+  else
+    echo "[ditto] build:plugin 실패 — 'bun run build:plugin'을 수동 실행하라." >&2
+  fi
+else
+  echo "[ditto] bun 없음 — 자동 재빌드 건너뜀. 'bun run build:plugin'을 수동 실행하라." >&2
+fi
+exit 0
