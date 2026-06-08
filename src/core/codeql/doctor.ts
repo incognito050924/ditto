@@ -98,7 +98,8 @@ export function classifyCodeqlTarget(input: ClassifyInput): CodeqlDoctorFinding[
     findings.push({
       kind: 'cli-unavailable',
       severity: 'high',
-      message: 'CodeQL CLI를 찾을 수 없다. 분석 불가 — gh extension 또는 PATH 설치 필요.',
+      message:
+        'CodeQL CLI를 찾을 수 없다. 분석 불가 — `ditto doctor codeql --install`로 설치하거나 PATH에 직접 설치하라.',
     });
   }
 

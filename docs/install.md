@@ -18,7 +18,59 @@ can safely re-run it.
 
 CodeQL and Playwright/Chromium are installed automatically when possible. Both
 degrade gracefully: if a download fails, the installer prints the exact manual
-step and continues.
+step and continues. See [Dependency model](#dependency-model-codeql--playwright)
+below for the details.
+
+## Dependency model: CodeQL / Playwright
+
+The DITTO **runtime never auto-installs heavy external tools mid-analysis.** When
+one is missing it degrades honestly — this is by design (it prevents false passes).
+
+| Tool | Used by | Runtime behavior when absent |
+|------|---------|------------------------------|
+| CodeQL CLI | `ditto codeql review` (ACG gate) | `doctor codeql` fail-closes and blocks analysis |
+| CodeQL query packs | analysis queries | auto-downloaded at analysis time (no separate install) |
+| Playwright/Chromium | `/ditto:e2e` real-browser journey | degrades to `result=blocked` (never a fake pass) |
+
+There are **two paths** that pre-seed these tools:
+
+1. **Install-script path** — `scripts/install.sh` pre-seeds CodeQL and
+   Playwright/Chromium gracefully in steps 3b/3c. Skip with `--no-codeql` /
+   `--no-playwright`.
+2. **Marketplace path** — installing via `claude plugin install
+   <plugin>@<marketplace>` does **not** run install.sh, so the pre-seed above
+   does **not** happen. Bootstrap CodeQL with the opt-in command below.
+
+### Install the CodeQL CLI (opt-in)
+
+```bash
+ditto doctor codeql --install
+```
+
+- **If already present**, it does nothing and returns `already-present`
+  (detection order: `CODEQL_BIN` → PATH → gh extension → ditto-managed).
+- **If absent**, it downloads the official CLI bundle (github/codeql-cli-binaries)
+  into `~/.local/share/ditto/codeql` and symlinks `~/.local/bin/codeql`. Query
+  packs are fetched on first analysis.
+- **Never hard-fails**: on error it returns `failed` plus copy-paste manual
+  commands (gh extension / direct bundle). It also tells you when `~/.local/bin`
+  is not on your PATH. Windows advises adding the dir to PATH instead of symlinking.
+
+> When CodeQL is missing, `doctor codeql`'s message also points at this command.
+> This installer uses the **same bundle source, location, and detection** as the
+> install script (step 3b) — there is only ever one ditto-managed CodeQL.
+
+### Install Playwright / Chromium
+
+The runtime **never auto-installs a browser** (`/ditto:e2e` returns `blocked`
+when absent). To pre-seed, use install.sh (step 3c) or run it directly:
+
+```bash
+bunx playwright install chromium
+```
+
+This provides both inputs the runtime probe requires (`playwright-core` in bun's
+cache + a full Chromium build in the ms-playwright cache).
 
 ## Quick start
 

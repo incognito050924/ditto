@@ -82,6 +82,16 @@ describe('classifyCodeqlTarget — fail-closed findings', () => {
     expect(findings.map((f) => f.kind)).toContain('cli-unavailable');
   });
 
+  test('cli-unavailable message is actionable (points at --install)', () => {
+    const findings = classifyCodeqlTarget({
+      languages: [{ language: 'javascript', files: 10 }],
+      unsupported: [],
+      cliAvailable: false,
+    });
+    const f = findings.find((x) => x.kind === 'cli-unavailable');
+    expect(f?.message).toContain('--install');
+  });
+
   test('no source at all is a finding', () => {
     const findings = classifyCodeqlTarget({ languages: [], unsupported: [], cliAvailable: true });
     expect(findings.map((f) => f.kind)).toContain('no-source-detected');

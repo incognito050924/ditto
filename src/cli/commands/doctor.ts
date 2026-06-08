@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { collectCapabilityInventory } from '~/core/capability-inventory';
 import { defaultDoctorDeps, inspectCodeqlTarget } from '~/core/codeql/doctor';
+import { defaultInstallDeps, installCodeqlCli } from '~/core/codeql/install';
 import { collectDistributionReport, defaultDistributionDeps } from '~/core/distribution-doctor';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
@@ -264,10 +265,29 @@ const codeqlCommand = defineCommand({
       description: 'Assert that a clean build was reproduced (unblocks compiled languages)',
     },
     advisory: { type: 'boolean', default: false, description: 'Report findings but exit 0' },
+    install: {
+      type: 'boolean',
+      default: false,
+      description: 'Opt-in: install the CodeQL CLI (downloads the official bundle) if absent',
+    },
   },
   async run({ args }) {
     try {
       const format = parseOutputFormat(args.output);
+      if (args.install) {
+        const result = await installCodeqlCli(defaultInstallDeps);
+        if (format === 'json') {
+          writeJson(result);
+        } else {
+          writeHuman(`codeql install: ${result.status} — ${result.message}`);
+          if (result.manual) for (const line of result.manual) writeHuman(`  ${line}`);
+        }
+        // already-present / installed = 성공(0). failed / unsupported = 1.
+        if (result.status === 'failed' || result.status === 'unsupported-platform') {
+          process.exit(DRIFT_EXIT);
+        }
+        return;
+      }
       const repoRoot = await resolveRepoRootForCreate();
       const sourceRoot = args['source-root'] ?? join(repoRoot, 'src');
       const report = await inspectCodeqlTarget(
