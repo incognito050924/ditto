@@ -20,7 +20,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildBinInto } from './build-bin.mjs';
+import { buildBinInto, syncManagedResources } from './build-bin.mjs';
 
 const IS_WIN = platform() === 'win32';
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -40,6 +40,10 @@ function copyInto(rel) {
 }
 
 function main() {
+  // 0. Regenerate committed managed resources from the canonical charter
+  //    (repo-root AGENTS.md) so resources/managed/{AGENTS,CLAUDE}.md never drift.
+  syncManagedResources();
+
   // 1. Fresh output tree.
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(OUT, { recursive: true });

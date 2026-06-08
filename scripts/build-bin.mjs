@@ -10,13 +10,25 @@
 // invoked directly by the `build` / `build:bin` package.json scripts.
 
 import { spawnSync } from 'node:child_process';
-import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { platform } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const IS_WIN = platform() === 'win32';
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+// Regenerate the committed managed-instruction resources from the canonical
+// charter (repo-root AGENTS.md) so they never drift from it. Both files carry
+// the IDENTICAL charter body; setup reads them from
+// ${CLAUDE_PLUGIN_ROOT}/resources/managed. Like bin/ditto, these are committed
+// artifacts — REBUILD BEFORE COMMITTING whenever AGENTS.md changes.
+export function syncManagedResources() {
+  const src = join(REPO, 'AGENTS.md');
+  const dir = join(REPO, 'resources', 'managed');
+  copyFileSync(src, join(dir, 'AGENTS.md'));
+  copyFileSync(src, join(dir, 'CLAUDE.md'));
+}
 
 export function buildBinInto(outFile) {
   const args = ['build', 'src/cli/index.ts', '--target=bun', '--outfile', outFile];
@@ -39,6 +51,7 @@ if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? '')) 
   }
   try {
     buildBinInto(resolve(process.cwd(), outArg));
+    syncManagedResources();
     console.log(`[ditto] build-bin OK → ${outArg}`);
   } catch (err) {
     console.error(`[ditto] build-bin FAILED — ${err.message}`);

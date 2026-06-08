@@ -36,6 +36,7 @@ import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Canonical, importable copy lives in src/core/settings-allowlist.ts (used by `ditto setup`); this .mjs duplicates the literal because it cannot import TS.
 const ALLOW_RULE = 'Bash(ditto:*)';
 const IS_WIN = platform() === 'win32';
 

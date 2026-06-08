@@ -27124,6 +27124,301 @@ var semanticCommand = defineCommand({
   }
 });
 
+// src/cli/commands/setup.ts
+import {homedir as homedir5} from "os";
+import {dirname as dirname7, join as join49, resolve as resolve10} from "path";
+import {fileURLToPath as fileURLToPath2} from "url";
+
+// src/core/setup.ts
+import {readFile as readFile5} from "fs/promises";
+import {join as join48} from "path";
+
+// src/core/managed-resource.ts
+import {copyFile} from "fs/promises";
+var locateBlock = function(content) {
+  const starts = [...content.matchAll(START_RE_G)];
+  const ends = [...content.matchAll(END_RE_G)];
+  if (starts.length === 0 && ends.length === 0)
+    return null;
+  if (starts.length !== 1 || ends.length !== 1)
+    return "corrupted";
+  const startMatch = starts[0];
+  const endMatch = ends[0];
+  if (startMatch?.index === undefined || endMatch?.index === undefined)
+    return "corrupted";
+  if (endMatch.index < startMatch.index)
+    return "corrupted";
+  return { start: startMatch.index, end: endMatch.index + endMatch[0].length };
+};
+function buildManagedBlock(managedBody, source = "AGENTS.md") {
+  const body = normalizeInstructionText(managedBody);
+  const sha2562 = normalizedSha256(managedBody);
+  const bodyWithBreak = body.endsWith("\n") ? body : `${body}\n`;
+  return `<!-- ditto:managed:start source=${source} sha256=${sha2562} -->\n${bodyWithBreak}${MANAGED_END}`;
+}
+function upsertManagedBlock(originalContent, managedBody, source = "AGENTS.md") {
+  const block2 = buildManagedBlock(managedBody, source);
+  const bounds = locateBlock(originalContent);
+  if (bounds === "corrupted")
+    return { kind: "corrupted", original: originalContent };
+  if (bounds === null) {
+    if (originalContent.length === 0)
+      return { kind: "ok", content: `${block2}\n` };
+    const separator = originalContent.endsWith("\n") ? "\n" : "\n\n";
+    return { kind: "ok", content: `${originalContent}${separator}${block2}\n` };
+  }
+  const next = `${originalContent.slice(0, bounds.start)}${block2}${originalContent.slice(bounds.end)}`;
+  return { kind: "ok", content: next };
+}
+function stripManagedBlock(content) {
+  const bounds = locateBlock(content);
+  if (bounds === "corrupted")
+    return { kind: "corrupted", original: content };
+  if (bounds === null)
+    return { kind: "ok", content };
+  const before = content.slice(0, bounds.start);
+  const after = content.slice(bounds.end);
+  const beforeTail = before.match(/\n*$/)?.[0] ?? "";
+  const afterHead = after.match(/^\n*/)?.[0] ?? "";
+  let seam = beforeTail + afterHead;
+  if (seam.length >= 3)
+    seam = "\n\n";
+  const next = before.slice(0, before.length - beforeTail.length) + seam + after.slice(afterHead.length);
+  return { kind: "ok", content: next };
+}
+async function writeBackupOnce(targetPath) {
+  const bakPath = `${targetPath}${BACKUP_SUFFIX}`;
+  if (await Bun.file(bakPath).exists())
+    return null;
+  if (!await Bun.file(targetPath).exists())
+    return null;
+  await copyFile(targetPath, bakPath);
+  return bakPath;
+}
+async function applyManagedFile(targetPath, managedBody, source = "AGENTS.md") {
+  const exists = await Bun.file(targetPath).exists();
+  const current = exists ? await Bun.file(targetPath).text() : "";
+  const merged = upsertManagedBlock(current, managedBody, source);
+  if (merged.kind === "corrupted")
+    return { kind: "corrupted", path: targetPath };
+  const backupPath = await writeBackupOnce(targetPath);
+  await atomicWriteText(targetPath, merged.content);
+  return { kind: "ok", path: targetPath, backupPath };
+}
+var START_RE_G = /<!--\s*ditto:managed:start\s+source=[^\s]+\s+sha256=[a-f0-9]{64}\s*-->/g;
+var END_RE_G = /<!--\s*ditto:managed:end\s*-->/g;
+var BACKUP_SUFFIX = ".ditto_bak";
+
+// src/core/resource-routing.ts
+import {readdirSync} from "fs";
+import {join as join47} from "path";
+function routeResource(filename, ctx) {
+  if (filename.startsWith(GLOBAL_PREFIX)) {
+    const destName = filename.slice(GLOBAL_PREFIX.length);
+    return {
+      scope: "global",
+      destName,
+      destPath: join47(ctx.homeDir, ".claude", destName)
+    };
+  }
+  return {
+    scope: "project",
+    destName: filename,
+    destPath: join47(ctx.projectRoot, filename)
+  };
+}
+function discoverResources(resourcesDir) {
+  try {
+    return readdirSync(resourcesDir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+var GLOBAL_PREFIX = "GLOBAL_";
+
+// src/core/settings-allowlist.ts
+import {readFile as readFile4} from "fs/promises";
+function addAllowRule(settings) {
+  const perms = settings.permissions ?? {};
+  const allow = Array.isArray(perms.allow) ? perms.allow : [];
+  const nextAllow = allow.includes(ALLOW_RULE2) ? allow : [...allow, ALLOW_RULE2];
+  return { ...settings, permissions: { ...perms, allow: nextAllow } };
+}
+function removeAllowRule(settings) {
+  const perms = settings.permissions;
+  if (!perms || !Array.isArray(perms.allow))
+    return settings;
+  return {
+    ...settings,
+    permissions: { ...perms, allow: perms.allow.filter((r3) => r3 !== ALLOW_RULE2) }
+  };
+}
+async function readSettings(settingsPath) {
+  if (!await fileExists(settingsPath))
+    return {};
+  const text = (await readFile4(settingsPath, "utf8")).trim();
+  return text ? JSON.parse(text) : {};
+}
+async function writeSettings(settingsPath, settings) {
+  await atomicWriteText(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+}
+async function allowlistSettingsFile(settingsPath) {
+  const settings = await readSettings(settingsPath);
+  await writeSettings(settingsPath, addAllowRule(settings));
+}
+async function unallowlistSettingsFile(settingsPath) {
+  if (!await fileExists(settingsPath))
+    return;
+  const settings = await readSettings(settingsPath);
+  await writeSettings(settingsPath, removeAllowRule(settings));
+}
+var ALLOW_RULE2 = "Bash(ditto:*)";
+
+// src/core/setup.ts
+async function setup(opts) {
+  const { resourcesDir, projectRoot, homeDir, now } = opts;
+  const resources = [];
+  for (const filename of discoverResources(resourcesDir)) {
+    const decision = routeResource(filename, { projectRoot, homeDir });
+    const body = await readFile5(join48(resourcesDir, filename), "utf8");
+    const applied = await applyManagedFile(decision.destPath, body, filename);
+    resources.push({
+      filename,
+      scope: decision.scope,
+      destPath: decision.destPath,
+      status: applied.kind === "ok" ? "written" : "corrupted",
+      backupPath: applied.kind === "ok" ? applied.backupPath : null
+    });
+  }
+  const scaffold = await initScaffold(projectRoot, now);
+  const allowlistPath = join48(projectRoot, ".claude", "settings.json");
+  await allowlistSettingsFile(allowlistPath);
+  return { resources, scaffold, allowlistPath };
+}
+
+// src/cli/commands/setup.ts
+var resolveResourcesDir = function() {
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? resolve10(dirname7(fileURLToPath2(import.meta.url)), "..", "..", "..");
+  return join49(pluginRoot, "resources", "managed");
+};
+var setupCommand = defineCommand({
+  meta: {
+    name: "setup",
+    description: "Install ditto managed resources, scaffold .ditto/, and allowlist the target project"
+  },
+  args: {
+    dir: {
+      type: "string",
+      required: false,
+      description: "Target project directory; defaults to the nearest .ditto/.git root or cwd"
+    }
+  },
+  run: async ({ args }) => {
+    try {
+      const projectRoot = args.dir ? resolve10(args.dir) : await resolveRepoRootForCreate();
+      const resourcesDir = resolveResourcesDir();
+      const pluginRoot = resolve10(resourcesDir, "..", "..");
+      if (pluginRoot === projectRoot) {
+        writeHuman(`setup: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
+        return;
+      }
+      const result2 = await setup({
+        resourcesDir,
+        projectRoot,
+        homeDir: homedir5(),
+        now: new Date
+      });
+      writeHuman(`setup: installed into ${projectRoot}`);
+      for (const r3 of result2.resources) {
+        const tag = r3.status === "corrupted" ? "SKIPPED (corrupted markers)" : `\u2192 ${r3.destPath}`;
+        const bak = r3.backupPath ? ` (backup ${r3.backupPath})` : "";
+        writeHuman(`  ${r3.filename} [${r3.scope}] ${tag}${bak}`);
+      }
+      writeHuman(`.ditto/: ${result2.scaffold.alreadyInitialized ? "already initialized" : "created"} \xB7 allowlist: ${result2.allowlistPath}`);
+    } catch (err) {
+      writeError(`setup failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+
+// src/cli/commands/teardown.ts
+import {homedir as homedir6} from "os";
+import {dirname as dirname8, join as join51, resolve as resolve11} from "path";
+import {fileURLToPath as fileURLToPath3} from "url";
+
+// src/core/teardown.ts
+import {copyFile as copyFile2, readFile as readFile6} from "fs/promises";
+import {join as join50} from "path";
+async function teardown(opts) {
+  const { resourcesDir, projectRoot, homeDir } = opts;
+  const files = [];
+  for (const filename of discoverResources(resourcesDir)) {
+    const decision = routeResource(filename, { projectRoot, homeDir });
+    const action = await teardownFile(decision.destPath);
+    files.push({ filename, scope: decision.scope, destPath: decision.destPath, action });
+  }
+  const allowlistPath = join50(projectRoot, ".claude", "settings.json");
+  await unallowlistSettingsFile(allowlistPath);
+  return { files, allowlistPath };
+}
+async function teardownFile(destPath) {
+  if (!await Bun.file(destPath).exists())
+    return "left-untouched";
+  const current = await readFile6(destPath, "utf8");
+  const stripped = stripManagedBlock(current);
+  if (stripped.kind === "ok") {
+    await atomicWriteText(destPath, stripped.content);
+    return "stripped";
+  }
+  const bakPath = `${destPath}${BACKUP_SUFFIX2}`;
+  if (await Bun.file(bakPath).exists()) {
+    await copyFile2(bakPath, destPath);
+    return "restored-from-backup";
+  }
+  return "left-untouched";
+}
+var BACKUP_SUFFIX2 = ".ditto_bak";
+
+// src/cli/commands/teardown.ts
+var resolveResourcesDir2 = function() {
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? resolve11(dirname8(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join51(pluginRoot, "resources", "managed");
+};
+var teardownCommand = defineCommand({
+  meta: {
+    name: "teardown",
+    description: "Undo ditto setup: strip managed blocks (preserving user content), remove the allow rule; keeps .ditto/"
+  },
+  args: {
+    dir: {
+      type: "string",
+      required: false,
+      description: "Target project directory; defaults to the nearest .ditto/.git root or cwd"
+    }
+  },
+  run: async ({ args }) => {
+    try {
+      const projectRoot = args.dir ? resolve11(args.dir) : await resolveRepoRootForCreate();
+      const resourcesDir = resolveResourcesDir2();
+      const pluginRoot = resolve11(resourcesDir, "..", "..");
+      if (pluginRoot === projectRoot) {
+        writeHuman(`teardown: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
+        return;
+      }
+      const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir6() });
+      writeHuman(`teardown: reverted ${projectRoot}`);
+      for (const f3 of result2.files) {
+        writeHuman(`  ${f3.filename} [${f3.scope}] ${f3.action} \u2192 ${f3.destPath}`);
+      }
+      writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ kept`);
+    } catch (err) {
+      writeError(`teardown failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+
 // src/cli/commands/verify.ts
 var runChildCommand = function(tail) {
   if (tail.length === 0) {
@@ -27506,6 +27801,8 @@ var main = defineCommand({
   },
   subCommands: {
     init: initCommand,
+    setup: setupCommand,
+    teardown: teardownCommand,
     work: workCommand,
     run: runCommand2,
     verify: verifyCommand,

@@ -19,6 +19,8 @@ import { initCommand } from './commands/init';
 import { knowledgeCommand } from './commands/knowledge';
 import { runCommand } from './commands/run';
 import { semanticCommand } from './commands/semantic';
+import { setupCommand } from './commands/setup';
+import { teardownCommand } from './commands/teardown';
 import { verifyCommand } from './commands/verify';
 import { workCommand } from './commands/work';
 
@@ -30,6 +32,8 @@ const main = defineCommand({
   },
   subCommands: {
     init: initCommand,
+    setup: setupCommand,
+    teardown: teardownCommand,
     work: workCommand,
     run: runCommand,
     verify: verifyCommand,
