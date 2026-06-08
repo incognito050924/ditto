@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,14 +9,31 @@ import { RUNTIME_ERROR_EXIT, writeError, writeHuman } from '../util';
 
 /**
  * Resolve the bundled resources directory. Under the installed plugin layout the
- * plugin root is `${CLAUDE_PLUGIN_ROOT}`; otherwise fall back to the repo root
- * derived from this module's location (src/cli/commands → repo root).
+ * plugin root is `${CLAUDE_PLUGIN_ROOT}`. Otherwise (manual/dev invocation) walk
+ * up from this module to the first ancestor that holds `resources/managed`. This
+ * is depth-independent, so it resolves correctly whether the entry point is the
+ * source file (src/cli/commands), the repo-root bundle (bin/ditto), or the
+ * product bundle (dist/plugin/bin/ditto) — a fixed `../../..` only matched the
+ * first and last, silently mis-resolving the repo-root bundle.
  */
 function resolveResourcesDir(): string {
-  const pluginRoot =
-    process.env.CLAUDE_PLUGIN_ROOT ??
-    resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-  return join(pluginRoot, 'resources', 'managed');
+  if (process.env.CLAUDE_PLUGIN_ROOT) {
+    return join(process.env.CLAUDE_PLUGIN_ROOT, 'resources', 'managed');
+  }
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (;;) {
+    const candidate = join(dir, 'resources', 'managed');
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  // Last-resort: the original source-layout guess (src/cli/commands → repo root).
+  return join(
+    resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'),
+    'resources',
+    'managed',
+  );
 }
 
 export const setupCommand = defineCommand({
