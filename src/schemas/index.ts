@@ -10,6 +10,7 @@ export * from './run-manifest';
 export * from './surface-catalog';
 export * from './work-item';
 export * from './intent';
+export * from './intent-metric';
 export * from './question-gate';
 export * from './interview-state';
 export * from './autopilot';

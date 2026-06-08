@@ -8,6 +8,7 @@ import { schemaExports } from '../../scripts/export-schemas';
 // sidecar schema is present in BOTH.
 const NEW_SIDECARS: Array<{ exportName: string; barrelConst: keyof typeof barrel }> = [
   { exportName: 'intent', barrelConst: 'intentContract' },
+  { exportName: 'intent-metric', barrelConst: 'intentMetric' },
   { exportName: 'question-gate', barrelConst: 'questionGate' },
   { exportName: 'interview-state', barrelConst: 'interviewState' },
   { exportName: 'autopilot', barrelConst: 'autopilot' },

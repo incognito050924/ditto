@@ -23,6 +23,7 @@ import { evidenceIndex, evidenceRecord } from '~/schemas/evidence-record';
 import { glossary } from '~/schemas/glossary';
 import { handoff } from '~/schemas/handoff';
 import { intentContract } from '~/schemas/intent';
+import { intentMetric } from '~/schemas/intent-metric';
 import { interviewState } from '~/schemas/interview-state';
 import { knowledgeRecord } from '~/schemas/knowledge-record';
 import { languageLedger } from '~/schemas/language-ledger';
@@ -50,6 +51,7 @@ export const schemaExports: ReadonlyArray<{ name: string; schema: ZodTypeAny }> 
   { name: 'knowledge-record', schema: knowledgeRecord },
   { name: 'e2e-journey', schema: e2eJourney },
   { name: 'intent', schema: intentContract },
+  { name: 'intent-metric', schema: intentMetric },
   { name: 'question-gate', schema: questionGate },
   { name: 'interview-state', schema: interviewState },
   { name: 'autopilot', schema: autopilot },

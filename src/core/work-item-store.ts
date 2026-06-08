@@ -1,6 +1,7 @@
 import { readdir, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { z } from 'zod';
+import { type IntentMetric, intentMetric } from '~/schemas/intent-metric';
 import { languageLedger } from '~/schemas/language-ledger';
 import { type WorkItem, workItem } from '~/schemas/work-item';
 import { localDir } from './ditto-paths';
@@ -164,19 +165,25 @@ export class WorkItemStore {
     return summaries;
   }
 
-  private async appendEvidenceJsonl(
-    workItemId: string,
-    filename: string,
-    jsonLine: string,
-  ): Promise<void> {
-    const dir = join(this.workItemDir(workItemId), 'evidence');
-    await ensureDir(dir);
-    const path = join(dir, filename);
+  /** Newline-safe append of one JSONL line at an absolute path (creates the dir). */
+  private async appendJsonlAtPath(path: string, jsonLine: string): Promise<void> {
+    await ensureDir(dirname(path));
     const file = Bun.file(path);
     const existing = (await file.exists()) ? await file.text() : '';
     const trimmedExisting =
       existing.endsWith('\n') || existing.length === 0 ? existing : `${existing}\n`;
     await atomicWriteText(path, `${trimmedExisting}${jsonLine}\n`);
+  }
+
+  private async appendEvidenceJsonl(
+    workItemId: string,
+    filename: string,
+    jsonLine: string,
+  ): Promise<void> {
+    return this.appendJsonlAtPath(
+      join(this.workItemDir(workItemId), 'evidence', filename),
+      jsonLine,
+    );
   }
 
   async appendCommandLogLine(workItemId: string, jsonLine: string): Promise<void> {
@@ -187,6 +194,28 @@ export class WorkItemStore {
   // so the evidence trail is not command-only.
   async appendEditLogLine(workItemId: string, jsonLine: string): Promise<void> {
     return this.appendEvidenceJsonl(workItemId, 'edits.jsonl', jsonLine);
+  }
+
+  private metricsPath(workItemId: string): string {
+    // Root level (sibling of autopilot-decisions.jsonl), not under evidence/:
+    // metrics.jsonl is measurement instrumentation, not per-AC work evidence (D1).
+    return join(this.workItemDir(workItemId), 'metrics.jsonl');
+  }
+
+  /** Append one intent-metric line. Caller pre-serializes (mirrors appendDecision). */
+  async appendMetricLine(workItemId: string, jsonLine: string): Promise<void> {
+    return this.appendJsonlAtPath(this.metricsPath(workItemId), jsonLine);
+  }
+
+  /** Read metrics.jsonl, schema-validating each line. Absent file → empty. */
+  async readMetrics(workItemId: string): Promise<IntentMetric[]> {
+    const file = Bun.file(this.metricsPath(workItemId));
+    if (!(await file.exists())) return [];
+    const text = await file.text();
+    return text
+      .split('\n')
+      .filter((line) => line.trim().length > 0)
+      .map((line) => intentMetric.parse(JSON.parse(line)));
   }
 }
 

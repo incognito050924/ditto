@@ -157,6 +157,47 @@ describe('WorkItemStore', () => {
     const parsed = JSON.parse(text);
     expect(() => workItem.parse(parsed)).not.toThrow();
   });
+
+  test('appendMetricLine writes metrics.jsonl at the work-item root (not under evidence/)', async () => {
+    const created = await store.create(sampleInput());
+    const line = JSON.stringify({
+      ts: '2026-06-08T15:00:00+09:00',
+      work_item_id: created.id,
+      kind: 'intent_drift',
+      source: 'stop_hook',
+      blocking_reasons: ['H1: scope grow'],
+      advisories: [],
+      hops: ['H1'],
+    });
+    await store.appendMetricLine(created.id, line);
+    const rootPath = join(workDir, '.ditto', 'local', 'work-items', created.id, 'metrics.jsonl');
+    expect(await Bun.file(rootPath).exists()).toBe(true);
+  });
+
+  test('readMetrics round-trips appended lines and validates the schema', async () => {
+    const created = await store.create(sampleInput());
+    const mk = (hop: string) =>
+      JSON.stringify({
+        ts: '2026-06-08T15:00:00+09:00',
+        work_item_id: created.id,
+        kind: 'intent_drift',
+        source: 'stop_hook',
+        blocking_reasons: [`${hop}: scope shrink`],
+        advisories: [],
+        hops: [hop],
+      });
+    await store.appendMetricLine(created.id, mk('H1'));
+    await store.appendMetricLine(created.id, mk('H2'));
+    const metrics = await store.readMetrics(created.id);
+    expect(metrics.length).toBe(2);
+    expect(metrics[0]?.hops).toEqual(['H1']);
+    expect(metrics[1]?.hops).toEqual(['H2']);
+  });
+
+  test('readMetrics returns empty when no metrics file exists', async () => {
+    const created = await store.create(sampleInput());
+    expect(await store.readMetrics(created.id)).toEqual([]);
+  });
 });
 
 function initGitRepo(dir: string) {
