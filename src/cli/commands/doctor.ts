@@ -14,6 +14,7 @@ import {
   parseHostId,
 } from '~/core/hosts';
 import { checkInstructionsForHosts } from '~/core/instruction-bridge';
+import { collectIntentQualityReport, defaultIntentQualityDeps } from '~/core/intent-quality-doctor';
 import { collectMcpInventory } from '~/core/mcp-inventory';
 import { collectPermissionFindings } from '~/core/permission-inventory';
 import { collectSurfaceInventory } from '~/core/surface-inventory';
@@ -360,6 +361,50 @@ const distributionCommand = defineCommand({
   },
 });
 
+const intentQualityCommand = defineCommand({
+  meta: {
+    name: 'intent-quality',
+    description:
+      'Aggregate deep-interview intent signal (questions/closure/readiness) vs downstream rework (fix nodes/retries/handoffs) per work item',
+  },
+  args: {
+    'work-item': {
+      type: 'string',
+      required: false,
+      description: 'Restrict to a single work item id',
+    },
+    output: { type: 'string', default: 'human', description: 'Output format: human|json' },
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const report = await collectIntentQualityReport(defaultIntentQualityDeps(repoRoot));
+      const rows = args['work-item']
+        ? report.rows.filter((r) => r.work_item_id === args['work-item'])
+        : report.rows;
+      if (format === 'json') {
+        writeJson(args['work-item'] ? { rows } : report);
+      } else if (rows.length === 0) {
+        writeHuman('intent-quality: no work items');
+      } else {
+        writeHuman('work_item\tquestions\tclosure\treadiness\tfix\trework\tretry/switch\thandoff');
+        for (const r of rows) {
+          writeHuman(
+            `${r.work_item_id}\t${r.questions_asked ?? '-'}\t${r.closure_mode ?? '-'}\t${
+              r.readiness_score ?? '-'
+            }\t${r.fix_nodes}\t${r.rework_attempts}\t${r.retry_switch_decisions}\t${r.handoff_rounds}`,
+          );
+        }
+      }
+      // Informational measurement readout; never a drift exit.
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  },
+});
+
 export const doctorCommand = defineCommand({
   meta: {
     name: 'doctor',
@@ -374,5 +419,6 @@ export const doctorCommand = defineCommand({
     capability: capabilityCommand,
     codeql: codeqlCommand,
     distribution: distributionCommand,
+    'intent-quality': intentQualityCommand,
   },
 });
