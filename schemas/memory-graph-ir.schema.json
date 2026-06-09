@@ -1,0 +1,421 @@
+{
+  "$ref": "#/definitions/memory-graph-ir",
+  "definitions": {
+    "memory-graph-ir": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "ir_version": {
+          "type": "string",
+          "pattern": "^ir_[a-z0-9_-]{4,}$",
+          "description": "Stable identifier for one Graph IR snapshot"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "extraction_run_id": {
+          "type": "string",
+          "pattern": "^xrun_[a-z0-9_-]{4,}$",
+          "description": "Stable identifier for one extraction run"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Canonical id, e.g. artifact:<path> or symbol:<path>#<qualified_name>"
+              },
+              "node_type": {
+                "type": "string",
+                "enum": [
+                  "Source",
+                  "Artifact",
+                  "Symbol",
+                  "DocumentSection",
+                  "Entity",
+                  "Concept",
+                  "Claim",
+                  "Decision",
+                  "Episode",
+                  "MemoryEvent",
+                  "GraphReport"
+                ],
+                "description": "Node label (report §3.3 / §8)"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "file_type": {
+                "type": "string",
+                "enum": [
+                  "code",
+                  "document",
+                  "paper",
+                  "image"
+                ]
+              },
+              "source_id": {
+                "type": "string",
+                "pattern": "^src_[a-z0-9_-]{4,}$",
+                "description": "Stable identifier for a raw source captured into memory"
+              },
+              "source_revision": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source_span": {
+                "type": "string"
+              },
+              "properties": {
+                "type": "object",
+                "additionalProperties": {},
+                "default": {}
+              },
+              "provenance": {
+                "type": "object",
+                "properties": {
+                  "source_id": {
+                    "type": "string",
+                    "pattern": "^src_[a-z0-9_-]{4,}$",
+                    "description": "Stable identifier for a raw source captured into memory"
+                  },
+                  "source_revision": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "source_hash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "description": "Lowercase hex sha256 hash"
+                  },
+                  "source_span": {
+                    "type": "string",
+                    "description": "line range, page, timestamp, etc."
+                  },
+                  "extraction_run_id": {
+                    "type": "string",
+                    "pattern": "^xrun_[a-z0-9_-]{4,}$",
+                    "description": "Stable identifier for one extraction run"
+                  },
+                  "extracted_by": {
+                    "type": "string",
+                    "enum": [
+                      "tree-sitter",
+                      "codeql",
+                      "impact",
+                      "llm",
+                      "node2vec",
+                      "human",
+                      "other"
+                    ],
+                    "description": "What produced this node/edge"
+                  },
+                  "schema_version": {
+                    "type": "string",
+                    "const": "0.1.0",
+                    "description": "Version of the DITTO schema set this document conforms to"
+                  }
+                },
+                "required": [
+                  "extraction_run_id",
+                  "extracted_by",
+                  "schema_version"
+                ],
+                "additionalProperties": false,
+                "description": "Where a node/edge came from — required so the graph stays regenerable (report §5.2)"
+              }
+            },
+            "required": [
+              "id",
+              "node_type",
+              "name"
+            ],
+            "additionalProperties": false,
+            "description": "One graph node"
+          },
+          "default": []
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "from": {
+                "type": "string",
+                "minLength": 1,
+                "description": "source node id"
+              },
+              "to": {
+                "type": "string",
+                "minLength": 1,
+                "description": "target node id"
+              },
+              "edge_type": {
+                "type": "string",
+                "enum": [
+                  "CALLS",
+                  "IMPORTS",
+                  "EXTENDS",
+                  "IMPLEMENTS",
+                  "MENTIONS",
+                  "ASSERTS",
+                  "SUPPORTS",
+                  "CONTRADICTS",
+                  "SIMILAR_TO",
+                  "RELATED_TO",
+                  "RATIONALE_FOR",
+                  "ALIAS_OF",
+                  "SUPERSEDES"
+                ],
+                "description": "Edge relation type"
+              },
+              "confidence_kind": {
+                "type": "string",
+                "enum": [
+                  "EXTRACTED",
+                  "INFERRED",
+                  "AMBIGUOUS"
+                ],
+                "description": "Provenance class of a relation: EXTRACTED (explicit in source), INFERRED (deduced), AMBIGUOUS (uncertain — review only)"
+              },
+              "confidence_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "provenance": {
+                "type": "object",
+                "properties": {
+                  "source_id": {
+                    "type": "string",
+                    "pattern": "^src_[a-z0-9_-]{4,}$",
+                    "description": "Stable identifier for a raw source captured into memory"
+                  },
+                  "source_revision": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "source_hash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "description": "Lowercase hex sha256 hash"
+                  },
+                  "source_span": {
+                    "type": "string",
+                    "description": "line range, page, timestamp, etc."
+                  },
+                  "extraction_run_id": {
+                    "type": "string",
+                    "pattern": "^xrun_[a-z0-9_-]{4,}$",
+                    "description": "Stable identifier for one extraction run"
+                  },
+                  "extracted_by": {
+                    "type": "string",
+                    "enum": [
+                      "tree-sitter",
+                      "codeql",
+                      "impact",
+                      "llm",
+                      "node2vec",
+                      "human",
+                      "other"
+                    ],
+                    "description": "What produced this node/edge"
+                  },
+                  "schema_version": {
+                    "type": "string",
+                    "const": "0.1.0",
+                    "description": "Version of the DITTO schema set this document conforms to"
+                  }
+                },
+                "required": [
+                  "extraction_run_id",
+                  "extracted_by",
+                  "schema_version"
+                ],
+                "additionalProperties": false,
+                "description": "Where a node/edge came from — required so the graph stays regenerable (report §5.2)"
+              },
+              "weight": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "default": 1
+              },
+              "valid_from": {
+                "type": "string",
+                "format": "date-time",
+                "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+              },
+              "valid_to": {
+                "type": "string",
+                "format": "date-time",
+                "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "TTL for inferred candidates (report §6.5)"
+              },
+              "requires_review": {
+                "type": "boolean",
+                "default": false
+              },
+              "used_as_evidence": {
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "required": [
+              "id",
+              "from",
+              "to",
+              "edge_type",
+              "confidence_kind",
+              "confidence_score",
+              "provenance"
+            ],
+            "additionalProperties": false,
+            "description": "One directed graph edge with provenance and calibrated confidence"
+          },
+          "default": []
+        },
+        "hyperedges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 3,
+                "description": "3+ node ids participating together"
+              },
+              "relation": {
+                "type": "string",
+                "enum": [
+                  "PARTICIPATE_IN",
+                  "IMPLEMENT",
+                  "FORM"
+                ],
+                "description": "N-ary relation type for a hyperedge"
+              },
+              "confidence_kind": {
+                "type": "string",
+                "enum": [
+                  "EXTRACTED",
+                  "INFERRED",
+                  "AMBIGUOUS"
+                ],
+                "description": "Provenance class of a relation: EXTRACTED (explicit in source), INFERRED (deduced), AMBIGUOUS (uncertain — review only)"
+              },
+              "confidence_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "provenance": {
+                "type": "object",
+                "properties": {
+                  "source_id": {
+                    "type": "string",
+                    "pattern": "^src_[a-z0-9_-]{4,}$",
+                    "description": "Stable identifier for a raw source captured into memory"
+                  },
+                  "source_revision": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "source_hash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "description": "Lowercase hex sha256 hash"
+                  },
+                  "source_span": {
+                    "type": "string",
+                    "description": "line range, page, timestamp, etc."
+                  },
+                  "extraction_run_id": {
+                    "type": "string",
+                    "pattern": "^xrun_[a-z0-9_-]{4,}$",
+                    "description": "Stable identifier for one extraction run"
+                  },
+                  "extracted_by": {
+                    "type": "string",
+                    "enum": [
+                      "tree-sitter",
+                      "codeql",
+                      "impact",
+                      "llm",
+                      "node2vec",
+                      "human",
+                      "other"
+                    ],
+                    "description": "What produced this node/edge"
+                  },
+                  "schema_version": {
+                    "type": "string",
+                    "const": "0.1.0",
+                    "description": "Version of the DITTO schema set this document conforms to"
+                  }
+                },
+                "required": [
+                  "extraction_run_id",
+                  "extracted_by",
+                  "schema_version"
+                ],
+                "additionalProperties": false,
+                "description": "Where a node/edge came from — required so the graph stays regenerable (report §5.2)"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "nodes",
+              "relation",
+              "confidence_kind",
+              "confidence_score",
+              "provenance"
+            ],
+            "additionalProperties": false,
+            "description": "N-ary relation among 3+ nodes (companion §4-1)"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "schema_version",
+        "ir_version",
+        "generated_at",
+        "extraction_run_id"
+      ],
+      "additionalProperties": false,
+      "description": "Compiled intermediate representation between extractors and projections — regenerable, never SoT (report §3.3)"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

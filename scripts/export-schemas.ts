@@ -27,6 +27,10 @@ import { intentMetric } from '~/schemas/intent-metric';
 import { interviewState } from '~/schemas/interview-state';
 import { knowledgeRecord } from '~/schemas/knowledge-record';
 import { languageLedger } from '~/schemas/language-ledger';
+import { memoryEvent } from '~/schemas/memory-event';
+import { memoryGraphIr } from '~/schemas/memory-graph-ir';
+import { memoryProjectionManifest } from '~/schemas/memory-projection-manifest';
+import { memorySource } from '~/schemas/memory-source';
 import { questionGate } from '~/schemas/question-gate';
 import { reviewerOutput } from '~/schemas/reviewer-output';
 import { runManifest } from '~/schemas/run-manifest';
@@ -58,6 +62,10 @@ export const schemaExports: ReadonlyArray<{ name: string; schema: ZodTypeAny }> 
   { name: 'dialectic', schema: dialectic },
   { name: 'convergence', schema: convergence },
   { name: 'handoff', schema: handoff },
+  { name: 'memory-source', schema: memorySource },
+  { name: 'memory-event', schema: memoryEvent },
+  { name: 'memory-graph-ir', schema: memoryGraphIr },
+  { name: 'memory-projection-manifest', schema: memoryProjectionManifest },
   { name: 'acg-change-contract', schema: acgChangeContract },
   { name: 'acg-impact-graph', schema: acgImpactGraph },
   { name: 'acg-architecture-spec', schema: acgArchitectureSpec },
