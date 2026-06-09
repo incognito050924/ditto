@@ -31,6 +31,13 @@ export const memorySource = z
     url: z.string().url().optional().describe('Location for url-backed sources'),
     content_hash: sha256.describe('Hash of the captured content; drives stale detection'),
     captured_at: isoDateTime,
+    repo: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Owning repo identifier for multi-repo workspaces (rooting-root-relative path to the repo this source belongs to). Omitted in the single-repo case where it equals the scan repoRoot (§3-7, cost 0); when present, revision/git_commit/staleness are judged against this repo, not the workspace git.',
+      ),
     revision: z
       .string()
       .min(1)

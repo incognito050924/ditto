@@ -17,6 +17,7 @@ import { hookCommand } from './commands/hook';
 import { impactCommand } from './commands/impact';
 import { initCommand } from './commands/init';
 import { knowledgeCommand } from './commands/knowledge';
+import { memoryCommand } from './commands/memory';
 import { runCommand } from './commands/run';
 import { semanticCommand } from './commands/semantic';
 import { setupCommand } from './commands/setup';
@@ -45,6 +46,7 @@ const main = defineCommand({
     'deep-interview': deepInterviewCommand,
     e2e: e2eCommand,
     knowledge: knowledgeCommand,
+    memory: memoryCommand,
     'acg-review': acgReviewCommand,
     codeql: codeqlCommand,
     impact: impactCommand,

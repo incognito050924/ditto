@@ -48,6 +48,11 @@
           "format": "date-time",
           "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
         },
+        "repo": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Owning repo identifier for multi-repo workspaces (rooting-root-relative path to the repo this source belongs to). Omitted in the single-repo case where it equals the scan repoRoot (§3-7, cost 0); when present, revision/git_commit/staleness are judged against this repo, not the workspace git."
+        },
         "revision": {
           "type": "string",
           "minLength": 1,

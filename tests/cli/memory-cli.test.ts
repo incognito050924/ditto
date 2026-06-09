@@ -1,0 +1,92 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const cliEntry = join(process.cwd(), 'src/cli/index.ts');
+let dir: string;
+
+function ditto(args: string[]): { stdout: string; stderr: string; exitCode: number | null } {
+  const proc = Bun.spawnSync(['bun', cliEntry, ...args], { cwd: dir, env: { ...process.env } });
+  return {
+    stdout: proc.stdout?.toString() ?? '',
+    stderr: proc.stderr?.toString() ?? '',
+    exitCode: proc.exitCode,
+  };
+}
+
+function initGit(d: string) {
+  Bun.spawnSync(['git', 'init', '-q'], { cwd: d, stdout: 'pipe', stderr: 'pipe' });
+  Bun.spawnSync(['git', 'config', 'user.email', 't@t'], { cwd: d, stdout: 'pipe' });
+  Bun.spawnSync(['git', 'config', 'user.name', 't'], { cwd: d, stdout: 'pipe' });
+  Bun.spawnSync(['git', 'commit', '--allow-empty', '-q', '-m', 'init'], {
+    cwd: d,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+}
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'ditto-mem-cli-'));
+  await mkdir(join(dir, '.ditto'), { recursive: true });
+  initGit(dir);
+});
+afterEach(async () => {
+  await rm(dir, { recursive: true, force: true });
+});
+
+describe('ditto memory scan', () => {
+  test('scan reports added then unchanged in json', async () => {
+    await writeFile(join(dir, 'a.ts'), 'export const x = 1;\n');
+    const first = ditto(['memory', 'scan', '--output', 'json']);
+    expect(first.exitCode).toBe(0);
+    const out1 = JSON.parse(first.stdout);
+    expect(out1.added.length).toBe(1);
+
+    const second = ditto(['memory', 'scan', '--output', 'json']);
+    const out2 = JSON.parse(second.stdout);
+    expect(out2.added.length).toBe(0);
+    expect(out2.unchanged.length).toBe(1);
+  });
+});
+
+describe('ditto memory events', () => {
+  test('append then list shows the event (append-only, created_at order)', async () => {
+    const appended = ditto([
+      'memory',
+      'events',
+      'append',
+      '--type',
+      'observation',
+      '--text',
+      'first note',
+      '--output',
+      'json',
+    ]);
+    expect(appended.exitCode).toBe(0);
+    const ev = JSON.parse(appended.stdout);
+    expect(ev.event_id).toMatch(/^memevt_/);
+    expect(ev.status).toBe('pending');
+
+    const listed = ditto(['memory', 'events', 'list', '--output', 'json']);
+    expect(listed.exitCode).toBe(0);
+    const out = JSON.parse(listed.stdout);
+    expect(out.events.length).toBe(1);
+    expect(out.events[0].text).toBe('first note');
+  });
+
+  test('append rejects an invalid event type with usage exit', () => {
+    const r = ditto([
+      'memory',
+      'events',
+      'append',
+      '--type',
+      'bogus',
+      '--text',
+      'x',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(65);
+  });
+});
