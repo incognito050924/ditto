@@ -4,6 +4,8 @@
 > **무엇에 대한 문서인가**: `agent-intelligence-memory-report.md`(이하 **메모리 보고서**)가 설계한 메모리/지식그래프 시스템을, ditto에 **네이티브 서브시스템(`ditto memory`)**으로 넣기 위한 설계. 왜 필요한지, 무엇을 어떻게 구현하는지, 대안보다 왜 나은지, ditto의 어디에 맞물려 어떤 가치를 주는지를 담는다.
 > **데이터 계약의 권위**: 스키마(Zod, `src/schemas/memory-*.ts`)가 SoT다(ADR-0002). 이 문서는 설계 의도·근거·통합을 담고, 강제 규격은 스키마가 담는다.
 > **작성일**: 2026-06-09 · **근거**: 메모리 보고서, `graphify-design-reference-companion.md`, 그리고 ditto 코드 실측(본문에 `파일:줄` 인용).
+>
+> ⚠ **가치·구조 평가 필독**: 이 설계의 §10 계약 정합성(dialectic 1라운드)은 통과했으나, **가치(증분 가치)와 구조(의도한 시점 발화)는 [memory-graph-value-structure-assessment.md](./memory-graph-value-structure-assessment.md)에서 별도 검증됐고 verdict=revise다** — 증명된 가치는 "색인-shaped"이고 그래프 기계장치는 미검증 의미층을 위한 것이라, 빌드 범위 재고(A′/A/원안) 결정 대기 중. 이 설계서를 "승인됨"으로 읽지 말 것.
 
 ---
 
@@ -207,14 +209,17 @@ Zod 스키마로 정의·등록·검증 완료. (커밋 `fd86842`)
 
 ## 7. 저장·배포 레이아웃
 
+> **정정(ac-0 동결)**: 메모리는 **두 tier에 걸친다.** 기존 3-tier 규약(`src/core/ditto-paths.ts`: `.ditto/local/`만 gitignored, `.ditto/` 직하는 git-tracked) 검증 결과, SoT와 파생물은 같은 서브트리에 둘 수 없다(파생물을 `.ditto/memory/` 직하에 두면 git에 추적됨). 그래서 SoT는 `dittoDir`(Tier ②, tracked), 파생물은 `localDir`(Tier ③, auto-ignored)로 가른다. 새 gitignore 특례 불필요. 구현-등급 계약은 §10-1.
+
 ```
-<rooting 루트>/.ditto/memory/        (rooting 지점 — 단일 repo면 repo 루트, 멀티 repo면 workspace 루트, §3-7)
-  sources/<source_id>.json          ← SoT, git-tracked (멀티 repo면 각 source에 repo 식별 포함)
-  events/<event_id>.json            ← SoT, git-tracked
-  ir/graph-ir.json                  ← 재생성 가능, gitignored
-  projections/{manifest.json,graph.json,wiki/}  ← 재생성 가능, gitignored
+<rooting 루트>/.ditto/memory/        (Tier ②, git-tracked SoT — dittoDir, §3-7 rooting 지점)
+  sources/<source_id>.json          ← SoT, per-entity JSON (멀티 repo면 repo 식별 포함)
+  events/<event_id>.json            ← SoT, per-entity 불변 JSON (논리적 append-only)
+<rooting 루트>/.ditto/local/memory/  (Tier ③, gitignored 파생물 — localDir)
+  ir/graph-ir.json                  ← 재생성 가능
+  projections/{manifest.json,graph.json,wiki/}  ← 재생성 가능
 ```
-ADR-0005(per-entity JSON·무서버) 준수. SoT(원본·이벤트)만 그 rooting 지점의 git이 추적, 파생물은 무시. 멀티 repo workspace에선 하위 코드 repo가 workspace에서 gitignore되므로 source의 `revision`/staleness는 소속 repo 기준(§3-7).
+ADR-0005 준수: git-tracked SoT는 **per-entity JSON**(one-file-per-entity)이라 무충돌 머지가 설계상 보장된다 — 그래서 events도 단일 append-only JSONL이 **아니라** 이벤트당 불변 파일이고, "append-only"는 파일 변형 금지 + `supersedes` 필드로 달성한다. SoT(원본·이벤트)만 rooting 지점 git이 추적, 파생물은 `.ditto/local/`이 흡수해 자동 무시. 멀티 repo workspace에선 하위 코드 repo가 workspace에서 gitignore되므로 source의 `revision`/staleness는 소속 repo 기준(§3-7).
 
 배포: 스키마는 `bin/ditto`로 컴파일. 스킬(`skills/memory-graph`)·에이전트(`agents/memory-extractor`)는 `build:plugin`이 `dist/plugin`으로 복사. 소스 변경 시 `build && build:plugin` 후 재설치.
 
@@ -249,7 +254,187 @@ ADR-0005(per-entity JSON·무서버) 준수. SoT(원본·이벤트)만 그 rooti
 - 인프로세스 그래프의 규모 한계 → ditto 규모에선 충분, 초과 시 Neo4j export 어댑터.
 - scope creep → 보고서 전체가 크므로 증분별 독립 검증으로 통제. work item 단일 의도 유지.
 
-**미결정 (사인오프/리뷰 권장)**
-- §3-2 Memgraph 제거(v0) 등 분기 확정.
-- Core API(HTTP)·MCP server를 v0에 넣을지(현재: 후속).
-- §5 통합 지점을 이번 work item에 포함할지, 별도 work item으로 분리할지.
+**미결정 → 확정 (ac-0 동결, 2026-06-10 사용자 사인오프)**
+- **§3-2 Memgraph 제거(v0)** → **확정.** 런타임은 인프로세스 그래프(`graph-ir.json`에서 빌드), 대규모 분석은 선택적 Neo4j export 어댑터. 상시 서버 없음.
+- **Core API(HTTP)·MCP server** → **v0 제외, 후속 work item.** query/path/explain CLI로 v0 충분.
+- **§5 통합 5지점** → **이번 work item에 포함**(사용자 v0 경계 선택 = 코어+§5). 증분 #9에서 비침습 배선(§10-6).
+
+---
+
+## 10. 구현-등급 계약 (ac-0 설계 동결)
+
+> **목적**: 증분 #2~#9·§5를 *구현이 기계적으로 떨어지는* 수준으로 못박는다. 모든 계약은 실코드 패턴(`파일:줄`)에 근거하며, 서브에이전트 조사 초안에서 발견한 정정 2건(§10-1)을 반영했다. 이 절이 동결의 산출물이고, 빌드(autopilot)는 이 계약을 그대로 따른다.
+
+### 10-1. 저장 tier·경로 계약 (정정 반영)
+
+근거: `src/core/ditto-paths.ts:16-26`(`dittoDir`=Tier ② tracked, `localDir`=Tier ③ `.ditto/local/` gitignored), `.gitignore:477`(`​.ditto/local/`만 ignore), ADR-0005 D1(git-tracked SoT=per-entity JSON, 무충돌 머지).
+
+| 엔티티 | 경로 | tier | 형태 | 근거 |
+|---|---|---|---|---|
+| source | `dittoDir(root)/memory/sources/<source_id>.json` | ② tracked | per-entity JSON | §7, ADR-0005 |
+| event | `dittoDir(root)/memory/events/<event_id>.json` | ② tracked | per-entity **불변** JSON (supersedes로 갱신) | ADR-0005 |
+| graph IR | `localDir(root,'memory','ir','graph-ir.json')` | ③ ignored | 단일 현행 스냅샷(재생성) | §4-3 |
+| projection | `localDir(root,'memory','projections',…)` | ③ ignored | manifest.json + graph.json + wiki/ | §4-3 |
+
+> **정정①**: 조사 초안은 전부 `localDir`(gitignored)에 뒀으나 §7은 sources/events를 git-tracked SoT로 요구 → SoT는 `dittoDir`. **정정②**: 조사 초안은 events를 단일 append-only JSONL로 제안했으나 ADR-0005가 git-tracked SoT의 무충돌 머지를 위해 per-entity 파일을 강제 → 이벤트당 불변 JSON, "append-only"는 파일 변형 금지 + `supersedes` 필드로 달성.
+
+> **F4 (OBJ-12) — 멀티 repo rooting × ADR-0011 scope-out.** ADR-0011은 faithful(서브에이전트 위임) autopilot 쓰기가 **세션 repoRoot 안**에서만 허용되고 PreToolUse가 그 밖 쓰기를 차단함을 못박았다. workspace 루트의 `.ditto/memory/`에 *쓰는* 작업(scan-write·propose·approve·build)을 target 코드 repo에 rooting된 서브에이전트가 수행하면 scope-out에 막힌다. 그래서: **멀티 repo workspace에서 workspace-루트 `.ditto/memory/`는 read/scan/projection(읽기·조회·투영) 전용**으로 선언하고, *변형* 메모리 작업은 쓰는 repo에 rooting된 세션에서 돌린다. **단일 repo(공통 케이스, §3-7이 비용 0이라 한 그 케이스)는 workspace 루트=repo 루트라 영향 없음.** 더 넓은 멀티 repo 변형이 필요해지면 ADR-0011 재개 대상(현 v0 비범위).
+
+### 10-2. Store 4종 계약
+
+골격(근거 `src/core/work-item-store.ts`): `constructor(public readonly repoRoot: string)`, 경로는 private 메서드로 `dittoDir`/`localDir` 조합, IO는 `src/core/fs.ts`의 `readJson(path,schema)`·`writeJson(path,schema,value)`·`ensureDir(path)`. 스키마는 증분 #1 산출(`src/schemas/memory-*.ts`) 그대로 사용.
+
+```
+MemorySourceStore(repoRoot)        // .ditto/memory/sources/
+  path(id) = dittoDir(repoRoot)/memory/sources/<id>.json
+  get(id): Promise<MemorySource>           readJson
+  write(s: MemorySource): Promise<MemorySource>  writeJson(memorySource)
+  list(): Promise<MemorySource[]>          readdir → readJson each
+  exists(id): Promise<boolean>
+
+MemoryEventStore(repoRoot)         // .ditto/memory/events/  (불변 per-entity)
+  append(e: MemoryEvent): Promise<MemoryEvent>   // 'wx' 플래그 write — 존재 시 실패(불변·TOCTOU 차단)
+  get(id): Promise<MemoryEvent>
+  list(): Promise<MemoryEvent[]>                 // created_at 정렬
+```
+**승인·갱신 모델 (F2 — OBJ-1/dialectic-1 해소, 스키마 변경 0).** 이벤트 파일은 절대 변형하지 않는다. pending→approved 전이는 *새 불변 이벤트*를 쓰는 것으로 한다: `status=approved`(+`approved_by`+`decided_at`, approval invariant 충족)이고 `supersedes=이전_event_id`인 새 이벤트를 `append`. 원본(pending) 파일은 그대로 남는다. **논리적 식별성 = supersedes 체인**이지 단일 id가 아니다 — `event_id`가 바뀌는 건 정상이고, reducer가 체인의 head로 현재 상태를 해소한다(아래 §10-4b). reject/supersede도 동일 메커니즘. 이로써 "불변 파일"과 "approval invariant"가 충돌 없이 양립한다.
+
+파생물 store(재생성, gitignored):
+```
+MemoryGraphIrStore(repoRoot)       // .ditto/local/memory/ir/  (재생성)
+  read(): Promise<MemoryGraphIr | null>
+  write(ir: MemoryGraphIr): Promise<MemoryGraphIr>   // 전체 교체
+
+MemoryProjectionStore(repoRoot)    // .ditto/local/memory/projections/  (재생성)
+  readManifest(): Promise<MemoryProjectionManifest | null>
+  writeManifest(m), writeServing(graph.json), writeWiki(dir)
+```
+
+> **D5 (OBJ-16)**: 증분 #2는 `memory-source`에 `repo` 식별 필드를 **추가**한다(default=scan repoRoot; 단일 repo면 생략/단일값으로 비용 0, §3-7). 즉 §10-2의 "스키마 그대로 사용"은 source 스키마엔 적용되지 않는다 — #2가 `memory-source.ts`를 고치고 `scripts/export-schemas.ts` 재실행 후 store를 구현한다. **D (OBJ-17)**: memory-* 4종을 `src/schemas/index.ts` barrel에도 추가(현재 `export-schemas.ts`엔 등록돼 `schemas:export`는 정상이나 barrel 누락 — 일관성 차원, #2에서).
+
+### 10-3. CLI 표면 계약
+
+근거: `src/cli/index.ts` subCommands 등록, `src/cli/commands/work.ts`(중첩 서브커맨드 패턴), `src/cli/util.ts`(`parseOutputFormat`·`writeJson`·`writeHuman`·`writeError`·`USAGE_ERROR_EXIT=65`·`RUNTIME_ERROR_EXIT=1`), `src/core/fs.ts:52 resolveRepoRootForCreate`.
+
+- **파일**: `src/cli/commands/memory.ts` (단일 파일). 부모 `memoryCommand = defineCommand({ subCommands: {…} })`.
+- **등록**: `index.ts`에 `import { memoryCommand } from './commands/memory'` + subCommands에 `memory: memoryCommand,`.
+- **공통 핸들러 관례**: `parseOutputFormat(args.output)` → `resolveRepoRootForCreate()` → Store 인스턴스화 → 로직 → `format==='json'?writeJson(obj):writeHuman(text)`; 에러는 `writeError`+`process.exit`.
+
+| 서브커맨드 | 증분 | 핵심 args | 산출 |
+|---|---|---|---|
+| `scan` | 2 | `--source-root`,`--output` | sources/* 갱신, 변경 리스트 |
+| `events append` | 2 | `--type`,`--text`,`--source…`,`--output` | event JSON 1건 |
+| `events list` | 2 | `--limit`,`--output` | 이벤트 목록 |
+| `build` | 3,4 | `--semantic`(LLM 추출 포함 여부),`--output` | graph-ir.json |
+| `query <node>` | 6 | `--depth`,`--output` | 이웃 + 출처·freshness |
+| `path <from> <to>` | 6 | `--output` | 경로 + 출처 |
+| `explain <node>` | 6 | `--output` | 설명 + 출처 |
+| `status` | 5 | `--output` | freshness/dirty_sources |
+| `audit` | 6 | `--strict`,`--output` | orphan/낡음/중복/모순 + 이력 append |
+| `propose` | 7 | `--change`(JSON),`--reason` | pending MemoryEvent |
+| `approve <eventId>` | 7 | `--by` | 승인 이벤트 + 재projection 트리거 |
+
+모든 query/path/explain 응답은 `projection_id`·`generated_at`·`freshness`·`dirty_sources` 동봉(§4-4, ac-6).
+
+### 10-4. 구조 추출 → IR 변환 계약 (증분 #3)
+
+근거: `src/acg/impact/impact-graph.ts:90 produceImpactGraph`, `src/acg/boundary/codeql-edges.ts:38 CodeqlEdgeAnalyzer.edges`, `src/acg/semantic/signature-codeql.ts scanSignatureChanges`. **이 산출물엔 provenance·confidence가 없다 → 변환 단계가 필수 주입.**
+
+**엣지 의미 정정 (D3 — OBJ-6/OBJ-7).** impact 분석기(`src/acg/impact/codeql-analyzer.ts:110-113`)는 call뿐 아니라 import/value 참조도 `direct_caller`로, 타입-위치 참조를 `type_contract`로 분류한다. 따라서 ACG `kind`를 IR `edge_type`로 강하게 단정하지 **않고**, 보수적으로 `RELATED_TO` + `properties.acg_kind=<원본 kind>`로 보존한다(원본 의미 무손실). 단 확실한 것만 좁혀 단정: boundary import→`IMPORTS`. 강한 의미 엣지(`CALLS`/`IMPLEMENTS`)는 그것이 실제 call/impl임이 분석기 출력으로 확정될 때만.
+
+| ACG 산출 | → IR 노드 | → IR 엣지 | provenance / confidence |
+|---|---|---|---|
+| impact `affected_nodes[{kind,path,symbol}]` (9 kind 전부) | `Symbol`(id=canonical, §10-4a) | `RELATED_TO` + `properties.acg_kind`·`reason` 보존 | `extracted_by:'impact'`, EXTRACTED=**1.0** |
+| impact `unresolved[{kind,path,reason}]` | `Artifact` | `RELATED_TO` + `properties.acg_unresolved_kind`·`reason` (cross_repo/journey_unknown 등 보존, OBJ-8) | `extracted_by:'impact'`, **AMBIGUOUS=0.1**, `requires_review:true` |
+| boundary `DependencyEdge{from,to}` | `Artifact`(id=`artifact:<path>`) ×2 | `IMPORTS` | `extracted_by:'codeql'`, EXTRACTED=1.0 |
+| semantic `changes[{file,symbol,before,after}]` | `Symbol` properties에 before/after | (선택) `SUPERSEDES` | `extracted_by:'codeql'`, EXTRACTED=1.0, `source_revision`=관찰 envelope의 `base_used`(D4 — OBJ-9; `acg-semantic-scan-observation.ts:30`의 envelope 필드, per-change 레코드엔 없음) |
+
+> **D2 (OBJ-5) — no-silent-drop**: `acgAffectedNode.kind`는 9종(`acg-impact-graph.ts:14-24`: direct_caller/transitive_caller/type_contract/generated_client/test/external_surface/ui_surface/user_journey + unresolved kinds). 변환기는 **전 kind를 매핑하거나, 미지원 kind를 만나면 loud fail**(조용한 누락 금지 — 누락=provenance 구멍, 설계가 금지). #3에서 전체 매핑표 확정.
+
+**§10-4a canonical node id (OBJ-11 결정성).** 같은 심볼이 impact·boundary·semantic에서 같은 노드로 병합되도록 id 규칙을 고정: `symbol:<repo-relative-path>#<symbol>`, `artifact:<repo-relative-path>`. 경로는 정규화(확장자 정책은 boundary가 이미 벗김 — 일관 적용). 결정성(ac-3)은 **run 메타(`generated_at`·`extraction_run_id`) 제외한 canonical content**(정렬된 nodes/edges) 기준으로 정의 — 같은 source→같은 canonical content. 변환 함수 `absorbAcgIntoIr({impact?, boundaryEdges?, semantic?}, xrunId): {nodes, edges}`는 순수·결정적, 출력은 id 기준 안정 정렬. confidence 밴드는 스키마 superRefine이 강제.
+
+### 10-4b. event→IR reducer (F3 — OBJ-1/OBJ-2/OBJ-3, 증분 #5/#7 게이트)
+
+SoT 이벤트는 projection 전에 **reducer**를 거쳐 IR에 합류한다(이게 없으면 승인 상태가 query에 안 보임 — OBJ-2):
+1. **supersession 해소**: events를 `supersedes` 체인으로 묶어 각 논리 이벤트의 **head**만 남긴다(§10-2 승인 모델의 읽기 측).
+2. **승인 필터**: head 중 `status=approved`인 것만 IR 노드/엣지로 방출(pending/rejected/superseded 제외). `event_type=decision`은 `Decision` 노드 + `rationale_for` 엣지.
+3. **freshness 경계 정정 (OBJ-3)**: projection manifest의 freshness 기준은 단일 `memory_event_until`(임의 id·체인에서 무의미)이 **아니라** *reduced approved-set의 해시*(head event_id 집합의 정렬 해시). `memory_event_until`은 coarse 마커로만 보조. dirty 판정 = 현재 reduced-set 해시 ≠ manifest 기록 해시.
+
+reducer 시그니처: `reduceEvents(events: MemoryEvent[]): {approvedHeads: MemoryEvent[], setHash: string}` — 순수·결정적.
+
+### 10-5. 의미 추출 계약 (증분 #4)
+
+`memory-extractor` 에이전트: 입력=청크(파일 20~25개 경로 + 내용), 출력=IR 조각 JSON(`{nodes,edges}`, 각 confidence_kind∈{INFERRED,AMBIGUOUS}, 출처 source_id 필수). main이 fan-out→병합. 재현성 통제 §4-2(1)(2)(3). `build --semantic` 일 때만 호출(기본은 구조만, §4-6 비용 등급). **provider는 호스트가 쥠** — ditto는 위임만(ADR-0001).
+
+> **D1 (OBJ-10) — 병합은 결정적 reducer로, #4에서 구현하되 의무는 지금 동결.** concept 안정 ID = `concept:<normalized-label>`만으론 부족하다. #4는 다음을 만족하는 **결정적 merge reducer**를 ship해야 한다: (a) label 정규화 규칙 명문화(소문자화·공백/구두점 정규화·trim), (b) 충돌 시 정책(같은 concept id의 중복 노드는 1개로 fold, 엣지는 (from,to,edge_type) 기준 dedup, confidence 충돌은 max 또는 명시 규칙), (c) 엣지 id 파생 규칙, (d) 출력 안정 정렬, (e) **same-input→same-IR를 단언하는 golden fixture 테스트**(ac-3·§9(A) 결정성이 load-bearing). 알고리즘은 노드에서 짜되, "결정적이고 fixture로 고정"이라는 요구는 동결 계약이다. LLM 비결정성(§9 A)은 이 reducer로 흡수되지 않는 잔여는 §4-5 propose/approve로 격리.
+
+### 10-6. §5 통합 5지점 삽입 계약 (증분 #9, 전부 optional·graceful degrade)
+
+| # | 위치 | 현재 | 추가(optional) | degrade |
+|---|---|---|---|---|
+| 1 | `autopilot-loop.ts:213,277` 조회 → `autopilot-dispatch.ts:70` `buildDelegationPacket` | `buildDelegationPacket`는 **순수·동기** | **조회는 loop에서**(fail-open, async) 하고 결과를 optional `memoryContext`로 빌더에 *주입*; `DelegationPacket.context.memory?` 필드는 빌더가 받기만 함 (F5 — OBJ-14) | 조회 실패/부재 시 `memoryContext=undefined` → 기존 packet |
+| 2 | `user-prompt-submit.ts`+`charter.ts` CharterContext | work item·handoff 투영 | task-relevant top-N를 **여기**(프롬프트 입력 있는 훅)서 주입 — `memoryGraphInsight?` 섹션 (F5 — OBJ-13: §5-2의 관련도 주입은 정적 knowledge-bridge가 아니라 이 경로) | 미구성 시 스킵 |
+| 3 | `knowledge-bridge.ts:111-131` `renderKnowledgeSummary` | ADR/용어 헤드라인 **정적** 투영(sha-keyed, prompt 입력 없음) | **정적 유지** — task-relevance 주입 안 함(드리프트 sha·결정성 깨짐 방지, OBJ-13). 그래프 연계는 #2(위)로 이동 | 변경 없음 |
+| 4 | `knowledge-record.ts` `knowledgeDecision` | id/title/status/rationale/… | `decision` MemoryEvent 연계 + audit 모순→curator 승격 | 기본 [] |
+| 5 | `completion-contract.ts`/`evidence-record.ts` | evidence_records (스키마 슬롯 없음) | `evidence_path` 질의 결과를 담을 **optional 스키마 필드 신설**(OBJ-15) + export + 테스트 — 기존 evidence_ref 재사용 아님 | 기본 [] |
+
+> 통합은 **기존 필드에 optional 추가만** — 침습 변경(시그니처 파괴) 금지. **단 비침습≠무수정**: #1은 loop 호출부 수정(조회 주입), #5는 스키마 필드 신설+export가 필요하다(OBJ-14/OBJ-15). "optional 추가"의 blast radius를 과소평가하지 말 것. 각 지점 "그래프 빈/부재/stale/손상 시 기존 경로 보존"을 fail-open 테스트 매트릭스로 증명(ac-9).
+
+### 10-7. 증분 → acceptance → 검증 매핑
+
+| 증분 | acceptance | 검증 |
+|---|---|---|
+| 2 | ac-1,ac-2 | scan 변경감지·repo 귀속 test+log, events 불변·invariant test |
+| 3 | ac-3 | 같은 source→같은 IR(결정성) test, provenance 주입 검증 |
+| 4 | ac-4 | extractor 출력 confidence 밴드·출처 동반 test+log |
+| 5 | ac-5 | projection 생성·manifest freshness test |
+| 6 | ac-6 | query/path/explain 출처 동봉 test+log, audit 시계열 누적 |
+| 7 | ac-7 | propose=pending·직접쓰기 불가·approve→재projection test |
+| 8 | ac-8 | skill/agent 존재·build:plugin 복사·pull 습관 1줄 test+diff |
+| 9 | ac-9 | 5지점 optional·degrade test |
+| (전 구간) | ac-10,ac-11 | ADR doc, bun test/tsc/biome/schemas:export 클린 log |
+
+> **dialectic-review 게이트(ac-0)**: 라운드1 완료 → §10-8. must-fix 전부 반영됨.
+
+### 10-8. dialectic-review 라운드1 — verdict·반영 ledger
+
+`reviews/dialectic-1.json`(+.md) 참조. Producer(Claude)/Opponent(Codex, codex-plugin-cc 위임)/Synthesizer(Claude) 3역 분리. **verdict = revise** — 기반은 견고(불변식이 Zod superRefine로 강제, tier 정합, §5 graceful-degrade)하나, 무인 한번에 빌드엔 13개 admissible(critical 1·high 12) objection이 위협. 재설계 아닌 경계화된 보강으로 닫음. 전 objection이 실코드로 확인됨(기각 0). main agent가 2건 정밀화(아래 ※).
+
+| edit | objection | 처리 | 반영 위치 |
+|---|---|---|---|
+| F1 | OBJ-4 | ※**정정**: 0.5는 INFERRED 밴드 내 정당값, 스키마 value-거부 안 함; ac-4 문구 "0.5 금지"→"0.5 기본값 금지(프롬프트 규율)" | intent ac-4, §10-5 |
+| F2 | OBJ-1(crit) | 승인=`supersedes`+`status=approved` 새 불변 이벤트, 논리식별=체인 head | §10-2 |
+| F3 | OBJ-2,3 | event→IR reducer(supersession 해소·승인필터) + freshness=reduced-set 해시 | §10-4b |
+| F4 | OBJ-12 | workspace-루트 메모리=read/scan/projection 전용, 변형은 target-rooted | §10-1 |
+| F5 | OBJ-13,14 | #1 조회는 loop서 async fail-open→순수빌더 주입; task-relevance는 훅(§5-2)이지 정적 knowledge-bridge 아님 | §10-6 |
+| D1 | OBJ-10 | 결정적 merge reducer + golden fixture 의무 동결(알고리즘은 #4) | §10-5 |
+| D2 | OBJ-5 | 미지원 kind = loud fail(조용한 누락 금지), 전체 매핑표는 #3 | §10-4 |
+| D3 | OBJ-6,7 | edge_type 과단정 금지 → `RELATED_TO`+`acg_kind` 보존 | §10-4 |
+| D4 | OBJ-9 | semantic `source_revision`=관찰 envelope `base_used` | §10-4 |
+| D5 | OBJ-16 | #2가 `memory-source.repo` 추가(스키마 변경 명시), default=scan repoRoot | §10-2 |
+| — | OBJ-8,11,15,17 | OBJ-8(unresolved kind/reason 보존)·OBJ-11(canonical content 결정성)→§10-4/10-4b; OBJ-15(evidence_path 스키마 슬롯 신설)→§10-6 #5; ※OBJ-17(barrel)→**강등**(export-schemas엔 등록됨, schemas:export 정상; barrel은 #2 일관성) | §10-4a,10-6,10-2 |
+
+**열린 값-결정(사용자 확인 권장 1건)**: F2 승인모델은 "supersedes 체인" 방식으로 확정([DECIDED], 스키마 변경 0·감사이력 보존 우수). 별도 `approves_event_id` 필드 신설안은 기각(불필요한 스키마 확장). 승인 감사 의미가 더 엄격해야 하면 재고.
+
+### 10-9. dialectic-review 라운드2 + 옵션 A 재범위 (가치·구조)
+
+라운드1이 계약 정합성을 봤다면, 라운드2는 **가치(증분 가치)와 구조(의도한 시점 발화)**를 봤다. 전체 종합·근거는 [memory-graph-value-structure-assessment.md](./memory-graph-value-structure-assessment.md)(git-tracked). verdict=**revise**. 핵심: 증명된 가치는 "색인-shaped"이고 그래프 기계장치는 미검증 의미층(④)용이라 — **그래프는 틀리지 않았으나 이르다(과설계).**
+
+**2026-06-10 사용자 결정 = 옵션 A (measure-before-expand).** 근거: "가치가 실재하면 도전하되, 확실한 바닥(capability + duplicateSearch 초과) 위에서 불확실한 상방(의미층)을 bounded·measurable·reversible하게." 엔진 척추는 짓고, push 소비는 1개로 좁혀 측정, 확장은 hit율 게이트.
+
+**라운드2 required_edits → A 반영:**
+| edit | objection | 처리 | 위치 |
+|---|---|---|---|
+| 가치 split 명시 | OBJ-R2-002 | EXTRACTED=day-1 net-positive(결정적), INFERRED=의미 coverage·fresh일 때만 조건부 | 본 절 + assessment §2 |
+| push 의미-coverage/freshness 선결 | OBJ-R2-002/008 | value push는 의미 content 없거나 stale이면 주입 억제(빈/stale 안 실음) | intent ac-9, §10-6 |
+| **bootstrap 증분 신설** | OBJ-R2-003/004 | 기존 .ditto/knowledge(ADR/glossary)+closed/archived handoff를 sources/events로 ingest → cold-start-0 제거 | intent ac-14, 아래 빌드순서 |
+| 가치 AC | OBJ-R2-005/006 | query 사용 계측(opportunities/attempts/hits/actionable) + push 확대 hit율 게이트; ac-8을 실제 query 발화 검사로 | intent ac-12, ac-8 |
+| stale-result 정책 | OBJ-R2-008 | stale 의미 source push 억제, 구조/의미 freshness 분리 | intent ac-9, §10-3 |
+| **되돌림(reversibility)** | 사용자 명시 요구 | memory 전체를 단일 플래그로 비활성(비활성 시 §5 통합 graceful-degrade로 ditto 불변); 제거=command/skill/agent+optional-field read 제거로 충분 | intent ac-13 |
+| (non-gating) push 4개로 재서술·evidence_path EvidenceRecord 종결 시만 gating | OBJ-R2-010/011 | §5-2 정적·§5-5 보조 | §10-6 |
+
+**옵션 A 빌드 순서 (§8/§10-7을 이걸로 대체):**
+#2(scan/events/repo) → #3(구조 IR) → **bootstrap ingest** → #4(semantic 엔진 — push 소비는 게이트) → #5(projection/status) → #6(query/path/explain/audit) → #7(propose/approve) → **§5-1 warm-start push 1개만 배선+계측** → #8(skill/agent/build:plugin/pull 습관) → ADR + 회귀게이트.
+**게이트(이번 미배선)**: §5-2/5-3/5-4/5-5 push 확대, audit→curator 자동 트리거. ac-12 hit율 데이터 후 후속 work item.
+
+**되돌림 설계 불변식**: ① memory 비활성 플래그 1개로 전 기능 off, ② §5 통합은 전부 optional·fail-open이라 off 시 기존 경로, ③ SoT(.ditto/memory/)·파생(.ditto/local/memory/)은 삭제해도 ditto 코어 불변, ④ 제거 = command/skill/agent 등록 + optional-field read만 떼면 됨. 빌드는 이 4불변식을 깨지 않는다.
