@@ -28,7 +28,7 @@
 
 | # | 증분 | 검증 |
 |---|---|---|
-| **2 (다음)** | Store 4종(WorkItemStore 패턴) + `ditto memory scan` + `events append/list` | scan이 변경 감지, 이벤트 append-only |
+| **2 (다음)** | Store 4종(WorkItemStore 패턴) + `ditto memory scan` + `events append/list` **+ `memory-source`에 `repo` 식별 필드(§3-7 cross-repo)** | scan이 변경 감지·owning repo 해석, source `revision`=소속 repo HEAD, 이벤트 append-only |
 | 3 | 구조 추출 — **기존 `impact`/`codeql`/`semantic`(CodeQL) 출력을 IR로 흡수** + provenance 주입 → IR builder/validator | 같은 source→같은 IR |
 | 4 | `memory build` 의미 추출(`memory-extractor` subagent fan-out)→IR 병합 | concept/claim이 출처와 함께 |
 | 5 | projection(서빙 그래프+위키)+manifest+`status` | freshness/dirty 확인 |
@@ -38,6 +38,14 @@
 | 9 | 통합 끼우기(설계서 §5) + ADR + dialectic-review | 위임패킷/투영/훅 자문 |
 
 **구현 시 ditto 패턴**: citty CLI(`src/cli/commands/<name>.ts` → `src/cli/index.ts` subCommands 등록), Zod=SoT(스키마 추가 시 `scripts/export-schemas.ts`에도 등록 안 하면 등록 테스트 실패), Store는 `src/core/*-store.ts` 패턴(`readJson/writeJson` + `localDir/dittoDir`), 저장은 `.ditto/memory/`(sources/events=SoT git-tracked, ir/projections=gitignored).
+
+## 설계 보강 (2026-06-09 세션 — 설계서에 반영 완료, 코드 대기)
+
+지난 커밋 이후 설계서를 사용자와의 검토로 보강했다. 모두 문서에 반영됨:
+- **§4-2 재현성 규율** — LLM 의미 추출 비결정성("(A)", §9)을 *제거 아닌 감수*로 두고 3가지로 통제: 구조화 출력+낮은 temp+고정 청크 / concept 안정 ID+concept 수준 diff / INFERRED advisory+approve. (A)는 *쓰기* 시점 문제, 읽기는 결정적.
+- **§5 pull/push 구분** — query/path/explain은 CLI라 **모든 에이전트+main agent** 공통(pull). §5-1~5-5는 콜드스타트 비용 큰 곳만 자동주입(push). #8에서 각 owner 프롬프트에 **조건부** pull 습관 1줄(항상조회 금지).
+- **§3-7 cross-repo 결정** — 별도 지식 repo(submodule) 기각, `.ditto/memory/`를 **rooting 지점에**(단일=repo 루트, 멀티=workspace 루트). boxwood-workspace처럼 workspace git이 하위 repo를 clone·gitignore하는 구조면 별도 repo 불필요. 대가=owning-repo provenance(→ #2 `repo` 필드).
+- **§4-6 hannes 차용 2건** — (성능) 자동화 경계를 비용 등급으로(scan 자동/구조 증분/LLM 명시만) → commit마다 LLM 비용 0. (관리) audit를 append-only 이력으로 → drift 시계열. URI 스킴은 보류.
 
 ## 미결정 (이어받아 사용자와 확인)
 
