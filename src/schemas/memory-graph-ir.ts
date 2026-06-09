@@ -132,6 +132,7 @@ export const memoryEdge = z
     edge_type: memoryEdgeType,
     confidence_kind: memoryConfidenceKind,
     confidence_score: z.number().min(0).max(1),
+    properties: z.record(z.unknown()).default({}),
     provenance: memoryProvenance,
     weight: z.number().positive().default(1),
     valid_from: isoDateTime.optional(),

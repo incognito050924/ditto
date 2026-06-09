@@ -91,26 +91,62 @@ describe('absorbAcgIntoIr', () => {
     expect(edgeIds).toEqual([...edgeIds].sort());
   });
 
-  test('impact affected -> Symbol + RELATED_TO with EXTRACTED=1.0 provenance', () => {
+  test('impact affected -> change_target Symbol + RELATED_TO edge (acg_kind on edge)', () => {
     const { nodes, edges } = absorbAcgIntoIr({ impact: sampleImpact() }, XRUN);
+    // change_target Symbol node is created from impact.change_target
+    const target = nodes.find((n) => n.id === 'symbol:src/core/foo#bar');
+    expect(target?.node_type).toBe('Symbol');
+    // affected Symbol node carries no acg_kind (kind lives on the edge now)
     const sym = nodes.find((n) => n.id === 'symbol:src/core/baz#callBar');
     expect(sym?.node_type).toBe('Symbol');
-    expect(sym?.properties.acg_kind).toBe('direct_caller');
-    expect(sym?.properties.reason).toBe('calls bar');
+    expect(sym?.properties.acg_kind).toBeUndefined();
     expect(sym?.provenance?.extraction_run_id).toBe(XRUN);
     expect(sym?.provenance?.extracted_by).toBe('impact');
 
-    const edge = edges.find((e) => e.from === 'symbol:src/core/baz#callBar');
+    const edge = edges.find((e) => e.to === 'symbol:src/core/baz#callBar');
     expect(edge?.edge_type).toBe('RELATED_TO');
     expect(edge?.confidence_kind).toBe('EXTRACTED');
     expect(edge?.confidence_score).toBe(1);
+    // edge direction: change_target -> affected (not a self-loop)
+    expect(edge?.from).toBe('symbol:src/core/foo#bar');
+    expect(edge?.from).not.toBe(edge?.to);
+    // acg_kind/reason preserved on the edge properties
+    expect(edge?.properties.acg_kind).toBe('direct_caller');
+    expect(edge?.properties.reason).toBe('calls bar');
+  });
+
+  test('multi-kind affected symbol -> one lossless edge per kind (no silent drop)', () => {
+    const impact = acgImpactGraph.parse({
+      schema_version: '0.1.0',
+      kind: 'acg.impact-graph.v1',
+      work_item_id: 'wi_test0001',
+      produced_by: 'agent',
+      produced_at: '2026-06-09T10:00:00+00:00',
+      change_target: 'src/core/foo.ts#bar',
+      change_type: 'signature',
+      affected_nodes: [
+        { kind: 'direct_caller', path: 'src/core/baz.ts', symbol: 'callBar', reason: 'calls bar' },
+        { kind: 'type_contract', path: 'src/core/baz.ts', symbol: 'callBar', reason: 'uses type' },
+      ],
+    });
+    const { nodes, edges } = absorbAcgIntoIr({ impact }, XRUN);
+    // same symbol => one node
+    expect(nodes.filter((n) => n.id === 'symbol:src/core/baz#callBar')).toHaveLength(1);
+    // but two distinct edges, one per kind (both preserved)
+    const toBaz = edges.filter((e) => e.to === 'symbol:src/core/baz#callBar');
+    expect(toBaz).toHaveLength(2);
+    const kinds = toBaz.map((e) => e.properties.acg_kind).sort();
+    expect(kinds).toEqual(['direct_caller', 'type_contract']);
+    const reasons = toBaz.map((e) => e.properties.reason).sort();
+    expect(reasons).toEqual(['calls bar', 'uses type']);
   });
 
   test('journey affected node uses journey_id (no path)', () => {
-    const { nodes } = absorbAcgIntoIr({ impact: sampleImpact() }, XRUN);
+    const { nodes, edges } = absorbAcgIntoIr({ impact: sampleImpact() }, XRUN);
     const journey = nodes.find((n) => n.id === 'symbol:journey:jrn_checkout#jrn_checkout');
     expect(journey?.node_type).toBe('Symbol');
-    expect(journey?.properties.acg_kind).toBe('user_journey');
+    const edge = edges.find((e) => e.to === 'symbol:journey:jrn_checkout#jrn_checkout');
+    expect(edge?.properties.acg_kind).toBe('user_journey');
   });
 
   test('unresolved -> Artifact + AMBIGUOUS=0.1 + requires_review with kind/reason preserved', () => {
@@ -146,6 +182,18 @@ describe('absorbAcgIntoIr', () => {
     expect(sym?.properties.after).toBe('(a,b)=>x');
     expect(sym?.source_revision).toBe('abc123');
     expect(sym?.provenance?.extracted_by).toBe('codeql');
+  });
+
+  test('impact+semantic merge -> provenance.source_revision set on the merged node', () => {
+    // change_target is src/core/foo.ts#bar; semantic also changes that symbol,
+    // so the impact-sourced node gets merged with semantic source_revision.
+    const { nodes } = absorbAcgIntoIr({ impact: sampleImpact(), semantic: sampleSemantic() }, XRUN);
+    const merged = nodes.find((n) => n.id === 'symbol:src/core/foo#bar');
+    expect(merged?.source_revision).toBe('abc123');
+    expect(merged?.provenance?.source_revision).toBe('abc123');
+    // origin-sourced extracted_by is preserved (impact created the node)
+    expect(merged?.provenance?.extracted_by).toBe('impact');
+    expect(merged?.properties.before).toBe('(a)=>x');
   });
 
   test('unsupported affected kind is a loud fail (no silent drop)', () => {

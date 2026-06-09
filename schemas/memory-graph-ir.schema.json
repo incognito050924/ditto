@@ -197,6 +197,11 @@
                 "minimum": 0,
                 "maximum": 1
               },
+              "properties": {
+                "type": "object",
+                "additionalProperties": {},
+                "default": {}
+              },
               "provenance": {
                 "type": "object",
                 "properties": {

@@ -12,8 +12,10 @@
  *     (EXTRACTED=1.0, AMBIGUOUS in [0.1,0.3]).
  *
  * Edge-type discipline (D3 — OBJ-6/7): impact kinds are NOT over-asserted to
- * CALLS/IMPLEMENTS; they are preserved as RELATED_TO + properties.acg_kind.
- * Only boundary imports become IMPORTS.
+ * CALLS/IMPLEMENTS; they are preserved as RELATED_TO + properties.acg_kind on
+ * the EDGE (per-relation, lossless: each affected kind = a distinct edge from
+ * the change_target Symbol → the affected node). Only boundary imports become
+ * IMPORTS.
  *
  * Determinism (ac-3): canonical content (sorted nodes/edges) depends only on
  * the source ACG inputs, never on run metadata. Node/edge ids are canonical
@@ -76,6 +78,18 @@ function symbolNodeId(path: string, symbol: string): string {
   return `symbol:${path}#${symbol}`;
 }
 
+/**
+ * Parse an impact `change_target` (acg-impact-graph.ts:71) of the form
+ * `<path>#<symbol>` or bare `<path>` into a canonical Symbol id + display name.
+ */
+function changeTargetNode(changeTarget: string): { id: string; name: string } {
+  const hashIdx = changeTarget.indexOf('#');
+  const rawPath = hashIdx === -1 ? changeTarget : changeTarget.slice(0, hashIdx);
+  const symbol = hashIdx === -1 ? changeTarget : changeTarget.slice(hashIdx + 1);
+  const path = normalizePath(rawPath);
+  return { id: symbolNodeId(path, symbol), name: symbol };
+}
+
 function artifactNodeId(path: string): string {
   return `artifact:${path}`;
 }
@@ -100,48 +114,64 @@ export function absorbAcgIntoIr(input: AbsorbAcgInput, xrunId: string): AbsorbAc
   const nodes = new Map<string, MemoryNode>();
   const edges = new Map<string, MemoryEdge>();
 
-  // --- impact.affected_nodes → Symbol + RELATED_TO (acg_kind/reason preserved) ---
-  for (const affected of input.impact?.affected_nodes ?? []) {
-    if (!SUPPORTED_AFFECTED_KINDS.has(affected.kind)) {
-      throw new UnsupportedAcgKindError('impact_affected', affected.kind);
-    }
-    const isJourney = JOURNEY_KINDS.has(affected.kind);
-    // journey nodes have journey_id (no path); others have path.
-    const path = affected.path ? normalizePath(affected.path) : undefined;
-    const symbol = affected.symbol ?? affected.journey_id ?? affected.kind;
-    const nodeId = isJourney
-      ? symbolNodeId(`journey:${affected.journey_id}`, symbol)
-      : symbolNodeId(path ?? '', symbol);
-
-    // The frozen #1 memory-edge schema has NO `properties` slot (only nodes do),
-    // so acg_kind/reason are preserved on the Symbol node to avoid silent loss
-    // on validation (zod strips unknown object keys). Edges stay schema-clean.
-    if (!nodes.has(nodeId)) {
-      const nodeProps: Record<string, unknown> = { acg_kind: affected.kind };
-      if (affected.reason !== undefined) nodeProps.reason = affected.reason;
-      nodes.set(nodeId, {
-        id: nodeId,
+  // --- impact.affected_nodes → Symbol + per-kind RELATED_TO from change_target ---
+  // The change_target is the relation source; each affected node is a target.
+  // acg_kind/reason live on the EDGE (per-relation), so a symbol affected via
+  // multiple kinds yields one distinct edge per kind — lossless (D2/D3).
+  if (input.impact && input.impact.affected_nodes.length > 0) {
+    const target = changeTargetNode(input.impact.change_target);
+    if (!nodes.has(target.id)) {
+      nodes.set(target.id, {
+        id: target.id,
         node_type: 'Symbol',
-        name: symbol,
-        properties: nodeProps,
+        name: target.name,
+        properties: {},
         provenance: provenance('impact', xrunId),
       });
     }
 
-    const edgeId = `related_to:impact:${nodeId}`;
-    if (!edges.has(edgeId)) {
-      edges.set(edgeId, {
-        id: edgeId,
-        from: nodeId,
-        to: nodeId,
-        edge_type: 'RELATED_TO',
-        confidence_kind: 'EXTRACTED',
-        confidence_score: 1,
-        provenance: provenance('impact', xrunId),
-        weight: 1,
-        requires_review: false,
-        used_as_evidence: false,
-      } as MemoryEdge);
+    for (const affected of input.impact.affected_nodes) {
+      if (!SUPPORTED_AFFECTED_KINDS.has(affected.kind)) {
+        throw new UnsupportedAcgKindError('impact_affected', affected.kind);
+      }
+      const isJourney = JOURNEY_KINDS.has(affected.kind);
+      // journey nodes have journey_id (no path); others have path.
+      const path = affected.path ? normalizePath(affected.path) : undefined;
+      const symbol = affected.symbol ?? affected.journey_id ?? affected.kind;
+      const nodeId = isJourney
+        ? symbolNodeId(`journey:${affected.journey_id}`, symbol)
+        : symbolNodeId(path ?? '', symbol);
+
+      if (!nodes.has(nodeId)) {
+        nodes.set(nodeId, {
+          id: nodeId,
+          node_type: 'Symbol',
+          name: symbol,
+          properties: {},
+          provenance: provenance('impact', xrunId),
+        });
+      }
+
+      // One edge per (kind, target→affected): canonical id includes the kind so
+      // multi-kind affected symbols keep a distinct edge each (no silent drop).
+      const edgeId = `related_to:impact:${affected.kind}:${target.id}->${nodeId}`;
+      if (!edges.has(edgeId)) {
+        const edgeProps: Record<string, unknown> = { acg_kind: affected.kind };
+        if (affected.reason !== undefined) edgeProps.reason = affected.reason;
+        edges.set(edgeId, {
+          id: edgeId,
+          from: target.id,
+          to: nodeId,
+          edge_type: 'RELATED_TO',
+          confidence_kind: 'EXTRACTED',
+          confidence_score: 1,
+          properties: edgeProps,
+          provenance: provenance('impact', xrunId),
+          weight: 1,
+          requires_review: false,
+          used_as_evidence: false,
+        } as MemoryEdge);
+      }
     }
   }
 
@@ -231,9 +261,15 @@ export function absorbAcgIntoIr(input: AbsorbAcgInput, xrunId: string): AbsorbAc
       };
       const existing = nodes.get(nodeId);
       if (existing) {
-        // merge before/after onto an already-extracted Symbol (e.g. from impact)
+        // merge before/after onto an already-extracted Symbol (e.g. from impact).
+        // The semantic observation carries the base revision, so set it on both
+        // the node and its provenance (D4/OBJ-9: source_revision 필수 주입).
+        // extracted_by reflects origin: an impact-sourced node stays 'impact'.
         existing.properties = { ...existing.properties, ...semanticProps };
         existing.source_revision = baseUsed;
+        existing.provenance = existing.provenance
+          ? { ...existing.provenance, source_revision: baseUsed }
+          : { ...provenance('codeql', xrunId), source_revision: baseUsed };
       } else {
         nodes.set(nodeId, {
           id: nodeId,
