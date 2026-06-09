@@ -90,3 +90,32 @@ describe('ditto memory events', () => {
     expect(r.exitCode).toBe(65);
   });
 });
+
+describe('ditto memory bootstrap', () => {
+  test('ingests curated ADR then is idempotent on re-run', async () => {
+    const adrDir = join(dir, '.ditto', 'knowledge', 'adr');
+    await mkdir(adrDir, { recursive: true });
+    await writeFile(
+      join(adrDir, 'ADR-0001-x.md'),
+      '# ADR-0001: A decision\n\n## 결정\nuse zod.\n\n## 근거\nzod reduces drift.\n',
+    );
+
+    const first = ditto(['memory', 'bootstrap', '--output', 'json']);
+    expect(first.exitCode).toBe(0);
+    const out1 = JSON.parse(first.stdout);
+    expect(out1.sources_added.length).toBe(1);
+    expect(out1.events_appended.length).toBe(1);
+
+    const second = ditto(['memory', 'bootstrap', '--output', 'json']);
+    expect(second.exitCode).toBe(0);
+    const out2 = JSON.parse(second.stdout);
+    expect(out2.sources_added.length).toBe(0);
+    expect(out2.events_appended.length).toBe(0);
+    expect(out2.events_skipped.length).toBe(1);
+
+    const listed = ditto(['memory', 'events', 'list', '--output', 'json']);
+    const listOut = JSON.parse(listed.stdout);
+    expect(listOut.events.length).toBe(1);
+    expect(listOut.events[0].status).toBe('approved');
+  });
+});

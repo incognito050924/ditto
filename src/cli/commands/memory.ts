@@ -1,6 +1,7 @@
 import { defineCommand } from 'citty';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { generateId } from '~/core/id';
+import { bootstrapIngest } from '~/core/memory-bootstrap';
 import { scanSources } from '~/core/memory-scan';
 import { MemoryEventExistsError, MemoryEventStore } from '~/core/memory-store';
 import { type MemoryEvent, memoryEvent, memoryEventType } from '~/schemas/memory-event';
@@ -238,6 +239,46 @@ const eventsCommand = defineCommand({
   subCommands: { append: eventsAppend, list: eventsList },
 });
 
+const memoryBootstrap = defineCommand({
+  meta: {
+    name: 'bootstrap',
+    description:
+      'Ingest curated knowledge (ADR, glossary) and archived handoffs into the memory graph so day-1 is not a cold start (idempotent)',
+  },
+  args: {
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const r = await bootstrapIngest(repoRoot);
+      if (format === 'json') {
+        writeJson({
+          sources_added: r.sourcesAdded,
+          sources_skipped: r.sourcesSkipped,
+          events_appended: r.eventsAppended,
+          events_skipped: r.eventsSkipped,
+        });
+      } else {
+        writeHuman(`Bootstrap ingest into ${repoRoot}`);
+        writeHuman(`  sources:  +${r.sourcesAdded.length} (skipped ${r.sourcesSkipped.length})`);
+        writeHuman(`  events:   +${r.eventsAppended.length} (skipped ${r.eventsSkipped.length})`);
+      }
+    } catch (err) {
+      writeError(`memory bootstrap failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const memoryCommand = defineCommand({
   meta: {
     name: 'memory',
@@ -246,5 +287,6 @@ export const memoryCommand = defineCommand({
   subCommands: {
     scan: memoryScan,
     events: eventsCommand,
+    bootstrap: memoryBootstrap,
   },
 });
