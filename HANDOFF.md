@@ -1,44 +1,63 @@
-# HANDOFF — ditto 배포 + 환경 초기화 (2026-06-08)
+# HANDOFF — memory-graph 플러그인 (설계 + 스키마 기반 / 2026-06-09)
 
 다른 PC에서 이어받기용. **이어받은 뒤 삭제해도 됨**(세션 핸드오프, 영구 문서 아님).
 
-## 이번 세션에 한 일 (둘 다 완료·배포됨)
+> **주의**: 이 PC의 `.ditto/local/`(work item 상태)과 `~/.claude` 자동 메모리는 **다른 PC로 가지 않는다.** git으로 가는 건 코드·문서·이 핸드오프뿐. 그래서 아래는 자기완결적으로 적었다.
 
-### 1) github-소스 배포 재설계 (work item wi_260608j2p)
-`/doctor`의 `⚠ 1 setup issue: plugins` 추적 → 원인은 directory-소스 마켓플레이스의 startup `file://` 갱신 버그. 배포 모델을 github 소스로 전환.
-- 54MB `bun --compile` 바이너리 → ~984KB **bun 번들**(`scripts/build-bin.mjs` 공유 헬퍼; `build`·`build:bin` 둘 다 번들, `build:bin:win` 제거). **런타임=bun 전용**(CLI가 `Bun.*` 전역 다수 사용 → `--target=node` 불가).
-- **Layout A**: repo 루트 = 플러그인 루트, marketplace `source:"./"`, `bin/ditto`(번들) 커밋(`.gitignore`에서 un-ignore).
-- `install-plugin.mjs`의 `file://` 마켓플레이스 등록 제거. `distribution-doctor`는 `plugin_enabled`→`plugin_surface_present`로 회귀 수정.
-- skills/agents 실행 호출부 13개: bare `ditto` → `"${CLAUDE_PLUGIN_ROOT}/bin/ditto"` (Claude가 plugin bin을 PATH **끝**에 append → macOS `/usr/bin/ditto`(OS 유틸) shadow 회피. `${CLAUDE_PLUGIN_ROOT}`는 skill/agent 본문 **inline 치환**, 셸 env 아님).
+## 무슨 작업인가
 
-### 2) `ditto setup`/`teardown` 환경 초기화 (work item wi_260608pcw, final_verdict=pass)
-ditto 로드된 임의 프로젝트에서 헌장·.ditto를 재현하되 사용자 편집 보존.
-- `src/core/managed-resource.ts`: `<!-- ditto:managed -->` 블록 strip/재발행 + `*.ditto_bak` 백업(최초 원본) + corruption guard(무손실).
-- `src/core/resource-routing.ts`: `GLOBAL_` 접두→`~/.claude` / 아니면 프로젝트 루트(데이터 주도).
-- `src/core/settings-allowlist.ts`: `Bash(ditto:*)` add/remove.
-- `src/core/{setup,teardown}.ts` + CLI: setup=discover→route→merge+백업+`.ditto`스캐폴드+allowlist(멱등, self-host no-op); teardown=블록 strip(증분 보존)+백업 폴백+allowlist 제거(`.ditto` 보존).
-- `resources/managed/{CLAUDE,AGENTS}.md`: 설치 페이로드. **build가 canonical 루트 `AGENTS.md`에서 동기화**(drift 방지) — 커밋 전 rebuild 필요(`bin/ditto`와 동일 규율).
+`agent-intelligence-memory-report.md`(메모리 보고서)가 설계한 메모리/지식그래프 시스템을 **ditto 네이티브 서브시스템 `ditto memory`로 풀 구축**하는 다증분 작업.
+- 사용자 결정: "graphify 래핑"이 아니라 **보고서 설계 자체를 풀 설계부터**.
+- work item: **wi_260609td5** (단, `.ditto/local`이라 이 PC에만 있음 → 새 PC에선 아래 "이어받기"대로 재등록).
 
-## 배포 상태 (검증됨)
-- github 마켓플레이스 라이브: `claude plugin marketplace add incognito050924/ditto` (source=github), `claude plugin install ditto@ditto-local` → enabled, 번들 동작.
-- 커밋 push 완료: `fdb98c3`(마켓플레이스 description) · `ad554da`(배포 재설계) · `5616f46`(setup/teardown) → `origin/main`.
+## 읽을 문서 (전부 git-tracked, pull로 따라옴)
 
-## 새 PC 셋업 (이어받을 때)
+1. `reports/design/memory-graph-plugin-design.md` — **설계서(이게 중심).** 왜 필요한가(ditto 빈틈 4개)·기능별 메커니즘·대안 6결정·ditto 맞물림 5지점·구현 순서 9단계·미결정.
+2. `graphify-design-reference-companion.md` — Graphify 실제 구현 대조(메커니즘 참고원, 정합성 반례).
+3. `agent-intelligence-memory-report.md` — 원본 설계 보고서(SoT 분리·projection·provenance·proposal write 철학).
+
+## 완료된 것 (커밋·푸시됨)
+
+- **증분 #1 — 데이터 계약 4 스키마** (`src/schemas/memory-{source,event,graph-ir,projection-manifest}.ts`, `scripts/export-schemas.ts` 등록, `schemas/memory-*.schema.json` 생성).
+  - confidence 밴드 강제(EXTRACTED=1.0 / AMBIGUOUS 0.1–0.3 / INFERRED 0.4–0.95, 0.5 금지), MemoryEvent approval invariant(approved⇒approved_by+decided_at, pending⇒approved_by 금지), 하이퍼엣지·rationale_for 지원.
+  - 검증: `schemas:export` 통과, tsc(내 파일 0에러), biome 클린, 불변식 런타임 safeParse 통과.
+- **문서**: 위 설계서 + companion.
+- 커밋: `836d2a4`(companion) · `fd86842`(스키마+설계) · `e927909`(설계서 재작성) → 전부 `origin/main` 푸시 완료.
+
+## 다음 (증분 #2~#9, 설계서 §8)
+
+| # | 증분 | 검증 |
+|---|---|---|
+| **2 (다음)** | Store 4종(WorkItemStore 패턴) + `ditto memory scan` + `events append/list` | scan이 변경 감지, 이벤트 append-only |
+| 3 | 구조 추출 — **기존 `impact`/`codeql`/`semantic`(CodeQL) 출력을 IR로 흡수** + provenance 주입 → IR builder/validator | 같은 source→같은 IR |
+| 4 | `memory build` 의미 추출(`memory-extractor` subagent fan-out)→IR 병합 | concept/claim이 출처와 함께 |
+| 5 | projection(서빙 그래프+위키)+manifest+`status` | freshness/dirty 확인 |
+| 6 | `query`/`path`/`explain`+`audit` | 출처 동반 응답 |
+| 7 | `propose`/`approve` 쓰기 모델 | 승인→재projection |
+| 8 | skill(`skills/memory-graph`)+agent(`agents/memory-extractor`)+build:plugin 배선 | `/memory-graph` 동작 |
+| 9 | 통합 끼우기(설계서 §5) + ADR + dialectic-review | 위임패킷/투영/훅 자문 |
+
+**구현 시 ditto 패턴**: citty CLI(`src/cli/commands/<name>.ts` → `src/cli/index.ts` subCommands 등록), Zod=SoT(스키마 추가 시 `scripts/export-schemas.ts`에도 등록 안 하면 등록 테스트 실패), Store는 `src/core/*-store.ts` 패턴(`readJson/writeJson` + `localDir/dittoDir`), 저장은 `.ditto/memory/`(sources/events=SoT git-tracked, ir/projections=gitignored).
+
+## 미결정 (이어받아 사용자와 확인)
+
+- 설계서 §3-2 **Memgraph 제거(v0)** — in-process 그래프 + Neo4j export 어댑터로 대체. 사인오프 필요.
+- 설계서 §5 **통합 5지점을 이 work item에 포함할지, 별도 work item으로 분리할지.**
+- Core API(HTTP)·MCP server를 v0에 넣을지(현재 설계: 후속).
+
+## 주의 — 선재 드리프트 (내 변경 무관)
+
+`bun run schemas:export` 실행 시 `autopilot/command-log-entry/e2e-journey/evidence-index/interview-state` 5개 `schemas/*.schema.json`이 재생성된다 = repo의 Zod ↔ 커밋된 JSON 드리프트(누가 Zod만 고치고 export 안 함). **내 커밋엔 안 섞었다(매번 revert).** 별도 Tidy-First 수정 대상. 새 스키마 작업 후 export하면 또 뜨니 `git checkout -- schemas/{그 5개}`로 분리할 것.
+
+## 이어받기 (새 PC)
+
 ```bash
-git pull                                   # 코드 + 이 핸드오프
-bun install                                # deps
-bun run build:bin && bun run build && bun link   # 터미널 `ditto`를 현재 빌드로 (setup/teardown 포함)
-# 확인: ditto --help 에 init|setup|teardown 보이면 OK
+git pull                                          # 코드 + 문서 + 이 핸드오프
+bun install
+bun run build:bin && bun run build && bun link    # 터미널 `ditto`를 현재 빌드로
+# 확인: ditto --help 에 memory 는 아직 없음(증분 #2부터 추가). work·knowledge 등 보이면 OK
+ditto work start "보고서의 메모리/지식그래프 시스템을 ditto 네이티브 플러그인으로 구축 (증분 #2~)" \
+  --request "다른 PC에서 이어서 — memory-graph plugin (HANDOFF.md 참조)"   # work item 재등록(이 PC 것은 안 따라옴)
 ```
-- macOS 주의: 터미널 bare `ditto`는 `/usr/bin/ditto`(OS 유틸)와 충돌 가능 → `bun link`로 깐 `~/.bun/bin/ditto`(PATH 앞)가 이겨야 함. (skills/agents는 `${CLAUDE_PLUGIN_ROOT}`로 이미 무관.)
-- ditto를 임의 프로젝트에 쓰려면: plain `claude`(github 설치본 자동 로드) 또는 로컬 dev는 `claude --plugin-dir <repo>` (이전 alias `ditto-cc`) → 그 프로젝트에서 **`ditto setup` 1회**로 헌장·`.ditto`·allowlist 세팅. ditto repo 자신은 setup self-skip.
 
-## 핵심 사실
-- 플러그인 로드 ≠ 컨텍스트 복사. 컨텍스트 복사는 명시적 `ditto setup`(deep-interview 결정: 훅 자동 아님). 로드만 해도 UserPromptSubmit 훅은 prime directive 주입.
-- 사용자 컨텍스트 보존 = in-file 마커(별도 USER 파일 없음). git 비의존 복구는 `*.ditto_bak`.
-- teardown 의미 A: 블록만 strip(증분 보존), 백업은 corruption 폴백.
-
-## 남은 follow-up (비블로커)
-- (선택) `GLOBAL_CLAUDE.md`/`GLOBAL_AGENTS.md` 실제 콘텐츠 작성(라우팅 규칙은 이미 구현).
-- (선택) `claude plugin uninstall`과 `ditto teardown` 연동(자동 복구).
-- 두 work item 모두 완료(`final_verdict=pass`). 추가 작업은 새 요구가 있을 때.
+그 뒤 `reports/design/memory-graph-plugin-design.md` §8 표의 **증분 #2**부터 시작.
