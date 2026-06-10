@@ -275,12 +275,17 @@ const eventsList = defineCommand({
     try {
       let events: MemoryEvent[] = await store.list();
       if (limit !== undefined) events = events.slice(Math.max(0, events.length - limit));
+      // Consistency with the R1 visibility rule: no CLI read surface prints a
+      // secret BODY. Metadata/id stay visible so curation (approve) still works.
+      const disclosed = events.map((e) =>
+        e.sensitivity === 'secret' ? { ...e, text: '[redacted: sensitivity=secret]' } : e,
+      );
       if (format === 'json') {
-        writeJson({ events });
-      } else if (events.length === 0) {
+        writeJson({ events: disclosed });
+      } else if (disclosed.length === 0) {
         writeHuman('No memory events.');
       } else {
-        for (const e of events) {
+        for (const e of disclosed) {
           writeHuman(`${e.event_id}\t${e.created_at}\t${e.status}\t${e.event_type}\t${e.text}`);
         }
       }

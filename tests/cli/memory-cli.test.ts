@@ -75,6 +75,40 @@ describe('ditto memory events', () => {
     expect(out.events[0].text).toBe('first note');
   });
 
+  test('list redacts the BODY of sensitivity=secret events but keeps metadata', async () => {
+    // Consistency with the R1 visibility rule: no CLI read surface prints a
+    // secret body. Metadata/id stay visible so curation (approve) still works.
+    const p = ditto([
+      'memory',
+      'propose',
+      '--type',
+      'observation',
+      '--text',
+      'topsecretbody xyz',
+      '--actor',
+      'user',
+      '--sensitivity',
+      'secret',
+      '--output',
+      'json',
+    ]);
+    expect(p.exitCode).toBe(0);
+    const id = JSON.parse(p.stdout).event_id;
+
+    const listed = ditto(['memory', 'events', 'list', '--output', 'json']);
+    expect(listed.exitCode).toBe(0);
+    const out = JSON.parse(listed.stdout);
+    const ev = out.events.find((e: { event_id: string }) => e.event_id === id);
+    expect(ev).toBeDefined();
+    expect(ev.sensitivity).toBe('secret');
+    expect(JSON.stringify(out)).not.toContain('topsecretbody');
+
+    const human = ditto(['memory', 'events', 'list']);
+    expect(human.exitCode).toBe(0);
+    expect(human.stdout).toContain(id);
+    expect(human.stdout).not.toContain('topsecretbody');
+  });
+
   test('append rejects an invalid event type with usage exit', () => {
     const r = ditto([
       'memory',
