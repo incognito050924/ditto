@@ -1,0 +1,12 @@
+{
+  "schema_version": "0.1.0",
+  "source_id": "src_104b5d1beb96",
+  "source_type": "spec",
+  "path": ".ditto/knowledge/adr/ADR-0011-distribution-cross-cutting-axis-session-rooting.md",
+  "content_hash": "4e8edce0d1e31d096a768f574a56f0528c5eefbe19ee7a84d5bc94202a1d6a06",
+  "captured_at": "2026-06-10T04:25:38.358Z",
+  "revision": "2a408b1667844bfbf33096c2573118dd14653a34",
+  "git_commit": "2a408b1667844bfbf33096c2573118dd14653a34",
+  "sensitivity": "internal",
+  "word_count": 824
+}

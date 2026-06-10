@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_be8120ec9aa1",
+  "event_type": "decision",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "ADR-0001: 런타임 및 구현 스택\n\n- 언어: TypeScript\n- 런타임: Bun\n- 배포: `bun build --compile`로 OS별 single binary\n- CLI 프레임워크: citty\n- Schema 라이브러리: zod\n- 외부용 schema export: zod-to-json-schema\n- 테스트 러너: bun:test\n- 포맷/린트: Biome\n- repo 구조: 단일 패키지 (v0.4 전후 분리 검토)\n\n- TS DX와 zod의 결합으로 runtime 검증 + 타입을 단일 소스로 관리 가능.\n- Bun이 Node 호환성을 유지하면서 startup이 빨라 hook 환경 제약을 충족.\n- `bun build --compile`이 single binary 배포를 단순화함.\n- citty는 ESM/TS-first에 객체 기반 declarative 정의로 schema-driven 코드와 자연스럽게 결합. 번들 크기가 작음(~10KB).\n- Biome가 포맷+린트 통합으로 설정 비용을 줄임.",
+  "created_at": "2026-06-10T04:25:38.358Z",
+  "status": "approved",
+  "sources": [
+    "src_8caee07e92fe"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-10T04:25:38.358Z"
+}

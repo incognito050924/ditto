@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_4a5b9a7b7f4b",
+  "event_type": "observation",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "internal_packages: ArchitectureSpec의 형제모듈 디스크립터 배열. {type:'glob'} 엔트리는 cross_repo 분류 대상 패키지 글로브, {type:'path'} 엔트리는 로컬 sibling JAR 위치 글로브(JVM 가드 입력)다.",
+  "created_at": "2026-06-10T04:25:38.358Z",
+  "status": "approved",
+  "sources": [
+    "src_a1fa40cf815e"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-10T04:25:38.358Z"
+}

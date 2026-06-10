@@ -1,0 +1,12 @@
+{
+  "schema_version": "0.1.0",
+  "source_id": "src_e654b3579fd7",
+  "source_type": "spec",
+  "path": ".ditto/knowledge/adr/ADR-0009-acg-residual-microitems-declined.md",
+  "content_hash": "ac66c8b4e4f9bd2ae4916f345577a38a3168967553d8bd9016db47c244318faf",
+  "captured_at": "2026-06-10T04:25:38.358Z",
+  "revision": "2a408b1667844bfbf33096c2573118dd14653a34",
+  "git_commit": "2a408b1667844bfbf33096c2573118dd14653a34",
+  "sensitivity": "internal",
+  "word_count": 406
+}

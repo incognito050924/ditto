@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_9a5dbd463830",
+  "event_type": "observation",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "run: 한 번의 provider 호출. 한 work item은 여러 run을 가질 수 있다. 식별자: run_*.",
+  "created_at": "2026-06-10T04:25:38.358Z",
+  "status": "approved",
+  "sources": [
+    "src_a1fa40cf815e"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-10T04:25:38.358Z"
+}

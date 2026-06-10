@@ -1,0 +1,12 @@
+{
+  "schema_version": "0.1.0",
+  "source_id": "src_428c7285160e",
+  "source_type": "spec",
+  "path": ".ditto/knowledge/adr/ADR-0008-host-abstraction-deferral.md",
+  "content_hash": "015a024a21393a232efd3852cc6a986f6f05317efdcd8b5dc7107afbcd08574c",
+  "captured_at": "2026-06-10T04:25:38.358Z",
+  "revision": "2a408b1667844bfbf33096c2573118dd14653a34",
+  "git_commit": "2a408b1667844bfbf33096c2573118dd14653a34",
+  "sensitivity": "internal",
+  "word_count": 395
+}

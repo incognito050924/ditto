@@ -1,0 +1,12 @@
+{
+  "schema_version": "0.1.0",
+  "source_id": "src_a1fa40cf815e",
+  "source_type": "spec",
+  "path": ".ditto/knowledge/glossary.json",
+  "content_hash": "3ebf7ad35b883ab2d3034648ecdd5c962907aef62eef93d76da1992a2b6d2443",
+  "captured_at": "2026-06-10T04:25:38.358Z",
+  "revision": "2a408b1667844bfbf33096c2573118dd14653a34",
+  "git_commit": "2a408b1667844bfbf33096c2573118dd14653a34",
+  "sensitivity": "internal",
+  "word_count": 753
+}

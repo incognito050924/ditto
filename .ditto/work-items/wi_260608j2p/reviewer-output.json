@@ -1,0 +1,71 @@
+{
+  "schema_version": "0.1.0",
+  "id": "rv_260608j2p1",
+  "work_item_id": "wi_260608j2p",
+  "kind": "code-reviewer",
+  "reviewer": "autopilot-reviewer",
+  "different_provider_than_generator": false,
+  "started_at": "2026-06-08T07:39:43Z",
+  "ended_at": "2026-06-08T07:39:43Z",
+  "verdict": "partial",
+  "findings": [
+    {
+      "severity": "high",
+      "file": "src/core/distribution-doctor.ts",
+      "location": "lines 17,141,163 (MARKETPLACE/pluginEnabled/collectDistributionChecks)",
+      "reason": "ac-3/ac-4 regression: install-plugin.mjs no longer writes enabledPlugins['ditto@ditto-local'] (registerPlugin removed), but pluginEnabled() still requires that exact key. plugin_enabled is now structurally always false for new-model users, so 'ditto doctor distribution' reports Skills+Agents axes as DRIFT (false error) and exits non-zero. Reproduced with clean HOME: status=drift, missing=plugin_enabled on Skills+Agents.",
+      "suggested_fix": "Drop plugin_enabled from the Skills/Agents axis contracts (or replace with a check that holds under github-source/--plugin-dir), since no install path writes the ditto-local enabledPlugins key anymore."
+    },
+    {
+      "severity": "low",
+      "file": "tests/core/distribution-doctor.test.ts",
+      "location": "line 55",
+      "reason": "Test pins the dead model: injects enabledPlugins {'ditto@ditto-local': true} and asserts a fully-deployed env maps every check true. Passes (pure fn unchanged) but encodes a contract the installer no longer fulfills; masks the high finding above.",
+      "suggested_fix": "Update fixture/assertions once plugin_enabled semantics are decided."
+    },
+    {
+      "severity": "low",
+      "file": "scripts/build-plugin.mjs",
+      "location": "build-plugin.mjs:3, install-plugin.mjs:4, build-bin.mjs:3",
+      "reason": "Stale comments still say the binary build needs bun's --compile / is self-contained; the producer now emits a ~1MB bun bundle via --target=bun (no --compile). No active --compile producer remains (grep verified). Doc-drift only, not behavior.",
+      "suggested_fix": "Reword the three comments to describe the bundle, not --compile."
+    },
+    {
+      "severity": "low",
+      "file": ".claude-plugin/marketplace.json",
+      "location": "lines 2,4 (name, description)",
+      "reason": "Marketplace name is still 'ditto-local' and description says 'Local marketplace' — semantically stale for a github-source model. Internally consistent (install ref ditto@ditto-local, docs match, 'claude plugin validate .' exits 0) so not a blocker.",
+      "suggested_fix": "Optional: rename marketplace for the github-source model and update docs/install*.md + DEVELOPMENT.md in lockstep."
+    },
+    {
+      "severity": "medium",
+      "file": "bin/ditto",
+      "location": "untracked working-tree file",
+      "reason": "ac-1 packaging gap: bin/ditto is now trackable (.gitignore !bin/ditto verified) but still UNTRACKED (git ls-files empty). github-source install requires bin/ditto COMMITTED; this diff makes it trackable but does not stage/commit it. Load-bearing for ac-1.",
+      "suggested_fix": "git add bin/ditto and commit it as part of the plugin surface."
+    }
+  ],
+  "evidence": [
+    {"kind": "command", "command": "grep -n -- --compile package.json scripts/*.mjs (+ repo-wide)", "summary": "no --compile in producers; only stale comments + ADR/docs reference it"},
+    {"kind": "command", "command": "bun run build:bin", "summary": "exit OK -> bin/ditto 1006KB bun script"},
+    {"kind": "command", "command": "bun run build:plugin", "summary": "exit OK -> dist/plugin/bin/ditto bun script"},
+    {"kind": "command", "command": "file bin/ditto && file dist/plugin/bin/ditto", "summary": "both: 'a /usr/bin/env bun script executable' (NOT Mach-O) — ac-4 met"},
+    {"kind": "command", "command": "node --check scripts/{build-bin,build-plugin,install-plugin}.mjs", "summary": "all parse, exit 0"},
+    {"kind": "command", "command": "bunx --bun biome check scripts/{build-bin,build-plugin,install-plugin}.mjs", "summary": "clean, no unused imports (spawnSync removed from build-plugin), exit 0"},
+    {"kind": "command", "command": "git check-ignore -q bin/ditto; echo $?", "summary": "exit 1 = NOT ignored; git add --dry-run accepts bin/ditto; bin/ditto.exe stays ignored"},
+    {"kind": "command", "command": "grep file://|pathToFileURL|extraKnownMarketplaces|ditto-local install-plugin.mjs", "summary": "only a comment remains; registerPlugin/unregisterPlugin/globalSettingsPath removed — ac-3 met for installer"},
+    {"kind": "command", "command": "HOME=tmp bun run src/cli/index.ts doctor distribution --output json --advisory", "summary": "status=drift, plugin_enabled=false, Skills+Agents missing plugin_enabled — REGRESSION reproduced"},
+    {"kind": "command", "command": "claude plugin validate .", "summary": "Validation passed (exit 0); plugin source ./ — ac-1 marketplace shape valid"},
+    {"kind": "command", "command": "HOME=tmp node scripts/install-plugin.mjs status", "summary": "runs; no more global_settings/marketplace/plugin_enabled fields — consistent with diff"},
+    {"kind": "command", "command": "printf CLAUDE_PLUGIN_ROOT in agent bash", "summary": "empty — confirms keeping bare 'ditto' correct; ${CLAUDE_PLUGIN_ROOT}/bin/ditto would be /bin/ditto"},
+    {"kind": "command", "command": "ls /usr/bin/ditto", "summary": "macOS system ditto exists (root) — residual shadow risk; clean env needs plugin bin ahead of /usr/bin (Claude PATH order unverifiable here)"},
+    {"kind": "command", "command": "bun test tests/", "summary": "1381 pass, 2 fail; both failures (repo-self-validation wi_v01bootstrap, e2e-browser Chromium) pre-existing, do NOT reference changed surface"}
+  ],
+  "unverified": [
+    {"item": "ac-1 end-to-end 'claude plugin install ditto@<gh>' exit 0 + enabled", "reason": "needs a real github remote + clean machine + committed bin/ditto; cannot run github-source install in sandbox. Marketplace validates and surface is trackable, but actual install unproven."},
+    {"item": "ac-2 'claude --plugin-dir dist/plugin' loads ditto + rebuild reflects", "reason": "needs an interactive Claude session; not runnable here. dist/plugin surface assembled correctly but load unproven."},
+    {"item": "ac-3 '/plugins' Errors=0 after removing directory marketplace", "reason": "needs interactive /plugins UI. Installer no longer writes file:// (verified statically), but UI error count unverified."},
+    {"item": "Claude prepends plugin bin/ ahead of /usr/bin on clean envs", "reason": "external host behavior; /usr/bin/ditto shadow means bare 'ditto' correctness depends on PATH order not observable here."}
+  ],
+  "recommended_next_action": "Fix the high finding: realign src/core/distribution-doctor.ts so plugin_enabled no longer gates Skills/Agents under the new no-registration install model (and update its test), since the change made that check structurally false and turned 'ditto doctor distribution' into a false-error reporter."
+}

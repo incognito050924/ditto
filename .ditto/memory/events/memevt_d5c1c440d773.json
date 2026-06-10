@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_d5c1c440d773",
+  "event_type": "decision",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "ADR-0007: cross_repo 처리 정책 — 명시 선언(internal_packages) + JVM 가드\n\n### D1 — cross_repo 형제모듈은 명시 선언한다 (자동 추론 비의존)\n\nsource-root를 늘 상위로 올려 전체 reactor를 빌드하는 자동 추론에 의존하지 않고, 형제모듈을 `ArchitectureSpec.internal_packages`에 **명시 선언**한다. 타입드 엔트리 `{type:'glob'|'path', value}`:\n\n- `glob` = cross_repo 분류 대상 패키지 글로브(`globToRegExp`, `^…$` 앵커).\n- `path` = 로컬 sibling JAR 위치 글로브(가드 입력용).\n\n### D2 — 분류는 선언된 glob에 매칭되는 NOT-fromSource 참조만 기록한다\n\nNOT-fromSource인 type/import 참조를 `(fromPath, package)`로 뽑아(UNRESOLVED_QUERY_*) glob에 매칭되는 것만 `ImpactGraph.unresolved{kind:cross_repo}`로 기록한다. glob 미선언이면 분류 자체를 skip한다 — 형제/써드파티를 구분할 수 없으므로, 잘못된 cross_repo 노이즈보다 미수집을 택하고 그 사실을 가드로 드러낸다. 써드파티(Spring/JDK)는 무시한다.\n\n### D3 — fail-loud 가드를 CLI 내장 + PreToolUse 훅 둘 다에 둔다\n\nJVM에서 로컬 JAR이 있는데 선언에 누락(glob 미선언 OR path로 안 덮인 JAR)이면 **차단**한다(CLI exit 65 / 훅 exit 2). JVM이고 glob 미선언이며 로컬 JAR이 없으면 **경고**한다(CLI만). 선언 완비 또는 비JVM이면 ok. warn은 CLI에서만 낸다(훅 중복 경고 방지). 훅은 `.ditto/architecture-spec.json`만 읽고 `ditto … impact|boundary --language java|kotlin` 텍스트를 매칭한다(별칭/변형 호출은 CLI 가드가 받친다).\n\n실 boxwood automation-engine DB(`mvn -o compile` 추적)에서:\n\n- **UNRESOLVED_QUERY_JAVA**가 NOT-fromSource **188 패키지** 산출 → glob `kr.co.ecoletree.boxwood.domain.**`가 9개 domain-model 패키지 매칭(StructuredErrorInfo 소속 `...domain.runtime.processing` 포함), `org.springframework`/`java.*` 무매칭. 형제/써드파티 분리 성립.\n- **scanLocalJars**가 `libs/boxwood-*.jar` 10개 탐지 → 미선언 시 block, glob + path(`libs/*.jar`) 선언 시 ok. 가드 3-상태(block/warn/ok) 통제.\n- **합성 Java probe**로 단일모듈 → cross_repo 기록·멀티모듈 → 손실 0을 통제 실증.\n- 전체 `bun test` green.\n\n**판정**: D1~D3 성립 — 명시 glob 선언으로 형제모듈만 cross_repo 분류, 써드파티는 무시, 선언 누락은 JVM 가드가 JAR 존재로 fail-loud하게 드러냄.",
+  "created_at": "2026-06-10T04:25:38.358Z",
+  "status": "approved",
+  "sources": [
+    "src_d2536495265d"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-10T04:25:38.358Z"
+}

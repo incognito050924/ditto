@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_f9c9d4763a70",
+  "event_type": "decision",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "ADR-0002: Schema의 source of truth\n\n- zod schema(`src/schemas/*.ts`)가 source of truth.\n- `scripts/export-schemas.ts`가 `schemas/*.schema.json`을 생성한다.\n- 외부 도구는 생성된 JSONSchema 파일을 import한다.\n- 모든 변경은 zod 쪽에서 일어나야 하며, JSONSchema 파일을 직접 편집하지 않는다.\n\n- zod는 runtime 검증과 TS 타입 추론을 한 정의로 제공해 drift 위험이 가장 작다.\n- `superRefine` 등 cross-field 룰을 표현하기 쉽다(예: `completion-contract`의 `final_verdict=pass` 검사).\n- `zod-to-json-schema`로 JSONSchema 7 export가 안정적이다.\n- JSONSchema-first는 TS DX(자동 추론, refine)가 떨어진다.",
+  "created_at": "2026-06-10T04:25:38.358Z",
+  "status": "approved",
+  "sources": [
+    "src_b265bd89aab6"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-10T04:25:38.358Z"
+}
