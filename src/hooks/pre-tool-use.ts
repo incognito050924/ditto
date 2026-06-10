@@ -612,25 +612,47 @@ export const preToolUseHandler: HookHandler = async (input: HookInput) => {
 
 /** Statically extractable write destinations from a Bash command (else none). */
 function bashWriteTargets(cmd: string): string[] {
+  // Quoted spans are opaque WORDS, not shell syntax (wi_260610767): a `>`
+  // inside quotes is prose (live FP — commit messages were blocked), while a
+  // quoted token right after a redirect IS the target (it previously slipped
+  // the scope check because the quote char rode into the resolved path).
+  // Replace each span with a placeholder, scan the skeleton, then map any
+  // placeholder in an extracted target back to its quoted content.
+  // Placeholder delimiter = SOH (U+0001): a control char that cannot appear
+  // in a typed command, so an index wrapped in it never collides with text.
+  const P = String.fromCharCode(1);
+  const spans: string[] = [];
+  const skeleton = cmd.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (q) => {
+    spans.push(q.slice(1, -1));
+    return `${P}${spans.length - 1}${P}`;
+  });
+  const placeholderRe = new RegExp(`${P}(\\d+)${P}`, 'g');
+  const unquote = (t: string): string =>
+    t.replace(placeholderRe, (_, i: string) => spans[Number(i)] ?? '');
   const out: string[] = [];
+  const push = (raw: string | undefined): void => {
+    if (!raw) return;
+    const t = unquote(raw);
+    // unresolvable-at-parse-time targets (vars, substitution, globs) stay skipped
+    if (t.length === 0 || /[$`*]/.test(t)) return;
+    out.push(t);
+  };
   // redirections: `> path` / `>> path`
-  for (const m of cmd.matchAll(/>>?\s*([^\s;&|>]+)/g)) {
+  for (const m of skeleton.matchAll(/>>?\s*([^\s;&|>]+)/g)) {
     const t = m[1];
-    if (t && !t.startsWith('/dev/') && !/[$`*]/.test(t)) out.push(t);
+    if (t && !unquote(t).startsWith('/dev/')) push(t);
   }
   // `tee path`
-  for (const m of cmd.matchAll(/\btee\b\s+(?:-\S+\s+)*([^\s;&|]+)/g)) {
-    const t = m[1];
-    if (t && !/[$`*]/.test(t)) out.push(t);
+  for (const m of skeleton.matchAll(/\btee\b\s+(?:-\S+\s+)*([^\s;&|]+)/g)) {
+    push(m[1]);
   }
   // `cp src dest` / `mv src dest` — last token is the destination
-  for (const m of cmd.matchAll(/\b(?:cp|mv)\b([^;&|]*)/g)) {
+  for (const m of skeleton.matchAll(/\b(?:cp|mv)\b([^;&|]*)/g)) {
     const args = (m[1] ?? '')
       .trim()
       .split(/\s+/)
       .filter((a) => a.length > 0 && !a.startsWith('-'));
-    const dest = args[args.length - 1];
-    if (dest && args.length >= 2 && !/[$`*]/.test(dest)) out.push(dest);
+    if (args.length >= 2) push(args[args.length - 1]);
   }
   return out;
 }

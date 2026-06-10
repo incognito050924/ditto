@@ -368,6 +368,27 @@ describe('preToolUseHandler — ac-4 scope-out write', () => {
     expect((await bash('echo hi > /tmp/elsewhere/out.txt')).exitCode).toBe(2);
     expect((await bash('echo hi > ./build/out.txt')).exitCode).toBe(0);
   });
+
+  // wi_260610767: quoted spans are words, not shell syntax. A `>` INSIDE quotes
+  // is prose (live FP: commit messages were blocked), while a quoted token
+  // right after a redirect IS the target (previously slipped the check because
+  // the quote char rode into the resolved path).
+  test('a `>` inside a quoted string is prose, not a redirect (commit-message FP)', async () => {
+    expect(
+      (await bash('git commit -m "docs: redirects like > /memory/ are described here"')).exitCode,
+    ).toBe(0);
+    expect((await bash("echo 'a > /tmp/elsewhere/x.txt b'")).exitCode).toBe(0);
+  });
+
+  test('a QUOTED redirect/tee target outside the repo is blocked (closes the quote bypass)', async () => {
+    expect((await bash('echo hi > "/tmp/elsewhere/x.txt"')).exitCode).toBe(2);
+    expect((await bash("echo hi > '/tmp/elsewhere/x.txt'")).exitCode).toBe(2);
+    expect((await bash('echo hi | tee "/tmp/elsewhere/y.txt"')).exitCode).toBe(2);
+  });
+
+  test('a quoted INSIDE-repo redirect target stays allowed', async () => {
+    expect((await bash('echo hi > "./build/out 1.txt"')).exitCode).toBe(0);
+  });
 });
 
 describe('preToolUseHandler — Claude session-memory dir is a narrow scope-out exception', () => {
