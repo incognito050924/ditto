@@ -1,0 +1,280 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  buildServingGraph,
+  memoryStatus,
+  projectDecisionEvents,
+  projectMemory,
+} from '~/core/memory-project';
+import { reduceEvents } from '~/core/memory-reduce';
+import { MemoryEventStore, MemoryGraphIrStore, MemorySourceStore } from '~/core/memory-store';
+import { type MemoryEvent, memoryEvent } from '~/schemas/memory-event';
+import type { MemoryEdge, MemoryGraphIr, MemoryNode } from '~/schemas/memory-graph-ir';
+import { type MemorySource, memorySource } from '~/schemas/memory-source';
+
+let workDir: string;
+
+beforeEach(async () => {
+  workDir = await mkdtemp(join(tmpdir(), 'ditto-mem-proj-'));
+  await mkdir(join(workDir, '.ditto'), { recursive: true });
+});
+afterEach(async () => {
+  await rm(workDir, { recursive: true, force: true });
+});
+
+function ev(id: string, over: Record<string, unknown> = {}): MemoryEvent {
+  return memoryEvent.parse({
+    schema_version: '0.1.0',
+    event_id: id,
+    event_type: 'observation',
+    actor: { kind: 'agent', role: 'reviewer' },
+    text: 'observed something',
+    created_at: '2026-06-09T10:00:00+00:00',
+    status: 'pending',
+    sources: [],
+    confidence_kind: 'EXTRACTED',
+    sensitivity: 'internal',
+    ...over,
+  });
+}
+
+const approval = {
+  status: 'approved' as const,
+  approved_by: 'user',
+  decided_at: '2026-06-09T11:00:00+00:00',
+};
+
+describe('reduceEvents (supersession + approval filter)', () => {
+  test('emits only approved heads; pending and superseded are excluded', () => {
+    const events = [
+      ev('memevt_pend0001'), // pending → excluded
+      ev('memevt_old00001'), // superseded below → excluded
+      ev('memevt_new00001', { ...approval, supersedes: 'memevt_old00001' }), // approved head
+      ev('memevt_appr0002', { ...approval }), // standalone approved head
+    ];
+    const { approvedHeads } = reduceEvents(events);
+    expect(approvedHeads.map((e) => e.event_id)).toEqual(['memevt_appr0002', 'memevt_new00001']);
+  });
+
+  test('superseded approved event is dropped in favor of its head', () => {
+    // chain: a (approved) -> b (approved, supersedes a). Only b is a head.
+    const events = [
+      ev('memevt_chaina01', { ...approval }),
+      ev('memevt_chainb01', { ...approval, supersedes: 'memevt_chaina01' }),
+    ];
+    const { approvedHeads } = reduceEvents(events);
+    expect(approvedHeads.map((e) => e.event_id)).toEqual(['memevt_chainb01']);
+  });
+
+  test('a rejected head is excluded', () => {
+    const events = [
+      ev('memevt_rej00001', {
+        status: 'rejected',
+        approved_by: 'user',
+        decided_at: '2026-06-09T11:00:00+00:00',
+      }),
+    ];
+    expect(reduceEvents(events).approvedHeads).toEqual([]);
+  });
+});
+
+describe('setHash determinism + change → dirty', () => {
+  test('setHash is deterministic and order-independent', () => {
+    const a = ev('memevt_aaaa0001', { ...approval });
+    const b = ev('memevt_bbbb0001', { ...approval });
+    const h1 = reduceEvents([a, b]).setHash;
+    const h2 = reduceEvents([b, a]).setHash;
+    expect(h1).toBe(h2);
+    expect(h1).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  test('approving an additional event changes the setHash', () => {
+    const base = [ev('memevt_aaaa0001', { ...approval })];
+    const more = [...base, ev('memevt_cccc0001', { ...approval })];
+    expect(reduceEvents(base).setHash).not.toBe(reduceEvents(more).setHash);
+  });
+});
+
+describe('projectDecisionEvents', () => {
+  test('approved decision → Decision node + RATIONALE_FOR edges from sources', () => {
+    const decision = ev('memevt_dec00001', {
+      ...approval,
+      event_type: 'decision',
+      text: 'use TOML parser X',
+      sources: ['src_aaaa1111'],
+    });
+    const { nodes, edges } = projectDecisionEvents([decision]);
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0]?.node_type).toBe('Decision');
+    expect(nodes[0]?.id).toBe('decision:memevt_dec00001');
+    expect(edges).toHaveLength(1);
+    expect(edges[0]?.edge_type).toBe('RATIONALE_FOR');
+    expect(edges[0]?.from).toBe('source:src_aaaa1111');
+    expect(edges[0]?.to).toBe('decision:memevt_dec00001');
+    expect(edges[0]?.confidence_kind).toBe('EXTRACTED');
+  });
+
+  test('non-decision approved events produce no decision nodes', () => {
+    const obs = ev('memevt_obs00001', { ...approval });
+    expect(projectDecisionEvents([obs]).nodes).toEqual([]);
+  });
+});
+
+describe('buildServingGraph (one-way adjacency)', () => {
+  test('edges become sorted adjacency keyed by from-node', () => {
+    const nodes: MemoryNode[] = [
+      { id: 'a', node_type: 'Symbol', name: 'a', properties: {} },
+      { id: 'b', node_type: 'Symbol', name: 'b', properties: {} },
+      { id: 'c', node_type: 'Symbol', name: 'c', properties: {} },
+    ];
+    const edges: MemoryEdge[] = [
+      {
+        id: 'e1',
+        from: 'a',
+        to: 'c',
+        edge_type: 'RELATED_TO' as const,
+        confidence_kind: 'EXTRACTED' as const,
+        confidence_score: 1,
+        properties: {},
+        provenance: {
+          extraction_run_id: 'xrun_t1',
+          extracted_by: 'impact' as const,
+          schema_version: '0.1.0' as const,
+        },
+        weight: 1,
+        requires_review: false,
+        used_as_evidence: false,
+      },
+      {
+        id: 'e2',
+        from: 'a',
+        to: 'b',
+        edge_type: 'IMPORTS' as const,
+        confidence_kind: 'EXTRACTED' as const,
+        confidence_score: 1,
+        properties: {},
+        provenance: {
+          extraction_run_id: 'xrun_t1',
+          extracted_by: 'codeql' as const,
+          schema_version: '0.1.0' as const,
+        },
+        weight: 1,
+        requires_review: false,
+        used_as_evidence: false,
+      },
+    ];
+    const g = buildServingGraph(nodes, edges, {
+      projection_id: 'proj_test00001',
+      generated_at: '2026-06-09T10:00:00+00:00',
+    });
+    expect(g.adjacency.a).toEqual([
+      { to: 'b', edge_type: 'IMPORTS' },
+      { to: 'c', edge_type: 'RELATED_TO' },
+    ]);
+    expect(g.nodes.map((n) => n.id)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+async function seedSource(id: string, hash: string): Promise<void> {
+  const s: MemorySource = memorySource.parse({
+    schema_version: '0.1.0',
+    source_id: id,
+    source_type: 'code',
+    path: `src/${id}.ts`,
+    content_hash: hash,
+    captured_at: '2026-06-09T10:00:00+00:00',
+    revision: 'r1',
+  });
+  await new MemorySourceStore(workDir).write(s);
+}
+
+describe('projectMemory + memoryStatus (end-to-end freshness)', () => {
+  test('projects serving graph + wiki + manifest; status reports fresh', async () => {
+    await seedSource('src_one00001', 'a'.repeat(64));
+    await new MemoryEventStore(workDir).append(
+      ev('memevt_dec00001', {
+        ...approval,
+        event_type: 'decision',
+        text: 'pick option A',
+        sources: ['src_one00001'],
+      }),
+    );
+
+    const r = await projectMemory(workDir, { now: new Date('2026-06-09T12:00:00Z') });
+    expect(r.node_count).toBe(1); // one Decision node
+    expect(r.edge_count).toBe(1); // one RATIONALE_FOR edge
+
+    // serving graph + wiki + manifest written to localDir (derived, gitignored)
+    const projDir = join(workDir, '.ditto', 'local', 'memory', 'projections');
+    expect(await Bun.file(join(projDir, 'graph.json')).exists()).toBe(true);
+    expect(await Bun.file(join(projDir, 'wiki', 'index.md')).exists()).toBe(true);
+    expect(await Bun.file(join(projDir, 'manifest.json')).exists()).toBe(true);
+
+    const status = await memoryStatus(workDir);
+    expect(status.freshness).toBe('fresh');
+    expect(status.dirty_sources).toEqual([]);
+  });
+
+  test('status is absent before any projection', async () => {
+    expect((await memoryStatus(workDir)).freshness).toBe('absent');
+  });
+
+  test('approving a new event after projection makes status stale (set-hash drift)', async () => {
+    await seedSource('src_one00001', 'a'.repeat(64));
+    const store = new MemoryEventStore(workDir);
+    await store.append(ev('memevt_appr0001', { ...approval }));
+    await projectMemory(workDir, { now: new Date('2026-06-09T12:00:00Z') });
+    expect((await memoryStatus(workDir)).freshness).toBe('fresh');
+
+    // a new approved event changes the reduced approved-set → stale
+    await store.append(ev('memevt_appr0002', { ...approval }));
+    expect((await memoryStatus(workDir)).freshness).toBe('stale');
+  });
+
+  test('editing a source content_hash after projection marks it dirty + stale', async () => {
+    await seedSource('src_one00001', 'a'.repeat(64));
+    await new MemoryEventStore(workDir).append(ev('memevt_appr0001', { ...approval }));
+    await projectMemory(workDir, { now: new Date('2026-06-09T12:00:00Z') });
+
+    await seedSource('src_one00001', 'b'.repeat(64)); // content changed
+    const status = await memoryStatus(workDir);
+    expect(status.freshness).toBe('stale');
+    expect(status.dirty_sources).toEqual(['src_one00001']);
+  });
+
+  test('projection reads structure IR nodes/edges and merges decision nodes', async () => {
+    const ir: MemoryGraphIr = {
+      schema_version: '0.1.0',
+      ir_version: 'ir_struct01',
+      generated_at: '2026-06-09T09:00:00+00:00',
+      extraction_run_id: 'xrun_struct01',
+      nodes: [
+        {
+          id: 'artifact:src/a',
+          node_type: 'Artifact',
+          name: 'src/a',
+          file_type: 'code',
+          properties: {},
+          provenance: {
+            extraction_run_id: 'xrun_struct01',
+            extracted_by: 'codeql',
+            schema_version: '0.1.0',
+          },
+        },
+      ],
+      edges: [],
+      hyperedges: [],
+    };
+    await new MemoryGraphIrStore(workDir).write(ir);
+    await new MemoryEventStore(workDir).append(
+      ev('memevt_dec00001', { ...approval, event_type: 'decision', text: 'd', sources: [] }),
+    );
+    const r = await projectMemory(workDir, { now: new Date('2026-06-09T12:00:00Z') });
+    // 1 structure node + 1 decision node
+    expect(r.node_count).toBe(2);
+    expect(r.serving.nodes.map((n) => n.id)).toContain('artifact:src/a');
+    expect(r.serving.nodes.map((n) => n.id)).toContain('decision:memevt_dec00001');
+  });
+});

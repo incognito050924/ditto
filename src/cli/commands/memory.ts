@@ -12,6 +12,7 @@ import {
   irFragmentsSchema,
   mergeIrFragments,
 } from '~/core/memory-build';
+import { memoryStatus, projectMemory } from '~/core/memory-project';
 import { scanSources } from '~/core/memory-scan';
 import { MemoryEventExistsError, MemoryEventStore, MemoryGraphIrStore } from '~/core/memory-store';
 import { type MemoryEvent, memoryEvent, memoryEventType } from '~/schemas/memory-event';
@@ -409,6 +410,82 @@ const memoryBuild = defineCommand({
   },
 });
 
+const memoryProject = defineCommand({
+  meta: {
+    name: 'project',
+    description:
+      'Project the current Graph IR + approved events one-way into the serving graph, wiki, and manifest (§4-3). Projections are regenerated, never hand-edited.',
+  },
+  args: {
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const r = await projectMemory(repoRoot);
+      if (format === 'json') {
+        writeJson({
+          projection_id: r.manifest.projection_id,
+          set_hash: r.set_hash,
+          nodes: r.node_count,
+          edges: r.edge_count,
+        });
+      } else {
+        writeHuman(`Projected ${r.manifest.projection_id}`);
+        writeHuman(`  nodes: ${r.node_count}`);
+        writeHuman(`  edges: ${r.edge_count}`);
+        writeHuman(`  set_hash: ${r.set_hash.slice(0, 16)}`);
+      }
+    } catch (err) {
+      writeError(`memory project failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+const memoryStatusCommand = defineCommand({
+  meta: {
+    name: 'status',
+    description: 'Report projection freshness (fresh/stale/absent) and dirty sources (§4-4)',
+  },
+  args: {
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const s = await memoryStatus(repoRoot);
+      if (format === 'json') {
+        writeJson(s);
+      } else {
+        writeHuman(`Memory projection: ${s.freshness}`);
+        if (s.projection_id) writeHuman(`  projection: ${s.projection_id}`);
+        writeHuman(`  dirty sources: ${s.dirty_sources.length}`);
+        for (const id of s.dirty_sources) writeHuman(`    ~ ${id}`);
+      }
+    } catch (err) {
+      writeError(`memory status failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const memoryCommand = defineCommand({
   meta: {
     name: 'memory',
@@ -419,5 +496,7 @@ export const memoryCommand = defineCommand({
     events: eventsCommand,
     bootstrap: memoryBootstrap,
     build: memoryBuild,
+    project: memoryProject,
+    status: memoryStatusCommand,
   },
 });

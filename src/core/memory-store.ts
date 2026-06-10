@@ -24,7 +24,20 @@ import {
 } from '~/schemas/memory-projection-manifest';
 import { type MemorySource, memorySource } from '~/schemas/memory-source';
 import { dittoDir, localDir } from './ditto-paths';
-import { ensureDir, readJson, writeJson } from './fs';
+import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
+
+/**
+ * Serving graph (derived, gitignored): a query-ready adjacency structure
+ * projected one-way from the IR (#5/§4-3). Regenerable — never SoT — so it
+ * carries no Zod schema (design §7), only this shape contract.
+ */
+export interface ServingGraph {
+  projection_id: string;
+  generated_at: string;
+  nodes: Array<{ id: string; node_type: string; name: string }>;
+  /** adjacency: node id → outgoing edges. */
+  adjacency: Record<string, Array<{ to: string; edge_type: string }>>;
+}
 
 /** Append failure when the target event file already exists (immutability/TOCTOU). */
 export class MemoryEventExistsError extends Error {
@@ -164,8 +177,20 @@ export class MemoryGraphIrStore {
 export class MemoryProjectionStore {
   constructor(public readonly repoRoot: string) {}
 
+  private dir(): string {
+    return localDir(this.repoRoot, 'memory', 'projections');
+  }
+
   private manifestPath(): string {
-    return localDir(this.repoRoot, 'memory', 'projections', 'manifest.json');
+    return join(this.dir(), 'manifest.json');
+  }
+
+  private servingPath(): string {
+    return join(this.dir(), 'graph.json');
+  }
+
+  private wikiDir(): string {
+    return join(this.dir(), 'wiki');
   }
 
   async readManifest(): Promise<MemoryProjectionManifest | null> {
@@ -175,6 +200,22 @@ export class MemoryProjectionStore {
 
   async writeManifest(m: MemoryProjectionManifest): Promise<MemoryProjectionManifest> {
     return writeJson(this.manifestPath(), memoryProjectionManifest, m);
+  }
+
+  /** Write the query-ready serving graph (derived, whole-file replacement). */
+  async writeServing(graph: ServingGraph): Promise<ServingGraph> {
+    await atomicWriteText(this.servingPath(), `${JSON.stringify(graph, null, 2)}\n`);
+    return graph;
+  }
+
+  async readServing(): Promise<ServingGraph | null> {
+    if (!(await Bun.file(this.servingPath()).exists())) return null;
+    return JSON.parse(await Bun.file(this.servingPath()).text()) as ServingGraph;
+  }
+
+  /** Write one human-facing wiki markdown file under projections/wiki/. */
+  async writeWiki(name: string, markdown: string): Promise<void> {
+    await atomicWriteText(join(this.wikiDir(), name), markdown);
   }
 }
 
