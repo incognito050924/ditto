@@ -25591,22 +25591,35 @@ var preToolUseHandler = async (input) => {
   return ALLOW;
 };
 function bashWriteTargets(cmd) {
+  const P3 = String.fromCharCode(1);
+  const spans = [];
+  const skeleton = cmd.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (q2) => {
+    spans.push(q2.slice(1, -1));
+    return `${P3}${spans.length - 1}${P3}`;
+  });
+  const placeholderRe = new RegExp(`${P3}(\\d+)${P3}`, "g");
+  const unquote = (t2) => t2.replace(placeholderRe, (_3, i2) => spans[Number(i2)] ?? "");
   const out = [];
-  for (const m2 of cmd.matchAll(/>>?\s*([^\s;&|>]+)/g)) {
+  const push = (raw) => {
+    if (!raw)
+      return;
+    const t2 = unquote(raw);
+    if (t2.length === 0 || /[$`*]/.test(t2))
+      return;
+    out.push(t2);
+  };
+  for (const m2 of skeleton.matchAll(/>>?\s*([^\s;&|>]+)/g)) {
     const t2 = m2[1];
-    if (t2 && !t2.startsWith("/dev/") && !/[$`*]/.test(t2))
-      out.push(t2);
+    if (t2 && !unquote(t2).startsWith("/dev/"))
+      push(t2);
   }
-  for (const m2 of cmd.matchAll(/\btee\b\s+(?:-\S+\s+)*([^\s;&|]+)/g)) {
-    const t2 = m2[1];
-    if (t2 && !/[$`*]/.test(t2))
-      out.push(t2);
+  for (const m2 of skeleton.matchAll(/\btee\b\s+(?:-\S+\s+)*([^\s;&|]+)/g)) {
+    push(m2[1]);
   }
-  for (const m2 of cmd.matchAll(/\b(?:cp|mv)\b([^;&|]*)/g)) {
+  for (const m2 of skeleton.matchAll(/\b(?:cp|mv)\b([^;&|]*)/g)) {
     const args = (m2[1] ?? "").trim().split(/\s+/).filter((a2) => a2.length > 0 && !a2.startsWith("-"));
-    const dest = args[args.length - 1];
-    if (dest && args.length >= 2 && !/[$`*]/.test(dest))
-      out.push(dest);
+    if (args.length >= 2)
+      push(args[args.length - 1]);
   }
   return out;
 }
@@ -27841,12 +27854,13 @@ var eventsList = defineCommand({
       let events = await store.list();
       if (limit !== undefined)
         events = events.slice(Math.max(0, events.length - limit));
+      const disclosed = events.map((e2) => e2.sensitivity === "secret" ? { ...e2, text: "[redacted: sensitivity=secret]" } : e2);
       if (format === "json") {
-        writeJson2({ events });
-      } else if (events.length === 0) {
+        writeJson2({ events: disclosed });
+      } else if (disclosed.length === 0) {
         writeHuman("No memory events.");
       } else {
-        for (const e2 of events) {
+        for (const e2 of disclosed) {
           writeHuman(`${e2.event_id}	${e2.created_at}	${e2.status}	${e2.event_type}	${e2.text}`);
         }
       }
@@ -30333,4 +30347,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=ebf037afac7fb8b1b75a83bdb670a156867016a548193e8f0bebf91c30a33e23
+//# ditto-src-stamp=c307dfa1a79c8221d65b222ae6d96d4492834d115713eae8eebd511543259b0f
