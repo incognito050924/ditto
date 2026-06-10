@@ -13,8 +13,22 @@ import {
   mergeIrFragments,
 } from '~/core/memory-build';
 import { memoryStatus, projectMemory } from '~/core/memory-project';
+import {
+  MemoryNodeNotFoundError,
+  MemoryProjectionAbsentError,
+  explainNode,
+  queryNeighbors,
+  readFreshness,
+  runAudit,
+  shortestPath,
+} from '~/core/memory-query';
 import { scanSources } from '~/core/memory-scan';
-import { MemoryEventExistsError, MemoryEventStore, MemoryGraphIrStore } from '~/core/memory-store';
+import {
+  MemoryEventExistsError,
+  MemoryEventStore,
+  MemoryGraphIrStore,
+  MemoryProjectionStore,
+} from '~/core/memory-store';
 import { type MemoryEvent, memoryEvent, memoryEventType } from '~/schemas/memory-event';
 import { memoryConfidenceKind } from '~/schemas/memory-graph-ir';
 import { memorySensitivity, memorySourceId } from '~/schemas/memory-source';
@@ -26,6 +40,20 @@ import {
   writeHuman,
   writeJson,
 } from '../util';
+
+/** Print the freshness envelope (§4-4) attached to every query/path/explain answer. */
+function writeFreshnessHuman(f: {
+  projection_id: string;
+  generated_at: string;
+  freshness: string;
+  dirty_sources: string[];
+}): void {
+  writeHuman(
+    `  [freshness: ${f.freshness} · projection: ${f.projection_id || '(absent)'} · generated: ${
+      f.generated_at || '(absent)'
+    } · dirty_sources: ${f.dirty_sources.length}]`,
+  );
+}
 
 const memoryScan = defineCommand({
   meta: {
@@ -486,6 +514,209 @@ const memoryStatusCommand = defineCommand({
   },
 });
 
+/**
+ * Load the serving graph (read-only) for query/path/explain. Exits with a usage
+ * error when nothing has been projected yet.
+ */
+async function loadServingOrExit(repoRoot: string) {
+  const graph = await new MemoryProjectionStore(repoRoot).readServing();
+  if (!graph) {
+    writeError('no serving graph projected yet; run `ditto memory project` first');
+    process.exit(USAGE_ERROR_EXIT);
+  }
+  return graph;
+}
+
+const memoryQuery = defineCommand({
+  meta: {
+    name: 'query',
+    description:
+      'Traverse the serving graph from a node (undirected BFS, default depth 2). Read-only; answer carries projection_id/generated_at/freshness/dirty_sources (§4-4).',
+  },
+  args: {
+    node: { type: 'positional', description: 'Node id to start from', required: true },
+    depth: { type: 'string', description: 'Traversal depth (default 2)', default: '2' },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const depth = Number(args.depth);
+    if (!Number.isInteger(depth) || depth < 0) {
+      writeError(`--depth must be a non-negative integer; got "${args.depth}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const graph = await loadServingOrExit(repoRoot);
+      const result = queryNeighbors(graph, args.node, depth);
+      const freshness = await readFreshness(repoRoot);
+      if (format === 'json') {
+        writeJson({ ...result, ...freshness });
+      } else {
+        writeHuman(`Neighbors of ${result.root} within depth ${result.depth}:`);
+        for (const id of result.neighbors) writeHuman(`  - ${id}`);
+        if (result.neighbors.length === 0) writeHuman('  (none)');
+        writeFreshnessHuman(freshness);
+      }
+    } catch (err) {
+      if (err instanceof MemoryNodeNotFoundError) {
+        writeError(err.message);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory query failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+const memoryPath = defineCommand({
+  meta: {
+    name: 'path',
+    description:
+      'Shortest path between two nodes (undirected BFS). Read-only; answer carries freshness (§4-4).',
+  },
+  args: {
+    from: { type: 'positional', description: 'Start node id', required: true },
+    to: { type: 'positional', description: 'Target node id', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const graph = await loadServingOrExit(repoRoot);
+      const result = shortestPath(graph, args.from, args.to);
+      const freshness = await readFreshness(repoRoot);
+      if (format === 'json') {
+        writeJson({ ...result, ...freshness });
+      } else if (result.path) {
+        writeHuman(`Path ${result.from} → ${result.to}:`);
+        writeHuman(`  ${result.path.join(' → ')}`);
+        writeFreshnessHuman(freshness);
+      } else {
+        writeHuman(`No path between ${result.from} and ${result.to}.`);
+        writeFreshnessHuman(freshness);
+      }
+    } catch (err) {
+      if (err instanceof MemoryNodeNotFoundError) {
+        writeError(err.message);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory path failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+const memoryExplain = defineCommand({
+  meta: {
+    name: 'explain',
+    description:
+      'Describe one node: its label + adjacent edges. Read-only; answer carries freshness (§4-4).',
+  },
+  args: {
+    node: { type: 'positional', description: 'Node id to explain', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const graph = await loadServingOrExit(repoRoot);
+      const result = explainNode(graph, args.node);
+      const freshness = await readFreshness(repoRoot);
+      if (format === 'json') {
+        writeJson({ ...result, ...freshness });
+      } else {
+        writeHuman(`${result.node.name} (${result.node.node_type})`);
+        writeHuman(`  id: ${result.node.id}`);
+        writeHuman(`  edges: ${result.edges.length}`);
+        for (const e of result.edges) {
+          writeHuman(`    ${e.direction === 'out' ? '→' : '←'} ${e.edge_type} ${e.to}`);
+        }
+        writeFreshnessHuman(freshness);
+      }
+    } catch (err) {
+      if (err instanceof MemoryNodeNotFoundError) {
+        writeError(err.message);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory explain failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+const memoryAudit = defineCommand({
+  meta: {
+    name: 'audit',
+    description:
+      'Count orphan/stale/duplicate/contradiction over the serving graph and append the result to the git-tracked append-only history (§4-6). Manual only — no auto-trigger.',
+  },
+  args: {
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const { entry, history_length } = await runAudit(repoRoot);
+      if (format === 'json') {
+        writeJson({ ...entry, history_length });
+      } else {
+        writeHuman(
+          `Audit ${entry.projection_id} (${entry.freshness}) — history #${history_length}`,
+        );
+        writeHuman(`  nodes: ${entry.node_count}  edges: ${entry.edge_count}`);
+        writeHuman(`  orphan:        ${entry.counts.orphan}`);
+        writeHuman(`  stale sources: ${entry.counts.stale}`);
+        writeHuman(`  duplicate:     ${entry.counts.duplicate}`);
+        writeHuman(`  contradiction: ${entry.counts.contradiction}`);
+      }
+    } catch (err) {
+      if (err instanceof MemoryProjectionAbsentError) {
+        writeError(err.message);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory audit failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const memoryCommand = defineCommand({
   meta: {
     name: 'memory',
@@ -498,5 +729,9 @@ export const memoryCommand = defineCommand({
     build: memoryBuild,
     project: memoryProject,
     status: memoryStatusCommand,
+    query: memoryQuery,
+    path: memoryPath,
+    explain: memoryExplain,
+    audit: memoryAudit,
   },
 });
