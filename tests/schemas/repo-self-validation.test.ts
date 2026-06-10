@@ -152,22 +152,15 @@ describe('repo .ditto self-validation', () => {
 const isDittoSourceRepo = process.env.DITTO_REPO_ROOT === undefined;
 
 describe.if(isDittoSourceRepo)('ditto source repo identity', () => {
+  // Identity must be asserted on GIT-TRACKED state only. The earlier work-item
+  // assertions here ("at least one work item", "wi_v01bootstrap/implement
+  // exist") read gitignored per-developer runtime (.ditto/local/work-items) and
+  // therefore failed on any fresh checkout — a test-design defect flagged by
+  // the memory round-1 review, removed (round-2 leftovers, wi_260610767).
   test('glossary project_name is ditto', async () => {
     const data = await loadJson(join(DITTO_DIR, 'knowledge', 'glossary.json'));
     const parsed = glossary.parse(data);
     expect(parsed.project_name).toBe('ditto');
     expect(parsed.entries.length).toBeGreaterThan(0);
-  });
-
-  test('at least one work item exists', async () => {
-    const dirs = await listWorkItemDirs();
-    expect(dirs.length).toBeGreaterThan(0);
-  });
-
-  test('wi_v01bootstrap and wi_v01implement exist', async () => {
-    const dirs = await listWorkItemDirs();
-    const ids = dirs.map((d) => d.split('/').at(-1));
-    expect(ids).toContain('wi_v01bootstrap');
-    expect(ids).toContain('wi_v01implement');
   });
 });
