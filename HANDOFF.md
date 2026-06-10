@@ -1,49 +1,60 @@
-# HANDOFF — 다른 PC 신규 설치 실측 준비 완료 (2026-06-10)
+# HANDOFF — 다른 PC 이어받기 (2026-06-11)
 
-이 PC의 호스트 메모리는 전파되지 않으므로, 다른 PC 세션에 필요한 것을 전부 여기 싣는다. **origin/main 최신 = 이 문서(전역 컨텍스트 테스트 보강판)가 포함된 커밋. 미커밋·미푸시 변경 없음**(예외: `agentic-coding-masters-research.md` untracked — 별도 작업 소속, 무시).
+이 PC의 호스트 메모리는 전파되지 않으므로, 다른 PC 세션에 필요한 것을 전부 여기 싣는다. **origin/main 최신 = 이 문서가 포함된 커밋. 미커밋·미푸시 변경 없음**(예외: 이 PC 전용 untracked 3건 — `AUTHORING-GUIDE.md`, `SAMPLE-PA-07-improved.md`는 tech-spec 기획의 BOXWOOD 예시 원전(기획문서가 출처로 인용, 커밋 여부는 사용자 보류), `agentic-coding-masters-research.md`는 별도 작업 소속).
 
-## 1. 오늘(2026-06-10) 닫힌 작업 — 전부 done, 전부 main에 푸시됨
+## 1. 닫힌 작업 — 전부 main에 푸시됨
+
+### 2026-06-10 오후~심야 세션 (tech-spec 표면)
 
 | work item | 내용 |
 |---|---|
-| wi_260610s7c | memory 종합 리뷰 라운드1+2 (`reports/reviews/memory-subsystem-review*.md`) |
-| wi_260610u8t | 라운드2 발견 R1~R10 전부 처리(본문검색 가시성, supersede 대칭, hook 축소, secret 배선, drift 가드 등) |
-| wi_260610767 | 잔여 3건: repo-self-validation 테스트 결함 제거(**이제 전체 bun test 0 fail이 정상**), events list secret redact, hook 따옴표 오탐 해소+우회 폐쇄 |
-| wi_260610idf | autopilot worst-fold(gotcha #3) 수정 — implement 노드 acrefs 정상 유지 + 하류 verifier가 닫으면 final_verdict=pass. **completion 우회 절차 폐기** |
-| wi_2606108ht | 헌장 §4-9(위임으로 컨텍스트를 지킨다) + 근거 노트(`reports/harnesses/context-rot-delegation-evidence.md`) + glossary(context rot) |
-| wi_260609td5 | memory-graph plugin 풀 구축 umbrella — 산출물 기준 AC 도출 후 마감(이견 있으면 재개) |
+| wi_260610z2z | tech-spec 표면 기획문서 (`reports/design/tech-spec-surface-design.md`, dialectic-1 revise 반영, 열린 결정 2건 확정: 저장 위치=`.ditto/specs/` tier ②, digest=컴파일 입력 섹션) |
+| wi_260610hwd | **ditto:tech-spec 구현 M1~M3 + deep-interview→autopilot 풀 파이프라인으로 종결(final_verdict=pass, AC 10/10)**. 산출: `skills/tech-spec/{SKILL,TEMPLATE}.md`, `ditto tech-spec start\|record-section\|finalize`(ac-9 근거 필수 스키마, 문서→intent 단방향 컴파일+source_digest), autopilot next-node digest 신선도 게이트. deep-interview는 zero-diff(계약 테스트 14건 무변경) |
+| wi_260610iex | autopilot 결함 2건 수정: ① lease `scope_source(declared\|derived)` — derived(=changed_files fallback)는 훅이 차단하지 않음(오차단→Bash 우회 학습 방지), 선언 스코프만 allow-list 집행 ② generated_nodes 승격 시 커버된 pending 후속 시드(N2/N3) supersede(보수적 고정점 폐쇄) + `superseded_node_ids` 반환 |
 
-남은 열린 work item: wi_260608pcw(환경 초기화)·wi_260608j2p(배포 재설계) — 별도 세션 소관(전역 리소스 GLOBAL_*.md는 `45223d1`로 커밋됨), wi_260608acp(intent-quality 측정).
+추가: 헌장 §3에 **코드베이스 변경 lazy 게이트** 신설(아래 §4), dogfooding 산출 스펙 2부 커밋(`.ditto/specs/fact-consistency-checker{,-oneshot}.md` — 사실 일치 checker, 시뮬레이션 리뷰 라벨 명시). dogfooding fixture work item 2개(wi_2606101qn, wi_260610irs)는 `.ditto/local`(개인 구획)이라 이 PC에만 있음 — 다른 PC에서 신경 쓸 것 없음.
 
-## 2. 다른 PC 신규 설치 실측 체크리스트
+### 2026-06-10 오전 세션 (memory/헌장)
 
-설치(이 PC에서 검증된 경로): marketplace 소스 = **GitHub incognito050924/ditto**.
+wi_260610s7c(memory 종합 리뷰) · wi_260610u8t(R1~R10 처리) · wi_260610767(잔여 3건 — **전체 bun test 0 fail이 정상**) · wi_260610idf(autopilot worst-fold 수정) · wi_2606108ht(헌장 §4-9 위임) · wi_260609td5(memory-graph plugin umbrella 마감). 상세는 git 이력의 2026-06-10자 본 문서.
+
+남은 열린 work item: wi_260608pcw(환경 초기화) · wi_260608j2p(배포 재설계 — 번들 JS 런처) · wi_260608acp(intent-quality 측정). 별도 세션 소관.
+
+## 2. 다른 PC 설치/갱신 체크리스트
+
+설치(검증된 경로): marketplace 소스 = **GitHub incognito050924/ditto**.
 
 ```bash
-claude plugin marketplace add incognito050924/ditto   # 마켓플레이스 미등록 시
+claude plugin marketplace add incognito050924/ditto   # 미등록 시
+claude plugin marketplace update ditto-local           # ★ 기존 설치 PC는 이게 필수 (stale 클론 함정)
 claude plugin install ditto@ditto-local
 ```
 
-설치 후 확인할 것(이 PC에서는 캐시 재설치로 전부 검증됨 — 신규 환경 실측이 목적):
+설치 후 확인:
 
-1. **헌장 배포**: `~/.claude/plugins/cache/ditto-local/ditto/0.0.0/resources/managed/AGENTS.md`에 `4-9. 위임으로 컨텍스트를 지킨다` 존재.
-2. **setup 적재**: 테스트 프로젝트에서 `ditto setup` → 그 프로젝트 CLAUDE.md 관리블록에 §4-9 포함 헌장, `.ditto/{knowledge,local}` 스캐폴드, `.claude/settings.json` allowlist. 전역 `~/.claude/CLAUDE.md`에 GLOBAL_CLAUDE.md 관리블록 적용(기존 내용은 블록 밖 보존 + `.ditto_bak` 백업).
-3. **전역 사용자 컨텍스트 내용 실측(이번 설치의 주목적)**: 설치된 전역 블록에 다음 섹션이 모두 있어야 한다 — `# 완료 게이트`, `# 사실 게이트`(할루시네이션 억제), `# 모호함 처리`(질문 시 맥락 동반), `# 범위 — 최소 검증 구현`, `# TDD`, `# 커밋 — Tidy First`, `# 구현 후 자가 점검`, `# 스타일`, `# 출력 — 사용자 응답 언어`(번역체 금지·용어 첫 등장 설명·무협의 축약어 금지·간결=의미 밀도 정의). 새 세션을 열어 실제 행동 변화(완료 주장 전 검증, 불확실 표명, 번역체 없는 한국어)를 관찰하는 것까지가 테스트다. 이 PC의 개인 `# 도구` 섹션은 블록 밖 개인 구획이므로 새 PC에는 없는 게 정상.
-4. **doctor**: `ditto doctor distribution --advisory` → all ok 기대. `binary_fresh`는 설치 컨텍스트(src/ 없음)에서 vacuously true가 정상.
-5. **hook 스모크**: 따옴표 안 `>`+경로 문자열이 든 명령은 통과, repo 밖 redirect(따옴표 포함)는 차단, `~/.claude/projects/<현재 슬러그>/memory/` 쓰기는 허용·타 프로젝트는 차단.
-6. **테스트 돌릴 경우**: bun ≥1.3.14, `bun test` 기대값 **0 fail**(1595+).
+1. **tech-spec 표면 존재(이번 갱신의 핵심)**: `~/.claude/plugins/cache/ditto-local/ditto/0.0.0/skills/tech-spec/{SKILL,TEMPLATE}.md` 존재 + `ditto tech-spec --help`에 start/record-section/finalize. 표면 카탈로그는 30개(스킬 10).
+2. **헌장 배포**: 관리블록 헌장에 `§3 코드베이스 변경 lazy 게이트`(착수=사용자 허가 후, 허가된 단위 안에서는 멈춤 금지)와 `§4-9 위임` 둘 다 존재.
+3. **전역 사용자 컨텍스트**: `# 완료 게이트`/`# 사실 게이트`/`# 모호함 처리`/`# 범위`/`# TDD`/`# 커밋`/`# 자가 점검`/`# 스타일`/`# 출력` 섹션 전부 존재(상세 기준은 git 이력의 2026-06-10자 본 문서 참조).
+4. **doctor**: `ditto doctor distribution --advisory` → all ok. `binary_fresh`는 설치 컨텍스트에서 vacuously true 정상.
+5. **테스트 돌릴 경우**: bun ≥1.3.14, `bun test` 기대값 **0 fail**(1642+).
 
-함정: 소스 변경을 반영하려면 push 후 `claude plugin marketplace update ditto-local`이 **필수**(생략하면 stale 클론에서 옛 코드 재설치 — 이 PC에서 실측). `claude plugin update`는 버전 0.0.0 고정이라 no-op.
+함정(재확인): 소스 변경 반영은 push 후 `claude plugin marketplace update ditto-local` **필수**. `claude plugin update`는 버전 0.0.0 고정이라 no-op.
 
-## 3. 의도된 보류 (ADR-0013 보강·재검토 조건에 기록됨)
+## 3. 의도된 보류 + 이번 세션 follow-up 후보
 
-1. 승인 게이트 적대적 차단 — **§5-2~5-5 push 확대 work item을 열기 전 선행 게이트.**
-2. bootstrap handoff-archive 신뢰 등급 분리 — 세탁 실측 시.
-3. pull actionability 측정 — 명시 보류(hit_node_types 분해는 구현됨).
+기존 보류(ADR-0013에 기록): ① 승인 게이트 적대적 차단(push 확대 전 선행 게이트) ② bootstrap handoff-archive 신뢰 등급 분리 ③ pull actionability 측정.
 
-## 4. 새 규칙 요약 (이 PC 세션들이 합의한 것)
+이번 세션 추가 follow-up (전부 미착수, 우선순위 미정 — 사용자 결정 대기):
 
-- **헌장 §4-9**: 탐색·조사는 기본 위임(반환=결론·증거·불확실성), 검증은 fresh context 강제(compaction은 편향 보존), 진짜 격리 가능할 때만 분할, 위임엔 계약 동반, 긴 세션은 handoff reset. 근거: `reports/harnesses/context-rot-delegation-evidence.md`.
-- **전역 행동 규칙(GLOBAL_CLAUDE/AGENTS.md)**: 대가 6인(Karpathy·Pocock·Beck·김연규·허예찬·obra/superpowers) 프롬프팅 리서치 기반으로 신설(`45223d1`), 사실 게이트 추가(`ca6906d` — 효과 측정된 형태만: 출구+기준 명시형 IDK, 불확실하면 도구로 확인, 결과 서열, 주장-근거 연결, 과잉 유보 방지), 출력 언어 규칙에 간결 정의 추가(이 커밋 — **간결=짧게가 아니라 의미상 불필요한 내용·수식어 제거 + 본질을 이해하기 쉽게; 이해를 희생해 길이를 줄이지 않는다**). 리서치 전문: `agentic-coding-masters-research.md`(untracked, 이 PC).
-- **knowledge 변경 후 `ditto memory bootstrap` 재실행**(ADR-0013 drift 정책) — 이 핸드오프 직전에 이행됨(projection fresh, 53 nodes, pending 0).
-- 빌드 drift는 `ditto doctor distribution`의 `binary_fresh`가 감시(dev repo에서만 유효).
+1. **실사용자 dogfooding 세션** — tech-spec ac-2/3의 생태 검증. 현재 증거는 에이전트 시뮬레이션 리뷰(라벨 명시)로 절차 동작까지만 증명.
+2. **planner의 file_scope 선언 활용** — lease 수정으로 스코프 미선언 실행은 경로 강제 비활성. `nodeProposal.file_scope`(스키마 이미 지원)를 planner 프롬프트/계약에 반영하면 정밀 집행 복원.
+3. **근거-주장 사실 일치 checker 구현** — 합의된 스펙이 `.ditto/specs/fact-consistency-checker.md`에 있음(stepwise 합의본). 착수 시 finalize부터.
+4. **경량 모드 검토** — tech-spec 기획문서 미해결 질문 3 (12섹션 부담, 사용 증거 쌓인 뒤).
+5. derived lease 환경의 우회율 계측 — 다음 autopilot 런에서 관찰(wi_260610iex completion의 unverified 항목).
+
+## 4. 새 규칙 요약
+
+- **헌장 §3 — 코드베이스 변경 lazy 게이트(2026-06-10 신설)**: 구현·수정·삭제는 계획 최우선, 착수는 현재 요청의 사용자 허가 후(질문·상태확인 프롬프트, 과거 승인, 핸드오프 존재 ≠ 착수 지시). 허가 단위는 사용자가 승인한 작업 단위(요청·증분·work item)이고, **허가된 실행 단위 안(autopilot 포함)에서 공연히 멈춰 절차 결정을 떠넘기는 것은 그 자체가 위반**. §10 금지에도 동기 반영.
+- **헌장 §4-9**: 탐색·조사 기본 위임, 검증은 fresh context 강제, 위임엔 계약 동반. 근거: `reports/harnesses/context-rot-delegation-evidence.md`.
+- **tech-spec SoT 모델**: 스펙 문서(`.ditto/specs/<slug>.md`, git 추적)가 유일 원본, intent.json은 finalize 단방향 컴파일 산출물(source_digest 스탬프). 컴파일 입력 섹션(요약·목표·비목표·AC·위험) 수정 시 autopilot이 차단되고 재-finalize 요구.
+- knowledge 변경 후 `ditto memory bootstrap` 재실행(ADR-0013 drift 정책).
