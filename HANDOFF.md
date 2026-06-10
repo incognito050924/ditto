@@ -22,8 +22,13 @@
 2. **bootstrap handoff-archive 신뢰 등급** — 세탁 경로(repo 쓰기+bootstrap)가 실측되면 분리.
 3. **pull actionability 측정** — 미측정 명시 보류. hit율만으로 게이트가 흔들리면 먼저 확장.
 
+## 추가 처리 (wi_260610767 — 보류 결정 없이 남아 있던 잔여 3건, done)
+
+- repo-self-validation의 로컬 상태 결합 단언 제거 → **전체 `bun test`가 이제 0 fail이 정상**(이전 "기지 1 fail" 안내 폐기).
+- `events list`가 secret 이벤트 본문을 redact(메타데이터 유지 — R1 가시성 규칙과 일관).
+- hook `bashWriteTargets` 따옴표 스팬 처리 — 커밋 메시지 오탐 해소 + 따옴표 redirect 대상의 검사 우회 폐쇄. 글로벌 재설치로 런타임 반영·라이브 확인 완료.
+
 ## 주의 (이 작업 무관)
 
-- **다른 세션의 미커밋 변경이 작업트리에 있음**: `scripts/build-plugin.mjs`(resources 배포 추가), `resources/managed/GLOBAL_{AGENTS,CLAUDE}.md`, `agentic-coding-masters-research.md` — 전역 컨텍스트 작업(별도 work item) 소속. 건드리지 말 것.
-- `bun test` 전체의 **기지 1 fail** = `tests/schemas/repo-self-validation.test.ts`의 `wi_v01bootstrap and wi_v01implement exist` — 로컬 상태 결합 테스트 설계 결함(라운드1 리뷰 별도 항목, 미처리). 이것만 fail이면 정상.
+- 작업트리의 `agentic-coding-masters-research.md`(untracked)는 다른 작업 소속. 전역 리소스 작업은 `45223d1`로 커밋됨.
 - bun 1.3.14+ 필요(1.0.2는 메모리 테스트 가짜 실패).
