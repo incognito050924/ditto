@@ -5,13 +5,15 @@ import { join } from 'node:path';
 import {
   MemoryEventAlreadyDecidedError,
   MemoryEventNotPendingError,
+  MemorySelfApprovalError,
   approveEvent,
   buildServingGraph,
   memoryStatus,
-  projectDecisionEvents,
+  projectEventNodes,
   projectMemory,
   proposeEvent,
 } from '~/core/memory-project';
+import { queryNeighbors } from '~/core/memory-query';
 import { reduceEvents } from '~/core/memory-reduce';
 import { MemoryEventStore, MemoryGraphIrStore, MemorySourceStore } from '~/core/memory-store';
 import { type MemoryEvent, memoryEvent } from '~/schemas/memory-event';
@@ -101,18 +103,21 @@ describe('setHash determinism + change → dirty', () => {
   });
 });
 
-describe('projectDecisionEvents', () => {
-  test('approved decision → Decision node + RATIONALE_FOR edges from sources', () => {
+describe('projectEventNodes', () => {
+  test('approved decision → Decision node + RATIONALE_FOR edges + Source node from sources', () => {
     const decision = ev('memevt_dec00001', {
       ...approval,
       event_type: 'decision',
       text: 'use TOML parser X',
       sources: ['src_aaaa1111'],
     });
-    const { nodes, edges } = projectDecisionEvents([decision]);
-    expect(nodes).toHaveLength(1);
-    expect(nodes[0]?.node_type).toBe('Decision');
-    expect(nodes[0]?.id).toBe('decision:memevt_dec00001');
+    const { nodes, edges } = projectEventNodes([decision]);
+    // Decision node + Source node (the grounding source is now a node, not dangling).
+    const decisionNode = nodes.find((n) => n.id === 'decision:memevt_dec00001');
+    expect(decisionNode?.node_type).toBe('Decision');
+    const sourceNode = nodes.find((n) => n.id === 'source:src_aaaa1111');
+    expect(sourceNode?.node_type).toBe('Source');
+    expect(sourceNode?.name).toBe('src_aaaa1111');
     expect(edges).toHaveLength(1);
     expect(edges[0]?.edge_type).toBe('RATIONALE_FOR');
     expect(edges[0]?.from).toBe('source:src_aaaa1111');
@@ -120,9 +125,51 @@ describe('projectDecisionEvents', () => {
     expect(edges[0]?.confidence_kind).toBe('EXTRACTED');
   });
 
-  test('non-decision approved events produce no decision nodes', () => {
-    const obs = ev('memevt_obs00001', { ...approval });
-    expect(projectDecisionEvents([obs]).nodes).toEqual([]);
+  test('approved observation → Episode node + MENTIONS edge + Source node', () => {
+    const obs = ev('memevt_obs00001', {
+      ...approval,
+      event_type: 'observation',
+      text: 'measurement first matters',
+      sources: ['src_bbbb2222'],
+    });
+    const { nodes, edges } = projectEventNodes([obs]);
+    const episode = nodes.find((n) => n.id === 'decision:memevt_obs00001');
+    expect(episode?.node_type).toBe('Episode');
+    expect(nodes.find((n) => n.id === 'source:src_bbbb2222')?.node_type).toBe('Source');
+    expect(edges).toHaveLength(1);
+    expect(edges[0]?.edge_type).toBe('MENTIONS');
+    expect(edges[0]?.from).toBe('source:src_bbbb2222');
+  });
+
+  test('same source across multiple events is emitted as a single Source node (dedup)', () => {
+    const a = ev('memevt_obs00001', {
+      ...approval,
+      event_type: 'observation',
+      sources: ['src_shared01'],
+    });
+    const b = ev('memevt_obs00002', {
+      ...approval,
+      event_type: 'observation',
+      sources: ['src_shared01'],
+    });
+    const { nodes } = projectEventNodes([a, b]);
+    expect(nodes.filter((n) => n.id === 'source:src_shared01')).toHaveLength(1);
+  });
+
+  test('sensitivity=secret approved event is not projected as a node (F6 ac-5)', () => {
+    const secret = ev('memevt_sec00001', {
+      ...approval,
+      event_type: 'observation',
+      text: 'secret observation',
+      sources: ['src_pub00001'],
+      sensitivity: 'secret',
+    });
+    const { nodes, edges } = projectEventNodes([secret]);
+    expect(nodes.find((n) => n.id === 'decision:memevt_sec00001')).toBeUndefined();
+    // its grounding-source edge is also dropped (no node to attach to).
+    expect(edges).toHaveLength(0);
+    // and the source node is not pulled in solely by a secret event.
+    expect(nodes.find((n) => n.id === 'source:src_pub00001')).toBeUndefined();
   });
 });
 
@@ -207,7 +254,7 @@ describe('projectMemory + memoryStatus (end-to-end freshness)', () => {
     );
 
     const r = await projectMemory(workDir, { now: new Date('2026-06-09T12:00:00Z') });
-    expect(r.node_count).toBe(1); // one Decision node
+    expect(r.node_count).toBe(2); // one Decision node + one Source node (grounding source)
     expect(r.edge_count).toBe(1); // one RATIONALE_FOR edge
 
     // serving graph + wiki + manifest written to localDir (derived, gitignored)
@@ -219,6 +266,28 @@ describe('projectMemory + memoryStatus (end-to-end freshness)', () => {
     const status = await memoryStatus(workDir);
     expect(status.freshness).toBe('fresh');
     expect(status.dirty_sources).toEqual([]);
+  });
+
+  test('approved observation projects an Episode + Source node queryable via queryNeighbors', async () => {
+    await seedSource('src_obs00001', 'a'.repeat(64));
+    await new MemoryEventStore(workDir).append(
+      ev('memevt_obs00001', {
+        ...approval,
+        event_type: 'observation',
+        text: 'measurement first matters',
+        sources: ['src_obs00001'],
+      }),
+    );
+
+    const r = await projectMemory(workDir, { now: new Date('2026-06-09T12:00:00Z') });
+    const ids = r.serving.nodes.map((n) => n.id);
+    expect(ids).toContain('source:src_obs00001'); // F4: source is a real node, not dangling
+    const episodeNode = r.serving.nodes.find((n) => n.node_type === 'Episode');
+    if (!episodeNode) throw new Error('expected an Episode node for the approved observation');
+
+    // the source node is now queryable and reaches the episode event node.
+    const result = queryNeighbors(r.serving, 'source:src_obs00001', 2);
+    expect(result.neighbors).toContain(episodeNode.id);
   });
 
   test('status is absent before any projection', async () => {
@@ -246,6 +315,40 @@ describe('projectMemory + memoryStatus (end-to-end freshness)', () => {
     const status = await memoryStatus(workDir);
     expect(status.freshness).toBe('stale');
     expect(status.dirty_sources).toEqual(['src_one00001']);
+  });
+
+  test('secret source is not made into a Source node and its edge is omitted (F6 ac-5)', async () => {
+    // a secret source grounding a non-secret event: the event stays, but the
+    // secret source node and the edge to it are dropped (source-sensitivity gate).
+    const secretSource: MemorySource = memorySource.parse({
+      schema_version: '0.1.0',
+      source_id: 'src_secret001',
+      source_type: 'code',
+      path: 'src/secret.ts',
+      content_hash: 'a'.repeat(64),
+      captured_at: '2026-06-09T10:00:00+00:00',
+      revision: 'r1',
+      sensitivity: 'secret',
+    });
+    await new MemorySourceStore(workDir).write(secretSource);
+    await new MemoryEventStore(workDir).append(
+      ev('memevt_obs00001', {
+        ...approval,
+        event_type: 'observation',
+        text: 'grounded on a secret source',
+        sources: ['src_secret001'],
+      }),
+    );
+
+    const r = await projectMemory(workDir, { now: new Date('2026-06-09T12:00:00Z') });
+    const ids = r.serving.nodes.map((n) => n.id);
+    expect(ids).not.toContain('source:src_secret001');
+    // the (non-secret) event node is still present.
+    expect(r.serving.nodes.some((n) => n.node_type === 'Episode')).toBe(true);
+    // no edge resolves into the secret source.
+    for (const bucket of Object.values(r.serving.adjacency)) {
+      expect(bucket.map((a) => a.to)).not.toContain('source:src_secret001');
+    }
   });
 
   test('projection reads structure IR nodes/edges and merges decision nodes', async () => {
@@ -309,6 +412,7 @@ describe('proposeEvent / approveEvent (write model §4-5 / §10-2 F2)', () => {
 
     const { decision, projection } = await approveEvent(workDir, proposed.event_id, {
       by: 'user',
+      approverKind: 'user',
       now: new Date('2026-06-09T12:00:00Z'),
     });
 
@@ -332,7 +436,10 @@ describe('proposeEvent / approveEvent (write model §4-5 / §10-2 F2)', () => {
 
   test('approveEvent then reduceEvents keeps only the new approved head', async () => {
     const proposed = await proposeEvent(workDir, { event_type: 'observation', text: 'x' });
-    const { decision } = await approveEvent(workDir, proposed.event_id, { by: 'policy' });
+    const { decision } = await approveEvent(workDir, proposed.event_id, {
+      by: 'policy',
+      approverKind: 'user',
+    });
     const all = await new MemoryEventStore(workDir).list();
     const { approvedHeads } = reduceEvents(all);
     expect(approvedHeads.map((e) => e.event_id)).toEqual([decision.event_id]);
@@ -340,7 +447,7 @@ describe('proposeEvent / approveEvent (write model §4-5 / §10-2 F2)', () => {
 
   test('approveEvent rejects a non-pending event id', async () => {
     const proposed = await proposeEvent(workDir, { event_type: 'observation', text: 'x' });
-    await approveEvent(workDir, proposed.event_id, { by: 'user' });
+    await approveEvent(workDir, proposed.event_id, { by: 'user', approverKind: 'user' });
     // approving the approved decision head is not allowed (status=approved).
     const all = await new MemoryEventStore(workDir).list();
     const approved = all.find((e) => e.status === 'approved');
@@ -352,12 +459,15 @@ describe('proposeEvent / approveEvent (write model §4-5 / §10-2 F2)', () => {
 
   test('double-approve of the same pending id is rejected and yields exactly one head', async () => {
     const proposed = await proposeEvent(workDir, { event_type: 'decision', text: 'use bun' });
-    const { decision } = await approveEvent(workDir, proposed.event_id, { by: 'user' });
+    const { decision } = await approveEvent(workDir, proposed.event_id, {
+      by: 'user',
+      approverKind: 'user',
+    });
 
     // second approve of the SAME (immutable, still-pending) original must reject
-    await expect(approveEvent(workDir, proposed.event_id, { by: 'user2' })).rejects.toBeInstanceOf(
-      MemoryEventAlreadyDecidedError,
-    );
+    await expect(
+      approveEvent(workDir, proposed.event_id, { by: 'user2', approverKind: 'user' }),
+    ).rejects.toBeInstanceOf(MemoryEventAlreadyDecidedError);
 
     // §10-2: the chain has exactly one approved head, no fork
     const all = await new MemoryEventStore(workDir).list();
@@ -367,10 +477,10 @@ describe('proposeEvent / approveEvent (write model §4-5 / §10-2 F2)', () => {
 
   test('approve then reject of the same pending id is rejected', async () => {
     const proposed = await proposeEvent(workDir, { event_type: 'decision', text: 'use bun' });
-    await approveEvent(workDir, proposed.event_id, { by: 'user' });
+    await approveEvent(workDir, proposed.event_id, { by: 'user', approverKind: 'user' });
 
     await expect(
-      approveEvent(workDir, proposed.event_id, { by: 'user', reject: true }),
+      approveEvent(workDir, proposed.event_id, { by: 'user', approverKind: 'user', reject: true }),
     ).rejects.toBeInstanceOf(MemoryEventAlreadyDecidedError);
   });
 
@@ -378,6 +488,7 @@ describe('proposeEvent / approveEvent (write model §4-5 / §10-2 F2)', () => {
     const proposed = await proposeEvent(workDir, { event_type: 'decision', text: 'maybe' });
     const { decision, projection } = await approveEvent(workDir, proposed.event_id, {
       by: 'user',
+      approverKind: 'user',
       reject: true,
     });
     expect(decision.status).toBe('rejected');
@@ -386,5 +497,55 @@ describe('proposeEvent / approveEvent (write model §4-5 / §10-2 F2)', () => {
     expect(projection.serving.nodes.map((n) => n.id)).not.toContain(
       `decision:${decision.event_id}`,
     );
+  });
+
+  test('actor.kind=agent proposed event approved with approverKind=agent is rejected (self-approval)', async () => {
+    const proposed = await proposeEvent(workDir, {
+      event_type: 'decision',
+      text: 'agent guess',
+      actor: { kind: 'agent' },
+    });
+    await expect(
+      approveEvent(workDir, proposed.event_id, { by: 'agent', approverKind: 'agent' }),
+    ).rejects.toBeInstanceOf(MemorySelfApprovalError);
+  });
+
+  test('agent-proposed event defaults approverKind to agent and is rejected (self-approval)', async () => {
+    const proposed = await proposeEvent(workDir, {
+      event_type: 'decision',
+      text: 'agent guess',
+      actor: { kind: 'agent' },
+    });
+    // omitting approverKind defaults to 'agent' → blocked
+    await expect(approveEvent(workDir, proposed.event_id, { by: 'agent' })).rejects.toBeInstanceOf(
+      MemorySelfApprovalError,
+    );
+  });
+
+  test('agent-proposed event approved with approverKind=user passes', async () => {
+    const proposed = await proposeEvent(workDir, {
+      event_type: 'decision',
+      text: 'agent guess',
+      actor: { kind: 'agent' },
+    });
+    const { decision } = await approveEvent(workDir, proposed.event_id, {
+      by: 'user',
+      approverKind: 'user',
+    });
+    expect(decision.status).toBe('approved');
+    expect(decision.supersedes).toBe(proposed.event_id);
+  });
+
+  test('user-proposed event approved with approverKind=agent passes (origin is user)', async () => {
+    const proposed = await proposeEvent(workDir, {
+      event_type: 'decision',
+      text: 'user fact',
+      actor: { kind: 'user' },
+    });
+    const { decision } = await approveEvent(workDir, proposed.event_id, {
+      by: 'agent',
+      approverKind: 'agent',
+    });
+    expect(decision.status).toBe('approved');
   });
 });

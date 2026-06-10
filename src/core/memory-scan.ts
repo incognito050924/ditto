@@ -193,6 +193,9 @@ export async function scanSources(
       content_hash: contentHash,
       captured_at: now,
       revision,
+      // Automatic secret classification is follow-up; scan tags everything
+      // 'internal'. The active secret gate is the explicit sensitivity on
+      // propose/events plus the projection/build filters (F6).
       sensitivity: 'internal',
       word_count: content.split(/\s+/).filter((w) => w.length > 0).length,
       ...(isOwnRoot ? {} : { repo: relative(root, owningRepo as string) }),

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
 import { AutopilotStore } from '~/core/autopilot-store';
@@ -367,6 +367,36 @@ describe('preToolUseHandler — ac-4 scope-out write', () => {
   test('Bash redirect outside repo is blocked; inside repo allowed', async () => {
     expect((await bash('echo hi > /tmp/elsewhere/out.txt')).exitCode).toBe(2);
     expect((await bash('echo hi > ./build/out.txt')).exitCode).toBe(0);
+  });
+});
+
+describe('preToolUseHandler — Claude session-memory dir is a narrow scope-out exception', () => {
+  const HOME = process.env.HOME ?? homedir();
+  const memPath = join(HOME, '.claude', 'projects', 'some-project', 'memory', 'foo.md');
+
+  test('allows a Write into ~/.claude/projects/<x>/memory/ (agent auto-memory)', async () => {
+    expect((await file('Write', memPath)).exitCode).toBe(0);
+    expect((await file('Edit', memPath)).exitCode).toBe(0);
+    expect((await file('MultiEdit', memPath)).exitCode).toBe(0);
+  });
+
+  test('allows a Bash redirect into ~/.claude/projects/<x>/memory/', async () => {
+    expect((await bash(`echo hi > ${memPath}`)).exitCode).toBe(0);
+  });
+
+  test('still blocks other repo-external writes (not memory)', async () => {
+    // a sibling .claude path that is NOT projects/*/memory must stay blocked
+    expect((await file('Write', join(HOME, '.claude', 'other.json'))).exitCode).toBe(2);
+    // projects/* but no memory segment stays blocked
+    expect((await file('Write', join(HOME, '.claude', 'projects', 'p', 'notes.md'))).exitCode).toBe(
+      2,
+    );
+    expect((await file('Write', '/tmp/elsewhere/x.txt')).exitCode).toBe(2);
+  });
+
+  test('secret still wins over the memory exception (a secret-shaped name in memory blocks)', async () => {
+    const secretInMem = join(HOME, '.claude', 'projects', 'p', 'memory', '.env');
+    expect((await file('Write', secretInMem)).exitCode).toBe(2);
   });
 });
 

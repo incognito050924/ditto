@@ -14,10 +14,12 @@
  * (open 'wx'); a duplicate id raises MemoryEventExistsError, which we treat as a
  * graceful skip (the event already exists) rather than an error.
  *
- * ADR events are pre-curated, so they are written `approved` and therefore carry
- * `approved_by='bootstrap'` + `decided_at` to satisfy the approval invariant
- * (src/schemas/memory-event.ts superRefine). glossary/handoff events stay
- * `pending` (default) — they are extractions, not approved decisions.
+ * All bootstrap events are written `approved` (and therefore carry
+ * `approved_by='bootstrap'` + `decided_at` to satisfy the approval invariant —
+ * src/schemas/memory-event.ts superRefine). Bootstrap ingests knowledge that is
+ * ALREADY curated (`.ditto/knowledge` + archived handoffs), so it is legitimate
+ * to seed it approved — otherwise the reducer drops every pending event and the
+ * serving graph holds only ADR decisions (the glossary/handoff would never show).
  */
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
@@ -295,10 +297,12 @@ async function ingestGlossary(
       actor: { kind: 'agent', role: 'bootstrap' },
       text,
       created_at: now,
-      status: 'pending',
+      status: 'approved',
       sources: [sourceId],
       confidence_kind: 'EXTRACTED',
       sensitivity: 'internal',
+      approved_by: 'bootstrap',
+      decided_at: now,
     };
     await appendEventGraceful(eventStore, event, result);
   }
@@ -373,10 +377,12 @@ async function ingestHandoffs(
       actor: { kind: 'agent', role: 'bootstrap' },
       text,
       created_at: now,
-      status: 'pending',
+      status: 'approved',
       sources: [sourceId],
       confidence_kind: 'EXTRACTED',
       sensitivity: 'internal',
+      approved_by: 'bootstrap',
+      decided_at: now,
     };
     await appendEventGraceful(eventStore, event, result);
   }

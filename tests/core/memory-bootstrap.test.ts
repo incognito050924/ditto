@@ -110,6 +110,20 @@ describe('bootstrapIngest', () => {
     expect(types).toEqual(['note', 'spec', 'spec']);
   });
 
+  test('glossary/handoff events are ingested as status=approved (carry approval invariant)', async () => {
+    await bootstrapIngest(workDir);
+    const events = await new MemoryEventStore(workDir).list();
+
+    // glossary + handoff are observations; both must be approved so projection sees them.
+    const observations = events.filter((e) => e.event_type === 'observation');
+    expect(observations.length).toBe(2);
+    for (const e of observations) {
+      expect(e.status).toBe('approved');
+      expect(e.approved_by).toBe('bootstrap');
+      expect(e.decided_at).toBeTruthy();
+    }
+  });
+
   test('is idempotent — a second run appends/adds nothing new', async () => {
     await bootstrapIngest(workDir);
     const second = await bootstrapIngest(workDir);
@@ -121,6 +135,51 @@ describe('bootstrapIngest', () => {
     // Total stays 3 — no duplicates created.
     const events = await new MemoryEventStore(workDir).list();
     expect(events.length).toBe(3);
+  });
+
+  test('re-ingest after ADR content changes updates the source content_hash (F5); event body stays immutable', async () => {
+    await bootstrapIngest(workDir);
+    const sourceStore = new MemorySourceStore(workDir);
+    // The ADR is the only `decision` event; its single source is the ADR source.
+    const adrEventBefore = (await new MemoryEventStore(workDir).list()).find(
+      (e) => e.event_type === 'decision',
+    );
+    expect(adrEventBefore).toBeDefined();
+    const adrSourceId = adrEventBefore?.sources[0] ?? '';
+    const adrEventId = adrEventBefore?.event_id ?? '';
+    const adrSourceBefore = await sourceStore.get(adrSourceId);
+
+    // Edit the curated ADR body — the rationale now mentions a new term.
+    const adrPath = join(workDir, '.ditto', 'knowledge', 'adr', 'ADR-0001-schema-source.md');
+    await writeFile(
+      adrPath,
+      [
+        '# ADR-0001: Schema source of truth',
+        '',
+        '## 결정',
+        'zod schema가 source of truth이다.',
+        '',
+        '## 근거',
+        'zod는 runtime 검증을 한 정의로 제공하고 telemetry 회귀 위험이 작다.',
+      ].join('\n'),
+    );
+
+    const second = await bootstrapIngest(workDir);
+    // The changed source is re-written (surfaced via sourcesAdded, not skipped).
+    expect(second.sourcesAdded).toContain(adrSourceId);
+    expect(second.sourcesSkipped).not.toContain(adrSourceId);
+
+    const adrSourceAfter = await sourceStore.get(adrSourceId);
+    expect(adrSourceAfter.content_hash).not.toBe(adrSourceBefore.content_hash);
+
+    // Limitation pinned: the immutable event body is NOT refreshed by re-ingest
+    // (same event_id is graceful-skipped, supersede path absent — ADR-0013).
+    expect(second.eventsSkipped).toContain(adrEventId);
+    const adrEventAfter = (await new MemoryEventStore(workDir).list()).find(
+      (e) => e.event_type === 'decision',
+    );
+    expect(adrEventAfter?.event_id).toBe(adrEventId);
+    expect(adrEventAfter?.text).toBe(adrEventBefore?.text);
   });
 
   test('body search has wider recall than title-token duplicateSearch (ac-14)', async () => {

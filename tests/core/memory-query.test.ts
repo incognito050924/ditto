@@ -9,6 +9,7 @@ import {
   auditCounts,
   explainNode,
   pullUsageLogPath,
+  queryBodies,
   queryNeighbors,
   readFreshness,
   readPullUsage,
@@ -224,7 +225,12 @@ async function projectFixture(): Promise<void> {
   };
   await new MemoryGraphIrStore(workDir).write(ir);
   await seedSource('src_one00001', 'a'.repeat(64));
-  await new MemoryEventStore(workDir).append(ev('memevt_appr0001', { ...approval }));
+  // Ground the approved event in the seeded source so N1's event projection
+  // (Episode node + Source node + MENTIONS edge) resolves instead of leaving
+  // the Episode node orphan: source → MENTIONS → episode.
+  await new MemoryEventStore(workDir).append(
+    ev('memevt_appr0001', { ...approval, sources: ['src_one00001'] }),
+  );
   await projectMemory(workDir, { now: new Date('2026-06-09T12:00:00Z') });
 }
 
@@ -263,8 +269,10 @@ describe('runAudit (append-only history)', () => {
     await projectFixture();
 
     const first = await runAudit(workDir, { now: new Date('2026-06-09T13:00:00Z') });
-    expect(first.entry.node_count).toBe(2);
-    expect(first.entry.edge_count).toBe(1);
+    // 2 IR nodes (artifact a/b) + N1 event projection (Episode + grounding Source).
+    expect(first.entry.node_count).toBe(4);
+    // 1 IMPORTS (a→b) + 1 MENTIONS (source→episode).
+    expect(first.entry.edge_count).toBe(2);
     expect(first.entry.counts.orphan).toBe(0);
     expect(first.history_length).toBe(1);
 
@@ -309,5 +317,24 @@ describe('pull-query instrumentation (ac-8: actual query utterances, not prompt 
     expect(pullUsageLogPath(workDir)).toBe(
       join(workDir, '.ditto', 'local', 'memory', 'pull-usage.jsonl'),
     );
+  });
+});
+
+describe('queryBodies (body-search fallback over events, ac-2 / F2)', () => {
+  test('returns event/source for a body token absent from any node id or title', async () => {
+    await projectFixture();
+    // The fixture event body is "observed" — no source id or node id contains it,
+    // so graph traversal cannot reach it, but body search must.
+    const r = await queryBodies(workDir, 'observed');
+    expect(r.matches.map((m) => m.event_id)).toContain('memevt_appr0001');
+    expect(r.matches.map((m) => m.source_id)).toContain('src_one00001');
+    // Answer carries the freshness envelope like every other query.
+    expect(r.freshness).toBe('fresh');
+    expect(r.projection_id).toMatch(/^proj_/);
+  });
+
+  test('empty result when no event body matches', async () => {
+    await projectFixture();
+    expect((await queryBodies(workDir, 'zzznomatch')).matches).toEqual([]);
   });
 });

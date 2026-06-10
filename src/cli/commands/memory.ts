@@ -15,15 +15,18 @@ import {
 import {
   MemoryEventAlreadyDecidedError,
   MemoryEventNotPendingError,
+  MemorySelfApprovalError,
   approveEvent,
   memoryStatus,
   projectMemory,
   proposeEvent,
 } from '~/core/memory-project';
 import {
+  type BodyQueryResult,
   MemoryNodeNotFoundError,
   MemoryProjectionAbsentError,
   explainNode,
+  queryBodies,
   queryNeighbors,
   readFreshness,
   readPullUsage,
@@ -39,7 +42,12 @@ import {
   MemoryProjectionStore,
 } from '~/core/memory-store';
 import { readUsageReport } from '~/core/memory-warmstart';
-import { type MemoryEvent, memoryEvent, memoryEventType } from '~/schemas/memory-event';
+import {
+  type MemoryEvent,
+  memoryEvent,
+  memoryEventId,
+  memoryEventType,
+} from '~/schemas/memory-event';
 import { memoryConfidenceKind } from '~/schemas/memory-graph-ir';
 import { memorySensitivity, memorySourceId } from '~/schemas/memory-source';
 import {
@@ -537,6 +545,36 @@ async function loadServingOrExit(repoRoot: string) {
   return graph;
 }
 
+/**
+ * BODY-search fallback for `query` (ac-2 / F2): when the node is absent from the
+ * serving graph (or `--text` is given), search ingested event bodies instead of
+ * graph adjacency, so a term living only in a rationale/finding is still found.
+ * Records the pull (ac-8) with the match count as neighbor_count.
+ */
+async function runBodyQuery(
+  repoRoot: string,
+  node: string,
+  depth: number,
+  format: ReturnType<typeof parseOutputFormat>,
+): Promise<void> {
+  const result: BodyQueryResult = await queryBodies(repoRoot, node);
+  await recordPullQuery(repoRoot, {
+    ts: new Date().toISOString(),
+    node,
+    depth,
+    neighbor_count: result.matches.length,
+    freshness: result.freshness,
+  }).catch(() => {});
+  if (format === 'json') {
+    writeJson(result);
+    return;
+  }
+  writeHuman(`Body matches for "${result.query}" (node not in graph — text fallback):`);
+  for (const m of result.matches) writeHuman(`  - ${m.event_id}\t${m.source_id}`);
+  if (result.matches.length === 0) writeHuman('  (none)');
+  writeFreshnessHuman(result);
+}
+
 const memoryQuery = defineCommand({
   meta: {
     name: 'query',
@@ -546,6 +584,11 @@ const memoryQuery = defineCommand({
   args: {
     node: { type: 'positional', description: 'Node id to start from', required: true },
     depth: { type: 'string', description: 'Traversal depth (default 2)', default: '2' },
+    text: {
+      type: 'boolean',
+      description: 'Search event bodies (rationale/finding) instead of graph traversal (ac-2 / F2)',
+      default: false,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
@@ -565,6 +608,11 @@ const memoryQuery = defineCommand({
     }
     const repoRoot = await resolveRepoRootForCreate();
     try {
+      // Explicit text mode: search event bodies, not the graph (ac-2 / F2).
+      if (args.text) {
+        await runBodyQuery(repoRoot, args.node, depth, format);
+        return;
+      }
       const graph = await loadServingOrExit(repoRoot);
       const result = queryNeighbors(graph, args.node, depth);
       const freshness = await readFreshness(repoRoot);
@@ -587,9 +635,10 @@ const memoryQuery = defineCommand({
         writeFreshnessHuman(freshness);
       }
     } catch (err) {
+      // Node absent from the serving graph → fall back to BODY search (ac-2 / F2)
+      // instead of failing, so the body-search recall is reachable at runtime.
       if (err instanceof MemoryNodeNotFoundError) {
-        writeError(err.message);
-        process.exit(USAGE_ERROR_EXIT);
+        await runBodyQuery(repoRoot, args.node, depth, format);
         return;
       }
       writeError(`memory query failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -844,6 +893,11 @@ const memoryApprove = defineCommand({
   args: {
     eventId: { type: 'positional', description: 'Pending event id to approve', required: true },
     by: { type: 'string', description: 'Approver identity (required)', required: true },
+    actor: {
+      type: 'string',
+      description: 'Approver kind: user|agent (default agent). Agents cannot self-approve.',
+      default: 'agent',
+    },
     reject: {
       type: 'boolean',
       description: 'Record a rejected decision instead of approved',
@@ -865,10 +919,24 @@ const memoryApprove = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
+    // F7: validate the event id against the schema (parity with append/propose
+    // --source) before it is composed into a file path.
+    if (!memoryEventId.safeParse(args.eventId).success) {
+      writeError(`invalid event id "${args.eventId}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const approverKind = args.actor;
+    if (approverKind !== 'user' && approverKind !== 'agent') {
+      writeError(`--actor must be user|agent; got "${approverKind}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
     const repoRoot = await resolveRepoRootForCreate();
     try {
       const { decision, projection } = await approveEvent(repoRoot, args.eventId, {
         by: args.by,
+        approverKind,
         reject: args.reject,
       });
       if (format === 'json') {
@@ -890,7 +958,8 @@ const memoryApprove = defineCommand({
     } catch (err) {
       if (
         err instanceof MemoryEventNotPendingError ||
-        err instanceof MemoryEventAlreadyDecidedError
+        err instanceof MemoryEventAlreadyDecidedError ||
+        err instanceof MemorySelfApprovalError
       ) {
         writeError(err.message);
         process.exit(USAGE_ERROR_EXIT);

@@ -17,8 +17,9 @@ import { appendFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { dittoDir, localDir } from './ditto-paths';
 import { ensureDir } from './fs';
+import { type BodyMatch, searchEventBodies } from './memory-bootstrap';
 import { memoryStatus } from './memory-project';
-import { MemoryProjectionStore, type ServingGraph } from './memory-store';
+import { MemoryEventStore, MemoryProjectionStore, type ServingGraph } from './memory-store';
 
 /** Freshness envelope attached to every query/path/explain answer (§4-4). */
 export interface FreshnessEnvelope {
@@ -144,6 +145,27 @@ export function queryNeighbors(graph: ServingGraph, node: string, depth: number)
   }
   seen.delete(node);
   return { root: node, depth, neighbors: [...seen].sort() };
+}
+
+export interface BodyQueryResult extends FreshnessEnvelope {
+  query: string;
+  /** events whose BODY matches `query` (substring or shared significant token). */
+  matches: BodyMatch[];
+}
+
+/**
+ * BODY-search fallback (ac-2 / F2): when a query string is not a node id present
+ * in the serving graph, search the ingested EVENT bodies (rationale/finding text)
+ * instead of the graph adjacency. This gives wider recall than node-id/title
+ * traversal — a term living only in a decision's rationale is still findable.
+ * Reads the append-only events SoT (read-only) and attaches the same freshness
+ * envelope as graph queries. Reuses `searchEventBodies` (bootstrap).
+ */
+export async function queryBodies(repoRoot: string, query: string): Promise<BodyQueryResult> {
+  const events = await new MemoryEventStore(repoRoot).list();
+  const matches = searchEventBodies(query, events);
+  const freshness = await readFreshness(repoRoot);
+  return { query, matches, ...freshness };
 }
 
 export interface PathResult {

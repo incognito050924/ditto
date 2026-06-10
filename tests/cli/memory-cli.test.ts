@@ -288,7 +288,17 @@ describe('ditto memory propose/approve (write model §4-5)', () => {
     const originalPath = join(dir, '.ditto', 'memory', 'events', `${originalId}.json`);
     const before = await readFile(originalPath, 'utf8');
 
-    const approved = ditto(['memory', 'approve', originalId, '--by', 'user', '--output', 'json']);
+    const approved = ditto([
+      'memory',
+      'approve',
+      originalId,
+      '--by',
+      'user',
+      '--actor',
+      'user',
+      '--output',
+      'json',
+    ]);
     expect(approved.exitCode).toBe(0);
     const out = JSON.parse(approved.stdout);
     expect(out.decision.status).toBe('approved');
@@ -324,10 +334,30 @@ describe('ditto memory propose/approve (write model §4-5)', () => {
       'json',
     ]);
     const id = JSON.parse(proposed.stdout).event_id;
-    const approved = ditto(['memory', 'approve', id, '--by', 'user', '--output', 'json']);
+    const approved = ditto([
+      'memory',
+      'approve',
+      id,
+      '--by',
+      'user',
+      '--actor',
+      'user',
+      '--output',
+      'json',
+    ]);
     const decisionId = JSON.parse(approved.stdout).decision.event_id;
     // re-approving the already-approved head is rejected
-    const second = ditto(['memory', 'approve', decisionId, '--by', 'user', '--output', 'json']);
+    const second = ditto([
+      'memory',
+      'approve',
+      decisionId,
+      '--by',
+      'user',
+      '--actor',
+      'user',
+      '--output',
+      'json',
+    ]);
     expect(second.exitCode).toBe(65);
     expect(second.stderr).toMatch(/not pending/);
   });
@@ -339,10 +369,70 @@ describe('ditto memory propose/approve (write model §4-5)', () => {
       'memevt_doesnotexist',
       '--by',
       'user',
+      '--actor',
+      'user',
       '--output',
       'json',
     ]);
     expect(r.exitCode).toBe(65);
+  });
+
+  test('approve of a malformed event id (not memevt_) is a usage error (F7)', () => {
+    const r = ditto(['memory', 'approve', 'not-a-valid-id', '--by', 'user', '--output', 'json']);
+    expect(r.exitCode).toBe(65);
+  });
+
+  test('agent-proposed event approved with --actor agent is a usage error (F3 self-approval)', () => {
+    const proposed = ditto([
+      'memory',
+      'propose',
+      '--type',
+      'decision',
+      '--text',
+      'agent guess',
+      '--output',
+      'json',
+    ]);
+    const id = JSON.parse(proposed.stdout).event_id;
+    const r = ditto([
+      'memory',
+      'approve',
+      id,
+      '--by',
+      'agent',
+      '--actor',
+      'agent',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(65);
+  });
+
+  test('agent-proposed event approved with --actor user succeeds (F3)', () => {
+    const proposed = ditto([
+      'memory',
+      'propose',
+      '--type',
+      'decision',
+      '--text',
+      'agent guess',
+      '--output',
+      'json',
+    ]);
+    const id = JSON.parse(proposed.stdout).event_id;
+    const r = ditto([
+      'memory',
+      'approve',
+      id,
+      '--by',
+      'user',
+      '--actor',
+      'user',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(0);
+    expect(JSON.parse(r.stdout).decision.status).toBe('approved');
   });
 
   // No-direct-write proof: the serving graph / IR can only change through

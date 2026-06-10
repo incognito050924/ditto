@@ -263,6 +263,18 @@ describe('chunkSources', () => {
     const reversed = chunkSources([...files].reverse(), 2);
     expect(JSON.stringify(reversed)).toBe(JSON.stringify(chunks));
   });
+
+  test('excludes sensitivity=secret files from chunks (F6 ac-5)', () => {
+    const files = [
+      { source_id: 'src_000000000001', path: 'a.ts', content: 'x' },
+      { source_id: 'src_000000000002', path: 'b.ts', content: 'y', sensitivity: 'secret' as const },
+      { source_id: 'src_000000000003', path: 'c.ts', content: 'z', sensitivity: 'public' as const },
+    ];
+    const chunks = chunkSources(files, 22);
+    const includedIds = chunks.flatMap((c) => c.files.map((f) => f.source_id));
+    expect(includedIds).toEqual(['src_000000000001', 'src_000000000003']);
+    expect(includedIds).not.toContain('src_000000000002');
+  });
 });
 
 describe('irFragmentsSchema', () => {

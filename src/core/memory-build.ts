@@ -27,16 +27,24 @@ import {
   memoryEdgeType,
   memoryNodeType,
 } from '~/schemas/memory-graph-ir';
-import { memorySourceId } from '~/schemas/memory-source';
+import { type memorySensitivity, memorySourceId } from '~/schemas/memory-source';
 
 /** Files per extraction chunk (design §4-2 / §10-5: 20–25 files). */
 export const CHUNK_FILE_COUNT = 22;
+
+export type MemorySensitivity = z.infer<typeof memorySensitivity>;
 
 /** One source file handed to the extractor (path + content for the chunk packet). */
 export interface ChunkFile {
   source_id: string;
   path: string;
   content: string;
+  /**
+   * Disclosure class. When `'secret'` the file is excluded from chunks so its
+   * content never reaches the host extractor LLM (F6 / ac-5). Optional: existing
+   * callers that omit it are treated as non-secret (non-invasive).
+   */
+  sensitivity?: MemorySensitivity;
 }
 
 /**
@@ -59,9 +67,12 @@ export function chunkSources(
   chunkSize: number = CHUNK_FILE_COUNT,
 ): ExtractionChunkRequest[] {
   const size = Math.max(1, Math.floor(chunkSize));
-  const sorted = [...sources].sort((a, b) =>
-    a.source_id < b.source_id ? -1 : a.source_id > b.source_id ? 1 : 0,
-  );
+  // F6/ac-5: drop secret files before chunking so their content is never handed
+  // to the host extractor LLM. Filtering first keeps chunk indices over the
+  // disclosed set.
+  const sorted = [...sources]
+    .filter((s) => s.sensitivity !== 'secret')
+    .sort((a, b) => (a.source_id < b.source_id ? -1 : a.source_id > b.source_id ? 1 : 0));
   const chunks: ExtractionChunkRequest[] = [];
   for (let i = 0; i < sorted.length; i += size) {
     const idx = chunks.length;

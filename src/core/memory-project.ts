@@ -10,9 +10,11 @@
  * Projections are never edited in place — if wrong, fix the source/extractor
  * and regenerate (§4-3). This module is the regeneration step.
  *
- * Decision nodes (§10-4b step 2): an approved `event_type='decision'` becomes a
- * `Decision` node; its grounding sources become `RATIONALE_FOR` edges
- * (source → decision). EXTRACTED (the decision is an approved fact, score 1.0).
+ * Event nodes (§10-4b step 2): an approved `event_type='decision'` becomes a
+ * `Decision` node (grounding sources → `RATIONALE_FOR` edges); every other
+ * approved type becomes an `Episode` node (grounding sources → `MENTIONS`
+ * edges). Each grounding source is also emitted as a `Source` node so the edge
+ * resolves to a real, queryable node. EXTRACTED (approved fact, score 1.0).
  */
 import { type MemoryEvent, memoryEvent } from '~/schemas/memory-event';
 import type { MemoryEdge, MemoryGraphIr, MemoryNode } from '~/schemas/memory-graph-ir';
@@ -40,28 +42,52 @@ function projectionIdFor(key: string): string {
   return `proj_${sha256Hex(key).slice(0, 12)}`;
 }
 
-function decisionNodeId(eventId: string): string {
+function eventNodeId(eventId: string): string {
   return `decision:${eventId}`;
 }
 
 /**
- * Fold approved decision events into Decision nodes + RATIONALE_FOR edges from
- * their grounding sources. Pure & deterministic — sorted by id.
+ * Fold approved events into graph nodes + edges from their grounding sources.
+ * Pure & deterministic — sorted by id.
+ *
+ * - `decision` events → a `Decision` node; its sources become `RATIONALE_FOR`
+ *   edges (source → decision).
+ * - every other approved type (observation/analysis/preference/review_outcome/
+ *   correction) → an `Episode` node; its sources become `MENTIONS` edges
+ *   (source → event).
+ * - each grounding source is ALSO emitted as a `Source` node (deduped by id) so
+ *   the edge's `from` resolves to a real node instead of dangling — without it
+ *   the source is unqueryable (query/explain only see graph.nodes).
+ *
+ * Sensitivity gate (F6 / ac-5): a `sensitivity='secret'` event is NOT projected
+ * (no node, no edges). Independently, any grounding source whose id is in
+ * `secretSourceIds` is not emitted as a `Source` node and its edge is omitted —
+ * the (non-secret) event node is kept, just without that one edge. Event
+ * sensitivity gates the event; source sensitivity gates the source/edge.
  */
-export function projectDecisionEvents(approved: MemoryEvent[]): {
+export function projectEventNodes(
+  approved: MemoryEvent[],
+  secretSourceIds: ReadonlySet<string> = new Set(),
+): {
   nodes: MemoryNode[];
   edges: MemoryEdge[];
 } {
   const nodes: MemoryNode[] = [];
   const edges: MemoryEdge[] = [];
+  const sourceNodeIds = new Set<string>();
   for (const e of approved) {
-    if (e.event_type !== 'decision') continue;
-    const nodeId = decisionNodeId(e.event_id);
+    if (e.sensitivity === 'secret') continue;
+    const isDecision = e.event_type === 'decision';
+    const nodeId = eventNodeId(e.event_id);
     nodes.push({
       id: nodeId,
-      node_type: 'Decision',
+      node_type: isDecision ? 'Decision' : 'Episode',
       name: e.text.slice(0, 120),
-      properties: { event_id: e.event_id, decided_at: e.decided_at ?? '' },
+      properties: {
+        event_id: e.event_id,
+        event_type: e.event_type,
+        decided_at: e.decided_at ?? '',
+      },
       provenance: {
         extraction_run_id: SEMANTIC_RUN_ID,
         extracted_by: 'human',
@@ -69,14 +95,31 @@ export function projectDecisionEvents(approved: MemoryEvent[]): {
         ...(e.sources[0] ? { source_id: e.sources[0] } : {}),
       },
     });
+    const edgeType = isDecision ? 'RATIONALE_FOR' : 'MENTIONS';
     for (const sourceId of e.sources) {
+      if (secretSourceIds.has(sourceId)) continue;
       const sourceNodeId = `source:${sourceId}`;
-      const edgeId = `rationale_for:${sourceId}->${nodeId}`;
+      if (!sourceNodeIds.has(sourceNodeId)) {
+        sourceNodeIds.add(sourceNodeId);
+        nodes.push({
+          id: sourceNodeId,
+          node_type: 'Source',
+          name: sourceId,
+          properties: {},
+          provenance: {
+            source_id: sourceId,
+            extraction_run_id: SEMANTIC_RUN_ID,
+            extracted_by: 'human',
+            schema_version: SCHEMA_VERSION,
+          },
+        });
+      }
+      const edgeId = `${edgeType.toLowerCase()}:${sourceId}->${nodeId}`;
       edges.push({
         id: edgeId,
         from: sourceNodeId,
         to: nodeId,
-        edge_type: 'RATIONALE_FOR',
+        edge_type: edgeType,
         confidence_kind: 'EXTRACTED',
         confidence_score: 1,
         properties: {},
@@ -185,10 +228,15 @@ export async function projectMemory(
   const sources: MemorySource[] = await new MemorySourceStore(repoRoot).list();
 
   const { approvedHeads, setHash } = reduceEvents(events);
-  const decisions = projectDecisionEvents(approvedHeads);
+  // F6/ac-5: secret sources are not projected as nodes and their edges are
+  // omitted (source-sensitivity gate; event-sensitivity gate lives inside).
+  const secretSourceIds = new Set(
+    sources.filter((s) => s.sensitivity === 'secret').map((s) => s.source_id),
+  );
+  const eventGraph = projectEventNodes(approvedHeads, secretSourceIds);
 
-  const nodes: MemoryNode[] = [...(ir?.nodes ?? []), ...decisions.nodes];
-  const edges: MemoryEdge[] = [...(ir?.edges ?? []), ...decisions.edges];
+  const nodes: MemoryNode[] = [...(ir?.nodes ?? []), ...eventGraph.nodes];
+  const edges: MemoryEdge[] = [...(ir?.edges ?? []), ...eventGraph.edges];
 
   const projectionId = projectionIdFor(`${ir?.ir_version ?? 'noir'}:${setHash}`);
   const serving = buildServingGraph(nodes, edges, {
@@ -278,6 +326,20 @@ export class MemoryEventAlreadyDecidedError extends Error {
   }
 }
 
+/**
+ * Raised when an agent tries to approve an event it (an agent) proposed — the
+ * propose→approve gate would otherwise be a no-op: an INFERRED guess could be
+ * self-approved into an approved fact (§4-5 "흔들린 추측이 사실로 굳지 않게").
+ * Enforced on actor *kind* (the actor carries no identifier), which is the
+ * simplest safe rule: an agent-proposed event requires a human approver.
+ */
+export class MemorySelfApprovalError extends Error {
+  constructor(public readonly eventId: string) {
+    super(`event ${eventId} was proposed by an agent; it requires approval by a user`);
+    this.name = 'MemorySelfApprovalError';
+  }
+}
+
 export interface ProposeInput {
   event_type: MemoryEvent['event_type'];
   text: string;
@@ -331,7 +393,7 @@ export async function proposeEvent(
 export async function approveEvent(
   repoRoot: string,
   eventId: string,
-  options: { by: string; reject?: boolean; now?: Date },
+  options: { by: string; approverKind?: 'user' | 'agent'; reject?: boolean; now?: Date },
 ): Promise<{ decision: MemoryEvent; projection: ProjectionResult }> {
   const store = new MemoryEventStore(repoRoot);
   const original = await store.get(eventId); // throws if absent
@@ -347,6 +409,13 @@ export async function approveEvent(
   const priorDecision = existing.find((e) => e.supersedes === eventId);
   if (priorDecision) {
     throw new MemoryEventAlreadyDecidedError(eventId, priorDecision.event_id);
+  }
+  // §4-5 propose/approve gate: an agent must not self-approve its own guess.
+  // Compare on actor *kind* (the actor has no identifier) — an agent-proposed
+  // event can only be decided by a user. approverKind defaults to 'agent'.
+  const approverKind = options.approverKind ?? 'agent';
+  if (original.actor.kind === 'agent' && approverKind === 'agent') {
+    throw new MemorySelfApprovalError(eventId);
   }
   const now = (options.now ?? new Date()).toISOString();
   const decisionId = await generateId('memevt', (candidate) =>
