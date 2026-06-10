@@ -13,6 +13,7 @@ import {
   mergeIrFragments,
 } from '~/core/memory-build';
 import {
+  MemoryEventAlreadyDecidedError,
   MemoryEventNotPendingError,
   approveEvent,
   memoryStatus,
@@ -25,6 +26,7 @@ import {
   explainNode,
   queryNeighbors,
   readFreshness,
+  readPullUsage,
   recordPullQuery,
   runAudit,
   shortestPath,
@@ -36,6 +38,7 @@ import {
   MemoryGraphIrStore,
   MemoryProjectionStore,
 } from '~/core/memory-store';
+import { readUsageReport } from '~/core/memory-warmstart';
 import { type MemoryEvent, memoryEvent, memoryEventType } from '~/schemas/memory-event';
 import { memoryConfidenceKind } from '~/schemas/memory-graph-ir';
 import { memorySensitivity, memorySourceId } from '~/schemas/memory-source';
@@ -885,7 +888,10 @@ const memoryApprove = defineCommand({
         );
       }
     } catch (err) {
-      if (err instanceof MemoryEventNotPendingError) {
+      if (
+        err instanceof MemoryEventNotPendingError ||
+        err instanceof MemoryEventAlreadyDecidedError
+      ) {
         writeError(err.message);
         process.exit(USAGE_ERROR_EXIT);
         return;
@@ -897,6 +903,67 @@ const memoryApprove = defineCommand({
         return;
       }
       writeError(`memory approve failed: ${msg}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+const memoryUsage = defineCommand({
+  meta: {
+    name: 'usage',
+    description:
+      'Report memory usage instrumentation (ac-12): warm-start metrics (opportunity/attempt/hit/actionable) for a work item, plus the global pull-query count. Read-only.',
+  },
+  args: {
+    'work-item': {
+      type: 'string',
+      description: 'Work item id whose warm-start usage to tally (omit to report pull usage only)',
+      required: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const warmstart = args['work-item']
+        ? await readUsageReport(repoRoot, args['work-item'])
+        : undefined;
+      const pull = await readPullUsage(repoRoot);
+      if (format === 'json') {
+        writeJson({
+          ...(args['work-item'] ? { work_item_id: args['work-item'] } : {}),
+          warmstart: warmstart
+            ? {
+                opportunities: warmstart.opportunities,
+                attempts: warmstart.attempts,
+                hits: warmstart.hits,
+                actionable: warmstart.actionable,
+              }
+            : null,
+          pull: { queries: pull.length },
+        });
+      } else {
+        if (warmstart) {
+          writeHuman(`Warm-start usage for ${args['work-item']}:`);
+          writeHuman(`  opportunities: ${warmstart.opportunities}`);
+          writeHuman(`  attempts:      ${warmstart.attempts}`);
+          writeHuman(`  hits:          ${warmstart.hits}`);
+          writeHuman(`  actionable:    ${warmstart.actionable}`);
+        } else {
+          writeHuman('Warm-start usage: (pass --work-item <id> to tally)');
+        }
+        writeHuman(`Pull-query usage: ${pull.length} query(ies)`);
+      }
+    } catch (err) {
+      writeError(`memory usage failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
     }
   },
@@ -918,6 +985,7 @@ export const memoryCommand = defineCommand({
     path: memoryPath,
     explain: memoryExplain,
     audit: memoryAudit,
+    usage: memoryUsage,
     propose: memoryPropose,
     approve: memoryApprove,
   },

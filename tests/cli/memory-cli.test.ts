@@ -177,6 +177,83 @@ describe('ditto memory project + status', () => {
   });
 });
 
+describe('ditto memory usage (ac-12 readable report)', () => {
+  async function seedUsage() {
+    // warm-start usage JSONL: .ditto/local/work-items/<id>/memory/warmstart-usage.jsonl
+    const wsDir = join(dir, '.ditto', 'local', 'work-items', 'wi_demo01', 'memory');
+    await mkdir(wsDir, { recursive: true });
+    const recs = [
+      { opportunity: true, attempt: true, hit: true, actionable: true },
+      { opportunity: true, attempt: true, hit: false, actionable: false },
+      { opportunity: true, attempt: false, hit: false, actionable: false },
+    ].map((r, i) => ({
+      ts: `2026-06-09T00:0${i}:00Z`,
+      work_item_id: 'wi_demo01',
+      node_id: `n${i}`,
+      owner: 'planner',
+      ...r,
+    }));
+    await writeFile(
+      join(wsDir, 'warmstart-usage.jsonl'),
+      `${recs.map((r) => JSON.stringify(r)).join('\n')}\n`,
+    );
+    // pull-query usage JSONL: .ditto/local/memory/pull-usage.jsonl
+    const pullDir = join(dir, '.ditto', 'local', 'memory');
+    await mkdir(pullDir, { recursive: true });
+    const pulls = [
+      { ts: '2026-06-09T00:00:00Z', node: 'foo', depth: 2, neighbor_count: 3, freshness: 'fresh' },
+      { ts: '2026-06-09T00:01:00Z', node: 'bar', depth: 1, neighbor_count: 0, freshness: 'fresh' },
+    ];
+    await writeFile(
+      join(pullDir, 'pull-usage.jsonl'),
+      `${pulls.map((p) => JSON.stringify(p)).join('\n')}\n`,
+    );
+  }
+
+  test('tallies the four warm-start metrics + pull count for a work item (json)', async () => {
+    await seedUsage();
+    const r = ditto(['memory', 'usage', '--work-item', 'wi_demo01', '--output', 'json']);
+    expect(r.exitCode).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.work_item_id).toBe('wi_demo01');
+    expect(out.warmstart).toEqual({
+      opportunities: 3,
+      attempts: 2,
+      hits: 1,
+      actionable: 1,
+    });
+    expect(out.pull.queries).toBe(2);
+  });
+
+  test('human output renders the four metrics + pull line', async () => {
+    await seedUsage();
+    const r = ditto(['memory', 'usage', '--work-item', 'wi_demo01']);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain('opportunities: 3');
+    expect(r.stdout).toContain('attempts:      2');
+    expect(r.stdout).toContain('hits:          1');
+    expect(r.stdout).toContain('actionable:    1');
+    expect(r.stdout).toContain('Pull-query usage: 2');
+  });
+
+  test('without --work-item reports pull usage only (warmstart null)', async () => {
+    await seedUsage();
+    const r = ditto(['memory', 'usage', '--output', 'json']);
+    expect(r.exitCode).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.warmstart).toBeNull();
+    expect(out.pull.queries).toBe(2);
+  });
+
+  test('unknown work item yields zeroed metrics (no records ⇒ all zero)', () => {
+    const r = ditto(['memory', 'usage', '--work-item', 'wi_missing', '--output', 'json']);
+    expect(r.exitCode).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.warmstart).toEqual({ opportunities: 0, attempts: 0, hits: 0, actionable: 0 });
+    expect(out.pull.queries).toBe(0);
+  });
+});
+
 describe('ditto memory propose/approve (write model §4-5)', () => {
   test('propose creates a pending event with no approved_by', () => {
     const r = ditto([

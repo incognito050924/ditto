@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  MemoryEventAlreadyDecidedError,
   MemoryEventNotPendingError,
   approveEvent,
   buildServingGraph,
@@ -340,14 +341,37 @@ describe('proposeEvent / approveEvent (write model §4-5 / §10-2 F2)', () => {
   test('approveEvent rejects a non-pending event id', async () => {
     const proposed = await proposeEvent(workDir, { event_type: 'observation', text: 'x' });
     await approveEvent(workDir, proposed.event_id, { by: 'user' });
-    // approving the now-superseded original twice is allowed (still pending),
-    // but approving the approved decision head is not (status=approved).
+    // approving the approved decision head is not allowed (status=approved).
     const all = await new MemoryEventStore(workDir).list();
     const approved = all.find((e) => e.status === 'approved');
     if (!approved) throw new Error('expected an approved event');
     await expect(approveEvent(workDir, approved.event_id, { by: 'user' })).rejects.toBeInstanceOf(
       MemoryEventNotPendingError,
     );
+  });
+
+  test('double-approve of the same pending id is rejected and yields exactly one head', async () => {
+    const proposed = await proposeEvent(workDir, { event_type: 'decision', text: 'use bun' });
+    const { decision } = await approveEvent(workDir, proposed.event_id, { by: 'user' });
+
+    // second approve of the SAME (immutable, still-pending) original must reject
+    await expect(approveEvent(workDir, proposed.event_id, { by: 'user2' })).rejects.toBeInstanceOf(
+      MemoryEventAlreadyDecidedError,
+    );
+
+    // §10-2: the chain has exactly one approved head, no fork
+    const all = await new MemoryEventStore(workDir).list();
+    const { approvedHeads } = reduceEvents(all);
+    expect(approvedHeads.map((e) => e.event_id)).toEqual([decision.event_id]);
+  });
+
+  test('approve then reject of the same pending id is rejected', async () => {
+    const proposed = await proposeEvent(workDir, { event_type: 'decision', text: 'use bun' });
+    await approveEvent(workDir, proposed.event_id, { by: 'user' });
+
+    await expect(
+      approveEvent(workDir, proposed.event_id, { by: 'user', reject: true }),
+    ).rejects.toBeInstanceOf(MemoryEventAlreadyDecidedError);
   });
 
   test('reject path records a rejected superseding event (excluded from projection)', async () => {

@@ -10,8 +10,8 @@
  *
  * Rollback invariant (ac-13 준비, §10-9): this is the SINGLE entry point for the
  * query. The loop never reaches into memory-query/-project directly, so warm-start
- * can later be disabled behind one flag (`DITTO_MEMORY_WARMSTART=0`) without
- * touching the dispatch code. The toolset of the read-only memory query is also
+ * can later be disabled behind one flag (`DITTO_MEMORY=off`, the master switch —
+ * or the granular `DITTO_MEMORY_WARMSTART=0`) without touching the dispatch code. The toolset of the read-only memory query is also
  * the only memory IO the dispatch path performs.
  *
  * Instrumentation (ac-12): every chance to warm-start is one *opportunity*; a
@@ -28,6 +28,7 @@ import type { AutopilotNode } from '~/schemas/autopilot';
 import type { WorkItem } from '~/schemas/work-item';
 import { localDir } from './ditto-paths';
 import { ensureDir } from './fs';
+import { isMemoryEnabled } from './memory-flag';
 import { memoryStatus } from './memory-project';
 import { queryNeighbors } from './memory-query';
 import { MemoryProjectionStore, type ServingGraph } from './memory-store';
@@ -63,9 +64,13 @@ function isWarmStartOwner(owner: AutopilotNode['owner']): boolean {
   return owner === 'researcher' || owner === 'planner';
 }
 
-/** Single off-switch for the whole query (rollback invariant, §10-9). */
+/**
+ * Off-switch for the warm-start query (rollback invariant, §10-9 ①/②). The master
+ * `DITTO_MEMORY=off` disables it (subsumes the granular flag); the granular
+ * `DITTO_MEMORY_WARMSTART=0` still disables just warm-start when the master is on.
+ */
 function warmStartEnabled(): boolean {
-  return process.env.DITTO_MEMORY_WARMSTART !== '0';
+  return isMemoryEnabled() && process.env.DITTO_MEMORY_WARMSTART !== '0';
 }
 
 const RELATED_NODE_CAP = 8;

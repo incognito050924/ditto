@@ -259,6 +259,25 @@ export class MemoryEventNotPendingError extends Error {
   }
 }
 
+/**
+ * Raised when an event has already been decided — some other event already
+ * supersedes it (§10-2 single-chain-head invariant). Because events are
+ * immutable, the original file stays `pending` forever, so a status check
+ * alone cannot detect this; we must look for an existing superseding event.
+ * Without this guard a double-approve forks the chain into two approved heads.
+ */
+export class MemoryEventAlreadyDecidedError extends Error {
+  constructor(
+    public readonly eventId: string,
+    public readonly decidedBy: string,
+  ) {
+    super(
+      `event ${eventId} is already decided by ${decidedBy}; it cannot be approved or rejected again`,
+    );
+    this.name = 'MemoryEventAlreadyDecidedError';
+  }
+}
+
 export interface ProposeInput {
   event_type: MemoryEvent['event_type'];
   text: string;
@@ -318,6 +337,16 @@ export async function approveEvent(
   const original = await store.get(eventId); // throws if absent
   if (original.status !== 'pending') {
     throw new MemoryEventNotPendingError(eventId, original.status);
+  }
+  // §10-2 single-chain-head invariant: the original file is immutable so its
+  // status is always 'pending', even after a decision. A decision is recorded
+  // as a NEW event whose `supersedes` points back here. If such an event
+  // already exists, this id is already decided — approving again would fork the
+  // chain into two approved heads (reduceEvents would emit both). Reject it.
+  const existing = await store.list();
+  const priorDecision = existing.find((e) => e.supersedes === eventId);
+  if (priorDecision) {
+    throw new MemoryEventAlreadyDecidedError(eventId, priorDecision.event_id);
   }
   const now = (options.now ?? new Date()).toISOString();
   const decisionId = await generateId('memevt', (candidate) =>

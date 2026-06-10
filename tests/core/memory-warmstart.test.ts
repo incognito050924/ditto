@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { buildDelegationPacket } from '~/core/autopilot-dispatch';
 import { projectMemory } from '~/core/memory-project';
 import { MemoryProjectionStore, type ServingGraph } from '~/core/memory-store';
 import { readUsageReport, usageLogPath, warmStartMemoryContext } from '~/core/memory-warmstart';
@@ -127,6 +128,65 @@ describe('warmStartMemoryContext (§5-1 / §10-6 #1, fail-open warm-start)', () 
     expect(report.hits).toBe(0);
   });
 
+  test('disabled via master DITTO_MEMORY=off ⇒ undefined, no query/record, dispatch packet unchanged (§10-9 ①②, ac-13)', async () => {
+    await seedFreshGraph(coveringGraph());
+    const wi = {
+      id: 'wi_warm1',
+      title: 'memory graph warm-start dispatch',
+      goal: 'wire warm-start into the autopilot dispatch path',
+      changed_files: ['src/x.ts'],
+    } as unknown as WorkItem;
+    const planner = {
+      id: 'N1',
+      owner: 'planner',
+      purpose: 'plan',
+      acceptance_refs: [],
+    } as unknown as AutopilotNode;
+    // The exact packet the loop would build with no memory at all (the off baseline).
+    const baseline = buildDelegationPacket(planner, wi, [], wi.changed_files, undefined);
+
+    const prev = process.env.DITTO_MEMORY;
+    process.env.DITTO_MEMORY = 'off';
+    try {
+      // ② §5 fail-open: the master switch off ⇒ warm-start returns undefined even
+      // though the graph is fresh + covering (would otherwise inject).
+      const ctx = await warmStartMemoryContext(repo, planner, wi, { now: NOW });
+      expect(ctx).toBeUndefined();
+      const report = await readUsageReport(repo, wi.id);
+      expect(report.opportunities).toBe(0); // disabled short-circuit, no instrumentation
+      // The packet the loop builds with the off-result is byte-for-byte the baseline.
+      const offPacket = buildDelegationPacket(planner, wi, [], wi.changed_files, ctx);
+      expect(offPacket).toEqual(baseline);
+      // and context.memory is omitted entirely (autopilot behaves as without memory).
+      expect('memory' in offPacket.context).toBe(false);
+    } finally {
+      // delete (not "= undefined") restores an originally-unset var to unset, not "undefined".
+      // biome-ignore lint/performance/noDelete: env unset.
+      if (prev === undefined) delete process.env.DITTO_MEMORY;
+      else process.env.DITTO_MEMORY = prev;
+    }
+  });
+
+  test('master DITTO_MEMORY=off subsumes DITTO_MEMORY_WARMSTART (single switch, §10-9 ①)', async () => {
+    await seedFreshGraph(coveringGraph());
+    const prevM = process.env.DITTO_MEMORY;
+    const prevW = process.env.DITTO_MEMORY_WARMSTART;
+    process.env.DITTO_MEMORY = 'off';
+    // even with the granular flag explicitly "on", the master off wins.
+    process.env.DITTO_MEMORY_WARMSTART = '1';
+    try {
+      const ctx = await warmStartMemoryContext(repo, node('planner'), workItem, { now: NOW });
+      expect(ctx).toBeUndefined();
+    } finally {
+      // biome-ignore lint/performance/noDelete: env unset (restore to unset, not "undefined").
+      if (prevM === undefined) delete process.env.DITTO_MEMORY;
+      else process.env.DITTO_MEMORY = prevM;
+      // biome-ignore lint/performance/noDelete: env unset (restore to unset, not "undefined").
+      if (prevW === undefined) delete process.env.DITTO_MEMORY_WARMSTART;
+      else process.env.DITTO_MEMORY_WARMSTART = prevW;
+    }
+  });
+
   test('disabled via DITTO_MEMORY_WARMSTART=0 ⇒ undefined, no query/record (rollback invariant)', async () => {
     await seedFreshGraph(coveringGraph());
     const prev = process.env.DITTO_MEMORY_WARMSTART;
@@ -137,7 +197,8 @@ describe('warmStartMemoryContext (§5-1 / §10-6 #1, fail-open warm-start)', () 
       const report = await readUsageReport(repo, workItem.id);
       expect(report.opportunities).toBe(0);
     } finally {
-      if (prev === undefined) process.env.DITTO_MEMORY_WARMSTART = undefined;
+      // biome-ignore lint/performance/noDelete: env unset (restore to unset, not "undefined").
+      if (prev === undefined) delete process.env.DITTO_MEMORY_WARMSTART;
       else process.env.DITTO_MEMORY_WARMSTART = prev;
     }
   });
