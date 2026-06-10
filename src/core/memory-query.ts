@@ -18,6 +18,7 @@ import { dirname, join } from 'node:path';
 import { dittoDir, localDir } from './ditto-paths';
 import { ensureDir } from './fs';
 import { memoryStatus } from './memory-project';
+import { reduceEvents } from './memory-reduce';
 import { MemoryEventStore, MemoryProjectionStore, type ServingGraph } from './memory-store';
 
 /** Freshness envelope attached to every query/path/explain answer (§4-4). */
@@ -212,7 +213,12 @@ export interface BodyQueryResult extends FreshnessEnvelope {
  */
 export async function queryBodies(repoRoot: string, query: string): Promise<BodyQueryResult> {
   const events = await new MemoryEventStore(repoRoot).list();
-  const matches = searchEventBodies(query, events);
+  // §4-5 visibility (round-2 review R1): body search obeys the SAME rule as the
+  // serving graph — approved chain heads only (reduceEvents), never
+  // sensitivity=secret. Without this, pending/rejected/secret bodies would leak
+  // through the body-search tier that projection/build already filter.
+  const visible = reduceEvents(events).approvedHeads.filter((e) => e.sensitivity !== 'secret');
+  const matches = searchEventBodies(query, visible);
   const freshness = await readFreshness(repoRoot);
   return { query, matches, ...freshness };
 }

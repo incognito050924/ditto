@@ -337,4 +337,50 @@ describe('queryBodies (body-search fallback over events, ac-2 / F2)', () => {
     await projectFixture();
     expect((await queryBodies(workDir, 'zzznomatch')).matches).toEqual([]);
   });
+
+  // R1 (round-2 review): body search must obey the SAME visibility rule as the
+  // serving graph (§4-5) — approved chain heads only, never sensitivity=secret.
+  test('R1: pending, rejected, and secret event bodies are not searchable', async () => {
+    await projectFixture();
+    const store = new MemoryEventStore(workDir);
+    await store.append(ev('memevt_pend0001', { text: 'wildguessmodulexx secretly couples' }));
+    await store.append(ev('memevt_rejc0001', { text: 'rejectedguessyy here' }));
+    await store.append(
+      ev('memevt_rejc0002', {
+        text: 'rejectedguessyy here',
+        status: 'rejected',
+        approved_by: 'user',
+        decided_at: '2026-06-09T11:00:00+00:00',
+        supersedes: 'memevt_rejc0001',
+      }),
+    );
+    await store.append(
+      ev('memevt_secr0001', {
+        ...approval,
+        sensitivity: 'secret',
+        text: 'supersecrettokenxyz inside',
+      }),
+    );
+    expect((await queryBodies(workDir, 'wildguessmodulexx')).matches).toEqual([]);
+    expect((await queryBodies(workDir, 'rejectedguessyy')).matches).toEqual([]);
+    expect((await queryBodies(workDir, 'supersecrettokenxyz')).matches).toEqual([]);
+    // approved + non-secret stays findable
+    const ok = await queryBodies(workDir, 'observed');
+    expect(ok.matches.map((m) => m.event_id)).toContain('memevt_appr0001');
+  });
+
+  test('R1: only the approved chain head is searchable, not superseded versions', async () => {
+    await projectFixture();
+    const store = new MemoryEventStore(workDir);
+    await store.append(ev('memevt_fact0001', { ...approval, text: 'originalfactzz v1' }));
+    await store.append(
+      ev('memevt_fact0002', {
+        ...approval,
+        text: 'originalfactzz v2',
+        supersedes: 'memevt_fact0001',
+      }),
+    );
+    const r = await queryBodies(workDir, 'originalfactzz');
+    expect(r.matches.map((m) => m.event_id)).toEqual(['memevt_fact0002']);
+  });
 });

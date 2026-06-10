@@ -556,6 +556,10 @@ async function runBodyQuery(
   node: string,
   depth: number,
   format: ReturnType<typeof parseOutputFormat>,
+  // R9: distinguish the implicit node-not-found fallback from explicit --text in
+  // machine output — exit 0 + empty matches is otherwise ambiguous with "known
+  // node, no neighbors" for callers that used the old exit-65 signal.
+  fallback: boolean,
 ): Promise<void> {
   const result: BodyQueryResult = await queryBodies(repoRoot, node);
   await recordPullQuery(repoRoot, {
@@ -566,10 +570,12 @@ async function runBodyQuery(
     freshness: result.freshness,
   }).catch(() => {});
   if (format === 'json') {
-    writeJson(result);
+    writeJson({ ...result, mode: 'body-search', fallback });
     return;
   }
-  writeHuman(`Body matches for "${result.query}" (node not in graph — text fallback):`);
+  writeHuman(
+    `Body matches for "${result.query}" (${fallback ? 'node not in graph — text fallback' : '--text'}):`,
+  );
   for (const m of result.matches) writeHuman(`  - ${m.event_id}\t${m.source_id}`);
   if (result.matches.length === 0) writeHuman('  (none)');
   writeFreshnessHuman(result);
@@ -610,7 +616,7 @@ const memoryQuery = defineCommand({
     try {
       // Explicit text mode: search event bodies, not the graph (ac-2 / F2).
       if (args.text) {
-        await runBodyQuery(repoRoot, args.node, depth, format);
+        await runBodyQuery(repoRoot, args.node, depth, format, false);
         return;
       }
       const graph = await loadServingOrExit(repoRoot);
@@ -638,7 +644,7 @@ const memoryQuery = defineCommand({
       // Node absent from the serving graph → fall back to BODY search (ac-2 / F2)
       // instead of failing, so the body-search recall is reachable at runtime.
       if (err instanceof MemoryNodeNotFoundError) {
-        await runBodyQuery(repoRoot, args.node, depth, format);
+        await runBodyQuery(repoRoot, args.node, depth, format, true);
         return;
       }
       writeError(`memory query failed: ${err instanceof Error ? err.message : String(err)}`);

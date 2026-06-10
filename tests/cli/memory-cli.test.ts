@@ -451,3 +451,48 @@ describe('ditto memory propose/approve (write model §4-5)', () => {
     }
   });
 });
+
+describe('ditto memory query body search (R1 visibility + R9 fallback marker)', () => {
+  test('pending body is not searchable; approved is; json marks mode/fallback', async () => {
+    const adrDir = join(dir, '.ditto', 'knowledge', 'adr');
+    await mkdir(adrDir, { recursive: true });
+    await writeFile(
+      join(adrDir, 'ADR-0001-x.md'),
+      '# ADR-0001: A decision\n\n## 결정\nuse zod.\n\n## 근거\nfrobnicate reduces drift.\n',
+    );
+    expect(ditto(['memory', 'bootstrap', '--output', 'json']).exitCode).toBe(0);
+    expect(ditto(['memory', 'project', '--output', 'json']).exitCode).toBe(0);
+
+    // R1: a pending proposal's body must NOT be findable via --text.
+    const p = ditto([
+      'memory',
+      'propose',
+      '--type',
+      'analysis',
+      '--text',
+      'wildguesszz only pending',
+      '--confidence',
+      'INFERRED',
+      '--actor',
+      'agent',
+      '--output',
+      'json',
+    ]);
+    expect(p.exitCode).toBe(0);
+    const explicit = ditto(['memory', 'query', 'wildguesszz', '--text', '--output', 'json']);
+    expect(explicit.exitCode).toBe(0);
+    const o1 = JSON.parse(explicit.stdout);
+    expect(o1.mode).toBe('body-search');
+    expect(o1.fallback).toBe(false);
+    expect(o1.matches).toEqual([]);
+
+    // Approved (bootstrap) rationale body IS findable through the implicit
+    // node-not-found fallback, and the answer is marked fallback:true (R9).
+    const implicit = ditto(['memory', 'query', 'frobnicate', '--output', 'json']);
+    expect(implicit.exitCode).toBe(0);
+    const o2 = JSON.parse(implicit.stdout);
+    expect(o2.mode).toBe('body-search');
+    expect(o2.fallback).toBe(true);
+    expect(o2.matches.length).toBeGreaterThan(0);
+  });
+});
