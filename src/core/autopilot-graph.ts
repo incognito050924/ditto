@@ -22,6 +22,9 @@ const KIND_TO_OWNER: Record<AutopilotNode['kind'], AutopilotNode['owner']> = {
   // `cleanup` maps to the `driver` pseudo-owner: deterministic git/worktree work
   // the engine runs in-process (intercepted before spawn), not an LLM subagent.
   cleanup: 'driver',
+  // `e2e-author` maps to the `main-session` pseudo-owner: journey authoring needs
+  // a user dialogue, so the driver runs the skill inline (intercepted before spawn).
+  'e2e-author': 'main-session',
 };
 
 export function kindToOwner(kind: AutopilotNode['kind']): AutopilotNode['owner'] {

@@ -1093,3 +1093,74 @@ describe('active-node lease lifecycle (ac-2: create on dispatch, remove on termi
     expect(await new ActiveNodeLeaseStore(repo).listActive(WI)).toHaveLength(0);
   });
 });
+
+describe('nextNode main-session (e2e-author) node — wi_260610p9h g5', () => {
+  const e2eAuthor = (id: string) => ({
+    id,
+    kind: 'e2e-author' as const,
+    owner: 'main-session' as const,
+    purpose: `author journeys ${id}`,
+    status: 'pending' as const,
+    depends_on: [] as string[],
+    acceptance_refs: [] as string[],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  });
+  const research = (id: string) => ({
+    id,
+    kind: 'research' as const,
+    owner: 'researcher' as const,
+    purpose: `research ${id}`,
+    status: 'pending' as const,
+    depends_on: [] as string[],
+    acceptance_refs: ['ac-1'],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  });
+
+  test('a main-session node is intercepted before spawn: action=main_session, dispatched to running', async () => {
+    await seed(graph({ nodes: [e2eAuthor('E1')] }));
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('main_session');
+    if (res.action !== 'main_session') throw new Error('expected main_session');
+    expect(res.node_id).toBe('E1');
+    expect(res.reason).toContain('e2e-author');
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'E1')?.status).toBe('running');
+  });
+
+  test('a main-session node is not folded into a wave — single main_session path', async () => {
+    await wis.update(WI, (w) => ({ ...w, changed_files: [] }));
+    await seed(graph({ nodes: [e2eAuthor('E1'), research('R2')] }));
+    const res = await nextNode(repo, WI);
+    // only R2 is wave-eligible (main-session excluded) → single-node path, and the
+    // first admitted node (E1) is the inline main-session step — same shape as the
+    // driver/cleanup interception.
+    expect(res.action).toBe('main_session');
+    if (res.action !== 'main_session') throw new Error('expected main_session');
+    expect(res.node_id).toBe('E1');
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'R2')?.status).toBe('pending');
+  });
+
+  test('record-result closes a main-session node like any other (driver ran it inline)', async () => {
+    await seed(graph({ nodes: [e2eAuthor('E1')] }));
+    await nextNode(repo, WI); // dispatch E1 to running
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'E1',
+        result_text:
+          'Authored journey checkout-flow with the user; DSL at e2e/journeys/checkout.journey.md, conformance pass (exit 0).',
+        outcome: 'pass',
+        evidence_refs: [
+          { kind: 'file', path: 'e2e/journeys/checkout.journey.md', summary: 'journey DSL' },
+        ],
+      },
+    });
+    expect(res.status).toBe('passed');
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'E1')?.status).toBe('passed');
+  });
+});

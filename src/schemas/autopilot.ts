@@ -28,6 +28,10 @@ export const nodeKind = z
     // deterministic git/worktree work, so the engine runs it as a driver step
     // behind an explicit irreversible-git approval gate (contract §2.2).
     'cleanup',
+    // `e2e-author` is wired to the `main-session` owner, not a subagent: journey
+    // authoring needs a user dialogue, which only the session-rooted main agent
+    // can hold (wi_260610p9h). The driver runs the ditto:e2e-author skill inline.
+    'e2e-author',
   ])
   .describe('Kind of work a node represents');
 
@@ -49,6 +53,10 @@ export const nodeOwner = z
     // Not an LLM subagent: the deterministic engine itself. Owns `cleanup` nodes
     // (git/worktree teardown) that the driver runs in-process, never spawns.
     'driver',
+    // Not a subagent either: the main session itself. Owns `e2e-author` nodes —
+    // scenario authoring requires a user dialogue (session rooting), so the
+    // driver executes the skill inline in the main session, never spawns.
+    'main-session',
   ])
   .describe('Subagent role that owns the node');
 

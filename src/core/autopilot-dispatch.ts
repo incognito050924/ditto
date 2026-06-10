@@ -50,6 +50,11 @@ const OWNER_TOOLS: Record<AutopilotNode['owner'], string[]> = {
   // no LLM toolset. Its irreversible git work is gated by a dedicated explicit
   // approval gate in autopilot-cleanup, not the Edit-derived mutation gate.
   driver: [],
+  // The main-session pseudo-owner is never spawned either (nextNode intercepts
+  // it): an e2e-author node needs a user dialogue, so the driver runs the
+  // ditto:e2e-author skill inline in the main session. No Edit here — the node
+  // is non-mutating for the approval gate (isMutatingOwner).
+  'main-session': [],
 };
 
 /**

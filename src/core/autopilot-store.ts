@@ -13,10 +13,15 @@ import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
 export interface AutopilotDecision {
   ts: string;
   node_id: string;
-  failure_class: 'fixable' | 'wrong_approach' | 'blocked_external' | 'user_decision_needed';
-  decision: 'retry' | 'switch_approach' | 'escalate';
+  /** Absent for proposal decisions (e2e_accept/e2e_decline) — there is no failure. */
+  failure_class?: 'fixable' | 'wrong_approach' | 'blocked_external' | 'user_decision_needed';
+  // `e2e_accept`/`e2e_decline` record the user's answer to the driver's E2E
+  // authoring proposal (propose-e2e, wi_260610p9h ac-6); the other three are
+  // the failure-pipeline decisions.
+  decision: 'retry' | 'switch_approach' | 'escalate' | 'e2e_accept' | 'e2e_decline';
   reason: string;
-  attempts: { fix: number; switch: number };
+  /** Absent for proposal decisions — no retry/switch budget is consumed. */
+  attempts?: { fix: number; switch: number };
 }
 
 export class AutopilotStore {

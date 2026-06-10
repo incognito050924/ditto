@@ -67,6 +67,10 @@ export type NextNodeResult =
   // A `driver`-owned node (cleanup): deterministic engine step, no LLM to spawn.
   // The caller runs `autopilot cleanup` to execute the gated teardown.
   | { action: 'cleanup'; node_id: string; reason: string }
+  // A `main-session`-owned node (e2e-author): needs a user dialogue, so there is
+  // no subagent to spawn. The driver runs the skill inline in the main session
+  // and records the outcome via record-result as usual.
+  | { action: 'main_session'; node_id: string; reason: string }
   // A blocked (escalated) node with nothing else runnable is a user-owned
   // decision, not a transient wait (§4.3). Surfaced distinctly so the driver
   // yields to the user instead of polling `waiting` forever.
@@ -197,12 +201,13 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   }
 
   // A node may run in a *parallel* wave only if it neither needs special
-  // single-node handling (the `driver` cleanup pseudo-owner, which has no LLM to
-  // spawn) nor is gated (a mutating node still behind the approval gate). When in
-  // doubt, fall back to the conservative single-node path.
+  // single-node handling (the `driver` cleanup and `main-session` e2e-author
+  // pseudo-owners, which have no LLM to spawn) nor is gated (a mutating node
+  // still behind the approval gate). When in doubt, fall back to the
+  // conservative single-node path.
   const gate = mutationGate(graph);
   const isWaveEligible = (n: AutopilotNode): boolean =>
-    n.owner !== 'driver' && (!isMutatingNode(n) || gate.allowed);
+    n.owner !== 'driver' && n.owner !== 'main-session' && (!isMutatingNode(n) || gate.allowed);
   // F1 conservative cap (the unknown-scope fallback): a mutating node WITHOUT a
   // declared `file_scope` falls back to the shared workItem.changed_files (often
   // empty at implement time), so the file-overlap gate can't actually keep two
@@ -281,6 +286,22 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
       action: 'cleanup',
       node_id: chosen.id,
       reason: `deterministic cleanup step (${chosen.kind}): run \`autopilot cleanup\` (irreversible git → explicit approval)`,
+    };
+  }
+
+  // A `main-session`-owned node (e2e-author) is run by the driver inline in the
+  // main session — scenario authoring needs a user dialogue, so there is no
+  // subagent to spawn (session rooting). Dispatch it to running and signal the
+  // caller to execute the ditto:e2e-author skill, then record-result as usual.
+  if (chosen.owner === 'main-session') {
+    await aps.updateNode(workItemId, chosen.id, (n) => ({
+      ...n,
+      status: nodeTransition(n.status, 'dispatch'),
+    }));
+    return {
+      action: 'main_session',
+      node_id: chosen.id,
+      reason: `main-session step (${chosen.kind}): run the ditto:e2e-author skill inline (user dialogue), then record-result`,
     };
   }
 

@@ -2,9 +2,11 @@ import { defineCommand } from 'citty';
 import { bootstrapAutopilot } from '~/core/autopilot-bootstrap';
 import { runCleanup } from '~/core/autopilot-cleanup';
 import { assembleCompletionFromGraph } from '~/core/autopilot-complete';
+import { kindToOwner } from '~/core/autopilot-graph';
 import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { CompletionStore } from '~/core/completion-store';
+import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { intentDriftGate } from '~/core/gates';
 import { IntentStore } from '~/core/intent-store';
@@ -200,6 +202,9 @@ const autopilotNextNode = defineCommand({
         } else if (res.action === 'cleanup') {
           writeHuman(`  node:        ${res.node_id}`);
           writeHuman(`  → run: ditto autopilot cleanup --workItem <wi> --node ${res.node_id}`);
+        } else if (res.action === 'main_session') {
+          writeHuman(`  node:        ${res.node_id}`);
+          writeHuman('  → run the ditto:e2e-author skill inline, then record-result');
         }
       }
     } catch (err) {
@@ -401,6 +406,142 @@ const autopilotCleanup = defineCommand({
 });
 
 /**
+ * `ditto autopilot propose-e2e` — the deterministic half of the E2E authoring
+ * proposal (wi_260610p9h ac-6). Detects whether the changed files touch a web
+ * surface (frontend page/component or backend API, diff-based heuristic in
+ * `src/core/e2e/web-surface.ts`); the driver then ASKS THE USER and re-runs
+ * with `--decision` to record the answer: decline → decision log only (no
+ * node), accept → an `e2e-author` (main-session) node is added to the graph.
+ * The proposal dialogue itself stays with the driver — this CLI only detects
+ * and records (determinism).
+ */
+const autopilotProposeE2e = defineCommand({
+  meta: {
+    name: 'propose-e2e',
+    description:
+      'Detect web-surface changes and record the user decision on E2E authoring (accept adds an e2e-author node)',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    changedFiles: {
+      type: 'string',
+      description: 'Comma-separated repo-relative changed paths to scan',
+      required: true,
+    },
+    decision: {
+      type: 'string',
+      description: 'accept|decline — record the user decision (omit to only detect)',
+      required: false,
+    },
+    journeys: {
+      type: 'string',
+      description: 'Optional user journey hint carried onto the e2e-author node on accept',
+      required: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const decision = args.decision;
+    if (decision !== undefined && decision !== 'accept' && decision !== 'decline') {
+      writeError(`invalid --decision "${decision}"; expected accept or decline`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    const changed = args.changedFiles
+      .split(',')
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+    const detection = detectWebSurfaceChange(changed);
+    try {
+      if (!detection.web) {
+        // No web surface in the diff → nothing to propose, regardless of any
+        // --decision: there is no proposal for the user to answer.
+        if (format === 'json') {
+          writeJson({ web: false, surfaces: [], proposal_needed: false });
+        } else {
+          writeHuman('No web-surface change detected — E2E authoring proposal not needed.');
+        }
+        return;
+      }
+      if (decision === undefined) {
+        if (format === 'json') {
+          writeJson({ web: true, surfaces: detection.surfaces, proposal_needed: true });
+        } else {
+          writeHuman(`Web-surface change detected (${detection.surfaces.length} surface(s)):`);
+          for (const s of detection.surfaces) writeHuman(`  - [${s.kind}] ${s.path}`);
+          writeHuman('  → ask the user, then re-run with --decision accept|decline');
+        }
+        return;
+      }
+      const aps = new AutopilotStore(repoRoot);
+      const ts = new Date().toISOString();
+      const surfaceSummary = detection.surfaces.map((s) => `${s.kind}:${s.path}`).join(', ');
+      if (decision === 'decline') {
+        // Decline → decision log only; the graph stays as-is (no authoring node)
+        // and verification proceeds through the regular verify nodes (ac-6).
+        await aps.appendDecision(args.workItem, {
+          ts,
+          node_id: 'e2e-proposal',
+          decision: 'e2e_decline',
+          reason: `user declined E2E authoring for web-surface change (${surfaceSummary})`,
+        });
+        if (format === 'json') {
+          writeJson({ web: true, decision: 'decline', node_id: null });
+        } else {
+          writeHuman('Recorded decline — no e2e-author node added; regular verification proceeds.');
+        }
+        return;
+      }
+      // accept → add an independent, non-mutating e2e-author (main-session) node.
+      const graph = await aps.get(args.workItem);
+      const taken = new Set(graph.nodes.map((n) => n.id));
+      let seq = 1;
+      while (taken.has(`e2e-author-${seq}`)) seq += 1;
+      const nodeId = `e2e-author-${seq}`;
+      await aps.addNodes(args.workItem, [
+        {
+          id: nodeId,
+          kind: 'e2e-author',
+          owner: kindToOwner('e2e-author'),
+          purpose: `Author E2E journey scenarios with the user for the changed web surfaces (${surfaceSummary})${
+            args.journeys ? ` — journey hint: ${args.journeys}` : ''
+          }`,
+          status: 'pending',
+          depends_on: [],
+          acceptance_refs: [],
+          evidence_refs: [],
+          ac_verdicts: [],
+          attempts: { fix: 0, switch: 0 },
+        },
+      ]);
+      await aps.appendDecision(args.workItem, {
+        ts,
+        node_id: nodeId,
+        decision: 'e2e_accept',
+        reason: `user accepted E2E authoring for web-surface change (${surfaceSummary})`,
+      });
+      if (format === 'json') {
+        writeJson({ web: true, decision: 'accept', node_id: nodeId });
+      } else {
+        writeHuman(`Recorded accept — added e2e-author node ${nodeId} (main-session owned).`);
+      }
+    } catch (err) {
+      writeError(`propose-e2e failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/**
  * `ditto autopilot intent-drift` — surface the axis-2 intent-conservation gate
  * (`intentDriftGate`). At finalize the chain (intent → work-item → autopilot →
  * completion) is written consistently from one payload; this re-checks that the
@@ -489,6 +630,7 @@ export const autopilotCommand = defineCommand({
     'record-result': autopilotRecordResult,
     complete: autopilotComplete,
     cleanup: autopilotCleanup,
+    'propose-e2e': autopilotProposeE2e,
     'intent-drift': autopilotIntentDrift,
   },
 });

@@ -93,7 +93,9 @@ function dependencyNames(pkg: Record<string, unknown> | null): Set<string> {
   return names;
 }
 
-const UI_EXTENSIONS = ['.tsx', '.jsx', '.vue', '.svelte', '.html'];
+// Exported so the diff-based web-surface detector (web-surface.ts) reuses the
+// same UI-file vocabulary instead of keeping a second, drift-prone list.
+export const UI_EXTENSIONS = ['.tsx', '.jsx', '.vue', '.svelte', '.html'];
 
 function defaultReadPackageJson(repoRoot: string): () => Record<string, unknown> | null {
   return () => {

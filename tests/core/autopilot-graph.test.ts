@@ -22,6 +22,12 @@ describe('kindToOwner ([VERIFY] lifecycle owners wired: security · refactor · 
     expect(kindToOwner('implement')).toBe('implementer');
     expect(kindToOwner('review')).toBe('reviewer');
   });
+
+  // wi_260610p9h g5: e2e-author is owned by the main-session pseudo-owner — the
+  // driver runs the authoring skill inline (user dialogue), never spawns.
+  test('e2e-author maps to the main-session pseudo-owner', () => {
+    expect(kindToOwner('e2e-author')).toBe('main-session');
+  });
 });
 
 describe('selectReadyNodes (the candidate concurrent wave)', () => {
