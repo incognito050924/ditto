@@ -350,6 +350,18 @@ describe('projectMemory + memoryStatus (end-to-end freshness)', () => {
     expect((await memoryStatus(workDir)).freshness).toBe('absent');
   });
 
+  // R9 (round-2 review, AX): pending proposals queue silently — without a
+  // visible backlog the user never learns an approval is waited on.
+  test('R9: status reports the pending-approval backlog (undecided pending heads)', async () => {
+    const store = new MemoryEventStore(workDir);
+    await store.append(ev('memevt_pend0001')); // pending, undecided → counted
+    await store.append(ev('memevt_pend0002')); // pending, decided below → not counted
+    await store.append(ev('memevt_deca0001', { ...approval, supersedes: 'memevt_pend0002' }));
+    await store.append(ev('memevt_appr0001', { ...approval })); // approved → not pending
+    const s = await memoryStatus(workDir);
+    expect(s.pending_count).toBe(1);
+  });
+
   test('approving a new event after projection makes status stale (set-hash drift)', async () => {
     await seedSource('src_one00001', 'a'.repeat(64));
     const store = new MemoryEventStore(workDir);

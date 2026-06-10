@@ -168,6 +168,23 @@ describe('scanSources change detection', () => {
     expect(r.added.length).toBe(0);
   });
 
+  // R7 (round-2 review): the secret gate rides on the source record's
+  // sensitivity; a rescan must not silently reset a manual 'secret' marking.
+  test('R7: rescan preserves a manually-set sensitivity when content changes', async () => {
+    initGitRepo(workDir);
+    const file = join(workDir, 'leaky.ts');
+    await writeFile(file, 'export const t = "v1";\n');
+    await scanSources(workDir);
+    const store = new MemorySourceStore(workDir);
+    const id = sourceIdForPath('leaky.ts');
+    const src = await store.get(id);
+    await store.write({ ...src, sensitivity: 'secret' });
+    await writeFile(file, 'export const t = "v2";\n');
+    const r = await scanSources(workDir);
+    expect(r.changed).toEqual([id]);
+    expect((await store.get(id)).sensitivity).toBe('secret');
+  });
+
   test('source id is stable and path-derived across scans', async () => {
     initGitRepo(workDir);
     await writeFile(join(workDir, 'a.ts'), 'export const x = 1;\n');

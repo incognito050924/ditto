@@ -435,6 +435,9 @@ const memoryBuild = defineCommand({
           source_id: s.source.source_id,
           path,
           content: await readFile(abs, 'utf8'),
+          // R7: carry the source record's disclosure class so chunkSources'
+          // secret filter is effective on the runtime path, not only in tests.
+          sensitivity: s.source.sensitivity,
         });
       }
       const chunks = chunkSources(files);
@@ -524,6 +527,11 @@ const memoryStatusCommand = defineCommand({
         if (s.projection_id) writeHuman(`  projection: ${s.projection_id}`);
         writeHuman(`  dirty sources: ${s.dirty_sources.length}`);
         for (const id of s.dirty_sources) writeHuman(`    ~ ${id}`);
+        // R9 (AX): surface the approval backlog instead of letting it queue silently.
+        writeHuman(`  pending approvals: ${s.pending_count}`);
+        if (s.pending_count > 0) {
+          writeHuman('    (decide with `ditto memory approve <eventId> --by <you> --actor user`)');
+        }
       }
     } catch (err) {
       writeError(`memory status failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -1021,6 +1029,7 @@ const memoryUsage = defineCommand({
                 attempts: warmstart.attempts,
                 hits: warmstart.hits,
                 actionable: warmstart.actionable,
+                hit_node_types: warmstart.hit_node_types,
               }
             : null,
           pull: { queries: pull.length },
@@ -1032,6 +1041,11 @@ const memoryUsage = defineCommand({
           writeHuman(`  attempts:      ${warmstart.attempts}`);
           writeHuman(`  hits:          ${warmstart.hits}`);
           writeHuman(`  actionable:    ${warmstart.actionable}`);
+          const types = Object.entries(warmstart.hit_node_types)
+            .sort(([a], [b]) => (a < b ? -1 : 1))
+            .map(([t, n]) => `${t}=${n}`)
+            .join(' ');
+          if (types.length > 0) writeHuman(`  hit node types: ${types}`);
         } else {
           writeHuman('Warm-start usage: (pass --work-item <id> to tally)');
         }

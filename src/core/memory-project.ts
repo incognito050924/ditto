@@ -444,10 +444,25 @@ export interface StatusResult {
   freshness: Freshness;
   /** sources whose current content_hash differs from the projection's record. */
   dirty_sources: string[];
+  /**
+   * Undecided pending proposals (pending heads no decision event supersedes).
+   * Surfaced so the approval backlog is visible instead of queueing silently
+   * (round-2 review R9, AX).
+   */
+  pending_count: number;
   current_set_hash: string;
   recorded_set_hash?: string;
   projection_id?: string;
   generated_at?: string;
+}
+
+/** Pending events that no other event supersedes (no decision recorded yet). */
+function countUndecidedPending(events: MemoryEvent[]): number {
+  const superseded = new Set<string>();
+  for (const e of events) {
+    if (e.supersedes) superseded.add(e.supersedes);
+  }
+  return events.filter((e) => e.status === 'pending' && !superseded.has(e.event_id)).length;
 }
 
 /**
@@ -460,9 +475,15 @@ export async function memoryStatus(repoRoot: string): Promise<StatusResult> {
   const events: MemoryEvent[] = await new MemoryEventStore(repoRoot).list();
   const { setHash: currentSetHash } = reduceEvents(events);
 
+  const pendingCount = countUndecidedPending(events);
   const manifest = await new MemoryProjectionStore(repoRoot).readManifest();
   if (!manifest) {
-    return { freshness: 'absent', dirty_sources: [], current_set_hash: currentSetHash };
+    return {
+      freshness: 'absent',
+      dirty_sources: [],
+      pending_count: pendingCount,
+      current_set_hash: currentSetHash,
+    };
   }
 
   const sources: MemorySource[] = await new MemorySourceStore(repoRoot).list();
@@ -482,6 +503,7 @@ export async function memoryStatus(repoRoot: string): Promise<StatusResult> {
   return {
     freshness,
     dirty_sources: dirty,
+    pending_count: pendingCount,
     current_set_hash: currentSetHash,
     ...(manifest.serving_version !== undefined
       ? { recorded_set_hash: manifest.serving_version }

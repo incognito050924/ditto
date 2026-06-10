@@ -185,6 +185,7 @@ export async function scanSources(
     // revision: owning repo HEAD when git-tracked, else a content-snapshot marker.
     const revision = head ?? `snapshot:${contentHash.slice(0, 16)}`;
 
+    const prior = existing.get(sourceId);
     const source: MemorySource = {
       schema_version: '0.1.0',
       source_id: sourceId,
@@ -193,16 +194,16 @@ export async function scanSources(
       content_hash: contentHash,
       captured_at: now,
       revision,
-      // Automatic secret classification is follow-up; scan tags everything
-      // 'internal'. The active secret gate is the explicit sensitivity on
-      // propose/events plus the projection/build filters (F6).
-      sensitivity: 'internal',
+      // Automatic secret classification is follow-up; new sources default to
+      // 'internal'. A rescan PRESERVES the prior record's sensitivity (R7) — the
+      // secret gate (projection/build filters, F6) rides on this field, so a
+      // content change must not silently reset a manual 'secret' marking.
+      sensitivity: prior?.sensitivity ?? 'internal',
       word_count: content.split(/\s+/).filter((w) => w.length > 0).length,
       ...(isOwnRoot ? {} : { repo: relative(root, owningRepo as string) }),
       ...(head ? { git_commit: head } : {}),
     };
 
-    const prior = existing.get(sourceId);
     let status: ScannedSource['status'];
     if (!prior) status = 'added';
     else if (prior.content_hash !== contentHash) status = 'changed';

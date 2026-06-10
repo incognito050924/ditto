@@ -57,6 +57,12 @@ export interface MemoryUsageRecord {
   actionable: boolean;
   /** structural freshness of the projection at query time (for the report). */
   freshness?: 'fresh' | 'stale' | 'absent';
+  /**
+   * node_type decomposition of the related set on a hit (ac-10, round-2 review):
+   * lets the expansion gate see WHAT the hits are (Decision-skewed vs semantic-
+   * layer contribution) instead of a bare hit count.
+   */
+  hit_node_types?: Record<string, number>;
 }
 
 /** Owners that receive a warm-start push (§5-1: cold-restart cost is large here). */
@@ -112,6 +118,8 @@ export interface UsageReport {
   attempts: number;
   hits: number;
   actionable: number;
+  /** summed node_type decomposition across all hit records (ac-10). */
+  hit_node_types: Record<string, number>;
   records: MemoryUsageRecord[];
 }
 
@@ -126,11 +134,18 @@ export async function readUsageReport(repoRoot: string, workItemId: string): Pro
       .filter((line) => line.trim().length > 0)
       .map((line) => JSON.parse(line) as MemoryUsageRecord);
   }
+  const hitNodeTypes: Record<string, number> = {};
+  for (const r of records) {
+    for (const [t, n] of Object.entries(r.hit_node_types ?? {})) {
+      hitNodeTypes[t] = (hitNodeTypes[t] ?? 0) + n;
+    }
+  }
   return {
     opportunities: records.filter((r) => r.opportunity).length,
     attempts: records.filter((r) => r.attempt).length,
     hits: records.filter((r) => r.hit).length,
     actionable: records.filter((r) => r.actionable).length,
+    hit_node_types: hitNodeTypes,
     records,
   };
 }
@@ -197,6 +212,16 @@ export async function warmStartMemoryContext(
       return undefined;
     }
     base.hit = true;
+
+    // ac-10: decompose the hit by node_type so the gate can tell Decision-skew
+    // from semantic-layer contribution.
+    const typeOf = new Map(graph.nodes.map((n) => [n.id, n.node_type]));
+    const hitTypes: Record<string, number> = {};
+    for (const id of relatedNodes) {
+      const t = typeOf.get(id) ?? 'unknown';
+      hitTypes[t] = (hitTypes[t] ?? 0) + 1;
+    }
+    base.hit_node_types = hitTypes;
 
     const decisionIds = new Set(
       graph.nodes.filter((n) => n.node_type === 'Decision').map((n) => n.id),

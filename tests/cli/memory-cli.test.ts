@@ -183,7 +183,13 @@ describe('ditto memory usage (ac-12 readable report)', () => {
     const wsDir = join(dir, '.ditto', 'local', 'work-items', 'wi_demo01', 'memory');
     await mkdir(wsDir, { recursive: true });
     const recs = [
-      { opportunity: true, attempt: true, hit: true, actionable: true },
+      {
+        opportunity: true,
+        attempt: true,
+        hit: true,
+        actionable: true,
+        hit_node_types: { Decision: 1, Episode: 2 },
+      },
       { opportunity: true, attempt: true, hit: false, actionable: false },
       { opportunity: true, attempt: false, hit: false, actionable: false },
     ].map((r, i) => ({
@@ -221,6 +227,7 @@ describe('ditto memory usage (ac-12 readable report)', () => {
       attempts: 2,
       hits: 1,
       actionable: 1,
+      hit_node_types: { Decision: 1, Episode: 2 },
     });
     expect(out.pull.queries).toBe(2);
   });
@@ -233,6 +240,7 @@ describe('ditto memory usage (ac-12 readable report)', () => {
     expect(r.stdout).toContain('attempts:      2');
     expect(r.stdout).toContain('hits:          1');
     expect(r.stdout).toContain('actionable:    1');
+    expect(r.stdout).toContain('hit node types: Decision=1 Episode=2');
     expect(r.stdout).toContain('Pull-query usage: 2');
   });
 
@@ -249,7 +257,13 @@ describe('ditto memory usage (ac-12 readable report)', () => {
     const r = ditto(['memory', 'usage', '--work-item', 'wi_missing', '--output', 'json']);
     expect(r.exitCode).toBe(0);
     const out = JSON.parse(r.stdout);
-    expect(out.warmstart).toEqual({ opportunities: 0, attempts: 0, hits: 0, actionable: 0 });
+    expect(out.warmstart).toEqual({
+      opportunities: 0,
+      attempts: 0,
+      hits: 0,
+      actionable: 0,
+      hit_node_types: {},
+    });
     expect(out.pull.queries).toBe(0);
   });
 });
@@ -449,6 +463,55 @@ describe('ditto memory propose/approve (write model §4-5)', () => {
     for (const n of names) {
       expect(n).not.toMatch(/graph-write|serving-write|ir-write|graph-set|graph-edit|write/);
     }
+  });
+});
+
+describe('DITTO_MEMORY=off scope (master flag disables auto-injection only — F9 gap)', () => {
+  test('memory CLI commands keep working with the master flag off', async () => {
+    const env = { ...process.env, DITTO_MEMORY: 'off' };
+    const run = (args: string[]) =>
+      Bun.spawnSync(['bun', cliEntry, ...args], { cwd: dir, env, stdout: 'pipe', stderr: 'pipe' });
+    await writeFile(join(dir, 'a.ts'), 'export const x = 1;\n');
+    expect(run(['memory', 'scan', '--output', 'json']).exitCode).toBe(0);
+    expect(
+      run([
+        'memory',
+        'propose',
+        '--type',
+        'analysis',
+        '--text',
+        'manual pull still works when off',
+        '--confidence',
+        'INFERRED',
+        '--actor',
+        'agent',
+        '--output',
+        'json',
+      ]).exitCode,
+    ).toBe(0);
+    expect(run(['memory', 'status', '--output', 'json']).exitCode).toBe(0);
+  });
+});
+
+describe('ditto memory build --semantic secret gate (R7 runtime path)', () => {
+  test('a source marked secret is excluded from chunks end-to-end', async () => {
+    const { sourceIdForPath } = await import('~/core/memory-scan');
+    await writeFile(join(dir, 'leaky.ts'), 'export const token = "supersecretvalue123";\n');
+    await writeFile(join(dir, 'clean.ts'), 'export const ok = 1;\n');
+    expect(ditto(['memory', 'scan', '--output', 'json']).exitCode).toBe(0);
+    // mark leaky.ts secret on its per-entity source record (SoT JSON)
+    const sid = sourceIdForPath('leaky.ts');
+    const recPath = join(dir, '.ditto', 'memory', 'sources', `${sid}.json`);
+    const rec = JSON.parse(await readFile(recPath, 'utf8'));
+    rec.sensitivity = 'secret';
+    await writeFile(recPath, JSON.stringify(rec));
+
+    const b = ditto(['memory', 'build', '--semantic', '--output', 'json']);
+    expect(b.exitCode).toBe(0);
+    const out = JSON.parse(b.stdout);
+    const serialized = JSON.stringify(out.chunks);
+    expect(serialized).not.toContain('supersecretvalue123');
+    expect(serialized).toContain('clean.ts');
   });
 });
 

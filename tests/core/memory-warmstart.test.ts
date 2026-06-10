@@ -78,6 +78,21 @@ describe('warmStartMemoryContext (§5-1 / §10-6 #1, fail-open warm-start)', () 
     expect(ctx).toBeDefined();
   });
 
+  // ac-10 (round-2 review): a bare hit count cannot tell Decision-skew from
+  // semantic-layer contribution — the expansion gate needs the decomposition.
+  test('ac-10: a hit records and aggregates the node_type decomposition', async () => {
+    await seedFreshGraph(coveringGraph());
+    await warmStartMemoryContext(repo, node('planner'), workItem, { now: NOW });
+    const report = await readUsageReport(repo, workItem.id);
+    const rec = report.records[0];
+    expect(rec?.hit).toBe(true);
+    expect(rec?.hit_node_types).toBeDefined();
+    const total = Object.values(rec?.hit_node_types ?? {}).reduce((a, b) => a + b, 0);
+    expect(total).toBeGreaterThan(0);
+    // the aggregated report sums per type; the covering graph relates a Decision.
+    expect(report.hit_node_types.Decision ?? 0).toBeGreaterThan(0);
+  });
+
   test('non-warm-start owner (implementer) is never injected — undefined, no record', async () => {
     await seedFreshGraph(coveringGraph());
     const ctx = await warmStartMemoryContext(repo, node('implementer'), workItem, { now: NOW });
