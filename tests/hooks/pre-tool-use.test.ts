@@ -372,30 +372,48 @@ describe('preToolUseHandler — ac-4 scope-out write', () => {
 
 describe('preToolUseHandler — Claude session-memory dir is a narrow scope-out exception', () => {
   const HOME = process.env.HOME ?? homedir();
-  const memPath = join(HOME, '.claude', 'projects', 'some-project', 'memory', 'foo.md');
+  // Claude Code project-dir slug of the CURRENT repoRoot (every non-alphanumeric → '-').
+  const SLUG = '-tmp-ditto-repo';
+  const memPath = join(HOME, '.claude', 'projects', SLUG, 'memory', 'foo.md');
 
-  test('allows a Write into ~/.claude/projects/<x>/memory/ (agent auto-memory)', async () => {
+  test("allows a Write into the CURRENT project's ~/.claude/projects/<slug>/memory/", async () => {
     expect((await file('Write', memPath)).exitCode).toBe(0);
     expect((await file('Edit', memPath)).exitCode).toBe(0);
     expect((await file('MultiEdit', memPath)).exitCode).toBe(0);
+    // nested below memory/ stays allowed (memory subtree)
+    expect(
+      (await file('Write', join(HOME, '.claude', 'projects', SLUG, 'memory', 'sub', 'x.md')))
+        .exitCode,
+    ).toBe(0);
   });
 
-  test('allows a Bash redirect into ~/.claude/projects/<x>/memory/', async () => {
+  test("allows a Bash redirect into the CURRENT project's memory dir", async () => {
     expect((await bash(`echo hi > ${memPath}`)).exitCode).toBe(0);
   });
 
+  test("R4: ANOTHER project's memory dir stays scope-out blocked (cross-session injection)", async () => {
+    const other = join(HOME, '.claude', 'projects', '-Users-x-other-proj', 'memory', 'MEMORY.md');
+    expect((await file('Write', other)).exitCode).toBe(2);
+    expect((await bash(`echo hi > ${other}`)).exitCode).toBe(2);
+  });
+
+  test('R4: a `memory` segment NOT directly under the project dir stays blocked', async () => {
+    const deep = join(HOME, '.claude', 'projects', SLUG, 'sub', 'memory', 'x.md');
+    expect((await file('Write', deep)).exitCode).toBe(2);
+  });
+
   test('still blocks other repo-external writes (not memory)', async () => {
-    // a sibling .claude path that is NOT projects/*/memory must stay blocked
+    // a sibling .claude path that is NOT projects/<slug>/memory must stay blocked
     expect((await file('Write', join(HOME, '.claude', 'other.json'))).exitCode).toBe(2);
-    // projects/* but no memory segment stays blocked
-    expect((await file('Write', join(HOME, '.claude', 'projects', 'p', 'notes.md'))).exitCode).toBe(
-      2,
-    );
+    // projects/<slug> but no memory segment stays blocked
+    expect(
+      (await file('Write', join(HOME, '.claude', 'projects', SLUG, 'notes.md'))).exitCode,
+    ).toBe(2);
     expect((await file('Write', '/tmp/elsewhere/x.txt')).exitCode).toBe(2);
   });
 
   test('secret still wins over the memory exception (a secret-shaped name in memory blocks)', async () => {
-    const secretInMem = join(HOME, '.claude', 'projects', 'p', 'memory', '.env');
+    const secretInMem = join(HOME, '.claude', 'projects', SLUG, 'memory', '.env');
     expect((await file('Write', secretInMem)).exitCode).toBe(2);
   });
 });

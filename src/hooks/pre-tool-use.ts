@@ -193,23 +193,25 @@ function isOutsideRepo(repoRoot: string, filePath: string): boolean {
 }
 
 /**
- * NARROW scope-out exception: Claude Code's per-session auto-memory directory,
- * `<home>/.claude/projects/<project>/memory/…`. Writing here keeps an agent's
- * cross-session continuity intact, so the scope-out guard must let it through —
- * but ONLY this one pattern (a `memory` segment under `.claude/projects/<x>/`).
- * Any other `~/.claude/…` path stays a scope-out block, and secret-shaped names
- * are still caught upstream by `isSecretPath`.
+ * NARROW scope-out exception: the CURRENT project's Claude Code auto-memory
+ * directory, `<home>/.claude/projects/<slug(repoRoot)>/memory/…`. Writing here
+ * keeps an agent's cross-session continuity intact, so the scope-out guard must
+ * let it through — but ONLY this one subtree. Narrowed to the current project
+ * (round-2 review R4): a cross-project allowance would let a prompt-injected
+ * agent poison another project's MEMORY.md, which Claude Code auto-loads into
+ * every future session there (persistent cross-session injection). Any other
+ * `~/.claude/…` path stays a scope-out block, and secret-shaped names are still
+ * caught upstream by `isSecretPath`.
  */
-function isClaudeMemoryPath(filePath: string): boolean {
+function isClaudeMemoryPath(repoRoot: string, filePath: string): boolean {
   const home = process.env.HOME ?? homedir();
   if (!home) return false;
-  const base = resolve(home, '.claude', 'projects');
-  const resolved = resolve(filePath);
-  const rel = relative(base, resolved);
-  if (rel.startsWith('..') || isAbsolute(rel)) return false; // not under .claude/projects/
-  // segments after `<project>/`: require a literal `memory` dir segment.
-  const segs = rel.split(/[\\/]/);
-  return segs.length >= 2 && segs.slice(1).includes('memory');
+  // Claude Code names the project dir by replacing every non-alphanumeric char
+  // of the absolute project path with '-'.
+  const slug = resolve(repoRoot).replace(/[^a-zA-Z0-9]/g, '-');
+  const base = resolve(home, '.claude', 'projects', slug, 'memory');
+  const rel = relative(base, resolve(filePath));
+  return rel.length > 0 && !rel.startsWith('..') && !isAbsolute(rel);
 }
 
 // --- (a) destructive Bash ---------------------------------------------------
@@ -555,7 +557,7 @@ export const preToolUseHandler: HookHandler = async (input: HookInput) => {
     // auto-memory dir is a narrow exception (secret operands already blocked
     // above by bashSecretExposure, which keeps secret-priority intact).
     for (const dest of bashWriteTargets(command)) {
-      if (isOutsideRepo(repoRoot, dest) && !isClaudeMemoryPath(dest)) {
+      if (isOutsideRepo(repoRoot, dest) && !isClaudeMemoryPath(repoRoot, dest)) {
         return block('scope-out', `write outside repo (${dest})`);
       }
     }
@@ -594,7 +596,7 @@ export const preToolUseHandler: HookHandler = async (input: HookInput) => {
   // exception so agent continuity survives; secret already blocked above, so
   // priority stays secret > claude-memory allow > scope-out block.
   if (toolName === 'Write' || toolName === 'Edit' || toolName === 'MultiEdit') {
-    if (isOutsideRepo(repoRoot, filePath) && !isClaudeMemoryPath(filePath)) {
+    if (isOutsideRepo(repoRoot, filePath) && !isClaudeMemoryPath(repoRoot, filePath)) {
       return block('scope-out', `write outside repo (${filePath})`);
     }
     // (d) forbidden_scope: 계약이 보호하는 파일을 건드리면 막는다.
