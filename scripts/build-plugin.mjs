@@ -27,7 +27,9 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(REPO, 'dist', 'plugin');
 
 // Product surface dirs that always ship. `commands` is conditional (absent today).
-const ALWAYS_DIRS = ['hooks', 'agents', 'skills'];
+// `resources` must ship: `ditto setup` resolves resources/managed under the
+// installed plugin root — without it setup silently installs zero resources.
+const ALWAYS_DIRS = ['hooks', 'agents', 'skills', 'resources'];
 const OPTIONAL_DIRS = ['commands'];
 
 // Bundle straight into dist/plugin/bin so assembly never clobbers the live
