@@ -80,6 +80,8 @@ graphify에서 **참고만** 하는 것: 추출 파이프라인 형태, confiden
 | knowledge를 그래프로 흡수/대체 | **기각.** knowledge(glossary·ADR)는 **사람이 큐레이션한 저빈도 durable 지식**이고, 그래프는 **기계 추출 고빈도 source-grounded** 층이다. 휘발성·신뢰도가 다르다. 합치면 둘 다 망가진다(보고서 §6.2 중복 저장 금지). |
 | **별개·상호보완** | **채택.** knowledge는 그대로. 접점만 명시: ADR/결정은 `event_type=decision`인 MemoryEvent로도 그래프에 들어오고, 그래프 audit가 모순을 찾으면 knowledge-curator로 승격. (§5-4) |
 
+> **동기화 한계 (knowledge↔memory).** ADR/glossary 본문을 memory로 끌어오는 길은 bootstrap ingest(증분, §10-9) 하나뿐인데, 이건 수동 1회성(CLI 호출)이고 scan은 `.ditto`를 제외(SKIP_DIRS)하므로 `.ditto/knowledge`를 수정하면 ingest 사본이 drift한다. **현재 정책**: knowledge 변경 후 `ditto memory bootstrap` 재실행으로 source를 갱신한다(source는 content_hash 변경 시 다시 write되나, 불변 이벤트 본문은 supersede 없이는 안 바뀜). 자동 재ingest/supersede는 drift가 실제 문제가 되면 후속 work item. (ADR-0013 철회/재검토 조건과 일관.)
+
 ### 3-6. 의미 검색 — 임베딩 벡터 스토어를 까나?
 
 **기각(v0).** 보고서도 graphify도 임베딩을 1차 수단으로 쓰지 않는다(graphify는 LLM 판단 유사도 + Leiden 군집). v0 검색은 **그래프 traversal + 라벨/식별자 매칭**으로 충분하다. 벡터 검색은 필요성이 증명된 뒤 별도 증분으로. (불필요한 추상화 금지.)

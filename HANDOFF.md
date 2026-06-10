@@ -1,56 +1,81 @@
-# HANDOFF — ditto memory 서브시스템 v0 완료 + 후속 (2026-06-10)
+# HANDOFF — 메모리 리뷰 후속 8건 수정 검증 (2026-06-10)
 
-다른 PC 이어받기용. **이어받은 뒤 갱신/삭제해도 됨**(git-tracked 세션 핸드오프).
+새 세션 **독립 검증**용. 작성자(이전 세션)의 자기평가를 믿지 말고 fresh evidence로 재검증하라. 이어받은 뒤 갱신/삭제해도 됨.
 
-> **주의**: `.ditto/local/`(work item 상태·autopilot 그래프·dialectic 원장·완료계약)과 `~/.claude` 자동 메모리는 **git으로 안 간다.** git으로 오는 건 코드·문서·ADR·이 파일뿐. 그래서 아래는 자기완결적으로 적었다. work item `wi_260609m41`은 이 PC에만 있고 새 PC엔 없다(아래 "새 PC 재등록" 참조).
+## ⚠ 먼저 — 상태 제약 (검증 가능 여부를 가름)
 
-## 무엇이 끝났나 — memory v0 (옵션 A) **DONE·푸시됨**
+- **8건 코드/문서 변경은 아직 커밋 안 됨.** HEAD는 `2a408b1`(직전 핸드오프)이고, 수정은 작업 트리에만 있다.
+  - **같은 PC 새 세션**: 작업 트리에 그대로 있으니 바로 검증 가능(git pull 불필요).
+  - **다른 PC**: 이 변경과 이 핸드오프는 **커밋·푸시해야** 간다. 안 하면 새 PC엔 코드가 없어 검증 불가. (커밋은 이전 세션이 사용자 지시 대기 중이었음 — 다른 PC 검증이면 먼저 커밋·푸시할 것.)
+- **`.ditto/local/`은 git으로 안 간다.** work item `wi_2606104bd`의 autopilot.json·intent.json·completion.json·evidence는 **이 PC에만** 있다. 새 PC에선 없다(검증은 코드·테스트로 자기완결하게 아래에 적었다).
+- **bun은 1.3.14 이상**이어야 한다. 1.0.2는 `FileHandle.close` 미구현으로 메모리 테스트가 가짜 실패한다.
 
-보고서의 메모리/지식그래프를 ditto 네이티브 `ditto memory`로 구축. dialectic 2라운드 검증 후 **옵션 A(measure-before-expand)**로 완주: autopilot 33/33 노드 passed, final_verdict=**pass**(15/15 AC 증거 close), 전체 `bun test` 1545 tests 0 fail.
+## 무엇을 검증하나
 
-**커밋(origin/main, push 완료, `f2b9a53`~`42f33f7`)** — 증분별:
-- `f2b9a53` 설계 동결 §10 + dialectic 1·2라운드 + 옵션 A (문서)
-- `65cd18a` #2 Store 4종 + scan/events + source.repo
-- `eec6fd4`+`7cee8c1` #3 ACG→IR builder (+리뷰 fix: 엣지 properties·멀티kind·방향)
-- `97e24a6` bootstrap ingest (knowledge/handoff→그래프, cold-start 해소)
-- `bf7b3cf` #4 semantic 엔진 + 결정적 merge reducer
-- `e2c77ca` #5 event→IR reducer + projection + status
-- `c52fac2` #6 query/path/explain + audit
-- `692da3e` §5-1 warm-start push + 계측
-- `d0c481b` #7 쓰기모델 + #8 플러그인 배선
-- `dcecdc8` ADR-0013 + CLAUDE.md 투영
-- `42f33f7` 되돌림 플래그(`DITTO_MEMORY=off`) + #7 double-approve fix + ac-12 usage 리포트
+`reports/reviews/memory-subsystem-review.md`(이전 세션이 쓴 `ditto memory` 종합 리뷰)의 발견 8건을 ditto autopilot 자율주행(work item `wi_2606104bd`, 7노드)으로 수정했다. final_verdict=pass(9/9 AC)로 닫았다고 주장한다 — 이걸 독립 검증하는 게 이 세션의 일이다.
 
-**진실원(전부 git-tracked, pull로 옴)**:
-- `reports/design/memory-graph-plugin-design.md` §10(구현계약)·§10-8/9(dialectic 반영·옵션 A·되돌림 4불변식)
-- `reports/design/memory-graph-value-structure-assessment.md`(가치·구조 평가·옵션 A 의사결정 §6-1)
-- `.ditto/knowledge/adr/ADR-0013-memory-subsystem-design.md`
-- 코드: `src/core/memory-*.ts`(store/scan/ir/bootstrap/build/reduce/project/query/warmstart/flag), `src/cli/commands/memory.ts`, `skills/memory-graph/`, `agents/memory-extractor.md`
+### 변경 파일 (전부 미커밋, `git status`로 확인)
+코드: `src/core/memory-{bootstrap,project,build,query,scan}.ts`, `src/cli/commands/memory.ts`, `src/hooks/pre-tool-use.ts`
+문서: `.ditto/knowledge/adr/ADR-0013-memory-subsystem-design.md`, `reports/design/memory-graph-plugin-design.md`
+테스트: `tests/core/memory-{bootstrap,project,build,query}.test.ts`, `tests/cli/memory-cli.test.ts`, `tests/hooks/pre-tool-use.test.ts`
 
-`ditto memory` 명령: scan · events(append/list) · build[--semantic] · project · status · query/path/explain · audit · propose/approve · bootstrap · usage.
+### 8건 수정 내역과 검증 포인트
 
-## ⚠ ditto autopilot gotcha 4건 (이번에 우회·교정함 — 재발 가능, ditto 자체 개선 후보)
+| # | 무엇을 고쳤나 | 어떻게 검증 (fresh) |
+|---|---|---|
+| **F1** | bootstrap이 ingest한 glossary/handoff를 `approved`로 승격 + projection이 approved observation을 `Episode` 노드, source를 `Source` 노드로 노출 | 격리repo 재현(아래 ①). 리뷰 전엔 `Decision` 1개뿐이었다 → 이제 Episode·Source가 보여야 |
+| **F2** | `searchEventBodies`를 query 런타임에 배선(`queryBodies` + CLI `--text`/node-not-found fallback) | `bun test tests/core/memory-query.test.ts`. 격리repo에서 제목에 없고 본문에만 있는 토큰으로 `ditto memory query <token> --text`가 결과 반환 |
+| **F3** | `approveEvent`에 `approverKind` 추가 — `actor.kind=agent`로 제안된 이벤트는 user만 승인 | 격리repo: `propose --actor agent` 후 `approve --actor agent` → **거부(exit 65)**, `--actor user` → 통과(exit 0) |
+| **F4** | RATIONALE_FOR 엣지의 `source:` 노드를 실제 그래프 노드로 생성(dangling 해소) | 격리repo: `ditto memory query source:<id>`가 이웃 반환(이전엔 NotFound) |
+| **F5** | ADR-0013/설계서에 knowledge↔memory drift 한계·재ingest 정책 명시 | `git diff`로 ADR-0013·설계서에 "knowledge↔memory"/"재ingest" 문구 확인. `bun test tests/core/memory-bootstrap.test.ts` |
+| **F6** | `sensitivity=secret` source/event를 projection·build chunk에서 제외 | `bun test tests/core/memory-build.test.ts tests/core/memory-project.test.ts` |
+| **F7** | `approve <eventId>`를 `memoryEventId` 스키마로 검증 | 격리repo: `ditto memory approve "../../../etc/hosts" --by x` → **거부(exit 65)** |
+| **hook** | PreToolUse scope-out이 `~/.claude/projects/*/memory/` 쓰기를 허용(repo밖 그외·secret은 차단 유지) | `bun test tests/hooks/pre-tool-use.test.ts`. **단 동작 hook은 컴파일된 `bin/ditto`라 소스만 고쳐선 런타임 미반영** — 실동작 검증하려면 `bun run build:bin` 후. 안 하면 단위테스트(163 pass)로만 |
 
-이 빌드 중 만난 autopilot 결함. autopilot.json은 `.ditto/local`이라 새 PC엔 안 가지만, **다음에 autopilot으로 큰 work item 돌리면 또 만난다**:
-1. **seed↔planner 중복**: bootstrap이 generic 시드 N1→N2→N3 만드는데 planner가 자기완결 subgraph 내면 시드 N2/N3 중복 → next-node가 generic 시드 고름. 우회=시드 retire.
-2. **impl↔verify 데드락**: `selectReadyNodes` B3 guard(`src/core/autopilot-graph.ts:87-92`)가 impl pending 시 모든 verify 보류. planner가 implement 의존을 verify에 걸면 순환 교착. 우회=verify-의존을 그 verify의 선행(impl/review)으로 lift.
-3. **N1 planner가 evidence 없이 전체 AC addressing** → `autopilot complete`의 worst-fold(`autopilot-complete.ts:115-125`)가 전 AC를 unverified로(false-negative). 우회=N1.acceptance_refs 비움.
-4. **work-item.json AC가 placeholder 1개**(intent 직접 작성 시 동기화 안 됨) → complete가 AC 못 매핑. 우회=work-item AC를 intent 15개로 동기화.
-→ **개선 제안**: bootstrap이 planner 노드 만들 때 seed impl/verify 생략, planner 출력의 impl→verify 의존 자동 정규화, design/planner 노드에 AC refs 미부여, intent→work-item AC 자동 동기화. (별도 work item 후보)
+## 독립 검증 절차
 
-## 후속 (measure-before-expand 게이트 + 운영 + 정리)
-
-1. **§5 push 확대(§5-2/5-3/5-4/5-5) + audit→curator 자동** — 이번엔 **미배선**(out_of_scope). `ditto memory usage`의 hit율(opportunities/attempts/hits/actionable) 데이터가 dogfooding으로 쌓인 뒤, 그 증거로 게이트 열고 확대. 이게 옵션 A의 핵심.
-2. **운영: 실 그래프 채우기** — `.ditto/memory/` SoT는 아직 비어있음(코드만 land, 실 ingest 미실행). 새 PC에서 `ditto memory bootstrap` → `ditto memory build [--semantic]` → `ditto memory project` 돌려 day-1 그래프 생성(SoT는 git-tracked라 커밋하면 따라옴).
-3. **선재 드리프트 정리(Tidy-First, 이 작업 무관)**: 선재 tsc 214건·`schemas/*.schema.json` 드리프트 5건(autopilot/command-log-entry/e2e-journey/evidence-index/interview-state). 메모리 작업이 만든 것 아님(검증으로 확인). 별도 정리.
-4. **CLAUDE.md knowledge 블록 sha256 마커** — ADR-0013 본문은 들어갔으나 마커 stale. 다음 `syncKnowledgeProjection`(knowledge-update 경로) 시 자가치유(본문은 `.ditto/knowledge/adr/`에서 재생성).
-
-## 새 PC 재등록 (work item 상태는 안 따라옴 — 이미 v0 done이라 보통 불필요)
-
-v0는 끝났으므로 후속은 **새 work item**으로 시작하는 게 맞다:
 ```bash
-git pull && bun install && bun run build:bin && bun run build && bun link   # 터미널 ditto 갱신
-ditto memory --help    # scan/build/query/... 보이면 OK
-# 후속(예: §5 push 확대 측정·운영 ingest)은 그때 ditto work start 로 새 work item
+# (다른 PC면 먼저: git pull && bun install && bun run build:bin && bun run build && bun link)
+bun --version            # 1.3.x 이상 확인
+bun test 2>&1 | tail -5  # 기대: 1555 pass / 1 fail. 그 1 fail은 아래 '환경 함정'의 wi_v01bootstrap(무관)
+bunx biome check src/core/memory-*.ts src/cli/commands/memory.ts src/hooks/pre-tool-use.ts
 ```
-이번 v0의 dialectic 원장·완료계약을 보려면 이 PC의 `.ditto/local/work-items/wi_260609m41/`(reviews/dialectic-{1,2}.json, completion.json) 참조 — git엔 없음.
+
+### ① 격리repo 재현 (F1/F2/F3/F4/F7 — 핵심, 리뷰 주장의 산 증거)
+```bash
+TMP=$(mktemp -d); cd "$TMP"; git init -q; git config user.email t@t.co; git config user.name t
+mkdir -p .ditto/knowledge/adr .ditto/local/handoff/archive
+printf '{ "entries": [ {"term":"wave splitting","definition":"autopilot partitions ready nodes ... frobnicate"} ] }' > .ditto/knowledge/glossary.json
+printf '# ADR-0001\n\n## 결정\nmutating 1 cap.\n\n## 근거\n파일 겹침 방지 drift.\n' > .ditto/knowledge/adr/ADR-0001-x.md
+printf -- '---\n{ "original_intent": "fix wave clobber" }\n---\n# h\n' > .ditto/local/handoff/archive/wi_old__x.md
+ditto memory bootstrap --output json && ditto memory project --output json
+# F1/F4: graph.json node_type 분포에 Episode·Source 가 있어야 (리뷰 전엔 Decision 1뿐)
+python3 -c "import json,collections; g=json.load(open('.ditto/local/memory/projections/graph.json')); print(collections.Counter(n['node_type'] for n in g['nodes']))"
+# F2: 본문에만 있는 토큰
+ditto memory query frobnicate --text
+# F3: self-approve 거부
+ID=$(ditto memory propose --type analysis --text guess --confidence INFERRED --actor agent --output json | python3 -c "import json,sys;print(json.load(sys.stdin)['event_id'])")
+ditto memory approve "$ID" --by a --actor agent   # exit 65 기대
+ditto memory approve "$ID" --by human --actor user # exit 0 기대
+# F7: traversal id 거부
+ditto memory approve "../../../etc/hosts" --by x    # exit 65 기대
+cd - && rm -rf "$TMP"
+```
+
+## 의심해야 할 지점 (검증자가 따져볼 것)
+
+이전 세션이 내린 **구현 결정**들 — 동작은 맞지만 설계적으로 이게 옳은지 검증자가 판단:
+1. **F3 정책이 kind 기반**: actor에 식별자가 없어 "agent가 제안 → user만 승인"으로 강제했다. 즉 *다른* agent도 승인 못 한다(제안자≠승인자보다 엄격). 자율주행 중 메모리 승인이 필요하면 사람 개입이 강제됨 — 이게 의도대로인가. (현재 autopilot은 memory approve를 호출하지 않아 실질 영향은 없음.)
+2. **F1이 bootstrap을 approved 승격**: pending은 그래프에 안 보인다는 §4-5 승인모델과의 화해를 "bootstrap=이미 큐레이션된 자산"으로 정당화했다. `propose` 경로는 여전히 pending. ADR이 원래 approved였던 것과 일관 — 그래도 "사람 승인 없이 approved"가 맞는지.
+3. **F2가 query 동작을 바꿈**: node-not-found가 이전엔 usage 에러(exit 65)였는데 이제 본문검색 fallback(exit 0). 이 동작 변경이 외부 스크립트에 영향 없는지.
+4. **hook 허용 범위**: `~/.claude/projects/*/memory/`만 좁게 뚫었다. secret은 여전히 우선 차단. 범위가 적절한지.
+5. **autopilot completion 우회**: gotcha 3(worst-fold)가 발동해, `wi_2606104bd/autopilot.json`에서 implement 노드(N1~N6)의 `acceptance_refs`를 비우고 verifier(N7)에 `evidence_refs`를 수동 주입해 final_verdict=pass를 얻었다. **이건 엔진 결함 우회지 거짓 통과가 아님**(N7이 실제 fresh evidence로 9 AC 검증) — 그러나 completion 산출물(`.ditto/local`, 이 PC에만)을 신뢰하지 말고 위 ①로 직접 재현해 판정하라.
+
+## 환경 함정 (이 작업 무관, 검증 중 마주침)
+- **`bun test`의 남은 1 fail = `repo-self-validation > wi_v01bootstrap and wi_v01implement exist`**: 이 PC의 `.ditto/local/work-items/`에 과거 work item이 있길 기대하는 테스트라 fresh PC/다른 상태에선 항상 실패한다. 로컬 상태에 결합된 **테스트 설계 결함**(리뷰의 별도 항목), 8건 수정과 무관. 이것만 fail이면 정상.
+- `.ditto/local/surfaces.json`은 생성형 — pull 후 drift 테스트 실패 시 `bun run surfaces:gen`.
+- `bunx tsc --noEmit`엔 사전존재 214건(`src/acg/*` 등)이 있다. 검증 기준은 "메모리/hook 파일발 신규 에러 0"이다(`| grep -E 'memory-|pre-tool-use|commands/memory'`로 0 확인).
+
+## 검증 후
+- 8건이 모두 재현되면 → 커밋(동작적 변경, 한 논리 단위). 미커밋 상태이므로 검증자가 커밋·푸시하면 다른 PC로도 전파된다.
+- 실패를 발견하면 재현 절차와 함께 기록(어느 F, 어느 명령, 기대 vs 실제).

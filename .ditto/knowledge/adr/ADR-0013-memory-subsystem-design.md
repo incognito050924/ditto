@@ -59,3 +59,4 @@ DITTO에 코드·결정·핸드오프를 출처-동반 그래프로 묶어 cross
 - 멀티 repo workspace에서 workspace-루트 `.ditto/memory/`에 **변형**(scan-write/propose/approve/build)이 필요해지면 → ADR-0011 session-rooting scope-out 재개 대상(현 v0는 read/scan/projection 전용).
 - 의미 추출 비결정성(리스크 A)이 confidence 분리 + propose/approve로 격리되지 못하는 사례가 나오면 → 보류한 쓰기 게이트/임베딩 대안 재검토.
 - 단일 플래그 되돌림(`DITTO_MEMORY=off`)이 §5 통합 graceful-degrade를 실제로 보장하지 못하는 회귀가 나오면 → 4불변식(D4) 재검토.
+- **knowledge↔memory 동기화** — bootstrap ingest는 수동 1회성이고(CLI `ditto memory bootstrap`만 호출), scan은 `.ditto`를 SKIP_DIRS로 제외하므로(src/core/memory-scan.ts), `.ditto/knowledge`(ADR/glossary) 본문을 수정하면 memory의 ingest 사본이 drift한다. **현재 정책**: knowledge 변경 후 `ditto memory bootstrap`을 재실행해 source를 갱신한다 — source는 content_hash가 다르면 다시 write되어 갱신되나, 불변(append-only) 이벤트 본문은 supersede 없이는 갱신되지 않는 한계가 있다(재실행은 동일 event_id를 graceful-skip). 이 drift가 실제 문제를 일으키면 → bootstrap 재ingest 자동화(예: githook) 또는 이벤트 supersede 경로를 후속 work item으로.
