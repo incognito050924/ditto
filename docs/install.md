@@ -134,6 +134,66 @@ hooks and bare `ditto …` commands will not resolve.
 If the DITTO repo can't be auto-detected, set `DITTO_HOME` to the repo root
 (the directory containing `.claude-plugin/plugin.json`).
 
+## Loading the behavior rules — `ditto setup` (a step the installer does NOT run)
+
+The installer's step 4 is `ditto init` (scaffolds `.ditto/`), not `ditto setup`.
+**The behavior rules only land when you run `ditto setup`** — after install alone
+the plugin surfaces (skills/agents/hooks) work, but these managed blocks are
+absent:
+
+| File | Scope | Content |
+|------|-------|---------|
+| `~/.claude/CLAUDE.md` · `~/.claude/AGENTS.md` | global | Global behavior rules (completion gate, fact gate, output rules, …). Applies to every project. |
+| `<target>/CLAUDE.md` · `<target>/AGENTS.md` | project | The Agent Behavior Charter. |
+
+Run it inside the target project:
+
+```bash
+cd /path/to/your/project
+ditto setup
+```
+
+Behavior (verified by direct runs):
+
+- **Preserves existing content**: anything already in the file stays outside the
+  managed block (`<!-- ditto:managed:start … -->`), and the first application
+  creates a `<file>.ditto_bak` backup.
+- **Idempotent**: re-running updates the block in place, never duplicates it.
+- **Removal**: `ditto teardown` strips only the managed blocks and keeps user
+  content.
+- The loaded rules take effect from the **next** Claude Code session.
+
+> Under self-host (target = the DITTO repo itself) setup is skipped entirely.
+> When dogfooding inside the DITTO repo and you only need the **global** blocks,
+> run `ditto setup` once in any other project (a scratch directory works) — the
+> global files land in the same place regardless of the target.
+
+## Marketplace install/update path
+
+Instead of install.sh you can install through the Claude Code plugin
+marketplace (GitHub source or a local `dist/plugin` directory source):
+
+```bash
+claude plugin marketplace add <owner>/<repo>     # or a local dist/plugin path
+claude plugin install ditto@ditto-local
+```
+
+Two traps on this path (both reproduced directly):
+
+1. **Updates require `marketplace update`.** The installed plugin is a **copied
+   cache** (`~/.claude/plugins/cache/…`). After the source changes
+   (push/rebuild) it stays stale until you run
+   `claude plugin marketplace update ditto-local`. The version is pinned
+   (0.0.0), so `claude plugin update` is a no-op.
+2. **`install` on an already-installed plugin is a no-op.** It ends with
+   "already installed" without refreshing the cache. To refresh, run
+   `claude plugin uninstall ditto@ditto-local`, then `claude plugin install`
+   again.
+
+This path also skips the installer's steps 3b/3c (CodeQL/Playwright pre-seed)
+and `PATH` placement — use the opt-in commands from the
+[dependency model](#dependency-model-codeql--playwright) above.
+
 ## Verify
 
 Start a **new** Claude Code session in the target project, then:

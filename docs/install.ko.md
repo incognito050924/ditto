@@ -133,6 +133,62 @@ cd /path/to/your/project           # DITTO가 관리할 프로젝트
 DITTO 저장소를 자동 감지하지 못하면 `DITTO_HOME`을 저장소 루트
 (`.claude-plugin/plugin.json`이 있는 디렉터리)로 지정하세요.
 
+## 행동 규칙 적재 — `ditto setup` (설치 스크립트가 하지 않는 단계)
+
+설치 스크립트의 4단계는 `ditto init`(`.ditto/` 스캐폴딩)이지 `ditto setup`이
+아닙니다. **행동 규칙은 `ditto setup`을 실행해야 적재됩니다** — 설치만 마치면
+플러그인 표면(스킬·에이전트·훅)은 동작하지만, 아래 관리블록은 비어 있습니다:
+
+| 파일 | 범위 | 내용 |
+|------|------|------|
+| `~/.claude/CLAUDE.md` · `~/.claude/AGENTS.md` | 전역 | 전역 행동 규칙(완료 게이트·사실 게이트·출력 규칙 등). 모든 프로젝트에 적용. |
+| `<대상>/CLAUDE.md` · `<대상>/AGENTS.md` | 프로젝트 | Agent Behavior Charter(행동 헌장). |
+
+대상 프로젝트에서 실행합니다:
+
+```bash
+cd /path/to/your/project
+ditto setup
+```
+
+동작 특성(직접 실행으로 검증됨):
+
+- **기존 내용 보존**: 파일에 이미 있던 사용자 내용은 관리블록
+  (`<!-- ditto:managed:start … -->`) 밖에 그대로 남고, 첫 적용 시
+  `<파일>.ditto_bak` 백업이 생깁니다.
+- **멱등**: 재실행해도 블록이 중복 적재되지 않고 갱신만 됩니다.
+- **제거**: `ditto teardown`이 관리블록만 벗겨내고 사용자 내용은 남깁니다.
+- 적재된 규칙은 **새 Claude Code 세션부터** 로드됩니다.
+
+> self-host(대상 = DITTO 저장소 자신)에서는 setup이 통째로 건너뛰어집니다.
+> DITTO 저장소에서 dogfooding하면서 **전역** 블록만 필요하면, 아무 다른
+> 프로젝트(임시 디렉터리도 가능)에서 `ditto setup`을 한 번 실행하세요 — 전역
+> 파일은 대상과 무관하게 같은 위치에 적재됩니다.
+
+## 마켓플레이스 설치/갱신 경로
+
+install.sh 대신 Claude Code 플러그인 마켓플레이스로 설치할 수도 있습니다
+(GitHub 소스 또는 로컬 `dist/plugin` 디렉터리 소스):
+
+```bash
+claude plugin marketplace add <owner>/<repo>     # 또는 로컬 dist/plugin 경로
+claude plugin install ditto@ditto-local
+```
+
+이 경로에는 함정이 둘 있습니다(직접 재현됨):
+
+1. **갱신은 `marketplace update`가 필수.** 설치본은 marketplace의 **복사본
+   캐시**(`~/.claude/plugins/cache/…`)입니다. 소스가 바뀌어도(push/재빌드)
+   `claude plugin marketplace update ditto-local`을 돌리기 전까지 stale입니다.
+   버전이 고정(0.0.0)이라 `claude plugin update`는 no-op입니다.
+2. **기설치 상태의 `install`은 no-op.** "already installed"로 끝나며 캐시를
+   갱신하지 않습니다. 갱신하려면 `claude plugin uninstall ditto@ditto-local`
+   후 다시 `claude plugin install` 하세요.
+
+또한 이 경로는 install.sh의 3b/3c(CodeQL·Playwright 사전 준비)와 `PATH` 배치를
+건너뜁니다 — 위 [의존성 모델](#의존성-모델-codeql--playwright)의 opt-in 명령을
+사용하세요.
+
 ## 확인
 
 대상 프로젝트에서 **새** Claude Code 세션을 시작한 뒤:
