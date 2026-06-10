@@ -1,4 +1,4 @@
-<!-- ditto:managed:start source=AGENTS.md sha256=ebc1271734886b3a9693f729a2c784742ad36d1106e892a546592e130ce0f38b -->
+<!-- ditto:managed:start source=AGENTS.md sha256=740c94da9aa52067a971a5540df5e39f0e88e23a4e696b34a317bd88dc6efa13 -->
 # Agent Behavior Charter v1
 
 부제: 모든 에이전트를 위한 기본 행동 헌장
