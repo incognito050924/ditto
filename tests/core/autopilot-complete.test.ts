@@ -222,6 +222,108 @@ describe('deriveAcVerdicts (evidence-gated: pass only with evidence; never auto-
     expect(v?.verdict).toBe('fail');
   });
 
+  // gotcha #3 / wi_260610idf: an IMPLEMENTATION node's evidence-less pass is a
+  // structural unverified — not a judgment. When a DOWNSTREAM addressing node
+  // (one that transitively depends on it) passed the same AC with evidence, the
+  // verification covered the implementation, so the structural unverified must
+  // not drag the AC down. This is the defect that forced wi_2606104bd to empty
+  // implement nodes' acceptance_refs by hand.
+  describe('downstream verified pass supersedes upstream structural unverified (gotcha #3)', () => {
+    const implNode = (id: string, over: Partial<AutopilotNode> = {}) =>
+      node({
+        id,
+        kind: 'implement',
+        owner: 'implementer',
+        status: 'passed',
+        acceptance_refs: ['ac-1'],
+        evidence_refs: [],
+        ...over,
+      });
+    const verifierNode = (id: string, deps: string[], over: Partial<AutopilotNode> = {}) =>
+      node({
+        id,
+        kind: 'verify',
+        owner: 'verifier',
+        status: 'passed',
+        acceptance_refs: ['ac-1'],
+        depends_on: deps,
+        evidence_refs: [ev('verify.log')],
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'pass' }],
+        ...over,
+      });
+
+    test('REPRO: evidence-less implement + downstream verified pass → pass (was unverified)', () => {
+      const graph = graphWith([implNode('N1'), verifierNode('N7', ['N1'])]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('pass');
+    });
+
+    test('transitive dependency counts (verifier behind a chain of implements)', () => {
+      const graph = graphWith([
+        implNode('N1'),
+        implNode('N2', { depends_on: ['N1'] }),
+        verifierNode('N7', ['N2']),
+      ]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('pass');
+    });
+
+    test('a pass that is NOT downstream of the implement cannot supersede (ordering matters)', () => {
+      // The verifier ran in parallel / before — its evidence does not cover N1's change.
+      const graph = graphWith([implNode('N1'), verifierNode('N7', [])]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('unverified');
+    });
+
+    test('an explicit per-AC non-pass on the implement node is a judgment and sticks', () => {
+      const graph = graphWith([
+        implNode('N1', {
+          evidence_refs: [ev('impl.log')],
+          ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'partial' }],
+        }),
+        verifierNode('N7', ['N1']),
+      ]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('partial');
+    });
+
+    test('a NON-TERMINAL implement node sticks at unverified (work unfinished)', () => {
+      const graph = graphWith([implNode('N1', { status: 'running' }), verifierNode('N7', ['N1'])]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('unverified');
+    });
+
+    test('a FAILED implement node still fails the AC (only fix-backed re-verify supersedes a fail)', () => {
+      const graph = graphWith([implNode('N1', { status: 'failed' }), verifierNode('N7', ['N1'])]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('fail');
+    });
+
+    test("a node's own per-AC pass still cannot upgrade its own evidence-less unverified", () => {
+      const graph = graphWith([
+        implNode('N1', { ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'pass' }] }),
+      ]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('unverified');
+    });
+
+    test('wi_2606104bd shape: implement fan + one verifier over all ACs → final_verdict=pass', () => {
+      const acs = ['ac-1', 'ac-2', 'ac-3'];
+      const graph = graphWith([
+        implNode('N1', { acceptance_refs: ['ac-1'] }),
+        implNode('N2', { acceptance_refs: ['ac-2'], depends_on: ['N1'] }),
+        implNode('N3', { acceptance_refs: ['ac-3'], depends_on: ['N1'] }),
+        verifierNode('N7', ['N2', 'N3'], {
+          acceptance_refs: acs,
+          ac_verdicts: acs.map((id) => ({ criterion_id: id, verdict: 'pass' as const })),
+        }),
+      ]);
+      const c = assembleCompletionFromGraph(graph, workItemWith(acs), { now: NOW });
+      expect(c.acceptance.map((a) => a.verdict)).toEqual(['pass', 'pass', 'pass']);
+      expect(c.final_verdict).toBe('pass');
+    });
+  });
+
   // A per-AC verdict for an AC the node does not address is ignored (it is not an
   // addressing node for that criterion).
   test('a per-AC verdict on a non-addressed criterion is ignored', () => {

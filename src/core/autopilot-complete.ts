@@ -85,6 +85,41 @@ function dependsOnPassedFix(node: AutopilotNode, byId: Map<string, AutopilotNode
   return visit(node.id);
 }
 
+/** Does `node` transitively depend on `targetId`? Same guarded DFS over depends_on. */
+function dependsOnNode(
+  node: AutopilotNode,
+  targetId: string,
+  byId: Map<string, AutopilotNode>,
+): boolean {
+  const seen = new Set<string>();
+  const visit = (id: string): boolean => {
+    if (seen.has(id)) return false;
+    seen.add(id);
+    const cur = byId.get(id);
+    if (!cur) return false;
+    for (const dep of cur.depends_on) {
+      if (dep === targetId) return true;
+      if (visit(dep)) return true;
+    }
+    return false;
+  };
+  return visit(node.id);
+}
+
+/**
+ * Is this node's `unverified` for `acId` purely STRUCTURAL — a passed node that
+ * simply carries no evidence (and no explicit per-AC judgment below pass)? Such
+ * an unverified is "implementation done, proof lives elsewhere", as opposed to
+ * an explicit verifier judgment or unfinished work, which must stick.
+ */
+function isStructuralUnverified(node: AutopilotNode, acId: string): boolean {
+  return (
+    node.status === 'passed' &&
+    node.evidence_refs.length === 0 &&
+    node.ac_verdicts.every((v) => v.criterion_id !== acId || v.verdict === 'pass')
+  );
+}
+
 export function deriveAcVerdicts(graph: Autopilot, acIds: string[]): DerivedVerdict[] {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   return acIds.map((acId) => {
@@ -112,10 +147,29 @@ export function deriveAcVerdicts(graph: Autopilot, acIds: string[]): DerivedVerd
     let verdict: Verdict = 'pass';
     let notes: string | undefined;
     let folded = false;
+    let structuralSuperseded = false;
     for (const n of addressing) {
       const nv = nodeVerdictFor(n, acId);
       // A fail that a later fix-backed re-verify supersedes is dropped from the fold.
       if (nv.verdict === 'fail' && supersedingFix) continue;
+      // gotcha #3 (wi_260610idf): an implementation node's evidence-less pass is
+      // a STRUCTURAL unverified, not a judgment. When another addressing node
+      // DOWNSTREAM of it (transitively depends on it) passed this AC with
+      // evidence, that verification ran after — and therefore covers — the
+      // implementation, so the structural unverified is dropped from the fold.
+      // Explicit per-AC non-pass verdicts, non-terminal nodes, fails, parallel/
+      // earlier passes, and a node's own per-AC pass are never superseded.
+      if (
+        nv.verdict === 'unverified' &&
+        isStructuralUnverified(n, acId) &&
+        addressing.some(
+          (m) =>
+            m !== n && nodeVerdictFor(m, acId).verdict === 'pass' && dependsOnNode(m, n.id, byId),
+        )
+      ) {
+        structuralSuperseded = true;
+        continue;
+      }
       const next = worst(verdict, nv.verdict);
       if (!folded || SEVERITY[next] < SEVERITY[verdict]) {
         verdict = next;
@@ -125,6 +179,8 @@ export function deriveAcVerdicts(graph: Autopilot, acIds: string[]): DerivedVerd
     }
     if (supersedingFix && verdict === 'pass') {
       notes = `earlier fail superseded by a re-verify behind a passed fix (${acId})`;
+    } else if (structuralSuperseded && verdict === 'pass') {
+      notes = `evidence-less implementation pass covered by a downstream verified pass (${acId})`;
     }
 
     return { criterion_id: acId, verdict, evidence, ...(notes ? { notes } : {}) };
