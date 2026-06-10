@@ -17029,6 +17029,28 @@ function dependsOnPassedFix(node, byId) {
   };
   return visit2(node.id);
 }
+function dependsOnNode(node, targetId, byId) {
+  const seen = new Set;
+  const visit2 = (id) => {
+    if (seen.has(id))
+      return false;
+    seen.add(id);
+    const cur = byId.get(id);
+    if (!cur)
+      return false;
+    for (const dep of cur.depends_on) {
+      if (dep === targetId)
+        return true;
+      if (visit2(dep))
+        return true;
+    }
+    return false;
+  };
+  return visit2(node.id);
+}
+function isStructuralUnverified(node, acId) {
+  return node.status === "passed" && node.evidence_refs.length === 0 && node.ac_verdicts.every((v2) => v2.criterion_id !== acId || v2.verdict === "pass");
+}
 function deriveAcVerdicts(graph, acIds) {
   const byId = new Map(graph.nodes.map((n2) => [n2.id, n2]));
   return acIds.map((acId) => {
@@ -17046,10 +17068,15 @@ function deriveAcVerdicts(graph, acIds) {
     let verdict2 = "pass";
     let notes;
     let folded = false;
+    let structuralSuperseded = false;
     for (const n2 of addressing) {
       const nv = nodeVerdictFor(n2, acId);
       if (nv.verdict === "fail" && supersedingFix)
         continue;
+      if (nv.verdict === "unverified" && isStructuralUnverified(n2, acId) && addressing.some((m2) => m2 !== n2 && nodeVerdictFor(m2, acId).verdict === "pass" && dependsOnNode(m2, n2.id, byId))) {
+        structuralSuperseded = true;
+        continue;
+      }
       const next = worst(verdict2, nv.verdict);
       if (!folded || SEVERITY[next] < SEVERITY[verdict2]) {
         verdict2 = next;
@@ -17059,6 +17086,8 @@ function deriveAcVerdicts(graph, acIds) {
     }
     if (supersedingFix && verdict2 === "pass") {
       notes = `earlier fail superseded by a re-verify behind a passed fix (${acId})`;
+    } else if (structuralSuperseded && verdict2 === "pass") {
+      notes = `evidence-less implementation pass covered by a downstream verified pass (${acId})`;
     }
     return { criterion_id: acId, verdict: verdict2, evidence, ...notes ? { notes } : {} };
   });
@@ -30347,4 +30376,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=c307dfa1a79c8221d65b222ae6d96d4492834d115713eae8eebd511543259b0f
+//# ditto-src-stamp=7879b2d05c5cc50671e3267a7093023a2fe6fcff4403c1cd6fca090667e67e21
