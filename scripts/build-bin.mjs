@@ -10,7 +10,8 @@
 // invoked directly by the `build` / `build:bin` package.json scripts.
 
 import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { chmodSync, copyFileSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +31,31 @@ export function syncManagedResources() {
   copyFileSync(src, join(dir, 'CLAUDE.md'));
 }
 
+// Build drift stamp (round-2 review R5). MUST stay in sync with the identical
+// algorithm in src/core/build-stamp.ts (the doctor's `binary_fresh` check):
+// sha256 over repo-relative posix path + NUL + content + NUL for every `.ts`
+// under src/, path-sorted.
+const NUL = String.fromCharCode(0); // same separator as build-stamp.ts
+export function sourceStamp() {
+  const list = (rel) => {
+    const out = [];
+    for (const e of readdirSync(join(REPO, rel), { withFileTypes: true })) {
+      const childRel = `${rel}/${e.name}`;
+      if (e.isDirectory()) out.push(...list(childRel));
+      else if (e.isFile() && e.name.endsWith('.ts')) out.push(childRel);
+    }
+    return out;
+  };
+  const h = createHash('sha256');
+  for (const rel of list('src').sort()) {
+    h.update(rel);
+    h.update(NUL);
+    h.update(readFileSync(join(REPO, rel)));
+    h.update(NUL);
+  }
+  return h.digest('hex');
+}
+
 export function buildBinInto(outFile) {
   const args = ['build', 'src/cli/index.ts', '--target=bun', '--outfile', outFile];
   const r = spawnSync('bun', args, { cwd: REPO, stdio: 'inherit' });
@@ -38,7 +64,8 @@ export function buildBinInto(outFile) {
   }
   if (r.status !== 0) throw new Error(`bin bundle failed (exit ${r.status})`);
   const bundle = readFileSync(outFile, 'utf8');
-  writeFileSync(outFile, `#!/usr/bin/env bun\n${bundle}`);
+  // Trailing stamp lets `ditto doctor distribution` flag a stale build (R5).
+  writeFileSync(outFile, `#!/usr/bin/env bun\n${bundle}\n//# ditto-src-stamp=${sourceStamp()}\n`);
   if (!IS_WIN) chmodSync(outFile, 0o755);
 }
 

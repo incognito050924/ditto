@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { computeSourceStamp, readEmbeddedStamp } from './build-stamp';
 
 /**
  * Distribution doctor (재평가 §3.5(C), 4e) — promotes the install-status flags to
@@ -16,10 +17,17 @@ import { join } from 'node:path';
 const ALLOW_RULE = 'Bash(ditto:*)';
 const IS_WIN = process.platform === 'win32';
 
-/** The five deployment-contract atomic checks (the promoted install-status flags). */
+/** The deployment-contract atomic checks (the promoted install-status flags). */
 export interface DistributionChecks {
   /** A self-contained binary was built at <repo>/bin/ditto (hooks need it). */
   binary_built: boolean;
+  /**
+   * The built binary's embedded source stamp matches the current `src/` contents
+   * (round-2 review R5). Hooks run the COMMITTED bundle, not the source — a
+   * stale build silently enforces an old policy while unit tests stay green.
+   * Vacuously true outside a dev checkout (no `src/` at the plugin root).
+   */
+  binary_fresh: boolean;
   /** `ditto` resolves on PATH (skills/agents call the bare command). */
   binary_on_path: boolean;
   /**
@@ -54,8 +62,8 @@ export interface AxisContract {
 const AXIS_CONTRACTS: Array<Pick<AxisContract, 'axis' | 'contract' | 'requires'>> = [
   {
     axis: 'Hooks',
-    contract: 'self-contained binary built + hooks.json registered',
-    requires: ['binary_built', 'hooks_registered'],
+    contract: 'self-contained binary built + fresh (matches src/) + hooks.json registered',
+    requires: ['binary_built', 'binary_fresh', 'hooks_registered'],
   },
   {
     axis: 'Skills',
@@ -110,6 +118,10 @@ export interface DistributionDeps {
   whichDitto: () => string | null;
   readProjectSettings: () => Record<string, unknown>;
   exists: (path: string) => boolean;
+  /** Read a text file; null when absent/unreadable (binary_fresh check). */
+  readText: (path: string) => string | null;
+  /** Compute the current src/ content stamp; injectable for tests (binary_fresh). */
+  sourceStamp: (repoRoot: string) => string;
 }
 
 function readJsonObject(path: string): Record<string, unknown> {
@@ -131,6 +143,14 @@ export function defaultDistributionDeps(targetRoot: string, pluginRoot: string):
     whichDitto: () => Bun.which('ditto'),
     readProjectSettings: () => readJsonObject(join(targetRoot, '.claude', 'settings.json')),
     exists: (p) => existsSync(p),
+    readText: (p) => {
+      try {
+        return readFileSync(p, 'utf8');
+      } catch {
+        return null;
+      }
+    },
+    sourceStamp: computeSourceStamp,
   };
 }
 
@@ -155,12 +175,32 @@ function allowlisted(settings: Record<string, unknown>): boolean {
   return Array.isArray(allow) && allow.includes(ALLOW_RULE);
 }
 
-/** Run the five deployment-contract checks from the current runtime vantage. */
+/**
+ * binary_fresh (R5): compare the bundle's embedded source stamp against the
+ * current `src/` contents. Outside a dev checkout (no `src/` at the plugin
+ * root) there is nothing to drift from — vacuously fresh. A missing binary or
+ * a pre-stamp build reads as stale (a rebuild embeds the stamp).
+ */
+function binaryFresh(deps: DistributionDeps, binaryName: string): boolean {
+  if (!deps.exists(join(deps.pluginRoot, 'src'))) return true;
+  const text = deps.readText(join(deps.pluginRoot, 'bin', binaryName));
+  if (text === null) return false;
+  const embedded = readEmbeddedStamp(text);
+  if (embedded === null) return false;
+  try {
+    return embedded === deps.sourceStamp(deps.pluginRoot);
+  } catch {
+    return false;
+  }
+}
+
+/** Run the deployment-contract checks from the current runtime vantage. */
 export function collectDistributionChecks(deps: DistributionDeps): DistributionChecks {
   const binaryName = IS_WIN ? 'ditto.exe' : 'ditto';
   return {
     // plugin-root artifacts: the plugin ships these at its own install dir.
     binary_built: deps.exists(join(deps.pluginRoot, 'bin', binaryName)),
+    binary_fresh: binaryFresh(deps, binaryName),
     hooks_registered: deps.exists(join(deps.pluginRoot, 'hooks', 'hooks.json')),
     // plugin-root surface: the loadable plugin ("./") ships skills/ + agents/.
     plugin_surface_present: pluginSurfacePresent(deps.pluginRoot, deps.exists),

@@ -8,12 +8,15 @@ import {
 
 const ALL_OK: DistributionChecks = {
   binary_built: true,
+  binary_fresh: true,
   binary_on_path: true,
   plugin_surface_present: true,
   hooks_registered: true,
   target_initialized: true,
   allowlisted: true,
 };
+
+const STAMP = 'a'.repeat(64);
 
 describe('evaluateDistribution (atomic checks → per-axis deployment contracts)', () => {
   test('every check met → all four axes satisfied, 0 findings', () => {
@@ -47,6 +50,12 @@ describe('evaluateDistribution (atomic checks → per-axis deployment contracts)
     expect(r.axes.filter((a) => !a.satisfied).map((a) => a.axis)).toEqual(['Hooks']);
   });
 
+  test('R5: a stale binary (src drift) breaks Hooks only', () => {
+    const r = evaluateDistribution({ ...ALL_OK, binary_fresh: false });
+    expect(r.axes.filter((a) => !a.satisfied).map((a) => a.axis)).toEqual(['Hooks']);
+    expect(r.axes.find((a) => a.axis === 'Hooks')?.missing).toContain('binary_fresh');
+  });
+
   test('allowlisted is reported but gates no axis (not in the §3.5 per-axis table)', () => {
     const r = evaluateDistribution({ ...ALL_OK, allowlisted: false });
     expect(r.finding_count).toBe(0);
@@ -61,6 +70,8 @@ describe('collectDistributionChecks (injected IO; runtime vantage)', () => {
     whichDitto: () => '/usr/local/bin/ditto',
     readProjectSettings: () => ({ permissions: { allow: ['Bash(ditto:*)'] } }),
     exists: () => true,
+    readText: () => `#!/usr/bin/env bun\nbundle()\n//# ditto-src-stamp=${STAMP}\n`,
+    sourceStamp: () => STAMP,
     ...over,
   });
 
@@ -106,6 +117,34 @@ describe('collectDistributionChecks (injected IO; runtime vantage)', () => {
   test('glossary seed absent → target_initialized false', () => {
     const c = collectDistributionChecks(deps({ exists: (p) => !p.endsWith('glossary.json') }));
     expect(c.target_initialized).toBe(false);
+  });
+
+  // R5 binary_fresh scenarios — the drift the round-2 review caught live
+  // (bin/ditto built 10:37 enforcing an old policy against 13:06 sources).
+  test('R5: stamp matches current src → binary_fresh true', () => {
+    expect(collectDistributionChecks(deps({})).binary_fresh).toBe(true);
+  });
+
+  test('R5: stamp differs from current src → binary_fresh false', () => {
+    const c = collectDistributionChecks(deps({ sourceStamp: () => 'b'.repeat(64) }));
+    expect(c.binary_fresh).toBe(false);
+  });
+
+  test('R5: pre-stamp build (no marker) → binary_fresh false (rebuild embeds it)', () => {
+    const c = collectDistributionChecks(deps({ readText: () => 'bundle()\n' }));
+    expect(c.binary_fresh).toBe(false);
+  });
+
+  test('R5: unreadable binary → binary_fresh false', () => {
+    const c = collectDistributionChecks(deps({ readText: () => null }));
+    expect(c.binary_fresh).toBe(false);
+  });
+
+  test('R5: no src/ at plugin root (installed context) → vacuously fresh', () => {
+    const c = collectDistributionChecks(
+      deps({ exists: (p) => p !== '/plugin/src', readText: () => null }),
+    );
+    expect(c.binary_fresh).toBe(true);
   });
 
   test('project allowlist missing the rule → allowlisted false', () => {

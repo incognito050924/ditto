@@ -14776,6 +14776,9 @@ function projectReviewerOutputToAcgReview(output) {
 
 // src/core/ditto-paths.ts
 import { join as join5 } from "path";
+function dittoDir(repoRoot) {
+  return join5(repoRoot, ".ditto");
+}
 function localDir(repoRoot, ...segments) {
   return join5(repoRoot, ".ditto", "local", ...segments);
 }
@@ -17332,7 +17335,7 @@ function isMutatingOwner(owner) {
   return OWNER_TOOLS[owner].includes("Edit");
 }
 var PLANNER_GENERATE_DIRECTIVE = "Emit a `generated_nodes` subgraph: pick the \xA72.2 lifecycle stages this task " + "actually needs (research\xB7design\xB7implement\xB7review\xB7verify\xB7\u2026), each node " + "{id, kind, purpose, depends_on, acceptance_refs} mapped to its acceptance " + "criteria; scale to task size (small tasks stay minimal \u2014 do not force a stage).";
-function buildDelegationPacket(node, workItem, variantCandidates = [], fileScope = workItem.changed_files) {
+function buildDelegationPacket(node, workItem, variantCandidates = [], fileScope = workItem.changed_files, memoryContext) {
   const isPlanner = node.owner === "planner";
   const doneWhen = node.acceptance_refs.length > 0 ? `acceptance criteria satisfied with evidence: ${node.acceptance_refs.join(", ")}` : node.purpose;
   const expectedOutcome = isPlanner ? `${doneWhen} (return the plan as a generated_nodes subgraph)` : doneWhen;
@@ -17355,7 +17358,8 @@ function buildDelegationPacket(node, workItem, variantCandidates = [], fileScope
       work_item_id: workItem.id,
       file_scope: fileScope,
       done_when: doneWhen,
-      acceptance_refs: node.acceptance_refs
+      acceptance_refs: node.acceptance_refs,
+      ...memoryContext ? { memory: memoryContext } : {}
     },
     variant_candidates: variantCandidates
   };
@@ -17532,9 +17536,1079 @@ class IntentStore {
   }
 }
 
-// src/core/work-item-store.ts
-import { readdir as readdir5, stat as stat2 } from "fs/promises";
+// src/core/memory-warmstart.ts
+import { appendFile as appendFile2 } from "fs/promises";
+import { dirname as dirname6 } from "path";
+
+// src/core/memory-flag.ts
+function isMemoryEnabled() {
+  const v2 = process.env.DITTO_MEMORY?.toLowerCase();
+  return v2 !== "off" && v2 !== "0";
+}
+
+// src/schemas/memory-source.ts
+var memorySourceId = exports_external.string().regex(/^src_[a-z0-9_-]{4,}$/, "source id must start with src_ followed by 4+ lowercase alphanumerics, underscore, or hyphen").describe("Stable identifier for a raw source captured into memory");
+var memorySourceType = exports_external.enum(["code", "markdown", "spec", "note", "log", "chat", "image", "other"]).describe("Kind of raw source");
+var memorySensitivity = exports_external.enum(["public", "internal", "secret"]).describe("Disclosure class of a source or memory event");
+var gitCommit = exports_external.string().regex(/^[a-f0-9]{40}$/, "git commit must be 40 lowercase hex characters").describe("Full git commit sha, when the source is git-managed");
+var memorySource = exports_external.object({
+  schema_version: schemaVersion,
+  source_id: memorySourceId,
+  source_type: memorySourceType,
+  path: relativePath.optional().describe("Repo-relative path for file-backed sources"),
+  url: exports_external.string().url().optional().describe("Location for url-backed sources"),
+  content_hash: sha256.describe("Hash of the captured content; drives stale detection"),
+  captured_at: isoDateTime,
+  repo: exports_external.string().min(1).optional().describe("Owning repo identifier for multi-repo workspaces (rooting-root-relative path to the repo this source belongs to). Omitted in the single-repo case where it equals the scan repoRoot (\xA73-7, cost 0); when present, revision/git_commit/staleness are judged against this repo, not the workspace git."),
+  revision: exports_external.string().min(1).describe("git commit, file mtime, or snapshot id identifying this source version"),
+  git_commit: gitCommit.optional(),
+  sensitivity: memorySensitivity.default("internal"),
+  word_count: exports_external.number().int().nonnegative().optional()
+}).superRefine((value, ctx) => {
+  if (!value.path && !value.url) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "a source must have either a path or a url",
+      path: ["path"]
+    });
+  }
+}).describe("Manifest entry for one raw source \u2014 the mutable reality memory projects from (report \xA73.1)");
+
+// src/schemas/memory-graph-ir.ts
+var memoryConfidenceKind = exports_external.enum(["EXTRACTED", "INFERRED", "AMBIGUOUS"]).describe("Provenance class of a relation: EXTRACTED (explicit in source), INFERRED (deduced), AMBIGUOUS (uncertain \u2014 review only)");
+var memoryExtractedBy = exports_external.enum(["tree-sitter", "codeql", "impact", "llm", "node2vec", "human", "other"]).describe("What produced this node/edge");
+var extractionRunId = exports_external.string().regex(/^xrun_[a-z0-9_-]{4,}$/, "extraction run id must start with xrun_ followed by 4+ lowercase alphanumerics, underscore, or hyphen").describe("Stable identifier for one extraction run");
+var graphIrVersion = exports_external.string().regex(/^ir_[a-z0-9_-]{4,}$/, "graph IR version must start with ir_ followed by 4+ lowercase alphanumerics, underscore, or hyphen").describe("Stable identifier for one Graph IR snapshot");
+var memoryNodeType = exports_external.enum([
+  "Source",
+  "Artifact",
+  "Symbol",
+  "DocumentSection",
+  "Entity",
+  "Concept",
+  "Claim",
+  "Decision",
+  "Episode",
+  "MemoryEvent",
+  "GraphReport"
+]).describe("Node label (report \xA73.3 / \xA78)");
+var memoryEdgeType = exports_external.enum([
+  "CALLS",
+  "IMPORTS",
+  "EXTENDS",
+  "IMPLEMENTS",
+  "MENTIONS",
+  "ASSERTS",
+  "SUPPORTS",
+  "CONTRADICTS",
+  "SIMILAR_TO",
+  "RELATED_TO",
+  "RATIONALE_FOR",
+  "ALIAS_OF",
+  "SUPERSEDES"
+]).describe("Edge relation type");
+var memoryHyperedgeRelation = exports_external.enum(["PARTICIPATE_IN", "IMPLEMENT", "FORM"]).describe("N-ary relation type for a hyperedge");
+var memoryProvenance = exports_external.object({
+  source_id: memorySourceId.optional(),
+  source_revision: exports_external.string().min(1).optional(),
+  source_hash: sha256.optional(),
+  source_span: exports_external.string().optional().describe("line range, page, timestamp, etc."),
+  extraction_run_id: extractionRunId,
+  extracted_by: memoryExtractedBy,
+  schema_version: schemaVersion
+}).describe("Where a node/edge came from \u2014 required so the graph stays regenerable (report \xA75.2)");
+var memoryNode = exports_external.object({
+  id: exports_external.string().min(1).describe("Canonical id, e.g. artifact:<path> or symbol:<path>#<qualified_name>"),
+  node_type: memoryNodeType,
+  name: exports_external.string().min(1),
+  file_type: exports_external.enum(["code", "document", "paper", "image"]).optional(),
+  source_id: memorySourceId.optional(),
+  source_revision: exports_external.string().min(1).optional(),
+  source_span: exports_external.string().optional(),
+  properties: exports_external.record(exports_external.unknown()).default({}),
+  provenance: memoryProvenance.optional()
+}).describe("One graph node");
+var enforceConfidenceBands = (kind, score, ctx) => {
+  if (kind === "EXTRACTED" && score !== 1) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "EXTRACTED relations must have confidence_score = 1.0",
+      path: ["confidence_score"]
+    });
+  }
+  if (kind === "AMBIGUOUS" && (score < 0.1 || score > 0.3)) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "AMBIGUOUS relations must have confidence_score in [0.1, 0.3]",
+      path: ["confidence_score"]
+    });
+  }
+  if (kind === "INFERRED" && (score < 0.4 || score > 0.95)) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "INFERRED relations must have confidence_score in [0.4, 0.95]",
+      path: ["confidence_score"]
+    });
+  }
+};
+var memoryEdge = exports_external.object({
+  id: exports_external.string().min(1),
+  from: exports_external.string().min(1).describe("source node id"),
+  to: exports_external.string().min(1).describe("target node id"),
+  edge_type: memoryEdgeType,
+  confidence_kind: memoryConfidenceKind,
+  confidence_score: exports_external.number().min(0).max(1),
+  properties: exports_external.record(exports_external.unknown()).default({}),
+  provenance: memoryProvenance,
+  weight: exports_external.number().positive().default(1),
+  valid_from: isoDateTime.optional(),
+  valid_to: isoDateTime.optional(),
+  expires_at: isoDateTime.optional().describe("TTL for inferred candidates (report \xA76.5)"),
+  requires_review: exports_external.boolean().default(false),
+  used_as_evidence: exports_external.boolean().default(false)
+}).superRefine((edge, ctx) => enforceConfidenceBands(edge.confidence_kind, edge.confidence_score, ctx)).describe("One directed graph edge with provenance and calibrated confidence");
+var memoryHyperedge = exports_external.object({
+  id: exports_external.string().min(1),
+  label: exports_external.string().min(1),
+  nodes: exports_external.array(exports_external.string().min(1)).min(3).describe("3+ node ids participating together"),
+  relation: memoryHyperedgeRelation,
+  confidence_kind: memoryConfidenceKind,
+  confidence_score: exports_external.number().min(0).max(1),
+  provenance: memoryProvenance
+}).superRefine((h2, ctx) => enforceConfidenceBands(h2.confidence_kind, h2.confidence_score, ctx)).describe("N-ary relation among 3+ nodes (companion \xA74-1)");
+var memoryGraphIr = exports_external.object({
+  schema_version: schemaVersion,
+  ir_version: graphIrVersion,
+  generated_at: isoDateTime,
+  extraction_run_id: extractionRunId,
+  nodes: exports_external.array(memoryNode).default([]),
+  edges: exports_external.array(memoryEdge).default([]),
+  hyperedges: exports_external.array(memoryHyperedge).default([])
+}).describe("Compiled intermediate representation between extractors and projections \u2014 regenerable, never SoT (report \xA73.3)");
+
+// src/schemas/memory-event.ts
+var memoryEventId = exports_external.string().regex(/^memevt_[a-z0-9_-]{4,}$/, "memory event id must start with memevt_ followed by 4+ lowercase alphanumerics, underscore, or hyphen").describe("Stable identifier for one append-only memory event");
+var memoryEventType = exports_external.enum(["decision", "observation", "preference", "review_outcome", "analysis", "correction"]).describe("What kind of memory this event records");
+var memoryEventStatus = exports_external.enum(["pending", "approved", "rejected", "superseded"]).describe("Review lifecycle; only approved events feed projections (report \xA710)");
+var memoryActor = exports_external.object({
+  kind: exports_external.enum(["user", "agent"]),
+  role: exports_external.string().min(1).optional().describe("agent role when kind=agent, e.g. reviewer")
+}).describe("Who authored the event");
+var memoryEvent = exports_external.object({
+  schema_version: schemaVersion,
+  event_id: memoryEventId,
+  event_type: memoryEventType,
+  actor: memoryActor,
+  text: exports_external.string().min(1).max(4000),
+  created_at: isoDateTime,
+  status: memoryEventStatus.default("pending"),
+  sources: exports_external.array(memorySourceId).default([]).describe("source ids grounding this event"),
+  confidence_kind: memoryConfidenceKind.default("EXTRACTED"),
+  sensitivity: memorySensitivity.default("internal"),
+  approved_by: exports_external.string().min(1).optional(),
+  decided_at: isoDateTime.optional(),
+  supersedes: memoryEventId.optional()
+}).superRefine((event, ctx) => {
+  if ((event.status === "approved" || event.status === "rejected") && !event.approved_by) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "approved/rejected events require approved_by",
+      path: ["approved_by"]
+    });
+  }
+  if ((event.status === "approved" || event.status === "rejected") && !event.decided_at) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "approved/rejected events require decided_at",
+      path: ["decided_at"]
+    });
+  }
+  if (event.status === "pending" && event.approved_by) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "pending events must not carry approved_by",
+      path: ["approved_by"]
+    });
+  }
+}).describe("Append-only memory event \u2014 SoT for knowledge not reconstructable from raw source (report \xA73.2)");
+
+// src/core/memory-reduce.ts
+import { createHash } from "crypto";
+function reduceEvents(events) {
+  const byTarget = new Map;
+  for (const e2 of events) {
+    if (!e2.supersedes)
+      continue;
+    const arr = byTarget.get(e2.supersedes);
+    if (arr)
+      arr.push(e2);
+    else
+      byTarget.set(e2.supersedes, [e2]);
+  }
+  const memo = new Map;
+  const effective = (e2) => {
+    const cached = memo.get(e2.event_id);
+    if (cached !== undefined)
+      return cached;
+    memo.set(e2.event_id, false);
+    const result2 = e2.status === "approved" || (byTarget.get(e2.event_id) ?? []).some((f3) => effective(f3));
+    memo.set(e2.event_id, result2);
+    return result2;
+  };
+  const supersededIds = new Set;
+  for (const e2 of events) {
+    if (e2.supersedes && effective(e2))
+      supersededIds.add(e2.supersedes);
+  }
+  const approvedHeads = events.filter((e2) => !supersededIds.has(e2.event_id) && e2.status === "approved").sort((a2, b2) => a2.event_id < b2.event_id ? -1 : a2.event_id > b2.event_id ? 1 : 0);
+  const setHash = createHash("sha256").update(approvedHeads.map((e2) => e2.event_id).join(`
+`)).digest("hex");
+  return { approvedHeads, setHash };
+}
+
+// src/core/memory-store.ts
+import { createHash as createHash2 } from "crypto";
+import { open, readdir as readdir5 } from "fs/promises";
 import { dirname as dirname4, join as join16 } from "path";
+
+// src/schemas/memory-projection-manifest.ts
+var memoryProjectionId = exports_external.string().regex(/^proj_[a-z0-9_-]{4,}$/, "projection id must start with proj_ followed by 4+ lowercase alphanumerics, underscore, or hyphen").describe("Stable identifier for one projection generation");
+var memorySourceRevision = exports_external.object({
+  source_id: memorySourceId,
+  path: exports_external.string().min(1).optional(),
+  hash: sha256,
+  revision: exports_external.string().min(1),
+  git_commit: exports_external.string().regex(/^[a-f0-9]{40}$/, "git commit must be 40 lowercase hex characters").optional()
+}).describe("Which source version this projection reflects");
+var memoryProjectionManifest = exports_external.object({
+  schema_version: schemaVersion,
+  projection_id: memoryProjectionId,
+  generated_at: isoDateTime,
+  graph_ir_version: graphIrVersion,
+  wiki_version: exports_external.string().min(1).optional(),
+  serving_version: exports_external.string().min(1).optional(),
+  extractor_versions: exports_external.record(exports_external.string().min(1)).default({}).describe("extractor name -> version, e.g. { ast: ast-v1, semantic: semantic-v1 }"),
+  source_revisions: exports_external.array(memorySourceRevision).default([]),
+  memory_event_until: memoryEventId.optional().describe("latest event id reflected in this projection"),
+  dirty_sources: exports_external.array(memorySourceId).default([]).describe("sources whose current hash differs from this projection")
+}).describe("Lineage contract: what inputs a projection was built from, so freshness is cheap to judge (report \xA73.4)");
+
+// src/core/memory-store.ts
+class MemoryEventExistsError extends Error {
+  eventId;
+  constructor(eventId) {
+    super(`memory event ${eventId} already exists; events are immutable (append-only)`);
+    this.eventId = eventId;
+    this.name = "MemoryEventExistsError";
+  }
+}
+
+class MemorySourceStore {
+  repoRoot;
+  constructor(repoRoot) {
+    this.repoRoot = repoRoot;
+  }
+  dir() {
+    return join16(dittoDir(this.repoRoot), "memory", "sources");
+  }
+  path(id) {
+    return join16(this.dir(), `${id}.json`);
+  }
+  async exists(id) {
+    return Bun.file(this.path(id)).exists();
+  }
+  async get(id) {
+    return readJson(this.path(id), memorySource);
+  }
+  async write(source) {
+    return writeJson(this.path(source.source_id), memorySource, source);
+  }
+  async list() {
+    let entries;
+    try {
+      entries = await readdir5(this.dir());
+    } catch {
+      return [];
+    }
+    const out = [];
+    for (const name of entries) {
+      if (!name.endsWith(".json"))
+        continue;
+      try {
+        out.push(await readJson(join16(this.dir(), name), memorySource));
+      } catch {}
+    }
+    return out;
+  }
+}
+
+class MemoryEventStore {
+  repoRoot;
+  constructor(repoRoot) {
+    this.repoRoot = repoRoot;
+  }
+  dir() {
+    return join16(dittoDir(this.repoRoot), "memory", "events");
+  }
+  path(id) {
+    return join16(this.dir(), `${id}.json`);
+  }
+  async append(event) {
+    const validated = memoryEvent.parse(event);
+    const path = this.path(validated.event_id);
+    await ensureDir(dirname4(path));
+    let handle;
+    try {
+      handle = await open(path, "wx");
+    } catch (err) {
+      if (err.code === "EEXIST") {
+        throw new MemoryEventExistsError(validated.event_id);
+      }
+      throw err;
+    }
+    try {
+      await handle.writeFile(`${JSON.stringify(validated, null, 2)}
+`, "utf8");
+    } finally {
+      await handle.close();
+    }
+    return validated;
+  }
+  async get(id) {
+    return readJson(this.path(id), memoryEvent);
+  }
+  async list() {
+    let entries;
+    try {
+      entries = await readdir5(this.dir());
+    } catch {
+      return [];
+    }
+    const out = [];
+    for (const name of entries) {
+      if (!name.endsWith(".json"))
+        continue;
+      try {
+        out.push(await readJson(join16(this.dir(), name), memoryEvent));
+      } catch {}
+    }
+    out.sort((a2, b2) => {
+      if (a2.created_at !== b2.created_at)
+        return a2.created_at < b2.created_at ? -1 : 1;
+      return a2.event_id < b2.event_id ? -1 : 1;
+    });
+    return out;
+  }
+}
+
+class MemoryGraphIrStore {
+  repoRoot;
+  constructor(repoRoot) {
+    this.repoRoot = repoRoot;
+  }
+  path() {
+    return localDir(this.repoRoot, "memory", "ir", "graph-ir.json");
+  }
+  async read() {
+    if (!await Bun.file(this.path()).exists())
+      return null;
+    return readJson(this.path(), memoryGraphIr);
+  }
+  async write(ir) {
+    return writeJson(this.path(), memoryGraphIr, ir);
+  }
+}
+
+class MemoryProjectionStore {
+  repoRoot;
+  constructor(repoRoot) {
+    this.repoRoot = repoRoot;
+  }
+  dir() {
+    return localDir(this.repoRoot, "memory", "projections");
+  }
+  manifestPath() {
+    return join16(this.dir(), "manifest.json");
+  }
+  servingPath() {
+    return join16(this.dir(), "graph.json");
+  }
+  wikiDir() {
+    return join16(this.dir(), "wiki");
+  }
+  async readManifest() {
+    if (!await Bun.file(this.manifestPath()).exists())
+      return null;
+    return readJson(this.manifestPath(), memoryProjectionManifest);
+  }
+  async writeManifest(m2) {
+    return writeJson(this.manifestPath(), memoryProjectionManifest, m2);
+  }
+  async writeServing(graph) {
+    await atomicWriteText(this.servingPath(), `${JSON.stringify(graph, null, 2)}
+`);
+    return graph;
+  }
+  async readServing() {
+    if (!await Bun.file(this.servingPath()).exists())
+      return null;
+    return JSON.parse(await Bun.file(this.servingPath()).text());
+  }
+  async writeWiki(name, markdown) {
+    await atomicWriteText(join16(this.wikiDir(), name), markdown);
+  }
+}
+function sha256Hex(content) {
+  return createHash2("sha256").update(content).digest("hex");
+}
+
+// src/core/memory-project.ts
+var SCHEMA_VERSION = "0.1.0";
+var SEMANTIC_RUN_ID = "xrun_decisions";
+function projectionIdFor(key) {
+  return `proj_${sha256Hex(key).slice(0, 12)}`;
+}
+function eventNodeId(eventId) {
+  return `decision:${eventId}`;
+}
+function projectEventNodes(approved, secretSourceIds = new Set) {
+  const nodes = [];
+  const edges = [];
+  const sourceNodeIds = new Set;
+  for (const e2 of approved) {
+    if (e2.sensitivity === "secret")
+      continue;
+    const isDecision = e2.event_type === "decision";
+    const nodeId = eventNodeId(e2.event_id);
+    nodes.push({
+      id: nodeId,
+      node_type: isDecision ? "Decision" : "Episode",
+      name: e2.text.slice(0, 120),
+      properties: {
+        event_id: e2.event_id,
+        event_type: e2.event_type,
+        decided_at: e2.decided_at ?? ""
+      },
+      provenance: {
+        extraction_run_id: SEMANTIC_RUN_ID,
+        extracted_by: "human",
+        schema_version: SCHEMA_VERSION,
+        ...e2.sources[0] ? { source_id: e2.sources[0] } : {}
+      }
+    });
+    const edgeType = isDecision ? "RATIONALE_FOR" : "MENTIONS";
+    for (const sourceId of e2.sources) {
+      if (secretSourceIds.has(sourceId))
+        continue;
+      const sourceNodeId = `source:${sourceId}`;
+      if (!sourceNodeIds.has(sourceNodeId)) {
+        sourceNodeIds.add(sourceNodeId);
+        nodes.push({
+          id: sourceNodeId,
+          node_type: "Source",
+          name: sourceId,
+          properties: {},
+          provenance: {
+            source_id: sourceId,
+            extraction_run_id: SEMANTIC_RUN_ID,
+            extracted_by: "human",
+            schema_version: SCHEMA_VERSION
+          }
+        });
+      }
+      const edgeId = `${edgeType.toLowerCase()}:${sourceId}->${nodeId}`;
+      edges.push({
+        id: edgeId,
+        from: sourceNodeId,
+        to: nodeId,
+        edge_type: edgeType,
+        confidence_kind: "EXTRACTED",
+        confidence_score: 1,
+        properties: {},
+        provenance: {
+          source_id: sourceId,
+          extraction_run_id: SEMANTIC_RUN_ID,
+          extracted_by: "human",
+          schema_version: SCHEMA_VERSION
+        },
+        weight: 1,
+        requires_review: false,
+        used_as_evidence: false
+      });
+    }
+  }
+  const byId = (a2, b2) => a2.id < b2.id ? -1 : a2.id > b2.id ? 1 : 0;
+  return { nodes: nodes.sort(byId), edges: edges.sort(byId) };
+}
+function buildServingGraph(nodes, edges, meta) {
+  const adjacency = {};
+  for (const e2 of edges) {
+    const bucket = adjacency[e2.from] ?? [];
+    bucket.push({ to: e2.to, edge_type: e2.edge_type });
+    adjacency[e2.from] = bucket;
+  }
+  for (const id of Object.keys(adjacency)) {
+    adjacency[id]?.sort((a2, b2) => a2.to < b2.to ? -1 : a2.to > b2.to ? 1 : a2.edge_type < b2.edge_type ? -1 : 1);
+  }
+  return {
+    projection_id: meta.projection_id,
+    generated_at: meta.generated_at,
+    nodes: [...nodes].sort((a2, b2) => a2.id < b2.id ? -1 : a2.id > b2.id ? 1 : 0).map((n2) => ({ id: n2.id, node_type: n2.node_type, name: n2.name })),
+    adjacency
+  };
+}
+function renderWiki(nodes, edges, meta) {
+  const lines = [];
+  lines.push("# Memory Graph (generated \u2014 do not edit)");
+  lines.push("");
+  lines.push(`> projection: ${meta.projection_id} \xB7 generated: ${meta.generated_at}`);
+  lines.push("> One-way projection from graph-ir.json. Fix the source/extractor and regenerate.");
+  lines.push("");
+  lines.push(`## Nodes (${nodes.length})`);
+  lines.push("");
+  const outgoing = new Map;
+  for (const e2 of edges) {
+    const bucket = outgoing.get(e2.from);
+    if (bucket)
+      bucket.push(e2);
+    else
+      outgoing.set(e2.from, [e2]);
+  }
+  for (const n2 of [...nodes].sort((a2, b2) => a2.id < b2.id ? -1 : 1)) {
+    lines.push(`### ${n2.name}`);
+    lines.push(`- id: \`${n2.id}\``);
+    lines.push(`- type: ${n2.node_type}`);
+    const out = outgoing.get(n2.id) ?? [];
+    if (out.length > 0) {
+      lines.push("- edges:");
+      for (const e2 of [...out].sort((a2, b2) => a2.to < b2.to ? -1 : 1)) {
+        lines.push(`  - ${e2.edge_type} \u2192 \`${e2.to}\` (${e2.confidence_kind})`);
+      }
+    }
+    lines.push("");
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+async function projectMemory(repoRoot, options = {}) {
+  const now = (options.now ?? new Date).toISOString();
+  const ir = await new MemoryGraphIrStore(repoRoot).read();
+  const events = await new MemoryEventStore(repoRoot).list();
+  const sources = await new MemorySourceStore(repoRoot).list();
+  const { approvedHeads, setHash } = reduceEvents(events);
+  const secretSourceIds = new Set(sources.filter((s2) => s2.sensitivity === "secret").map((s2) => s2.source_id));
+  const eventGraph = projectEventNodes(approvedHeads, secretSourceIds);
+  const nodes = [...ir?.nodes ?? [], ...eventGraph.nodes];
+  const edges = [...ir?.edges ?? [], ...eventGraph.edges];
+  const projectionId = projectionIdFor(`${ir?.ir_version ?? "noir"}:${setHash}`);
+  const serving = buildServingGraph(nodes, edges, {
+    projection_id: projectionId,
+    generated_at: now
+  });
+  const wiki = renderWiki(nodes, edges, { projection_id: projectionId, generated_at: now });
+  const sourceRevisions = [...sources].sort((a2, b2) => a2.source_id < b2.source_id ? -1 : 1).map((s2) => ({
+    source_id: s2.source_id,
+    ...s2.path ? { path: s2.path } : {},
+    hash: s2.content_hash,
+    revision: s2.revision,
+    ...s2.git_commit ? { git_commit: s2.git_commit } : {}
+  }));
+  const manifest = {
+    schema_version: SCHEMA_VERSION,
+    projection_id: projectionId,
+    generated_at: now,
+    graph_ir_version: ir?.ir_version ?? "ir_empty",
+    serving_version: setHash,
+    extractor_versions: {},
+    source_revisions: sourceRevisions,
+    ...approvedHeads.length > 0 ? { memory_event_until: approvedHeads[approvedHeads.length - 1]?.event_id } : {},
+    dirty_sources: []
+  };
+  const store = new MemoryProjectionStore(repoRoot);
+  await store.writeServing(serving);
+  await store.writeWiki("index.md", wiki);
+  await store.writeManifest(manifest);
+  return {
+    manifest,
+    serving,
+    set_hash: setHash,
+    node_count: nodes.length,
+    edge_count: edges.length
+  };
+}
+
+class MemoryEventNotPendingError extends Error {
+  eventId;
+  status;
+  constructor(eventId, status) {
+    super(`event ${eventId} is not pending (status=${status}); only pending events can be approved`);
+    this.eventId = eventId;
+    this.status = status;
+    this.name = "MemoryEventNotPendingError";
+  }
+}
+
+class MemoryEventAlreadyDecidedError extends Error {
+  eventId;
+  decidedBy;
+  constructor(eventId, decidedBy) {
+    super(`event ${eventId} is already decided by ${decidedBy}; it cannot be approved or rejected again`);
+    this.eventId = eventId;
+    this.decidedBy = decidedBy;
+    this.name = "MemoryEventAlreadyDecidedError";
+  }
+}
+
+class MemorySelfApprovalError extends Error {
+  eventId;
+  constructor(eventId) {
+    super(`event ${eventId} was proposed by an agent; it requires approval by a user`);
+    this.eventId = eventId;
+    this.name = "MemorySelfApprovalError";
+  }
+}
+async function proposeEvent(repoRoot, input, options = {}) {
+  const now = (options.now ?? new Date).toISOString();
+  const store = new MemoryEventStore(repoRoot);
+  const eventId = await generateId("memevt", (candidate) => store.get(candidate).then(() => true, () => false));
+  const draft = memoryEvent.parse({
+    schema_version: "0.1.0",
+    event_id: eventId,
+    event_type: input.event_type,
+    actor: input.actor ?? { kind: "agent" },
+    text: input.text,
+    created_at: now,
+    status: "pending",
+    sources: input.sources ?? [],
+    confidence_kind: input.confidence_kind ?? "EXTRACTED",
+    sensitivity: input.sensitivity ?? "internal"
+  });
+  return store.append(draft);
+}
+async function approveEvent(repoRoot, eventId, options) {
+  const store = new MemoryEventStore(repoRoot);
+  const original = await store.get(eventId);
+  if (original.status !== "pending") {
+    throw new MemoryEventNotPendingError(eventId, original.status);
+  }
+  const existing = await store.list();
+  const priorDecision = existing.find((e2) => e2.supersedes === eventId);
+  if (priorDecision) {
+    throw new MemoryEventAlreadyDecidedError(eventId, priorDecision.event_id);
+  }
+  const approverKind = options.approverKind ?? "agent";
+  if (original.actor.kind === "agent" && approverKind === "agent") {
+    throw new MemorySelfApprovalError(eventId);
+  }
+  const now = (options.now ?? new Date).toISOString();
+  const decisionId = await generateId("memevt", (candidate) => store.get(candidate).then(() => true, () => false));
+  const decision = memoryEvent.parse({
+    ...original,
+    event_id: decisionId,
+    created_at: now,
+    status: options.reject ? "rejected" : "approved",
+    approved_by: options.by,
+    decided_at: now,
+    supersedes: original.event_id
+  });
+  const written = await store.append(decision);
+  const projection = await projectMemory(repoRoot, options.now ? { now: options.now } : {});
+  return { decision: written, projection };
+}
+function countUndecidedPending(events) {
+  const superseded = new Set;
+  for (const e2 of events) {
+    if (e2.supersedes)
+      superseded.add(e2.supersedes);
+  }
+  return events.filter((e2) => e2.status === "pending" && !superseded.has(e2.event_id)).length;
+}
+async function memoryStatus(repoRoot) {
+  const events = await new MemoryEventStore(repoRoot).list();
+  const { setHash: currentSetHash } = reduceEvents(events);
+  const pendingCount = countUndecidedPending(events);
+  const manifest = await new MemoryProjectionStore(repoRoot).readManifest();
+  if (!manifest) {
+    return {
+      freshness: "absent",
+      dirty_sources: [],
+      pending_count: pendingCount,
+      current_set_hash: currentSetHash
+    };
+  }
+  const sources = await new MemorySourceStore(repoRoot).list();
+  const recordedHash = new Map;
+  for (const r3 of manifest.source_revisions)
+    recordedHash.set(r3.source_id, r3.hash);
+  const dirty = [];
+  for (const s2 of sources) {
+    const recorded = recordedHash.get(s2.source_id);
+    if (recorded === undefined || recorded !== s2.content_hash)
+      dirty.push(s2.source_id);
+  }
+  dirty.sort();
+  const eventSetStale = manifest.serving_version !== currentSetHash;
+  const freshness2 = eventSetStale || dirty.length > 0 ? "stale" : "fresh";
+  return {
+    freshness: freshness2,
+    dirty_sources: dirty,
+    pending_count: pendingCount,
+    current_set_hash: currentSetHash,
+    ...manifest.serving_version !== undefined ? { recorded_set_hash: manifest.serving_version } : {},
+    projection_id: manifest.projection_id,
+    generated_at: manifest.generated_at
+  };
+}
+
+// src/core/memory-query.ts
+import { appendFile } from "fs/promises";
+import { dirname as dirname5, join as join17 } from "path";
+class MemoryProjectionAbsentError extends Error {
+  constructor() {
+    super("no serving graph projected yet; run `ditto memory project` first");
+    this.name = "MemoryProjectionAbsentError";
+  }
+}
+
+class MemoryNodeNotFoundError extends Error {
+  nodeId;
+  constructor(nodeId) {
+    super(`node "${nodeId}" not found in the serving graph`);
+    this.nodeId = nodeId;
+    this.name = "MemoryNodeNotFoundError";
+  }
+}
+async function readFreshness(repoRoot) {
+  const status = await memoryStatus(repoRoot);
+  return {
+    projection_id: status.projection_id ?? "",
+    generated_at: status.generated_at ?? "",
+    freshness: status.freshness,
+    dirty_sources: status.dirty_sources
+  };
+}
+function pullUsageLogPath(repoRoot) {
+  return localDir(repoRoot, "memory", "pull-usage.jsonl");
+}
+async function recordPullQuery(repoRoot, record) {
+  const path = pullUsageLogPath(repoRoot);
+  await ensureDir(dirname5(path));
+  await appendFile(path, `${JSON.stringify(record)}
+`, "utf8");
+}
+async function readPullUsage(repoRoot) {
+  const path = pullUsageLogPath(repoRoot);
+  if (!await Bun.file(path).exists())
+    return [];
+  const text = await Bun.file(path).text();
+  return text.split(`
+`).filter((line) => line.trim().length > 0).map((line) => JSON.parse(line));
+}
+function neighborsOf(graph, id) {
+  const out = [];
+  for (const e2 of graph.adjacency[id] ?? []) {
+    out.push({ to: e2.to, edge_type: e2.edge_type, direction: "out" });
+  }
+  for (const [from, edges] of Object.entries(graph.adjacency)) {
+    for (const e2 of edges) {
+      if (e2.to === id)
+        out.push({ to: from, edge_type: e2.edge_type, direction: "in" });
+    }
+  }
+  return out;
+}
+function queryNeighbors(graph, node, depth) {
+  const present = new Set(graph.nodes.map((n2) => n2.id));
+  if (!present.has(node))
+    throw new MemoryNodeNotFoundError(node);
+  const seen = new Set([node]);
+  let frontier = [node];
+  for (let hop = 0;hop < depth; hop++) {
+    const next = [];
+    for (const id of frontier) {
+      for (const nb of neighborsOf(graph, id)) {
+        if (!seen.has(nb.to)) {
+          seen.add(nb.to);
+          next.push(nb.to);
+        }
+      }
+    }
+    frontier = next;
+    if (frontier.length === 0)
+      break;
+  }
+  seen.delete(node);
+  return { root: node, depth, neighbors: [...seen].sort() };
+}
+function bodyTokens(s2) {
+  return new Set(s2.toLowerCase().split(/[^a-z0-9\uAC00-\uD7A3]+/).filter((t2) => t2.length >= 3));
+}
+function searchEventBodies(query, events) {
+  const q2 = query.trim().toLowerCase();
+  if (q2.length === 0)
+    return [];
+  const qTokens = bodyTokens(query);
+  const out = [];
+  for (const e2 of events) {
+    const body = e2.text.toLowerCase();
+    let hit = body.includes(q2);
+    if (!hit) {
+      const bTokens = bodyTokens(e2.text);
+      for (const t2 of qTokens) {
+        if (bTokens.has(t2)) {
+          hit = true;
+          break;
+        }
+      }
+    }
+    if (hit)
+      out.push({ source_id: e2.sources[0] ?? "", event_id: e2.event_id });
+  }
+  return out;
+}
+async function queryBodies(repoRoot, query) {
+  const events = await new MemoryEventStore(repoRoot).list();
+  const visible = reduceEvents(events).approvedHeads.filter((e2) => e2.sensitivity !== "secret");
+  const matches = searchEventBodies(query, visible);
+  const freshness2 = await readFreshness(repoRoot);
+  return { query, matches, ...freshness2 };
+}
+function shortestPath(graph, from, to) {
+  const present = new Set(graph.nodes.map((n2) => n2.id));
+  if (!present.has(from))
+    throw new MemoryNodeNotFoundError(from);
+  if (!present.has(to))
+    throw new MemoryNodeNotFoundError(to);
+  if (from === to)
+    return { from, to, path: [from] };
+  const prev = new Map;
+  const visited = new Set([from]);
+  const queue2 = [from];
+  while (queue2.length > 0) {
+    const cur = queue2.shift();
+    for (const nb of neighborsOf(graph, cur)) {
+      if (visited.has(nb.to))
+        continue;
+      visited.add(nb.to);
+      prev.set(nb.to, cur);
+      if (nb.to === to) {
+        const path = [to];
+        let step = to;
+        while (step !== from) {
+          step = prev.get(step);
+          path.push(step);
+        }
+        return { from, to, path: path.reverse() };
+      }
+      queue2.push(nb.to);
+    }
+  }
+  return { from, to, path: null };
+}
+function explainNode(graph, node) {
+  const found = graph.nodes.find((n2) => n2.id === node);
+  if (!found)
+    throw new MemoryNodeNotFoundError(node);
+  const edges = neighborsOf(graph, node).sort((a2, b2) => a2.to < b2.to ? -1 : a2.to > b2.to ? 1 : a2.edge_type < b2.edge_type ? -1 : 1);
+  return { node: { id: found.id, node_type: found.node_type, name: found.name }, edges };
+}
+function auditCounts(graph, dirtySources) {
+  const referenced = new Set;
+  const seenEdges = new Set;
+  let duplicate = 0;
+  let contradiction = 0;
+  for (const [from, edges] of Object.entries(graph.adjacency)) {
+    for (const e2 of edges) {
+      referenced.add(from);
+      referenced.add(e2.to);
+      const key = `${from}\x00${e2.to}\x00${e2.edge_type}`;
+      if (seenEdges.has(key))
+        duplicate++;
+      else
+        seenEdges.add(key);
+      if (e2.edge_type === "CONTRADICTS")
+        contradiction++;
+    }
+  }
+  let orphan = 0;
+  for (const n2 of graph.nodes) {
+    if (!referenced.has(n2.id))
+      orphan++;
+  }
+  return { orphan, stale: dirtySources.length, duplicate, contradiction };
+}
+
+class MemoryAuditLogStore {
+  repoRoot;
+  constructor(repoRoot) {
+    this.repoRoot = repoRoot;
+  }
+  path() {
+    return join17(dittoDir(this.repoRoot), "memory", "audit-log.jsonl");
+  }
+  async append(entry) {
+    const p = this.path();
+    await ensureDir(dirname5(p));
+    await appendFile(p, `${JSON.stringify(entry)}
+`, "utf8");
+  }
+  async list() {
+    const p = this.path();
+    if (!await Bun.file(p).exists())
+      return [];
+    const text = await Bun.file(p).text();
+    return text.split(`
+`).filter((line) => line.trim().length > 0).map((line) => JSON.parse(line));
+  }
+}
+async function runAudit(repoRoot, options = {}) {
+  const graph = await new MemoryProjectionStore(repoRoot).readServing();
+  if (!graph)
+    throw new MemoryProjectionAbsentError;
+  const fresh = await readFreshness(repoRoot);
+  let edgeCount = 0;
+  for (const edges of Object.values(graph.adjacency))
+    edgeCount += edges.length;
+  const entry = {
+    audited_at: (options.now ?? new Date).toISOString(),
+    projection_id: fresh.projection_id,
+    freshness: fresh.freshness,
+    node_count: graph.nodes.length,
+    edge_count: edgeCount,
+    counts: auditCounts(graph, fresh.dirty_sources)
+  };
+  const store = new MemoryAuditLogStore(repoRoot);
+  await store.append(entry);
+  const history = await store.list();
+  return { entry, history_length: history.length };
+}
+
+// src/core/memory-warmstart.ts
+function isWarmStartOwner(owner) {
+  return owner === "researcher" || owner === "planner";
+}
+function warmStartEnabled() {
+  return isMemoryEnabled() && process.env.DITTO_MEMORY_WARMSTART !== "0";
+}
+var RELATED_NODE_CAP = 8;
+function tokensOf(text) {
+  return (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((t2) => t2.length >= 4);
+}
+function coverageRoots(graph, workItem2) {
+  const want = new Set([...tokensOf(workItem2.title), ...tokensOf(workItem2.goal)]);
+  if (want.size === 0)
+    return [];
+  const roots = [];
+  for (const n2 of graph.nodes) {
+    const have = new Set([...tokensOf(n2.id), ...tokensOf(n2.name)]);
+    if ([...have].some((t2) => want.has(t2)))
+      roots.push(n2.id);
+  }
+  return roots.sort();
+}
+async function recordUsage(repoRoot, record) {
+  const path = usageLogPath(repoRoot, record.work_item_id);
+  await ensureDir(dirname6(path));
+  await appendFile2(path, `${JSON.stringify(record)}
+`, "utf8");
+}
+function usageLogPath(repoRoot, workItemId2) {
+  return localDir(repoRoot, "work-items", workItemId2, "memory", "warmstart-usage.jsonl");
+}
+async function readUsageReport(repoRoot, workItemId2) {
+  const path = usageLogPath(repoRoot, workItemId2);
+  let records = [];
+  if (await Bun.file(path).exists()) {
+    const text = await Bun.file(path).text();
+    records = text.split(`
+`).filter((line) => line.trim().length > 0).map((line) => JSON.parse(line));
+  }
+  const hitNodeTypes = {};
+  for (const r3 of records) {
+    for (const [t2, n2] of Object.entries(r3.hit_node_types ?? {})) {
+      hitNodeTypes[t2] = (hitNodeTypes[t2] ?? 0) + n2;
+    }
+  }
+  return {
+    opportunities: records.filter((r3) => r3.opportunity).length,
+    attempts: records.filter((r3) => r3.attempt).length,
+    hits: records.filter((r3) => r3.hit).length,
+    actionable: records.filter((r3) => r3.actionable).length,
+    hit_node_types: hitNodeTypes,
+    records
+  };
+}
+async function warmStartMemoryContext(repoRoot, node, workItem2, options = {}) {
+  if (!isWarmStartOwner(node.owner) || !warmStartEnabled())
+    return;
+  const now = (options.now ?? new Date).toISOString();
+  const base = {
+    ts: now,
+    work_item_id: workItem2.id,
+    node_id: node.id,
+    owner: node.owner,
+    opportunity: true,
+    attempt: false,
+    hit: false,
+    actionable: false
+  };
+  try {
+    const status = await memoryStatus(repoRoot);
+    base.freshness = status.freshness;
+    if (status.freshness !== "fresh") {
+      await recordUsage(repoRoot, base);
+      return;
+    }
+    const graph = await new MemoryProjectionStore(repoRoot).readServing();
+    if (!graph || graph.nodes.length === 0) {
+      await recordUsage(repoRoot, base);
+      return;
+    }
+    const roots = coverageRoots(graph, workItem2);
+    if (roots.length === 0) {
+      await recordUsage(repoRoot, base);
+      return;
+    }
+    base.attempt = true;
+    const related = new Set;
+    for (const root of roots) {
+      related.add(root);
+      for (const nb of queryNeighbors(graph, root, 2).neighbors)
+        related.add(nb);
+    }
+    const relatedNodes = [...related].sort().slice(0, RELATED_NODE_CAP);
+    if (relatedNodes.length === 0) {
+      await recordUsage(repoRoot, base);
+      return;
+    }
+    base.hit = true;
+    const typeOf = new Map(graph.nodes.map((n2) => [n2.id, n2.node_type]));
+    const hitTypes = {};
+    for (const id of relatedNodes) {
+      const t2 = typeOf.get(id) ?? "unknown";
+      hitTypes[t2] = (hitTypes[t2] ?? 0) + 1;
+    }
+    base.hit_node_types = hitTypes;
+    const decisionIds = new Set(graph.nodes.filter((n2) => n2.node_type === "Decision").map((n2) => n2.id));
+    const decisions = relatedNodes.filter((id) => decisionIds.has(id));
+    base.actionable = true;
+    await recordUsage(repoRoot, base);
+    return {
+      related_nodes: relatedNodes,
+      ...decisions.length > 0 ? { decisions } : {}
+    };
+  } catch {
+    try {
+      await recordUsage(repoRoot, base);
+    } catch {}
+    return;
+  }
+}
+
+// src/core/work-item-store.ts
+import { readdir as readdir6, stat as stat2 } from "fs/promises";
+import { dirname as dirname7, join as join18 } from "path";
 
 // src/schemas/intent-metric.ts
 var intentMetricHop = exports_external.enum(["H1", "H2", "H3"]).describe("Which intent-chain hop the drift was detected at (intentDriftGate H1/H2/H3)");
@@ -17599,10 +18673,10 @@ class WorkItemStore {
     return localDir(this.repoRoot, "work-items", id);
   }
   workItemPath(id) {
-    return join16(this.workItemDir(id), "work-item.json");
+    return join18(this.workItemDir(id), "work-item.json");
   }
   languageLedgerPath(id) {
-    return join16(this.workItemDir(id), "language-ledger.json");
+    return join18(this.workItemDir(id), "language-ledger.json");
   }
   async exists(id) {
     try {
@@ -17632,7 +18706,7 @@ class WorkItemStore {
       created_at: nowIso,
       updated_at: nowIso
     };
-    await ensureDir(join16(this.workItemDir(id), "evidence"));
+    await ensureDir(join18(this.workItemDir(id), "evidence"));
     const written = await writeJson(this.workItemPath(id), workItem, draft);
     await writeJson(this.languageLedgerPath(id), languageLedger, {
       schema_version: "0.1.0",
@@ -17666,13 +18740,13 @@ class WorkItemStore {
     const base = localDir(this.repoRoot, "work-items");
     let entries;
     try {
-      entries = await readdir5(base);
+      entries = await readdir6(base);
     } catch {
       return [];
     }
     const summaries = [];
     for (const name of entries) {
-      const dir = join16(base, name);
+      const dir = join18(base, name);
       let s2;
       try {
         s2 = await stat2(dir);
@@ -17682,7 +18756,7 @@ class WorkItemStore {
       if (!s2.isDirectory())
         continue;
       try {
-        const item = await readJson(join16(dir, "work-item.json"), workItem);
+        const item = await readJson(join18(dir, "work-item.json"), workItem);
         summaries.push({
           id: item.id,
           title: item.title,
@@ -17695,7 +18769,7 @@ class WorkItemStore {
     return summaries;
   }
   async appendJsonlAtPath(path, jsonLine) {
-    await ensureDir(dirname4(path));
+    await ensureDir(dirname7(path));
     const file = Bun.file(path);
     const existing = await file.exists() ? await file.text() : "";
     const trimmedExisting = existing.endsWith(`
@@ -17705,7 +18779,7 @@ class WorkItemStore {
 `);
   }
   async appendEvidenceJsonl(workItemId2, filename, jsonLine) {
-    return this.appendJsonlAtPath(join16(this.workItemDir(workItemId2), "evidence", filename), jsonLine);
+    return this.appendJsonlAtPath(join18(this.workItemDir(workItemId2), "evidence", filename), jsonLine);
   }
   async appendCommandLogLine(workItemId2, jsonLine) {
     return this.appendEvidenceJsonl(workItemId2, "commands.jsonl", jsonLine);
@@ -17714,7 +18788,7 @@ class WorkItemStore {
     return this.appendEvidenceJsonl(workItemId2, "edits.jsonl", jsonLine);
   }
   metricsPath(workItemId2) {
-    return join16(this.workItemDir(workItemId2), "metrics.jsonl");
+    return join18(this.workItemDir(workItemId2), "metrics.jsonl");
   }
   async appendMetricLine(workItemId2, jsonLine) {
     return this.appendJsonlAtPath(this.metricsPath(workItemId2), jsonLine);
@@ -17821,10 +18895,11 @@ async function nextNode(repoRoot, workItemId2) {
         created_at: now.toISOString()
       });
       const candidates2 = selectVariantCandidates(catalog2, node.owner, scopeOf(node), node.agent_hint);
+      const memory2 = await warmStartMemoryContext(repoRoot, node, workItem2, { now });
       spawns.push({
         node_id: node.id,
         owner: node.owner,
-        packet: buildDelegationPacket(node, workItem2, candidates2, scopeOf(node))
+        packet: buildDelegationPacket(node, workItem2, candidates2, scopeOf(node), memory2)
       });
     }
     return { action: "spawn_wave", spawns };
@@ -17859,11 +18934,12 @@ async function nextNode(repoRoot, workItemId2) {
   });
   const catalog = await loadVariantCatalog(repoRoot);
   const candidates = selectVariantCandidates(catalog, chosen.owner, scopeOf(chosen), chosen.agent_hint);
+  const memory = await warmStartMemoryContext(repoRoot, chosen, workItem2, { now });
   return {
     action: "spawn",
     node_id: chosen.id,
     owner: chosen.owner,
-    packet: buildDelegationPacket(chosen, workItem2, candidates, scopeOf(chosen))
+    packet: buildDelegationPacket(chosen, workItem2, candidates, scopeOf(chosen), memory)
   };
 }
 var recordResultPayload = exports_external.object({
@@ -18454,7 +19530,7 @@ var autopilotCommand = defineCommand({
 });
 
 // src/cli/commands/boundary.ts
-import { join as join17 } from "path";
+import { join as join19 } from "path";
 function violationsToReviewGraph(violations) {
   return acgReviewGraph.parse({
     kind: "acg.review-graph.v1",
@@ -18528,7 +19604,7 @@ var boundaryCommand = defineCommand({
           }
           const changedFiles = args.file.split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
           const language = args.language ?? "javascript";
-          const sourceRoot = args["source-root"] ?? join17(repoRoot, "src");
+          const sourceRoot = args["source-root"] ?? join19(repoRoot, "src");
           const guard = await runInternalPackagesGuard({
             language,
             entries: spec.internal_packages,
@@ -18581,11 +19657,11 @@ var boundaryCommand = defineCommand({
 });
 
 // src/core/bridge-sync.ts
-import { join as join19 } from "path";
+import { join as join21 } from "path";
 
 // src/core/instruction-bridge.ts
-import { createHash } from "crypto";
-import { join as join18 } from "path";
+import { createHash as createHash3 } from "crypto";
+import { join as join20 } from "path";
 var MANAGED_END = "<!-- ditto:managed:end -->";
 var MANAGED_BLOCK_RE_G = /<!--\s*ditto:managed:start\s+source=([^\s]+)\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:managed:end\s*-->/g;
 function normalizeInstructionText(text) {
@@ -18596,11 +19672,11 @@ function normalizeInstructionText(text) {
 `);
 }
 function normalizedSha256(text) {
-  return createHash("sha256").update(normalizeInstructionText(text)).digest("hex");
+  return createHash3("sha256").update(normalizeInstructionText(text)).digest("hex");
 }
 function sourceFromSurface(surface) {
   if (surface.role !== "source") {
-    return { kind: "missing", path: join18(surface.path, "..", "AGENTS.md") };
+    return { kind: "missing", path: join20(surface.path, "..", "AGENTS.md") };
   }
   if (!surface.exists || surface.content === undefined)
     return { kind: "missing", path: surface.path };
@@ -18794,7 +19870,7 @@ async function checkInstructionsForAdapters(adapters, repoRoot) {
     sourceSurface = registered.find((surface) => surface.role === "source");
   }
   if (!sourceSurface) {
-    const sourcePath = join18(repoRoot, "AGENTS.md");
+    const sourcePath = join20(repoRoot, "AGENTS.md");
     sourceSurface = { role: "source", host: "codex", path: sourcePath, exists: false };
   }
   const source = sourceFromSurface(sourceSurface);
@@ -18825,7 +19901,7 @@ async function syncClaudeCodeProjection(repoRoot, options = {}) {
   const source = await loadSource(repoRoot);
   if ("kind" in source)
     throw new Error("AGENTS.md is missing; cannot sync Claude projection");
-  const path = join19(repoRoot, "CLAUDE.md");
+  const path = join21(repoRoot, "CLAUDE.md");
   const projection = await loadProjection(repoRoot);
   const block = managedBlock(source.content, source.normalizedSha256);
   const check = options.check === true;
@@ -18881,14 +19957,14 @@ async function syncClaudeCodeProjection(repoRoot, options = {}) {
 }
 
 // src/core/knowledge-bridge.ts
-import { readdir as readdir6 } from "fs/promises";
-import { join as join20 } from "path";
+import { readdir as readdir7 } from "fs/promises";
+import { join as join22 } from "path";
 var KNOWLEDGE_END = "<!-- ditto:knowledge:end -->";
 var KNOWLEDGE_BLOCK_RE_G = /<!--\s*ditto:knowledge:start\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:knowledge:end\s*-->/g;
 var glossarySummarySchema = exports_external.object({
   entries: exports_external.array(exports_external.object({ term: exports_external.string(), status: exports_external.string().optional() })).default([])
 });
-var KNOWLEDGE_DIR = join20(".ditto", "knowledge");
+var KNOWLEDGE_DIR = join22(".ditto", "knowledge");
 function adrHeadline(filename, body) {
   const id = filename.match(/ADR-\d{4}/)?.[0] ?? filename;
   const titleLine = body.split(`
@@ -18903,12 +19979,12 @@ function adrHeadline(filename, body) {
   return parts.join(" \xB7 ");
 }
 async function loadKnowledgeSources(repoRoot) {
-  const dir = join20(repoRoot, KNOWLEDGE_DIR);
-  const contextPath = join20(KNOWLEDGE_DIR, "CONTEXT.md");
-  const glossaryPath = join20(KNOWLEDGE_DIR, "glossary.json");
-  const adrDir = join20(KNOWLEDGE_DIR, "adr");
+  const dir = join22(repoRoot, KNOWLEDGE_DIR);
+  const contextPath = join22(KNOWLEDGE_DIR, "CONTEXT.md");
+  const glossaryPath = join22(KNOWLEDGE_DIR, "glossary.json");
+  const adrDir = join22(KNOWLEDGE_DIR, "adr");
   let termHeadlines = [];
-  const glossaryFile = Bun.file(join20(dir, "glossary.json"));
+  const glossaryFile = Bun.file(join22(dir, "glossary.json"));
   if (await glossaryFile.exists()) {
     const parsed = glossarySummarySchema.safeParse(JSON.parse(await glossaryFile.text()));
     if (parsed.success) {
@@ -18916,15 +19992,15 @@ async function loadKnowledgeSources(repoRoot) {
     }
   }
   const adrHeadlines = [];
-  const adrPath = join20(dir, "adr");
+  const adrPath = join22(dir, "adr");
   let adrEntries = [];
   try {
-    adrEntries = (await readdir6(adrPath)).filter((f3) => /^ADR-\d{4}.*\.md$/.test(f3));
+    adrEntries = (await readdir7(adrPath)).filter((f3) => /^ADR-\d{4}.*\.md$/.test(f3));
   } catch {
     adrEntries = [];
   }
   for (const rel of adrEntries) {
-    const body = await Bun.file(join20(adrPath, rel)).text();
+    const body = await Bun.file(join22(adrPath, rel)).text();
     adrHeadlines.push(adrHeadline(rel, body));
   }
   adrHeadlines.sort();
@@ -18989,7 +20065,7 @@ async function syncKnowledgeProjection(repoRoot, options = {}) {
   const summary = renderKnowledgeSummary(sources);
   const sha2562 = knowledgeSummarySha256(summary);
   const block = knowledgeBlock(summary, sha2562);
-  const path = join20(repoRoot, "CLAUDE.md");
+  const path = join22(repoRoot, "CLAUDE.md");
   const check = options.check === true;
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : null;
@@ -19139,7 +20215,7 @@ var bridgeCommand = defineCommand({
 
 // src/cli/commands/change-contract.ts
 import { readFile } from "fs/promises";
-import { join as join24 } from "path";
+import { join as join26 } from "path";
 
 // src/schemas/acg-change-contract.ts
 var acgScopeRef = exports_external.object({
@@ -19785,7 +20861,7 @@ function zodErrors(error) {
   }));
 }
 // src/acg/scope/symbol-expand.ts
-import { join as join21, relative as relative4 } from "path";
+import { join as join23, relative as relative4 } from "path";
 async function expandForbiddenSymbols(contract, ctx) {
   if (!contract.forbidden_scope.some((r3) => r3.kind === "symbol")) {
     return { contract, resolved: 0, unresolved: [] };
@@ -19803,11 +20879,11 @@ async function expandForbiddenSymbols(contract, ctx) {
       repoRoot: ctx.repoRoot,
       sourceRoot: ctx.sourceRoot,
       language: ctx.language,
-      dbPath: join21(ctx.cacheDir, "db"),
-      workDir: join21(ctx.cacheDir, `q-symdecl-${ref.ref}`),
+      dbPath: join23(ctx.cacheDir, "db"),
+      workDir: join23(ctx.cacheDir, `q-symdecl-${ref.ref}`),
       ...ctx.binary ? { binary: ctx.binary } : {}
     }, ctx.deps);
-    const files = declFiles.map((f3) => relative4(ctx.repoRoot, join21(ctx.sourceRoot, f3)));
+    const files = declFiles.map((f3) => relative4(ctx.repoRoot, join23(ctx.sourceRoot, f3)));
     if (files.length === 0) {
       out.push(ref);
       unresolved.push(ref.ref);
@@ -19822,7 +20898,7 @@ async function expandForbiddenSymbols(contract, ctx) {
 }
 
 // src/core/change-contract-store.ts
-import { join as join22 } from "path";
+import { join as join24 } from "path";
 class ChangeContractStore {
   repoRoot;
   constructor(repoRoot) {
@@ -19832,7 +20908,7 @@ class ChangeContractStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   path(workItemId2) {
-    return join22(this.dir(workItemId2), "change-contract.json");
+    return join24(this.dir(workItemId2), "change-contract.json");
   }
   async read(workItemId2) {
     try {
@@ -19848,7 +20924,7 @@ class ChangeContractStore {
 }
 
 // src/core/fitness-function-store.ts
-import { join as join23 } from "path";
+import { join as join25 } from "path";
 var fitnessFunctionArray = exports_external.array(acgFitnessFunction);
 
 class FitnessFunctionStore {
@@ -19860,7 +20936,7 @@ class FitnessFunctionStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   path(workItemId2) {
-    return join23(this.dir(workItemId2), "fitness-functions.json");
+    return join25(this.dir(workItemId2), "fitness-functions.json");
   }
   async read(workItemId2) {
     try {
@@ -19929,7 +21005,7 @@ var changeContractCommand = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     const expanded = await expandForbiddenSymbols(result2.changeContract, {
       repoRoot,
-      sourceRoot: join24(repoRoot, "src"),
+      sourceRoot: join26(repoRoot, "src"),
       language: "javascript",
       cacheDir: codeqlCacheDir(repoRoot, "javascript"),
       deps: makeRelationDeps()
@@ -20165,12 +21241,12 @@ var changeMapCommand = defineCommand({
 });
 
 // src/cli/commands/codeql.ts
-import { join as join27 } from "path";
+import { join as join29 } from "path";
 
 // src/core/codeql/doctor.ts
 import { existsSync as existsSync2 } from "fs";
-import { readdir as readdir7 } from "fs/promises";
-import { join as join25 } from "path";
+import { readdir as readdir8 } from "fs/promises";
+import { join as join27 } from "path";
 var LANG_BY_EXT = {
   ts: "javascript",
   tsx: "javascript",
@@ -20278,7 +21354,7 @@ var EXCLUDED_DIR = new Set([
 async function walkExtensions(dir, counts) {
   let entries;
   try {
-    entries = await readdir7(dir, { withFileTypes: true });
+    entries = await readdir8(dir, { withFileTypes: true });
   } catch {
     return;
   }
@@ -20286,7 +21362,7 @@ async function walkExtensions(dir, counts) {
     if (entry.isDirectory()) {
       if (EXCLUDED_DIR.has(entry.name))
         continue;
-      await walkExtensions(join25(dir, entry.name), counts);
+      await walkExtensions(join27(dir, entry.name), counts);
     } else if (entry.isFile()) {
       const dot = entry.name.lastIndexOf(".");
       if (dot < 0)
@@ -20429,8 +21505,8 @@ async function runCodeqlReviewToLedger(input, deps) {
 }
 
 // src/core/evidence-store.ts
-import { createHash as createHash2 } from "crypto";
-import { join as join26 } from "path";
+import { createHash as createHash4 } from "crypto";
+import { join as join28 } from "path";
 
 // src/schemas/evidence-log.ts
 var commandLogEntry = exports_external.object({
@@ -20462,13 +21538,13 @@ class EvidenceStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   evidenceDir(workItemId2) {
-    return join26(this.workItemDir(workItemId2), "evidence");
+    return join28(this.workItemDir(workItemId2), "evidence");
   }
   commandsPath(workItemId2) {
-    return join26(this.evidenceDir(workItemId2), "commands.jsonl");
+    return join28(this.evidenceDir(workItemId2), "commands.jsonl");
   }
   evidenceIndexPath(workItemId2) {
-    return join26(this.workItemDir(workItemId2), "evidence-index.json");
+    return join28(this.workItemDir(workItemId2), "evidence-index.json");
   }
   async appendCommand(workItemId2, entry) {
     const parsed = commandLogEntry.parse(entry);
@@ -20518,8 +21594,8 @@ class EvidenceStore {
     return writeJson(this.evidenceIndexPath(workItemId2), evidenceIndex, next);
   }
 }
-function sha256Hex(content) {
-  const hash = createHash2("sha256");
+function sha256Hex2(content) {
+  const hash = createHash4("sha256");
   hash.update(content);
   return hash.digest("hex");
 }
@@ -20562,7 +21638,7 @@ function defaultLedgerDeps(repoRoot) {
     fileExists: (path) => Bun.file(path).exists(),
     drain: drainStream2,
     appendRecord: (workItemId2, record) => evidence.appendRecord(workItemId2, record),
-    sha256: sha256Hex,
+    sha256: sha256Hex2,
     now: () => new Date().toISOString(),
     collectExtensions: defaultDoctorDeps.collectExtensions,
     cliAvailable: defaultDoctorDeps.cliAvailable,
@@ -20628,7 +21704,7 @@ var reviewSubcommand = defineCommand({
     try {
       const repoRoot = await resolveRepoRootForCreate();
       const language = args.language ?? "javascript";
-      const sourceRoot = args["source-root"] ?? join27(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join29(repoRoot, "src");
       const commitSha = await gitHeadSha(repoRoot);
       const key = cacheKey(commitSha, language);
       const dbPath = localDir(repoRoot, "cache", "codeql", key, "db");
@@ -20675,7 +21751,7 @@ var codeqlCommand = defineCommand({
 });
 
 // src/core/context-packet.ts
-import { join as join29 } from "path";
+import { join as join31 } from "path";
 
 // src/core/git.ts
 import { execFileSync as execFileSync2 } from "child_process";
@@ -20758,7 +21834,7 @@ function captureGitDiff(cwd) {
 
 // src/core/run-store.ts
 import { stat as stat3 } from "fs/promises";
-import { join as join28 } from "path";
+import { join as join30 } from "path";
 
 // src/schemas/run-manifest.ts
 var gitState = exports_external.object({
@@ -20809,7 +21885,7 @@ class RunStore {
     return localDir(this.repoRoot, "runs", id);
   }
   manifestPath(id) {
-    return join28(this.runDir(id), "manifest.json");
+    return join30(this.runDir(id), "manifest.json");
   }
   async exists(id) {
     try {
@@ -20820,7 +21896,7 @@ class RunStore {
     }
   }
   pathFor(id, kind) {
-    return join28(this.runDir(id), kind);
+    return join30(this.runDir(id), kind);
   }
   async create(input, now = new Date) {
     const id = await generateId("run", (candidate) => this.exists(candidate));
@@ -20917,7 +21993,7 @@ async function buildContextPacket(repoRoot, input) {
   ];
   const content = `${lines.join(`
 `)}`;
-  await atomicWriteText(join29(repoRoot, outputPath), content);
+  await atomicWriteText(join31(repoRoot, outputPath), content);
   return {
     work_item_id: item.id,
     output_path: outputPath,
@@ -21125,7 +22201,7 @@ var interviewState = exports_external.object({
 }).describe("Deep interview sidecar tracking ambiguity dimensions and readiness (\xA76.3)");
 
 // src/core/interview-store.ts
-import { join as join30 } from "path";
+import { join as join32 } from "path";
 class InterviewStore {
   repoRoot;
   constructor(repoRoot) {
@@ -21135,7 +22211,7 @@ class InterviewStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   path(workItemId2) {
-    return join30(this.dir(workItemId2), "interview-state.json");
+    return join32(this.dir(workItemId2), "interview-state.json");
   }
   async exists(workItemId2) {
     return Bun.file(this.path(workItemId2)).exists();
@@ -21648,7 +22724,7 @@ var deepInterviewCommand = defineCommand({
 });
 
 // src/cli/commands/doctor.ts
-import { join as join34 } from "path";
+import { join as join37 } from "path";
 
 // src/core/capability-inventory.ts
 var REQUIRED_CAPABILITIES = ["instructions", "permissions", "mcp", "surface"];
@@ -21711,7 +22787,7 @@ async function collectCapabilityInventory(adapters, repoRoot) {
 import { existsSync as existsSync3 } from "fs";
 import { mkdir as mkdir2 } from "fs/promises";
 import { homedir as homedir3 } from "os";
-import { join as join31 } from "path";
+import { join as join33 } from "path";
 function detectPlatform(os = process.platform) {
   switch (os) {
     case "darwin":
@@ -21727,10 +22803,10 @@ function detectPlatform(os = process.platform) {
 function bundleUrl(platform2) {
   return `https://github.com/github/codeql-cli-binaries/releases/latest/download/codeql-${platform2}.zip`;
 }
-var DEFAULT_INSTALL_DIR = join31(homedir3(), ".local", "share", "ditto", "codeql");
-var DEFAULT_BIN_DIR = join31(homedir3(), ".local", "bin");
+var DEFAULT_INSTALL_DIR = join33(homedir3(), ".local", "share", "ditto", "codeql");
+var DEFAULT_BIN_DIR = join33(homedir3(), ".local", "bin");
 function managedBinary(installDir, platform2) {
-  return join31(installDir, "codeql", platform2 === "win64" ? "codeql.exe" : "codeql");
+  return join33(installDir, "codeql", platform2 === "win64" ? "codeql.exe" : "codeql");
 }
 function manualInstructions(platform2) {
   const lines = [
@@ -21762,7 +22838,7 @@ async function installCodeqlCli(deps) {
   }
   await deps.ensureDir(deps.installDir);
   await deps.ensureDir(deps.binDir);
-  const zip = join31(deps.installDir, `codeql-${platform2}.zip`);
+  const zip = join33(deps.installDir, `codeql-${platform2}.zip`);
   const url = bundleUrl(platform2);
   const fail = (why, stderr2) => ({
     status: "failed",
@@ -21785,10 +22861,10 @@ async function installCodeqlCli(deps) {
     return {
       status: "installed",
       binary,
-      message: `codeql installed at ${binary} \u2014 ${join31(deps.installDir, "codeql")}\uB97C PATH\uC5D0 \uCD94\uAC00\uD558\uB77C.`
+      message: `codeql installed at ${binary} \u2014 ${join33(deps.installDir, "codeql")}\uB97C PATH\uC5D0 \uCD94\uAC00\uD558\uB77C.`
     };
   }
-  const link = join31(deps.binDir, "codeql");
+  const link = join33(deps.binDir, "codeql");
   const ln = await deps.run("ln", ["-sf", binary, link]);
   if (ln.exit_code !== 0)
     return fail(`\uC2EC\uB9C1\uD06C \uC2E4\uD328 (ln exit=${ln.exit_code ?? "null"})`, ln.stderr);
@@ -21806,7 +22882,7 @@ var defaultInstallDeps = {
     const onPath = Bun.which("codeql");
     if (onPath)
       return onPath;
-    const gh = join31(homedir3(), ".local", "share", "gh", "extensions", "gh-codeql");
+    const gh = join33(homedir3(), ".local", "share", "gh", "extensions", "gh-codeql");
     if (existsSync3(gh))
       return gh;
     const platform2 = detectPlatform();
@@ -21839,15 +22915,52 @@ var defaultInstallDeps = {
 };
 
 // src/core/distribution-doctor.ts
-import { existsSync as existsSync4, readFileSync } from "fs";
-import { join as join32 } from "path";
+import { existsSync as existsSync4, readFileSync as readFileSync2 } from "fs";
+import { join as join35 } from "path";
+
+// src/core/build-stamp.ts
+import { createHash as createHash5 } from "crypto";
+import { readFileSync, readdirSync } from "fs";
+import { join as join34 } from "path";
+var STAMP_PREFIX = "//# ditto-src-stamp=";
+function listSourceFiles(repoRoot, rel = "src") {
+  const out = [];
+  const entries = readdirSync(join34(repoRoot, rel), { withFileTypes: true });
+  for (const e2 of entries) {
+    const childRel = `${rel}/${e2.name}`;
+    if (e2.isDirectory())
+      out.push(...listSourceFiles(repoRoot, childRel));
+    else if (e2.isFile() && e2.name.endsWith(".ts"))
+      out.push(childRel);
+  }
+  return out.sort();
+}
+function computeSourceStamp(repoRoot) {
+  const h2 = createHash5("sha256");
+  for (const rel of listSourceFiles(repoRoot)) {
+    h2.update(rel);
+    h2.update("\x00");
+    h2.update(readFileSync(join34(repoRoot, rel)));
+    h2.update("\x00");
+  }
+  return h2.digest("hex");
+}
+function readEmbeddedStamp(bundleText) {
+  const idx = bundleText.lastIndexOf(STAMP_PREFIX);
+  if (idx === -1)
+    return null;
+  const m2 = bundleText.slice(idx + STAMP_PREFIX.length).match(/^[a-f0-9]{64}/);
+  return m2 ? m2[0] : null;
+}
+
+// src/core/distribution-doctor.ts
 var ALLOW_RULE = "Bash(ditto:*)";
 var IS_WIN = process.platform === "win32";
 var AXIS_CONTRACTS = [
   {
     axis: "Hooks",
-    contract: "self-contained binary built + hooks.json registered",
-    requires: ["binary_built", "hooks_registered"]
+    contract: "self-contained binary built + fresh (matches src/) + hooks.json registered",
+    requires: ["binary_built", "binary_fresh", "hooks_registered"]
   },
   {
     axis: "Skills",
@@ -21875,7 +22988,7 @@ function evaluateDistribution(checks) {
 function readJsonObject(path) {
   if (!existsSync4(path))
     return {};
-  const text = readFileSync(path, "utf8").trim();
+  const text = readFileSync2(path, "utf8").trim();
   if (!text)
     return {};
   try {
@@ -21890,26 +23003,50 @@ function defaultDistributionDeps(targetRoot, pluginRoot) {
     pluginRoot,
     targetRoot,
     whichDitto: () => Bun.which("ditto"),
-    readProjectSettings: () => readJsonObject(join32(targetRoot, ".claude", "settings.json")),
-    exists: (p) => existsSync4(p)
+    readProjectSettings: () => readJsonObject(join35(targetRoot, ".claude", "settings.json")),
+    exists: (p) => existsSync4(p),
+    readText: (p) => {
+      try {
+        return readFileSync2(p, "utf8");
+      } catch {
+        return null;
+      }
+    },
+    sourceStamp: computeSourceStamp
   };
 }
 function pluginSurfacePresent(pluginRoot, exists) {
-  return exists(join32(pluginRoot, ".claude-plugin", "plugin.json")) && exists(join32(pluginRoot, "skills")) && exists(join32(pluginRoot, "agents"));
+  return exists(join35(pluginRoot, ".claude-plugin", "plugin.json")) && exists(join35(pluginRoot, "skills")) && exists(join35(pluginRoot, "agents"));
 }
 function allowlisted(settings) {
   const permissions = settings.permissions;
   const allow = permissions && typeof permissions === "object" ? permissions.allow : undefined;
   return Array.isArray(allow) && allow.includes(ALLOW_RULE);
 }
+function binaryFresh(deps, binaryName) {
+  if (!deps.exists(join35(deps.pluginRoot, "src")))
+    return true;
+  const text = deps.readText(join35(deps.pluginRoot, "bin", binaryName));
+  if (text === null)
+    return false;
+  const embedded = readEmbeddedStamp(text);
+  if (embedded === null)
+    return false;
+  try {
+    return embedded === deps.sourceStamp(deps.pluginRoot);
+  } catch {
+    return false;
+  }
+}
 function collectDistributionChecks(deps) {
   const binaryName = IS_WIN ? "ditto.exe" : "ditto";
   return {
-    binary_built: deps.exists(join32(deps.pluginRoot, "bin", binaryName)),
-    hooks_registered: deps.exists(join32(deps.pluginRoot, "hooks", "hooks.json")),
+    binary_built: deps.exists(join35(deps.pluginRoot, "bin", binaryName)),
+    binary_fresh: binaryFresh(deps, binaryName),
+    hooks_registered: deps.exists(join35(deps.pluginRoot, "hooks", "hooks.json")),
     plugin_surface_present: pluginSurfacePresent(deps.pluginRoot, deps.exists),
     binary_on_path: deps.whichDitto() !== null,
-    target_initialized: deps.exists(join32(deps.targetRoot, ".ditto", "knowledge", "glossary.json")),
+    target_initialized: deps.exists(join35(deps.targetRoot, ".ditto", "knowledge", "glossary.json")),
     allowlisted: allowlisted(deps.readProjectSettings())
   };
 }
@@ -21918,8 +23055,8 @@ function collectDistributionReport(deps) {
 }
 
 // src/core/handoff-store.ts
-import { readdir as readdir8, rename as rename2 } from "fs/promises";
-import { join as join33 } from "path";
+import { readdir as readdir9, rename as rename2 } from "fs/promises";
+import { join as join36 } from "path";
 
 // src/schemas/handoff.ts
 var handoff = exports_external.object({
@@ -22051,7 +23188,7 @@ class HandoffStore {
     return localDir(this.repoRoot, "handoff");
   }
   activePath(workItemId2) {
-    return join33(this.dir(), `${workItemId2}.md`);
+    return join36(this.dir(), `${workItemId2}.md`);
   }
   activeRel(workItemId2) {
     return `.ditto/local/handoff/${workItemId2}.md`;
@@ -22073,14 +23210,14 @@ class HandoffStore {
   }
   async writeArchived(h2, now = new Date) {
     const rel = this.archiveRel(h2.work_item_id, stamp(now));
-    await atomicWriteText(join33(this.repoRoot, rel), serialize(h2));
+    await atomicWriteText(join36(this.repoRoot, rel), serialize(h2));
     await this.link(h2.work_item_id, rel);
     return rel;
   }
   async listActive() {
     let names;
     try {
-      names = await readdir8(this.dir());
+      names = await readdir9(this.dir());
     } catch {
       return [];
     }
@@ -22088,7 +23225,7 @@ class HandoffStore {
     for (const name of names) {
       if (!name.endsWith(".md"))
         continue;
-      const path = join33(this.dir(), name);
+      const path = join36(this.dir(), name);
       try {
         const { handoff: handoff2, body } = parseHandoffFile(await Bun.file(path).text());
         out.push({ handoff: handoff2, body, path });
@@ -22100,9 +23237,9 @@ class HandoffStore {
     const active = await this.listActive();
     if (active.length === 0)
       return [];
-    await ensureDir(join33(this.dir(), "archive"));
+    await ensureDir(join36(this.dir(), "archive"));
     for (const a2 of active) {
-      const dest = join33(this.repoRoot, this.archiveRel(a2.handoff.work_item_id, stamp(now)));
+      const dest = join36(this.repoRoot, this.archiveRel(a2.handoff.work_item_id, stamp(now)));
       try {
         await rename2(a2.path, dest);
       } catch {}
@@ -22656,7 +23793,7 @@ var codeqlCommand2 = defineCommand({
         return;
       }
       const repoRoot = await resolveRepoRootForCreate();
-      const sourceRoot = args["source-root"] ?? join34(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join37(repoRoot, "src");
       const report = await inspectCodeqlTarget({ sourceRoot, buildVerified: args["build-verified"] }, defaultDoctorDeps);
       if (format === "json") {
         writeJson2({
@@ -22778,11 +23915,11 @@ var doctorCommand = defineCommand({
 
 // src/cli/commands/e2e.ts
 import { mkdir as mkdir4 } from "fs/promises";
-import { join as join37 } from "path";
+import { join as join40 } from "path";
 
 // src/core/e2e/applicability.ts
-import { existsSync as existsSync5, readFileSync as readFileSync2 } from "fs";
-import { join as join35 } from "path";
+import { existsSync as existsSync5, readFileSync as readFileSync3 } from "fs";
+import { join as join38 } from "path";
 var WEB_FRAMEWORKS = [
   "react",
   "react-dom",
@@ -22837,11 +23974,11 @@ function dependencyNames(pkg) {
 var UI_EXTENSIONS = [".tsx", ".jsx", ".vue", ".svelte", ".html"];
 function defaultReadPackageJson(repoRoot) {
   return () => {
-    const path = join35(repoRoot, "package.json");
+    const path = join38(repoRoot, "package.json");
     if (!existsSync5(path))
       return null;
     try {
-      const parsed = JSON.parse(readFileSync2(path, "utf8"));
+      const parsed = JSON.parse(readFileSync3(path, "utf8"));
       return parsed && typeof parsed === "object" ? parsed : null;
     } catch {
       return null;
@@ -22850,7 +23987,7 @@ function defaultReadPackageJson(repoRoot) {
 }
 function defaultCountUiFiles(repoRoot) {
   return () => {
-    const srcDir = join35(repoRoot, "src");
+    const srcDir = join38(repoRoot, "src");
     if (!existsSync5(srcDir))
       return 0;
     const glob = new Bun.Glob(`**/*{${UI_EXTENSIONS.join(",")}}`);
@@ -22880,10 +24017,10 @@ function evaluateAxis3FromRepo(deps) {
 }
 
 // src/core/e2e/browser.ts
-import { createHash as createHash3 } from "crypto";
-import { mkdir as mkdir3, readFile as readFile2, readdir as readdir9, writeFile as writeFile2 } from "fs/promises";
+import { createHash as createHash6 } from "crypto";
+import { mkdir as mkdir3, readFile as readFile2, readdir as readdir10, writeFile as writeFile2 } from "fs/promises";
 import { homedir as homedir4 } from "os";
-import { dirname as dirname5, join as join36, relative as relative7, sep as sep2 } from "path";
+import { dirname as dirname8, join as join39, relative as relative7, sep as sep2 } from "path";
 import { fileURLToPath } from "url";
 
 // src/schemas/e2e-journey.ts
@@ -22962,20 +24099,20 @@ var e2eJourney = exports_external.object({
 
 // src/core/e2e/browser.ts
 function runnerScriptPath() {
-  return join36(dirname5(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
+  return join39(dirname8(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
 }
 async function resolvePlaywrightCore() {
-  const bunInstall = process.env.BUN_INSTALL ?? join36(homedir4(), ".bun");
-  const cacheDir = join36(bunInstall, "install", "cache");
+  const bunInstall = process.env.BUN_INSTALL ?? join39(homedir4(), ".bun");
+  const cacheDir = join39(bunInstall, "install", "cache");
   let entries;
   try {
-    entries = await readdir9(cacheDir);
+    entries = await readdir10(cacheDir);
   } catch {
     return null;
   }
   const versions = entries.filter((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2)).sort((a2, b2) => compareSemver(b2.split("@")[1], a2.split("@")[1]));
   for (const v2 of versions) {
-    const mjs = join36(cacheDir, v2, "index.mjs");
+    const mjs = join39(cacheDir, v2, "index.mjs");
     if (await fileExists(mjs))
       return mjs;
   }
@@ -22991,10 +24128,10 @@ function compareSemver(a2, b2) {
   return 0;
 }
 async function findCachedChromium() {
-  const cacheRoot = join36(homedir4(), "Library", "Caches", "ms-playwright");
+  const cacheRoot = join39(homedir4(), "Library", "Caches", "ms-playwright");
   let entries;
   try {
-    entries = await readdir9(cacheRoot);
+    entries = await readdir10(cacheRoot);
   } catch {
     return null;
   }
@@ -23005,7 +24142,7 @@ async function findCachedChromium() {
   ];
   for (const dir of chromiumDirs) {
     for (const rel of candidates) {
-      const abs = join36(cacheRoot, dir, rel);
+      const abs = join39(cacheRoot, dir, rel);
       if (await fileExists(abs))
         return abs;
     }
@@ -23017,7 +24154,7 @@ function repoRelative(repoRoot, path) {
 }
 async function sha256OfFile(path) {
   const bytes = await readFile2(path);
-  return createHash3("sha256").update(bytes).digest("hex");
+  return createHash6("sha256").update(bytes).digest("hex");
 }
 async function probePlaywright(repoRoot) {
   let proc;
@@ -23086,7 +24223,7 @@ async function runJourney(repoRoot, runId2, spec) {
   }
   const runDir = localDir(repoRoot, "runs", runId2);
   await mkdir3(runDir, { recursive: true });
-  const configAbs = join36(runDir, "runner-config.json");
+  const configAbs = join39(runDir, "runner-config.json");
   await writeFile2(configAbs, JSON.stringify({
     playwrightCore: probe.playwrightCore,
     executablePath: probe.executablePath,
@@ -23119,10 +24256,10 @@ async function runJourney(repoRoot, runId2, spec) {
       probe
     };
   }
-  const screenshotAbs = join36(runDir, "journey.png");
-  const traceAbs = join36(runDir, "trace.zip");
-  const consoleAbs = join36(runDir, "console.log");
-  const networkAbs = join36(runDir, "network.log");
+  const screenshotAbs = join39(runDir, "journey.png");
+  const traceAbs = join39(runDir, "trace.zip");
+  const consoleAbs = join39(runDir, "console.log");
+  const networkAbs = join39(runDir, "network.log");
   const screenshots = [];
   if (await fileExists(screenshotAbs)) {
     screenshots.push({
@@ -23133,7 +24270,7 @@ async function runJourney(repoRoot, runId2, spec) {
   const trace = await fileExists(traceAbs) ? { path: repoRelative(repoRoot, traceAbs) } : null;
   const consoleArtifact = await fileExists(consoleAbs) ? { path: repoRelative(repoRoot, consoleAbs) } : null;
   const network = await fileExists(networkAbs) ? { path: repoRelative(repoRoot, networkAbs) } : null;
-  const outcomeAbs = join36(runDir, "outcome.json");
+  const outcomeAbs = join39(runDir, "outcome.json");
   if (!await fileExists(outcomeAbs)) {
     return {
       journey: blockedJourney(spec, "Playwright present but no capture outcome was produced; treating as blocked rather than asserting an unobserved pass"),
@@ -23220,7 +24357,7 @@ var e2eRun = defineCommand({
       const result2 = await runJourney(repoRoot, args.runId, parsed.data);
       const runDir = localDir(repoRoot, "runs", args.runId);
       await mkdir4(runDir, { recursive: true });
-      await atomicWriteText(join37(runDir, "journey.json"), `${JSON.stringify(result2.journey, null, 2)}
+      await atomicWriteText(join40(runDir, "journey.json"), `${JSON.stringify(result2.journey, null, 2)}
 `);
       if (format === "json") {
         writeJson2(result2);
@@ -24053,7 +25190,8 @@ var preCompactHandler = async (input) => {
 };
 
 // src/hooks/pre-tool-use.ts
-import { join as join38 } from "path";
+import { homedir as homedir5 } from "os";
+import { join as join41 } from "path";
 import { isAbsolute as isAbsolute3, relative as relative8, resolve as resolve6 } from "path";
 
 // src/acg/scope/resolve.ts
@@ -24203,6 +25341,15 @@ function isOutsideRepo(repoRoot, filePath) {
   const rel = relative8(repoRoot, resolved);
   return rel.startsWith("..") || isAbsolute3(rel);
 }
+function isClaudeMemoryPath(repoRoot, filePath) {
+  const home = process.env.HOME ?? homedir5();
+  if (!home)
+    return false;
+  const slug = resolve6(repoRoot).replace(/[^a-zA-Z0-9]/g, "-");
+  const base = resolve6(home, ".claude", "projects", slug, "memory");
+  const rel = relative8(base, resolve6(filePath));
+  return rel.length > 0 && !rel.startsWith("..") && !isAbsolute3(rel);
+}
 var RM_LITERAL_BLOCK = ["rm -rf /", "rm -rf ~", "rm -rf /*", "rm -rf ~/"];
 function isRecursiveForceRm(cmd) {
   if (!/(^|[;&|]\s*)rm\b/.test(cmd))
@@ -24335,9 +25482,9 @@ function autopilotBypassActive(input) {
   return env2.DITTO_AUTOPILOT_BYPASS === "1" || process.env.DITTO_AUTOPILOT_BYPASS === "1";
 }
 async function appendBypassRecord(repoRoot, entry) {
-  const dir = join38(repoRoot, ".ditto");
+  const dir = join41(repoRoot, ".ditto");
   await ensureDir(dir);
-  const path = join38(dir, "autopilot-bypass.jsonl");
+  const path = join41(dir, "autopilot-bypass.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -24405,7 +25552,7 @@ var preToolUseHandler = async (input) => {
       return block("secret", `command exposes a secret file (${exposed})`);
     }
     for (const dest of bashWriteTargets(command)) {
-      if (isOutsideRepo(repoRoot, dest)) {
+      if (isOutsideRepo(repoRoot, dest) && !isClaudeMemoryPath(repoRoot, dest)) {
         return block("scope-out", `write outside repo (${dest})`);
       }
     }
@@ -24431,7 +25578,7 @@ var preToolUseHandler = async (input) => {
     return block("secret", `access to a secret file (${filePath})`);
   }
   if (toolName === "Write" || toolName === "Edit" || toolName === "MultiEdit") {
-    if (isOutsideRepo(repoRoot, filePath)) {
+    if (isOutsideRepo(repoRoot, filePath) && !isClaudeMemoryPath(repoRoot, filePath)) {
       return block("scope-out", `write outside repo (${filePath})`);
     }
     const forbidden = await checkForbiddenScope(input, filePath);
@@ -24465,8 +25612,8 @@ function bashWriteTargets(cmd) {
 }
 
 // src/hooks/stop.ts
-import { readFile as readFile3, readdir as readdir10 } from "fs/promises";
-import { join as join40 } from "path";
+import { readFile as readFile3, readdir as readdir11 } from "fs/promises";
+import { join as join43 } from "path";
 
 // src/schemas/acg-semantic-compatibility.ts
 var SEMANTIC_UNVERIFIED_SENTINEL = "__unverified__";
@@ -24594,7 +25741,7 @@ var dialectic = exports_external.object({
 }).describe("Full three-role dialectic deliberation artifact (\xA76.6)");
 
 // src/hooks/semantic-nudge.ts
-import { readFileSync as readFileSync3 } from "fs";
+import { readFileSync as readFileSync4 } from "fs";
 
 // src/acg/semantic/scan-observation.ts
 function workItemBaseCandidates(workItem2) {
@@ -24605,7 +25752,7 @@ function workItemBaseCandidates(workItem2) {
   return candidates;
 }
 function computeScanFingerprint(baseSha, diffText) {
-  return sha256Hex(`${baseSha}
+  return sha256Hex2(`${baseSha}
 ${diffText}`);
 }
 function buildScanObservation(input) {
@@ -24630,7 +25777,7 @@ function buildScanObservation(input) {
 }
 
 // src/core/work-item-handoff.ts
-import { join as join39 } from "path";
+import { join as join42 } from "path";
 class InvalidBaseRefError extends Error {
   ref;
   constructor(ref) {
@@ -24811,7 +25958,7 @@ async function writeWorkItemHandoff(repoRoot, store, workId, options = {}, now =
   });
   const hstore = new HandoffStore(repoRoot);
   const handoffRel = completion.final_verdict === "pass" ? await hstore.writeArchived(handoffArtifact, now) : await hstore.write(handoffArtifact);
-  const handoffPath = join39(repoRoot, handoffRel);
+  const handoffPath = join42(repoRoot, handoffRel);
   await store.update(workId, (cur) => {
     const { re_entry: _existingReEntry, ...rest } = cur;
     if (completion.final_verdict === "pass") {
@@ -24887,7 +26034,7 @@ function computeSemanticNudge(repoRoot, workItem2, opts) {
 function freshObservationChangeCount(repoRoot, workItemId2, base) {
   try {
     const path = localDir(repoRoot, "work-items", workItemId2, "semantic-scan-observation.json");
-    const parsed = acgSemanticScanObservation.safeParse(JSON.parse(readFileSync3(path, "utf8")));
+    const parsed = acgSemanticScanObservation.safeParse(JSON.parse(readFileSync4(path, "utf8")));
     if (!parsed.success)
       return null;
     const fingerprintNow = computeScanFingerprint(gitRevParse(repoRoot, base), diffVsRef(repoRoot, base));
@@ -24945,17 +26092,17 @@ async function readArtifact(path, schema, name) {
   }
 }
 async function readDialecticLedgers(dir) {
-  const reviewsDir = join40(dir, "reviews");
+  const reviewsDir = join43(dir, "reviews");
   let names;
   try {
-    names = await readdir10(reviewsDir);
+    names = await readdir11(reviewsDir);
   } catch {
     return { status: "ok", items: [] };
   }
   const files = names.filter((n2) => /^dialectic-.*\.json$/.test(n2)).sort();
   const items = [];
   for (const name of files) {
-    const read = await readArtifact(join40(reviewsDir, name), dialectic, `reviews/${name}`);
+    const read = await readArtifact(join43(reviewsDir, name), dialectic, `reviews/${name}`);
     if (read.status === "malformed")
       return { status: "malformed", name: read.name };
     if (read.status === "ok")
@@ -25024,11 +26171,11 @@ async function maybeRunFitness(repoRoot, workItemId2, dir) {
       riskKnown: false,
       producedAt: new Date().toISOString()
     };
-    const verdictsPath = join40(dir, "fitness-verdicts.json");
+    const verdictsPath = join43(dir, "fitness-verdicts.json");
     const provider = await Bun.file(verdictsPath).exists() ? compositeProvider(repoRoot, verdictsPath) : commandProvider(repoRoot);
     const snapshot = await runFitness(fns, ctx, provider);
     await ensureDir(dir);
-    await writeJson(join40(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, snapshot);
+    await writeJson(join43(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, snapshot);
   } catch {}
 }
 var DRIFT_HOPS = ["H1", "H2", "H3"];
@@ -25078,15 +26225,15 @@ var stopHandler = async (input) => {
   }
   const dir = localDir(input.repoRoot, "work-items", pointer);
   await maybeRunFitness(input.repoRoot, pointer, dir);
-  const completion = await readArtifact(join40(dir, "completion.json"), completionContract, "completion.json");
-  const conv = await readArtifact(join40(dir, "convergence.json"), convergence, "convergence.json");
-  const pilot = await readArtifact(join40(dir, "autopilot.json"), autopilot, "autopilot.json");
-  const intent = await readArtifact(join40(dir, "intent.json"), intentContract, "intent.json");
+  const completion = await readArtifact(join43(dir, "completion.json"), completionContract, "completion.json");
+  const conv = await readArtifact(join43(dir, "convergence.json"), convergence, "convergence.json");
+  const pilot = await readArtifact(join43(dir, "autopilot.json"), autopilot, "autopilot.json");
+  const intent = await readArtifact(join43(dir, "intent.json"), intentContract, "intent.json");
   const dialectics = await readDialecticLedgers(dir);
-  const acgReview = await readArtifact(join40(dir, "acg-review.json"), acgReviewGraph, "acg-review.json");
-  const assurance = await readArtifact(join40(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json");
-  const impact = await readArtifact(join40(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json");
-  const semantic = await readArtifact(join40(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
+  const acgReview = await readArtifact(join43(dir, "acg-review.json"), acgReviewGraph, "acg-review.json");
+  const assurance = await readArtifact(join43(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json");
+  const impact = await readArtifact(join43(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json");
+  const semantic = await readArtifact(join43(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
   const malformed = [
     completion,
     conv,
@@ -25186,7 +26333,7 @@ ${advisoryBlock}`
 };
 
 // src/hooks/user-prompt-submit.ts
-import { join as join41 } from "path";
+import { join as join44 } from "path";
 
 // src/core/charter.ts
 var PRIME_DIRECTIVE = [
@@ -25280,11 +26427,11 @@ function looksCodebaseAnswerable(prompt2) {
 function tokens(s2) {
   return new Set(s2.toLowerCase().split(/[^a-z0-9\uAC00-\uD7A3]+/).filter((t2) => t2.length >= 3));
 }
-function duplicateSearch(prompt2, open) {
+function duplicateSearch(prompt2, open2) {
   const promptTokens = tokens(prompt2);
   if (promptTokens.size === 0)
     return [];
-  return open.map((s2) => {
+  return open2.map((s2) => {
     let overlap = 0;
     for (const t2 of tokens(s2.title))
       if (promptTokens.has(t2))
@@ -25299,14 +26446,14 @@ async function resolveActiveWorkItem(repoRoot, sessionId, prompt2) {
   if (pointed && await items.exists(pointed)) {
     return { workItem: await items.get(pointed), action: "loaded" };
   }
-  const open = (await items.list()).filter((s2) => NON_TERMINAL.includes(s2.status));
-  if (open.length > 0) {
-    const ids = open.map((s2) => s2.id).join(", ");
-    const matches = classifyPromptAdvisory(prompt2) === "execution" ? duplicateSearch(prompt2, open) : [];
+  const open2 = (await items.list()).filter((s2) => NON_TERMINAL.includes(s2.status));
+  if (open2.length > 0) {
+    const ids = open2.map((s2) => s2.id).join(", ");
+    const matches = classifyPromptAdvisory(prompt2) === "execution" ? duplicateSearch(prompt2, open2) : [];
     const dupLine = matches.length > 0 ? ` Possible duplicates by title overlap: ${matches.map((m2) => `${m2.id} ("${m2.title}")`).join("; ")}.` : "";
     return {
       action: "ask",
-      advisory: `No active work item pointer for this session and ${open.length} open work item(s) exist (${ids}).${dupLine} Resume one explicitly, or create a NEW work item before acting \u2014 not picking arbitrarily.`
+      advisory: `No active work item pointer for this session and ${open2.length} open work item(s) exist (${ids}).${dupLine} Resume one explicitly, or create a NEW work item before acting \u2014 not picking arbitrarily.`
     };
   }
   return { action: "guide" };
@@ -25322,7 +26469,7 @@ function pendingHandoffHint(item) {
 async function logClassification(repoRoot, entry) {
   const dir = localDir(repoRoot, "logs");
   await ensureDir(dir);
-  const path = join41(dir, "user-prompt.jsonl");
+  const path = join44(dir, "user-prompt.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -25421,10 +26568,10 @@ var hookCommand = defineCommand({
 });
 
 // src/cli/commands/impact.ts
-import { join as join43 } from "path";
+import { join as join46 } from "path";
 
 // src/acg/impact/codeql-analyzer.ts
-import { join as join42 } from "path";
+import { join as join45 } from "path";
 function isTestFile(path, language) {
   if (language === "java") {
     return path.includes("/test/") || /(Test|Tests|IT)\.java$/.test(path);
@@ -25453,8 +26600,8 @@ class CodeqlImpactAnalyzer {
       repoRoot: this.target.repoRoot,
       sourceRoot: input.sourceRoot,
       language: this.target.language,
-      dbPath: join42(this.target.cacheDir, "db"),
-      workDir: join42(this.target.cacheDir, `q-impact-${this.target.symbol}`),
+      dbPath: join45(this.target.cacheDir, "db"),
+      workDir: join45(this.target.cacheDir, `q-impact-${this.target.symbol}`),
       query: renderQuery(relationQueries(this.target.language).impact, this.target.symbol, this.target.declFile),
       ...this.target.buildMode ? { buildMode: this.target.buildMode } : {},
       ...this.target.buildCommand ? { buildCommand: this.target.buildCommand } : {},
@@ -25490,8 +26637,8 @@ class CodeqlImpactAnalyzer {
       repoRoot: this.target.repoRoot,
       sourceRoot,
       language: this.target.language,
-      dbPath: join42(this.target.cacheDir, "db"),
-      workDir: join42(this.target.cacheDir, "q-xrepo"),
+      dbPath: join45(this.target.cacheDir, "db"),
+      workDir: join45(this.target.cacheDir, "q-xrepo"),
       query: relationQueries(this.target.language).unresolved,
       ...this.target.buildMode ? { buildMode: this.target.buildMode } : {},
       ...this.target.buildCommand ? { buildCommand: this.target.buildCommand } : {},
@@ -25603,7 +26750,7 @@ var impactCommand = defineCommand({
     const changeType = args["change-type"] ?? "signature";
     try {
       const repoRoot = await resolveRepoRootForCreate();
-      const sourceRoot = args["source-root"] ?? join43(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join46(repoRoot, "src");
       const language = args.language ?? "javascript";
       const buildCommand = args["build-command"];
       const buildMode = !buildCommand && language === "java" ? "none" : undefined;
@@ -25664,7 +26811,7 @@ var impactCommand = defineCommand({
 import { resolve as resolve7 } from "path";
 
 // src/core/init-scaffold.ts
-import { basename, join as join44 } from "path";
+import { basename, join as join47 } from "path";
 
 // src/schemas/glossary.ts
 var glossaryStatus = exports_external.enum(["proposed", "agreed", "deprecated"]).describe("Lifecycle of a glossary entry");
@@ -25689,15 +26836,15 @@ var glossary = exports_external.object({
 
 // src/core/init-scaffold.ts
 var SCAFFOLD_DIRS = [
-  join44("local", "work-items"),
-  join44("local", "runs"),
-  join44("local", "handoff"),
-  join44("local", "sessions"),
-  join44("local", "logs"),
-  join44("local", "cache"),
+  join47("local", "work-items"),
+  join47("local", "runs"),
+  join47("local", "handoff"),
+  join47("local", "sessions"),
+  join47("local", "logs"),
+  join47("local", "cache"),
   "agents",
   "knowledge",
-  join44("knowledge", "adr")
+  join47("knowledge", "adr")
 ];
 var DITTO_GITIGNORE = `# DITTO per-developer runtime \u2014 volatile, not for version control.
 # Managed by \`ditto init\`; safe to edit.
@@ -25734,18 +26881,18 @@ async function seedFileIfAbsent(absPath, relPath, write, created, skipped) {
   return true;
 }
 async function initScaffold(repoRoot, now) {
-  const dittoDir = join44(repoRoot, ".ditto");
+  const dittoDir2 = join47(repoRoot, ".ditto");
   const createdDirs = [];
   const createdFiles = [];
   const skippedFiles = [];
-  const glossaryAbs = join44(dittoDir, "knowledge", "glossary.json");
+  const glossaryAbs = join47(dittoDir2, "knowledge", "glossary.json");
   const alreadyInitialized = await fileExists(glossaryAbs);
-  await ensureDirTracked(dittoDir, ".ditto", createdDirs);
+  await ensureDirTracked(dittoDir2, ".ditto", createdDirs);
   for (const sub of SCAFFOLD_DIRS) {
-    await ensureDirTracked(join44(dittoDir, sub), join44(".ditto", sub), createdDirs);
+    await ensureDirTracked(join47(dittoDir2, sub), join47(".ditto", sub), createdDirs);
   }
   const projectName = basename(repoRoot) || "project";
-  await seedFileIfAbsent(glossaryAbs, join44(".ditto", "knowledge", "glossary.json"), () => writeJson(glossaryAbs, glossary, {
+  await seedFileIfAbsent(glossaryAbs, join47(".ditto", "knowledge", "glossary.json"), () => writeJson(glossaryAbs, glossary, {
     schema_version: "0.1.0",
     project_name: projectName,
     updated_at: now.toISOString(),
@@ -25753,10 +26900,10 @@ async function initScaffold(repoRoot, now) {
   }).then(() => {
     return;
   }), createdFiles, skippedFiles);
-  const contextAbs = join44(dittoDir, "knowledge", "CONTEXT.md");
-  await seedFileIfAbsent(contextAbs, join44(".ditto", "knowledge", "CONTEXT.md"), () => atomicWriteText(contextAbs, emptyContext(projectName)), createdFiles, skippedFiles);
-  const gitignoreAbs = join44(dittoDir, ".gitignore");
-  await seedFileIfAbsent(gitignoreAbs, join44(".ditto", ".gitignore"), () => atomicWriteText(gitignoreAbs, DITTO_GITIGNORE), createdFiles, skippedFiles);
+  const contextAbs = join47(dittoDir2, "knowledge", "CONTEXT.md");
+  await seedFileIfAbsent(contextAbs, join47(".ditto", "knowledge", "CONTEXT.md"), () => atomicWriteText(contextAbs, emptyContext(projectName)), createdFiles, skippedFiles);
+  const gitignoreAbs = join47(dittoDir2, ".gitignore");
+  await seedFileIfAbsent(gitignoreAbs, join47(".ditto", ".gitignore"), () => atomicWriteText(gitignoreAbs, DITTO_GITIGNORE), createdFiles, skippedFiles);
   return { repoRoot, createdDirs, createdFiles, skippedFiles, alreadyInitialized };
 }
 
@@ -25875,9 +27022,1550 @@ var knowledgeCommand = defineCommand({
   }
 });
 
+// src/cli/commands/memory.ts
+import { randomBytes as randomBytes3 } from "crypto";
+import { readFile as readFile5 } from "fs/promises";
+import { isAbsolute as isAbsolute5, join as join50 } from "path";
+
+// src/core/memory-bootstrap.ts
+import { readFile as readFile4, readdir as readdir13 } from "fs/promises";
+import { join as join49, relative as relative10 } from "path";
+
+// src/core/memory-scan.ts
+import { readdir as readdir12 } from "fs/promises";
+import { isAbsolute as isAbsolute4, join as join48, relative as relative9, resolve as resolve8, sep as sep3 } from "path";
+var SKIP_DIRS2 = new Set([
+  "node_modules",
+  ".git",
+  ".ditto",
+  "target",
+  "build",
+  "dist",
+  ".gradle",
+  "out",
+  "coverage"
+]);
+var EXT_TYPE = new Map([
+  [".ts", "code"],
+  [".tsx", "code"],
+  [".js", "code"],
+  [".jsx", "code"],
+  [".mjs", "code"],
+  [".cjs", "code"],
+  [".py", "code"],
+  [".java", "code"],
+  [".kt", "code"],
+  [".go", "code"],
+  [".rs", "code"],
+  [".md", "markdown"],
+  [".mdx", "markdown"]
+]);
+function classifyType(name) {
+  const dot = name.lastIndexOf(".");
+  if (dot < 0)
+    return;
+  return EXT_TYPE.get(name.slice(dot).toLowerCase());
+}
+function sourceIdForPath(repoRelativePath) {
+  return `src_${sha256Hex(repoRelativePath).slice(0, 12)}`;
+}
+function gitHeadSha2(repoRoot) {
+  const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
+    cwd: repoRoot,
+    stdout: "pipe",
+    stderr: "pipe"
+  });
+  if (proc.exitCode !== 0)
+    return null;
+  const sha = (proc.stdout?.toString() ?? "").trim();
+  return /^[a-f0-9]{40}$/.test(sha) ? sha : null;
+}
+async function findOwningRepo(absPath, rootingRoot) {
+  let current = resolve8(absPath);
+  const root = resolve8(rootingRoot);
+  while (true) {
+    if (await fileExists(join48(current, ".git")))
+      return current;
+    if (current === root)
+      return null;
+    const parent = resolve8(current, "..");
+    if (parent === current)
+      return null;
+    if (!resolve8(current).startsWith(root + sep3) && resolve8(current) !== root)
+      return null;
+    current = parent;
+  }
+}
+async function walkFiles(root, maxDepth = 12) {
+  const out = [];
+  async function walk(dir, depth) {
+    if (depth > maxDepth)
+      return;
+    let entries;
+    try {
+      entries = await readdir12(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e2 of entries) {
+      const full = join48(dir, e2.name);
+      if (e2.isDirectory()) {
+        if (!SKIP_DIRS2.has(e2.name))
+          await walk(full, depth + 1);
+      } else if (e2.isFile() && classifyType(e2.name) !== undefined) {
+        out.push(full);
+      }
+    }
+  }
+  await walk(resolve8(root), 0);
+  out.sort();
+  return out;
+}
+async function scanSources(repoRoot, options = {}) {
+  const root = resolve8(repoRoot);
+  const sourceRoot = resolve8(options.sourceRoot && isAbsolute4(options.sourceRoot) ? options.sourceRoot : join48(root, options.sourceRoot ?? "."));
+  const now = (options.now ?? new Date).toISOString();
+  const store = new MemorySourceStore(root);
+  const existing = new Map;
+  for (const s2 of await store.list())
+    existing.set(s2.source_id, s2);
+  const files = await walkFiles(sourceRoot);
+  const headCache = new Map;
+  const rootHead = gitHeadSha2(root);
+  headCache.set(root, rootHead);
+  const scanned = [];
+  const added = [];
+  const changed = [];
+  const unchanged = [];
+  for (const abs of files) {
+    const repoRelative2 = relative9(root, abs);
+    if (repoRelative2.startsWith("..") || isAbsolute4(repoRelative2))
+      continue;
+    const sourceType = classifyType(abs);
+    if (sourceType === undefined)
+      continue;
+    const content = await Bun.file(abs).text();
+    const contentHash = sha256Hex(content);
+    const sourceId = sourceIdForPath(repoRelative2);
+    const owningRepo = await findOwningRepo(abs, root);
+    const isOwnRoot = owningRepo === null || resolve8(owningRepo) === root;
+    let head;
+    if (isOwnRoot) {
+      head = rootHead;
+    } else {
+      const key = resolve8(owningRepo);
+      if (!headCache.has(key))
+        headCache.set(key, gitHeadSha2(key));
+      head = headCache.get(key) ?? null;
+    }
+    const revision = head ?? `snapshot:${contentHash.slice(0, 16)}`;
+    const prior = existing.get(sourceId);
+    const source = {
+      schema_version: "0.1.0",
+      source_id: sourceId,
+      source_type: sourceType,
+      path: repoRelative2,
+      content_hash: contentHash,
+      captured_at: now,
+      revision,
+      sensitivity: prior?.sensitivity ?? "internal",
+      word_count: content.split(/\s+/).filter((w2) => w2.length > 0).length,
+      ...isOwnRoot ? {} : { repo: relative9(root, owningRepo) },
+      ...head ? { git_commit: head } : {}
+    };
+    let status;
+    if (!prior)
+      status = "added";
+    else if (prior.content_hash !== contentHash)
+      status = "changed";
+    else
+      status = "unchanged";
+    if (status === "unchanged") {
+      scanned.push({ source: prior, status });
+      unchanged.push(sourceId);
+      continue;
+    }
+    await store.write(source);
+    scanned.push({ source, status });
+    if (status === "added")
+      added.push(sourceId);
+    else
+      changed.push(sourceId);
+  }
+  return { scanned, added, changed, unchanged };
+}
+
+// src/core/memory-bootstrap.ts
+function bootstrapEventId(key) {
+  return `memevt_${sha256Hex(key).slice(0, 12)}`;
+}
+function gitHeadSha3(repoRoot) {
+  const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
+    cwd: repoRoot,
+    stdout: "pipe",
+    stderr: "pipe"
+  });
+  if (proc.exitCode !== 0)
+    return null;
+  const sha = (proc.stdout?.toString() ?? "").trim();
+  return /^[a-f0-9]{40}$/.test(sha) ? sha : null;
+}
+function wordCount(s2) {
+  return s2.split(/\s+/).filter((w2) => w2.length > 0).length;
+}
+function markdownTitle(body) {
+  const lines = body.split(`
+`);
+  for (const line of lines) {
+    const m2 = line.match(/^#\s+(.+)$/);
+    if (m2?.[1])
+      return m2[1].trim();
+  }
+  for (const line of lines) {
+    if (line.trim().length > 0)
+      return line.trim();
+  }
+  return "";
+}
+function adrGist(body) {
+  const title = markdownTitle(body);
+  const sections = [];
+  const lines = body.split(`
+`);
+  let capturing = false;
+  let captured = [];
+  const flush = () => {
+    if (captured.length > 0)
+      sections.push(captured.join(`
+`).trim());
+    captured = [];
+  };
+  for (const line of lines) {
+    const heading = line.match(/^##\s+(.+)$/);
+    if (heading) {
+      flush();
+      const name = heading[1]?.trim() ?? "";
+      capturing = /\uACB0\uC815|\uADFC\uAC70|decision|rationale/i.test(name);
+      continue;
+    }
+    if (capturing)
+      captured.push(line);
+  }
+  flush();
+  const gist = sections.join(`
+
+`).trim();
+  const text = gist.length > 0 ? `${title}
+
+${gist}` : title;
+  return text.slice(0, 4000);
+}
+function emptyResult() {
+  return { sourcesAdded: [], sourcesSkipped: [], eventsAppended: [], eventsSkipped: [] };
+}
+function merge(into, from) {
+  into.sourcesAdded.push(...from.sourcesAdded);
+  into.sourcesSkipped.push(...from.sourcesSkipped);
+  into.eventsAppended.push(...from.eventsAppended);
+  into.eventsSkipped.push(...from.eventsSkipped);
+}
+async function writeSourceIdempotent(store, source, result2) {
+  if (await store.exists(source.source_id)) {
+    const prior = await store.get(source.source_id);
+    if (prior.content_hash === source.content_hash) {
+      result2.sourcesSkipped.push(source.source_id);
+      return;
+    }
+  }
+  await store.write(source);
+  result2.sourcesAdded.push(source.source_id);
+}
+async function appendEventGraceful(store, event, result2) {
+  try {
+    await store.append(event);
+    result2.eventsAppended.push(event.event_id);
+  } catch (err) {
+    if (err instanceof MemoryEventExistsError) {
+      result2.eventsSkipped.push(event.event_id);
+      return;
+    }
+    throw err;
+  }
+}
+async function listMarkdown(dir) {
+  let entries;
+  try {
+    entries = await readdir13(dir);
+  } catch {
+    return [];
+  }
+  return entries.filter((n2) => n2.endsWith(".md")).sort().map((n2) => join49(dir, n2));
+}
+async function bootstrapIngest(repoRoot, options = {}) {
+  const now = (options.now ?? new Date).toISOString();
+  const head = gitHeadSha3(repoRoot);
+  const revision = head ?? `bootstrap:${now}`;
+  const sourceStore = new MemorySourceStore(repoRoot);
+  const eventStore = new MemoryEventStore(repoRoot);
+  const result2 = emptyResult();
+  merge(result2, await ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head));
+  merge(result2, await ingestGlossary(repoRoot, sourceStore, eventStore, now, revision, head));
+  merge(result2, await ingestHandoffs(repoRoot, sourceStore, eventStore, now, revision, head));
+  return result2;
+}
+async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head) {
+  const result2 = emptyResult();
+  const dir = join49(dittoDir(repoRoot), "knowledge", "adr");
+  for (const abs of await listMarkdown(dir)) {
+    const body = await readFile4(abs, "utf8");
+    const rel = relative10(repoRoot, abs);
+    const sourceId = sourceIdForPath(rel);
+    const source = {
+      schema_version: "0.1.0",
+      source_id: sourceId,
+      source_type: "spec",
+      path: rel,
+      content_hash: sha256Hex(body),
+      captured_at: now,
+      revision,
+      sensitivity: "internal",
+      word_count: wordCount(body),
+      ...head ? { git_commit: head } : {}
+    };
+    await writeSourceIdempotent(sourceStore, source, result2);
+    const text = adrGist(body) || markdownTitle(body) || rel;
+    const event = {
+      schema_version: "0.1.0",
+      event_id: bootstrapEventId(`adr:${sourceId}`),
+      event_type: "decision",
+      actor: { kind: "agent", role: "bootstrap" },
+      text,
+      created_at: now,
+      status: "approved",
+      sources: [sourceId],
+      confidence_kind: "EXTRACTED",
+      sensitivity: "internal",
+      approved_by: "bootstrap",
+      decided_at: now
+    };
+    await appendEventGraceful(eventStore, event, result2);
+  }
+  return result2;
+}
+async function ingestGlossary(repoRoot, sourceStore, eventStore, now, revision, head) {
+  const result2 = emptyResult();
+  const abs = join49(dittoDir(repoRoot), "knowledge", "glossary.json");
+  let raw;
+  try {
+    raw = await readFile4(abs, "utf8");
+  } catch {
+    return result2;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return result2;
+  }
+  const rel = relative10(repoRoot, abs);
+  const sourceId = sourceIdForPath(rel);
+  const source = {
+    schema_version: "0.1.0",
+    source_id: sourceId,
+    source_type: "spec",
+    path: rel,
+    content_hash: sha256Hex(raw),
+    captured_at: now,
+    revision,
+    sensitivity: "internal",
+    word_count: wordCount(raw),
+    ...head ? { git_commit: head } : {}
+  };
+  await writeSourceIdempotent(sourceStore, source, result2);
+  for (const entry of parsed.entries ?? []) {
+    if (!entry?.term)
+      continue;
+    const definition = entry.definition ?? "";
+    const aliases = (entry.aliases ?? []).join(", ");
+    const text = [`${entry.term}: ${definition}`, aliases ? `aliases: ${aliases}` : ""].filter((s2) => s2.length > 0).join(`
+`).slice(0, 4000);
+    const event = {
+      schema_version: "0.1.0",
+      event_id: bootstrapEventId(`glossary:${sourceId}:${entry.term}`),
+      event_type: "observation",
+      actor: { kind: "agent", role: "bootstrap" },
+      text,
+      created_at: now,
+      status: "approved",
+      sources: [sourceId],
+      confidence_kind: "EXTRACTED",
+      sensitivity: "internal",
+      approved_by: "bootstrap",
+      decided_at: now
+    };
+    await appendEventGraceful(eventStore, event, result2);
+  }
+  return result2;
+}
+function handoffGist(body) {
+  const parts = [];
+  const fence = body.match(/^---\n([\s\S]*?)\n---/);
+  if (fence?.[1]) {
+    try {
+      const meta = JSON.parse(fence[1].trim());
+      for (const key of ["original_intent", "current_state", "next_first_check"]) {
+        const v2 = meta[key];
+        if (typeof v2 === "string" && v2.length > 0)
+          parts.push(`${key}: ${v2}`);
+      }
+      const decisions = meta.decisions_made;
+      if (Array.isArray(decisions) && decisions.length > 0) {
+        parts.push(`decisions: ${decisions.map((d2) => String(d2)).join("; ")}`);
+      }
+      const failed = meta.failed_or_unverified;
+      if (Array.isArray(failed) && failed.length > 0) {
+        parts.push(`failed_or_unverified: ${failed.map((d2) => String(d2)).join("; ")}`);
+      }
+    } catch {}
+  }
+  if (parts.length === 0) {
+    const title = markdownTitle(body);
+    if (title)
+      parts.push(title);
+  }
+  return parts.join(`
+`).slice(0, 4000);
+}
+async function ingestHandoffs(repoRoot, sourceStore, eventStore, now, revision, head) {
+  const result2 = emptyResult();
+  const dir = localDir(repoRoot, "handoff", "archive");
+  for (const abs of await listMarkdown(dir)) {
+    const body = await readFile4(abs, "utf8");
+    const rel = relative10(repoRoot, abs);
+    const sourceId = sourceIdForPath(rel);
+    const source = {
+      schema_version: "0.1.0",
+      source_id: sourceId,
+      source_type: "note",
+      path: rel,
+      content_hash: sha256Hex(body),
+      captured_at: now,
+      revision,
+      sensitivity: "internal",
+      word_count: wordCount(body),
+      ...head ? { git_commit: head } : {}
+    };
+    await writeSourceIdempotent(sourceStore, source, result2);
+    const text = handoffGist(body) || markdownTitle(body) || rel;
+    const event = {
+      schema_version: "0.1.0",
+      event_id: bootstrapEventId(`handoff:${sourceId}`),
+      event_type: "observation",
+      actor: { kind: "agent", role: "bootstrap" },
+      text,
+      created_at: now,
+      status: "approved",
+      sources: [sourceId],
+      confidence_kind: "EXTRACTED",
+      sensitivity: "internal",
+      approved_by: "bootstrap",
+      decided_at: now
+    };
+    await appendEventGraceful(eventStore, event, result2);
+  }
+  return result2;
+}
+
+// src/core/memory-build.ts
+var CHUNK_FILE_COUNT = 22;
+function chunkSources(sources, chunkSize = CHUNK_FILE_COUNT) {
+  const size = Math.max(1, Math.floor(chunkSize));
+  const sorted = [...sources].filter((s2) => s2.sensitivity !== "secret").sort((a2, b2) => a2.source_id < b2.source_id ? -1 : a2.source_id > b2.source_id ? 1 : 0);
+  const chunks = [];
+  for (let i2 = 0;i2 < sorted.length; i2 += size) {
+    const idx = chunks.length;
+    chunks.push({
+      chunk_id: `chunk_${String(idx).padStart(4, "0")}`,
+      files: sorted.slice(i2, i2 + size)
+    });
+  }
+  return chunks;
+}
+var semanticConfidenceKind = memoryConfidenceKind.exclude(["EXTRACTED"]);
+var fragmentNodeSchema = exports_external.object({
+  id: exports_external.string().min(1).optional(),
+  node_type: memoryNodeType,
+  name: exports_external.string().min(1),
+  source_id: memorySourceId,
+  properties: exports_external.record(exports_external.unknown()).optional()
+});
+var fragmentEdgeSchema = exports_external.object({
+  from: exports_external.string().min(1),
+  to: exports_external.string().min(1),
+  edge_type: memoryEdgeType,
+  confidence_kind: semanticConfidenceKind,
+  confidence_score: exports_external.number().min(0).max(1),
+  source_id: memorySourceId,
+  properties: exports_external.record(exports_external.unknown()).optional()
+});
+var irFragmentSchema = exports_external.object({
+  nodes: exports_external.array(fragmentNodeSchema).default([]),
+  edges: exports_external.array(fragmentEdgeSchema).default([])
+});
+var irFragmentsSchema = exports_external.array(irFragmentSchema);
+function normalizeConceptLabel(label2) {
+  return label2.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+function conceptId(label2) {
+  return `concept:${normalizeConceptLabel(label2)}`;
+}
+function canonicalNodeId(node) {
+  if (node.node_type === "Concept")
+    return conceptId(node.name);
+  if (node.id && node.id.length > 0)
+    return node.id;
+  return `${node.node_type.toLowerCase()}:${normalizeConceptLabel(node.name)}`;
+}
+var KIND_RANK = { INFERRED: 0, AMBIGUOUS: 1 };
+var SEMANTIC_RUN_ID2 = "xrun_semantic";
+var SCHEMA_VERSION2 = "0.1.0";
+function sortById(items) {
+  return items.sort((a2, b2) => a2.id < b2.id ? -1 : a2.id > b2.id ? 1 : 0);
+}
+function mergeIrFragments(fragments) {
+  const provenance = (sourceId) => ({
+    source_id: sourceId,
+    extraction_run_id: SEMANTIC_RUN_ID2,
+    extracted_by: "llm",
+    schema_version: SCHEMA_VERSION2
+  });
+  const idRemap = new Map;
+  const nodeAcc = new Map;
+  const grouped = new Map;
+  for (const frag of fragments) {
+    for (const fn of frag.nodes) {
+      const cid = canonicalNodeId(fn);
+      if (fn.id && fn.id !== cid)
+        idRemap.set(fn.id, cid);
+      const bucket = grouped.get(cid);
+      if (bucket)
+        bucket.push(fn);
+      else
+        grouped.set(cid, [fn]);
+    }
+  }
+  for (const [cid, group] of grouped) {
+    const ordered = [...group].sort((a2, b2) => {
+      const ka = `${a2.id ?? ""}\x00${a2.name}`;
+      const kb = `${b2.id ?? ""}\x00${b2.name}`;
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
+    const winner = ordered[0];
+    const collected = {};
+    for (const fn of ordered) {
+      for (const [k2, v2] of Object.entries(fn.properties ?? {})) {
+        if (!(k2 in collected))
+          collected[k2] = v2;
+      }
+    }
+    const props = {};
+    for (const k2 of Object.keys(collected).sort())
+      props[k2] = collected[k2];
+    nodeAcc.set(cid, {
+      id: cid,
+      node_type: winner.node_type,
+      name: winner.name,
+      properties: props,
+      provenance: provenance(winner.source_id)
+    });
+  }
+  const remapEndpoint = (raw) => {
+    const mapped = idRemap.get(raw);
+    if (mapped)
+      return mapped;
+    if (raw.startsWith("concept:"))
+      return conceptId(raw.slice("concept:".length));
+    return raw;
+  };
+  const edgeAcc = new Map;
+  for (const frag of fragments) {
+    for (const fe2 of frag.edges) {
+      const from = remapEndpoint(fe2.from);
+      const to = remapEndpoint(fe2.to);
+      const key = `${from}|${fe2.edge_type}|${to}`;
+      const incoming = { ...fe2, remappedFrom: from, remappedTo: to };
+      const existing = edgeAcc.get(key);
+      if (!existing) {
+        edgeAcc.set(key, incoming);
+        continue;
+      }
+      const winner = pickConfidence(existing, incoming);
+      edgeAcc.set(key, winner);
+    }
+  }
+  const edges = [];
+  for (const [key, fe2] of edgeAcc) {
+    edges.push({
+      id: `edge:${key}`,
+      from: fe2.remappedFrom,
+      to: fe2.remappedTo,
+      edge_type: fe2.edge_type,
+      confidence_kind: fe2.confidence_kind,
+      confidence_score: fe2.confidence_score,
+      properties: fe2.properties ?? {},
+      provenance: provenance(fe2.source_id),
+      weight: 1,
+      requires_review: fe2.confidence_kind === "AMBIGUOUS",
+      used_as_evidence: false
+    });
+  }
+  return { nodes: sortById([...nodeAcc.values()]), edges: sortById(edges) };
+}
+function pickConfidence(a2, b2) {
+  const ra = KIND_RANK[a2.confidence_kind];
+  const rb = KIND_RANK[b2.confidence_kind];
+  if (ra !== rb)
+    return ra > rb ? a2 : b2;
+  if (a2.confidence_score !== b2.confidence_score) {
+    return a2.confidence_score > b2.confidence_score ? a2 : b2;
+  }
+  return a2.source_id <= b2.source_id ? a2 : b2;
+}
+function assembleSemanticIr(merged, run) {
+  return {
+    schema_version: SCHEMA_VERSION2,
+    ir_version: run.ir_version,
+    generated_at: run.generated_at,
+    extraction_run_id: run.extraction_run_id,
+    nodes: merged.nodes,
+    edges: merged.edges,
+    hyperedges: []
+  };
+}
+
+// src/cli/commands/memory.ts
+function writeFreshnessHuman(f3) {
+  writeHuman(`  [freshness: ${f3.freshness} \xB7 projection: ${f3.projection_id || "(absent)"} \xB7 generated: ${f3.generated_at || "(absent)"} \xB7 dirty_sources: ${f3.dirty_sources.length}]`);
+}
+var memoryScan = defineCommand({
+  meta: {
+    name: "scan",
+    description: "Hash code/document sources into the memory manifest and report changes"
+  },
+  args: {
+    "source-root": {
+      type: "string",
+      description: "Directory to scan (absolute or repo-relative). Defaults to the repo root.",
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const result2 = await scanSources(repoRoot, {
+        ...args["source-root"] ? { sourceRoot: args["source-root"] } : {}
+      });
+      if (format === "json") {
+        writeJson2({
+          repo_root: repoRoot,
+          scanned: result2.scanned.length,
+          added: result2.added,
+          changed: result2.changed,
+          unchanged: result2.unchanged
+        });
+      } else {
+        writeHuman(`Scanned ${result2.scanned.length} source(s) under ${repoRoot}`);
+        writeHuman(`  added:     ${result2.added.length}`);
+        writeHuman(`  changed:   ${result2.changed.length}`);
+        writeHuman(`  unchanged: ${result2.unchanged.length}`);
+        for (const id of [...result2.added, ...result2.changed]) {
+          const s2 = result2.scanned.find((x2) => x2.source.source_id === id);
+          writeHuman(`  ${s2?.status === "added" ? "+" : "~"} ${id}	${s2?.source.path ?? ""}`);
+        }
+      }
+    } catch (err) {
+      writeError(`memory scan failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var eventsAppend = defineCommand({
+  meta: {
+    name: "append",
+    description: "Append one immutable memory event (append-only SoT)"
+  },
+  args: {
+    type: {
+      type: "string",
+      description: `Event type: ${memoryEventType.options.join("|")}`,
+      required: true
+    },
+    text: { type: "string", description: "Event body text", required: true },
+    source: {
+      type: "string",
+      description: "Source id grounding this event (repeatable as comma-separated)",
+      required: false
+    },
+    actor: {
+      type: "string",
+      description: "Actor kind: user|agent (default agent)",
+      default: "agent"
+    },
+    role: { type: "string", description: "Agent role when actor=agent", required: false },
+    confidence: {
+      type: "string",
+      description: `Confidence kind: ${memoryConfidenceKind.options.join("|")} (default EXTRACTED)`,
+      default: "EXTRACTED"
+    },
+    sensitivity: {
+      type: "string",
+      description: `Sensitivity: ${memorySensitivity.options.join("|")} (default internal)`,
+      default: "internal"
+    },
+    supersedes: {
+      type: "string",
+      description: "Event id this event supersedes (approval/correction chain)",
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const actorKind = args.actor;
+    if (actorKind !== "user" && actorKind !== "agent") {
+      writeError(`--actor must be user|agent; got "${actorKind}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const sources = (args.source ?? "").split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+    for (const s2 of sources) {
+      if (!memorySourceId.safeParse(s2).success) {
+        writeError(`invalid --source id "${s2}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new MemoryEventStore(repoRoot);
+    try {
+      const eventId = await generateId("memevt", (candidate) => Bun.file(`${repoRoot}/.ditto/memory/events/${candidate}.json`).exists());
+      const draft = {
+        schema_version: "0.1.0",
+        event_id: eventId,
+        event_type: args.type,
+        actor: { kind: actorKind, ...args.role ? { role: args.role } : {} },
+        text: args.text,
+        created_at: new Date().toISOString(),
+        status: "pending",
+        sources,
+        confidence_kind: args.confidence,
+        sensitivity: args.sensitivity,
+        ...args.supersedes ? { supersedes: args.supersedes } : {}
+      };
+      const parsed = memoryEvent.safeParse(draft);
+      if (!parsed.success) {
+        writeError(`invalid event: ${parsed.error.issues.map((i2) => i2.message).join("; ")}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const written = await store.append(parsed.data);
+      if (format === "json") {
+        writeJson2(written);
+      } else {
+        writeHuman(`Appended event ${written.event_id}`);
+        writeHuman(`  type:   ${written.event_type}`);
+        writeHuman(`  status: ${written.status}`);
+      }
+    } catch (err) {
+      if (err instanceof MemoryEventExistsError) {
+        writeError(err.message);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory events append failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var eventsList = defineCommand({
+  meta: {
+    name: "list",
+    description: "List memory events sorted by created_at ascending"
+  },
+  args: {
+    limit: {
+      type: "string",
+      description: "Max number of (most recent) events to show",
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let limit;
+    if (args.limit !== undefined) {
+      const n2 = Number(args.limit);
+      if (!Number.isInteger(n2) || n2 < 0) {
+        writeError(`--limit must be a non-negative integer; got "${args.limit}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      limit = n2;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new MemoryEventStore(repoRoot);
+    try {
+      let events = await store.list();
+      if (limit !== undefined)
+        events = events.slice(Math.max(0, events.length - limit));
+      if (format === "json") {
+        writeJson2({ events });
+      } else if (events.length === 0) {
+        writeHuman("No memory events.");
+      } else {
+        for (const e2 of events) {
+          writeHuman(`${e2.event_id}	${e2.created_at}	${e2.status}	${e2.event_type}	${e2.text}`);
+        }
+      }
+    } catch (err) {
+      writeError(`memory events list failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var eventsCommand = defineCommand({
+  meta: { name: "events", description: "Append-only memory events (append, list)" },
+  subCommands: { append: eventsAppend, list: eventsList }
+});
+var memoryBootstrap = defineCommand({
+  meta: {
+    name: "bootstrap",
+    description: "Ingest curated knowledge (ADR, glossary) and archived handoffs into the memory graph so day-1 is not a cold start (idempotent)"
+  },
+  args: {
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const r3 = await bootstrapIngest(repoRoot);
+      if (format === "json") {
+        writeJson2({
+          sources_added: r3.sourcesAdded,
+          sources_skipped: r3.sourcesSkipped,
+          events_appended: r3.eventsAppended,
+          events_skipped: r3.eventsSkipped
+        });
+      } else {
+        writeHuman(`Bootstrap ingest into ${repoRoot}`);
+        writeHuman(`  sources:  +${r3.sourcesAdded.length} (skipped ${r3.sourcesSkipped.length})`);
+        writeHuman(`  events:   +${r3.eventsAppended.length} (skipped ${r3.eventsSkipped.length})`);
+      }
+    } catch (err) {
+      writeError(`memory bootstrap failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var memoryBuild = defineCommand({
+  meta: {
+    name: "build",
+    description: "Build the memory Graph IR. Default is structure-only (cheap, \xA74-6). With --semantic it delegates LLM extraction to the host (ADR-0001): emit chunk request packets, or merge host-returned --fragments deterministically and write the IR."
+  },
+  args: {
+    semantic: {
+      type: "boolean",
+      description: "Enable the (expensive) semantic extraction path. Default off (structure only).",
+      default: false
+    },
+    fragments: {
+      type: "string",
+      description: "Path to a JSON array of host-returned IR fragments ({nodes,edges}). When set with --semantic, merge them deterministically and write the IR.",
+      required: false
+    },
+    "source-root": {
+      type: "string",
+      description: "Directory to scan for chunking (absolute or repo-relative). Defaults to repo root.",
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    if (!args.semantic) {
+      if (format === "json") {
+        writeJson2({ mode: "structure-only", semantic: false });
+      } else {
+        writeHuman("Structure-only build (cost grade \xA74-6). Pass --semantic for LLM extraction.");
+      }
+      return;
+    }
+    try {
+      if (args.fragments) {
+        const path = isAbsolute5(args.fragments) ? args.fragments : join50(repoRoot, args.fragments);
+        const raw = await readFile5(path, "utf8");
+        const parsed = irFragmentsSchema.safeParse(JSON.parse(raw));
+        if (!parsed.success) {
+          writeError(`invalid fragments: ${parsed.error.issues.map((i2) => `${i2.path.join(".")}: ${i2.message}`).join("; ")}`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const merged = mergeIrFragments(parsed.data);
+        const stamp2 = `${Date.now().toString(36)}${randomBytes3(3).toString("hex")}`;
+        const ir = assembleSemanticIr(merged, {
+          ir_version: `ir_${stamp2}`,
+          generated_at: new Date().toISOString(),
+          extraction_run_id: `xrun_${stamp2}`
+        });
+        await new MemoryGraphIrStore(repoRoot).write(ir);
+        if (format === "json") {
+          writeJson2({
+            mode: "semantic-merge",
+            ir_version: ir.ir_version,
+            nodes: ir.nodes.length,
+            edges: ir.edges.length
+          });
+        } else {
+          writeHuman(`Merged semantic IR ${ir.ir_version}`);
+          writeHuman(`  nodes: ${ir.nodes.length}`);
+          writeHuman(`  edges: ${ir.edges.length}`);
+        }
+        return;
+      }
+      const scan = await scanSources(repoRoot, {
+        ...args["source-root"] ? { sourceRoot: args["source-root"] } : {}
+      });
+      const files = [];
+      for (const s2 of scan.scanned) {
+        const path = s2.source.path;
+        if (!path)
+          continue;
+        const abs = isAbsolute5(path) ? path : join50(repoRoot, path);
+        files.push({
+          source_id: s2.source.source_id,
+          path,
+          content: await readFile5(abs, "utf8"),
+          sensitivity: s2.source.sensitivity
+        });
+      }
+      const chunks = chunkSources(files);
+      if (format === "json") {
+        writeJson2({ mode: "semantic-chunks", chunk_count: chunks.length, chunks });
+      } else {
+        writeHuman(`Semantic build: ${chunks.length} chunk(s) ready for memory-extractor.`);
+        for (const c3 of chunks) {
+          writeHuman(`  ${c3.chunk_id}	${c3.files.length} file(s)`);
+        }
+        writeHuman("Run extraction in the host, then: ditto memory build --semantic --fragments <out.json>");
+      }
+    } catch (err) {
+      writeError(`memory build failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var memoryProject = defineCommand({
+  meta: {
+    name: "project",
+    description: "Project the current Graph IR + approved events one-way into the serving graph, wiki, and manifest (\xA74-3). Projections are regenerated, never hand-edited."
+  },
+  args: {
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const r3 = await projectMemory(repoRoot);
+      if (format === "json") {
+        writeJson2({
+          projection_id: r3.manifest.projection_id,
+          set_hash: r3.set_hash,
+          nodes: r3.node_count,
+          edges: r3.edge_count
+        });
+      } else {
+        writeHuman(`Projected ${r3.manifest.projection_id}`);
+        writeHuman(`  nodes: ${r3.node_count}`);
+        writeHuman(`  edges: ${r3.edge_count}`);
+        writeHuman(`  set_hash: ${r3.set_hash.slice(0, 16)}`);
+      }
+    } catch (err) {
+      writeError(`memory project failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var memoryStatusCommand = defineCommand({
+  meta: {
+    name: "status",
+    description: "Report projection freshness (fresh/stale/absent) and dirty sources (\xA74-4)"
+  },
+  args: {
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const s2 = await memoryStatus(repoRoot);
+      if (format === "json") {
+        writeJson2(s2);
+      } else {
+        writeHuman(`Memory projection: ${s2.freshness}`);
+        if (s2.projection_id)
+          writeHuman(`  projection: ${s2.projection_id}`);
+        writeHuman(`  dirty sources: ${s2.dirty_sources.length}`);
+        for (const id of s2.dirty_sources)
+          writeHuman(`    ~ ${id}`);
+        writeHuman(`  pending approvals: ${s2.pending_count}`);
+        if (s2.pending_count > 0) {
+          writeHuman("    (decide with `ditto memory approve <eventId> --by <you> --actor user`)");
+        }
+      }
+    } catch (err) {
+      writeError(`memory status failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+async function loadServingOrExit(repoRoot) {
+  const graph = await new MemoryProjectionStore(repoRoot).readServing();
+  if (!graph) {
+    writeError("no serving graph projected yet; run `ditto memory project` first");
+    process.exit(USAGE_ERROR_EXIT);
+  }
+  return graph;
+}
+async function runBodyQuery(repoRoot, node, depth, format, fallback) {
+  const result2 = await queryBodies(repoRoot, node);
+  await recordPullQuery(repoRoot, {
+    ts: new Date().toISOString(),
+    node,
+    depth,
+    neighbor_count: result2.matches.length,
+    freshness: result2.freshness
+  }).catch(() => {});
+  if (format === "json") {
+    writeJson2({ ...result2, mode: "body-search", fallback });
+    return;
+  }
+  writeHuman(`Body matches for "${result2.query}" (${fallback ? "node not in graph \u2014 text fallback" : "--text"}):`);
+  for (const m2 of result2.matches)
+    writeHuman(`  - ${m2.event_id}	${m2.source_id}`);
+  if (result2.matches.length === 0)
+    writeHuman("  (none)");
+  writeFreshnessHuman(result2);
+}
+var memoryQuery = defineCommand({
+  meta: {
+    name: "query",
+    description: "Traverse the serving graph from a node (undirected BFS, default depth 2). Read-only; answer carries projection_id/generated_at/freshness/dirty_sources (\xA74-4)."
+  },
+  args: {
+    node: { type: "positional", description: "Node id to start from", required: true },
+    depth: { type: "string", description: "Traversal depth (default 2)", default: "2" },
+    text: {
+      type: "boolean",
+      description: "Search event bodies (rationale/finding) instead of graph traversal (ac-2 / F2)",
+      default: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const depth = Number(args.depth);
+    if (!Number.isInteger(depth) || depth < 0) {
+      writeError(`--depth must be a non-negative integer; got "${args.depth}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      if (args.text) {
+        await runBodyQuery(repoRoot, args.node, depth, format, false);
+        return;
+      }
+      const graph = await loadServingOrExit(repoRoot);
+      const result2 = queryNeighbors(graph, args.node, depth);
+      const freshness2 = await readFreshness(repoRoot);
+      await recordPullQuery(repoRoot, {
+        ts: new Date().toISOString(),
+        node: args.node,
+        depth,
+        neighbor_count: result2.neighbors.length,
+        freshness: freshness2.freshness
+      }).catch(() => {});
+      if (format === "json") {
+        writeJson2({ ...result2, ...freshness2 });
+      } else {
+        writeHuman(`Neighbors of ${result2.root} within depth ${result2.depth}:`);
+        for (const id of result2.neighbors)
+          writeHuman(`  - ${id}`);
+        if (result2.neighbors.length === 0)
+          writeHuman("  (none)");
+        writeFreshnessHuman(freshness2);
+      }
+    } catch (err) {
+      if (err instanceof MemoryNodeNotFoundError) {
+        await runBodyQuery(repoRoot, args.node, depth, format, true);
+        return;
+      }
+      writeError(`memory query failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var memoryPath = defineCommand({
+  meta: {
+    name: "path",
+    description: "Shortest path between two nodes (undirected BFS). Read-only; answer carries freshness (\xA74-4)."
+  },
+  args: {
+    from: { type: "positional", description: "Start node id", required: true },
+    to: { type: "positional", description: "Target node id", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const graph = await loadServingOrExit(repoRoot);
+      const result2 = shortestPath(graph, args.from, args.to);
+      const freshness2 = await readFreshness(repoRoot);
+      if (format === "json") {
+        writeJson2({ ...result2, ...freshness2 });
+      } else if (result2.path) {
+        writeHuman(`Path ${result2.from} \u2192 ${result2.to}:`);
+        writeHuman(`  ${result2.path.join(" \u2192 ")}`);
+        writeFreshnessHuman(freshness2);
+      } else {
+        writeHuman(`No path between ${result2.from} and ${result2.to}.`);
+        writeFreshnessHuman(freshness2);
+      }
+    } catch (err) {
+      if (err instanceof MemoryNodeNotFoundError) {
+        writeError(err.message);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory path failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var memoryExplain = defineCommand({
+  meta: {
+    name: "explain",
+    description: "Describe one node: its label + adjacent edges. Read-only; answer carries freshness (\xA74-4)."
+  },
+  args: {
+    node: { type: "positional", description: "Node id to explain", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const graph = await loadServingOrExit(repoRoot);
+      const result2 = explainNode(graph, args.node);
+      const freshness2 = await readFreshness(repoRoot);
+      if (format === "json") {
+        writeJson2({ ...result2, ...freshness2 });
+      } else {
+        writeHuman(`${result2.node.name} (${result2.node.node_type})`);
+        writeHuman(`  id: ${result2.node.id}`);
+        writeHuman(`  edges: ${result2.edges.length}`);
+        for (const e2 of result2.edges) {
+          writeHuman(`    ${e2.direction === "out" ? "\u2192" : "\u2190"} ${e2.edge_type} ${e2.to}`);
+        }
+        writeFreshnessHuman(freshness2);
+      }
+    } catch (err) {
+      if (err instanceof MemoryNodeNotFoundError) {
+        writeError(err.message);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory explain failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var memoryAudit = defineCommand({
+  meta: {
+    name: "audit",
+    description: "Count orphan/stale/duplicate/contradiction over the serving graph and append the result to the git-tracked append-only history (\xA74-6). Manual only \u2014 no auto-trigger."
+  },
+  args: {
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const { entry, history_length } = await runAudit(repoRoot);
+      if (format === "json") {
+        writeJson2({ ...entry, history_length });
+      } else {
+        writeHuman(`Audit ${entry.projection_id} (${entry.freshness}) \u2014 history #${history_length}`);
+        writeHuman(`  nodes: ${entry.node_count}  edges: ${entry.edge_count}`);
+        writeHuman(`  orphan:        ${entry.counts.orphan}`);
+        writeHuman(`  stale sources: ${entry.counts.stale}`);
+        writeHuman(`  duplicate:     ${entry.counts.duplicate}`);
+        writeHuman(`  contradiction: ${entry.counts.contradiction}`);
+      }
+    } catch (err) {
+      if (err instanceof MemoryProjectionAbsentError) {
+        writeError(err.message);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory audit failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var memoryPropose = defineCommand({
+  meta: {
+    name: "propose",
+    description: "Propose a pending memory event (write model, \xA74-5). Agents cannot write the graph directly; only propose\u2192approve\u2192re-projection. Creates a pending event (no approved_by)."
+  },
+  args: {
+    type: {
+      type: "string",
+      description: `Event type: ${memoryEventType.options.join("|")}`,
+      required: true
+    },
+    text: { type: "string", description: "Event body text", required: true },
+    source: {
+      type: "string",
+      description: "Source id grounding this event (comma-separated)",
+      required: false
+    },
+    actor: {
+      type: "string",
+      description: "Actor kind: user|agent (default agent)",
+      default: "agent"
+    },
+    role: { type: "string", description: "Agent role when actor=agent", required: false },
+    confidence: {
+      type: "string",
+      description: `Confidence kind: ${memoryConfidenceKind.options.join("|")} (default EXTRACTED)`,
+      default: "EXTRACTED"
+    },
+    sensitivity: {
+      type: "string",
+      description: `Sensitivity: ${memorySensitivity.options.join("|")} (default internal)`,
+      default: "internal"
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const actorKind = args.actor;
+    if (actorKind !== "user" && actorKind !== "agent") {
+      writeError(`--actor must be user|agent; got "${actorKind}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const sources = (args.source ?? "").split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+    for (const s2 of sources) {
+      if (!memorySourceId.safeParse(s2).success) {
+        writeError(`invalid --source id "${s2}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const written = await proposeEvent(repoRoot, {
+        event_type: args.type,
+        text: args.text,
+        sources,
+        confidence_kind: args.confidence,
+        sensitivity: args.sensitivity,
+        actor: { kind: actorKind, ...args.role ? { role: args.role } : {} }
+      });
+      if (format === "json") {
+        writeJson2(written);
+      } else {
+        writeHuman(`Proposed event ${written.event_id}`);
+        writeHuman(`  type:   ${written.event_type}`);
+        writeHuman(`  status: ${written.status}`);
+      }
+    } catch (err) {
+      if (err instanceof MemoryEventExistsError) {
+        writeError(err.message);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/invalid|expected|required/i.test(msg)) {
+        writeError(`memory propose failed: ${msg}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory propose failed: ${msg}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var memoryApprove = defineCommand({
+  meta: {
+    name: "approve",
+    description: "Approve (or --reject) a pending event (\xA710-2 F2). Original file is never mutated; a new immutable event with supersedes is appended, then the projection is regenerated."
+  },
+  args: {
+    eventId: { type: "positional", description: "Pending event id to approve", required: true },
+    by: { type: "string", description: "Approver identity (required)", required: true },
+    actor: {
+      type: "string",
+      description: "Approver kind: user|agent (default agent). Agents cannot self-approve.",
+      default: "agent"
+    },
+    reject: {
+      type: "boolean",
+      description: "Record a rejected decision instead of approved",
+      default: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.by || args.by.trim().length === 0) {
+      writeError("--by <approver> is required");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!memoryEventId.safeParse(args.eventId).success) {
+      writeError(`invalid event id "${args.eventId}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const approverKind = args.actor;
+    if (approverKind !== "user" && approverKind !== "agent") {
+      writeError(`--actor must be user|agent; got "${approverKind}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const { decision, projection } = await approveEvent(repoRoot, args.eventId, {
+        by: args.by,
+        approverKind,
+        reject: args.reject
+      });
+      if (format === "json") {
+        writeJson2({
+          decision,
+          projection_id: projection.manifest.projection_id,
+          set_hash: projection.set_hash,
+          nodes: projection.node_count,
+          edges: projection.edge_count
+        });
+      } else {
+        writeHuman(`${args.reject ? "Rejected" : "Approved"} ${args.eventId}`);
+        writeHuman(`  decision event: ${decision.event_id} (supersedes ${decision.supersedes})`);
+        writeHuman(`  status: ${decision.status} \xB7 by ${decision.approved_by}`);
+        writeHuman(`  re-projected: ${projection.manifest.projection_id} (${projection.node_count} nodes)`);
+      }
+    } catch (err) {
+      if (err instanceof MemoryEventNotPendingError || err instanceof MemoryEventAlreadyDecidedError || err instanceof MemorySelfApprovalError) {
+        writeError(err.message);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/ENOENT|no such file|not found/i.test(msg)) {
+        writeError(`memory approve failed: event ${args.eventId} not found`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory approve failed: ${msg}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var memoryUsage = defineCommand({
+  meta: {
+    name: "usage",
+    description: "Report memory usage instrumentation (ac-12): warm-start metrics (opportunity/attempt/hit/actionable) for a work item, plus the global pull-query count. Read-only."
+  },
+  args: {
+    "work-item": {
+      type: "string",
+      description: "Work item id whose warm-start usage to tally (omit to report pull usage only)",
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const warmstart = args["work-item"] ? await readUsageReport(repoRoot, args["work-item"]) : undefined;
+      const pull = await readPullUsage(repoRoot);
+      if (format === "json") {
+        writeJson2({
+          ...args["work-item"] ? { work_item_id: args["work-item"] } : {},
+          warmstart: warmstart ? {
+            opportunities: warmstart.opportunities,
+            attempts: warmstart.attempts,
+            hits: warmstart.hits,
+            actionable: warmstart.actionable,
+            hit_node_types: warmstart.hit_node_types
+          } : null,
+          pull: { queries: pull.length }
+        });
+      } else {
+        if (warmstart) {
+          writeHuman(`Warm-start usage for ${args["work-item"]}:`);
+          writeHuman(`  opportunities: ${warmstart.opportunities}`);
+          writeHuman(`  attempts:      ${warmstart.attempts}`);
+          writeHuman(`  hits:          ${warmstart.hits}`);
+          writeHuman(`  actionable:    ${warmstart.actionable}`);
+          const types3 = Object.entries(warmstart.hit_node_types).sort(([a2], [b2]) => a2 < b2 ? -1 : 1).map(([t2, n2]) => `${t2}=${n2}`).join(" ");
+          if (types3.length > 0)
+            writeHuman(`  hit node types: ${types3}`);
+        } else {
+          writeHuman("Warm-start usage: (pass --work-item <id> to tally)");
+        }
+        writeHuman(`Pull-query usage: ${pull.length} query(ies)`);
+      }
+    } catch (err) {
+      writeError(`memory usage failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var memoryCommand = defineCommand({
+  meta: {
+    name: "memory",
+    description: "Memory subsystem \u2014 scan sources and record append-only events"
+  },
+  subCommands: {
+    scan: memoryScan,
+    events: eventsCommand,
+    bootstrap: memoryBootstrap,
+    build: memoryBuild,
+    project: memoryProject,
+    status: memoryStatusCommand,
+    query: memoryQuery,
+    path: memoryPath,
+    explain: memoryExplain,
+    audit: memoryAudit,
+    usage: memoryUsage,
+    propose: memoryPropose,
+    approve: memoryApprove
+  }
+});
+
 // src/core/run-with.ts
 import { stat as stat4, writeFile as writeFile3 } from "fs/promises";
-import { dirname as dirname6, join as join45, relative as relative9, resolve as resolve8, sep as sep3 } from "path";
+import { dirname as dirname9, join as join51, relative as relative11, resolve as resolve9, sep as sep4 } from "path";
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
 
 class RunWithUsageError extends Error {
@@ -25896,16 +28584,16 @@ class RunWithRuntimeError extends Error {
   }
 }
 function repoRelative2(repoRoot, path) {
-  return relative9(repoRoot, path).split(sep3).join("/");
+  return relative11(repoRoot, path).split(sep4).join("/");
 }
 function resolveRepoCwd(repoRoot, cwd) {
   const parsed = relativePath.safeParse(cwd);
   if (!parsed.success) {
     throw new RunWithUsageError(`invalid cwd: ${parsed.error.issues[0]?.message}`);
   }
-  const resolvedRoot = resolve8(repoRoot);
-  const resolvedCwd = resolve8(join45(repoRoot, cwd));
-  if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep3}`)) {
+  const resolvedRoot = resolve9(repoRoot);
+  const resolvedCwd = resolve9(join51(repoRoot, cwd));
+  if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep4}`)) {
     throw new RunWithUsageError(`cwd escapes repo root: ${cwd}`);
   }
   return parsed.data;
@@ -25949,7 +28637,7 @@ function parseRunnableProvider(provider) {
   throw new RunWithUsageError(`provider ${provider} is schema-valid but not runnable in v0.3`);
 }
 async function streamToFile(stream, path) {
-  await ensureDir(dirname6(path));
+  await ensureDir(dirname9(path));
   const bytes = await new Response(stream).arrayBuffer();
   await writeFile3(path, new Uint8Array(bytes));
 }
@@ -26107,7 +28795,7 @@ async function runVerifyStep(repoRoot, runRoot, runStore, runId2, rawCommand) {
   const tokens2 = command.split(/\s+/).filter(Boolean);
   const logAbsolute = runStore.pathFor(runId2, "verify.log");
   const logRelative = repoRelative2(repoRoot, logAbsolute);
-  await ensureDir(dirname6(logAbsolute));
+  await ensureDir(dirname9(logAbsolute));
   if (tokens2.length === 0) {
     await writeFile3(logAbsolute, "", "utf8");
     const entry2 = {
@@ -26414,7 +29102,7 @@ function applySemanticVerdict(seed, v2) {
 // src/acg/semantic/signature-codeql.ts
 import { existsSync as existsSync6 } from "fs";
 import { rm } from "fs/promises";
-import { join as join46 } from "path";
+import { join as join52 } from "path";
 var SIGNATURE_QUERY_JS = `/**
  * @name ditto signatures js
  * @id ditto/signature-relations
@@ -26542,20 +29230,20 @@ async function extractSignatures(input, deps) {
 async function scanSignatureChanges(input, deps) {
   const baseSha = gitRevParse(input.repoRoot, input.baseRef);
   const cacheBase = localDir(input.repoRoot, "cache", "codeql");
-  const baseCache = join46(cacheBase, `${baseSha}-${input.language}`);
-  const baseDb = join46(baseCache, "db");
+  const baseCache = join52(cacheBase, `${baseSha}-${input.language}`);
+  const baseDb = join52(baseCache, "db");
   const needWorktree = !existsSync6(baseDb);
-  const worktree = join46(cacheBase, "worktrees", `${baseSha}-${input.language}`);
+  const worktree = join52(cacheBase, "worktrees", `${baseSha}-${input.language}`);
   if (needWorktree)
     addDetachedWorktree(input.repoRoot, worktree, baseSha);
   let before;
   try {
     before = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join46(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
+      sourceRoot: join52(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
       language: input.language,
       dbPath: baseDb,
-      workDir: join46(baseCache, "q-sig"),
+      workDir: join52(baseCache, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -26563,14 +29251,14 @@ async function scanSignatureChanges(input, deps) {
     if (needWorktree)
       removeWorktree(input.repoRoot, worktree);
   }
-  const afterDir = join46(cacheBase, `after-${process.pid}-${input.language}`);
+  const afterDir = join52(cacheBase, `after-${process.pid}-${input.language}`);
   try {
     const after = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join46(input.repoRoot, input.sourceRootRel),
+      sourceRoot: join52(input.repoRoot, input.sourceRootRel),
       language: input.language,
-      dbPath: join46(afterDir, "db"),
-      workDir: join46(afterDir, "q-sig"),
+      dbPath: join52(afterDir, "db"),
+      workDir: join52(afterDir, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -26916,13 +29604,13 @@ var semanticCommand = defineCommand({
 
 // src/cli/commands/setup.ts
 import { existsSync as existsSync7 } from "fs";
-import { homedir as homedir5 } from "os";
-import { dirname as dirname7, join as join49, resolve as resolve9 } from "path";
+import { homedir as homedir6 } from "os";
+import { dirname as dirname10, join as join55, resolve as resolve10 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 
 // src/core/setup.ts
-import { readFile as readFile5 } from "fs/promises";
-import { join as join48 } from "path";
+import { readFile as readFile7 } from "fs/promises";
+import { join as join54 } from "path";
 
 // src/core/managed-resource.ts
 import { copyFile } from "fs/promises";
@@ -27012,8 +29700,8 @@ async function applyManagedFile(targetPath, managedBody, source = "AGENTS.md") {
 }
 
 // src/core/resource-routing.ts
-import { readdirSync } from "fs";
-import { join as join47 } from "path";
+import { readdirSync as readdirSync2 } from "fs";
+import { join as join53 } from "path";
 var GLOBAL_PREFIX = "GLOBAL_";
 function routeResource(filename, ctx) {
   if (filename.startsWith(GLOBAL_PREFIX)) {
@@ -27021,25 +29709,25 @@ function routeResource(filename, ctx) {
     return {
       scope: "global",
       destName,
-      destPath: join47(ctx.homeDir, ".claude", destName)
+      destPath: join53(ctx.homeDir, ".claude", destName)
     };
   }
   return {
     scope: "project",
     destName: filename,
-    destPath: join47(ctx.projectRoot, filename)
+    destPath: join53(ctx.projectRoot, filename)
   };
 }
 function discoverResources(resourcesDir) {
   try {
-    return readdirSync(resourcesDir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name);
+    return readdirSync2(resourcesDir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name);
   } catch {
     return [];
   }
 }
 
 // src/core/settings-allowlist.ts
-import { readFile as readFile4 } from "fs/promises";
+import { readFile as readFile6 } from "fs/promises";
 var ALLOW_RULE2 = "Bash(ditto:*)";
 function addAllowRule(settings) {
   const perms = settings.permissions ?? {};
@@ -27059,7 +29747,7 @@ function removeAllowRule(settings) {
 async function readSettings(settingsPath) {
   if (!await fileExists(settingsPath))
     return {};
-  const text = (await readFile4(settingsPath, "utf8")).trim();
+  const text = (await readFile6(settingsPath, "utf8")).trim();
   return text ? JSON.parse(text) : {};
 }
 async function writeSettings(settingsPath, settings) {
@@ -27083,7 +29771,7 @@ async function setup(opts) {
   const resources = [];
   for (const filename of discoverResources(resourcesDir)) {
     const decision = routeResource(filename, { projectRoot, homeDir });
-    const body = await readFile5(join48(resourcesDir, filename), "utf8");
+    const body = await readFile7(join54(resourcesDir, filename), "utf8");
     const applied = await applyManagedFile(decision.destPath, body, filename);
     resources.push({
       filename,
@@ -27094,7 +29782,7 @@ async function setup(opts) {
     });
   }
   const scaffold = await initScaffold(projectRoot, now);
-  const allowlistPath = join48(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join54(projectRoot, ".claude", "settings.json");
   await allowlistSettingsFile(allowlistPath);
   return { resources, scaffold, allowlistPath };
 }
@@ -27102,19 +29790,19 @@ async function setup(opts) {
 // src/cli/commands/setup.ts
 function resolveResourcesDir() {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
-    return join49(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
+    return join55(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
   }
-  let dir = dirname7(fileURLToPath2(import.meta.url));
+  let dir = dirname10(fileURLToPath2(import.meta.url));
   for (;; ) {
-    const candidate = join49(dir, "resources", "managed");
+    const candidate = join55(dir, "resources", "managed");
     if (existsSync7(candidate))
       return candidate;
-    const parent = dirname7(dir);
+    const parent = dirname10(dir);
     if (parent === dir)
       break;
     dir = parent;
   }
-  return join49(resolve9(dirname7(fileURLToPath2(import.meta.url)), "..", "..", ".."), "resources", "managed");
+  return join55(resolve10(dirname10(fileURLToPath2(import.meta.url)), "..", "..", ".."), "resources", "managed");
 }
 var setupCommand = defineCommand({
   meta: {
@@ -27130,9 +29818,9 @@ var setupCommand = defineCommand({
   },
   run: async ({ args }) => {
     try {
-      const projectRoot = args.dir ? resolve9(args.dir) : await resolveRepoRootForCreate();
+      const projectRoot = args.dir ? resolve10(args.dir) : await resolveRepoRootForCreate();
       const resourcesDir = resolveResourcesDir();
-      const pluginRoot = resolve9(resourcesDir, "..", "..");
+      const pluginRoot = resolve10(resourcesDir, "..", "..");
       if (pluginRoot === projectRoot) {
         writeHuman(`setup: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
@@ -27140,7 +29828,7 @@ var setupCommand = defineCommand({
       const result2 = await setup({
         resourcesDir,
         projectRoot,
-        homeDir: homedir5(),
+        homeDir: homedir6(),
         now: new Date
       });
       writeHuman(`setup: installed into ${projectRoot}`);
@@ -27158,13 +29846,13 @@ var setupCommand = defineCommand({
 });
 
 // src/cli/commands/teardown.ts
-import { homedir as homedir6 } from "os";
-import { dirname as dirname8, join as join51, resolve as resolve10 } from "path";
+import { homedir as homedir7 } from "os";
+import { dirname as dirname11, join as join57, resolve as resolve11 } from "path";
 import { fileURLToPath as fileURLToPath3 } from "url";
 
 // src/core/teardown.ts
-import { copyFile as copyFile2, readFile as readFile6 } from "fs/promises";
-import { join as join50 } from "path";
+import { copyFile as copyFile2, readFile as readFile8 } from "fs/promises";
+import { join as join56 } from "path";
 var BACKUP_SUFFIX2 = ".ditto_bak";
 async function teardown(opts) {
   const { resourcesDir, projectRoot, homeDir } = opts;
@@ -27174,14 +29862,14 @@ async function teardown(opts) {
     const action = await teardownFile(decision.destPath);
     files.push({ filename, scope: decision.scope, destPath: decision.destPath, action });
   }
-  const allowlistPath = join50(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join56(projectRoot, ".claude", "settings.json");
   await unallowlistSettingsFile(allowlistPath);
   return { files, allowlistPath };
 }
 async function teardownFile(destPath) {
   if (!await Bun.file(destPath).exists())
     return "left-untouched";
-  const current = await readFile6(destPath, "utf8");
+  const current = await readFile8(destPath, "utf8");
   const stripped = stripManagedBlock(current);
   if (stripped.kind === "ok") {
     await atomicWriteText(destPath, stripped.content);
@@ -27197,8 +29885,8 @@ async function teardownFile(destPath) {
 
 // src/cli/commands/teardown.ts
 function resolveResourcesDir2() {
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? resolve10(dirname8(fileURLToPath3(import.meta.url)), "..", "..", "..");
-  return join51(pluginRoot, "resources", "managed");
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? resolve11(dirname11(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join57(pluginRoot, "resources", "managed");
 }
 var teardownCommand = defineCommand({
   meta: {
@@ -27214,14 +29902,14 @@ var teardownCommand = defineCommand({
   },
   run: async ({ args }) => {
     try {
-      const projectRoot = args.dir ? resolve10(args.dir) : await resolveRepoRootForCreate();
+      const projectRoot = args.dir ? resolve11(args.dir) : await resolveRepoRootForCreate();
       const resourcesDir = resolveResourcesDir2();
-      const pluginRoot = resolve10(resourcesDir, "..", "..");
+      const pluginRoot = resolve11(resourcesDir, "..", "..");
       if (pluginRoot === projectRoot) {
         writeHuman(`teardown: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
       }
-      const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir6() });
+      const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir7() });
       writeHuman(`teardown: reverted ${projectRoot}`);
       for (const f3 of result2.files) {
         writeHuman(`  ${f3.filename} [${f3.scope}] ${f3.action} \u2192 ${f3.destPath}`);
@@ -27629,6 +30317,7 @@ var main = defineCommand({
     "deep-interview": deepInterviewCommand,
     e2e: e2eCommand,
     knowledge: knowledgeCommand,
+    memory: memoryCommand,
     "acg-review": acgReviewCommand,
     codeql: codeqlCommand,
     impact: impactCommand,
@@ -27643,3 +30332,5 @@ var main = defineCommand({
 var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
+
+//# ditto-src-stamp=ebf037afac7fb8b1b75a83bdb670a156867016a548193e8f0bebf91c30a33e23
