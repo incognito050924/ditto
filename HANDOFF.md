@@ -1,71 +1,56 @@
-# HANDOFF — memory-graph 플러그인 (설계 + 스키마 기반 / 2026-06-09)
+# HANDOFF — ditto memory 서브시스템 v0 완료 + 후속 (2026-06-10)
 
-다른 PC에서 이어받기용. **이어받은 뒤 삭제해도 됨**(세션 핸드오프, 영구 문서 아님).
+다른 PC 이어받기용. **이어받은 뒤 갱신/삭제해도 됨**(git-tracked 세션 핸드오프).
 
-> **주의**: 이 PC의 `.ditto/local/`(work item 상태)과 `~/.claude` 자동 메모리는 **다른 PC로 가지 않는다.** git으로 가는 건 코드·문서·이 핸드오프뿐. 그래서 아래는 자기완결적으로 적었다.
+> **주의**: `.ditto/local/`(work item 상태·autopilot 그래프·dialectic 원장·완료계약)과 `~/.claude` 자동 메모리는 **git으로 안 간다.** git으로 오는 건 코드·문서·ADR·이 파일뿐. 그래서 아래는 자기완결적으로 적었다. work item `wi_260609m41`은 이 PC에만 있고 새 PC엔 없다(아래 "새 PC 재등록" 참조).
 
-## 무슨 작업인가
+## 무엇이 끝났나 — memory v0 (옵션 A) **DONE·푸시됨**
 
-`agent-intelligence-memory-report.md`(메모리 보고서)가 설계한 메모리/지식그래프 시스템을 **ditto 네이티브 서브시스템 `ditto memory`로 풀 구축**하는 다증분 작업.
-- 사용자 결정: "graphify 래핑"이 아니라 **보고서 설계 자체를 풀 설계부터**.
-- work item: **wi_260609td5** (단, `.ditto/local`이라 이 PC에만 있음 → 새 PC에선 아래 "이어받기"대로 재등록).
+보고서의 메모리/지식그래프를 ditto 네이티브 `ditto memory`로 구축. dialectic 2라운드 검증 후 **옵션 A(measure-before-expand)**로 완주: autopilot 33/33 노드 passed, final_verdict=**pass**(15/15 AC 증거 close), 전체 `bun test` 1545 tests 0 fail.
 
-## 읽을 문서 (전부 git-tracked, pull로 따라옴)
+**커밋(origin/main, push 완료, `f2b9a53`~`42f33f7`)** — 증분별:
+- `f2b9a53` 설계 동결 §10 + dialectic 1·2라운드 + 옵션 A (문서)
+- `65cd18a` #2 Store 4종 + scan/events + source.repo
+- `eec6fd4`+`7cee8c1` #3 ACG→IR builder (+리뷰 fix: 엣지 properties·멀티kind·방향)
+- `97e24a6` bootstrap ingest (knowledge/handoff→그래프, cold-start 해소)
+- `bf7b3cf` #4 semantic 엔진 + 결정적 merge reducer
+- `e2c77ca` #5 event→IR reducer + projection + status
+- `c52fac2` #6 query/path/explain + audit
+- `692da3e` §5-1 warm-start push + 계측
+- `d0c481b` #7 쓰기모델 + #8 플러그인 배선
+- `dcecdc8` ADR-0013 + CLAUDE.md 투영
+- `42f33f7` 되돌림 플래그(`DITTO_MEMORY=off`) + #7 double-approve fix + ac-12 usage 리포트
 
-1. `reports/design/memory-graph-plugin-design.md` — **설계서(이게 중심).** 왜 필요한가(ditto 빈틈 4개)·기능별 메커니즘·대안 6결정·ditto 맞물림 5지점·구현 순서 9단계·미결정.
-2. `graphify-design-reference-companion.md` — Graphify 실제 구현 대조(메커니즘 참고원, 정합성 반례).
-3. `agent-intelligence-memory-report.md` — 원본 설계 보고서(SoT 분리·projection·provenance·proposal write 철학).
+**진실원(전부 git-tracked, pull로 옴)**:
+- `reports/design/memory-graph-plugin-design.md` §10(구현계약)·§10-8/9(dialectic 반영·옵션 A·되돌림 4불변식)
+- `reports/design/memory-graph-value-structure-assessment.md`(가치·구조 평가·옵션 A 의사결정 §6-1)
+- `.ditto/knowledge/adr/ADR-0013-memory-subsystem-design.md`
+- 코드: `src/core/memory-*.ts`(store/scan/ir/bootstrap/build/reduce/project/query/warmstart/flag), `src/cli/commands/memory.ts`, `skills/memory-graph/`, `agents/memory-extractor.md`
 
-## 완료된 것 (커밋·푸시됨)
+`ditto memory` 명령: scan · events(append/list) · build[--semantic] · project · status · query/path/explain · audit · propose/approve · bootstrap · usage.
 
-- **증분 #1 — 데이터 계약 4 스키마** (`src/schemas/memory-{source,event,graph-ir,projection-manifest}.ts`, `scripts/export-schemas.ts` 등록, `schemas/memory-*.schema.json` 생성).
-  - confidence 밴드 강제(EXTRACTED=1.0 / AMBIGUOUS 0.1–0.3 / INFERRED 0.4–0.95, 0.5 금지), MemoryEvent approval invariant(approved⇒approved_by+decided_at, pending⇒approved_by 금지), 하이퍼엣지·rationale_for 지원.
-  - 검증: `schemas:export` 통과, tsc(내 파일 0에러), biome 클린, 불변식 런타임 safeParse 통과.
-- **문서**: 위 설계서 + companion.
-- 커밋: `836d2a4`(companion) · `fd86842`(스키마+설계) · `e927909`(설계서 재작성) → 전부 `origin/main` 푸시 완료.
+## ⚠ ditto autopilot gotcha 4건 (이번에 우회·교정함 — 재발 가능, ditto 자체 개선 후보)
 
-## 다음 (증분 #2~#9, 설계서 §8)
+이 빌드 중 만난 autopilot 결함. autopilot.json은 `.ditto/local`이라 새 PC엔 안 가지만, **다음에 autopilot으로 큰 work item 돌리면 또 만난다**:
+1. **seed↔planner 중복**: bootstrap이 generic 시드 N1→N2→N3 만드는데 planner가 자기완결 subgraph 내면 시드 N2/N3 중복 → next-node가 generic 시드 고름. 우회=시드 retire.
+2. **impl↔verify 데드락**: `selectReadyNodes` B3 guard(`src/core/autopilot-graph.ts:87-92`)가 impl pending 시 모든 verify 보류. planner가 implement 의존을 verify에 걸면 순환 교착. 우회=verify-의존을 그 verify의 선행(impl/review)으로 lift.
+3. **N1 planner가 evidence 없이 전체 AC addressing** → `autopilot complete`의 worst-fold(`autopilot-complete.ts:115-125`)가 전 AC를 unverified로(false-negative). 우회=N1.acceptance_refs 비움.
+4. **work-item.json AC가 placeholder 1개**(intent 직접 작성 시 동기화 안 됨) → complete가 AC 못 매핑. 우회=work-item AC를 intent 15개로 동기화.
+→ **개선 제안**: bootstrap이 planner 노드 만들 때 seed impl/verify 생략, planner 출력의 impl→verify 의존 자동 정규화, design/planner 노드에 AC refs 미부여, intent→work-item AC 자동 동기화. (별도 work item 후보)
 
-| # | 증분 | 검증 |
-|---|---|---|
-| **2 (다음)** | Store 4종(WorkItemStore 패턴) + `ditto memory scan` + `events append/list` **+ `memory-source`에 `repo` 식별 필드(§3-7 cross-repo)** | scan이 변경 감지·owning repo 해석, source `revision`=소속 repo HEAD, 이벤트 append-only |
-| 3 | 구조 추출 — **기존 `impact`/`codeql`/`semantic`(CodeQL) 출력을 IR로 흡수** + provenance 주입 → IR builder/validator | 같은 source→같은 IR |
-| 4 | `memory build` 의미 추출(`memory-extractor` subagent fan-out)→IR 병합 | concept/claim이 출처와 함께 |
-| 5 | projection(서빙 그래프+위키)+manifest+`status` | freshness/dirty 확인 |
-| 6 | `query`/`path`/`explain`+`audit` | 출처 동반 응답 |
-| 7 | `propose`/`approve` 쓰기 모델 | 승인→재projection |
-| 8 | skill(`skills/memory-graph`)+agent(`agents/memory-extractor`)+build:plugin 배선 | `/memory-graph` 동작 |
-| 9 | 통합 끼우기(설계서 §5) + ADR + dialectic-review | 위임패킷/투영/훅 자문 |
+## 후속 (measure-before-expand 게이트 + 운영 + 정리)
 
-**구현 시 ditto 패턴**: citty CLI(`src/cli/commands/<name>.ts` → `src/cli/index.ts` subCommands 등록), Zod=SoT(스키마 추가 시 `scripts/export-schemas.ts`에도 등록 안 하면 등록 테스트 실패), Store는 `src/core/*-store.ts` 패턴(`readJson/writeJson` + `localDir/dittoDir`), 저장은 `.ditto/memory/`(sources/events=SoT git-tracked, ir/projections=gitignored).
+1. **§5 push 확대(§5-2/5-3/5-4/5-5) + audit→curator 자동** — 이번엔 **미배선**(out_of_scope). `ditto memory usage`의 hit율(opportunities/attempts/hits/actionable) 데이터가 dogfooding으로 쌓인 뒤, 그 증거로 게이트 열고 확대. 이게 옵션 A의 핵심.
+2. **운영: 실 그래프 채우기** — `.ditto/memory/` SoT는 아직 비어있음(코드만 land, 실 ingest 미실행). 새 PC에서 `ditto memory bootstrap` → `ditto memory build [--semantic]` → `ditto memory project` 돌려 day-1 그래프 생성(SoT는 git-tracked라 커밋하면 따라옴).
+3. **선재 드리프트 정리(Tidy-First, 이 작업 무관)**: 선재 tsc 214건·`schemas/*.schema.json` 드리프트 5건(autopilot/command-log-entry/e2e-journey/evidence-index/interview-state). 메모리 작업이 만든 것 아님(검증으로 확인). 별도 정리.
+4. **CLAUDE.md knowledge 블록 sha256 마커** — ADR-0013 본문은 들어갔으나 마커 stale. 다음 `syncKnowledgeProjection`(knowledge-update 경로) 시 자가치유(본문은 `.ditto/knowledge/adr/`에서 재생성).
 
-## 설계 보강 (2026-06-09 세션 — 설계서에 반영 완료, 코드 대기)
+## 새 PC 재등록 (work item 상태는 안 따라옴 — 이미 v0 done이라 보통 불필요)
 
-지난 커밋 이후 설계서를 사용자와의 검토로 보강했다. 모두 문서에 반영됨:
-- **§4-2 재현성 규율** — LLM 의미 추출 비결정성("(A)", §9)을 *제거 아닌 감수*로 두고 3가지로 통제: 구조화 출력+낮은 temp+고정 청크 / concept 안정 ID+concept 수준 diff / INFERRED advisory+approve. (A)는 *쓰기* 시점 문제, 읽기는 결정적.
-- **§5 pull/push 구분** — query/path/explain은 CLI라 **모든 에이전트+main agent** 공통(pull). §5-1~5-5는 콜드스타트 비용 큰 곳만 자동주입(push). #8에서 각 owner 프롬프트에 **조건부** pull 습관 1줄(항상조회 금지).
-- **§3-7 cross-repo 결정** — 별도 지식 repo(submodule) 기각, `.ditto/memory/`를 **rooting 지점에**(단일=repo 루트, 멀티=workspace 루트). boxwood-workspace처럼 workspace git이 하위 repo를 clone·gitignore하는 구조면 별도 repo 불필요. 대가=owning-repo provenance(→ #2 `repo` 필드).
-- **§4-6 hannes 차용 2건** — (성능) 자동화 경계를 비용 등급으로(scan 자동/구조 증분/LLM 명시만) → commit마다 LLM 비용 0. (관리) audit를 append-only 이력으로 → drift 시계열. URI 스킴은 보류.
-
-## 미결정 (이어받아 사용자와 확인)
-
-- 설계서 §3-2 **Memgraph 제거(v0)** — in-process 그래프 + Neo4j export 어댑터로 대체. 사인오프 필요.
-- 설계서 §5 **통합 5지점을 이 work item에 포함할지, 별도 work item으로 분리할지.**
-- Core API(HTTP)·MCP server를 v0에 넣을지(현재 설계: 후속).
-
-## 주의 — 선재 드리프트 (내 변경 무관)
-
-`bun run schemas:export` 실행 시 `autopilot/command-log-entry/e2e-journey/evidence-index/interview-state` 5개 `schemas/*.schema.json`이 재생성된다 = repo의 Zod ↔ 커밋된 JSON 드리프트(누가 Zod만 고치고 export 안 함). **내 커밋엔 안 섞었다(매번 revert).** 별도 Tidy-First 수정 대상. 새 스키마 작업 후 export하면 또 뜨니 `git checkout -- schemas/{그 5개}`로 분리할 것.
-
-## 이어받기 (새 PC)
-
+v0는 끝났으므로 후속은 **새 work item**으로 시작하는 게 맞다:
 ```bash
-git pull                                          # 코드 + 문서 + 이 핸드오프
-bun install
-bun run build:bin && bun run build && bun link    # 터미널 `ditto`를 현재 빌드로
-# 확인: ditto --help 에 memory 는 아직 없음(증분 #2부터 추가). work·knowledge 등 보이면 OK
-ditto work start "보고서의 메모리/지식그래프 시스템을 ditto 네이티브 플러그인으로 구축 (증분 #2~)" \
-  --request "다른 PC에서 이어서 — memory-graph plugin (HANDOFF.md 참조)"   # work item 재등록(이 PC 것은 안 따라옴)
+git pull && bun install && bun run build:bin && bun run build && bun link   # 터미널 ditto 갱신
+ditto memory --help    # scan/build/query/... 보이면 OK
+# 후속(예: §5 push 확대 측정·운영 ingest)은 그때 ditto work start 로 새 work item
 ```
-
-그 뒤 `reports/design/memory-graph-plugin-design.md` §8 표의 **증분 #2**부터 시작.
+이번 v0의 dialectic 원장·완료계약을 보려면 이 PC의 `.ditto/local/work-items/wi_260609m41/`(reviews/dialectic-{1,2}.json, completion.json) 참조 — git엔 없음.
