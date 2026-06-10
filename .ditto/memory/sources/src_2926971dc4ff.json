@@ -3,10 +3,10 @@
   "source_id": "src_2926971dc4ff",
   "source_type": "spec",
   "path": ".ditto/knowledge/adr/ADR-0013-memory-subsystem-design.md",
-  "content_hash": "2394300ade379317d5f8b17728700504735f6fdd2d964119aa8fe88ec0f8b351",
-  "captured_at": "2026-06-10T04:25:38.358Z",
-  "revision": "2a408b1667844bfbf33096c2573118dd14653a34",
-  "git_commit": "2a408b1667844bfbf33096c2573118dd14653a34",
+  "content_hash": "f5fd89f41b50d0cf43a5b5e2afe2ec9274dcc01c691367176b19ac396798d58a",
+  "captured_at": "2026-06-10T07:19:59.627Z",
+  "revision": "5e70f97f5c2e2b3156b5341ba4d0e26fd87ee147",
+  "git_commit": "5e70f97f5c2e2b3156b5341ba4d0e26fd87ee147",
   "sensitivity": "internal",
-  "word_count": 794
+  "word_count": 1118
 }

@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_b7d57be1e031",
+  "event_type": "observation",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "confidence_kind: memory 추출 신뢰 밴드: EXTRACTED(결정적 도구가 직접 추출)·INFERRED(의미 추론)·AMBIGUOUS(불확실/충돌). 의미 추출기는 EXTRACTED를 주장할 수 없고, 밴드 이탈은 스키마가 loud fail로 거부한다.",
+  "created_at": "2026-06-10T07:19:59.627Z",
+  "status": "approved",
+  "sources": [
+    "src_a1fa40cf815e"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-10T07:19:59.627Z"
+}

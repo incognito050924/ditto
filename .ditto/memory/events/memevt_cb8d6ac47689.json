@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_cb8d6ac47689",
+  "event_type": "observation",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "context rot: 적재된 컨텍스트가 결과물을 해치는 두 메커니즘의 총칭. (A) 용량: 입력이 길수록 성능이 비균일하게 저하(한도 도달 전부터, distractor 1개로도 악화 — Chroma 18모델 실증). (B) 편향: 쌓인 맥락이 prior로 작동해 판단을 자기 서사 쪽으로 끌어당김(self-eval 과신). (A)는 compaction으로 완화되나 (B)는 compaction이 고착시키므로 검증은 fresh context가 유효성 조건이다. 대응 규칙은 헌장 §4-9, 근거는 reports/harnesses/context-rot-delegation-evidence.md.",
+  "created_at": "2026-06-10T07:19:59.627Z",
+  "status": "approved",
+  "sources": [
+    "src_a1fa40cf815e"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-10T07:19:59.627Z"
+}

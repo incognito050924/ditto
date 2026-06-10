@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_f1b0a7d6d59c",
+  "event_type": "observation",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "memory projection: approved 이벤트 head + IR에서 재생성되는 파생물(serving graph·wiki·manifest). .ditto/local(Tier③, gitignored)에 살고 언제든 재생성 가능하다. 모든 질의 응답은 projection의 freshness envelope을 동반한다.\naliases: projection, serving graph",
+  "created_at": "2026-06-10T07:19:59.627Z",
+  "status": "approved",
+  "sources": [
+    "src_a1fa40cf815e"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-10T07:19:59.627Z"
+}
