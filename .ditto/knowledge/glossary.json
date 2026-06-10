@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-06-06T00:00:00.000Z",
+  "updated_at": "2026-06-11T00:00:00+09:00",
   "entries": [
     {
       "term": "request",
@@ -335,6 +335,18 @@
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-06-10T16:30:00+09:00"
+    },
+    {
+      "term": "Journey DSL",
+      "aliases": [],
+      "definition": "사용자가 사용자 여정을 선언하는 Markdown 마크업. front-matter(id·name·description·surfaces·uses_blocks·flaky_history) + 한국어 동사 7개 단계 + assertion 5형 + 재사용 블록 + 데이터 케이스 테이블 + 선언적 조건 3형으로 구성된다. e2e/journeys/*.journey.md에 git-tracked되고, 에이전트(e2e-scripter)가 e2e/generated/*.spec.ts로 변환한다. 사용자가 도입한 말(\"DSL 혹은 전용 Markup\")에서 합의된 어휘. 정의 원천: skills/e2e-author/DSL-GUIDE.md.",
+      "examples": [
+        "e2e/journeys/*.journey.md"
+      ],
+      "not_to_be_confused_with": [],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-11T00:00:00+09:00"
     }
   ]
 }

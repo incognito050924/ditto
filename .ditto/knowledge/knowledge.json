@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-06-10T00:00:00+00:00",
+  "updated_at": "2026-06-11T00:00:00+09:00",
   "context_path": ".ditto/knowledge/CONTEXT.md",
   "glossary_path": ".ditto/knowledge/glossary.json",
   "project_map_path": null,
@@ -14,9 +14,29 @@
       "change_condition": "인프로세스 그래프가 규모 한계에 닿으면 Neo4j export를 상시 분석 경로로 승격. query hit율이 게이트를 넘으면 §5-2~5-5 push 확대·audit→curator 자동 트리거를 후속 work item으로 배선. 멀티 repo workspace에서 workspace-루트 메모리 변형이 필요해지면 ADR-0011 session-rooting scope-out 재개. DITTO_MEMORY=off 단일 플래그 graceful-degrade가 회귀하면 4불변식 재검토.",
       "path": ".ditto/knowledge/adr/ADR-0013-memory-subsystem-design.md",
       "superseded_by": null
+    },
+    {
+      "id": "ADR-0014",
+      "title": "E2E 테스트 작성 — 사용자 DSL 선언 + 에이전트 변환 + 게이트 검증",
+      "status": "accepted",
+      "rationale": "사용자 결정 4건의 종합(2026-06-11 tech-spec 세션, stepwise 리뷰로 합의): 산출물=영속 Playwright 파일, 입력=사용자 DSL, 변환기 개발 부담 과대 → 에이전트 변환+게이트, 전체 실행은 느림·flaky로 비현실적. 에이전트 단독 자율 작성은 UI/UX·기획 맥락을 못 담아 무의미 테스트가 된다(기능 존재 이유) — 의도(여정)는 사람이 Journey DSL로 선언, Playwright 구현은 에이전트(e2e-scripter). 정합성은 게이트 3종(생성 직후 1회 실브라우저 실행, DSL step↔@step 마커 집합 검사, DSL digest 임베드·stale 감지)으로 보장. 회귀는 영향 추림(front-matter surfaces × 변경 diff 교차) — 추려진 목록 안에서는 회피 불가. E2E 실패 시 사용자 판정(기능/스크립트/환경/flaky) 전 기능 코드 수정 잠금(featureFixAllowed)으로 잘못된 스크립트에 맞춘 기능 과적합 차단.",
+      "change_condition": "DSL 표현력 한계(선언적 구문으로 못 푸는 여정)가 실사용에서 반복 확인되면 스펙 §5-10 경계(범용 문법화 금지) 재논의; 추림 미탐이 실회귀를 놓치는 사례가 확인되면 추림 규칙 재설계.",
+      "path": ".ditto/knowledge/adr/ADR-0014-e2e-dsl-agent-gates.md",
+      "superseded_by": null
     }
   ],
   "patterns": [],
-  "learnings": [],
+  "learnings": [
+    {
+      "summary": "autopilot seed↔planner 중복은 시드 retire로 푼다(2회 재발 확인) — bootstrap의 generic 시드 N2(전체 구현)와 planner의 자기완결 분해 subgraph가 중복될 때, 시드 노드를 store 경유로 제거하고 의존(리뷰·verify)을 재배선한다. wi_260609m41에 이어 wi_260610p9h에서 동일 해법 재사용. supersededByPromotion은 리뷰 노드가 시드에 의존하면 시드를 못 지우므로 수동 retire가 필요. 코드 차원 자동 정규화는 미해결 개선 후보.",
+      "evidence": [
+        {
+          "kind": "note",
+          "summary": "wi_260609m41과 wi_260610p9h 두 work item에서 동일 증상(시드 N2 ↔ planner subgraph 중복)·동일 해법(store 경유 시드 제거 + 의존 재배선) 재현"
+        }
+      ],
+      "learned_at": "2026-06-11T00:00:00+09:00"
+    }
+  ],
   "projected_to_claude_md": true
 }

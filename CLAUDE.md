@@ -305,7 +305,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=c539de5fe25fe93d19e88653610e5ab6bdeb381fea3843ab4e79c92d12a39db0 -->
+<!-- ditto:knowledge:start sha256=e49a10f69cb201174a6679a85157b325d2f9542d4bb6c5ea344c207eabc25a65 -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -317,6 +317,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 ## Glossary terms
 - ADR
 - DITTO 기능 4축
+- Journey DSL
 - completion contract
 - confidence_kind
 - context packet
@@ -356,5 +357,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-0011 · accepted · Distribution 횡단 배포계약 축 + session-rooting invariant (cross-repo subagent 위임 비지원)
 - ADR-0012 · accepted · 제품/프로젝트전역/개인 3계층 격리 — `.ditto/local` 개인구획 + `dist/plugin` 배포조립
 - ADR-0013 · accepted · 메모리 서브시스템 설계 — 인프로세스 그래프 · 2-tier 저장 · supersedes 승인 · 옵션 A 재범위
+- ADR-0014 · accepted · E2E 테스트 작성 — 사용자 DSL 선언 + 에이전트 변환 + 게이트 검증
 
 <!-- ditto:knowledge:end -->
