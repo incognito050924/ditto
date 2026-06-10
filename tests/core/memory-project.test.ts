@@ -84,6 +84,62 @@ describe('reduceEvents (supersession + approval filter)', () => {
     ];
     expect(reduceEvents(events).approvedHeads).toEqual([]);
   });
+
+  // R3 (round-2 review): a supersedes edge only takes effect when the
+  // superseding event is EFFECTIVE (approved itself, or decided-approved through
+  // its own chain). A pending/rejected correction must not retract an approved
+  // fact from the graph (§4-5 symmetry: pending can neither add NOR remove).
+  test('R3: a pending correction does not drop the approved head it supersedes', () => {
+    const events = [
+      ev('memevt_fact0001', { ...approval }),
+      ev('memevt_corr0001', { supersedes: 'memevt_fact0001' }), // pending correction
+    ];
+    expect(reduceEvents(events).approvedHeads.map((e) => e.event_id)).toEqual(['memevt_fact0001']);
+  });
+
+  test('R3: a rejected correction leaves the approved fact in place', () => {
+    const events = [
+      ev('memevt_fact0001', { ...approval }),
+      ev('memevt_corr0001', { supersedes: 'memevt_fact0001' }), // pending correction
+      ev('memevt_decr0001', {
+        // user rejects the correction (approveEvent --reject shape)
+        status: 'rejected',
+        approved_by: 'user',
+        decided_at: '2026-06-09T11:00:00+00:00',
+        supersedes: 'memevt_corr0001',
+      }),
+    ];
+    expect(reduceEvents(events).approvedHeads.map((e) => e.event_id)).toEqual(['memevt_fact0001']);
+  });
+
+  test('R3: an approved correction (decided through its chain) replaces the fact — chain depth 3', () => {
+    const events = [
+      ev('memevt_fact0001', { ...approval }),
+      ev('memevt_corr0001', { supersedes: 'memevt_fact0001' }), // pending correction
+      ev('memevt_deca0001', { ...approval, supersedes: 'memevt_corr0001' }), // approval decision
+    ];
+    // The decision head is the only emitted event: the correction is decided
+    // approved (via its chain), so its supersedes edge now retires the old fact.
+    expect(reduceEvents(events).approvedHeads.map((e) => e.event_id)).toEqual(['memevt_deca0001']);
+  });
+
+  test('R3/F9: all-approved chain of depth 3 resolves to the single newest head', () => {
+    const events = [
+      ev('memevt_chna0001', { ...approval }),
+      ev('memevt_chnb0001', { ...approval, supersedes: 'memevt_chna0001' }),
+      ev('memevt_chnc0001', { ...approval, supersedes: 'memevt_chnb0001' }),
+    ];
+    expect(reduceEvents(events).approvedHeads.map((e) => e.event_id)).toEqual(['memevt_chnc0001']);
+  });
+
+  test('R3: a supersedes cycle does not hang and emits no head for the cycle', () => {
+    const events = [
+      ev('memevt_cyca0001', { ...approval, supersedes: 'memevt_cycb0001' }),
+      ev('memevt_cycb0001', { ...approval, supersedes: 'memevt_cyca0001' }),
+    ];
+    // Both supersede each other (hostile/corrupt input): neither is a head.
+    expect(reduceEvents(events).approvedHeads).toEqual([]);
+  });
 });
 
 describe('setHash determinism + change → dirty', () => {
