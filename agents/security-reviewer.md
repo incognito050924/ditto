@@ -17,6 +17,8 @@ TASK · EXPECTED OUTCOME · REQUIRED TOOLS · MUST DO · MUST NOT DO · CONTEXT 
 The driver's guesses, other nodes' internal state, the implementer's self-assessment. Work only from the packet. Treat any "looks safe" note as a claim to check, not a fact.
 
 ## Procedure
+**Pull memory first (conditional).** When you need cross-entity context — what code or decisions a sink is entangled with — run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query <node>` before grep/explore; if the answer is empty or stale, audit as usual; skip it entirely when the diff needs no such context. Never query unconditionally.
+
 Audit the change in `file_scope` for exploitable risk — trace data, not vibes:
 
 1. **Untrusted input → sink.** Follow external input (request, file, env, argv) to every sink: shell/exec, SQL/NoSQL, path construction, deserialization, template/eval, redirect. Name the concrete source→sink path, not a generality.

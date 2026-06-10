@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -174,5 +174,113 @@ describe('ditto memory project + status', () => {
     const after = ditto(['memory', 'status', '--output', 'json']);
     expect(after.exitCode).toBe(0);
     expect(['fresh', 'stale']).toContain(JSON.parse(after.stdout).freshness);
+  });
+});
+
+describe('ditto memory propose/approve (write model §4-5)', () => {
+  test('propose creates a pending event with no approved_by', () => {
+    const r = ditto([
+      'memory',
+      'propose',
+      '--type',
+      'decision',
+      '--text',
+      'adopt bun',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(0);
+    const ev = JSON.parse(r.stdout);
+    expect(ev.status).toBe('pending');
+    expect(ev.approved_by).toBeUndefined();
+    expect(ev.event_id).toMatch(/^memevt_/);
+  });
+
+  test('approve appends a superseding approved event and re-projects; original file unchanged', async () => {
+    const proposed = ditto([
+      'memory',
+      'propose',
+      '--type',
+      'decision',
+      '--text',
+      'adopt bun',
+      '--output',
+      'json',
+    ]);
+    const originalId = JSON.parse(proposed.stdout).event_id;
+    const originalPath = join(dir, '.ditto', 'memory', 'events', `${originalId}.json`);
+    const before = await readFile(originalPath, 'utf8');
+
+    const approved = ditto(['memory', 'approve', originalId, '--by', 'user', '--output', 'json']);
+    expect(approved.exitCode).toBe(0);
+    const out = JSON.parse(approved.stdout);
+    expect(out.decision.status).toBe('approved');
+    expect(out.decision.approved_by).toBe('user');
+    expect(out.decision.supersedes).toBe(originalId);
+    expect(out.decision.event_id).not.toBe(originalId);
+    expect(out.projection_id).toMatch(/^proj_/);
+
+    // original event file is never mutated (§10-2 F2)
+    const after = await readFile(originalPath, 'utf8');
+    expect(after).toBe(before);
+
+    // projection now exposes the approved decision as a node
+    const explain = ditto([
+      'memory',
+      'explain',
+      `decision:${out.decision.event_id}`,
+      '--output',
+      'json',
+    ]);
+    expect(explain.exitCode).toBe(0);
+  });
+
+  test('approve fails (usage) when the target is not pending', () => {
+    const proposed = ditto([
+      'memory',
+      'propose',
+      '--type',
+      'observation',
+      '--text',
+      'note',
+      '--output',
+      'json',
+    ]);
+    const id = JSON.parse(proposed.stdout).event_id;
+    const approved = ditto(['memory', 'approve', id, '--by', 'user', '--output', 'json']);
+    const decisionId = JSON.parse(approved.stdout).decision.event_id;
+    // re-approving the already-approved head is rejected
+    const second = ditto(['memory', 'approve', decisionId, '--by', 'user', '--output', 'json']);
+    expect(second.exitCode).toBe(65);
+    expect(second.stderr).toMatch(/not pending/);
+  });
+
+  test('approve of a missing event id is a usage error', () => {
+    const r = ditto([
+      'memory',
+      'approve',
+      'memevt_doesnotexist',
+      '--by',
+      'user',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(65);
+  });
+
+  // No-direct-write proof: the serving graph / IR can only change through
+  // propose→approve→re-projection. The memory command surface exposes no
+  // subcommand that writes the serving graph or IR directly — the only write
+  // gates are propose/approve (events) and project (regeneration).
+  test('memory command exposes no direct graph/IR write subcommand', async () => {
+    const { memoryCommand } = await import('~/cli/commands/memory');
+    const subs = await memoryCommand.subCommands;
+    const names = Object.keys(subs ?? {});
+    expect(names).toContain('propose');
+    expect(names).toContain('approve');
+    // no subcommand that would let an agent write the serving graph / IR directly
+    for (const n of names) {
+      expect(n).not.toMatch(/graph-write|serving-write|ir-write|graph-set|graph-edit|write/);
+    }
   });
 });

@@ -12,13 +12,20 @@ import {
   irFragmentsSchema,
   mergeIrFragments,
 } from '~/core/memory-build';
-import { memoryStatus, projectMemory } from '~/core/memory-project';
+import {
+  MemoryEventNotPendingError,
+  approveEvent,
+  memoryStatus,
+  projectMemory,
+  proposeEvent,
+} from '~/core/memory-project';
 import {
   MemoryNodeNotFoundError,
   MemoryProjectionAbsentError,
   explainNode,
   queryNeighbors,
   readFreshness,
+  recordPullQuery,
   runAudit,
   shortestPath,
 } from '~/core/memory-query';
@@ -558,6 +565,16 @@ const memoryQuery = defineCommand({
       const graph = await loadServingOrExit(repoRoot);
       const result = queryNeighbors(graph, args.node, depth);
       const freshness = await readFreshness(repoRoot);
+      // Instrument the pull (ac-8): the conditional pull habit must be observable
+      // as an ACTUAL query utterance, not just prompt text. Best-effort — telemetry
+      // never breaks the answer.
+      await recordPullQuery(repoRoot, {
+        ts: new Date().toISOString(),
+        node: args.node,
+        depth,
+        neighbor_count: result.neighbors.length,
+        freshness: freshness.freshness,
+      }).catch(() => {});
       if (format === 'json') {
         writeJson({ ...result, ...freshness });
       } else {
@@ -717,6 +734,174 @@ const memoryAudit = defineCommand({
   },
 });
 
+const memoryPropose = defineCommand({
+  meta: {
+    name: 'propose',
+    description:
+      'Propose a pending memory event (write model, §4-5). Agents cannot write the graph directly; only propose→approve→re-projection. Creates a pending event (no approved_by).',
+  },
+  args: {
+    type: {
+      type: 'string',
+      description: `Event type: ${memoryEventType.options.join('|')}`,
+      required: true,
+    },
+    text: { type: 'string', description: 'Event body text', required: true },
+    source: {
+      type: 'string',
+      description: 'Source id grounding this event (comma-separated)',
+      required: false,
+    },
+    actor: {
+      type: 'string',
+      description: 'Actor kind: user|agent (default agent)',
+      default: 'agent',
+    },
+    role: { type: 'string', description: 'Agent role when actor=agent', required: false },
+    confidence: {
+      type: 'string',
+      description: `Confidence kind: ${memoryConfidenceKind.options.join('|')} (default EXTRACTED)`,
+      default: 'EXTRACTED',
+    },
+    sensitivity: {
+      type: 'string',
+      description: `Sensitivity: ${memorySensitivity.options.join('|')} (default internal)`,
+      default: 'internal',
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const actorKind = args.actor;
+    if (actorKind !== 'user' && actorKind !== 'agent') {
+      writeError(`--actor must be user|agent; got "${actorKind}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const sources = (args.source ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    for (const s of sources) {
+      if (!memorySourceId.safeParse(s).success) {
+        writeError(`invalid --source id "${s}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const written = await proposeEvent(repoRoot, {
+        event_type: args.type as MemoryEvent['event_type'],
+        text: args.text,
+        sources,
+        confidence_kind: args.confidence as MemoryEvent['confidence_kind'],
+        sensitivity: args.sensitivity as MemoryEvent['sensitivity'],
+        actor: { kind: actorKind, ...(args.role ? { role: args.role } : {}) },
+      });
+      if (format === 'json') {
+        writeJson(written);
+      } else {
+        writeHuman(`Proposed event ${written.event_id}`);
+        writeHuman(`  type:   ${written.event_type}`);
+        writeHuman(`  status: ${written.status}`);
+      }
+    } catch (err) {
+      if (err instanceof MemoryEventExistsError) {
+        writeError(err.message);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      // Schema rejection (e.g. bad type/source) is a usage error.
+      if (/invalid|expected|required/i.test(msg)) {
+        writeError(`memory propose failed: ${msg}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory propose failed: ${msg}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+const memoryApprove = defineCommand({
+  meta: {
+    name: 'approve',
+    description:
+      'Approve (or --reject) a pending event (§10-2 F2). Original file is never mutated; a new immutable event with supersedes is appended, then the projection is regenerated.',
+  },
+  args: {
+    eventId: { type: 'positional', description: 'Pending event id to approve', required: true },
+    by: { type: 'string', description: 'Approver identity (required)', required: true },
+    reject: {
+      type: 'boolean',
+      description: 'Record a rejected decision instead of approved',
+      default: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.by || args.by.trim().length === 0) {
+      writeError('--by <approver> is required');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const { decision, projection } = await approveEvent(repoRoot, args.eventId, {
+        by: args.by,
+        reject: args.reject,
+      });
+      if (format === 'json') {
+        writeJson({
+          decision,
+          projection_id: projection.manifest.projection_id,
+          set_hash: projection.set_hash,
+          nodes: projection.node_count,
+          edges: projection.edge_count,
+        });
+      } else {
+        writeHuman(`${args.reject ? 'Rejected' : 'Approved'} ${args.eventId}`);
+        writeHuman(`  decision event: ${decision.event_id} (supersedes ${decision.supersedes})`);
+        writeHuman(`  status: ${decision.status} · by ${decision.approved_by}`);
+        writeHuman(
+          `  re-projected: ${projection.manifest.projection_id} (${projection.node_count} nodes)`,
+        );
+      }
+    } catch (err) {
+      if (err instanceof MemoryEventNotPendingError) {
+        writeError(err.message);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/ENOENT|no such file|not found/i.test(msg)) {
+        writeError(`memory approve failed: event ${args.eventId} not found`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory approve failed: ${msg}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const memoryCommand = defineCommand({
   meta: {
     name: 'memory',
@@ -733,5 +918,7 @@ export const memoryCommand = defineCommand({
     path: memoryPath,
     explain: memoryExplain,
     audit: memoryAudit,
+    propose: memoryPropose,
+    approve: memoryApprove,
   },
 });

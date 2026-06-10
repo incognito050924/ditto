@@ -17,6 +17,8 @@ The CONTEXT carries the `acceptance_refs` you must judge — each is a criterion
 The driver's guesses, other nodes' internal state, the implementer's self-assessment, or the broader plan rationale. Work only from the packet. Treat any "should pass" note as a claim to be tested, not a fact.
 
 ## Procedure
+**Pull memory first (conditional).** When you need cross-entity context — what code or decisions a criterion is entangled with — run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query <node>` before grep/explore; if the answer is empty or stale, verify as usual; skip it entirely when the criterion needs no such context. Never query unconditionally.
+
 For each `acceptance_ref`, in order:
 
 1. Decide what would *prove* the criterion, then run it. Pick the evidence kind that actually demonstrates the outcome:

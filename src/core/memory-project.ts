@@ -14,13 +14,14 @@
  * `Decision` node; its grounding sources become `RATIONALE_FOR` edges
  * (source → decision). EXTRACTED (the decision is an approved fact, score 1.0).
  */
-import type { MemoryEvent } from '~/schemas/memory-event';
+import { type MemoryEvent, memoryEvent } from '~/schemas/memory-event';
 import type { MemoryEdge, MemoryGraphIr, MemoryNode } from '~/schemas/memory-graph-ir';
 import type {
   MemoryProjectionManifest,
   MemorySourceRevision,
 } from '~/schemas/memory-projection-manifest';
 import type { MemorySource } from '~/schemas/memory-source';
+import { generateId } from './id';
 import { reduceEvents } from './memory-reduce';
 import {
   MemoryEventStore,
@@ -232,6 +233,111 @@ export async function projectMemory(
     node_count: nodes.length,
     edge_count: edges.length,
   };
+}
+
+/**
+ * Write model — proposal/approval gate (design §4-5 / §10-2 F2).
+ *
+ * Agents never write the serving graph or IR directly: there is no
+ * graph/IR write API exposed for them. The ONLY path that influences a
+ * projection is (1) `proposeEvent` → a pending MemoryEvent, then (2)
+ * `approveEvent` → a NEW immutable approved event that supersedes the
+ * original, then re-projection. The approval invariant is enforced by the
+ * `memoryEvent` schema (approved ⇒ approved_by + decided_at; pending ⇒ no
+ * approved_by); reduceEvents only feeds approved heads into projection.
+ */
+
+export class MemoryEventNotPendingError extends Error {
+  constructor(
+    public readonly eventId: string,
+    public readonly status: string,
+  ) {
+    super(
+      `event ${eventId} is not pending (status=${status}); only pending events can be approved`,
+    );
+    this.name = 'MemoryEventNotPendingError';
+  }
+}
+
+export interface ProposeInput {
+  event_type: MemoryEvent['event_type'];
+  text: string;
+  sources?: string[];
+  confidence_kind?: MemoryEvent['confidence_kind'];
+  sensitivity?: MemoryEvent['sensitivity'];
+  actor?: MemoryEvent['actor'];
+}
+
+/**
+ * Create one pending MemoryEvent (status='pending', no approved_by — approval
+ * invariant). Records it immutably via MemoryEventStore.append. This is the
+ * only entry point that introduces new knowledge into the write model.
+ */
+export async function proposeEvent(
+  repoRoot: string,
+  input: ProposeInput,
+  options: { now?: Date } = {},
+): Promise<MemoryEvent> {
+  const now = (options.now ?? new Date()).toISOString();
+  const store = new MemoryEventStore(repoRoot);
+  const eventId = await generateId('memevt', (candidate) =>
+    store.get(candidate).then(
+      () => true,
+      () => false,
+    ),
+  );
+  const draft = memoryEvent.parse({
+    schema_version: '0.1.0' as const,
+    event_id: eventId,
+    event_type: input.event_type,
+    actor: input.actor ?? { kind: 'agent' },
+    text: input.text,
+    created_at: now,
+    status: 'pending' as const,
+    sources: input.sources ?? [],
+    confidence_kind: input.confidence_kind ?? 'EXTRACTED',
+    sensitivity: input.sensitivity ?? 'internal',
+  });
+  return store.append(draft);
+}
+
+/**
+ * Approve a pending event (§10-2 F2). The original file is NEVER mutated;
+ * instead a NEW immutable event is appended with status='approved',
+ * approved_by, decided_at, and supersedes=<originalId>. After appending,
+ * the projection is regenerated so reduceEvents reflects the new approved
+ * head (the supersession chain's new head). `decision` becomes 'rejected'
+ * when reject=true (same supersedes mechanism).
+ */
+export async function approveEvent(
+  repoRoot: string,
+  eventId: string,
+  options: { by: string; reject?: boolean; now?: Date },
+): Promise<{ decision: MemoryEvent; projection: ProjectionResult }> {
+  const store = new MemoryEventStore(repoRoot);
+  const original = await store.get(eventId); // throws if absent
+  if (original.status !== 'pending') {
+    throw new MemoryEventNotPendingError(eventId, original.status);
+  }
+  const now = (options.now ?? new Date()).toISOString();
+  const decisionId = await generateId('memevt', (candidate) =>
+    store.get(candidate).then(
+      () => true,
+      () => false,
+    ),
+  );
+  const decision = memoryEvent.parse({
+    ...original,
+    event_id: decisionId,
+    created_at: now,
+    status: options.reject ? ('rejected' as const) : ('approved' as const),
+    approved_by: options.by,
+    decided_at: now,
+    supersedes: original.event_id,
+  });
+  const written = await store.append(decision);
+  const projection = await projectMemory(repoRoot, options.now ? { now: options.now } : {});
+  return { decision: written, projection };
 }
 
 export type Freshness = 'fresh' | 'stale' | 'absent';

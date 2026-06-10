@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  MemoryEventNotPendingError,
+  approveEvent,
   buildServingGraph,
   memoryStatus,
   projectDecisionEvents,
   projectMemory,
+  proposeEvent,
 } from '~/core/memory-project';
 import { reduceEvents } from '~/core/memory-reduce';
 import { MemoryEventStore, MemoryGraphIrStore, MemorySourceStore } from '~/core/memory-store';
@@ -276,5 +279,88 @@ describe('projectMemory + memoryStatus (end-to-end freshness)', () => {
     expect(r.node_count).toBe(2);
     expect(r.serving.nodes.map((n) => n.id)).toContain('artifact:src/a');
     expect(r.serving.nodes.map((n) => n.id)).toContain('decision:memevt_dec00001');
+  });
+});
+
+describe('proposeEvent / approveEvent (write model §4-5 / §10-2 F2)', () => {
+  test('proposeEvent creates a pending event with no approved_by', async () => {
+    const proposed = await proposeEvent(workDir, {
+      event_type: 'decision',
+      text: 'use bun for runtime',
+      sources: [],
+    });
+    expect(proposed.status).toBe('pending');
+    expect(proposed.approved_by).toBeUndefined();
+    expect(proposed.event_id).toMatch(/^memevt_/);
+    // persisted immutably
+    const stored = await new MemoryEventStore(workDir).get(proposed.event_id);
+    expect(stored.status).toBe('pending');
+  });
+
+  test('approveEvent appends a superseding approved event without mutating the original', async () => {
+    const proposed = await proposeEvent(workDir, {
+      event_type: 'decision',
+      text: 'use bun for runtime',
+      sources: [],
+    });
+    const originalPath = join(workDir, '.ditto', 'memory', 'events', `${proposed.event_id}.json`);
+    const beforeRaw = await readFile(originalPath, 'utf8');
+
+    const { decision, projection } = await approveEvent(workDir, proposed.event_id, {
+      by: 'user',
+      now: new Date('2026-06-09T12:00:00Z'),
+    });
+
+    // new immutable approved event with supersedes + invariant fields
+    expect(decision.event_id).not.toBe(proposed.event_id);
+    expect(decision.status).toBe('approved');
+    expect(decision.approved_by).toBe('user');
+    expect(decision.decided_at).toBeDefined();
+    expect(decision.supersedes).toBe(proposed.event_id);
+
+    // original file byte-for-byte unchanged (no mutation)
+    const afterRaw = await readFile(originalPath, 'utf8');
+    expect(afterRaw).toBe(beforeRaw);
+
+    // re-projection reflects the approved head as a Decision node
+    expect(projection.serving.nodes.map((n) => n.id)).toContain(`decision:${decision.event_id}`);
+    expect(projection.serving.nodes.map((n) => n.id)).not.toContain(
+      `decision:${proposed.event_id}`,
+    );
+  });
+
+  test('approveEvent then reduceEvents keeps only the new approved head', async () => {
+    const proposed = await proposeEvent(workDir, { event_type: 'observation', text: 'x' });
+    const { decision } = await approveEvent(workDir, proposed.event_id, { by: 'policy' });
+    const all = await new MemoryEventStore(workDir).list();
+    const { approvedHeads } = reduceEvents(all);
+    expect(approvedHeads.map((e) => e.event_id)).toEqual([decision.event_id]);
+  });
+
+  test('approveEvent rejects a non-pending event id', async () => {
+    const proposed = await proposeEvent(workDir, { event_type: 'observation', text: 'x' });
+    await approveEvent(workDir, proposed.event_id, { by: 'user' });
+    // approving the now-superseded original twice is allowed (still pending),
+    // but approving the approved decision head is not (status=approved).
+    const all = await new MemoryEventStore(workDir).list();
+    const approved = all.find((e) => e.status === 'approved');
+    if (!approved) throw new Error('expected an approved event');
+    await expect(approveEvent(workDir, approved.event_id, { by: 'user' })).rejects.toBeInstanceOf(
+      MemoryEventNotPendingError,
+    );
+  });
+
+  test('reject path records a rejected superseding event (excluded from projection)', async () => {
+    const proposed = await proposeEvent(workDir, { event_type: 'decision', text: 'maybe' });
+    const { decision, projection } = await approveEvent(workDir, proposed.event_id, {
+      by: 'user',
+      reject: true,
+    });
+    expect(decision.status).toBe('rejected');
+    expect(decision.supersedes).toBe(proposed.event_id);
+    // rejected head is not projected
+    expect(projection.serving.nodes.map((n) => n.id)).not.toContain(
+      `decision:${decision.event_id}`,
+    );
   });
 });

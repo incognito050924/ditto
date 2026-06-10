@@ -8,8 +8,11 @@ import {
   MemoryProjectionAbsentError,
   auditCounts,
   explainNode,
+  pullUsageLogPath,
   queryNeighbors,
   readFreshness,
+  readPullUsage,
+  recordPullQuery,
   runAudit,
   shortestPath,
 } from '~/core/memory-query';
@@ -274,5 +277,37 @@ describe('runAudit (append-only history)', () => {
     expect(lines).toHaveLength(2);
     expect(JSON.parse(lines[0] as string).audited_at).toBe('2026-06-09T13:00:00.000Z');
     expect(JSON.parse(lines[1] as string).audited_at).toBe('2026-06-09T14:00:00.000Z');
+  });
+});
+
+describe('pull-query instrumentation (ac-8: actual query utterances, not prompt text)', () => {
+  test('records each pull as a JSONL line readable as data', async () => {
+    expect(await readPullUsage(workDir)).toEqual([]); // empty before any query
+
+    await recordPullQuery(workDir, {
+      ts: '2026-06-09T15:00:00.000Z',
+      node: 'b',
+      depth: 2,
+      neighbor_count: 2,
+      freshness: 'fresh',
+    });
+    await recordPullQuery(workDir, {
+      ts: '2026-06-09T15:01:00.000Z',
+      node: 'o',
+      depth: 1,
+      neighbor_count: 0,
+      freshness: 'stale',
+    });
+
+    const records = await readPullUsage(workDir);
+    expect(records).toHaveLength(2);
+    expect(records[0]).toMatchObject({ node: 'b', neighbor_count: 2, freshness: 'fresh' });
+    expect(records[1]).toMatchObject({ node: 'o', neighbor_count: 0, freshness: 'stale' });
+  });
+
+  test('telemetry lives under .ditto/local (gitignored derivative), not the SoT tier', () => {
+    expect(pullUsageLogPath(workDir)).toBe(
+      join(workDir, '.ditto', 'local', 'memory', 'pull-usage.jsonl'),
+    );
   });
 });

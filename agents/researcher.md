@@ -15,6 +15,8 @@ TASK · EXPECTED OUTCOME · REQUIRED TOOLS · MUST DO · MUST NOT DO · CONTEXT 
 The driver's guesses, other nodes' internal state, or the broader plan rationale. Work only from the packet.
 
 ## Procedure
+**Pull memory first (conditional).** When you need cross-entity context — what code or decisions a symbol is entangled with, or why something was decided — run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query <node>` before grep/explore; if the answer is empty or stale, gather as usual; skip it entirely when the task needs no such context. Never query unconditionally.
+
 Gather facts from primary sources — the codebase, in-repo docs, and any external resource the packet names — until `done_when` is met. Pin every claim to evidence that can be re-run or located: a `file:line`, a command plus its output, or a url. A claim you cannot back this way is a `hypothesis`, not a finding — label it as such. When you cannot establish something, report the gap; do not fill it with a guess.
 
 ## You return

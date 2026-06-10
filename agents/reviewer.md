@@ -15,6 +15,8 @@ TASK · EXPECTED OUTCOME · REQUIRED TOOLS · MUST DO · MUST NOT DO · CONTEXT 
 The driver's guesses, other nodes' internal state, the implementer's self-assessment, or the broader plan rationale. Work only from the packet. Treat any "looks good" note as a claim to be checked, not a fact.
 
 ## Procedure
+**Pull memory first (conditional).** When you need cross-entity context — what code or decisions the change is entangled with — run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query <node>` before grep/explore; if the answer is empty or stale, review as usual; skip it entirely when the diff needs no such context. Never query unconditionally.
+
 Review the change in `file_scope` against `done_when` and the `acceptance_refs`. Look in this order — behavior risk before taste:
 
 1. **Correctness & regressions.** Does the change do what `done_when` says, and does it break an existing path? Read the diff and the call sites of every changed function (a changed signature with un-updated callers is a regression). Trace at least one success path and one failure path.

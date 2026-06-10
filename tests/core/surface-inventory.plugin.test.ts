@@ -15,7 +15,7 @@ describe('DITTO plugin surface inventory (M1.6)', () => {
       readFileSync(join(REPO_ROOT, '.ditto', 'local', 'surfaces.json'), 'utf8'),
     );
     const parsed = surfaceCatalog.parse(raw);
-    expect(parsed.surfaces.length).toBe(27); // 8 skills + 13 agents + 5 hooks + 1 plugin ([VERIFY] owners: +security-reviewer, +refactorer, +retrospective agents)
+    expect(parsed.surfaces.length).toBe(29); // 9 skills + 14 agents + 5 hooks + 1 plugin (memory-graph skill + memory-extractor agent, increment #8)
   });
 
   test('declared catalog matches the actual plugin-root scan (no drift)', async () => {
