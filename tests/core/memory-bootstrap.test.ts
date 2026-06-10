@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { bootstrapIngest, searchEventBodies } from '~/core/memory-bootstrap';
+import { bootstrapIngest } from '~/core/memory-bootstrap';
+import { searchEventBodies } from '~/core/memory-query';
 import { MemoryEventStore, MemorySourceStore } from '~/core/memory-store';
 import { duplicateSearch } from '~/hooks/user-prompt-submit';
 

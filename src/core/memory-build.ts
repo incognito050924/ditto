@@ -219,8 +219,8 @@ export function mergeIrFragments(fragments: IrFragment[]): {
   for (const [cid, group] of grouped) {
     // canonical winner = smallest by (id, name); its scalar fields win ties.
     const ordered = [...group].sort((a, b) => {
-      const ka = `${a.id ?? ''} ${a.name}`;
-      const kb = `${b.id ?? ''} ${b.name}`;
+      const ka = `${a.id ?? ''}\u0000${a.name}`;
+      const kb = `${b.id ?? ''}\u0000${b.name}`;
       return ka < kb ? -1 : ka > kb ? 1 : 0;
     });
     const winner = ordered[0] as FragmentNode;

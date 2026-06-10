@@ -17,7 +17,6 @@ import { appendFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { dittoDir, localDir } from './ditto-paths';
 import { ensureDir } from './fs';
-import { type BodyMatch, searchEventBodies } from './memory-bootstrap';
 import { memoryStatus } from './memory-project';
 import { MemoryEventStore, MemoryProjectionStore, type ServingGraph } from './memory-store';
 
@@ -145,6 +144,56 @@ export function queryNeighbors(graph: ServingGraph, node: string, depth: number)
   }
   seen.delete(node);
   return { root: node, depth, neighbors: [...seen].sort() };
+}
+
+/**
+ * Significant tokens (len ≥ 3) of a string — the SAME tokenizer the title-token
+ * duplicateSearch (src/hooks/user-prompt-submit.ts) uses, so the recall
+ * comparison in the ac-14 test is apples-to-apples.
+ */
+export function bodyTokens(s: string): Set<string> {
+  return new Set(
+    s
+      .toLowerCase()
+      .split(/[^a-z0-9가-힣]+/)
+      .filter((t) => t.length >= 3),
+  );
+}
+
+export interface BodyMatch {
+  source_id: string;
+  event_id: string;
+}
+
+/**
+ * BODY search over ingested events: an event matches when `query` appears as a
+ * substring of its text OR shares a significant token with it. This is broader
+ * recall than title-token overlap because it sees the rationale/finding body,
+ * not just the document title (ac-14). Pure helper over already-loaded events.
+ */
+export function searchEventBodies(
+  query: string,
+  events: ReadonlyArray<{ event_id: string; text: string; sources: string[] }>,
+): BodyMatch[] {
+  const q = query.trim().toLowerCase();
+  if (q.length === 0) return [];
+  const qTokens = bodyTokens(query);
+  const out: BodyMatch[] = [];
+  for (const e of events) {
+    const body = e.text.toLowerCase();
+    let hit = body.includes(q);
+    if (!hit) {
+      const bTokens = bodyTokens(e.text);
+      for (const t of qTokens) {
+        if (bTokens.has(t)) {
+          hit = true;
+          break;
+        }
+      }
+    }
+    if (hit) out.push({ source_id: e.sources[0] ?? '', event_id: e.event_id });
+  }
+  return out;
 }
 
 export interface BodyQueryResult extends FreshnessEnvelope {
