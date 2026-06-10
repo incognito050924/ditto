@@ -82,6 +82,8 @@ graphify에서 **참고만** 하는 것: 추출 파이프라인 형태, confiden
 
 > **동기화 한계 (knowledge↔memory).** ADR/glossary 본문을 memory로 끌어오는 길은 bootstrap ingest(증분, §10-9) 하나뿐인데, 이건 수동 1회성(CLI 호출)이고 scan은 `.ditto`를 제외(SKIP_DIRS)하므로 `.ditto/knowledge`를 수정하면 ingest 사본이 drift한다. **현재 정책**: knowledge 변경 후 `ditto memory bootstrap` 재실행으로 source를 갱신한다(source는 content_hash 변경 시 다시 write되나, 불변 이벤트 본문은 supersede 없이는 안 바뀜). 자동 재ingest/supersede는 drift가 실제 문제가 되면 후속 work item. (ADR-0013 철회/재검토 조건과 일관.)
 
+> **호스트 메모리와의 경계 — 기억이 사는 곳은 셋이다 (라운드2 R8).** Claude Code 자체의 자동 메모리(`~/.claude/projects/<프로젝트 슬러그>/memory/MEMORY.md`, 매 세션 시스템 컨텍스트로 자동 주입)는 knowledge·memory와 **별개의 3번째 저장소**다. 경계 규칙: **호스트 메모리** = 개인·세션 연속성·repo 비종속 사실(사용자 선호, 진행 흐름 포인터). **`.ditto/knowledge`** = 팀 공유 durable 결정(사람 큐레이션). **`.ditto/memory`** = source-grounded 기계 추출 advisory 층. repo에서 파생 가능한 사실은 호스트 메모리에 두지 않으며, 같은 사실이 겹치면 ditto 쪽(knowledge 또는 memory)이 SoT다. PreToolUse hook은 **현재 프로젝트의** 호스트 메모리 서브트리만 쓰기를 허용한다(교차 프로젝트는 영속 주입 채널이라 차단 — 라운드2 R4, ADR-0013 보강).
+
 ### 3-6. 의미 검색 — 임베딩 벡터 스토어를 까나?
 
 **기각(v0).** 보고서도 graphify도 임베딩을 1차 수단으로 쓰지 않는다(graphify는 LLM 판단 유사도 + Leiden 군집). v0 검색은 **그래프 traversal + 라벨/식별자 매칭**으로 충분하다. 벡터 검색은 필요성이 증명된 뒤 별도 증분으로. (불필요한 추상화 금지.)
@@ -137,6 +139,12 @@ graphify에서 **참고만** 하는 것: 추출 파이프라인 형태, confiden
 ### 4-5. 쓰기 (proposal → approval)
 
 에이전트는 그래프에 직접 못 쓴다. `propose`가 **pending MemoryEvent**를 만들고, `approve`(사람/정책)가 승인하면 재projection 입력이 된다. 스키마의 approval invariant(approved는 approved_by+decided_at 필수, pending은 approved_by 금지)가 이를 강제. **graphify의 write-back 오염 경로를 닫는다**(보완문서 §5).
+
+**가시성 규칙 — 본문검색 포함 (라운드2 R1).** 그래프 traversal이든 본문검색(`query --text`/node-not-found fallback)이든 모든 런타임 읽기 표면은 동일 규칙을 따른다: **approved 체인 head + sensitivity≠secret만** 노출. pending/rejected/secret 본문은 어떤 읽기 표면으로도 닿지 않는다(`queryBodies`가 reducer를 재사용).
+
+**supersede 대칭 (라운드2 R3).** pending은 그래프에 더하지도 **빼지도** 못한다. supersedes 엣지는 superseding 이벤트가 승인 확정(effective — 자체 approved이거나 자기 체인으로 approved 결정됨)일 때만 효력을 갖는다. pending/rejected 정정이 approved 사실을 조용히 철회할 수 없다(reducer 강제).
+
+**승인 게이트의 위협모델 (라운드2 R2).** agent-제안 이벤트는 user만 승인할 수 있다(actor kind 게이트, 코어 강제). 단 `--actor`는 호출자 자기신고 플래그다 — 로컬 CLI는 호출 주체를 인증할 수 없으므로 이 게이트는 **정직한 에이전트의 실수**(무심한 self-approve)를 막는 장치이지, 적대적 우회(주입된 에이전트가 `--actor user`로 호출, 또는 propose 시점 actor 위장)를 막지 못한다. 적대적 차단(승인 호출 경로 분리 — 예: PreToolUse hook이 agent 세션의 approve 호출을 게이트)은 §5 push 확대 전 차단 게이트로 보류(ADR-0013 재검토 조건). bootstrap ingest의 승격 신뢰 모델도 ADR-0013 보강 참조.
 
 ### 4-6. 갱신·자동화 경계 + audit 영속 (hannes 차용)
 

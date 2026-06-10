@@ -52,6 +52,15 @@ DITTO에 코드·결정·핸드오프를 출처-동반 그래프로 묶어 cross
 - **§5 5지점 push 전부 즉시 배선(전체 그래프 가치 가정)**: 의미층 미검증 — dialectic 라운드2 verdict=revise. measure-before-expand(D4).
 - **(리스크 A) 쓰기 시 코드베이스 재검증 게이트 / 임베딩 결정적 유사도**: 전자는 INFERRED끼리 충돌에 무력(audit이 흡수), 후자는 타입 있는 의미 엣지 대체 불가 + ADR-0001/§3-6 닫은 결정 재개방. 둘 다 보류(재제안 방지 기록).
 
+## 보강 (2026-06-10 — 라운드2 리뷰 R1~R10 반영)
+
+- **D3 보완 — supersede 효력 규칙 (R3)**: supersedes 엣지는 superseding 이벤트가 **승인 확정(effective)** — 자체 approved이거나 자기 체인으로 approved 결정됨 — 일 때만 체인에서 효력을 갖는다(reducer 강제). §4-5 대칭: pending은 그래프에 더하지도 빼지도 못한다. 이전 구현은 pending 정정이 approved head를 조용히 떨어뜨릴 수 있었다.
+- **읽기 가시성 단일 규칙 (R1)**: 본문검색(`query --text`/fallback)을 포함한 모든 런타임 읽기 표면은 serving graph와 동일하게 **approved head + sensitivity≠secret**만 노출한다. 별도 tier가 아니라 같은 규칙의 다른 인덱스다.
+- **승인 게이트의 위협모델 (R2)**: actor-kind 게이트(agent 제안 → user만 승인)는 로컬 CLI의 한계상 **honor-system**이다 — `--actor`는 자기신고라 적대적 우회를 막지 못한다(정직한 실수 차단용). 적대적 차단(예: hook이 agent 세션의 `memory approve` 호출 자체를 게이트)은 **§5-2~5-5 push 확대를 여는 work item의 선행 차단 게이트**로 보류한다.
+- **bootstrap 승격 신뢰 모델 (R6)**: bootstrap이 ingest물을 `approved_by='bootstrap'`으로 승격하는 근거는 "upstream이 이미 큐레이션됨"이다. 이 전제는 ADR·glossary(knowledge 큐레이션 경로의 산출물)에는 성립하나 **handoff archive(에이전트 자동 생성, 큐레이션 없음)에는 약하다**. 알려진 한계: repo 내 쓰기 + bootstrap 실행으로 propose→approve를 우회하는 세탁 경로가 존재한다. 완화: `approved_by='bootstrap'` 감사 라벨, bootstrap은 수동 CLI(자동 트리거 없음), warm-start 주입물은 노드 id뿐. handoff 유래 이벤트의 신뢰 등급 분리는 세탁이 실제 문제가 되면 후속.
+- **hook 호스트 메모리 예외의 잔여 위험 (R4)**: scope-out 예외를 **현재 프로젝트의** `~/.claude/projects/<slug>/memory/` 서브트리로 축소했다(교차 프로젝트는 영속 prompt-injection/유출 채널이라 차단). 잔여 위험 = 현재 프로젝트 자신의 메모리 오염 — 이는 Claude Code 호스트 메모리 자체의 신뢰 모델과 동급이라 수용한다. 3-저장소 경계는 설계서 §3-5.
+- **측정 분해 (ac-10/R9)**: warm-start hit에 `hit_node_types`(node_type 분해)를 기록·합산해 게이트가 Decision 편중과 의미층 기여를 구분한다. **actionability**(pull 응답이 에이전트 행동을 실제로 바꿨는가)는 **미측정으로 명시 보류** — push 측 actionable 카운터만 존재하며, pull 측은 발화 수·neighbor_count뿐이다. pending 백로그는 `memory status`의 `pending_count`로 노출(AX).
+
 ## 철회/재검토 조건
 
 - 인프로세스 그래프가 ditto 규모를 초과해 성능 한계에 닿으면 → Neo4j export 어댑터를 상시 분석 경로로 승격 검토(D1).
@@ -59,4 +68,6 @@ DITTO에 코드·결정·핸드오프를 출처-동반 그래프로 묶어 cross
 - 멀티 repo workspace에서 workspace-루트 `.ditto/memory/`에 **변형**(scan-write/propose/approve/build)이 필요해지면 → ADR-0011 session-rooting scope-out 재개 대상(현 v0는 read/scan/projection 전용).
 - 의미 추출 비결정성(리스크 A)이 confidence 분리 + propose/approve로 격리되지 못하는 사례가 나오면 → 보류한 쓰기 게이트/임베딩 대안 재검토.
 - 단일 플래그 되돌림(`DITTO_MEMORY=off`)이 §5 통합 graceful-degrade를 실제로 보장하지 못하는 회귀가 나오면 → 4불변식(D4) 재검토.
+- **§5-2~5-5 push 확대 work item을 열기 전** → 승인 게이트의 적대적 차단(승인 호출 경로 분리)을 선행 차단 게이트로 처리(보강 R2). bootstrap 세탁 경로(보강 R6)가 실측되면 handoff 유래 이벤트 신뢰 등급 분리를 같은 work item에.
+- pull 질의의 actionability 측정 없이 hit율만으로 게이트 판단이 흔들리면 → 측정 분해 확장(보강 ac-10)을 먼저.
 - **knowledge↔memory 동기화** — bootstrap ingest는 수동 1회성이고(CLI `ditto memory bootstrap`만 호출), scan은 `.ditto`를 SKIP_DIRS로 제외하므로(src/core/memory-scan.ts), `.ditto/knowledge`(ADR/glossary) 본문을 수정하면 memory의 ingest 사본이 drift한다. **현재 정책**: knowledge 변경 후 `ditto memory bootstrap`을 재실행해 source를 갱신한다 — source는 content_hash가 다르면 다시 write되어 갱신되나, 불변(append-only) 이벤트 본문은 supersede 없이는 갱신되지 않는 한계가 있다(재실행은 동일 event_id를 graceful-skip). 이 drift가 실제 문제를 일으키면 → bootstrap 재ingest 자동화(예: githook) 또는 이벤트 supersede 경로를 후속 work item으로.
