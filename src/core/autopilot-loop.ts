@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
 import { evidenceRef, relativePath, verdict } from '~/schemas/common';
@@ -24,6 +26,7 @@ import {
 import { AutopilotStore } from './autopilot-store';
 import { IntentStore } from './intent-store';
 import { warmStartMemoryContext } from './memory-warmstart';
+import { computeSpecDigest } from './tech-spec';
 import { WorkItemStore } from './work-item-store';
 
 /**
@@ -73,18 +76,54 @@ export type NextNodeResult =
   // pass. It never auto-closes an AC.
   | { action: 'done'; reason: string; all_passed: boolean };
 
+/** Non-null when intent.source_digest no longer matches the spec document (ac-6). */
+async function specDigestStale(
+  repoRoot: string,
+  workItemId: string,
+): Promise<Extract<NextNodeResult, { action: 'blocked' }> | null> {
+  const intentStore = new IntentStore(repoRoot);
+  if (!(await intentStore.exists(workItemId))) return null;
+  const intent = await intentStore.get(workItemId);
+  if (!intent.source_digest) return null; // interview-finalized intent — no spec doc to track
+  const { doc_path, sha256 } = intent.source_digest;
+  let doc: string | null;
+  try {
+    doc = await readFile(join(repoRoot, doc_path), 'utf8');
+  } catch {
+    doc = null;
+  }
+  if (doc !== null && computeSpecDigest(doc) === sha256) return null;
+  return {
+    action: 'blocked',
+    blocked_node_ids: [],
+    reason:
+      doc === null
+        ? `spec document ${doc_path} is missing but intent.json was compiled from it — restore the document or re-run \`ditto tech-spec finalize\` (ac-6)`
+        : `spec document ${doc_path} changed after finalize (source_digest mismatch) — re-run \`ditto tech-spec finalize\` to re-compile intent.json before executing (ac-6)`,
+  };
+}
+
 export async function nextNode(repoRoot: string, workItemId: string): Promise<NextNodeResult> {
   const aps = new AutopilotStore(repoRoot);
   const graph = await aps.get(workItemId);
 
   // A rejected plan invalidates everything: undo speculative (running) work and
   // stop. Idempotent — a second call finds no running nodes and rolls back none.
+  // (Runs before the digest gate: rejection invalidates the graph regardless of
+  // the spec document's state.)
   if (graph.approval_gate.status === 'rejected') {
     const rb = rollbackOnRejection(graph);
     const rolledBack = graph.nodes.filter((n) => n.status === 'running').map((n) => n.id);
     await aps.write(workItemId, { ...graph, nodes: rb.nodes });
     return { action: 'rollback', reason: rb.reason, rolled_back_node_ids: rolledBack };
   }
+
+  // ac-6 digest freshness gate: an intent compiled from a spec document carries
+  // source_digest. If a compile-input section changed after finalize (or the doc
+  // is gone) the agreed source is stale — fail closed and require re-finalize
+  // instead of executing against a contract the document no longer states.
+  const staleSpec = await specDigestStale(repoRoot, workItemId);
+  if (staleSpec) return staleSpec;
 
   // Select the next dispatchable node (first ready, after the file-overlap gate
   // serializes any same-scope wave). v0 runs one owner at a time.

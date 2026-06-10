@@ -17,6 +17,19 @@ export const intentAcceptanceCriterion = acceptanceCriterion
   })
   .describe('Acceptance criterion in the intent sidecar; reuses work-item criterion shape');
 
+// Stamped only by tech-spec finalize (the spec document is the source; intent is
+// its one-way compile artifact). Additive + optional: interview-finalized intents
+// never carry it, and deep-interview is unchanged (design §5 zero-diff).
+export const sourceDigest = z
+  .object({
+    doc_path: z.string().min(1).describe('Spec document path relative to repo root'),
+    sha256: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .describe('Digest over the compile-input sections (요약·목표·비목표·완료 조건·위험)'),
+  })
+  .describe('Freshness stamp linking intent.json to the spec document it was compiled from');
+
 export const intentContract = z
   .object({
     schema_version: schemaVersion,
@@ -32,6 +45,7 @@ export const intentContract = z
       .default([])
       .describe('Out-of-scope improvement ideas captured but not acted on (§6.1)'),
     question_policy: questionPolicy,
+    source_digest: sourceDigest.optional(),
   })
   .describe('Sidecar that preserves original intent and guards against scope creep (§6.1)');
 

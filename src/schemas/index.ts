@@ -13,6 +13,7 @@ export * from './intent';
 export * from './intent-metric';
 export * from './question-gate';
 export * from './interview-state';
+export * from './tech-spec-state';
 export * from './autopilot';
 export * from './dialectic';
 export * from './e2e-journey';

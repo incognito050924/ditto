@@ -22,6 +22,7 @@ import { runCommand } from './commands/run';
 import { semanticCommand } from './commands/semantic';
 import { setupCommand } from './commands/setup';
 import { teardownCommand } from './commands/teardown';
+import { techSpecCommand } from './commands/tech-spec';
 import { verifyCommand } from './commands/verify';
 import { workCommand } from './commands/work';
 
@@ -44,6 +45,7 @@ const main = defineCommand({
     autopilot: autopilotCommand,
     hook: hookCommand,
     'deep-interview': deepInterviewCommand,
+    'tech-spec': techSpecCommand,
     e2e: e2eCommand,
     knowledge: knowledgeCommand,
     memory: memoryCommand,
