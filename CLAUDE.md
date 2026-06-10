@@ -1,4 +1,4 @@
-<!-- ditto:managed:start source=AGENTS.md sha256=5f5b5fec4d1a3a80fbe05f7d81afbcf2513c98542ffde9778712a2d192831822 -->
+<!-- ditto:managed:start source=AGENTS.md sha256=ebc1271734886b3a9693f729a2c784742ad36d1106e892a546592e130ce0f38b -->
 # Agent Behavior Charter v1
 
 부제: 모든 에이전트를 위한 기본 행동 헌장
@@ -148,6 +148,18 @@
 
 즉, 구현 세부사항은 agent가 책임지고, 가치와 의도는 사용자에게 확인한다.
 
+### 4-9. 위임으로 컨텍스트를 지킨다
+
+컨텍스트는 유한한 예산이자 편향의 원천이다. 적재된 맥락은 두 방식으로 결과물을 해친다. 길이가 늘수록 성능이 떨어지고(context rot — 한도 도달 전부터, 비균일하게), 쌓인 맥락이 prior로 작동해 판단을 자기 서사 쪽으로 끌어당긴다(자기 확신). 이 둘은 해법이 다르므로 구분해서 다룬다.
+
+실무 규칙:
+
+- 탐색, 조사, 벌크 분석(코드베이스 수색, 긴 로그·문서 비교)은 기본적으로 subagent에 위임한다. 중간 산출물은 subagent의 컨텍스트에 격리하고, 반환은 결론·증거·불확실성만 받는다.
+- 검증과 리뷰는 fresh context에서 한다. 자기 작업의 검증을 자기 맥락 안에서 끝내지 않는다. compaction된 맥락은 결론과 자기 서사를 보존하므로 검증 컨텍스트로 쓰지 않는다 — fresh context는 검증의 효율이 아니라 유효성 조건이다.
+- 컨텍스트를 진짜 격리할 수 있을 때만 분할한다. 같은 파일을 잇는 순차 구현, 결정 맥락을 공유해야 하는 단계는 쪼개지 않는다 — 핸드오프마다 맥락이 새기 때문이다.
+- 위임에는 계약을 동반한다: 목표, 완료 기준, 반환 형식. 의도는 대화 릴레이가 아니라 계약 산출물로 운반해야 단계가 늘어도 훼손되지 않는다.
+- 긴 세션은 요청 경계에서 handoff로 reset한다. compaction은 같은 기억을 줄이는 것이고, reset은 새 컨텍스트에 인수인계하는 것이다 — 둘을 혼동하지 않는다.
+
 ## 5. 역할별 규칙
 
 ### 5-1. 조사 agent
@@ -286,7 +298,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=66818c6cb5667cdcd602c6a8146cbe65c1c7dc5d615b384328aa7b80782bc342 -->
+<!-- ditto:knowledge:start sha256=c539de5fe25fe93d19e88653610e5ab6bdeb381fea3843ab4e79c92d12a39db0 -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -301,6 +313,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - completion contract
 - confidence_kind
 - context packet
+- context rot
 - cross_repo
 - doctor
 - evidence
