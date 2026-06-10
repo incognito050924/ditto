@@ -8,7 +8,9 @@
       "aliases": [],
       "definition": "사용자가 한 말의 원문 또는 그에 가까운 paraphrase. 한 요청에서 여러 work item이 파생될 수 있다.",
       "examples": [],
-      "not_to_be_confused_with": ["work item"],
+      "not_to_be_confused_with": [
+        "work item"
+      ],
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-05-24T12:00:00+09:00"
@@ -17,18 +19,32 @@
       "term": "work item",
       "aliases": [],
       "definition": "DITTO가 추적하는 작업 단위. goal, acceptance criteria, 실행 기록, 검증 evidence, handoff를 포함한다. 식별자: wi_*. task라는 이름은 사용하지 않는다.",
-      "examples": ["wi_v01bootstrap", "wi_v01implement"],
-      "not_to_be_confused_with": ["task", "issue", "ticket"],
+      "examples": [
+        "wi_v01bootstrap",
+        "wi_v01implement"
+      ],
+      "not_to_be_confused_with": [
+        "task",
+        "issue",
+        "ticket"
+      ],
       "status": "agreed",
-      "forbidden_abbreviations": ["wi"],
+      "forbidden_abbreviations": [
+        "wi"
+      ],
       "agreed_at": "2026-05-24T12:00:00+09:00"
     },
     {
       "term": "run",
       "aliases": [],
       "definition": "한 번의 provider 호출. 한 work item은 여러 run을 가질 수 있다. 식별자: run_*.",
-      "examples": ["run_pwdcheck1"],
-      "not_to_be_confused_with": ["session", "background task"],
+      "examples": [
+        "run_pwdcheck1"
+      ],
+      "not_to_be_confused_with": [
+        "session",
+        "background task"
+      ],
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-05-24T12:00:00+09:00"
@@ -98,7 +114,9 @@
       "aliases": [],
       "definition": "실제로 model/tool loop를 실행하는 host. 값: codex | claude-code | opencode | openagent | other.",
       "examples": [],
-      "not_to_be_confused_with": ["model"],
+      "not_to_be_confused_with": [
+        "model"
+      ],
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-05-24T12:00:00+09:00"
@@ -135,10 +153,17 @@
     },
     {
       "term": "ADR",
-      "aliases": ["Architecture Decision Record"],
+      "aliases": [
+        "Architecture Decision Record"
+      ],
       "definition": "되돌리기 어려운 결정의 영속 기록. adr/ADR-NNNN-<slug>.md. 결정만 보존하고 토론은 decisions.md에 둔다.",
-      "examples": ["ADR-0001-runtime-stack", "ADR-0002-schema-source-of-truth"],
-      "not_to_be_confused_with": ["decisions.md"],
+      "examples": [
+        "ADR-0001-runtime-stack",
+        "ADR-0002-schema-source-of-truth"
+      ],
+      "not_to_be_confused_with": [
+        "decisions.md"
+      ],
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-05-24T12:00:00+09:00"
@@ -168,7 +193,9 @@
       "aliases": [],
       "definition": "검증하지 못함의 명시적 표기. 모름은 모름으로 표기해야 하며 완료 주장과 섞지 않는다.",
       "examples": [],
-      "not_to_be_confused_with": ["fail"],
+      "not_to_be_confused_with": [
+        "fail"
+      ],
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-05-24T12:00:00+09:00"
@@ -177,8 +204,13 @@
       "term": "cross_repo",
       "aliases": [],
       "definition": "단일모듈 CodeQL DB 분석에서 형제모듈(로컬 JAR) 의존이 정적으로 해소되지 않아 ImpactGraph.unresolved에 남는 kind. internal_packages의 glob에 매칭돼야 기록되며, 써드파티(Spring/JDK)와 구분된다.",
-      "examples": ["kr.co.ecoletree.boxwood.domain.runtime.processing.StructuredErrorInfo (automation-engine이 libs의 domain-model JAR를 참조)"],
-      "not_to_be_confused_with": ["journey_unknown", "third-party dependency"],
+      "examples": [
+        "kr.co.ecoletree.boxwood.domain.runtime.processing.StructuredErrorInfo (automation-engine이 libs의 domain-model JAR를 참조)"
+      ],
+      "not_to_be_confused_with": [
+        "journey_unknown",
+        "third-party dependency"
+      ],
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-06-05T07:00:00.000Z"
@@ -187,21 +219,112 @@
       "term": "internal_packages",
       "aliases": [],
       "definition": "ArchitectureSpec의 형제모듈 디스크립터 배열. {type:'glob'} 엔트리는 cross_repo 분류 대상 패키지 글로브, {type:'path'} 엔트리는 로컬 sibling JAR 위치 글로브(JVM 가드 입력)다.",
-      "examples": ["{type:'glob', value:'kr.co.ecoletree.boxwood.domain.**'}", "{type:'path', value:'libs/*.jar'}"],
-      "not_to_be_confused_with": ["public_surfaces", "forbidden_dependencies"],
+      "examples": [
+        "{type:'glob', value:'kr.co.ecoletree.boxwood.domain.**'}",
+        "{type:'path', value:'libs/*.jar'}"
+      ],
+      "not_to_be_confused_with": [
+        "public_surfaces",
+        "forbidden_dependencies"
+      ],
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-06-05T07:00:00.000Z"
     },
     {
       "term": "DITTO 기능 4축",
-      "aliases": ["기능 4축", "functional four axes"],
+      "aliases": [
+        "기능 4축",
+        "functional four axes"
+      ],
       "definition": "DITTO가 사용자를 위해 무엇을 하는가를 정의하는 canonical 목적 기둥. (1) 사용자 의도 파악 및 동기화, (2) 자율 실행 오케스트레이션, (3) E2E 테스트, (4) 지식 베이스. 완전 순차 파이프라인 1→2→3→4로 동작한다. 경계: 축3=진짜 브라우저 E2E only(웹 없는 프로젝트는 N/A), 축4=가치 있는 durable 변경만(자동강제 아님), 축1 종료=readiness 게이트+사용자 확인 둘 다. 근거는 ADR-0010.",
-      "examples": ["축1=deep-interview skill", "축2=autopilot skill", "축3=e2e skill", "축4=knowledge-update skill"],
-      "not_to_be_confused_with": ["기층 4축 (Hooks/Skills/Agents/State)"],
+      "examples": [
+        "축1=deep-interview skill",
+        "축2=autopilot skill",
+        "축3=e2e skill",
+        "축4=knowledge-update skill"
+      ],
+      "not_to_be_confused_with": [
+        "기층 4축 (Hooks/Skills/Agents/State)"
+      ],
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-06-06T00:00:00.000Z"
+    },
+    {
+      "term": "memory event",
+      "aliases": [
+        "event"
+      ],
+      "definition": "memory 서브시스템의 append-only 불변 사실 기록(이벤트당 per-entity JSON). pending→approved/rejected 전이는 원본 변형이 아니라 supersedes를 단 새 불변 이벤트로 기록된다(ADR-0013 D3).",
+      "examples": [
+        "memevt_260610fkx"
+      ],
+      "not_to_be_confused_with": [
+        "evidence",
+        "run"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-10T15:00:00+09:00"
+    },
+    {
+      "term": "memory source",
+      "aliases": [
+        "source"
+      ],
+      "definition": "memory가 스캔/ingest로 등록한 출처 레코드(content_hash·revision·sensitivity 동반, Tier② git-tracked SoT). 모든 이벤트는 source에 근거(grounding)를 둘 수 있다.",
+      "examples": [
+        "src_a1fa40cf815e"
+      ],
+      "not_to_be_confused_with": [
+        "provider"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-10T15:00:00+09:00"
+    },
+    {
+      "term": "memory projection",
+      "aliases": [
+        "projection",
+        "serving graph"
+      ],
+      "definition": "approved 이벤트 head + IR에서 재생성되는 파생물(serving graph·wiki·manifest). .ditto/local(Tier③, gitignored)에 살고 언제든 재생성 가능하다. 모든 질의 응답은 projection의 freshness envelope을 동반한다.",
+      "examples": [
+        "graph.json",
+        "proj_b4f1c19b71d3"
+      ],
+      "not_to_be_confused_with": [
+        "memory event"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-10T15:00:00+09:00"
+    },
+    {
+      "term": "confidence_kind",
+      "aliases": [],
+      "definition": "memory 추출 신뢰 밴드: EXTRACTED(결정적 도구가 직접 추출)·INFERRED(의미 추론)·AMBIGUOUS(불확실/충돌). 의미 추출기는 EXTRACTED를 주장할 수 없고, 밴드 이탈은 스키마가 loud fail로 거부한다.",
+      "examples": [
+        "INFERRED"
+      ],
+      "not_to_be_confused_with": [
+        "verdict"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-10T15:00:00+09:00"
+    },
+    {
+      "term": "supersedes chain",
+      "aliases": [],
+      "definition": "불변 이벤트들이 supersedes 포인터로 잇는 정정/승인 사슬. 논리적 이벤트의 현재 상태는 체인 head이며, supersede 효력은 superseding 이벤트가 승인 확정(effective)일 때만 발생한다 — pending 정정은 approved 사실을 더하지도 빼지도 못한다.",
+      "examples": [],
+      "not_to_be_confused_with": [],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-10T15:00:00+09:00"
     }
   ]
 }
