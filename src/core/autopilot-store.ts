@@ -88,6 +88,32 @@ export class AutopilotStore {
     });
   }
 
+  /**
+   * Remove superseded nodes (wi_260610iex). Defensive guards re-assert what
+   * `supersededByPromotion` already guarantees — every removed node is PENDING
+   * and no surviving node depends on it — so a buggy caller cannot orphan the
+   * graph. Throws with stable markers: `not pending` / `dangling depends_on`.
+   */
+  async removeNodes(workItemId: string, ids: string[]): Promise<Autopilot> {
+    if (ids.length === 0) return this.get(workItemId);
+    const graph = await this.get(workItemId);
+    const removal = new Set(ids);
+    for (const id of ids) {
+      const node = graph.nodes.find((n) => n.id === id);
+      if (!node) throw new Error(`cannot remove unknown node: ${id}`);
+      if (node.status !== 'pending') throw new Error(`cannot remove node not pending: ${id}`);
+    }
+    const survivors = graph.nodes.filter((n) => !removal.has(n.id));
+    for (const n of survivors) {
+      for (const dep of n.depends_on) {
+        if (removal.has(dep)) {
+          throw new Error(`removal would leave dangling depends_on: ${n.id} -> ${dep}`);
+        }
+      }
+    }
+    return writeJson(this.graphPath(workItemId), autopilot, { ...graph, nodes: survivors });
+  }
+
   async appendDecision(workItemId: string, decision: AutopilotDecision): Promise<void> {
     await ensureDir(this.dir(workItemId));
     const path = this.decisionsPath(workItemId);

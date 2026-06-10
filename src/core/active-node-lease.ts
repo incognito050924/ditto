@@ -26,6 +26,12 @@ export const activeNodeLease = z
     node_id: z.string().min(1),
     work_item_id: workItemId,
     file_scope: z.array(relativePath),
+    // Scope provenance (wi_260610iex): `declared` = the node's own file_scope —
+    // an intent the hook may enforce as an allow-list. `derived` = the dispatch
+    // fallback (workItem.changed_files) — a concurrency heuristic that does NOT
+    // describe what the node may write, so the hook must not block on it.
+    // Default `declared` keeps pre-provenance lease files enforcing as before.
+    scope_source: z.enum(['declared', 'derived']).default('declared'),
     created_at: isoDateTime,
   })
   .describe('One in-flight autopilot node lease');

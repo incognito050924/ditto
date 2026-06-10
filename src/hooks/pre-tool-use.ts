@@ -508,6 +508,13 @@ async function checkAutopilotLease(
   const leases = await new ActiveNodeLeaseStore(input.repoRoot).listActive(workItemId);
   if (leases.length === 0) return undefined; // fail-open: nothing dispatched (no in-flight node)
 
+  // A derived-scope lease's file_scope is the dispatch fallback (changed_files) —
+  // a concurrency heuristic, not the node's intended write set. With one in
+  // flight, an out-of-scope write cannot be attributed as a violation, so the
+  // allow-list is only enforceable when EVERY active lease declares its scope
+  // (wi_260610iex — the dogfooding run blocked legitimate new artifact paths).
+  if (leases.some((l) => l.scope_source === 'derived')) return undefined;
+
   const repoRel = relative(input.repoRoot, resolve(input.repoRoot, filePath));
   const inScope = leases.some((l) => fileScopeContains(l.file_scope, repoRel));
   if (inScope) return undefined; // allow-list hit

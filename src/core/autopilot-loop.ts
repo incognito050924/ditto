@@ -22,6 +22,7 @@ import {
   nodeTransition,
   proposalsToNodes,
   selectReadyNodes,
+  supersededByPromotion,
 } from './autopilot-graph';
 import { AutopilotStore } from './autopilot-store';
 import { IntentStore } from './intent-store';
@@ -239,6 +240,7 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
         node_id: node.id,
         work_item_id: workItemId,
         file_scope: scopeOf(node),
+        scope_source: node.file_scope !== undefined ? 'declared' : 'derived',
         created_at: now.toISOString(),
       });
       const candidates = selectVariantCandidates(
@@ -300,6 +302,7 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
     node_id: chosen.id,
     work_item_id: workItemId,
     file_scope: scopeOf(chosen),
+    scope_source: chosen.file_scope !== undefined ? 'declared' : 'derived',
     created_at: now.toISOString(),
   });
   // Variant routing (ac-3): filter specialized-subagent candidates by the chosen
@@ -401,6 +404,8 @@ export interface RecordResultOutcome {
   reason: string;
   /** Ids of nodes promoted from `generated_nodes` on this pass; [] otherwise (A-3). */
   promoted_node_ids: string[];
+  /** Pending successors superseded by the promoted subgraph; [] otherwise (wi_260610iex). */
+  superseded_node_ids: string[];
 }
 
 export async function recordResult(
@@ -507,6 +512,7 @@ export async function recordResult(
           cap_exceeded: false,
           reason: guardReason,
           promoted_node_ids: plan.nodes.map((n) => n.id),
+          superseded_node_ids: [],
         };
       }
       // escalate: convergence budget exhausted with findings still open. STOP
@@ -536,6 +542,7 @@ export async function recordResult(
         cap_exceeded: true,
         reason,
         promoted_node_ids: [],
+        superseded_node_ids: [],
       };
     }
 
@@ -546,10 +553,20 @@ export async function recordResult(
     // is status-agnostic, so depending on the still-running node id is valid.
     const proposals = input.payload.generated_nodes ?? [];
     let promotedNodeIds: string[] = [];
+    let supersededNodeIds: string[] = [];
     if (proposals.length > 0) {
       const promoted = proposalsToNodes(proposals);
       await aps.addNodes(input.workItemId, promoted, allowedAcceptanceIds);
       promotedNodeIds = promoted.map((n) => n.id);
+      // Seed supersession (wi_260610iex): the promoted subgraph refines the work
+      // of still-pending successors it fully covers (the seed N2/N3 overlap) —
+      // remove them under the conservative closure so the graph carries one
+      // owner per responsibility instead of a redundant parallel chain.
+      const grown = await aps.get(input.workItemId);
+      supersededNodeIds = supersededByPromotion(grown.nodes, node.id, promoted);
+      if (supersededNodeIds.length > 0) {
+        await aps.removeNodes(input.workItemId, supersededNodeIds);
+      }
     }
     await aps.updateNode(input.workItemId, node.id, (n) => ({
       ...n,
@@ -584,6 +601,7 @@ export async function recordResult(
       cap_exceeded: false,
       reason: guardReason,
       promoted_node_ids: promotedNodeIds,
+      superseded_node_ids: supersededNodeIds,
     };
   }
 
@@ -635,5 +653,6 @@ export async function recordResult(
     cap_exceeded,
     reason: guardReason,
     promoted_node_ids: [],
+    superseded_node_ids: [],
   };
 }

@@ -599,6 +599,39 @@ describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease a
     }
   });
 
+  test('derived-scope lease does NOT block (fallback scope is a concurrency heuristic, not an allow-list)', async () => {
+    const dir = await setup({ leaseScope: ['src/core/'] });
+    try {
+      // Rewrite the lease as derived — the same out-of-scope edit must now allow.
+      await new ActiveNodeLeaseStore(dir).set({
+        node_id: 'N1',
+        work_item_id: WI,
+        file_scope: ['src/core/'],
+        scope_source: 'derived',
+        created_at: '2026-06-06T00:00:00.000Z',
+      });
+      expect((await edit(dir, 'src/hooks/elsewhere.ts')).exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a derived lease alongside a declared one fails open (the write cannot be attributed)', async () => {
+    const dir = await setup({ leaseScope: ['src/core/'] }); // N1: declared (default)
+    try {
+      await new ActiveNodeLeaseStore(dir).set({
+        node_id: 'N2',
+        work_item_id: WI,
+        file_scope: ['src/x.ts'],
+        scope_source: 'derived',
+        created_at: '2026-06-06T00:00:00.000Z',
+      });
+      expect((await edit(dir, 'docs/outside-everything.md')).exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test('fail-open: graph present but NO active lease → allow (nothing dispatched)', async () => {
     const dir = await setup({ nodeStatus: 'running' }); // no lease written
     try {

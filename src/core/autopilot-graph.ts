@@ -194,6 +194,78 @@ export type NodeGenerator = (acceptanceIds: string[]) => AutopilotNode[];
 export const defaultNodeGenerator: NodeGenerator = buildInitialNodes;
 
 /**
+ * Seed supersession on planner promotion (wi_260610iex): when a node's
+ * `generated_nodes` are spliced in, still-PENDING successors of the generator
+ * whose acceptance_refs the promoted subgraph fully covers are redundant — the
+ * planner refined their work into dedicated nodes (the 3-node seed's N2/N3 are
+ * the canonical case). Returns the ids safe to remove under a conservative
+ * fixpoint closure:
+ *  - candidate: pending ∧ transitively depends on the generator ∧ not promoted
+ *    ∧ acceptance_refs non-empty and ⊆ the promoted union;
+ *  - a candidate a SURVIVOR depends on is kept (the planner wove it in);
+ *  - a candidate whose own dependency (other than the generator) survives is
+ *    kept (never orphan a chain behind live work — conservative duplication
+ *    beats a hole).
+ */
+export function supersededByPromotion(
+  nodes: AutopilotNode[],
+  generatorId: string,
+  promoted: AutopilotNode[],
+): string[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const promotedIds = new Set(promoted.map((n) => n.id));
+  const covered = new Set(promoted.flatMap((n) => n.acceptance_refs));
+
+  const dependsOnGenerator = (start: AutopilotNode): boolean => {
+    const seen = new Set<string>();
+    const visit = (id: string): boolean => {
+      if (seen.has(id)) return false;
+      seen.add(id);
+      const cur = byId.get(id);
+      if (!cur) return false;
+      for (const dep of cur.depends_on) {
+        if (dep === generatorId || visit(dep)) return true;
+      }
+      return false;
+    };
+    return visit(start.id);
+  };
+
+  const removal = new Set(
+    nodes
+      .filter(
+        (n) =>
+          n.status === 'pending' &&
+          !promotedIds.has(n.id) &&
+          n.acceptance_refs.length > 0 &&
+          n.acceptance_refs.every((ac) => covered.has(ac)) &&
+          dependsOnGenerator(n),
+      )
+      .map((n) => n.id),
+  );
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const id of [...removal]) {
+      const candidate = byId.get(id);
+      if (!candidate) continue;
+      const survivorDependsOnIt = nodes.some(
+        (n) => !removal.has(n.id) && n.depends_on.includes(id),
+      );
+      const ancestorSurvives = candidate.depends_on.some(
+        (dep) => dep !== generatorId && !removal.has(dep),
+      );
+      if (survivorDependsOnIt || ancestorSurvives) {
+        removal.delete(id);
+        changed = true;
+      }
+    }
+  }
+  return [...removal];
+}
+
+/**
  * Integrity gate for a node-add (A-1). Pure, no I/O — `addNodes` calls this
  * before any write. Throws on a duplicate id (against the existing graph or
  * within the batch), a dangling `depends_on` reference, or a `depends_on` edge
