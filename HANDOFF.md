@@ -1,6 +1,6 @@
 # HANDOFF — 다른 PC 신규 설치 실측 준비 완료 (2026-06-10)
 
-이 PC의 호스트 메모리는 전파되지 않으므로, 다른 PC 세션에 필요한 것을 전부 여기 싣는다. **origin/main 최신 = 이 문서가 포함된 커밋. 미커밋·미푸시 변경 없음**(예외: `agentic-coding-masters-research.md` untracked — 별도 작업 소속, 무시).
+이 PC의 호스트 메모리는 전파되지 않으므로, 다른 PC 세션에 필요한 것을 전부 여기 싣는다. **origin/main 최신 = 이 문서(전역 컨텍스트 테스트 보강판)가 포함된 커밋. 미커밋·미푸시 변경 없음**(예외: `agentic-coding-masters-research.md` untracked — 별도 작업 소속, 무시).
 
 ## 1. 오늘(2026-06-10) 닫힌 작업 — 전부 done, 전부 main에 푸시됨
 
@@ -28,9 +28,10 @@ claude plugin install ditto@ditto-local
 
 1. **헌장 배포**: `~/.claude/plugins/cache/ditto-local/ditto/0.0.0/resources/managed/AGENTS.md`에 `4-9. 위임으로 컨텍스트를 지킨다` 존재.
 2. **setup 적재**: 테스트 프로젝트에서 `ditto setup` → 그 프로젝트 CLAUDE.md 관리블록에 §4-9 포함 헌장, `.ditto/{knowledge,local}` 스캐폴드, `.claude/settings.json` allowlist. 전역 `~/.claude/CLAUDE.md`에 GLOBAL_CLAUDE.md 관리블록 적용(기존 내용은 블록 밖 보존 + `.ditto_bak` 백업).
-3. **doctor**: `ditto doctor distribution --advisory` → all ok 기대. `binary_fresh`는 설치 컨텍스트(src/ 없음)에서 vacuously true가 정상.
-4. **hook 스모크**: 따옴표 안 `>`+경로 문자열이 든 명령은 통과, repo 밖 redirect(따옴표 포함)는 차단, `~/.claude/projects/<현재 슬러그>/memory/` 쓰기는 허용·타 프로젝트는 차단.
-5. **테스트 돌릴 경우**: bun ≥1.3.14, `bun test` 기대값 **0 fail**(1595+).
+3. **전역 사용자 컨텍스트 내용 실측(이번 설치의 주목적)**: 설치된 전역 블록에 다음 섹션이 모두 있어야 한다 — `# 완료 게이트`, `# 사실 게이트`(할루시네이션 억제), `# 모호함 처리`(질문 시 맥락 동반), `# 범위 — 최소 검증 구현`, `# TDD`, `# 커밋 — Tidy First`, `# 구현 후 자가 점검`, `# 스타일`, `# 출력 — 사용자 응답 언어`(번역체 금지·용어 첫 등장 설명·무협의 축약어 금지·간결=의미 밀도 정의). 새 세션을 열어 실제 행동 변화(완료 주장 전 검증, 불확실 표명, 번역체 없는 한국어)를 관찰하는 것까지가 테스트다. 이 PC의 개인 `# 도구` 섹션은 블록 밖 개인 구획이므로 새 PC에는 없는 게 정상.
+4. **doctor**: `ditto doctor distribution --advisory` → all ok 기대. `binary_fresh`는 설치 컨텍스트(src/ 없음)에서 vacuously true가 정상.
+5. **hook 스모크**: 따옴표 안 `>`+경로 문자열이 든 명령은 통과, repo 밖 redirect(따옴표 포함)는 차단, `~/.claude/projects/<현재 슬러그>/memory/` 쓰기는 허용·타 프로젝트는 차단.
+6. **테스트 돌릴 경우**: bun ≥1.3.14, `bun test` 기대값 **0 fail**(1595+).
 
 함정: 소스 변경을 반영하려면 push 후 `claude plugin marketplace update ditto-local`이 **필수**(생략하면 stale 클론에서 옛 코드 재설치 — 이 PC에서 실측). `claude plugin update`는 버전 0.0.0 고정이라 no-op.
 
@@ -43,5 +44,6 @@ claude plugin install ditto@ditto-local
 ## 4. 새 규칙 요약 (이 PC 세션들이 합의한 것)
 
 - **헌장 §4-9**: 탐색·조사는 기본 위임(반환=결론·증거·불확실성), 검증은 fresh context 강제(compaction은 편향 보존), 진짜 격리 가능할 때만 분할, 위임엔 계약 동반, 긴 세션은 handoff reset. 근거: `reports/harnesses/context-rot-delegation-evidence.md`.
+- **전역 행동 규칙(GLOBAL_CLAUDE/AGENTS.md)**: 대가 6인(Karpathy·Pocock·Beck·김연규·허예찬·obra/superpowers) 프롬프팅 리서치 기반으로 신설(`45223d1`), 사실 게이트 추가(`ca6906d` — 효과 측정된 형태만: 출구+기준 명시형 IDK, 불확실하면 도구로 확인, 결과 서열, 주장-근거 연결, 과잉 유보 방지), 출력 언어 규칙에 간결 정의 추가(이 커밋 — **간결=짧게가 아니라 의미상 불필요한 내용·수식어 제거 + 본질을 이해하기 쉽게; 이해를 희생해 길이를 줄이지 않는다**). 리서치 전문: `agentic-coding-masters-research.md`(untracked, 이 PC).
 - **knowledge 변경 후 `ditto memory bootstrap` 재실행**(ADR-0013 drift 정책) — 이 핸드오프 직전에 이행됨(projection fresh, 53 nodes, pending 0).
 - 빌드 drift는 `ditto doctor distribution`의 `binary_fresh`가 감시(dev repo에서만 유효).
