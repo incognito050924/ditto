@@ -330,5 +330,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-0010 · accepted · DITTO 기능 4축 정식화 — 목적 기둥 canonical 정의 + 경계 + 기층과의 관계
 - ADR-0011 · accepted · Distribution 횡단 배포계약 축 + session-rooting invariant (cross-repo subagent 위임 비지원)
 - ADR-0012 · accepted · 제품/프로젝트전역/개인 3계층 격리 — `.ditto/local` 개인구획 + `dist/plugin` 배포조립
+- ADR-0013 · accepted · 메모리 서브시스템 설계 — 인프로세스 그래프 · 2-tier 저장 · supersedes 승인 · 옵션 A 재범위
 
 <!-- ditto:knowledge:end -->

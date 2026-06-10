@@ -1,0 +1,22 @@
+{
+  "schema_version": "0.1.0",
+  "project_name": "ditto",
+  "updated_at": "2026-06-10T00:00:00+00:00",
+  "context_path": ".ditto/knowledge/CONTEXT.md",
+  "glossary_path": ".ditto/knowledge/glossary.json",
+  "project_map_path": null,
+  "decisions": [
+    {
+      "id": "ADR-0013",
+      "title": "메모리 서브시스템 설계 — 인프로세스 그래프 · 2-tier 저장 · supersedes 승인 · 옵션 A 재범위",
+      "status": "accepted",
+      "rationale": "서버리스 인프로세스 그래프는 ADR-0005 무서버·핸드오프·머지 모델을 보존하고 ditto 규모에 충분하다(Neo4j는 선택적 export). SoT/파생 2-tier(dittoDir tracked / localDir gitignored)는 ADR-0012 경로=정책·ADR-0005 per-entity JSON 무충돌 머지를 유지하며 신규 gitignore 특례 0. supersedes 새 불변 이벤트 승인은 스키마 변경 0으로 불변 파일과 approval invariant를 양립. 옵션 A(measure-before-expand)는 증명된 색인-shaped 가치 위에 미검증 의미층을 bounded·measurable·reversible하게 올려 dialectic 라운드2의 과설계 지적을 hit율 게이트로 흡수.",
+      "change_condition": "인프로세스 그래프가 규모 한계에 닿으면 Neo4j export를 상시 분석 경로로 승격. query hit율이 게이트를 넘으면 §5-2~5-5 push 확대·audit→curator 자동 트리거를 후속 work item으로 배선. 멀티 repo workspace에서 workspace-루트 메모리 변형이 필요해지면 ADR-0011 session-rooting scope-out 재개. DITTO_MEMORY=off 단일 플래그 graceful-degrade가 회귀하면 4불변식 재검토.",
+      "path": ".ditto/knowledge/adr/ADR-0013-memory-subsystem-design.md",
+      "superseded_by": null
+    }
+  ],
+  "patterns": [],
+  "learnings": [],
+  "projected_to_claude_md": true
+}
