@@ -1,22 +1,10 @@
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { defineCommand } from 'citty';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { teardown } from '~/core/teardown';
+import { resolveResourcesDir } from '../resources';
 import { RUNTIME_ERROR_EXIT, writeError, writeHuman } from '../util';
-
-/**
- * Resolve the bundled resources directory. Under the installed plugin layout the
- * plugin root is `${CLAUDE_PLUGIN_ROOT}`; otherwise fall back to the repo root
- * derived from this module's location (src/cli/commands → repo root).
- */
-function resolveResourcesDir(): string {
-  const pluginRoot =
-    process.env.CLAUDE_PLUGIN_ROOT ??
-    resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-  return join(pluginRoot, 'resources', 'managed');
-}
 
 export const teardownCommand = defineCommand({
   meta: {
@@ -45,6 +33,13 @@ export const teardownCommand = defineCommand({
       }
 
       const result = await teardown({ resourcesDir, projectRoot, homeDir: homedir() });
+
+      // No discovered resources means nothing was actually stripped — saying
+      // "reverted" here would be a false green (the pre-fix symptom).
+      if (result.files.length === 0) {
+        writeError(`teardown failed: no managed resources found at ${resourcesDir}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+      }
 
       writeHuman(`teardown: reverted ${projectRoot}`);
       for (const f of result.files) {

@@ -30125,10 +30125,8 @@ var semanticCommand = defineCommand({
 });
 
 // src/cli/commands/setup.ts
-import { existsSync as existsSync7 } from "fs";
 import { homedir as homedir6 } from "os";
-import { dirname as dirname10, join as join58, resolve as resolve10 } from "path";
-import { fileURLToPath as fileURLToPath2 } from "url";
+import { resolve as resolve11 } from "path";
 
 // src/core/setup.ts
 import { readFile as readFile9 } from "fs/promises";
@@ -30309,12 +30307,16 @@ async function setup(opts) {
   return { resources, scaffold, allowlistPath };
 }
 
-// src/cli/commands/setup.ts
-function resolveResourcesDir() {
+// src/cli/resources.ts
+import { existsSync as existsSync7 } from "fs";
+import { dirname as dirname10, join as join58, resolve as resolve10 } from "path";
+import { fileURLToPath as fileURLToPath2 } from "url";
+function resolveResourcesDir(from) {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
     return join58(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
   }
-  let dir = dirname10(fileURLToPath2(import.meta.url));
+  const start = from ?? dirname10(fileURLToPath2(import.meta.url));
+  let dir = start;
   for (;; ) {
     const candidate = join58(dir, "resources", "managed");
     if (existsSync7(candidate))
@@ -30324,8 +30326,10 @@ function resolveResourcesDir() {
       break;
     dir = parent;
   }
-  return join58(resolve10(dirname10(fileURLToPath2(import.meta.url)), "..", "..", ".."), "resources", "managed");
+  return join58(resolve10(start, "..", ".."), "resources", "managed");
 }
+
+// src/cli/commands/setup.ts
 var setupCommand = defineCommand({
   meta: {
     name: "setup",
@@ -30340,9 +30344,9 @@ var setupCommand = defineCommand({
   },
   run: async ({ args }) => {
     try {
-      const projectRoot = args.dir ? resolve10(args.dir) : await resolveRepoRootForCreate();
+      const projectRoot = args.dir ? resolve11(args.dir) : await resolveRepoRootForCreate();
       const resourcesDir = resolveResourcesDir();
-      const pluginRoot = resolve10(resourcesDir, "..", "..");
+      const pluginRoot = resolve11(resourcesDir, "..", "..");
       if (pluginRoot === projectRoot) {
         writeHuman(`setup: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
@@ -30369,8 +30373,7 @@ var setupCommand = defineCommand({
 
 // src/cli/commands/teardown.ts
 import { homedir as homedir7 } from "os";
-import { dirname as dirname11, join as join60, resolve as resolve11 } from "path";
-import { fileURLToPath as fileURLToPath3 } from "url";
+import { resolve as resolve12 } from "path";
 
 // src/core/teardown.ts
 import { copyFile as copyFile2, readFile as readFile10 } from "fs/promises";
@@ -30406,10 +30409,6 @@ async function teardownFile(destPath) {
 }
 
 // src/cli/commands/teardown.ts
-function resolveResourcesDir2() {
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? resolve11(dirname11(fileURLToPath3(import.meta.url)), "..", "..", "..");
-  return join60(pluginRoot, "resources", "managed");
-}
 var teardownCommand = defineCommand({
   meta: {
     name: "teardown",
@@ -30424,14 +30423,18 @@ var teardownCommand = defineCommand({
   },
   run: async ({ args }) => {
     try {
-      const projectRoot = args.dir ? resolve11(args.dir) : await resolveRepoRootForCreate();
-      const resourcesDir = resolveResourcesDir2();
-      const pluginRoot = resolve11(resourcesDir, "..", "..");
+      const projectRoot = args.dir ? resolve12(args.dir) : await resolveRepoRootForCreate();
+      const resourcesDir = resolveResourcesDir();
+      const pluginRoot = resolve12(resourcesDir, "..", "..");
       if (pluginRoot === projectRoot) {
         writeHuman(`teardown: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
       }
       const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir7() });
+      if (result2.files.length === 0) {
+        writeError(`teardown failed: no managed resources found at ${resourcesDir}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+      }
       writeHuman(`teardown: reverted ${projectRoot}`);
       for (const f3 of result2.files) {
         writeHuman(`  ${f3.filename} [${f3.scope}] ${f3.action} \u2192 ${f3.destPath}`);
@@ -31092,4 +31095,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=ef0cfc958a0f0eb8b55aa7edcd8aa0df6bb82eeb9b15b12335e7b9c33ae73b58
+//# ditto-src-stamp=04673871b90aa472deb612531e9c88ed5228c2d845d16cd072cd5a08853baec6
