@@ -23,6 +23,7 @@ import {
 } from './autopilot-graph';
 import { AutopilotStore } from './autopilot-store';
 import { IntentStore } from './intent-store';
+import { warmStartMemoryContext } from './memory-warmstart';
 import { WorkItemStore } from './work-item-store';
 
 /**
@@ -207,10 +208,13 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
         scopeOf(node),
         node.agent_hint,
       );
+      // Warm-start memory push (§5-1 / §10-6 #1): fail-open query in the loop, the
+      // builder stays pure. researcher/planner only; undefined ⇒ packet unchanged.
+      const memory = await warmStartMemoryContext(repoRoot, node, workItem, { now });
       spawns.push({
         node_id: node.id,
         owner: node.owner,
-        packet: buildDelegationPacket(node, workItem, candidates, scopeOf(node)),
+        packet: buildDelegationPacket(node, workItem, candidates, scopeOf(node), memory),
       });
     }
     return { action: 'spawn_wave', spawns };
@@ -270,11 +274,14 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
     scopeOf(chosen),
     chosen.agent_hint,
   );
+  // Warm-start memory push (§5-1 / §10-6 #1): fail-open query in the loop, the
+  // builder stays pure. researcher/planner only; undefined ⇒ packet unchanged.
+  const memory = await warmStartMemoryContext(repoRoot, chosen, workItem, { now });
   return {
     action: 'spawn',
     node_id: chosen.id,
     owner: chosen.owner,
-    packet: buildDelegationPacket(chosen, workItem, candidates, scopeOf(chosen)),
+    packet: buildDelegationPacket(chosen, workItem, candidates, scopeOf(chosen), memory),
   };
 }
 

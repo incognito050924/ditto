@@ -73,6 +73,26 @@ describe('buildDelegationPacket (6-section, Context Isolation)', () => {
     expect(p.variant_candidates).toEqual(candidates);
   });
 
+  // Warm-start memory push (§10-6 #1): the builder stays PURE & SYNCHRONOUS. It
+  // never queries the graph — it injects whatever the loop hands it (or omits the
+  // field). With no 5th arg, context.memory is absent (no-memory path unchanged).
+  test('context.memory is absent when no memoryContext is passed (packet unchanged)', () => {
+    const p = buildDelegationPacket(designNode, workItem);
+    expect(p.context.memory).toBeUndefined();
+    expect('memory' in p.context).toBe(false);
+  });
+
+  test('buildDelegationPacket injects the passed memoryContext into context.memory', () => {
+    const memory = { related_nodes: ['sym:a', 'art:b'], decisions: ['decision:d1'] };
+    const p = buildDelegationPacket(designNode, workItem, [], workItem.changed_files, memory);
+    expect(p.context.memory).toEqual(memory);
+    // injection only — every other section is identical to the no-memory packet.
+    const baseline = buildDelegationPacket(designNode, workItem);
+    expect(p.task).toBe(baseline.task);
+    expect(p.must_do).toEqual(baseline.must_do);
+    expect(p.context.file_scope).toEqual(baseline.context.file_scope);
+  });
+
   test('non-planner nodes carry no subgraph-generation directive (surgical)', () => {
     for (const node of [implementNode, verifyNode]) {
       const p = buildDelegationPacket(node, workItem);

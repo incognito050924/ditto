@@ -1,5 +1,6 @@
 import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
 import type { WorkItem } from '~/schemas/work-item';
+import type { MemoryWarmStartContext } from './memory-warmstart';
 
 /**
  * Node dispatch + failure classification (M2.4). The 6-section delegation packet
@@ -18,6 +19,11 @@ export interface DelegationPacket {
     file_scope: string[];
     done_when: string;
     acceptance_refs: string[];
+    // Warm-start memory push (§5-1 / §10-6 #1): related serving-graph context for
+    // researcher/planner nodes. Optional & non-invasive — the loop queries the
+    // memory graph fail-open and injects the result here; absent/stale/no-coverage
+    // ⇒ undefined ⇒ the packet is byte-for-byte what it was without memory.
+    memory?: MemoryWarmStartContext;
   };
   // Variant routing: deterministically filtered specialized-subagent candidates
   // (role + file_scope match). The driver picks a `subagent_type` from these
@@ -78,6 +84,10 @@ export function buildDelegationPacket(
   // enforces — otherwise a node that declares its own file_scope gets a packet
   // scoped to a different (often empty) file set.
   fileScope: string[] = workItem.changed_files,
+  // Warm-start memory context (§10-6 #1). The builder stays PURE & SYNCHRONOUS:
+  // it never queries the memory graph — the loop does that fail-open and passes
+  // the result here, or `undefined` (then `context.memory` is omitted entirely).
+  memoryContext?: MemoryWarmStartContext,
 ): DelegationPacket {
   const isPlanner = node.owner === 'planner';
   const doneWhen =
@@ -109,6 +119,9 @@ export function buildDelegationPacket(
       file_scope: fileScope,
       done_when: doneWhen,
       acceptance_refs: node.acceptance_refs,
+      // Only present when the loop supplied a non-empty warm-start context; an
+      // omitted field keeps the packet identical to the no-memory path.
+      ...(memoryContext ? { memory: memoryContext } : {}),
     },
     variant_candidates: variantCandidates,
   };

@@ -121,6 +121,21 @@ match: [src/**]
     ]);
   });
 
+  // Warm-start non-invasiveness (§10-6 #1, ac-9): with NO memory projection, the
+  // loop's fail-open query returns undefined, so a planner spawn packet carries no
+  // `memory` context and dispatch behaves exactly as before.
+  test('no memory projection ⇒ planner packet has no memory context (dispatch unchanged)', async () => {
+    await seed(graph());
+    const res = await nextNode(repo, WI);
+    if (res.action !== 'spawn') throw new Error('expected spawn');
+    expect(res.owner).toBe('planner');
+    expect(res.packet.context.memory).toBeUndefined();
+    expect('memory' in res.packet.context).toBe(false);
+    // node still dispatched to running — the absent query never blocked dispatch.
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'N1')?.status).toBe('running');
+  });
+
   test('is idempotent: a dispatched (running) node is not re-selected', async () => {
     await seed(graph());
     await nextNode(repo, WI); // dispatches N1 -> running
