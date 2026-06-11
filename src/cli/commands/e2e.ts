@@ -408,7 +408,11 @@ const CLASSIFICATION_FOLLOW_UP: Record<string, string> = {
 const e2eFailureVerdictCmd = defineCommand({
   meta: {
     name: 'failure-verdict',
-    description: 'Record the user verdict (기능|스크립트|환경|flaky) for an e2e failure',
+    description:
+      'Record the user verdict (기능|스크립트|환경|flaky) for an e2e failure. ⚠ USER-ONLY DECISION: ' +
+      'an agent must NEVER run this on its own judgment — running it IS recording a user decision, ' +
+      'so invoke it only after the user explicitly stated this exact classification. ' +
+      'Fabricating it violates ac-12 and is auditable in the append-only ledger.',
   },
   args: {
     'work-item': { type: 'string', description: 'Work item id', required: true },
@@ -416,7 +420,8 @@ const e2eFailureVerdictCmd = defineCommand({
     case: { type: 'string', description: 'Case name from the test title', required: true },
     classification: {
       type: 'string',
-      description: '기능|스크립트|환경|flaky',
+      description:
+        "기능|스크립트|환경|flaky — must be the classification the USER chose, verbatim; an agent's own proposal is not a verdict",
       required: true,
     },
     basis: { type: 'string', description: 'Why this classification', required: true },
@@ -687,14 +692,21 @@ const e2eRegression = defineCommand({
 const e2eLifecycle = defineCommand({
   meta: {
     name: 'lifecycle',
-    description: 'Update or delete a DSL-derived e2e test after user confirmation',
+    description:
+      'Update or delete a DSL-derived e2e test after user confirmation. ⚠ USER-ONLY DECISION: ' +
+      'an agent must NEVER pass --confirmed-by-user on its own judgment — propose the action with ' +
+      'its basis, wait for the user to explicitly approve, and only then re-run with the flag. ' +
+      'Passing it unapproved is fabricating a user decision (ac-8) and is auditable in the ledger.',
   },
   args: {
     action: { type: 'string', description: 'update|delete', required: true },
     'journey-file': { type: 'string', description: 'Path to <slug>.journey.md', required: true },
     'confirmed-by-user': {
       type: 'boolean',
-      description: 'The user explicitly confirmed this action (required)',
+      description:
+        '⚠ The USER explicitly approved this exact action in this conversation (required). ' +
+        'This flag IS the recorded user decision — an agent must never set it autonomously, ' +
+        'however obvious the action seems; no user approval = do not run this command',
       default: false,
     },
     reason: { type: 'string', description: 'Why the test is updated/deleted' },

@@ -26414,7 +26414,7 @@ var CLASSIFICATION_FOLLOW_UP = {
 var e2eFailureVerdictCmd = defineCommand({
   meta: {
     name: "failure-verdict",
-    description: "Record the user verdict (\uAE30\uB2A5|\uC2A4\uD06C\uB9BD\uD2B8|\uD658\uACBD|flaky) for an e2e failure"
+    description: "Record the user verdict (\uAE30\uB2A5|\uC2A4\uD06C\uB9BD\uD2B8|\uD658\uACBD|flaky) for an e2e failure. \u26A0 USER-ONLY DECISION: " + "an agent must NEVER run this on its own judgment \u2014 running it IS recording a user decision, " + "so invoke it only after the user explicitly stated this exact classification. " + "Fabricating it violates ac-12 and is auditable in the append-only ledger."
   },
   args: {
     "work-item": { type: "string", description: "Work item id", required: true },
@@ -26422,7 +26422,7 @@ var e2eFailureVerdictCmd = defineCommand({
     case: { type: "string", description: "Case name from the test title", required: true },
     classification: {
       type: "string",
-      description: "\uAE30\uB2A5|\uC2A4\uD06C\uB9BD\uD2B8|\uD658\uACBD|flaky",
+      description: "\uAE30\uB2A5|\uC2A4\uD06C\uB9BD\uD2B8|\uD658\uACBD|flaky \u2014 must be the classification the USER chose, verbatim; an agent's own proposal is not a verdict",
       required: true
     },
     basis: { type: "string", description: "Why this classification", required: true },
@@ -26644,14 +26644,14 @@ var e2eRegression = defineCommand({
 var e2eLifecycle = defineCommand({
   meta: {
     name: "lifecycle",
-    description: "Update or delete a DSL-derived e2e test after user confirmation"
+    description: "Update or delete a DSL-derived e2e test after user confirmation. \u26A0 USER-ONLY DECISION: " + "an agent must NEVER pass --confirmed-by-user on its own judgment \u2014 propose the action with " + "its basis, wait for the user to explicitly approve, and only then re-run with the flag. " + "Passing it unapproved is fabricating a user decision (ac-8) and is auditable in the ledger."
   },
   args: {
     action: { type: "string", description: "update|delete", required: true },
     "journey-file": { type: "string", description: "Path to <slug>.journey.md", required: true },
     "confirmed-by-user": {
       type: "boolean",
-      description: "The user explicitly confirmed this action (required)",
+      description: "\u26A0 The USER explicitly approved this exact action in this conversation (required). " + "This flag IS the recorded user decision \u2014 an agent must never set it autonomously, " + "however obvious the action seems; no user approval = do not run this command",
       default: false
     },
     reason: { type: "string", description: "Why the test is updated/deleted" },
@@ -32901,4 +32901,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=61790a35bc90d3569363808f8fddd0742db67a322c61612fa6c32a122bf36550
+//# ditto-src-stamp=ef4156bf783df2567b8d9b7437432376a46366c47cd696f66072e4cad8c8a915
