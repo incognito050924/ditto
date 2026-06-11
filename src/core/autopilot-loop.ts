@@ -40,10 +40,15 @@ import { WorkItemStore } from './work-item-store';
  * as the `recordResult` payload; this module only enforces the deterministic
  * floor (charter §3.1: judgment in the agent, state in the schema).
  *
- * A node mutates files only when its owner is the implementer; every other owner
- * is read-only, so the approval gate blocks only a mutating node (contract §5.3 —
- * design/research may run before approval). A rejected plan invalidates the whole
- * graph and rolls back in-flight work regardless of which node is next.
+ * A node mutates files only when its owner is the implementer; every other
+ * SUBAGENT owner is read-only, so the approval gate blocks only a mutating node
+ * (contract §5.3 — design/research may run before approval). One deliberate
+ * exception sits outside this dichotomy: a `main-session` (e2e-author) node
+ * writes journey/spec files inline in the main session — its user dialogue is
+ * the approval, it is excluded from waves (single-node handling, no clobber),
+ * and its changed_files arrive via record-result like a mutating node's
+ * (dialectic-1 O-10). A rejected plan invalidates the whole graph and rolls
+ * back in-flight work regardless of which node is next.
  */
 function isMutatingNode(node: AutopilotNode): boolean {
   return isMutatingOwner(node.owner);

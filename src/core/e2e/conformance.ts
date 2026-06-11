@@ -1,4 +1,11 @@
-import { extractStepMarkers, parseBlockDoc, parseJourneyDoc } from './journey-dsl';
+import {
+  extractBlockCalls,
+  extractCaseNames,
+  extractStepMarkers,
+  parseBlockDoc,
+  parseJourneyDoc,
+  splitFrontMatter,
+} from './journey-dsl';
 
 /**
  * DSL ↔ generated-spec step conformance (wi_260610p9h ac-3).
@@ -61,6 +68,15 @@ export function checkStepConformance(input: ConformanceInput): ConformanceReport
         errors.push(`block "${blockId}": ${block.error}`);
         continue;
       }
+      // O-6: blockTexts is keyed by the uses_blocks id (= the block file stem);
+      // required refs use the block's front-matter id. A mismatch would make
+      // the gate compare against refs no marker can satisfy honestly — refuse.
+      if (block.frontMatter.id !== blockId) {
+        errors.push(
+          `block "${blockId}": front-matter id "${block.frontMatter.id}" does not match the uses_blocks reference/filename — block id and filename stem must be identical`,
+        );
+        continue;
+      }
       if (block.stepIds.length === 0) {
         errors.push(
           `block "${blockId}": body declares no step id ([bN]) — nothing to trace, vacuous pass refused`,
@@ -68,6 +84,27 @@ export function checkStepConformance(input: ConformanceInput): ConformanceReport
         continue;
       }
       required.push(...block.stepIds.map((id) => `${block.frontMatter.id}/${id}`));
+    }
+
+    const body = splitFrontMatter(input.journeyText)?.body ?? '';
+    // O-14: a `블록:` call in the body that uses_blocks does not declare slips
+    // past block freshness + block step conformance — declaration drift fails.
+    const declared = new Set(journey.frontMatter.uses_blocks);
+    for (const called of new Set(extractBlockCalls(body))) {
+      if (!declared.has(called)) {
+        errors.push(
+          `block "${called}" is invoked by a 블록: step but missing from uses_blocks — declare it (영향 추림과 블록 게이트가 이 선언을 본다)`,
+        );
+      }
+    }
+    // O-13: every declared case must surface in the generated spec — a dropped
+    // case would otherwise pass (the agent converts; the machine gates).
+    for (const caseName of extractCaseNames(body)) {
+      if (!input.generatedText.includes(caseName)) {
+        errors.push(
+          `case "${caseName}" is declared in ## 케이스 but not found in the generated spec — every case must become a test`,
+        );
+      }
     }
   }
 

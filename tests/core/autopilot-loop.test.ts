@@ -895,6 +895,38 @@ describe('nextNode parallel wave (ac-3: spawn the whole file-overlap-admitted wa
     expect(after.nodes.find((n) => n.id === 'R2')?.status).toBe('pending');
   });
 
+  test('main-session(e2e-author) 노드는 wave에 절대 포함되지 않는다 (O-10 동시성 가드)', async () => {
+    await seed(
+      graph({
+        nodes: [
+          {
+            id: 'E1',
+            kind: 'e2e-author' as const,
+            owner: 'main-session' as const,
+            purpose: 'author journeys with the user',
+            status: 'pending' as const,
+            depends_on: [],
+            acceptance_refs: [],
+            evidence_refs: [],
+            attempts: { fix: 0, switch: 0 },
+          },
+          node('R2', 'research', 'researcher'),
+        ],
+      }),
+    );
+    const res = await nextNode(repo, WI);
+    // main-session은 wave-eligible이 아니므로 spawn_wave에 실리지 않고,
+    // 단일 노드 경로에서 main_session 액션으로 인터셉트된다.
+    expect(res.action).not.toBe('spawn_wave');
+    if (res.action === 'main_session') {
+      expect(res.node_id).toBe('E1');
+    }
+    const after = await aps.get(WI);
+    // 어느 쪽이 먼저 선택되든 main-session 노드가 wave spawn으로 흘러가지 않았다.
+    const e1 = after.nodes.find((n) => n.id === 'E1');
+    expect(e1?.status === 'pending' || e1?.status === 'running').toBe(true);
+  });
+
   test('F1: 2 approved mutating nodes are NOT both dispatched in one wave (≤1 mutating per wave)', async () => {
     // Both implementer nodes are otherwise wave-eligible (approval allowed, empty
     // changed_files → disjoint scopes). file_scope can't actually separate their real

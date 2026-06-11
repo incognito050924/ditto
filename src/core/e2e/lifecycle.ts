@@ -1,5 +1,5 @@
 import { readFile, readdir, unlink } from 'node:fs/promises';
-import { basename, dirname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   type E2eLifecycleAction,
   type E2eLifecycleDecision,
@@ -87,6 +87,15 @@ export async function runLifecycleAction(
     };
   }
   const journeyAbs = resolve(repoRoot, req.journeyFile);
+  // O-19: this command unlinks files — a path resolving outside the repo root
+  // (`../…` or an absolute path elsewhere) is out of its mandate, refuse.
+  const repoRel = relative(resolve(repoRoot), journeyAbs);
+  if (repoRel.startsWith('..') || isAbsolute(repoRel)) {
+    return {
+      ok: false,
+      refusal: `journey 경로가 저장소 밖을 가리킨다(${req.journeyFile}) — 수명주기 집행은 저장소 안의 파생 테스트에만 적용된다`,
+    };
+  }
   const journeyName = basename(journeyAbs);
   if (!journeyName.endsWith('.journey.md')) {
     return { ok: false, refusal: `journey 파일이 아니다(*.journey.md 아님): ${req.journeyFile}` };
@@ -143,7 +152,7 @@ export async function runLifecycleAction(
   };
 
   if (req.action === 'update') {
-    const stale = await detectStale(journeyAbs, specAbs);
+    const stale = await detectStale(journeyAbs, specAbs, rel(journeyAbs));
     await appendDecision(ledgerPath, {
       action: 'update',
       ...base,
@@ -185,7 +194,16 @@ export async function runLifecycleAction(
     const other = await readOrNull(otherAbs);
     if (other === null) continue;
     const otherParsed = parseJourneyDoc(other);
-    if (!otherParsed.ok) continue;
+    if (!otherParsed.ok) {
+      // O-8: unparsable ≠ "references nothing". A broken journey is still a
+      // DSL-derived asset; when its raw text shows any trace of a block id,
+      // conservatively preserve that helper (mirror of regression-select's
+      // invalid-journey escalation — invalid never silently widens a delete).
+      for (const b of parsed.frontMatter.uses_blocks) {
+        if (other.includes(b)) referencedElsewhere.add(b);
+      }
+      continue;
+    }
     for (const b of otherParsed.frontMatter.uses_blocks) referencedElsewhere.add(b);
   }
 

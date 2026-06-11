@@ -127,6 +127,88 @@ describe('runRegressionGate (ac-7 실행·기록)', () => {
     expect(persisted.failures).toHaveLength(1);
   });
 
+  test('제목 규약이 깨진 실패도 spec 파일 경로로 journey에 매핑된다 (O-7)', async () => {
+    await seedJourney('login', 'jrn-login', '로그인 여정', ['component:src/auth/**']);
+    await seedJourney('pay', 'jrn-pay', '결제 여정', ['component:src/auth/**']);
+    const { record } = await runRegressionGate(
+      repoRoot,
+      { workItemId: 'wi_r8', runId: 'rg-09', changedPaths: ['src/auth/x.ts'] },
+      {
+        probe: available,
+        runner: async (_root, _files, jsonReportPath) => {
+          if (jsonReportPath !== undefined) {
+            await Bun.write(
+              jsonReportPath,
+              JSON.stringify({
+                config: { rootDir: join(repoRoot, 'e2e', 'generated') },
+                suites: [
+                  {
+                    title: 'login.spec.ts',
+                    file: 'login.spec.ts',
+                    specs: [
+                      {
+                        // 규약(<journey-id> · <case>) 위반 제목 — 파일 기준 매핑이 받쳐야 한다
+                        title: 'free-form title',
+                        file: 'login.spec.ts',
+                        tests: [{ results: [{ status: 'failed', error: { message: 'boom' } }] }],
+                      },
+                    ],
+                  },
+                ],
+              }),
+            );
+          }
+          return { exit_code: 1, output: '1 failed\n' };
+        },
+      },
+    );
+    expect(record.result).toBe('fail');
+    expect(record.failures).toEqual([{ journey_id: 'jrn-login', case: 'free-form title' }]);
+    // 파일 매핑 덕에 실패는 jrn-login에 국소화되고, jrn-pay는 정당하게 pass.
+    expect(record.journey_results).toContainEqual({ journey_id: 'jrn-login', result: 'fail' });
+    expect(record.journey_results).toContainEqual({ journey_id: 'jrn-pay', result: 'pass' });
+  });
+
+  test('어느 여정에도 매핑 못 한 실패가 있으면 모든 실행 여정이 보수적 fail (O-7)', async () => {
+    await seedJourney('login', 'jrn-login', '로그인 여정', ['component:src/auth/**']);
+    await seedJourney('pay', 'jrn-pay', '결제 여정', ['component:src/auth/**']);
+    const { record } = await runRegressionGate(
+      repoRoot,
+      { workItemId: 'wi_r9', runId: 'rg-10', changedPaths: ['src/auth/x.ts'] },
+      {
+        probe: available,
+        runner: async (_root, _files, jsonReportPath) => {
+          if (jsonReportPath !== undefined) {
+            await Bun.write(
+              jsonReportPath,
+              JSON.stringify({
+                config: { rootDir: join(repoRoot, 'e2e', 'generated') },
+                suites: [
+                  {
+                    title: 'mystery.spec.ts',
+                    file: 'mystery.spec.ts', // 추려진 어떤 spec과도 다름
+                    specs: [
+                      {
+                        title: 'free-form title',
+                        file: 'mystery.spec.ts',
+                        tests: [{ results: [{ status: 'failed', error: { message: 'boom' } }] }],
+                      },
+                    ],
+                  },
+                ],
+              }),
+            );
+          }
+          return { exit_code: 1, output: '1 failed\n' };
+        },
+      },
+    );
+    expect(record.result).toBe('fail');
+    // 실패를 국소화할 수 없으면 어떤 여정도 pass로 기록될 수 없다 (pass 증명 불가).
+    expect(record.journey_results).toContainEqual({ journey_id: 'jrn-login', result: 'fail' });
+    expect(record.journey_results).toContainEqual({ journey_id: 'jrn-pay', result: 'fail' });
+  });
+
   test('blocked(브라우저 부재) → result=blocked, 절대 pass 아님, runner 미호출', async () => {
     await seedJourney('login', 'jrn-login', '로그인 여정', ['component:src/auth/**']);
     let calls = 0;

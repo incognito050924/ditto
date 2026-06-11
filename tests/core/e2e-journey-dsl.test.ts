@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  extractBlockCalls,
+  extractCaseNames,
   extractStepIds,
   extractStepMarkers,
   parseBlockDoc,
@@ -66,6 +68,48 @@ describe('parseJourneyDoc', () => {
 
   test('fails when a block document is fed as a journey', () => {
     expect(parseJourneyDoc(blockDoc).ok).toBe(false);
+  });
+
+  test('duplicate step ids are a parse failure (O-5: 추적성이 조용히 합쳐지지 않게)', () => {
+    const dup = journeyDoc.replace('2. [s2]', '2. [s1]');
+    const out = parseJourneyDoc(dup);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.error).toContain('s1');
+  });
+});
+
+describe('extractBlockCalls (O-14: body 블록 호출 추출)', () => {
+  test('블록: 호출의 블록 id를 조건 유무와 무관하게 추출한다', () => {
+    const body = [
+      '1. [s1] 블록: blk-login (user=a@b.c, password=x)',
+      '2. [s2] (coupon 있음) 블록: blk-apply-coupon (code={coupon})',
+      '3. [s3] 클릭: "결제" 버튼',
+      '본문에서 블록: blk-prose 를 언급해도 step 줄이 아니면 무시',
+    ].join('\n');
+    expect(extractBlockCalls(body)).toEqual(['blk-login', 'blk-apply-coupon']);
+  });
+});
+
+describe('extractCaseNames (O-13: ## 케이스 테이블 파싱)', () => {
+  test('케이스 테이블의 첫 열(케이스 이름)을 순서대로 추출한다', () => {
+    const body = [
+      '1. [s1] 방문: /checkout',
+      '',
+      '## 케이스',
+      '',
+      '| 케이스 | coupon | 유형 |',
+      '|---|---|---|',
+      '| 유효 쿠폰 | WELCOME10 | 성공 |',
+      '| 만료 쿠폰 | EXPIRED99 | 실패 |',
+      '',
+      '## 다른 섹션',
+      '| 표지만 비슷한 표 | x |',
+    ].join('\n');
+    expect(extractCaseNames(body)).toEqual(['유효 쿠폰', '만료 쿠폰']);
+  });
+
+  test('케이스 섹션이 없으면 빈 목록', () => {
+    expect(extractCaseNames('1. [s1] 방문: /\n')).toEqual([]);
   });
 });
 

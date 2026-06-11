@@ -160,4 +160,64 @@ describe('checkStepConformance (ac-3)', () => {
     expect(report.ok).toBe(false);
     expect(report.errors.length).toBeGreaterThan(0);
   });
+
+  test('block front-matter id ≠ uses_blocks 참조 키 → error (O-6: id↔파일명 드리프트)', () => {
+    const renamedBlock = BLOCK.replace('id: blk-login', 'id: blk-signin');
+    const report = checkStepConformance({
+      journeyText: JOURNEY,
+      blockTexts: { 'blk-login': renamedBlock },
+      generatedText: GENERATED_OK,
+      supportTexts: [SUPPORT_OK.replaceAll('blk-login/', 'blk-signin/')],
+    });
+    expect(report.ok).toBe(false);
+    expect(report.errors.join('\n')).toContain('blk-signin');
+  });
+
+  test('body 블록: 호출이 uses_blocks에 없으면 error (O-14: 선언 드리프트)', () => {
+    const journeyExtraCall = JOURNEY.replace(
+      '2. [s2] 확인: url contains /dashboard',
+      '2. [s2] 블록: blk-logout ()\n3. [s3] 확인: url contains /dashboard',
+    );
+    const generated = GENERATED_OK.replace(
+      '  // @step jrn-login-basic/s2 확인: url contains /dashboard',
+      '  // @step jrn-login-basic/s2 블록: blk-logout ()\n  // @step jrn-login-basic/s3 확인: url contains /dashboard',
+    );
+    const report = checkStepConformance({
+      journeyText: journeyExtraCall,
+      blockTexts: { 'blk-login': BLOCK },
+      generatedText: generated,
+      supportTexts: [SUPPORT_OK],
+    });
+    expect(report.ok).toBe(false);
+    expect(report.errors.join('\n')).toContain('blk-logout');
+    expect(report.errors.join('\n')).toContain('uses_blocks');
+  });
+
+  test('## 케이스 선언 케이스가 생성 spec에 없으면 error (O-13: 케이스 누락 게이트)', () => {
+    const journeyWithCases = `${JOURNEY}\n## 케이스\n\n| 케이스 | user | 유형 |\n|---|---|---|\n| 정상 로그인 | user@example.com | 성공 |\n| 잠긴 계정 | locked@example.com | 실패 |\n`;
+    const generatedOneCase = GENERATED_OK.replace(
+      "test('jrn-login-basic'",
+      "test('jrn-login-basic · 정상 로그인'",
+    );
+    const report = checkStepConformance({
+      journeyText: journeyWithCases,
+      blockTexts: { 'blk-login': BLOCK },
+      generatedText: generatedOneCase,
+      supportTexts: [SUPPORT_OK],
+    });
+    expect(report.ok).toBe(false);
+    expect(report.errors.join('\n')).toContain('잠긴 계정');
+
+    const generatedBothCases = generatedOneCase.replace(
+      "import { blkLogin } from './support/blk-login.block';",
+      "import { blkLogin } from './support/blk-login.block';\n// case: 잠긴 계정",
+    );
+    const ok = checkStepConformance({
+      journeyText: journeyWithCases,
+      blockTexts: { 'blk-login': BLOCK },
+      generatedText: generatedBothCases,
+      supportTexts: [SUPPORT_OK],
+    });
+    expect(ok.ok).toBe(true);
+  });
 });

@@ -162,7 +162,11 @@ export async function buildFailureReport(
       message: f.message,
       spec_file,
       replay: {
-        headed_command: `npx playwright test ${spec_file} -g "${f.title.replaceAll('"', '\\"')}" --headed`,
+        // Playwright -g treats the pattern as a regex — escape metacharacters
+        // so a case name like "가격 (1+1)" replays the exact failing test (O-9).
+        headed_command: `npx playwright test ${spec_file} -g "${f.title
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          .replaceAll('"', '\\"')}" --headed`,
         ...(f.tracePath ? { trace_command: `npx playwright show-trace ${f.tracePath}` } : {}),
       },
     });

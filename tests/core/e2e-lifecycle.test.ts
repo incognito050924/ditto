@@ -191,6 +191,46 @@ describe('runLifecycleAction (ac-8 가드)', () => {
     ).toBe(true);
   });
 
+  test('파싱 불가한 다른 여정이 참조 흔적을 가지면 공유 helper 보존 (O-8)', async () => {
+    await Bun.write(
+      join(repoRoot, 'e2e', 'journeys', 'login.journey.md'),
+      journeyDoc('jrn-login', '로그인', ['shared-step']),
+    );
+    // front-matter가 깨진 여정 — 그러나 본문에 shared-step 참조 흔적이 있다.
+    await Bun.write(
+      join(repoRoot, 'e2e', 'journeys', 'broken.journey.md'),
+      '깨진 front matter\n1. [s1] 블록: shared-step ()\n',
+    );
+    await Bun.write(join(repoRoot, 'e2e', 'generated', 'login.spec.ts'), GENERATED);
+    await Bun.write(
+      join(repoRoot, 'e2e', 'generated', 'support', 'shared-step.block.ts'),
+      GENERATED,
+    );
+    const res = await runLifecycleAction(repoRoot, {
+      action: 'delete',
+      journeyFile: 'e2e/journeys/login.journey.md',
+      confirmedByUser: true,
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    // 파싱 불가 = 참조 안 함이 아니다 — 보수적으로 보존한다.
+    expect(res.preserved_helpers).toEqual(['e2e/generated/support/shared-step.block.ts']);
+    expect(
+      await exists(join(repoRoot, 'e2e', 'generated', 'support', 'shared-step.block.ts')),
+    ).toBe(true);
+  });
+
+  test('저장소 밖 journey 경로는 거부 (O-19: repo 경계)', async () => {
+    const res = await runLifecycleAction(repoRoot, {
+      action: 'delete',
+      journeyFile: '../outside/evil.journey.md',
+      confirmedByUser: true,
+    });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.refusal).toContain('저장소');
+  });
+
   test('update: 아무것도 지우지 않고 stale 판정 + 결정 기록(워크아이템 없이도 동작)', async () => {
     await Bun.write(
       join(repoRoot, 'e2e', 'journeys', 'login.journey.md'),

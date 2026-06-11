@@ -1,5 +1,5 @@
 import { mkdir, readFile, readdir } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { defineCommand } from 'citty';
 import { z } from 'zod';
 import { localDir } from '~/core/ditto-paths';
@@ -7,9 +7,13 @@ import { defaultApplicabilityDeps, evaluateAxis3FromRepo } from '~/core/e2e/appl
 import { runJourney } from '~/core/e2e/browser';
 import { checkStepConformance } from '~/core/e2e/conformance';
 import { buildFailureReport, renderFailureLines } from '~/core/e2e/failure-report';
-import { appendFailureVerdict, appendFlakyHistory } from '~/core/e2e/failure-verdict';
+import {
+  appendFailureVerdict,
+  appendFlakyHistory,
+  featureFixAllowed,
+} from '~/core/e2e/failure-verdict';
 import { verifyGenerated } from '~/core/e2e/generated-verify';
-import { detectStale } from '~/core/e2e/journey-digest';
+import { computeSourceDigest, detectStale } from '~/core/e2e/journey-digest';
 import { parseJourneyDoc } from '~/core/e2e/journey-dsl';
 import { runLifecycleAction } from '~/core/e2e/lifecycle';
 import { runRegressionGate } from '~/core/e2e/regression-gate';
@@ -206,16 +210,21 @@ const e2eConformance = defineCommand({
       const report = checkStepConformance({ journeyText, blockTexts, generatedText, supportTexts });
 
       // Freshness (ac-4 mechanics applied at the gate): journey ↔ spec, and each
-      // used block ↔ its support helper when one exists.
+      // used block ↔ its support helper when one exists. The expected-source
+      // argument (O-15) also pins the header `@ditto-source` to THIS DSL file —
+      // a digest borrowed from another source cannot prove freshness.
+      const repoRoot = await resolveRepoRootForCreate();
+      const repoRel = (abs: string): string => relative(repoRoot, abs).split(sep).join('/');
       const stale: string[] = [];
-      const journeyVerdict = await detectStale(journeyAbs, generatedAbs);
+      const journeyVerdict = await detectStale(journeyAbs, generatedAbs, repoRel(journeyAbs));
       if (journeyVerdict.stale) stale.push(`${args.generated}: ${journeyVerdict.reason}`);
       const parsedJourney = parseJourneyDoc(journeyText);
       if (parsedJourney.ok) {
         for (const blockId of parsedJourney.frontMatter.uses_blocks) {
           if (blockTexts[blockId] === undefined) continue; // already a conformance error
           const helperAbs = join(supportDir, `${blockId}.block.ts`);
-          const verdict = await detectStale(join(blocksDir, `${blockId}.block.md`), helperAbs);
+          const blockMdAbs = join(blocksDir, `${blockId}.block.md`);
+          const verdict = await detectStale(blockMdAbs, helperAbs, repoRel(blockMdAbs));
           if (verdict.stale) stale.push(`support/${blockId}.block.ts: ${verdict.reason}`);
         }
       }
@@ -442,6 +451,16 @@ const e2eFailureVerdictCmd = defineCommand({
     }
     try {
       const repoRoot = await resolveRepoRootForCreate();
+      if (journeyFile !== undefined) {
+        // O-19: flaky history rewrites the journey file — refuse a path that
+        // resolves outside the repo (this command manages repo assets only).
+        const rel = relative(repoRoot, resolve(repoRoot, journeyFile));
+        if (rel.startsWith('..') || isAbsolute(rel)) {
+          writeError(`--journey-file이 저장소 밖을 가리킨다: ${journeyFile} — 거부한다`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+      }
       const decided_at = new Date().toISOString();
       const verdict = await appendFailureVerdict(repoRoot, args['work-item'], {
         journey_id: args.journey,
@@ -469,6 +488,92 @@ const e2eFailureVerdictCmd = defineCommand({
       }
     } catch (err) {
       writeError(`e2e failure-verdict failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/**
+ * `ditto e2e fix-allowed` — the ac-12 lock QUERY (dialectic-1 O-1). Surfaces
+ * `featureFixAllowed` as an executable gate: before any feature-code fix
+ * motivated by an e2e failure, the agent runs this; a non-zero exit means the
+ * latest user verdict for the journey·case is not '기능' (or none exists) and
+ * feature-code edits stay forbidden. The exit code is the evidence.
+ */
+const e2eFixAllowed = defineCommand({
+  meta: {
+    name: 'fix-allowed',
+    description: 'Query the ac-12 lock: may feature code be fixed for this journey·case failure?',
+  },
+  args: {
+    'work-item': { type: 'string', description: 'Work item id', required: true },
+    journey: { type: 'string', description: 'Journey id (jrn-…)', required: true },
+    case: { type: 'string', description: 'Case name from the test title', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    try {
+      const repoRoot = await resolveRepoRootForCreate();
+      const gate = await featureFixAllowed(repoRoot, args['work-item'], args.journey, args.case);
+      if (format === 'json') {
+        writeJson(gate);
+      } else {
+        writeHuman(`e2e fix-allowed: ${gate.allowed ? 'ALLOWED' : 'LOCKED'} — ${gate.reason}`);
+      }
+      if (!gate.allowed) process.exit(RUNTIME_ERROR_EXIT);
+    } catch (err) {
+      writeError(`e2e fix-allowed failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/**
+ * `ditto e2e digest` — canonical source digest for generated headers (O-2).
+ * The digest excludes the operational `flaky_history` front-matter field, so a
+ * flaky verdict never flips conformance to stale. The scripter embeds THIS
+ * value as `@ditto-digest sha256:<hex>` (not a raw `shasum` of the file).
+ */
+const e2eDigest = defineCommand({
+  meta: {
+    name: 'digest',
+    description: 'Print the canonical digest of a journey/block DSL file (flaky_history excluded)',
+  },
+  args: {
+    journey: {
+      type: 'string',
+      description: 'Path to the .journey.md/.block.md file',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    try {
+      const text = await readFile(resolve(args.journey), 'utf8');
+      const digest = computeSourceDigest(text);
+      if (format === 'json') {
+        writeJson({ file: args.journey, digest });
+      } else {
+        writeHuman(`sha256:${digest}`);
+      }
+    } catch (err) {
+      writeError(`e2e digest failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
     }
   },
@@ -662,6 +767,8 @@ export const e2eCommand = defineCommand({
     'verify-generated': e2eVerifyGenerated,
     'failure-report': e2eFailureReport,
     'failure-verdict': e2eFailureVerdictCmd,
+    'fix-allowed': e2eFixAllowed,
+    digest: e2eDigest,
     regression: e2eRegression,
     lifecycle: e2eLifecycle,
   },

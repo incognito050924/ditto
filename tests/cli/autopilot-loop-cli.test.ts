@@ -182,3 +182,30 @@ describe('ditto autopilot next-node / record-result (G9 loop step CLI)', () => {
     expect(res.stderr).toContain('autopilot.json missing');
   });
 });
+
+describe('ditto autopilot complete — e2e 완료 게이트 (O-4/O-18)', () => {
+  test('웹 표면 changed_files + 제안 결정 부재 → complete가 거부한다', async () => {
+    // changed_files에 웹 표면(.tsx)을 넣되, 제안 결정 레코드는 만들지 않는다.
+    const wiPath = join(dir, '.ditto', 'local', 'work-items', WI, 'work-item.json');
+    const wi = JSON.parse(await Bun.file(wiPath).text());
+    wi.changed_files = ['src/pages/Home.tsx'];
+    await writeFile(wiPath, `${JSON.stringify(wi, null, 2)}\n`, 'utf8');
+
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    expect(res.exitCode).not.toBe(0);
+    const out = JSON.parse(res.stdout);
+    expect(out.e2e_gate.map((v: { code: string }) => v.code)).toContain('proposal_missing');
+    // completion.json이 조립되지 않았다 — 의무 미이행 상태로는 닫히지 않는다.
+    expect(
+      await Bun.file(join(dir, '.ditto', 'local', 'work-items', WI, 'completion.json')).exists(),
+    ).toBe(false);
+  });
+
+  test('웹 표면이 아니면 게이트는 침묵하고 complete가 정상 진행된다', async () => {
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    // changed_files=['src/x.ts'] — 웹 표면 아님, journeys 디렉토리 없음.
+    expect(res.exitCode).toBe(0);
+    const out = JSON.parse(res.stdout);
+    expect(out.final_verdict).toBeDefined();
+  });
+});

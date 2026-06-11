@@ -86,6 +86,18 @@ describe('buildFailureReport (ac-11: DSL vocabulary + replay)', () => {
     );
   });
 
+  test('-g pattern escapes regex metacharacters in the title (O-9)', async () => {
+    const rep = reporter();
+    // 케이스명에 정규식 메타문자: Playwright -g는 정규식이므로 그대로 넣으면 깨진다.
+    const title = 'jrn-login · 가격 (1+1) [할인]';
+    const spec = rep.suites[0]?.specs[0];
+    if (spec) spec.title = title;
+    const failures = await buildFailureReport(rep, { repoRoot: '/repo', readSpec });
+    const cmd = failures[0]?.replay.headed_command ?? '';
+    expect(cmd).toContain('가격 \\(1\\+1\\) \\[할인\\]');
+    expect(cmd).not.toContain('-g "jrn-login · 가격 (1+1) [할인]"');
+  });
+
   test('no trace attachment → trace_command absent (renderer gives guidance instead)', async () => {
     const failures = await buildFailureReport(reporter({ attachments: [] }), {
       repoRoot: '/repo',

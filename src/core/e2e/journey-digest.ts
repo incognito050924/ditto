@@ -1,21 +1,58 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
+import { stringify as stringifyYaml } from 'yaml';
+import { parseYaml } from '../hosts/shared';
+import { splitFrontMatter } from './journey-dsl';
 
 /**
  * Journey DSL digest + provenance mechanics (wi_260610p9h ac-4/ac-8).
  *
  * Every generated artifact (`e2e/generated/*.spec.ts`, `support/*.block.ts`)
- * carries a header embedding the source DSL path and the sha256 of the source
- * file bytes. That makes two things mechanical:
+ * carries a header embedding the source DSL path and the sha256 of the source.
+ * That makes two things mechanical:
  *  - ac-4: a DSL edited after its last generation is detected as STALE
  *    (header digest ≠ current source digest) — no human memory involved.
  *  - ac-8: derived specs are identified by the `@ditto-generated` marker;
  *    human-authored specs (no marker) are never mistaken for derived ones.
+ *
+ * Digest input is the CANONICAL source text (`computeSourceDigest`): the
+ * `flaky_history` front-matter field is operational metadata written by the
+ * verdict ledger, not journey behavior — including it would turn every flaky
+ * verdict into a false-stale regeneration demand (dialectic-1 O-2). Raw-bytes
+ * digests from artifacts generated before this rule are still accepted.
  */
 
 export function sha256Hex(bytes: string | Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
+}
+
+/**
+ * Canonical digest text: the source with operational metadata (front-matter
+ * `flaky_history`) removed. Non-front-matter documents, non-mapping
+ * front-matter, and YAML parse failures fall back to the raw text — the digest
+ * never throws on user input.
+ */
+export function canonicalDigestText(text: string): string {
+  const split = splitFrontMatter(text);
+  if (!split) return text;
+  let raw: unknown;
+  try {
+    raw = parseYaml(split.frontMatter);
+  } catch {
+    return text;
+  }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return text;
+  // Always re-stringify (not only when flaky_history is present): the verdict
+  // ledger writes front-matter through the same YAML stringifier, so canonical
+  // equality must not depend on the author's original YAML formatting.
+  const { flaky_history: _omitted, ...record } = raw as Record<string, unknown>;
+  return `---\n${stringifyYaml(record)}---\n${split.body}`;
+}
+
+/** sha256 of the canonical source text — what generated headers must embed. */
+export function computeSourceDigest(text: string): string {
+  return sha256Hex(canonicalDigestText(text));
 }
 
 export interface GeneratedHeaderInput {
@@ -82,12 +119,20 @@ export interface StaleVerdict {
 /**
  * ac-4: is the generated file out of date w.r.t. its source DSL? Missing or
  * header-less generated files are stale (freshness cannot be proven), and a
- * digest mismatch means the DSL changed after the last generation.
+ * digest mismatch means the DSL changed after the last generation. The header
+ * digest may be canonical (current convention) or raw-bytes (pre-O-2
+ * artifacts) — either match proves freshness. When `expectedSource` is given,
+ * a header `@ditto-source` pointing elsewhere is stale (O-15: provenance is
+ * source path + digest, not digest alone).
  */
-export async function detectStale(sourceAbs: string, generatedAbs: string): Promise<StaleVerdict> {
-  let sourceBytes: Uint8Array;
+export async function detectStale(
+  sourceAbs: string,
+  generatedAbs: string,
+  expectedSource?: string,
+): Promise<StaleVerdict> {
+  let sourceText: string;
   try {
-    sourceBytes = await readFile(sourceAbs);
+    sourceText = await readFile(sourceAbs, 'utf8');
   } catch {
     return { stale: true, reason: `source DSL not readable: ${sourceAbs}` };
   }
@@ -107,14 +152,21 @@ export async function detectStale(sourceAbs: string, generatedAbs: string): Prom
       reason: 'generated file has no @ditto-digest header; freshness unprovable',
     };
   }
-  const current = sha256Hex(sourceBytes);
-  if (header.digest !== current) {
+  if (expectedSource !== undefined && header.source !== expectedSource) {
     return {
       stale: true,
-      reason: `digest mismatch: header sha256:${header.digest} ≠ current source sha256:${current} (DSL changed after last generation)`,
+      reason: `@ditto-source mismatch: header points at ${header.source}, expected ${expectedSource} — provenance unprovable`,
     };
   }
-  return { stale: false, reason: 'header digest matches current source bytes' };
+  const canonical = computeSourceDigest(sourceText);
+  const raw = sha256Hex(sourceText);
+  if (header.digest !== canonical && header.digest !== raw) {
+    return {
+      stale: true,
+      reason: `digest mismatch: header sha256:${header.digest} ≠ current source sha256:${canonical} (DSL changed after last generation)`,
+    };
+  }
+  return { stale: false, reason: 'header digest matches current source' };
 }
 
 export interface SpecPartition {

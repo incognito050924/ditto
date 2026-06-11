@@ -6,6 +6,7 @@ import { kindToOwner } from '~/core/autopilot-graph';
 import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { CompletionStore } from '~/core/completion-store';
+import { checkE2eCompletionGate } from '~/core/e2e/completion-gate';
 import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { intentDriftGate } from '~/core/gates';
@@ -308,8 +309,27 @@ const autopilotComplete = defineCommand({
     }
     const repoRoot = await requireGraph(args.workItem);
     try {
-      const graph = await new AutopilotStore(repoRoot).get(args.workItem);
+      const aps = new AutopilotStore(repoRoot);
+      const graph = await aps.get(args.workItem);
       const workItem = await new WorkItemStore(repoRoot).get(args.workItem);
+      // 완료측 결정론 체크 (dialectic-1 O-4/O-18): E2E 제안 결정과 회귀 게이트
+      // 기록은 에이전트 기억이 아니라 여기서 기계로 강제된다 — 의무 미이행
+      // 상태로는 completion을 조립하지 않는다.
+      const e2eViolations = await checkE2eCompletionGate(repoRoot, {
+        workItemId: args.workItem,
+        changedFiles: workItem.changed_files,
+        decisions: await aps.readDecisions(args.workItem),
+      });
+      if (e2eViolations.length > 0) {
+        if (format === 'json') {
+          writeJson({ work_item_id: args.workItem, e2e_gate: e2eViolations });
+        } else {
+          writeError(`complete blocked by the e2e completion gate (${e2eViolations.length}):`);
+          for (const v of e2eViolations) writeError(`  [${v.code}] ${v.message}`);
+        }
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
       const completion = assembleCompletionFromGraph(graph, workItem, {
         ...(args.summary ? { summary: args.summary } : {}),
       });
@@ -438,6 +458,12 @@ const autopilotProposeE2e = defineCommand({
       description: 'Optional user journey hint carried onto the e2e-author node on accept',
       required: false,
     },
+    after: {
+      type: 'string',
+      description:
+        'Comma-separated existing node ids the e2e-author node must run AFTER (depends_on)',
+      required: false,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
@@ -455,6 +481,10 @@ const autopilotProposeE2e = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
+    const after = (args.after ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0);
     const repoRoot = await requireGraph(args.workItem);
     const changed = args.changedFiles
       .split(',')
@@ -501,9 +531,17 @@ const autopilotProposeE2e = defineCommand({
         }
         return;
       }
-      // accept → add an independent, non-mutating e2e-author (main-session) node.
+      // accept → add a non-mutating e2e-author (main-session) node, ordered
+      // after the nodes named by --after (O-17: the authoring dialogue should
+      // not race the implement work that motivated it).
       const graph = await aps.get(args.workItem);
       const taken = new Set(graph.nodes.map((n) => n.id));
+      const unknownAfter = after.filter((id) => !taken.has(id));
+      if (unknownAfter.length > 0) {
+        writeError(`--after references unknown node id(s): ${unknownAfter.join(', ')}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
       let seq = 1;
       while (taken.has(`e2e-author-${seq}`)) seq += 1;
       const nodeId = `e2e-author-${seq}`;
@@ -516,7 +554,7 @@ const autopilotProposeE2e = defineCommand({
             args.journeys ? ` — journey hint: ${args.journeys}` : ''
           }`,
           status: 'pending',
-          depends_on: [],
+          depends_on: after,
           acceptance_refs: [],
           evidence_refs: [],
           ac_verdicts: [],

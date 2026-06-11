@@ -17,6 +17,9 @@ export const nodeKind = z
     'review',
     'verify',
     'fix',
+    // `e2e` (one-off journey run, owner playwright-e2e): since the proposal
+    // model (wi_260610p9h) the planner no longer adds these itself — the kind
+    // stays for manually-authored graphs and the skills/e2e runtime.
     'e2e',
     'docs',
     'knowledge',

@@ -9,8 +9,12 @@ import { parseYaml } from '../hosts/shared';
 /**
  * Journey DSL v1 file parser (wi_260610p9h). Reads `*.journey.md` / `*.block.md`
  * documents: YAML front-matter (validated through the zod schemas — ADR-0002)
- * plus the step-id set from the body. DESIGN BOUNDARY: the machine extracts step
- * ids ONLY — it never interprets body semantics (verbs/objects stay human-read).
+ * plus STRUCTURE from the body. DESIGN BOUNDARY: the machine extracts structure
+ * only — step ids, `블록:` call targets, `## 케이스` table case names — and
+ * never interprets step semantics (verbs/objects stay human-read). The
+ * structural set was widened from "step ids only" by dialectic-1 (wi_260611uzs
+ * O-13/O-14): gates need block-call and case-name existence checks, which are
+ * id-level facts, not semantics.
  */
 
 export type ParsedDoc<F> = { ok: true; frontMatter: F; stepIds: string[] } | ParseFailure;
@@ -21,6 +25,9 @@ export interface ParseFailure {
 
 /** Step line shape: `N. [s<번호>] …` (journeys) / `N. [b<번호>] …` (blocks). */
 const stepLine = /^\s*\d+\.\s+\[([sb]\d+)\]/;
+
+/** Step line invoking a reusable block: `N. [sN] (조건)? 블록: <block-id> …`. */
+const blockCallLine = /^\s*\d+\.\s+\[[sb]\d+\]\s*(?:\([^)]*\)\s*)?블록:\s*([^\s(]+)/;
 
 /** Generated-spec marker: `// @step <journey-id|block-id>/<step-id> <DSL 원문>`. */
 const stepMarker = /^\s*\/\/\s*@step\s+(\S+\/[sb]\d+)\b/;
@@ -48,6 +55,46 @@ export function extractStepIds(body: string): string[] {
     if (m?.[1]) ids.push(m[1]);
   }
   return ids;
+}
+
+/** Extract the block ids invoked by `블록:` step lines, in body order. */
+export function extractBlockCalls(body: string): string[] {
+  const ids: string[] = [];
+  for (const line of body.split('\n')) {
+    const m = blockCallLine.exec(line);
+    if (m?.[1]) ids.push(m[1]);
+  }
+  return ids;
+}
+
+/**
+ * Extract the case names (first table column) declared under the `## 케이스`
+ * heading. Header and separator rows are skipped; the table ends at the next
+ * heading. No table → empty list.
+ */
+export function extractCaseNames(body: string): string[] {
+  const lines = body.split('\n');
+  const start = lines.findIndex((l) => /^##\s*케이스\s*$/.test(l.trim()));
+  if (start < 0) return [];
+  const names: string[] = [];
+  let sawHeader = false;
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = (lines[i] ?? '').trim();
+    if (line.startsWith('#')) break;
+    if (!line.startsWith('|')) {
+      if (names.length > 0 || sawHeader) break;
+      if (line === '') continue;
+      break;
+    }
+    if (/^\|[\s\-:|]+\|?$/.test(line)) continue; // separator row
+    if (!sawHeader) {
+      sawHeader = true; // first table row is the column header
+      continue;
+    }
+    const first = line.split('|')[1]?.trim();
+    if (first !== undefined && first !== '') names.push(first);
+  }
+  return names;
 }
 
 /** Extract `<owner-id>/<step-id>` refs from `// @step` markers in a generated spec. */
@@ -81,7 +128,17 @@ function parseDoc<F>(
   }
   const parsed = schema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: parsed.error.message };
-  return { ok: true, frontMatter: parsed.data, stepIds: extractStepIds(split.body) };
+  const stepIds = extractStepIds(split.body);
+  // O-5: duplicate step ids would silently merge two distinct steps into one
+  // traceability ref (one marker satisfies both) — refuse at parse time.
+  const seen = new Set<string>();
+  for (const id of stepIds) {
+    if (seen.has(id)) {
+      return { ok: false, error: `duplicate step id [${id}] — step ids must be unique` };
+    }
+    seen.add(id);
+  }
+  return { ok: true, frontMatter: parsed.data, stepIds };
 }
 
 /** Parse an `e2e/journeys/<slug>.journey.md` document. */

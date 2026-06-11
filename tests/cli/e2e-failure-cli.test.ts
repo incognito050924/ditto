@@ -239,4 +239,153 @@ describe('ditto e2e failure-verdict CLI (ac-12)', () => {
     const gate = await featureFixAllowed(dir, 'wi_x', 'jrn-login', '정상 로그인');
     expect(gate.allowed).toBe(false);
   });
+
+  test('flaky --journey-file이 저장소 밖이면 거부 (O-19)', async () => {
+    const res = run([
+      'e2e',
+      'failure-verdict',
+      '--work-item',
+      'wi_x',
+      '--journey',
+      'jrn-login',
+      '--case',
+      'c',
+      '--classification',
+      'flaky',
+      '--basis',
+      'b',
+      '--journey-file',
+      '../outside/login.journey.md',
+    ]);
+    expect(res.exitCode).not.toBe(0);
+    expect(res.stderr).toContain('저장소');
+  });
+});
+
+describe('ditto e2e fix-allowed CLI (ac-12 잠금 질의 — O-1)', () => {
+  test('판정 없음 → 잠금(allowed=false) + 비0 종료', () => {
+    const res = run([
+      'e2e',
+      'fix-allowed',
+      '--work-item',
+      'wi_gate',
+      '--journey',
+      'jrn-login',
+      '--case',
+      '정상 로그인',
+      '--output',
+      'json',
+    ]);
+    expect(res.exitCode).not.toBe(0);
+    const out = JSON.parse(res.stdout);
+    expect(out.allowed).toBe(false);
+  });
+
+  test('기능 판정 후 → allowed=true + 종료 0; 재판정(flaky)이 오면 다시 잠금', async () => {
+    await mkdir(join(dir, 'e2e', 'journeys'), { recursive: true });
+    await Bun.write(join(dir, 'e2e', 'journeys', 'login.journey.md'), JOURNEY);
+    run([
+      'e2e',
+      'failure-verdict',
+      '--work-item',
+      'wi_gate',
+      '--journey',
+      'jrn-login',
+      '--case',
+      '정상 로그인',
+      '--classification',
+      '기능',
+      '--basis',
+      '기능 결함 확인',
+    ]);
+    const open = run([
+      'e2e',
+      'fix-allowed',
+      '--work-item',
+      'wi_gate',
+      '--journey',
+      'jrn-login',
+      '--case',
+      '정상 로그인',
+      '--output',
+      'json',
+    ]);
+    expect(open.exitCode).toBe(0);
+    expect(JSON.parse(open.stdout).allowed).toBe(true);
+
+    run([
+      'e2e',
+      'failure-verdict',
+      '--work-item',
+      'wi_gate',
+      '--journey',
+      'jrn-login',
+      '--case',
+      '정상 로그인',
+      '--classification',
+      'flaky',
+      '--basis',
+      '재판정',
+      '--journey-file',
+      'e2e/journeys/login.journey.md',
+    ]);
+    const closed = run([
+      'e2e',
+      'fix-allowed',
+      '--work-item',
+      'wi_gate',
+      '--journey',
+      'jrn-login',
+      '--case',
+      '정상 로그인',
+      '--output',
+      'json',
+    ]);
+    expect(closed.exitCode).not.toBe(0);
+    expect(JSON.parse(closed.stdout).allowed).toBe(false);
+  });
+});
+
+describe('ditto e2e digest CLI (O-2: canonical digest 산출)', () => {
+  test('flaky_history 유무와 무관하게 같은 digest를 출력한다', async () => {
+    await mkdir(join(dir, 'e2e', 'journeys'), { recursive: true });
+    await Bun.write(join(dir, 'e2e', 'journeys', 'login.journey.md'), JOURNEY);
+    const before = run([
+      'e2e',
+      'digest',
+      '--journey',
+      'e2e/journeys/login.journey.md',
+      '--output',
+      'json',
+    ]);
+    expect(before.exitCode).toBe(0);
+    const d1 = JSON.parse(before.stdout).digest;
+    expect(d1).toMatch(/^[a-f0-9]{64}$/);
+
+    run([
+      'e2e',
+      'failure-verdict',
+      '--work-item',
+      'wi_d',
+      '--journey',
+      'jrn-login',
+      '--case',
+      'c',
+      '--classification',
+      'flaky',
+      '--basis',
+      'b',
+      '--journey-file',
+      'e2e/journeys/login.journey.md',
+    ]);
+    const after = run([
+      'e2e',
+      'digest',
+      '--journey',
+      'e2e/journeys/login.journey.md',
+      '--output',
+      'json',
+    ]);
+    expect(JSON.parse(after.stdout).digest).toBe(d1);
+  });
 });

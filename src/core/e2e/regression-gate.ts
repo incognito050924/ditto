@@ -43,6 +43,7 @@ export function regressionGatePath(repoRoot: string, workItemId: string): string
 async function mapRunFailures(
   repoRoot: string,
   runId: string,
+  selected: ImpactedJourney[],
 ): Promise<{ journey_id: string; case: string }[]> {
   const reportFile = Bun.file(join(localDir(repoRoot, 'runs', runId), 'playwright-report.json'));
   if (!(await reportFile.exists())) return [];
@@ -62,8 +63,16 @@ async function mapRunFailures(
       }
     },
   });
+  // O-7: a failure localizes by the title convention (<journey-id> · <case>)
+  // when the title id is a selected journey; otherwise by the spec FILE — each
+  // journey owns exactly one generated spec, so the file is authoritative even
+  // when a title is free-form. Only a failure neither maps catches '(unmapped)'.
+  const knownIds = new Set(selected.map((j) => j.id));
+  const bySpecFile = new Map(selected.map((j) => [j.generated_spec, j.id]));
   return failures.map((f) => ({
-    journey_id: f.journey_id === '' ? '(unmapped)' : f.journey_id,
+    journey_id: knownIds.has(f.journey_id)
+      ? f.journey_id
+      : (bySpecFile.get(f.spec_file) ?? '(unmapped)'),
     case: f.case_name === '' ? '(unmapped)' : f.case_name,
   }));
 }
@@ -134,12 +143,15 @@ export async function runRegressionGate(
     } else {
       result = 'fail';
       reason = verify.reason;
-      failures = await mapRunFailures(repoRoot, input.runId);
+      failures = await mapRunFailures(repoRoot, input.runId, runnable);
       const failing = new Set(failures.map((f) => f.journey_id));
+      // Cannot localize when there are no mapped failures at all OR any failure
+      // stayed '(unmapped)': a per-journey 'pass' would then be unprovable, so
+      // every run journey is conservatively 'fail' (O-7 — the persisted record
+      // must never claim a pass the run cannot support).
+      const unlocalized = failures.length === 0 || failing.has('(unmapped)');
       for (const j of runnable) {
-        // No mapped failures at all → cannot localize: every run journey is
-        // conservatively 'fail' (the aggregate run failed; pass is unprovable).
-        const failed = failures.length === 0 || failing.has(j.id);
+        const failed = unlocalized || failing.has(j.id);
         journeyResults.push({ journey_id: j.id, result: failed ? 'fail' : 'pass' });
       }
     }

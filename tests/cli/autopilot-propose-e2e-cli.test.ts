@@ -226,6 +226,46 @@ describe('ditto autopilot propose-e2e', () => {
     expect(action.node_id).toBe('e2e-author-1');
   });
 
+  test('accept --after <node> → e2e-author 노드가 그 노드 뒤에 순서화된다 (O-17)', async () => {
+    const res = spawnDitto([
+      'autopilot',
+      'propose-e2e',
+      '--workItem',
+      WI,
+      '--changedFiles',
+      'src/pages/Home.tsx',
+      '--decision',
+      'accept',
+      '--after',
+      'N1',
+      '--output',
+      'json',
+    ]);
+    expect(res.exitCode).toBe(0);
+    const graph = await readGraph();
+    const node = graph.nodes.find((n) => n.id === 'e2e-author-1') as
+      | { depends_on?: string[] }
+      | undefined;
+    expect(node?.depends_on).toEqual(['N1']);
+  });
+
+  test('accept --after에 존재하지 않는 노드 id → usage error', async () => {
+    const res = spawnDitto([
+      'autopilot',
+      'propose-e2e',
+      '--workItem',
+      WI,
+      '--changedFiles',
+      'src/pages/Home.tsx',
+      '--decision',
+      'accept',
+      '--after',
+      'NOPE',
+    ]);
+    expect(res.exitCode).toBe(65);
+    expect(res.stderr).toContain('NOPE');
+  });
+
   test('invalid --decision is a usage error', async () => {
     const res = spawnDitto([
       'autopilot',
