@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { defineCommand } from 'citty';
 import { resolveRepoRootForCreate } from '~/core/fs';
+import { listChangedFiles } from '~/core/git';
 import { generateId } from '~/core/id';
 import { bootstrapIngest } from '~/core/memory-bootstrap';
 import {
@@ -66,12 +67,47 @@ function writeFreshnessHuman(f: {
   generated_at: string;
   freshness: string;
   dirty_sources: string[];
+  drifted_repos: string[];
+  drifted_sources: string[];
 }): void {
   writeHuman(
     `  [freshness: ${f.freshness} · projection: ${f.projection_id || '(absent)'} · generated: ${
       f.generated_at || '(absent)'
-    } · dirty_sources: ${f.dirty_sources.length}]`,
+    } · dirty_sources: ${f.dirty_sources.length} · drifted_repos: ${
+      f.drifted_repos.length
+    } · drifted_sources: ${f.drifted_sources.length}]`,
   );
+  // Make the axis-2 label actionable, not inert (design §3 D-H, ac-11): tell the
+  // consumer to verify only the drifted sources directly (from code) and trust
+  // the rest. The full consumer contract lives in skills/memory-graph/SKILL.md.
+  if ((f.freshness === 'code_drift' || f.freshness === 'code_dirty') && f.drifted_sources.length) {
+    writeHuman('  drift: verify the drifted_sources directly (from code); trust the rest.');
+  }
+}
+
+/**
+ * Dirty working-tree gate for scan/build (ac-9, design §3 D-E). A dirty CODE tree
+ * means what is hashed may diverge from what gets committed, so the manifest
+ * baseline could be stale. The tracked SoT under `.ditto/` is rewritten by
+ * scan/project itself and is NOT code drift, so it is excluded from this check
+ * (mirrors isRepoDirty in memory-project.ts:498-501; ac-6 false-positive rule).
+ * Default is non-interactive-safe: warn (stderr) and proceed. `--require-clean`
+ * turns it into a hard precondition: exit non-zero and do NOT proceed. Never
+ * creates a commit or stash — diagnostic only. Returns true when the caller must
+ * stop (already exited).
+ */
+function dirtyTreeGate(repoRoot: string, requireClean: boolean): boolean {
+  const dirty = listChangedFiles(repoRoot).some((p) => !p.startsWith('.ditto/'));
+  if (!dirty) return false;
+  if (requireClean) {
+    writeError(`working tree is dirty under ${repoRoot}; --require-clean refuses to proceed`);
+    process.exit(USAGE_ERROR_EXIT);
+    return true;
+  }
+  writeError(
+    `warning: working tree is dirty under ${repoRoot}; the memory baseline may not match committed code (pass --require-clean to enforce, or commit first)`,
+  );
+  return false;
 }
 
 const memoryScan = defineCommand({
@@ -85,6 +121,11 @@ const memoryScan = defineCommand({
       description: 'Directory to scan (absolute or repo-relative). Defaults to the repo root.',
       required: false,
     },
+    'require-clean': {
+      type: 'boolean',
+      description: 'Hard-fail (non-zero exit) when the working tree is dirty instead of warning.',
+      default: false,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
@@ -97,6 +138,7 @@ const memoryScan = defineCommand({
       return;
     }
     const repoRoot = await resolveRepoRootForCreate();
+    if (dirtyTreeGate(repoRoot, args['require-clean'])) return;
     try {
       const result = await scanSources(repoRoot, {
         ...(args['source-root'] ? { sourceRoot: args['source-root'] } : {}),
@@ -366,6 +408,11 @@ const memoryBuild = defineCommand({
         'Directory to scan for chunking (absolute or repo-relative). Defaults to repo root.',
       required: false,
     },
+    'require-clean': {
+      type: 'boolean',
+      description: 'Hard-fail (non-zero exit) when the working tree is dirty instead of warning.',
+      default: false,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
@@ -378,6 +425,7 @@ const memoryBuild = defineCommand({
       return;
     }
     const repoRoot = await resolveRepoRootForCreate();
+    if (dirtyTreeGate(repoRoot, args['require-clean'])) return;
 
     // Default (no --semantic): structure-only cost grade (§4-6). Semantic
     // extraction is opt-in because it is expensive + non-deterministic (LLM).

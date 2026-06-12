@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 /**
  * IR → projection (increment #5, design §4-3 / §10-4b).
  *
@@ -23,8 +24,10 @@ import type {
   MemorySourceRevision,
 } from '~/schemas/memory-projection-manifest';
 import type { MemorySource } from '~/schemas/memory-source';
+import { gitRevParse, listChangedFiles } from './git';
 import { generateId } from './id';
 import { reduceEvents } from './memory-reduce';
+import { findOwningRepo } from './memory-scan';
 import {
   MemoryEventStore,
   MemoryGraphIrStore,
@@ -438,12 +441,23 @@ export async function approveEvent(
   return { decision: written, projection };
 }
 
-export type Freshness = 'fresh' | 'stale' | 'absent';
+/**
+ * `code_drift`/`code_dirty` are axis-2 (code ↔ SoT) signals separate from the
+ * axis-1 `stale` (SoT ↔ projection) signal: `code_drift` = an owning repo's HEAD
+ * no longer matches the commit the projection was built from (the memory reflects
+ * a different commit's code), `code_dirty` = an owning repo's working tree
+ * diverges from its baseline (file edited / stashed). `absent` = never projected.
+ */
+export type Freshness = 'fresh' | 'stale' | 'absent' | 'code_drift' | 'code_dirty';
 
 export interface StatusResult {
   freshness: Freshness;
   /** sources whose current content_hash differs from the projection's record. */
   dirty_sources: string[];
+  /** owning repos whose current HEAD/working tree diverged from the baseline. */
+  drifted_repos: string[];
+  /** sources owned by a drifted/dirty repo (or a non-git source whose hash moved). */
+  drifted_sources: string[];
   /**
    * Undecided pending proposals (pending heads no decision event supersedes).
    * Surfaced so the approval backlog is visible instead of queueing silently
@@ -465,11 +479,117 @@ function countUndecidedPending(events: MemoryEvent[]): number {
   return events.filter((e) => e.status === 'pending' && !superseded.has(e.event_id)).length;
 }
 
+/** Best-effort current HEAD sha for `repo`; null when not a git work tree. */
+function headOf(repo: string): string | null {
+  try {
+    const sha = gitRevParse(repo, 'HEAD');
+    return /^[a-f0-9]{40}$/.test(sha) ? sha : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Report freshness (design §4-4 / §10-4b step 3): the projection is stale when
- * the CURRENT reduced approved-set hash differs from the one the manifest
- * recorded (`serving_version`), OR when any source's current content_hash
- * differs from the revision the projection recorded. `absent` = never projected.
+ * Whether `repo`'s working tree is dirty (design §3 D-B). At the rooting root the
+ * tracked SoT lives under `.ditto/`, which is rewritten by scan/project and so is
+ * NOT code drift — exclude it (git.ts:44 precedent). Sub-repos carry no SoT, so no
+ * exclusion. Constant git calls: one porcelain per repo.
+ */
+function isRepoDirty(repo: string, isRoot: boolean): boolean {
+  const changed = listChangedFiles(repo);
+  const relevant = isRoot ? changed.filter((p) => !p.startsWith('.ditto/')) : changed;
+  return relevant.length > 0;
+}
+
+interface Axis2Result {
+  /** code_drift (HEAD moved) takes priority over code_dirty (working tree); null = no axis-2 signal. */
+  freshness: 'code_drift' | 'code_dirty' | null;
+  drifted_repos: string[];
+  drifted_sources: string[];
+}
+
+/**
+ * Axis-2 (code ↔ SoT) detection (design §3 D-B / D-G). Groups manifest source
+ * revisions by their OWNING repo (findOwningRepo, mirroring scan attribution),
+ * then per repo (head + porcelain cached — repo-once, file-count-independent):
+ *  - stored git_commit ≠ current HEAD → `code_drift` for that repo's sources,
+ *  - working tree dirty → `code_dirty` for that repo's sources.
+ * Non-git sources (revision=`snapshot:<hash>`, no git_commit) are compared only
+ * by bounded content_hash against the manifest — no full rehash, no rescan.
+ */
+async function detectAxis2(
+  repoRoot: string,
+  revisions: readonly MemorySourceRevision[],
+  currentHash: ReadonlyMap<string, string>,
+): Promise<Axis2Result> {
+  const root = resolve(repoRoot);
+  // Group source revisions by owning repo (absolute dir), repo-once attribution.
+  const owningRepoOf = new Map<string, string | null>();
+  const sourcesByRepo = new Map<string, MemorySourceRevision[]>();
+  const nonGit: MemorySourceRevision[] = [];
+  for (const r of revisions) {
+    if (!r.git_commit) {
+      nonGit.push(r);
+      continue;
+    }
+    const owner = r.path ? ((await findOwningRepo(resolve(root, r.path), root)) ?? root) : root;
+    const key = resolve(owner);
+    owningRepoOf.set(r.source_id, key);
+    const bucket = sourcesByRepo.get(key) ?? [];
+    bucket.push(r);
+    sourcesByRepo.set(key, bucket);
+  }
+
+  const driftedRepos = new Set<string>();
+  const driftedSources = new Set<string>();
+  let sawDrift = false;
+  let sawDirty = false;
+  for (const [repo, revs] of sourcesByRepo) {
+    const isRoot = repo === root;
+    const head = headOf(repo);
+    const drift = head !== null && revs.some((r) => r.git_commit !== head);
+    const dirty = isRepoDirty(repo, isRoot);
+    if (!drift && !dirty) continue;
+    if (drift) sawDrift = true;
+    if (dirty) sawDirty = true;
+    driftedRepos.add(repo);
+    for (const r of revs) driftedSources.add(r.source_id);
+  }
+
+  // Non-git sources (no HEAD): bounded content_hash compare only — no full rehash,
+  // no rescan (ac-8). A hash move IS already the axis-1 `stale`/dirty signal, so it
+  // does NOT raise a code_dirty git-working-tree verdict; we only surface the moved
+  // source in `drifted_sources` for visibility. (Permanent-drift hard semantics: ②.)
+  for (const r of nonGit) {
+    const now = currentHash.get(r.source_id);
+    if (now !== undefined && now !== r.hash) driftedSources.add(r.source_id);
+  }
+
+  const driftedRepoPaths = [...driftedRepos]
+    .map((abs) => (abs === root ? '.' : relativeFromRoot(root, abs)))
+    .sort();
+  return {
+    // code_drift outranks code_dirty (HEAD mismatch = trust defect > working edit).
+    freshness: sawDrift ? 'code_drift' : sawDirty ? 'code_dirty' : null,
+    drifted_repos: driftedRepoPaths,
+    drifted_sources: [...driftedSources].sort(),
+  };
+}
+
+/** Rooting-root-relative path to an owning repo dir (mirrors scan's `repo` field). */
+function relativeFromRoot(root: string, abs: string): string {
+  const rel = abs.startsWith(`${root}/`) ? abs.slice(root.length + 1) : abs;
+  return rel || '.';
+}
+
+/**
+ * Report freshness (design §4-4 / §10-4b step 3 + §3 axis-2): axis 1 — the
+ * projection is `stale` when the CURRENT reduced approved-set hash differs from
+ * the manifest's (`serving_version`) OR a source's content_hash moved. axis 2 —
+ * `code_drift`/`code_dirty` when an owning repo's HEAD/working tree diverged from
+ * the recorded baseline. `absent` = never projected. Priority: code_drift first
+ * (HEAD diverged — the worst trust defect), then stale (axis-1), then code_dirty
+ * (working tree edited — normal dev state), then fresh.
  */
 export async function memoryStatus(repoRoot: string): Promise<StatusResult> {
   const events: MemoryEvent[] = await new MemoryEventStore(repoRoot).list();
@@ -481,6 +601,8 @@ export async function memoryStatus(repoRoot: string): Promise<StatusResult> {
     return {
       freshness: 'absent',
       dirty_sources: [],
+      drifted_repos: [],
+      drifted_sources: [],
       pending_count: pendingCount,
       current_set_hash: currentSetHash,
     };
@@ -489,6 +611,8 @@ export async function memoryStatus(repoRoot: string): Promise<StatusResult> {
   const sources: MemorySource[] = await new MemorySourceStore(repoRoot).list();
   const recordedHash = new Map<string, string>();
   for (const r of manifest.source_revisions) recordedHash.set(r.source_id, r.hash);
+  const currentHash = new Map<string, string>();
+  for (const s of sources) currentHash.set(s.source_id, s.content_hash);
 
   const dirty: string[] = [];
   for (const s of sources) {
@@ -497,12 +621,31 @@ export async function memoryStatus(repoRoot: string): Promise<StatusResult> {
   }
   dirty.sort();
 
+  const axis2 = await detectAxis2(repoRoot, manifest.source_revisions, currentHash);
+
   const eventSetStale = manifest.serving_version !== currentSetHash;
-  const freshness: Freshness = eventSetStale || dirty.length > 0 ? 'stale' : 'fresh';
+  const axis1Stale = eventSetStale || dirty.length > 0;
+  // Priority (intentional): code_drift > stale > code_dirty > fresh. code_drift
+  // (HEAD diverged) is the worst trust defect and stays absolute-highest. But
+  // axis-1 `stale` MUST outrank `code_dirty`: the dev tree is almost always dirty,
+  // so if code_dirty won, a stale projection would read code_dirty and the
+  // warm-start gate (which injects code_dirty) would serve it as settled (ac-5).
+  // Pure code_dirty (axis-1 fresh + dirty tree) still wins over fresh so the gate
+  // injects mid-development. All signals surface via the separate fields.
+  const freshness: Freshness =
+    axis2.freshness === 'code_drift'
+      ? 'code_drift'
+      : axis1Stale
+        ? 'stale'
+        : axis2.freshness === 'code_dirty'
+          ? 'code_dirty'
+          : 'fresh';
 
   return {
     freshness,
     dirty_sources: dirty,
+    drifted_repos: axis2.drifted_repos,
+    drifted_sources: axis2.drifted_sources,
     pending_count: pendingCount,
     current_set_hash: currentSetHash,
     ...(manifest.serving_version !== undefined

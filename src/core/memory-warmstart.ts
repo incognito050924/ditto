@@ -29,7 +29,7 @@ import type { WorkItem } from '~/schemas/work-item';
 import { localDir } from './ditto-paths';
 import { ensureDir } from './fs';
 import { isMemoryEnabled } from './memory-flag';
-import { memoryStatus } from './memory-project';
+import { type Freshness, memoryStatus } from './memory-project';
 import { queryNeighbors } from './memory-query';
 import { MemoryProjectionStore, type ServingGraph } from './memory-store';
 
@@ -56,7 +56,7 @@ export interface MemoryUsageRecord {
   /** a non-empty memory context was actually injected into the packet. */
   actionable: boolean;
   /** structural freshness of the projection at query time (for the report). */
-  freshness?: 'fresh' | 'stale' | 'absent';
+  freshness?: Freshness;
   /**
    * node_type decomposition of the related set on a hit (ac-10, round-2 review):
    * lets the expansion gate see WHAT the hits are (Decision-skewed vs semantic-
@@ -180,11 +180,16 @@ export async function warmStartMemoryContext(
   };
 
   try {
-    // Structural freshness gate (§10-6): an absent or stale projection is never
-    // injected — a stale answer used as settled is worse than no answer (ac-9).
+    // Freshness gate (§10-6, §3 D-G / ac-5): suppress on the trust-defect set
+    // {stale, absent, code_drift} — a stale answer or one whose owning-repo HEAD
+    // has diverged, used as settled, is worse than no answer (ac-9). But
+    // `code_dirty` (working tree edited, not committed) is NOT suppressed: that is
+    // the normal mid-development state, so suppressing it would make memory inert
+    // the moment a file is touched. We inject and preserve the `code_dirty` label
+    // (below) so the consumer knows the working tree was dirty.
     const status = await memoryStatus(repoRoot);
     base.freshness = status.freshness;
-    if (status.freshness !== 'fresh') {
+    if (status.freshness !== 'fresh' && status.freshness !== 'code_dirty') {
       await recordUsage(repoRoot, base);
       return undefined;
     }

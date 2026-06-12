@@ -17,7 +17,7 @@ import { appendFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { dittoDir, localDir } from './ditto-paths';
 import { ensureDir } from './fs';
-import { memoryStatus } from './memory-project';
+import { type Freshness, memoryStatus } from './memory-project';
 import { reduceEvents } from './memory-reduce';
 import { MemoryEventStore, MemoryProjectionStore, type ServingGraph } from './memory-store';
 
@@ -25,8 +25,12 @@ import { MemoryEventStore, MemoryProjectionStore, type ServingGraph } from './me
 export interface FreshnessEnvelope {
   projection_id: string;
   generated_at: string;
-  freshness: 'fresh' | 'stale' | 'absent';
+  freshness: Freshness;
   dirty_sources: string[];
+  /** axis-2 (code ↔ SoT): owning repos whose HEAD/working tree diverged from baseline. */
+  drifted_repos: string[];
+  /** axis-2: sources owned by a drifted/dirty repo (or a non-git source whose hash moved). */
+  drifted_sources: string[];
 }
 
 export class MemoryProjectionAbsentError extends Error {
@@ -51,6 +55,8 @@ export async function readFreshness(repoRoot: string): Promise<FreshnessEnvelope
     generated_at: status.generated_at ?? '',
     freshness: status.freshness,
     dirty_sources: status.dirty_sources,
+    drifted_repos: status.drifted_repos,
+    drifted_sources: status.drifted_sources,
   };
 }
 
@@ -69,8 +75,8 @@ export interface PullQueryRecord {
   depth: number;
   /** count of related nodes the query returned (0 ⇒ the caller falls back to explore). */
   neighbor_count: number;
-  /** projection freshness at query time (a stale answer must not be used as settled). */
-  freshness: 'fresh' | 'stale' | 'absent';
+  /** projection freshness at query time (incl. axis-2 code_drift/code_dirty; a non-fresh answer must not be used as settled). */
+  freshness: Freshness;
 }
 
 /** Path to the pull-query usage JSONL (ac-8 instrumentation source). */
@@ -291,7 +297,7 @@ export interface AuditCounts {
 export interface AuditEntry {
   audited_at: string;
   projection_id: string;
-  freshness: 'fresh' | 'stale' | 'absent';
+  freshness: Freshness;
   node_count: number;
   edge_count: number;
   counts: AuditCounts;

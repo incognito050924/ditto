@@ -21,6 +21,8 @@ All commands are `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory <sub>`. Design source
 
 Every read answer carries `projection_id`/`generated_at`/`freshness`/`dirty_sources`. **Do not treat a `stale`/`absent` answer as settled** — re-`scan`/`build`/`project` first or fall back to normal exploration.
 
+When `freshness` is `code_drift`/`code_dirty`, the answer also carries `drifted_repos`/`drifted_sources` (the code diverged from what the memory was built on). **Verify only the sources listed in `drifted_sources` directly from code; trust the rest of the answer.** The label is advisory, never a refusal — the answer is still returned.
+
 ## Build the graph (derivation pipeline)
 - `memory scan [--source-root <dir>] [--output json]` — hash sources into the manifest; reports added/changed/unchanged (the change gate for re-extraction).
 - `memory build [--semantic] [--fragments <out.json>] [--source-root <dir>]` — structure-only by default (cheap, §4-6). `--semantic` emits chunk request packets for the `memory-extractor` agent; the host fans out, then `memory build --semantic --fragments <out.json>` merges host-returned IR fragments deterministically (§10-5).

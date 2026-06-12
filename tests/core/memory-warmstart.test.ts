@@ -1,9 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildDelegationPacket } from '~/core/autopilot-dispatch';
+import * as memoryProject from '~/core/memory-project';
 import { projectMemory } from '~/core/memory-project';
+import { scanSources } from '~/core/memory-scan';
 import { MemoryProjectionStore, type ServingGraph } from '~/core/memory-store';
 import { readUsageReport, usageLogPath, warmStartMemoryContext } from '~/core/memory-warmstart';
 import type { AutopilotNode } from '~/schemas/autopilot';
@@ -230,5 +232,89 @@ describe('warmStartMemoryContext (§5-1 / §10-6 #1, fail-open warm-start)', () 
     expect(report.records).toHaveLength(2);
     // the report source is a readable JSONL under the work item's memory/ dir.
     expect(usageLogPath(repo, workItem.id)).toContain(join('work-items', workItem.id, 'memory'));
+  });
+
+  // ac-5 (wi_260612503 ①): the warm-start guard must split the two axis-2 verdicts.
+  // code_drift (owning-repo HEAD diverged) is a trust defect ⇒ suppress like stale.
+  // code_dirty (working tree dirty) is the normal dev state ⇒ MUST still inject, or
+  // memory goes inert the moment you touch a file. The detection itself is the prior
+  // node's scope, so we spy memoryStatus to drive each verdict deterministically.
+  function stubStatus(freshness: memoryProject.Freshness) {
+    return spyOn(memoryProject, 'memoryStatus').mockResolvedValue({
+      freshness,
+      dirty_sources: [],
+      drifted_repos: [],
+      drifted_sources: [],
+      pending_count: 0,
+      current_set_hash: 'h',
+    });
+  }
+
+  test('ac-5: code_drift ⇒ suppressed (0 injections), recorded with the label', async () => {
+    await seedFreshGraph(coveringGraph());
+    const spy = stubStatus('code_drift');
+    try {
+      const ctx = await warmStartMemoryContext(repo, node('planner'), workItem, { now: NOW });
+      expect(ctx).toBeUndefined(); // 0 warm-start injections
+      const report = await readUsageReport(repo, workItem.id);
+      expect(report.attempts).toBe(0);
+      expect(report.actionable).toBe(0);
+      expect(report.records[0]?.freshness).toBe('code_drift');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('ac-5: code_dirty ⇒ injected (1 injection), freshness label preserved (not inert)', async () => {
+    await seedFreshGraph(coveringGraph());
+    const spy = stubStatus('code_dirty');
+    try {
+      const ctx = await warmStartMemoryContext(repo, node('planner'), workItem, { now: NOW });
+      expect(ctx).toBeDefined(); // 1 warm-start injection (dev working tree is dirty)
+      expect(ctx?.related_nodes).toContain('sym:memory-warmstart');
+      const report = await readUsageReport(repo, workItem.id);
+      expect(report.actionable).toBe(1);
+      // the consumer can still see the tree was dirty (label preserved, not erased).
+      expect(report.records[0]?.freshness).toBe('code_dirty');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // ac-5 regression (HIGH, review-axis2): end-to-end through the REAL memoryStatus
+  // priority synthesis (no stub). A stale projection on a dirty dev tree must NOT
+  // be injected. Before the priority reorder, axis-2 code_dirty masked axis-1 stale
+  // → the gate (which admits code_dirty) injected the stale graph as settled.
+  test('ac-5: stale projection on a dirty working tree ⇒ suppressed (0 injections), recorded stale', async () => {
+    function git(args: string[]): void {
+      Bun.spawnSync(['git', ...args], { cwd: repo, stdout: 'pipe', stderr: 'pipe' });
+    }
+    // Real git repo so the dirty working tree is a genuine axis-2 code_dirty signal.
+    git(['init', '-q']);
+    git(['config', 'user.email', 't@t']);
+    git(['config', 'user.name', 't']);
+    await writeFile(join(repo, 'a.ts'), 'export const a = 1;\n', 'utf8');
+    git(['add', '-A']);
+    git(['commit', '-q', '-m', 'init']);
+
+    await scanSources(repo);
+    await projectMemory(repo, { now: NOW });
+    // Covering serving graph so coverage would pass IF freshness let us through.
+    await new MemoryProjectionStore(repo).writeServing(coveringGraph());
+
+    // Force axis-1 stale (serving_version ≠ current event-set hash)...
+    const store = new MemoryProjectionStore(repo);
+    const manifest = await store.readManifest();
+    if (!manifest) throw new Error('manifest expected');
+    await store.writeManifest({ ...manifest, serving_version: 'not-the-current-hash' });
+    // ...AND dirty the working tree (the normal mid-development state).
+    await writeFile(join(repo, 'a.ts'), 'export const a = 2;\n', 'utf8');
+
+    const ctx = await warmStartMemoryContext(repo, node('planner'), workItem, { now: NOW });
+    expect(ctx).toBeUndefined(); // stale wins over code_dirty ⇒ gate suppresses
+    const report = await readUsageReport(repo, workItem.id);
+    expect(report.opportunities).toBe(1);
+    expect(report.attempts).toBe(0);
+    expect(report.records[0]?.freshness).toBe('stale');
   });
 });

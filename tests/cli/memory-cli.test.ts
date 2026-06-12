@@ -500,6 +500,195 @@ describe('ditto memory propose/approve (write model §4-5)', () => {
   });
 });
 
+describe('ditto memory query/path/explain axis-2 label (ac-7)', () => {
+  // Build a real git repo with a scanned code file + a projected Decision node,
+  // then diverge the code so memoryStatus reports code_dirty/code_drift. The
+  // read surfaces must STILL answer (no refusal) and carry the axis-2 label +
+  // drifted_repos/drifted_sources in the freshness envelope (design §3 D-G).
+  async function seedProjectedRepo(): Promise<{ decisionId: string }> {
+    // a scanned code file → its source_revisions baseline drives axis-2 detection.
+    await writeFile(join(dir, 'a.ts'), 'export const a = 1;\n');
+    Bun.spawnSync(['git', 'add', '-A'], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '-q', '-m', 'add a.ts'], {
+      cwd: dir,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(ditto(['memory', 'scan', '--output', 'json']).exitCode).toBe(0);
+    // an approved decision → a Decision node `decision:<id>` to query/path/explain.
+    const proposed = ditto([
+      'memory',
+      'propose',
+      '--type',
+      'decision',
+      '--text',
+      'adopt bun',
+      '--output',
+      'json',
+    ]);
+    const proposedId = JSON.parse(proposed.stdout).event_id;
+    const approved = ditto([
+      'memory',
+      'approve',
+      proposedId,
+      '--by',
+      'user',
+      '--actor',
+      'user',
+      '--output',
+      'json',
+    ]);
+    expect(approved.exitCode).toBe(0);
+    // approve re-projects; the projection records a.ts's owning-repo HEAD baseline.
+    expect(ditto(['memory', 'project', '--output', 'json']).exitCode).toBe(0);
+    return { decisionId: JSON.parse(approved.stdout).decision.event_id };
+  }
+
+  test('code_dirty: query answers + envelope carries label and drifted fields (no refusal)', async () => {
+    const { decisionId } = await seedProjectedRepo();
+    const node = `decision:${decisionId}`;
+
+    // baseline: clean → fresh, no drifted fields.
+    const clean = ditto(['memory', 'query', node, '--output', 'json']);
+    expect(clean.exitCode).toBe(0);
+    expect(JSON.parse(clean.stdout).freshness).toBe('fresh');
+
+    // edit the scanned file WITHOUT rescanning → working tree diverges → code_dirty.
+    await writeFile(join(dir, 'a.ts'), 'export const a = 2;\n');
+
+    const q = ditto(['memory', 'query', node, '--output', 'json']);
+    // (a) still returns an answer — drift/dirty is a LABEL, never a refusal.
+    expect(q.exitCode).toBe(0);
+    const out = JSON.parse(q.stdout);
+    expect(out.root).toBe(node); // graph result is present, unchanged by the label
+    // (b) envelope carries the axis-2 label + the separate drifted fields.
+    expect(out.freshness).toBe('code_dirty');
+    expect(out.drifted_repos).toEqual(['.']);
+    expect(Array.isArray(out.drifted_sources)).toBe(true);
+    expect(out.drifted_sources.length).toBeGreaterThan(0);
+  });
+
+  test('code_drift: path + explain answer + envelope carries label and drifted fields', async () => {
+    const { decisionId } = await seedProjectedRepo();
+    const node = `decision:${decisionId}`;
+
+    // advance HEAD with a clean commit → owning-repo HEAD ≠ stored git_commit → code_drift.
+    Bun.spawnSync(['git', 'commit', '-q', '--allow-empty', '-m', 'move HEAD'], {
+      cwd: dir,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+
+    const explain = ditto(['memory', 'explain', node, '--output', 'json']);
+    expect(explain.exitCode).toBe(0); // not a refusal
+    const eo = JSON.parse(explain.stdout);
+    expect(eo.node.id).toBe(node); // graph answer present
+    expect(eo.freshness).toBe('code_drift');
+    expect(eo.drifted_repos).toEqual(['.']);
+    expect(eo.drifted_sources.length).toBeGreaterThan(0);
+
+    // path from a node to itself returns [node]; the label rides along.
+    const path = ditto(['memory', 'path', node, node, '--output', 'json']);
+    expect(path.exitCode).toBe(0); // not a refusal
+    const po = JSON.parse(path.stdout);
+    expect(po.path).toEqual([node]);
+    expect(po.freshness).toBe('code_drift');
+    expect(po.drifted_repos).toEqual(['.']);
+    expect(po.drifted_sources.length).toBeGreaterThan(0);
+  });
+
+  test('code_dirty: human output prints the label and drifted counts', async () => {
+    const { decisionId } = await seedProjectedRepo();
+    const node = `decision:${decisionId}`;
+    await writeFile(join(dir, 'a.ts'), 'export const a = 3;\n');
+
+    const q = ditto(['memory', 'query', node]);
+    expect(q.exitCode).toBe(0);
+    expect(q.stdout).toContain('freshness: code_dirty');
+    expect(q.stdout).toContain('drifted_repos: 1');
+  });
+
+  test('code_drift: human envelope carries an actionable consumer hint (ac-11)', async () => {
+    const { decisionId } = await seedProjectedRepo();
+    const node = `decision:${decisionId}`;
+    // advance HEAD → owning-repo HEAD ≠ stored git_commit → code_drift.
+    Bun.spawnSync(['git', 'commit', '-q', '--allow-empty', '-m', 'move HEAD'], {
+      cwd: dir,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+
+    const q = ditto(['memory', 'query', node]);
+    expect(q.exitCode).toBe(0);
+    expect(q.stdout).toContain('freshness: code_drift');
+    // the label must be actionable, not inert: tell the consumer what to do with
+    // drifted_sources (verify those directly; trust the rest). (design §3 D-H)
+    expect(q.stdout).toContain('drifted_sources');
+    expect(q.stdout.toLowerCase()).toContain('verify');
+  });
+});
+
+describe('ditto memory scan/build dirty-tree gate (ac-9)', () => {
+  // Commit the .ditto marker + working files so the tree is genuinely clean;
+  // returns the HEAD sha so commit-count invariance can be asserted.
+  function commitAll(): string {
+    Bun.spawnSync(['git', 'add', '-A'], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '-q', '-m', 'snapshot'], {
+      cwd: dir,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    return Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: dir, stdout: 'pipe' })
+      .stdout.toString()
+      .trim();
+  }
+
+  test('(1) dirty tree: scan warns on stderr but proceeds (exit 0)', async () => {
+    // beforeEach leaves .ditto/ untracked → tree already dirty.
+    await writeFile(join(dir, 'a.ts'), 'export const x = 1;\n');
+    const r = ditto(['memory', 'scan', '--output', 'json']);
+    expect(r.exitCode).toBe(0); // not blocked
+    expect(r.stderr.toLowerCase()).toContain('working tree'); // warning emitted
+    expect(JSON.parse(r.stdout).added.length).toBe(1); // scan actually ran
+  });
+
+  test('(2) --require-clean on a dirty tree hard-fails (non-zero exit, no scan)', async () => {
+    await writeFile(join(dir, 'a.ts'), 'export const x = 1;\n');
+    const r = ditto(['memory', 'scan', '--require-clean', '--output', 'json']);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stdout.trim()).toBe(''); // did not proceed to scan output
+  });
+
+  test('(2b) --require-clean on a dirty tree hard-fails for build too', async () => {
+    await writeFile(join(dir, 'a.ts'), 'export const x = 1;\n');
+    const r = ditto(['memory', 'build', '--require-clean', '--output', 'json']);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stdout.trim()).toBe('');
+  });
+
+  test('(3) clean tree: scan emits no warning, exit 0', async () => {
+    await writeFile(join(dir, 'a.ts'), 'export const x = 1;\n');
+    commitAll();
+    const r = ditto(['memory', 'scan', '--output', 'json']);
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr.toLowerCase()).not.toContain('working tree');
+    const clean = ditto(['memory', 'scan', '--require-clean', '--output', 'json']);
+    expect(clean.exitCode).toBe(0); // --require-clean passes when clean
+  });
+
+  test('(4) scan/build never create a git commit (commit count invariant)', async () => {
+    await writeFile(join(dir, 'a.ts'), 'export const x = 1;\n');
+    const before = commitAll(); // HEAD after committing the working files
+    expect(ditto(['memory', 'scan', '--output', 'json']).exitCode).toBe(0);
+    expect(ditto(['memory', 'build', '--output', 'json']).exitCode).toBe(0);
+    expect(ditto(['memory', 'build', '--semantic', '--output', 'json']).exitCode).toBe(0);
+    const after = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: dir, stdout: 'pipe' })
+      .stdout.toString()
+      .trim();
+    expect(after).toBe(before); // HEAD unchanged → zero commits created
+  });
+});
+
 describe('DITTO_MEMORY=off scope (master flag disables auto-injection only — F9 gap)', () => {
   test('memory CLI commands keep working with the master flag off', async () => {
     const env = { ...process.env, DITTO_MEMORY: 'off' };

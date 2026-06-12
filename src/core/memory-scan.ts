@@ -79,7 +79,7 @@ function gitHeadSha(repoRoot: string): string | null {
  * rooting root. Walks parents so a file under a sub-repo resolves to that
  * sub-repo rather than the workspace.
  */
-async function findOwningRepo(absPath: string, rootingRoot: string): Promise<string | null> {
+export async function findOwningRepo(absPath: string, rootingRoot: string): Promise<string | null> {
   let current = resolve(absPath);
   const root = resolve(rootingRoot);
   while (true) {
