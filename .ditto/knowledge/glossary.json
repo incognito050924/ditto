@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-06-11T00:00:00+09:00",
+  "updated_at": "2026-06-12T00:00:00+09:00",
   "entries": [
     {
       "term": "request",
@@ -347,6 +347,59 @@
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-06-11T00:00:00+09:00"
+    },
+    {
+      "term": "정합성 2축",
+      "aliases": [
+        "freshness 2축",
+        "consistency two axes"
+      ],
+      "definition": "memory freshness가 답해야 하는 두 독립 관계. 축1=SoT↔파생물(SoT는 바뀌었는데 파생물 재빌드 안 됨), 축2=코드베이스↔SoT(코드 수정·git stash·브랜치 이동으로 실제 코드가 SoT 스냅샷과 달라짐). 기존 memoryStatus는 축1만 검출, 축2는 사각지대였다. 결정 근거는 ADR-0015.",
+      "examples": [],
+      "not_to_be_confused_with": [
+        "기능 4축",
+        "기층 4축"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-12T00:00:00+09:00"
+    },
+    {
+      "term": "code_drift",
+      "aliases": [],
+      "definition": "owning-repo 현재 HEAD가 memory가 저장한 git_commit(source_revisions[].git_commit)과 달라, SoT가 다른 커밋의 코드에서 만들어진 상태. 축2의 진짜 신뢰 결함이라 warm-start 주입 억제 대상이다. 결정 근거는 ADR-0015.",
+      "examples": [],
+      "not_to_be_confused_with": [
+        "code_dirty",
+        "stale"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-12T00:00:00+09:00"
+    },
+    {
+      "term": "code_dirty",
+      "aliases": [],
+      "definition": "owning-repo 워킹트리가 더티(미커밋 편집·git stash)인 상태. 개발 중 정상이라 라벨만 달고 warm-start를 억제하지 않는다 — 더티마다 억제하면 memory가 inert가 되기 때문. 결정 근거는 ADR-0015.",
+      "examples": [],
+      "not_to_be_confused_with": [
+        "code_drift"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-12T00:00:00+09:00"
+    },
+    {
+      "term": "drifted_sources",
+      "aliases": [],
+      "definition": "축2 검출이 어긋났다고 판정한 source 목록(별도 필드, 축1의 dirty_sources와 분리). 소비자(memory-graph 스킬)는 이 목록에 든 source만 코드로 직접 검증하고 나머지는 신뢰한다. 결정 근거는 ADR-0015.",
+      "examples": [],
+      "not_to_be_confused_with": [
+        "dirty_sources"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-12T00:00:00+09:00"
     }
   ]
 }

@@ -305,7 +305,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=e49a10f69cb201174a6679a85157b325d2f9542d4bb6c5ea344c207eabc25a65 -->
+<!-- ditto:knowledge:start sha256=4a2a584db4f5291e0cc450a9b1a3610dca01b7715954958ce9956fbd4829eb37 -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -318,12 +318,15 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR
 - DITTO 기능 4축
 - Journey DSL
+- code_dirty
+- code_drift
 - completion contract
 - confidence_kind
 - context packet
 - context rot
 - cross_repo
 - doctor
+- drifted_sources
 - evidence
 - handoff
 - internal_packages
@@ -342,6 +345,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - unverified
 - verdict
 - work item
+- 정합성 2축
 
 ## Architecture decisions
 - ADR-0001 · accepted · 런타임 및 구현 스택
@@ -358,5 +362,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-0012 · accepted · 제품/프로젝트전역/개인 3계층 격리 — `.ditto/local` 개인구획 + `dist/plugin` 배포조립
 - ADR-0013 · accepted · 메모리 서브시스템 설계 — 인프로세스 그래프 · 2-tier 저장 · supersedes 승인 · 옵션 A 재범위
 - ADR-0014 · accepted · E2E 테스트 작성 — 사용자 DSL 선언 + 에이전트 변환 + 게이트 검증
+- ADR-0015 · accepted · Memory freshness 축2(코드↔SoT) 검출 — 증분 검출 채택, 델타/overlay 게이트
 
 <!-- ditto:knowledge:end -->
