@@ -549,6 +549,55 @@ describe('ditto memory build --semantic secret gate (R7 runtime path)', () => {
   });
 });
 
+describe('ditto memory build --semantic --fragments (merge + dangling diagnostic)', () => {
+  test('resolves bare-name endpoints and reports dangling edges in json output', async () => {
+    const fragments = [
+      {
+        nodes: [
+          { node_type: 'Concept', name: 'Alpha', source_id: 'src_aaaaaaaaaaaa' },
+          { node_type: 'Concept', name: 'Beta', source_id: 'src_aaaaaaaaaaaa' },
+        ],
+        edges: [
+          // bare display-name endpoints -> fold to concept ids (not dangling)
+          {
+            from: 'Alpha',
+            to: 'Beta',
+            edge_type: 'RELATED_TO',
+            confidence_kind: 'INFERRED',
+            confidence_score: 0.6,
+            source_id: 'src_aaaaaaaaaaaa',
+          },
+          // 'Ghost' was never declared as a node -> dangling
+          {
+            from: 'Alpha',
+            to: 'Ghost',
+            edge_type: 'RELATED_TO',
+            confidence_kind: 'INFERRED',
+            confidence_score: 0.6,
+            source_id: 'src_aaaaaaaaaaaa',
+          },
+        ],
+      },
+    ];
+    await writeFile(join(dir, 'frags.json'), JSON.stringify(fragments));
+    const b = ditto([
+      'memory',
+      'build',
+      '--semantic',
+      '--fragments',
+      'frags.json',
+      '--output',
+      'json',
+    ]);
+    expect(b.exitCode).toBe(0);
+    const out = JSON.parse(b.stdout);
+    expect(out.mode).toBe('semantic-merge');
+    expect(out.nodes).toBe(2);
+    expect(out.edges).toBe(2);
+    expect(out.dangling_edges).toBe(1);
+  });
+});
+
 describe('ditto memory query body search (R1 visibility + R9 fallback marker)', () => {
   test('pending body is not searchable; approved is; json marks mode/fallback', async () => {
     const adrDir = join(dir, '.ditto', 'knowledge', 'adr');

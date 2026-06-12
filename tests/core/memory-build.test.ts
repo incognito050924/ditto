@@ -4,6 +4,7 @@ import {
   assembleSemanticIr,
   chunkSources,
   conceptId,
+  findDanglingEdges,
   irFragmentsSchema,
   mergeIrFragments,
   normalizeConceptLabel,
@@ -274,6 +275,84 @@ describe('chunkSources', () => {
     const includedIds = chunks.flatMap((c) => c.files.map((f) => f.source_id));
     expect(includedIds).toEqual(['src_000000000001', 'src_000000000003']);
     expect(includedIds).not.toContain('src_000000000002');
+  });
+});
+
+describe('mergeIrFragments — bare-name endpoint resolution', () => {
+  test('resolves a bare display-name endpoint to the node canonical id', () => {
+    const frags: IrFragment[] = [
+      {
+        nodes: [
+          { node_type: 'Concept', name: 'Logging Service', source_id: 'src_111111111111' },
+          { node_type: 'Concept', name: 'Async Buffer', source_id: 'src_111111111111' },
+        ],
+        edges: [
+          {
+            // extractor referenced endpoints by display name, not canonical id
+            from: 'Logging Service',
+            to: 'Async Buffer',
+            edge_type: 'DEPENDS_ON',
+            confidence_kind: 'INFERRED',
+            confidence_score: 0.8,
+            source_id: 'src_111111111111',
+          },
+        ],
+      },
+    ];
+    const { edges } = mergeIrFragments(frags);
+    expect(edges[0]?.from).toBe('concept:logging service');
+    expect(edges[0]?.to).toBe('concept:async buffer');
+  });
+
+  test('does NOT resolve an ambiguous name shared by two distinct nodes', () => {
+    const frags: IrFragment[] = [
+      {
+        nodes: [
+          { id: 'symbol:a#X', node_type: 'Symbol', name: 'X', source_id: 'src_222222222222' },
+          { id: 'symbol:b#X', node_type: 'Symbol', name: 'X', source_id: 'src_222222222222' },
+        ],
+        edges: [
+          {
+            from: 'X',
+            to: 'symbol:a#X',
+            edge_type: 'RELATED_TO',
+            confidence_kind: 'INFERRED',
+            confidence_score: 0.5,
+            source_id: 'src_222222222222',
+          },
+        ],
+      },
+    ];
+    const { edges } = mergeIrFragments(frags);
+    // ambiguous 'X' is left unresolved (deterministic), not silently bound to one node
+    expect(edges[0]?.from).toBe('X');
+  });
+});
+
+describe('findDanglingEdges', () => {
+  test('reports an edge whose endpoint resolves to no node', () => {
+    const frags: IrFragment[] = [
+      {
+        nodes: [{ node_type: 'Concept', name: 'Real', source_id: 'src_333333333333' }],
+        edges: [
+          {
+            from: 'concept:real',
+            to: 'Ghost Node',
+            edge_type: 'RELATED_TO',
+            confidence_kind: 'INFERRED',
+            confidence_score: 0.5,
+            source_id: 'src_333333333333',
+          },
+        ],
+      },
+    ];
+    const { nodes, edges } = mergeIrFragments(frags);
+    expect(findDanglingEdges(nodes, edges)).toHaveLength(1);
+  });
+
+  test('a clean merged fragment has no dangling edges', () => {
+    const { nodes, edges } = mergeIrFragments(goldenFragments());
+    expect(findDanglingEdges(nodes, edges)).toEqual([]);
   });
 });
 

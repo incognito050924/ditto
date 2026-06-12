@@ -9,6 +9,7 @@ import {
   type ChunkFile,
   assembleSemanticIr,
   chunkSources,
+  findDanglingEdges,
   irFragmentsSchema,
   mergeIrFragments,
 } from '~/core/memory-build';
@@ -410,17 +411,20 @@ const memoryBuild = defineCommand({
           extraction_run_id: `xrun_${stamp}`,
         });
         await new MemoryGraphIrStore(repoRoot).write(ir);
+        const dangling = findDanglingEdges(ir.nodes, ir.edges);
         if (format === 'json') {
           writeJson({
             mode: 'semantic-merge',
             ir_version: ir.ir_version,
             nodes: ir.nodes.length,
             edges: ir.edges.length,
+            dangling_edges: dangling.length,
           });
         } else {
           writeHuman(`Merged semantic IR ${ir.ir_version}`);
           writeHuman(`  nodes: ${ir.nodes.length}`);
           writeHuman(`  edges: ${ir.edges.length}`);
+          writeHuman(`  dangling edges: ${dangling.length}`);
         }
         return;
       }

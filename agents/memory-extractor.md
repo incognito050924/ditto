@@ -15,7 +15,7 @@ An `ExtractionChunkRequest` (`src/core/memory-build.ts`): `chunk_id` plus `files
 A single JSON object `{ "nodes": [...], "edges": [...] }` matching `irFragmentSchema` (`src/core/memory-build.ts`, exported via `irFragmentsSchema`). The host writes the host-returned array to a file and runs `ditto memory build --semantic --fragments <out.json>` to merge it.
 
 - **node**: `{ node_type, name, source_id, id?, properties? }`. `node_type` ∈ the `memoryNodeType` enum (e.g. `Concept`, `Decision`, …). For `Concept` nodes you may omit `id` — the reducer derives a stable `concept:<normalized-label>` id from `name`. Other node types should carry a stable `id`.
-- **edge**: `{ from, to, edge_type, confidence_kind, confidence_score, source_id, properties? }`.
+- **edge**: `{ from, to, edge_type, confidence_kind, confidence_score, source_id, properties? }`. `from`/`to` MUST each resolve to a node you declared in THIS fragment: use the node's `id` for non-`Concept` nodes, and for `Concept` nodes use `concept:<label>` or the node's exact `name`. Do NOT invent prose endpoints (e.g. `"Decision: X"`) or point at a node you never declared — the reducer reports such edges as *dangling* and they carry no signal.
 
 ## Hard rules (provenance + confidence band, §4-2 / §10-5)
 - **Every node and edge MUST carry a `source_id`** drawn from the chunk's files (provenance — no source_id, no fragment element).

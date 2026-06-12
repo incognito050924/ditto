@@ -245,13 +245,28 @@ export function mergeIrFragments(fragments: IrFragment[]): {
   }
 
   // --- edges: dedup by (from,to,edge_type) after node-id remap ---
-  // Endpoint canonicalization: an explicit node remap wins; otherwise a raw
-  // `concept:<label>` endpoint is normalized to its canonical concept id so an
-  // edge that references a concept by raw label still folds to one node.
+  // Bare-name endpoint resolution: extractors commonly reference an endpoint by a
+  // node's display name rather than its canonical id. Map each UNIQUE normalized
+  // name to its canonical id; a name shared by 2+ distinct nodes stays unresolved
+  // (value null) so resolution never depends on fragment arrival order.
+  const nameToId = new Map<string, string | null>();
+  for (const node of nodeAcc.values()) {
+    const key = normalizeConceptLabel(node.name);
+    if (!key) continue;
+    const existing = nameToId.get(key);
+    if (existing === undefined) nameToId.set(key, node.id);
+    else if (existing !== node.id) nameToId.set(key, null);
+  }
+  // Endpoint canonicalization: an explicit node remap wins; a raw `concept:<label>`
+  // is normalized to its canonical concept id; otherwise a bare display name that
+  // uniquely identifies a node folds to that node's id; else the raw is kept (and
+  // surfaces via findDanglingEdges when it matches no node).
   const remapEndpoint = (raw: string): string => {
     const mapped = idRemap.get(raw);
     if (mapped) return mapped;
     if (raw.startsWith('concept:')) return conceptId(raw.slice('concept:'.length));
+    const byName = nameToId.get(normalizeConceptLabel(raw));
+    if (byName) return byName;
     return raw;
   };
 
@@ -322,6 +337,16 @@ export function assembleSemanticIr(
     edges: merged.edges,
     hyperedges: [],
   };
+}
+
+/**
+ * Edge ids whose endpoints (after canonicalization) resolve to no node in the
+ * merged set — extractor output that referenced a node it never declared, or used
+ * an unresolvable label. Surfaced as a build diagnostic, never silently dropped.
+ */
+export function findDanglingEdges(nodes: MemoryNode[], edges: MemoryEdge[]): string[] {
+  const ids = new Set(nodes.map((n) => n.id));
+  return edges.filter((e) => !ids.has(e.from) || !ids.has(e.to)).map((e) => e.id);
 }
 
 /**
