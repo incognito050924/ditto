@@ -1,6 +1,6 @@
 # HANDOFF — 다른 PC 이어받기 (2026-06-11)
 
-이 PC의 호스트 메모리는 전파되지 않으므로, 다른 PC 세션에 필요한 것을 전부 여기 싣는다. **origin/main 최신 = 이 문서가 포함된 커밋. 미커밋·미푸시 변경 없음**(예외: 이 PC 전용 untracked 3건 — `AUTHORING-GUIDE.md`, `SAMPLE-PA-07-improved.md`는 tech-spec 기획의 BOXWOOD 예시 원전(기획문서가 출처로 인용, 커밋 여부는 사용자 보류), `agentic-coding-masters-research.md`는 별도 작업 소속).
+이 PC의 호스트 메모리는 전파되지 않으므로, 다른 PC 세션에 필요한 것을 전부 여기 싣는다. **origin/main 최신 = 이 문서가 포함된 커밋. 미커밋·미푸시 변경 없음**.
 
 ## 1. 닫힌 작업 — 전부 main에 푸시됨
 

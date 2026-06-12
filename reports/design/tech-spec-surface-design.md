@@ -1,7 +1,7 @@
 # ditto:tech-spec · 스펙 공동작성 사용자 표면 — 기획문서
 
-> **소비자**: DITTO(design → implement → verify) + 사람(증분 리뷰). 이 문서 자체가 제안하는 산출물 형식(AUTHORING-GUIDE 12섹션)의 워크드 예시다.
-> **소스**: `USER_PATTERN.md` §"DITTO 의 새로운 사용자 표면 기능 제안" + 2026-06-10 설계 논의 + `AUTHORING-GUIDE.md` / `SAMPLE-PA-07-improved.md`.
+> **소비자**: DITTO(design → implement → verify) + 사람(증분 리뷰). 이 문서 자체가 제안하는 12섹션 산출물 형식의 워크드 예시다.
+> **소스**: `USER_PATTERN.md` §"DITTO 의 새로운 사용자 표면 기능 제안" + 2026-06-10 설계 논의.
 > **수명**: §3·§5·§6·§7·§10 = 장수명(빌드 후 ADR 승격) · §8·§11 = 단수명(빌드 후 폐기).
 > **work item**: `wi_260610z2z`
 > **검토 이력**: dialectic-1 (2026-06-10, verdict=revise → required_edits 5건 반영 완료. Opponent=codex/gpt-5-codex. 기록: `.ditto/local/work-items/wi_260610z2z/reviews/dialectic-1.{json,md}`)
@@ -67,7 +67,7 @@ GSD(`open-gsd/gsd-core`)는 `spec-phase`(소크라테스식 스펙 정제)·`dis
 - **intent.json 손편집·양방향 동기화 없음.** 문서 → intent.json 단방향 컴파일만 존재한다. 동기화 작업 자체가 설계상 없다.
 - **리뷰 게이트의 완전 제거 없음.** 일괄 모드에서 문서 리뷰는 통합 1회로 줄이거나 사용자가 생략할 수 있으나, finalize의 사용자 의도 확인(deep-interview 2차 게이트)은 모드와 무관하게 생략 불가다. 또한 일괄 모드를 기본값으로 두지 않는다 — 기본은 증분, 일괄은 명시적 선택.
 - **사용자 표면 대량 확장 아님.** 사용자 호출 표면은 스킬 1개 + 문서 템플릿 1개로 캡핑한다 — GSD식 다명령 표면(67 commands)을 따라가지 않는다. 단 내부 메커니즘의 총 범위는 그보다 크며 이를 숨기지 않는다: record-section CLI 상태기계, 전용 finalize 컴파일러, digest 검사 게이트, hook 보조 게이트(§8). 공수·마일스톤 판단은 이 총 범위 기준으로 한다(dialectic-1 obj-2).
-- **특정 제품 고유 내용 포함 금지.** AUTHORING-GUIDE·SAMPLE의 BOXWOOD 고유 내용(`apps/process-assets`, PA-번호, Confluence 섹션 대응)은 템플릿 일반화 시 제거한다.
+- **특정 제품 고유 내용 포함 금지.** 초기 BOXWOOD 예시에서 온 제품 고유 내용(`apps/process-assets`, PA-번호, Confluence 섹션 대응)은 템플릿 일반화 시 제거한다.
 - **작은 가역적 요청에 강제 안 함.** deep-interview와 같은 원칙(작은 요청을 무거운 워크플로로 승격하지 않는다)을 따른다.
 
 ## 6. 완료 조건 (Acceptance Criteria)
@@ -110,12 +110,12 @@ GSD(`open-gsd/gsd-core`)는 `spec-phase`(소크라테스식 스펙 정제)·`dis
 - **모드 매개변수 모양**: `/ditto:tech-spec --mode=stepwise|oneshot` (가칭, 기본 `stepwise`). 모드는 작성·리뷰 리듬만 바꾼다 — pre-mortem·deep-interview 진입 조건·finalize 게이트는 모드 불변. 일괄 초안 후 특정 섹션만 증분 리듬으로 재수정하는 혼합 사용도 허용(수정 요청 단위로 모드 적용).
 - **ACG/Memory 사용 강제(ac-9) 메커니즘**: 호스트에는 스킬 자동 발동(푸시)이 없으므로 **fail-closed 게이트(풀)**로 뒤집는다 — "발동을 강제"가 아니라 "발동 증거 없이는 진행 불가". 2층: (1) 1차는 deep-interview와 동형의 CLI 상태기계 — `ditto tech-spec record-section`(가칭)의 스키마 필수 필드로 근거 증거(memory query 응답의 projection_id/freshness, ACG 산출물 경로)를 요구하고 누락 시 거부. (2) 보조로 기존 훅 인프라(`ditto hook pre-tool-use|stop`) — 스펙 문서 Write 시 해당 work item의 근거 조회(memory usage 계측 ∨ ACG 산출물 존재)가 전무하면 차단(ac-9의 허용 집합과 동일 신호 — dialectic-1 obj-9 정합화). 판정 신호는 신규 구현 없이 기존 `ditto memory usage`(work item별 opportunity/attempt/hit/actionable + pull-query count, ac-12 계측) 재사용. memory 응답이 freshness를 들고 오므로 stale 프로젝션 거부도 같은 게이트에서 가능.
 - **강제의 정직한 한계**: 게이트가 보장하는 것은 "조회했다"까지다. "결과를 반영했다"는 record-section에 조회 결과 인용 필드를 두어 구조적 압력은 만들되, 최종적으로는 증분 리뷰(사용자)와 finalize 게이트가 잡는다.
-- **템플릿**: AUTHORING-GUIDE 12섹션을 일반화(제품 고유 내용 제거) + **"인터뷰 기록"** 섹션 추가. WHY/HOW 수명 라벨 유지.
+- **템플릿**: 이 문서의 12섹션 구조를 일반화(제품 고유 내용 제거) + **"인터뷰 기록"** 섹션 추가. WHY/HOW 수명 라벨 유지.
 - **SoT 모델**: manifest/lockfile 유추 — 문서 = 사람·에이전트가 편집하는 원본, intent.json = finalize만 쓰는 컴파일 산출물(현재도 finalize가 유일한 writer, `skills/deep-interview/SKILL.md:120`). 기존 memory projection 패턴(propose→approve→재투영)과 동형.
 - **pre-mortem 내장 위치**: (a) 초안 작성 시 1회 — 배경·목표 초안 직후 "이 이해가 틀렸다면 어디서?", (b) 비목표·AC 증분마다 — 결과를 위험 섹션에 누적, (c) deep-interview의 finalize 전 pre-mortem은 그대로 — 문서 위험 섹션이 누적 입력이 되므로 중복이 아니라 수렴.
 - **digest**: 해시 범위 = **컴파일 입력 섹션(요약·목표·비목표·AC·위험)** — 확정(2026-06-10, M3 착수 전). digest의 목적(ac-6)은 intent.json↔문서 정합 신선도이므로 보호 대상은 intent가 파생되는 섹션 자체다. 초안의 장수명 안(배경·기각 대안 포함)은 컴파일 입력이 아닌 섹션을 포함하면서 컴파일 입력인 요약·목표를 놓쳐 대체했다. 배경·계획·마일스톤·인터뷰 기록 수정은 재-finalize 불요(과민 차단 → 우회 위험 완화, §7).
 - **finalize**: `ditto tech-spec finalize`(가칭) 전용 명령. deep-interview finalize는 인터뷰 상태 부재·score 미달 시 `not_ready`로 fail-closed라(`src/core/interview-driver.ts:318-328`, `src/core/gates.ts:54-71`) 무모호 요청에서 재사용이 성립하지 않는다(dialectic-1 obj-1). 대신 내부 모듈(IntentStore, bootstrapAutopilot)을 직접 재사용해 writer 단일성은 모듈 수준에서 유지한다. 게이트: 인터뷰가 발생했으면 그 readiness 통과 선행(우회 금지) ∧ 사용자 의도 확인(2차) 필수. autopilot 실행 전 digest 검사는 doctor 또는 자체 게이트.
-- **문서→intent 컴파일 계약**: 섹션→필드 매핑은 AUTHORING-GUIDE §1 표를 정식 계약으로 채택(요약·목표→`goal`/`in_scope`, 비목표→`out_of_scope`, AC 표→`acceptance_criteria`, 위험→`risk`/`unknowns`). 필수 섹션 누락·중복 AC id·스키마 불일치는 컴파일 거부(fail-closed) + 결함 위치를 사용자에게 보고. 사용자가 markdown을 편집한 뒤의 재-finalize도 동일 검증 경로를 탄다 — 우회 컴파일 경로 없음.
+- **문서→intent 컴파일 계약**: 섹션→필드 매핑은 이 항목의 계약을 따른다(요약·목표→`goal`/`in_scope`, 비목표→`out_of_scope`, AC 표→`acceptance_criteria`, 위험→`risk`/`unknowns`). 필수 섹션 누락·중복 AC id·스키마 불일치는 컴파일 거부(fail-closed) + 결함 위치를 사용자에게 보고. 사용자가 markdown을 편집한 뒤의 재-finalize도 동일 검증 경로를 탄다 — 우회 컴파일 경로 없음.
 - **리뷰 커버리지 기록**: finalize 산출물에 섹션별 리뷰 상태(reviewed/skipped)를 기록한다. '이해 동기화·합의된 원본' 주장은 리뷰가 수행된 섹션에 한해 성립하며, 생략을 합의로 위장하지 않는다(일괄 모드 리뷰 생략 허용 자체는 사용자 결정으로 불변).
 - **문서 저장 위치**: `.ditto/specs/<slug>.md` — 확정(2026-06-10, M1). 근거는 미해결 질문 1 참조.
 
@@ -132,7 +132,7 @@ GSD(`open-gsd/gsd-core`)는 `spec-phase`(소크라테스식 스펙 정제)·`dis
 - **문서·intent.json 대등 이중 SoT** → 기각. 양방향 동기화 비용이 구조적으로 발생. 단방향 컴파일 + digest 신선도 검사로 대체.
 - **순차 파이프라인 (tech-spec 산출물 → deep-interview 후행 실행)** → 기각(초기 제안에서 정제됨). 모호성은 문서 작성 *중에* 발견되므로 그 시점에 인터뷰가 끼어드는 합성이 자연스럽다. intent.json writer 단일성은 finalize 명령이 아니라 코드 모듈(IntentStore) 수준에서 유지한다.
 - **deep-interview finalize 1차 게이트 분기(readiness ∨ 문서 리뷰 증거)** → 기각(2026-06-10, dialectic-1 edit-1의 선택지 (a)). deep-interview 게이트의 의미 변경은 §5의 불변조건(목적·계약·게이트 무변경 — 사용자 명시 요구) 위반. 전용 finalize(선택지 (b))가 모듈 재사용으로 동등 효과를 내면서 불변조건을 지킨다.
-- **이름 `brief`** → 기각(사용자 결정). 현황 파악 뉘앙스가 강해 "스펙을 결정한다"는 기능 목적과 불일치. `tech-spec`은 AUTHORING-GUIDE의 기존 용어("테크스펙")와 일관.
+- **이름 `brief`** → 기각(사용자 결정). 현황 파악 뉘앙스가 강해 "스펙을 결정한다"는 기능 목적과 불일치. `tech-spec`은 기존 논의의 용어("테크스펙")와 일관.
 - **원샷(일괄) 작성 전면 금지 (이 문서 초안 v1의 비목표)** → 기각(사용자 결정, 2026-06-10). 리뷰가 많이 필요 없거나 생략하고 싶은 상황에서 시간 비용을 줄일 합리적 경로가 필요하고, 금지하면 사용자가 표면 밖에서 우회한다. 일괄을 명시적 opt-in 모드로 양립시키되, 기본값=증분과 finalize 의도 확인 불변으로 리뷰 형해화를 막는다(§5·§7).
 
 ## 11. 마일스톤 [단수명]

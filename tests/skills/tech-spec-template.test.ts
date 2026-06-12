@@ -30,7 +30,7 @@ describe('tech-spec template generalization (ac-1)', () => {
     // 수명 라벨(WHY/HOW half-life)은 일반화 후에도 유지된다 (기획문서 §8)
     expect(template).toContain('[장]');
     expect(template).toContain('[단]');
-    // §8 계획의 비구속 배너는 템플릿이 직접 들고 있어야 한다 (AUTHORING-GUIDE §3)
+    // §8 계획의 비구속 배너는 템플릿이 직접 들고 있어야 한다 (기획문서 §8)
     expect(template).toContain('비구속');
   });
 
