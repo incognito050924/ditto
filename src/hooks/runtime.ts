@@ -20,11 +20,13 @@ export interface HookOutput {
 }
 
 export interface HookInput {
-  /** Parsed stdin JSON from Claude Code (or null/`{}` when absent). */
+  /** Parsed stdin JSON from the host (Claude Code or Codex; null/`{}` when absent). */
   raw: unknown;
-  /** Project dir, from `$CLAUDE_PROJECT_DIR`, falling back to cwd. */
+  /** Project dir. Claude Code: `$CLAUDE_PROJECT_DIR`; Codex: `raw.cwd`; both fall back to cwd. */
   repoRoot: string;
   env: Record<string, string | undefined>;
+  /** Host whose envelope produced `raw`. Defaults to `claude-code` when absent (back-compat). */
+  host?: 'claude-code' | 'codex';
 }
 
 export type HookHandler = (input: HookInput) => Promise<HookOutput> | HookOutput;

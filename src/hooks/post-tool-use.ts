@@ -1,6 +1,7 @@
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import { commandLogEntry, editLogEntry } from '~/schemas/evidence-log';
+import { mutatedPaths } from './envelope';
 import type { HookHandler, HookInput } from './runtime';
 
 /**
@@ -25,7 +26,12 @@ function exitCodeOf(response: unknown): number {
 export const postToolUseHandler: HookHandler = async (input: HookInput) => {
   const raw = (input.raw ?? {}) as Record<string, unknown>;
   const toolName = typeof raw.tool_name === 'string' ? raw.tool_name : undefined;
-  if (toolName !== 'Bash' && !FILE_MUTATION_TOOLS.has(toolName ?? '')) return { exitCode: 0 };
+  // Codex edits arrive as apply_patch; let them through additively so their
+  // mutated paths are recorded like Claude's Edit/Write/MultiEdit (host defaults
+  // to claude-code, so this never relaxes the gate for the Claude path).
+  const isCodexPatch = input.host === 'codex' && toolName === 'apply_patch';
+  if (toolName !== 'Bash' && !FILE_MUTATION_TOOLS.has(toolName ?? '') && !isCodexPatch)
+    return { exitCode: 0 };
 
   const sessionId = typeof raw.session_id === 'string' ? raw.session_id : undefined;
   if (!sessionId) return { exitCode: 0 };
@@ -47,6 +53,24 @@ export const postToolUseHandler: HookHandler = async (input: HookInput) => {
       work_item_id: pointer,
     });
     await store.appendCommandLogLine(pointer, JSON.stringify(entry));
+    return { exitCode: 0 };
+  }
+
+  // Codex apply_patch (additive): record EVERY mutated path the patch touches so
+  // multi-file Codex edits leave the same per-file evidence trail as Claude.
+  // tool is 'Edit' (the closest schema enum value; apply_patch add/update/delete
+  // are edits) — the editLogEntry enum is host-neutral and not widened here.
+  if (isCodexPatch) {
+    for (const path of mutatedPaths('codex', raw)) {
+      const entry = editLogEntry.parse({
+        ts: new Date().toISOString(),
+        kind: 'edit',
+        tool: 'Edit',
+        file_path: path,
+        work_item_id: pointer,
+      });
+      await store.appendEditLogLine(pointer, JSON.stringify(entry));
+    }
     return { exitCode: 0 };
   }
 

@@ -1,0 +1,6 @@
+{
+  "defaultMode": "default",
+  "permissions": {
+    "allow": ["Bash(ditto:*)"]
+  }
+}

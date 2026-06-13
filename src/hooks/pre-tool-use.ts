@@ -9,6 +9,7 @@ import { ChangeContractStore } from '~/core/change-contract-store';
 import { atomicWriteText, ensureDir, readArchitectureSpec } from '~/core/fs';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { type AcgArchitectureSpec, acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
+import { mutatedPaths } from './envelope';
 import type { HookHandler, HookInput } from './runtime';
 
 /**
@@ -590,6 +591,20 @@ export const preToolUseHandler: HookHandler = async (input: HookInput) => {
     return ALLOW;
   }
 
+  // --- Codex apply_patch (additive, host=codex only) ----------------------
+  // Codex sends edits as tool_name="apply_patch" with the touched paths inside
+  // tool_input.command. Run the SAME secret / scope-out / forbidden_scope /
+  // lease gates over EVERY mutated path so a multi-file patch is blocked if any
+  // one path violates. The Claude path below is untouched (host defaults to
+  // claude-code, so this branch never fires for it — byte-identical behaviour).
+  if (input.host === 'codex' && toolName === 'apply_patch') {
+    for (const path of mutatedPaths('codex', raw)) {
+      const verdict = await checkMutatedPath(input, path);
+      if (verdict) return verdict;
+    }
+    return ALLOW;
+  }
+
   // --- File tools ---------------------------------------------------------
   const filePath = typeof toolInput.file_path === 'string' ? toolInput.file_path : undefined;
   if (!filePath) return ALLOW;
@@ -616,6 +631,29 @@ export const preToolUseHandler: HookHandler = async (input: HookInput) => {
 
   return ALLOW;
 };
+
+/**
+ * The Codex-side equivalent of the Claude file-tool gate sequence, run per
+ * mutated path: secret (read+write), scope-out write, forbidden_scope, autopilot
+ * lease. Returns a block on the first violating path, undefined to allow. Mirrors
+ * the Write/Edit/MultiEdit branch so both hosts enforce the same policy.
+ */
+async function checkMutatedPath(
+  input: HookInput,
+  filePath: string,
+): Promise<ReturnType<typeof block> | undefined> {
+  if (isSecretPath(filePath)) {
+    return block('secret', `access to a secret file (${filePath})`);
+  }
+  if (isOutsideRepo(input.repoRoot, filePath) && !isClaudeMemoryPath(input.repoRoot, filePath)) {
+    return block('scope-out', `write outside repo (${filePath})`);
+  }
+  const forbidden = await checkForbiddenScope(input, filePath);
+  if (forbidden) return forbidden;
+  const offPath = await checkAutopilotLease(input, filePath);
+  if (offPath) return offPath;
+  return undefined;
+}
 
 /** Statically extractable write destinations from a Bash command (else none). */
 function bashWriteTargets(cmd: string): string[] {

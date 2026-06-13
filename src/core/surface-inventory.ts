@@ -11,8 +11,21 @@ interface ExpectedSurface {
   path: string;
 }
 
-async function loadExpected(repoRoot: string): Promise<ExpectedSurface[]> {
-  const path = localDir(repoRoot, 'surfaces.json');
+/**
+ * Per-host catalog file under `.ditto/local/`. claude-code keeps the canonical
+ * `surfaces.json`; codex declares its surfaces in a sibling `surfaces.codex.json`
+ * so the two host catalogs never collide (the drift check is host-scoped). A host
+ * with no dedicated file falls back to `surfaces.json`.
+ */
+function catalogFileFor(host: HostId): string {
+  return host === 'codex' ? 'surfaces.codex.json' : 'surfaces.json';
+}
+
+async function loadExpected(
+  repoRoot: string,
+  catalogFile = 'surfaces.json',
+): Promise<ExpectedSurface[]> {
+  const path = localDir(repoRoot, catalogFile);
   let raw: unknown;
   try {
     raw = await readJsonIfExists(path);
@@ -53,12 +66,17 @@ function keyOf(surface: Pick<SurfaceEntry, 'host' | 'kind' | 'id'>): string {
 export async function generateSurfaceCatalog(
   adapters: HostAdapter[],
   repoRoot: string,
+  catalogFile = 'surfaces.json',
 ): Promise<SurfaceCatalog> {
   const inventories = await Promise.all(
     adapters.map((adapter) => adapter.loadSurfaceInventory(repoRoot)),
   );
   const surfaces = inventories
     .flatMap((inv) => inv.localSurfaces)
+    // Each host writes its own catalog file; a generator run targets one file and
+    // only emits the surfaces that belong in it. This keeps `surfaces.json` the
+    // pure claude-code catalog even when codex adapters are in the list (G6).
+    .filter((s) => catalogFileFor(s.host) === catalogFile)
     .map((s) => ({
       host: s.host,
       kind: s.kind,
@@ -79,7 +97,16 @@ export async function collectSurfaceInventory(
   const localActual = inventories.flatMap((inv) => inv.localSurfaces);
   const homeActual = inventories.flatMap((inv) => inv.homeSurfaces);
   const allInventory = [...localActual, ...homeActual];
-  const expected = await loadExpected(repoRoot);
+
+  // Each host compares its own actual surfaces against its own catalog file. A
+  // host's surfaces never count as drift against another host's catalog, so
+  // mixing codex into the inventory cannot make the claude catalog look stale.
+  const catalogFiles = [...new Set(adapters.map((a) => catalogFileFor(a.id)))];
+  const expectedByFile = new Map<string, ExpectedSurface[]>();
+  for (const file of catalogFiles) {
+    expectedByFile.set(file, await loadExpected(repoRoot, file));
+  }
+  const expected = catalogFiles.flatMap((file) => expectedByFile.get(file) ?? []);
   if (expected.length === 0) {
     return { surfaces: allInventory, mismatch_count: 0, findings: [] };
   }

@@ -6,16 +6,18 @@ import { listHostAdapters } from '~/core/hosts';
 import { generateSurfaceCatalog } from '~/core/surface-inventory';
 
 /**
- * Regenerate `.ditto/local/surfaces.json` from the code (G6). The catalog is a build
- * artifact, not a hand-maintained file: run this after adding/removing a skill,
- * agent, command, plugin, or hook. CI regenerates and compares (see
+ * Regenerate the per-host surface catalogs from the code (G6). Each catalog is a
+ * build artifact, not a hand-maintained file: run this after adding/removing a
+ * skill, agent, command, plugin, or hook. CI regenerates and compares (see
  * tests/doctor/surface.test.ts) so a stale catalog fails loudly.
+ *
+ * claude-code -> `.ditto/local/surfaces.json` (canonical), codex ->
+ * `.ditto/local/surfaces.codex.json`. The generator filters by catalog file, so
+ * each host's surfaces only ever land in its own catalog.
  */
-async function main(): Promise<void> {
-  const repoRoot = await findRepoRoot();
-  const catalog = await generateSurfaceCatalog(listHostAdapters(), repoRoot);
-  const out = localDir(repoRoot, 'surfaces.json');
-  await ensureDir(localDir(repoRoot));
+async function writeCatalog(repoRoot: string, catalogFile: string): Promise<void> {
+  const catalog = await generateSurfaceCatalog(listHostAdapters(), repoRoot, catalogFile);
+  const out = localDir(repoRoot, catalogFile);
   // One surface per line keeps the generated catalog reviewable in diffs.
   const body = catalog.surfaces
     .map(
@@ -26,6 +28,13 @@ async function main(): Promise<void> {
   const text = `{\n  "schema_version": ${JSON.stringify(catalog.schema_version)},\n  "surfaces": [\n${body}\n  ]\n}\n`;
   await writeFile(out, text, 'utf8');
   console.log(`wrote ${catalog.surfaces.length} surfaces → ${out}`);
+}
+
+async function main(): Promise<void> {
+  const repoRoot = await findRepoRoot();
+  await ensureDir(localDir(repoRoot));
+  await writeCatalog(repoRoot, 'surfaces.json');
+  await writeCatalog(repoRoot, 'surfaces.codex.json');
 }
 
 main().catch((err) => {

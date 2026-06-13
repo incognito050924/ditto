@@ -39,6 +39,11 @@ export const hookCommand = defineCommand({
       required: true,
       description: `Hook event: ${HOOK_EVENTS.join(' | ')}`,
     },
+    host: {
+      type: 'string',
+      default: 'claude-code',
+      description: 'Host whose hook envelope feeds stdin/env: claude-code | codex.',
+    },
   },
   run: async ({ args }) => {
     const handler = HANDLERS[args.event];
@@ -48,8 +53,9 @@ export const hookCommand = defineCommand({
       );
       process.exit(2);
     }
+    const host = args.host === 'codex' ? 'codex' : 'claude-code';
     // executeHook reads stdin, runs the fail-open wrapper, writes stdout/stderr,
     // and process.exit()s with the hook's exit code — so it never returns.
-    await executeHook(handler);
+    await executeHook(handler, host);
   },
 });

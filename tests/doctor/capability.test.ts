@@ -34,13 +34,16 @@ describe('doctor capability', () => {
     expect(cc.capabilities.hooks.length).toBe(5);
   });
 
-  test('ac-2: codex json honestly declares no hooks and exits 0', () => {
+  test('ac-2: codex json reports 5 hook events and exits 0', () => {
+    // M3 (dual-host surface adapter): codex adopted the Claude hook protocol, so
+    // it declares the same 5 events and registers them from the shared
+    // hooks/hooks.json — declared == registered, 0 drift, exit 0.
     const proc = run(['doctor', 'capability', '--host', 'codex', '--output', 'json']);
     expect(proc.exitCode).toBe(0);
     const json = JSON.parse(proc.stdout.toString());
     const codex = json.hosts.find((h: { host: string }) => h.host === 'codex');
-    expect(codex.capabilities.hooks).toEqual([]);
-    expect(codex.hook_events).toEqual([]);
+    expect(codex.capabilities.hooks.length).toBe(5);
+    expect([...codex.hook_events].sort()).toEqual([...codex.capabilities.hooks].sort());
   });
 
   test('ac-3 pass-side: all hosts satisfy parity, exit 0', () => {

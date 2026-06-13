@@ -1,8 +1,9 @@
 ---
 title: "DITTO dual-host surface adapter 근거와 구현 계획"
 kind: design-plan
-last_updated: 2026-06-12 KST
-status: draft
+last_updated: 2026-06-13 KST
+status: reviewed
+review: ".ditto/local/work-items/wi_26061304x/reviews/dialectic-1.json (verdict=revise, required_edits 반영)"
 scope: "Claude Code와 Codex를 모두 지원하기 위한 공통 core, host별 surface adapter, 증거 기반 구현 순서"
 inputs:
   - AGENTS.md
@@ -31,6 +32,10 @@ official_sources_verified:
   - "2026-06-12: https://developers.openai.com/codex/skills"
   - "2026-06-12: https://developers.openai.com/codex/guides/agents-md"
   - "2026-06-12: https://developers.openai.com/codex/subagents"
+  - "2026-06-13: https://developers.openai.com/codex/hooks (apply_patch=tool_input.command; matcher alias apply_patch|Edit|Write, stdin tool_name=apply_patch)"
+  - "2026-06-13: https://github.com/openai/codex/blob/main/codex-rs/apply-patch/apply_patch_tool_instructions.md (apply_patch 패치 문법 — *** Add/Update/Delete File, *** Move to, 항상 상대경로)"
+  - "2026-06-13: https://developers.openai.com/codex/custom-prompts (custom prompts deprecated → skills)"
+companion_report: reports/design/dual-host-codex-fact-verification.md
 ---
 
 # DITTO dual-host surface adapter 근거와 구현 계획
@@ -99,6 +104,7 @@ official_sources_verified:
 
 - Codex는 `AGENTS.md`를 직접 읽으므로 별도 projection이 필요 없다.
 - Claude Code는 `CLAUDE.md`를 읽으므로 DITTO charter는 `AGENTS.md`를 정본으로 두고 `CLAUDE.md`에는 managed block으로 투영하는 구조가 맞다.
+- **위험(저, dialectic-1 G3): AGENTS.md 32 KiB 병합 한도.** Codex는 global+project `AGENTS.md`를 git root부터 합쳐 `project_doc_max_bytes`(기본 32 KiB)에서 자른다. 현재 repo `AGENTS.md`는 14,142 bytes로 단독은 안전하나, 사용자 global·중첩 `AGENTS.md`와 합산되면 DITTO charter가 잘릴 수 있다. M5 setup은 charter 설치 시 이 한도를 doctor에서 안내한다.
 
 ### C3. skills는 공통 원천으로 둘 수 있는가
 
@@ -117,8 +123,9 @@ official_sources_verified:
 추론:
 
 - `SKILL.md` 내용 자체는 상당 부분 공통 원천으로 유지할 수 있다.
-- 그러나 `${CLAUDE_PLUGIN_ROOT}`는 Claude Code plugin envelope 변수라 Codex용 산출물에서는 `${PLUGIN_ROOT}` 또는 Codex가 제공하는 plugin-root 변수로 치환해야 한다. 이 치환은 host별 build 단계에서 하는 편이 안전하다.
-- 지금 바로 `surfaces/common/skills`로 파일을 이동하는 것은 위험하다. 먼저 host별 build에서 현 `skills/`를 복사/치환하고, 중복 관리 문제가 실제로 커질 때 source tree 이동을 한다.
+- `${CLAUDE_PLUGIN_ROOT}` 치환 부담은 당초 가정보다 작다. Codex는 plugin **hook command**에 `PLUGIN_ROOT`와 함께 `CLAUDE_PLUGIN_ROOT`를 레거시 호환 변수로 제공한다(2026-06-13 plugins/build 확인). 따라서 `hooks/hooks.json`의 `"${CLAUDE_PLUGIN_ROOT}/bin/ditto"`는 Codex에서도 그대로 resolve되어 치환이 **불필요**하다.
+- **단 이 호환은 hook command에서만 확인됐다.** skill 본문 Bash나 custom agent instruction이 실행될 때 이 env가 주입되는지는 미증명이다(dialectic-1 obj 5). 그쪽의 `${CLAUDE_PLUGIN_ROOT}/bin/ditto`는 안정 PATH command(`ditto …`)로 두거나, env 가용성을 별도 검증한 뒤에만 의존한다.
+- 지금 바로 `surfaces/common/skills`로 파일을 이동하는 것은 위험하다. 먼저 host별 build에서 현 `skills/`를 복사하고, 중복 관리 문제가 실제로 커질 때 source tree 이동을 한다.
 
 ### C4. agents는 같은 내용을 쓰되 파일 형식 projection이 필요하다
 
@@ -159,9 +166,9 @@ official_sources_verified:
 
 추론:
 
-- handler 판단 로직은 대부분 공통으로 유지할 수 있다.
-- 다만 input source, repo root 계산, plugin root env, hook output JSON shape는 host adapter에서 normalize/render해야 한다.
-- 첫 구현은 `HookInput`에 host와 normalized fields를 추가하고, 기존 handler는 raw fallback을 유지하는 호환 방식이 안전하다.
+- handler 판단 로직은 대부분 공통으로 유지할 수 있다. Codex의 event별 stdin 필드명(`prompt`, `tool_name`, `tool_input`, `tool_response`, `trigger`, `session_id`, `cwd`)과 stdout 출력 shape(`{"decision":"block",…}` / `hookSpecificOutput.additionalContext` / PreToolUse `permissionDecision`·`updatedInput`)는 Claude Code와 동일하다(2026-06-13 hooks 확인). 따라서 광범위한 per-host `renderHookOutput` 추상화는 현재 증거상 불필요하다(dialectic-1 scope_creep).
+- **실제 divergence는 두 가지뿐이다.** (1) `repoRoot` 출처 — Claude는 `CLAUDE_PROJECT_DIR`, Codex는 `cwd`. (2) **파일 변경 도구 의미** — Codex는 편집을 `tool_name="apply_patch"` / `tool_input.command`(패치 문자열)로 보낸다(matcher alias는 `apply_patch|Edit|Write`지만 stdin `tool_name`은 `apply_patch`로 보고). 현재 핸들러는 `Write|Edit|MultiEdit` + `tool_input.file_path`에만 게이트·evidence를 건다(`pre-tool-use.ts:594,605`, `post-tool-use.ts:13,28`). 따라서 Codex 편집은 secret/forbidden_scope 게이트와 edit evidence를 **둘 다 우회한다** — 이게 normalize가 반드시 해결해야 하는 진짜 지점이다(dialectic-1 obj 1, severity high).
+- 첫 구현은 `HookInput`에 host와 normalized fields를 추가하되 그 핵심은 **apply_patch → 대상 경로 추출**이다: `tool_input.command`의 `*** Add File:`·`*** Update File:`·`*** Delete File:`·`*** Move to:` 헤더에서 상대경로(들)를 파싱해, 다중 파일 패치의 모든 경로를 Write/Edit과 동일하게 게이트·기록한다. 기존 Claude handler는 raw fallback을 유지한다.
 
 ### C6. Codex custom command는 1차 목표가 아니다
 
@@ -169,7 +176,7 @@ official_sources_verified:
 
 공식 근거:
 
-- Codex custom prompts는 deprecated이고, reusable instruction은 skills 사용을 권장한다. 근거: Codex manual 및 https://developers.openai.com/codex/skills
+- Codex custom prompts는 deprecated이고, reusable instruction은 skills 사용을 권장한다. 근거: https://developers.openai.com/codex/custom-prompts, deprecation warning PR https://github.com/openai/codex/pull/15076 (skills 페이지에는 이 deprecation 진술이 없다 — 출처 교정, dialectic-1 §1 #5).
 - Claude Code는 custom commands가 skills로 병합됐고 기존 `.claude/commands/*.md`도 계속 작동한다. 근거: https://code.claude.com/docs/en/skills
 
 저장소 근거:
@@ -247,8 +254,8 @@ official_sources_verified:
 | Codex adapter | `src/core/hosts/codex.ts` 존재, spawn/profile test 존재 | plugin build, hook capability, surface scan 부족 |
 | instruction bridge | `AGENTS.md` source, `CLAUDE.md` projection 구현 | Codex는 sync 거부가 맞지만 setup host 옵션에는 AGENTS install 경로를 반영해야 함 |
 | hooks | handler는 공통, registration은 Claude env 변수 | `HookInput` normalize/render, Codex hooks manifest 필요 |
-| skills | `skills/*/SKILL.md` 공통 후보 | `${CLAUDE_PLUGIN_ROOT}` 치환 필요 |
-| agents | `agents/*.md` Claude 형식 | Codex `.toml` projection 필요 |
+| skills | `skills/*/SKILL.md` 공통 후보 | hook command는 `${CLAUDE_PLUGIN_ROOT}` 호환으로 무치환; skill 본문 명령은 PATH command 권장 |
+| agents | `agents/*.md` Claude 형식 | Codex `.toml` projection 필요 + read-only는 `sandbox_mode` 매핑 + 프로젝트 `.codex/agents/` 설치 |
 | doctor/surface | Claude plugin root scan 구현 | Codex `.codex-plugin`, `.agents/plugins`, `.codex/agents`, plugin-bundled hooks scan 필요 |
 | install | Claude settings allowlist와 PATH placement 중심 | `setup --host codex|both`와 Codex marketplace/config 설치 필요 |
 
@@ -358,7 +365,9 @@ repo root
   - `toolResponse`
   - `compactTrigger`
   - `repoRoot`
-- `renderHookOutput(host, event, HookOutput)`를 만든다.
+  - `mutatedPaths` — 파일 변경 도구가 건드리는 대상 경로 목록(정규화 산출). Claude는 `tool_input.file_path` 단일, Codex `apply_patch`는 패치에서 추출한 다중 경로.
+- **apply_patch 경로 추출 (이 슬라이스의 핵심, dialectic-1 obj 1).** host=codex이고 `tool_name="apply_patch"`이면, `tool_input.command`의 `*** Add File: <path>`·`*** Update File: <path>`·`*** Delete File: <path>`·`*** Move to: <path>` 헤더에서 상대경로(들)를 파싱해 `mutatedPaths`로 채운다. PreToolUse 게이트(secret/forbidden_scope)와 PostToolUse edit evidence가 이 `mutatedPaths`를 돌게 해서, Claude의 `Write|Edit|MultiEdit` 단일 `file_path` 경로(`pre-tool-use.ts:605`, `post-tool-use.ts:13`)와 동일하게 **모든** 변경 경로를 검사·기록한다. 다중 파일 패치는 한 경로라도 forbidden_scope에 들면 block.
+- `renderHookOutput`은 **defer**한다 — Codex/Claude 출력 shape가 동일(F3)하므로 per-host render layer는 지금 만들지 않는다(헌장 4-3). 실제 출력 divergence가 관측될 때 도입.
 - 기존 handler는 처음에는 `input.raw` fallback을 유지한다. 다음 단계에서 normalized field 사용으로 좁힌다.
 - `repoRoot` 계산은 host별로 분리한다.
   - Claude Code: `CLAUDE_PROJECT_DIR ?? raw.cwd ?? process.cwd()`
@@ -368,6 +377,7 @@ repo root
 
 - Claude fixture로 기존 tests/hooks 통과.
 - Codex fixture로 UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, Stop smoke 추가.
+- **apply_patch fixture 필수**: Codex PreToolUse `tool_name="apply_patch"`로 forbidden_scope 경로를 담은 패치가 **block**되는지, PostToolUse가 그 변경을 `evidence/edits.jsonl`에 **기록**하는지 검증한다. 단일·다중 파일 패치, `*** Move to:` 리네임을 모두 포함. 이 fixture가 없으면 §7 첫 증분은 false-green(게이트·evidence 무력화)으로 닫힌다.
 - malformed stdin은 fail-open, malformed gate artifact는 fail-closed라는 기존 경계 유지.
 
 완료 기준:
@@ -396,7 +406,7 @@ repo root
 - Codex surface scan:
   - `.codex-plugin/plugin.json` -> plugin
   - `skills/*/SKILL.md` 또는 `.agents/skills/*/SKILL.md` -> skill
-  - `.codex/agents/*.toml` -> agent
+  - `.codex/agents/*.toml` -> agent **(M4 의존, dialectic-1 obj 4)**: 이 TOML은 M4가 생성한다. 따라서 M3에서는 scanner capability만 추가하고, agent-surface가 실제로 잡히는지의 **검증은 M4 fixture가 생긴 뒤**에 한다(또는 M4를 이 검증 앞으로 당긴다). M3 단독 완료 기준에서 agent-surface 검증은 제외한다.
   - `hooks/hooks.json` -> hook
   - `.agents/plugins/marketplace.json` -> plugin marketplace entry는 별도 kind를 늘리지 않고 plugin evidence로만 시작한다.
 - generator output에 `host: "codex"` surface가 포함되도록 한다.
@@ -428,14 +438,16 @@ repo root
 - Markdown frontmatter를 파싱한다.
 - `name`, `description`은 그대로 TOML 필드로 둔다.
 - Markdown body는 `developer_instructions = """..."""`로 넣는다.
-- `tools`는 바로 강제하지 않는다. 매핑 가능한 경우만 advisory metadata 또는 comment로 남기고, sandbox/tool restriction 강제는 후속으로 둔다.
-- 본문 안의 `${CLAUDE_PLUGIN_ROOT}`는 host-neutral command placeholder로 치환한다.
+- `tools`는 **advisory comment로 두지 않는다 (dialectic-1 obj 3, severity high).** Codex custom agent에는 Claude식 per-tool allowlist가 없고 `sandbox_mode`/`mcp_servers`만 있다. read-only 역할(reviewer/researcher/verifier/security-reviewer 등 `tools`에 Edit/Write가 없는 agent)은 `sandbox_mode = "read-only"`로 매핑해 "파일 변경 불가"를 실제 강제하고, mutating 역할(implementer/refactorer)은 `workspace-write`로 둔다. comment로 남기면 Codex agent가 파일을 써서 read-only 검증 계약이 깨진다.
+  - 단 `sandbox_mode="read-only"`도 **per-tool 충실 매핑은 아니다**: Bash 자체는 여전히 가능하고 runtime override가 agent default를 덮을 수 있다. 따라서 per-tool allowlist fidelity는 `unverified`/unsupported로 명시한다(이 사실을 산출 TOML 주석 또는 문서에 남긴다).
+- agent 본문 안의 `${CLAUDE_PLUGIN_ROOT}/bin/ditto`는 안정 PATH command(`ditto …`)로 치환한다 — custom agent instruction 실행 시 이 env가 주입된다는 보장이 없다(dialectic-1 obj 5; C3 참조).
+- **설치 위치 (dialectic-1 obj 2).** Codex 공식 문서는 custom agent를 standalone `~/.codex/agents/`·`.codex/agents/`에만 둔다고 명시하고, plugin **번들** agent 경로는 문서화돼 있지 않다. 따라서 생성 TOML은 plugin 안에 넣지 말고 **setup(M5)이 프로젝트 `.codex/agents/`에 설치**한다. plugin-bundled agent 경로가 공식 확인되면 그때 번들로 옮긴다.
 
 검증:
 
 - 샘플 agent projection snapshot test.
 - Codex TOML parse test.
-- generated `dist/codex-plugin/.codex/agents/*.toml` 또는 plugin-supported 위치 확인.
+- generated TOML이 setup(M5)이 설치하는 프로젝트 `.codex/agents/*.toml` 위치에 놓이는지 확인(plugin 번들 아님 — 위 설치 위치 결정 참조).
 
 완료 기준:
 
@@ -462,8 +474,9 @@ repo root
 - `claude-code`:
   - 기존 behavior 유지: `CLAUDE.md` projection, `.claude/settings.json` allowlist.
 - `codex`:
-  - `AGENTS.md` managed resource 설치 또는 source 확인.
+  - `AGENTS.md` managed resource 설치 또는 source 확인. 설치 시 32 KiB 병합 한도(C2 G3)를 doctor에서 안내한다.
   - `.agents/plugins/marketplace.json` 등록.
+  - M4 산출 custom agent TOML을 프로젝트 `.codex/agents/`에 설치(plugin 번들 아님).
   - `.codex/config.toml`은 필요한 최소 hook/plugin 설정만 쓴다. 프로젝트 trust가 필요한 항목은 doctor에서 안내한다.
 - `both`:
   - `.ditto` scaffold는 한 번만.
@@ -507,9 +520,11 @@ repo root
 | 위험 | 영향 | 대응 |
 |---|---|---|
 | Codex plugin/hook surface가 바뀔 수 있음 | build output이 stale해질 수 있음 | 공식 문서 기준으로 구현하고, doc source verified date를 남긴다 |
-| `${CLAUDE_PLUGIN_ROOT}`가 skill/agent에 넓게 박혀 있음 | Codex 산출물이 그대로는 깨짐 | M1/M4에서 build-time 치환. source 이동은 후순위 |
-| Claude agent `tools`와 Codex custom agent config가 1:1 아님 | tool restriction을 과장할 위험 | 지원 가능한 필드만 projection하고, 미지원은 `unverified` 또는 문서 gap으로 남김 |
-| Hook output shape가 미세하게 다를 수 있음 | context injection/blocking이 host별로 다르게 동작 | `renderHookOutput(host, event, result)`와 fixture tests로 분리 |
+| `${CLAUDE_PLUGIN_ROOT}` (강등) | hook command는 Codex가 레거시 호환 제공으로 그대로 동작; skill body·agent instruction만 미증명 | hook은 치환 불필요. skill/agent는 안정 PATH command(`ditto …`) 사용 |
+| **Codex `apply_patch` 편집이 Claude 게이트를 우회 (high)** | secret/forbidden_scope 차단·edit evidence가 Codex 편집에 무력화 → 첫 증분 false-green | M2에서 `tool_input.command` 경로 추출 + apply_patch fixture (block + evidence 검증) |
+| Claude agent `tools`와 Codex custom agent config가 1:1 아님 (high) | read-only agent를 advisory로 두면 Codex가 파일 쓰기 가능 → 검증 계약 붕괴 | read-only=`sandbox_mode:read-only` 강제; per-tool fidelity는 `unverified`/unsupported 명시 |
+| Codex plugin-bundled agent 경로 미문서화 (high) | M4가 로드 안 되는 위치에 TOML 생성 → false-green | setup이 프로젝트 `.codex/agents/`에 설치; 번들 경로 확인 후 이동 |
+| M3 agent-scan이 M4 생성물 의존 | 순서상 M3 단독 검증 불가 | M3는 scanner capability만, agent-surface 검증은 post-M4 |
 | Codex project-local hooks는 trust 필요 | setup 후 즉시 실행된다고 과장할 위험 | doctor에서 trusted config 상태를 별도 안내. 완료 주장에는 실제 hook smoke 필요 |
 | install이 사용자 home을 수정함 | 되돌리기와 범위가 중요 | setup은 idempotent, backup, dry-run/check 옵션 우선 |
 
@@ -517,7 +532,7 @@ repo root
 
 첫 구현 단위는 **M1 + M2 일부**가 적당하다.
 
-구체적으로는 `dist/codex-plugin`을 만들고, UserPromptSubmit/Stop/PreToolUse/PostToolUse/PreCompact 5개 hook을 Codex fixture로 통과시키는 것까지다. 이 단위가 통과하면 "core는 공통, surface는 host별"이라는 구조적 가능성이 증거로 닫힌다.
+구체적으로는 `dist/codex-plugin`을 만들고, UserPromptSubmit/Stop/PreToolUse/PostToolUse/PreCompact 5개 hook을 Codex fixture로 통과시키는 것까지다. **단, 이 5개 fixture 통과만으로는 Codex 파일 변경 집행을 증명하지 못한다** — PreToolUse/PostToolUse가 Claude `Edit/Write`에만 반응하므로 Codex `apply_patch` 편집은 게이트·evidence를 우회한다(dialectic-1 obj 1). 따라서 첫 증분은 **M2의 apply_patch 경로 추출(§M2 구현)과 그 fixture(forbidden_scope block + edit evidence 기록)를 반드시 포함**해야 하며, 그래야 "core는 공통, surface는 host별"이 *안전 게이트를 보존한 채* 증거로 닫힌다. apply_patch 매핑 없이 닫으면 false-green이다.
 
 반대로 처음부터 하지 말 것:
 
