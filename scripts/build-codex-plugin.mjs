@@ -82,9 +82,19 @@ function projectAgents() {
   const outDir = join(OUT, '.codex', 'agents');
   mkdirSync(outDir, { recursive: true });
   const names = [];
+  // Fail loud on a duplicate projected name (OBJ-7): two agents/*.md projecting to
+  // the same name would silently overwrite one TOML, breaking surface parity with
+  // no failing signal. A collision is a build error, not a silent last-writer-wins.
+  const seen = new Set();
   for (const file of readdirSync(agentsDir).sort()) {
     if (!file.endsWith('.md')) continue;
     const projection = projectAgent(readFileSync(join(agentsDir, file), 'utf8'));
+    if (seen.has(projection.name)) {
+      throw new Error(
+        `duplicate projected agent name "${projection.name}" (from ${file}) — would overwrite ${projection.name}.toml`,
+      );
+    }
+    seen.add(projection.name);
     writeFileSync(join(outDir, `${projection.name}.toml`), projection.toml);
     names.push(`${projection.name}=${projection.sandboxMode}`);
   }

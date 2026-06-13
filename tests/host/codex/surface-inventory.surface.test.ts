@@ -8,6 +8,8 @@
 // are produced by agent projection (M4 / N8); this slice wires the scanner
 // capability but does not assert any agent surface is discovered.
 import { describe, expect, test } from 'bun:test';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { collectCapabilityInventory } from '~/core/capability-inventory';
 import { codexHostAdapter } from '~/core/hosts';
@@ -42,6 +44,22 @@ describe('Codex host surface inventory (M3)', () => {
 
     // skills shared with the claude build are surfaced under host=codex
     expect(local.some((s) => s.kind === 'skill' && s.id === 'autopilot')).toBe(true);
+  });
+
+  test('does NOT inventory the non-official .codex/plugins path (OBJ-5)', async () => {
+    // Official Codex discovery is .agents/plugins/marketplace.json (+ legacy
+    // .claude-plugin/marketplace.json), NOT a .codex/plugins directory. Scanning
+    // .codex/plugins emitted false plugin-surface evidence (dialectic-1 OBJ-5).
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-codex-obj5-'));
+    try {
+      await mkdir(join(dir, '.codex', 'plugins', 'bogus'), { recursive: true });
+      const inv = await codexHostAdapter.loadSurfaceInventory(dir);
+      const all = [...inv.localSurfaces, ...inv.homeSurfaces];
+      expect(all.some((s) => s.id === 'bogus')).toBe(false);
+      expect(all.some((s) => s.path.includes(join('.codex', 'plugins')))).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   test('codex catalog matches the actual codex scan (no drift)', async () => {

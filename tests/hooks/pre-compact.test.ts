@@ -40,6 +40,29 @@ describe('preCompactHandler', () => {
     expect((await new HandoffStore(repo).get(wiId)).original_intent).toBe('do the thing');
   });
 
+  test('from_context carries the actual host (codex), not a hardcoded claude-code (OBJ-9)', async () => {
+    const out = await preCompactHandler({
+      raw: { session_id: SESSION, trigger: 'auto' },
+      repoRoot: repo,
+      env: {},
+      host: 'codex',
+    });
+    expect(out.exitCode).toBe(0);
+    const handoff = await new HandoffStore(repo).get(wiId);
+    expect(handoff.from_context).toContain('codex session');
+    expect(handoff.from_context).not.toContain('claude-code');
+  });
+
+  test('from_context defaults to claude-code when host is absent', async () => {
+    await preCompactHandler({
+      raw: { session_id: SESSION, trigger: 'auto' },
+      repoRoot: repo,
+      env: {},
+    });
+    const handoff = await new HandoffStore(repo).get(wiId);
+    expect(handoff.from_context).toContain('claude-code session');
+  });
+
   test('no session pointer => exit 0, no handoff', async () => {
     const out = await preCompactHandler({
       raw: { session_id: 'unknown' },

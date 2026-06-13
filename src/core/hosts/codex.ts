@@ -170,24 +170,14 @@ export const codexHostAdapter: HostAdapter = {
   },
 
   async loadSurfaceInventory(repoRoot): Promise<SurfaceInventory> {
-    const projectPlugins = join(repoRoot, '.codex', 'plugins');
-    const userPlugins = join(homedir(), '.codex', 'plugins');
-    const localSurfaces: SurfaceEntry[] = [
-      ...(await listDirectories(projectPlugins)).map((entry) => ({
-        host: 'codex' as const,
-        kind: 'plugin' as const,
-        id: entry.id,
-        path: entry.path,
-      })),
-      ...(await scanCodexPluginRoot(repoRoot)),
-    ];
-    const homeSurfaces: SurfaceEntry[] = (await listDirectories(userPlugins)).map((entry) => ({
-      host: 'codex' as const,
-      kind: 'plugin' as const,
-      id: entry.id,
-      path: entry.path,
-    }));
-    return { host: 'codex', localSurfaces, homeSurfaces, unavailable: [] };
+    // Official Codex plugin discovery is `$REPO/.agents/plugins/marketplace.json`
+    // (+ personal `~/.agents/plugins/marketplace.json` + legacy
+    // `$REPO/.claude-plugin/marketplace.json`), NOT a `.codex/plugins` directory.
+    // Scanning `.codex/plugins`/`~/.codex/plugins` fabricated plugin-surface
+    // evidence from a path Codex never loads (dialectic-1 OBJ-5). We inventory the
+    // real plugin-root surfaces (manifest/skill/hook/agent) via scanCodexPluginRoot.
+    const localSurfaces: SurfaceEntry[] = [...(await scanCodexPluginRoot(repoRoot))];
+    return { host: 'codex', localSurfaces, homeSurfaces: [], unavailable: [] };
   },
 
   async spawnRun(input) {

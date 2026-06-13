@@ -41,7 +41,7 @@ export const preCompactHandler: HookHandler = async (input: HookInput) => {
   const handoff = buildHandoff({
     workItem,
     ...(autopilotId ? { autopilotId } : {}),
-    fromContext: `claude-code session ${sessionId} at PreCompact (${trigger})`,
+    fromContext: `${input.host ?? 'claude-code'} session ${sessionId} at PreCompact (${trigger})`,
     currentState: `work item status=${workItem.status} at compaction`,
     nextFirstCheck: 'Re-read the work item and its acceptance criteria, then resume the open node.',
     ...(workItem.re_entry?.command ? { openThreads: [workItem.re_entry.command] } : {}),

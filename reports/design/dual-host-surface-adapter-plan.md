@@ -225,6 +225,8 @@ companion_report: reports/design/dual-host-codex-fact-verification.md
 - `.ditto/local/surfaces.json`은 전부 `host: "claude-code"`이다.
 - `tests/core/surface-inventory.plugin.test.ts`도 현재 Claude Code plugin surface 32개를 기준으로 검증한다.
 
+> **정정 (2026-06-13, OBJ-2).** 위 4줄은 작성 시점 스냅샷이며 코드가 앞서갔다. 현재: `capabilities.hooks`는 검증된 5개 event로 채워졌고(M2), `loadSurfaceInventory()`는 비공식 `.codex/plugins` 스캔을 제거하고 `scanCodexPluginRoot`(공식 plugin-root)만 본다(OBJ-5). 권위 있는 현재 상태는 문서 끝 "## 9. 진행 상태 / 잔여" 참조.
+
 추론:
 
 - Codex plugin/hook/skill/agent surface를 생성해도 doctor가 보지 못하면 drift를 잡을 수 없다.
@@ -551,3 +553,23 @@ repo root
 - `ditto doctor surface --host claude-code`와 `--host codex`가 각 surface를 scan함.
 - setup/install 문서가 host별로 분리되어 있음.
 - Codex에서 미검증인 부분은 `unverified`로 남아 있음.
+
+## 9. 진행 상태 / 잔여 (2026-06-13 갱신, 권위 있는 현재 상태)
+
+> §3 현재상태표·§5 milestone 서술보다 이 절이 우선한다. dialectic-1(`wi_260613afv/reviews/dialectic-1.json`)·verify·dogfooding 결과를 추적되는 위치로 승격(#7).
+
+**구현·검증됨 (커밋)**
+- M1~M4 Codex surface: `codexHostAdapter`, host-aware `io`(repoRoot), apply_patch 경로 추출(`envelope`), PreToolUse 게이트/PostToolUse evidence, agent→TOML projection(15개).
+- **OBJ-1 [critical] 수정** — 배포 `dist/codex-plugin/hooks/hooks.json`의 `ditto hook` 명령에 `--host codex` 부착(build-codex-plugin `injectCodexHost`). 이전엔 미부착으로 apply_patch 안전게이트가 실 Codex에서 미발화(false-green). repo `hooks/hooks.json`(Claude)은 byte-identical. seam 테스트 `tests/host/codex/applypatch-deploy-seam.surface.test.ts`.
+- **OBJ-5 [high] 수정** — `loadSurfaceInventory`가 비공식 `.codex/plugins` 스캔 제거, 공식 plugin-root만. 공식 발견 경로는 `.agents/plugins/marketplace.json`(+ `~/.agents/plugins/` + legacy `.claude-plugin/marketplace.json`).
+- **OBJ-7 [med] 수정** — agent name 중복 시 build가 fail-loud(silent overwrite 방지).
+- **OBJ-9 [med] 수정** — PreCompact `from_context`가 host-aware(claude-code 하드코딩 제거).
+- **OBJ-2/3/6 [doc] 해소** — §3 현재상태표 정정(위 정정 박스), 본 절로 동기화.
+
+**Codex 트랙 (실 바이너리 없이는 검증 불가 — 별도 Codex 세션)**
+- **M5** setup/install의 Codex 분기(`~/.codex`·marketplace 등록): install 동작은 실 Codex로만 검증 가능 → 미착수.
+- **OBJ-10 / 층위③ 라이브 load·발화**: 실 `codex`가 plugin·hook·agent를 실제 로드·발화하는지. 지금까지 전부 fixture-green + handler 단위.
+- **OBJ-8 [med]**: agent surface 0개여도 카탈로그 통과 — repo 소스엔 agent TOML이 install 후 생기므로 0개가 정상. 진짜 parity 검사는 post-install(Codex)에서. 여기서 flag하면 false-positive라 보류.
+- **OBJ-4 [high-borderline]**: skill/agent 본문의 `${CLAUDE_PLUGIN_ROOT}` 치환이 실 Codex에서 동작하는지 미검증(공식은 plugin hook 명령에 한해 확인됨).
+
+**참고**: 재현 방법은 `reports/design/dual-host-test-methods.md`.
