@@ -1,8 +1,320 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-06-12T00:00:00+09:00",
+  "updated_at": "2026-06-13T13:50:00+09:00",
   "entries": [
+    {
+      "term": "ADR",
+      "aliases": [
+        "Architecture Decision Record"
+      ],
+      "definition": "되돌리기 어려운 결정의 영속 기록. adr/ADR-NNNN-<slug>.md. 결정만 보존하고 토론은 decisions.md에 둔다.",
+      "examples": [
+        "ADR-0001-runtime-stack",
+        "ADR-0002-schema-source-of-truth"
+      ],
+      "not_to_be_confused_with": [
+        "decisions.md"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-05-24T12:00:00+09:00"
+    },
+    {
+      "term": "code_dirty",
+      "aliases": [],
+      "definition": "owning-repo 워킹트리가 더티(미커밋 편집·git stash)인 상태. 개발 중 정상이라 라벨만 달고 warm-start를 억제하지 않는다 — 더티마다 억제하면 memory가 inert가 되기 때문. 결정 근거는 ADR-0015.",
+      "examples": [],
+      "not_to_be_confused_with": [
+        "code_drift"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-12T00:00:00+09:00"
+    },
+    {
+      "term": "code_drift",
+      "aliases": [],
+      "definition": "owning-repo 현재 HEAD가 memory가 저장한 git_commit(source_revisions[].git_commit)과 달라, SoT가 다른 커밋의 코드에서 만들어진 상태. 축2의 진짜 신뢰 결함이라 warm-start 주입 억제 대상이다. 결정 근거는 ADR-0015.",
+      "examples": [],
+      "not_to_be_confused_with": [
+        "code_dirty",
+        "stale"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-12T00:00:00+09:00"
+    },
+    {
+      "term": "completion contract",
+      "aliases": [],
+      "definition": "work item 완료 주장에 필수인 필드 집합. acceptance verdict, 변경 파일, 검증 명령, unverified 항목, remaining risk, next_handoff_path를 포함한다. final_verdict=pass는 모든 acceptance가 pass여야 허용된다.",
+      "examples": [],
+      "not_to_be_confused_with": [],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-05-24T12:00:00+09:00"
+    },
+    {
+      "term": "confidence_kind",
+      "aliases": [],
+      "definition": "memory 추출 신뢰 밴드: EXTRACTED(결정적 도구가 직접 추출)·INFERRED(의미 추론)·AMBIGUOUS(불확실/충돌). 의미 추출기는 EXTRACTED를 주장할 수 없고, 밴드 이탈은 스키마가 loud fail로 거부한다.",
+      "examples": [
+        "INFERRED"
+      ],
+      "not_to_be_confused_with": [
+        "verdict"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-10T15:00:00+09:00"
+    },
+    {
+      "term": "context packet",
+      "aliases": [],
+      "definition": "run에 넘기는 prompt. goal, acceptance, git state, relevant files, last failure, what-not-to-touch, evidence pointer, expected output contract로 구성된다.",
+      "examples": [],
+      "not_to_be_confused_with": [],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-05-24T12:00:00+09:00"
+    },
+    {
+      "term": "context rot",
+      "aliases": [],
+      "definition": "적재된 컨텍스트가 결과물을 해치는 두 메커니즘의 총칭. (A) 용량: 입력이 길수록 성능이 비균일하게 저하(한도 도달 전부터, distractor 1개로도 악화 — Chroma 18모델 실증). (B) 편향: 쌓인 맥락이 prior로 작동해 판단을 자기 서사 쪽으로 끌어당김(self-eval 과신). (A)는 compaction으로 완화되나 (B)는 compaction이 고착시키므로 검증은 fresh context가 유효성 조건이다. 대응 규칙은 헌장 §4-9, 근거는 reports/harnesses/context-rot-delegation-evidence.md.",
+      "examples": [],
+      "not_to_be_confused_with": [],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-10T16:30:00+09:00"
+    },
+    {
+      "term": "cross_repo",
+      "aliases": [],
+      "definition": "단일모듈 CodeQL DB 분석에서 형제모듈(로컬 JAR) 의존이 정적으로 해소되지 않아 ImpactGraph.unresolved에 남는 kind. internal_packages의 glob에 매칭돼야 기록되며, 써드파티(Spring/JDK)와 구분된다.",
+      "examples": [
+        "kr.co.ecoletree.boxwood.domain.runtime.processing.StructuredErrorInfo (automation-engine이 libs의 domain-model JAR를 참조)"
+      ],
+      "not_to_be_confused_with": [
+        "journey_unknown",
+        "third-party dependency"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-05T07:00:00.000Z"
+    },
+    {
+      "term": "deployment seam",
+      "aliases": [
+        "배포 seam"
+      ],
+      "definition": "빌드 산출물이 실 호스트 런타임으로 연결되는 지점. Codex 빌드가 복사본 hooks.json 명령에 --host codex를 부착해 게이트가 실제 발화되게 한다 (OBJ-1).",
+      "examples": [],
+      "not_to_be_confused_with": [],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-13T13:50:00+09:00"
+    },
+    {
+      "term": "DITTO 기능 4축",
+      "aliases": [
+        "기능 4축",
+        "functional four axes"
+      ],
+      "definition": "DITTO가 사용자를 위해 무엇을 하는가를 정의하는 canonical 목적 기둥. (1) 사용자 의도 파악 및 동기화, (2) 자율 실행 오케스트레이션, (3) E2E 테스트, (4) 지식 베이스. 완전 순차 파이프라인 1→2→3→4로 동작한다. 경계: 축3=진짜 브라우저 E2E only(웹 없는 프로젝트는 N/A), 축4=가치 있는 durable 변경만(자동강제 아님), 축1 종료=readiness 게이트+사용자 확인 둘 다. 근거는 ADR-0010.",
+      "examples": [
+        "축1=deep-interview skill",
+        "축2=autopilot skill",
+        "축3=e2e skill",
+        "축4=knowledge-update skill"
+      ],
+      "not_to_be_confused_with": [
+        "기층 4축 (Hooks/Skills/Agents/State)"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-06T00:00:00.000Z"
+    },
+    {
+      "term": "doctor",
+      "aliases": [],
+      "definition": "host별 instruction, permission, MCP, skill 표면의 drift를 점검하는 명령. 실행이 아니라 진단.",
+      "examples": [],
+      "not_to_be_confused_with": [],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-05-24T12:00:00+09:00"
+    },
+    {
+      "term": "drifted_sources",
+      "aliases": [],
+      "definition": "축2 검출이 어긋났다고 판정한 source 목록(별도 필드, 축1의 dirty_sources와 분리). 소비자(memory-graph 스킬)는 이 목록에 든 source만 코드로 직접 검증하고 나머지는 신뢰한다. 결정 근거는 ADR-0015.",
+      "examples": [],
+      "not_to_be_confused_with": [
+        "dirty_sources"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-12T00:00:00+09:00"
+    },
+    {
+      "term": "dual host",
+      "aliases": [
+        "dual-host"
+      ],
+      "definition": "DITTO가 Claude Code와 Codex 두 호스트에서 동작하는 구조. 공통 코어 + per-host HostAdapter (ADR-0016).",
+      "examples": [],
+      "not_to_be_confused_with": [],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-13T13:50:00+09:00"
+    },
+    {
+      "term": "evidence",
+      "aliases": [],
+      "definition": "주장을 뒷받침하는 참조. command 실행 결과, 파일, artifact path, URL, note 형태. context에 직접 넣지 않고 path/hash/preview로 참조한다.",
+      "examples": [],
+      "not_to_be_confused_with": [],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-05-24T12:00:00+09:00"
+    },
+    {
+      "term": "handoff",
+      "aliases": [],
+      "definition": "work item을 다른 세션/PC/agent로 이어주기 위한 사람이 읽는 문서. 무엇이 끝났나, 무엇이 남았나, 어디서 이어받나, 어떤 fresh evidence가 필요한가, 무엇을 건드리지 않아야 하는가를 담는다.",
+      "examples": [],
+      "not_to_be_confused_with": [],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-05-24T12:00:00+09:00"
+    },
+    {
+      "term": "host adapter",
+      "aliases": [
+        "HostAdapter"
+      ],
+      "definition": "host별 spawn/capabilities/surface/repoRoot 차이를 흡수하는 추상(src/core/hosts/types.ts). host = claude-code | codex (ADR-0008·0016).",
+      "examples": [],
+      "not_to_be_confused_with": [
+        "provider"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-13T13:50:00+09:00"
+    },
+    {
+      "term": "internal_packages",
+      "aliases": [],
+      "definition": "ArchitectureSpec의 형제모듈 디스크립터 배열. {type:'glob'} 엔트리는 cross_repo 분류 대상 패키지 글로브, {type:'path'} 엔트리는 로컬 sibling JAR 위치 글로브(JVM 가드 입력)다.",
+      "examples": [
+        "{type:'glob', value:'kr.co.ecoletree.boxwood.domain.**'}",
+        "{type:'path', value:'libs/*.jar'}"
+      ],
+      "not_to_be_confused_with": [
+        "public_surfaces",
+        "forbidden_dependencies"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-05T07:00:00.000Z"
+    },
+    {
+      "term": "Journey DSL",
+      "aliases": [],
+      "definition": "사용자가 사용자 여정을 선언하는 Markdown 마크업. front-matter(id·name·description·surfaces·uses_blocks·flaky_history) + 한국어 동사 7개 단계 + assertion 5형 + 재사용 블록 + 데이터 케이스 테이블 + 선언적 조건 3형으로 구성된다. e2e/journeys/*.journey.md에 git-tracked되고, 에이전트(e2e-scripter)가 e2e/generated/*.spec.ts로 변환한다. 사용자가 도입한 말(\"DSL 혹은 전용 Markup\")에서 합의된 어휘. 정의 원천: skills/e2e-author/DSL-GUIDE.md.",
+      "examples": [
+        "e2e/journeys/*.journey.md"
+      ],
+      "not_to_be_confused_with": [],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-11T00:00:00+09:00"
+    },
+    {
+      "term": "language ledger",
+      "aliases": [],
+      "definition": "work item 진행 중 합의되거나 수정된 용어 변경 기록. 합의 후 글로벌 glossary로 흡수된다.",
+      "examples": [],
+      "not_to_be_confused_with": [],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-05-24T12:00:00+09:00"
+    },
+    {
+      "term": "memory event",
+      "aliases": [
+        "event"
+      ],
+      "definition": "memory 서브시스템의 append-only 불변 사실 기록(이벤트당 per-entity JSON). pending→approved/rejected 전이는 원본 변형이 아니라 supersedes를 단 새 불변 이벤트로 기록된다(ADR-0013 D3).",
+      "examples": [
+        "memevt_260610fkx"
+      ],
+      "not_to_be_confused_with": [
+        "evidence",
+        "run"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-10T15:00:00+09:00"
+    },
+    {
+      "term": "memory projection",
+      "aliases": [
+        "projection",
+        "serving graph"
+      ],
+      "definition": "approved 이벤트 head + IR에서 재생성되는 파생물(serving graph·wiki·manifest). .ditto/local(Tier③, gitignored)에 살고 언제든 재생성 가능하다. 모든 질의 응답은 projection의 freshness envelope을 동반한다.",
+      "examples": [
+        "graph.json",
+        "proj_b4f1c19b71d3"
+      ],
+      "not_to_be_confused_with": [
+        "memory event"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-10T15:00:00+09:00"
+    },
+    {
+      "term": "memory source",
+      "aliases": [
+        "source"
+      ],
+      "definition": "memory가 스캔/ingest로 등록한 출처 레코드(content_hash·revision·sensitivity 동반, Tier② git-tracked SoT). 모든 이벤트는 source에 근거(grounding)를 둘 수 있다.",
+      "examples": [
+        "src_a1fa40cf815e"
+      ],
+      "not_to_be_confused_with": [
+        "provider"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-10T15:00:00+09:00"
+    },
+    {
+      "term": "profile",
+      "aliases": [],
+      "definition": "실행 권한과 정책의 묶음. 값: read-only | workspace-write | networked | reviewer | isolated.",
+      "examples": [],
+      "not_to_be_confused_with": [],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-05-24T12:00:00+09:00"
+    },
+    {
+      "term": "provider",
+      "aliases": [],
+      "definition": "실제로 model/tool loop를 실행하는 host. 값: codex | claude-code | opencode | openagent | other.",
+      "examples": [],
+      "not_to_be_confused_with": [
+        "model"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-05-24T12:00:00+09:00"
+    },
     {
       "term": "request",
       "aliases": [],
@@ -16,22 +328,13 @@
       "agreed_at": "2026-05-24T12:00:00+09:00"
     },
     {
-      "term": "work item",
+      "term": "reviewer output",
       "aliases": [],
-      "definition": "DITTO가 추적하는 작업 단위. goal, acceptance criteria, 실행 기록, 검증 evidence, handoff를 포함한다. 식별자: wi_*. task라는 이름은 사용하지 않는다.",
-      "examples": [
-        "wi_v01bootstrap",
-        "wi_v01implement"
-      ],
-      "not_to_be_confused_with": [
-        "task",
-        "issue",
-        "ticket"
-      ],
+      "definition": "generator와 분리된 evaluator의 결과. verdict, evidence, findings, unverified, recommended next action을 담는다.",
+      "examples": [],
+      "not_to_be_confused_with": [],
       "status": "agreed",
-      "forbidden_abbreviations": [
-        "wi"
-      ],
+      "forbidden_abbreviations": [],
       "agreed_at": "2026-05-24T12:00:00+09:00"
     },
     {
@@ -60,9 +363,9 @@
       "agreed_at": "2026-05-24T12:00:00+09:00"
     },
     {
-      "term": "evidence",
+      "term": "self-check",
       "aliases": [],
-      "definition": "주장을 뒷받침하는 참조. command 실행 결과, 파일, artifact path, URL, note 형태. context에 직접 넣지 않고 path/hash/preview로 참조한다.",
+      "definition": "사용자에게 응답이 나가기 전에 적용하는 결정적 lint. 미합의 용어, 약어 남용, 추측 단정, 미검증 완료 선언, 근거 없는 답변을 reject한다.",
       "examples": [],
       "not_to_be_confused_with": [],
       "status": "agreed",
@@ -70,21 +373,35 @@
       "agreed_at": "2026-05-24T12:00:00+09:00"
     },
     {
-      "term": "handoff",
+      "term": "supersedes chain",
       "aliases": [],
-      "definition": "work item을 다른 세션/PC/agent로 이어주기 위한 사람이 읽는 문서. 무엇이 끝났나, 무엇이 남았나, 어디서 이어받나, 어떤 fresh evidence가 필요한가, 무엇을 건드리지 않아야 하는가를 담는다.",
+      "definition": "불변 이벤트들이 supersedes 포인터로 잇는 정정/승인 사슬. 논리적 이벤트의 현재 상태는 체인 head이며, supersede 효력은 superseding 이벤트가 승인 확정(effective)일 때만 발생한다 — pending 정정은 approved 사실을 더하지도 빼지도 못한다.",
       "examples": [],
       "not_to_be_confused_with": [],
       "status": "agreed",
       "forbidden_abbreviations": [],
-      "agreed_at": "2026-05-24T12:00:00+09:00"
+      "agreed_at": "2026-06-10T15:00:00+09:00"
     },
     {
-      "term": "completion contract",
+      "term": "surface projection",
       "aliases": [],
-      "definition": "work item 완료 주장에 필수인 필드 집합. acceptance verdict, 변경 파일, 검증 명령, unverified 항목, remaining risk, next_handoff_path를 포함한다. final_verdict=pass는 모든 acceptance가 pass여야 허용된다.",
+      "definition": "한 host의 surface 정의를 다른 host 형식으로 단방향·결정론 투영. 예: agents/*.md → .codex/agents/*.toml (ADR-0016 D4).",
       "examples": [],
-      "not_to_be_confused_with": [],
+      "not_to_be_confused_with": [
+        "memory projection"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-13T13:50:00+09:00"
+    },
+    {
+      "term": "unverified",
+      "aliases": [],
+      "definition": "검증하지 못함의 명시적 표기. 모름은 모름으로 표기해야 하며 완료 주장과 섞지 않는다.",
+      "examples": [],
+      "not_to_be_confused_with": [
+        "fail"
+      ],
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-05-24T12:00:00+09:00"
@@ -100,253 +417,23 @@
       "agreed_at": "2026-05-24T12:00:00+09:00"
     },
     {
-      "term": "profile",
+      "term": "work item",
       "aliases": [],
-      "definition": "실행 권한과 정책의 묶음. 값: read-only | workspace-write | networked | reviewer | isolated.",
-      "examples": [],
-      "not_to_be_confused_with": [],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-05-24T12:00:00+09:00"
-    },
-    {
-      "term": "provider",
-      "aliases": [],
-      "definition": "실제로 model/tool loop를 실행하는 host. 값: codex | claude-code | opencode | openagent | other.",
-      "examples": [],
-      "not_to_be_confused_with": [
-        "model"
-      ],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-05-24T12:00:00+09:00"
-    },
-    {
-      "term": "reviewer output",
-      "aliases": [],
-      "definition": "generator와 분리된 evaluator의 결과. verdict, evidence, findings, unverified, recommended next action을 담는다.",
-      "examples": [],
-      "not_to_be_confused_with": [],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-05-24T12:00:00+09:00"
-    },
-    {
-      "term": "self-check",
-      "aliases": [],
-      "definition": "사용자에게 응답이 나가기 전에 적용하는 결정적 lint. 미합의 용어, 약어 남용, 추측 단정, 미검증 완료 선언, 근거 없는 답변을 reject한다.",
-      "examples": [],
-      "not_to_be_confused_with": [],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-05-24T12:00:00+09:00"
-    },
-    {
-      "term": "language ledger",
-      "aliases": [],
-      "definition": "work item 진행 중 합의되거나 수정된 용어 변경 기록. 합의 후 글로벌 glossary로 흡수된다.",
-      "examples": [],
-      "not_to_be_confused_with": [],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-05-24T12:00:00+09:00"
-    },
-    {
-      "term": "ADR",
-      "aliases": [
-        "Architecture Decision Record"
-      ],
-      "definition": "되돌리기 어려운 결정의 영속 기록. adr/ADR-NNNN-<slug>.md. 결정만 보존하고 토론은 decisions.md에 둔다.",
+      "definition": "DITTO가 추적하는 작업 단위. goal, acceptance criteria, 실행 기록, 검증 evidence, handoff를 포함한다. 식별자: wi_*. task라는 이름은 사용하지 않는다.",
       "examples": [
-        "ADR-0001-runtime-stack",
-        "ADR-0002-schema-source-of-truth"
+        "wi_v01bootstrap",
+        "wi_v01implement"
       ],
       "not_to_be_confused_with": [
-        "decisions.md"
+        "task",
+        "issue",
+        "ticket"
       ],
       "status": "agreed",
-      "forbidden_abbreviations": [],
+      "forbidden_abbreviations": [
+        "wi"
+      ],
       "agreed_at": "2026-05-24T12:00:00+09:00"
-    },
-    {
-      "term": "doctor",
-      "aliases": [],
-      "definition": "host별 instruction, permission, MCP, skill 표면의 drift를 점검하는 명령. 실행이 아니라 진단.",
-      "examples": [],
-      "not_to_be_confused_with": [],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-05-24T12:00:00+09:00"
-    },
-    {
-      "term": "context packet",
-      "aliases": [],
-      "definition": "run에 넘기는 prompt. goal, acceptance, git state, relevant files, last failure, what-not-to-touch, evidence pointer, expected output contract로 구성된다.",
-      "examples": [],
-      "not_to_be_confused_with": [],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-05-24T12:00:00+09:00"
-    },
-    {
-      "term": "unverified",
-      "aliases": [],
-      "definition": "검증하지 못함의 명시적 표기. 모름은 모름으로 표기해야 하며 완료 주장과 섞지 않는다.",
-      "examples": [],
-      "not_to_be_confused_with": [
-        "fail"
-      ],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-05-24T12:00:00+09:00"
-    },
-    {
-      "term": "cross_repo",
-      "aliases": [],
-      "definition": "단일모듈 CodeQL DB 분석에서 형제모듈(로컬 JAR) 의존이 정적으로 해소되지 않아 ImpactGraph.unresolved에 남는 kind. internal_packages의 glob에 매칭돼야 기록되며, 써드파티(Spring/JDK)와 구분된다.",
-      "examples": [
-        "kr.co.ecoletree.boxwood.domain.runtime.processing.StructuredErrorInfo (automation-engine이 libs의 domain-model JAR를 참조)"
-      ],
-      "not_to_be_confused_with": [
-        "journey_unknown",
-        "third-party dependency"
-      ],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-06-05T07:00:00.000Z"
-    },
-    {
-      "term": "internal_packages",
-      "aliases": [],
-      "definition": "ArchitectureSpec의 형제모듈 디스크립터 배열. {type:'glob'} 엔트리는 cross_repo 분류 대상 패키지 글로브, {type:'path'} 엔트리는 로컬 sibling JAR 위치 글로브(JVM 가드 입력)다.",
-      "examples": [
-        "{type:'glob', value:'kr.co.ecoletree.boxwood.domain.**'}",
-        "{type:'path', value:'libs/*.jar'}"
-      ],
-      "not_to_be_confused_with": [
-        "public_surfaces",
-        "forbidden_dependencies"
-      ],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-06-05T07:00:00.000Z"
-    },
-    {
-      "term": "DITTO 기능 4축",
-      "aliases": [
-        "기능 4축",
-        "functional four axes"
-      ],
-      "definition": "DITTO가 사용자를 위해 무엇을 하는가를 정의하는 canonical 목적 기둥. (1) 사용자 의도 파악 및 동기화, (2) 자율 실행 오케스트레이션, (3) E2E 테스트, (4) 지식 베이스. 완전 순차 파이프라인 1→2→3→4로 동작한다. 경계: 축3=진짜 브라우저 E2E only(웹 없는 프로젝트는 N/A), 축4=가치 있는 durable 변경만(자동강제 아님), 축1 종료=readiness 게이트+사용자 확인 둘 다. 근거는 ADR-0010.",
-      "examples": [
-        "축1=deep-interview skill",
-        "축2=autopilot skill",
-        "축3=e2e skill",
-        "축4=knowledge-update skill"
-      ],
-      "not_to_be_confused_with": [
-        "기층 4축 (Hooks/Skills/Agents/State)"
-      ],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-06-06T00:00:00.000Z"
-    },
-    {
-      "term": "memory event",
-      "aliases": [
-        "event"
-      ],
-      "definition": "memory 서브시스템의 append-only 불변 사실 기록(이벤트당 per-entity JSON). pending→approved/rejected 전이는 원본 변형이 아니라 supersedes를 단 새 불변 이벤트로 기록된다(ADR-0013 D3).",
-      "examples": [
-        "memevt_260610fkx"
-      ],
-      "not_to_be_confused_with": [
-        "evidence",
-        "run"
-      ],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-06-10T15:00:00+09:00"
-    },
-    {
-      "term": "memory source",
-      "aliases": [
-        "source"
-      ],
-      "definition": "memory가 스캔/ingest로 등록한 출처 레코드(content_hash·revision·sensitivity 동반, Tier② git-tracked SoT). 모든 이벤트는 source에 근거(grounding)를 둘 수 있다.",
-      "examples": [
-        "src_a1fa40cf815e"
-      ],
-      "not_to_be_confused_with": [
-        "provider"
-      ],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-06-10T15:00:00+09:00"
-    },
-    {
-      "term": "memory projection",
-      "aliases": [
-        "projection",
-        "serving graph"
-      ],
-      "definition": "approved 이벤트 head + IR에서 재생성되는 파생물(serving graph·wiki·manifest). .ditto/local(Tier③, gitignored)에 살고 언제든 재생성 가능하다. 모든 질의 응답은 projection의 freshness envelope을 동반한다.",
-      "examples": [
-        "graph.json",
-        "proj_b4f1c19b71d3"
-      ],
-      "not_to_be_confused_with": [
-        "memory event"
-      ],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-06-10T15:00:00+09:00"
-    },
-    {
-      "term": "confidence_kind",
-      "aliases": [],
-      "definition": "memory 추출 신뢰 밴드: EXTRACTED(결정적 도구가 직접 추출)·INFERRED(의미 추론)·AMBIGUOUS(불확실/충돌). 의미 추출기는 EXTRACTED를 주장할 수 없고, 밴드 이탈은 스키마가 loud fail로 거부한다.",
-      "examples": [
-        "INFERRED"
-      ],
-      "not_to_be_confused_with": [
-        "verdict"
-      ],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-06-10T15:00:00+09:00"
-    },
-    {
-      "term": "supersedes chain",
-      "aliases": [],
-      "definition": "불변 이벤트들이 supersedes 포인터로 잇는 정정/승인 사슬. 논리적 이벤트의 현재 상태는 체인 head이며, supersede 효력은 superseding 이벤트가 승인 확정(effective)일 때만 발생한다 — pending 정정은 approved 사실을 더하지도 빼지도 못한다.",
-      "examples": [],
-      "not_to_be_confused_with": [],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-06-10T15:00:00+09:00"
-    },
-    {
-      "term": "context rot",
-      "aliases": [],
-      "definition": "적재된 컨텍스트가 결과물을 해치는 두 메커니즘의 총칭. (A) 용량: 입력이 길수록 성능이 비균일하게 저하(한도 도달 전부터, distractor 1개로도 악화 — Chroma 18모델 실증). (B) 편향: 쌓인 맥락이 prior로 작동해 판단을 자기 서사 쪽으로 끌어당김(self-eval 과신). (A)는 compaction으로 완화되나 (B)는 compaction이 고착시키므로 검증은 fresh context가 유효성 조건이다. 대응 규칙은 헌장 §4-9, 근거는 reports/harnesses/context-rot-delegation-evidence.md.",
-      "examples": [],
-      "not_to_be_confused_with": [],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-06-10T16:30:00+09:00"
-    },
-    {
-      "term": "Journey DSL",
-      "aliases": [],
-      "definition": "사용자가 사용자 여정을 선언하는 Markdown 마크업. front-matter(id·name·description·surfaces·uses_blocks·flaky_history) + 한국어 동사 7개 단계 + assertion 5형 + 재사용 블록 + 데이터 케이스 테이블 + 선언적 조건 3형으로 구성된다. e2e/journeys/*.journey.md에 git-tracked되고, 에이전트(e2e-scripter)가 e2e/generated/*.spec.ts로 변환한다. 사용자가 도입한 말(\"DSL 혹은 전용 Markup\")에서 합의된 어휘. 정의 원천: skills/e2e-author/DSL-GUIDE.md.",
-      "examples": [
-        "e2e/journeys/*.journey.md"
-      ],
-      "not_to_be_confused_with": [],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-06-11T00:00:00+09:00"
     },
     {
       "term": "정합성 2축",
@@ -359,43 +446,6 @@
       "not_to_be_confused_with": [
         "기능 4축",
         "기층 4축"
-      ],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-06-12T00:00:00+09:00"
-    },
-    {
-      "term": "code_drift",
-      "aliases": [],
-      "definition": "owning-repo 현재 HEAD가 memory가 저장한 git_commit(source_revisions[].git_commit)과 달라, SoT가 다른 커밋의 코드에서 만들어진 상태. 축2의 진짜 신뢰 결함이라 warm-start 주입 억제 대상이다. 결정 근거는 ADR-0015.",
-      "examples": [],
-      "not_to_be_confused_with": [
-        "code_dirty",
-        "stale"
-      ],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-06-12T00:00:00+09:00"
-    },
-    {
-      "term": "code_dirty",
-      "aliases": [],
-      "definition": "owning-repo 워킹트리가 더티(미커밋 편집·git stash)인 상태. 개발 중 정상이라 라벨만 달고 warm-start를 억제하지 않는다 — 더티마다 억제하면 memory가 inert가 되기 때문. 결정 근거는 ADR-0015.",
-      "examples": [],
-      "not_to_be_confused_with": [
-        "code_drift"
-      ],
-      "status": "agreed",
-      "forbidden_abbreviations": [],
-      "agreed_at": "2026-06-12T00:00:00+09:00"
-    },
-    {
-      "term": "drifted_sources",
-      "aliases": [],
-      "definition": "축2 검출이 어긋났다고 판정한 source 목록(별도 필드, 축1의 dirty_sources와 분리). 소비자(memory-graph 스킬)는 이 목록에 든 source만 코드로 직접 검증하고 나머지는 신뢰한다. 결정 근거는 ADR-0015.",
-      "examples": [],
-      "not_to_be_confused_with": [
-        "dirty_sources"
       ],
       "status": "agreed",
       "forbidden_abbreviations": [],

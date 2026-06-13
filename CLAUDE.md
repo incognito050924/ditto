@@ -305,7 +305,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=4a2a584db4f5291e0cc450a9b1a3610dca01b7715954958ce9956fbd4829eb37 -->
+<!-- ditto:knowledge:start sha256=4b31c0f358c872c53fef566b906b66275fb4b248818a87a99a6d6da8dd9ff8cf -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -325,10 +325,13 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - context packet
 - context rot
 - cross_repo
+- deployment seam
 - doctor
 - drifted_sources
+- dual host
 - evidence
 - handoff
+- host adapter
 - internal_packages
 - language ledger
 - memory event
@@ -342,6 +345,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - run manifest
 - self-check
 - supersedes chain
+- surface projection
 - unverified
 - verdict
 - work item
@@ -363,5 +367,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-0013 · accepted · 메모리 서브시스템 설계 — 인프로세스 그래프 · 2-tier 저장 · supersedes 승인 · 옵션 A 재범위
 - ADR-0014 · accepted · E2E 테스트 작성 — 사용자 DSL 선언 + 에이전트 변환 + 게이트 검증
 - ADR-0015 · accepted · Memory freshness 축2(코드↔SoT) 검출 — 증분 검출 채택, 델타/overlay 게이트
+- ADR-0016 · accepted · Dual-host 아키텍처 — DITTO는 Claude Code와 Codex 두 호스트에서 동작한다
 
 <!-- ditto:knowledge:end -->
