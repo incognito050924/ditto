@@ -19321,7 +19321,7 @@ class TechSpecStore {
 }
 
 // src/core/work-item-store.ts
-import { readdir as readdir7, stat as stat2 } from "fs/promises";
+import { readdir as readdir7, rename as rename2, stat as stat2 } from "fs/promises";
 import { dirname as dirname7, join as join21 } from "path";
 
 // src/schemas/intent-metric.ts
@@ -19449,6 +19449,27 @@ class WorkItemStore {
     }
     const withTouched = { ...withSha, updated_at: new Date().toISOString() };
     return writeJson(this.workItemPath(id), workItem, withTouched);
+  }
+  async close(id, terminal, now = new Date) {
+    return this.update(id, (cur) => ({
+      ...cur,
+      status: terminal,
+      closed_at: now.toISOString()
+    }));
+  }
+  async archive(label) {
+    if (!/^[A-Za-z0-9._-]+$/.test(label)) {
+      throw new Error(`archive label must match [A-Za-z0-9._-]+ (got: ${label})`);
+    }
+    const targets = (await this.list()).filter((s2) => s2.status === "done" || s2.status === "abandoned");
+    if (targets.length === 0)
+      return [];
+    const archiveBase = localDir(this.repoRoot, "archive", label);
+    await ensureDir(archiveBase);
+    for (const t2 of targets) {
+      await rename2(this.workItemDir(t2.id), join21(archiveBase, t2.id));
+    }
+    return targets.map((t2) => t2.id);
   }
   async list() {
     const base = localDir(this.repoRoot, "work-items");
@@ -25117,7 +25138,7 @@ function collectDistributionReport(deps) {
 }
 
 // src/core/handoff-store.ts
-import { readdir as readdir12, rename as rename2 } from "fs/promises";
+import { readdir as readdir12, rename as rename3 } from "fs/promises";
 import { join as join47 } from "path";
 
 // src/schemas/handoff.ts
@@ -25303,7 +25324,7 @@ class HandoffStore {
     for (const a2 of active) {
       const dest = join47(this.repoRoot, this.archiveRel(a2.handoff.work_item_id, stamp(now)));
       try {
-        await rename2(a2.path, dest);
+        await rename3(a2.path, dest);
       } catch {}
     }
     return active;
@@ -33462,15 +33483,163 @@ var workHandoff = defineCommand({
     }
   }
 });
+var TERMINAL_STATUSES = ["done", "abandoned"];
+var workAbandon = defineCommand({
+  meta: {
+    name: "abandon",
+    description: "Close a work item as abandoned (give up; no evidence required)"
+  },
+  args: {
+    workId: { type: "positional", description: "Work item id to abandon", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const cur = await store.get(args.workId);
+      if (cur.status === "done" || cur.status === "abandoned") {
+        writeError(`work ${args.workId} is already terminal (status=${cur.status})`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const closed = await store.close(args.workId, "abandoned");
+      if (format === "json") {
+        writeJson2({ id: closed.id, status: closed.status, closed_at: closed.closed_at });
+      } else {
+        writeHuman(`Abandoned ${closed.id} (was ${cur.status}). Archive with: ditto work archive <label>`);
+      }
+    } catch (err) {
+      writeError(`work abandon failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
+var workDone = defineCommand({
+  meta: {
+    name: "done",
+    description: "Mark a work item done \u2014 only when its completion final_verdict=pass (evidence gate)"
+  },
+  args: {
+    workId: { type: "positional", description: "Work item id to mark done", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    const completions = new CompletionStore(repoRoot);
+    try {
+      await store.get(args.workId);
+      if (!await completions.exists(args.workId)) {
+        writeError(`work ${args.workId} has no completion.json \u2014 run \`ditto verify\` first, or \`ditto work abandon\` to give up`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const completion = await completions.get(args.workId);
+      if (completion.final_verdict !== "pass") {
+        writeError(`work ${args.workId} completion final_verdict=${completion.final_verdict} (not pass) \u2014 cannot mark done`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const closed = await store.close(args.workId, "done");
+      if (format === "json") {
+        writeJson2({ id: closed.id, status: closed.status, closed_at: closed.closed_at });
+      } else {
+        writeHuman(`Done ${closed.id} (completion final_verdict=pass). Archive with: ditto work archive <label>`);
+      }
+    } catch (err) {
+      writeError(`work done failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
+var workArchive = defineCommand({
+  meta: {
+    name: "archive",
+    description: "Move terminal (done/abandoned) work items to .ditto/local/archive/<label> (ADR-0005 D3)"
+  },
+  args: {
+    label: {
+      type: "positional",
+      description: "Archive label / batch name (e.g. 2026-Q2). [A-Za-z0-9._-]+",
+      required: true
+    },
+    "dry-run": {
+      type: "boolean",
+      description: "List what would move without moving",
+      default: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      if (args["dry-run"]) {
+        const candidates = (await store.list()).filter((s2) => TERMINAL_STATUSES.includes(s2.status));
+        if (format === "json") {
+          writeJson2({
+            dry_run: true,
+            label: args.label,
+            would_archive: candidates.map((c3) => c3.id)
+          });
+        } else {
+          writeHuman(`dry-run: ${candidates.length} item(s) would move to archive/${args.label}:`);
+          for (const c3 of candidates)
+            writeHuman(`  ${c3.id}	${c3.status}	${c3.title}`);
+        }
+        return;
+      }
+      const moved = await store.archive(args.label);
+      if (format === "json") {
+        writeJson2({ label: args.label, archived: moved });
+      } else {
+        writeHuman(`Archived ${moved.length} item(s) to .ditto/local/archive/${args.label}.`);
+        for (const id of moved)
+          writeHuman(`  ${id}`);
+      }
+    } catch (err) {
+      writeError(`work archive failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
 var workCommand = defineCommand({
   meta: {
     name: "work",
-    description: "Manage work items (start, status, handoff)"
+    description: "Manage work items (start, status, handoff, done, abandon, archive)"
   },
   subCommands: {
     start: workStart,
     status: workStatus,
-    handoff: workHandoff
+    handoff: workHandoff,
+    done: workDone,
+    abandon: workAbandon,
+    archive: workArchive
   }
 });
 
@@ -33513,4 +33682,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=52f2337c715bb17ae8d7c0be17667855b7b46097b6f7a6b89c6f695e09cc4be1
+//# ditto-src-stamp=bc72ed3437d9fde3e416b808cbb8fceb7bcb55853f3ec80a2636c3db8fb56f39

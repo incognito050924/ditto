@@ -1,5 +1,6 @@
 import { defineCommand } from 'citty';
 import { PLACEHOLDER_AC_STATEMENT } from '~/core/charter';
+import { CompletionStore } from '~/core/completion-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   InvalidBaseRefError,
@@ -277,14 +278,178 @@ const workHandoff = defineCommand({
   },
 });
 
+const TERMINAL_STATUSES = ['done', 'abandoned'] as const;
+
+const workAbandon = defineCommand({
+  meta: {
+    name: 'abandon',
+    description: 'Close a work item as abandoned (give up; no evidence required)',
+  },
+  args: {
+    workId: { type: 'positional', description: 'Work item id to abandon', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const cur = await store.get(args.workId);
+      if (cur.status === 'done' || cur.status === 'abandoned') {
+        writeError(`work ${args.workId} is already terminal (status=${cur.status})`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const closed = await store.close(args.workId, 'abandoned');
+      if (format === 'json') {
+        writeJson({ id: closed.id, status: closed.status, closed_at: closed.closed_at });
+      } else {
+        writeHuman(
+          `Abandoned ${closed.id} (was ${cur.status}). Archive with: ditto work archive <label>`,
+        );
+      }
+    } catch (err) {
+      writeError(`work abandon failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  },
+});
+
+const workDone = defineCommand({
+  meta: {
+    name: 'done',
+    description:
+      'Mark a work item done — only when its completion final_verdict=pass (evidence gate)',
+  },
+  args: {
+    workId: { type: 'positional', description: 'Work item id to mark done', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    const completions = new CompletionStore(repoRoot);
+    try {
+      await store.get(args.workId); // throws with a clear error if unknown
+      // Evidence gate: done requires a completion contract with final_verdict=pass.
+      // Manual `done` syncs status to a verified completion; it never bypasses it.
+      if (!(await completions.exists(args.workId))) {
+        writeError(
+          `work ${args.workId} has no completion.json — run \`ditto verify\` first, or \`ditto work abandon\` to give up`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const completion = await completions.get(args.workId);
+      if (completion.final_verdict !== 'pass') {
+        writeError(
+          `work ${args.workId} completion final_verdict=${completion.final_verdict} (not pass) — cannot mark done`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const closed = await store.close(args.workId, 'done');
+      if (format === 'json') {
+        writeJson({ id: closed.id, status: closed.status, closed_at: closed.closed_at });
+      } else {
+        writeHuman(
+          `Done ${closed.id} (completion final_verdict=pass). Archive with: ditto work archive <label>`,
+        );
+      }
+    } catch (err) {
+      writeError(`work done failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  },
+});
+
+const workArchive = defineCommand({
+  meta: {
+    name: 'archive',
+    description:
+      'Move terminal (done/abandoned) work items to .ditto/local/archive/<label> (ADR-0005 D3)',
+  },
+  args: {
+    label: {
+      type: 'positional',
+      description: 'Archive label / batch name (e.g. 2026-Q2). [A-Za-z0-9._-]+',
+      required: true,
+    },
+    'dry-run': {
+      type: 'boolean',
+      description: 'List what would move without moving',
+      default: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      if (args['dry-run']) {
+        const candidates = (await store.list()).filter((s) =>
+          (TERMINAL_STATUSES as readonly string[]).includes(s.status),
+        );
+        if (format === 'json') {
+          writeJson({
+            dry_run: true,
+            label: args.label,
+            would_archive: candidates.map((c) => c.id),
+          });
+        } else {
+          writeHuman(`dry-run: ${candidates.length} item(s) would move to archive/${args.label}:`);
+          for (const c of candidates) writeHuman(`  ${c.id}\t${c.status}\t${c.title}`);
+        }
+        return;
+      }
+      const moved = await store.archive(args.label);
+      if (format === 'json') {
+        writeJson({ label: args.label, archived: moved });
+      } else {
+        writeHuman(`Archived ${moved.length} item(s) to .ditto/local/archive/${args.label}.`);
+        for (const id of moved) writeHuman(`  ${id}`);
+      }
+    } catch (err) {
+      writeError(`work archive failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  },
+});
+
 export const workCommand = defineCommand({
   meta: {
     name: 'work',
-    description: 'Manage work items (start, status, handoff)',
+    description: 'Manage work items (start, status, handoff, done, abandon, archive)',
   },
   subCommands: {
     start: workStart,
     status: workStatus,
     handoff: workHandoff,
+    done: workDone,
+    abandon: workAbandon,
+    archive: workArchive,
   },
 });

@@ -1,4 +1,4 @@
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, rename, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { type IntentMetric, intentMetric } from '~/schemas/intent-metric';
@@ -128,6 +128,48 @@ export class WorkItemStore {
     }
     const withTouched = { ...withSha, updated_at: new Date().toISOString() };
     return writeJson(this.workItemPath(id), workItem, withTouched);
+  }
+
+  /**
+   * Move a work item to a terminal status (`done` / `abandoned`) and stamp
+   * `closed_at`. Manual counterpart to the autopilot/handoff completion paths —
+   * lets a user close a draft (`abandon`) or sync a verified item to `done`.
+   * The `done` evidence gate (completion `final_verdict=pass`) is enforced by
+   * the caller (CLI), not here; this is the pure state transition.
+   */
+  async close(
+    id: string,
+    terminal: Extract<WorkItem['status'], 'done' | 'abandoned'>,
+    now: Date = new Date(),
+  ): Promise<WorkItem> {
+    return this.update(id, (cur) => ({
+      ...cur,
+      status: terminal,
+      closed_at: now.toISOString(),
+    }));
+  }
+
+  /**
+   * Archive terminal (`done`/`abandoned`) work items out of the active set
+   * (ADR-0005 D3): move `.ditto/local/work-items/<wi>` → `.ditto/local/archive/
+   * <label>/<wi>`. Move-not-delete (restorable), no git history rewrite — the
+   * goal is to lighten the agent's active working set, not shrink `.git`.
+   * Returns the ids moved. `label` must be a safe path segment.
+   */
+  async archive(label: string): Promise<string[]> {
+    if (!/^[A-Za-z0-9._-]+$/.test(label)) {
+      throw new Error(`archive label must match [A-Za-z0-9._-]+ (got: ${label})`);
+    }
+    const targets = (await this.list()).filter(
+      (s) => s.status === 'done' || s.status === 'abandoned',
+    );
+    if (targets.length === 0) return [];
+    const archiveBase = localDir(this.repoRoot, 'archive', label);
+    await ensureDir(archiveBase);
+    for (const t of targets) {
+      await rename(this.workItemDir(t.id), join(archiveBase, t.id));
+    }
+    return targets.map((t) => t.id);
   }
 
   async list(): Promise<WorkItemSummary[]> {

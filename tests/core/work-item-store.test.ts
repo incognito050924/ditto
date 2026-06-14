@@ -286,3 +286,59 @@ describe('WorkItemStore started_at_sha hook', () => {
     expect(done.started_at_sha).toBeUndefined();
   });
 });
+
+describe('WorkItemStore.close', () => {
+  test('abandon sets status=abandoned + closed_at', async () => {
+    const created = await store.create(sampleInput());
+    const closed = await store.close(created.id, 'abandoned');
+    expect(closed.status).toBe('abandoned');
+    expect(closed.closed_at).toBeDefined();
+    // persisted
+    expect((await store.get(created.id)).status).toBe('abandoned');
+  });
+
+  test('close to done sets status=done + closed_at', async () => {
+    const created = await store.create(sampleInput());
+    const closed = await store.close(created.id, 'done');
+    expect(closed.status).toBe('done');
+    expect(closed.closed_at).toBeDefined();
+  });
+});
+
+describe('WorkItemStore.archive', () => {
+  test('moves done/abandoned items to .ditto/local/archive/<label>, leaves non-terminal', async () => {
+    const a = await store.create({ ...sampleInput(), title: 'done-one' });
+    const b = await store.create({ ...sampleInput(), title: 'abandoned-one' });
+    const c = await store.create({ ...sampleInput(), title: 'still-draft' });
+    await store.close(a.id, 'done');
+    await store.close(b.id, 'abandoned');
+
+    const moved = await store.archive('2026-Q2');
+    expect(moved.sort()).toEqual([a.id, b.id].sort());
+
+    // archived items leave the active list; the draft stays
+    const remaining = (await store.list()).map((s) => s.id);
+    expect(remaining).toEqual([c.id]);
+
+    // move-not-delete: files exist under archive/<label>/<wi>
+    const archivedPath = join(
+      workDir,
+      '.ditto',
+      'local',
+      'archive',
+      '2026-Q2',
+      a.id,
+      'work-item.json',
+    );
+    expect(await Bun.file(archivedPath).exists()).toBe(true);
+  });
+
+  test('rejects a label with path traversal', async () => {
+    await expect(store.archive('../escape')).rejects.toThrow();
+  });
+
+  test('returns empty when nothing is terminal', async () => {
+    await store.create(sampleInput());
+    expect(await store.archive('empty')).toEqual([]);
+  });
+});
