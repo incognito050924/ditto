@@ -20,6 +20,7 @@
 import { projectReviewerOutputToAcgReview } from '~/acg/review/acg-review-adapter';
 import type { AcgReviewGraph } from '~/schemas/acg-review-graph';
 import { type ReviewerOutput, reviewerOutput } from '~/schemas/reviewer-output';
+import { type DataflowDoD, toDataflowDoDs } from './dataflow-dod';
 import { type CodeqlDoctorDeps, type CodeqlDoctorReport, inspectCodeqlTarget } from './doctor';
 import { type CodeqlReviewDeps, type RunCodeqlReviewInput, runCodeqlReview } from './review';
 import { assembleReviewerOutput } from './sarif-adapter';
@@ -31,6 +32,8 @@ export interface CodeqlLedgerDeps extends CodeqlReviewDeps, CodeqlDoctorDeps {
   persistReviewerOutput: (workItemId: string, output: ReviewerOutput) => Promise<void>;
   /** Persist the projected acg_review ledger (.ditto/local/work-items/<wi>/acg-review.json). */
   persistLedger: (workItemId: string, graph: AcgReviewGraph) => Promise<void>;
+  /** Persist the dataflow DoD propositions (.ditto/local/work-items/<wi>/dataflow-dod.json). */
+  persistDataflowDoDs: (workItemId: string, dods: DataflowDoD[]) => Promise<void>;
 }
 
 export interface CodeqlReviewToLedgerInput extends RunCodeqlReviewInput {
@@ -48,6 +51,12 @@ export interface CodeqlReviewToLedgerResult {
   /** Files in the ledger that block completion (high-risk without evidence). */
   highRiskWithoutEvidence: number;
   ledgerWritten: boolean;
+  /**
+   * Dataflow DoD propositions (one per taint finding with a source→sink path).
+   * A specification of what closes each finding — NOT a gate; the Stop block
+   * logic is unchanged.
+   */
+  dataflowDoDs: DataflowDoD[];
 }
 
 /** Doctor findings that mean the analysis itself cannot be trusted. */
@@ -73,6 +82,7 @@ export async function runCodeqlReviewToLedger(
       verdict: null,
       highRiskWithoutEvidence: 0,
       ledgerWritten: false,
+      dataflowDoDs: [],
     };
   }
 
@@ -96,6 +106,13 @@ export async function runCodeqlReviewToLedger(
     (f) => f.risk === 'high' && f.evidence === undefined,
   ).length;
 
+  // 5. Lift taint findings into verifiable Dataflow DoD propositions (WI-5).
+  //    Spec, not gate: persisted only when there is at least one to record.
+  const dataflowDoDs = toDataflowDoDs(result.findings);
+  if (dataflowDoDs.length > 0) {
+    await deps.persistDataflowDoDs(input.workItemId, dataflowDoDs);
+  }
+
   return {
     gated: false,
     doctor,
@@ -104,5 +121,6 @@ export async function runCodeqlReviewToLedger(
     verdict: output.verdict,
     highRiskWithoutEvidence,
     ledgerWritten: true,
+    dataflowDoDs,
   };
 }

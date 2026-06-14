@@ -99,10 +99,15 @@ describe('ACG SemanticCompatibility (split verdict)', () => {
   test('type-safe but semantically unsafe parses', () => {
     const sc = {
       ...changeEnv('acg.semantic-compatibility.v1'),
-      change: { before: 'getUser(): User|null', after: 'getUser(): User' },
-      old_meaning: 'null = 미존재',
-      compatibility: 'breaking' as const,
-      verdict: { type_safe: true, semantic_safe: 'no' as const },
+      changes: [
+        {
+          before: 'getUser(): User|null',
+          after: 'getUser(): User',
+          old_meaning: 'null = 미존재',
+          compatibility: 'breaking' as const,
+          verdict: { type_safe: true, semantic_safe: 'no' as const },
+        },
+      ],
     };
     expect(acgSemanticCompatibility.safeParse(sc).success).toBe(true);
   });

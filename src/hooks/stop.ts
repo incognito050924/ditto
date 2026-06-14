@@ -12,6 +12,7 @@ import {
   completionGate,
   convergenceGate,
   intentDriftGate,
+  knowledgeUpdateGate,
 } from '~/core/gates';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -28,6 +29,7 @@ import { convergence as convergenceSchema } from '~/schemas/convergence';
 import { type Dialectic, dialectic as dialecticSchema } from '~/schemas/dialectic';
 import { intentContract } from '~/schemas/intent';
 import { intentMetric } from '~/schemas/intent-metric';
+import { type KnowledgeGateCarrier, knowledgeGateCarrier } from '~/schemas/knowledge-gate-carrier';
 import type { WorkItem } from '~/schemas/work-item';
 import type { HookHandler, HookInput } from './runtime';
 import { computeSemanticNudge } from './semantic-nudge';
@@ -257,18 +259,54 @@ export function impactForcesContinuation(graph: AcgImpactGraph): string[] {
  *   - `semantic_safe: 'unverified'` → meaning could not be checked (no behavior
  *     test); an evidence gap a human must close (verify or declare intended).
  * A declared-intended break (`'no' ∧ intended_breaking`) and a verified-safe
- * change (`'yes'`) clear. One verdict per artifact ⇒ at most one reason.
+ * change (`'yes'`) clear. The artifact carries ALL detected pairs (G4 multi-
+ * change); every blocking pair contributes a reason, so resolving one does not
+ * clear the others.
  */
 export function semanticForcesContinuation(sem: AcgSemanticCompatibility): string[] {
-  const v = sem.verdict;
-  const where = `${sem.change.before} → ${sem.change.after}`;
-  if (v.semantic_safe === 'unverified') {
-    return [`semantic: meaning compatibility unverified for ${where} — verify or declare intended`];
-  }
-  if (v.semantic_safe === 'no' && v.intended_breaking !== true) {
-    return [`semantic: unintended meaning break ${where} (was: ${sem.old_meaning})`];
-  }
-  return [];
+  return sem.changes.flatMap((change) => {
+    const v = change.verdict;
+    const where = `${change.before} → ${change.after}`;
+    if (v.semantic_safe === 'unverified') {
+      return [
+        `semantic: meaning compatibility unverified for ${where} — verify or declare intended`,
+      ];
+    }
+    if (v.semantic_safe === 'no' && v.intended_breaking !== true) {
+      return [`semantic: unintended meaning break ${where} (was: ${change.old_meaning})`];
+    }
+    return [];
+  });
+}
+
+/** A graph node carrying durable-knowledge responsibility (kind or owner). */
+function isKnowledgeNode(n: Autopilot['nodes'][number]): boolean {
+  return n.kind === 'knowledge' || n.owner === 'knowledge-curator';
+}
+
+/** Terminal = the node has finished running; only then is its gate due to fire. */
+const TERMINAL_NODE_STATUSES: ReadonlySet<string> = new Set(['passed', 'failed', 'blocked']);
+
+/**
+ * Does the knowledge-update gate force continuation? (axis-4, G1 runtime wiring.)
+ * INERT unless the graph has a TERMINAL knowledge node (kind `knowledge` or owner
+ * `knowledge-curator`) — a no-knowledge work item, or one whose knowledge node has
+ * not finished, never blocks. The gate input is the persisted carrier
+ * (knowledge-gate.json); an absent carrier is also inert (a no-trigger work item
+ * that recorded nothing is the valid EXPLICIT skip — ADR-0010 (b): the gate
+ * enforces "declared trigger ↔ actual record" consistency, never "record
+ * something"). Malformed carrier fail-closes upstream like every other ledger.
+ */
+export function knowledgeForcesContinuation(
+  graph: Autopilot,
+  carrier: KnowledgeGateCarrier | undefined,
+): string[] {
+  const hasTerminalKnowledgeNode = graph.nodes.some(
+    (n) => isKnowledgeNode(n) && TERMINAL_NODE_STATUSES.has(n.status),
+  );
+  if (!hasTerminalKnowledgeNode || carrier === undefined) return [];
+  const g = knowledgeUpdateGate(carrier.triggers, carrier.delta);
+  return g.pass ? [] : g.reasons.map((r) => `knowledge update — ${r}`);
 }
 
 /**
@@ -427,6 +465,14 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     acgSemanticCompatibility,
     'semantic-compatibility.json',
   );
+  // Knowledge-update gate carrier (axis-4, G1) — the persisted triggers + delta the
+  // knowledge node declared. Same work-item-dir home + absent/malformed discipline:
+  // absent → inert (valid no-trigger skip), malformed → fail-closed.
+  const knowledge = await readArtifact(
+    join(dir, 'knowledge-gate.json'),
+    knowledgeGateCarrier,
+    'knowledge-gate.json',
+  );
 
   // Malformed artifact = gate-input violation → fail CLOSED (exit 2).
   const malformed = [
@@ -439,6 +485,7 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     assurance,
     impact,
     semantic,
+    knowledge,
   ].find((a) => a.status === 'malformed');
   if (malformed && malformed.status === 'malformed') {
     return {
@@ -509,6 +556,17 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   }
   if (semantic.status === 'ok') {
     reasons.push(...semanticForcesContinuation(semantic.data));
+  }
+  // Axis-4 knowledge-update gate (G1). Inert unless the graph has a terminal
+  // knowledge node AND a carrier is present; ADR-0010 (b) preserved (never forces
+  // recording, only "declared trigger ↔ actual record" consistency).
+  if (pilot.status === 'ok') {
+    reasons.push(
+      ...knowledgeForcesContinuation(
+        pilot.data,
+        knowledge.status === 'ok' ? knowledge.data : undefined,
+      ),
+    );
   }
 
   // Advisory suffix — appended to whatever this handler returns (blocking or not),

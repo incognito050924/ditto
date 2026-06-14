@@ -36,6 +36,12 @@ export const acgReproducibility = z
 export const acgExecution = z
   .object({
     environment: z.string().optional(),
+    requires_clean_build: z
+      .boolean()
+      .optional()
+      .describe(
+        'executed spec succeeds with exit 0; non-zero exit is a build/command failure, not a clean result (fail-closed)',
+      ),
     timeout_s: z.number().int().positive().optional(),
     retries: z.number().int().min(0).optional(),
     flake_policy: z.enum(['quarantine', 'fail', 'retry']).optional(),

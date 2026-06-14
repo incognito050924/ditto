@@ -74,28 +74,37 @@ const detectCommand = defineCommand({
     try {
       const repoRoot = await resolveRepoRootForCreate();
       const path = semanticPath(repoRoot, args['work-item']);
-      // Multi-pair fail-closed: the artifact holds ONE change pair, so a second
-      // detect would clobber the first into a silent false pass (dialectic-1 O1).
-      if (await Bun.file(path).exists()) {
-        writeError(
-          `semantic detect: ${args['work-item']} already has semantic-compatibility.json. MVP supports one signature pair per work item; multi-pair detection is a follow-up (wi-semantic-diff-extractor). Remove it or resolve it with \`ditto semantic verdict\` first.`,
-        );
-        process.exit(USAGE_ERROR_EXIT);
-        return;
-      }
+      // Multi-pair (G4): a second detect APPENDS its pair to the existing artifact
+      // so every detected change reaches the gate. A duplicate pair (same
+      // before/after) is rejected — re-seeding would clobber a resolved verdict.
       const seed = buildSemanticSeed({
         workItemId: args['work-item'],
-        file: args.file,
-        symbol: args.symbol,
-        before: args.before,
-        after: args.after,
+        changes: [{ before: args.before, after: args.after }],
         producedAt: new Date().toISOString(),
       });
+      let artifact = seed;
+      if (await Bun.file(path).exists()) {
+        const prior = acgSemanticCompatibility.parse(JSON.parse(await Bun.file(path).text()));
+        const dup = prior.changes.some((c) => c.before === args.before && c.after === args.after);
+        if (dup) {
+          writeError(
+            `semantic detect: ${args['work-item']} already has "${args.before}" → "${args.after}". Resolve it with \`ditto semantic verdict\` instead of re-seeding.`,
+          );
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        artifact = { ...prior, changes: [...prior.changes, ...seed.changes] };
+      }
       await ensureDir(localDir(repoRoot, 'work-items', args['work-item']));
-      await writeJsonFile(path, acgSemanticCompatibility, seed);
+      await writeJsonFile(path, acgSemanticCompatibility, artifact);
 
       if (format === 'json') {
-        writeJson({ work_item_id: args['work-item'], semantic_safe: 'unverified', seeded: true });
+        writeJson({
+          work_item_id: args['work-item'],
+          semantic_safe: 'unverified',
+          seeded: true,
+          changes: artifact.changes.length,
+        });
       } else {
         writeHuman(
           `semantic detect: ${args.file} ${args.symbol} "${args.before}" → "${args.after}" seeded (unverified) → semantic-compatibility.json`,
@@ -118,6 +127,14 @@ const verdictCommand = defineCommand({
   args: {
     'work-item': { type: 'string', description: 'Work item id', required: true },
     'semantic-safe': { type: 'string', description: 'yes|no|unverified', required: true },
+    before: {
+      type: 'string',
+      description: 'Signature before — selects which pair to resolve (required when >1 pair)',
+    },
+    after: {
+      type: 'string',
+      description: 'Signature after — selects which pair to resolve (required when >1 pair)',
+    },
     'old-meaning': { type: 'string', description: 'Real domain meaning (required for yes/no)' },
     'intended-breaking': {
       type: 'boolean',
@@ -168,29 +185,48 @@ const verdictCommand = defineCommand({
         return;
       }
       const seed = acgSemanticCompatibility.parse(JSON.parse(await Bun.file(path).text()));
+      if ((args.before === undefined) !== (args.after === undefined)) {
+        writeError('semantic verdict: --before and --after must be given together');
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const target =
+        args.before !== undefined && args.after !== undefined
+          ? { before: args.before, after: args.after }
+          : undefined;
       const resolved = applySemanticVerdict(seed, {
         semanticSafe: safe as (typeof SAFE_VALUES)[number],
-        oldMeaning: args['old-meaning'],
-        compatibility,
-        intendedBreaking: args['intended-breaking'],
-        typeSafe: args['type-safe'],
-        modelVersion: args['model-version'],
-        characterizationTestRef: args['characterization-test'],
+        ...(args['old-meaning'] !== undefined ? { oldMeaning: args['old-meaning'] } : {}),
+        ...(compatibility !== undefined ? { compatibility } : {}),
+        ...(args['intended-breaking'] !== undefined
+          ? { intendedBreaking: args['intended-breaking'] }
+          : {}),
+        ...(args['type-safe'] !== undefined ? { typeSafe: args['type-safe'] } : {}),
+        ...(args['model-version'] !== undefined ? { modelVersion: args['model-version'] } : {}),
+        ...(args['characterization-test'] !== undefined
+          ? { characterizationTestRef: args['characterization-test'] }
+          : {}),
+        ...(target ? { target } : {}),
       });
       // writeJson re-validates → an unsubstantiated yes (no model_version) or a
       // left-over sentinel old_meaning fails closed here (dialectic-1 O4/O5).
       await writeJsonFile(path, acgSemanticCompatibility, resolved);
 
+      // Report the pair just resolved (the sole pair when no target was given).
+      const resolvedChange = target
+        ? resolved.changes.find((c) => c.before === target.before && c.after === target.after)
+        : resolved.changes[0];
+      const resolvedVerdict = resolvedChange?.verdict;
       if (format === 'json') {
         writeJson({
           work_item_id: args['work-item'],
-          semantic_safe: resolved.verdict.semantic_safe,
-          intended_breaking: resolved.verdict.intended_breaking ?? false,
+          semantic_safe: resolvedVerdict?.semantic_safe,
+          intended_breaking: resolvedVerdict?.intended_breaking ?? false,
         });
       } else {
         writeHuman(
-          `semantic verdict: ${args['work-item']} → semantic_safe=${resolved.verdict.semantic_safe}` +
-            `${resolved.verdict.intended_breaking ? ' (intended break)' : ''} → semantic-compatibility.json`,
+          `semantic verdict: ${args['work-item']} → semantic_safe=${resolvedVerdict?.semantic_safe}` +
+            `${resolvedVerdict?.intended_breaking ? ' (intended break)' : ''} → semantic-compatibility.json`,
         );
       }
     } catch (err) {
@@ -258,17 +294,10 @@ const scanCommand = defineCommand({
         }
         return;
       }
-      // Multi-pair fail-closed: the artifact holds ONE change pair (dialectic-1 O1).
-      if (changes.length > 1) {
-        const list = changes.map((c) => `  - ${c.file}: ${c.before} → ${c.after}`).join('\n');
-        writeError(
-          `semantic scan: ${changes.length} exported signature changes vs ${args.base}; MVP seeds one pair per work item. Narrow the change or seed one explicitly with \`ditto semantic detect\`.\n${list}`,
-        );
-        process.exit(USAGE_ERROR_EXIT);
-        return;
-      }
-
-      const only = changes[0];
+      // Multi-pair (G4): the artifact carries EVERY detected pair so all reach the
+      // gate. An existing artifact fail-closes — scan is the fresh-seed path; a
+      // re-scan after partial resolution would clobber verdicts (resolve or remove
+      // first, or use `ditto semantic detect` to add a pair).
       const path = semanticPath(repoRoot, args['work-item']);
       if (await Bun.file(path).exists()) {
         writeError(
@@ -279,10 +308,7 @@ const scanCommand = defineCommand({
       }
       const seed = buildSemanticSeed({
         workItemId: args['work-item'],
-        file: only.file,
-        symbol: only.symbol,
-        before: only.before,
-        after: only.after,
+        changes: changes.map((c) => ({ before: c.before, after: c.after })),
         producedAt: new Date().toISOString(),
       });
       await ensureDir(localDir(repoRoot, 'work-items', args['work-item']));
@@ -292,13 +318,15 @@ const scanCommand = defineCommand({
         writeJson({
           work_item_id: args['work-item'],
           base: args.base,
-          changes: 1,
+          changes: changes.length,
           seeded: true,
-          symbol: only.symbol,
         });
       } else {
+        const list = changes
+          .map((c) => `  - ${c.file} ${c.symbol} "${c.before}" → "${c.after}"`)
+          .join('\n');
         writeHuman(
-          `semantic scan: ${only.file} ${only.symbol} "${only.before}" → "${only.after}" seeded (unverified) → semantic-compatibility.json`,
+          `semantic scan: ${changes.length} exported signature change(s) seeded (unverified) → semantic-compatibility.json\n${list}`,
         );
       }
     } catch (err) {

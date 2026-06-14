@@ -657,12 +657,17 @@ const semanticCompat = (
   work_item_id: wiId,
   produced_by: 'agent',
   produced_at: '2026-06-05T00:00:00.000Z',
-  change: { before: 'getUser(): User | null', after: 'getUser(): User' },
-  old_meaning: 'absent user returns null',
-  business_assumptions: [],
-  compatibility: 'breaking',
-  ...(characterization ? { characterization } : {}),
-  verdict,
+  changes: [
+    {
+      before: 'getUser(): User | null',
+      after: 'getUser(): User',
+      old_meaning: 'absent user returns null',
+      business_assumptions: [],
+      compatibility: 'breaking',
+      ...(characterization ? { characterization } : {}),
+      verdict,
+    },
+  ],
 });
 
 describe('stopHandler — ACG fitness (AssuranceSnapshot) ledger', () => {
@@ -843,26 +848,140 @@ describe('stopHandler — ACG semantic (SemanticCompatibility) ledger', () => {
 });
 
 describe('semanticForcesContinuation', () => {
-  const sem = (verdict: Record<string, unknown>) =>
-    ({
-      change: { before: 'a', after: 'b' },
-      old_meaning: 'm',
-      verdict,
-    }) as never;
+  const change = (verdict: Record<string, unknown>, before = 'a', after = 'b') => ({
+    before,
+    after,
+    old_meaning: 'm',
+    verdict,
+  });
+  const sem = (...changes: ReturnType<typeof change>[]) => ({ changes }) as never;
 
   test('semantic_safe=no without intended_breaking → one reason', () => {
     expect(
-      semanticForcesContinuation(sem({ semantic_safe: 'no', intended_breaking: false })),
+      semanticForcesContinuation(sem(change({ semantic_safe: 'no', intended_breaking: false }))),
     ).toHaveLength(1);
-    expect(semanticForcesContinuation(sem({ semantic_safe: 'no' }))).toHaveLength(1); // intended_breaking absent
+    expect(semanticForcesContinuation(sem(change({ semantic_safe: 'no' })))).toHaveLength(1); // intended_breaking absent
   });
   test('semantic_safe=unverified → one reason', () => {
-    expect(semanticForcesContinuation(sem({ semantic_safe: 'unverified' }))).toHaveLength(1);
+    expect(semanticForcesContinuation(sem(change({ semantic_safe: 'unverified' })))).toHaveLength(
+      1,
+    );
   });
   test('semantic_safe=no with intended_breaking, or =yes → no reason', () => {
     expect(
-      semanticForcesContinuation(sem({ semantic_safe: 'no', intended_breaking: true })),
+      semanticForcesContinuation(sem(change({ semantic_safe: 'no', intended_breaking: true }))),
     ).toHaveLength(0);
-    expect(semanticForcesContinuation(sem({ semantic_safe: 'yes' }))).toHaveLength(0);
+    expect(semanticForcesContinuation(sem(change({ semantic_safe: 'yes' })))).toHaveLength(0);
+  });
+
+  // G4 multi-change: every blocking pair contributes a reason.
+  test('two breaking pairs → both summed into reasons', () => {
+    const reasons = semanticForcesContinuation(
+      sem(
+        change({ semantic_safe: 'unverified' }, 'f(): A', 'f(): B'),
+        change({ semantic_safe: 'no', intended_breaking: false }, 'g(): C', 'g(): D'),
+      ),
+    );
+    expect(reasons).toHaveLength(2);
+    expect(reasons.some((r) => r.includes('f(): A → f(): B'))).toBe(true);
+    expect(reasons.some((r) => r.includes('g(): C → g(): D'))).toBe(true);
+  });
+  test('one pair resolved + one unresolved → only the unresolved blocks', () => {
+    const reasons = semanticForcesContinuation(
+      sem(
+        change({ semantic_safe: 'no', intended_breaking: true }, 'f(): A', 'f(): B'),
+        change({ semantic_safe: 'unverified' }, 'g(): C', 'g(): D'),
+      ),
+    );
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toContain('g(): C → g(): D');
+  });
+  test('all pairs cleared (intended/yes) → no reason', () => {
+    expect(
+      semanticForcesContinuation(
+        sem(
+          change({ semantic_safe: 'no', intended_breaking: true }, 'f', 'f2'),
+          change({ semantic_safe: 'yes' }, 'g', 'g2'),
+        ),
+      ),
+    ).toHaveLength(0);
+  });
+});
+
+describe('stopHandler — knowledge-update gate (carrier-driven, G1)', () => {
+  const carrier = (overrides: Record<string, unknown>) => ({
+    schema_version: '0.1.0',
+    triggers: { adr_worthy_decision: false, new_agreed_term: false, repeated_pattern: false },
+    delta: { decisions: 0, glossary_terms: 0, patterns: 0, learnings: 0 },
+    ...overrides,
+  });
+  const knowledgeNode = (overrides: Record<string, unknown>) =>
+    node({
+      id: 'NK',
+      kind: 'knowledge',
+      owner: 'knowledge-curator',
+      status: 'passed',
+      acceptance_refs: ['ac-1', 'ac-2', 'ac-3'],
+      ...overrides,
+    });
+
+  // (a) trigger fired but nothing recorded → under-recording → Stop blocks.
+  test('terminal knowledge node + carrier with a fired trigger but delta 0 => exit 2', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+    await writeArtifact('autopilot.json', autopilot({ nodes: [knowledgeNode({})] }));
+    await writeArtifact(
+      'knowledge-gate.json',
+      carrier({
+        triggers: { adr_worthy_decision: true, new_agreed_term: false, repeated_pattern: false },
+      }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('knowledge');
+    expect(out.stderr).toContain('under-recording');
+  });
+
+  // (b) no trigger + empty record carrier → valid explicit skip → Stop passes.
+  test('terminal knowledge node + no-trigger empty carrier => exit 0 (valid skip)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+    await writeArtifact('autopilot.json', autopilot({ nodes: [knowledgeNode({})] }));
+    await writeArtifact('knowledge-gate.json', carrier({}));
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  // (c) no knowledge node in the graph → gate inert even if a carrier exists
+  // (ADR-0010 (b): the gate never forces "record something").
+  test('no knowledge node in graph => gate inert (exit 0) even with a fired-trigger carrier', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({ nodes: [node({ status: 'passed', acceptance_refs: ['ac-1', 'ac-2', 'ac-3'] })] }),
+    );
+    await writeArtifact(
+      'knowledge-gate.json',
+      carrier({
+        triggers: { adr_worthy_decision: true, new_agreed_term: false, repeated_pattern: false },
+      }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  // Inert when the knowledge node exists but no carrier was written (no-trigger
+  // work that recorded nothing is a valid explicit skip — never blocks).
+  test('terminal knowledge node but no carrier => gate inert (exit 0)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+    await writeArtifact('autopilot.json', autopilot({ nodes: [knowledgeNode({})] }));
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  // Malformed carrier = gate-input violation → fail closed, like every ledger.
+  test('malformed knowledge-gate.json => exit 2 (fail-closed)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+    await writeArtifact('autopilot.json', autopilot({ nodes: [knowledgeNode({})] }));
+    await writeArtifact('knowledge-gate.json', '{ not valid');
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('knowledge-gate.json');
+    expect(out.stderr).toContain('malformed');
   });
 });

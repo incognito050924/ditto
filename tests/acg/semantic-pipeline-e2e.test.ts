@@ -62,12 +62,17 @@ const run = () => stopHandler({ raw: { session_id: SESSION }, repoRoot: repo, en
 const writeSemantic = (sem: AcgSemanticCompatibility) =>
   writeJson(semPath(), acgSemanticCompatibility, sem);
 
-const seedInput = {
-  workItemId: '',
-  file: 'src/user.ts',
-  symbol: 'getUser',
+const PAIR = {
   before: 'getUser(id: string): User | null',
   after: 'getUser(id: string): User',
+};
+const PAIR2 = {
+  before: 'listUsers(): User[] | null',
+  after: 'listUsers(): User[]',
+};
+const seedInput = {
+  workItemId: '',
+  changes: [PAIR],
   producedAt: '2026-06-05T00:00:00Z',
 };
 
@@ -108,6 +113,40 @@ describe('semantic pipeline e2e — seed → block → resolve → clear', () =>
       characterizationTestRef: 'tests/user.test.ts::getUser absence not relied upon',
     });
     await writeSemantic(resolved);
+    expect((await run()).exitCode).toBe(0);
+  });
+
+  // G4 (wi_260614gd9) — two breaking pairs both block; resolving one alone does
+  // NOT clear the gate; resolving both clears it.
+  test('two breaking pairs both gate; clearing only one still blocks; both clears', async () => {
+    const seed = buildSemanticSeed({ ...seedInput, workItemId: wiId, changes: [PAIR, PAIR2] });
+    await writeSemantic(seed);
+    const blocked = await run();
+    expect(blocked.exitCode).toBe(2);
+    // Both pairs surfaced as reasons.
+    expect(blocked.stderr).toContain(
+      'getUser(id: string): User | null → getUser(id: string): User',
+    );
+    expect(blocked.stderr).toContain('listUsers(): User[] | null → listUsers(): User[]');
+
+    // Resolve only PAIR → PAIR2 still blocks.
+    const partial = applySemanticVerdict(seed, {
+      semanticSafe: 'no',
+      intendedBreaking: true,
+      oldMeaning: 'null = 미존재',
+      target: PAIR,
+    });
+    await writeSemantic(partial);
+    expect((await run()).exitCode).toBe(2);
+
+    // Resolve PAIR2 too → clears.
+    const full = applySemanticVerdict(partial, {
+      semanticSafe: 'no',
+      intendedBreaking: true,
+      oldMeaning: 'null = 빈 목록 아님',
+      target: PAIR2,
+    });
+    await writeSemantic(full);
     expect((await run()).exitCode).toBe(0);
   });
 });

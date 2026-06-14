@@ -9,13 +9,20 @@ import {
 //   buildSemanticSeed: static layer, deterministic, meaning left unverified.
 //   applySemanticVerdict: resolver layer, injects an agent's meaning judgment so
 //   the unverified seed can clear the stop gate (dialectic-1 O3 deadlock).
+// G4 (wi_260614gd9) — the artifact carries changes[] so every detected pair gates.
+
+const PAIR = {
+  before: 'getUser(id: string): User | null',
+  after: 'getUser(id: string): User',
+};
+const PAIR2 = {
+  before: 'listUsers(): User[] | null',
+  after: 'listUsers(): User[]',
+};
 
 const seedInput = {
   workItemId: 'wi_seedtst01',
-  file: 'src/user.ts',
-  symbol: 'getUser',
-  before: 'getUser(id: string): User | null',
-  after: 'getUser(id: string): User',
+  changes: [PAIR],
   producedAt: '2026-06-05T00:00:00Z',
 };
 
@@ -23,17 +30,26 @@ describe('buildSemanticSeed — static unverified seed', () => {
   test('seeds an unverified, schema-valid artifact with sentinel meaning', () => {
     const seed = buildSemanticSeed(seedInput);
     expect(acgSemanticCompatibility.safeParse(seed).success).toBe(true);
-    expect(seed.verdict.semantic_safe).toBe('unverified');
-    expect(seed.old_meaning).toBe(SEMANTIC_UNVERIFIED_SENTINEL);
-    expect(seed.change).toEqual({ before: seedInput.before, after: seedInput.after });
+    expect(seed.changes).toHaveLength(1);
+    expect(seed.changes[0]?.verdict.semantic_safe).toBe('unverified');
+    expect(seed.changes[0]?.old_meaning).toBe(SEMANTIC_UNVERIFIED_SENTINEL);
+    expect({ before: seed.changes[0]?.before, after: seed.changes[0]?.after }).toEqual(PAIR);
   });
 
   test('seeds conservatively as breaking (fail-closed compatibility)', () => {
-    expect(buildSemanticSeed(seedInput).compatibility).toBe('breaking');
+    expect(buildSemanticSeed(seedInput).changes[0]?.compatibility).toBe('breaking');
   });
 
   test('deterministic — same input yields the same seed', () => {
     expect(buildSemanticSeed(seedInput)).toEqual(buildSemanticSeed(seedInput));
+  });
+
+  // G4: multiple detected pairs are all seeded into changes[].
+  test('seeds every detected pair (multi-change)', () => {
+    const seed = buildSemanticSeed({ ...seedInput, changes: [PAIR, PAIR2] });
+    expect(acgSemanticCompatibility.safeParse(seed).success).toBe(true);
+    expect(seed.changes).toHaveLength(2);
+    expect(seed.changes.every((c) => c.verdict.semantic_safe === 'unverified')).toBe(true);
   });
 });
 
@@ -49,12 +65,12 @@ describe('applySemanticVerdict — resolver injects agent judgment', () => {
       characterizationTestRef: 'tests/user.test.ts::getUser keeps null-absence',
     });
     expect(acgSemanticCompatibility.safeParse(resolved).success).toBe(true);
-    expect(resolved.verdict.semantic_safe).toBe('yes');
-    expect(resolved.verdict.reproducibility?.model_version).toBe('claude-opus-4-8');
-    expect(resolved.characterization?.test_ref).toBe(
+    expect(resolved.changes[0]?.verdict.semantic_safe).toBe('yes');
+    expect(resolved.changes[0]?.verdict.reproducibility?.model_version).toBe('claude-opus-4-8');
+    expect(resolved.changes[0]?.characterization?.test_ref).toBe(
       'tests/user.test.ts::getUser keeps null-absence',
     );
-    expect(resolved.old_meaning).toBe('null = 사용자 미존재');
+    expect(resolved.changes[0]?.old_meaning).toBe('null = 사용자 미존재');
   });
 
   test('yes verdict WITHOUT model_version is schema-rejected (fail-closed)', () => {
@@ -83,7 +99,7 @@ describe('applySemanticVerdict — resolver injects agent judgment', () => {
       oldMeaning: 'null = 미존재',
     });
     expect(acgSemanticCompatibility.safeParse(resolved).success).toBe(true);
-    expect(resolved.verdict.intended_breaking).toBe(true);
+    expect(resolved.changes[0]?.verdict.intended_breaking).toBe(true);
   });
 
   test('preserves the seed change pair and envelope', () => {
@@ -91,7 +107,40 @@ describe('applySemanticVerdict — resolver injects agent judgment', () => {
       semanticSafe: 'no',
       oldMeaning: 'null = 미존재',
     });
-    expect(resolved.change).toEqual(seed.change);
+    expect(resolved.changes[0]?.before).toBe(seed.changes[0]?.before);
+    expect(resolved.changes[0]?.after).toBe(seed.changes[0]?.after);
     expect(resolved.work_item_id).toBe(seed.work_item_id);
+  });
+
+  // G4 resolver semantics — verdict targets ONE pair; others stay untouched.
+  describe('multi-change targeting', () => {
+    const multi = buildSemanticSeed({ ...seedInput, changes: [PAIR, PAIR2] });
+
+    test('no target with >1 pair throws (cannot guess which pair)', () => {
+      expect(() => applySemanticVerdict(multi, { semanticSafe: 'no' })).toThrow();
+    });
+
+    test('targeting one pair leaves the other unverified', () => {
+      const resolved = applySemanticVerdict(multi, {
+        semanticSafe: 'no',
+        intendedBreaking: true,
+        oldMeaning: 'null = 미존재',
+        target: PAIR,
+      });
+      const resolvedPair = resolved.changes.find((c) => c.before === PAIR.before);
+      const otherPair = resolved.changes.find((c) => c.before === PAIR2.before);
+      expect(resolvedPair?.verdict.semantic_safe).toBe('no');
+      expect(resolvedPair?.verdict.intended_breaking).toBe(true);
+      expect(otherPair?.verdict.semantic_safe).toBe('unverified');
+    });
+
+    test('unmatched target throws (no silent landing on the wrong pair)', () => {
+      expect(() =>
+        applySemanticVerdict(multi, {
+          semanticSafe: 'no',
+          target: { before: 'nope', after: 'nope2' },
+        }),
+      ).toThrow();
+    });
   });
 });

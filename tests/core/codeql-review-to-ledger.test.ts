@@ -78,12 +78,39 @@ const SARIF_HIGH = SARIF([
         },
       },
     ],
+    codeFlows: [
+      {
+        threadFlows: [
+          {
+            locations: [
+              {
+                location: {
+                  physicalLocation: {
+                    artifactLocation: { uri: 'src/a.ts' },
+                    region: { startLine: 1 },
+                  },
+                },
+              },
+              {
+                location: {
+                  physicalLocation: {
+                    artifactLocation: { uri: 'src/exec.ts' },
+                    region: { startLine: 42 },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
 ]);
 
 interface Captured {
   ledgers: Array<{ workItemId: string; graph: AcgReviewGraph }>;
   outputs: Array<{ workItemId: string; output: ReviewerOutput }>;
+  dods: Array<{ workItemId: string; dods: unknown[] }>;
   spawned: number;
 }
 
@@ -92,7 +119,7 @@ function ledgerDeps(opts: {
   cliAvailable?: boolean;
   extensions?: Record<string, number>;
 }): { deps: CodeqlLedgerDeps; cap: Captured } {
-  const cap: Captured = { ledgers: [], outputs: [], spawned: 0 };
+  const cap: Captured = { ledgers: [], outputs: [], dods: [], spawned: 0 };
   const deps: CodeqlLedgerDeps = {
     // cache-hit path: fileExists true + readText returns the fixture, so spawn is unused.
     spawn: () => {
@@ -117,6 +144,9 @@ function ledgerDeps(opts: {
     },
     persistLedger: async (workItemId, graph) => {
       cap.ledgers.push({ workItemId, graph });
+    },
+    persistDataflowDoDs: async (workItemId, dods) => {
+      cap.dods.push({ workItemId, dods });
     },
   };
   return { deps, cap };
@@ -152,6 +182,18 @@ describe('runCodeqlReviewToLedger', () => {
     expect(reasons[0]).toContain('src/exec.ts');
     // reviewer-output persisted too (audit trail).
     expect(cap.outputs[0].output.verdict).toBe('fail');
+    // dataflow DoD: the taint finding yields one verifiable proposition.
+    expect(res.dataflowDoDs).toHaveLength(1);
+    expect(res.dataflowDoDs[0].oracle).toBe('src/a.ts:1 → src/exec.ts:42');
+    expect(cap.dods).toHaveLength(1);
+    expect(cap.dods[0].dods).toHaveLength(1);
+  });
+
+  test('clean analysis produces no dataflow DoDs and persists none', async () => {
+    const { deps, cap } = ledgerDeps({ sarif: SARIF([]) });
+    const res = await runCodeqlReviewToLedger(baseInput, deps);
+    expect(res.dataflowDoDs).toHaveLength(0);
+    expect(cap.dods).toHaveLength(0);
   });
 
   test('doctor gate blocks (cli unavailable) → no analysis, no ledger', async () => {

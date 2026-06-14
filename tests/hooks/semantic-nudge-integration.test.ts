@@ -124,10 +124,15 @@ describe('Stop semantic-scan nudge (S1+S3)', () => {
       work_item_id: wiId,
       produced_by: 'agent',
       produced_at: '2026-06-05T00:00:00Z',
-      change: { before: 'a', after: 'b' },
-      old_meaning: 'm',
-      compatibility: 'breaking',
-      verdict: { type_safe: true, semantic_safe: 'no', intended_breaking: true },
+      changes: [
+        {
+          before: 'a',
+          after: 'b',
+          old_meaning: 'm',
+          compatibility: 'breaking',
+          verdict: { type_safe: true, semantic_safe: 'no', intended_breaking: true },
+        },
+      ],
     });
     const out = await run();
     expect(out.exitCode).toBe(0);

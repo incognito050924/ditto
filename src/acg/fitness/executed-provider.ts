@@ -26,7 +26,10 @@ export interface ExecutedRun {
 }
 
 export interface ExecutedDeps {
-  runOnce(spec: string, opts: { timeoutMs?: number; repoRoot: string }): Promise<ExecutedRun>;
+  runOnce(
+    spec: string,
+    opts: { timeoutMs?: number; repoRoot: string; requiresCleanBuild?: boolean },
+  ): Promise<ExecutedRun>;
 }
 
 /** 위반셋 시그니처(순서 무관 동일성). */
@@ -74,10 +77,14 @@ export function decideExecutedOutcome(
   return { violationIds: [...new Set(ok.flatMap((a) => a.violationIds))] };
 }
 
-/** 실 실행: sh -c spec, stdout 라인=위반, timeout이면 errored. spawn 실패도 errored. */
+/**
+ * 실 실행: sh -c spec, stdout 라인=위반, timeout이면 errored. spawn 실패도 errored.
+ * requiresCleanBuild=true면 non-zero exit를 "빌드/명령 실패"로 보아 errored(빈/부분 추출을
+ * clean으로 오판하지 않게 fail-close). 부재/false면 기존 동작(exit code 무시, 하위호환).
+ */
 async function defaultRunOnce(
   spec: string,
-  opts: { timeoutMs?: number; repoRoot: string },
+  opts: { timeoutMs?: number; repoRoot: string; requiresCleanBuild?: boolean },
 ): Promise<ExecutedRun> {
   let proc: ReturnType<typeof Bun.spawn>;
   try {
@@ -99,9 +106,16 @@ async function defaultRunOnce(
     : undefined;
   try {
     const out = await new Response(proc.stdout).text();
-    await proc.exited;
+    const exitCode = await proc.exited;
     if (timedOut) {
       return { errored: true, reason: `timeout after ${opts.timeoutMs}ms`, violationIds: [] };
+    }
+    if (opts.requiresCleanBuild && exitCode !== 0) {
+      return {
+        errored: true,
+        reason: `clean build not proven: spec exited non-zero (${exitCode})`,
+        violationIds: [],
+      };
     }
     const violationIds = out
       .split('\n')
@@ -137,9 +151,12 @@ export function executedProvider(
       const timeoutMs = exec.timeout_s ? exec.timeout_s * 1000 : undefined;
       const attemptsN = 1 + (exec.retries ?? 0);
       const flake: FlakePolicy = exec.flake_policy ?? 'fail';
+      const requiresCleanBuild = exec.requires_clean_build;
       const runs: ExecutedRun[] = [];
       for (let i = 0; i < attemptsN; i++) {
-        runs.push(await deps.runOnce(fn.evaluator.spec, { timeoutMs, repoRoot }));
+        runs.push(
+          await deps.runOnce(fn.evaluator.spec, { timeoutMs, repoRoot, requiresCleanBuild }),
+        );
       }
       return decideExecutedOutcome(runs, flake);
     },

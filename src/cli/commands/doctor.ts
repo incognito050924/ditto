@@ -3,6 +3,10 @@ import { defineCommand } from 'citty';
 import { collectCapabilityInventory } from '~/core/capability-inventory';
 import { defaultDoctorDeps, inspectCodeqlTarget } from '~/core/codeql/doctor';
 import { defaultInstallDeps, installCodeqlCli } from '~/core/codeql/install';
+import {
+  collectCompletionCoverageReport,
+  defaultCompletionCoverageDeps,
+} from '~/core/completion-coverage-doctor';
 import { collectDistributionReport, defaultDistributionDeps } from '~/core/distribution-doctor';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
@@ -420,6 +424,56 @@ const intentQualityCommand = defineCommand({
   },
 });
 
+const completionCoverageCommand = defineCommand({
+  meta: {
+    name: 'completion-coverage',
+    description:
+      'Aggregate completion-evidence coverage (evidence-closed acceptance / total acceptance) across work items + archive, from persisted completion.json (no new instrumentation)',
+  },
+  args: {
+    'work-item': {
+      type: 'string',
+      required: false,
+      description: 'Restrict to a single work item id',
+    },
+    output: { type: 'string', default: 'human', description: 'Output format: human|json' },
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const report = await collectCompletionCoverageReport(defaultCompletionCoverageDeps(repoRoot));
+      const rows = args['work-item']
+        ? report.rows.filter((r) => r.work_item_id === args['work-item'])
+        : report.rows;
+      if (format === 'json') {
+        writeJson(args['work-item'] ? { rows } : report);
+      } else if (rows.length === 0) {
+        writeHuman('completion-coverage: no work items');
+      } else {
+        writeHuman('work_item\tstatus\tcompletion\tclosed/total\tcoverage');
+        for (const r of rows) {
+          writeHuman(
+            `${r.work_item_id}\t${r.status}\t${r.has_completion ? 'yes' : 'no'}\t${
+              r.closed_acceptance
+            }/${r.total_acceptance}\t${r.coverage.toFixed(2)}`,
+          );
+        }
+        if (!args['work-item']) {
+          const t = report.totals;
+          writeHuman(
+            `\ntotal\t${t.with_completion}/${t.work_items} with completion\t${t.closed_acceptance}/${t.total_acceptance} acceptance closed\tcoverage=${t.coverage.toFixed(2)}`,
+          );
+        }
+      }
+      // Informational measurement readout; never a drift exit.
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  },
+});
+
 export const doctorCommand = defineCommand({
   meta: {
     name: 'doctor',
@@ -435,5 +489,6 @@ export const doctorCommand = defineCommand({
     codeql: codeqlCommand,
     distribution: distributionCommand,
     'intent-quality': intentQualityCommand,
+    'completion-coverage': completionCoverageCommand,
   },
 });

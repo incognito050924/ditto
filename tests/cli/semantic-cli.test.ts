@@ -49,23 +49,53 @@ const detectArgs = [
   'getUser(id: string): User',
 ];
 
+const detectArgs2 = [
+  'semantic',
+  'detect',
+  '--work-item',
+  WI,
+  '--file',
+  'src/user.ts',
+  '--symbol',
+  'listUsers',
+  '--before',
+  'listUsers(): User[] | null',
+  '--after',
+  'listUsers(): User[]',
+];
+
 describe('ditto semantic detect', () => {
   test('seeds an unverified artifact (deterministic static layer)', async () => {
     const r = ditto(detectArgs);
     expect(r.exitCode).toBe(0);
     const seed = await readSemantic();
-    expect(seed.verdict.semantic_safe).toBe('unverified');
-    expect(seed.change).toEqual({
+    expect(seed.changes).toHaveLength(1);
+    expect(seed.changes[0].verdict.semantic_safe).toBe('unverified');
+    expect({ before: seed.changes[0].before, after: seed.changes[0].after }).toEqual({
       before: 'getUser(id: string): User | null',
       after: 'getUser(id: string): User',
     });
   });
 
-  test('second detect fail-closes (one signature pair per work item, O1)', async () => {
+  // G4 (wi_260614gd9): a second detect APPENDS a new pair (multi-change), so every
+  // detected change reaches the gate instead of the first clobbering the rest.
+  test('second detect appends a new pair (multi-change)', async () => {
+    expect(ditto(detectArgs).exitCode).toBe(0);
+    const r = ditto(detectArgs2);
+    expect(r.exitCode).toBe(0);
+    const seed = await readSemantic();
+    expect(seed.changes).toHaveLength(2);
+    expect(seed.changes.map((c: { before: string }) => c.before)).toEqual([
+      'getUser(id: string): User | null',
+      'listUsers(): User[] | null',
+    ]);
+  });
+
+  test('re-detecting the SAME pair fail-closes (would clobber a verdict)', async () => {
     expect(ditto(detectArgs).exitCode).toBe(0);
     const r = ditto(detectArgs);
     expect(r.exitCode).toBe(65);
-    expect(r.stderr).toContain('already has semantic-compatibility.json');
+    expect(r.stderr).toContain('already has');
   });
 });
 
@@ -89,9 +119,9 @@ describe('ditto semantic verdict (resolver, O3 deadlock)', () => {
     ]);
     expect(r.exitCode).toBe(0);
     const out = await readSemantic();
-    expect(out.verdict.semantic_safe).toBe('no');
-    expect(out.verdict.intended_breaking).toBe(true);
-    expect(out.old_meaning).toBe('null = 사용자 미존재');
+    expect(out.changes[0].verdict.semantic_safe).toBe('no');
+    expect(out.changes[0].verdict.intended_breaking).toBe(true);
+    expect(out.changes[0].old_meaning).toBe('null = 사용자 미존재');
   });
 
   test('yes WITHOUT model-version fail-closes (no unsubstantiated yes, O5)', async () => {
@@ -108,7 +138,7 @@ describe('ditto semantic verdict (resolver, O3 deadlock)', () => {
     ]);
     expect(r.exitCode).toBe(1);
     // seed unchanged — the unverified seed still gates (no silent clear).
-    expect((await readSemantic()).verdict.semantic_safe).toBe('unverified');
+    expect((await readSemantic()).changes[0].verdict.semantic_safe).toBe('unverified');
   });
 
   test('yes WITH model-version but WITHOUT characterization fail-closes (agent yes needs a witness test, B)', async () => {
@@ -126,7 +156,7 @@ describe('ditto semantic verdict (resolver, O3 deadlock)', () => {
       'claude-opus-4-8',
     ]);
     expect(r.exitCode).toBe(1);
-    expect((await readSemantic()).verdict.semantic_safe).toBe('unverified');
+    expect((await readSemantic()).changes[0].verdict.semantic_safe).toBe('unverified');
   });
 
   test('yes WITH model-version + characterization-test resolves', async () => {
@@ -147,9 +177,9 @@ describe('ditto semantic verdict (resolver, O3 deadlock)', () => {
     ]);
     expect(r.exitCode).toBe(0);
     const out = await readSemantic();
-    expect(out.verdict.semantic_safe).toBe('yes');
-    expect(out.verdict.reproducibility.model_version).toBe('claude-opus-4-8');
-    expect(out.characterization.test_ref).toBe('tests/user.test.ts::keeps null-absence');
+    expect(out.changes[0].verdict.semantic_safe).toBe('yes');
+    expect(out.changes[0].verdict.reproducibility.model_version).toBe('claude-opus-4-8');
+    expect(out.changes[0].characterization.test_ref).toBe('tests/user.test.ts::keeps null-absence');
   });
 
   test('verdict without a prior seed fail-closes', async () => {
@@ -167,5 +197,62 @@ describe('ditto semantic verdict (resolver, O3 deadlock)', () => {
     ]);
     expect(r.exitCode).toBe(65);
     expect(r.stderr).toContain('Run `ditto semantic detect` first');
+  });
+
+  // G4 (wi_260614gd9): with multiple pairs, --before/--after select which to
+  // resolve; resolving one leaves the other unverified.
+  test('multi-pair: targeted verdict resolves one pair, the other stays unverified', async () => {
+    expect(ditto(detectArgs).exitCode).toBe(0);
+    expect(ditto(detectArgs2).exitCode).toBe(0);
+    const r = ditto([
+      'semantic',
+      'verdict',
+      '--work-item',
+      WI,
+      '--semantic-safe',
+      'no',
+      '--intended-breaking',
+      '--old-meaning',
+      'null = 미존재',
+      '--before',
+      'getUser(id: string): User | null',
+      '--after',
+      'getUser(id: string): User',
+    ]);
+    expect(r.exitCode).toBe(0);
+    const out = await readSemantic();
+    const getUserPair = out.changes.find(
+      (c: { before: string }) => c.before === 'getUser(id: string): User | null',
+    );
+    const listPair = out.changes.find(
+      (c: { before: string }) => c.before === 'listUsers(): User[] | null',
+    );
+    expect(getUserPair.verdict.semantic_safe).toBe('no');
+    expect(getUserPair.verdict.intended_breaking).toBe(true);
+    expect(listPair.verdict.semantic_safe).toBe('unverified');
+  });
+
+  test('multi-pair: verdict WITHOUT --before/--after fail-closes (cannot guess the pair)', async () => {
+    expect(ditto(detectArgs).exitCode).toBe(0);
+    expect(ditto(detectArgs2).exitCode).toBe(0);
+    const r = ditto([
+      'semantic',
+      'verdict',
+      '--work-item',
+      WI,
+      '--semantic-safe',
+      'no',
+      '--intended-breaking',
+      '--old-meaning',
+      'x',
+    ]);
+    expect(r.exitCode).toBe(1);
+    // Both pairs untouched.
+    const out = await readSemantic();
+    expect(
+      out.changes.every(
+        (c: { verdict: { semantic_safe: string } }) => c.verdict.semantic_safe === 'unverified',
+      ),
+    ).toBe(true);
   });
 });

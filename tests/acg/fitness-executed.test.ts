@@ -142,6 +142,40 @@ describe('executedProvider (real spawn)', () => {
   }, 8000);
 });
 
+// ── requires_clean_build 가드 (G5) ──────────────────────────────────────────
+describe('requires_clean_build fail-closed 가드 (real spawn)', () => {
+  test('(a) requires_clean_build=true + non-zero exit + 빈 stdout → errored→skip(pass·clean 아님)', async () => {
+    const r = await executedProvider(process.cwd()).evaluate(
+      fn({ mode: 'executed', spec: 'exit 1', execution: { requires_clean_build: true } }),
+      CTX,
+    );
+    expect(r.skipped?.reason).toContain('errored');
+    expect(r.violationIds).toEqual([]);
+  });
+
+  test('(b) requires_clean_build=true + exit 0 + 위반 라인 → 정상 위반 파싱', async () => {
+    const r = await executedProvider(process.cwd()).evaluate(
+      fn({
+        mode: 'executed',
+        spec: "printf 'v1\\nv2\\n'",
+        execution: { requires_clean_build: true },
+      }),
+      CTX,
+    );
+    expect(r.skipped).toBeUndefined();
+    expect(r.violationIds).toEqual(['v1', 'v2']);
+  });
+
+  test('(c) requires_clean_build 부재 + non-zero exit → 기존 동작(clean으로 처리, 하위호환)', async () => {
+    const r = await executedProvider(process.cwd()).evaluate(
+      fn({ mode: 'executed', spec: 'exit 1' }),
+      CTX,
+    );
+    expect(r.skipped).toBeUndefined();
+    expect(r.violationIds).toEqual([]); // exit code 무시 — 기존 동작
+  });
+});
+
 describe('executingProvider — 모드별 라우팅(real spawn)', () => {
   test('deterministic→command, executed→executed, llm_judged(verdicts 없음)→skip', async () => {
     const p = executingProvider(process.cwd());

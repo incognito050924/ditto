@@ -6,7 +6,12 @@ import { type CodeqlLedgerDeps, runCodeqlReviewToLedger } from '~/core/codeql/re
 import { type CodeqlLanguage, cacheKey } from '~/core/codeql/runner';
 import { localDir } from '~/core/ditto-paths';
 import { EvidenceStore, sha256Hex } from '~/core/evidence-store';
-import { ensureDir, resolveRepoRootForCreate, writeJson as writeJsonFile } from '~/core/fs';
+import {
+  atomicWriteText,
+  ensureDir,
+  resolveRepoRootForCreate,
+  writeJson as writeJsonFile,
+} from '~/core/fs';
 import type { HostRunProcess } from '~/core/hosts/types';
 import { generateId } from '~/core/id';
 import { reviewerOutput } from '~/schemas/reviewer-output';
@@ -69,6 +74,15 @@ function defaultLedgerDeps(repoRoot: string): CodeqlLedgerDeps {
     },
     persistLedger: async (workItemId, graph) => {
       await ledgerStore.write(workItemId, graph);
+    },
+    persistDataflowDoDs: async (workItemId, dods) => {
+      const path = localDir(repoRoot, 'work-items', workItemId, 'dataflow-dod.json');
+      await ensureDir(localDir(repoRoot, 'work-items', workItemId));
+      // Spec artifact (not a gated schema): write the propositions as plain JSON.
+      await atomicWriteText(
+        path,
+        `${JSON.stringify({ schema_version: '0.1.0', dods }, null, 2)}\n`,
+      );
     },
   };
 }
@@ -172,8 +186,15 @@ const reviewSubcommand = defineCommand({
             .join('\n')}`,
         );
       } else {
+        const dodLines = res.dataflowDoDs
+          .map((d) => `  DoD ${d.rule_id}: GIVEN ${d.given} WHEN ${d.when} THEN ${d.then}`)
+          .join('\n');
         writeHuman(
-          `codeql review: ${res.findings} finding(s), verdict=${res.verdict}, ${res.highRiskWithoutEvidence} high-risk without evidence → acg-review.json ${res.ledgerWritten ? 'written' : 'not written'}`,
+          `codeql review: ${res.findings} finding(s), verdict=${res.verdict}, ${res.highRiskWithoutEvidence} high-risk without evidence → acg-review.json ${res.ledgerWritten ? 'written' : 'not written'}${
+            res.dataflowDoDs.length > 0
+              ? `\n${res.dataflowDoDs.length} dataflow DoD(s) → dataflow-dod.json\n${dodLines}`
+              : ''
+          }`,
         );
       }
       // Doctor-gated is a precondition failure (exit non-zero); a written ledger is

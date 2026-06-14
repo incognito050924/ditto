@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { buildCandidateSpec, observeArchitecture } from '~/acg/architecture/propose';
+import { type ForbiddenDependency, ratifyCandidateSpec } from '~/acg/architecture/ratify';
 import { CodeqlEdgeAnalyzer } from '~/acg/boundary/codeql-edges';
 import { withInternalPackages } from '~/acg/internal-packages';
 import { codeqlCacheDir, makeRelationDeps } from '~/core/codeql/host-deps';
@@ -26,6 +27,28 @@ function csv(value: string | undefined): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+/** citty 반복 string arg는 undefined|string|string[] — 항상 배열로 정규화. */
+function asArray(value: string | string[] | undefined): string[] {
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+/**
+ * `--forbid "from,to,reason"` 토큰을 파싱한다. 세 필드 모두 필수(쉼표 3칸).
+ * reason에 쉼표가 들어갈 수 있어 앞 2개만 분리하고 나머지를 reason으로 합친다.
+ */
+function parseForbidden(tokens: string[]): ForbiddenDependency[] {
+  return tokens.map((t) => {
+    const parts = t.split(',').map((s) => s.trim());
+    const [from, to, ...rest] = parts;
+    const reason = rest.join(',').trim();
+    if (!from || !to || !reason) {
+      throw new Error(`--forbid: expected "from,to,reason", got "${t}"`);
+    }
+    return { from, to, reason };
+  });
 }
 
 /**
@@ -91,6 +114,83 @@ export const architectureCommand = defineCommand({
               Object.keys(candidate.layers).length
             } layer(s), ${candidate.public_surfaces.length} public surface(s), 0 forbidden_dependencies (declare rules by hand).`,
           );
+        }
+      },
+    }),
+    ratify: defineCommand({
+      meta: {
+        name: 'ratify',
+        description:
+          'Promote a candidate ArchitectureSpec (produced_by=agent) to authoritative (produced_by=user); forbidden_dependencies come ONLY from --forbid',
+      },
+      args: {
+        spec: {
+          type: 'string',
+          description: 'Candidate spec path (default .ditto/architecture-spec.json)',
+        },
+        forbid: {
+          type: 'string',
+          description:
+            'Forbidden dependency "from,to,reason" (repeatable). Rules are the human\'s — never auto-derived from observation.',
+        },
+        output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+      },
+      run: async ({ args }) => {
+        let format: ReturnType<typeof parseOutputFormat>;
+        try {
+          format = parseOutputFormat(args.output);
+        } catch (err) {
+          writeError(err instanceof Error ? err.message : String(err));
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        let forbidden: ForbiddenDependency[];
+        try {
+          forbidden = parseForbidden(asArray(args.forbid));
+        } catch (err) {
+          writeError(err instanceof Error ? err.message : String(err));
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        try {
+          const repoRoot = await resolveRepoRootForCreate();
+          const specPath = args.spec ?? join(repoRoot, '.ditto', 'architecture-spec.json');
+          let candidate: ReturnType<typeof acgArchitectureSpec.parse>;
+          try {
+            candidate = await readArchitectureSpec(specPath, acgArchitectureSpec);
+          } catch {
+            writeError(
+              `ratify: no candidate spec at ${specPath} — run \`ditto architecture propose --write\` first`,
+            );
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          let ratified: ReturnType<typeof acgArchitectureSpec.parse>;
+          try {
+            ratified = ratifyCandidateSpec(candidate, {
+              forbidden,
+              ratifiedAt: new Date().toISOString(),
+            });
+          } catch (err) {
+            writeError(err instanceof Error ? err.message : String(err));
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          await writeJsonFile(specPath, acgArchitectureSpec, ratified);
+          if (format === 'json') {
+            writeJson(ratified);
+          } else {
+            writeHuman(
+              `ratified ArchitectureSpec (AUTHORITATIVE, produced_by=user): ${
+                Object.keys(ratified.layers).length
+              } layer(s), ${ratified.public_surfaces.length} public surface(s), ${
+                ratified.forbidden_dependencies.length
+              } forbidden_dependencies → ${specPath}`,
+            );
+          }
+        } catch (err) {
+          writeError(`ratify failed: ${err instanceof Error ? err.message : String(err)}`);
+          process.exit(RUNTIME_ERROR_EXIT);
         }
       },
     }),

@@ -15173,6 +15173,19 @@ async function observeArchitecture(repoRoot, sourceRoot, edgeAnalyzer) {
   return { layers: [...layers], publicSurfaces: [...publicSurfaces] };
 }
 
+// src/acg/architecture/ratify.ts
+function ratifyCandidateSpec(candidate, opts) {
+  if (candidate.produced_by === "user") {
+    throw new Error("ratify: spec is already authoritative (produced_by=user) \u2014 nothing to ratify");
+  }
+  return acgArchitectureSpec.parse({
+    ...candidate,
+    produced_by: "user",
+    produced_at: opts.ratifiedAt,
+    forbidden_dependencies: opts.forbidden
+  });
+}
+
 // src/acg/boundary/codeql-edges.ts
 import { join as join9 } from "path";
 
@@ -15984,6 +15997,22 @@ function codeqlCacheDir(repoRoot, language) {
 function csv(value) {
   return (value ?? "").split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
 }
+function asArray(value) {
+  if (value === undefined)
+    return [];
+  return Array.isArray(value) ? value : [value];
+}
+function parseForbidden(tokens) {
+  return tokens.map((t2) => {
+    const parts = t2.split(",").map((s2) => s2.trim());
+    const [from, to, ...rest] = parts;
+    const reason = rest.join(",").trim();
+    if (!from || !to || !reason) {
+      throw new Error(`--forbid: expected "from,to,reason", got "${t2}"`);
+    }
+    return { from, to, reason };
+  });
+}
 var architectureCommand = defineCommand({
   meta: {
     name: "architecture",
@@ -16026,6 +16055,73 @@ var architectureCommand = defineCommand({
           writeJson2(candidate);
         } else {
           writeHuman(`candidate ArchitectureSpec (NON-AUTHORITATIVE, produced_by=agent): ${Object.keys(candidate.layers).length} layer(s), ${candidate.public_surfaces.length} public surface(s), 0 forbidden_dependencies (declare rules by hand).`);
+        }
+      }
+    }),
+    ratify: defineCommand({
+      meta: {
+        name: "ratify",
+        description: "Promote a candidate ArchitectureSpec (produced_by=agent) to authoritative (produced_by=user); forbidden_dependencies come ONLY from --forbid"
+      },
+      args: {
+        spec: {
+          type: "string",
+          description: "Candidate spec path (default .ditto/architecture-spec.json)"
+        },
+        forbid: {
+          type: "string",
+          description: `Forbidden dependency "from,to,reason" (repeatable). Rules are the human's \u2014 never auto-derived from observation.`
+        },
+        output: { type: "string", description: "Output format: human|json", default: "human" }
+      },
+      run: async ({ args }) => {
+        let format;
+        try {
+          format = parseOutputFormat(args.output);
+        } catch (err) {
+          writeError(err instanceof Error ? err.message : String(err));
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        let forbidden;
+        try {
+          forbidden = parseForbidden(asArray(args.forbid));
+        } catch (err) {
+          writeError(err instanceof Error ? err.message : String(err));
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        try {
+          const repoRoot = await resolveRepoRootForCreate();
+          const specPath = args.spec ?? join11(repoRoot, ".ditto", "architecture-spec.json");
+          let candidate;
+          try {
+            candidate = await readArchitectureSpec(specPath, acgArchitectureSpec);
+          } catch {
+            writeError(`ratify: no candidate spec at ${specPath} \u2014 run \`ditto architecture propose --write\` first`);
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          let ratified;
+          try {
+            ratified = ratifyCandidateSpec(candidate, {
+              forbidden,
+              ratifiedAt: new Date().toISOString()
+            });
+          } catch (err) {
+            writeError(err instanceof Error ? err.message : String(err));
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          await writeJson(specPath, acgArchitectureSpec, ratified);
+          if (format === "json") {
+            writeJson2(ratified);
+          } else {
+            writeHuman(`ratified ArchitectureSpec (AUTHORITATIVE, produced_by=user): ${Object.keys(ratified.layers).length} layer(s), ${ratified.public_surfaces.length} public surface(s), ${ratified.forbidden_dependencies.length} forbidden_dependencies \u2192 ${specPath}`);
+          }
+        } catch (err) {
+          writeError(`ratify failed: ${err instanceof Error ? err.message : String(err)}`);
+          process.exit(RUNTIME_ERROR_EXIT);
         }
       }
     }),
@@ -20274,35 +20370,35 @@ var ANSI = /\u001b\[[0-9;]*m/g;
 function asDict(v2) {
   return v2 !== null && typeof v2 === "object" && !Array.isArray(v2) ? v2 : null;
 }
-function asArray(v2) {
+function asArray2(v2) {
   return Array.isArray(v2) ? v2 : [];
 }
 function asString(v2) {
   return typeof v2 === "string" ? v2 : undefined;
 }
 function collectFailures(suite, rootDir, out) {
-  for (const child of asArray(suite.suites)) {
+  for (const child of asArray2(suite.suites)) {
     const c3 = asDict(child);
     if (c3)
       collectFailures(c3, rootDir, out);
   }
-  for (const specRaw of asArray(suite.specs)) {
+  for (const specRaw of asArray2(suite.specs)) {
     const spec = asDict(specRaw);
     if (!spec)
       continue;
     const title = asString(spec.title) ?? "";
     const file = asString(spec.file) ?? "";
     const specFile = rootDir !== undefined ? resolve5(rootDir, file) : file;
-    for (const testRaw of asArray(spec.tests)) {
+    for (const testRaw of asArray2(spec.tests)) {
       const t2 = asDict(testRaw);
       if (!t2)
         continue;
-      const results = asArray(t2.results);
+      const results = asArray2(t2.results);
       const last = asDict(results[results.length - 1]);
       if (!last || !FAILED_STATUSES.has(asString(last.status) ?? ""))
         continue;
-      const error = asDict(last.error) ?? asDict(asArray(last.errors)[0]) ?? {};
-      const trace = asArray(last.attachments).map(asDict).find((a2) => a2 !== null && asString(a2.name) === "trace" && asString(a2.path) !== undefined);
+      const error = asDict(last.error) ?? asDict(asArray2(last.errors)[0]) ?? {};
+      const trace = asArray2(last.attachments).map(asDict).find((a2) => a2 !== null && asString(a2.name) === "trace" && asString(a2.path) !== undefined);
       out.push({
         title,
         specFile,
@@ -22591,6 +22687,7 @@ var acgReproducibility = exports_external.object({
 }).describe("llm_judged reproducibility fixing (OBJ-07)");
 var acgExecution = exports_external.object({
   environment: exports_external.string().optional(),
+  requires_clean_build: exports_external.boolean().optional().describe("executed spec succeeds with exit 0; non-zero exit is a build/command failure, not a clean result (fail-closed)"),
   timeout_s: exports_external.number().int().positive().optional(),
   retries: exports_external.number().int().min(0).optional(),
   flake_policy: exports_external.enum(["quarantine", "fail", "retry"]).optional(),
@@ -23708,6 +23805,29 @@ var defaultDoctorDeps = {
   }
 };
 
+// src/core/codeql/dataflow-dod.ts
+function pos(step) {
+  return step.startLine != null ? `${step.file}:${step.startLine}` : step.file;
+}
+function toDataflowDoD(f3) {
+  const first = f3.dataflow[0];
+  const last = f3.dataflow[f3.dataflow.length - 1];
+  if (first === undefined || last === undefined)
+    return null;
+  const source = pos(first);
+  const sink = pos(last);
+  return {
+    given: `Untrusted input enters at the source ${source}.`,
+    when: `The value reaches the sensitive sink ${sink} along the tracked dataflow path (${f3.ruleId}).`,
+    then: "The source\u2192sink path is broken by a validated sanitizer/barrier, or the source is proven trusted.",
+    oracle: `${source} \u2192 ${sink}`,
+    rule_id: f3.ruleId
+  };
+}
+function toDataflowDoDs(findings) {
+  return findings.map(toDataflowDoD).filter((d2) => d2 !== null);
+}
+
 // src/core/codeql/review.ts
 import { relative as relative9 } from "path";
 async function runCodeqlReview(input, deps) {
@@ -23799,7 +23919,8 @@ async function runCodeqlReviewToLedger(input, deps) {
       fromCache: false,
       verdict: null,
       highRiskWithoutEvidence: 0,
-      ledgerWritten: false
+      ledgerWritten: false,
+      dataflowDoDs: []
     };
   }
   const { result: result2 } = await runCodeqlReview(input, deps);
@@ -23813,6 +23934,10 @@ async function runCodeqlReviewToLedger(input, deps) {
   const graph = projectReviewerOutputToAcgReview(output);
   await deps.persistLedger(input.workItemId, graph);
   const highRiskWithoutEvidence = graph.files.filter((f3) => f3.risk === "high" && f3.evidence === undefined).length;
+  const dataflowDoDs = toDataflowDoDs(result2.findings);
+  if (dataflowDoDs.length > 0) {
+    await deps.persistDataflowDoDs(input.workItemId, dataflowDoDs);
+  }
   return {
     gated: false,
     doctor,
@@ -23820,7 +23945,8 @@ async function runCodeqlReviewToLedger(input, deps) {
     fromCache: result2.fromCache,
     verdict: output.verdict,
     highRiskWithoutEvidence,
-    ledgerWritten: true
+    ledgerWritten: true,
+    dataflowDoDs
   };
 }
 
@@ -23970,6 +24096,12 @@ function defaultLedgerDeps(repoRoot) {
     },
     persistLedger: async (workItemId2, graph) => {
       await ledgerStore.write(workItemId2, graph);
+    },
+    persistDataflowDoDs: async (workItemId2, dods) => {
+      const path = localDir(repoRoot, "work-items", workItemId2, "dataflow-dod.json");
+      await ensureDir(localDir(repoRoot, "work-items", workItemId2));
+      await atomicWriteText(path, `${JSON.stringify({ schema_version: "0.1.0", dods }, null, 2)}
+`);
     }
   };
 }
@@ -24052,7 +24184,11 @@ var reviewSubcommand = defineCommand({
 ${res.doctor.findings.map((f3) => `  ${f3.severity}	${f3.kind}	${f3.message}`).join(`
 `)}`);
       } else {
-        writeHuman(`codeql review: ${res.findings} finding(s), verdict=${res.verdict}, ${res.highRiskWithoutEvidence} high-risk without evidence \u2192 acg-review.json ${res.ledgerWritten ? "written" : "not written"}`);
+        const dodLines = res.dataflowDoDs.map((d2) => `  DoD ${d2.rule_id}: GIVEN ${d2.given} WHEN ${d2.when} THEN ${d2.then}`).join(`
+`);
+        writeHuman(`codeql review: ${res.findings} finding(s), verdict=${res.verdict}, ${res.highRiskWithoutEvidence} high-risk without evidence \u2192 acg-review.json ${res.ledgerWritten ? "written" : "not written"}${res.dataflowDoDs.length > 0 ? `
+${res.dataflowDoDs.length} dataflow DoD(s) \u2192 dataflow-dod.json
+${dodLines}` : ""}`);
       }
       if (res.gated)
         process.exit(USAGE_ERROR_EXIT);
@@ -24788,7 +24924,7 @@ var deepInterviewCommand = defineCommand({
 });
 
 // src/cli/commands/doctor.ts
-import { join as join48 } from "path";
+import { join as join49 } from "path";
 
 // src/core/capability-inventory.ts
 import { join as join43 } from "path";
@@ -24997,18 +25133,126 @@ var defaultInstallDeps = {
   pathIncludes: (dir) => (process.env.PATH ?? "").split(":").includes(dir)
 };
 
+// src/core/completion-coverage-doctor.ts
+import { readdir as readdir12 } from "fs/promises";
+import { join as join45 } from "path";
+function isClosed(ac) {
+  const hasEvidence = (ac.evidence?.length ?? 0) > 0 || (ac.evidence_records?.length ?? 0) > 0;
+  return ac.verdict === "pass" && hasEvidence;
+}
+async function listArchived(repoRoot) {
+  const base = localDir(repoRoot, "archive");
+  let labels;
+  try {
+    labels = await readdir12(base);
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const label2 of labels) {
+    let ids;
+    try {
+      ids = await readdir12(join45(base, label2));
+    } catch {
+      continue;
+    }
+    for (const id of ids) {
+      try {
+        const item = await readJson(join45(base, label2, id, "work-item.json"), workItem);
+        out.push({ id, title: item.title, status: item.status, updated_at: item.updated_at });
+      } catch {}
+    }
+  }
+  return out;
+}
+async function readArchivedCompletion(repoRoot, label2, id) {
+  const path = localDir(repoRoot, "archive", label2, id, "completion.json");
+  if (!await Bun.file(path).exists())
+    return null;
+  try {
+    return await readJson(path, completionContract);
+  } catch {
+    return null;
+  }
+}
+function defaultCompletionCoverageDeps(repoRoot) {
+  const workItems = new WorkItemStore(repoRoot);
+  const completions = new CompletionStore(repoRoot);
+  const archiveLabelOf = new Map;
+  return {
+    listWorkItems: async () => {
+      const active = await workItems.list();
+      const base = localDir(repoRoot, "archive");
+      let labels = [];
+      try {
+        labels = await readdir12(base);
+      } catch {
+        labels = [];
+      }
+      for (const label2 of labels) {
+        try {
+          for (const id of await readdir12(join45(base, label2)))
+            archiveLabelOf.set(id, label2);
+        } catch {}
+      }
+      const archived = await listArchived(repoRoot);
+      return [...active, ...archived];
+    },
+    readCompletion: async (id) => {
+      const label2 = archiveLabelOf.get(id);
+      if (label2)
+        return readArchivedCompletion(repoRoot, label2, id);
+      return await completions.exists(id) ? completions.get(id) : null;
+    }
+  };
+}
+function buildRow(summary, completion) {
+  const acceptance = completion?.acceptance ?? [];
+  const total = acceptance.length;
+  const closed = acceptance.filter(isClosed).length;
+  return {
+    work_item_id: summary.id,
+    title: summary.title,
+    status: summary.status,
+    has_completion: completion !== null,
+    total_acceptance: total,
+    closed_acceptance: closed,
+    coverage: total === 0 ? 0 : closed / total
+  };
+}
+function totalsOf(rows) {
+  const totalAcceptance = rows.reduce((s2, r3) => s2 + r3.total_acceptance, 0);
+  const closedAcceptance = rows.reduce((s2, r3) => s2 + r3.closed_acceptance, 0);
+  return {
+    work_items: rows.length,
+    with_completion: rows.filter((r3) => r3.has_completion).length,
+    total_acceptance: totalAcceptance,
+    closed_acceptance: closedAcceptance,
+    coverage: totalAcceptance === 0 ? 0 : closedAcceptance / totalAcceptance
+  };
+}
+async function collectCompletionCoverageReport(deps) {
+  const summaries = await deps.listWorkItems();
+  const rows = [];
+  for (const summary of summaries) {
+    const completion = await deps.readCompletion(summary.id);
+    rows.push(buildRow(summary, completion));
+  }
+  return { rows, totals: totalsOf(rows) };
+}
+
 // src/core/distribution-doctor.ts
 import { existsSync as existsSync5, readFileSync as readFileSync3 } from "fs";
-import { join as join46 } from "path";
+import { join as join47 } from "path";
 
 // src/core/build-stamp.ts
 import { createHash as createHash7 } from "crypto";
 import { readFileSync as readFileSync2, readdirSync } from "fs";
-import { join as join45 } from "path";
+import { join as join46 } from "path";
 var STAMP_PREFIX = "//# ditto-src-stamp=";
 function listSourceFiles(repoRoot, rel = "src") {
   const out = [];
-  const entries = readdirSync(join45(repoRoot, rel), { withFileTypes: true });
+  const entries = readdirSync(join46(repoRoot, rel), { withFileTypes: true });
   for (const e2 of entries) {
     const childRel = `${rel}/${e2.name}`;
     if (e2.isDirectory())
@@ -25023,7 +25267,7 @@ function computeSourceStamp(repoRoot) {
   for (const rel of listSourceFiles(repoRoot)) {
     h2.update(rel);
     h2.update("\x00");
-    h2.update(readFileSync2(join45(repoRoot, rel)));
+    h2.update(readFileSync2(join46(repoRoot, rel)));
     h2.update("\x00");
   }
   return h2.digest("hex");
@@ -25086,7 +25330,7 @@ function defaultDistributionDeps(targetRoot, pluginRoot) {
     pluginRoot,
     targetRoot,
     whichDitto: () => Bun.which("ditto"),
-    readProjectSettings: () => readJsonObject(join46(targetRoot, ".claude", "settings.json")),
+    readProjectSettings: () => readJsonObject(join47(targetRoot, ".claude", "settings.json")),
     exists: (p) => existsSync5(p),
     readText: (p) => {
       try {
@@ -25099,7 +25343,7 @@ function defaultDistributionDeps(targetRoot, pluginRoot) {
   };
 }
 function pluginSurfacePresent(pluginRoot, exists) {
-  return exists(join46(pluginRoot, ".claude-plugin", "plugin.json")) && exists(join46(pluginRoot, "skills")) && exists(join46(pluginRoot, "agents"));
+  return exists(join47(pluginRoot, ".claude-plugin", "plugin.json")) && exists(join47(pluginRoot, "skills")) && exists(join47(pluginRoot, "agents"));
 }
 function allowlisted(settings) {
   const permissions = settings.permissions;
@@ -25107,9 +25351,9 @@ function allowlisted(settings) {
   return Array.isArray(allow) && allow.includes(ALLOW_RULE);
 }
 function binaryFresh(deps, binaryName) {
-  if (!deps.exists(join46(deps.pluginRoot, "src")))
+  if (!deps.exists(join47(deps.pluginRoot, "src")))
     return true;
-  const text = deps.readText(join46(deps.pluginRoot, "bin", binaryName));
+  const text = deps.readText(join47(deps.pluginRoot, "bin", binaryName));
   if (text === null)
     return false;
   const embedded = readEmbeddedStamp(text);
@@ -25124,12 +25368,12 @@ function binaryFresh(deps, binaryName) {
 function collectDistributionChecks(deps) {
   const binaryName = IS_WIN ? "ditto.exe" : "ditto";
   return {
-    binary_built: deps.exists(join46(deps.pluginRoot, "bin", binaryName)),
+    binary_built: deps.exists(join47(deps.pluginRoot, "bin", binaryName)),
     binary_fresh: binaryFresh(deps, binaryName),
-    hooks_registered: deps.exists(join46(deps.pluginRoot, "hooks", "hooks.json")),
+    hooks_registered: deps.exists(join47(deps.pluginRoot, "hooks", "hooks.json")),
     plugin_surface_present: pluginSurfacePresent(deps.pluginRoot, deps.exists),
     binary_on_path: deps.whichDitto() !== null,
-    target_initialized: deps.exists(join46(deps.targetRoot, ".ditto", "knowledge", "glossary.json")),
+    target_initialized: deps.exists(join47(deps.targetRoot, ".ditto", "knowledge", "glossary.json")),
     allowlisted: allowlisted(deps.readProjectSettings())
   };
 }
@@ -25138,8 +25382,8 @@ function collectDistributionReport(deps) {
 }
 
 // src/core/handoff-store.ts
-import { readdir as readdir12, rename as rename3 } from "fs/promises";
-import { join as join47 } from "path";
+import { readdir as readdir13, rename as rename3 } from "fs/promises";
+import { join as join48 } from "path";
 
 // src/schemas/handoff.ts
 var handoff = exports_external.object({
@@ -25271,7 +25515,7 @@ class HandoffStore {
     return localDir(this.repoRoot, "handoff");
   }
   activePath(workItemId2) {
-    return join47(this.dir(), `${workItemId2}.md`);
+    return join48(this.dir(), `${workItemId2}.md`);
   }
   activeRel(workItemId2) {
     return `.ditto/local/handoff/${workItemId2}.md`;
@@ -25293,14 +25537,14 @@ class HandoffStore {
   }
   async writeArchived(h2, now = new Date) {
     const rel = this.archiveRel(h2.work_item_id, stamp(now));
-    await atomicWriteText(join47(this.repoRoot, rel), serialize(h2));
+    await atomicWriteText(join48(this.repoRoot, rel), serialize(h2));
     await this.link(h2.work_item_id, rel);
     return rel;
   }
   async listActive() {
     let names;
     try {
-      names = await readdir12(this.dir());
+      names = await readdir13(this.dir());
     } catch {
       return [];
     }
@@ -25308,7 +25552,7 @@ class HandoffStore {
     for (const name of names) {
       if (!name.endsWith(".md"))
         continue;
-      const path = join47(this.dir(), name);
+      const path = join48(this.dir(), name);
       try {
         const { handoff: handoff2, body } = parseHandoffFile(await Bun.file(path).text());
         out.push({ handoff: handoff2, body, path });
@@ -25320,9 +25564,9 @@ class HandoffStore {
     const active = await this.listActive();
     if (active.length === 0)
       return [];
-    await ensureDir(join47(this.dir(), "archive"));
+    await ensureDir(join48(this.dir(), "archive"));
     for (const a2 of active) {
-      const dest = join47(this.repoRoot, this.archiveRel(a2.handoff.work_item_id, stamp(now)));
+      const dest = join48(this.repoRoot, this.archiveRel(a2.handoff.work_item_id, stamp(now)));
       try {
         await rename3(a2.path, dest);
       } catch {}
@@ -25352,7 +25596,7 @@ function defaultIntentQualityDeps(repoRoot) {
     readMetrics: (id) => workItems.readMetrics(id)
   };
 }
-function buildRow(summary, interview, graph, decisions, handoffRounds, driftEvents) {
+function buildRow2(summary, interview, graph, decisions, handoffRounds, driftEvents) {
   const fixNodes = graph ? graph.nodes.filter((n2) => n2.kind === "fix") : [];
   const reworkAttempts = graph ? graph.nodes.reduce((sum, n2) => sum + (n2.attempts?.fix ?? 0), 0) : 0;
   const retrySwitch = decisions.filter((d2) => d2.decision === "retry" || d2.decision === "switch_approach").length;
@@ -25373,7 +25617,7 @@ function buildRow(summary, interview, graph, decisions, handoffRounds, driftEven
     post_cost: driftEvents + reworkAttempts + retrySwitch + handoffRounds
   };
 }
-function totalsOf(rows) {
+function totalsOf2(rows) {
   return {
     work_items: rows.length,
     with_interview: rows.filter((r3) => r3.questions_asked !== null).length,
@@ -25415,9 +25659,9 @@ async function collectIntentQualityReport(deps) {
       deps.countHandoffRounds(summary.id),
       deps.readMetrics(summary.id)
     ]);
-    rows.push(buildRow(summary, interview, graph, decisions, handoffRounds, metrics.length));
+    rows.push(buildRow2(summary, interview, graph, decisions, handoffRounds, metrics.length));
   }
-  return { rows, totals: totalsOf(rows), correlation: correlationOf(rows) };
+  return { rows, totals: totalsOf2(rows), correlation: correlationOf(rows) };
 }
 
 // src/core/mcp-inventory.ts
@@ -25894,7 +26138,7 @@ var codeqlCommand2 = defineCommand({
         return;
       }
       const repoRoot = await resolveRepoRootForCreate();
-      const sourceRoot = args["source-root"] ?? join48(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join49(repoRoot, "src");
       const report = await inspectCodeqlTarget({ sourceRoot, buildVerified: args["build-verified"] }, defaultDoctorDeps);
       if (format === "json") {
         writeJson2({
@@ -25997,6 +26241,46 @@ questions-quantile \xD7 avg post-cost (interviewed items):`);
     }
   }
 });
+var completionCoverageCommand = defineCommand({
+  meta: {
+    name: "completion-coverage",
+    description: "Aggregate completion-evidence coverage (evidence-closed acceptance / total acceptance) across work items + archive, from persisted completion.json (no new instrumentation)"
+  },
+  args: {
+    "work-item": {
+      type: "string",
+      required: false,
+      description: "Restrict to a single work item id"
+    },
+    output: { type: "string", default: "human", description: "Output format: human|json" }
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const report = await collectCompletionCoverageReport(defaultCompletionCoverageDeps(repoRoot));
+      const rows = args["work-item"] ? report.rows.filter((r3) => r3.work_item_id === args["work-item"]) : report.rows;
+      if (format === "json") {
+        writeJson2(args["work-item"] ? { rows } : report);
+      } else if (rows.length === 0) {
+        writeHuman("completion-coverage: no work items");
+      } else {
+        writeHuman("work_item\tstatus\tcompletion\tclosed/total\tcoverage");
+        for (const r3 of rows) {
+          writeHuman(`${r3.work_item_id}	${r3.status}	${r3.has_completion ? "yes" : "no"}	${r3.closed_acceptance}/${r3.total_acceptance}	${r3.coverage.toFixed(2)}`);
+        }
+        if (!args["work-item"]) {
+          const t2 = report.totals;
+          writeHuman(`
+total	${t2.with_completion}/${t2.work_items} with completion	${t2.closed_acceptance}/${t2.total_acceptance} acceptance closed	coverage=${t2.coverage.toFixed(2)}`);
+        }
+      }
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  }
+});
 var doctorCommand = defineCommand({
   meta: {
     name: "doctor",
@@ -26010,13 +26294,14 @@ var doctorCommand = defineCommand({
     capability: capabilityCommand,
     codeql: codeqlCommand2,
     distribution: distributionCommand,
-    "intent-quality": intentQualityCommand
+    "intent-quality": intentQualityCommand,
+    "completion-coverage": completionCoverageCommand
   }
 });
 
 // src/cli/commands/e2e.ts
-import { mkdir as mkdir5, readFile as readFile10, readdir as readdir15 } from "fs/promises";
-import { dirname as dirname10, isAbsolute as isAbsolute4, join as join51, relative as relative12, resolve as resolve10, sep as sep6 } from "path";
+import { mkdir as mkdir5, readFile as readFile10, readdir as readdir16 } from "fs/promises";
+import { dirname as dirname10, isAbsolute as isAbsolute4, join as join52, relative as relative12, resolve as resolve10, sep as sep6 } from "path";
 
 // src/core/e2e/conformance.ts
 function checkStepConformance(input) {
@@ -26076,7 +26361,7 @@ function checkStepConformance(input) {
 
 // src/core/e2e/failure-verdict.ts
 import { readFile as readFile7 } from "fs/promises";
-import { join as join49 } from "path";
+import { join as join50 } from "path";
 
 // src/schemas/e2e-failure-verdict.ts
 var e2eFailureClassification = exports_external.enum(["\uAE30\uB2A5", "\uC2A4\uD06C\uB9BD\uD2B8", "\uD658\uACBD", "flaky"]).describe("User verdict on an e2e failure: \uAE30\uB2A5 \uACB0\uD568 | \uC2A4\uD06C\uB9BD\uD2B8 \uACB0\uD568 | \uD658\uACBD\xB7\uB370\uC774\uD130 | flaky (spec \xA78 4\uBD84\uB958)");
@@ -26091,7 +26376,7 @@ var e2eFailureVerdict = exports_external.object({
 
 // src/core/e2e/failure-verdict.ts
 function verdictsPath(repoRoot, workItemId2) {
-  return join49(localDir(repoRoot, "work-items", workItemId2), "e2e-verdicts.jsonl");
+  return join50(localDir(repoRoot, "work-items", workItemId2), "e2e-verdicts.jsonl");
 }
 async function appendFailureVerdict(repoRoot, workItemId2, verdict2) {
   const parsed = e2eFailureVerdict.parse(verdict2);
@@ -26158,7 +26443,7 @@ ${split.body}`);
 
 // src/core/e2e/journey-digest.ts
 import { createHash as createHash8 } from "crypto";
-import { readFile as readFile8, readdir as readdir13 } from "fs/promises";
+import { readFile as readFile8, readdir as readdir14 } from "fs/promises";
 function sha256Hex3(bytes) {
   return createHash8("sha256").update(bytes).digest("hex");
 }
@@ -26244,8 +26529,8 @@ async function detectStale(sourceAbs, generatedAbs, expectedSource) {
 }
 
 // src/core/e2e/lifecycle.ts
-import { readFile as readFile9, readdir as readdir14, unlink as unlink2 } from "fs/promises";
-import { basename, dirname as dirname9, isAbsolute as isAbsolute3, join as join50, relative as relative11, resolve as resolve9, sep as sep5 } from "path";
+import { readFile as readFile9, readdir as readdir15, unlink as unlink2 } from "fs/promises";
+import { basename, dirname as dirname9, isAbsolute as isAbsolute3, join as join51, relative as relative11, resolve as resolve9, sep as sep5 } from "path";
 
 // src/schemas/e2e-lifecycle.ts
 var e2eLifecycleAction = exports_external.enum(["update", "delete"]).describe("update = mark for regeneration (scripter re-runs); delete = remove journey + derived spec");
@@ -26262,7 +26547,7 @@ var e2eLifecycleDecision = exports_external.object({
 
 // src/core/e2e/lifecycle.ts
 function lifecycleLedgerPath(repoRoot, workItemId2) {
-  return workItemId2 === undefined ? localDir(repoRoot, "e2e-lifecycle.jsonl") : join50(localDir(repoRoot, "work-items", workItemId2), "e2e-lifecycle.jsonl");
+  return workItemId2 === undefined ? localDir(repoRoot, "e2e-lifecycle.jsonl") : join51(localDir(repoRoot, "work-items", workItemId2), "e2e-lifecycle.jsonl");
 }
 async function appendDecision(path, decision) {
   const parsed = e2eLifecycleDecision.parse(decision);
@@ -26311,7 +26596,7 @@ async function runLifecycleAction(repoRoot, req) {
   }
   const slug = journeyName.slice(0, -".journey.md".length);
   const generatedDir = resolve9(dirname9(journeyAbs), "..", "generated");
-  const specAbs = join50(generatedDir, `${slug}.spec.ts`);
+  const specAbs = join51(generatedDir, `${slug}.spec.ts`);
   const rel = (abs) => toPosix2(relative11(repoRoot, abs));
   const specText = await readOrNull(specAbs);
   if (specText === null) {
@@ -26326,8 +26611,8 @@ async function runLifecycleAction(repoRoot, req) {
       refusal: `${rel(specAbs)}\uB294 @ditto-generated \uB9C8\uCEE4\uAC00 \uC5C6\uB294 \uC218\uB3D9 \uD30C\uC77C \u2014 \uC218\uBA85\uC8FC\uAE30 \uC9D1\uD589\uC740 DSL \uD30C\uC0DD \uD14C\uC2A4\uD2B8\uC5D0\uB9CC \uC801\uC6A9\uB41C\uB2E4`
     };
   }
-  const supportDir = join50(generatedDir, "support");
-  const helperOf = (blockId) => join50(supportDir, `${blockId}.block.ts`);
+  const supportDir = join51(generatedDir, "support");
+  const helperOf = (blockId) => join51(supportDir, `${blockId}.block.ts`);
   for (const blockId of parsed.frontMatter.uses_blocks) {
     const helperText = await readOrNull(helperOf(blockId));
     if (helperText !== null && !isDittoGenerated(helperText)) {
@@ -26376,8 +26661,8 @@ async function runLifecycleAction(repoRoot, req) {
   }
   const journeysDir = dirname9(journeyAbs);
   const referencedElsewhere = new Set;
-  for (const name of (await readdir14(journeysDir)).filter((n2) => n2.endsWith(".journey.md"))) {
-    const otherAbs = join50(journeysDir, name);
+  for (const name of (await readdir15(journeysDir)).filter((n2) => n2.endsWith(".journey.md"))) {
+    const otherAbs = join51(journeysDir, name);
     if (otherAbs === journeyAbs)
       continue;
     const other = await readOrNull(otherAbs);
@@ -26479,7 +26764,7 @@ var e2eRun = defineCommand({
       const result2 = await runJourney(repoRoot, args.runId, parsed.data);
       const runDir = localDir(repoRoot, "runs", args.runId);
       await mkdir5(runDir, { recursive: true });
-      await atomicWriteText(join51(runDir, "journey.json"), `${JSON.stringify(result2.journey, null, 2)}
+      await atomicWriteText(join52(runDir, "journey.json"), `${JSON.stringify(result2.journey, null, 2)}
 `);
       if (format === "json") {
         writeJson2(result2);
@@ -26559,24 +26844,24 @@ var e2eConformance = defineCommand({
     try {
       const journeyAbs = resolve10(args.journey);
       const generatedAbs = resolve10(args.generated);
-      const blocksDir = resolve10(args["blocks-dir"] ?? join51(dirname10(journeyAbs), "blocks"));
-      const supportDir = resolve10(args["support-dir"] ?? join51(dirname10(generatedAbs), "support"));
+      const blocksDir = resolve10(args["blocks-dir"] ?? join52(dirname10(journeyAbs), "blocks"));
+      const supportDir = resolve10(args["support-dir"] ?? join52(dirname10(generatedAbs), "support"));
       const journeyText = await readFile10(journeyAbs, "utf8");
       const generatedText = await readFile10(generatedAbs, "utf8");
       const blockTexts = {};
       try {
-        for (const name of await readdir15(blocksDir)) {
+        for (const name of await readdir16(blocksDir)) {
           if (!name.endsWith(".block.md"))
             continue;
-          blockTexts[name.slice(0, -".block.md".length)] = await readFile10(join51(blocksDir, name), "utf8");
+          blockTexts[name.slice(0, -".block.md".length)] = await readFile10(join52(blocksDir, name), "utf8");
         }
       } catch {}
       const supportTexts = [];
       try {
-        for (const name of await readdir15(supportDir)) {
+        for (const name of await readdir16(supportDir)) {
           if (!name.endsWith(".ts"))
             continue;
-          supportTexts.push(await readFile10(join51(supportDir, name), "utf8"));
+          supportTexts.push(await readFile10(join52(supportDir, name), "utf8"));
         }
       } catch {}
       const report = checkStepConformance({ journeyText, blockTexts, generatedText, supportTexts });
@@ -26591,8 +26876,8 @@ var e2eConformance = defineCommand({
         for (const blockId of parsedJourney.frontMatter.uses_blocks) {
           if (blockTexts[blockId] === undefined)
             continue;
-          const helperAbs = join51(supportDir, `${blockId}.block.ts`);
-          const blockMdAbs = join51(blocksDir, `${blockId}.block.md`);
+          const helperAbs = join52(supportDir, `${blockId}.block.ts`);
+          const blockMdAbs = join52(blocksDir, `${blockId}.block.md`);
           const verdict2 = await detectStale(blockMdAbs, helperAbs, repoRel(blockMdAbs));
           if (verdict2.stale)
             stale.push(`support/${blockId}.block.ts: ${verdict2.reason}`);
@@ -26666,12 +26951,12 @@ var e2eVerifyGenerated = defineCommand({
 });
 async function loadJourneyNames(repoRoot) {
   const names = {};
-  const journeysDir = join51(repoRoot, "e2e", "journeys");
+  const journeysDir = join52(repoRoot, "e2e", "journeys");
   try {
-    for (const name of await readdir15(journeysDir)) {
+    for (const name of await readdir16(journeysDir)) {
       if (!name.endsWith(".journey.md"))
         continue;
-      const parsed = parseJourneyDoc(await readFile10(join51(journeysDir, name), "utf8"));
+      const parsed = parseJourneyDoc(await readFile10(join52(journeysDir, name), "utf8"));
       if (parsed.ok)
         names[parsed.frontMatter.id] = parsed.frontMatter.name;
     }
@@ -26698,7 +26983,7 @@ var e2eFailureReport = defineCommand({
     }
     try {
       const repoRoot = await resolveRepoRootForCreate();
-      const reportPath = join51(localDir(repoRoot, "runs", args.runId), "playwright-report.json");
+      const reportPath = join52(localDir(repoRoot, "runs", args.runId), "playwright-report.json");
       const reportFile = Bun.file(reportPath);
       if (!await reportFile.exists()) {
         writeError(`no playwright-report.json for run ${args.runId} \u2014 run \`ditto e2e verify-generated --runId ${args.runId} --files <specs>\` first`);
@@ -27445,9 +27730,16 @@ async function defaultRunOnce(spec, opts) {
   }, opts.timeoutMs) : undefined;
   try {
     const out = await new Response(proc.stdout).text();
-    await proc.exited;
+    const exitCode = await proc.exited;
     if (timedOut) {
       return { errored: true, reason: `timeout after ${opts.timeoutMs}ms`, violationIds: [] };
+    }
+    if (opts.requiresCleanBuild && exitCode !== 0) {
+      return {
+        errored: true,
+        reason: `clean build not proven: spec exited non-zero (${exitCode})`,
+        violationIds: []
+      };
     }
     const violationIds = out.split(`
 `).map((s2) => s2.trim()).filter((s2) => s2.length > 0);
@@ -27473,9 +27765,10 @@ function executedProvider(repoRoot, deps = realDeps) {
       const timeoutMs = exec.timeout_s ? exec.timeout_s * 1000 : undefined;
       const attemptsN = 1 + (exec.retries ?? 0);
       const flake = exec.flake_policy ?? "fail";
+      const requiresCleanBuild = exec.requires_clean_build;
       const runs = [];
       for (let i2 = 0;i2 < attemptsN; i2++) {
-        runs.push(await deps.runOnce(fn.evaluator.spec, { timeoutMs, repoRoot }));
+        runs.push(await deps.runOnce(fn.evaluator.spec, { timeoutMs, repoRoot, requiresCleanBuild }));
       }
       return decideExecutedOutcome(runs, flake);
     }
@@ -27890,7 +28183,7 @@ var preCompactHandler = async (input) => {
 
 // src/hooks/pre-tool-use.ts
 import { homedir as homedir5 } from "os";
-import { join as join52 } from "path";
+import { join as join53 } from "path";
 import { isAbsolute as isAbsolute7, relative as relative13, resolve as resolve13 } from "path";
 
 // src/acg/scope/resolve.ts
@@ -28245,9 +28538,9 @@ function autopilotBypassActive(input) {
   return env2.DITTO_AUTOPILOT_BYPASS === "1" || process.env.DITTO_AUTOPILOT_BYPASS === "1";
 }
 async function appendBypassRecord(repoRoot, entry) {
-  const dir = join52(repoRoot, ".ditto");
+  const dir = join53(repoRoot, ".ditto");
   await ensureDir(dir);
-  const path = join52(dir, "autopilot-bypass.jsonl");
+  const path = join53(dir, "autopilot-bypass.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -28427,14 +28720,14 @@ function bashWriteTargets(cmd) {
 }
 
 // src/hooks/stop.ts
-import { readFile as readFile11, readdir as readdir16 } from "fs/promises";
-import { join as join54 } from "path";
+import { readFile as readFile11, readdir as readdir17 } from "fs/promises";
+import { join as join55 } from "path";
 
 // src/schemas/acg-semantic-compatibility.ts
 var SEMANTIC_UNVERIFIED_SENTINEL = "__unverified__";
-var acgSemanticCompatibility = exports_external.object({
-  ...acgChangeEnvelope("acg.semantic-compatibility.v1"),
-  change: exports_external.object({ before: exports_external.string().min(1), after: exports_external.string().min(1) }),
+var acgSemanticCompatibilityChange = exports_external.object({
+  before: exports_external.string().min(1),
+  after: exports_external.string().min(1),
   old_meaning: exports_external.string().min(1).describe("Domain meaning the old signature expressed"),
   business_assumptions: exports_external.array(exports_external.string().min(1)).default([]).describe("Implicit assumptions callers depended on"),
   compatibility: exports_external.enum(["compatible", "additive", "breaking"]),
@@ -28449,33 +28742,39 @@ var acgSemanticCompatibility = exports_external.object({
     intended_breaking: exports_external.boolean().optional(),
     reproducibility: acgFitnessVerdictReproducibility.optional().describe("Pinned judge model for an LLM meaning judgment; required for an agent-produced semantic_safe=yes (a user yes is a human attestation, exempt)")
   })
+});
+var acgSemanticCompatibility = exports_external.object({
+  ...acgChangeEnvelope("acg.semantic-compatibility.v1"),
+  changes: exports_external.array(acgSemanticCompatibilityChange).min(1)
 }).superRefine((value, ctx) => {
-  if (value.produced_by === "agent" && value.verdict.semantic_safe === "yes") {
-    if (!value.verdict.reproducibility) {
+  value.changes.forEach((change, i2) => {
+    if (value.produced_by === "agent" && change.verdict.semantic_safe === "yes") {
+      if (!change.verdict.reproducibility) {
+        ctx.addIssue({
+          code: exports_external.ZodIssueCode.custom,
+          message: "agent-produced semantic_safe='yes' requires verdict.reproducibility (model_version)",
+          path: ["changes", i2, "verdict", "reproducibility"]
+        });
+      }
+      const ref = change.characterization?.test_ref;
+      const witnessed = change.characterization?.exists === true && typeof ref === "string" && ref.length > 0;
+      if (!witnessed) {
+        ctx.addIssue({
+          code: exports_external.ZodIssueCode.custom,
+          message: "agent-produced semantic_safe='yes' requires characterization.exists=true with a non-empty test_ref (a passing behavior test must witness the preserved meaning)",
+          path: ["changes", i2, "characterization", "test_ref"]
+        });
+      }
+    }
+    if (change.verdict.semantic_safe !== "unverified" && change.old_meaning === SEMANTIC_UNVERIFIED_SENTINEL) {
       ctx.addIssue({
         code: exports_external.ZodIssueCode.custom,
-        message: "agent-produced semantic_safe='yes' requires verdict.reproducibility (model_version)",
-        path: ["verdict", "reproducibility"]
+        message: `old_meaning '${SEMANTIC_UNVERIFIED_SENTINEL}' is a seed placeholder; provide the real domain meaning before declaring yes/no`,
+        path: ["changes", i2, "old_meaning"]
       });
     }
-    const ref = value.characterization?.test_ref;
-    const witnessed = value.characterization?.exists === true && typeof ref === "string" && ref.length > 0;
-    if (!witnessed) {
-      ctx.addIssue({
-        code: exports_external.ZodIssueCode.custom,
-        message: "agent-produced semantic_safe='yes' requires characterization.exists=true with a non-empty test_ref (a passing behavior test must witness the preserved meaning)",
-        path: ["characterization", "test_ref"]
-      });
-    }
-  }
-  if (value.verdict.semantic_safe !== "unverified" && value.old_meaning === SEMANTIC_UNVERIFIED_SENTINEL) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: `old_meaning '${SEMANTIC_UNVERIFIED_SENTINEL}' is a seed placeholder; provide the real domain meaning before declaring yes/no`,
-      path: ["old_meaning"]
-    });
-  }
-}).describe("ACG SemanticCompatibility \u2014 type vs meaning split verdict");
+  });
+}).describe("ACG SemanticCompatibility \u2014 type vs meaning split verdict (multi-change)");
 
 // src/schemas/dialectic.ts
 var dialecticMode = exports_external.enum(["create", "review", "decision", "proposal", "document", "final-answer"]).describe("What the three roles work on and produce");
@@ -28555,6 +28854,22 @@ var dialectic = exports_external.object({
   synthesizer: dialecticSynthesizer
 }).describe("Full three-role dialectic deliberation artifact (\xA76.6)");
 
+// src/schemas/knowledge-gate-carrier.ts
+var knowledgeGateCarrier = exports_external.object({
+  schema_version: schemaVersion,
+  triggers: exports_external.object({
+    adr_worthy_decision: exports_external.boolean(),
+    new_agreed_term: exports_external.boolean(),
+    repeated_pattern: exports_external.boolean()
+  }).describe("The three knowledge triggers the node declared for this work item"),
+  delta: exports_external.object({
+    decisions: exports_external.number().int().nonnegative(),
+    glossary_terms: exports_external.number().int().nonnegative(),
+    patterns: exports_external.number().int().nonnegative(),
+    learnings: exports_external.number().int().nonnegative()
+  }).describe("Per-update counts the node declared it recorded")
+}).describe("Persisted inputs to knowledgeUpdateGate, written by the knowledge node");
+
 // src/hooks/semantic-nudge.ts
 import { readFileSync as readFileSync4 } from "fs";
 
@@ -28592,7 +28907,7 @@ function buildScanObservation(input) {
 }
 
 // src/core/work-item-handoff.ts
-import { join as join53 } from "path";
+import { join as join54 } from "path";
 class InvalidBaseRefError extends Error {
   ref;
   constructor(ref) {
@@ -28773,7 +29088,7 @@ async function writeWorkItemHandoff(repoRoot, store, workId, options = {}, now =
   });
   const hstore = new HandoffStore(repoRoot);
   const handoffRel = completion.final_verdict === "pass" ? await hstore.writeArchived(handoffArtifact, now) : await hstore.write(handoffArtifact);
-  const handoffPath = join53(repoRoot, handoffRel);
+  const handoffPath = join54(repoRoot, handoffRel);
   await store.update(workId, (cur) => {
     const { re_entry: _existingReEntry, ...rest } = cur;
     if (completion.final_verdict === "pass") {
@@ -28907,17 +29222,17 @@ async function readArtifact(path, schema, name) {
   }
 }
 async function readDialecticLedgers(dir) {
-  const reviewsDir = join54(dir, "reviews");
+  const reviewsDir = join55(dir, "reviews");
   let names;
   try {
-    names = await readdir16(reviewsDir);
+    names = await readdir17(reviewsDir);
   } catch {
     return { status: "ok", items: [] };
   }
   const files = names.filter((n2) => /^dialectic-.*\.json$/.test(n2)).sort();
   const items = [];
   for (const name of files) {
-    const read = await readArtifact(join54(reviewsDir, name), dialectic, `reviews/${name}`);
+    const read = await readArtifact(join55(reviewsDir, name), dialectic, `reviews/${name}`);
     if (read.status === "malformed")
       return { status: "malformed", name: read.name };
     if (read.status === "ok")
@@ -28965,15 +29280,30 @@ function impactForcesContinuation(graph) {
   return graph.unresolved.map((u3) => `impact: unresolved ${u3.kind} \u2014 ${u3.path} (${u3.reason})`);
 }
 function semanticForcesContinuation(sem) {
-  const v2 = sem.verdict;
-  const where = `${sem.change.before} \u2192 ${sem.change.after}`;
-  if (v2.semantic_safe === "unverified") {
-    return [`semantic: meaning compatibility unverified for ${where} \u2014 verify or declare intended`];
-  }
-  if (v2.semantic_safe === "no" && v2.intended_breaking !== true) {
-    return [`semantic: unintended meaning break ${where} (was: ${sem.old_meaning})`];
-  }
-  return [];
+  return sem.changes.flatMap((change) => {
+    const v2 = change.verdict;
+    const where = `${change.before} \u2192 ${change.after}`;
+    if (v2.semantic_safe === "unverified") {
+      return [
+        `semantic: meaning compatibility unverified for ${where} \u2014 verify or declare intended`
+      ];
+    }
+    if (v2.semantic_safe === "no" && v2.intended_breaking !== true) {
+      return [`semantic: unintended meaning break ${where} (was: ${change.old_meaning})`];
+    }
+    return [];
+  });
+}
+function isKnowledgeNode(n2) {
+  return n2.kind === "knowledge" || n2.owner === "knowledge-curator";
+}
+var TERMINAL_NODE_STATUSES = new Set(["passed", "failed", "blocked"]);
+function knowledgeForcesContinuation(graph, carrier) {
+  const hasTerminalKnowledgeNode = graph.nodes.some((n2) => isKnowledgeNode(n2) && TERMINAL_NODE_STATUSES.has(n2.status));
+  if (!hasTerminalKnowledgeNode || carrier === undefined)
+    return [];
+  const g3 = knowledgeUpdateGate(carrier.triggers, carrier.delta);
+  return g3.pass ? [] : g3.reasons.map((r3) => `knowledge update \u2014 ${r3}`);
 }
 async function maybeRunFitness(repoRoot, workItemId2, dir) {
   try {
@@ -28986,11 +29316,11 @@ async function maybeRunFitness(repoRoot, workItemId2, dir) {
       riskKnown: false,
       producedAt: new Date().toISOString()
     };
-    const verdictsPath2 = join54(dir, "fitness-verdicts.json");
+    const verdictsPath2 = join55(dir, "fitness-verdicts.json");
     const provider = await Bun.file(verdictsPath2).exists() ? compositeProvider(repoRoot, verdictsPath2) : commandProvider(repoRoot);
     const snapshot = await runFitness(fns, ctx, provider);
     await ensureDir(dir);
-    await writeJson(join54(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, snapshot);
+    await writeJson(join55(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, snapshot);
   } catch {}
 }
 var DRIFT_HOPS = ["H1", "H2", "H3"];
@@ -29040,15 +29370,16 @@ var stopHandler = async (input) => {
   }
   const dir = localDir(input.repoRoot, "work-items", pointer);
   await maybeRunFitness(input.repoRoot, pointer, dir);
-  const completion = await readArtifact(join54(dir, "completion.json"), completionContract, "completion.json");
-  const conv = await readArtifact(join54(dir, "convergence.json"), convergence, "convergence.json");
-  const pilot = await readArtifact(join54(dir, "autopilot.json"), autopilot, "autopilot.json");
-  const intent = await readArtifact(join54(dir, "intent.json"), intentContract, "intent.json");
+  const completion = await readArtifact(join55(dir, "completion.json"), completionContract, "completion.json");
+  const conv = await readArtifact(join55(dir, "convergence.json"), convergence, "convergence.json");
+  const pilot = await readArtifact(join55(dir, "autopilot.json"), autopilot, "autopilot.json");
+  const intent = await readArtifact(join55(dir, "intent.json"), intentContract, "intent.json");
   const dialectics = await readDialecticLedgers(dir);
-  const acgReview = await readArtifact(join54(dir, "acg-review.json"), acgReviewGraph, "acg-review.json");
-  const assurance = await readArtifact(join54(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json");
-  const impact = await readArtifact(join54(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json");
-  const semantic = await readArtifact(join54(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
+  const acgReview = await readArtifact(join55(dir, "acg-review.json"), acgReviewGraph, "acg-review.json");
+  const assurance = await readArtifact(join55(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json");
+  const impact = await readArtifact(join55(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json");
+  const semantic = await readArtifact(join55(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
+  const knowledge = await readArtifact(join55(dir, "knowledge-gate.json"), knowledgeGateCarrier, "knowledge-gate.json");
   const malformed = [
     completion,
     conv,
@@ -29058,7 +29389,8 @@ var stopHandler = async (input) => {
     acgReview,
     assurance,
     impact,
-    semantic
+    semantic,
+    knowledge
   ].find((a2) => a2.status === "malformed");
   if (malformed && malformed.status === "malformed") {
     return {
@@ -29119,6 +29451,9 @@ var stopHandler = async (input) => {
   if (semantic.status === "ok") {
     reasons.push(...semanticForcesContinuation(semantic.data));
   }
+  if (pilot.status === "ok") {
+    reasons.push(...knowledgeForcesContinuation(pilot.data, knowledge.status === "ok" ? knowledge.data : undefined));
+  }
   const advisoryBlock = advisories.length > 0 ? `DITTO Stop advisory (non-blocking) \u2014 ${advisories.length} item(s):
 - ${advisories.join(`
 - `)}
@@ -29148,7 +29483,7 @@ ${advisoryBlock}`
 };
 
 // src/hooks/user-prompt-submit.ts
-import { join as join55 } from "path";
+import { join as join56 } from "path";
 
 // src/core/charter.ts
 var PRIME_DIRECTIVE = [
@@ -29284,7 +29619,7 @@ function pendingHandoffHint(item) {
 async function logClassification(repoRoot, entry) {
   const dir = localDir(repoRoot, "logs");
   await ensureDir(dir);
-  const path = join55(dir, "user-prompt.jsonl");
+  const path = join56(dir, "user-prompt.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -29403,10 +29738,10 @@ var hookCommand = defineCommand({
 });
 
 // src/cli/commands/impact.ts
-import { join as join57 } from "path";
+import { join as join58 } from "path";
 
 // src/acg/impact/codeql-analyzer.ts
-import { join as join56 } from "path";
+import { join as join57 } from "path";
 function isTestFile(path, language) {
   if (language === "java") {
     return path.includes("/test/") || /(Test|Tests|IT)\.java$/.test(path);
@@ -29435,8 +29770,8 @@ class CodeqlImpactAnalyzer {
       repoRoot: this.target.repoRoot,
       sourceRoot: input.sourceRoot,
       language: this.target.language,
-      dbPath: join56(this.target.cacheDir, "db"),
-      workDir: join56(this.target.cacheDir, `q-impact-${this.target.symbol}`),
+      dbPath: join57(this.target.cacheDir, "db"),
+      workDir: join57(this.target.cacheDir, `q-impact-${this.target.symbol}`),
       query: renderQuery(relationQueries(this.target.language).impact, this.target.symbol, this.target.declFile),
       ...this.target.buildMode ? { buildMode: this.target.buildMode } : {},
       ...this.target.buildCommand ? { buildCommand: this.target.buildCommand } : {},
@@ -29472,8 +29807,8 @@ class CodeqlImpactAnalyzer {
       repoRoot: this.target.repoRoot,
       sourceRoot,
       language: this.target.language,
-      dbPath: join56(this.target.cacheDir, "db"),
-      workDir: join56(this.target.cacheDir, "q-xrepo"),
+      dbPath: join57(this.target.cacheDir, "db"),
+      workDir: join57(this.target.cacheDir, "q-xrepo"),
       query: relationQueries(this.target.language).unresolved,
       ...this.target.buildMode ? { buildMode: this.target.buildMode } : {},
       ...this.target.buildCommand ? { buildCommand: this.target.buildCommand } : {},
@@ -29585,7 +29920,7 @@ var impactCommand = defineCommand({
     const changeType = args["change-type"] ?? "signature";
     try {
       const repoRoot = await resolveRepoRootForCreate();
-      const sourceRoot = args["source-root"] ?? join57(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join58(repoRoot, "src");
       const language = args.language ?? "javascript";
       const buildCommand = args["build-command"];
       const buildMode = !buildCommand && language === "java" ? "none" : undefined;
@@ -29646,7 +29981,7 @@ var impactCommand = defineCommand({
 import { resolve as resolve14 } from "path";
 
 // src/core/init-scaffold.ts
-import { basename as basename2, join as join58 } from "path";
+import { basename as basename2, join as join59 } from "path";
 
 // src/schemas/glossary.ts
 var glossaryStatus = exports_external.enum(["proposed", "agreed", "deprecated"]).describe("Lifecycle of a glossary entry");
@@ -29671,15 +30006,15 @@ var glossary = exports_external.object({
 
 // src/core/init-scaffold.ts
 var SCAFFOLD_DIRS = [
-  join58("local", "work-items"),
-  join58("local", "runs"),
-  join58("local", "handoff"),
-  join58("local", "sessions"),
-  join58("local", "logs"),
-  join58("local", "cache"),
+  join59("local", "work-items"),
+  join59("local", "runs"),
+  join59("local", "handoff"),
+  join59("local", "sessions"),
+  join59("local", "logs"),
+  join59("local", "cache"),
   "agents",
   "knowledge",
-  join58("knowledge", "adr")
+  join59("knowledge", "adr")
 ];
 var DITTO_GITIGNORE = `# DITTO per-developer runtime \u2014 volatile, not for version control.
 # Managed by \`ditto init\`; safe to edit.
@@ -29716,18 +30051,18 @@ async function seedFileIfAbsent(absPath, relPath, write, created, skipped) {
   return true;
 }
 async function initScaffold(repoRoot, now) {
-  const dittoDir2 = join58(repoRoot, ".ditto");
+  const dittoDir2 = join59(repoRoot, ".ditto");
   const createdDirs = [];
   const createdFiles = [];
   const skippedFiles = [];
-  const glossaryAbs = join58(dittoDir2, "knowledge", "glossary.json");
+  const glossaryAbs = join59(dittoDir2, "knowledge", "glossary.json");
   const alreadyInitialized = await fileExists(glossaryAbs);
   await ensureDirTracked(dittoDir2, ".ditto", createdDirs);
   for (const sub of SCAFFOLD_DIRS) {
-    await ensureDirTracked(join58(dittoDir2, sub), join58(".ditto", sub), createdDirs);
+    await ensureDirTracked(join59(dittoDir2, sub), join59(".ditto", sub), createdDirs);
   }
   const projectName = basename2(repoRoot) || "project";
-  await seedFileIfAbsent(glossaryAbs, join58(".ditto", "knowledge", "glossary.json"), () => writeJson(glossaryAbs, glossary, {
+  await seedFileIfAbsent(glossaryAbs, join59(".ditto", "knowledge", "glossary.json"), () => writeJson(glossaryAbs, glossary, {
     schema_version: "0.1.0",
     project_name: projectName,
     updated_at: now.toISOString(),
@@ -29735,10 +30070,10 @@ async function initScaffold(repoRoot, now) {
   }).then(() => {
     return;
   }), createdFiles, skippedFiles);
-  const contextAbs = join58(dittoDir2, "knowledge", "CONTEXT.md");
-  await seedFileIfAbsent(contextAbs, join58(".ditto", "knowledge", "CONTEXT.md"), () => atomicWriteText(contextAbs, emptyContext(projectName)), createdFiles, skippedFiles);
-  const gitignoreAbs = join58(dittoDir2, ".gitignore");
-  await seedFileIfAbsent(gitignoreAbs, join58(".ditto", ".gitignore"), () => atomicWriteText(gitignoreAbs, DITTO_GITIGNORE), createdFiles, skippedFiles);
+  const contextAbs = join59(dittoDir2, "knowledge", "CONTEXT.md");
+  await seedFileIfAbsent(contextAbs, join59(".ditto", "knowledge", "CONTEXT.md"), () => atomicWriteText(contextAbs, emptyContext(projectName)), createdFiles, skippedFiles);
+  const gitignoreAbs = join59(dittoDir2, ".gitignore");
+  await seedFileIfAbsent(gitignoreAbs, join59(".ditto", ".gitignore"), () => atomicWriteText(gitignoreAbs, DITTO_GITIGNORE), createdFiles, skippedFiles);
   return { repoRoot, createdDirs, createdFiles, skippedFiles, alreadyInitialized };
 }
 
@@ -29860,11 +30195,11 @@ var knowledgeCommand = defineCommand({
 // src/cli/commands/memory.ts
 import { randomBytes as randomBytes3 } from "crypto";
 import { readFile as readFile13 } from "fs/promises";
-import { isAbsolute as isAbsolute8, join as join60 } from "path";
+import { isAbsolute as isAbsolute8, join as join61 } from "path";
 
 // src/core/memory-bootstrap.ts
-import { readFile as readFile12, readdir as readdir17 } from "fs/promises";
-import { join as join59, relative as relative14 } from "path";
+import { readFile as readFile12, readdir as readdir18 } from "fs/promises";
+import { join as join60, relative as relative14 } from "path";
 function bootstrapEventId(key) {
   return `memevt_${sha256Hex(key).slice(0, 12)}`;
 }
@@ -29964,11 +30299,11 @@ async function appendEventGraceful(store, event, result2) {
 async function listMarkdown(dir) {
   let entries;
   try {
-    entries = await readdir17(dir);
+    entries = await readdir18(dir);
   } catch {
     return [];
   }
-  return entries.filter((n2) => n2.endsWith(".md")).sort().map((n2) => join59(dir, n2));
+  return entries.filter((n2) => n2.endsWith(".md")).sort().map((n2) => join60(dir, n2));
 }
 async function bootstrapIngest(repoRoot, options = {}) {
   const now = (options.now ?? new Date).toISOString();
@@ -29984,7 +30319,7 @@ async function bootstrapIngest(repoRoot, options = {}) {
 }
 async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head) {
   const result2 = emptyResult();
-  const dir = join59(dittoDir(repoRoot), "knowledge", "adr");
+  const dir = join60(dittoDir(repoRoot), "knowledge", "adr");
   for (const abs of await listMarkdown(dir)) {
     const body = await readFile12(abs, "utf8");
     const rel = relative14(repoRoot, abs);
@@ -30023,7 +30358,7 @@ async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head
 }
 async function ingestGlossary(repoRoot, sourceStore, eventStore, now, revision, head) {
   const result2 = emptyResult();
-  const abs = join59(dittoDir(repoRoot), "knowledge", "glossary.json");
+  const abs = join60(dittoDir(repoRoot), "knowledge", "glossary.json");
   let raw;
   try {
     raw = await readFile12(abs, "utf8");
@@ -30658,7 +30993,7 @@ var memoryBuild = defineCommand({
     }
     try {
       if (args.fragments) {
-        const path = isAbsolute8(args.fragments) ? args.fragments : join60(repoRoot, args.fragments);
+        const path = isAbsolute8(args.fragments) ? args.fragments : join61(repoRoot, args.fragments);
         const raw = await readFile13(path, "utf8");
         const parsed = irFragmentsSchema.safeParse(JSON.parse(raw));
         if (!parsed.success) {
@@ -30699,7 +31034,7 @@ var memoryBuild = defineCommand({
         const path = s2.source.path;
         if (!path)
           continue;
-        const abs = isAbsolute8(path) ? path : join60(repoRoot, path);
+        const abs = isAbsolute8(path) ? path : join61(repoRoot, path);
         files.push({
           source_id: s2.source.source_id,
           path,
@@ -31285,7 +31620,7 @@ var memoryCommand = defineCommand({
 
 // src/core/run-with.ts
 import { stat as stat5, writeFile as writeFile3 } from "fs/promises";
-import { dirname as dirname11, join as join61, relative as relative15, resolve as resolve15, sep as sep7 } from "path";
+import { dirname as dirname11, join as join62, relative as relative15, resolve as resolve15, sep as sep7 } from "path";
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
 
 class RunWithUsageError extends Error {
@@ -31312,7 +31647,7 @@ function resolveRepoCwd(repoRoot, cwd) {
     throw new RunWithUsageError(`invalid cwd: ${parsed.error.issues[0]?.message}`);
   }
   const resolvedRoot = resolve15(repoRoot);
-  const resolvedCwd = resolve15(join61(repoRoot, cwd));
+  const resolvedCwd = resolve15(join62(repoRoot, cwd));
   if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep7}`)) {
     throw new RunWithUsageError(`cwd escapes repo root: ${cwd}`);
   }
@@ -31784,6 +32119,16 @@ var runCommand2 = defineCommand({
 });
 
 // src/acg/semantic/semantic-produce.ts
+function buildSeedChange(pair) {
+  return {
+    before: pair.before,
+    after: pair.after,
+    old_meaning: SEMANTIC_UNVERIFIED_SENTINEL,
+    business_assumptions: [],
+    compatibility: "breaking",
+    verdict: { type_safe: true, semantic_safe: "unverified" }
+  };
+}
 function buildSemanticSeed(input) {
   return {
     schema_version: "0.1.0",
@@ -31791,18 +32136,29 @@ function buildSemanticSeed(input) {
     work_item_id: input.workItemId,
     produced_by: "agent",
     produced_at: input.producedAt,
-    change: { before: input.before, after: input.after },
-    old_meaning: SEMANTIC_UNVERIFIED_SENTINEL,
-    business_assumptions: [],
-    compatibility: "breaking",
-    verdict: { type_safe: true, semantic_safe: "unverified" }
+    changes: input.changes.map(buildSeedChange)
   };
 }
+function selectChangeIndex(seed, target) {
+  if (!target) {
+    if (seed.changes.length !== 1) {
+      throw new Error(`semantic verdict: ${seed.changes.length} changes present; specify which pair (--before/--after) to resolve`);
+    }
+    return 0;
+  }
+  const idx = seed.changes.findIndex((c3) => c3.before === target.before && c3.after === target.after);
+  if (idx < 0) {
+    throw new Error(`semantic verdict: no change matching "${target.before}" \u2192 "${target.after}"`);
+  }
+  return idx;
+}
 function applySemanticVerdict(seed, v2) {
-  return {
-    ...seed,
-    old_meaning: v2.oldMeaning ?? seed.old_meaning,
-    compatibility: v2.compatibility ?? seed.compatibility,
+  const idx = selectChangeIndex(seed, v2.target);
+  const prior = seed.changes[idx];
+  const resolved = {
+    ...prior,
+    old_meaning: v2.oldMeaning ?? prior.old_meaning,
+    compatibility: v2.compatibility ?? prior.compatibility,
     ...v2.characterizationTestRef ? {
       characterization: {
         exists: true,
@@ -31811,18 +32167,22 @@ function applySemanticVerdict(seed, v2) {
       }
     } : {},
     verdict: {
-      type_safe: v2.typeSafe ?? seed.verdict.type_safe,
+      type_safe: v2.typeSafe ?? prior.verdict.type_safe,
       semantic_safe: v2.semanticSafe,
       ...v2.intendedBreaking !== undefined ? { intended_breaking: v2.intendedBreaking } : {},
       ...v2.modelVersion ? { reproducibility: { model_version: v2.modelVersion } } : {}
     }
+  };
+  return {
+    ...seed,
+    changes: seed.changes.map((c3, i2) => i2 === idx ? resolved : c3)
   };
 }
 
 // src/acg/semantic/signature-codeql.ts
 import { existsSync as existsSync6 } from "fs";
 import { rm } from "fs/promises";
-import { join as join62 } from "path";
+import { join as join63 } from "path";
 var SIGNATURE_QUERY_JS = `/**
  * @name ditto signatures js
  * @id ditto/signature-relations
@@ -31950,20 +32310,20 @@ async function extractSignatures(input, deps) {
 async function scanSignatureChanges(input, deps) {
   const baseSha = gitRevParse(input.repoRoot, input.baseRef);
   const cacheBase = localDir(input.repoRoot, "cache", "codeql");
-  const baseCache = join62(cacheBase, `${baseSha}-${input.language}`);
-  const baseDb = join62(baseCache, "db");
+  const baseCache = join63(cacheBase, `${baseSha}-${input.language}`);
+  const baseDb = join63(baseCache, "db");
   const needWorktree = !existsSync6(baseDb);
-  const worktree = join62(cacheBase, "worktrees", `${baseSha}-${input.language}`);
+  const worktree = join63(cacheBase, "worktrees", `${baseSha}-${input.language}`);
   if (needWorktree)
     addDetachedWorktree(input.repoRoot, worktree, baseSha);
   let before;
   try {
     before = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join62(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
+      sourceRoot: join63(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
       language: input.language,
       dbPath: baseDb,
-      workDir: join62(baseCache, "q-sig"),
+      workDir: join63(baseCache, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -31971,14 +32331,14 @@ async function scanSignatureChanges(input, deps) {
     if (needWorktree)
       removeWorktree(input.repoRoot, worktree);
   }
-  const afterDir = join62(cacheBase, `after-${process.pid}-${input.language}`);
+  const afterDir = join63(cacheBase, `after-${process.pid}-${input.language}`);
   try {
     const after = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join62(input.repoRoot, input.sourceRootRel),
+      sourceRoot: join63(input.repoRoot, input.sourceRootRel),
       language: input.language,
-      dbPath: join62(afterDir, "db"),
-      workDir: join62(afterDir, "q-sig"),
+      dbPath: join63(afterDir, "db"),
+      workDir: join63(afterDir, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -32020,23 +32380,31 @@ var detectCommand = defineCommand({
     try {
       const repoRoot = await resolveRepoRootForCreate();
       const path = semanticPath(repoRoot, args["work-item"]);
-      if (await Bun.file(path).exists()) {
-        writeError(`semantic detect: ${args["work-item"]} already has semantic-compatibility.json. MVP supports one signature pair per work item; multi-pair detection is a follow-up (wi-semantic-diff-extractor). Remove it or resolve it with \`ditto semantic verdict\` first.`);
-        process.exit(USAGE_ERROR_EXIT);
-        return;
-      }
       const seed = buildSemanticSeed({
         workItemId: args["work-item"],
-        file: args.file,
-        symbol: args.symbol,
-        before: args.before,
-        after: args.after,
+        changes: [{ before: args.before, after: args.after }],
         producedAt: new Date().toISOString()
       });
+      let artifact = seed;
+      if (await Bun.file(path).exists()) {
+        const prior = acgSemanticCompatibility.parse(JSON.parse(await Bun.file(path).text()));
+        const dup = prior.changes.some((c3) => c3.before === args.before && c3.after === args.after);
+        if (dup) {
+          writeError(`semantic detect: ${args["work-item"]} already has "${args.before}" \u2192 "${args.after}". Resolve it with \`ditto semantic verdict\` instead of re-seeding.`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        artifact = { ...prior, changes: [...prior.changes, ...seed.changes] };
+      }
       await ensureDir(localDir(repoRoot, "work-items", args["work-item"]));
-      await writeJson(path, acgSemanticCompatibility, seed);
+      await writeJson(path, acgSemanticCompatibility, artifact);
       if (format === "json") {
-        writeJson2({ work_item_id: args["work-item"], semantic_safe: "unverified", seeded: true });
+        writeJson2({
+          work_item_id: args["work-item"],
+          semantic_safe: "unverified",
+          seeded: true,
+          changes: artifact.changes.length
+        });
       } else {
         writeHuman(`semantic detect: ${args.file} ${args.symbol} "${args.before}" \u2192 "${args.after}" seeded (unverified) \u2192 semantic-compatibility.json`);
       }
@@ -32055,6 +32423,14 @@ var verdictCommand = defineCommand({
   args: {
     "work-item": { type: "string", description: "Work item id", required: true },
     "semantic-safe": { type: "string", description: "yes|no|unverified", required: true },
+    before: {
+      type: "string",
+      description: "Signature before \u2014 selects which pair to resolve (required when >1 pair)"
+    },
+    after: {
+      type: "string",
+      description: "Signature after \u2014 selects which pair to resolve (required when >1 pair)"
+    },
     "old-meaning": { type: "string", description: "Real domain meaning (required for yes/no)" },
     "intended-breaking": {
       type: "boolean",
@@ -32102,24 +32478,33 @@ var verdictCommand = defineCommand({
         return;
       }
       const seed = acgSemanticCompatibility.parse(JSON.parse(await Bun.file(path).text()));
+      if (args.before === undefined !== (args.after === undefined)) {
+        writeError("semantic verdict: --before and --after must be given together");
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const target = args.before !== undefined && args.after !== undefined ? { before: args.before, after: args.after } : undefined;
       const resolved = applySemanticVerdict(seed, {
         semanticSafe: safe,
-        oldMeaning: args["old-meaning"],
-        compatibility,
-        intendedBreaking: args["intended-breaking"],
-        typeSafe: args["type-safe"],
-        modelVersion: args["model-version"],
-        characterizationTestRef: args["characterization-test"]
+        ...args["old-meaning"] !== undefined ? { oldMeaning: args["old-meaning"] } : {},
+        ...compatibility !== undefined ? { compatibility } : {},
+        ...args["intended-breaking"] !== undefined ? { intendedBreaking: args["intended-breaking"] } : {},
+        ...args["type-safe"] !== undefined ? { typeSafe: args["type-safe"] } : {},
+        ...args["model-version"] !== undefined ? { modelVersion: args["model-version"] } : {},
+        ...args["characterization-test"] !== undefined ? { characterizationTestRef: args["characterization-test"] } : {},
+        ...target ? { target } : {}
       });
       await writeJson(path, acgSemanticCompatibility, resolved);
+      const resolvedChange = target ? resolved.changes.find((c3) => c3.before === target.before && c3.after === target.after) : resolved.changes[0];
+      const resolvedVerdict = resolvedChange?.verdict;
       if (format === "json") {
         writeJson2({
           work_item_id: args["work-item"],
-          semantic_safe: resolved.verdict.semantic_safe,
-          intended_breaking: resolved.verdict.intended_breaking ?? false
+          semantic_safe: resolvedVerdict?.semantic_safe,
+          intended_breaking: resolvedVerdict?.intended_breaking ?? false
         });
       } else {
-        writeHuman(`semantic verdict: ${args["work-item"]} \u2192 semantic_safe=${resolved.verdict.semantic_safe}` + `${resolved.verdict.intended_breaking ? " (intended break)" : ""} \u2192 semantic-compatibility.json`);
+        writeHuman(`semantic verdict: ${args["work-item"]} \u2192 semantic_safe=${resolvedVerdict?.semantic_safe}` + `${resolvedVerdict?.intended_breaking ? " (intended break)" : ""} \u2192 semantic-compatibility.json`);
       }
     } catch (err) {
       writeError(`semantic verdict failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -32179,15 +32564,6 @@ var scanCommand = defineCommand({
         }
         return;
       }
-      if (changes.length > 1) {
-        const list = changes.map((c3) => `  - ${c3.file}: ${c3.before} \u2192 ${c3.after}`).join(`
-`);
-        writeError(`semantic scan: ${changes.length} exported signature changes vs ${args.base}; MVP seeds one pair per work item. Narrow the change or seed one explicitly with \`ditto semantic detect\`.
-${list}`);
-        process.exit(USAGE_ERROR_EXIT);
-        return;
-      }
-      const only = changes[0];
       const path = semanticPath(repoRoot, args["work-item"]);
       if (await Bun.file(path).exists()) {
         writeError(`semantic scan: ${args["work-item"]} already has semantic-compatibility.json. Remove it or resolve it with \`ditto semantic verdict\` first.`);
@@ -32196,10 +32572,7 @@ ${list}`);
       }
       const seed = buildSemanticSeed({
         workItemId: args["work-item"],
-        file: only.file,
-        symbol: only.symbol,
-        before: only.before,
-        after: only.after,
+        changes: changes.map((c3) => ({ before: c3.before, after: c3.after })),
         producedAt: new Date().toISOString()
       });
       await ensureDir(localDir(repoRoot, "work-items", args["work-item"]));
@@ -32208,12 +32581,14 @@ ${list}`);
         writeJson2({
           work_item_id: args["work-item"],
           base: args.base,
-          changes: 1,
-          seeded: true,
-          symbol: only.symbol
+          changes: changes.length,
+          seeded: true
         });
       } else {
-        writeHuman(`semantic scan: ${only.file} ${only.symbol} "${only.before}" \u2192 "${only.after}" seeded (unverified) \u2192 semantic-compatibility.json`);
+        const list = changes.map((c3) => `  - ${c3.file} ${c3.symbol} "${c3.before}" \u2192 "${c3.after}"`).join(`
+`);
+        writeHuman(`semantic scan: ${changes.length} exported signature change(s) seeded (unverified) \u2192 semantic-compatibility.json
+${list}`);
       }
     } catch (err) {
       writeError(`semantic scan failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -32324,12 +32699,12 @@ var semanticCommand = defineCommand({
 
 // src/cli/commands/setup.ts
 import { homedir as homedir6 } from "os";
-import { dirname as dirname13, join as join66, resolve as resolve18 } from "path";
+import { dirname as dirname13, join as join67, resolve as resolve18 } from "path";
 
 // src/core/setup.ts
 import { cp, readFile as readFile15, rm as rm2, writeFile as writeFile4 } from "fs/promises";
 import { platform as platform2 } from "os";
-import { join as join64, resolve as resolve16 } from "path";
+import { join as join65, resolve as resolve16 } from "path";
 
 // src/core/managed-resource.ts
 import { copyFile } from "fs/promises";
@@ -32420,7 +32795,7 @@ async function applyManagedFile(targetPath, managedBody, source = "AGENTS.md") {
 
 // src/core/resource-routing.ts
 import { readdirSync as readdirSync2 } from "fs";
-import { join as join63 } from "path";
+import { join as join64 } from "path";
 var GLOBAL_PREFIX = "GLOBAL_";
 function routeResource(filename, ctx) {
   if (filename.startsWith(GLOBAL_PREFIX)) {
@@ -32428,13 +32803,13 @@ function routeResource(filename, ctx) {
     return {
       scope: "global",
       destName,
-      destPath: join63(ctx.homeDir, ".claude", destName)
+      destPath: join64(ctx.homeDir, ".claude", destName)
     };
   }
   return {
     scope: "project",
     destName: filename,
-    destPath: join63(ctx.projectRoot, filename)
+    destPath: join64(ctx.projectRoot, filename)
   };
 }
 function discoverResources(resourcesDir) {
@@ -32487,7 +32862,7 @@ async function unallowlistSettingsFile(settingsPath) {
 // src/core/setup.ts
 var CODEX_MARKETPLACE_NAME = "ditto-local";
 var CODEX_PLUGIN_NAME = "ditto";
-var CODEX_PLUGIN_DEST_REL = join64(".agents", "plugins", CODEX_PLUGIN_NAME);
+var CODEX_PLUGIN_DEST_REL = join65(".agents", "plugins", CODEX_PLUGIN_NAME);
 var CODEX_BIN_NAME = platform2() === "win32" ? "ditto.exe" : "ditto";
 function setupHosts(host) {
   if (host === "codex")
@@ -32512,14 +32887,14 @@ function resourceDecisions(resourcesDir, projectRoot, homeDir, hosts) {
           host: "codex",
           filename,
           scope: "project",
-          destPath: join64(projectRoot, "AGENTS.md")
+          destPath: join65(projectRoot, "AGENTS.md")
         });
       } else if (filename === "GLOBAL_AGENTS.md") {
         out.push({
           host: "codex",
           filename,
           scope: "global",
-          destPath: join64(homeDir, ".codex", "AGENTS.md")
+          destPath: join65(homeDir, ".codex", "AGENTS.md")
         });
       }
     }
@@ -32574,23 +32949,23 @@ async function writeCodexMarketplace(path) {
 `);
 }
 async function installCodexAgents(pluginRoot, projectRoot) {
-  const srcDir = join64(pluginRoot, ".codex", "agents");
+  const srcDir = join65(pluginRoot, ".codex", "agents");
   if (!await fileExists(srcDir)) {
     throw new Error(`codex custom agents not found at ${srcDir}; run build:codex-plugin first`);
   }
-  const destDir = join64(projectRoot, ".codex", "agents");
+  const destDir = join65(projectRoot, ".codex", "agents");
   await ensureDir(destDir);
   let count = 0;
   for (const file of await listFiles(srcDir)) {
     if (!file.id.endsWith(".toml"))
       continue;
-    await cp(file.path, join64(destDir, file.id));
+    await cp(file.path, join65(destDir, file.id));
     count += 1;
   }
   return count;
 }
 function codexDittoCommand(installedPluginDir) {
-  return `"${join64(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
+  return `"${join65(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
 }
 function rewriteCodexDittoReferences(text, dittoCommand) {
   return text.replace(/"\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?"/g, dittoCommand).replace(/\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?/g, dittoCommand).replace(/`ditto(?=\s)/g, `\`${dittoCommand}`);
@@ -32601,28 +32976,37 @@ async function rewriteCodexTextFile(path, dittoCommand) {
   if (after !== before)
     await writeFile4(path, after);
 }
+function rewriteCodexAgentTomlReferences(text, dittoCommand) {
+  return text.replace(/(\bdeveloper_instructions\s*=\s*""")([\s\S]*?)("""\s*)/, (_match, open2, body, close) => `${open2}${rewriteCodexDittoReferences(body, dittoCommand)}${close}`);
+}
+async function rewriteCodexAgentTomlFile(path, dittoCommand) {
+  const before = await readFile15(path, "utf8");
+  const after = rewriteCodexAgentTomlReferences(before, dittoCommand);
+  if (after !== before)
+    await writeFile4(path, after);
+}
 async function rewriteCodexInstalledReferences(installedPluginDir) {
   const dittoCommand = codexDittoCommand(installedPluginDir);
-  for (const dir of await listDirectories(join64(installedPluginDir, "skills"))) {
-    const skillPath = join64(dir.path, "SKILL.md");
+  for (const dir of await listDirectories(join65(installedPluginDir, "skills"))) {
+    const skillPath = join65(dir.path, "SKILL.md");
     if (await fileExists(skillPath))
       await rewriteCodexTextFile(skillPath, dittoCommand);
   }
-  for (const file of await listFiles(join64(installedPluginDir, ".codex", "agents"))) {
+  for (const file of await listFiles(join65(installedPluginDir, ".codex", "agents"))) {
     if (file.id.endsWith(".toml"))
-      await rewriteCodexTextFile(file.path, dittoCommand);
+      await rewriteCodexAgentTomlFile(file.path, dittoCommand);
   }
 }
 async function writeCodexSurfaceCatalog(projectRoot) {
-  const surfaceCatalogPath = join64(projectRoot, ".ditto", "local", "surfaces.codex.json");
-  await ensureDir(join64(projectRoot, ".ditto", "local"));
+  const surfaceCatalogPath = join65(projectRoot, ".ditto", "local", "surfaces.codex.json");
+  await ensureDir(join65(projectRoot, ".ditto", "local"));
   const catalog = await generateSurfaceCatalog([codexHostAdapter], projectRoot, "surfaces.codex.json");
   await atomicWriteText(surfaceCatalogPath, `${JSON.stringify(catalog, null, 2)}
 `);
   return surfaceCatalogPath;
 }
 async function writeCodexPluginStatus(projectRoot) {
-  const statusPath = join64(projectRoot, ".ditto", "local", "codex-plugin-status.json");
+  const statusPath = join65(projectRoot, ".ditto", "local", "codex-plugin-status.json");
   const enableCommands = [
     `codex plugin marketplace add ${JSON.stringify(projectRoot)}`,
     `codex plugin add ${CODEX_PLUGIN_NAME}@${CODEX_MARKETPLACE_NAME}`
@@ -32640,19 +33024,19 @@ async function writeCodexPluginStatus(projectRoot) {
 }
 async function installCodexSurface(opts) {
   const { pluginRoot, projectRoot } = opts;
-  const manifestPath = join64(pluginRoot, ".codex-plugin", "plugin.json");
+  const manifestPath = join65(pluginRoot, ".codex-plugin", "plugin.json");
   if (!await fileExists(manifestPath)) {
     throw new Error(`codex plugin manifest not found at ${manifestPath}; run build:codex-plugin first`);
   }
-  const installedPluginDir = join64(projectRoot, CODEX_PLUGIN_DEST_REL);
+  const installedPluginDir = join65(projectRoot, CODEX_PLUGIN_DEST_REL);
   if (resolve16(pluginRoot) === resolve16(installedPluginDir)) {
     throw new Error(`codex plugin source is already the installed plugin directory: ${installedPluginDir}`);
   }
   await rm2(installedPluginDir, { recursive: true, force: true });
-  await ensureDir(join64(projectRoot, ".agents", "plugins"));
+  await ensureDir(join65(projectRoot, ".agents", "plugins"));
   await cp(pluginRoot, installedPluginDir, { recursive: true });
   await rewriteCodexInstalledReferences(installedPluginDir);
-  const marketplacePath = join64(projectRoot, ".agents", "plugins", "marketplace.json");
+  const marketplacePath = join65(projectRoot, ".agents", "plugins", "marketplace.json");
   await writeCodexMarketplace(marketplacePath);
   const agentsInstalled = await installCodexAgents(installedPluginDir, projectRoot);
   const surfaceCatalogPath = await writeCodexSurfaceCatalog(projectRoot);
@@ -32665,7 +33049,7 @@ async function installCodexSurface(opts) {
     statusPath,
     pluginLoadStatus: "needs_user_action",
     enableCommands,
-    agentsDir: join64(projectRoot, ".codex", "agents"),
+    agentsDir: join65(projectRoot, ".codex", "agents"),
     agentsInstalled
   };
 }
@@ -32674,7 +33058,7 @@ async function setup(opts) {
   const hosts = setupHosts(opts.host);
   const resources = [];
   for (const decision of resourceDecisions(resourcesDir, projectRoot, homeDir, hosts)) {
-    const body = await readFile15(join64(resourcesDir, decision.filename), "utf8");
+    const body = await readFile15(join65(resourcesDir, decision.filename), "utf8");
     const applied = await applyManagedFile(decision.destPath, body, decision.filename);
     resources.push({
       host: decision.host,
@@ -32686,7 +33070,7 @@ async function setup(opts) {
     });
   }
   const scaffold = await initScaffold(projectRoot, now);
-  const allowlistPath = join64(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join65(projectRoot, ".claude", "settings.json");
   const allowlistApplied = hosts.has("claude-code");
   if (allowlistApplied)
     await allowlistSettingsFile(allowlistPath);
@@ -32699,16 +33083,16 @@ async function setup(opts) {
 
 // src/cli/resources.ts
 import { existsSync as existsSync7 } from "fs";
-import { dirname as dirname12, join as join65, resolve as resolve17 } from "path";
+import { dirname as dirname12, join as join66, resolve as resolve17 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 function resolveResourcesDir(from) {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
-    return join65(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
+    return join66(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
   }
   const start = from ?? dirname12(fileURLToPath2(import.meta.url));
   let dir = start;
   for (;; ) {
-    const candidate = join65(dir, "resources", "managed");
+    const candidate = join66(dir, "resources", "managed");
     if (existsSync7(candidate))
       return candidate;
     const parent = dirname12(dir);
@@ -32716,7 +33100,7 @@ function resolveResourcesDir(from) {
       break;
     dir = parent;
   }
-  return join65(resolve17(start, "..", ".."), "resources", "managed");
+  return join66(resolve17(start, "..", ".."), "resources", "managed");
 }
 
 // src/cli/commands/setup.ts
@@ -32732,16 +33116,16 @@ function includesCodex(host) {
 }
 async function resolveCodexPluginRoot(resourcesDir, projectRoot) {
   const currentPluginRoot = resolve18(resourcesDir, "..", "..");
-  const sibling = join66(dirname13(currentPluginRoot), "codex-plugin");
-  if (await fileExists(join66(sibling, ".codex-plugin", "plugin.json")))
+  const sibling = join67(dirname13(currentPluginRoot), "codex-plugin");
+  if (await fileExists(join67(sibling, ".codex-plugin", "plugin.json")))
     return sibling;
-  const currentDist = join66(currentPluginRoot, "dist", "codex-plugin");
-  if (await fileExists(join66(currentDist, ".codex-plugin", "plugin.json")))
+  const currentDist = join67(currentPluginRoot, "dist", "codex-plugin");
+  if (await fileExists(join67(currentDist, ".codex-plugin", "plugin.json")))
     return currentDist;
-  const projectDist = join66(projectRoot, "dist", "codex-plugin");
-  if (await fileExists(join66(projectDist, ".codex-plugin", "plugin.json")))
+  const projectDist = join67(projectRoot, "dist", "codex-plugin");
+  if (await fileExists(join67(projectDist, ".codex-plugin", "plugin.json")))
     return projectDist;
-  if (await fileExists(join66(currentPluginRoot, ".codex", "agents")))
+  if (await fileExists(join67(currentPluginRoot, ".codex", "agents")))
     return currentPluginRoot;
   return currentPluginRoot;
 }
@@ -32816,7 +33200,7 @@ import { resolve as resolve19 } from "path";
 
 // src/core/teardown.ts
 import { copyFile as copyFile2, readFile as readFile16 } from "fs/promises";
-import { join as join67 } from "path";
+import { join as join68 } from "path";
 var BACKUP_SUFFIX2 = ".ditto_bak";
 async function teardown(opts) {
   const { resourcesDir, projectRoot, homeDir } = opts;
@@ -32826,7 +33210,7 @@ async function teardown(opts) {
     const action = await teardownFile(decision.destPath);
     files.push({ filename, scope: decision.scope, destPath: decision.destPath, action });
   }
-  const allowlistPath = join67(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join68(projectRoot, ".claude", "settings.json");
   await unallowlistSettingsFile(allowlistPath);
   return { files, allowlistPath };
 }
@@ -33682,4 +34066,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=733d65087bdc3ec0f51f80d48003e1f667acbbaf9e7a5ad504e89e7ca5734fa3
+//# ditto-src-stamp=182a6ef6772fed0849017d9e090553623ec79ccd7ca25882d8cf5d60c66fd2e6
