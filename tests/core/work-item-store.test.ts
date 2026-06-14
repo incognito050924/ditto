@@ -337,6 +337,13 @@ describe('WorkItemStore.archive', () => {
     await expect(store.archive('../escape')).rejects.toThrow();
   });
 
+  test('rejects bare dot-segment labels (. and ..)', async () => {
+    // '.'/'..' pass the [A-Za-z0-9._-]+ charset but resolve to the wrong dir
+    // (one level up from archive/), so they must be rejected explicitly.
+    await expect(store.archive('..')).rejects.toThrow();
+    await expect(store.archive('.')).rejects.toThrow();
+  });
+
   test('returns empty when nothing is terminal', async () => {
     await store.create(sampleInput());
     expect(await store.archive('empty')).toEqual([]);

@@ -157,8 +157,10 @@ export class WorkItemStore {
    * Returns the ids moved. `label` must be a safe path segment.
    */
   async archive(label: string): Promise<string[]> {
-    if (!/^[A-Za-z0-9._-]+$/.test(label)) {
-      throw new Error(`archive label must match [A-Za-z0-9._-]+ (got: ${label})`);
+    if (!/^[A-Za-z0-9._-]+$/.test(label) || label === '.' || label === '..') {
+      throw new Error(
+        `archive label must be a safe path segment ([A-Za-z0-9._-]+, not '.' or '..'; got: ${label})`,
+      );
     }
     const targets = (await this.list()).filter(
       (s) => s.status === 'done' || s.status === 'abandoned',

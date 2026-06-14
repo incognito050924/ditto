@@ -19458,8 +19458,8 @@ class WorkItemStore {
     }));
   }
   async archive(label) {
-    if (!/^[A-Za-z0-9._-]+$/.test(label)) {
-      throw new Error(`archive label must match [A-Za-z0-9._-]+ (got: ${label})`);
+    if (!/^[A-Za-z0-9._-]+$/.test(label) || label === "." || label === "..") {
+      throw new Error(`archive label must be a safe path segment ([A-Za-z0-9._-]+, not '.' or '..'; got: ${label})`);
     }
     const targets = (await this.list()).filter((s2) => s2.status === "done" || s2.status === "abandoned");
     if (targets.length === 0)
@@ -33682,4 +33682,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=bc72ed3437d9fde3e416b808cbb8fceb7bcb55853f3ec80a2636c3db8fb56f39
+//# ditto-src-stamp=733d65087bdc3ec0f51f80d48003e1f667acbbaf9e7a5ad504e89e7ca5734fa3
