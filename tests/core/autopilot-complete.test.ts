@@ -185,6 +185,58 @@ describe('deriveAcVerdicts (evidence-gated: pass only with evidence; never auto-
     expect(v?.verdict).toBe('pass');
   });
 
+  // find→fix→reverify convergence for a PARTIAL (symmetry with fail): an earlier
+  // verify recorded ac-1 partial, a fix passed, and a LATER re-verify behind that
+  // fix recorded ac-1 pass. The pre-fix partial snapshot is superseded like a fail.
+  test('a fix-backed re-verify supersedes an earlier partial for the same AC → pass', () => {
+    const graph = graphWith([
+      node({
+        id: 'N3',
+        kind: 'verify',
+        acceptance_refs: ['ac-1'],
+        status: 'passed',
+        evidence_refs: [ev('v1.log')],
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'partial' }],
+      }),
+      node({ id: 'N4', kind: 'fix', owner: 'implementer', status: 'passed', depends_on: ['N3'] }),
+      node({
+        id: 'N5',
+        kind: 'verify',
+        acceptance_refs: ['ac-1'],
+        status: 'passed',
+        depends_on: ['N4'],
+        evidence_refs: [ev('reverify.log')],
+      }),
+    ]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1']);
+    expect(v?.verdict).toBe('pass');
+  });
+
+  // guard: an UNFIXED partial (no later passing re-verify behind a fix) must still
+  // report partial — supersession must NOT mask an unresolved partial.
+  test('an unfixed partial (no fix-backed re-verify) still reports partial (no false-green)', () => {
+    const graph = graphWith([
+      node({
+        id: 'N3',
+        kind: 'verify',
+        acceptance_refs: ['ac-1'],
+        status: 'passed',
+        evidence_refs: [ev('v1.log')],
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'partial' }],
+      }),
+      // A later re-verify PASSES but does NOT depend on any fix node → cannot supersede.
+      node({
+        id: 'N5',
+        kind: 'verify',
+        acceptance_refs: ['ac-1'],
+        status: 'passed',
+        evidence_refs: [ev('reverify.log')],
+      }),
+    ]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1']);
+    expect(v?.verdict).toBe('partial');
+  });
+
   // ac-3 guard: an UNFIXED fail (no later passing re-verify behind a fix) must
   // still report fail — supersession must NOT mask a real failure.
   test('an unfixed fail (no fix-backed re-verify) still reports fail (no false-green)', () => {

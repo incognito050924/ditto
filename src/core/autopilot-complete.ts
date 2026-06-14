@@ -137,9 +137,10 @@ export function deriveAcVerdicts(graph: Autopilot, acIds: string[]): DerivedVerd
 
     // Per-node verdicts for this AC. Supersession: a later re-verify node that
     // PASSES this AC *and* transitively depends on a passed fix node cancels any
-    // earlier fail for the same AC (find→fix→reverify converged). A pass that is
-    // NOT behind a fix cannot supersede — so an unfixed fail still wins (no
-    // false-green). After supersession, fold the survivors with worst().
+    // earlier non-pass (fail OR partial) for the same AC (find→fix→reverify
+    // converged). A pass that is NOT behind a fix cannot supersede — so an unfixed
+    // fail/partial still wins (no false-green). After supersession, fold the
+    // survivors with worst().
     const supersedingFix = addressing.some(
       (n) => nodeVerdictFor(n, acId).verdict === 'pass' && dependsOnPassedFix(n, byId),
     );
@@ -150,8 +151,10 @@ export function deriveAcVerdicts(graph: Autopilot, acIds: string[]): DerivedVerd
     let structuralSuperseded = false;
     for (const n of addressing) {
       const nv = nodeVerdictFor(n, acId);
-      // A fail that a later fix-backed re-verify supersedes is dropped from the fold.
-      if (nv.verdict === 'fail' && supersedingFix) continue;
+      // A non-pass (fail OR partial) that a later fix-backed re-verify supersedes
+      // is dropped from the fold — a pre-fix verification snapshot, like an earlier
+      // fail, must not drag down an AC the fix-backed re-verify has since passed.
+      if ((nv.verdict === 'fail' || nv.verdict === 'partial') && supersedingFix) continue;
       // gotcha #3 (wi_260610idf): an implementation node's evidence-less pass is
       // a STRUCTURAL unverified, not a judgment. When another addressing node
       // DOWNSTREAM of it (transitively depends on it) passed this AC with
@@ -178,7 +181,7 @@ export function deriveAcVerdicts(graph: Autopilot, acIds: string[]): DerivedVerd
       }
     }
     if (supersedingFix && verdict === 'pass') {
-      notes = `earlier fail superseded by a re-verify behind a passed fix (${acId})`;
+      notes = `earlier non-pass superseded by a re-verify behind a passed fix (${acId})`;
     } else if (structuralSuperseded && verdict === 'pass') {
       notes = `evidence-less implementation pass covered by a downstream verified pass (${acId})`;
     }
