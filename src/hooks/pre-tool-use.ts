@@ -9,7 +9,7 @@ import { ChangeContractStore } from '~/core/change-contract-store';
 import { atomicWriteText, ensureDir, readArchitectureSpec } from '~/core/fs';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { type AcgArchitectureSpec, acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
-import { mutatedPaths } from './envelope';
+import { mutatedPaths, parseApplyPatchPaths } from './envelope';
 import type { HookHandler, HookInput } from './runtime';
 
 /**
@@ -101,6 +101,83 @@ function commandSegments(cmd: string): string[] {
 function leadingCommand(seg: string): string {
   const afterEnv = seg.replace(/^(?:\s*[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|\S+)\s+)*\s*/, '');
   return afterEnv.split(/\s+/)[0] ?? '';
+}
+
+function shellWords(seg: string): string[] {
+  return seg.match(/"[^"]*"|'[^']*'|\S+/g)?.map((w) => w.replace(/^(['"])(.*)\1$/, '$2')) ?? [];
+}
+
+function isShellEnvAssignment(word: string): boolean {
+  return /^[A-Za-z_]\w*=/.test(word);
+}
+
+function basenameCommand(word: string): string {
+  return word.replace(/^.*[\\/]/, '');
+}
+
+function operativeShellCommand(seg: string): string {
+  const words = shellWords(seg);
+  let i = 0;
+
+  while (i < words.length) {
+    while (i < words.length && isShellEnvAssignment(words[i] ?? '')) i++;
+
+    const word = words[i] ?? '';
+    if (word === 'env') {
+      i++;
+      while (i < words.length) {
+        const current = words[i] ?? '';
+        if (current === '-u' || current === '--unset') {
+          i += 2;
+          continue;
+        }
+        if (current === '-i' || current === '--ignore-environment' || current.startsWith('-u')) {
+          i++;
+          continue;
+        }
+        if (current.startsWith('-')) {
+          i++;
+          continue;
+        }
+        if (isShellEnvAssignment(current)) {
+          i++;
+          continue;
+        }
+        break;
+      }
+      continue;
+    }
+
+    if (word === 'command' || word === 'exec' || word === 'sudo') {
+      i++;
+      while (word === 'sudo' && i < words.length && (words[i] ?? '').startsWith('-')) i++;
+      continue;
+    }
+
+    return basenameCommand(word);
+  }
+
+  return '';
+}
+
+function shellRunsApplyPatch(cmd: string): boolean {
+  return commandSegments(cmd).some((seg) => operativeShellCommand(seg) === 'apply_patch');
+}
+
+function isCommandTool(input: HookInput, toolName: unknown): boolean {
+  return toolName === 'Bash' || (input.host === 'codex' && toolName === 'exec_command');
+}
+
+function commandToolInput(
+  input: HookInput,
+  toolName: unknown,
+  toolInput: Record<string, unknown>,
+): string | undefined {
+  if (typeof toolInput.command === 'string') return toolInput.command;
+  if (input.host === 'codex' && toolName === 'exec_command' && typeof toolInput.cmd === 'string') {
+    return toolInput.cmd;
+  }
+  return undefined;
 }
 
 /**
@@ -545,10 +622,28 @@ export const preToolUseHandler: HookHandler = async (input: HookInput) => {
   const toolInput = (raw.tool_input ?? {}) as Record<string, unknown>;
   const repoRoot = input.repoRoot;
 
-  // --- Bash ---------------------------------------------------------------
-  if (toolName === 'Bash') {
-    const command = typeof toolInput.command === 'string' ? toolInput.command : undefined;
+  // --- Codex write_stdin carrying apply_patch content ---------------------
+  if (input.host === 'codex' && toolName === 'write_stdin') {
+    const chars = typeof toolInput.chars === 'string' ? toolInput.chars : undefined;
+    if (!chars) return ALLOW;
+    for (const path of parseApplyPatchPaths(chars)) {
+      const verdict = await checkMutatedPath(input, path);
+      if (verdict) return verdict;
+    }
+    return ALLOW;
+  }
+
+  // --- Shell commands -----------------------------------------------------
+  if (isCommandTool(input, toolName)) {
+    const command = commandToolInput(input, toolName, toolInput);
     if (!command) return ALLOW;
+
+    if (input.host === 'codex' && shellRunsApplyPatch(command)) {
+      return block(
+        'apply-patch-bypass',
+        'shell command runs apply_patch outside the Codex apply_patch tool gate',
+      );
+    }
 
     const destructive = checkDestructive(command);
     if (destructive.exitCode === 2) return destructive;

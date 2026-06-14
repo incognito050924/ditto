@@ -1,4 +1,6 @@
+import { join } from 'node:path';
 import type { HookEventId, HostAdapter, HostId } from './hosts';
+import { asRecord, readJsonIfExists } from './hosts/shared';
 
 /**
  * The cross-host required capabilities (provider parity). Every selected host
@@ -25,13 +27,27 @@ export interface HostCapabilityReport {
 export type CapabilityFindingKind =
   | 'missing_required'
   | 'declared_hook_not_registered'
-  | 'registered_hook_not_declared';
+  | 'registered_hook_not_declared'
+  | 'codex_plugin_needs_user_action';
 
 export interface CapabilityFinding {
   host: HostId;
   kind: CapabilityFindingKind;
   capability: string;
   message: string;
+}
+
+async function codexPluginNeedsUserAction(repoRoot: string): Promise<string[] | null> {
+  const raw = asRecord(
+    await readJsonIfExists(join(repoRoot, '.ditto', 'local', 'codex-plugin-status.json')).catch(
+      () => null,
+    ),
+  );
+  if (!raw || raw.plugin !== 'ditto' || raw.status !== 'needs_user_action') return null;
+  const commands = Array.isArray(raw.commands)
+    ? raw.commands.filter((command): command is string => typeof command === 'string')
+    : [];
+  return commands;
 }
 
 /**
@@ -94,6 +110,18 @@ export async function collectCapabilityInventory(
           kind: 'registered_hook_not_declared',
           capability: event,
           message: `host "${adapter.id}" registers hook "${event}" but it is not declared`,
+        });
+      }
+    }
+
+    if (adapter.id === 'codex') {
+      const commands = await codexPluginNeedsUserAction(repoRoot);
+      if (commands) {
+        findings.push({
+          host: adapter.id,
+          kind: 'codex_plugin_needs_user_action',
+          capability: 'plugin-enabled',
+          message: `Codex plugin files are prepared, but DITTO is not marked enabled in CODEX_HOME. Run: ${commands.join(' && ')}`,
         });
       }
     }

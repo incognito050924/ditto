@@ -95,10 +95,12 @@ function isReadOnly(tools: string[]): boolean {
 }
 
 /**
- * Rewrite `${CLAUDE_PLUGIN_ROOT}/bin/ditto` to the stable PATH command `ditto`.
- * Codex injects CLAUDE_PLUGIN_ROOT into plugin *hook* commands, but there is no
- * guarantee it is present when a custom-agent instruction body runs (plan obj 5,
- * C3). The PATH command is the host-neutral form.
+ * Rewrite `${CLAUDE_PLUGIN_ROOT}/bin/ditto` to a neutral command token in the
+ * build artifact. Codex injects CLAUDE_PLUGIN_ROOT into plugin *hook* commands,
+ * but there is no guarantee it is present when a custom-agent instruction body
+ * runs. `setup --host codex` later rewrites this token in the installed target
+ * to that target's absolute `.agents/plugins/ditto/bin/ditto` path, avoiding the
+ * macOS `/usr/bin/ditto` collision in the final surface.
  */
 function rewritePluginRoot(body: string): string {
   return body.replace(/"\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto"/g, 'ditto');

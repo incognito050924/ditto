@@ -27,6 +27,12 @@ const HANDLERS: Record<string, HookHandler> = {
 
 export const HOOK_EVENTS = Object.keys(HANDLERS);
 
+function parseHookHost(value: unknown): 'claude-code' | 'codex' {
+  if (value === undefined || value === null || value === '') return 'claude-code';
+  if (value === 'claude-code' || value === 'codex') return value;
+  throw new Error(`invalid --host ${String(value)} (expected claude-code|codex)`);
+}
+
 export const hookCommand = defineCommand({
   meta: {
     name: 'hook',
@@ -53,7 +59,13 @@ export const hookCommand = defineCommand({
       );
       process.exit(2);
     }
-    const host = args.host === 'codex' ? 'codex' : 'claude-code';
+    let host: 'claude-code' | 'codex';
+    try {
+      host = parseHookHost(args.host);
+    } catch (err) {
+      process.stderr.write(`ditto hook: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.exit(2);
+    }
     // executeHook reads stdin, runs the fail-open wrapper, writes stdout/stderr,
     // and process.exit()s with the hook's exit code — so it never returns.
     await executeHook(handler, host);

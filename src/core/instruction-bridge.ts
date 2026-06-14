@@ -157,16 +157,19 @@ export function checkCodexInstructions(
       },
     ];
   }
-  if (!sourceHasManagedMarker(source.content)) return [];
-  return [
-    {
-      host: 'codex',
-      path: source.path,
-      kind: 'marker_in_source',
-      message: 'AGENTS.md must not contain ditto managed block markers',
-      sourceSha256: source.normalizedSha256,
-    },
-  ];
+  const markerCount = [...source.content.matchAll(MANAGED_BLOCK_RE_G)].length;
+  if (markerCount > 1) {
+    return [
+      {
+        host: 'codex',
+        path: source.path,
+        kind: 'multiple_markers',
+        message: `AGENTS.md contains ${markerCount} ditto managed blocks; expected at most 1`,
+        sourceSha256: source.normalizedSha256,
+      },
+    ];
+  }
+  return [];
 }
 
 export function compareClaudeProjection(
