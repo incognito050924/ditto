@@ -13,3 +13,23 @@ if ! bun run adr:guard; then
   echo "✗ ADR 가드 실패 — 커밋을 중단했다. 위 ADR 위반을 해소하거나 해당 ADR을 개정하라." >&2
   exit 1
 fi
+# bin/ditto(tracked CLI 번들)를 src/ 와 동기화 — stale 바이너리 커밋을 막는다.
+# dist/plugin(gitignored)은 post-commit/merge/checkout이 처리하지만, bin/ditto 는
+# tracked 라 커밋에 포함돼야 하므로 여기서 재빌드+add 한다. build:bin 은 결정론적이라
+# (재빌드해도 동일) src 무변경 커밋에서는 git diff 가 비어 no-op — 불필요한 add 가 없다.
+# 빌드 실패는 차단(진짜 문제), bun/스크립트 부재는 graceful skip(빌드 못 하는 환경까지
+# 커밋을 막지 않는다). 한계: working tree 기준 빌드라 src 를 부분 스테이징하면 bin 이
+# unstaged src 까지 반영할 수 있다(dist/plugin 과 동일 한계).
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -n "$ROOT" ] && [ -f "$ROOT/scripts/build-bin.mjs" ] && command -v bun >/dev/null 2>&1; then
+  if (cd "$ROOT" && bun run build:bin >/dev/null 2>&1); then
+    if ! git diff --quiet -- "$ROOT/bin/ditto" 2>/dev/null; then
+      git add "$ROOT/bin/ditto"
+      echo "[ditto] bin/ditto 재빌드 — src 와 동기화 후 스테이징했다." >&2
+    fi
+  else
+    echo "" >&2
+    echo "✗ bin/ditto 재빌드 실패 — 커밋을 중단했다. 'bun run build:bin' 으로 확인하라." >&2
+    exit 1
+  fi
+fi
