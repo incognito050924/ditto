@@ -147,13 +147,34 @@ describe('mutationGate brief hard-gate (ac-7 — plan_brief required before impl
     expect(mutationGate(g).action).toBe('proceed');
   });
 
-  // ac-6 (wi_260614z7r): close the change_surface escape-hatch. A graph whose
-  // design node has ALREADY PASSED is under the brief regime — the deterministic
-  // Manager (producePlanGate) ALWAYS sets change_surface on a brief-producing
-  // design pass. So an approved gate with a PASSED design node but ABSENT
-  // change_surface means the brief stage was bypassed: fail-closed (block), not
-  // proceed. A pending design node (brief stage not run yet) stays legacy.
-  test('escape-hatch: passed design node + approved + change_surface ABSENT => pending (fail-closed, not proceed)', () => {
+  // ac-6 (wi_260614z7r) + LOW2 (wi_2606144ta): close the change_surface escape-hatch,
+  // but only for an UN-authorized approval. A passed design node with an absent
+  // change_surface means producePlanGate did not run on it. Whether that is a
+  // bypass depends on WHO approved: an explicit human/spec authorizer
+  // (source != null) took responsibility for mutating without a brief → proceed; an
+  // approval with NO recorded authorizer (source === null) is the suspicious case
+  // → fail-closed (block). The brief itself is still forced whenever the sweep DID
+  // run (change_surface present → the plan_brief check above).
+  test('escape-hatch: passed design + approved + no change_surface + source=null => pending (fail-closed)', () => {
+    const withPassedDesign = buildInitialNodes(['ac-1']).map((n) =>
+      n.kind === 'design' ? { ...n, status: 'passed' as const } : n,
+    );
+    const g = graph({
+      nodes: withPassedDesign,
+      approval_gate: {
+        status: 'approved',
+        source: null,
+        approved_at: null,
+        approved_by: null,
+        evidence_refs: [],
+      },
+    });
+    const result = mutationGate(g);
+    expect(result.allowed).toBe(false);
+    expect(result.action).toBe('present_plan');
+  });
+
+  test('LOW2: passed design + approved + no change_surface + source=user => proceed (manual approval is authorization)', () => {
     const withPassedDesign = buildInitialNodes(['ac-1']).map((n) =>
       n.kind === 'design' ? { ...n, status: 'passed' as const } : n,
     );
@@ -167,9 +188,7 @@ describe('mutationGate brief hard-gate (ac-7 — plan_brief required before impl
         evidence_refs: [],
       },
     });
-    const result = mutationGate(g);
-    expect(result.allowed).toBe(false);
-    expect(result.action).toBe('present_plan');
+    expect(mutationGate(g).action).toBe('proceed');
   });
 
   test('escape-hatch: pending design node + approved + no change_surface still proceeds (brief stage not yet run — legacy)', () => {

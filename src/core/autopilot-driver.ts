@@ -27,21 +27,26 @@ export function mutationGate(graph: Autopilot): MutationGate {
   // change_surface) skips this entirely and keeps status-only behavior, preserving
   // backward compatibility.
   const briefRegimeActive = gate.change_surface !== undefined;
-  // ac-6 (wi_260614z7r) — close the change_surface escape-hatch (fail-closed). A
-  // graph whose design node has ALREADY PASSED ran the plan stage; the deterministic
-  // Manager (producePlanGate) ALWAYS sets change_surface on a brief-producing design
-  // pass (coverage-manager §7.2). So an APPROVED gate with a passed design node but
-  // ABSENT change_surface means the brief stage was bypassed by omission — block
-  // instead of proceeding. A PENDING design node (brief stage not yet run) stays the
-  // legacy status-only path, so legacy graphs and pre-brief seeds do not regress.
+  // ac-6 (wi_260614z7r) + LOW2 (wi_2606144ta) — close the change_surface escape-hatch,
+  // narrowed to an UN-authorized approval. A passed design node with an absent
+  // change_surface means producePlanGate did not run on it (coverage-manager §7.2
+  // ALWAYS sets change_surface on a brief-producing design pass). Whether that is a
+  // bypass depends on the authorizer: an explicit human/spec source took
+  // responsibility for mutating without a brief (manual/small-graph approval) →
+  // proceed; an approval with NO recorded source is the suspicious case → block.
+  // The brief flow never sets `source` (autopilot-loop only copies status/
+  // change_surface/plan_brief), so an explicit `source` can only come from a real
+  // approval path. A PENDING design node (brief stage not yet run) stays the legacy
+  // status-only path, so legacy graphs and pre-brief seeds do not regress.
   const designPassed = (graph.nodes ?? []).some(
     (n) => n.kind === 'design' && n.status === 'passed',
   );
-  if (designPassed && !briefRegimeActive && gate.status === 'approved') {
+  if (designPassed && !briefRegimeActive && gate.status === 'approved' && gate.source === null) {
     return {
       allowed: false,
       action: 'present_plan',
-      reason: 'design passed but change_surface is absent: produce the brief before mutating',
+      reason:
+        'design passed, change_surface absent, and approval has no authorizer (source=null): produce the brief before mutating',
     };
   }
   if (briefRegimeActive && gate.status === 'approved' && gate.plan_brief === undefined) {

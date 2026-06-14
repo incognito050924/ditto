@@ -87,14 +87,43 @@ export function selectReadyNodes(nodes: AutopilotNode[]): AutopilotNode[] {
   // every `verify` node while ANY `implement` node is still non-terminal, so
   // verify never fires ahead of the implement frontier. No-op when no implement
   // node is in flight (pure seed: the single implement node is terminal).
-  const implementPending = nodes.some(
+  const nonTerminalImplements = nodes.filter(
     (n) => n.kind === 'implement' && n.status !== 'passed' && n.status !== 'failed',
   );
+  const implementPending = nonTerminalImplements.length > 0;
+  // BUG1 exemption (wi_2606144ta): a verify that an in-flight implement DEPENDS ON
+  // is that implement's PRECONDITION, not a post-condition — holding it deadlocks
+  // (the implement waits on the verify, the guard holds the verify). So a verify is
+  // exempt from the frontier hold when some non-terminal implement (transitively)
+  // depends on it. The B3 case (seed verify nothing depends on) is unaffected.
+  const isImplementPrecondition = (verifyId: string): boolean =>
+    nonTerminalImplements.some((impl) => dependsOnNode(impl, verifyId, byId));
   return nodes.filter((n) => {
     if (!isNodeReady(n, byId)) return false;
-    if (n.kind === 'verify' && implementPending) return false;
+    if (n.kind === 'verify' && implementPending && !isImplementPrecondition(n.id)) return false;
     return true;
   });
+}
+
+/** Does `node` transitively depend on `targetId`? Guarded DFS over depends_on. */
+function dependsOnNode(
+  node: AutopilotNode,
+  targetId: string,
+  byId: Map<string, AutopilotNode>,
+): boolean {
+  const seen = new Set<string>();
+  const visit = (id: string): boolean => {
+    if (seen.has(id)) return false;
+    seen.add(id);
+    const cur = byId.get(id);
+    if (!cur) return false;
+    for (const dep of cur.depends_on) {
+      if (dep === targetId) return true;
+      if (visit(dep)) return true;
+    }
+    return false;
+  };
+  return visit(node.id);
 }
 
 /**

@@ -201,6 +201,17 @@ function enforceClose(
   const gate = coverageClosureGate(map, node.id, state);
   if (!gate.pass) reasons.push(...gate.reasons);
 
+  // LOW1 (wi_2606144ta) fail-closed: a 'resolved' close asserts the scope was
+  // adversarially settled, so it MUST carry the neutrality signal. Without it the
+  // non-structural axes are silently skipped and a node closes having never been
+  // checked. user_owned / out_of_scope closes are deferrals, not resolutions, so
+  // they do not require neutrality.
+  if (state === 'resolved' && signals.neutrality === undefined) {
+    reasons.push(
+      `neutrality axis required for resolved close of ${node.id}: axis_signals.neutrality absent`,
+    );
+  }
+
   const neutralityOk =
     signals.neutrality === undefined ||
     (COVERAGE_AXIS_MECHANISMS.neutrality.enforce(signals.neutrality) as boolean);

@@ -162,12 +162,22 @@ export function deriveAcVerdicts(graph: Autopilot, acIds: string[]): DerivedVerd
       // implementation, so the structural unverified is dropped from the fold.
       // Explicit per-AC non-pass verdicts, non-terminal nodes, fails, parallel/
       // earlier passes, and a node's own per-AC pass are never superseded.
+      // BUG2 (wi_2606144ta): a `design`/planner node is a GENERATOR — upstream of
+      // all real work by construction — so any addressing node that verified this
+      // AC inherently ran after it; the downstream-dependency edge is not required.
+      // (A planner can emit a subgraph whose root does not depend on the seed
+      // design node, which would otherwise leave its all-AC structural unverified
+      // unsuperseded and fold every AC to unverified.) Non-generator (implement)
+      // nodes keep the ordering requirement so a parallel/earlier pass can't mask
+      // them (preserves the gotcha #3 false-green protection).
       if (
         nv.verdict === 'unverified' &&
         isStructuralUnverified(n, acId) &&
         addressing.some(
           (m) =>
-            m !== n && nodeVerdictFor(m, acId).verdict === 'pass' && dependsOnNode(m, n.id, byId),
+            m !== n &&
+            nodeVerdictFor(m, acId).verdict === 'pass' &&
+            (n.kind === 'design' || dependsOnNode(m, n.id, byId)),
         )
       ) {
         structuralSuperseded = true;

@@ -374,6 +374,51 @@ describe('deriveAcVerdicts (evidence-gated: pass only with evidence; never auto-
       expect(c.acceptance.map((a) => a.verdict)).toEqual(['pass', 'pass', 'pass']);
       expect(c.final_verdict).toBe('pass');
     });
+
+    // BUG2 (wi_2606144ta): the seed `design`/planner node carries ALL ACs and
+    // passes without evidence → a STRUCTURAL unverified for every AC. A
+    // planner-emitted subgraph whose root does NOT depend on the generator would
+    // otherwise leave that structural unverified unsuperseded → every AC folds to
+    // unverified even though dedicated nodes verified each one. A `design`
+    // generator is upstream of all real work by definition, so its structural
+    // unverified is superseded by ANY addressing node that verified the AC — no
+    // dependency edge required (unlike an implement node, below).
+    describe('design generator structural-unverified is superseded without a dep edge (BUG2)', () => {
+      const designSeed = (over: Partial<AutopilotNode> = {}) =>
+        node({
+          id: 'N1',
+          kind: 'design',
+          owner: 'planner',
+          status: 'passed',
+          acceptance_refs: ['ac-1'],
+          evidence_refs: [],
+          ...over,
+        });
+
+      test('REPRO: design generator + detached verified pass (no dep edge) → pass (was unverified)', () => {
+        const graph = graphWith([
+          designSeed(),
+          // planner-emitted verify; its depends_on does NOT reference the generator.
+          verifierNode('N4', []),
+        ]);
+        const [v] = deriveAcVerdicts(graph, ['ac-1']);
+        expect(v?.verdict).toBe('pass');
+      });
+
+      test('design generator is the ONLY addressing node (no evidence anywhere) → unverified (no false-green)', () => {
+        const graph = graphWith([designSeed()]);
+        const [v] = deriveAcVerdicts(graph, ['ac-1']);
+        expect(v?.verdict).toBe('unverified');
+      });
+
+      test('an IMPLEMENT node still needs a DOWNSTREAM pass to supersede (non-generator unchanged)', () => {
+        // Same detached shape but the evidence-less node is `implement`, not
+        // `design` — the ordering requirement (dependsOnNode) still applies.
+        const graph = graphWith([implNode('N1'), verifierNode('N4', [])]);
+        const [v] = deriveAcVerdicts(graph, ['ac-1']);
+        expect(v?.verdict).toBe('unverified');
+      });
+    });
   });
 
   // A per-AC verdict for an AC the node does not address is ignored (it is not an

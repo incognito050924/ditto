@@ -16237,14 +16237,35 @@ function isNodeReady(node, byId) {
 }
 function selectReadyNodes(nodes) {
   const byId = new Map(nodes.map((n2) => [n2.id, n2]));
-  const implementPending = nodes.some((n2) => n2.kind === "implement" && n2.status !== "passed" && n2.status !== "failed");
+  const nonTerminalImplements = nodes.filter((n2) => n2.kind === "implement" && n2.status !== "passed" && n2.status !== "failed");
+  const implementPending = nonTerminalImplements.length > 0;
+  const isImplementPrecondition = (verifyId) => nonTerminalImplements.some((impl) => dependsOnNode(impl, verifyId, byId));
   return nodes.filter((n2) => {
     if (!isNodeReady(n2, byId))
       return false;
-    if (n2.kind === "verify" && implementPending)
+    if (n2.kind === "verify" && implementPending && !isImplementPrecondition(n2.id))
       return false;
     return true;
   });
+}
+function dependsOnNode(node, targetId, byId) {
+  const seen = new Set;
+  const visit2 = (id) => {
+    if (seen.has(id))
+      return false;
+    seen.add(id);
+    const cur = byId.get(id);
+    if (!cur)
+      return false;
+    for (const dep of cur.depends_on) {
+      if (dep === targetId)
+        return true;
+      if (visit2(dep))
+        return true;
+    }
+    return false;
+  };
+  return visit2(node.id);
 }
 function fileOverlapGate(wave) {
   const claimed = new Set;
@@ -17458,7 +17479,7 @@ function dependsOnPassedFix(node, byId) {
   };
   return visit2(node.id);
 }
-function dependsOnNode(node, targetId, byId) {
+function dependsOnNode2(node, targetId, byId) {
   const seen = new Set;
   const visit2 = (id) => {
     if (seen.has(id))
@@ -17502,7 +17523,7 @@ function deriveAcVerdicts(graph, acIds) {
       const nv = nodeVerdictFor(n2, acId);
       if ((nv.verdict === "fail" || nv.verdict === "partial") && supersedingFix)
         continue;
-      if (nv.verdict === "unverified" && isStructuralUnverified(n2, acId) && addressing.some((m2) => m2 !== n2 && nodeVerdictFor(m2, acId).verdict === "pass" && dependsOnNode(m2, n2.id, byId))) {
+      if (nv.verdict === "unverified" && isStructuralUnverified(n2, acId) && addressing.some((m2) => m2 !== n2 && nodeVerdictFor(m2, acId).verdict === "pass" && (n2.kind === "design" || dependsOnNode2(m2, n2.id, byId)))) {
         structuralSuperseded = true;
         continue;
       }
@@ -17870,11 +17891,11 @@ function mutationGate(graph) {
   const gate2 = graph.approval_gate;
   const briefRegimeActive = gate2.change_surface !== undefined;
   const designPassed = (graph.nodes ?? []).some((n2) => n2.kind === "design" && n2.status === "passed");
-  if (designPassed && !briefRegimeActive && gate2.status === "approved") {
+  if (designPassed && !briefRegimeActive && gate2.status === "approved" && gate2.source === null) {
     return {
       allowed: false,
       action: "present_plan",
-      reason: "design passed but change_surface is absent: produce the brief before mutating"
+      reason: "design passed, change_surface absent, and approval has no authorizer (source=null): produce the brief before mutating"
     };
   }
   if (briefRegimeActive && gate2.status === "approved" && gate2.plan_brief === undefined) {
@@ -20786,6 +20807,9 @@ function enforceClose(map, node, state, signals) {
   const gate2 = coverageClosureGate(map, node.id, state);
   if (!gate2.pass)
     reasons.push(...gate2.reasons);
+  if (state === "resolved" && signals.neutrality === undefined) {
+    reasons.push(`neutrality axis required for resolved close of ${node.id}: axis_signals.neutrality absent`);
+  }
   const neutralityOk = signals.neutrality === undefined || COVERAGE_AXIS_MECHANISMS.neutrality.enforce(signals.neutrality);
   if (!neutralityOk) {
     reasons.push(`neutrality axis rejected ${node.id}: Opponent did not run or verdict blocked`);
@@ -34974,4 +34998,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=43b337eabb48ddc22cffe91e61b67d8754c7ac9c39a3e5dcebd24c89d158a150
+//# ditto-src-stamp=092643ee6efab73d809856b0447a375a5b54cbd3cb6e20eb9a4e5f951d593052

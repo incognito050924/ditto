@@ -76,6 +76,50 @@ describe('selectReadyNodes (the candidate concurrent wave)', () => {
     expect(selectReadyNodes(after).map((n) => n.id)).toEqual(['N3']);
   });
 
+  test('BUG1: a verify an in-flight implement depends on is exempt from the frontier hold (no deadlock)', () => {
+    // N7 (design) passed. N9 (verify) is ready (its dep N7 passed). N10 (implement)
+    // depends on N9 — so N9 is a PRECONDITION of N10, not a post-condition. The
+    // implement-frontier guard would hold N9 (verify) while N10 (implement) is
+    // non-terminal; but N10 waits on N9 → deadlock (nothing dispatchable). N9 must
+    // stay selectable so it can pass and unblock N10.
+    const nodes: AutopilotNode[] = [
+      {
+        id: 'N7',
+        kind: 'design',
+        owner: 'planner',
+        purpose: 'design',
+        status: 'passed',
+        depends_on: [],
+        acceptance_refs: ['ac-1'],
+        evidence_refs: [],
+        attempts: { fix: 0, switch: 0 },
+      },
+      {
+        id: 'N9',
+        kind: 'verify',
+        owner: 'verifier',
+        purpose: 'verify a precondition',
+        status: 'pending',
+        depends_on: ['N7'],
+        acceptance_refs: ['ac-1'],
+        evidence_refs: [],
+        attempts: { fix: 0, switch: 0 },
+      },
+      {
+        id: 'N10',
+        kind: 'implement',
+        owner: 'implementer',
+        purpose: 'implement after the precondition holds',
+        status: 'pending',
+        depends_on: ['N9'],
+        acceptance_refs: ['ac-1'],
+        evidence_refs: [],
+        attempts: { fix: 0, switch: 0 },
+      },
+    ];
+    expect(selectReadyNodes(nodes).map((n) => n.id)).toEqual(['N9']);
+  });
+
   test('B3 no-op: pure seed makes N3 ready once N2 passes (single implement, terminal)', () => {
     const seed = buildInitialNodes(['ac-1']);
     const nodes = seed.map((n) =>

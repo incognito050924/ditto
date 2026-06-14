@@ -218,6 +218,48 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
     expect(map.nodes.find((n) => n.id === 'cov-root')?.state).toBe('open');
   });
 
+  // LOW1 (wi_2606144ta): a 'resolved' close that OMITS axis_signals.neutrality must
+  // be rejected (fail-closed), not silently skipped. Before the fix the non-structural
+  // axes were only enforced when present, so a close with no signals slipped through
+  // the subtree-dry gate alone, never having been adversarially checked.
+  test('LOW1: resolved close with NO neutrality signal is rejected (fail-closed)', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI }); // seed root
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: 'cov-root',
+        admissibleBranchesAdded: 0,
+        close_as: 'resolved',
+        // axis_signals omitted entirely → neutrality is absent.
+      },
+    });
+    expect(r.terminated).toBe(false);
+    if (r.terminated) return;
+    expect(r.closed).toBe(false);
+    expect(r.reasons.some((x) => x.includes('neutrality'))).toBe(true);
+    const map = await new CoverageStore(repo).getMap(WI);
+    expect(map.nodes.find((n) => n.id === 'cov-root')?.state).toBe('open');
+  });
+
+  test('LOW1: resolved close WITH neutrality signal still closes (positive control)', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI }); // seed root
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: 'cov-root',
+        admissibleBranchesAdded: 0,
+        close_as: 'resolved',
+        axis_signals: passingSignals,
+      },
+    });
+    expect(r.terminated).toBe(false);
+    if (r.terminated) return;
+    expect(r.closed).toBe(true);
+    expect(r.reasons).toEqual([]);
+  });
+
   test('S4: two consecutive dry rounds → plan-dialog.md + brief returned', async () => {
     await nextCoverageNode({ repoRoot: repo, workItemId: WI }); // seed root
     // Round A: close the lone root (dry counter 0→1).
