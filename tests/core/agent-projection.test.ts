@@ -61,7 +61,7 @@ describe('agent-projection: agents/*.md → Codex custom-agent TOML (M4)', () =>
     expect(projectAgent(md).sandboxMode).toBe('workspace-write');
   });
 
-  test('rewrites ${CLAUDE_PLUGIN_ROOT}/bin/ditto to the stable PATH command', () => {
+  test('rewrites ${CLAUDE_PLUGIN_ROOT}/bin/ditto to the setup-rewritten command token', () => {
     const md = [
       '---',
       'name: x',

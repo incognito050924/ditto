@@ -32,7 +32,8 @@ function ditto(args: string[]): { stdout: string; stderr: string; exitCode: numb
     exitCode: proc.exitCode,
   };
 }
-const obsFile = () => join(dir, '.ditto', 'work-items', WI, 'semantic-scan-observation.json');
+const obsFile = () =>
+  join(dir, '.ditto', 'local', 'work-items', WI, 'semantic-scan-observation.json');
 
 d('ditto semantic observe — real CodeQL', () => {
   beforeEach(async () => {
@@ -76,9 +77,9 @@ d('ditto semantic observe — real CodeQL', () => {
       after: 'getUser(string): User',
     });
     // It must NOT write the blocking artifact (non-gated separation, O3).
-    expect(existsSync(join(dir, '.ditto', 'work-items', WI, 'semantic-compatibility.json'))).toBe(
-      false,
-    );
+    expect(
+      existsSync(join(dir, '.ditto', 'local', 'work-items', WI, 'semantic-compatibility.json')),
+    ).toBe(false);
   }, 120_000);
 
   test('a re-run with an unchanged tree is skipped by fingerprint', async () => {

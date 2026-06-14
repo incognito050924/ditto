@@ -19,7 +19,11 @@ import { CompletionStore, buildCompletion } from '~/core/completion-store';
 import { ConvergenceStore, buildConvergence } from '~/core/convergence-store';
 import { EvidenceStore } from '~/core/evidence-store';
 import { completionGate, convergenceGate } from '~/core/gates';
-import { resolveOpponentCandidates, selectOpponent } from '~/core/opponent-router';
+import {
+  NoOpponentAvailableError,
+  resolveOpponentCandidates,
+  selectOpponent,
+} from '~/core/opponent-router';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import { postToolUseHandler } from '~/hooks/post-tool-use';
@@ -519,19 +523,33 @@ describe('M3.5 — dialectic runtime (OpponentModelRouter + admissibility + Stop
   });
 
   test('OpponentModelRouter: Codex 우선, 가용 시 fallback 없음 (provenance none)', () => {
-    const sel = selectOpponent(resolveOpponentCandidates(policy()), () => ({ available: true }));
+    const sel = selectOpponent(
+      resolveOpponentCandidates(policy(), { currentHost: 'claude-code' }),
+      () => ({
+        available: true,
+      }),
+    );
     expect(sel.provider).toBe('codex');
     expect(sel.fallback_from).toBe(null);
     expect(sel.fallback_reason).toBe('none');
   });
 
-  test('OpponentModelRouter: Codex 불가 → claude fallback + 사유 기록 (침묵 금지, §3.2/§3.5)', () => {
-    const sel = selectOpponent(resolveOpponentCandidates(policy()), (c) =>
-      c.token === 'codex' ? { available: false, reason: 'auth' } : { available: true },
+  test('OpponentModelRouter: Claude Code host에서 Codex 불가 → claude fallback + 사유 기록 (침묵 금지, §3.2/§3.5)', () => {
+    const sel = selectOpponent(
+      resolveOpponentCandidates(policy(), { currentHost: 'claude-code' }),
+      (c) => (c.token === 'codex' ? { available: false, reason: 'auth' } : { available: true }),
     );
     expect(sel.provider).toBe('claude-code');
     expect(sel.fallback_from).toBe('codex');
     expect(sel.fallback_reason).toBe('auth');
+  });
+
+  test('OpponentModelRouter: Codex host는 Claude Code 역호출 fallback 없이 context-separated Codex만 후보로 둔다', () => {
+    const cands = resolveOpponentCandidates(policy(), { currentHost: 'codex' });
+    expect(cands.map((c) => c.provider)).toEqual(['codex']);
+    expect(() => selectOpponent(cands, () => ({ available: false, reason: 'runtime' }))).toThrow(
+      NoOpponentAvailableError,
+    );
   });
 
   // admissibility: maps_to(oracle) ∧ severity critical|high. medium 이하·oracle 없음 = taste.

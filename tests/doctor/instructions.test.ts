@@ -108,23 +108,15 @@ describe('doctor instructions', () => {
     expect(json.findings[0].kind).toBe('source_missing');
   });
 
-  test('advisory keeps drift exit code at zero', async () => {
+  test('accepts a setup-managed block in Codex AGENTS.md', async () => {
     await writeFile(
       join(dir, 'AGENTS.md'),
       '<!-- ditto:managed:start source=AGENTS.md sha256=a38d48e293e579a63234dc67dff1b6bcc44fb17acd78f6996fe1cc22bb4444a1 -->\noops\n<!-- ditto:managed:end -->\n',
     );
-    const proc = run([
-      'doctor',
-      'instructions',
-      '--host',
-      'codex',
-      '--output',
-      'json',
-      '--advisory',
-    ]);
+    const proc = run(['doctor', 'instructions', '--host', 'codex', '--output', 'json']);
     expect(proc.exitCode).toBe(0);
     const json = JSON.parse(proc.stdout.toString());
-    expect(json.findings[0].kind).toBe('marker_in_source');
+    expect(json.findings).toEqual([]);
   });
 
   test('rejects invalid host as usage error', () => {

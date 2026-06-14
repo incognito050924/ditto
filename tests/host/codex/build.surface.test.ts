@@ -41,4 +41,25 @@ describe('Codex host surface — build:codex-plugin', () => {
     expect(tomls.length).toBe(15);
     expect(tomls).toContain('reviewer.toml');
   });
+
+  test('dialectic Codex routing instructions are host-aware in the shipped artifact', () => {
+    const proc = Bun.spawnSync(['bun', 'scripts/build-codex-plugin.mjs'], {
+      cwd: REPO,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(proc.exitCode).toBe(0);
+
+    const skill = readFileSync(join(OUT, 'skills', 'dialectic', 'SKILL.md'), 'utf8');
+    const opponent = readFileSync(join(OUT, '.codex', 'agents', 'dialectic-opponent.toml'), 'utf8');
+    for (const text of [skill, opponent]) {
+      expect(text).toContain('Codex host');
+      expect(text).toContain('Claude Code host');
+      expect(text).toContain('separate context');
+      expect(text).toContain('generic Codex subagent');
+      expect(text).toContain('do not call Claude Code');
+      expect(text).not.toContain('ditto never spawns Codex itself');
+      expect(text).not.toContain('spawn the `dialectic-opponent` agent on the Claude fallback');
+    }
+  });
 });

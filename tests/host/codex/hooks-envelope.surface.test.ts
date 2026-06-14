@@ -101,6 +101,47 @@ describe('Codex host surface — hook envelope', () => {
     expect(proc.exitCode).toBe(2);
   });
 
+  test('PreToolUse blocks shell-spawned apply_patch under Codex (exit 2)', () => {
+    const proc = runCodexHook('pre-tool-use', {
+      tool_name: 'Bash',
+      tool_input: { command: 'env DITTO_SKIP_HOOKS=1 apply_patch' },
+    });
+    expect(proc.exitCode).toBe(2);
+    expect(proc.stderr.toString()).toContain('apply_patch');
+  });
+
+  test('PreToolUse blocks shell-spawned apply_patch through Codex exec_command (exit 2)', () => {
+    const proc = runCodexHook('pre-tool-use', {
+      tool_name: 'exec_command',
+      tool_input: {
+        cmd: "DITTO_SKIP_HOOKS=1 apply_patch $'*** Begin Patch\\n*** Add File: config/.env\\n+API_KEY=test-secret\\n*** End Patch\\n'",
+      },
+    });
+    expect(proc.exitCode).toBe(2);
+    expect(proc.stderr.toString()).toContain('apply_patch');
+  });
+
+  test('PreToolUse blocks tty shell-spawned apply_patch through Codex exec_command (exit 2)', () => {
+    const proc = runCodexHook('pre-tool-use', {
+      tool_name: 'exec_command',
+      tool_input: { cmd: 'DITTO_SKIP_HOOKS=1 apply_patch', tty: true },
+    });
+    expect(proc.exitCode).toBe(2);
+    expect(proc.stderr.toString()).toContain('apply_patch');
+  });
+
+  test('PreToolUse blocks apply_patch content sent through Codex write_stdin (exit 2)', () => {
+    const proc = runCodexHook('pre-tool-use', {
+      tool_name: 'write_stdin',
+      tool_input: {
+        session_id: 39332,
+        chars: '*** Begin Patch\n*** Add File: config/.env\n+API_KEY=test-secret\n*** End Patch\n',
+      },
+    });
+    expect(proc.exitCode).toBe(2);
+    expect(proc.stderr.toString()).toContain('secret');
+  });
+
   test('PostToolUse on a tool run exits 0 (observational, never blocks)', () => {
     const proc = runCodexHook('post-tool-use', {
       session_id: 'codex-post',

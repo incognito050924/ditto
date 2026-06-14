@@ -4,6 +4,7 @@ import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { listHostAdapters } from '~/core/hosts';
+import { setup } from '~/core/setup';
 import { generateSurfaceCatalog } from '~/core/surface-inventory';
 
 const repoRoot = join(import.meta.dir, '..', '..');
@@ -18,6 +19,43 @@ function run(args: string[]) {
     stderr: 'pipe',
     env: { ...process.env, HOME: home },
   });
+}
+
+function hookEntry(command: string) {
+  return [{ matcher: '', hooks: [{ type: 'command', command }] }];
+}
+
+async function makeCodexPluginFixture(): Promise<string> {
+  const pluginRoot = await mkdtemp(join(tmpdir(), 'ditto-doctor-codex-plugin-'));
+  await mkdir(join(pluginRoot, 'resources', 'managed'), { recursive: true });
+  await mkdir(join(pluginRoot, '.codex-plugin'), { recursive: true });
+  await mkdir(join(pluginRoot, '.codex', 'agents'), { recursive: true });
+  await mkdir(join(pluginRoot, 'skills', 'verify'), { recursive: true });
+  await mkdir(join(pluginRoot, 'hooks'), { recursive: true });
+
+  await writeFile(join(pluginRoot, 'resources', 'managed', 'AGENTS.md'), '# Agent rules\n');
+  await writeFile(join(pluginRoot, 'resources', 'managed', 'GLOBAL_AGENTS.md'), '# Global rules\n');
+  await writeFile(
+    join(pluginRoot, '.codex-plugin', 'plugin.json'),
+    JSON.stringify({ name: 'ditto', version: '0.0.0', description: 'test' }),
+  );
+  await writeFile(join(pluginRoot, '.codex', 'agents', 'verifier.toml'), 'name = "verifier"\n');
+  await writeFile(join(pluginRoot, 'skills', 'verify', 'SKILL.md'), '# Verify\n');
+  await writeFile(
+    join(pluginRoot, 'hooks', 'hooks.json'),
+    JSON.stringify({
+      hooks: {
+        UserPromptSubmit: hookEntry(
+          '"${CLAUDE_PLUGIN_ROOT}/bin/ditto" hook user-prompt-submit --host codex',
+        ),
+        Stop: hookEntry('"${CLAUDE_PLUGIN_ROOT}/bin/ditto" hook stop --host codex'),
+        PreCompact: hookEntry('"${CLAUDE_PLUGIN_ROOT}/bin/ditto" hook pre-compact --host codex'),
+        PostToolUse: hookEntry('"${CLAUDE_PLUGIN_ROOT}/bin/ditto" hook post-tool-use --host codex'),
+        PreToolUse: hookEntry('"${CLAUDE_PLUGIN_ROOT}/bin/ditto" hook pre-tool-use --host codex'),
+      },
+    }),
+  );
+  return pluginRoot;
 }
 
 beforeEach(async () => {
@@ -164,6 +202,40 @@ describe('doctor surface', () => {
       ),
     ).toBe(true);
     expect(json.findings.some((finding: { id: string }) => finding.id === 'extra-a')).toBe(false);
+  });
+
+  test('codex setup target passes surface/instructions and reports plugin enable need', async () => {
+    const pluginRoot = await makeCodexPluginFixture();
+    try {
+      await setup({
+        resourcesDir: join(pluginRoot, 'resources', 'managed'),
+        projectRoot: dir,
+        homeDir: home,
+        now: new Date('2026-06-14T00:00:00.000Z'),
+        host: 'codex',
+        pluginRoot,
+      });
+
+      const surface = run(['doctor', 'surface', '--host', 'codex', '--output', 'json']);
+      expect(surface.exitCode).toBe(0);
+      expect(JSON.parse(surface.stdout.toString()).mismatch_count).toBe(0);
+
+      const capability = run(['doctor', 'capability', '--host', 'codex', '--output', 'json']);
+      expect(capability.exitCode).toBe(1);
+      const capabilityJson = JSON.parse(capability.stdout.toString());
+      expect(capabilityJson.findings).toContainEqual(
+        expect.objectContaining({
+          kind: 'codex_plugin_needs_user_action',
+          capability: 'plugin-enabled',
+        }),
+      );
+
+      const instructions = run(['doctor', 'instructions', '--host', 'codex', '--output', 'json']);
+      expect(instructions.exitCode).toBe(0);
+      expect(JSON.parse(instructions.stdout.toString()).findings).toEqual([]);
+    } finally {
+      await rm(pluginRoot, { recursive: true, force: true });
+    }
   });
 });
 

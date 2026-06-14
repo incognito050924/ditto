@@ -16,7 +16,7 @@ const policy = (over: Record<string, unknown> = {}) => ({
 
 describe('resolveOpponentCandidates', () => {
   test('preferred first, then fallbacks in order, mapped to provider/model', () => {
-    const cands = resolveOpponentCandidates(policy());
+    const cands = resolveOpponentCandidates(policy(), { currentHost: 'claude-code' });
     expect(cands.map((c) => c.token)).toEqual(['codex', 'claude-opus', 'claude-sonnet']);
     expect(cands[0]).toEqual({ token: 'codex', provider: 'codex', model: 'codex' });
     expect(cands[1]).toEqual({
@@ -29,6 +29,7 @@ describe('resolveOpponentCandidates', () => {
   test('duplicate tokens are dropped (first wins)', () => {
     const cands = resolveOpponentCandidates(
       policy({ opponent_preferred: 'codex', opponent_fallback: ['codex', 'claude-opus'] }),
+      { currentHost: 'claude-code' },
     );
     expect(cands.map((c) => c.token)).toEqual(['codex', 'claude-opus']);
   });
@@ -36,6 +37,7 @@ describe('resolveOpponentCandidates', () => {
   test('unknown token defaults to claude-code host carrying the token as model', () => {
     const cands = resolveOpponentCandidates(
       policy({ opponent_preferred: 'mystery-model', opponent_fallback: [] }),
+      { currentHost: 'claude-code' },
     );
     expect(cands[0]).toEqual({
       token: 'mystery-model',
@@ -43,10 +45,27 @@ describe('resolveOpponentCandidates', () => {
       model: 'mystery-model',
     });
   });
+
+  test('codex host keeps the debate on Codex and drops Claude reverse-call fallbacks', () => {
+    const cands = resolveOpponentCandidates(policy(), { currentHost: 'codex' });
+    expect(cands).toEqual([{ token: 'codex', provider: 'codex', model: 'codex' }]);
+  });
+
+  test('unknown token defaults to the current Codex host when resolving on Codex', () => {
+    const cands = resolveOpponentCandidates(
+      policy({ opponent_preferred: 'context-opponent', opponent_fallback: [] }),
+      { currentHost: 'codex' },
+    );
+    expect(cands[0]).toEqual({
+      token: 'context-opponent',
+      provider: 'codex',
+      model: 'context-opponent',
+    });
+  });
 });
 
 describe('selectOpponent', () => {
-  const cands = resolveOpponentCandidates(policy());
+  const cands = resolveOpponentCandidates(policy(), { currentHost: 'claude-code' });
   const always = () => ({ available: true });
 
   test('preferred available → fallback_from null, reason none', () => {
@@ -94,6 +113,29 @@ describe('selectOpponent', () => {
     expect(() => selectOpponent(cands, () => ({ available: false, reason: 'runtime' }))).toThrow(
       NoOpponentAvailableError,
     );
+  });
+
+  test('codex host does not fall back to Claude when Codex context spawning is unavailable', () => {
+    const codexCands = resolveOpponentCandidates(policy(), { currentHost: 'codex' });
+    expect(() =>
+      selectOpponent(codexCands, () => ({ available: false, reason: 'runtime' })),
+    ).toThrow(NoOpponentAvailableError);
+  });
+
+  test('codex host: same-provider surface downgrade (custom-agent → generic subagent) is NOT a provider fallback (§3.4)', () => {
+    // custom-agent unavailable → generic Codex subagent: both are provider=codex,
+    // so the switch is a role-surface downgrade, not a provider fallback.
+    const codexCands = resolveOpponentCandidates(
+      policy({ opponent_preferred: 'codex', opponent_fallback: ['codex-generic'] }),
+      { currentHost: 'codex' },
+    );
+    const sel = selectOpponent(codexCands, (c) =>
+      c.token === 'codex' ? { available: false, reason: 'runtime' } : { available: true },
+    );
+    expect(sel.provider).toBe('codex');
+    expect(sel.model).toBe('codex-generic');
+    expect(sel.fallback_from).toBeNull();
+    expect(sel.fallback_reason).toBe('none');
   });
 
   test('empty candidate list → NoOpponentAvailableError', () => {
