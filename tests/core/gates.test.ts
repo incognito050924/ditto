@@ -10,6 +10,7 @@ import {
   deterministicFloor,
   highRiskAssumption,
   intentDriftGate,
+  interfaceBaselineDriftGate,
   interviewReadinessGate,
   knowledgeTriggerFired,
   knowledgeUpdateGate,
@@ -497,5 +498,57 @@ describe('intentDriftGate (axis-2 intent conservation across the contract chain)
       graph: mkGraph(IDS),
     });
     expect(r.pass).toBe(true);
+  });
+
+  // ── ac-5: the frozen temporal baseline is consumed by drift enforcement ──
+  // The baseline read here is the REAL frozen surface on a parsed autopilot graph
+  // (approval_gate.change_surface, set by producePlanGate at plan stage), not a
+  // stub — this exercises the baseline→comparison wiring the reviewer/verifier
+  // drift path uses, reusing COVERAGE_AXIS_MECHANISMS.temporal.enforce.
+  describe('interfaceBaselineDriftGate (axis-2 temporal: frozen plan baseline)', () => {
+    const BASELINE = ['src/core/gates.ts', 'src/core/coverage-manager.ts'];
+    const mkBaselineGraph = (surface: string[]) =>
+      mkGraph(IDS, {
+        approval_gate: { status: 'pending', change_surface: surface },
+      });
+
+    test('a current surface matching the frozen baseline passes', () => {
+      const graph = mkBaselineGraph(BASELINE);
+      // order-insensitive: reverse the current surface, still conserved
+      const r = interfaceBaselineDriftGate(
+        graph.approval_gate.change_surface,
+        [...BASELINE].reverse(),
+      );
+      expect(r.pass).toBe(true);
+      expect(r.reasons).toEqual([]);
+    });
+
+    test('an unconsented interface ADD vs the frozen baseline is flagged', () => {
+      const graph = mkBaselineGraph(BASELINE);
+      const r = interfaceBaselineDriftGate(graph.approval_gate.change_surface, [
+        ...BASELINE,
+        'src/core/secret-new-surface.ts',
+      ]);
+      expect(r.pass).toBe(false);
+      expect(r.reasons.some((x) => x.includes('grow') && x.includes('secret-new-surface'))).toBe(
+        true,
+      );
+    });
+
+    test('an unconsented interface REMOVAL vs the frozen baseline is flagged', () => {
+      const graph = mkBaselineGraph(BASELINE);
+      const r = interfaceBaselineDriftGate(graph.approval_gate.change_surface, [BASELINE[0] ?? '']);
+      expect(r.pass).toBe(false);
+      expect(r.reasons.some((x) => x.includes('shrink') && x.includes('coverage-manager'))).toBe(
+        true,
+      );
+    });
+
+    test('no frozen baseline (brief regime inactive) is a no-op pass', () => {
+      const graph = mkGraph(IDS); // approval_gate.status not_required, no change_surface
+      expect(graph.approval_gate.change_surface).toBeUndefined();
+      const r = interfaceBaselineDriftGate(graph.approval_gate.change_surface, ['src/anything.ts']);
+      expect(r.pass).toBe(true);
+    });
   });
 });

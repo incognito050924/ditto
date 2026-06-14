@@ -27,6 +27,25 @@ function isClosed(ac: CompletionContract['acceptance'][number]): boolean {
   return ac.verdict === 'pass' && hasEvidence;
 }
 
+/**
+ * Auxiliary probe (advisory, NON-gating) for the wi_260614ojc recurrence class:
+ * a `pass` AC whose ONLY evidence is `kind:"command"` (a unit/CLI test) with NO
+ * `kind:"file"`/`kind:"artifact"` evidence pointing at a runtime/artifact path.
+ * Such a closure proves a function runs in a test, not that the feature is wired
+ * into the runtime path or that its §9 artifact was produced. This does NOT change
+ * `isClosed` or any verdict — it only surfaces "closed on unit evidence alone" so
+ * the real guardrail (AC-authoring discipline, §11) has a visible signal. A
+ * non-pass AC is never flagged: only closures can be falsely-green.
+ */
+export function isUnitOnlyClosure(ac: CompletionContract['acceptance'][number]): boolean {
+  if (ac.verdict !== 'pass') return false;
+  const refs = [...(ac.evidence ?? []), ...(ac.evidence_records ?? [])];
+  if (refs.length === 0) return false;
+  const hasCommand = refs.some((e) => e.kind === 'command');
+  const hasRuntimeOrArtifact = refs.some((e) => e.kind === 'file' || e.kind === 'artifact');
+  return hasCommand && !hasRuntimeOrArtifact;
+}
+
 export interface CompletionCoverageRow {
   work_item_id: string;
   title: string;

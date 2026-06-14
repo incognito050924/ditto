@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   type CompletionCoverageDeps,
   collectCompletionCoverageReport,
+  isUnitOnlyClosure,
 } from '~/core/completion-coverage-doctor';
 import type { WorkItemSummary } from '~/core/work-item-store';
 import type { CompletionContract } from '~/schemas/completion-contract';
@@ -127,6 +128,49 @@ describe('collectCompletionCoverageReport', () => {
       }),
     );
     expect(report.rows[0].closed_acceptance).toBe(1);
+  });
+
+  test('isUnitOnlyclosure: command-only evidence flags a unit-only closure', () => {
+    const ac = {
+      criterion_id: 'ac-6',
+      verdict: 'pass' as const,
+      evidence: [{ kind: 'command' as const, command: 'bun test tests/foo.test.ts' }],
+      evidence_records: [],
+    };
+    expect(isUnitOnlyClosure(ac)).toBe(true);
+  });
+
+  test('isUnitOnlyclosure: a file evidence pointing at a runtime/artifact path clears the flag', () => {
+    const ac = {
+      criterion_id: 'ac-6',
+      verdict: 'pass' as const,
+      evidence: [
+        { kind: 'command' as const, command: 'bun test tests/foo.test.ts' },
+        { kind: 'file' as const, path: 'src/core/autopilot-loop.ts' },
+      ],
+      evidence_records: [],
+    };
+    expect(isUnitOnlyClosure(ac)).toBe(false);
+  });
+
+  test('isUnitOnlyClosure: an artifact-path evidence clears the flag', () => {
+    const ac = {
+      criterion_id: 'ac-6',
+      verdict: 'pass' as const,
+      evidence: [{ kind: 'command' as const, command: 'bun test' }],
+      evidence_records: [{ kind: 'artifact' as const, path: '.ditto/local/runs/wi/coverage.json' }],
+    };
+    expect(isUnitOnlyClosure(ac)).toBe(false);
+  });
+
+  test('isUnitOnlyClosure: a non-pass AC is never flagged (only closed ACs matter)', () => {
+    const ac = {
+      criterion_id: 'ac-6',
+      verdict: 'unverified' as const,
+      evidence: [{ kind: 'command' as const, command: 'bun test' }],
+      evidence_records: [],
+    };
+    expect(isUnitOnlyClosure(ac)).toBe(false);
   });
 
   test('totals aggregate across work items', async () => {

@@ -5,6 +5,7 @@ import type { ClosureMode } from '~/schemas/convergence';
 import type { IntentContract } from '~/schemas/intent';
 import type { InterviewState } from '~/schemas/interview-state';
 import type { WorkItem } from '~/schemas/work-item';
+import { COVERAGE_AXIS_MECHANISMS } from './coverage-manager';
 
 /**
  * Deterministic gates (M0.4). Pure functions, no LLM calls (D5: 결정론 1차).
@@ -477,4 +478,48 @@ export function intentDriftGate(a: IntentChainArtifacts): IntentDriftResult {
   }
 
   return { ...gate(reasons), advisories };
+}
+
+// ── interface/scope baseline drift gate (axis-2 temporal: frozen plan baseline) ─
+
+/**
+ * Drift ENFORCEMENT against the frozen temporal baseline the pre-mortem coverage
+ * engine produces (premortem-coverage-contract §2 시간정합, contract §2 l.62). The
+ * engine only PRODUCES the baseline (`approval_gate.change_surface` set by
+ * `producePlanGate`) and DETECTS divergence; the reviewer/verifier stage is where
+ * that baseline is consumed to flag an unconsented interface/scope change. This
+ * gate is that consumer: it compares the CURRENT change surface against the FROZEN
+ * baseline and blocks when they diverge (an added surface = unconsented scope grow,
+ * a removed surface = scope shrink).
+ *
+ * It REUSES the temporal axis mechanism (`COVERAGE_AXIS_MECHANISMS.temporal.enforce`)
+ * for the set/length divergence decision rather than reimplementing it — the gate
+ * is the same set-equality the engine froze, now wired to enforcement. When no
+ * baseline was frozen (no brief regime) the gate is a no-op pass: there is nothing
+ * to drift from. Set semantics (membership + length), so order does not matter and
+ * a duplicate would change length (a real surface mutation).
+ */
+export function interfaceBaselineDriftGate(
+  baseline: readonly string[] | undefined,
+  current: readonly string[],
+): GateResult {
+  // No frozen baseline ⇒ brief regime inactive for this graph ⇒ nothing to enforce.
+  if (baseline === undefined) return gate([]);
+  const conserved = COVERAGE_AXIS_MECHANISMS.temporal.enforce(baseline, current);
+  if (conserved) return gate([]);
+  const frozen = new Set(baseline);
+  const added = current.filter((c) => !frozen.has(c));
+  const removed = baseline.filter((b) => !current.includes(b));
+  const reasons: string[] = [];
+  if (added.length > 0) {
+    reasons.push(
+      `interface/scope added vs frozen baseline (unconsented grow): ${added.join(', ')}`,
+    );
+  }
+  if (removed.length > 0) {
+    reasons.push(
+      `interface/scope removed vs frozen baseline (unconsented shrink): ${removed.join(', ')}`,
+    );
+  }
+  return gate(reasons);
 }

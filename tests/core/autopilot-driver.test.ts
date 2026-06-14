@@ -146,6 +146,46 @@ describe('mutationGate brief hard-gate (ac-7 — plan_brief required before impl
     });
     expect(mutationGate(g).action).toBe('proceed');
   });
+
+  // ac-6 (wi_260614z7r): close the change_surface escape-hatch. A graph whose
+  // design node has ALREADY PASSED is under the brief regime — the deterministic
+  // Manager (producePlanGate) ALWAYS sets change_surface on a brief-producing
+  // design pass. So an approved gate with a PASSED design node but ABSENT
+  // change_surface means the brief stage was bypassed: fail-closed (block), not
+  // proceed. A pending design node (brief stage not run yet) stays legacy.
+  test('escape-hatch: passed design node + approved + change_surface ABSENT => pending (fail-closed, not proceed)', () => {
+    const withPassedDesign = buildInitialNodes(['ac-1']).map((n) =>
+      n.kind === 'design' ? { ...n, status: 'passed' as const } : n,
+    );
+    const g = graph({
+      nodes: withPassedDesign,
+      approval_gate: {
+        status: 'approved',
+        source: 'user',
+        approved_at: null,
+        approved_by: null,
+        evidence_refs: [],
+      },
+    });
+    const result = mutationGate(g);
+    expect(result.allowed).toBe(false);
+    expect(result.action).toBe('present_plan');
+  });
+
+  test('escape-hatch: pending design node + approved + no change_surface still proceeds (brief stage not yet run — legacy)', () => {
+    // The default seed has a PENDING design node — the brief regime has not run,
+    // so this is the legacy approved→proceed path and must stay open.
+    const g = graph({
+      approval_gate: {
+        status: 'approved',
+        source: 'user',
+        approved_at: null,
+        approved_by: null,
+        evidence_refs: [],
+      },
+    });
+    expect(mutationGate(g).action).toBe('proceed');
+  });
 });
 
 describe('approval_gate schema (ac-7 — plan_brief/change_surface additive, backward compatible)', () => {

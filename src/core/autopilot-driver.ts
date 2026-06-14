@@ -18,15 +18,32 @@ export interface MutationGate {
 export function mutationGate(graph: Autopilot): MutationGate {
   const gate = graph.approval_gate;
   // Brief hard-gate (pre-mortem coverage engine §7.2). The brief regime is active
-  // only when `change_surface` is set (a non-light plan whose mutation must be
-  // gated on an approved brief). When active, a user-approved gate (`approved`)
-  // additionally requires the brief itself to be present — an absent brief under
-  // `approved` is a false-green (the plan was approved but no brief was produced),
-  // so we return pending to block, not proceed. `not_required` is the §8.2 light
-  // small-reversible auto-waiver: it proceeds without requiring brief approval.
-  // A legacy graph (no change_surface) skips this entirely and keeps status-only
-  // behavior, preserving backward compatibility.
+  // when `change_surface` is set (a non-light plan whose mutation must be gated on
+  // an approved brief). When active, a user-approved gate (`approved`) additionally
+  // requires the brief itself to be present — an absent brief under `approved` is a
+  // false-green (the plan was approved but no brief was produced), so we return
+  // pending to block, not proceed. `not_required` is the §8.2 light small-reversible
+  // auto-waiver: it proceeds without requiring brief approval. A legacy graph (no
+  // change_surface) skips this entirely and keeps status-only behavior, preserving
+  // backward compatibility.
   const briefRegimeActive = gate.change_surface !== undefined;
+  // ac-6 (wi_260614z7r) — close the change_surface escape-hatch (fail-closed). A
+  // graph whose design node has ALREADY PASSED ran the plan stage; the deterministic
+  // Manager (producePlanGate) ALWAYS sets change_surface on a brief-producing design
+  // pass (coverage-manager §7.2). So an APPROVED gate with a passed design node but
+  // ABSENT change_surface means the brief stage was bypassed by omission — block
+  // instead of proceeding. A PENDING design node (brief stage not yet run) stays the
+  // legacy status-only path, so legacy graphs and pre-brief seeds do not regress.
+  const designPassed = (graph.nodes ?? []).some(
+    (n) => n.kind === 'design' && n.status === 'passed',
+  );
+  if (designPassed && !briefRegimeActive && gate.status === 'approved') {
+    return {
+      allowed: false,
+      action: 'present_plan',
+      reason: 'design passed but change_surface is absent: produce the brief before mutating',
+    };
+  }
   if (briefRegimeActive && gate.status === 'approved' && gate.plan_brief === undefined) {
     return {
       allowed: false,
