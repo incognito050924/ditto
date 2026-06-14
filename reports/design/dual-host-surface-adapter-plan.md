@@ -1,7 +1,7 @@
 ---
 title: "DITTO dual-host surface adapter 근거와 구현 계획"
 kind: design-plan
-last_updated: 2026-06-13 KST
+last_updated: 2026-06-14 KST
 status: reviewed
 review: ".ditto/local/work-items/wi_26061304x/reviews/dialectic-1.json (verdict=revise, required_edits 반영)"
 scope: "Claude Code와 Codex를 모두 지원하기 위한 공통 core, host별 surface adapter, 증거 기반 구현 순서"
@@ -554,11 +554,11 @@ repo root
 - setup/install 문서가 host별로 분리되어 있음.
 - Codex에서 미검증인 부분은 `unverified`로 남아 있음.
 
-## 9. 진행 상태 / 잔여 (2026-06-13 갱신, 권위 있는 현재 상태)
+## 9. 진행 상태 / 잔여 (2026-06-14 갱신, 권위 있는 현재 상태)
 
 > §3 현재상태표·§5 milestone 서술보다 이 절이 우선한다. dialectic-1(`wi_260613afv/reviews/dialectic-1.json`)·verify·dogfooding 결과를 추적되는 위치로 승격(#7).
 
-**구현·검증됨 (커밋)**
+**구현·검증됨**
 - M1~M4 Codex surface: `codexHostAdapter`, host-aware `io`(repoRoot), apply_patch 경로 추출(`envelope`), PreToolUse 게이트/PostToolUse evidence, agent→TOML projection(15개).
 - **OBJ-1 [critical] 수정** — 배포 `dist/codex-plugin/hooks/hooks.json`의 `ditto hook` 명령에 `--host codex` 부착(build-codex-plugin `injectCodexHost`). 이전엔 미부착으로 apply_patch 안전게이트가 실 Codex에서 미발화(false-green). repo `hooks/hooks.json`(Claude)은 byte-identical. seam 테스트 `tests/host/codex/applypatch-deploy-seam.surface.test.ts`.
 - **OBJ-5 [high] 수정** — `loadSurfaceInventory`가 비공식 `.codex/plugins` 스캔 제거, 공식 plugin-root만. 공식 발견 경로는 `.agents/plugins/marketplace.json`(+ `~/.agents/plugins/` + legacy `.claude-plugin/marketplace.json`).
@@ -566,10 +566,19 @@ repo root
 - **OBJ-9 [med] 수정** — PreCompact `from_context`가 host-aware(claude-code 하드코딩 제거).
 - **OBJ-2/3/6 [doc] 해소** — §3 현재상태표 정정(위 정정 박스), 본 절로 동기화.
 
-**Codex 트랙 (실 바이너리 없이는 검증 불가 — 별도 Codex 세션)**
-- **M5** setup/install의 Codex 분기(`~/.codex`·marketplace 등록): install 동작은 실 Codex로만 검증 가능 → 미착수.
-- **OBJ-10 / 층위③ 라이브 load·발화**: 실 `codex`가 plugin·hook·agent를 실제 로드·발화하는지. 지금까지 전부 fixture-green + handler 단위.
-- **OBJ-8 [med]**: agent surface 0개여도 카탈로그 통과 — repo 소스엔 agent TOML이 install 후 생기므로 0개가 정상. 진짜 parity 검사는 post-install(Codex)에서. 여기서 flag하면 false-positive라 보류.
-- **OBJ-4 [high-borderline]**: skill/agent 본문의 `${CLAUDE_PLUGIN_ROOT}` 치환이 실 Codex에서 동작하는지 미검증(공식은 plugin hook 명령에 한해 확인됨).
+**M5 setup 수정·검증**
+- **M5 source-mode 버그 수정** — source tree 자체에도 `.codex-plugin/plugin.json`이 있어 `ditto setup --host codex`가 `dist/codex-plugin` 대신 repo root 전체를 plugin으로 복사하던 문제를 수정했다. `resolveCodexPluginRoot`는 sibling/build artifact(`dist/codex-plugin`)를 우선하고, source root는 `.codex/agents`가 있는 빌드 산출물일 때만 plugin root로 본다.
+- **M5 fail-loud 추가** — Codex plugin artifact에 `.codex/agents/*.toml`이 없으면 `agentsInstalled=0`으로 조용히 통과하지 않고 `codex custom agents not found ...; run build:codex-plugin first`로 실패한다.
+- **M5 positional target 수정** — `ditto setup --host codex <target>`가 `<target>`을 무시하고 cwd를 대상으로 삼던 문제를 수정했다. `--dir`와 positional target 모두 지원한다.
+- 검증: `tests/cli/setup-command.test.ts`, `tests/core/setup.test.ts`, 실제 임시 repo source-mode 설치. 실제 설치 결과는 project `.codex/agents` 15개, plugin copy 35 files.
+
+**Codex 트랙 (실 바이너리 검증 결과 — 2026-06-14 Codex CLI 0.139.0)**
+- **환경** — `codex update` 후 `codex-cli 0.139.0`; `codex doctor`는 17 ok, 1 idle, 0 warn/fail. features는 hooks/multi_agent/plugins enabled.
+- **OBJ-10 plugin·skill load 통과** — `codex plugin list --json`에서 `ditto@ditto-local` installed/enabled 확인. `codex debug prompt-input`에서 11개 DITTO skill(`ditto:autopilot`, `ditto:deep-interview`, `ditto:dialectic`, `ditto:dialectic-review`, `ditto:e2e`, `ditto:e2e-author`, `ditto:handoff`, `ditto:knowledge-update`, `ditto:memory-graph`, `ditto:tech-spec`, `ditto:verify`)이 실제 prompt surface에 로드됨.
+- **OBJ-10 hook 발화: TUI 통과 / `exec` 불발** — `codex exec` 0.139.0은 user-level·project-local 최소 echo hook(`UserPromptSubmit`, `PreToolUse`)과 plugin-bundled DITTO hook을 모두 발화하지 않았다. 반면 interactive TUI에서는 같은 최소 echo hook이 발화했고, DITTO plugin-bundled PreToolUse가 `apply_patch config/.env` secret 편집을 차단했다. transcript: `~/.codex/sessions/2026/06/14/rollout-2026-06-14T00-07-38-019ec186-34bd-7a93-a69f-a31bc746e9f5.jsonl`; 대상 파일은 생성되지 않음.
+- **OBJ-8 custom-agent 로드 통과** — project `.codex/agents/*.toml` 15개 모두 interactive TUI runtime spawn으로 확인했다. 각 agent는 `CUSTOM_AGENT_OK <name>`을 반환했다. transcript: `~/.codex/sessions/2026/06/14/rollout-2026-06-14T01-17-42-019ec1c6-5b37-7ac0-84e3-25ecc6e930b0.jsonl`. 단, project trust와 model config가 실제 config에 있어야 하며, file existence만으로는 통과 증거가 아니다.
+- **층위④ skill dogfooding 완료** — Codex 호스트에서 11개 skill을 발화했다. PASS: `dialectic`, `dialectic-review`, `autopilot`, `deep-interview`, `verify`, `tech-spec`, `knowledge-update`, `memory-graph`, `handoff`. PARTIAL: `e2e-author`(digest 결정론성은 PASS, web journey authoring은 web UI 부재로 미수행). N/A: `e2e`(web UI 없음). `memory-graph`는 `code_drift` freshness caveat를 동반한다.
+- **OBJ-4 정리** — plugin hook command의 plugin-root env 경로는 TUI hook 실발화로 검증됐다. skill/agent 본문은 실제 plugin cache/project 파일에서 로드되어 `ditto` CLI를 PATH로 실행했으므로, skill text 안의 `${CLAUDE_PLUGIN_ROOT}` 리터럴 확장을 일반 보장으로 주장하지 않는다.
+- **남은 분류** — DITTO repo 체크리스트의 미검증 항목은 닫혔다. 단, `codex exec` hook 비발화는 Codex 0.139.0 런타임 모드별 실패로 재현됐으므로 hook 실증 수단은 interactive TUI로 제한한다.
 
 **참고**: 재현 방법은 `reports/design/dual-host-test-methods.md`.

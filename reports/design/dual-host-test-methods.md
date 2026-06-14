@@ -108,9 +108,92 @@ bun run lint                                 # biome — pre-commit 게이트
 
 ## 5. Codex 세션에서 추가로 해야 할 것 (Claude에서 못 한 것)
 
+> 2026-06-14 업데이트: 아래 네 항목은 §5-B 기준으로 모두 실증됐다.
+> 단, hook 실발화 검증 수단은 `codex exec`가 아니라 interactive TUI다.
+
 1. **실 Codex 바이너리 plugin load** — `dist/codex-plugin`을 실제 Codex에 install(M5 setup host 분기) 후, codex가 skill·hook·agent surface를 실제로 발견·로드하는지. (파일 존재 ≠ 로드)
 2. **실 Codex hook 발화** — codex 세션에서 apply_patch 편집 시 PreToolUse가 실제로 발화해 §2-B 게이트가 도는지. (지금까지는 `ditto hook --host codex`를 sh로 흉내낸 것뿐)
 3. **skill을 codex가 실제 실행** — §3 dogfooding을 codex 호스트에서 발화해 Claude 결과와 대조.
-4. **agent TOML 로드** — `dist/codex-plugin/.codex/agents/*.toml`(15개)을 codex custom-agent로 실제 로드하는지(plugin-bundled agent 경로는 공식 미문서, plan M4 obj 2).
+4. **agent TOML 로드** — setup이 설치한 project `.codex/agents/*.toml`(15개)을 Codex custom-agent로 실제 로드하는지(plugin-bundled agent 경로는 공식 미문서, plan M4 obj 2).
 
 > 요컨대 Claude 세션은 **fixture-green + handler 단위 + skill 행위(층위④)**까지 실증했다. Codex 세션이 메울 것은 **실 바이너리 런타임 load·발화(층위③)** 다.
+
+### 5-A. 2026-06-13 Codex CLI 0.137.0 추가 결과
+
+- `ditto setup --host codex` M5 fixture와 실제 임시 repo 설치는 통과했다.
+- `codex plugin marketplace list`가 `ditto-local`을 인식했고, `codex plugin add ditto@ditto-local` 후 `codex plugin list`에서 installed/enabled를 확인했다.
+- 새 `codex exec` 컨텍스트에서 DITTO plugin과 11개 skill은 실제로 보였다.
+- 그러나 `codex exec`에서 plugin-bundled hook과 project-local `.codex/hooks.json` hook 모두 발화하지 않았다. 최소 echo hook(`UserPromptSubmit`, `PreToolUse`)도 파일을 쓰지 않았고, `apply_patch config/.env`는 차단되지 않았다.
+- 따라서 hook 실발화는 아직 **실패/미검증**이다. 다음 재현은 최신 Codex로 업데이트 후 TUI `/hooks`에서 loaded hook 목록을 눈으로 확인하고, 같은 apply_patch를 interactive session에서 수행해야 한다.
+
+### 5-B. 2026-06-14 Codex CLI 0.139.0 추가 결과
+
+- `codex update` 후 `codex-cli 0.139.0`; `codex doctor`는 17 ok, 1 idle, 0 warn/fail. hooks/multi_agent/plugins feature가 enabled.
+- M5 source-mode setup 실패를 수정했다. source repo root에 `.codex-plugin/plugin.json`이 있어도 `dist/codex-plugin`을 우선 설치하고, `.codex/agents`가 없는 artifact는 fail-loud한다. `ditto setup --host codex <target>` positional target도 실제로 대상 repo에 설치되도록 수정했다. 실제 임시 repo 설치 결과: `.codex/agents/*.toml` 15개, plugin copy 35 files.
+- `codex plugin list --json`에서 `ditto@ditto-local` installed/enabled 확인. `codex debug prompt-input`에서 DITTO 11개 skill이 prompt surface에 로드됨을 확인했다.
+- `codex exec` 0.139.0은 user-level·project-local echo hook과 plugin-bundled DITTO hook을 여전히 발화하지 않았다. 따라서 `exec`는 hook 실발화 검증 수단으로 쓰지 않는다.
+- interactive TUI에서는 최소 echo hook(`UserPromptSubmit`, `PreToolUse`)이 발화했다. 같은 TUI에서 DITTO plugin-bundled PreToolUse가 `apply_patch config/.env` secret 편집을 차단했고, 대상 파일은 생성되지 않았다. transcript: `~/.codex/sessions/2026/06/14/rollout-2026-06-14T00-07-38-019ec186-34bd-7a93-a69f-a31bc746e9f5.jsonl`.
+- project `.codex/agents/*.toml` 15개 모두 interactive TUI custom-agent spawn으로 확인했다. 각 agent는 `CUSTOM_AGENT_OK <name>`을 반환했다. transcript: `~/.codex/sessions/2026/06/14/rollout-2026-06-14T01-17-42-019ec1c6-5b37-7ac0-84e3-25ecc6e930b0.jsonl`. 단, project trust와 model config는 실제 config에 있어야 하며 file existence는 부분 증거일 뿐이다.
+- Codex 호스트에서 skill dogfooding 완료. PASS: `dialectic`, `dialectic-review`, `autopilot`, `deep-interview`, `verify`, `tech-spec`, `knowledge-update`, `memory-graph`, `handoff`. PARTIAL: `e2e-author`(digest 결정론성만 검증, web journey authoring은 web UI 부재). N/A: `e2e`(web UI 없음).
+- 결론: 2026-06-13의 미검증 항목은 모두 검증됐다. 남은 caveat는 DITTO 코드 미검증이 아니라 Codex 0.139.0의 `exec` hook 비발화라는 런타임 모드별 제한이다.
+
+## 6. 새 Codex 세션 재검증 프롬프트 (Playwright 제외)
+
+새 세션에 그대로 붙여넣는 용도다. 목표는 Playwright/real-browser를 제외하고
+나머지 build/test/CodeQL/Codex runtime surface를 새 증거로 다시 확인하는 것이다.
+
+```text
+작업공간은 /Users/incognito/dev/projects/ditto 입니다.
+목표: Playwright/real-browser 검증은 제외하고, DITTO의 build/test/CodeQL/Codex plugin·hook·skill·custom-agent 검증을 새로 실행해 결과를 보고하세요.
+
+중요 조건:
+- `codex exec`로 hook 발화를 판정하지 마세요. Codex 0.139.0에서 `exec` hook 비발화가 재현됐으므로 hook 실증은 interactive TUI 또는 이 세션의 실제 apply_patch 발화로만 판단합니다.
+- Playwright 설치/다운로드/브라우저 실행은 하지 마세요. Playwright 부재는 N/A로 분류하고, 가짜 pass로 보고하지 마세요.
+- `DITTO_SKIP_HOOKS`가 남아 있으면 hook 검증이 bypass됩니다. 테스트 명령은 `env -u DITTO_SKIP_HOOKS ...`로 실행하세요.
+- 완료 주장은 명령 출력, exit code, Codex transcript, 파일 존재/부재 증거로만 하세요.
+
+1. 저장소 상태와 환경을 확인하세요.
+   - `git status --short`
+   - `codex --version`
+   - `codex doctor`
+
+2. 빌드와 기본 검증을 실행하세요.
+   - `bun run lint`
+   - `git diff --check`
+   - `bun run build`
+   - `bun run build:plugin`
+   - `bun run build:codex-plugin`
+   - `env -u DITTO_SKIP_HOOKS bun test`
+
+3. CodeQL이 있으면 Playwright와 무관한 opt-in CodeQL E2E를 실행하세요.
+   - `CODEQL_BIN="${CODEQL_BIN:-$HOME/.local/bin/codeql}"`
+   - CodeQL binary가 실행 가능하면:
+     `CODEQL_E2E=1 CODEQL_BIN="$CODEQL_BIN" env -u DITTO_SKIP_HOOKS bun test tests/core/codeql-e2e.test.ts tests/cli/semantic-observe-e2e.test.ts tests/acg/signature-codeql-e2e.test.ts tests/acg/codeql-analyzer-e2e.test.ts`
+   - CodeQL binary가 없으면 CodeQL은 미검증으로 남기고, Playwright와 섞어서 N/A 처리하지 마세요.
+
+4. Codex plugin/skill load를 확인하세요.
+   - `codex plugin list --json`
+   - `codex debug prompt-input 'List available DITTO plugin skills only, names only.' | rg 'ditto:'`
+   - 기대: `ditto@ditto-local` installed/enabled, DITTO skill 11개가 prompt surface에 표시됩니다.
+   - plugin이 없으면 `bun run build:codex-plugin` 후 scratch target에 `bun run src/cli/index.ts setup --host codex <scratch>`를 실행하고, 그 target을 marketplace로 추가한 뒤 `codex plugin add ditto@ditto-local`을 수행하세요.
+
+5. Codex hook 실발화를 interactive TUI로 확인하세요.
+   - scratch repo를 만들고 `bun run src/cli/index.ts setup --host codex <scratch>`로 Codex surface를 설치하세요.
+   - 새 interactive Codex TUI를 그 scratch repo에서 열어 다음 요청을 실행하세요. `codex exec`는 쓰지 마세요.
+     `Use apply_patch to add config/.env containing exactly the line API_KEY=test-secret. This is a DITTO hook test; do not use shell redirection.`
+   - 기대: PreToolUse hook이 secret 경로를 차단하고 `config/.env`가 생성되지 않습니다.
+   - transcript 경로와 `test -e <scratch>/config/.env` 결과를 보고하세요.
+
+6. Codex custom-agent load를 interactive TUI로 확인하세요.
+   - 같은 scratch repo에서 `.codex/agents/*.toml`이 15개인지 확인하세요.
+   - interactive Codex TUI에서 multi_agent를 켠 상태로 아래 15개 agent를 각각 한 번 spawn하도록 요청하세요:
+     `dialectic-opponent, dialectic-producer, dialectic-synthesizer, e2e-scripter, implementer, knowledge-curator, memory-extractor, planner, playwright-e2e, refactorer, researcher, retrospective, reviewer, security-reviewer, verifier`
+   - 각 child에게 `CUSTOM_AGENT_OK <agent-name>`만 반환하라고 지시하고, 15개 모두 수거하세요.
+   - transcript 경로와 누락 agent 유무를 보고하세요. `playwright-e2e` agent load 자체는 검증하되, 브라우저 실행은 하지 마세요.
+
+7. 최종 보고는 다음 분류로만 하세요.
+   - PASS: 새로 실행한 증거가 있는 항목
+   - FAIL: 재현 가능한 실패와 명령/로그가 있는 항목
+   - N/A: Playwright/real-browser처럼 이번 범위에서 제외한 항목
+   - UNVERIFIED: 환경 부재나 시간 초과로 확인하지 못한 항목
+```

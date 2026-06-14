@@ -151,6 +151,36 @@ cd /path/to/your/project
 ditto setup
 ```
 
+호스트별 setup은 명시적으로 선택합니다:
+
+```bash
+ditto setup --host claude-code   # 기본값; 기존 Claude Code 동작
+ditto setup --host codex         # Codex AGENTS, marketplace, agents 설치
+ditto setup --host both
+```
+
+Codex는 먼저 Codex 플러그인 표면을 빌드합니다:
+
+```bash
+bun run build:codex-plugin
+ditto setup --host codex
+```
+
+Codex 분기는 빌드된 플러그인을 `<대상>/.agents/plugins/ditto/`에 복사하고,
+`<대상>/.agents/plugins/marketplace.json`을 쓰며, 생성된 custom-agent TOML을
+`<대상>/.codex/agents/`에 설치합니다. 이 상태는 **prepared**(파일 준비)이지
+Codex plugin enabled 상태가 아닙니다. `ditto setup --host codex`는 이어서 실행할
+명령을 그대로 출력합니다:
+
+```bash
+codex plugin marketplace add /path/to/your/project
+codex plugin add ditto@ditto-local
+```
+
+사용할 Codex home에서 위 명령을 실행한 뒤 새 Codex 세션을 시작하세요. 그 전까지
+`ditto doctor capability --host codex`는 준비된 파일을 loaded hook/skill로 둥글리지
+않고 `codex_plugin_needs_user_action`을 보고합니다.
+
 동작 특성(직접 실행으로 검증됨):
 
 - **기존 내용 보존**: 파일에 이미 있던 사용자 내용은 관리블록
@@ -158,7 +188,7 @@ ditto setup
   `<파일>.ditto_bak` 백업이 생깁니다.
 - **멱등**: 재실행해도 블록이 중복 적재되지 않고 갱신만 됩니다.
 - **제거**: `ditto teardown`이 관리블록만 벗겨내고 사용자 내용은 남깁니다.
-- 적재된 규칙은 **새 Claude Code 세션부터** 로드됩니다.
+- 적재된 규칙은 **새 호스트 세션부터** 로드됩니다.
 
 > self-host(대상 = DITTO 저장소 자신)에서는 setup이 통째로 건너뛰어집니다.
 > DITTO 저장소에서 dogfooding하면서 **전역** 블록만 필요하면, 아무 다른

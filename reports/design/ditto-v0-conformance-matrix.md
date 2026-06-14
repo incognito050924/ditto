@@ -140,7 +140,7 @@ schema parse/reject·등록(barrel/registry/sidecar-registration)은 `tests/sche
 | **M3.4** | clone 환경 fallback: local-artifact+artifact_available=false 라도 summary/exit_code/sha256/key_lines 로 판정 가능 | ✅ |
 | **M3.4** | evidence-index.json ledger: appendRecord→readIndex append-only 라운드트립 (커밋 대상, evidence/ gitignore 와 분리) | ✅ |
 | **M3.5** | OpponentModelRouter: Codex 우선, 가용 시 fallback 없음(provenance none) | ✅ |
-| **M3.5** | OpponentModelRouter: Codex 불가 → claude fallback + 사유 기록(침묵 금지, §3.2/§3.5) | ✅ |
+| **M3.5** | OpponentModelRouter: Claude Code host는 Codex 불가 시 claude fallback 사유 기록, Codex host는 Claude Code 역호출 없이 Codex context 후보만 유지 | ✅ |
 | **M3.5** | dialectic admissibility: maps_to∧critical\|high 해결+accept→통과 / 미해결→continuation | ✅ |
 | **M3.5** | dialectic verdict reject\|blocked → continuation; taste(medium·oracle 없음)는 non-blocker | ✅ |
 | **M3.5** | Stop hook 통합: reviews/dialectic-*.json verdict=blocked → exit 2, malformed → fail-closed | ✅ |

@@ -153,6 +153,38 @@ cd /path/to/your/project
 ditto setup
 ```
 
+Host-specific setup is explicit:
+
+```bash
+ditto setup --host claude-code   # default; existing Claude Code behavior
+ditto setup --host codex         # installs Codex AGENTS, marketplace, and agents
+ditto setup --host both
+```
+
+For Codex, build the Codex plugin surface first:
+
+```bash
+bun run build:codex-plugin
+ditto setup --host codex
+```
+
+The Codex branch copies the built plugin into
+`<target>/.agents/plugins/ditto/`, writes
+`<target>/.agents/plugins/marketplace.json`, and installs generated custom
+agents into `<target>/.codex/agents/`. This is a **prepared** state, not an
+enabled Codex plugin. `ditto setup --host codex` prints the exact follow-up
+commands:
+
+```bash
+codex plugin marketplace add /path/to/your/project
+codex plugin add ditto@ditto-local
+```
+
+Run those commands in the Codex home you intend to use, then start a new Codex
+session. Until then, `ditto doctor capability --host codex` reports
+`codex_plugin_needs_user_action` instead of rounding prepared files up to loaded
+hooks/skills.
+
 Behavior (verified by direct runs):
 
 - **Preserves existing content**: anything already in the file stays outside the
@@ -161,7 +193,7 @@ Behavior (verified by direct runs):
 - **Idempotent**: re-running updates the block in place, never duplicates it.
 - **Removal**: `ditto teardown` strips only the managed blocks and keeps user
   content.
-- The loaded rules take effect from the **next** Claude Code session.
+- The loaded rules take effect from the **next** host session.
 
 > Under self-host (target = the DITTO repo itself) setup is skipped entirely.
 > When dogfooding inside the DITTO repo and you only need the **global** blocks,
