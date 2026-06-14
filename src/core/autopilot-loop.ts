@@ -25,6 +25,7 @@ import {
   supersededByPromotion,
 } from './autopilot-graph';
 import { AutopilotStore } from './autopilot-store';
+import { producePlanGate } from './coverage-manager';
 import { IntentStore } from './intent-store';
 import { warmStartMemoryContext } from './memory-warmstart';
 import { computeSpecDigest } from './tech-spec';
@@ -398,6 +399,35 @@ export const recordResultPayload = z
           'security-node pass, true splices a forward fix+re-check round (§2.4) under the ' +
           'convergence budget, false/absent closes the loop. Ignored for other node kinds.',
       ),
+    // Pre-mortem coverage engine plan-stage output (§3.1/§7.2/§12). A design
+    // (planner) node returns the brief it produced from the coverage sweep; on a
+    // contentful design pass `producePlanGate` turns it into the approval_gate
+    // patch (change_surface presence = brief regime ON; tier → status). Optional +
+    // additive: absent ⇒ approval_gate is left untouched (backward compat — the
+    // legacy seed path). Ignored for non-design nodes.
+    plan_brief: z
+      .object({
+        change_surface: z.array(relativePath),
+        interface_changes: z.array(z.string()).default([]),
+        dod: z.array(z.string()).default([]),
+        test_scenarios: z.array(z.string()).default([]),
+        tier_inputs: z.object({
+          changedFileCount: z.number().int().nonnegative(),
+          interfaceChanged: z.boolean(),
+          risk: z.object({
+            non_local: z.boolean(),
+            irreversible: z.boolean(),
+            unaudited: z.boolean(),
+          }),
+          large: z.boolean(),
+        }),
+      })
+      .optional()
+      .describe(
+        "A plan-stage (design/planner) node's pre-mortem coverage brief + tier inputs. On a " +
+          'contentful design pass it populates approval_gate.{plan_brief,change_surface,status} ' +
+          'via producePlanGate (brief hard-gate, §7.2). Ignored for non-design nodes.',
+      ),
   })
   .superRefine((value, ctx) => {
     if (value.outcome === 'fail' && value.failure_class === undefined) {
@@ -593,6 +623,38 @@ export async function recordResult(
       if (supersededNodeIds.length > 0) {
         await aps.removeNodes(input.workItemId, supersededNodeIds);
       }
+    }
+    // Plan-stage coverage wiring (premortem-coverage §3.1/§7.2/§12 — the
+    // design→review seam). A contentful `design` (planner) pass that ran the
+    // pre-mortem coverage sweep carries the brief it produced. The deterministic
+    // Manager (`producePlanGate`) turns the brief + tier inputs into the
+    // approval_gate patch: change_surface PRESENCE turns the brief hard-gate ON
+    // (mutationGate, §7.2) and the tier sets the status (light auto-waives,
+    // standard/full → pending for user approval). This is the engine replacing the
+    // legacy seed plan stage — it runs on the SAME design pass that promotes
+    // generated_nodes and supersedes the seed N2/N3 (above). Absent plan_brief
+    // (legacy path / non-design node) ⇒ approval_gate untouched (backward compat).
+    if (node.kind === 'design' && input.payload.plan_brief !== undefined) {
+      const pb = input.payload.plan_brief;
+      const patch = producePlanGate({
+        changeSurface: pb.change_surface,
+        brief: {
+          interface_changes: pb.interface_changes,
+          dod: pb.dod,
+          test_scenarios: pb.test_scenarios,
+        },
+        tierInputs: pb.tier_inputs,
+      });
+      const current = await aps.get(input.workItemId);
+      await aps.write(input.workItemId, {
+        ...current,
+        approval_gate: {
+          ...current.approval_gate,
+          status: patch.status,
+          change_surface: patch.change_surface,
+          plan_brief: patch.plan_brief,
+        },
+      });
     }
     await aps.updateNode(input.workItemId, node.id, (n) => ({
       ...n,

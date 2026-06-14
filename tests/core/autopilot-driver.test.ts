@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { allNodesTerminal, mutationGate, rollbackOnRejection } from '~/core/autopilot-driver';
 import { buildInitialNodes } from '~/core/autopilot-graph';
-import type { Autopilot } from '~/schemas/autopilot';
+import { type Autopilot, autopilot } from '~/schemas/autopilot';
 
 function graph(overrides: Partial<Autopilot> = {}): Autopilot {
   return {
@@ -74,6 +74,104 @@ describe('mutationGate (M2.3 consumes approval status)', () => {
       },
     });
     expect(mutationGate(g).action).toBe('blocked');
+  });
+});
+
+describe('mutationGate brief hard-gate (ac-7 — plan_brief required before implement)', () => {
+  const briefRegimeGate = (
+    overrides: Partial<Autopilot['approval_gate']> = {},
+  ): Autopilot['approval_gate'] => ({
+    status: 'approved',
+    source: 'user',
+    approved_at: null,
+    approved_by: null,
+    evidence_refs: [],
+    // change_surface present == the brief regime is active for this graph.
+    change_surface: ['src/foo.ts'],
+    ...overrides,
+  });
+
+  const brief: NonNullable<Autopilot['approval_gate']['plan_brief']> = {
+    interface_changes: ['mutationGate now reads brief approval'],
+    dod: ['implement is blocked before brief approval'],
+    test_scenarios: ['absent brief under approved status returns pending'],
+  };
+
+  test('brief regime + approved + brief present => proceed', () => {
+    const g = graph({ approval_gate: briefRegimeGate({ plan_brief: brief }) });
+    const result = mutationGate(g);
+    expect(result.allowed).toBe(true);
+    expect(result.action).toBe('proceed');
+  });
+
+  test('brief regime + approved + brief ABSENT => pending (not proceed; false-green guard)', () => {
+    const g = graph({ approval_gate: briefRegimeGate({ plan_brief: undefined }) });
+    const result = mutationGate(g);
+    expect(result.allowed).toBe(false);
+    expect(result.action).toBe('present_plan');
+    expect(result.reason).toContain('brief');
+  });
+
+  test('brief regime + pending => present_plan (pre-approval blocks as before)', () => {
+    const g = graph({
+      approval_gate: briefRegimeGate({ status: 'pending', source: null, plan_brief: brief }),
+    });
+    const result = mutationGate(g);
+    expect(result.allowed).toBe(false);
+    expect(result.action).toBe('present_plan');
+  });
+
+  test('small-reversible auto-approval (not_required) proceeds even without brief approval', () => {
+    const g = graph({
+      approval_gate: briefRegimeGate({
+        status: 'not_required',
+        source: 'small_reversible_policy',
+        plan_brief: brief,
+      }),
+    });
+    const result = mutationGate(g);
+    expect(result.allowed).toBe(true);
+    expect(result.action).toBe('proceed');
+  });
+
+  test('legacy graph (no change_surface, approved, no brief) still proceeds — backward compat', () => {
+    const g = graph({
+      approval_gate: {
+        status: 'approved',
+        source: 'user',
+        approved_at: null,
+        approved_by: null,
+        evidence_refs: [],
+      },
+    });
+    expect(mutationGate(g).action).toBe('proceed');
+  });
+});
+
+describe('approval_gate schema (ac-7 — plan_brief/change_surface additive, backward compatible)', () => {
+  test('legacy gate with no plan_brief / change_surface still parses', () => {
+    const parsed = autopilot.safeParse(graph());
+    expect(parsed.success).toBe(true);
+  });
+
+  test('gate with plan_brief + change_surface parses', () => {
+    const g = graph({
+      approval_gate: {
+        status: 'approved',
+        source: 'user',
+        approved_at: null,
+        approved_by: null,
+        evidence_refs: [],
+        change_surface: ['src/foo.ts'],
+        plan_brief: {
+          interface_changes: ['a'],
+          dod: ['b'],
+          test_scenarios: ['c'],
+        },
+      },
+    });
+    const parsed = autopilot.safeParse(g);
+    expect(parsed.success).toBe(true);
   });
 });
 

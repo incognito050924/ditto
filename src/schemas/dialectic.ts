@@ -137,3 +137,4 @@ export const dialectic = z
   .describe('Full three-role dialectic deliberation artifact (§6.6)');
 
 export type Dialectic = z.infer<typeof dialectic>;
+export type DialecticVerdict = z.infer<typeof dialecticVerdict>;

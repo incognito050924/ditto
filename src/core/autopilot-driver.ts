@@ -16,10 +16,28 @@ export interface MutationGate {
 }
 
 export function mutationGate(graph: Autopilot): MutationGate {
-  switch (graph.approval_gate.status) {
+  const gate = graph.approval_gate;
+  // Brief hard-gate (pre-mortem coverage engine §7.2). The brief regime is active
+  // only when `change_surface` is set (a non-light plan whose mutation must be
+  // gated on an approved brief). When active, a user-approved gate (`approved`)
+  // additionally requires the brief itself to be present — an absent brief under
+  // `approved` is a false-green (the plan was approved but no brief was produced),
+  // so we return pending to block, not proceed. `not_required` is the §8.2 light
+  // small-reversible auto-waiver: it proceeds without requiring brief approval.
+  // A legacy graph (no change_surface) skips this entirely and keeps status-only
+  // behavior, preserving backward compatibility.
+  const briefRegimeActive = gate.change_surface !== undefined;
+  if (briefRegimeActive && gate.status === 'approved' && gate.plan_brief === undefined) {
+    return {
+      allowed: false,
+      action: 'present_plan',
+      reason: 'plan approved but plan_brief is absent: produce the brief before mutating',
+    };
+  }
+  switch (gate.status) {
     case 'approved':
     case 'not_required':
-      return { allowed: true, action: 'proceed', reason: `approval=${graph.approval_gate.status}` };
+      return { allowed: true, action: 'proceed', reason: `approval=${gate.status}` };
     case 'pending':
       return {
         allowed: false,

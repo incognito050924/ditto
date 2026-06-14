@@ -22,6 +22,7 @@ export * from './e2e-regression-gate';
 export * from './e2e-lifecycle';
 export * from './journey-dsl';
 export * from './convergence';
+export * from './coverage';
 export * from './handoff';
 export * from './memory-source';
 export * from './memory-event';

@@ -16459,7 +16459,13 @@ var autopilot = exports_external.object({
     source: approvalSource.nullable().default(null),
     approved_at: isoDateTime.nullable().default(null),
     approved_by: exports_external.string().min(1).nullable().default(null),
-    evidence_refs: exports_external.array(evidenceRef).default([])
+    evidence_refs: exports_external.array(evidenceRef).default([]),
+    change_surface: exports_external.array(relativePath).optional(),
+    plan_brief: exports_external.object({
+      interface_changes: exports_external.array(exports_external.string().min(1)).default([]),
+      dod: exports_external.array(exports_external.string().min(1)).default([]),
+      test_scenarios: exports_external.array(exports_external.string().min(1)).default([])
+    }).optional()
   }),
   nodes: exports_external.array(autopilotNode).default([]),
   caps: exports_external.object({
@@ -16716,6 +16722,9 @@ function convergenceGate(c3) {
 }
 function highRiskAssumption(a2) {
   return a2.non_local || a2.irreversible || a2.unaudited;
+}
+function safeDefaultable(a2) {
+  return !highRiskAssumption(a2);
 }
 function knowledgeTriggerFired(t2) {
   return t2.adr_worthy_decision || t2.new_agreed_term || t2.repeated_pattern;
@@ -17262,7 +17271,7 @@ function deriveAcVerdicts(graph, acIds) {
     let structuralSuperseded = false;
     for (const n2 of addressing) {
       const nv = nodeVerdictFor(n2, acId);
-      if (nv.verdict === "fail" && supersedingFix)
+      if ((nv.verdict === "fail" || nv.verdict === "partial") && supersedingFix)
         continue;
       if (nv.verdict === "unverified" && isStructuralUnverified(n2, acId) && addressing.some((m2) => m2 !== n2 && nodeVerdictFor(m2, acId).verdict === "pass" && dependsOnNode(m2, n2.id, byId))) {
         structuralSuperseded = true;
@@ -17276,7 +17285,7 @@ function deriveAcVerdicts(graph, acIds) {
       }
     }
     if (supersedingFix && verdict2 === "pass") {
-      notes = `earlier fail superseded by a re-verify behind a passed fix (${acId})`;
+      notes = `earlier non-pass superseded by a re-verify behind a passed fix (${acId})`;
     } else if (structuralSuperseded && verdict2 === "pass") {
       notes = `evidence-less implementation pass covered by a downstream verified pass (${acId})`;
     }
@@ -17629,10 +17638,19 @@ function decideOnFailure(failureClass, attempts, caps) {
 
 // src/core/autopilot-driver.ts
 function mutationGate(graph) {
-  switch (graph.approval_gate.status) {
+  const gate2 = graph.approval_gate;
+  const briefRegimeActive = gate2.change_surface !== undefined;
+  if (briefRegimeActive && gate2.status === "approved" && gate2.plan_brief === undefined) {
+    return {
+      allowed: false,
+      action: "present_plan",
+      reason: "plan approved but plan_brief is absent: produce the brief before mutating"
+    };
+  }
+  switch (gate2.status) {
     case "approved":
     case "not_required":
-      return { allowed: true, action: "proceed", reason: `approval=${graph.approval_gate.status}` };
+      return { allowed: true, action: "proceed", reason: `approval=${gate2.status}` };
     case "pending":
       return {
         allowed: false,
@@ -17652,6 +17670,39 @@ function rollbackOnRejection(graph) {
 }
 function allNodesTerminal(graph) {
   return graph.nodes.every((n2) => n2.status === "passed" || n2.status === "failed");
+}
+
+// src/core/coverage-manager.ts
+var CLOSED_STATES = new Set([
+  "resolved",
+  "user_owned",
+  "out_of_scope"
+]);
+var FEW_FILES = 3;
+function selectCoverageTier(input) {
+  if (input.large || input.risk.irreversible || input.risk.non_local) {
+    return "full";
+  }
+  const fewFiles = input.changedFileCount <= FEW_FILES;
+  if (fewFiles && !input.interfaceChanged && safeDefaultable(input.risk)) {
+    return "light";
+  }
+  return "standard";
+}
+function tierBriefApproval(tier) {
+  return tier === "light" ? "not_required" : "pending";
+}
+function producePlanGate(input) {
+  const tier = selectCoverageTier(input.tierInputs);
+  return {
+    status: tierBriefApproval(tier),
+    change_surface: [...input.changeSurface],
+    plan_brief: {
+      interface_changes: [...input.brief.interface_changes],
+      dod: [...input.brief.dod],
+      test_scenarios: [...input.brief.test_scenarios]
+    }
+  };
 }
 
 // src/core/intent-store.ts
@@ -20112,7 +20163,23 @@ var recordResultPayload = exports_external.object({
   changed_files: exports_external.array(relativePath).optional().describe("Repo-relative paths this node changed (#1). On a contentful pass they are unioned " + "into the work item changed_files so `autopilot complete` reads them without a manual " + "pin. The expected reporter is a mutating node (implementer/refactorer)."),
   reason: exports_external.string().optional().describe("2\u20133 line rationale recorded in the decision log"),
   generated_nodes: exports_external.array(nodeProposal).optional().describe("Subgraph this node generated (A-3). Promoted to the graph via addNodes on a " + "contentful pass; a planner/design node uses this to grow the graph past the seed."),
-  has_findings: exports_external.boolean().optional().describe("Reviewer/security verdict that findings remain (A-2). On a contentful review- or " + "security-node pass, true splices a forward fix+re-check round (\xA72.4) under the " + "convergence budget, false/absent closes the loop. Ignored for other node kinds.")
+  has_findings: exports_external.boolean().optional().describe("Reviewer/security verdict that findings remain (A-2). On a contentful review- or " + "security-node pass, true splices a forward fix+re-check round (\xA72.4) under the " + "convergence budget, false/absent closes the loop. Ignored for other node kinds."),
+  plan_brief: exports_external.object({
+    change_surface: exports_external.array(relativePath),
+    interface_changes: exports_external.array(exports_external.string()).default([]),
+    dod: exports_external.array(exports_external.string()).default([]),
+    test_scenarios: exports_external.array(exports_external.string()).default([]),
+    tier_inputs: exports_external.object({
+      changedFileCount: exports_external.number().int().nonnegative(),
+      interfaceChanged: exports_external.boolean(),
+      risk: exports_external.object({
+        non_local: exports_external.boolean(),
+        irreversible: exports_external.boolean(),
+        unaudited: exports_external.boolean()
+      }),
+      large: exports_external.boolean()
+    })
+  }).optional().describe("A plan-stage (design/planner) node's pre-mortem coverage brief + tier inputs. On a " + "contentful design pass it populates approval_gate.{plan_brief,change_surface,status} " + "via producePlanGate (brief hard-gate, \xA77.2). Ignored for non-design nodes.")
 }).superRefine((value, ctx) => {
   if (value.outcome === "fail" && value.failure_class === undefined) {
     ctx.addIssue({
@@ -20220,6 +20287,28 @@ async function recordResult(repoRoot, input) {
       if (supersededNodeIds.length > 0) {
         await aps.removeNodes(input.workItemId, supersededNodeIds);
       }
+    }
+    if (node.kind === "design" && input.payload.plan_brief !== undefined) {
+      const pb = input.payload.plan_brief;
+      const patch = producePlanGate({
+        changeSurface: pb.change_surface,
+        brief: {
+          interface_changes: pb.interface_changes,
+          dod: pb.dod,
+          test_scenarios: pb.test_scenarios
+        },
+        tierInputs: pb.tier_inputs
+      });
+      const current = await aps.get(input.workItemId);
+      await aps.write(input.workItemId, {
+        ...current,
+        approval_gate: {
+          ...current.approval_gate,
+          status: patch.status,
+          change_surface: patch.change_surface,
+          plan_brief: patch.plan_brief
+        }
+      });
     }
     await aps.updateNode(input.workItemId, node.id, (n2) => ({
       ...n2,
@@ -34066,4 +34155,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=182a6ef6772fed0849017d9e090553623ec79ccd7ca25882d8cf5d60c66fd2e6
+//# ditto-src-stamp=7105346403ff4dd4bf40e65fa3f64c16938be365995f0ba95975fcb00541a2e7

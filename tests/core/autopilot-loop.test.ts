@@ -618,6 +618,130 @@ describe('recordResult node promotion (A-3: planner 콘텐츠 승격 — addNode
   });
 });
 
+describe('recordResult plan-stage coverage wiring (premortem-coverage §7.2/§12: design→review brief)', () => {
+  const designOnly = (): Autopilot =>
+    graph({
+      approval_gate: {
+        status: 'not_required',
+        source: 'small_reversible_policy',
+        approved_at: null,
+        approved_by: null,
+        evidence_refs: [],
+      },
+      nodes: [
+        {
+          id: 'N1',
+          kind: 'design',
+          owner: 'planner',
+          purpose: 'plan the change',
+          status: 'pending',
+          depends_on: [],
+          acceptance_refs: ['ac-1'],
+          evidence_refs: [],
+          attempts: { fix: 0, switch: 0 },
+        },
+      ],
+    });
+
+  const proposal = (id: string, kind: 'implement' | 'review', depends_on: string[]) => ({
+    id,
+    kind,
+    purpose: `p-${id}`,
+    depends_on,
+    acceptance_refs: ['ac-1'],
+  });
+
+  test('contentful design pass with plan_brief populates approval_gate brief + change_surface (standard → pending)', async () => {
+    await seed(designOnly());
+    await nextNode(repo, WI); // dispatch N1 → running
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text:
+          'plan: ran the pre-mortem coverage sweep; the change touches the parser interface',
+        outcome: 'pass',
+        generated_nodes: [proposal('G1', 'implement', ['N1']), proposal('G2', 'review', ['G1'])],
+        plan_brief: {
+          change_surface: ['src/parser.ts', 'src/lexer.ts'],
+          interface_changes: ['parse(): add an options arg'],
+          dod: ['parser accepts the new option'],
+          test_scenarios: ['parse with the option set returns the new shape'],
+          tier_inputs: {
+            changedFileCount: 2,
+            interfaceChanged: true,
+            risk: { non_local: false, irreversible: false, unaudited: false },
+            large: false,
+          },
+        },
+      },
+      now: NOW,
+    });
+    const g = await aps.get(WI);
+    // brief regime turned ON: change_surface present, brief populated.
+    expect(g.approval_gate.change_surface).toEqual(['src/parser.ts', 'src/lexer.ts']);
+    expect(g.approval_gate.plan_brief?.interface_changes).toEqual(['parse(): add an options arg']);
+    expect(g.approval_gate.plan_brief?.dod).toEqual(['parser accepts the new option']);
+    expect(g.approval_gate.plan_brief?.test_scenarios).toEqual([
+      'parse with the option set returns the new shape',
+    ]);
+    // standard tier (interface changed) → user approval required → pending.
+    expect(g.approval_gate.status).toBe('pending');
+    // seed-style supersession path still grows the graph from the planner output.
+    expect(g.nodes.map((n) => n.id)).toEqual(['N1', 'G1', 'G2']);
+  });
+
+  test('light tier (few files, no interface, no risk) auto-waives the brief (not_required)', async () => {
+    await seed(designOnly());
+    await nextNode(repo, WI);
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text: 'plan: small reversible change; coverage sweep found no interface impact',
+        outcome: 'pass',
+        generated_nodes: [proposal('G1', 'implement', ['N1'])],
+        plan_brief: {
+          change_surface: ['src/x.ts'],
+          interface_changes: [],
+          dod: ['x still works'],
+          test_scenarios: ['unit test for x'],
+          tier_inputs: {
+            changedFileCount: 1,
+            interfaceChanged: false,
+            risk: { non_local: false, irreversible: false, unaudited: false },
+            large: false,
+          },
+        },
+      },
+      now: NOW,
+    });
+    const g = await aps.get(WI);
+    expect(g.approval_gate.change_surface).toEqual(['src/x.ts']);
+    expect(g.approval_gate.plan_brief).toBeDefined();
+    expect(g.approval_gate.status).toBe('not_required');
+  });
+
+  test('design pass WITHOUT plan_brief leaves approval_gate untouched (backward compat)', async () => {
+    await seed(designOnly());
+    await nextNode(repo, WI);
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text: 'planned the change; no brief regime for this legacy path',
+        outcome: 'pass',
+        generated_nodes: [proposal('G1', 'implement', ['N1'])],
+      },
+      now: NOW,
+    });
+    const g = await aps.get(WI);
+    expect(g.approval_gate.change_surface).toBeUndefined();
+    expect(g.approval_gate.plan_brief).toBeUndefined();
+    expect(g.approval_gate.status).toBe('not_required');
+  });
+});
+
 describe('recordResult forward re-expansion (A-2: review findings → fix+review splice · §2.4/§4.3)', () => {
   const reviewGraph = (reviewId: string, converge = 3): Autopilot =>
     graph({

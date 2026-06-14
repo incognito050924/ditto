@@ -162,6 +162,27 @@ export const autopilot = z
       approved_at: isoDateTime.nullable().default(null),
       approved_by: z.string().min(1).nullable().default(null),
       evidence_refs: z.array(evidenceRef).default([]),
+      // Pre-mortem coverage engine §7 (wi_260614ojc). Both fields are OPTIONAL +
+      // additive: a legacy autopilot.json written before this regime omits them
+      // and parses + behaves exactly as before (mutationGate falls through to the
+      // status-only path). They turn the brief hard-gate ON for a graph.
+      //
+      // `change_surface`: repo-relative interface/files this plan touches. Its
+      // PRESENCE is the marker that the brief regime is active for this graph —
+      // a non-light change whose mutation must be gated on an approved brief.
+      change_surface: z.array(relativePath).optional(),
+      // `plan_brief`: what changes (interface 표면) + what is guaranteed/verified
+      // when done (DoD) + how each DoD is checked (테스트 시나리오, scenario-level).
+      // The user-facing body of the brief hard-gate (§7.1). Absent under an active
+      // brief regime (change_surface set) means the brief was never produced — the
+      // gate returns pending, not proceed, to block a false-green mutation (§7.2).
+      plan_brief: z
+        .object({
+          interface_changes: z.array(z.string().min(1)).default([]),
+          dod: z.array(z.string().min(1)).default([]),
+          test_scenarios: z.array(z.string().min(1)).default([]),
+        })
+        .optional(),
     }),
     nodes: z.array(autopilotNode).default([]),
     caps: z.object({
