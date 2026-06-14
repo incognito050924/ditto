@@ -209,6 +209,20 @@ async function rewriteCodexTextFile(path: string, dittoCommand: string): Promise
   if (after !== before) await writeFile(path, after);
 }
 
+function rewriteCodexAgentTomlReferences(text: string, dittoCommand: string): string {
+  return text.replace(
+    /(\bdeveloper_instructions\s*=\s*""")([\s\S]*?)("""\s*)/,
+    (_match, open: string, body: string, close: string) =>
+      `${open}${rewriteCodexDittoReferences(body, dittoCommand)}${close}`,
+  );
+}
+
+async function rewriteCodexAgentTomlFile(path: string, dittoCommand: string): Promise<void> {
+  const before = await readFile(path, 'utf8');
+  const after = rewriteCodexAgentTomlReferences(before, dittoCommand);
+  if (after !== before) await writeFile(path, after);
+}
+
 async function rewriteCodexInstalledReferences(installedPluginDir: string): Promise<void> {
   const dittoCommand = codexDittoCommand(installedPluginDir);
   for (const dir of await listDirectories(join(installedPluginDir, 'skills'))) {
@@ -216,7 +230,7 @@ async function rewriteCodexInstalledReferences(installedPluginDir: string): Prom
     if (await fileExists(skillPath)) await rewriteCodexTextFile(skillPath, dittoCommand);
   }
   for (const file of await listFiles(join(installedPluginDir, '.codex', 'agents'))) {
-    if (file.id.endsWith('.toml')) await rewriteCodexTextFile(file.path, dittoCommand);
+    if (file.id.endsWith('.toml')) await rewriteCodexAgentTomlFile(file.path, dittoCommand);
   }
 }
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parse as parseToml } from 'smol-toml';
 import { fileExists } from '~/core/hosts/shared';
 import { ALLOW_RULE } from '~/core/settings-allowlist';
 import { setup } from '~/core/setup';
@@ -49,6 +50,17 @@ async function freshCodexDirs(): Promise<Required<Dirs>> {
     'name = "reviewer"\ndeveloper_instructions = """\nRun `ditto memory query x`\n"""\n',
   );
   await writeFile(join(pluginRoot, '.codex', 'agents', 'planner.toml'), 'name = "planner"\n');
+  await writeFile(
+    join(pluginRoot, '.codex', 'agents', 'memory-extractor.toml'),
+    [
+      'name = "memory-extractor"',
+      'description = "Host-delegated extraction for `ditto memory build --semantic`."',
+      'developer_instructions = """',
+      'Run `ditto memory build --semantic --fragments out.json`',
+      '"""',
+      '',
+    ].join('\n'),
+  );
   await writeFile(
     join(pluginRoot, 'skills', 'memory-graph', 'SKILL.md'),
     'Run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query x`.\n',
@@ -200,11 +212,18 @@ describe('setup', () => {
         join(d.projectRoot, '.codex', 'agents', 'reviewer.toml'),
         'utf8',
       );
+      const memoryExtractorAgent = await readFile(
+        join(d.projectRoot, '.codex', 'agents', 'memory-extractor.toml'),
+        'utf8',
+      );
       expect(installedSkill).toContain(dittoCommand);
       expect(installedSkill).not.toContain('CLAUDE_PLUGIN_ROOT');
       expect(projectAgent).toContain(dittoCommand);
       expect(projectAgent).not.toContain('`ditto memory query x`');
-      expect(result.codex?.agentsInstalled).toBe(2);
+      expect(() => parseToml(memoryExtractorAgent)).not.toThrow();
+      expect(memoryExtractorAgent).toContain('`ditto memory build --semantic`');
+      expect(memoryExtractorAgent).toContain(dittoCommand);
+      expect(result.codex?.agentsInstalled).toBe(3);
       expect(result.scaffold.alreadyInitialized).toBe(false);
     } finally {
       await cleanup(d);
