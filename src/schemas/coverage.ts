@@ -39,3 +39,54 @@ export const coverageMap = z
 
 export type CoverageNode = z.infer<typeof coverageNode>;
 export type CoverageMap = z.infer<typeof coverageMap>;
+
+// Plan-stage coverage-round payload (§4·§5 wiring) — the structural signals the
+// fresh fan-out hands back to the deterministic Manager via `coverage-round`. The
+// Manager appends children (append-only), steps the dry counter, and — on
+// `close_as` — runs the six §2 axis mechanisms + false-green gate. The
+// natural-language `label` is carried but never interpreted by code (§4.1).
+const coverageChildInput = z.object({
+  id: z.string().min(1),
+  parent_id: z.string().min(1),
+  label: z.string().min(1),
+  origin: z.enum(['derived', 'discovered']),
+  depth_weight: z.number(),
+});
+
+export const coverageRoundPayload = z
+  .object({
+    node_id: z.string().min(1),
+    derived_nodes: z.array(coverageChildInput).default([]),
+    discovered_nodes: z.array(coverageChildInput).default([]),
+    admissibleBranchesAdded: z.number().int().nonnegative(),
+    close_as: z.enum(['resolved', 'user_owned', 'out_of_scope']).optional(),
+    axis_signals: z
+      .object({
+        neutrality: z
+          .object({
+            opponent_ran: z.boolean(),
+            verdict: z.enum(['accept', 'revise', 'reject', 'blocked']),
+          })
+          .optional(),
+        balance: z
+          .object({
+            achievedDepth: z.number(),
+            open_required_sections: z.number(),
+            conflicting: z.number(),
+            assumption_ratio: z.number(),
+          })
+          .optional(),
+        priority: z
+          .object({
+            userPriority: z.enum(['high', 'normal', 'low']),
+            achievedDepth: z.number(),
+          })
+          .optional(),
+        temporalBaseline: z.array(z.string()).optional(),
+        temporalCurrent: z.array(z.string()).optional(),
+      })
+      .optional(),
+  })
+  .describe('One coverage interrogation round handed back to the deterministic Manager (§5)');
+
+export type CoverageRoundPayload = z.infer<typeof coverageRoundPayload>;

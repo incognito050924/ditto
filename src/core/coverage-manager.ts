@@ -242,18 +242,25 @@ export interface PlanDialogInput {
   assumptions: PlanDialogAssumption[];
   closedItems: PlanDialogItem[];
   openItems: PlanDialogItem[];
+  /**
+   * Dialog kind/title — 'plan-dialog' (default, §6) or 'intent-dialog' (§9, intent
+   * stage). Same serializer/sections; only the frontmatter kind + H1 title differ
+   * so the intent stage REUSES this renderer instead of forking a second one.
+   */
+  kind?: 'plan-dialog' | 'intent-dialog';
 }
 
 export function serializePlanDialog(input: PlanDialogInput): string {
   const lines: string[] = [];
+  const kind = input.kind ?? 'plan-dialog';
 
   // Minimal frontmatter (§6 추가 규칙: frontmatter 최소).
   lines.push('---');
-  lines.push('kind: plan-dialog');
+  lines.push(`kind: ${kind}`);
   lines.push(`work_item_id: ${input.workItemId}`);
   lines.push('---');
   lines.push('');
-  lines.push('# plan-dialog');
+  lines.push(`# ${kind}`);
   lines.push('');
 
   // (1) 사용자 Q&A

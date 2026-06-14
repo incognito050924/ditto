@@ -4,6 +4,9 @@ import {
   checkReadiness,
   finalizeInterview,
   finalizePayload,
+  projectInterviewDimensions,
+  promotePremortem,
+  promotePremortemPayload,
   recordTurn,
   recordTurnPayload,
   startInterview,
@@ -310,6 +313,127 @@ const finalizeCmd = defineCommand({
   },
 });
 
+const projectCoverageCmd = defineCommand({
+  meta: {
+    name: 'project-coverage',
+    description:
+      'Project interview dimensions onto the SHARED coverage tree (intent stage); writes coverage.json + intent-dialog.md',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const result = await projectInterviewDimensions(repoRoot, args.workItem);
+      const closed = result.map.nodes.filter((n) => n.state !== 'open').length;
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.workItem,
+          coverage_path: `.ditto/local/runs/${args.workItem}/coverage.json`,
+          ...(result.intentDialogPath ? { intent_dialog_path: result.intentDialogPath } : {}),
+          node_count: result.map.nodes.length,
+          closed_count: closed,
+          node_ids: result.map.nodes.map((n) => n.id),
+        });
+      } else {
+        writeHuman(`Projected interview dimensions for ${args.workItem}`);
+        writeHuman(`  coverage:  .ditto/local/runs/${args.workItem}/coverage.json`);
+        writeHuman(`  nodes:     ${result.map.nodes.length} (${closed} closed)`);
+      }
+    } catch (err) {
+      writeError(`project-coverage failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+const premortemCmd = defineCommand({
+  meta: {
+    name: 'premortem',
+    description:
+      'Record pre-mortem items + enforce §5 승격 rule (irreversible/high-blast MUST be promoted)',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    json: {
+      type: 'string',
+      description: 'JSON payload matching promotePremortemPayload schema',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw: unknown;
+    try {
+      raw = parseJsonArg(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = promotePremortemPayload.safeParse(raw);
+    if (!parsed.success) {
+      writeError('--json failed schema validation:');
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const result = await promotePremortem(repoRoot, args.workItem, parsed.data);
+      // §5 fail-closed: an irreversible/high-blast item left promoted_to:'none' is
+      // a contract violation — the items were recorded but the gate is not met.
+      if (result.unpromoted.length > 0) {
+        writeError(
+          `${result.unpromoted.length} critical pre-mortem item(s) require promotion (§5) but are promoted_to:'none' — promote each to ac | out_of_scope | user_owned_decision and re-run:`,
+        );
+        for (const item of result.unpromoted) {
+          writeError(`  - [${item.reversibility}/blast:${item.blast_radius}] ${item.scenario}`);
+        }
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.workItem,
+          premortem_count: result.state.premortem.length,
+          promoted: result.state.premortem.map((p) => ({
+            scenario: p.scenario,
+            promoted_to: p.promoted_to,
+            ref: p.ref,
+          })),
+        });
+      } else {
+        writeHuman(`Recorded ${parsed.data.items.length} pre-mortem item(s) for ${args.workItem}`);
+        writeHuman(`  total premortem items: ${result.state.premortem.length}`);
+      }
+    } catch (err) {
+      writeError(`premortem failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const deepInterviewCommand = defineCommand({
   meta: {
     name: 'deep-interview',
@@ -320,6 +444,8 @@ export const deepInterviewCommand = defineCommand({
     start: startCmd,
     'record-turn': recordTurnCmd,
     'check-readiness': checkReadinessCmd,
+    'project-coverage': projectCoverageCmd,
+    premortem: premortemCmd,
     finalize: finalizeCmd,
   },
 });

@@ -6,12 +6,15 @@ import { kindToOwner } from '~/core/autopilot-graph';
 import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { CompletionStore } from '~/core/completion-store';
+import { nextCoverageNode, recordCoverageRound } from '~/core/coverage-loop';
 import { checkE2eCompletionGate } from '~/core/e2e/completion-gate';
 import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
 import { resolveRepoRootForCreate } from '~/core/fs';
-import { intentDriftGate } from '~/core/gates';
+import { intentDriftGate, interfaceBaselineDriftGate } from '~/core/gates';
+import { listChangedFiles } from '~/core/git';
 import { IntentStore } from '~/core/intent-store';
 import { WorkItemStore } from '~/core/work-item-store';
+import { coverageRoundPayload } from '~/schemas/coverage';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -637,20 +640,181 @@ const autopilotIntentDrift = defineCommand({
         graph,
         ...(completion ? { completion } : {}),
       });
+      // ac-5 (wi_260614z7r): consume the FROZEN temporal baseline the coverage
+      // engine produced (approval_gate.change_surface, set by producePlanGate at
+      // plan stage) and flag an unconsented interface/scope change against it. The
+      // current surface is the real working-tree change set; the comparison reuses
+      // the temporal axis mechanism (interfaceBaselineDriftGate → temporal.enforce).
+      // No frozen baseline ⇒ no-op pass (brief regime inactive). This is the
+      // enforcement seam the engine deliberately leaves to reviewer/verifier.
+      const currentSurface = listChangedFiles(repoRoot, { excludeDittoRuns: true });
+      const surfaceDrift = interfaceBaselineDriftGate(
+        graph.approval_gate.change_surface,
+        currentSurface,
+      );
+      const pass = result.pass && surfaceDrift.pass;
       if (format === 'json') {
-        writeJson({ pass: result.pass, reasons: result.reasons, advisories: result.advisories });
+        writeJson({
+          pass,
+          reasons: [...result.reasons, ...surfaceDrift.reasons],
+          advisories: result.advisories,
+        });
       } else {
-        writeHuman(`intent drift: ${result.pass ? 'PASS (conserved)' : 'FAIL (drift detected)'}`);
+        writeHuman(`intent drift: ${pass ? 'PASS (conserved)' : 'FAIL (drift detected)'}`);
         for (const r of result.reasons) writeHuman(`  - ${r}`);
+        for (const r of surfaceDrift.reasons) writeHuman(`  - ${r}`);
         // Advisories are non-blocking (goal-string divergence — a re-statement or
         // real drift the user judges); they never change the exit code.
         for (const a of result.advisories) writeHuman(`  ~ (advisory) ${a}`);
       }
-      // Exit reflects BLOCKING reasons only (AC id-set conservation). Advisories
-      // are surfaced above but do not fail the command.
-      if (!result.pass) process.exit(RUNTIME_ERROR_EXIT);
+      // Exit reflects BLOCKING reasons only (AC id-set conservation + interface/
+      // scope baseline drift). Advisories are surfaced above but do not fail.
+      if (!pass) process.exit(RUNTIME_ERROR_EXIT);
     } catch (err) {
       writeError(`intent-drift failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/**
+ * `ditto autopilot coverage-next` / `coverage-round` — surface the plan-stage
+ * pre-mortem coverage loop steps (premortem-coverage §4·§5·§9), modeled on
+ * next-node/record-result. coverage-next seeds the root (original intent) on the
+ * first call, schedules the next open scope node, and returns the judge input +
+ * tier (or `dry` when terminated). coverage-round hands the fan-out's structural
+ * signals back to the deterministic Manager: append children, step the dry
+ * counter, gate `close_as` through the six axes; on termination it writes
+ * plan-dialog.md and returns the brief for the design node's plan_brief.
+ *
+ * Spawn-capability division (§3.1): the CLI computes/gates/aggregates; the main
+ * agent spawns the fresh sweep + 3-role dialectic + judges. The CLI never spawns.
+ */
+const autopilotCoverageNext = defineCommand({
+  meta: {
+    name: 'coverage-next',
+    description: 'Compute the next plan-stage coverage step (seed root, schedule node, or dry)',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    try {
+      const res = await nextCoverageNode({ repoRoot, workItemId: args.workItem });
+      if (format === 'json') {
+        writeJson(res);
+      } else if (res.action === 'dry') {
+        writeHuman('Coverage: dry — sweep terminated (breadth + depth). Record the design result.');
+      } else {
+        writeHuman(`Coverage: interrogate ${res.node.id} (tier=${res.tier})`);
+        writeHuman(`  label:       ${res.node.label}`);
+        writeHuman(`  dry_counter: ${res.dryCounter}`);
+        writeHuman(
+          '  → run fresh sweep + 3-role dialectic + judges with ONLY judgeInput, then coverage-round',
+        );
+      }
+    } catch (err) {
+      writeError(`coverage-next failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+const autopilotCoverageRound = defineCommand({
+  meta: {
+    name: 'coverage-round',
+    description: 'Record a coverage interrogation round: append, step dry counter, gate close',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    json: {
+      type: 'string',
+      description: 'JSON payload matching coverageRoundPayload schema',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw: unknown;
+    try {
+      raw = JSON.parse(args.json);
+    } catch (err) {
+      writeError(`--json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = coverageRoundPayload.safeParse(raw);
+    if (!parsed.success) {
+      writeError('--json failed schema validation:');
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    // Optional passthrough fields (brief / tier_inputs) the design node folds into
+    // plan_brief on termination — not part of the structural round schema.
+    const extra = raw as { brief?: unknown; tier_inputs?: unknown };
+    try {
+      const res = await recordCoverageRound({
+        repoRoot,
+        workItemId: args.workItem,
+        payload: parsed.data,
+        ...(extra.brief
+          ? {
+              brief: extra.brief as {
+                interface_changes: string[];
+                dod: string[];
+                test_scenarios: string[];
+              },
+            }
+          : {}),
+        ...(extra.tier_inputs
+          ? {
+              tierInputs: extra.tier_inputs as {
+                changedFileCount: number;
+                interfaceChanged: boolean;
+                risk: { non_local: boolean; irreversible: boolean; unaudited: boolean };
+                large: boolean;
+              },
+            }
+          : {}),
+      });
+      if (format === 'json') {
+        writeJson(res);
+      } else if (res.terminated) {
+        writeHuman(`Coverage round: TERMINATED — plan-dialog written (${res.planDialogPath})`);
+        writeHuman('  → record the design result WITH plan_brief');
+      } else {
+        writeHuman(
+          `Coverage round: ${res.closed ? 'closed' : 'open'} — dry_counter=${res.dryCounter}`,
+        );
+        if (res.reasons.length > 0) {
+          writeHuman('  close rejected (node stays open):');
+          for (const r of res.reasons) writeHuman(`    - ${r}`);
+        }
+      }
+    } catch (err) {
+      writeError(`coverage-round failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
     }
   },
@@ -670,5 +834,7 @@ export const autopilotCommand = defineCommand({
     cleanup: autopilotCleanup,
     'propose-e2e': autopilotProposeE2e,
     'intent-drift': autopilotIntentDrift,
+    'coverage-next': autopilotCoverageNext,
+    'coverage-round': autopilotCoverageRound,
   },
 });

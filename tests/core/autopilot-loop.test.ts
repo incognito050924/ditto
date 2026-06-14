@@ -6,6 +6,7 @@ import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
 import { buildInitialNodes } from '~/core/autopilot-graph';
 import { nextNode, recordResult } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
+import { CoverageStore } from '~/core/coverage-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import type { Autopilot } from '~/schemas/autopilot';
 
@@ -651,8 +652,30 @@ describe('recordResult plan-stage coverage wiring (premortem-coverage §7.2/§12
     acceptance_refs: ['ac-1'],
   });
 
+  // ac-3 precondition: a design pass carrying plan_brief is only valid after a
+  // real coverage sweep wrote coverage.json. Seed it so the wiring assertions run.
+  const seedCoverage = async (): Promise<void> => {
+    await new CoverageStore(repo).writeMap(WI, {
+      schema_version: '0.1.0',
+      work_item_id: WI,
+      root_id: 'cov-root',
+      nodes: [
+        {
+          id: 'cov-root',
+          parent_id: null,
+          label: 'intent',
+          origin: 'seed',
+          depth_weight: 0,
+          state: 'resolved',
+          children: [],
+        },
+      ],
+    });
+  };
+
   test('contentful design pass with plan_brief populates approval_gate brief + change_surface (standard → pending)', async () => {
     await seed(designOnly());
+    await seedCoverage();
     await nextNode(repo, WI); // dispatch N1 → running
     await recordResult(repo, {
       workItemId: WI,
@@ -693,6 +716,7 @@ describe('recordResult plan-stage coverage wiring (premortem-coverage §7.2/§12
 
   test('light tier (few files, no interface, no risk) auto-waives the brief (not_required)', async () => {
     await seed(designOnly());
+    await seedCoverage();
     await nextNode(repo, WI);
     await recordResult(repo, {
       workItemId: WI,

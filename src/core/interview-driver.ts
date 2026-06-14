@@ -1,14 +1,20 @@
 import { z } from 'zod';
 import type { Autopilot } from '~/schemas/autopilot';
+import type { CoverageMap } from '~/schemas/coverage';
 import { type IntentContract, intentAcceptanceCriterion } from '~/schemas/intent';
 import {
   type InterviewState,
+  type PremortemItem,
   dimensionState,
   infoGain,
   interviewQuestion,
+  premortemItem,
   userConfirmation,
 } from '~/schemas/interview-state';
 import { bootstrapAutopilot } from './autopilot-bootstrap';
+import { nextCoverageNode, recordCoverageRound } from './coverage-loop';
+import { serializePlanDialog } from './coverage-manager';
+import { CoverageStore } from './coverage-store';
 import { type GateResult, type RiskAxes, deriveClosureMode, interviewReadinessGate } from './gates';
 import { IntentStore } from './intent-store';
 import { InterviewStore } from './interview-store';
@@ -55,6 +61,7 @@ export async function startInterview(repoRoot: string, input: StartInput): Promi
     },
     questions: [],
     assumptions: [],
+    premortem: [],
     exit: {
       reason: 'readiness_met',
       // placeholder until a terminal closure; gate starts blocked (score 0).
@@ -394,4 +401,178 @@ export async function finalizeInterview(
     );
   }
   return { status: 'finalized', intent: writtenIntent, autopilot: boot.graph };
+}
+
+/**
+ * Project the Deep Interview `dimensions` onto the coverage tree and drive the
+ * SHARED pre-mortem coverage engine for the INTENT stage (premortem-coverage §3.2,
+ * §6.3, §9). This does NOT fork a second engine: it reuses `nextCoverageNode`
+ * (seeds coverage.json root = original intent) and `recordCoverageRound` (the same
+ * append-only `addNode`, false-green `coverageClosureGate`, dry counter, axis
+ * enforcement). Each interview dimension becomes a `derived` coverage node under
+ * the root; a `resolved` dimension is closed through the engine's `close_as` path
+ * so the §3.2 false-green invariant (a parent cannot project resolved while a
+ * child is open) is enforced by the engine, not re-implemented here.
+ *
+ * On termination the engine writes `.ditto/local/runs/<wi>/intent-dialog.md`
+ * (stage:'intent') and returns the dialog path. The terminal sweep is driven
+ * deterministically from the recorded interview state — no fresh LLM judges are
+ * spawned here (code computes/gates; the main agent owns any judge fan-out, same
+ * division as the plan stage).
+ */
+export interface ProjectDimensionsResult {
+  map: CoverageMap;
+  intentDialogPath?: string;
+}
+
+export async function projectInterviewDimensions(
+  repoRoot: string,
+  workItemId: string,
+): Promise<ProjectDimensionsResult> {
+  const state = await new InterviewStore(repoRoot).get(workItemId);
+  const store = new CoverageStore(repoRoot);
+
+  // Seed coverage.json (root = original intent) via the shared engine.
+  await nextCoverageNode({ repoRoot, workItemId });
+
+  // Append each dimension as a derived child of the root (append-only, §3.2).
+  // Skip ids already present so projection is idempotent across re-runs.
+  let map = await store.getMap(workItemId);
+  const existingIds = new Set(map.nodes.map((n) => n.id));
+  const newDims = state.dimensions.filter((d) => !existingIds.has(`cov-dim-${d.id}`));
+  if (newDims.length > 0) {
+    await recordCoverageRound({
+      repoRoot,
+      workItemId,
+      payload: {
+        node_id: map.root_id,
+        derived_nodes: newDims.map((d) => ({
+          id: `cov-dim-${d.id}`,
+          parent_id: map.root_id,
+          label: d.notes || d.id,
+          origin: 'derived' as const,
+          depth_weight: d.critical ? 1 : 0,
+        })),
+        admissibleBranchesAdded: newDims.length,
+      },
+      stage: 'intent',
+    });
+  }
+
+  // Close each resolved dimension through the engine (false-green gate applies:
+  // a resolved parent dimension stays open while any child is still open).
+  for (const d of state.dimensions) {
+    if (d.state !== 'resolved') continue;
+    const nodeId = `cov-dim-${d.id}`;
+    const node = (await store.getMap(workItemId)).nodes.find((n) => n.id === nodeId);
+    if (node === undefined || node.state !== 'open') continue;
+    await recordCoverageRound({
+      repoRoot,
+      workItemId,
+      payload: {
+        node_id: nodeId,
+        admissibleBranchesAdded: 0,
+        close_as: 'resolved',
+        // Intent-stage projection close: the interview already gated bias via the
+        // readiness/socratic loop, so the neutrality axis is satisfied here.
+        axis_signals: { neutrality: { opponent_ran: true, verdict: 'accept' } },
+      },
+      stage: 'intent',
+    });
+  }
+
+  map = await store.getMap(workItemId);
+
+  // Always render intent-dialog.md from the projected tree + interview record
+  // (§6/§9) — REUSING serializePlanDialog with kind:'intent-dialog'. Unlike the
+  // engine's terminal write (which fires only on full breadth+depth termination),
+  // the intent dialog is produced on every projection so the user can correct
+  // thin/open scope before the readiness gate closes. Not a fork: same serializer,
+  // same CoverageStore, same markdown sections.
+  const closedItems = map.nodes
+    .filter((n) => n.state !== 'open')
+    .map((n) => ({ id: n.id, label: n.label, state: n.state }));
+  const openItems = map.nodes
+    .filter((n) => n.state === 'open')
+    .map((n) => ({ id: n.id, label: n.label, state: n.state }));
+  const userQa = state.questions
+    .filter((q) => q.answer !== undefined && q.answer_kind === 'user')
+    .map((q) => ({
+      question: q.question,
+      why_matters: q.why_matters,
+      answer: q.answer ?? '',
+    }));
+  const assumptions = state.assumptions.map((a) => ({
+    statement: a.statement,
+    label: a.label,
+    because_no_answer_to: a.because_no_answer_to,
+  }));
+  const markdown = serializePlanDialog({
+    workItemId,
+    userQa,
+    selfAnswers: [],
+    assumptions,
+    closedItems,
+    openItems,
+    kind: 'intent-dialog',
+  });
+  await store.writeIntentDialog(workItemId, markdown);
+
+  return { map, intentDialogPath: `.ditto/local/runs/${workItemId}/intent-dialog.md` };
+}
+
+// Pre-mortem promotion payload — the surfaced risk items the LLM enumerated for
+// the risk_reversibility dimension. The driver enforces the §5 promotion rule
+// (irreversible OR blast_radius>=high MUST land somewhere) and records the items
+// into interview-state.json; the LLM owns the scenario content.
+export const promotePremortemPayload = z
+  .object({
+    items: z.array(premortemItem).min(1),
+  })
+  .describe('Pre-mortem items to record + promote into the interview state (§5)');
+
+export type PromotePremortemPayload = z.infer<typeof promotePremortemPayload>;
+
+export interface PromotePremortemResult {
+  state: InterviewState;
+  /** Items requiring promotion (irreversible/high-blast) left at promoted_to:'none'. */
+  unpromoted: PremortemItem[];
+}
+
+/** An item that §5 forces to be promoted (irreversible OR blast_radius>=high). */
+function requiresPromotion(item: PremortemItem): boolean {
+  return (
+    item.reversibility === 'irreversible' ||
+    item.blast_radius === 'high' ||
+    item.blast_radius === 'critical'
+  );
+}
+
+/**
+ * Pre-mortem 승격 (deep-interview §5 — previously unimplemented per coverage §9).
+ * Records the surfaced pre-mortem items into interview-state.json and enforces
+ * the §5 promotion rule: every irreversible / high-blast item MUST be promoted to
+ * one of ac | out_of_scope | user_owned_decision (not merely recorded). An item
+ * that requires promotion but is left `promoted_to:'none'` is returned in
+ * `unpromoted` so the caller fails closed — this is the mechanism that closes the
+ * `risk_reversibility` dimension instead of recording risk and moving on.
+ */
+export async function promotePremortem(
+  repoRoot: string,
+  workItemId: string,
+  payload: PromotePremortemPayload,
+  now?: Date,
+): Promise<PromotePremortemResult> {
+  const store = new InterviewStore(repoRoot);
+  const state = await store.get(workItemId);
+  const unpromoted = payload.items.filter(
+    (item) => requiresPromotion(item) && item.promoted_to === 'none',
+  );
+  const nowIso = (now ?? new Date()).toISOString();
+  const written = await store.write({
+    ...state,
+    updated_at: nowIso,
+    premortem: [...state.premortem, ...payload.items],
+  });
+  return { state: written, unpromoted };
 }

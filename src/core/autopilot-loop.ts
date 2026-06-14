@@ -26,6 +26,7 @@ import {
 } from './autopilot-graph';
 import { AutopilotStore } from './autopilot-store';
 import { producePlanGate } from './coverage-manager';
+import { CoverageStore } from './coverage-store';
 import { IntentStore } from './intent-store';
 import { warmStartMemoryContext } from './memory-warmstart';
 import { computeSpecDigest } from './tech-spec';
@@ -527,6 +528,28 @@ export async function recordResult(
       outcome = 'fail';
       failureClass = 'fixable';
       guardReason = mut.reason;
+    }
+  }
+  // Plan-stage coverage precondition (premortem-coverage §9, ac-3). A `design`
+  // (planner) pass that carries a plan_brief is closing the plan stage — that is
+  // only legitimate AFTER a real pre-mortem coverage sweep ran (coverage.json on
+  // disk). If the sidecar is absent the brief was produced without the 6-axis
+  // sweep + loop-until-dry, so force the pass to a fixable failure (same mechanism
+  // as guardMutatingEvidence). Non-design / no-brief paths are untouched (backward
+  // compat — the legacy seed plan stage).
+  if (
+    contentful &&
+    outcome === 'pass' &&
+    node.kind === 'design' &&
+    input.payload.plan_brief !== undefined
+  ) {
+    const coverageRan = await new CoverageStore(repoRoot).exists(input.workItemId);
+    if (!coverageRan) {
+      contentful = false;
+      outcome = 'fail';
+      failureClass = 'fixable';
+      guardReason =
+        'design pass carried plan_brief but no coverage.json exists — run the pre-mortem coverage sweep (coverage-next → coverage-round until dry) before closing the plan stage (claim ≠ proof)';
     }
   }
 

@@ -50,6 +50,30 @@ export const interviewAssumption = z
   })
   .describe('Assumption recorded when a question was not answered (§6.9)');
 
+// Pre-mortem item (deep-interview §5). Each surfaced risk scenario; an
+// irreversible / high-blast item MUST be promoted (not merely recorded) into one
+// of: a new acceptance criterion, out_of_scope + rationale, or a
+// user_owned_decision question (§5 승격 규칙). `promoted_to`/`ref` record where it
+// landed so the promotion is provable, not a bare boolean.
+export const premortemItem = z
+  .object({
+    scenario: z.string().min(1).describe('What failed / caused harm if this shipped'),
+    likelihood: z.enum(['low', 'medium', 'high']),
+    blast_radius: z.enum(['low', 'medium', 'high', 'critical']),
+    reversibility: z.enum(['reversible', 'hard', 'irreversible']),
+    early_signal: z
+      .string()
+      .default('')
+      .describe('What you would observe if this risk is materializing'),
+    promoted_to: z
+      .enum(['ac', 'out_of_scope', 'user_owned_decision', 'none'])
+      .describe('Where a critical item was promoted (§5 승격 규칙)'),
+    ref: z.string().default('').describe('Pointer to the AC / out_of_scope[i] / question id'),
+  })
+  .describe('One pre-mortem risk item with its promotion outcome (deep-interview §5)');
+
+export type PremortemItem = z.infer<typeof premortemItem>;
+
 // 축1 종료 = readiness 게이트(1차, 시스템) ∧ 사용자 확인(2차, 휴먼). The second
 // condition: the user confirmed the synthesized intent matches their understanding.
 // Carries the user's own words (`statement`) as evidence — `confirmed=true` is not
@@ -92,6 +116,10 @@ export const interviewState = z
     }),
     questions: z.array(interviewQuestion).default([]),
     assumptions: z.array(interviewAssumption).default([]),
+    // Pre-mortem items surfaced during the interview (deep-interview §5). Optional
+    // so pre-existing interview-state.json parse unchanged; populated by the
+    // premortem-promotion step which closes the risk_reversibility dimension.
+    premortem: z.array(premortemItem).default([]),
     // The 2차 (user-confirmation) half of the axis-1 closure gate, recorded when
     // the interview is finalized. Optional so an active/pre-confirmation interview
     // and every pre-existing interview-state.json parse unchanged.
