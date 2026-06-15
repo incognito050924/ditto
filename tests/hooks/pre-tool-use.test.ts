@@ -689,3 +689,74 @@ describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease a
     }
   });
 });
+
+describe('preToolUseHandler — (d2) whitelist scope_mode (Tidy cleanup profile, WU-1 ac-2)', () => {
+  const whitelist = (workItemId: string, allowed: string[]) =>
+    acgChangeContract.parse({
+      schema_version: '0.1.0',
+      kind: 'acg.change-contract.v1',
+      work_item_id: workItemId,
+      produced_by: 'agent',
+      produced_at: '2026-06-15T00:00:00Z',
+      purpose: 'tidy whitelist',
+      allowed_scope: allowed.map((ref) => ({ kind: 'path', ref })),
+      forbidden_scope: [{ kind: 'glob', ref: '**' }],
+      scope_mode: 'whitelist',
+      acceptance: [{ criterion: 'green', evidence_kind: 'test' }],
+      risk_default: 'low',
+      decision_ref: null,
+    });
+  const edit = (dir: string, rel: string, sessionId: string) =>
+    preToolUseHandler({
+      raw: { tool_name: 'Edit', tool_input: { file_path: join(dir, rel) }, session_id: sessionId },
+      repoRoot: dir,
+      env: {},
+    });
+
+  test('whitelist: edit inside allowed_scope allows, edit outside blocks with exitCode 2', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-wl-'));
+    try {
+      await new SessionPointerStore(dir).set('sess-wl', 'wi_whitelist1');
+      await new ChangeContractStore(dir).write(
+        'wi_whitelist1',
+        whitelist('wi_whitelist1', ['src/core/keep.ts']),
+      );
+
+      expect((await edit(dir, 'src/core/keep.ts', 'sess-wl')).exitCode).toBe(0);
+      const blocked = await edit(dir, 'src/core/other.ts', 'sess-wl');
+      expect(blocked.exitCode).toBe(2);
+      expect(blocked.stderr).toContain('allowed_scope');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('regression: default blacklist contract does NOT enforce allowed_scope as a whitelist', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-wl-'));
+    try {
+      // blacklist (no scope_mode) with a non-empty allowed_scope but only a narrow forbidden
+      const c = acgChangeContract.parse({
+        schema_version: '0.1.0',
+        kind: 'acg.change-contract.v1',
+        work_item_id: 'wi_blacklist1',
+        produced_by: 'agent',
+        produced_at: '2026-06-15T00:00:00Z',
+        purpose: 'blacklist unchanged',
+        allowed_scope: [{ kind: 'path', ref: 'src/core/keep.ts' }],
+        forbidden_scope: [{ kind: 'path', ref: 'src/core/locked.ts' }],
+        acceptance: [{ criterion: 'green', evidence_kind: 'test' }],
+        risk_default: 'low',
+        decision_ref: null,
+      });
+      expect(c.scope_mode).toBe('blacklist');
+      await new SessionPointerStore(dir).set('sess-bl', 'wi_blacklist1');
+      await new ChangeContractStore(dir).write('wi_blacklist1', c);
+
+      // a file NOT in allowed_scope is still allowed under blacklist (only forbidden blocks)
+      expect((await edit(dir, 'src/core/elsewhere.ts', 'sess-bl')).exitCode).toBe(0);
+      expect((await edit(dir, 'src/core/locked.ts', 'sess-bl')).exitCode).toBe(2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

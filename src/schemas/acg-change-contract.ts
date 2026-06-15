@@ -42,6 +42,14 @@ export const acgChangeContract = z
       .array(acgScopeRef)
       .min(1)
       .describe('Must stay untouched. Non-empty — an empty forbid = unbounded change'),
+    scope_mode: z
+      .enum(['blacklist', 'whitelist'])
+      .default('blacklist')
+      .describe(
+        'blacklist (default, existing behaviour): only forbidden_scope blocks edits. ' +
+          'whitelist (cleanup profile, 80-plan §7): edits MUST fall inside allowed_scope; ' +
+          'everything else blocks (allowed=diff, forbidden=그외). Opt-in so existing contracts are unchanged.',
+      ),
     invariants: z.array(acgInvariant).default([]),
     acceptance: z.array(acgAcceptanceCriterion).min(1),
     decision_ref: z

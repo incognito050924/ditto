@@ -23381,6 +23381,7 @@ var acgChangeContract = exports_external.object({
   purpose: exports_external.string().min(1).describe("The result the change pursues (intent, not code)"),
   allowed_scope: exports_external.array(acgScopeRef).default([]).describe("Frame condition: only paths/symbols here may be modified"),
   forbidden_scope: exports_external.array(acgScopeRef).min(1).describe("Must stay untouched. Non-empty \u2014 an empty forbid = unbounded change"),
+  scope_mode: exports_external.enum(["blacklist", "whitelist"]).default("blacklist").describe("blacklist (default, existing behaviour): only forbidden_scope blocks edits. " + "whitelist (cleanup profile, 80-plan \xA77): edits MUST fall inside allowed_scope; " + "everything else blocks (allowed=diff, forbidden=\uADF8\uC678). Opt-in so existing contracts are unchanged."),
   invariants: exports_external.array(acgInvariant).default([]),
   acceptance: exports_external.array(acgAcceptanceCriterion).min(1),
   decision_ref: exports_external.string().nullable().default(null).describe("ADR/decision id. Required when risk_default \u2265 medium (stage-2 gate)"),
@@ -29455,10 +29456,19 @@ async function checkForbiddenScope(input, filePath) {
   if (!workItemId2)
     return;
   const contract = await new ChangeContractStore(input.repoRoot).read(workItemId2);
-  if (!contract || contract.forbidden_scope.length === 0)
+  if (!contract)
     return;
   const repoRel = relative13(input.repoRoot, resolve13(input.repoRoot, filePath));
   const archSpec = await loadArchSpec(input.repoRoot);
+  if (contract.scope_mode === "whitelist" && contract.allowed_scope.length > 0) {
+    const allowed = contract.allowed_scope.some((ref) => scopeRefMatches(ref, repoRel, archSpec));
+    if (!allowed) {
+      return block("tidy-scope", `${repoRel} is outside this tidy contract's allowed_scope (whitelist: allowed=diff, forbidden=\uADF8\uC678)`);
+    }
+    return;
+  }
+  if (contract.forbidden_scope.length === 0)
+    return;
   const hit = matchForbiddenScope(contract.forbidden_scope, repoRel, archSpec);
   if (hit) {
     return block("forbidden-scope", `${repoRel} is in this work item's forbidden_scope (${hit.kind}:${hit.ref})`);
@@ -34998,4 +35008,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=092643ee6efab73d809856b0447a375a5b54cbd3cb6e20eb9a4e5f951d593052
+//# ditto-src-stamp=86fea90d9069c5f155821960f5d09d0a17de1e6d3a69ae2c6f8d6f91bd6909bf

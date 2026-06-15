@@ -490,7 +490,14 @@ async function loadArchSpec(repoRoot: string): Promise<AcgArchitectureSpec | und
   }
 }
 
-/** 편집 대상 file_path가 현재 work item 계약의 forbidden_scope에 들면 block, 아니면 undefined. */
+/**
+ * Enforce the current work item ChangeContract's scope on an edit.
+ * - whitelist mode (cleanup profile, 80-plan §7): edit MUST fall inside
+ *   allowed_scope; everything else blocks (allowed=diff, forbidden=그외). Secrets
+ *   are already blocked upstream, so an allowed file is permitted.
+ * - blacklist mode (default, existing behaviour): only forbidden_scope blocks.
+ * Opt-in scope_mode keeps every pre-existing (blacklist) contract unchanged.
+ */
 async function checkForbiddenScope(
   input: HookInput,
   filePath: string,
@@ -503,10 +510,25 @@ async function checkForbiddenScope(
   if (!workItemId) return undefined;
 
   const contract = await new ChangeContractStore(input.repoRoot).read(workItemId);
-  if (!contract || contract.forbidden_scope.length === 0) return undefined;
+  if (!contract) return undefined;
 
   const repoRel = relative(input.repoRoot, resolve(input.repoRoot, filePath));
   const archSpec = await loadArchSpec(input.repoRoot);
+
+  // whitelist (cleanup profile): only allowed_scope is editable; 그외 blocks.
+  if (contract.scope_mode === 'whitelist' && contract.allowed_scope.length > 0) {
+    const allowed = contract.allowed_scope.some((ref) => scopeRefMatches(ref, repoRel, archSpec));
+    if (!allowed) {
+      return block(
+        'tidy-scope',
+        `${repoRel} is outside this tidy contract's allowed_scope (whitelist: allowed=diff, forbidden=그외)`,
+      );
+    }
+    return undefined;
+  }
+
+  // blacklist (default): forbidden_scope hard no-go.
+  if (contract.forbidden_scope.length === 0) return undefined;
   const hit = matchForbiddenScope(contract.forbidden_scope, repoRel, archSpec);
   if (hit) {
     return block(
