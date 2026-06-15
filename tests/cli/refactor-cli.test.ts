@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -99,4 +99,82 @@ describe('ditto refactor --scope (WU-4)', () => {
     expect(remotes).toBe(''); // nothing pushed because no remote and no push call
     expect(branches).toContain('main');
   });
+});
+
+// ac-3 / dogfood (wi_260615lj6) — the FULL-BAR auto-commit reached by the CLI ALONE, end to
+// end on a real git repo with real codeql. HEAD has a high-complexity function covered by a
+// characterization test; the working tree holds a behavior-preserving tidy that lowers the
+// complexity below threshold. `ditto refactor` must measure baselineGreen (L2 OLD),
+// behaviorGreen (L2 OLD↔NEW preserved), and a debt DECREASE (codeql HEAD↔worktree), then
+// auto-commit on an isolated branch — NEVER pushing (D8). Opt-in (needs codeql, ~30s).
+describe.if(process.env.CODEQL_E2E === '1')('ditto refactor — full-bar auto-commit (e2e)', () => {
+  // 11 branches → cyclomatic complexity ~12 (> the default 10 threshold).
+  const HIGH_COMPLEXITY = `export function grade(n: number): string {
+  if (n < 0) return 'invalid';
+  if (n < 10) return 'F';
+  if (n < 20) return 'E';
+  if (n < 30) return 'D';
+  if (n < 40) return 'C';
+  if (n < 50) return 'C+';
+  if (n < 60) return 'B';
+  if (n < 70) return 'B+';
+  if (n < 80) return 'A';
+  if (n < 90) return 'A+';
+  if (n <= 100) return 'S';
+  return 'invalid';
+}
+`;
+  // Same behavior via a table lookup → cyclomatic complexity ~3 (below threshold).
+  const LOW_COMPLEXITY = `const BANDS: Array<[number, string]> = [
+  [0, 'F'], [10, 'E'], [20, 'D'], [30, 'C'], [40, 'C+'],
+  [50, 'B'], [60, 'B+'], [70, 'A'], [80, 'A+'], [90, 'S'],
+];
+export function grade(n: number): string {
+  if (n < 0 || n > 100) return 'invalid';
+  let g = 'F';
+  for (const [min, label] of BANDS) if (n >= min) g = label;
+  return g;
+}
+`;
+  const CHARACTERIZATION = `import { test, expect } from 'bun:test';
+import { grade } from '../src/widget/grade';
+test('grade pins behavior across all bands', () => {
+  const cases: Array<[number, string]> = [
+    [-1, 'invalid'], [5, 'F'], [15, 'E'], [25, 'D'], [35, 'C'], [45, 'C+'],
+    [55, 'B'], [65, 'B+'], [75, 'A'], [85, 'A+'], [90, 'S'], [100, 'S'], [101, 'invalid'],
+  ];
+  for (const [n, want] of cases) expect(grade(n)).toBe(want);
+});
+`;
+
+  test('covered unit + behavior-preserving complexity tidy → barMet, auto-commit, push 0', async () => {
+    await mkdir(join(dir, 'src', 'widget'), { recursive: true });
+    await mkdir(join(dir, 'tests'), { recursive: true });
+    await mkdir(join(dir, 'scripts'), { recursive: true });
+    // The L2 preload must be reachable at <repoRoot>/scripts (ditto resolves it there).
+    await copyFile(
+      join(process.cwd(), 'scripts', 'l2-effect-preload.ts'),
+      join(dir, 'scripts', 'l2-effect-preload.ts'),
+    );
+    await writeFile(join(dir, 'src', 'widget', 'grade.ts'), HIGH_COMPLEXITY);
+    await writeFile(join(dir, 'tests', 'widget-grade.test.ts'), CHARACTERIZATION);
+    git(['add', '-A']);
+    git(['commit', '-q', '-m', 'baseline: high-complexity grade()']); // HEAD = OLD
+
+    // Apply the behavior-preserving tidy to the WORKING TREE (NEW) — uncommitted.
+    await writeFile(join(dir, 'src', 'widget', 'grade.ts'), LOW_COMPLEXITY);
+
+    const r = ditto(['refactor', '--scope', 'component:widget', '--output', 'json']);
+    expect(r.exitCode).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.baselineGreen).toBe(true);
+    expect(out.behaviorGreen).toBe(true);
+    expect(out.debt.before).toBeGreaterThan(out.debt.after); // complexity violation cleared
+    expect(out.barMet).toBe(true);
+    expect(out.autoCommit).toBe('full');
+    expect(out.commit?.committed).toBe(true);
+    expect(out.commit?.branch).toBe('ditto-tidy/component-widget');
+    // D8: never pushed (no remote configured, no push call).
+    expect(git(['remote']).stdout.toString().trim()).toBe('');
+  }, 180_000);
 });

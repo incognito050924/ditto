@@ -60,6 +60,12 @@ export interface TracedRun {
 }
 
 /**
+ * L2 verdict plus the OLD-baseline signal. `baselineGreen` (OLD/HEAD tests green) feeds
+ * `decideUnitTidy`'s G-R1 floor separately from `behaviorGreen` (which is `status==='unrefuted'`).
+ */
+export type L2WorktreeVerdict = L2DifferentialVerdict & { baselineGreen: boolean };
+
+/**
  * Classify the OLD↔NEW differential (pure). Order of decisions encodes the safety bias:
  *   1. OLD tests red → the characterization is invalid → unverified (can't witness on a
  *      red baseline), diff-only.
@@ -72,9 +78,12 @@ export function classifyWorktreeDifferential(
   oldRun: TracedRun,
   newRun: TracedRun,
   effectBearing: boolean,
-): L2DifferentialVerdict {
+): L2WorktreeVerdict {
+  // baselineGreen = OLD/HEAD characterization is valid (separate from behaviorGreen).
+  const baselineGreen = oldRun.testsOk;
   if (!oldRun.testsOk) {
     return {
+      baselineGreen,
       status: 'unverified',
       autoCommit: 'diff-only',
       reviewHighRisk: true,
@@ -84,6 +93,7 @@ export function classifyWorktreeDifferential(
   }
   if (!newRun.testsOk) {
     return {
+      baselineGreen,
       status: 'refuted',
       autoCommit: 'none',
       reviewHighRisk: false,
@@ -94,6 +104,7 @@ export function classifyWorktreeDifferential(
   const diff = compareTraces(oldRun.trace, newRun.trace);
   if (diff.refuted) {
     return {
+      baselineGreen,
       status: 'refuted',
       autoCommit: 'none',
       reviewHighRisk: false,
@@ -102,6 +113,7 @@ export function classifyWorktreeDifferential(
   }
   if (effectBearing && oldRun.trace.length === 0) {
     return {
+      baselineGreen,
       status: 'unverified',
       autoCommit: 'diff-only',
       reviewHighRisk: true,
@@ -110,6 +122,7 @@ export function classifyWorktreeDifferential(
     };
   }
   return {
+    baselineGreen,
     status: 'unrefuted',
     autoCommit: 'full',
     reviewHighRisk: false,
@@ -150,7 +163,8 @@ function worktreeRunId(unitFiles: readonly string[]): string {
   return `l2-${(h >>> 0).toString(36)}`;
 }
 
-const degraded = (reason: string): L2DifferentialVerdict => ({
+const degraded = (reason: string): L2WorktreeVerdict => ({
+  baselineGreen: false, // baseline unknown when orchestration failed → cannot claim green
   status: 'unverified',
   autoCommit: 'diff-only',
   reviewHighRisk: true,
@@ -165,7 +179,7 @@ const degraded = (reason: string): L2DifferentialVerdict => ({
 export async function runL2WorktreeDifferential(
   input: L2WorktreeInput,
   deps: L2WorktreeDeps,
-): Promise<L2DifferentialVerdict> {
+): Promise<L2WorktreeVerdict> {
   const effectBearing = (() => {
     try {
       return isEffectBearing(deps.readUnitSources(input.repoRoot, input.unitFiles));

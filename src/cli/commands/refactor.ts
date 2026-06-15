@@ -1,7 +1,14 @@
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { type UnitScope, parseUnitScope, resolveUnitScope } from '~/acg/scope/unit-resolve';
-import { buildCoverageProvider } from '~/acg/tidy/coverage-provider';
+import { buildCoverageProvider, deriveUnitTestPaths } from '~/acg/tidy/coverage-provider';
+import {
+  type L2WorktreeVerdict,
+  defaultL2WorktreeDeps,
+  runL2WorktreeDifferential,
+} from '~/acg/tidy/l2-worktree-differential';
+import { commitTidyStructural } from '~/acg/tidy/tidy-commit';
+import { measureUnitDebt } from '~/acg/tidy/unit-debt';
 import { decideUnitTidy } from '~/acg/tidy/unit-refactor';
 import { readArchitectureSpec, resolveRepoRootForCreate } from '~/core/fs';
 import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
@@ -23,13 +30,48 @@ import {
  * the §4.4 bar gates an isolated-branch auto-commit.
  *
  * COVERAGE WIRING (wi_260615889): the L1 coverage provider (`buildCoverageProvider`,
- * `bun test --coverage`) is now wired here — `coverageProviderPresent`/`unitCovered`
- * come from a real run, not a hardcoded false. When coverage cannot be collected the
- * provider is ABSENT and we fail open to diff-only + a NARROW residual question (never a
- * bulk diff to approve — §4.4 검증 연극; OBJ-02). This surface MEASURES the unit (it does
- * not itself refactor), so absolute debt before==after here and the §4.4 full-bar
- * auto-commit fires only once a real tidy has reduced the debt (decideUnitTidy gates it).
+ * `bun test --coverage`) is wired here — `coverageProviderPresent`/`unitCovered` come from
+ * a real run, not a hardcoded false. When coverage cannot be collected the provider is
+ * ABSENT and we fail open to diff-only + a NARROW residual question (never a bulk diff to
+ * approve — §4.4 검증 연극; OBJ-02).
+ *
+ * FULL-BAR WIRING (wi_260615lj6 / dialectic-10): the three formerly-hardcoded inputs are
+ * replaced by their REAL sources, ATOMICALLY (OBJ-D — never piecemeal, or a stale
+ * placeholder false-fires the bar):
+ *   - baselineGreen ← L2's OLD/HEAD test outcome,
+ *   - behaviorGreen ← L2 worktree differential (`status==='unrefuted'`),
+ *   - debt before/after ← `measureUnitDebt` (HEAD↔worktree CodeQL complexity counts).
+ * The model: a refactorer has ALREADY applied the tidy to the working tree (NEW); this
+ * surface measures OLD(HEAD)↔NEW and, when the §4.4 bar is met, auto-commits the working
+ * tree on an ISOLATED branch via `commitTidyStructural` (push 0 — ADR-0017 D8).
+ *
+ * FAIL-OPEN (OBJ-C): the L2 and debt measurements are each fail-open (degrade to diff-only,
+ * never throw) AND time-boxed here, so a missing/slow/hanging codeql or worktree degrades
+ * to diff-only rather than a hard block. The expensive measurements run ONLY when the unit
+ * is full-bar-eligible (covered + has characterization tests); otherwise we skip them and
+ * decideUnitTidy degrades on the coverage gate.
  */
+
+/** Hang-guard for the codeql/test subprocesses (OBJ-C 타임박스). Override via env. */
+const MEASURE_TIMEOUT_MS = Number(process.env.DITTO_REFACTOR_TIMEOUT_MS) || 300_000;
+
+/** Race a measurement against a timeout; on timeout resolve to a degraded fallback. */
+async function withTimebox<T>(p: Promise<T>, ms: number, onTimeout: () => T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(onTimeout()), ms);
+  });
+  try {
+    return await Promise.race([p, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** A safe branch slug for the isolated tidy branch from a unit scope string. */
+function tidyBranchSlug(scope: string): string {
+  return scope.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'unit';
+}
 
 /** Tracked standing files under `src/` at HEAD (git ls-files — deterministic). */
 function trackedSrcFiles(repoRoot: string): string[] {
@@ -110,29 +152,74 @@ export const refactorCommand = defineCommand({
       const archSpec = await loadArchSpec(repoRoot);
       const resolved = resolveUnitScope(unit, files, archSpec);
 
-      // Standing-code baseline = HEAD. The absolute-debt before/after measurement and
-      // the behavior-preservation run happen during the actual refactor; this entrypoint
-      // only MEASURES, so before==after (debtDecreased=false until a refactorer runs).
-      // The L1 coverage provider, however, IS consulted here: if coverage can be
-      // collected we report whether the unit is covered (full-bar-eligible); if not, we
-      // fail open to diff-only (OBJ-02).
+      // Standing-code baseline = HEAD. The L1 coverage provider gates full-bar eligibility.
+      const testFiles = trackedTestFiles(repoRoot);
       const coverageProvider = buildCoverageProvider(repoRoot, undefined, {
         scopeFiles: resolved,
-        testFiles: trackedTestFiles(repoRoot),
+        testFiles,
       });
       const coverageProviderPresent = coverageProvider !== undefined;
       const unitCovered = coverageProvider
         ? (await coverageProvider.coverageOf({ files: resolved })).status === 'covered'
         : undefined;
+
+      // Real full-bar inputs (OBJ-D atomic). Defaults are the SAFE values — baseline valid,
+      // behavior NOT preserved, debt unknown (before==after) — so a unit that is not
+      // full-bar-eligible (no coverage / not covered / no tests) degrades on the coverage
+      // gate without paying for the expensive measurements.
+      const testPaths = deriveUnitTestPaths(resolved, testFiles);
+      let baselineGreen = true;
+      let behaviorGreen = false;
+      let debt = { before: 0, after: 0 };
+      let l2Reason: string | undefined;
+      if (coverageProviderPresent && unitCovered === true && testPaths.length > 0) {
+        const l2 = await withTimebox(
+          runL2WorktreeDifferential(
+            { repoRoot, unitFiles: resolved, testPaths },
+            defaultL2WorktreeDeps(repoRoot),
+          ),
+          MEASURE_TIMEOUT_MS,
+          (): L2WorktreeVerdict => ({
+            baselineGreen: false,
+            status: 'unverified',
+            autoCommit: 'diff-only',
+            reviewHighRisk: true,
+            reason: 'L2 timed out — degrade to diff-only (fail-open, OBJ-C)',
+          }),
+        );
+        baselineGreen = l2.baselineGreen;
+        behaviorGreen = l2.status === 'unrefuted';
+        l2Reason = l2.reason;
+        const debtRes = await withTimebox(
+          measureUnitDebt({ repoRoot, unitFiles: resolved }),
+          MEASURE_TIMEOUT_MS,
+          () => ({ ok: false as const, degradedReason: 'unit debt timed out — diff-only (OBJ-C)' }),
+        );
+        if (debtRes.ok && debtRes.debt) {
+          debt = { before: debtRes.debt.before, after: debtRes.debt.after };
+        }
+      }
+
       const decision = decideUnitTidy({
         unit: args.scope,
         files: resolved,
-        baselineGreen: true,
-        debt: { before: resolved.length, after: resolved.length },
-        behaviorGreen: true,
+        baselineGreen,
+        debt,
+        behaviorGreen,
         coverageProviderPresent,
         unitCovered,
       });
+
+      // §4.4 full-bar met → auto-commit the working-tree tidy on an ISOLATED branch (push 0).
+      let commit: ReturnType<typeof commitTidyStructural> | undefined;
+      if (decision.barMet) {
+        commit = commitTidyStructural({
+          repoRoot,
+          branch: `ditto-tidy/${tidyBranchSlug(args.scope)}`,
+          files: [...resolved],
+          message: `tidy(${args.scope}): structural — §4.4 full-bar auto-commit (behavior-preserved, debt ${debt.before}→${debt.after})`,
+        });
+      }
 
       if (format === 'json') {
         writeJson({
@@ -140,12 +227,24 @@ export const refactorCommand = defineCommand({
           files: resolved,
           autoCommit: decision.autoCommit,
           barMet: decision.barMet,
+          baselineGreen,
+          behaviorGreen,
+          debt,
           residualQuestions: decision.residualQuestions,
+          commit: commit ?? null,
+          l2Reason: l2Reason ?? null,
         });
       } else {
         writeHuman(
-          `refactor ${args.scope}: ${resolved.length} file(s), autoCommit=${decision.autoCommit}, barMet=${decision.barMet}`,
+          `refactor ${args.scope}: ${resolved.length} file(s), autoCommit=${decision.autoCommit}, barMet=${decision.barMet} (baselineGreen=${baselineGreen}, behaviorGreen=${behaviorGreen}, debt ${debt.before}→${debt.after})`,
         );
+        if (commit) {
+          writeHuman(
+            commit.committed
+              ? `  committed ${commit.sha?.slice(0, 9)} on ${commit.branch} (not pushed — D8)`
+              : `  commit skipped: ${commit.reason}`,
+          );
+        }
         for (const q of decision.residualQuestions) writeHuman(`  residual: ${q}`);
       }
     } catch (err) {
