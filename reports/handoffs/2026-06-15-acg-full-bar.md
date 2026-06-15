@@ -3,11 +3,15 @@ title: "Handoff — ACG ① CLI 단독 full-bar 프로젝트 (cross-PC 인수인
 kind: handoff
 created: 2026-06-15 KST
 author: hskim, claude
-status: in_progress
+status: done
 branch: wi_260615t8o/l2-interception
 adr: [ADR-0018, ADR-0019]
 work_items: [wi_260615t8o, wi_260615lj6]
 ---
+
+> **2026-06-15 후속 세션 — ① 달성.** §5 남은 작업 1~5 전부 완료. ① 목표(`ditto refactor
+> --scope`가 standing 코드에서 §4.4 full-bar 자동커밋 도달)가 실 git repo + 실 codeql
+> end-to-end e2e로 입증됐다(아래 §8). 미푸시(origin 대비 ahead) — 푸시·머지는 사용자 판단.
 
 # Handoff — ACG ① "CLI 단독 full-bar" (다른 PC에서 이어서)
 
@@ -126,3 +130,41 @@ bun test tests/acg/effect-interception.test.ts   # L2 코어 9/9
 bun run lint && bun run adr:guard
 # dogfood (full-bar 결선 후): time ./dist/ditto refactor --scope <covered unit> --output json
 ```
+
+## 8. 완료 (2026-06-15 후속 세션 — ① 달성)
+
+### dialectic-10 (착수 전 압박검증, verdict=revise)
+ADR-0018/0019 본격 빌드 전 dialectic-review 실행(`reports/design/agentic-governance/reviews/dialectic-10.{json,md}`). 검증된 치명 결함 2건을 required_edits로 반영 후 착수:
+- **OBJ-A(확정)**: 기성 CodeQL metrics 쿼리는 `@kind treemap`/`where none()`라 SARIF result 0 → ADR-0019 D1을 **커스텀 `@kind problem` 쿼리**(cyclomatic > N)로 재작성.
+- **OBJ-B(확정)**: 빈 effect trace가 unrefuted=full로 false-pass → ADR-0018 **D5 신설**(effect-bearing unit의 OLD zero-trace=미관측→unverified/diff-only).
+- OBJ-C(D4 코드의무화: codeql throw→refactor catch+타임박스→diff-only), OBJ-D(세 입력 atomic 교체).
+
+### 커밋 (이 브랜치, origin 미푸시)
+1. `24f4fd7` docs(adr): dialectic-10 revise 반영 — ADR-0018 D5 + ADR-0019 D1/D4 (구조적)
+2. `f6c9272` feat: L2 standing-code worktree differential + interception preload (t8o ac-2/3)
+3. `c51d0e3` feat: standing-code fitness analyzer — custom CodeQL complexity problem 쿼리 (lj6 ac-1)
+4. `af488b2` feat: HEAD↔worktree 절대 debt 측정 measureUnitDebt (lj6 ac-2)
+5. `0c39b1e` feat: refactor.ts full-bar 결선 — L2+debt 실배선 + commitTidyStructural (lj6 ac-3/4)
+
+### 신규 모듈 / 파일
+- `src/acg/tidy/l2-worktree-differential.ts` (+ `scripts/l2-effect-preload.ts`): OLD(HEAD 워크트리)·NEW(워킹트리)에서 unit 테스트를 `--preload` 인터셉션과 함께 실행→test outcome+effect trace(Bun.spawn*·child_process) 비교. D5/fail-open.
+- `src/acg/fitness/standing-fitness.ts`: 커스텀 복잡도 problem 쿼리 + `rule@path#L<line>` 함수단위 식별자(assessUnitDebt가 set-size로 계산하므로 line 포함). 기본 임계 10(McCabe).
+- `src/acg/tidy/unit-debt.ts`: `measureUnitDebt` HEAD↔worktree debt.
+- `src/cli/commands/refactor.ts`: 세 placeholder 실배선 + barMet→commitTidyStructural(push 0).
+
+### ac 상태
+- **t8o**: ac-1 DONE, **ac-2 DONE**(provider 통합), **ac-3 DONE**(degraded/fail-open), ac-4 DONE(전체 green).
+- **lj6**: **ac-1~ac-4 DONE**.
+
+### 검증 (fresh evidence)
+- 전체 `bun test`: **2214 pass / 11 skip / 1 fail**. 1 fail = `.ditto/local/work-items/wi_2606144ta/completion.json` 스키마(로컬 전용·gitignore·이 작업 무관·체크아웃 이전부터 존재).
+- `bun run lint` clean, `bun run adr:guard` 통과(ADR-0006 TS-AST 금지 위반 0).
+- **ac-3 / ① full-bar e2e**(`CODEQL_E2E=1 bun test tests/cli/refactor-cli.test.ts`): 실 git repo에서 HEAD=고복잡도 grade()(cyclomatic ~12), 워킹트리=동작보존 tidy(테이블 룩업, ~3). `ditto refactor --scope component:widget` CLI 단독으로 **barMet=true, autoCommit=full, debt 1→0, `ditto-tidy/component-widget` 격리 브랜치 commit, push 0** (28.6s 통과).
+- OBJ-A e2e(`CODEQL_E2E=1 bun test tests/acg/standing-fitness.test.ts`): 실 codeql가 coverage-provider.ts에서 함수단위 violation 산출(8.4s).
+
+### 남은 위험 / 다음에 볼 것
+- **L2 적용 경계(잔존)**: ditto 자기 코드는 `node:fs` named import 우세라 대부분 L2 미관측→D5 degrade(diff-only). full-bar는 pure unit 또는 `Bun.spawn*`/injected-deps 경유 unit에서만 켜진다(안전쪽 — 잘못된 자동커밋은 구조적으로 불가). dogfood는 그래서 격리 fixture의 pure unit으로 입증.
+- **preload 배포 경계**: `defaultL2WorktreeDeps`는 preload를 `<repoRoot>/scripts/l2-effect-preload.ts`로 해소 — ditto self-dogfood(repoRoot=ditto)는 OK이나, ditto를 *타 repo*에 적용하려면 preload를 ditto 설치 위치에서 해소하도록 후속 필요(cross-repo).
+- **codeql 비용**: refactor 1회 = HEAD↔worktree DB 빌드 2회(+L2 테스트런). opt-in 표면이라 수용(ADR-0019 D2). withTimebox 기본 300s.
+- **ADR-0018/0019 상태**: 여전히 `proposed`. 구현·e2e로 검증됐으니 `accepted` 승격 후보(별도 판단).
+- **푸시/머지**: 5커밋 origin 미푸시, 선행 두 WI(889·q77) main 미머지 — 사용자 판단.
