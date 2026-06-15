@@ -2,16 +2,22 @@
 title: "Handoff — ACG ① CLI 단독 full-bar 프로젝트 (cross-PC 인수인계)"
 kind: handoff
 created: 2026-06-15 KST
+updated: 2026-06-16 KST
 author: hskim, claude
-status: done
+status: parked
 branch: wi_260615t8o/l2-interception
+archive_branch: archive/acg-full-bar-auto-commit
 adr: [ADR-0018, ADR-0019]
-work_items: [wi_260615t8o, wi_260615lj6]
+work_items: [wi_260615t8o, wi_260615lj6, wi_260615dxx]
 ---
 
-> **2026-06-15 후속 세션 — ① 달성.** §5 남은 작업 1~5 전부 완료. ① 목표(`ditto refactor
-> --scope`가 standing 코드에서 §4.4 full-bar 자동커밋 도달)가 실 git repo + 실 codeql
-> end-to-end e2e로 입증됐다(아래 §8). 미푸시(origin 대비 ahead) — 푸시·머지는 사용자 판단.
+> **2026-06-16 — PARKED(보류).** ① 기술 목표는 달성·검증됐으나(§8), 가치 검토 결과 사용자
+> 의도("믿고 맡기는 자동 정리·커밋")를 잘 못 섬긴다고 판단해 **main 미머지로 보류**하고 이
+> 브랜치를 `archive/acg-full-bar-auto-commit`로 원격 보존한다. 나중에 완성하려 할 때의 권위
+> 재개 문서는 **§9**다(반드시 §9부터 읽어라). main·autopilot은 손대지 않았다.
+>
+> **2026-06-15 — ① 달성.** §5 남은 작업 1~5 전부 완료. ① 목표(`ditto refactor --scope`가
+> standing 코드에서 §4.4 full-bar 자동커밋 도달)가 실 git repo + 실 codeql e2e로 입증됨(§8).
 
 # Handoff — ACG ① "CLI 단독 full-bar" (다른 PC에서 이어서)
 
@@ -168,3 +174,66 @@ ADR-0018/0019 본격 빌드 전 dialectic-review 실행(`reports/design/agentic-
 - **codeql 비용**: refactor 1회 = HEAD↔worktree DB 빌드 2회(+L2 테스트런). opt-in 표면이라 수용(ADR-0019 D2). withTimebox 기본 300s.
 - **ADR-0018/0019 상태**: 여전히 `proposed`. 구현·e2e로 검증됐으니 `accepted` 승격 후보(별도 판단).
 - **푸시/머지**: 5커밋 origin 미푸시, 선행 두 WI(889·q77) main 미머지 — 사용자 판단.
+
+## 9. 보류(PARK) 결정 + 완성 재개 가이드 (2026-06-16 — 미래 완성용 권위 문서)
+
+> 이 기능을 **나중에 완성하려는 사람**을 위한 문서다. §1~§8은 "어떻게 만들었나", 이 §9는
+> "왜 보류했고, 완성하려면 무엇을 해야 하나"다. 재개 시 여기부터 읽어라.
+
+### 9.1 결정: main 미머지 보류, 아카이브 브랜치로 원격 보존
+- 기능은 기술적으로 동작·검증됐으나(§8 e2e), **사용자 의도("믿고 맡기는 자동 정리·커밋")를 잘
+  못 섬긴다**고 판단해 보류. main에 머지하지 않고 브랜치 `archive/acg-full-bar-auto-commit`로
+  origin에 보존한다. **삭제가 아니라 동결**이다.
+- main·autopilot은 **전혀 손대지 않았다**(아래 9.3).
+
+### 9.2 왜 보류했나 — 자동커밋이 거의 발화하지 않는다 (구조적)
+완성 전에 이 한계를 이해해야 같은 벽에 다시 부딪히지 않는다.
+1. **`ditto refactor`는 정리를 *측정*만 하고 *생성*하지 않는다.** full-bar가 발화하려면 누군가
+   (에이전트/사람)가 **이미 동작보존 정리를 작업트리에 적용해 커밋 안 한 상태로** 남겨둬야 한다.
+   즉 이 기능이 자동화하는 건 "정리"가 아니라 "이미 된 정리의 검증+커밋 한 번"이다. 의도("맡기면
+   알아서 정리")와 어긋나는 핵심 지점.
+2. **발화 조건이 곱(AND)으로 좁다**: covered≥80% ∧ 동작 관측가능(pure 또는 `Bun.spawn*` 경유;
+   `node:fs` named import는 D5로 빠짐) ∧ 빚 실제 감소 ∧ baseline green. 실코드에서 이 교집합은 작다.
+3. **이 희소성은 안전성의 대가**다. "절대 잘못 커밋 안 함"과 "자주 발화함"은 싸게 양립 안 된다.
+   현재는 안전 쪽 극단(모든 오차가 '커밋 안 함' 방향) → 거의 안 켜짐.
+
+### 9.3 autopilot 비결합 (완성 시 반드시 보존할 불변식)
+- **사용자 최우선 제약: 작동 중인 autopilot 오케스트레이션/워크플로를 망치지 말 것.**
+- 현재 이 기능은 autopilot과 **완전 분리**다(2026-06-16 코드 확인): main 대비 바뀐 파일에
+  `src/core/autopilot*` 0개, autopilot이 신규 모듈(l2-worktree-differential·standing-fitness·
+  unit-debt·effect-interception) import 0건, autopilot이 refactor/decideUnitTidy/commitTidyStructural
+  호출 0건. `ditto refactor`는 독립 CLI 명령일 뿐이다.
+- **함정**: 9.2-(1)을 풀려고 "refactorer/autopilot 파이프라인과 결선"하면 **바로 autopilot을
+  건드리게 된다.** 완성하려면 이 결합을 autopilot 코어 수정 없이(예: 별도 어댑터/노드 추가, 기존
+  드라이버 불변) 설계해야 한다. 이 불변식을 깨는 완성안은 사용자 의도 위반.
+
+### 9.4 완성하려면 (필요 작업, 큰 것부터)
+1. **정리 *생성* 주체와 결선** (가장 큰 공사) — refactorer 에이전트가 covered 단위에 동작보존
+   정리를 만들어내고 → 이 게이트가 검증+커밋하는 루프. 단 9.3 불변식 준수(autopilot 코어 불변).
+   완성해도 발화는 "covered ∧ 관측가능 ∧ 빚감소" **안전 부분집합 한정**임을 받아들여야 함.
+2. **빚 축 확장 (가)** — *미착수, 승인됐다가 보류됨* (wi_260615dxx). 복잡도 단독 → +모듈크기(순수
+   LOC>250) +in-file dead code(CodeQL unused-local/private/도달불가). 전부 CodeQL/단순 메트릭,
+   ADR-0006 안(ast-grep/TS-AST 금지). `standing-fitness.ts`에 violation 출처만 추가하면 됨
+   (measureUnitDebt는 카운트만 늘어남). duplication은 CodeQL 기성 쿼리가 결과 0이라 보류 — 넣으려면
+   "CodeQL 열위" 실측 후 ast-grep ADR 별도(ADR-0017 철회조건).
+3. **L2 적용 범위 확장** — 동작 관측을 `node:fs` 등 named import까지 넓혀야 발화율이 오름. 단
+   false-green 위험과 맞바꿔야 함(D5 안전성과 트레이드오프). 신중히.
+4. **preload cross-repo 해소** — 타 repo 적용 시 preload를 ditto 설치 위치에서 해소(§8 참조).
+
+### 9.5 절대 하지 말 것 (이 대화에서 확정된 경계)
+- **deep-module·remove-ai-slops(slop) 류를 자동커밋 빚 카운터에 넣지 말 것.** 이들은 LLM 판단이라
+  before/after 카운트가 비결정적 → 자동커밋 게이트의 안전 전제를 깬다. ACG 자신도 deep-module을
+  메트릭이 아닌 dialectic "Deep Module Gate"로 둔다. 이 기준들이 필요하면 자동커밋이 아니라
+  **advisory 리뷰 출력**으로 붙여라(자동커밋 축과 분리).
+
+### 9.6 보류해도 살아있는 재사용 자산
+자동커밋을 안 살리더라도 아래는 "코드 건강 측정/리포트"로 독립 재사용 가능(브랜치에서 떼올 수 있음):
+- `src/acg/fitness/standing-fitness.ts` — CodeQL 커스텀 복잡도 problem 쿼리 → 함수단위 violation.
+- `src/acg/tidy/unit-debt.ts` — HEAD↔worktree 절대 debt 측정.
+
+### 9.7 재개 체크리스트
+1. `git fetch origin && git checkout archive/acg-full-bar-auto-commit`
+2. `bun install && bun run build && bun test` (baseline 확인; 1 fail은 §8의 로컬 데이터 무관건)
+3. §9.2 한계와 §9.3 autopilot 불변식을 먼저 납득. 의도가 여전히 "자동커밋"이면 9.4-(1)이 핵심,
+   "리뷰 보조"로 바뀌었으면 9.5대로 advisory로 재설계(자동커밋 축 폐기).
+4. 본격 빌드 전 ADR-0018/0019 + 새 결선안을 dialectic-review로 재압박(§8 dialectic-10 선례).
