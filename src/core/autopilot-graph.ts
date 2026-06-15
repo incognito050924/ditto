@@ -38,7 +38,7 @@ export function kindToOwner(kind: AutopilotNode['kind']): AutopilotNode['owner']
  * current status is an illegal transition that fails loudly. `rollback` undoes a
  * speculative dispatch (running/failed → pending) — used when a plan is rejected.
  */
-export type NodeEvent = 'dispatch' | 'pass' | 'fail' | 'block' | 'rollback' | 'retry';
+export type NodeEvent = 'dispatch' | 'pass' | 'fail' | 'block' | 'rollback' | 'retry' | 'reopen';
 
 const NODE_TRANSITIONS: Record<
   AutopilotNode['status'],
@@ -57,7 +57,11 @@ const NODE_TRANSITIONS: Record<
   },
   failed: { dispatch: 'running', rollback: 'pending' }, // retry re-dispatches
   blocked: { dispatch: 'running' }, // unblocked → re-dispatch
-  passed: {}, // terminal within a run
+  // `reopen` re-opens a passed node (80-plan §8, WU-3 ac-4): when a tidy pass
+  // uncovers a real defect in the implementation, the implement node is returned
+  // to pending so it (and a fresh tidy stage) re-runs — the only legal way out of
+  // the otherwise-terminal `passed` state.
+  passed: { reopen: 'pending' },
 };
 
 export function nodeTransition(

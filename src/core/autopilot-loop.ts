@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { collectTidyDiffStat, writeTidyClassification } from '~/acg/tidy/classifier';
 import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
 import { evidenceRef, relativePath, verdict } from '~/schemas/common';
 import { ActiveNodeLeaseStore } from './active-node-lease';
@@ -25,6 +26,7 @@ import {
   supersededByPromotion,
 } from './autopilot-graph';
 import { AutopilotStore } from './autopilot-store';
+import { planTidyOnImplementPass } from './autopilot-tidy';
 import { producePlanGate } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
 import { IntentStore } from './intent-store';
@@ -400,6 +402,16 @@ export const recordResultPayload = z
           'security-node pass, true splices a forward fix+re-check round (§2.4) under the ' +
           'convergence budget, false/absent closes the loop. Ignored for other node kinds.',
       ),
+    tidy_bug_found: z
+      .boolean()
+      .optional()
+      .describe(
+        'Tidy failure policy (80-plan §8, WU-3 ac-4). On a `refactor` (tidy) node FAIL, ' +
+          'true means the tidy pass uncovered a real defect in the implementation. The ' +
+          'engine then returns the implement node the tidy stage roots on to pending — it ' +
+          'does NOT fix the bug here and does NOT retry the tidy node in place (the fix ' +
+          'belongs to the implement node). Ignored for non-refactor nodes / on pass.',
+      ),
     // Pre-mortem coverage engine plan-stage output (§3.1/§7.2/§12). A design
     // (planner) node returns the brief it produced from the coverage sweep; on a
     // contentful design pass `producePlanGate` turns it into the approval_gate
@@ -463,6 +475,41 @@ export interface RecordResultOutcome {
   promoted_node_ids: string[];
   /** Pending successors superseded by the promoted subgraph; [] otherwise (wi_260610iex). */
   superseded_node_ids: string[];
+}
+
+/**
+ * WU-3 ac-1 seam: on a green `implement` pass, classify the just-made diff and
+ * (on ENTER) splice the tidy subgraph. Returns the promoted node ids ([] on SKIP).
+ * Fail-open: any precondition gap (no base sha, not a git work tree, empty diff)
+ * yields a SKIP classification — never a throw — so the absence of a base never
+ * hard-blocks the loop (§4.4 / OBJ-02). The classifier verdict is always written.
+ */
+async function spliceTidyStage(
+  repoRoot: string,
+  workItemId: string,
+  implementNode: AutopilotNode,
+  aps: AutopilotStore,
+): Promise<string[]> {
+  const wi = await new WorkItemStore(repoRoot).get(workItemId);
+  // The just-made diff is base…HEAD where base = the work item's started_at_sha.
+  // Absent base ⇒ empty diff-stat ⇒ classifier SKIPs (collectTidyDiffStat returns
+  // {files: []} when git fails, so no separate guard is needed here).
+  const diffStat = wi.started_at_sha
+    ? collectTidyDiffStat(repoRoot, wi.started_at_sha)
+    : { files: [] };
+  const graph = await aps.get(workItemId);
+  const plan = planTidyOnImplementPass({
+    implementNodeId: implementNode.id,
+    diffStat,
+    acceptanceIds: implementNode.acceptance_refs,
+    existingNodeIds: graph.nodes.map((n) => n.id),
+  });
+  // Persist the SKIP/ENTER verdict as an artifact (G3 — 축소는 드러낸다).
+  await writeTidyClassification(repoRoot, workItemId, plan.classification);
+  if (plan.nodes.length === 0) return [];
+  // Splice via addNodes (the integrity gate) — same path as planner promotion.
+  await aps.addNodes(workItemId, plan.nodes);
+  return plan.nodes.map((n) => n.id);
 }
 
 export async function recordResult(
@@ -702,6 +749,17 @@ export async function recordResult(
           : w;
       });
     }
+    // Tidy stage wiring (80-plan §8/§10, WU-3 ac-1): a green `implement` pass
+    // triggers the ⓪ classifier on the just-made diff (base = work item
+    // started_at_sha … HEAD). On ENTER the ④/⑦ tidy subgraph is spliced through
+    // the SAME addNodes path as planner generated_nodes. Fail-open by design — no
+    // base ref / not a git work tree ⇒ empty diff-stat ⇒ SKIP, never a throw
+    // (provider/precondition absence degrades, never hard-blocks: §4.4 / OBJ-02).
+    // The classifier verdict is persisted as an artifact regardless (G3).
+    if (node.kind === 'implement') {
+      const tidyPromoted = await spliceTidyStage(repoRoot, input.workItemId, node, aps);
+      promotedNodeIds = [...promotedNodeIds, ...tidyPromoted];
+    }
     return {
       node_id: node.id,
       status: 'passed',
@@ -713,6 +771,56 @@ export async function recordResult(
       reason: guardReason,
       promoted_node_ids: promotedNodeIds,
       superseded_node_ids: supersededNodeIds,
+    };
+  }
+
+  // Tidy bug-found policy (80-plan §8, WU-3 ac-4). A `refactor` (tidy) node that
+  // FAILS because it uncovered a real defect in the implementation does NOT get
+  // fixed or retried in place — the fix belongs to the implement node. Return the
+  // implement node the tidy stage roots on to pending (so it, and a fresh tidy
+  // stage, re-runs) and mark the tidy node failed (terminal, no retry/attempt
+  // increment). This runs BEFORE the generic decision policy so a tidy bug never
+  // burns the tidy node's retry budget. Guarded to a contentful refactor fail with
+  // the explicit signal; otherwise the normal policy below applies.
+  if (contentful && node.kind === 'refactor' && input.payload.tidy_bug_found === true) {
+    const implementDep = graph.nodes.find(
+      (n) => node.depends_on.includes(n.id) && n.kind === 'implement',
+    );
+    const reason =
+      implementDep !== undefined
+        ? `tidy found a bug — returning implement node ${implementDep.id} to pending (not fixing here, not retrying the tidy node in place) (ac-4)`
+        : 'tidy found a bug but no implement node found in depends_on — tidy node failed without reopening (ac-4)';
+    // Tidy node → failed (terminal): do NOT retry it in place.
+    await aps.updateNode(input.workItemId, node.id, (n) => ({
+      ...n,
+      status: nodeTransition(n.status, 'fail'),
+    }));
+    if (implementDep !== undefined) {
+      // Implement node passed → pending via the explicit `reopen` transition.
+      await aps.updateNode(input.workItemId, implementDep.id, (n) => ({
+        ...n,
+        status: nodeTransition(n.status, 'reopen'),
+      }));
+    }
+    await aps.appendDecision(input.workItemId, {
+      ts: (input.now ?? new Date()).toISOString(),
+      node_id: node.id,
+      failure_class: 'fixable',
+      decision: 'escalate',
+      reason,
+      attempts: node.attempts,
+    });
+    return {
+      node_id: node.id,
+      status: 'failed',
+      outcome: 'fail',
+      guard_contentful: contentful,
+      decision: 'escalate',
+      failure_class: 'fixable',
+      cap_exceeded: false,
+      reason,
+      promoted_node_ids: [],
+      superseded_node_ids: [],
     };
   }
 
