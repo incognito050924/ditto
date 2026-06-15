@@ -1,6 +1,6 @@
 # ADR-0018: L2 동작 보존 — effect interception(record/replay) 프레임워크
 
-- 상태: proposed (2026-06-15 사용자 결정 — "① CLI 단독 full-bar" 조사 후 옵션 채택. **결정 채택이며 구현/dialectic 재검증은 미완** — implementation·반증 라운드로 검증되기 전까지 proposed 유지. 관련: wi_260615t8o + full-bar-wiring WI)
+- 상태: proposed (2026-06-15 사용자 결정 — "① CLI 단독 full-bar" 조사 후 옵션 채택. **결정 채택이며 구현 검증은 미완** — implementation으로 검증되기 전까지 proposed 유지. dialectic-10(review, verdict=revise) 통과 — OBJ-B 반영해 D5 신설. 관련: wi_260615t8o + full-bar-wiring WI, reports/design/agentic-governance/reviews/dialectic-10.md)
 - 결정 일자: 2026-06-15
 - 결정자: hskim, claude
 - 관련: ADR-0017(정리 워크플로 — 이 ADR이 그 D5의 L2 differential을 미수정 standing 코드로 확장), ADR-0006(정적 분석 엔진 = CodeQL 단일 — 이 ADR은 그 D2 "TS-AST 금지"를 침범하지 않음을 명시), `src/acg/tidy/l2-differential.ts`(현 pure/trace 모드), `reports/design/agentic-governance/80-acg-cleanup-deslop-plan.md` §4.2·§4.3·§4.4, wi_260615t8o(record/replay/intercept DEFERRED 항목)
@@ -28,6 +28,10 @@ trace는 회귀 *탐지*이지 보존 *증명*이 아니다(Rice). 정규화 불
 ### D4 — 안전: 단일 스코프 패치 + finally 원복 + 격리 실행
 
 패치는 단일 실행 스코프에서만 적용하고 `finally`로 반드시 원복한다(전역 오염 금지). 실 I/O를 RECORD 모드에서 실제로 수행하면 부수효과가 외부에 남으므로, full-bar 자동 정리 대상은 격리(워크트리 / 샌드박스)에서만 실행한다.
+
+### D5 — 빈 trace는 "미반증"이 아니라 "미관측"이다 (dialectic-10 OBJ-B)
+
+effect-bearing으로 분류된 unit(화이트리스트 effect 채널을 import/사용하는 unit)에서 OLD 실행이 effect를 0개 관측하면, 그 결과를 `unrefuted`(= full-bar 자격)로 통과시켜서는 **안 된다**. 빈 trace는 "동작이 같다"는 증거가 아니라 "interception이 이 unit의 effect에 도달하지 못했다"는 신호(D1의 적용 경계 — named import 직접 바인딩 등)이므로, `unverified`로 강등하고 diff-only로 처리한다(full 자격 박탈). 순수 함수처럼 effect-bearing이 아닌 unit은 이 규칙의 대상이 아니다(빈 trace가 정상). 이 분류기가 없으면 ditto 자기 코드(named import 우세)가 거짓 green으로 자동커밋돼 §4.4 "검증 연극"을 재현한다. 구현: trace 모드가 effect-bearing unit의 zero-trace를 `unverified`/diff-only로 반환한다(`runTrace`의 zero-trace 경로).
 
 ## 철회/재검토 조건
 

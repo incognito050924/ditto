@@ -1,0 +1,174 @@
+{
+  "schema_version": "0.1.0",
+  "review_id": "rv_12561930e8",
+  "round": 1,
+  "input": {
+    "mode": "review",
+    "target_artifact": ".ditto/knowledge/adr/ADR-0018-l2-effect-interception-record-replay.md + .ditto/knowledge/adr/ADR-0019-standing-code-fitness-codeql-refactor-gate.md",
+    "question": "ADR-0018(L2 effect-interception) + ADR-0019(CodeQL standing-code fitness gate)로 본격 구현에 착수해도 되는가? ① 목표(ditto refactor --scope가 standing 코드에서 §4.4 full-bar 자동커밋에 도달)를 달성하는 건전한 설계인가?",
+    "intent_refs": ["reports/handoffs/2026-06-15-acg-full-bar.md §1 (① 목표 — 범위 보존)"],
+    "acceptance_refs": [
+      "handoff §3 wi_260615t8o ac-2/ac-3 (L2 provider 통합)",
+      "handoff §3 wi_260615lj6 ac-1/ac-2/ac-3/ac-4 (CodeQL fitness + debt + refactor 결선)"
+    ],
+    "evidence_refs": [
+      { "kind": "file", "path": "src/acg/tidy/effect-interception.ts", "summary": "L2 코어 interceptEffects/compareTraces (9/9)" },
+      { "kind": "file", "path": "src/acg/tidy/l2-differential.ts", "summary": "pure/trace differential" },
+      { "kind": "file", "path": "src/acg/tidy/unit-refactor.ts", "summary": "assessUnitDebt/decideUnitTidy 게이트" },
+      { "kind": "file", "path": "src/cli/commands/refactor.ts", "summary": "baselineGreen/behaviorGreen/debt 하드코딩" },
+      { "kind": "file", "path": "src/core/codeql/runner.ts", "summary": "runCodeqlAnalysis (실패 시 throw)" }
+    ],
+    "constraints": {
+      "scope_guard": ["① 목표(full-bar 자동커밋 메커니즘) 보존", "push 0 불변식(ADR-0017 D8)", "ADR-0006 TS-AST 금지"],
+      "non_goals": ["비결정성 false-refute 빈도 판정", "interception 화이트리스트 완전성 판정"],
+      "review_budget": "thorough",
+      "max_rounds": 1
+    },
+    "model_policy": {
+      "producer": "current-host",
+      "opponent_preferred": "codex",
+      "opponent_fallback": ["claude-dialectic-opponent"],
+      "synthesizer": "claude-opus"
+    }
+  },
+  "producer": {
+    "position": "두 ADR 설계는 ① 목표를 달성할 수 있는 건전한 설계이며 착수에 충분하다. full-bar는 5입력 AND 게이트(unit-refactor.ts:82-167)이고 coverage 2축은 이미 실값(refactor.ts:119-126). 남은 건 behaviorGreen(L2)·debt(CodeQL) 배선뿐. fail-open이 게이트에 박혀 모든 degraded가 diff-only로 빠진다. L2 코어 9/9 검증됨.",
+    "proposal": "ADR을 proposed로 둔 채 handoff §5 순서로 구현 착수. 4개 리스크는 게이트 구조+fail-open으로 흡수되어 '잘못 커밋'이 아니라 '보류'로 귀결. accepted 승격은 구현+검증 후.",
+    "evidence": [
+      { "kind": "file", "path": "src/acg/tidy/unit-refactor.ts", "lines": { "start": 82, "end": 167 }, "summary": "full-bar = 5입력 AND 게이트" },
+      { "kind": "file", "path": "src/cli/commands/refactor.ts", "lines": { "start": 119, "end": 126 }, "summary": "coverage 2축 이미 실값" },
+      { "kind": "file", "path": "src/acg/tidy/l2-differential.ts", "lines": { "start": 113, "end": 137 }, "summary": "pure unit은 interception 없이 full-bar 도달" }
+    ],
+    "assumptions": [
+      "codeql CLI가 이 머신에서 실행 가능 (read-only라 미실행)",
+      "coverage가 존재하는 standing unit이 ditto 안에 실재 (어떤 unit이 covered인지 미측정)",
+      "CodeQL metrics 쿼리가 TS/JS에서 duplication·complexity를 SARIF로 산출 (미검증 — 리스크 2 핵심)"
+    ],
+    "known_limits": [
+      "L2 provider 진입점(covered unit을 워크트리서 실행해 trace 추출) 미구현이 가장 큰 미지수 (t8o ac-2 PARTIAL)",
+      "dogfood full-bar 발화 미보장: ditto 자기 코드 대부분 named import→interception 미관측 + side-effect라 pure도 아님 → diff-only로 빠질 가능성",
+      "CodeQL 실패→degraded 변환 미배선 (runner.ts:203-230 throw)",
+      "CodeQL DB빌드 비용 HEAD↔worktree 2회 = 최대 6분/refactor"
+    ]
+  },
+  "opponent": {
+    "run": {
+      "provider": "codex",
+      "model": "codex-cli 0.139.0 (gpt-5.4 class)",
+      "command": "Agent subagent_type=codex:codex-rescue (adversarial-review surface, Claude Code host)",
+      "timestamp": "2026-06-15T14:10:00Z",
+      "fallback_from": null,
+      "fallback_reason": "none"
+    },
+    "objections": [
+      {
+        "id": "OBJ-A",
+        "severity": "critical",
+        "claim": "CodeQL metrics 쿼리는 SARIF alert(result)를 내지 않아 violation ID를 생성하지 못한다 — ADR-0019 D1은 기성 로컬팩으로 구현 불가.",
+        "evidence": [
+          { "kind": "command", "command": "grep @kind / where none() over codeql js qlpack 2.3.11 Metrics/*.ql", "summary": "FunCyclomaticComplexity.ql=@kind treemap; FLinesOfDuplicatedCode.ql=treemap+where none(); 전 Metrics/*.ql treemap. analyze는 @kind problem/path-problem만 SARIF result로 산출 — synthesizer가 로컬에서 직접 확인" },
+          { "kind": "file", "path": "src/core/codeql/sarif.ts", "lines": { "start": 99, "end": 100 }, "summary": "parseSarif는 runs[].results[]만 수집; metrics는 거기 없음" }
+        ],
+        "maps_to": "ADR-0019 D1 / src/core/codeql/sarif.ts:99-100",
+        "failure_mode": "sarifToViolationIds → [] → debt before==after 항상 → full-bar가 debt로 절대 발화 못 함 (또는 공허하게 발화).",
+        "required_fix": "ADR-0019 D1을 임계값 기반 커스텀 @kind problem 쿼리(복잡도>N, 중복블록≥M행)로 교체 — 단일 CodeQL 엔진 유지(ADR-0006 준수). D1의 기존 철회조건(line 35) 발동."
+      },
+      {
+        "id": "OBJ-B",
+        "severity": "critical",
+        "claim": "빈 effect trace가 '반박 없음(unrefuted)'=full-bar 자격으로 false-pass한다. '기대 effect 있는데 0 관측' 분류기가 ADR에도 코드에도 없다.",
+        "evidence": [
+          { "kind": "file", "path": "src/acg/tidy/l2-differential.ts", "lines": { "start": 215, "end": 220 }, "summary": "seeds:[] + noSeam 미설정 → 루프 skip → status:unrefuted, autoCommit:full" }
+        ],
+        "maps_to": "src/acg/tidy/l2-differential.ts:176-221 / ADR-0018 D3",
+        "failure_mode": "ditto named-import effect unit은 관측 effect=0인데 behaviorGreen=true(false green) → §4.4 '검증 연극' 불변식 위반.",
+        "required_fix": "ADR-0018 D5 신설: OLD 실행 trace가 비었는데 unit이 effect-bearing으로 분류되면 unverified(diff-only), full 자격 박탈. 빈 trace=미관측≠미반증."
+      },
+      {
+        "id": "OBJ-C",
+        "severity": "high",
+        "claim": "CodeQL fail-open이 ADR 텍스트(D4)에만 있고 코드에 없다 — runner는 throw, refactor는 catch/timebox 없음.",
+        "evidence": [
+          { "kind": "file", "path": "src/core/codeql/runner.ts", "lines": { "start": 203, "end": 230 }, "summary": "DB create/analyze 실패 시 throw" }
+        ],
+        "maps_to": "ADR-0019 D4 / src/core/codeql/runner.ts:203-230",
+        "failure_mode": "codeql 부재/실패/타임아웃 시 refactor.ts catch가 RUNTIME_ERROR_EXIT(152-153)로 fail-closed → fail-open 불변식 깨짐.",
+        "required_fix": "refactor.ts가 runCodeqlAnalysis throw를 try/catch+타임박스로 degraded(diff-only)로 변환. fail-open은 호출부 코드에서 보존."
+      },
+      {
+        "id": "OBJ-D",
+        "severity": "high",
+        "claim": "하드코딩 baselineGreen/behaviorGreen=true가 debt 어댑터 배선 순간 실 증거 없이 full-bar 오발화.",
+        "evidence": [
+          { "kind": "file", "path": "src/cli/commands/refactor.ts", "lines": { "start": 130, "end": 132 }, "summary": "baselineGreen:true, behaviorGreen:true 하드코딩" }
+        ],
+        "maps_to": "src/cli/commands/refactor.ts:130-132 / unit-refactor.ts:160",
+        "failure_mode": "세 placeholder를 piecemeal 배선하면 공허한 full-bar 발화.",
+        "required_fix": "세 입력(baselineGreen/behaviorGreen/debt)을 실 출처로 atomic 교체 — barMet→commitTidyStructural는 셋 다 실값일 때만."
+      },
+      {
+        "id": "OBJ-E",
+        "severity": "critical",
+        "claim": "ditto src effect는 named import 직접호출이라 interception이 0건 관측. (51 named node import, 0 `import * as fs`, 0 fs.method 호출, 131 named 직접호출, 29 Bun.spawn)",
+        "evidence": [
+          { "kind": "command", "command": "rg over src/ for node effect import/call shapes", "summary": "named import 직접호출 우세, patchable 객체참조 거의 없음" }
+        ],
+        "maps_to": "handoff §4 lines 89-90 / src/acg/tidy/effect-interception.ts:14-21",
+        "failure_mode": "dogfood에서 L2 관측 effect=0 → behaviorGreen degraded.",
+        "required_fix": "OBJ-B 수정(미관측→diff-only)으로 안전화. full-bar 도달은 pure/injected-deps unit으로 한정 — handoff가 이미 인정한 한계라 novel 아님(비gating)."
+      },
+      {
+        "id": "OBJ-F",
+        "severity": "critical",
+        "claim": "runL2Differential 프로덕션 호출자 0건. refactor.ts는 입력/seed/실행 진입점 없음.",
+        "evidence": [
+          { "kind": "command", "command": "rg runL2Differential src", "summary": "export 선언만, 호출자 0" }
+        ],
+        "maps_to": "src/acg/tidy/l2-differential.ts:74,146 / src/cli/commands/refactor.ts:119",
+        "failure_mode": "ac-2/ac-3 미구현 상태 — 입력 출처는 coverage(characterization) seeds.",
+        "required_fix": "handoff §5.1대로 OLD/NEW 워크트리에서 covered unit 실행해 trace 뽑는 진입점 구현. coverage 선행 게이트가 '입력 없는 임의 함수'를 차단(unit-refactor.ts:117-129)."
+      }
+    ],
+    "missing_alternatives": [
+      "더 단순한 첫 슬라이스(OBJ-G, medium): L2 건너뛰고 bun test --coverage + post-refactor bun test로 behavior 증명, 기존 problem alert만 debt로 — 단 over-fitting/wrong-internal-call 회귀 탐지를 잃음(synthesizer 기각)."
+    ],
+    "scope_creep_risks": [
+      "양 ADR 합산 신규 컴포넌트 수가 ① 최소 슬라이스 초과 가능 (channel registry, worktree 실행 하니스, seed 발견, trace 완전성 분류기, custom problem 쿼리, fail-open 어댑터 등) — synthesizer는 handoff §5 순서가 atomic 결선에 필요해 유지 판정."
+    ],
+    "verification_gaps": [
+      "dogfood full-bar가 실제 covered+effect-observable+debt-reduced unit에서 발화하는지 미증명",
+      "새 D1 problem 쿼리 임계값(N/M) 기본값 미정"
+    ]
+  },
+  "synthesizer": {
+    "verdict": "revise",
+    "synthesis": "설계 골격(5입력 AND 게이트 + fail-open)은 건전하고 L2 코어 9/9·L1 coverage 배선은 실재한다. 그러나 두 admissible critical objection(OBJ-A 구현 불가, OBJ-B full-bar false-pass)은 ADR 텍스트대로면 게이트를 공허하게 통과시키거나 빌드 불가하게 만드는 결함이며, synthesizer가 소스로 직접 확인했다. 더 큰 논쟁이 아니라 확정 결함이고 ADR 텍스트로 싸게 고쳐지므로 reject가 아닌 revise. OBJ-G(taste/scope)는 사용자 비준 범위(pure-only/coverage-only 기각)를 비용으로 되돌리는 것이라 grounded 기각. required_edits 1·2·3 반영 시 handoff §5 순서로 착수 가능.",
+    "accepted_objections": ["OBJ-A", "OBJ-B", "OBJ-C", "OBJ-D", "OBJ-F"],
+    "rejected_objections": [
+      {
+        "objection": "OBJ-E (interception 0건 관측)",
+        "reason": "admissible severity이나 NOT NOVEL — handoff §4 lines 89-90이 이미 동일 한계 명시. ADR-0018 D1의 모듈-namespace 패치가 named import 일부를 가로챌 여지 있고, 잔여는 OBJ-B 수정(미관측→degrade)+dogfood AC로 흡수. 독립 블로커 아님.",
+        "evidence": [{ "kind": "file", "path": "reports/handoffs/2026-06-15-acg-full-bar.md", "summary": "§4 lines 89-90이 이 한계를 이미 자인" }]
+      },
+      {
+        "objection": "OBJ-G (더 단순한 L2-없는 슬라이스)",
+        "reason": "coverage-only/full-green-suite는 behavior PASSING만 증인하지 behavior PRESERVATION(old↔new differential)을 증인 못 함 — over-fitting/wrong-internal-call 회귀를 놓침(l2-differential.ts:1-6). 사용자가 pure-only/coverage-only를 명시 기각(ADR-0018 alt a, ADR-0019 alt a). 비용 이유로 비준된 범위를 축소하는 것은 헌장 금지(조용히 축소).",
+        "evidence": [{ "kind": "file", "path": "src/acg/tidy/l2-differential.ts", "lines": { "start": 1, "end": 6 }, "summary": "L2 = 상대 오라클(old≡new), over-fitting 탐지" }]
+      }
+    ],
+    "required_edits": [
+      "[OBJ-B] ADR-0018 D5 신설: TRACE 변수에서 OLD 실행 effect trace가 비었는데 unit이 effect-bearing(side-effect 채널 import 보유)으로 분류되면 → unverified(diff-only), full 자격 박탈. 빈 trace=미관측≠미반증. 구현: runTrace가 effect-bearing unit의 zero-trace를 unverified/diff-only로 반환(현 l2-differential.ts:215-220은 unrefuted/full = false-pass).",
+      "[OBJ-A] ADR-0019 D1 재작성: 'metrics 쿼리로 산출' → '임계값 기반 커스텀 @kind problem 쿼리(cyclomatic>N, duplicated-block≥M행)로 산출. @kind treemap/where none() metrics 쿼리는 SARIF results 미산출(sarif.ts:99-100)이라 사용 불가. 단일 CodeQL 엔진 유지(ADR-0006 준수)'. D1 기존 철회조건(line 35) 발동.",
+      "[OBJ-C] ADR-0019 D4 코드 의무화: refactor.ts가 runCodeqlAnalysis throw(runner.ts:204,227)를 try/catch+타임박스로 degraded(diff-only) 변환. fail-open은 ADR 텍스트가 아니라 호출부 코드에서 보존.",
+      "[OBJ-D] 구현 순서 제약(ADR 무수정): 세 하드코딩 입력(baselineGreen/behaviorGreen/debt)을 실 출처로 atomic 교체 — debt 어댑터를 behaviorGreen:true 하드코딩 남은 채 배선 금지(역도). barMet→commitTidyStructural는 셋 다 실값 도착 시에만."
+    ],
+    "remaining_open_questions": [
+      "L2 provider가 ditto 자기 named-import effect unit에서 non-empty trace를 내는지 미증명 — required_edit 1이 안전화(degrade)하지만 full-bar 도달 가능성은 별개. ① dogfood full-bar는 초기엔 pure 또는 require/injected-object unit에서만 실증될 수 있음.",
+      "CodeQL DB빌드 비용 ~최대 6분/refactor (opt-in 표면이라 비gating, ADR-0019 line 34 철회조건 관찰).",
+      "새 D1 problem 쿼리 임계값(N=복잡도, M=중복행) 기본값 — 구현 시 방어 가능한 기본값 필요, 아니면 debt 신호가 임의적."
+    ],
+    "evidence_refs": [
+      { "kind": "command", "command": "codeql --version; grep @kind codeql js qlpack 2.3.11 Metrics/*.ql", "summary": "codeql 2.25.6; 전 Metrics/*.ql @kind treemap, duplication은 where none() — OBJ-A 확정" }
+    ]
+  }
+}
