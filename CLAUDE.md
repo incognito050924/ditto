@@ -305,7 +305,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=9bc5a2f8e8b9847bb3929c419481d4aea80fe3a852440e40461eccc3aa5af0fc -->
+<!-- ditto:knowledge:start sha256=4e0dd098c4b5c98170135eba28f80788cc4124b2fef153e8bb412aa236a283c0 -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -369,5 +369,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-0015 · accepted · Memory freshness 축2(코드↔SoT) 검출 — 증분 검출 채택, 델타/overlay 게이트
 - ADR-0016 · accepted · Dual-host 아키텍처 — DITTO는 Claude Code와 Codex 두 호스트에서 동작한다
 - ADR-0017 · accepted · 정리(Tidy/deslop) 절차를 ACG 게이트 위에 정립한다 — 2차 정적 엔진 없이
+- ADR-0018 · proposed · L2 동작 보존 — effect interception(record/replay) 프레임워크
+- ADR-0019 · proposed · standing-code fitness 분석기 — CodeQL을 refactor 게이트로
 
 <!-- ditto:knowledge:end -->
