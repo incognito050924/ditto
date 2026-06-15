@@ -192,27 +192,49 @@ export function autopilotForcesContinuation(a: Autopilot): boolean {
 }
 
 /**
+ * Does the autopilot graph lack a real plan? True when no autopilot.json exists at
+ * all (pilot absent) OR a fig-leaf autopilot.json exists with zero mutating
+ * (implementer-owned) nodes — the "플랜 없는 degenerate" bypass (handoff §2 B). A
+ * graph that ever held an implementer node means the path was genuinely taken, so
+ * this returns false for it.
+ */
+function autopilotHasNoPlan(pilot: ArtifactRead<Autopilot>): boolean {
+  if (pilot.status === 'absent') return true;
+  if (pilot.status === 'ok') return !pilot.data.nodes.some((n) => n.owner === 'implementer');
+  return false; // malformed is fail-closed earlier; never reached for the gate
+}
+
+/**
  * (B) plan→autopilot transition gate (中, wi_260615xby). Returns a continuation
- * reason when a non-trivial work item is about to close on a completion.json
- * ALONE — autopilot.json was never bootstrapped (pilot absent) — so it bypassed
- * the finalize→bootstrap→drive path. Non-trivial means it changed code
- * (completion OR work-item `changed_files` non-empty). A no-change close, an
- * `autopilot_exempt` work item, a terminal work item, and any present
- * autopilot.json (the path WAS taken) all pass — the gate keys on pilot ABSENT,
- * disjoint from the all-absent strong-block. Empty array = nothing to force.
+ * reason when a non-trivial work item is about to CLOSE on a completion.json that
+ * passes its own gate, yet autopilot was never really run (no autopilot.json, or a
+ * fig-leaf graph with no plan). It bypassed the finalize→bootstrap→drive path.
+ *
+ * Guards (all must hold), each closing a dialectic objection:
+ * - `completionWouldClose` — the completion passes completionGate+evidenceGate, so
+ *   the work is actually closing. A partial/handoff checkpoint (non-passing
+ *   completion) is NOT a bypass-to-close and never double-messages (OBJ-1/OBJ-5).
+ * - `autopilotHasNoPlan(pilot)` — absent OR degenerate fig-leaf (OBJ-2).
+ * - non-terminal status — done/abandoned already closed.
+ * - not `autopilot_exempt` — the explicit escape hatch.
+ * - changed code (completion OR work-item `changed_files` non-empty) — a no-change
+ *   close (investigation/docs) is not the bypass this gate targets.
+ * Keys on completion PRESENT + no plan, disjoint from the all-absent strong-block.
  */
 export function autopilotBypassForcesContinuation(
   workItem: WorkItem,
   completion: ArtifactRead<z.infer<typeof completionContract>>,
   pilot: ArtifactRead<Autopilot>,
+  completionWouldClose: boolean,
 ): string[] {
-  if (completion.status !== 'ok' || pilot.status !== 'absent') return [];
+  if (completion.status !== 'ok' || !completionWouldClose) return [];
+  if (!autopilotHasNoPlan(pilot)) return [];
   if (!NON_TERMINAL_STATUSES.includes(workItem.status)) return [];
   if (workItem.autopilot_exempt === true) return [];
   const changedCode = completion.data.changed_files.length > 0 || workItem.changed_files.length > 0;
   if (!changedCode) return [];
   return [
-    `work item ${workItem.id} is closing on completion.json alone without going through autopilot (no autopilot.json). Non-trivial work should run finalize → bootstrap → autopilot drive (ditto autopilot bootstrap, then the autopilot skill). To close without autopilot, set autopilot_exempt:true on the work item.`,
+    `work item ${workItem.id} changed code but is closing on completion.json alone, without going through autopilot (no real plan was ever run). Non-trivial work should run finalize → bootstrap → autopilot drive (ditto autopilot bootstrap ${workItem.id}, then the autopilot skill). To close without autopilot, run "ditto autopilot exempt ${workItem.id}" or transition the work item to done/abandoned.`,
   ];
 }
 
@@ -535,11 +557,15 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   // force continuation (dialectic P1 — ACG assigns goal-wording judgment to
   // human/LLM review, not a deterministic block).
   const advisories: string[] = [];
+  // Whether the completion passes its OWN gates (so the work is actually closing,
+  // not a partial/handoff checkpoint). Gates the (B) bypass check below.
+  let completionWouldClose = false;
   if (completion.status === 'ok') {
     const g = completionGate(workItem, completion.data);
     if (!g.pass) reasons.push(...g.reasons);
     const e = completionEvidenceGate(completion.data);
     if (!e.pass) reasons.push(...e.reasons);
+    completionWouldClose = g.pass && e.pass;
   }
   if (conv.status === 'ok') {
     const g = convergenceGate(conv.data);
@@ -549,14 +575,14 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     reasons.push('autopilot has runnable node(s); the work item is not complete yet');
   }
   // (B) plan→autopilot transition gate (中, wi_260615xby). A non-trivial work item
-  // about to close on a completion.json ALONE — autopilot.json was never
-  // bootstrapped — bypassed the finalize→bootstrap→drive path. Force continuation
-  // so the work runs through autopilot, UNLESS the work item is explicitly exempt.
-  // Non-trivial = it changed code (completion or work-item changed_files non-empty);
-  // a no-change close (investigation/docs) and an exempt work item pass. A present
-  // autopilot.json (any plan) means the path WAS taken, so this never fires then —
-  // it keys on pilot ABSENT, disjoint from the strong-block below (completion absent).
-  reasons.push(...autopilotBypassForcesContinuation(workItem, completion, pilot));
+  // actually CLOSING on a completion.json (it passes its own gate) yet with no real
+  // autopilot plan ever run bypassed finalize→bootstrap→drive. See the helper for
+  // the full guard set (completion-would-close, no-plan, non-terminal, not exempt,
+  // changed code) — disjoint from the strong-block below (which needs completion
+  // ABSENT) so the two never double-message.
+  reasons.push(
+    ...autopilotBypassForcesContinuation(workItem, completion, pilot, completionWouldClose),
+  );
   // Axis-2 intent drift: the chain (intent → work-item → autopilot → completion)
   // is conserved by construction at finalize; this catches post-finalize
   // divergence (goal rewrite, AC grow/shrink, invented refs) before the work item

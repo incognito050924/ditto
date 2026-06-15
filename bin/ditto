@@ -23017,6 +23017,53 @@ var autopilotReject = defineCommand({
     }
   }
 });
+var autopilotExempt = defineCommand({
+  meta: {
+    name: "exempt",
+    description: "Mark a work item exempt from the plan\u2192autopilot Stop gate (or --unset)"
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    unset: {
+      type: "boolean",
+      description: "Clear the exemption instead of setting it",
+      default: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const items = new WorkItemStore(repoRoot);
+    if (!await items.exists(args.workItem)) {
+      writeError(`work item ${args.workItem} not found`);
+      process.exit(RUNTIME_ERROR_EXIT);
+      return;
+    }
+    const exempt = !args.unset;
+    try {
+      await items.update(args.workItem, (current) => {
+        const { autopilot_exempt: _drop, ...rest } = current;
+        return exempt ? { ...rest, autopilot_exempt: true } : rest;
+      });
+      if (format === "json") {
+        writeJson2({ work_item_id: args.workItem, autopilot_exempt: exempt });
+      } else {
+        writeHuman(exempt ? `Work item ${args.workItem} is now autopilot-exempt (closes on completion.json alone).` : `Work item ${args.workItem} is no longer autopilot-exempt.`);
+      }
+    } catch (err) {
+      writeError(`exempt failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var autopilotCommand = defineCommand({
   meta: {
     name: "autopilot",
@@ -23027,6 +23074,7 @@ var autopilotCommand = defineCommand({
     status: autopilotStatus,
     approve: autopilotApprove,
     reject: autopilotReject,
+    exempt: autopilotExempt,
     "next-node": autopilotNextNode,
     "record-result": autopilotRecordResult,
     complete: autopilotComplete,
@@ -30596,8 +30644,17 @@ function autopilotForcesContinuation(a2) {
     return false;
   return hasRunnableNode(a2);
 }
-function autopilotBypassForcesContinuation(workItem2, completion, pilot) {
-  if (completion.status !== "ok" || pilot.status !== "absent")
+function autopilotHasNoPlan(pilot) {
+  if (pilot.status === "absent")
+    return true;
+  if (pilot.status === "ok")
+    return !pilot.data.nodes.some((n2) => n2.owner === "implementer");
+  return false;
+}
+function autopilotBypassForcesContinuation(workItem2, completion, pilot, completionWouldClose) {
+  if (completion.status !== "ok" || !completionWouldClose)
+    return [];
+  if (!autopilotHasNoPlan(pilot))
     return [];
   if (!NON_TERMINAL_STATUSES.includes(workItem2.status))
     return [];
@@ -30607,7 +30664,7 @@ function autopilotBypassForcesContinuation(workItem2, completion, pilot) {
   if (!changedCode)
     return [];
   return [
-    `work item ${workItem2.id} is closing on completion.json alone without going through autopilot (no autopilot.json). Non-trivial work should run finalize \u2192 bootstrap \u2192 autopilot drive (ditto autopilot bootstrap, then the autopilot skill). To close without autopilot, set autopilot_exempt:true on the work item.`
+    `work item ${workItem2.id} changed code but is closing on completion.json alone, without going through autopilot (no real plan was ever run). Non-trivial work should run finalize \u2192 bootstrap \u2192 autopilot drive (ditto autopilot bootstrap ${workItem2.id}, then the autopilot skill). To close without autopilot, run "ditto autopilot exempt ${workItem2.id}" or transition the work item to done/abandoned.`
   ];
 }
 function acgReviewForcesContinuation(graph) {
@@ -30758,6 +30815,7 @@ var stopHandler = async (input) => {
   }
   const reasons = [];
   const advisories = [];
+  let completionWouldClose = false;
   if (completion.status === "ok") {
     const g3 = completionGate(workItem2, completion.data);
     if (!g3.pass)
@@ -30765,6 +30823,7 @@ var stopHandler = async (input) => {
     const e2 = completionEvidenceGate(completion.data);
     if (!e2.pass)
       reasons.push(...e2.reasons);
+    completionWouldClose = g3.pass && e2.pass;
   }
   if (conv.status === "ok") {
     const g3 = convergenceGate(conv.data);
@@ -30774,7 +30833,7 @@ var stopHandler = async (input) => {
   if (pilot.status === "ok" && autopilotForcesContinuation(pilot.data)) {
     reasons.push("autopilot has runnable node(s); the work item is not complete yet");
   }
-  reasons.push(...autopilotBypassForcesContinuation(workItem2, completion, pilot));
+  reasons.push(...autopilotBypassForcesContinuation(workItem2, completion, pilot, completionWouldClose));
   if (intent.status === "ok" && pilot.status === "ok") {
     const d2 = intentDriftGate({
       intent: intent.data,
@@ -35804,4 +35863,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=0667ff9b6b599718d5210cf45366a43aadc50584156746aeedc810f940f078b3
+//# ditto-src-stamp=c6db13e25c793a5c6f276f86b5c9ca700fbc33bea65df072954dcb299807ceda

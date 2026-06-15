@@ -331,8 +331,8 @@ describe('stopHandler', () => {
       await writeArtifact('completion.json', passingCompletion({ changed_files: ['src/x.ts'] }));
       const out = await run({ stop_hook_active: false });
       expect(out.exitCode).toBe(2);
-      expect(out.stderr).toContain('autopilot');
-      expect(out.stderr).toContain('autopilot_exempt');
+      expect(out.stderr).toContain('without going through autopilot');
+      expect(out.stderr).toContain('ditto autopilot exempt');
     });
 
     test('autopilot_exempt work item closes on completion alone => exit 0', async () => {
@@ -369,6 +369,34 @@ describe('stopHandler', () => {
       const out = await run({ stop_hook_active: false });
       expect(out.exitCode).toBe(2);
       expect(out.stderr).toContain('autopilot');
+    });
+
+    test('OBJ-1/OBJ-5: a NON-passing completion (handoff/partial checkpoint) does NOT fire the (B) gate', async () => {
+      // A partial/handoff completion misses a criterion → completionGate already
+      // blocks. The (B) message must stay silent (no double-messaging, and a
+      // handoff checkpoint of incomplete work is not a bypass-to-close).
+      await writeArtifact(
+        'completion.json',
+        completion({
+          changed_files: ['src/x.ts'],
+          acceptance: [{ criterion_id: 'ac-1', verdict: 'pass' }],
+        }),
+      );
+      const out = await run({ stop_hook_active: false });
+      expect(out.exitCode).toBe(2); // blocked by completion gate, not (B)
+      expect(out.stderr).toContain('missing');
+      expect(out.stderr).not.toContain('without going through autopilot');
+    });
+
+    test('OBJ-2: a fig-leaf autopilot.json with no plan (no implementer node) still fires => exit 2', async () => {
+      // autopilot.json PRESENT but degenerate (zero mutating/implementer nodes) is
+      // the "플랜 없는 degenerate" bypass (handoff §2 B). A real graph with a
+      // passed implementer node passes (the sibling test above).
+      await writeArtifact('autopilot.json', autopilot({ nodes: [] }));
+      await writeArtifact('completion.json', passingCompletion({ changed_files: ['src/x.ts'] }));
+      const out = await run({ stop_hook_active: false });
+      expect(out.exitCode).toBe(2);
+      expect(out.stderr).toContain('without going through autopilot');
     });
   });
 

@@ -983,6 +983,64 @@ const autopilotReject = defineCommand({
   },
 });
 
+/**
+ * `ditto autopilot exempt` — set (or --unset) the work item's `autopilot_exempt`
+ * flag, the escape hatch for the (B) plan→autopilot Stop gate (wi_260615xby). The
+ * gate's error message points here so a user is never forced to hand-edit
+ * work-item.json. Writes only the work item; no autopilot graph is touched.
+ */
+const autopilotExempt = defineCommand({
+  meta: {
+    name: 'exempt',
+    description: 'Mark a work item exempt from the plan→autopilot Stop gate (or --unset)',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    unset: {
+      type: 'boolean',
+      description: 'Clear the exemption instead of setting it',
+      default: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const items = new WorkItemStore(repoRoot);
+    if (!(await items.exists(args.workItem))) {
+      writeError(`work item ${args.workItem} not found`);
+      process.exit(RUNTIME_ERROR_EXIT);
+      return;
+    }
+    const exempt = !args.unset;
+    try {
+      await items.update(args.workItem, (current) => {
+        const { autopilot_exempt: _drop, ...rest } = current;
+        return exempt ? { ...rest, autopilot_exempt: true } : rest;
+      });
+      if (format === 'json') {
+        writeJson({ work_item_id: args.workItem, autopilot_exempt: exempt });
+      } else {
+        writeHuman(
+          exempt
+            ? `Work item ${args.workItem} is now autopilot-exempt (closes on completion.json alone).`
+            : `Work item ${args.workItem} is no longer autopilot-exempt.`,
+        );
+      }
+    } catch (err) {
+      writeError(`exempt failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const autopilotCommand = defineCommand({
   meta: {
     name: 'autopilot',
@@ -994,6 +1052,7 @@ export const autopilotCommand = defineCommand({
     status: autopilotStatus,
     approve: autopilotApprove,
     reject: autopilotReject,
+    exempt: autopilotExempt,
     'next-node': autopilotNextNode,
     'record-result': autopilotRecordResult,
     complete: autopilotComplete,

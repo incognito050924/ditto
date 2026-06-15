@@ -192,3 +192,64 @@ describe('ditto autopilot reject', () => {
     expect(res.stderr).toContain('not pending');
   });
 });
+
+describe('ditto autopilot exempt (B escape hatch)', () => {
+  async function seedWorkItem(): Promise<void> {
+    const wiDir = join(dir, '.ditto', 'local', 'work-items', WI);
+    await mkdir(wiDir, { recursive: true });
+    await writeFile(
+      join(wiDir, 'work-item.json'),
+      `${JSON.stringify(
+        {
+          schema_version: '0.1.0',
+          id: WI,
+          title: 'exempt cli test',
+          source_request: 'mark exempt',
+          goal: 'work item can close without autopilot',
+          acceptance_criteria: [
+            { id: 'ac-1', statement: 'x', verdict: 'unverified', evidence: [] },
+          ],
+          status: 'in_progress',
+          owner_profile: 'workspace-write',
+          child_ids: [],
+          changed_files: [],
+          risks: [],
+          runs: [],
+          created_at: '2026-06-01T00:00:00.000Z',
+          updated_at: '2026-06-01T00:00:00.000Z',
+        },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+  }
+
+  async function readExempt(): Promise<unknown> {
+    const wi = JSON.parse(
+      await Bun.file(join(dir, '.ditto', 'local', 'work-items', WI, 'work-item.json')).text(),
+    );
+    return wi.autopilot_exempt;
+  }
+
+  test('sets autopilot_exempt=true', async () => {
+    await seedWorkItem();
+    const res = spawnDitto(['autopilot', 'exempt', '--workItem', WI, '--output', 'json']);
+    expect(res.exitCode).toBe(0);
+    expect(await readExempt()).toBe(true);
+  });
+
+  test('--unset clears the flag', async () => {
+    await seedWorkItem();
+    spawnDitto(['autopilot', 'exempt', '--workItem', WI]);
+    const res = spawnDitto(['autopilot', 'exempt', '--workItem', WI, '--unset']);
+    expect(res.exitCode).toBe(0);
+    expect(await readExempt()).toBeUndefined();
+  });
+
+  test('unknown work item errors clearly', async () => {
+    const res = spawnDitto(['autopilot', 'exempt', '--workItem', 'wi_nope0000']);
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).toContain('not found');
+  });
+});
