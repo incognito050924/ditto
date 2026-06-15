@@ -48,6 +48,21 @@ function trackedSrcFiles(repoRoot: string): string[] {
     .filter((s) => s.length > 0 && /\.[cm]?tsx?$/.test(s) && !/\.(test|spec)\./.test(s));
 }
 
+/** Tracked test files under `tests/` — used to scope the coverage run to the unit (item 2). */
+function trackedTestFiles(repoRoot: string): string[] {
+  const r = Bun.spawnSync(['git', 'ls-files', '--', 'tests'], {
+    cwd: repoRoot,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  if (r.exitCode !== 0) return []; // no test list → coverage falls back to the full suite (safe)
+  return r.stdout
+    .toString()
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && /\.[cm]?tsx?$/.test(s));
+}
+
 /** Load the repo's ArchitectureSpec if present (layer:<name> needs it); else undefined. */
 async function loadArchSpec(repoRoot: string) {
   const specPath = join(repoRoot, '.ditto', 'architecture-spec.json');
@@ -101,7 +116,10 @@ export const refactorCommand = defineCommand({
       // The L1 coverage provider, however, IS consulted here: if coverage can be
       // collected we report whether the unit is covered (full-bar-eligible); if not, we
       // fail open to diff-only (OBJ-02).
-      const coverageProvider = buildCoverageProvider(repoRoot);
+      const coverageProvider = buildCoverageProvider(repoRoot, undefined, {
+        scopeFiles: resolved,
+        testFiles: trackedTestFiles(repoRoot),
+      });
       const coverageProviderPresent = coverageProvider !== undefined;
       const unitCovered = coverageProvider
         ? (await coverageProvider.coverageOf({ files: resolved })).status === 'covered'

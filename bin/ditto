@@ -32862,26 +32862,52 @@ function parseLcov(lcov) {
   }
   return map;
 }
-function regionCoverage(map, region2) {
+var DEFAULT_COVERAGE_THRESHOLD = 0.8;
+function regionCoverage(map, region2, threshold = DEFAULT_COVERAGE_THRESHOLD) {
   const files = region2.files.map(normalizePath2);
   if (files.length === 0)
     return { status: "uncovered", coveredRatio: 0 };
   let found = 0;
   let hit = 0;
-  let everyFileExecuted = true;
+  let everyFileMeetsThreshold = true;
   for (const f3 of files) {
     const cov = map.get(f3);
-    if (!cov || cov.linesHit === 0)
-      everyFileExecuted = false;
-    if (cov) {
-      found += cov.linesFound;
-      hit += cov.linesHit;
-    }
+    const fileFound = cov?.linesFound ?? 0;
+    const fileHit = cov?.linesHit ?? 0;
+    const fileRatio = fileFound > 0 ? fileHit / fileFound : 0;
+    if (fileRatio < threshold)
+      everyFileMeetsThreshold = false;
+    found += fileFound;
+    hit += fileHit;
   }
   const coveredRatio = found > 0 ? hit / found : 0;
-  return { status: everyFileExecuted ? "covered" : "uncovered", coveredRatio };
+  return { status: everyFileMeetsThreshold ? "covered" : "uncovered", coveredRatio };
 }
-function defaultCollect(repoRoot) {
+function basenameNoExt(p) {
+  const base = normalizePath2(p).split("/").pop() ?? "";
+  const dot = base.lastIndexOf(".");
+  return dot > 0 ? base.slice(0, dot) : base;
+}
+function deriveUnitTestPaths(unitFiles, testFiles) {
+  const bases = new Set;
+  for (const f3 of unitFiles) {
+    const b2 = basenameNoExt(f3);
+    if (b2)
+      bases.add(b2);
+  }
+  const out = new Set;
+  for (const t2 of testFiles) {
+    const tn = normalizePath2(t2);
+    for (const b2 of bases) {
+      if (tn.includes(b2)) {
+        out.add(tn);
+        break;
+      }
+    }
+  }
+  return [...out];
+}
+function defaultCollect(repoRoot, testPaths) {
   let covDir;
   try {
     covDir = mkdtempSync(join64(tmpdir(), "ditto-cov-"));
@@ -32889,7 +32915,16 @@ function defaultCollect(repoRoot) {
     return { ok: false, reason: `could not create coverage dir: ${String(err)}` };
   }
   try {
-    Bun.spawnSync(["bun", "test", "--coverage", "--coverage-reporter=lcov", `--coverage-dir=${covDir}`], { cwd: repoRoot, stdout: "ignore", stderr: "ignore" });
+    const args = [
+      "bun",
+      "test",
+      "--coverage",
+      "--coverage-reporter=lcov",
+      `--coverage-dir=${covDir}`
+    ];
+    if (testPaths && testPaths.length > 0)
+      args.push(...testPaths);
+    Bun.spawnSync(args, { cwd: repoRoot, stdout: "ignore", stderr: "ignore" });
     try {
       return { ok: true, lcov: readFileSync5(join64(covDir, "lcov.info"), "utf8") };
     } catch {
@@ -32901,14 +32936,35 @@ function defaultCollect(repoRoot) {
     rmSync(covDir, { recursive: true, force: true });
   }
 }
-function buildCoverageProvider(repoRoot, deps = { collect: defaultCollect }) {
-  const res = deps.collect(repoRoot);
+function buildCoverageProvider(repoRoot, deps = { collect: defaultCollect }, opts = {}) {
+  const threshold = opts.threshold ?? DEFAULT_COVERAGE_THRESHOLD;
+  const scopeFiles = opts.scopeFiles ?? [];
+  const derived = scopeFiles.length > 0 ? deriveUnitTestPaths(scopeFiles, opts.testFiles ?? []) : [];
+  const scopedPaths = derived.length > 0 ? derived : undefined;
+  let res = deps.collect(repoRoot, scopedPaths);
+  let usedScope = scopedPaths !== undefined;
+  if ((!res.ok || !res.lcov) && usedScope) {
+    res = deps.collect(repoRoot);
+    usedScope = false;
+  }
   if (!res.ok || !res.lcov)
     return;
   const map = parseLcov(res.lcov);
   if (map.size === 0)
     return;
-  return { coverageOf: (region2) => regionCoverage(map, region2) };
+  let fullMap = usedScope ? null : map;
+  return {
+    coverageOf: (region2) => {
+      const verdict2 = regionCoverage(map, region2, threshold);
+      if (verdict2.status === "covered" || !usedScope)
+        return verdict2;
+      if (fullMap === null) {
+        const full = deps.collect(repoRoot);
+        fullMap = full.ok && full.lcov ? parseLcov(full.lcov) : new Map;
+      }
+      return regionCoverage(fullMap, region2, threshold);
+    }
+  };
 }
 
 // src/acg/tidy/unit-refactor.ts
@@ -32993,6 +33049,17 @@ function trackedSrcFiles(repoRoot) {
   return r3.stdout.toString().split(`
 `).map((s2) => s2.trim()).filter((s2) => s2.length > 0 && /\.[cm]?tsx?$/.test(s2) && !/\.(test|spec)\./.test(s2));
 }
+function trackedTestFiles(repoRoot) {
+  const r3 = Bun.spawnSync(["git", "ls-files", "--", "tests"], {
+    cwd: repoRoot,
+    stdout: "pipe",
+    stderr: "pipe"
+  });
+  if (r3.exitCode !== 0)
+    return [];
+  return r3.stdout.toString().split(`
+`).map((s2) => s2.trim()).filter((s2) => s2.length > 0 && /\.[cm]?tsx?$/.test(s2));
+}
 async function loadArchSpec2(repoRoot) {
   const specPath = join65(repoRoot, ".ditto", "architecture-spec.json");
   try {
@@ -33036,7 +33103,10 @@ var refactorCommand = defineCommand({
       const files = trackedSrcFiles(repoRoot);
       const archSpec = await loadArchSpec2(repoRoot);
       const resolved = resolveUnitScope(unit, files, archSpec);
-      const coverageProvider = buildCoverageProvider(repoRoot);
+      const coverageProvider = buildCoverageProvider(repoRoot, undefined, {
+        scopeFiles: resolved,
+        testFiles: trackedTestFiles(repoRoot)
+      });
       const coverageProviderPresent = coverageProvider !== undefined;
       const unitCovered = coverageProvider ? (await coverageProvider.coverageOf({ files: resolved })).status === "covered" : undefined;
       const decision = decideUnitTidy({
@@ -35703,4 +35773,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=ba443e5d75d415c0a5cb26e98a1feb598cda80b9fd2f4746d8bcbf632622f54a
+//# ditto-src-stamp=c7dc4090dba2fcc4ea628ca8326bcd5873670d601af8f1b54f1377261eacccd5
