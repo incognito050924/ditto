@@ -18223,6 +18223,7 @@ var workItem = exports_external.object({
   parent_id: workItemId.optional().describe("Parent work item if this is a child task"),
   child_ids: exports_external.array(workItemId).default([]),
   changed_files: exports_external.array(relativePath).default([]),
+  autopilot_exempt: exports_external.boolean().optional().describe("Allow closing on completion.json alone without going through autopilot"),
   risks: exports_external.array(riskNote).default([]),
   re_entry: reEntry.optional(),
   runs: exports_external.array(runId).default([]),
@@ -30595,6 +30596,20 @@ function autopilotForcesContinuation(a2) {
     return false;
   return hasRunnableNode(a2);
 }
+function autopilotBypassForcesContinuation(workItem2, completion, pilot) {
+  if (completion.status !== "ok" || pilot.status !== "absent")
+    return [];
+  if (!NON_TERMINAL_STATUSES.includes(workItem2.status))
+    return [];
+  if (workItem2.autopilot_exempt === true)
+    return [];
+  const changedCode = completion.data.changed_files.length > 0 || workItem2.changed_files.length > 0;
+  if (!changedCode)
+    return [];
+  return [
+    `work item ${workItem2.id} is closing on completion.json alone without going through autopilot (no autopilot.json). Non-trivial work should run finalize \u2192 bootstrap \u2192 autopilot drive (ditto autopilot bootstrap, then the autopilot skill). To close without autopilot, set autopilot_exempt:true on the work item.`
+  ];
+}
 function acgReviewForcesContinuation(graph) {
   const reasons = [];
   for (const file of graph.files) {
@@ -30759,6 +30774,7 @@ var stopHandler = async (input) => {
   if (pilot.status === "ok" && autopilotForcesContinuation(pilot.data)) {
     reasons.push("autopilot has runnable node(s); the work item is not complete yet");
   }
+  reasons.push(...autopilotBypassForcesContinuation(workItem2, completion, pilot));
   if (intent.status === "ok" && pilot.status === "ok") {
     const d2 = intentDriftGate({
       intent: intent.data,
@@ -35788,4 +35804,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=96f95e980a057dc0a846ee903aeff767b1f4d43923d80077f4fa4230d34466af
+//# ditto-src-stamp=0667ff9b6b599718d5210cf45366a43aadc50584156746aeedc810f940f078b3

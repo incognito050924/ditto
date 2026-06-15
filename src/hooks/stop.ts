@@ -192,6 +192,31 @@ export function autopilotForcesContinuation(a: Autopilot): boolean {
 }
 
 /**
+ * (B) plan→autopilot transition gate (中, wi_260615xby). Returns a continuation
+ * reason when a non-trivial work item is about to close on a completion.json
+ * ALONE — autopilot.json was never bootstrapped (pilot absent) — so it bypassed
+ * the finalize→bootstrap→drive path. Non-trivial means it changed code
+ * (completion OR work-item `changed_files` non-empty). A no-change close, an
+ * `autopilot_exempt` work item, a terminal work item, and any present
+ * autopilot.json (the path WAS taken) all pass — the gate keys on pilot ABSENT,
+ * disjoint from the all-absent strong-block. Empty array = nothing to force.
+ */
+export function autopilotBypassForcesContinuation(
+  workItem: WorkItem,
+  completion: ArtifactRead<z.infer<typeof completionContract>>,
+  pilot: ArtifactRead<Autopilot>,
+): string[] {
+  if (completion.status !== 'ok' || pilot.status !== 'absent') return [];
+  if (!NON_TERMINAL_STATUSES.includes(workItem.status)) return [];
+  if (workItem.autopilot_exempt === true) return [];
+  const changedCode = completion.data.changed_files.length > 0 || workItem.changed_files.length > 0;
+  if (!changedCode) return [];
+  return [
+    `work item ${workItem.id} is closing on completion.json alone without going through autopilot (no autopilot.json). Non-trivial work should run finalize → bootstrap → autopilot drive (ditto autopilot bootstrap, then the autopilot skill). To close without autopilot, set autopilot_exempt:true on the work item.`,
+  ];
+}
+
+/**
  * Does an ACG ReviewGraph ledger force continuation? (WU-6 / producer wiring —
  * Review by Exception, §5). A file classified `risk: 'high'` that carries NO
  * evidence is a risky change nobody has shown to be handled → the work item is
@@ -523,6 +548,15 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   if (pilot.status === 'ok' && autopilotForcesContinuation(pilot.data)) {
     reasons.push('autopilot has runnable node(s); the work item is not complete yet');
   }
+  // (B) plan→autopilot transition gate (中, wi_260615xby). A non-trivial work item
+  // about to close on a completion.json ALONE — autopilot.json was never
+  // bootstrapped — bypassed the finalize→bootstrap→drive path. Force continuation
+  // so the work runs through autopilot, UNLESS the work item is explicitly exempt.
+  // Non-trivial = it changed code (completion or work-item changed_files non-empty);
+  // a no-change close (investigation/docs) and an exempt work item pass. A present
+  // autopilot.json (any plan) means the path WAS taken, so this never fires then —
+  // it keys on pilot ABSENT, disjoint from the strong-block below (completion absent).
+  reasons.push(...autopilotBypassForcesContinuation(workItem, completion, pilot));
   // Axis-2 intent drift: the chain (intent → work-item → autopilot → completion)
   // is conserved by construction at finalize; this catches post-finalize
   // divergence (goal rewrite, AC grow/shrink, invented refs) before the work item

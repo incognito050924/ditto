@@ -322,6 +322,56 @@ describe('stopHandler', () => {
     expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
   });
 
+  describe('(B) plan→autopilot transition gate (wi_260615xby)', () => {
+    // PASSING_ACCEPTANCE closes the completion gate so only the (B) gate decides.
+    const passingCompletion = (overrides: Record<string, unknown> = {}) =>
+      completion({ acceptance: PASSING_ACCEPTANCE, ...overrides });
+
+    test('non-trivial completion-only close (changed files, no autopilot.json) => exit 2', async () => {
+      await writeArtifact('completion.json', passingCompletion({ changed_files: ['src/x.ts'] }));
+      const out = await run({ stop_hook_active: false });
+      expect(out.exitCode).toBe(2);
+      expect(out.stderr).toContain('autopilot');
+      expect(out.stderr).toContain('autopilot_exempt');
+    });
+
+    test('autopilot_exempt work item closes on completion alone => exit 0', async () => {
+      await store.update(wiId, (c) => ({ ...c, autopilot_exempt: true }));
+      await writeArtifact('completion.json', passingCompletion({ changed_files: ['src/x.ts'] }));
+      expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+    });
+
+    test('trivial completion-only close (no changed files) does NOT fire the (B) gate => exit 0', async () => {
+      await writeArtifact('completion.json', passingCompletion({ changed_files: [] }));
+      expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+    });
+
+    test('autopilot.json present (path taken) => (B) gate does not fire => exit 0', async () => {
+      await writeArtifact('autopilot.json', autopilot({ nodes: [coveringNode] }));
+      await writeArtifact('completion.json', passingCompletion({ changed_files: ['src/x.ts'] }));
+      expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+    });
+
+    test('terminal work item (done) with changed-files completion, no autopilot => exit 0', async () => {
+      await store.update(wiId, (c) => ({ ...c, status: 'in_progress' }));
+      await store.update(wiId, (c) => ({
+        ...c,
+        status: 'done',
+        closed_at: '2026-06-16T00:00:00.000Z',
+      }));
+      await writeArtifact('completion.json', passingCompletion({ changed_files: ['src/x.ts'] }));
+      expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+    });
+
+    test('work item changed_files (completion empty) also triggers => exit 2', async () => {
+      await store.update(wiId, (c) => ({ ...c, changed_files: ['src/y.ts'] }));
+      await writeArtifact('completion.json', passingCompletion({ changed_files: [] }));
+      const out = await run({ stop_hook_active: false });
+      expect(out.exitCode).toBe(2);
+      expect(out.stderr).toContain('autopilot');
+    });
+  });
+
   test('approval_gate pending (with remaining nodes) => exit 0 (yield to surface plan)', async () => {
     await writeArtifact(
       'autopilot.json',

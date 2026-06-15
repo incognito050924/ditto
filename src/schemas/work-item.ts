@@ -63,6 +63,15 @@ export const workItem = z
     parent_id: workItemId.optional().describe('Parent work item if this is a child task'),
     child_ids: z.array(workItemId).default([]),
     changed_files: z.array(relativePath).default([]),
+    // (B) plan→autopilot transition escape hatch (wi_260615xby). When true, the
+    // Stop gate lets this work item close on a completion.json ALONE without ever
+    // bootstrapping autopilot — the explicit "this work did not need the
+    // finalize→bootstrap→drive path" marker. Optional + additive: a legacy
+    // work-item.json omits it and parses + behaves exactly as before.
+    autopilot_exempt: z
+      .boolean()
+      .optional()
+      .describe('Allow closing on completion.json alone without going through autopilot'),
     risks: z.array(riskNote).default([]),
     re_entry: reEntry.optional(),
     runs: z.array(runId).default([]),
