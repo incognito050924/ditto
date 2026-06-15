@@ -1,0 +1,76 @@
+{
+  "schema": "ditto.dialectic.v1",
+  "n": 9,
+  "round": 1,
+  "max_rounds": 1,
+  "mode": "review",
+  "work_item": "wi_2606158xq",
+  "target_artifact": "80-acg-cleanup-deslop-plan.md (v3) + ADR-0017 — dialectic-8 이후 추가분 4개(trace-differential·§4.4 충분 bar·catalog 변환·unit-scoped 표면+절대부채 fitness) 재검증",
+  "question": "dialectic-8 이후 누적된 추가분 4개가 design-stage로서 건전하고 accepted 승격 준비됐는가.",
+  "produced_at": "2026-06-15 KST",
+  "producer": {
+    "verdict_proposed": "revise",
+    "position": "셋(trace-diff·충분 bar·unit-scoped)은 dialectic-8 OBJ-03/05를 정확히 겨냥한 건전한 방향. 그러나 catalog 변환(§1.1③)의 근거 'ADR-0006=변환 제약 아님'은 repo 가드(adr-guard.ts:43-58 텍스트 패턴 `from 'typescript'`)가 반증, TS LS API는 src 0건. 정정 2건(catalog·자동커밋 provider 의존) 선행 후 accepted 제안.",
+    "known_limits": ["catalog 근거가 repo 가드와 충돌", "bar 4-leg 중 2-leg(L1·L2)이 provider 0건이라 미발화", "자동커밋이 dialectic-8 D8 뒤집은 신규 결정", "trace 잔여(비재현 비결정)가 OBJ-03 핵심 위험", "절대부채는 drift 재사용 아닌 신규"]
+  },
+  "opponent": {
+    "run": { "provider": "claude", "model": "claude-opus", "command": "Agent ditto:dialectic-opponent", "fallback_from": "codex", "fallback_reason": "codex:codex-rescue background-async 설계라 인라인 반론 미반환 (dialectic-8 재확인)" },
+    "objection_count": 11
+  },
+  "synthesizer": {
+    "verdict": "revise",
+    "rationale": "admissible high 5건을 코드 오라클로 전수 재검증. 개념 reject·blocker 없음. v3 추가분 4개가 '미배선 능력 위에 강제력을 약속'하는 공통 결함을 공유하고, 둘(OBJ-01 catalog·OBJ-02 절대부채)은 자산을 사실과 다르게 지목 — 취향이 아니라 사실 오류라 accept 차단. 5건 전부 문구 정정·조건화·WU 분리로 닫힘. Producer 정정 2건은 옳으나 부족 → OBJ-02/03/04/05까지 5건으로 확장."
+  },
+  "objections": [
+    { "id": "OBJ-01", "severity": "high", "category": "engineering_soundness", "admissible": true, "oracle": "grep src/ 0건(ts-morph·LanguageService·getEditsForRefactor), package.json:35 typescript=devDep, agents/refactorer.md:20 freehand; 80-plan §1.1③·§4.4·§9·ADR D5 'catalog 제약 변환(TS 언어서비스 API)'", "finding": "catalog 변환을 사후검증 경감 핵심으로 '재사용 자산'처럼 두나 TS LS 리팩토링 API·ts-morph가 src에 0건이고 refactorer는 freehand Edit/Write 계약 — 미존재 능력 위 약속이자 운용 계약과 모순.", "disposition": "fixed", "fix": "catalog '재사용 자산' 철회 → 미보유 능력으로 강등, 도입 시 별도 ADR 선결(ast-grep WU-X와 동형). ADR-0006 곁다리('분석 제약이지 변환 아님') 삭제." },
+    { "id": "OBJ-02", "severity": "high", "category": "engineering_soundness", "admissible": true, "oracle": "src/acg/fitness/drift.ts:55(주석 '추세만')·57·84·123(cumulative_new_violations), fitness.ts:178; 80-plan §9 표·각주 '절대 부채 감소(ditto fitness drift 결)'", "finding": "unit-scoped 절대부채 fitness 재사용 자산으로 `ditto fitness drift`를 지목하나 drift는 work-item 가로지른 신규위반 누적-추세 엔진이지 '단위 절대 before/after'를 측정 안 함. §9 각주 스스로 '[추론]'.", "disposition": "fixed", "fix": "'ditto fitness drift 결' 삭제 → '신규 측정(단위 파일집합 절대 before/after 스냅샷 diff)이며 drift 추세 엔진 재사용 아님' 명시. [추론] 꼬리표 해소." },
+    { "id": "OBJ-03", "severity": "high", "category": "engineering_soundness", "admissible": true, "oracle": "grep src/ 녹화/replay/intercept/property/differential 0건; 80-plan §4.2·§4.3·§4.4(Rice 인용)·§0 '얇음'", "finding": "trace 변종 '효과 동등=동작 보존'은 미증명(내부상태·지연평가·캐시·순서·동시성에서 깨짐). golden-master=회귀 탐지지 보존 증명 아님. §4.4 Rice 인용과 내부 긴장. intercept/녹화/replay 하니스는 src 0건 신규 프레임워크 → §0 '얇음' 모순.", "disposition": "fixed", "fix": "trace를 '동작보존 증명'→'회귀 탐지(통과=미반증, 불통과=확정 반증)'로 등급 강등. '골든마스터=회귀탐지' 정정, §4.3에 '통과는 미반증이지 보존 증명 아님' 한 줄. 신규 하니스 비용은 §0 정직화에 흡수." },
+    { "id": "OBJ-04", "severity": "high", "category": "engineering_soundness", "admissible": true, "oracle": "src/hooks/stop.ts:548-558(enforcement leg=review/fitness/impact/semantic뿐, L1·L2 leg 없음); 80-plan §4.4·§4.3·§6⑧·§10(다)·ADR D8; provider 0건(OBJ-02@d8)", "finding": "bar 4-leg 중 L1·L2가 0-wired provider 위 → 미검증-강등 경로에서 bar가 L3(위험계층 해당시)+fitness-delta로 축소돼 비-dataflow 리팩토링의 동작보존을 구조적으로 못 봄. 그 위 자동커밋은 배격한 '검증 연극'을 자동 재생산. dialectic-8 OBJ-05(diff-only 강등)의 부분 회귀. bar가 못 보는 결함클래스(동시성·성능·계약·내부상태) 존재.", "disposition": "fixed", "fix": "자동커밋을 'full bar(L1·L2 provider 배선+실제 발화) 충족 시에만'으로 조건화, 미배선·강등 경로는 diff-only(자동커밋 금지·격리 브랜치 누적). bar 미검사 결함클래스를 §4.3·철회조건에 잔여로 명시. (diff-only로 되돌릴 필요는 없음 — full bar 발화 시 자동커밋은 사용자 명시결정으로 유효.)" },
+    { "id": "OBJ-05", "severity": "high", "category": "scope_creep", "admissible": true, "oracle": "40-refactoring-criteria.md:45(boxwood automation-engine 2.7%·portal 11%); src/cli/commands refactor/review 0건; acg-review.ts:27-50(work-item 스코프); 80-plan §0 '얇은 CLI 엔트리뿐' vs §9/WU-4/5", "finding": "unit-scoped 표면이 §0 '얇은 오케스트레이션' 깸. boxwood 저커버리지면 standing 코드 대부분 L1 미달→대량 characterization(거대비용) or 대부분 skip(무의미). refactor/review CLI 0건(전부 신규: scope resolver·배치·집계·절대부채·자동커밋). '변경 정리'→'전체 코드베이스 자동 리팩토링'으로 팽창.", "disposition": "deferred", "fix": "unit-scoped 표면(WU-4/5)을 후속 WU로 분리, 이번 증분은 change-scoped Tidy + diff-mode 우선. §0를 '이번 증분=change-scoped 배선 / unit-scoped=신규 표면·신규 비용 동반 후속 WU'로 정직화. unit-mode 폐기 아님 — 비용·boxwood 함의를 후속으로 격리." },
+    { "id": "OBJ-06", "severity": "medium", "category": "engineering_soundness", "admissible": false, "oracle": "40-criteria G-R3:60; 절대부채 게이밍 논리", "finding": "절대부채 감소 게이트가 게이밍 유인(쉬운 위반만 제거·코드 삭제로 카운트↓).", "disposition": "open_question", "fix": "unit-WU에서 '절대부채 감소는 behavior-preservation green 동반 시에만 카운트', 코드삭제 감소는 G-R3(미사용 증명) 조건." },
+    { "id": "OBJ-07", "severity": "medium", "category": "internal_consistency", "admissible": false, "oracle": "ADR-0006 D2/D3; §1.1③", "finding": "'변환 vs 분석'으로 ADR-0006 우회=궤변.", "disposition": "rejected", "reason": "OBJ-01 fix로 catalog 약속 자체가 철회되면 ADR-0006 우회 논쟁의 전제가 사라짐." },
+    { "id": "OBJ-08", "severity": "medium", "category": "engineering_soundness", "admissible": false, "oracle": "§4.2 old/new 이중 호출", "finding": "L2 이중 빌드·실행 비용 미측정.", "disposition": "rejected", "reason": "OBJ-05로 하니스가 신규 비용 WU로 분리되면 비용은 그 WU dogfood 수용기준으로 이월. 계획단계 정밀 미측정은 reject 사유 아님." },
+    { "id": "OBJ-09", "severity": "low", "category": "internal_consistency", "admissible": false, "oracle": "§6⑥; fitness-runner.ts:56-60·119", "finding": "이동 보정 두 옵션 다 신규 구현인데 비용 미명시.", "disposition": "open_question", "fix": "WU-2 수용기준에 'normalizeViolationIdentity/assessDelta 변경 필요'를 비용으로 명시. 택일은 WU-2 구현 세부." },
+    { "id": "OBJ-10", "severity": "low", "category": "internal_consistency", "admissible": false, "oracle": "acg-review.ts:27-50(work-item 스코프); §9", "finding": "ditto review unit-scoped 집계는 acg-review thin wrapper 아닌 신규.", "disposition": "deferred", "fix": "OBJ-05로 WU-5 후속 분리 시 신규 비용 그 WU로 이월." },
+    { "id": "OBJ-11", "severity": "low", "category": "internal_consistency", "admissible": false, "oracle": "ADR-0017:3 '미-재검증' 자인; §0 '얇음'", "finding": "ADR 헤더가 핵심 추가분 미검증을 자인한 채 proposed — 이 라운드가 그 재검증.", "disposition": "fixed", "fix": "ADR 상태줄·80-plan revision 헤더의 '미-재검증'을 '재검증 round=1 완료, 정정 5건 반영'으로 교체. §0 '얇음'은 OBJ-03·05 fix로 정직화." }
+  ],
+  "missing_alternatives": [
+    "trace 신규 하니스 대신 characterization 강화 + 정직한 회귀-탐지 등급(더 얇음) — 부분 채택(OBJ-03 등급 강등)",
+    "unit-scoped 전체를 후속 WU로, 이번엔 change-scoped만(§0 정합) — 채택(OBJ-05)",
+    "절대부채 신규 대신 baseline=정리직전 HEAD로 delta-only 재사용 — unit-WU 설계 시 비교 대안",
+    "자동커밋 대신 격리 브랜치 누적+최종 1회 사람 커밋('연극' 논거 안 깨고 자동 git mutation 제거)"
+  ],
+  "scope_creep_risks": [
+    "trace record-replay 하니스가 §0 '기존 원시구성요소 배선'을 넘어 신규 테스트 프레임워크로 성장",
+    "unit-scoped 표면이 '변경 정리'→'전체 코드베이스 자동 리팩토링+자동커밋'으로 팽창",
+    "catalog 변환(TS LS/ts-morph)이 '변환 아닌 분석' 구분으로 새 AST 엔진 우회 도입",
+    "ADR-0017이 핵심 추가분 미검증 자인한 채 proposed → 재검증 없이 accepted면 미검증 결정 박힘"
+  ],
+  "verification_gaps": [
+    "TS LS/ts-morph src 0건 — catalog '구성 보존' 메커니즘 미존재(OBJ-01)",
+    "drift.ts=delta-trend, 절대 before/after 미측정 — 절대부채 자산 주장 미검증(OBJ-02)",
+    "trace 동등→동작보존 함의 미증명(내부상태·순서·동시성)(OBJ-03)",
+    "bar L1·L2 leg가 provider 0건 — 강등경로 자동커밋 차단 여부 미명세(OBJ-04)",
+    "boxwood 2.7% standing 코드의 unit-scoped L1 skip율·characterization 비용 미측정(OBJ-05)"
+  ],
+  "required_edits": [
+    "§1.1③·§4.4·§9: catalog '재사용 자산' 철회→미보유 능력, 별도 ADR 선결. ADR-0006 곁다리 삭제 [OBJ-01]",
+    "§9 표·각주: 'ditto fitness drift 결' 삭제→신규 절대 before/after 스냅샷 측정 명시, [추론] 해소 [OBJ-02]",
+    "§4.2·§4.3·L2 행: trace를 '회귀 탐지(통과=미반증)'로 등급 강등, Rice 긴장 명시 [OBJ-03]",
+    "§6⑧·§10(다)·ADR D8: 자동커밋을 full-bar(L1·L2 provider 배선+발화) 조건화, 미배선·강등은 diff-only. bar 미검사 결함클래스 §4.3 명시 [OBJ-04]",
+    "§0·WU-4·WU-5: unit-scoped 후속 WU 분리, 이번 증분=change-scoped+diff-mode 우선, §0 정직화 [OBJ-03·05]",
+    "ADR-0017 상태줄·80-plan revision: '미-재검증'→'재검증 round=1 완료, 정정 5건 반영' [OBJ-11]"
+  ],
+  "open_questions_kept": [
+    "절대부채 게이밍 유인 — unit-WU에서 behavior-green 동반 카운트(OBJ-06)",
+    "이동 보정 두 옵션 택일 — WU-2 구현 세부(OBJ-09)",
+    "L1·L2 provider 배선 — 이미 Q3 선결조건, OBJ-04 fix가 자동커밋을 그 위 hard 의존",
+    "unit-scoped 절대부채 측정 신규 스냅샷 메커니즘 정의 — drift와 별개(OBJ-02 노출)"
+  ],
+  "alternatives_adopted": [
+    "missing_alt(b): unit-scoped 후속 WU 분리, 이번엔 change-scoped만 — OBJ-05 닫는 수단",
+    "missing_alt(a) 부분: trace를 '증명' 대신 회귀-탐지 등급으로 강등 — OBJ-03 흡수"
+  ],
+  "outcome": "revise → required_edits 6건(OBJ-01 catalog 철회·OBJ-02 절대부채 자산 정정·OBJ-03 trace 등급 강등·OBJ-04 자동커밋 full-bar 조건화·OBJ-05 unit-scoped 후속 분리·OBJ-11 자인 갱신) 반영 시 accept. ledger 직후 80-plan/ADR-0017에 적용.",
+  "accept_condition": "required_edits 6건 반영 시 admissible high 5건 전부 fixed/deferred로 닫힘. in-scope open question(provider 배선·절대부채 측정)은 후속 WU 선결조건으로 격리. accept는 '설계 문서 정정'의 accept이지 구현 착수 허가가 아님(Charter §3 — WU-0만 권고)."
+}
