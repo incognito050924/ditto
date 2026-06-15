@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { type UnitScope, parseUnitScope, resolveUnitScope } from '~/acg/scope/unit-resolve';
+import { buildCoverageProvider } from '~/acg/tidy/coverage-provider';
 import { decideUnitTidy } from '~/acg/tidy/unit-refactor';
 import { readArchitectureSpec, resolveRepoRootForCreate } from '~/core/fs';
 import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
@@ -21,11 +22,13 @@ import {
  * also used by WU-5 `ditto review`), the unit's absolute fitness debt is measured, and
  * the §4.4 bar gates an isolated-branch auto-commit.
  *
- * N8 measure-first finding (dialectic-9 OBJ-04): no coverage provider is wired in this
- * repo (provider 0건), so behavior preservation cannot be witnessed at full bar →
- * provider-presence-FIRST degrades EVERY unit to diff-only and surfaces the bar-miss as
- * a NARROW residual question (never a bulk diff to approve — §4.4 검증 연극). The full-bar
- * isolated-branch commit path stays gated behind a wired+firing coverage provider.
+ * COVERAGE WIRING (wi_260615889): the L1 coverage provider (`buildCoverageProvider`,
+ * `bun test --coverage`) is now wired here — `coverageProviderPresent`/`unitCovered`
+ * come from a real run, not a hardcoded false. When coverage cannot be collected the
+ * provider is ABSENT and we fail open to diff-only + a NARROW residual question (never a
+ * bulk diff to approve — §4.4 검증 연극; OBJ-02). This surface MEASURES the unit (it does
+ * not itself refactor), so absolute debt before==after here and the §4.4 full-bar
+ * auto-commit fires only once a real tidy has reduced the debt (decideUnitTidy gates it).
  */
 
 /** Tracked standing files under `src/` at HEAD (git ls-files — deterministic). */
@@ -93,17 +96,24 @@ export const refactorCommand = defineCommand({
       const resolved = resolveUnitScope(unit, files, archSpec);
 
       // Standing-code baseline = HEAD. The absolute-debt before/after measurement and
-      // the behavior-preservation run happen during the actual refactor; here, with no
-      // wired coverage provider (N8), the unit degrades to diff-only — we report the
-      // resolved unit + the gated decision. before/after debt are equal (no mutation
-      // performed by this entrypoint) so debtDecreased=false until refactorers run.
+      // the behavior-preservation run happen during the actual refactor; this entrypoint
+      // only MEASURES, so before==after (debtDecreased=false until a refactorer runs).
+      // The L1 coverage provider, however, IS consulted here: if coverage can be
+      // collected we report whether the unit is covered (full-bar-eligible); if not, we
+      // fail open to diff-only (OBJ-02).
+      const coverageProvider = buildCoverageProvider(repoRoot);
+      const coverageProviderPresent = coverageProvider !== undefined;
+      const unitCovered = coverageProvider
+        ? (await coverageProvider.coverageOf({ files: resolved })).status === 'covered'
+        : undefined;
       const decision = decideUnitTidy({
         unit: args.scope,
         files: resolved,
         baselineGreen: true,
         debt: { before: resolved.length, after: resolved.length },
         behaviorGreen: true,
-        coverageProviderPresent: false, // provider 0건 (N8) — degrade-all to diff-only
+        coverageProviderPresent,
+        unitCovered,
       });
 
       if (format === 'json') {
