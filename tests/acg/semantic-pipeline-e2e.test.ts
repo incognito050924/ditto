@@ -111,6 +111,7 @@ describe('semantic pipeline e2e — seed → block → resolve → clear', () =>
       compatibility: 'additive',
       modelVersion: 'claude-opus-4-8',
       characterizationTestRef: 'tests/user.test.ts::getUser absence not relied upon',
+      characterizationAdequacy: 'l1_met',
     });
     await writeSemantic(resolved);
     expect((await run()).exitCode).toBe(0);

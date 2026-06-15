@@ -150,6 +150,11 @@ const verdictCommand = defineCommand({
       description:
         'Ref to a passing behavior/characterization test — required for an agent yes (witnesses the preserved meaning)',
     },
+    'characterization-adequacy': {
+      type: 'string',
+      description:
+        'Adequacy of the cited test: l1_met|l2_passed — required for an agent yes (ref existence alone is insufficient, OBJ-11)',
+    },
     'type-safe': { type: 'boolean', description: 'Override the type-safety judgment' },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
@@ -171,6 +176,12 @@ const verdictCommand = defineCommand({
     const compatibility = args.compatibility as 'compatible' | 'additive' | 'breaking' | undefined;
     if (compatibility && !['compatible', 'additive', 'breaking'].includes(compatibility)) {
       writeError('semantic verdict: --compatibility must be compatible|additive|breaking');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const adequacy = args['characterization-adequacy'] as 'l1_met' | 'l2_passed' | undefined;
+    if (adequacy && !['l1_met', 'l2_passed'].includes(adequacy)) {
+      writeError('semantic verdict: --characterization-adequacy must be l1_met|l2_passed');
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
@@ -206,6 +217,7 @@ const verdictCommand = defineCommand({
         ...(args['characterization-test'] !== undefined
           ? { characterizationTestRef: args['characterization-test'] }
           : {}),
+        ...(adequacy !== undefined ? { characterizationAdequacy: adequacy } : {}),
         ...(target ? { target } : {}),
       });
       // writeJson re-validates → an unsubstantiated yes (no model_version) or a

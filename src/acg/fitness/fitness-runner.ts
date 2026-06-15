@@ -70,6 +70,44 @@ function parseBaselineSet(snapshot: string | undefined): Set<string> {
   );
 }
 
+/** Rule prefix of an identity (`rule@path#site`); the move-invariant component. */
+function ruleOf(id: string): string {
+  const at = id.indexOf('@');
+  return at < 0 ? id : id.slice(0, at);
+}
+
+/**
+ * Relocation-aware new violations (PM-13/OBJ-01). A method move/extract changes
+ * the enclosing/path, so the moved EXISTING violation gets a NEW identity — naive
+ * set-difference (current − baseline) would mis-count it as new and block a legit
+ * tidy. Fix: within each RULE (the only component invariant under a move), match
+ * an "appeared" current id against a "disappeared" baseline id one-to-one; those
+ * are relocations, not new. A current id is genuinely new only when its rule's
+ * count actually grew. Preserves current order; the COUNT (what gates) is exact.
+ */
+function relocationAwareNewIds(current: string[], baseline: Set<string>): string[] {
+  const currentSet = new Set(current);
+  // Per-rule budget of baseline violations that disappeared (candidates for relocation).
+  const disappearedBudget = new Map<string, number>();
+  for (const id of baseline) {
+    if (!currentSet.has(id)) {
+      disappearedBudget.set(ruleOf(id), (disappearedBudget.get(ruleOf(id)) ?? 0) + 1);
+    }
+  }
+  const newIds: string[] = [];
+  for (const id of current) {
+    if (baseline.has(id)) continue; // unchanged existing violation
+    const rule = ruleOf(id);
+    const budget = disappearedBudget.get(rule) ?? 0;
+    if (budget > 0) {
+      disappearedBudget.set(rule, budget - 1); // a relocation of a disappeared one
+      continue;
+    }
+    newIds.push(id); // rule count grew → genuinely new
+  }
+  return newIds;
+}
+
 export interface ScheduleDecision {
   run: boolean;
   reason: string;
@@ -116,7 +154,7 @@ export interface DeltaResult {
 export function assessDelta(fn: AcgFitnessFunction, currentIds: string[]): DeltaResult {
   const current = [...new Set(currentIds)];
   const baseline = parseBaselineSet(fn.baseline?.snapshot);
-  const newIds = current.filter((id) => !baseline.has(id));
+  const newIds = relocationAwareNewIds(current, baseline);
   const deltaOnly = fn.baseline?.delta_only === true;
   const blockingIds = deltaOnly ? newIds : current;
   const outcome: AcgSnapshotResult['outcome'] =

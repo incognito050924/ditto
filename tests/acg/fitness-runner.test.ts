@@ -145,3 +145,40 @@ describe('runFitness → AssuranceSnapshot', () => {
     expect(snap.trigger).toBe('per_change');
   });
 });
+
+describe('assessDelta — relocation-aware (move/extract is not a new violation, PM-13/OBJ-01)', () => {
+  test('move (path change, same rule+site) → 0 new violations', () => {
+    const f = fn({ baseline: { snapshot: 'no-dup@src/a.ts#foo', delta_only: true } });
+    const d = assessDelta(f, ['no-dup@src/b.ts#foo']);
+    expect(d.new_violation_ids).toEqual([]);
+    expect(d.outcome).toBe('pass');
+  });
+
+  test('extract (enclosing change, same rule+path) → 0 new violations', () => {
+    const f = fn({ baseline: { snapshot: 'no-dup@src/x.ts#A', delta_only: true } });
+    const d = assessDelta(f, ['no-dup@src/x.ts#B']);
+    expect(d.new_violation_ids).toEqual([]);
+    expect(d.outcome).toBe('pass');
+  });
+
+  test('genuinely new violation (rule count increases) → counted + fail', () => {
+    const f = fn({ baseline: { snapshot: 'no-dup@src/a.ts#foo', delta_only: true } });
+    const d = assessDelta(f, ['no-dup@src/a.ts#foo', 'no-dup@src/c.ts#bar']);
+    expect(d.new_violation_ids).toEqual(['no-dup@src/c.ts#bar']);
+    expect(d.outcome).toBe('fail');
+  });
+
+  test('move + one genuinely new (same rule) → exactly one new', () => {
+    const f = fn({ baseline: { snapshot: 'no-dup@src/a.ts#foo', delta_only: true } });
+    const d = assessDelta(f, ['no-dup@src/b.ts#foo', 'no-dup@src/c.ts#baz']);
+    expect(d.new_violation_ids).toEqual(['no-dup@src/c.ts#baz']);
+    expect(d.outcome).toBe('fail');
+  });
+
+  test('relocation is per-rule: a different rule appearing is still new', () => {
+    const f = fn({ baseline: { snapshot: 'no-dup@src/a.ts#foo', delta_only: true } });
+    // ruleA moved away, ruleB appeared — different rules, so ruleB is new, not a relocation
+    const d = assessDelta(f, ['complexity@src/b.ts#foo']);
+    expect(d.new_violation_ids).toEqual(['complexity@src/b.ts#foo']);
+  });
+});

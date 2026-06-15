@@ -174,6 +174,8 @@ describe('ditto semantic verdict (resolver, O3 deadlock)', () => {
       'claude-opus-4-8',
       '--characterization-test',
       'tests/user.test.ts::keeps null-absence',
+      '--characterization-adequacy',
+      'l1_met',
     ]);
     expect(r.exitCode).toBe(0);
     const out = await readSemantic();

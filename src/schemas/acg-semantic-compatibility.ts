@@ -42,6 +42,12 @@ export const acgSemanticCompatibilityChange = z.object({
         .nullable()
         .default(null)
         .describe('Generated candidate when no behavior test exists'),
+      adequacy: z
+        .enum(['l1_met', 'l2_passed', 'none'])
+        .default('none')
+        .describe(
+          'Adequacy of the cited characterization (OBJ-11): l1_met = the changed region is executed by the test (L1), l2_passed = the old↔new differential passed (L2). none = mere existence, which is INSUFFICIENT for an agent semantic_safe=yes.',
+        ),
     })
     .optional(),
   verdict: z.object({
@@ -90,6 +96,19 @@ export const acgSemanticCompatibility = z
             message:
               "agent-produced semantic_safe='yes' requires characterization.exists=true with a non-empty test_ref (a passing behavior test must witness the preserved meaning)",
             path: ['changes', i, 'characterization', 'test_ref'],
+          });
+        }
+        // 3. adequacy — the cited test must be ADEQUATE, not merely existing
+        //    (OBJ-11): it executes the changed region (l1_met) or its old↔new
+        //    differential passed (l2_passed). A bare ref (adequacy=none) leaves
+        //    the over-fitting/coverage-blind-spot gap §4 warns about.
+        const adequacy = change.characterization?.adequacy;
+        if (adequacy !== 'l1_met' && adequacy !== 'l2_passed') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              "agent-produced semantic_safe='yes' requires characterization.adequacy of 'l1_met' or 'l2_passed' (the cited test must execute the changed region or pass an old↔new differential — ref existence alone is insufficient, OBJ-11)",
+            path: ['changes', i, 'characterization', 'adequacy'],
           });
         }
       }

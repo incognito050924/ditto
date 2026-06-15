@@ -42,6 +42,7 @@ const charz = {
   exists: true,
   test_ref: 'tests/user.test.ts::getUser keeps null-absence semantics',
   candidate: null,
+  adequacy: 'l1_met' as const,
 };
 
 describe('acgSemanticCompatibility — OBJ-43 producer rules', () => {

@@ -71,6 +71,12 @@ export interface SemanticVerdictInput {
    */
   characterizationTestRef?: string;
   /**
+   * Adequacy of the cited characterization (OBJ-11): 'l1_met' (test executes the
+   * changed region) or 'l2_passed' (old↔new differential passed). Required for an
+   * agent-produced `yes` — a bare ref (default 'none') no longer clears the gate.
+   */
+  characterizationAdequacy?: 'l1_met' | 'l2_passed';
+  /**
    * Which pair to resolve when the artifact holds several (G4 multi-change),
    * identified by its before/after. Omitted resolves the sole pair; ambiguous or
    * unmatched throws so a verdict cannot silently land on the wrong change.
@@ -117,6 +123,7 @@ export function applySemanticVerdict(
             exists: true,
             test_ref: v.characterizationTestRef,
             candidate: null,
+            adequacy: v.characterizationAdequacy ?? 'none',
           },
         }
       : {}),

@@ -28315,6 +28315,32 @@ function parseBaselineSet(snapshot) {
     return new Set;
   return new Set(snapshot.split(/[\n,]/).map((s2) => s2.trim()).filter((s2) => s2.length > 0));
 }
+function ruleOf(id) {
+  const at = id.indexOf("@");
+  return at < 0 ? id : id.slice(0, at);
+}
+function relocationAwareNewIds(current, baseline) {
+  const currentSet = new Set(current);
+  const disappearedBudget = new Map;
+  for (const id of baseline) {
+    if (!currentSet.has(id)) {
+      disappearedBudget.set(ruleOf(id), (disappearedBudget.get(ruleOf(id)) ?? 0) + 1);
+    }
+  }
+  const newIds = [];
+  for (const id of current) {
+    if (baseline.has(id))
+      continue;
+    const rule = ruleOf(id);
+    const budget = disappearedBudget.get(rule) ?? 0;
+    if (budget > 0) {
+      disappearedBudget.set(rule, budget - 1);
+      continue;
+    }
+    newIds.push(id);
+  }
+  return newIds;
+}
 function scheduleDecision(fn, ctx) {
   if (ctx.trigger === "periodic") {
     const p = fn.cadence.periodic;
@@ -28346,7 +28372,7 @@ function scheduleDecision(fn, ctx) {
 function assessDelta(fn, currentIds) {
   const current = [...new Set(currentIds)];
   const baseline = parseBaselineSet(fn.baseline?.snapshot);
-  const newIds = current.filter((id) => !baseline.has(id));
+  const newIds = relocationAwareNewIds(current, baseline);
   const deltaOnly = fn.baseline?.delta_only === true;
   const blockingIds = deltaOnly ? newIds : current;
   const outcome = fn.on_violation === "block" && blockingIds.length > 0 ? "fail" : "pass";
@@ -29676,7 +29702,8 @@ var acgSemanticCompatibilityChange = exports_external.object({
   characterization: exports_external.object({
     exists: exports_external.boolean(),
     test_ref: exports_external.string().nullable().default(null),
-    candidate: exports_external.string().nullable().default(null).describe("Generated candidate when no behavior test exists")
+    candidate: exports_external.string().nullable().default(null).describe("Generated candidate when no behavior test exists"),
+    adequacy: exports_external.enum(["l1_met", "l2_passed", "none"]).default("none").describe("Adequacy of the cited characterization (OBJ-11): l1_met = the changed region is executed by the test (L1), l2_passed = the old\u2194new differential passed (L2). none = mere existence, which is INSUFFICIENT for an agent semantic_safe=yes.")
   }).optional(),
   verdict: exports_external.object({
     type_safe: exports_external.boolean(),
@@ -29705,6 +29732,14 @@ var acgSemanticCompatibility = exports_external.object({
           code: exports_external.ZodIssueCode.custom,
           message: "agent-produced semantic_safe='yes' requires characterization.exists=true with a non-empty test_ref (a passing behavior test must witness the preserved meaning)",
           path: ["changes", i2, "characterization", "test_ref"]
+        });
+      }
+      const adequacy = change.characterization?.adequacy;
+      if (adequacy !== "l1_met" && adequacy !== "l2_passed") {
+        ctx.addIssue({
+          code: exports_external.ZodIssueCode.custom,
+          message: "agent-produced semantic_safe='yes' requires characterization.adequacy of 'l1_met' or 'l2_passed' (the cited test must execute the changed region or pass an old\u2194new differential \u2014 ref existence alone is insufficient, OBJ-11)",
+          path: ["changes", i2, "characterization", "adequacy"]
         });
       }
     }
@@ -33105,7 +33140,8 @@ function applySemanticVerdict(seed, v2) {
       characterization: {
         exists: true,
         test_ref: v2.characterizationTestRef,
-        candidate: null
+        candidate: null,
+        adequacy: v2.characterizationAdequacy ?? "none"
       }
     } : {},
     verdict: {
@@ -33387,6 +33423,10 @@ var verdictCommand = defineCommand({
       type: "string",
       description: "Ref to a passing behavior/characterization test \u2014 required for an agent yes (witnesses the preserved meaning)"
     },
+    "characterization-adequacy": {
+      type: "string",
+      description: "Adequacy of the cited test: l1_met|l2_passed \u2014 required for an agent yes (ref existence alone is insufficient, OBJ-11)"
+    },
     "type-safe": { type: "boolean", description: "Override the type-safety judgment" },
     output: { type: "string", description: "Output format: human|json", default: "human" }
   },
@@ -33408,6 +33448,12 @@ var verdictCommand = defineCommand({
     const compatibility = args.compatibility;
     if (compatibility && !["compatible", "additive", "breaking"].includes(compatibility)) {
       writeError("semantic verdict: --compatibility must be compatible|additive|breaking");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const adequacy = args["characterization-adequacy"];
+    if (adequacy && !["l1_met", "l2_passed"].includes(adequacy)) {
+      writeError("semantic verdict: --characterization-adequacy must be l1_met|l2_passed");
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
@@ -33434,6 +33480,7 @@ var verdictCommand = defineCommand({
         ...args["type-safe"] !== undefined ? { typeSafe: args["type-safe"] } : {},
         ...args["model-version"] !== undefined ? { modelVersion: args["model-version"] } : {},
         ...args["characterization-test"] !== undefined ? { characterizationTestRef: args["characterization-test"] } : {},
+        ...adequacy !== undefined ? { characterizationAdequacy: adequacy } : {},
         ...target ? { target } : {}
       });
       await writeJson(path, acgSemanticCompatibility, resolved);
@@ -35008,4 +35055,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=86fea90d9069c5f155821960f5d09d0a17de1e6d3a69ae2c6f8d6f91bd6909bf
+//# ditto-src-stamp=feca68ed67267d8b4a9857d50866419cdc2243d3ec07c6c5d9959e0ccc16e0eb

@@ -831,7 +831,12 @@ describe('stopHandler — ACG semantic (SemanticCompatibility) ledger', () => {
           semantic_safe: 'yes',
           reproducibility: { model_version: 'claude-opus-4-8' },
         },
-        { exists: true, test_ref: 'tests/user.test.ts::keeps null-absence', candidate: null },
+        {
+          exists: true,
+          test_ref: 'tests/user.test.ts::keeps null-absence',
+          candidate: null,
+          adequacy: 'l1_met',
+        },
       ),
     );
     expect((await run({ stop_hook_active: false })).exitCode).toBe(0);

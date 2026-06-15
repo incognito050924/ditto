@@ -63,6 +63,7 @@ describe('applySemanticVerdict — resolver injects agent judgment', () => {
       compatibility: 'additive',
       modelVersion: 'claude-opus-4-8',
       characterizationTestRef: 'tests/user.test.ts::getUser keeps null-absence',
+      characterizationAdequacy: 'l1_met',
     });
     expect(acgSemanticCompatibility.safeParse(resolved).success).toBe(true);
     expect(resolved.changes[0]?.verdict.semantic_safe).toBe('yes');
@@ -142,5 +143,50 @@ describe('applySemanticVerdict — resolver injects agent judgment', () => {
         }),
       ).toThrow();
     });
+  });
+});
+
+// WU-2(b) / OBJ-11 — an agent semantic_safe=yes needs an ADEQUACY tag (L1 충족 or
+// L2 통과), not merely an existing characterization ref. A user yes stays exempt.
+describe('semantic_safe=yes adequacy tag (WU-2(b), OBJ-11)', () => {
+  const seed = buildSemanticSeed(seedInput);
+  const agentYes = (adequacy?: 'l1_met' | 'l2_passed' | 'none') =>
+    applySemanticVerdict(seed, {
+      semanticSafe: 'yes',
+      oldMeaning: 'null = 미존재',
+      compatibility: 'additive',
+      modelVersion: 'claude-opus-4-8',
+      characterizationTestRef: 'tests/user.test.ts::x',
+      ...(adequacy ? { characterizationAdequacy: adequacy } : {}),
+    });
+
+  test('agent yes with characterization but adequacy=none is rejected (ref existence insufficient)', () => {
+    expect(acgSemanticCompatibility.safeParse(agentYes()).success).toBe(false);
+    expect(acgSemanticCompatibility.safeParse(agentYes('none')).success).toBe(false);
+  });
+
+  test('agent yes with adequacy=l1_met or l2_passed clears', () => {
+    expect(acgSemanticCompatibility.safeParse(agentYes('l1_met')).success).toBe(true);
+    expect(acgSemanticCompatibility.safeParse(agentYes('l2_passed')).success).toBe(true);
+  });
+
+  test('user-produced yes is accepted without an adequacy tag (human attestation exempt)', () => {
+    const userArtifact = {
+      schema_version: '0.1.0',
+      kind: 'acg.semantic-compatibility.v1',
+      work_item_id: 'wi_seedtst01',
+      produced_by: 'user',
+      produced_at: '2026-06-05T00:00:00Z',
+      changes: [
+        {
+          before: PAIR.before,
+          after: PAIR.after,
+          old_meaning: 'null = 미존재',
+          compatibility: 'additive',
+          verdict: { type_safe: true, semantic_safe: 'yes' },
+        },
+      ],
+    };
+    expect(acgSemanticCompatibility.safeParse(userArtifact).success).toBe(true);
   });
 });
