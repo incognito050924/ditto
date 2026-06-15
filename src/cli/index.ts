@@ -18,6 +18,8 @@ import { impactCommand } from './commands/impact';
 import { initCommand } from './commands/init';
 import { knowledgeCommand } from './commands/knowledge';
 import { memoryCommand } from './commands/memory';
+import { refactorCommand } from './commands/refactor';
+import { reviewCommand } from './commands/review';
 import { runCommand } from './commands/run';
 import { semanticCommand } from './commands/semantic';
 import { setupCommand } from './commands/setup';
@@ -58,6 +60,8 @@ const main = defineCommand({
     'change-contract': changeContractCommand,
     'change-map': changeMapCommand,
     semantic: semanticCommand,
+    refactor: refactorCommand,
+    review: reviewCommand,
   },
 });
 
