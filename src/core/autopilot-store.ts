@@ -119,6 +119,22 @@ export class AutopilotStore {
     return writeJson(this.graphPath(workItemId), autopilot, { ...graph, nodes: survivors });
   }
 
+  /**
+   * Mutate the approval gate in place (wi_260615xby A — approve/reject CLI). Only
+   * the gate object is replaced; nodes and every other field stay byte-identical.
+   * The write re-validates the whole graph against the schema.
+   */
+  async updateApprovalGate(
+    workItemId: string,
+    mutator: (gate: Autopilot['approval_gate']) => Autopilot['approval_gate'],
+  ): Promise<Autopilot> {
+    const graph = await this.get(workItemId);
+    return writeJson(this.graphPath(workItemId), autopilot, {
+      ...graph,
+      approval_gate: mutator(graph.approval_gate),
+    });
+  }
+
   async appendDecision(workItemId: string, decision: AutopilotDecision): Promise<void> {
     await ensureDir(this.dir(workItemId));
     const path = this.decisionsPath(workItemId);

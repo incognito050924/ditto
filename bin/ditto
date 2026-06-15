@@ -16191,6 +16191,28 @@ var architectureCommand = defineCommand({
   }
 });
 
+// src/core/autopilot-approval.ts
+function requirePending(gate, action) {
+  if (gate.status !== "pending") {
+    throw new Error(`approval gate is not pending (current: ${gate.status}); nothing to ${action}`);
+  }
+}
+function applyApproval(gate, input = {}) {
+  requirePending(gate, "approve");
+  return {
+    ...gate,
+    status: "approved",
+    source: input.source ?? "user",
+    approved_at: (input.now ?? new Date).toISOString(),
+    approved_by: input.by ?? "user"
+  };
+}
+function applyRejection(gate, reason) {
+  requirePending(gate, "reject");
+  const evidence_refs = reason ? [...gate.evidence_refs, { kind: "note", summary: reason }] : gate.evidence_refs;
+  return { ...gate, status: "rejected", evidence_refs };
+}
+
 // src/core/autopilot-graph.ts
 var KIND_TO_OWNER = {
   research: "researcher",
@@ -16575,6 +16597,13 @@ class AutopilotStore {
       }
     }
     return writeJson(this.graphPath(workItemId2), autopilot, { ...graph, nodes: survivors });
+  }
+  async updateApprovalGate(workItemId2, mutator) {
+    const graph = await this.get(workItemId2);
+    return writeJson(this.graphPath(workItemId2), autopilot, {
+      ...graph,
+      approval_gate: mutator(graph.approval_gate)
+    });
   }
   async appendDecision(workItemId2, decision) {
     await ensureDir(this.dir(workItemId2));
@@ -22851,6 +22880,142 @@ var autopilotCoverageRound = defineCommand({
     }
   }
 });
+var autopilotStatus = defineCommand({
+  meta: {
+    name: "status",
+    description: "Show the approval gate, plan brief, and node progress for a work item"
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    const graph = await new AutopilotStore(repoRoot).get(args.workItem);
+    const gate2 = graph.approval_gate;
+    const byStatus = graph.nodes.reduce((acc, n2) => {
+      acc[n2.status] = (acc[n2.status] ?? 0) + 1;
+      return acc;
+    }, {});
+    if (format === "json") {
+      writeJson2({
+        work_item_id: args.workItem,
+        autopilot_id: graph.autopilot_id,
+        approval_gate: gate2,
+        nodes: { total: graph.nodes.length, by_status: byStatus }
+      });
+      return;
+    }
+    writeHuman(`Autopilot ${graph.autopilot_id} (${args.workItem})`);
+    writeHuman(`  approval_gate: ${gate2.status}${gate2.source ? ` (source: ${gate2.source})` : ""}`);
+    if (gate2.approved_by)
+      writeHuman(`  approved_by:   ${gate2.approved_by}`);
+    if (gate2.change_surface?.length) {
+      writeHuman(`  change_surface: ${gate2.change_surface.join(", ")}`);
+    }
+    if (gate2.plan_brief) {
+      writeHuman("  plan_brief:");
+      for (const c3 of gate2.plan_brief.interface_changes)
+        writeHuman(`    interface: ${c3}`);
+      for (const d2 of gate2.plan_brief.dod)
+        writeHuman(`    dod:       ${d2}`);
+      for (const s2 of gate2.plan_brief.test_scenarios)
+        writeHuman(`    test:      ${s2}`);
+    }
+    const counts = Object.entries(byStatus).map(([s2, n2]) => `${s2}=${n2}`).join(" ");
+    writeHuman(`  nodes:         ${graph.nodes.length} (${counts})`);
+    if (gate2.status === "pending") {
+      writeHuman("  \u2192 review the brief, then: ditto autopilot approve|reject --workItem <wi>");
+    }
+  }
+});
+var APPROVAL_SOURCES = ["user", "approved_spec", "issue", "prd"];
+var autopilotApprove = defineCommand({
+  meta: { name: "approve", description: "Approve a pending plan approval gate" },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    by: { type: "string", description: "Recorded as approved_by (default: user)", required: false },
+    source: {
+      type: "string",
+      description: "Approval source: user|approved_spec|issue|prd (default: user)",
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (args.source !== undefined && !APPROVAL_SOURCES.includes(args.source)) {
+      writeError(`invalid --source "${args.source}"; expected one of: ${APPROVAL_SOURCES.join(", ")}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    try {
+      const updated = await new AutopilotStore(repoRoot).updateApprovalGate(args.workItem, (gate3) => applyApproval(gate3, {
+        ...args.by ? { by: args.by } : {},
+        ...args.source ? { source: args.source } : {}
+      }));
+      const gate2 = updated.approval_gate;
+      if (format === "json") {
+        writeJson2({ work_item_id: args.workItem, approval_gate: gate2 });
+      } else {
+        writeHuman(`Approved ${args.workItem}: gate=${gate2.status} source=${gate2.source}`);
+        writeHuman(`  approved_by: ${gate2.approved_by} at ${gate2.approved_at}`);
+      }
+    } catch (err) {
+      writeError(`approve failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var autopilotReject = defineCommand({
+  meta: { name: "reject", description: "Reject a pending plan approval gate" },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    reason: { type: "string", description: "Why the plan is rejected (recorded)", required: false },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    try {
+      const updated = await new AutopilotStore(repoRoot).updateApprovalGate(args.workItem, (gate3) => applyRejection(gate3, args.reason));
+      const gate2 = updated.approval_gate;
+      if (format === "json") {
+        writeJson2({ work_item_id: args.workItem, approval_gate: gate2 });
+      } else {
+        writeHuman(`Rejected ${args.workItem}: gate=${gate2.status}`);
+        if (args.reason)
+          writeHuman(`  reason: ${args.reason}`);
+      }
+    } catch (err) {
+      writeError(`reject failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var autopilotCommand = defineCommand({
   meta: {
     name: "autopilot",
@@ -22858,6 +23023,9 @@ var autopilotCommand = defineCommand({
   },
   subCommands: {
     bootstrap: autopilotBootstrap,
+    status: autopilotStatus,
+    approve: autopilotApprove,
+    reject: autopilotReject,
     "next-node": autopilotNextNode,
     "record-result": autopilotRecordResult,
     complete: autopilotComplete,
@@ -35620,4 +35788,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=46e17d7a28995c22e668957e6c55b52b2871a7b6cfd8ec79920b36fbd5e2d7bb
+//# ditto-src-stamp=96f95e980a057dc0a846ee903aeff767b1f4d43923d80077f4fa4230d34466af

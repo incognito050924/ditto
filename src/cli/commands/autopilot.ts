@@ -1,4 +1,5 @@
 import { defineCommand } from 'citty';
+import { type ApprovalSourceValue, applyApproval, applyRejection } from '~/core/autopilot-approval';
 import { bootstrapAutopilot } from '~/core/autopilot-bootstrap';
 import { runCleanup } from '~/core/autopilot-cleanup';
 import { assembleCompletionFromGraph } from '~/core/autopilot-complete';
@@ -820,6 +821,168 @@ const autopilotCoverageRound = defineCommand({
   },
 });
 
+/**
+ * `ditto autopilot status` — surface the approval gate, its plan brief
+ * ("무엇을 승인하는가"), and node progress so an operator decides on the gate
+ * without hand-reading autopilot.json (wi_260615xby A). Read-only.
+ */
+const autopilotStatus = defineCommand({
+  meta: {
+    name: 'status',
+    description: 'Show the approval gate, plan brief, and node progress for a work item',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    const graph = await new AutopilotStore(repoRoot).get(args.workItem);
+    const gate = graph.approval_gate;
+    const byStatus = graph.nodes.reduce<Record<string, number>>((acc, n) => {
+      acc[n.status] = (acc[n.status] ?? 0) + 1;
+      return acc;
+    }, {});
+    if (format === 'json') {
+      writeJson({
+        work_item_id: args.workItem,
+        autopilot_id: graph.autopilot_id,
+        approval_gate: gate,
+        nodes: { total: graph.nodes.length, by_status: byStatus },
+      });
+      return;
+    }
+    writeHuman(`Autopilot ${graph.autopilot_id} (${args.workItem})`);
+    writeHuman(`  approval_gate: ${gate.status}${gate.source ? ` (source: ${gate.source})` : ''}`);
+    if (gate.approved_by) writeHuman(`  approved_by:   ${gate.approved_by}`);
+    if (gate.change_surface?.length) {
+      writeHuman(`  change_surface: ${gate.change_surface.join(', ')}`);
+    }
+    if (gate.plan_brief) {
+      writeHuman('  plan_brief:');
+      for (const c of gate.plan_brief.interface_changes) writeHuman(`    interface: ${c}`);
+      for (const d of gate.plan_brief.dod) writeHuman(`    dod:       ${d}`);
+      for (const s of gate.plan_brief.test_scenarios) writeHuman(`    test:      ${s}`);
+    }
+    const counts = Object.entries(byStatus)
+      .map(([s, n]) => `${s}=${n}`)
+      .join(' ');
+    writeHuman(`  nodes:         ${graph.nodes.length} (${counts})`);
+    if (gate.status === 'pending') {
+      writeHuman('  → review the brief, then: ditto autopilot approve|reject --workItem <wi>');
+    }
+  },
+});
+
+const APPROVAL_SOURCES: readonly ApprovalSourceValue[] = ['user', 'approved_spec', 'issue', 'prd'];
+
+/**
+ * `ditto autopilot approve` — flip a pending approval gate to approved, recording
+ * source/approved_at/approved_by, so the loop's `autopilotForcesContinuation`
+ * picks it up (wi_260615xby A). Resolves the manual-edit gotcha (#1). Writes only
+ * the gate; the loop core is untouched.
+ */
+const autopilotApprove = defineCommand({
+  meta: { name: 'approve', description: 'Approve a pending plan approval gate' },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    by: { type: 'string', description: 'Recorded as approved_by (default: user)', required: false },
+    source: {
+      type: 'string',
+      description: 'Approval source: user|approved_spec|issue|prd (default: user)',
+      required: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (
+      args.source !== undefined &&
+      !APPROVAL_SOURCES.includes(args.source as ApprovalSourceValue)
+    ) {
+      writeError(
+        `invalid --source "${args.source}"; expected one of: ${APPROVAL_SOURCES.join(', ')}`,
+      );
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    try {
+      const updated = await new AutopilotStore(repoRoot).updateApprovalGate(args.workItem, (gate) =>
+        applyApproval(gate, {
+          ...(args.by ? { by: args.by } : {}),
+          ...(args.source ? { source: args.source as ApprovalSourceValue } : {}),
+        }),
+      );
+      const gate = updated.approval_gate;
+      if (format === 'json') {
+        writeJson({ work_item_id: args.workItem, approval_gate: gate });
+      } else {
+        writeHuman(`Approved ${args.workItem}: gate=${gate.status} source=${gate.source}`);
+        writeHuman(`  approved_by: ${gate.approved_by} at ${gate.approved_at}`);
+      }
+    } catch (err) {
+      writeError(`approve failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/**
+ * `ditto autopilot reject` — flip a pending approval gate to rejected (the loop
+ * then rolls back, autopilot-loop.ts). An optional --reason is persisted as a
+ * note evidence_ref. Writes only the gate; the loop core is untouched.
+ */
+const autopilotReject = defineCommand({
+  meta: { name: 'reject', description: 'Reject a pending plan approval gate' },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    reason: { type: 'string', description: 'Why the plan is rejected (recorded)', required: false },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    try {
+      const updated = await new AutopilotStore(repoRoot).updateApprovalGate(args.workItem, (gate) =>
+        applyRejection(gate, args.reason),
+      );
+      const gate = updated.approval_gate;
+      if (format === 'json') {
+        writeJson({ work_item_id: args.workItem, approval_gate: gate });
+      } else {
+        writeHuman(`Rejected ${args.workItem}: gate=${gate.status}`);
+        if (args.reason) writeHuman(`  reason: ${args.reason}`);
+      }
+    } catch (err) {
+      writeError(`reject failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const autopilotCommand = defineCommand({
   meta: {
     name: 'autopilot',
@@ -828,6 +991,9 @@ export const autopilotCommand = defineCommand({
   },
   subCommands: {
     bootstrap: autopilotBootstrap,
+    status: autopilotStatus,
+    approve: autopilotApprove,
+    reject: autopilotReject,
     'next-node': autopilotNextNode,
     'record-result': autopilotRecordResult,
     complete: autopilotComplete,

@@ -84,6 +84,15 @@ describe('AutopilotStore', () => {
     expect((err as Error)?.message).toContain('changed node id');
   });
 
+  test('updateApprovalGate mutates only the gate and persists', async () => {
+    await store.write(WI, graph());
+    await store.updateApprovalGate(WI, (g) => ({ ...g, status: 'approved', approved_by: 'me' }));
+    const read = await store.get(WI);
+    expect(read.approval_gate.status).toBe('approved');
+    expect(read.approval_gate.approved_by).toBe('me');
+    expect(read.nodes).toHaveLength(3);
+  });
+
   const extraNode = (id: string, depends_on: string[]): AutopilotNode => ({
     id,
     kind: 'implement',
