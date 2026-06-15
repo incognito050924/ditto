@@ -1,6 +1,6 @@
 # ADR-0017: 정리(Tidy/deslop) 절차를 ACG 게이트 위에 정립한다 — 2차 정적 엔진 없이
 
-- 상태: proposed (dialectic-8·9 두 라운드 재검증 완료, verdict=revise 정정 반영. **dialectic-9 정정 5건**: catalog 변환 철회(미배선)·절대부채 신규측정(drift 재사용 아님)·trace 회귀탐지 등급강등·자동커밋 full-bar 조건화·unit-scoped 후속 WU 분리. accept_condition 충족 → 사용자 승인 시 accepted 승격 가능. ledger: `reviews/dialectic-8.json`·`dialectic-9.json`)
+- 상태: accepted (2026-06-15 사용자 승인 — wi_2606158xq WU-0. dialectic-8·9 두 라운드 재검증 완료, verdict=revise 정정 5건 반영: catalog 변환 철회(미배선)·절대부채 신규측정(drift 재사용 아님)·trace 회귀탐지 등급강등·자동커밋 full-bar 조건화·unit-scoped 후속 WU 분리. **결정 채택이며 구현은 미착수** — WU-1~(change-scoped 코어·fitness·병렬정리)는 별도 착수 허가 대상이고 coverage/property provider 배선이 선결조건[D5]. ledger: `reviews/dialectic-8.json`·`dialectic-9.json`)
 - 결정 일자: 2026-06-15
 - 결정자: hskim, claude
 - 관련: ADR-0006(정적 분석 엔진 = CodeQL 단일 — 이 ADR이 그 결정을 정리 워크플로에서 *재확인*), `reports/design/agentic-governance/80-acg-cleanup-deslop-plan.md`(구현 계획·작업단위·pre-mortem), `reports/design/agentic-governance/40-refactoring-criteria.md`(리팩토링 허용 게이트·Deep Module Gate·증거형식 — 이 절차가 재사용·확장), `reports/design/agentic-governance/10-methodology.md`(8단계 라이프사이클), `reports/harnesses/lazycodex-remove-ai-slops-ast-grep.md`(코드레벨 근거), wi_2606158xq
