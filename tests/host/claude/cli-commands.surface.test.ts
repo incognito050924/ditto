@@ -23,7 +23,7 @@ const CLI = join(REPO, 'src', 'cli', 'index.ts');
 const TOP_LEVEL = [
   ['init', initCommand],
   ['setup', setupCommand],
-  ['teardown', teardownCommand],
+  ['uninstall', teardownCommand],
   ['doctor', doctorCommand],
   ['verify', verifyCommand],
   ['work', workCommand],

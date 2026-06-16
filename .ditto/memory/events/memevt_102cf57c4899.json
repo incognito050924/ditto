@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_102cf57c4899",
+  "event_type": "observation",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "original_intent: 측정이 우선이겠네? → b (결과 지표까지 포함한 제대로 된 측정 설계)\ncurrent_state: final_verdict=partial; deep-interview 의도파악 품질 측정 인프라 — 일부 acceptance criterion이 비-pass 상태로 partial 핸드오프된다.\nnext_first_check: 미pass acceptance에 대한 검증 결과\nfailed_or_unverified: ac-1 [unverified]",
+  "created_at": "2026-06-16T16:46:51.311Z",
+  "status": "approved",
+  "sources": [
+    "src_255eca8f4d32"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-16T16:46:51.311Z"
+}

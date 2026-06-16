@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_37729e4d2379",
+  "event_type": "observation",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "original_intent: 빌드/배포 정리 맥락에서: ditto 사용 필수(전역)와 dogfooding 부산물(로컬)이 뭉뚱그려져 구분이 안 됨. knowledge 등 전반을 전수 조사한 결과를 바탕으로, 의도 적합도 우선, 위험이 적은 방향으로 계획하여 자율 수행해.\ncurrent_state: final_verdict=pass; ditto 제품(전역)/이 레포 dogfooding(로컬) 자산 구분 정리: 갇힌 실행계층 계약 3개(host-adapter/run-with/verify) reports/design/contracts/ 승격(소실 방지), 배포 표면 dogfooding 누출(skills wi_*·DEVELOPMENT 절대경로) 제거, orphan knowledge.json 제거, 전역/로컬/research 경계 문서화. 고위험 항목은 경계 문서에 후속으로 기록.\nnext_first_check: work item과 acceptance를 재확인하고 열린 노드를 재개한다.",
+  "created_at": "2026-06-16T16:46:51.311Z",
+  "status": "approved",
+  "sources": [
+    "src_279c2fda5c6c"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-16T16:46:51.311Z"
+}

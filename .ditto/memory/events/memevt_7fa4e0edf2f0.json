@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_7fa4e0edf2f0",
+  "event_type": "observation",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "Handoff — autopilot 경로 강제 + PreToolUse 가드 정밀화 + Windows 파괴탐지",
+  "created_at": "2026-06-16T16:46:51.311Z",
+  "status": "approved",
+  "sources": [
+    "src_8e6c35de7291"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-16T16:46:51.311Z"
+}

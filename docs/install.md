@@ -2,75 +2,33 @@
 
 > 한국어 안내는 [install.ko.md](install.ko.md)를 참고하세요.
 
-DITTO installs as a local Claude Code plugin. One orchestrator script registers
-the plugin, builds the self-contained CLI/hook binary, puts it on your `PATH`,
-and scaffolds whichever project you point it at. Everything is idempotent — you
-can safely re-run it.
+DITTO installs as a local Claude Code (or Codex) plugin. The install script is a
+**thin bootstrap**: it builds the self-contained `ditto` binary and puts it on
+your `PATH` — the two steps that must happen before `ditto` exists — and then
+**delegates everything else to the binary itself** (`ditto setup`). Everything is
+idempotent; you can safely re-run it.
 
 ## Prerequisites
 
-| Requirement | Why | Notes |
-|-------------|-----|-------|
-| **bun ≥ 1.3** | Builds the self-contained `ditto` binary (`bun --compile`). | `node` alone can drive the installer, but the binary build needs bun. Install from <https://bun.sh>. |
-| **Claude Code** | DITTO is a Claude Code plugin. | The plugin is registered into `~/.claude/settings.json`. |
-| **git** | DITTO reads repo state. | Already present in any dev environment. |
-| curl + unzip *(optional)* | Auto-installs the CodeQL CLI. | Used by `ditto impact` / `boundary` / `acg-review`. The step is graceful — it never fails the install. |
+Install these first. Both are quick, one-command installs.
 
-CodeQL and Playwright/Chromium are installed automatically when possible. Both
-degrade gracefully: if a download fails, the installer prints the exact manual
-step and continues. See [Dependency model](#dependency-model-codeql--playwright)
-below for the details.
+| Requirement | Why | How to install |
+|-------------|-----|----------------|
+| **bun ≥ 1.3** | Builds the self-contained `ditto` binary (`bun --compile`) and runs the install orchestrator. | Official guide: <https://bun.sh/docs/installation> (`curl -fsSL https://bun.sh/install \| bash`). |
+| **git** | DITTO reads repo state and memory lives in git. | Official downloads: <https://git-scm.com/downloads>. macOS: `xcode-select --install` or `brew install git`; Debian/Ubuntu: `sudo apt-get install git`; Windows: the installer from git-scm. |
+| **Claude Code** *(or Codex)* | DITTO is a host plugin. | The host you intend to run DITTO under. See <https://docs.claude.com/claude-code>. |
 
-## Dependency model: CodeQL / Playwright
+That is all you need to install. The heavier analysis tools below are **optional**
+and provisioned later by the wizard — never required to get DITTO running.
 
-The DITTO **runtime never auto-installs heavy external tools mid-analysis.** When
-one is missing it degrades honestly — this is by design (it prevents false passes).
+| Optional tool | Provisioned by | Used by |
+|---------------|----------------|---------|
+| CodeQL CLI | `ditto setup` (with tools) or `ditto doctor codeql --install` | `ditto codeql review`, `impact`, `boundary` (ACG gate) |
+| Playwright / Chromium | `ditto setup` (with tools) or `bunx playwright install chromium` | `/ditto:e2e` real-browser journeys |
+| Language servers (LSP) | `ditto setup` (with tools) | per-language servers for detected languages |
 
-| Tool | Used by | Runtime behavior when absent |
-|------|---------|------------------------------|
-| CodeQL CLI | `ditto codeql review` (ACG gate) | `doctor codeql` fail-closes and blocks analysis |
-| CodeQL query packs | analysis queries | auto-downloaded at analysis time (no separate install) |
-| Playwright/Chromium | `/ditto:e2e` real-browser journey | degrades to `result=blocked` (never a fake pass) |
-
-There are **two paths** that pre-seed these tools:
-
-1. **Install-script path** — `scripts/install.sh` pre-seeds CodeQL and
-   Playwright/Chromium gracefully in steps 3b/3c. Skip with `--no-codeql` /
-   `--no-playwright`.
-2. **Marketplace path** — installing via `claude plugin install
-   <plugin>@<marketplace>` does **not** run install.sh, so the pre-seed above
-   does **not** happen. Bootstrap CodeQL with the opt-in command below.
-
-### Install the CodeQL CLI (opt-in)
-
-```bash
-ditto doctor codeql --install
-```
-
-- **If already present**, it does nothing and returns `already-present`
-  (detection order: `CODEQL_BIN` → PATH → gh extension → ditto-managed).
-- **If absent**, it downloads the official CLI bundle (github/codeql-cli-binaries)
-  into `~/.local/share/ditto/codeql` and symlinks `~/.local/bin/codeql`. Query
-  packs are fetched on first analysis.
-- **Never hard-fails**: on error it returns `failed` plus copy-paste manual
-  commands (gh extension / direct bundle). It also tells you when `~/.local/bin`
-  is not on your PATH. Windows advises adding the dir to PATH instead of symlinking.
-
-> When CodeQL is missing, `doctor codeql`'s message also points at this command.
-> This installer uses the **same bundle source, location, and detection** as the
-> install script (step 3b) — there is only ever one ditto-managed CodeQL.
-
-### Install Playwright / Chromium
-
-The runtime **never auto-installs a browser** (`/ditto:e2e` returns `blocked`
-when absent). To pre-seed, use install.sh (step 3c) or run it directly:
-
-```bash
-bunx playwright install chromium
-```
-
-This provides both inputs the runtime probe requires (`playwright-core` in bun's
-cache + a full Chromium build in the ms-playwright cache).
+All three are **graceful**: if a download or prerequisite is missing, the wizard
+prints the exact manual command and continues — it never fails the install.
 
 ## Quick start
 
@@ -78,8 +36,8 @@ Clone the repo, then install DITTO **into the project you want it to manage**:
 
 ```bash
 git clone <ditto-repo-url> ditto
-cd /path/to/your/project          # the project DITTO should manage
-/path/to/ditto/scripts/install.sh # install into the current directory
+cd /path/to/your/project           # the project DITTO should manage
+/path/to/ditto/scripts/install.sh  # bootstrap, then run the setup wizard
 ```
 
 Or target a project explicitly without changing directories:
@@ -95,32 +53,33 @@ On **Windows (PowerShell 5+)** use the `.ps1` entry point:
 \path\to\ditto\scripts\install.ps1 install -Target C:\path\to\your\project
 ```
 
-## What the installer does
+`install.sh` runs non-interactively (`ditto setup --yes --tools`). To answer the
+wizard questions yourself instead, run `ditto setup` directly in a terminal after
+the bootstrap (see [The setup wizard](#the-setup-wizard)).
+
+## What `install.sh` does
+
+The script bootstraps the binary, then hands the rest to `ditto setup`:
 
 | Step | Scope | Action |
 |------|-------|--------|
-| 1. register | global | Patches `~/.claude/settings.json` so the local plugin loads. |
-| 2. build | repo | `bun run build:plugin` → `dist/plugin/` (the deploy unit, incl. `bin/ditto`). |
-| 3. place | global | Symlinks the binary onto `PATH` (`~/.local/bin/ditto`) so bare `ditto …` works. **On Windows the binary is NOT symlinked** — see the note below. |
-| 3b. codeql | host | Reuses an existing CodeQL CLI or downloads it (graceful). |
-| 3c. playwright | host | Pre-seeds Playwright + Chromium for `/ditto:e2e` (graceful). |
-| 4. init | project | `ditto init` scaffolds the target's `.ditto/`. |
-| 5. allowlist | project | Adds `Bash(ditto:*)` to the target's `.claude/settings.json` so `ditto …` never prompts. |
+| 1. build | repo | `bun run build:plugin` → `dist/plugin/` (the deploy unit, incl. `bin/ditto`). |
+| 2. place | global | Symlinks the binary onto `PATH` (`~/.local/bin/ditto`) so bare `ditto …` works. **On Windows the binary is NOT symlinked** — see the note below. |
+| 3. delegate | project | Runs `ditto setup --dir <target> --yes --tools`, which installs the host instruction blocks, scaffolds `.ditto/`, allowlists `Bash(ditto:*)`, and provisions detected tools. |
 
-> When the target **is** the DITTO repo itself (self-host), the project steps
-> (init / allowlist) are skipped — the repo must not be its own managed target.
+There is **no marketplace registration step** — the GitHub/source plugin and the
+local `dist/plugin` dev path do not need a persistent marketplace entry.
+
+> When the target **is** the DITTO repo itself (self-host), `ditto setup` no-ops
+> its project steps — the repo must not be its own managed target.
 
 ### Windows note
 
-Symlink placement (step 3) is POSIX-only. On Windows the installer builds the
+Symlink placement (step 2) is POSIX-only. On Windows the installer builds the
 binary but does **not** put it on `PATH` automatically. After installing, add
-these directories to your `PATH` so `ditto` (and CodeQL) resolve:
-
-- `<ditto-repo>\dist\plugin\bin` — the `ditto.exe` binary
-- the CodeQL directory the installer reports (if CodeQL was downloaded)
-
-The installer prints the exact directories to add. Until they are on `PATH`,
-hooks and bare `ditto …` commands will not resolve.
+`<ditto-repo>\dist\plugin\bin` (the `ditto.exe` binary) to your `PATH`. The
+installer prints the exact directory. Until it is on `PATH`, hooks and bare
+`ditto …` commands will not resolve.
 
 ### Options
 
@@ -128,38 +87,57 @@ hooks and bare `ditto …` commands will not resolve.
 |------|--------|
 | `--target <dir>` (`-Target` on Windows) | Project to install into. Defaults to the current directory. |
 | `--no-build` (`-NoBuild`) | Skip the binary build (reuse an existing one). |
-| `--no-codeql` (`-NoCodeql`) | Skip CodeQL installation. |
-| `--no-playwright` (`-NoPlaywright`) | Skip Playwright/Chromium installation. |
+| `--no-tools` (`-NoTools`) | Skip tool provisioning (CodeQL / Playwright / LSP). |
 
 If the DITTO repo can't be auto-detected, set `DITTO_HOME` to the repo root
 (the directory containing `.claude-plugin/plugin.json`).
 
-## Loading the behavior rules — `ditto setup` (a step the installer does NOT run)
+## The setup wizard
 
-The installer's step 4 is `ditto init` (scaffolds `.ditto/`), not `ditto setup`.
-**The behavior rules only land when you run `ditto setup`** — after install alone
-the plugin surfaces (skills/agents/hooks) work, but these managed blocks are
-absent:
-
-| File | Scope | Content |
-|------|-------|---------|
-| `~/.claude/CLAUDE.md` · `~/.claude/AGENTS.md` | global | Global behavior rules (completion gate, fact gate, output rules, …). Applies to every project. |
-| `<target>/CLAUDE.md` · `<target>/AGENTS.md` | project | The Agent Behavior Charter. |
-
-Run it inside the target project:
+`ditto setup` is the single surface for installing DITTO into a project. When you
+run it **in a terminal (TTY)**, it is interactive; when run by a script, CI, or an
+agent (no TTY), or with `--yes`, it runs non-interactively with safe defaults.
 
 ```bash
 cd /path/to/your/project
-ditto setup
+ditto setup                 # interactive wizard
+ditto setup --yes           # non-interactive, defaults, no tool install
+ditto setup --yes --tools   # non-interactive + provision detected tools (what install.sh uses)
 ```
 
-Host-specific setup is explicit:
+### Wizard questions
 
-```bash
-ditto setup --host claude-code   # default; existing Claude Code behavior
-ditto setup --host codex         # installs Codex AGENTS, marketplace, and agents
-ditto setup --host both
-```
+| # | Question | Options (default first) | What it does |
+|---|----------|-------------------------|--------------|
+| 1 | **Host** | `claude-code` / `codex` / `both` | Which host's instruction blocks, surfaces, and agents to install. |
+| 2 | **Analysis / language tools** | multi-select over **detected** tools | DITTO walks the source tree, infers languages, and pre-checks the missing tools (CodeQL, Playwright, and the LSP servers for each detected language). You confirm or toggle; only the selected, missing ones are installed. Skipping is safe — the feature degrades, it does not break. |
+| 3 | **Memory storage** | `in-project` / `separate repo` | Where the memory SoT (`.ditto/memory/`) lives. Default keeps it in the project's git. Choosing **separate repo** offers `gitignore-standalone` (default: `git init` in `.ditto/memory/` + add it to the parent `.gitignore`) or `submodule` (opt-in; needs a remote, so it prints manual steps). |
+
+Non-interactive runs take Host from `--host` (default `claude-code`), provision
+tools only with `--tools`, and keep memory in-project.
+
+After the questions the wizard prints a one-line note: the **PreToolUse safety
+hook** is active plugin-wide (it blocks a conservative set of destructive /
+secret-touching tool calls; default is allow). It is not a per-project toggle —
+if it false-positives on a legitimate command, prefix it with `DITTO_SKIP_HOOKS=1`.
+
+### What `ditto setup` installs
+
+| File | Scope | Content |
+|------|-------|---------|
+| `~/.claude/CLAUDE.md` · `~/.claude/AGENTS.md` | global | Global behavior rules (completion gate, fact gate, output rules). Applies to every project. |
+| `<target>/CLAUDE.md` · `<target>/AGENTS.md` | project | The Agent Behavior Charter. |
+
+Behavior (verified by direct runs):
+
+- **Preserves existing content**: anything already in the file stays outside the
+  managed block (`<!-- ditto:managed:start … -->`); the first application creates
+  a `<file>.ditto_bak` backup.
+- **Idempotent**: re-running updates the block in place, never duplicates it.
+- **Removal**: `ditto uninstall` strips only the managed blocks and keeps user content.
+- The loaded rules take effect from the **next** host session.
+
+### Codex host
 
 For Codex, build the Codex plugin surface first:
 
@@ -168,41 +146,56 @@ bun run build:codex-plugin
 ditto setup --host codex
 ```
 
-The Codex branch copies the built plugin into
-`<target>/.agents/plugins/ditto/`, writes
-`<target>/.agents/plugins/marketplace.json`, and installs generated custom
-agents into `<target>/.codex/agents/`. This is a **prepared** state, not an
-enabled Codex plugin. `ditto setup --host codex` prints the exact follow-up
-commands:
+The Codex branch copies the built plugin into `<target>/.agents/plugins/ditto/`,
+writes `<target>/.agents/plugins/marketplace.json`, and installs generated agents
+into `<target>/.codex/agents/`. This is a **prepared** state, not an enabled
+plugin. `ditto setup --host codex` prints the follow-up commands:
 
 ```bash
 codex plugin marketplace add /path/to/your/project
 codex plugin add ditto@ditto-local
 ```
 
-Run those commands in the Codex home you intend to use, then start a new Codex
-session. Until then, `ditto doctor capability --host codex` reports
-`codex_plugin_needs_user_action` instead of rounding prepared files up to loaded
-hooks/skills.
+Run those in the Codex home you intend to use, then start a new Codex session.
+Until then, `ditto doctor capability --host codex` reports
+`codex_plugin_needs_user_action`.
 
-Behavior (verified by direct runs):
+## Tools: CodeQL / Playwright / LSP
 
-- **Preserves existing content**: anything already in the file stays outside the
-  managed block (`<!-- ditto:managed:start … -->`), and the first application
-  creates a `<file>.ditto_bak` backup.
-- **Idempotent**: re-running updates the block in place, never duplicates it.
-- **Removal**: `ditto teardown` strips only the managed blocks and keeps user
-  content.
-- The loaded rules take effect from the **next** host session.
+The DITTO **runtime never auto-installs heavy external tools mid-analysis.** When
+one is missing it degrades honestly — this prevents false passes.
 
-> Under self-host (target = the DITTO repo itself) setup is skipped entirely.
-> When dogfooding inside the DITTO repo and you only need the **global** blocks,
-> run `ditto setup` once in any other project (a scratch directory works) — the
-> global files land in the same place regardless of the target.
+| Tool | Used by | Runtime behavior when absent |
+|------|---------|------------------------------|
+| CodeQL CLI | `ditto codeql review` (ACG gate) | `doctor codeql` fail-closes and blocks analysis |
+| CodeQL query packs | analysis queries | auto-downloaded at analysis time (no separate install) |
+| Playwright/Chromium | `/ditto:e2e` real-browser journey | degrades to `result=blocked` (never a fake pass) |
+| Language servers (LSP) | language-aware features | the language is reported as unserviced; no block |
+
+These are provisioned **opt-in** by `ditto setup` (the wizard's tool question, or
+`--tools` non-interactively), all behind one provisioner with a shared detection
+probe (`<TOOL>_BIN` env → `PATH` → ditto-managed under `~/.local/share/ditto/…`).
+
+CodeQL also has a standalone opt-in installer (e.g. for the marketplace path that
+skips the wizard):
+
+```bash
+ditto doctor codeql --install
+```
+
+- **If present**, it returns `already-present` (detection: `CODEQL_BIN` → PATH →
+  gh extension → ditto-managed).
+- **If absent**, it downloads the official CLI bundle (github/codeql-cli-binaries)
+  into `~/.local/share/ditto/codeql` and symlinks `~/.local/bin/codeql`.
+- **Never hard-fails**: on error it returns `failed` plus copy-paste manual commands.
+
+LSP servers are provisioned only through `ditto setup --tools` today (auto for
+ts/js, python, go, rust; manual instructions for heavier servers like Java/Kotlin).
+Playwright can also be pre-seeded directly with `bunx playwright install chromium`.
 
 ## Marketplace install/update path
 
-Instead of install.sh you can install through the Claude Code plugin
+Instead of `install.sh` you can install through the Claude Code plugin
 marketplace (GitHub source or a local `dist/plugin` directory source):
 
 ```bash
@@ -213,18 +206,14 @@ claude plugin install ditto@ditto-local
 Two traps on this path (both reproduced directly):
 
 1. **Updates require `marketplace update`.** The installed plugin is a **copied
-   cache** (`~/.claude/plugins/cache/…`). After the source changes
-   (push/rebuild) it stays stale until you run
-   `claude plugin marketplace update ditto-local`. The version is pinned
-   (0.0.0), so `claude plugin update` is a no-op.
-2. **`install` on an already-installed plugin is a no-op.** It ends with
-   "already installed" without refreshing the cache. To refresh, run
-   `claude plugin uninstall ditto@ditto-local`, then `claude plugin install`
-   again.
+   cache** (`~/.claude/plugins/cache/…`). After the source changes it stays stale
+   until you run `claude plugin marketplace update ditto-local`. The version is
+   pinned (0.0.0), so `claude plugin update` is a no-op.
+2. **`install` on an already-installed plugin is a no-op.** To refresh, run
+   `claude plugin uninstall ditto@ditto-local`, then `install` again.
 
-This path also skips the installer's steps 3b/3c (CodeQL/Playwright pre-seed)
-and `PATH` placement — use the opt-in commands from the
-[dependency model](#dependency-model-codeql--playwright) above.
+This path skips the bootstrap's `PATH` placement **and** the tool provisioning —
+run `ditto setup --tools` (or the opt-in commands above) yourself afterward.
 
 ## Verify
 
@@ -235,17 +224,20 @@ Start a **new** Claude Code session in the target project, then:
 ```
 
 ```bash
-ditto doctor       # binary on PATH, runtime reachable
+ditto doctor       # binary on PATH, runtime reachable, drift check
 ```
 
 A healthy install reports `ok` for `distribution`, `capability`, and `surface`.
 `permissions` / `mcp` may report `missing` / `unverified` when run inside the
-DITTO repo itself — that is expected, since the repo is not a managed target.
+DITTO repo itself — expected, since the repo is not a managed target.
+
+`ditto doctor` is the **diagnose** surface (instructions, permissions, MCP,
+surface, capability, distribution drift). It is advisory — it reports drift but
+does not auto-repair; to repair, re-run `ditto setup` (idempotent re-projection).
 
 ## Per-session wrapper (no persistent settings)
 
-If you'd rather not patch `settings.json` persistently, load DITTO for a single
-session via the assembled product surface:
+To load DITTO for a single session via the assembled product surface:
 
 ```bash
 # bash/zsh — add to ~/.bashrc or ~/.zshrc
@@ -259,38 +251,32 @@ $env:DITTO_HOME = 'C:\path\to\ditto'
 function ditto-claude { claude --plugin-dir $env:DITTO_HOME\dist\plugin $args }
 ```
 
-Then `ditto-claude` launches Claude Code with DITTO loaded for that session
-only. Run `bun run build:plugin` first if `dist/plugin` is absent. The
-`--plugin-dir` points at `dist/plugin` (the assembled product surface), never
-the repo root, so source and dogfooding state never leak in.
+Then `ditto-claude` launches Claude Code with DITTO loaded for that session only.
+Run `bun run build:plugin` first if `dist/plugin` is absent. `--plugin-dir` points
+at `dist/plugin` (the assembled surface), never the repo root, so source and
+dogfooding state never leak in.
 
 ## Updating & dogfooding
 
-The installed plugin reads `dist/plugin/` — a **copy** of the source assembled
-by `build:plugin`, not the source tree itself. And Claude Code loads plugins
-only at **session start** (no hot reload). So two things are always true:
+There is no dedicated `ditto update` command — **updating is re-running the
+bootstrap** (`install.sh` is idempotent: rebuild + idempotent `ditto setup`), plus
+the automatic `dist/plugin` rebuild below. The installed plugin reads
+`dist/plugin/` — a **copy** assembled by `build:plugin`, not the source tree — and
+Claude Code loads plugins only at **session start** (no hot reload). So:
 
 1. After changing source, `dist/plugin` must be **rebuilt**.
 2. A **new Claude Code session** is needed to pick up the rebuild.
 
-DITTO automates step 1 so you rarely run it by hand:
+DITTO automates step 1:
 
-- **Git hooks (multi-PC sync).** `post-merge` and `post-checkout` rebuild
-  `dist/plugin` automatically after `git pull` / merge / branch switch. They are
-  graceful (a build failure never blocks git) and activate via `bun install`
-  (the `prepare` script points `core.hooksPath` at `.githooks/`). So on any PC:
-  `git pull` → auto-rebuild → start a new session.
-- **Dev launcher (local loop).** `bun run dev:plugin` rebuilds and launches
-  Claude Code with the fresh `dist/plugin` in one step. The optional
-  `ditto-claude` wrapper (below) does the same as a shell function.
+- **Git hooks (multi-PC sync).** `post-merge` / `post-checkout` rebuild
+  `dist/plugin` after `git pull` / merge / branch switch (graceful; a build
+  failure never blocks git). Activated via `bun install` (the `prepare` script
+  points `core.hooksPath` at `.githooks/`).
+- **Dev launcher.** `bun run dev:plugin` rebuilds and launches Claude Code with
+  the fresh `dist/plugin` in one step.
 
-Either way the rebuild lands at session start — there is no in-session reload.
 If you ever need it manually: `bun run build:plugin`.
-
-> **Verified.** The auto-rebuild firing on real `git merge` and `git checkout`
-> (and the skip guard for file checkouts / same-commit switches) was confirmed
-> by running them. Not yet verified on Windows (`install.ps1`); and a new
-> session is still required to actually load the rebuilt plugin.
 
 ## Status & uninstall
 
@@ -300,6 +286,15 @@ If you ever need it manually: `bun run build:plugin`.
 /path/to/ditto/scripts/install.sh uninstall --target /the/project
 ```
 
-Uninstall reverses registration, binary placement, and the allowlist. It leaves
-the target's `.ditto/` runtime data intact — that is your work-item history;
-remove it manually to purge.
+Uninstall removes the binary symlink and delegates to `ditto uninstall` (alias: `teardown`), which
+strips the managed instruction blocks and the allowlist rule while **keeping** the
+target's `.ditto/` runtime data — that is your work-item history and memory.
+
+To also delete `.ditto/` (irreversible — purges work-item history and memory):
+
+```bash
+ditto uninstall --purge                 # in the target project
+```
+
+`--purge` is required explicitly; in a terminal `ditto uninstall` first asks for
+confirmation (default: keep).

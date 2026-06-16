@@ -7,12 +7,13 @@
 #   ./scripts/install.sh uninstall [--target <dir>]
 #   ./scripts/install.sh status   [--target <dir>]
 #
-# Beyond plugin registration this also builds the self-contained binary,
-# symlinks it onto PATH, installs the CodeQL CLI and Playwright/Chromium (both
-# graceful — reuse if present, else download), scaffolds the target's .ditto/,
-# and allowlists `ditto …` in the target's .claude/settings.json. Pass
-# --no-build / --no-codeql / --no-playwright to skip those. Run from inside the
-# target project (or pass --target).
+# This is a thin bootstrap: it builds the self-contained binary and symlinks it
+# onto PATH (the two steps that must happen before `ditto` exists), then delegates
+# every project step to the binary itself — `ditto setup --dir <target> --yes
+# --tools` scaffolds .ditto/, installs host instruction blocks, allowlists
+# `ditto …`, and provisions detected tools (CodeQL/Playwright/LSP, graceful).
+# Pass --no-build to skip the build, --no-tools to skip tool provisioning. Run
+# from inside the target project (or pass --target).
 #
 # Env:
 #   DITTO_HOME   absolute path to the ditto repo (auto-detected if unset)

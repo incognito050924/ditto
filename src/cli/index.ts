@@ -38,7 +38,8 @@ const main = defineCommand({
   subCommands: {
     init: initCommand,
     setup: setupCommand,
-    teardown: teardownCommand,
+    uninstall: teardownCommand,
+    teardown: teardownCommand, // alias of uninstall (기존 참조·setup/teardown 대칭 호환)
     work: workCommand,
     run: runCommand,
     verify: verifyCommand,

@@ -10,8 +10,7 @@
  * ③(PHP 미지원 exit 1)을 전부 커버한다 — probe는 build 입증용 추가 단계(opt-in).
  */
 import { existsSync } from 'node:fs';
-import { readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { countExtensions } from '~/core/source-extensions';
 import { type CodeqlLanguage, selectBuildMode } from './runner';
 
 /** 파일 확장자 → CodeQL 언어. 목록에 없는 확장자는 미지원으로 분류된다. */
@@ -185,46 +184,9 @@ export async function inspectCodeqlTarget(
   };
 }
 
-/** 분석·추출에서 제외할 디렉터리명(소스 아님 / 빌드 산출물). */
-const EXCLUDED_DIR = new Set([
-  'node_modules',
-  '.git',
-  'dist',
-  'build',
-  'out',
-  '.ditto',
-  'coverage',
-  '.gradle',
-  'target',
-]);
-
-async function walkExtensions(dir: string, counts: Record<string, number>): Promise<void> {
-  let entries: Awaited<ReturnType<typeof readdir>>;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return; // 읽을 수 없는 디렉터리는 건너뛴다.
-  }
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      if (EXCLUDED_DIR.has(entry.name)) continue;
-      await walkExtensions(join(dir, entry.name), counts);
-    } else if (entry.isFile()) {
-      const dot = entry.name.lastIndexOf('.');
-      if (dot < 0) continue;
-      const ext = entry.name.slice(dot + 1).toLowerCase();
-      counts[ext] = (counts[ext] ?? 0) + 1;
-    }
-  }
-}
-
 /** 실제 파일시스템·CLI를 쓰는 기본 deps. */
 export const defaultDoctorDeps: CodeqlDoctorDeps = {
-  collectExtensions: async (sourceRoot) => {
-    const counts: Record<string, number> = {};
-    await walkExtensions(sourceRoot, counts);
-    return counts;
-  },
+  collectExtensions: (sourceRoot) => countExtensions(sourceRoot),
   cliAvailable: async () => {
     const bin = process.env.CODEQL_BIN;
     if (bin) return existsSync(bin);

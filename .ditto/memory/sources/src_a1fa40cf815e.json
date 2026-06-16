@@ -3,10 +3,10 @@
   "source_id": "src_a1fa40cf815e",
   "source_type": "spec",
   "path": ".ditto/knowledge/glossary.json",
-  "content_hash": "4fc1723995c63a1cec236a9479d86e38f4d214c3a38984ffac63b1abb414ea6a",
-  "captured_at": "2026-06-10T07:19:59.627Z",
-  "revision": "5e70f97f5c2e2b3156b5341ba4d0e26fd87ee147",
-  "git_commit": "5e70f97f5c2e2b3156b5341ba4d0e26fd87ee147",
+  "content_hash": "11ab964f81c2f2790bb5e910f3f270279f803ef8978b9ce146d3008eee003d8c",
+  "captured_at": "2026-06-16T16:46:51.311Z",
+  "revision": "f0b265ee45ff87f89ea344b41a164fbfc4928ad0",
+  "git_commit": "f0b265ee45ff87f89ea344b41a164fbfc4928ad0",
   "sensitivity": "internal",
-  "word_count": 1082
+  "word_count": 1863
 }

@@ -25109,8 +25109,49 @@ import { join as join43 } from "path";
 
 // src/core/codeql/doctor.ts
 import { existsSync as existsSync4 } from "fs";
+
+// src/core/source-extensions.ts
 import { readdir as readdir11 } from "fs/promises";
 import { join as join41 } from "path";
+var EXCLUDED_DIR = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  "out",
+  ".ditto",
+  "coverage",
+  ".gradle",
+  "target"
+]);
+async function walkExtensions(dir, counts) {
+  let entries;
+  try {
+    entries = await readdir11(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (EXCLUDED_DIR.has(entry.name))
+        continue;
+      await walkExtensions(join41(dir, entry.name), counts);
+    } else if (entry.isFile()) {
+      const dot = entry.name.lastIndexOf(".");
+      if (dot < 0)
+        continue;
+      const ext = entry.name.slice(dot + 1).toLowerCase();
+      counts[ext] = (counts[ext] ?? 0) + 1;
+    }
+  }
+}
+async function countExtensions(sourceRoot) {
+  const counts = {};
+  await walkExtensions(sourceRoot, counts);
+  return counts;
+}
+
+// src/core/codeql/doctor.ts
 var LANG_BY_EXT = {
   ts: "javascript",
   tsx: "javascript",
@@ -25204,44 +25245,8 @@ async function inspectCodeqlTarget(input, deps) {
     finding_count: findings.length
   };
 }
-var EXCLUDED_DIR = new Set([
-  "node_modules",
-  ".git",
-  "dist",
-  "build",
-  "out",
-  ".ditto",
-  "coverage",
-  ".gradle",
-  "target"
-]);
-async function walkExtensions(dir, counts) {
-  let entries;
-  try {
-    entries = await readdir11(dir, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      if (EXCLUDED_DIR.has(entry.name))
-        continue;
-      await walkExtensions(join41(dir, entry.name), counts);
-    } else if (entry.isFile()) {
-      const dot = entry.name.lastIndexOf(".");
-      if (dot < 0)
-        continue;
-      const ext = entry.name.slice(dot + 1).toLowerCase();
-      counts[ext] = (counts[ext] ?? 0) + 1;
-    }
-  }
-}
 var defaultDoctorDeps = {
-  collectExtensions: async (sourceRoot) => {
-    const counts = {};
-    await walkExtensions(sourceRoot, counts);
-    return counts;
-  },
+  collectExtensions: (sourceRoot) => countExtensions(sourceRoot),
   cliAvailable: async () => {
     const bin = process.env.CODEQL_BIN;
     if (bin)
@@ -34890,13 +34895,418 @@ var semanticCommand = defineCommand({
 });
 
 // src/cli/commands/setup.ts
+import { homedir as homedir9 } from "os";
+import { dirname as dirname14, join as join75, resolve as resolve18 } from "path";
+
+// src/core/provision/lsp-detect.ts
+var LSP_LANG_BY_EXT = {
+  ts: "typescript",
+  tsx: "typescript",
+  mts: "typescript",
+  cts: "typescript",
+  js: "javascript",
+  jsx: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  py: "python",
+  pyi: "python",
+  go: "go",
+  rs: "rust",
+  rb: "ruby",
+  java: "java",
+  kt: "kotlin",
+  kts: "kotlin",
+  cs: "csharp",
+  swift: "swift",
+  c: "c",
+  h: "c",
+  cpp: "cpp",
+  cc: "cpp",
+  cxx: "cpp",
+  hpp: "cpp",
+  hh: "cpp",
+  hxx: "cpp",
+  php: "php",
+  scala: "scala",
+  sc: "scala",
+  dart: "dart",
+  lua: "lua",
+  r: "r"
+};
+var LSP_LANGUAGES = new Set(Object.values(LSP_LANG_BY_EXT));
+function classifyLspExtensions(extCounts) {
+  const byLang = new Map;
+  for (const [ext, count] of Object.entries(extCounts)) {
+    const lang = LSP_LANG_BY_EXT[ext];
+    if (lang)
+      byLang.set(lang, (byLang.get(lang) ?? 0) + count);
+  }
+  return [...byLang.entries()].map(([language, files]) => ({ language, files })).sort((a2, b2) => b2.files - a2.files);
+}
+async function detectLspLanguages(sourceRoot) {
+  return classifyLspExtensions(await countExtensions(sourceRoot));
+}
+
+// src/core/provision/memory-separate.ts
+import { existsSync as existsSync8, readFileSync as readFileSync5, writeFileSync } from "fs";
+import { join as pathJoin } from "path";
+var GITIGNORE_ENTRY = ".ditto/memory/";
+function join69(...parts) {
+  return parts.join("/");
+}
+function ensureGitignored(deps) {
+  const current = deps.readGitignore();
+  const lines = current.split(`
+`).map((l2) => l2.trim());
+  if (lines.includes(GITIGNORE_ENTRY))
+    return false;
+  const sep8 = current === "" || current.endsWith(`
+`) ? "" : `
+`;
+  deps.writeGitignore(`${current}${sep8}
+# ditto memory: \uBCC4\uB3C4 \uC800\uC7A5\uC18C\uB85C \uBD84\uB9AC\uB428(\uC911\uBCF5 \uAD00\uB9AC \uBC29\uC9C0)
+${GITIGNORE_ENTRY}
+`);
+  return true;
+}
+var submoduleManual = (memoryDir) => [
+  "# submodule\uC740 \uC6D0\uACA9\uC774 \uC120\uD589\uB3FC\uC57C \uD55C\uB2E4. memory\uB97C \uC6D0\uACA9\uC5D0 \uC62C\uB9B0 \uB4A4:",
+  `cd ${memoryDir} && git init && git add -A && git commit -m "memory" && git remote add origin <URL> && git push -u origin main`,
+  "# \uADF8\uB2E4\uC74C \uBD80\uBAA8\uC5D0\uC11C: git rm -r --cached .ditto/memory && git submodule add <URL> .ditto/memory"
+];
+async function separateMemoryRepo(deps, mode = "gitignore") {
+  const memoryDir = join69(deps.repoRoot, ".ditto", "memory");
+  if (!deps.pathExists(memoryDir)) {
+    return {
+      status: "failed",
+      message: `${memoryDir}\uC774(\uAC00) \uC5C6\uB2E4 \u2014 memory\uAC00 \uCD08\uAE30\uD654\uB418\uC9C0 \uC54A\uC558\uB2E4(ditto init \uBA3C\uC800).`
+    };
+  }
+  if (mode === "submodule") {
+    return {
+      status: "manual",
+      message: "submodule \uBD84\uB9AC\uB294 \uC6D0\uACA9\uC774 \uC120\uD589\uB3FC\uC57C \uD574 \uC790\uB3D9\uD654\uD558\uC9C0 \uC54A\uB294\uB2E4 \u2014 \uC544\uB798 \uC808\uCC28\uB97C \uB530\uB974\uB77C.",
+      manual: submoduleManual(memoryDir)
+    };
+  }
+  const alreadyRepo = deps.pathExists(join69(memoryDir, ".git"));
+  if (!alreadyRepo) {
+    const r3 = await deps.run("git", ["init"], memoryDir);
+    if (r3.exit_code !== 0) {
+      return {
+        status: "failed",
+        message: `git init \uC2E4\uD328 (exit=${r3.exit_code ?? "null"})${r3.stderr ? `: ${r3.stderr.trim()}` : ""}`,
+        manual: [
+          `cd ${memoryDir} && git init`,
+          `echo '${GITIGNORE_ENTRY}' >> ${deps.repoRoot}/.gitignore`
+        ]
+      };
+    }
+  }
+  const added = ensureGitignored(deps);
+  if (alreadyRepo && !added) {
+    return { status: "already", message: `${memoryDir}\uC740(\uB294) \uC774\uBBF8 \uBD84\uB9AC\uB3FC \uC788\uACE0 gitignore\uB428` };
+  }
+  return {
+    status: "separated",
+    message: `memory\uB97C \uBCC4\uB3C4 \uC800\uC7A5\uC18C\uB85C \uBD84\uB9AC: ${memoryDir} (git init) + \uBD80\uBAA8 .gitignore\uC5D0 ${GITIGNORE_ENTRY} \uCD94\uAC00`
+  };
+}
+function defaultMemorySeparateDeps(repoRoot) {
+  const gitignorePath = pathJoin(repoRoot, ".gitignore");
+  return {
+    repoRoot,
+    run: async (cmd, args, cwd) => {
+      const proc = Bun.spawn([cmd, ...args], {
+        cwd,
+        stdout: "ignore",
+        stderr: "pipe",
+        stdin: "ignore"
+      });
+      const [exit_code, stderr2] = await Promise.all([
+        proc.exited,
+        new Response(proc.stderr).text().catch(() => "")
+      ]);
+      return { exit_code, stderr: stderr2 };
+    },
+    pathExists: (p) => existsSync8(p),
+    readGitignore: () => existsSync8(gitignorePath) ? readFileSync5(gitignorePath, "utf8") : "",
+    writeGitignore: (content) => writeFileSync(gitignorePath, content, "utf8")
+  };
+}
+
+// src/core/provision/lsp-servers.ts
+import { existsSync as existsSync9 } from "fs";
 import { homedir as homedir7 } from "os";
-import { dirname as dirname14, join as join72, resolve as resolve18 } from "path";
+import { join as join70 } from "path";
+function resolveServerPath(spec, deps) {
+  const forced = deps.env(spec.envVar);
+  if (forced && deps.fileExists(forced))
+    return forced;
+  const onPath = deps.which(spec.bin);
+  if (onPath)
+    return onPath;
+  const managed = join70(deps.managedDir, spec.language, "bin", spec.bin);
+  if (deps.fileExists(managed))
+    return managed;
+  return null;
+}
+function missingPrereqs(spec, deps) {
+  return spec.prereqs.filter((p) => deps.which(p.probe[0]) === null).map((p) => p.name);
+}
+async function installLspServer(spec, deps) {
+  const existing = resolveServerPath(spec, deps);
+  if (existing) {
+    return { status: "already-present", binary: existing, message: `${spec.label} \uC774\uBBF8 \uC124\uCE58\uB428` };
+  }
+  const missing = missingPrereqs(spec, deps);
+  if (missing.length > 0) {
+    return {
+      status: "failed",
+      message: `${spec.label}: \uC804\uC81C \uBBF8\uCDA9\uC871(${missing.join(", ")})`,
+      manual: spec.manual
+    };
+  }
+  if (!spec.installCmd) {
+    return {
+      status: "failed",
+      message: `${spec.label}: \uC790\uB3D9 \uC124\uCE58 \uBBF8\uC9C0\uC6D0 \u2014 \uC218\uB3D9 \uC124\uCE58 \uD544\uC694`,
+      manual: spec.manual
+    };
+  }
+  const r3 = await deps.run(spec.installCmd.cmd, spec.installCmd.args);
+  if (r3.exit_code !== 0) {
+    return {
+      status: "failed",
+      message: `${spec.label} \uC124\uCE58 \uC2E4\uD328 (${spec.installCmd.cmd} exit=${r3.exit_code ?? "null"})${r3.stderr ? `: ${r3.stderr.trim()}` : ""}`,
+      manual: spec.manual
+    };
+  }
+  const after = resolveServerPath(spec, deps);
+  if (!after) {
+    return {
+      status: "failed",
+      message: `${spec.label}: \uC124\uCE58 \uBA85\uB839\uC740 \uB05D\uB0AC\uC73C\uB098 ${spec.bin}\uC744(\uB97C) PATH\uC5D0\uC11C \uCC3E\uC9C0 \uBABB\uD588\uB2E4`,
+      manual: spec.manual
+    };
+  }
+  return { status: "installed", binary: after, message: `${spec.label} \uC124\uCE58 \uC644\uB8CC \u2192 ${after}` };
+}
+function lspProvisioner(spec, deps) {
+  return {
+    id: `lsp:${spec.language}`,
+    label: spec.label,
+    resolveExisting: async () => resolveServerPath(spec, deps),
+    install: () => installLspServer(spec, deps),
+    manual: () => spec.manual,
+    prereqs: () => spec.prereqs
+  };
+}
+var NODE_PREREQ = {
+  name: "node",
+  probe: ["node", "--version"],
+  reason: "npm \uC804\uC5ED \uC124\uCE58\uC5D0 \uD544\uC694"
+};
+var LSP_SPECS = [
+  {
+    language: "typescript",
+    bin: "typescript-language-server",
+    envVar: "TYPESCRIPT_LSP_BIN",
+    label: "typescript-language-server",
+    prereqs: [NODE_PREREQ],
+    installCmd: { cmd: "npm", args: ["i", "-g", "typescript-language-server", "typescript"] },
+    manual: ["npm i -g typescript-language-server typescript"]
+  },
+  {
+    language: "javascript",
+    bin: "typescript-language-server",
+    envVar: "JAVASCRIPT_LSP_BIN",
+    label: "typescript-language-server (JS)",
+    prereqs: [NODE_PREREQ],
+    installCmd: { cmd: "npm", args: ["i", "-g", "typescript-language-server", "typescript"] },
+    manual: ["npm i -g typescript-language-server typescript"]
+  },
+  {
+    language: "python",
+    bin: "pyright-langserver",
+    envVar: "PYTHON_LSP_BIN",
+    label: "pyright",
+    prereqs: [NODE_PREREQ],
+    installCmd: { cmd: "npm", args: ["i", "-g", "pyright"] },
+    manual: ["npm i -g pyright"]
+  },
+  {
+    language: "go",
+    bin: "gopls",
+    envVar: "GO_LSP_BIN",
+    label: "gopls",
+    prereqs: [{ name: "go", probe: ["go", "version"], reason: "go install\uC5D0 \uD544\uC694" }],
+    installCmd: { cmd: "go", args: ["install", "golang.org/x/tools/gopls@latest"] },
+    manual: [
+      "go install golang.org/x/tools/gopls@latest   # $GOBIN/$GOPATH/bin\uC774 PATH\uC5D0 \uC788\uC5B4\uC57C \uD568"
+    ]
+  },
+  {
+    language: "rust",
+    bin: "rust-analyzer",
+    envVar: "RUST_LSP_BIN",
+    label: "rust-analyzer",
+    prereqs: [
+      { name: "rustup", probe: ["rustup", "--version"], reason: "rustup component\uC5D0 \uD544\uC694" }
+    ],
+    installCmd: { cmd: "rustup", args: ["component", "add", "rust-analyzer"] },
+    manual: ["rustup component add rust-analyzer"]
+  },
+  {
+    language: "java",
+    bin: "jdtls",
+    envVar: "JAVA_LSP_BIN",
+    label: "Eclipse JDT.LS (jdtls)",
+    prereqs: [{ name: "jdk17", probe: ["java", "-version"], reason: "JDT.LS \uC2E4\uD589\uC5D0 JDK 17+ \uD544\uC694" }],
+    installCmd: null,
+    manual: ["brew install jdtls   # \uB610\uB294 Eclipse JDT.LS \uBC88\uB4E4 \uC218\uB3D9 \uC124\uCE58 \uD6C4 jdtls\uB97C PATH\uC5D0"]
+  },
+  {
+    language: "kotlin",
+    bin: "kotlin-language-server",
+    envVar: "KOTLIN_LSP_BIN",
+    label: "kotlin-language-server",
+    prereqs: [],
+    installCmd: null,
+    manual: ["kotlin-language-server \uB9B4\uB9AC\uC2A4\uB97C \uBC1B\uC544 bin/\uC744 PATH\uC5D0 \uCD94\uAC00"]
+  }
+];
+function lspManagedDir() {
+  return join70(homedir7(), ".local", "share", "ditto", "lsp");
+}
+var defaultLspServerDeps = {
+  which: (bin) => Bun.which(bin),
+  run: async (cmd, args) => {
+    const proc = Bun.spawn([cmd, ...args], { stdout: "ignore", stderr: "pipe", stdin: "ignore" });
+    const [exit_code, stderr2] = await Promise.all([
+      proc.exited,
+      new Response(proc.stderr).text().catch(() => "")
+    ]);
+    return { exit_code, stderr: stderr2 };
+  },
+  env: (name) => process.env[name],
+  managedDir: lspManagedDir(),
+  fileExists: (p) => existsSync9(p)
+};
+function lspProvisioners(deps = defaultLspServerDeps) {
+  return new Map(LSP_SPECS.map((spec) => [spec.language, lspProvisioner(spec, deps)]));
+}
+
+// src/core/provision/playwright.ts
+import { existsSync as existsSync10, readdirSync as readdirSync2 } from "fs";
+import { homedir as homedir8, platform as osPlatform } from "os";
+import { join as join71 } from "path";
+function playwrightCacheRoot(os = osPlatform()) {
+  if (os === "win32")
+    return join71(homedir8(), "AppData", "Local", "ms-playwright");
+  if (os === "darwin")
+    return join71(homedir8(), "Library", "Caches", "ms-playwright");
+  return join71(homedir8(), ".cache", "ms-playwright");
+}
+function bunCacheDir() {
+  return join71(process.env.BUN_INSTALL ?? join71(homedir8(), ".bun"), "install", "cache");
+}
+function detectPlaywright(deps) {
+  const core = deps.listDir(deps.bunCache).some((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2));
+  const chromium = deps.listDir(deps.cacheRoot).some((e2) => /^chromium-\d+$/.test(e2));
+  return { core, chromium, available: core && chromium };
+}
+function manualInstructions2(cacheRoot) {
+  return [`bunx playwright install chromium   # Chromium\uC744 ${cacheRoot}\uC5D0 \uBC1B\uB294\uB2E4 (\uC804\uC81C: bun)`];
+}
+async function installPlaywright(deps) {
+  if (detectPlaywright(deps).available) {
+    return {
+      status: "already-present",
+      binary: deps.cacheRoot,
+      message: "playwright already installed (playwright-core + cached chromium)"
+    };
+  }
+  const r3 = await deps.run("bun", ["x", "playwright", "install", "chromium"]);
+  if (r3.exit_code !== 0) {
+    return {
+      status: "failed",
+      message: `playwright \uC124\uCE58 \uC2E4\uD328 (bun exit=${r3.exit_code ?? "null"})${r3.stderr ? `: ${r3.stderr.trim()}` : ""}`,
+      manual: manualInstructions2(deps.cacheRoot)
+    };
+  }
+  if (!detectPlaywright(deps).available) {
+    return {
+      status: "failed",
+      message: "\uC124\uCE58 \uBA85\uB839\uC740 \uB05D\uB0AC\uC73C\uB098 \uCE90\uC2DC probe\uAC00 \uC5EC\uC804\uD788 \uC74C\uC131\uC774\uB2E4",
+      manual: manualInstructions2(deps.cacheRoot)
+    };
+  }
+  return {
+    status: "installed",
+    binary: deps.cacheRoot,
+    message: `Chromium \uC124\uCE58 \uC644\uB8CC \u2192 ${deps.cacheRoot}`
+  };
+}
+var defaultPlaywrightDeps = {
+  cacheRoot: playwrightCacheRoot(),
+  bunCache: bunCacheDir(),
+  listDir: (dir) => {
+    try {
+      return existsSync10(dir) ? readdirSync2(dir) : [];
+    } catch {
+      return [];
+    }
+  },
+  run: async (binary, args) => {
+    const proc = Bun.spawn([binary, ...args], {
+      stdout: "ignore",
+      stderr: "pipe",
+      stdin: "ignore"
+    });
+    const [exit_code, stderr2] = await Promise.all([
+      proc.exited,
+      new Response(proc.stderr).text().catch(() => "")
+    ]);
+    return { exit_code, stderr: stderr2 };
+  }
+};
+function playwrightProvisioner(deps = defaultPlaywrightDeps) {
+  return {
+    id: "playwright",
+    label: "Playwright/Chromium",
+    resolveExisting: async () => detectPlaywright(deps).available ? deps.cacheRoot : null,
+    install: () => installPlaywright(deps),
+    manual: () => manualInstructions2(deps.cacheRoot),
+    prereqs: () => []
+  };
+}
+
+// src/core/provision/provisioner.ts
+function codeqlProvisioner(deps = defaultInstallDeps) {
+  return {
+    id: "codeql",
+    label: "CodeQL CLI",
+    resolveExisting: deps.resolveExisting,
+    install: () => installCodeqlCli(deps),
+    manual: () => manualInstructions(deps.platform()),
+    prereqs: () => []
+  };
+}
+function defaultRegistry() {
+  return {
+    tools: new Map([
+      ["codeql", codeqlProvisioner()],
+      ["playwright", playwrightProvisioner()]
+    ]),
+    lsp: lspProvisioners()
+  };
+}
 
 // src/core/setup.ts
 import { cp, readFile as readFile15, rm as rm2, writeFile as writeFile4 } from "fs/promises";
 import { platform as platform2 } from "os";
-import { join as join70, resolve as resolve16 } from "path";
+import { join as join73, resolve as resolve16 } from "path";
 
 // src/core/managed-resource.ts
 import { copyFile } from "fs/promises";
@@ -34986,8 +35396,8 @@ async function applyManagedFile(targetPath, managedBody, source = "AGENTS.md") {
 }
 
 // src/core/resource-routing.ts
-import { readdirSync as readdirSync2 } from "fs";
-import { join as join69 } from "path";
+import { readdirSync as readdirSync3 } from "fs";
+import { join as join72 } from "path";
 var GLOBAL_PREFIX = "GLOBAL_";
 function routeResource(filename, ctx) {
   if (filename.startsWith(GLOBAL_PREFIX)) {
@@ -34995,18 +35405,18 @@ function routeResource(filename, ctx) {
     return {
       scope: "global",
       destName,
-      destPath: join69(ctx.homeDir, ".claude", destName)
+      destPath: join72(ctx.homeDir, ".claude", destName)
     };
   }
   return {
     scope: "project",
     destName: filename,
-    destPath: join69(ctx.projectRoot, filename)
+    destPath: join72(ctx.projectRoot, filename)
   };
 }
 function discoverResources(resourcesDir) {
   try {
-    return readdirSync2(resourcesDir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name);
+    return readdirSync3(resourcesDir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name);
   } catch {
     return [];
   }
@@ -35054,7 +35464,7 @@ async function unallowlistSettingsFile(settingsPath) {
 // src/core/setup.ts
 var CODEX_MARKETPLACE_NAME = "ditto-local";
 var CODEX_PLUGIN_NAME = "ditto";
-var CODEX_PLUGIN_DEST_REL = join70(".agents", "plugins", CODEX_PLUGIN_NAME);
+var CODEX_PLUGIN_DEST_REL = join73(".agents", "plugins", CODEX_PLUGIN_NAME);
 var CODEX_BIN_NAME = platform2() === "win32" ? "ditto.exe" : "ditto";
 function setupHosts(host) {
   if (host === "codex")
@@ -35079,14 +35489,14 @@ function resourceDecisions(resourcesDir, projectRoot, homeDir, hosts) {
           host: "codex",
           filename,
           scope: "project",
-          destPath: join70(projectRoot, "AGENTS.md")
+          destPath: join73(projectRoot, "AGENTS.md")
         });
       } else if (filename === "GLOBAL_AGENTS.md") {
         out.push({
           host: "codex",
           filename,
           scope: "global",
-          destPath: join70(homeDir, ".codex", "AGENTS.md")
+          destPath: join73(homeDir, ".codex", "AGENTS.md")
         });
       }
     }
@@ -35141,23 +35551,23 @@ async function writeCodexMarketplace(path) {
 `);
 }
 async function installCodexAgents(pluginRoot, projectRoot) {
-  const srcDir = join70(pluginRoot, ".codex", "agents");
+  const srcDir = join73(pluginRoot, ".codex", "agents");
   if (!await fileExists(srcDir)) {
     throw new Error(`codex custom agents not found at ${srcDir}; run build:codex-plugin first`);
   }
-  const destDir = join70(projectRoot, ".codex", "agents");
+  const destDir = join73(projectRoot, ".codex", "agents");
   await ensureDir(destDir);
   let count = 0;
   for (const file of await listFiles(srcDir)) {
     if (!file.id.endsWith(".toml"))
       continue;
-    await cp(file.path, join70(destDir, file.id));
+    await cp(file.path, join73(destDir, file.id));
     count += 1;
   }
   return count;
 }
 function codexDittoCommand(installedPluginDir) {
-  return `"${join70(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
+  return `"${join73(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
 }
 function rewriteCodexDittoReferences(text, dittoCommand) {
   return text.replace(/"\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?"/g, dittoCommand).replace(/\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?/g, dittoCommand).replace(/`ditto(?=\s)/g, `\`${dittoCommand}`);
@@ -35179,26 +35589,26 @@ async function rewriteCodexAgentTomlFile(path, dittoCommand) {
 }
 async function rewriteCodexInstalledReferences(installedPluginDir) {
   const dittoCommand = codexDittoCommand(installedPluginDir);
-  for (const dir of await listDirectories(join70(installedPluginDir, "skills"))) {
-    const skillPath = join70(dir.path, "SKILL.md");
+  for (const dir of await listDirectories(join73(installedPluginDir, "skills"))) {
+    const skillPath = join73(dir.path, "SKILL.md");
     if (await fileExists(skillPath))
       await rewriteCodexTextFile(skillPath, dittoCommand);
   }
-  for (const file of await listFiles(join70(installedPluginDir, ".codex", "agents"))) {
+  for (const file of await listFiles(join73(installedPluginDir, ".codex", "agents"))) {
     if (file.id.endsWith(".toml"))
       await rewriteCodexAgentTomlFile(file.path, dittoCommand);
   }
 }
 async function writeCodexSurfaceCatalog(projectRoot) {
-  const surfaceCatalogPath = join70(projectRoot, ".ditto", "local", "surfaces.codex.json");
-  await ensureDir(join70(projectRoot, ".ditto", "local"));
+  const surfaceCatalogPath = join73(projectRoot, ".ditto", "local", "surfaces.codex.json");
+  await ensureDir(join73(projectRoot, ".ditto", "local"));
   const catalog = await generateSurfaceCatalog([codexHostAdapter], projectRoot, "surfaces.codex.json");
   await atomicWriteText(surfaceCatalogPath, `${JSON.stringify(catalog, null, 2)}
 `);
   return surfaceCatalogPath;
 }
 async function writeCodexPluginStatus(projectRoot) {
-  const statusPath = join70(projectRoot, ".ditto", "local", "codex-plugin-status.json");
+  const statusPath = join73(projectRoot, ".ditto", "local", "codex-plugin-status.json");
   const enableCommands = [
     `codex plugin marketplace add ${JSON.stringify(projectRoot)}`,
     `codex plugin add ${CODEX_PLUGIN_NAME}@${CODEX_MARKETPLACE_NAME}`
@@ -35216,19 +35626,19 @@ async function writeCodexPluginStatus(projectRoot) {
 }
 async function installCodexSurface(opts) {
   const { pluginRoot, projectRoot } = opts;
-  const manifestPath = join70(pluginRoot, ".codex-plugin", "plugin.json");
+  const manifestPath = join73(pluginRoot, ".codex-plugin", "plugin.json");
   if (!await fileExists(manifestPath)) {
     throw new Error(`codex plugin manifest not found at ${manifestPath}; run build:codex-plugin first`);
   }
-  const installedPluginDir = join70(projectRoot, CODEX_PLUGIN_DEST_REL);
+  const installedPluginDir = join73(projectRoot, CODEX_PLUGIN_DEST_REL);
   if (resolve16(pluginRoot) === resolve16(installedPluginDir)) {
     throw new Error(`codex plugin source is already the installed plugin directory: ${installedPluginDir}`);
   }
   await rm2(installedPluginDir, { recursive: true, force: true });
-  await ensureDir(join70(projectRoot, ".agents", "plugins"));
+  await ensureDir(join73(projectRoot, ".agents", "plugins"));
   await cp(pluginRoot, installedPluginDir, { recursive: true });
   await rewriteCodexInstalledReferences(installedPluginDir);
-  const marketplacePath = join70(projectRoot, ".agents", "plugins", "marketplace.json");
+  const marketplacePath = join73(projectRoot, ".agents", "plugins", "marketplace.json");
   await writeCodexMarketplace(marketplacePath);
   const agentsInstalled = await installCodexAgents(installedPluginDir, projectRoot);
   const surfaceCatalogPath = await writeCodexSurfaceCatalog(projectRoot);
@@ -35241,7 +35651,7 @@ async function installCodexSurface(opts) {
     statusPath,
     pluginLoadStatus: "needs_user_action",
     enableCommands,
-    agentsDir: join70(projectRoot, ".codex", "agents"),
+    agentsDir: join73(projectRoot, ".codex", "agents"),
     agentsInstalled
   };
 }
@@ -35250,7 +35660,7 @@ async function setup(opts) {
   const hosts = setupHosts(opts.host);
   const resources = [];
   for (const decision of resourceDecisions(resourcesDir, projectRoot, homeDir, hosts)) {
-    const body = await readFile15(join70(resourcesDir, decision.filename), "utf8");
+    const body = await readFile15(join73(resourcesDir, decision.filename), "utf8");
     const applied = await applyManagedFile(decision.destPath, body, decision.filename);
     resources.push({
       host: decision.host,
@@ -35262,7 +35672,7 @@ async function setup(opts) {
     });
   }
   const scaffold = await initScaffold(projectRoot, now);
-  const allowlistPath = join70(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join73(projectRoot, ".claude", "settings.json");
   const allowlistApplied = hosts.has("claude-code");
   if (allowlistApplied)
     await allowlistSettingsFile(allowlistPath);
@@ -35274,28 +35684,191 @@ async function setup(opts) {
 }
 
 // src/cli/resources.ts
-import { existsSync as existsSync8 } from "fs";
-import { dirname as dirname13, join as join71, resolve as resolve17 } from "path";
+import { existsSync as existsSync11 } from "fs";
+import { dirname as dirname13, join as join74, resolve as resolve17 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 function resolveResourcesDir(from) {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
-    return join71(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
+    return join74(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
   }
   const start = from ?? dirname13(fileURLToPath2(import.meta.url));
   let dir = start;
   for (;; ) {
-    const candidate = join71(dir, "resources", "managed");
-    if (existsSync8(candidate))
+    const candidate = join74(dir, "resources", "managed");
+    if (existsSync11(candidate))
       return candidate;
     const parent = dirname13(dir);
     if (parent === dir)
       break;
     dir = parent;
   }
-  return join71(resolve17(start, "..", ".."), "resources", "managed");
+  return join74(resolve17(start, "..", ".."), "resources", "managed");
+}
+
+// src/cli/wizard/prompt-io.ts
+import { createInterface } from "readline/promises";
+function createStdioPromptIO() {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return {
+    isTTY: Boolean(process.stdin.isTTY),
+    ask: (query) => rl.question(query),
+    write: (text) => {
+      process.stdout.write(text);
+    },
+    close: () => {
+      rl.close();
+    }
+  };
+}
+
+// src/cli/wizard/prompt.ts
+async function confirm(io, message, defaultYes) {
+  if (!io.isTTY)
+    return defaultYes;
+  const hint = defaultYes ? "[Y/n]" : "[y/N]";
+  const ans = (await io.ask(`${message} ${hint} `)).trim().toLowerCase();
+  if (ans === "")
+    return defaultYes;
+  return ans === "y" || ans === "yes";
+}
+async function select(io, message, options, defaultValue) {
+  if (!io.isTTY || options.length === 0)
+    return defaultValue;
+  const defaultIdx = options.findIndex((o3) => o3.value === defaultValue);
+  io.write(`${message}
+`);
+  options.forEach((o3, i2) => {
+    const mark = o3.value === defaultValue ? "(\uAE30\uBCF8)" : "";
+    io.write(`  ${i2 + 1}. ${o3.label} ${mark}
+`);
+  });
+  const ans = (await io.ask(`\uBC88\uD638 (Enter=${defaultIdx + 1}): `)).trim();
+  if (ans === "")
+    return defaultValue;
+  const n2 = Number.parseInt(ans, 10);
+  if (Number.isInteger(n2) && n2 >= 1 && n2 <= options.length)
+    return options[n2 - 1].value;
+  return defaultValue;
+}
+async function multiSelect(io, message, choices) {
+  const defaults = choices.filter((c3) => c3.checked).map((c3) => c3.value);
+  if (!io.isTTY || choices.length === 0)
+    return defaults;
+  io.write(`${message}
+`);
+  choices.forEach((c3, i2) => io.write(`  ${i2 + 1}. [${c3.checked ? "x" : " "}] ${c3.label}
+`));
+  const ans = (await io.ask("\uC124\uCE58\uD560 \uBC88\uD638 (\uC27C\uD45C \uAD6C\uBD84, Enter=\uAE30\uBCF8\uAC12 \uC720\uC9C0): ")).trim();
+  if (ans === "")
+    return defaults;
+  const picked = new Set(ans.split(",").map((s2) => Number.parseInt(s2.trim(), 10)).filter((n2) => Number.isInteger(n2) && n2 >= 1 && n2 <= choices.length));
+  return choices.filter((_3, i2) => picked.has(i2 + 1)).map((c3) => c3.value);
+}
+
+// src/cli/wizard/provision-step.ts
+async function planProvisioning(registry2, detectedLanguages) {
+  const provisioners = [
+    ...registry2.tools.values(),
+    ...detectedLanguages.map((lang) => registry2.lsp.get(lang)).filter((p) => p !== undefined)
+  ];
+  const out = [];
+  for (const p of provisioners) {
+    const present = await p.resolveExisting() !== null;
+    out.push({
+      id: p.id,
+      label: p.label,
+      present,
+      recommended: !present,
+      install: p.install,
+      manual: p.manual
+    });
+  }
+  return out;
+}
+async function runProvisionStep(io, registry2, sourceRoot, deps) {
+  const detected = await deps.detect(sourceRoot);
+  const languages = detected.map((d2) => d2.language);
+  const unservicedLanguages = languages.filter((lang) => !registry2.lsp.has(lang));
+  const plan = await planProvisioning(registry2, languages);
+  const present = plan.filter((c3) => c3.present);
+  const absent = plan.filter((c3) => !c3.present);
+  const outcomes = present.map((c3) => ({
+    id: c3.id,
+    action: "already-present",
+    message: `${c3.label}: \uC774\uBBF8 \uC124\uCE58\uB428`
+  }));
+  if (absent.length === 0) {
+    return { outcomes, unservicedLanguages };
+  }
+  const choices = absent.map((c3) => ({
+    label: c3.label,
+    value: c3.id,
+    checked: c3.recommended
+  }));
+  const picked = new Set(await multiSelect(io, "\uBD84\uC11D/\uC5B8\uC5B4 \uB3C4\uAD6C \u2014 \uC124\uCE58\uD560 \uD56D\uBAA9", choices));
+  for (const c3 of absent) {
+    if (!picked.has(c3.id)) {
+      outcomes.push({
+        id: c3.id,
+        action: "skipped",
+        message: `${c3.label}: \uAC74\uB108\uB700(\uD544\uC694 \uC2DC \uAE30\uB2A5 degrade)`
+      });
+      continue;
+    }
+    const result2 = await c3.install();
+    const action = result2.status === "installed" ? "installed" : result2.status === "already-present" ? "already-present" : "failed";
+    outcomes.push({
+      id: c3.id,
+      action,
+      message: `${c3.label}: ${result2.message}`,
+      ...result2.manual ? { manual: result2.manual } : {}
+    });
+  }
+  return { outcomes, unservicedLanguages };
+}
+
+// src/cli/wizard/setup-wizard.ts
+var HOST_OPTIONS = [
+  { label: "Claude Code", value: "claude-code" },
+  { label: "Codex", value: "codex" },
+  { label: "\uB458 \uB2E4(both)", value: "both" }
+];
+var MEMORY_OPTIONS = [
+  { label: "gitignore-\uB3C5\uB9BD (\uB2E8\uC21C, \uBD80\uBAA8 git\uC5D0\uC11C \uC81C\uC678)", value: "gitignore" },
+  { label: "submodule (\uD300 \uC7AC\uD604 \u2014 \uC6D0\uACA9 \uC120\uD589, \uC218\uB3D9 \uC548\uB0B4)", value: "submodule" }
+];
+async function runSetupWizard(io, deps) {
+  const host = await select(io, "Host \uC120\uD0DD", HOST_OPTIONS, "claude-code");
+  const setupResult = await deps.setup(host);
+  const provision = await deps.runProvision(io);
+  let memory = { mode: "in-project", result: null };
+  const separate = await confirm(io, "memory\uB97C \uBCC4\uB3C4 git \uC800\uC7A5\uC18C\uB85C \uBD84\uB9AC\uD560\uAE4C?", false);
+  if (separate) {
+    const mode = await select(io, "memory \uBD84\uB9AC \uBC29\uC2DD", MEMORY_OPTIONS, "gitignore");
+    memory = { mode, result: await deps.separateMemory(mode) };
+  }
+  return { host, setup: setupResult, provision, memory };
 }
 
 // src/cli/commands/setup.ts
+async function provisionToolsNonInteractive(projectRoot) {
+  const io = {
+    isTTY: false,
+    ask: async () => "",
+    write: (t2) => {
+      process.stdout.write(t2);
+    }
+  };
+  const summary = await runProvisionStep(io, defaultRegistry(), projectRoot, {
+    detect: detectLspLanguages
+  });
+  writeHuman("tools:");
+  for (const o3 of summary.outcomes)
+    writeHuman(`  ${o3.action}	${o3.message}`);
+  if (summary.unservicedLanguages.length > 0) {
+    writeHuman(`  \uAC10\uC9C0\uB410\uC73C\uB098 \uC11C\uBC84 \uBBF8\uB4F1\uB85D: ${summary.unservicedLanguages.join(", ")}`);
+  }
+}
 function parseSetupHost(value) {
   if (value === undefined || value === null || value === "")
     return "claude-code";
@@ -35308,18 +35881,55 @@ function includesCodex(host) {
 }
 async function resolveCodexPluginRoot(resourcesDir, projectRoot) {
   const currentPluginRoot = resolve18(resourcesDir, "..", "..");
-  const sibling = join72(dirname14(currentPluginRoot), "codex-plugin");
-  if (await fileExists(join72(sibling, ".codex-plugin", "plugin.json")))
+  const sibling = join75(dirname14(currentPluginRoot), "codex-plugin");
+  if (await fileExists(join75(sibling, ".codex-plugin", "plugin.json")))
     return sibling;
-  const currentDist = join72(currentPluginRoot, "dist", "codex-plugin");
-  if (await fileExists(join72(currentDist, ".codex-plugin", "plugin.json")))
+  const currentDist = join75(currentPluginRoot, "dist", "codex-plugin");
+  if (await fileExists(join75(currentDist, ".codex-plugin", "plugin.json")))
     return currentDist;
-  const projectDist = join72(projectRoot, "dist", "codex-plugin");
-  if (await fileExists(join72(projectDist, ".codex-plugin", "plugin.json")))
+  const projectDist = join75(projectRoot, "dist", "codex-plugin");
+  if (await fileExists(join75(projectDist, ".codex-plugin", "plugin.json")))
     return projectDist;
-  if (await fileExists(join72(currentPluginRoot, ".codex", "agents")))
+  if (await fileExists(join75(currentPluginRoot, ".codex", "agents")))
     return currentPluginRoot;
   return currentPluginRoot;
+}
+async function runWizard(resourcesDir, projectRoot) {
+  const io = createStdioPromptIO();
+  try {
+    const result2 = await runSetupWizard(io, {
+      projectRoot,
+      sourceRoot: projectRoot,
+      setup: async (host) => setup({
+        resourcesDir,
+        projectRoot,
+        homeDir: homedir9(),
+        now: new Date,
+        host,
+        ...includesCodex(host) ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) } : {}
+      }),
+      runProvision: (promptIo) => runProvisionStep(promptIo, defaultRegistry(), projectRoot, { detect: detectLspLanguages }),
+      separateMemory: (mode) => separateMemoryRepo(defaultMemorySeparateDeps(projectRoot), mode)
+    });
+    writeHuman(`setup: installed into ${projectRoot} (host=${result2.host})`);
+    writeHuman(`.ditto/: ${result2.setup.scaffold.alreadyInitialized ? "already initialized" : "created"} \xB7 allowlist: ${result2.setup.allowlistApplied ? result2.setup.allowlistPath : "skipped"}`);
+    writeHuman("tools:");
+    for (const o3 of result2.provision.outcomes)
+      writeHuman(`  ${o3.action}	${o3.message}`);
+    if (result2.provision.unservicedLanguages.length > 0) {
+      writeHuman(`  \uAC10\uC9C0\uB410\uC73C\uB098 \uC11C\uBC84 \uBBF8\uB4F1\uB85D: ${result2.provision.unservicedLanguages.join(", ")}`);
+    }
+    if (result2.memory.result) {
+      writeHuman(`memory: ${result2.memory.mode} \u2014 ${result2.memory.result.message}`);
+      for (const line of result2.memory.result.manual ?? [])
+        writeHuman(`  ${line}`);
+    } else {
+      writeHuman("memory: \uD504\uB85C\uC81D\uD2B8 git\uC5D0 \uD3EC\uD568(\uAE30\uBCF8)");
+    }
+    writeHuman("safety hook: PreToolUse \uD65C\uC131(\uD50C\uB7EC\uADF8\uC778 \uC804\uC5ED) \u2014 \uC815\uC0C1 \uBA85\uB839 \uC624\uD0D0 \uC2DC DITTO_SKIP_HOOKS=1 prefix");
+  } finally {
+    io.close();
+  }
 }
 var setupCommand = defineCommand({
   meta: {
@@ -35341,6 +35951,18 @@ var setupCommand = defineCommand({
       type: "string",
       required: false,
       description: "Host surface to install: claude-code|codex|both (default: claude-code)"
+    },
+    yes: {
+      type: "boolean",
+      required: false,
+      default: false,
+      description: "Non-interactive: skip the wizard, use defaults/flags (CI/agent)"
+    },
+    tools: {
+      type: "boolean",
+      required: false,
+      default: false,
+      description: "Non-interactive only: also provision detected tools (codeql/playwright/LSP)"
     }
   },
   run: async ({ args }) => {
@@ -35354,10 +35976,14 @@ var setupCommand = defineCommand({
         writeHuman(`setup: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
       }
+      if (process.stdin.isTTY && !args.yes) {
+        await runWizard(resourcesDir, projectRoot);
+        return;
+      }
       const result2 = await setup({
         resourcesDir,
         projectRoot,
-        homeDir: homedir7(),
+        homeDir: homedir9(),
         now: new Date,
         host,
         ...includesCodex(host) ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) } : {}
@@ -35379,6 +36005,8 @@ var setupCommand = defineCommand({
           writeHuman(`    ${command}`);
       }
       writeHuman(`.ditto/: ${result2.scaffold.alreadyInitialized ? "already initialized" : "created"} \xB7 allowlist: ${result2.allowlistApplied ? result2.allowlistPath : "skipped"}`);
+      if (args.tools)
+        await provisionToolsNonInteractive(projectRoot);
     } catch (err) {
       writeError(`setup failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
@@ -35387,12 +36015,13 @@ var setupCommand = defineCommand({
 });
 
 // src/cli/commands/teardown.ts
-import { homedir as homedir8 } from "os";
-import { resolve as resolve19 } from "path";
+import { rm as rm3 } from "fs/promises";
+import { homedir as homedir10 } from "os";
+import { join as join77, resolve as resolve19 } from "path";
 
 // src/core/teardown.ts
 import { copyFile as copyFile2, readFile as readFile16 } from "fs/promises";
-import { join as join73 } from "path";
+import { join as join76 } from "path";
 var BACKUP_SUFFIX2 = ".ditto_bak";
 async function teardown(opts) {
   const { resourcesDir, projectRoot, homeDir } = opts;
@@ -35402,7 +36031,7 @@ async function teardown(opts) {
     const action = await teardownFile(decision.destPath);
     files.push({ filename, scope: decision.scope, destPath: decision.destPath, action });
   }
-  const allowlistPath = join73(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join76(projectRoot, ".claude", "settings.json");
   await unallowlistSettingsFile(allowlistPath);
   return { files, allowlistPath };
 }
@@ -35424,16 +36053,34 @@ async function teardownFile(destPath) {
 }
 
 // src/cli/commands/teardown.ts
+async function shouldPurge(flagPurge) {
+  if (flagPurge)
+    return true;
+  if (!process.stdin.isTTY)
+    return false;
+  const io = createStdioPromptIO();
+  try {
+    return await confirm(io, ".ditto/ \uB370\uC774\uD130(work-item \uC774\uB825\xB7\uBA54\uBAA8\uB9AC)\uAE4C\uC9C0 \uC601\uAD6C \uC0AD\uC81C\uD560\uAE4C?", false);
+  } finally {
+    io.close();
+  }
+}
 var teardownCommand = defineCommand({
   meta: {
-    name: "teardown",
-    description: "Undo ditto setup: strip managed blocks (preserving user content), remove the allow rule; keeps .ditto/"
+    name: "uninstall",
+    description: "Undo ditto setup: strip managed blocks (preserving user content), remove the allow rule; keeps .ditto/ (alias: teardown)"
   },
   args: {
     dir: {
       type: "string",
       required: false,
       description: "Target project directory; defaults to the nearest .ditto/.git root or cwd"
+    },
+    purge: {
+      type: "boolean",
+      required: false,
+      default: false,
+      description: "Also delete .ditto/ (work-item history + memory) \u2014 irreversible; default keeps it"
     }
   },
   run: async ({ args }) => {
@@ -35442,21 +36089,28 @@ var teardownCommand = defineCommand({
       const resourcesDir = resolveResourcesDir();
       const pluginRoot = resolve19(resourcesDir, "..", "..");
       if (pluginRoot === projectRoot) {
-        writeHuman(`teardown: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
+        writeHuman(`uninstall: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
       }
-      const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir8() });
+      const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir10() });
       if (result2.files.length === 0) {
-        writeError(`teardown failed: no managed resources found at ${resourcesDir}`);
+        writeError(`uninstall failed: no managed resources found at ${resourcesDir}`);
         process.exit(RUNTIME_ERROR_EXIT);
       }
-      writeHuman(`teardown: reverted ${projectRoot}`);
+      writeHuman(`uninstall: reverted ${projectRoot}`);
       for (const f3 of result2.files) {
         writeHuman(`  ${f3.filename} [${f3.scope}] ${f3.action} \u2192 ${f3.destPath}`);
       }
-      writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ kept`);
+      const purge = await shouldPurge(Boolean(args.purge));
+      if (purge) {
+        const dittoDir2 = join77(projectRoot, ".ditto");
+        await rm3(dittoDir2, { recursive: true, force: true });
+        writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ PURGED (${dittoDir2})`);
+      } else {
+        writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ kept`);
+      }
     } catch (err) {
-      writeError(`teardown failed: ${err instanceof Error ? err.message : String(err)}`);
+      writeError(`uninstall failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
     }
   }
@@ -36229,6 +36883,7 @@ var main = defineCommand({
   subCommands: {
     init: initCommand,
     setup: setupCommand,
+    uninstall: teardownCommand,
     teardown: teardownCommand,
     work: workCommand,
     run: runCommand2,
@@ -36261,4 +36916,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=03ebe3e5a5533e5100d864ee72732893dfdafe0b1e3eeaa63a74d15ae4cfaeda
+//# ditto-src-stamp=41df34f0c7d61122391fd82099abe60a02c540e447bd87b8a77c2ee51f237bf5

@@ -1,0 +1,12 @@
+{
+  "schema_version": "0.1.0",
+  "source_id": "src_aac3b9d55ac4",
+  "source_type": "spec",
+  "path": ".ditto/knowledge/adr/ADR-0015-memory-freshness-axis2-code-vs-sot.md",
+  "content_hash": "86132b7c49a60fad15f8f958755ac64623b77dd12b0adada3b1472fd23ad1ce9",
+  "captured_at": "2026-06-16T16:46:51.311Z",
+  "revision": "f0b265ee45ff87f89ea344b41a164fbfc4928ad0",
+  "git_commit": "f0b265ee45ff87f89ea344b41a164fbfc4928ad0",
+  "sensitivity": "internal",
+  "word_count": 584
+}

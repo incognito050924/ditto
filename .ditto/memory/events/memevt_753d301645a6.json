@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_753d301645a6",
+  "event_type": "observation",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "original_intent: 새 autopilot 버그 2건과 저위험 발견 2건 새 세션에서 work item으로 등록하고 처리할거야. 핸드오프해줘\ncurrent_state: draft. wi_260614z7r(done, 커밋 b109a37/8436a57/844164a) 도그푸딩에서 발견한 autopilot 결함 4건을 수정 대상으로 등록만 한 상태. 아직 계획·구현 착수 전.\nnext_first_check: reports/reviews/wi_260614ojc-implementation-gap-rootcause.md + 아래 BUG1/BUG2 위치를 읽고 두 autopilot 버그가 재현되는지 확인\nfailed_or_unverified: BUG1 B3 impl→verify 데드락 (미수정); BUG2 structural-unverified supersession이 planner 의존 요구 (미수정); LOW1 coverage axis_signals optional 우회 (미수정); LOW2 change_surface fail-closed edge-case (미수정)",
+  "created_at": "2026-06-16T16:46:51.311Z",
+  "status": "approved",
+  "sources": [
+    "src_a4fba10835e8"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-16T16:46:51.311Z"
+}

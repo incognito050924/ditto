@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_16f888a8d974",
+  "event_type": "observation",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "original_intent: 배포와 사용 시 ditto 자체 / 프로젝트 별로 격리될 수 있는 구조로 수정해줘. 사용 측면에서도 개인별(ignore pattern) / 프로젝트 전역(다른 사용자 및 PC에 적용 가능) 으로도 구분되고 말이야. 결정: work-item 산출물=개인 전체(local/gitignore, 기존 102개도 이동), 배포=dist/plugin 빌드 조립.\ncurrent_state: final_verdict=pass; ditto 3계층 격리 재편: ① 제품(dist/plugin 빌드조립 배포단위) ② 프로젝트전역(.ditto/knowledge·agents, git 추적) ③ 개인별(.ditto/local/, gitignore). 경로상수 ~30곳 ditto-paths 헬퍼로 수렴, init-scaffold/gitignore 갱신, 기존 데이터 git mv+untrack(자기참조 원자적 재빌드), ADR-0012 + 경계문서. skills 문서 경로·knowledge projection 동기화.\nnext_first_check: work item과 acceptance를 재확인하고 열린 노드를 재개한다.",
+  "created_at": "2026-06-16T16:46:51.311Z",
+  "status": "approved",
+  "sources": [
+    "src_1cc529764467"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-16T16:46:51.311Z"
+}
