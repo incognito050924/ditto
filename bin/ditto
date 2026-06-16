@@ -35650,6 +35650,24 @@ async function runSetupWizard(io, deps) {
 }
 
 // src/cli/commands/setup.ts
+async function provisionToolsNonInteractive(projectRoot) {
+  const io = {
+    isTTY: false,
+    ask: async () => "",
+    write: (t2) => {
+      process.stdout.write(t2);
+    }
+  };
+  const summary = await runProvisionStep(io, defaultRegistry(), projectRoot, {
+    detect: detectLspLanguages
+  });
+  writeHuman("tools:");
+  for (const o3 of summary.outcomes)
+    writeHuman(`  ${o3.action}	${o3.message}`);
+  if (summary.unservicedLanguages.length > 0) {
+    writeHuman(`  \uAC10\uC9C0\uB410\uC73C\uB098 \uC11C\uBC84 \uBBF8\uB4F1\uB85D: ${summary.unservicedLanguages.join(", ")}`);
+  }
+}
 function parseSetupHost(value) {
   if (value === undefined || value === null || value === "")
     return "claude-code";
@@ -35737,6 +35755,12 @@ var setupCommand = defineCommand({
       required: false,
       default: false,
       description: "Non-interactive: skip the wizard, use defaults/flags (CI/agent)"
+    },
+    tools: {
+      type: "boolean",
+      required: false,
+      default: false,
+      description: "Non-interactive only: also provision detected tools (codeql/playwright/LSP)"
     }
   },
   run: async ({ args }) => {
@@ -35779,6 +35803,8 @@ var setupCommand = defineCommand({
           writeHuman(`    ${command}`);
       }
       writeHuman(`.ditto/: ${result2.scaffold.alreadyInitialized ? "already initialized" : "created"} \xB7 allowlist: ${result2.allowlistApplied ? result2.allowlistPath : "skipped"}`);
+      if (args.tools)
+        await provisionToolsNonInteractive(projectRoot);
     } catch (err) {
       writeError(`setup failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
@@ -36661,4 +36687,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=347828ea6e3328e5687f1887d0372ebfcdfbdcff6487fc13301896b4a54c93a5
+//# ditto-src-stamp=c4db8e91cddf3e97c2f61438c553f88a66a02ce0661018643edf911c6c6b54d3

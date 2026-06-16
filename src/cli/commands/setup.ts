@@ -9,9 +9,29 @@ import { defaultRegistry } from '~/core/provision/provisioner';
 import { type SetupHost, setup } from '~/core/setup';
 import { resolveResourcesDir } from '../resources';
 import { RUNTIME_ERROR_EXIT, writeError, writeHuman } from '../util';
+import type { PromptIO } from '../wizard/prompt';
 import { createStdioPromptIO } from '../wizard/prompt-io';
 import { runProvisionStep } from '../wizard/provision-step';
 import { runSetupWizard } from '../wizard/setup-wizard';
+
+/** 비대화 도구 provisioning: 강제 non-TTY io로 추론된 빠진 도구를 프롬프트 없이 설치. */
+async function provisionToolsNonInteractive(projectRoot: string): Promise<void> {
+  const io: PromptIO = {
+    isTTY: false,
+    ask: async () => '',
+    write: (t) => {
+      process.stdout.write(t);
+    },
+  };
+  const summary = await runProvisionStep(io, defaultRegistry(), projectRoot, {
+    detect: detectLspLanguages,
+  });
+  writeHuman('tools:');
+  for (const o of summary.outcomes) writeHuman(`  ${o.action}\t${o.message}`);
+  if (summary.unservicedLanguages.length > 0) {
+    writeHuman(`  감지됐으나 서버 미등록: ${summary.unservicedLanguages.join(', ')}`);
+  }
+}
 
 function parseSetupHost(value: unknown): SetupHost {
   if (value === undefined || value === null || value === '') return 'claude-code';
@@ -116,6 +136,12 @@ export const setupCommand = defineCommand({
       default: false,
       description: 'Non-interactive: skip the wizard, use defaults/flags (CI/agent)',
     },
+    tools: {
+      type: 'boolean',
+      required: false,
+      default: false,
+      description: 'Non-interactive only: also provision detected tools (codeql/playwright/LSP)',
+    },
   },
   run: async ({ args }) => {
     try {
@@ -171,6 +197,10 @@ export const setupCommand = defineCommand({
           result.allowlistApplied ? result.allowlistPath : 'skipped'
         }`,
       );
+
+      // 비대화에서 --tools 명시 시에만 도구 설치(install.sh가 이 경로로 위임).
+      // 기본은 안전 — 무거운 다운로드를 묻지 않고 자동 실행하지 않는다.
+      if (args.tools) await provisionToolsNonInteractive(projectRoot);
     } catch (err) {
       writeError(`setup failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
