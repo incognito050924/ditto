@@ -24908,8 +24908,49 @@ import { join as join42 } from "path";
 
 // src/core/codeql/doctor.ts
 import { existsSync as existsSync3 } from "fs";
+
+// src/core/source-extensions.ts
 import { readdir as readdir11 } from "fs/promises";
 import { join as join40 } from "path";
+var EXCLUDED_DIR = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  "out",
+  ".ditto",
+  "coverage",
+  ".gradle",
+  "target"
+]);
+async function walkExtensions(dir, counts) {
+  let entries;
+  try {
+    entries = await readdir11(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (EXCLUDED_DIR.has(entry.name))
+        continue;
+      await walkExtensions(join40(dir, entry.name), counts);
+    } else if (entry.isFile()) {
+      const dot = entry.name.lastIndexOf(".");
+      if (dot < 0)
+        continue;
+      const ext = entry.name.slice(dot + 1).toLowerCase();
+      counts[ext] = (counts[ext] ?? 0) + 1;
+    }
+  }
+}
+async function countExtensions(sourceRoot) {
+  const counts = {};
+  await walkExtensions(sourceRoot, counts);
+  return counts;
+}
+
+// src/core/codeql/doctor.ts
 var LANG_BY_EXT = {
   ts: "javascript",
   tsx: "javascript",
@@ -25003,44 +25044,8 @@ async function inspectCodeqlTarget(input, deps) {
     finding_count: findings.length
   };
 }
-var EXCLUDED_DIR = new Set([
-  "node_modules",
-  ".git",
-  "dist",
-  "build",
-  "out",
-  ".ditto",
-  "coverage",
-  ".gradle",
-  "target"
-]);
-async function walkExtensions(dir, counts) {
-  let entries;
-  try {
-    entries = await readdir11(dir, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      if (EXCLUDED_DIR.has(entry.name))
-        continue;
-      await walkExtensions(join40(dir, entry.name), counts);
-    } else if (entry.isFile()) {
-      const dot = entry.name.lastIndexOf(".");
-      if (dot < 0)
-        continue;
-      const ext = entry.name.slice(dot + 1).toLowerCase();
-      counts[ext] = (counts[ext] ?? 0) + 1;
-    }
-  }
-}
 var defaultDoctorDeps = {
-  collectExtensions: async (sourceRoot) => {
-    const counts = {};
-    await walkExtensions(sourceRoot, counts);
-    return counts;
-  },
+  collectExtensions: (sourceRoot) => countExtensions(sourceRoot),
   cliAvailable: async () => {
     const bin = process.env.CODEQL_BIN;
     if (bin)
@@ -36060,4 +36065,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=a3a14d61545b8ac9df80c9c228e60e2f9d3cf720b5a7e110322b33e903b2ba00
+//# ditto-src-stamp=fa04f262bd0af3fad3a6a39661626e72db1ca0ae1e156f7fa9356e7fc5e33cea
