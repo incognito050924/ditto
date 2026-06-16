@@ -2,7 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { collectTidyDiffStat, writeTidyClassification } from '~/acg/tidy/classifier';
-import { ensureDir, writeJson } from '~/core/fs';
+import { atomicWriteText, ensureDir, writeJson } from '~/core/fs';
+import { type Diagnostic, getDiagnostics, resolveServer } from '~/core/lsp/client';
 import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
 import { evidenceRef, relativePath, verdict } from '~/schemas/common';
 import { decisionConflict, decisionConflictCarrier } from '~/schemas/decision-conflict-carrier';
@@ -488,6 +489,13 @@ export interface RecordResultOutcome {
   promoted_node_ids: string[];
   /** Pending successors superseded by the promoted subgraph; [] otherwise (wi_260610iex). */
   superseded_node_ids: string[];
+  /**
+   * ADVISORY (ac-2): error-severity LSP diagnostics found on a contentful
+   * mutating pass over `changed_files`, surfaced for the downstream verify node.
+   * Non-blocking — never read by any gate / completion path; absent (undefined)
+   * on every non-mutating / no-server / no-TS-file path (no-op SKIP).
+   */
+  lsp_advisory?: { file: string; diagnostics: Diagnostic[] }[];
 }
 
 /**
@@ -523,6 +531,54 @@ async function spliceTidyStage(
   // Splice via addNodes (the integrity gate) — same path as planner promotion.
   await aps.addNodes(workItemId, plan.nodes);
   return plan.nodes.map((n) => n.id);
+}
+
+/** One file's error-severity diagnostics, surfaced for the advisory artifact. */
+interface LspFileDiagnostics {
+  file: string;
+  diagnostics: Diagnostic[];
+}
+
+/**
+ * ADVISORY edit-then-diagnostics gate (ac-2). On a contentful mutating pass, run
+ * the n2 LSP client over the node's just-reported `changed_files` (TS only) and
+ * SURFACE error-severity diagnostics as feedback for the downstream verify node.
+ *
+ * MONOTONIC — adds no completion-blocking. This is a pure SURFACE step on the
+ * pass path, modelled on {@link spliceTidyStage}: it never alters the node's
+ * pass/fail outcome, never certifies clean (the test run remains authoritative),
+ * and is fail-open. Server absent (`resolveServer` → null) or no `.ts`/`.tsx`
+ * file ⇒ no-op SKIP (return []). `getDiagnostics` already degrades to [] on
+ * absence/spawn-failure/timeout and never throws, so no try/catch is needed here.
+ * The diagnostics are persisted as a NON-authoritative advisory artifact
+ * (`lsp-diagnostics.json`) and returned for the outcome's advisory note — they
+ * are never read by any gate / completion path (ac-3 keeps completion LSP-free).
+ */
+async function surfaceLspDiagnostics(
+  repoRoot: string,
+  workItemId: string,
+  changedFiles: string[],
+): Promise<LspFileDiagnostics[]> {
+  const tsFiles = changedFiles.filter((p) => p.endsWith('.ts') || p.endsWith('.tsx'));
+  // SKIP (fail-open): no TS file to check, or no language server installed — same
+  // degrade seam as the optional-tool contract (ADR-0018); never a hard-block.
+  if (tsFiles.length === 0 || resolveServer('typescript') === null) return [];
+
+  const surfaced: LspFileDiagnostics[] = [];
+  for (const file of tsFiles) {
+    const diags = await getDiagnostics(join(repoRoot, file));
+    const errors = diags.filter((d) => d.severity === 'error');
+    if (errors.length > 0) surfaced.push({ file, diagnostics: errors });
+  }
+  // Persist the advisory verdict as an artifact (mirrors writeTidyClassification —
+  // G3: the surfaced findings are left as a non-authoritative record). Written
+  // even when empty so the run shows the gate ran and found nothing.
+  await ensureDir(localDir(repoRoot, 'work-items', workItemId));
+  await atomicWriteText(
+    localDir(repoRoot, 'work-items', workItemId, 'lsp-diagnostics.json'),
+    `${JSON.stringify({ schema_version: '0.1.0', advisory: true, files: surfaced }, null, 2)}\n`,
+  );
+  return surfaced;
 }
 
 /**
@@ -818,6 +874,16 @@ export async function recordResult(
           : w;
       });
     }
+    // Edit-then-diagnostics ADVISORY gate (ac-2): on a contentful mutating pass,
+    // surface LSP error diagnostics over the just-reported changed_files BEFORE
+    // the downstream verify node — same pass-path seam as spliceTidyStage. Fail-
+    // open & MONOTONIC: it never touches `outcome`/the pass return below, only
+    // attaches a non-blocking advisory note (no server / no TS file ⇒ no-op SKIP).
+    let lspAdvisory: { file: string; diagnostics: Diagnostic[] }[] | undefined;
+    if (isMutatingNode(node) && reported.length > 0) {
+      const surfaced = await surfaceLspDiagnostics(repoRoot, input.workItemId, reported);
+      if (surfaced.length > 0) lspAdvisory = surfaced;
+    }
     // Tidy stage wiring (80-plan §8/§10, WU-3 ac-1): a green `implement` pass
     // triggers the ⓪ classifier on the just-made diff (base = work item
     // started_at_sha … HEAD). On ENTER the ④/⑦ tidy subgraph is spliced through
@@ -840,6 +906,9 @@ export async function recordResult(
       reason: guardReason,
       promoted_node_ids: promotedNodeIds,
       superseded_node_ids: supersededNodeIds,
+      // Advisory only — surfaced for the downstream verify node; never affects the
+      // pass/fail outcome above or any completion gate (ac-2 monotonic, ac-3).
+      ...(lspAdvisory ? { lsp_advisory: lspAdvisory } : {}),
     };
   }
 
