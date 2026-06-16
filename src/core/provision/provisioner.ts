@@ -20,6 +20,7 @@ import {
   installCodeqlCli,
   manualInstructions,
 } from '~/core/codeql/install';
+import { lspProvisioners } from '~/core/provision/lsp-servers';
 import { playwrightProvisioner } from '~/core/provision/playwright';
 
 // 일반 결과 타입은 codeql/install.ts가 정본(현 위치)이며 여기서 재노출한다. 통일 후
@@ -96,13 +97,13 @@ export function codeqlProvisioner(deps: InstallDeps = defaultInstallDeps): Provi
   };
 }
 
-/** 기본 레지스트리(실제 deps). lsp는 증분 3에서 추가된다. */
+/** 기본 레지스트리(실제 deps): codeql·playwright + 언어별 LSP 서버. */
 export function defaultRegistry(): ProvisionerRegistry {
   return {
     tools: new Map<string, Provisioner>([
       ['codeql', codeqlProvisioner()],
       ['playwright', playwrightProvisioner()],
     ]),
-    lsp: new Map<string, Provisioner>(),
+    lsp: lspProvisioners(),
   };
 }

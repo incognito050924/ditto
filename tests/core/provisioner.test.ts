@@ -82,10 +82,14 @@ describe('resolveServer (LSP 표면 계약)', () => {
 });
 
 describe('defaultRegistry', () => {
-  test('codeql 단일 도구가 등록돼 있고 lsp는 비어 있다(증분 3 전)', () => {
+  test('codeql·playwright 도구 + 언어별 LSP 서버가 등록돼 있다', () => {
     const reg = defaultRegistry();
     expect(reg.tools.has('codeql')).toBe(true);
     expect(reg.tools.get('codeql')?.label).toBe('CodeQL CLI');
-    expect(reg.lsp.size).toBe(0);
+    expect(reg.tools.has('playwright')).toBe(true);
+    // lsp Map 키는 LSP_LANGUAGES taxonomy(예: typescript/go/java/kotlin)
+    expect(reg.lsp.has('typescript')).toBe(true);
+    expect(reg.lsp.has('kotlin')).toBe(true);
+    expect(reg.lsp.get('go')?.id).toBe('lsp:go');
   });
 });
