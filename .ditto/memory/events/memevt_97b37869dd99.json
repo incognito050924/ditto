@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_97b37869dd99",
+  "event_type": "observation",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "original_intent: 다음 해결해야지. 왜 안 하는거야? 하지만 custom agents 표면은 memory-extractor.toml 파싱 실패 때문에 전수 사용 가능이라고 말할 수 없습니다.\ncurrent_state: final_verdict=partial; Fix Codex custom-agent TOML setup rewrite — 모든 acceptance criterion이 pass로 기록되었다.\nnext_first_check: 미pass acceptance에 대한 검증 결과\nfailed_or_unverified: changed_files not recorded — git diff against HEAD returned no files but work item has runs/evidence",
+  "created_at": "2026-06-16T16:46:51.311Z",
+  "status": "approved",
+  "sources": [
+    "src_abdc5753090d"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-16T16:46:51.311Z"
+}

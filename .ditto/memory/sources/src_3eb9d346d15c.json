@@ -1,12 +1,12 @@
 {
   "schema_version": "0.1.0",
-  "source_id": "src_2926971dc4ff",
+  "source_id": "src_3eb9d346d15c",
   "source_type": "spec",
-  "path": ".ditto/knowledge/adr/ADR-0013-memory-subsystem-design.md",
-  "content_hash": "9c262f721bc91fe9238003d02d2cb61e0d4ffd025408a21adf7e1a05fa2aba38",
+  "path": ".ditto/knowledge/adr/ADR-0017-cleanup-deslop-on-acg.md",
+  "content_hash": "5fde119a6fb146288cc701366c9a65cb260047770f19ba6bb35653a7ec72bf45",
   "captured_at": "2026-06-16T16:46:51.311Z",
   "revision": "f0b265ee45ff87f89ea344b41a164fbfc4928ad0",
   "git_commit": "f0b265ee45ff87f89ea344b41a164fbfc4928ad0",
   "sensitivity": "internal",
-  "word_count": 1282
+  "word_count": 1253
 }

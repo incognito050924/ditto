@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_189331fdd946",
+  "event_type": "observation",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "original_intent: 두 개선. (1) plan에 대해 pre-mortem으로 잠재위험·표면적 누락·가능한 모든 대안 조사·구현 시 계획 곡해 요소·가정이 아닌 실제 사용자 의도 파악·모호성을 완전히 제거할 때까지 변증법적 질문을 반복하는 루프로 계획을 수정. 사람은 자기확신/편향이 심해 혼자서는 못 보므로 에이전트가 경계의 질문으로 채워줘야 함 — 이것이 pre-mortem의 진가. 충분히 완성되면(완벽 추구 금지) 구현으로. (2) pre-mortem 후 사용자에게 구현 brief 단계 추가: 무엇을 어떻게 바꾸는지, 변경 범위(특히 Interface 표면: HTTP req/resp, 메서드 시그니처, 객체/추상화 수준, 시스템 구조/흐름의 추가·수정·삭제). 세부 태스크가 아니라 코드베이스가 어떻게 바뀌는지. 모르면 autopilot이 건드리면 안되는 수정·잘못된 방향을 못 잡음. 결정사항: 변증법은 에이전트 우선+사용자에게도 질문, 모든 pre-mortem 단계의 Q&A를 dialog md 파일로 산출(사용자가 잘못 바로잡게); 전부 적용+소규모 자동 경량화; brief는 hard gate+소규모 자동승인.\ncurrent_state: final_verdict=partial; autopilot에 plan 변증법 pre-mortem 루프 + 구현 brief hard-gate 추가, 모든 pre-mortem 단계의 Q&A — 일부 acceptance criterion이 비-pass 상태로 partial 핸드오프된다.\nnext_first_check: 미pass acceptance에 대한 검증 결과\nfailed_or_unverified: ac-1 [unverified]; ac-2 [unverified]; ac-3 [unverified]; ac-4 [unverified]; ac-5 [unverified]; ac-6 [unverified]; ac-7 [unverified]; ac-8 [unverified]; ac-9 [unverified]",
+  "created_at": "2026-06-16T16:46:51.311Z",
+  "status": "approved",
+  "sources": [
+    "src_9c552a29819c"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-16T16:46:51.311Z"
+}

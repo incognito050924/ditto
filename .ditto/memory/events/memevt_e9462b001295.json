@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_e9462b001295",
+  "event_type": "decision",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "ADR-0016: Dual-host 아키텍처 — DITTO는 Claude Code와 Codex 두 호스트에서 동작한다\n\n### D1 — 공통 코어 + per-host 어댑터\n\n호스트-무관 코어(거버넌스·게이트·오케스트레이션) 위에 `HostAdapter`(`src/core/hosts/types.ts`)가 host별 차이를 흡수한다. host는 `'claude-code' | 'codex'` 두 값. **새 코드는 host를 하드코딩하지 않는다** — `input.host`로 분기하고, 미지정 시 `'claude-code'`로 안전 default하되 그 사실을 주석/계약으로 남긴다.\n\n### D2 — host divergence는 정확히 두 지점\n\n1. **repoRoot 출처** (`src/hooks/io.ts`): Claude는 `CLAUDE_PROJECT_DIR`, Codex는 이벤트 `cwd`. host별 `resolveRepoRoot`로만 해석한다.\n2. **파일 편집 도구 의미**: Claude는 `Write|Edit|MultiEdit` + `tool_input.file_path`. Codex는 `tool_name=\"apply_patch\"` + `tool_input.command`(패치 본문). Codex 편집의 경로는 `envelope.parseApplyPatchPaths`가 `*** Add/Update/Delete File:`·`*** Move to:` 헤더에서 추출하고, **같은** secret/scope-out/forbidden_scope/lease 게이트와 edit-evidence를 모든 mutated path에 적용한다(`pre-tool-use.ts` apply_patch 분기, `post-tool-use.ts`). hook stdin/stdout shape와 prompt/Bash/session_id 필드는 두 호스트가 동일.\n\n### D3 — 빌드·배포는 host별로 분리, 절대 교차 금지\n\n- `scripts/build-plugin.mjs` → `dist/plugin/`(Claude), `scripts/build-codex-plugin.mjs` → `dist/codex-plugin/`(Codex). 두 빌드는 서로의 출력 디렉터리를 건드리지 않는다.\n- **배포 seam(OBJ-1)**: repo `hooks/hooks.json`(Claude 소스)은 `--host` 없이 둔다. Codex 빌드가 **복사본** hooks.json의 각 `ditto hook` 명령에 `--host codex`를 부착(`injectCodexHost`)해, 실 Codex 런타임에서 host가 `claude-code`로 default되어 apply_patch 안전게이트가 미발화(false-green)되는 일을 막는다. Claude 소스는 byte-identical 유지.\n\n### D4 — surface projection은 단방향·결정론\n\n`agents/*.md`(Claude 정의) → `dist/codex-plugin/.codex/agents/<name>.toml`(Codex custom-agent)로 build가 단방향 투영한다(`agent-projection.ts`). read-only agent는 `sandbox_mode=\"read-only\"`로 매핑(per-tool 충실도는 보존 안 됨 — TOML 주석에 `unverified` 명시). 같은 projected name 충돌은 build error(silent overwrite 금지).\n\n### D5 — Codex 공식 발견 경로\n\nplugin manifest = `.codex-plugin/plugin.json`(root에 skills/·hooks/·.mcp.json). marketplace = `$REPO/.agents/plugins/marketplace.json`(+ `~/.agents/plugins/` + legacy `$REPO/.claude-plugin/marketplace.json`). **비공식 `.codex/plugins`는 발견 경로가 아니다** — surface 인벤토리에서 스캔하지 않는다(OBJ-5).\n\n### D6 — 개발 규칙 (체크리스트)\n\nhook·surface·host-touching 코드를 추가/수정할 때:\n- host를 하드코딩하지 말 것(특히 `'claude-code'` 문자열). `input.host` 사용.\n- Codex 경로(apply_patch·cwd repoRoot)를 함께 처리하거나, 못 하면 명시적으로 default + 사유 기록.\n- 두 host fixture를 모두 통과시킬 것(`tests/host/claude/*`·`tests/host/codex/*`). handler 단위뿐 아니라 **배포 seam**(빌드된 매니페스트 명령으로 구동)도 검증.\n- 테스트는 `DITTO_SKIP_HOOKS`를 spawn env에서 제거해 격리(kill-switch 누출로 hook bypass 방지).\n\n- 추가 host-추상 기계 — ADR-0008이 보류(provider 슬롯이 이미 stack-agnostic); 이 ADR도 `HostAdapter` 두 지점 분기로 충분하다고 본다.\n- Claude installer를 Codex까지 parameterize — host별 빌드/문서 분리가 더 단순(D3).\n- 단일 hooks.json에 host 자동감지 — 배포 seam은 build가 복사본을 재작성하는 쪽이 repo 소스 불변·결정론적(D3).\n\n- Codex 공식 plugin/hook/agent 계약이 바뀌면 → D2/D5 재검토(`dual-host-codex-fact-verification.md` 재검증).\n- 세 번째 host가 생기면 → D1 어댑터 인터페이스가 2-host 가정에 새는지 점검(현재 `host` enum 2값 전제).\n- 층위③ 라이브 검증에서 fixture-green과 실 동작이 갈리면 → 해당 D 항목을 실측 기준으로 개정.",
+  "created_at": "2026-06-16T16:46:51.311Z",
+  "status": "approved",
+  "sources": [
+    "src_de233164e0d5"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-16T16:46:51.311Z"
+}

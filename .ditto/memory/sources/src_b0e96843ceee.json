@@ -1,12 +1,12 @@
 {
   "schema_version": "0.1.0",
-  "source_id": "src_2926971dc4ff",
+  "source_id": "src_b0e96843ceee",
   "source_type": "spec",
-  "path": ".ditto/knowledge/adr/ADR-0013-memory-subsystem-design.md",
-  "content_hash": "9c262f721bc91fe9238003d02d2cb61e0d4ffd025408a21adf7e1a05fa2aba38",
+  "path": ".ditto/knowledge/adr/ADR-0014-e2e-dsl-agent-gates.md",
+  "content_hash": "17341f00183b19f1522eb06bf41e691b78ab5c1ac1226e9940525144de186fc7",
   "captured_at": "2026-06-16T16:46:51.311Z",
   "revision": "f0b265ee45ff87f89ea344b41a164fbfc4928ad0",
   "git_commit": "f0b265ee45ff87f89ea344b41a164fbfc4928ad0",
   "sensitivity": "internal",
-  "word_count": 1282
+  "word_count": 261
 }

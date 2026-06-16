@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_b7294603336a",
+  "event_type": "observation",
+  "actor": {
+    "kind": "agent",
+    "role": "bootstrap"
+  },
+  "text": "original_intent: 실제 호스트에서 DITTO 기능이 의도대로 동작함을 라이브 증거로 실증: (1) 호스트 로드 smoke — 실제 Claude Code·Codex에 install해 각 surface 로드·발화 확인(M6), (2) skill 행위 dogfooding — 각 skill을 시나리오에 돌려 산출물을 사람이 판정. fixture-green이 못 증명한 호스트 통합·LLM 행위를 메운다.\ncurrent_state: wi_260613afv는 draft, intent.json 없음. 새 세션이 ditto setup부터 시작해 deep-interview > autopilot로 진행 예정. 선행 wi_260613f9d(Codex 최소 surface M1~M4 + dual-host fixture 테스트)는 final_verdict=pass로 완료됐으나 아직 미커밋(working tree). changed_files는 그 미커밋 변경분이며 setup이 설치할 대상이다.\nnext_first_check: git status로 wi_260613f9d 미커밋 변경 확인 → bun run build:plugin (+build:codex-plugin) → 커밋 판단 → ditto setup\ndecisions: 검증 수준을 fixture로 한정한 결과 호스트 통합(층위③)·LLM 오케스트레이션 행위(층위④)가 미검증 → 이 work item이 라이브 실증을 담당; wi_260613f9d 변경은 미커밋 — ditto setup 전에 빌드/커밋 판단 필요\nfailed_or_unverified: 층위③ 호스트 통합: 실제 Claude/Codex가 플러그인 로드·hook 발화 — 미검증; 층위④ LLM 행위: skill이 의도대로 동작 — 미검증; Codex 라이브: 로컬 codex 바이너리 가용 여부 미확인(없으면 Codex smoke skip)",
+  "created_at": "2026-06-16T16:46:51.311Z",
+  "status": "approved",
+  "sources": [
+    "src_ca652b33633d"
+  ],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "bootstrap",
+  "decided_at": "2026-06-16T16:46:51.311Z"
+}
