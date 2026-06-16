@@ -316,7 +316,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=9fbc2e159a26aa54bf581bf1fabd69d330089dc3f9f037c36f15c8b9fafc2308 -->
+<!-- ditto:knowledge:start sha256=164d13edfb233af08411cd3a8eae57fef63662a7f3a6989409c463e1771188ec -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -380,6 +380,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-0015 · accepted · Memory freshness 축2(코드↔SoT) 검출 — 증분 검출 채택, 델타/overlay 게이트
 - ADR-0016 · accepted · Dual-host 아키텍처 — DITTO는 Claude Code와 Codex 두 호스트에서 동작한다
 - ADR-0017 · accepted · 정리(Tidy/deslop) 절차를 ACG 게이트 위에 정립한다 — 2차 정적 엔진 없이
-- ADR-0020 · proposed · 결정-모순 가드레일 — ADR을 추론 시점에 일관 적용 (classify × route × disclose)
+- ADR-0020 · accepted · 결정-모순 가드레일 — ADR을 추론 시점에 일관 적용 (classify × route × disclose)
 
 <!-- ditto:knowledge:end -->

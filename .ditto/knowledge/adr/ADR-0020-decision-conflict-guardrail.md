@@ -1,6 +1,6 @@
 # ADR-0020: 결정-모순 가드레일 — ADR을 추론 시점에 일관 적용 (classify × route × disclose)
 
-- 상태: proposed (2026-06-16 사용자와 설계 합의 + 코어 일부 구현. **배선·집행 통합 미완 → proposed 유지**. 검출 producer·disclosure 렌더링·planner 승인/Stop hook 통합이 끝나고 동작으로 검증되기 전까지 accepted 아님)
+- 상태: accepted (2026-06-16 설계 합의 + 전체 배선·집행 구현 + 라이브 e2e 검증 완료. 검출 지침(planner/researcher/reviewer/deep-interview/AGENTS §4-10)·라우팅 게이트(`decisionConflictGate`)·carrier(`decision-conflict-carrier`)·record-result producer(`decision_conflicts`→carrier 영속화)·approval front-load(`producePlanGate`)·Stop hook 집행(`decisionConflictForcesContinuation`)이 통합됨. 라이브 검증: 등록 planner 자율 검출 → 오케스트레이터 pass-through → record-result가 carrier 생성 → approval pending(예방) + Stop exit2(캐치)까지 실제 코드로 작동, 실제 코드 변경 0건. 커밋 `1f38011`. 철회·재검토 조건은 §철회/재검토 조건 참조)
 - 결정 일자: 2026-06-16
 - 결정자: hskim, claude
 - 관련: ADR-0006(CodeQL 단일 — `scripts/adr-guard.ts`가 grep으로 집행하는 결정의 예), ADR-0001(provider 간접화 — 충돌 판단은 host LLM이 하고 ditto는 직접 분석 안 함), ADR-0013(memory subsystem — 검색 경로 + supersede 메커니즘), `scripts/adr-guard.ts`(상보적 grep 가드), `src/core/memory-bootstrap.ts`(`adrGist` 색인), `src/core/gates.ts`(`decisionConflictGate`), wi_260616pyj
