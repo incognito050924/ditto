@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { collectCapabilityInventory } from '~/core/capability-inventory';
@@ -7,7 +8,17 @@ import {
   collectCompletionCoverageReport,
   defaultCompletionCoverageDeps,
 } from '~/core/completion-coverage-doctor';
-import { collectDistributionReport, defaultDistributionDeps } from '~/core/distribution-doctor';
+import {
+  collectDistributionChecks,
+  collectDistributionReport,
+  defaultDistributionDeps,
+} from '~/core/distribution-doctor';
+import {
+  type FixItem,
+  applyDoctorFixes,
+  defaultDoctorFixDeps,
+  planInstructionFixes,
+} from '~/core/doctor-fix';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   type BuiltinHostId,
@@ -30,6 +41,8 @@ import {
   writeHuman,
   writeJson,
 } from '../util';
+import { confirm } from '../wizard/prompt';
+import { createStdioPromptIO } from '../wizard/prompt-io';
 
 const DRIFT_EXIT = 1;
 const DOCTOR_RUNTIME_ERROR_EXIT = 70;
@@ -55,6 +68,55 @@ function exitForFindings(count: number, advisory: boolean | undefined): void {
   if (count > 0 && advisory !== true) process.exit(DRIFT_EXIT);
 }
 
+/**
+ * Run the repair flow for a planned set of fix items. Non-reversible repairs ask
+ * for a TTY confirm (skipped with no prompt in non-TTY); reversible auto-apply.
+ * Reports applied/skipped/nothing-to-fix and never raises a drift exit (a `--fix`
+ * run that completes its reversible work is a success).
+ */
+async function runFix(repoRoot: string, items: FixItem[]): Promise<void> {
+  const deps = defaultDoctorFixDeps(repoRoot, homedir());
+  const io = createStdioPromptIO();
+  try {
+    const result = await applyDoctorFixes(
+      {
+        ...deps,
+        // Non-reversible repairs (global ~/.claude host impact) confirm via TTY;
+        // confirm() returns the default (false) when there is no TTY → skip.
+        confirmNonReversible: (item) =>
+          confirm(io, `Apply non-reversible repair? ${item.describe}`, false),
+      },
+      items,
+    );
+    if (result.nothingToFix) {
+      writeHuman('fix: nothing to fix');
+      return;
+    }
+    for (const item of result.applied) writeHuman(`fixed\t${item.describe}`);
+    for (const item of result.skipped)
+      writeHuman(`skipped (non-reversible, not confirmed)\t${item.describe}`);
+  } finally {
+    io.close();
+  }
+}
+
+/**
+ * Plan the ditto-allowlist fix from the already-computed distribution checks:
+ * when `allowlisted` is false the project `.claude/settings.json` is missing the
+ * `Bash(ditto:*)` rule. Project-level → reversible (auto-applies).
+ */
+function planAllowlistFixes(allowlisted: boolean, repoRoot: string): FixItem[] {
+  if (allowlisted) return [];
+  return [
+    {
+      kind: 'allowlist',
+      reversible: true,
+      targetPath: join(repoRoot, '.claude', 'settings.json'),
+      describe: 'add Bash(ditto:*) to project .claude/settings.json allow',
+    },
+  ];
+}
+
 function parseCommon(args: { output?: string; host?: string }) {
   const format = parseOutputFormat(args.output);
   const adapters = selectedAdapters(args.host);
@@ -70,6 +132,11 @@ const instructionsCommand = defineCommand({
     host: { type: 'string', required: false, description: 'Host: codex|claude-code' },
     output: { type: 'string', default: 'human', description: 'Output format: human|json' },
     advisory: { type: 'boolean', default: false, description: 'Report drift but exit 0' },
+    fix: {
+      type: 'boolean',
+      default: false,
+      description: 'Repair detected instruction drift by re-projecting the managed block',
+    },
   },
   run: async ({ args }) => {
     try {
@@ -77,6 +144,10 @@ const instructionsCommand = defineCommand({
       const hosts = selectedHostIds(args.host);
       const repoRoot = await resolveRepoRootForCreate();
       const report = await checkInstructionsForHosts(hosts, repoRoot);
+      if (args.fix === true) {
+        await runFix(repoRoot, planInstructionFixes(report.findings, homedir()));
+        return; // --fix never raises a drift exit
+      }
       if (format === 'json') {
         writeJson({
           status: report.findings.length === 0 ? 'ok' : 'drift',
@@ -329,6 +400,11 @@ const distributionCommand = defineCommand({
   args: {
     output: { type: 'string', default: 'human', description: 'Output format: human|json' },
     advisory: { type: 'boolean', default: false, description: 'Report findings but exit 0' },
+    fix: {
+      type: 'boolean',
+      default: false,
+      description: 'Repair the ditto allowlist drift (Bash(ditto:*) in project settings.json)',
+    },
   },
   run: async ({ args }) => {
     try {
@@ -338,6 +414,12 @@ const distributionCommand = defineCommand({
       // the plugin lives at ${CLAUDE_PLUGIN_ROOT}. Fall back to targetRoot when the
       // env is unset (self-host / co-located layout), preserving prior behavior.
       const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? targetRoot;
+      if (args.fix === true) {
+        // Reuse the SAME detection (allowlisted check) — repair only the allowlist.
+        const checks = collectDistributionChecks(defaultDistributionDeps(targetRoot, pluginRoot));
+        await runFix(targetRoot, planAllowlistFixes(checks.allowlisted, targetRoot));
+        return; // --fix never raises a drift exit
+      }
       const report = collectDistributionReport(defaultDistributionDeps(targetRoot, pluginRoot));
       if (format === 'json') {
         writeJson({
