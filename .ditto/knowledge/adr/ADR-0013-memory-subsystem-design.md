@@ -61,6 +61,13 @@ DITTO에 코드·결정·핸드오프를 출처-동반 그래프로 묶어 cross
 - **hook 호스트 메모리 예외의 잔여 위험 (R4)**: scope-out 예외를 **현재 프로젝트의** `~/.claude/projects/<slug>/memory/` 서브트리로 축소했다(교차 프로젝트는 영속 prompt-injection/유출 채널이라 차단). 잔여 위험 = 현재 프로젝트 자신의 메모리 오염 — 이는 Claude Code 호스트 메모리 자체의 신뢰 모델과 동급이라 수용한다. 3-저장소 경계는 설계서 §3-5.
 - **측정 분해 (ac-10/R9)**: warm-start hit에 `hit_node_types`(node_type 분해)를 기록·합산해 게이트가 Decision 편중과 의미층 기여를 구분한다. **actionability**(pull 응답이 에이전트 행동을 실제로 바꿨는가)는 **미측정으로 명시 보류** — push 측 actionable 카운터만 존재하며, pull 측은 발화 수·neighbor_count뿐이다. pending 백로그는 `memory status`의 `pending_count`로 노출(AX).
 
+## 보강 (2026-06-17 — memory 별도 저장소 분리 옵션, wi_260616us6)
+
+- **D2 위치 결정의 명시화 — SoT는 git-tracked이되 "어느 repo"는 미규정이었다.** D2는 SoT가 `.ditto/memory/`에서 git-tracked임을 결정했을 뿐, 그것이 **반드시 프로젝트(부모) repo의 일부**여야 한다고는 결정하지 않았다. 따라서 SoT를 제자리(경로 불변)에서 **별도 git 저장소로 분리**하는 것은 D2 불변식과 양립한다 — 이를 옵션으로 명문화한다.
+- **분리 옵션(`ditto setup` wizard / `src/core/provision/memory-separate.ts`)**: 기본은 D2대로 프로젝트 git 포함(tracked). 사용자가 원할 때만 분리한다 — ① **gitignore-독립(기본)**: `.ditto/memory/`에서 `git init` + 부모 `.gitignore`에 `.ditto/memory/` 추가. ② **submodule(opt-in)**: 원격 선행 필요라 수동 절차 안내.
+- **D2 불변식 보존(기각 대안과의 구분)**: 분리해도 SoT는 **여전히 git-tracked**(다른 repo로 이동할 뿐)라 per-entity JSON 무충돌 머지·감사·팀 공유가 유지된다. 이는 기각 대안 "메모리 전체를 localDir(gitignored)에 두기"(line 49 — SoT **추적 자체**를 잃어 팀 공유·감사 상실)와 **다르다**. 중복 관리 방지를 위해 부모에서 가릴 뿐, 추적을 끊지 않는다.
+- **session-rooting(ADR-0011) 불변**: 분리는 경로 `.ditto/memory/` 고정의 **제자리 git init**이고 트리 밖 재배치가 아니다. 철회조건의 "멀티 repo workspace에서 `.ditto/memory/`에 변형 필요"(아래)와는 별개 — 단일 프로젝트의 저장소 경계 선택일 뿐 cross-repo 운용이 아니다.
+
 ## 철회/재검토 조건
 
 - 인프로세스 그래프가 ditto 규모를 초과해 성능 한계에 닿으면 → Neo4j export 어댑터를 상시 분석 경로로 승격 검토(D1).
