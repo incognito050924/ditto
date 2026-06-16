@@ -35813,8 +35813,9 @@ var setupCommand = defineCommand({
 });
 
 // src/cli/commands/teardown.ts
+import { rm as rm3 } from "fs/promises";
 import { homedir as homedir9 } from "os";
-import { resolve as resolve19 } from "path";
+import { join as join76, resolve as resolve19 } from "path";
 
 // src/core/teardown.ts
 import { copyFile as copyFile2, readFile as readFile16 } from "fs/promises";
@@ -35850,6 +35851,18 @@ async function teardownFile(destPath) {
 }
 
 // src/cli/commands/teardown.ts
+async function shouldPurge(flagPurge) {
+  if (flagPurge)
+    return true;
+  if (!process.stdin.isTTY)
+    return false;
+  const io = createStdioPromptIO();
+  try {
+    return await confirm(io, ".ditto/ \uB370\uC774\uD130(work-item \uC774\uB825\xB7\uBA54\uBAA8\uB9AC)\uAE4C\uC9C0 \uC601\uAD6C \uC0AD\uC81C\uD560\uAE4C?", false);
+  } finally {
+    io.close();
+  }
+}
 var teardownCommand = defineCommand({
   meta: {
     name: "teardown",
@@ -35860,6 +35873,12 @@ var teardownCommand = defineCommand({
       type: "string",
       required: false,
       description: "Target project directory; defaults to the nearest .ditto/.git root or cwd"
+    },
+    purge: {
+      type: "boolean",
+      required: false,
+      default: false,
+      description: "Also delete .ditto/ (work-item history + memory) \u2014 irreversible; default keeps it"
     }
   },
   run: async ({ args }) => {
@@ -35880,7 +35899,14 @@ var teardownCommand = defineCommand({
       for (const f3 of result2.files) {
         writeHuman(`  ${f3.filename} [${f3.scope}] ${f3.action} \u2192 ${f3.destPath}`);
       }
-      writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ kept`);
+      const purge = await shouldPurge(Boolean(args.purge));
+      if (purge) {
+        const dittoDir2 = join76(projectRoot, ".ditto");
+        await rm3(dittoDir2, { recursive: true, force: true });
+        writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ PURGED (${dittoDir2})`);
+      } else {
+        writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ kept`);
+      }
     } catch (err) {
       writeError(`teardown failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
@@ -36687,4 +36713,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=c4db8e91cddf3e97c2f61438c553f88a66a02ce0661018643edf911c6c6b54d3
+//# ditto-src-stamp=e7d96a0f9b709779ec3f3e62fd18d4e48b57256a9dd214de170faf315d873bad

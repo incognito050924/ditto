@@ -1,10 +1,28 @@
+import { rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { defineCommand } from 'citty';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { teardown } from '~/core/teardown';
 import { resolveResourcesDir } from '../resources';
 import { RUNTIME_ERROR_EXIT, writeError, writeHuman } from '../util';
+import { confirm } from '../wizard/prompt';
+import { createStdioPromptIO } from '../wizard/prompt-io';
+
+/**
+ * 삭제 표면의 유일한 질문: `.ditto/`(work-item 이력·메모리 SoT)까지 지울까. 기본은 보존.
+ * 비가역이므로 명시적으로만 — TTY면 confirm(기본 아니오), 비TTY는 --purge 플래그로만.
+ */
+async function shouldPurge(flagPurge: boolean): Promise<boolean> {
+  if (flagPurge) return true;
+  if (!process.stdin.isTTY) return false;
+  const io = createStdioPromptIO();
+  try {
+    return await confirm(io, '.ditto/ 데이터(work-item 이력·메모리)까지 영구 삭제할까?', false);
+  } finally {
+    io.close();
+  }
+}
 
 export const teardownCommand = defineCommand({
   meta: {
@@ -17,6 +35,13 @@ export const teardownCommand = defineCommand({
       type: 'string',
       required: false,
       description: 'Target project directory; defaults to the nearest .ditto/.git root or cwd',
+    },
+    purge: {
+      type: 'boolean',
+      required: false,
+      default: false,
+      description:
+        'Also delete .ditto/ (work-item history + memory) — irreversible; default keeps it',
     },
   },
   run: async ({ args }) => {
@@ -45,7 +70,17 @@ export const teardownCommand = defineCommand({
       for (const f of result.files) {
         writeHuman(`  ${f.filename} [${f.scope}] ${f.action} → ${f.destPath}`);
       }
-      writeHuman(`allowlist: removed Bash(ditto:*) from ${result.allowlistPath} · .ditto/ kept`);
+
+      const purge = await shouldPurge(Boolean(args.purge));
+      if (purge) {
+        const dittoDir = join(projectRoot, '.ditto');
+        await rm(dittoDir, { recursive: true, force: true });
+        writeHuman(
+          `allowlist: removed Bash(ditto:*) from ${result.allowlistPath} · .ditto/ PURGED (${dittoDir})`,
+        );
+      } else {
+        writeHuman(`allowlist: removed Bash(ditto:*) from ${result.allowlistPath} · .ditto/ kept`);
+      }
     } catch (err) {
       writeError(`teardown failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
