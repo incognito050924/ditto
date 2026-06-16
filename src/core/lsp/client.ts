@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { LSP_SPECS, type LspServerDeps, resolveServerPath } from '~/core/provision/lsp-servers';
 
 /**
  * Minimal LSP diagnostics client. Given an installed language server, opens one
@@ -28,16 +29,20 @@ export interface Diagnostic {
   source?: string;
 }
 
-/** Per-language server descriptor: the binary name and LSP `languageId`. */
-interface ServerSpec {
-  bin: string;
-  languageId: string;
+/**
+ * Real deps for the provisioner's `resolveServerPath`. `run` is unused for
+ * resolution (resolveServerPath never invokes it — install lives in the
+ * provisioner), so it is a no-op stub the type requires.
+ */
+function defaultLspDeps(): LspServerDeps {
+  return {
+    which: (b) => Bun.which(b),
+    env: (n) => process.env[n],
+    managedDir: join(homedir(), '.local', 'share', 'ditto', 'lsp'),
+    fileExists: existsSync,
+    run: async () => ({ exit_code: null, stderr: '' }),
+  };
 }
-
-/** The only language wired up so far. Keep this table minimal. */
-const SERVERS: Record<string, ServerSpec> = {
-  typescript: { bin: 'typescript-language-server', languageId: 'typescript' },
-};
 
 /** LSP severity number → our string. Defaults to 'error' for unknown values. */
 function severityFromLsp(n: number | undefined): DiagnosticSeverity {
@@ -55,29 +60,16 @@ function severityFromLsp(n: number | undefined): DiagnosticSeverity {
 
 /**
  * Resolve the server binary for a language, or `null` when none is installed.
- *
- * Order: env `<LANG>_LSP_BIN` (e.g. `TYPESCRIPT_LSP_BIN`) → `Bun.which(bin)` →
- * ditto-managed `~/.local/share/ditto/lsp/<bin>/<bin>`. Never throws — absence
- * is the expected case (`Bun.which` returns `null`; we never raw-spawn to probe).
- *
- * The env override is authoritative: when it is set it is the operator's explicit
- * choice, so a set-but-missing path resolves to `null` (degrade) rather than
- * falling back to PATH.
+ * Delegates to the canonical provisioner detection (`provision/lsp-servers`):
+ * env `<LANG>_LSP_BIN` → `Bun.which(bin)` → ditto-managed
+ * `~/.local/share/ditto/lsp/<language>/bin/<bin>`. Never throws — absence is the
+ * expected case. Sharing the provisioner's `resolveServerPath` keeps this surface
+ * in lock-step with what the `ditto setup` wizard installs (no path divergence).
  */
 export function resolveServer(language: string): string | null {
-  const spec = SERVERS[language];
+  const spec = LSP_SPECS.find((s) => s.language === language);
   if (!spec) return null;
-
-  const envBin = process.env[`${language.toUpperCase()}_LSP_BIN`];
-  if (envBin !== undefined) return existsSync(envBin) ? envBin : null;
-
-  const onPath = Bun.which(spec.bin);
-  if (onPath) return onPath;
-
-  const managed = join(homedir(), '.local', 'share', 'ditto', 'lsp', spec.bin, spec.bin);
-  if (existsSync(managed)) return managed;
-
-  return null;
+  return resolveServerPath(spec, defaultLspDeps());
 }
 
 export interface GetDiagnosticsOptions {
@@ -111,7 +103,7 @@ export async function getDiagnostics(
   opts: GetDiagnosticsOptions = {},
 ): Promise<Diagnostic[]> {
   const language = opts.language ?? 'typescript';
-  const spec = SERVERS[language];
+  const spec = LSP_SPECS.find((s) => s.language === language);
   if (!spec) return [];
 
   const binary = resolveServer(language);
@@ -213,7 +205,7 @@ export async function getDiagnostics(
           jsonrpc: '2.0',
           method: 'textDocument/didOpen',
           params: {
-            textDocument: { uri, languageId: spec.languageId, version: 1, text },
+            textDocument: { uri, languageId: spec.language, version: 1, text },
           },
         });
         return;

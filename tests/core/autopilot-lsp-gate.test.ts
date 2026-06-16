@@ -208,7 +208,12 @@ describe.if(TS_SERVER !== null)('ac-2 gate with the real typescript-language-ser
 
     // Reset N2 to running for a second record (the first record passed it).
     await aps.write(WI, { ...graphWithRunningImplement(), work_item_id: WI });
-    process.env.TYPESCRIPT_LSP_BIN = '/nonexistent/typescript-language-server';
+    // Force the gate "off" with a stub that resolves but never speaks LSP. (The
+    // unified detection falls a set-but-missing env through to PATH, so a bogus
+    // path would find the real server — a present-but-mute stub degrades instead.)
+    const stub = join(repo, 'stub-lsp');
+    await writeFile(stub, '#!/bin/sh\nexit 0\n');
+    process.env.TYPESCRIPT_LSP_BIN = stub;
     const gateOff = await recordImplementPass('bad.ts');
     expect(gateOff.lsp_advisory).toBeUndefined();
     // Outcome identical regardless of the advisory — monotonic across both runs.
@@ -218,17 +223,25 @@ describe.if(TS_SERVER !== null)('ac-2 gate with the real typescript-language-ser
 });
 
 describe('ac-2 gate DEGRADE (no server / no TS file — server-independent)', () => {
-  test('4a. DEGRADE server-absent: TYPESCRIPT_LSP_BIN=/nonexistent → no advisory, pass unchanged, no throw', async () => {
+  test('4a. DEGRADE server unusable: a present-but-mute server → no advisory, pass unchanged, no throw', async () => {
     await writeFile(join(repo, 'bad.ts'), BAD_TS);
-    process.env.TYPESCRIPT_LSP_BIN = '/nonexistent/typescript-language-server';
+    // A stub that resolves (detection succeeds) but exits without diagnostics —
+    // the spawn/stdout-close degrade. (A set-but-missing env would fall through to
+    // the real PATH server under the unified provisioner detection.)
+    const stub = join(repo, 'stub-lsp');
+    await writeFile(stub, '#!/bin/sh\nexit 0\n');
+    process.env.TYPESCRIPT_LSP_BIN = stub;
 
     const res = await recordImplementPass('bad.ts');
 
     expect(res.lsp_advisory).toBeUndefined();
     expect(res.status).toBe('passed');
     expect(res.outcome).toBe('pass');
-    // SKIP path writes no advisory artifact.
-    await expect(readFile(diagnosticsArtifactPath(), 'utf8')).rejects.toThrow();
+    // The mute server resolved, so the gate ran and wrote an (empty) advisory
+    // record — surfacing no errors (files: []), hence no advisory on the outcome.
+    // (The true SKIP→no-artifact path is covered by 4b, where no .ts is checked.)
+    const artifact = JSON.parse(await readFile(diagnosticsArtifactPath(), 'utf8'));
+    expect(artifact.files).toEqual([]);
   });
 
   test('4b. DEGRADE no-TS-file: a changed non-TS file is not checked → no advisory, pass unchanged, no throw', async () => {

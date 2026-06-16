@@ -54,10 +54,15 @@ describe.if(TS_SERVER !== null)('getDiagnostics (real typescript-language-server
 });
 
 describe('getDiagnostics degrade path (ADR-0018 optional tool)', () => {
-  test('non-existent server bin → [] without throwing', async () => {
+  test('a present-but-mute server (exits without diagnostics) → [] without throwing', async () => {
     const file = join(dir, 'bad.ts');
     await writeFile(file, 'const x: number = "str";\n');
-    process.env.TYPESCRIPT_LSP_BIN = '/nonexistent/typescript-language-server';
+    // The unified detection (provision/lsp-servers) falls a set-but-missing env
+    // through to PATH, so genuine absence is covered by the `no server` case
+    // below; here a present-but-mute stub forces the spawn/stdout-close degrade.
+    const stub = join(dir, 'stub-lsp');
+    await writeFile(stub, '#!/bin/sh\nexit 0\n');
+    process.env.TYPESCRIPT_LSP_BIN = stub;
     try {
       const diags = await getDiagnostics(file, { timeoutMs: 2000 });
       expect(diags).toEqual([]);
