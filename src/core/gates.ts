@@ -143,6 +143,109 @@ export function acceptanceTestable(ac: { statement: string }): GateResult {
   return gate(reasons);
 }
 
+// ── resolvability classifier (default-DENY over declared unverified labels) ──
+
+/** One unverified entry as declared in the completion contract (resolvability/grounding are optional, additive). */
+export type UnverifiedItem = CompletionContract['unverified'][number];
+
+/** Class of a blocking unverified item, used by the Stop hook to render the reason. */
+export type ResolvabilityKind = 'agent_resolvable' | 'blocked_external' | 'user_decision';
+
+export interface ResolvabilityBlocker {
+  /** The declared `item` text (what was not verified). */
+  item: string;
+  /** Why this item blocks a pass-close. */
+  reason: string;
+  /** Which class blocks; `user_decision` is a surface to defer, not a defect. */
+  kind: ResolvabilityKind;
+  /** True only for the user-decision surface (caller labels it deferred_needs_user_ok). */
+  userDecision: boolean;
+}
+
+/** A grounding ref is satisfied only by a present, non-empty string. */
+function isGrounded(u: UnverifiedItem): boolean {
+  return typeof u.grounding === 'string' && u.grounding.trim().length > 0;
+}
+
+/** Whole-token AC-id reference in the item/reason text (structural, not free-text verb mining). */
+function referencesAcceptanceId(u: UnverifiedItem, acceptanceIds: readonly string[]): boolean {
+  const haystack = `${u.item} ${u.reason}`;
+  return acceptanceIds.some((id) =>
+    new RegExp(`(?<![\\w-])${escapeRegex(id)}(?![\\w-])`).test(haystack),
+  );
+}
+
+/**
+ * Pure classifier (deterministic-floor): given the ALREADY-DECLARED `unverified`
+ * list and the work item's acceptance criterion ids, return the items that must
+ * BLOCK a pass-close and why. It reads ONLY the passed-in list — no filesystem,
+ * no code scanning (it classifies declared labels + structural signals; it does
+ * not judge prose quality). Default-DENY: a labeled / AC-referencing item blocks
+ * unless it is a grounded genuine residual. Rules:
+ *  - `agent_resolvable` → ALWAYS blocks (the agent declared it resolvable; parking
+ *    it is the anti-pattern). grounding does NOT excuse it.
+ *  - `blocked_external` | `accepted_tradeoff` → block UNLESS `grounding` present
+ *    (default-deny on ungrounded residual claims).
+ *  - `user_decision` → blocks UNLESS `grounding` present (a recorded decision
+ *    pointer = the decision was made); when it blocks it is flagged a USER-DECISION
+ *    surface (`userDecision: true`) so the caller can label it deferred_needs_user_ok.
+ *  - AC-referencing item (item/reason names one of `acceptanceIds`, whole-token) →
+ *    treated as `agent_resolvable` (blocks) unless grounded, because it blocks a
+ *    criterion the work owns. Structural id match, not keyword mining.
+ *  - resolvability ABSENT and no AC reference (legacy/unlabeled) → does NOT block;
+ *    such items stay governed by the existing out_of_scope rule (additive, no
+ *    double-messaging the in-scope-unverified gate).
+ */
+export function resolvabilityBlockers(
+  unverified: readonly UnverifiedItem[],
+  acceptanceIds: readonly string[],
+): ResolvabilityBlocker[] {
+  const blockers: ResolvabilityBlocker[] = [];
+  for (const u of unverified) {
+    const grounded = isGrounded(u);
+    // Structural AC-blocking signal: an unlabeled (or any) item naming an owned
+    // criterion is treated as agent_resolvable — it blocks a criterion the work owns.
+    const acRef = referencesAcceptanceId(u, acceptanceIds);
+
+    if (u.resolvability === 'agent_resolvable' || (acRef && u.resolvability === undefined)) {
+      if (grounded && u.resolvability !== 'agent_resolvable') continue; // AC-ref residual may be grounded
+      blockers.push({
+        item: u.item,
+        reason:
+          u.resolvability === 'agent_resolvable'
+            ? 'declared agent_resolvable but parked (resolve it, do not park)'
+            : 'references an owned acceptance criterion but is unverified',
+        kind: 'agent_resolvable',
+        userDecision: false,
+      });
+      continue;
+    }
+
+    if (u.resolvability === 'blocked_external' || u.resolvability === 'accepted_tradeoff') {
+      if (grounded) continue;
+      blockers.push({
+        item: u.item,
+        reason: `declared ${u.resolvability} without grounding (ungrounded residual claim)`,
+        kind: 'blocked_external',
+        userDecision: false,
+      });
+      continue;
+    }
+
+    if (u.resolvability === 'user_decision') {
+      if (grounded) continue;
+      blockers.push({
+        item: u.item,
+        reason: 'declared user_decision without a recorded decision pointer (surface for user ok)',
+        kind: 'user_decision',
+        userDecision: true,
+      });
+    }
+    // resolvability absent and no AC reference → legacy/unlabeled; not blocked here.
+  }
+  return blockers;
+}
+
 // ── completion gate (cross-checks completion against the work item) ─────────
 
 export function completionGate(item: WorkItem, completion: CompletionContract): GateResult {

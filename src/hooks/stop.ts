@@ -13,6 +13,7 @@ import {
   convergenceGate,
   intentDriftGate,
   knowledgeUpdateGate,
+  resolvabilityBlockers,
 } from '~/core/gates';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -357,6 +358,32 @@ export function knowledgeForcesContinuation(
 }
 
 /**
+ * Does a residual labeled in the completion's `unverified[]` force continuation?
+ * (ac-2 runtime wiring.) Delegates the classification to the pure
+ * `resolvabilityBlockers` (gates.ts default-DENY): an `agent_resolvable` residual
+ * (or one naming an owned AC) ALWAYS blocks — parking what the agent can resolve is
+ * the anti-pattern; an ungrounded `blocked_external`/`accepted_tradeoff`/`user_decision`
+ * residual blocks as an ungrounded residual claim. It inspects resolvability
+ * regardless of `out_of_scope` (an item marked out_of_scope=true yet labeled
+ * agent_resolvable is exactly the parked-resolvable bypass to catch). One reason
+ * per blocker; a user-decision surface gets distinct `deferred_needs_user_ok`
+ * wording (the user must decide or ground it), not the plain resolvable/ungrounded
+ * phrasing. The CALLER gates this on `completionWouldClose` so it only fires on a
+ * completion that actually passes its own gates (no double-message on a partial).
+ */
+export function residualResolvabilityForcesContinuation(
+  completion: z.infer<typeof completionContract>,
+  workItem: WorkItem,
+): string[] {
+  const acceptanceIds = workItem.acceptance_criteria.map((c) => c.id);
+  return resolvabilityBlockers(completion.unverified, acceptanceIds).map((b) =>
+    b.userDecision
+      ? `residual deferred_needs_user_ok — ${b.item}: ${b.reason}`
+      : `residual blocks pass-close — ${b.item}: ${b.reason}`,
+  );
+}
+
+/**
  * fitness 자동 트리거 — 정의된 fitness가 있으면 stop 시점에 평가해 assurance-snapshot.json을
  * 최신화한다(stale 없음). deterministic은 commandProvider가 실제 평가한다.
  * llm_judged/executed는 에이전트가 미리 산출한 표준 경로 verdict 파일
@@ -583,6 +610,16 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   reasons.push(
     ...autopilotBypassForcesContinuation(workItem, completion, pilot, completionWouldClose),
   );
+  // (ac-2) residual resolvability gate. Gated on completionWouldClose so it fires
+  // ONLY on a completion that actually passes its own gates — a closing work item
+  // that parks an agent-resolvable residual, or attaches an ungrounded
+  // non-resolvable label, must keep going. Disjoint from the completion gate above
+  // (which never reads the resolvability labels), so no double-message; fires for
+  // ANY completion.json present (including a direct /ditto:verify write, no
+  // autopilot.json required).
+  if (completion.status === 'ok' && completionWouldClose) {
+    reasons.push(...residualResolvabilityForcesContinuation(completion.data, workItem));
+  }
   // Axis-2 intent drift: the chain (intent → work-item → autopilot → completion)
   // is conserved by construction at finalize; this catches post-finalize
   // divergence (goal rewrite, AC grow/shrink, invented refs) before the work item

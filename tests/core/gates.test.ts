@@ -14,6 +14,7 @@ import {
   interviewReadinessGate,
   knowledgeTriggerFired,
   knowledgeUpdateGate,
+  resolvabilityBlockers,
   safeDefaultable,
 } from '~/core/gates';
 import { autopilot } from '~/schemas/autopilot';
@@ -550,5 +551,176 @@ describe('intentDriftGate (axis-2 intent conservation across the contract chain)
       const r = interfaceBaselineDriftGate(graph.approval_gate.change_surface, ['src/anything.ts']);
       expect(r.pass).toBe(true);
     });
+  });
+});
+
+describe('resolvabilityBlockers (default-DENY classifier over declared unverified labels)', () => {
+  const ACS = ['ac-1', 'ac-2'];
+
+  test('empty list → no blockers', () => {
+    expect(resolvabilityBlockers([], ACS)).toEqual([]);
+  });
+
+  test('agent_resolvable ALWAYS blocks, even with grounding', () => {
+    const b = resolvabilityBlockers(
+      [
+        {
+          item: 'flaky test',
+          reason: 'could fix',
+          out_of_scope: false,
+          resolvability: 'agent_resolvable',
+          grounding: 'ADR-0099',
+        },
+      ],
+      ACS,
+    );
+    expect(b).toHaveLength(1);
+    expect(b[0]?.kind).toBe('agent_resolvable');
+    expect(b[0]?.item).toBe('flaky test');
+  });
+
+  test('blocked_external ungrounded blocks; grounded does NOT block', () => {
+    const ungrounded = resolvabilityBlockers(
+      [
+        {
+          item: 'upstream API down',
+          reason: 'cannot reach',
+          out_of_scope: false,
+          resolvability: 'blocked_external',
+        },
+      ],
+      ACS,
+    );
+    expect(ungrounded).toHaveLength(1);
+    const grounded = resolvabilityBlockers(
+      [
+        {
+          item: 'upstream API down',
+          reason: 'cannot reach',
+          out_of_scope: false,
+          resolvability: 'blocked_external',
+          grounding: 'depends on payments-svc#42',
+        },
+      ],
+      ACS,
+    );
+    expect(grounded).toEqual([]);
+  });
+
+  test('accepted_tradeoff grounded passes; ungrounded blocks', () => {
+    const grounded = resolvabilityBlockers(
+      [
+        {
+          item: 'perf not tuned',
+          reason: 'tradeoff',
+          out_of_scope: false,
+          resolvability: 'accepted_tradeoff',
+          grounding: 'ADR-0017',
+        },
+      ],
+      ACS,
+    );
+    expect(grounded).toEqual([]);
+    const ungrounded = resolvabilityBlockers(
+      [
+        {
+          item: 'perf not tuned',
+          reason: 'tradeoff',
+          out_of_scope: false,
+          resolvability: 'accepted_tradeoff',
+        },
+      ],
+      ACS,
+    );
+    expect(ungrounded).toHaveLength(1);
+  });
+
+  test('user_decision ungrounded → blocks AND is flagged a user-decision surface', () => {
+    const b = resolvabilityBlockers(
+      [
+        {
+          item: 'which retention policy?',
+          reason: 'needs product call',
+          out_of_scope: false,
+          resolvability: 'user_decision',
+        },
+      ],
+      ACS,
+    );
+    expect(b).toHaveLength(1);
+    expect(b[0]?.kind).toBe('user_decision');
+    expect(b[0]?.userDecision).toBe(true);
+  });
+
+  test('user_decision grounded (recorded decision pointer) does NOT block', () => {
+    const b = resolvabilityBlockers(
+      [
+        {
+          item: 'retention policy',
+          reason: 'decided',
+          out_of_scope: false,
+          resolvability: 'user_decision',
+          grounding: 'decision in handoff.md:12',
+        },
+      ],
+      ACS,
+    );
+    expect(b).toEqual([]);
+  });
+
+  test('AC-referencing item blocks (structural ac-id match) unless grounded', () => {
+    const blocks = resolvabilityBlockers(
+      [{ item: 'ac-2 path not exercised', reason: 'no test run', out_of_scope: false }],
+      ACS,
+    );
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.kind).toBe('agent_resolvable');
+    const grounded = resolvabilityBlockers(
+      [
+        {
+          item: 'ac-2 path not exercised',
+          reason: 'no test run',
+          out_of_scope: false,
+          grounding: 'covered by e2e-7',
+        },
+      ],
+      ACS,
+    );
+    expect(grounded).toEqual([]);
+  });
+
+  test('AC id matched as a whole token, not a brittle substring (ac-1 ≠ ac-12)', () => {
+    const b = resolvabilityBlockers(
+      [{ item: 'see ticket ac-12 unrelated', reason: 'note', out_of_scope: false }],
+      ['ac-1'],
+    );
+    expect(b).toEqual([]);
+  });
+
+  test('absent label and no AC reference → does NOT block (legacy backward-compat)', () => {
+    const b = resolvabilityBlockers(
+      [{ item: 'docs not regenerated', reason: 'out of scope', out_of_scope: true }],
+      ACS,
+    );
+    expect(b).toEqual([]);
+  });
+
+  test('pure: same input → same output and reads no files (does not touch fs)', () => {
+    const input = [
+      {
+        item: 'flaky',
+        reason: 'x',
+        out_of_scope: false,
+        resolvability: 'agent_resolvable' as const,
+      },
+      { item: 'ext', reason: 'y', out_of_scope: false, resolvability: 'blocked_external' as const },
+    ];
+    const a = resolvabilityBlockers(input, ACS);
+    const b = resolvabilityBlockers(input, ACS);
+    expect(a).toEqual(b);
+    // structural guard against accidental fs access in the implementation source.
+    const src = readFileSync(join(import.meta.dir, '..', '..', 'src', 'core', 'gates.ts'), 'utf8');
+    const fnBody = src.slice(src.indexOf('export function resolvabilityBlockers'));
+    expect(/readFileSync|Bun\.file|readFile\b|require\(/.test(fnBody)).toBe(false);
   });
 });

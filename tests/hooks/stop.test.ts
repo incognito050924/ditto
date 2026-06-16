@@ -9,6 +9,7 @@ import {
   assuranceSnapshotForcesContinuation,
   autopilotForcesContinuation,
   impactForcesContinuation,
+  residualResolvabilityForcesContinuation,
   semanticForcesContinuation,
   stopHandler,
 } from '~/hooks/stop';
@@ -1066,5 +1067,115 @@ describe('stopHandler — knowledge-update gate (carrier-driven, G1)', () => {
     expect(out.exitCode).toBe(2);
     expect(out.stderr).toContain('knowledge-gate.json');
     expect(out.stderr).toContain('malformed');
+  });
+});
+
+describe('stopHandler — residual resolvability gate (ac-2 runtime wiring)', () => {
+  // A passing completion (all-AC pass, ran a command) carrying ONE residual. The
+  // superRefine forbids an in-scope (out_of_scope=false) unverified on a pass, so
+  // the residual is out_of_scope=true; the gate inspects resolvability regardless.
+  const passingWithResidual = (residual: Record<string, unknown>) =>
+    completion({
+      acceptance: PASSING_ACCEPTANCE,
+      unverified: [{ item: 'flaky path X', reason: 'parked', out_of_scope: true, ...residual }],
+    });
+
+  // (a) parked-resolvable bypass: out_of_scope=true but labeled agent_resolvable.
+  test('passing completion with an agent_resolvable residual => exit 2, reason mentions resolvable', async () => {
+    await writeArtifact(
+      'completion.json',
+      passingWithResidual({ resolvability: 'agent_resolvable' }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('resolvable');
+  });
+
+  // (b) accepted_tradeoff WITH grounding → not blocked by THIS gate.
+  test('accepted_tradeoff residual WITH grounding does not block this gate => exit 0', async () => {
+    await writeArtifact(
+      'completion.json',
+      passingWithResidual({ resolvability: 'accepted_tradeoff', grounding: 'ADR-0017' }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  // (c) ungrounded blocked_external → exit 2.
+  test('ungrounded blocked_external residual => exit 2', async () => {
+    await writeArtifact(
+      'completion.json',
+      passingWithResidual({ resolvability: 'blocked_external' }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('blocked_external');
+  });
+
+  // (d) ungrounded user_decision → exit 2 with a user-decision-surface reason.
+  test('ungrounded user_decision residual => exit 2 with a deferred_needs_user_ok reason', async () => {
+    await writeArtifact('completion.json', passingWithResidual({ resolvability: 'user_decision' }));
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('deferred_needs_user_ok');
+  });
+
+  // (e) a NON-passing completion (would-close=false) must NOT add the residual
+  // reason — no double-message on a completion that already fails its own gate.
+  test('NON-passing completion (misses a criterion) does NOT add the resolvability reason', async () => {
+    await writeArtifact(
+      'completion.json',
+      completion({
+        acceptance: [{ criterion_id: 'ac-1', verdict: 'pass' }],
+        // an agent_resolvable residual would block IF the gate fired here
+        unverified: [{ item: 'flaky path X', reason: 'parked', resolvability: 'agent_resolvable' }],
+        final_verdict: 'fail',
+        next_handoff_path: 'handoff.md',
+      }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2); // blocked by completion gate (missing criteria), not this gate
+    expect(out.stderr).toContain('missing');
+    expect(out.stderr).not.toContain('parked (resolve it');
+  });
+
+  // (f) the direct-verify path: completion.json present with NO autopilot.json
+  // still triggers (it does not require an autopilot run). Mark out_of_scope=true
+  // so the (B) bypass gate does not also fire (no changed files either).
+  test('completion.json present with NO autopilot.json (direct verify) still triggers => exit 2', async () => {
+    await writeArtifact(
+      'completion.json',
+      passingWithResidual({ resolvability: 'agent_resolvable' }),
+    );
+    // no autopilot.json written
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('resolvable');
+  });
+});
+
+describe('residualResolvabilityForcesContinuation', () => {
+  const wi = { acceptance_criteria: [{ id: 'ac-1' }, { id: 'ac-2' }, { id: 'ac-3' }] };
+  const comp = (unverified: unknown[]) => ({ unverified });
+
+  test('agent_resolvable blocks; reason mentions resolvable', () => {
+    const reasons = residualResolvabilityForcesContinuation(
+      comp([{ item: 'x', reason: 'parked', resolvability: 'agent_resolvable' }]) as never,
+      wi as never,
+    );
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toContain('resolvable');
+  });
+
+  test('user_decision (ungrounded) → a deferred_needs_user_ok reason, distinct wording', () => {
+    const reasons = residualResolvabilityForcesContinuation(
+      comp([{ item: 'x', reason: 'r', resolvability: 'user_decision' }]) as never,
+      wi as never,
+    );
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toContain('deferred_needs_user_ok');
+  });
+
+  test('no blockers => empty array', () => {
+    expect(residualResolvabilityForcesContinuation(comp([]) as never, wi as never)).toHaveLength(0);
   });
 });

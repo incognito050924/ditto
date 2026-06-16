@@ -67,6 +67,24 @@ export const completionContract = z
             .describe(
               'True when the item is intentionally outside acceptance scope; only such items are allowed when final_verdict=pass',
             ),
+          // Additive + optional, so a legacy completion.json without these
+          // round-trips byte-identically (no default on resolvability). The
+          // Stop hook/gate reads this declared label and the grounding ref to
+          // decide; the schema only stores them and never computes
+          // resolvability itself (deterministic-floor, gates.ts:10-14 idiom).
+          resolvability: z
+            .enum(['agent_resolvable', 'blocked_external', 'user_decision', 'accepted_tradeoff'])
+            .optional()
+            .describe(
+              'Declared class of why this is unverified; read by the gate, not computed here',
+            ),
+          grounding: z
+            .string()
+            .min(1)
+            .optional()
+            .describe(
+              'Free-text oracle/ref (ADR id, dependency, decision pointer, file:line); a non-resolvable class attaches it and the gate later checks its presence',
+            ),
         }),
       )
       .default([])
@@ -113,6 +131,11 @@ export const completionContract = z
         });
       }
     }
+    // Structural note only: a non-resolvable class (blocked_external |
+    // user_decision | accepted_tradeoff) is expected to attach `grounding`,
+    // but grounding-presence is NOT enforced here. That blocking judgement
+    // lives in the Stop hook later (it reads the label); enforcing it in the
+    // schema would reject existing on-disk completion.json (backward-compat).
     if (value.final_verdict !== 'pass' && !value.next_handoff_path) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

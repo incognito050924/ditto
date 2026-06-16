@@ -16917,6 +16917,53 @@ function acceptanceTestable(ac) {
     reasons.push("no observable/measurable predicate found");
   return gate(reasons);
 }
+function isGrounded(u3) {
+  return typeof u3.grounding === "string" && u3.grounding.trim().length > 0;
+}
+function referencesAcceptanceId(u3, acceptanceIds) {
+  const haystack = `${u3.item} ${u3.reason}`;
+  return acceptanceIds.some((id) => new RegExp(`(?<![\\w-])${escapeRegex(id)}(?![\\w-])`).test(haystack));
+}
+function resolvabilityBlockers(unverified, acceptanceIds) {
+  const blockers = [];
+  for (const u3 of unverified) {
+    const grounded = isGrounded(u3);
+    const acRef = referencesAcceptanceId(u3, acceptanceIds);
+    if (u3.resolvability === "agent_resolvable" || acRef && u3.resolvability === undefined) {
+      if (grounded && u3.resolvability !== "agent_resolvable")
+        continue;
+      blockers.push({
+        item: u3.item,
+        reason: u3.resolvability === "agent_resolvable" ? "declared agent_resolvable but parked (resolve it, do not park)" : "references an owned acceptance criterion but is unverified",
+        kind: "agent_resolvable",
+        userDecision: false
+      });
+      continue;
+    }
+    if (u3.resolvability === "blocked_external" || u3.resolvability === "accepted_tradeoff") {
+      if (grounded)
+        continue;
+      blockers.push({
+        item: u3.item,
+        reason: `declared ${u3.resolvability} without grounding (ungrounded residual claim)`,
+        kind: "blocked_external",
+        userDecision: false
+      });
+      continue;
+    }
+    if (u3.resolvability === "user_decision") {
+      if (grounded)
+        continue;
+      blockers.push({
+        item: u3.item,
+        reason: "declared user_decision without a recorded decision pointer (surface for user ok)",
+        kind: "user_decision",
+        userDecision: true
+      });
+    }
+  }
+  return blockers;
+}
 function completionGate(item, completion) {
   const reasons = [];
   const expected = item.acceptance_criteria.map((c3) => c3.id);
@@ -17362,7 +17409,9 @@ var completionContract = exports_external.object({
   unverified: exports_external.array(exports_external.object({
     item: exports_external.string().min(1).describe("What was not verified"),
     reason: exports_external.string().min(1).describe("Why verification did not happen"),
-    out_of_scope: exports_external.boolean().default(false).describe("True when the item is intentionally outside acceptance scope; only such items are allowed when final_verdict=pass")
+    out_of_scope: exports_external.boolean().default(false).describe("True when the item is intentionally outside acceptance scope; only such items are allowed when final_verdict=pass"),
+    resolvability: exports_external.enum(["agent_resolvable", "blocked_external", "user_decision", "accepted_tradeoff"]).optional().describe("Declared class of why this is unverified; read by the gate, not computed here"),
+    grounding: exports_external.string().min(1).optional().describe("Free-text oracle/ref (ADR id, dependency, decision pointer, file:line); a non-resolvable class attaches it and the gate later checks its presence")
   })).default([]).describe("Anything the implementer could not verify; explicit not-knowing is required"),
   remaining_risks: exports_external.array(exports_external.string()).default([]),
   acg_governance: exports_external.object({
@@ -30716,6 +30765,10 @@ function knowledgeForcesContinuation(graph, carrier) {
   const g3 = knowledgeUpdateGate(carrier.triggers, carrier.delta);
   return g3.pass ? [] : g3.reasons.map((r3) => `knowledge update \u2014 ${r3}`);
 }
+function residualResolvabilityForcesContinuation(completion, workItem2) {
+  const acceptanceIds = workItem2.acceptance_criteria.map((c3) => c3.id);
+  return resolvabilityBlockers(completion.unverified, acceptanceIds).map((b2) => b2.userDecision ? `residual deferred_needs_user_ok \u2014 ${b2.item}: ${b2.reason}` : `residual blocks pass-close \u2014 ${b2.item}: ${b2.reason}`);
+}
 async function maybeRunFitness(repoRoot, workItemId2, dir) {
   try {
     const fns = await new FitnessFunctionStore(repoRoot).read(workItemId2);
@@ -30834,6 +30887,9 @@ var stopHandler = async (input) => {
     reasons.push("autopilot has runnable node(s); the work item is not complete yet");
   }
   reasons.push(...autopilotBypassForcesContinuation(workItem2, completion, pilot, completionWouldClose));
+  if (completion.status === "ok" && completionWouldClose) {
+    reasons.push(...residualResolvabilityForcesContinuation(completion.data, workItem2));
+  }
   if (intent.status === "ok" && pilot.status === "ok") {
     const d2 = intentDriftGate({
       intent: intent.data,
@@ -35863,4 +35919,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=c6db13e25c793a5c6f276f86b5c9ca700fbc33bea65df072954dcb299807ceda
+//# ditto-src-stamp=3efb5eb6f885a990a7d312cfee37dd8795fc20d881191b8387faa7dacad0b01c
