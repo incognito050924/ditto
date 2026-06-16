@@ -1,8 +1,51 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-06-13T13:50:00+09:00",
+  "updated_at": "2026-06-17T00:00:00+09:00",
   "entries": [
+    {
+      "term": "autopilot",
+      "aliases": [],
+      "definition": "축2(자율 실행 오케스트레이션)를 구동하는 오케스트레이터. 단어 그대로 자율 주행 — 승인된 실행 단위(요청·증분·work item) 안에서 노드 그래프를 스스로 선택·위임·검증하며 정지 조건까지 끝까지 몬다. 중간 멈춤은 가치·의도 결정, 비가역 위험, 안전 경계에서만(헌장 §3). 배제되는 안티패턴: 절차 결정(구현 A/B, '이대로 진행할까요?', 다음 증분·커밋 확인)을 사용자에게 떠넘기며 증분마다 멈춰 묻는 것 — 자율의 실패. 그런 질문은 착수 전 deep-interview/pre-mortem에서 소진한다.",
+      "examples": [
+        "autopilot은 승인된 work item을 정지 조건까지 무정지로 몬다",
+        "A/B 구현 선택을 사용자에게 되묻는 것은 배제 대상 안티패턴"
+      ],
+      "not_to_be_confused_with": [
+        "착수 게이트(헌장 §3 — 최초 착수만 사용자 허가)"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-17T00:00:00+09:00"
+    },
+    {
+      "term": "deep-interview",
+      "aliases": [],
+      "definition": "축1(의도 파악)의 인터뷰 메커니즘. autopilot이 자율 주행할 수 있도록 착수 전에 모든 진짜 질문(제품 가치·도메인 의미·비가역 결정)을 변증론적·경계 질문으로 소진해 intent를 확정한다. 실행 중 멈춰 되묻지 않기 위한 선행 게이트 — 질문은 여기서 끝낸다.",
+      "examples": [
+        "축1=deep-interview skill"
+      ],
+      "not_to_be_confused_with": [
+        "pre-mortem"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-17T00:00:00+09:00"
+    },
+    {
+      "term": "pre-mortem",
+      "aliases": [],
+      "definition": "계획 단계에서 '이 일이 실패한다면 왜인가'를 미리 돌려 비가역 위험·커버리지 공백을 드러내는 절차. deep-interview와 함께 축1에서 의도·위험을 front-load해, autopilot이 실행 도중 새 모호함·위험에 부딪혀 멈추는 일을 막는다.",
+      "examples": [
+        "계획 brief에 6축 coverage pre-mortem을 hard-gate로 건다"
+      ],
+      "not_to_be_confused_with": [
+        "deep-interview"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-06-17T00:00:00+09:00"
+    },
     {
       "term": "ADR",
       "aliases": [

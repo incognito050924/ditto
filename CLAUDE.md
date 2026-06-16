@@ -316,7 +316,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=164d13edfb233af08411cd3a8eae57fef63662a7f3a6989409c463e1771188ec -->
+<!-- ditto:knowledge:start sha256=be400fcccb2fdd0698d73f70683346d1184e84bdb1ad8f15d389fa694f9e89f5 -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -329,6 +329,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR
 - DITTO 기능 4축
 - Journey DSL
+- autopilot
 - code_dirty
 - code_drift
 - completion contract
@@ -336,6 +337,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - context packet
 - context rot
 - cross_repo
+- deep-interview
 - deployment seam
 - doctor
 - drifted_sources
@@ -348,6 +350,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - memory event
 - memory projection
 - memory source
+- pre-mortem
 - profile
 - provider
 - request
