@@ -38,6 +38,35 @@ export interface Choice {
   checked: boolean;
 }
 
+export interface Option {
+  label: string;
+  value: string;
+}
+
+/**
+ * 단일 선택(번호). 비TTY거나 빈/잘못된 입력이면 defaultValue.
+ * defaultValue는 options에 존재해야 한다(호출부 책임).
+ */
+export async function select(
+  io: PromptIO,
+  message: string,
+  options: Option[],
+  defaultValue: string,
+): Promise<string> {
+  if (!io.isTTY || options.length === 0) return defaultValue;
+  const defaultIdx = options.findIndex((o) => o.value === defaultValue);
+  io.write(`${message}\n`);
+  options.forEach((o, i) => {
+    const mark = o.value === defaultValue ? '(기본)' : '';
+    io.write(`  ${i + 1}. ${o.label} ${mark}\n`);
+  });
+  const ans = (await io.ask(`번호 (Enter=${defaultIdx + 1}): `)).trim();
+  if (ans === '') return defaultValue;
+  const n = Number.parseInt(ans, 10);
+  if (Number.isInteger(n) && n >= 1 && n <= options.length) return options[n - 1].value;
+  return defaultValue;
+}
+
 /**
  * 다중선택(번호 입력 방식 — raw-mode 화살표 없이 line-based라 견고·테스트 용이).
  * 비TTY거나 빈 입력이면 기본 체크된 항목(추론 결과)을 그대로 돌려준다.
