@@ -3,7 +3,7 @@
 - 상태: accepted (2026-06-16 결정. 이미 관례로 실현된 메커니즘들[e2e blockedJourney·Stop 게이트 inert·fail-open fitness·evidence-gated completion]을 단일 불변식으로 형식화하고, 가드로 집행 가능하게 못박는다. 가드 구현은 별도 노드 n2의 책임 — 이 ADR은 결정 기록이다.)
 - 결정 일자: 2026-06-16
 - 결정자: hskim, claude
-- 관련: ADR-0006(정적 분석 엔진 = CodeQL 단일 — 본 ADR과 **직교**, 아래 "공개" 참조), ADR-0010(DITTO 기능 4축 — 도구는 축을 떠받치는 기층), ADR-0020(결정-모순 가드레일 — 본 ADR의 "공개" 절이 그 투명성 규율을 따른다), `src/core/e2e/browser.ts`(blockedJourney), `src/hooks/stop.ts`(ledger 부재 시 게이트 inert), `src/core/gates.ts`·`src/core/autopilot-complete.ts`(fail-open fitness·evidence-gated completion), wi_2606168oh
+- 관련: ADR-0006(정적 분석 엔진 = CodeQL 단일 — 본 ADR과 **직교**, 아래 "공개" 참조), ADR-0010(DITTO 기능 4축 — 도구는 축을 떠받치는 기층), ADR-0020(결정-모순 가드레일 — 본 ADR의 "공개" 절이 그 투명성 규율을 따른다), `src/core/e2e/browser.ts`(blockedJourney), `src/hooks/stop.ts`(ledger 부재 시 게이트 inert), `src/core/gates.ts`·`src/core/autopilot-complete.ts`(fail-open fitness·evidence-gated completion), `reports/design/lsp-for-agentic-coding-assessment.md`(LSP 적용성 평가 — 통합 시 LSP는 본 불변식이 규율하는 선택적 도구), wi_2606168oh, wi_2606168m0(LSP 연구)
 
 ## 컨텍스트
 
