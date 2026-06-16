@@ -462,7 +462,7 @@
     {
       "term": "work item",
       "aliases": [],
-      "definition": "DITTO가 추적하는 작업 단위. goal, acceptance criteria, 실행 기록, 검증 evidence, handoff를 포함한다. 식별자: wi_*. task라는 이름은 사용하지 않는다.",
+      "definition": "DITTO가 추적하는 작업 단위. goal, acceptance criteria, 실행 기록, 검증 evidence, handoff를 포함한다. 식별자: wi_*. task라는 이름은 사용하지 않는다. 처리 정본 프로세스: 진입점은 둘(명시적 deep-interview / 대화·handoff로 받아 autopilot 바로)이나 내부 파이프라인은 항상 동일 — deep-interview 의도 잠금(intent.json) → pre-mortem 계획 잠금 → autopilot 코드베이스 변경. 사용자 의도는 work item을 열고 (우회 명분 없는 한) 이 프로세스를 따른다. 무축소 의무: 잠긴 의도·계획을 임의 축소 금지(§4-6) — 구현 범위 줄여 다음 WI/세션으로 넘기기(계획 무시)·남은 위험 미처리(의도 무시) 둘 다 위반. 진짜 축소가 필요하면 사용자 의도 차원 결정이라 사용자에게 확인.",
       "examples": [
         "wi_v01bootstrap",
         "wi_v01implement"
