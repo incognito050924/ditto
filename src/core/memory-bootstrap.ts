@@ -69,10 +69,15 @@ function markdownTitle(body: string): string {
 }
 
 /**
- * Extract the searchable gist of an ADR: title + the "결정"(decision) and
- * "근거"(rationale) sections. This is the part ac-14 needs to be searchable by
- * BODY content, not just the title token (a term in the rationale must be
- * findable even when absent from the title).
+ * Extract the searchable gist of an ADR: title + the sections that carry what a
+ * decision-contradiction guardrail must retrieve — "결정"(decision), "근거"
+ * (rationale), the rejected alternatives ("대안 (기각)" / "대안과 폐기 사유"), and
+ * the validity window ("철회/재검토 조건" / "변경 조건"). This is the part ac-14
+ * needs to be searchable by BODY content, not just the title token: a term in the
+ * rationale must be findable even when absent from the title, and — critically —
+ * "we decided NOT to do X" lives in the rejected-alternatives section, while "when
+ * does this decision expire" lives in the change-condition section. Capturing only
+ * 결정/근거 leaves prohibitions and expiry conditions invisible to retrieval.
  */
 function adrGist(body: string): string {
   const title = markdownTitle(body);
@@ -89,7 +94,10 @@ function adrGist(body: string): string {
     if (heading) {
       flush();
       const name = heading[1]?.trim() ?? '';
-      capturing = /결정|근거|decision|rationale/i.test(name);
+      capturing =
+        /결정|근거|대안|기각|폐기|철회|재검토|변경\s*조건|decision|rationale|alternative|reject/i.test(
+          name,
+        );
       continue;
     }
     if (capturing) captured.push(line);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
@@ -7,6 +7,7 @@ import { buildInitialNodes } from '~/core/autopilot-graph';
 import { nextNode, recordResult } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { CoverageStore } from '~/core/coverage-store';
+import { localDir } from '~/core/ditto-paths';
 import { WorkItemStore } from '~/core/work-item-store';
 import type { Autopilot } from '~/schemas/autopilot';
 
@@ -762,6 +763,99 @@ describe('recordResult plan-stage coverage wiring (premortem-coverage §7.2/§12
     const g = await aps.get(WI);
     expect(g.approval_gate.change_surface).toBeUndefined();
     expect(g.approval_gate.plan_brief).toBeUndefined();
+    expect(g.approval_gate.status).toBe('not_required');
+  });
+
+  // ADR-0020 D3 producer (wi_260616eu8): recordResult persists the planner's
+  // declared decision conflicts as the carrier, BEFORE the plan-gate consults it,
+  // so an intent conflict front-loads the approval gate in the SAME call even when
+  // the tier alone would auto-waive (light → not_required).
+  const carrierPath = () => localDir(repo, 'work-items', WI, 'decision-conflict.json');
+
+  test('contentful design pass with intent-level decision_conflicts writes carrier + forces approval pending', async () => {
+    await seed(designOnly());
+    await seedCoverage();
+    await nextNode(repo, WI);
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text:
+          'plan: ran the coverage sweep; this request contradicts a recorded decision (ADR-0011)',
+        outcome: 'pass',
+        generated_nodes: [proposal('G1', 'implement', ['N1'])],
+        plan_brief: {
+          // light tier (1 file, no interface, no risk) → producePlanGate alone
+          // would give not_required; the intent conflict must override to pending.
+          change_surface: ['src/x.ts'],
+          interface_changes: [],
+          dod: ['x still works'],
+          test_scenarios: ['unit test for x'],
+          tier_inputs: {
+            changedFileCount: 1,
+            interfaceChanged: false,
+            risk: { non_local: false, irreversible: false, unaudited: false },
+            large: false,
+          },
+        },
+        decision_conflicts: [
+          {
+            adr_id: 'ADR-0011',
+            kind: 'forbid',
+            level: 'intent',
+            basis: 'ADR-0011 forbids cross-repo subagent delegation; this work item requires it',
+          },
+        ],
+      },
+      now: NOW,
+    });
+    // (a) the carrier was written BY recordResult (not a fixture) with the conflict.
+    const carrier = JSON.parse(await readFile(carrierPath(), 'utf8'));
+    expect(carrier.schema_version).toBe('0.1.0');
+    expect(carrier.mode).toBe('autopilot');
+    expect(carrier.conflicts).toEqual([
+      {
+        adr_id: 'ADR-0011',
+        kind: 'forbid',
+        level: 'intent',
+        basis: 'ADR-0011 forbids cross-repo subagent delegation; this work item requires it',
+      },
+    ]);
+    // (b) the SAME call front-loaded the approval gate to pending despite light tier.
+    const g = await aps.get(WI);
+    expect(g.approval_gate.status).toBe('pending');
+  });
+
+  test('contentful design pass with absent decision_conflicts writes no carrier (backward compat)', async () => {
+    await seed(designOnly());
+    await seedCoverage();
+    await nextNode(repo, WI);
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text: 'plan: small reversible change; no ADR conflicts detected',
+        outcome: 'pass',
+        generated_nodes: [proposal('G1', 'implement', ['N1'])],
+        plan_brief: {
+          change_surface: ['src/x.ts'],
+          interface_changes: [],
+          dod: ['x still works'],
+          test_scenarios: ['unit test for x'],
+          tier_inputs: {
+            changedFileCount: 1,
+            interfaceChanged: false,
+            risk: { non_local: false, irreversible: false, unaudited: false },
+            large: false,
+          },
+        },
+      },
+      now: NOW,
+    });
+    // No carrier file created.
+    await expect(readFile(carrierPath(), 'utf8')).rejects.toThrow();
+    // approval_gate behaves exactly as the legacy light-tier path: not_required.
+    const g = await aps.get(WI);
     expect(g.approval_gate.status).toBe('not_required');
   });
 });

@@ -213,4 +213,45 @@ describe('bootstrapIngest', () => {
     expect(handoffTitleBaseline.length).toBe(0);
     expect(searchEventBodies(handoffQuery, events).length).toBeGreaterThan(0);
   });
+
+  test('rejected-alternative and change-condition terms are searchable (prohibition recall)', async () => {
+    // A decision whose PROHIBITION lives in "대안 (기각)" and whose validity
+    // window lives in "철회/재검토 조건" — neither term appears in 결정/근거. The
+    // gist must capture these sections, else "we decided NOT to do X" and "when
+    // does this decision expire" are invisible to the retrieval that the
+    // decision-contradiction guardrail depends on.
+    const adrDir = join(workDir, '.ditto', 'knowledge', 'adr');
+    await writeFile(
+      join(adrDir, 'ADR-0002-engine.md'),
+      [
+        '# ADR-0002: Static engine choice',
+        '',
+        '## 결정',
+        'CodeQL 단일 엔진을 쓴다.',
+        '',
+        '## 근거',
+        '단일 분석 파이프라인이 유지보수가 싸다.',
+        '',
+        '## 대안 (기각)',
+        '- kafka 기반 스트리밍 분석기 — 운영 부담으로 기각.',
+        '',
+        '## 철회/재검토 조건',
+        'petabyte 규모 코드베이스가 생기면 다시 연다.',
+      ].join('\n'),
+    );
+
+    await bootstrapIngest(workDir);
+    const events = await new MemoryEventStore(workDir).list();
+    const decisionIds = new Set(
+      events.filter((e) => e.event_type === 'decision').map((e) => e.event_id),
+    );
+
+    // Rejected-alternative term — encodes "we decided NOT to adopt kafka".
+    const rejectHits = searchEventBodies('kafka', events);
+    expect(rejectHits.some((h) => decisionIds.has(h.event_id))).toBe(true);
+
+    // Change-condition term — when the decision should be revisited.
+    const condHits = searchEventBodies('petabyte', events);
+    expect(condHits.some((h) => decisionIds.has(h.event_id))).toBe(true);
+  });
 });

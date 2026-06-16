@@ -9,6 +9,7 @@ import {
   closeNode,
   coverageClosureGate,
   isCoverageTerminated,
+  producePlanGate,
   recordDryRound,
   selectCoverageTier,
   selectReadyCoverageNodes,
@@ -661,5 +662,27 @@ describe('coverage Manager — breadth-invariant: tier shrinks depth only (§8.2
     const counts = COVERAGE_TIERS.map((t) => tierDepthBudget(t).axes.length);
     expect(new Set(counts).size).toBe(1); // all tiers carry the same axis count
     expect(counts[0]).toBe(COVERAGE_AXES.length);
+  });
+});
+
+describe('producePlanGate — intent ADR conflict front-loads approval (ADR-0020 D3)', () => {
+  const lightInputs = {
+    changeSurface: ['src/x.ts'],
+    brief: { interface_changes: [], dod: [], test_scenarios: [] },
+    tierInputs: {
+      changedFileCount: 1,
+      interfaceChanged: false,
+      risk: { non_local: false, irreversible: false, unaudited: false },
+      large: false,
+    },
+  };
+
+  test('light tier auto-waives to not_required when nothing forces approval', () => {
+    expect(producePlanGate(lightInputs).status).toBe('not_required');
+    expect(producePlanGate({ ...lightInputs, requireApproval: false }).status).toBe('not_required');
+  });
+
+  test('requireApproval forces pending even for an otherwise auto-waivable light tier', () => {
+    expect(producePlanGate({ ...lightInputs, requireApproval: true }).status).toBe('pending');
   });
 });

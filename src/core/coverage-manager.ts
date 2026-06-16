@@ -524,6 +524,13 @@ export interface PlanGateInput {
   changeSurface: string[];
   brief: { interface_changes: string[]; dod: string[]; test_scenarios: string[] };
   tierInputs: TierSelectionInput;
+  /**
+   * Force `status='pending'` regardless of tier — the deterministic front-load of an
+   * intent-level ADR conflict to the approval gate (ADR-0020 D3). The caller computes
+   * it with `decisionConflictRequiresApproval`; a `light`/auto-waivable tier cannot
+   * silently proceed past a recorded decision the request contradicts.
+   */
+  requireApproval?: boolean;
 }
 
 export interface PlanGatePatch {
@@ -535,7 +542,7 @@ export interface PlanGatePatch {
 export function producePlanGate(input: PlanGateInput): PlanGatePatch {
   const tier = selectCoverageTier(input.tierInputs);
   return {
-    status: tierBriefApproval(tier),
+    status: input.requireApproval ? 'pending' : tierBriefApproval(tier),
     change_surface: [...input.changeSurface],
     plan_brief: {
       interface_changes: [...input.brief.interface_changes],

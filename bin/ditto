@@ -16827,7 +16827,7 @@ function tierBriefApproval(tier) {
 function producePlanGate(input) {
   const tier = selectCoverageTier(input.tierInputs);
   return {
-    status: tierBriefApproval(tier),
+    status: input.requireApproval ? "pending" : tierBriefApproval(tier),
     change_surface: [...input.changeSurface],
     plan_brief: {
       interface_changes: [...input.brief.interface_changes],
@@ -17053,6 +17053,24 @@ function knowledgeUpdateGate(t2, d2) {
     reasons.push("repeated_pattern trigger fired but no pattern/learning recorded (under-recording)");
   }
   return gate(reasons);
+}
+function decisionConflictGate(conflicts, mode) {
+  const dispositions = conflicts.map((conflict) => {
+    if (conflict.kind === "prefer")
+      return { conflict, route: "justify" };
+    if (conflict.level === "method")
+      return { conflict, route: "align" };
+    return { conflict, route: mode === "autopilot" ? "block" : "ask_user" };
+  });
+  return {
+    dispositions,
+    blocked: dispositions.some((d2) => d2.route === "block"),
+    needsApproval: dispositions.some((d2) => d2.route === "ask_user"),
+    disclose: conflicts.length > 0
+  };
+}
+function decisionConflictRequiresApproval(conflicts) {
+  return conflicts.some((c3) => c3.kind !== "prefer" && c3.level === "intent");
 }
 function idSet(items) {
   return new Set(items.map((i2) => i2.id));
@@ -17744,6 +17762,19 @@ function collectTidyDiffStat(repoRoot, base, head = "HEAD") {
   }
   return { files };
 }
+
+// src/schemas/decision-conflict-carrier.ts
+var decisionConflict = exports_external.object({
+  adr_id: exports_external.string().regex(/^ADR-\d{4}$/, "adr_id must be ADR-NNNN"),
+  kind: exports_external.enum(["forbid", "require", "prefer"]),
+  level: exports_external.enum(["intent", "method"]),
+  basis: exports_external.string().min(1).describe("Evidence: what the ADR says and how the current work touches it")
+});
+var decisionConflictCarrier = exports_external.object({
+  schema_version: schemaVersion,
+  mode: exports_external.enum(["interactive", "autopilot"]),
+  conflicts: exports_external.array(decisionConflict).default([])
+}).describe("Persisted inputs to decisionConflictGate, written by the detecting node");
 
 // src/core/active-node-lease.ts
 import { join as join14 } from "path";
@@ -20725,7 +20756,8 @@ var recordResultPayload = exports_external.object({
       }),
       large: exports_external.boolean()
     })
-  }).optional().describe("A plan-stage (design/planner) node's pre-mortem coverage brief + tier inputs. On a " + "contentful design pass it populates approval_gate.{plan_brief,change_surface,status} " + "via producePlanGate (brief hard-gate, \xA77.2). Ignored for non-design nodes.")
+  }).optional().describe("A plan-stage (design/planner) node's pre-mortem coverage brief + tier inputs. On a " + "contentful design pass it populates approval_gate.{plan_brief,change_surface,status} " + "via producePlanGate (brief hard-gate, \xA77.2). Ignored for non-design nodes."),
+  decision_conflicts: exports_external.array(decisionConflict).optional().describe("The planner's declared ADR conflicts (ADR-0020 D3 producer). On a contentful design " + "pass a non-empty list is written to the decision-conflict carrier so an intent " + "conflict front-loads the approval gate (prevention) and the Stop hook re-checks it " + "(catch). Absent/empty \u21D2 no carrier written (backward compat). Ignored for non-design.")
 }).superRefine((value, ctx) => {
   if (value.outcome === "fail" && value.failure_class === undefined) {
     ctx.addIssue({
@@ -20750,6 +20782,20 @@ async function spliceTidyStage(repoRoot, workItemId2, implementNode, aps) {
     return [];
   await aps.addNodes(workItemId2, plan.nodes);
   return plan.nodes.map((n2) => n2.id);
+}
+async function planRequiresDecisionApproval(repoRoot, workItemId2) {
+  let text;
+  try {
+    text = await readFile2(localDir(repoRoot, "work-items", workItemId2, "decision-conflict.json"), "utf8");
+  } catch {
+    return false;
+  }
+  try {
+    const parsed = decisionConflictCarrier.safeParse(JSON.parse(text));
+    return parsed.success && decisionConflictRequiresApproval(parsed.data.conflicts);
+  } catch {
+    return false;
+  }
 }
 async function recordResult(repoRoot, input) {
   const aps = new AutopilotStore(repoRoot);
@@ -20793,6 +20839,14 @@ async function recordResult(repoRoot, input) {
     }
   }
   if (outcome === "pass") {
+    if (node2.kind === "design" && input.payload.decision_conflicts !== undefined && input.payload.decision_conflicts.length > 0) {
+      await ensureDir(localDir(repoRoot, "work-items", input.workItemId));
+      await writeJson(localDir(repoRoot, "work-items", input.workItemId, "decision-conflict.json"), decisionConflictCarrier, {
+        schema_version: "0.1.0",
+        mode: "autopilot",
+        conflicts: input.payload.decision_conflicts
+      });
+    }
     if ((node2.kind === "review" || node2.kind === "security") && input.payload.has_findings === true) {
       const plan = planForwardReexpansion({
         reviewNode: node2,
@@ -20861,6 +20915,7 @@ async function recordResult(repoRoot, input) {
     }
     if (node2.kind === "design" && input.payload.plan_brief !== undefined) {
       const pb = input.payload.plan_brief;
+      const requireApproval = await planRequiresDecisionApproval(repoRoot, input.workItemId);
       const patch = producePlanGate({
         changeSurface: pb.change_surface,
         brief: {
@@ -20868,7 +20923,8 @@ async function recordResult(repoRoot, input) {
           dod: pb.dod,
           test_scenarios: pb.test_scenarios
         },
-        tierInputs: pb.tier_inputs
+        tierInputs: pb.tier_inputs,
+        requireApproval
       });
       const current = await aps.get(input.workItemId);
       await aps.write(input.workItemId, {
@@ -25612,6 +25668,74 @@ var contextCommand = defineCommand({
   },
   subCommands: {
     build: contextBuild
+  }
+});
+
+// src/cli/commands/decision-conflict.ts
+var gateInput = exports_external.object({
+  mode: exports_external.enum(["interactive", "autopilot"]).default("autopilot"),
+  conflicts: exports_external.array(decisionConflict).default([])
+});
+var decisionConflictGateCmd = defineCommand({
+  meta: {
+    name: "gate",
+    description: "Route detected ADR conflicts by (kind, level, mode); block intent conflicts, disclose all"
+  },
+  args: {
+    json: {
+      type: "string",
+      description: 'JSON: {mode:"interactive"|"autopilot", conflicts:[{adr_id,kind:forbid|require|prefer,level:intent|method,basis}]}',
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw;
+    try {
+      raw = JSON.parse(args.json);
+    } catch (err) {
+      writeError(`--json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = gateInput.safeParse(raw);
+    if (!parsed.success) {
+      writeError("--json failed schema validation:");
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const result2 = decisionConflictGate(parsed.data.conflicts, parsed.data.mode);
+    const status = result2.blocked ? "BLOCKED" : result2.needsApproval ? "NEEDS APPROVAL" : result2.disclose ? "DISCLOSE" : "CLEAR";
+    if (format === "json") {
+      writeJson2(result2);
+    } else {
+      writeHuman(`decision-conflict gate: ${status}`);
+      for (const d2 of result2.dispositions) {
+        writeHuman(`  - ${d2.conflict.adr_id} (${d2.conflict.kind}/${d2.conflict.level}) \u2192 ${d2.route}: ${d2.conflict.basis}`);
+      }
+    }
+    if (result2.blocked || result2.needsApproval)
+      process.exit(RUNTIME_ERROR_EXIT);
+  }
+});
+var decisionConflictCommand = defineCommand({
+  meta: {
+    name: "decision-conflict",
+    description: "ADR decision-conflict guardrail (ADR-0020): route + disclose detected ADR conflicts"
+  },
+  subCommands: {
+    gate: decisionConflictGateCmd
   }
 });
 
@@ -30769,6 +30893,17 @@ function residualResolvabilityForcesContinuation(completion, workItem2) {
   const acceptanceIds = workItem2.acceptance_criteria.map((c3) => c3.id);
   return resolvabilityBlockers(completion.unverified, acceptanceIds).map((b2) => b2.userDecision ? `residual deferred_needs_user_ok \u2014 ${b2.item}: ${b2.reason}` : `residual blocks pass-close \u2014 ${b2.item}: ${b2.reason}`);
 }
+function decisionConflictForcesContinuation(carrier) {
+  if (carrier === undefined)
+    return { reasons: [], advisories: [] };
+  const { dispositions } = decisionConflictGate(carrier.conflicts, carrier.mode);
+  const line = (d2) => `${d2.conflict.adr_id} (${d2.conflict.kind}/${d2.conflict.level}) \u2192 ${d2.route}: ${d2.conflict.basis}`;
+  const blocks = (d2) => d2.route === "block" || d2.route === "ask_user";
+  return {
+    reasons: dispositions.filter(blocks).map((d2) => `decision conflict \u2014 ${line(d2)}`),
+    advisories: dispositions.filter((d2) => !blocks(d2)).map((d2) => `decision conflict (disclosed, agent followed ADR) \u2014 ${line(d2)}`)
+  };
+}
 async function maybeRunFitness(repoRoot, workItemId2, dir) {
   try {
     const fns = await new FitnessFunctionStore(repoRoot).read(workItemId2);
@@ -30844,6 +30979,7 @@ var stopHandler = async (input) => {
   const impact = await readArtifact(join57(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json");
   const semantic = await readArtifact(join57(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
   const knowledge = await readArtifact(join57(dir, "knowledge-gate.json"), knowledgeGateCarrier, "knowledge-gate.json");
+  const decisionConflicts = await readArtifact(join57(dir, "decision-conflict.json"), decisionConflictCarrier, "decision-conflict.json");
   const malformed = [
     completion,
     conv,
@@ -30854,7 +30990,8 @@ var stopHandler = async (input) => {
     assurance,
     impact,
     semantic,
-    knowledge
+    knowledge,
+    decisionConflicts
   ].find((a2) => a2.status === "malformed");
   if (malformed && malformed.status === "malformed") {
     return {
@@ -30924,6 +31061,9 @@ var stopHandler = async (input) => {
   if (pilot.status === "ok") {
     reasons.push(...knowledgeForcesContinuation(pilot.data, knowledge.status === "ok" ? knowledge.data : undefined));
   }
+  const dc = decisionConflictForcesContinuation(decisionConflicts.status === "ok" ? decisionConflicts.data : undefined);
+  reasons.push(...dc.reasons);
+  advisories.push(...dc.advisories);
   const advisoryBlock = advisories.length > 0 ? `DITTO Stop advisory (non-blocking) \u2014 ${advisories.length} item(s):
 - ${advisories.join(`
 - `)}
@@ -31588,7 +31728,7 @@ var initCommand = defineCommand({
 });
 
 // src/cli/commands/knowledge.ts
-var gateInput = exports_external.object({
+var gateInput2 = exports_external.object({
   triggers: exports_external.object({
     adr_worthy_decision: exports_external.boolean(),
     new_agreed_term: exports_external.boolean(),
@@ -31631,7 +31771,7 @@ var knowledgeGate = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
-    const parsed = gateInput.safeParse(raw);
+    const parsed = gateInput2.safeParse(raw);
     if (!parsed.success) {
       writeError("--json failed schema validation:");
       for (const issue of parsed.error.issues) {
@@ -31719,7 +31859,7 @@ function adrGist(body) {
     if (heading) {
       flush();
       const name = heading[1]?.trim() ?? "";
-      capturing = /\uACB0\uC815|\uADFC\uAC70|decision|rationale/i.test(name);
+      capturing = /\uACB0\uC815|\uADFC\uAC70|\uB300\uC548|\uAE30\uAC01|\uD3D0\uAE30|\uCCA0\uD68C|\uC7AC\uAC80\uD1A0|\uBCC0\uACBD\s*\uC870\uAC74|decision|rationale|alternative|reject/i.test(name);
       continue;
     }
     if (capturing)
@@ -35897,6 +36037,7 @@ var main = defineCommand({
     context: contextCommand,
     autopilot: autopilotCommand,
     hook: hookCommand,
+    "decision-conflict": decisionConflictCommand,
     "deep-interview": deepInterviewCommand,
     "tech-spec": techSpecCommand,
     e2e: e2eCommand,
@@ -35919,4 +36060,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=3efb5eb6f885a990a7d312cfee37dd8795fc20d881191b8387faa7dacad0b01c
+//# ditto-src-stamp=6b68226ca6535eea5151fc96e32e42d935bea947ee2b0796d4b7bd49428a23b8

@@ -2,10 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  type DecisionConflict,
   acceptanceTestable,
   completionEvidenceGate,
   completionGate,
   convergenceGate,
+  decisionConflictGate,
+  decisionConflictRequiresApproval,
   deriveClosureMode,
   deterministicFloor,
   highRiskAssumption,
@@ -722,5 +725,112 @@ describe('resolvabilityBlockers (default-DENY classifier over declared unverifie
     const src = readFileSync(join(import.meta.dir, '..', '..', 'src', 'core', 'gates.ts'), 'utf8');
     const fnBody = src.slice(src.indexOf('export function resolvabilityBlockers'));
     expect(/readFileSync|Bun\.file|readFile\b|require\(/.test(fnBody)).toBe(false);
+  });
+});
+
+describe('decisionConflictGate (ADR-contradiction guardrail: classify × route × disclose)', () => {
+  const C = (over: Partial<DecisionConflict> = {}): DecisionConflict => ({
+    adr_id: 'ADR-0006',
+    kind: 'forbid',
+    level: 'method',
+    basis: 'work would add a TS-AST analyzer; ADR-0006 mandates CodeQL only',
+    ...over,
+  });
+
+  test('no conflicts → nothing to disclose, not blocked, no approval', () => {
+    const r = decisionConflictGate([], 'autopilot');
+    expect(r.dispositions).toEqual([]);
+    expect(r.blocked).toBe(false);
+    expect(r.needsApproval).toBe(false);
+    expect(r.disclose).toBe(false);
+  });
+
+  test('method conflict → align autonomously (no approval, not blocked) but STILL disclosed', () => {
+    const r = decisionConflictGate([C({ level: 'method' })], 'autopilot');
+    expect(r.dispositions[0]?.route).toBe('align');
+    expect(r.blocked).toBe(false);
+    expect(r.needsApproval).toBe(false);
+    // Transparency: autonomous compliance is never silent — the basis must surface.
+    expect(r.disclose).toBe(true);
+    expect(r.dispositions[0]?.conflict.basis).toContain('CodeQL');
+  });
+
+  test('intent conflict, interactive → ask the user, not blocked, disclosed', () => {
+    const r = decisionConflictGate([C({ level: 'intent' })], 'interactive');
+    expect(r.dispositions[0]?.route).toBe('ask_user');
+    expect(r.needsApproval).toBe(true);
+    expect(r.blocked).toBe(false);
+    expect(r.disclose).toBe(true);
+  });
+
+  test('intent conflict, autopilot → fail-closed block (no live wait), disclosed', () => {
+    const r = decisionConflictGate([C({ level: 'intent' })], 'autopilot');
+    expect(r.dispositions[0]?.route).toBe('block');
+    expect(r.blocked).toBe(true);
+    expect(r.needsApproval).toBe(false);
+    expect(r.disclose).toBe(true);
+  });
+
+  test('prefer conflict → justify only, never blocks regardless of level/mode', () => {
+    for (const mode of ['interactive', 'autopilot'] as const) {
+      for (const level of ['intent', 'method'] as const) {
+        const r = decisionConflictGate([C({ kind: 'prefer', level })], mode);
+        expect(r.dispositions[0]?.route).toBe('justify');
+        expect(r.blocked).toBe(false);
+        expect(r.needsApproval).toBe(false);
+        expect(r.disclose).toBe(true);
+      }
+    }
+  });
+
+  test('require kind routes like forbid (hard), not like prefer', () => {
+    const r = decisionConflictGate([C({ kind: 'require', level: 'intent' })], 'autopilot');
+    expect(r.dispositions[0]?.route).toBe('block');
+  });
+
+  test('mixed batch: method aligns while intent blocks (autopilot)', () => {
+    const r = decisionConflictGate(
+      [C({ adr_id: 'ADR-0006', level: 'method' }), C({ adr_id: 'ADR-0005', level: 'intent' })],
+      'autopilot',
+    );
+    expect(r.dispositions.map((d) => d.route)).toEqual(['align', 'block']);
+    expect(r.blocked).toBe(true);
+    expect(r.disclose).toBe(true);
+  });
+});
+
+describe('decisionConflictRequiresApproval (front-load intent conflict to the approval gate)', () => {
+  const C = (over: Partial<DecisionConflict> = {}): DecisionConflict => ({
+    adr_id: 'ADR-0006',
+    kind: 'forbid',
+    level: 'method',
+    basis: 'b',
+    ...over,
+  });
+
+  test('intent-level forbid/require → approval required', () => {
+    expect(decisionConflictRequiresApproval([C({ kind: 'forbid', level: 'intent' })])).toBe(true);
+    expect(decisionConflictRequiresApproval([C({ kind: 'require', level: 'intent' })])).toBe(true);
+  });
+
+  test('method conflict (auto-aligned) → no approval gate', () => {
+    expect(decisionConflictRequiresApproval([C({ kind: 'forbid', level: 'method' })])).toBe(false);
+  });
+
+  test('prefer at intent level → no approval gate (justify only)', () => {
+    expect(decisionConflictRequiresApproval([C({ kind: 'prefer', level: 'intent' })])).toBe(false);
+  });
+
+  test('no conflicts → no approval gate', () => {
+    expect(decisionConflictRequiresApproval([])).toBe(false);
+  });
+
+  test('mixed: one intent conflict among methods still requires approval', () => {
+    expect(
+      decisionConflictRequiresApproval([
+        C({ level: 'method' }),
+        C({ adr_id: 'ADR-0005', level: 'intent' }),
+      ]),
+    ).toBe(true);
   });
 });

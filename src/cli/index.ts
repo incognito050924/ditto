@@ -9,6 +9,7 @@ import { changeContractCommand } from './commands/change-contract';
 import { changeMapCommand } from './commands/change-map';
 import { codeqlCommand } from './commands/codeql';
 import { contextCommand } from './commands/context';
+import { decisionConflictCommand } from './commands/decision-conflict';
 import { deepInterviewCommand } from './commands/deep-interview';
 import { doctorCommand } from './commands/doctor';
 import { e2eCommand } from './commands/e2e';
@@ -46,6 +47,7 @@ const main = defineCommand({
     context: contextCommand,
     autopilot: autopilotCommand,
     hook: hookCommand,
+    'decision-conflict': decisionConflictCommand,
     'deep-interview': deepInterviewCommand,
     'tech-spec': techSpecCommand,
     e2e: e2eCommand,

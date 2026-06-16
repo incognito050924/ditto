@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-06-12T00:00:00+09:00",
+  "updated_at": "2026-06-16T00:00:00+09:00",
   "context_path": ".ditto/knowledge/CONTEXT.md",
   "glossary_path": ".ditto/knowledge/glossary.json",
   "project_map_path": null,
@@ -31,6 +31,15 @@
       "rationale": "memory는 분석 당시 스냅샷인데 코드·SoT가 그 뒤 변해도 freshness가 검출 못 했다 — memoryStatus가 저장 레코드끼리만 비교하고 실제 파일↔레코드는 수동 scan 안에서만 갱신돼 편집·stash·브랜치 이동 후 fresh로 거짓 보고('조용한 거짓말', boxwood assets/main→main 결함의 원천). 결정: freshness를 2축으로 1급화하고(축1 SoT↔파생, 축2 코드↔SoT 신규), 축2는 owning-repo별 싼 git 신호로 검출한다 — code_drift=현재 HEAD≠저장 source_revisions[].git_commit, code_dirty=워킹트리 porcelain 더티. baseline은 빌드 시점에 이미 영속화된 source_revisions[].git_commit을 읽기만 해 신규 projection 스키마 0(dialectic-2 E1, 사용자의 'HEAD 스탬프 영속화'는 이미 충족). code_dirty(개발 중 정상)는 라벨만, code_drift(다른 커밋 코드)만 warm-start 억제 — 더티마다 억제하면 memory가 inert가 되는 함정 회피. freshness 우선순위 code_drift>stale>code_dirty>fresh로 stale이 code_dirty에 마스킹되는 회귀 차단. query/path/explain은 라벨만 달고 거부 안 함; 소비자는 drifted_sources에 든 것만 코드로 직접 검증. 델타/overlay/커밋공유/compaction(증분 ②~④)은 게이트 — '싼 구조 델타' 전제가 코드로 반증됐다(dialectic-1 V1: 비용은 상류 CodeQL DB, 더티트리=보장 캐시미스 13.8초~3분이고 overlay가 노린 미커밋 편집이 바로 비싼 케이스).",
       "change_condition": "CodeQL 증분 비용이 충분히 싸지거나 구조 추출이 변경 파일만 증분 가능해지면 증분 ②~④(델타/overlay/store 계약, store 계약은 ADR-0013 D2 개정 선행) 재검토; whole-projection warm-start 억제가 멀티레포에서 과잉으로 실측되면 node-level granularity 도입; ac-4 다수 sub-repo git 호출 wall-clock latency가 read 핫패스 문제로 실측되면 캐시·측정 도입.",
       "path": ".ditto/knowledge/adr/ADR-0015-memory-freshness-axis2-code-vs-sot.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0020",
+      "title": "결정-모순 가드레일 — ADR을 추론 시점에 일관 적용 (classify × route × disclose)",
+      "status": "proposed",
+      "rationale": "ADR은 영속 기록물일 뿐 추론 시점 가드레일로 작동 안 함 — CLAUDE.md 투영은 헤드라인만, memory query는 자발적, warm-start는 오토파일럿+researcher/planner 한정, grep adr-guard는 의미적 결정을 의도적으로 범위 밖에 둠. 결정: 충돌을 kind(forbid|require|prefer)×level(intent|method)로 분류해 라우팅한다(method→align 자동준수, intent→interactive=ask_user/autopilot=block fail-closed, prefer→justify). 투명성 불변식으로 충돌 감지 시 자동정렬도 출력에 근거(basis) 노출(조용한 준수 금지). autopilot은 live 대기 없이 fail-closed(노드 block+blocked 보고), intent 충돌은 planner→승인 이음새에서 앞당겨 검출. 판단은 host LLM(ADR-0001/0006 준수), ditto는 검색(memory graph adrGist)+순수 라우팅(decisionConflictGate)+투명성만 소유. adr-guard와 상보(grep·커밋후 vs 의미·추론시점).",
+      "change_condition": "intent 충돌 false positive 빈발로 마찰 과하면 method 자동정렬 확대 또는 intent 임계 상향; 전역 invariant 상시주입이 context rot로 실측되면 node-level granularity; host LLM 분류 신뢰도 낮으면 타입드 constraint 필드(kind/scope/enforced_by) 가산적 추가; 사용자 프로젝트가 자체 ADR 축적+ditto-product 결정 배포 필요해지면 층 분리 재개. 배선·집행 통합 완료+동작 검증 시 accepted로 승격.",
+      "path": ".ditto/knowledge/adr/ADR-0020-decision-conflict-guardrail.md",
       "superseded_by": null
     }
   ],

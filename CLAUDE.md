@@ -1,4 +1,4 @@
-<!-- ditto:managed:start source=AGENTS.md sha256=740c94da9aa52067a971a5540df5e39f0e88e23a4e696b34a317bd88dc6efa13 -->
+<!-- ditto:managed:start source=AGENTS.md sha256=f6b5fd35a743e54401dd14fa40c1ed8998385042d00851154872771ae994134d -->
 # Agent Behavior Charter v1
 
 부제: 모든 에이전트를 위한 기본 행동 헌장
@@ -166,6 +166,17 @@
 - 위임에는 계약을 동반한다: 목표, 완료 기준, 반환 형식. 의도는 대화 릴레이가 아니라 계약 산출물로 운반해야 단계가 늘어도 훼손되지 않는다.
 - 긴 세션은 요청 경계에서 handoff로 reset한다. compaction은 같은 기억을 줄이는 것이고, reset은 새 컨텍스트에 인수인계하는 것이다 — 둘을 혼동하지 않는다.
 
+### 4-10. 기록된 결정과 충돌하면 드러낸다
+
+ADR(되돌리기 어려운 결정의 영속 기록)은 추론 시점에 일관되게 반영돼야 한다 — 특히 현황 파악, 의도 분석, 계획, 결과 확인(리뷰)에서. 결정을 잊고 어기는 일을 막는 것은 약하게가 아니라 강하게 적용한다(ADR-0020).
+
+실무 규칙:
+
+- 위 단계에서 작업이 기록된 결정에 닿으면 `ditto memory query`로 관련 ADR을 확인한다(결정·기각된 대안·철회 조건이 색인돼 있다).
+- 충돌을 분류한다: **method**(ADR이 금지한 *방법*을 쓰려 함)는 에이전트가 ADR대로 따른다 — 사용자 확인 불필요. **intent**(work item의 목적 자체가 ADR이 금지한 것을 요구)는 사용자만 풀 수 있다.
+- intent 충돌은 사용자에게 확인한다(인터랙티브) 또는 autopilot에서는 진행을 멈추고 보고한다(live 대기 금지, fail-closed). prefer(약한 선호) 충돌은 정당화만 기록한다.
+- **충돌은 항상 출력에 근거와 함께 드러낸다.** ADR을 독자 판단으로 따랐더라도(사용자 확인 없이) 조용히 넘어가지 않는다 — "ADR-X를 고려해 이렇게 판단했다"가 응답에 보여야 한다.
+
 ## 5. 역할별 규칙
 
 ### 5-1. 조사 agent
@@ -305,7 +316,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=9bc5a2f8e8b9847bb3929c419481d4aea80fe3a852440e40461eccc3aa5af0fc -->
+<!-- ditto:knowledge:start sha256=9fbc2e159a26aa54bf581bf1fabd69d330089dc3f9f037c36f15c8b9fafc2308 -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -369,5 +380,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-0015 · accepted · Memory freshness 축2(코드↔SoT) 검출 — 증분 검출 채택, 델타/overlay 게이트
 - ADR-0016 · accepted · Dual-host 아키텍처 — DITTO는 Claude Code와 Codex 두 호스트에서 동작한다
 - ADR-0017 · accepted · 정리(Tidy/deslop) 절차를 ACG 게이트 위에 정립한다 — 2차 정적 엔진 없이
+- ADR-0020 · proposed · 결정-모순 가드레일 — ADR을 추론 시점에 일관 적용 (classify × route × disclose)
 
 <!-- ditto:knowledge:end -->

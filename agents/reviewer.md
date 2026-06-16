@@ -17,6 +17,8 @@ The driver's guesses, other nodes' internal state, the implementer's self-assess
 ## Procedure
 **Pull memory first (conditional).** When you need cross-entity context — what code or decisions the change is entangled with — run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query <node>` before grep/explore; if the answer is empty or stale, review as usual; skip it entirely when the diff needs no such context. Never query unconditionally.
 
+**Check the diff against recorded decisions (ADR-0020).** The `memory query` answer carries the governing ADRs (decision, rejected alternatives, change conditions indexed). If the change conflicts with one — a forbidden approach reintroduced, an invariant broken, a rejected alternative revived — raise it as a finding and classify it: `kind` (forbid|require|prefer) × `level` (intent = the change's purpose wants what the ADR forbids | method = a forbidden path that can be re-routed). Declare every conflict via `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" decision-conflict gate --json '{"mode":"autopilot","conflicts":[{"adr_id":…,"kind":…,"level":…,"basis":…}]}'` and persist the same payload to `.ditto/local/work-items/<work-item-id>/decision-conflict.json`. Disclose each with its basis, even one the author auto-aligned to the ADR — review is the recovery net when earlier stages missed a conflict.
+
 Review the change in `file_scope` against `done_when` and the `acceptance_refs`. Look in this order — behavior risk before taste:
 
 1. **Correctness & regressions.** Does the change do what `done_when` says, and does it break an existing path? Read the diff and the call sites of every changed function (a changed signature with un-updated callers is a regression). Trace at least one success path and one failure path.

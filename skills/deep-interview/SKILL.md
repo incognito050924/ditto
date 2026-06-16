@@ -54,6 +54,8 @@ Before asking, run the QuestionGate self-answer check (`⚠ self-answer from cod
 2. Read web sources if the question is about an external standard / API.
 3. Only if NONE of the above answers, ask the user — and include "what changes depending on the answer".
 
+**Check recorded decisions (ADR-0020) while clarifying intent.** Part of self-answering is `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query` over the governing ADRs (decision, rejected alternatives, change conditions are indexed). If the request's *intent* conflicts with a recorded decision — the user is asking for what an ADR forbids — that is a user-owned decision, not something to silently plan around: surface it as a question (follow the ADR / deliberately supersede it / re-scope). An intent conflict caught here is the cheapest to resolve, because the user is present (no autopilot fail-closed needed).
+
 Record every turn with:
 
 ```

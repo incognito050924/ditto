@@ -8,6 +8,7 @@ import {
   acgReviewForcesContinuation,
   assuranceSnapshotForcesContinuation,
   autopilotForcesContinuation,
+  decisionConflictForcesContinuation,
   impactForcesContinuation,
   residualResolvabilityForcesContinuation,
   semanticForcesContinuation,
@@ -1177,5 +1178,66 @@ describe('residualResolvabilityForcesContinuation', () => {
 
   test('no blockers => empty array', () => {
     expect(residualResolvabilityForcesContinuation(comp([]) as never, wi as never)).toHaveLength(0);
+  });
+});
+
+describe('decisionConflictForcesContinuation (ADR-0020: fail-closed block + always-disclose)', () => {
+  const carrier = (
+    conflicts: Array<Record<string, unknown>>,
+    mode: 'interactive' | 'autopilot' = 'autopilot',
+  ) => ({ schema_version: '0.1.0', mode, conflicts }) as never;
+  const conflict = (over: Record<string, unknown> = {}) => ({
+    adr_id: 'ADR-0006',
+    kind: 'forbid',
+    level: 'method',
+    basis: 'work adds a TS-AST analyzer; ADR-0006 mandates CodeQL only',
+    ...over,
+  });
+
+  test('absent carrier → inert (no reasons, no advisories)', () => {
+    const r = decisionConflictForcesContinuation(undefined);
+    expect(r.reasons).toHaveLength(0);
+    expect(r.advisories).toHaveLength(0);
+  });
+
+  test('intent conflict under autopilot → blocks (reason), not a mere advisory', () => {
+    const r = decisionConflictForcesContinuation(carrier([conflict({ level: 'intent' })]));
+    expect(r.reasons).toHaveLength(1);
+    expect(r.advisories).toHaveLength(0);
+    expect(r.reasons[0]).toContain('ADR-0006'); // basis/adr surfaced in the blocking line
+    expect(r.reasons[0]).toContain('CodeQL');
+  });
+
+  test('method conflict (auto-aligned) → NOT blocking but STILL disclosed (transparency)', () => {
+    const r = decisionConflictForcesContinuation(carrier([conflict({ level: 'method' })]));
+    expect(r.reasons).toHaveLength(0);
+    expect(r.advisories).toHaveLength(1);
+    expect(r.advisories[0]).toContain('ADR-0006');
+    expect(r.advisories[0]).toContain('CodeQL'); // basis is in the OUTPUT, never silent
+  });
+
+  test('prefer conflict → disclosed advisory only, never blocks', () => {
+    const r = decisionConflictForcesContinuation(carrier([conflict({ kind: 'prefer' })]));
+    expect(r.reasons).toHaveLength(0);
+    expect(r.advisories).toHaveLength(1);
+  });
+
+  test('mixed: method aligns (advisory) while intent blocks (reason) — both surface', () => {
+    const r = decisionConflictForcesContinuation(
+      carrier([
+        conflict({ adr_id: 'ADR-0006', level: 'method' }),
+        conflict({ adr_id: 'ADR-0005', level: 'intent' }),
+      ]),
+    );
+    expect(r.reasons).toHaveLength(1);
+    expect(r.reasons[0]).toContain('ADR-0005');
+    expect(r.advisories).toHaveLength(1);
+    expect(r.advisories[0]).toContain('ADR-0006');
+  });
+
+  test('empty conflict list → inert', () => {
+    const r = decisionConflictForcesContinuation(carrier([]));
+    expect(r.reasons).toHaveLength(0);
+    expect(r.advisories).toHaveLength(0);
   });
 });

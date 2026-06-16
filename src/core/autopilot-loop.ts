@@ -2,8 +2,10 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { collectTidyDiffStat, writeTidyClassification } from '~/acg/tidy/classifier';
+import { ensureDir, writeJson } from '~/core/fs';
 import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
 import { evidenceRef, relativePath, verdict } from '~/schemas/common';
+import { decisionConflict, decisionConflictCarrier } from '~/schemas/decision-conflict-carrier';
 import { ActiveNodeLeaseStore } from './active-node-lease';
 import { loadVariantCatalog, selectVariantCandidates } from './agent-variants';
 import { forwardRound, planForwardReexpansion } from './autopilot-converge';
@@ -29,6 +31,8 @@ import { AutopilotStore } from './autopilot-store';
 import { planTidyOnImplementPass } from './autopilot-tidy';
 import { producePlanGate } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
+import { localDir } from './ditto-paths';
+import { decisionConflictRequiresApproval } from './gates';
 import { IntentStore } from './intent-store';
 import { warmStartMemoryContext } from './memory-warmstart';
 import { computeSpecDigest } from './tech-spec';
@@ -441,6 +445,15 @@ export const recordResultPayload = z
           'contentful design pass it populates approval_gate.{plan_brief,change_surface,status} ' +
           'via producePlanGate (brief hard-gate, §7.2). Ignored for non-design nodes.',
       ),
+    decision_conflicts: z
+      .array(decisionConflict)
+      .optional()
+      .describe(
+        "The planner's declared ADR conflicts (ADR-0020 D3 producer). On a contentful design " +
+          'pass a non-empty list is written to the decision-conflict carrier so an intent ' +
+          'conflict front-loads the approval gate (prevention) and the Stop hook re-checks it ' +
+          '(catch). Absent/empty ⇒ no carrier written (backward compat). Ignored for non-design.',
+      ),
   })
   .superRefine((value, ctx) => {
     if (value.outcome === 'fail' && value.failure_class === undefined) {
@@ -510,6 +523,35 @@ async function spliceTidyStage(
   // Splice via addNodes (the integrity gate) — same path as planner promotion.
   await aps.addNodes(workItemId, plan.nodes);
   return plan.nodes.map((n) => n.id);
+}
+
+/**
+ * Read the decision-conflict carrier (ADR-0020) and decide whether a declared
+ * intent conflict must front-load the approval gate (D3 prevention layer) — so a
+ * `light`/auto-waivable plan cannot run mutating nodes while the request
+ * contradicts a recorded decision the user has not resolved. Absent/malformed
+ * carrier → false: the deterministic Stop-hook catch (`decisionConflictForcesContinuation`)
+ * still fail-closes at the boundary, so this layer fails open by design.
+ */
+async function planRequiresDecisionApproval(
+  repoRoot: string,
+  workItemId: string,
+): Promise<boolean> {
+  let text: string;
+  try {
+    text = await readFile(
+      localDir(repoRoot, 'work-items', workItemId, 'decision-conflict.json'),
+      'utf8',
+    );
+  } catch {
+    return false;
+  }
+  try {
+    const parsed = decisionConflictCarrier.safeParse(JSON.parse(text));
+    return parsed.success && decisionConflictRequiresApproval(parsed.data.conflicts);
+  } catch {
+    return false;
+  }
 }
 
 export async function recordResult(
@@ -601,6 +643,28 @@ export async function recordResult(
   }
 
   if (outcome === 'pass') {
+    // ADR-0020 D3 producer (wi_260616eu8): on a contentful `design` pass the
+    // planner declares any ADR conflicts it detected; persist them as the carrier
+    // BEFORE the plan-gate consults it (planRequiresDecisionApproval, below), so an
+    // intent conflict front-loads the approval gate in this SAME call (prevention)
+    // and the Stop hook re-checks the same file (catch). Written regardless of
+    // plan_brief; empty/absent ⇒ no carrier (backward compat — legacy design pass).
+    if (
+      node.kind === 'design' &&
+      input.payload.decision_conflicts !== undefined &&
+      input.payload.decision_conflicts.length > 0
+    ) {
+      await ensureDir(localDir(repoRoot, 'work-items', input.workItemId));
+      await writeJson(
+        localDir(repoRoot, 'work-items', input.workItemId, 'decision-conflict.json'),
+        decisionConflictCarrier,
+        {
+          schema_version: '0.1.0',
+          mode: 'autopilot',
+          conflicts: input.payload.decision_conflicts,
+        },
+      );
+    }
     // Forward re-expansion (A-2 · §2.4): a contentful findings-bearing node that
     // still has findings does NOT close the loop — it splices a fix+re-check round
     // *forward* (a new pair of nodes, not a back-edge, governed by the convergence
@@ -706,6 +770,10 @@ export async function recordResult(
     // (legacy path / non-design node) ⇒ approval_gate untouched (backward compat).
     if (node.kind === 'design' && input.payload.plan_brief !== undefined) {
       const pb = input.payload.plan_brief;
+      // ADR-0020 D3: an intent-level ADR conflict declared by the planner
+      // front-loads the approval gate, so mutating nodes do not run before the
+      // user resolves it — the prevention layer paired with the Stop-hook catch.
+      const requireApproval = await planRequiresDecisionApproval(repoRoot, input.workItemId);
       const patch = producePlanGate({
         changeSurface: pb.change_surface,
         brief: {
@@ -714,6 +782,7 @@ export async function recordResult(
           test_scenarios: pb.test_scenarios,
         },
         tierInputs: pb.tier_inputs,
+        requireApproval,
       });
       const current = await aps.get(input.workItemId);
       await aps.write(input.workItemId, {

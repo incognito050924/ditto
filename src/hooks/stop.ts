@@ -8,9 +8,11 @@ import { localDir } from '~/core/ditto-paths';
 import { FitnessFunctionStore } from '~/core/fitness-function-store';
 import { ensureDir, writeJson } from '~/core/fs';
 import {
+  type ConflictDisposition,
   completionEvidenceGate,
   completionGate,
   convergenceGate,
+  decisionConflictGate,
   intentDriftGate,
   knowledgeUpdateGate,
   resolvabilityBlockers,
@@ -27,6 +29,10 @@ import {
 import { type Autopilot, autopilot as autopilotSchema } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
 import { convergence as convergenceSchema } from '~/schemas/convergence';
+import {
+  type DecisionConflictCarrier,
+  decisionConflictCarrier,
+} from '~/schemas/decision-conflict-carrier';
 import { type Dialectic, dialectic as dialecticSchema } from '~/schemas/dialectic';
 import { intentContract } from '~/schemas/intent';
 import { intentMetric } from '~/schemas/intent-metric';
@@ -384,6 +390,34 @@ export function residualResolvabilityForcesContinuation(
 }
 
 /**
+ * Decision-conflict guardrail (ADR-0020). The detecting node declares the ADR
+ * conflicts it judged in a carrier; this runs `decisionConflictGate` and splits the
+ * dispositions two ways, mirroring the gate's routing:
+ *  - `reasons` (force continuation): conflicts that must not silently proceed —
+ *    intent conflicts under autopilot (D3 fail-closed) and any `ask_user` route;
+ *  - `advisories` (non-blocking disclosure): auto-aligned method conflicts and
+ *    `justify`-ed preferences — surfaced anyway, because D2's transparency invariant
+ *    forbids silent autonomous compliance: the basis must reach the OUTPUT.
+ * Absent carrier → inert (declaring no conflicts is a valid run).
+ */
+export function decisionConflictForcesContinuation(carrier: DecisionConflictCarrier | undefined): {
+  reasons: string[];
+  advisories: string[];
+} {
+  if (carrier === undefined) return { reasons: [], advisories: [] };
+  const { dispositions } = decisionConflictGate(carrier.conflicts, carrier.mode);
+  const line = (d: ConflictDisposition) =>
+    `${d.conflict.adr_id} (${d.conflict.kind}/${d.conflict.level}) → ${d.route}: ${d.conflict.basis}`;
+  const blocks = (d: ConflictDisposition) => d.route === 'block' || d.route === 'ask_user';
+  return {
+    reasons: dispositions.filter(blocks).map((d) => `decision conflict — ${line(d)}`),
+    advisories: dispositions
+      .filter((d) => !blocks(d))
+      .map((d) => `decision conflict (disclosed, agent followed ADR) — ${line(d)}`),
+  };
+}
+
+/**
  * fitness 자동 트리거 — 정의된 fitness가 있으면 stop 시점에 평가해 assurance-snapshot.json을
  * 최신화한다(stale 없음). deterministic은 commandProvider가 실제 평가한다.
  * llm_judged/executed는 에이전트가 미리 산출한 표준 경로 verdict 파일
@@ -547,6 +581,13 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     knowledgeGateCarrier,
     'knowledge-gate.json',
   );
+  // Decision-conflict carrier (ADR-0020) — ADR conflicts the detecting node declared.
+  // Same work-item-dir home + absent/malformed discipline.
+  const decisionConflicts = await readArtifact(
+    join(dir, 'decision-conflict.json'),
+    decisionConflictCarrier,
+    'decision-conflict.json',
+  );
 
   // Malformed artifact = gate-input violation → fail CLOSED (exit 2).
   const malformed = [
@@ -560,6 +601,7 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     impact,
     semantic,
     knowledge,
+    decisionConflicts,
   ].find((a) => a.status === 'malformed');
   if (malformed && malformed.status === 'malformed') {
     return {
@@ -665,6 +707,13 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
       ),
     );
   }
+  // Decision-conflict guardrail (ADR-0020): intent conflicts block (D3 fail-closed),
+  // every detected conflict is disclosed (D2 transparency) even when auto-aligned.
+  const dc = decisionConflictForcesContinuation(
+    decisionConflicts.status === 'ok' ? decisionConflicts.data : undefined,
+  );
+  reasons.push(...dc.reasons);
+  advisories.push(...dc.advisories);
 
   // Advisory suffix — appended to whatever this handler returns (blocking or not),
   // so a non-blocking goal-divergence note reaches the user even on exit 0.

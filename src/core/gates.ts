@@ -434,6 +434,108 @@ export function knowledgeUpdateGate(t: KnowledgeTriggers, d: KnowledgeRecordDelt
   return gate(reasons);
 }
 
+// ── decision-conflict routing gate (ADR-contradiction guardrail) ─────────────
+
+/**
+ * A single detected conflict between the work in flight and a recorded decision
+ * (an ADR). WHETHER a conflict exists and its `(kind, level)` is the LLM layer's
+ * judgement (host-delegated, ADR-0001) over the retrieved ADR gist; this gate is
+ * the pure routing + transparency policy over already-classified conflicts.
+ */
+export interface DecisionConflict {
+  /** The decision in conflict, e.g. `ADR-0006`. */
+  adr_id: string;
+  /** Constraint kind: a hard prohibition/requirement vs a soft preference. */
+  kind: 'forbid' | 'require' | 'prefer';
+  /**
+   * Whether the conflict touches the work item's INTENT (its goal/AC — only the
+   * user can resolve, since the request itself wants what the ADR forbids) or just
+   * a candidate METHOD (an implementation path the agent can re-route by following
+   * the ADR autonomously).
+   */
+  level: 'intent' | 'method';
+  /**
+   * The evidence for the conflict: what the ADR says and how the current work
+   * touches it. Carried through to the disposition so the disclosure OUTPUT can
+   * show WHY a decision was made — the transparency invariant requires the basis of
+   * any ADR-considering autonomous judgement to appear in the user-facing output,
+   * not just a log.
+   */
+  basis: string;
+}
+
+/** How a single conflict is handled. Every conflict is disclosed regardless of route. */
+export type ConflictRoute =
+  | 'align' // method conflict: follow the ADR autonomously, proceed
+  | 'justify' // prefer conflict: record a justification, proceed
+  | 'ask_user' // intent conflict, user present: confirm before mutating
+  | 'block'; // intent conflict, autopilot: fail-closed, report at the Stop boundary
+
+export interface ConflictDisposition {
+  conflict: DecisionConflict;
+  route: ConflictRoute;
+}
+
+export interface DecisionConflictResult {
+  dispositions: ConflictDisposition[];
+  /** A conflict that fails the run closed (an intent conflict under autopilot). */
+  blocked: boolean;
+  /** A conflict that needs user confirmation before mutating (intent, interactive). */
+  needsApproval: boolean;
+  /**
+   * Transparency invariant: every detected conflict must be surfaced to the user in
+   * the OUTPUT, even an auto-aligned method conflict the agent resolved without
+   * asking. True whenever at least one conflict was detected — silent autonomous
+   * compliance is a violation; the disclosure CONTENT is `dispositions` (each
+   * carrying its `basis`).
+   */
+  disclose: boolean;
+}
+
+/**
+ * Route each detected ADR conflict by `(kind, level, mode)` and decide whether the
+ * run is blocked or needs approval. Pure and deterministic (D5: 결정론 1차) — it does
+ * not judge whether a conflict exists, only what to do once one is classified.
+ *
+ * Routing:
+ *  - prefer (any level)      → justify   (soft: record a reason, never blocks)
+ *  - forbid/require · method → align     (follow the ADR autonomously)
+ *  - forbid/require · intent → ask_user  (interactive) | block (autopilot, fail-closed)
+ *
+ * Transparency: `disclose` is true whenever any conflict was detected — the user is
+ * always told, even for auto-aligned method conflicts (no silent compliance).
+ */
+export function decisionConflictGate(
+  conflicts: DecisionConflict[],
+  mode: 'interactive' | 'autopilot',
+): DecisionConflictResult {
+  const dispositions = conflicts.map((conflict): ConflictDisposition => {
+    if (conflict.kind === 'prefer') return { conflict, route: 'justify' };
+    if (conflict.level === 'method') return { conflict, route: 'align' };
+    return { conflict, route: mode === 'autopilot' ? 'block' : 'ask_user' };
+  });
+  return {
+    dispositions,
+    blocked: dispositions.some((d) => d.route === 'block'),
+    needsApproval: dispositions.some((d) => d.route === 'ask_user'),
+    disclose: conflicts.length > 0,
+  };
+}
+
+/**
+ * Does any declared conflict require user approval BEFORE mutating work runs? An
+ * `intent`-level hard conflict (forbid/require) does — the request itself wants
+ * what an ADR forbids, so only the user can resolve it (align / supersede / drop).
+ * A `method` conflict (re-routed by following the ADR) and a `prefer` conflict
+ * (justified, never blocks) do not gate approval. This is the deterministic input
+ * that front-loads an intent conflict to the autopilot approval gate (ADR-0020 D3),
+ * so mutating nodes do not run before the user resolves it — the prevention layer
+ * paired with the Stop-hook fail-closed catch.
+ */
+export function decisionConflictRequiresApproval(conflicts: DecisionConflict[]): boolean {
+  return conflicts.some((c) => c.kind !== 'prefer' && c.level === 'intent');
+}
+
 // ── intent-conservation gate (axis-2 intent drift across the contract chain) ──
 
 /**
