@@ -1,0 +1,66 @@
+/**
+ * wizard 대화형 프롬프트 primitive (readline 기반, IO 주입형).
+ *
+ * 핵심 규칙: **TTY가 없으면 묻지 않는다.** `ditto`는 사람이 터미널에서 직접 돌릴 때만
+ * 대화하고, 에이전트/CI가 부를 땐 입력을 받을 수 없으므로 기본값으로 진행한다(CRA의
+ * `--yes` 패턴). IO를 주입해 stdin 없이 순수 로직을 단위테스트한다 — codeql InstallDeps와
+ * 같은 주입 패턴.
+ */
+
+export interface PromptIO {
+  /** stdin이 TTY인가. false면 어떤 프롬프트도 묻지 않고 기본값을 돌려준다. */
+  isTTY: boolean;
+  /** 한 줄 질문하고 입력 한 줄을 받는다(개행 포함 가능, 호출부가 trim). */
+  ask: (query: string) => Promise<string>;
+  /** 안내/목록 출력. */
+  write: (text: string) => void;
+}
+
+/** y/n 확인. 비TTY거나 빈 입력이면 defaultYes. */
+export async function confirm(
+  io: PromptIO,
+  message: string,
+  defaultYes: boolean,
+): Promise<boolean> {
+  if (!io.isTTY) return defaultYes;
+  const hint = defaultYes ? '[Y/n]' : '[y/N]';
+  const ans = (await io.ask(`${message} ${hint} `)).trim().toLowerCase();
+  if (ans === '') return defaultYes;
+  return ans === 'y' || ans === 'yes';
+}
+
+export interface Choice {
+  /** 사용자에게 보이는 라벨. */
+  label: string;
+  /** 선택 시 반환되는 값. */
+  value: string;
+  /** 기본 체크 여부(추론 결과). */
+  checked: boolean;
+}
+
+/**
+ * 다중선택(번호 입력 방식 — raw-mode 화살표 없이 line-based라 견고·테스트 용이).
+ * 비TTY거나 빈 입력이면 기본 체크된 항목(추론 결과)을 그대로 돌려준다.
+ * 범위 밖/비숫자 토큰은 무시한다.
+ */
+export async function multiSelect(
+  io: PromptIO,
+  message: string,
+  choices: Choice[],
+): Promise<string[]> {
+  const defaults = choices.filter((c) => c.checked).map((c) => c.value);
+  if (!io.isTTY || choices.length === 0) return defaults;
+
+  io.write(`${message}\n`);
+  choices.forEach((c, i) => io.write(`  ${i + 1}. [${c.checked ? 'x' : ' '}] ${c.label}\n`));
+  const ans = (await io.ask('설치할 번호 (쉼표 구분, Enter=기본값 유지): ')).trim();
+  if (ans === '') return defaults;
+
+  const picked = new Set(
+    ans
+      .split(',')
+      .map((s) => Number.parseInt(s.trim(), 10))
+      .filter((n) => Number.isInteger(n) && n >= 1 && n <= choices.length),
+  );
+  return choices.filter((_, i) => picked.has(i + 1)).map((c) => c.value);
+}
