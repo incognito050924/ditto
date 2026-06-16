@@ -26,9 +26,9 @@ async function shouldPurge(flagPurge: boolean): Promise<boolean> {
 
 export const teardownCommand = defineCommand({
   meta: {
-    name: 'teardown',
+    name: 'uninstall',
     description:
-      'Undo ditto setup: strip managed blocks (preserving user content), remove the allow rule; keeps .ditto/',
+      'Undo ditto setup: strip managed blocks (preserving user content), remove the allow rule; keeps .ditto/ (alias: teardown)',
   },
   args: {
     dir: {
@@ -53,7 +53,7 @@ export const teardownCommand = defineCommand({
       // guard (resourcesDir's plugin root == projectRoot).
       const pluginRoot = resolve(resourcesDir, '..', '..');
       if (pluginRoot === projectRoot) {
-        writeHuman(`teardown: skipped (self-host — target IS the ditto repo at ${projectRoot})`);
+        writeHuman(`uninstall: skipped (self-host — target IS the ditto repo at ${projectRoot})`);
         return;
       }
 
@@ -62,11 +62,11 @@ export const teardownCommand = defineCommand({
       // No discovered resources means nothing was actually stripped — saying
       // "reverted" here would be a false green (the pre-fix symptom).
       if (result.files.length === 0) {
-        writeError(`teardown failed: no managed resources found at ${resourcesDir}`);
+        writeError(`uninstall failed: no managed resources found at ${resourcesDir}`);
         process.exit(RUNTIME_ERROR_EXIT);
       }
 
-      writeHuman(`teardown: reverted ${projectRoot}`);
+      writeHuman(`uninstall: reverted ${projectRoot}`);
       for (const f of result.files) {
         writeHuman(`  ${f.filename} [${f.scope}] ${f.action} → ${f.destPath}`);
       }
@@ -82,7 +82,7 @@ export const teardownCommand = defineCommand({
         writeHuman(`allowlist: removed Bash(ditto:*) from ${result.allowlistPath} · .ditto/ kept`);
       }
     } catch (err) {
-      writeError(`teardown failed: ${err instanceof Error ? err.message : String(err)}`);
+      writeError(`uninstall failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
     }
   },

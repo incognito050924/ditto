@@ -9,7 +9,7 @@
 // 그 위의 프로젝트 단계(host 블록·.ditto scaffold·allowlist·CodeQL/Playwright/LSP 설치)는
 // 전부 빌드된 바이너리에 위임한다:
 //   install   → `ditto setup --dir <target> --yes --tools`
-//   uninstall → `ditto teardown --dir <target>`  (+ 바이너리 unplace)
+//   uninstall → `ditto uninstall --dir <target>`  (+ 바이너리 unplace)
 //   status    → 바이너리 부트스트랩 사실 보고 + `ditto doctor` 안내
 //
 // 이렇게 해서 설치 로직의 단일 진실원은 TS(src/core/provision/*, ditto setup)이고, 예전처럼
@@ -175,9 +175,9 @@ function doUninstall(repo, target) {
   const log = [];
   const up = unplaceBinary(repo);
   log.push(`unplace:   ${up.message}`);
-  // 관리 블록·allowlist 제거를 `ditto teardown`에 위임(.ditto/ 데이터는 보존).
-  const t = delegate(repo, ['teardown', '--dir', target]);
-  log.push(`teardown:  ${t.ok ? 'ok' : 'SKIPPED'} — ${t.message}`);
+  // 관리 블록·allowlist 제거를 `ditto uninstall`에 위임(.ditto/ 데이터는 보존).
+  const t = delegate(repo, ['uninstall', '--dir', target]);
+  log.push(`uninstall: ${t.ok ? 'ok' : 'SKIPPED'} — ${t.message}`);
   log.push(`data:      left ${join(target, '.ditto')} intact (remove manually to purge history)`);
   return log;
 }

@@ -1,247 +1,236 @@
 # DITTO 설치
 
-> English guide: [install.md](install.md)
+> English: [install.md](install.md)
 
-DITTO는 로컬 Claude Code 플러그인으로 설치됩니다. 오케스트레이터 스크립트
-하나가 플러그인 등록, 자체 포함형 CLI/훅 바이너리 빌드, `PATH` 등록, 그리고
-지정한 프로젝트의 스캐폴딩까지 처리합니다. 모든 단계는 멱등(idempotent)이라
-다시 실행해도 안전합니다.
+DITTO는 로컬 Claude Code(또는 Codex) 플러그인으로 설치된다. 설치 스크립트는 **얇은
+부트스트랩**이다 — `ditto` 바이너리를 빌드해 `PATH`에 올리는, 바이너리가 존재하기 전에
+반드시 일어나야 하는 두 단계만 하고, **나머지는 전부 바이너리 자신(`ditto setup`)에 위임**한다.
+모든 단계는 멱등(여러 번 실행해도 결과가 같음)이라 안전하게 재실행할 수 있다.
 
-## 사전 요구사항
+## 사전 단계 (Prerequisites)
 
-| 요구사항 | 이유 | 비고 |
-|----------|------|------|
-| **bun ≥ 1.3** | 자체 포함형 `ditto` 바이너리 빌드(`bun --compile`)에 필요. | `node`만으로도 설치 스크립트는 돌지만, 바이너리 빌드에는 bun이 필요합니다. <https://bun.sh> |
-| **Claude Code** | DITTO는 Claude Code 플러그인입니다. | 플러그인은 `~/.claude/settings.json`에 등록됩니다. |
-| **git** | DITTO가 저장소 상태를 읽습니다. | 개발 환경이면 이미 있습니다. |
-| curl + unzip *(선택)* | CodeQL CLI 자동 설치에 사용. | `ditto impact` / `boundary` / `acg-review`에서 사용. 이 단계는 graceful이라 설치를 실패시키지 않습니다. |
+먼저 아래 둘을 설치한다. 둘 다 한 줄 명령으로 끝난다.
 
-CodeQL과 Playwright/Chromium은 가능하면 자동 설치됩니다. 둘 다 graceful로
-동작하므로, 다운로드가 실패하면 설치 스크립트가 정확한 수동 단계를 출력하고
-계속 진행합니다. 자세한 동작은 아래 [의존성 모델](#의존성-모델-codeql--playwright) 참고.
+| 필요 | 이유 | 설치 방법 |
+|------|------|-----------|
+| **bun ≥ 1.3** | 자립 실행형 `ditto` 바이너리 빌드(`bun --compile`) + 설치 오케스트레이터 실행. | 공식 가이드: <https://bun.sh/docs/installation> (`curl -fsSL https://bun.sh/install \| bash`). |
+| **git** | DITTO가 repo 상태를 읽고, 메모리가 git 위에 산다. | 공식 다운로드: <https://git-scm.com/downloads>. macOS: `xcode-select --install` 또는 `brew install git`; Debian/Ubuntu: `sudo apt-get install git`; Windows: git-scm 설치 프로그램. |
+| **Claude Code** *(또는 Codex)* | DITTO는 호스트 플러그인이다. | DITTO를 돌릴 호스트. <https://docs.claude.com/claude-code> 참고. |
 
-## 의존성 모델: CodeQL / Playwright
+설치에 필요한 건 이게 전부다. 아래의 무거운 분석 도구는 **선택**이며 wizard가 나중에
+설치한다 — DITTO를 띄우는 데 필수가 아니다.
 
-DITTO **런타임은 분석 도중 무거운 외부 도구를 자동 설치하지 않습니다.** 없으면
-정직하게 degrade합니다 — 의도된 설계입니다(가짜 통과 방지).
+| 선택 도구 | 설치 주체 | 사용처 |
+|-----------|-----------|--------|
+| CodeQL CLI | `ditto setup`(도구 포함) 또는 `ditto doctor codeql --install` | `ditto codeql review`, `impact`, `boundary` (ACG 게이트) |
+| Playwright / Chromium | `ditto setup`(도구 포함) 또는 `bunx playwright install chromium` | `/ditto:e2e` 실브라우저 여정 |
+| 언어 서버(LSP) | `ditto setup`(도구 포함) | 감지된 언어별 LSP 서버 |
 
-| 도구 | 쓰임 | 없을 때 런타임 동작 |
-|------|------|--------------------|
-| CodeQL CLI | `ditto codeql review`(ACG 게이트) | `doctor codeql`이 fail-closed로 분석 차단 |
-| CodeQL 쿼리팩 | 분석 쿼리 | 분석 시 자동 다운로드(별도 설치 불필요) |
-| Playwright/Chromium | `/ditto:e2e` 실제 브라우저 저니 | `result=blocked`로 degrade(가짜 pass 없음) |
+셋 다 **graceful**하다: 다운로드나 전제가 빠지면 wizard가 정확한 수동 명령을 출력하고
+계속 진행한다 — 설치 자체를 실패시키지 않는다.
 
-도구를 **미리 까는 경로는 둘**입니다:
+## 빠른 시작 (Quick start)
 
-1. **설치 스크립트 경로** — `scripts/install.sh`가 단계 3b/3c에서 CodeQL과
-   Playwright/Chromium을 graceful하게 사전 준비합니다. `--no-codeql` /
-   `--no-playwright`로 건너뜁니다.
-2. **마켓플레이스 경로** — `claude plugin install <plugin>@<marketplace>`로
-   설치하면 install.sh를 거치지 않아 위 사전 준비가 **실행되지 않습니다.** 이때
-   CodeQL은 아래 opt-in 명령으로 부트스트랩하세요.
-
-### CodeQL CLI 설치 (opt-in)
-
-```bash
-ditto doctor codeql --install
-```
-
-- **이미 있으면** 아무것도 하지 않고 `already-present`로 끝납니다(탐지 순서:
-  `CODEQL_BIN` → PATH → gh 확장 → ditto-managed).
-- **없으면** 공식 CLI 번들(github/codeql-cli-binaries)을 받아
-  `~/.local/share/ditto/codeql`에 풀고 `~/.local/bin/codeql`로 심링크합니다.
-  쿼리팩은 첫 분석 때 자동으로 받습니다.
-- **실패해도 hard-fail하지 않고** `failed` + 복붙용 수동 명령(gh 확장 / 번들
-  직접)을 출력합니다. `~/.local/bin`이 PATH에 없으면 그 사실도 함께 알립니다.
-  Windows는 심링크 대신 PATH 추가 안내를 줍니다.
-
-> CodeQL이 없을 때 `doctor codeql`의 안내 메시지도 이 명령을 가리킵니다. 이
-> 설치기는 설치 스크립트(단계 3b)와 **동일한 번들 소스·위치·탐지**를 씁니다 —
-> 어느 경로로 깔든 ditto-managed CodeQL은 한 곳뿐입니다.
-
-### Playwright / Chromium 설치
-
-런타임은 브라우저를 **절대 자동 설치하지 않습니다**(`/ditto:e2e`는 없으면
-`blocked`). 미리 깔려면 install.sh(단계 3c)를 쓰거나 직접 실행하세요:
-
-```bash
-bunx playwright install chromium
-```
-
-이렇게 하면 런타임 탐지가 요구하는 두 가지(bun 캐시의 `playwright-core` + ms-playwright
-캐시의 full Chromium)가 모두 준비됩니다.
-
-## 빠른 시작
-
-저장소를 클론한 뒤, **DITTO로 관리할 프로젝트에** 설치합니다:
+repo를 clone한 뒤, **DITTO가 관리할 프로젝트에** 설치한다:
 
 ```bash
 git clone <ditto-repo-url> ditto
 cd /path/to/your/project           # DITTO가 관리할 프로젝트
-/path/to/ditto/scripts/install.sh  # 현재 디렉터리에 설치
+/path/to/ditto/scripts/install.sh  # 부트스트랩 후 setup wizard 실행
 ```
 
-디렉터리를 옮기지 않고 대상을 직접 지정할 수도 있습니다:
+디렉터리를 옮기지 않고 대상 프로젝트를 명시할 수도 있다:
 
 ```bash
 /path/to/ditto/scripts/install.sh install --target /path/to/your/project
 ```
 
-**Windows (PowerShell 5+)** 에서는 `.ps1` 진입점을 사용합니다:
+**Windows (PowerShell 5+)** 에서는 `.ps1` 진입점을 쓴다:
 
 ```powershell
 \path\to\ditto\scripts\install.ps1
 \path\to\ditto\scripts\install.ps1 install -Target C:\path\to\your\project
 ```
 
-## 설치 스크립트가 하는 일
+`install.sh`는 비대화로 실행된다(`ditto setup --yes --tools`). wizard 질문에 직접
+답하려면 부트스트랩 후 터미널에서 `ditto setup`을 직접 실행한다([setup wizard](#setup-wizard) 참고).
+
+## install.sh가 하는 일
+
+스크립트는 바이너리를 부트스트랩한 뒤 나머지를 `ditto setup`에 넘긴다:
 
 | 단계 | 범위 | 동작 |
 |------|------|------|
-| 1. register | 전역 | `~/.claude/settings.json`을 패치해 로컬 플러그인을 로드. |
-| 2. build | 저장소 | `bun run build:plugin` → `dist/plugin/` (배포 단위, `bin/ditto` 포함). |
-| 3. place | 전역 | 바이너리를 `PATH`에 심링크(`~/.local/bin/ditto`)해 맨손 `ditto …` 사용 가능. **Windows에서는 심링크하지 않습니다** — 아래 노트 참고. |
-| 3b. codeql | 호스트 | 기존 CodeQL CLI 재사용 또는 다운로드(graceful). |
-| 3c. playwright | 호스트 | `/ditto:e2e`용 Playwright + Chromium 사전 준비(graceful). |
-| 4. init | 프로젝트 | `ditto init`이 대상의 `.ditto/`를 스캐폴딩. |
-| 5. allowlist | 프로젝트 | 대상 `.claude/settings.json`에 `Bash(ditto:*)`를 추가해 `ditto …`가 매번 묻지 않도록 함. |
+| 1. build | repo | `bun run build:plugin` → `dist/plugin/` (배포 단위, `bin/ditto` 포함). |
+| 2. place | global | 바이너리를 `PATH`(`~/.local/bin/ditto`)에 심링크 → 맨 `ditto …`가 동작. **Windows에서는 심링크 안 함** — 아래 주석 참고. |
+| 3. delegate | project | `ditto setup --dir <target> --yes --tools` 실행 → 호스트 지침 블록 설치, `.ditto/` scaffold, `Bash(ditto:*)` allowlist, 감지된 도구 provisioning. |
 
-> 대상이 DITTO 저장소 **자기 자신**일 때(self-host)는 프로젝트 단계(init /
-> allowlist)를 건너뜁니다 — 저장소는 자기 자신을 관리 대상으로 삼지 않습니다.
+**marketplace 등록 단계는 없다** — GitHub/소스 플러그인과 로컬 `dist/plugin` 개발 경로는
+영속 marketplace 항목이 필요 없다.
 
-### Windows 참고
+> 대상이 **DITTO repo 자신**(self-host)이면 `ditto setup`은 프로젝트 단계를 no-op한다 —
+> repo는 자기 자신의 관리 대상이 되면 안 된다.
 
-심링크 배치(3단계)는 POSIX 전용입니다. Windows에서는 설치 스크립트가
-바이너리를 빌드하지만 `PATH`에 **자동으로 올리지 않습니다.** 설치 후 아래
-디렉터리를 `PATH`에 추가해야 `ditto`(및 CodeQL)가 인식됩니다:
+### Windows 주석
 
-- `<ditto-repo>\dist\plugin\bin` — `ditto.exe` 바이너리
-- 설치 스크립트가 알려주는 CodeQL 디렉터리 (CodeQL을 다운로드한 경우)
-
-추가할 정확한 디렉터리는 설치 스크립트가 출력합니다. 이 경로들이 `PATH`에
-오르기 전까지는 훅과 맨손 `ditto …` 명령이 동작하지 않습니다.
+심링크 배치(2단계)는 POSIX 전용이다. Windows에서는 바이너리를 빌드하되 `PATH`에 자동으로
+올리지 않는다. 설치 후 `<ditto-repo>\dist\plugin\bin`(`ditto.exe`)을 `PATH`에 추가한다.
+설치 프로그램이 정확한 디렉터리를 출력한다. `PATH`에 오르기 전까지 훅과 맨 `ditto …`는
+해석되지 않는다.
 
 ### 옵션
 
 | 플래그 | 효과 |
 |--------|------|
-| `--target <dir>` (Windows: `-Target`) | 설치할 프로젝트. 기본값은 현재 디렉터리. |
-| `--no-build` (`-NoBuild`) | 바이너리 빌드 건너뛰기(기존 것 재사용). |
-| `--no-codeql` (`-NoCodeql`) | CodeQL 설치 건너뛰기. |
-| `--no-playwright` (`-NoPlaywright`) | Playwright/Chromium 설치 건너뛰기. |
+| `--target <dir>` (Windows는 `-Target`) | 설치 대상 프로젝트. 기본은 현재 디렉터리. |
+| `--no-build` (`-NoBuild`) | 바이너리 빌드 생략(기존 것 재사용). |
+| `--no-tools` (`-NoTools`) | 도구 provisioning(CodeQL/Playwright/LSP) 생략. |
 
-DITTO 저장소를 자동 감지하지 못하면 `DITTO_HOME`을 저장소 루트
-(`.claude-plugin/plugin.json`이 있는 디렉터리)로 지정하세요.
+DITTO repo를 자동 감지하지 못하면 `DITTO_HOME`을 repo 루트(`.claude-plugin/plugin.json`이
+있는 디렉터리)로 설정한다.
 
-## 행동 규칙 적재 — `ditto setup` (설치 스크립트가 하지 않는 단계)
+## setup wizard
 
-설치 스크립트의 4단계는 `ditto init`(`.ditto/` 스캐폴딩)이지 `ditto setup`이
-아닙니다. **행동 규칙은 `ditto setup`을 실행해야 적재됩니다** — 설치만 마치면
-플러그인 표면(스킬·에이전트·훅)은 동작하지만, 아래 관리블록은 비어 있습니다:
-
-| 파일 | 범위 | 내용 |
-|------|------|------|
-| `~/.claude/CLAUDE.md` · `~/.claude/AGENTS.md` | 전역 | 전역 행동 규칙(완료 게이트·사실 게이트·출력 규칙 등). 모든 프로젝트에 적용. |
-| `<대상>/CLAUDE.md` · `<대상>/AGENTS.md` | 프로젝트 | Agent Behavior Charter(행동 헌장). |
-
-대상 프로젝트에서 실행합니다:
+`ditto setup`은 프로젝트에 DITTO를 설치하는 유일 표면이다. **터미널(TTY)에서** 실행하면
+대화형이고, 스크립트·CI·에이전트(비TTY)거나 `--yes`면 안전한 기본값으로 비대화 실행된다.
 
 ```bash
 cd /path/to/your/project
-ditto setup
+ditto setup                 # 대화형 wizard
+ditto setup --yes           # 비대화, 기본값, 도구 설치 안 함
+ditto setup --yes --tools   # 비대화 + 감지된 도구 provisioning (install.sh가 쓰는 경로)
 ```
 
-호스트별 setup은 명시적으로 선택합니다:
+### wizard 질문
 
-```bash
-ditto setup --host claude-code   # 기본값; 기존 Claude Code 동작
-ditto setup --host codex         # Codex AGENTS, marketplace, agents 설치
-ditto setup --host both
-```
+| # | 질문 | 선택지(기본 먼저) | 하는 일 |
+|---|------|-------------------|---------|
+| 1 | **Host** | `claude-code` / `codex` / `both` | 어느 호스트의 지침 블록·표면·에이전트를 설치할지. |
+| 2 | **분석/언어 도구** | **감지된** 도구에 대한 다중선택 | DITTO가 소스 트리를 순회해 언어를 추론하고, 빠진 도구(CodeQL·Playwright·감지된 언어별 LSP 서버)를 미리 체크해 제시한다. 확인·토글하면 선택된 빠진 것만 설치한다. 건너뛰어도 안전 — 기능이 degrade될 뿐 깨지지 않는다. |
+| 3 | **memory 저장** | `프로젝트 포함` / `별도 repo 분리` | memory SoT(`.ditto/memory/`)의 위치. 기본은 프로젝트 git에 포함. **별도 repo**를 고르면 `gitignore-독립`(기본: `.ditto/memory/`에서 `git init` + 부모 `.gitignore`에 추가) 또는 `submodule`(opt-in; 원격 선행 필요라 수동 절차 출력) 중 택. |
 
-Codex는 먼저 Codex 플러그인 표면을 빌드합니다:
+비대화 실행은 Host를 `--host`(기본 `claude-code`)에서 받고, `--tools`가 있을 때만 도구를
+설치하며, memory는 프로젝트 포함으로 둔다.
+
+질문 뒤 wizard는 한 줄을 고지한다: **PreToolUse 안전 훅**은 플러그인 전역으로 활성이다
+(파괴적·secret 접근 류의 보수적 집합을 차단; 기본은 허용). per-project 토글이 아니라서,
+정상 명령을 오탐 차단하면 `DITTO_SKIP_HOOKS=1`을 앞에 붙인다.
+
+### ditto setup이 설치하는 것
+
+| 파일 | 범위 | 내용 |
+|------|------|------|
+| `~/.claude/CLAUDE.md` · `~/.claude/AGENTS.md` | global | 전역 행동 규칙(완료 게이트, 사실 게이트, 출력 규칙). 모든 프로젝트에 적용. |
+| `<target>/CLAUDE.md` · `<target>/AGENTS.md` | project | Agent Behavior Charter. |
+
+동작(직접 실행으로 검증됨):
+
+- **기존 내용 보존**: 파일에 이미 있던 것은 관리 블록(`<!-- ditto:managed:start … -->`)
+  밖에 그대로 남고, 첫 적용 시 `<file>.ditto_bak` 백업 생성.
+- **멱등**: 재실행은 블록을 제자리 갱신, 중복 생성 안 함.
+- **제거**: `ditto uninstall`은 관리 블록만 떼고 사용자 내용은 유지.
+- 적용된 규칙은 **다음** 호스트 세션부터 발효.
+
+### Codex 호스트
+
+Codex는 플러그인 표면을 먼저 빌드한다:
 
 ```bash
 bun run build:codex-plugin
 ditto setup --host codex
 ```
 
-Codex 분기는 빌드된 플러그인을 `<대상>/.agents/plugins/ditto/`에 복사하고,
-`<대상>/.agents/plugins/marketplace.json`을 쓰며, 생성된 custom-agent TOML을
-`<대상>/.codex/agents/`에 설치합니다. 이 상태는 **prepared**(파일 준비)이지
-Codex plugin enabled 상태가 아닙니다. `ditto setup --host codex`는 이어서 실행할
-명령을 그대로 출력합니다:
+Codex 분기는 빌드된 플러그인을 `<target>/.agents/plugins/ditto/`에 복사하고,
+`<target>/.agents/plugins/marketplace.json`을 쓰고, 생성된 에이전트를
+`<target>/.codex/agents/`에 설치한다. 이건 **준비된** 상태이지 활성화된 플러그인이 아니다.
+`ditto setup --host codex`가 후속 명령을 출력한다:
 
 ```bash
 codex plugin marketplace add /path/to/your/project
 codex plugin add ditto@ditto-local
 ```
 
-사용할 Codex home에서 위 명령을 실행한 뒤 새 Codex 세션을 시작하세요. 그 전까지
-`ditto doctor capability --host codex`는 준비된 파일을 loaded hook/skill로 둥글리지
-않고 `codex_plugin_needs_user_action`을 보고합니다.
+이를 쓰려는 Codex home에서 실행한 뒤 새 Codex 세션을 시작한다. 그 전까지
+`ditto doctor capability --host codex`는 `codex_plugin_needs_user_action`을 보고한다.
 
-동작 특성(직접 실행으로 검증됨):
+## 도구: CodeQL / Playwright / LSP
 
-- **기존 내용 보존**: 파일에 이미 있던 사용자 내용은 관리블록
-  (`<!-- ditto:managed:start … -->`) 밖에 그대로 남고, 첫 적용 시
-  `<파일>.ditto_bak` 백업이 생깁니다.
-- **멱등**: 재실행해도 블록이 중복 적재되지 않고 갱신만 됩니다.
-- **제거**: `ditto teardown`이 관리블록만 벗겨내고 사용자 내용은 남깁니다.
-- 적재된 규칙은 **새 호스트 세션부터** 로드됩니다.
+DITTO **런타임은 분석 도중 무거운 외부 도구를 자동 설치하지 않는다.** 빠지면 정직하게
+degrade한다 — 거짓 통과를 막기 위해서다.
 
-> self-host(대상 = DITTO 저장소 자신)에서는 setup이 통째로 건너뛰어집니다.
-> DITTO 저장소에서 dogfooding하면서 **전역** 블록만 필요하면, 아무 다른
-> 프로젝트(임시 디렉터리도 가능)에서 `ditto setup`을 한 번 실행하세요 — 전역
-> 파일은 대상과 무관하게 같은 위치에 적재됩니다.
+| 도구 | 사용처 | 부재 시 런타임 동작 |
+|------|--------|---------------------|
+| CodeQL CLI | `ditto codeql review` (ACG 게이트) | `doctor codeql`이 fail-close하고 분석 차단 |
+| CodeQL 쿼리팩 | 분석 쿼리 | 분석 시점 자동 다운로드(별도 설치 없음) |
+| Playwright/Chromium | `/ditto:e2e` 실브라우저 여정 | `result=blocked`로 degrade(가짜 통과 없음) |
+| 언어 서버(LSP) | 언어 인식 기능 | 해당 언어를 미지원으로 보고, 차단 없음 |
 
-## 마켓플레이스 설치/갱신 경로
+이들은 `ditto setup`이 **opt-in**으로 설치한다(wizard 도구 질문, 또는 비대화 `--tools`).
+전부 하나의 provisioner 뒤에 공유 탐지 probe(`<TOOL>_BIN` env → `PATH` →
+`~/.local/share/ditto/…` ditto-managed)로 통일돼 있다.
 
-install.sh 대신 Claude Code 플러그인 마켓플레이스로 설치할 수도 있습니다
-(GitHub 소스 또는 로컬 `dist/plugin` 디렉터리 소스):
+CodeQL은 독립 opt-in 설치기도 있다(wizard를 건너뛰는 marketplace 경로용):
+
+```bash
+ditto doctor codeql --install
+```
+
+- **있으면** `already-present` 반환(탐지: `CODEQL_BIN` → PATH → gh 확장 → ditto-managed).
+- **없으면** 공식 CLI 번들(github/codeql-cli-binaries)을 `~/.local/share/ditto/codeql`에
+  받아 `~/.local/bin/codeql`로 심링크.
+- **hard-fail 없음**: 오류 시 `failed` + 복붙 수동 명령 반환.
+
+LSP 서버는 현재 `ditto setup --tools`로만 설치된다(ts/js·python·go·rust는 자동, Java/Kotlin
+같은 무거운 서버는 수동 안내). Playwright는 `bunx playwright install chromium`으로 직접
+미리 받을 수도 있다.
+
+## Marketplace 설치/업데이트 경로
+
+`install.sh` 대신 Claude Code 플러그인 marketplace로 설치할 수도 있다(GitHub 소스 또는
+로컬 `dist/plugin` 디렉터리 소스):
 
 ```bash
 claude plugin marketplace add <owner>/<repo>     # 또는 로컬 dist/plugin 경로
 claude plugin install ditto@ditto-local
 ```
 
-이 경로에는 함정이 둘 있습니다(직접 재현됨):
+이 경로의 함정 둘(둘 다 직접 재현됨):
 
-1. **갱신은 `marketplace update`가 필수.** 설치본은 marketplace의 **복사본
-   캐시**(`~/.claude/plugins/cache/…`)입니다. 소스가 바뀌어도(push/재빌드)
-   `claude plugin marketplace update ditto-local`을 돌리기 전까지 stale입니다.
-   버전이 고정(0.0.0)이라 `claude plugin update`는 no-op입니다.
-2. **기설치 상태의 `install`은 no-op.** "already installed"로 끝나며 캐시를
-   갱신하지 않습니다. 갱신하려면 `claude plugin uninstall ditto@ditto-local`
-   후 다시 `claude plugin install` 하세요.
+1. **업데이트는 `marketplace update` 필요.** 설치된 플러그인은 **복사 캐시**
+   (`~/.claude/plugins/cache/…`)다. 소스가 바뀌어도 `claude plugin marketplace update
+   ditto-local`을 돌리기 전까진 stale. 버전이 고정(0.0.0)이라 `claude plugin update`는 무동작.
+2. **이미 설치된 플러그인에 `install`은 무동작.** 갱신하려면
+   `claude plugin uninstall ditto@ditto-local` 후 다시 `install`.
 
-또한 이 경로는 install.sh의 3b/3c(CodeQL·Playwright 사전 준비)와 `PATH` 배치를
-건너뜁니다 — 위 [의존성 모델](#의존성-모델-codeql--playwright)의 opt-in 명령을
-사용하세요.
+이 경로는 부트스트랩의 `PATH` 배치 **와** 도구 provisioning을 건너뛴다 — 이후
+`ditto setup --tools`(또는 위 opt-in 명령)를 직접 실행한다.
 
-## 확인
+## 검증
 
 대상 프로젝트에서 **새** Claude Code 세션을 시작한 뒤:
 
 ```text
-/plugin            # ditto@ditto-local 가 목록에 있고 enabled 인지
+/plugin            # ditto@ditto-local 목록에 있고 enabled
 ```
 
 ```bash
-ditto doctor       # 바이너리가 PATH에 있고 런타임이 닿는지
+ditto doctor       # 바이너리 PATH·런타임 도달·drift 점검
 ```
 
-정상 설치라면 `distribution`, `capability`, `surface`가 `ok`로 나옵니다.
-DITTO 저장소 안에서 실행하면 `permissions` / `mcp`가 `missing` /
-`unverified`로 나올 수 있는데, 저장소는 관리 대상이 아니므로 정상입니다.
+정상 설치는 `distribution`·`capability`·`surface`가 `ok`다. DITTO repo 자신 안에서
+실행하면 `permissions`/`mcp`가 `missing`/`unverified`일 수 있다 — repo는 관리 대상이 아니라
+정상이다.
 
-## 세션 단위 래퍼 (설정 영구 변경 없이)
+`ditto doctor`가 **진단** 표면이다(instructions·permissions·MCP·surface·capability·
+distribution drift). advisory다 — drift를 보고하되 자동 교정하지 않는다. 교정하려면
+`ditto setup`을 재실행한다(멱등 재투영).
 
-`settings.json`을 영구적으로 바꾸지 않으려면, 조립된 제품 표면을 통해 한
-세션만 DITTO를 로드할 수 있습니다:
+## 세션 단위 wrapper (영속 설정 없이)
+
+조립된 산출물 표면으로 한 세션만 DITTO를 로드하려면:
 
 ```bash
-# bash/zsh — ~/.bashrc 또는 ~/.zshrc 에 추가
+# bash/zsh — ~/.bashrc 또는 ~/.zshrc에 추가
 export DITTO_HOME="/path/to/ditto"
 alias ditto-claude='claude --plugin-dir "$DITTO_HOME/dist/plugin"'
 ```
@@ -252,47 +241,45 @@ $env:DITTO_HOME = 'C:\path\to\ditto'
 function ditto-claude { claude --plugin-dir $env:DITTO_HOME\dist\plugin $args }
 ```
 
-이후 `ditto-claude`를 실행하면 그 세션에서만 DITTO가 로드된 Claude Code가
-뜹니다. `dist/plugin`이 없으면 먼저 `bun run build:plugin`을 실행하세요.
-`--plugin-dir`는 저장소 루트가 아니라 `dist/plugin`(조립된 제품 표면)을
-가리키므로, 소스나 dogfooding 상태가 새어 들어가지 않습니다.
+그러면 `ditto-claude`가 그 세션에만 DITTO를 로드해 Claude Code를 띄운다. `dist/plugin`이
+없으면 먼저 `bun run build:plugin`. `--plugin-dir`은 repo 루트가 아니라 `dist/plugin`(조립된
+표면)을 가리켜, 소스·도그푸딩 상태가 새지 않는다.
 
-## 업데이트 & dogfooding
+## 업데이트 & 도그푸딩
 
-설치된 플러그인은 `dist/plugin/`을 읽습니다 — 이것은 `build:plugin`이 조립한
-소스의 **복사본**이지 소스 트리 자체가 아닙니다. 그리고 Claude Code는 플러그인을
-**세션 시작 시점에만** 로드합니다(핫리로드 없음). 그래서 항상 두 가지가 참입니다:
+전용 `ditto update` 명령은 없다 — **업데이트 = 부트스트랩 재실행**이다(`install.sh`는 멱등:
+재빌드 + 멱등 `ditto setup`). 더해 아래 `dist/plugin` 자동 재빌드가 있다. 설치된 플러그인은
+소스 트리가 아니라 `build:plugin`이 조립한 **복사본** `dist/plugin/`을 읽고, Claude Code는
+플러그인을 **세션 시작 시에만** 로드한다(핫 리로드 없음). 그래서:
 
-1. 소스를 바꾸면 `dist/plugin`을 **다시 빌드**해야 한다.
+1. 소스 변경 후 `dist/plugin`을 **재빌드**해야 한다.
 2. 재빌드를 반영하려면 **새 Claude Code 세션**이 필요하다.
 
-DITTO는 1번을 자동화해 손으로 빌드할 일을 거의 없앱니다:
+DITTO는 1단계를 자동화한다:
 
-- **Git 훅 (멀티 PC 동기화).** `post-merge`와 `post-checkout`이 `git pull` /
-  merge / 브랜치 전환 후 `dist/plugin`을 자동 재빌드합니다. graceful이라 빌드
-  실패가 git 작업을 막지 않으며, `bun install`로 활성화됩니다(`prepare`
-  스크립트가 `core.hooksPath`를 `.githooks/`로 지정). 즉 어느 PC에서든:
-  `git pull` → 자동 재빌드 → 새 세션 시작.
-- **Dev 런처 (로컬 루프).** `bun run dev:plugin`이 재빌드 후 갓 만든
-  `dist/plugin`으로 Claude Code를 띄우는 것까지 한 번에 합니다. 아래의 선택적
-  `ditto-claude` 래퍼도 셸 함수로 동일하게 동작합니다.
+- **Git 훅(다중 PC 동기화).** `post-merge`/`post-checkout`이 `git pull`/merge/브랜치
+  전환 후 `dist/plugin`을 재빌드한다(graceful; 빌드 실패가 git을 막지 않음).
+  `bun install`(`prepare`가 `core.hooksPath`를 `.githooks/`로 지정)로 활성화.
+- **개발 런처.** `bun run dev:plugin`이 재빌드 + 새 `dist/plugin`으로 Claude Code 실행을
+  한 단계로.
 
-어느 경우든 재빌드는 세션 시작 시점에 반영됩니다 — 세션 도중 리로드는 없습니다.
 수동이 필요하면: `bun run build:plugin`.
 
-> **검증됨.** 자동 재빌드가 실제 `git merge`·`git checkout`에서 발동하는 것(과
-> 파일 체크아웃·동일 커밋 전환의 skip 가드)을 직접 실행해 확인했습니다. Windows
-> (`install.ps1`)는 아직 미검증이며, 재빌드를 실제로 로드하려면 새 세션이
-> 필요합니다.
-
-## 상태 확인 및 제거
+## 상태 & 제거
 
 ```bash
-/path/to/ditto/scripts/install.sh status                        # JSON 상태 보고
-/path/to/ditto/scripts/install.sh uninstall                     # 현재 디렉터리
+/path/to/ditto/scripts/install.sh status                       # JSON 상태 보고
+/path/to/ditto/scripts/install.sh uninstall                    # 현재 디렉터리
 /path/to/ditto/scripts/install.sh uninstall --target /the/project
 ```
 
-uninstall은 등록, 바이너리 배치, allowlist를 되돌립니다. 대상의 `.ditto/`
-런타임 데이터는 그대로 둡니다 — 이것이 work-item 이력이며, 완전히 지우려면
-수동으로 제거하세요.
+uninstall은 바이너리 심링크를 제거하고 `ditto uninstall`(별칭: `teardown`)에 위임한다 — 관리 지침 블록과
+allowlist 규칙을 떼되 대상의 `.ditto/` 런타임 데이터는 **보존**한다(work-item 이력·메모리).
+
+`.ditto/`까지 삭제하려면(비가역 — work-item 이력·메모리 영구 삭제):
+
+```bash
+ditto uninstall --purge                 # 대상 프로젝트에서
+```
+
+`--purge`는 명시해야 한다; 터미널에서 `ditto uninstall`은 먼저 확인을 묻는다(기본: 보존).

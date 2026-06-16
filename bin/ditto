@@ -35866,8 +35866,8 @@ async function shouldPurge(flagPurge) {
 }
 var teardownCommand = defineCommand({
   meta: {
-    name: "teardown",
-    description: "Undo ditto setup: strip managed blocks (preserving user content), remove the allow rule; keeps .ditto/"
+    name: "uninstall",
+    description: "Undo ditto setup: strip managed blocks (preserving user content), remove the allow rule; keeps .ditto/ (alias: teardown)"
   },
   args: {
     dir: {
@@ -35888,15 +35888,15 @@ var teardownCommand = defineCommand({
       const resourcesDir = resolveResourcesDir();
       const pluginRoot = resolve19(resourcesDir, "..", "..");
       if (pluginRoot === projectRoot) {
-        writeHuman(`teardown: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
+        writeHuman(`uninstall: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
       }
       const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir9() });
       if (result2.files.length === 0) {
-        writeError(`teardown failed: no managed resources found at ${resourcesDir}`);
+        writeError(`uninstall failed: no managed resources found at ${resourcesDir}`);
         process.exit(RUNTIME_ERROR_EXIT);
       }
-      writeHuman(`teardown: reverted ${projectRoot}`);
+      writeHuman(`uninstall: reverted ${projectRoot}`);
       for (const f3 of result2.files) {
         writeHuman(`  ${f3.filename} [${f3.scope}] ${f3.action} \u2192 ${f3.destPath}`);
       }
@@ -35909,7 +35909,7 @@ var teardownCommand = defineCommand({
         writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ kept`);
       }
     } catch (err) {
-      writeError(`teardown failed: ${err instanceof Error ? err.message : String(err)}`);
+      writeError(`uninstall failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
     }
   }
@@ -36682,6 +36682,7 @@ var main = defineCommand({
   subCommands: {
     init: initCommand,
     setup: setupCommand,
+    uninstall: teardownCommand,
     teardown: teardownCommand,
     work: workCommand,
     run: runCommand2,
@@ -36714,4 +36715,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=62527c69e268a28e6c6c168541774d5745a8ac8f4f5f567dc3f90c533b02fc94
+//# ditto-src-stamp=a79c0d0513efb872df005466921e6ca8b37970550c24b1d98fa1a081c2b83ba0
