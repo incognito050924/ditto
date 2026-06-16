@@ -35725,6 +35725,7 @@ async function runWizard(resourcesDir, projectRoot) {
     } else {
       writeHuman("memory: \uD504\uB85C\uC81D\uD2B8 git\uC5D0 \uD3EC\uD568(\uAE30\uBCF8)");
     }
+    writeHuman("safety hook: PreToolUse \uD65C\uC131(\uD50C\uB7EC\uADF8\uC778 \uC804\uC5ED) \u2014 \uC815\uC0C1 \uBA85\uB839 \uC624\uD0D0 \uC2DC DITTO_SKIP_HOOKS=1 prefix");
   } finally {
     io.close();
   }
@@ -36713,4 +36714,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=e7d96a0f9b709779ec3f3e62fd18d4e48b57256a9dd214de170faf315d873bad
+//# ditto-src-stamp=62527c69e268a28e6c6c168541774d5745a8ac8f4f5f567dc3f90c533b02fc94

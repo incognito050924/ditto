@@ -103,6 +103,11 @@ async function runWizard(resourcesDir: string, projectRoot: string): Promise<voi
     } else {
       writeHuman('memory: 프로젝트 git에 포함(기본)');
     }
+    // 안전 훅은 토글이 아니라 플러그인 전역으로 항상 활성(hooks/hooks.json, default ALLOW).
+    // per-project on/off 설정이 없으므로 질문 대신 활성 사실 + 우회법만 고지한다.
+    writeHuman(
+      'safety hook: PreToolUse 활성(플러그인 전역) — 정상 명령 오탐 시 DITTO_SKIP_HOOKS=1 prefix',
+    );
   } finally {
     io.close();
   }
