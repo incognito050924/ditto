@@ -18265,6 +18265,50 @@ function parseVariant(text) {
     return null;
   return { name, role, description, match };
 }
+function recommendVariantRole(name, description) {
+  const text = `${name} ${description}`.toLowerCase();
+  if (/security|appsec|vuln/.test(text))
+    return "security-reviewer";
+  if (/review|audit/.test(text))
+    return "reviewer";
+  if (/architect|architecture|design/.test(text))
+    return "architect";
+  if (/research|investigate/.test(text))
+    return "researcher";
+  if (/test|qa/.test(text))
+    return "verifier";
+  if (/refactor|tidy/.test(text))
+    return "refactorer";
+  return "implementer";
+}
+async function writeAgentVariants(repoRoot, variants) {
+  const dir = join17(repoRoot, ".ditto", "agents");
+  const written = [];
+  const skipped = [];
+  for (const variant of variants) {
+    const file = join17(dir, `${variant.name}.md`);
+    if (await fileExists(file)) {
+      skipped.push(variant.name);
+      continue;
+    }
+    await ensureDir(dir);
+    await Bun.write(file, renderVariant(variant));
+    written.push(variant.name);
+  }
+  return { written, skipped };
+}
+function renderVariant(variant) {
+  const lines = ["---", `name: ${variant.name}`, `role: ${variant.role}`];
+  if (variant.match.length > 0)
+    lines.push(`match: [${variant.match.join(", ")}]`);
+  lines.push("description: |");
+  for (const line of variant.description.split(`
+`))
+    lines.push(`  ${line}`);
+  lines.push("---", "");
+  return lines.join(`
+`);
+}
 function extractFrontmatter(text) {
   const lines = text.split(`
 `);
@@ -26808,7 +26852,8 @@ var deepInterviewCommand = defineCommand({
 });
 
 // src/cli/commands/doctor.ts
-import { join as join53 } from "path";
+import { homedir as homedir7 } from "os";
+import { join as join54 } from "path";
 
 // src/core/capability-inventory.ts
 import { join as join47 } from "path";
@@ -27265,9 +27310,203 @@ function collectDistributionReport(deps) {
   return evaluateDistribution(collectDistributionChecks(deps));
 }
 
+// src/core/doctor-fix.ts
+import { join as join52 } from "path";
+
+// src/core/managed-resource.ts
+import { copyFile } from "fs/promises";
+var START_RE_G = /<!--\s*ditto:managed:start\s+source=[^\s]+\s+sha256=[a-f0-9]{64}\s*-->/g;
+var END_RE_G = /<!--\s*ditto:managed:end\s*-->/g;
+function locateBlock(content) {
+  const starts = [...content.matchAll(START_RE_G)];
+  const ends = [...content.matchAll(END_RE_G)];
+  if (starts.length === 0 && ends.length === 0)
+    return null;
+  if (starts.length !== 1 || ends.length !== 1)
+    return "corrupted";
+  const startMatch = starts[0];
+  const endMatch = ends[0];
+  if (startMatch?.index === undefined || endMatch?.index === undefined)
+    return "corrupted";
+  if (endMatch.index < startMatch.index)
+    return "corrupted";
+  return { start: startMatch.index, end: endMatch.index + endMatch[0].length };
+}
+function buildManagedBlock(managedBody, source = "AGENTS.md") {
+  const body = normalizeInstructionText(managedBody);
+  const sha2562 = normalizedSha256(managedBody);
+  const bodyWithBreak = body.endsWith(`
+`) ? body : `${body}
+`;
+  return `<!-- ditto:managed:start source=${source} sha256=${sha2562} -->
+${bodyWithBreak}${MANAGED_END}`;
+}
+function upsertManagedBlock(originalContent, managedBody, source = "AGENTS.md") {
+  const block = buildManagedBlock(managedBody, source);
+  const bounds = locateBlock(originalContent);
+  if (bounds === "corrupted")
+    return { kind: "corrupted", original: originalContent };
+  if (bounds === null) {
+    if (originalContent.length === 0)
+      return { kind: "ok", content: `${block}
+` };
+    const separator = originalContent.endsWith(`
+`) ? `
+` : `
+
+`;
+    return { kind: "ok", content: `${originalContent}${separator}${block}
+` };
+  }
+  const next = `${originalContent.slice(0, bounds.start)}${block}${originalContent.slice(bounds.end)}`;
+  return { kind: "ok", content: next };
+}
+function stripManagedBlock(content) {
+  const bounds = locateBlock(content);
+  if (bounds === "corrupted")
+    return { kind: "corrupted", original: content };
+  if (bounds === null)
+    return { kind: "ok", content };
+  const before = content.slice(0, bounds.start);
+  const after = content.slice(bounds.end);
+  const beforeTail = before.match(/\n*$/)?.[0] ?? "";
+  const afterHead = after.match(/^\n*/)?.[0] ?? "";
+  let seam = beforeTail + afterHead;
+  if (seam.length >= 3)
+    seam = `
+
+`;
+  const next = before.slice(0, before.length - beforeTail.length) + seam + after.slice(afterHead.length);
+  return { kind: "ok", content: next };
+}
+var BACKUP_SUFFIX = ".ditto_bak";
+async function writeBackupOnce(targetPath) {
+  const bakPath = `${targetPath}${BACKUP_SUFFIX}`;
+  if (await Bun.file(bakPath).exists())
+    return null;
+  if (!await Bun.file(targetPath).exists())
+    return null;
+  await copyFile(targetPath, bakPath);
+  return bakPath;
+}
+async function applyManagedFile(targetPath, managedBody, source = "AGENTS.md") {
+  const exists = await Bun.file(targetPath).exists();
+  const current = exists ? await Bun.file(targetPath).text() : "";
+  const merged = upsertManagedBlock(current, managedBody, source);
+  if (merged.kind === "corrupted")
+    return { kind: "corrupted", path: targetPath };
+  const backupPath = await writeBackupOnce(targetPath);
+  await atomicWriteText(targetPath, merged.content);
+  return { kind: "ok", path: targetPath, backupPath };
+}
+
+// src/core/settings-allowlist.ts
+import { readFile as readFile7 } from "fs/promises";
+var ALLOW_RULE2 = "Bash(ditto:*)";
+function addAllowRule(settings) {
+  const perms = settings.permissions ?? {};
+  const allow = Array.isArray(perms.allow) ? perms.allow : [];
+  const nextAllow = allow.includes(ALLOW_RULE2) ? allow : [...allow, ALLOW_RULE2];
+  return { ...settings, permissions: { ...perms, allow: nextAllow } };
+}
+function removeAllowRule(settings) {
+  const perms = settings.permissions;
+  if (!perms || !Array.isArray(perms.allow))
+    return settings;
+  return {
+    ...settings,
+    permissions: { ...perms, allow: perms.allow.filter((r3) => r3 !== ALLOW_RULE2) }
+  };
+}
+async function readSettings(settingsPath) {
+  if (!await fileExists(settingsPath))
+    return {};
+  const text = (await readFile7(settingsPath, "utf8")).trim();
+  return text ? JSON.parse(text) : {};
+}
+async function writeSettings(settingsPath, settings) {
+  await atomicWriteText(settingsPath, `${JSON.stringify(settings, null, 2)}
+`);
+}
+async function allowlistSettingsFile(settingsPath) {
+  const settings = await readSettings(settingsPath);
+  await writeSettings(settingsPath, addAllowRule(settings));
+}
+async function unallowlistSettingsFile(settingsPath) {
+  if (!await fileExists(settingsPath))
+    return;
+  const settings = await readSettings(settingsPath);
+  await writeSettings(settingsPath, removeAllowRule(settings));
+}
+
+// src/core/doctor-fix.ts
+function classifyReversible(targetPath, homeDir) {
+  const globalRoot = join52(homeDir, ".claude");
+  return !(targetPath === globalRoot || targetPath.startsWith(`${globalRoot}/`));
+}
+function planInstructionFixes(findings, homeDir) {
+  const seen = new Set;
+  const items = [];
+  for (const finding2 of findings) {
+    if (finding2.host !== "claude-code")
+      continue;
+    if (seen.has(finding2.path))
+      continue;
+    seen.add(finding2.path);
+    items.push({
+      kind: "instruction-projection",
+      reversible: classifyReversible(finding2.path, homeDir),
+      targetPath: finding2.path,
+      describe: `re-project managed block in ${finding2.path} (${finding2.kind})`
+    });
+  }
+  return items;
+}
+async function applyDoctorFixes(deps, items) {
+  const applied = [];
+  const skipped = [];
+  for (const item of items) {
+    if (!item.reversible) {
+      const ok = await deps.confirmNonReversible(item);
+      if (!ok) {
+        skipped.push(item);
+        continue;
+      }
+    }
+    if (item.kind === "instruction-projection") {
+      const res = await deps.syncProjection();
+      if (res.applied)
+        applied.push(item);
+    } else {
+      const res = await deps.ensureAllowlist();
+      if (res.applied)
+        applied.push(item);
+    }
+  }
+  return { applied, skipped, nothingToFix: items.length === 0 };
+}
+function defaultDoctorFixDeps(repoRoot, homeDir) {
+  return {
+    repoRoot,
+    homeDir,
+    confirmNonReversible: async () => false,
+    syncProjection: async () => {
+      const path = join52(repoRoot, "CLAUDE.md");
+      const backupPath = await writeBackupOnce(path);
+      const result2 = await syncClaudeCodeProjection(repoRoot);
+      const applied = result2.action === "created" || result2.action === "updated";
+      return { applied, backupPath };
+    },
+    ensureAllowlist: async () => {
+      await allowlistSettingsFile(join52(repoRoot, ".claude", "settings.json"));
+      return { applied: true };
+    }
+  };
+}
+
 // src/core/handoff-store.ts
 import { readdir as readdir13, rename as rename3 } from "fs/promises";
-import { join as join52 } from "path";
+import { join as join53 } from "path";
 
 // src/schemas/handoff.ts
 var handoff = exports_external.object({
@@ -27399,7 +27638,7 @@ class HandoffStore {
     return localDir(this.repoRoot, "handoff");
   }
   activePath(workItemId2) {
-    return join52(this.dir(), `${workItemId2}.md`);
+    return join53(this.dir(), `${workItemId2}.md`);
   }
   activeRel(workItemId2) {
     return `.ditto/local/handoff/${workItemId2}.md`;
@@ -27421,7 +27660,7 @@ class HandoffStore {
   }
   async writeArchived(h2, now = new Date) {
     const rel = this.archiveRel(h2.work_item_id, stamp(now));
-    await atomicWriteText(join52(this.repoRoot, rel), serialize(h2));
+    await atomicWriteText(join53(this.repoRoot, rel), serialize(h2));
     await this.link(h2.work_item_id, rel);
     return rel;
   }
@@ -27436,7 +27675,7 @@ class HandoffStore {
     for (const name of names) {
       if (!name.endsWith(".md"))
         continue;
-      const path = join52(this.dir(), name);
+      const path = join53(this.dir(), name);
       try {
         const { handoff: handoff2, body } = parseHandoffFile(await Bun.file(path).text());
         out.push({ handoff: handoff2, body, path });
@@ -27448,9 +27687,9 @@ class HandoffStore {
     const active = await this.listActive();
     if (active.length === 0)
       return [];
-    await ensureDir(join52(this.dir(), "archive"));
+    await ensureDir(join53(this.dir(), "archive"));
     for (const a2 of active) {
-      const dest = join52(this.repoRoot, this.archiveRel(a2.handoff.work_item_id, stamp(now)));
+      const dest = join53(this.repoRoot, this.archiveRel(a2.handoff.work_item_id, stamp(now)));
       try {
         await rename3(a2.path, dest);
       } catch {}
@@ -27777,6 +28016,66 @@ async function collectSurfaceInventory(adapters, repoRoot) {
   };
 }
 
+// src/cli/wizard/prompt.ts
+async function confirm(io, message, defaultYes) {
+  if (!io.isTTY)
+    return defaultYes;
+  const hint = defaultYes ? "[Y/n]" : "[y/N]";
+  const ans = (await io.ask(`${message} ${hint} `)).trim().toLowerCase();
+  if (ans === "")
+    return defaultYes;
+  return ans === "y" || ans === "yes";
+}
+async function select(io, message, options, defaultValue) {
+  if (!io.isTTY || options.length === 0)
+    return defaultValue;
+  const defaultIdx = options.findIndex((o3) => o3.value === defaultValue);
+  io.write(`${message}
+`);
+  options.forEach((o3, i2) => {
+    const mark = o3.value === defaultValue ? "(\uAE30\uBCF8)" : "";
+    io.write(`  ${i2 + 1}. ${o3.label} ${mark}
+`);
+  });
+  const ans = (await io.ask(`\uBC88\uD638 (Enter=${defaultIdx + 1}): `)).trim();
+  if (ans === "")
+    return defaultValue;
+  const n2 = Number.parseInt(ans, 10);
+  if (Number.isInteger(n2) && n2 >= 1 && n2 <= options.length)
+    return options[n2 - 1].value;
+  return defaultValue;
+}
+async function multiSelect(io, message, choices) {
+  const defaults = choices.filter((c3) => c3.checked).map((c3) => c3.value);
+  if (!io.isTTY || choices.length === 0)
+    return defaults;
+  io.write(`${message}
+`);
+  choices.forEach((c3, i2) => io.write(`  ${i2 + 1}. [${c3.checked ? "x" : " "}] ${c3.label}
+`));
+  const ans = (await io.ask("\uC124\uCE58\uD560 \uBC88\uD638 (\uC27C\uD45C \uAD6C\uBD84, Enter=\uAE30\uBCF8\uAC12 \uC720\uC9C0): ")).trim();
+  if (ans === "")
+    return defaults;
+  const picked = new Set(ans.split(",").map((s2) => Number.parseInt(s2.trim(), 10)).filter((n2) => Number.isInteger(n2) && n2 >= 1 && n2 <= choices.length));
+  return choices.filter((_3, i2) => picked.has(i2 + 1)).map((c3) => c3.value);
+}
+
+// src/cli/wizard/prompt-io.ts
+import { createInterface } from "readline/promises";
+function createStdioPromptIO() {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return {
+    isTTY: Boolean(process.stdin.isTTY),
+    ask: (query) => rl.question(query),
+    write: (text) => {
+      process.stdout.write(text);
+    },
+    close: () => {
+      rl.close();
+    }
+  };
+}
+
 // src/cli/commands/doctor.ts
 var DRIFT_EXIT2 = 1;
 var DOCTOR_RUNTIME_ERROR_EXIT = 70;
@@ -27794,6 +28093,38 @@ function exitForFindings(count, advisory) {
   if (count > 0 && advisory !== true)
     process.exit(DRIFT_EXIT2);
 }
+async function runFix(repoRoot, items) {
+  const deps = defaultDoctorFixDeps(repoRoot, homedir7());
+  const io = createStdioPromptIO();
+  try {
+    const result2 = await applyDoctorFixes({
+      ...deps,
+      confirmNonReversible: (item) => confirm(io, `Apply non-reversible repair? ${item.describe}`, false)
+    }, items);
+    if (result2.nothingToFix) {
+      writeHuman("fix: nothing to fix");
+      return;
+    }
+    for (const item of result2.applied)
+      writeHuman(`fixed	${item.describe}`);
+    for (const item of result2.skipped)
+      writeHuman(`skipped (non-reversible, not confirmed)	${item.describe}`);
+  } finally {
+    io.close();
+  }
+}
+function planAllowlistFixes(allowlisted2, repoRoot) {
+  if (allowlisted2)
+    return [];
+  return [
+    {
+      kind: "allowlist",
+      reversible: true,
+      targetPath: join54(repoRoot, ".claude", "settings.json"),
+      describe: "add Bash(ditto:*) to project .claude/settings.json allow"
+    }
+  ];
+}
 function parseCommon(args) {
   const format = parseOutputFormat(args.output);
   const adapters = selectedAdapters(args.host);
@@ -27807,7 +28138,12 @@ var instructionsCommand = defineCommand({
   args: {
     host: { type: "string", required: false, description: "Host: codex|claude-code" },
     output: { type: "string", default: "human", description: "Output format: human|json" },
-    advisory: { type: "boolean", default: false, description: "Report drift but exit 0" }
+    advisory: { type: "boolean", default: false, description: "Report drift but exit 0" },
+    fix: {
+      type: "boolean",
+      default: false,
+      description: "Repair detected instruction drift by re-projecting the managed block"
+    }
   },
   run: async ({ args }) => {
     try {
@@ -27815,6 +28151,10 @@ var instructionsCommand = defineCommand({
       const hosts = selectedHostIds(args.host);
       const repoRoot = await resolveRepoRootForCreate();
       const report = await checkInstructionsForHosts(hosts, repoRoot);
+      if (args.fix === true) {
+        await runFix(repoRoot, planInstructionFixes(report.findings, homedir7()));
+        return;
+      }
       if (format === "json") {
         writeJson2({
           status: report.findings.length === 0 ? "ok" : "drift",
@@ -28022,7 +28362,7 @@ var codeqlCommand2 = defineCommand({
         return;
       }
       const repoRoot = await resolveRepoRootForCreate();
-      const sourceRoot = args["source-root"] ?? join53(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join54(repoRoot, "src");
       const report = await inspectCodeqlTarget({ sourceRoot, buildVerified: args["build-verified"] }, defaultDoctorDeps);
       if (format === "json") {
         writeJson2({
@@ -28051,13 +28391,23 @@ var distributionCommand = defineCommand({
   },
   args: {
     output: { type: "string", default: "human", description: "Output format: human|json" },
-    advisory: { type: "boolean", default: false, description: "Report findings but exit 0" }
+    advisory: { type: "boolean", default: false, description: "Report findings but exit 0" },
+    fix: {
+      type: "boolean",
+      default: false,
+      description: "Repair the ditto allowlist drift (Bash(ditto:*) in project settings.json)"
+    }
   },
   run: async ({ args }) => {
     try {
       const format = parseOutputFormat(args.output);
       const targetRoot = await resolveRepoRootForCreate();
       const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? targetRoot;
+      if (args.fix === true) {
+        const checks = collectDistributionChecks(defaultDistributionDeps(targetRoot, pluginRoot));
+        await runFix(targetRoot, planAllowlistFixes(checks.allowlisted, targetRoot));
+        return;
+      }
       const report = collectDistributionReport(defaultDistributionDeps(targetRoot, pluginRoot));
       if (format === "json") {
         writeJson2({
@@ -28184,8 +28534,8 @@ var doctorCommand = defineCommand({
 });
 
 // src/cli/commands/e2e.ts
-import { mkdir as mkdir5, readFile as readFile10, readdir as readdir16 } from "fs/promises";
-import { dirname as dirname11, isAbsolute as isAbsolute4, join as join56, relative as relative12, resolve as resolve10, sep as sep6 } from "path";
+import { mkdir as mkdir5, readFile as readFile11, readdir as readdir16 } from "fs/promises";
+import { dirname as dirname11, isAbsolute as isAbsolute4, join as join57, relative as relative12, resolve as resolve10, sep as sep6 } from "path";
 
 // src/core/e2e/conformance.ts
 function checkStepConformance(input) {
@@ -28244,8 +28594,8 @@ function checkStepConformance(input) {
 }
 
 // src/core/e2e/failure-verdict.ts
-import { readFile as readFile7 } from "fs/promises";
-import { join as join54 } from "path";
+import { readFile as readFile8 } from "fs/promises";
+import { join as join55 } from "path";
 
 // src/schemas/e2e-failure-verdict.ts
 var e2eFailureClassification = exports_external.enum(["\uAE30\uB2A5", "\uC2A4\uD06C\uB9BD\uD2B8", "\uD658\uACBD", "flaky"]).describe("User verdict on an e2e failure: \uAE30\uB2A5 \uACB0\uD568 | \uC2A4\uD06C\uB9BD\uD2B8 \uACB0\uD568 | \uD658\uACBD\xB7\uB370\uC774\uD130 | flaky (spec \xA78 4\uBD84\uB958)");
@@ -28260,7 +28610,7 @@ var e2eFailureVerdict = exports_external.object({
 
 // src/core/e2e/failure-verdict.ts
 function verdictsPath(repoRoot, workItemId2) {
-  return join54(localDir(repoRoot, "work-items", workItemId2), "e2e-verdicts.jsonl");
+  return join55(localDir(repoRoot, "work-items", workItemId2), "e2e-verdicts.jsonl");
 }
 async function appendFailureVerdict(repoRoot, workItemId2, verdict2) {
   const parsed = e2eFailureVerdict.parse(verdict2);
@@ -28304,7 +28654,7 @@ async function featureFixAllowed(repoRoot, workItemId2, journeyId, caseName) {
   };
 }
 async function appendFlakyHistory(journeyFilePath, entry) {
-  const text = await readFile7(journeyFilePath, "utf8");
+  const text = await readFile8(journeyFilePath, "utf8");
   const split = splitFrontMatter(text);
   if (!split) {
     throw new Error(`${journeyFilePath}: no leading ---\u2026--- front-matter block`);
@@ -28327,7 +28677,7 @@ ${split.body}`);
 
 // src/core/e2e/journey-digest.ts
 import { createHash as createHash8 } from "crypto";
-import { readFile as readFile8, readdir as readdir14 } from "fs/promises";
+import { readFile as readFile9, readdir as readdir14 } from "fs/promises";
 function sha256Hex3(bytes) {
   return createHash8("sha256").update(bytes).digest("hex");
 }
@@ -28375,13 +28725,13 @@ function parseGeneratedHeader(content) {
 async function detectStale(sourceAbs, generatedAbs, expectedSource) {
   let sourceText;
   try {
-    sourceText = await readFile8(sourceAbs, "utf8");
+    sourceText = await readFile9(sourceAbs, "utf8");
   } catch {
     return { stale: true, reason: `source DSL not readable: ${sourceAbs}` };
   }
   let generated;
   try {
-    generated = await readFile8(generatedAbs, "utf8");
+    generated = await readFile9(generatedAbs, "utf8");
   } catch {
     return {
       stale: true,
@@ -28413,8 +28763,8 @@ async function detectStale(sourceAbs, generatedAbs, expectedSource) {
 }
 
 // src/core/e2e/lifecycle.ts
-import { readFile as readFile9, readdir as readdir15, unlink as unlink2 } from "fs/promises";
-import { basename, dirname as dirname10, isAbsolute as isAbsolute3, join as join55, relative as relative11, resolve as resolve9, sep as sep5 } from "path";
+import { readFile as readFile10, readdir as readdir15, unlink as unlink2 } from "fs/promises";
+import { basename, dirname as dirname10, isAbsolute as isAbsolute3, join as join56, relative as relative11, resolve as resolve9, sep as sep5 } from "path";
 
 // src/schemas/e2e-lifecycle.ts
 var e2eLifecycleAction = exports_external.enum(["update", "delete"]).describe("update = mark for regeneration (scripter re-runs); delete = remove journey + derived spec");
@@ -28431,7 +28781,7 @@ var e2eLifecycleDecision = exports_external.object({
 
 // src/core/e2e/lifecycle.ts
 function lifecycleLedgerPath(repoRoot, workItemId2) {
-  return workItemId2 === undefined ? localDir(repoRoot, "e2e-lifecycle.jsonl") : join55(localDir(repoRoot, "work-items", workItemId2), "e2e-lifecycle.jsonl");
+  return workItemId2 === undefined ? localDir(repoRoot, "e2e-lifecycle.jsonl") : join56(localDir(repoRoot, "work-items", workItemId2), "e2e-lifecycle.jsonl");
 }
 async function appendDecision(path, decision) {
   const parsed = e2eLifecycleDecision.parse(decision);
@@ -28446,7 +28796,7 @@ async function appendDecision(path, decision) {
 var toPosix2 = (p) => p.split(sep5).join("/");
 async function readOrNull(path) {
   try {
-    return await readFile9(path, "utf8");
+    return await readFile10(path, "utf8");
   } catch {
     return null;
   }
@@ -28480,7 +28830,7 @@ async function runLifecycleAction(repoRoot, req) {
   }
   const slug = journeyName.slice(0, -".journey.md".length);
   const generatedDir = resolve9(dirname10(journeyAbs), "..", "generated");
-  const specAbs = join55(generatedDir, `${slug}.spec.ts`);
+  const specAbs = join56(generatedDir, `${slug}.spec.ts`);
   const rel = (abs) => toPosix2(relative11(repoRoot, abs));
   const specText = await readOrNull(specAbs);
   if (specText === null) {
@@ -28495,8 +28845,8 @@ async function runLifecycleAction(repoRoot, req) {
       refusal: `${rel(specAbs)}\uB294 @ditto-generated \uB9C8\uCEE4\uAC00 \uC5C6\uB294 \uC218\uB3D9 \uD30C\uC77C \u2014 \uC218\uBA85\uC8FC\uAE30 \uC9D1\uD589\uC740 DSL \uD30C\uC0DD \uD14C\uC2A4\uD2B8\uC5D0\uB9CC \uC801\uC6A9\uB41C\uB2E4`
     };
   }
-  const supportDir = join55(generatedDir, "support");
-  const helperOf = (blockId) => join55(supportDir, `${blockId}.block.ts`);
+  const supportDir = join56(generatedDir, "support");
+  const helperOf = (blockId) => join56(supportDir, `${blockId}.block.ts`);
   for (const blockId of parsed.frontMatter.uses_blocks) {
     const helperText = await readOrNull(helperOf(blockId));
     if (helperText !== null && !isDittoGenerated(helperText)) {
@@ -28546,7 +28896,7 @@ async function runLifecycleAction(repoRoot, req) {
   const journeysDir = dirname10(journeyAbs);
   const referencedElsewhere = new Set;
   for (const name of (await readdir15(journeysDir)).filter((n2) => n2.endsWith(".journey.md"))) {
-    const otherAbs = join55(journeysDir, name);
+    const otherAbs = join56(journeysDir, name);
     if (otherAbs === journeyAbs)
       continue;
     const other = await readOrNull(otherAbs);
@@ -28648,7 +28998,7 @@ var e2eRun = defineCommand({
       const result2 = await runJourney(repoRoot, args.runId, parsed.data);
       const runDir = localDir(repoRoot, "runs", args.runId);
       await mkdir5(runDir, { recursive: true });
-      await atomicWriteText(join56(runDir, "journey.json"), `${JSON.stringify(result2.journey, null, 2)}
+      await atomicWriteText(join57(runDir, "journey.json"), `${JSON.stringify(result2.journey, null, 2)}
 `);
       if (format === "json") {
         writeJson2(result2);
@@ -28728,16 +29078,16 @@ var e2eConformance = defineCommand({
     try {
       const journeyAbs = resolve10(args.journey);
       const generatedAbs = resolve10(args.generated);
-      const blocksDir = resolve10(args["blocks-dir"] ?? join56(dirname11(journeyAbs), "blocks"));
-      const supportDir = resolve10(args["support-dir"] ?? join56(dirname11(generatedAbs), "support"));
-      const journeyText = await readFile10(journeyAbs, "utf8");
-      const generatedText = await readFile10(generatedAbs, "utf8");
+      const blocksDir = resolve10(args["blocks-dir"] ?? join57(dirname11(journeyAbs), "blocks"));
+      const supportDir = resolve10(args["support-dir"] ?? join57(dirname11(generatedAbs), "support"));
+      const journeyText = await readFile11(journeyAbs, "utf8");
+      const generatedText = await readFile11(generatedAbs, "utf8");
       const blockTexts = {};
       try {
         for (const name of await readdir16(blocksDir)) {
           if (!name.endsWith(".block.md"))
             continue;
-          blockTexts[name.slice(0, -".block.md".length)] = await readFile10(join56(blocksDir, name), "utf8");
+          blockTexts[name.slice(0, -".block.md".length)] = await readFile11(join57(blocksDir, name), "utf8");
         }
       } catch {}
       const supportTexts = [];
@@ -28745,7 +29095,7 @@ var e2eConformance = defineCommand({
         for (const name of await readdir16(supportDir)) {
           if (!name.endsWith(".ts"))
             continue;
-          supportTexts.push(await readFile10(join56(supportDir, name), "utf8"));
+          supportTexts.push(await readFile11(join57(supportDir, name), "utf8"));
         }
       } catch {}
       const report = checkStepConformance({ journeyText, blockTexts, generatedText, supportTexts });
@@ -28760,8 +29110,8 @@ var e2eConformance = defineCommand({
         for (const blockId of parsedJourney.frontMatter.uses_blocks) {
           if (blockTexts[blockId] === undefined)
             continue;
-          const helperAbs = join56(supportDir, `${blockId}.block.ts`);
-          const blockMdAbs = join56(blocksDir, `${blockId}.block.md`);
+          const helperAbs = join57(supportDir, `${blockId}.block.ts`);
+          const blockMdAbs = join57(blocksDir, `${blockId}.block.md`);
           const verdict2 = await detectStale(blockMdAbs, helperAbs, repoRel(blockMdAbs));
           if (verdict2.stale)
             stale.push(`support/${blockId}.block.ts: ${verdict2.reason}`);
@@ -28835,12 +29185,12 @@ var e2eVerifyGenerated = defineCommand({
 });
 async function loadJourneyNames(repoRoot) {
   const names = {};
-  const journeysDir = join56(repoRoot, "e2e", "journeys");
+  const journeysDir = join57(repoRoot, "e2e", "journeys");
   try {
     for (const name of await readdir16(journeysDir)) {
       if (!name.endsWith(".journey.md"))
         continue;
-      const parsed = parseJourneyDoc(await readFile10(join56(journeysDir, name), "utf8"));
+      const parsed = parseJourneyDoc(await readFile11(join57(journeysDir, name), "utf8"));
       if (parsed.ok)
         names[parsed.frontMatter.id] = parsed.frontMatter.name;
     }
@@ -28867,7 +29217,7 @@ var e2eFailureReport = defineCommand({
     }
     try {
       const repoRoot = await resolveRepoRootForCreate();
-      const reportPath = join56(localDir(repoRoot, "runs", args.runId), "playwright-report.json");
+      const reportPath = join57(localDir(repoRoot, "runs", args.runId), "playwright-report.json");
       const reportFile = Bun.file(reportPath);
       if (!await reportFile.exists()) {
         writeError(`no playwright-report.json for run ${args.runId} \u2014 run \`ditto e2e verify-generated --runId ${args.runId} --files <specs>\` first`);
@@ -28879,7 +29229,7 @@ var e2eFailureReport = defineCommand({
         repoRoot,
         readSpec: async (specFile) => {
           try {
-            return await readFile10(resolve10(repoRoot, specFile), "utf8");
+            return await readFile11(resolve10(repoRoot, specFile), "utf8");
           } catch {
             return null;
           }
@@ -29053,7 +29403,7 @@ var e2eDigest = defineCommand({
       return;
     }
     try {
-      const text = await readFile10(resolve10(args.journey), "utf8");
+      const text = await readFile11(resolve10(args.journey), "utf8");
       const digest = computeSourceDigest(text);
       if (format === "json") {
         writeJson2({ file: args.journey, digest });
@@ -30092,8 +30442,8 @@ var preCompactHandler = async (input) => {
 };
 
 // src/hooks/pre-tool-use.ts
-import { homedir as homedir7 } from "os";
-import { join as join57 } from "path";
+import { homedir as homedir8 } from "os";
+import { join as join58 } from "path";
 import { isAbsolute as isAbsolute7, relative as relative13, resolve as resolve13 } from "path";
 
 // src/acg/scope/resolve.ts
@@ -30308,7 +30658,7 @@ function isOutsideRepo(repoRoot, filePath) {
   return rel.startsWith("..") || isAbsolute7(rel);
 }
 function isClaudeMemoryPath(repoRoot, filePath) {
-  const home = process.env.HOME ?? homedir7();
+  const home = process.env.HOME ?? homedir8();
   if (!home)
     return false;
   const slug = resolve13(repoRoot).replace(/[^a-zA-Z0-9]/g, "-");
@@ -30457,9 +30807,9 @@ function autopilotBypassActive(input) {
   return env2.DITTO_AUTOPILOT_BYPASS === "1" || process.env.DITTO_AUTOPILOT_BYPASS === "1";
 }
 async function appendBypassRecord(repoRoot, entry) {
-  const dir = join57(repoRoot, ".ditto");
+  const dir = join58(repoRoot, ".ditto");
   await ensureDir(dir);
-  const path = join57(dir, "autopilot-bypass.jsonl");
+  const path = join58(dir, "autopilot-bypass.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -30639,8 +30989,8 @@ function bashWriteTargets(cmd) {
 }
 
 // src/hooks/stop.ts
-import { readFile as readFile11, readdir as readdir17 } from "fs/promises";
-import { join as join59 } from "path";
+import { readFile as readFile12, readdir as readdir17 } from "fs/promises";
+import { join as join60 } from "path";
 
 // src/schemas/acg-semantic-compatibility.ts
 var SEMANTIC_UNVERIFIED_SENTINEL = "__unverified__";
@@ -30835,7 +31185,7 @@ function buildScanObservation(input) {
 }
 
 // src/core/work-item-handoff.ts
-import { join as join58 } from "path";
+import { join as join59 } from "path";
 class InvalidBaseRefError extends Error {
   ref;
   constructor(ref) {
@@ -31016,7 +31366,7 @@ async function writeWorkItemHandoff(repoRoot, store, workId, options = {}, now =
   });
   const hstore = new HandoffStore(repoRoot);
   const handoffRel = completion.final_verdict === "pass" ? await hstore.writeArchived(handoffArtifact, now) : await hstore.write(handoffArtifact);
-  const handoffPath = join58(repoRoot, handoffRel);
+  const handoffPath = join59(repoRoot, handoffRel);
   await store.update(workId, (cur) => {
     const { re_entry: _existingReEntry, ...rest } = cur;
     if (completion.final_verdict === "pass") {
@@ -31136,7 +31486,7 @@ var NON_TERMINAL_STATUSES = [
 async function readArtifact(path, schema, name) {
   let text;
   try {
-    text = await readFile11(path, "utf8");
+    text = await readFile12(path, "utf8");
   } catch {
     return { status: "absent" };
   }
@@ -31150,7 +31500,7 @@ async function readArtifact(path, schema, name) {
   }
 }
 async function readDialecticLedgers(dir) {
-  const reviewsDir = join59(dir, "reviews");
+  const reviewsDir = join60(dir, "reviews");
   let names;
   try {
     names = await readdir17(reviewsDir);
@@ -31160,7 +31510,7 @@ async function readDialecticLedgers(dir) {
   const files = names.filter((n2) => /^dialectic-.*\.json$/.test(n2)).sort();
   const items = [];
   for (const name of files) {
-    const read = await readArtifact(join59(reviewsDir, name), dialectic, `reviews/${name}`);
+    const read = await readArtifact(join60(reviewsDir, name), dialectic, `reviews/${name}`);
     if (read.status === "malformed")
       return { status: "malformed", name: read.name };
     if (read.status === "ok")
@@ -31282,11 +31632,11 @@ async function maybeRunFitness(repoRoot, workItemId2, dir) {
       riskKnown: false,
       producedAt: new Date().toISOString()
     };
-    const verdictsPath2 = join59(dir, "fitness-verdicts.json");
+    const verdictsPath2 = join60(dir, "fitness-verdicts.json");
     const provider = await Bun.file(verdictsPath2).exists() ? compositeProvider(repoRoot, verdictsPath2) : commandProvider(repoRoot);
     const snapshot = await runFitness(fns, ctx, provider);
     await ensureDir(dir);
-    await writeJson(join59(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, snapshot);
+    await writeJson(join60(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, snapshot);
   } catch {}
 }
 var DRIFT_HOPS = ["H1", "H2", "H3"];
@@ -31336,17 +31686,17 @@ var stopHandler = async (input) => {
   }
   const dir = localDir(input.repoRoot, "work-items", pointer);
   await maybeRunFitness(input.repoRoot, pointer, dir);
-  const completion = await readArtifact(join59(dir, "completion.json"), completionContract, "completion.json");
-  const conv = await readArtifact(join59(dir, "convergence.json"), convergence, "convergence.json");
-  const pilot = await readArtifact(join59(dir, "autopilot.json"), autopilot, "autopilot.json");
-  const intent = await readArtifact(join59(dir, "intent.json"), intentContract, "intent.json");
+  const completion = await readArtifact(join60(dir, "completion.json"), completionContract, "completion.json");
+  const conv = await readArtifact(join60(dir, "convergence.json"), convergence, "convergence.json");
+  const pilot = await readArtifact(join60(dir, "autopilot.json"), autopilot, "autopilot.json");
+  const intent = await readArtifact(join60(dir, "intent.json"), intentContract, "intent.json");
   const dialectics = await readDialecticLedgers(dir);
-  const acgReview = await readArtifact(join59(dir, "acg-review.json"), acgReviewGraph, "acg-review.json");
-  const assurance = await readArtifact(join59(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json");
-  const impact = await readArtifact(join59(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json");
-  const semantic = await readArtifact(join59(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
-  const knowledge = await readArtifact(join59(dir, "knowledge-gate.json"), knowledgeGateCarrier, "knowledge-gate.json");
-  const decisionConflicts = await readArtifact(join59(dir, "decision-conflict.json"), decisionConflictCarrier, "decision-conflict.json");
+  const acgReview = await readArtifact(join60(dir, "acg-review.json"), acgReviewGraph, "acg-review.json");
+  const assurance = await readArtifact(join60(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json");
+  const impact = await readArtifact(join60(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json");
+  const semantic = await readArtifact(join60(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
+  const knowledge = await readArtifact(join60(dir, "knowledge-gate.json"), knowledgeGateCarrier, "knowledge-gate.json");
+  const decisionConflicts = await readArtifact(join60(dir, "decision-conflict.json"), decisionConflictCarrier, "decision-conflict.json");
   const malformed = [
     completion,
     conv,
@@ -31460,7 +31810,7 @@ ${advisoryBlock}`
 };
 
 // src/hooks/user-prompt-submit.ts
-import { join as join60 } from "path";
+import { join as join61 } from "path";
 
 // src/core/charter.ts
 var PRIME_DIRECTIVE = [
@@ -31596,7 +31946,7 @@ function pendingHandoffHint(item) {
 async function logClassification(repoRoot, entry) {
   const dir = localDir(repoRoot, "logs");
   await ensureDir(dir);
-  const path = join60(dir, "user-prompt.jsonl");
+  const path = join61(dir, "user-prompt.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -31715,10 +32065,10 @@ var hookCommand = defineCommand({
 });
 
 // src/cli/commands/impact.ts
-import { join as join62 } from "path";
+import { join as join63 } from "path";
 
 // src/acg/impact/codeql-analyzer.ts
-import { join as join61 } from "path";
+import { join as join62 } from "path";
 function isTestFile(path, language) {
   if (language === "java") {
     return path.includes("/test/") || /(Test|Tests|IT)\.java$/.test(path);
@@ -31747,8 +32097,8 @@ class CodeqlImpactAnalyzer {
       repoRoot: this.target.repoRoot,
       sourceRoot: input.sourceRoot,
       language: this.target.language,
-      dbPath: join61(this.target.cacheDir, "db"),
-      workDir: join61(this.target.cacheDir, `q-impact-${this.target.symbol}`),
+      dbPath: join62(this.target.cacheDir, "db"),
+      workDir: join62(this.target.cacheDir, `q-impact-${this.target.symbol}`),
       query: renderQuery(relationQueries(this.target.language).impact, this.target.symbol, this.target.declFile),
       ...this.target.buildMode ? { buildMode: this.target.buildMode } : {},
       ...this.target.buildCommand ? { buildCommand: this.target.buildCommand } : {},
@@ -31784,8 +32134,8 @@ class CodeqlImpactAnalyzer {
       repoRoot: this.target.repoRoot,
       sourceRoot,
       language: this.target.language,
-      dbPath: join61(this.target.cacheDir, "db"),
-      workDir: join61(this.target.cacheDir, "q-xrepo"),
+      dbPath: join62(this.target.cacheDir, "db"),
+      workDir: join62(this.target.cacheDir, "q-xrepo"),
       query: relationQueries(this.target.language).unresolved,
       ...this.target.buildMode ? { buildMode: this.target.buildMode } : {},
       ...this.target.buildCommand ? { buildCommand: this.target.buildCommand } : {},
@@ -31897,7 +32247,7 @@ var impactCommand = defineCommand({
     const changeType = args["change-type"] ?? "signature";
     try {
       const repoRoot = await resolveRepoRootForCreate();
-      const sourceRoot = args["source-root"] ?? join62(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join63(repoRoot, "src");
       const language = args.language ?? "javascript";
       const buildCommand = args["build-command"];
       const buildMode = !buildCommand && language === "java" ? "none" : undefined;
@@ -31958,7 +32308,7 @@ var impactCommand = defineCommand({
 import { resolve as resolve14 } from "path";
 
 // src/core/init-scaffold.ts
-import { basename as basename2, join as join63 } from "path";
+import { basename as basename2, join as join64 } from "path";
 
 // src/schemas/glossary.ts
 var glossaryStatus = exports_external.enum(["proposed", "agreed", "deprecated"]).describe("Lifecycle of a glossary entry");
@@ -31983,15 +32333,15 @@ var glossary = exports_external.object({
 
 // src/core/init-scaffold.ts
 var SCAFFOLD_DIRS = [
-  join63("local", "work-items"),
-  join63("local", "runs"),
-  join63("local", "handoff"),
-  join63("local", "sessions"),
-  join63("local", "logs"),
-  join63("local", "cache"),
+  join64("local", "work-items"),
+  join64("local", "runs"),
+  join64("local", "handoff"),
+  join64("local", "sessions"),
+  join64("local", "logs"),
+  join64("local", "cache"),
   "agents",
   "knowledge",
-  join63("knowledge", "adr")
+  join64("knowledge", "adr")
 ];
 var DITTO_GITIGNORE = `# DITTO per-developer runtime \u2014 volatile, not for version control.
 # Managed by \`ditto init\`; safe to edit.
@@ -32028,18 +32378,18 @@ async function seedFileIfAbsent(absPath, relPath, write, created, skipped) {
   return true;
 }
 async function initScaffold(repoRoot, now) {
-  const dittoDir2 = join63(repoRoot, ".ditto");
+  const dittoDir2 = join64(repoRoot, ".ditto");
   const createdDirs = [];
   const createdFiles = [];
   const skippedFiles = [];
-  const glossaryAbs = join63(dittoDir2, "knowledge", "glossary.json");
+  const glossaryAbs = join64(dittoDir2, "knowledge", "glossary.json");
   const alreadyInitialized = await fileExists(glossaryAbs);
   await ensureDirTracked(dittoDir2, ".ditto", createdDirs);
   for (const sub of SCAFFOLD_DIRS) {
-    await ensureDirTracked(join63(dittoDir2, sub), join63(".ditto", sub), createdDirs);
+    await ensureDirTracked(join64(dittoDir2, sub), join64(".ditto", sub), createdDirs);
   }
   const projectName = basename2(repoRoot) || "project";
-  await seedFileIfAbsent(glossaryAbs, join63(".ditto", "knowledge", "glossary.json"), () => writeJson(glossaryAbs, glossary, {
+  await seedFileIfAbsent(glossaryAbs, join64(".ditto", "knowledge", "glossary.json"), () => writeJson(glossaryAbs, glossary, {
     schema_version: "0.1.0",
     project_name: projectName,
     updated_at: now.toISOString(),
@@ -32047,10 +32397,10 @@ async function initScaffold(repoRoot, now) {
   }).then(() => {
     return;
   }), createdFiles, skippedFiles);
-  const contextAbs = join63(dittoDir2, "knowledge", "CONTEXT.md");
-  await seedFileIfAbsent(contextAbs, join63(".ditto", "knowledge", "CONTEXT.md"), () => atomicWriteText(contextAbs, emptyContext(projectName)), createdFiles, skippedFiles);
-  const gitignoreAbs = join63(dittoDir2, ".gitignore");
-  await seedFileIfAbsent(gitignoreAbs, join63(".ditto", ".gitignore"), () => atomicWriteText(gitignoreAbs, DITTO_GITIGNORE), createdFiles, skippedFiles);
+  const contextAbs = join64(dittoDir2, "knowledge", "CONTEXT.md");
+  await seedFileIfAbsent(contextAbs, join64(".ditto", "knowledge", "CONTEXT.md"), () => atomicWriteText(contextAbs, emptyContext(projectName)), createdFiles, skippedFiles);
+  const gitignoreAbs = join64(dittoDir2, ".gitignore");
+  await seedFileIfAbsent(gitignoreAbs, join64(".ditto", ".gitignore"), () => atomicWriteText(gitignoreAbs, DITTO_GITIGNORE), createdFiles, skippedFiles);
   return { repoRoot, createdDirs, createdFiles, skippedFiles, alreadyInitialized };
 }
 
@@ -32171,12 +32521,12 @@ var knowledgeCommand = defineCommand({
 
 // src/cli/commands/memory.ts
 import { randomBytes as randomBytes3 } from "crypto";
-import { readFile as readFile13 } from "fs/promises";
-import { isAbsolute as isAbsolute8, join as join65 } from "path";
+import { readFile as readFile14 } from "fs/promises";
+import { isAbsolute as isAbsolute8, join as join66 } from "path";
 
 // src/core/memory-bootstrap.ts
-import { readFile as readFile12, readdir as readdir18 } from "fs/promises";
-import { join as join64, relative as relative14 } from "path";
+import { readFile as readFile13, readdir as readdir18 } from "fs/promises";
+import { join as join65, relative as relative14 } from "path";
 function bootstrapEventId(key) {
   return `memevt_${sha256Hex(key).slice(0, 12)}`;
 }
@@ -32280,7 +32630,7 @@ async function listMarkdown(dir) {
   } catch {
     return [];
   }
-  return entries.filter((n2) => n2.endsWith(".md")).sort().map((n2) => join64(dir, n2));
+  return entries.filter((n2) => n2.endsWith(".md")).sort().map((n2) => join65(dir, n2));
 }
 async function bootstrapIngest(repoRoot, options = {}) {
   const now = (options.now ?? new Date).toISOString();
@@ -32296,9 +32646,9 @@ async function bootstrapIngest(repoRoot, options = {}) {
 }
 async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head) {
   const result2 = emptyResult();
-  const dir = join64(dittoDir(repoRoot), "knowledge", "adr");
+  const dir = join65(dittoDir(repoRoot), "knowledge", "adr");
   for (const abs of await listMarkdown(dir)) {
-    const body = await readFile12(abs, "utf8");
+    const body = await readFile13(abs, "utf8");
     const rel = relative14(repoRoot, abs);
     const sourceId = sourceIdForPath(rel);
     const source = {
@@ -32335,10 +32685,10 @@ async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head
 }
 async function ingestGlossary(repoRoot, sourceStore, eventStore, now, revision, head) {
   const result2 = emptyResult();
-  const abs = join64(dittoDir(repoRoot), "knowledge", "glossary.json");
+  const abs = join65(dittoDir(repoRoot), "knowledge", "glossary.json");
   let raw;
   try {
-    raw = await readFile12(abs, "utf8");
+    raw = await readFile13(abs, "utf8");
   } catch {
     return result2;
   }
@@ -32421,7 +32771,7 @@ async function ingestHandoffs(repoRoot, sourceStore, eventStore, now, revision, 
   const result2 = emptyResult();
   const dir = localDir(repoRoot, "handoff", "archive");
   for (const abs of await listMarkdown(dir)) {
-    const body = await readFile12(abs, "utf8");
+    const body = await readFile13(abs, "utf8");
     const rel = relative14(repoRoot, abs);
     const sourceId = sourceIdForPath(rel);
     const source = {
@@ -32970,8 +33320,8 @@ var memoryBuild = defineCommand({
     }
     try {
       if (args.fragments) {
-        const path = isAbsolute8(args.fragments) ? args.fragments : join65(repoRoot, args.fragments);
-        const raw = await readFile13(path, "utf8");
+        const path = isAbsolute8(args.fragments) ? args.fragments : join66(repoRoot, args.fragments);
+        const raw = await readFile14(path, "utf8");
         const parsed = irFragmentsSchema.safeParse(JSON.parse(raw));
         if (!parsed.success) {
           writeError(`invalid fragments: ${parsed.error.issues.map((i2) => `${i2.path.join(".")}: ${i2.message}`).join("; ")}`);
@@ -33011,11 +33361,11 @@ var memoryBuild = defineCommand({
         const path = s2.source.path;
         if (!path)
           continue;
-        const abs = isAbsolute8(path) ? path : join65(repoRoot, path);
+        const abs = isAbsolute8(path) ? path : join66(repoRoot, path);
         files.push({
           source_id: s2.source.source_id,
           path,
-          content: await readFile13(abs, "utf8"),
+          content: await readFile14(abs, "utf8"),
           sensitivity: s2.source.sensitivity
         });
       }
@@ -33596,7 +33946,7 @@ var memoryCommand = defineCommand({
 });
 
 // src/cli/commands/refactor.ts
-import { join as join66 } from "path";
+import { join as join67 } from "path";
 
 // src/acg/scope/unit-resolve.ts
 var API_LAYERS = ["controller", "controllers", "route", "routes"];
@@ -33721,7 +34071,7 @@ function trackedSrcFiles(repoRoot) {
 `).map((s2) => s2.trim()).filter((s2) => s2.length > 0 && /\.[cm]?tsx?$/.test(s2) && !/\.(test|spec)\./.test(s2));
 }
 async function loadArchSpec2(repoRoot) {
-  const specPath = join66(repoRoot, ".ditto", "architecture-spec.json");
+  const specPath = join67(repoRoot, ".ditto", "architecture-spec.json");
   try {
     return await readArchitectureSpec(specPath, acgArchitectureSpec);
   } catch {
@@ -33792,7 +34142,7 @@ var refactorCommand = defineCommand({
 });
 
 // src/cli/commands/review.ts
-import { join as join67 } from "path";
+import { join as join68 } from "path";
 
 // src/acg/review/unit-review.ts
 var REVIEW_ROLES = ["code-reviewer", "security-reviewer"];
@@ -33850,7 +34200,7 @@ function trackedSrcFiles2(repoRoot) {
 `).map((s2) => s2.trim()).filter((s2) => s2.length > 0 && /\.[cm]?tsx?$/.test(s2) && !/\.(test|spec)\./.test(s2));
 }
 async function loadArchSpec3(repoRoot) {
-  const specPath = join67(repoRoot, ".ditto", "architecture-spec.json");
+  const specPath = join68(repoRoot, ".ditto", "architecture-spec.json");
   try {
     return await readArchitectureSpec(specPath, acgArchitectureSpec);
   } catch {
@@ -33966,7 +34316,7 @@ var reviewCommand = defineCommand({
 
 // src/core/run-with.ts
 import { stat as stat5, writeFile as writeFile3 } from "fs/promises";
-import { dirname as dirname12, join as join68, relative as relative15, resolve as resolve15, sep as sep7 } from "path";
+import { dirname as dirname12, join as join69, relative as relative15, resolve as resolve15, sep as sep7 } from "path";
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
 
 class RunWithUsageError extends Error {
@@ -33993,7 +34343,7 @@ function resolveRepoCwd(repoRoot, cwd) {
     throw new RunWithUsageError(`invalid cwd: ${parsed.error.issues[0]?.message}`);
   }
   const resolvedRoot = resolve15(repoRoot);
-  const resolvedCwd = resolve15(join68(repoRoot, cwd));
+  const resolvedCwd = resolve15(join69(repoRoot, cwd));
   if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep7}`)) {
     throw new RunWithUsageError(`cwd escapes repo root: ${cwd}`);
   }
@@ -34529,7 +34879,7 @@ function applySemanticVerdict(seed, v2) {
 // src/acg/semantic/signature-codeql.ts
 import { existsSync as existsSync8 } from "fs";
 import { rm } from "fs/promises";
-import { join as join69 } from "path";
+import { join as join70 } from "path";
 var SIGNATURE_QUERY_JS = `/**
  * @name ditto signatures js
  * @id ditto/signature-relations
@@ -34657,20 +35007,20 @@ async function extractSignatures(input, deps) {
 async function scanSignatureChanges(input, deps) {
   const baseSha = gitRevParse(input.repoRoot, input.baseRef);
   const cacheBase = localDir(input.repoRoot, "cache", "codeql");
-  const baseCache = join69(cacheBase, `${baseSha}-${input.language}`);
-  const baseDb = join69(baseCache, "db");
+  const baseCache = join70(cacheBase, `${baseSha}-${input.language}`);
+  const baseDb = join70(baseCache, "db");
   const needWorktree = !existsSync8(baseDb);
-  const worktree = join69(cacheBase, "worktrees", `${baseSha}-${input.language}`);
+  const worktree = join70(cacheBase, "worktrees", `${baseSha}-${input.language}`);
   if (needWorktree)
     addDetachedWorktree(input.repoRoot, worktree, baseSha);
   let before;
   try {
     before = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join69(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
+      sourceRoot: join70(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
       language: input.language,
       dbPath: baseDb,
-      workDir: join69(baseCache, "q-sig"),
+      workDir: join70(baseCache, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -34678,14 +35028,14 @@ async function scanSignatureChanges(input, deps) {
     if (needWorktree)
       removeWorktree(input.repoRoot, worktree);
   }
-  const afterDir = join69(cacheBase, `after-${process.pid}-${input.language}`);
+  const afterDir = join70(cacheBase, `after-${process.pid}-${input.language}`);
   try {
     const after = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join69(input.repoRoot, input.sourceRootRel),
+      sourceRoot: join70(input.repoRoot, input.sourceRootRel),
       language: input.language,
-      dbPath: join69(afterDir, "db"),
-      workDir: join69(afterDir, "q-sig"),
+      dbPath: join70(afterDir, "db"),
+      workDir: join70(afterDir, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -35056,8 +35406,8 @@ var semanticCommand = defineCommand({
 });
 
 // src/cli/commands/setup.ts
-import { homedir as homedir9 } from "os";
-import { dirname as dirname14, join as join75, resolve as resolve18 } from "path";
+import { homedir as homedir10 } from "os";
+import { dirname as dirname14, join as join76, resolve as resolve18 } from "path";
 
 // src/core/provision/lsp-detect.ts
 var LSP_LANG_BY_EXT = {
@@ -35112,7 +35462,7 @@ async function detectLspLanguages(sourceRoot) {
 import { existsSync as existsSync9, readFileSync as readFileSync5, writeFileSync } from "fs";
 import { join as pathJoin } from "path";
 var GITIGNORE_ENTRY = ".ditto/memory/";
-function join70(...parts) {
+function join71(...parts) {
   return parts.join("/");
 }
 function ensureGitignored(deps) {
@@ -35136,7 +35486,7 @@ var submoduleManual = (memoryDir) => [
   "# \uADF8\uB2E4\uC74C \uBD80\uBAA8\uC5D0\uC11C: git rm -r --cached .ditto/memory && git submodule add <URL> .ditto/memory"
 ];
 async function separateMemoryRepo(deps, mode = "gitignore") {
-  const memoryDir = join70(deps.repoRoot, ".ditto", "memory");
+  const memoryDir = join71(deps.repoRoot, ".ditto", "memory");
   if (!deps.pathExists(memoryDir)) {
     return {
       status: "failed",
@@ -35150,7 +35500,7 @@ async function separateMemoryRepo(deps, mode = "gitignore") {
       manual: submoduleManual(memoryDir)
     };
   }
-  const alreadyRepo = deps.pathExists(join70(memoryDir, ".git"));
+  const alreadyRepo = deps.pathExists(join71(memoryDir, ".git"));
   if (!alreadyRepo) {
     const r3 = await deps.run("git", ["init"], memoryDir);
     if (r3.exit_code !== 0) {
@@ -35198,17 +35548,17 @@ function defaultMemorySeparateDeps(repoRoot) {
 
 // src/core/provision/playwright.ts
 import { existsSync as existsSync10, readdirSync as readdirSync2 } from "fs";
-import { homedir as homedir8, platform as osPlatform } from "os";
-import { join as join71 } from "path";
+import { homedir as homedir9, platform as osPlatform } from "os";
+import { join as join72 } from "path";
 function playwrightCacheRoot(os = osPlatform()) {
   if (os === "win32")
-    return join71(homedir8(), "AppData", "Local", "ms-playwright");
+    return join72(homedir9(), "AppData", "Local", "ms-playwright");
   if (os === "darwin")
-    return join71(homedir8(), "Library", "Caches", "ms-playwright");
-  return join71(homedir8(), ".cache", "ms-playwright");
+    return join72(homedir9(), "Library", "Caches", "ms-playwright");
+  return join72(homedir9(), ".cache", "ms-playwright");
 }
 function bunCacheDir() {
-  return join71(process.env.BUN_INSTALL ?? join71(homedir8(), ".bun"), "install", "cache");
+  return join72(process.env.BUN_INSTALL ?? join72(homedir9(), ".bun"), "install", "cache");
 }
 function detectPlaywright(deps) {
   const core = deps.listDir(deps.bunCache).some((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2));
@@ -35305,98 +35655,11 @@ function defaultRegistry() {
 // src/core/setup.ts
 import { cp, readFile as readFile15, rm as rm2, writeFile as writeFile4 } from "fs/promises";
 import { platform as platform2 } from "os";
-import { join as join73, resolve as resolve16 } from "path";
-
-// src/core/managed-resource.ts
-import { copyFile } from "fs/promises";
-var START_RE_G = /<!--\s*ditto:managed:start\s+source=[^\s]+\s+sha256=[a-f0-9]{64}\s*-->/g;
-var END_RE_G = /<!--\s*ditto:managed:end\s*-->/g;
-function locateBlock(content) {
-  const starts = [...content.matchAll(START_RE_G)];
-  const ends = [...content.matchAll(END_RE_G)];
-  if (starts.length === 0 && ends.length === 0)
-    return null;
-  if (starts.length !== 1 || ends.length !== 1)
-    return "corrupted";
-  const startMatch = starts[0];
-  const endMatch = ends[0];
-  if (startMatch?.index === undefined || endMatch?.index === undefined)
-    return "corrupted";
-  if (endMatch.index < startMatch.index)
-    return "corrupted";
-  return { start: startMatch.index, end: endMatch.index + endMatch[0].length };
-}
-function buildManagedBlock(managedBody, source = "AGENTS.md") {
-  const body = normalizeInstructionText(managedBody);
-  const sha2562 = normalizedSha256(managedBody);
-  const bodyWithBreak = body.endsWith(`
-`) ? body : `${body}
-`;
-  return `<!-- ditto:managed:start source=${source} sha256=${sha2562} -->
-${bodyWithBreak}${MANAGED_END}`;
-}
-function upsertManagedBlock(originalContent, managedBody, source = "AGENTS.md") {
-  const block2 = buildManagedBlock(managedBody, source);
-  const bounds = locateBlock(originalContent);
-  if (bounds === "corrupted")
-    return { kind: "corrupted", original: originalContent };
-  if (bounds === null) {
-    if (originalContent.length === 0)
-      return { kind: "ok", content: `${block2}
-` };
-    const separator = originalContent.endsWith(`
-`) ? `
-` : `
-
-`;
-    return { kind: "ok", content: `${originalContent}${separator}${block2}
-` };
-  }
-  const next = `${originalContent.slice(0, bounds.start)}${block2}${originalContent.slice(bounds.end)}`;
-  return { kind: "ok", content: next };
-}
-function stripManagedBlock(content) {
-  const bounds = locateBlock(content);
-  if (bounds === "corrupted")
-    return { kind: "corrupted", original: content };
-  if (bounds === null)
-    return { kind: "ok", content };
-  const before = content.slice(0, bounds.start);
-  const after = content.slice(bounds.end);
-  const beforeTail = before.match(/\n*$/)?.[0] ?? "";
-  const afterHead = after.match(/^\n*/)?.[0] ?? "";
-  let seam = beforeTail + afterHead;
-  if (seam.length >= 3)
-    seam = `
-
-`;
-  const next = before.slice(0, before.length - beforeTail.length) + seam + after.slice(afterHead.length);
-  return { kind: "ok", content: next };
-}
-var BACKUP_SUFFIX = ".ditto_bak";
-async function writeBackupOnce(targetPath) {
-  const bakPath = `${targetPath}${BACKUP_SUFFIX}`;
-  if (await Bun.file(bakPath).exists())
-    return null;
-  if (!await Bun.file(targetPath).exists())
-    return null;
-  await copyFile(targetPath, bakPath);
-  return bakPath;
-}
-async function applyManagedFile(targetPath, managedBody, source = "AGENTS.md") {
-  const exists = await Bun.file(targetPath).exists();
-  const current = exists ? await Bun.file(targetPath).text() : "";
-  const merged = upsertManagedBlock(current, managedBody, source);
-  if (merged.kind === "corrupted")
-    return { kind: "corrupted", path: targetPath };
-  const backupPath = await writeBackupOnce(targetPath);
-  await atomicWriteText(targetPath, merged.content);
-  return { kind: "ok", path: targetPath, backupPath };
-}
+import { join as join74, resolve as resolve16 } from "path";
 
 // src/core/resource-routing.ts
 import { readdirSync as readdirSync3 } from "fs";
-import { join as join72 } from "path";
+import { join as join73 } from "path";
 var GLOBAL_PREFIX = "GLOBAL_";
 function routeResource(filename, ctx) {
   if (filename.startsWith(GLOBAL_PREFIX)) {
@@ -35404,13 +35667,13 @@ function routeResource(filename, ctx) {
     return {
       scope: "global",
       destName,
-      destPath: join72(ctx.homeDir, ".claude", destName)
+      destPath: join73(ctx.homeDir, ".claude", destName)
     };
   }
   return {
     scope: "project",
     destName: filename,
-    destPath: join72(ctx.projectRoot, filename)
+    destPath: join73(ctx.projectRoot, filename)
   };
 }
 function discoverResources(resourcesDir) {
@@ -35421,49 +35684,10 @@ function discoverResources(resourcesDir) {
   }
 }
 
-// src/core/settings-allowlist.ts
-import { readFile as readFile14 } from "fs/promises";
-var ALLOW_RULE2 = "Bash(ditto:*)";
-function addAllowRule(settings) {
-  const perms = settings.permissions ?? {};
-  const allow = Array.isArray(perms.allow) ? perms.allow : [];
-  const nextAllow = allow.includes(ALLOW_RULE2) ? allow : [...allow, ALLOW_RULE2];
-  return { ...settings, permissions: { ...perms, allow: nextAllow } };
-}
-function removeAllowRule(settings) {
-  const perms = settings.permissions;
-  if (!perms || !Array.isArray(perms.allow))
-    return settings;
-  return {
-    ...settings,
-    permissions: { ...perms, allow: perms.allow.filter((r3) => r3 !== ALLOW_RULE2) }
-  };
-}
-async function readSettings(settingsPath) {
-  if (!await fileExists(settingsPath))
-    return {};
-  const text = (await readFile14(settingsPath, "utf8")).trim();
-  return text ? JSON.parse(text) : {};
-}
-async function writeSettings(settingsPath, settings) {
-  await atomicWriteText(settingsPath, `${JSON.stringify(settings, null, 2)}
-`);
-}
-async function allowlistSettingsFile(settingsPath) {
-  const settings = await readSettings(settingsPath);
-  await writeSettings(settingsPath, addAllowRule(settings));
-}
-async function unallowlistSettingsFile(settingsPath) {
-  if (!await fileExists(settingsPath))
-    return;
-  const settings = await readSettings(settingsPath);
-  await writeSettings(settingsPath, removeAllowRule(settings));
-}
-
 // src/core/setup.ts
 var CODEX_MARKETPLACE_NAME = "ditto-local";
 var CODEX_PLUGIN_NAME = "ditto";
-var CODEX_PLUGIN_DEST_REL = join73(".agents", "plugins", CODEX_PLUGIN_NAME);
+var CODEX_PLUGIN_DEST_REL = join74(".agents", "plugins", CODEX_PLUGIN_NAME);
 var CODEX_BIN_NAME = platform2() === "win32" ? "ditto.exe" : "ditto";
 function setupHosts(host) {
   if (host === "codex")
@@ -35488,14 +35712,14 @@ function resourceDecisions(resourcesDir, projectRoot, homeDir, hosts) {
           host: "codex",
           filename,
           scope: "project",
-          destPath: join73(projectRoot, "AGENTS.md")
+          destPath: join74(projectRoot, "AGENTS.md")
         });
       } else if (filename === "GLOBAL_AGENTS.md") {
         out.push({
           host: "codex",
           filename,
           scope: "global",
-          destPath: join73(homeDir, ".codex", "AGENTS.md")
+          destPath: join74(homeDir, ".codex", "AGENTS.md")
         });
       }
     }
@@ -35550,23 +35774,23 @@ async function writeCodexMarketplace(path) {
 `);
 }
 async function installCodexAgents(pluginRoot, projectRoot) {
-  const srcDir = join73(pluginRoot, ".codex", "agents");
+  const srcDir = join74(pluginRoot, ".codex", "agents");
   if (!await fileExists(srcDir)) {
     throw new Error(`codex custom agents not found at ${srcDir}; run build:codex-plugin first`);
   }
-  const destDir = join73(projectRoot, ".codex", "agents");
+  const destDir = join74(projectRoot, ".codex", "agents");
   await ensureDir(destDir);
   let count = 0;
   for (const file of await listFiles(srcDir)) {
     if (!file.id.endsWith(".toml"))
       continue;
-    await cp(file.path, join73(destDir, file.id));
+    await cp(file.path, join74(destDir, file.id));
     count += 1;
   }
   return count;
 }
 function codexDittoCommand(installedPluginDir) {
-  return `"${join73(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
+  return `"${join74(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
 }
 function rewriteCodexDittoReferences(text, dittoCommand) {
   return text.replace(/"\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?"/g, dittoCommand).replace(/\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?/g, dittoCommand).replace(/`ditto(?=\s)/g, `\`${dittoCommand}`);
@@ -35588,26 +35812,26 @@ async function rewriteCodexAgentTomlFile(path, dittoCommand) {
 }
 async function rewriteCodexInstalledReferences(installedPluginDir) {
   const dittoCommand = codexDittoCommand(installedPluginDir);
-  for (const dir of await listDirectories(join73(installedPluginDir, "skills"))) {
-    const skillPath = join73(dir.path, "SKILL.md");
+  for (const dir of await listDirectories(join74(installedPluginDir, "skills"))) {
+    const skillPath = join74(dir.path, "SKILL.md");
     if (await fileExists(skillPath))
       await rewriteCodexTextFile(skillPath, dittoCommand);
   }
-  for (const file of await listFiles(join73(installedPluginDir, ".codex", "agents"))) {
+  for (const file of await listFiles(join74(installedPluginDir, ".codex", "agents"))) {
     if (file.id.endsWith(".toml"))
       await rewriteCodexAgentTomlFile(file.path, dittoCommand);
   }
 }
 async function writeCodexSurfaceCatalog(projectRoot) {
-  const surfaceCatalogPath = join73(projectRoot, ".ditto", "local", "surfaces.codex.json");
-  await ensureDir(join73(projectRoot, ".ditto", "local"));
+  const surfaceCatalogPath = join74(projectRoot, ".ditto", "local", "surfaces.codex.json");
+  await ensureDir(join74(projectRoot, ".ditto", "local"));
   const catalog = await generateSurfaceCatalog([codexHostAdapter], projectRoot, "surfaces.codex.json");
   await atomicWriteText(surfaceCatalogPath, `${JSON.stringify(catalog, null, 2)}
 `);
   return surfaceCatalogPath;
 }
 async function writeCodexPluginStatus(projectRoot) {
-  const statusPath = join73(projectRoot, ".ditto", "local", "codex-plugin-status.json");
+  const statusPath = join74(projectRoot, ".ditto", "local", "codex-plugin-status.json");
   const enableCommands = [
     `codex plugin marketplace add ${JSON.stringify(projectRoot)}`,
     `codex plugin add ${CODEX_PLUGIN_NAME}@${CODEX_MARKETPLACE_NAME}`
@@ -35625,19 +35849,19 @@ async function writeCodexPluginStatus(projectRoot) {
 }
 async function installCodexSurface(opts) {
   const { pluginRoot, projectRoot } = opts;
-  const manifestPath = join73(pluginRoot, ".codex-plugin", "plugin.json");
+  const manifestPath = join74(pluginRoot, ".codex-plugin", "plugin.json");
   if (!await fileExists(manifestPath)) {
     throw new Error(`codex plugin manifest not found at ${manifestPath}; run build:codex-plugin first`);
   }
-  const installedPluginDir = join73(projectRoot, CODEX_PLUGIN_DEST_REL);
+  const installedPluginDir = join74(projectRoot, CODEX_PLUGIN_DEST_REL);
   if (resolve16(pluginRoot) === resolve16(installedPluginDir)) {
     throw new Error(`codex plugin source is already the installed plugin directory: ${installedPluginDir}`);
   }
   await rm2(installedPluginDir, { recursive: true, force: true });
-  await ensureDir(join73(projectRoot, ".agents", "plugins"));
+  await ensureDir(join74(projectRoot, ".agents", "plugins"));
   await cp(pluginRoot, installedPluginDir, { recursive: true });
   await rewriteCodexInstalledReferences(installedPluginDir);
-  const marketplacePath = join73(projectRoot, ".agents", "plugins", "marketplace.json");
+  const marketplacePath = join74(projectRoot, ".agents", "plugins", "marketplace.json");
   await writeCodexMarketplace(marketplacePath);
   const agentsInstalled = await installCodexAgents(installedPluginDir, projectRoot);
   const surfaceCatalogPath = await writeCodexSurfaceCatalog(projectRoot);
@@ -35650,7 +35874,7 @@ async function installCodexSurface(opts) {
     statusPath,
     pluginLoadStatus: "needs_user_action",
     enableCommands,
-    agentsDir: join73(projectRoot, ".codex", "agents"),
+    agentsDir: join74(projectRoot, ".codex", "agents"),
     agentsInstalled
   };
 }
@@ -35659,7 +35883,7 @@ async function setup(opts) {
   const hosts = setupHosts(opts.host);
   const resources = [];
   for (const decision of resourceDecisions(resourcesDir, projectRoot, homeDir, hosts)) {
-    const body = await readFile15(join73(resourcesDir, decision.filename), "utf8");
+    const body = await readFile15(join74(resourcesDir, decision.filename), "utf8");
     const applied = await applyManagedFile(decision.destPath, body, decision.filename);
     resources.push({
       host: decision.host,
@@ -35671,7 +35895,7 @@ async function setup(opts) {
     });
   }
   const scaffold = await initScaffold(projectRoot, now);
-  const allowlistPath = join73(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join74(projectRoot, ".claude", "settings.json");
   const allowlistApplied = hosts.has("claude-code");
   if (allowlistApplied)
     await allowlistSettingsFile(allowlistPath);
@@ -35684,16 +35908,16 @@ async function setup(opts) {
 
 // src/cli/resources.ts
 import { existsSync as existsSync11 } from "fs";
-import { dirname as dirname13, join as join74, resolve as resolve17 } from "path";
+import { dirname as dirname13, join as join75, resolve as resolve17 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 function resolveResourcesDir(from) {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
-    return join74(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
+    return join75(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
   }
   const start = from ?? dirname13(fileURLToPath2(import.meta.url));
   let dir = start;
   for (;; ) {
-    const candidate = join74(dir, "resources", "managed");
+    const candidate = join75(dir, "resources", "managed");
     if (existsSync11(candidate))
       return candidate;
     const parent = dirname13(dir);
@@ -35701,67 +35925,29 @@ function resolveResourcesDir(from) {
       break;
     dir = parent;
   }
-  return join74(resolve17(start, "..", ".."), "resources", "managed");
+  return join75(resolve17(start, "..", ".."), "resources", "managed");
 }
 
-// src/cli/wizard/prompt-io.ts
-import { createInterface } from "readline/promises";
-function createStdioPromptIO() {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  return {
-    isTTY: Boolean(process.stdin.isTTY),
-    ask: (query) => rl.question(query),
-    write: (text) => {
-      process.stdout.write(text);
-    },
-    close: () => {
-      rl.close();
-    }
-  };
-}
-
-// src/cli/wizard/prompt.ts
-async function confirm(io, message, defaultYes) {
-  if (!io.isTTY)
-    return defaultYes;
-  const hint = defaultYes ? "[Y/n]" : "[y/N]";
-  const ans = (await io.ask(`${message} ${hint} `)).trim().toLowerCase();
-  if (ans === "")
-    return defaultYes;
-  return ans === "y" || ans === "yes";
-}
-async function select(io, message, options, defaultValue) {
-  if (!io.isTTY || options.length === 0)
-    return defaultValue;
-  const defaultIdx = options.findIndex((o3) => o3.value === defaultValue);
-  io.write(`${message}
-`);
-  options.forEach((o3, i2) => {
-    const mark = o3.value === defaultValue ? "(\uAE30\uBCF8)" : "";
-    io.write(`  ${i2 + 1}. ${o3.label} ${mark}
-`);
-  });
-  const ans = (await io.ask(`\uBC88\uD638 (Enter=${defaultIdx + 1}): `)).trim();
-  if (ans === "")
-    return defaultValue;
-  const n2 = Number.parseInt(ans, 10);
-  if (Number.isInteger(n2) && n2 >= 1 && n2 <= options.length)
-    return options[n2 - 1].value;
-  return defaultValue;
-}
-async function multiSelect(io, message, choices) {
-  const defaults = choices.filter((c3) => c3.checked).map((c3) => c3.value);
-  if (!io.isTTY || choices.length === 0)
-    return defaults;
-  io.write(`${message}
-`);
-  choices.forEach((c3, i2) => io.write(`  ${i2 + 1}. [${c3.checked ? "x" : " "}] ${c3.label}
-`));
-  const ans = (await io.ask("\uC124\uCE58\uD560 \uBC88\uD638 (\uC27C\uD45C \uAD6C\uBD84, Enter=\uAE30\uBCF8\uAC12 \uC720\uC9C0): ")).trim();
-  if (ans === "")
-    return defaults;
-  const picked = new Set(ans.split(",").map((s2) => Number.parseInt(s2.trim(), 10)).filter((n2) => Number.isInteger(n2) && n2 >= 1 && n2 <= choices.length));
-  return choices.filter((_3, i2) => picked.has(i2 + 1)).map((c3) => c3.value);
+// src/cli/wizard/agent-link-step.ts
+async function runAgentLinkStep(io, deps) {
+  const agents = await deps.loadAgents();
+  const discovered = agents.map((a2) => ({
+    ...a2,
+    role: recommendVariantRole(a2.name, a2.description)
+  }));
+  if (discovered.length === 0)
+    return { discovered, written: [], skipped: [] };
+  const choices = discovered.map((a2) => ({
+    label: `${a2.name} \u2192 ${a2.role}${a2.description ? ` (${a2.description})` : ""}`,
+    value: a2.name,
+    checked: false
+  }));
+  const picked = new Set(await multiSelect(io, "\uD504\uB85C\uC81D\uD2B8 agent\uB97C ditto role\uC5D0 \uC5F0\uACB0", choices));
+  const approved = discovered.filter((a2) => picked.has(a2.name)).map((a2) => ({ name: a2.name, role: a2.role, description: a2.description, match: [] }));
+  if (approved.length === 0)
+    return { discovered, written: [], skipped: [] };
+  const result2 = await deps.writeVariants(approved);
+  return { discovered, written: result2.written, skipped: result2.skipped };
 }
 
 // src/cli/wizard/provision-step.ts
@@ -35840,13 +36026,14 @@ async function runSetupWizard(io, deps) {
   const host = await select(io, "Host \uC120\uD0DD", HOST_OPTIONS, "claude-code");
   const setupResult = await deps.setup(host);
   const provision = await deps.runProvision(io);
+  const agents = await deps.runAgentLink(io);
   let memory = { mode: "in-project", result: null };
   const separate = await confirm(io, "memory\uB97C \uBCC4\uB3C4 git \uC800\uC7A5\uC18C\uB85C \uBD84\uB9AC\uD560\uAE4C?", false);
   if (separate) {
     const mode = await select(io, "memory \uBD84\uB9AC \uBC29\uC2DD", MEMORY_OPTIONS, "gitignore");
     memory = { mode, result: await deps.separateMemory(mode) };
   }
-  return { host, setup: setupResult, provision, memory };
+  return { host, setup: setupResult, provision, memory, agents };
 }
 
 // src/cli/commands/setup.ts
@@ -35880,18 +36067,34 @@ function includesCodex(host) {
 }
 async function resolveCodexPluginRoot(resourcesDir, projectRoot) {
   const currentPluginRoot = resolve18(resourcesDir, "..", "..");
-  const sibling = join75(dirname14(currentPluginRoot), "codex-plugin");
-  if (await fileExists(join75(sibling, ".codex-plugin", "plugin.json")))
+  const sibling = join76(dirname14(currentPluginRoot), "codex-plugin");
+  if (await fileExists(join76(sibling, ".codex-plugin", "plugin.json")))
     return sibling;
-  const currentDist = join75(currentPluginRoot, "dist", "codex-plugin");
-  if (await fileExists(join75(currentDist, ".codex-plugin", "plugin.json")))
+  const currentDist = join76(currentPluginRoot, "dist", "codex-plugin");
+  if (await fileExists(join76(currentDist, ".codex-plugin", "plugin.json")))
     return currentDist;
-  const projectDist = join75(projectRoot, "dist", "codex-plugin");
-  if (await fileExists(join75(projectDist, ".codex-plugin", "plugin.json")))
+  const projectDist = join76(projectRoot, "dist", "codex-plugin");
+  if (await fileExists(join76(projectDist, ".codex-plugin", "plugin.json")))
     return projectDist;
-  if (await fileExists(join75(currentPluginRoot, ".codex", "agents")))
+  if (await fileExists(join76(currentPluginRoot, ".codex", "agents")))
     return currentPluginRoot;
   return currentPluginRoot;
+}
+async function discoverClaudeAgents(projectRoot) {
+  const inventory = await claudeCodeHostAdapter.loadSurfaceInventory(projectRoot);
+  const agents = inventory.localSurfaces.filter((s2) => s2.kind === "agent");
+  const out = [];
+  for (const a2 of agents) {
+    let description = "";
+    try {
+      const text = await Bun.file(a2.path).text();
+      const m2 = /^description:\s*(.+)$/m.exec(text);
+      if (m2)
+        description = (m2[1] ?? "").trim();
+    } catch {}
+    out.push({ name: a2.id, description });
+  }
+  return out;
 }
 async function runWizard(resourcesDir, projectRoot) {
   const io = createStdioPromptIO();
@@ -35902,13 +36105,17 @@ async function runWizard(resourcesDir, projectRoot) {
       setup: async (host) => setup({
         resourcesDir,
         projectRoot,
-        homeDir: homedir9(),
+        homeDir: homedir10(),
         now: new Date,
         host,
         ...includesCodex(host) ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) } : {}
       }),
       runProvision: (promptIo) => runProvisionStep(promptIo, defaultRegistry(), projectRoot, { detect: detectLspLanguages }),
-      separateMemory: (mode) => separateMemoryRepo(defaultMemorySeparateDeps(projectRoot), mode)
+      separateMemory: (mode) => separateMemoryRepo(defaultMemorySeparateDeps(projectRoot), mode),
+      runAgentLink: (promptIo) => runAgentLinkStep(promptIo, {
+        loadAgents: () => discoverClaudeAgents(projectRoot),
+        writeVariants: (variants) => writeAgentVariants(projectRoot, variants)
+      })
     });
     writeHuman(`setup: installed into ${projectRoot} (host=${result2.host})`);
     writeHuman(`.ditto/: ${result2.setup.scaffold.alreadyInitialized ? "already initialized" : "created"} \xB7 allowlist: ${result2.setup.allowlistApplied ? result2.setup.allowlistPath : "skipped"}`);
@@ -35917,6 +36124,12 @@ async function runWizard(resourcesDir, projectRoot) {
       writeHuman(`  ${o3.action}	${o3.message}`);
     if (result2.provision.unservicedLanguages.length > 0) {
       writeHuman(`  \uAC10\uC9C0\uB410\uC73C\uB098 \uC11C\uBC84 \uBBF8\uB4F1\uB85D: ${result2.provision.unservicedLanguages.join(", ")}`);
+    }
+    if (result2.agents.discovered.length > 0) {
+      writeHuman("project agents:");
+      for (const a2 of result2.agents.discovered)
+        writeHuman(`  ${a2.name} \u2192 ${a2.role}`);
+      writeHuman(`  linked: ${result2.agents.written.length ? result2.agents.written.join(", ") : "(none)"}${result2.agents.skipped.length ? ` \xB7 skipped(existing): ${result2.agents.skipped.join(", ")}` : ""}`);
     }
     if (result2.memory.result) {
       writeHuman(`memory: ${result2.memory.mode} \u2014 ${result2.memory.result.message}`);
@@ -35982,7 +36195,7 @@ var setupCommand = defineCommand({
       const result2 = await setup({
         resourcesDir,
         projectRoot,
-        homeDir: homedir9(),
+        homeDir: homedir10(),
         now: new Date,
         host,
         ...includesCodex(host) ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) } : {}
@@ -36015,12 +36228,12 @@ var setupCommand = defineCommand({
 
 // src/cli/commands/teardown.ts
 import { rm as rm3 } from "fs/promises";
-import { homedir as homedir10 } from "os";
-import { join as join77, resolve as resolve19 } from "path";
+import { homedir as homedir11 } from "os";
+import { join as join78, resolve as resolve19 } from "path";
 
 // src/core/teardown.ts
 import { copyFile as copyFile2, readFile as readFile16 } from "fs/promises";
-import { join as join76 } from "path";
+import { join as join77 } from "path";
 var BACKUP_SUFFIX2 = ".ditto_bak";
 async function teardown(opts) {
   const { resourcesDir, projectRoot, homeDir } = opts;
@@ -36030,7 +36243,7 @@ async function teardown(opts) {
     const action = await teardownFile(decision.destPath);
     files.push({ filename, scope: decision.scope, destPath: decision.destPath, action });
   }
-  const allowlistPath = join76(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join77(projectRoot, ".claude", "settings.json");
   await unallowlistSettingsFile(allowlistPath);
   return { files, allowlistPath };
 }
@@ -36091,7 +36304,7 @@ var teardownCommand = defineCommand({
         writeHuman(`uninstall: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
       }
-      const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir10() });
+      const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir11() });
       if (result2.files.length === 0) {
         writeError(`uninstall failed: no managed resources found at ${resourcesDir}`);
         process.exit(RUNTIME_ERROR_EXIT);
@@ -36102,7 +36315,7 @@ var teardownCommand = defineCommand({
       }
       const purge = await shouldPurge(Boolean(args.purge));
       if (purge) {
-        const dittoDir2 = join77(projectRoot, ".ditto");
+        const dittoDir2 = join78(projectRoot, ".ditto");
         await rm3(dittoDir2, { recursive: true, force: true });
         writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ PURGED (${dittoDir2})`);
       } else {
@@ -36915,4 +37128,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=9411847ae505f7be844ec0df69441afbeb3a4bc8eab6c1415ff1fa8153803854
+//# ditto-src-stamp=59b3575c09f172cfcdde752c5d813f6ccad1abe4c1c63c6fc7ee72cf650401c1
