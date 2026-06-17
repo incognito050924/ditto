@@ -64,6 +64,29 @@ describe('runAgentLinkStep', () => {
     expect(r.written).toEqual([]);
   });
 
+  test('ac-5: TTY can override the recommended role per agent', async () => {
+    const { deps: d, writes } = deps();
+    // multiSelect "1" → sec-bot; role select "4" → reviewer (overrides recommended security-reviewer)
+    const r = await runAgentLinkStep(fakeIO(['1', '4'], true), d);
+    expect(writes.map((v) => v.name)).toEqual(['sec-bot']);
+    expect(writes[0]?.role).toBe('reviewer');
+    expect(r.written).toEqual(['sec-bot']);
+  });
+
+  test('ac-5: empty role input keeps the recommended role', async () => {
+    const { deps: d, writes } = deps();
+    // multiSelect "1" → sec-bot; role select "" → default = recommended security-reviewer
+    await runAgentLinkStep(fakeIO(['1', ''], true), d);
+    expect(writes[0]?.role).toBe('security-reviewer');
+  });
+
+  test('ac-5: can override to a role the heuristic never recommends (planner)', async () => {
+    const { deps: d, writes } = deps();
+    // pick "1" → sec-bot; role select "2" → planner (recommendVariantRole never returns this)
+    await runAgentLinkStep(fakeIO(['1', '2'], true), d);
+    expect(writes[0]?.role).toBe('planner');
+  });
+
   test('ac-4: writer skips report propagates', async () => {
     const { deps: d } = deps({
       writeVariants: async () => ({ written: [], skipped: ['sec-bot'] }),

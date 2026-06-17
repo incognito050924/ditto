@@ -11,8 +11,16 @@
  */
 import type { AgentVariant } from '~/core/agent-variants';
 import { recommendVariantRole } from '~/core/agent-variants';
-import { type Choice, multiSelect } from './prompt';
+import { nodeOwner } from '~/schemas/autopilot';
+import { type Choice, type Option, multiSelect, select } from './prompt';
 import type { PromptIO } from './prompt';
+
+// role override 선택지 = autopilot owner role 정본(nodeOwner)에서 pseudo-owner를 뺀 것.
+// driver/main-session은 subagent로 spawn되지 않아 variant role로 쓸 수 없으므로 제외한다.
+const PSEUDO_OWNERS = new Set(['driver', 'main-session']);
+const ROLE_OPTIONS: Option[] = nodeOwner.options
+  .filter((role) => !PSEUDO_OWNERS.has(role))
+  .map((role) => ({ label: role, value: role }));
 
 /** 발견된 프로젝트 agent (이름 + frontmatter description). */
 export interface DiscoveredAgent {
@@ -55,9 +63,14 @@ export async function runAgentLinkStep(
   }));
   const picked = new Set(await multiSelect(io, '프로젝트 agent를 ditto role에 연결', choices));
 
-  const approved: AgentVariant[] = discovered
-    .filter((a) => picked.has(a.name))
-    .map((a) => ({ name: a.name, role: a.role, description: a.description, match: [] }));
+  // 승인된 agent마다 role을 고른다 — 추천 role이 기본값, 사용자가 다른 owner role로 override 가능.
+  // 비TTY/Enter면 select가 기본값(추천 role)을 그대로 돌려준다(기존 동작 보존).
+  const approved: AgentVariant[] = [];
+  for (const a of discovered) {
+    if (!picked.has(a.name)) continue;
+    const role = await select(io, `'${a.name}' role 선택 (추천: ${a.role})`, ROLE_OPTIONS, a.role);
+    approved.push({ name: a.name, role, description: a.description, match: [] });
+  }
 
   if (approved.length === 0) return { discovered, written: [], skipped: [] };
 
