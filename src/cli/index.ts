@@ -32,7 +32,7 @@ import { workCommand } from './commands/work';
 const main = defineCommand({
   meta: {
     name: 'ditto',
-    version: '0.0.0',
+    version: '0.1.0',
     description: 'Coding agent work orchestration layer',
   },
   subCommands: {
