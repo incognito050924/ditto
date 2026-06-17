@@ -6,12 +6,13 @@
 #   .\scripts\install.ps1 uninstall [-Target <dir>]
 #   .\scripts\install.ps1 status   [-Target <dir>]
 #
-# Beyond plugin registration this also builds the self-contained binary
-# (bin\ditto.exe), installs the CodeQL CLI and Playwright/Chromium (graceful),
-# scaffolds the target's .ditto\, and allowlists `ditto …` in the target's
-# .claude\settings.json. On Windows the binaries are NOT symlinked; add bin\
-# (and the CodeQL dir) to PATH so they resolve. Pass -NoBuild / -NoCodeql /
-# -NoPlaywright to skip those steps.
+# Beyond plugin registration this bundles the JS launcher (bin\ditto, run by
+# `bun`, plus the Windows shim bin\ditto.cmd) and delegates the project steps —
+# .ditto\ scaffold, `ditto …` allowlist in .claude\settings.json, and tool
+# provisioning (CodeQL/Playwright/LSP, graceful) — to `ditto setup`. On Windows
+# nothing is symlinked; add bin\ to PATH so `ditto` resolves via ditto.cmd. The
+# launcher runs the bundle with `bun`, so bun >=1.3 must be on PATH. Pass
+# -NoBuild to skip the bundle rebuild, -NoTools to skip tool provisioning.
 #
 # Env:
 #   DITTO_HOME   absolute path to the ditto repo (auto-detected if unset)
@@ -21,8 +22,7 @@ param(
   [string]$Mode = 'install',
   [string]$Target,
   [switch]$NoBuild,
-  [switch]$NoCodeql,
-  [switch]$NoPlaywright
+  [switch]$NoTools
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,8 +52,7 @@ $installer = Join-Path $repoRoot 'scripts\install-plugin.mjs'
 $extra = @()
 if ($Target) { $extra += @('--target', $Target) }
 if ($NoBuild) { $extra += '--no-build' }
-if ($NoCodeql) { $extra += '--no-codeql' }
-if ($NoPlaywright) { $extra += '--no-playwright' }
+if ($NoTools) { $extra += '--no-tools' }
 & $runner[0] @($runner[1..($runner.Length - 1)]) $installer $Mode @extra
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

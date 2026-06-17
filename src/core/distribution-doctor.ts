@@ -15,7 +15,6 @@ import { computeSourceStamp, readEmbeddedStamp } from './build-stamp';
 
 // Mirrored from scripts/install-plugin.mjs (the canonical installer).
 const ALLOW_RULE = 'Bash(ditto:*)';
-const IS_WIN = process.platform === 'win32';
 
 /** The deployment-contract atomic checks (the promoted install-status flags). */
 export interface DistributionChecks {
@@ -196,7 +195,9 @@ function binaryFresh(deps: DistributionDeps, binaryName: string): boolean {
 
 /** Run the deployment-contract checks from the current runtime vantage. */
 export function collectDistributionChecks(deps: DistributionDeps): DistributionChecks {
-  const binaryName = IS_WIN ? 'ditto.exe' : 'ditto';
+  // Single cross-platform bundle name: `bun` runs `bin/ditto` on every OS, and
+  // the Windows launcher is a sibling `ditto.cmd` — there is no `ditto.exe`.
+  const binaryName = 'ditto';
   return {
     // plugin-root artifacts: the plugin ships these at its own install dir.
     binary_built: deps.exists(join(deps.pluginRoot, 'bin', binaryName)),

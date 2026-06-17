@@ -11,11 +11,14 @@ import { userPromptSubmitHandler } from '~/hooks/user-prompt-submit';
  * `ditto hook <event>` — the self-contained hook entry (wi_2606068sy).
  *
  * Claude Code decides WHICH hook fires (by event) and the plugin's `hooks.json`
- * maps each event to `ditto hook <event>`; this command just dispatches the named
- * handler. The binary is `bun --compile`d (src + deps bundled), so a target
- * project needs NO bun runtime, NO `src/`, NO `node_modules` — only the single
- * executable. This replaces the old `bun run hooks/<event>.ts` entries that
- * depended on all three (and broke on Windows).
+ * maps each event to `bun "${CLAUDE_PLUGIN_ROOT}/bin/ditto" hook <event>`; this
+ * command just dispatches the named handler. `bin/ditto` is a `bun build
+ * --target=bun` JS bundle (src + deps in one file), invoked via `bun <bundle>`,
+ * so a target project needs NO `src/` and NO `node_modules` — only `bun` on PATH
+ * plus the single bundle. The bundle is portable JS that `bun` runs on every OS
+ * (including Windows), which is why hooks invoke it through `bun` rather than
+ * executing the file directly. This replaces the old `bun run hooks/<event>.ts`
+ * entries that depended on the source tree.
  */
 const HANDLERS: Record<string, HookHandler> = {
   'user-prompt-submit': userPromptSubmitHandler,

@@ -7,8 +7,8 @@
 #   ./scripts/install.sh uninstall [--target <dir>]
 #   ./scripts/install.sh status   [--target <dir>]
 #
-# This is a thin bootstrap: it builds the self-contained binary and symlinks it
-# onto PATH (the two steps that must happen before `ditto` exists), then delegates
+# This is a thin bootstrap: it bundles the `ditto` JS launcher (run by `bun`) and
+# symlinks it onto PATH (the two steps that must happen before `ditto` exists), then delegates
 # every project step to the binary itself — `ditto setup --dir <target> --yes
 # --tools` scaffolds .ditto/, installs host instruction blocks, allowlists
 # `ditto …`, and provisions detected tools (CodeQL/Playwright/LSP, graceful).

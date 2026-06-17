@@ -32,13 +32,11 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { projectAgent } from '../src/core/agent-projection.ts';
 import { buildBinInto, syncManagedResources } from './build-bin.mjs';
 
-const IS_WIN = platform() === 'win32';
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(REPO, 'dist', 'codex-plugin');
 
@@ -109,12 +107,13 @@ function main() {
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(OUT, { recursive: true });
 
-  // 2. Compile the bin straight into the output tree (never touches repo bin/).
-  const binName = IS_WIN ? 'ditto.exe' : 'ditto';
+  // 2. Bundle the bin straight into the output tree (never touches repo bin/).
+  //    Portable JS bundle `ditto` (run by `bun`) + Windows launcher `ditto.cmd`.
+  const binName = 'ditto';
   mkdirSync(join(OUT, 'bin'), { recursive: true });
   buildBinInto(join(OUT, 'bin', binName));
   if (!existsSync(join(OUT, 'bin', binName))) {
-    throw new Error(`expected ${join(OUT, 'bin', binName)} after compile`);
+    throw new Error(`expected ${join(OUT, 'bin', binName)} after bundle`);
   }
 
   // 3. Assemble the Codex surface.

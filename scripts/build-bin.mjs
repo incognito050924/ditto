@@ -13,7 +13,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, copyFileSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { platform } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const IS_WIN = platform() === 'win32';
@@ -67,6 +67,13 @@ export function buildBinInto(outFile) {
   // Trailing stamp lets `ditto doctor distribution` flag a stale build (R5).
   writeFileSync(outFile, `#!/usr/bin/env bun\n${bundle}\n//# ditto-src-stamp=${sourceStamp()}\n`);
   if (!IS_WIN) chmodSync(outFile, 0o755);
+  // Thin-launcher separation: the bundle is portable JS, so `bun <bundle>` runs it
+  // on ANY OS — Windows needs no native PE compile, only this batch shim that
+  // invokes bun on the sibling bundle. (A `#!/usr/bin/env bun` shebang file is not
+  // executable on Windows; the previous `ditto.exe` was such a file, hence unrunnable.)
+  // Emitted on every build OS so a dist/ built on mac/linux still runs on Windows.
+  // %~dp0 = this .cmd's own directory (trailing backslash); %* forwards all args.
+  writeFileSync(`${outFile}.cmd`, `@bun "%~dp0${basename(outFile)}" %*\r\n`);
 }
 
 // CLI entry: `node scripts/build-bin.mjs <outfile>`. No-op when imported.

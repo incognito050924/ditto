@@ -1,0 +1,3 @@
+# DITTO Windows launcher: check out with CRLF so cmd.exe runs the batch shim
+# reliably on Windows. The bundle bin/ditto stays LF — `bun` reads it on any OS.
+bin/ditto.cmd text eol=crlf

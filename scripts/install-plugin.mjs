@@ -62,7 +62,9 @@ function resolveTarget(repo, targetArg) {
 
 // ------------------------------------------------------------------ (1) build
 function binaryPath(repo) {
-  return join(repo, 'dist', 'plugin', 'bin', IS_WIN ? 'ditto.exe' : 'ditto');
+  // Single cross-platform JS bundle; `bun` runs it on every OS (Windows uses the
+  // sibling `ditto.cmd` launcher for the bare `ditto` command). No `ditto.exe`.
+  return join(repo, 'dist', 'plugin', 'bin', 'ditto');
 }
 function buildBinary(repo) {
   const r = spawnSync('bun', ['run', 'build:plugin'], { cwd: repo, stdio: 'inherit' });
@@ -125,12 +127,15 @@ function unplaceBinary(repo) {
 }
 
 // --------------------------------------------------- (3) delegate to the binary
-/** 빌드된 바이너리로 프로젝트 단계를 위임 실행한다. */
+/** 빌드된 번들로 프로젝트 단계를 위임 실행한다. `bun <bundle>`로 호출해 OS-실행권한이나
+ *  셔뱅 해석에 의존하지 않는다 — Windows는 셔뱅 텍스트를 직접 실행할 수 없기 때문이다. */
 function delegate(repo, args) {
   const binary = binaryPath(repo);
-  if (!existsSync(binary)) return { ok: false, message: 'binary not built; cannot delegate' };
-  const r = spawnSync(binary, args, { stdio: 'inherit' });
-  if (r.error && r.error.code === 'ENOENT') return { ok: false, message: 'binary not executable' };
+  if (!existsSync(binary)) return { ok: false, message: 'bundle not built; cannot delegate' };
+  const r = spawnSync('bun', [binary, ...args], { stdio: 'inherit' });
+  if (r.error && r.error.code === 'ENOENT') {
+    return { ok: false, message: 'bun not found on PATH — install bun ≥1.3 then re-run' };
+  }
   if (r.status !== 0) {
     return { ok: false, message: `\`ditto ${args[0]}\` failed (exit ${r.status})` };
   }

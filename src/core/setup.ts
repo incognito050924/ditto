@@ -1,5 +1,4 @@
 import { cp, readFile, rm, writeFile } from 'node:fs/promises';
-import { platform } from 'node:os';
 import { join, resolve } from 'node:path';
 import { atomicWriteText, ensureDir } from './fs';
 import { codexHostAdapter } from './hosts/codex';
@@ -75,7 +74,9 @@ interface Marketplace {
 const CODEX_MARKETPLACE_NAME = 'ditto-local';
 const CODEX_PLUGIN_NAME = 'ditto';
 const CODEX_PLUGIN_DEST_REL = join('.agents', 'plugins', CODEX_PLUGIN_NAME);
-const CODEX_BIN_NAME = platform() === 'win32' ? 'ditto.exe' : 'ditto';
+// Cross-platform bundle name: `bin/ditto` is portable JS run by `bun` (Windows
+// uses the sibling `ditto.cmd` launcher) — there is no per-OS `ditto.exe`.
+const CODEX_BIN_NAME = 'ditto';
 
 function setupHosts(host: SetupHost | undefined): Set<'claude-code' | 'codex'> {
   if (host === 'codex') return new Set(['codex']);

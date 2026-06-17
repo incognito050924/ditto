@@ -484,5 +484,7 @@ dist/
 # bundle below can be re-included (git can't un-ignore a file under an ignored dir).
 bin/*
 # ...except the committed plugin bundle: github-source marketplace install (source="./")
-# needs bin/ditto present with NO build step on the consumer side.
+# needs bin/ditto present with NO build step on the consumer side. The Windows
+# launcher (bin/ditto.cmd, runs `bun bin/ditto`) ships for the same no-build guarantee.
 !bin/ditto
+!bin/ditto.cmd

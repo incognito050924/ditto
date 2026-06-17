@@ -3,10 +3,16 @@
 > 한국어 안내는 [install.ko.md](install.ko.md)를 참고하세요.
 
 DITTO installs as a local Claude Code (or Codex) plugin. The install script is a
-**thin bootstrap**: it builds the self-contained `ditto` binary and puts it on
-your `PATH` — the two steps that must happen before `ditto` exists — and then
-**delegates everything else to the binary itself** (`ditto setup`). Everything is
+**thin bootstrap**: it bundles the `ditto` JS launcher (run by `bun`) and puts it
+on your `PATH` — the two steps that must happen before `ditto` exists — and then
+**delegates everything else to the launcher itself** (`ditto setup`). Everything is
 idempotent; you can safely re-run it.
+
+> `ditto` is a **portable JS bundle executed by `bun`**, not a native compiled
+> binary. `bun` must stay on `PATH` for the CLI and hooks to work. The same bundle
+> runs on macOS, Linux, and Windows; only the launcher differs — a `#!/usr/bin/env
+> bun` shebang on POSIX, a `bin/ditto.cmd` shim on Windows. Hooks invoke it as
+> `bun "${CLAUDE_PLUGIN_ROOT}/bin/ditto"`, which is why no per-OS `.exe` is shipped.
 
 ## Prerequisites
 
@@ -14,7 +20,7 @@ Install these first. Both are quick, one-command installs.
 
 | Requirement | Why | How to install |
 |-------------|-----|----------------|
-| **bun ≥ 1.3** | Builds the self-contained `ditto` binary (`bun --compile`) and runs the install orchestrator. | Official guide: <https://bun.sh/docs/installation> (`curl -fsSL https://bun.sh/install \| bash`). |
+| **bun ≥ 1.3** | Bundles the `ditto` JS launcher (`bun build --target=bun`) **and runs it at runtime** — `ditto` is portable JS, not a native binary, so bun must stay on `PATH`. Also runs the install orchestrator. | Official guide: <https://bun.sh/docs/installation> (`curl -fsSL https://bun.sh/install \| bash`). |
 | **git** | DITTO reads repo state and memory lives in git. | Official downloads: <https://git-scm.com/downloads>. macOS: `xcode-select --install` or `brew install git`; Debian/Ubuntu: `sudo apt-get install git`; Windows: the installer from git-scm. |
 | **Claude Code** *(or Codex)* | DITTO is a host plugin. | The host you intend to run DITTO under. See <https://docs.claude.com/claude-code>. |
 
@@ -63,7 +69,7 @@ The script bootstraps the binary, then hands the rest to `ditto setup`:
 
 | Step | Scope | Action |
 |------|-------|--------|
-| 1. build | repo | `bun run build:plugin` → `dist/plugin/` (the deploy unit, incl. `bin/ditto`). |
+| 1. build | repo | `bun run build:plugin` → `dist/plugin/` (the deploy unit, incl. the `bin/ditto` JS bundle + the `bin/ditto.cmd` Windows launcher). |
 | 2. place | global | Symlinks the binary onto `PATH` (`~/.local/bin/ditto`) so bare `ditto …` works. **On Windows the binary is NOT symlinked** — see the note below. |
 | 3. delegate | project | Runs `ditto setup --dir <target> --yes --tools`, which installs the host instruction blocks, scaffolds `.ditto/`, allowlists `Bash(ditto:*)`, and provisions detected tools. |
 
@@ -75,11 +81,14 @@ local `dist/plugin` dev path do not need a persistent marketplace entry.
 
 ### Windows note
 
-Symlink placement (step 2) is POSIX-only. On Windows the installer builds the
-binary but does **not** put it on `PATH` automatically. After installing, add
-`<ditto-repo>\dist\plugin\bin` (the `ditto.exe` binary) to your `PATH`. The
-installer prints the exact directory. Until it is on `PATH`, hooks and bare
-`ditto …` commands will not resolve.
+Symlink placement (step 2) is POSIX-only. On Windows the installer bundles the
+launcher but does **not** put it on `PATH` automatically. After installing, add
+`<ditto-repo>\dist\plugin\bin` to your `PATH`; the bare `ditto` command resolves
+there through the `ditto.cmd` shim (which runs `bun "…\bin\ditto"`). The installer
+prints the exact directory. Hooks invoke the bundle the same way — `bun
+"${CLAUDE_PLUGIN_ROOT}/bin/ditto"` — so **bun must be on `PATH`**; there is no
+native `.exe` (the previous `ditto.exe` was a non-executable shebang text file and
+never ran on Windows).
 
 ### Options
 

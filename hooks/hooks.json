@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/ditto\" hook user-prompt-submit"
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/bin/ditto\" hook user-prompt-submit"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/ditto\" hook stop"
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/bin/ditto\" hook stop"
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/ditto\" hook pre-compact"
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/bin/ditto\" hook pre-compact"
           }
         ]
       }
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/ditto\" hook post-tool-use"
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/bin/ditto\" hook post-tool-use"
           }
         ]
       }
@@ -48,7 +48,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/ditto\" hook pre-tool-use"
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/bin/ditto\" hook pre-tool-use"
           }
         ]
       }

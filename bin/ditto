@@ -27228,7 +27228,6 @@ function readEmbeddedStamp(bundleText) {
 
 // src/core/distribution-doctor.ts
 var ALLOW_RULE = "Bash(ditto:*)";
-var IS_WIN = process.platform === "win32";
 var AXIS_CONTRACTS = [
   {
     axis: "Hooks",
@@ -27312,7 +27311,7 @@ function binaryFresh(deps, binaryName) {
   }
 }
 function collectDistributionChecks(deps) {
-  const binaryName = IS_WIN ? "ditto.exe" : "ditto";
+  const binaryName = "ditto";
   return {
     binary_built: deps.exists(join51(deps.pluginRoot, "bin", binaryName)),
     binary_fresh: binaryFresh(deps, binaryName),
@@ -30493,7 +30492,7 @@ function matchForbiddenScope(refs, repoRelPath, archSpec) {
 
 // src/hooks/pre-tool-use.ts
 var HOME = process.env.HOME ?? process.env.USERPROFILE ?? "";
-var IS_WIN2 = process.platform === "win32";
+var IS_WIN = process.platform === "win32";
 function block(category, reason) {
   return {
     exitCode: 2,
@@ -30746,7 +30745,7 @@ function windowsDestructiveReason(normalized, home = "") {
 }
 function checkDestructive(cmd) {
   const normalized = cmd.replace(/\s+/g, " ").trim();
-  if (IS_WIN2) {
+  if (IS_WIN) {
     const winReason = windowsDestructiveReason(normalized, HOME);
     if (winReason)
       return block("destructive", winReason);
@@ -35671,7 +35670,6 @@ function defaultRegistry() {
 
 // src/core/setup.ts
 import { cp, readFile as readFile15, rm as rm2, writeFile as writeFile4 } from "fs/promises";
-import { platform as platform2 } from "os";
 import { join as join74, resolve as resolve16 } from "path";
 
 // src/core/resource-routing.ts
@@ -35705,7 +35703,7 @@ function discoverResources(resourcesDir) {
 var CODEX_MARKETPLACE_NAME = "ditto-local";
 var CODEX_PLUGIN_NAME = "ditto";
 var CODEX_PLUGIN_DEST_REL = join74(".agents", "plugins", CODEX_PLUGIN_NAME);
-var CODEX_BIN_NAME = platform2() === "win32" ? "ditto.exe" : "ditto";
+var CODEX_BIN_NAME = "ditto";
 function setupHosts(host) {
   if (host === "codex")
     return new Set(["codex"]);
@@ -37178,4 +37176,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=ae174f683b245c6448db2f7977f52f64a70a8ce6d9cb9a62c7e6cbba0cce8162
+//# ditto-src-stamp=c1de118b8b13f5e249621bd20ce0a09eaf14e0a78db2e41a7dd599e0e9f2a111
