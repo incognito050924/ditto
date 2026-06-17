@@ -216,8 +216,10 @@ Two traps on this path (both reproduced directly):
 
 1. **Updates require `marketplace update`.** The installed plugin is a **copied
    cache** (`~/.claude/plugins/cache/…`). After the source changes it stays stale
-   until you run `claude plugin marketplace update ditto-local`. The version is
-   pinned (0.0.0), so `claude plugin update` is a no-op.
+   until you run `claude plugin marketplace update ditto-local`. Claude Code detects
+   a new version only when the plugin's `version` **changes**, so updates are driven
+   by **releases** (see below) — `claude plugin update` picks up the new version once
+   the marketplace has refreshed.
 2. **`install` on an already-installed plugin is a no-op.** To refresh, run
    `claude plugin uninstall ditto@ditto-local`, then `install` again.
 
@@ -286,6 +288,29 @@ DITTO automates step 1:
   the fresh `dist/plugin` in one step.
 
 If you ever need it manually: `bun run build:plugin`.
+
+## Releasing a version (maintainers)
+
+DITTO ships as a **committed JS bundle** served by the github-source marketplace.
+The Claude Code plugin host copies files from the repo tree and has **no mechanism
+to fetch GitHub-Release assets**, so the bundle lives in the repo (`bin/ditto`, a
+~1.4MB JS file run by `bun` — not a native binary). Distribution versions are plain
+**semver**, and cutting one is a single command:
+
+```bash
+bun run release minor              # major | minor | patch | or an explicit X.Y.Z
+bun run release minor --dry-run    # preview the bump + touched files, write nothing
+```
+
+It bumps the version in lockstep everywhere the host and CLI read it
+(`package.json`, `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, the CLI
+`--version`), rebuilds the committed bundle so `bin/ditto` carries the new version +
+a fresh source stamp, commits those files, and tags `vX.Y.Z`. It **never pushes** —
+publish with `git push && git push origin vX.Y.Z`.
+
+Claude Code detects a new plugin version only when the `version` field **changes**,
+so bumping it is exactly what makes `claude plugin update` meaningful: consumers run
+`claude plugin marketplace update ditto-local`, then `/plugin update`.
 
 ## Status & uninstall
 

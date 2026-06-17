@@ -13,6 +13,7 @@
     "build:bin": "node scripts/build-bin.mjs bin/ditto",
     "build:plugin": "node scripts/build-plugin.mjs",
     "build:codex-plugin": "bun scripts/build-codex-plugin.mjs",
+    "release": "node scripts/release.mjs",
     "dev": "bun run src/cli/index.ts",
     "dev:plugin": "bun run build:bin && claude --plugin-dir .",
     "test": "bun test",

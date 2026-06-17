@@ -205,7 +205,9 @@ claude plugin install ditto@ditto-local
 
 1. **업데이트는 `marketplace update` 필요.** 설치된 플러그인은 **복사 캐시**
    (`~/.claude/plugins/cache/…`)다. 소스가 바뀌어도 `claude plugin marketplace update
-   ditto-local`을 돌리기 전까진 stale. 버전이 고정(0.0.0)이라 `claude plugin update`는 무동작.
+   ditto-local`을 돌리기 전까진 stale. Claude Code는 플러그인 `version`이 **바뀔 때만** 새
+   버전으로 인식하므로 업데이트는 **릴리스**(아래)가 구동한다 — 마켓플레이스 갱신 후
+   `claude plugin update`가 새 버전을 받는다.
 2. **이미 설치된 플러그인에 `install`은 무동작.** 갱신하려면
    `claude plugin uninstall ditto@ditto-local` 후 다시 `install`.
 
@@ -271,6 +273,27 @@ DITTO는 1단계를 자동화한다:
   한 단계로.
 
 수동이 필요하면: `bun run build:plugin`.
+
+## 릴리스 (유지보수자)
+
+DITTO는 github-소스 마켓플레이스가 서빙하는 **커밋된 JS 번들**로 배포된다. Claude Code
+플러그인 호스트는 repo 트리 파일만 복사하고 **GitHub Release 자산을 받는 메커니즘이 없으므로**,
+번들은 repo에 둔다(`bin/ditto`, `bun`이 실행하는 ~1.4MB JS — 네이티브 바이너리 아님). 배포
+버전은 순수 **semver**이고, 릴리스는 한 명령이다:
+
+```bash
+bun run release minor              # major | minor | patch | 또는 명시 X.Y.Z
+bun run release minor --dry-run    # bump + 대상 파일 미리보기, 쓰지 않음
+```
+
+호스트·CLI가 버전을 읽는 모든 곳(`package.json`, `.claude-plugin/plugin.json`,
+`.codex-plugin/plugin.json`, CLI `--version`)을 일괄 bump하고, 커밋된 번들을 재빌드해
+`bin/ditto`가 새 버전 + fresh 소스 stamp를 담게 한 뒤, 그 파일들을 커밋하고 `vX.Y.Z` 태그를
+단다. **push는 하지 않는다** — `git push && git push origin vX.Y.Z`로 게시한다.
+
+Claude Code는 `version` 필드가 **바뀔 때만** 새 버전을 감지하므로, bump가 곧 `claude plugin
+update`를 동작시킨다: 사용자는 `claude plugin marketplace update ditto-local` 후
+`/plugin update`를 실행한다.
 
 ## 상태 & 제거
 
