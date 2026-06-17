@@ -12,6 +12,7 @@ import type { MemorySeparateMode, MemorySeparateResult } from '~/core/provision/
  * stdin/fs/네트워크 없이 테스트한다.
  */
 import type { SetupHost, SetupResult } from '~/core/setup';
+import type { AgentLinkSummary } from './agent-link-step';
 import { type PromptIO, confirm, select } from './prompt';
 import type { ProvisionSummary } from './provision-step';
 
@@ -26,6 +27,8 @@ export interface SetupWizardDeps {
   runProvision: (io: PromptIO) => Promise<ProvisionSummary>;
   /** memory 분리(분리를 택했을 때만 호출). */
   separateMemory: (mode: MemorySeparateMode) => Promise<MemorySeparateResult>;
+  /** 프로젝트 agent 발견 → ditto role 연결(io를 다시 받아 다중선택). */
+  runAgentLink: (io: PromptIO) => Promise<AgentLinkSummary>;
 }
 
 export interface SetupWizardResult {
@@ -33,6 +36,7 @@ export interface SetupWizardResult {
   setup: SetupResult;
   provision: ProvisionSummary;
   memory: { mode: MemorySeparateMode | 'in-project'; result: MemorySeparateResult | null };
+  agents: AgentLinkSummary;
 }
 
 const HOST_OPTIONS = [
@@ -57,7 +61,10 @@ export async function runSetupWizard(
   // 2. 분석/언어 도구
   const provision = await deps.runProvision(io);
 
-  // 3. memory 저장
+  // 3. 프로젝트 agent 연결(발견 → 추천 role → 승인한 것만 등록)
+  const agents = await deps.runAgentLink(io);
+
+  // 4. memory 저장
   let memory: SetupWizardResult['memory'] = { mode: 'in-project', result: null };
   const separate = await confirm(io, 'memory를 별도 git 저장소로 분리할까?', false);
   if (separate) {
@@ -70,5 +77,5 @@ export async function runSetupWizard(
     memory = { mode, result: await deps.separateMemory(mode) };
   }
 
-  return { host, setup: setupResult, provision, memory };
+  return { host, setup: setupResult, provision, memory, agents };
 }

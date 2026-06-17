@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import {
   type AgentVariant,
   loadVariantCatalog,
+  recommendVariantRole,
   selectVariantCandidates,
+  writeAgentVariants,
 } from '~/core/agent-variants';
 import { ensureDir } from '~/core/fs';
 
@@ -160,5 +162,75 @@ describe('selectVariantCandidates (ac-2: deterministic role + scope filter)', ()
     const noHint = selectVariantCandidates(catalog, 'implementer', ['src/db/users.ts']);
     const ghost = selectVariantCandidates(catalog, 'implementer', ['src/db/users.ts'], 'nope');
     expect(ghost).toEqual(noHint);
+  });
+});
+
+describe('recommendVariantRole (ac-1: 7-case keyword heuristic)', () => {
+  test('security/appsec/vuln → security-reviewer (highest priority)', () => {
+    expect(recommendVariantRole('appsec-bot', '')).toBe('security-reviewer');
+    expect(recommendVariantRole('x', 'finds VULNerabilities')).toBe('security-reviewer');
+    expect(recommendVariantRole('SecurityAuditor', 'review audit')).toBe('security-reviewer');
+  });
+  test('review/audit → reviewer', () => {
+    expect(recommendVariantRole('code-reviewer', '')).toBe('reviewer');
+    expect(recommendVariantRole('x', 'performs an AUDIT')).toBe('reviewer');
+  });
+  test('architect/architecture/design → architect', () => {
+    expect(recommendVariantRole('the-architect', '')).toBe('architect');
+    expect(recommendVariantRole('x', 'system DESIGN guidance')).toBe('architect');
+  });
+  test('research/investigate → researcher', () => {
+    expect(recommendVariantRole('deep-research', '')).toBe('researcher');
+    expect(recommendVariantRole('x', 'will INVESTIGATE the issue')).toBe('researcher');
+  });
+  test('test/qa → verifier', () => {
+    expect(recommendVariantRole('test-writer', '')).toBe('verifier');
+    expect(recommendVariantRole('x', 'QA specialist')).toBe('verifier');
+  });
+  test('refactor/tidy → refactorer', () => {
+    expect(recommendVariantRole('refactor-helper', '')).toBe('refactorer');
+    expect(recommendVariantRole('x', 'tidy first')).toBe('refactorer');
+  });
+  test('else → implementer (default)', () => {
+    expect(recommendVariantRole('feature-builder', 'writes code')).toBe('implementer');
+    expect(recommendVariantRole('', '')).toBe('implementer');
+  });
+});
+
+describe('writeAgentVariants (ac-4: idempotent writer)', () => {
+  test('writes new variants in parseVariant-readable frontmatter; round-trips', async () => {
+    const result = await writeAgentVariants(repo, [
+      { name: 'sec', role: 'security-reviewer', description: 'finds vulns', match: [] },
+    ]);
+    expect(result.written).toEqual(['sec']);
+    expect(result.skipped).toEqual([]);
+
+    const catalog = await loadVariantCatalog(repo);
+    expect(catalog).toEqual([
+      { name: 'sec', role: 'security-reviewer', description: 'finds vulns', match: [] },
+    ]);
+  });
+
+  test('existing file is skipped, never overwritten (preserves user edits)', async () => {
+    await writeVariant(
+      'sec.md',
+      `---
+name: sec
+role: implementer
+description: user-edited body
+---
+hand edit
+`,
+    );
+    const result = await writeAgentVariants(repo, [
+      { name: 'sec', role: 'security-reviewer', description: 'auto', match: [] },
+    ]);
+    expect(result.written).toEqual([]);
+    expect(result.skipped).toEqual(['sec']);
+
+    // user edit preserved
+    const text = await Bun.file(join(repo, '.ditto', 'agents', 'sec.md')).text();
+    expect(text).toContain('user-edited body');
+    expect(text).toContain('hand edit');
   });
 });

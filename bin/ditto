@@ -17926,6 +17926,50 @@ function parseVariant(text) {
     return null;
   return { name, role, description, match };
 }
+function recommendVariantRole(name, description) {
+  const text = `${name} ${description}`.toLowerCase();
+  if (/security|appsec|vuln/.test(text))
+    return "security-reviewer";
+  if (/review|audit/.test(text))
+    return "reviewer";
+  if (/architect|architecture|design/.test(text))
+    return "architect";
+  if (/research|investigate/.test(text))
+    return "researcher";
+  if (/test|qa/.test(text))
+    return "verifier";
+  if (/refactor|tidy/.test(text))
+    return "refactorer";
+  return "implementer";
+}
+async function writeAgentVariants(repoRoot, variants) {
+  const dir = join15(repoRoot, ".ditto", "agents");
+  const written = [];
+  const skipped = [];
+  for (const variant of variants) {
+    const file = join15(dir, `${variant.name}.md`);
+    if (await fileExists(file)) {
+      skipped.push(variant.name);
+      continue;
+    }
+    await ensureDir(dir);
+    await Bun.write(file, renderVariant(variant));
+    written.push(variant.name);
+  }
+  return { written, skipped };
+}
+function renderVariant(variant) {
+  const lines = ["---", `name: ${variant.name}`, `role: ${variant.role}`];
+  if (variant.match.length > 0)
+    lines.push(`match: [${variant.match.join(", ")}]`);
+  lines.push("description: |");
+  for (const line of variant.description.split(`
+`))
+    lines.push(`  ${line}`);
+  lines.push("---", "");
+  return lines.join(`
+`);
+}
 function extractFrontmatter(text) {
   const lines = text.split(`
 `);
@@ -35684,6 +35728,28 @@ function resolveResourcesDir(from) {
   return join74(resolve17(start, "..", ".."), "resources", "managed");
 }
 
+// src/cli/wizard/agent-link-step.ts
+async function runAgentLinkStep(io, deps) {
+  const agents = await deps.loadAgents();
+  const discovered = agents.map((a2) => ({
+    ...a2,
+    role: recommendVariantRole(a2.name, a2.description)
+  }));
+  if (discovered.length === 0)
+    return { discovered, written: [], skipped: [] };
+  const choices = discovered.map((a2) => ({
+    label: `${a2.name} \u2192 ${a2.role}${a2.description ? ` (${a2.description})` : ""}`,
+    value: a2.name,
+    checked: false
+  }));
+  const picked = new Set(await multiSelect(io, "\uD504\uB85C\uC81D\uD2B8 agent\uB97C ditto role\uC5D0 \uC5F0\uACB0", choices));
+  const approved = discovered.filter((a2) => picked.has(a2.name)).map((a2) => ({ name: a2.name, role: a2.role, description: a2.description, match: [] }));
+  if (approved.length === 0)
+    return { discovered, written: [], skipped: [] };
+  const result2 = await deps.writeVariants(approved);
+  return { discovered, written: result2.written, skipped: result2.skipped };
+}
+
 // src/cli/wizard/provision-step.ts
 async function planProvisioning(registry2, detectedLanguages) {
   const provisioners = [
@@ -35760,13 +35826,14 @@ async function runSetupWizard(io, deps) {
   const host = await select(io, "Host \uC120\uD0DD", HOST_OPTIONS, "claude-code");
   const setupResult = await deps.setup(host);
   const provision = await deps.runProvision(io);
+  const agents = await deps.runAgentLink(io);
   let memory = { mode: "in-project", result: null };
   const separate = await confirm(io, "memory\uB97C \uBCC4\uB3C4 git \uC800\uC7A5\uC18C\uB85C \uBD84\uB9AC\uD560\uAE4C?", false);
   if (separate) {
     const mode = await select(io, "memory \uBD84\uB9AC \uBC29\uC2DD", MEMORY_OPTIONS, "gitignore");
     memory = { mode, result: await deps.separateMemory(mode) };
   }
-  return { host, setup: setupResult, provision, memory };
+  return { host, setup: setupResult, provision, memory, agents };
 }
 
 // src/cli/commands/setup.ts
@@ -35813,6 +35880,22 @@ async function resolveCodexPluginRoot(resourcesDir, projectRoot) {
     return currentPluginRoot;
   return currentPluginRoot;
 }
+async function discoverClaudeAgents(projectRoot) {
+  const inventory = await claudeCodeHostAdapter.loadSurfaceInventory(projectRoot);
+  const agents = inventory.localSurfaces.filter((s2) => s2.kind === "agent");
+  const out = [];
+  for (const a2 of agents) {
+    let description = "";
+    try {
+      const text = await Bun.file(a2.path).text();
+      const m2 = /^description:\s*(.+)$/m.exec(text);
+      if (m2)
+        description = (m2[1] ?? "").trim();
+    } catch {}
+    out.push({ name: a2.id, description });
+  }
+  return out;
+}
 async function runWizard(resourcesDir, projectRoot) {
   const io = createStdioPromptIO();
   try {
@@ -35828,7 +35911,11 @@ async function runWizard(resourcesDir, projectRoot) {
         ...includesCodex(host) ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) } : {}
       }),
       runProvision: (promptIo) => runProvisionStep(promptIo, defaultRegistry(), projectRoot, { detect: detectLspLanguages }),
-      separateMemory: (mode) => separateMemoryRepo(defaultMemorySeparateDeps(projectRoot), mode)
+      separateMemory: (mode) => separateMemoryRepo(defaultMemorySeparateDeps(projectRoot), mode),
+      runAgentLink: (promptIo) => runAgentLinkStep(promptIo, {
+        loadAgents: () => discoverClaudeAgents(projectRoot),
+        writeVariants: (variants) => writeAgentVariants(projectRoot, variants)
+      })
     });
     writeHuman(`setup: installed into ${projectRoot} (host=${result2.host})`);
     writeHuman(`.ditto/: ${result2.setup.scaffold.alreadyInitialized ? "already initialized" : "created"} \xB7 allowlist: ${result2.setup.allowlistApplied ? result2.setup.allowlistPath : "skipped"}`);
@@ -35837,6 +35924,12 @@ async function runWizard(resourcesDir, projectRoot) {
       writeHuman(`  ${o3.action}	${o3.message}`);
     if (result2.provision.unservicedLanguages.length > 0) {
       writeHuman(`  \uAC10\uC9C0\uB410\uC73C\uB098 \uC11C\uBC84 \uBBF8\uB4F1\uB85D: ${result2.provision.unservicedLanguages.join(", ")}`);
+    }
+    if (result2.agents.discovered.length > 0) {
+      writeHuman("project agents:");
+      for (const a2 of result2.agents.discovered)
+        writeHuman(`  ${a2.name} \u2192 ${a2.role}`);
+      writeHuman(`  linked: ${result2.agents.written.length ? result2.agents.written.join(", ") : "(none)"}${result2.agents.skipped.length ? ` \xB7 skipped(existing): ${result2.agents.skipped.join(", ")}` : ""}`);
     }
     if (result2.memory.result) {
       writeHuman(`memory: ${result2.memory.mode} \u2014 ${result2.memory.result.message}`);
@@ -36835,4 +36928,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=139454d4ff39d7c8e1ecfea451b104ae4f5766db5b9967c62bcd56b1a3ec7477
+//# ditto-src-stamp=ad3929c83af2a49b30d1bf4311cefc898f6786bd8d96f5ae905eb07be61b0fd9

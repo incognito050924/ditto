@@ -1,7 +1,9 @@
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { defineCommand } from 'citty';
+import { writeAgentVariants } from '~/core/agent-variants';
 import { resolveRepoRootForCreate } from '~/core/fs';
+import { claudeCodeHostAdapter } from '~/core/hosts/claude-code';
 import { fileExists } from '~/core/hosts/shared';
 import { detectLspLanguages } from '~/core/provision/lsp-detect';
 import { defaultMemorySeparateDeps, separateMemoryRepo } from '~/core/provision/memory-separate';
@@ -9,6 +11,7 @@ import { defaultRegistry } from '~/core/provision/provisioner';
 import { type SetupHost, setup } from '~/core/setup';
 import { resolveResourcesDir } from '../resources';
 import { RUNTIME_ERROR_EXIT, writeError, writeHuman } from '../util';
+import { runAgentLinkStep } from '../wizard/agent-link-step';
 import type { PromptIO } from '../wizard/prompt';
 import { createStdioPromptIO } from '../wizard/prompt-io';
 import { runProvisionStep } from '../wizard/provision-step';
@@ -63,6 +66,31 @@ export async function resolveCodexPluginRoot(
   return currentPluginRoot;
 }
 
+/**
+ * 프로젝트 `.claude/agents`에서 agent를 발견한다(claude-code 호스트, agent only).
+ * description은 파일 frontmatter의 `description:` 한 줄을 best-effort로 읽는다 — heuristic은
+ * name만으로도 동작하므로 없으면 빈 문자열.
+ */
+async function discoverClaudeAgents(
+  projectRoot: string,
+): Promise<{ name: string; description: string }[]> {
+  const inventory = await claudeCodeHostAdapter.loadSurfaceInventory(projectRoot);
+  const agents = inventory.localSurfaces.filter((s) => s.kind === 'agent');
+  const out: { name: string; description: string }[] = [];
+  for (const a of agents) {
+    let description = '';
+    try {
+      const text = await Bun.file(a.path).text();
+      const m = /^description:\s*(.+)$/m.exec(text);
+      if (m) description = (m[1] ?? '').trim();
+    } catch {
+      // 디렉터리형 agent 등 파일 읽기 실패는 무시 — name만으로 추천.
+    }
+    out.push({ name: a.id, description });
+  }
+  return out;
+}
+
 /** 대화형 wizard 흐름: 의존을 실제 구현으로 묶어 runSetupWizard를 돌리고 요약을 출력한다. */
 async function runWizard(resourcesDir: string, projectRoot: string): Promise<void> {
   const io = createStdioPromptIO();
@@ -84,6 +112,11 @@ async function runWizard(resourcesDir: string, projectRoot: string): Promise<voi
       runProvision: (promptIo) =>
         runProvisionStep(promptIo, defaultRegistry(), projectRoot, { detect: detectLspLanguages }),
       separateMemory: (mode) => separateMemoryRepo(defaultMemorySeparateDeps(projectRoot), mode),
+      runAgentLink: (promptIo) =>
+        runAgentLinkStep(promptIo, {
+          loadAgents: () => discoverClaudeAgents(projectRoot),
+          writeVariants: (variants) => writeAgentVariants(projectRoot, variants),
+        }),
     });
 
     writeHuman(`setup: installed into ${projectRoot} (host=${result.host})`);
@@ -96,6 +129,17 @@ async function runWizard(resourcesDir: string, projectRoot: string): Promise<voi
     for (const o of result.provision.outcomes) writeHuman(`  ${o.action}\t${o.message}`);
     if (result.provision.unservicedLanguages.length > 0) {
       writeHuman(`  감지됐으나 서버 미등록: ${result.provision.unservicedLanguages.join(', ')}`);
+    }
+    if (result.agents.discovered.length > 0) {
+      writeHuman('project agents:');
+      for (const a of result.agents.discovered) writeHuman(`  ${a.name} → ${a.role}`);
+      writeHuman(
+        `  linked: ${result.agents.written.length ? result.agents.written.join(', ') : '(none)'}${
+          result.agents.skipped.length
+            ? ` · skipped(existing): ${result.agents.skipped.join(', ')}`
+            : ''
+        }`,
+      );
     }
     if (result.memory.result) {
       writeHuman(`memory: ${result.memory.mode} — ${result.memory.result.message}`);

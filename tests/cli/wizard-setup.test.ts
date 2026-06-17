@@ -41,6 +41,10 @@ function deps(over: Partial<SetupWizardDeps> = {}): { deps: SetupWizardDeps; log
       log.push(`memory:${mode}`);
       return { status: 'separated', message: 'ok' } as MemorySeparateResult;
     },
+    runAgentLink: async () => {
+      log.push('agent-link');
+      return { discovered: [], written: [], skipped: [] };
+    },
     ...over,
   };
   return { deps: d, log };
@@ -72,7 +76,7 @@ describe('runSetupWizard', () => {
     expect(r.host).toBe('claude-code');
     expect(r.memory.mode).toBe('in-project');
     expect(r.memory.result).toBeNull();
-    expect(log).toEqual(['setup:claude-code', 'provision']); // memory 분리 미호출
+    expect(log).toEqual(['setup:claude-code', 'provision', 'agent-link']); // memory 분리 미호출
   });
 
   test('TTY: host=both 선택 → setup(both)', async () => {
@@ -101,5 +105,22 @@ describe('runSetupWizard', () => {
     const { deps: d, log } = deps();
     await runSetupWizard(fakeIO([], false), d);
     expect(log).toContain('provision');
+  });
+
+  test('agent-link 단계가 실행되고 결과가 요약에 실린다', async () => {
+    const { deps: d, log } = deps({
+      runAgentLink: async () => {
+        log.push('agent-link');
+        return {
+          discovered: [{ name: 'x', description: 'd', role: 'implementer' }],
+          written: ['x'],
+          skipped: [],
+        };
+      },
+    });
+    const r = await runSetupWizard(fakeIO([], false), d);
+    expect(log).toContain('agent-link');
+    expect(r.agents.written).toEqual(['x']);
+    expect(r.agents.discovered[0]?.role).toBe('implementer');
   });
 });

@@ -1,5 +1,7 @@
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { ensureDir } from './fs';
+import { fileExists } from './hosts/shared';
 
 /**
  * Agent variant catalog (variant routing). See docs/agent-variants.md for the
@@ -138,6 +140,59 @@ function parseVariant(text: string): AgentVariant | null {
 
   if (!name || !role) return null;
   return { name, role, description, match };
+}
+
+/**
+ * Pure heuristic mapping a discovered agent's name+description to a recommended
+ * ditto owner role by keyword (case-insensitive), in priority order. Used by
+ * `ditto setup` to suggest a role when linking a project's `.claude/agents`.
+ * Selection/override stays the user's job; this only *recommends* (ac-1).
+ */
+export function recommendVariantRole(name: string, description: string): string {
+  const text = `${name} ${description}`.toLowerCase();
+  if (/security|appsec|vuln/.test(text)) return 'security-reviewer';
+  if (/review|audit/.test(text)) return 'reviewer';
+  if (/architect|architecture|design/.test(text)) return 'architect';
+  if (/research|investigate/.test(text)) return 'researcher';
+  if (/test|qa/.test(text)) return 'verifier';
+  if (/refactor|tidy/.test(text)) return 'refactorer';
+  return 'implementer';
+}
+
+/**
+ * Idempotent variant writer. Writes each `AgentVariant` to
+ * `.ditto/agents/<name>.md` in the same frontmatter format `parseVariant`
+ * reads. An already-existing target is SKIPPED (never overwritten) so user
+ * hand-edits survive re-runs (ac-4). Returns the names written vs skipped.
+ */
+export async function writeAgentVariants(
+  repoRoot: string,
+  variants: AgentVariant[],
+): Promise<{ written: string[]; skipped: string[] }> {
+  const dir = join(repoRoot, '.ditto', 'agents');
+  const written: string[] = [];
+  const skipped: string[] = [];
+  for (const variant of variants) {
+    const file = join(dir, `${variant.name}.md`);
+    if (await fileExists(file)) {
+      skipped.push(variant.name);
+      continue;
+    }
+    await ensureDir(dir);
+    await Bun.write(file, renderVariant(variant));
+    written.push(variant.name);
+  }
+  return { written, skipped };
+}
+
+function renderVariant(variant: AgentVariant): string {
+  const lines = ['---', `name: ${variant.name}`, `role: ${variant.role}`];
+  if (variant.match.length > 0) lines.push(`match: [${variant.match.join(', ')}]`);
+  // description as a `|` block so multiline text round-trips through parseVariant.
+  lines.push('description: |');
+  for (const line of variant.description.split('\n')) lines.push(`  ${line}`);
+  lines.push('---', '');
+  return lines.join('\n');
 }
 
 function extractFrontmatter(text: string): string | null {
