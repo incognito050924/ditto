@@ -540,6 +540,19 @@ interface LspFileDiagnostics {
 }
 
 /**
+ * Edit-then-diagnostics gate budget (review #1 — the gate must not stall the pass
+ * path). The gate is ADVISORY, so a slow / non-responding server is bounded by a
+ * short per-file timeout (vs the 8s client default — a responsive server answers
+ * in <1s), and the files are checked in bounded-parallel batches so wall-clock is
+ * ~ceil(n/CONCURRENCY)·timeout, not n·timeout serial. A file CAP bounds how many
+ * servers a sweeping change spawns; the overflow is disclosed in the artifact
+ * (`truncated`) — a silent cap would read as "checked everything".
+ */
+const GATE_TIMEOUT_MS = 3000;
+const GATE_CONCURRENCY = 4;
+const GATE_FILE_CAP = 24;
+
+/**
  * ADVISORY edit-then-diagnostics gate (ac-2). On a contentful mutating pass, run
  * the n2 LSP client over the node's just-reported `changed_files` (TS only) and
  * SURFACE error-severity diagnostics as feedback for the downstream verify node.
@@ -564,19 +577,41 @@ async function surfaceLspDiagnostics(
   // degrade seam as the optional-tool contract (ADR-0018); never a hard-block.
   if (tsFiles.length === 0 || resolveServer('typescript') === null) return [];
 
+  // Bound the server-spawn count on a sweeping change; disclose the overflow below.
+  const checked = tsFiles.slice(0, GATE_FILE_CAP);
+  const truncated = tsFiles.length - checked.length;
+
   const surfaced: LspFileDiagnostics[] = [];
-  for (const file of tsFiles) {
-    const diags = await getDiagnostics(join(repoRoot, file));
-    const errors = diags.filter((d) => d.severity === 'error');
-    if (errors.length > 0) surfaced.push({ file, diagnostics: errors });
+  // Bounded-parallel batches with a short per-file timeout: a slow server stalls
+  // only its own batch, not the whole pass path (review #1 — latency).
+  for (let i = 0; i < checked.length; i += GATE_CONCURRENCY) {
+    const batch = await Promise.all(
+      checked.slice(i, i + GATE_CONCURRENCY).map(async (file) => {
+        const diags = await getDiagnostics(join(repoRoot, file), { timeoutMs: GATE_TIMEOUT_MS });
+        const errors = diags.filter((d) => d.severity === 'error');
+        return errors.length > 0 ? { file, diagnostics: errors } : null;
+      }),
+    );
+    for (const r of batch) if (r) surfaced.push(r);
   }
   // Persist the advisory verdict as an artifact (mirrors writeTidyClassification —
   // G3: the surfaced findings are left as a non-authoritative record). Written
-  // even when empty so the run shows the gate ran and found nothing.
+  // even when empty so the run shows the gate ran and found nothing. `checked` /
+  // `truncated` disclose how many files the cap let through (G3 — no silent cap).
   await ensureDir(localDir(repoRoot, 'work-items', workItemId));
   await atomicWriteText(
     localDir(repoRoot, 'work-items', workItemId, 'lsp-diagnostics.json'),
-    `${JSON.stringify({ schema_version: '0.1.0', advisory: true, files: surfaced }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        schema_version: '0.1.0',
+        advisory: true,
+        checked: checked.length,
+        truncated,
+        files: surfaced,
+      },
+      null,
+      2,
+    )}\n`,
   );
   return surfaced;
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assembleCompletionFromGraph } from '~/core/autopilot-complete';
@@ -91,6 +91,22 @@ async function recordImplementPass(changedFile: string) {
       result_text: `Implemented the change in ${changedFile}; the type now flows through the call site.`,
       outcome: 'pass',
       changed_files: [changedFile],
+      evidence_refs: [{ kind: 'file', path: 'run.log', summary: 'bun test output' }],
+    },
+  });
+}
+
+// Record a contentful mutating pass on N2 reporting many edited files at once —
+// the sweeping-change path the file cap and bounded-parallel batching guard.
+async function recordImplementPassMany(changedFiles: string[]) {
+  return recordResult(repo, {
+    workItemId: WI,
+    now: NOW,
+    payload: {
+      node_id: 'N2',
+      result_text: `Implemented the change across ${changedFiles.length} files; the types now flow through the call sites.`,
+      outcome: 'pass',
+      changed_files: changedFiles,
       evidence_refs: [{ kind: 'file', path: 'run.log', summary: 'bun test output' }],
     },
   });
@@ -254,4 +270,51 @@ describe('ac-2 gate DEGRADE (no server / no TS file — server-independent)', ()
     expect(res.outcome).toBe('pass');
     await expect(readFile(diagnosticsArtifactPath(), 'utf8')).rejects.toThrow();
   });
+
+  test('5. FILE CAP DISCLOSED: more changed .ts files than the cap → only the cap is examined and the overflow is recorded as `truncated` (G3 — no silent cap)', async () => {
+    // Mute stub so the gate runs but surfaces nothing — the cap arithmetic is what
+    // we assert, independent of any server. Files need not exist on disk: the cap
+    // is computed from the filtered changed-file list, not from per-file reads.
+    const stub = join(repo, 'stub-lsp');
+    await writeFile(stub, '#!/bin/sh\nexit 0\n');
+    process.env.TYPESCRIPT_LSP_BIN = stub;
+
+    const total = 30;
+    const files = Array.from({ length: total }, (_, i) => `src/f${i}.ts`);
+    const res = await recordImplementPassMany(files);
+
+    expect(res.lsp_advisory).toBeUndefined(); // mute → nothing surfaced
+    const artifact = JSON.parse(await readFile(diagnosticsArtifactPath(), 'utf8'));
+    expect(artifact.files).toEqual([]);
+    // The cap bit: examined + skipped === total reported, and some WERE skipped
+    // (total exceeds the cap). Asserted via the disclosed counts, not the cap value,
+    // so the test survives a future cap retune.
+    expect(artifact.checked + artifact.truncated).toBe(total);
+    expect(artifact.truncated).toBeGreaterThan(0);
+    expect(artifact.checked).toBeLessThan(total);
+  }, 20000);
+
+  test('6. BOUNDED LATENCY: several non-responding .ts files finish within a short bound — short per-file timeout + bounded parallel, not N×8s-default serial', async () => {
+    // A stub that connects but never answers (reads stdin, writes nothing) — each
+    // getDiagnostics must hit its timeout. CHMOD +x is required: an un-executable
+    // stub fails spawn (EACCES) and degrades instantly, which would NOT exercise the
+    // timeout path. With the gate's short timeout + bounded parallel, n files finish
+    // in ~ceil(n/concurrency)·gateTimeout, NOT n·8s serial.
+    const stub = join(repo, 'stub-lsp');
+    await writeFile(stub, '#!/bin/sh\ncat >/dev/null\n');
+    await chmod(stub, 0o755);
+    process.env.TYPESCRIPT_LSP_BIN = stub;
+
+    const files = ['a', 'b', 'c', 'd', 'e', 'f'].map((n) => `${n}.ts`);
+    for (const f of files) await writeFile(join(repo, f), 'export const x = 1;\n');
+
+    const start = performance.now();
+    const res = await recordImplementPassMany(files);
+    const elapsed = performance.now() - start;
+
+    expect(res.lsp_advisory).toBeUndefined(); // every file degraded to []
+    // 6 files: bounded-parallel(4)+3s ≈ 6s; serial+3s ≈ 18s; serial+8s-default ≈ 48s.
+    // A 12s bound passes the parallel-short path and fails both serial paths.
+    expect(elapsed).toBeLessThan(12000);
+  }, 20000);
 });
