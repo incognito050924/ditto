@@ -3,7 +3,7 @@ import type { PromptIO } from '~/cli/wizard/prompt';
 import { type Option, select } from '~/cli/wizard/prompt';
 import { type SetupWizardDeps, runSetupWizard } from '~/cli/wizard/setup-wizard';
 import type { MemorySeparateResult } from '~/core/provision/memory-separate';
-import type { SetupResult } from '~/core/setup';
+import type { SetupHost, SetupResult } from '~/core/setup';
 
 function fakeIO(answers: string[], isTTY = true): PromptIO {
   const q = [...answers];
@@ -105,6 +105,19 @@ describe('runSetupWizard', () => {
     const { deps: d, log } = deps();
     await runSetupWizard(fakeIO([], false), d);
     expect(log).toContain('provision');
+  });
+
+  test('agent-link 단계는 선택된 host를 받는다(host별 발견 분기)', async () => {
+    let receivedHost: SetupHost | undefined;
+    const { deps: d } = deps({
+      runAgentLink: async (_io: PromptIO, host?: SetupHost) => {
+        receivedHost = host;
+        return { discovered: [], written: [], skipped: [] };
+      },
+    });
+    // host(3=both) → memory 분리?(빈=no)
+    await runSetupWizard(fakeIO(['3', ''], true), d);
+    expect(receivedHost).toBe('both');
   });
 
   test('agent-link 단계가 실행되고 결과가 요약에 실린다', async () => {

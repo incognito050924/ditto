@@ -21166,19 +21166,34 @@ async function spliceTidyStage(repoRoot, workItemId2, implementNode, aps) {
   await aps.addNodes(workItemId2, plan.nodes);
   return plan.nodes.map((n2) => n2.id);
 }
+var GATE_TIMEOUT_MS = 3000;
+var GATE_CONCURRENCY = 4;
+var GATE_FILE_CAP = 24;
 async function surfaceLspDiagnostics(repoRoot, workItemId2, changedFiles) {
   const tsFiles = changedFiles.filter((p) => p.endsWith(".ts") || p.endsWith(".tsx"));
   if (tsFiles.length === 0 || resolveServer("typescript") === null)
     return [];
+  const checked = tsFiles.slice(0, GATE_FILE_CAP);
+  const truncated = tsFiles.length - checked.length;
   const surfaced = [];
-  for (const file of tsFiles) {
-    const diags = await getDiagnostics(join27(repoRoot, file));
-    const errors3 = diags.filter((d2) => d2.severity === "error");
-    if (errors3.length > 0)
-      surfaced.push({ file, diagnostics: errors3 });
+  for (let i2 = 0;i2 < checked.length; i2 += GATE_CONCURRENCY) {
+    const batch = await Promise.all(checked.slice(i2, i2 + GATE_CONCURRENCY).map(async (file) => {
+      const diags = await getDiagnostics(join27(repoRoot, file), { timeoutMs: GATE_TIMEOUT_MS });
+      const errors3 = diags.filter((d2) => d2.severity === "error");
+      return errors3.length > 0 ? { file, diagnostics: errors3 } : null;
+    }));
+    for (const r3 of batch)
+      if (r3)
+        surfaced.push(r3);
   }
   await ensureDir(localDir(repoRoot, "work-items", workItemId2));
-  await atomicWriteText(localDir(repoRoot, "work-items", workItemId2, "lsp-diagnostics.json"), `${JSON.stringify({ schema_version: "0.1.0", advisory: true, files: surfaced }, null, 2)}
+  await atomicWriteText(localDir(repoRoot, "work-items", workItemId2, "lsp-diagnostics.json"), `${JSON.stringify({
+    schema_version: "0.1.0",
+    advisory: true,
+    checked: checked.length,
+    truncated,
+    files: surfaced
+  }, null, 2)}
 `);
   return surfaced;
 }
@@ -35929,6 +35944,8 @@ function resolveResourcesDir(from) {
 }
 
 // src/cli/wizard/agent-link-step.ts
+var PSEUDO_OWNERS = new Set(["driver", "main-session"]);
+var ROLE_OPTIONS = nodeOwner.options.filter((role) => !PSEUDO_OWNERS.has(role)).map((role) => ({ label: role, value: role }));
 async function runAgentLinkStep(io, deps) {
   const agents = await deps.loadAgents();
   const discovered = agents.map((a2) => ({
@@ -35943,7 +35960,13 @@ async function runAgentLinkStep(io, deps) {
     checked: false
   }));
   const picked = new Set(await multiSelect(io, "\uD504\uB85C\uC81D\uD2B8 agent\uB97C ditto role\uC5D0 \uC5F0\uACB0", choices));
-  const approved = discovered.filter((a2) => picked.has(a2.name)).map((a2) => ({ name: a2.name, role: a2.role, description: a2.description, match: [] }));
+  const approved = [];
+  for (const a2 of discovered) {
+    if (!picked.has(a2.name))
+      continue;
+    const role = await select(io, `'${a2.name}' role \uC120\uD0DD (\uCD94\uCC9C: ${a2.role})`, ROLE_OPTIONS, a2.role);
+    approved.push({ name: a2.name, role, description: a2.description, match: [] });
+  }
   if (approved.length === 0)
     return { discovered, written: [], skipped: [] };
   const result2 = await deps.writeVariants(approved);
@@ -36026,7 +36049,7 @@ async function runSetupWizard(io, deps) {
   const host = await select(io, "Host \uC120\uD0DD", HOST_OPTIONS, "claude-code");
   const setupResult = await deps.setup(host);
   const provision = await deps.runProvision(io);
-  const agents = await deps.runAgentLink(io);
+  const agents = await deps.runAgentLink(io, host);
   let memory = { mode: "in-project", result: null };
   const separate = await confirm(io, "memory\uB97C \uBCC4\uB3C4 git \uC800\uC7A5\uC18C\uB85C \uBD84\uB9AC\uD560\uAE4C?", false);
   if (separate) {
@@ -36096,6 +36119,31 @@ async function discoverClaudeAgents(projectRoot) {
   }
   return out;
 }
+async function discoverCodexAgents(projectRoot) {
+  const inventory = await codexHostAdapter.loadSurfaceInventory(projectRoot);
+  const agents = inventory.localSurfaces.filter((s2) => s2.kind === "agent");
+  const out = [];
+  for (const a2 of agents) {
+    let text = "";
+    try {
+      text = await Bun.file(a2.path).text();
+    } catch {}
+    if (/ditto agent-projection/.test(text))
+      continue;
+    let description = "";
+    const m2 = /^description\s*=\s*"([^"]*)"\s*$/m.exec(text);
+    if (m2)
+      description = (m2[1] ?? "").trim();
+    out.push({ name: a2.id, description });
+  }
+  return out;
+}
+async function discoverProjectAgents(projectRoot, host) {
+  const claude = host === "claude-code" || host === "both" ? await discoverClaudeAgents(projectRoot) : [];
+  const codex = host === "codex" || host === "both" ? await discoverCodexAgents(projectRoot) : [];
+  const seen = new Set(claude.map((a2) => a2.name));
+  return [...claude, ...codex.filter((a2) => !seen.has(a2.name))];
+}
 async function runWizard(resourcesDir, projectRoot) {
   const io = createStdioPromptIO();
   try {
@@ -36112,8 +36160,8 @@ async function runWizard(resourcesDir, projectRoot) {
       }),
       runProvision: (promptIo) => runProvisionStep(promptIo, defaultRegistry(), projectRoot, { detect: detectLspLanguages }),
       separateMemory: (mode) => separateMemoryRepo(defaultMemorySeparateDeps(projectRoot), mode),
-      runAgentLink: (promptIo) => runAgentLinkStep(promptIo, {
-        loadAgents: () => discoverClaudeAgents(projectRoot),
+      runAgentLink: (promptIo, host) => runAgentLinkStep(promptIo, {
+        loadAgents: () => discoverProjectAgents(projectRoot, host),
         writeVariants: (variants) => writeAgentVariants(projectRoot, variants)
       })
     });
@@ -37128,4 +37176,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=59b3575c09f172cfcdde752c5d813f6ccad1abe4c1c63c6fc7ee72cf650401c1
+//# ditto-src-stamp=49904fafca7df87a3e9197209dfd0d38f3b874d41c328920bb0172a42c4fec6e

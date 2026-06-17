@@ -27,8 +27,8 @@ export interface SetupWizardDeps {
   runProvision: (io: PromptIO) => Promise<ProvisionSummary>;
   /** memory 분리(분리를 택했을 때만 호출). */
   separateMemory: (mode: MemorySeparateMode) => Promise<MemorySeparateResult>;
-  /** 프로젝트 agent 발견 → ditto role 연결(io를 다시 받아 다중선택). */
-  runAgentLink: (io: PromptIO) => Promise<AgentLinkSummary>;
+  /** 프로젝트 agent 발견 → ditto role 연결(io + 선택된 host를 받아 host별로 발견·다중선택). */
+  runAgentLink: (io: PromptIO, host: SetupHost) => Promise<AgentLinkSummary>;
 }
 
 export interface SetupWizardResult {
@@ -61,8 +61,8 @@ export async function runSetupWizard(
   // 2. 분석/언어 도구
   const provision = await deps.runProvision(io);
 
-  // 3. 프로젝트 agent 연결(발견 → 추천 role → 승인한 것만 등록)
-  const agents = await deps.runAgentLink(io);
+  // 3. 프로젝트 agent 연결(발견 → 추천 role → 승인한 것만 등록). step 1 host로 발견 대상 분기.
+  const agents = await deps.runAgentLink(io, host);
 
   // 4. memory 저장
   let memory: SetupWizardResult['memory'] = { mode: 'in-project', result: null };

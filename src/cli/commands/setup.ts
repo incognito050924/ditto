@@ -4,6 +4,7 @@ import { defineCommand } from 'citty';
 import { writeAgentVariants } from '~/core/agent-variants';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { claudeCodeHostAdapter } from '~/core/hosts/claude-code';
+import { codexHostAdapter } from '~/core/hosts/codex';
 import { fileExists } from '~/core/hosts/shared';
 import { detectLspLanguages } from '~/core/provision/lsp-detect';
 import { defaultMemorySeparateDeps, separateMemoryRepo } from '~/core/provision/memory-separate';
@@ -91,6 +92,50 @@ async function discoverClaudeAgents(
   return out;
 }
 
+/**
+ * 프로젝트 `.codex/agents`에서 사용자 커스텀 codex agent를 발견한다(codex 호스트, agent only).
+ * claude와 달리 codex는 ditto 자체 agent를 프로젝트 `.codex/agents`에 직접 복사하므로
+ * (installCodexAgents), provenance 헤더(`ditto agent-projection`)가 있는 번들 agent는 제외해
+ * 사용자가 직접 쓴 agent만 surface한다. description은 TOML `description = "..."` 한 줄을
+ * best-effort로 읽는다(heuristic은 name만으로도 동작) — 멀티라인/이스케이프는 미파싱, 빈 문자열.
+ */
+export async function discoverCodexAgents(
+  projectRoot: string,
+): Promise<{ name: string; description: string }[]> {
+  const inventory = await codexHostAdapter.loadSurfaceInventory(projectRoot);
+  const agents = inventory.localSurfaces.filter((s) => s.kind === 'agent');
+  const out: { name: string; description: string }[] = [];
+  for (const a of agents) {
+    let text = '';
+    try {
+      text = await Bun.file(a.path).text();
+    } catch {
+      // 파일 읽기 실패는 무시 — name만으로 추천.
+    }
+    if (/ditto agent-projection/.test(text)) continue; // ditto 자체 번들 agent 제외
+    let description = '';
+    const m = /^description\s*=\s*"([^"]*)"\s*$/m.exec(text);
+    if (m) description = (m[1] ?? '').trim();
+    out.push({ name: a.id, description });
+  }
+  return out;
+}
+
+/**
+ * 설치 대상 host에 맞는 프로젝트 agent를 발견한다 — claude-code는 `.claude/agents`, codex는
+ * `.codex/agents`, both는 둘을 합치되 이름 충돌은 claude 우선(먼저 발견)으로 dedupe한다.
+ */
+export async function discoverProjectAgents(
+  projectRoot: string,
+  host: SetupHost,
+): Promise<{ name: string; description: string }[]> {
+  const claude =
+    host === 'claude-code' || host === 'both' ? await discoverClaudeAgents(projectRoot) : [];
+  const codex = host === 'codex' || host === 'both' ? await discoverCodexAgents(projectRoot) : [];
+  const seen = new Set(claude.map((a) => a.name));
+  return [...claude, ...codex.filter((a) => !seen.has(a.name))];
+}
+
 /** 대화형 wizard 흐름: 의존을 실제 구현으로 묶어 runSetupWizard를 돌리고 요약을 출력한다. */
 async function runWizard(resourcesDir: string, projectRoot: string): Promise<void> {
   const io = createStdioPromptIO();
@@ -112,9 +157,9 @@ async function runWizard(resourcesDir: string, projectRoot: string): Promise<voi
       runProvision: (promptIo) =>
         runProvisionStep(promptIo, defaultRegistry(), projectRoot, { detect: detectLspLanguages }),
       separateMemory: (mode) => separateMemoryRepo(defaultMemorySeparateDeps(projectRoot), mode),
-      runAgentLink: (promptIo) =>
+      runAgentLink: (promptIo, host) =>
         runAgentLinkStep(promptIo, {
-          loadAgents: () => discoverClaudeAgents(projectRoot),
+          loadAgents: () => discoverProjectAgents(projectRoot, host),
           writeVariants: (variants) => writeAgentVariants(projectRoot, variants),
         }),
     });
