@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { collectTidyDiffStat, writeTidyClassification } from '~/acg/tidy/classifier';
 import { atomicWriteText, ensureDir, writeJson } from '~/core/fs';
 import { type Diagnostic, getDiagnostics, resolveServer } from '~/core/lsp/client';
+import { lspLanguageForPath } from '~/core/provision/lsp-detect';
 import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
 import { evidenceRef, relativePath, verdict } from '~/schemas/common';
 import { decisionConflict, decisionConflictCarrier } from '~/schemas/decision-conflict-carrier';
@@ -554,14 +555,18 @@ const GATE_FILE_CAP = 24;
 
 /**
  * ADVISORY edit-then-diagnostics gate (ac-2). On a contentful mutating pass, run
- * the n2 LSP client over the node's just-reported `changed_files` (TS only) and
- * SURFACE error-severity diagnostics as feedback for the downstream verify node.
+ * the n2 LSP client over the node's just-reported `changed_files` and SURFACE
+ * error-severity diagnostics as feedback for the downstream verify node. Each
+ * file is routed to its language by extension via the SHARED `lsp-detect`
+ * taxonomy that `ditto setup` also uses — so the gate checks exactly the languages
+ * setup can install servers for, in lock-step (no TS-only assumption).
  *
  * MONOTONIC — adds no completion-blocking. This is a pure SURFACE step on the
  * pass path, modelled on {@link spliceTidyStage}: it never alters the node's
  * pass/fail outcome, never certifies clean (the test run remains authoritative),
- * and is fail-open. Server absent (`resolveServer` → null) or no `.ts`/`.tsx`
- * file ⇒ no-op SKIP (return []). `getDiagnostics` itself degrades to [] on
+ * and is fail-open. No source file with a mapped language, or no installed server
+ * for that language (`resolveServer` → null), ⇒ no-op SKIP (return []) — per-file
+ * degrade (ADR-0018). `getDiagnostics` itself degrades to [] on
  * absence/spawn-failure/timeout and never throws, so the diagnostics loop needs
  * no guard; the artifact WRITE can throw on a broken FS, so it is wrapped to
  * degrade too — nothing in this gate may abort the pass it annotates. The
@@ -574,22 +579,45 @@ async function surfaceLspDiagnostics(
   workItemId: string,
   changedFiles: string[],
 ): Promise<LspFileDiagnostics[]> {
-  const tsFiles = changedFiles.filter((p) => p.endsWith('.ts') || p.endsWith('.tsx'));
-  // SKIP (fail-open): no TS file to check, or no language server installed — same
-  // degrade seam as the optional-tool contract (ADR-0018); never a hard-block.
-  if (tsFiles.length === 0 || resolveServer('typescript') === null) return [];
+  // Route each changed file to its LSP language by extension (shared lsp-detect
+  // taxonomy). Files with no mapped language (docs, configs) are dropped.
+  const targets = changedFiles
+    .map((file) => ({ file, language: lspLanguageForPath(file) }))
+    .filter((t): t is { file: string; language: string } => t.language !== null);
+  // Keep only files whose language server is actually installed; the rest are a
+  // no-op SKIP (ADR-0018 per-file degrade, never a hard-block). resolveServer is
+  // the dynamic source of truth (env → PATH → ditto-managed) — probe once per
+  // language and memoize, so a sweeping change does not re-probe per file.
+  const serverByLang = new Map<string, boolean>();
+  const checkable = targets.filter(({ language }) => {
+    let ok = serverByLang.get(language);
+    if (ok === undefined) {
+      ok = resolveServer(language) !== null;
+      serverByLang.set(language, ok);
+    }
+    return ok;
+  });
+  if (checkable.length === 0) return [];
 
   // Bound the server-spawn count on a sweeping change; disclose the overflow below.
-  const checked = tsFiles.slice(0, GATE_FILE_CAP);
-  const truncated = tsFiles.length - checked.length;
+  const checked = checkable.slice(0, GATE_FILE_CAP);
+  const truncated = checkable.length - checked.length;
 
   const surfaced: LspFileDiagnostics[] = [];
   // Bounded-parallel batches with a short per-file timeout: a slow server stalls
   // only its own batch, not the whole pass path (review #1 — latency).
+  // NOTE: getDiagnostics resolves on the FIRST publishDiagnostics. typescript
+  // emits one complete publish, but progressive-diagnostic servers (e.g.
+  // rust-analyzer) may publish empty-then-populated → a possible false-clean for
+  // those languages. Tolerated here: the gate is advisory/monotonic, so a missed
+  // diagnostic never blocks; a settle window is deferred (would re-add latency).
   for (let i = 0; i < checked.length; i += GATE_CONCURRENCY) {
     const batch = await Promise.all(
-      checked.slice(i, i + GATE_CONCURRENCY).map(async (file) => {
-        const diags = await getDiagnostics(join(repoRoot, file), { timeoutMs: GATE_TIMEOUT_MS });
+      checked.slice(i, i + GATE_CONCURRENCY).map(async ({ file, language }) => {
+        const diags = await getDiagnostics(join(repoRoot, file), {
+          language,
+          timeoutMs: GATE_TIMEOUT_MS,
+        });
         const errors = diags.filter((d) => d.severity === 'error');
         return errors.length > 0 ? { file, diagnostics: errors } : null;
       }),

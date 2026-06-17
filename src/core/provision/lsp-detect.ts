@@ -77,3 +77,16 @@ export function classifyLspExtensions(extCounts: Record<string, number>): Detect
 export async function detectLspLanguages(sourceRoot: string): Promise<DetectedLspLanguage[]> {
   return classifyLspExtensions(await countExtensions(sourceRoot));
 }
+
+/**
+ * 단일 파일 경로 → LSP language id, 매핑 없으면 null. {@link classifyLspExtensions}의
+ * 경로 단위 동반 함수로, 같은 `LSP_LANG_BY_EXT` taxonomy를 쓴다 — 파일 단위로 라우팅하는
+ * 소비자(autopilot 진단 게이트)가 `ditto setup`이 감지·설치하는 언어 집합과 lock-step을
+ * 유지하게 한다. 확장자 없는 파일·dotfile(`.env`)·미지원 확장자는 null.
+ */
+export function lspLanguageForPath(filePath: string): string | null {
+  const base = filePath.slice(filePath.lastIndexOf('/') + 1);
+  const dot = base.lastIndexOf('.');
+  if (dot <= 0) return null; // 확장자 없음 또는 dotfile(".env")
+  return LSP_LANG_BY_EXT[base.slice(dot + 1).toLowerCase()] ?? null;
+}

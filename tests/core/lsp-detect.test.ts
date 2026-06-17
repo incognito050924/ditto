@@ -3,6 +3,7 @@ import {
   LSP_LANGUAGES,
   classifyLspExtensions,
   detectLspLanguages,
+  lspLanguageForPath,
 } from '~/core/provision/lsp-detect';
 
 describe('classifyLspExtensions', () => {
@@ -53,6 +54,31 @@ describe('LSP_LANGUAGES 계약', () => {
   test('classify 출력은 항상 계약 집합의 부분집합', () => {
     const langs = classifyLspExtensions({ ts: 1, kt: 1, php: 1, go: 1, xyz: 9 });
     for (const l of langs) expect(LSP_LANGUAGES.has(l.language)).toBe(true);
+  });
+});
+
+describe('lspLanguageForPath (파일 단위 라우팅 — 게이트가 쓰는 동반 함수)', () => {
+  test('확장자를 language id로 매핑(classify와 같은 taxonomy)', () => {
+    expect(lspLanguageForPath('src/app.ts')).toBe('typescript');
+    expect(lspLanguageForPath('ui/Btn.tsx')).toBe('typescript');
+    expect(lspLanguageForPath('svc/main.py')).toBe('python');
+    expect(lspLanguageForPath('cmd/x.go')).toBe('go');
+    expect(lspLanguageForPath('app.rb')).toBe('ruby');
+  });
+
+  test('마지막 확장자를 본다(.d.ts → typescript)', () => {
+    expect(lspLanguageForPath('types/foo.d.ts')).toBe('typescript');
+  });
+
+  test('대소문자 무시', () => {
+    expect(lspLanguageForPath('SRC/MAIN.PY')).toBe('python');
+  });
+
+  test('확장자 없음·dotfile·미지원 확장자는 null', () => {
+    expect(lspLanguageForPath('Makefile')).toBeNull();
+    expect(lspLanguageForPath('.env')).toBeNull();
+    expect(lspLanguageForPath('README.md')).toBeNull();
+    expect(lspLanguageForPath('data.json')).toBeNull();
   });
 });
 

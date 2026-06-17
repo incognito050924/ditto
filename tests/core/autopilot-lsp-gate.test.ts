@@ -134,8 +134,12 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  // biome-ignore lint/performance/noDelete: env var must be unset via delete; assigning undefined coerces to the string "undefined"
+  /* biome-ignore lint/performance/noDelete: env var must be unset via delete; assigning undefined coerces to the string "undefined" */
   delete process.env.TYPESCRIPT_LSP_BIN;
+  // biome-ignore lint/performance/noDelete: same reason — multi-language routing tests set these
+  delete process.env.PYTHON_LSP_BIN;
+  // biome-ignore lint/performance/noDelete: same reason
+  delete process.env.RUST_LSP_BIN;
   await rm(repo, { recursive: true, force: true });
 });
 
@@ -340,5 +344,54 @@ describe('ac-2 gate DEGRADE (no server / no TS file — server-independent)', ()
     expect(res.status).toBe('passed');
     expect(res.outcome).toBe('pass');
     expect(res.lsp_advisory).toBeUndefined();
+  });
+
+  test('8. MULTI-LANGUAGE: a changed .py file is routed to the python server (gate is no longer TS-only)', async () => {
+    // Mute python server "installed" via env. The gate must classify foo.py as
+    // python and CHECK it — under the old TS-only filter a .py file was dropped
+    // entirely (no artifact written).
+    const stub = join(repo, 'stub-lsp');
+    await writeFile(stub, '#!/bin/sh\nexit 0\n');
+    await chmod(stub, 0o755);
+    process.env.PYTHON_LSP_BIN = stub;
+    await writeFile(join(repo, 'foo.py'), 'x = 1\n');
+
+    const res = await recordImplementPass('foo.py');
+
+    expect(res.status).toBe('passed');
+    const artifact = JSON.parse(await readFile(diagnosticsArtifactPath(), 'utf8'));
+    expect(artifact.checked).toBe(1); // the .py file WAS routed and checked
+    expect(artifact.files).toEqual([]); // mute server → no errors surfaced
+  });
+
+  test('9. MULTI-LANGUAGE MIXED: .ts + .py both checked, a non-source .md is dropped', async () => {
+    const stub = join(repo, 'stub-lsp');
+    await writeFile(stub, '#!/bin/sh\nexit 0\n');
+    await chmod(stub, 0o755);
+    process.env.TYPESCRIPT_LSP_BIN = stub;
+    process.env.PYTHON_LSP_BIN = stub;
+    await writeFile(join(repo, 'a.ts'), 'export const a = 1;\n');
+    await writeFile(join(repo, 'b.py'), 'b = 2\n');
+    await writeFile(join(repo, 'notes.md'), '# notes\n');
+
+    const res = await recordImplementPassMany(['a.ts', 'b.py', 'notes.md']);
+
+    expect(res.status).toBe('passed');
+    const artifact = JSON.parse(await readFile(diagnosticsArtifactPath(), 'utf8'));
+    expect(artifact.checked).toBe(2); // ts + py checked; md (no LSP language) dropped
+    expect(artifact.truncated).toBe(0);
+  });
+
+  test('10. MULTI-LANGUAGE DEGRADE: a changed .rb file (no ruby server in LSP_SPECS) is skipped (no artifact, no throw)', async () => {
+    // Ruby is in the extension taxonomy but has NO entry in LSP_SPECS → resolveServer
+    // is deterministically null regardless of what is installed → the file is skipped
+    // (ADR-0018 degrade), so nothing is written. (Deterministic across machines.)
+    await writeFile(join(repo, 'app.rb'), 'puts 1\n');
+
+    const res = await recordImplementPass('app.rb');
+
+    expect(res.status).toBe('passed');
+    expect(res.lsp_advisory).toBeUndefined();
+    await expect(readFile(diagnosticsArtifactPath(), 'utf8')).rejects.toThrow();
   });
 });
