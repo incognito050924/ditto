@@ -21186,15 +21186,17 @@ async function surfaceLspDiagnostics(repoRoot, workItemId2, changedFiles) {
       if (r3)
         surfaced.push(r3);
   }
-  await ensureDir(localDir(repoRoot, "work-items", workItemId2));
-  await atomicWriteText(localDir(repoRoot, "work-items", workItemId2, "lsp-diagnostics.json"), `${JSON.stringify({
-    schema_version: "0.1.0",
-    advisory: true,
-    checked: checked.length,
-    truncated,
-    files: surfaced
-  }, null, 2)}
+  try {
+    await ensureDir(localDir(repoRoot, "work-items", workItemId2));
+    await atomicWriteText(localDir(repoRoot, "work-items", workItemId2, "lsp-diagnostics.json"), `${JSON.stringify({
+      schema_version: "0.1.0",
+      advisory: true,
+      checked: checked.length,
+      truncated,
+      files: surfaced
+    }, null, 2)}
 `);
+  } catch {}
   return surfaced;
 }
 async function planRequiresDecisionApproval(repoRoot, workItemId2) {
@@ -37176,4 +37178,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=49904fafca7df87a3e9197209dfd0d38f3b874d41c328920bb0172a42c4fec6e
+//# ditto-src-stamp=ae174f683b245c6448db2f7977f52f64a70a8ce6d9cb9a62c7e6cbba0cce8162

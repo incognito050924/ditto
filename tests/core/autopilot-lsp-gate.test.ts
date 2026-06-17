@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assembleCompletionFromGraph } from '~/core/autopilot-complete';
@@ -317,4 +317,22 @@ describe('ac-2 gate DEGRADE (no server / no TS file — server-independent)', ()
     // A 12s bound passes the parallel-short path and fails both serial paths.
     expect(elapsed).toBeLessThan(12000);
   }, 20000);
+
+  test('7. FAIL-OPEN ON WRITE FAILURE: an unwritable advisory artifact path degrades the gate, never aborts the pass', async () => {
+    await writeFile(join(repo, 'bad.ts'), BAD_TS);
+    // Mute stub so the gate runs and reaches the artifact write (surfaces nothing).
+    const stub = join(repo, 'stub-lsp');
+    await writeFile(stub, '#!/bin/sh\nexit 0\n');
+    process.env.TYPESCRIPT_LSP_BIN = stub;
+    // Block the write: a DIRECTORY at the artifact path makes atomicWriteText's
+    // rename(tmp, path) throw. The advisory persistence is best-effort, so the gate
+    // must swallow it (fail-open / monotonic) rather than propagate out of the pass.
+    await mkdir(diagnosticsArtifactPath(), { recursive: true });
+
+    const res = await recordImplementPass('bad.ts');
+
+    expect(res.status).toBe('passed');
+    expect(res.outcome).toBe('pass');
+    expect(res.lsp_advisory).toBeUndefined();
+  });
 });

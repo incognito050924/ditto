@@ -561,9 +561,11 @@ const GATE_FILE_CAP = 24;
  * pass path, modelled on {@link spliceTidyStage}: it never alters the node's
  * pass/fail outcome, never certifies clean (the test run remains authoritative),
  * and is fail-open. Server absent (`resolveServer` → null) or no `.ts`/`.tsx`
- * file ⇒ no-op SKIP (return []). `getDiagnostics` already degrades to [] on
- * absence/spawn-failure/timeout and never throws, so no try/catch is needed here.
- * The diagnostics are persisted as a NON-authoritative advisory artifact
+ * file ⇒ no-op SKIP (return []). `getDiagnostics` itself degrades to [] on
+ * absence/spawn-failure/timeout and never throws, so the diagnostics loop needs
+ * no guard; the artifact WRITE can throw on a broken FS, so it is wrapped to
+ * degrade too — nothing in this gate may abort the pass it annotates. The
+ * diagnostics are persisted as a NON-authoritative advisory artifact
  * (`lsp-diagnostics.json`) and returned for the outcome's advisory note — they
  * are never read by any gate / completion path (ac-3 keeps completion LSP-free).
  */
@@ -598,21 +600,27 @@ async function surfaceLspDiagnostics(
   // G3: the surfaced findings are left as a non-authoritative record). Written
   // even when empty so the run shows the gate ran and found nothing. `checked` /
   // `truncated` disclose how many files the cap let through (G3 — no silent cap).
-  await ensureDir(localDir(repoRoot, 'work-items', workItemId));
-  await atomicWriteText(
-    localDir(repoRoot, 'work-items', workItemId, 'lsp-diagnostics.json'),
-    `${JSON.stringify(
-      {
-        schema_version: '0.1.0',
-        advisory: true,
-        checked: checked.length,
-        truncated,
-        files: surfaced,
-      },
-      null,
-      2,
-    )}\n`,
-  );
+  // Best-effort: a broken local dir degrades the advisory RECORD, never the pass
+  // it annotates (fail-open) — so the FS write is wrapped like getDiagnostics.
+  try {
+    await ensureDir(localDir(repoRoot, 'work-items', workItemId));
+    await atomicWriteText(
+      localDir(repoRoot, 'work-items', workItemId, 'lsp-diagnostics.json'),
+      `${JSON.stringify(
+        {
+          schema_version: '0.1.0',
+          advisory: true,
+          checked: checked.length,
+          truncated,
+          files: surfaced,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  } catch {
+    // advisory persistence is non-authoritative — swallow and keep the pass path
+  }
   return surfaced;
 }
 
