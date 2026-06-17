@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getDiagnostics, resolveServer } from '~/core/lsp/client';
@@ -59,9 +59,12 @@ describe('getDiagnostics degrade path (ADR-0018 optional tool)', () => {
     await writeFile(file, 'const x: number = "str";\n');
     // The unified detection (provision/lsp-servers) falls a set-but-missing env
     // through to PATH, so genuine absence is covered by the `no server` case
-    // below; here a present-but-mute stub forces the spawn/stdout-close degrade.
+    // below; here a present-but-mute server (spawns, exits 0, emits no diagnostics
+    // → stdout closes) forces the stdout-close degrade. The +x is load-bearing:
+    // without it Bun.spawn fails EACCES and the spawn-failure path runs instead.
     const stub = join(dir, 'stub-lsp');
     await writeFile(stub, '#!/bin/sh\nexit 0\n');
+    await chmod(stub, 0o755);
     process.env.TYPESCRIPT_LSP_BIN = stub;
     try {
       const diags = await getDiagnostics(file, { timeoutMs: 2000 });

@@ -224,11 +224,14 @@ describe.if(TS_SERVER !== null)('ac-2 gate with the real typescript-language-ser
 
     // Reset N2 to running for a second record (the first record passed it).
     await aps.write(WI, { ...graphWithRunningImplement(), work_item_id: WI });
-    // Force the gate "off" with a stub that resolves but never speaks LSP. (The
-    // unified detection falls a set-but-missing env through to PATH, so a bogus
-    // path would find the real server — a present-but-mute stub degrades instead.)
+    // Force the gate "off" with a present-but-mute server: it spawns, exits 0, and
+    // never emits diagnostics → stdout closes → []. (The unified detection falls a
+    // set-but-missing env through to PATH, so a bogus path would find the real
+    // server — a mute stub degrades instead.) The +x is load-bearing: without it
+    // Bun.spawn fails EACCES and the spawn-failure path runs, not stdout-close.
     const stub = join(repo, 'stub-lsp');
     await writeFile(stub, '#!/bin/sh\nexit 0\n');
+    await chmod(stub, 0o755);
     process.env.TYPESCRIPT_LSP_BIN = stub;
     const gateOff = await recordImplementPass('bad.ts');
     expect(gateOff.lsp_advisory).toBeUndefined();
@@ -241,11 +244,14 @@ describe.if(TS_SERVER !== null)('ac-2 gate with the real typescript-language-ser
 describe('ac-2 gate DEGRADE (no server / no TS file — server-independent)', () => {
   test('4a. DEGRADE server unusable: a present-but-mute server → no advisory, pass unchanged, no throw', async () => {
     await writeFile(join(repo, 'bad.ts'), BAD_TS);
-    // A stub that resolves (detection succeeds) but exits without diagnostics —
-    // the spawn/stdout-close degrade. (A set-but-missing env would fall through to
-    // the real PATH server under the unified provisioner detection.)
+    // A present-but-mute server: detection resolves it, it spawns and exits without
+    // emitting diagnostics → stdout closes → []. The +x is load-bearing — an
+    // un-executable stub fails Bun.spawn (EACCES) and would exercise the
+    // spawn-failure path instead of this stdout-close one. (A set-but-missing env
+    // would fall through to the real PATH server under the unified detection.)
     const stub = join(repo, 'stub-lsp');
     await writeFile(stub, '#!/bin/sh\nexit 0\n');
+    await chmod(stub, 0o755);
     process.env.TYPESCRIPT_LSP_BIN = stub;
 
     const res = await recordImplementPass('bad.ts');
