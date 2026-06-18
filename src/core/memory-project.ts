@@ -416,16 +416,25 @@ export async function proposeEvent(
       () => false,
     ),
   );
+  const actor = input.actor ?? { kind: 'agent' };
+  // Laundering guard (memory-librarian §8 inc.4, ac-4): an agent's self-report
+  // must not be stored as EXTRACTED (fact). Deterministic facts (ACG/codeql,
+  // ADR bootstrap) are appended directly, never through propose — so an agent
+  // claiming EXTRACTED here is laundering a guess. Downgrade to INFERRED; the
+  // returned event surfaces the downgraded kind. A user may assert EXTRACTED.
+  const requestedKind = input.confidence_kind ?? 'EXTRACTED';
+  const confidenceKind =
+    actor.kind === 'agent' && requestedKind === 'EXTRACTED' ? 'INFERRED' : requestedKind;
   const draft = memoryEvent.parse({
     schema_version: '0.1.0' as const,
     event_id: eventId,
     event_type: input.event_type,
-    actor: input.actor ?? { kind: 'agent' },
+    actor,
     text: input.text,
     created_at: now,
     status: 'pending' as const,
     sources: input.sources ?? [],
-    confidence_kind: input.confidence_kind ?? 'EXTRACTED',
+    confidence_kind: confidenceKind,
     sensitivity: input.sensitivity ?? 'internal',
   });
   return store.append(draft);

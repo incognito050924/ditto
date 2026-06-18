@@ -18511,6 +18511,7 @@ function isMutatingOwner(owner) {
   return OWNER_TOOLS[owner].includes("Edit");
 }
 var PLANNER_GENERATE_DIRECTIVE = "Emit a `generated_nodes` subgraph: pick the \xA72.2 lifecycle stages this task " + "actually needs (research\xB7design\xB7implement\xB7review\xB7verify\xB7\u2026), each node " + "{id, kind, purpose, depends_on, acceptance_refs} mapped to its acceptance " + "criteria; scale to task size (small tasks stay minimal \u2014 do not force a stage).";
+var CITE_OR_ABSTAIN_DIRECTIVE = "Consult the governing decisions in context.memory.decision_briefs: cite the " + "ones you relied on (follow them or justify any deviation), and if none apply " + "to this task, state that explicitly (cite-or-abstain).";
 function buildDelegationPacket(node, workItem, variantCandidates = [], fileScope = workItem.changed_files, memoryContext) {
   const isPlanner = node.owner === "planner";
   const doneWhen = node.acceptance_refs.length > 0 ? `acceptance criteria satisfied with evidence: ${node.acceptance_refs.join(", ")}` : node.purpose;
@@ -18523,6 +18524,7 @@ function buildDelegationPacket(node, workItem, variantCandidates = [], fileScope
       "Work only from this packet.",
       "Return a single result with evidence (command + exit code, file:line).",
       ...isPlanner ? [PLANNER_GENERATE_DIRECTIVE] : [],
+      ...memoryContext?.decisions?.length || memoryContext?.decision_briefs?.length ? [CITE_OR_ABSTAIN_DIRECTIVE] : [],
       `Stop when done_when is met: ${doneWhen}.`
     ],
     must_not_do: [
@@ -19809,16 +19811,19 @@ async function proposeEvent(repoRoot, input, options = {}) {
   const now = (options.now ?? new Date).toISOString();
   const store = new MemoryEventStore(repoRoot);
   const eventId = await generateId("memevt", (candidate) => store.get(candidate).then(() => true, () => false));
+  const actor = input.actor ?? { kind: "agent" };
+  const requestedKind = input.confidence_kind ?? "EXTRACTED";
+  const confidenceKind = actor.kind === "agent" && requestedKind === "EXTRACTED" ? "INFERRED" : requestedKind;
   const draft = memoryEvent.parse({
     schema_version: "0.1.0",
     event_id: eventId,
     event_type: input.event_type,
-    actor: input.actor ?? { kind: "agent" },
+    actor,
     text: input.text,
     created_at: now,
     status: "pending",
     sources: input.sources ?? [],
-    confidence_kind: input.confidence_kind ?? "EXTRACTED",
+    confidence_kind: confidenceKind,
     sensitivity: input.sensitivity ?? "internal"
   });
   return store.append(draft);
@@ -20305,11 +20310,14 @@ async function warmStartMemoryContext(repoRoot, node2, workItem2, options = {}) 
     base.hit_node_types = hitTypes;
     const decisionIds = new Set(graph.nodes.filter((n2) => n2.node_type === "Decision").map((n2) => n2.id));
     const decisions = relatedNodes.filter((id) => decisionIds.has(id));
+    const nameOf = new Map(graph.nodes.map((n2) => [n2.id, n2.name]));
+    const decisionBriefs = decisions.map((id) => ({ id, summary: nameOf.get(id) ?? id }));
     base.actionable = true;
     await recordUsage(repoRoot, base);
     return {
       related_nodes: relatedNodes,
-      ...decisions.length > 0 ? { decisions } : {}
+      ...decisions.length > 0 ? { decisions } : {},
+      ...decisionBriefs.length > 0 ? { decision_briefs: decisionBriefs } : {}
     };
   } catch {
     try {
@@ -37262,4 +37270,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=e8a983e2d958d0ce6a26db760d1c2201b716a0274a8bbc5e4fe8d79f370a959c
+//# ditto-src-stamp=a27e86f5ea1641a0a334655d6536c103616709b831a99b2fe980623c82bd18fd

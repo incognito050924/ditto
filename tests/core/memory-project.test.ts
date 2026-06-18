@@ -524,6 +524,29 @@ describe('proposeEvent / approveEvent (write model §4-5 / §10-2 F2)', () => {
     expect(stored.status).toBe('pending');
   });
 
+  test('laundering guard: an agent cannot propose an EXTRACTED fact — downgraded to INFERRED (ac-4)', async () => {
+    const proposed = await proposeEvent(workDir, {
+      event_type: 'observation',
+      text: 'I think the cache breaks when empty',
+      actor: { kind: 'agent', role: 'implementer' },
+      confidence_kind: 'EXTRACTED',
+      sources: [],
+    });
+    // a self-reported guess must not be laundered into a fact (EXTRACTED).
+    expect(proposed.confidence_kind).toBe('INFERRED');
+  });
+
+  test('a user may assert an EXTRACTED fact (not downgraded)', async () => {
+    const proposed = await proposeEvent(workDir, {
+      event_type: 'observation',
+      text: 'confirmed by the user',
+      actor: { kind: 'user' },
+      confidence_kind: 'EXTRACTED',
+      sources: [],
+    });
+    expect(proposed.confidence_kind).toBe('EXTRACTED');
+  });
+
   test('approveEvent appends a superseding approved event without mutating the original', async () => {
     const proposed = await proposeEvent(workDir, {
       event_type: 'decision',
