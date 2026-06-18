@@ -74,6 +74,17 @@ describe('warmStartMemoryContext (§5-1 / §10-6 #1, fail-open warm-start)', () 
     expect(ctx?.related_nodes).not.toContain('sym:unrelated');
   });
 
+  test('attaches decision briefs (id + summary) so the planner can cite governing decisions', async () => {
+    await seedFreshGraph(coveringGraph());
+    const ctx = await warmStartMemoryContext(repo, node('planner'), workItem, { now: NOW });
+    // a bare decision id is not actionable; the brief carries the node summary
+    // (the Decision node's name) so the agent can cite it or abstain (ac-2).
+    expect(ctx?.decision_briefs).toContainEqual({
+      id: 'decision:d1',
+      summary: 'use loop-side fail-open query',
+    });
+  });
+
   test('researcher is a warm-start owner too', async () => {
     await seedFreshGraph(coveringGraph());
     const ctx = await warmStartMemoryContext(repo, node('researcher'), workItem, { now: NOW });

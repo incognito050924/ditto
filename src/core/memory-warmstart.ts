@@ -39,6 +39,12 @@ export interface MemoryWarmStartContext {
   related_nodes?: string[];
   /** Decision-node ids among the related set (a Decision is high-signal context). */
   decisions?: string[];
+  /**
+   * Decision briefs (id + node summary) for the related Decisions — a bare id is
+   * not actionable, so the agent gets the governing decision's gist to cite or
+   * abstain against (memory-librarian §8 inc.2, ac-2).
+   */
+  decision_briefs?: { id: string; summary: string }[];
 }
 
 /** One usage-instrumentation record (ac-12), appended as a JSONL line per spawn. */
@@ -232,12 +238,17 @@ export async function warmStartMemoryContext(
       graph.nodes.filter((n) => n.node_type === 'Decision').map((n) => n.id),
     );
     const decisions = relatedNodes.filter((id) => decisionIds.has(id));
+    // Decision briefs: pair each related Decision id with its node summary (name)
+    // so the packet carries the governing decision's gist, not just an id (ac-2).
+    const nameOf = new Map(graph.nodes.map((n) => [n.id, n.name]));
+    const decisionBriefs = decisions.map((id) => ({ id, summary: nameOf.get(id) ?? id }));
 
     base.actionable = true;
     await recordUsage(repoRoot, base);
     return {
       related_nodes: relatedNodes,
       ...(decisions.length > 0 ? { decisions } : {}),
+      ...(decisionBriefs.length > 0 ? { decision_briefs: decisionBriefs } : {}),
     };
   } catch {
     // Fail-open: any error in the query path leaves dispatch exactly as it was.

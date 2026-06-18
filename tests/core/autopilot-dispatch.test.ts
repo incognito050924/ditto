@@ -86,11 +86,20 @@ describe('buildDelegationPacket (6-section, Context Isolation)', () => {
     const memory = { related_nodes: ['sym:a', 'art:b'], decisions: ['decision:d1'] };
     const p = buildDelegationPacket(designNode, workItem, [], workItem.changed_files, memory);
     expect(p.context.memory).toEqual(memory);
-    // injection only — every other section is identical to the no-memory packet.
+    // injection + a cite-or-abstain directive because governing decisions are
+    // present (ac-2); task/file_scope are otherwise identical to no-memory.
     const baseline = buildDelegationPacket(designNode, workItem);
     expect(p.task).toBe(baseline.task);
-    expect(p.must_do).toEqual(baseline.must_do);
     expect(p.context.file_scope).toEqual(baseline.context.file_scope);
+    expect(p.must_do.some((m) => m.toLowerCase().includes('cite'))).toBe(true);
+  });
+
+  test('no cite-or-abstain directive when memoryContext carries no decisions', () => {
+    const memory = { related_nodes: ['sym:a', 'art:b'] };
+    const p = buildDelegationPacket(designNode, workItem, [], workItem.changed_files, memory);
+    // nothing to cite ⇒ must_do stays identical to the no-memory baseline.
+    const baseline = buildDelegationPacket(designNode, workItem);
+    expect(p.must_do).toEqual(baseline.must_do);
   });
 
   test('non-planner nodes carry no subgraph-generation directive (surgical)', () => {
