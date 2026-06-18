@@ -227,6 +227,61 @@ describe('projectEventNodes', () => {
     // and the source node is not pulled in solely by a secret event.
     expect(nodes.find((n) => n.id === 'source:src_pub00001')).toBeUndefined();
   });
+
+  test('decision with governs → Artifact node + Artifact→Decision RATIONALE_FOR bridge edge', () => {
+    const decision = ev('memevt_dec00002', {
+      ...approval,
+      event_type: 'decision',
+      text: 'memory subsystem design',
+      sources: ['src_adr0013'],
+      governs: ['src/core/memory-project.ts', 'src/core/ditto-paths.ts'],
+    });
+    const { nodes, edges } = projectEventNodes([decision]);
+    // each governed code path → an Artifact node, extension stripped to match ACG-emitted ids
+    expect(nodes.find((n) => n.id === 'artifact:src/core/memory-project')?.node_type).toBe(
+      'Artifact',
+    );
+    expect(nodes.find((n) => n.id === 'artifact:src/core/ditto-paths')?.node_type).toBe('Artifact');
+    // the bridge: code → decision, EXTRACTED because cited in the ADR 관련: header
+    const bridge = edges.find(
+      (e) => e.from === 'artifact:src/core/memory-project' && e.to === 'decision:memevt_dec00002',
+    );
+    expect(bridge?.edge_type).toBe('RATIONALE_FOR');
+    expect(bridge?.confidence_kind).toBe('EXTRACTED');
+  });
+
+  test('governs is ignored for non-decision events (bridge is decision-only)', () => {
+    const obs = ev('memevt_obs00003', {
+      ...approval,
+      event_type: 'observation',
+      governs: ['src/core/whatever'],
+    });
+    const { nodes } = projectEventNodes([obs]);
+    expect(nodes.find((n) => n.id === 'artifact:src/core/whatever')).toBeUndefined();
+  });
+});
+
+describe('code↔decision bridge (end-to-end traversal)', () => {
+  test('a governed code file resolves to its governing ADR in the serving graph', () => {
+    const decision = ev('memevt_dec00010', {
+      ...approval,
+      event_type: 'decision',
+      text: 'ADR-XXXX governing decision',
+      sources: ['src_adr00099'],
+      governs: ['src/core/foo.ts'],
+    });
+    const { nodes, edges } = projectEventNodes([decision]);
+    const g = buildServingGraph(nodes, edges, {
+      projection_id: 'proj_bridge01',
+      generated_at: '2026-06-18T00:00:00+00:00',
+    });
+    // BFS from the code file reaches the ADR that governs it — the bridge that
+    // §3 said was missing (code island ↔ decision island now connected).
+    const neighbors = g.adjacency['artifact:src/core/foo'] ?? [];
+    expect(
+      neighbors.some((n) => n.to === 'decision:memevt_dec00010' && n.edge_type === 'RATIONALE_FOR'),
+    ).toBe(true);
+  });
 });
 
 describe('buildServingGraph (one-way adjacency)', () => {

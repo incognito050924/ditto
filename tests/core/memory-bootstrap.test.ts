@@ -30,6 +30,9 @@ async function seedKnowledge(root: string) {
     [
       '# ADR-0001: Schema source of truth',
       '',
+      '- 상태: accepted',
+      '- 관련: ADR-0005, reports/design/schema.md, src/schemas/common.ts, src/core/memory-build.ts',
+      '',
       '## 결정',
       'zod schema가 source of truth이다.',
       '',
@@ -109,6 +112,15 @@ describe('bootstrapIngest', () => {
     // source types reflect the corpus.
     const types = sources.map((s) => s.source_type).sort();
     expect(types).toEqual(['note', 'spec', 'spec']);
+  });
+
+  test('ADR `관련:` header populates decision.governs with code paths only', async () => {
+    await bootstrapIngest(workDir);
+    const events = await new MemoryEventStore(workDir).list();
+    const adrEvent = events.find((e) => e.event_type === 'decision');
+    // ADR-0005 (decision ref) and reports/design/schema.md (doc) are excluded;
+    // only src/ code paths become governs, order preserved.
+    expect(adrEvent?.governs).toEqual(['src/schemas/common.ts', 'src/core/memory-build.ts']);
   });
 
   test('glossary/handoff events are ingested as status=approved (carry approval invariant)', async () => {

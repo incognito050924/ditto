@@ -108,6 +108,27 @@ function adrGist(body: string): string {
   return text.slice(0, 4000);
 }
 
+/**
+ * Parse the code paths an ADR governs from its `관련:` header line
+ * (memory-librarian §8 inc.1). The header lists a comma-separated mix of ADR
+ * refs, design docs, work-item ids, and code paths; only `src/`·`tests/`·
+ * `scripts/` paths are the code↔decision bridge anchors. Order preserved.
+ */
+function parseGovernedPaths(body: string): string[] {
+  const line = body.split('\n').find((l) => /^[-*\s]*관련\s*:/.test(l));
+  if (!line) return [];
+  return line
+    .replace(/^[-*\s]*관련\s*:/, '')
+    .split(',')
+    .map((s) =>
+      s
+        .trim()
+        .replace(/\s*\(.*$/, '')
+        .trim(),
+    )
+    .filter((s) => /^(src|tests|scripts)\//.test(s));
+}
+
 interface GlossaryEntry {
   term: string;
   definition?: string;
@@ -246,6 +267,7 @@ async function ingestAdrs(
       sensitivity: 'internal',
       approved_by: 'bootstrap',
       decided_at: now,
+      governs: parseGovernedPaths(body),
     };
     await appendEventGraceful(eventStore, event, result);
   }

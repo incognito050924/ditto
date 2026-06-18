@@ -26,6 +26,7 @@ import type {
 import type { MemorySource } from '~/schemas/memory-source';
 import { gitRevParse, listChangedFiles } from './git';
 import { generateId } from './id';
+import { artifactNodeId, normalizePath } from './memory-ir';
 import { reduceEvents } from './memory-reduce';
 import { findOwningRepo } from './memory-scan';
 import {
@@ -78,6 +79,7 @@ export function projectEventNodes(
   const nodes: MemoryNode[] = [];
   const edges: MemoryEdge[] = [];
   const sourceNodeIds = new Set<string>();
+  const artifactNodeIds = new Set<string>();
   for (const e of approved) {
     if (e.sensitivity === 'secret') continue;
     const isDecision = e.event_type === 'decision';
@@ -136,6 +138,50 @@ export function projectEventNodes(
         requires_review: false,
         used_as_evidence: false,
       });
+    }
+    // Code↔decision bridge (memory-librarian §8 inc.1): a decision's `governs`
+    // paths (from an ADR `관련:` header) → Artifact nodes + Artifact→Decision
+    // RATIONALE_FOR edges, so a code file resolves to the ADR that governs it.
+    // Artifact ids reuse the ACG path normalization so they merge with the
+    // code-island Artifact/Symbol nodes emitted from impact/codeql IR.
+    if (isDecision) {
+      for (const rawPath of e.governs) {
+        const artId = artifactNodeId(normalizePath(rawPath));
+        const groundingSource = e.sources[0];
+        if (!artifactNodeIds.has(artId)) {
+          artifactNodeIds.add(artId);
+          nodes.push({
+            id: artId,
+            node_type: 'Artifact',
+            name: artId.slice('artifact:'.length),
+            properties: {},
+            provenance: {
+              extraction_run_id: SEMANTIC_RUN_ID,
+              extracted_by: 'human',
+              schema_version: SCHEMA_VERSION,
+              ...(groundingSource ? { source_id: groundingSource } : {}),
+            },
+          });
+        }
+        edges.push({
+          id: `rationale_for:${artId}->${nodeId}`,
+          from: artId,
+          to: nodeId,
+          edge_type: 'RATIONALE_FOR',
+          confidence_kind: 'EXTRACTED',
+          confidence_score: 1,
+          properties: {},
+          provenance: {
+            extraction_run_id: SEMANTIC_RUN_ID,
+            extracted_by: 'human',
+            schema_version: SCHEMA_VERSION,
+            ...(groundingSource ? { source_id: groundingSource } : {}),
+          },
+          weight: 1,
+          requires_review: false,
+          used_as_evidence: false,
+        });
+      }
     }
   }
   const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);

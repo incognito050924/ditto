@@ -19038,7 +19038,8 @@ var memoryEvent = exports_external.object({
   sensitivity: memorySensitivity.default("internal"),
   approved_by: exports_external.string().min(1).optional(),
   decided_at: isoDateTime.optional(),
-  supersedes: memoryEventId.optional()
+  supersedes: memoryEventId.optional(),
+  governs: exports_external.array(exports_external.string().min(1)).default([]).describe("code paths this decision governs (from an ADR `\uAD00\uB828:` header) \u2014 bridges code Artifact nodes to this Decision (decision events only)")
 }).superRefine((event, ctx) => {
   if ((event.status === "approved" || event.status === "rejected") && !event.approved_by) {
     ctx.addIssue({
@@ -19140,6 +19141,26 @@ function captureGitDiff(cwd) {
       return "";
     }
   }
+}
+
+// src/core/memory-ir.ts
+var SUPPORTED_AFFECTED_KINDS = new Set([
+  "direct_caller",
+  "transitive_caller",
+  "type_contract",
+  "generated_client",
+  "test",
+  "doc",
+  "external_surface",
+  "ui_surface",
+  "user_journey"
+]);
+var JOURNEY_KINDS = new Set(["ui_surface", "user_journey"]);
+function normalizePath(path) {
+  return path.replace(/\.[cm]?[jt]sx?$/, "").replace(/\.(java|kt|py)$/, "");
+}
+function artifactNodeId(path) {
+  return `artifact:${path}`;
 }
 
 // src/core/memory-reduce.ts
@@ -19551,6 +19572,7 @@ function projectEventNodes(approved, secretSourceIds = new Set) {
   const nodes = [];
   const edges = [];
   const sourceNodeIds = new Set;
+  const artifactNodeIds = new Set;
   for (const e2 of approved) {
     if (e2.sensitivity === "secret")
       continue;
@@ -19611,6 +19633,45 @@ function projectEventNodes(approved, secretSourceIds = new Set) {
         requires_review: false,
         used_as_evidence: false
       });
+    }
+    if (isDecision) {
+      for (const rawPath of e2.governs) {
+        const artId = artifactNodeId(normalizePath(rawPath));
+        const groundingSource = e2.sources[0];
+        if (!artifactNodeIds.has(artId)) {
+          artifactNodeIds.add(artId);
+          nodes.push({
+            id: artId,
+            node_type: "Artifact",
+            name: artId.slice("artifact:".length),
+            properties: {},
+            provenance: {
+              extraction_run_id: SEMANTIC_RUN_ID,
+              extracted_by: "human",
+              schema_version: SCHEMA_VERSION,
+              ...groundingSource ? { source_id: groundingSource } : {}
+            }
+          });
+        }
+        edges.push({
+          id: `rationale_for:${artId}->${nodeId}`,
+          from: artId,
+          to: nodeId,
+          edge_type: "RATIONALE_FOR",
+          confidence_kind: "EXTRACTED",
+          confidence_score: 1,
+          properties: {},
+          provenance: {
+            extraction_run_id: SEMANTIC_RUN_ID,
+            extracted_by: "human",
+            schema_version: SCHEMA_VERSION,
+            ...groundingSource ? { source_id: groundingSource } : {}
+          },
+          weight: 1,
+          requires_review: false,
+          used_as_evidence: false
+        });
+      }
     }
   }
   const byId = (a2, b2) => a2.id < b2.id ? -1 : a2.id > b2.id ? 1 : 0;
@@ -22507,10 +22568,10 @@ async function loadJourneyEntries(journeysDir) {
   }
   return { entries, invalid };
 }
-var normalizePath = (p) => toPosix(p).replace(/^\.\//, "");
+var normalizePath2 = (p) => toPosix(p).replace(/^\.\//, "");
 async function selectImpactedJourneys(journeysDir, changedPaths) {
   const { entries, invalid } = await loadJourneyEntries(journeysDir);
-  const normalized = changedPaths.map(normalizePath);
+  const normalized = changedPaths.map(normalizePath2);
   const matchedPaths = new Set;
   const journeys = [];
   for (const entry of entries) {
@@ -22518,7 +22579,7 @@ async function selectImpactedJourneys(journeysDir, changedPaths) {
     for (const surface of entry.surfaces) {
       if (!surface.startsWith(COMPONENT_PREFIX))
         continue;
-      const pattern = normalizePath(surface.slice(COMPONENT_PREFIX.length));
+      const pattern = normalizePath2(surface.slice(COMPONENT_PREFIX.length));
       const hits = normalized.filter((p) => matchesComponentPattern(pattern, p));
       if (hits.length === 0)
         continue;
@@ -32673,6 +32734,13 @@ function adrGist(body) {
 ${gist}` : title;
   return text.slice(0, 4000);
 }
+function parseGovernedPaths(body) {
+  const line = body.split(`
+`).find((l2) => /^[-*\s]*\uAD00\uB828\s*:/.test(l2));
+  if (!line)
+    return [];
+  return line.replace(/^[-*\s]*\uAD00\uB828\s*:/, "").split(",").map((s2) => s2.trim().replace(/\s*\(.*$/, "").trim()).filter((s2) => /^(src|tests|scripts)\//.test(s2));
+}
 function emptyResult() {
   return { sourcesAdded: [], sourcesSkipped: [], eventsAppended: [], eventsSkipped: [] };
 }
@@ -32759,7 +32827,8 @@ async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head
       confidence_kind: "EXTRACTED",
       sensitivity: "internal",
       approved_by: "bootstrap",
-      decided_at: now
+      decided_at: now,
+      governs: parseGovernedPaths(body)
     };
     await appendEventGraceful(eventStore, event, result2);
   }
@@ -37193,4 +37262,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=e8d47eab3b70a171a77ad5f421e5a5f186ecd2d3954fae37b0b810dbda93287c
+//# ditto-src-stamp=e8a983e2d958d0ce6a26db760d1c2201b716a0274a8bbc5e4fe8d79f370a959c
