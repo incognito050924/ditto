@@ -34023,6 +34023,112 @@ var memoryApprove = defineCommand({
     }
   }
 });
+function evidenceLocus(record) {
+  const ref = record.ref;
+  switch (ref.kind) {
+    case "command":
+      return ref.command ? `command \`${ref.command}\`${record.exit_code !== null ? ` (exit ${record.exit_code})` : ""}` : "command";
+    case "file":
+    case "artifact":
+      if (ref.path) {
+        return ref.lines ? `${ref.path}:${ref.lines.start}-${ref.lines.end}` : ref.path;
+      }
+      return ref.kind;
+    case "url":
+      return ref.url ?? "url";
+    default:
+      return ref.kind;
+  }
+}
+function findingText(record) {
+  const body = record.ref.summary ?? record.key_lines.join(`
+`);
+  const sha = record.ref.sha256 ? ` sha256:${record.ref.sha256.slice(0, 12)}` : "";
+  const text = `${body}
+
+evidence: ${evidenceLocus(record)}${sha}`.trim();
+  return text.length > 4000 ? text.slice(0, 4000) : text;
+}
+var memoryProposeFinding = defineCommand({
+  meta: {
+    name: "propose-finding",
+    description: "Convert a captured evidence record into a pending INFERRED observation event (\xA78 inc.3, ac-3). Evidence-bound capture only: the agent self-report is grounded in an evidence record and never stored as fact. Selector: --work-item <id> --index <n> (EvidenceRecord has no stable id; see design note)."
+  },
+  args: {
+    "work-item": {
+      type: "string",
+      description: "Work item id whose evidence-index.json holds the record",
+      required: true
+    },
+    index: {
+      type: "string",
+      description: "Zero-based index of the record in evidence-index.json",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const wi = args["work-item"];
+    if (!workItemId.safeParse(wi).success) {
+      writeError(`invalid --work-item id "${wi}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const index = Number(args.index);
+    if (!Number.isInteger(index) || index < 0) {
+      writeError(`--index must be a non-negative integer; got "${args.index}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const ledger = await new EvidenceStore(repoRoot).readIndex(wi);
+      if (ledger.records.length === 0) {
+        writeError(`no evidence records for work item ${wi}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      if (index >= ledger.records.length) {
+        writeError(`--index ${index} out of range (${ledger.records.length} record(s))`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const record = ledger.records[index];
+      const written = await proposeEvent(repoRoot, {
+        event_type: "observation",
+        text: findingText(record),
+        sources: [],
+        confidence_kind: "INFERRED",
+        actor: { kind: "agent" }
+      });
+      if (format === "json") {
+        writeJson2(written);
+      } else {
+        writeHuman(`Proposed finding ${written.event_id} from ${wi} evidence #${index}`);
+        writeHuman(`  type:       ${written.event_type}`);
+        writeHuman(`  confidence: ${written.confidence_kind}`);
+        writeHuman(`  status:     ${written.status}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/invalid|expected|required/i.test(msg)) {
+        writeError(`memory propose-finding failed: ${msg}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory propose-finding failed: ${msg}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var memoryUsage = defineCommand({
   meta: {
     name: "usage",
@@ -34100,6 +34206,7 @@ var memoryCommand = defineCommand({
     audit: memoryAudit,
     usage: memoryUsage,
     propose: memoryPropose,
+    "propose-finding": memoryProposeFinding,
     approve: memoryApprove
   }
 });
@@ -37270,4 +37377,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=a27e86f5ea1641a0a334655d6536c103616709b831a99b2fe980623c82bd18fd
+//# ditto-src-stamp=227a949299e4f2ebe4c8cc2b49f727e72d462fa0df9114da48de00bc04e0a049

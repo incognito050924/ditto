@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { defineCommand } from 'citty';
+import { EvidenceStore } from '~/core/evidence-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { listChangedFiles } from '~/core/git';
 import { generateId } from '~/core/id';
@@ -44,6 +45,8 @@ import {
   MemoryProjectionStore,
 } from '~/core/memory-store';
 import { readUsageReport } from '~/core/memory-warmstart';
+import { workItemId as workItemIdSchema } from '~/schemas/common';
+import type { EvidenceRecord } from '~/schemas/evidence-record';
 import {
   type MemoryEvent,
   memoryEvent,
@@ -1048,6 +1051,126 @@ const memoryApprove = defineCommand({
   },
 });
 
+/**
+ * Where the evidence came from, rendered for the event text. The EvidenceRecord
+ * has no stable id and is not a memory source, so the provenance cannot live in
+ * the event's `sources` array (those must be `src_…` ids) — it is carried in the
+ * text instead (memory-librarian §8 inc.3 design note, ac-3 predicate adjusted).
+ */
+function evidenceLocus(record: EvidenceRecord): string {
+  const ref = record.ref;
+  switch (ref.kind) {
+    case 'command':
+      return ref.command
+        ? `command \`${ref.command}\`${record.exit_code !== null ? ` (exit ${record.exit_code})` : ''}`
+        : 'command';
+    case 'file':
+    case 'artifact':
+      if (ref.path) {
+        return ref.lines ? `${ref.path}:${ref.lines.start}-${ref.lines.end}` : ref.path;
+      }
+      return ref.kind;
+    case 'url':
+      return ref.url ?? 'url';
+    default:
+      return ref.kind;
+  }
+}
+
+/** Build the INFERRED observation body from an evidence record. */
+function findingText(record: EvidenceRecord): string {
+  const body = record.ref.summary ?? record.key_lines.join('\n');
+  const sha = record.ref.sha256 ? ` sha256:${record.ref.sha256.slice(0, 12)}` : '';
+  const text = `${body}\n\nevidence: ${evidenceLocus(record)}${sha}`.trim();
+  // memoryEvent.text caps at 4000; truncate defensively (rare, long key_lines).
+  return text.length > 4000 ? text.slice(0, 4000) : text;
+}
+
+const memoryProposeFinding = defineCommand({
+  meta: {
+    name: 'propose-finding',
+    description:
+      'Convert a captured evidence record into a pending INFERRED observation event (§8 inc.3, ac-3). Evidence-bound capture only: the agent self-report is grounded in an evidence record and never stored as fact. Selector: --work-item <id> --index <n> (EvidenceRecord has no stable id; see design note).',
+  },
+  args: {
+    'work-item': {
+      type: 'string',
+      description: 'Work item id whose evidence-index.json holds the record',
+      required: true,
+    },
+    index: {
+      type: 'string',
+      description: 'Zero-based index of the record in evidence-index.json',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const wi = args['work-item'];
+    if (!workItemIdSchema.safeParse(wi).success) {
+      writeError(`invalid --work-item id "${wi}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const index = Number(args.index);
+    if (!Number.isInteger(index) || index < 0) {
+      writeError(`--index must be a non-negative integer; got "${args.index}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const ledger = await new EvidenceStore(repoRoot).readIndex(wi);
+      if (ledger.records.length === 0) {
+        writeError(`no evidence records for work item ${wi}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      if (index >= ledger.records.length) {
+        writeError(`--index ${index} out of range (${ledger.records.length} record(s))`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const record = ledger.records[index];
+      // confidence_kind=INFERRED: an agent-captured finding is a guess grounded
+      // in evidence, never a fact (ac-3·ac-4). The laundering guard in
+      // proposeEvent would downgrade EXTRACTED anyway; we set it explicitly.
+      const written = await proposeEvent(repoRoot, {
+        event_type: 'observation',
+        text: findingText(record),
+        sources: [],
+        confidence_kind: 'INFERRED',
+        actor: { kind: 'agent' },
+      });
+      if (format === 'json') {
+        writeJson(written);
+      } else {
+        writeHuman(`Proposed finding ${written.event_id} from ${wi} evidence #${index}`);
+        writeHuman(`  type:       ${written.event_type}`);
+        writeHuman(`  confidence: ${written.confidence_kind}`);
+        writeHuman(`  status:     ${written.status}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/invalid|expected|required/i.test(msg)) {
+        writeError(`memory propose-finding failed: ${msg}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory propose-finding failed: ${msg}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 const memoryUsage = defineCommand({
   meta: {
     name: 'usage',
@@ -1133,6 +1256,7 @@ export const memoryCommand = defineCommand({
     audit: memoryAudit,
     usage: memoryUsage,
     propose: memoryPropose,
+    'propose-finding': memoryProposeFinding,
     approve: memoryApprove,
   },
 });

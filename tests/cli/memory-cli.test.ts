@@ -831,3 +831,160 @@ describe('ditto memory query body search (R1 visibility + R9 fallback marker)', 
     expect(o2.matches.length).toBeGreaterThan(0);
   });
 });
+
+describe('ditto memory propose-finding (§8 inc.3, ac-3 — evidence→INFERRED memory)', () => {
+  const WI = 'wi_finding01';
+
+  async function writeEvidenceIndex(records: unknown[]) {
+    const wiDir = join(dir, '.ditto', 'local', 'work-items', WI);
+    await mkdir(wiDir, { recursive: true });
+    await writeFile(
+      join(wiDir, 'evidence-index.json'),
+      JSON.stringify({ schema_version: '0.1.0', work_item_id: WI, records }, null, 2),
+    );
+  }
+
+  const commandRecord = {
+    ref: { kind: 'command', command: 'bun test', summary: 'full suite green' },
+    captured_at: '2026-06-18T00:00:00.000Z',
+    freshness: 'fresh',
+    stale_reason: null,
+    portability: 'local-artifact',
+    artifact_available: false,
+    exit_code: 0,
+    key_lines: ['2376 pass', '0 fail'],
+  };
+
+  test('converts an evidence record to a pending INFERRED observation event', async () => {
+    await writeEvidenceIndex([commandRecord]);
+    const r = ditto([
+      'memory',
+      'propose-finding',
+      '--work-item',
+      WI,
+      '--index',
+      '0',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(0);
+    const ev = JSON.parse(r.stdout);
+    expect(ev.event_type).toBe('observation');
+    expect(ev.confidence_kind).toBe('INFERRED');
+    expect(ev.status).toBe('pending');
+    expect(ev.actor.kind).toBe('agent');
+    expect(ev.event_id).toMatch(/^memevt_/);
+    // evidence provenance is carried in the text (EvidenceRecord has no stable
+    // id and is not a memory source, so it cannot live in `sources`).
+    expect(ev.text).toContain('full suite green');
+    expect(ev.text).toContain('bun test');
+  });
+
+  test('roundtrips propose-finding → approve → query (ac-3)', async () => {
+    await writeEvidenceIndex([commandRecord]);
+    const proposed = ditto([
+      'memory',
+      'propose-finding',
+      '--work-item',
+      WI,
+      '--index',
+      '0',
+      '--output',
+      'json',
+    ]);
+    expect(proposed.exitCode).toBe(0);
+    const id = JSON.parse(proposed.stdout).event_id;
+    const approved = ditto([
+      'memory',
+      'approve',
+      id,
+      '--by',
+      'user',
+      '--actor',
+      'user',
+      '--output',
+      'json',
+    ]);
+    expect(approved.exitCode).toBe(0);
+    const decisionId = JSON.parse(approved.stdout).decision.event_id;
+    // event nodes carry the `decision:` id prefix regardless of event_type
+    // (node_type differs: Episode for observation). See eventNodeId.
+    const explain = ditto(['memory', 'explain', `decision:${decisionId}`, '--output', 'json']);
+    expect(explain.exitCode).toBe(0);
+    const node = JSON.parse(explain.stdout);
+    expect(node.node?.node_type ?? node.node_type).toBe('Episode');
+  });
+
+  test('falls back to key_lines when the ref has no summary (file kind)', async () => {
+    await writeEvidenceIndex([
+      {
+        ref: { kind: 'file', path: 'src/core/x.ts', lines: { start: 10, end: 20 } },
+        captured_at: '2026-06-18T00:00:00.000Z',
+        freshness: 'fresh',
+        stale_reason: null,
+        portability: 'committed',
+        artifact_available: true,
+        exit_code: null,
+        key_lines: ['export const broken = true;'],
+      },
+    ]);
+    const r = ditto([
+      'memory',
+      'propose-finding',
+      '--work-item',
+      WI,
+      '--index',
+      '0',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(0);
+    const ev = JSON.parse(r.stdout);
+    expect(ev.text).toContain('export const broken = true;');
+    expect(ev.text).toContain('src/core/x.ts:10-20');
+  });
+
+  test('out-of-range index is a usage error', async () => {
+    await writeEvidenceIndex([commandRecord]);
+    const r = ditto([
+      'memory',
+      'propose-finding',
+      '--work-item',
+      WI,
+      '--index',
+      '5',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(65);
+    expect(r.stderr).toMatch(/index/i);
+  });
+
+  test('empty/absent evidence index is a usage error', () => {
+    const r = ditto([
+      'memory',
+      'propose-finding',
+      '--work-item',
+      WI,
+      '--index',
+      '0',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(65);
+  });
+
+  test('malformed work item id is a usage error', () => {
+    const r = ditto([
+      'memory',
+      'propose-finding',
+      '--work-item',
+      'not-a-wi',
+      '--index',
+      '0',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(65);
+  });
+});
