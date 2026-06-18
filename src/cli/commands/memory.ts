@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { defineCommand } from 'citty';
+import { dittoDir } from '~/core/ditto-paths';
 import { EvidenceStore } from '~/core/evidence-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { listChangedFiles } from '~/core/git';
@@ -15,6 +16,7 @@ import {
   irFragmentsSchema,
   mergeIrFragments,
 } from '~/core/memory-build';
+import { measureHallucination } from '~/core/memory-measure';
 import {
   MemoryEventAlreadyDecidedError,
   MemoryEventNotPendingError,
@@ -1171,6 +1173,81 @@ const memoryProposeFinding = defineCommand({
   },
 });
 
+const memoryMeasure = defineCommand({
+  meta: {
+    name: 'measure',
+    description:
+      'Compute the hallucination-reduction baseline (§8 inc.5, ac-5): re-proposal rate against catalogued rejected alternatives + invariant inventory + ADR parse coverage. measure-before-expand gate data source (ADR-0013 D4). Pass --against <file,...> to check candidate plan texts for re-proposals.',
+  },
+  args: {
+    against: {
+      type: 'string',
+      description: 'Comma-separated candidate text file(s) to scan for re-proposals',
+      required: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const adrDir = join(dittoDir(repoRoot), 'knowledge', 'adr');
+    let names: string[];
+    try {
+      names = (await readdir(adrDir)).filter((n) => n.endsWith('.md')).sort();
+    } catch {
+      writeError(`no ADR directory at ${adrDir}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (names.length === 0) {
+      writeError(`no ADRs found under ${adrDir}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    try {
+      const adrs = await Promise.all(
+        names.map(async (n) => ({ id: n, body: await readFile(join(adrDir, n), 'utf8') })),
+      );
+      const candidateFiles = (args.against ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      const candidates = await Promise.all(
+        candidateFiles.map((f) => readFile(isAbsolute(f) ? f : join(repoRoot, f), 'utf8')),
+      );
+      const report = measureHallucination(adrs, candidates);
+      if (format === 'json') {
+        writeJson(report);
+      } else {
+        writeHuman('Hallucination-reduction baseline (ac-5):');
+        writeHuman(
+          `  ADRs: ${report.adrs_total} (with 대안 section: ${report.adrs_with_rejected_section})`,
+        );
+        if (report.adrs_without_rejected_section.length > 0) {
+          writeHuman(`  no 대안 section: ${report.adrs_without_rejected_section.join(', ')}`);
+        }
+        writeHuman(`  rejected alternatives catalogued: ${report.rejected_alternatives_total}`);
+        writeHuman(`  invariants (low-precision scan): ${report.invariants_total}`);
+        writeHuman(`  candidates scanned: ${report.candidates_total}`);
+        writeHuman(
+          `  re-proposals detected: ${report.reproposals_detected} (rate ${report.reproposal_rate.toFixed(3)})`,
+        );
+        writeHuman('  invariant violation rate: not computed (prose-scattered — see doc)');
+      }
+    } catch (err) {
+      writeError(`memory measure failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 const memoryUsage = defineCommand({
   meta: {
     name: 'usage',
@@ -1257,6 +1334,7 @@ export const memoryCommand = defineCommand({
     usage: memoryUsage,
     propose: memoryPropose,
     'propose-finding': memoryProposeFinding,
+    measure: memoryMeasure,
     approve: memoryApprove,
   },
 });

@@ -32672,7 +32672,7 @@ var knowledgeCommand = defineCommand({
 
 // src/cli/commands/memory.ts
 import { randomBytes as randomBytes3 } from "crypto";
-import { readFile as readFile14 } from "fs/promises";
+import { readFile as readFile14, readdir as readdir19 } from "fs/promises";
 import { isAbsolute as isAbsolute8, join as join66 } from "path";
 
 // src/core/memory-bootstrap.ts
@@ -33149,6 +33149,92 @@ function assembleSemanticIr(merged, run) {
 function findDanglingEdges(nodes, edges) {
   const ids = new Set(nodes.map((n2) => n2.id));
   return edges.filter((e2) => !ids.has(e2.from) || !ids.has(e2.to)).map((e2) => e2.id);
+}
+
+// src/core/memory-measure.ts
+var REJECTED_HEADING = /^##\s*\uB300\uC548/;
+var HEADING = /^##\s/;
+var BULLET = /^\s*[-*]\s+/;
+var INVARIANT_KEYWORD = /\uBD88\uBCC0\uC2DD|invariant/i;
+var RELATED_LINE = /^[-*\s]*\uAD00\uB828\s*:/;
+function extractRejectedAlternatives(adrBody) {
+  const items = [];
+  let capturing = false;
+  for (const raw of adrBody.split(`
+`)) {
+    if (HEADING.test(raw)) {
+      capturing = REJECTED_HEADING.test(raw);
+      continue;
+    }
+    if (!capturing)
+      continue;
+    if (BULLET.test(raw)) {
+      items.push(raw.replace(BULLET, "").trim());
+    } else if (raw.trim().length > 0 && items.length > 0) {
+      items[items.length - 1] = `${items[items.length - 1]} ${raw.trim()}`;
+    }
+  }
+  return items.filter((i2) => i2.length > 0);
+}
+function extractInvariants(adrBody) {
+  return adrBody.split(`
+`).map((l2) => l2.trim()).filter((l2) => l2.length > 0 && !l2.startsWith("#") && !RELATED_LINE.test(l2) && INVARIANT_KEYWORD.test(l2));
+}
+function salientTokens(item) {
+  const bold = item.match(/\*\*(.+?)\*\*/);
+  const lead = bold?.[1] ?? item;
+  const tokens2 = new Set;
+  for (const m2 of lead.matchAll(/\(([^)]+)\)/g)) {
+    for (const t2 of (m2[1] ?? "").split(/[\s,/]+/)) {
+      if (t2.length >= 3)
+        tokens2.add(t2.toLowerCase());
+    }
+  }
+  for (const m2 of lead.matchAll(/[A-Za-z][A-Za-z0-9]{3,}/g)) {
+    tokens2.add(m2[0].toLowerCase());
+  }
+  return [...tokens2];
+}
+function measureHallucination(adrs, candidates) {
+  const without = [];
+  let rejectedTotal = 0;
+  let invariantsTotal = 0;
+  let withSection = 0;
+  const lowerCandidates = candidates.map((c3) => c3.toLowerCase());
+  const hits = [];
+  for (const adr of adrs) {
+    const rejected = extractRejectedAlternatives(adr.body);
+    invariantsTotal += extractInvariants(adr.body).length;
+    if (rejected.length === 0) {
+      without.push(adr.id);
+    } else {
+      withSection += 1;
+      rejectedTotal += rejected.length;
+      for (const item of rejected) {
+        const tokens2 = salientTokens(item);
+        for (let ci = 0;ci < lowerCandidates.length; ci += 1) {
+          const matched = tokens2.find((t2) => lowerCandidates[ci]?.includes(t2));
+          if (matched) {
+            hits.push({ adr_id: adr.id, item, matched_token: matched, candidate_index: ci });
+            break;
+          }
+        }
+      }
+    }
+  }
+  const detected = hits.length;
+  return {
+    adrs_total: adrs.length,
+    adrs_with_rejected_section: withSection,
+    adrs_without_rejected_section: without,
+    rejected_alternatives_total: rejectedTotal,
+    invariants_total: invariantsTotal,
+    candidates_total: candidates.length,
+    reproposals_detected: detected,
+    reproposal_rate: rejectedTotal === 0 ? 0 : detected / rejectedTotal,
+    reproposal_hits: hits,
+    invariant_violations_computed: false
+  };
 }
 
 // src/cli/commands/memory.ts
@@ -34129,6 +34215,68 @@ var memoryProposeFinding = defineCommand({
     }
   }
 });
+var memoryMeasure = defineCommand({
+  meta: {
+    name: "measure",
+    description: "Compute the hallucination-reduction baseline (\xA78 inc.5, ac-5): re-proposal rate against catalogued rejected alternatives + invariant inventory + ADR parse coverage. measure-before-expand gate data source (ADR-0013 D4). Pass --against <file,...> to check candidate plan texts for re-proposals."
+  },
+  args: {
+    against: {
+      type: "string",
+      description: "Comma-separated candidate text file(s) to scan for re-proposals",
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const adrDir = join66(dittoDir(repoRoot), "knowledge", "adr");
+    let names;
+    try {
+      names = (await readdir19(adrDir)).filter((n2) => n2.endsWith(".md")).sort();
+    } catch {
+      writeError(`no ADR directory at ${adrDir}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (names.length === 0) {
+      writeError(`no ADRs found under ${adrDir}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    try {
+      const adrs = await Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile14(join66(adrDir, n2), "utf8") })));
+      const candidateFiles = (args.against ?? "").split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+      const candidates = await Promise.all(candidateFiles.map((f3) => readFile14(isAbsolute8(f3) ? f3 : join66(repoRoot, f3), "utf8")));
+      const report = measureHallucination(adrs, candidates);
+      if (format === "json") {
+        writeJson2(report);
+      } else {
+        writeHuman("Hallucination-reduction baseline (ac-5):");
+        writeHuman(`  ADRs: ${report.adrs_total} (with \uB300\uC548 section: ${report.adrs_with_rejected_section})`);
+        if (report.adrs_without_rejected_section.length > 0) {
+          writeHuman(`  no \uB300\uC548 section: ${report.adrs_without_rejected_section.join(", ")}`);
+        }
+        writeHuman(`  rejected alternatives catalogued: ${report.rejected_alternatives_total}`);
+        writeHuman(`  invariants (low-precision scan): ${report.invariants_total}`);
+        writeHuman(`  candidates scanned: ${report.candidates_total}`);
+        writeHuman(`  re-proposals detected: ${report.reproposals_detected} (rate ${report.reproposal_rate.toFixed(3)})`);
+        writeHuman("  invariant violation rate: not computed (prose-scattered \u2014 see doc)");
+      }
+    } catch (err) {
+      writeError(`memory measure failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var memoryUsage = defineCommand({
   meta: {
     name: "usage",
@@ -34207,6 +34355,7 @@ var memoryCommand = defineCommand({
     usage: memoryUsage,
     propose: memoryPropose,
     "propose-finding": memoryProposeFinding,
+    measure: memoryMeasure,
     approve: memoryApprove
   }
 });
@@ -37377,4 +37526,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=227a949299e4f2ebe4c8cc2b49f727e72d462fa0df9114da48de00bc04e0a049
+//# ditto-src-stamp=5ed6a1ccf7b2357bd4416df247829b7fd70686b2c8cc6f2bf26d434913b1d5ad

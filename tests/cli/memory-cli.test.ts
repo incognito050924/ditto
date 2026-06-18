@@ -988,3 +988,45 @@ describe('ditto memory propose-finding (§8 inc.3, ac-3 — evidence→INFERRED 
     expect(r.exitCode).toBe(65);
   });
 });
+
+describe('ditto memory measure (§8 inc.5, ac-5 — hallucination baseline)', () => {
+  async function writeAdrs() {
+    const adrDir = join(dir, '.ditto', 'knowledge', 'adr');
+    await mkdir(adrDir, { recursive: true });
+    await writeFile(
+      join(adrDir, 'ADR-0001-x.md'),
+      '# ADR-0001: A\n\n## 결정\nuse zod.\n\n## 대안 (기각)\n- **Neo4j 상시 서버**: 무서버 위반. 기각.\n- **임베딩 매칭**: 비결정. 기각.\n',
+    );
+    await writeFile(
+      join(adrDir, 'ADR-0002-y.md'),
+      '# ADR-0002: B\n\n## 결정\nschema is SoT.\n\n## 근거\nsingle source.\n',
+    );
+  }
+
+  test('emits the baseline inventory + coverage over real ADRs (1회 산출)', async () => {
+    await writeAdrs();
+    const r = ditto(['memory', 'measure', '--output', 'json']);
+    expect(r.exitCode).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.adrs_total).toBe(2);
+    expect(out.rejected_alternatives_total).toBe(2);
+    expect(out.adrs_without_rejected_section).toContain('ADR-0002-y.md');
+    expect(out.reproposals_detected).toBe(0);
+    expect(out.reproposal_rate).toBe(0);
+  });
+
+  test('--against detects a re-proposal in a candidate text file', async () => {
+    await writeAdrs();
+    await writeFile(join(dir, 'plan.md'), 'plan: stand up a Neo4j server for the graph.');
+    const r = ditto(['memory', 'measure', '--against', 'plan.md', '--output', 'json']);
+    expect(r.exitCode).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.reproposals_detected).toBeGreaterThanOrEqual(1);
+    expect(out.reproposal_rate).toBeGreaterThan(0);
+  });
+
+  test('absent ADR dir is a usage error', () => {
+    const r = ditto(['memory', 'measure', '--output', 'json']);
+    expect(r.exitCode).toBe(65);
+  });
+});
