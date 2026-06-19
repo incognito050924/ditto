@@ -52,15 +52,50 @@ Then register the machine state (for `<wi>` = the active work item id):
 
   `review` is `reviewed` only after the user actually confirmed the section; `skipped` when the user chose to skip (oneshot); otherwise `pending`. This coverage feeds finalize's honest review record.
 
-## Pre-mortem (three fixed points)
+## Expert elicitation — good questions (always on)
+
+The agent does the expert's legwork: bring the considerations a seasoned practitioner of *this* task would raise, with evidence, so the user sees what they would have missed. This is core behavior, not an opt-in mode — it runs whenever you draft, so output quality does not depend on the author's expertise. "Reduce the user's cognitive cost" means the agent carries the legwork (surfacing grounded considerations), never that the agent decides intent or value.
+
+- **Characterize the task first.** Work out what the user is actually doing and in which domain (codebase, `ditto memory query`, domain knowledge), then **generate that domain's expert considerations on the spot** — abstraction level, tech-stack choice, deployment, versioning, UI/UX, security, and beyond. No fixed checklist: considerations are generated per task (the task may not even be software).
+- **A good question has three properties:**
+  1. **Blind-spot** — never ask what the user already decided; fire where an expert would have looked but the spec is silent.
+  2. **Perspective-shift / expansion** — go beyond filling a missing slot: open a different angle that widens the problem/solution space and lets the answerer see what they could not. A question that only fills gaps has decayed into a checklist. ("Make them see what they don't see" = surfacing omissions **and** opening new perspectives.)
+  3. **Orientation** — anchor to the goal so direction is never lost. Paired with #2: the standard is "expand without scattering," not "always narrow to a decision." The question carries "what changes depending on the answer."
+- **Separate facts from decisions.** Facts (which considerations apply) the agent self-answers from code/domain; the user gets only the **decision**, as an oriented question — e.g. "Path X goes through JWT; does this feature enforce that too, or is public access intended?"
+- **Boundary:** expansion is *intellectual reframing within the goal*, not business ambition. No "what's the 10x version?" — expansion makes the user *see* farther, it does not inflate the goal.
+
+## Critique axis — continuous pre-mortem
+
+A standing critique runs the whole time, so the skill never decays into a form to fill in. It targets two things, **every increment** — not a one-time finalize ritual:
+
+1. **The user's answers** — wrong, ambiguous, or incomplete? An answer arriving does not end the loop; the critique re-checks it for consistency and sufficiency (fill ↔ doubt alternate each increment).
+2. **The whole artifact** — cross-section contradictions, gaps, acceptance criteria that cannot be verified.
+
+A critique result surfaces as a *new good question* or a *flagged unknown/gap* — never as raw question phrasing in the document. Concrete triggers stay:
 
 1. **Right after the 배경·목표 draft**: "If this understanding is wrong, where is it wrong?" — fix the draft or record the doubt in §7.
-2. **On every 비목표/AC increment**: "Shipped and broke in 3 days — what was the cause?" Each answer is promoted to an AC (§6), pushed to 비목표 (§5), or left in §7 as an unknown; flag irreversible / blast-radius risks explicitly. Results accumulate in §7 위험 — this is per-increment, not a one-time ceremony.
+2. **On every 비목표/AC increment**: "Shipped and broke in 3 days — what was the cause?" Each answer is promoted to an AC (§6), pushed to 비목표 (§5), or left in §7 as an unknown; flag irreversible / blast-radius risks explicitly. Results accumulate in §7 위험.
 3. **Before finalize**: deep-interview's own pre-mortem converges on the accumulated §7 — it consumes the ledger, it does not duplicate it.
 
 ## Deep-interview synthesis
 
 When intent-level ambiguity meets the **existing** deep-interview entry conditions (`skills/deep-interview/SKILL.md` "When to enter"), call deep-interview internally — unchanged: same gates, same question budget, same finalize contract (zero diff). Record the process and result as a summary + link in §12 인터뷰 기록 (original stays in `interview-state.json`). If an interview happened, its readiness gate must pass before finalize — never bypass it. If no ambiguity is detected, no interview happens; do not force entry.
+
+## Help ladder — when the user can't answer
+
+A good question can still stump the user (they miss the question or the intent, or lack the knowledge to answer). Don't stall — help, but know that **stronger help locks the user into that frame** (especially a non-expert), so help is ordered by bias cost and the upper rungs are opt-in:
+
+1. **Explain the question** (least bias, default): say plainly what is asked and why. Make the question understood — do not hand over an answer.
+2. **Offer a reference / consideration map**: not conclusions — a map of the territory the user explores and judges for themselves.
+3. **Research it for them** (opt-in, highest bias): only when the user asks. Return **≥2 viable options + trade-offs**, never a single answer (anti-anchoring).
+
+The agent does not treat "giving the answer" as the default. When it does answer, only because the user chose it, and in a form that widens rather than narrows their view.
+
+## Output discipline
+
+Questions ("broke in 3 days?") are internal elicitation tools. The document carries only the **resolved conclusions**, as clean professional sections (e.g. "Technical choice and trade-offs: …", "Edge cases / caveats: …"). Never leak question phrasing into a spec section title or body — the pre-mortem prompt and the good questions shape the content, they do not appear in it.
+
+The one home for the *process* is **§12 인터뷰 기록**, the provenance section: record a **summary** of how the document was shaped — which good questions surfaced what (blind-spots, new perspectives) and which decisions followed — so a reader understands the authoring path. Summary, never a raw transcript; fill it from the always-on elicitation loop too, not only when a formal deep-interview ran. This keeps the process visible without the spec body carrying question phrasing.
 
 ## Finalize
 
@@ -86,6 +121,8 @@ After finalize, editing a compile-input section of the document makes `ditto aut
 
 - Default mode is stepwise; oneshot only via explicit parameter. Never default to oneshot.
 - Never ask the user a spec question answerable from code/docs/memory — the user reviews, the agent researches.
+- Expert elicitation (good questions) and the critique axis are always-on core behavior, never an opt-in mode — the quality floor must hold even when the author is a novice.
+- Never leak elicitation or pre-mortem question phrasing into the document — sections carry resolved conclusions only.
 - Never modify deep-interview's contract, gates, budget, or finalize (zero diff — guarded by its contract tests).
 - Never hand-edit `intent.json` or build any document↔intent sync path.
 - Never skip pre-mortem or the finalize intent confirmation, in any mode.

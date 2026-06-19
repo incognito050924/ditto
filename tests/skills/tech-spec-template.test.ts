@@ -59,3 +59,31 @@ describe('tech-spec template generalization (ac-1)', () => {
     expect(skill).toContain('.ditto/specs/');
   });
 });
+
+describe('output discipline — no elicitation leak (ac-5)', () => {
+  // 질문/내부 도구 문구는 작성 루프의 도구일 뿐, 산출물(템플릿 인스턴스)엔 결론만 남는다.
+  // 설계 §5·§6-4: "질문 문구 산출물 누출 금지 + 기존 pre-mortem 템플릿 누출 수정".
+  test('TEMPLATE spec section headings carry no internal tool name (no "Pre-mortem" in headings)', () => {
+    const template = readFileSync(TEMPLATE_PATH, 'utf8');
+    const headings = template.split('\n').filter((l) => l.startsWith('## '));
+    for (const h of headings) {
+      expect(h.toLowerCase()).not.toContain('pre-mortem');
+      expect(h.toLowerCase()).not.toContain('premortem');
+    }
+  });
+
+  test('TEMPLATE does not embed the pre-mortem question verbatim (the question is an internal tool, not output)', () => {
+    const template = readFileSync(TEMPLATE_PATH, 'utf8');
+    expect(template).not.toContain('깨진다면 원인은');
+    expect(template).not.toContain('3일 만에 깨진다면');
+  });
+
+  test('SKILL.md declares output discipline and keeps the pre-mortem prompt as an internal tool', () => {
+    const skill = readFileSync(SKILL_PATH, 'utf8');
+    // 누출 금지 규율이 스킬에 명시돼 있다 (ac-5: 스킬에 출력 규율 명시)
+    expect(skill).toContain('Output discipline');
+    expect(skill).toMatch(/Never leak .*question phrasing/);
+    // pre-mortem 질문은 삭제가 아니라 스킬(비판 축)로 옮겨 내부 도구로 산다
+    expect(skill).toContain('broke in 3 days');
+  });
+});
