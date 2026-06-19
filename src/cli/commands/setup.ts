@@ -273,7 +273,12 @@ export const setupCommand = defineCommand({
 
       writeHuman(`setup: installed into ${projectRoot} (host=${host})`);
       for (const r of result.resources) {
-        const tag = r.status === 'corrupted' ? 'SKIPPED (corrupted markers)' : `→ ${r.destPath}`;
+        const tag =
+          r.status === 'corrupted'
+            ? 'SKIPPED (corrupted markers)'
+            : r.status === 'kept'
+              ? `→ ${r.destPath} (kept existing source)`
+              : `→ ${r.destPath}`;
         const bak = r.backupPath ? ` (backup ${r.backupPath})` : '';
         writeHuman(`  ${r.filename} [${r.host}/${r.scope}] ${tag}${bak}`);
       }

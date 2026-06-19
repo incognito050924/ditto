@@ -35667,7 +35667,7 @@ var semanticCommand = defineCommand({
 
 // src/cli/commands/setup.ts
 import { homedir as homedir10 } from "os";
-import { dirname as dirname14, join as join76, resolve as resolve18 } from "path";
+import { dirname as dirname15, join as join76, resolve as resolve18 } from "path";
 
 // src/core/provision/memory-separate.ts
 import { existsSync as existsSync9, readFileSync as readFileSync5, writeFileSync } from "fs";
@@ -35865,7 +35865,7 @@ function defaultRegistry() {
 
 // src/core/setup.ts
 import { cp, readFile as readFile15, rm as rm2, writeFile as writeFile4 } from "fs/promises";
-import { join as join74, resolve as resolve16 } from "path";
+import { basename as basename3, dirname as dirname13, join as join74, resolve as resolve16 } from "path";
 
 // src/core/resource-routing.ts
 import { readdirSync as readdirSync3 } from "fs";
@@ -36088,21 +36088,51 @@ async function installCodexSurface(opts) {
     agentsInstalled
   };
 }
+async function installResource(decision, resourcesDir) {
+  const common = {
+    host: decision.host,
+    filename: decision.filename,
+    scope: decision.scope,
+    destPath: decision.destPath
+  };
+  const name = basename3(decision.destPath);
+  if (name === "AGENTS.md") {
+    const existed = await fileExists(decision.destPath);
+    if (!existed) {
+      const body2 = await readFile15(join74(resourcesDir, decision.filename), "utf8");
+      await atomicWriteText(decision.destPath, body2);
+    }
+    return { ...common, status: existed ? "kept" : "written", backupPath: null };
+  }
+  if (name === "CLAUDE.md") {
+    const sourcePath = join74(dirname13(decision.destPath), "AGENTS.md");
+    const projectionBody = await fileExists(sourcePath) ? await readFile15(sourcePath, "utf8") : await readFile15(join74(resourcesDir, decision.filename), "utf8");
+    const applied2 = await applyManagedFile(decision.destPath, projectionBody, "AGENTS.md");
+    return {
+      ...common,
+      status: applied2.kind === "ok" ? "written" : "corrupted",
+      backupPath: applied2.kind === "ok" ? applied2.backupPath : null
+    };
+  }
+  const body = await readFile15(join74(resourcesDir, decision.filename), "utf8");
+  const applied = await applyManagedFile(decision.destPath, body, decision.filename);
+  return {
+    ...common,
+    status: applied.kind === "ok" ? "written" : "corrupted",
+    backupPath: applied.kind === "ok" ? applied.backupPath : null
+  };
+}
 async function setup(opts) {
   const { resourcesDir, projectRoot, homeDir, now } = opts;
   const hosts = setupHosts(opts.host);
+  const decisions = resourceDecisions(resourcesDir, projectRoot, homeDir, hosts);
+  const ordered = [
+    ...decisions.filter((d2) => basename3(d2.destPath) !== "CLAUDE.md"),
+    ...decisions.filter((d2) => basename3(d2.destPath) === "CLAUDE.md")
+  ];
   const resources = [];
-  for (const decision of resourceDecisions(resourcesDir, projectRoot, homeDir, hosts)) {
-    const body = await readFile15(join74(resourcesDir, decision.filename), "utf8");
-    const applied = await applyManagedFile(decision.destPath, body, decision.filename);
-    resources.push({
-      host: decision.host,
-      filename: decision.filename,
-      scope: decision.scope,
-      destPath: decision.destPath,
-      status: applied.kind === "ok" ? "written" : "corrupted",
-      backupPath: applied.kind === "ok" ? applied.backupPath : null
-    });
+  for (const decision of ordered) {
+    resources.push(await installResource(decision, resourcesDir));
   }
   const scaffold = await initScaffold(projectRoot, now);
   const allowlistPath = join74(projectRoot, ".claude", "settings.json");
@@ -36118,19 +36148,19 @@ async function setup(opts) {
 
 // src/cli/resources.ts
 import { existsSync as existsSync11 } from "fs";
-import { dirname as dirname13, join as join75, resolve as resolve17 } from "path";
+import { dirname as dirname14, join as join75, resolve as resolve17 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 function resolveResourcesDir(from) {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
     return join75(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
   }
-  const start = from ?? dirname13(fileURLToPath2(import.meta.url));
+  const start = from ?? dirname14(fileURLToPath2(import.meta.url));
   let dir = start;
   for (;; ) {
     const candidate = join75(dir, "resources", "managed");
     if (existsSync11(candidate))
       return candidate;
-    const parent = dirname13(dir);
+    const parent = dirname14(dir);
     if (parent === dir)
       break;
     dir = parent;
@@ -36285,7 +36315,7 @@ function includesCodex(host) {
 }
 async function resolveCodexPluginRoot(resourcesDir, projectRoot) {
   const currentPluginRoot = resolve18(resourcesDir, "..", "..");
-  const sibling = join76(dirname14(currentPluginRoot), "codex-plugin");
+  const sibling = join76(dirname15(currentPluginRoot), "codex-plugin");
   if (await fileExists(join76(sibling, ".codex-plugin", "plugin.json")))
     return sibling;
   const currentDist = join76(currentPluginRoot, "dist", "codex-plugin");
@@ -36445,7 +36475,7 @@ var setupCommand = defineCommand({
       });
       writeHuman(`setup: installed into ${projectRoot} (host=${host})`);
       for (const r3 of result2.resources) {
-        const tag = r3.status === "corrupted" ? "SKIPPED (corrupted markers)" : `\u2192 ${r3.destPath}`;
+        const tag = r3.status === "corrupted" ? "SKIPPED (corrupted markers)" : r3.status === "kept" ? `\u2192 ${r3.destPath} (kept existing source)` : `\u2192 ${r3.destPath}`;
         const bak = r3.backupPath ? ` (backup ${r3.backupPath})` : "";
         writeHuman(`  ${r3.filename} [${r3.host}/${r3.scope}] ${tag}${bak}`);
       }
@@ -37630,4 +37660,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=ed65fa90da116f440f1d1dda443b24b8c33b63b5709c35c2ca5e06a7c71e7cf8
+//# ditto-src-stamp=964d5664f77c9afba574e40b2e6f7a0967d26796006ac8997966c6f6cc2883ac
