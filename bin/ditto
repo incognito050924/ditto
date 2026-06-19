@@ -20565,6 +20565,7 @@ class InterviewStore {
 }
 
 // src/core/tech-spec-options.ts
+var MAX_SELECTION_BAR = 0.9;
 var PERFORMANCE_PRESETS = {
   glance: { intensity: 15, generators: 1, effort: "low" },
   quick: { intensity: 35, generators: 2, effort: "low" },
@@ -20573,9 +20574,9 @@ var PERFORMANCE_PRESETS = {
   exhaustive: { intensity: 100, generators: 4, effort: "high" }
 };
 function intensityToSubLevers(intensity) {
-  const threshold = Math.round(intensity / 100 * 100) / 100;
+  const threshold = Math.min(MAX_SELECTION_BAR, Math.round(intensity / 100 * 100) / 100);
   const granularity = intensity < 34 ? "low" : intensity < 67 ? "medium" : "high";
-  const count_hint = Math.max(1, Math.round(intensity / 33));
+  const count_hint = Math.max(1, Math.round(intensity / 25));
   return { threshold, granularity, count_hint };
 }
 function resolveQuestionConfig(cliRaw, configRaw = {}) {
@@ -37626,4 +37627,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=b1f43094a5f3bc3072f285559a702c7cf6dd248abca70e720e7a72d54b26f5ce
+//# ditto-src-stamp=97c9f491dfd8932b29c8f9b0e71b5b7e31dcad2f0b36edab6c4b054bd035f84e

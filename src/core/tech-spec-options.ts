@@ -30,6 +30,21 @@ export type PerformancePreset = 'glance' | 'quick' | 'standard' | 'deep' | 'exha
  */
 export const CURRENT_SELECTION_BAR = 0.6;
 
+/**
+ * The reachable ceiling for the intensity-derived threshold. The raw
+ * `intensity/100` curve sends intensity 100 (the `exhaustive` preset) to 1.0 —
+ * "all four dimensions perfect", which the gate can essentially never clear, so
+ * exhaustive fans out the most generators and then discards every candidate
+ * (2026-06-19 doc-cleanup dogfood, wi_260619jgv). Cap the curve here so the top
+ * of the dial stays a *strict* bar, not an *impossible* one; an explicit
+ * `--threshold` override still bypasses it.
+ *
+ * Set ABOVE deep's bar (intensity 85 → 0.85): a cap at 0.85 would collapse deep
+ * and exhaustive onto the same threshold. 0.9 keeps exhaustive distinct from deep
+ * while staying reachable (wi_2606190l8).
+ */
+export const MAX_SELECTION_BAR = 0.9;
+
 /** Exact preset expansions (intensity, generators, effort) — ac-3 (authoritative). */
 export const PERFORMANCE_PRESETS: Record<
   PerformancePreset,
@@ -55,12 +70,16 @@ export interface SubLevers {
  * Deterministic intensity → sub-levers. Same intensity always yields the same
  * levers (ac-2). Linear `intensity/100` threshold curve, monotone, anchored so
  * intensity 60 === CURRENT_SELECTION_BAR (ac-6). Granularity buckets at the
- * natural thirds; count_hint scales roughly 1..3 over the dial.
+ * natural thirds; count_hint scales roughly 1..4 over the dial.
  */
 export function intensityToSubLevers(intensity: number): SubLevers {
-  const threshold = Math.round((intensity / 100) * 100) / 100; // 2-dp, 60 → 0.6
+  // 2-dp linear curve (60 → 0.6), capped so the top of the dial is strict, not
+  // impossible (intensity 100 would otherwise be 1.0 = unreachable; wi_260619jgv).
+  const threshold = Math.min(MAX_SELECTION_BAR, Math.round((intensity / 100) * 100) / 100);
   const granularity: Granularity = intensity < 34 ? 'low' : intensity < 67 ? 'medium' : 'high';
-  const count_hint = Math.max(1, Math.round(intensity / 33));
+  // /25 (not /33) so the top presets separate: standard 60→2, deep 85→3,
+  // exhaustive 100→4 (wi_2606190l8). Still 1-based via max(1, …).
+  const count_hint = Math.max(1, Math.round(intensity / 25));
   return { threshold, granularity, count_hint };
 }
 

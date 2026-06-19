@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   CURRENT_SELECTION_BAR,
+  MAX_SELECTION_BAR,
   PERFORMANCE_PRESETS,
   intensityToSubLevers,
   resolveQuestionConfig,
@@ -25,6 +26,30 @@ describe('tech-spec question-config resolver (wi_260619yfw)', () => {
     expect(intensityToSubLevers(60).threshold).toBeLessThanOrEqual(
       intensityToSubLevers(90).threshold,
     );
+  });
+
+  test('high intensity caps the threshold below the unreachable 1.0 bar (gate-neutering fix, wi_260619jgv)', () => {
+    // intensity/100 alone gives intensity 100 → 1.0 = "4-dim perfect only" = the gate
+    // selects ~nothing, so exhaustive (generators 4) builds many candidates and discards
+    // all of them (2026-06-19 doc-cleanup dogfood finding). Cap at a reachable ceiling so
+    // exhaustive still admits the strongest questions.
+    expect(intensityToSubLevers(100).threshold).toBe(MAX_SELECTION_BAR);
+    expect(intensityToSubLevers(100).threshold).toBeLessThan(1);
+    // anchor (60 → 0.6) and an unsaturated mid-range stay unchanged
+    expect(intensityToSubLevers(60).threshold).toBe(0.6);
+    expect(intensityToSubLevers(80).threshold).toBe(0.8);
+  });
+
+  test('top presets stay distinguished — deep(85) ≠ exhaustive(100) on threshold and count (wi_2606190l8)', () => {
+    // The cap must sit ABOVE deep(85→0.85) or the two top presets collapse onto the
+    // same threshold. Cap at 0.9 → deep 0.85, exhaustive 0.9 (still strict, still <1).
+    expect(intensityToSubLevers(85).threshold).toBe(0.85);
+    expect(intensityToSubLevers(100).threshold).toBe(0.9);
+    expect(intensityToSubLevers(85).threshold).toBeLessThan(intensityToSubLevers(100).threshold);
+    // count_hint curve (/25) separates the top too, while preserving standard(60)→2.
+    expect(intensityToSubLevers(60).count_hint).toBe(2);
+    expect(intensityToSubLevers(85).count_hint).toBe(3);
+    expect(intensityToSubLevers(100).count_hint).toBe(4);
   });
 
   test('intensity drives granularity buckets deterministically', () => {
