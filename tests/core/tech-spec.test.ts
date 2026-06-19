@@ -11,6 +11,7 @@ import {
   computeSpecDigest,
   finalizeTechSpec,
   finalizeTechSpecPayload,
+  nextRound,
   recordRound,
   recordRoundPayload,
   recordSection,
@@ -453,5 +454,130 @@ describe('recordRound (증분 3 — 점수 영속 sink)', () => {
         payload: recordRoundPayload.parse({ round: 1, dry: true }),
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe('nextRound (옵션 enforcement seam — 매 라운드 levers 하달 + cap 신호)', () => {
+  let repo: string;
+  let wiId: string;
+
+  beforeEach(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'ditto-tsn-'));
+    const wi = await new WorkItemStore(repo).create({
+      title: 'demo',
+      source_request: 'demo',
+      goal: 'demo',
+      acceptance_criteria: [{ id: 'ac-1', statement: 'TBD', verdict: 'unverified', evidence: [] }],
+    });
+    wiId = wi.id;
+  });
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true });
+  });
+
+  const score = { consensus: 2, quality: 0.8, necessity: 0.7, answer_value: 0.9 };
+
+  // ── 슬라이스 A: levers 하달 (persist된 question_config를 그대로 반환) ──
+
+  test('returns persisted question_config levers and round=1 with no rounds yet (ac-1)', async () => {
+    await startTechSpec(repo, {
+      workItemId: wiId,
+      docPath: '.ditto/specs/demo.md',
+      questionConfig: resolveQuestionConfig({ generators: 4, intensity: 80, gate_mode: 'draft' }),
+    });
+    const r = await nextRound(repo, { workItemId: wiId });
+    expect(r.round).toBe(1);
+    expect(r.generators).toBe(4);
+    expect(r.gate_mode).toBe('draft');
+    expect(r.threshold).toBe(0.8); // intensity 80 → 0.8 (linear curve)
+    expect(r.granularity).toBe('high'); // intensity 80 → high
+    expect(r.rounds_so_far).toBe(0);
+    expect(r.questions_so_far).toBe(0);
+    expect(r.cap_reached).toBe(false);
+    expect(r.cap_reason).toBeNull();
+  });
+
+  test('next-round for a non-started tech-spec throws (ac-4)', async () => {
+    await expect(nextRound(repo, { workItemId: wiId })).rejects.toThrow();
+  });
+
+  // ── 슬라이스 B: cap 카운트 (기존 rounds.jsonl 재사용, 별도 counter 없음) ──
+
+  test('counts rounds_so_far / questions_so_far from the round trail (ac-2)', async () => {
+    await startTechSpec(repo, { workItemId: wiId, docPath: '.ditto/specs/demo.md' });
+    await recordRound(repo, {
+      workItemId: wiId,
+      payload: recordRoundPayload.parse({
+        round: 1,
+        dry: false,
+        selected: [
+          { text: 'q1', property: 'blind-spot', scores: score },
+          { text: 'q2', property: 'expansion', scores: score },
+        ],
+      }),
+    });
+    await recordRound(repo, {
+      workItemId: wiId,
+      payload: recordRoundPayload.parse({ round: 2, dry: true }),
+    });
+    const r = await nextRound(repo, { workItemId: wiId });
+    expect(r.rounds_so_far).toBe(2);
+    expect(r.questions_so_far).toBe(2); // 2 selected in round 1, 0 in round 2
+    expect(r.round).toBe(3);
+  });
+
+  test('max_rounds ceiling reached → cap_reached with reason (ac-3)', async () => {
+    await startTechSpec(repo, {
+      workItemId: wiId,
+      docPath: '.ditto/specs/demo.md',
+      questionConfig: resolveQuestionConfig({ max_rounds: 1 }),
+    });
+    await recordRound(repo, {
+      workItemId: wiId,
+      payload: recordRoundPayload.parse({ round: 1, dry: true }),
+    });
+    const r = await nextRound(repo, { workItemId: wiId });
+    expect(r.cap_reached).toBe(true);
+    expect(r.cap_reason).toBe('max_rounds');
+  });
+
+  test('max_questions ceiling reached → cap_reached with reason (ac-3)', async () => {
+    await startTechSpec(repo, {
+      workItemId: wiId,
+      docPath: '.ditto/specs/demo.md',
+      questionConfig: resolveQuestionConfig({ max_questions: 2 }),
+    });
+    await recordRound(repo, {
+      workItemId: wiId,
+      payload: recordRoundPayload.parse({
+        round: 1,
+        dry: false,
+        selected: [
+          { text: 'q1', property: 'blind-spot', scores: score },
+          { text: 'q2', property: 'expansion', scores: score },
+        ],
+      }),
+    });
+    const r = await nextRound(repo, { workItemId: wiId });
+    expect(r.cap_reached).toBe(true);
+    expect(r.cap_reason).toBe('max_questions');
+  });
+
+  test('caps default 0 = unlimited → never cap_reached (current behavior preserved) (ac-3)', async () => {
+    await startTechSpec(repo, { workItemId: wiId, docPath: '.ditto/specs/demo.md' });
+    for (const round of [1, 2, 3, 4, 5]) {
+      await recordRound(repo, {
+        workItemId: wiId,
+        payload: recordRoundPayload.parse({
+          round,
+          dry: false,
+          selected: [{ text: `q${round}`, property: 'blind-spot', scores: score }],
+        }),
+      });
+    }
+    const r = await nextRound(repo, { workItemId: wiId });
+    expect(r.cap_reached).toBe(false);
+    expect(r.cap_reason).toBeNull();
+    expect(r.rounds_so_far).toBe(5);
   });
 });

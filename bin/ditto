@@ -20515,7 +20515,7 @@ var questionConfig = exports_external.object({
   generators: exports_external.number().int().min(1).max(6).default(2),
   performance: exports_external.enum(["glance", "quick", "standard", "deep", "exhaustive"]).default("standard"),
   generator_effort: exports_external.enum(["low", "medium", "high", "inherit"]).default("inherit"),
-  gate_mode: exports_external.enum(["confirm", "auto"]).default("confirm"),
+  gate_mode: exports_external.enum(["confirm", "draft"]).default("confirm"),
   max_questions: exports_external.number().int().nonnegative().default(0).describe("0 = unlimited (opt-in cap)"),
   max_rounds: exports_external.number().int().nonnegative().default(0).describe("0 = unlimited (opt-in cap)"),
   threshold: exports_external.number().min(0).max(1).default(0.6).describe("Intensity-derived unless overridden"),
@@ -21084,6 +21084,34 @@ async function recordRound(repoRoot, input) {
   });
   await store.appendTechSpecRoundLine(input.workItemId, JSON.stringify(record));
   return record;
+}
+async function nextRound(repoRoot, input) {
+  const techStore = new TechSpecStore(repoRoot);
+  if (!await techStore.exists(input.workItemId)) {
+    throw new Error(`tech-spec was never started for ${input.workItemId} \u2014 run 'ditto tech-spec start' first`);
+  }
+  const cfg = (await techStore.get(input.workItemId)).question_config;
+  const rounds = await new WorkItemStore(repoRoot).readTechSpecRounds(input.workItemId);
+  const rounds_so_far = rounds.length;
+  const questions_so_far = rounds.reduce((n2, r3) => n2 + r3.selected.length, 0);
+  const roundCapHit = cfg.max_rounds > 0 && rounds_so_far >= cfg.max_rounds;
+  const questionCapHit = cfg.max_questions > 0 && questions_so_far >= cfg.max_questions;
+  const cap_reason = roundCapHit ? "max_rounds" : questionCapHit ? "max_questions" : null;
+  return {
+    round: rounds_so_far + 1,
+    generators: cfg.generators,
+    threshold: cfg.threshold,
+    granularity: cfg.granularity,
+    generator_effort: cfg.generator_effort,
+    gate_mode: cfg.gate_mode,
+    count_hint: cfg.count_hint,
+    max_rounds: cfg.max_rounds,
+    max_questions: cfg.max_questions,
+    rounds_so_far,
+    questions_so_far,
+    cap_reached: cap_reason !== null,
+    cap_reason
+  };
 }
 var finalizeTechSpecPayload = exports_external.object({
   risk: exports_external.object({
@@ -36548,7 +36576,7 @@ var dittoConfigQuestion = exports_external.object({
   generators: exports_external.number().int().min(1).max(6).optional(),
   performance: exports_external.enum(["glance", "quick", "standard", "deep", "exhaustive"]).optional(),
   generator_effort: exports_external.enum(["low", "medium", "high", "inherit"]).optional(),
-  gate_mode: exports_external.enum(["confirm", "auto"]).optional(),
+  gate_mode: exports_external.enum(["confirm", "draft"]).optional(),
   max_questions: exports_external.number().int().nonnegative().optional(),
   max_rounds: exports_external.number().int().nonnegative().optional(),
   threshold: exports_external.number().min(0).max(1).optional(),
@@ -36585,7 +36613,7 @@ function parseJsonArg2(raw) {
 }
 var PERFORMANCE_VALUES = ["glance", "quick", "standard", "deep", "exhaustive"];
 var EFFORT_VALUES = ["low", "medium", "high", "inherit"];
-var GATE_MODE_VALUES = ["confirm", "auto"];
+var GATE_MODE_VALUES = ["confirm", "draft"];
 var GRANULARITY_VALUES = ["low", "medium", "high"];
 function intArg(raw, label2, min, max) {
   const n2 = Number(raw);
@@ -36974,6 +37002,52 @@ var finalizeCmd2 = defineCommand({
     }
   }
 });
+var nextRoundCmd = defineCommand({
+  meta: {
+    name: "next-round",
+    description: "Hand the \xA76-6 driver this round\u2019s resolved levers + an opt-in cap signal: code enforces only the numeric cap (max_rounds/max_questions, counted from the round trail); the quality levers (threshold/granularity/count_hint) are relayed for the gate agent to obey with judgment, not a mechanical cutoff"
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const r3 = await nextRound(repoRoot, { workItemId: args.workItem });
+      if (format === "json") {
+        writeJson2(r3);
+      } else {
+        writeHuman(`Round ${r3.round} for ${args.workItem}`);
+        writeHuman(`  generators:  ${r3.generators} (effort: ${r3.generator_effort})`);
+        writeHuman(`  quality dial: threshold ${r3.threshold}, granularity ${r3.granularity}, count_hint ${r3.count_hint} \u2014 anchors for the gate, judged not cut`);
+        writeHuman(`  gate_mode:   ${r3.gate_mode}`);
+        writeHuman(`  progress:    ${r3.rounds_so_far} rounds / ${r3.questions_so_far} questions so far`);
+        if (r3.cap_reached) {
+          writeHuman(`  CAP REACHED (${r3.cap_reason}): stop the question loop \u2014 ceiling set by config`);
+        } else {
+          const caps = [];
+          if (r3.max_rounds > 0)
+            caps.push(`rounds\u2264${r3.max_rounds}`);
+          if (r3.max_questions > 0)
+            caps.push(`questions\u2264${r3.max_questions}`);
+          writeHuman(`  cap:         ${caps.length ? caps.join(", ") : "none \u2014 score-based termination (dry)"}`);
+        }
+      }
+    } catch (err) {
+      writeError(`next-round failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var techSpecCommand = defineCommand({
   meta: {
     name: "tech-spec",
@@ -36983,6 +37057,7 @@ var techSpecCommand = defineCommand({
     start: startCmd2,
     "record-section": recordSectionCmd,
     "record-round": recordRoundCmd,
+    "next-round": nextRoundCmd,
     finalize: finalizeCmd2
   }
 });
@@ -37551,4 +37626,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=379c7f052135cae39bb9d30c599dddb7f6b530b1f15d7295b13b1db8db45f79e
+//# ditto-src-stamp=b1f43094a5f3bc3072f285559a702c7cf6dd248abca70e720e7a72d54b26f5ce

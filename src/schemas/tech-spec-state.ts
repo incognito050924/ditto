@@ -65,7 +65,7 @@ export const questionConfig = z
     generators: z.number().int().min(1).max(6).default(2),
     performance: z.enum(['glance', 'quick', 'standard', 'deep', 'exhaustive']).default('standard'),
     generator_effort: z.enum(['low', 'medium', 'high', 'inherit']).default('inherit'),
-    gate_mode: z.enum(['confirm', 'auto']).default('confirm'),
+    gate_mode: z.enum(['confirm', 'draft']).default('confirm'),
     max_questions: z.number().int().nonnegative().default(0).describe('0 = unlimited (opt-in cap)'),
     max_rounds: z.number().int().nonnegative().default(0).describe('0 = unlimited (opt-in cap)'),
     threshold: z

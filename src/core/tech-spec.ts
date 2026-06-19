@@ -373,6 +373,86 @@ export async function recordRound(
   return record;
 }
 
+// ── next-round (옵션 enforcement seam — 매 라운드 levers 하달 + cap 신호) ──
+
+export interface NextRoundInput {
+  workItemId: string;
+}
+
+/**
+ * What `ditto tech-spec next-round` hands the driver at the top of each round.
+ * Read-only/deterministic: it reads the persisted `question_config` (the levers
+ * the SKILL §6-6 loop must obey) and `tech-spec-rounds.jsonl` (the rounds
+ * recorded so far), then signals whether an opt-in cap is reached. It does NOT
+ * spawn generators — that stays an agent action (single-level delegation,
+ * structurally un-enforceable); next-round only relays values + the stop signal.
+ * cap counting reuses the existing round trail, so no duplicate counter state.
+ *
+ * Enforcement boundary (deliberate): the numeric cap (max_rounds/max_questions
+ * counts) is the ONLY thing code decides deterministically. The quality levers —
+ * intensity-derived `threshold`, `granularity`, `count_hint` — are relayed as
+ * anchors the `question-gate` agent obeys with judgment, NOT a mechanical score
+ * cutoff. Quality (is this question meaningful at this intensity?) is not
+ * quantifiable here; forcing it into a deterministic gate would degrade the
+ * selection, so it stays the agent's call. Code enforces counts; the agent is
+ * driven (by SKILL §6-6) to honor the quality dial.
+ */
+export interface NextRoundResult {
+  round: number;
+  generators: number;
+  threshold: number;
+  granularity: QuestionConfig['granularity'];
+  generator_effort: QuestionConfig['generator_effort'];
+  gate_mode: QuestionConfig['gate_mode'];
+  count_hint: number;
+  max_rounds: number;
+  max_questions: number;
+  rounds_so_far: number;
+  questions_so_far: number;
+  cap_reached: boolean;
+  cap_reason: 'max_rounds' | 'max_questions' | null;
+}
+
+export async function nextRound(repoRoot: string, input: NextRoundInput): Promise<NextRoundResult> {
+  const techStore = new TechSpecStore(repoRoot);
+  if (!(await techStore.exists(input.workItemId))) {
+    throw new Error(
+      `tech-spec was never started for ${input.workItemId} — run 'ditto tech-spec start' first`,
+    );
+  }
+  const cfg = (await techStore.get(input.workItemId)).question_config;
+  const rounds = await new WorkItemStore(repoRoot).readTechSpecRounds(input.workItemId);
+  const rounds_so_far = rounds.length;
+  const questions_so_far = rounds.reduce((n, r) => n + r.selected.length, 0);
+
+  // Opt-in caps: 0 = unlimited (the default → cap never fires → current
+  // score-based termination preserved). max_rounds checked before max_questions
+  // so the reason is deterministic when both ceilings are hit at once.
+  const roundCapHit = cfg.max_rounds > 0 && rounds_so_far >= cfg.max_rounds;
+  const questionCapHit = cfg.max_questions > 0 && questions_so_far >= cfg.max_questions;
+  const cap_reason: NextRoundResult['cap_reason'] = roundCapHit
+    ? 'max_rounds'
+    : questionCapHit
+      ? 'max_questions'
+      : null;
+
+  return {
+    round: rounds_so_far + 1,
+    generators: cfg.generators,
+    threshold: cfg.threshold,
+    granularity: cfg.granularity,
+    generator_effort: cfg.generator_effort,
+    gate_mode: cfg.gate_mode,
+    count_hint: cfg.count_hint,
+    max_rounds: cfg.max_rounds,
+    max_questions: cfg.max_questions,
+    rounds_so_far,
+    questions_so_far,
+    cap_reached: cap_reason !== null,
+    cap_reason,
+  };
+}
+
 // ── finalize (tech-spec 전용 — deep-interview finalize 재사용 불가, design §8) ──
 
 /**

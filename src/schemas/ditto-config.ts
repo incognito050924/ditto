@@ -16,7 +16,7 @@ export const dittoConfigQuestion = z
     generators: z.number().int().min(1).max(6).optional(),
     performance: z.enum(['glance', 'quick', 'standard', 'deep', 'exhaustive']).optional(),
     generator_effort: z.enum(['low', 'medium', 'high', 'inherit']).optional(),
-    gate_mode: z.enum(['confirm', 'auto']).optional(),
+    gate_mode: z.enum(['confirm', 'draft']).optional(),
     max_questions: z.number().int().nonnegative().optional(),
     max_rounds: z.number().int().nonnegative().optional(),
     threshold: z.number().min(0).max(1).optional(),

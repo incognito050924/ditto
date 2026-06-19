@@ -15,7 +15,7 @@
 
 export type GeneratorEffort = 'low' | 'medium' | 'high' | 'inherit';
 export type Granularity = 'low' | 'medium' | 'high';
-export type GateMode = 'confirm' | 'auto';
+export type GateMode = 'confirm' | 'draft';
 export type PerformancePreset = 'glance' | 'quick' | 'standard' | 'deep' | 'exhaustive';
 
 /**

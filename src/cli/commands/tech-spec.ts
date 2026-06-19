@@ -4,6 +4,7 @@ import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   finalizeTechSpec,
   finalizeTechSpecPayload,
+  nextRound,
   recordRound,
   recordRoundPayload,
   recordSection,
@@ -40,7 +41,7 @@ function parseJsonArg(raw: string): unknown {
 
 const PERFORMANCE_VALUES = ['glance', 'quick', 'standard', 'deep', 'exhaustive'] as const;
 const EFFORT_VALUES = ['low', 'medium', 'high', 'inherit'] as const;
-const GATE_MODE_VALUES = ['confirm', 'auto'] as const;
+const GATE_MODE_VALUES = ['confirm', 'draft'] as const;
 const GRANULARITY_VALUES = ['low', 'medium', 'high'] as const;
 
 /** Coerce a string arg to an integer in [min,max], or throw a usage error. */
@@ -476,6 +477,60 @@ const finalizeCmd = defineCommand({
   },
 });
 
+const nextRoundCmd = defineCommand({
+  meta: {
+    name: 'next-round',
+    description:
+      'Hand the §6-6 driver this round’s resolved levers + an opt-in cap signal: code enforces only the numeric cap (max_rounds/max_questions, counted from the round trail); the quality levers (threshold/granularity/count_hint) are relayed for the gate agent to obey with judgment, not a mechanical cutoff',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const r = await nextRound(repoRoot, { workItemId: args.workItem });
+      if (format === 'json') {
+        writeJson(r);
+      } else {
+        writeHuman(`Round ${r.round} for ${args.workItem}`);
+        writeHuman(`  generators:  ${r.generators} (effort: ${r.generator_effort})`);
+        writeHuman(
+          `  quality dial: threshold ${r.threshold}, granularity ${r.granularity}, count_hint ${r.count_hint} — anchors for the gate, judged not cut`,
+        );
+        writeHuman(`  gate_mode:   ${r.gate_mode}`);
+        writeHuman(
+          `  progress:    ${r.rounds_so_far} rounds / ${r.questions_so_far} questions so far`,
+        );
+        if (r.cap_reached) {
+          writeHuman(
+            `  CAP REACHED (${r.cap_reason}): stop the question loop — ceiling set by config`,
+          );
+        } else {
+          const caps: string[] = [];
+          if (r.max_rounds > 0) caps.push(`rounds≤${r.max_rounds}`);
+          if (r.max_questions > 0) caps.push(`questions≤${r.max_questions}`);
+          writeHuman(
+            `  cap:         ${caps.length ? caps.join(', ') : 'none — score-based termination (dry)'}`,
+          );
+        }
+      }
+    } catch (err) {
+      writeError(`next-round failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const techSpecCommand = defineCommand({
   meta: {
     name: 'tech-spec',
@@ -486,6 +541,7 @@ export const techSpecCommand = defineCommand({
     start: startCmd,
     'record-section': recordSectionCmd,
     'record-round': recordRoundCmd,
+    'next-round': nextRoundCmd,
     finalize: finalizeCmd,
   },
 });

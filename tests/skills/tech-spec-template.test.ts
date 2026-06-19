@@ -153,3 +153,34 @@ describe('question generation workflow — multi-agent (ac-10~12)', () => {
     expect(skill).toMatch(/default 0 = unlimited/);
   });
 });
+
+// wi_260619nep: every relayed option needs a "how to obey" basis at its consumer,
+// otherwise next-round relaying it is hollow. Guards against regressing to
+// "option named but no behavior defined".
+describe('per-option behavior rubric — relayed options carry an obey basis (ac-7)', () => {
+  test('generator_effort changes generator grounding depth (defined in the generator agent)', () => {
+    const gen = readFileSync(GENERATOR_AGENT_PATH, 'utf8');
+    expect(gen).toMatch(/effort/i);
+    // low↔high must differ in concrete behavior, not just be named
+    expect(gen).toMatch(/\blow\b/);
+    expect(gen).toMatch(/\bhigh\b/);
+    expect(gen).toMatch(/grounding|Read\/Grep|code/i);
+  });
+
+  test('granularity changes how a section is split into questions (defined for the generator)', () => {
+    const gen = readFileSync(GENERATOR_AGENT_PATH, 'utf8');
+    expect(gen).toMatch(/granularity/i);
+    expect(gen).toMatch(/\blow\b/);
+    expect(gen).toMatch(/\bhigh\b/);
+  });
+
+  test('gate_mode confirm vs draft behavior — and draft’s safety boundary — is defined in the SKILL', () => {
+    const skill = readFileSync(SKILL_PATH, 'utf8');
+    expect(skill).toMatch(/gate_mode/);
+    expect(skill).toMatch(/\bconfirm\b/);
+    expect(skill).toMatch(/\bdraft\b/);
+    // draft's safety boundary stated near `draft` itself (not the far-away pre-mortem
+    // mention of irreversible) — the boundary is what makes draft safe to obey.
+    expect(skill).toMatch(/draft[\s\S]{0,400}(irreversible|비가역)/i);
+  });
+});
