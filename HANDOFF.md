@@ -13,14 +13,13 @@
 | `931ff53` | reports/ tech-spec 문서 7개 삭제 + 배포표면 design-source 연결 제거(코드에 동기화 안 되는 설계/기획은 drift → 제거). 죽은 링크 0 |
 | `f6696ff` | charter §4-11 "권위는 코드에" 추가(`AGENTS.md` canonical → bridge sync로 `CLAUDE.md`/`resources/managed`/`dist/plugin` 전파, GLOBAL_* 제외) |
 | `2c9795f` | 사용자 가이드 `skills/tech-spec/GUIDE.md`(사용법·옵션·최적화·config) + README "Authoring a tech-spec" 연결 |
+| `39d2913` | follow-up #2·#3 — config fail-open 경고(`.ditto/local/config.json` 파싱 실패 시 `onMalformed` 콜백으로 CLI 경고, fail-open 유지) + `agents/question-gate.md`에 threshold=anchor(hard cut 아님) 명시 |
 
 ## 2. 남은 위험 / follow-up (선택 — 차단 아님; 정적 검증은 SOUND)
 
-최종 독립 점검(fresh context)에서 정적은 전부 OK였다(삭제 문서 죽은 링크 0, charter 6곳 일관, CLI verb 5/5, 옵션 resolver↔GUIDE 프리셋 표 정합, 테스트 2450 pass). 남은 건 **행동 검증·미세 정합**:
+최종 독립 점검(fresh context)에서 정적은 전부 OK였다(삭제 문서 죽은 링크 0, charter 6곳 일관, CLI verb 5/5, 옵션 resolver↔GUIDE 프리셋 표 정합). 직전 점검의 미세 정합 2건(#2 gate.md threshold 문구, #3 config fail-open 무경고)은 `39d2913`에서 처리했다. **남은 건 하나뿐 — 행동 검증**:
 
-1. **(최우선) 실 에이전트 도그푸딩** — `ditto:question-generator`/`question-gate`가 실행 중 세션에서 spawn 불가(에이전트 레지스트리는 세션 시작 시 로드)라, 이번 세션은 `general-purpose` **대역**으로만 워크플로를 검증했다. next-round 하달·옵션 obey·`gate_mode=draft` 안전경계를 **실제 `ditto:` 타입으로** 검증하려면 새 세션이 필요하다 — 다른 PC에서 이어받기 좋은 첫 작업.
-2. **`agents/question-gate.md` threshold 문구 정합** — gate.md는 "clears the threshold → select"로 적혀 있고 SKILL §6-6은 "threshold는 anchor, hard cut 아님"으로 경화돼 있다. 실 동작은 정합(gate가 4차원 종합점수로 판단)하나, gate.md에 그 철학을 명시하면 cross-component 오해를 막는다.
-3. **config fail-open 무경고** — `.ditto/local/config.json`이 깨지면 조용히 빌트인 기본값으로 폴백한다(`src/cli/commands/tech-spec.ts` start 경로). 사용자가 오타/JSON 오류를 눈치 못 챌 수 있어, 경고 로그 추가가 후속 후보.
+1. **(유일하게 남은 후속) 실 에이전트 도그푸딩** — `ditto:question-generator`/`question-gate`가 실행 중 세션에서 spawn 불가(에이전트 레지스트리는 세션 시작 시 로드)라, 이번 세션은 `general-purpose` **대역**으로만 워크플로를 검증했다. next-round 하달·옵션 obey·`gate_mode=draft` 안전경계를 **실제 `ditto:` 타입으로** 검증하려면 새 세션이 필요하다 — 다른 PC에서 이어받기 좋은 첫 작업. (코드/테스트/문서는 검증됨; `bun test` 2452 pass / 0 fail. 미검증은 실타입 *행동*뿐.)
 
 기존 보류(ADR-0013): 승인게이트 적대적 차단 · bootstrap handoff-archive 신뢰등급 · pull actionability 측정 — 별도 소관.
 
