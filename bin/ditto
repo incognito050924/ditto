@@ -20443,7 +20443,7 @@ var scoredQuestion = exports_external.object({
 var techSpecRoundPayload = exports_external.object({
   round: exports_external.number().int().positive().describe("1-based round index within the interview"),
   section: exports_external.string().optional().describe("Target spec section this round filled"),
-  generator_count: exports_external.number().int().positive().default(3).describe("N generators fanned out (\xA79 #5: fixed 3)"),
+  generator_count: exports_external.number().int().positive().default(2).describe("N generators fanned out (--generators default 2, range 1..6; wi_260619yfw)"),
   threshold: exports_external.number().optional().describe("Fixed selection threshold used this round (\xA79 #4)"),
   dry: exports_external.boolean().describe("Gate found no candidate above the threshold \u2192 round/interview ends (\xA79 #4)"),
   selected: exports_external.array(scoredQuestion).default([]).describe("Questions selected to ask the user"),
@@ -20469,7 +20469,7 @@ var techSpecRound = exports_external.object({
   work_item_id: workItemId,
   round: exports_external.number().int().positive(),
   section: exports_external.string().optional(),
-  generator_count: exports_external.number().int().positive().default(3),
+  generator_count: exports_external.number().int().positive().default(2),
   threshold: exports_external.number().optional(),
   dry: exports_external.boolean(),
   selected: exports_external.array(scoredQuestion).default([]),
@@ -20510,12 +20510,27 @@ var specSectionRecord = exports_external.object({
   evidence: exports_external.array(specGroundingEvidence).default([]),
   recorded_at: exports_external.string().min(1)
 });
+var questionConfig = exports_external.object({
+  intensity: exports_external.number().int().min(0).max(100).default(60),
+  generators: exports_external.number().int().min(1).max(6).default(2),
+  performance: exports_external.enum(["glance", "quick", "standard", "deep", "exhaustive"]).default("standard"),
+  generator_effort: exports_external.enum(["low", "medium", "high", "inherit"]).default("inherit"),
+  gate_mode: exports_external.enum(["confirm", "auto"]).default("confirm"),
+  max_questions: exports_external.number().int().nonnegative().default(0).describe("0 = unlimited (opt-in cap)"),
+  max_rounds: exports_external.number().int().nonnegative().default(0).describe("0 = unlimited (opt-in cap)"),
+  threshold: exports_external.number().min(0).max(1).default(0.6).describe("Intensity-derived unless overridden"),
+  granularity: exports_external.enum(["low", "medium", "high"]).default("medium"),
+  count_hint: exports_external.number().int().positive().default(2),
+  threshold_override: exports_external.boolean().default(false),
+  granularity_override: exports_external.boolean().default(false)
+}).describe("Resolved question-elicitation tuning; defaults preserve current behavior");
 var techSpecState = exports_external.object({
   schema_version: schemaVersion,
   work_item_id: workItemId,
   doc_path: exports_external.string().min(1).describe("Spec document path relative to repo root"),
   mode: exports_external.enum(["stepwise", "oneshot"]).describe("Writing/review rhythm; gates are mode-invariant"),
   sections: exports_external.array(specSectionRecord).default([]),
+  question_config: questionConfig.default({}).describe("Resolved \xA76-6 question-elicitation tuning (wi_260619yfw)"),
   finalized: exports_external.object({
     at: exports_external.string().min(1),
     digest: exports_external.string().regex(/^[0-9a-f]{64}$/),
@@ -20547,6 +20562,50 @@ class InterviewStore {
     await ensureDir(this.dir(state.work_item_id));
     return writeJson(this.path(state.work_item_id), interviewState, state);
   }
+}
+
+// src/core/tech-spec-options.ts
+var PERFORMANCE_PRESETS = {
+  glance: { intensity: 15, generators: 1, effort: "low" },
+  quick: { intensity: 35, generators: 2, effort: "low" },
+  standard: { intensity: 60, generators: 2, effort: "inherit" },
+  deep: { intensity: 85, generators: 3, effort: "high" },
+  exhaustive: { intensity: 100, generators: 4, effort: "high" }
+};
+function intensityToSubLevers(intensity) {
+  const threshold = Math.round(intensity / 100 * 100) / 100;
+  const granularity = intensity < 34 ? "low" : intensity < 67 ? "medium" : "high";
+  const count_hint = Math.max(1, Math.round(intensity / 33));
+  return { threshold, granularity, count_hint };
+}
+function resolveQuestionConfig(raw) {
+  const performance = raw.performance ?? "standard";
+  const preset = PERFORMANCE_PRESETS[performance];
+  const intensity = raw.intensity ?? preset.intensity;
+  const generators = raw.generators ?? preset.generators;
+  const generator_effort = raw.generator_effort ?? preset.effort;
+  const gate_mode = raw.gate_mode ?? "confirm";
+  const max_questions = raw.max_questions ?? 0;
+  const max_rounds = raw.max_rounds ?? 0;
+  const derived = intensityToSubLevers(intensity);
+  const threshold_override = raw.threshold !== undefined;
+  const granularity_override = raw.granularity !== undefined;
+  const threshold = threshold_override ? raw.threshold : derived.threshold;
+  const granularity = granularity_override ? raw.granularity : derived.granularity;
+  return {
+    intensity,
+    generators,
+    performance,
+    generator_effort,
+    gate_mode,
+    max_questions,
+    max_rounds,
+    threshold,
+    granularity,
+    count_hint: derived.count_hint,
+    threshold_override,
+    granularity_override
+  };
 }
 
 // src/core/tech-spec-store.ts
@@ -20991,6 +21050,7 @@ async function startTechSpec(repoRoot, input) {
     doc_path: input.docPath,
     mode: input.mode ?? "stepwise",
     sections: [],
+    question_config: input.questionConfig ?? resolveQuestionConfig({}),
     finalized: null,
     updated_at: nowIso
   });
@@ -36488,10 +36548,67 @@ function parseJsonArg2(raw) {
     throw new Error(`--json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
+var PERFORMANCE_VALUES = ["glance", "quick", "standard", "deep", "exhaustive"];
+var EFFORT_VALUES = ["low", "medium", "high", "inherit"];
+var GATE_MODE_VALUES = ["confirm", "auto"];
+var GRANULARITY_VALUES = ["low", "medium", "high"];
+function intArg(raw, label2, min, max) {
+  const n2 = Number(raw);
+  if (!Number.isInteger(n2) || n2 < min || n2 > max) {
+    throw new Error(`--${label2} must be an integer in [${min}, ${max}]; got "${raw}"`);
+  }
+  return n2;
+}
+function enumArg(raw, label2, values) {
+  if (!values.includes(raw)) {
+    throw new Error(`--${label2} must be ${values.join("|")}; got "${raw}"`);
+  }
+  return raw;
+}
+function parseQuestionConfigArgs(args) {
+  const raw = {};
+  const intensity = args.intensity;
+  if (intensity !== undefined)
+    raw.intensity = intArg(intensity, "intensity", 0, 100);
+  const generators = args.generators;
+  if (generators !== undefined)
+    raw.generators = intArg(generators, "generators", 1, 6);
+  const maxQuestions = args["max-questions"];
+  if (maxQuestions !== undefined)
+    raw.max_questions = intArg(maxQuestions, "max-questions", 0, 1e6);
+  const maxRounds = args["max-rounds"];
+  if (maxRounds !== undefined)
+    raw.max_rounds = intArg(maxRounds, "max-rounds", 0, 1e6);
+  const performance = args.performance;
+  if (performance !== undefined) {
+    raw.performance = enumArg(performance, "performance", PERFORMANCE_VALUES);
+  }
+  const effort = args["generator-effort"];
+  if (effort !== undefined) {
+    raw.generator_effort = enumArg(effort, "generator-effort", EFFORT_VALUES);
+  }
+  const gateMode = args["gate-mode"];
+  if (gateMode !== undefined) {
+    raw.gate_mode = enumArg(gateMode, "gate-mode", GATE_MODE_VALUES);
+  }
+  const granularity = args.granularity;
+  if (granularity !== undefined) {
+    raw.granularity = enumArg(granularity, "granularity", GRANULARITY_VALUES);
+  }
+  const threshold = args.threshold;
+  if (threshold !== undefined) {
+    const t2 = Number(threshold);
+    if (!Number.isFinite(t2) || t2 < 0 || t2 > 1) {
+      throw new Error(`--threshold must be a number in [0, 1]; got "${threshold}"`);
+    }
+    raw.threshold = t2;
+  }
+  return resolveQuestionConfig(raw);
+}
 var startCmd2 = defineCommand({
   meta: {
     name: "start",
-    description: "Initialize tech-spec-state.json for a work item (doc path + mode)"
+    description: "Initialize tech-spec-state.json for a work item (doc path + mode + question tuning)"
   },
   args: {
     workItem: { type: "string", description: "Work item id (wi_*)", required: true },
@@ -36504,6 +36621,51 @@ var startCmd2 = defineCommand({
       type: "string",
       description: "Writing/review rhythm: stepwise (default) | oneshot",
       default: "stepwise"
+    },
+    intensity: {
+      type: "string",
+      alias: "i",
+      description: "Unified dial 0..100 over {gate threshold, granularity, count/rounds} (default 60)"
+    },
+    generators: {
+      type: "string",
+      alias: "g",
+      description: "Generator fan-out count 1..6 (default 2)"
+    },
+    performance: {
+      type: "string",
+      alias: "p",
+      description: `Preset ${PERFORMANCE_VALUES.join("|")} (default standard)`
+    },
+    "generator-effort": {
+      type: "string",
+      alias: "e",
+      description: `Generator effort ${EFFORT_VALUES.join("|")} (default inherit)`
+    },
+    "gate-mode": {
+      type: "string",
+      alias: "m",
+      description: `Gate mode ${GATE_MODE_VALUES.join("|")} (default confirm)`
+    },
+    "max-questions": {
+      type: "string",
+      alias: "q",
+      description: "Question ceiling (default 0 = unlimited, opt-in cap)"
+    },
+    "max-rounds": {
+      type: "string",
+      alias: "r",
+      description: "Round ceiling (default 0 = unlimited, opt-in cap)"
+    },
+    threshold: {
+      type: "string",
+      alias: "t",
+      description: "Selection threshold 0..1 \u2014 advanced override of the intensity-derived value"
+    },
+    granularity: {
+      type: "string",
+      alias: "d",
+      description: `Granularity ${GRANULARITY_VALUES.join("|")} \u2014 advanced override of the intensity-derived value`
     },
     output: { type: "string", description: "Output format: human|json", default: "human" }
   },
@@ -36521,6 +36683,14 @@ var startCmd2 = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
+    let questionConfig2;
+    try {
+      questionConfig2 = parseQuestionConfigArgs(args);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
     const repoRoot = await resolveRepoRootForCreate();
     if (!await new WorkItemStore(repoRoot).exists(args.workItem)) {
       writeError(`work item ${args.workItem} not found`);
@@ -36530,7 +36700,8 @@ var startCmd2 = defineCommand({
     const state = await startTechSpec(repoRoot, {
       workItemId: args.workItem,
       docPath: args.doc,
-      mode: args.mode
+      mode: args.mode,
+      questionConfig: questionConfig2
     });
     if (format === "json") {
       writeJson2({
@@ -37344,4 +37515,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=05b1f72f2b967e33d43b64599ef97cb4e6ca447ea136d7e20eab7e4f2560a64d
+//# ditto-src-stamp=adc0d31d9e72e9f5d41299fbe11b798258790b5d1f5fa9bdbc342d45aa65c2e3

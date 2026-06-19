@@ -29,9 +29,9 @@ describe('tech-spec-round schema (증분 3 — 점수 영속 sink)', () => {
     expect(r.generator_count).toBe(3);
   });
 
-  test('generator_count defaults to 3 (§9 #5 N=3 고정)', () => {
+  test('generator_count defaults to 2 (--generators default 2, range 1..6; wi_260619yfw)', () => {
     const r = techSpecRoundPayload.parse({ round: 1, dry: true, all_scored: [] });
-    expect(r.generator_count).toBe(3);
+    expect(r.generator_count).toBe(2);
     expect(r.selected).toEqual([]);
   });
 

@@ -54,8 +54,8 @@ export const techSpecRoundPayload = z
       .number()
       .int()
       .positive()
-      .default(3)
-      .describe('N generators fanned out (§9 #5: fixed 3)'),
+      .default(2)
+      .describe('N generators fanned out (--generators default 2, range 1..6; wi_260619yfw)'),
     threshold: z.number().optional().describe('Fixed selection threshold used this round (§9 #4)'),
     dry: z
       .boolean()
@@ -95,7 +95,7 @@ export const techSpecRound = z
     work_item_id: workItemId,
     round: z.number().int().positive(),
     section: z.string().optional(),
-    generator_count: z.number().int().positive().default(3),
+    generator_count: z.number().int().positive().default(2),
     threshold: z.number().optional(),
     dry: z.boolean(),
     selected: z.array(scoredQuestion).default([]),

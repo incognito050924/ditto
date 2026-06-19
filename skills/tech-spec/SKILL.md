@@ -73,20 +73,22 @@ The three properties above define *what* a good question is; this defines *who m
 **Three roles**:
 
 1. **driver (you)** — orchestrate the loop. Keep your own context bound: work from the compressed source (the spec doc + the fixed facts/decisions ledger + the §12 summary), not the growing transcript; reset a long session via handoff. Rot discipline is for the driver too, not only the generators.
-2. **`ditto:question-generator` × 3 (parallel, fresh each round)** — fan out 3 generators, each with **only** the minimal packet `{fixed facts & decisions, project status/environment, current draft / target empty section}`. Excluded: the interview narrative and your own guesses — that exclusion is the anti-bias mechanism. Three independent generators cover each other's blind spots.
+2. **`ditto:question-generator` × N (parallel, fresh each round)** — fan out N generators (N = the resolved `--generators`, default 2, range 1..6), each with **only** the minimal packet `{fixed facts & decisions, project status/environment, current draft / target empty section}`. Excluded: the interview narrative and your own guesses — that exclusion is the anti-bias mechanism. Independent generators cover each other's blind spots.
 3. **`ditto:question-gate` (fan-in)** — one gate over the pooled candidates; it scores (consensus / quality / necessity / answer_value) and selects, or signals dry.
 
 **Mechanical constraint**: ditto subagents cannot spawn sub-subagents (single-level delegation). So the gate does not call the generators — **you** fan out the generators, collect candidates, then hand the pool to the gate. The logical roles are as above; only the caller is the driver.
 
+The loop is tuned by the **resolved question-config** persisted at `tech-spec start` (`question_config` in `tech-spec-state.json`): `intensity` (the unified dial — derives the gate `threshold`, `granularity`, and per-round count hint), `generators` (fan-out N), `gate_mode` (`confirm` default, or `auto`), `generator_effort`, and the opt-in caps `max_questions`/`max_rounds`. The `--performance` presets (glance/quick/standard/deep/exhaustive) just expand to these. Read the resolved values and obey them — do not re-derive tuning in your context. Defaults reproduce current behavior.
+
 **Control loop (per round, score-based termination)**:
 
-1. Fan out 3 generators with the current minimal packet → collect candidates.
-2. Spawn the gate with the pool → it returns `{selected, dry, all_scored}`.
+1. Fan out N generators (N = resolved `generators`, default 2) with the current minimal packet → collect candidates.
+2. Spawn the gate with the pool, handing it the resolved `threshold` + count hint → it returns `{selected, dry, all_scored}`.
 3. Record the round: `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" tech-spec record-round --work-item <wi> --json '{"round": <n>, "dry": <bool>, "selected": [...], "all_scored": [...]}'` — appends the gate's scores to the durable trail (`tech-spec-rounds.jsonl`). `ditto doctor intent-quality` reads them as the question-VALUE signal (next to the deep-interview question-COUNT signal).
 4. If `selected` is non-empty: ask the user those questions **in the main session** (the gate never asks the user) → fold answers into the fixed-facts ledger → next round with a refreshed packet.
-5. If `dry` (no candidate cleared the fixed threshold): end the round/interview. Termination is **score-based, not a fixed question count** — it sits where deep-interview's readiness termination sits, but on value-score, while deep-interview itself stays zero-diff.
+5. End the round/interview when `dry` (no candidate cleared the resolved `threshold`) — **also** end when the resolved `max_rounds`/`max_questions` ceiling is reached, **if set** (default 0 = unlimited, so by default termination stays purely score-based). Termination is **score-based, not a fixed question count** — it sits where deep-interview's readiness termination sits, but on value-score, while deep-interview itself stays zero-diff.
 
-N = 3 generators and the termination threshold are **fixed** for now; budget-linked N and adaptive/user-set thresholds are later increments. Output discipline still applies — generators emit raw question text as internal tooling, but only resolved conclusions reach the document.
+N (fan-out) and the selection threshold are now **resolved from the question-config** — `--generators` defaults to 2 (range 1..6) and the threshold is intensity-derived (`--threshold` overrides). The defaults preserve current behavior; adaptive thresholds and budget-linked N beyond this dial are later increments. Output discipline still applies — generators emit raw question text as internal tooling, but only resolved conclusions reach the document.
 
 ## Critique axis — continuous pre-mortem
 

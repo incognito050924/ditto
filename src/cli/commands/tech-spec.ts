@@ -9,6 +9,14 @@ import {
   recordSectionPayload,
   startTechSpec,
 } from '~/core/tech-spec';
+import {
+  type GateMode,
+  type GeneratorEffort,
+  type Granularity,
+  type PerformancePreset,
+  type RawQuestionConfig,
+  resolveQuestionConfig,
+} from '~/core/tech-spec-options';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
   RUNTIME_ERROR_EXIT,
@@ -29,10 +37,80 @@ function parseJsonArg(raw: string): unknown {
   }
 }
 
+const PERFORMANCE_VALUES = ['glance', 'quick', 'standard', 'deep', 'exhaustive'] as const;
+const EFFORT_VALUES = ['low', 'medium', 'high', 'inherit'] as const;
+const GATE_MODE_VALUES = ['confirm', 'auto'] as const;
+const GRANULARITY_VALUES = ['low', 'medium', 'high'] as const;
+
+/** Coerce a string arg to an integer in [min,max], or throw a usage error. */
+function intArg(raw: string, label: string, min: number, max: number): number {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < min || n > max) {
+    throw new Error(`--${label} must be an integer in [${min}, ${max}]; got "${raw}"`);
+  }
+  return n;
+}
+
+/** Coerce a string arg to one of `values`, or throw a usage error. */
+function enumArg<T extends string>(raw: string, label: string, values: readonly T[]): T {
+  if (!(values as readonly string[]).includes(raw)) {
+    throw new Error(`--${label} must be ${values.join('|')}; got "${raw}"`);
+  }
+  return raw as T;
+}
+
+type StartArgs = Record<string, unknown>;
+
+/**
+ * Validate the §6-6 question-elicitation args and resolve the effective config
+ * (wi_260619yfw). Only explicitly-passed options enter the raw config; the
+ * resolver applies precedence and defaults (= current behavior). Bad values
+ * (out-of-range intensity, generators∉1..6, undefined enum, threshold∉[0,1])
+ * are rejected here — this is ac-1's evidence.
+ */
+function parseQuestionConfigArgs(args: StartArgs): ReturnType<typeof resolveQuestionConfig> {
+  const raw: RawQuestionConfig = {};
+  const intensity = args.intensity as string | undefined;
+  if (intensity !== undefined) raw.intensity = intArg(intensity, 'intensity', 0, 100);
+  const generators = args.generators as string | undefined;
+  if (generators !== undefined) raw.generators = intArg(generators, 'generators', 1, 6);
+  const maxQuestions = args['max-questions'] as string | undefined;
+  if (maxQuestions !== undefined)
+    raw.max_questions = intArg(maxQuestions, 'max-questions', 0, 1_000_000);
+  const maxRounds = args['max-rounds'] as string | undefined;
+  if (maxRounds !== undefined) raw.max_rounds = intArg(maxRounds, 'max-rounds', 0, 1_000_000);
+  const performance = args.performance as string | undefined;
+  if (performance !== undefined) {
+    raw.performance = enumArg<PerformancePreset>(performance, 'performance', PERFORMANCE_VALUES);
+  }
+  const effort = args['generator-effort'] as string | undefined;
+  if (effort !== undefined) {
+    raw.generator_effort = enumArg<GeneratorEffort>(effort, 'generator-effort', EFFORT_VALUES);
+  }
+  const gateMode = args['gate-mode'] as string | undefined;
+  if (gateMode !== undefined) {
+    raw.gate_mode = enumArg<GateMode>(gateMode, 'gate-mode', GATE_MODE_VALUES);
+  }
+  const granularity = args.granularity as string | undefined;
+  if (granularity !== undefined) {
+    raw.granularity = enumArg<Granularity>(granularity, 'granularity', GRANULARITY_VALUES);
+  }
+  const threshold = args.threshold as string | undefined;
+  if (threshold !== undefined) {
+    const t = Number(threshold);
+    if (!Number.isFinite(t) || t < 0 || t > 1) {
+      throw new Error(`--threshold must be a number in [0, 1]; got "${threshold}"`);
+    }
+    raw.threshold = t;
+  }
+  return resolveQuestionConfig(raw);
+}
+
 const startCmd = defineCommand({
   meta: {
     name: 'start',
-    description: 'Initialize tech-spec-state.json for a work item (doc path + mode)',
+    description:
+      'Initialize tech-spec-state.json for a work item (doc path + mode + question tuning)',
   },
   args: {
     workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
@@ -45,6 +123,53 @@ const startCmd = defineCommand({
       type: 'string',
       description: 'Writing/review rhythm: stepwise (default) | oneshot',
       default: 'stepwise',
+    },
+    // §6-6 question-elicitation tuning (wi_260619yfw). Defaults preserve current behavior.
+    intensity: {
+      type: 'string',
+      alias: 'i',
+      description:
+        'Unified dial 0..100 over {gate threshold, granularity, count/rounds} (default 60)',
+    },
+    generators: {
+      type: 'string',
+      alias: 'g',
+      description: 'Generator fan-out count 1..6 (default 2)',
+    },
+    performance: {
+      type: 'string',
+      alias: 'p',
+      description: `Preset ${PERFORMANCE_VALUES.join('|')} (default standard)`,
+    },
+    'generator-effort': {
+      type: 'string',
+      alias: 'e',
+      description: `Generator effort ${EFFORT_VALUES.join('|')} (default inherit)`,
+    },
+    'gate-mode': {
+      type: 'string',
+      alias: 'm',
+      description: `Gate mode ${GATE_MODE_VALUES.join('|')} (default confirm)`,
+    },
+    'max-questions': {
+      type: 'string',
+      alias: 'q',
+      description: 'Question ceiling (default 0 = unlimited, opt-in cap)',
+    },
+    'max-rounds': {
+      type: 'string',
+      alias: 'r',
+      description: 'Round ceiling (default 0 = unlimited, opt-in cap)',
+    },
+    threshold: {
+      type: 'string',
+      alias: 't',
+      description: 'Selection threshold 0..1 — advanced override of the intensity-derived value',
+    },
+    granularity: {
+      type: 'string',
+      alias: 'd',
+      description: `Granularity ${GRANULARITY_VALUES.join('|')} — advanced override of the intensity-derived value`,
     },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
@@ -62,6 +187,14 @@ const startCmd = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
+    let questionConfig: ReturnType<typeof resolveQuestionConfig>;
+    try {
+      questionConfig = parseQuestionConfigArgs(args);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
     const repoRoot = await resolveRepoRootForCreate();
     if (!(await new WorkItemStore(repoRoot).exists(args.workItem))) {
       writeError(`work item ${args.workItem} not found`);
@@ -72,6 +205,7 @@ const startCmd = defineCommand({
       workItemId: args.workItem,
       docPath: args.doc,
       mode: args.mode,
+      questionConfig,
     });
     if (format === 'json') {
       writeJson({

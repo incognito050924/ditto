@@ -17,6 +17,7 @@ import {
   recordSectionPayload,
   startTechSpec,
 } from '~/core/tech-spec';
+import { resolveQuestionConfig } from '~/core/tech-spec-options';
 import { TechSpecStore } from '~/core/tech-spec-store';
 import { WorkItemStore } from '~/core/work-item-store';
 
@@ -196,6 +197,38 @@ describe('startTechSpec / recordSection (ac-9)', () => {
     expect(state.mode).toBe('stepwise');
     expect(state.sections).toEqual([]);
     expect(await new TechSpecStore(repo).exists(wiId)).toBe(true);
+  });
+
+  test('start persists the resolved question_config — defaults preserve current behavior (ac-6)', async () => {
+    const state = await startTechSpec(repo, { workItemId: wiId, docPath: '.ditto/specs/demo.md' });
+    const qc = state.question_config;
+    expect(qc.intensity).toBe(60);
+    expect(qc.generators).toBe(2);
+    expect(qc.performance).toBe('standard');
+    expect(qc.generator_effort).toBe('inherit');
+    expect(qc.gate_mode).toBe('confirm');
+    expect(qc.max_questions).toBe(0); // unlimited — current dry termination unchanged (ac-5)
+    expect(qc.max_rounds).toBe(0);
+    expect(qc.threshold).toBe(0.6); // intensity-60 anchor
+    expect(qc.granularity).toBe('medium');
+  });
+
+  test('start persists an explicitly resolved config (ac-3/4/5)', async () => {
+    const state = await startTechSpec(repo, {
+      workItemId: wiId,
+      docPath: '.ditto/specs/demo.md',
+      questionConfig: resolveQuestionConfig({
+        performance: 'deep',
+        intensity: 50,
+        max_questions: 4,
+        max_rounds: 2,
+      }),
+    });
+    const qc = state.question_config;
+    expect(qc.intensity).toBe(50); // explicit intensity beats the deep preset
+    expect(qc.generators).toBe(3); // deep preset
+    expect(qc.max_questions).toBe(4);
+    expect(qc.max_rounds).toBe(2);
   });
 
   test('factual section without grounding evidence is rejected at the schema (ac-9)', () => {
@@ -392,7 +425,7 @@ describe('recordRound (증분 3 — 점수 영속 sink)', () => {
     const rounds = await new WorkItemStore(repo).readTechSpecRounds(wiId);
     expect(rounds).toHaveLength(1);
     expect(rounds[0]?.selected[0]?.scores.answer_value).toBe(0.9);
-    expect(rounds[0]?.generator_count).toBe(3);
+    expect(rounds[0]?.generator_count).toBe(2); // --generators default 2 (wi_260619yfw)
   });
 
   test('multiple rounds append (not overwrite)', async () => {

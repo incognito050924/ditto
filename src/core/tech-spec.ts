@@ -12,6 +12,7 @@ import {
   techSpecRoundPayload,
 } from '~/schemas/tech-spec-round';
 import {
+  type QuestionConfig,
   type SpecSectionId as SchemaSectionId,
   type TechSpecState,
   specGroundingEvidence,
@@ -22,6 +23,7 @@ import { bootstrapAutopilot } from './autopilot-bootstrap';
 import { type GateResult, type RiskAxes, interviewReadinessGate } from './gates';
 import { IntentStore } from './intent-store';
 import { InterviewStore } from './interview-store';
+import { resolveQuestionConfig } from './tech-spec-options';
 import { TechSpecStore } from './tech-spec-store';
 import { WorkItemStore } from './work-item-store';
 
@@ -285,6 +287,8 @@ export interface StartTechSpecInput {
   workItemId: string;
   docPath: string;
   mode?: 'stepwise' | 'oneshot';
+  /** Resolved §6-6 question tuning (wi_260619yfw). Omitted ⇒ schema defaults (= current behavior). */
+  questionConfig?: QuestionConfig;
   now?: Date;
 }
 
@@ -300,6 +304,7 @@ export async function startTechSpec(
     doc_path: input.docPath,
     mode: input.mode ?? 'stepwise',
     sections: [],
+    question_config: input.questionConfig ?? resolveQuestionConfig({}),
     finalized: null,
     updated_at: nowIso,
   });

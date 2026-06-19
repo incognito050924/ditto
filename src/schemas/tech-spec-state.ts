@@ -52,6 +52,35 @@ export const specSectionRecord = z.object({
   recorded_at: z.string().min(1),
 });
 
+/**
+ * Resolved question-elicitation config (wi_260619yfw). The §6-6 question
+ * workflow is a soft driver procedure; this is its resolved tuning, persisted at
+ * `tech-spec start` so the SKILL driver reads the effective values and obeys.
+ * Defaults reproduce current behavior (the only intentional change is generators
+ * 3→2). Assembled by `resolveQuestionConfig` (src/core/tech-spec-options.ts).
+ */
+export const questionConfig = z
+  .object({
+    intensity: z.number().int().min(0).max(100).default(60),
+    generators: z.number().int().min(1).max(6).default(2),
+    performance: z.enum(['glance', 'quick', 'standard', 'deep', 'exhaustive']).default('standard'),
+    generator_effort: z.enum(['low', 'medium', 'high', 'inherit']).default('inherit'),
+    gate_mode: z.enum(['confirm', 'auto']).default('confirm'),
+    max_questions: z.number().int().nonnegative().default(0).describe('0 = unlimited (opt-in cap)'),
+    max_rounds: z.number().int().nonnegative().default(0).describe('0 = unlimited (opt-in cap)'),
+    threshold: z
+      .number()
+      .min(0)
+      .max(1)
+      .default(0.6)
+      .describe('Intensity-derived unless overridden'),
+    granularity: z.enum(['low', 'medium', 'high']).default('medium'),
+    count_hint: z.number().int().positive().default(2),
+    threshold_override: z.boolean().default(false),
+    granularity_override: z.boolean().default(false),
+  })
+  .describe('Resolved question-elicitation tuning; defaults preserve current behavior');
+
 export const techSpecState = z
   .object({
     schema_version: schemaVersion,
@@ -61,6 +90,9 @@ export const techSpecState = z
       .enum(['stepwise', 'oneshot'])
       .describe('Writing/review rhythm; gates are mode-invariant'),
     sections: z.array(specSectionRecord).default([]),
+    question_config: questionConfig
+      .default({})
+      .describe('Resolved §6-6 question-elicitation tuning (wi_260619yfw)'),
     finalized: z
       .object({
         at: z.string().min(1),
@@ -76,4 +108,5 @@ export const techSpecState = z
 
 export type SpecSectionId = z.infer<typeof specSectionId>;
 export type SpecGroundingEvidence = z.infer<typeof specGroundingEvidence>;
+export type QuestionConfig = z.infer<typeof questionConfig>;
 export type TechSpecState = z.infer<typeof techSpecState>;

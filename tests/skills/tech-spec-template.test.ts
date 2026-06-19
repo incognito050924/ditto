@@ -117,10 +117,12 @@ describe('question generation workflow — multi-agent (ac-10~12)', () => {
   test('fan-out → fan-in gate is the workflow, with the four-dimension score schema (ac-11)', () => {
     const skill = readFileSync(SKILL_PATH, 'utf8');
     expect(skill).toContain('ditto:question-gate');
-    expect(skill).toMatch(/fan out 3 generators/);
+    expect(skill).toMatch(/fan out N generators/);
     expect(skill).toMatch(/fan-in/);
-    // N=3 고정 (§9 #5 확정).
-    expect(skill).toMatch(/N = 3 generators/);
+    // N 생성기 수는 config-driven: 기본 2, 1..6 (§9 #5 갱신, wi_260619yfw).
+    expect(skill).toMatch(/--generators/);
+    expect(skill).toMatch(/default 2/);
+    expect(skill).toMatch(/range 1\.\.6/);
     // 점수 4차원 (§9 #3: consensus=공통도, 나머지 품질·필요성·가치).
     for (const dim of ['consensus', 'quality', 'necessity', 'answer_value']) {
       expect(skill).toContain(dim);
@@ -145,7 +147,9 @@ describe('question generation workflow — multi-agent (ac-10~12)', () => {
     const skill = readFileSync(SKILL_PATH, 'utf8');
     expect(skill).toMatch(/score-based.*not a fixed question count/);
     expect(skill).toContain('dry');
-    // 고정 임계 (§9 #4 확정).
-    expect(skill).toMatch(/fixed threshold|threshold are \*\*fixed\*\*/);
+    // 임계는 강도 유도값, hard-cap은 선택적(기본 무제한) — wi_260619yfw 갱신.
+    expect(skill).toMatch(/intensity-derived/);
+    expect(skill).toMatch(/max_rounds|max_questions/);
+    expect(skill).toMatch(/default 0 = unlimited/);
   });
 });
