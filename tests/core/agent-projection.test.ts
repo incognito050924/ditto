@@ -19,6 +19,8 @@ const READ_ONLY = [
   'memory-extractor',
   'playwright-e2e',
   'retrospective',
+  'question-generator',
+  'question-gate',
 ];
 const MUTATING = ['implementer', 'refactorer', 'e2e-scripter', 'knowledge-curator'];
 
@@ -92,7 +94,7 @@ describe('agent-projection: agents/*.md → Codex custom-agent TOML (M4)', () =>
 
   test('every real agent projects to valid TOML with all required fields', async () => {
     const projections = await projectAgents(REPO_ROOT);
-    expect(projections.length).toBe(READ_ONLY.length + MUTATING.length); // 15
+    expect(projections.length).toBe(READ_ONLY.length + MUTATING.length); // 17
     for (const p of projections) {
       const parsed = parseToml(p.toml) as Record<string, unknown>;
       expect(typeof parsed.name).toBe('string');

@@ -64,6 +64,30 @@ The agent does the expert's legwork: bring the considerations a seasoned practit
 - **Separate facts from decisions.** Facts (which considerations apply) the agent self-answers from code/domain; the user gets only the **decision**, as an oriented question — e.g. "Path X goes through JWT; does this feature enforce that too, or is public access intended?"
 - **Boundary:** expansion is *intellectual reframing within the goal*, not business ambition. No "what's the 10x version?" — expansion makes the user *see* farther, it does not inflate the goal.
 
+*How* these questions are produced — fanned out to fresh generators and chosen by a scoring gate, not generated inline in your accumulated context — is the next section.
+
+## Question generation workflow (multi-agent)
+
+The three properties above define *what* a good question is; this defines *who makes and picks them*. Generating questions inside the driver's long, accumulated context fails two ways at once (the two failure modes the charter §4-9 separates): **bias** — your narrative acts as a prior — and **context rot** — quality degrades non-uniformly as the transcript grows. So generation is pulled out of the driver into fresh, minimal-context subagents.
+
+**Three roles**:
+
+1. **driver (you)** — orchestrate the loop. Keep your own context bound: work from the compressed source (the spec doc + the fixed facts/decisions ledger + the §12 summary), not the growing transcript; reset a long session via handoff. Rot discipline is for the driver too, not only the generators.
+2. **`ditto:question-generator` × 3 (parallel, fresh each round)** — fan out 3 generators, each with **only** the minimal packet `{fixed facts & decisions, project status/environment, current draft / target empty section}`. Excluded: the interview narrative and your own guesses — that exclusion is the anti-bias mechanism. Three independent generators cover each other's blind spots.
+3. **`ditto:question-gate` (fan-in)** — one gate over the pooled candidates; it scores (consensus / quality / necessity / answer_value) and selects, or signals dry.
+
+**Mechanical constraint**: ditto subagents cannot spawn sub-subagents (single-level delegation). So the gate does not call the generators — **you** fan out the generators, collect candidates, then hand the pool to the gate. The logical roles are as above; only the caller is the driver.
+
+**Control loop (per round, score-based termination)**:
+
+1. Fan out 3 generators with the current minimal packet → collect candidates.
+2. Spawn the gate with the pool → it returns `{selected, dry, all_scored}`.
+3. Record `all_scored` to the work-item trail as a structured score artifact — available for later tuning. (Analysis/consumption of the scores, e.g. intent-quality measurement, is a later increment.)
+4. If `selected` is non-empty: ask the user those questions **in the main session** (the gate never asks the user) → fold answers into the fixed-facts ledger → next round with a refreshed packet.
+5. If `dry` (no candidate cleared the fixed threshold): end the round/interview. Termination is **score-based, not a fixed question count** — it sits where deep-interview's readiness termination sits, but on value-score, while deep-interview itself stays zero-diff.
+
+N = 3 generators and the termination threshold are **fixed** for now; budget-linked N and adaptive/user-set thresholds are later increments. Output discipline still applies — generators emit raw question text as internal tooling, but only resolved conclusions reach the document.
+
 ## Critique axis — continuous pre-mortem
 
 A standing critique runs the whole time, so the skill never decays into a form to fill in. It targets two things, **every increment** — not a one-time finalize ritual:
@@ -122,6 +146,7 @@ After finalize, editing a compile-input section of the document makes `ditto aut
 - Default mode is stepwise; oneshot only via explicit parameter. Never default to oneshot.
 - Never ask the user a spec question answerable from code/docs/memory — the user reviews, the agent researches.
 - Expert elicitation (good questions) and the critique axis are always-on core behavior, never an opt-in mode — the quality floor must hold even when the author is a novice.
+- Question generation is delegated to fresh `ditto:question-generator` subagents (minimal packet — no interview narrative, no driver guesses) and selected by `ditto:question-gate` on score; the round/interview ends when the gate finds no question above the threshold. Never generate the final question set inline in the driver's accumulated (biased) context.
 - Never leak elicitation or pre-mortem question phrasing into the document — sections carry resolved conclusions only.
 - Never modify deep-interview's contract, gates, budget, or finalize (zero diff — guarded by its contract tests).
 - Never hand-edit `intent.json` or build any document↔intent sync path.

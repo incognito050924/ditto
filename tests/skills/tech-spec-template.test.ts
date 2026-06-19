@@ -5,6 +5,8 @@ import { join } from 'node:path';
 const REPO_ROOT = join(import.meta.dir, '..', '..');
 const TEMPLATE_PATH = join(REPO_ROOT, 'skills', 'tech-spec', 'TEMPLATE.md');
 const SKILL_PATH = join(REPO_ROOT, 'skills', 'tech-spec', 'SKILL.md');
+const GENERATOR_AGENT_PATH = join(REPO_ROOT, 'agents', 'question-generator.md');
+const GATE_AGENT_PATH = join(REPO_ROOT, 'agents', 'question-gate.md');
 
 describe('tech-spec template generalization (ac-1)', () => {
   test('TEMPLATE.md exists and carries the 12 generalized sections + 인터뷰 기록', () => {
@@ -85,5 +87,65 @@ describe('output discipline — no elicitation leak (ac-5)', () => {
     expect(skill).toMatch(/Never leak .*question phrasing/);
     // pre-mortem 질문은 삭제가 아니라 스킬(비판 축)로 옮겨 내부 도구로 산다
     expect(skill).toContain('broke in 3 days');
+  });
+});
+
+describe('question generation workflow — multi-agent (ac-10~12)', () => {
+  // 설계 §6-6 + §9 확정값. 증거 종류=doc: 계약이 SKILL/에이전트 정의에 박혀 있는지 grep으로 잠근다.
+  test('generation is delegated to fresh minimal-packet generator subagents, not inline (ac-10)', () => {
+    const skill = readFileSync(SKILL_PATH, 'utf8');
+    // driver 인라인 생성이 아니라 fresh 서브에이전트 위임 + 최소 패킷이 계약에 명시된다.
+    expect(skill).toContain('ditto:question-generator');
+    expect(skill).toContain('minimal packet');
+    expect(skill).toMatch(/fresh/i);
+    // 패킷 제외 항목(편향원): 인터뷰 서사 + driver 추측.
+    expect(skill).toMatch(/Excluded:.*interview narrative.*guesses/);
+    // 하드 룰로도 잠긴다: 인라인 최종 질문 생성 금지.
+    expect(skill).toMatch(/Never generate the final question set inline/);
+  });
+
+  test('generator agent contract exists, read-only, minimal-packet, generate-only (ac-10)', () => {
+    const gen = readFileSync(GENERATOR_AGENT_PATH, 'utf8');
+    expect(gen).toMatch(/^---\nname: question-generator\n/);
+    expect(gen).toContain('tools: Read, Grep, Glob'); // read-only
+    expect(gen).toContain('minimal packet');
+    expect(gen).toContain('You do NOT receive'); // 컨텍스트 격리(반-편향)
+    // 생성 전용: 점수/선정은 게이트의 일이다.
+    expect(gen).toMatch(/do \*\*not\*\* score, select/);
+  });
+
+  test('fan-out → fan-in gate is the workflow, with the four-dimension score schema (ac-11)', () => {
+    const skill = readFileSync(SKILL_PATH, 'utf8');
+    expect(skill).toContain('ditto:question-gate');
+    expect(skill).toMatch(/fan out 3 generators/);
+    expect(skill).toMatch(/fan-in/);
+    // N=3 고정 (§9 #5 확정).
+    expect(skill).toMatch(/N = 3 generators/);
+    // 점수 4차원 (§9 #3: consensus=공통도, 나머지 품질·필요성·가치).
+    for (const dim of ['consensus', 'quality', 'necessity', 'answer_value']) {
+      expect(skill).toContain(dim);
+    }
+  });
+
+  test('gate agent scores four dimensions, selects by threshold, returns to driver not the user (ac-11~12)', () => {
+    const gate = readFileSync(GATE_AGENT_PATH, 'utf8');
+    expect(gate).toMatch(/^---\nname: question-gate\n/);
+    expect(gate).toContain('tools: Read, Grep, Glob'); // read-only
+    for (const dim of ['consensus', 'quality', 'necessity', 'answer_value']) {
+      expect(gate).toContain(dim);
+    }
+    // 게이트는 사용자에게 직접 질문하지 않는다 (§9 #7 확정).
+    expect(gate).toMatch(/never ask the user/);
+    // dry 신호 + 임계 (§9 #4 확정).
+    expect(gate).toContain('dry');
+    expect(gate).toContain('threshold');
+  });
+
+  test('termination is score-based (dry round), not a fixed question count (ac-12)', () => {
+    const skill = readFileSync(SKILL_PATH, 'utf8');
+    expect(skill).toMatch(/score-based.*not a fixed question count/);
+    expect(skill).toContain('dry');
+    // 고정 임계 (§9 #4 확정).
+    expect(skill).toMatch(/fixed threshold|threshold are \*\*fixed\*\*/);
   });
 });
