@@ -1,5 +1,7 @@
 # HANDOFF — tech-spec 전문가-유도 질문 + 상시 비판축 (2026-06-19)
 
+> ⚠ **SUPERSEDED (2026-06-19)**: 증분 1(소프트 계약 ac-1~9) 구현·커밋 완료(`54c5743`). 이후 작업(증분 2 = 다중-에이전트 워크플로, wi_260619tf7)은 → `reports/handoffs/2026-06-19-tech-spec-elicitation-workflow-incr2.md`. 이 문서는 역사적 기록.
+
 다른 PC에서 이어받기 위한 문서. 클라우드 세션에서 설계까지만 하고 중단 — 구현은 로컬 PC에서.
 
 - **브랜치**: `claude/deep-interview-skill-gaps-g5liop` (이 핸드오프 + 설계문서가 포함된 커밋이 최신).
