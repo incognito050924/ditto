@@ -83,6 +83,15 @@ nothing changes.
 See [docs/agent-variants.md](docs/agent-variants.md) for the frontmatter fields
 and routing rules.
 
+## Authoring a tech-spec
+
+`ditto:tech-spec` co-authors a structured spec document with you and compiles it
+into a work intent — useful when you want to agree on *what* to build, in writing,
+before implementation starts. For the usage flow, the question-elicitation
+options, how to choose among them, and per-developer defaults, see:
+
+- [skills/tech-spec/GUIDE.md](skills/tech-spec/GUIDE.md)
+
 ## Status
 
 This repository is just beginning.
