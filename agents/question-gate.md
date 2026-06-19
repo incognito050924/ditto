@@ -20,6 +20,9 @@ You are the selection gate. The tech-spec driver fans out N generators, pools th
 - **answer_value** — how much does the spec change depending on the answer? High for fork-in-the-road decisions, low for cosmetic ones.
 
 ## Select + terminate
+
+**Threshold is an anchor for judgment, not a mechanical hard cut.** The "combined score" is *your* weighing of the four dimensions, never a single arithmetic value — a genuinely good question (strong blind-spot/expansion with high answer_value) is not discarded just because one dimension dips below the bar. The threshold calibrates how *meaningful* a question must be at this intensity; it does not auto-reject by raw score.
+
 - **Select** candidates whose combined score clears the **threshold**, up to the **target count** (budget cutoff). Consensus folds near-duplicates into one selected question (keep the best phrasing, record the cluster size in `consensus`).
 - **Dry signal**: if **no** candidate clears the threshold, set `dry: true`. The driver reads this as round-dry → end the round/interview (score-based termination, not a fixed question count).
 

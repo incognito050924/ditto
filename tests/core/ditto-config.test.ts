@@ -49,4 +49,26 @@ describe('readQuestionConfigDefaults — per-user .ditto/local/config.json (wi_2
     await writeConfig(JSON.stringify({ tech_spec: {} }));
     expect(await readQuestionConfigDefaults(repo)).toEqual({});
   });
+
+  test('onMalformed fires only when a present file fails to parse (not absent/valid)', async () => {
+    let calls = 0;
+    const onMalformed = () => {
+      calls++;
+    };
+    // absent file → fail-open, NOT malformed (no warning)
+    await readQuestionConfigDefaults(repo, onMalformed);
+    expect(calls).toBe(0);
+    // valid config → no warning
+    await writeConfig(JSON.stringify({ tech_spec: { question: { generators: 3 } } }));
+    await readQuestionConfigDefaults(repo, onMalformed);
+    expect(calls).toBe(0);
+    // present + invalid JSON → warning (fail-open still returns {})
+    await writeConfig('{ not json');
+    expect(await readQuestionConfigDefaults(repo, onMalformed)).toEqual({});
+    expect(calls).toBe(1);
+    // present + schema-invalid → warning
+    await writeConfig(JSON.stringify({ tech_spec: { question: { generators: 99 } } }));
+    await readQuestionConfigDefaults(repo, onMalformed);
+    expect(calls).toBe(2);
+  });
 });

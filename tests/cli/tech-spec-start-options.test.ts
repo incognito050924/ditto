@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -141,5 +141,13 @@ describe('ditto tech-spec start — question-elicitation options (ac-1)', () => 
     const r = start(['-d', 'extreme']);
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toMatch(/granularity/);
+  });
+
+  test('malformed config.json → start still succeeds (fail-open) but warns on stderr', async () => {
+    await mkdir(join(dir, '.ditto', 'local'), { recursive: true });
+    await writeFile(join(dir, '.ditto', 'local', 'config.json'), '{ not valid json', 'utf8');
+    const r = start(['--output', 'json']);
+    expect(r.exitCode).toBe(0); // fail-open: a broken config never blocks start
+    expect(r.stderr).toMatch(/config\.json/i); // but the user is warned it was ignored
   });
 });

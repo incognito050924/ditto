@@ -199,7 +199,13 @@ const startCmd = defineCommand({
     let questionConfig: ReturnType<typeof resolveQuestionConfig>;
     try {
       // Per-user defaults (.ditto/local/config.json) fill absent CLI flags; CLI wins.
-      const configRaw = await readQuestionConfigDefaults(repoRoot);
+      // Broken config is fail-open (start proceeds with defaults) but warns, so a
+      // silently-ignored config doesn't look like it "did nothing".
+      const configRaw = await readQuestionConfigDefaults(repoRoot, () =>
+        writeError(
+          'warning: .ditto/local/config.json could not be parsed — ignoring it and using defaults',
+        ),
+      );
       questionConfig = parseQuestionConfigArgs(args, configRaw);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));

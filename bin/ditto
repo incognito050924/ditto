@@ -36590,16 +36590,19 @@ var dittoConfig = exports_external.object({
 }).describe("Per-developer ditto config \u2014 .ditto/local/config.json (tier \u2462, gitignored)");
 
 // src/core/ditto-config.ts
-async function readQuestionConfigDefaults(repoRoot) {
+async function readQuestionConfigDefaults(repoRoot, onMalformed) {
   const file = Bun.file(localDir(repoRoot, "config.json"));
   if (!await file.exists())
     return {};
   try {
     const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
-    if (!parsed.success)
+    if (!parsed.success) {
+      onMalformed?.();
       return {};
+    }
     return parsed.data.tech_spec?.question ?? {};
   } catch {
+    onMalformed?.();
     return {};
   }
 }
@@ -36750,7 +36753,7 @@ var startCmd2 = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     let questionConfig2;
     try {
-      const configRaw = await readQuestionConfigDefaults(repoRoot);
+      const configRaw = await readQuestionConfigDefaults(repoRoot, () => writeError("warning: .ditto/local/config.json could not be parsed \u2014 ignoring it and using defaults"));
       questionConfig2 = parseQuestionConfigArgs(args, configRaw);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
@@ -37627,4 +37630,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=ac1b92adcadc86e29be897d830df6545391da6a6433498f42efc3afe9bcb8900
+//# ditto-src-stamp=ed65fa90da116f440f1d1dda443b24b8c33b63b5709c35c2ca5e06a7c71e7cf8
