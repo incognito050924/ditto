@@ -6,6 +6,12 @@ import type { Autopilot } from '~/schemas/autopilot';
 import type { IntentContract } from '~/schemas/intent';
 import { userConfirmation } from '~/schemas/interview-state';
 import {
+  type TechSpecRound,
+  type TechSpecRoundPayload,
+  techSpecRound,
+  techSpecRoundPayload,
+} from '~/schemas/tech-spec-round';
+import {
   type SpecSectionId as SchemaSectionId,
   type TechSpecState,
   specGroundingEvidence,
@@ -325,6 +331,41 @@ export async function recordSection(
       ? [...state.sections, record]
       : state.sections.map((s, i) => (i === idx ? record : s));
   return store.write({ ...state, sections, updated_at: nowIso });
+}
+
+// ── record-round (증분 3 — 다중-에이전트 질문 워크플로의 점수 영속 sink) ──
+
+/** The driver records one gate round's scores; ts + work_item_id are stamped on persist. */
+export const recordRoundPayload = techSpecRoundPayload;
+export type RecordRoundPayload = TechSpecRoundPayload;
+
+export interface RecordRoundInput {
+  workItemId: string;
+  payload: RecordRoundPayload;
+  now?: Date;
+}
+
+/**
+ * Append one question-round's gate scores to tech-spec-rounds.jsonl (the durable
+ * score trail). Independent of tech-spec-state — rounds run during the interview,
+ * before finalize. `ditto doctor intent-quality` reads the trail as the question-
+ * VALUE signal. Requires the work item to exist.
+ */
+export async function recordRound(
+  repoRoot: string,
+  input: RecordRoundInput,
+): Promise<TechSpecRound> {
+  const store = new WorkItemStore(repoRoot);
+  if (!(await store.exists(input.workItemId))) {
+    throw new Error(`work item ${input.workItemId} not found`);
+  }
+  const record: TechSpecRound = techSpecRound.parse({
+    ts: (input.now ?? new Date()).toISOString(),
+    work_item_id: input.workItemId,
+    ...input.payload,
+  });
+  await store.appendTechSpecRoundLine(input.workItemId, JSON.stringify(record));
+  return record;
 }
 
 // ── finalize (tech-spec 전용 — deep-interview finalize 재사용 불가, design §8) ──

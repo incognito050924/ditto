@@ -3,6 +3,8 @@ import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   finalizeTechSpec,
   finalizeTechSpecPayload,
+  recordRound,
+  recordRoundPayload,
   recordSection,
   recordSectionPayload,
   startTechSpec,
@@ -149,6 +151,74 @@ const recordSectionCmd = defineCommand({
   },
 });
 
+const recordRoundCmd = defineCommand({
+  meta: {
+    name: 'record-round',
+    description:
+      'Append one question-generation round’s gate scores to the durable score trail (selected + all_scored + dry; consumed by doctor intent-quality)',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    json: {
+      type: 'string',
+      description:
+        'JSON payload matching recordRoundPayload schema (round, dry, selected, all_scored, ...)',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw: unknown;
+    try {
+      raw = parseJsonArg(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = recordRoundPayload.safeParse(raw);
+    if (!parsed.success) {
+      writeError('--json failed schema validation:');
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const record = await recordRound(repoRoot, {
+        workItemId: args.workItem,
+        payload: parsed.data,
+      });
+      if (format === 'json') {
+        writeJson({
+          work_item_id: record.work_item_id,
+          round: record.round,
+          dry: record.dry,
+          selected: record.selected.length,
+          all_scored: record.all_scored.length,
+        });
+      } else {
+        writeHuman(
+          `Recorded round ${record.round} for ${record.work_item_id} (selected ${record.selected.length}, scored ${record.all_scored.length}${record.dry ? ', dry' : ''})`,
+        );
+      }
+    } catch (err) {
+      writeError(`record-round failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 const finalizeCmd = defineCommand({
   meta: {
     name: 'finalize',
@@ -272,6 +342,7 @@ export const techSpecCommand = defineCommand({
   subCommands: {
     start: startCmd,
     'record-section': recordSectionCmd,
+    'record-round': recordRoundCmd,
     finalize: finalizeCmd,
   },
 });

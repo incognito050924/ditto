@@ -11,6 +11,8 @@ import {
   computeSpecDigest,
   finalizeTechSpec,
   finalizeTechSpecPayload,
+  recordRound,
+  recordRoundPayload,
   recordSection,
   recordSectionPayload,
   startTechSpec,
@@ -349,5 +351,74 @@ describe('computeSpecDigest (해시 범위 = 컴파일 입력 섹션: 요약·�
     const doc = specDoc();
     const noisy = doc.replace(/\n/g, '\r\n').replace(/점수 API 제공/, '점수 API 제공   ');
     expect(computeSpecDigest(noisy)).toBe(computeSpecDigest(doc));
+  });
+});
+
+describe('recordRound (증분 3 — 점수 영속 sink)', () => {
+  let repo: string;
+  let wiId: string;
+
+  beforeEach(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'ditto-tsr-'));
+    const wi = await new WorkItemStore(repo).create({
+      title: 'demo',
+      source_request: 'demo',
+      goal: 'demo',
+      acceptance_criteria: [{ id: 'ac-1', statement: 'TBD', verdict: 'unverified', evidence: [] }],
+    });
+    wiId = wi.id;
+  });
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true });
+  });
+
+  const score = { consensus: 2, quality: 0.8, necessity: 0.7, answer_value: 0.9 };
+
+  test('appends a round to tech-spec-rounds.jsonl, stamping ts + work_item_id', async () => {
+    const payload = recordRoundPayload.parse({
+      round: 1,
+      section: 'background',
+      dry: false,
+      selected: [{ text: 'enforce JWT here?', property: 'blind-spot', scores: score }],
+      all_scored: [{ text: 'enforce JWT here?', property: 'blind-spot', scores: score }],
+    });
+    const record = await recordRound(repo, {
+      workItemId: wiId,
+      payload,
+      now: new Date('2026-06-19T05:00:00.000Z'),
+    });
+    expect(record.work_item_id).toBe(wiId);
+    expect(record.ts).toBe('2026-06-19T05:00:00.000Z');
+    const rounds = await new WorkItemStore(repo).readTechSpecRounds(wiId);
+    expect(rounds).toHaveLength(1);
+    expect(rounds[0]?.selected[0]?.scores.answer_value).toBe(0.9);
+    expect(rounds[0]?.generator_count).toBe(3);
+  });
+
+  test('multiple rounds append (not overwrite)', async () => {
+    await recordRound(repo, {
+      workItemId: wiId,
+      payload: recordRoundPayload.parse({
+        round: 1,
+        dry: false,
+        selected: [{ text: 'q', property: 'blind-spot', scores: score }],
+      }),
+    });
+    await recordRound(repo, {
+      workItemId: wiId,
+      payload: recordRoundPayload.parse({ round: 2, dry: true }),
+    });
+    const rounds = await new WorkItemStore(repo).readTechSpecRounds(wiId);
+    expect(rounds.map((r) => r.round)).toEqual([1, 2]);
+    expect(rounds[1]?.dry).toBe(true);
+  });
+
+  test('recording a round for a missing work item throws', async () => {
+    await expect(
+      recordRound(repo, {
+        workItemId: 'wi_doesnotexist',
+        payload: recordRoundPayload.parse({ round: 1, dry: true }),
+      }),
+    ).rejects.toThrow();
   });
 });

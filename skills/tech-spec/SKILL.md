@@ -82,7 +82,7 @@ The three properties above define *what* a good question is; this defines *who m
 
 1. Fan out 3 generators with the current minimal packet → collect candidates.
 2. Spawn the gate with the pool → it returns `{selected, dry, all_scored}`.
-3. Record `all_scored` to the work-item trail as a structured score artifact — available for later tuning. (Analysis/consumption of the scores, e.g. intent-quality measurement, is a later increment.)
+3. Record the round: `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" tech-spec record-round --work-item <wi> --json '{"round": <n>, "dry": <bool>, "selected": [...], "all_scored": [...]}'` — appends the gate's scores to the durable trail (`tech-spec-rounds.jsonl`). `ditto doctor intent-quality` reads them as the question-VALUE signal (next to the deep-interview question-COUNT signal).
 4. If `selected` is non-empty: ask the user those questions **in the main session** (the gate never asks the user) → fold answers into the fixed-facts ledger → next round with a refreshed packet.
 5. If `dry` (no candidate cleared the fixed threshold): end the round/interview. Termination is **score-based, not a fixed question count** — it sits where deep-interview's readiness termination sits, but on value-score, while deep-interview itself stays zero-diff.
 

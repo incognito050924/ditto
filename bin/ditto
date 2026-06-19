@@ -20425,6 +20425,57 @@ var interviewState = exports_external.object({
   })
 }).describe("Deep interview sidecar tracking ambiguity dimensions and readiness (\xA76.3)");
 
+// src/schemas/tech-spec-round.ts
+var questionProperty = exports_external.enum(["blind-spot", "expansion", "orientation"]).describe("Which good-question property the candidate carries (SKILL.md \xA7good questions)");
+var questionScore = exports_external.object({
+  consensus: exports_external.number().int().nonnegative().describe("How many generators independently raised this question (necessity signal)"),
+  quality: exports_external.number().min(0).max(1).describe("Meets the three good-question properties [0..1]"),
+  necessity: exports_external.number().min(0).max(1).describe("Still open given the fixed facts [0..1]"),
+  answer_value: exports_external.number().min(0).max(1).describe("How much the spec changes depending on the answer [0..1]")
+}).describe("The gate 4-dimension score for one candidate question");
+var scoredQuestion = exports_external.object({
+  text: exports_external.string().min(1),
+  property: questionProperty,
+  why_matters: exports_external.string().optional(),
+  scores: questionScore,
+  rationale: exports_external.string().optional().describe("Why selected (present on selected questions)")
+}).describe("One candidate question with its gate score");
+var techSpecRoundPayload = exports_external.object({
+  round: exports_external.number().int().positive().describe("1-based round index within the interview"),
+  section: exports_external.string().optional().describe("Target spec section this round filled"),
+  generator_count: exports_external.number().int().positive().default(3).describe("N generators fanned out (\xA79 #5: fixed 3)"),
+  threshold: exports_external.number().optional().describe("Fixed selection threshold used this round (\xA79 #4)"),
+  dry: exports_external.boolean().describe("Gate found no candidate above the threshold \u2192 round/interview ends (\xA79 #4)"),
+  selected: exports_external.array(scoredQuestion).default([]).describe("Questions selected to ask the user"),
+  all_scored: exports_external.array(scoredQuestion).default([]).describe("Every candidate with its score (durable score trail for later tuning)")
+}).superRefine((val, ctx) => {
+  if (val.dry && val.selected.length > 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      path: ["selected"],
+      message: "dry=true \uB77C\uC6B4\uB4DC\uB294 selected\uAC00 \uBE44\uC5B4 \uC788\uC5B4\uC57C \uD55C\uB2E4 (\uC784\uACC4 \uC774\uC0C1 \uC9C8\uBB38 \uBD80\uC7AC\uAC00 dry\uC758 \uC815\uC758)"
+    });
+  }
+  if (!val.dry && val.selected.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      path: ["dry"],
+      message: "selected\uAC00 \uBE44\uC5B4 \uC788\uC73C\uBA74 dry=true\uC5EC\uC57C \uD55C\uB2E4 (\uC120\uC815\uB41C \uC9C8\uBB38\uC774 \uC5C6\uB294 \uB77C\uC6B4\uB4DC\uB294 dry)"
+    });
+  }
+});
+var techSpecRound = exports_external.object({
+  ts: isoDateTime,
+  work_item_id: workItemId,
+  round: exports_external.number().int().positive(),
+  section: exports_external.string().optional(),
+  generator_count: exports_external.number().int().positive().default(3),
+  threshold: exports_external.number().optional(),
+  dry: exports_external.boolean(),
+  selected: exports_external.array(scoredQuestion).default([]),
+  all_scored: exports_external.array(scoredQuestion).default([])
+}).describe("One line of .ditto/local/work-items/<id>/tech-spec-rounds.jsonl");
+
 // src/schemas/tech-spec-state.ts
 var specSectionId = exports_external.enum([
   "feature",
@@ -20739,6 +20790,20 @@ class WorkItemStore {
     return text.split(`
 `).filter((line) => line.trim().length > 0).map((line) => intentMetric.parse(JSON.parse(line)));
   }
+  techSpecRoundsPath(workItemId2) {
+    return join26(this.workItemDir(workItemId2), "tech-spec-rounds.jsonl");
+  }
+  async appendTechSpecRoundLine(workItemId2, jsonLine) {
+    return this.appendJsonlAtPath(this.techSpecRoundsPath(workItemId2), jsonLine);
+  }
+  async readTechSpecRounds(workItemId2) {
+    const file = Bun.file(this.techSpecRoundsPath(workItemId2));
+    if (!await file.exists())
+      return [];
+    const text = await file.text();
+    return text.split(`
+`).filter((line) => line.trim().length > 0).map((line) => techSpecRound.parse(JSON.parse(line)));
+  }
 }
 var acceptanceCriterionInputSchema = exports_external.object({
   id: exports_external.string().min(1),
@@ -20943,6 +21008,20 @@ async function recordSection(repoRoot, input) {
   const idx = state.sections.findIndex((s2) => s2.id === record.id);
   const sections = idx === -1 ? [...state.sections, record] : state.sections.map((s2, i2) => i2 === idx ? record : s2);
   return store.write({ ...state, sections, updated_at: nowIso });
+}
+var recordRoundPayload = techSpecRoundPayload;
+async function recordRound(repoRoot, input) {
+  const store = new WorkItemStore(repoRoot);
+  if (!await store.exists(input.workItemId)) {
+    throw new Error(`work item ${input.workItemId} not found`);
+  }
+  const record = techSpecRound.parse({
+    ts: (input.now ?? new Date).toISOString(),
+    work_item_id: input.workItemId,
+    ...input.payload
+  });
+  await store.appendTechSpecRoundLine(input.workItemId, JSON.stringify(record));
+  return record;
 }
 var finalizeTechSpecPayload = exports_external.object({
   risk: exports_external.object({
@@ -27798,13 +27877,15 @@ function defaultIntentQualityDeps(repoRoot) {
     readAutopilot: async (id) => await autopilots.exists(id) ? autopilots.get(id) : null,
     readDecisions: (id) => autopilots.readDecisions(id),
     countHandoffRounds: async (id) => (await handoffs.listActive()).filter((h2) => h2.handoff.work_item_id === id).length,
-    readMetrics: (id) => workItems.readMetrics(id)
+    readMetrics: (id) => workItems.readMetrics(id),
+    readTechSpecRounds: (id) => workItems.readTechSpecRounds(id)
   };
 }
-function buildRow2(summary, interview, graph, decisions, handoffRounds, driftEvents) {
+function buildRow2(summary, interview, graph, decisions, handoffRounds, driftEvents, rounds) {
   const fixNodes = graph ? graph.nodes.filter((n2) => n2.kind === "fix") : [];
   const reworkAttempts = graph ? graph.nodes.reduce((sum, n2) => sum + (n2.attempts?.fix ?? 0), 0) : 0;
   const retrySwitch = decisions.filter((d2) => d2.decision === "retry" || d2.decision === "switch_approach").length;
+  const selectedScores = rounds.flatMap((r3) => r3.selected.map((q2) => q2.scores.answer_value));
   return {
     work_item_id: summary.id,
     title: summary.title,
@@ -27819,7 +27900,11 @@ function buildRow2(summary, interview, graph, decisions, handoffRounds, driftEve
     retry_switch_decisions: retrySwitch,
     handoff_rounds: handoffRounds,
     drift_events: driftEvents,
-    post_cost: driftEvents + reworkAttempts + retrySwitch + handoffRounds
+    post_cost: driftEvents + reworkAttempts + retrySwitch + handoffRounds,
+    tech_spec_rounds: rounds.length,
+    tech_spec_selected: selectedScores.length,
+    tech_spec_dry_rounds: rounds.filter((r3) => r3.dry).length,
+    tech_spec_mean_answer_value: selectedScores.length === 0 ? null : mean(selectedScores)
   };
 }
 function totalsOf2(rows) {
@@ -27831,7 +27916,8 @@ function totalsOf2(rows) {
     total_rework_attempts: rows.reduce((s2, r3) => s2 + r3.rework_attempts, 0),
     total_retry_switch_decisions: rows.reduce((s2, r3) => s2 + r3.retry_switch_decisions, 0),
     total_handoff_rounds: rows.reduce((s2, r3) => s2 + r3.handoff_rounds, 0),
-    total_drift_events: rows.reduce((s2, r3) => s2 + r3.drift_events, 0)
+    total_drift_events: rows.reduce((s2, r3) => s2 + r3.drift_events, 0),
+    total_tech_spec_rounds: rows.reduce((s2, r3) => s2 + r3.tech_spec_rounds, 0)
   };
 }
 var QUANTILES = ["low", "mid", "high"];
@@ -27857,14 +27943,15 @@ async function collectIntentQualityReport(deps) {
   const summaries = await deps.listWorkItems();
   const rows = [];
   for (const summary of summaries) {
-    const [interview, graph, decisions, handoffRounds, metrics] = await Promise.all([
+    const [interview, graph, decisions, handoffRounds, metrics, rounds] = await Promise.all([
       deps.readInterview(summary.id),
       deps.readAutopilot(summary.id),
       deps.readDecisions(summary.id),
       deps.countHandoffRounds(summary.id),
-      deps.readMetrics(summary.id)
+      deps.readMetrics(summary.id),
+      deps.readTechSpecRounds(summary.id)
     ]);
-    rows.push(buildRow2(summary, interview, graph, decisions, handoffRounds, metrics.length));
+    rows.push(buildRow2(summary, interview, graph, decisions, handoffRounds, metrics.length, rounds));
   }
   return { rows, totals: totalsOf2(rows), correlation: correlationOf(rows) };
 }
@@ -28538,9 +28625,9 @@ var intentQualityCommand = defineCommand({
       } else if (rows.length === 0) {
         writeHuman("intent-quality: no work items");
       } else {
-        writeHuman("work_item\tquestions\tclosure\treadiness\tfix\trework\tretry/switch\thandoff\tdrift\tpost_cost");
+        writeHuman("work_item\tquestions\tclosure\treadiness\tfix\trework\tretry/switch\thandoff\tdrift\tpost_cost\ttspec_rounds\ttspec_q");
         for (const r3 of rows) {
-          writeHuman(`${r3.work_item_id}	${r3.questions_asked ?? "-"}	${r3.closure_mode ?? "-"}	${r3.readiness_score ?? "-"}	${r3.fix_nodes}	${r3.rework_attempts}	${r3.retry_switch_decisions}	${r3.handoff_rounds}	${r3.drift_events}	${r3.post_cost}`);
+          writeHuman(`${r3.work_item_id}	${r3.questions_asked ?? "-"}	${r3.closure_mode ?? "-"}	${r3.readiness_score ?? "-"}	${r3.fix_nodes}	${r3.rework_attempts}	${r3.retry_switch_decisions}	${r3.handoff_rounds}	${r3.drift_events}	${r3.post_cost}	${r3.tech_spec_rounds}	${r3.tech_spec_mean_answer_value ?? "-"}`);
         }
         if (!args["work-item"]) {
           writeHuman(`
@@ -36520,6 +36607,69 @@ var recordSectionCmd = defineCommand({
     }
   }
 });
+var recordRoundCmd = defineCommand({
+  meta: {
+    name: "record-round",
+    description: "Append one question-generation round\u2019s gate scores to the durable score trail (selected + all_scored + dry; consumed by doctor intent-quality)"
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    json: {
+      type: "string",
+      description: "JSON payload matching recordRoundPayload schema (round, dry, selected, all_scored, ...)",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw;
+    try {
+      raw = parseJsonArg2(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = recordRoundPayload.safeParse(raw);
+    if (!parsed.success) {
+      writeError("--json failed schema validation:");
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const record = await recordRound(repoRoot, {
+        workItemId: args.workItem,
+        payload: parsed.data
+      });
+      if (format === "json") {
+        writeJson2({
+          work_item_id: record.work_item_id,
+          round: record.round,
+          dry: record.dry,
+          selected: record.selected.length,
+          all_scored: record.all_scored.length
+        });
+      } else {
+        writeHuman(`Recorded round ${record.round} for ${record.work_item_id} (selected ${record.selected.length}, scored ${record.all_scored.length}${record.dry ? ", dry" : ""})`);
+      }
+    } catch (err) {
+      writeError(`record-round failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var finalizeCmd2 = defineCommand({
   meta: {
     name: "finalize",
@@ -36625,6 +36775,7 @@ var techSpecCommand = defineCommand({
   subCommands: {
     start: startCmd2,
     "record-section": recordSectionCmd,
+    "record-round": recordRoundCmd,
     finalize: finalizeCmd2
   }
 });
@@ -37193,4 +37344,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=e8d47eab3b70a171a77ad5f421e5a5f186ecd2d3954fae37b0b810dbda93287c
+//# ditto-src-stamp=05b1f72f2b967e33d43b64599ef97cb4e6ca447ea136d7e20eab7e4f2560a64d

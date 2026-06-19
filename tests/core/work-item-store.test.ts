@@ -198,6 +198,63 @@ describe('WorkItemStore', () => {
     const created = await store.create(sampleInput());
     expect(await store.readMetrics(created.id)).toEqual([]);
   });
+
+  test('appendTechSpecRoundLine writes tech-spec-rounds.jsonl at the work-item root', async () => {
+    const created = await store.create(sampleInput());
+    const line = JSON.stringify({
+      ts: '2026-06-19T05:00:00.000Z',
+      work_item_id: created.id,
+      round: 1,
+      dry: true,
+      selected: [],
+      all_scored: [],
+      generator_count: 3,
+    });
+    await store.appendTechSpecRoundLine(created.id, line);
+    const rootPath = join(
+      workDir,
+      '.ditto',
+      'local',
+      'work-items',
+      created.id,
+      'tech-spec-rounds.jsonl',
+    );
+    expect(await Bun.file(rootPath).exists()).toBe(true);
+  });
+
+  test('readTechSpecRounds round-trips appended lines and validates the schema', async () => {
+    const created = await store.create(sampleInput());
+    const mk = (round: number, dry: boolean) =>
+      JSON.stringify({
+        ts: '2026-06-19T05:00:00.000Z',
+        work_item_id: created.id,
+        round,
+        dry,
+        selected: dry
+          ? []
+          : [
+              {
+                text: 'q',
+                property: 'blind-spot',
+                scores: { consensus: 2, quality: 0.8, necessity: 0.7, answer_value: 0.9 },
+              },
+            ],
+        all_scored: [],
+        generator_count: 3,
+      });
+    await store.appendTechSpecRoundLine(created.id, mk(1, false));
+    await store.appendTechSpecRoundLine(created.id, mk(2, true));
+    const rounds = await store.readTechSpecRounds(created.id);
+    expect(rounds.length).toBe(2);
+    expect(rounds[0]?.round).toBe(1);
+    expect(rounds[0]?.selected[0]?.scores.answer_value).toBe(0.9);
+    expect(rounds[1]?.dry).toBe(true);
+  });
+
+  test('readTechSpecRounds returns empty when no rounds file exists', async () => {
+    const created = await store.create(sampleInput());
+    expect(await store.readTechSpecRounds(created.id)).toEqual([]);
+  });
 });
 
 function initGitRepo(dir: string) {
