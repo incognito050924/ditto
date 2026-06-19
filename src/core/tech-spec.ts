@@ -28,8 +28,7 @@ import { TechSpecStore } from './tech-spec-store';
 import { WorkItemStore } from './work-item-store';
 
 /**
- * tech-spec driver — the hard half of the `ditto:tech-spec` surface
- * (design: reports/design/tech-spec-surface-design.md §8).
+ * tech-spec driver — the hard half of the `ditto:tech-spec` surface.
  *
  * The spec document is the single source; `intent.json` is compiled from it at
  * finalize, one-way (no sync back). This module owns:

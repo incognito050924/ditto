@@ -1,6 +1,6 @@
 # 조사: deep-interview류의 "생성적 질문 vs 모호성 축소" 축 (2026-06-19)
 
-> **목적**: tech-spec 강화 설계(`reports/design/tech-spec-expert-elicitation-design.md`)의 증거 기반. 4개 하네스(oh-my-codex, oh-my-claudecode, ouroboros, gstack)를 1차 자료(GitHub)로 조사해, 각자가 *생성적 발굴 질문*을 정의하는지 / *모호성 축소*만 하는지 가렸다.
+> **목적**: tech-spec 강화 설계(질문 생성축; 설계문서는 SKILL/코드로 흡수·제거됨)의 증거 기반. 4개 하네스(oh-my-codex, oh-my-claudecode, ouroboros, gstack)를 1차 자료(GitHub)로 조사해, 각자가 *생성적 발굴 질문*을 정의하는지 / *모호성 축소*만 하는지 가렸다.
 > **방법**: 각 저장소를 병렬 subagent가 GitHub 1차 자료로 읽고, 기존 로컬 리포트(`reports/harnesses/*.md`)와 대조. finding(증거 있음)과 inference(해석) 분리.
 > **계기**: DITTO deep-interview가 "요청의 모호성 축소"는 잘하지만, "사용자가 만들고자 하는 것을 발굴·확장·가지치기하는 질문"은 부족하다는 문제 제기.
 

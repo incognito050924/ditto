@@ -18,7 +18,7 @@ reports/ 아래 누적된 git-추적 문서(handoffs·design·harnesses)에서 *
 
 ## 3. 배경 [장]
 
-문서가 프로젝트 내내 reports/에 쌓였고 아무도 쳐내지 않았다 — `reports/handoffs/`(3개, 1개 SUPERSEDED: `2026-06-19-tech-spec-expert-elicitation.md`), `reports/design/`(~12개), `reports/harnesses/`(~15+개, 외부 1차 조사 노트 포함). 거버넌스는 이미 있다: Agent Charter §9(CLAUDE.md:277)는 모든 문서가 목적/소비자/갱신주기/삭제조건을 댈 수 있어야 한다고 정한다. 문제는 정책 부재가 아니라 적체 미해소다. 동시에 위험도 분명하다 — 문서 삭제는 빌드·테스트가 잡지 못하는 참조 무결성 회귀(끊긴 supersedes chain, 죽은 projection 링크)를 만들 수 있고, harnesses의 외부 조사 노트는 재현 불가한 1차 자료라 '오래됨=불필요'가 가장 안 맞는 부류다.
+문서가 프로젝트 내내 reports/에 쌓였고 아무도 쳐내지 않았다 — `reports/handoffs/`(3개, 1개 SUPERSEDED), `reports/design/`(~12개), `reports/harnesses/`(~15+개, 외부 1차 조사 노트 포함). 거버넌스는 이미 있다: Agent Charter §9(CLAUDE.md:277)는 모든 문서가 목적/소비자/갱신주기/삭제조건을 댈 수 있어야 한다고 정한다. 문제는 정책 부재가 아니라 적체 미해소다. 동시에 위험도 분명하다 — 문서 삭제는 빌드·테스트가 잡지 못하는 참조 무결성 회귀(끊긴 supersedes chain, 죽은 projection 링크)를 만들 수 있고, harnesses의 외부 조사 노트는 재현 불가한 1차 자료라 '오래됨=불필요'가 가장 안 맞는 부류다.
 
 ## 4. 목표
 
@@ -88,7 +88,7 @@ reports/ 아래 누적된 git-추적 문서(handoffs·design·harnesses)에서 *
 
 - 작성 과정 요약: 정식 deep-interview 없음. 이 문서는 도그푸딩 e2e(wi_260619gr1)의 §6-6 질문 워크플로가 fan-out(생성기 3)·게이트 점수로 선정한 6개 결정 fork로 형성됐다. 드러난 핵심 맹점·관점: ① '성공=파일수 감소'라는 기본 가정의 위험(→ 신뢰도 회복으로 재정의), ② 소비자가 사람만이 아니라 에이전트(grep/projection)일 수 있음(→ 역참조 확인 승격), ③ harnesses 1차자료·SUPERSEDED 이력의 비대칭 보존가치(→ 비목표 보존), ④ projection 산출물은 삭제가 아니라 SoT 대상(→ 범위 밖). 각 fork는 charter 정합한 보수적 기본값으로 해소했고, 본문엔 결론만 남겼다(질문 문구 비누출).
 - deep-interview: 없음(의도 수준 모호성 진입 조건 미충족).
-- 원본: 점수 trail = wi_260619gr1 `tech-spec-rounds.jsonl`(아카이브) · harness = `reports/harnesses/2026-06-19-tech-spec-workflow-dogfood-e2e.md`.
+- 원본: 점수 trail = wi_260619gr1 `tech-spec-rounds.jsonl`(아카이브) · harness = wi_260619gr1 도그푸딩 e2e(제거됨).
 
 ## 13. 빌드 후 처리
 

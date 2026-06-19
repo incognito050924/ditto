@@ -8,7 +8,7 @@ argument-hint: "[--mode=stepwise|oneshot] [topic]"
 
 Co-author the briefing document a PATTERN-1 user would otherwise write alone. The agent fills sections from codebase / memory / ACG investigation; the user spends effort on *review and value decisions*, not on writing. The document is the **single source**; `intent.json` is a compile artifact produced only at finalize — one-way, never synced back.
 
-Design source: `reports/design/tech-spec-surface-design.md` (§2 flow, §5 non-goals, §8 hints). Template: `"${CLAUDE_PLUGIN_ROOT}/skills/tech-spec/TEMPLATE.md"`. Mechanism is in code: `ditto tech-spec {start,record-section,finalize}` enforces the schema, the evidence gate, and the compile.
+Template: `"${CLAUDE_PLUGIN_ROOT}/skills/tech-spec/TEMPLATE.md"`. Mechanism is in code: `ditto tech-spec {start,record-section,finalize}` enforces the schema, the evidence gate, and the compile — the code and this SKILL are the source of truth (no separate design doc to drift from).
 
 ## When to enter
 

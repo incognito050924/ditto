@@ -8,7 +8,7 @@
 
 | work item | 내용 |
 |---|---|
-| wi_260610z2z | tech-spec 표면 기획문서 (`reports/design/tech-spec-surface-design.md`, dialectic-1 revise 반영, 열린 결정 2건 확정: 저장 위치=`.ditto/specs/` tier ②, digest=컴파일 입력 섹션) |
+| wi_260610z2z | tech-spec 표면 기획 (dialectic-1 revise 반영, 열린 결정 2건 확정: 저장 위치=`.ditto/specs/` tier ②, digest=컴파일 입력 섹션; 기획문서는 SKILL/코드로 흡수·제거됨) |
 | wi_260610hwd | **ditto:tech-spec 구현 M1~M3 + deep-interview→autopilot 풀 파이프라인으로 종결(final_verdict=pass, AC 10/10)**. 산출: `skills/tech-spec/{SKILL,TEMPLATE}.md`, `ditto tech-spec start\|record-section\|finalize`(ac-9 근거 필수 스키마, 문서→intent 단방향 컴파일+source_digest), autopilot next-node digest 신선도 게이트. deep-interview는 zero-diff(계약 테스트 14건 무변경) |
 | wi_260610iex | autopilot 결함 2건 수정: ① lease `scope_source(declared\|derived)` — derived(=changed_files fallback)는 훅이 차단하지 않음(오차단→Bash 우회 학습 방지), 선언 스코프만 allow-list 집행 ② generated_nodes 승격 시 커버된 pending 후속 시드(N2/N3) supersede(보수적 고정점 폐쇄) + `superseded_node_ids` 반환 |
 
