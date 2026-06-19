@@ -1,10 +1,15 @@
-# HANDOFF — 다른 PC 이어받기 (2026-06-19)
+# HANDOFF — 다른 PC 이어받기 (2026-06-20)
 
-호스트 메모리는 전파되지 않으므로 다른 PC에 필요한 것을 여기 싣는다. **브랜치 `claude/deep-interview-skill-gaps-g5liop`, origin 푸시 완료, 미커밋 없음.** 코드·테스트·git이 권위다(헌장 §4-11) — 이 문서는 "어디서 이어받나 + 남은 위험" 포인터이지 사실의 원본이 아니다.
+호스트 메모리는 전파되지 않으므로 다른 PC에 필요한 것을 여기 싣는다. **작업은 `main`(`48d6d44`)에 있다 — origin 푸시 완료, 미커밋 없음.** feature 브랜치 `claude/deep-interview-skill-gaps-g5liop`는 main에 FF 머지 후 local·remote 삭제됐고 그 worktree도 제거됐다. **이어받을 위치 = `~/dev/projects/ditto`, 브랜치 `main`** (worktree 아님). 코드·테스트·git이 권위다(헌장 §4-11) — 이 문서는 "어디서 이어받나 + 남은 위험" 포인터이지 사실의 원본이 아니다.
 
-> 별도 스레드(2026-06-19): tech-spec와 무관한 setup 버그 수정 `bbed714`가 이 브랜치에 얹혀 있다 — `ditto setup`가 instruction 파일을 source(AGENTS.md, raw·create-if-missing)/projection(CLAUDE.md, source=AGENTS.md mirror) 역할로 분기 설치하도록 고침(이전엔 CLAUDE.md source 뒤바뀜·AGENTS.md 헌장 중복). work item `wi_260619r0o` done. 설치 플러그인은 main 머지 후 dist/plugin 재빌드 시 반영.
+## 0. 직전 세션 (2026-06-20) — setup 수정 머지 + 도그푸딩 + 환경 정리
 
-## 1. 직전 세션 (2026-06-19) — tech-spec 표면 마감
+- **setup 버그 수정 `bbed714`** (main 반영, behavioral): `ditto setup`가 instruction 파일을 역할로 분기 설치하도록 고침 — AGENTS.md=source(raw·create-if-missing, authored 헌장 미덮어쓰기), CLAUDE.md=projection(`source=AGENTS.md`로 on-disk AGENTS.md verbatim mirror). 이전엔 CLAUDE.md source가 CLAUDE.md로 뒤바뀌고(모든 setup 프로젝트 `doctor instructions` drift) ditto 자기 repo에선 AGENTS.md 헌장이 중복됐다. 핵심=`src/core/setup.ts`의 `installResource()`. work item `wi_260619r0o` done. **블라스트 반경**: source-flip은 setup된 모든 프로젝트에 영향 — 기존 프로젝트는 고친 `ditto setup` 재실행으로 self-heal(AGENTS.md kept, CLAUDE.md만 재투영).
+- **tech-spec 실 에이전트 도그푸딩 완료(PASS)** — §2 참조. question-generator/gate가 이제 main의 `dist/plugin`에 포함되므로 **새 세션은 `--plugin-dir` 우회 없이 실타입으로 바로 사용 가능**.
+- **환경 정리**: FF 머지 → feature 브랜치 local+remote 삭제 → worktree 제거 → 메인 체크아웃 `main` 전환. 브랜치 전환 훅이 `dist/plugin` 재조립 → 라이브 `ditto`(심링크 `~/.local/bin/ditto` → `~/dev/projects/ditto/dist/plugin/bin/ditto`)에 수정 반영 확인(`installResource` 2).
+- **선택 후속(차단 아님)**: ① 도구 불일치 — `ditto work done`은 completion.json(현재 `autopilot complete`/handoff만 생성)을 요구하는데 `ditto verify` CLI는 criterion verdict만 기록한다. 그런데 `work done` 에러는 "run `ditto verify` first"라 안내해 어긋난다. 직접 TDD 수정처럼 deep-interview→autopilot을 정당히 건너뛴 작업은 handoff 우회 없이 깔끔히 닫히지 않음(이번엔 `ditto work handoff`로 우회해 닫음). ② setup self-heal 안내(위 블라스트 반경).
+
+## 1. 이전 세션 (2026-06-19) — tech-spec 표면 마감
 
 전부 커밋·푸시(`037572e`~`2c9795f`). `bun test` **2450 pass / 0 fail / 9 skip**.
 
