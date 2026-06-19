@@ -116,3 +116,50 @@ describe('tech-spec question-config resolver (wi_260619yfw)', () => {
     expect(c.max_rounds).toBe(3);
   });
 });
+
+describe('config-default layer — per-user .ditto/local/config.json (wi_260619jmu)', () => {
+  test('config value is used when the CLI flag is absent', () => {
+    const c = resolveQuestionConfig({}, { generators: 5 });
+    expect(c.generators).toBe(5);
+  });
+
+  test('explicit CLI overrides the config value', () => {
+    const c = resolveQuestionConfig({ generators: 6 }, { generators: 5 });
+    expect(c.generators).toBe(6);
+  });
+
+  test('config overrides the built-in default', () => {
+    // built-in intensity default is 60; config moves it
+    const c = resolveQuestionConfig({}, { intensity: 90 });
+    expect(c.intensity).toBe(90);
+  });
+
+  test('config performance: exhaustive ⇒ intensity 100 / generators 4 / effort high (no CLI)', () => {
+    const c = resolveQuestionConfig({}, { performance: 'exhaustive' });
+    expect(c.performance).toBe('exhaustive');
+    expect(c.intensity).toBe(100);
+    expect(c.generators).toBe(4);
+    expect(c.generator_effort).toBe('high');
+  });
+
+  test('CLI performance overrides config performance', () => {
+    const c = resolveQuestionConfig({ performance: 'glance' }, { performance: 'exhaustive' });
+    expect(c.performance).toBe('glance');
+    expect(c.intensity).toBe(15);
+  });
+
+  test('override flags are true when EITHER cliRaw or configRaw set them', () => {
+    expect(resolveQuestionConfig({ threshold: 0.3 }, {}).threshold_override).toBe(true);
+    expect(resolveQuestionConfig({}, { threshold: 0.3 }).threshold_override).toBe(true);
+    expect(resolveQuestionConfig({}, { granularity: 'high' }).granularity_override).toBe(true);
+    expect(resolveQuestionConfig({}, {}).threshold_override).toBe(false);
+    // CLI threshold wins over config threshold
+    expect(resolveQuestionConfig({ threshold: 0.2 }, { threshold: 0.9 }).threshold).toBe(0.2);
+  });
+
+  test('omitting configRaw is equivalent to passing {} (back-compat, single-arg callers)', () => {
+    expect(resolveQuestionConfig({ intensity: 70 })).toEqual(
+      resolveQuestionConfig({ intensity: 70 }, {}),
+    );
+  });
+});

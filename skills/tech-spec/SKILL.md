@@ -80,6 +80,8 @@ The three properties above define *what* a good question is; this defines *who m
 
 The loop is tuned by the **resolved question-config** persisted at `tech-spec start` (`question_config` in `tech-spec-state.json`): `intensity` (the unified dial — derives the gate `threshold`, `granularity`, and per-round count hint), `generators` (fan-out N), `gate_mode` (`confirm` default, or `auto`), `generator_effort`, and the opt-in caps `max_questions`/`max_rounds`. The `--performance` presets (glance/quick/standard/deep/exhaustive) just expand to these. Read the resolved values and obey them — do not re-derive tuning in your context. Defaults reproduce current behavior.
 
+A developer can set per-option defaults in their own `.ditto/local/config.json` under `tech_spec.question` (a `RawQuestionConfig`-shaped block: any of `performance`, `intensity`, `generators`, `generator_effort`, `gate_mode`, `max_questions`, `max_rounds`, `threshold`, `granularity`). These defaults apply when the matching CLI flag is absent; an explicit CLI flag still wins. So you normally just run `tech-spec start` (no flags) and obey the resolved `question_config` — it is config-driven and **authoritative** (generators count, intensity-derived threshold, opt-in cap, gate mode). This file is per-developer (`.ditto/local/` is gitignored), not team-shared; a missing or malformed config falls back to built-in defaults (fail-open).
+
 **Control loop (per round, score-based termination)**:
 
 1. Fan out N generators (N = resolved `generators`, default 2) with the current minimal packet → collect candidates.

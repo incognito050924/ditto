@@ -1,4 +1,5 @@
 import { defineCommand } from 'citty';
+import { readQuestionConfigDefaults } from '~/core/ditto-config';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   finalizeTechSpec,
@@ -67,8 +68,14 @@ type StartArgs = Record<string, unknown>;
  * resolver applies precedence and defaults (= current behavior). Bad values
  * (out-of-range intensity, generators∉1..6, undefined enum, threshold∉[0,1])
  * are rejected here — this is ac-1's evidence.
+ *
+ * `configRaw` carries the per-user `.ditto/local/config.json` defaults
+ * (wi_260619jmu): they apply when a CLI flag is absent, but explicit CLI wins.
  */
-function parseQuestionConfigArgs(args: StartArgs): ReturnType<typeof resolveQuestionConfig> {
+function parseQuestionConfigArgs(
+  args: StartArgs,
+  configRaw: RawQuestionConfig,
+): ReturnType<typeof resolveQuestionConfig> {
   const raw: RawQuestionConfig = {};
   const intensity = args.intensity as string | undefined;
   if (intensity !== undefined) raw.intensity = intArg(intensity, 'intensity', 0, 100);
@@ -103,7 +110,7 @@ function parseQuestionConfigArgs(args: StartArgs): ReturnType<typeof resolveQues
     }
     raw.threshold = t;
   }
-  return resolveQuestionConfig(raw);
+  return resolveQuestionConfig(raw, configRaw);
 }
 
 const startCmd = defineCommand({
@@ -187,15 +194,17 @@ const startCmd = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
+    const repoRoot = await resolveRepoRootForCreate();
     let questionConfig: ReturnType<typeof resolveQuestionConfig>;
     try {
-      questionConfig = parseQuestionConfigArgs(args);
+      // Per-user defaults (.ditto/local/config.json) fill absent CLI flags; CLI wins.
+      const configRaw = await readQuestionConfigDefaults(repoRoot);
+      questionConfig = parseQuestionConfigArgs(args, configRaw);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
-    const repoRoot = await resolveRepoRootForCreate();
     if (!(await new WorkItemStore(repoRoot).exists(args.workItem))) {
       writeError(`work item ${args.workItem} not found`);
       process.exit(RUNTIME_ERROR_EXIT);

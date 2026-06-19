@@ -94,25 +94,36 @@ export interface RawQuestionConfig {
 
 /**
  * Assemble the effective config by precedence. Pure: same input → same output.
+ *
+ * Precedence per field: explicit `cliRaw` > `configRaw` (per-user
+ * .ditto/local/config.json defaults, wi_260619jmu) > preset/built-in. `configRaw`
+ * is passed in (NOT read inside) so this stays a pure, unit-testable function;
+ * the CLI is responsible for loading the config file.
  */
-export function resolveQuestionConfig(raw: RawQuestionConfig): QuestionConfig {
-  const performance: PerformancePreset = raw.performance ?? 'standard';
+export function resolveQuestionConfig(
+  cliRaw: RawQuestionConfig,
+  configRaw: RawQuestionConfig = {},
+): QuestionConfig {
+  const performance: PerformancePreset = cliRaw.performance ?? configRaw.performance ?? 'standard';
   const preset = PERFORMANCE_PRESETS[performance];
 
-  // intensity: explicit > preset > default(60). The preset's intensity is the
-  // default carrier (standard.intensity === 60), so this also fixes the default.
-  const intensity = raw.intensity ?? preset.intensity;
-  const generators = raw.generators ?? preset.generators;
-  const generator_effort = raw.generator_effort ?? preset.effort;
-  const gate_mode: GateMode = raw.gate_mode ?? 'confirm';
-  const max_questions = raw.max_questions ?? 0;
-  const max_rounds = raw.max_rounds ?? 0;
+  // intensity: explicit cli > config > preset > default(60). The preset's
+  // intensity is the default carrier (standard.intensity === 60), so this also
+  // fixes the default.
+  const intensity = cliRaw.intensity ?? configRaw.intensity ?? preset.intensity;
+  const generators = cliRaw.generators ?? configRaw.generators ?? preset.generators;
+  const generator_effort = cliRaw.generator_effort ?? configRaw.generator_effort ?? preset.effort;
+  const gate_mode: GateMode = cliRaw.gate_mode ?? configRaw.gate_mode ?? 'confirm';
+  const max_questions = cliRaw.max_questions ?? configRaw.max_questions ?? 0;
+  const max_rounds = cliRaw.max_rounds ?? configRaw.max_rounds ?? 0;
 
   const derived = intensityToSubLevers(intensity);
-  const threshold_override = raw.threshold !== undefined;
-  const granularity_override = raw.granularity !== undefined;
-  const threshold = threshold_override ? (raw.threshold as number) : derived.threshold;
-  const granularity = granularity_override ? (raw.granularity as Granularity) : derived.granularity;
+  const rawThreshold = cliRaw.threshold ?? configRaw.threshold;
+  const rawGranularity = cliRaw.granularity ?? configRaw.granularity;
+  const threshold_override = rawThreshold !== undefined;
+  const granularity_override = rawGranularity !== undefined;
+  const threshold = threshold_override ? (rawThreshold as number) : derived.threshold;
+  const granularity = granularity_override ? (rawGranularity as Granularity) : derived.granularity;
 
   return {
     intensity,
