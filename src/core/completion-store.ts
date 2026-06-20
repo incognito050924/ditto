@@ -82,6 +82,33 @@ export function buildCompletion(input: CompletionInput): CompletionContract {
   return completionContract.parse(candidate);
 }
 
+/**
+ * Lightweight completion synthesis for a work item fixed OUTSIDE the autopilot
+ * pipeline (wi_2606200ec). It maps the work item's own acceptance criteria —
+ * their `verdict` and `evidence`, populated by `ditto verify` — into the SAME
+ * `buildCompletion` builder the autopilot path uses, so there is one evidence
+ * gate, not a weaker parallel one. The caller still runs `completionGate` +
+ * `completionEvidenceGate` on the result before accepting a `pass` close: this
+ * function only assembles, it does not bless. A pass-without-evidence criterion
+ * stays `pass` in the contract here and is caught by `completionEvidenceGate`.
+ */
+export function assembleCompletionFromWorkItem(
+  workItem: WorkItem,
+  opts: { declaredBy: DeclarerRole; summary: string; now?: Date },
+): CompletionContract {
+  return buildCompletion({
+    workItem,
+    declaredBy: opts.declaredBy,
+    summary: opts.summary,
+    verdicts: workItem.acceptance_criteria.map((c) => ({
+      criterion_id: c.id,
+      verdict: c.verdict,
+      evidence: c.evidence,
+    })),
+    now: opts.now,
+  });
+}
+
 export class CompletionStore {
   constructor(public readonly repoRoot: string) {}
 

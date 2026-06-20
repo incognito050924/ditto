@@ -18512,6 +18512,19 @@ function buildCompletion(input) {
   };
   return completionContract.parse(candidate);
 }
+function assembleCompletionFromWorkItem(workItem, opts) {
+  return buildCompletion({
+    workItem,
+    declaredBy: opts.declaredBy,
+    summary: opts.summary,
+    verdicts: workItem.acceptance_criteria.map((c3) => ({
+      criterion_id: c3.id,
+      verdict: c3.verdict,
+      evidence: c3.evidence
+    })),
+    now: opts.now
+  });
+}
 
 class CompletionStore {
   repoRoot;
@@ -38969,11 +38982,30 @@ var workDone = defineCommand({
     const store = new WorkItemStore(repoRoot);
     const completions = new CompletionStore(repoRoot);
     try {
-      await store.get(args.workId);
+      const item = await store.get(args.workId);
       if (!await completions.exists(args.workId)) {
-        writeError(`work ${args.workId} has no completion.json \u2014 run \`ditto verify\` first, or \`ditto work abandon\` to give up`);
-        process.exit(USAGE_ERROR_EXIT);
-        return;
+        const placeholders = item.acceptance_criteria.filter((c3) => c3.statement === PLACEHOLDER_AC_STATEMENT);
+        if (placeholders.length > 0) {
+          writeError(`work ${args.workId} still has placeholder acceptance criteria (${placeholders.map((c3) => c3.id).join(", ")}) \u2014 lock real criteria via /ditto:deep-interview, or \`ditto work abandon\` to give up`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const synthesized = assembleCompletionFromWorkItem(item, {
+          declaredBy: "main",
+          summary: `Closed via lightweight completion path (ditto verify evidence) for ${args.workId}.`
+        });
+        const gateReasons = [
+          ...completionGate(item, synthesized).reasons,
+          ...completionEvidenceGate(synthesized).reasons
+        ];
+        if (synthesized.final_verdict !== "pass" || gateReasons.length > 0) {
+          const notPass = synthesized.acceptance.filter((a2) => a2.verdict !== "pass").map((a2) => a2.criterion_id);
+          const detail = gateReasons.length > 0 ? gateReasons.join("; ") : `not-pass criteria: ${notPass.join(", ")}`;
+          writeError(`work ${args.workId} cannot close: ${detail}. Verify each criterion with \`ditto verify ${args.workId} --criterion <ac> -- <command>\`, or \`ditto work abandon\`.`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        await completions.write(synthesized);
       }
       const completion = await completions.get(args.workId);
       if (completion.final_verdict !== "pass") {
@@ -39112,4 +39144,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=830925e769c7b91b7ff12d7ac02586c4d3764b2a1710388fbe4e8140f2b5b64e
+//# ditto-src-stamp=370ab2af4f4e9d2ae0ec98fd232efd2bb9653f147900f96b7fedcbb8d21f69b4

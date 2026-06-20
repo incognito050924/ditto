@@ -1,7 +1,8 @@
 import { defineCommand } from 'citty';
 import { PLACEHOLDER_AC_STATEMENT } from '~/core/charter';
-import { CompletionStore } from '~/core/completion-store';
+import { CompletionStore, assembleCompletionFromWorkItem } from '~/core/completion-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
+import { completionEvidenceGate, completionGate } from '~/core/gates';
 import {
   InvalidBaseRefError,
   InvalidHeadRefError,
@@ -345,15 +346,51 @@ const workDone = defineCommand({
     const store = new WorkItemStore(repoRoot);
     const completions = new CompletionStore(repoRoot);
     try {
-      await store.get(args.workId); // throws with a clear error if unknown
+      const item = await store.get(args.workId); // throws with a clear error if unknown
       // Evidence gate: done requires a completion contract with final_verdict=pass.
-      // Manual `done` syncs status to a verified completion; it never bypasses it.
+      // If none exists — a work item fixed directly, outside the autopilot pipeline
+      // (wi_2606200ec) — synthesize one from the work item's OWN acceptance
+      // verdicts/evidence (populated by `ditto verify`) through the SAME
+      // buildCompletion + completionGate + completionEvidenceGate the autopilot path
+      // uses. One evidence gate, no weaker parallel path; no intent.json/graph needed.
       if (!(await completions.exists(args.workId))) {
-        writeError(
-          `work ${args.workId} has no completion.json — run \`ditto verify\` first, or \`ditto work abandon\` to give up`,
+        const placeholders = item.acceptance_criteria.filter(
+          (c) => c.statement === PLACEHOLDER_AC_STATEMENT,
         );
-        process.exit(USAGE_ERROR_EXIT);
-        return;
+        if (placeholders.length > 0) {
+          writeError(
+            `work ${args.workId} still has placeholder acceptance criteria (${placeholders
+              .map((c) => c.id)
+              .join(
+                ', ',
+              )}) — lock real criteria via /ditto:deep-interview, or \`ditto work abandon\` to give up`,
+          );
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const synthesized = assembleCompletionFromWorkItem(item, {
+          declaredBy: 'main',
+          summary: `Closed via lightweight completion path (ditto verify evidence) for ${args.workId}.`,
+        });
+        const gateReasons = [
+          ...completionGate(item, synthesized).reasons,
+          ...completionEvidenceGate(synthesized).reasons,
+        ];
+        if (synthesized.final_verdict !== 'pass' || gateReasons.length > 0) {
+          const notPass = synthesized.acceptance
+            .filter((a) => a.verdict !== 'pass')
+            .map((a) => a.criterion_id);
+          const detail =
+            gateReasons.length > 0
+              ? gateReasons.join('; ')
+              : `not-pass criteria: ${notPass.join(', ')}`;
+          writeError(
+            `work ${args.workId} cannot close: ${detail}. Verify each criterion with \`ditto verify ${args.workId} --criterion <ac> -- <command>\`, or \`ditto work abandon\`.`,
+          );
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        await completions.write(synthesized);
       }
       const completion = await completions.get(args.workId);
       if (completion.final_verdict !== 'pass') {
