@@ -16903,7 +16903,7 @@ var VAGUE_TERMS = [
   "flexible",
   "nice"
 ];
-var OBSERVABLE = /\b(returns?|rejects?|responds?|displays?|shows?|exits?|equals?|matches?|contains?|within|less than|greater than|at most|at least|status|code)\b|\d|\uBC18\uD658|\uAC70\uBD80|\uC751\uB2F5|\uD45C\uC2DC|\uB178\uCD9C|\uC885\uB8CC|\uAC19\uC74C|\uC77C\uCE58|\uD3EC\uD568|\uD1B5\uACFC|\uC2E4\uD328|\uC0DD\uC131|\uAC31\uC2E0|\uD638\uCD9C/i;
+var OBSERVABLE = /\b(returns?|rejects?|responds?|displays?|shows?|exits?|equals?|matches?|contains?|within|less than|greater than|at most|at least|status|code)\b|\d|\uBC18\uD658|\uAC70\uBD80|\uC751\uB2F5|\uD45C\uC2DC|\uB178\uCD9C|\uC885\uB8CC|\uAC19\uC74C|\uC77C\uCE58|\uD3EC\uD568|\uD1B5\uACFC|\uC2E4\uD328|\uC0DD\uC131|\uAC31\uC2E0|\uD638\uCD9C|\uAC15\uB4F1|\uC7AC\uD604|\uBB34\uD6A8\uD654|\uD544\uD130|\uC815\uB82C|\uBCD1\uD569|\uC9D1\uACC4|\uBD84\uD560|\uB80C\uB354|\uCC28\uB2E8/i;
 function escapeRegex(s2) {
   return s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -16913,7 +16913,8 @@ function acceptanceTestable(ac) {
   const vague = VAGUE_TERMS.filter((t2) => new RegExp(`\\b${escapeRegex(t2)}\\b`).test(lower));
   if (vague.length > 0)
     reasons.push(`vague term(s): ${[...new Set(vague)].join(", ")}`);
-  if (!OBSERVABLE.test(ac.statement))
+  const hasEvidence = (ac.evidence_required?.length ?? 0) > 0;
+  if (!OBSERVABLE.test(ac.statement) && !hasEvidence)
     reasons.push("no observable/measurable predicate found");
   return gate(reasons);
 }
@@ -17205,7 +17206,10 @@ async function bootstrapAutopilot(repoRoot, input) {
     reasons.push("intent has no acceptance criteria");
   }
   for (const ac of input.intent.acceptance_criteria) {
-    const t2 = acceptanceTestable({ statement: ac.statement });
+    const t2 = acceptanceTestable({
+      statement: ac.statement,
+      evidence_required: ac.evidence_required
+    });
     if (!t2.pass)
       reasons.push(`criterion ${ac.id} not testable: ${t2.reasons.join("; ")}`);
   }
@@ -18565,6 +18569,17 @@ function guardMutatingEvidence(owner, outcome, changedFiles) {
   }
   return { contentful: true };
 }
+function guardAcClosingEvidence(args) {
+  const hasPassVerdict = args.ac_verdicts.some((v2) => v2.verdict === "pass");
+  if (args.outcome === "pass" && hasPassVerdict && args.evidence_refs.length === 0) {
+    return {
+      contentful: false,
+      failure_class: "fixable",
+      reason: "node judged an acceptance criterion `pass` but carried no evidence_refs \u2014 closing a criterion to pass on a bare claim is not proof (claim \u2260 proof); attach the evidence (test/build/run output, artifact) before passing"
+    };
+  }
+  return { contentful: true };
+}
 function decideOnFailure(failureClass, attempts, caps) {
   switch (failureClass) {
     case "fixable":
@@ -18659,7 +18674,7 @@ function planTidyOnImplementPass(input) {
 }
 
 // src/core/coverage-store.ts
-import { join as join19 } from "path";
+import { join as join19, relative as relative4 } from "path";
 
 // src/schemas/coverage.ts
 var coverageOrigin = exports_external.enum(["seed", "derived", "discovered"]).describe("How a coverage node entered the tree (\xA73.2)");
@@ -18732,6 +18747,9 @@ class CoverageStore {
   }
   async exists(workItemId2) {
     return Bun.file(this.mapPath(workItemId2)).exists();
+  }
+  relMapPath(workItemId2) {
+    return relative4(this.repoRoot, this.mapPath(workItemId2));
   }
   async getMap(workItemId2) {
     return readJson(this.mapPath(workItemId2), coverageMap);
@@ -19178,7 +19196,7 @@ function reduceEvents(events) {
 
 // src/core/memory-scan.ts
 import { readdir as readdir7 } from "fs/promises";
-import { isAbsolute, join as join22, relative as relative4, resolve as resolve3, sep as sep2 } from "path";
+import { isAbsolute, join as join22, relative as relative5, resolve as resolve3, sep as sep2 } from "path";
 
 // src/core/memory-store.ts
 import { createHash as createHash2 } from "crypto";
@@ -19481,7 +19499,7 @@ async function scanSources(repoRoot, options = {}) {
   const changed = [];
   const unchanged = [];
   for (const abs of files) {
-    const repoRelative = relative4(root, abs);
+    const repoRelative = relative5(root, abs);
     if (repoRelative.startsWith("..") || isAbsolute(repoRelative))
       continue;
     const sourceType = classifyType(abs);
@@ -19513,7 +19531,7 @@ async function scanSources(repoRoot, options = {}) {
       revision,
       sensitivity: prior?.sensitivity ?? "internal",
       word_count: content.split(/\s+/).filter((w2) => w2.length > 0).length,
-      ...isOwnRoot ? {} : { repo: relative4(root, owningRepo) },
+      ...isOwnRoot ? {} : { repo: relative5(root, owningRepo) },
       ...head ? { git_commit: head } : {}
     };
     let status;
@@ -20364,7 +20382,8 @@ var interviewQuestion = exports_external.object({
   self_answer_attempts: exports_external.array(selfAnswerAttempt).default([]),
   answer: exports_external.string().optional(),
   answer_kind: exports_external.enum(["user", "assumption"]).optional(),
-  ambiguity_delta: exports_external.number().optional()
+  ambiguity_delta: exports_external.number().optional(),
+  marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal")
 }).describe("One asked question with its self-answer attempts and outcome");
 var interviewAssumption = exports_external.object({
   statement: exports_external.string().min(1),
@@ -21533,6 +21552,19 @@ async function recordResult(repoRoot, input) {
       guardReason = "design pass carried plan_brief but no coverage.json exists \u2014 run the pre-mortem coverage sweep (coverage-next \u2192 coverage-round until dry) before closing the plan stage (claim \u2260 proof)";
     }
   }
+  if (contentful && outcome === "pass") {
+    const acGuard = guardAcClosingEvidence({
+      outcome: input.payload.outcome,
+      ac_verdicts: input.payload.ac_verdicts ?? [],
+      evidence_refs: input.payload.evidence_refs ?? []
+    });
+    if (!acGuard.contentful) {
+      contentful = false;
+      outcome = "fail";
+      failureClass = "fixable";
+      guardReason = acGuard.reason;
+    }
+  }
   if (outcome === "pass") {
     if (node2.kind === "design" && input.payload.decision_conflicts !== undefined && input.payload.decision_conflicts.length > 0) {
       await ensureDir(localDir(repoRoot, "work-items", input.workItemId));
@@ -21608,6 +21640,7 @@ async function recordResult(repoRoot, input) {
         await aps.removeNodes(input.workItemId, supersededNodeIds);
       }
     }
+    let designEvidenceRefs;
     if (node2.kind === "design" && input.payload.plan_brief !== undefined) {
       const pb = input.payload.plan_brief;
       const requireApproval = await planRequiresDecisionApproval(repoRoot, input.workItemId);
@@ -21631,11 +21664,26 @@ async function recordResult(repoRoot, input) {
           plan_brief: patch.plan_brief
         }
       });
+      const coverageStore = new CoverageStore(repoRoot);
+      if (await coverageStore.exists(input.workItemId)) {
+        const caller = input.payload.evidence_refs ?? [];
+        const coverageRel = coverageStore.relMapPath(input.workItemId);
+        if (!caller.some((e2) => e2.path === coverageRel)) {
+          designEvidenceRefs = [
+            ...caller,
+            {
+              kind: "file",
+              path: coverageRel,
+              summary: "pre-mortem coverage sweep artifact (plan-stage close)"
+            }
+          ];
+        }
+      }
     }
     await aps.updateNode(input.workItemId, node2.id, (n2) => ({
       ...n2,
       status: nodeTransition(n2.status, "pass"),
-      evidence_refs: input.payload.evidence_refs ?? n2.evidence_refs,
+      evidence_refs: designEvidenceRefs ?? input.payload.evidence_refs ?? n2.evidence_refs,
       ac_verdicts: input.payload.ac_verdicts ?? n2.ac_verdicts
     }));
     const reported = input.payload.changed_files ?? [];
@@ -22002,7 +22050,7 @@ import { readFile as readFile5 } from "fs/promises";
 import { join as join32, resolve as resolve7 } from "path";
 
 // src/core/e2e/failure-report.ts
-import { isAbsolute as isAbsolute2, relative as relative5, resolve as resolve5 } from "path";
+import { isAbsolute as isAbsolute2, relative as relative6, resolve as resolve5 } from "path";
 var FAILED_STATUSES = new Set(["failed", "timedOut", "interrupted"]);
 var STEP_MARKER = /^\s*\/\/\s*@step\s+(\S+)\/([sb]\d+)\s*(.*)$/;
 var ANSI = /\u001b\[[0-9;]*m/g;
@@ -22084,7 +22132,7 @@ async function buildFailureReport(reporter, options) {
   collectFailures(root, rootDir, raw);
   const failures = [];
   for (const f3 of raw) {
-    const spec_file = isAbsolute2(f3.specFile) ? relative5(options.repoRoot, f3.specFile) : f3.specFile;
+    const spec_file = isAbsolute2(f3.specFile) ? relative6(options.repoRoot, f3.specFile) : f3.specFile;
     const sep3 = f3.title.indexOf(" \xB7 ");
     const journey_id = sep3 >= 0 ? f3.title.slice(0, sep3) : "";
     const case_name = sep3 >= 0 ? f3.title.slice(sep3 + " \xB7 ".length) : f3.title;
@@ -22132,7 +22180,7 @@ import { join as join30 } from "path";
 import { createHash as createHash4 } from "crypto";
 import { mkdir as mkdir2, readFile as readFile3, readdir as readdir9, writeFile as writeFile2 } from "fs/promises";
 import { homedir as homedir5 } from "os";
-import { dirname as dirname9, join as join29, relative as relative6, sep as sep3 } from "path";
+import { dirname as dirname9, join as join29, relative as relative7, sep as sep3 } from "path";
 import { fileURLToPath } from "url";
 
 // src/schemas/e2e-journey.ts
@@ -22262,7 +22310,7 @@ async function findCachedChromium() {
   return null;
 }
 function repoRelative(repoRoot, path) {
-  return relative6(repoRoot, path).split(sep3).join("/");
+  return relative7(repoRoot, path).split(sep3).join("/");
 }
 async function sha256OfFile(path) {
   const bytes = await readFile3(path);
@@ -22492,7 +22540,7 @@ async function verifyGenerated(repoRoot, runId2, files, options = {}) {
 
 // src/core/e2e/regression-select.ts
 import { readFile as readFile4, readdir as readdir10, stat as stat3 } from "fs/promises";
-import { join as join31, relative as relative7, resolve as resolve6, sep as sep4 } from "path";
+import { join as join31, relative as relative8, resolve as resolve6, sep as sep4 } from "path";
 
 // src/core/e2e/journey-dsl.ts
 var stepLine = /^\s*\d+\.\s+\[([sb]\d+)\]/;
@@ -22656,7 +22704,7 @@ async function loadJourneyEntries(journeysDir) {
   const invalid = [];
   for (const name of names) {
     const fileAbs = join31(journeysAbs, name);
-    const fileRel = toPosix(relative7(repoRoot, fileAbs));
+    const fileRel = toPosix(relative8(repoRoot, fileAbs));
     const parsed = parseJourneyDoc(await readFile4(fileAbs, "utf8"));
     if (!parsed.ok) {
       invalid.push({ file: fileRel, error: parsed.error });
@@ -22671,7 +22719,7 @@ async function loadJourneyEntries(journeysDir) {
       surfaces: parsed.frontMatter.surfaces,
       uses_blocks: parsed.frontMatter.uses_blocks,
       journey_file: fileRel,
-      generated_spec: toPosix(relative7(repoRoot, specAbs)),
+      generated_spec: toPosix(relative8(repoRoot, specAbs)),
       missing_generated: !await fileExists2(specAbs)
     });
   }
@@ -23552,7 +23600,7 @@ var autopilotIntentDrift = defineCommand({
         graph,
         ...completion ? { completion } : {}
       });
-      const currentSurface = listChangedFiles(repoRoot, { excludeDittoRuns: true });
+      const currentSurface = workItem2.changed_files;
       const surfaceDrift = interfaceBaselineDriftGate(graph.approval_gate.change_surface, currentSurface);
       const pass = result2.pass && surfaceDrift.pass;
       if (format === "json") {
@@ -25226,7 +25274,7 @@ function zodErrors(error) {
   }));
 }
 // src/acg/scope/symbol-expand.ts
-import { join as join39, relative as relative8 } from "path";
+import { join as join39, relative as relative9 } from "path";
 async function expandForbiddenSymbols(contract, ctx) {
   if (!contract.forbidden_scope.some((r3) => r3.kind === "symbol")) {
     return { contract, resolved: 0, unresolved: [] };
@@ -25248,7 +25296,7 @@ async function expandForbiddenSymbols(contract, ctx) {
       workDir: join39(ctx.cacheDir, `q-symdecl-${ref.ref}`),
       ...ctx.binary ? { binary: ctx.binary } : {}
     }, ctx.deps);
-    const files = declFiles.map((f3) => relative8(ctx.repoRoot, join39(ctx.sourceRoot, f3)));
+    const files = declFiles.map((f3) => relative9(ctx.repoRoot, join39(ctx.sourceRoot, f3)));
     if (files.length === 0) {
       out.push(ref);
       unresolved.push(ref.ref);
@@ -25739,12 +25787,12 @@ function toDataflowDoDs(findings) {
 }
 
 // src/core/codeql/review.ts
-import { relative as relative9 } from "path";
+import { relative as relative10 } from "path";
 async function runCodeqlReview(input, deps) {
   const result2 = await runCodeqlAnalysis(input, deps);
   const sarifText = await deps.readText(result2.sarifPath);
   const sha = deps.sha256(sarifText);
-  const relPath = relative9(input.repoRoot, result2.sarifPath);
+  const relPath = relative10(input.repoRoot, result2.sarifPath);
   const evidence = await deps.appendRecord(input.workItemId, {
     ref: {
       kind: "artifact",
@@ -26406,8 +26454,11 @@ var decisionConflictCommand = defineCommand({
 // src/core/interview-driver.ts
 var DEFAULT_THRESHOLD = 0.7;
 var DEFAULT_QUESTION_CAP = 8;
+var DEFAULT_GENERATORS = 1;
+var DRY_FLOOR = 0.05;
 async function startInterview(repoRoot, input) {
   const now = (input.now ?? new Date).toISOString();
+  const generators = input.generators ?? DEFAULT_GENERATORS;
   const initial = {
     schema_version: "0.1.0",
     work_item_id: input.workItemId,
@@ -26431,7 +26482,8 @@ async function startInterview(repoRoot, input) {
       questions_asked: 0
     }
   };
-  return new InterviewStore(repoRoot).write(initial);
+  const written = await new InterviewStore(repoRoot).write(initial);
+  return { ...written, generators };
 }
 var recordTurnPayload = exports_external.object({
   dimension: exports_external.object({
@@ -26444,7 +26496,8 @@ var recordTurnPayload = exports_external.object({
   question: exports_external.object({
     text: exports_external.string().min(1),
     why_matters: exports_external.string().min(1),
-    info_gain_estimate: infoGain
+    info_gain_estimate: infoGain,
+    marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal")
   }).describe("The asked question and why it matters"),
   answer: exports_external.object({
     text: exports_external.string().min(1),
@@ -26486,6 +26539,7 @@ async function recordTurn(repoRoot, input) {
     why_matters: question.why_matters,
     info_gain_estimate: question.info_gain_estimate,
     self_answer_attempts: [],
+    ...question.marginal_gain !== undefined ? { marginal_gain: question.marginal_gain } : {},
     ...answer ? {
       answer: answer.text,
       answer_kind: answer.kind,
@@ -26523,6 +26577,8 @@ async function recordTurn(repoRoot, input) {
   updated.readiness.gate = gateResult.pass ? "ready" : "blocked";
   if (capReached && updated.status === "active") {
     updated.exit.reason = "cap_reached";
+  } else if (question.marginal_gain !== undefined && question.marginal_gain < DRY_FLOOR && !gateResult.pass && updated.status === "active") {
+    updated.exit.reason = "diminishing_returns";
   }
   updated.exit.closure_mode = deriveClosureMode(updated.exit.reason, gateResult.pass);
   return store.write(updated);
@@ -26733,6 +26789,11 @@ var startCmd = defineCommand({
       description: "Maximum questions before exit=cap_reached (default 8)",
       required: false
     },
+    generators: {
+      type: "string",
+      description: "Parallel question-generator fan-out count for the SKILL loop (default 1)",
+      required: false
+    },
     output: { type: "string", description: "Output format: human|json", default: "human" }
   },
   run: async ({ args }) => {
@@ -26756,6 +26817,12 @@ var startCmd = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
+    const generators = args.generators === undefined ? undefined : Number(args.generators);
+    if (generators !== undefined && (!Number.isInteger(generators) || generators <= 0)) {
+      writeError(`--generators must be a positive integer; got "${args.generators}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
     const repoRoot = await resolveRepoRootForCreate();
     if (!await new WorkItemStore(repoRoot).exists(args.workItem)) {
       writeError(`work item ${args.workItem} not found`);
@@ -26765,7 +26832,8 @@ var startCmd = defineCommand({
     const state = await startInterview(repoRoot, {
       workItemId: args.workItem,
       ...threshold !== undefined ? { threshold } : {},
-      ...questionCap !== undefined ? { questionCap } : {}
+      ...questionCap !== undefined ? { questionCap } : {},
+      ...generators !== undefined ? { generators } : {}
     });
     if (format === "json") {
       writeJson2({
@@ -26773,12 +26841,14 @@ var startCmd = defineCommand({
         status: state.status,
         threshold: state.readiness.threshold,
         question_cap: state.exit.question_cap,
+        generators: state.generators,
         path: `.ditto/local/work-items/${state.work_item_id}/interview-state.json`
       });
     } else {
       writeHuman(`Started interview for ${state.work_item_id}`);
       writeHuman(`  threshold:    ${state.readiness.threshold}`);
       writeHuman(`  question_cap: ${state.exit.question_cap}`);
+      writeHuman(`  generators:   ${state.generators}`);
       writeHuman(`  path:         .ditto/local/work-items/${state.work_item_id}/interview-state.json`);
     }
   }
@@ -28181,7 +28251,7 @@ async function collectPermissionFindings(adapters, repoRoot) {
 }
 
 // src/core/surface-inventory.ts
-import { relative as relative10, resolve as resolve8 } from "path";
+import { relative as relative11, resolve as resolve8 } from "path";
 
 // src/schemas/surface-catalog.ts
 var surfaceCatalogEntry = exports_external.object({
@@ -28228,7 +28298,7 @@ async function generateSurfaceCatalog(adapters, repoRoot, catalogFile = "surface
     host: s2.host,
     kind: s2.kind,
     id: s2.id,
-    path: relative10(repoRoot, s2.path)
+    path: relative11(repoRoot, s2.path)
   })).sort((a2, b2) => keyOf(a2).localeCompare(keyOf(b2)) || a2.path.localeCompare(b2.path));
   return surfaceCatalog.parse({ schema_version: "0.1.0", surfaces });
 }
@@ -28795,7 +28865,7 @@ var doctorCommand = defineCommand({
 
 // src/cli/commands/e2e.ts
 import { mkdir as mkdir5, readFile as readFile11, readdir as readdir16 } from "fs/promises";
-import { dirname as dirname11, isAbsolute as isAbsolute4, join as join57, relative as relative12, resolve as resolve10, sep as sep6 } from "path";
+import { dirname as dirname11, isAbsolute as isAbsolute4, join as join57, relative as relative13, resolve as resolve10, sep as sep6 } from "path";
 
 // src/core/e2e/conformance.ts
 function checkStepConformance(input) {
@@ -29024,7 +29094,7 @@ async function detectStale(sourceAbs, generatedAbs, expectedSource) {
 
 // src/core/e2e/lifecycle.ts
 import { readFile as readFile10, readdir as readdir15, unlink as unlink2 } from "fs/promises";
-import { basename, dirname as dirname10, isAbsolute as isAbsolute3, join as join56, relative as relative11, resolve as resolve9, sep as sep5 } from "path";
+import { basename, dirname as dirname10, isAbsolute as isAbsolute3, join as join56, relative as relative12, resolve as resolve9, sep as sep5 } from "path";
 
 // src/schemas/e2e-lifecycle.ts
 var e2eLifecycleAction = exports_external.enum(["update", "delete"]).describe("update = mark for regeneration (scripter re-runs); delete = remove journey + derived spec");
@@ -29069,7 +29139,7 @@ async function runLifecycleAction(repoRoot, req) {
     };
   }
   const journeyAbs = resolve9(repoRoot, req.journeyFile);
-  const repoRel = relative11(resolve9(repoRoot), journeyAbs);
+  const repoRel = relative12(resolve9(repoRoot), journeyAbs);
   if (repoRel.startsWith("..") || isAbsolute3(repoRel)) {
     return {
       ok: false,
@@ -29091,7 +29161,7 @@ async function runLifecycleAction(repoRoot, req) {
   const slug = journeyName.slice(0, -".journey.md".length);
   const generatedDir = resolve9(dirname10(journeyAbs), "..", "generated");
   const specAbs = join56(generatedDir, `${slug}.spec.ts`);
-  const rel = (abs) => toPosix2(relative11(repoRoot, abs));
+  const rel = (abs) => toPosix2(relative12(repoRoot, abs));
   const specText = await readOrNull(specAbs);
   if (specText === null) {
     return {
@@ -29360,7 +29430,7 @@ var e2eConformance = defineCommand({
       } catch {}
       const report = checkStepConformance({ journeyText, blockTexts, generatedText, supportTexts });
       const repoRoot = await resolveRepoRootForCreate();
-      const repoRel = (abs) => relative12(repoRoot, abs).split(sep6).join("/");
+      const repoRel = (abs) => relative13(repoRoot, abs).split(sep6).join("/");
       const stale = [];
       const journeyVerdict = await detectStale(journeyAbs, generatedAbs, repoRel(journeyAbs));
       if (journeyVerdict.stale)
@@ -29568,7 +29638,7 @@ var e2eFailureVerdictCmd = defineCommand({
     try {
       const repoRoot = await resolveRepoRootForCreate();
       if (journeyFile !== undefined) {
-        const rel = relative12(repoRoot, resolve10(repoRoot, journeyFile));
+        const rel = relative13(repoRoot, resolve10(repoRoot, journeyFile));
         if (rel.startsWith("..") || isAbsolute4(rel)) {
           writeError(`--journey-file\uC774 \uC800\uC7A5\uC18C \uBC16\uC744 \uAC00\uB9AC\uD0A8\uB2E4: ${journeyFile} \u2014 \uAC70\uBD80\uD55C\uB2E4`);
           process.exit(USAGE_ERROR_EXIT);
@@ -30704,7 +30774,7 @@ var preCompactHandler = async (input) => {
 // src/hooks/pre-tool-use.ts
 import { homedir as homedir8 } from "os";
 import { join as join58 } from "path";
-import { isAbsolute as isAbsolute7, relative as relative13, resolve as resolve13 } from "path";
+import { isAbsolute as isAbsolute7, relative as relative14, resolve as resolve13 } from "path";
 
 // src/acg/scope/resolve.ts
 function stripModuleExt2(p) {
@@ -30914,7 +30984,7 @@ function bashSecretExposure(cmd) {
 }
 function isOutsideRepo(repoRoot, filePath) {
   const resolved = resolve13(repoRoot, filePath);
-  const rel = relative13(repoRoot, resolved);
+  const rel = relative14(repoRoot, resolved);
   return rel.startsWith("..") || isAbsolute7(rel);
 }
 function isClaudeMemoryPath(repoRoot, filePath) {
@@ -30923,7 +30993,7 @@ function isClaudeMemoryPath(repoRoot, filePath) {
     return false;
   const slug = resolve13(repoRoot).replace(/[^a-zA-Z0-9]/g, "-");
   const base = resolve13(home, ".claude", "projects", slug, "memory");
-  const rel = relative13(base, resolve13(filePath));
+  const rel = relative14(base, resolve13(filePath));
   return rel.length > 0 && !rel.startsWith("..") && !isAbsolute7(rel);
 }
 var RM_LITERAL_BLOCK = ["rm -rf /", "rm -rf ~", "rm -rf /*", "rm -rf ~/"];
@@ -31045,7 +31115,7 @@ async function checkForbiddenScope(input, filePath) {
   const contract = await new ChangeContractStore(input.repoRoot).read(workItemId2);
   if (!contract)
     return;
-  const repoRel = relative13(input.repoRoot, resolve13(input.repoRoot, filePath));
+  const repoRel = relative14(input.repoRoot, resolve13(input.repoRoot, filePath));
   const archSpec = await loadArchSpec(input.repoRoot);
   if (contract.scope_mode === "whitelist" && contract.allowed_scope.length > 0) {
     const allowed = contract.allowed_scope.some((ref) => scopeRefMatches(ref, repoRel, archSpec));
@@ -31106,7 +31176,7 @@ async function checkAutopilotLease(input, filePath) {
     return;
   if (leases.some((l2) => l2.scope_source === "derived"))
     return;
-  const repoRel = relative13(input.repoRoot, resolve13(input.repoRoot, filePath));
+  const repoRel = relative14(input.repoRoot, resolve13(input.repoRoot, filePath));
   const inScope = leases.some((l2) => fileScopeContains(l2.file_scope, repoRel));
   if (inScope)
     return;
@@ -32786,7 +32856,7 @@ import { isAbsolute as isAbsolute8, join as join66 } from "path";
 
 // src/core/memory-bootstrap.ts
 import { readFile as readFile13, readdir as readdir18 } from "fs/promises";
-import { join as join65, relative as relative14 } from "path";
+import { join as join65, relative as relative15 } from "path";
 function bootstrapEventId(key) {
   return `memevt_${sha256Hex(key).slice(0, 12)}`;
 }
@@ -32909,7 +32979,7 @@ async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head
   const dir = join65(dittoDir(repoRoot), "knowledge", "adr");
   for (const abs of await listMarkdown(dir)) {
     const body = await readFile13(abs, "utf8");
-    const rel = relative14(repoRoot, abs);
+    const rel = relative15(repoRoot, abs);
     const sourceId = sourceIdForPath(rel);
     const source = {
       schema_version: "0.1.0",
@@ -32958,7 +33028,7 @@ async function ingestGlossary(repoRoot, sourceStore, eventStore, now, revision, 
   } catch {
     return result2;
   }
-  const rel = relative14(repoRoot, abs);
+  const rel = relative15(repoRoot, abs);
   const sourceId = sourceIdForPath(rel);
   const source = {
     schema_version: "0.1.0",
@@ -33032,7 +33102,7 @@ async function ingestHandoffs(repoRoot, sourceStore, eventStore, now, revision, 
   const dir = localDir(repoRoot, "handoff", "archive");
   for (const abs of await listMarkdown(dir)) {
     const body = await readFile13(abs, "utf8");
-    const rel = relative14(repoRoot, abs);
+    const rel = relative15(repoRoot, abs);
     const sourceId = sourceIdForPath(rel);
     const source = {
       schema_version: "0.1.0",
@@ -34576,7 +34646,7 @@ var reviewCommand = defineCommand({
 
 // src/core/run-with.ts
 import { stat as stat5, writeFile as writeFile3 } from "fs/promises";
-import { dirname as dirname12, join as join69, relative as relative15, resolve as resolve15, sep as sep7 } from "path";
+import { dirname as dirname12, join as join69, relative as relative16, resolve as resolve15, sep as sep7 } from "path";
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
 
 class RunWithUsageError extends Error {
@@ -34595,7 +34665,7 @@ class RunWithRuntimeError extends Error {
   }
 }
 function repoRelative2(repoRoot, path) {
-  return relative15(repoRoot, path).split(sep7).join("/");
+  return relative16(repoRoot, path).split(sep7).join("/");
 }
 function resolveRepoCwd(repoRoot, cwd) {
   const parsed = relativePath.safeParse(cwd);
@@ -37660,4 +37730,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=964d5664f77c9afba574e40b2e6f7a0967d26796006ac8997966c6f6cc2883ac
+//# ditto-src-stamp=c063cf1b7c0625cd818d11745b247c8f9cb7c09c65edfecabd9dda21ec8b0675
