@@ -32,12 +32,15 @@ The driver relays two dials it got from `ditto tech-spec next-round`. Obey them 
 
 ## Procedure
 1. **Characterize the task.** Work out what the user is actually doing and in which domain. Use Read/Grep/Glob to ground a candidate against the actual code/docs when it sharpens a blind-spot — never to reconstruct the driver's narrative.
+   - **Brownfield vs greenfield — rebalance, don't just add.** From the grounding, judge whether the task *modifies an existing codebase* (brownfield) or *builds something new* (greenfield), and shift question weight accordingly — both directions, not a one-sided brownfield boost. Brownfield → weight Context Clarity (which existing pattern / canonical term / integration boundary to follow; the goal is often already given). Greenfield → weight goal / success-criteria / scope-definition (there is no existing code to align to, so "follow which pattern?" is moot). This is a rebalancing across the same three good-question properties, not a fixed extra dimension — a mixed task weights both.
 2. **Generate this domain's expert considerations on the spot** — no fixed checklist (do not replicate deep-interview's 7 dimensions or any 10-section taxonomy). The considerations are generated per task; the task may not even be software.
 3. **Each candidate must carry the three good-question properties** (see `skills/tech-spec/SKILL.md` "Expert elicitation"):
    - **blind-spot** — fire where an expert would have looked but the spec is silent; never re-ask a fixed-facts decision.
    - **expansion** — open a different angle that widens the problem/solution space, not just fill a missing slot.
    - **orientation** — anchor to the goal, carry "what changes depending on the answer" (expand without scattering).
 4. **Separate facts from decisions.** Self-answer the factual part (which considerations apply) from code/domain; phrase the candidate as the *decision* the user must make, oriented to the goal.
+   - **Source label.** Tag each candidate by where its answer comes from: `[from-code]` (verifiable from the codebase), `[from-research]` (a fact from docs/web), `[from-user]` (a genuine judgment only the user can give). This sharpens step 4: self-answer `[from-code]` and `[from-research]` facts from the source rather than emitting them as questions — only `[from-user]` judgments are real candidates.
+   - **Evidence-cited confirmation.** When a candidate must confirm a fact-derived assumption, cite the evidence (`file:line` / doc) in the question text so the user confirms a stated fact, instead of asking them to supply what the code already shows.
 
 ## You return
 A flat list of candidates. Each candidate:

@@ -16,7 +16,7 @@ You are the selection gate. The tech-spec driver fans out N generators, pools th
 ## Score each candidate (four dimensions)
 - **consensus** — how many generators independently raised the same question (cluster near-duplicates yourself). Independent repetition is a *necessity signal*: a question several generators reached without sharing context is more likely to matter. This is where "공통 질문" lives — it is a score, not the budget.
 - **quality** — does it actually meet the three good-question properties (blind-spot / expansion / orientation), or has it decayed into a checklist slot?
-- **necessity** — given the fixed facts, is this still open? A question already answered by a settled decision scores low (blind-spot violation).
+- **necessity** — given the fixed facts, is this still open? A question already answered by a settled decision scores low (blind-spot violation). Same dimension, one more case: a **code-self-answerable fact-confirmation** — something you could verify from code/docs without the user (often tagged `[from-code]`/`[from-research]`) — also scores low on necessity, and correspondingly low on answer_value, so it does not crowd out genuine `[from-user]` judgment questions. This is not a new axis; it extends the existing "already-settled" penalty to facts the agent itself can settle.
 - **answer_value** — how much does the spec change depending on the answer? High for fork-in-the-road decisions, low for cosmetic ones.
 
 ## Select + terminate
