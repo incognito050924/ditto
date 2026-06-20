@@ -1,5 +1,7 @@
 # 불필요한 문서 정리 — 테크스펙
 
+> ⛔ **SUPERSEDED (2026-06-20, wi_260620qdw)**: 이 보수적 스펙은 정식 deep-interview로 재설계된 broader intent(2-스킬 `분류`/`정리`, staging 모델, 적극성 5단계, repo-aware)로 대체됨. 권위는 코드(`skills/{classify,cleanup}/`, `src/core/cleanup-*.ts`, `src/cli/commands/{classify,cleanup}.ts`)와 wi_260620qdw intent에 있다. 이 문서는 배경 참조용으로만 보존(§4-11).
+
 > **소비자**: DITTO(design → implement → verify) + 사람(증분 리뷰).
 > **소스**: 도그푸딩 e2e(wi_260619gr1)에서 §6-6 질문 워크플로가 선정한 6개 결정 fork. 작성 = wi_260619vqp.
 > **수명**: §3·§5·§6·§7·§10 = 장수명 · §8·§11 = 단수명(빌드 후 폐기).
