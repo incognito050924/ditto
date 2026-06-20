@@ -122,6 +122,34 @@ describe('recordTurn', () => {
     expect(state.assumptions[0]?.because_no_answer_to).toBe('q001');
   });
 
+  test('record-turn with marginal_gain preserves it on the appended question', async () => {
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
+        question: {
+          text: 'q1?',
+          why_matters: 'because',
+          info_gain_estimate: 'low',
+          marginal_gain: 0.05,
+        },
+      },
+    });
+    expect(state.questions[0]?.marginal_gain).toBe(0.05);
+  });
+
+  test('record-turn without marginal_gain parses + works (backward compatible)', async () => {
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
+        question: { text: 'q1?', why_matters: 'because', info_gain_estimate: 'medium' },
+      },
+    });
+    expect(state.questions.length).toBe(1);
+    expect(state.questions[0]?.marginal_gain).toBeUndefined();
+  });
+
   test('exit.reason flips to cap_reached when questions_asked >= cap', async () => {
     for (let i = 0; i < 3; i++) {
       await recordTurn(repo, {
@@ -135,6 +163,89 @@ describe('recordTurn', () => {
     const state = await new InterviewStore(repo).get(wiId);
     expect(state.exit.questions_asked).toBe(3);
     expect(state.exit.reason).toBe('cap_reached');
+  });
+
+  test('marginal_gain below dry floor + gate blocked + non-cap → exit.reason=diminishing_returns', async () => {
+    // single turn, cap=3 so not cap_reached; critical dim unresolved → gate blocked;
+    // marginal_gain 0.02 < dry floor → dry round.
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
+        question: {
+          text: 'q?',
+          why_matters: 'x',
+          info_gain_estimate: 'low',
+          marginal_gain: 0.02,
+        },
+      },
+    });
+    expect(state.exit.questions_asked).toBe(1);
+    expect(state.readiness.gate).toBe('blocked');
+    expect(state.exit.reason).toBe('diminishing_returns');
+    // dry + blocked stays ledger_only (deriveClosureMode unchanged).
+    expect(state.exit.closure_mode).toBe('ledger_only');
+  });
+
+  test('cap_reached takes precedence over dry (both true on the same turn)', async () => {
+    // questionCap=3: first 2 turns non-terminal, 3rd hits cap AND carries a dry-floor
+    // marginal_gain. cap_reached must win.
+    for (let i = 0; i < 2; i++) {
+      await recordTurn(repo, {
+        workItemId: wiId,
+        payload: {
+          dimension: { id: `d${i}`, critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
+          question: { text: `q${i}?`, why_matters: 'x', info_gain_estimate: 'low' },
+        },
+      });
+    }
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd2', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
+        question: {
+          text: 'q2?',
+          why_matters: 'x',
+          info_gain_estimate: 'low',
+          marginal_gain: 0.01,
+        },
+      },
+    });
+    expect(state.exit.questions_asked).toBe(3);
+    expect(state.exit.reason).toBe('cap_reached');
+  });
+
+  test('marginal_gain at/above dry floor does NOT trigger diminishing_returns', async () => {
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
+        question: {
+          text: 'q?',
+          why_matters: 'x',
+          info_gain_estimate: 'high',
+          marginal_gain: 0.5,
+        },
+      },
+    });
+    expect(state.exit.reason).not.toBe('diminishing_returns');
+  });
+});
+
+describe('startInterview generators lever (ac-4)', () => {
+  // The fan-out count is a SKILL-loop lever (read by the deep-interview driver
+  // agent), not a persisted InterviewState field — the state schema is owned
+  // elsewhere and out of scope. The driver entry contract is: startInterview
+  // accepts `generators` on StartInput (default 1 = serial-equivalent) and
+  // returns the resolved value so the CLI/SKILL can surface it.
+  test('honors explicit generators count on StartInput', async () => {
+    const result = await startInterview(repo, { workItemId: wiId, generators: 3 });
+    expect(result.generators).toBe(3);
+  });
+
+  test('defaults generators to 1 when omitted (serial-equivalent)', async () => {
+    const result = await startInterview(repo, { workItemId: wiId });
+    expect(result.generators).toBe(1);
   });
 });
 
@@ -359,6 +470,48 @@ describe('finalizeInterview', () => {
 
   test('readiness gate passes but user has NOT confirmed → not_confirmed, no artifact written', async () => {
     await driveToReady();
+    const result = await finalizeInterview(repo, {
+      workItemId: wiId,
+      payload: readyPayload({ user_confirmation: { confirmed: false, statement: '' } }),
+    });
+    expect(result.status).toBe('not_confirmed');
+    expect(await new IntentStore(repo).exists(wiId)).toBe(false);
+    expect(await new AutopilotStore(repo).exists(wiId)).toBe(false);
+  });
+
+  // n3 dry termination sets exit.reason='diminishing_returns' but MUST NOT bypass
+  // the finalize gate (finalize reads readiness ∧ user confirmation, never exit.reason).
+  test('dry exit.reason + critical unresolved → not_ready, no artifact written', async () => {
+    await startInterview(repo, { workItemId: wiId });
+    // single turn: critical dim partial (gate blocked) + marginal_gain<0.05 → dry.
+    const turned = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
+        question: { text: 'q?', why_matters: 'm', info_gain_estimate: 'low', marginal_gain: 0.02 },
+      },
+    });
+    expect(turned.exit.reason).toBe('diminishing_returns');
+    const result = await finalizeInterview(repo, {
+      workItemId: wiId,
+      payload: readyPayload({ user_confirmation: { confirmed: true, statement: '맞아요' } }),
+    });
+    // gate still blocked (critical unresolved) → dry reason did not bypass it.
+    expect(result.status).toBe('not_ready');
+    expect(await new IntentStore(repo).exists(wiId)).toBe(false);
+    expect(await new AutopilotStore(repo).exists(wiId)).toBe(false);
+  });
+
+  // recordTurn makes 'diminishing_returns' exclusive with a passing gate (it requires
+  // !gate.pass), so to pin "finalize ignores exit.reason even when the gate passes" we
+  // construct the adversarial state directly: ready gate + stale dry reason persisted.
+  test('dry exit.reason but gate passes + confirmed=false → not_confirmed, no artifact written', async () => {
+    await driveToReady();
+    const ready = await new InterviewStore(repo).get(wiId);
+    await new InterviewStore(repo).write({
+      ...ready,
+      exit: { ...ready.exit, reason: 'diminishing_returns' },
+    });
     const result = await finalizeInterview(repo, {
       workItemId: wiId,
       payload: readyPayload({ user_confirmation: { confirmed: false, statement: '' } }),

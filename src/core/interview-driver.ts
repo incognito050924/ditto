@@ -36,16 +36,29 @@ import { WorkItemStore } from './work-item-store';
 
 const DEFAULT_THRESHOLD = 0.7;
 const DEFAULT_QUESTION_CAP = 8;
+// Fan-out lever default: 1 generator = serial-equivalent (a small request stays
+// lightweight, ac-4). >1 fans out parallel fresh-context generators in the SKILL loop.
+const DEFAULT_GENERATORS = 1;
+// Dry floor: a round whose score-gated marginal_gain falls below this is treated
+// as diminishing returns. Small constant — at this level a round's incremental
+// information no longer justifies another user turn (the dry termination signal).
+const DRY_FLOOR = 0.05;
 
 export interface StartInput {
   workItemId: string;
   threshold?: number;
   questionCap?: number;
+  /** Fan-out count for the SKILL question-generator loop (default 1 = serial-equivalent). */
+  generators?: number;
   now?: Date;
 }
 
-export async function startInterview(repoRoot: string, input: StartInput): Promise<InterviewState> {
+export async function startInterview(
+  repoRoot: string,
+  input: StartInput,
+): Promise<InterviewState & { generators: number }> {
   const now = (input.now ?? new Date()).toISOString();
+  const generators = input.generators ?? DEFAULT_GENERATORS;
   const initial: InterviewState = {
     schema_version: '0.1.0',
     work_item_id: input.workItemId,
@@ -70,7 +83,11 @@ export async function startInterview(repoRoot: string, input: StartInput): Promi
       questions_asked: 0,
     },
   };
-  return new InterviewStore(repoRoot).write(initial);
+  // generators is a SKILL-loop lever (the fan-out count the driver agent reads),
+  // not a persisted InterviewState field — return it alongside the written state
+  // so the CLI/SKILL can surface the resolved value.
+  const written = await new InterviewStore(repoRoot).write(initial);
+  return { ...written, generators };
 }
 
 // Single JSON payload for record-turn — keeps the CLI surface narrow and lets
@@ -91,6 +108,14 @@ export const recordTurnPayload = z
         text: z.string().min(1),
         why_matters: z.string().min(1),
         info_gain_estimate: infoGain,
+        marginal_gain: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe(
+            'Score-gated marginal information gain of this round; low value across a round is the dry signal',
+          ),
       })
       .describe('The asked question and why it matters'),
     answer: z
@@ -164,6 +189,7 @@ export async function recordTurn(
     why_matters: question.why_matters,
     info_gain_estimate: question.info_gain_estimate,
     self_answer_attempts: [],
+    ...(question.marginal_gain !== undefined ? { marginal_gain: question.marginal_gain } : {}),
     ...(answer
       ? {
           answer: answer.text,
@@ -221,6 +247,17 @@ export async function recordTurn(
   updated.readiness.gate = gateResult.pass ? 'ready' : 'blocked';
   if (capReached && updated.status === 'active') {
     updated.exit.reason = 'cap_reached';
+  } else if (
+    // dry round: this round's score-gated marginal_gain fell below the dry floor and
+    // the gate is still blocked. Exclusive with cap_reached (cap wins, set above).
+    // Termination is *suggested* via exit.reason; finalize still requires
+    // readiness ∧ user confirmation (the gate is not bypassed here).
+    question.marginal_gain !== undefined &&
+    question.marginal_gain < DRY_FLOOR &&
+    !gateResult.pass &&
+    updated.status === 'active'
+  ) {
+    updated.exit.reason = 'diminishing_returns';
   }
   // Keep closure_mode consistent with the current (reason, gate): a cap hit
   // while the gate is still blocked is ledger_only, not mutual_agreement.

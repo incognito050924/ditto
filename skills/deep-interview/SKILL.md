@@ -32,7 +32,7 @@ For `<wi>` = the active work item id (see charter `Active work item:` line).
 "${CLAUDE_PLUGIN_ROOT}/bin/ditto" deep-interview start --work-item <wi> --output json
 ```
 
-Initializes `.ditto/local/work-items/<wi>/interview-state.json` with `readiness.threshold=0.7` and `exit.question_cap=8` (override with `--threshold` and `--question-cap` if the request justifies it; do not lower the threshold to escape the gate).
+Initializes `.ditto/local/work-items/<wi>/interview-state.json` with `readiness.threshold=0.7` and `exit.question_cap=8` (override with `--threshold` and `--question-cap` if the request justifies it; do not lower the threshold to escape the gate). `--generators <N>` (default 1) sets the per-round fan-out for §3 — `N=1` is serial-equivalent (a small request stays lightweight); raise it for an ambiguous request so independent generators cover each other's blind spots.
 
 ### 2. Identify ambiguity dimensions
 
@@ -46,22 +46,36 @@ List every dimension where the answer would change what is built:
 
 Mark each as `critical` when the gate must resolve it before finalize.
 
-### 3. Ask one question per turn
+### 3. Ask questions — fan out to fresh generators, fan in through the gate
 
-Before asking, run the QuestionGate self-answer check (`⚠ self-answer from code/docs/web first …` is the hint surface):
+Do NOT generate questions inline in your accumulated context: your interview narrative acts as a prior (bias) and quality degrades non-uniformly as the transcript grows (context rot) — the two failure modes the charter §4-9 separates. Generation is pulled out of the driver into fresh, minimal-context subagents (same pattern as `skills/tech-spec/SKILL.md` "Question generation workflow (multi-agent)", adapted to deep-interview's intent dimensions).
 
-1. Search the codebase, docs, and prior work items.
-2. Read web sources if the question is about an external standard / API.
-3. Only if NONE of the above answers, ask the user — and include "what changes depending on the answer".
+**Per-round loop** (`N` = the resolved `--generators`, default 1):
 
-**Check recorded decisions (ADR-0020) while clarifying intent.** Part of self-answering is `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query` over the governing ADRs (decision, rejected alternatives, change conditions are indexed). If the request's *intent* conflicts with a recorded decision — the user is asking for what an ADR forbids — that is a user-owned decision, not something to silently plan around: surface it as a question (follow the ADR / deliberately supersede it / re-scope). An intent conflict caught here is the cheapest to resolve, because the user is present (no autopilot fail-closed needed).
+1. **Self-answer first (the anti-ask gate, per dimension).** Before any dimension reaches a generator, run the QuestionGate self-answer check (`⚠ self-answer from code/docs/web first …` is the hint surface):
+   1. Search the codebase, docs, and prior work items.
+   2. Read web sources if the question is about an external standard / API.
+   3. **Check recorded decisions (ADR-0020).** Part of self-answering is `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query` over the governing ADRs (decision, rejected alternatives, change conditions are indexed). If the request's *intent* conflicts with a recorded decision — the user is asking for what an ADR forbids — that is a user-owned decision, not something to silently plan around: surface it as a question (follow the ADR / deliberately supersede it / re-scope). An intent conflict caught here is the cheapest to resolve, because the user is present (no autopilot fail-closed needed).
+   4. Only the dimensions that survive self-answering (NONE of the above resolved them) go to the generators.
 
-Record every turn with:
+2. **Fan out `N` generators (parallel, fresh each round).** Spawn `ditto:question-generator` × `N` in one parallel batch, each with **only** a minimal packet — you are the adapter that maps the interview's unresolved ambiguity dimensions into the generator's `target`:
+   - **Fixed facts & decisions** — what is already settled (resolved dimensions, recorded answers, the governing ADR decisions). Blind-spot guard: a generator must never re-ask a settled dimension.
+   - **Project status & environment** — codebase/domain facts to ground questions (paths, stack, constraints).
+   - **Target** — the unresolved (`critical`, `unknown`/`partial`) ambiguity dimensions this round must fill, expressed as the open intent decisions.
+   - **Excluded (the anti-bias mechanism):** the interview narrative/transcript and your own guesses. Do NOT pass them. `N=1` makes this a single serial generator (lightweight); `N>1` lets independent generators cover each other's blind spots.
+
+3. **Fan in through the gate.** Hand the pooled candidates to one `ditto:question-gate` with the readiness `threshold` as the meaningfulness anchor → it returns `{selected, dry, all_scored}`. Single-level delegation: **you** fan out the generators and pool the candidates; the gate does not call the generators.
+
+4. **Record each selected question as one turn.** For every selected candidate, record one turn with `record-turn` (the question carries its `why_matters` = "what changes depending on the answer"), then ask the user that question and fold the answer back via the same turn's `answer`. Set `question.marginal_gain` to the round's score-gated marginal information gain (the gate's value signal for this round).
+
+5. **Dry → propose ending.** If the round is `dry` (no candidate cleared the threshold) — equivalently, the recorded `marginal_gain` falls below the dry floor — the driver records `exit.reason=diminishing_returns` and you propose ending the interview. Ending is a *proposal*, not a close: finalize (§6) still requires the readiness gate ∧ user confirmation to pass — never bypass the gate just because a round went dry.
+
+Record each turn with:
 
 ```
 "${CLAUDE_PLUGIN_ROOT}/bin/ditto" deep-interview record-turn --work-item <wi> --json '{
   "dimension": {"id": "d-<short-id>", "critical": true, "state": "partial", "ambiguity": 0.6, "notes": ""},
-  "question": {"text": "…?", "why_matters": "…", "info_gain_estimate": "high"},
+  "question": {"text": "…?", "why_matters": "…", "info_gain_estimate": "high", "marginal_gain": 0.4},
   "answer": {"text": "…", "kind": "user"},
   "readiness_score": 0.55
 }' --output json
@@ -70,6 +84,7 @@ Record every turn with:
 - `dimension.id` is upserted: same id on a later turn updates the existing dimension in place (no duplicates).
 - `dimension.state` flips to `"resolved"` when the answer closes it; the gate will then drop it from `critical_unresolved`.
 - `answer.kind` is `"user"` when the user answered, `"assumption"` when you record an explicit `hypothesis`-labelled assumption because the user deferred / cannot answer now. Assumptions land in `assumptions[]` ledger; they do not pretend to be answers.
+- `marginal_gain` (optional, 0..1) is the round's score-gated marginal information gain from the gate. A round whose value falls below the dry floor flips `exit.reason` to `diminishing_returns` (ending becomes a proposal; the finalize gate still applies).
 - `readiness_score` is your honest estimate after the turn; the deterministic floor caps it so high self-reports cannot escape unresolved-critical reality.
 
 ### 4. Pre-mortem (before finalize, not in record-turn)

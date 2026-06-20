@@ -48,6 +48,11 @@ const startCmd = defineCommand({
       description: 'Maximum questions before exit=cap_reached (default 8)',
       required: false,
     },
+    generators: {
+      type: 'string',
+      description: 'Parallel question-generator fan-out count for the SKILL loop (default 1)',
+      required: false,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
@@ -74,6 +79,12 @@ const startCmd = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
+    const generators = args.generators === undefined ? undefined : Number(args.generators);
+    if (generators !== undefined && (!Number.isInteger(generators) || generators <= 0)) {
+      writeError(`--generators must be a positive integer; got "${args.generators}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
     const repoRoot = await resolveRepoRootForCreate();
     if (!(await new WorkItemStore(repoRoot).exists(args.workItem))) {
       writeError(`work item ${args.workItem} not found`);
@@ -84,6 +95,7 @@ const startCmd = defineCommand({
       workItemId: args.workItem,
       ...(threshold !== undefined ? { threshold } : {}),
       ...(questionCap !== undefined ? { questionCap } : {}),
+      ...(generators !== undefined ? { generators } : {}),
     });
     if (format === 'json') {
       writeJson({
@@ -91,12 +103,14 @@ const startCmd = defineCommand({
         status: state.status,
         threshold: state.readiness.threshold,
         question_cap: state.exit.question_cap,
+        generators: state.generators,
         path: `.ditto/local/work-items/${state.work_item_id}/interview-state.json`,
       });
     } else {
       writeHuman(`Started interview for ${state.work_item_id}`);
       writeHuman(`  threshold:    ${state.readiness.threshold}`);
       writeHuman(`  question_cap: ${state.exit.question_cap}`);
+      writeHuman(`  generators:   ${state.generators}`);
       writeHuman(
         `  path:         .ditto/local/work-items/${state.work_item_id}/interview-state.json`,
       );
