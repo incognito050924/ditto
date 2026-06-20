@@ -200,6 +200,38 @@ export function guardMutatingEvidence(
   return { contentful: true };
 }
 
+/**
+ * G7 floor 확장 (wi_260619zqa): the mirror of guardMutatingEvidence for *judging*
+ * nodes. A node that judges at least one acceptance criterion `pass` but carries
+ * NO evidence_refs is closing that criterion to pass on a bare claim — and once
+ * the node locks `passed`, `autopilot complete` reads that pass-verdict with an
+ * empty evidence set forever (the criterion is stuck unverified with no recovery
+ * path). Refuse it at the point it is recorded: force the pass back through the
+ * failure pipeline as fixable so the node stays running and re-recordable.
+ *
+ * Triggers only on a pass verdict (`verdict==='pass'`). A node that already judged
+ * its criteria partial/fail/unverified is NOT downgraded — per-AC granularity is
+ * preserved (it never over-closed anything). Owner/kind agnostic: verifier,
+ * reviewer, security-reviewer, playwright-e2e, and any manual graph node are all
+ * covered. design/planner bare passes carry no pass-verdict, so they never trigger.
+ */
+export function guardAcClosingEvidence(args: {
+  outcome: 'pass' | 'fail';
+  ac_verdicts: { criterion_id: string; verdict: string }[];
+  evidence_refs: unknown[];
+}): ChildResultGuard {
+  const hasPassVerdict = args.ac_verdicts.some((v) => v.verdict === 'pass');
+  if (args.outcome === 'pass' && hasPassVerdict && args.evidence_refs.length === 0) {
+    return {
+      contentful: false,
+      failure_class: 'fixable',
+      reason:
+        'node judged an acceptance criterion `pass` but carried no evidence_refs — closing a criterion to pass on a bare claim is not proof (claim ≠ proof); attach the evidence (test/build/run output, artifact) before passing',
+    };
+  }
+  return { contentful: true };
+}
+
 export type FailureDecision = 'retry' | 'switch_approach' | 'escalate';
 
 /**
