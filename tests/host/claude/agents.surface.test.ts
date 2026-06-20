@@ -63,4 +63,14 @@ describe('Claude host surface — agents', () => {
     const assembler = readFileSync(join(REPO, 'scripts', 'build-plugin.mjs'), 'utf8');
     expect(assembler).toMatch(/ALWAYS_DIRS\s*=\s*\[[^\]]*'agents'/);
   });
+
+  // wi_260620njg — agents must write runtime output under the canonical tier-③
+  // path `.ditto/local/work-items/` (ADR-0012), never the legacy pre-isolation
+  // `.ditto/work-items/` which is NOT gitignored and pollutes the tracked tree.
+  test.each(AGENTS)('agents/%s.md never instructs the legacy non-local work-items path', (name) => {
+    const text = readFileSync(join(AGENTS_DIR, `${name}.md`), 'utf8');
+    // Strip the canonical path, then any remaining `.ditto/work-items/` is the legacy leak.
+    const residual = text.split('.ditto/local/work-items/').join('');
+    expect(residual).not.toContain('.ditto/work-items/');
+  });
 });
