@@ -97,6 +97,37 @@ describe('acceptanceTestable', () => {
     expect(r.reasons.some((x) => /observable/.test(x))).toBe(true);
   });
 
+  test('Korean verb outside keyword list passes when evidence_required declared', () => {
+    const invalidated = acceptanceTestable({
+      statement: '캐시가 무효화된다',
+      evidence_required: ['test'],
+    });
+    expect(invalidated.pass).toBe(true);
+    expect(invalidated.reasons.some((x) => /observable/.test(x))).toBe(false);
+
+    const reproduced = acceptanceTestable({
+      statement: '버그가 재현되지 않는다',
+      evidence_required: ['test'],
+    });
+    expect(reproduced.pass).toBe(true);
+    expect(reproduced.reasons.some((x) => /observable/.test(x))).toBe(false);
+  });
+
+  test('no observable keyword and empty evidence_required still fails', () => {
+    const r = acceptanceTestable({
+      statement: '비밀번호 기능을 더 좋게 처리한다',
+      evidence_required: [],
+    });
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => /observable/.test(x))).toBe(true);
+  });
+
+  test('vague statement still fails even with evidence_required (VAGUE_TERMS independent)', () => {
+    const r = acceptanceTestable({ statement: 'makes it robust', evidence_required: ['test'] });
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => /vague/.test(x))).toBe(true);
+  });
+
   test('word-boundary: standalone vague terms still flag (incl. multi-word)', () => {
     expect(acceptanceTestable({ statement: 'response must be fast' }).reasons.join()).toContain(
       'fast',

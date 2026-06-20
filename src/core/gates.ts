@@ -126,20 +126,28 @@ const VAGUE_TERMS = [
 // language-neutral measurable signal. The Korean alternation matches verb stems
 // (no \b — Korean is not an ASCII \w sequence) so conjugations (한다/된다/하면 …) hit.
 const OBSERVABLE =
-  /\b(returns?|rejects?|responds?|displays?|shows?|exits?|equals?|matches?|contains?|within|less than|greater than|at most|at least|status|code)\b|\d|반환|거부|응답|표시|노출|종료|같음|일치|포함|통과|실패|생성|갱신|호출/i;
+  /\b(returns?|rejects?|responds?|displays?|shows?|exits?|equals?|matches?|contains?|within|less than|greater than|at most|at least|status|code)\b|\d|반환|거부|응답|표시|노출|종료|같음|일치|포함|통과|실패|생성|갱신|호출|강등|재현|무효화|필터|정렬|병합|집계|분할|렌더|차단/i;
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function acceptanceTestable(ac: { statement: string }): GateResult {
+export function acceptanceTestable(ac: {
+  statement: string;
+  evidence_required?: string[];
+}): GateResult {
   const reasons: string[] = [];
   const lower = ac.statement.toLowerCase();
   // Word-boundary match: 'breakfast' must not hit 'fast', 'improvement' must not
   // hit 'improve'. Multi-word phrases ('user friendly') keep \b around the whole.
   const vague = VAGUE_TERMS.filter((t) => new RegExp(`\\b${escapeRegex(t)}\\b`).test(lower));
   if (vague.length > 0) reasons.push(`vague term(s): ${[...new Set(vague)].join(', ')}`);
-  if (!OBSERVABLE.test(ac.statement)) reasons.push('no observable/measurable predicate found');
+  // An AC passes the observable check when EITHER an OBSERVABLE keyword matches OR
+  // the author declared a non-empty evidence_required (a named verification path is
+  // a strong testability signal). VAGUE_TERMS rejection above is independent.
+  const hasEvidence = (ac.evidence_required?.length ?? 0) > 0;
+  if (!OBSERVABLE.test(ac.statement) && !hasEvidence)
+    reasons.push('no observable/measurable predicate found');
   return gate(reasons);
 }
 
