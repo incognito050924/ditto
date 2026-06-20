@@ -477,6 +477,9 @@ dist/
 .ditto/local/
 # Bypass audit log stays at .ditto root (not part of the local/ runtime tier).
 .ditto/autopilot-bypass.jsonl
+# Legacy pre-isolation runtime path: reviewer/verifier outputs still land here for
+# some flows (canonical is .ditto/local/work-items/). Runtime state, never tracked.
+.ditto/work-items/
 
 
 # DITTO compiled CLI/hook binary (built at install; cross-targets in install step)
