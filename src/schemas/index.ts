@@ -25,6 +25,7 @@ export * from './journey-dsl';
 export * from './convergence';
 export * from './coverage';
 export * from './handoff';
+export * from './cleanup-index';
 export * from './memory-source';
 export * from './memory-event';
 export * from './memory-graph-ir';
