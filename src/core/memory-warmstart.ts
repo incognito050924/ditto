@@ -219,7 +219,21 @@ export async function warmStartMemoryContext(
       related.add(root);
       for (const nb of queryNeighbors(graph, root, 2).neighbors) related.add(nb);
     }
-    const relatedNodes = [...related].sort().slice(0, RELATED_NODE_CAP);
+    // Value-ordering before the cap (wi_260621i0w): a plain alphabetical sort lets
+    // incidental Artifact nodes (id `artifact:…`, which sort before `decision:…`/
+    // `sym:…`) fill all RELATED_NODE_CAP slots and evict the coverage roots and
+    // governing Decisions. Rank by value tier instead — roots (direct coverage)
+    // first, then Decisions (governing), then the rest — keeping alphabetical
+    // order WITHIN a tier for determinism. The cap then drops only the
+    // lowest-value incidental neighbors, never a root or a Decision while a slot
+    // is taken by an Artifact.
+    const typeOf = new Map(graph.nodes.map((n) => [n.id, n.node_type]));
+    const rootSet = new Set(roots);
+    const tierOf = (id: string): number =>
+      rootSet.has(id) ? 0 : typeOf.get(id) === 'Decision' ? 1 : 2;
+    const relatedNodes = [...related]
+      .sort((a, b) => tierOf(a) - tierOf(b) || (a < b ? -1 : a > b ? 1 : 0))
+      .slice(0, RELATED_NODE_CAP);
     if (relatedNodes.length === 0) {
       await recordUsage(repoRoot, base);
       return undefined;
@@ -228,7 +242,6 @@ export async function warmStartMemoryContext(
 
     // ac-10: decompose the hit by node_type so the gate can tell Decision-skew
     // from semantic-layer contribution.
-    const typeOf = new Map(graph.nodes.map((n) => [n.id, n.node_type]));
     const hitTypes: Record<string, number> = {};
     for (const id of relatedNodes) {
       const t = typeOf.get(id) ?? 'unknown';

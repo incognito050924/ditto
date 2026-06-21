@@ -21058,13 +21058,15 @@ async function warmStartMemoryContext(repoRoot, node2, workItem2, options = {}) 
       for (const nb of queryNeighbors(graph, root, 2).neighbors)
         related.add(nb);
     }
-    const relatedNodes = [...related].sort().slice(0, RELATED_NODE_CAP);
+    const typeOf = new Map(graph.nodes.map((n2) => [n2.id, n2.node_type]));
+    const rootSet = new Set(roots);
+    const tierOf = (id) => rootSet.has(id) ? 0 : typeOf.get(id) === "Decision" ? 1 : 2;
+    const relatedNodes = [...related].sort((a2, b2) => tierOf(a2) - tierOf(b2) || (a2 < b2 ? -1 : a2 > b2 ? 1 : 0)).slice(0, RELATED_NODE_CAP);
     if (relatedNodes.length === 0) {
       await recordUsage(repoRoot, base);
       return;
     }
     base.hit = true;
-    const typeOf = new Map(graph.nodes.map((n2) => [n2.id, n2.node_type]));
     const hitTypes = {};
     for (const id of relatedNodes) {
       const t2 = typeOf.get(id) ?? "unknown";
@@ -39920,4 +39922,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=f304a7b6913d875138ae5562ec2d04ef65fd7c27169e9efb6e17ea9e2432f750
+//# ditto-src-stamp=df8b7ba581957dc98276c385a6da7e590acd072704e32319ef6cfb049c0e91d2

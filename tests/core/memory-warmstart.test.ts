@@ -459,4 +459,45 @@ describe('warmStartMemoryContext (§5-1 / §10-6 #1, fail-open warm-start)', () 
     // the Episode reached via the path Artifact is tallied.
     expect(report.hit_node_types.Episode ?? 0).toBeGreaterThan(0);
   });
+
+  // wi_260621i0w (cap value-ordering): the RELATED_NODE_CAP slice must keep the
+  // high-value nodes — the coverage roots and governing Decisions — ahead of
+  // incidental neighbors. A plain `.sort()` is alphabetical, so an Artifact node
+  // (id `artifact:…`, which sorts before `decision:…`/`sym:…`) can fill all 8
+  // slots and evict both the root and the Decision. That is the cap-crowding LIVE
+  // risk the option-A Artifact bridge introduced. Value-ordering fixes it.
+  function crowdedGraph(): ServingGraph {
+    const artifacts = Array.from({ length: 8 }, (_, i) => ({
+      id: `artifact:${String.fromCharCode(97 + i)}`, // artifact:a … artifact:h, all sort first
+      node_type: 'Artifact' as const,
+      name: `artifact ${i}`,
+    }));
+    return {
+      projection_id: 'proj_crowd01',
+      generated_at: '2026-06-09T12:00:00.000Z',
+      // root name shares tokens "memory"/"graph" with the work item ⇒ coverage root.
+      nodes: [
+        { id: 'sym:zzz-memory-graph', node_type: 'Symbol', name: 'memory graph root' },
+        { id: 'decision:important', node_type: 'Decision', name: 'governing decision' },
+        ...artifacts,
+      ],
+      adjacency: {
+        'sym:zzz-memory-graph': [
+          { to: 'decision:important', edge_type: 'RELATED_TO' },
+          ...artifacts.map((a) => ({ to: a.id, edge_type: 'RELATED_TO' as const })),
+        ],
+      },
+    };
+  }
+
+  test('(cap) value-ordering keeps the root + Decision ahead of incidental Artifact neighbors', async () => {
+    await seedFreshGraph(crowdedGraph());
+    const ctx = await warmStartMemoryContext(repo, node('planner'), workItem, { now: NOW });
+    expect(ctx).toBeDefined();
+    // cap is still respected (8 slots) …
+    expect(ctx?.related_nodes).toHaveLength(8);
+    // … but the high-value nodes are kept, not the alphabetically-first Artifacts.
+    expect(ctx?.related_nodes).toContain('sym:zzz-memory-graph'); // coverage root survives
+    expect(ctx?.decisions).toContain('decision:important'); // governing Decision survives
+  });
 });
