@@ -122,6 +122,51 @@ describe('recordTurn', () => {
     expect(state.assumptions[0]?.because_no_answer_to).toBe('q001');
   });
 
+  // Soundness: an agent-guessed (assumption-kind, not user-delegated) answer must
+  // not be able to close a CRITICAL dimension as resolved — otherwise the readiness
+  // gate cannot tell an agent's guess apart from a user's answer.
+  test('agent-guess assumption cannot resolve a CRITICAL dimension', async () => {
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd-crit', critical: true, state: 'resolved', ambiguity: 0.2, notes: '' },
+        question: { text: 'critical?', why_matters: 'load-bearing', info_gain_estimate: 'high' },
+        answer: { text: 'agent guesses bcrypt-12', kind: 'assumption' },
+      },
+    });
+    // the dimension is NOT closed by an agent guess …
+    expect(state.dimensions[0]?.state).not.toBe('resolved');
+    // … so the readiness gate still sees it as unresolved.
+    expect(state.readiness.critical_unresolved).toContain('d-crit');
+    // it is still recorded as an assumption in the ledger (intent preserved).
+    expect(state.assumptions.length).toBe(1);
+  });
+
+  test('user-delegated assumption MAY resolve a CRITICAL dimension', async () => {
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd-crit', critical: true, state: 'resolved', ambiguity: 0.2, notes: '' },
+        question: { text: 'critical?', why_matters: 'load-bearing', info_gain_estimate: 'high' },
+        answer: { text: 'user said: you decide', kind: 'assumption', delegated: true },
+      },
+    });
+    expect(state.dimensions[0]?.state).toBe('resolved');
+    expect(state.readiness.critical_unresolved).not.toContain('d-crit');
+  });
+
+  test('agent-guess assumption may still resolve a NON-critical dimension', async () => {
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd-min', critical: false, state: 'resolved', ambiguity: 0.2, notes: '' },
+        question: { text: 'minor?', why_matters: 'cosmetic', info_gain_estimate: 'low' },
+        answer: { text: 'assume default', kind: 'assumption' },
+      },
+    });
+    expect(state.dimensions[0]?.state).toBe('resolved');
+  });
+
   test('record-turn with marginal_gain preserves it on the appended question', async () => {
     const state = await recordTurn(repo, {
       workItemId: wiId,

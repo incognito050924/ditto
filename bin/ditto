@@ -27793,6 +27793,7 @@ var recordTurnPayload = exports_external.object({
   answer: exports_external.object({
     text: exports_external.string().min(1),
     kind: exports_external.enum(["user", "assumption"]),
+    delegated: exports_external.boolean().optional(),
     ambiguity_delta: exports_external.number().optional()
   }).optional(),
   readiness_score: exports_external.number().min(0).max(1).optional().describe("LLM self-reported readiness after this turn (floor-capped by the gate)")
@@ -27801,8 +27802,11 @@ async function recordTurn(repoRoot, input) {
   const store = new InterviewStore(repoRoot);
   const current = await store.get(input.workItemId);
   const nowIso = (input.now ?? new Date).toISOString();
-  const { dimension, question, answer, readiness_score } = input.payload;
-  const existingDim = current.dimensions.find((d2) => d2.id === dimension.id);
+  const { dimension: rawDimension, question, answer, readiness_score } = input.payload;
+  const existingDim = current.dimensions.find((d2) => d2.id === rawDimension.id);
+  const isCritical = rawDimension.critical || existingDim?.critical || false;
+  const isAgentGuess = answer?.kind === "assumption" && answer.delegated !== true;
+  const dimension = isAgentGuess && isCritical && rawDimension.state === "resolved" ? { ...rawDimension, state: "partial" } : rawDimension;
   const nextDimensions = existingDim ? current.dimensions.map((d2) => d2.id === dimension.id ? {
     ...d2,
     critical: dimension.critical || d2.critical,
@@ -39144,4 +39148,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=370ab2af4f4e9d2ae0ec98fd232efd2bb9653f147900f96b7fedcbb8d21f69b4
+//# ditto-src-stamp=2abfe9574d507c2c372bffebd86661305c4e38a6b1d1531e76be239b2f70e789

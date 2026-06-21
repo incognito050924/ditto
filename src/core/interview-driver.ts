@@ -122,6 +122,10 @@ export const recordTurnPayload = z
       .object({
         text: z.string().min(1),
         kind: z.enum(['user', 'assumption']),
+        // An assumption is by default the agent's own guess. `delegated:true` marks
+        // it as an explicit user delegation ("you decide") — the only case in which
+        // an assumption-kind answer is allowed to close a CRITICAL dimension.
+        delegated: z.boolean().optional(),
         ambiguity_delta: z.number().optional(),
       })
       .optional(),
@@ -149,10 +153,20 @@ export async function recordTurn(
   const store = new InterviewStore(repoRoot);
   const current = await store.get(input.workItemId);
   const nowIso = (input.now ?? new Date()).toISOString();
-  const { dimension, question, answer, readiness_score } = input.payload;
+  const { dimension: rawDimension, question, answer, readiness_score } = input.payload;
 
-  // Upsert dimension by id; preserve resolved_by history.
-  const existingDim = current.dimensions.find((d) => d.id === dimension.id);
+  // Soundness invariant (deep-interview readiness gate): an agent-guessed answer
+  // — assumption-kind and NOT user-delegated — must not close a CRITICAL dimension
+  // as `resolved`. Otherwise the gate (gates.ts: critical && state!=='resolved')
+  // cannot tell an agent's guess apart from a user's answer. We demote the state to
+  // 'partial' so the existing hard-block fires; user-delegated assumptions pass.
+  const existingDim = current.dimensions.find((d) => d.id === rawDimension.id);
+  const isCritical = rawDimension.critical || existingDim?.critical || false;
+  const isAgentGuess = answer?.kind === 'assumption' && answer.delegated !== true;
+  const dimension =
+    isAgentGuess && isCritical && rawDimension.state === 'resolved'
+      ? { ...rawDimension, state: 'partial' as const }
+      : rawDimension;
   const nextDimensions = existingDim
     ? current.dimensions.map((d) =>
         d.id === dimension.id
