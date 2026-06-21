@@ -27738,6 +27738,66 @@ var decisionConflictCommand = defineCommand({
   }
 });
 
+// src/schemas/ditto-config.ts
+init_zod();
+var dittoConfigQuestion = exports_external.object({
+  intensity: exports_external.number().int().min(0).max(100).optional(),
+  generators: exports_external.number().int().min(1).max(6).optional(),
+  performance: exports_external.enum(["glance", "quick", "standard", "deep", "exhaustive"]).optional(),
+  generator_effort: exports_external.enum(["low", "medium", "high", "inherit"]).optional(),
+  gate_mode: exports_external.enum(["confirm", "draft"]).optional(),
+  max_questions: exports_external.number().int().nonnegative().optional(),
+  max_rounds: exports_external.number().int().nonnegative().optional(),
+  threshold: exports_external.number().min(0).max(1).optional(),
+  granularity: exports_external.enum(["low", "medium", "high"]).optional()
+}).describe("Per-user defaults for \xA76-6 question-elicitation (RawQuestionConfig-shaped)");
+var dittoConfigDeepInterview = exports_external.object({
+  threshold: exports_external.number().min(0).max(1).optional(),
+  question_cap: exports_external.number().int().positive().optional(),
+  generators: exports_external.number().int().positive().optional()
+}).describe("Per-user defaults for deep-interview start (CLI-flag-shaped)");
+var dittoConfig = exports_external.object({
+  tech_spec: exports_external.object({
+    question: dittoConfigQuestion.optional()
+  }).optional(),
+  deep_interview: dittoConfigDeepInterview.optional()
+}).describe("Per-developer ditto config \u2014 .ditto/local/config.json (tier \u2462, gitignored)");
+
+// src/core/ditto-config.ts
+init_ditto_paths();
+async function readQuestionConfigDefaults(repoRoot, onMalformed) {
+  const file = Bun.file(localDir(repoRoot, "config.json"));
+  if (!await file.exists())
+    return {};
+  try {
+    const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
+    if (!parsed.success) {
+      onMalformed?.();
+      return {};
+    }
+    return parsed.data.tech_spec?.question ?? {};
+  } catch {
+    onMalformed?.();
+    return {};
+  }
+}
+async function readDeepInterviewConfigDefaults(repoRoot, onMalformed) {
+  const file = Bun.file(localDir(repoRoot, "config.json"));
+  if (!await file.exists())
+    return {};
+  try {
+    const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
+    if (!parsed.success) {
+      onMalformed?.();
+      return {};
+    }
+    return parsed.data.deep_interview ?? {};
+  } catch {
+    onMalformed?.();
+    return {};
+  }
+}
+
 // src/cli/commands/deep-interview.ts
 init_fs();
 
@@ -28100,25 +28160,29 @@ var startCmd = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
-    const threshold = args.threshold === undefined ? undefined : Number(args.threshold);
-    if (threshold !== undefined && (!Number.isFinite(threshold) || threshold < 0 || threshold > 1)) {
+    const cliThreshold = args.threshold === undefined ? undefined : Number(args.threshold);
+    if (cliThreshold !== undefined && (!Number.isFinite(cliThreshold) || cliThreshold < 0 || cliThreshold > 1)) {
       writeError(`--threshold must be a number in [0, 1]; got "${args.threshold}"`);
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
-    const questionCap = args.questionCap === undefined ? undefined : Number(args.questionCap);
-    if (questionCap !== undefined && (!Number.isInteger(questionCap) || questionCap <= 0)) {
+    const cliQuestionCap = args.questionCap === undefined ? undefined : Number(args.questionCap);
+    if (cliQuestionCap !== undefined && (!Number.isInteger(cliQuestionCap) || cliQuestionCap <= 0)) {
       writeError(`--question-cap must be a positive integer; got "${args.questionCap}"`);
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
-    const generators = args.generators === undefined ? undefined : Number(args.generators);
-    if (generators !== undefined && (!Number.isInteger(generators) || generators <= 0)) {
+    const cliGenerators = args.generators === undefined ? undefined : Number(args.generators);
+    if (cliGenerators !== undefined && (!Number.isInteger(cliGenerators) || cliGenerators <= 0)) {
       writeError(`--generators must be a positive integer; got "${args.generators}"`);
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
     const repoRoot = await resolveRepoRootForCreate();
+    const configDefaults = await readDeepInterviewConfigDefaults(repoRoot, () => writeError("warning: .ditto/local/config.json could not be parsed \u2014 ignoring it and using defaults"));
+    const threshold = cliThreshold ?? configDefaults.threshold;
+    const questionCap = cliQuestionCap ?? configDefaults.question_cap;
+    const generators = cliGenerators ?? configDefaults.generators;
     if (!await new WorkItemStore(repoRoot).exists(args.workItem)) {
       writeError(`work item ${args.workItem} not found`);
       process.exit(RUNTIME_ERROR_EXIT);
@@ -38062,44 +38126,6 @@ var teardownCommand = defineCommand({
   }
 });
 
-// src/schemas/ditto-config.ts
-init_zod();
-var dittoConfigQuestion = exports_external.object({
-  intensity: exports_external.number().int().min(0).max(100).optional(),
-  generators: exports_external.number().int().min(1).max(6).optional(),
-  performance: exports_external.enum(["glance", "quick", "standard", "deep", "exhaustive"]).optional(),
-  generator_effort: exports_external.enum(["low", "medium", "high", "inherit"]).optional(),
-  gate_mode: exports_external.enum(["confirm", "draft"]).optional(),
-  max_questions: exports_external.number().int().nonnegative().optional(),
-  max_rounds: exports_external.number().int().nonnegative().optional(),
-  threshold: exports_external.number().min(0).max(1).optional(),
-  granularity: exports_external.enum(["low", "medium", "high"]).optional()
-}).describe("Per-user defaults for \xA76-6 question-elicitation (RawQuestionConfig-shaped)");
-var dittoConfig = exports_external.object({
-  tech_spec: exports_external.object({
-    question: dittoConfigQuestion.optional()
-  }).optional()
-}).describe("Per-developer ditto config \u2014 .ditto/local/config.json (tier \u2462, gitignored)");
-
-// src/core/ditto-config.ts
-init_ditto_paths();
-async function readQuestionConfigDefaults(repoRoot, onMalformed) {
-  const file = Bun.file(localDir(repoRoot, "config.json"));
-  if (!await file.exists())
-    return {};
-  try {
-    const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
-    if (!parsed.success) {
-      onMalformed?.();
-      return {};
-    }
-    return parsed.data.tech_spec?.question ?? {};
-  } catch {
-    onMalformed?.();
-    return {};
-  }
-}
-
 // src/cli/commands/tech-spec.ts
 init_fs();
 function parseJsonArg2(raw) {
@@ -39148,4 +39174,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=2abfe9574d507c2c372bffebd86661305c4e38a6b1d1531e76be239b2f70e789
+//# ditto-src-stamp=f1af8897403ae057d5829ed0522e4666e10c580956d1bb4de9bb9b5a096e1796

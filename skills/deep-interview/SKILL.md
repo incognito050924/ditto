@@ -34,6 +34,8 @@ For `<wi>` = the active work item id (see charter `Active work item:` line).
 
 Initializes `.ditto/local/work-items/<wi>/interview-state.json` with `readiness.threshold=0.7` and `exit.question_cap=8` (override with `--threshold` and `--question-cap` if the request justifies it; do not lower the threshold to escape the gate). `--generators <N>` (default 1) sets the per-round fan-out for §3 — `N=1` is serial-equivalent (a small request stays lightweight); raise it for an ambiguous request so independent generators cover each other's blind spots.
 
+**Per-user defaults (config).** A developer can set permanent defaults for `threshold` / `question_cap` / `generators` in `.ditto/local/config.json` under a `deep_interview` block (gitignored, tier ③) — e.g. `{"deep_interview": {"generators": 3}}` to always fan out 3 generators. Resolution is **CLI flag > config > code default**; a broken config fails open to defaults and warns on stderr. Always read the resolved values from the `start` output (it reports `threshold` / `question_cap` / `generators`) rather than assuming the code defaults — those are what config/flags actually produced.
+
 ### 2. Identify ambiguity dimensions
 
 List every dimension where the answer would change what is built:
@@ -50,7 +52,7 @@ Mark each as `critical` when the gate must resolve it before finalize.
 
 Do NOT generate questions inline in your accumulated context: your interview narrative acts as a prior (bias) and quality degrades non-uniformly as the transcript grows (context rot) — the two failure modes the charter §4-9 separates. Generation is pulled out of the driver into fresh, minimal-context subagents (same pattern as `skills/tech-spec/SKILL.md` "Question generation workflow (multi-agent)", adapted to deep-interview's intent dimensions).
 
-**Per-round loop** (`N` = the resolved `--generators`, default 1):
+**Per-round loop** (`N` = the resolved generators count that `start` reported — a CLI `--generators` flag if given, else the `deep_interview.generators` config default, else 1):
 
 1. **Self-answer first (the anti-ask gate, per dimension).** Before any dimension reaches a generator, run the QuestionGate self-answer check (`⚠ self-answer from code/docs/web first …` is the hint surface):
    1. Search the codebase, docs, and prior work items.
