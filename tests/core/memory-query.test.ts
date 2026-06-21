@@ -450,6 +450,24 @@ describe('assembleSymbolBrief (decision-lineage, ac-1)', () => {
     expect(brief.items).toEqual([]);
   });
 
+  test('a glob governs entry (src/core/*-store.ts) cites a matching symbol (EXTRACTED)', () => {
+    const decisions: GoverningDecision[] = [
+      // an ADR `관련:` may wildcard a family of files; the cite must still fire.
+      { adr_id: 'ADR-0099', body: adrBody, governs: ['src/core/*-store.ts'] },
+    ];
+    const brief = assembleSymbolBrief('symbol:src/core/cleanup-store.ts#load', decisions);
+    expect(brief.items[0]).toMatchObject({ tag: 'EXTRACTED', coverage: 'cite' });
+    expect(brief.coverage).toBe('cite');
+  });
+
+  test('a glob governs entry does NOT cite a non-matching symbol', () => {
+    const decisions: GoverningDecision[] = [
+      { adr_id: 'ADR-0099', body: adrBody, governs: ['src/core/*-store.ts'] },
+    ];
+    const brief = assembleSymbolBrief('symbol:src/core/memory-query.ts#run', decisions);
+    expect(brief.coverage).toBe('미발견');
+  });
+
   test('no governing decision → 미발견, never a false EXTRACTED', () => {
     const unrelated = [
       '# ADR-0099: unrelated',

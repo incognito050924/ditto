@@ -20505,10 +20505,10 @@ async function memoryStatus(repoRoot) {
 }
 
 // src/core/memory-query.ts
-init_ditto_paths();
-init_fs();
 import { appendFile, readFile } from "fs/promises";
 import { basename, dirname as dirname6, isAbsolute as isAbsolute2, join as join23 } from "path";
+init_ditto_paths();
+init_fs();
 
 // src/core/memory-measure.ts
 var REJECTED_HEADING = /^##\s*\uB300\uC548/;
@@ -20727,7 +20727,10 @@ function assembleSymbolBrief(symbolId, decisions) {
   const invariants = [];
   const adrs = [];
   for (const d2 of decisions) {
-    const cited = d2.governs.some((g3) => stripExt(g3) === file);
+    const cited = d2.governs.some((g3) => {
+      const gn = stripExt(g3);
+      return gn.includes("*") ? globToRegExp(gn).test(file) : gn === file;
+    });
     const mentioned = !cited && d2.body.includes(path);
     if (!cited && !mentioned)
       continue;
@@ -39730,4 +39733,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=b1d844987afaaefd3406551f7661c958f0d8fff31dec0292c3e55e74ef2d6c92
+//# ditto-src-stamp=9a4b1ed68b7ef8be764d36d780d180a3c29c3ae697544444033f31635ab56419

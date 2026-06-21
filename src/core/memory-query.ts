@@ -15,6 +15,7 @@
  */
 import { appendFile, readFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join } from 'node:path';
+import { globToRegExp } from '../acg/boundary/boundary';
 import { dittoDir, localDir } from './ditto-paths';
 import { ensureDir } from './fs';
 import { extractInvariants, extractRejectedAlternatives } from './memory-measure';
@@ -319,7 +320,12 @@ export function assembleSymbolBrief(
   const adrs: string[] = [];
 
   for (const d of decisions) {
-    const cited = d.governs.some((g) => stripExt(g) === file);
+    // governs entries may be exact paths or globs (an ADR `관련:` can wildcard a
+    // file family, e.g. `src/core/*-store.ts`); match both at file granularity.
+    const cited = d.governs.some((g) => {
+      const gn = stripExt(g);
+      return gn.includes('*') ? globToRegExp(gn).test(file) : gn === file;
+    });
     // fallback is a FILE-level signal (matches cite/governs granularity). Matching
     // the bare symbol NAME too produced false positives — a short/common name like
     // "run"/"x" appears in almost any ADR prose. Require the file path mention.
