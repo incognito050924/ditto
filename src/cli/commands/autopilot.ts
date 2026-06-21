@@ -15,9 +15,9 @@ import { dittoDir } from '~/core/ditto-paths';
 import { checkE2eCompletionGate } from '~/core/e2e/completion-gate';
 import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
 import { resolveRepoRootForCreate } from '~/core/fs';
-import { type MeasurementReport, measureHallucination } from '~/core/memory-measure';
 import { intentDriftGate, interfaceBaselineDriftGate } from '~/core/gates';
 import { IntentStore } from '~/core/intent-store';
+import { type MeasurementReport, measureHallucination } from '~/core/memory-measure';
 import { WorkItemStore } from '~/core/work-item-store';
 import { coverageRoundPayload } from '~/schemas/coverage';
 import {

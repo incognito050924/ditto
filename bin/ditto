@@ -22595,7 +22595,7 @@ async function recordResult(repoRoot, input) {
 
 // src/core/cite-gate.ts
 init_ditto_paths();
-import { readdir as readdir9, readFile as readFile4 } from "fs/promises";
+import { readFile as readFile4, readdir as readdir9 } from "fs/promises";
 import { join as join29 } from "path";
 var CITE_RE = /\bdecision:|\bADR-\d/i;
 var ABSTAIN_RE = /\babstain|none\s+(?:of\s+the\s+)?(?:governing\s+)?decisions?\s+apply|none\s+apply/i;
@@ -36177,6 +36177,98 @@ var memoryProposeFinding = defineCommand({
     }
   }
 });
+var memoryCapture = defineCommand({
+  meta: {
+    name: "capture",
+    description: "Capture a data-dependent-case observation: a pending, INFERRED observation event grounded in \u22651 code-path source (wi_260621r2m, ac-1). Reuses the propose path; the agent self-report is never stored as fact (laundering downgrade) and must cite at least one source_type=code source."
+  },
+  args: {
+    text: { type: "string", description: "Observed data-dependent behavior", required: true },
+    source: {
+      type: "string",
+      description: "Code-path source id(s) grounding the observation (comma-separated, \u22651 required)",
+      required: false
+    },
+    role: { type: "string", description: "Agent role", required: false },
+    confidence: {
+      type: "string",
+      description: `Confidence kind: ${memoryConfidenceKind.options.join("|")} (default INFERRED)`,
+      default: "INFERRED"
+    },
+    sensitivity: {
+      type: "string",
+      description: `Sensitivity: ${memorySensitivity.options.join("|")} (default internal)`,
+      default: "internal"
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const sources = (args.source ?? "").split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+    for (const s2 of sources) {
+      if (!memorySourceId.safeParse(s2).success) {
+        writeError(`invalid --source id "${s2}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const sourceStore = new MemorySourceStore(repoRoot);
+    let hasCodeSource = false;
+    for (const id of sources) {
+      try {
+        if ((await sourceStore.get(id)).source_type === "code") {
+          hasCodeSource = true;
+          break;
+        }
+      } catch {}
+    }
+    if (!hasCodeSource) {
+      writeError("capture requires at least one --source resolving to a source_type=code MemorySource");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    try {
+      const written = await proposeEvent(repoRoot, {
+        event_type: "observation",
+        text: args.text,
+        sources,
+        confidence_kind: args.confidence,
+        sensitivity: args.sensitivity,
+        actor: { kind: "agent", ...args.role ? { role: args.role } : {} }
+      });
+      if (format === "json") {
+        writeJson2(written);
+      } else {
+        writeHuman(`Captured observation ${written.event_id}`);
+        writeHuman(`  type:       ${written.event_type}`);
+        writeHuman(`  confidence: ${written.confidence_kind}`);
+        writeHuman(`  status:     ${written.status}`);
+      }
+    } catch (err) {
+      if (err instanceof MemoryEventExistsError) {
+        writeError(err.message);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/invalid|expected|required/i.test(msg)) {
+        writeError(`memory capture failed: ${msg}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory capture failed: ${msg}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var memoryMeasure = defineCommand({
   meta: {
     name: "measure",
@@ -36317,6 +36409,7 @@ var memoryCommand = defineCommand({
     usage: memoryUsage,
     propose: memoryPropose,
     "propose-finding": memoryProposeFinding,
+    capture: memoryCapture,
     measure: memoryMeasure,
     approve: memoryApprove
   }
@@ -39783,4 +39876,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=055a99b026dcd95ca0975a46f0362485f9a453174c14378d5125a1143e37e275
+//# ditto-src-stamp=5347f56a8cf1d99d941741f032bfabac828239052ea45c1b05b990c335e163bd
