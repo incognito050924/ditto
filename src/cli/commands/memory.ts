@@ -46,6 +46,7 @@ import {
   MemoryEventStore,
   MemoryGraphIrStore,
   MemoryProjectionStore,
+  MemorySourceStore,
 } from '~/core/memory-store';
 import { readUsageReport } from '~/core/memory-warmstart';
 import { workItemId as workItemIdSchema } from '~/schemas/common';
@@ -1209,6 +1210,114 @@ const memoryProposeFinding = defineCommand({
   },
 });
 
+const memoryCapture = defineCommand({
+  meta: {
+    name: 'capture',
+    description:
+      'Capture a data-dependent-case observation: a pending, INFERRED observation event grounded in ≥1 code-path source (wi_260621r2m, ac-1). Reuses the propose path; the agent self-report is never stored as fact (laundering downgrade) and must cite at least one source_type=code source.',
+  },
+  args: {
+    text: { type: 'string', description: 'Observed data-dependent behavior', required: true },
+    source: {
+      type: 'string',
+      description:
+        'Code-path source id(s) grounding the observation (comma-separated, ≥1 required)',
+      required: false,
+    },
+    role: { type: 'string', description: 'Agent role', required: false },
+    // confidence is accepted for symmetry with `propose`; an agent EXTRACTED
+    // claim is downgraded to INFERRED by proposeEvent's laundering guard (ac-1).
+    confidence: {
+      type: 'string',
+      description: `Confidence kind: ${memoryConfidenceKind.options.join('|')} (default INFERRED)`,
+      default: 'INFERRED',
+    },
+    sensitivity: {
+      type: 'string',
+      description: `Sensitivity: ${memorySensitivity.options.join('|')} (default internal)`,
+      default: 'internal',
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const sources = (args.source ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    for (const s of sources) {
+      if (!memorySourceId.safeParse(s).success) {
+        writeError(`invalid --source id "${s}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    // Code-source floor (ac-1, finding-B): a data-dependent case is an observation
+    // ABOUT code, so it must be grounded in ≥1 source that resolves to a
+    // source_type='code' MemorySource. Enforced here at the CLI layer only — the
+    // generic proposeEvent contract is left unchanged.
+    const sourceStore = new MemorySourceStore(repoRoot);
+    let hasCodeSource = false;
+    for (const id of sources) {
+      try {
+        if ((await sourceStore.get(id)).source_type === 'code') {
+          hasCodeSource = true;
+          break;
+        }
+      } catch {
+        // unresolvable source id — does not count toward the code floor
+      }
+    }
+    if (!hasCodeSource) {
+      writeError(
+        'capture requires at least one --source resolving to a source_type=code MemorySource',
+      );
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    try {
+      const written = await proposeEvent(repoRoot, {
+        event_type: 'observation',
+        text: args.text,
+        sources,
+        confidence_kind: args.confidence as MemoryEvent['confidence_kind'],
+        sensitivity: args.sensitivity as MemoryEvent['sensitivity'],
+        actor: { kind: 'agent', ...(args.role ? { role: args.role } : {}) },
+      });
+      if (format === 'json') {
+        writeJson(written);
+      } else {
+        writeHuman(`Captured observation ${written.event_id}`);
+        writeHuman(`  type:       ${written.event_type}`);
+        writeHuman(`  confidence: ${written.confidence_kind}`);
+        writeHuman(`  status:     ${written.status}`);
+      }
+    } catch (err) {
+      if (err instanceof MemoryEventExistsError) {
+        writeError(err.message);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/invalid|expected|required/i.test(msg)) {
+        writeError(`memory capture failed: ${msg}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory capture failed: ${msg}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 const memoryMeasure = defineCommand({
   meta: {
     name: 'measure',
@@ -1370,6 +1479,7 @@ export const memoryCommand = defineCommand({
     usage: memoryUsage,
     propose: memoryPropose,
     'propose-finding': memoryProposeFinding,
+    capture: memoryCapture,
     measure: memoryMeasure,
     approve: memoryApprove,
   },

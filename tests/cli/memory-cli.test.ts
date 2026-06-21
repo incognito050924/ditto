@@ -1030,3 +1030,169 @@ describe('ditto memory measure (§8 inc.5, ac-5 — hallucination baseline)', ()
     expect(r.exitCode).toBe(65);
   });
 });
+
+describe('ditto memory capture (data-dependent case, wi_260621r2m)', () => {
+  // Scan one code file so a source_type='code' MemorySource exists, then return
+  // its src_ id (the capture's code-path grounding, ac-1 finding-B floor).
+  async function scanCodeSource(): Promise<string> {
+    await writeFile(
+      join(dir, 'feature.ts'),
+      'export const branch = (x: number) => (x > 0 ? 1 : 2);\n',
+    );
+    const scan = ditto(['memory', 'scan', '--output', 'json']);
+    expect(scan.exitCode).toBe(0);
+    const added: string[] = JSON.parse(scan.stdout).added;
+    expect(added.length).toBeGreaterThanOrEqual(1);
+    return added[0];
+  }
+
+  // ac-1: capture → INFERRED + pending + ≥1 code source. The agent claims a fact
+  // (EXTRACTED) but it is stored as a guess (INFERRED), and it stays pending.
+  test('capture records an INFERRED, pending observation bound to a code source (ac-1)', async () => {
+    const src = await scanCodeSource();
+    const r = ditto([
+      'memory',
+      'capture',
+      '--text',
+      'with an empty input list the loop never runs and total stays 0',
+      '--source',
+      src,
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(0);
+    const ev = JSON.parse(r.stdout);
+    expect(ev.event_type).toBe('observation');
+    expect(ev.confidence_kind).toBe('INFERRED');
+    expect(ev.status).toBe('pending');
+    expect(ev.sources).toContain(src);
+    expect(ev.sources.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // ac-1 regression: an agent-actor EXTRACTED claim is downgraded to INFERRED
+  // (laundering guard in proposeEvent, reused — never stored as fact).
+  test('agent EXTRACTED claim is stored INFERRED, never as fact (ac-1)', async () => {
+    const src = await scanCodeSource();
+    const r = ditto([
+      'memory',
+      'capture',
+      '--text',
+      'negative quantity yields a refund branch',
+      '--source',
+      src,
+      '--confidence',
+      'EXTRACTED',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(0);
+    expect(JSON.parse(r.stdout).confidence_kind).toBe('INFERRED');
+  });
+
+  // ac-1 negative: a capture with no code source is rejected (CLI-layer floor).
+  test('capture with no source is rejected (usage error)', async () => {
+    await scanCodeSource();
+    const r = ditto([
+      'memory',
+      'capture',
+      '--text',
+      'some data-dependent behavior',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(65);
+  });
+
+  // ac-1 negative: a capture whose only source is non-code (markdown) is rejected
+  // — the floor checks the bound source resolves to source_type='code'.
+  test('capture bound only to a non-code source is rejected (usage error)', async () => {
+    await writeFile(join(dir, 'notes.md'), '# notes\n\nsome prose about behavior\n');
+    const scan = ditto(['memory', 'scan', '--output', 'json']);
+    expect(scan.exitCode).toBe(0);
+    const mdSrc: string = JSON.parse(scan.stdout).added[0];
+    const r = ditto([
+      'memory',
+      'capture',
+      '--text',
+      'data-dependent behavior',
+      '--source',
+      mdSrc,
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(65);
+  });
+
+  // ac-2 round-trip: capture → approve → the event is retrievable via memory query
+  // (deterministic body-search round-trip over the approved head).
+  test('after approve the captured event is retrievable via memory query (ac-2)', async () => {
+    const src = await scanCodeSource();
+    const captured = ditto([
+      'memory',
+      'capture',
+      '--text',
+      'sentinelTokenZyx marks the empty-batch branch',
+      '--source',
+      src,
+      '--output',
+      'json',
+    ]);
+    expect(captured.exitCode).toBe(0);
+    const id = JSON.parse(captured.stdout).event_id;
+
+    const approved = ditto([
+      'memory',
+      'approve',
+      id,
+      '--by',
+      'user',
+      '--actor',
+      'user',
+      '--output',
+      'json',
+    ]);
+    expect(approved.exitCode).toBe(0);
+    const approvedId = JSON.parse(approved.stdout).decision.event_id;
+
+    const q = ditto(['memory', 'query', 'sentinelTokenZyx', '--text', '--output', 'json']);
+    expect(q.exitCode).toBe(0);
+    const out = JSON.parse(q.stdout);
+    const ids = out.matches.map((m: { event_id: string }) => m.event_id);
+    expect(ids).toContain(approvedId);
+  });
+
+  // ac-3: a pending (pre-approve) capture is NOT served — absent from query
+  // (approved-only reduce). Pending knowledge never leaks into answers.
+  test('a pending capture is absent from query before approval (ac-3)', async () => {
+    const src = await scanCodeSource();
+    const captured = ditto([
+      'memory',
+      'capture',
+      '--text',
+      'sentinelPendingQqq marks a pre-approval branch',
+      '--source',
+      src,
+      '--output',
+      'json',
+    ]);
+    expect(captured.exitCode).toBe(0);
+
+    const q = ditto(['memory', 'query', 'sentinelPendingQqq', '--text', '--output', 'json']);
+    expect(q.exitCode).toBe(0);
+    expect(JSON.parse(q.stdout).matches.length).toBe(0);
+  });
+
+  // ac-4: the capture path adds no new event_type — memoryEventType enum is
+  // unchanged. Snapshot diff over the canonical option list.
+  test('memoryEventType enum options are unchanged (ac-4)', async () => {
+    const { memoryEventType } = await import('~/schemas/memory-event');
+    expect(memoryEventType.options).toEqual([
+      'decision',
+      'observation',
+      'preference',
+      'review_outcome',
+      'analysis',
+      'correction',
+    ]);
+  });
+});
