@@ -6,6 +6,13 @@ import type { Autopilot } from '~/schemas/autopilot';
 import type { IntentContract } from '~/schemas/intent';
 import { userConfirmation } from '~/schemas/interview-state';
 import {
+  type TechSpecRound,
+  type TechSpecRoundPayload,
+  techSpecRound,
+  techSpecRoundPayload,
+} from '~/schemas/tech-spec-round';
+import {
+  type QuestionConfig,
   type SpecSectionId as SchemaSectionId,
   type TechSpecState,
   specGroundingEvidence,
@@ -16,12 +23,12 @@ import { bootstrapAutopilot } from './autopilot-bootstrap';
 import { type GateResult, type RiskAxes, interviewReadinessGate } from './gates';
 import { IntentStore } from './intent-store';
 import { InterviewStore } from './interview-store';
+import { resolveQuestionConfig } from './tech-spec-options';
 import { TechSpecStore } from './tech-spec-store';
 import { WorkItemStore } from './work-item-store';
 
 /**
- * tech-spec driver — the hard half of the `ditto:tech-spec` surface
- * (design: reports/design/tech-spec-surface-design.md §8).
+ * tech-spec driver — the hard half of the `ditto:tech-spec` surface.
  *
  * The spec document is the single source; `intent.json` is compiled from it at
  * finalize, one-way (no sync back). This module owns:
@@ -279,6 +286,8 @@ export interface StartTechSpecInput {
   workItemId: string;
   docPath: string;
   mode?: 'stepwise' | 'oneshot';
+  /** Resolved §6-6 question tuning (wi_260619yfw). Omitted ⇒ schema defaults (= current behavior). */
+  questionConfig?: QuestionConfig;
   now?: Date;
 }
 
@@ -294,6 +303,7 @@ export async function startTechSpec(
     doc_path: input.docPath,
     mode: input.mode ?? 'stepwise',
     sections: [],
+    question_config: input.questionConfig ?? resolveQuestionConfig({}),
     finalized: null,
     updated_at: nowIso,
   });
@@ -325,6 +335,121 @@ export async function recordSection(
       ? [...state.sections, record]
       : state.sections.map((s, i) => (i === idx ? record : s));
   return store.write({ ...state, sections, updated_at: nowIso });
+}
+
+// ── record-round (증분 3 — 다중-에이전트 질문 워크플로의 점수 영속 sink) ──
+
+/** The driver records one gate round's scores; ts + work_item_id are stamped on persist. */
+export const recordRoundPayload = techSpecRoundPayload;
+export type RecordRoundPayload = TechSpecRoundPayload;
+
+export interface RecordRoundInput {
+  workItemId: string;
+  payload: RecordRoundPayload;
+  now?: Date;
+}
+
+/**
+ * Append one question-round's gate scores to tech-spec-rounds.jsonl (the durable
+ * score trail). Independent of tech-spec-state — rounds run during the interview,
+ * before finalize. `ditto doctor intent-quality` reads the trail as the question-
+ * VALUE signal. Requires the work item to exist.
+ */
+export async function recordRound(
+  repoRoot: string,
+  input: RecordRoundInput,
+): Promise<TechSpecRound> {
+  const store = new WorkItemStore(repoRoot);
+  if (!(await store.exists(input.workItemId))) {
+    throw new Error(`work item ${input.workItemId} not found`);
+  }
+  const record: TechSpecRound = techSpecRound.parse({
+    ts: (input.now ?? new Date()).toISOString(),
+    work_item_id: input.workItemId,
+    ...input.payload,
+  });
+  await store.appendTechSpecRoundLine(input.workItemId, JSON.stringify(record));
+  return record;
+}
+
+// ── next-round (옵션 enforcement seam — 매 라운드 levers 하달 + cap 신호) ──
+
+export interface NextRoundInput {
+  workItemId: string;
+}
+
+/**
+ * What `ditto tech-spec next-round` hands the driver at the top of each round.
+ * Read-only/deterministic: it reads the persisted `question_config` (the levers
+ * the SKILL §6-6 loop must obey) and `tech-spec-rounds.jsonl` (the rounds
+ * recorded so far), then signals whether an opt-in cap is reached. It does NOT
+ * spawn generators — that stays an agent action (single-level delegation,
+ * structurally un-enforceable); next-round only relays values + the stop signal.
+ * cap counting reuses the existing round trail, so no duplicate counter state.
+ *
+ * Enforcement boundary (deliberate): the numeric cap (max_rounds/max_questions
+ * counts) is the ONLY thing code decides deterministically. The quality levers —
+ * intensity-derived `threshold`, `granularity`, `count_hint` — are relayed as
+ * anchors the `question-gate` agent obeys with judgment, NOT a mechanical score
+ * cutoff. Quality (is this question meaningful at this intensity?) is not
+ * quantifiable here; forcing it into a deterministic gate would degrade the
+ * selection, so it stays the agent's call. Code enforces counts; the agent is
+ * driven (by SKILL §6-6) to honor the quality dial.
+ */
+export interface NextRoundResult {
+  round: number;
+  generators: number;
+  threshold: number;
+  granularity: QuestionConfig['granularity'];
+  generator_effort: QuestionConfig['generator_effort'];
+  gate_mode: QuestionConfig['gate_mode'];
+  count_hint: number;
+  max_rounds: number;
+  max_questions: number;
+  rounds_so_far: number;
+  questions_so_far: number;
+  cap_reached: boolean;
+  cap_reason: 'max_rounds' | 'max_questions' | null;
+}
+
+export async function nextRound(repoRoot: string, input: NextRoundInput): Promise<NextRoundResult> {
+  const techStore = new TechSpecStore(repoRoot);
+  if (!(await techStore.exists(input.workItemId))) {
+    throw new Error(
+      `tech-spec was never started for ${input.workItemId} — run 'ditto tech-spec start' first`,
+    );
+  }
+  const cfg = (await techStore.get(input.workItemId)).question_config;
+  const rounds = await new WorkItemStore(repoRoot).readTechSpecRounds(input.workItemId);
+  const rounds_so_far = rounds.length;
+  const questions_so_far = rounds.reduce((n, r) => n + r.selected.length, 0);
+
+  // Opt-in caps: 0 = unlimited (the default → cap never fires → current
+  // score-based termination preserved). max_rounds checked before max_questions
+  // so the reason is deterministic when both ceilings are hit at once.
+  const roundCapHit = cfg.max_rounds > 0 && rounds_so_far >= cfg.max_rounds;
+  const questionCapHit = cfg.max_questions > 0 && questions_so_far >= cfg.max_questions;
+  const cap_reason: NextRoundResult['cap_reason'] = roundCapHit
+    ? 'max_rounds'
+    : questionCapHit
+      ? 'max_questions'
+      : null;
+
+  return {
+    round: rounds_so_far + 1,
+    generators: cfg.generators,
+    threshold: cfg.threshold,
+    granularity: cfg.granularity,
+    generator_effort: cfg.generator_effort,
+    gate_mode: cfg.gate_mode,
+    count_hint: cfg.count_hint,
+    max_rounds: cfg.max_rounds,
+    max_questions: cfg.max_questions,
+    rounds_so_far,
+    questions_so_far,
+    cap_reached: cap_reason !== null,
+    cap_reason,
+  };
 }
 
 // ── finalize (tech-spec 전용 — deep-interview finalize 재사용 불가, design §8) ──

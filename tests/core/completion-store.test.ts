@@ -2,8 +2,12 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CompletionStore, buildCompletion } from '~/core/completion-store';
-import { completionGate } from '~/core/gates';
+import {
+  CompletionStore,
+  assembleCompletionFromWorkItem,
+  buildCompletion,
+} from '~/core/completion-store';
+import { completionEvidenceGate, completionGate } from '~/core/gates';
 import { WorkItemStore } from '~/core/work-item-store';
 
 let repo: string;
@@ -105,5 +109,49 @@ describe('CompletionStore', () => {
     await store.write(completion);
     expect(await store.exists(wi.id)).toBe(true);
     expect((await store.get(wi.id)).final_verdict).toBe('pass');
+  });
+});
+
+describe('assembleCompletionFromWorkItem (lightweight path, wi_2606200ec)', () => {
+  test('all ACs pass with real evidence → final_verdict=pass and gates clear', async () => {
+    const base = await workItem();
+    const verified = await new WorkItemStore(repo).update(base.id, (cur) => ({
+      ...cur,
+      acceptance_criteria: cur.acceptance_criteria.map((c) => ({
+        ...c,
+        verdict: 'pass' as const,
+        evidence: [{ kind: 'command' as const, command: 'echo ok', summary: 'exit 0' }],
+      })),
+    }));
+    const completion = assembleCompletionFromWorkItem(verified, {
+      declaredBy: 'main',
+      summary: 's',
+    });
+    expect(completion.final_verdict).toBe('pass');
+    expect(completionGate(verified, completion).pass).toBe(true);
+    expect(completionEvidenceGate(completion).pass).toBe(true);
+  });
+
+  test('an unverified AC → final_verdict not pass', async () => {
+    const base = await workItem(); // ac-1/ac-2 unverified
+    const completion = assembleCompletionFromWorkItem(base, { declaredBy: 'main', summary: 's' });
+    expect(completion.final_verdict).not.toBe('pass');
+  });
+
+  test('pass verdict but evidence is only a note → evidence gate rejects (no false-green)', async () => {
+    const base = await workItem();
+    const acked = await new WorkItemStore(repo).update(base.id, (cur) => ({
+      ...cur,
+      acceptance_criteria: cur.acceptance_criteria.map((c) => ({
+        ...c,
+        verdict: 'pass' as const,
+        evidence: [{ kind: 'note' as const, summary: 'looks good' }],
+      })),
+    }));
+    const completion = assembleCompletionFromWorkItem(acked, { declaredBy: 'main', summary: 's' });
+    // buildCompletion derives pass from verdicts...
+    expect(completion.final_verdict).toBe('pass');
+    // ...but the ack-only evidence is caught by the evidence gate.
+    expect(completionEvidenceGate(completion).pass).toBe(false);
   });
 });

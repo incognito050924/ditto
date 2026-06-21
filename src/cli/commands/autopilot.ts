@@ -12,7 +12,6 @@ import { checkE2eCompletionGate } from '~/core/e2e/completion-gate';
 import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { intentDriftGate, interfaceBaselineDriftGate } from '~/core/gates';
-import { listChangedFiles } from '~/core/git';
 import { IntentStore } from '~/core/intent-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import { coverageRoundPayload } from '~/schemas/coverage';
@@ -643,12 +642,17 @@ const autopilotIntentDrift = defineCommand({
       });
       // ac-5 (wi_260614z7r): consume the FROZEN temporal baseline the coverage
       // engine produced (approval_gate.change_surface, set by producePlanGate at
-      // plan stage) and flag an unconsented interface/scope change against it. The
-      // current surface is the real working-tree change set; the comparison reuses
-      // the temporal axis mechanism (interfaceBaselineDriftGate → temporal.enforce).
-      // No frozen baseline ⇒ no-op pass (brief regime inactive). This is the
-      // enforcement seam the engine deliberately leaves to reviewer/verifier.
-      const currentSurface = listChangedFiles(repoRoot, { excludeDittoRuns: true });
+      // plan stage) and flag an unconsented interface/scope change against it.
+      // The current surface is THIS work item's own changed_files (the files its
+      // nodes actually touched, unioned by record-result; autopilot-loop.ts ~983),
+      // NOT the whole working tree — autopilot does not assume per-work-item
+      // worktree isolation, so a sibling work item's uncommitted changes in the
+      // same tree must not be falsely flagged as this work item's scope grow
+      // (wi_260619qdx). The comparison reuses the temporal axis mechanism
+      // (interfaceBaselineDriftGate → temporal.enforce). No frozen baseline ⇒
+      // no-op pass (brief regime inactive). This is the enforcement seam the
+      // engine deliberately leaves to reviewer/verifier.
+      const currentSurface = workItem.changed_files;
       const surfaceDrift = interfaceBaselineDriftGate(
         graph.approval_gate.change_surface,
         currentSurface,

@@ -11,10 +11,14 @@ import {
   computeSpecDigest,
   finalizeTechSpec,
   finalizeTechSpecPayload,
+  nextRound,
+  recordRound,
+  recordRoundPayload,
   recordSection,
   recordSectionPayload,
   startTechSpec,
 } from '~/core/tech-spec';
+import { resolveQuestionConfig } from '~/core/tech-spec-options';
 import { TechSpecStore } from '~/core/tech-spec-store';
 import { WorkItemStore } from '~/core/work-item-store';
 
@@ -196,6 +200,38 @@ describe('startTechSpec / recordSection (ac-9)', () => {
     expect(await new TechSpecStore(repo).exists(wiId)).toBe(true);
   });
 
+  test('start persists the resolved question_config — defaults preserve current behavior (ac-6)', async () => {
+    const state = await startTechSpec(repo, { workItemId: wiId, docPath: '.ditto/specs/demo.md' });
+    const qc = state.question_config;
+    expect(qc.intensity).toBe(60);
+    expect(qc.generators).toBe(2);
+    expect(qc.performance).toBe('standard');
+    expect(qc.generator_effort).toBe('inherit');
+    expect(qc.gate_mode).toBe('confirm');
+    expect(qc.max_questions).toBe(0); // unlimited — current dry termination unchanged (ac-5)
+    expect(qc.max_rounds).toBe(0);
+    expect(qc.threshold).toBe(0.6); // intensity-60 anchor
+    expect(qc.granularity).toBe('medium');
+  });
+
+  test('start persists an explicitly resolved config (ac-3/4/5)', async () => {
+    const state = await startTechSpec(repo, {
+      workItemId: wiId,
+      docPath: '.ditto/specs/demo.md',
+      questionConfig: resolveQuestionConfig({
+        performance: 'deep',
+        intensity: 50,
+        max_questions: 4,
+        max_rounds: 2,
+      }),
+    });
+    const qc = state.question_config;
+    expect(qc.intensity).toBe(50); // explicit intensity beats the deep preset
+    expect(qc.generators).toBe(3); // deep preset
+    expect(qc.max_questions).toBe(4);
+    expect(qc.max_rounds).toBe(2);
+  });
+
   test('factual section without grounding evidence is rejected at the schema (ac-9)', () => {
     const parsed = recordSectionPayload.safeParse({
       section: { id: 'background', review: 'reviewed' },
@@ -349,5 +385,199 @@ describe('computeSpecDigest (해시 범위 = 컴파일 입력 섹션: 요약·�
     const doc = specDoc();
     const noisy = doc.replace(/\n/g, '\r\n').replace(/점수 API 제공/, '점수 API 제공   ');
     expect(computeSpecDigest(noisy)).toBe(computeSpecDigest(doc));
+  });
+});
+
+describe('recordRound (증분 3 — 점수 영속 sink)', () => {
+  let repo: string;
+  let wiId: string;
+
+  beforeEach(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'ditto-tsr-'));
+    const wi = await new WorkItemStore(repo).create({
+      title: 'demo',
+      source_request: 'demo',
+      goal: 'demo',
+      acceptance_criteria: [{ id: 'ac-1', statement: 'TBD', verdict: 'unverified', evidence: [] }],
+    });
+    wiId = wi.id;
+  });
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true });
+  });
+
+  const score = { consensus: 2, quality: 0.8, necessity: 0.7, answer_value: 0.9 };
+
+  test('appends a round to tech-spec-rounds.jsonl, stamping ts + work_item_id', async () => {
+    const payload = recordRoundPayload.parse({
+      round: 1,
+      section: 'background',
+      dry: false,
+      selected: [{ text: 'enforce JWT here?', property: 'blind-spot', scores: score }],
+      all_scored: [{ text: 'enforce JWT here?', property: 'blind-spot', scores: score }],
+    });
+    const record = await recordRound(repo, {
+      workItemId: wiId,
+      payload,
+      now: new Date('2026-06-19T05:00:00.000Z'),
+    });
+    expect(record.work_item_id).toBe(wiId);
+    expect(record.ts).toBe('2026-06-19T05:00:00.000Z');
+    const rounds = await new WorkItemStore(repo).readTechSpecRounds(wiId);
+    expect(rounds).toHaveLength(1);
+    expect(rounds[0]?.selected[0]?.scores.answer_value).toBe(0.9);
+    expect(rounds[0]?.generator_count).toBe(2); // --generators default 2 (wi_260619yfw)
+  });
+
+  test('multiple rounds append (not overwrite)', async () => {
+    await recordRound(repo, {
+      workItemId: wiId,
+      payload: recordRoundPayload.parse({
+        round: 1,
+        dry: false,
+        selected: [{ text: 'q', property: 'blind-spot', scores: score }],
+      }),
+    });
+    await recordRound(repo, {
+      workItemId: wiId,
+      payload: recordRoundPayload.parse({ round: 2, dry: true }),
+    });
+    const rounds = await new WorkItemStore(repo).readTechSpecRounds(wiId);
+    expect(rounds.map((r) => r.round)).toEqual([1, 2]);
+    expect(rounds[1]?.dry).toBe(true);
+  });
+
+  test('recording a round for a missing work item throws', async () => {
+    await expect(
+      recordRound(repo, {
+        workItemId: 'wi_doesnotexist',
+        payload: recordRoundPayload.parse({ round: 1, dry: true }),
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe('nextRound (옵션 enforcement seam — 매 라운드 levers 하달 + cap 신호)', () => {
+  let repo: string;
+  let wiId: string;
+
+  beforeEach(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'ditto-tsn-'));
+    const wi = await new WorkItemStore(repo).create({
+      title: 'demo',
+      source_request: 'demo',
+      goal: 'demo',
+      acceptance_criteria: [{ id: 'ac-1', statement: 'TBD', verdict: 'unverified', evidence: [] }],
+    });
+    wiId = wi.id;
+  });
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true });
+  });
+
+  const score = { consensus: 2, quality: 0.8, necessity: 0.7, answer_value: 0.9 };
+
+  // ── 슬라이스 A: levers 하달 (persist된 question_config를 그대로 반환) ──
+
+  test('returns persisted question_config levers and round=1 with no rounds yet (ac-1)', async () => {
+    await startTechSpec(repo, {
+      workItemId: wiId,
+      docPath: '.ditto/specs/demo.md',
+      questionConfig: resolveQuestionConfig({ generators: 4, intensity: 80, gate_mode: 'draft' }),
+    });
+    const r = await nextRound(repo, { workItemId: wiId });
+    expect(r.round).toBe(1);
+    expect(r.generators).toBe(4);
+    expect(r.gate_mode).toBe('draft');
+    expect(r.threshold).toBe(0.8); // intensity 80 → 0.8 (linear curve)
+    expect(r.granularity).toBe('high'); // intensity 80 → high
+    expect(r.rounds_so_far).toBe(0);
+    expect(r.questions_so_far).toBe(0);
+    expect(r.cap_reached).toBe(false);
+    expect(r.cap_reason).toBeNull();
+  });
+
+  test('next-round for a non-started tech-spec throws (ac-4)', async () => {
+    await expect(nextRound(repo, { workItemId: wiId })).rejects.toThrow();
+  });
+
+  // ── 슬라이스 B: cap 카운트 (기존 rounds.jsonl 재사용, 별도 counter 없음) ──
+
+  test('counts rounds_so_far / questions_so_far from the round trail (ac-2)', async () => {
+    await startTechSpec(repo, { workItemId: wiId, docPath: '.ditto/specs/demo.md' });
+    await recordRound(repo, {
+      workItemId: wiId,
+      payload: recordRoundPayload.parse({
+        round: 1,
+        dry: false,
+        selected: [
+          { text: 'q1', property: 'blind-spot', scores: score },
+          { text: 'q2', property: 'expansion', scores: score },
+        ],
+      }),
+    });
+    await recordRound(repo, {
+      workItemId: wiId,
+      payload: recordRoundPayload.parse({ round: 2, dry: true }),
+    });
+    const r = await nextRound(repo, { workItemId: wiId });
+    expect(r.rounds_so_far).toBe(2);
+    expect(r.questions_so_far).toBe(2); // 2 selected in round 1, 0 in round 2
+    expect(r.round).toBe(3);
+  });
+
+  test('max_rounds ceiling reached → cap_reached with reason (ac-3)', async () => {
+    await startTechSpec(repo, {
+      workItemId: wiId,
+      docPath: '.ditto/specs/demo.md',
+      questionConfig: resolveQuestionConfig({ max_rounds: 1 }),
+    });
+    await recordRound(repo, {
+      workItemId: wiId,
+      payload: recordRoundPayload.parse({ round: 1, dry: true }),
+    });
+    const r = await nextRound(repo, { workItemId: wiId });
+    expect(r.cap_reached).toBe(true);
+    expect(r.cap_reason).toBe('max_rounds');
+  });
+
+  test('max_questions ceiling reached → cap_reached with reason (ac-3)', async () => {
+    await startTechSpec(repo, {
+      workItemId: wiId,
+      docPath: '.ditto/specs/demo.md',
+      questionConfig: resolveQuestionConfig({ max_questions: 2 }),
+    });
+    await recordRound(repo, {
+      workItemId: wiId,
+      payload: recordRoundPayload.parse({
+        round: 1,
+        dry: false,
+        selected: [
+          { text: 'q1', property: 'blind-spot', scores: score },
+          { text: 'q2', property: 'expansion', scores: score },
+        ],
+      }),
+    });
+    const r = await nextRound(repo, { workItemId: wiId });
+    expect(r.cap_reached).toBe(true);
+    expect(r.cap_reason).toBe('max_questions');
+  });
+
+  test('caps default 0 = unlimited → never cap_reached (current behavior preserved) (ac-3)', async () => {
+    await startTechSpec(repo, { workItemId: wiId, docPath: '.ditto/specs/demo.md' });
+    for (const round of [1, 2, 3, 4, 5]) {
+      await recordRound(repo, {
+        workItemId: wiId,
+        payload: recordRoundPayload.parse({
+          round,
+          dry: false,
+          selected: [{ text: `q${round}`, property: 'blind-spot', scores: score }],
+        }),
+      });
+    }
+    const r = await nextRound(repo, { workItemId: wiId });
+    expect(r.cap_reached).toBe(false);
+    expect(r.cap_reason).toBeNull();
+    expect(r.rounds_so_far).toBe(5);
   });
 });

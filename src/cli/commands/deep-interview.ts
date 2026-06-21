@@ -1,4 +1,5 @@
 import { defineCommand } from 'citty';
+import { readDeepInterviewConfigDefaults } from '~/core/ditto-config';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   checkReadiness,
@@ -48,6 +49,11 @@ const startCmd = defineCommand({
       description: 'Maximum questions before exit=cap_reached (default 8)',
       required: false,
     },
+    generators: {
+      type: 'string',
+      description: 'Parallel question-generator fan-out count for the SKILL loop (default 1)',
+      required: false,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
@@ -59,22 +65,43 @@ const startCmd = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
-    const threshold = args.threshold === undefined ? undefined : Number(args.threshold);
+    const cliThreshold = args.threshold === undefined ? undefined : Number(args.threshold);
     if (
-      threshold !== undefined &&
-      (!Number.isFinite(threshold) || threshold < 0 || threshold > 1)
+      cliThreshold !== undefined &&
+      (!Number.isFinite(cliThreshold) || cliThreshold < 0 || cliThreshold > 1)
     ) {
       writeError(`--threshold must be a number in [0, 1]; got "${args.threshold}"`);
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
-    const questionCap = args.questionCap === undefined ? undefined : Number(args.questionCap);
-    if (questionCap !== undefined && (!Number.isInteger(questionCap) || questionCap <= 0)) {
+    const cliQuestionCap = args.questionCap === undefined ? undefined : Number(args.questionCap);
+    if (
+      cliQuestionCap !== undefined &&
+      (!Number.isInteger(cliQuestionCap) || cliQuestionCap <= 0)
+    ) {
       writeError(`--question-cap must be a positive integer; got "${args.questionCap}"`);
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
+    const cliGenerators = args.generators === undefined ? undefined : Number(args.generators);
+    if (cliGenerators !== undefined && (!Number.isInteger(cliGenerators) || cliGenerators <= 0)) {
+      writeError(`--generators must be a positive integer; got "${args.generators}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
     const repoRoot = await resolveRepoRootForCreate();
+    // Per-user defaults (.ditto/local/config.json `deep_interview`) fill absent CLI
+    // flags; an explicit flag still wins. Broken config is fail-open (start proceeds
+    // with code defaults) but warns, so a silently-ignored config doesn't look like
+    // it "did nothing".
+    const configDefaults = await readDeepInterviewConfigDefaults(repoRoot, () =>
+      writeError(
+        'warning: .ditto/local/config.json could not be parsed — ignoring it and using defaults',
+      ),
+    );
+    const threshold = cliThreshold ?? configDefaults.threshold;
+    const questionCap = cliQuestionCap ?? configDefaults.question_cap;
+    const generators = cliGenerators ?? configDefaults.generators;
     if (!(await new WorkItemStore(repoRoot).exists(args.workItem))) {
       writeError(`work item ${args.workItem} not found`);
       process.exit(RUNTIME_ERROR_EXIT);
@@ -84,6 +111,7 @@ const startCmd = defineCommand({
       workItemId: args.workItem,
       ...(threshold !== undefined ? { threshold } : {}),
       ...(questionCap !== undefined ? { questionCap } : {}),
+      ...(generators !== undefined ? { generators } : {}),
     });
     if (format === 'json') {
       writeJson({
@@ -91,12 +119,14 @@ const startCmd = defineCommand({
         status: state.status,
         threshold: state.readiness.threshold,
         question_cap: state.exit.question_cap,
+        generators: state.generators,
         path: `.ditto/local/work-items/${state.work_item_id}/interview-state.json`,
       });
     } else {
       writeHuman(`Started interview for ${state.work_item_id}`);
       writeHuman(`  threshold:    ${state.readiness.threshold}`);
       writeHuman(`  question_cap: ${state.exit.question_cap}`);
+      writeHuman(`  generators:   ${state.generators}`);
       writeHuman(
         `  path:         .ditto/local/work-items/${state.work_item_id}/interview-state.json`,
       );

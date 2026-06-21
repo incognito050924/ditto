@@ -5,6 +5,7 @@ import type { WorkItemSummary } from '~/core/work-item-store';
 import type { Autopilot } from '~/schemas/autopilot';
 import type { IntentMetric } from '~/schemas/intent-metric';
 import type { InterviewState } from '~/schemas/interview-state';
+import type { TechSpecRound } from '~/schemas/tech-spec-round';
 
 function summary(id: string, over: Partial<WorkItemSummary> = {}): WorkItemSummary {
   return {
@@ -55,6 +56,25 @@ function driftMetric(hops: ('H1' | 'H2' | 'H3')[]): IntentMetric {
   };
 }
 
+function techRound(over: Partial<TechSpecRound> = {}): TechSpecRound {
+  return {
+    ts: '2026-06-19T05:00:00.000Z',
+    work_item_id: 'wi_aaaaaaaa',
+    round: 1,
+    dry: false,
+    generator_count: 3,
+    selected: [
+      {
+        text: 'q',
+        property: 'blind-spot',
+        scores: { consensus: 2, quality: 0.8, necessity: 0.7, answer_value: 0.8 },
+      },
+    ],
+    all_scored: [],
+    ...over,
+  } as TechSpecRound;
+}
+
 function deps(over: Partial<IntentQualityDeps> = {}): IntentQualityDeps {
   return {
     listWorkItems: async () => [],
@@ -63,6 +83,7 @@ function deps(over: Partial<IntentQualityDeps> = {}): IntentQualityDeps {
     readDecisions: async () => [],
     countHandoffRounds: async () => 0,
     readMetrics: async () => [],
+    readTechSpecRounds: async () => [],
     ...over,
   };
 }
@@ -175,5 +196,50 @@ describe('collectIntentQualityReport', () => {
     expect(report.correlation.map((b) => b.quantile)).toEqual(['low', 'mid', 'high']);
     expect(report.correlation.every((b) => b.work_items === 0)).toBe(true);
     expect(report.correlation.every((b) => b.questions_range === null)).toBe(true);
+  });
+
+  test('tech-spec question-value signal maps onto the row (증분 3 — 점수 소비)', async () => {
+    const av = (v: number): TechSpecRound['selected'] => [
+      {
+        text: 'q',
+        property: 'blind-spot',
+        scores: { consensus: 2, quality: 0.8, necessity: 0.7, answer_value: v },
+      },
+    ];
+    const report = await collectIntentQualityReport(
+      deps({
+        listWorkItems: async () => [summary('wi_aaaaaaaa')],
+        readTechSpecRounds: async () => [
+          techRound({ round: 1, dry: false, selected: av(0.8) }),
+          techRound({ round: 2, dry: false, selected: av(0.4) }),
+        ],
+      }),
+    );
+    const row = report.rows[0];
+    expect(row.tech_spec_rounds).toBe(2);
+    expect(row.tech_spec_selected).toBe(2);
+    expect(row.tech_spec_dry_rounds).toBe(0);
+    expect(row.tech_spec_mean_answer_value).toBeCloseTo(0.6, 5); // (0.8 + 0.4)/2
+    expect(report.totals.total_tech_spec_rounds).toBe(2);
+  });
+
+  test('dry rounds counted; absent tech-spec rounds → zeroed signal, null mean (fail-open)', async () => {
+    const withDry = await collectIntentQualityReport(
+      deps({
+        listWorkItems: async () => [summary('wi_aaaaaaaa')],
+        readTechSpecRounds: async () => [techRound({ round: 1, dry: true, selected: [] })],
+      }),
+    );
+    expect(withDry.rows[0].tech_spec_rounds).toBe(1);
+    expect(withDry.rows[0].tech_spec_dry_rounds).toBe(1);
+    expect(withDry.rows[0].tech_spec_selected).toBe(0);
+    expect(withDry.rows[0].tech_spec_mean_answer_value).toBeNull();
+
+    const absent = await collectIntentQualityReport(
+      deps({ listWorkItems: async () => [summary('wi_bbbbbbbb')] }),
+    );
+    expect(absent.rows[0].tech_spec_rounds).toBe(0);
+    expect(absent.rows[0].tech_spec_mean_answer_value).toBeNull();
+    expect(absent.totals.total_tech_spec_rounds).toBe(0);
   });
 });

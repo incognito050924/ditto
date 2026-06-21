@@ -68,7 +68,10 @@ export async function bootstrapAutopilot(
     reasons.push('intent has no acceptance criteria');
   }
   for (const ac of input.intent.acceptance_criteria) {
-    const t = acceptanceTestable({ statement: ac.statement });
+    const t = acceptanceTestable({
+      statement: ac.statement,
+      evidence_required: ac.evidence_required,
+    });
     if (!t.pass) reasons.push(`criterion ${ac.id} not testable: ${t.reasons.join('; ')}`);
   }
   if (reasons.length > 0) return { status: 'intent_not_ready', reasons };

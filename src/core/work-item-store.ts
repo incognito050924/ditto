@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { type IntentMetric, intentMetric } from '~/schemas/intent-metric';
 import { languageLedger } from '~/schemas/language-ledger';
+import { type TechSpecRound, techSpecRound } from '~/schemas/tech-spec-round';
 import { type WorkItem, workItem } from '~/schemas/work-item';
 import { localDir } from './ditto-paths';
 import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
@@ -260,6 +261,28 @@ export class WorkItemStore {
       .split('\n')
       .filter((line) => line.trim().length > 0)
       .map((line) => intentMetric.parse(JSON.parse(line)));
+  }
+
+  private techSpecRoundsPath(workItemId: string): string {
+    // Root level (sibling of metrics.jsonl), not under evidence/: a question-score
+    // trail is measurement instrumentation, not per-AC work evidence (ADR-0005 D1).
+    return join(this.workItemDir(workItemId), 'tech-spec-rounds.jsonl');
+  }
+
+  /** Append one tech-spec question-round line. Caller pre-serializes (mirrors appendMetricLine). */
+  async appendTechSpecRoundLine(workItemId: string, jsonLine: string): Promise<void> {
+    return this.appendJsonlAtPath(this.techSpecRoundsPath(workItemId), jsonLine);
+  }
+
+  /** Read tech-spec-rounds.jsonl, schema-validating each line. Absent file → empty. */
+  async readTechSpecRounds(workItemId: string): Promise<TechSpecRound[]> {
+    const file = Bun.file(this.techSpecRoundsPath(workItemId));
+    if (!(await file.exists())) return [];
+    const text = await file.text();
+    return text
+      .split('\n')
+      .filter((line) => line.trim().length > 0)
+      .map((line) => techSpecRound.parse(JSON.parse(line)));
   }
 }
 

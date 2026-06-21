@@ -7,6 +7,8 @@ import { boundaryCommand } from './commands/boundary';
 import { bridgeCommand } from './commands/bridge';
 import { changeContractCommand } from './commands/change-contract';
 import { changeMapCommand } from './commands/change-map';
+import { classifyCommand } from './commands/classify';
+import { cleanupCommand } from './commands/cleanup';
 import { codeqlCommand } from './commands/codeql';
 import { contextCommand } from './commands/context';
 import { decisionConflictCommand } from './commands/decision-conflict';
@@ -62,6 +64,8 @@ const main = defineCommand({
     architecture: architectureCommand,
     'change-contract': changeContractCommand,
     'change-map': changeMapCommand,
+    classify: classifyCommand,
+    cleanup: cleanupCommand,
     semantic: semanticCommand,
     refactor: refactorCommand,
     review: reviewCommand,

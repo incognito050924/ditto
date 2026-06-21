@@ -4,6 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 import { fileExists } from '~/core/hosts/shared';
+import {
+  checkCodexInstructions,
+  compareClaudeProjection,
+  loadProjection,
+  loadSource,
+} from '~/core/instruction-bridge';
 import { ALLOW_RULE } from '~/core/settings-allowlist';
 import { setup } from '~/core/setup';
 
@@ -87,10 +93,12 @@ describe('setup', () => {
       // project resources land in projectRoot with a managed block
       const claude = await readFile(join(d.projectRoot, 'CLAUDE.md'), 'utf8');
       const agents = await readFile(join(d.projectRoot, 'AGENTS.md'), 'utf8');
-      expect(claude).toMatch(MANAGED_START);
-      expect(claude).toContain('CLAUDE charter body');
-      expect(agents).toMatch(MANAGED_START);
+      // AGENTS.md is the raw canonical source; CLAUDE.md is a managed projection
+      // that mirrors it (not the bundled CLAUDE.md copy).
+      expect(agents).not.toMatch(MANAGED_START);
       expect(agents).toContain('AGENTS charter body');
+      expect(claude).toMatch(MANAGED_START);
+      expect(claude).toContain('AGENTS charter body');
 
       // GLOBAL_ prefix strips to <homeDir>/.claude/FOO.md
       const globalFoo = await readFile(join(d.homeDir, '.claude', 'FOO.md'), 'utf8');
@@ -111,6 +119,48 @@ describe('setup', () => {
       // every resource written cleanly
       expect(result.resources.every((r) => r.status === 'written')).toBe(true);
       expect(result.resources).toHaveLength(3);
+    } finally {
+      await cleanup(d);
+    }
+  });
+
+  test('project CLAUDE.md is a doctor-valid managed projection of a raw AGENTS.md source', async () => {
+    const d = await freshDirs();
+    try {
+      await setup({ ...d, now: NOW });
+
+      // The canonical source (AGENTS.md) is raw — no managed block. doctor mirrors
+      // AGENTS.md verbatim into CLAUDE.md, so wrapping the source would break the
+      // sha/content match and (on a pre-existing source) duplicate the charter.
+      const agents = await readFile(join(d.projectRoot, 'AGENTS.md'), 'utf8');
+      expect(agents).not.toMatch(MANAGED_START);
+      expect(agents).toBe('AGENTS charter body\n');
+
+      // CLAUDE.md is sourced from AGENTS.md and mirrors it — zero doctor findings.
+      const source = await loadSource(d.projectRoot);
+      const projection = await loadProjection(d.projectRoot);
+      expect(checkCodexInstructions(source)).toEqual([]);
+      expect(compareClaudeProjection(source, projection)).toEqual([]);
+    } finally {
+      await cleanup(d);
+    }
+  });
+
+  test('does not overwrite a pre-existing authored AGENTS.md source', async () => {
+    const d = await freshDirs();
+    try {
+      await writeFile(join(d.projectRoot, 'AGENTS.md'), 'AUTHORED canonical charter\n');
+      await setup({ ...d, now: NOW });
+
+      // create-if-missing: an existing source is kept, never clobbered by the bundle…
+      const agents = await readFile(join(d.projectRoot, 'AGENTS.md'), 'utf8');
+      expect(agents).toBe('AUTHORED canonical charter\n');
+      expect(agents).not.toMatch(MANAGED_START);
+
+      // …and CLAUDE.md still projects whatever the on-disk source actually is.
+      const source = await loadSource(d.projectRoot);
+      const projection = await loadProjection(d.projectRoot);
+      expect(compareClaudeProjection(source, projection)).toEqual([]);
     } finally {
       await cleanup(d);
     }
@@ -162,15 +212,15 @@ describe('setup', () => {
       const result = await setup({ ...d, now: NOW, host: 'codex', pluginRoot: d.pluginRoot });
       await setup({ ...d, now: NOW, host: 'codex', pluginRoot: d.pluginRoot });
 
+      // AGENTS.md is the raw canonical source (no managed block), kept across re-runs.
       const agents = await readFile(join(d.projectRoot, 'AGENTS.md'), 'utf8');
-      expect(agents).toMatch(MANAGED_START);
-      expect(agents).toContain('PROJECT AGENTS charter body');
-      expect((agents.match(MANAGED_START) ?? []).length).toBe(1);
+      expect(agents).not.toMatch(MANAGED_START);
+      expect(agents).toBe('PROJECT AGENTS charter body\n');
       expect(await fileExists(join(d.projectRoot, 'CLAUDE.md'))).toBe(false);
 
       const globalAgents = await readFile(join(d.homeDir, '.codex', 'AGENTS.md'), 'utf8');
-      expect(globalAgents).toMatch(MANAGED_START);
-      expect(globalAgents).toContain('GLOBAL AGENTS charter body');
+      expect(globalAgents).not.toMatch(MANAGED_START);
+      expect(globalAgents).toBe('GLOBAL AGENTS charter body\n');
       expect(await fileExists(join(d.homeDir, '.claude', 'AGENTS.md'))).toBe(false);
 
       expect(result.allowlistApplied).toBe(false);

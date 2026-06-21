@@ -1,5 +1,5 @@
 import { cp, readFile, rm, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { atomicWriteText, ensureDir } from './fs';
 import { codexHostAdapter } from './hosts/codex';
 import { fileExists, listDirectories, listFiles, readJsonIfExists } from './hosts/shared';
@@ -34,7 +34,7 @@ export interface ResourceOutcome {
   filename: string;
   scope: RoutingScope;
   destPath: string;
-  status: 'written' | 'corrupted';
+  status: 'written' | 'kept' | 'corrupted';
   backupPath: string | null;
 }
 
@@ -318,6 +318,63 @@ async function installCodexSurface(opts: {
 }
 
 /**
+ * Install one bundled instruction resource by the role of its destination:
+ *
+ *  - `AGENTS.md` is the canonical, host-agnostic SOURCE. It is written raw (no
+ *    managed block) and create-if-missing, so an authored charter is never
+ *    clobbered by the bundled snapshot nor duplicated by appending a block after
+ *    pre-existing raw content.
+ *  - `CLAUDE.md` is a PROJECTION of the sibling AGENTS.md: a single managed block
+ *    `source=AGENTS.md` whose body mirrors the on-disk AGENTS.md verbatim. This is
+ *    exactly what `ditto doctor instructions` requires (markerSource=AGENTS.md and
+ *    body sha == AGENTS.md sha), so it must read the installed source, not the
+ *    bundled CLAUDE.md copy.
+ *  - anything else keeps the generic managed-block install.
+ */
+async function installResource(
+  decision: ResourceInstallDecision,
+  resourcesDir: string,
+): Promise<ResourceOutcome> {
+  const common = {
+    host: decision.host,
+    filename: decision.filename,
+    scope: decision.scope,
+    destPath: decision.destPath,
+  };
+  const name = basename(decision.destPath);
+
+  if (name === 'AGENTS.md') {
+    const existed = await fileExists(decision.destPath);
+    if (!existed) {
+      const body = await readFile(join(resourcesDir, decision.filename), 'utf8');
+      await atomicWriteText(decision.destPath, body);
+    }
+    return { ...common, status: existed ? 'kept' : 'written', backupPath: null };
+  }
+
+  if (name === 'CLAUDE.md') {
+    const sourcePath = join(dirname(decision.destPath), 'AGENTS.md');
+    const projectionBody = (await fileExists(sourcePath))
+      ? await readFile(sourcePath, 'utf8')
+      : await readFile(join(resourcesDir, decision.filename), 'utf8');
+    const applied = await applyManagedFile(decision.destPath, projectionBody, 'AGENTS.md');
+    return {
+      ...common,
+      status: applied.kind === 'ok' ? 'written' : 'corrupted',
+      backupPath: applied.kind === 'ok' ? applied.backupPath : null,
+    };
+  }
+
+  const body = await readFile(join(resourcesDir, decision.filename), 'utf8');
+  const applied = await applyManagedFile(decision.destPath, body, decision.filename);
+  return {
+    ...common,
+    status: applied.kind === 'ok' ? 'written' : 'corrupted',
+    backupPath: applied.kind === 'ok' ? applied.backupPath : null,
+  };
+}
+
+/**
  * Discover bundled resources, route + merge each into its destination as a
  * managed block, scaffold `.ditto/` under the project, and allowlist the
  * project settings file.
@@ -326,18 +383,17 @@ export async function setup(opts: SetupOptions): Promise<SetupResult> {
   const { resourcesDir, projectRoot, homeDir, now } = opts;
   const hosts = setupHosts(opts.host);
 
+  const decisions = resourceDecisions(resourcesDir, projectRoot, homeDir, hosts);
+  // Install canonical sources (AGENTS.md) and generic resources first so each
+  // CLAUDE.md projection can mirror its sibling on-disk AGENTS.md.
+  const ordered = [
+    ...decisions.filter((d) => basename(d.destPath) !== 'CLAUDE.md'),
+    ...decisions.filter((d) => basename(d.destPath) === 'CLAUDE.md'),
+  ];
+
   const resources: ResourceOutcome[] = [];
-  for (const decision of resourceDecisions(resourcesDir, projectRoot, homeDir, hosts)) {
-    const body = await readFile(join(resourcesDir, decision.filename), 'utf8');
-    const applied = await applyManagedFile(decision.destPath, body, decision.filename);
-    resources.push({
-      host: decision.host,
-      filename: decision.filename,
-      scope: decision.scope,
-      destPath: decision.destPath,
-      status: applied.kind === 'ok' ? 'written' : 'corrupted',
-      backupPath: applied.kind === 'ok' ? applied.backupPath : null,
-    });
+  for (const decision of ordered) {
+    resources.push(await installResource(decision, resourcesDir));
   }
 
   const scaffold = await initScaffold(projectRoot, now);

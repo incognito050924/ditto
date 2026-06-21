@@ -475,13 +475,13 @@ const intentQualityCommand = defineCommand({
         writeHuman('intent-quality: no work items');
       } else {
         writeHuman(
-          'work_item\tquestions\tclosure\treadiness\tfix\trework\tretry/switch\thandoff\tdrift\tpost_cost',
+          'work_item\tquestions\tclosure\treadiness\tfix\trework\tretry/switch\thandoff\tdrift\tpost_cost\ttspec_rounds\ttspec_q',
         );
         for (const r of rows) {
           writeHuman(
             `${r.work_item_id}\t${r.questions_asked ?? '-'}\t${r.closure_mode ?? '-'}\t${
               r.readiness_score ?? '-'
-            }\t${r.fix_nodes}\t${r.rework_attempts}\t${r.retry_switch_decisions}\t${r.handoff_rounds}\t${r.drift_events}\t${r.post_cost}`,
+            }\t${r.fix_nodes}\t${r.rework_attempts}\t${r.retry_switch_decisions}\t${r.handoff_rounds}\t${r.drift_events}\t${r.post_cost}\t${r.tech_spec_rounds}\t${r.tech_spec_mean_answer_value ?? '-'}`,
           );
         }
         // D4 correlation only makes sense over the full interviewed set, so it is

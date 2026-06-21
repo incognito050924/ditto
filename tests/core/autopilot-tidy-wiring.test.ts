@@ -356,7 +356,10 @@ describe('tidy DoD replay (WU-3 ac-3: replay node carries the DoD + reports fitn
         ac_verdicts: [
           { criterion_id: 'ac-1', verdict: 'pass', notes: 'DoD replay green after tidy' },
         ],
-        evidence_refs: [],
+        // ac-closing evidence guard (wi_260619zqa): a pass-verdict criterion must
+        // carry evidence — the replay's exit-0 run is the proof, recorded as a
+        // command evidenceRef (was [] under the old false-green-tolerant behavior).
+        evidence_refs: [{ kind: 'command', command: 'bun test (DoD replay)', summary: 'exit 0' }],
       },
     });
     expect(res.status).toBe('passed');

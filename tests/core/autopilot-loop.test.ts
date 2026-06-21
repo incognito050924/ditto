@@ -1438,3 +1438,204 @@ describe('nextNode main-session (e2e-author) node — wi_260610p9h g5', () => {
     expect(after.nodes.find((n) => n.id === 'E1')?.status).toBe('passed');
   });
 });
+
+describe('recordResult ac-closing evidence guard (n2: pass with pass-verdict but empty evidence_refs → fixable)', () => {
+  const verifyGraph = (
+    id: string,
+    kind: 'verify' | 'review' | 'security',
+    owner: string,
+  ): Autopilot =>
+    graph({
+      nodes: [
+        {
+          id,
+          kind,
+          owner: owner as never,
+          purpose: `${kind} the change against ac-1`,
+          status: 'running',
+          depends_on: [],
+          acceptance_refs: ['ac-1'],
+          evidence_refs: [],
+          attempts: { fix: 0, switch: 0 },
+        },
+      ],
+    });
+
+  test('(a) verifier pass with ac_verdicts pass + empty evidence_refs → downgraded to fixable failure, node stays running', async () => {
+    await seed(verifyGraph('V0', 'verify', 'verifier'));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V0',
+        result_text: 'verified ac-1 passes — ran the suite, all green',
+        outcome: 'pass',
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'pass' }],
+        evidence_refs: [],
+      },
+    });
+    expect(res.outcome).toBe('fail');
+    expect(res.failure_class).toBe('fixable');
+    expect(res.guard_contentful).toBe(false);
+    const node = (await aps.get(WI)).nodes.find((n) => n.id === 'V0');
+    expect(node?.status).not.toBe('passed'); // pass transition blocked; goes to retry
+  });
+
+  test('(b) review forward-expansion (has_findings=true) with ac_verdicts pass + empty evidence_refs → still downgraded, no splice', async () => {
+    await seed(verifyGraph('R0', 'review', 'reviewer'));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'R0',
+        result_text: 'reviewed against ac-1; 1 issue remains but I marked ac-1 pass',
+        outcome: 'pass',
+        has_findings: true,
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'pass' }],
+        evidence_refs: [],
+      },
+    });
+    expect(res.outcome).toBe('fail');
+    expect(res.failure_class).toBe('fixable');
+    expect(res.promoted_node_ids).toEqual([]);
+    expect((await aps.get(WI)).nodes).toHaveLength(1); // no forward splice
+    const node = (await aps.get(WI)).nodes.find((n) => n.id === 'R0');
+    expect(node?.status).not.toBe('passed');
+  });
+
+  test('(b2) security forward-expansion (has_findings=true) with ac_verdicts pass + empty evidence_refs → downgraded', async () => {
+    await seed(verifyGraph('S0', 'security', 'security-reviewer'));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'S0',
+        result_text: 'security review of ac-1; finding open but claimed pass',
+        outcome: 'pass',
+        has_findings: true,
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'pass' }],
+        evidence_refs: [],
+      },
+    });
+    expect(res.outcome).toBe('fail');
+    expect(res.failure_class).toBe('fixable');
+    expect((await aps.get(WI)).nodes).toHaveLength(1);
+  });
+
+  test('(c) ac_verdicts with no pass (only fail/partial) + empty evidence_refs → NOT downgraded (per-AC granularity preserved)', async () => {
+    await seed(verifyGraph('V0', 'verify', 'verifier'));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V0',
+        result_text:
+          'verified ac-1 — it is partial / failing, recording the per-AC non-pass verdict',
+        outcome: 'pass',
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'fail' }],
+        evidence_refs: [],
+      },
+    });
+    expect(res.outcome).toBe('pass');
+    expect(res.status).toBe('passed');
+  });
+
+  test('(d) design pass (generated_nodes, no evidence_refs) → NOT downgraded by the new guard', async () => {
+    await seed(verifyGraph('N1', 'verify', 'verifier'));
+    // overwrite to a design/planner node
+    await aps.write(WI, {
+      ...(await aps.get(WI)),
+      nodes: [
+        {
+          id: 'N1',
+          kind: 'design',
+          owner: 'planner',
+          purpose: 'plan the change',
+          status: 'running',
+          depends_on: [],
+          acceptance_refs: ['ac-1'],
+          evidence_refs: [],
+          ac_verdicts: [],
+          attempts: { fix: 0, switch: 0 },
+        },
+      ],
+    });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text: 'plan: implement node then review node; generated the subgraph',
+        outcome: 'pass',
+        generated_nodes: [
+          {
+            id: 'G1',
+            kind: 'implement',
+            purpose: 'impl',
+            depends_on: ['N1'],
+            acceptance_refs: ['ac-1'],
+          },
+        ],
+        evidence_refs: [],
+      },
+    });
+    expect(res.outcome).toBe('pass');
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual(['G1']);
+  });
+
+  test('(e) design plan-stage close projects the on-disk coverage.json path into node.evidence_refs', async () => {
+    await seed(verifyGraph('N1', 'verify', 'verifier'));
+    await aps.write(WI, {
+      ...(await aps.get(WI)),
+      nodes: [
+        {
+          id: 'N1',
+          kind: 'design',
+          owner: 'planner',
+          purpose: 'plan the change',
+          status: 'running',
+          depends_on: [],
+          acceptance_refs: ['ac-1'],
+          evidence_refs: [],
+          ac_verdicts: [],
+          attempts: { fix: 0, switch: 0 },
+        },
+      ],
+    });
+    // a real coverage sweep ran → coverage.json exists on disk
+    await new CoverageStore(repo).writeMap(WI, {
+      schema_version: '0.1.0',
+      work_item_id: WI,
+      root_id: 'root',
+      nodes: [],
+    });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text: 'plan closed: 6-axis coverage swept dry, brief produced',
+        outcome: 'pass',
+        evidence_refs: [],
+        plan_brief: {
+          change_surface: ['src/x.ts'],
+          interface_changes: [],
+          dod: [],
+          test_scenarios: [],
+          tier_inputs: {
+            changedFileCount: 1,
+            interfaceChanged: false,
+            risk: { non_local: false, irreversible: false, unaudited: false },
+            large: false,
+          },
+        },
+      },
+    });
+    expect(res.outcome).toBe('pass');
+    const node = (await aps.get(WI)).nodes.find((n) => n.id === 'N1');
+    expect(
+      node?.evidence_refs.some((e) => e.kind === 'file' && e.path?.includes('coverage.json')),
+    ).toBe(true);
+  });
+});

@@ -38,6 +38,14 @@ export const interviewQuestion = z
     answer: z.string().optional(),
     answer_kind: z.enum(['user', 'assumption']).optional(),
     ambiguity_delta: z.number().optional(),
+    marginal_gain: z
+      .number()
+      .min(0)
+      .max(1)
+      .optional()
+      .describe(
+        'Score-gated marginal information gain of this round; low value across a round is the dry signal',
+      ),
   })
   .describe('One asked question with its self-answer attempts and outcome');
 

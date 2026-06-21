@@ -47,7 +47,11 @@ async function seedIntent(acIds: string[]): Promise<void> {
   });
 }
 
-async function seedWorkItem(acIds: string[], goal = GOAL): Promise<void> {
+async function seedWorkItem(
+  acIds: string[],
+  goal = GOAL,
+  changedFiles: string[] = [],
+): Promise<void> {
   await write('work-item.json', {
     schema_version: '0.1.0',
     id: WI,
@@ -63,7 +67,7 @@ async function seedWorkItem(acIds: string[], goal = GOAL): Promise<void> {
     status: 'in_progress',
     owner_profile: 'workspace-write',
     child_ids: [],
-    changed_files: [],
+    changed_files: changedFiles,
     risks: [],
     runs: [],
     created_at: '2026-06-06T00:00:00.000Z',
@@ -71,7 +75,7 @@ async function seedWorkItem(acIds: string[], goal = GOAL): Promise<void> {
   });
 }
 
-async function seedGraph(refs: string[], rootGoal = GOAL): Promise<void> {
+async function seedGraph(refs: string[], rootGoal = GOAL, changeSurface?: string[]): Promise<void> {
   await write('autopilot.json', {
     schema_version: '0.1.0',
     autopilot_id: 'orch_driftcli1',
@@ -85,6 +89,7 @@ async function seedGraph(refs: string[], rootGoal = GOAL): Promise<void> {
       approved_at: null,
       approved_by: null,
       evidence_refs: [],
+      ...(changeSurface ? { change_surface: changeSurface } : {}),
     },
     nodes: [
       {
@@ -149,6 +154,36 @@ describe('ditto autopilot intent-drift CLI', () => {
     const out = json(res.stdout);
     expect(out.pass).toBe(true);
     expect(out.advisories.join(' ')).toContain('root_goal');
+  });
+
+  test("sibling work item's working-tree change is NOT flagged (surface scoped to this work item)", async () => {
+    // Baseline = [fileA]; THIS work item's nodes touched [fileA]; the working
+    // tree also has an unrelated fileB (a sibling work item's uncommitted edit).
+    // The surface comparison must be scoped to this work item's own
+    // changed_files, so fileB is not a false "scope added".
+    await seedIntent(['ac-1']);
+    await seedWorkItem(['ac-1'], GOAL, ['fileA.ts']);
+    await seedGraph(['ac-1'], GOAL, ['fileA.ts']);
+    await writeFile(join(dir, 'fileA.ts'), 'a\n', 'utf8');
+    await writeFile(join(dir, 'fileB.ts'), 'b\n', 'utf8');
+    const res = spawnDitto(['autopilot', 'intent-drift', '--workItem', WI, '--output', 'json']);
+    expect(res.exitCode).toBe(0);
+    const out = json(res.stdout);
+    expect(out.pass).toBe(true);
+    expect(out.reasons).toEqual([]);
+  });
+
+  test('within-work-item grow (a node touched a file not in baseline) IS flagged', async () => {
+    // Baseline = [fileA]; this work item's nodes actually touched [fileA, fileC].
+    // fileC is a genuine unconsented grow within this work item → must FAIL.
+    await seedIntent(['ac-1']);
+    await seedWorkItem(['ac-1'], GOAL, ['fileA.ts', 'fileC.ts']);
+    await seedGraph(['ac-1'], GOAL, ['fileA.ts']);
+    const res = spawnDitto(['autopilot', 'intent-drift', '--workItem', WI, '--output', 'json']);
+    expect(res.exitCode).not.toBe(0);
+    const out = json(res.stdout);
+    expect(out.pass).toBe(false);
+    expect(out.reasons.join(' ')).toContain('fileC.ts');
   });
 
   test('missing autopilot.json → runtime error, non-zero exit', async () => {

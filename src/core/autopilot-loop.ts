@@ -17,6 +17,7 @@ import {
   type FailureDecision,
   buildDelegationPacket,
   decideOnFailure,
+  guardAcClosingEvidence,
   guardChildResult,
   guardMutatingEvidence,
   isMutatingOwner,
@@ -768,6 +769,28 @@ export async function recordResult(
         'design pass carried plan_brief but no coverage.json exists — run the pre-mortem coverage sweep (coverage-next → coverage-round until dry) before closing the plan stage (claim ≠ proof)';
     }
   }
+  // G7 확장 (wi_260619zqa): a judging node that closes an acceptance criterion to
+  // `pass` must carry evidence. A pass-verdict with empty evidence_refs would lock
+  // the node `passed` and leave `complete` reading that criterion as
+  // pass-with-no-proof forever (asymmetry: irrecoverable). Downgrade to fixable so
+  // the node stays running. Placed BEFORE the `outcome==='pass'` block so it gates
+  // BOTH the normal pass path AND the review/security forward-re-expansion
+  // early-return (which lives inside that block) — there is no bypass. Owner/kind
+  // agnostic; nodes that judged only partial/fail/unverified are exempt (per-AC
+  // granularity preserved), and design/planner bare passes carry no pass-verdict.
+  if (contentful && outcome === 'pass') {
+    const acGuard = guardAcClosingEvidence({
+      outcome: input.payload.outcome,
+      ac_verdicts: input.payload.ac_verdicts ?? [],
+      evidence_refs: input.payload.evidence_refs ?? [],
+    });
+    if (!acGuard.contentful) {
+      contentful = false;
+      outcome = 'fail';
+      failureClass = 'fixable';
+      guardReason = acGuard.reason;
+    }
+  }
 
   if (outcome === 'pass') {
     // ADR-0020 D3 producer (wi_260616eu8): on a contentful `design` pass the
@@ -895,6 +918,13 @@ export async function recordResult(
     // legacy seed plan stage — it runs on the SAME design pass that promotes
     // generated_nodes and supersedes the seed N2/N3 (above). Absent plan_brief
     // (legacy path / non-design node) ⇒ approval_gate untouched (backward compat).
+    // D-lite materialization (wi_260619zqa): when a `design` node closes the plan
+    // stage (plan_brief + coverage.json on disk), project the REAL on-disk
+    // coverage.json path into evidence_refs as a file evidenceRef. A legitimate
+    // design pass produces no caller evidence_refs, so without this `complete`
+    // reads it as evidence-less; pointing at the artifact it actually produced
+    // makes that pass carry proof. No synthesis — only added when the file exists.
+    let designEvidenceRefs: typeof input.payload.evidence_refs;
     if (node.kind === 'design' && input.payload.plan_brief !== undefined) {
       const pb = input.payload.plan_brief;
       // ADR-0020 D3: an intent-level ADR conflict declared by the planner
@@ -921,11 +951,26 @@ export async function recordResult(
           plan_brief: patch.plan_brief,
         },
       });
+      const coverageStore = new CoverageStore(repoRoot);
+      if (await coverageStore.exists(input.workItemId)) {
+        const caller = input.payload.evidence_refs ?? [];
+        const coverageRel = coverageStore.relMapPath(input.workItemId);
+        if (!caller.some((e) => e.path === coverageRel)) {
+          designEvidenceRefs = [
+            ...caller,
+            {
+              kind: 'file',
+              path: coverageRel,
+              summary: 'pre-mortem coverage sweep artifact (plan-stage close)',
+            },
+          ];
+        }
+      }
     }
     await aps.updateNode(input.workItemId, node.id, (n) => ({
       ...n,
       status: nodeTransition(n.status, 'pass'),
-      evidence_refs: input.payload.evidence_refs ?? n.evidence_refs,
+      evidence_refs: designEvidenceRefs ?? input.payload.evidence_refs ?? n.evidence_refs,
       // Persist a judging node's per-AC verdicts so the completion bridge consumes
       // them directly (a node-level pass cannot absorb a per-AC partial/fail).
       ac_verdicts: input.payload.ac_verdicts ?? n.ac_verdicts,

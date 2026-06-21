@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { type CoverageMap, coverageMap } from '~/schemas/coverage';
 import { localDir } from './ditto-paths';
 import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
@@ -32,6 +32,14 @@ export class CoverageStore {
   /** True once a coverage sweep has produced coverage.json for this work item. */
   async exists(workItemId: string): Promise<boolean> {
     return Bun.file(this.mapPath(workItemId)).exists();
+  }
+
+  /**
+   * Repo-relative path of coverage.json (for evidenceRef projection). Returns the
+   * path even if the file is absent — callers gate on `exists` first.
+   */
+  relMapPath(workItemId: string): string {
+    return relative(this.repoRoot, this.mapPath(workItemId));
   }
 
   async getMap(workItemId: string): Promise<CoverageMap> {

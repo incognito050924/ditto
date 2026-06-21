@@ -1,6 +1,6 @@
 // Claude Code host surface: subagent definitions (N2-claude-surface-coverage, wi_260613f9d).
 //
-// Asserts the 15 agents/*.md exist and carry the frontmatter Claude Code parses
+// Asserts the 17 agents/*.md exist and carry the frontmatter Claude Code parses
 // to register a subagent (name/description/tools), and that agents/ ships in the
 // plugin build. Companion to skills.surface.test.ts; the catalog test pins the
 // count, this pins each agent's frontmatter shape.
@@ -12,7 +12,7 @@ import { parse as parseYaml } from 'yaml';
 const REPO = join(import.meta.dir, '..', '..', '..');
 const AGENTS_DIR = join(REPO, 'agents');
 
-// The 15 product agents (task surface (e)). Pinned so a deleted/renamed agent fails.
+// The 17 product agents (task surface (e)). Pinned so a deleted/renamed agent fails.
 const AGENTS = [
   'dialectic-opponent',
   'dialectic-producer',
@@ -23,6 +23,8 @@ const AGENTS = [
   'memory-extractor',
   'planner',
   'playwright-e2e',
+  'question-gate',
+  'question-generator',
   'refactorer',
   'researcher',
   'retrospective',
@@ -38,7 +40,7 @@ function frontmatter(text: string): Record<string, unknown> {
 }
 
 describe('Claude host surface — agents', () => {
-  test('exactly the 15 pinned agent markdown files exist on disk (no drift)', () => {
+  test('exactly the 17 pinned agent markdown files exist on disk (no drift)', () => {
     const onDisk = readdirSync(AGENTS_DIR)
       .filter((f) => f.endsWith('.md'))
       .map((f) => f.replace(/\.md$/, ''))
@@ -60,5 +62,15 @@ describe('Claude host surface — agents', () => {
   test('agents/ is a product-surface dir that the plugin build ships', () => {
     const assembler = readFileSync(join(REPO, 'scripts', 'build-plugin.mjs'), 'utf8');
     expect(assembler).toMatch(/ALWAYS_DIRS\s*=\s*\[[^\]]*'agents'/);
+  });
+
+  // wi_260620njg — agents must write runtime output under the canonical tier-③
+  // path `.ditto/local/work-items/` (ADR-0012), never the legacy pre-isolation
+  // `.ditto/work-items/` which is NOT gitignored and pollutes the tracked tree.
+  test.each(AGENTS)('agents/%s.md never instructs the legacy non-local work-items path', (name) => {
+    const text = readFileSync(join(AGENTS_DIR, `${name}.md`), 'utf8');
+    // Strip the canonical path, then any remaining `.ditto/work-items/` is the legacy leak.
+    const residual = text.split('.ditto/local/work-items/').join('');
+    expect(residual).not.toContain('.ditto/work-items/');
   });
 });
