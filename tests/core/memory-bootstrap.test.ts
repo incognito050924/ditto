@@ -31,7 +31,7 @@ async function seedKnowledge(root: string) {
       '# ADR-0001: Schema source of truth',
       '',
       '- 상태: accepted',
-      '- 관련: ADR-0005, reports/design/schema.md, src/schemas/common.ts, src/core/memory-build.ts',
+      '- 관련: ADR-0005, `reports/design/schema.md`, `src/schemas/common.ts`, `src/core/memory-build.ts`',
       '',
       '## 결정',
       'zod schema가 source of truth이다.',

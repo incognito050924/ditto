@@ -34700,7 +34700,7 @@ function parseGovernedPaths(body) {
 `).find((l2) => /^[-*\s]*\uAD00\uB828\s*:/.test(l2));
   if (!line)
     return [];
-  return line.replace(/^[-*\s]*\uAD00\uB828\s*:/, "").split(",").map((s2) => s2.trim().replace(/\s*\(.*$/, "").trim()).filter((s2) => /^(src|tests|scripts)\//.test(s2));
+  return line.replace(/^[-*\s]*\uAD00\uB828\s*:/, "").split(",").map((s2) => s2.trim().replace(/\s*\(.*$/, "").replace(/`/g, "").trim()).filter((s2) => /^(src|tests|scripts)\//.test(s2));
 }
 function emptyResult() {
   return { sourcesAdded: [], sourcesSkipped: [], eventsAppended: [], eventsSkipped: [] };
@@ -39730,4 +39730,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=493617eaaa10489ac3cd5f4f0a60501d8a0f8a6044a957d4c61a8de016140ab8
+//# ditto-src-stamp=2a2f616687cecc6e4b1afa92520734e3cc22fee0ca1643f6404f0e5c6d1c174f

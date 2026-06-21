@@ -124,6 +124,10 @@ function parseGovernedPaths(body: string): string[] {
       s
         .trim()
         .replace(/\s*\(.*$/, '')
+        // ADR `관련:` lines wrap code paths in backticks (`src/...`); strip them
+        // so the path-prefix filter matches — else governs is silently empty and
+        // every code↔decision edge falls back to INFERRED (memory-librarian §8 inc.1).
+        .replace(/`/g, '')
         .trim(),
     )
     .filter((s) => /^(src|tests|scripts)\//.test(s));
