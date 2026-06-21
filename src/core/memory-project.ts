@@ -68,10 +68,17 @@ function eventNodeId(eventId: string): string {
  * `secretSourceIds` is not emitted as a `Source` node and its edge is omitted —
  * the (non-secret) event node is kept, just without that one edge. Event
  * sensitivity gates the event; source sensitivity gates the source/edge.
+ *
+ * Code-grounding (wi_260621vy9, option A): `codeSourcePaths` maps a code
+ * source id → its path; a non-decision event grounded on such a source also gets
+ * an Artifact node (name=path) + Episode→Artifact MENTIONS edge, deduped through
+ * the same Artifact set the decision governs bridge uses. Secret sources are
+ * skipped (the source loop `continue`s on them before this branch).
  */
 export function projectEventNodes(
   approved: MemoryEvent[],
   secretSourceIds: ReadonlySet<string> = new Set(),
+  codeSourcePaths: ReadonlyMap<string, string> = new Map(),
 ): {
   nodes: MemoryNode[];
   edges: MemoryEdge[];
@@ -138,6 +145,52 @@ export function projectEventNodes(
         requires_review: false,
         used_as_evidence: false,
       });
+      // Code-source grounding bridge (wi_260621vy9, option A): a non-decision
+      // event (observation/analysis) grounded on a `source_type='code'` source →
+      // an Artifact node (id reuses the ACG path normalization so it merges with
+      // governs/code-island Artifacts) + an Episode→Artifact MENTIONS edge, so a
+      // code-grounded captured discovery is reachable in warm-start (it shares
+      // the path's tokens). Secret sources are already skipped above (the loop
+      // `continue`s before here). Decision events keep the governs bridge below.
+      if (!isDecision) {
+        const codePath = codeSourcePaths.get(sourceId);
+        if (codePath !== undefined) {
+          const artId = artifactNodeId(normalizePath(codePath));
+          if (!artifactNodeIds.has(artId)) {
+            artifactNodeIds.add(artId);
+            nodes.push({
+              id: artId,
+              node_type: 'Artifact',
+              name: codePath,
+              properties: {},
+              provenance: {
+                extraction_run_id: SEMANTIC_RUN_ID,
+                extracted_by: 'human',
+                schema_version: SCHEMA_VERSION,
+                source_id: sourceId,
+              },
+            });
+          }
+          edges.push({
+            id: `mentions:${artId}->${nodeId}`,
+            from: nodeId,
+            to: artId,
+            edge_type: 'MENTIONS',
+            confidence_kind: 'EXTRACTED',
+            confidence_score: 1,
+            properties: {},
+            provenance: {
+              extraction_run_id: SEMANTIC_RUN_ID,
+              extracted_by: 'human',
+              schema_version: SCHEMA_VERSION,
+              source_id: sourceId,
+            },
+            weight: 1,
+            requires_review: false,
+            used_as_evidence: false,
+          });
+        }
+      }
     }
     // Code↔decision bridge (memory-librarian §8 inc.1): a decision's `governs`
     // paths (from an ADR `관련:` header) → Artifact nodes + Artifact→Decision
@@ -282,7 +335,15 @@ export async function projectMemory(
   const secretSourceIds = new Set(
     sources.filter((s) => s.sensitivity === 'secret').map((s) => s.source_id),
   );
-  const eventGraph = projectEventNodes(approvedHeads, secretSourceIds);
+  // wi_260621vy9 (option A): map each code source to its path so a non-decision
+  // event grounded on code emits an Artifact node — the core wiring that makes
+  // code-grounded captured discoveries reachable in warm-start (without it the
+  // capture-side branch silently no-ops). Secret gating stays via secretSourceIds.
+  const codeSourcePaths = new Map<string, string>();
+  for (const s of sources) {
+    if (s.source_type === 'code' && s.path) codeSourcePaths.set(s.source_id, s.path);
+  }
+  const eventGraph = projectEventNodes(approvedHeads, secretSourceIds, codeSourcePaths);
 
   const nodes: MemoryNode[] = [...(ir?.nodes ?? []), ...eventGraph.nodes];
   const edges: MemoryEdge[] = [...(ir?.edges ?? []), ...eventGraph.edges];

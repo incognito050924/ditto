@@ -7,9 +7,16 @@ import { bootstrapIngest } from '~/core/memory-bootstrap';
 import * as memoryProject from '~/core/memory-project';
 import { projectMemory } from '~/core/memory-project';
 import { scanSources } from '~/core/memory-scan';
-import { MemoryProjectionStore, type ServingGraph } from '~/core/memory-store';
+import {
+  MemoryEventStore,
+  MemoryProjectionStore,
+  MemorySourceStore,
+  type ServingGraph,
+} from '~/core/memory-store';
 import { readUsageReport, usageLogPath, warmStartMemoryContext } from '~/core/memory-warmstart';
 import type { AutopilotNode } from '~/schemas/autopilot';
+import { memoryEvent } from '~/schemas/memory-event';
+import { memorySource } from '~/schemas/memory-source';
 import type { WorkItem } from '~/schemas/work-item';
 
 let repo: string;
@@ -379,5 +386,77 @@ describe('warmStartMemoryContext (§5-1 / §10-6 #1, fail-open warm-start)', () 
     expect(report.opportunities).toBe(1);
     expect(report.attempts).toBe(0);
     expect(report.records[0]?.freshness).toBe('stale');
+  });
+
+  // wi_260621vy9 (option A), ac-2/ac-4: a code-grounded captured discovery
+  // (approved non-decision event grounded on a code source) reaches warm-start.
+  // Capture a code source + an approved observation grounded on it, project, then
+  // warm-start with a work item whose title/goal shares a ≥4-char token with the
+  // path ("memory" in src/core/memory-discovery.ts). The capture Episode must be
+  // in related_nodes (it sits 1 hop from the path Artifact a coverage root) and
+  // survive the RELATED_NODE_CAP=8 slice; the reached node_type is tallied.
+  async function captureCodeGroundedDiscovery(): Promise<string> {
+    const source = memorySource.parse({
+      schema_version: '0.1.0',
+      source_id: 'src_disc00001',
+      source_type: 'code',
+      path: 'src/core/memory-discovery.ts',
+      content_hash: 'a'.repeat(64),
+      captured_at: '2026-06-09T10:00:00+00:00',
+      revision: 'r1',
+    });
+    await new MemorySourceStore(repo).write(source);
+    const episodeId = 'memevt_disc00001';
+    await new MemoryEventStore(repo).append(
+      memoryEvent.parse({
+        schema_version: '0.1.0',
+        event_id: episodeId,
+        event_type: 'observation',
+        actor: { kind: 'user' },
+        // NO token overlap with the work item: the ONLY path from a coverage root
+        // to this Episode is through the code-source Artifact (name=path carries
+        // "memory"/"discovery"). Proves the new Artifact bridge, not name overlap.
+        text: 'empty cache breaks under zero rows xyz qrst',
+        created_at: '2026-06-09T10:00:00+00:00',
+        status: 'approved',
+        approved_by: 'user',
+        decided_at: '2026-06-09T11:00:00+00:00',
+        sources: ['src_disc00001'],
+        confidence_kind: 'EXTRACTED',
+        sensitivity: 'internal',
+      }),
+    );
+    await projectMemory(repo, { now: NOW });
+    return `decision:${episodeId}`;
+  }
+
+  test('(f) capture→approve→project→warmStart: the captured Episode is in related_nodes (survives the cap)', async () => {
+    const episodeNodeId = await captureCodeGroundedDiscovery();
+    const wi = {
+      id: 'wi_disc1',
+      title: 'memory discovery follow-up',
+      goal: 'extend the memory discovery loop',
+      changed_files: ['src/core/memory-discovery.ts'],
+    } as unknown as WorkItem;
+    const ctx = await warmStartMemoryContext(repo, node('planner'), wi, { now: NOW });
+    expect(ctx).toBeDefined();
+    expect(ctx?.related_nodes).toContain(episodeNodeId);
+  });
+
+  test('(g) warm-start hit_node_types tallies the reached node_type on the hit', async () => {
+    await captureCodeGroundedDiscovery();
+    const wi = {
+      id: 'wi_disc2',
+      title: 'memory discovery follow-up',
+      goal: 'extend the memory discovery loop',
+      changed_files: ['src/core/memory-discovery.ts'],
+    } as unknown as WorkItem;
+    await warmStartMemoryContext(repo, node('planner'), wi, { now: NOW });
+    const report = await readUsageReport(repo, wi.id);
+    expect(report.records[0]?.hit).toBe(true);
+    const total = Object.values(report.records[0]?.hit_node_types ?? {}).reduce((a, b) => a + b, 0);
+    expect(total).toBeGreaterThan(0);
+    // the Episode reached via the path Artifact is tallied.
+    expect(report.hit_node_types.Episode ?? 0).toBeGreaterThan(0);
   });
 });

@@ -259,6 +259,112 @@ describe('projectEventNodes', () => {
     const { nodes } = projectEventNodes([obs]);
     expect(nodes.find((n) => n.id === 'artifact:src/core/whatever')).toBeUndefined();
   });
+
+  // wi_260621vy9 (option A): a code-grounded captured discovery (non-decision
+  // event whose source is a code source) emits an Artifact node + Episode↔Artifact
+  // MENTIONS edge so it is reachable in warm-start.
+  test('(a) code-source observation → artifact:<path> node (name=path) + Episode↔Artifact MENTIONS edge', () => {
+    const obs = ev('memevt_codeobs01', {
+      ...approval,
+      event_type: 'observation',
+      text: 'the loop fans out waves here',
+      sources: ['src_codeaaa1'],
+    });
+    const codePaths = new Map([['src_codeaaa1', 'src/core/autopilot-loop.ts']]);
+    const { nodes, edges } = projectEventNodes([obs], new Set(), codePaths);
+    const art = nodes.find((n) => n.id === 'artifact:src/core/autopilot-loop');
+    expect(art?.node_type).toBe('Artifact');
+    // name MUST carry the path tokens so coverageRoots can match (OBJ-1).
+    expect(art?.name).toBe('src/core/autopilot-loop.ts');
+    const mentions = edges.find(
+      (e) => e.from === 'decision:memevt_codeobs01' && e.to === 'artifact:src/core/autopilot-loop',
+    );
+    expect(mentions?.edge_type).toBe('MENTIONS');
+    expect(mentions?.confidence_kind).toBe('EXTRACTED');
+    expect(mentions?.id).toBe(
+      'mentions:artifact:src/core/autopilot-loop->decision:memevt_codeobs01',
+    );
+  });
+
+  test('(b) same path captured + governed → ONE Artifact node (dedup)', () => {
+    const obs = ev('memevt_codeobs02', {
+      ...approval,
+      event_type: 'observation',
+      text: 'observed here',
+      sources: ['src_codebbb2'],
+    });
+    const decision = ev('memevt_decgov02', {
+      ...approval,
+      event_type: 'decision',
+      text: 'governs the same path',
+      sources: ['src_adr00002'],
+      governs: ['src/core/shared.ts'],
+    });
+    const codePaths = new Map([['src_codebbb2', 'src/core/shared.ts']]);
+    const { nodes } = projectEventNodes([obs, decision], new Set(), codePaths);
+    expect(nodes.filter((n) => n.id === 'artifact:src/core/shared')).toHaveLength(1);
+  });
+
+  test('(c) secret code-source → NO Artifact node and NO MENTIONS edge', () => {
+    const obs = ev('memevt_codeobs03', {
+      ...approval,
+      event_type: 'observation',
+      text: 'grounded on a secret code source',
+      sources: ['src_secretc3'],
+    });
+    const codePaths = new Map([['src_secretc3', 'src/core/secret.ts']]);
+    const { nodes, edges } = projectEventNodes([obs], new Set(['src_secretc3']), codePaths);
+    expect(nodes.find((n) => n.id === 'artifact:src/core/secret')).toBeUndefined();
+    expect(edges.find((e) => e.to === 'artifact:src/core/secret')).toBeUndefined();
+    // the non-secret event node itself is still present.
+    expect(nodes.find((n) => n.id === 'decision:memevt_codeobs03')?.node_type).toBe('Episode');
+  });
+
+  test('(d) code-source-less observation + decision governs are unchanged by the new param', () => {
+    const obs = ev('memevt_codeobs04', {
+      ...approval,
+      event_type: 'observation',
+      text: 'no code source',
+      sources: ['src_note00004'], // not in the code map
+    });
+    const decision = ev('memevt_decgov04', {
+      ...approval,
+      event_type: 'decision',
+      text: 'governs',
+      sources: ['src_adr00004'],
+      governs: ['src/core/governed.ts'],
+    });
+    const codePaths = new Map([['src_codexxx4', 'src/core/elsewhere.ts']]);
+    const { nodes, edges } = projectEventNodes([obs, decision], new Set(), codePaths);
+    // observation grounded on a non-code source ⇒ no Artifact from the capture branch.
+    expect(nodes.find((n) => n.id === 'artifact:src/core/elsewhere')).toBeUndefined();
+    // the decision governs bridge is intact.
+    expect(nodes.find((n) => n.id === 'artifact:src/core/governed')?.node_type).toBe('Artifact');
+    expect(
+      edges.find(
+        (e) =>
+          e.from === 'artifact:src/core/governed' &&
+          e.to === 'decision:memevt_decgov04' &&
+          e.edge_type === 'RATIONALE_FOR',
+      ),
+    ).toBeDefined();
+  });
+
+  test('(e) determinism: two projections of the same input are identical', () => {
+    const obs = ev('memevt_codeobs05', {
+      ...approval,
+      event_type: 'observation',
+      text: 'observed',
+      sources: ['src_codeee5a', 'src_codeee5b'],
+    });
+    const codePaths = new Map([
+      ['src_codeee5a', 'src/core/a.ts'],
+      ['src_codeee5b', 'src/core/b.ts'],
+    ]);
+    const r1 = projectEventNodes([obs], new Set(), codePaths);
+    const r2 = projectEventNodes([obs], new Set(), codePaths);
+    expect(r1).toEqual(r2);
+  });
 });
 
 describe('code↔decision bridge (end-to-end traversal)', () => {

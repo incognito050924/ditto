@@ -20097,7 +20097,7 @@ function projectionIdFor(key) {
 function eventNodeId(eventId) {
   return `decision:${eventId}`;
 }
-function projectEventNodes(approved, secretSourceIds = new Set) {
+function projectEventNodes(approved, secretSourceIds = new Set, codeSourcePaths = new Map) {
   const nodes = [];
   const edges = [];
   const sourceNodeIds = new Set;
@@ -20162,6 +20162,45 @@ function projectEventNodes(approved, secretSourceIds = new Set) {
         requires_review: false,
         used_as_evidence: false
       });
+      if (!isDecision) {
+        const codePath = codeSourcePaths.get(sourceId);
+        if (codePath !== undefined) {
+          const artId = artifactNodeId(normalizePath(codePath));
+          if (!artifactNodeIds.has(artId)) {
+            artifactNodeIds.add(artId);
+            nodes.push({
+              id: artId,
+              node_type: "Artifact",
+              name: codePath,
+              properties: {},
+              provenance: {
+                extraction_run_id: SEMANTIC_RUN_ID,
+                extracted_by: "human",
+                schema_version: SCHEMA_VERSION,
+                source_id: sourceId
+              }
+            });
+          }
+          edges.push({
+            id: `mentions:${artId}->${nodeId}`,
+            from: nodeId,
+            to: artId,
+            edge_type: "MENTIONS",
+            confidence_kind: "EXTRACTED",
+            confidence_score: 1,
+            properties: {},
+            provenance: {
+              extraction_run_id: SEMANTIC_RUN_ID,
+              extracted_by: "human",
+              schema_version: SCHEMA_VERSION,
+              source_id: sourceId
+            },
+            weight: 1,
+            requires_review: false,
+            used_as_evidence: false
+          });
+        }
+      }
     }
     if (isDecision) {
       for (const rawPath of e2.governs) {
@@ -20264,7 +20303,12 @@ async function projectMemory(repoRoot, options = {}) {
   const sources = await new MemorySourceStore(repoRoot).list();
   const { approvedHeads, setHash } = reduceEvents(events);
   const secretSourceIds = new Set(sources.filter((s2) => s2.sensitivity === "secret").map((s2) => s2.source_id));
-  const eventGraph = projectEventNodes(approvedHeads, secretSourceIds);
+  const codeSourcePaths = new Map;
+  for (const s2 of sources) {
+    if (s2.source_type === "code" && s2.path)
+      codeSourcePaths.set(s2.source_id, s2.path);
+  }
+  const eventGraph = projectEventNodes(approvedHeads, secretSourceIds, codeSourcePaths);
   const nodes = [...ir?.nodes ?? [], ...eventGraph.nodes];
   const edges = [...ir?.edges ?? [], ...eventGraph.edges];
   const projectionId = projectionIdFor(`${ir?.ir_version ?? "noir"}:${setHash}`);
@@ -39876,4 +39920,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=5347f56a8cf1d99d941741f032bfabac828239052ea45c1b05b990c335e163bd
+//# ditto-src-stamp=f304a7b6913d875138ae5562ec2d04ef65fd7c27169e9efb6e17ea9e2432f750

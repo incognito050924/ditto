@@ -273,10 +273,12 @@ describe('runAudit (append-only history)', () => {
     await projectFixture();
 
     const first = await runAudit(workDir, { now: new Date('2026-06-09T13:00:00Z') });
-    // 2 IR nodes (artifact a/b) + N1 event projection (Episode + grounding Source).
-    expect(first.entry.node_count).toBe(4);
-    // 1 IMPORTS (a→b) + 1 MENTIONS (source→episode).
-    expect(first.entry.edge_count).toBe(2);
+    // 2 IR nodes (artifact a/b) + N1 event projection: Episode + grounding Source +
+    // the code-grounding Artifact (the seeded source is source_type=code → its path
+    // becomes an Artifact node, wi_260621vy9 option A).
+    expect(first.entry.node_count).toBe(5);
+    // 1 IMPORTS (a→b) + 1 MENTIONS (source→episode) + 1 MENTIONS (episode→code Artifact).
+    expect(first.entry.edge_count).toBe(3);
     expect(first.entry.counts.orphan).toBe(0);
     expect(first.history_length).toBe(1);
 
