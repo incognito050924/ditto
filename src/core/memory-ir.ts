@@ -70,7 +70,7 @@ export interface AbsorbAcgResult {
  * Strip the module extension so paths from impact/semantic match the
  * already-stripped repo-path form boundary emits (§10-4a 일관 적용).
  */
-function normalizePath(path: string): string {
+export function normalizePath(path: string): string {
   return path.replace(/\.[cm]?[jt]sx?$/, '').replace(/\.(java|kt|py)$/, '');
 }
 
@@ -90,7 +90,7 @@ function changeTargetNode(changeTarget: string): { id: string; name: string } {
   return { id: symbolNodeId(path, symbol), name: symbol };
 }
 
-function artifactNodeId(path: string): string {
+export function artifactNodeId(path: string): string {
   return `artifact:${path}`;
 }
 

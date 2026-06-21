@@ -30,7 +30,7 @@ import { localDir } from './ditto-paths';
 import { ensureDir } from './fs';
 import { isMemoryEnabled } from './memory-flag';
 import { type Freshness, memoryStatus } from './memory-project';
-import { queryNeighbors } from './memory-query';
+import { type DecisionBrief, queryDecisionBriefs, queryNeighbors } from './memory-query';
 import { MemoryProjectionStore, type ServingGraph } from './memory-store';
 
 /** The optional memory context injected into a delegation packet (§10-6 #1). */
@@ -39,6 +39,14 @@ export interface MemoryWarmStartContext {
   related_nodes?: string[];
   /** Decision-node ids among the related set (a Decision is high-signal context). */
   decisions?: string[];
+  /**
+   * Decision briefs for the related Decisions — a bare id is not actionable, so
+   * the agent gets the governing decision's STRUCTURED gist (rejected-alternatives
+   * + invariants + EXTRACTED/INFERRED tag, assembled by the ac-1 brief assembler)
+   * to cite or abstain against (memory-librarian §8 inc.2, ac-2). A decision whose
+   * body does not resolve degrades to id+summary with empty gist (미발견).
+   */
+  decision_briefs?: DecisionBrief[];
 }
 
 /** One usage-instrumentation record (ac-12), appended as a JSONL line per spawn. */
@@ -232,12 +240,22 @@ export async function warmStartMemoryContext(
       graph.nodes.filter((n) => n.node_type === 'Decision').map((n) => n.id),
     );
     const decisions = relatedNodes.filter((id) => decisionIds.has(id));
+    // Decision briefs (ac-2): expand each related Decision id to the STRUCTURED
+    // brief (rejected-alternatives + invariants + EXTRACTED/INFERRED tag) via the
+    // reused ac-1 assembler, so the packet carries the governing decision's gist,
+    // not just an id+name. The node name is kept as the readable `summary`.
+    const nameOf = new Map(graph.nodes.map((n) => [n.id, n.name]));
+    const decisionBriefs = await queryDecisionBriefs(
+      repoRoot,
+      decisions.map((id) => ({ id, summary: nameOf.get(id) ?? id })),
+    );
 
     base.actionable = true;
     await recordUsage(repoRoot, base);
     return {
       related_nodes: relatedNodes,
       ...(decisions.length > 0 ? { decisions } : {}),
+      ...(decisionBriefs.length > 0 ? { decision_briefs: decisionBriefs } : {}),
     };
   } catch {
     // Fail-open: any error in the query path leaves dispatch exactly as it was.

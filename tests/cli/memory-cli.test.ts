@@ -831,3 +831,368 @@ describe('ditto memory query body search (R1 visibility + R9 fallback marker)', 
     expect(o2.matches.length).toBeGreaterThan(0);
   });
 });
+
+describe('ditto memory propose-finding (§8 inc.3, ac-3 — evidence→INFERRED memory)', () => {
+  const WI = 'wi_finding01';
+
+  async function writeEvidenceIndex(records: unknown[]) {
+    const wiDir = join(dir, '.ditto', 'local', 'work-items', WI);
+    await mkdir(wiDir, { recursive: true });
+    await writeFile(
+      join(wiDir, 'evidence-index.json'),
+      JSON.stringify({ schema_version: '0.1.0', work_item_id: WI, records }, null, 2),
+    );
+  }
+
+  const commandRecord = {
+    ref: { kind: 'command', command: 'bun test', summary: 'full suite green' },
+    captured_at: '2026-06-18T00:00:00.000Z',
+    freshness: 'fresh',
+    stale_reason: null,
+    portability: 'local-artifact',
+    artifact_available: false,
+    exit_code: 0,
+    key_lines: ['2376 pass', '0 fail'],
+  };
+
+  test('converts an evidence record to a pending INFERRED observation event', async () => {
+    await writeEvidenceIndex([commandRecord]);
+    const r = ditto([
+      'memory',
+      'propose-finding',
+      '--work-item',
+      WI,
+      '--index',
+      '0',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(0);
+    const ev = JSON.parse(r.stdout);
+    expect(ev.event_type).toBe('observation');
+    expect(ev.confidence_kind).toBe('INFERRED');
+    expect(ev.status).toBe('pending');
+    expect(ev.actor.kind).toBe('agent');
+    expect(ev.event_id).toMatch(/^memevt_/);
+    // evidence provenance is carried in the text (EvidenceRecord has no stable
+    // id and is not a memory source, so it cannot live in `sources`).
+    expect(ev.text).toContain('full suite green');
+    expect(ev.text).toContain('bun test');
+  });
+
+  test('roundtrips propose-finding → approve → query (ac-3)', async () => {
+    await writeEvidenceIndex([commandRecord]);
+    const proposed = ditto([
+      'memory',
+      'propose-finding',
+      '--work-item',
+      WI,
+      '--index',
+      '0',
+      '--output',
+      'json',
+    ]);
+    expect(proposed.exitCode).toBe(0);
+    const id = JSON.parse(proposed.stdout).event_id;
+    const approved = ditto([
+      'memory',
+      'approve',
+      id,
+      '--by',
+      'user',
+      '--actor',
+      'user',
+      '--output',
+      'json',
+    ]);
+    expect(approved.exitCode).toBe(0);
+    const decisionId = JSON.parse(approved.stdout).decision.event_id;
+    // event nodes carry the `decision:` id prefix regardless of event_type
+    // (node_type differs: Episode for observation). See eventNodeId.
+    const explain = ditto(['memory', 'explain', `decision:${decisionId}`, '--output', 'json']);
+    expect(explain.exitCode).toBe(0);
+    const node = JSON.parse(explain.stdout);
+    expect(node.node?.node_type ?? node.node_type).toBe('Episode');
+  });
+
+  test('falls back to key_lines when the ref has no summary (file kind)', async () => {
+    await writeEvidenceIndex([
+      {
+        ref: { kind: 'file', path: 'src/core/x.ts', lines: { start: 10, end: 20 } },
+        captured_at: '2026-06-18T00:00:00.000Z',
+        freshness: 'fresh',
+        stale_reason: null,
+        portability: 'committed',
+        artifact_available: true,
+        exit_code: null,
+        key_lines: ['export const broken = true;'],
+      },
+    ]);
+    const r = ditto([
+      'memory',
+      'propose-finding',
+      '--work-item',
+      WI,
+      '--index',
+      '0',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(0);
+    const ev = JSON.parse(r.stdout);
+    expect(ev.text).toContain('export const broken = true;');
+    expect(ev.text).toContain('src/core/x.ts:10-20');
+  });
+
+  test('out-of-range index is a usage error', async () => {
+    await writeEvidenceIndex([commandRecord]);
+    const r = ditto([
+      'memory',
+      'propose-finding',
+      '--work-item',
+      WI,
+      '--index',
+      '5',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(65);
+    expect(r.stderr).toMatch(/index/i);
+  });
+
+  test('empty/absent evidence index is a usage error', () => {
+    const r = ditto([
+      'memory',
+      'propose-finding',
+      '--work-item',
+      WI,
+      '--index',
+      '0',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(65);
+  });
+
+  test('malformed work item id is a usage error', () => {
+    const r = ditto([
+      'memory',
+      'propose-finding',
+      '--work-item',
+      'not-a-wi',
+      '--index',
+      '0',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(65);
+  });
+});
+
+describe('ditto memory measure (§8 inc.5, ac-5 — hallucination baseline)', () => {
+  async function writeAdrs() {
+    const adrDir = join(dir, '.ditto', 'knowledge', 'adr');
+    await mkdir(adrDir, { recursive: true });
+    await writeFile(
+      join(adrDir, 'ADR-0001-x.md'),
+      '# ADR-0001: A\n\n## 결정\nuse zod.\n\n## 대안 (기각)\n- **Neo4j 상시 서버**: 무서버 위반. 기각.\n- **임베딩 매칭**: 비결정. 기각.\n',
+    );
+    await writeFile(
+      join(adrDir, 'ADR-0002-y.md'),
+      '# ADR-0002: B\n\n## 결정\nschema is SoT.\n\n## 근거\nsingle source.\n',
+    );
+  }
+
+  test('emits the baseline inventory + coverage over real ADRs (1회 산출)', async () => {
+    await writeAdrs();
+    const r = ditto(['memory', 'measure', '--output', 'json']);
+    expect(r.exitCode).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.adrs_total).toBe(2);
+    expect(out.rejected_alternatives_total).toBe(2);
+    expect(out.adrs_without_rejected_section).toContain('ADR-0002-y.md');
+    expect(out.reproposals_detected).toBe(0);
+    expect(out.reproposal_rate).toBe(0);
+  });
+
+  test('--against detects a re-proposal in a candidate text file', async () => {
+    await writeAdrs();
+    await writeFile(join(dir, 'plan.md'), 'plan: stand up a Neo4j server for the graph.');
+    const r = ditto(['memory', 'measure', '--against', 'plan.md', '--output', 'json']);
+    expect(r.exitCode).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.reproposals_detected).toBeGreaterThanOrEqual(1);
+    expect(out.reproposal_rate).toBeGreaterThan(0);
+  });
+
+  test('absent ADR dir is a usage error', () => {
+    const r = ditto(['memory', 'measure', '--output', 'json']);
+    expect(r.exitCode).toBe(65);
+  });
+});
+
+describe('ditto memory capture (data-dependent case, wi_260621r2m)', () => {
+  // Scan one code file so a source_type='code' MemorySource exists, then return
+  // its src_ id (the capture's code-path grounding, ac-1 finding-B floor).
+  async function scanCodeSource(): Promise<string> {
+    await writeFile(
+      join(dir, 'feature.ts'),
+      'export const branch = (x: number) => (x > 0 ? 1 : 2);\n',
+    );
+    const scan = ditto(['memory', 'scan', '--output', 'json']);
+    expect(scan.exitCode).toBe(0);
+    const added: string[] = JSON.parse(scan.stdout).added;
+    expect(added.length).toBeGreaterThanOrEqual(1);
+    return added[0];
+  }
+
+  // ac-1: capture → INFERRED + pending + ≥1 code source. The agent claims a fact
+  // (EXTRACTED) but it is stored as a guess (INFERRED), and it stays pending.
+  test('capture records an INFERRED, pending observation bound to a code source (ac-1)', async () => {
+    const src = await scanCodeSource();
+    const r = ditto([
+      'memory',
+      'capture',
+      '--text',
+      'with an empty input list the loop never runs and total stays 0',
+      '--source',
+      src,
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(0);
+    const ev = JSON.parse(r.stdout);
+    expect(ev.event_type).toBe('observation');
+    expect(ev.confidence_kind).toBe('INFERRED');
+    expect(ev.status).toBe('pending');
+    expect(ev.sources).toContain(src);
+    expect(ev.sources.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // ac-1 regression: an agent-actor EXTRACTED claim is downgraded to INFERRED
+  // (laundering guard in proposeEvent, reused — never stored as fact).
+  test('agent EXTRACTED claim is stored INFERRED, never as fact (ac-1)', async () => {
+    const src = await scanCodeSource();
+    const r = ditto([
+      'memory',
+      'capture',
+      '--text',
+      'negative quantity yields a refund branch',
+      '--source',
+      src,
+      '--confidence',
+      'EXTRACTED',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(0);
+    expect(JSON.parse(r.stdout).confidence_kind).toBe('INFERRED');
+  });
+
+  // ac-1 negative: a capture with no code source is rejected (CLI-layer floor).
+  test('capture with no source is rejected (usage error)', async () => {
+    await scanCodeSource();
+    const r = ditto([
+      'memory',
+      'capture',
+      '--text',
+      'some data-dependent behavior',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(65);
+  });
+
+  // ac-1 negative: a capture whose only source is non-code (markdown) is rejected
+  // — the floor checks the bound source resolves to source_type='code'.
+  test('capture bound only to a non-code source is rejected (usage error)', async () => {
+    await writeFile(join(dir, 'notes.md'), '# notes\n\nsome prose about behavior\n');
+    const scan = ditto(['memory', 'scan', '--output', 'json']);
+    expect(scan.exitCode).toBe(0);
+    const mdSrc: string = JSON.parse(scan.stdout).added[0];
+    const r = ditto([
+      'memory',
+      'capture',
+      '--text',
+      'data-dependent behavior',
+      '--source',
+      mdSrc,
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(65);
+  });
+
+  // ac-2 round-trip: capture → approve → the event is retrievable via memory query
+  // (deterministic body-search round-trip over the approved head).
+  test('after approve the captured event is retrievable via memory query (ac-2)', async () => {
+    const src = await scanCodeSource();
+    const captured = ditto([
+      'memory',
+      'capture',
+      '--text',
+      'sentinelTokenZyx marks the empty-batch branch',
+      '--source',
+      src,
+      '--output',
+      'json',
+    ]);
+    expect(captured.exitCode).toBe(0);
+    const id = JSON.parse(captured.stdout).event_id;
+
+    const approved = ditto([
+      'memory',
+      'approve',
+      id,
+      '--by',
+      'user',
+      '--actor',
+      'user',
+      '--output',
+      'json',
+    ]);
+    expect(approved.exitCode).toBe(0);
+    const approvedId = JSON.parse(approved.stdout).decision.event_id;
+
+    const q = ditto(['memory', 'query', 'sentinelTokenZyx', '--text', '--output', 'json']);
+    expect(q.exitCode).toBe(0);
+    const out = JSON.parse(q.stdout);
+    const ids = out.matches.map((m: { event_id: string }) => m.event_id);
+    expect(ids).toContain(approvedId);
+  });
+
+  // ac-3: a pending (pre-approve) capture is NOT served — absent from query
+  // (approved-only reduce). Pending knowledge never leaks into answers.
+  test('a pending capture is absent from query before approval (ac-3)', async () => {
+    const src = await scanCodeSource();
+    const captured = ditto([
+      'memory',
+      'capture',
+      '--text',
+      'sentinelPendingQqq marks a pre-approval branch',
+      '--source',
+      src,
+      '--output',
+      'json',
+    ]);
+    expect(captured.exitCode).toBe(0);
+
+    const q = ditto(['memory', 'query', 'sentinelPendingQqq', '--text', '--output', 'json']);
+    expect(q.exitCode).toBe(0);
+    expect(JSON.parse(q.stdout).matches.length).toBe(0);
+  });
+
+  // ac-4: the capture path adds no new event_type — memoryEventType enum is
+  // unchanged. Snapshot diff over the canonical option list.
+  test('memoryEventType enum options are unchanged (ac-4)', async () => {
+    const { memoryEventType } = await import('~/schemas/memory-event');
+    expect(memoryEventType.options).toEqual([
+      'decision',
+      'observation',
+      'preference',
+      'review_outcome',
+      'analysis',
+      'correction',
+    ]);
+  });
+});

@@ -41,6 +41,12 @@ export const memoryEvent = z
     approved_by: z.string().min(1).optional(),
     decided_at: isoDateTime.optional(),
     supersedes: memoryEventId.optional(),
+    governs: z
+      .array(z.string().min(1))
+      .default([])
+      .describe(
+        'code paths this decision governs (from an ADR `관련:` header) — bridges code Artifact nodes to this Decision (decision events only)',
+      ),
   })
   .superRefine((event, ctx) => {
     // Approval invariant: approved/rejected events must record who and when.

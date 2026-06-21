@@ -227,6 +227,167 @@ describe('projectEventNodes', () => {
     // and the source node is not pulled in solely by a secret event.
     expect(nodes.find((n) => n.id === 'source:src_pub00001')).toBeUndefined();
   });
+
+  test('decision with governs → Artifact node + Artifact→Decision RATIONALE_FOR bridge edge', () => {
+    const decision = ev('memevt_dec00002', {
+      ...approval,
+      event_type: 'decision',
+      text: 'memory subsystem design',
+      sources: ['src_adr0013'],
+      governs: ['src/core/memory-project.ts', 'src/core/ditto-paths.ts'],
+    });
+    const { nodes, edges } = projectEventNodes([decision]);
+    // each governed code path → an Artifact node, extension stripped to match ACG-emitted ids
+    expect(nodes.find((n) => n.id === 'artifact:src/core/memory-project')?.node_type).toBe(
+      'Artifact',
+    );
+    expect(nodes.find((n) => n.id === 'artifact:src/core/ditto-paths')?.node_type).toBe('Artifact');
+    // the bridge: code → decision, EXTRACTED because cited in the ADR 관련: header
+    const bridge = edges.find(
+      (e) => e.from === 'artifact:src/core/memory-project' && e.to === 'decision:memevt_dec00002',
+    );
+    expect(bridge?.edge_type).toBe('RATIONALE_FOR');
+    expect(bridge?.confidence_kind).toBe('EXTRACTED');
+  });
+
+  test('governs is ignored for non-decision events (bridge is decision-only)', () => {
+    const obs = ev('memevt_obs00003', {
+      ...approval,
+      event_type: 'observation',
+      governs: ['src/core/whatever'],
+    });
+    const { nodes } = projectEventNodes([obs]);
+    expect(nodes.find((n) => n.id === 'artifact:src/core/whatever')).toBeUndefined();
+  });
+
+  // wi_260621vy9 (option A): a code-grounded captured discovery (non-decision
+  // event whose source is a code source) emits an Artifact node + Episode↔Artifact
+  // MENTIONS edge so it is reachable in warm-start.
+  test('(a) code-source observation → artifact:<path> node (name=path) + Episode↔Artifact MENTIONS edge', () => {
+    const obs = ev('memevt_codeobs01', {
+      ...approval,
+      event_type: 'observation',
+      text: 'the loop fans out waves here',
+      sources: ['src_codeaaa1'],
+    });
+    const codePaths = new Map([['src_codeaaa1', 'src/core/autopilot-loop.ts']]);
+    const { nodes, edges } = projectEventNodes([obs], new Set(), codePaths);
+    const art = nodes.find((n) => n.id === 'artifact:src/core/autopilot-loop');
+    expect(art?.node_type).toBe('Artifact');
+    // name MUST carry the path tokens so coverageRoots can match (OBJ-1).
+    expect(art?.name).toBe('src/core/autopilot-loop.ts');
+    const mentions = edges.find(
+      (e) => e.from === 'decision:memevt_codeobs01' && e.to === 'artifact:src/core/autopilot-loop',
+    );
+    expect(mentions?.edge_type).toBe('MENTIONS');
+    expect(mentions?.confidence_kind).toBe('EXTRACTED');
+    expect(mentions?.id).toBe(
+      'mentions:artifact:src/core/autopilot-loop->decision:memevt_codeobs01',
+    );
+  });
+
+  test('(b) same path captured + governed → ONE Artifact node (dedup)', () => {
+    const obs = ev('memevt_codeobs02', {
+      ...approval,
+      event_type: 'observation',
+      text: 'observed here',
+      sources: ['src_codebbb2'],
+    });
+    const decision = ev('memevt_decgov02', {
+      ...approval,
+      event_type: 'decision',
+      text: 'governs the same path',
+      sources: ['src_adr00002'],
+      governs: ['src/core/shared.ts'],
+    });
+    const codePaths = new Map([['src_codebbb2', 'src/core/shared.ts']]);
+    const { nodes } = projectEventNodes([obs, decision], new Set(), codePaths);
+    expect(nodes.filter((n) => n.id === 'artifact:src/core/shared')).toHaveLength(1);
+  });
+
+  test('(c) secret code-source → NO Artifact node and NO MENTIONS edge', () => {
+    const obs = ev('memevt_codeobs03', {
+      ...approval,
+      event_type: 'observation',
+      text: 'grounded on a secret code source',
+      sources: ['src_secretc3'],
+    });
+    const codePaths = new Map([['src_secretc3', 'src/core/secret.ts']]);
+    const { nodes, edges } = projectEventNodes([obs], new Set(['src_secretc3']), codePaths);
+    expect(nodes.find((n) => n.id === 'artifact:src/core/secret')).toBeUndefined();
+    expect(edges.find((e) => e.to === 'artifact:src/core/secret')).toBeUndefined();
+    // the non-secret event node itself is still present.
+    expect(nodes.find((n) => n.id === 'decision:memevt_codeobs03')?.node_type).toBe('Episode');
+  });
+
+  test('(d) code-source-less observation + decision governs are unchanged by the new param', () => {
+    const obs = ev('memevt_codeobs04', {
+      ...approval,
+      event_type: 'observation',
+      text: 'no code source',
+      sources: ['src_note00004'], // not in the code map
+    });
+    const decision = ev('memevt_decgov04', {
+      ...approval,
+      event_type: 'decision',
+      text: 'governs',
+      sources: ['src_adr00004'],
+      governs: ['src/core/governed.ts'],
+    });
+    const codePaths = new Map([['src_codexxx4', 'src/core/elsewhere.ts']]);
+    const { nodes, edges } = projectEventNodes([obs, decision], new Set(), codePaths);
+    // observation grounded on a non-code source ⇒ no Artifact from the capture branch.
+    expect(nodes.find((n) => n.id === 'artifact:src/core/elsewhere')).toBeUndefined();
+    // the decision governs bridge is intact.
+    expect(nodes.find((n) => n.id === 'artifact:src/core/governed')?.node_type).toBe('Artifact');
+    expect(
+      edges.find(
+        (e) =>
+          e.from === 'artifact:src/core/governed' &&
+          e.to === 'decision:memevt_decgov04' &&
+          e.edge_type === 'RATIONALE_FOR',
+      ),
+    ).toBeDefined();
+  });
+
+  test('(e) determinism: two projections of the same input are identical', () => {
+    const obs = ev('memevt_codeobs05', {
+      ...approval,
+      event_type: 'observation',
+      text: 'observed',
+      sources: ['src_codeee5a', 'src_codeee5b'],
+    });
+    const codePaths = new Map([
+      ['src_codeee5a', 'src/core/a.ts'],
+      ['src_codeee5b', 'src/core/b.ts'],
+    ]);
+    const r1 = projectEventNodes([obs], new Set(), codePaths);
+    const r2 = projectEventNodes([obs], new Set(), codePaths);
+    expect(r1).toEqual(r2);
+  });
+});
+
+describe('code↔decision bridge (end-to-end traversal)', () => {
+  test('a governed code file resolves to its governing ADR in the serving graph', () => {
+    const decision = ev('memevt_dec00010', {
+      ...approval,
+      event_type: 'decision',
+      text: 'ADR-XXXX governing decision',
+      sources: ['src_adr00099'],
+      governs: ['src/core/foo.ts'],
+    });
+    const { nodes, edges } = projectEventNodes([decision]);
+    const g = buildServingGraph(nodes, edges, {
+      projection_id: 'proj_bridge01',
+      generated_at: '2026-06-18T00:00:00+00:00',
+    });
+    // BFS from the code file reaches the ADR that governs it — the bridge that
+    // §3 said was missing (code island ↔ decision island now connected).
+    const neighbors = g.adjacency['artifact:src/core/foo'] ?? [];
+    expect(
+      neighbors.some((n) => n.to === 'decision:memevt_dec00010' && n.edge_type === 'RATIONALE_FOR'),
+    ).toBe(true);
+  });
 });
 
 describe('buildServingGraph (one-way adjacency)', () => {
@@ -467,6 +628,29 @@ describe('proposeEvent / approveEvent (write model §4-5 / §10-2 F2)', () => {
     // persisted immutably
     const stored = await new MemoryEventStore(workDir).get(proposed.event_id);
     expect(stored.status).toBe('pending');
+  });
+
+  test('laundering guard: an agent cannot propose an EXTRACTED fact — downgraded to INFERRED (ac-4)', async () => {
+    const proposed = await proposeEvent(workDir, {
+      event_type: 'observation',
+      text: 'I think the cache breaks when empty',
+      actor: { kind: 'agent', role: 'implementer' },
+      confidence_kind: 'EXTRACTED',
+      sources: [],
+    });
+    // a self-reported guess must not be laundered into a fact (EXTRACTED).
+    expect(proposed.confidence_kind).toBe('INFERRED');
+  });
+
+  test('a user may assert an EXTRACTED fact (not downgraded)', async () => {
+    const proposed = await proposeEvent(workDir, {
+      event_type: 'observation',
+      text: 'confirmed by the user',
+      actor: { kind: 'user' },
+      confidence_kind: 'EXTRACTED',
+      sources: [],
+    });
+    expect(proposed.confidence_kind).toBe('EXTRACTED');
   });
 
   test('approveEvent appends a superseding approved event without mutating the original', async () => {

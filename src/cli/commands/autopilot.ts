@@ -1,3 +1,5 @@
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { type ApprovalSourceValue, applyApproval, applyRejection } from '~/core/autopilot-approval';
 import { bootstrapAutopilot } from '~/core/autopilot-bootstrap';
@@ -6,13 +8,16 @@ import { assembleCompletionFromGraph } from '~/core/autopilot-complete';
 import { kindToOwner } from '~/core/autopilot-graph';
 import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
+import { checkCiteGate, crossValidateCite, detectActiveConflicts } from '~/core/cite-gate';
 import { CompletionStore } from '~/core/completion-store';
 import { nextCoverageNode, recordCoverageRound } from '~/core/coverage-loop';
+import { dittoDir } from '~/core/ditto-paths';
 import { checkE2eCompletionGate } from '~/core/e2e/completion-gate';
 import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { intentDriftGate, interfaceBaselineDriftGate } from '~/core/gates';
 import { IntentStore } from '~/core/intent-store';
+import { type MeasurementReport, measureHallucination } from '~/core/memory-measure';
 import { WorkItemStore } from '~/core/work-item-store';
 import { coverageRoundPayload } from '~/schemas/coverage';
 import {
@@ -280,6 +285,28 @@ const autopilotRecordResult = defineCommand({
 });
 
 /**
+ * Re-proposal-rate measurement over the repo's ADR bodies — the same source
+ * `ditto memory measure` reads (memory.ts §memoryMeasure). The completion path
+ * has no candidate plan texts, so this is the inventory baseline (re-proposal
+ * rate is 0 with an empty candidate set). A missing ADR dir is tolerated:
+ * `measureHallucination([], [])` yields an empty, non-crashing report so the
+ * cross-check stays advisory and never blocks completion.
+ */
+async function measureReproposalForCompletion(repoRoot: string): Promise<MeasurementReport> {
+  const adrDir = join(dittoDir(repoRoot), 'knowledge', 'adr');
+  let names: string[];
+  try {
+    names = (await readdir(adrDir)).filter((n) => n.endsWith('.md')).sort();
+  } catch {
+    names = [];
+  }
+  const adrs = await Promise.all(
+    names.map(async (n) => ({ id: n, body: await readFile(join(adrDir, n), 'utf8') })),
+  );
+  return measureHallucination(adrs, []);
+}
+
+/**
  * `ditto autopilot complete` — assemble a completion contract from the finished
  * graph (done→completion bridge). Maps each acceptance criterion to the evidence
  * the nodes collected and derives its verdict, evidence-gated (a pass needs a
@@ -337,6 +364,27 @@ const autopilotComplete = defineCommand({
         ...(args.summary ? { summary: args.summary } : {}),
       });
       await new CompletionStore(repoRoot).write(completion);
+      // ac-2 cite-or-abstain advisory gate: did the lineage-pushed nodes cite or
+      // abstain against the governing decisions injected into their packets?
+      // ADVISORY — warnings are surfaced but NEVER block completion (no exit
+      // change). A `skip` verdict (empty denominator: no node received a push)
+      // is info, NOT a vacuous checked-pass.
+      const cite = await checkCiteGate(repoRoot, { workItemId: args.workItem, graph });
+      // ac-4 표식 단독 성공판정 금지: cross-validate the cite verdict against the
+      // deterministic re-proposal rate (memory-measure source). ADVISORY — a
+      // cite `pass` is only "confirmed" when the outcome backs it; otherwise it
+      // is surfaced as cited-but-unvalidated / cannot-confirm. NEVER blocks
+      // (mirrors the cite-gate; never touches final_verdict or exit code). A
+      // non-pass cite verdict ⇒ not-applicable (no clean cite to validate).
+      const measurement = await measureReproposalForCompletion(repoRoot);
+      const citeCrossCheck = crossValidateCite(cite, measurement);
+      // 단계2 능동 모순경고: where a pushed node's OUTPUT re-proposes a rejected
+      // alternative of a governing ADR, surface it per-node. ADVISORY · FN우선;
+      // never blocks, never touches final_verdict (same posture as the cite-gate).
+      const conflicts = await detectActiveConflicts(repoRoot, {
+        workItemId: args.workItem,
+        graph,
+      });
       if (format === 'json') {
         writeJson({
           work_item_id: args.workItem,
@@ -346,6 +394,13 @@ const autopilotComplete = defineCommand({
             verdict: a.verdict,
             evidence_count: a.evidence.length,
           })),
+          cite_gate: {
+            verdict: cite.verdict,
+            pushed_node_ids: cite.pushed_node_ids,
+            warnings: cite.warnings,
+          },
+          cite_cross_check: citeCrossCheck,
+          conflict_warnings: conflicts,
           path: `.ditto/local/work-items/${args.workItem}/completion.json`,
         });
       } else {
@@ -359,6 +414,21 @@ const autopilotComplete = defineCommand({
           writeHuman(
             '  (non-pass: criteria without evidence stay unverified — close them, then re-run)',
           );
+        }
+        if (cite.verdict === 'warning') {
+          writeHuman(
+            `  cite-or-abstain (ac-2, advisory — non-blocking): ${cite.warnings.length} warning(s)`,
+          );
+          for (const w of cite.warnings) writeHuman(`    [${w.node_id}] ${w.message}`);
+        }
+        writeHuman(
+          `  cite cross-check (ac-4, advisory — non-blocking): ${citeCrossCheck.combined} (re-proposal rate ${citeCrossCheck.reproposal_rate.toFixed(3)})`,
+        );
+        if (conflicts.length > 0) {
+          writeHuman(
+            `  능동 모순경고 (단계2, advisory — non-blocking): ${conflicts.length}건 — 기각된 대안 재제안 가능성`,
+          );
+          for (const c of conflicts) writeHuman(`    [${c.node_id}] ${c.message}`);
         }
       }
     } catch (err) {

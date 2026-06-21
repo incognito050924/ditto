@@ -78,6 +78,17 @@ const PLANNER_GENERATE_DIRECTIVE =
   '{id, kind, purpose, depends_on, acceptance_refs} mapped to its acceptance ' +
   'criteria; scale to task size (small tasks stay minimal — do not force a stage).';
 
+/**
+ * Cite-or-abstain directive (memory-librarian §8 inc.2, ac-2): when the packet
+ * carries governing decisions, the agent must not silently ignore them — for
+ * each it relied on, cite it; if none apply, say so. Turns warm-start from mere
+ * injection into enforced consumption (the §7 "inject ≠ consume" risk).
+ */
+const CITE_OR_ABSTAIN_DIRECTIVE =
+  'Consult the governing decisions in context.memory.decision_briefs: cite the ' +
+  'ones you relied on (follow them or justify any deviation), and if none apply ' +
+  'to this task, state that explicitly (cite-or-abstain).';
+
 export function buildDelegationPacket(
   node: AutopilotNode,
   workItem: WorkItem,
@@ -112,6 +123,9 @@ export function buildDelegationPacket(
       'Work only from this packet.',
       'Return a single result with evidence (command + exit code, file:line).',
       ...(isPlanner ? [PLANNER_GENERATE_DIRECTIVE] : []),
+      ...(memoryContext?.decisions?.length || memoryContext?.decision_briefs?.length
+        ? [CITE_OR_ABSTAIN_DIRECTIVE]
+        : []),
       `Stop when done_when is met: ${doneWhen}.`,
     ],
     must_not_do: [

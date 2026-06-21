@@ -1,7 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { defineCommand } from 'citty';
+import { dittoDir } from '~/core/ditto-paths';
+import { EvidenceStore } from '~/core/evidence-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { listChangedFiles } from '~/core/git';
 import { generateId } from '~/core/id';
@@ -14,6 +16,7 @@ import {
   irFragmentsSchema,
   mergeIrFragments,
 } from '~/core/memory-build';
+import { measureHallucination } from '~/core/memory-measure';
 import {
   MemoryEventAlreadyDecidedError,
   MemoryEventNotPendingError,
@@ -30,6 +33,7 @@ import {
   explainNode,
   queryBodies,
   queryNeighbors,
+  querySymbolBrief,
   readFreshness,
   readPullUsage,
   recordPullQuery,
@@ -42,8 +46,11 @@ import {
   MemoryEventStore,
   MemoryGraphIrStore,
   MemoryProjectionStore,
+  MemorySourceStore,
 } from '~/core/memory-store';
 import { readUsageReport } from '~/core/memory-warmstart';
+import { workItemId as workItemIdSchema } from '~/schemas/common';
+import type { EvidenceRecord } from '~/schemas/evidence-record';
 import {
   type MemoryEvent,
   memoryEvent,
@@ -684,6 +691,41 @@ const memoryQuery = defineCommand({
         await runBodyQuery(repoRoot, args.node, depth, format, false);
         return;
       }
+      // A `symbol:<path>#<name>` id returns the decision-lineage brief (ac-1):
+      // governing ADR(s) + rejected alternatives + invariants + per-item
+      // EXTRACTED/INFERRED tag with cite/fallback/미발견 coverage — not generic
+      // BFS neighbors.
+      if (args.node.startsWith('symbol:') && args.node.includes('#')) {
+        const brief = await querySymbolBrief(repoRoot, args.node);
+        await recordPullQuery(repoRoot, {
+          ts: new Date().toISOString(),
+          node: args.node,
+          depth,
+          neighbor_count: brief.governing_adrs.length,
+          freshness: brief.freshness,
+        }).catch(() => {});
+        if (format === 'json') {
+          writeJson(brief);
+        } else {
+          writeHuman(`Decision-lineage brief for ${brief.symbol} (coverage: ${brief.coverage}):`);
+          if (brief.items.length === 0) {
+            writeHuman('  (no governing decision found — 미발견)');
+          }
+          for (const it of brief.items) {
+            writeHuman(`  - ${it.adr_id}\t[${it.tag} · ${it.coverage}]`);
+          }
+          if (brief.rejected_alternatives.length > 0) {
+            writeHuman(`  rejected alternatives (${brief.rejected_alternatives.length}):`);
+            for (const a of brief.rejected_alternatives) writeHuman(`    × ${a}`);
+          }
+          if (brief.invariants.length > 0) {
+            writeHuman(`  invariants (${brief.invariants.length}):`);
+            for (const i of brief.invariants) writeHuman(`    ! ${i}`);
+          }
+          writeFreshnessHuman(brief);
+        }
+        return;
+      }
       const graph = await loadServingOrExit(repoRoot);
       const result = queryNeighbors(graph, args.node, depth);
       const freshness = await readFreshness(repoRoot);
@@ -1048,6 +1090,309 @@ const memoryApprove = defineCommand({
   },
 });
 
+/**
+ * Where the evidence came from, rendered for the event text. The EvidenceRecord
+ * has no stable id and is not a memory source, so the provenance cannot live in
+ * the event's `sources` array (those must be `src_…` ids) — it is carried in the
+ * text instead (memory-librarian §8 inc.3 design note, ac-3 predicate adjusted).
+ */
+function evidenceLocus(record: EvidenceRecord): string {
+  const ref = record.ref;
+  switch (ref.kind) {
+    case 'command':
+      return ref.command
+        ? `command \`${ref.command}\`${record.exit_code !== null ? ` (exit ${record.exit_code})` : ''}`
+        : 'command';
+    case 'file':
+    case 'artifact':
+      if (ref.path) {
+        return ref.lines ? `${ref.path}:${ref.lines.start}-${ref.lines.end}` : ref.path;
+      }
+      return ref.kind;
+    case 'url':
+      return ref.url ?? 'url';
+    default:
+      return ref.kind;
+  }
+}
+
+/** Build the INFERRED observation body from an evidence record. */
+function findingText(record: EvidenceRecord): string {
+  const body = record.ref.summary ?? record.key_lines.join('\n');
+  const sha = record.ref.sha256 ? ` sha256:${record.ref.sha256.slice(0, 12)}` : '';
+  const text = `${body}\n\nevidence: ${evidenceLocus(record)}${sha}`.trim();
+  // memoryEvent.text caps at 4000; truncate defensively (rare, long key_lines).
+  return text.length > 4000 ? text.slice(0, 4000) : text;
+}
+
+const memoryProposeFinding = defineCommand({
+  meta: {
+    name: 'propose-finding',
+    description:
+      'Convert a captured evidence record into a pending INFERRED observation event (§8 inc.3, ac-3). Evidence-bound capture only: the agent self-report is grounded in an evidence record and never stored as fact. Selector: --work-item <id> --index <n> (EvidenceRecord has no stable id; see design note).',
+  },
+  args: {
+    'work-item': {
+      type: 'string',
+      description: 'Work item id whose evidence-index.json holds the record',
+      required: true,
+    },
+    index: {
+      type: 'string',
+      description: 'Zero-based index of the record in evidence-index.json',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const wi = args['work-item'];
+    if (!workItemIdSchema.safeParse(wi).success) {
+      writeError(`invalid --work-item id "${wi}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const index = Number(args.index);
+    if (!Number.isInteger(index) || index < 0) {
+      writeError(`--index must be a non-negative integer; got "${args.index}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const ledger = await new EvidenceStore(repoRoot).readIndex(wi);
+      if (ledger.records.length === 0) {
+        writeError(`no evidence records for work item ${wi}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      if (index >= ledger.records.length) {
+        writeError(`--index ${index} out of range (${ledger.records.length} record(s))`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const record = ledger.records[index];
+      // confidence_kind=INFERRED: an agent-captured finding is a guess grounded
+      // in evidence, never a fact (ac-3·ac-4). The laundering guard in
+      // proposeEvent would downgrade EXTRACTED anyway; we set it explicitly.
+      const written = await proposeEvent(repoRoot, {
+        event_type: 'observation',
+        text: findingText(record),
+        sources: [],
+        confidence_kind: 'INFERRED',
+        actor: { kind: 'agent' },
+      });
+      if (format === 'json') {
+        writeJson(written);
+      } else {
+        writeHuman(`Proposed finding ${written.event_id} from ${wi} evidence #${index}`);
+        writeHuman(`  type:       ${written.event_type}`);
+        writeHuman(`  confidence: ${written.confidence_kind}`);
+        writeHuman(`  status:     ${written.status}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/invalid|expected|required/i.test(msg)) {
+        writeError(`memory propose-finding failed: ${msg}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory propose-finding failed: ${msg}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+const memoryCapture = defineCommand({
+  meta: {
+    name: 'capture',
+    description:
+      'Capture a data-dependent-case observation: a pending, INFERRED observation event grounded in ≥1 code-path source (wi_260621r2m, ac-1). Reuses the propose path; the agent self-report is never stored as fact (laundering downgrade) and must cite at least one source_type=code source.',
+  },
+  args: {
+    text: { type: 'string', description: 'Observed data-dependent behavior', required: true },
+    source: {
+      type: 'string',
+      description:
+        'Code-path source id(s) grounding the observation (comma-separated, ≥1 required)',
+      required: false,
+    },
+    role: { type: 'string', description: 'Agent role', required: false },
+    // confidence is accepted for symmetry with `propose`; an agent EXTRACTED
+    // claim is downgraded to INFERRED by proposeEvent's laundering guard (ac-1).
+    confidence: {
+      type: 'string',
+      description: `Confidence kind: ${memoryConfidenceKind.options.join('|')} (default INFERRED)`,
+      default: 'INFERRED',
+    },
+    sensitivity: {
+      type: 'string',
+      description: `Sensitivity: ${memorySensitivity.options.join('|')} (default internal)`,
+      default: 'internal',
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const sources = (args.source ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    for (const s of sources) {
+      if (!memorySourceId.safeParse(s).success) {
+        writeError(`invalid --source id "${s}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    // Code-source floor (ac-1, finding-B): a data-dependent case is an observation
+    // ABOUT code, so it must be grounded in ≥1 source that resolves to a
+    // source_type='code' MemorySource. Enforced here at the CLI layer only — the
+    // generic proposeEvent contract is left unchanged.
+    const sourceStore = new MemorySourceStore(repoRoot);
+    let hasCodeSource = false;
+    for (const id of sources) {
+      try {
+        if ((await sourceStore.get(id)).source_type === 'code') {
+          hasCodeSource = true;
+          break;
+        }
+      } catch {
+        // unresolvable source id — does not count toward the code floor
+      }
+    }
+    if (!hasCodeSource) {
+      writeError(
+        'capture requires at least one --source resolving to a source_type=code MemorySource',
+      );
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    try {
+      const written = await proposeEvent(repoRoot, {
+        event_type: 'observation',
+        text: args.text,
+        sources,
+        confidence_kind: args.confidence as MemoryEvent['confidence_kind'],
+        sensitivity: args.sensitivity as MemoryEvent['sensitivity'],
+        actor: { kind: 'agent', ...(args.role ? { role: args.role } : {}) },
+      });
+      if (format === 'json') {
+        writeJson(written);
+      } else {
+        writeHuman(`Captured observation ${written.event_id}`);
+        writeHuman(`  type:       ${written.event_type}`);
+        writeHuman(`  confidence: ${written.confidence_kind}`);
+        writeHuman(`  status:     ${written.status}`);
+      }
+    } catch (err) {
+      if (err instanceof MemoryEventExistsError) {
+        writeError(err.message);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/invalid|expected|required/i.test(msg)) {
+        writeError(`memory capture failed: ${msg}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`memory capture failed: ${msg}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+const memoryMeasure = defineCommand({
+  meta: {
+    name: 'measure',
+    description:
+      'Compute the hallucination-reduction baseline (§8 inc.5, ac-5): re-proposal rate against catalogued rejected alternatives + invariant inventory + ADR parse coverage. measure-before-expand gate data source (ADR-0013 D4). Pass --against <file,...> to check candidate plan texts for re-proposals.',
+  },
+  args: {
+    against: {
+      type: 'string',
+      description: 'Comma-separated candidate text file(s) to scan for re-proposals',
+      required: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const adrDir = join(dittoDir(repoRoot), 'knowledge', 'adr');
+    let names: string[];
+    try {
+      names = (await readdir(adrDir)).filter((n) => n.endsWith('.md')).sort();
+    } catch {
+      writeError(`no ADR directory at ${adrDir}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (names.length === 0) {
+      writeError(`no ADRs found under ${adrDir}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    try {
+      const adrs = await Promise.all(
+        names.map(async (n) => ({ id: n, body: await readFile(join(adrDir, n), 'utf8') })),
+      );
+      const candidateFiles = (args.against ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      const candidates = await Promise.all(
+        candidateFiles.map((f) => readFile(isAbsolute(f) ? f : join(repoRoot, f), 'utf8')),
+      );
+      const report = measureHallucination(adrs, candidates);
+      if (format === 'json') {
+        writeJson(report);
+      } else {
+        writeHuman('Hallucination-reduction baseline (ac-5):');
+        writeHuman(
+          `  ADRs: ${report.adrs_total} (with 대안 section: ${report.adrs_with_rejected_section})`,
+        );
+        if (report.adrs_without_rejected_section.length > 0) {
+          writeHuman(`  no 대안 section: ${report.adrs_without_rejected_section.join(', ')}`);
+        }
+        writeHuman(`  rejected alternatives catalogued: ${report.rejected_alternatives_total}`);
+        writeHuman(`  invariants (low-precision scan): ${report.invariants_total}`);
+        writeHuman(`  candidates scanned: ${report.candidates_total}`);
+        writeHuman(
+          `  re-proposals detected: ${report.reproposals_detected} (rate ${report.reproposal_rate.toFixed(3)})`,
+        );
+        writeHuman('  invariant violation rate: not computed (prose-scattered — see doc)');
+      }
+    } catch (err) {
+      writeError(`memory measure failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 const memoryUsage = defineCommand({
   meta: {
     name: 'usage',
@@ -1133,6 +1478,9 @@ export const memoryCommand = defineCommand({
     audit: memoryAudit,
     usage: memoryUsage,
     propose: memoryPropose,
+    'propose-finding': memoryProposeFinding,
+    capture: memoryCapture,
+    measure: memoryMeasure,
     approve: memoryApprove,
   },
 });
