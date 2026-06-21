@@ -20720,7 +20720,7 @@ function stripExt(path) {
   return path.replace(/\.[cm]?[jt]sx?$/, "").replace(/\.(java|kt|py)$/, "");
 }
 function assembleSymbolBrief(symbolId, decisions) {
-  const { path, name } = symbolFilePath(symbolId);
+  const { path } = symbolFilePath(symbolId);
   const file = stripExt(path);
   const items = [];
   const rejected = [];
@@ -20728,7 +20728,7 @@ function assembleSymbolBrief(symbolId, decisions) {
   const adrs = [];
   for (const d2 of decisions) {
     const cited = d2.governs.some((g3) => stripExt(g3) === file);
-    const mentioned = !cited && (d2.body.includes(path) || d2.body.includes(name));
+    const mentioned = !cited && d2.body.includes(path);
     if (!cited && !mentioned)
       continue;
     adrs.push(d2.adr_id);
@@ -39730,4 +39730,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=2a2f616687cecc6e4b1afa92520734e3cc22fee0ca1643f6404f0e5c6d1c174f
+//# ditto-src-stamp=b1d844987afaaefd3406551f7661c958f0d8fff31dec0292c3e55e74ef2d6c92

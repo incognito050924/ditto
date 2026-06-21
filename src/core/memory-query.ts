@@ -311,7 +311,7 @@ export function assembleSymbolBrief(
   symbolId: string,
   decisions: ReadonlyArray<GoverningDecision>,
 ): SymbolBrief {
-  const { path, name } = symbolFilePath(symbolId);
+  const { path } = symbolFilePath(symbolId);
   const file = stripExt(path);
   const items: SymbolBriefItem[] = [];
   const rejected: string[] = [];
@@ -320,7 +320,10 @@ export function assembleSymbolBrief(
 
   for (const d of decisions) {
     const cited = d.governs.some((g) => stripExt(g) === file);
-    const mentioned = !cited && (d.body.includes(path) || d.body.includes(name));
+    // fallback is a FILE-level signal (matches cite/governs granularity). Matching
+    // the bare symbol NAME too produced false positives — a short/common name like
+    // "run"/"x" appears in almost any ADR prose. Require the file path mention.
+    const mentioned = !cited && d.body.includes(path);
     if (!cited && !mentioned) continue;
     adrs.push(d.adr_id);
     items.push({

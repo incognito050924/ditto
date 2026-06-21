@@ -435,6 +435,21 @@ describe('assembleSymbolBrief (decision-lineage, ac-1)', () => {
     expect(brief.coverage).toBe('fallback');
   });
 
+  test('a symbol whose NAME appears in prose but FILE does not is NOT matched (fallback precision)', () => {
+    const decisions: GoverningDecision[] = [
+      {
+        adr_id: 'ADR-0099',
+        // the symbol NAME ("run") appears in prose, but the file path does NOT —
+        // a common short name must not create a false fallback (file-level signal only).
+        body: `${adrBody}\nThe scheduler will run the job loosely.`,
+        governs: ['src/other/unrelated.ts'],
+      },
+    ];
+    const brief = assembleSymbolBrief('symbol:src/core/scheduler.ts#run', decisions);
+    expect(brief.coverage).toBe('미발견');
+    expect(brief.items).toEqual([]);
+  });
+
   test('no governing decision → 미발견, never a false EXTRACTED', () => {
     const unrelated = [
       '# ADR-0099: unrelated',
