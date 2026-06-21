@@ -8,7 +8,7 @@ import { assembleCompletionFromGraph } from '~/core/autopilot-complete';
 import { kindToOwner } from '~/core/autopilot-graph';
 import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
-import { checkCiteGate, crossValidateCite } from '~/core/cite-gate';
+import { checkCiteGate, crossValidateCite, detectActiveConflicts } from '~/core/cite-gate';
 import { CompletionStore } from '~/core/completion-store';
 import { nextCoverageNode, recordCoverageRound } from '~/core/coverage-loop';
 import { dittoDir } from '~/core/ditto-paths';
@@ -378,6 +378,13 @@ const autopilotComplete = defineCommand({
       // non-pass cite verdict ⇒ not-applicable (no clean cite to validate).
       const measurement = await measureReproposalForCompletion(repoRoot);
       const citeCrossCheck = crossValidateCite(cite, measurement);
+      // 단계2 능동 모순경고: where a pushed node's OUTPUT re-proposes a rejected
+      // alternative of a governing ADR, surface it per-node. ADVISORY · FN우선;
+      // never blocks, never touches final_verdict (same posture as the cite-gate).
+      const conflicts = await detectActiveConflicts(repoRoot, {
+        workItemId: args.workItem,
+        graph,
+      });
       if (format === 'json') {
         writeJson({
           work_item_id: args.workItem,
@@ -393,6 +400,7 @@ const autopilotComplete = defineCommand({
             warnings: cite.warnings,
           },
           cite_cross_check: citeCrossCheck,
+          conflict_warnings: conflicts,
           path: `.ditto/local/work-items/${args.workItem}/completion.json`,
         });
       } else {
@@ -416,6 +424,12 @@ const autopilotComplete = defineCommand({
         writeHuman(
           `  cite cross-check (ac-4, advisory — non-blocking): ${citeCrossCheck.combined} (re-proposal rate ${citeCrossCheck.reproposal_rate.toFixed(3)})`,
         );
+        if (conflicts.length > 0) {
+          writeHuman(
+            `  능동 모순경고 (단계2, advisory — non-blocking): ${conflicts.length}건 — 기각된 대안 재제안 가능성`,
+          );
+          for (const c of conflicts) writeHuman(`    [${c.node_id}] ${c.message}`);
+        }
       }
     } catch (err) {
       writeError(`complete failed: ${err instanceof Error ? err.message : String(err)}`);

@@ -3,7 +3,12 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname } from 'node:path';
 import { join } from 'node:path';
-import { checkCiteGate, crossValidateCite } from '~/core/cite-gate';
+import {
+  checkCiteGate,
+  conflictsFromHits,
+  crossValidateCite,
+  detectActiveConflicts,
+} from '~/core/cite-gate';
 import type { CiteGateResult } from '~/core/cite-gate';
 import type { MeasurementReport } from '~/core/memory-measure';
 import { usageLogPath } from '~/core/memory-warmstart';
@@ -185,5 +190,90 @@ describe('crossValidateCite (ac-4 표식 단독 성공 판정 금지 — cite �
       baseline_reproposal_rate: 0.2,
     });
     expect(out.combined).not.toBe('confirmed');
+  });
+});
+
+describe('conflictsFromHits (active contradiction warning, 단계2)', () => {
+  const baseReport: MeasurementReport = {
+    adrs_total: 1,
+    adrs_with_rejected_section: 1,
+    adrs_without_rejected_section: [],
+    rejected_alternatives_total: 1,
+    invariants_total: 0,
+    candidates_total: 2,
+    reproposals_detected: 0,
+    reproposal_rate: 0,
+    reproposal_hits: [],
+    invariant_violations_computed: false,
+  };
+
+  test('maps each reproposal hit to a per-node conflict warning', () => {
+    const report: MeasurementReport = {
+      ...baseReport,
+      reproposal_hits: [
+        {
+          adr_id: 'ADR-0013',
+          item: '**임베딩 (vector)**: 비결정적이라 기각.',
+          matched_token: '임베딩',
+          candidate_index: 1,
+        },
+      ],
+    };
+    const warnings = conflictsFromHits(['nodeA', 'nodeB'], report);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({
+      node_id: 'nodeB',
+      adr_id: 'ADR-0013',
+      matched_token: '임베딩',
+    });
+    expect(warnings[0]?.message).toContain('재제안');
+  });
+
+  test('no hits → no warnings (advisory, never fabricates)', () => {
+    expect(conflictsFromHits(['nodeA'], baseReport)).toEqual([]);
+  });
+});
+
+describe('detectActiveConflicts (단계2 능동 모순경고 — end-to-end)', () => {
+  async function writeAdr(): Promise<void> {
+    const adrDir = join(repo, '.ditto', 'knowledge', 'adr');
+    await mkdir(adrDir, { recursive: true });
+    await writeFile(
+      join(adrDir, 'ADR-0099-x.md'),
+      ['# ADR-0099', '## 대안', '- **벡터 매칭 (vector)**: 비결정적이라 기각.'].join('\n'),
+      'utf8',
+    );
+  }
+
+  test('a pushed node re-proposing a rejected alternative → conflict warning', async () => {
+    await writeAdr();
+    await writeUsage([usage({ node_id: 'N1', actionable: true })]);
+    const graph = graphWith([
+      node({
+        id: 'N1',
+        evidence_refs: [{ kind: 'note', summary: '구현은 vector 매칭을 사용한다' }],
+      }),
+    ]);
+    const conflicts = await detectActiveConflicts(repo, { workItemId: WI, graph });
+    expect(conflicts.length).toBeGreaterThan(0);
+    expect(conflicts[0]).toMatchObject({ node_id: 'N1', adr_id: 'ADR-0099-x.md' });
+    expect(conflicts[0]?.matched_token).toContain('vector');
+  });
+
+  test('a pushed node NOT re-proposing → no conflict', async () => {
+    await writeAdr();
+    await writeUsage([usage({ node_id: 'N1', actionable: true })]);
+    const graph = graphWith([
+      node({ id: 'N1', evidence_refs: [{ kind: 'note', summary: '결정적 파싱으로 구현' }] }),
+    ]);
+    expect(await detectActiveConflicts(repo, { workItemId: WI, graph })).toEqual([]);
+  });
+
+  test('zero-denominator (no actionable push) → no conflict (advisory)', async () => {
+    await writeAdr();
+    const graph = graphWith([
+      node({ id: 'N1', evidence_refs: [{ kind: 'note', summary: 'vector 매칭' }] }),
+    ]);
+    expect(await detectActiveConflicts(repo, { workItemId: WI, graph })).toEqual([]);
   });
 });

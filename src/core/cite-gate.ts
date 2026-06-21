@@ -1,5 +1,8 @@
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
-import type { MeasurementReport } from './memory-measure';
+import { dittoDir } from './ditto-paths';
+import { type MeasurementReport, measureHallucination } from './memory-measure';
 import { readUsageReport } from './memory-warmstart';
 
 /**
@@ -158,4 +161,76 @@ export function crossValidateCite(
     ...(baseline !== undefined ? { baseline_reproposal_rate: baseline } : {}),
     advisory: true,
   };
+}
+
+/**
+ * Active contradiction warning (memory-librarian follow_up 단계2). The cite-gate
+ * checks that a pushed decision was cited/abstained; this goes one step further —
+ * it surfaces when a pushed node's OUTPUT re-proposes an alternative a governing
+ * ADR already rejected. The detection is the exact mechanism `measureHallucination`
+ * already runs (a candidate text echoing a rejected alternative = a re-proposal
+ * hit); 단계2 just renders each hit as a per-node warning instead of a rate.
+ * ADVISORY · FN우선: crude token matching errs toward over-flagging (놓치느니 넓게);
+ * never blocks, never changes final_verdict.
+ */
+export interface ConflictWarning {
+  node_id: string;
+  adr_id: string;
+  rejected_alternative: string;
+  matched_token: string;
+  message: string;
+}
+
+/** Pure: map measurement re-proposal hits onto per-node conflict warnings. */
+export function conflictsFromHits(
+  pushedNodeIds: string[],
+  report: MeasurementReport,
+): ConflictWarning[] {
+  return report.reproposal_hits.map((h) => {
+    const node_id = pushedNodeIds[h.candidate_index] ?? '?';
+    return {
+      node_id,
+      adr_id: h.adr_id,
+      rejected_alternative: h.item,
+      matched_token: h.matched_token,
+      message: `노드 ${node_id} 출력이 ${h.adr_id}가 기각한 대안 "${h.item.slice(0, 60)}"을(를) 재제안할 수 있음 (matched: "${h.matched_token}", advisory·FN우선)`,
+    };
+  });
+}
+
+/** Best-effort load of ADR bodies for the completion-path re-proposal scan. */
+async function loadAdrBodies(repoRoot: string): Promise<Array<{ id: string; body: string }>> {
+  const adrDir = join(dittoDir(repoRoot), 'knowledge', 'adr');
+  let names: string[];
+  try {
+    names = (await readdir(adrDir)).filter((n) => n.endsWith('.md')).sort();
+  } catch {
+    return [];
+  }
+  return Promise.all(
+    names.map(async (n) => ({ id: n, body: await readFile(join(adrDir, n), 'utf8') })),
+  );
+}
+
+/**
+ * Detect, on the completion path, where a pushed node's output re-proposes a
+ * rejected alternative of a governing ADR. Same denominator as the cite-gate
+ * (warmstart `actionable` nodes); the node's evidence text is the candidate.
+ */
+export async function detectActiveConflicts(
+  repoRoot: string,
+  input: CiteGateInput,
+): Promise<ConflictWarning[]> {
+  const report = await readUsageReport(repoRoot, input.workItemId);
+  const pushedNodeIds = [
+    ...new Set(report.records.filter((r) => r.actionable).map((r) => r.node_id)),
+  ].sort();
+  if (pushedNodeIds.length === 0) return [];
+  const byId = new Map(input.graph.nodes.map((n) => [n.id, n]));
+  const candidates = pushedNodeIds.map((id) => {
+    const node = byId.get(id);
+    return node ? evidenceText(node) : '';
+  });
+  const adrs = await loadAdrBodies(repoRoot);
+  return conflictsFromHits(pushedNodeIds, measureHallucination(adrs, candidates));
 }
