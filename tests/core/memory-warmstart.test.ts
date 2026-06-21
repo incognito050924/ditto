@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildDelegationPacket } from '~/core/autopilot-dispatch';
+import { bootstrapIngest } from '~/core/memory-bootstrap';
 import * as memoryProject from '~/core/memory-project';
 import { projectMemory } from '~/core/memory-project';
 import { scanSources } from '~/core/memory-scan';
@@ -78,11 +79,62 @@ describe('warmStartMemoryContext (§5-1 / §10-6 #1, fail-open warm-start)', () 
     await seedFreshGraph(coveringGraph());
     const ctx = await warmStartMemoryContext(repo, node('planner'), workItem, { now: NOW });
     // a bare decision id is not actionable; the brief carries the node summary
-    // (the Decision node's name) so the agent can cite it or abstain (ac-2).
-    expect(ctx?.decision_briefs).toContainEqual({
-      id: 'decision:d1',
-      summary: 'use loop-side fail-open query',
-    });
+    // (the Decision node's name) so the agent can cite it or abstain (ac-2). The
+    // directly-seeded decision:d1 has no backing decision event, so its structured
+    // fields are empty — but id + summary are still present.
+    const brief = ctx?.decision_briefs?.find((b) => b.id === 'decision:d1');
+    expect(brief).toBeDefined();
+    expect(brief?.summary).toBe('use loop-side fail-open query');
+    expect(brief?.rejected_alternatives).toEqual([]);
+    expect(brief?.invariants).toEqual([]);
+    expect(brief?.coverage).toBe('미발견');
+  });
+
+  // ac-2 (push side): the thin {id, summary} brief is expanded to the STRUCTURED
+  // brief (rejected-alternatives + invariants + tag/coverage) via the ac-1
+  // assembler, so the decision-boundary packet carries the governing decision's
+  // gist, not just an id+name. Bootstrap a real ADR so the decision node resolves
+  // to a body the reused extractors can read.
+  test('ac-2: expands decision briefs to the structured brief (rejected-alternatives + invariants + tag)', async () => {
+    const adrDir = join(repo, '.ditto', 'knowledge', 'adr');
+    await mkdir(adrDir, { recursive: true });
+    await writeFile(
+      join(adrDir, 'ADR-0099-warmstart.md'),
+      [
+        '# ADR-0099: warmstart memory graph decision',
+        '- 상태: accepted',
+        '- 관련: src/core/memory-warmstart.ts',
+        '## 결정',
+        '결정 본문.',
+        '## 대안',
+        '- **임베딩 (vector)**: 비결정적이라 기각.',
+        '## 불변식',
+        '- 도구 부재가 invariant를 깨면 안 된다 (불변식).',
+      ].join('\n'),
+    );
+    await bootstrapIngest(repo);
+    await projectMemory(repo, { now: NOW });
+
+    const wi = {
+      id: 'wi_warm_struct',
+      title: 'warmstart memory graph dispatch',
+      goal: 'wire warmstart into the autopilot dispatch path',
+      changed_files: ['src/core/memory-warmstart.ts'],
+    } as unknown as WorkItem;
+
+    const ctx = await warmStartMemoryContext(repo, node('planner'), wi, { now: NOW });
+    expect(ctx?.decision_briefs).toBeDefined();
+    const brief = ctx?.decision_briefs?.find((b) => b.coverage !== '미발견');
+    expect(brief).toBeDefined();
+    // structured fields populated by the reused ac-1 assembler:
+    expect(brief?.rejected_alternatives.some((a) => a.includes('임베딩'))).toBe(true);
+    expect(brief?.invariants.length).toBeGreaterThan(0);
+    // the ADR explicitly cites the governed file ⇒ EXTRACTED/cite.
+    expect(brief?.tag).toBe('EXTRACTED');
+    expect(brief?.coverage).toBe('cite');
+    // and the id + summary are still carried (not just the structured fields).
+    expect(brief?.id).toMatch(/^decision:/);
+    expect(typeof brief?.summary).toBe('string');
   });
 
   test('researcher is a warm-start owner too', async () => {

@@ -209,3 +209,52 @@ describe('ditto autopilot complete — e2e 완료 게이트 (O-4/O-18)', () => {
     expect(out.final_verdict).toBeDefined();
   });
 });
+
+describe('ditto autopilot complete — ac-4 표식 단독 성공판정 금지 (cite cross-check 배선)', () => {
+  test('완료 경로가 cite_cross_check를 advisory로 방출한다 (push 없음 → not-applicable)', async () => {
+    // 워밍스타트 usage 로그 없음 ⇒ cite verdict=skip ⇒ cross-check=not-applicable.
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    expect(res.exitCode).toBe(0);
+    const out = JSON.parse(res.stdout);
+    expect(out.cite_cross_check).toBeDefined();
+    expect(out.cite_cross_check.combined).toBe('not-applicable');
+    expect(out.cite_cross_check.advisory).toBe(true);
+    // advisory: cross-check가 final_verdict나 exit code를 바꾸지 않는다.
+    expect(out.cite_cross_check).not.toHaveProperty('block');
+  });
+
+  test('lineage-pushed 노드가 결정을 인용하면 cite=pass → cross-check는 실제 cite 결과를 검증한다 (baseline 없음 → cannot-confirm)', async () => {
+    // 인용한 노드 출력 + actionable usage 레코드 ⇒ cite verdict=pass.
+    const wiDir = join(dir, '.ditto', 'local', 'work-items', WI);
+    const graphPath = join(wiDir, 'autopilot.json');
+    const graph = JSON.parse(await Bun.file(graphPath).text());
+    graph.nodes[0].evidence_refs = [
+      { kind: 'note', summary: 'followed decision:d1 (ADR-0007) on internal_packages' },
+    ];
+    await writeFile(graphPath, `${JSON.stringify(graph, null, 2)}\n`, 'utf8');
+    const usageDir = join(wiDir, 'memory');
+    await mkdir(usageDir, { recursive: true });
+    await writeFile(
+      join(usageDir, 'warmstart-usage.jsonl'),
+      `${JSON.stringify({
+        ts: '2026-06-17T00:00:00.000Z',
+        work_item_id: WI,
+        node_id: 'N1',
+        owner: 'planner',
+        opportunity: true,
+        attempt: true,
+        hit: true,
+        actionable: true,
+      })}\n`,
+      'utf8',
+    );
+
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    expect(res.exitCode).toBe(0);
+    const out = JSON.parse(res.stdout);
+    expect(out.cite_gate.verdict).toBe('pass');
+    // 인용은 했으나(re-proposal) baseline 비교가 없으므로 표식 단독으로 성공 판정 안 함.
+    expect(out.cite_cross_check.combined).toBe('cannot-confirm');
+    expect(out.cite_cross_check.cite_verdict).toBe('pass');
+  });
+});

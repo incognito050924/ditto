@@ -2,15 +2,19 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { bootstrapIngest } from '~/core/memory-bootstrap';
 import { projectMemory } from '~/core/memory-project';
 import {
+  type GoverningDecision,
   MemoryNodeNotFoundError,
   MemoryProjectionAbsentError,
+  assembleSymbolBrief,
   auditCounts,
   explainNode,
   pullUsageLogPath,
   queryBodies,
   queryNeighbors,
+  querySymbolBrief,
   readFreshness,
   readPullUsage,
   recordPullQuery,
@@ -382,5 +386,96 @@ describe('queryBodies (body-search fallback over events, ac-2 / F2)', () => {
     );
     const r = await queryBodies(workDir, 'originalfactzz');
     expect(r.matches.map((m) => m.event_id)).toEqual(['memevt_fact0002']);
+  });
+});
+
+describe('assembleSymbolBrief (decision-lineage, ac-1)', () => {
+  const adrBody = [
+    '# ADR-0099: example',
+    '- 관련: src/core/widget.ts',
+    '## 대안',
+    '- **임베딩 (vector)**: 비결정적이라 기각.',
+    '## 불변식',
+    '- 도구 부재가 invariant를 깨면 안 된다 (불변식).',
+  ].join('\n');
+
+  test('a symbol whose file is cited by an ADR yields a 4-field EXTRACTED/cite brief', () => {
+    const decisions: GoverningDecision[] = [
+      { adr_id: 'ADR-0099', body: adrBody, governs: ['src/core/widget.ts'] },
+    ];
+    const brief = assembleSymbolBrief('symbol:src/core/widget#render', decisions);
+    // 1. governing ADR(s)
+    expect(brief.governing_adrs).toEqual(['ADR-0099']);
+    // 2. rejected-alternatives (reused extractor)
+    expect(brief.rejected_alternatives.length).toBeGreaterThan(0);
+    expect(brief.rejected_alternatives[0]).toContain('임베딩');
+    // 3. invariants (reused extractor)
+    expect(brief.invariants.length).toBeGreaterThan(0);
+    // 4. per-item tag + coverage status
+    expect(brief.items).toHaveLength(1);
+    expect(brief.items[0]).toMatchObject({
+      adr_id: 'ADR-0099',
+      tag: 'EXTRACTED',
+      coverage: 'cite',
+    });
+    expect(brief.coverage).toBe('cite');
+  });
+
+  test('a symbol only body-mentioned (not cited) is INFERRED/fallback', () => {
+    const decisions: GoverningDecision[] = [
+      {
+        adr_id: 'ADR-0099',
+        // body mentions the symbol file but `관련:` (governs) does NOT list it
+        body: `${adrBody}\nsrc/core/widget.ts is referenced loosely in the prose.`,
+        governs: ['src/other/unrelated.ts'],
+      },
+    ];
+    const brief = assembleSymbolBrief('symbol:src/core/widget#render', decisions);
+    expect(brief.items[0]).toMatchObject({ tag: 'INFERRED', coverage: 'fallback' });
+    expect(brief.coverage).toBe('fallback');
+  });
+
+  test('no governing decision → 미발견, never a false EXTRACTED', () => {
+    const unrelated = [
+      '# ADR-0099: unrelated',
+      '- 관련: src/elsewhere/none.ts',
+      '## 대안',
+      '- **임베딩 (vector)**: 비결정적이라 기각.',
+    ].join('\n');
+    const decisions: GoverningDecision[] = [
+      { adr_id: 'ADR-0099', body: unrelated, governs: ['src/elsewhere/none.ts'] },
+    ];
+    const brief = assembleSymbolBrief('symbol:src/core/widget#render', decisions);
+    expect(brief.governing_adrs).toEqual([]);
+    expect(brief.items).toEqual([]);
+    expect(brief.coverage).toBe('미발견');
+  });
+
+  test('querySymbolBrief resolves governing ADR end-to-end from a bootstrapped repo', async () => {
+    const adrDir = join(workDir, '.ditto', 'knowledge', 'adr');
+    await mkdir(adrDir, { recursive: true });
+    await Bun.write(
+      join(adrDir, 'ADR-0042-thing.md'),
+      [
+        '# ADR-0042: thing',
+        '- 상태: accepted',
+        '- 관련: src/core/memory-query.ts',
+        '## 결정',
+        '결정 본문.',
+        '## 대안',
+        '- **폴링 (polling)**: 비효율적이라 기각.',
+      ].join('\n'),
+    );
+    await bootstrapIngest(workDir);
+    await projectMemory(workDir, { now: new Date('2026-06-09T12:00:00Z') });
+
+    const result = await querySymbolBrief(workDir, 'symbol:src/core/memory-query#readFreshness');
+    expect(result.governing_adrs).toEqual(['ADR-0042-thing.md']);
+    expect(result.coverage).toBe('cite');
+    expect(result.items[0]).toMatchObject({ tag: 'EXTRACTED', coverage: 'cite' });
+    expect(result.rejected_alternatives.some((a) => a.includes('폴링'))).toBe(true);
+    // carries the freshness envelope like every other query
+    expect(result.freshness).toBe('fresh');
+    expect(result.projection_id).toMatch(/^proj_/);
   });
 });

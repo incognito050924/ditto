@@ -30,7 +30,7 @@ import { localDir } from './ditto-paths';
 import { ensureDir } from './fs';
 import { isMemoryEnabled } from './memory-flag';
 import { type Freshness, memoryStatus } from './memory-project';
-import { queryNeighbors } from './memory-query';
+import { type DecisionBrief, queryDecisionBriefs, queryNeighbors } from './memory-query';
 import { MemoryProjectionStore, type ServingGraph } from './memory-store';
 
 /** The optional memory context injected into a delegation packet (§10-6 #1). */
@@ -40,11 +40,13 @@ export interface MemoryWarmStartContext {
   /** Decision-node ids among the related set (a Decision is high-signal context). */
   decisions?: string[];
   /**
-   * Decision briefs (id + node summary) for the related Decisions — a bare id is
-   * not actionable, so the agent gets the governing decision's gist to cite or
-   * abstain against (memory-librarian §8 inc.2, ac-2).
+   * Decision briefs for the related Decisions — a bare id is not actionable, so
+   * the agent gets the governing decision's STRUCTURED gist (rejected-alternatives
+   * + invariants + EXTRACTED/INFERRED tag, assembled by the ac-1 brief assembler)
+   * to cite or abstain against (memory-librarian §8 inc.2, ac-2). A decision whose
+   * body does not resolve degrades to id+summary with empty gist (미발견).
    */
-  decision_briefs?: { id: string; summary: string }[];
+  decision_briefs?: DecisionBrief[];
 }
 
 /** One usage-instrumentation record (ac-12), appended as a JSONL line per spawn. */
@@ -238,10 +240,15 @@ export async function warmStartMemoryContext(
       graph.nodes.filter((n) => n.node_type === 'Decision').map((n) => n.id),
     );
     const decisions = relatedNodes.filter((id) => decisionIds.has(id));
-    // Decision briefs: pair each related Decision id with its node summary (name)
-    // so the packet carries the governing decision's gist, not just an id (ac-2).
+    // Decision briefs (ac-2): expand each related Decision id to the STRUCTURED
+    // brief (rejected-alternatives + invariants + EXTRACTED/INFERRED tag) via the
+    // reused ac-1 assembler, so the packet carries the governing decision's gist,
+    // not just an id+name. The node name is kept as the readable `summary`.
     const nameOf = new Map(graph.nodes.map((n) => [n.id, n.name]));
-    const decisionBriefs = decisions.map((id) => ({ id, summary: nameOf.get(id) ?? id }));
+    const decisionBriefs = await queryDecisionBriefs(
+      repoRoot,
+      decisions.map((id) => ({ id, summary: nameOf.get(id) ?? id })),
+    );
 
     base.actionable = true;
     await recordUsage(repoRoot, base);

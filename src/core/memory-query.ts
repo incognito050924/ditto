@@ -13,13 +13,19 @@
  * "what was orphan at that point" (not recomputable from a regenerable IR). It
  * never triggers curator/anything else (audit→curator auto is out of scope, §5-4).
  */
-import { appendFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { appendFile, readFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import { dittoDir, localDir } from './ditto-paths';
 import { ensureDir } from './fs';
+import { extractInvariants, extractRejectedAlternatives } from './memory-measure';
 import { type Freshness, memoryStatus } from './memory-project';
 import { reduceEvents } from './memory-reduce';
-import { MemoryEventStore, MemoryProjectionStore, type ServingGraph } from './memory-store';
+import {
+  MemoryEventStore,
+  MemoryProjectionStore,
+  MemorySourceStore,
+  type ServingGraph,
+} from './memory-store';
 
 /** Freshness envelope attached to every query/path/explain answer (§4-4). */
 export interface FreshnessEnvelope {
@@ -227,6 +233,233 @@ export async function queryBodies(repoRoot: string, query: string): Promise<Body
   const matches = searchEventBodies(query, visible);
   const freshness = await readFreshness(repoRoot);
   return { query, matches, ...freshness };
+}
+
+// ---- symbol decision-lineage brief (memory-librarian §8 inc.2, ac-1) ----
+
+/**
+ * One governing decision candidate for a symbol: the ADR id, its full body (so
+ * the reused extractors see the `## 대안` / 불변식 prose), and the code paths it
+ * explicitly governs (from the ADR `관련:` header → event.governs). cite vs
+ * fallback is decided by whether `governs` lists the symbol's FILE path.
+ */
+export interface GoverningDecision {
+  adr_id: string;
+  body: string;
+  governs: string[];
+}
+
+/** Per-governing-ADR lineage item: provenance tag + how it was reached. */
+export interface SymbolBriefItem {
+  adr_id: string;
+  /** EXTRACTED = the ADR explicitly cited (관련:) this symbol's file; INFERRED = body-mention only. */
+  tag: 'EXTRACTED' | 'INFERRED';
+  /** cite = explicit citation edge; fallback = body-mention inference. */
+  coverage: 'cite' | 'fallback';
+}
+
+/**
+ * Structured decision-lineage brief for a symbol (ac-1): the governing ADR(s)
+ * reached via the code↔decision bridge, the rejected alternatives + invariants
+ * the governing ADRs carry (reused extractors), and a per-item EXTRACTED/INFERRED
+ * tag with cite/fallback/미발견 coverage.
+ */
+export interface SymbolBrief {
+  symbol: string;
+  governing_adrs: string[];
+  rejected_alternatives: string[];
+  invariants: string[];
+  items: SymbolBriefItem[];
+  /** worst-case coverage: cite > fallback > 미발견. 미발견 ⇒ no governing decision found. */
+  coverage: 'cite' | 'fallback' | '미발견';
+}
+
+/** Parse the FILE path out of a `symbol:<path>#<name>` node id. */
+function symbolFilePath(symbolId: string): { path: string; name: string } {
+  const bare = symbolId.startsWith('symbol:') ? symbolId.slice('symbol:'.length) : symbolId;
+  const hashIdx = bare.indexOf('#');
+  return hashIdx === -1
+    ? { path: bare, name: bare }
+    : { path: bare.slice(0, hashIdx), name: bare.slice(hashIdx + 1) };
+}
+
+/**
+ * Strip a module extension so `governs`/body paths compare to the already-
+ * stripped form a `symbol:<path>#<name>` id carries (mirrors memory-ir
+ * normalizePath; kept local so this stays a pure module with no IR import).
+ */
+function stripExt(path: string): string {
+  return path.replace(/\.[cm]?[jt]sx?$/, '').replace(/\.(java|kt|py)$/, '');
+}
+
+/**
+ * Assemble the decision-lineage brief for a symbol from its governing decision
+ * candidates. Pure & deterministic.
+ *
+ * For each candidate ADR, the symbol's FILE is matched two ways:
+ *   - **cite** (EXTRACTED): the ADR `관련:` header explicitly listed the file
+ *     (event.governs) — an EXTRACTED provenance, the strongest evidence.
+ *   - **fallback** (INFERRED): the ADR did not cite the file but its body
+ *     mentions the file path or the symbol name — an agent-inferred connection,
+ *     never auto-promoted to EXTRACTED (feeds ac-5 permanence).
+ * An ADR matching neither is not a governing decision for this symbol. When no
+ * candidate matches at all, coverage is `미발견` — and the brief carries NO
+ * governing ADR, so a false "지배 결정 없음" is impossible the other way (a real
+ * governing decision is never dropped: cite/fallback both surface it).
+ */
+export function assembleSymbolBrief(
+  symbolId: string,
+  decisions: ReadonlyArray<GoverningDecision>,
+): SymbolBrief {
+  const { path, name } = symbolFilePath(symbolId);
+  const file = stripExt(path);
+  const items: SymbolBriefItem[] = [];
+  const rejected: string[] = [];
+  const invariants: string[] = [];
+  const adrs: string[] = [];
+
+  for (const d of decisions) {
+    const cited = d.governs.some((g) => stripExt(g) === file);
+    const mentioned = !cited && (d.body.includes(path) || d.body.includes(name));
+    if (!cited && !mentioned) continue;
+    adrs.push(d.adr_id);
+    items.push({
+      adr_id: d.adr_id,
+      tag: cited ? 'EXTRACTED' : 'INFERRED',
+      coverage: cited ? 'cite' : 'fallback',
+    });
+    rejected.push(...extractRejectedAlternatives(d.body));
+    invariants.push(...extractInvariants(d.body));
+  }
+
+  // worst-case coverage roll-up: any cite ⇒ cite; else any fallback ⇒ fallback;
+  // none ⇒ 미발견 (no governing decision found — distinct from "found but weak").
+  const coverage: SymbolBrief['coverage'] = items.some((i) => i.coverage === 'cite')
+    ? 'cite'
+    : items.length > 0
+      ? 'fallback'
+      : '미발견';
+
+  return {
+    symbol: symbolId,
+    governing_adrs: adrs,
+    rejected_alternatives: rejected,
+    invariants,
+    items,
+    coverage,
+  };
+}
+
+export interface SymbolBriefResult extends SymbolBrief, FreshnessEnvelope {}
+
+/**
+ * Resolve every approved `decision` event head into a `GoverningDecision` (ADR id
+ * + full body + governs), keyed by its serving-graph node id (`decision:<event_id>`,
+ * the projection's `eventNodeId`). Reads the ADR file so the reused extractors see
+ * the `## 대안`/불변식 prose; falls back to the event gist when unreadable. §4-5
+ * visibility: approved chain heads only, never sensitivity=secret.
+ */
+async function loadGoverningDecisions(repoRoot: string): Promise<Map<string, GoverningDecision>> {
+  const events = await new MemoryEventStore(repoRoot).list();
+  const approved = reduceEvents(events).approvedHeads.filter((e) => e.sensitivity !== 'secret');
+  const sources = await new MemorySourceStore(repoRoot).list();
+  const pathOf = new Map(sources.map((s) => [s.source_id, s.path] as const));
+
+  const byNodeId = new Map<string, GoverningDecision>();
+  for (const e of approved) {
+    if (e.event_type !== 'decision') continue;
+    const sourceId = e.sources[0];
+    const rel = sourceId ? pathOf.get(sourceId) : undefined;
+    let body = e.text; // fall back to the event gist when the ADR file is unreadable
+    if (rel) {
+      try {
+        body = await readFile(isAbsolute(rel) ? rel : join(repoRoot, rel), 'utf8');
+      } catch {
+        // unreadable ADR file ⇒ keep the event gist (still parseable by extractors)
+      }
+    }
+    // The projection's eventNodeId(event_id) — keep in sync with memory-project.
+    byNodeId.set(`decision:${e.event_id}`, {
+      adr_id: rel ? basename(rel) : e.event_id,
+      body,
+      governs: e.governs,
+    });
+  }
+  return byNodeId;
+}
+
+/**
+ * Query the decision-lineage brief for a `symbol:<path>#<name>` node (ac-1).
+ * Resolves the governing decision candidates from the approved `decision` event
+ * heads (each carries `governs` + the ADR grounding source), reads each ADR body
+ * (so the reused extractors see the `## 대안`/불변식 prose), then assembles the
+ * brief and attaches the same freshness envelope as every other query.
+ */
+export async function querySymbolBrief(
+  repoRoot: string,
+  symbolId: string,
+): Promise<SymbolBriefResult> {
+  const decisions = [...(await loadGoverningDecisions(repoRoot)).values()];
+  const brief = assembleSymbolBrief(symbolId, decisions);
+  const freshness = await readFreshness(repoRoot);
+  return { ...brief, ...freshness };
+}
+
+/** One related Decision expanded to its structured gist for the warm-start push. */
+export interface DecisionBrief {
+  /** the serving-graph Decision node id (`decision:<event_id>`). */
+  id: string;
+  /** the Decision node summary (its name) — kept for readability alongside the gist. */
+  summary: string;
+  /** rejected alternatives the governing ADR carries (reused ac-1 extractor). */
+  rejected_alternatives: string[];
+  /** invariants the governing ADR carries (reused ac-1 extractor). */
+  invariants: string[];
+  /** EXTRACTED = the ADR explicitly cited a governed file; INFERRED = body-mention; 미발견 = unresolved. */
+  tag: 'EXTRACTED' | 'INFERRED' | '미발견';
+  /** cite > fallback > 미발견 (no governing decision body resolved). */
+  coverage: 'cite' | 'fallback' | '미발견';
+}
+
+/**
+ * Expand related Decision node ids into structured briefs for the warm-start push
+ * (ac-2): each carries the governing ADR's rejected-alternatives + invariants +
+ * EXTRACTED/INFERRED tag, not just an id+name. Reuses the ac-1 `assembleSymbolBrief`
+ * (no reimplementation): a decision is "briefed against" the first file it governs
+ * (its own grounding), so the assembler runs its real cite/fallback extraction.
+ * A decision node with no resolvable event/body yields an empty 미발견 brief, so
+ * the push degrades to the bare id+summary the caller supplies as a fallback.
+ */
+export async function queryDecisionBriefs(
+  repoRoot: string,
+  decisionNodeIds: ReadonlyArray<{ id: string; summary: string }>,
+): Promise<DecisionBrief[]> {
+  const byNodeId = await loadGoverningDecisions(repoRoot);
+  return decisionNodeIds.map(({ id, summary }) => {
+    const decision = byNodeId.get(id);
+    if (!decision) {
+      return {
+        id,
+        summary,
+        rejected_alternatives: [],
+        invariants: [],
+        tag: '미발견',
+        coverage: '미발견',
+      };
+    }
+    // Brief the decision against the first file it governs so the reused assembler
+    // resolves cite/EXTRACTED; ungoverned decisions fall to 미발견 (empty gist).
+    const symbolKey = `symbol:${decision.governs[0] ?? id}#${id}`;
+    const brief = assembleSymbolBrief(symbolKey, [decision]);
+    return {
+      id,
+      summary,
+      rejected_alternatives: brief.rejected_alternatives,
+      invariants: brief.invariants,
+      tag: brief.items[0]?.tag ?? '미발견',
+      coverage: brief.coverage,
+    };
+  });
 }
 
 export interface PathResult {

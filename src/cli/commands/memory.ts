@@ -33,6 +33,7 @@ import {
   explainNode,
   queryBodies,
   queryNeighbors,
+  querySymbolBrief,
   readFreshness,
   readPullUsage,
   recordPullQuery,
@@ -687,6 +688,41 @@ const memoryQuery = defineCommand({
       // Explicit text mode: search event bodies, not the graph (ac-2 / F2).
       if (args.text) {
         await runBodyQuery(repoRoot, args.node, depth, format, false);
+        return;
+      }
+      // A `symbol:<path>#<name>` id returns the decision-lineage brief (ac-1):
+      // governing ADR(s) + rejected alternatives + invariants + per-item
+      // EXTRACTED/INFERRED tag with cite/fallback/미발견 coverage — not generic
+      // BFS neighbors.
+      if (args.node.startsWith('symbol:') && args.node.includes('#')) {
+        const brief = await querySymbolBrief(repoRoot, args.node);
+        await recordPullQuery(repoRoot, {
+          ts: new Date().toISOString(),
+          node: args.node,
+          depth,
+          neighbor_count: brief.governing_adrs.length,
+          freshness: brief.freshness,
+        }).catch(() => {});
+        if (format === 'json') {
+          writeJson(brief);
+        } else {
+          writeHuman(`Decision-lineage brief for ${brief.symbol} (coverage: ${brief.coverage}):`);
+          if (brief.items.length === 0) {
+            writeHuman('  (no governing decision found — 미발견)');
+          }
+          for (const it of brief.items) {
+            writeHuman(`  - ${it.adr_id}\t[${it.tag} · ${it.coverage}]`);
+          }
+          if (brief.rejected_alternatives.length > 0) {
+            writeHuman(`  rejected alternatives (${brief.rejected_alternatives.length}):`);
+            for (const a of brief.rejected_alternatives) writeHuman(`    × ${a}`);
+          }
+          if (brief.invariants.length > 0) {
+            writeHuman(`  invariants (${brief.invariants.length}):`);
+            for (const i of brief.invariants) writeHuman(`    ! ${i}`);
+          }
+          writeFreshnessHuman(brief);
+        }
         return;
       }
       const graph = await loadServingOrExit(repoRoot);
