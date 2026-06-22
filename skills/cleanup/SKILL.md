@@ -8,7 +8,7 @@ argument-hint: "<archive|delete|restore> --run-id <id> [--commit] [--confirm] [-
 
 Terminal step after `classify`: take a classify run folder (created by `classify create-run`, populated by `classify stage`) and action it. Mechanism is in code (`src/cli/commands/cleanup.ts`, `src/core/cleanup-archive.ts`, `src/core/cleanup-store.ts`) — the code and this SKILL are the source of truth.
 
-All commands are `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" cleanup <sub>`. Per ADR-0001 this CLI is pure deterministic mechanics (git/zip/fs) — no LLM, no per-doc judgment here. The judgment already happened in `classify`.
+All commands are `ditto cleanup <sub>`. Per ADR-0001 this CLI is pure deterministic mechanics (git/zip/fs) — no LLM, no per-doc judgment here. The judgment already happened in `classify`.
 
 It acts ONLY on the named run folder. If the run id's folder is absent it refuses; it never touches another run.
 
@@ -16,19 +16,19 @@ It acts ONLY on the named run folder. If the run id's folder is absent it refuse
 
 ### archive (default — reversible)
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/ditto" cleanup archive --run-id <id> [--commit] --output json
+ditto cleanup archive --run-id <id> [--commit] --output json
 ```
 Zips the run folder to `.ditto/local/cleanup/archive/<id>.zip` (the index is included), then removes the run folder. The zip IS the reversibility — keep it to restore later. The zip is bound to the run folder only (no parent escape; symlinks are stored, not followed).
 
 ### delete (permanent — gated, fail-closed)
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/ditto" cleanup delete --run-id <id> --confirm [--commit] --output json
+ditto cleanup delete --run-id <id> --confirm [--commit] --output json
 ```
 Permanently removes the staged files + run folder. This is irreversible, so it needs an explicit `--confirm`. **Without `--confirm` it refuses** — and on any autopilot / non-interactive path there is no confirm, so delete is fail-closed there (it can never delete unattended). This mirrors the irreversible-git approval gate (`src/core/autopilot-cleanup.ts`): the small-reversible waiver does not cover permanent deletion. The auto-cleanup chain can ONLY archive — it never reaches delete (`autoChainArchive` in `src/core/cleanup-archive.ts`).
 
 ### restore (undo one staged doc)
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/ditto" cleanup restore --run-id <id> --path <original_path> --output json
+ditto cleanup restore --run-id <id> --path <original_path> --output json
 ```
 Moves one staged doc back to where it lived (over `CleanupStore.restore`). Use before archiving if a doc was staged by mistake.
 

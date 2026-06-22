@@ -24,7 +24,7 @@ Instantiate the template at `.ditto/specs/<slug>.md` (`<slug>` = short kebab-cas
 Then register the machine state (for `<wi>` = the active work item id):
 
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/ditto" tech-spec start --work-item <wi> --doc .ditto/specs/<slug>.md --mode stepwise --output json
+ditto tech-spec start --work-item <wi> --doc .ditto/specs/<slug>.md --mode stepwise --output json
 ```
 
 By default pass **no tuning flags** (`--performance`/`--generators`/`--intensity`/`--gate-mode`/…) at `start` — they override the user's `tech_spec.question` config (§ question-config below), which is **authoritative**. Deviate only for a stated reason; read the resolved values from `start`/`next-round` output, never assume.
@@ -46,7 +46,7 @@ By default pass **no tuning flags** (`--performance`/`--generators`/`--intensity
 - Record every section increment with `record-section`. For the factual sections (`background`, `impact`) the grounding evidence is **schema-required** — the call is rejected without it (fail-closed pull gate, ac-9):
 
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/ditto" tech-spec record-section --work-item <wi> --json '{
+ditto tech-spec record-section --work-item <wi> --json '{
   "section": {"id": "background", "review": "reviewed",
     "evidence": [{"kind": "memory", "projection_id": "…", "freshness": "fresh"}]}
 }' --output json
@@ -86,11 +86,11 @@ A developer can set per-option defaults in their own `.ditto/local/config.json` 
 
 **Control loop (per round, score-based termination)**:
 
-0. **Get this round's levers + cap signal**: `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" tech-spec next-round --work-item <wi>` → `{round, generators, threshold, granularity, count_hint, gate_mode, generator_effort, rounds_so_far, questions_so_far, cap_reached, cap_reason}`. **If `cap_reached` is true, stop the loop now** — the user-set `max_rounds`/`max_questions` ceiling is hit. Otherwise use the returned levers for the steps below.
+0. **Get this round's levers + cap signal**: `ditto tech-spec next-round --work-item <wi>` → `{round, generators, threshold, granularity, count_hint, gate_mode, generator_effort, rounds_so_far, questions_so_far, cap_reached, cap_reason}`. **If `cap_reached` is true, stop the loop now** — the user-set `max_rounds`/`max_questions` ceiling is hit. Otherwise use the returned levers for the steps below.
 1. Fan out N generators (N = the returned `generators`, default 2), passing each the current minimal packet **plus the returned `generator_effort` and `granularity`** — each generator obeys those two dials per `agents/question-generator.md` (effort = grounding depth, granularity = how finely the section splits into questions) → collect candidates.
 2. Spawn the gate with the pool, handing it the returned `threshold` + `count_hint` → it returns `{selected, dry, all_scored}`.
-3. Record the round: `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" tech-spec record-round --work-item <wi> --json '{"round": <n>, "dry": <bool>, "selected": [...], "all_scored": [...]}'` — appends the gate's scores to the durable trail (`tech-spec-rounds.jsonl`), which is also what `next-round` counts for the cap. `ditto doctor intent-quality` reads them as the question-VALUE signal (next to the deep-interview question-COUNT signal).
-4. If `selected` is non-empty, handle it per the resolved `gate_mode` (the gate itself never asks the user — this is the driver's step). **Presentation contract — whenever a question reaches the user (here or via `draft` escalation):** first gate it with `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" deep-interview check-question --json '{…candidate…}'` (shared, state-independent validator — non-zero exit when the candidate lacks a plain-language `user_explanation`; send a rejected candidate back to the generators, do **not** ask it), then ask in the user's language with that `user_explanation` (plain *why we ask + what your answer decides*) — never raw code, `file:line`, schema fields, or axis names.
+3. Record the round: `ditto tech-spec record-round --work-item <wi> --json '{"round": <n>, "dry": <bool>, "selected": [...], "all_scored": [...]}'` — appends the gate's scores to the durable trail (`tech-spec-rounds.jsonl`), which is also what `next-round` counts for the cap. `ditto doctor intent-quality` reads them as the question-VALUE signal (next to the deep-interview question-COUNT signal).
+4. If `selected` is non-empty, handle it per the resolved `gate_mode` (the gate itself never asks the user — this is the driver's step). **Presentation contract — whenever a question reaches the user (here or via `draft` escalation):** first gate it with `ditto deep-interview check-question --json '{…candidate…}'` (shared, state-independent validator — non-zero exit when the candidate lacks a plain-language `user_explanation`; send a rejected candidate back to the generators, do **not** ask it), then ask in the user's language with that `user_explanation` (plain *why we ask + what your answer decides*) — never raw code, `file:line`, schema fields, or axis names.
    - **`confirm` (default)** — ask the user those questions **in the main session** (with the presentation contract above) → fold their answers into the fixed-facts ledger.
    - **`draft`** — for each selected question, if you can answer it confidently from code/domain grounding, write that **provisional answer with its evidence** into the fixed-facts ledger and proceed unattended. But any question whose answer is an **irreversible, product-value, or domain-meaning** call still goes to the user (with the presentation contract above) — `draft` cuts interaction, it does **not** hand value judgments to the agent (charter §4-2/§4-8).
 
@@ -139,7 +139,7 @@ The one home for the *process* is **§12 인터뷰 기록**, the provenance sect
 When the document is agreed (and the pre-mortem ledger is converged), compile it:
 
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/ditto" tech-spec finalize --work-item <wi> --json '{
+ditto tech-spec finalize --work-item <wi> --json '{
   "risk": {"non_local": false, "irreversible": false, "unaudited": false},
   "user_confirmation": {"confirmed": true, "statement": "<the user's own words confirming the spec matches their intent>"}
 }' --output json

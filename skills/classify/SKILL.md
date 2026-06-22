@@ -8,7 +8,7 @@ argument-hint: "[--scope <glob|commits>] [--tracked tracked-only|include-untrack
 
 Triage workspace documents that may have lost authority — orphaned (nothing references them), stale (older than the code they describe), or contradicting current code (charter §4-11: code is the source of truth; drift-prone docs are not). Each candidate is staged into a reversible action bucket; **nothing is deleted** — docs are MOVED under a run folder and can be restored.
 
-All commands are `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" classify <sub>`. Mechanism is in code (`src/cli/commands/classify.ts`, `src/core/cleanup-scan.ts`, `src/core/cleanup-store.ts`) — the code and this SKILL are the source of truth.
+All commands are `ditto classify <sub>`. Mechanism is in code (`src/cli/commands/classify.ts`, `src/core/cleanup-scan.ts`, `src/core/cleanup-store.ts`) — the code and this SKILL are the source of truth.
 
 ## Why a thin CLI + per-doc agents (ADR-0001 + charter §4-9)
 
@@ -28,7 +28,7 @@ ditto (TypeScript) never calls an LLM. So the split is:
 
 1. **Scan.**
    ```
-   "${CLAUDE_PLUGIN_ROOT}/bin/ditto" classify scan \
+   ditto classify scan \
      [--scope <glob|commit,commit>] [--tracked tracked-only|include-untracked|untracked-only] \
      [--categories design,report,...] [--aggressiveness 1-5] [--concurrency N] [--auto-cleanup] \
      --output json
@@ -37,7 +37,7 @@ ditto (TypeScript) never calls an LLM. So the split is:
 
 2. **Create the run** with the params snapshot scan returned:
    ```
-   "${CLAUDE_PLUGIN_ROOT}/bin/ditto" classify create-run --params '<params json>' --output json
+   ditto classify create-run --params '<params json>' --output json
    ```
    → `{run_id, run_dir}`. All per-doc results merge into this one run folder + index (append-only, 1:1 per staged doc).
 
@@ -51,7 +51,7 @@ ditto (TypeScript) never calls an LLM. So the split is:
 
 4. **Stage each decided doc** (one call per doc — the index grows 1:1, crash-safe):
    ```
-   "${CLAUDE_PLUGIN_ROOT}/bin/ditto" classify stage --run-id <id> --path <doc> \
+   ditto classify stage --run-id <id> --path <doc> \
      --action <bucket> --basis '[{"kind":"stale","detail":"…"}]' \
      --summary '…' --aggressiveness <n> [--agent <handle>] [--auto] --output json
    ```

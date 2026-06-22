@@ -29,7 +29,7 @@ For `<wi>` = the active work item id (see charter `Active work item:` line).
 ### 1. Start
 
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/ditto" deep-interview start --work-item <wi> --output json
+ditto deep-interview start --work-item <wi> --output json
 ```
 
 Initializes `.ditto/local/work-items/<wi>/interview-state.json` with `readiness.threshold=0.7` and `exit.question_cap=8` (override with `--threshold` and `--question-cap` if the request justifies it; do not lower the threshold to escape the gate). `--generators <N>` (default 1) sets the per-round fan-out for §3 — `N=1` is serial-equivalent (a small request stays lightweight); raise it for an ambiguous request so independent generators cover each other's blind spots. **But if the user set a `deep_interview.generators` config default (§config), that IS their preference — run `start` without `--generators` and let config drive the fan-out; pass `--generators` only to deviate from their config for a stated reason. Read the resolved count from the `start` output, never assume.**
@@ -57,7 +57,7 @@ Do NOT generate questions inline in your accumulated context: your interview nar
 1. **Self-answer first (the anti-ask gate, per dimension).** Before any dimension reaches a generator, run the QuestionGate self-answer check (`⚠ self-answer from code/docs/web first …` is the hint surface):
    1. Search the codebase, docs, and prior work items.
    2. Read web sources if the question is about an external standard / API.
-   3. **Check recorded decisions (ADR-0020).** Part of self-answering is `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query` over the governing ADRs (decision, rejected alternatives, change conditions are indexed). If the request's *intent* conflicts with a recorded decision — the user is asking for what an ADR forbids — that is a user-owned decision, not something to silently plan around: surface it as a question (follow the ADR / deliberately supersede it / re-scope). An intent conflict caught here is the cheapest to resolve, because the user is present (no autopilot fail-closed needed).
+   3. **Check recorded decisions (ADR-0020).** Part of self-answering is `ditto memory query` over the governing ADRs (decision, rejected alternatives, change conditions are indexed). If the request's *intent* conflicts with a recorded decision — the user is asking for what an ADR forbids — that is a user-owned decision, not something to silently plan around: surface it as a question (follow the ADR / deliberately supersede it / re-scope). An intent conflict caught here is the cheapest to resolve, because the user is present (no autopilot fail-closed needed).
    4. Only the dimensions that survive self-answering (NONE of the above resolved them) go to the generators.
 
 2. **Fan out `N` generators (parallel, fresh each round).** Spawn `ditto:question-generator` × `N` in one parallel batch, each with **only** a minimal packet — you are the adapter that maps the interview's unresolved ambiguity dimensions into the generator's `target`:
@@ -70,7 +70,7 @@ Do NOT generate questions inline in your accumulated context: your interview nar
 
 4. **Gate, present, then record each selected question as one turn.** For every selected candidate:
 
-   1. **Gate the context (hard, before asking).** Run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" deep-interview check-question --json '{…candidate…}'`. It rejects (non-zero exit) a candidate that lacks a plain-language `user_explanation` — do **not** ask a rejected question; send the dimension back to the generators with the gap noted. This is the structural half of the success bar: a question reaches the user only with the context to act on it.
+   1. **Gate the context (hard, before asking).** Run `ditto deep-interview check-question --json '{…candidate…}'`. It rejects (non-zero exit) a candidate that lacks a plain-language `user_explanation` — do **not** ask a rejected question; send the dimension back to the generators with the gap noted. This is the structural half of the success bar: a question reaches the user only with the context to act on it.
 
    2. **Present with the presentation contract (comprehensible + sufficient).** Ask the user in *their* language, not the code's:
       - **Default view** = the question + its `user_explanation` (plain *why we ask + what your answer decides*). This must be enough to decide on its own, yet free of raw code, `file:line`, schema fields, axis names, or `[from-code]`-style tags. Translating the agent's reasoning into the user's language IS the work — a correct but unreadable explanation is a failure (curse of knowledge).
@@ -84,7 +84,7 @@ Do NOT generate questions inline in your accumulated context: your interview nar
 Record each turn with:
 
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/ditto" deep-interview record-turn --work-item <wi> --json '{
+ditto deep-interview record-turn --work-item <wi> --json '{
   "dimension": {"id": "d-<short-id>", "critical": true, "state": "partial", "ambiguity": 0.6, "notes": ""},
   "question": {"text": "…?", "why_matters": "…", "info_gain_estimate": "high", "marginal_gain": 0.4,
     "user_explanation": "<plain why-we-ask + what-your-answer-decides, user language>",
@@ -116,7 +116,7 @@ For each candidate acceptance criterion, run a pre-mortem **internally** (your o
 ### 5. Check readiness
 
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/ditto" deep-interview check-readiness --work-item <wi> --output json
+ditto deep-interview check-readiness --work-item <wi> --output json
 ```
 
 `gate.pass=true` requires:
@@ -131,7 +131,7 @@ If `cap_reached=true` but the gate is still blocked, do NOT pretend success. Rec
 Synthesize the intent fields and lock the interview:
 
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/ditto" deep-interview finalize --work-item <wi> --json '{
+ditto deep-interview finalize --work-item <wi> --json '{
   "goal": "<verifiable goal in project terms>",
   "in_scope": ["<concrete in-scope item>", "…"],
   "out_of_scope": ["<concrete excluded item>", "…"],

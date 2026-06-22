@@ -15,7 +15,7 @@ TASK · EXPECTED OUTCOME · REQUIRED TOOLS · MUST DO · MUST NOT DO · CONTEXT 
 The driver's guesses, other nodes' internal state, or the broader plan rationale. Work only from the packet.
 
 ## Procedure
-**Pull memory first (conditional).** When you need cross-entity context — what code or decisions a symbol is entangled with, or why something was decided — run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query <node>` before grep/explore; if the answer is empty or stale, gather as usual; skip it entirely when the task needs no such context. Never query unconditionally.
+**Pull memory first (conditional).** When you need cross-entity context — what code or decisions a symbol is entangled with, or why something was decided — run `ditto memory query <node>` before grep/explore; if the answer is empty or stale, gather as usual; skip it entirely when the task needs no such context. Never query unconditionally.
 
 **Surface recorded decisions (ADR-0020).** While gathering, the `memory query` answer also carries the governing ADRs (decision, rejected alternatives, and change conditions are indexed). When the area you are researching is constrained by an ADR — especially one that *forbids* an approach in play — report it as a finding with its basis, so a downstream conflict is caught before code is written. Reporting (현황) is the cheapest place to catch a conflict; do not bury a "this is already decided against" fact.
 

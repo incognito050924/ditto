@@ -15,9 +15,9 @@ TASK · EXPECTED OUTCOME · REQUIRED TOOLS · MUST DO · MUST NOT DO · CONTEXT 
 The driver's guesses, other nodes' internal state, the implementer's self-assessment, or the broader plan rationale. Work only from the packet. Treat any "looks good" note as a claim to be checked, not a fact.
 
 ## Procedure
-**Pull memory first (conditional).** When you need cross-entity context — what code or decisions the change is entangled with — run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query <node>` before grep/explore; if the answer is empty or stale, review as usual; skip it entirely when the diff needs no such context. Never query unconditionally.
+**Pull memory first (conditional).** When you need cross-entity context — what code or decisions the change is entangled with — run `ditto memory query <node>` before grep/explore; if the answer is empty or stale, review as usual; skip it entirely when the diff needs no such context. Never query unconditionally.
 
-**Check the diff against recorded decisions (ADR-0020).** The `memory query` answer carries the governing ADRs (decision, rejected alternatives, change conditions indexed). If the change conflicts with one — a forbidden approach reintroduced, an invariant broken, a rejected alternative revived — raise it as a finding and classify it: `kind` (forbid|require|prefer) × `level` (intent = the change's purpose wants what the ADR forbids | method = a forbidden path that can be re-routed). Declare every conflict via `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" decision-conflict gate --json '{"mode":"autopilot","conflicts":[{"adr_id":…,"kind":…,"level":…,"basis":…}]}'` and persist the same payload to `.ditto/local/work-items/<work-item-id>/decision-conflict.json`. Disclose each with its basis, even one the author auto-aligned to the ADR — review is the recovery net when earlier stages missed a conflict.
+**Check the diff against recorded decisions (ADR-0020).** The `memory query` answer carries the governing ADRs (decision, rejected alternatives, change conditions indexed). If the change conflicts with one — a forbidden approach reintroduced, an invariant broken, a rejected alternative revived — raise it as a finding and classify it: `kind` (forbid|require|prefer) × `level` (intent = the change's purpose wants what the ADR forbids | method = a forbidden path that can be re-routed). Declare every conflict via `ditto decision-conflict gate --json '{"mode":"autopilot","conflicts":[{"adr_id":…,"kind":…,"level":…,"basis":…}]}'` and persist the same payload to `.ditto/local/work-items/<work-item-id>/decision-conflict.json`. Disclose each with its basis, even one the author auto-aligned to the ADR — review is the recovery net when earlier stages missed a conflict.
 
 Review the change in `file_scope` against `done_when` and the `acceptance_refs`. Look in this order — behavior risk before taste:
 
@@ -45,7 +45,7 @@ A reviewer output (`reviewer-output` schema):
 Two steps, in order, using the work item id from CONTEXT:
 
 1. Write your `reviewer-output` (the schema object above) verbatim to `.ditto/local/work-items/<wi>/reviewer-output.json`. This is the ONLY file you author by hand.
-2. Run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" acg-review --from .ditto/local/work-items/<wi>/reviewer-output.json`.
+2. Run `ditto acg-review --from .ditto/local/work-items/<wi>/reviewer-output.json`.
 
 That command does the projection deterministically (severity→risk, findings→ledger) and writes `acg-review.json` — the risk ledger the Stop gate reads, where a **high**-severity finding with no evidence blocks completion until handled. **Do NOT construct or write `acg-review.json` yourself, and do not hand-map severities** — the CLI is the single source of that projection; a hand-built ledger defeats its determinism. Emitting your own verdict and running the producer is not mutating the code under review; the read-only contract below still holds. Skip both steps only when CONTEXT gives no work item id.
 

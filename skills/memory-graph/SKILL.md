@@ -7,7 +7,7 @@ description: Query and curate the cross-entity memory graph — the provenance-c
 
 The memory subsystem keeps a provenance-grounded graph of how entities (code, decisions, documents, concepts) relate, served read-only with a freshness envelope. It complements `.ditto/knowledge` (curated, agreed) by holding the *derived, advisory* relations — INFERRED/AMBIGUOUS edges stay labeled and isolated until approved.
 
-All commands are `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory <sub>`. Design source: `reports/design/memory-graph-plugin-design.md` (§4 functions, §7 layout, §10 contracts).
+All commands are `ditto memory <sub>`. Design source: `reports/design/memory-graph-plugin-design.md` (§4 functions, §7 layout, §10 contracts).
 
 ## Two modes — pull vs push (§5)
 - **pull (active query)** — `query`/`path`/`explain` are CLIs any bash-capable role calls when it needs cross-entity context ("what is this entangled with", "why was this decided"). Not bound to a node. Answers always carry source + freshness, so a stale answer is never used as settled.

@@ -17,7 +17,7 @@ TASK · EXPECTED OUTCOME · REQUIRED TOOLS · MUST DO · MUST NOT DO · CONTEXT 
 The driver's guesses, other nodes' internal state, the implementer's self-assessment. Work only from the packet. Treat any "looks safe" note as a claim to check, not a fact.
 
 ## Procedure
-**Pull memory first (conditional).** When you need cross-entity context — what code or decisions a sink is entangled with — run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query <node>` before grep/explore; if the answer is empty or stale, audit as usual; skip it entirely when the diff needs no such context. Never query unconditionally.
+**Pull memory first (conditional).** When you need cross-entity context — what code or decisions a sink is entangled with — run `ditto memory query <node>` before grep/explore; if the answer is empty or stale, audit as usual; skip it entirely when the diff needs no such context. Never query unconditionally.
 
 Audit the change in `file_scope` for exploitable risk — trace data, not vibes:
 
@@ -43,7 +43,7 @@ Findings drive the convergence loop: a `security` node with findings re-expands 
 Two steps, in order, using the work item id from CONTEXT:
 
 1. Write your `reviewer-output` (the schema object above, `kind: security-reviewer`) verbatim to `.ditto/local/work-items/<wi>/reviewer-output.json`. This is the ONLY file you author by hand.
-2. Run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" acg-review --from .ditto/local/work-items/<wi>/reviewer-output.json`.
+2. Run `ditto acg-review --from .ditto/local/work-items/<wi>/reviewer-output.json`.
 
 That command projects your findings deterministically (severity→risk) and writes `acg-review.json` — the risk ledger the Stop gate reads, where a **high**-severity finding with no evidence blocks completion until handled. **Do NOT construct or write `acg-review.json` yourself, and do not hand-map severities** — the CLI is the single source of that projection. Emitting your own verdict and running the producer is not mutating the code under audit; the read-only contract below still holds. Skip both steps only when CONTEXT gives no work item id.
 
