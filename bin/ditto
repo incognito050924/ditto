@@ -22872,6 +22872,22 @@ function farFieldCategoriesEnabled() {
   const v2 = process.env.DITTO_FARFIELD_CATEGORIES?.toLowerCase();
   return v2 !== "0" && v2 !== "off" && v2 !== "false";
 }
+function farFieldCoverageReport(map) {
+  const cats = map.nodes.filter((n2) => n2.id.startsWith(CATEGORY_NODE_PREFIX));
+  const open2 = cats.filter((n2) => n2.state === "open").length;
+  const skipped = cats.filter((n2) => n2.state === "out_of_scope" || n2.state === "user_owned").map((n2) => ({
+    id: n2.id,
+    state: n2.state,
+    reason: n2.close_reason ?? null
+  }));
+  return {
+    seeded: cats.length,
+    resolved: cats.filter((n2) => n2.state === "resolved").length,
+    open: open2,
+    skipped,
+    complete: cats.length > 0 && open2 === 0
+  };
+}
 
 // src/core/coverage-loop.ts
 init_ditto_paths();
@@ -24896,6 +24912,50 @@ var autopilotCoverageRound = defineCommand({
     }
   }
 });
+var autopilotCoverageReport = defineCommand({
+  meta: {
+    name: "coverage-report",
+    description: "Report far-field process coverage: swept/skipped(+reason)/open categories + completeness (ac-11a)"
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new CoverageStore(repoRoot);
+    if (!await store.exists(args.workItem)) {
+      if (format === "json") {
+        writeJson2({ seeded: 0, resolved: 0, open: 0, skipped: [], complete: false });
+      } else {
+        writeHuman("Far-field coverage: no sweep recorded (coverage.json absent).");
+      }
+      return;
+    }
+    const report = farFieldCoverageReport(await store.getMap(args.workItem));
+    if (format === "json") {
+      writeJson2(report);
+      return;
+    }
+    writeHuman(`Far-field coverage (${args.workItem}):`);
+    writeHuman(`  seeded:   ${report.seeded}`);
+    writeHuman(`  resolved: ${report.resolved} (swept-dry)`);
+    writeHuman(`  open:     ${report.open}`);
+    writeHuman(`  skipped:  ${report.skipped.length}`);
+    for (const s2 of report.skipped) {
+      writeHuman(`    - ${s2.id} [${s2.state}]: ${s2.reason ?? "(no reason recorded!)"}`);
+    }
+    writeHuman(`  complete: ${report.complete}${report.seeded === 0 ? " (far-field seeding off)" : ""}`);
+  }
+});
 var autopilotStatus = defineCommand({
   meta: {
     name: "status",
@@ -25097,7 +25157,8 @@ var autopilotCommand = defineCommand({
     "propose-e2e": autopilotProposeE2e,
     "intent-drift": autopilotIntentDrift,
     "coverage-next": autopilotCoverageNext,
-    "coverage-round": autopilotCoverageRound
+    "coverage-round": autopilotCoverageRound,
+    "coverage-report": autopilotCoverageReport
   }
 });
 
@@ -40386,4 +40447,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=5f4aeb05a9e3a529040bf8f841c3e9852c559879f0abe884fd1f7d35a2cbcfbc
+//# ditto-src-stamp=aab63554fb80f9787e67725562d6c2f1eb9a1b2f34bf694ec62c195aabdb1b33

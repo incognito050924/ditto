@@ -14,7 +14,7 @@
  * "go look" (ac-6) — handled by the engine, not by hardcoding here.
  */
 
-import type { CoverageNode } from '~/schemas/coverage';
+import type { CoverageMap, CoverageNode } from '~/schemas/coverage';
 
 export interface FarFieldCategory {
   /** Stable id (kebab) — used for tier-② config enable/disable and skip records. */
@@ -171,4 +171,53 @@ export function farFieldCoverageNodes(intent: string, rootId = 'cov-root'): Cove
 export function farFieldCategoriesEnabled(): boolean {
   const v = process.env.DITTO_FARFIELD_CATEGORIES?.toLowerCase();
   return v !== '0' && v !== 'off' && v !== 'false';
+}
+
+/** One skipped/deferred category with its recorded justification (ac-2 — never silent). */
+export interface FarFieldSkip {
+  id: string;
+  state: 'out_of_scope' | 'user_owned';
+  /** The recorded close_reason; null only for a legacy node missing one (the close gate forbids this going forward). */
+  reason: string | null;
+}
+
+/** Process-coverage summary of one work item's far-field sweep (ac-11a, deterministic). */
+export interface FarFieldCoverageReport {
+  /** Far-field category nodes seeded in the map (cov-cat-*); 0 when seeding was off (ac-7). */
+  seeded: number;
+  /** Categories swept and settled (resolved). */
+  resolved: number;
+  /** Categories still open (not yet swept). */
+  open: number;
+  /** Categories skipped/deferred with their recorded reason. */
+  skipped: FarFieldSkip[];
+  /** Breadth complete — at least one category seeded AND none still open (ac-2). */
+  complete: boolean;
+}
+
+/**
+ * Deterministic process-coverage measurement (ac-11a, design §8-6): read a work
+ * item's coverage map and report how the far-field breadth was handled — how many
+ * categories were swept (resolved), skipped (with the justification the close gate
+ * forced, ac-2), or are still open, and whether the breadth is complete. Pure over
+ * the map (no I/O); the CLI reads coverage.json and prints this. The depth/stakes
+ * dimension is the tier (ac-4), surfaced by coverage-next, not stored per-category.
+ */
+export function farFieldCoverageReport(map: CoverageMap): FarFieldCoverageReport {
+  const cats = map.nodes.filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX));
+  const open = cats.filter((n) => n.state === 'open').length;
+  const skipped: FarFieldSkip[] = cats
+    .filter((n) => n.state === 'out_of_scope' || n.state === 'user_owned')
+    .map((n) => ({
+      id: n.id,
+      state: n.state as 'out_of_scope' | 'user_owned',
+      reason: n.close_reason ?? null,
+    }));
+  return {
+    seeded: cats.length,
+    resolved: cats.filter((n) => n.state === 'resolved').length,
+    open,
+    skipped,
+    complete: cats.length > 0 && open === 0,
+  };
 }

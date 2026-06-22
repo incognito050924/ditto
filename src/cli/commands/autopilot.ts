@@ -12,7 +12,8 @@ import { checkCiteGate, crossValidateCite, detectActiveConflicts } from '~/core/
 import { CompletionStore } from '~/core/completion-store';
 import { nextCoverageNode, recordCoverageRound } from '~/core/coverage-loop';
 import { COVERAGE_TIERS, type CoverageTier } from '~/core/coverage-manager';
-import { farFieldCategoriesEnabled } from '~/core/coverage-taxonomy';
+import { CoverageStore } from '~/core/coverage-store';
+import { farFieldCategoriesEnabled, farFieldCoverageReport } from '~/core/coverage-taxonomy';
 import { dittoDir } from '~/core/ditto-paths';
 import { checkE2eCompletionGate } from '~/core/e2e/completion-gate';
 import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
@@ -933,6 +934,60 @@ const autopilotCoverageRound = defineCommand({
 });
 
 /**
+ * `ditto autopilot coverage-report` — deterministic far-field process coverage
+ * (ac-11a, design §8-6): read the work item's coverage.json and report how the
+ * far-field breadth was handled (swept / skipped-with-reason / open) and whether
+ * the breadth is complete. Read-only; absent coverage.json → no sweep recorded.
+ */
+const autopilotCoverageReport = defineCommand({
+  meta: {
+    name: 'coverage-report',
+    description:
+      'Report far-field process coverage: swept/skipped(+reason)/open categories + completeness (ac-11a)',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new CoverageStore(repoRoot);
+    if (!(await store.exists(args.workItem))) {
+      if (format === 'json') {
+        writeJson({ seeded: 0, resolved: 0, open: 0, skipped: [], complete: false });
+      } else {
+        writeHuman('Far-field coverage: no sweep recorded (coverage.json absent).');
+      }
+      return;
+    }
+    const report = farFieldCoverageReport(await store.getMap(args.workItem));
+    if (format === 'json') {
+      writeJson(report);
+      return;
+    }
+    writeHuman(`Far-field coverage (${args.workItem}):`);
+    writeHuman(`  seeded:   ${report.seeded}`);
+    writeHuman(`  resolved: ${report.resolved} (swept-dry)`);
+    writeHuman(`  open:     ${report.open}`);
+    writeHuman(`  skipped:  ${report.skipped.length}`);
+    for (const s of report.skipped) {
+      writeHuman(`    - ${s.id} [${s.state}]: ${s.reason ?? '(no reason recorded!)'}`);
+    }
+    writeHuman(
+      `  complete: ${report.complete}${report.seeded === 0 ? ' (far-field seeding off)' : ''}`,
+    );
+  },
+});
+
+/**
  * `ditto autopilot status` — surface the approval gate, its plan brief
  * ("무엇을 승인하는가"), and node progress so an operator decides on the gate
  * without hand-reading autopilot.json (wi_260615xby A). Read-only.
@@ -1172,5 +1227,6 @@ export const autopilotCommand = defineCommand({
     'intent-drift': autopilotIntentDrift,
     'coverage-next': autopilotCoverageNext,
     'coverage-round': autopilotCoverageRound,
+    'coverage-report': autopilotCoverageReport,
   },
 });

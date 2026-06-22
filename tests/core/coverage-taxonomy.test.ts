@@ -5,6 +5,7 @@ import {
   FAR_FIELD_TAXONOMY_FLOOR,
   farFieldCategoriesEnabled,
   farFieldCoverageNodes,
+  farFieldCoverageReport,
   farFieldLenses,
 } from '~/core/coverage-taxonomy';
 import type { CoverageMap } from '~/schemas/coverage';
@@ -108,6 +109,89 @@ describe('far-field category seeding (wi_260622vjo §8-2)', () => {
     expect(isCoverageTerminated(closed, 5)).toBe(true);
     // breadth alone is not enough either: all closed but dry below K → not terminated.
     expect(isCoverageTerminated(closed, 0)).toBe(false);
+  });
+
+  test('farFieldCoverageReport summarizes the process coverage — sweep/skip(+reason)/open + completeness (ac-11a)', () => {
+    const nodes = farFieldCoverageNodes('add login');
+    const catIds = nodes.filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX)).map((n) => n.id);
+    // resolve 2 (swept-dry), skip 1 out_of_scope + 1 user_owned with reasons, rest open.
+    let nn = nodes;
+    nn = nn.map((n) => (n.id === catIds[0] ? { ...n, state: 'resolved' as const } : n));
+    nn = nn.map((n) => (n.id === catIds[1] ? { ...n, state: 'resolved' as const } : n));
+    nn = nn.map((n) =>
+      n.id === catIds[2]
+        ? {
+            ...n,
+            state: 'out_of_scope' as const,
+            close_reason: 'no external surface in this change',
+          }
+        : n,
+    );
+    nn = nn.map((n) =>
+      n.id === catIds[3]
+        ? {
+            ...n,
+            state: 'user_owned' as const,
+            close_reason: 'product owner owns the rollout window',
+          }
+        : n,
+    );
+    const map: CoverageMap = {
+      schema_version: '0.1.0',
+      work_item_id: 'wi_test',
+      root_id: 'cov-root',
+      nodes: nn,
+    };
+
+    const r = farFieldCoverageReport(map);
+    expect(r.seeded).toBe(FAR_FIELD_TAXONOMY_FLOOR.length);
+    expect(r.resolved).toBe(2);
+    expect(r.open).toBe(FAR_FIELD_TAXONOMY_FLOOR.length - 4);
+    expect(r.skipped).toHaveLength(2);
+    // every recorded skip carries its justification (ac-2 — no silent skip)
+    for (const s of r.skipped) {
+      expect(['out_of_scope', 'user_owned']).toContain(s.state);
+      expect(s.reason).toBeTruthy();
+    }
+    // breadth not complete while any category is still open
+    expect(r.complete).toBe(false);
+  });
+
+  test('farFieldCoverageReport reports complete once every seeded category is closed (resolved or justified-skip)', () => {
+    const nodes = farFieldCoverageNodes('add login').map((n) =>
+      n.id.startsWith(CATEGORY_NODE_PREFIX) ? { ...n, state: 'resolved' as const } : n,
+    );
+    const map: CoverageMap = {
+      schema_version: '0.1.0',
+      work_item_id: 'wi_test',
+      root_id: 'cov-root',
+      nodes,
+    };
+    const r = farFieldCoverageReport(map);
+    expect(r.open).toBe(0);
+    expect(r.complete).toBe(true);
+  });
+
+  test('farFieldCoverageReport on a root-only map (seeding off) reports zero seeded, not complete (ac-7)', () => {
+    const map: CoverageMap = {
+      schema_version: '0.1.0',
+      work_item_id: 'wi_test',
+      root_id: 'cov-root',
+      nodes: [
+        {
+          id: 'cov-root',
+          parent_id: null,
+          label: 'add login',
+          origin: 'seed',
+          depth_weight: 1,
+          state: 'open',
+          children: [],
+        },
+      ],
+    };
+    const r = farFieldCoverageReport(map);
+    expect(r.seeded).toBe(0);
+    expect(r.complete).toBe(false);
   });
 
   test('farFieldCategoriesEnabled() defaults ON (activated); off only for explicit falsy env', () => {
