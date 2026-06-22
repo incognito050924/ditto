@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { FAR_FIELD_TAXONOMY_FLOOR, farFieldLenses } from '~/core/coverage-taxonomy';
+import { isCoverageTerminated } from '~/core/coverage-manager';
+import {
+  CATEGORY_NODE_PREFIX,
+  FAR_FIELD_TAXONOMY_FLOOR,
+  farFieldCategoriesEnabled,
+  farFieldCoverageNodes,
+  farFieldLenses,
+} from '~/core/coverage-taxonomy';
+import type { CoverageMap } from '~/schemas/coverage';
 
 // wi_260622vjo §6-floor — the always-on far-field category FLOOR. Each category is
 // a probing QUESTION (a lens the sweep must answer for the change's scope), not a
@@ -43,5 +51,82 @@ describe('far-field taxonomy floor (wi_260622vjo §6-floor)', () => {
     // the lens probes for the smallest/clearest increment (over-engineering is the
     // most common failure — charter §4-3/§4-4, 범위 axiom)
     expect(cat?.lens).toContain('증분');
+  });
+});
+
+// §8-2 — category-complete termination: seed each floor category as a coverage
+// node so termination (existing `allClosed`) requires every category swept; an
+// un-swept category cannot pass on novelty-dry alone (ac-2). Behind a flag so the
+// existing root-only tree is unchanged by default (ac-7).
+describe('far-field category seeding (wi_260622vjo §8-2)', () => {
+  test('farFieldCoverageNodes seeds root + one open node per floor category', () => {
+    const nodes = farFieldCoverageNodes('add login');
+    // root + 19 categories
+    expect(nodes.length).toBe(FAR_FIELD_TAXONOMY_FLOOR.length + 1);
+
+    const root = nodes.find((n) => n.id === 'cov-root');
+    expect(root).toBeDefined();
+    expect(root?.parent_id).toBeNull();
+    expect(root?.children.length).toBe(FAR_FIELD_TAXONOMY_FLOOR.length);
+
+    const cats = nodes.filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX));
+    expect(cats.length).toBe(FAR_FIELD_TAXONOMY_FLOOR.length);
+    for (const c of cats) {
+      expect(c.parent_id).toBe('cov-root');
+      expect(c.state).toBe('open');
+      expect(c.origin).toBe('seed');
+      expect(c.children.length).toBe(0); // leaf frontier
+    }
+    // every category node id is reachable from the root's children (consistent tree)
+    expect([...(root?.children ?? [])].sort()).toEqual(cats.map((c) => c.id).sort());
+  });
+
+  test('category node labels are the probing-question lenses (ac-1)', () => {
+    const nodes = farFieldCoverageNodes('add login');
+    const catLabels = nodes
+      .filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX))
+      .map((n) => n.label)
+      .sort();
+    expect(catLabels).toEqual(farFieldLenses().slice().sort());
+  });
+
+  test('a category-seeded map cannot terminate on novelty-dry alone — every category must close (ac-2)', () => {
+    const map: CoverageMap = {
+      schema_version: '0.1.0',
+      work_item_id: 'wi_test',
+      root_id: 'cov-root',
+      nodes: farFieldCoverageNodes('add login'),
+    };
+    // dry counter well past K, but the categories are still open → NOT terminated.
+    expect(isCoverageTerminated(map, 5)).toBe(false);
+
+    // close every node → terminated once the dry depth also holds.
+    const closed: CoverageMap = {
+      ...map,
+      nodes: map.nodes.map((n) => ({ ...n, state: 'resolved' as const })),
+    };
+    expect(isCoverageTerminated(closed, 5)).toBe(true);
+    // breadth alone is not enough either: all closed but dry below K → not terminated.
+    expect(isCoverageTerminated(closed, 0)).toBe(false);
+  });
+
+  test('farFieldCategoriesEnabled() defaults off; on only for explicit truthy env', () => {
+    const saved = process.env.DITTO_FARFIELD_CATEGORIES;
+    try {
+      // biome-ignore lint/performance/noDelete: default-off means truly unset, not the "undefined" string
+      delete process.env.DITTO_FARFIELD_CATEGORIES;
+      expect(farFieldCategoriesEnabled()).toBe(false);
+      process.env.DITTO_FARFIELD_CATEGORIES = '1';
+      expect(farFieldCategoriesEnabled()).toBe(true);
+      process.env.DITTO_FARFIELD_CATEGORIES = 'off';
+      expect(farFieldCategoriesEnabled()).toBe(false);
+    } finally {
+      if (saved === undefined) {
+        // biome-ignore lint/performance/noDelete: restore the env var to truly unset
+        delete process.env.DITTO_FARFIELD_CATEGORIES;
+      } else {
+        process.env.DITTO_FARFIELD_CATEGORIES = saved;
+      }
+    }
   });
 });

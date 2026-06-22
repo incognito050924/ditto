@@ -16,7 +16,7 @@ import {
   serializePlanDialog,
 } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
-import { farFieldLenses } from './coverage-taxonomy';
+import { farFieldCoverageNodes, farFieldLenses } from './coverage-taxonomy';
 import { localDir } from './ditto-paths';
 import { IntentStore } from './intent-store';
 import { WorkItemStore } from './work-item-store';
@@ -111,6 +111,12 @@ export async function nextCoverageNode(args: {
   repoRoot: string;
   workItemId: string;
   tierInputs?: TierSelectionInput;
+  /**
+   * Seed each floor category as a coverage node so termination requires every
+   * category swept (§8-2, ac-2). Default false preserves the root-only tree (ac-7).
+   * Only consulted on the first call (when the map is seeded).
+   */
+  seedCategories?: boolean;
 }): Promise<NextCoverageNodeResult> {
   const { repoRoot, workItemId } = args;
   const store = new CoverageStore(repoRoot);
@@ -123,7 +129,9 @@ export async function nextCoverageNode(args: {
       schema_version: '0.1.0',
       work_item_id: workItemId,
       root_id: 'cov-root',
-      nodes: [rootNode(intent)],
+      // §8-2: category-complete discovery seeds every floor category as a node so
+      // termination requires each one swept (ac-2); off → root-only tree (ac-7).
+      nodes: args.seedCategories ? farFieldCoverageNodes(intent) : [rootNode(intent)],
     };
     await store.writeMap(workItemId, map);
   }

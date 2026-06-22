@@ -22823,6 +22823,33 @@ var FAR_FIELD_TAXONOMY_FLOOR = [
 function farFieldLenses() {
   return FAR_FIELD_TAXONOMY_FLOOR.map((c3) => c3.lens);
 }
+var CATEGORY_NODE_PREFIX = "cov-cat-";
+function farFieldCoverageNodes(intent, rootId = "cov-root") {
+  const categoryIds = FAR_FIELD_TAXONOMY_FLOOR.map((c3) => `${CATEGORY_NODE_PREFIX}${c3.id}`);
+  const root = {
+    id: rootId,
+    parent_id: null,
+    label: intent,
+    origin: "seed",
+    depth_weight: 1,
+    state: "open",
+    children: categoryIds
+  };
+  const categories = FAR_FIELD_TAXONOMY_FLOOR.map((c3, i2) => ({
+    id: categoryIds[i2],
+    parent_id: rootId,
+    label: c3.lens,
+    origin: "seed",
+    depth_weight: 1,
+    state: "open",
+    children: []
+  }));
+  return [root, ...categories];
+}
+function farFieldCategoriesEnabled() {
+  const v2 = process.env.DITTO_FARFIELD_CATEGORIES?.toLowerCase();
+  return v2 === "1" || v2 === "on" || v2 === "true";
+}
 
 // src/core/coverage-loop.ts
 init_ditto_paths();
@@ -22873,7 +22900,7 @@ async function nextCoverageNode(args) {
       schema_version: "0.1.0",
       work_item_id: workItemId2,
       root_id: "cov-root",
-      nodes: [rootNode(intent2)]
+      nodes: args.seedCategories ? farFieldCoverageNodes(intent2) : [rootNode(intent2)]
     };
     await store.writeMap(workItemId2, map);
   }
@@ -24727,7 +24754,11 @@ var autopilotCoverageNext = defineCommand({
     }
     const repoRoot = await requireGraph(args.workItem);
     try {
-      const res = await nextCoverageNode({ repoRoot, workItemId: args.workItem });
+      const res = await nextCoverageNode({
+        repoRoot,
+        workItemId: args.workItem,
+        seedCategories: farFieldCategoriesEnabled()
+      });
       if (format === "json") {
         writeJson2(res);
       } else if (res.action === "dry") {
@@ -40307,4 +40338,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=86dd79b08cb5a6e029a6956b8d9886d96dc18ad1aeda3d19fa4268ba3784b8c4
+//# ditto-src-stamp=0296e4124223c85310351a12eb9b06b13d7cd26832fa4460519a1e6fdd45e327

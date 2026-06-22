@@ -11,6 +11,7 @@ import { AutopilotStore } from '~/core/autopilot-store';
 import { checkCiteGate, crossValidateCite, detectActiveConflicts } from '~/core/cite-gate';
 import { CompletionStore } from '~/core/completion-store';
 import { nextCoverageNode, recordCoverageRound } from '~/core/coverage-loop';
+import { farFieldCategoriesEnabled } from '~/core/coverage-taxonomy';
 import { dittoDir } from '~/core/ditto-paths';
 import { checkE2eCompletionGate } from '~/core/e2e/completion-gate';
 import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
@@ -785,7 +786,12 @@ const autopilotCoverageNext = defineCommand({
     }
     const repoRoot = await requireGraph(args.workItem);
     try {
-      const res = await nextCoverageNode({ repoRoot, workItemId: args.workItem });
+      const res = await nextCoverageNode({
+        repoRoot,
+        workItemId: args.workItem,
+        // §8-2: opt-in category-complete discovery (env toggle until ac-10 config).
+        seedCategories: farFieldCategoriesEnabled(),
+      });
       if (format === 'json') {
         writeJson(res);
       } else if (res.action === 'dry') {

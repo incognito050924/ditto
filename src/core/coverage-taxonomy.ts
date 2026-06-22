@@ -14,6 +14,8 @@
  * "go look" (ac-6) — handled by the engine, not by hardcoding here.
  */
 
+import type { CoverageNode } from '~/schemas/coverage';
+
 export interface FarFieldCategory {
   /** Stable id (kebab) — used for tier-② config enable/disable and skip records. */
   id: string;
@@ -113,4 +115,56 @@ export const FAR_FIELD_TAXONOMY_FLOOR: readonly FarFieldCategory[] = [
  */
 export function farFieldLenses(): string[] {
   return FAR_FIELD_TAXONOMY_FLOOR.map((c) => c.lens);
+}
+
+/** Coverage-node id prefix for a seeded far-field category (§8-2). */
+export const CATEGORY_NODE_PREFIX = 'cov-cat-';
+
+/**
+ * Build the seeded coverage nodes for category-complete discovery (§8-2): the
+ * root (original intent) plus one OPEN node per floor category. Because the
+ * categories are real nodes, the existing termination predicate
+ * (`isCoverageTerminated` = every node closed AND K dry) now requires every
+ * category to be swept and closed — novelty-dry alone no longer terminates, and
+ * an un-swept category cannot pass silently (ac-2). No new termination logic: the
+ * node tree IS the per-category sweep ledger (§8-reuse). A category is skipped by
+ * closing its node `out_of_scope` through the existing gated close — a recorded,
+ * auditable decision, never a silent drop. The label is the probing-question lens.
+ *
+ * depth_weight is a neutral floor (1) here; the stakes-proportional depth dial
+ * (§8-4) tunes it later. Returns root first so callers can keep `root_id`.
+ */
+export function farFieldCoverageNodes(intent: string, rootId = 'cov-root'): CoverageNode[] {
+  const categoryIds = FAR_FIELD_TAXONOMY_FLOOR.map((c) => `${CATEGORY_NODE_PREFIX}${c.id}`);
+  const root: CoverageNode = {
+    id: rootId,
+    parent_id: null,
+    label: intent,
+    origin: 'seed',
+    depth_weight: 1,
+    state: 'open',
+    children: categoryIds,
+  };
+  const categories: CoverageNode[] = FAR_FIELD_TAXONOMY_FLOOR.map((c, i) => ({
+    id: categoryIds[i] as string,
+    parent_id: rootId,
+    label: c.lens,
+    origin: 'seed',
+    depth_weight: 1,
+    state: 'open',
+    children: [],
+  }));
+  return [root, ...categories];
+}
+
+/**
+ * Whether the far-field categories are seeded as coverage nodes (§8-2). Default
+ * OFF preserves the existing plan-stage tree (root-only seeding) so existing
+ * autopilot behavior + tests are unchanged (ac-7). A later slice replaces this
+ * env toggle with tier-② project config (ac-10). Fail-open style mirrors
+ * memory-flag.ts: only an explicit truthy value enables it.
+ */
+export function farFieldCategoriesEnabled(): boolean {
+  const v = process.env.DITTO_FARFIELD_CATEGORIES?.toLowerCase();
+  return v === '1' || v === 'on' || v === 'true';
 }
