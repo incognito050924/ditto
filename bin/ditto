@@ -17642,13 +17642,13 @@ function addNode(map, child) {
   nodes.push({ ...child });
   return { ...map, nodes };
 }
-function closeNode(map, id, state) {
+function closeNode(map, id, state, reason) {
   if (!map.nodes.some((n2) => n2.id === id)) {
     throw new Error(`unknown coverage node id: ${id}`);
   }
   return {
     ...map,
-    nodes: map.nodes.map((n2) => n2.id === id ? { ...n2, state } : n2)
+    nodes: map.nodes.map((n2) => n2.id === id ? { ...n2, state, ...reason !== undefined ? { close_reason: reason } : {} } : n2)
   };
 }
 function selectReadyCoverageNodes(map) {
@@ -19726,7 +19726,8 @@ var coverageNode = exports_external.object({
   origin: coverageOrigin,
   depth_weight: exports_external.number().describe("Estimated needed depth (\xA74.4)"),
   state: coverageNodeState,
-  children: exports_external.array(exports_external.string().min(1)).default([]).describe("Child node ids (flat array + parent_id represents the tree/DAG)")
+  children: exports_external.array(exports_external.string().min(1)).default([]).describe("Child node ids (flat array + parent_id represents the tree/DAG)"),
+  close_reason: exports_external.string().optional().describe("Recorded justification when the node is closed in a non-resolved state \u2014 a skip/deferral must be justified, never silent (\xA78-2, ac-2)")
 }).describe("One node in the coverage scope tree (\xA73.1)");
 var coverageMap = exports_external.object({
   schema_version: schemaVersion,
@@ -19747,6 +19748,7 @@ var coverageRoundPayload = exports_external.object({
   discovered_nodes: exports_external.array(coverageChildInput).default([]),
   admissibleBranchesAdded: exports_external.number().int().nonnegative(),
   close_as: exports_external.enum(["resolved", "user_owned", "out_of_scope"]).optional(),
+  close_reason: exports_external.string().optional().describe("Justification for a skip/deferral close (out_of_scope/user_owned) \u2014 required to skip a seeded category, recorded on the node (\xA78-2, ac-2)"),
   axis_signals: exports_external.object({
     neutrality: exports_external.object({
       opponent_ran: exports_external.boolean(),
@@ -22936,11 +22938,14 @@ async function nextCoverageNode(args) {
     dryCounter
   };
 }
-function enforceClose(map, node2, state, signals) {
+function enforceClose(map, node2, state, signals, reason) {
   const reasons = [];
   const gate2 = coverageClosureGate(map, node2.id, state);
   if (!gate2.pass)
     reasons.push(...gate2.reasons);
+  if (node2.id.startsWith(CATEGORY_NODE_PREFIX) && state !== "resolved" && (reason === undefined || reason.trim() === "")) {
+    reasons.push(`category ${node2.id} skipped as ${state} without a reason: a category skip must be a recorded, justified decision (ac-2)`);
+  }
   if (state === "resolved" && signals.neutrality === undefined) {
     reasons.push(`neutrality axis required for resolved close of ${node2.id}: axis_signals.neutrality absent`);
   }
@@ -22996,9 +23001,9 @@ async function recordCoverageRound(args) {
     if (node2 === undefined) {
       reasons = [`unknown coverage node id: ${payload.node_id}`];
     } else {
-      reasons = enforceClose(map, node2, payload.close_as, payload.axis_signals ?? {});
+      reasons = enforceClose(map, node2, payload.close_as, payload.axis_signals ?? {}, payload.close_reason);
       if (reasons.length === 0) {
-        map = closeNode(map, payload.node_id, payload.close_as);
+        map = closeNode(map, payload.node_id, payload.close_as, payload.close_reason);
         closed = true;
       }
     }
@@ -40338,4 +40343,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=0296e4124223c85310351a12eb9b06b13d7cd26832fa4460519a1e6fdd45e327
+//# ditto-src-stamp=b55e698808ef08facc85b07a2f501a666251bbb5e280ef222bdb961f4d4b2537

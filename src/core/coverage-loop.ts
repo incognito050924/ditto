@@ -16,7 +16,7 @@ import {
   serializePlanDialog,
 } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
-import { farFieldCoverageNodes, farFieldLenses } from './coverage-taxonomy';
+import { CATEGORY_NODE_PREFIX, farFieldCoverageNodes, farFieldLenses } from './coverage-taxonomy';
 import { localDir } from './ditto-paths';
 import { IntentStore } from './intent-store';
 import { WorkItemStore } from './work-item-store';
@@ -207,11 +207,26 @@ function enforceClose(
   node: CoverageNode,
   state: Exclude<CoverageNode['state'], 'open'>,
   signals: CoverageAxisSignals,
+  reason: string | undefined,
 ): string[] {
   const reasons: string[] = [];
 
   const gate = coverageClosureGate(map, node.id, state);
   if (!gate.pass) reasons.push(...gate.reasons);
+
+  // §8-2 / ac-2 fail-closed: a seeded category closed in a NON-resolved state
+  // (out_of_scope / user_owned) is a skip/deferral — it MUST carry a recorded
+  // justification, never a silent pass. 'resolved' means the category was actually
+  // swept and settled, so the sweep itself is the record (no skip reason needed).
+  if (
+    node.id.startsWith(CATEGORY_NODE_PREFIX) &&
+    state !== 'resolved' &&
+    (reason === undefined || reason.trim() === '')
+  ) {
+    reasons.push(
+      `category ${node.id} skipped as ${state} without a reason: a category skip must be a recorded, justified decision (ac-2)`,
+    );
+  }
 
   // LOW1 (wi_2606144ta) fail-closed: a 'resolved' close asserts the scope was
   // adversarially settled, so it MUST carry the neutrality signal. Without it the
@@ -314,9 +329,15 @@ export async function recordCoverageRound(args: {
     if (node === undefined) {
       reasons = [`unknown coverage node id: ${payload.node_id}`];
     } else {
-      reasons = enforceClose(map, node, payload.close_as, payload.axis_signals ?? {});
+      reasons = enforceClose(
+        map,
+        node,
+        payload.close_as,
+        payload.axis_signals ?? {},
+        payload.close_reason,
+      );
       if (reasons.length === 0) {
-        map = closeNode(map, payload.node_id, payload.close_as);
+        map = closeNode(map, payload.node_id, payload.close_as, payload.close_reason);
         closed = true;
       }
     }

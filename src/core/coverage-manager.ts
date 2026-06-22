@@ -61,13 +61,16 @@ export function closeNode(
   map: CoverageMap,
   id: string,
   state: Exclude<CoverageNode['state'], 'open'>,
+  reason?: string,
 ): CoverageMap {
   if (!map.nodes.some((n) => n.id === id)) {
     throw new Error(`unknown coverage node id: ${id}`);
   }
   return {
     ...map,
-    nodes: map.nodes.map((n) => (n.id === id ? { ...n, state } : n)),
+    nodes: map.nodes.map((n) =>
+      n.id === id ? { ...n, state, ...(reason !== undefined ? { close_reason: reason } : {}) } : n,
+    ),
   };
 }
 

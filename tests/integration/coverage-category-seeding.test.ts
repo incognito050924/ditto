@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { nextCoverageNode } from '~/core/coverage-loop';
+import { nextCoverageNode, recordCoverageRound } from '~/core/coverage-loop';
 import { CoverageStore } from '~/core/coverage-store';
 import { CATEGORY_NODE_PREFIX } from '~/core/coverage-taxonomy';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -59,5 +59,68 @@ describe('category seeding (wi_260622vjo §8-2)', () => {
 
     const map = await new CoverageStore(repo).getMap(WI);
     expect(map.nodes.length).toBe(1);
+  });
+});
+
+// ac-2 — a category may be skipped only as a recorded, justified decision: closing
+// a category in a non-resolved state (out_of_scope / user_owned) without a reason
+// is rejected (no silent skip); the reason is recorded on the node (auditable).
+describe('justified category skip (wi_260622vjo §8-2 / ac-2)', () => {
+  const AUTH = `${CATEGORY_NODE_PREFIX}authentication`;
+
+  test('skipping a category out_of_scope without a reason is rejected — no silent skip', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI, seedCategories: true });
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: { node_id: AUTH, admissibleBranchesAdded: 0, close_as: 'out_of_scope' },
+    });
+    expect(r.terminated).toBe(false);
+    if (r.terminated) return;
+    expect(r.closed).toBe(false);
+    expect(r.reasons.join(' ')).toContain('reason');
+
+    // the category stays OPEN — it cannot be silently passed.
+    const node = (await new CoverageStore(repo).getMap(WI)).nodes.find((n) => n.id === AUTH);
+    expect(node?.state).toBe('open');
+  });
+
+  test('a skipped category records its justification on the node (auditable)', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI, seedCategories: true });
+    const reason = '이 변경은 인증 경로를 건드리지 않음 — 읽기 전용 내부 계산';
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: AUTH,
+        admissibleBranchesAdded: 0,
+        close_as: 'out_of_scope',
+        close_reason: reason,
+      },
+    });
+    expect(r.terminated).toBe(false);
+    if (r.terminated) return;
+    expect(r.closed).toBe(true);
+
+    const node = (await new CoverageStore(repo).getMap(WI)).nodes.find((n) => n.id === AUTH);
+    expect(node?.state).toBe('out_of_scope');
+    expect(node?.close_reason).toBe(reason);
+  });
+
+  test('resolving a category (swept, not skipped) does not require a skip reason', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI, seedCategories: true });
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: AUTH,
+        admissibleBranchesAdded: 0,
+        close_as: 'resolved',
+        axis_signals: { neutrality: { opponent_ran: true, verdict: 'accept' } },
+      },
+    });
+    expect(r.terminated).toBe(false);
+    if (r.terminated) return;
+    expect(r.closed).toBe(true);
   });
 });
