@@ -620,3 +620,35 @@ describe('ditto autopilot bootstrap CLI surface', () => {
     }
   });
 });
+
+describe('recordTurn — question context fields (ac-1/ac-4/ac-5, wi_260622ph8)', () => {
+  beforeEach(async () => {
+    await startInterview(repo, { workItemId: wiId, questionCap: 8 });
+  });
+
+  test('persists user_explanation, background, grounding, self_answer_attempts, and answer self-report', async () => {
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
+        question: {
+          text: 'Which password hash?',
+          why_matters: 'Determines the storage format.',
+          info_gain_estimate: 'high',
+          user_explanation: '비밀번호를 어떻게 안전하게 저장할지 정하는 질문이에요.',
+          background: '저장 후 바꾸기 어려워 처음에 정해야 합니다.',
+          grounding: 'src/auth/store.ts:42',
+          self_answer_attempts: [{ source: 'code', result: '코드에 정책이 없어 확인 불가' }],
+        },
+        answer: { text: 'bcrypt', kind: 'user', self_report: 'confident' },
+      },
+    });
+    const q = state.questions[0];
+    expect(q?.user_explanation).toBe('비밀번호를 어떻게 안전하게 저장할지 정하는 질문이에요.');
+    expect(q?.background).toBe('저장 후 바꾸기 어려워 처음에 정해야 합니다.');
+    expect(q?.grounding).toBe('src/auth/store.ts:42');
+    expect(q?.self_answer_attempts.length).toBe(1);
+    expect(q?.self_answer_attempts[0]?.source).toBe('code');
+    expect(q?.answer_self_report).toBe('confident');
+  });
+});

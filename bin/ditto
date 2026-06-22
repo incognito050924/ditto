@@ -21189,6 +21189,7 @@ var questionGate = exports_external.object({
 var interviewStatus = exports_external.enum(["active", "converged", "deferred", "aborted"]).describe("Lifecycle of the deep interview");
 var dimensionState = exports_external.enum(["unknown", "partial", "resolved"]).describe("Resolution state of one ambiguity dimension");
 var infoGain = exports_external.enum(["high", "medium", "low"]).describe("Estimated information gain of a question");
+var answerSelfReport = exports_external.enum(["confident", "partial", "unsure"]).describe("User self-report of decision-ability after answering (presentation-sufficiency signal)");
 var interviewDimension = exports_external.object({
   id: exports_external.string().min(1),
   critical: exports_external.boolean().default(false),
@@ -21205,8 +21206,12 @@ var interviewQuestion = exports_external.object({
   why_matters: exports_external.string().min(1).describe("What changes depending on the answer"),
   info_gain_estimate: infoGain,
   self_answer_attempts: exports_external.array(selfAnswerAttempt).default([]),
+  user_explanation: exports_external.string().min(1).optional().describe("Plain-language why-we-ask + what-the-answer-decides \u2014 user language, no raw code/jargon (default-shown)"),
+  background: exports_external.string().min(1).optional().describe('Deeper context for progressive disclosure ("more") \u2014 optional expansion beyond user_explanation'),
+  grounding: exports_external.string().min(1).optional().describe("Evidence the question stems from (file:line | doc | domain) \u2014 the source behind why-we-ask"),
   answer: exports_external.string().optional(),
   answer_kind: exports_external.enum(["user", "assumption"]).optional(),
+  answer_self_report: answerSelfReport.optional().describe("User self-report of decision-ability after answering (presentation-sufficiency signal)"),
   ambiguity_delta: exports_external.number().optional(),
   marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal")
 }).describe("One asked question with its self-answer attempts and outcome");
@@ -28290,13 +28295,18 @@ var recordTurnPayload = exports_external.object({
     text: exports_external.string().min(1),
     why_matters: exports_external.string().min(1),
     info_gain_estimate: infoGain,
+    user_explanation: exports_external.string().min(1).optional(),
+    background: exports_external.string().min(1).optional(),
+    grounding: exports_external.string().min(1).optional(),
+    self_answer_attempts: exports_external.array(selfAnswerAttempt).optional(),
     marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal")
   }).describe("The asked question and why it matters"),
   answer: exports_external.object({
     text: exports_external.string().min(1),
     kind: exports_external.enum(["user", "assumption"]),
     delegated: exports_external.boolean().optional(),
-    ambiguity_delta: exports_external.number().optional()
+    ambiguity_delta: exports_external.number().optional(),
+    self_report: answerSelfReport.optional()
   }).optional(),
   readiness_score: exports_external.number().min(0).max(1).optional().describe("LLM self-reported readiness after this turn (floor-capped by the gate)")
 }).describe("One interview turn \u2014 dimension upsert + question append + optional answer");
@@ -28335,12 +28345,16 @@ async function recordTurn(repoRoot, input) {
     question: question.text,
     why_matters: question.why_matters,
     info_gain_estimate: question.info_gain_estimate,
-    self_answer_attempts: [],
+    self_answer_attempts: question.self_answer_attempts ?? [],
+    ...question.user_explanation !== undefined ? { user_explanation: question.user_explanation } : {},
+    ...question.background !== undefined ? { background: question.background } : {},
+    ...question.grounding !== undefined ? { grounding: question.grounding } : {},
     ...question.marginal_gain !== undefined ? { marginal_gain: question.marginal_gain } : {},
     ...answer ? {
       answer: answer.text,
       answer_kind: answer.kind,
-      ...answer.ambiguity_delta !== undefined ? { ambiguity_delta: answer.ambiguity_delta } : {}
+      ...answer.ambiguity_delta !== undefined ? { ambiguity_delta: answer.ambiguity_delta } : {},
+      ...answer.self_report !== undefined ? { answer_self_report: answer.self_report } : {}
     } : {}
   });
   const dimensionsWithResolution = answer && dimension.state === "resolved" ? nextDimensions.map((d2) => d2.id === dimension.id ? { ...d2, resolved_by: [...d2.resolved_by, qId] } : d2) : nextDimensions;
@@ -28559,6 +28573,34 @@ async function promotePremortem(repoRoot, workItemId2, payload, now) {
     premortem: [...state.premortem, ...payload.items]
   });
   return { state: written, unpromoted };
+}
+
+// src/core/question-context.ts
+init_zod();
+var questionContextCandidate = exports_external.object({
+  text: exports_external.string().min(1),
+  why_matters: exports_external.string().min(1),
+  user_explanation: exports_external.string().optional(),
+  background: exports_external.string().optional(),
+  grounding: exports_external.string().optional(),
+  self_answer_attempts: exports_external.array(selfAnswerAttempt).optional()
+}).describe("A gate-selected question candidate checked against the presentation contract");
+var isBlank = (s2) => s2 === undefined || s2.trim().length === 0;
+function validateQuestionContext(candidate) {
+  const violations = [];
+  if (isBlank(candidate.user_explanation)) {
+    violations.push({
+      field: "user_explanation",
+      reason: "a plain-language why-we-ask + what-the-answer-decides (user language, no raw code/jargon) is required before asking the user"
+    });
+  }
+  if (isBlank(candidate.why_matters)) {
+    violations.push({
+      field: "why_matters",
+      reason: "the value of the answer (what it decides) must be stated"
+    });
+  }
+  return { ok: violations.length === 0, violations };
 }
 
 // src/cli/commands/deep-interview.ts
@@ -28960,6 +29002,60 @@ var premortemCmd = defineCommand({
     }
   }
 });
+var checkQuestionCmd = defineCommand({
+  meta: {
+    name: "check-question",
+    description: "Gate a question candidate against the presentation contract (why\xB7value\xB7user-language) before asking"
+  },
+  args: {
+    json: {
+      type: "string",
+      description: "Question candidate JSON: {text, why_matters, user_explanation, background?, grounding?, self_answer_attempts?}",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw;
+    try {
+      raw = parseJsonArg(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = questionContextCandidate.safeParse(raw);
+    if (!parsed.success) {
+      writeError("--json failed schema validation:");
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const verdict2 = validateQuestionContext(parsed.data);
+    if (format === "json") {
+      writeJson2(verdict2);
+    } else if (verdict2.ok) {
+      writeHuman("check-question: ok (presentation contract satisfied)");
+    } else {
+      writeError("check-question: REJECTED \u2014 under-contextualized, do not ask as-is:");
+      for (const v2 of verdict2.violations) {
+        writeError(`  - ${v2.field}: ${v2.reason}`);
+      }
+    }
+    if (!verdict2.ok)
+      process.exit(RUNTIME_ERROR_EXIT);
+  }
+});
 var deepInterviewCommand = defineCommand({
   meta: {
     name: "deep-interview",
@@ -28968,6 +29064,7 @@ var deepInterviewCommand = defineCommand({
   subCommands: {
     start: startCmd,
     "record-turn": recordTurnCmd,
+    "check-question": checkQuestionCmd,
     "check-readiness": checkReadinessCmd,
     "project-coverage": projectCoverageCmd,
     premortem: premortemCmd,
@@ -39922,4 +40019,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=aa8476c88b3e5efb83711e55d49eff4b6dd5a5038bb3a944ffe66e0ba64811e6
+//# ditto-src-stamp=a544d297ca5e00de9c8ecaf1db704b7a2b7db83308e9dab4565825d8421283e7

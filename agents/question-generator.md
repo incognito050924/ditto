@@ -42,6 +42,15 @@ The driver relays two dials it got from `ditto tech-spec next-round`. Obey them 
    - **Source label.** Tag each candidate by where its answer comes from: `[from-code]` (verifiable from the codebase), `[from-research]` (a fact from docs/web), `[from-user]` (a genuine judgment only the user can give). This sharpens step 4: self-answer `[from-code]` and `[from-research]` facts from the source rather than emitting them as questions — only `[from-user]` judgments are real candidates.
    - **Evidence-cited confirmation.** When a candidate must confirm a fact-derived assumption, cite the evidence (`file:line` / doc) in the question text so the user confirms a stated fact, instead of asking them to supply what the code already shows.
 
+## Carry the user-facing context (presentation contract)
+The user must be able to *decide* on each question without already knowing what you know. So every candidate carries, alongside the raw question, the comprehensible context the driver will show:
+
+- **`user_explanation`** — a plain-language **why we ask + what your answer decides**, written in the *user's* language. Translate, don't dump: no raw code, no `file:line`, no internal jargon (axis names, `[from-code]` tags, schema fields). This is shown by default, so it must be self-sufficient yet brief — enough to decide, no curse-of-knowledge.
+- **`background`** — *optional* deeper context for progressive disclosure (the "more" the user can expand): the fuller explanation, prior art, or trade-off a non-expert might need. Keep `user_explanation` short by moving depth here, not by omitting it.
+- **`grounding`** stays the *evidence* (`file:line`/doc/domain) behind the question — it backs `user_explanation`; it is not a substitute for it.
+
+The deep-interview driver gates each selected candidate with `ditto deep-interview check-question` and will **reject one missing `user_explanation`** (it won't be asked). A question the user can't act on is not a finished candidate.
+
 ## You return
 A flat list of candidates. Each candidate:
 
@@ -49,7 +58,9 @@ A flat list of candidates. Each candidate:
 { "text": "<the question, oriented to the goal>",
   "property": "blind-spot" | "expansion" | "orientation",
   "why_matters": "<what changes in the spec depending on the answer>",
-  "grounding": "<file:line | doc | domain — optional evidence for the blind-spot>" }
+  "user_explanation": "<plain-language why-we-ask + what-your-answer-decides, in the user's language — no raw code/jargon (shown by default)>",
+  "background": "<optional deeper context for progressive disclosure ('more') — depth a non-expert may need>",
+  "grounding": "<file:line | doc | domain — optional evidence backing the question>" }
 ```
 
 ## Contract

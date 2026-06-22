@@ -12,6 +12,7 @@ import {
   recordTurnPayload,
   startInterview,
 } from '~/core/interview-driver';
+import { questionContextCandidate, validateQuestionContext } from '~/core/question-context';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
   RUNTIME_ERROR_EXIT,
@@ -464,6 +465,68 @@ const premortemCmd = defineCommand({
   },
 });
 
+// The presentation-contract gate (wi_260622ph8). The SKILL runs this on each
+// gate-selected candidate BEFORE presenting it to the user — a candidate missing
+// the comprehensible, decision-sufficient context (user_explanation) is rejected
+// (exit non-zero) so the driver regenerates instead of asking a context-less
+// question. Structural presence check; quality is the LLM gate's job.
+const checkQuestionCmd = defineCommand({
+  meta: {
+    name: 'check-question',
+    description:
+      'Gate a question candidate against the presentation contract (why·value·user-language) before asking',
+  },
+  args: {
+    json: {
+      type: 'string',
+      description:
+        'Question candidate JSON: {text, why_matters, user_explanation, background?, grounding?, self_answer_attempts?}',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw: unknown;
+    try {
+      raw = parseJsonArg(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = questionContextCandidate.safeParse(raw);
+    if (!parsed.success) {
+      writeError('--json failed schema validation:');
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const verdict = validateQuestionContext(parsed.data);
+    if (format === 'json') {
+      writeJson(verdict);
+    } else if (verdict.ok) {
+      writeHuman('check-question: ok (presentation contract satisfied)');
+    } else {
+      writeError('check-question: REJECTED — under-contextualized, do not ask as-is:');
+      for (const v of verdict.violations) {
+        writeError(`  - ${v.field}: ${v.reason}`);
+      }
+    }
+    // Non-zero exit on rejection so the SKILL/driver can branch (regenerate) on it.
+    if (!verdict.ok) process.exit(RUNTIME_ERROR_EXIT);
+  },
+});
+
 export const deepInterviewCommand = defineCommand({
   meta: {
     name: 'deep-interview',
@@ -473,6 +536,7 @@ export const deepInterviewCommand = defineCommand({
   subCommands: {
     start: startCmd,
     'record-turn': recordTurnCmd,
+    'check-question': checkQuestionCmd,
     'check-readiness': checkReadinessCmd,
     'project-coverage': projectCoverageCmd,
     premortem: premortemCmd,

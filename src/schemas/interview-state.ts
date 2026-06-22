@@ -15,6 +15,15 @@ export const infoGain = z
   .enum(['high', 'medium', 'low'])
   .describe('Estimated information gain of a question');
 
+// User's own report, when answering, of whether they had enough comprehensible
+// context to decide. The success proxy for the presentation contract (wi_260622ph8):
+// "did you have enough to answer?" is observable where "did you understand?" is not.
+export const answerSelfReport = z
+  .enum(['confident', 'partial', 'unsure'])
+  .describe(
+    'User self-report of decision-ability after answering (presentation-sufficiency signal)',
+  );
+
 export const interviewDimension = z
   .object({
     id: z.string().min(1),
@@ -35,8 +44,38 @@ export const interviewQuestion = z
     why_matters: z.string().min(1).describe('What changes depending on the answer'),
     info_gain_estimate: infoGain,
     self_answer_attempts: z.array(selfAnswerAttempt).default([]),
+    // Presentation contract (wi_260622ph8). These carry the comprehensible,
+    // decision-sufficient context the user needs WITH the question. All optional so
+    // pre-existing interview-state.json parse unchanged; the gate (check-question)
+    // enforces user_explanation presence before a question is asked.
+    user_explanation: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Plain-language why-we-ask + what-the-answer-decides — user language, no raw code/jargon (default-shown)',
+      ),
+    background: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Deeper context for progressive disclosure ("more") — optional expansion beyond user_explanation',
+      ),
+    grounding: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Evidence the question stems from (file:line | doc | domain) — the source behind why-we-ask',
+      ),
     answer: z.string().optional(),
     answer_kind: z.enum(['user', 'assumption']).optional(),
+    answer_self_report: answerSelfReport
+      .optional()
+      .describe(
+        'User self-report of decision-ability after answering (presentation-sufficiency signal)',
+      ),
     ambiguity_delta: z.number().optional(),
     marginal_gain: z
       .number()

@@ -5,12 +5,14 @@ import { type IntentContract, intentAcceptanceCriterion } from '~/schemas/intent
 import {
   type InterviewState,
   type PremortemItem,
+  answerSelfReport,
   dimensionState,
   infoGain,
   interviewQuestion,
   premortemItem,
   userConfirmation,
 } from '~/schemas/interview-state';
+import { selfAnswerAttempt } from '~/schemas/question-gate';
 import { bootstrapAutopilot } from './autopilot-bootstrap';
 import { nextCoverageNode, recordCoverageRound } from './coverage-loop';
 import { serializePlanDialog } from './coverage-manager';
@@ -108,6 +110,17 @@ export const recordTurnPayload = z
         text: z.string().min(1),
         why_matters: z.string().min(1),
         info_gain_estimate: infoGain,
+        // Presentation-contract context (wi_260622ph8): the comprehensible,
+        // decision-sufficient context carried WITH the question. Optional here so
+        // existing callers parse unchanged; the gate (check-question) enforces
+        // user_explanation before a question is asked.
+        user_explanation: z.string().min(1).optional(),
+        background: z.string().min(1).optional(),
+        grounding: z.string().min(1).optional(),
+        // Sources the agent checked before asking (§6.2). The driver persists these
+        // instead of the previous hardcoded empty array, so "why we ask" is backed
+        // by "what we already checked".
+        self_answer_attempts: z.array(selfAnswerAttempt).optional(),
         marginal_gain: z
           .number()
           .min(0)
@@ -127,6 +140,8 @@ export const recordTurnPayload = z
         // an assumption-kind answer is allowed to close a CRITICAL dimension.
         delegated: z.boolean().optional(),
         ambiguity_delta: z.number().optional(),
+        // User's decision-ability self-report (presentation-sufficiency signal).
+        self_report: answerSelfReport.optional(),
       })
       .optional(),
     readiness_score: z
@@ -202,7 +217,15 @@ export async function recordTurn(
     question: question.text,
     why_matters: question.why_matters,
     info_gain_estimate: question.info_gain_estimate,
-    self_answer_attempts: [],
+    // Persist the self-answer ledger from the payload (was hardcoded `[]`), so the
+    // "we checked X first" evidence behind asking the user survives (wi_260622ph8).
+    self_answer_attempts: question.self_answer_attempts ?? [],
+    // Presentation-contract context carried with the question (wi_260622ph8).
+    ...(question.user_explanation !== undefined
+      ? { user_explanation: question.user_explanation }
+      : {}),
+    ...(question.background !== undefined ? { background: question.background } : {}),
+    ...(question.grounding !== undefined ? { grounding: question.grounding } : {}),
     ...(question.marginal_gain !== undefined ? { marginal_gain: question.marginal_gain } : {}),
     ...(answer
       ? {
@@ -211,6 +234,7 @@ export async function recordTurn(
           ...(answer.ambiguity_delta !== undefined
             ? { ambiguity_delta: answer.ambiguity_delta }
             : {}),
+          ...(answer.self_report !== undefined ? { answer_self_report: answer.self_report } : {}),
         }
       : {}),
   });
