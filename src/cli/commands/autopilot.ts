@@ -11,6 +11,9 @@ import { AutopilotStore } from '~/core/autopilot-store';
 import { checkCiteGate, crossValidateCite, detectActiveConflicts } from '~/core/cite-gate';
 import { CompletionStore } from '~/core/completion-store';
 import { nextCoverageNode, recordCoverageRound } from '~/core/coverage-loop';
+import { COVERAGE_TIERS, type CoverageTier } from '~/core/coverage-manager';
+import { CoverageStore } from '~/core/coverage-store';
+import { farFieldCategoriesEnabled, farFieldCoverageReport } from '~/core/coverage-taxonomy';
 import { dittoDir } from '~/core/ditto-paths';
 import { checkE2eCompletionGate } from '~/core/e2e/completion-gate';
 import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
@@ -765,6 +768,20 @@ const autopilotIntentDrift = defineCommand({
  * Spawn-capability division (§3.1): the CLI computes/gates/aggregates; the main
  * agent spawns the fresh sweep + 3-role dialectic + judges. The CLI never spawns.
  */
+
+/**
+ * Parse the user's `--coverageIntensity` override (ac-4). Undefined → no override
+ * (engine keeps its stakes-derived/standard tier, ac-7). An unknown value throws
+ * so the caller can exit with a usage error, mirroring `parseOutputFormat`. Both
+ * coverage-next and coverage-round share this so the entered tier is validated
+ * identically and threaded to the same termination K.
+ */
+function parseCoverageIntensity(raw: string | undefined): CoverageTier | undefined {
+  if (raw === undefined) return undefined;
+  if ((COVERAGE_TIERS as readonly string[]).includes(raw)) return raw as CoverageTier;
+  throw new Error(`--coverageIntensity must be one of ${COVERAGE_TIERS.join('|')} (got "${raw}")`);
+}
+
 const autopilotCoverageNext = defineCommand({
   meta: {
     name: 'coverage-next',
@@ -772,12 +789,18 @@ const autopilotCoverageNext = defineCommand({
   },
   args: {
     workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    coverageIntensity: {
+      type: 'string',
+      description: `Override sweep intensity at entry: ${COVERAGE_TIERS.join('|')} (default: stakes-derived, ac-4)`,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
     let format: ReturnType<typeof parseOutputFormat>;
+    let intensity: CoverageTier | undefined;
     try {
       format = parseOutputFormat(args.output);
+      intensity = parseCoverageIntensity(args.coverageIntensity);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(USAGE_ERROR_EXIT);
@@ -785,15 +808,23 @@ const autopilotCoverageNext = defineCommand({
     }
     const repoRoot = await requireGraph(args.workItem);
     try {
-      const res = await nextCoverageNode({ repoRoot, workItemId: args.workItem });
+      const res = await nextCoverageNode({
+        repoRoot,
+        workItemId: args.workItem,
+        // §8-2: opt-in category-complete discovery (env toggle until ac-10 config).
+        seedCategories: farFieldCategoriesEnabled(),
+        // ac-4: explicit user override wins over the stakes-derived/standard tier.
+        ...(intensity ? { intensity } : {}),
+      });
       if (format === 'json') {
         writeJson(res);
       } else if (res.action === 'dry') {
         writeHuman('Coverage: dry — sweep terminated (breadth + depth). Record the design result.');
       } else {
         writeHuman(`Coverage: interrogate ${res.node.id} (tier=${res.tier})`);
-        writeHuman(`  label:       ${res.node.label}`);
-        writeHuman(`  dry_counter: ${res.dryCounter}`);
+        writeHuman(`  label:        ${res.node.label}`);
+        writeHuman(`  sweep_angles: ${res.sweepAngles}`);
+        writeHuman(`  dry_counter:  ${res.dryCounter}`);
         writeHuman(
           '  → run fresh sweep + 3-role dialectic + judges with ONLY judgeInput, then coverage-round',
         );
@@ -817,12 +848,18 @@ const autopilotCoverageRound = defineCommand({
       description: 'JSON payload matching coverageRoundPayload schema',
       required: true,
     },
+    coverageIntensity: {
+      type: 'string',
+      description: `Override sweep intensity at entry: ${COVERAGE_TIERS.join('|')} (default: stakes-derived, ac-4)`,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
     let format: ReturnType<typeof parseOutputFormat>;
+    let intensity: CoverageTier | undefined;
     try {
       format = parseOutputFormat(args.output);
+      intensity = parseCoverageIntensity(args.coverageIntensity);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(USAGE_ERROR_EXIT);
@@ -873,6 +910,8 @@ const autopilotCoverageRound = defineCommand({
               },
             }
           : {}),
+        // ac-4: explicit user override wins over stakes-derived tier_inputs.
+        ...(intensity ? { intensity } : {}),
       });
       if (format === 'json') {
         writeJson(res);
@@ -892,6 +931,60 @@ const autopilotCoverageRound = defineCommand({
       writeError(`coverage-round failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
     }
+  },
+});
+
+/**
+ * `ditto autopilot coverage-report` — deterministic far-field process coverage
+ * (ac-11a, design §8-6): read the work item's coverage.json and report how the
+ * far-field breadth was handled (swept / skipped-with-reason / open) and whether
+ * the breadth is complete. Read-only; absent coverage.json → no sweep recorded.
+ */
+const autopilotCoverageReport = defineCommand({
+  meta: {
+    name: 'coverage-report',
+    description:
+      'Report far-field process coverage: swept/skipped(+reason)/open categories + completeness (ac-11a)',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new CoverageStore(repoRoot);
+    if (!(await store.exists(args.workItem))) {
+      if (format === 'json') {
+        writeJson({ seeded: 0, resolved: 0, open: 0, skipped: [], complete: false });
+      } else {
+        writeHuman('Far-field coverage: no sweep recorded (coverage.json absent).');
+      }
+      return;
+    }
+    const report = farFieldCoverageReport(await store.getMap(args.workItem));
+    if (format === 'json') {
+      writeJson(report);
+      return;
+    }
+    writeHuman(`Far-field coverage (${args.workItem}):`);
+    writeHuman(`  seeded:   ${report.seeded}`);
+    writeHuman(`  resolved: ${report.resolved} (swept-dry)`);
+    writeHuman(`  open:     ${report.open}`);
+    writeHuman(`  skipped:  ${report.skipped.length}`);
+    for (const s of report.skipped) {
+      writeHuman(`    - ${s.id} [${s.state}]: ${s.reason ?? '(no reason recorded!)'}`);
+    }
+    writeHuman(
+      `  complete: ${report.complete}${report.seeded === 0 ? ' (far-field seeding off)' : ''}`,
+    );
   },
 });
 
@@ -1135,5 +1228,6 @@ export const autopilotCommand = defineCommand({
     'intent-drift': autopilotIntentDrift,
     'coverage-next': autopilotCoverageNext,
     'coverage-round': autopilotCoverageRound,
+    'coverage-report': autopilotCoverageReport,
   },
 });

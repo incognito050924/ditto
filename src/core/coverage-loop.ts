@@ -9,13 +9,21 @@ import {
   buildJudgeInput,
   closeNode,
   coverageClosureGate,
+  coverageDryK,
   isCoverageTerminated,
   recordDryRound,
   selectCoverageTier,
   selectReadyCoverageNodes,
   serializePlanDialog,
+  tierDepthBudget,
 } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
+import {
+  CATEGORY_NODE_PREFIX,
+  farFieldCoverageNodes,
+  farFieldLenses,
+  loadFarFieldTaxonomy,
+} from './coverage-taxonomy';
 import { localDir } from './ditto-paths';
 import { IntentStore } from './intent-store';
 import { WorkItemStore } from './work-item-store';
@@ -93,6 +101,13 @@ export type NextCoverageNodeResult =
       node: CoverageNode;
       judgeInput: JudgeInput;
       tier: CoverageTier;
+      /**
+       * How many blind sweep angles to spawn for this node — the tier's effort
+       * lever (light=1 / standard=3 / full=5, §8.2). Breadth (every category) is
+       * invariant; this scales the *effort per node* with stakes (ac-4) so a
+       * low-stakes sweep is cheaper and a high-stakes one more thorough (ac-8).
+       */
+      sweepAngles: number;
       dryCounter: number;
     }
   | { action: 'dry'; terminated: true };
@@ -110,9 +125,25 @@ export async function nextCoverageNode(args: {
   repoRoot: string;
   workItemId: string;
   tierInputs?: TierSelectionInput;
+  /**
+   * Explicit intensity override entered by the user (ac-4). When set it forces
+   * the tier — and thus the termination depth K — winning over both `tierInputs`
+   * (stakes-derived) and the standard default. Absent → unchanged (ac-7).
+   */
+  intensity?: CoverageTier;
+  /**
+   * Seed each floor category as a coverage node so termination requires every
+   * category swept (§8-2, ac-2). Default false preserves the root-only tree (ac-7).
+   * Only consulted on the first call (when the map is seeded).
+   */
+  seedCategories?: boolean;
 }): Promise<NextCoverageNodeResult> {
   const { repoRoot, workItemId } = args;
   const store = new CoverageStore(repoRoot);
+  // ac-10: resolve the project's tier-② taxonomy (floor + .ditto/coverage-taxonomy.json)
+  // once; it drives both the seeded category nodes and the injected lenses. Absent/
+  // malformed config → the code floor (fail-open).
+  const taxonomy = await loadFarFieldTaxonomy(repoRoot);
   let map: CoverageMap;
   if (await store.exists(workItemId)) {
     map = await store.getMap(workItemId);
@@ -122,13 +153,24 @@ export async function nextCoverageNode(args: {
       schema_version: '0.1.0',
       work_item_id: workItemId,
       root_id: 'cov-root',
-      nodes: [rootNode(intent)],
+      // §8-2: category-complete discovery seeds every floor category as a node so
+      // termination requires each one swept (ac-2); off → root-only tree (ac-7).
+      nodes: args.seedCategories
+        ? farFieldCoverageNodes(intent, 'cov-root', taxonomy)
+        : [rootNode(intent)],
     };
     await store.writeMap(workItemId, map);
   }
 
   const dryCounter = await readDryCounter(repoRoot, workItemId);
-  if (isCoverageTerminated(map, dryCounter)) {
+  // §8-4: termination depth K scales with the stakes-derived tier (light=1,
+  // standard=2, full=3); no tierInputs → standard = the existing default (ac-7).
+  const tier =
+    args.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard');
+  // §8.2 effort lever surfaced to the caller: how many blind sweep angles to spawn
+  // per node (light=1/standard=3/full=5). Breadth invariant; effort scales (ac-4/ac-8).
+  const sweepAngles = tierDepthBudget(tier).sweepAngles;
+  if (isCoverageTerminated(map, dryCounter, coverageDryK(tier))) {
     return { action: 'dry', terminated: true };
   }
 
@@ -143,9 +185,12 @@ export async function nextCoverageNode(args: {
       judgeInput: buildJudgeInput({
         node: map.nodes[0] ?? rootNode(workItemId),
         originalIntent: await originalIntent(repoRoot, workItemId),
-        crossCuttingConstraints: [],
+        // Far-field floor lenses (design §8-1) — the fresh judge now sees every
+        // category instead of the previous empty slot (cross_cutting_constraints:[]).
+        crossCuttingConstraints: farFieldLenses(taxonomy),
       }),
-      tier: args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard',
+      tier,
+      sweepAngles,
       dryCounter,
     };
   }
@@ -157,9 +202,11 @@ export async function nextCoverageNode(args: {
     judgeInput: buildJudgeInput({
       node,
       originalIntent: intent,
-      crossCuttingConstraints: [],
+      // Far-field floor lenses (design §8-1) — see the no-ready-node path above.
+      crossCuttingConstraints: farFieldLenses(taxonomy),
     }),
-    tier: args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard',
+    tier,
+    sweepAngles,
     dryCounter,
   };
 }
@@ -195,11 +242,26 @@ function enforceClose(
   node: CoverageNode,
   state: Exclude<CoverageNode['state'], 'open'>,
   signals: CoverageAxisSignals,
+  reason: string | undefined,
 ): string[] {
   const reasons: string[] = [];
 
   const gate = coverageClosureGate(map, node.id, state);
   if (!gate.pass) reasons.push(...gate.reasons);
+
+  // §8-2 / ac-2 fail-closed: a seeded category closed in a NON-resolved state
+  // (out_of_scope / user_owned) is a skip/deferral — it MUST carry a recorded
+  // justification, never a silent pass. 'resolved' means the category was actually
+  // swept and settled, so the sweep itself is the record (no skip reason needed).
+  if (
+    node.id.startsWith(CATEGORY_NODE_PREFIX) &&
+    state !== 'resolved' &&
+    (reason === undefined || reason.trim() === '')
+  ) {
+    reasons.push(
+      `category ${node.id} skipped as ${state} without a reason: a category skip must be a recorded, justified decision (ac-2)`,
+    );
+  }
 
   // LOW1 (wi_2606144ta) fail-closed: a 'resolved' close asserts the scope was
   // adversarially settled, so it MUST carry the neutrality signal. Without it the
@@ -267,6 +329,13 @@ export async function recordCoverageRound(args: {
   /** Brief content the design node produced — folded into the result on termination. */
   brief?: { interface_changes: string[]; dod: string[]; test_scenarios: string[] };
   tierInputs?: TierSelectionInput;
+  /**
+   * Explicit intensity override entered by the user (ac-4) — forces the tier (and
+   * termination depth K), winning over `tierInputs` and the standard default.
+   * Must match the value passed to `nextCoverageNode` so both termination checks
+   * use the same K. Absent → unchanged (ac-7).
+   */
+  intensity?: CoverageTier;
   /** plan-dialog delta assembled into plan-dialog.md on termination (§6). */
   dialogDelta?: Partial<PlanDialogInput>;
   /** Stage selecting the dialog artifact on termination (default 'plan', §6/§9). */
@@ -302,9 +371,15 @@ export async function recordCoverageRound(args: {
     if (node === undefined) {
       reasons = [`unknown coverage node id: ${payload.node_id}`];
     } else {
-      reasons = enforceClose(map, node, payload.close_as, payload.axis_signals ?? {});
+      reasons = enforceClose(
+        map,
+        node,
+        payload.close_as,
+        payload.axis_signals ?? {},
+        payload.close_reason,
+      );
       if (reasons.length === 0) {
-        map = closeNode(map, payload.node_id, payload.close_as);
+        map = closeNode(map, payload.node_id, payload.close_as, payload.close_reason);
         closed = true;
       }
     }
@@ -312,7 +387,10 @@ export async function recordCoverageRound(args: {
 
   await store.writeMap(workItemId, map);
 
-  if (isCoverageTerminated(map, nextCounter)) {
+  // §8-4: same stakes-proportional K as nextCoverageNode (default standard, ac-7).
+  const tier =
+    args.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard');
+  if (isCoverageTerminated(map, nextCounter, coverageDryK(tier))) {
     const delta = args.dialogDelta ?? {};
     const closedItems = map.nodes
       .filter((n) => n.state !== 'open')

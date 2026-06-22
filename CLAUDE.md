@@ -327,7 +327,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=0052c87f8755f9b47266279d9823ff784cba47f9b2a7fb3ebf67dadf749ef632 -->
+<!-- ditto:knowledge:start sha256=afbc99d140c27727832f1fc70cd5c5b8f1d1c4c972455d03459244f514a62dc6 -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -398,5 +398,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-0020 · accepted · 결정-모순 가드레일 — ADR을 추론 시점에 일관 적용 (classify × route × disclose)
 - ADR-0021 · accepted · 조직·cross-repo 메모리를 별도 standalone 프로젝트로 — ditto memory seam 대체 (흡수=feature parity 아님)
 - ADR-0022 · accepted · ditto 자기호스팅 도그푸딩·배포 생애주기 — 단일 repo dev+dogfood + 결정적 진입 + 게이트 배포
+- ADR-0023 · accepted · pre-mortem coverage 종료 재정의 — novelty-dry에서 카테고리-완전 종료 + 정당화-close 게이트로
 
 <!-- ditto:knowledge:end -->

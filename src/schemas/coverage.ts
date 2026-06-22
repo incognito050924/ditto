@@ -25,6 +25,12 @@ export const coverageNode = z
       .array(z.string().min(1))
       .default([])
       .describe('Child node ids (flat array + parent_id represents the tree/DAG)'),
+    close_reason: z
+      .string()
+      .optional()
+      .describe(
+        'Recorded justification when the node is closed in a non-resolved state — a skip/deferral must be justified, never silent (§8-2, ac-2)',
+      ),
   })
   .describe('One node in the coverage scope tree (§3.1)');
 
@@ -60,6 +66,12 @@ export const coverageRoundPayload = z
     discovered_nodes: z.array(coverageChildInput).default([]),
     admissibleBranchesAdded: z.number().int().nonnegative(),
     close_as: z.enum(['resolved', 'user_owned', 'out_of_scope']).optional(),
+    close_reason: z
+      .string()
+      .optional()
+      .describe(
+        'Justification for a skip/deferral close (out_of_scope/user_owned) — required to skip a seeded category, recorded on the node (§8-2, ac-2)',
+      ),
     axis_signals: z
       .object({
         neutrality: z
@@ -90,3 +102,32 @@ export const coverageRoundPayload = z
   .describe('One coverage interrogation round handed back to the deterministic Manager (§5)');
 
 export type CoverageRoundPayload = z.infer<typeof coverageRoundPayload>;
+
+// Tier-② project taxonomy config (ac-10) — `.ditto/coverage-taxonomy.json`, git-tracked
+// (team-shared, NOT the per-developer tier-③ `.ditto/local/config.json`). DITTO ships a
+// good floor; a project enables/disables/adds categories here to reflect its own auth
+// model / domain. Absent or malformed → the code floor (fail-open). Each added category
+// is a probing-QUESTION lens (ac-1), not a bare noun.
+export const coverageTaxonomyConfig = z
+  .object({
+    disabled: z
+      .array(z.string().min(1))
+      .optional()
+      .describe('Floor category ids to turn off for this project (ac-10)'),
+    added: z
+      .array(
+        z.object({
+          id: z.string().min(1),
+          lens: z.string().min(1).describe('Probing-question lens the sweep answers (ac-1)'),
+        }),
+      )
+      .optional()
+      .describe(
+        'Project-added categories (id + probing-question lens); id collision overrides a floor lens',
+      ),
+  })
+  .describe(
+    'Tier-② project far-field taxonomy config (.ditto/coverage-taxonomy.json, git-tracked) — ac-10',
+  );
+
+export type CoverageTaxonomyConfig = z.infer<typeof coverageTaxonomyConfig>;
