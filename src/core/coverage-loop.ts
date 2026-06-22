@@ -17,7 +17,12 @@ import {
   serializePlanDialog,
 } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
-import { CATEGORY_NODE_PREFIX, farFieldCoverageNodes, farFieldLenses } from './coverage-taxonomy';
+import {
+  CATEGORY_NODE_PREFIX,
+  farFieldCoverageNodes,
+  farFieldLenses,
+  loadFarFieldTaxonomy,
+} from './coverage-taxonomy';
 import { localDir } from './ditto-paths';
 import { IntentStore } from './intent-store';
 import { WorkItemStore } from './work-item-store';
@@ -127,6 +132,10 @@ export async function nextCoverageNode(args: {
 }): Promise<NextCoverageNodeResult> {
   const { repoRoot, workItemId } = args;
   const store = new CoverageStore(repoRoot);
+  // ac-10: resolve the project's tier-② taxonomy (floor + .ditto/coverage-taxonomy.json)
+  // once; it drives both the seeded category nodes and the injected lenses. Absent/
+  // malformed config → the code floor (fail-open).
+  const taxonomy = await loadFarFieldTaxonomy(repoRoot);
   let map: CoverageMap;
   if (await store.exists(workItemId)) {
     map = await store.getMap(workItemId);
@@ -138,7 +147,9 @@ export async function nextCoverageNode(args: {
       root_id: 'cov-root',
       // §8-2: category-complete discovery seeds every floor category as a node so
       // termination requires each one swept (ac-2); off → root-only tree (ac-7).
-      nodes: args.seedCategories ? farFieldCoverageNodes(intent) : [rootNode(intent)],
+      nodes: args.seedCategories
+        ? farFieldCoverageNodes(intent, 'cov-root', taxonomy)
+        : [rootNode(intent)],
     };
     await store.writeMap(workItemId, map);
   }
@@ -165,7 +176,7 @@ export async function nextCoverageNode(args: {
         originalIntent: await originalIntent(repoRoot, workItemId),
         // Far-field floor lenses (design §8-1) — the fresh judge now sees every
         // category instead of the previous empty slot (cross_cutting_constraints:[]).
-        crossCuttingConstraints: farFieldLenses(),
+        crossCuttingConstraints: farFieldLenses(taxonomy),
       }),
       tier,
       dryCounter,
@@ -180,7 +191,7 @@ export async function nextCoverageNode(args: {
       node,
       originalIntent: intent,
       // Far-field floor lenses (design §8-1) — see the no-ready-node path above.
-      crossCuttingConstraints: farFieldLenses(),
+      crossCuttingConstraints: farFieldLenses(taxonomy),
     }),
     tier,
     dryCounter,

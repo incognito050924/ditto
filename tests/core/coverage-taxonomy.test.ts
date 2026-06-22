@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { isCoverageTerminated } from '~/core/coverage-manager';
 import {
   CATEGORY_NODE_PREFIX,
@@ -7,6 +10,8 @@ import {
   farFieldCoverageNodes,
   farFieldCoverageReport,
   farFieldLenses,
+  loadFarFieldTaxonomy,
+  resolveTaxonomy,
 } from '~/core/coverage-taxonomy';
 import type { CoverageMap } from '~/schemas/coverage';
 
@@ -214,5 +219,112 @@ describe('far-field category seeding (wi_260622vjo §8-2)', () => {
         process.env.DITTO_FARFIELD_CATEGORIES = saved;
       }
     }
+  });
+});
+
+// ac-10 — the floor is the code DEFAULT, but a project tunes it via a git-tracked
+// tier-② config (.ditto/coverage-taxonomy.json): disable floor categories that do
+// not apply, add product-specific ones. Absent/malformed config → the floor
+// (fail-open). The resolved taxonomy drives both the seeded nodes and the lenses.
+describe('far-field taxonomy project config (wi_260622vjo ac-10)', () => {
+  const floor = FAR_FIELD_TAXONOMY_FLOOR;
+
+  test('resolveTaxonomy with empty config returns the floor unchanged', () => {
+    expect(resolveTaxonomy(floor, {})).toEqual([...floor]);
+  });
+
+  test('resolveTaxonomy disables floor categories by id', () => {
+    const out = resolveTaxonomy(floor, { disabled: ['authentication', 'time-clock'] });
+    const ids = out.map((c) => c.id);
+    expect(ids).not.toContain('authentication');
+    expect(ids).not.toContain('time-clock');
+    expect(out.length).toBe(floor.length - 2);
+  });
+
+  test('resolveTaxonomy appends project-added categories', () => {
+    const out = resolveTaxonomy(floor, {
+      added: [
+        { id: 'tenancy-isolation', lens: '이 변경이 테넌트 경계를 넘나? 데이터/캐시 격리는?' },
+      ],
+    });
+    expect(out.length).toBe(floor.length + 1);
+    expect(out.find((c) => c.id === 'tenancy-isolation')?.lens).toContain('테넌트');
+  });
+
+  test('resolveTaxonomy: an added id colliding with a floor id overrides that lens (no duplicate)', () => {
+    const out = resolveTaxonomy(floor, {
+      added: [{ id: 'authentication', lens: 'OVERRIDDEN auth lens?' }],
+    });
+    const auth = out.filter((c) => c.id === 'authentication');
+    expect(auth).toHaveLength(1);
+    expect(auth[0]?.lens).toBe('OVERRIDDEN auth lens?');
+    expect(out.length).toBe(floor.length);
+  });
+
+  test('loadFarFieldTaxonomy returns the floor when no config file exists (fail-open)', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-tax-absent-'));
+    try {
+      const out = await loadFarFieldTaxonomy(repo);
+      expect(out).toEqual([...floor]);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('loadFarFieldTaxonomy merges a valid git-tracked config (.ditto/coverage-taxonomy.json)', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-tax-valid-'));
+    try {
+      await mkdir(join(repo, '.ditto'), { recursive: true });
+      await writeFile(
+        join(repo, '.ditto', 'coverage-taxonomy.json'),
+        JSON.stringify({
+          disabled: ['authentication'],
+          added: [{ id: 'tenancy', lens: '테넌트 경계?' }],
+        }),
+      );
+      const out = await loadFarFieldTaxonomy(repo);
+      const ids = out.map((c) => c.id);
+      expect(ids).not.toContain('authentication');
+      expect(ids).toContain('tenancy');
+      expect(out.length).toBe(floor.length); // -1 disabled +1 added
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('loadFarFieldTaxonomy fails open to the floor on a malformed config (+onMalformed)', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-tax-bad-'));
+    try {
+      await mkdir(join(repo, '.ditto'), { recursive: true });
+      await writeFile(join(repo, '.ditto', 'coverage-taxonomy.json'), '{ not json');
+      let flagged = false;
+      const out = await loadFarFieldTaxonomy(repo, () => {
+        flagged = true;
+      });
+      expect(out).toEqual([...floor]);
+      expect(flagged).toBe(true);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('farFieldLenses(taxonomy) returns the resolved taxonomy lenses (not always the floor)', () => {
+    const custom = [
+      { id: 'a', lens: 'lens A?' },
+      { id: 'b', lens: 'lens B?' },
+    ];
+    expect(farFieldLenses(custom)).toEqual(['lens A?', 'lens B?']);
+    // default (no arg) stays the floor (ac-7)
+    expect(farFieldLenses()).toEqual(floor.map((c) => c.lens));
+  });
+
+  test('farFieldCoverageNodes(intent, root, taxonomy) seeds nodes for the resolved taxonomy', () => {
+    const custom = [
+      { id: 'a', lens: 'lens A?' },
+      { id: 'b', lens: 'lens B?' },
+    ];
+    const nodes = farFieldCoverageNodes('add login', 'cov-root', custom);
+    const cats = nodes.filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX));
+    expect(cats.map((n) => n.id).sort()).toEqual(['cov-cat-a', 'cov-cat-b']);
   });
 });

@@ -14,7 +14,9 @@
  * "go look" (ac-6) — handled by the engine, not by hardcoding here.
  */
 
+import { type CoverageTaxonomyConfig, coverageTaxonomyConfig } from '~/schemas/coverage';
 import type { CoverageMap, CoverageNode } from '~/schemas/coverage';
+import { dittoDir } from './ditto-paths';
 
 export interface FarFieldCategory {
   /** Stable id (kebab) — used for tier-② config enable/disable and skip records. */
@@ -109,12 +111,58 @@ export const FAR_FIELD_TAXONOMY_FLOOR: readonly FarFieldCategory[] = [
 ];
 
 /**
- * The floor lenses injected into `cross_cutting_constraints` (design §8-1). Pure
- * over the floor for now; a later slice threads tier-② config (enable/disable/add,
- * ac-10) and discovery-critic additions (ac-6) through the same return shape.
+ * The lenses injected into `cross_cutting_constraints` (design §8-1). Defaults to
+ * the code floor (ac-7); pass a resolved taxonomy (floor + tier-② project config,
+ * ac-10) to inject the project's effective category set. Discovery-critic
+ * additions (ac-6) flow through the same `taxonomy` argument.
  */
-export function farFieldLenses(): string[] {
-  return FAR_FIELD_TAXONOMY_FLOOR.map((c) => c.lens);
+export function farFieldLenses(
+  taxonomy: readonly FarFieldCategory[] = FAR_FIELD_TAXONOMY_FLOOR,
+): string[] {
+  return taxonomy.map((c) => c.lens);
+}
+
+/**
+ * Resolve the effective taxonomy from the code floor + a project's tier-② config
+ * (ac-10): drop `disabled` floor ids, append `added` categories, and let an added
+ * id that collides with a floor id OVERRIDE that floor lens (no duplicate id).
+ * Pure — the caller supplies floor + config so this stays trivially testable.
+ */
+export function resolveTaxonomy(
+  floor: readonly FarFieldCategory[],
+  config: CoverageTaxonomyConfig,
+): FarFieldCategory[] {
+  const disabled = new Set(config.disabled ?? []);
+  const added = config.added ?? [];
+  const overridden = new Set(added.map((c) => c.id));
+  const kept = floor.filter((c) => !disabled.has(c.id) && !overridden.has(c.id));
+  return [...kept, ...added];
+}
+
+/**
+ * Read the project's tier-② far-field taxonomy config (`.ditto/coverage-taxonomy.json`,
+ * git-tracked) and resolve it against the code floor (ac-10). Absent or malformed
+ * → the floor (fail-open; `onMalformed` lets the caller surface a warning so a bad
+ * config doesn't look like it silently "did nothing"). The single I/O entry point;
+ * `resolveTaxonomy` does the pure merge.
+ */
+export async function loadFarFieldTaxonomy(
+  repoRoot: string,
+  onMalformed?: () => void,
+): Promise<FarFieldCategory[]> {
+  const file = Bun.file(`${dittoDir(repoRoot)}/coverage-taxonomy.json`);
+  if (!(await file.exists())) return [...FAR_FIELD_TAXONOMY_FLOOR];
+  try {
+    const parsed = coverageTaxonomyConfig.safeParse(JSON.parse(await file.text()));
+    if (!parsed.success) {
+      onMalformed?.();
+      return [...FAR_FIELD_TAXONOMY_FLOOR];
+    }
+    return resolveTaxonomy(FAR_FIELD_TAXONOMY_FLOOR, parsed.data);
+  } catch {
+    onMalformed?.();
+    return [...FAR_FIELD_TAXONOMY_FLOOR];
+  }
 }
 
 /** Coverage-node id prefix for a seeded far-field category (§8-2). */
@@ -134,8 +182,12 @@ export const CATEGORY_NODE_PREFIX = 'cov-cat-';
  * depth_weight is a neutral floor (1) here; the stakes-proportional depth dial
  * (§8-4) tunes it later. Returns root first so callers can keep `root_id`.
  */
-export function farFieldCoverageNodes(intent: string, rootId = 'cov-root'): CoverageNode[] {
-  const categoryIds = FAR_FIELD_TAXONOMY_FLOOR.map((c) => `${CATEGORY_NODE_PREFIX}${c.id}`);
+export function farFieldCoverageNodes(
+  intent: string,
+  rootId = 'cov-root',
+  taxonomy: readonly FarFieldCategory[] = FAR_FIELD_TAXONOMY_FLOOR,
+): CoverageNode[] {
+  const categoryIds = taxonomy.map((c) => `${CATEGORY_NODE_PREFIX}${c.id}`);
   const root: CoverageNode = {
     id: rootId,
     parent_id: null,
@@ -145,7 +197,7 @@ export function farFieldCoverageNodes(intent: string, rootId = 'cov-root'): Cove
     state: 'open',
     children: categoryIds,
   };
-  const categories: CoverageNode[] = FAR_FIELD_TAXONOMY_FLOOR.map((c, i) => ({
+  const categories: CoverageNode[] = taxonomy.map((c, i) => ({
     id: categoryIds[i] as string,
     parent_id: rootId,
     label: c.lens,

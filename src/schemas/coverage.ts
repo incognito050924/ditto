@@ -102,3 +102,32 @@ export const coverageRoundPayload = z
   .describe('One coverage interrogation round handed back to the deterministic Manager (§5)');
 
 export type CoverageRoundPayload = z.infer<typeof coverageRoundPayload>;
+
+// Tier-② project taxonomy config (ac-10) — `.ditto/coverage-taxonomy.json`, git-tracked
+// (team-shared, NOT the per-developer tier-③ `.ditto/local/config.json`). DITTO ships a
+// good floor; a project enables/disables/adds categories here to reflect its own auth
+// model / domain. Absent or malformed → the code floor (fail-open). Each added category
+// is a probing-QUESTION lens (ac-1), not a bare noun.
+export const coverageTaxonomyConfig = z
+  .object({
+    disabled: z
+      .array(z.string().min(1))
+      .optional()
+      .describe('Floor category ids to turn off for this project (ac-10)'),
+    added: z
+      .array(
+        z.object({
+          id: z.string().min(1),
+          lens: z.string().min(1).describe('Probing-question lens the sweep answers (ac-1)'),
+        }),
+      )
+      .optional()
+      .describe(
+        'Project-added categories (id + probing-question lens); id collision overrides a floor lens',
+      ),
+  })
+  .describe(
+    'Tier-② project far-field taxonomy config (.ditto/coverage-taxonomy.json, git-tracked) — ac-10',
+  );
+
+export type CoverageTaxonomyConfig = z.infer<typeof coverageTaxonomyConfig>;

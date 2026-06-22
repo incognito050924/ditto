@@ -19788,6 +19788,13 @@ var coverageRoundPayload = exports_external.object({
     temporalCurrent: exports_external.array(exports_external.string()).optional()
   }).optional()
 }).describe("One coverage interrogation round handed back to the deterministic Manager (\xA75)");
+var coverageTaxonomyConfig = exports_external.object({
+  disabled: exports_external.array(exports_external.string().min(1)).optional().describe("Floor category ids to turn off for this project (ac-10)"),
+  added: exports_external.array(exports_external.object({
+    id: exports_external.string().min(1),
+    lens: exports_external.string().min(1).describe("Probing-question lens the sweep answers (ac-1)")
+  })).optional().describe("Project-added categories (id + probing-question lens); id collision overrides a floor lens")
+}).describe("Tier-\u2461 project far-field taxonomy config (.ditto/coverage-taxonomy.json, git-tracked) \u2014 ac-10");
 
 // src/core/coverage-store.ts
 init_ditto_paths();
@@ -22764,6 +22771,7 @@ async function detectActiveConflicts(repoRoot, input) {
 }
 
 // src/core/coverage-taxonomy.ts
+init_ditto_paths();
 var FAR_FIELD_TAXONOMY_FLOOR = [
   {
     id: "authentication",
@@ -22842,12 +22850,35 @@ var FAR_FIELD_TAXONOMY_FLOOR = [
     lens: "\uC774\uAC8C \uC758\uB3C4\uB97C \uB2EC\uC131\uD558\uB294 \uAC00\uC7A5 \uBA85\uB8CC\uD558\uACE0 \uC791\uC740 \uC99D\uBD84\uC778\uAC00? \uCD94\uC0C1\uD654\uAC00 \uC9C0\uAE08\uC758 \uC2E4\uC81C \uBCF5\uC7A1\uB3C4\uC5D0 \uBE44\uB840\uD558\uB098 \u2014 \uC694\uCCAD\uB418\uC9C0 \uC54A\uC740 \uAE30\uB2A5\xB7\uC124\uC815\uAC00\uB2A5\uC131\xB7\uD655\uC7A5\uC131, \uBBF8\uB798 \uB300\uBE44/\uB2E8\uC77C \uC0AC\uC6A9/\uC595\uC740 \uCD94\uC0C1\uD654\uB85C \uACFC\uD558\uC9C0 \uC54A\uB098(\uACFC\uC789\uC774 \uD754\uD55C \uC2E4\uD328)? \uAC70\uAFB8\uB85C, \uC774 \uBCC0\uACBD\uC774 \uC0C8\uB85C \uB4E4\uC774\uB294 \uC911\uBCF5\xB7\uBC18\uBCF5\uC744 \uB9C8\uB545\uD788 \uBB36\uC9C0 \uC54A\uC544 \uBAA8\uC790\uB77C\uC9C0 \uC54A\uB098(\uC911\uBCF5\uC740 \uBC84\uADF8\xB7\uB4DC\uB9AC\uD504\uD2B8\uC758 \uC6D0\uCC9C)? \uBCC0\uACBD\uD55C \uBAA8\uB4E0 \uC904\uC5D0 \uC694\uCCAD\uACFC \uC5F0\uACB0\uB41C \uC774\uC720\uAC00 \uC788\uACE0, \uAD00\uB828 \uC5C6\uB294 \uB9AC\uD329\uD130\xB7\uD3EC\uB9F7 \uC815\uB9AC\uAC00 \uC11E\uC774\uC9C0 \uC54A\uC558\uB098? (\uBAA9\uD45C\uB294 \uCD94\uC0C1\uD654 \uD68C\uD53C\uAC00 \uC544\uB2C8\uB77C \uC801\uC815 \u2014 \uC2E4\uC81C \uBCF5\uC7A1\uB3C4\uB97C \uC904\uC77C \uB54C\uB9CC \uCD94\uC0C1\uD654\uD55C\uB2E4. \uAE30\uC874 \uC7AC\uC0AC\uC6A9 \uAC00\uB2A5 \uC790\uC0B0\uC744 \uCC44\uD0DD\uD588\uB294\uC9C0\uB294 #reuse-build-vs-buy\uC758 \uBAAB)"
   }
 ];
-function farFieldLenses() {
-  return FAR_FIELD_TAXONOMY_FLOOR.map((c3) => c3.lens);
+function farFieldLenses(taxonomy = FAR_FIELD_TAXONOMY_FLOOR) {
+  return taxonomy.map((c3) => c3.lens);
+}
+function resolveTaxonomy(floor, config) {
+  const disabled = new Set(config.disabled ?? []);
+  const added = config.added ?? [];
+  const overridden = new Set(added.map((c3) => c3.id));
+  const kept = floor.filter((c3) => !disabled.has(c3.id) && !overridden.has(c3.id));
+  return [...kept, ...added];
+}
+async function loadFarFieldTaxonomy(repoRoot, onMalformed) {
+  const file = Bun.file(`${dittoDir(repoRoot)}/coverage-taxonomy.json`);
+  if (!await file.exists())
+    return [...FAR_FIELD_TAXONOMY_FLOOR];
+  try {
+    const parsed = coverageTaxonomyConfig.safeParse(JSON.parse(await file.text()));
+    if (!parsed.success) {
+      onMalformed?.();
+      return [...FAR_FIELD_TAXONOMY_FLOOR];
+    }
+    return resolveTaxonomy(FAR_FIELD_TAXONOMY_FLOOR, parsed.data);
+  } catch {
+    onMalformed?.();
+    return [...FAR_FIELD_TAXONOMY_FLOOR];
+  }
 }
 var CATEGORY_NODE_PREFIX = "cov-cat-";
-function farFieldCoverageNodes(intent, rootId = "cov-root") {
-  const categoryIds = FAR_FIELD_TAXONOMY_FLOOR.map((c3) => `${CATEGORY_NODE_PREFIX}${c3.id}`);
+function farFieldCoverageNodes(intent, rootId = "cov-root", taxonomy = FAR_FIELD_TAXONOMY_FLOOR) {
+  const categoryIds = taxonomy.map((c3) => `${CATEGORY_NODE_PREFIX}${c3.id}`);
   const root = {
     id: rootId,
     parent_id: null,
@@ -22857,7 +22888,7 @@ function farFieldCoverageNodes(intent, rootId = "cov-root") {
     state: "open",
     children: categoryIds
   };
-  const categories = FAR_FIELD_TAXONOMY_FLOOR.map((c3, i2) => ({
+  const categories = taxonomy.map((c3, i2) => ({
     id: categoryIds[i2],
     parent_id: rootId,
     label: c3.lens,
@@ -22929,6 +22960,7 @@ async function originalIntent(repoRoot, workItemId2) {
 async function nextCoverageNode(args) {
   const { repoRoot, workItemId: workItemId2 } = args;
   const store = new CoverageStore(repoRoot);
+  const taxonomy = await loadFarFieldTaxonomy(repoRoot);
   let map;
   if (await store.exists(workItemId2)) {
     map = await store.getMap(workItemId2);
@@ -22938,7 +22970,7 @@ async function nextCoverageNode(args) {
       schema_version: "0.1.0",
       work_item_id: workItemId2,
       root_id: "cov-root",
-      nodes: args.seedCategories ? farFieldCoverageNodes(intent2) : [rootNode(intent2)]
+      nodes: args.seedCategories ? farFieldCoverageNodes(intent2, "cov-root", taxonomy) : [rootNode(intent2)]
     };
     await store.writeMap(workItemId2, map);
   }
@@ -22956,7 +22988,7 @@ async function nextCoverageNode(args) {
       judgeInput: buildJudgeInput({
         node: map.nodes[0] ?? rootNode(workItemId2),
         originalIntent: await originalIntent(repoRoot, workItemId2),
-        crossCuttingConstraints: farFieldLenses()
+        crossCuttingConstraints: farFieldLenses(taxonomy)
       }),
       tier,
       dryCounter
@@ -22969,7 +23001,7 @@ async function nextCoverageNode(args) {
     judgeInput: buildJudgeInput({
       node: node2,
       originalIntent: intent,
-      crossCuttingConstraints: farFieldLenses()
+      crossCuttingConstraints: farFieldLenses(taxonomy)
     }),
     tier,
     dryCounter
@@ -40447,4 +40479,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=aab63554fb80f9787e67725562d6c2f1eb9a1b2f34bf694ec62c195aabdb1b33
+//# ditto-src-stamp=215d7e92bb7726455720ce030d52e1b420b678983f3c2511d34e707cb948d826
