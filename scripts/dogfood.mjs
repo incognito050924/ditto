@@ -33,6 +33,9 @@ const value = (name, fallback) => {
 
 const PRINT = flag('print');
 const NO_LAUNCH = flag('no-launch');
+// Forward an all-permissions / bypass flag to whichever host we launch.
+// Accept both spellings so a trailing-s typo still works.
+const SKIP_PERM = flag('skip-permissions') || flag('skip-permission');
 const host = value('host', 'claude');
 const target = resolve(value('dir', repoRoot));
 
@@ -58,7 +61,11 @@ function launch(cmd, args, { cwd = target, env } = {}) {
 if (host === 'claude' || host === 'claude-code') {
   // Stateless: build the repo-root bin (hooks run it), load the repo as the plugin.
   step('bun', ['run', 'build:bin']);
-  launch('claude', ['--plugin-dir', repoRoot], { cwd: target });
+  launch(
+    'claude',
+    ['--plugin-dir', repoRoot, ...(SKIP_PERM ? ['--dangerously-skip-permissions'] : [])],
+    { cwd: target },
+  );
 } else if (host === 'codex') {
   // Stateful: build the codex surface, stage it into the target, register a local
   // marketplace into an ISOLATED CODEX_HOME. The env (CODEX_HOME) is passed to the
@@ -84,7 +91,10 @@ if (host === 'claude' || host === 'claude-code') {
   );
   step('codex', ['plugin', 'marketplace', 'add', target], { cwd: target, env });
   step('codex', ['plugin', 'add', 'ditto@ditto-local'], { cwd: target, env });
-  launch('codex', [], { cwd: target, env });
+  launch('codex', SKIP_PERM ? ['--dangerously-bypass-approvals-and-sandbox'] : [], {
+    cwd: target,
+    env,
+  });
 } else {
   console.error(`unknown --host: ${host} (use: claude | codex)`);
   process.exit(2);
