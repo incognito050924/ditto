@@ -16,6 +16,7 @@
     "release": "node scripts/release.mjs",
     "dev": "bun run src/cli/index.ts",
     "dev:plugin": "bun run build:bin && claude --plugin-dir .",
+    "dogfood": "bun scripts/dogfood.mjs",
     "test": "bun test",
     "lint": "biome check src tests scripts",
     "lint:fix": "biome check --write src tests scripts",
