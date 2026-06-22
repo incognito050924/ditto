@@ -1,15 +1,18 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   type AgentVariant,
+  findOrphanVariants,
   loadVariantCatalog,
   recommendVariantRole,
   selectVariantCandidates,
   writeAgentVariants,
 } from '~/core/agent-variants';
 import { ensureDir } from '~/core/fs';
+
+const REPO_ROOT = join(import.meta.dir, '..', '..');
 
 let repo: string;
 
@@ -232,5 +235,36 @@ hand edit
     const text = await Bun.file(join(repo, '.ditto', 'agents', 'sec.md')).text();
     expect(text).toContain('user-edited body');
     expect(text).toContain('hand edit');
+  });
+});
+
+// C-6 (wi_26062257r): spawn 가능성 불변식. A `.ditto/agents` variant only routes if
+// the host can actually spawn it — `selectVariantCandidates` hands the driver a
+// `subagent_type` name, and the driver spawns THAT name as a Task. If the name is
+// not registered under `.claude/agents`, the candidate is a ghost: routed but
+// un-spawnable. This guard keeps the two surfaces from drifting (the sibling of the
+// f95ebec surface-catalog regression — one surface updated, the other not).
+describe('findOrphanVariants (C-6: variant↔host spawn 가능성 불변식)', () => {
+  test('host에 등록되지 않은 variant를 orphan으로 반환한다', () => {
+    expect(findOrphanVariants(['a', 'b', 'c'], ['a', 'c'])).toEqual(['b']);
+  });
+
+  test('모든 variant가 host에 있으면 빈 배열(정상)', () => {
+    expect(findOrphanVariants(['a', 'b'], ['a', 'b', 'extra'])).toEqual([]);
+  });
+
+  test('빈 catalog는 orphan이 없다', () => {
+    expect(findOrphanVariants([], ['a'])).toEqual([]);
+  });
+
+  // self-host 불변식: 이 repo의 모든 .ditto/agents variant는 .claude/agents에
+  // 대응하는 spawn 등록을 가져야 한다. 어긋나면 autopilot이 spawn 불가능한 후보를
+  // driver에게 넘긴다 — f95ebec류 회귀(한 표면만 갱신)를 디스크에서 직접 잡는다.
+  test('self-host: 모든 .ditto/agents variant가 .claude/agents에 등록돼 있다', async () => {
+    const variantNames = (await loadVariantCatalog(REPO_ROOT)).map((v) => v.name);
+    const hostAgents = (await readdir(join(REPO_ROOT, '.claude', 'agents')))
+      .filter((f) => f.endsWith('.md'))
+      .map((f) => f.replace(/\.md$/, ''));
+    expect(findOrphanVariants(variantNames, hostAgents)).toEqual([]);
   });
 });

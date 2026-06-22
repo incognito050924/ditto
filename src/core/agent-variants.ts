@@ -143,6 +143,21 @@ function parseVariant(text: string): AgentVariant | null {
 }
 
 /**
+ * Spawn-feasibility invariant (C-6, wi_26062257r). A variant only routes if the
+ * host can actually spawn it: `selectVariantCandidates` hands the driver a
+ * `subagent_type` name and the driver spawns THAT name as a Task. A variant whose
+ * name has no `.claude/agents` registration is a ghost candidate — routed but
+ * un-spawnable. Returns the variant names with NO host registration (empty = all
+ * spawnable). Pure set-difference; the caller supplies both name lists (the
+ * `.ditto/agents` catalog and the host's agent registry) so this stays fs-free
+ * and testable, and the same guard works for any host that lists agent names.
+ */
+export function findOrphanVariants(variantNames: string[], hostAgentNames: string[]): string[] {
+  const host = new Set(hostAgentNames);
+  return variantNames.filter((name) => !host.has(name));
+}
+
+/**
  * Pure heuristic mapping a discovered agent's name+description to a recommended
  * ditto owner role by keyword (case-insensitive), in priority order. Used by
  * `ditto setup` to suggest a role when linking a project's `.claude/agents`.
