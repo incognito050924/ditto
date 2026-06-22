@@ -34,12 +34,21 @@ export const coverageNode = z
   })
   .describe('One node in the coverage scope tree (§3.1)');
 
+export const coverageTier = z
+  .enum(['light', 'standard', 'full'])
+  .describe('Sweep intensity tier — scales sweepAngles and termination depth K (§8-4, ac-4)');
+
 export const coverageMap = z
   .object({
     schema_version: schemaVersion,
     work_item_id: workItemId,
     root_id: z.string().min(1).describe('Id of the root node (user original intent)'),
     nodes: z.array(coverageNode).default([]),
+    intensity: coverageTier
+      .optional()
+      .describe(
+        'Entry intensity override (ac-4) persisted on the first seed so the tier and termination depth K stay consistent across every round without the caller re-passing it (§8-4)',
+      ),
   })
   .describe('Coverage map sidecar (coverage.json) — additive dynamic-growth scope tree (§9)');
 

@@ -158,15 +158,23 @@ export async function nextCoverageNode(args: {
       nodes: args.seedCategories
         ? farFieldCoverageNodes(intent, 'cov-root', taxonomy)
         : [rootNode(intent)],
+      // ac-4: persist the entry intensity override on the first seed so the tier (and
+      // depth K) stay consistent across later calls that don't re-pass it — otherwise
+      // the override would scale only this first call and revert to standard.
+      ...(args.intensity ? { intensity: args.intensity } : {}),
     };
     await store.writeMap(workItemId, map);
   }
 
   const dryCounter = await readDryCounter(repoRoot, workItemId);
-  // §8-4: termination depth K scales with the stakes-derived tier (light=1,
-  // standard=2, full=3); no tierInputs → standard = the existing default (ac-7).
+  // §8-4: termination depth K scales with the tier. Precedence: this call's explicit
+  // intensity (re-definition allowed) → persisted entry override (map.intensity, ac-4)
+  // → stakes-derived tierInputs → standard default (ac-7). Persisting the entry override
+  // keeps every round on one tier even when the caller stops re-passing intensity.
   const tier =
-    args.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard');
+    args.intensity ??
+    map.intensity ??
+    (args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard');
   // §8.2 effort lever surfaced to the caller: how many blind sweep angles to spawn
   // per node (light=1/standard=3/full=5). Breadth invariant; effort scales (ac-4/ac-8).
   const sweepAngles = tierDepthBudget(tier).sweepAngles;
@@ -387,9 +395,13 @@ export async function recordCoverageRound(args: {
 
   await store.writeMap(workItemId, map);
 
-  // §8-4: same stakes-proportional K as nextCoverageNode (default standard, ac-7).
+  // §8-4: same precedence as nextCoverageNode (call intensity → persisted map.intensity
+  // → stakes → standard) so the termination K matches the seed tier without the caller
+  // re-passing intensity to every round (the K-scale no longer evaporates).
   const tier =
-    args.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard');
+    args.intensity ??
+    map.intensity ??
+    (args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard');
   if (isCoverageTerminated(map, nextCounter, coverageDryK(tier))) {
     const delta = args.dialogDelta ?? {};
     const closedItems = map.nodes

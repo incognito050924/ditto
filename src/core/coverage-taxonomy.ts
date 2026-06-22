@@ -270,6 +270,10 @@ export function farFieldCoverageReport(map: CoverageMap): FarFieldCoverageReport
     resolved: cats.filter((n) => n.state === 'resolved').length,
     open,
     skipped,
-    complete: cats.length > 0 && open === 0,
+    // Structural completeness must agree with isCoverageTerminated's `allClosed`
+    // (every node, incl. derived sub-scopes that are NOT cov-cat-*), not just the
+    // categories — else a closed-category report reads complete while a derived
+    // scope is still open. K-dry termination stays with coverage-next's {action:'dry'}.
+    complete: cats.length > 0 && map.nodes.every((n) => n.state !== 'open'),
   };
 }

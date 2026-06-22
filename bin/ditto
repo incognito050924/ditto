@@ -19749,11 +19749,13 @@ var coverageNode = exports_external.object({
   children: exports_external.array(exports_external.string().min(1)).default([]).describe("Child node ids (flat array + parent_id represents the tree/DAG)"),
   close_reason: exports_external.string().optional().describe("Recorded justification when the node is closed in a non-resolved state \u2014 a skip/deferral must be justified, never silent (\xA78-2, ac-2)")
 }).describe("One node in the coverage scope tree (\xA73.1)");
+var coverageTier = exports_external.enum(["light", "standard", "full"]).describe("Sweep intensity tier \u2014 scales sweepAngles and termination depth K (\xA78-4, ac-4)");
 var coverageMap = exports_external.object({
   schema_version: schemaVersion,
   work_item_id: workItemId,
   root_id: exports_external.string().min(1).describe("Id of the root node (user original intent)"),
-  nodes: exports_external.array(coverageNode).default([])
+  nodes: exports_external.array(coverageNode).default([]),
+  intensity: coverageTier.optional().describe("Entry intensity override (ac-4) persisted on the first seed so the tier and termination depth K stay consistent across every round without the caller re-passing it (\xA78-4)")
 }).describe("Coverage map sidecar (coverage.json) \u2014 additive dynamic-growth scope tree (\xA79)");
 var coverageChildInput = exports_external.object({
   id: exports_external.string().min(1),
@@ -22916,7 +22918,7 @@ function farFieldCoverageReport(map) {
     resolved: cats.filter((n2) => n2.state === "resolved").length,
     open: open2,
     skipped,
-    complete: cats.length > 0 && open2 === 0
+    complete: cats.length > 0 && map.nodes.every((n2) => n2.state !== "open")
   };
 }
 
@@ -22970,12 +22972,13 @@ async function nextCoverageNode(args) {
       schema_version: "0.1.0",
       work_item_id: workItemId2,
       root_id: "cov-root",
-      nodes: args.seedCategories ? farFieldCoverageNodes(intent2, "cov-root", taxonomy) : [rootNode(intent2)]
+      nodes: args.seedCategories ? farFieldCoverageNodes(intent2, "cov-root", taxonomy) : [rootNode(intent2)],
+      ...args.intensity ? { intensity: args.intensity } : {}
     };
     await store.writeMap(workItemId2, map);
   }
   const dryCounter = await readDryCounter(repoRoot, workItemId2);
-  const tier = args.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard");
+  const tier = args.intensity ?? map.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard");
   const sweepAngles = tierDepthBudget(tier).sweepAngles;
   if (isCoverageTerminated(map, dryCounter, coverageDryK(tier))) {
     return { action: "dry", terminated: true };
@@ -23081,7 +23084,7 @@ async function recordCoverageRound(args) {
     }
   }
   await store.writeMap(workItemId2, map);
-  const tier = args.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard");
+  const tier = args.intensity ?? map.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard");
   if (isCoverageTerminated(map, nextCounter, coverageDryK(tier))) {
     const delta = args.dialogDelta ?? {};
     const closedItems = map.nodes.filter((n2) => n2.state !== "open").map((n2) => ({ id: n2.id, label: n2.label, state: n2.state }));
@@ -40528,4 +40531,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=b472e61c86e220ec9e359a898a71d2def9081db1dff5806b5eec6780dcbf31c4
+//# ditto-src-stamp=7da3253031c7db0462a83af44a82161c5e8d97c0feab45c08764f61f6bc3151a

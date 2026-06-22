@@ -153,6 +153,34 @@ describe('intensity override at entry (wi_260622vjo ac-4)', () => {
     expect(r.terminated).toBe(false);
   });
 
+  test('entry intensity persists on coverage.json — later calls keep the tier without re-passing it (K-scale no longer evaporates)', async () => {
+    // seed ONCE with the light override
+    const seed = await nextCoverageNode({ repoRoot: repo, workItemId: WI, intensity: 'light' });
+    expect(seed.action).toBe('interrogate');
+    if (seed.action === 'interrogate') expect(seed.sweepAngles).toBe(1);
+
+    // a later coverage-next WITHOUT intensity must stay light (persisted), not revert to standard
+    const next = await nextCoverageNode({ repoRoot: repo, workItemId: WI });
+    expect(next.action).toBe('interrogate');
+    if (next.action === 'interrogate') {
+      expect(next.tier).toBe('light');
+      expect(next.sweepAngles).toBe(1);
+    }
+
+    // and a single dry round terminates (K=1 from the persisted light) — no intensity re-passed to round
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: 'cov-root',
+        admissibleBranchesAdded: 0,
+        close_as: 'resolved',
+        axis_signals: passingNeutrality,
+      },
+    });
+    expect(r.terminated).toBe(true);
+  });
+
   test('nextCoverageNode reflects the overridden tier in its result', async () => {
     const r = await nextCoverageNode({ repoRoot: repo, workItemId: WI, intensity: 'full' });
     expect(r.action).toBe('interrogate');
@@ -160,6 +188,7 @@ describe('intensity override at entry (wi_260622vjo ac-4)', () => {
   });
 
   test('nextCoverageNode surfaces sweepAngles per tier so the sweep effort scales (ac-4/ac-8)', async () => {
+    // an explicit override on a call still wins per call → maps tier to angles
     const full = await nextCoverageNode({ repoRoot: repo, workItemId: WI, intensity: 'full' });
     expect(full.action).toBe('interrogate');
     if (full.action === 'interrogate') expect(full.sweepAngles).toBe(5);
@@ -167,8 +196,21 @@ describe('intensity override at entry (wi_260622vjo ac-4)', () => {
     const light = await nextCoverageNode({ repoRoot: repo, workItemId: WI, intensity: 'light' });
     if (light.action === 'interrogate') expect(light.sweepAngles).toBe(1);
 
-    // no override → standard = 3 angles (the existing default, ac-7)
-    const std = await nextCoverageNode({ repoRoot: repo, workItemId: WI });
+    // no override → standard = 3 angles (the existing default, ac-7). Checked on a
+    // FRESH work item: this WI already persisted an entry override on its first seed,
+    // so "no override" now means the persisted tier, not standard (the fix's whole point).
+    const freshWi = await new WorkItemStore(repo).create(
+      {
+        title: 'standard default',
+        source_request: '기본 강도',
+        goal: '강도 미지정 시 standard',
+        acceptance_criteria: [
+          { id: 'ac-1', statement: 'standard default', verdict: 'unverified', evidence: [] },
+        ],
+      },
+      NOW,
+    );
+    const std = await nextCoverageNode({ repoRoot: repo, workItemId: freshWi.id });
     if (std.action === 'interrogate') expect(std.sweepAngles).toBe(3);
   });
 });

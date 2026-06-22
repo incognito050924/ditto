@@ -163,9 +163,12 @@ describe('far-field category seeding (wi_260622vjo §8-2)', () => {
   });
 
   test('farFieldCoverageReport reports complete once every seeded category is closed (resolved or justified-skip)', () => {
-    const nodes = farFieldCoverageNodes('add login').map((n) =>
-      n.id.startsWith(CATEGORY_NODE_PREFIX) ? { ...n, state: 'resolved' as const } : n,
-    );
+    // every node closed (root + categories) — structural completeness mirrors the
+    // real sweep termination, which closes the root once its category children are done
+    const nodes = farFieldCoverageNodes('add login').map((n) => ({
+      ...n,
+      state: 'resolved' as const,
+    }));
     const map: CoverageMap = {
       schema_version: '0.1.0',
       work_item_id: 'wi_test',
@@ -175,6 +178,36 @@ describe('far-field category seeding (wi_260622vjo §8-2)', () => {
     const r = farFieldCoverageReport(map);
     expect(r.open).toBe(0);
     expect(r.complete).toBe(true);
+  });
+
+  test('farFieldCoverageReport is not complete while a derived sub-scope node is still open (parity with isCoverageTerminated — derived nodes are not cov-cat-*)', () => {
+    // Every category + root closed, but one derived (non-cov-cat) sub-scope still open.
+    // The real sweep terminates only when EVERY node is closed; the report must agree.
+    const base = farFieldCoverageNodes('add login').map((n) => ({
+      ...n,
+      state: 'resolved' as const,
+    }));
+    const catId = base.find((n) => n.id.startsWith(CATEGORY_NODE_PREFIX))?.id ?? 'cov-root';
+    const map: CoverageMap = {
+      schema_version: '0.1.0',
+      work_item_id: 'wi_test',
+      root_id: 'cov-root',
+      nodes: [
+        ...base,
+        {
+          id: 'cov-auth-sub',
+          parent_id: catId,
+          label: 'derived sub-scope still open',
+          origin: 'derived' as const,
+          depth_weight: 0.5,
+          state: 'open' as const,
+          children: [],
+        },
+      ],
+    };
+    const r = farFieldCoverageReport(map);
+    // categories all closed, but a derived scope is open → sweep NOT structurally complete
+    expect(r.complete).toBe(false);
   });
 
   test('farFieldCoverageReport on a root-only map (seeding off) reports zero seeded, not complete (ac-7)', () => {
