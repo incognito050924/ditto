@@ -507,7 +507,14 @@ export async function projectInterviewDimensions(
   const state = await new InterviewStore(repoRoot).get(workItemId);
   const store = new CoverageStore(repoRoot);
 
-  // Seed coverage.json (root = original intent) via the shared engine.
+  // Seed coverage.json (root = original intent) via the shared engine. The intent
+  // stage gets the far-field LENS injection (§8-1, inside nextCoverageNode) so the
+  // interview sees every far-field domain, but it does NOT pass `seedCategories`:
+  // this terminal sweep is driven deterministically from recorded interview state
+  // (no fresh category judges here), so seeding category NODES would leave them
+  // permanently open and the intent dialog could never terminate. The
+  // category-complete hard sweep (§8-2) belongs to the autopilot PLAN stage, which
+  // deep-interview reaches transitively via bootstrapAutopilot (wi_260622vjo ac-5).
   await nextCoverageNode({ repoRoot, workItemId });
 
   // Append each dimension as a derived child of the root (append-only, §3.2).
