@@ -22869,7 +22869,7 @@ function farFieldCoverageNodes(intent, rootId = "cov-root") {
 }
 function farFieldCategoriesEnabled() {
   const v2 = process.env.DITTO_FARFIELD_CATEGORIES?.toLowerCase();
-  return v2 === "1" || v2 === "on" || v2 === "true";
+  return v2 !== "0" && v2 !== "off" && v2 !== "false";
 }
 
 // src/core/coverage-loop.ts
@@ -40364,4 +40364,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=cbf45de35e3f57773786e15d2c4db240cea48ac6faa620d772c21c96d0c33cb4
+//# ditto-src-stamp=1ebcb6f2fa0fab53563f9a7dbb0b441841f1e01e312e0702736fceb43516eb1d

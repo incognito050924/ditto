@@ -110,16 +110,18 @@ describe('far-field category seeding (wi_260622vjo §8-2)', () => {
     expect(isCoverageTerminated(closed, 0)).toBe(false);
   });
 
-  test('farFieldCategoriesEnabled() defaults off; on only for explicit truthy env', () => {
+  test('farFieldCategoriesEnabled() defaults ON (activated); off only for explicit falsy env', () => {
     const saved = process.env.DITTO_FARFIELD_CATEGORIES;
     try {
-      // biome-ignore lint/performance/noDelete: default-off means truly unset, not the "undefined" string
+      // biome-ignore lint/performance/noDelete: default-on means truly unset, not the "undefined" string
       delete process.env.DITTO_FARFIELD_CATEGORIES;
-      expect(farFieldCategoriesEnabled()).toBe(false);
-      process.env.DITTO_FARFIELD_CATEGORIES = '1';
       expect(farFieldCategoriesEnabled()).toBe(true);
       process.env.DITTO_FARFIELD_CATEGORIES = 'off';
       expect(farFieldCategoriesEnabled()).toBe(false);
+      process.env.DITTO_FARFIELD_CATEGORIES = '0';
+      expect(farFieldCategoriesEnabled()).toBe(false);
+      process.env.DITTO_FARFIELD_CATEGORIES = '1';
+      expect(farFieldCategoriesEnabled()).toBe(true);
     } finally {
       if (saved === undefined) {
         // biome-ignore lint/performance/noDelete: restore the env var to truly unset

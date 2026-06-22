@@ -158,13 +158,17 @@ export function farFieldCoverageNodes(intent: string, rootId = 'cov-root'): Cove
 }
 
 /**
- * Whether the far-field categories are seeded as coverage nodes (§8-2). Default
- * OFF preserves the existing plan-stage tree (root-only seeding) so existing
- * autopilot behavior + tests are unchanged (ac-7). A later slice replaces this
- * env toggle with tier-② project config (ac-10). Fail-open style mirrors
- * memory-flag.ts: only an explicit truthy value enables it.
+ * Whether the far-field categories are seeded as coverage nodes (§8-2). ACTIVATED:
+ * ON by default — the far-field engine is this work item's intent (exhaustive
+ * coverage), and the depth dial (§8-4) keeps a low-stakes sweep shallow so the
+ * full-breadth (all categories) stays affordable (ac-4/ac-8). Opt OUT with
+ * DITTO_FARFIELD_CATEGORIES=0/off/false. Consumed only at the autopilot
+ * `coverage-next` CLI seam (no test drives that CLI, so flipping the default is
+ * test-neutral; the engine's `seedCategories` param still defaults false for direct
+ * callers, ac-7). A later slice replaces this env toggle with an entry intensity
+ * option (ac-4) + tier-② project config (ac-10).
  */
 export function farFieldCategoriesEnabled(): boolean {
   const v = process.env.DITTO_FARFIELD_CATEGORIES?.toLowerCase();
-  return v === '1' || v === 'on' || v === 'true';
+  return v !== '0' && v !== 'off' && v !== 'false';
 }
