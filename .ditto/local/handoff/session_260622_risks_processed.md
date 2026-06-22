@@ -46,7 +46,32 @@
 9. 스테일 브랜치 정리 — experiment/reframe-gap, codex/omx-reset-plan, feat/cli-wizard-provisioner(wi_260616us6 done)
 10. `.ditto/.gitignore` untracked 추적 여부 판단
 
+## 다른 PC 세션 시작 시 — 복붙용 프롬프트
+
+이번 세션에서 ditto를 재빌드했고(bin/ditto·dist/plugin·dist/codex-plugin) `.claude/agents` variant 3개가 main에 올라가 있다. 다른 PC는 pull 후 아래 두 가지를 처리한 뒤 작업을 이어가면 된다.
+
+### 1) 재빌드 & setup 재실행 프롬프트
+```
+git pull 했어. ditto 바이너리를 재빌드하고 setup을 다시 실행해서 글로벌 설치본·.claude/agents variant 링크·allowlist를 최신 코드에 동기화해줘.
+- bun install (의존성 변동 대비; 변동 없으면 no-op)
+- bun run build:bin && bun run build:plugin && bun run build:codex-plugin
+- ditto setup (인터랙티브로 — variant agent-link 포함. --yes는 agent-link를 건너뛰니 쓰지 마)
+검증: ditto doctor 로 surface/capability/distribution drift 0 확인. (PreToolUse 훅이 정상 명령을 false-positive로 막으면 DITTO_SKIP_HOOKS=1 prefix)
+```
+
+### 2) deep-interview 전역 설정(config.json) 생성 프롬프트
+`.ditto/local/config.json`은 tier ③ per-developer · **gitignored**라 다른 PC엔 없다(그래서 push하지 않는다 — 각 PC에서 직접 만든다). deep-interview/tech-spec 전역 기본값을 쓰려면:
+```
+.ditto/local/config.json 을 만들어서 deep-interview 전역 기본값을 넣어줘. 이 파일은 gitignored per-developer 설정이라 커밋·push하지 마. 내가 이 PC에서 쓰던 값과 동일하게:
+{
+  "deep_interview": { "threshold": 0.85, "generators": 6 },
+  "tech_spec": { "question": { "performance": "exhaustive" } }
+}
+스키마(src/schemas/ditto-config.ts): deep_interview.threshold(0~1, readiness 게이트), question_cap(양의 정수), generators(양의 정수, 질문 생성기 fan-out). tech_spec.question 은 performance(glance|quick|standard|deep|exhaustive)·intensity(0~100)·generators(1~6)·gate_mode(confirm|draft)·granularity(low|medium|high) 등. 우선순위는 CLI flag > config > code default, fail-open(없거나 깨지면 코드 기본값으로 무시).
+```
+> 위 값은 이 PC의 현재 config.json 그대로다. 다른 값을 원하면 그 자리에서 조정하면 된다. 파일을 안 만들면 코드 기본값(deep-interview threshold 0.7 / questionCap 8 / generators 1)으로 동작한다.
+
 ## 금지/주의
 - B(A-1) 측정 게이트 없이 착수 금지(ADR-0013 D4)
-- surfaces.json은 gitignored — 손편집 말고 `bun run surfaces:gen`으로 재생성
+- surfaces.json·config.json은 gitignored — push하지 않는다. surfaces.json은 `bun run surfaces:gen`으로 재생성, config.json은 각 PC에서 생성
 - 코드가 권위 — 이 핸드오프가 코드와 어긋나면 코드 확인 우선
