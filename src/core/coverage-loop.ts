@@ -16,6 +16,7 @@ import {
   serializePlanDialog,
 } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
+import { farFieldLenses } from './coverage-taxonomy';
 import { localDir } from './ditto-paths';
 import { IntentStore } from './intent-store';
 import { WorkItemStore } from './work-item-store';
@@ -143,7 +144,9 @@ export async function nextCoverageNode(args: {
       judgeInput: buildJudgeInput({
         node: map.nodes[0] ?? rootNode(workItemId),
         originalIntent: await originalIntent(repoRoot, workItemId),
-        crossCuttingConstraints: [],
+        // Far-field floor lenses (design §8-1) — the fresh judge now sees every
+        // category instead of the previous empty slot (cross_cutting_constraints:[]).
+        crossCuttingConstraints: farFieldLenses(),
       }),
       tier: args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard',
       dryCounter,
@@ -157,7 +160,8 @@ export async function nextCoverageNode(args: {
     judgeInput: buildJudgeInput({
       node,
       originalIntent: intent,
-      crossCuttingConstraints: [],
+      // Far-field floor lenses (design §8-1) — see the no-ready-node path above.
+      crossCuttingConstraints: farFieldLenses(),
     }),
     tier: args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard',
     dryCounter,
