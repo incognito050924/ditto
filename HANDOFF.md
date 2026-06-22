@@ -55,3 +55,20 @@ dogfood 권한 프롬프트 제거. memory상 "done·미커밋". **git으로 전
 - `scripts/release.mjs` — 버전 bump + `bin/ditto` 재빌드 + commit/tag(push 안 함).
 - `DEVELOPMENT.md` §"배포 / 설치" + "배포 기준" — npx 설치 + 언제 rebuild/push/reinstall/update.
 - `.ditto/knowledge/adr/ADR-0022-dogfood-deploy-lifecycle.md` — 배포 생애주기 결정.
+
+## 6. 먼-들판 coverage 검증 인계 (wi_260622vjo) — 다음 핵심 작업 (다른 스레드)
+
+이 PC가 머지한 `wi_260622vjo`(머지 `3191090`, 9슬라이스)의 **남은 검증·실측**을 fresh 세션에서 이어받는다. 코드/엔진은 단위·CLI e2e로 검증됐으나(머지트리 2693 pass), **SKILL 프롬프트 부분(ac-3 anti-SLOP·ac-6 critic·ac-8 sweepAngles)은 실 autopilot 한 바퀴로 검증된 적이 없다.** 상세는 이 PC 호스트 메모리 [[premortem-far-field-redesign]](비전파).
+
+- **⚠ 전제 — push 선행**: 이 검증은 far-field 코드가 그 PC에 있어야 한다 → §0대로 이 PC에서 `git push origin main` 후 그 PC가 pull. push 안 하면 그 PC엔 far-field 없음.
+- **⚠ 왜 fresh 세션 필수**: SKILL 정의는 세션 시작에 freeze(ADR-0022). 변경된 SKILL(ac-3/6/8)은 **새 세션 autopilot에서만** 활성 — 이 PC의 작업 세션에선 검증 불가였다.
+
+**A1+A2 (가장 큰 미검증) — 실 autopilot far-field sweep 한 바퀴.** design/planner 노드가 있는 work item을 autopilot으로 plan-stage coverage sweep까지 구동(`coverage-next`→`coverage-round`→dry). 확인:
+- **ac-8 sweepAngles**: `coverage-next`가 tier별 `sweepAngles`(light1/std3/full5) 반환하고 그만큼 blind sweep 각도를 띄우나. `--coverageIntensity light|standard|full`로 진입 override 되나.
+- **ac-3 anti-SLOP**: Opponent가 refute-by-default로 위험 검증, oracle-linked(`maps_to`) 근거 없는 위험은 `admissibleBranchesAdded`에 안 들어가나. neutrality 축이 resolved close를 게이트하나.
+- **ac-6 critic**: floor(19)+config 밖 도메인을 sweep이 만나면 `cov-cat-<id>` discovered_node로 새 카테고리를 시딩하나.
+- 산출 확인: `ditto autopilot coverage-report --workItem <wi>` → seeded/resolved/skipped(+reason)/complete (ac-11a). plan-dialog.md.
+
+**B1 (그다음) — 비용 실측.** 기본-ON 19카테고리 sweep은 폭 불변(19 전수)·깊이만 tier 축소 → 사소한 변경도 19×judge. 실제 한 바퀴 토큰/시간을 재서, light tier로도 비싸 끄고 싶어지는지(R3·ac-8 역설) 판단. 비싸면 강도 기본값/예산 재조정.
+
+**검증과 무관한 미결(별건)**: §8-5 memory seam(보류·R1), ac-11b outcome 루프(미착수), 설계 spec `.ditto/specs/premortem-far-field-coverage.md`(untracked), work-item 스토어 AC placeholder. — 다 이 PC 메모리에 상세(비전파).
