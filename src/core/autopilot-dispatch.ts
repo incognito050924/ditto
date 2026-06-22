@@ -231,16 +231,28 @@ export function guardMutatingEvidence(
  */
 export function guardAcClosingEvidence(args: {
   outcome: 'pass' | 'fail';
-  ac_verdicts: { criterion_id: string; verdict: string }[];
+  ac_verdicts: { criterion_id: string; verdict: string; evidence_refs?: unknown[] }[];
   evidence_refs: unknown[];
 }): ChildResultGuard {
-  const hasPassVerdict = args.ac_verdicts.some((v) => v.verdict === 'pass');
-  if (args.outcome === 'pass' && hasPassVerdict && args.evidence_refs.length === 0) {
+  if (args.outcome !== 'pass') return { contentful: true };
+  const passVerdicts = args.ac_verdicts.filter((v) => v.verdict === 'pass');
+  if (passVerdicts.length === 0) return { contentful: true };
+  // A pass-verdict is proved if there is top-level evidence OR that verdict
+  // carries its own non-empty evidence_refs. Either path counts; both empty for
+  // any pass criterion is a bare claim. Refuse if at least one pass criterion is
+  // unevidenced by both paths.
+  const topLevelEvidence = args.evidence_refs.length > 0;
+  const unevidenced = passVerdicts.filter(
+    (v) => !topLevelEvidence && (v.evidence_refs?.length ?? 0) === 0,
+  );
+  if (unevidenced.length > 0) {
+    const ids = unevidenced.map((v) => v.criterion_id).join(', ');
+    const criteria = unevidenced.length === 1 ? 'criterion' : 'criteria';
+    const head = `node judged acceptance ${criteria} \`pass\` (${ids}) but carried no evidence`;
     return {
       contentful: false,
       failure_class: 'fixable',
-      reason:
-        'node judged an acceptance criterion `pass` but carried no evidence_refs — closing a criterion to pass on a bare claim is not proof (claim ≠ proof); attach the evidence (test/build/run output, artifact) before passing',
+      reason: `${head} — closing a criterion to pass on a bare claim is not proof (claim ≠ proof). Attach the evidence (test/build/run output, artifact) at the top-level \`evidence_refs\`, or on the matching \`ac_verdict\` entry's \`evidence_refs\`, before passing`,
     };
   }
   return { contentful: true };

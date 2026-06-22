@@ -50,24 +50,43 @@ export async function loadVariantCatalog(repoRoot: string): Promise<AgentVariant
  * in the (already filtered) candidates, it is moved FIRST so the driver sees the
  * suggestion at the head of the list. The hint never selects and never crashes —
  * a hint absent from the catalog is ignored, and selection stays the driver's job.
+ *
+ * `opts.scopeDeclared` distinguishes a node's OWN declared `file_scope` (true,
+ * the default) from the loop's fallback to the shared, mixed `changed_files`
+ * (false). A mixed fallback scope must not narrow by `match`: it spuriously
+ * matches every scoped variant's glob and would confidently route a wrong
+ * specialist. So when `scopeDeclared` is false we drop scoped variants — keeping
+ * only role-generalists (empty `match`) — and let an explicit `hint` still
+ * re-admit and surface its variant. Declared scope keeps the precise narrowing.
  */
 export function selectVariantCandidates(
   catalog: AgentVariant[],
   owner: string,
   fileScope: string[],
   hint?: string,
+  opts: { scopeDeclared: boolean } = { scopeDeclared: true },
 ): { name: string; description: string }[] {
   const candidates = catalog
     .filter(
       (v) =>
         v.role === owner &&
+        // Declared scope narrows by glob; an undeclared (fallback) scope is
+        // untrusted, so only empty-match generalists qualify by scope.
         (v.match.length === 0 ||
-          v.match.some((glob) => fileScope.some((path) => globMatch(glob, path)))),
+          (opts.scopeDeclared &&
+            v.match.some((glob) => fileScope.some((path) => globMatch(glob, path))))),
     )
     .map((v) => ({ name: v.name, description: v.description }));
 
   if (hint === undefined) return candidates;
-  const hinted = candidates.find((c) => c.name === hint);
+  const hinted =
+    candidates.find((c) => c.name === hint) ??
+    // Under an undeclared scope a scoped variant was dropped above; an explicit
+    // hint re-admits its own variant (role must still match) so the planner's
+    // late-bound preference is not lost to the fallback.
+    catalog
+      .filter((v) => v.role === owner && v.name === hint)
+      .map((v) => ({ name: v.name, description: v.description }))[0];
   if (!hinted) return candidates; // hint not in catalog → ignore
   return [hinted, ...candidates.filter((c) => c.name !== hint)];
 }

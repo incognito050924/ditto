@@ -269,6 +269,9 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
         node.owner,
         scopeOf(node),
         node.agent_hint,
+        // A node without its own `file_scope` uses the shared (mixed) changed_files
+        // fallback; that scope must not narrow by glob (it mis-routes a specialist).
+        { scopeDeclared: node.file_scope !== undefined },
       );
       // Warm-start memory push (§5-1 / §10-6 #1): fail-open query in the loop, the
       // builder stays pure. researcher/planner only; undefined ⇒ packet unchanged.
@@ -352,6 +355,9 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
     chosen.owner,
     scopeOf(chosen),
     chosen.agent_hint,
+    // A node without its own `file_scope` uses the shared (mixed) changed_files
+    // fallback; that scope must not narrow by glob (it mis-routes a specialist).
+    { scopeDeclared: chosen.file_scope !== undefined },
   );
   // Warm-start memory push (§5-1 / §10-6 #1): fail-open query in the loop, the
   // builder stays pure. researcher/planner only; undefined ⇒ packet unchanged.
@@ -377,7 +383,17 @@ export const recordResultPayload = z
       .describe('Required when outcome=fail; the caller-supplied classification'),
     evidence_refs: z.array(evidenceRef).optional().describe('Evidence pointers gathered on pass'),
     ac_verdicts: z
-      .array(z.object({ criterion_id: z.string().min(1), verdict, notes: z.string().optional() }))
+      .array(
+        z.object({
+          criterion_id: z.string().min(1),
+          verdict,
+          notes: z.string().optional(),
+          // Per-AC evidence for *this* criterion (optional + additive). A pass
+          // verdict may carry its own evidence here instead of (or alongside) the
+          // top-level evidence_refs; the AC-closing guard accepts either path.
+          evidence_refs: z.array(evidenceRef).optional(),
+        }),
+      )
       .optional()
       .describe(
         "A judging node's per-AC verdicts (verifier/e2e). The node still records a single " +

@@ -421,6 +421,106 @@ describe('deriveAcVerdicts (evidence-gated: pass only with evidence; never auto-
     });
   });
 
+  // wi_260622kb4 / ac-2: a judging node can attach evidence on the matching
+  // ac_verdict entry (per-AC evidence_refs) instead of mirroring it at top-level.
+  // The completion bridge must accept that per-AC evidence as proof for closing the
+  // AC — exactly like the AC-closing guard (autopilot-dispatch) already does —
+  // otherwise a node carrying ONLY per-AC evidence reads as "0 evidence → unverified".
+  describe('per-AC evidence_refs close an AC (wi_260622kb4)', () => {
+    test('a passed node with ONLY per-AC evidence_refs (no top-level) → pass, carrying that evidence', () => {
+      const graph = graphWith([
+        node({
+          id: 'N3',
+          acceptance_refs: ['ac-1'],
+          status: 'passed',
+          evidence_refs: [],
+          ac_verdicts: [
+            { criterion_id: 'ac-1', verdict: 'pass', evidence_refs: [ev('per-ac.log')] },
+          ],
+        }),
+      ]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('pass');
+      expect(v?.evidence).toEqual([ev('per-ac.log')]);
+    });
+
+    test('top-level evidence still closes the AC (the existing path is preserved)', () => {
+      const graph = graphWith([
+        node({
+          id: 'N3',
+          acceptance_refs: ['ac-1'],
+          status: 'passed',
+          evidence_refs: [ev('top.log')],
+        }),
+      ]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('pass');
+      expect(v?.evidence).toEqual([ev('top.log')]);
+    });
+
+    test('neither top-level NOR per-AC evidence on a passed node → unverified (claim ≠ proof)', () => {
+      const graph = graphWith([
+        node({
+          id: 'N3',
+          acceptance_refs: ['ac-1'],
+          status: 'passed',
+          evidence_refs: [],
+          // a per-AC pass verdict WITHOUT evidence is still just a claim
+          ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'pass' }],
+        }),
+      ]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('unverified');
+    });
+
+    test('a per-AC FAIL verdict still folds to fail even when it carries evidence', () => {
+      const graph = graphWith([
+        node({
+          id: 'N3',
+          acceptance_refs: ['ac-1'],
+          status: 'passed',
+          evidence_refs: [],
+          ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'fail', evidence_refs: [ev('fail.log')] }],
+        }),
+      ]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('fail');
+    });
+
+    test('per-AC evidence is unioned into the derived verdict evidence alongside top-level', () => {
+      const graph = graphWith([
+        node({
+          id: 'N3',
+          acceptance_refs: ['ac-1'],
+          status: 'passed',
+          evidence_refs: [ev('top.log')],
+          ac_verdicts: [
+            { criterion_id: 'ac-1', verdict: 'pass', evidence_refs: [ev('per-ac.log')] },
+          ],
+        }),
+      ]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('pass');
+      expect(v?.evidence).toEqual([ev('top.log'), ev('per-ac.log')]);
+    });
+
+    test('per-AC evidence for a DIFFERENT criterion does not close this AC', () => {
+      const graph = graphWith([
+        node({
+          id: 'N3',
+          acceptance_refs: ['ac-1'],
+          status: 'passed',
+          evidence_refs: [],
+          ac_verdicts: [
+            { criterion_id: 'ac-2', verdict: 'pass', evidence_refs: [ev('other.log')] },
+          ],
+        }),
+      ]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('unverified'); // no evidence for ac-1
+    });
+  });
+
   // A per-AC verdict for an AC the node does not address is ignored (it is not an
   // addressing node for that criterion).
   test('a per-AC verdict on a non-addressed criterion is ignored', () => {

@@ -87,6 +87,54 @@ export class CoverageFeedbackLedger {
   }
 }
 
+/** One copy-paste `ditto coverage feedback` template the suggest command surfaces. */
+export interface CoverageSuggestion {
+  /** Bare floor category id (no cov-cat- prefix) the escape would be attributed to. */
+  category_id: string;
+  /** depth = a dry-closed (resolved) category that was judged safe yet may have broken. */
+  fault_kind: CoverageFaultKind;
+  /** The category's coverage-node label (its probing-question lens), for context. */
+  lens: string;
+  /** A copy-paste `ditto coverage feedback ...` command line the user can run. */
+  template: string;
+}
+
+/**
+ * Build copy-paste `ditto coverage feedback` SUGGESTIONS for a work item's
+ * coverage map (ac-3, wi_260622kb4). This is PURE and SUGGEST-ONLY: it reads the
+ * map, picks the categories whose escape `attributeCoverageEscape` would ACCEPT
+ * — currently the dry-closed (resolved) floor categories (`depth`) — and emits one
+ * feedback template per candidate. It records NOTHING and mutates NO ledger; the
+ * user decides whether to run the template. The evidence is left as a placeholder
+ * the user fills with the triggering failure (the command never invents it).
+ *
+ * Only the structural attribution guard's accepted shape is mirrored here so the
+ * suggestion and the eventual `feedback` accept never diverge (gate ↔ score): a
+ * resolved floor category → depth. Still-open / skipped categories are not
+ * dry-closed escapes, so they are omitted (the guard would reject them).
+ */
+export function suggestCoverageFeedback(
+  map: CoverageMap,
+  workItemId: string,
+  floor: readonly FarFieldCategory[] = FAR_FIELD_TAXONOMY_FLOOR,
+): CoverageSuggestion[] {
+  const floorIds = new Set(floor.map((c) => c.id));
+  const suggestions: CoverageSuggestion[] = [];
+  for (const node of map.nodes) {
+    if (!node.id.startsWith(CATEGORY_NODE_PREFIX)) continue;
+    if (node.state !== 'resolved') continue;
+    const bare = node.id.slice(CATEGORY_NODE_PREFIX.length);
+    if (!floorIds.has(bare)) continue;
+    suggestions.push({
+      category_id: bare,
+      fault_kind: 'depth',
+      lens: node.label,
+      template: `ditto coverage feedback --wi ${workItemId} --category ${bare} --evidence "<what slipped past the resolved sweep>"`,
+    });
+  }
+  return suggestions;
+}
+
 /**
  * Count how many ledger rows each `category_id` has (ac-4 recurrence base). Pure
  * over the rows — the threshold/aggregation engine that would act on a high count

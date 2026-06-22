@@ -109,7 +109,19 @@ export const autopilotNode = z
     // Optional + default [] — a legacy graph and any non-judging node parse
     // unchanged. criterion_ids outside `acceptance_refs` are ignored downstream.
     ac_verdicts: z
-      .array(z.object({ criterion_id: z.string().min(1), verdict, notes: z.string().optional() }))
+      .array(
+        z.object({
+          criterion_id: z.string().min(1),
+          verdict,
+          notes: z.string().optional(),
+          // Per-AC evidence the judging node attaches to *this* criterion. Lets the
+          // node write evidence where it judged (no forced top-level mirror), and
+          // the AC-closing guard accepts a pass verdict carrying its own evidence
+          // even when top-level evidence_refs is empty. Optional + additive — a
+          // legacy verdict (no field) parses unchanged.
+          evidence_refs: z.array(evidenceRef).optional(),
+        }),
+      )
       .default([]),
     attempts: z
       .object({ fix: z.number().int().nonnegative(), switch: z.number().int().nonnegative() })

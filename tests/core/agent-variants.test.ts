@@ -166,6 +166,68 @@ describe('selectVariantCandidates (ac-2: deterministic role + scope filter)', ()
     const ghost = selectVariantCandidates(catalog, 'implementer', ['src/db/users.ts'], 'nope');
     expect(ghost).toEqual(noHint);
   });
+
+  // ac-1 defense (wi_260622kb4): when the node DID NOT declare its own file_scope,
+  // the loop falls back to the shared (mixed) changed_files. That scope is untrusted
+  // for narrowing — a mixed scope spuriously matches every scoped variant's glob and
+  // routes a confidently-wrong specialist. With `scopeDeclared=false`, scoped
+  // variants are dropped: keep only role-generalists (empty match), and let an
+  // explicit hint still surface its variant. Declared scope (default true) is
+  // unchanged — narrowing stays precise.
+  test('derived (undeclared) scope drops scoped variants — keeps only empty-match generalists', () => {
+    const out = selectVariantCandidates(catalog, 'implementer', ['src/db/users.ts'], undefined, {
+      scopeDeclared: false,
+    });
+    expect(out.map((c) => c.name)).toEqual(['any-impl']);
+  });
+
+  test('derived scope still honors an explicit hint (surfaces the hinted scoped variant)', () => {
+    const out = selectVariantCandidates(catalog, 'implementer', ['src/db/users.ts'], 'sql-impl', {
+      scopeDeclared: false,
+    });
+    // hint re-admits its scoped variant and orders it first; generalist remains.
+    expect(out.map((c) => c.name)).toEqual(['sql-impl', 'any-impl']);
+  });
+
+  test('derived scope with a hint that is not a real catalog variant stays generalist-only', () => {
+    const out = selectVariantCandidates(catalog, 'implementer', ['src/db/users.ts'], 'ghost', {
+      scopeDeclared: false,
+    });
+    expect(out.map((c) => c.name)).toEqual(['any-impl']);
+  });
+
+  test('declared scope (default) is byte-for-byte the prior narrowing behavior', () => {
+    const a = selectVariantCandidates(catalog, 'implementer', ['src/db/users.ts']);
+    const b = selectVariantCandidates(catalog, 'implementer', ['src/db/users.ts'], undefined, {
+      scopeDeclared: true,
+    });
+    expect(b).toEqual(a);
+    expect(b.map((c) => c.name).sort()).toEqual(['any-impl', 'sql-impl']);
+  });
+});
+
+// ac-1 (wi_260622kb4): the real `.ditto/agents` catalog must route each implementer
+// scope to exactly its specialist — src/core/** → core-implementer only, src/cli/** →
+// cli-implementer only, src/schemas/** → schema-implementer only. Without a `match`
+// glob on each variant, `match` defaults to [] and the variant routes to EVERY
+// implementer scope (file_scope ignored). This locks the catalog so dropping a
+// `match` field is caught here rather than mis-routing a live dispatch.
+describe('repo catalog implementer routing by file_scope (ac-1, wi_260622kb4)', () => {
+  const cases: { scope: string; only: string }[] = [
+    { scope: 'src/core/agent-variants.ts', only: 'core-implementer' },
+    { scope: 'src/cli/commands/work.ts', only: 'cli-implementer' },
+    { scope: 'src/schemas/autopilot.ts', only: 'schema-implementer' },
+  ];
+
+  for (const { scope, only } of cases) {
+    test(`${scope} routes to ${only} only`, async () => {
+      const catalog = await loadVariantCatalog(REPO_ROOT);
+      const out = selectVariantCandidates(catalog, 'implementer', [scope]).map((c) => c.name);
+      const specialists = ['core-implementer', 'cli-implementer', 'schema-implementer'];
+      const present = out.filter((n) => specialists.includes(n));
+      expect(present).toEqual([only]);
+    });
+  }
 });
 
 describe('recommendVariantRole (ac-1: 7-case keyword heuristic)', () => {

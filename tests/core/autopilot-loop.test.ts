@@ -91,7 +91,12 @@ describe('nextNode (loop step 1-5: select → approval → dispatch → packet)'
   });
 
   test('spawn packet exposes matching variant_candidates from .ditto/agents (ac-3)', async () => {
-    await seed(graph());
+    // The seed node must DECLARE its own file_scope for a scoped variant to route:
+    // a scoped variant narrows by glob only on a declared scope (wi_260622kb4). A
+    // node falling back to the mixed work-item changed_files drops scoped variants.
+    const g = graph();
+    g.nodes = g.nodes.map((n) => (n.id === 'N1' ? { ...n, file_scope: ['src/plan.ts'] } : n));
+    await seed(g);
     const dir = join(repo, '.ditto', 'agents');
     await mkdir(dir, { recursive: true });
     await Bun.write(
@@ -121,6 +126,30 @@ match: [src/**]
     expect(res.packet.variant_candidates).toEqual([
       { name: 'deep-planner', description: 'deep planning specialist' },
     ]);
+  });
+
+  // wi_260622kb4 defense: a node that does NOT declare its own file_scope falls
+  // back to the mixed work-item changed_files; a scoped variant must NOT route off
+  // that untrusted scope (the live mis-routing this fix closes).
+  test('undeclared file_scope (changed_files fallback) drops scoped variant candidates', async () => {
+    await seed(graph()); // seed nodes carry no file_scope → derived from changed_files
+    const dir = join(repo, '.ditto', 'agents');
+    await mkdir(dir, { recursive: true });
+    await Bun.write(
+      join(dir, 'planner-variant.md'),
+      `---
+name: deep-planner
+role: planner
+description: deep planning specialist
+match: [src/**]
+---
+`,
+    );
+    const res = await nextNode(repo, WI);
+    if (res.action !== 'spawn') throw new Error('expected spawn');
+    expect(res.owner).toBe('planner');
+    // scoped variant dropped — no role-generalist present, so candidates is empty.
+    expect(res.packet.variant_candidates).toEqual([]);
   });
 
   // Warm-start non-invasiveness (§10-6 #1, ac-9): with NO memory projection, the
@@ -1479,6 +1508,78 @@ describe('recordResult ac-closing evidence guard (n2: pass with pass-verdict but
     expect(res.guard_contentful).toBe(false);
     const node = (await aps.get(WI)).nodes.find((n) => n.id === 'V0');
     expect(node?.status).not.toBe('passed'); // pass transition blocked; goes to retry
+  });
+
+  test('(a2) verifier pass with empty top-level evidence_refs but per-AC evidence_refs on the pass verdict → NOT downgraded', async () => {
+    await seed(verifyGraph('V0', 'verify', 'verifier'));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V0',
+        result_text: 'verified ac-1 — attached the suite output to the per-AC verdict',
+        outcome: 'pass',
+        ac_verdicts: [
+          {
+            criterion_id: 'ac-1',
+            verdict: 'pass',
+            evidence_refs: [{ kind: 'command', command: 'bun test', summary: 'all green' }],
+          },
+        ],
+        evidence_refs: [],
+      },
+    });
+    expect(res.outcome).toBe('pass');
+    expect(res.status).toBe('passed');
+    const node = (await aps.get(WI)).nodes.find((n) => n.id === 'V0');
+    // per-AC evidence is preserved on the node for the completion bridge
+    expect(node?.ac_verdicts?.[0]?.evidence_refs).toEqual([
+      { kind: 'command', command: 'bun test', summary: 'all green' },
+    ]);
+  });
+
+  test('(a3) two pass AC: one with per-AC evidence, one without, top-level empty → downgraded (the bare one is not proof)', async () => {
+    await seed(verifyGraph('V0', 'verify', 'verifier'));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V0',
+        result_text: 'verified two criteria; only evidenced one',
+        outcome: 'pass',
+        ac_verdicts: [
+          {
+            criterion_id: 'ac-1',
+            verdict: 'pass',
+            evidence_refs: [{ kind: 'command', command: 'bun test', summary: 'green' }],
+          },
+          { criterion_id: 'ac-2', verdict: 'pass' },
+        ],
+        evidence_refs: [],
+      },
+    });
+    expect(res.outcome).toBe('fail');
+    expect(res.failure_class).toBe('fixable');
+    // message guides the caller to either evidence path
+    expect(res.reason).toMatch(/evidence_refs/);
+    expect(res.reason).toMatch(/ac_verdict/);
+  });
+
+  test('(a4) empty top-level evidence_refs and pass AC with empty per-AC evidence_refs array → downgraded', async () => {
+    await seed(verifyGraph('V0', 'verify', 'verifier'));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V0',
+        result_text: 'verified ac-1 — but no evidence anywhere',
+        outcome: 'pass',
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'pass', evidence_refs: [] }],
+        evidence_refs: [],
+      },
+    });
+    expect(res.outcome).toBe('fail');
+    expect(res.failure_class).toBe('fixable');
   });
 
   test('(b) review forward-expansion (has_findings=true) with ac_verdicts pass + empty evidence_refs → still downgraded, no splice', async () => {

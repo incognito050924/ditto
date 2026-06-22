@@ -17468,7 +17468,12 @@ var autopilotNode = exports_external.object({
   depends_on: exports_external.array(exports_external.string()).default([]),
   acceptance_refs: exports_external.array(exports_external.string()).default([]),
   evidence_refs: exports_external.array(evidenceRef).default([]),
-  ac_verdicts: exports_external.array(exports_external.object({ criterion_id: exports_external.string().min(1), verdict, notes: exports_external.string().optional() })).default([]),
+  ac_verdicts: exports_external.array(exports_external.object({
+    criterion_id: exports_external.string().min(1),
+    verdict,
+    notes: exports_external.string().optional(),
+    evidence_refs: exports_external.array(evidenceRef).optional()
+  })).default([]),
   attempts: exports_external.object({ fix: exports_external.number().int().nonnegative(), switch: exports_external.number().int().nonnegative() }).default({ fix: 0, switch: 0 }),
   agent_hint: exports_external.string().optional(),
   file_scope: exports_external.array(relativePath).optional()
@@ -18573,13 +18578,19 @@ class CompletionStore {
 // src/core/autopilot-complete.ts
 var SEVERITY = { fail: 0, partial: 1, unverified: 2, pass: 3 };
 var worst = (a2, b2) => SEVERITY[a2] <= SEVERITY[b2] ? a2 : b2;
+function perAcEvidence(node, acId) {
+  return node.ac_verdicts.filter((v2) => v2.criterion_id === acId).flatMap((v2) => v2.evidence_refs ?? []);
+}
+function hasClosingEvidence(node, acId) {
+  return node.evidence_refs.length > 0 || perAcEvidence(node, acId).length > 0;
+}
 function nodeVerdictFor(node, acId) {
   let verdict2;
   let notes;
   if (node.status === "failed") {
     verdict2 = "fail";
     notes = "an addressing node failed";
-  } else if (node.status === "passed" && node.evidence_refs.length > 0) {
+  } else if (node.status === "passed" && hasClosingEvidence(node, acId)) {
     verdict2 = "pass";
   } else if (node.status === "passed") {
     verdict2 = "unverified";
@@ -18637,13 +18648,13 @@ function dependsOnNode2(node, targetId, byId) {
   return visit2(node.id);
 }
 function isStructuralUnverified(node, acId) {
-  return node.status === "passed" && node.evidence_refs.length === 0 && node.ac_verdicts.every((v2) => v2.criterion_id !== acId || v2.verdict === "pass");
+  return node.status === "passed" && !hasClosingEvidence(node, acId) && node.ac_verdicts.every((v2) => v2.criterion_id !== acId || v2.verdict === "pass");
 }
 function deriveAcVerdicts(graph, acIds) {
   const byId = new Map(graph.nodes.map((n2) => [n2.id, n2]));
   return acIds.map((acId) => {
     const addressing = graph.nodes.filter((n2) => n2.acceptance_refs.includes(acId));
-    const evidence = addressing.flatMap((n2) => n2.evidence_refs);
+    const evidence = addressing.flatMap((n2) => [...n2.evidence_refs, ...perAcEvidence(n2, acId)]);
     if (addressing.length === 0) {
       return {
         criterion_id: acId,
@@ -19348,11 +19359,11 @@ async function loadVariantCatalog(repoRoot) {
   }
   return catalog;
 }
-function selectVariantCandidates(catalog, owner, fileScope, hint) {
-  const candidates = catalog.filter((v2) => v2.role === owner && (v2.match.length === 0 || v2.match.some((glob) => fileScope.some((path) => globMatch(glob, path))))).map((v2) => ({ name: v2.name, description: v2.description }));
+function selectVariantCandidates(catalog, owner, fileScope, hint, opts = { scopeDeclared: true }) {
+  const candidates = catalog.filter((v2) => v2.role === owner && (v2.match.length === 0 || opts.scopeDeclared && v2.match.some((glob) => fileScope.some((path) => globMatch(glob, path))))).map((v2) => ({ name: v2.name, description: v2.description }));
   if (hint === undefined)
     return candidates;
-  const hinted = candidates.find((c3) => c3.name === hint);
+  const hinted = candidates.find((c3) => c3.name === hint) ?? catalog.filter((v2) => v2.role === owner && v2.name === hint).map((v2) => ({ name: v2.name, description: v2.description }))[0];
   if (!hinted)
     return candidates;
   return [hinted, ...candidates.filter((c3) => c3.name !== hint)];
@@ -19628,12 +19639,21 @@ function guardMutatingEvidence(owner, outcome, changedFiles) {
   return { contentful: true };
 }
 function guardAcClosingEvidence(args) {
-  const hasPassVerdict = args.ac_verdicts.some((v2) => v2.verdict === "pass");
-  if (args.outcome === "pass" && hasPassVerdict && args.evidence_refs.length === 0) {
+  if (args.outcome !== "pass")
+    return { contentful: true };
+  const passVerdicts = args.ac_verdicts.filter((v2) => v2.verdict === "pass");
+  if (passVerdicts.length === 0)
+    return { contentful: true };
+  const topLevelEvidence = args.evidence_refs.length > 0;
+  const unevidenced = passVerdicts.filter((v2) => !topLevelEvidence && (v2.evidence_refs?.length ?? 0) === 0);
+  if (unevidenced.length > 0) {
+    const ids = unevidenced.map((v2) => v2.criterion_id).join(", ");
+    const criteria = unevidenced.length === 1 ? "criterion" : "criteria";
+    const head = `node judged acceptance ${criteria} \`pass\` (${ids}) but carried no evidence`;
     return {
       contentful: false,
       failure_class: "fixable",
-      reason: "node judged an acceptance criterion `pass` but carried no evidence_refs \u2014 closing a criterion to pass on a bare claim is not proof (claim \u2260 proof); attach the evidence (test/build/run output, artifact) before passing"
+      reason: `${head} \u2014 closing a criterion to pass on a bare claim is not proof (claim \u2260 proof). Attach the evidence (test/build/run output, artifact) at the top-level \`evidence_refs\`, or on the matching \`ac_verdict\` entry's \`evidence_refs\`, before passing`
     };
   }
   return { contentful: true };
@@ -22229,7 +22249,7 @@ async function nextNode(repoRoot, workItemId2) {
         scope_source: node2.file_scope !== undefined ? "declared" : "derived",
         created_at: now.toISOString()
       });
-      const candidates2 = selectVariantCandidates(catalog2, node2.owner, scopeOf(node2), node2.agent_hint);
+      const candidates2 = selectVariantCandidates(catalog2, node2.owner, scopeOf(node2), node2.agent_hint, { scopeDeclared: node2.file_scope !== undefined });
       const memory2 = await warmStartMemoryContext(repoRoot, node2, workItem2, { now });
       spawns.push({
         node_id: node2.id,
@@ -22280,7 +22300,7 @@ async function nextNode(repoRoot, workItemId2) {
     created_at: now.toISOString()
   });
   const catalog = await loadVariantCatalog(repoRoot);
-  const candidates = selectVariantCandidates(catalog, chosen.owner, scopeOf(chosen), chosen.agent_hint);
+  const candidates = selectVariantCandidates(catalog, chosen.owner, scopeOf(chosen), chosen.agent_hint, { scopeDeclared: chosen.file_scope !== undefined });
   const memory = await warmStartMemoryContext(repoRoot, chosen, workItem2, { now });
   return {
     action: "spawn",
@@ -22295,7 +22315,12 @@ var recordResultPayload = exports_external.object({
   outcome: exports_external.enum(["pass", "fail"]).describe("Caller judgment; pass is overridden if non-contentful"),
   failure_class: exports_external.enum(["fixable", "wrong_approach", "blocked_external", "user_decision_needed"]).optional().describe("Required when outcome=fail; the caller-supplied classification"),
   evidence_refs: exports_external.array(evidenceRef).optional().describe("Evidence pointers gathered on pass"),
-  ac_verdicts: exports_external.array(exports_external.object({ criterion_id: exports_external.string().min(1), verdict, notes: exports_external.string().optional() })).optional().describe("A judging node's per-AC verdicts (verifier/e2e). The node still records a single " + "pass/fail outcome, but a verify node can pass *as a node* while judging one criterion " + "partial/fail; persisting the per-AC verdicts here keeps `autopilot complete` from " + "over-closing that criterion to pass (false-green; claim \u2260 proof)."),
+  ac_verdicts: exports_external.array(exports_external.object({
+    criterion_id: exports_external.string().min(1),
+    verdict,
+    notes: exports_external.string().optional(),
+    evidence_refs: exports_external.array(evidenceRef).optional()
+  })).optional().describe("A judging node's per-AC verdicts (verifier/e2e). The node still records a single " + "pass/fail outcome, but a verify node can pass *as a node* while judging one criterion " + "partial/fail; persisting the per-AC verdicts here keeps `autopilot complete` from " + "over-closing that criterion to pass (false-green; claim \u2260 proof)."),
   changed_files: exports_external.array(relativePath).optional().describe("Repo-relative paths this node changed (#1). On a contentful pass they are unioned " + "into the work item changed_files so `autopilot complete` reads them without a manual " + "pin. The expected reporter is a mutating node (implementer/refactorer)."),
   reason: exports_external.string().optional().describe("2\u20133 line rationale recorded in the decision log"),
   generated_nodes: exports_external.array(nodeProposal).optional().describe("Subgraph this node generated (A-3). Promoted to the graph via addNodes on a " + "contentful pass; a planner/design node uses this to grow the graph past the seed."),
@@ -28432,6 +28457,26 @@ class CoverageFeedbackLedger {
     });
   }
 }
+function suggestCoverageFeedback(map, workItemId2, floor = FAR_FIELD_TAXONOMY_FLOOR) {
+  const floorIds = new Set(floor.map((c3) => c3.id));
+  const suggestions = [];
+  for (const node2 of map.nodes) {
+    if (!node2.id.startsWith(CATEGORY_NODE_PREFIX))
+      continue;
+    if (node2.state !== "resolved")
+      continue;
+    const bare = node2.id.slice(CATEGORY_NODE_PREFIX.length);
+    if (!floorIds.has(bare))
+      continue;
+    suggestions.push({
+      category_id: bare,
+      fault_kind: "depth",
+      lens: node2.label,
+      template: `ditto coverage feedback --wi ${workItemId2} --category ${bare} --evidence "<what slipped past the resolved sweep>"`
+    });
+  }
+  return suggestions;
+}
 function recurrenceCounts(entries) {
   const counts = new Map;
   for (const e2 of entries)
@@ -28635,14 +28680,90 @@ var coverageProposeCommand = defineCommand({
     }
   }
 });
+var coverageSuggestCommand = defineCommand({
+  meta: {
+    name: "suggest",
+    description: "Suggest `coverage feedback` templates for a verify failure that may be a coverage miss (suggest only, ac-3)"
+  },
+  args: {
+    wi: { type: "string", description: "Work item id (wi_*) whose coverage map to read" },
+    node: {
+      type: "string",
+      description: "The failing verify node id, for context only (not auto-hooked)",
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.wi) {
+      writeError("coverage suggest requires --wi <wi_*>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const wi = args.wi;
+    const failedNode = args.node ?? null;
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const store = new CoverageStore(repoRoot);
+      if (!await store.exists(wi)) {
+        const hint = "no coverage.json for this work item \u2014 the plan-stage far-field sweep did not run (no design node / small change). Enable the sweep and re-run plan to get coverage data to attribute against.";
+        if (format === "json") {
+          writeJson2({
+            work_item_id: wi,
+            failed_node: failedNode,
+            coverage_present: false,
+            suggestions: [],
+            hint
+          });
+        } else {
+          writeHuman(`coverage suggest: ${hint}`);
+        }
+        return;
+      }
+      const map = await store.getMap(wi);
+      const suggestions = suggestCoverageFeedback(map, wi);
+      if (format === "json") {
+        writeJson2({
+          work_item_id: wi,
+          failed_node: failedNode,
+          coverage_present: true,
+          suggestions
+        });
+        return;
+      }
+      if (suggestions.length === 0) {
+        writeHuman("coverage suggest: no dry-closed (resolved) floor categories \u2014 nothing to attribute a verify failure to.");
+        return;
+      }
+      writeHuman(`coverage suggest: ${suggestions.length} dry-closed categor${suggestions.length === 1 ? "y" : "ies"} a verify failure could be a miss in.`);
+      writeHuman("  Fill in the evidence and run one to record (it does NOT record for you):");
+      for (const s2 of suggestions) {
+        writeHuman(`  [${s2.fault_kind}] ${s2.category_id} \u2014 ${s2.lens}`);
+        writeHuman(`    ${s2.template}`);
+      }
+    } catch (err) {
+      writeError(`coverage suggest failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var coverageCommand = defineCommand({
   meta: {
     name: "coverage",
-    description: "Coverage outcome loop (ac-11b): record escapes (feedback) and surface taxonomy-augmentation candidates (propose)"
+    description: "Coverage outcome loop (ac-11b): record escapes (feedback), surface taxonomy-augmentation candidates (propose), and suggest feedback templates for a verify miss (suggest)"
   },
   subCommands: {
     feedback: coverageFeedbackCommand,
-    propose: coverageProposeCommand
+    propose: coverageProposeCommand,
+    suggest: coverageSuggestCommand
   }
 });
 
@@ -40800,4 +40921,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=87f60eb0e19c6323e17940e692e08dfd6419d463f2d03bd9f30f3ba1cef6bf6d
+//# ditto-src-stamp=dea64d5486499acc89a69948bc0179345aad6ca2e00075384861613a5e190ebe

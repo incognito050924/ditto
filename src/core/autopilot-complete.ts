@@ -27,6 +27,29 @@ const SEVERITY: Record<Verdict, number> = { fail: 0, partial: 1, unverified: 2, 
 const worst = (a: Verdict, b: Verdict): Verdict => (SEVERITY[a] <= SEVERITY[b] ? a : b);
 
 /**
+ * Evidence a node attached to ONE criterion via the matching `ac_verdict` entry's
+ * own `evidence_refs`. A judging node can write proof where it judged (per-AC)
+ * instead of mirroring it at the top level (wi_260622kb4). The AC-closing guard
+ * (autopilot-dispatch.guardAcClosingEvidence) already accepts this path, so the
+ * completion bridge must too — otherwise a node carrying only per-AC evidence
+ * reads as "0 evidence → unverified".
+ */
+function perAcEvidence(node: AutopilotNode, acId: string) {
+  return node.ac_verdicts
+    .filter((v) => v.criterion_id === acId)
+    .flatMap((v) => v.evidence_refs ?? []);
+}
+
+/**
+ * Does `node` carry evidence that closes `acId` — top-level OR per-AC? Both paths
+ * count (the guard accepts either); only when BOTH are empty is a passed node's
+ * claim unbacked (claim ≠ proof).
+ */
+function hasClosingEvidence(node: AutopilotNode, acId: string): boolean {
+  return node.evidence_refs.length > 0 || perAcEvidence(node, acId).length > 0;
+}
+
+/**
  * The verdict a single addressing node contributes for ONE criterion: its
  * evidence-gated structural verdict (status + evidence) lowered by any per-AC
  * verdict that node emitted for this criterion. This is the old flat fold,
@@ -39,7 +62,7 @@ function nodeVerdictFor(node: AutopilotNode, acId: string): { verdict: Verdict; 
   if (node.status === 'failed') {
     verdict = 'fail';
     notes = 'an addressing node failed';
-  } else if (node.status === 'passed' && node.evidence_refs.length > 0) {
+  } else if (node.status === 'passed' && hasClosingEvidence(node, acId)) {
     verdict = 'pass';
   } else if (node.status === 'passed') {
     verdict = 'unverified';
@@ -115,7 +138,7 @@ function dependsOnNode(
 function isStructuralUnverified(node: AutopilotNode, acId: string): boolean {
   return (
     node.status === 'passed' &&
-    node.evidence_refs.length === 0 &&
+    !hasClosingEvidence(node, acId) &&
     node.ac_verdicts.every((v) => v.criterion_id !== acId || v.verdict === 'pass')
   );
 }
@@ -124,7 +147,9 @@ export function deriveAcVerdicts(graph: Autopilot, acIds: string[]): DerivedVerd
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   return acIds.map((acId) => {
     const addressing = graph.nodes.filter((n) => n.acceptance_refs.includes(acId));
-    const evidence = addressing.flatMap((n) => n.evidence_refs);
+    // Evidence closing this AC = top-level evidence on every addressing node PLUS
+    // any per-AC evidence those nodes attached to *this* criterion (wi_260622kb4).
+    const evidence = addressing.flatMap((n) => [...n.evidence_refs, ...perAcEvidence(n, acId)]);
 
     if (addressing.length === 0) {
       return {

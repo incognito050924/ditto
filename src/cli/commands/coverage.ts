@@ -1,6 +1,6 @@
 import { defineCommand } from 'citty';
 import { CoverageFeedbackLedger, recurrenceCounts } from '~/core/coverage-feedback';
-import { attributeCoverageEscape } from '~/core/coverage-feedback';
+import { attributeCoverageEscape, suggestCoverageFeedback } from '~/core/coverage-feedback';
 import { CoverageStore } from '~/core/coverage-store';
 import { CATEGORY_NODE_PREFIX, FAR_FIELD_TAXONOMY_FLOOR } from '~/core/coverage-taxonomy';
 import { resolveRepoRootForCreate } from '~/core/fs';
@@ -237,14 +237,113 @@ const coverageProposeCommand = defineCommand({
   },
 });
 
+/**
+ * `ditto coverage suggest` — when a verify node fails and the failure may be a
+ * coverage MISS (a dry-closed category judged safe yet broke), surface a
+ * copy-paste `ditto coverage feedback` template the user can run to record the
+ * escape (ac-3, wi_260622kb4). SUGGEST ONLY: it reads the work item's
+ * coverage.json (the SAME map the far-field verdict reads) and, for each dry-closed
+ * (resolved) floor category, emits a feedback command line with a placeholder
+ * evidence the user fills in. It records NOTHING, classifies NOTHING automatically,
+ * and never mutates the ledger — the user decides whether to run a template. The
+ * "verify fail" signal is NOT auto-hooked; the user invokes this manually (and may
+ * pass the failing `--node` for context only).
+ *
+ * When coverage.json is ABSENT (the common small-change case — no plan-stage
+ * far-field sweep ran), there is no coverage data to attribute against, so the
+ * command prints a hint to enable the sweep and re-run, with no suggestions.
+ */
+const coverageSuggestCommand = defineCommand({
+  meta: {
+    name: 'suggest',
+    description:
+      'Suggest `coverage feedback` templates for a verify failure that may be a coverage miss (suggest only, ac-3)',
+  },
+  args: {
+    wi: { type: 'string', description: 'Work item id (wi_*) whose coverage map to read' },
+    node: {
+      type: 'string',
+      description: 'The failing verify node id, for context only (not auto-hooked)',
+      required: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.wi) {
+      writeError('coverage suggest requires --wi <wi_*>');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const wi = args.wi;
+    const failedNode = args.node ?? null;
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const store = new CoverageStore(repoRoot);
+      if (!(await store.exists(wi))) {
+        const hint =
+          'no coverage.json for this work item — the plan-stage far-field sweep did not run (no design node / small change). Enable the sweep and re-run plan to get coverage data to attribute against.';
+        if (format === 'json') {
+          writeJson({
+            work_item_id: wi,
+            failed_node: failedNode,
+            coverage_present: false,
+            suggestions: [],
+            hint,
+          });
+        } else {
+          writeHuman(`coverage suggest: ${hint}`);
+        }
+        return;
+      }
+      const map = await store.getMap(wi);
+      const suggestions = suggestCoverageFeedback(map, wi);
+      if (format === 'json') {
+        writeJson({
+          work_item_id: wi,
+          failed_node: failedNode,
+          coverage_present: true,
+          suggestions,
+        });
+        return;
+      }
+      if (suggestions.length === 0) {
+        writeHuman(
+          'coverage suggest: no dry-closed (resolved) floor categories — nothing to attribute a verify failure to.',
+        );
+        return;
+      }
+      writeHuman(
+        `coverage suggest: ${suggestions.length} dry-closed categor${suggestions.length === 1 ? 'y' : 'ies'} a verify failure could be a miss in.`,
+      );
+      writeHuman('  Fill in the evidence and run one to record (it does NOT record for you):');
+      for (const s of suggestions) {
+        writeHuman(`  [${s.fault_kind}] ${s.category_id} — ${s.lens}`);
+        writeHuman(`    ${s.template}`);
+      }
+    } catch (err) {
+      writeError(`coverage suggest failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const coverageCommand = defineCommand({
   meta: {
     name: 'coverage',
     description:
-      'Coverage outcome loop (ac-11b): record escapes (feedback) and surface taxonomy-augmentation candidates (propose)',
+      'Coverage outcome loop (ac-11b): record escapes (feedback), surface taxonomy-augmentation candidates (propose), and suggest feedback templates for a verify miss (suggest)',
   },
   subCommands: {
     feedback: coverageFeedbackCommand,
     propose: coverageProposeCommand,
+    suggest: coverageSuggestCommand,
   },
 });
