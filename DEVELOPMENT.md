@@ -11,6 +11,8 @@ ditto는 두 얼굴을 가진다. dogfood도 두 갈래다.
 
 ## 1. 플러그인 dogfood — `claude --plugin-dir .`
 
+> 권장 진입은 `bun run dogfood [--host claude|codex]`(ADR-0022) — 워킹트리를 host별로 로드하고 SessionStart 모드 배너(`mode-doctor`)로 dev vs stale-설치본을 알린다. 아래 `--plugin-dir` 설명은 그 내부 동작이다. SoT는 `scripts/dogfood.mjs`.
+
 ditto repo 루트에서 Claude Code를 **이 플래그로 직접** 연다:
 
 ```bash
@@ -81,6 +83,35 @@ dogfood에 부적합한 이유:
 개발 중에는 `--plugin-dir`(즉시 반영·격리)이 맞고, install 스크립트는 "다 만든 ditto를 평소에 쓰고 싶을 때" 쓴다.
 
 ---
+
+## 배포 / 설치 — npx 한 줄 (다른 프로젝트·일반 사용)
+
+남이(또는 본인이 ditto repo 밖에서 평소 쓰려고) 설치할 때는 **npm publish 없이 GitHub 소스**로 한 줄이다 — Claude Code 플러그인과 전역 `ditto` CLI를 둘 다 멱등 설치/갱신/삭제한다:
+
+```bash
+npx github:incognito050924/ditto install     # 플러그인 + 전역 CLI
+npx github:incognito050924/ditto update      # 최신으로 갱신
+npx github:incognito050924/ditto uninstall   # 둘 다 제거
+```
+
+- 플러그인: `claude plugin marketplace add incognito050924/ditto` + `install ditto@ditto-local`(Claude Code가 github에서 클론·관리).
+- 전역 CLI: 커밋된 `bin/ditto` 번들(= 배포 산출물)을 `~/.local/share/ditto/bin`에 복사 후 `~/.local/bin/ditto`로 심링크(ephemeral npx 클론에 안 매임).
+- 전제: `claude`(Claude Code CLI) + `bun`(≥1.3, CLI 런타임)이 PATH에. 구현 SoT: `scripts/npx-bootstrap.mjs`(package.json `bin`).
+- `install-plugin.mjs`는 별개 — *프로젝트별* setup(.ditto scaffold·host 블록·allowlist) 경로다.
+
+## 배포 기준 — 언제 rebuild / push / reinstall / update 하나 (단일출처: ADR-0022)
+
+| 상황 | 한다 | SoT |
+|---|---|---|
+| `src/`·skills·agents·hooks 고치고 dogfood 검증 | 아무것도 안 함 — `bun run dogfood`(플러그인) / `bun run dev`(CLI)가 소스 직접 로드 | `dogfood.mjs` |
+| 배포 번들·버전 올리기 | `node scripts/release.mjs <major\|minor\|patch>` — 4 touchpoint 버전 + `bin/ditto` 재빌드 + commit + tag (**push 안 함**) | `release.mjs` |
+| 게시(배포) | `git push && git push origin v<X.Y.Z>` — 깨끗한 트리 + 전체 green일 때만 (ADR-0022 게이트 ⑤) | git |
+| 배포 후 스모크 | throwaway `CLAUDE_CONFIG_DIR`/`HOME`에 `npx github:… install` → enabled + `ditto --version` 확인 | `npx-bootstrap.mjs` |
+| 소비자 갱신 | `npx github:… update` (= `marketplace update ditto-local` + `/plugin update`) | `npx-bootstrap.mjs` |
+| 지금 내 모드·신선도·배포 액션 확인 | `ditto mode` (`--output json`) | `mode-doctor` |
+| 세션이 stale 설치본을 잡음 | `bun run dogfood`로 재시작(워킹트리 로드) | SessionStart `mode-doctor` 배너 |
+
+판정의 권위는 코드다: 신선도는 `ditto doctor distribution`(src-stamp + 표면-stamp)과 SessionStart `mode-doctor`가, 배포 lifecycle 결정은 ADR-0022가 박는다. 이 표는 사실을 복제하지 않고 그 SoT를 가리킨다(charter §4-11, drift 방지).
 
 ## 검사 자동화 (이미 걸려 있음)
 
