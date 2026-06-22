@@ -577,6 +577,11 @@ export async function finalizeTechSpec(
 
   const refreshedItem = await items.get(input.workItemId);
   const risk: RiskAxes = input.payload.risk;
+  // Far-field pre-mortem coverage (wi_260622vjo ac-5) is delegated to the autopilot
+  // plan-stage, not run here: this bootstraps the SAME graph as deep-interview (an
+  // N1 'design' node), and that design node's plan-stage sweep seeds the far-field
+  // categories (DITTO_FARFIELD_CATEGORIES default on). tech-spec runs no own
+  // intent-stage sweep by design (ADR-0023, option B — transitive coverage).
   const boot = await bootstrapAutopilot(repoRoot, {
     workItem: refreshedItem,
     intent: writtenIntent,

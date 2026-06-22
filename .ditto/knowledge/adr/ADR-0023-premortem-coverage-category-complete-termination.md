@@ -39,7 +39,11 @@ pre-mortem coverage 종료를 novelty-dry 단독에서 **카테고리-완전 종
 
 - **적대 증거 게이트(anti-SLOP)**: 위험마다 refute-by-default 독립 검증(dialectic Opponent 재사용)을 통과해야 "유효"로 카운트. 종료 재정의가 아니라 *카운트 자격*에 얹는 가산 레이어라 이 ADR과 호환(별도 ADR/amendment 불요).
 - **memory seam entanglement**: 라이브 그래프 결박을 ADR-0021 seam 경유로 카테고리 시딩에 주입. gap=가서봐(미확인을 "결합 없음=안전"으로 종료 근거 삼지 않음), fail-open=taxonomy floor.
-- **deep-interview/tech-spec 카테고리-노드 시딩**: 현재 렌즈 주입(결정 3)은 deep-interview에 닿으나 카테고리-노드 하드 종료(결정 1)는 autopilot plan-stage 전용. tech-spec은 아직 엔진 미연결.
+- **deep-interview 카테고리-노드 시딩**: 렌즈 주입(결정 3)은 deep-interview intent-stage에 이미 닿으나(`interview-driver.ts`가 `nextCoverageNode` 호출), 카테고리-노드 하드 종료(결정 1)는 autopilot plan-stage 전용 — intent-stage에 시딩하면 카테고리 전수 close 요구로 비종료 위험이 있어 별도 처리 선행 필요.
+
+#### tech-spec 표면 — autopilot plan-stage 위임 (option B, 2026-06-22 결정 · ac-5)
+
+tech-spec은 **자체 far-field sweep을 돌리지 않는다.** tech-spec finalize(`tech-spec.ts`)는 deep-interview와 **동일한** `bootstrapAutopilot` 경로를 거쳐 같은 초기 그래프(`buildInitialNodes`의 N1 `design` 노드)를 만들고, 그 design 노드의 plan-stage sweep이 far-field 카테고리를 시딩한다(`farFieldCategoriesEnabled()` 기본 ON). 즉 tech-spec에서 출발한 work item의 먼-들판 coverage는 autopilot plan-stage에서 **transitive하게** 실현된다 — tech-spec 단계에 별도 엔진을 연결하지 않는 것이 의도다. (대안 A=tech-spec finalize 전 자체 sweep은 비용·중복 때문에 기각; "세 표면 공유 엔진"은 공유 bootstrap→plan-stage 경로로 충족.) 검증: 체인이 코드로 성립 — tech-spec.ts→bootstrapAutopilot→N1 design(autopilot-graph.ts)→SKILL §2b plan-stage coverage-next(라이브 e2e에서 19 카테고리 시딩 확인).
 
 ## 기각된 대안
 
