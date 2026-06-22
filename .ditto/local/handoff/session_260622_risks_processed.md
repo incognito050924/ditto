@@ -40,7 +40,7 @@
 - 위험2 cap-crowding (47388f2) · 위험1 variant 검증(코드 0) · surface 회귀(5b41ee0) — 이전 핸드오프 항목
 - **C-6** variant↔host spawn 불변식 가드 findOrphanVariants (a5af7a6)
 - **C-7** terminal work item 16개 archive (.ditto/local/archive/2026-06, 로컬)
-- **C-8** 스테일 브랜치 — omx-reset-plan·cli-wizard-provisioner 로컬+원격 삭제, reframe-gap 보존(미병합)
+- **C-8** 스테일 브랜치 전부 정리 — omx-reset-plan·cli-wizard-provisioner(로컬+원격)·docs/memory-librarian-spec(merged)·experiment/reframe-gap 삭제. reframe-gap은 미병합이었으나 코드 0·미입증 실험 문서뿐이라 삭제(was 7b92f3f, 필요시 로컬 reflog 복구). archive/acg-full-bar-auto-commit만 의도적 보존
 - **C-9** root .gitignore에 중복 .ditto/.gitignore 무시 (2ce079e)
 - 검증: 2619 pass / 0 fail, biome·adr-guard 통과
 
@@ -50,8 +50,7 @@
 - B-5 교차청크/섬그래프 한계 → **신규 GraphRAG가 푸는 문제**(보류 합의 그대로).
 
 ### 살아있음(내부 memory와 무관)
-- experiment/reframe-gap 미병합 브랜치 — 살릴지 버릴지 사용자 판단 대기(삭제=비가역이라 보존 중)
-- docs/memory-librarian-spec 로컬 브랜치 — main 병합됨, 정리 가능(이번 C-8 범위 밖이라 안 건드림)
+- (없음 — C-8 스테일 브랜치 정리 완료)
 
 ## 다른 PC 세션 시작 시 — 복붙용 프롬프트
 
