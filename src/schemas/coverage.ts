@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { schemaVersion, workItemId } from './common';
+import { isoDateTime, schemaVersion, workItemId } from './common';
 
 // Pre-mortem coverage engine — dynamic-growth scope tree (premortem-coverage-contract §3.1·§3.2).
 // The tree grows append-only as interrogation proceeds; origin records how each node entered
@@ -140,3 +140,42 @@ export const coverageTaxonomyConfig = z
   );
 
 export type CoverageTaxonomyConfig = z.infer<typeof coverageTaxonomyConfig>;
+
+// ac-11b outcome loop — a coverage escape (a fault that slipped past the floor) is
+// fed back so the taxonomy can learn. `coverageFeedback` is the input the
+// `ditto coverage feedback` command accepts; `coverageFeedbackEntry` is one
+// append-only jsonl row the command records.
+
+export const coverageFeedback = z
+  .object({
+    work_item_id: workItemId,
+    category_id: z
+      .string()
+      .min(1)
+      .describe('Coverage category the escape belongs to (cov-cat-* or a floor category id)'),
+    evidence: z
+      .string()
+      .min(1)
+      .describe('Triggering-failure evidence text — what slipped past coverage (ac-11b)'),
+  })
+  .describe('Input to `ditto coverage feedback` — a coverage-escape report (ac-11b)');
+
+export const coverageFaultKind = z
+  .enum(['depth', 'breadth'])
+  .describe(
+    'depth = an existing category that was resolved still broke (under-probed); breadth = a category the floor never seeded (missing lens) (ac-11b)',
+  );
+
+export const coverageFeedbackEntry = z
+  .object({
+    work_item_id: workItemId,
+    category_id: z.string().min(1).describe('Coverage category the escape is attributed to'),
+    fault_kind: coverageFaultKind,
+    evidence: z.string().min(1).describe('Triggering-failure evidence text'),
+    recorded_at: isoDateTime.describe('When the feedback row was appended (set by the core node)'),
+  })
+  .describe('One append-only row in the coverage-feedback jsonl ledger (ac-11b)');
+
+export type CoverageFeedback = z.infer<typeof coverageFeedback>;
+export type CoverageFaultKind = z.infer<typeof coverageFaultKind>;
+export type CoverageFeedbackEntry = z.infer<typeof coverageFeedbackEntry>;

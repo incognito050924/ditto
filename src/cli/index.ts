@@ -11,6 +11,7 @@ import { classifyCommand } from './commands/classify';
 import { cleanupCommand } from './commands/cleanup';
 import { codeqlCommand } from './commands/codeql';
 import { contextCommand } from './commands/context';
+import { coverageCommand } from './commands/coverage';
 import { decisionConflictCommand } from './commands/decision-conflict';
 import { deepInterviewCommand } from './commands/deep-interview';
 import { doctorCommand } from './commands/doctor';
@@ -51,6 +52,7 @@ const main = defineCommand({
     bridge: bridgeCommand,
     context: contextCommand,
     autopilot: autopilotCommand,
+    coverage: coverageCommand,
     hook: hookCommand,
     'decision-conflict': decisionConflictCommand,
     'deep-interview': deepInterviewCommand,

@@ -19797,6 +19797,19 @@ var coverageTaxonomyConfig = exports_external.object({
     lens: exports_external.string().min(1).describe("Probing-question lens the sweep answers (ac-1)")
   })).optional().describe("Project-added categories (id + probing-question lens); id collision overrides a floor lens")
 }).describe("Tier-\u2461 project far-field taxonomy config (.ditto/coverage-taxonomy.json, git-tracked) \u2014 ac-10");
+var coverageFeedback = exports_external.object({
+  work_item_id: workItemId,
+  category_id: exports_external.string().min(1).describe("Coverage category the escape belongs to (cov-cat-* or a floor category id)"),
+  evidence: exports_external.string().min(1).describe("Triggering-failure evidence text \u2014 what slipped past coverage (ac-11b)")
+}).describe("Input to `ditto coverage feedback` \u2014 a coverage-escape report (ac-11b)");
+var coverageFaultKind = exports_external.enum(["depth", "breadth"]).describe("depth = an existing category that was resolved still broke (under-probed); breadth = a category the floor never seeded (missing lens) (ac-11b)");
+var coverageFeedbackEntry = exports_external.object({
+  work_item_id: workItemId,
+  category_id: exports_external.string().min(1).describe("Coverage category the escape is attributed to"),
+  fault_kind: coverageFaultKind,
+  evidence: exports_external.string().min(1).describe("Triggering-failure evidence text"),
+  recorded_at: isoDateTime.describe("When the feedback row was appended (set by the core node)")
+}).describe("One append-only row in the coverage-feedback jsonl ledger (ac-11b)");
 
 // src/core/coverage-store.ts
 init_ditto_paths();
@@ -28375,6 +28388,261 @@ var contextCommand = defineCommand({
   },
   subCommands: {
     build: contextBuild
+  }
+});
+
+// src/core/coverage-feedback.ts
+init_ditto_paths();
+init_fs();
+
+class CoverageFeedbackLedger {
+  repoRoot;
+  constructor(repoRoot) {
+    this.repoRoot = repoRoot;
+  }
+  path() {
+    return localDir(this.repoRoot, "coverage-feedback.jsonl");
+  }
+  async append(row, recordedAt) {
+    const entry = coverageFeedbackEntry.parse({ ...row, recorded_at: recordedAt });
+    const path = this.path();
+    const file = Bun.file(path);
+    const existing = await file.exists() ? await file.text() : "";
+    const trimmed = existing.length === 0 || existing.endsWith(`
+`) ? existing : `${existing}
+`;
+    await atomicWriteText(path, `${trimmed}${JSON.stringify(entry)}
+`);
+    return entry;
+  }
+  async readAll() {
+    const path = this.path();
+    const file = Bun.file(path);
+    if (!await file.exists())
+      return [];
+    const text = await file.text();
+    const lines = text.split(`
+`).filter((l2) => l2.length > 0);
+    return lines.map((line, idx) => {
+      try {
+        return coverageFeedbackEntry.parse(JSON.parse(line));
+      } catch (err) {
+        throw new Error(`coverage-feedback.jsonl ${path}:${idx + 1} invalid: ${String(err)}`);
+      }
+    });
+  }
+}
+function recurrenceCounts(entries) {
+  const counts = new Map;
+  for (const e2 of entries)
+    counts.set(e2.category_id, (counts.get(e2.category_id) ?? 0) + 1);
+  return counts;
+}
+function bareFloorId(categoryId) {
+  return categoryId.startsWith(CATEGORY_NODE_PREFIX) ? categoryId.slice(CATEGORY_NODE_PREFIX.length) : categoryId;
+}
+function findCoverageNode(map, categoryId) {
+  const prefixed = categoryId.startsWith(CATEGORY_NODE_PREFIX) ? categoryId : `${CATEGORY_NODE_PREFIX}${categoryId}`;
+  return map.nodes.find((n2) => n2.id === categoryId || n2.id === prefixed);
+}
+async function attributeCoverageEscape(store, input, floor = FAR_FIELD_TAXONOMY_FLOOR) {
+  const map = await store.exists(input.work_item_id) ? await store.getMap(input.work_item_id) : null;
+  const bare = bareFloorId(input.category_id);
+  const isFloorCategory = floor.some((c3) => c3.id === bare);
+  const node2 = map ? findCoverageNode(map, input.category_id) : undefined;
+  if (isFloorCategory) {
+    if (node2?.state === "resolved") {
+      return { accepted: true, fault_kind: "depth" };
+    }
+    return {
+      accepted: false,
+      reason: node2 ? `floor category '${bare}' is '${node2.state}', not a dry-closed (resolved) escape` : `floor category '${bare}' is not seeded in this work item's coverage map`
+    };
+  }
+  if (!node2) {
+    return { accepted: true, fault_kind: "breadth" };
+  }
+  return {
+    accepted: false,
+    reason: `category '${input.category_id}' is a non-floor coverage node (state '${node2.state}') \u2014 a general bug, not a floor escape`
+  };
+}
+
+// src/cli/commands/coverage.ts
+init_fs();
+var coverageFeedbackCommand = defineCommand({
+  meta: {
+    name: "feedback",
+    description: "Attribute a coverage escape (depth/breadth) and record it to the ledger (ac-11b)"
+  },
+  args: {
+    wi: { type: "string", description: "Work item id (wi_*) the escape was found in" },
+    category: {
+      type: "string",
+      description: "Coverage category the escape belongs to (floor id or cov-cat-*)"
+    },
+    evidence: {
+      type: "string",
+      description: "Triggering-failure evidence \u2014 what slipped past coverage"
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = coverageFeedback.safeParse({
+      work_item_id: args.wi,
+      category_id: args.category,
+      evidence: args.evidence
+    });
+    if (!parsed.success) {
+      writeError("coverage feedback input failed schema validation:");
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const input = parsed.data;
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const store = new CoverageStore(repoRoot);
+      const attribution = await attributeCoverageEscape(store, input);
+      if (!attribution.accepted) {
+        if (format === "json") {
+          writeJson2({
+            work_item_id: input.work_item_id,
+            category_id: input.category_id,
+            accepted: false,
+            reason: attribution.reason
+          });
+        } else {
+          writeHuman(`coverage feedback REJECTED (not a floor escape): ${attribution.reason}`);
+          writeHuman("  \u2192 nothing recorded.");
+        }
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const faultKind = attribution.fault_kind;
+      if (faultKind === undefined) {
+        writeError("attribution accepted without a fault_kind \u2014 refusing to record");
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const ledger = new CoverageFeedbackLedger(repoRoot);
+      const entry = await ledger.append({
+        work_item_id: input.work_item_id,
+        category_id: input.category_id,
+        fault_kind: faultKind,
+        evidence: input.evidence
+      }, new Date().toISOString());
+      if (format === "json") {
+        writeJson2({
+          work_item_id: entry.work_item_id,
+          category_id: entry.category_id,
+          accepted: true,
+          fault_kind: entry.fault_kind,
+          recorded_at: entry.recorded_at
+        });
+      } else {
+        writeHuman(`coverage feedback recorded: ${entry.category_id} [${entry.fault_kind}] for ${entry.work_item_id}`);
+        writeHuman(`  evidence: ${entry.evidence}`);
+      }
+    } catch (err) {
+      writeError(`coverage feedback failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+function bareFloorId2(categoryId) {
+  return categoryId.startsWith(CATEGORY_NODE_PREFIX) ? categoryId.slice(CATEGORY_NODE_PREFIX.length) : categoryId;
+}
+var coverageProposeCommand = defineCommand({
+  meta: {
+    name: "propose",
+    description: "Surface taxonomy-augmentation candidates from the feedback ledger (lens + evidence + fault + recurrence, ac-3)"
+  },
+  args: {
+    wi: {
+      type: "string",
+      description: "Filter the ledger to one work item id (omit for the whole ledger)",
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const all = await new CoverageFeedbackLedger(repoRoot).readAll();
+      const entries = args.wi ? all.filter((e2) => e2.work_item_id === args.wi) : all;
+      const counts = recurrenceCounts(entries);
+      const floorLens = new Map(FAR_FIELD_TAXONOMY_FLOOR.map((c3) => [c3.id, c3.lens]));
+      const order = [];
+      const byCat = new Map;
+      for (const e2 of entries) {
+        if (!byCat.has(e2.category_id)) {
+          byCat.set(e2.category_id, []);
+          order.push(e2.category_id);
+        }
+        byCat.get(e2.category_id)?.push(e2);
+      }
+      const candidates = order.map((categoryId) => {
+        const rows = byCat.get(categoryId) ?? [];
+        const evidence = rows.map((r3) => r3.evidence);
+        const faultKind = rows[rows.length - 1]?.fault_kind ?? "breadth";
+        const seededLens = floorLens.get(bareFloorId2(categoryId));
+        const lens = seededLens ?? evidence[0] ?? "";
+        return {
+          category_id: categoryId,
+          lens,
+          fault_kind: faultKind,
+          evidence,
+          recurrence: counts.get(categoryId) ?? rows.length
+        };
+      });
+      if (format === "json") {
+        writeJson2({ candidates });
+        return;
+      }
+      if (candidates.length === 0) {
+        writeHuman("coverage propose: ledger empty \u2014 no augmentation candidates.");
+        return;
+      }
+      writeHuman(`coverage propose: ${candidates.length} augmentation candidate(s)`);
+      for (const c3 of candidates) {
+        writeHuman(`  [${c3.fault_kind}] ${c3.category_id} (recurrence ${c3.recurrence})`);
+        writeHuman(`    lens: ${c3.lens}`);
+        for (const ev of c3.evidence)
+          writeHuman(`    - ${ev}`);
+      }
+    } catch (err) {
+      writeError(`coverage propose failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var coverageCommand = defineCommand({
+  meta: {
+    name: "coverage",
+    description: "Coverage outcome loop (ac-11b): record escapes (feedback) and surface taxonomy-augmentation candidates (propose)"
+  },
+  subCommands: {
+    feedback: coverageFeedbackCommand,
+    propose: coverageProposeCommand
   }
 });
 
@@ -40505,6 +40773,7 @@ var main = defineCommand({
     bridge: bridgeCommand,
     context: contextCommand,
     autopilot: autopilotCommand,
+    coverage: coverageCommand,
     hook: hookCommand,
     "decision-conflict": decisionConflictCommand,
     "deep-interview": deepInterviewCommand,
@@ -40531,4 +40800,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=7da3253031c7db0462a83af44a82161c5e8d97c0feab45c08764f61f6bc3151a
+//# ditto-src-stamp=87f60eb0e19c6323e17940e692e08dfd6419d463f2d03bd9f30f3ba1cef6bf6d
