@@ -21,6 +21,7 @@ import { impactCommand } from './commands/impact';
 import { initCommand } from './commands/init';
 import { knowledgeCommand } from './commands/knowledge';
 import { memoryCommand } from './commands/memory';
+import { modeCommand } from './commands/mode';
 import { refactorCommand } from './commands/refactor';
 import { reviewCommand } from './commands/review';
 import { runCommand } from './commands/run';
@@ -43,6 +44,7 @@ const main = defineCommand({
     uninstall: teardownCommand,
     teardown: teardownCommand, // alias of uninstall (기존 참조·setup/teardown 대칭 호환)
     work: workCommand,
+    mode: modeCommand,
     run: runCommand,
     verify: verifyCommand,
     doctor: doctorCommand,

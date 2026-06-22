@@ -33328,6 +33328,21 @@ function formatModeBanner(report, opts) {
   }
   return { warn: false, text: "" };
 }
+function formatModeHuman(report, inDittoRepo) {
+  if (!inDittoRepo) {
+    return [
+      `ditto mode: session=${report.sessionMode} (not the ditto source repo \u2014 no staleness check)`
+    ];
+  }
+  const inst = report.installed.present ? `present v${report.installed.version ?? "?"}, ${report.installed.fresh ? "fresh" : "STALE"}` : "absent";
+  return [
+    "ditto mode",
+    `  session:   ${report.sessionMode}`,
+    `  installed: ${inst}`,
+    `  drift:     src=${report.drift.src ? "yes" : "no"} surface=${report.drift.surface ? "yes" : "no"}`,
+    `  action:    ${report.action} \u2014 ${report.reason}`
+  ];
+}
 var SURFACE_DIRS = ["agents", "skills", "hooks"];
 function listSurfaceFiles(root, rel, out) {
   const dir = join65(root, rel);
@@ -36757,6 +36772,35 @@ var memoryCommand = defineCommand({
     capture: memoryCapture,
     measure: memoryMeasure,
     approve: memoryApprove
+  }
+});
+
+// src/cli/commands/mode.ts
+init_fs();
+var MODE_RUNTIME_ERROR_EXIT = 70;
+var modeCommand = defineCommand({
+  meta: {
+    name: "mode",
+    description: "Report which ditto this session runs (dev working-tree vs installed), whether the installed plugin is stale, and the deploy action to take"
+  },
+  args: {
+    output: { type: "string", default: "human", description: "Output format: human|json" }
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const { report, inDittoRepo } = collectModeReport(repoRoot);
+      if (format === "json") {
+        writeJson2({ ...report, inDittoRepo });
+      } else {
+        for (const line of formatModeHuman(report, inDittoRepo))
+          writeHuman(line);
+      }
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(err instanceof InvalidOutputFormatError ? USAGE_ERROR_EXIT : MODE_RUNTIME_ERROR_EXIT);
+    }
   }
 });
 
@@ -40192,6 +40236,7 @@ var main = defineCommand({
     uninstall: teardownCommand,
     teardown: teardownCommand,
     work: workCommand,
+    mode: modeCommand,
     run: runCommand2,
     verify: verifyCommand,
     doctor: doctorCommand,
@@ -40224,4 +40269,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=0e156cdf64fd18c604ea59593755ef198461c51cec093d03556dced211e4b30b
+//# ditto-src-stamp=095bb0984bfdcf62a95de0c946ac396d47a215547a718758f065181709f54ca1

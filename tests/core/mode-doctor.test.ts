@@ -3,6 +3,7 @@ import {
   type ModeInputs,
   type ModeReport,
   formatModeBanner,
+  formatModeHuman,
   resolveMode,
 } from '~/core/mode-doctor';
 
@@ -154,5 +155,59 @@ describe('formatModeBanner — the SessionStart entry guard', () => {
   test('dev classification but not the ditto repo → silent (no false dogfood banner)', () => {
     const b = formatModeBanner(reportWith({ sessionMode: 'dev' }), { inDittoRepo: false });
     expect(b.text).toBe('');
+  });
+});
+
+describe('formatModeHuman — the `ditto mode` readout', () => {
+  test('in-repo dev + fresh installed → session, installed version, action none', () => {
+    const lines = formatModeHuman(
+      reportWith({
+        sessionMode: 'dev',
+        installed: { present: true, version: '0.1.0', fresh: true },
+        action: 'none',
+        reason: 'installed plugin matches the working tree',
+      }),
+      true,
+    );
+    const text = lines.join('\n');
+    expect(text).toContain('dev');
+    expect(text).toContain('0.1.0');
+    expect(text).toContain('none');
+    expect(text).toContain('installed plugin matches the working tree');
+  });
+
+  test('in-repo stale installed → surfaces drift + the deploy action', () => {
+    const lines = formatModeHuman(
+      reportWith({
+        sessionMode: 'installed',
+        installed: { present: true, version: '0.1.0', fresh: false },
+        drift: { src: false, surface: true },
+        action: 'reinstall',
+      }),
+      true,
+    );
+    const text = lines.join('\n');
+    expect(text).toContain('installed');
+    expect(text).toContain('reinstall');
+    expect(text).toContain('surface');
+  });
+
+  test('installed absent → action install', () => {
+    const lines = formatModeHuman(
+      reportWith({
+        sessionMode: 'unknown',
+        installed: { present: false, version: null, fresh: false },
+        action: 'install',
+      }),
+      true,
+    );
+    expect(lines.join('\n')).toContain('install');
+  });
+
+  test('outside the ditto repo → one concise line, no staleness verdict', () => {
+    const lines = formatModeHuman(reportWith({ sessionMode: 'unknown' }), false);
+    const text = lines.join('\n');
+    expect(lines.length).toBe(1);
+    expect(text).not.toContain('reinstall');
   });
 });
