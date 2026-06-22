@@ -5,7 +5,7 @@
   "type": "module",
   "module": "src/cli/index.ts",
   "bin": {
-    "ditto": "./dist/ditto"
+    "ditto": "./scripts/npx-bootstrap.mjs"
   },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
