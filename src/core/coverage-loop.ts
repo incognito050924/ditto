@@ -113,6 +113,12 @@ export async function nextCoverageNode(args: {
   workItemId: string;
   tierInputs?: TierSelectionInput;
   /**
+   * Explicit intensity override entered by the user (ac-4). When set it forces
+   * the tier — and thus the termination depth K — winning over both `tierInputs`
+   * (stakes-derived) and the standard default. Absent → unchanged (ac-7).
+   */
+  intensity?: CoverageTier;
+  /**
    * Seed each floor category as a coverage node so termination requires every
    * category swept (§8-2, ac-2). Default false preserves the root-only tree (ac-7).
    * Only consulted on the first call (when the map is seeded).
@@ -140,7 +146,8 @@ export async function nextCoverageNode(args: {
   const dryCounter = await readDryCounter(repoRoot, workItemId);
   // §8-4: termination depth K scales with the stakes-derived tier (light=1,
   // standard=2, full=3); no tierInputs → standard = the existing default (ac-7).
-  const tier = args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard';
+  const tier =
+    args.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard');
   if (isCoverageTerminated(map, dryCounter, coverageDryK(tier))) {
     return { action: 'dry', terminated: true };
   }
@@ -298,6 +305,13 @@ export async function recordCoverageRound(args: {
   /** Brief content the design node produced — folded into the result on termination. */
   brief?: { interface_changes: string[]; dod: string[]; test_scenarios: string[] };
   tierInputs?: TierSelectionInput;
+  /**
+   * Explicit intensity override entered by the user (ac-4) — forces the tier (and
+   * termination depth K), winning over `tierInputs` and the standard default.
+   * Must match the value passed to `nextCoverageNode` so both termination checks
+   * use the same K. Absent → unchanged (ac-7).
+   */
+  intensity?: CoverageTier;
   /** plan-dialog delta assembled into plan-dialog.md on termination (§6). */
   dialogDelta?: Partial<PlanDialogInput>;
   /** Stage selecting the dialog artifact on termination (default 'plan', §6/§9). */
@@ -350,7 +364,8 @@ export async function recordCoverageRound(args: {
   await store.writeMap(workItemId, map);
 
   // §8-4: same stakes-proportional K as nextCoverageNode (default standard, ac-7).
-  const tier = args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard';
+  const tier =
+    args.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard');
   if (isCoverageTerminated(map, nextCounter, coverageDryK(tier))) {
     const delta = args.dialogDelta ?? {};
     const closedItems = map.nodes

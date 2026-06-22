@@ -89,3 +89,73 @@ describe('depth dial — termination timing follows the tier (§8-4)', () => {
     expect(r.terminated).toBe(false);
   });
 });
+
+/**
+ * wi_260622vjo ac-4 — the user can OVERRIDE intensity at entry. An explicit
+ * `intensity` forces the tier (and thus depth K), winning over both the
+ * standard default and the stakes-derived `tierInputs`. Breadth is untouched.
+ * Absent `intensity` → unchanged behavior (the two tests above stay green, ac-7).
+ */
+describe('intensity override at entry (wi_260622vjo ac-4)', () => {
+  let repo: string;
+  let WI: string;
+  const NOW = new Date('2026-06-01T00:00:00.000Z');
+
+  beforeEach(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'ditto-cov-intensity-'));
+    const wi = await new WorkItemStore(repo).create(
+      {
+        title: 'intensity override test',
+        source_request: '진입 강도 override',
+        goal: '사용자가 강도를 진입 시 override',
+        acceptance_criteria: [
+          { id: 'ac-1', statement: 'override forces tier', verdict: 'unverified', evidence: [] },
+        ],
+      },
+      NOW,
+    );
+    WI = wi.id;
+  });
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true });
+  });
+
+  test('explicit intensity=light terminates after a single dry round (overrides standard default)', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI });
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: 'cov-root',
+        admissibleBranchesAdded: 0,
+        close_as: 'resolved',
+        axis_signals: passingNeutrality,
+      },
+      intensity: 'light', // override → K=1 (vs the standard default K=2)
+    });
+    expect(r.terminated).toBe(true);
+  });
+
+  test('explicit intensity=full beats stakes-derived light tierInputs (override precedence)', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI });
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: 'cov-root',
+        admissibleBranchesAdded: 0,
+        close_as: 'resolved',
+        axis_signals: passingNeutrality,
+      },
+      tierInputs: lightTier, // would derive light (K=1) on its own…
+      intensity: 'full', // …but the explicit override wins → K=3, not yet dry after 1 round
+    });
+    expect(r.terminated).toBe(false);
+  });
+
+  test('nextCoverageNode reflects the overridden tier in its result', async () => {
+    const r = await nextCoverageNode({ repoRoot: repo, workItemId: WI, intensity: 'full' });
+    expect(r.action).toBe('interrogate');
+    if (r.action === 'interrogate') expect(r.tier).toBe('full');
+  });
+});

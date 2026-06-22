@@ -11,6 +11,7 @@ import { AutopilotStore } from '~/core/autopilot-store';
 import { checkCiteGate, crossValidateCite, detectActiveConflicts } from '~/core/cite-gate';
 import { CompletionStore } from '~/core/completion-store';
 import { nextCoverageNode, recordCoverageRound } from '~/core/coverage-loop';
+import { COVERAGE_TIERS, type CoverageTier } from '~/core/coverage-manager';
 import { farFieldCategoriesEnabled } from '~/core/coverage-taxonomy';
 import { dittoDir } from '~/core/ditto-paths';
 import { checkE2eCompletionGate } from '~/core/e2e/completion-gate';
@@ -766,6 +767,20 @@ const autopilotIntentDrift = defineCommand({
  * Spawn-capability division (§3.1): the CLI computes/gates/aggregates; the main
  * agent spawns the fresh sweep + 3-role dialectic + judges. The CLI never spawns.
  */
+
+/**
+ * Parse the user's `--coverageIntensity` override (ac-4). Undefined → no override
+ * (engine keeps its stakes-derived/standard tier, ac-7). An unknown value throws
+ * so the caller can exit with a usage error, mirroring `parseOutputFormat`. Both
+ * coverage-next and coverage-round share this so the entered tier is validated
+ * identically and threaded to the same termination K.
+ */
+function parseCoverageIntensity(raw: string | undefined): CoverageTier | undefined {
+  if (raw === undefined) return undefined;
+  if ((COVERAGE_TIERS as readonly string[]).includes(raw)) return raw as CoverageTier;
+  throw new Error(`--coverageIntensity must be one of ${COVERAGE_TIERS.join('|')} (got "${raw}")`);
+}
+
 const autopilotCoverageNext = defineCommand({
   meta: {
     name: 'coverage-next',
@@ -773,12 +788,18 @@ const autopilotCoverageNext = defineCommand({
   },
   args: {
     workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    coverageIntensity: {
+      type: 'string',
+      description: `Override sweep intensity at entry: ${COVERAGE_TIERS.join('|')} (default: stakes-derived, ac-4)`,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
     let format: ReturnType<typeof parseOutputFormat>;
+    let intensity: CoverageTier | undefined;
     try {
       format = parseOutputFormat(args.output);
+      intensity = parseCoverageIntensity(args.coverageIntensity);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(USAGE_ERROR_EXIT);
@@ -791,6 +812,8 @@ const autopilotCoverageNext = defineCommand({
         workItemId: args.workItem,
         // §8-2: opt-in category-complete discovery (env toggle until ac-10 config).
         seedCategories: farFieldCategoriesEnabled(),
+        // ac-4: explicit user override wins over the stakes-derived/standard tier.
+        ...(intensity ? { intensity } : {}),
       });
       if (format === 'json') {
         writeJson(res);
@@ -823,12 +846,18 @@ const autopilotCoverageRound = defineCommand({
       description: 'JSON payload matching coverageRoundPayload schema',
       required: true,
     },
+    coverageIntensity: {
+      type: 'string',
+      description: `Override sweep intensity at entry: ${COVERAGE_TIERS.join('|')} (default: stakes-derived, ac-4)`,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
     let format: ReturnType<typeof parseOutputFormat>;
+    let intensity: CoverageTier | undefined;
     try {
       format = parseOutputFormat(args.output);
+      intensity = parseCoverageIntensity(args.coverageIntensity);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(USAGE_ERROR_EXIT);
@@ -879,6 +908,8 @@ const autopilotCoverageRound = defineCommand({
               },
             }
           : {}),
+        // ac-4: explicit user override wins over stakes-derived tier_inputs.
+        ...(intensity ? { intensity } : {}),
       });
       if (format === 'json') {
         writeJson(res);

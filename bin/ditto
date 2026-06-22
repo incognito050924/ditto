@@ -17813,6 +17813,7 @@ var COVERAGE_AXIS_MECHANISMS = {
     }
   }
 };
+var COVERAGE_TIERS = ["light", "standard", "full"];
 var FEW_FILES = 3;
 function selectCoverageTier(input) {
   if (input.large || input.risk.irreversible || input.risk.non_local) {
@@ -22926,7 +22927,7 @@ async function nextCoverageNode(args) {
     await store.writeMap(workItemId2, map);
   }
   const dryCounter = await readDryCounter(repoRoot, workItemId2);
-  const tier = args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard";
+  const tier = args.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard");
   if (isCoverageTerminated(map, dryCounter, coverageDryK(tier))) {
     return { action: "dry", terminated: true };
   }
@@ -23029,7 +23030,7 @@ async function recordCoverageRound(args) {
     }
   }
   await store.writeMap(workItemId2, map);
-  const tier = args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard";
+  const tier = args.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard");
   if (isCoverageTerminated(map, nextCounter, coverageDryK(tier))) {
     const delta = args.dialogDelta ?? {};
     const closedItems = map.nodes.filter((n2) => n2.state !== "open").map((n2) => ({ id: n2.id, label: n2.label, state: n2.state }));
@@ -24760,6 +24761,13 @@ var autopilotIntentDrift = defineCommand({
     }
   }
 });
+function parseCoverageIntensity(raw) {
+  if (raw === undefined)
+    return;
+  if (COVERAGE_TIERS.includes(raw))
+    return raw;
+  throw new Error(`--coverageIntensity must be one of ${COVERAGE_TIERS.join("|")} (got "${raw}")`);
+}
 var autopilotCoverageNext = defineCommand({
   meta: {
     name: "coverage-next",
@@ -24767,12 +24775,18 @@ var autopilotCoverageNext = defineCommand({
   },
   args: {
     workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    coverageIntensity: {
+      type: "string",
+      description: `Override sweep intensity at entry: ${COVERAGE_TIERS.join("|")} (default: stakes-derived, ac-4)`
+    },
     output: { type: "string", description: "Output format: human|json", default: "human" }
   },
   run: async ({ args }) => {
     let format;
+    let intensity;
     try {
       format = parseOutputFormat(args.output);
+      intensity = parseCoverageIntensity(args.coverageIntensity);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(USAGE_ERROR_EXIT);
@@ -24783,7 +24797,8 @@ var autopilotCoverageNext = defineCommand({
       const res = await nextCoverageNode({
         repoRoot,
         workItemId: args.workItem,
-        seedCategories: farFieldCategoriesEnabled()
+        seedCategories: farFieldCategoriesEnabled(),
+        ...intensity ? { intensity } : {}
       });
       if (format === "json") {
         writeJson2(res);
@@ -24813,12 +24828,18 @@ var autopilotCoverageRound = defineCommand({
       description: "JSON payload matching coverageRoundPayload schema",
       required: true
     },
+    coverageIntensity: {
+      type: "string",
+      description: `Override sweep intensity at entry: ${COVERAGE_TIERS.join("|")} (default: stakes-derived, ac-4)`
+    },
     output: { type: "string", description: "Output format: human|json", default: "human" }
   },
   run: async ({ args }) => {
     let format;
+    let intensity;
     try {
       format = parseOutputFormat(args.output);
+      intensity = parseCoverageIntensity(args.coverageIntensity);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(USAGE_ERROR_EXIT);
@@ -24853,7 +24874,8 @@ var autopilotCoverageRound = defineCommand({
         } : {},
         ...extra.tier_inputs ? {
           tierInputs: extra.tier_inputs
-        } : {}
+        } : {},
+        ...intensity ? { intensity } : {}
       });
       if (format === "json") {
         writeJson2(res);
@@ -40364,4 +40386,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=1ebcb6f2fa0fab53563f9a7dbb0b441841f1e01e312e0702736fceb43516eb1d
+//# ditto-src-stamp=06aae96a5a9f00a54d927dc530afad179e4db77bdb4c6c8ae2024a5669bfc230
