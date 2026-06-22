@@ -91,7 +91,8 @@ function lstatSafe(p) {
 }
 function placeCli() {
   const src = sourceBundle();
-  if (!existsSync(src)) return { ok: false, message: `missing ${src} (corrupt clone?)` };
+  if (!existsSync(src))
+    return { ok: false, fatal: true, message: `missing ${src} (corrupt clone?)` };
   const sdir = shareBinDir();
   mkdirSync(sdir, { recursive: true });
   const owned = join(sdir, 'ditto');
@@ -103,17 +104,20 @@ function placeCli() {
     return { ok: true, message: `${owned} — add ${sdir} to PATH (symlink is POSIX-only)` };
   const link = join(pathBinDir(), 'ditto');
   if (linksTo(link, owned)) return { ok: true, message: `${link} (already linked)` };
-  const st = lstatSafe(link);
-  if (st && !st.isSymbolicLink()) {
+  // Never clobber an existing `ditto` we did not place — a developer's dogfood
+  // symlink (`→ dist/plugin/bin/ditto`) or any user-managed binary stays put.
+  // Same refuse-don't-overwrite rule as scripts/install-plugin.mjs. CLI placement
+  // is best-effort (the plugin half already succeeded), so this is a warning, not
+  // a hard failure.
+  if (lstatSafe(link)) {
     return {
       ok: false,
-      message: `${link} exists and is not a symlink — leave it (remove manually)`,
+      message: `${link} already exists and is not ours — left untouched. Remove it (or adjust PATH), then re-run to place the ditto CLI; the plugin is installed regardless.`,
     };
   }
   mkdirSync(pathBinDir(), { recursive: true });
-  if (st) rmSync(link); // an old/foreign ditto symlink → repoint to our owned bundle
   symlinkSync(owned, link);
-  return { ok: true, message: st ? `${link} (repointed)` : link };
+  return { ok: true, message: link };
 }
 function unplaceCli() {
   const out = [];
@@ -178,8 +182,8 @@ function doInstall() {
     pluginPresent() ? claude(['update', PLUGIN_REF]) : claude(['install', PLUGIN_REF]),
   );
   const c = placeCli();
-  if (!c.ok) fail('cli', c.message);
-  note('cli', c.message);
+  if (!c.ok && c.fatal) fail('cli', c.message);
+  note('cli', c.ok ? c.message : `SKIPPED — ${c.message}`);
   bunHint();
 }
 function doUpdate() {
@@ -190,8 +194,8 @@ function doUpdate() {
     pluginPresent() ? claude(['update', PLUGIN_REF]) : claude(['install', PLUGIN_REF]),
   );
   const c = placeCli();
-  if (!c.ok) fail('cli', c.message);
-  note('cli', c.message);
+  if (!c.ok && c.fatal) fail('cli', c.message);
+  note('cli', c.ok ? c.message : `SKIPPED — ${c.message}`);
   bunHint();
 }
 function doUninstall() {
