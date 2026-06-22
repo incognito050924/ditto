@@ -148,6 +148,7 @@ async function runWizard(resourcesDir: string, projectRoot: string): Promise<voi
           resourcesDir,
           projectRoot,
           homeDir: homedir(),
+          ...(process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {}),
           now: new Date(),
           host,
           ...(includesCodex(host)
@@ -264,6 +265,7 @@ export const setupCommand = defineCommand({
         resourcesDir,
         projectRoot,
         homeDir: homedir(),
+        ...(process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {}),
         now: new Date(),
         host,
         ...(includesCodex(host)

@@ -61,24 +61,27 @@ if (host === 'claude' || host === 'claude-code') {
   launch('claude', ['--plugin-dir', repoRoot], { cwd: target });
 } else if (host === 'codex') {
   // Stateful: build the codex surface, stage it into the target, register a local
-  // marketplace into an ISOLATED CODEX_HOME (keeps the user's real plugin registry
-  // clean). KNOWN GAP: `ditto setup` still projects the global AGENTS.md to
-  // ~/.codex/AGENTS.md (homedir-hardcoded, ignores CODEX_HOME) — idempotent today,
-  // but full isolation needs a setup option to skip/redirect that global write.
+  // marketplace into an ISOLATED CODEX_HOME. The env (CODEX_HOME) is passed to the
+  // setup step too, so `ditto setup` projects the global AGENTS.md into the isolated
+  // home — the user's real ~/.codex is never touched (verified end-to-end).
   const codexHome = join(target, '.ditto', 'local', 'codex-home');
   const env = { CODEX_HOME: codexHome };
   step('bun', ['run', 'build:codex-plugin']);
-  step('bun', [
-    join(repoRoot, 'src', 'cli', 'index.ts'),
-    'setup',
-    '--host',
-    'codex',
-    '--dir',
-    target,
-    '--yes',
-  ]);
-  if (!PRINT) mkdirSync(codexHome, { recursive: true });
   if (!PRINT && !existsSync(target)) mkdirSync(target, { recursive: true });
+  if (!PRINT) mkdirSync(codexHome, { recursive: true });
+  step(
+    'bun',
+    [
+      join(repoRoot, 'src', 'cli', 'index.ts'),
+      'setup',
+      '--host',
+      'codex',
+      '--dir',
+      target,
+      '--yes',
+    ],
+    { env },
+  );
   step('codex', ['plugin', 'marketplace', 'add', target], { cwd: target, env });
   step('codex', ['plugin', 'add', 'ditto@ditto-local'], { cwd: target, env });
   launch('codex', [], { cwd: target, env });

@@ -280,6 +280,23 @@ describe('setup', () => {
     }
   });
 
+  test('codex global AGENTS.md honors codexHome (CODEX_HOME isolation)', async () => {
+    const d = await freshCodexDirs();
+    const codexHome = await mkdtemp(join(tmpdir(), 'ditto-setup-codexhome-'));
+    try {
+      await setup({ ...d, now: NOW, host: 'codex', pluginRoot: d.pluginRoot, codexHome });
+      // The global charter lands inside the isolated CODEX_HOME — NOT the real
+      // ~/.codex — so a dogfood codex session never touches the user's home.
+      expect(await readFile(join(codexHome, 'AGENTS.md'), 'utf8')).toBe(
+        'GLOBAL AGENTS charter body\n',
+      );
+      expect(await fileExists(join(d.homeDir, '.codex', 'AGENTS.md'))).toBe(false);
+    } finally {
+      await rm(codexHome, { recursive: true, force: true });
+      await cleanup(d);
+    }
+  });
+
   test('codex host fails when the plugin artifact has no projected custom agents', async () => {
     const d = await freshCodexDirs();
     try {

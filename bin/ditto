@@ -38476,7 +38476,7 @@ function setupHosts(host) {
     return new Set(["claude-code", "codex"]);
   return new Set(["claude-code"]);
 }
-function resourceDecisions(resourcesDir, projectRoot, homeDir, hosts) {
+function resourceDecisions(resourcesDir, projectRoot, homeDir, codexHome, hosts) {
   const out = [];
   const files = discoverResources(resourcesDir);
   if (hosts.has("claude-code")) {
@@ -38499,7 +38499,7 @@ function resourceDecisions(resourcesDir, projectRoot, homeDir, hosts) {
           host: "codex",
           filename,
           scope: "global",
-          destPath: join81(homeDir, ".codex", "AGENTS.md")
+          destPath: join81(codexHome, "AGENTS.md")
         });
       }
     }
@@ -38694,8 +38694,9 @@ async function installResource(decision, resourcesDir) {
 }
 async function setup(opts) {
   const { resourcesDir, projectRoot, homeDir, now } = opts;
+  const codexHome = opts.codexHome ?? join81(homeDir, ".codex");
   const hosts = setupHosts(opts.host);
-  const decisions = resourceDecisions(resourcesDir, projectRoot, homeDir, hosts);
+  const decisions = resourceDecisions(resourcesDir, projectRoot, homeDir, codexHome, hosts);
   const ordered = [
     ...decisions.filter((d2) => basename4(d2.destPath) !== "CLAUDE.md"),
     ...decisions.filter((d2) => basename4(d2.destPath) === "CLAUDE.md")
@@ -38949,6 +38950,7 @@ async function runWizard(resourcesDir, projectRoot) {
         resourcesDir,
         projectRoot,
         homeDir: homedir11(),
+        ...process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {},
         now: new Date,
         host,
         ...includesCodex(host) ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) } : {}
@@ -39039,6 +39041,7 @@ var setupCommand = defineCommand({
         resourcesDir,
         projectRoot,
         homeDir: homedir11(),
+        ...process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {},
         now: new Date,
         host,
         ...includesCodex(host) ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) } : {}
@@ -40221,4 +40224,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=fcab36e56f4cf49ee40bbde37da430a42216edab7a8a95591ad6110f308782ff
+//# ditto-src-stamp=0e156cdf64fd18c604ea59593755ef198461c51cec093d03556dced211e4b30b

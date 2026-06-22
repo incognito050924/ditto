@@ -21,6 +21,12 @@ export interface SetupOptions {
   resourcesDir: string;
   projectRoot: string;
   homeDir: string;
+  /**
+   * Codex config root for global resource install (the codex global AGENTS.md).
+   * Defaults to `<homeDir>/.codex`; the CLI passes `$CODEX_HOME` here so a dogfood
+   * codex session (isolated CODEX_HOME) never writes the user's real ~/.codex.
+   */
+  codexHome?: string;
   now: Date;
   host?: SetupHost;
   pluginRoot?: string;
@@ -88,6 +94,7 @@ function resourceDecisions(
   resourcesDir: string,
   projectRoot: string,
   homeDir: string,
+  codexHome: string,
   hosts: Set<'claude-code' | 'codex'>,
 ): ResourceInstallDecision[] {
   const out: ResourceInstallDecision[] = [];
@@ -114,7 +121,7 @@ function resourceDecisions(
           host: 'codex',
           filename,
           scope: 'global',
-          destPath: join(homeDir, '.codex', 'AGENTS.md'),
+          destPath: join(codexHome, 'AGENTS.md'),
         });
       }
     }
@@ -381,9 +388,10 @@ async function installResource(
  */
 export async function setup(opts: SetupOptions): Promise<SetupResult> {
   const { resourcesDir, projectRoot, homeDir, now } = opts;
+  const codexHome = opts.codexHome ?? join(homeDir, '.codex');
   const hosts = setupHosts(opts.host);
 
-  const decisions = resourceDecisions(resourcesDir, projectRoot, homeDir, hosts);
+  const decisions = resourceDecisions(resourcesDir, projectRoot, homeDir, codexHome, hosts);
   // Install canonical sources (AGENTS.md) and generic resources first so each
   // CLAUDE.md projection can mirror its sibling on-disk AGENTS.md.
   const ordered = [
