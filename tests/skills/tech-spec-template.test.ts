@@ -85,8 +85,10 @@ describe('output discipline — no elicitation leak (ac-5)', () => {
     // 누출 금지 규율이 스킬에 명시돼 있다 (ac-5: 스킬에 출력 규율 명시)
     expect(skill).toContain('Output discipline');
     expect(skill).toMatch(/Never leak .*question phrasing/);
-    // pre-mortem 질문은 삭제가 아니라 스킬(비판 축)로 옮겨 내부 도구로 산다
-    expect(skill).toContain('broke in 3 days');
+    // pre-mortem 질문은 삭제가 아니라 스킬(비판 축)로 옮겨 내부 도구로 산다 — 단 임의 시간 앵커 없이
+    expect(skill).toContain('Shipped, then failed');
+    // 임의 시간 앵커('3 days')는 사용자에게 누출 시 혼란을 주므로 소스에서 제거한다
+    expect(skill).not.toContain('3 days');
   });
 });
 

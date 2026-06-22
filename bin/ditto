@@ -40019,4 +40019,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=a544d297ca5e00de9c8ecaf1db704b7a2b7db83308e9dab4565825d8421283e7
+//# ditto-src-stamp=d39f56bac625a1fe64e2d9671b54e4fbb2f742cacef04024dbe52e09a177e615

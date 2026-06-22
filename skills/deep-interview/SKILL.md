@@ -106,7 +106,7 @@ Record each turn with:
 
 ### 4. Pre-mortem (before finalize, not in record-turn)
 
-For each candidate acceptance criterion, ask: "If this shipped and broke in 3 days, what would the cause be?" Promote irreversible / blast-radius risks to:
+For each candidate acceptance criterion, run a pre-mortem **internally** (your own reasoning, **not surfaced to the user**): assume it shipped and later failed in real use — what is the most likely cause? **Output discipline:** surface only the *result* — a specific risk, a plain-language question about that risk, or a flagged unknown — **never the pre-mortem prompt itself**, and never an arbitrary time anchor (no "breaks in N days" framing). Promote irreversible / blast-radius risks to:
 
 - An additional acceptance criterion (constrain the implementation), or
 - `out_of_scope` (we are NOT going to do this), or

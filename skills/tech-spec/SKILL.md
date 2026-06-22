@@ -109,7 +109,7 @@ A standing critique runs the whole time, so the skill never decays into a form t
 A critique result surfaces as a *new good question* or a *flagged unknown/gap* — never as raw question phrasing in the document. Concrete triggers stay:
 
 1. **Right after the 배경·목표 draft**: "If this understanding is wrong, where is it wrong?" — fix the draft or record the doubt in §7.
-2. **On every 비목표/AC increment**: "Shipped and broke in 3 days — what was the cause?" Each answer is promoted to an AC (§6), pushed to 비목표 (§5), or left in §7 as an unknown; flag irreversible / blast-radius risks explicitly. Results accumulate in §7 위험.
+2. **On every 비목표/AC increment**: "Shipped, then failed in real use — what was the cause?" Each answer is promoted to an AC (§6), pushed to 비목표 (§5), or left in §7 as an unknown; flag irreversible / blast-radius risks explicitly. Results accumulate in §7 위험.
 3. **Before finalize**: deep-interview's own pre-mortem converges on the accumulated §7 — it consumes the ledger, it does not duplicate it.
 
 ## Deep-interview synthesis
@@ -128,7 +128,7 @@ The agent does not treat "giving the answer" as the default. When it does answer
 
 ## Output discipline
 
-Questions ("broke in 3 days?") are internal elicitation tools. The document carries only the **resolved conclusions**, as clean professional sections (e.g. "Technical choice and trade-offs: …", "Edge cases / caveats: …"). Never leak question phrasing into a spec section title or body — the pre-mortem prompt and the good questions shape the content, they do not appear in it.
+Questions ("shipped, then failed — why?") are internal elicitation tools. The document carries only the **resolved conclusions**, as clean professional sections (e.g. "Technical choice and trade-offs: …", "Edge cases / caveats: …"). Never leak question phrasing into a spec section title or body — the pre-mortem prompt and the good questions shape the content, they do not appear in it.
 
 The one home for the *process* is **§12 인터뷰 기록**, the provenance section: record a **summary** of how the document was shaped — which good questions surfaced what (blind-spots, new perspectives) and which decisions followed — so a reader understands the authoring path. Summary, never a raw transcript; fill it from the always-on elicitation loop too, not only when a formal deep-interview ran. This keeps the process visible without the spec body carrying question phrasing.
 
