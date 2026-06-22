@@ -1,74 +1,84 @@
-# HANDOFF — 다른 PC 이어받기 (2026-06-22)
+# HANDOFF — 다른 PC 이어받기 (2026-06-23)
 
 호스트 메모리(`~/.claude/.../memory/`)와 work-items(`.ditto/local/`, gitignored)는 **git으로 전파되지 않는다.** 다른 PC에 필요한 비전파 컨텍스트를 여기 싣는다. 코드·테스트·git이 권위다(헌장 §4-11) — 이 문서는 "어디서 이어받나 + 안 넘어가는 것"이지 사실의 원본이 아니다.
 
-## 0. 전파 주의 (먼저 읽기)
+## 0. 전파 상태 (먼저 읽기)
 
-- **이어받을 위치**: repo `main`. 이번 세션 배포작업 4커밋은 **origin/main에 push 완료** (`fc744ae`).
-- **이 핸드오프 커밋은 push 안 함**(사용자 지시). → 다른 PC가 받으려면 **이 PC에서 `git push` 먼저** 해야 한다. push 전엔 origin/main = `fc744ae`(핸드오프 커밋 없음).
-- ⚠ **로컬 main에는 미푸시 커밋이 16개**다 = 이 핸드오프(1) + **동시 far-field 세션이 머지한 `wi_260622vjo` 작업(15커밋 + 머지 `3191090`)**. 후자는 내 작업이 아니라 다른 스레드 산출물. **push하면 far-field 머지도 같이 올라간다** — far-field가 push 준비됐는지 그쪽 핸드오프/메모리로 확인 후 push할 것. 둘을 분리하려면 핸드오프 커밋만 따로 cherry-pick/브랜치.
-- **안 넘어가는 것**: ① work-item `.json`(`.ditto/local/work-items/` gitignored — 다른 PC는 자기 로컬 상태) ② 호스트 메모리 ③ 아래 §3 미커밋 WIP.
-- **넘어가는 것**: 소스·테스트·`bin/ditto`(커밋된 배포 산출물)·`DEVELOPMENT.md`(배포 기준 표)·ADR·이 문서.
+- **이어받을 위치**: repo `main`. **이번 세션 4커밋은 origin/main에 push 완료** (`origin/main = d43a624`, 0커밋 차이). 다른 PC는 `git pull`만 하면 된다.
+- **안 넘어가는 것**: ① work-item `.json`(`.ditto/local/work-items/` gitignored — 다른 PC는 자기 로컬 상태) ② 호스트 메모리 ③ `.ditto/local/runs/`(coverage·feedback 런타임 산출). 아래 §5 "재빌드 & setup" 먼저 돌릴 것.
+- **넘어가는 것**: 소스·테스트·`bin/ditto`·`agents/planner.md`·ADR·이 문서.
 
-## 1. 이번 세션 (2026-06-22) — ditto 배포 vehicle 완성 (3 WI close, 4커밋 push)
+## 1. 이번 세션 (2026-06-22~23) — push된 4커밋
 
-`npx github:incognito050924/ditto install|update|uninstall` 한 줄 설치를 완성. origin/main=`fc744ae`.
+| 커밋 | work item | 내용 |
+|---|---|---|
+| `08f3d9b` | wi_26062240y | dogfood `--skip-permissions` opt-in 플래그 + `.claude/settings.json` 권한 포스처 관대화(allow Bash/Read/Edit…, deny sudo/mkfs/force-push). **프로젝트 권한 포스처 변경**이니 다른 PC도 이 settings를 받는다. |
+| `be30a17` | wi_260622z7d | far-field coverage 버그 2건: ①intensity 진입 override를 coverage.json에 영속(K-scale 휘발 수정) ②`farFieldCoverageReport.complete`를 전체 노드 기준으로(파생 노드 무시 수정). |
+| `d225209` | wi_260622qre | **ac-11b far-field outcome 루프**: `ditto coverage feedback`(구조적 가드로 dry-closed=depth/미시딩=breadth 귀속, 일반버그 거부) + append-only cross-wi ledger(`.ditto/local/coverage-feedback.jsonl`) + `ditto coverage propose`. 검출+제안+재발 측정 토대까지(자동 집계/분류/반영은 out_of_scope). |
+| `d43a624` | wi_260622kb4 | **autopilot 도구 마찰 수정 + outcome 데이터 수집**: 아래 §2 상세. |
 
-| 커밋 | 내용 |
-|---|---|
-| `7421565` | **npx 부트스트랩**(`scripts/npx-bootstrap.mjs` ← `package.json bin.ditto`). `dist/`는 gitignored라 npx 클론에 bin 없음 → 커밋된 `bin/ditto`가 배포 산출물 SoT. plugin=`claude plugin` 셸아웃, CLI=번들을 `~/.local/share/ditto/bin` 복사 후 `~/.local/bin/ditto` 심링크. |
-| `2473bea` | **`ditto mode`** 명령(`src/cli/commands/mode.ts` + `formatModeHuman` TDD). session(dev/installed/unknown)·신선도·drift·배포액션 human/json. |
-| `f8468f1` | **DEVELOPMENT.md "배포 기준" 표** — rebuild/push/reinstall/update/모드확인을 각 SoT(release.mjs·npx-bootstrap.mjs·mode-doctor·ADR-0022)로 포인팅. |
-| `fc744ae` | **npx 설치기 footgun 수정** — placeCli가 남의 `~/.local/bin/ditto` 심링크(dev dogfood 심링크 등) 안 덮고 거부+경고(SKIPPED), 플러그인은 설치·exit 0. |
+- 전체 `DITTO_SKIP_HOOKS=1 bun test` **2754 pass / 0 fail**. lint·adr-guard green.
 
-- **닫은 work item 3**: `wi_260622njt`(npx, WI-B) · `wi_2606225jt`(mode·배포기준, WI-A) · `wi_260608j2p`(github 소스경로). 셋 다 `ditto work done` final_verdict=pass.
-- 전체 `bun test` 2657 pass / 0 fail. lint·adr-guard·CI(3커밋) green.
+## 2. `d43a624` 상세 (autopilot 도구 + outcome 데이터)
 
-## 2. 남은 작업 / follow-up (이 스레드)
+ac-11b 도그푸딩에서 발견한 도구 마찰 2건 수정 + 그 과정을 outcome 자동화 방향 데이터 수집 표본으로.
 
-- **j2p ac-3 잔여(저위험)**: `/plugins` UI 에러카운트=0을 화면으로 못 봄 → root-cause(file:// 소멸)로만 검증. 새 `claude` 세션에서 `/plugins` 한 번 눈확인하면 완전 종결.
-- **스모크-게이트 자동화**(ADR-0022 §5, 별도 WI): 이번엔 throwaway 격리로 **수동** 검증. 자동 게이트는 미구현.
-- **njt Windows 미검증**: `npx-bootstrap.mjs` Windows 분기(심링크 대신 PATH 안내 + `ditto.cmd`) 미실행. mac만 검증. cf. memory `windows-install-thin-launcher`.
-- **njt bun 부재**: bun 없으면 install은 exit 0이나 `ditto` CLI(bun 셔뱅)는 실행 불가(soft 경고만). 플러그인 절반은 동작. 미테스트.
-- **`wi_260608pcw`**: `ditto setup`이 `~/.claude` 글로벌 managed 블록을 교체 않고 이중 래핑하는 멱등성 버그(미수정).
+- **ac-1 variant 라우팅 오매칭** — **진짜 원인은 match 부재가 아니었다.** match는 이미 올바름(`.ditto/agents/*.md`, da8a7e6). 실제 원인 = **planner가 generated_nodes에 per-node `file_scope`를 안 채워** 노드가 `changed_files`(혼합)로 폴백 → 변종 매칭 무력화(autopilot-loop.ts:196 `scopeOf`). 수정: (a) `agents/planner.md`에 file_scope 산출 지시(근본 — `nodeProposal.file_scope`·`proposalsToNodes` 인프라는 da8a7e6에 이미 있었음), (b) `selectVariantCandidates`에 `scopeDeclared` opts — 미선언 노드는 scoped 변종 배제·generalist/hint만(방어).
+- **ac-2 per-AC evidence** — `ac_verdict` 항목에 optional `evidence_refs` + `guardAcClosingEvidence`가 top-level OR per-AC 인정 **+ `deriveAcVerdicts`(complete)도 per-AC evidence를 AC 닫기 증거로 인정.** ⚠ **이 마지막이 도그푸딩이 즉시 노출한 갭**: 게이트만 배선하면 complete가 못 닫아 per-AC evidence 기능이 반쪽 → complete까지 배선해야 완성.
+- **ac-3** `ditto coverage suggest` — verify 실패 + coverage 미시딩/dry-close 감지 시 feedback 템플릿 제안(제안만, 자동기록 없음).
+- **ac-4 outcome 데이터** (▼ §3).
 
-## 3. 미커밋 WIP — 안 넘어감, 별도 커밋 필요 (`wi_26062240y`)
+## 3. ★ outcome 루프 자동화 방향 — 수집된 결정 데이터 (다음 결정 입력)
 
-dogfood 권한 프롬프트 제거. memory상 "done·미커밋". **git으로 전파 안 되니 다른 PC에서 이어 쓰려면 이 PC에서 별도 커밋해야 한다.** 내용:
+ac-11b에서 "false-negative 빈도 모름 → 측정부터"(Q1)로 보류한 자동화 결정의 **실측 데이터**를 d43a624 ac-4에서 모았다:
 
-- `scripts/dogfood.mjs` (+18): `--skip-permissions` opt-in 플래그. claude=`--dangerously-skip-permissions`, codex=`--dangerously-bypass-approvals-and-sandbox`. 기본은 sandboxed.
-- `.claude/settings.json` (+20): `allow`=[Bash,Read,Edit,Write,Glob,Grep,WebSearch,WebFetch], `deny`=[sudo,mkfs,dd,shutdown,reboot,git push --force/-f/--force-with-lease]. (기존 `["Bash(ditto:*)"]`에서 관대화 — **프로젝트 .claude/settings.json 권한 포스처 변경**이라 커밋 여부는 가치 판단.)
+- **비용 (light tier, 가장 싼)**: far-field sweep Opponent-only 평균 **35.25k 토큰/카테고리**(authentication 25.2k + reuse 45.3k 실측). 19 카테고리 전수 외삽 ≈ **670k(Opponent만) ~ 2-3M(full 3-role dialectic+judges)** 토큰. 작은 도구 수정 1건에.
+- **false-negative**: **0건** (두 표본 모두 위험 0, verify 전부 pass와 일치).
+- **결론(권고)**: 작은 작업의 자동 far-field sweep은 **비현실적**(수백k~수M 토큰)이고 false-negative는 **희소**. → ac-11b의 검출+제안+**수동(on-demand)** 설계가 정당. **자동 집계·임계 트리거·자동 sweep은 비용 대비 가치 낮음** — 도입 보류 권고. 단 단일 개발자 dogfooding 규모 데이터(표본 2)라, 더 큰 표본이 필요하면 `ditto coverage suggest`로 자연 수집(앞으로 verify fail마다).
 
-> 이 둘은 내(이번 세션) 작업이 아니라 건드리지 않고 둠. 커밋하면 다른 PC로 전파됨.
+## 4. 남은 작업 / 열린 work item
 
-## 4. 비전파 운영 컨텍스트 (memory → 여기 복제)
+- **wi_260621i0w** (draft) — "variant 라우팅 실제 동작 검증 + warm-start cap 가치순 정렬". **앞부분(variant 라우팅)은 이번 d43a624가 근본 해결** — 그 검증은 닫힌 셈. **남은 건 warm-start cap-crowding 가치순 정렬**(memory-warmstart.ts:222, RELATED_NODE_CAP=8 사전순 컷 → artifact 노드가 중요 노드 밀어냄). 이것만 분리해 진행하거나 work item 갱신.
+- **wi_26062257r** (draft) — C-6 variant spawn 불변식 가드 + 사소 항목. 이전 핸드오프 잔여. 이번 variant 작업과 인접 — 정리/재개 판단.
+- **wi_260622z7d** (draft, 커밋 `be30a17`됨) — 직접수정 completion 트랩이라 done 못 닫음(autopilot 밖). 커밋 이력이 추적 대신. 삭제 가능.
+- **ac-2 follow-up**: `deriveAcVerdicts` 보강은 했으나, completion-store/doctor 등 다른 per-AC evidence 소비처가 더 있는지 미점검(이번 범위는 complete close만).
+- **planner file_scope 효과**: `agents/planner.md` 지시는 **다음 세션 planner부터** 적용(세션 시작에 freeze). 다음 autopilot 작업에서 planner가 실제로 노드별 file_scope를 채우는지 확인하면 ac-1 (a) 근본수정이 실전 검증됨(이번 세션 노드들은 이미 폴백+방어로 안전).
 
-- **격리 검증 하네스**: `HOME=<throwaway> CLAUDE_CONFIG_DIR=<throwaway>/.claude` 로 npx install/uninstall을 라이브 `~/.claude`·`~/.local` 안 건드리고 검증. `claude plugin`은 user-global이라 디렉터리로는 격리 안 됨 — config-dir 분리가 핵심. (ADR-0022 §5 스모크-게이트가 이 패턴.)
-- **GOTCHA — stale completion.json**: `ditto work done`은 work-item 디렉터리에 completion.json이 **이미 있으면** 그걸 읽고(ac verdict 재합성 안 함, `src/cli/commands/work.ts:356` `!exists`일 때만 합성), 없으면 work-item ACs에서 합성. j2p는 2026-06-08 partial completion이 남아 막혀서, 그 파일을 옆으로 치우고 재합성해 닫았다.
-- **dogfood 진입**: `bun run dogfood [--host claude|codex]` = `build:bin` + `claude --plugin-dir <repoRoot>`(워킹트리 로드). SessionStart 배너가 dev/stale-installed 구분(`✓ ditto dogfood mode`). stale 잡으면 `bun run dogfood` 재시작.
-- **다른 PC의 work-item 상태는 이 PC와 다르다**(per-PC local). 위 WI ID는 참조용. 전체 백로그는 각 PC의 `ditto work status`.
+## 5. 다른 PC 세션 시작 — 복붙용 프롬프트
 
-## 5. 핵심 파일
+### 5-1. 재빌드 & setup
+```
+git pull 했어. ditto 바이너리 재빌드하고 setup 다시 실행해서 글로벌 설치본·.claude/agents variant 링크·allowlist를 최신 코드에 동기화해줘.
+- bun install (변동 없으면 no-op)
+- bun run build:bin && bun run build:plugin && bun run build:codex-plugin
+- ditto setup (인터랙티브 — variant agent-link 포함. --yes는 agent-link 건너뜀)
+검증: ditto doctor 전 축 drift 0. surface drift 뜨면 surfaces:gen 재생성(catalog stale일 수 있음). PreToolUse 훅이 정상 명령 false-positive 차단 시 DITTO_SKIP_HOOKS=1 prefix.
+```
+참고: 이번 세션에서 `ditto setup`은 **self-host 가드로 skip**됨(타겟이 ditto repo 자신 — dogfood는 `--plugin-dir`로 로드). `ditto mode`는 글로벌 설치본 STALE를 권하나 dogfood 세션엔 무관(`bun run dogfood`로 워킹트리 로드).
 
-- `scripts/npx-bootstrap.mjs` — npx install/update/uninstall (package.json `bin.ditto`).
-- `src/cli/commands/mode.ts` + `src/core/mode-doctor.ts`(`collectModeReport`/`formatModeBanner`/`formatModeHuman`) — `ditto mode` + SessionStart 배너.
-- `scripts/release.mjs` — 버전 bump + `bin/ditto` 재빌드 + commit/tag(push 안 함).
-- `DEVELOPMENT.md` §"배포 / 설치" + "배포 기준" — npx 설치 + 언제 rebuild/push/reinstall/update.
-- `.ditto/knowledge/adr/ADR-0022-dogfood-deploy-lifecycle.md` — 배포 생애주기 결정.
+### 5-2. deep-interview 전역 설정 (gitignored, 각 PC에서 생성)
+`.ditto/local/config.json` — 이 PC와 동일하게:
+```json
+{ "deep_interview": { "threshold": 0.85, "generators": 6 },
+  "tech_spec": { "question": { "performance": "exhaustive" } } }
+```
+스키마: src/schemas/ditto-config.ts. 우선순위 CLI flag > config > code default. 파일 없으면 코드 기본값(threshold 0.7/cap 8/generators 1).
 
-## 6. 먼-들판 coverage 검증 인계 (wi_260622vjo) — 다음 핵심 작업 (다른 스레드)
+## 6. 비전파 운영 GOTCHA (memory → 여기 복제)
 
-이 PC가 머지한 `wi_260622vjo`(머지 `3191090`, 9슬라이스)의 **남은 검증·실측**을 fresh 세션에서 이어받는다. 코드/엔진은 단위·CLI e2e로 검증됐으나(머지트리 2693 pass), **SKILL 프롬프트 부분(ac-3 anti-SLOP·ac-6 critic·ac-8 sweepAngles)은 실 autopilot 한 바퀴로 검증된 적이 없다.** 상세는 이 PC 호스트 메모리 [[premortem-far-field-redesign]](비전파).
+- **work item AC mirror**: `work start`는 ac-1 TBD placeholder만 만든다. deep-interview `finalize`를 **안 거치고** intent.json을 직접 작성하면 work-item.json의 acceptance_criteria가 mirror 안 됨 → autopilot complete 전 `intent-drift`가 "AC id missing (scope shrink)"로 **FAIL**. 해결: work-item.json의 acceptance_criteria를 intent.json과 일치시킨다(id-set 보존). 이번 wi_260622kb4에서 발생·수정함.
+- **passed 노드 재기록 불가**: record-result는 passed 노드를 "not running"으로 거부. 증거 보강하려면 노드가 running일 때 해야. (complete가 못 읽는 증거는 노드 재기록 말고 complete 로직을 고치는 게 정석 — 이번 ac-2 보강.)
+- **completion 증거 위치**: `autopilot complete`(deriveAcVerdicts)는 노드의 evidence를 모은다. 이번 수정 후 **top-level node.evidence_refs OR ac_verdict 항목의 evidence_refs** 둘 다 인정. record-result 시 둘 중 하나에 증거를 실어야 AC가 pass close된다.
+- **coverage intensity 영속**: `coverage-next --coverageIntensity`는 **첫 seed에만** coverage.json에 영속(be30a17). 이후 호출은 그 tier 유지(명시 override는 그 호출만 재정의). zsh에서 테스트 시 `"$@"`로 넘겨야 단어분리 안 됨(unquoted `$flag`는 파싱 실패).
+- **far-field sweep 비용**: light여도 floor 19 전수. 작은 작업엔 design 노드 생략하면 sweep 자체가 안 돌아 비용 0(planner 판단). 데이터 수집하려면 design 노드를 의도적으로 넣고 `--coverageIntensity light`로 진입. 전수는 비싸니(§3) 샘플+외삽이 실용적.
 
-- **⚠ 전제 — push 선행**: 이 검증은 far-field 코드가 그 PC에 있어야 한다 → §0대로 이 PC에서 `git push origin main` 후 그 PC가 pull. push 안 하면 그 PC엔 far-field 없음.
-- **⚠ 왜 fresh 세션 필수**: SKILL 정의는 세션 시작에 freeze(ADR-0022). 변경된 SKILL(ac-3/6/8)은 **새 세션 autopilot에서만** 활성 — 이 PC의 작업 세션에선 검증 불가였다.
+## 7. 핵심 파일
 
-**A1+A2 (가장 큰 미검증) — 실 autopilot far-field sweep 한 바퀴.** design/planner 노드가 있는 work item을 autopilot으로 plan-stage coverage sweep까지 구동(`coverage-next`→`coverage-round`→dry). 확인:
-- **ac-8 sweepAngles**: `coverage-next`가 tier별 `sweepAngles`(light1/std3/full5) 반환하고 그만큼 blind sweep 각도를 띄우나. `--coverageIntensity light|standard|full`로 진입 override 되나.
-- **ac-3 anti-SLOP**: Opponent가 refute-by-default로 위험 검증, oracle-linked(`maps_to`) 근거 없는 위험은 `admissibleBranchesAdded`에 안 들어가나. neutrality 축이 resolved close를 게이트하나.
-- **ac-6 critic**: floor(19)+config 밖 도메인을 sweep이 만나면 `cov-cat-<id>` discovered_node로 새 카테고리를 시딩하나.
-- 산출 확인: `ditto autopilot coverage-report --workItem <wi>` → seeded/resolved/skipped(+reason)/complete (ac-11a). plan-dialog.md.
-
-**B1 (그다음) — 비용 실측.** 기본-ON 19카테고리 sweep은 폭 불변(19 전수)·깊이만 tier 축소 → 사소한 변경도 19×judge. 실제 한 바퀴 토큰/시간을 재서, light tier로도 비싸 끄고 싶어지는지(R3·ac-8 역설) 판단. 비싸면 강도 기본값/예산 재조정.
-
-**검증과 무관한 미결(별건)**: §8-5 memory seam(보류·R1), ac-11b outcome 루프(미착수), 설계 spec `.ditto/specs/premortem-far-field-coverage.md`(untracked), work-item 스토어 AC placeholder. — 다 이 PC 메모리에 상세(비전파).
+- `src/core/agent-variants.ts` — `selectVariantCandidates(catalog, owner, fileScope, hint?, {scopeDeclared})`. catalog=`.ditto/agents/*.md`(loadVariantCatalog), match glob.
+- `src/core/autopilot-loop.ts` — `scopeOf`(:196 file_scope ?? changed_files), variant 호출부 2곳(scopeDeclared 전달), record-result 게이트.
+- `src/core/autopilot-complete.ts` — `deriveAcVerdicts`·`nodeVerdictFor`·`perAcEvidence`/`hasClosingEvidence` 헬퍼(per-AC evidence 인정).
+- `src/core/autopilot-dispatch.ts` — `guardAcClosingEvidence`(top-level OR per-AC).
+- `src/core/coverage-feedback.ts` — `CoverageFeedbackLedger`·`attributeCoverageEscape`·`suggestCoverageFeedback`·`recurrenceCounts`.
+- `src/cli/commands/coverage.ts` — `ditto coverage feedback|propose|suggest`.
+- `agents/planner.md` — file_scope 산출 지시(line 24 부근).
+- `.ditto/knowledge/adr/ADR-0023-*.md` — far-field coverage 결정(철회조건 §3이 ac-11b outcome 루프의 출처).
