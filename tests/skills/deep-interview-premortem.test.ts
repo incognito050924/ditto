@@ -20,3 +20,11 @@ describe('deep-interview pre-mortem output discipline (leak guard)', () => {
     expect(skill).not.toMatch(/broke in \d+ days?/i);
   });
 });
+
+describe('deep-interview honors user config (no gratuitous flag override)', () => {
+  test('start guidance tells the agent to run start WITHOUT --generators when a config default is set', () => {
+    const skill = readFileSync(SKILL_PATH, 'utf8');
+    // local config가 사용자의 표명된 선호이므로, 에이전트가 --generators를 박아 덮어쓰지 않도록 명시.
+    expect(skill).toContain('without `--generators`');
+  });
+});

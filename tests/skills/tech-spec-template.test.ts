@@ -131,6 +131,12 @@ describe('question generation workflow — multi-agent (ac-10~12)', () => {
     }
   });
 
+  test('start guidance honors tech_spec config — no tuning flags by default (config is authoritative)', () => {
+    const skill = readFileSync(SKILL_PATH, 'utf8');
+    // 호출 지점(start)에 config 존중을 명시: tuning flag를 기본적으로 넘기지 않는다(사용자 config override 방지).
+    expect(skill).toContain('no tuning flags');
+  });
+
   test('asking the user carries the presentation contract — check-question guard + user_explanation', () => {
     const skill = readFileSync(SKILL_PATH, 'utf8');
     // 사용자에게 질문이 닿을 때(confirm / draft-escalation) 제시 전 check-question 하드가드로 미충족 후보를 반송한다.

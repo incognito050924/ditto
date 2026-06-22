@@ -27,6 +27,8 @@ Then register the machine state (for `<wi>` = the active work item id):
 "${CLAUDE_PLUGIN_ROOT}/bin/ditto" tech-spec start --work-item <wi> --doc .ditto/specs/<slug>.md --mode stepwise --output json
 ```
 
+By default pass **no tuning flags** (`--performance`/`--generators`/`--intensity`/`--gate-mode`/…) at `start` — they override the user's `tech_spec.question` config (§ question-config below), which is **authoritative**. Deviate only for a stated reason; read the resolved values from `start`/`next-round` output, never assume.
+
 ## Mode
 
 `--mode=stepwise` (default) | `--mode=oneshot`. The mode changes the writing/review **rhythm only** — pre-mortem triggers, deep-interview entry conditions, and finalize gates are mode-invariant.
