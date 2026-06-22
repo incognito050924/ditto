@@ -4,7 +4,7 @@
 // exercises `ditto hook <event>` with CLAUDE_PROJECT_DIR + Claude stdin. This
 // file exercises the SAME entry with `--host codex` + Codex stdin field names
 // (prompt / tool_name / tool_input / tool_response / trigger / session_id / cwd),
-// asserting the dispatch + envelope for all 5 events. N4 implemented the
+// asserting the dispatch + envelope for all 6 events. N4 implemented the
 // `--host codex` branch (repoRoot from cwd, apply_patch normalization); this
 // verifies the host surface. Thin on gate logic (the unit tests cover that);
 // apply_patch gate/evidence integration is N6, not here.
@@ -16,7 +16,14 @@ import { join } from 'node:path';
 const REPO = join(import.meta.dir, '..', '..', '..');
 const CLI = join(REPO, 'src', 'cli', 'index.ts');
 
-const EVENTS = ['user-prompt-submit', 'pre-tool-use', 'post-tool-use', 'pre-compact', 'stop'];
+const EVENTS = [
+  'session-start',
+  'user-prompt-submit',
+  'pre-tool-use',
+  'post-tool-use',
+  'pre-compact',
+  'stop',
+];
 
 let projectDir: string;
 beforeEach(async () => {

@@ -4,6 +4,7 @@ import { postToolUseHandler } from '~/hooks/post-tool-use';
 import { preCompactHandler } from '~/hooks/pre-compact';
 import { preToolUseHandler } from '~/hooks/pre-tool-use';
 import type { HookHandler } from '~/hooks/runtime';
+import { sessionStartHandler } from '~/hooks/session-start';
 import { stopHandler } from '~/hooks/stop';
 import { userPromptSubmitHandler } from '~/hooks/user-prompt-submit';
 
@@ -21,6 +22,7 @@ import { userPromptSubmitHandler } from '~/hooks/user-prompt-submit';
  * entries that depended on the source tree.
  */
 const HANDLERS: Record<string, HookHandler> = {
+  'session-start': sessionStartHandler,
   'user-prompt-submit': userPromptSubmitHandler,
   'pre-tool-use': preToolUseHandler,
   'post-tool-use': postToolUseHandler,

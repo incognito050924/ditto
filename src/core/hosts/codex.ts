@@ -103,12 +103,14 @@ export const codexHostAdapter: HostAdapter = {
   id: 'codex',
 
   capabilities: {
-    // The 5 lifecycle events verified against Codex's hook protocol (M2 smoke);
-    // these mirror the Claude event names because Codex adopted the same protocol
-    // (reports/design/dual-host-codex-fact-verification.md F2/F3). The codex
-    // surface scanner registers exactly these from the shared hooks/hooks.json,
-    // so declared == registered (capability-inventory hook drift = 0).
-    hooks: ['UserPromptSubmit', 'Stop', 'PreCompact', 'PostToolUse', 'PreToolUse'],
+    // The lifecycle events mirror Claude's names because Codex adopted the same
+    // hook protocol (reports/design/dual-host-codex-fact-verification.md F2/F3);
+    // the codex scanner registers exactly these from the shared hooks/hooks.json,
+    // so declared == registered (capability-inventory hook drift = 0). The first 5
+    // were smoke-verified at M2. [VERIFY] SessionStart inherits the adopted protocol
+    // but its codex firing is not yet smoke-verified — declared here for dual-host
+    // parity (the banner it backs is claude-centric and degrades to silent on codex).
+    hooks: ['SessionStart', 'UserPromptSubmit', 'Stop', 'PreCompact', 'PostToolUse', 'PreToolUse'],
     instructions: true,
     permissions: true,
     mcp: true,

@@ -100,9 +100,16 @@ export interface HostRunProcess {
   completion: Promise<HostRunCompletion>;
 }
 
-export type HookEventId = 'UserPromptSubmit' | 'Stop' | 'PreCompact' | 'PostToolUse' | 'PreToolUse';
+export type HookEventId =
+  | 'SessionStart'
+  | 'UserPromptSubmit'
+  | 'Stop'
+  | 'PreCompact'
+  | 'PostToolUse'
+  | 'PreToolUse';
 
 export const HOOK_EVENT_IDS: readonly HookEventId[] = [
+  'SessionStart',
   'UserPromptSubmit',
   'Stop',
   'PreCompact',

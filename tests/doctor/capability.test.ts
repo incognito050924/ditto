@@ -24,25 +24,25 @@ function hookEntry(command: string) {
 }
 
 describe('doctor capability', () => {
-  test('ac-2: claude-code json reports 5 hook events and exits 0', () => {
+  test('ac-2: claude-code json reports 6 hook events and exits 0', () => {
     const proc = run(['doctor', 'capability', '--host', 'claude-code', '--output', 'json']);
     expect(proc.exitCode).toBe(0);
     const json = JSON.parse(proc.stdout.toString());
     expect(json.status).toBe('ok');
     const cc = json.hosts.find((h: { host: string }) => h.host === 'claude-code');
-    expect(cc.hook_events.length).toBe(5);
-    expect(cc.capabilities.hooks.length).toBe(5);
+    expect(cc.hook_events.length).toBe(6);
+    expect(cc.capabilities.hooks.length).toBe(6);
   });
 
-  test('ac-2: codex json reports 5 hook events and exits 0', () => {
+  test('ac-2: codex json reports 6 hook events and exits 0', () => {
     // M3 (dual-host surface adapter): codex adopted the Claude hook protocol, so
-    // it declares the same 5 events and registers them from the shared
+    // it declares the same events and registers them from the shared
     // hooks/hooks.json — declared == registered, 0 drift, exit 0.
     const proc = run(['doctor', 'capability', '--host', 'codex', '--output', 'json']);
     expect(proc.exitCode).toBe(0);
     const json = JSON.parse(proc.stdout.toString());
     const codex = json.hosts.find((h: { host: string }) => h.host === 'codex');
-    expect(codex.capabilities.hooks.length).toBe(5);
+    expect(codex.capabilities.hooks.length).toBe(6);
     expect([...codex.hook_events].sort()).toEqual([...codex.capabilities.hooks].sort());
   });
 
@@ -103,17 +103,18 @@ describe('doctor capability (fail-closed at CLI surface)', () => {
       (f: { kind: string; host: string }) =>
         f.kind === 'declared_hook_not_registered' && f.host === 'claude-code',
     );
-    expect(drift.length).toBe(4);
+    expect(drift.length).toBe(5);
     expect(drift.map((f: { capability: string }) => f.capability).sort()).toEqual([
       'PostToolUse',
       'PreCompact',
       'PreToolUse',
+      'SessionStart',
       'UserPromptSubmit',
     ]);
   });
 
   test('ac-4 fail-side: registered hook not declared drift exits 1', async () => {
-    // Register all 5 declared events plus an undeclared SessionStart event →
+    // Register all 6 declared events plus an undeclared Notification event →
     // one registered_hook_not_declared finding. Exercises the reverse direction
     // via the CLI without touching the adapter's hardcoded declaration.
     await mkdir(join(dir, 'hooks'), { recursive: true });
@@ -121,12 +122,13 @@ describe('doctor capability (fail-closed at CLI surface)', () => {
       join(dir, 'hooks', 'hooks.json'),
       JSON.stringify({
         hooks: {
+          SessionStart: hookEntry('bun run session-start.ts'),
           UserPromptSubmit: hookEntry('bun run user-prompt-submit.ts'),
           Stop: hookEntry('bun run stop.ts'),
           PreCompact: hookEntry('bun run pre-compact.ts'),
           PostToolUse: hookEntry('bun run post-tool-use.ts'),
           PreToolUse: hookEntry('bun run pre-tool-use.ts'),
-          SessionStart: hookEntry('bun run session-start.ts'),
+          Notification: hookEntry('bun run notification.ts'),
         },
       }),
       'utf8',
@@ -139,7 +141,7 @@ describe('doctor capability (fail-closed at CLI surface)', () => {
       (f: { kind: string; host: string; capability: string }) =>
         f.kind === 'registered_hook_not_declared' &&
         f.host === 'claude-code' &&
-        f.capability === 'SessionStart',
+        f.capability === 'Notification',
     );
     expect(drift.length).toBe(1);
   });

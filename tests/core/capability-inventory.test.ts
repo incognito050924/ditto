@@ -90,18 +90,25 @@ describe('collectCapabilityInventory', () => {
     const cc = report.hosts.find((h) => h.host === 'claude-code');
     expect(cc).toBeDefined();
     expect([...(cc?.hook_events ?? [])].sort()).toEqual([...(cc?.capabilities.hooks ?? [])].sort());
-    expect(cc?.hook_events.length).toBe(5);
+    expect(cc?.hook_events.length).toBe(6);
   });
 
-  test('codex declares the 5 verified hooks and registers exactly those (0 drift)', async () => {
+  test('codex declares the verified hooks and registers exactly those (0 drift)', async () => {
     // M3 (dual-host surface adapter): codex adopted the Claude hook protocol, so
-    // it now declares the same 5 lifecycle events and registers them from the
-    // shared hooks/hooks.json — declared == registered, no drift.
+    // it declares the same lifecycle events and registers them from the shared
+    // hooks/hooks.json — declared == registered, no drift.
     const report = await collectCapabilityInventory([codexHostAdapter], repoRoot);
     const codex = report.hosts.find((h) => h.host === 'codex');
     const declared = [...(codex?.capabilities.hooks ?? [])].map(String).sort();
     expect(declared).toEqual(
-      ['PostToolUse', 'PreCompact', 'PreToolUse', 'Stop', 'UserPromptSubmit'].sort(),
+      [
+        'PostToolUse',
+        'PreCompact',
+        'PreToolUse',
+        'SessionStart',
+        'Stop',
+        'UserPromptSubmit',
+      ].sort(),
     );
     expect([...(codex?.hook_events ?? [])].sort()).toEqual(declared);
     expect(report.finding_count).toBe(0);

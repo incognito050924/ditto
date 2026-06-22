@@ -13,7 +13,14 @@ import { join } from 'node:path';
 const REPO = join(import.meta.dir, '..', '..', '..');
 const CLI = join(REPO, 'src', 'cli', 'index.ts');
 
-const EVENTS = ['user-prompt-submit', 'pre-tool-use', 'post-tool-use', 'pre-compact', 'stop'];
+const EVENTS = [
+  'session-start',
+  'user-prompt-submit',
+  'pre-tool-use',
+  'post-tool-use',
+  'pre-compact',
+  'stop',
+];
 
 let projectDir: string;
 beforeEach(async () => {
@@ -40,14 +47,21 @@ function runHook(event: string, payload: unknown) {
 }
 
 describe('Claude host surface — hook envelope', () => {
-  test('hooks.json wires all 5 events to `ditto hook <event>`', () => {
+  test('hooks.json wires all 6 events to `ditto hook <event>`', () => {
     type HookGroup = { hooks: { command: string }[] };
     const wiring = require(join(REPO, 'hooks', 'hooks.json')) as {
       hooks: Record<string, HookGroup[]>;
     };
     const wiredEvents = Object.keys(wiring.hooks);
     expect(wiredEvents.sort()).toEqual(
-      ['PostToolUse', 'PreCompact', 'PreToolUse', 'Stop', 'UserPromptSubmit'].sort(),
+      [
+        'PostToolUse',
+        'PreCompact',
+        'PreToolUse',
+        'SessionStart',
+        'Stop',
+        'UserPromptSubmit',
+      ].sort(),
     );
     for (const handlers of Object.values(wiring.hooks)) {
       const cmd = handlers.flatMap((h) => h.hooks).map((h) => h.command);

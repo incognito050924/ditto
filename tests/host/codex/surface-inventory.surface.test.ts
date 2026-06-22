@@ -33,13 +33,20 @@ describe('Codex host surface inventory (M3)', () => {
     // plugin manifest .codex-plugin/plugin.json -> name "ditto"
     expect(local.some((s) => s.kind === 'plugin' && s.id === 'ditto')).toBe(true);
 
-    // hooks/hooks.json registers exactly the 5 verified events
+    // hooks/hooks.json registers exactly the declared lifecycle events
     const hookIds = local
       .filter((s) => s.kind === 'hook')
       .map((s) => s.id)
       .sort();
     expect(hookIds).toEqual(
-      ['PostToolUse', 'PreCompact', 'PreToolUse', 'Stop', 'UserPromptSubmit'].sort(),
+      [
+        'PostToolUse',
+        'PreCompact',
+        'PreToolUse',
+        'SessionStart',
+        'Stop',
+        'UserPromptSubmit',
+      ].sort(),
     );
 
     // skills shared with the claude build are surfaced under host=codex

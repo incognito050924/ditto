@@ -127,7 +127,7 @@ export const claudeCodeHostAdapter: HostAdapter = {
   id: 'claude-code',
 
   capabilities: {
-    hooks: ['UserPromptSubmit', 'Stop', 'PreCompact', 'PostToolUse', 'PreToolUse'],
+    hooks: ['SessionStart', 'UserPromptSubmit', 'Stop', 'PreCompact', 'PostToolUse', 'PreToolUse'],
     instructions: true,
     permissions: true,
     mcp: true,
