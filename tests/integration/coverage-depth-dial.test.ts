@@ -158,4 +158,17 @@ describe('intensity override at entry (wi_260622vjo ac-4)', () => {
     expect(r.action).toBe('interrogate');
     if (r.action === 'interrogate') expect(r.tier).toBe('full');
   });
+
+  test('nextCoverageNode surfaces sweepAngles per tier so the sweep effort scales (ac-4/ac-8)', async () => {
+    const full = await nextCoverageNode({ repoRoot: repo, workItemId: WI, intensity: 'full' });
+    expect(full.action).toBe('interrogate');
+    if (full.action === 'interrogate') expect(full.sweepAngles).toBe(5);
+
+    const light = await nextCoverageNode({ repoRoot: repo, workItemId: WI, intensity: 'light' });
+    if (light.action === 'interrogate') expect(light.sweepAngles).toBe(1);
+
+    // no override → standard = 3 angles (the existing default, ac-7)
+    const std = await nextCoverageNode({ repoRoot: repo, workItemId: WI });
+    if (std.action === 'interrogate') expect(std.sweepAngles).toBe(3);
+  });
 });

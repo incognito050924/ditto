@@ -15,6 +15,7 @@ import {
   selectCoverageTier,
   selectReadyCoverageNodes,
   serializePlanDialog,
+  tierDepthBudget,
 } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
 import {
@@ -100,6 +101,13 @@ export type NextCoverageNodeResult =
       node: CoverageNode;
       judgeInput: JudgeInput;
       tier: CoverageTier;
+      /**
+       * How many blind sweep angles to spawn for this node — the tier's effort
+       * lever (light=1 / standard=3 / full=5, §8.2). Breadth (every category) is
+       * invariant; this scales the *effort per node* with stakes (ac-4) so a
+       * low-stakes sweep is cheaper and a high-stakes one more thorough (ac-8).
+       */
+      sweepAngles: number;
       dryCounter: number;
     }
   | { action: 'dry'; terminated: true };
@@ -159,6 +167,9 @@ export async function nextCoverageNode(args: {
   // standard=2, full=3); no tierInputs → standard = the existing default (ac-7).
   const tier =
     args.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard');
+  // §8.2 effort lever surfaced to the caller: how many blind sweep angles to spawn
+  // per node (light=1/standard=3/full=5). Breadth invariant; effort scales (ac-4/ac-8).
+  const sweepAngles = tierDepthBudget(tier).sweepAngles;
   if (isCoverageTerminated(map, dryCounter, coverageDryK(tier))) {
     return { action: 'dry', terminated: true };
   }
@@ -179,6 +190,7 @@ export async function nextCoverageNode(args: {
         crossCuttingConstraints: farFieldLenses(taxonomy),
       }),
       tier,
+      sweepAngles,
       dryCounter,
     };
   }
@@ -194,6 +206,7 @@ export async function nextCoverageNode(args: {
       crossCuttingConstraints: farFieldLenses(taxonomy),
     }),
     tier,
+    sweepAngles,
     dryCounter,
   };
 }

@@ -822,8 +822,9 @@ const autopilotCoverageNext = defineCommand({
         writeHuman('Coverage: dry — sweep terminated (breadth + depth). Record the design result.');
       } else {
         writeHuman(`Coverage: interrogate ${res.node.id} (tier=${res.tier})`);
-        writeHuman(`  label:       ${res.node.label}`);
-        writeHuman(`  dry_counter: ${res.dryCounter}`);
+        writeHuman(`  label:        ${res.node.label}`);
+        writeHuman(`  sweep_angles: ${res.sweepAngles}`);
+        writeHuman(`  dry_counter:  ${res.dryCounter}`);
         writeHuman(
           '  → run fresh sweep + 3-role dialectic + judges with ONLY judgeInput, then coverage-round',
         );

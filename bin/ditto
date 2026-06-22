@@ -22976,6 +22976,7 @@ async function nextCoverageNode(args) {
   }
   const dryCounter = await readDryCounter(repoRoot, workItemId2);
   const tier = args.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard");
+  const sweepAngles = tierDepthBudget(tier).sweepAngles;
   if (isCoverageTerminated(map, dryCounter, coverageDryK(tier))) {
     return { action: "dry", terminated: true };
   }
@@ -22991,6 +22992,7 @@ async function nextCoverageNode(args) {
         crossCuttingConstraints: farFieldLenses(taxonomy)
       }),
       tier,
+      sweepAngles,
       dryCounter
     };
   }
@@ -23004,6 +23006,7 @@ async function nextCoverageNode(args) {
       crossCuttingConstraints: farFieldLenses(taxonomy)
     }),
     tier,
+    sweepAngles,
     dryCounter
   };
 }
@@ -24854,8 +24857,9 @@ var autopilotCoverageNext = defineCommand({
         writeHuman("Coverage: dry \u2014 sweep terminated (breadth + depth). Record the design result.");
       } else {
         writeHuman(`Coverage: interrogate ${res.node.id} (tier=${res.tier})`);
-        writeHuman(`  label:       ${res.node.label}`);
-        writeHuman(`  dry_counter: ${res.dryCounter}`);
+        writeHuman(`  label:        ${res.node.label}`);
+        writeHuman(`  sweep_angles: ${res.sweepAngles}`);
+        writeHuman(`  dry_counter:  ${res.dryCounter}`);
         writeHuman("  \u2192 run fresh sweep + 3-role dialectic + judges with ONLY judgeInput, then coverage-round");
       }
     } catch (err) {
@@ -40479,4 +40483,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=0ff91d4933122d4de2f2b8887e678f004e6e404d8fed4cf1ef5fbaa9d2f769b4
+//# ditto-src-stamp=8d8e79dfbabe96ebb651caa3cb02f3d604e61176a370fdc1e527d837ab61e9ac
