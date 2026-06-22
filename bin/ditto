@@ -17760,6 +17760,14 @@ function serializePlanDialog(input) {
   return lines.join(`
 `);
 }
+var COVERAGE_AXES = [
+  "completeness",
+  "neutrality",
+  "balance",
+  "discovery",
+  "priority",
+  "temporal"
+];
 var COVERAGE_AXIS_MECHANISMS = {
   completeness: {
     mechanism_id: "multi-angle-blind-sweep+breadth-termination",
@@ -17830,6 +17838,17 @@ function producePlanGate(input) {
       test_scenarios: [...input.brief.test_scenarios]
     }
   };
+}
+var TIER_DEPTH = {
+  light: { maxRoundsPerNode: 1, sweepAngles: 1 },
+  standard: { maxRoundsPerNode: 2, sweepAngles: 3 },
+  full: { maxRoundsPerNode: 3, sweepAngles: 5 }
+};
+function tierDepthBudget(tier) {
+  return { axes: COVERAGE_AXES, ...TIER_DEPTH[tier] };
+}
+function coverageDryK(tier) {
+  return tierDepthBudget(tier).maxRoundsPerNode;
 }
 
 // src/core/gates.ts
@@ -22907,7 +22926,8 @@ async function nextCoverageNode(args) {
     await store.writeMap(workItemId2, map);
   }
   const dryCounter = await readDryCounter(repoRoot, workItemId2);
-  if (isCoverageTerminated(map, dryCounter)) {
+  const tier = args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard";
+  if (isCoverageTerminated(map, dryCounter, coverageDryK(tier))) {
     return { action: "dry", terminated: true };
   }
   const ready = selectReadyCoverageNodes(map);
@@ -22921,7 +22941,7 @@ async function nextCoverageNode(args) {
         originalIntent: await originalIntent(repoRoot, workItemId2),
         crossCuttingConstraints: farFieldLenses()
       }),
-      tier: args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard",
+      tier,
       dryCounter
     };
   }
@@ -22934,7 +22954,7 @@ async function nextCoverageNode(args) {
       originalIntent: intent,
       crossCuttingConstraints: farFieldLenses()
     }),
-    tier: args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard",
+    tier,
     dryCounter
   };
 }
@@ -23009,7 +23029,8 @@ async function recordCoverageRound(args) {
     }
   }
   await store.writeMap(workItemId2, map);
-  if (isCoverageTerminated(map, nextCounter)) {
+  const tier = args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard";
+  if (isCoverageTerminated(map, nextCounter, coverageDryK(tier))) {
     const delta = args.dialogDelta ?? {};
     const closedItems = map.nodes.filter((n2) => n2.state !== "open").map((n2) => ({ id: n2.id, label: n2.label, state: n2.state }));
     const openItems = map.nodes.filter((n2) => n2.state === "open").map((n2) => ({ id: n2.id, label: n2.label, state: n2.state }));
@@ -40343,4 +40364,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=b55e698808ef08facc85b07a2f501a666251bbb5e280ef222bdb961f4d4b2537
+//# ditto-src-stamp=cbf45de35e3f57773786e15d2c4db240cea48ac6faa620d772c21c96d0c33cb4

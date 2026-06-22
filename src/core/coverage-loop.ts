@@ -9,6 +9,7 @@ import {
   buildJudgeInput,
   closeNode,
   coverageClosureGate,
+  coverageDryK,
   isCoverageTerminated,
   recordDryRound,
   selectCoverageTier,
@@ -137,7 +138,10 @@ export async function nextCoverageNode(args: {
   }
 
   const dryCounter = await readDryCounter(repoRoot, workItemId);
-  if (isCoverageTerminated(map, dryCounter)) {
+  // §8-4: termination depth K scales with the stakes-derived tier (light=1,
+  // standard=2, full=3); no tierInputs → standard = the existing default (ac-7).
+  const tier = args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard';
+  if (isCoverageTerminated(map, dryCounter, coverageDryK(tier))) {
     return { action: 'dry', terminated: true };
   }
 
@@ -156,7 +160,7 @@ export async function nextCoverageNode(args: {
         // category instead of the previous empty slot (cross_cutting_constraints:[]).
         crossCuttingConstraints: farFieldLenses(),
       }),
-      tier: args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard',
+      tier,
       dryCounter,
     };
   }
@@ -171,7 +175,7 @@ export async function nextCoverageNode(args: {
       // Far-field floor lenses (design §8-1) — see the no-ready-node path above.
       crossCuttingConstraints: farFieldLenses(),
     }),
-    tier: args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard',
+    tier,
     dryCounter,
   };
 }
@@ -345,7 +349,9 @@ export async function recordCoverageRound(args: {
 
   await store.writeMap(workItemId, map);
 
-  if (isCoverageTerminated(map, nextCounter)) {
+  // §8-4: same stakes-proportional K as nextCoverageNode (default standard, ac-7).
+  const tier = args.tierInputs ? selectCoverageTier(args.tierInputs) : 'standard';
+  if (isCoverageTerminated(map, nextCounter, coverageDryK(tier))) {
     const delta = args.dialogDelta ?? {};
     const closedItems = map.nodes
       .filter((n) => n.state !== 'open')

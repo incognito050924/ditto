@@ -585,6 +585,19 @@ export function tierDepthBudget(tier: CoverageTier): TierDepthBudget {
 }
 
 /**
+ * Termination DEPTH for a tier (§8-4) — the number of consecutive dry rounds K
+ * required to terminate, reused from the tier's `maxRoundsPerNode` (light=1,
+ * standard=2, full=3). This is the depth lever that is actually wired into
+ * `isCoverageTerminated`; lowering the tier settles a low-stakes sweep sooner.
+ * Breadth is untouched (every node/category must still close, §8.2/ac-4). With no
+ * tier resolved, callers fall back to DEFAULT_DRY_K (= standard), preserving the
+ * existing default (ac-7).
+ */
+export function coverageDryK(tier: CoverageTier): number {
+  return tierDepthBudget(tier).maxRoundsPerNode;
+}
+
+/**
  * Caps (§8.2 상한) — configurable upper bounds on cost. These bound DEPTH/cost,
  * not breadth: the tree-node cap escalates rather than silently pruning scope.
  */

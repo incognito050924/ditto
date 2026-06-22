@@ -1,0 +1,91 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { nextCoverageNode, recordCoverageRound } from '~/core/coverage-loop';
+import { coverageDryK } from '~/core/coverage-manager';
+import { WorkItemStore } from '~/core/work-item-store';
+
+/**
+ * wi_260622vjo §8-4 — stakes-proportional DEPTH, breadth invariant (ac-4). The
+ * termination depth K (consecutive dry rounds) scales with the tier derived from
+ * the change's stakes: light=1, standard=2, full=3 (= TIER_DEPTH.maxRoundsPerNode).
+ * A low-stakes sweep settles sooner; breadth (the node/category set) is unchanged.
+ * No tierInputs → standard (K=2) = the existing default (ac-7).
+ */
+const passingNeutrality = {
+  neutrality: { opponent_ran: true, verdict: 'accept' as const },
+};
+const lightTier = {
+  changedFileCount: 1,
+  interfaceChanged: false,
+  risk: { non_local: false, irreversible: false, unaudited: false },
+  large: false,
+};
+
+describe('depth dial — K maps to tier (wi_260622vjo §8-4)', () => {
+  test('coverageDryK scales depth with the tier (breadth never reduced)', () => {
+    expect(coverageDryK('light')).toBe(1);
+    expect(coverageDryK('standard')).toBe(2);
+    expect(coverageDryK('full')).toBe(3);
+  });
+});
+
+describe('depth dial — termination timing follows the tier (§8-4)', () => {
+  let repo: string;
+  let WI: string;
+  const NOW = new Date('2026-06-01T00:00:00.000Z');
+
+  beforeEach(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'ditto-cov-dial-'));
+    const wi = await new WorkItemStore(repo).create(
+      {
+        title: 'depth dial test',
+        source_request: 'stakes 비례 깊이',
+        goal: 'low-stakes sweep는 더 얕게 종료',
+        acceptance_criteria: [
+          { id: 'ac-1', statement: 'depth scales', verdict: 'unverified', evidence: [] },
+        ],
+      },
+      NOW,
+    );
+    WI = wi.id;
+  });
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true });
+  });
+
+  test('a light-tier sweep terminates after a single dry round (K=1)', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI }); // seed root (no categories)
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: 'cov-root',
+        admissibleBranchesAdded: 0,
+        close_as: 'resolved',
+        axis_signals: passingNeutrality,
+      },
+      tierInputs: lightTier,
+    });
+    // root closed + 1 dry round → light K=1 → terminated.
+    expect(r.terminated).toBe(true);
+  });
+
+  test('the same sweep at standard (no tierInputs) needs a second dry round (K=2, ac-7)', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI });
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: 'cov-root',
+        admissibleBranchesAdded: 0,
+        close_as: 'resolved',
+        axis_signals: passingNeutrality,
+      },
+      // no tierInputs → standard, K=2
+    });
+    // root closed but only 1 dry round (counter=1 < 2) → not yet terminated.
+    expect(r.terminated).toBe(false);
+  });
+});
