@@ -131,6 +131,15 @@ describe('question generation workflow — multi-agent (ac-10~12)', () => {
     }
   });
 
+  test('asking the user carries the presentation contract — check-question guard + user_explanation', () => {
+    const skill = readFileSync(SKILL_PATH, 'utf8');
+    // 사용자에게 질문이 닿을 때(confirm / draft-escalation) 제시 전 check-question 하드가드로 미충족 후보를 반송한다.
+    expect(skill).toContain('check-question');
+    // 평이한 why·value를 user_explanation으로 제시한다 (raw 코드/축이름 금지).
+    expect(skill).toContain('user_explanation');
+    expect(skill).toMatch(/presentation contract/i);
+  });
+
   test('gate agent scores four dimensions, selects by threshold, returns to driver not the user (ac-11~12)', () => {
     const gate = readFileSync(GATE_AGENT_PATH, 'utf8');
     expect(gate).toMatch(/^---\nname: question-gate\n/);
