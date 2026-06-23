@@ -28,9 +28,14 @@
 - **② 부분**(구조 grep·동작 재현 비용): `authentication`·`authorization`·`data-integrity`·`resource-abuse`(N+1)·`configuration`·`reuse`. → LLM + 결정적 도구 보강.
 - **③ 약함**(코드로 환각 못 거름 + 환각 다수): `external-env`·`deployment-rollout`·`concurrency-ordering`·`observability`·`auditing`·`minimal-increment`. 검증 약한데 진짜 사고도 잦은 역설. `minimal-increment`는 pre-mortem 아닌 코드리뷰 영역(카테고리 오류).
 
-**사용자 결정(이 방향으로 구현)**: **③ 약함 그룹을 far-field 자동 sweep 목록에서 제외**하고, 그 위험은 **deep-interview 시점에 사용자 확인 질문**으로 이관한다(charter QuestionGate 정합 — 배포순서·감사필요·외부연동은 사용자만 답할 도메인/운영 질문이지 LLM이 코드에서 환각할 게 아님). 효과: 비용↓(③ 비싼 LLM 발산 제거)·신뢰성↑(환각 제거)·본질 회복(남은 ①②는 코드 결박 가능).
+**사용자 결정(1차)**: ③ 약함 그룹을 far-field 자동 sweep에서 제외하고 deep-interview 사용자 확인으로 이관. 효과: 비용↓·신뢰성↑·본질 회복.
 
-**남은 설계 작업**: ②③ 경계 정밀 분류; ① 카테고리에 oracle 결정적 검증(`file:line` 실재를 grep/AST로) 부착; ③를 deep-interview 질문으로 시딩하는 경로(question-generator/gate); 비용(분할 vs 통합·ON/OFF 증분 ~20배 추정, `coverage-manager.ts:458-464` 모델)은 ① 축소 후 재측정. intent.json 미작성 — deep-interview/계획부터.
+**정교화(후속 자기검토 — 1차가 거칠었음)**: ③를 *통째로* deep-interview에 넣는 건 과하다. 진짜 분류 기준은 카테고리(①②③)가 아니라 **"누가·언제 답하나"**다. 같은 카테고리도 갈린다(예: `authorization` = "어떤 인가 모델?"은 의도→deep-interview, "코드가 그 모델 지키나?"는 코드 검증):
+- **코드가, 언제든** → 자동 검증/정적도구: ①② 대부분 + `concurrency` 등 정적탐지 가능분. (QuestionGate: ①②를 deep-interview에서 물으면 **안 됨** — 코드가 답하고, 사용자도 답하려면 코드 봐야 함.)
+- **사용자가, 의도 단계** → **deep-interview**: ③ **요구사항형**(감사 필요?·인가 모델?·호환성 보장 수준?) + ② 일부. ← ③ 이관의 핵심은 *이것만*.
+- **실제 동작이, 구현 후** → **검증·리뷰 단계**: boundary/race 재현, `external-env` 실패 = ③ **구현위험형**. deep-interview엔 사용자도 못 답함(구현 미정).
+
+**남은 설계 작업**: ③를 요구사항형 vs 구현위험형으로 재분할(deep-interview 시딩은 요구사항형만); ②③ 경계 정밀 분류; ① 카테고리에 oracle 결정적 검증(`file:line` 실재를 grep/AST로) 부착; deep-interview 질문 시딩 경로(question-generator/gate); 비용(분할 vs 통합·ON/OFF 증분 ~20배 추정, `coverage-manager.ts:458-464` 모델)은 ① 축소 후 재측정. intent.json 미작성 — deep-interview/계획부터.
 
 ## 3. 다른 열린 work item (정리 대상)
 
