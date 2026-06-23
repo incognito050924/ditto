@@ -56,3 +56,17 @@ tech-spec은 **자체 far-field sweep을 돌리지 않는다.** tech-spec finali
 - 카테고리-완전 종료가 실측에서 **비용 때문에 기능 OFF**를 유발하면(비싸서 끄는 역설) → 강도 dial 기본값·per-plan 예산을 재조정. 종료 재정의 자체는 불변.
 - ADR-0021 memory seam이 standalone로 이관되면 → entanglement 주입 소스만 seam 뒤에서 교체(이 종료 계약 불변, 내부 결박 금지).
 - 하류 게이트(autopilot verify/review/e2e·`ditto verify`)가 **dry로 닫았거나 미시딩한 카테고리의 실패를 반복 검출**하면 → 사용자 귀속 결정으로 floor taxonomy를 보강한다(카테고리는 닫힌 목록이 아니다; completeness critic이 새 카테고리를 시딩할 수 있다).
+
+### far-field 자동화 보류 (2026-06-23 · wi_26062257r ac-4)
+
+far-field outcome-loop **자동화**(자동 집계 · 임계 트리거 · 자동 sweep)는 **보류(미채택)**. detect + propose + manual(on-demand) 설계가 충분하다고 확정한다. (이번 작업에서 새 far-field sweep을 돌리지 않고 §3 기존 비용 표본 2건으로 판정.)
+
+근거(기존 비용 실측, 임베드):
+
+- far-field sweep 비용 = light tier·Opponent-only 기준 카테고리당 **~35.25k 토큰** (표본 2건: authentication 25.2k, reuse 45.3k). 19-카테고리 floor로 외삽 ≈ **670k 토큰(Opponent only)** ~ **2–3M 토큰(3역 dialectic 전체 + judges)** — 작은 변경 1건당.
+- false-negative: 두 표본 모두 **0** (sweep 위험 0, verify 전수 pass와 일치).
+- 결론: 작은 작업에 자동 far-field sweep은 비실용적(수십만~수백만 토큰)이고 false-negative는 희소 → detect + propose + manual 설계가 정당. 자동 집계·임계 트리거·자동 sweep은 비용 대비 가치가 낮다.
+
+재검토 트리거: far-field **비용 구조 재측정**은 별도 work item **wi_26062227h**("far-field 비용 구조 측정·재설계")로 분리한다 — (a) far-field ON vs OFF 한계비용(노드 1→20, ~20배 추정이나 직접 측정된 적 없음), (b) 19-sweep 분할 vs 단일-통합 sweep의 품질/비용 비교. 둘 중 하나라도 이 보류를 재개할 수 있다.
+
+(주: 이 기록은 ADR-0023 자체의 기존 철회 경로 — "비용 때문에 기능 OFF면 강도 dial·예산 재조정", 위 첫 bullet — 를 비용 측정으로 자동화 판정에 적용한 **정렬**이지, 새 모순 결정이 아니다. ADR-0023을 supersede하지 않는다.)
