@@ -60,16 +60,30 @@ It should avoid:
 
 ## Installing
 
-DITTO installs as a local Claude Code plugin via one idempotent script. See the
-install guide for prerequisites, commands, options, verification, and uninstall:
+One line — no clone, no npm publish. `npx` fetches the source straight from
+GitHub and installs the Claude Code plugin + a global `ditto` CLI. Run it **from
+the project you want DITTO to manage** (a git repo) and the same step scaffolds
+that project's `.ditto/`:
+
+```bash
+npx github:incognito050924/ditto install
+```
+
+Update or remove the same way:
+
+```bash
+npx github:incognito050924/ditto update      # pull the latest
+npx github:incognito050924/ditto uninstall   # remove the plugin + global CLI
+```
+
+Prerequisites: **bun ≥ 1.3**, **git**, and **Claude Code** on your `PATH`. If you
+run the install from outside a git repo it sets up the global plugin only — then
+`cd` into your project and run `ditto setup`. Full guide — options, per-project
+setup/teardown, the local-repo path for contributors, verification, and
+troubleshooting:
 
 - English: [docs/install.md](docs/install.md)
 - 한국어: [docs/install.ko.md](docs/install.ko.md)
-
-```bash
-# install into the project you want DITTO to manage
-/path/to/ditto/scripts/install.sh --target /path/to/your/project
-```
 
 ## Configuring agent variants
 

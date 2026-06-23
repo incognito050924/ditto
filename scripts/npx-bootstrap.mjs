@@ -9,7 +9,7 @@
 // from the symlink we place below — so wiring `bin.ditto` to this bootstrap is
 // safe: nobody runs `npm install -g` on a no-publish repo.
 //
-// Two halves, both idempotent:
+// Three steps, all idempotent:
 //   plugin → shell out to `claude plugin marketplace/install/update/uninstall`.
 //            Claude Code clones+manages the plugin under its own config dir; the
 //            github-source install path is the one verified for wi_260608j2p.
@@ -18,6 +18,10 @@
 //            onto PATH. Copy, not symlink-to-clone, because the npx clone is
 //            ephemeral (vanishes after the command) and a symlink into it would
 //            dangle.
+//   setup  → if the cwd is a git repo, shell out to the just-placed `ditto setup
+//            --dir <cwd> --yes` so install/update is one line end-to-end (global
+//            plugin+CLI AND project .ditto). Best-effort: the global half is the
+//            primary outcome, so a setup miss warns instead of aborting.
 //
 // Pure Node, zero deps — it must run before `ditto`/bun exist. Honors HOME and
 // CLAUDE_CONFIG_DIR so it can be exercised in a throwaway environment without
@@ -138,6 +142,36 @@ function unplaceCli() {
   return out;
 }
 
+// ----------------------------------------------- (optional) per-project setup
+// The one-line install also wires the CURRENT project when it is a git repo:
+// shell out to the just-placed `ditto setup` so `npx … install` is genuinely
+// one line (global plugin+CLI AND project .ditto), not two. Best-effort — the
+// global half is the primary outcome, so a setup miss warns, never aborts. No
+// `--tools` (CodeQL/Playwright/LSP are heavy; run `ditto setup --tools` to add).
+function setupProject() {
+  const cwd = process.cwd();
+  if (!existsSync(join(cwd, '.git')))
+    return {
+      ran: false,
+      message: `${cwd} is not a git repo — cd into your project and run \`ditto setup\``,
+    };
+  const owned = join(shareBinDir(), 'ditto');
+  if (!existsSync(owned))
+    return { ran: false, message: `ditto CLI not placed — run \`ditto setup\` in ${cwd}` };
+  const r = spawnSync('bun', [owned, 'setup', '--dir', cwd, '--yes'], { stdio: 'inherit' });
+  if (r.error && r.error.code === 'ENOENT')
+    return {
+      ran: false,
+      message: 'bun not on PATH — `ditto setup` skipped; install bun, then run it',
+    };
+  if (r.status !== 0)
+    return {
+      ran: false,
+      message: `\`ditto setup\` exited ${r.status} — run it manually in ${cwd}`,
+    };
+  return { ran: true, message: `${cwd} (.ditto scaffolded)` };
+}
+
 // ----------------------------------------------------------------------- output
 const log = [];
 function note(stage, message) {
@@ -184,6 +218,8 @@ function doInstall() {
   const c = placeCli();
   if (!c.ok && c.fatal) fail('cli', c.message);
   note('cli', c.ok ? c.message : `SKIPPED — ${c.message}`);
+  const s = setupProject();
+  note('setup', s.ran ? s.message : `skipped — ${s.message}`);
   bunHint();
 }
 function doUpdate() {
@@ -196,6 +232,8 @@ function doUpdate() {
   const c = placeCli();
   if (!c.ok && c.fatal) fail('cli', c.message);
   note('cli', c.ok ? c.message : `SKIPPED — ${c.message}`);
+  const s = setupProject();
+  note('setup', s.ran ? s.message : `skipped — ${s.message}`);
   bunHint();
 }
 function doUninstall() {
