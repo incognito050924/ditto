@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
+import { findOrphanVariants, loadVariantCatalog } from '~/core/agent-variants';
 import { collectCapabilityInventory } from '~/core/capability-inventory';
 import { defaultDoctorDeps, inspectCodeqlTarget } from '~/core/codeql/doctor';
 import { defaultInstallDeps, installCodeqlCli } from '~/core/codeql/install';
@@ -115,6 +116,21 @@ function planAllowlistFixes(allowlisted: boolean, repoRoot: string): FixItem[] {
       describe: 'add Bash(ditto:*) to project .claude/settings.json allow',
     },
   ];
+}
+
+/**
+ * Plan one register-variant fix per orphan, reusing the SAME orphan detection.
+ * Each repair copies `.ditto/agents/<name>.md` → `.claude/agents/<name>.md`.
+ * The target is project-local → reversible (auto-applies).
+ */
+function planVariantFixes(orphans: string[], repoRoot: string): FixItem[] {
+  return orphans.map((name) => ({
+    kind: 'register-variant' as const,
+    reversible: true,
+    targetPath: join(repoRoot, '.claude', 'agents', `${name}.md`),
+    variantName: name,
+    describe: `register orphan variant ${name} into .claude/agents`,
+  }));
 }
 
 function parseCommon(args: { output?: string; host?: string }) {
@@ -556,6 +572,61 @@ const completionCoverageCommand = defineCommand({
   },
 });
 
+const variantsCommand = defineCommand({
+  meta: {
+    name: 'variants',
+    description:
+      'Check that every .ditto/agents variant has a .claude/agents host registration (un-spawnable orphans = drift)',
+  },
+  args: {
+    output: { type: 'string', default: 'human', description: 'Output format: human|json' },
+    advisory: { type: 'boolean', default: false, description: 'Report drift but exit 0' },
+    fix: {
+      type: 'boolean',
+      default: false,
+      description: 'Register orphan variants into .claude/agents (copy from .ditto/agents)',
+    },
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const variantNames = (await loadVariantCatalog(repoRoot)).map((v) => v.name);
+      // A variant only routes if the claude-code host can spawn it: its name must
+      // have a `.claude/agents` registration. loadSurfaceInventory collects those
+      // as kind:'agent' local surfaces.
+      const inventory = await getHostAdapter('claude-code').loadSurfaceInventory(repoRoot);
+      const hostAgentNames = inventory.localSurfaces
+        .filter((surface) => surface.kind === 'agent')
+        .map((surface) => surface.id);
+      const orphans = findOrphanVariants(variantNames, hostAgentNames);
+      if (args.fix === true) {
+        // Reuse the SAME orphan detection — repair only the detected orphans.
+        await runFix(repoRoot, planVariantFixes(orphans, repoRoot));
+        return; // --fix never raises a drift exit
+      }
+      if (format === 'json') {
+        writeJson({
+          status: orphans.length === 0 ? 'ok' : 'drift',
+          variant_count: variantNames.length,
+          orphan_count: orphans.length,
+          orphans,
+        });
+      } else if (orphans.length === 0) {
+        writeHuman(`variants: ok (${variantNames.length} variants, all host-registered)`);
+      } else {
+        for (const name of orphans) {
+          writeHuman(`claude-code\torphan_variant\t${name}\tno .claude/agents registration`);
+        }
+      }
+      exitForFindings(orphans.length, args.advisory);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  },
+});
+
 export const doctorCommand = defineCommand({
   meta: {
     name: 'doctor',
@@ -572,5 +643,6 @@ export const doctorCommand = defineCommand({
     distribution: distributionCommand,
     'intent-quality': intentQualityCommand,
     'completion-coverage': completionCoverageCommand,
+    variants: variantsCommand,
   },
 });

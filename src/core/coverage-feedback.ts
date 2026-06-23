@@ -23,6 +23,7 @@ import {
   type CoverageFeedback,
   type CoverageFeedbackEntry,
   coverageFeedbackEntry,
+  isFarFieldEscape,
 } from '~/schemas/coverage';
 import type { CoverageMap, CoverageNode } from '~/schemas/coverage';
 import type { CoverageStore } from './coverage-store';
@@ -136,14 +137,45 @@ export function suggestCoverageFeedback(
 }
 
 /**
- * Count how many ledger rows each `category_id` has (ac-4 recurrence base). Pure
- * over the rows — the threshold/aggregation engine that would act on a high count
- * is out of scope for this slice.
+ * Count how many FAR-FIELD ESCAPE rows each `category_id` has (ac-4 recurrence
+ * base). This is the far-field cost/escape aggregation: it counts ONLY depth and
+ * breadth escapes and EXCLUDES `residual` rows (general followup / residual-risk),
+ * so the new kind is recorded in the ledger but invisible to far-field cost stats
+ * (ac-3, wi_26062257r). Pure over the rows — the threshold/aggregation engine that
+ * would act on a high count is out of scope for this slice.
  */
 export function recurrenceCounts(entries: readonly CoverageFeedbackEntry[]): Map<string, number> {
   const counts = new Map<string, number>();
-  for (const e of entries) counts.set(e.category_id, (counts.get(e.category_id) ?? 0) + 1);
+  for (const e of entries) {
+    if (!isFarFieldEscape(e.fault_kind)) continue;
+    counts.set(e.category_id, (counts.get(e.category_id) ?? 0) + 1);
+  }
   return counts;
+}
+
+/**
+ * Record a general followup / residual-risk row (ac-3, wi_26062257r) — NOT a
+ * far-field escape. This bypasses the far-field structural guard
+ * (`attributeCoverageEscape`) on purpose: a residual row is not a floor escape, so
+ * it has no depth/breadth attribution. It is appended to the SAME ledger with
+ * `fault_kind: 'residual'` so it is kept and visible to `propose`/`readAll`, yet
+ * `recurrenceCounts` (the far-field cost aggregation) excludes it. `recorded_at`
+ * is injected by the caller for determinism, as with `append`.
+ */
+export async function recordResidual(
+  ledger: CoverageFeedbackLedger,
+  input: CoverageFeedback,
+  recordedAt: string,
+): Promise<CoverageFeedbackEntry> {
+  return ledger.append(
+    {
+      work_item_id: input.work_item_id,
+      category_id: input.category_id,
+      fault_kind: 'residual',
+      evidence: input.evidence,
+    },
+    recordedAt,
+  );
 }
 
 /** Outcome of the structural attribution guard (ac-2). */

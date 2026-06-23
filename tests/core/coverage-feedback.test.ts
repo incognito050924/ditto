@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import {
   CoverageFeedbackLedger,
   attributeCoverageEscape,
+  recordResidual,
   recurrenceCounts,
 } from '~/core/coverage-feedback';
 import { CoverageStore } from '~/core/coverage-store';
@@ -113,6 +114,91 @@ describe('CoverageFeedbackLedger (append-only jsonl, ac-4)', () => {
       const counts = recurrenceCounts(all);
       expect(counts.get('cov-cat-time-clock')).toBe(2);
       expect(counts.get('cov-cat-configuration')).toBe(1);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+// ac-3 (wi_26062257r) — a general followup / residual-risk row is recorded as a
+// SEPARATE kind ('residual') in the same ledger, yet the far-field cost/escape
+// aggregation (recurrenceCounts) excludes it while still counting depth/breadth.
+describe('residual rows (ac-3, wi_26062257r)', () => {
+  test('recordResidual writes a residual row visible in the ledger', async () => {
+    const root = await freshRepo();
+    try {
+      const ledger = new CoverageFeedbackLedger(root);
+      const entry = await recordResidual(
+        ledger,
+        {
+          work_item_id: 'wi_aaaaaaaa',
+          category_id: 'deployment-rollback',
+          evidence: 'rollback path not exercised; follow up next sprint',
+        },
+        TS,
+      );
+      expect(entry.fault_kind).toBe('residual');
+      expect(entry.recorded_at).toBe(TS);
+      const all = await ledger.readAll();
+      expect(all).toHaveLength(1);
+      expect(all[0]?.fault_kind).toBe('residual');
+      expect(all[0]?.category_id).toBe('deployment-rollback');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test('recurrenceCounts EXCLUDES residual rows but still counts depth/breadth', async () => {
+    const root = await freshRepo();
+    try {
+      const ledger = new CoverageFeedbackLedger(root);
+      await ledger.append(
+        {
+          work_item_id: 'wi_aaaaaaaa',
+          category_id: 'cov-cat-time-clock',
+          fault_kind: 'depth',
+          evidence: 'far-field escape',
+        },
+        '2026-06-23T00:00:00.000Z',
+      );
+      await ledger.append(
+        {
+          work_item_id: 'wi_bbbbbbbb',
+          category_id: 'cov-cat-configuration',
+          fault_kind: 'breadth',
+          evidence: 'missing lens escape',
+        },
+        '2026-06-24T00:00:00.000Z',
+      );
+      // Two residual rows — one on a category that ALSO has a far-field escape,
+      // proving the residual is never folded into that category's far-field count.
+      await recordResidual(
+        ledger,
+        {
+          work_item_id: 'wi_cccccccc',
+          category_id: 'cov-cat-time-clock',
+          evidence: 'general followup, not a sweep escape',
+        },
+        '2026-06-25T00:00:00.000Z',
+      );
+      await recordResidual(
+        ledger,
+        {
+          work_item_id: 'wi_dddddddd',
+          category_id: 'deployment-rollback',
+          evidence: 'residual risk, no far-field attribution',
+        },
+        '2026-06-26T00:00:00.000Z',
+      );
+
+      const all = await ledger.readAll();
+      expect(all).toHaveLength(4); // all four rows are kept in the ledger
+      const counts = recurrenceCounts(all);
+      // depth/breadth escapes counted...
+      expect(counts.get('cov-cat-time-clock')).toBe(1);
+      expect(counts.get('cov-cat-configuration')).toBe(1);
+      // ...residual-only category never appears in far-field cost stats
+      expect(counts.has('deployment-rollback')).toBe(false);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

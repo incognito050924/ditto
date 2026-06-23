@@ -19433,6 +19433,10 @@ function parseVariant(text) {
     return null;
   return { name, role, description, match };
 }
+function findOrphanVariants(variantNames, hostAgentNames) {
+  const host = new Set(hostAgentNames);
+  return variantNames.filter((name) => !host.has(name));
+}
 function recommendVariantRole(name, description) {
   const text = `${name} ${description}`.toLowerCase();
   if (/security|appsec|vuln/.test(text))
@@ -19822,7 +19826,11 @@ var coverageFeedback = exports_external.object({
   category_id: exports_external.string().min(1).describe("Coverage category the escape belongs to (cov-cat-* or a floor category id)"),
   evidence: exports_external.string().min(1).describe("Triggering-failure evidence text \u2014 what slipped past coverage (ac-11b)")
 }).describe("Input to `ditto coverage feedback` \u2014 a coverage-escape report (ac-11b)");
-var coverageFaultKind = exports_external.enum(["depth", "breadth"]).describe("depth = an existing category that was resolved still broke (under-probed); breadth = a category the floor never seeded (missing lens) (ac-11b)");
+var coverageFaultKind = exports_external.enum(["depth", "breadth", "residual"]).describe("depth = an existing category that was resolved still broke (under-probed); breadth = a category the floor never seeded (missing lens); both are far-field escapes. residual = a general followup / residual-risk row recorded in the ledger but EXCLUDED from far-field cost aggregation (ac-3, wi_26062257r)");
+var FAR_FIELD_ESCAPE_KINDS = ["depth", "breadth"];
+function isFarFieldEscape(kind) {
+  return FAR_FIELD_ESCAPE_KINDS.includes(kind);
+}
 var coverageFeedbackEntry = exports_external.object({
   work_item_id: workItemId,
   category_id: exports_external.string().min(1).describe("Coverage category the escape is attributed to"),
@@ -28479,9 +28487,20 @@ function suggestCoverageFeedback(map, workItemId2, floor = FAR_FIELD_TAXONOMY_FL
 }
 function recurrenceCounts(entries) {
   const counts = new Map;
-  for (const e2 of entries)
+  for (const e2 of entries) {
+    if (!isFarFieldEscape(e2.fault_kind))
+      continue;
     counts.set(e2.category_id, (counts.get(e2.category_id) ?? 0) + 1);
+  }
   return counts;
+}
+async function recordResidual(ledger, input, recordedAt) {
+  return ledger.append({
+    work_item_id: input.work_item_id,
+    category_id: input.category_id,
+    fault_kind: "residual",
+    evidence: input.evidence
+  }, recordedAt);
 }
 function bareFloorId(categoryId) {
   return categoryId.startsWith(CATEGORY_NODE_PREFIX) ? categoryId.slice(CATEGORY_NODE_PREFIX.length) : categoryId;
@@ -28605,6 +28624,68 @@ var coverageFeedbackCommand = defineCommand({
     }
   }
 });
+var coverageResidualCommand = defineCommand({
+  meta: {
+    name: "residual",
+    description: "Record a general followup / residual-risk row (NOT a far-field escape; excluded from far-field cost stats, ac-3)"
+  },
+  args: {
+    wi: { type: "string", description: "Work item id (wi_*) the residual risk belongs to" },
+    category: {
+      type: "string",
+      description: "Category / area the residual risk belongs to"
+    },
+    evidence: {
+      type: "string",
+      description: "The followup / residual-risk text"
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = coverageFeedback.safeParse({
+      work_item_id: args.wi,
+      category_id: args.category,
+      evidence: args.evidence
+    });
+    if (!parsed.success) {
+      writeError("coverage residual input failed schema validation:");
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const input = parsed.data;
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const ledger = new CoverageFeedbackLedger(repoRoot);
+      const entry = await recordResidual(ledger, input, new Date().toISOString());
+      if (format === "json") {
+        writeJson2({
+          work_item_id: entry.work_item_id,
+          category_id: entry.category_id,
+          fault_kind: entry.fault_kind,
+          recorded_at: entry.recorded_at
+        });
+      } else {
+        writeHuman(`coverage residual recorded: ${entry.category_id} [${entry.fault_kind}] for ${entry.work_item_id}`);
+        writeHuman(`  evidence: ${entry.evidence}`);
+        writeHuman("  \u2192 excluded from far-field cost/escape stats.");
+      }
+    } catch (err) {
+      writeError(`coverage residual failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 function bareFloorId2(categoryId) {
   return categoryId.startsWith(CATEGORY_NODE_PREFIX) ? categoryId.slice(CATEGORY_NODE_PREFIX.length) : categoryId;
 }
@@ -28633,7 +28714,8 @@ var coverageProposeCommand = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     try {
       const all = await new CoverageFeedbackLedger(repoRoot).readAll();
-      const entries = args.wi ? all.filter((e2) => e2.work_item_id === args.wi) : all;
+      const wiFiltered = args.wi ? all.filter((e2) => e2.work_item_id === args.wi) : all;
+      const entries = wiFiltered.filter((e2) => isFarFieldEscape(e2.fault_kind));
       const counts = recurrenceCounts(entries);
       const floorLens = new Map(FAR_FIELD_TAXONOMY_FLOOR.map((c3) => [c3.id, c3.lens]));
       const order = [];
@@ -28758,10 +28840,11 @@ var coverageSuggestCommand = defineCommand({
 var coverageCommand = defineCommand({
   meta: {
     name: "coverage",
-    description: "Coverage outcome loop (ac-11b): record escapes (feedback), surface taxonomy-augmentation candidates (propose), and suggest feedback templates for a verify miss (suggest)"
+    description: "Coverage outcome loop (ac-11b): record far-field escapes (feedback), record general followup/residual-risk excluded from far-field cost stats (residual), surface taxonomy-augmentation candidates (propose), and suggest feedback templates for a verify miss (suggest)"
   },
   subCommands: {
     feedback: coverageFeedbackCommand,
+    residual: coverageResidualCommand,
     propose: coverageProposeCommand,
     suggest: coverageSuggestCommand
   }
@@ -30186,6 +30269,8 @@ function collectDistributionReport(deps) {
 
 // src/core/doctor-fix.ts
 import { join as join58 } from "path";
+init_fs();
+init_shared();
 
 // src/core/managed-resource.ts
 init_fs();
@@ -30354,6 +30439,10 @@ async function applyDoctorFixes(deps, items) {
       const res = await deps.syncProjection();
       if (res.applied)
         applied.push(item);
+    } else if (item.kind === "register-variant") {
+      const res = await deps.registerVariant(item.variantName ?? "");
+      if (res.applied)
+        applied.push(item);
     } else {
       const res = await deps.ensureAllowlist();
       if (res.applied)
@@ -30376,6 +30465,15 @@ function defaultDoctorFixDeps(repoRoot, homeDir) {
     },
     ensureAllowlist: async () => {
       await allowlistSettingsFile(join58(repoRoot, ".claude", "settings.json"));
+      return { applied: true };
+    },
+    registerVariant: async (name) => {
+      const dest = join58(repoRoot, ".claude", "agents", `${name}.md`);
+      if (await fileExists(dest))
+        return { applied: false };
+      const src2 = join58(repoRoot, ".ditto", "agents", `${name}.md`);
+      await ensureDir(join58(repoRoot, ".claude", "agents"));
+      await Bun.write(dest, await Bun.file(src2).text());
       return { applied: true };
     }
   };
@@ -31022,6 +31120,15 @@ function planAllowlistFixes(allowlisted2, repoRoot) {
     }
   ];
 }
+function planVariantFixes(orphans, repoRoot) {
+  return orphans.map((name) => ({
+    kind: "register-variant",
+    reversible: true,
+    targetPath: join60(repoRoot, ".claude", "agents", `${name}.md`),
+    variantName: name,
+    describe: `register orphan variant ${name} into .claude/agents`
+  }));
+}
 function parseCommon(args) {
   const format = parseOutputFormat(args.output);
   const adapters = selectedAdapters(args.host);
@@ -31412,6 +31519,53 @@ total	${t2.with_completion}/${t2.work_items} with completion	${t2.closed_accepta
     }
   }
 });
+var variantsCommand = defineCommand({
+  meta: {
+    name: "variants",
+    description: "Check that every .ditto/agents variant has a .claude/agents host registration (un-spawnable orphans = drift)"
+  },
+  args: {
+    output: { type: "string", default: "human", description: "Output format: human|json" },
+    advisory: { type: "boolean", default: false, description: "Report drift but exit 0" },
+    fix: {
+      type: "boolean",
+      default: false,
+      description: "Register orphan variants into .claude/agents (copy from .ditto/agents)"
+    }
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const variantNames = (await loadVariantCatalog(repoRoot)).map((v2) => v2.name);
+      const inventory = await getHostAdapter("claude-code").loadSurfaceInventory(repoRoot);
+      const hostAgentNames = inventory.localSurfaces.filter((surface) => surface.kind === "agent").map((surface) => surface.id);
+      const orphans = findOrphanVariants(variantNames, hostAgentNames);
+      if (args.fix === true) {
+        await runFix(repoRoot, planVariantFixes(orphans, repoRoot));
+        return;
+      }
+      if (format === "json") {
+        writeJson2({
+          status: orphans.length === 0 ? "ok" : "drift",
+          variant_count: variantNames.length,
+          orphan_count: orphans.length,
+          orphans
+        });
+      } else if (orphans.length === 0) {
+        writeHuman(`variants: ok (${variantNames.length} variants, all host-registered)`);
+      } else {
+        for (const name of orphans) {
+          writeHuman(`claude-code	orphan_variant	${name}	no .claude/agents registration`);
+        }
+      }
+      exitForFindings(orphans.length, args.advisory);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  }
+});
 var doctorCommand = defineCommand({
   meta: {
     name: "doctor",
@@ -31426,7 +31580,8 @@ var doctorCommand = defineCommand({
     codeql: codeqlCommand2,
     distribution: distributionCommand,
     "intent-quality": intentQualityCommand,
-    "completion-coverage": completionCoverageCommand
+    "completion-coverage": completionCoverageCommand,
+    variants: variantsCommand
   }
 });
 
@@ -40921,4 +41076,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=dea64d5486499acc89a69948bc0179345aad6ca2e00075384861613a5e190ebe
+//# ditto-src-stamp=933c3faca75ebd8f6a10253767144309be26f01b8638016b839ff71a81bf71de

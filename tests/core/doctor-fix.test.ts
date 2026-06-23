@@ -23,6 +23,7 @@ function baseDeps(over: Partial<DoctorFixDeps> = {}): { deps: DoctorFixDeps; con
     },
     syncProjection: async () => ({ applied: true, backupPath: '/repo/CLAUDE.md.ditto_bak' }),
     ensureAllowlist: async () => ({ applied: true }),
+    registerVariant: async () => ({ applied: true }),
     ...over,
   };
   return { deps, confirms };

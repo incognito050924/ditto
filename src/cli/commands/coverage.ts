@@ -1,10 +1,10 @@
 import { defineCommand } from 'citty';
-import { CoverageFeedbackLedger, recurrenceCounts } from '~/core/coverage-feedback';
+import { CoverageFeedbackLedger, recordResidual, recurrenceCounts } from '~/core/coverage-feedback';
 import { attributeCoverageEscape, suggestCoverageFeedback } from '~/core/coverage-feedback';
 import { CoverageStore } from '~/core/coverage-store';
 import { CATEGORY_NODE_PREFIX, FAR_FIELD_TAXONOMY_FLOOR } from '~/core/coverage-taxonomy';
 import { resolveRepoRootForCreate } from '~/core/fs';
-import { coverageFeedback } from '~/schemas/coverage';
+import { coverageFeedback, isFarFieldEscape } from '~/schemas/coverage';
 import type { CoverageFeedbackEntry } from '~/schemas/coverage';
 import {
   RUNTIME_ERROR_EXIT,
@@ -128,6 +128,82 @@ const coverageFeedbackCommand = defineCommand({
   },
 });
 
+/**
+ * `ditto coverage residual` — record a general followup / residual-risk row that
+ * is NOT a far-field escape (ac-3, wi_26062257r). Unlike `feedback`, it does NOT
+ * run the far-field structural guard: a residual is not a floor escape, so there
+ * is no depth/breadth attribution to make. It is appended to the SAME ledger with
+ * `fault_kind: 'residual'` so it is kept and visible to `readAll`, yet the
+ * far-field cost aggregation (`recurrenceCounts` / `propose`) excludes it. The CLI
+ * is a thin surface: validate the same three inputs, call the core recorder, and
+ * inject `recorded_at` (the clock stays out of core for determinism).
+ */
+const coverageResidualCommand = defineCommand({
+  meta: {
+    name: 'residual',
+    description:
+      'Record a general followup / residual-risk row (NOT a far-field escape; excluded from far-field cost stats, ac-3)',
+  },
+  args: {
+    wi: { type: 'string', description: 'Work item id (wi_*) the residual risk belongs to' },
+    category: {
+      type: 'string',
+      description: 'Category / area the residual risk belongs to',
+    },
+    evidence: {
+      type: 'string',
+      description: 'The followup / residual-risk text',
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = coverageFeedback.safeParse({
+      work_item_id: args.wi,
+      category_id: args.category,
+      evidence: args.evidence,
+    });
+    if (!parsed.success) {
+      writeError('coverage residual input failed schema validation:');
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const input = parsed.data;
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const ledger = new CoverageFeedbackLedger(repoRoot);
+      const entry = await recordResidual(ledger, input, new Date().toISOString());
+      if (format === 'json') {
+        writeJson({
+          work_item_id: entry.work_item_id,
+          category_id: entry.category_id,
+          fault_kind: entry.fault_kind,
+          recorded_at: entry.recorded_at,
+        });
+      } else {
+        writeHuman(
+          `coverage residual recorded: ${entry.category_id} [${entry.fault_kind}] for ${entry.work_item_id}`,
+        );
+        writeHuman(`  evidence: ${entry.evidence}`);
+        writeHuman('  → excluded from far-field cost/escape stats.');
+      }
+    } catch (err) {
+      writeError(`coverage residual failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 /** Map a (possibly cov-cat- prefixed) ledger category_id to its bare floor id. */
 function bareFloorId(categoryId: string): string {
   return categoryId.startsWith(CATEGORY_NODE_PREFIX)
@@ -183,7 +259,11 @@ const coverageProposeCommand = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     try {
       const all = await new CoverageFeedbackLedger(repoRoot).readAll();
-      const entries = args.wi ? all.filter((e) => e.work_item_id === args.wi) : all;
+      const wiFiltered = args.wi ? all.filter((e) => e.work_item_id === args.wi) : all;
+      // `propose` surfaces FAR-FIELD taxonomy-augmentation candidates, so it reads
+      // only far-field escapes (depth/breadth) and excludes residual rows — those
+      // are recorded but never feed the far-field cost/escape judgement (ac-3).
+      const entries = wiFiltered.filter((e) => isFarFieldEscape(e.fault_kind));
       const counts = recurrenceCounts(entries);
       const floorLens = new Map(FAR_FIELD_TAXONOMY_FLOOR.map((c) => [c.id, c.lens]));
 
@@ -339,10 +419,11 @@ export const coverageCommand = defineCommand({
   meta: {
     name: 'coverage',
     description:
-      'Coverage outcome loop (ac-11b): record escapes (feedback), surface taxonomy-augmentation candidates (propose), and suggest feedback templates for a verify miss (suggest)',
+      'Coverage outcome loop (ac-11b): record far-field escapes (feedback), record general followup/residual-risk excluded from far-field cost stats (residual), surface taxonomy-augmentation candidates (propose), and suggest feedback templates for a verify miss (suggest)',
   },
   subCommands: {
     feedback: coverageFeedbackCommand,
+    residual: coverageResidualCommand,
     propose: coverageProposeCommand,
     suggest: coverageSuggestCommand,
   },

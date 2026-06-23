@@ -160,11 +160,27 @@ export const coverageFeedback = z
   })
   .describe('Input to `ditto coverage feedback` — a coverage-escape report (ac-11b)');
 
+// depth/breadth are the two FAR-FIELD escapes (a fault that slipped past the
+// floor sweep) — these feed the far-field cost/escape aggregation. `residual` is
+// NOT a far-field escape: it records a general followup / residual-risk row in
+// the SAME ledger so it is kept, but the far-field cost stats exclude it
+// (wi_26062257r ac-3). Keep `isFarFieldEscape` below in sync with this enum.
 export const coverageFaultKind = z
-  .enum(['depth', 'breadth'])
+  .enum(['depth', 'breadth', 'residual'])
   .describe(
-    'depth = an existing category that was resolved still broke (under-probed); breadth = a category the floor never seeded (missing lens) (ac-11b)',
+    'depth = an existing category that was resolved still broke (under-probed); breadth = a category the floor never seeded (missing lens); both are far-field escapes. residual = a general followup / residual-risk row recorded in the ledger but EXCLUDED from far-field cost aggregation (ac-3, wi_26062257r)',
   );
+
+/**
+ * The far-field escape kinds (depth/breadth) — the kinds the far-field
+ * cost/escape aggregation counts. `residual` is recorded in the ledger but
+ * excluded here, so it stays invisible to the far-field cost judgement (ac-3).
+ */
+export const FAR_FIELD_ESCAPE_KINDS = ['depth', 'breadth'] as const;
+
+export function isFarFieldEscape(kind: CoverageFaultKind): boolean {
+  return (FAR_FIELD_ESCAPE_KINDS as readonly string[]).includes(kind);
+}
 
 export const coverageFeedbackEntry = z
   .object({

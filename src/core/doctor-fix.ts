@@ -1,5 +1,7 @@
 import { join } from 'node:path';
 import { syncClaudeCodeProjection } from './bridge-sync';
+import { ensureDir } from './fs';
+import { fileExists } from './hosts/shared';
 import type { InstructionFinding } from './instruction-bridge';
 import { writeBackupOnce } from './managed-resource';
 import { allowlistSettingsFile } from './settings-allowlist';
@@ -14,7 +16,7 @@ import { allowlistSettingsFile } from './settings-allowlist';
  * decides what to repair, classifies reversibility, and applies the repairs.
  */
 
-export type FixKind = 'instruction-projection' | 'allowlist';
+export type FixKind = 'instruction-projection' | 'allowlist' | 'register-variant';
 
 export interface FixItem {
   kind: FixKind;
@@ -28,6 +30,8 @@ export interface FixItem {
   targetPath: string;
   /** Human-readable one-liner for the report. */
   describe: string;
+  /** For `register-variant`: the orphan variant name to register into the host. */
+  variantName?: string;
 }
 
 /**
@@ -73,6 +77,12 @@ export interface DoctorFixDeps {
   syncProjection: () => Promise<{ applied: boolean; backupPath: string | null }>;
   /** Repair the ditto allowlist drift idempotently. */
   ensureAllowlist: () => Promise<{ applied: boolean }>;
+  /**
+   * Register an orphan variant into the host by copying `.ditto/agents/<name>.md`
+   * to `.claude/agents/<name>.md`. Idempotent: an already-present host file is
+   * preserved (skipped), so re-runs and existing hand-edits are no-ops.
+   */
+  registerVariant: (name: string) => Promise<{ applied: boolean }>;
 }
 
 export interface ApplyFixesResult {
@@ -98,6 +108,9 @@ export async function applyDoctorFixes(
     }
     if (item.kind === 'instruction-projection') {
       const res = await deps.syncProjection();
+      if (res.applied) applied.push(item);
+    } else if (item.kind === 'register-variant') {
+      const res = await deps.registerVariant(item.variantName ?? '');
       if (res.applied) applied.push(item);
     } else {
       const res = await deps.ensureAllowlist();
@@ -131,6 +144,16 @@ export function defaultDoctorFixDeps(
     },
     ensureAllowlist: async () => {
       await allowlistSettingsFile(join(repoRoot, '.claude', 'settings.json'));
+      return { applied: true };
+    },
+    registerVariant: async (name) => {
+      const dest = join(repoRoot, '.claude', 'agents', `${name}.md`);
+      // Idempotent + hand-edit-safe: never clobber an existing host file
+      // (matches writeAgentVariants' skip-existing in agent-variants.ts).
+      if (await fileExists(dest)) return { applied: false };
+      const src = join(repoRoot, '.ditto', 'agents', `${name}.md`);
+      await ensureDir(join(repoRoot, '.claude', 'agents'));
+      await Bun.write(dest, await Bun.file(src).text());
       return { applied: true };
     },
   };
