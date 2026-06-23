@@ -889,6 +889,353 @@ describe('recordResult plan-stage coverage wiring (premortem-coverage §7.2/§12
   });
 });
 
+// ADR-0024 ac-2 (wi_260623uap inc-1): the design node assigns a verification
+// method (oracle) per AC and records it. Oracle ASSIGNMENT is an LLM judgment
+// carried in the design-node result payload (ac_oracles) and written by the loop
+// onto the work-item acceptance_criteria[].oracle (the SoT decision). A
+// deterministic presence-CHECK (computed in the loop, passed to producePlanGate)
+// keeps the plan stage from auto-closing when an in-play AC lacks an oracle.
+// Presence-gated: a design close that carries NO oracle assignment behaves
+// exactly as the legacy path (no oracle requirement retro-imposed).
+describe('recordResult design oracle assignment (ADR-0024 ac-2: per-AC verification method)', () => {
+  const designOnlyTwoAcs = (): Autopilot =>
+    graph({
+      approval_gate: {
+        status: 'not_required',
+        source: 'small_reversible_policy',
+        approved_at: null,
+        approved_by: null,
+        evidence_refs: [],
+      },
+      nodes: [
+        {
+          id: 'N1',
+          kind: 'design',
+          owner: 'planner',
+          purpose: 'plan the change',
+          status: 'pending',
+          depends_on: [],
+          // both ACs are in play (the design node covers them)
+          acceptance_refs: ['ac-1', 'ac-2'],
+          evidence_refs: [],
+          attempts: { fix: 0, switch: 0 },
+        },
+      ],
+    });
+
+  // The presence-check works over the design node's in-play AC set, so the work
+  // item must actually carry those ACs. Add ac-2 alongside the beforeEach ac-1.
+  const seedTwoAcs = async (): Promise<void> => {
+    await wis.update(WI, (w) => ({
+      ...w,
+      acceptance_criteria: [
+        ...w.acceptance_criteria,
+        { id: 'ac-2', statement: 'second criterion', verdict: 'unverified', evidence: [] },
+      ],
+    }));
+  };
+
+  const seedCoverage = async (): Promise<void> => {
+    await new CoverageStore(repo).writeMap(WI, {
+      schema_version: '0.1.0',
+      work_item_id: WI,
+      root_id: 'cov-root',
+      nodes: [
+        {
+          id: 'cov-root',
+          parent_id: null,
+          label: 'intent',
+          origin: 'seed',
+          depth_weight: 0,
+          state: 'resolved',
+          children: [],
+        },
+      ],
+    });
+  };
+
+  // light-tier brief: alone it would auto-waive (not_required); the oracle
+  // presence-check is the only thing that can force pending here.
+  const lightBrief = () => ({
+    change_surface: ['src/x.ts'],
+    interface_changes: [] as string[],
+    dod: ['x still works'],
+    test_scenarios: ['unit test for x'],
+    tier_inputs: {
+      changedFileCount: 1,
+      interfaceChanged: false,
+      risk: { non_local: false, irreversible: false, unaudited: false },
+      large: false,
+    },
+  });
+
+  test('(a) design payload carrying per-AC oracles writes them onto the work-item AC', async () => {
+    await seed(designOnlyTwoAcs());
+    await seedTwoAcs();
+    await seedCoverage();
+    await nextNode(repo, WI);
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text: 'plan: assigned a verification method to every AC in scope',
+        outcome: 'pass',
+        plan_brief: lightBrief(),
+        ac_oracles: [
+          {
+            criterion_id: 'ac-1',
+            oracle: { verification_method: 'dynamic_test', maps_to: 'ac-1', direction: 'forward' },
+          },
+          {
+            criterion_id: 'ac-2',
+            oracle: {
+              verification_method: 'soft_judgment',
+              maps_to: 'docs/decision.md',
+              direction: 'backward',
+            },
+          },
+        ],
+      },
+      now: NOW,
+    });
+    const w = await wis.get(WI);
+    const ac1 = w.acceptance_criteria.find((a) => a.id === 'ac-1');
+    const ac2 = w.acceptance_criteria.find((a) => a.id === 'ac-2');
+    expect(ac1?.oracle).toEqual({
+      verification_method: 'dynamic_test',
+      maps_to: 'ac-1',
+      direction: 'forward',
+    });
+    expect(ac2?.oracle).toEqual({
+      verification_method: 'soft_judgment',
+      maps_to: 'docs/decision.md',
+      direction: 'backward',
+    });
+    // every in-play AC got an oracle → presence-check passes → light tier auto-waives.
+    const g = await aps.get(WI);
+    expect(g.approval_gate.status).toBe('not_required');
+  });
+
+  test('(b) presence-check keeps the plan stage from closing when an in-play AC lacks an oracle', async () => {
+    await seed(designOnlyTwoAcs());
+    await seedTwoAcs();
+    await seedCoverage();
+    await nextNode(repo, WI);
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text: 'plan: assigned an oracle to ac-1 but left ac-2 without one',
+        outcome: 'pass',
+        plan_brief: lightBrief(),
+        // assignment is IN PLAY (non-empty) but ac-2 is missing → must not auto-close.
+        ac_oracles: [
+          {
+            criterion_id: 'ac-1',
+            oracle: { verification_method: 'dynamic_test', maps_to: 'ac-1', direction: 'forward' },
+          },
+        ],
+      },
+      now: NOW,
+    });
+    const g = await aps.get(WI);
+    // light tier alone would be not_required; the oracle gap forces pending.
+    expect(g.approval_gate.status).toBe('pending');
+  });
+
+  test('(c) legacy design close with NO oracle assignment still closes as before (light → not_required)', async () => {
+    await seed(designOnlyTwoAcs());
+    await seedTwoAcs();
+    await seedCoverage();
+    await nextNode(repo, WI);
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text: 'plan: legacy path — no oracle regime engaged',
+        outcome: 'pass',
+        plan_brief: lightBrief(),
+        // ac_oracles ABSENT → assignment not in play → no retro oracle requirement.
+      },
+      now: NOW,
+    });
+    const g = await aps.get(WI);
+    expect(g.approval_gate.status).toBe('not_required');
+    // and no oracle was silently written onto the ACs.
+    const w = await wis.get(WI);
+    expect(w.acceptance_criteria.every((a) => a.oracle === undefined)).toBe(true);
+  });
+
+  // ADR-0024 ac-5 (blueprint §4 anti-SLOP): the design-close assignment path runs
+  // validateAcOracle — a fake / tautological oracle (a hard method anchored to
+  // prose) is REJECTED at assignment (the plan stage does not accept it). And once
+  // a FORWARD oracle is design-assigned, a later re-assignment to a DIFFERENT value
+  // is rejected (freeze); an equal re-assignment is a no-op.
+
+  test('(d) injecting a tautological oracle (static_scan → doc: prose) is REJECTED at assignment', async () => {
+    await seed(designOnlyTwoAcs());
+    await seedTwoAcs();
+    await seedCoverage();
+    await nextNode(repo, WI);
+    await expect(
+      recordResult(repo, {
+        workItemId: WI,
+        payload: {
+          node_id: 'N1',
+          result_text: 'plan: assigned a fake static_scan that points at prose',
+          outcome: 'pass',
+          plan_brief: lightBrief(),
+          ac_oracles: [
+            {
+              criterion_id: 'ac-1',
+              // tautological: a "scan" of a doc: ref re-runs nothing.
+              oracle: {
+                verification_method: 'static_scan',
+                maps_to: 'doc: the spec says it works',
+                direction: 'forward',
+              },
+            },
+          ],
+        },
+        now: NOW,
+      }),
+    ).rejects.toThrow(/anchor|re-evaluab|tautolog|static_scan/i);
+    // the fake oracle must NOT have been written onto the AC.
+    const w = await wis.get(WI);
+    expect(w.acceptance_criteria.find((a) => a.id === 'ac-1')?.oracle).toBeUndefined();
+  });
+
+  test('(e) a legit static_scan → path oracle is accepted and written', async () => {
+    await seed(designOnlyTwoAcs());
+    await seedTwoAcs();
+    await seedCoverage();
+    await nextNode(repo, WI);
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text: 'plan: assigned a real scannable anchor',
+        outcome: 'pass',
+        plan_brief: lightBrief(),
+        ac_oracles: [
+          {
+            criterion_id: 'ac-1',
+            oracle: {
+              verification_method: 'static_scan',
+              maps_to: 'src/core/parser.ts',
+              direction: 'forward',
+            },
+          },
+          {
+            criterion_id: 'ac-2',
+            oracle: { verification_method: 'dynamic_test', maps_to: 'ac-2', direction: 'forward' },
+          },
+        ],
+      },
+      now: NOW,
+    });
+    const w = await wis.get(WI);
+    expect(w.acceptance_criteria.find((a) => a.id === 'ac-1')?.oracle).toEqual({
+      verification_method: 'static_scan',
+      maps_to: 'src/core/parser.ts',
+      direction: 'forward',
+    });
+  });
+
+  test('(f) re-assigning an already-frozen FORWARD oracle to a DIFFERENT value is REJECTED', async () => {
+    await seed(designOnlyTwoAcs());
+    await seedTwoAcs();
+    await seedCoverage();
+    // pre-assign a forward oracle on ac-1 (as if a prior design pass froze it).
+    await wis.update(WI, (w) => ({
+      ...w,
+      acceptance_criteria: w.acceptance_criteria.map((a) =>
+        a.id === 'ac-1'
+          ? {
+              ...a,
+              oracle: {
+                verification_method: 'dynamic_test' as const,
+                maps_to: 'ac-1',
+                direction: 'forward' as const,
+              },
+            }
+          : a,
+      ),
+    }));
+    await nextNode(repo, WI);
+    await expect(
+      recordResult(repo, {
+        workItemId: WI,
+        payload: {
+          node_id: 'N1',
+          result_text: 'plan: tries to re-point the frozen forward oracle',
+          outcome: 'pass',
+          plan_brief: lightBrief(),
+          ac_oracles: [
+            {
+              criterion_id: 'ac-1',
+              // DIFFERENT value than the frozen one → must be rejected.
+              oracle: {
+                verification_method: 'static_scan',
+                maps_to: 'src/core/other.ts',
+                direction: 'forward',
+              },
+            },
+          ],
+        },
+        now: NOW,
+      }),
+    ).rejects.toThrow(/frozen|forward/i);
+    // the original frozen oracle is untouched.
+    const w = await wis.get(WI);
+    expect(w.acceptance_criteria.find((a) => a.id === 'ac-1')?.oracle).toEqual({
+      verification_method: 'dynamic_test',
+      maps_to: 'ac-1',
+      direction: 'forward',
+    });
+  });
+
+  test('(g) re-assigning an already-frozen FORWARD oracle to the SAME value is a no-op', async () => {
+    await seed(designOnlyTwoAcs());
+    await seedTwoAcs();
+    await seedCoverage();
+    const frozen = {
+      verification_method: 'dynamic_test' as const,
+      maps_to: 'ac-1',
+      direction: 'forward' as const,
+    };
+    await wis.update(WI, (w) => ({
+      ...w,
+      acceptance_criteria: w.acceptance_criteria.map((a) =>
+        a.id === 'ac-1' ? { ...a, oracle: frozen } : a,
+      ),
+    }));
+    await nextNode(repo, WI);
+    // equal re-assignment of ac-1 (no diff) + a fresh assignment for ac-2.
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text: 'plan: re-confirms the same forward oracle (idempotent)',
+        outcome: 'pass',
+        plan_brief: lightBrief(),
+        ac_oracles: [
+          { criterion_id: 'ac-1', oracle: frozen },
+          {
+            criterion_id: 'ac-2',
+            oracle: { verification_method: 'dynamic_test', maps_to: 'ac-2', direction: 'forward' },
+          },
+        ],
+      },
+      now: NOW,
+    });
+    const w = await wis.get(WI);
+    expect(w.acceptance_criteria.find((a) => a.id === 'ac-1')?.oracle).toEqual(frozen);
+    const g = await aps.get(WI);
+    expect(g.approval_gate.status).toBe('not_required');
+  });
+});
+
 describe('recordResult forward re-expansion (A-2: review findings → fix+review splice · §2.4/§4.3)', () => {
   const reviewGraph = (reviewId: string, converge = 3): Autopilot =>
     graph({

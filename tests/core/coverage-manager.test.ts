@@ -4,11 +4,13 @@ import {
   COVERAGE_AXIS_MECHANISMS,
   COVERAGE_TIERS,
   addNode,
+  assertOracleFrozen,
   buildJudgeInput,
   capStatus,
   closeNode,
   coverageClosureGate,
   isCoverageTerminated,
+  oraclesEqual,
   producePlanGate,
   recordDryRound,
   selectCoverageTier,
@@ -16,8 +18,10 @@ import {
   serializePlanDialog,
   tierBriefApproval,
   tierDepthBudget,
+  validateAcOracle,
 } from '~/core/coverage-manager';
 import type { CoverageMap, CoverageNode } from '~/schemas/coverage';
+import type { AcOracle } from '~/schemas/work-item';
 
 // Builder helpers — keep the structural fields explicit so each test reads as a
 // concrete tree shape (the Manager handles only these fields, never natural language).
@@ -684,5 +688,126 @@ describe('producePlanGate — intent ADR conflict front-loads approval (ADR-0020
 
   test('requireApproval forces pending even for an otherwise auto-waivable light tier', () => {
     expect(producePlanGate({ ...lightInputs, requireApproval: true }).status).toBe('pending');
+  });
+});
+
+// ADR-0024 ac-5 (wi_260623uap inc-1, blueprint §4 anti-SLOP): an assigned oracle
+// must deliver the re-evaluability it claims. A HARD method (dynamic_test /
+// static_scan) whose maps_to anchors to prose / a doc:/intent: ref cannot
+// actually re-run anything — a "scan" of prose is tautological. validateAcOracle
+// is the deterministic mismatch detector that REJECTS those and ADMITS a real
+// testable/scannable anchor (an AC id, a path/file, or a rule id). N4's schema
+// already rejects forward + raw code-pointer; this builds on it, not duplicates.
+describe('validateAcOracle — adversarial oracle mismatch detection (ADR-0024 ac-5)', () => {
+  const ac = { id: 'ac-1', statement: 'parser accepts the new option' };
+
+  test('REJECTS a static_scan anchored to a doc: ref (a scan of prose re-runs nothing)', () => {
+    const res = validateAcOracle(ac, {
+      verification_method: 'static_scan',
+      maps_to: 'doc: the spec says it should work',
+      direction: 'forward',
+    });
+    expect(res.ok).toBe(false);
+    expect(res.reasons.join(' ')).toMatch(/static_scan|re-evaluab|anchor/i);
+  });
+
+  test('REJECTS a dynamic_test anchored to an intent: ref (no executable anchor)', () => {
+    const res = validateAcOracle(ac, {
+      verification_method: 'dynamic_test',
+      maps_to: 'intent: the user wants it faster',
+      direction: 'forward',
+    });
+    expect(res.ok).toBe(false);
+  });
+
+  test('REJECTS a dynamic_test anchored to free prose (not an ac-id / path / rule id)', () => {
+    const res = validateAcOracle(ac, {
+      verification_method: 'dynamic_test',
+      maps_to: 'the parser should work correctly in all cases',
+      direction: 'forward',
+    });
+    expect(res.ok).toBe(false);
+  });
+
+  test('ACCEPTS a dynamic_test anchored to an AC id', () => {
+    const res = validateAcOracle(ac, {
+      verification_method: 'dynamic_test',
+      maps_to: 'ac-1',
+      direction: 'forward',
+    });
+    expect(res.ok).toBe(true);
+    expect(res.reasons).toEqual([]);
+  });
+
+  test('ACCEPTS a static_scan anchored to a path/file', () => {
+    const res = validateAcOracle(ac, {
+      verification_method: 'static_scan',
+      maps_to: 'src/core/parser.ts',
+      direction: 'forward',
+    });
+    expect(res.ok).toBe(true);
+  });
+
+  test('ACCEPTS a static_scan anchored to a rule id', () => {
+    const res = validateAcOracle(ac, {
+      verification_method: 'static_scan',
+      maps_to: 'no-explicit-any',
+      direction: 'forward',
+    });
+    expect(res.ok).toBe(true);
+  });
+
+  test('soft_judgment may anchor to a doc/prose ref (not a hard re-evaluable claim)', () => {
+    const res = validateAcOracle(ac, {
+      verification_method: 'soft_judgment',
+      maps_to: 'doc: the spec',
+      direction: 'backward',
+    });
+    expect(res.ok).toBe(true);
+  });
+});
+
+// ADR-0024 ac-5 (frozen forward-AC oracle): once a FORWARD oracle is assigned at
+// the design node, a later attempt to change it to a DIFFERENT value is rejected
+// (diff = reject). Equal re-assignment is a no-op (idempotent). backward oracles
+// are not frozen.
+describe('oraclesEqual / assertOracleFrozen — forward-AC oracle freeze (ADR-0024 ac-5)', () => {
+  const fwd = (over: Partial<AcOracle> = {}): AcOracle => ({
+    verification_method: 'dynamic_test',
+    maps_to: 'ac-1',
+    direction: 'forward',
+    ...over,
+  });
+
+  test('oraclesEqual is true for structurally identical oracles', () => {
+    expect(oraclesEqual(fwd(), fwd())).toBe(true);
+  });
+
+  test('oraclesEqual is false when any field differs', () => {
+    expect(oraclesEqual(fwd(), fwd({ verification_method: 'static_scan' }))).toBe(false);
+    expect(oraclesEqual(fwd(), fwd({ maps_to: 'ac-2' }))).toBe(false);
+  });
+
+  test('REJECTS changing an already-assigned FORWARD oracle to a different value', () => {
+    const res = assertOracleFrozen(fwd(), fwd({ maps_to: 'ac-9' }));
+    expect(res.ok).toBe(false);
+    expect(res.reasons.join(' ')).toMatch(/frozen|forward/i);
+  });
+
+  test('equal re-assignment of a forward oracle is a no-op (idempotent, ok)', () => {
+    const res = assertOracleFrozen(fwd(), fwd());
+    expect(res.ok).toBe(true);
+    expect(res.reasons).toEqual([]);
+  });
+
+  test('a backward oracle is NOT frozen — a different value is allowed', () => {
+    const back = (over: Partial<AcOracle> = {}): AcOracle => ({
+      verification_method: 'soft_judgment',
+      maps_to: 'docs/decision.md',
+      direction: 'backward',
+      ...over,
+    });
+    const res = assertOracleFrozen(back(), back({ maps_to: 'docs/other.md' }));
+    expect(res.ok).toBe(true);
   });
 });

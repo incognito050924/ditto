@@ -17836,13 +17836,43 @@ function tierBriefApproval(tier) {
 function producePlanGate(input) {
   const tier = selectCoverageTier(input.tierInputs);
   return {
-    status: input.requireApproval ? "pending" : tierBriefApproval(tier),
+    status: input.requireApproval || input.oracleAssignmentIncomplete ? "pending" : tierBriefApproval(tier),
     change_surface: [...input.changeSurface],
     plan_brief: {
       interface_changes: [...input.brief.interface_changes],
       dod: [...input.brief.dod],
       test_scenarios: [...input.brief.test_scenarios]
     }
+  };
+}
+var DOC_INTENT_PREFIX = /^(doc|intent)\s*:/i;
+var ANCHOR_TOKEN = /^[^\s]+$/;
+function isReEvaluableAnchor(mapsTo) {
+  if (DOC_INTENT_PREFIX.test(mapsTo))
+    return false;
+  return ANCHOR_TOKEN.test(mapsTo);
+}
+function validateAcOracle(ac, oracle) {
+  const reasons = [];
+  const isHard = oracle.verification_method === "dynamic_test" || oracle.verification_method === "static_scan";
+  if (isHard && !isReEvaluableAnchor(oracle.maps_to)) {
+    reasons.push(`oracle for ${ac.id}: ${oracle.verification_method} claims a re-evaluable check but maps_to "${oracle.maps_to}" is not a testable/scannable anchor (expected an AC id, a path/file, or a rule id \u2014 not a doc:/intent: ref or free prose). A scan/test of prose is tautological (ADR-0024 \xA73/\xA74).`);
+  }
+  return { ok: reasons.length === 0, reasons };
+}
+function oraclesEqual(a2, b2) {
+  return a2.verification_method === b2.verification_method && a2.maps_to === b2.maps_to && a2.direction === b2.direction;
+}
+function assertOracleFrozen(assigned, candidate) {
+  if (assigned.direction !== "forward")
+    return { ok: true, reasons: [] };
+  if (oraclesEqual(assigned, candidate))
+    return { ok: true, reasons: [] };
+  return {
+    ok: false,
+    reasons: [
+      `forward oracle is frozen after design assignment: cannot change {${assigned.verification_method},${assigned.maps_to},${assigned.direction}} \u2192 {${candidate.verification_method},${candidate.maps_to},${candidate.direction}} (ADR-0024 ac-5)`
+    ]
   };
 }
 var TIER_DEPTH = {
@@ -17984,6 +18014,28 @@ function resolvabilityBlockers(unverified, acceptanceIds) {
     }
   }
   return blockers;
+}
+var STATIC_SCAN_KINDS = new Set([
+  "file",
+  "artifact",
+  "command"
+]);
+function oracleSatisfaction(acId, oracle, closingEvidence) {
+  const satisfied = (() => {
+    switch (oracle.verification_method) {
+      case "dynamic_test":
+        return closingEvidence.length > 0;
+      case "static_scan":
+        return closingEvidence.some((e2) => STATIC_SCAN_KINDS.has(e2.kind));
+      case "soft_judgment":
+        return closingEvidence.length > 0;
+    }
+  })();
+  if (satisfied)
+    return gate([]);
+  return gate([
+    `${acId}: ${oracle.verification_method} oracle unsatisfied (no closing evidence meets the oracle; not closed to pass)`
+  ]);
 }
 function completionGate(item, completion) {
   const reasons = [];
@@ -18584,14 +18636,34 @@ function perAcEvidence(node, acId) {
 function hasClosingEvidence(node, acId) {
   return node.evidence_refs.length > 0 || perAcEvidence(node, acId).length > 0;
 }
-function nodeVerdictFor(node, acId) {
+function closingEvidence(node, acId) {
+  return [...node.evidence_refs, ...perAcEvidence(node, acId)];
+}
+function nodeVerdictFor(node, acId, oracle) {
   let verdict2;
   let notes;
   if (node.status === "failed") {
     verdict2 = "fail";
     notes = "an addressing node failed";
   } else if (node.status === "passed" && hasClosingEvidence(node, acId)) {
-    verdict2 = "pass";
+    if (oracle) {
+      let blocked;
+      try {
+        const sat = oracleSatisfaction(acId, oracle, closingEvidence(node, acId));
+        if (!sat.pass)
+          blocked = sat.reasons[0];
+      } catch {
+        blocked = `${acId}: ${oracle.verification_method} oracle evaluation errored (held non-pass, fail-closed)`;
+      }
+      if (blocked) {
+        verdict2 = "unverified";
+        notes = blocked;
+      } else {
+        verdict2 = "pass";
+      }
+    } else {
+      verdict2 = "pass";
+    }
   } else if (node.status === "passed") {
     verdict2 = "unverified";
     notes = "addressing node passed without evidence (claim \u2260 proof)";
@@ -18650,9 +18722,10 @@ function dependsOnNode2(node, targetId, byId) {
 function isStructuralUnverified(node, acId) {
   return node.status === "passed" && !hasClosingEvidence(node, acId) && node.ac_verdicts.every((v2) => v2.criterion_id !== acId || v2.verdict === "pass");
 }
-function deriveAcVerdicts(graph, acIds) {
+function deriveAcVerdicts(graph, acIds, oracles) {
   const byId = new Map(graph.nodes.map((n2) => [n2.id, n2]));
   return acIds.map((acId) => {
+    const oracle = oracles?.get(acId);
     const addressing = graph.nodes.filter((n2) => n2.acceptance_refs.includes(acId));
     const evidence = addressing.flatMap((n2) => [...n2.evidence_refs, ...perAcEvidence(n2, acId)]);
     if (addressing.length === 0) {
@@ -18663,16 +18736,16 @@ function deriveAcVerdicts(graph, acIds) {
         notes: "no node addressed this criterion"
       };
     }
-    const supersedingFix = addressing.some((n2) => nodeVerdictFor(n2, acId).verdict === "pass" && dependsOnPassedFix(n2, byId));
+    const supersedingFix = addressing.some((n2) => nodeVerdictFor(n2, acId, oracle).verdict === "pass" && dependsOnPassedFix(n2, byId));
     let verdict2 = "pass";
     let notes;
     let folded = false;
     let structuralSuperseded = false;
     for (const n2 of addressing) {
-      const nv = nodeVerdictFor(n2, acId);
+      const nv = nodeVerdictFor(n2, acId, oracle);
       if ((nv.verdict === "fail" || nv.verdict === "partial") && supersedingFix)
         continue;
-      if (nv.verdict === "unverified" && isStructuralUnverified(n2, acId) && addressing.some((m2) => m2 !== n2 && nodeVerdictFor(m2, acId).verdict === "pass" && (n2.kind === "design" || dependsOnNode2(m2, n2.id, byId)))) {
+      if (nv.verdict === "unverified" && isStructuralUnverified(n2, acId) && addressing.some((m2) => m2 !== n2 && nodeVerdictFor(m2, acId, oracle).verdict === "pass" && (n2.kind === "design" || dependsOnNode2(m2, n2.id, byId)))) {
         structuralSuperseded = true;
         continue;
       }
@@ -18693,7 +18766,8 @@ function deriveAcVerdicts(graph, acIds) {
 }
 function assembleCompletionFromGraph(graph, workItem, opts = {}) {
   const acIds = workItem.acceptance_criteria.map((c3) => c3.id);
-  const verdicts = deriveAcVerdicts(graph, acIds);
+  const oracles = new Map(workItem.acceptance_criteria.map((c3) => [c3.id, c3.oracle]));
+  const verdicts = deriveAcVerdicts(graph, acIds, oracles);
   const summary = opts.summary ?? `Completion assembled from autopilot ${graph.autopilot_id} (${graph.nodes.length} nodes) for "${workItem.goal}".`;
   const nonTerminal = graph.nodes.filter((n2) => n2.status !== "passed" && n2.status !== "failed");
   const remainingRisks = [
@@ -19277,6 +19351,87 @@ var decisionConflictCarrier = exports_external.object({
   conflicts: exports_external.array(decisionConflict).default([])
 }).describe("Persisted inputs to decisionConflictGate, written by the detecting node");
 
+// src/schemas/work-item.ts
+init_zod();
+init_common();
+var gitSha40 = exports_external.string().regex(/^[a-f0-9]{40}$/, "git sha must be 40 lowercase hex characters").describe("Full 40-char git commit sha");
+var verificationMethod = exports_external.enum(["dynamic_test", "static_scan", "soft_judgment"]).describe("Re-evaluability class of the oracle (ADR-0024 \xA73.1: hard\xB7dynamic / hard\xB7static / soft\xB7judgment). Distinct from evidenceRequiredKind (intent.ts), which is the kind of evidence, not its re-evaluability.");
+var codePointerMapsTo = /^[^\s]+\.[A-Za-z0-9]+:[^\s]+$/;
+var acOracle = exports_external.object({
+  verification_method: verificationMethod,
+  maps_to: exports_external.string().min(1).describe("AC, file:line, intent, or doc the oracle anchors to (same vocabulary as dialectic maps_to)"),
+  direction: exports_external.enum(["forward", "backward"]).describe("forward = post-change final state; backward = current-code finding (ADR-0024 \xA73.0)")
+}).superRefine((value, ctx) => {
+  if (value.direction === "forward" && codePointerMapsTo.test(value.maps_to)) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "forward oracle must be re-evaluable: a code-pointer maps_to (file:line / symbol) drifts on change \u2014 use direction=backward for a current-code finding (ADR-0024 \xA73.0)",
+      path: ["maps_to"]
+    });
+  }
+}).describe("Per-AC oracle: re-evaluable verification method + anchor target (ADR-0024 \xA73)");
+var acceptanceCriterion = exports_external.object({
+  id: exports_external.string().min(1).describe("Stable id within the work item (e.g., ac-1)"),
+  statement: exports_external.string().min(1).describe("Single observable behavior in user-facing terms"),
+  verdict: verdict.default("unverified"),
+  evidence: exports_external.array(evidenceRef).default([]),
+  oracle: acOracle.optional()
+}).describe("One acceptance criterion with its verification verdict");
+var riskNote = exports_external.object({
+  description: exports_external.string().min(1),
+  severity: exports_external.enum(["info", "low", "medium", "high", "critical"]).default("low"),
+  mitigation: exports_external.string().optional()
+}).describe("Outstanding risk that did not block completion but remains relevant");
+var reEntry = exports_external.object({
+  command: exports_external.string().optional().describe("Concrete next command to resume work"),
+  fresh_evidence_needed: exports_external.array(exports_external.string()).default([]).describe("What new evidence must be gathered before the next attempt"),
+  owner: exports_external.string().optional().describe("Profile or human handle expected to resume")
+}).describe("Instructions for resuming a partial/unverified/blocked work item");
+var workItem = exports_external.object({
+  schema_version: schemaVersion,
+  id: workItemId,
+  title: exports_external.string().min(1).max(200),
+  source_request: exports_external.string().min(1).describe("Verbatim or close-paraphrase of the original user request"),
+  goal: exports_external.string().min(1).describe("Observable outcome stated in project terms; not a list of steps"),
+  acceptance_criteria: exports_external.array(acceptanceCriterion).min(1),
+  status: workItemStatus.default("draft"),
+  owner_profile: profileName.default("workspace-write"),
+  parent_id: workItemId.optional().describe("Parent work item if this is a child task"),
+  child_ids: exports_external.array(workItemId).default([]),
+  changed_files: exports_external.array(relativePath).default([]),
+  autopilot_exempt: exports_external.boolean().optional().describe("Allow closing on completion.json alone without going through autopilot"),
+  risks: exports_external.array(riskNote).default([]),
+  re_entry: reEntry.optional(),
+  runs: exports_external.array(runId).default([]),
+  handoff_path: relativePath.optional(),
+  language_overrides: relativePath.optional().describe("Path to language.md if this work item modifies the glossary"),
+  started_at_sha: gitSha40.optional().describe("Git HEAD sha at the time this work item transitioned draft \u2192 in_progress; used as default base for handoff diff collection"),
+  created_at: isoDateTime,
+  updated_at: isoDateTime,
+  closed_at: isoDateTime.optional()
+}).superRefine((value, ctx) => {
+  const needsReEntry = ["partial", "unverified", "blocked"].includes(value.status);
+  if (!needsReEntry)
+    return;
+  if (!value.re_entry) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: `status=${value.status} requires re_entry with command or fresh_evidence_needed`,
+      path: ["re_entry"]
+    });
+    return;
+  }
+  const hasCommand = typeof value.re_entry.command === "string" && value.re_entry.command.length > 0;
+  const hasEvidence = value.re_entry.fresh_evidence_needed.length > 0;
+  if (!hasCommand && !hasEvidence) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: `status=${value.status} requires re_entry.command or non-empty re_entry.fresh_evidence_needed`,
+      path: ["re_entry"]
+    });
+  }
+}).describe("Authoritative state for a single DITTO work item");
+
 // src/core/active-node-lease.ts
 init_zod();
 init_common();
@@ -19587,9 +19742,18 @@ function isMutatingOwner(owner) {
 }
 var PLANNER_GENERATE_DIRECTIVE = "Emit a `generated_nodes` subgraph: pick the \xA72.2 lifecycle stages this task " + "actually needs (research\xB7design\xB7implement\xB7review\xB7verify\xB7\u2026), each node " + "{id, kind, purpose, depends_on, acceptance_refs} mapped to its acceptance " + "criteria; scale to task size (small tasks stay minimal \u2014 do not force a stage).";
 var CITE_OR_ABSTAIN_DIRECTIVE = "Consult the governing decisions in context.memory.decision_briefs: cite the " + "ones you relied on (follow them or justify any deviation), and if none apply " + "to this task, state that explicitly (cite-or-abstain).";
-function buildDelegationPacket(node, workItem, variantCandidates = [], fileScope = workItem.changed_files, memoryContext) {
+function buildDelegationPacket(node, workItem2, variantCandidates = [], fileScope = workItem2.changed_files, memoryContext) {
   const isPlanner = node.owner === "planner";
-  const doneWhen = node.acceptance_refs.length > 0 ? `acceptance criteria satisfied with evidence: ${node.acceptance_refs.join(", ")}` : node.purpose;
+  const acceptance = node.acceptance_refs.flatMap((id) => {
+    const ac = workItem2.acceptance_criteria?.find((c3) => c3.id === id);
+    if (!ac)
+      return [];
+    return [{ id: ac.id, statement: ac.statement, ...ac.oracle ? { oracle: ac.oracle } : {} }];
+  });
+  const doneWhen = acceptance.length > 0 ? `acceptance criteria satisfied with evidence: ${acceptance.map((a2) => {
+    const how = a2.oracle ? ` [oracle: ${a2.oracle.verification_method}]` : "";
+    return `${a2.id} \u2014 ${a2.statement}${how}`;
+  }).join("; ")}` : node.acceptance_refs.length > 0 ? `acceptance criteria satisfied with evidence: ${node.acceptance_refs.join(", ")}` : node.purpose;
   const expectedOutcome = isPlanner ? `${doneWhen} (return the plan as a generated_nodes subgraph)` : doneWhen;
   return {
     task: node.purpose,
@@ -19608,10 +19772,11 @@ function buildDelegationPacket(node, workItem, variantCandidates = [], fileScope
       ...isMutatingOwner(node.owner) ? [] : ["Do not mutate files (read-only role)."]
     ],
     context: {
-      work_item_id: workItem.id,
+      work_item_id: workItem2.id,
       file_scope: fileScope,
       done_when: doneWhen,
       acceptance_refs: node.acceptance_refs,
+      acceptance,
       ...memoryContext ? { memory: memoryContext } : {}
     },
     variant_candidates: variantCandidates
@@ -19892,73 +20057,6 @@ import { join as join20 } from "path";
 // src/schemas/intent.ts
 init_zod();
 init_common();
-
-// src/schemas/work-item.ts
-init_zod();
-init_common();
-var gitSha40 = exports_external.string().regex(/^[a-f0-9]{40}$/, "git sha must be 40 lowercase hex characters").describe("Full 40-char git commit sha");
-var acceptanceCriterion = exports_external.object({
-  id: exports_external.string().min(1).describe("Stable id within the work item (e.g., ac-1)"),
-  statement: exports_external.string().min(1).describe("Single observable behavior in user-facing terms"),
-  verdict: verdict.default("unverified"),
-  evidence: exports_external.array(evidenceRef).default([])
-}).describe("One acceptance criterion with its verification verdict");
-var riskNote = exports_external.object({
-  description: exports_external.string().min(1),
-  severity: exports_external.enum(["info", "low", "medium", "high", "critical"]).default("low"),
-  mitigation: exports_external.string().optional()
-}).describe("Outstanding risk that did not block completion but remains relevant");
-var reEntry = exports_external.object({
-  command: exports_external.string().optional().describe("Concrete next command to resume work"),
-  fresh_evidence_needed: exports_external.array(exports_external.string()).default([]).describe("What new evidence must be gathered before the next attempt"),
-  owner: exports_external.string().optional().describe("Profile or human handle expected to resume")
-}).describe("Instructions for resuming a partial/unverified/blocked work item");
-var workItem = exports_external.object({
-  schema_version: schemaVersion,
-  id: workItemId,
-  title: exports_external.string().min(1).max(200),
-  source_request: exports_external.string().min(1).describe("Verbatim or close-paraphrase of the original user request"),
-  goal: exports_external.string().min(1).describe("Observable outcome stated in project terms; not a list of steps"),
-  acceptance_criteria: exports_external.array(acceptanceCriterion).min(1),
-  status: workItemStatus.default("draft"),
-  owner_profile: profileName.default("workspace-write"),
-  parent_id: workItemId.optional().describe("Parent work item if this is a child task"),
-  child_ids: exports_external.array(workItemId).default([]),
-  changed_files: exports_external.array(relativePath).default([]),
-  autopilot_exempt: exports_external.boolean().optional().describe("Allow closing on completion.json alone without going through autopilot"),
-  risks: exports_external.array(riskNote).default([]),
-  re_entry: reEntry.optional(),
-  runs: exports_external.array(runId).default([]),
-  handoff_path: relativePath.optional(),
-  language_overrides: relativePath.optional().describe("Path to language.md if this work item modifies the glossary"),
-  started_at_sha: gitSha40.optional().describe("Git HEAD sha at the time this work item transitioned draft \u2192 in_progress; used as default base for handoff diff collection"),
-  created_at: isoDateTime,
-  updated_at: isoDateTime,
-  closed_at: isoDateTime.optional()
-}).superRefine((value, ctx) => {
-  const needsReEntry = ["partial", "unverified", "blocked"].includes(value.status);
-  if (!needsReEntry)
-    return;
-  if (!value.re_entry) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: `status=${value.status} requires re_entry with command or fresh_evidence_needed`,
-      path: ["re_entry"]
-    });
-    return;
-  }
-  const hasCommand = typeof value.re_entry.command === "string" && value.re_entry.command.length > 0;
-  const hasEvidence = value.re_entry.fresh_evidence_needed.length > 0;
-  if (!hasCommand && !hasEvidence) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: `status=${value.status} requires re_entry.command or non-empty re_entry.fresh_evidence_needed`,
-      path: ["re_entry"]
-    });
-  }
-}).describe("Authoritative state for a single DITTO work item");
-
-// src/schemas/intent.ts
 var evidenceRequiredKind = exports_external.enum(["test", "diff", "browser", "doc", "log"]).describe("Kind of evidence required to verify an acceptance criterion");
 var questionPolicy = exports_external.enum(["ask_only_if_user_only_can_answer", "ask_freely", "never_ask"]).default("ask_only_if_user_only_can_answer").describe("How freely the agent may ask the user questions for this work item");
 var intentAcceptanceCriterion = acceptanceCriterion.extend({
@@ -22350,7 +22448,11 @@ var recordResultPayload = exports_external.object({
       large: exports_external.boolean()
     })
   }).optional().describe("A plan-stage (design/planner) node's pre-mortem coverage brief + tier inputs. On a " + "contentful design pass it populates approval_gate.{plan_brief,change_surface,status} " + "via producePlanGate (brief hard-gate, \xA77.2). Ignored for non-design nodes."),
-  decision_conflicts: exports_external.array(decisionConflict).optional().describe("The planner's declared ADR conflicts (ADR-0020 D3 producer). On a contentful design " + "pass a non-empty list is written to the decision-conflict carrier so an intent " + "conflict front-loads the approval gate (prevention) and the Stop hook re-checks it " + "(catch). Absent/empty \u21D2 no carrier written (backward compat). Ignored for non-design.")
+  decision_conflicts: exports_external.array(decisionConflict).optional().describe("The planner's declared ADR conflicts (ADR-0020 D3 producer). On a contentful design " + "pass a non-empty list is written to the decision-conflict carrier so an intent " + "conflict front-loads the approval gate (prevention) and the Stop hook re-checks it " + "(catch). Absent/empty \u21D2 no carrier written (backward compat). Ignored for non-design."),
+  ac_oracles: exports_external.array(exports_external.object({
+    criterion_id: exports_external.string().min(1),
+    oracle: acOracle
+  })).optional().describe("A design node's per-AC oracle assignments (ADR-0024 ac-2). Written onto the " + "work-item AC and gated for completeness over the in-play set on a contentful design pass.")
 }).superRefine((value, ctx) => {
   if (value.outcome === "fail" && value.failure_class === undefined) {
     ctx.addIssue({
@@ -22568,6 +22670,35 @@ async function recordResult(repoRoot, input) {
     if (node2.kind === "design" && input.payload.plan_brief !== undefined) {
       const pb = input.payload.plan_brief;
       const requireApproval = await planRequiresDecisionApproval(repoRoot, input.workItemId);
+      const assignments = input.payload.ac_oracles ?? [];
+      let oracleAssignmentIncomplete = false;
+      if (assignments.length > 0) {
+        const byCriterion = new Map(assignments.map((a2) => [a2.criterion_id, a2.oracle]));
+        const current2 = await new WorkItemStore(repoRoot).get(input.workItemId);
+        const currentById = new Map(current2.acceptance_criteria.map((ac) => [ac.id, ac]));
+        for (const [criterionId, candidate] of byCriterion) {
+          const mismatch = validateAcOracle({ id: criterionId }, candidate);
+          if (!mismatch.ok) {
+            throw new Error(mismatch.reasons.join("; "));
+          }
+          const existing = currentById.get(criterionId)?.oracle;
+          if (existing !== undefined) {
+            const frozen = assertOracleFrozen(existing, candidate);
+            if (!frozen.ok) {
+              throw new Error(frozen.reasons.join("; "));
+            }
+          }
+        }
+        const updated = await new WorkItemStore(repoRoot).update(input.workItemId, (w2) => ({
+          ...w2,
+          acceptance_criteria: w2.acceptance_criteria.map((ac) => {
+            const assigned = byCriterion.get(ac.id);
+            return assigned !== undefined ? { ...ac, oracle: assigned } : ac;
+          })
+        }));
+        const inPlay = new Set(node2.acceptance_refs);
+        oracleAssignmentIncomplete = updated.acceptance_criteria.some((ac) => inPlay.has(ac.id) && ac.oracle === undefined);
+      }
       const patch = producePlanGate({
         changeSurface: pb.change_surface,
         brief: {
@@ -22576,7 +22707,8 @@ async function recordResult(repoRoot, input) {
           test_scenarios: pb.test_scenarios
         },
         tierInputs: pb.tier_inputs,
-        requireApproval
+        requireApproval,
+        oracleAssignmentIncomplete
       });
       const current = await aps.get(input.workItemId);
       await aps.write(input.workItemId, {
@@ -34283,6 +34415,7 @@ var sessionStartHandler = (input) => {
 };
 
 // src/hooks/stop.ts
+import { existsSync as existsSync9 } from "fs";
 import { readFile as readFile15, readdir as readdir20 } from "fs/promises";
 import { join as join67 } from "path";
 init_ditto_paths();
@@ -34761,7 +34894,16 @@ function freshObservationChangeCount(repoRoot, workItemId2, base) {
 
 // src/hooks/stop.ts
 var ADMISSIBLE_SEVERITIES = new Set(["critical", "high"]);
-function dialecticForcesContinuation(d2) {
+function fileAnchorPath(mapsTo) {
+  const anchor = mapsTo.trim();
+  if (/^(ac-|intent:|doc:)/.test(anchor))
+    return;
+  const path = anchor.replace(/:\d+$/, "");
+  if (!/^[\w./-]+\.[A-Za-z0-9]+$/.test(path))
+    return;
+  return path;
+}
+function dialecticForcesContinuation(d2, repoRoot) {
   const reasons = [];
   const verdict2 = d2.synthesizer.verdict;
   if (verdict2 === "reject" || verdict2 === "blocked") {
@@ -34779,6 +34921,12 @@ function dialecticForcesContinuation(d2) {
     const idResolved = obj.id !== undefined && resolved.has(obj.id);
     if (admissible && !resolved.has(obj.claim) && !idResolved) {
       reasons.push(`dialectic ${d2.review_id}: admissible objection unresolved \u2014 ${obj.claim}`);
+    }
+    if (admissible && repoRoot !== undefined) {
+      const anchor = fileAnchorPath(obj.maps_to);
+      if (anchor !== undefined && !existsSync9(join67(repoRoot, anchor))) {
+        reasons.push(`dialectic ${d2.review_id}: objection maps_to '${obj.maps_to}' does not resolve to an existing file \u2014 backward-finding oracle unverifiable/stale`);
+      }
     }
   }
   return reasons;
@@ -35068,7 +35216,7 @@ var stopHandler = async (input) => {
   }
   if (dialectics.status === "ok") {
     for (const d2 of dialectics.items)
-      reasons.push(...dialecticForcesContinuation(d2));
+      reasons.push(...dialecticForcesContinuation(d2, input.repoRoot));
   }
   if (acgReview.status === "ok") {
     reasons.push(...acgReviewForcesContinuation(acgReview.data));
@@ -38550,7 +38698,7 @@ function applySemanticVerdict(seed, v2) {
 }
 
 // src/acg/semantic/signature-codeql.ts
-import { existsSync as existsSync9 } from "fs";
+import { existsSync as existsSync10 } from "fs";
 import { rm as rm2 } from "fs/promises";
 import { join as join77 } from "path";
 init_ditto_paths();
@@ -38683,7 +38831,7 @@ async function scanSignatureChanges(input, deps) {
   const cacheBase = localDir(input.repoRoot, "cache", "codeql");
   const baseCache = join77(cacheBase, `${baseSha}-${input.language}`);
   const baseDb = join77(baseCache, "db");
-  const needWorktree = !existsSync9(baseDb);
+  const needWorktree = !existsSync10(baseDb);
   const worktree = join77(cacheBase, "worktrees", `${baseSha}-${input.language}`);
   if (needWorktree)
     addDetachedWorktree(input.repoRoot, worktree, baseSha);
@@ -39088,7 +39236,7 @@ init_fs();
 init_shared();
 
 // src/core/provision/memory-separate.ts
-import { existsSync as existsSync10, readFileSync as readFileSync6, writeFileSync } from "fs";
+import { existsSync as existsSync11, readFileSync as readFileSync6, writeFileSync } from "fs";
 import { join as pathJoin } from "path";
 var GITIGNORE_ENTRY = ".ditto/memory/";
 function join78(...parts) {
@@ -39169,14 +39317,14 @@ function defaultMemorySeparateDeps(repoRoot) {
       ]);
       return { exit_code, stderr: stderr2 };
     },
-    pathExists: (p) => existsSync10(p),
-    readGitignore: () => existsSync10(gitignorePath) ? readFileSync6(gitignorePath, "utf8") : "",
+    pathExists: (p) => existsSync11(p),
+    readGitignore: () => existsSync11(gitignorePath) ? readFileSync6(gitignorePath, "utf8") : "",
     writeGitignore: (content) => writeFileSync(gitignorePath, content, "utf8")
   };
 }
 
 // src/core/provision/playwright.ts
-import { existsSync as existsSync11, readdirSync as readdirSync3 } from "fs";
+import { existsSync as existsSync12, readdirSync as readdirSync3 } from "fs";
 import { homedir as homedir10, platform as osPlatform } from "os";
 import { join as join79 } from "path";
 function playwrightCacheRoot(os = osPlatform()) {
@@ -39231,7 +39379,7 @@ var defaultPlaywrightDeps = {
   bunCache: bunCacheDir(),
   listDir: (dir) => {
     try {
-      return existsSync11(dir) ? readdirSync3(dir) : [];
+      return existsSync12(dir) ? readdirSync3(dir) : [];
     } catch {
       return [];
     }
@@ -39568,7 +39716,7 @@ async function setup(opts) {
 }
 
 // src/cli/resources.ts
-import { existsSync as existsSync12 } from "fs";
+import { existsSync as existsSync13 } from "fs";
 import { dirname as dirname16, join as join82, resolve as resolve21 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 function resolveResourcesDir(from) {
@@ -39579,7 +39727,7 @@ function resolveResourcesDir(from) {
   let dir = start;
   for (;; ) {
     const candidate = join82(dir, "resources", "managed");
-    if (existsSync12(candidate))
+    if (existsSync13(candidate))
       return candidate;
     const parent = dirname16(dir);
     if (parent === dir)
@@ -41076,4 +41224,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=933c3faca75ebd8f6a10253767144309be26f01b8638016b839ff71a81bf71de
+//# ditto-src-stamp=e0df498091e0303fbb693fc46af320dc5969fbf018e4812336f4759f3056e93d

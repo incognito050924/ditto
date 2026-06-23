@@ -1,6 +1,18 @@
 import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
-import type { WorkItem } from '~/schemas/work-item';
+import type { AcOracle, WorkItem } from '~/schemas/work-item';
 import type { MemoryWarmStartContext } from './memory-warmstart';
+
+/**
+ * An addressed acceptance criterion resolved for the packet (ADR-0024 ac-3, ②
+ * DELIVER): the implementer needs the AC's STATEMENT TEXT and its assigned ORACLE
+ * (what to satisfy + how it is judged), not just the id. `oracle` is omitted for a
+ * legacy AC that carries none — additive, no breakage.
+ */
+export interface ResolvedAcceptance {
+  id: string;
+  statement: string;
+  oracle?: AcOracle;
+}
 
 /**
  * Node dispatch + failure classification (M2.4). The 6-section delegation packet
@@ -19,6 +31,11 @@ export interface DelegationPacket {
     file_scope: string[];
     done_when: string;
     acceptance_refs: string[];
+    // ADR-0024 ac-3 (② DELIVER): each addressed AC resolved to its statement text
+    // + assigned oracle. Additive alongside `acceptance_refs` (ids), which existing
+    // consumers still read. Empty when the work item carries no matching criteria
+    // (e.g. a node whose acceptance_refs point nowhere, or a legacy fixture).
+    acceptance: ResolvedAcceptance[];
     // Warm-start memory push (§5-1 / §10-6 #1): related serving-graph context for
     // researcher/planner nodes. Optional & non-invasive — the loop queries the
     // memory graph fail-open and injects the result here; absent/stale/no-coverage
@@ -106,10 +123,29 @@ export function buildDelegationPacket(
   memoryContext?: MemoryWarmStartContext,
 ): DelegationPacket {
   const isPlanner = node.owner === 'planner';
+  // ADR-0024 ac-3 (② DELIVER): resolve each addressed AC id to its statement +
+  // assigned oracle so the implementer receives what to satisfy + how it is judged,
+  // not just the id (the intent-loss point). PURE & SYNCHRONOUS: read only from the
+  // passed workItem — no store calls, no async. Order follows node.acceptance_refs;
+  // ids with no matching criterion are skipped (legacy / mis-pointed refs).
+  const acceptance: ResolvedAcceptance[] = node.acceptance_refs.flatMap((id) => {
+    const ac = workItem.acceptance_criteria?.find((c) => c.id === id);
+    if (!ac) return [];
+    return [{ id: ac.id, statement: ac.statement, ...(ac.oracle ? { oracle: ac.oracle } : {}) }];
+  });
+  // Human-readable so the agent knows what + how-judged (not just ids). Falls back
+  // to the bare-id form when no criterion resolved (no statements to show).
   const doneWhen =
-    node.acceptance_refs.length > 0
-      ? `acceptance criteria satisfied with evidence: ${node.acceptance_refs.join(', ')}`
-      : node.purpose;
+    acceptance.length > 0
+      ? `acceptance criteria satisfied with evidence: ${acceptance
+          .map((a) => {
+            const how = a.oracle ? ` [oracle: ${a.oracle.verification_method}]` : '';
+            return `${a.id} — ${a.statement}${how}`;
+          })
+          .join('; ')}`
+      : node.acceptance_refs.length > 0
+        ? `acceptance criteria satisfied with evidence: ${node.acceptance_refs.join(', ')}`
+        : node.purpose;
   // A planner closes on a generated subgraph, not just prose; surface it in the
   // expected outcome so done_when reflects the graph-generation responsibility.
   const expectedOutcome = isPlanner
@@ -138,6 +174,7 @@ export function buildDelegationPacket(
       file_scope: fileScope,
       done_when: doneWhen,
       acceptance_refs: node.acceptance_refs,
+      acceptance,
       // Only present when the loop supplied a non-empty warm-start context; an
       // omitted field keeps the packet identical to the no-memory path.
       ...(memoryContext ? { memory: memoryContext } : {}),

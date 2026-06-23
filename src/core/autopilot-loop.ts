@@ -8,6 +8,7 @@ import { lspLanguageForPath } from '~/core/provision/lsp-detect';
 import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
 import { evidenceRef, relativePath, verdict } from '~/schemas/common';
 import { decisionConflict, decisionConflictCarrier } from '~/schemas/decision-conflict-carrier';
+import { acOracle } from '~/schemas/work-item';
 import { ActiveNodeLeaseStore } from './active-node-lease';
 import { loadVariantCatalog, selectVariantCandidates } from './agent-variants';
 import { forwardRound, planForwardReexpansion } from './autopilot-converge';
@@ -32,7 +33,7 @@ import {
 } from './autopilot-graph';
 import { AutopilotStore } from './autopilot-store';
 import { planTidyOnImplementPass } from './autopilot-tidy';
-import { producePlanGate } from './coverage-manager';
+import { assertOracleFrozen, producePlanGate, validateAcOracle } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
 import { localDir } from './ditto-paths';
 import { decisionConflictRequiresApproval } from './gates';
@@ -472,6 +473,27 @@ export const recordResultPayload = z
           'pass a non-empty list is written to the decision-conflict carrier so an intent ' +
           'conflict front-loads the approval gate (prevention) and the Stop hook re-checks it ' +
           '(catch). Absent/empty ⇒ no carrier written (backward compat). Ignored for non-design.',
+      ),
+    // Per-AC oracle ASSIGNMENT — the design node's LLM judgment of the verification
+    // method per criterion (ADR-0024 §3, ac-2). On a contentful design pass the loop
+    // writes each oracle onto the work-item acceptance_criteria[].oracle (the SoT
+    // decision: oracle assigned ON the AC) and runs a DETERMINISTIC presence-check:
+    // when assignment is in play (non-empty), every in-play AC (the node's
+    // acceptance_refs) must carry an oracle or the plan stage cannot auto-close
+    // (producePlanGate forced to pending). Absent/empty ⇒ assignment not in play ⇒
+    // legacy path unchanged (no oracle requirement retro-imposed). Ignored for
+    // non-design nodes.
+    ac_oracles: z
+      .array(
+        z.object({
+          criterion_id: z.string().min(1),
+          oracle: acOracle,
+        }),
+      )
+      .optional()
+      .describe(
+        "A design node's per-AC oracle assignments (ADR-0024 ac-2). Written onto the " +
+          'work-item AC and gated for completeness over the in-play set on a contentful design pass.',
       ),
   })
   .superRefine((value, ctx) => {
@@ -947,6 +969,51 @@ export async function recordResult(
       // front-loads the approval gate, so mutating nodes do not run before the
       // user resolves it — the prevention layer paired with the Stop-hook catch.
       const requireApproval = await planRequiresDecisionApproval(repoRoot, input.workItemId);
+      // ADR-0024 ac-2: per-AC oracle ASSIGNMENT (LLM judgment) is carried in the
+      // payload and WRITTEN here onto the work-item acceptance_criteria[].oracle (the
+      // SoT). Presence-gated: only engages when the design pass actually carried
+      // assignments (non-empty); absent/empty leaves every AC and the gate untouched
+      // (legacy round-trips). The completeness CHECK below then reads the post-write
+      // state over the in-play AC set (the node's acceptance_refs).
+      const assignments = input.payload.ac_oracles ?? [];
+      let oracleAssignmentIncomplete = false;
+      if (assignments.length > 0) {
+        const byCriterion = new Map(assignments.map((a) => [a.criterion_id, a.oracle]));
+        // ADR-0024 ac-5: BEFORE writing, reject fake/tautological oracles and
+        // changes to a frozen forward oracle. Validation runs against the current
+        // (pre-write) ACs so the freeze compares against the design-assigned value.
+        const current = await new WorkItemStore(repoRoot).get(input.workItemId);
+        const currentById = new Map(current.acceptance_criteria.map((ac) => [ac.id, ac]));
+        for (const [criterionId, candidate] of byCriterion) {
+          // (A) adversarial mismatch — a hard method anchored to prose re-runs nothing.
+          const mismatch = validateAcOracle({ id: criterionId }, candidate);
+          if (!mismatch.ok) {
+            throw new Error(mismatch.reasons.join('; '));
+          }
+          // (B) forward-AC freeze — once design-assigned, a different value is rejected.
+          const existing = currentById.get(criterionId)?.oracle;
+          if (existing !== undefined) {
+            const frozen = assertOracleFrozen(existing, candidate);
+            if (!frozen.ok) {
+              throw new Error(frozen.reasons.join('; '));
+            }
+          }
+        }
+        const updated = await new WorkItemStore(repoRoot).update(input.workItemId, (w) => ({
+          ...w,
+          acceptance_criteria: w.acceptance_criteria.map((ac) => {
+            const assigned = byCriterion.get(ac.id);
+            return assigned !== undefined ? { ...ac, oracle: assigned } : ac;
+          }),
+        }));
+        // Deterministic presence-check over the in-play set: every AC the design node
+        // covers (acceptance_refs) must now carry an oracle, else the plan stage may
+        // not auto-close (producePlanGate forced to pending below).
+        const inPlay = new Set(node.acceptance_refs);
+        oracleAssignmentIncomplete = updated.acceptance_criteria.some(
+          (ac) => inPlay.has(ac.id) && ac.oracle === undefined,
+        );
+      }
       const patch = producePlanGate({
         changeSurface: pb.change_surface,
         brief: {
@@ -956,6 +1023,7 @@ export async function recordResult(
         },
         tierInputs: pb.tier_inputs,
         requireApproval,
+        oracleAssignmentIncomplete,
       });
       const current = await aps.get(input.workItemId);
       await aps.write(input.workItemId, {

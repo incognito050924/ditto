@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionPointerStore } from '~/core/session-pointer';
@@ -9,11 +9,13 @@ import {
   assuranceSnapshotForcesContinuation,
   autopilotForcesContinuation,
   decisionConflictForcesContinuation,
+  dialecticForcesContinuation,
   impactForcesContinuation,
   residualResolvabilityForcesContinuation,
   semanticForcesContinuation,
   stopHandler,
 } from '~/hooks/stop';
+import { type Dialectic, dialectic as dialecticSchema } from '~/schemas/dialectic';
 
 let repo: string;
 let store: WorkItemStore;
@@ -1239,5 +1241,159 @@ describe('decisionConflictForcesContinuation (ADR-0020: fail-closed block + alwa
     const r = decisionConflictForcesContinuation(carrier([]));
     expect(r.reasons).toHaveLength(0);
     expect(r.advisories).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// ac-4 clause 2 (wi_260623uap): the dialectic oracle gate must check that a
+// backward-finding objection's `maps_to` ANCHOR actually resolves — not just
+// that the string is present + severity admissible. Only file:line / file-path
+// anchors get the existence check; ac-N / intent: / doc: / prose are out of
+// scope and must stay exactly as before.
+describe('dialecticForcesContinuation — backward-finding anchor existence (ac-4 clause 2)', () => {
+  // Create a real file under the tmp `repo` so a file-anchor RESOLVES on disk;
+  // returns the repo-relative path to use as a maps_to anchor.
+  const makeAnchorFile = async (rel: string) => {
+    const parts = rel.split('/');
+    if (parts.length > 1) await mkdir(join(repo, ...parts.slice(0, -1)), { recursive: true });
+    await writeFile(join(repo, rel), '// anchor target\n');
+    return rel;
+  };
+
+  const baseObjection = (over: Record<string, unknown> = {}) => ({
+    severity: 'critical' as const,
+    claim: 'oracle anchor objection',
+    evidence: [],
+    maps_to: 'src/core/gates.ts:42',
+    failure_mode: 'gate misfires',
+    required_fix: 'fix gate',
+    ...over,
+  });
+
+  const build = (objOver: Record<string, unknown> = {}): Dialectic =>
+    dialecticSchema.parse({
+      schema_version: '0.1.0',
+      review_id: 'rv_dia00009',
+      input: { mode: 'review', target_artifact: 'src/api.ts', question: 'correct?' },
+      producer: { position: 'ok', proposal: 'ship' },
+      opponent: {
+        run: {
+          provider: 'codex',
+          model: 'codex',
+          command: 'codex review',
+          timestamp: '2026-06-23T00:00:00.000Z',
+        },
+        objections: [baseObjection(objOver)],
+      },
+      // accept + objection unresolved → the admissibility branch would normally fire;
+      // we resolve it by claim so ONLY the anchor-existence reason is under test.
+      synthesizer: {
+        verdict: 'accept',
+        synthesis: 'agreed',
+        accepted_objections: ['oracle anchor objection'],
+      },
+    });
+
+  test('(a) admissible objection maps_to an EXISTING file:line → no anchor reason', async () => {
+    const rel = await makeAnchorFile('src/core/real-anchor.ts');
+    const d = build({ maps_to: `${rel}:88` });
+    const reasons = dialecticForcesContinuation(d, repo);
+    expect(reasons.some((r) => r.includes('does not resolve'))).toBe(false);
+    // resolved by claim, file exists → no continuation at all.
+    expect(reasons).toEqual([]);
+  });
+
+  test('(a2) admissible objection maps_to an EXISTING file path (no :line) → no anchor reason', async () => {
+    const rel = await makeAnchorFile('src/core/real-anchor2.ts');
+    const d = build({ maps_to: rel });
+    const reasons = dialecticForcesContinuation(d, repo);
+    expect(reasons.some((r) => r.includes('does not resolve'))).toBe(false);
+    expect(reasons).toEqual([]);
+  });
+
+  test('(b) admissible objection maps_to a NON-EXISTENT file:line → "does not resolve" reason', () => {
+    const d = build({ maps_to: 'src/core/ghost-file.ts:42' });
+    const reasons = dialecticForcesContinuation(d, repo);
+    expect(reasons.some((r) => r.includes('does not resolve'))).toBe(true);
+    expect(reasons.some((r) => r.includes('src/core/ghost-file.ts'))).toBe(true);
+  });
+
+  test('(b2) admissible objection maps_to a NON-EXISTENT file path (no :line) → "does not resolve"', () => {
+    const d = build({ maps_to: 'src/core/ghost-file.ts' });
+    const reasons = dialecticForcesContinuation(d, repo);
+    expect(reasons.some((r) => r.includes('does not resolve'))).toBe(true);
+  });
+
+  test('(c) ac-N maps_to is OUT of scope → no anchor existence reason', () => {
+    const d = build({ maps_to: 'ac-3' });
+    const reasons = dialecticForcesContinuation(d, repo);
+    expect(reasons.some((r) => r.includes('does not resolve'))).toBe(false);
+    expect(reasons).toEqual([]);
+  });
+
+  test('(c2) intent: maps_to is OUT of scope → no anchor existence reason', () => {
+    const d = build({ maps_to: 'intent:returns-200' });
+    const reasons = dialecticForcesContinuation(d, repo);
+    expect(reasons.some((r) => r.includes('does not resolve'))).toBe(false);
+    expect(reasons).toEqual([]);
+  });
+
+  test('(c3) doc: maps_to is OUT of scope → no anchor existence reason', () => {
+    const d = build({ maps_to: 'doc:dialectic-contract.md' });
+    const reasons = dialecticForcesContinuation(d, repo);
+    expect(reasons.some((r) => r.includes('does not resolve'))).toBe(false);
+    expect(reasons).toEqual([]);
+  });
+
+  test('(c4) free-prose maps_to is OUT of scope → no anchor existence reason', () => {
+    const d = build({ maps_to: 'the empty-input handling path in the API layer' });
+    const reasons = dialecticForcesContinuation(d, repo);
+    expect(reasons.some((r) => r.includes('does not resolve'))).toBe(false);
+    expect(reasons).toEqual([]);
+  });
+
+  test('(d) existing admissibility + verdict behavior unchanged when repoRoot present', async () => {
+    // verdict reject still forces continuation
+    const reject = dialecticSchema.parse({
+      schema_version: '0.1.0',
+      review_id: 'rv_dia00010',
+      input: { mode: 'review', target_artifact: 'src/api.ts', question: 'q' },
+      producer: { position: 'ok', proposal: 'ship' },
+      opponent: {
+        run: {
+          provider: 'codex',
+          model: 'codex',
+          command: 'c',
+          timestamp: '2026-06-23T00:00:00.000Z',
+        },
+        objections: [],
+      },
+      synthesizer: { verdict: 'reject', synthesis: 'no' },
+    });
+    expect(dialecticForcesContinuation(reject, repo).length).toBeGreaterThan(0);
+
+    // admissible objection UNRESOLVED (existing file anchor) still forces the
+    // admissibility reason — anchor existence is additive, not a replacement.
+    const rel = await makeAnchorFile('src/core/real-anchor3.ts');
+    const unresolved = build({ maps_to: `${rel}:88` });
+    unresolved.synthesizer.accepted_objections = [];
+    const r = dialecticForcesContinuation(unresolved, repo);
+    expect(r.some((x) => x.includes('admissible'))).toBe(true);
+    expect(r.some((x) => x.includes('does not resolve'))).toBe(false);
+  });
+
+  test('(d2) non-file anchor with a NON-EXISTENT-looking string is never blocked', () => {
+    // a prose anchor that happens to contain a slash but is not a file path form
+    const d = build({ maps_to: 'ac-3/empty-input' });
+    const reasons = dialecticForcesContinuation(d, repo);
+    expect(reasons.some((r) => r.includes('does not resolve'))).toBe(false);
+  });
+
+  test('(d3) no repoRoot passed → anchor check skipped (backward-compat one-arg call)', () => {
+    const d = build({ maps_to: 'src/core/ghost-file.ts:42' });
+    // one-arg call (legacy) must behave exactly as before: no anchor existence check.
+    const reasons = dialecticForcesContinuation(d);
+    expect(reasons.some((r) => r.includes('does not resolve'))).toBe(false);
+    expect(reasons).toEqual([]);
   });
 });

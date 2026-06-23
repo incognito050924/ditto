@@ -226,11 +226,13 @@
     {
       "term": "oracle",
       "aliases": ["maps_to"],
-      "definition": "주장·위험·발견(objection/risk/finding)을 검증 가능한 닻(anchor)에 묶는 것 — '이게 참인지 무엇으로 판정하나'의 판정 기준. dialectic objection(maps_to), pre-mortem far-field anti-SLOP, reviewer/security-reviewer 발견, CodeQL 발견(oracleOf), completion-contract 전반에서 쓰이는 횡단 개념(dialectic 전용 아님). 닻 대상은 maps_to로 표현: AC id / file:line / intent / doc. 핵심 규칙: oracle 없는 주장은 taste(취향)이지 finding이 아니다 — 가치 카운트에서 제외. 알려진 갭: 현재 게이트(stop.ts:88)는 oracle 문자열의 존재+severity만 검사하고, 그 닻이 실재하는지·실제로 참/거짓을 가르는지(검증법)는 확인하지 않는다(honor-system).",
+      "definition": "주장·위험·발견(objection/risk/finding)을 검증 가능한 닻(anchor)에 묶는 것 — '이게 참인지 무엇으로 판정하나'의 판정 기준. dialectic objection(maps_to), pre-mortem far-field anti-SLOP, reviewer/security-reviewer 발견, CodeQL 발견(oracleOf), completion-contract·AC↔oracle 수렴(ADR-0024) 전반에서 쓰이는 횡단 개념(dialectic 전용 아님). 닻 대상은 maps_to로 표현: AC id / file:line / intent / doc. 두 직교 축(ADR-0024 §3.1·§3.0): (가) **검증법 부류**(재평가 가능성) — dynamic_test(hard·동적=실행) / static_scan(hard·정적=재스캔, file:line 닻) / soft_judgment(soft=review·user-decision); (나) **방향** — forward(구현 후 최종 상태에서 평가, 코드-포인터 maps_to 금지=변경에 부서짐) vs backward(현재 코드 finding, file:line/path 닻 유효). file:line은 soft가 아니라 정적 부류 닻이다. finding의 raise(현재)와 resolution(detector 재실행/회귀)은 시점·oracle이 다르다. 핵심 규칙: oracle 없는 주장은 taste(취향)이지 finding이 아니다 — 가치 카운트에서 제외. 닫힘 판정 위치: AC-oracle 닫힘은 deriveAcVerdicts/nodeVerdictFor(autopilot-complete.ts) + oracleSatisfaction(gates.ts)에서, dialectic-objection 허용성은 dialecticForcesContinuation(stop.ts:83)에서 — 별개 이음새다. 알려진 갭(부분 해소): backward-finding objection의 닻 실재 검사가 dialecticForcesContinuation에 착륙(ac-4 clause 2 — file:line/path 닻이 디스크에 실재하는지 검사, 미실재→과차단), 따라서 '문자열 존재+severity만' honor-system 갭은 dialectic objection 쪽에서 부분 닫힘. forward AC oracle은 acOracle 스키마가 코드-포인터 maps_to를 거부해 재평가 가능성을 강제한다.",
       "examples": [
         "reviewer: 모든 finding을 oracle(AC id/file:line/doc)에 묶는다 — oracle 없으면 taste (agents/reviewer.md:29)",
         "far-field sweep anti-SLOP: oracle 없는 위험은 SLOP, admissibleBranchesAdded에서 제외 (skills/autopilot/SKILL.md:37)",
-        "CodeQL: sarif-adapter가 maps_to=oracleOf(finding)로 file:line oracle 부여 (src/core/codeql/sarif-adapter.ts:74)"
+        "CodeQL: sarif-adapter가 maps_to=oracleOf(finding)로 file:line oracle 부여 (src/core/codeql/sarif-adapter.ts:74)",
+        "AC oracle: verification_method{dynamic_test|static_scan|soft_judgment} × maps_to × direction{forward|backward}, forward는 코드-포인터 거부 (src/schemas/work-item.ts acOracle, ADR-0024 §3)",
+        "닫힘 판정: oracleSatisfaction은 presence-gated·fail-closed, static_scan은 재스캔 evidenceRef 필요(분석기 부재→unverified, ADR-0018) (src/core/gates.ts)"
       ],
       "not_to_be_confused_with": [
         "evidence (oracle=판정 기준/닻; evidence=그 판정을 뒷받침하는 산출물)",

@@ -1,6 +1,7 @@
 import type { CoverageMap, CoverageNode } from '~/schemas/coverage';
 import type { DialecticVerdict } from '~/schemas/dialectic';
 import type { SelfAnswerAttempt } from '~/schemas/question-gate';
+import type { AcOracle } from '~/schemas/work-item';
 import { type RiskAxes, deterministicFloor, safeDefaultable } from './gates';
 
 /**
@@ -534,6 +535,15 @@ export interface PlanGateInput {
    * silently proceed past a recorded decision the request contradicts.
    */
   requireApproval?: boolean;
+  /**
+   * Deterministic presence-CHECK (ADR-0024 ac-2). The caller computes this boolean
+   * (exactly like `requireApproval`): true when the design node assigned per-AC
+   * oracles (assignment is in play) yet some in-play AC is left WITHOUT one. When set,
+   * a `light`/auto-waivable tier cannot silently close the plan stage with an oracle
+   * gap — the status is forced to `pending`. No LLM/assignment logic lives here; this
+   * is a pure presence flag, keeping `producePlanGate` deterministic.
+   */
+  oracleAssignmentIncomplete?: boolean;
 }
 
 export interface PlanGatePatch {
@@ -545,13 +555,97 @@ export interface PlanGatePatch {
 export function producePlanGate(input: PlanGateInput): PlanGatePatch {
   const tier = selectCoverageTier(input.tierInputs);
   return {
-    status: input.requireApproval ? 'pending' : tierBriefApproval(tier),
+    status:
+      input.requireApproval || input.oracleAssignmentIncomplete
+        ? 'pending'
+        : tierBriefApproval(tier),
     change_surface: [...input.changeSurface],
     plan_brief: {
       interface_changes: [...input.brief.interface_changes],
       dod: [...input.brief.dod],
       test_scenarios: [...input.brief.test_scenarios],
     },
+  };
+}
+
+/**
+ * Adversarial oracle validation (ADR-0024 ac-5, blueprint §4 anti-SLOP). An
+ * assigned oracle must deliver the re-evaluability its `verification_method`
+ * claims. A HARD method (dynamic_test = executed, static_scan = re-scanned)
+ * anchored to a non-re-evaluable target is a MISMATCH (fake / tautological): a
+ * "scan" or "test" that points at prose / a doc:/intent: ref re-runs nothing.
+ *
+ * Concrete, testable rules (increment 1 — deliberately small, not a framework):
+ *  - A hard method whose `maps_to` is a `doc:`/`intent:` style ref → REJECT.
+ *  - A hard method whose `maps_to` is not a testable/scannable anchor — an AC id
+ *    (`ac-N`), a path/file (has a `/` or a `name.ext`), or a rule id (a single
+ *    dotted/hyphenated token, no spaces) — → REJECT (free prose is not an anchor).
+ *  - `soft_judgment` makes no hard re-evaluability claim, so a doc/prose anchor is
+ *    legitimate (review / user-decision) — ADMIT.
+ *  - forward + raw code-pointer is already rejected by the schema (work-item.ts
+ *    superRefine, ADR-0024 §3.0); this builds on that, it does not duplicate it.
+ *
+ * Pure: returns `{ ok, reasons }`, never throws. The AC is passed for the reason
+ * message only (the rule is structural over the oracle fields).
+ */
+const DOC_INTENT_PREFIX = /^(doc|intent)\s*:/i;
+/** A single anchor token (no whitespace): an ac-id / path / file / rule id. */
+const ANCHOR_TOKEN = /^[^\s]+$/;
+
+function isReEvaluableAnchor(mapsTo: string): boolean {
+  // A doc:/intent: ref names prose, not a re-evaluable position.
+  if (DOC_INTENT_PREFIX.test(mapsTo)) return false;
+  // Free prose has whitespace; a real anchor (ac-id / path / file / rule id) is a
+  // single token. This is the structural separation between an anchor and a label.
+  return ANCHOR_TOKEN.test(mapsTo);
+}
+
+export function validateAcOracle(
+  ac: { id: string },
+  oracle: AcOracle,
+): { ok: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  const isHard =
+    oracle.verification_method === 'dynamic_test' || oracle.verification_method === 'static_scan';
+  if (isHard && !isReEvaluableAnchor(oracle.maps_to)) {
+    reasons.push(
+      `oracle for ${ac.id}: ${oracle.verification_method} claims a re-evaluable check but maps_to "${oracle.maps_to}" is not a testable/scannable anchor (expected an AC id, a path/file, or a rule id — not a doc:/intent: ref or free prose). A scan/test of prose is tautological (ADR-0024 §3/§4).`,
+    );
+  }
+  return { ok: reasons.length === 0, reasons };
+}
+
+/**
+ * Structural equality of two oracles (ADR-0024 ac-5). All three fields must match.
+ */
+export function oraclesEqual(a: AcOracle, b: AcOracle): boolean {
+  return (
+    a.verification_method === b.verification_method &&
+    a.maps_to === b.maps_to &&
+    a.direction === b.direction
+  );
+}
+
+/**
+ * Forward-AC oracle FREEZE (ADR-0024 ac-5). Once a FORWARD oracle is assigned at
+ * the design node, a later attempt to change it to a DIFFERENT value is rejected
+ * (diff = reject; freeze applies AFTER the design assignment). Equal re-assignment
+ * is a no-op (idempotent → ok). A `backward` oracle is a current-code finding and
+ * is NOT frozen — a later re-assignment to a different value is allowed.
+ * Pure: returns `{ ok, reasons }`, never throws.
+ */
+export function assertOracleFrozen(
+  assigned: AcOracle,
+  candidate: AcOracle,
+): { ok: boolean; reasons: string[] } {
+  // Only the design-assigned forward oracle is frozen.
+  if (assigned.direction !== 'forward') return { ok: true, reasons: [] };
+  if (oraclesEqual(assigned, candidate)) return { ok: true, reasons: [] };
+  return {
+    ok: false,
+    reasons: [
+      `forward oracle is frozen after design assignment: cannot change {${assigned.verification_method},${assigned.maps_to},${assigned.direction}} → {${candidate.verification_method},${candidate.maps_to},${candidate.direction}} (ADR-0024 ac-5)`,
+    ],
   };
 }
 

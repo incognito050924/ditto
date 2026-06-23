@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ZodTypeAny, z } from 'zod';
@@ -45,14 +46,41 @@ import { computeSemanticNudge } from './semantic-nudge';
 const ADMISSIBLE_SEVERITIES: ReadonlySet<string> = new Set(['critical', 'high']);
 
 /**
+ * A `maps_to` anchor that is a file:line or file path (e.g. `src/core/gates.ts:42`
+ * or `src/core/gates.ts`). Returns the repo-relative file path (line suffix
+ * stripped) when the anchor is a file form, else undefined. Only file-shaped
+ * anchors get the backward-finding existence check (ac-4 clause 2); ac-N ids,
+ * `intent:`/`doc:` refs, and free prose are intentionally NOT file anchors and
+ * are left untouched. The shape gate is deliberately narrow: a single path
+ * token (no whitespace) with a file extension, not prefixed by a known oracle
+ * scheme — so `ac-3/empty-input` (no extension) and prose stay out of scope.
+ */
+function fileAnchorPath(mapsTo: string): string | undefined {
+  const anchor = mapsTo.trim();
+  if (/^(ac-|intent:|doc:)/.test(anchor)) return undefined;
+  const path = anchor.replace(/:\d+$/, '');
+  if (!/^[\w./-]+\.[A-Za-z0-9]+$/.test(path)) return undefined;
+  return path;
+}
+
+/**
  * Cross-check one dialectic ledger (reviews/dialectic-<n>.json) against the
  * convergence honesty discipline. Returns continuation reasons:
  * - a synthesizer verdict of reject/blocked is an unresolved deliberation;
  * - an admissible objection (oracle-linked `maps_to` ∧ severity critical|high)
  *   that the synthesizer neither accepted nor grounded-rejected is unresolved.
  * Objections without an oracle are *taste* — surfaced, never a blocker.
+ *
+ * ac-4 clause 2 (wi_260623uap): when `repoRoot` is supplied, a backward-finding
+ * objection whose `maps_to` is a file:line / file path anchor is additionally
+ * checked for ANCHOR EXISTENCE — if the file does not resolve on disk the oracle
+ * is unverifiable/stale and continuation is forced (fail-safe over-block,
+ * ADR-0024 transparency). Non-file anchors (ac-N, intent:, doc:, prose) are out
+ * of scope and unaffected. `repoRoot` is optional for backward-compatible
+ * one-arg callers (existence check then skipped); the function stays pure over
+ * its inputs (sole side-channel is a sync filesystem existence probe).
  */
-export function dialecticForcesContinuation(d: Dialectic): string[] {
+export function dialecticForcesContinuation(d: Dialectic, repoRoot?: string): string[] {
   const reasons: string[] = [];
   const verdict = d.synthesizer.verdict;
   if (verdict === 'reject' || verdict === 'blocked') {
@@ -89,6 +117,18 @@ export function dialecticForcesContinuation(d: Dialectic): string[] {
     const idResolved = obj.id !== undefined && resolved.has(obj.id);
     if (admissible && !resolved.has(obj.claim) && !idResolved) {
       reasons.push(`dialectic ${d.review_id}: admissible objection unresolved — ${obj.claim}`);
+    }
+    // ac-4 clause 2: backward-finding anchor existence. Additive to (not a
+    // replacement for) the resolution check above — an admissible objection
+    // whose file:line/path oracle does not resolve on disk is unverifiable, so
+    // we over-block (deliberately fail-safe, never a false pass).
+    if (admissible && repoRoot !== undefined) {
+      const anchor = fileAnchorPath(obj.maps_to);
+      if (anchor !== undefined && !existsSync(join(repoRoot, anchor))) {
+        reasons.push(
+          `dialectic ${d.review_id}: objection maps_to '${obj.maps_to}' does not resolve to an existing file — backward-finding oracle unverifiable/stale`,
+        );
+      }
     }
   }
   return reasons;
@@ -682,7 +722,8 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     });
   }
   if (dialectics.status === 'ok') {
-    for (const d of dialectics.items) reasons.push(...dialecticForcesContinuation(d));
+    for (const d of dialectics.items)
+      reasons.push(...dialecticForcesContinuation(d, input.repoRoot));
   }
   if (acgReview.status === 'ok') {
     reasons.push(...acgReviewForcesContinuation(acgReview.data));

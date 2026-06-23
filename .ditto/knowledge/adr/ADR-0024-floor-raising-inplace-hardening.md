@@ -1,15 +1,20 @@
 # ADR-0024: 기획~구현 품질 floor — design 노드 제자리 경화 (AC↔oracle 수렴·회고 측정·의사결정 투명성)
 
-- 상태: proposed (설계 합의 — 구현은 후속 WI; work item wi_260623dfa의 design 산출)
-- 결정 일자: 2026-06-23
+- 상태: accepted (increment 1 착지 — AC↔oracle 코어가 코드로 착륙·검증됨; 나머지 결정은 후속 increment)
+- 결정 일자: 2026-06-23 (proposed) · 2026-06-23 accepted 승격 (increment 1 wi_260623uap 착지)
 - 결정자: hskim, claude (claude-opus-4-8)
-- 관련: ADR-0023 (fused design 노드·far-field detect/propose/manual·비용/중복 거부 — 이 ADR은 그와 **정합(alignment)**, supersede 아님), ADR-0020 (결정-모순 가드레일·fail-closed — 투명성 원칙과 정합), ADR-0018 (옵셔널 도구 강등 — 정적 검증법 분석기 부재 시), ADR-0013 (완료 계약). 코드(권위): `src/core/autopilot-loop.ts`(`producePlanGate` — plan 단계 증거 기록기), `src/core/autopilot-dispatch.ts:92`(`buildDelegationPacket`), `src/core/gates.ts`(completion 계열), `src/hooks/stop.ts:88`(현 oracle 게이트=문자열 존재+severity만), `src/schemas/dialectic.ts:77`(`maps_to`), `src/core/codeql/sarif-adapter.ts:74`(`oracleOf`), `src/core/coverage-feedback.ts`·`src/core/intent-quality-doctor.ts`·`src/core/completion-coverage-doctor.ts`(측정 재료), `src/core/interview-driver.ts:70,271`(intent floor 공허). 설계 상세(drift 주의·비권위): `reports/design/floor-raising-blueprint.md`. 심의: dialectic round-1 (verdict=revise).
+- 관련: ADR-0023 (fused design 노드·far-field detect/propose/manual·비용/중복 거부 — 이 ADR은 그와 **정합(alignment)**, supersede 아님), ADR-0020 (결정-모순 가드레일·fail-closed — 투명성 원칙과 정합), ADR-0018 (옵셔널 도구 강등 — 정적 검증법 분석기 부재 시), ADR-0013 (완료 계약). 코드(권위, increment 1 착지 후 실제 닻): `src/schemas/work-item.ts`(`acOracle` — verification_method{dynamic_test|static_scan|soft_judgment} × maps_to × direction forward|backward, forward는 코드-포인터 maps_to 거부; `acceptanceCriterion.oracle` additive-optional), `src/core/autopilot-loop.ts`(design-close 경로가 recordResultPayload.ac_oracles를 work-item AC에 기록), `src/core/coverage-manager.ts`(`producePlanGate` 결정론 presence-CHECK만·순수 유지; `validateAcOracle`·`assertOracleFrozen`·`oraclesEqual` — 적대 검증+forward-AC frozen, design-close write 직전 배선), `src/core/autopilot-dispatch.ts`(`buildDelegationPacket` — AC 문장+oracle을 context.acceptance로 운반), `src/core/autopilot-complete.ts`(`deriveAcVerdicts`/`nodeVerdictFor` — AC↔oracle **닫힘 판정**), `src/core/gates.ts`(`oracleSatisfaction` — presence-gated·fail-closed·static_scan은 재스캔 evidenceRef 필요), `src/hooks/stop.ts:83`(`dialecticForcesContinuation` — **dialectic-OBJECTION 게이트**; ac-4 clause 2로 admissible objection의 file:line/path 닻 디스크 실재 검사 추가). 측정 재료(후속 increment): `src/core/coverage-feedback.ts`·`src/core/intent-quality-doctor.ts`·`src/core/completion-coverage-doctor.ts`. intent floor 공허(후속): `src/core/interview-driver.ts:70,271`. 설계 상세(drift 주의·비권위): `reports/design/floor-raising-blueprint.md`. 심의: dialectic round-1 (verdict=revise).
+
+### 착지 (landed) — increment 1 (wi_260623uap)
+- 착지한 것: **결정 1·2·3 + 적대 변환기 + forward-AC frozen oracle** = AC↔oracle 코어. 전 스위트 2802 pass/0 fail (fresh verifier+reviewer).
+- 후속 increment로 남은 것: **결정 4(회고 측정), 5(plan 미리보기 뷰), 6(루프 규율), 7(의사결정 투명성 전면화)**. 결정 7은 부분 내재화됨 — oracle-unmet 블록이 이미 사유(reasons)를 발화한다.
+- **앵커 정정**: 원안(아래 결정 1·6 등)이 `stop.ts:88`을 "현 oracle 게이트"로 불렀으나 잘못이다 — `stop.ts`의 `dialecticForcesContinuation`은 **dialectic-objection 허용성 게이트**이고 AC oracle을 닫지 않는다. AC-oracle **닫힘 판정**은 `deriveAcVerdicts`/`nodeVerdictFor`(autopilot-complete.ts) + `oracleSatisfaction`(gates.ts)에 산다. stop.ts가 받은 것은 backward-finding objection 닻 실재 검사(ac-4 clause 2)뿐이다. 이 오라벨은 plan 단계 pre-mortem이 드러냈다.
 
 ## 컨텍스트
 
 목적: 사용자의 기획/설계 역량과 무관하게 ditto를 거치면 **autopilot 최종 산출물의 품질 floor가 일관되게** 오르게 한다. 조사(4 researcher, main 코드)로 확인한 현황:
 
-- floor는 2층. **breadth/구조 층**(far-field 19 카테고리 무조건 주입·vague-AC bootstrap 차단·coverage sweep 필수)은 실재하고 기획자 실력과 무관. **depth/validity 층**은 honor-system — neutrality·`admissibleBranchesAdded`·oracle 전부 에이전트 자기보고이고 `stop.ts:88`은 oracle 문자열의 *존재+severity*만 검사(실재·판별 미검증), anti-SLOP refute 게이트 미착륙(ADR-0023:40).
+- floor는 2층. **breadth/구조 층**(far-field 19 카테고리 무조건 주입·vague-AC bootstrap 차단·coverage sweep 필수)은 실재하고 기획자 실력과 무관. **depth/validity 층**은 honor-system — neutrality·`admissibleBranchesAdded`·oracle 전부 에이전트 자기보고이고 `dialecticForcesContinuation`(stop.ts:83, dialectic-objection 게이트)은 objection 문자열의 *존재+severity*만 검사했다(닻 실재·판별 미검증), anti-SLOP refute 게이트 미착륙(ADR-0023:40). (increment 1이 backward-finding objection 닻 실재 검사를 추가 = ac-4 clause 2.)
 - 의도 손실: 위임 packet이 AC **id만** 운반(`autopilot-dispatch.ts:110-111`) — 구현자는 AC 문장·oracle을 못 받는다.
 - intent floor 공허: deep-interview `dimensions:[]` 시드(`interview-driver.ts:70`) — critical 0개면 "모든 critical 해결" 게이트가 공허; readiness는 LLM 자기보고(`:271`).
 - 출력 floor 측정 부재: 끝에서 산출물 품질을 재는 단일 지표 없음(재료만 흩어짐).
@@ -20,7 +25,7 @@ dialectic(round-1, Codex 교차모델 Opponent) verdict=**revise**: 진단은 ma
 
 floor를 **단계 분리가 아니라 `design` 노드 *제자리(in-place)* 경화**로 올린다. (서사 순서 의도→계획→구현→회고→정리는 유지, 코드 단계 구분은 불변.)
 
-1. **AC↔oracle 수렴.** 완료 통화를 "LLM이 됐다고 말함"에서 **"AC가 재평가 가능한 oracle로 닫힘"**으로 바꾼다. ①매치=`design` 노드(`producePlanGate`), ②전달=packet 농축(AC 문장+oracle, `buildDelegationPacket`), ③판정=완료 게이트(`gates.ts`). 분리하지 않음(ADR-0023:44-46 정합).
+1. **AC↔oracle 수렴.** 완료 통화를 "LLM이 됐다고 말함"에서 **"AC가 재평가 가능한 oracle로 닫힘"**으로 바꾼다. ①매치=`design` 노드 design-close 경로가 `recordResultPayload.ac_oracles`를 work-item AC에 기록(LLM-배정), `producePlanGate`는 결정론 presence-CHECK만 추가(순수 유지 — producePlanGate 안에서 LLM 배정 아님); ②전달=packet 농축(AC 문장+oracle, `buildDelegationPacket` → context.acceptance); ③판정=`deriveAcVerdicts`/`nodeVerdictFor`(autopilot-complete.ts) + `oracleSatisfaction`(gates.ts) — **completionGate 아님, stop.ts 아님**; presence-gated·fail-closed, static_scan은 기록된 재스캔 evidenceRef 필요(분석기 부재→unverified, ADR-0018). 분리하지 않음(ADR-0023:44-46 정합).
 
 2. **oracle 모델 — 재평가 가능성이 강도.** oracle = *기계가 재평가 가능한* 의도된 행동/속성의 진술. 두 축: **대상**(`maps_to`: AC/file:line/intent/doc) × **검증법** 3부류 — **hard·동적**(테스트=실행) / **hard·정적**(분석·스캔=재스캔; `file:line` 앵커) / **soft·판단**(review/user-decision). forward AC(구현 후 평가)는 hard 우선·코드-포인터 금지(변경에 부서짐); backward finding(현재 코드 증거)만 `file:line` 유효. **`file:line` ≠ soft**(정적 부류 앵커). finding의 raise(현재)와 resolution(detector 재실행/회귀 테스트)은 시점·oracle이 다르다.
 

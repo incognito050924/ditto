@@ -1,11 +1,15 @@
+import type { z } from 'zod';
 import type { Autopilot } from '~/schemas/autopilot';
+import type { evidenceRef } from '~/schemas/common';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { Convergence } from '~/schemas/convergence';
 import type { ClosureMode } from '~/schemas/convergence';
 import type { IntentContract } from '~/schemas/intent';
 import type { InterviewState } from '~/schemas/interview-state';
-import type { WorkItem } from '~/schemas/work-item';
+import type { AcOracle, WorkItem } from '~/schemas/work-item';
 import { COVERAGE_AXIS_MECHANISMS } from './coverage-manager';
+
+type EvidenceRef = z.infer<typeof evidenceRef>;
 
 /**
  * Deterministic gates (M0.4). Pure functions, no LLM calls (D5: 결정론 1차).
@@ -252,6 +256,56 @@ export function resolvabilityBlockers(
     // resolvability absent and no AC reference → legacy/unlabeled; not blocked here.
   }
   return blockers;
+}
+
+// ── per-AC oracle satisfaction (ADR-0024 §3 ③ JUDGE; consumed by deriveAcVerdicts) ─
+
+/**
+ * Is an AC's oracle SATISFIED by the evidence that already closes it? Pure, reads
+ * ONLY the passed-in evidence refs — it NEVER runs a scanner/test (static = a
+ * RECORDED re-scan ref only; ADR-0018 graceful-degrade: absent analyzer/evidence
+ * stays non-pass, never auto-pass). The closure DECISION lives in
+ * autopilot-complete (`nodeVerdictFor`); this helper only classifies whether the
+ * recorded evidence meets the oracle's re-evaluability class and emits `reasons`
+ * naming the unmet oracle (transparency, ADR-0024:35).
+ *
+ * `closingEvidence` is the same union the AC-closing rule already gathers
+ * (top-level + per-AC `evidence_refs`), so a satisfied oracle implies closing
+ * evidence existed — presence is a precondition, not a separate check.
+ *
+ *  - `dynamic_test` → satisfied by ANY closing evidence ref (reuses the existing
+ *    closing-evidence rule; an executed/runnable ref). No new constraint vs. the
+ *    legacy behavior.
+ *  - `static_scan`  → satisfied ONLY by a RECORDED re-scan ref (kind file /
+ *    artifact / command). A note-only ack ("looks clean") is NOT a re-scan.
+ *  - `soft_judgment`→ satisfied by ANY closing evidence ref incl. a review /
+ *    decision `note`.
+ */
+const STATIC_SCAN_KINDS: ReadonlySet<EvidenceRef['kind']> = new Set([
+  'file',
+  'artifact',
+  'command',
+]);
+
+export function oracleSatisfaction(
+  acId: string,
+  oracle: AcOracle,
+  closingEvidence: readonly EvidenceRef[],
+): GateResult {
+  const satisfied = ((): boolean => {
+    switch (oracle.verification_method) {
+      case 'dynamic_test':
+        return closingEvidence.length > 0;
+      case 'static_scan':
+        return closingEvidence.some((e) => STATIC_SCAN_KINDS.has(e.kind));
+      case 'soft_judgment':
+        return closingEvidence.length > 0;
+    }
+  })();
+  if (satisfied) return gate([]);
+  return gate([
+    `${acId}: ${oracle.verification_method} oracle unsatisfied (no closing evidence meets the oracle; not closed to pass)`,
+  ]);
 }
 
 // ── completion gate (cross-checks completion against the work item) ─────────

@@ -1,7 +1,11 @@
 import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
 import type { CompletionContract } from '~/schemas/completion-contract';
-import type { WorkItem } from '~/schemas/work-item';
+import type { AcOracle, WorkItem } from '~/schemas/work-item';
 import { type CompletionInput, buildCompletion } from './completion-store';
+import { oracleSatisfaction } from './gates';
+
+/** Per-AC oracle lookup threaded into the closure decision (ADR-0024 §3 ③ JUDGE). */
+type OracleMap = ReadonlyMap<string, AcOracle | undefined>;
 
 /**
  * Assemble a completion contract from a finished autopilot graph (done→completion
@@ -49,21 +53,55 @@ function hasClosingEvidence(node: AutopilotNode, acId: string): boolean {
   return node.evidence_refs.length > 0 || perAcEvidence(node, acId).length > 0;
 }
 
+/** Evidence that closes `acId` on `node` (top-level ∪ per-AC), the union the oracle gate reads. */
+function closingEvidence(node: AutopilotNode, acId: string) {
+  return [...node.evidence_refs, ...perAcEvidence(node, acId)];
+}
+
 /**
  * The verdict a single addressing node contributes for ONE criterion: its
  * evidence-gated structural verdict (status + evidence) lowered by any per-AC
  * verdict that node emitted for this criterion. This is the old flat fold,
  * evaluated per node so supersession can reason about *which* node failed vs.
  * which later node re-passed.
+ *
+ * ADR-0024 §3 ③ JUDGE (ac-4): when an oracle IS present for `acId`, a would-be
+ * `pass` close is held to that oracle — if the recorded closing evidence does not
+ * meet the oracle (e.g. a static_scan with only a note, no recorded re-scan), the
+ * node's contribution is downgraded to `unverified` (NOT pass) with a reason note
+ * naming the AC + unmet oracle. fail-closed: any throw while evaluating the oracle
+ * also downgrades (over-block, never a false pass). An ABSENT oracle leaves the
+ * exact prior behavior (presence-gated, regression-safe).
  */
-function nodeVerdictFor(node: AutopilotNode, acId: string): { verdict: Verdict; notes?: string } {
+function nodeVerdictFor(
+  node: AutopilotNode,
+  acId: string,
+  oracle?: AcOracle,
+): { verdict: Verdict; notes?: string } {
   let verdict: Verdict;
   let notes: string | undefined;
   if (node.status === 'failed') {
     verdict = 'fail';
     notes = 'an addressing node failed';
   } else if (node.status === 'passed' && hasClosingEvidence(node, acId)) {
-    verdict = 'pass';
+    if (oracle) {
+      let blocked: string | undefined;
+      try {
+        const sat = oracleSatisfaction(acId, oracle, closingEvidence(node, acId));
+        if (!sat.pass) blocked = sat.reasons[0];
+      } catch {
+        // fail-closed: an oracle/anchor evaluation error never yields a silent pass.
+        blocked = `${acId}: ${oracle.verification_method} oracle evaluation errored (held non-pass, fail-closed)`;
+      }
+      if (blocked) {
+        verdict = 'unverified';
+        notes = blocked;
+      } else {
+        verdict = 'pass';
+      }
+    } else {
+      verdict = 'pass';
+    }
   } else if (node.status === 'passed') {
     verdict = 'unverified';
     notes = 'addressing node passed without evidence (claim ≠ proof)';
@@ -143,9 +181,16 @@ function isStructuralUnverified(node: AutopilotNode, acId: string): boolean {
   );
 }
 
-export function deriveAcVerdicts(graph: Autopilot, acIds: string[]): DerivedVerdict[] {
+export function deriveAcVerdicts(
+  graph: Autopilot,
+  acIds: string[],
+  oracles?: OracleMap,
+): DerivedVerdict[] {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   return acIds.map((acId) => {
+    // Presence-gated: only an AC that carries an oracle gets the new closure check;
+    // absent → the exact prior behavior (regression-safe, ADR-0024 ac-4).
+    const oracle = oracles?.get(acId);
     const addressing = graph.nodes.filter((n) => n.acceptance_refs.includes(acId));
     // Evidence closing this AC = top-level evidence on every addressing node PLUS
     // any per-AC evidence those nodes attached to *this* criterion (wi_260622kb4).
@@ -167,7 +212,7 @@ export function deriveAcVerdicts(graph: Autopilot, acIds: string[]): DerivedVerd
     // fail/partial still wins (no false-green). After supersession, fold the
     // survivors with worst().
     const supersedingFix = addressing.some(
-      (n) => nodeVerdictFor(n, acId).verdict === 'pass' && dependsOnPassedFix(n, byId),
+      (n) => nodeVerdictFor(n, acId, oracle).verdict === 'pass' && dependsOnPassedFix(n, byId),
     );
 
     let verdict: Verdict = 'pass';
@@ -175,7 +220,7 @@ export function deriveAcVerdicts(graph: Autopilot, acIds: string[]): DerivedVerd
     let folded = false;
     let structuralSuperseded = false;
     for (const n of addressing) {
-      const nv = nodeVerdictFor(n, acId);
+      const nv = nodeVerdictFor(n, acId, oracle);
       // A non-pass (fail OR partial) that a later fix-backed re-verify supersedes
       // is dropped from the fold — a pre-fix verification snapshot, like an earlier
       // fail, must not drag down an AC the fix-backed re-verify has since passed.
@@ -201,7 +246,7 @@ export function deriveAcVerdicts(graph: Autopilot, acIds: string[]): DerivedVerd
         addressing.some(
           (m) =>
             m !== n &&
-            nodeVerdictFor(m, acId).verdict === 'pass' &&
+            nodeVerdictFor(m, acId, oracle).verdict === 'pass' &&
             (n.kind === 'design' || dependsOnNode(m, n.id, byId)),
         )
       ) {
@@ -238,7 +283,10 @@ export function assembleCompletionFromGraph(
   opts: AssembleOptions = {},
 ): CompletionContract {
   const acIds = workItem.acceptance_criteria.map((c) => c.id);
-  const verdicts = deriveAcVerdicts(graph, acIds);
+  // ADR-0024 §3 ③ JUDGE: thread each AC's oracle (if any) into the closure
+  // decision. Absent oracle → prior evidence-gated behavior (presence-gated).
+  const oracles: OracleMap = new Map(workItem.acceptance_criteria.map((c) => [c.id, c.oracle]));
+  const verdicts = deriveAcVerdicts(graph, acIds, oracles);
   const summary =
     opts.summary ??
     `Completion assembled from autopilot ${graph.autopilot_id} (${graph.nodes.length} nodes) for "${workItem.goal}".`;

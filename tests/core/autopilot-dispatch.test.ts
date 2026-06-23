@@ -110,6 +110,65 @@ describe('buildDelegationPacket (6-section, Context Isolation)', () => {
     }
   });
 
+  // ADR-0024 ac-3 (② DELIVER): the implementer must receive each addressed AC's
+  // STATEMENT TEXT + its assigned ORACLE, not just the id — the id-only packet was
+  // the intent-loss point. Additive: acceptance_refs (ids) stays for existing
+  // consumers; context.acceptance carries the resolved {id, statement, oracle}.
+  test('packet carries each AC statement + assigned oracle (not just the id)', () => {
+    const wiWithOracle = {
+      id: 'wi_oracle1',
+      changed_files: ['src/x.ts'],
+      acceptance_criteria: [
+        {
+          id: 'ac-1',
+          statement: 'login rejects an empty password',
+          oracle: {
+            verification_method: 'dynamic_test',
+            maps_to: 'ac-1',
+            direction: 'forward',
+          },
+        },
+        {
+          id: 'ac-2',
+          statement: 'audit log records the attempt',
+          // legacy AC: no oracle
+        },
+      ],
+    } as unknown as WorkItem;
+
+    const p = buildDelegationPacket(implementNode, wiWithOracle);
+
+    // additive: ids still present for existing consumers.
+    expect(p.context.acceptance_refs).toEqual(['ac-1', 'ac-2']);
+
+    // structured resolved list: id + statement (+ oracle when assigned).
+    expect(p.context.acceptance).toEqual([
+      {
+        id: 'ac-1',
+        statement: 'login rejects an empty password',
+        oracle: { verification_method: 'dynamic_test', maps_to: 'ac-1', direction: 'forward' },
+      },
+      { id: 'ac-2', statement: 'audit log records the attempt' },
+    ]);
+
+    // human-readable done_when names what + how-judged, not just ids.
+    expect(p.context.done_when).toContain('login rejects an empty password');
+    expect(p.context.done_when).toContain('dynamic_test');
+    expect(p.expected_outcome).toContain('login rejects an empty password');
+  });
+
+  test('an AC with no assigned oracle omits the oracle field (no breakage)', () => {
+    const wiLegacy = {
+      id: 'wi_legacy1',
+      changed_files: ['src/x.ts'],
+      acceptance_criteria: [{ id: 'ac-1', statement: 'does the thing' }],
+    } as unknown as WorkItem;
+    const single = { ...implementNode, acceptance_refs: ['ac-1'] };
+    const p = buildDelegationPacket(single, wiLegacy);
+    expect(p.context.acceptance).toEqual([{ id: 'ac-1', statement: 'does the thing' }]);
+    expect(p.context.acceptance?.[0]).not.toHaveProperty('oracle');
+  });
+
   // [VERIFY] lifecycle owners: a refactor node mutates code (Tidy First) so it is
   // approval-gated like the implementer; security/retro are read-only analysis.
   // The mutating signal is derived from the owner's toolset (Edit ⇒ mutates), so
