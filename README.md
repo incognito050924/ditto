@@ -60,27 +60,46 @@ It should avoid:
 
 ## Installing
 
-One line — no clone, no npm publish. `npx` fetches the source straight from
-GitHub and installs the Claude Code plugin + a global `ditto` CLI. Run it **from
-the project you want DITTO to manage** (a git repo) and the same step scaffolds
-that project's `.ditto/`:
+No clone, no npm publish — `npx` pulls the source straight from GitHub. One line
+per lifecycle step. Prerequisites: **bun ≥ 1.3**, **git**, and **Claude Code** on
+your `PATH`.
+
+### Install
+
+Run it **from the project you want DITTO to manage** (a git repo): it installs the
+Claude Code plugin + a global `ditto` CLI and scaffolds that project's `.ditto/`
+in the same step.
 
 ```bash
 npx github:incognito050924/ditto install
 ```
 
-Update or remove the same way:
+> Run from outside a git repo and it installs the global plugin only — then `cd`
+> into your project and run `ditto setup`. Optional analysis tools
+> (CodeQL/Playwright/LSP) aren't provisioned by npx; add them with `ditto setup --tools`.
+
+### Update
+
+Pull the latest published version (refreshes the plugin + CLI, re-runs setup; idempotent):
 
 ```bash
-npx github:incognito050924/ditto update      # pull the latest
-npx github:incognito050924/ditto uninstall   # remove the plugin + global CLI
+npx github:incognito050924/ditto update
 ```
 
-Prerequisites: **bun ≥ 1.3**, **git**, and **Claude Code** on your `PATH`. If you
-run the install from outside a git repo it sets up the global plugin only — then
-`cd` into your project and run `ditto setup`. Full guide — options, per-project
-setup/teardown, the local-repo path for contributors, verification, and
-troubleshooting:
+### Uninstall — two layers
+
+```bash
+# from one project only (the global install stays):
+ditto uninstall            # remove DITTO's managed blocks + allowlist; keep .ditto/
+ditto uninstall --purge    # also delete .ditto/ (work-item history + memory)
+
+# the whole global host install:
+npx github:incognito050924/ditto uninstall   # remove plugin + global CLI; each project's .ditto/ stays
+```
+
+Maintainers publish a new version with `bun run release <patch|minor|major>` then
+`git push && git push origin v<version>`. Full guide — options, the setup wizard,
+the local-repo path for contributors, verification, and troubleshooting:
 
 - English: [docs/install.md](docs/install.md)
 - 한국어: [docs/install.ko.md](docs/install.ko.md)
