@@ -19,11 +19,18 @@
 
 ## 2. ★ 다음 착수 후보 — wi_26062227h (draft, 본격 미착수)
 
-"far-field 비용 구조 측정·재설계". 이번 세션 대화에서 사용자가 짚은 §3 자동화 보류의 **빈틈을 측정**하는 트랙. 둘 다 §3/ADR-0023 자동화 보류를 데이터로 다시 열 카드:
+"far-field pre-mortem 재설계". 이번 세션 대화가 비용 질문에서 출발해 far-field의 **근본 신뢰성**까지 파고들어 도달한 결론. (자세한 추론 사슬은 호스트 메모리 `project_premortem_redesign` — 이 PC 로컬, git 미전파.)
 
-- **(a) far-field ON vs OFF 증분 비용** — pre-mortem 점검 노드가 `root` 1개 → `root`+19카테고리 = 20개로 fan-out 전체를 **~20배**로 부풀린다(추정, **직접 측정 안 됨**). 비용 모델=`coverage-manager.ts:458-464`(per-node × 3-role+judges, multiplicative; tier는 depth만 줄이고 breadth=19는 hard invariant로 불변).
-- **(b) 분할 19회 vs 통합 1회** — 19개를 카테고리별 독립 fan-out 대신 한 에이전트가 전부 체크하면 싸진다. 분할 이유=편향 차단(fresh·독립)+refute-by-default anti-SLOP(ADR-0023 §40). 단 "통합이 실제로 품질 해친다"는 **측정 안 된 설계 의도(추론)**이고 ADR에 기각 기록도 없음.
-- ADR-0023 철회조건(`line 60-72`)에 재검토 트리거로 기록됨. intent.json 미작성(draft) — deep-interview/계획부터.
+**신뢰성 문제(대화로 확인)**: LLM pre-mortem은 leading-question + 작화(confabulation)로 *없는* 위험을 지어낸다("A의 관계 실패는?" → A에 관계가 없어도 생성). DITTO의 anti-SLOP(refute-by-default·oracle 결박)은 **코드가 아니라 LLM 규율**이다 — `coverage-loop`/`coverage-manager.ts:141`은 LLM이 보고한 `admissibleBranchesAdded` 숫자를 받을 뿐, oracle(`file:line`) 실재를 코드가 검증하지 않는다. dialectic도 skill-driven(LLM 수행). 즉 환각 거르기를 또 LLM에 맡긴다.
+
+**카테고리 3분류(코드 결박 가능성)**:
+- **① 강함**(코드로 환각 결정적 기각): `cross-feature`·`compat-version`·`boundary-edge`·`input-validation`·`security-privacy`(시크릿). → LLM 발산 + **코드 oracle 검증**.
+- **② 부분**(구조 grep·동작 재현 비용): `authentication`·`authorization`·`data-integrity`·`resource-abuse`(N+1)·`configuration`·`reuse`. → LLM + 결정적 도구 보강.
+- **③ 약함**(코드로 환각 못 거름 + 환각 다수): `external-env`·`deployment-rollout`·`concurrency-ordering`·`observability`·`auditing`·`minimal-increment`. 검증 약한데 진짜 사고도 잦은 역설. `minimal-increment`는 pre-mortem 아닌 코드리뷰 영역(카테고리 오류).
+
+**사용자 결정(이 방향으로 구현)**: **③ 약함 그룹을 far-field 자동 sweep 목록에서 제외**하고, 그 위험은 **deep-interview 시점에 사용자 확인 질문**으로 이관한다(charter QuestionGate 정합 — 배포순서·감사필요·외부연동은 사용자만 답할 도메인/운영 질문이지 LLM이 코드에서 환각할 게 아님). 효과: 비용↓(③ 비싼 LLM 발산 제거)·신뢰성↑(환각 제거)·본질 회복(남은 ①②는 코드 결박 가능).
+
+**남은 설계 작업**: ②③ 경계 정밀 분류; ① 카테고리에 oracle 결정적 검증(`file:line` 실재를 grep/AST로) 부착; ③를 deep-interview 질문으로 시딩하는 경로(question-generator/gate); 비용(분할 vs 통합·ON/OFF 증분 ~20배 추정, `coverage-manager.ts:458-464` 모델)은 ① 축소 후 재측정. intent.json 미작성 — deep-interview/계획부터.
 
 ## 3. 다른 열린 work item (정리 대상)
 
