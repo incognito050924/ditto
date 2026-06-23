@@ -11,7 +11,7 @@ pre-mortem coverage 엔진(`coverage-loop.ts`·`coverage-manager.ts`)은 autopil
 
 핵심 결함:
 
-- novelty-dry는 **시딩된 적 없는 도메인을 영영 안 보여도 종료**시킨다. LLM이 우연히 떠올리지 못한 먼-들판(기능적으로 먼 feature·환경·인증·타 도메인 결합) 실패 모드는 "새 가지 없음"으로 보여 dry로 닫힌다 → false-green(거짓 완료)이 한 단계 상승.
+- novelty-dry는 **시딩된 적 없는 도메인을 영영 안 보여도 종료**시킨다. LLM이 우연히 떠올리지 못한 간접 영향 분야(far-field — 기능적으로 먼 feature·환경·인증·타 도메인 결합) 실패 모드는 "새 가지 없음"으로 보여 dry로 닫힌다 → false-green(거짓 완료)이 한 단계 상승.
 - sweep judge input의 `cross_cutting_constraints`가 `[]`로 하드코딩돼(`coverage-loop.ts`), judge가 지역 노드 + 의도 문자열만 보고 먼 도메인 맵을 못 받았다.
 - 노드 close에 정당화 기록이 없어 **조용한 skip**이 가능했다(어느 카테고리를 왜 안 봤는지 감사 불가).
 
@@ -19,7 +19,7 @@ pre-mortem coverage 엔진(`coverage-loop.ts`·`coverage-manager.ts`)은 autopil
 
 pre-mortem coverage 종료를 novelty-dry 단독에서 **카테고리-완전 종료 + 정당화-close 게이트**로 재정의한다. 모두 가산적·플래그·기존 테스트 green 유지(회귀 0).
 
-1. **카테고리-완전 종료.** 먼-들판 floor taxonomy(`coverage-taxonomy.ts` — 카테고리 수의 SoT)의 각 카테고리를 coverage **노드**로 시딩한다(`farFieldCoverageNodes`). `isCoverageTerminated`의 로직은 그대로(모든 노드 closed 요구)이되, 종료가 이제 **각 카테고리의 명시적 sweep+close**를 요구한다. un-swept 카테고리가 열려 있으면 novelty-dry만으로 종료 불가. 노드트리가 곧 per-category sweep ledger다(신규 기계장치 없음).
+1. **카테고리-완전 종료.** 간접 영향 분야(far-field) floor taxonomy(`coverage-taxonomy.ts` — 카테고리 수의 SoT)의 각 카테고리를 coverage **노드**로 시딩한다(`farFieldCoverageNodes`). `isCoverageTerminated`의 로직은 그대로(모든 노드 closed 요구)이되, 종료가 이제 **각 카테고리의 명시적 sweep+close**를 요구한다. un-swept 카테고리가 열려 있으면 novelty-dry만으로 종료 불가. 노드트리가 곧 per-category sweep ledger다(신규 기계장치 없음).
 
 2. **정당화-close 게이트(fail-closed).** 노드를 resolved 외 상태(out_of_scope/user_owned)로 닫을 때 `close_reason`이 없으면 `enforceClose`(`coverage-loop.ts:209`)가 거부한다. `close_reason`은 노드(`closeNode`, `coverage-manager.ts:72`)·라운드 payload에 기록(감사가능). resolved close는 무영향. → 조용한 skip 차단.
 
@@ -43,7 +43,7 @@ pre-mortem coverage 종료를 novelty-dry 단독에서 **카테고리-완전 종
 
 #### tech-spec 표면 — autopilot plan-stage 위임 (option B, 2026-06-22 결정 · ac-5)
 
-tech-spec은 **자체 far-field sweep을 돌리지 않는다.** tech-spec finalize(`tech-spec.ts`)는 deep-interview와 **동일한** `bootstrapAutopilot` 경로를 거쳐 같은 초기 그래프(`buildInitialNodes`의 N1 `design` 노드)를 만들고, 그 design 노드의 plan-stage sweep이 far-field 카테고리를 시딩한다(`farFieldCategoriesEnabled()` 기본 ON). 즉 tech-spec에서 출발한 work item의 먼-들판 coverage는 autopilot plan-stage에서 **transitive하게** 실현된다 — tech-spec 단계에 별도 엔진을 연결하지 않는 것이 의도다. (대안 A=tech-spec finalize 전 자체 sweep은 비용·중복 때문에 기각; "세 표면 공유 엔진"은 공유 bootstrap→plan-stage 경로로 충족.) 검증: 체인이 코드로 성립 — tech-spec.ts→bootstrapAutopilot→N1 design(autopilot-graph.ts)→SKILL §2b plan-stage coverage-next(라이브 e2e에서 19 카테고리 시딩 확인).
+tech-spec은 **자체 far-field sweep을 돌리지 않는다.** tech-spec finalize(`tech-spec.ts`)는 deep-interview와 **동일한** `bootstrapAutopilot` 경로를 거쳐 같은 초기 그래프(`buildInitialNodes`의 N1 `design` 노드)를 만들고, 그 design 노드의 plan-stage sweep이 far-field 카테고리를 시딩한다(`farFieldCategoriesEnabled()` 기본 ON). 즉 tech-spec에서 출발한 work item의 간접 영향 분야(far-field) coverage는 autopilot plan-stage에서 **transitive하게** 실현된다 — tech-spec 단계에 별도 엔진을 연결하지 않는 것이 의도다. (대안 A=tech-spec finalize 전 자체 sweep은 비용·중복 때문에 기각; "세 표면 공유 엔진"은 공유 bootstrap→plan-stage 경로로 충족.) 검증: 체인이 코드로 성립 — tech-spec.ts→bootstrapAutopilot→N1 design(autopilot-graph.ts)→SKILL §2b plan-stage coverage-next(라이브 e2e에서 19 카테고리 시딩 확인).
 
 ## 기각된 대안
 
