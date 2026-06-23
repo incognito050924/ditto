@@ -327,7 +327,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=01091b5c844fed2e36d239409a896db1a1b3785e79a84be436fac0b32bbda420 -->
+<!-- ditto:knowledge:start sha256=f5bbadb51be4cbe43e536a71c16d7324c186f0b066115203e52628f605b9741d -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -401,5 +401,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-0022 · accepted · ditto 자기호스팅 도그푸딩·배포 생애주기 — 단일 repo dev+dogfood + 결정적 진입 + 게이트 배포
 - ADR-0023 · accepted · pre-mortem coverage 종료 재정의 — novelty-dry에서 카테고리-완전 종료 + 정당화-close 게이트로
 - ADR-0024 · proposed · 기획~구현 품질 floor — design 노드 제자리 경화 (AC↔oracle 수렴·회고 측정·의사결정 투명성)
+- ADR-0025 · accepted · Codex dogfood 수정은 Claude Code 표면과 분리한다
 
 <!-- ditto:knowledge:end -->

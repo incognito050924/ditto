@@ -86,7 +86,7 @@ dogfood에 부적합한 이유:
 
 ## 배포 / 설치 — npx 한 줄 (다른 프로젝트·일반 사용)
 
-남이(또는 본인이 ditto repo 밖에서 평소 쓰려고) 설치할 때는 **npm publish 없이 GitHub 소스**로 한 줄이다 — Claude Code 플러그인과 전역 `ditto` CLI를 둘 다 멱등 설치/갱신/삭제한다:
+남이(또는 본인이 ditto repo 밖에서 평소 쓰려고) 설치할 때는 **npm publish 없이 GitHub 소스**로 한 줄이다 — Claude Code 플러그인과 전역 `ditto` CLI를 둘 다 멱등(여러 번 돌려도 결과 같음) 설치/갱신/삭제한다. 진입점은 단 하나(`scripts/npx-bootstrap.mjs`, package.json `bin`)이고 **verb는 아래 3개뿐**이다 — 다른 인자는 usage 출력 후 exit 64.
 
 ```bash
 npx github:incognito050924/ditto install     # 플러그인 + 전역 CLI
@@ -94,10 +94,23 @@ npx github:incognito050924/ditto update      # 최신으로 갱신
 npx github:incognito050924/ditto uninstall   # 둘 다 제거
 ```
 
-- 플러그인: `claude plugin marketplace add incognito050924/ditto` + `install ditto@ditto-local`(Claude Code가 github에서 클론·관리).
-- 전역 CLI: 커밋된 `bin/ditto` 번들(= 배포 산출물)을 `~/.local/share/ditto/bin`에 복사 후 `~/.local/bin/ditto`로 심링크(ephemeral npx 클론에 안 매임).
-- 전제: `claude`(Claude Code CLI) + `bun`(≥1.3, CLI 런타임)이 PATH에. 구현 SoT: `scripts/npx-bootstrap.mjs`(package.json `bin`).
-- `install-plugin.mjs`는 별개 — *프로젝트별* setup(.ditto scaffold·host 블록·allowlist) 경로다.
+### verb별 — 구체적으로 뭘 하나 / 언제 쓰나
+
+진입점이 매번 하는 일은 두 갈래다: **plugin**(=`claude plugin …`로 위임, Claude Code가 github에서 클론·관리) + **cli**(=커밋된 `bin/ditto` 번들을 `~/.local/share/ditto/bin`에 복사 후 `~/.local/bin/ditto`로 심링크). 세 verb는 이 두 갈래를 각각 다르게 다룬다.
+
+| verb | plugin 갈래 | cli 갈래 | 언제 쓰나 |
+|---|---|---|---|
+| `install` | marketplace 있으면 `update`·없으면 `add`, plugin 있으면 `update`·없으면 `install` | `bin/ditto` 복사 + 심링크 | **처음 설치**. 멱등이라 깨진 설치 **복구·재설치**에도 그대로 다시 돌리면 됨 |
+| `update` | marketplace 무조건 `update`, plugin 있으면 `update`·없으면 `install`(fallback) | 번들 다시 복사 + 심링크 | **이미 깔려 있고** 최신 main 산출물로 올릴 때 |
+| `uninstall` | plugin·marketplace 제거(tolerant — 없으면 skip) | **우리가 심은** 심링크·`~/.local/share/ditto`만 제거 | 플러그인+전역 CLI 모두 제거할 때 |
+
+- 안전장치: `uninstall`/`install`은 우리가 심지 않은 `ditto`(예: 개발자의 dogfood 심링크 `→ dist/plugin/bin/ditto`, 또는 사용자가 직접 둔 바이너리)는 **건드리지 않는다** — 그 경우 CLI 갈래만 건너뛰고 경고하며, 플러그인은 그대로 설치됨(`npx-bootstrap.mjs:107-117`, `:126-132`).
+- 전제: `claude`(Claude Code CLI)가 PATH에 없으면 **exit 2로 중단**(`requireClaude`). 런타임은 `bun`(≥1.3)이 필요 — 없으면 경고만 하고 진행(설치 자체는 됨), CLI 실행 시점에 막힌다.
+- 검증: install/update 성공 후 안내대로 새 Claude Code 세션에서 `/plugins`(ditto enabled·0 errors) + `ditto doctor`로 확인.
+- Windows: 심링크가 POSIX 전용이라 복사만 되고, `~/.local/share/ditto/bin`을 PATH에 직접 추가하라고 안내한다(`:103-104`).
+- `install-plugin.mjs`는 **별개** — *프로젝트별* setup(.ditto scaffold·host 블록·allowlist) 경로이지 npx 설치와 무관하다.
+
+> 동작 권위는 코드다. 위 표는 `scripts/npx-bootstrap.mjs`(install→`doInstall`, update→`doUpdate`, uninstall→`doUninstall`)의 사실을 담은 것이고, 분기·메시지가 바뀌면 그 파일이 SoT다(charter §4-11).
 
 ## 배포 기준 — 언제 rebuild / push / reinstall / update 하나 (단일출처: ADR-0022)
 

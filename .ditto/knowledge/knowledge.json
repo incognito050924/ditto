@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-06-16T00:00:00+09:00",
+  "updated_at": "2026-06-23T00:00:00+09:00",
   "context_path": ".ditto/knowledge/CONTEXT.md",
   "glossary_path": ".ditto/knowledge/glossary.json",
   "project_map_path": null,
@@ -40,6 +40,15 @@
       "rationale": "ADR은 영속 기록물일 뿐 추론 시점 가드레일로 작동 안 함 — CLAUDE.md 투영은 헤드라인만, memory query는 자발적, warm-start는 오토파일럿+researcher/planner 한정, grep adr-guard는 의미적 결정을 의도적으로 범위 밖에 둠. 결정: 충돌을 kind(forbid|require|prefer)×level(intent|method)로 분류해 라우팅한다(method→align 자동준수, intent→interactive=ask_user/autopilot=block fail-closed, prefer→justify). 투명성 불변식으로 충돌 감지 시 자동정렬도 출력에 근거(basis) 노출(조용한 준수 금지). autopilot은 live 대기 없이 fail-closed(노드 block+blocked 보고), intent 충돌은 planner→승인 이음새에서 앞당겨 검출. 판단은 host LLM(ADR-0001/0006 준수), ditto는 검색(memory graph adrGist)+순수 라우팅(decisionConflictGate)+투명성만 소유. adr-guard와 상보(grep·커밋후 vs 의미·추론시점).",
       "change_condition": "intent 충돌 false positive 빈발로 마찰 과하면 method 자동정렬 확대 또는 intent 임계 상향; 전역 invariant 상시주입이 context rot로 실측되면 node-level granularity; host LLM 분류 신뢰도 낮으면 타입드 constraint 필드(kind/scope/enforced_by) 가산적 추가; 사용자 프로젝트가 자체 ADR 축적+ditto-product 결정 배포 필요해지면 층 분리 재개. (배선·집행 통합+라이브 e2e 검증 완료로 2026-06-16 accepted 승격, 커밋 1f38011; 위 조건은 향후 철회·재검토 트리거.)",
       "path": ".ditto/knowledge/adr/ADR-0020-decision-conflict-guardrail.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0025",
+      "title": "Codex dogfood 수정은 Claude Code 표면과 분리한다",
+      "status": "accepted",
+      "rationale": "Codex dogfood 실패는 Codex의 stateful marketplace 진입에서 발생했다. Claude Code dogfood는 stateless `--plugin-dir` 경로로 이미 분리되어 있으므로, Codex 설치 결함을 Claude Code marketplace/build/manifest로 풀면 dual-host 분리가 약해지고 비목표 회귀가 생긴다. 따라서 수정은 Codex branch와 Codex build/setup 표면에만 두고, Claude Code 표면은 fresh 비회귀 검증으로 닫는다.",
+      "change_condition": "Claude Code가 Codex와 같은 stateful marketplace-only 모델로 바뀌거나 Codex가 stateless plugin-dir 등가 경로를 제공하면 dogfood 진입 분리를 재검토한다. Codex 공식 marketplace 발견 경로가 바뀌면 ADR-0016 D5와 함께 Codex 경로만 실측 기준으로 갱신한다. Claude Code 파일 변경 없이는 Codex dogfood를 고칠 수 없다는 코드 근거가 나오면 영향 범위와 비회귀 검증을 ADR amendment로 남긴다.",
+      "path": ".ditto/knowledge/adr/ADR-0025-codex-dogfood-host-isolation.md",
       "superseded_by": null
     }
   ],
