@@ -22952,18 +22952,22 @@ async function collectRetroContext(repoRoot, workItemId2, graph) {
   const evidenceRefs = [];
   try {
     const completion = new CompletionStore(repoRoot);
-    if (await completion.exists(workItemId2)) {
-      const c3 = await completion.get(workItemId2);
-      const total = c3.acceptance.length;
+    const persisted = await completion.exists(workItemId2) ? await completion.get(workItemId2) : null;
+    const hasAcWork = graph.nodes.some((n2) => n2.kind !== "retro" && n2.acceptance_refs.length > 0);
+    const floorSource = persisted ?? (hasAcWork ? assembleCompletionFromGraph(graph, await new WorkItemStore(repoRoot).get(workItemId2)) : null);
+    if (floorSource) {
+      const total = floorSource.acceptance.length;
       if (total > 0) {
-        coverage = c3.acceptance.filter((a2) => a2.verdict === "pass").length / total;
+        coverage = floorSource.acceptance.filter((a2) => a2.verdict === "pass").length / total;
       }
-      unitOnlyClosures = countUnitOnlyClosures(c3);
-      for (const u3 of c3.unverified)
+      unitOnlyClosures = countUnitOnlyClosures(floorSource);
+    }
+    if (persisted) {
+      for (const u3 of persisted.unverified)
         unverifiedItems.push(u3.item);
-      for (const r3 of c3.remaining_risks)
+      for (const r3 of persisted.remaining_risks)
         residualRisks.push(r3);
-      for (const a2 of c3.acceptance)
+      for (const a2 of persisted.acceptance)
         for (const e2 of a2.evidence)
           evidenceRefs.push(`${e2.kind}: ${e2.path}`);
     }
@@ -41598,4 +41602,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=2e135199e78c890cbc51f487fb02007f676361e1a835a0d24b9ab1a0c75f05cf
+//# ditto-src-stamp=83bb60f692580bb336ba56abcc4a8e02951e64296e8b95a23ea03523c807732f

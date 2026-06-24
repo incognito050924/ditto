@@ -12,6 +12,7 @@ import { decisionConflict, decisionConflictCarrier } from '~/schemas/decision-co
 import { type AcOracle, acOracle } from '~/schemas/work-item';
 import { ActiveNodeLeaseStore } from './active-node-lease';
 import { loadVariantCatalog, selectVariantCandidates } from './agent-variants';
+import { assembleCompletionFromGraph } from './autopilot-complete';
 import { forwardRound, planForwardReexpansion, totalForwardRounds } from './autopilot-converge';
 import {
   type DelegationPacket,
@@ -186,20 +187,47 @@ async function collectRetroContext(
   const evidenceRefs: string[] = [];
   try {
     const completion = new CompletionStore(repoRoot);
-    if (await completion.exists(workItemId)) {
-      const c = await completion.get(workItemId);
-      const total = c.acceptance.length;
+    const persisted = (await completion.exists(workItemId))
+      ? await completion.get(workItemId)
+      : null;
+    // The contract the outcome floor measures: the PERSISTED completion when
+    // `autopilot complete` already wrote it, else one assembled in-memory from the
+    // SAME (graph, workItem) the complete path uses — because the standard flow runs
+    // the retro node BEFORE `autopilot complete` writes completion.json, so coverage +
+    // unit_only would otherwise be omitted in every normal run (ADR-0024 Decision 4
+    // gap). Assembling is PURE — it never writes completion.json (CompletionStore.write
+    // is the only writer), so it cannot race the later real complete; the still-running
+    // retro node carries no acceptance_refs, so it does not affect either metric.
+    // Grounded only when the graph holds AC-addressing work (some non-retro node has
+    // acceptance_refs); a graph with none has no closing signal, so the slots stay
+    // ungrounded (omitted) — anti-SLOP, a real 0 is a measurement but a no-op graph is
+    // not. The two metrics align with their escape_recurrence/post_cost siblings, which
+    // already compute from live state rather than waiting for completion.json.
+    const hasAcWork = graph.nodes.some((n) => n.kind !== 'retro' && n.acceptance_refs.length > 0);
+    const floorSource =
+      persisted ??
+      (hasAcWork
+        ? assembleCompletionFromGraph(graph, await new WorkItemStore(repoRoot).get(workItemId))
+        : null);
+    if (floorSource) {
+      const total = floorSource.acceptance.length;
       if (total > 0) {
-        coverage = c.acceptance.filter((a) => a.verdict === 'pass').length / total;
+        coverage = floorSource.acceptance.filter((a) => a.verdict === 'pass').length / total;
       }
       // ① unit_only_closures — count of falsely-green closures (pass closed on
-      // command-only evidence, no runtime/artifact). Grounded whenever completion
-      // exists (a real 0 is a measurement); the count uses the SAME isUnitOnlyClosure
-      // probe the completion-coverage doctor uses, so the two never drift.
-      unitOnlyClosures = countUnitOnlyClosures(c);
-      for (const u of c.unverified) unverifiedItems.push(u.item);
-      for (const r of c.remaining_risks) residualRisks.push(r);
-      for (const a of c.acceptance)
+      // command-only evidence, no runtime/artifact). The count uses the SAME
+      // isUnitOnlyClosure probe the completion-coverage doctor uses, so the two never
+      // drift.
+      unitOnlyClosures = countUnitOnlyClosures(floorSource);
+    }
+    // Narrative records come ONLY from a PERSISTED completion: the in-memory assembled
+    // contract's remaining_risks would name the still-running retro node, and the
+    // narrative is out of this metrics-grounding fix's scope (absent completion ⇒ these
+    // stay empty, as before).
+    if (persisted) {
+      for (const u of persisted.unverified) unverifiedItems.push(u.item);
+      for (const r of persisted.remaining_risks) residualRisks.push(r);
+      for (const a of persisted.acceptance)
         for (const e of a.evidence) evidenceRefs.push(`${e.kind}: ${e.path}`);
     }
   } catch {

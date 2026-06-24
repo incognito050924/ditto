@@ -235,6 +235,59 @@ describe('retro dispatch wiring (ac-4: context.retro carries the SEPARATED metri
     expect(retro?.metrics.no_measurable_signal).toBeUndefined();
   });
 
+  // ADR-0024 Decision 4 gap fix (wi_260624qde): in the STANDARD flow the retro node
+  // runs BEFORE `autopilot complete` writes completion.json, so coverage/unit_only
+  // must ground from the live graph — the SAME (graph, workItem) `autopilot complete`
+  // assembles from — not wait for a file that does not exist yet. (Siblings
+  // escape_recurrence/post_cost already compute from live state; these two were the
+  // only slots that waited for completion.json, which made the floor empty in the
+  // standard flow.)
+  test('NO completion.json + terminal AC work → outcome_floor.coverage grounds FROM THE GRAPH', async () => {
+    // N1 closes ac-1 pass with FILE evidence (not unit-only); ac-2 is unaddressed →
+    // unverified. No completion.json on disk. Grounded coverage = 1 pass / 2 = 0.5,
+    // matching what `assembleCompletionFromGraph(graph, wi)` (the complete path) yields.
+    const verifyN1 = {
+      id: 'N1',
+      kind: 'verify',
+      owner: 'verifier',
+      purpose: 'verify ac-1',
+      status: 'passed',
+      depends_on: [],
+      acceptance_refs: ['ac-1'],
+      evidence_refs: [{ kind: 'file', path: 'src/x.ts', summary: 'runtime wired' }],
+      ac_verdicts: [],
+      attempts: { fix: 0, switch: 0 },
+    } as AutopilotNode;
+    await aps.write(WI, graph([verifyN1, retroNode({ depends_on: ['N1'] })]));
+    const res = await nextNode(repo, WI);
+    if (res.action !== 'spawn') throw new Error('expected spawn');
+    expect(res.node_id).toBe('N7');
+    const retro = res.packet.context.retro;
+    expect(retro?.metrics.outcome_floor?.coverage).toBe(0.5);
+    expect(retro?.metrics.outcome_floor?.unit_only_closures).toBe(0);
+  });
+
+  test('NO completion.json + command-only closure → unit_only_closures grounds FROM THE GRAPH', async () => {
+    // ac-1 closes pass with command-ONLY evidence (no file/artifact) → a unit-only
+    // (falsely-green) closure. Grounded from the graph without any completion.json.
+    const verifyN1 = {
+      id: 'N1',
+      kind: 'verify',
+      owner: 'verifier',
+      purpose: 'verify ac-1',
+      status: 'passed',
+      depends_on: [],
+      acceptance_refs: ['ac-1'],
+      evidence_refs: [{ kind: 'command', command: 'bun test', summary: 'unit only' }],
+      ac_verdicts: [],
+      attempts: { fix: 0, switch: 0 },
+    } as AutopilotNode;
+    await aps.write(WI, graph([verifyN1, retroNode({ depends_on: ['N1'] })]));
+    const res = await nextNode(repo, WI);
+    if (res.action !== 'spawn') throw new Error('expected spawn');
+    expect(res.packet.context.retro?.metrics.outcome_floor?.unit_only_closures).toBe(1);
+  });
+
   test('a NON-retro node carries no context.retro (unchanged dispatch path)', async () => {
     const impl = {
       id: 'N1',
