@@ -22255,6 +22255,40 @@ var retroMetricSnapshot = exports_external.object({
 // src/core/retro-metric-ledger.ts
 init_ditto_paths();
 init_fs();
+function metricTrend(values) {
+  if (values.length === 0)
+    return;
+  const sum = values.reduce((s2, v2) => s2 + v2, 0);
+  return {
+    n: values.length,
+    first: values[0],
+    last: values[values.length - 1],
+    mean: sum / values.length,
+    min: Math.min(...values),
+    max: Math.max(...values)
+  };
+}
+function summarizeRetroTrend(rows) {
+  const ordered = [...rows].sort((a2, b2) => a2.recorded_at.localeCompare(b2.recorded_at));
+  const grounded2 = (pick) => ordered.map(pick).filter((v2) => typeof v2 === "number" && Number.isFinite(v2));
+  const summary = {
+    work_items: rows.length,
+    no_measurable_signal: rows.filter((r3) => r3.metrics.no_measurable_signal === true).length
+  };
+  const coverage = metricTrend(grounded2((r3) => r3.metrics.outcome_floor?.coverage));
+  const unitOnly = metricTrend(grounded2((r3) => r3.metrics.outcome_floor?.unit_only_closures));
+  const escapeRecurrence = metricTrend(grounded2((r3) => r3.metrics.outcome_floor?.escape_recurrence));
+  const postCost = metricTrend(grounded2((r3) => r3.metrics.process_health?.post_cost));
+  if (coverage)
+    summary.coverage = coverage;
+  if (unitOnly)
+    summary.unit_only_closures = unitOnly;
+  if (escapeRecurrence)
+    summary.escape_recurrence = escapeRecurrence;
+  if (postCost)
+    summary.post_cost = postCost;
+  return summary;
+}
 
 class RetroMetricLedger {
   repoRoot;
@@ -23026,7 +23060,7 @@ async function collectRetroContext(repoRoot, workItemId2, graph) {
     if (floorSource) {
       const total = floorSource.acceptance.length;
       if (total > 0) {
-        coverage = floorSource.acceptance.filter((a2) => a2.verdict === "pass").length / total;
+        coverage = floorSource.acceptance.filter(isClosed2).length / total;
       }
       unitOnlyClosures = countUnitOnlyClosures(floorSource);
     }
@@ -32098,6 +32132,51 @@ total	${t2.with_completion}/${t2.work_items} with completion	${t2.closed_accepta
     }
   }
 });
+var retroTrendCommand = defineCommand({
+  meta: {
+    name: "retro-trend",
+    description: "Read the cross-WI retro-metric ledger and surface the per-metric trend (coverage / unit_only_closures / escape_recurrence / post_cost) so the ADR-0024 floor retract condition can be evaluated from real data"
+  },
+  args: {
+    output: { type: "string", default: "human", description: "Output format: human|json" }
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const rows = await new RetroMetricLedger(repoRoot).readAll();
+      const summary = summarizeRetroTrend(rows);
+      if (format === "json") {
+        writeJson2({ rows, summary });
+      } else if (rows.length === 0) {
+        writeHuman("retro-trend: no measurements (the retro-metric ledger is empty)");
+      } else {
+        const num = (v2, digits = 0) => typeof v2 === "number" ? v2.toFixed(digits) : "-";
+        writeHuman("work_item\trecorded_at\tcoverage\tunit_only\tescape\tpost_cost");
+        for (const r3 of rows) {
+          const o3 = r3.metrics.outcome_floor;
+          const p = r3.metrics.process_health;
+          const marker = r3.metrics.no_measurable_signal ? "\t(no measurable signal)" : "";
+          writeHuman(`${r3.work_item_id}	${r3.recorded_at}	${num(o3?.coverage, 2)}	${num(o3?.unit_only_closures)}	${num(o3?.escape_recurrence)}	${num(p?.post_cost)}${marker}`);
+        }
+        writeHuman(`
+trend (${summary.work_items} work items, ${summary.no_measurable_signal} no_measurable_signal):`);
+        const trendLine = (label2, t2, digits = 0) => {
+          if (!t2)
+            return;
+          writeHuman(`  ${label2}	n=${t2.n}	first=${t2.first.toFixed(digits)}	last=${t2.last.toFixed(digits)}	mean=${t2.mean.toFixed(2)}	[${t2.min.toFixed(digits)}, ${t2.max.toFixed(digits)}]`);
+        };
+        trendLine("coverage", summary.coverage, 2);
+        trendLine("unit_only_closures", summary.unit_only_closures);
+        trendLine("escape_recurrence", summary.escape_recurrence);
+        trendLine("post_cost", summary.post_cost);
+      }
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  }
+});
 var variantsCommand = defineCommand({
   meta: {
     name: "variants",
@@ -32160,6 +32239,7 @@ var doctorCommand = defineCommand({
     distribution: distributionCommand,
     "intent-quality": intentQualityCommand,
     "completion-coverage": completionCoverageCommand,
+    "retro-trend": retroTrendCommand,
     variants: variantsCommand
   }
 });
@@ -41672,4 +41752,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=52f29a01bb161cdf269caddc01f9030b5c52e63f91e98a018b5cbcb29375e492
+//# ditto-src-stamp=c0b6768a9354af8dbfffe1b5ddd363d20ebcf013054923cbd4bbf220da51e23e
