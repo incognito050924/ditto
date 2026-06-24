@@ -6,7 +6,7 @@ import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { ChangeContractStore } from '~/core/change-contract-store';
 import { SessionPointerStore } from '~/core/session-pointer';
-import { preToolUseHandler, windowsDestructiveReason } from '~/hooks/pre-tool-use';
+import { isSystemTmpPath, preToolUseHandler, windowsDestructiveReason } from '~/hooks/pre-tool-use';
 import { type HookInput, KILL_SWITCH, runHook } from '~/hooks/runtime';
 import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import { acgChangeContract } from '~/schemas/acg-change-contract';
@@ -344,7 +344,8 @@ describe('preToolUseHandler — ac-3 secret files', () => {
 });
 
 describe('preToolUseHandler — ac-4 scope-out write', () => {
-  test.each(['/etc/passwd', '/tmp/elsewhere/x.txt', '../outside.txt', '../../escape.ts'])(
+  // Non-tmp external paths (system-tmp is now a narrow allow exception, ac-1).
+  test.each(['/etc/passwd', '/var/data/x.txt', '../outside.txt', '../../escape.ts'])(
     'blocks write outside repo: %s',
     async (p) => {
       expect((await file('Write', p)).exitCode).toBe(2);
@@ -361,11 +362,11 @@ describe('preToolUseHandler — ac-4 scope-out write', () => {
   );
 
   test('Read outside repo is NOT a scope-out block (only writes)', async () => {
-    expect((await file('Read', '/tmp/elsewhere/x.txt')).exitCode).toBe(0);
+    expect((await file('Read', '/var/data/x.txt')).exitCode).toBe(0);
   });
 
   test('Bash redirect outside repo is blocked; inside repo allowed', async () => {
-    expect((await bash('echo hi > /tmp/elsewhere/out.txt')).exitCode).toBe(2);
+    expect((await bash('echo hi > /var/data/out.txt')).exitCode).toBe(2);
     expect((await bash('echo hi > ./build/out.txt')).exitCode).toBe(0);
   });
 
@@ -381,13 +382,74 @@ describe('preToolUseHandler — ac-4 scope-out write', () => {
   });
 
   test('a QUOTED redirect/tee target outside the repo is blocked (closes the quote bypass)', async () => {
-    expect((await bash('echo hi > "/tmp/elsewhere/x.txt"')).exitCode).toBe(2);
-    expect((await bash("echo hi > '/tmp/elsewhere/x.txt'")).exitCode).toBe(2);
-    expect((await bash('echo hi | tee "/tmp/elsewhere/y.txt"')).exitCode).toBe(2);
+    expect((await bash('echo hi > "/var/data/x.txt"')).exitCode).toBe(2);
+    expect((await bash("echo hi > '/var/data/x.txt'")).exitCode).toBe(2);
+    expect((await bash('echo hi | tee "/var/data/y.txt"')).exitCode).toBe(2);
   });
 
   test('a quoted INSIDE-repo redirect target stays allowed', async () => {
     expect((await bash('echo hi > "./build/out 1.txt"')).exitCode).toBe(0);
+  });
+});
+
+describe('preToolUseHandler — system tmp is a narrow scope-out exception (wi_260624gpw)', () => {
+  // A non-tmp repo so system-tmp paths are unambiguously outside the repo.
+  const PROJ = '/home/u/proj';
+  const tmpFile = join(tmpdir(), 'ditto-scratch', 'x.txt');
+
+  test('ac-1: Write/Edit into /tmp, /private/tmp, and os.tmpdir() are allowed (exit 0)', async () => {
+    for (const p of ['/tmp/scratch/x.txt', '/private/tmp/scratch/x.txt', tmpFile]) {
+      expect((await file('Write', p, PROJ)).exitCode).toBe(0);
+      expect((await file('Edit', p, PROJ)).exitCode).toBe(0);
+      expect((await file('MultiEdit', p, PROJ)).exitCode).toBe(0);
+    }
+  });
+
+  test('ac-1: Bash redirect/tee into system tmp is allowed (exit 0)', async () => {
+    expect((await bash('echo hi > /tmp/scratch/out.txt', PROJ)).exitCode).toBe(0);
+    expect((await bash('echo hi > /private/tmp/scratch/out.txt', PROJ)).exitCode).toBe(0);
+    expect((await bash(`echo hi > ${tmpFile}`, PROJ)).exitCode).toBe(0);
+    expect((await bash(`echo hi | tee ${join(tmpdir(), 'tee.txt')}`, PROJ)).exitCode).toBe(0);
+  });
+
+  test('ac-2: a secret-shaped path under /tmp still blocks on the file tool (exit 2)', async () => {
+    // secret > tmp-allow precedence (file-tool branch secret-checks before scope-out)
+    expect((await file('Write', '/tmp/scratch/.env', PROJ)).exitCode).toBe(2);
+    expect((await file('Write', join(tmpdir(), 'secret.pem'), PROJ)).exitCode).toBe(2);
+  });
+
+  test('ac-2: a secret-shaped path under /tmp still blocks on Bash (exit 2)', async () => {
+    expect((await bash('echo hi > /tmp/scratch/.env', PROJ)).exitCode).toBe(2);
+    expect((await bash(`echo hi > ${join(tmpdir(), 'secret.pem')}`, PROJ)).exitCode).toBe(2);
+  });
+
+  test('ac-3: a non-tmp external path is still scope-out blocked (exit 2)', async () => {
+    expect((await file('Write', '/var/data/x.txt', PROJ)).exitCode).toBe(2);
+    expect((await file('Write', '/etc/passwd', PROJ)).exitCode).toBe(2);
+    expect((await bash('echo hi > /var/data/x.txt', PROJ)).exitCode).toBe(2);
+  });
+});
+
+describe('isSystemTmpPath (Windows tmp recognition; pure, OS-agnostic) — ac-4', () => {
+  test.each([
+    'C:\\Users\\me\\AppData\\Local\\Temp\\scratch.txt',
+    'C:/Users/me/AppData/Local/Temp/scratch.txt',
+    'C:\\Windows\\Temp\\x.log',
+    'C:/Windows/Temp/x.log',
+    '%TEMP%\\x.txt',
+    '%TEMP%/x.txt',
+    '%TMP%\\x.txt',
+    'D:\\Windows\\Temp\\y',
+  ])('recognizes a Windows temp path: %s', (p) => {
+    expect(isSystemTmpPath(p)).toBe(true);
+  });
+
+  test.each([
+    'C:\\Users\\me\\projects\\app\\src\\index.ts',
+    'C:/Users/me/projects/app/README.md',
+    'D:\\work\\repo\\file.ts',
+  ])('a normal Windows project path is NOT system tmp: %s', (p) => {
+    expect(isSystemTmpPath(p)).toBe(false);
   });
 });
 
@@ -430,7 +492,7 @@ describe('preToolUseHandler — Claude session-memory dir is a narrow scope-out 
     expect(
       (await file('Write', join(HOME, '.claude', 'projects', SLUG, 'notes.md'))).exitCode,
     ).toBe(2);
-    expect((await file('Write', '/tmp/elsewhere/x.txt')).exitCode).toBe(2);
+    expect((await file('Write', '/var/data/x.txt')).exitCode).toBe(2);
   });
 
   test('secret still wins over the memory exception (a secret-shaped name in memory blocks)', async () => {

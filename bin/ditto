@@ -34220,7 +34220,7 @@ var preCompactHandler = async (input) => {
 };
 
 // src/hooks/pre-tool-use.ts
-import { homedir as homedir8 } from "os";
+import { homedir as homedir8, tmpdir } from "os";
 import { join as join64 } from "path";
 import { isAbsolute as isAbsolute12, relative as relative16, resolve as resolve16 } from "path";
 
@@ -34444,6 +34444,20 @@ function isClaudeMemoryPath(repoRoot, filePath) {
   const base = resolve16(home, ".claude", "projects", slug, "memory");
   const rel = relative16(base, resolve16(filePath));
   return rel.length > 0 && !rel.startsWith("..") && !isAbsolute12(rel);
+}
+var WIN_TMP = /(^|[\\/])%temp%([\\/]|$)|(^|[\\/])%tmp%([\\/]|$)|[\\/]appdata[\\/]local[\\/]temp([\\/]|$)|[\\/]windows[\\/]temp([\\/]|$)/i;
+function isSystemTmpPath(filePath) {
+  if (WIN_TMP.test(filePath))
+    return true;
+  const resolved = resolve16(filePath);
+  for (const root of ["/tmp", "/private/tmp", tmpdir()]) {
+    if (!root)
+      continue;
+    const rel = relative16(resolve16(root), resolved);
+    if (rel.length > 0 && !rel.startsWith("..") && !isAbsolute12(rel))
+      return true;
+  }
+  return false;
 }
 var RM_LITERAL_BLOCK = ["rm -rf /", "rm -rf ~", "rm -rf /*", "rm -rf ~/"];
 function isRecursiveForceRm(cmd) {
@@ -34672,7 +34686,8 @@ var preToolUseHandler = async (input) => {
       return block("secret", `command exposes a secret file (${exposed})`);
     }
     for (const dest of bashWriteTargets(command)) {
-      if (isOutsideRepo(repoRoot, dest) && !isClaudeMemoryPath(repoRoot, dest)) {
+      const tmpAllowed = isSystemTmpPath(dest) && !isSecretPath(dest);
+      if (isOutsideRepo(repoRoot, dest) && !isClaudeMemoryPath(repoRoot, dest) && !tmpAllowed) {
         return block("scope-out", `write outside repo (${dest})`);
       }
     }
@@ -34706,7 +34721,7 @@ var preToolUseHandler = async (input) => {
     return block("secret", `access to a secret file (${filePath})`);
   }
   if (toolName === "Write" || toolName === "Edit" || toolName === "MultiEdit") {
-    if (isOutsideRepo(repoRoot, filePath) && !isClaudeMemoryPath(repoRoot, filePath)) {
+    if (isOutsideRepo(repoRoot, filePath) && !isClaudeMemoryPath(repoRoot, filePath) && !isSystemTmpPath(filePath)) {
       return block("scope-out", `write outside repo (${filePath})`);
     }
     const forbidden = await checkForbiddenScope(input, filePath);
@@ -34722,7 +34737,7 @@ async function checkMutatedPath(input, filePath) {
   if (isSecretPath(filePath)) {
     return block("secret", `access to a secret file (${filePath})`);
   }
-  if (isOutsideRepo(input.repoRoot, filePath) && !isClaudeMemoryPath(input.repoRoot, filePath)) {
+  if (isOutsideRepo(input.repoRoot, filePath) && !isClaudeMemoryPath(input.repoRoot, filePath) && !isSystemTmpPath(filePath)) {
     return block("scope-out", `write outside repo (${filePath})`);
   }
   const forbidden = await checkForbiddenScope(input, filePath);
@@ -41984,4 +41999,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=37135a5b00bfe1b918330c1c6f98edf51bc26e0d722a0f32fc536387c079d4cd
+//# ditto-src-stamp=f031940739e9dd335f699d9ab40999bc2879c3f8be3003154a1b1a5c0b9110a6

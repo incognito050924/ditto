@@ -1,4 +1,4 @@
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { parseJvmCodeqlCommand, runInternalPackagesGuard } from '~/acg/internal-packages';
@@ -290,6 +290,33 @@ function isClaudeMemoryPath(repoRoot: string, filePath: string): boolean {
   const base = resolve(home, '.claude', 'projects', slug, 'memory');
   const rel = relative(base, resolve(filePath));
   return rel.length > 0 && !rel.startsWith('..') && !isAbsolute(rel);
+}
+
+/**
+ * NARROW scope-out exception: the system temporary directory. Legitimate
+ * scratch work (incl. the harness scratchpad) lands here and must not be
+ * blocked as a repo-external write. Kept narrow on purpose — only the roots the
+ * user named: POSIX `/tmp`, `/private/tmp`, and `os.tmpdir()` ($TMPDIR; macOS
+ * resolves to `/var/folders/.../T`); NOT `/var/tmp` or other roots. Secret-shaped
+ * names under tmp are still caught upstream (file-tool/codex secret check, and
+ * the Bash loop excludes secrets from this allowance), so secret > tmp-allow.
+ *
+ * POSIX roots use resolve + relative containment (mirrors isClaudeMemoryPath).
+ * Windows is matched by PURE REGEX so it judges correctly even on a POSIX
+ * runtime (mirrors windowsDestructiveReason): an unexpanded %TEMP%/%TMP%, or an
+ * expanded `…\AppData\Local\Temp\…` / `…\Windows\Temp\…` with either separator.
+ */
+const WIN_TMP =
+  /(^|[\\/])%temp%([\\/]|$)|(^|[\\/])%tmp%([\\/]|$)|[\\/]appdata[\\/]local[\\/]temp([\\/]|$)|[\\/]windows[\\/]temp([\\/]|$)/i;
+export function isSystemTmpPath(filePath: string): boolean {
+  if (WIN_TMP.test(filePath)) return true;
+  const resolved = resolve(filePath);
+  for (const root of ['/tmp', '/private/tmp', tmpdir()]) {
+    if (!root) continue;
+    const rel = relative(resolve(root), resolved);
+    if (rel.length > 0 && !rel.startsWith('..') && !isAbsolute(rel)) return true;
+  }
+  return false;
 }
 
 // --- (a) destructive Bash ---------------------------------------------------
@@ -682,7 +709,11 @@ export const preToolUseHandler: HookHandler = async (input: HookInput) => {
     // auto-memory dir is a narrow exception (secret operands already blocked
     // above by bashSecretExposure, which keeps secret-priority intact).
     for (const dest of bashWriteTargets(command)) {
-      if (isOutsideRepo(repoRoot, dest) && !isClaudeMemoryPath(repoRoot, dest)) {
+      // The system-tmp allowance EXCLUDES secret-shaped targets (this loop has no
+      // upstream secret-check on its write targets), so a secret under tmp still
+      // blocks here — keeping secret > tmp-allow on the Bash path too.
+      const tmpAllowed = isSystemTmpPath(dest) && !isSecretPath(dest);
+      if (isOutsideRepo(repoRoot, dest) && !isClaudeMemoryPath(repoRoot, dest) && !tmpAllowed) {
         return block('scope-out', `write outside repo (${dest})`);
       }
     }
@@ -735,7 +766,11 @@ export const preToolUseHandler: HookHandler = async (input: HookInput) => {
   // exception so agent continuity survives; secret already blocked above, so
   // priority stays secret > claude-memory allow > scope-out block.
   if (toolName === 'Write' || toolName === 'Edit' || toolName === 'MultiEdit') {
-    if (isOutsideRepo(repoRoot, filePath) && !isClaudeMemoryPath(repoRoot, filePath)) {
+    if (
+      isOutsideRepo(repoRoot, filePath) &&
+      !isClaudeMemoryPath(repoRoot, filePath) &&
+      !isSystemTmpPath(filePath)
+    ) {
       return block('scope-out', `write outside repo (${filePath})`);
     }
     // (d) forbidden_scope: 계약이 보호하는 파일을 건드리면 막는다.
@@ -762,7 +797,11 @@ async function checkMutatedPath(
   if (isSecretPath(filePath)) {
     return block('secret', `access to a secret file (${filePath})`);
   }
-  if (isOutsideRepo(input.repoRoot, filePath) && !isClaudeMemoryPath(input.repoRoot, filePath)) {
+  if (
+    isOutsideRepo(input.repoRoot, filePath) &&
+    !isClaudeMemoryPath(input.repoRoot, filePath) &&
+    !isSystemTmpPath(filePath)
+  ) {
     return block('scope-out', `write outside repo (${filePath})`);
   }
   const forbidden = await checkForbiddenScope(input, filePath);
