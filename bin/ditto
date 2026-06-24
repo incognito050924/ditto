@@ -22234,6 +22234,74 @@ async function absorbRetroMemory(store, narrative, opts) {
   }
 }
 
+// src/schemas/retro-metric-snapshot.ts
+init_zod();
+init_common();
+var retroMetricSnapshot = exports_external.object({
+  schema_version: schemaVersion,
+  work_item_id: exports_external.string().min(1),
+  recorded_at: exports_external.string().min(1),
+  metrics: exports_external.object({
+    outcome_floor: exports_external.object({
+      coverage: exports_external.number().optional(),
+      unit_only_closures: exports_external.number().int().nonnegative().optional(),
+      escape_recurrence: exports_external.number().int().nonnegative().optional()
+    }).optional(),
+    process_health: exports_external.object({ post_cost: exports_external.number().int().nonnegative() }).optional(),
+    no_measurable_signal: exports_external.literal(true).optional()
+  })
+});
+
+// src/core/retro-metric-ledger.ts
+init_ditto_paths();
+init_fs();
+
+class RetroMetricLedger {
+  repoRoot;
+  constructor(repoRoot) {
+    this.repoRoot = repoRoot;
+  }
+  path() {
+    return localDir(this.repoRoot, "retro-metrics.jsonl");
+  }
+  async append(row, recordedAt) {
+    const existing = await this.readAll();
+    const prior = existing.find((r3) => r3.work_item_id === row.work_item_id);
+    if (prior)
+      return prior;
+    const entry = retroMetricSnapshot.parse({
+      ...row,
+      schema_version: "0.1.0",
+      recorded_at: recordedAt
+    });
+    const path = this.path();
+    const file = Bun.file(path);
+    const text = await file.exists() ? await file.text() : "";
+    const trimmed = text.length === 0 || text.endsWith(`
+`) ? text : `${text}
+`;
+    await atomicWriteText(path, `${trimmed}${JSON.stringify(entry)}
+`);
+    return entry;
+  }
+  async readAll() {
+    const path = this.path();
+    const file = Bun.file(path);
+    if (!await file.exists())
+      return [];
+    const text = await file.text();
+    const lines = text.split(`
+`).filter((l2) => l2.length > 0);
+    return lines.map((line, i2) => {
+      try {
+        return retroMetricSnapshot.parse(JSON.parse(line));
+      } catch (err) {
+        throw new Error(`retro-metrics.jsonl:${i2 + 1} failed schema parse: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    });
+  }
+}
+
 // src/core/tech-spec.ts
 init_zod();
 import { createHash as createHash3 } from "crypto";
@@ -23687,10 +23755,12 @@ async function recordResult(repoRoot, input) {
     if (node2.kind === "retro") {
       try {
         const ctx = await collectRetroContext(repoRoot, input.workItemId, graph);
+        const now = (input.now ?? new Date).toISOString();
         await absorbRetroMemory(new MemoryEventStore(repoRoot), ctx.narrative, {
-          createdAt: (input.now ?? new Date).toISOString(),
+          createdAt: now,
           actorRole: node2.owner
         });
+        await new RetroMetricLedger(repoRoot).append({ work_item_id: input.workItemId, metrics: ctx.metrics }, now);
       } catch {}
     }
     return {
@@ -41602,4 +41672,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=83bb60f692580bb336ba56abcc4a8e02951e64296e8b95a23ea03523c807732f
+//# ditto-src-stamp=52f29a01bb161cdf269caddc01f9030b5c52e63f91e98a018b5cbcb29375e492

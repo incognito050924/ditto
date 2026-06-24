@@ -54,6 +54,7 @@ import {
   assembleRetroMetrics,
   projectRetroNarrative,
 } from './retro-measure';
+import { RetroMetricLedger } from './retro-metric-ledger';
 import { computeSpecDigest } from './tech-spec';
 import { WorkItemStore } from './work-item-store';
 
@@ -1670,12 +1671,23 @@ export async function recordResult(
     if (node.kind === 'retro') {
       try {
         const ctx = await collectRetroContext(repoRoot, input.workItemId, graph);
+        const now = (input.now ?? new Date()).toISOString();
         await absorbRetroMemory(new MemoryEventStore(repoRoot), ctx.narrative, {
-          createdAt: (input.now ?? new Date()).toISOString(),
+          createdAt: now,
           actorRole: node.owner,
         });
+        // ADR-0024 Decision 4 trend preservation: capture this WI's retro metrics in
+        // the cross-WI ledger (one row per WI, idempotent) so the floor trend can be
+        // measured later. The numbers are ephemeral — a past WI's coverage cannot be
+        // rebuilt after the run — so they must be logged AT retro time, not derived
+        // on demand. Same fail-open try as the memory absorption (§4.4 / ADR-0018).
+        await new RetroMetricLedger(repoRoot).append(
+          { work_item_id: input.workItemId, metrics: ctx.metrics },
+          now,
+        );
       } catch {
-        // durable absorption is non-authoritative — swallow and keep the pass path
+        // durable absorption + trend capture are non-authoritative — swallow and keep
+        // the pass path
       }
     }
     return {

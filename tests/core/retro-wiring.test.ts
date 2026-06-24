@@ -8,6 +8,7 @@ import { CompletionStore, buildCompletion } from '~/core/completion-store';
 import { CoverageFeedbackLedger } from '~/core/coverage-feedback';
 import { MemoryEventStore } from '~/core/memory-store';
 import { retroMemoryEventId } from '~/core/retro-measure';
+import { RetroMetricLedger } from '~/core/retro-metric-ledger';
 import { WorkItemStore } from '~/core/work-item-store';
 import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
 
@@ -378,5 +379,54 @@ describe('retro absorption wiring (ac-5: idempotent cross-WI memory)', () => {
     expect(r2.status).toBe('passed');
     const afterSecond = (await mem.list()).filter((e) => e.event_id === eventId);
     expect(afterSecond).toHaveLength(1);
+  });
+});
+
+describe('retro metric trend ledger wiring (ADR-0024 결정4 trend preservation)', () => {
+  test('recording a retro pass appends ONE snapshot with the grounded metrics; re-drive is idempotent', async () => {
+    const wi = await wis.get(WI);
+    await new CompletionStore(repo).write(
+      buildCompletion({
+        workItem: wi,
+        declaredBy: 'verifier',
+        summary: 's',
+        verdicts: [
+          { criterion_id: 'ac-1', verdict: 'pass', evidence: [] },
+          { criterion_id: 'ac-2', verdict: 'unverified', evidence: [] },
+        ],
+        now: NOW,
+      }),
+    );
+    await aps.write(WI, graph([retroNode()]));
+
+    const ledger = new RetroMetricLedger(repo);
+    expect(await ledger.readAll()).toHaveLength(0);
+
+    const dispatched = await nextNode(repo, WI);
+    expect(dispatched.action).toBe('spawn');
+    const passPayload = {
+      node_id: 'N7',
+      result_text: 'Retro complete.',
+      outcome: 'pass' as const,
+      evidence_refs: [
+        { kind: 'file' as const, path: '.ditto/local/work-items/x/completion.json', summary: 'c' },
+      ],
+    };
+    const r1 = await recordResult(repo, { workItemId: WI, payload: passPayload, now: NOW });
+    expect(r1.status).toBe('passed');
+
+    const rows = await ledger.readAll();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.work_item_id).toBe(WI);
+    // grounded coverage = 1 pass / 2 acceptance.
+    expect(rows[0]?.metrics.outcome_floor?.coverage).toBe(0.5);
+    expect(rows[0]?.recorded_at).toBe(NOW.toISOString());
+
+    // Re-drive: one row per WI (idempotent), mirroring the memory absorption.
+    await aps.updateNode(WI, 'N7', (n) => ({ ...n, status: 'pending' as const }));
+    const redispatched = await nextNode(repo, WI);
+    expect(redispatched.action).toBe('spawn');
+    await recordResult(repo, { workItemId: WI, payload: passPayload, now: NOW });
+    expect(await ledger.readAll()).toHaveLength(1);
   });
 });
