@@ -22,7 +22,9 @@ ADR-0024 = 기획~구현 품질 floor를 design 노드 *제자리 경화*로 올
 - **retro↔completion 순서 갭 fix** (wi_260624qde, `321a016`, behavioral): retro 노드가 `autopilot complete`(completion.json 생산)보다 **먼저** 실행돼 outcome_floor의 coverage·unit_only가 retro시점 omit되던 갭. → `collectRetroContext`(autopilot-loop.ts)가 persisted completion 없을 때 complete와 **동일한** `assembleCompletionFromGraph(graph,workItem)`로 in-place grounded. **그래프에 AC-닫기 작업(non-retro 노드 acceptance_refs) 있을 때만** grounded, 없으면 anti-SLOP omit 유지. 순수(completion.json 안 씀→race 없음), 메트릭만 취함(서술은 persisted-only). 라이브 스모크로 실제 바이너리 grounded 확인.
 - **측정값 추세 원장** (wi_260624mtq, `e4e02d6`, behavioral): `src/schemas/retro-metric-snapshot.ts` + `src/core/retro-metric-ledger.ts`(cross-WI append-only `.ditto/local/retro-metrics.jsonl`, WI당 1행 first-wins 멱등). record-result retro pass가 `ctx.metrics` 적재(흡수와 같은 fail-open try). **persist까지만** — 사용자向 report는 후속(원장 readAll로 회수 가능).
 - **origin/main 통합** (`d08df53`): main 3커밋(npx 설치 완결·ADR-0025 codex dogfood host 분리) 흡수. 충돌 2건 해소 — knowledge.json decisions[] union(0013·14·15·20·24·25), CLAUDE.md는 `ditto bridge knowledge` 재생성(ADR-0024 accepted·ADR-0025 accepted, drift 0).
-- **검증**: 전체 `bun test` **2885 pass / 9 skip / 0 fail**, biome 0, adr-guard 통과, 투영 drift 0.
+- **ADR 식별자 정책** (2026-06-24 세션, wi_260624gm9 + 후속): ADR id = **불변 파일명** `ADR-YYYYMMDD-<slug>.md`(순차번호·uid 폐기). `131d962` feat(schema legacy∪new regex·knowledge-bridge 파서·`ditto knowledge adr-new`/`adr-check` CLI·정책 ADR `ADR-20260624-adr-identifier-policy.md`) · `267396d` ci(adr-check를 pre-commit 배선) · `2a95b32` refactor(ADR-id 정규식 단일 SoT `src/schemas/adr-id.ts`, 5곳 일원화). 기존 ADR-NNNN grandfather(rename 0), 진짜 충돌=동일 파일명→git add/add. **인덱스 백필은 revert**(`eea6244`, wi_260624op1 abandoned) — knowledge.json decisions[]가 **런타임 orphan**으로 판명(투영·메모리는 .md/glossary 직접, decisions[] 읽는 건 adr-check뿐; c9f8604가 같은 이유로 삭제했던 파일). 폐기 vs 존치는 `wi_2606247cx`(§2).
+- **동시 세션 교차**: `600cb42`(coverage residual_risk, wi_260624wg4)가 같은 브랜치에 교차 커밋됨(내 ADR 커밋과 안 섞임 확인).
+- **검증**: ADR 작업 시점 전체 `bun test` **2899 pass / 9 skip / 0 fail**, biome 0, adr-guard 통과. (ADR-0024 베이스라인은 2885였음; 이후 600cb42가 coverage 테스트 추가 → 다음 세션 재확인.)
 
 ## 2. 다음 착수 후보 (전부 미착수)
 
@@ -34,6 +36,8 @@ ADR-0024 = 기획~구현 품질 floor를 design 노드 *제자리 경화*로 올
 - **coverage.json `resolved` `close_reason` 자기설명 갭**(라이브 retro 발견 #1): surviving-risk 근거가 plan_brief에만 남고 sweep 산출물엔 안 남음.
 - **결정5 plan oracle 뷰** 저위험 WI 확대(measure 후).
 - **retro 실패경로·재드라이브 멱등** 라이브 미실증(단위검증만; 라이브 스모크는 happy/converged만).
+- **`wi_2606247cx` — knowledge.json/decisions[] orphan 해소 (아키텍처)**: M6 Knowledge는 이 파일 유지하도록 지었으나 c9f8604가 "런타임 미참조 orphan"으로 삭제, curator는 여전히 씀 = **코드베이스 내부 모순**. **폐기**(knowledge.json/decisions[]·스키마 decisions[]·adr-check #3·curator.md 지침 제거) vs **존치**(decisions[]에 실 소비자 부여 후 c9f8604 supersede) 결정 필요 — 방향 design 한 번 거칠 값어치, M6 기계를 건드리니 cascade-삭제 성급 금지. `curator.md:18` decisions[] 지침 처리(스톱갭 (a))도 이 WI에 **흡수**됨(단독 선행 금지).
+- **`wi_260624nde` — 테스트 격리 가드 + reviewer 렌즈**: 테스트가 실 `.ditto/` 경로에 쓰는 격리 누수(false-pass로 진짜 버그 가림)를 막는 구조 가드 + reviewer/verifier 렌즈. (pre-mortem far-field 카테고리로는 약하다고 판단 — dev-time 테스트 품질이라 review/verify가 맞는 자리.)
 - **상류 의존(별도 WI)**: 과정측정=wi_260608acp, far-field 비용=wi_26062227h, fitness=wi_260615lj6.
 
 ## 3. GOTCHA
