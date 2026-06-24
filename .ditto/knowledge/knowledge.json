@@ -59,6 +59,177 @@
       "change_condition": "Claude Code가 Codex와 같은 stateful marketplace-only 모델로 바뀌거나 Codex가 stateless plugin-dir 등가 경로를 제공하면 dogfood 진입 분리를 재검토한다. Codex 공식 marketplace 발견 경로가 바뀌면 ADR-0016 D5와 함께 Codex 경로만 실측 기준으로 갱신한다. Claude Code 파일 변경 없이는 Codex dogfood를 고칠 수 없다는 코드 근거가 나오면 영향 범위와 비회귀 검증을 ADR amendment로 남긴다.",
       "path": ".ditto/knowledge/adr/ADR-0025-codex-dogfood-host-isolation.md",
       "superseded_by": null
+    },
+    {
+      "id": "ADR-0001",
+      "title": "런타임 및 구현 스택",
+      "status": "accepted",
+      "rationale": "DITTO는 사용자 머신에서 자주 실행되는 wrapper이고 Claude Code hook 환경에서는 tool 호출마다 spawn될 수 있어 single binary 배포·빠른 startup·provider CLI spawn 캡처·6개+ schema runtime/타입 처리·외부 도구의 contract import가 제약이다. 후보(Go/Rust/TS+Bun/TS+Node/Python) 중 TypeScript + Bun을 택한다: zod로 runtime 검증과 TS 타입을 단일 소스로 묶어 drift를 줄이고, Bun이 Node 호환을 유지하며 startup이 빨라 hook 제약을 충족하고, `bun build --compile`이 OS별 single binary 배포를 단순화한다. CLI는 citty(ESM/TS-first·declarative·~10KB), schema는 zod, export는 zod-to-json-schema, 테스트는 bun:test, 포맷/린트는 Biome, repo는 단일 패키지.",
+      "change_condition": "언어 변경은 매우 큼(전체 재작성). 런타임 Bun→Node는 작음(거의 호환, bun:test→vitest/node:test 마이그레이션). CLI citty→commander, Biome→ESLint+Prettier는 작음. schema 라이브러리 zod 교체는 중간(전체 schema 재작성). 사용자 환경 Bun 1.0.2 구버전은 1.1.x+ 업그레이드 권장.",
+      "path": ".ditto/knowledge/adr/ADR-0001-runtime-stack.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0002",
+      "title": "Schema의 source of truth",
+      "status": "accepted",
+      "rationale": "DITTO contract는 TS 코드 내 runtime 검증·컴파일 타임 타입, 외부 도구(타 언어 reviewer·hook)에서의 동일 contract 검증, 사용자 문서 참조에서 쓰인다. 후보(zod-source+JSONSchema export / JSONSchema-source+TS codegen / 둘 동시 유지) 중 zod schema(`src/schemas/*.ts`)를 source of truth로 둔다: zod는 runtime 검증과 TS 타입 추론을 한 정의로 제공해 drift 위험이 가장 작고, `superRefine`으로 cross-field 룰(예: completion-contract final_verdict=pass)을 표현하기 쉬우며, zod-to-json-schema로 JSONSchema 7 export가 안정적이다. `scripts/export-schemas.ts`가 `schemas/*.schema.json`을 생성하고 외부 도구는 그것을 import하며, 변경은 zod 쪽에서만 일어나고 JSONSchema 파일은 직접 편집하지 않는다.",
+      "change_condition": "JSONSchema-first로 전환은 중간(모든 schema를 .json 재작성·TS codegen·superRefine 별도 처리). zod 라이브러리 교체는 큼(전체 schema 재작성). JSONSchema export 누락 시 외부 도구와 drift가 생기므로 `ditto doctor schemas`가 source/export 일치를 검증해야 한다(v0.2 doctor 범위).",
+      "path": ".ditto/knowledge/adr/ADR-0002-schema-source-of-truth.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0003",
+      "title": "Codex 설정용 TOML 파서",
+      "status": "accepted",
+      "rationale": "doctor가 codex의 두 설정 파일을 읽어 위험 표면·MCP inventory를 보고하는데, 자체 `parseTomlSubset`(한 줄 단위 평탄 파싱)이 nested section(`[sandbox_workspace_write].network_access`)을 root에 안 넣어 false safety를, inline table(`env = { ... }`)을 string으로 받아 MCP inventory 누락을 일으켰다(wi_v02harden 리뷰). doctor는 provider preflight 신뢰 기반이라 false safety가 후속 결정 전체를 흔든다. 결정: smol-toml v1.6.1을 runtime dependency로 도입하고 자체 파서를 제거, `parseToml` wrapper 한 함수만 유지한다. 근거: TOML 1.0 spec 완전 지원으로 '반쪽 파서' 회귀 방지, transitive dep 0·minified ~10KB로 ADR-0001 startup 제약과 무충돌, ESM 친화, 활발한 유지보수.",
+      "change_condition": "smol-toml→다른 lib 교체는 작음(사용 지점이 `shared.ts:parseToml`과 codex.ts 두 호출자뿐, wrapper만 교체). smol-toml→자체 파서 복귀는 매우 큼(nested/inline false safety 회귀).",
+      "path": ".ditto/knowledge/adr/ADR-0003-toml-parser.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0004",
+      "title": "ACG Q3·Q4 — ArchitectureSpec 출처 & 적합성 함수 비용 정책",
+      "status": "accepted",
+      "rationale": "ACG 00-framework §9의 열린질문 Q3(ArchitectureSpec 출처·부트스트랩)·Q4(적합성 함수 비용·incremental)를 3역 적대 숙의로 닫는 설계 정책 결정(코드 구현은 별도 work item). Q3: ArchitectureSpec은 produced_by=user 권위 기본의 수동 카탈로그(저장소당 1회)이고 agent는 관측 가능한 layers/public_surfaces만 비권위 candidate로 제안한다 — forbidden_dependencies·can_call을 관측에서 자동 박제하면 위반을 정상으로 동결하거나 우연한 부재를 규칙화하므로 금지(소비처 단계6 boundary 게이트가 v0 밖이라 deferred 목표상태). Q4: codeql 실측(캐시 후 단일쿼리 ~3.9s, cold 추출 13.8s~3분, 전체 스위트 34s~1분)이 evaluator.mode별 차등을 강제 — deterministic은 per_change 싼 가드+reviewer/release 전체스위트, executed는 risk_tiered/sampled+on_release(per_change 전수 금지). 안전 불변식: ImpactGraph/boundary 부재나 journey_unknown이면 high-risk escalate(fail-closed), sample down 금지. 신규 스키마 0(기존 필드 활용)으로 ADR-0002 SoT·단순성 준수.",
+      "change_condition": "per-file 증분 DB 추출이 실증되면 incremental 단위 한정을 완화. ImpactGraph 생산기·boundary 게이트가 구현되면 risk tiering base를 risk_default에서 ImpactGraph로 승급하고 Q3 agent candidate 경로를 활성. 타입드 invariant 표현이 도입되면 module_invariants 주석 규약을 대체.",
+      "path": ".ditto/knowledge/adr/ADR-0004-q3-q4-architecture-fitness.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0005",
+      "title": "런타임 산출물 저장 — per-entity 파일 + 수동 명령 아카이빙",
+      "status": "accepted",
+      "rationale": "작업마다 생기는 런타임 산출물(work-item/completion/review JSON·run 로그·evidence·ledger)을 공유 RDB(SQLite)로 옮기는 안을 측정 후 기각한다. 측정(2026-06-04): .git 9.4M로 절대 크기는 사소(자동 아카이빙 YAGNI)하나 런타임 트레일 객체 비중은 장기 우세 → 정책은 정의하되 집행은 사용자 호출. D1: durable 계약 산출물은 git-tracked per-entity JSON을 SoT로 유지하고 SQLite SoT 이전 금지 — git diff/blame/merge/PR 리뷰, one-file-per-entity 무충돌 머지, schema_version 단일 버전 관리, 장애 반경·가독성이 모두 깨지기 때문(파생 rebuildable read-model은 캐시로만 예외 허용). D2: knowledge/는 영구 보존(아카이빙 안 함), work-items/는 knowledge 승격 후 아카이빙 가능. D3: 아카이빙은 사용자 호출 수동 CLI(move-not-delete, git history rewrite 금지)이고 주 동기는 agent-context 경량화다(git 크기 절감 아님).",
+      "change_condition": "cross-run 질의·시계열 분석 needs가 실증되면 JSON-SoT 위 파생 rebuildable SQLite read-model 추가(D1 예외 발동). .git 크기가 clone/CI 실부담이 되면 git bundle cold 보관 검토. 활성 work-item 비대가 반복 수동 부담이면 임계치 자동 제안(여전히 move·사용자 확인 후). knowledge 승격이 durable 가치를 신뢰성 있게 추출 못 하면 아카이빙 전 승격 강제 게이트 재검토.",
+      "path": ".ditto/knowledge/adr/ADR-0005-runtime-artifact-storage-archiving.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0006",
+      "title": "정적 분석 엔진 통일 — CodeQL 단일, 바인딩별 언어-컴파일러 분석기 제거",
+      "status": "accepted",
+      "rationale": "ACG 거버넌스 코어는 analyzer 인터페이스(ImpactAnalyzer/EdgeAnalyzer) 뒤에 있지만 구현체가 TS 컴파일러 API에 직접 결합돼 '스펙은 저장소 중립이라 주장하나 TS 저장소에서만 동작'하는 leak이었다(boxwood 같은 다언어/비-TS repo에 거버넌스 불가). LLM 구조 추론은 규모 비례로 부정확해 거버넌스 입력에 부적합하고, CodeQL은 이미 절반 배선(dataflow/취약점)돼 있다. D1: 코드 구조·관계·데이터흐름 결정론 추출 엔진을 CodeQL로 통일(인터페이스 유지·구현체 교체). D2: TsImpactAnalyzer/TsEdgeAnalyzer를 삭제하고 'TS fast-path' 2-tier를 두지 않는다(동등성 영구 보증 부담·leak 재발 통로 제거, 정확도·저장소 독립성을 속도보다 우선). D3: alert(SARIF)이 아니라 BQRS 사실추출 경로로 관계를 뽑는다. 2026-06-04 실증으로 JS call/type/import가 type checker와 위치단위 동등(14/14·25/25·diff 0), Java 동일 쿼리 동작 확인, ts-analyzer/ts-edges 삭제·전체 회귀 1011 pass로 proposed→accepted.",
+      "change_condition": "CodeQL이 impact/boundary 관계를 실용 비용으로 추출 못 함이 드러나면 D1/D3 재검토. DB build 비용이 캐시로도 게이트 UX를 해치면 D2(폴백 금지)를 한정 완화 검토.",
+      "path": ".ditto/knowledge/adr/ADR-0006-static-analysis-engine-codeql.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0007",
+      "title": "cross_repo 처리 정책 — 명시 선언(internal_packages) + JVM 가드",
+      "status": "accepted",
+      "rationale": "단일모듈 CodeQL DB로 JVM을 분석하면 형제모듈 JAR 타입 의존이 fromSource 필터에서 빠져 ImpactGraph에서 침묵 손실된다(automation-engine이 형제 domain-model JAR 타입을 써도 사라짐). 멀티모듈 reactor DB면 손실 0이나 형제모듈과 써드파티(Spring/JDK)를 구분할 정적 신호가 없으면 cross_repo 분류가 노이즈가 되거나 손실을 방치한다. D1: 형제모듈을 ArchitectureSpec.internal_packages에 타입드 엔트리({type:'glob'|'path'})로 명시 선언한다(자동 추론 비의존). D2: NOT-fromSource 참조 중 선언 glob에 매칭되는 것만 cross_repo로 기록하고 미선언이면 분류 skip(잘못된 노이즈보다 미수집을 택해 가드로 드러냄). D3: 로컬 JAR이 있는데 선언 누락이면 CLI exit 65/훅 exit 2로 차단, JVM·glob 미선언·JAR 없으면 경고하는 fail-loud 가드. 2026-06-05 실 boxwood automation-engine 실증(188 NOT-fromSource 패키지, glob 9개 매칭, scanLocalJars 10개 탐지, 3-상태 가드 통제)으로 proposed→accepted.",
+      "change_condition": "멀티모듈 reactor 빌드가 기본 워크플로가 되면 형제모듈이 source로 해소돼 가드가 무의미해지므로 재검토. JAR 내부 패키지 단위 정밀 커버리지가 필요해지면 unzip 도입 검토. 훅 텍스트 매칭이 새는 호출 형태가 늘면 CLI 가드 의존도를 명문화.",
+      "path": ".ditto/knowledge/adr/ADR-0007-cross-repo-handling-policy.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0008",
+      "title": "호스트-추상 기계 보류 — provider 슬롯이 이미 stack-agnostic",
+      "status": "accepted",
+      "rationale": "여러 핸드오프가 'provider 슬롯(analyzer 주입) 위에 추가 호스트-추상 계층을 둘지'를 열린 질문으로 이월해 왔고, 이 ADR은 그 질문을 결정(보류, 빌드 아님)으로 닫는다. 이미 두 추상 축(HostAdapter의 에이전트 호스트 축, ImpactAnalyzer/EdgeAnalyzer의 분석 제공자 축)이 분리돼 있다. D1: 추가 호스트-추상 계층을 보류한다 — provider 슬롯이 이미 stack-agnostic이고 load-bearing임이 실증됐고(java/kotlin/python signature 바인딩 추가가 쿼리 상수 추가+등록만으로 거버넌스 코어 변경 0, 커밋 cd26c30), 두 번째 소비처가 없는 상위 추상은 헌장 4-3이 경고하는 단일사용·얕은 추상화이며, 두 축은 서로 다른 변경 이유를 가져 별도 경계가 맞다. D2: 새 스택/제공자는 기존 슬롯에 바인딩(쿼리 상수+언어 등록·미바인딩 fail-loud)으로 가산한다.",
+      "change_condition": "비-CodeQL 분석 제공자가 필요해지면 현 Analyzer 슬롯이 CodeQL deps에 결합됐는지 재검토. spawn 형태가 아닌 에이전트 호스트가 등장해 HostAdapter가 표현 못 하면 호스트 축 추상 재설계. ≥2개 바인딩 구현에서 실제(추측 아닌 실측) 중복이 생겨 상위 추상이 그것을 제거하면 그때 최소 추상 도입.",
+      "path": ".ditto/knowledge/adr/ADR-0008-host-abstraction-deferral.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0009",
+      "title": "ACG 잔여 micro-item 명시 종결 — 4건 \"구현 안 함\" + 철회조건",
+      "status": "accepted",
+      "rationale": "ACG v0 governance 표면이 2026-06-05 기준 기능적으로 완성(§2.2 OUT 항목 전부 IN 이동)됐고, 남은 semantic 트랙 micro-item 4건을 '보류로 띄워두지 않는다' 방침에 따라 종결한다(사용자 기준: 작아도 유의미하면 구현, 공연히 복잡성·위험이면 명시적 비-구현). 4건 모두 비-구현으로 종결: D1 semantic-scan-status.json은 cosmetic 마찰 감소뿐인데 새 스키마·영속 artifact·배선 비용이 효과보다 큼(observe 실패는 지금도 foreground에서 즉시 노출). D2 nudge opt-out은 실제 exported-signature 변경 신호를 은폐할 위험(보수적 과알림이 설계상 안전 측). D3 executed fitness 자동-stop은 CodeQL DB 빌드/실행이 비싸 opt-in 유지가 의도된 비용 결정. D4 어휘 enum 승격은 표본이 첫 바인딩 1개뿐이라 조기 추상화.",
+      "change_condition": "각 결정의 철회조건 중 하나라도 충족되면 해당 건만 재개한다 — D1: observe가 자동 발동돼 실패가 안 보이게 되면. D2: 과알림이 실측으로 과해 작업 방해 근거가 모이면(opt-out보다 정적 정밀화 우선). D3: executed 비용이 무시 가능해지거나 자동 발동 워크플로가 생기면. D4: 두 번째 바인딩에서 같은 값 집합이 반복 관측되면 enum 승격. 그 전까지 ACG governance 표면은 닫힌 것으로 본다.",
+      "path": ".ditto/knowledge/adr/ADR-0009-acg-residual-microitems-declined.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0010",
+      "title": "DITTO 기능 4축 정식화 — 목적 기둥 canonical 정의 + 경계 + 기층과의 관계",
+      "status": "accepted",
+      "rationale": "'4축'이라는 어휘가 substrate(Hooks/Skills/Agents/State — OMC 하네스 차용)와 목적 기둥(DITTO가 사용자를 위해 무엇을 하는가) 두 뜻으로 혼선됐다. 이 ADR은 사용자 정의 기능 4축을 canonical로 박고 substrate를 그 아래 기층 4축으로 위치시킨다(두 층위 모델). D1: 기능 4축은 ①사용자 의도 파악·동기화 ②자율 실행 오케스트레이션 ③E2E 테스트 ④지식 베이스이며 완전 순차 파이프라인 1→2→3→4로 동작. D2: 확정 경계 4개 — (a)축3은 진짜 브라우저 E2E only(웹 UI 없으면 N/A) (b)축4는 가치 있는 durable 변경만 기록(에이전트 판단, 자동 강제 아님) (c)축1 종료는 시스템 readiness 게이트+사용자 확인 둘 다 (d)완전 순차 파이프라인. D3: 기능 4축은 substrate-agnostic 목적 기둥, 기층 4축은 그것을 배달하는 구현 substrate이고 각 기능 축은 (Skill+Agent)로 노출·(CLI+State)로 동작·(Hook)으로 트리거된다(축1=deep-interview, 축2=autopilot, 축3=e2e, 축4=knowledge-update).",
+      "change_condition": "기능 축 정의 자체가 사용자 합의로 바뀌면(예: 축3을 브라우저 외로 확장, 파이프라인을 비순차로 허용) 해당 축·경계만 재개정. 기층 4축이 새 substrate(다른 하네스)로 교체되면 D3 매핑만 갱신(기능 4축은 substrate-agnostic이라 영향 없음).",
+      "path": ".ditto/knowledge/adr/ADR-0010-ditto-functional-four-axes.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0011",
+      "title": "Distribution 횡단 배포계약 축 + session-rooting invariant (cross-repo subagent 위임 비지원)",
+      "status": "accepted",
+      "rationale": "기층 4축(ADR-0010 D3)은 '런타임 위에서 어떻게 동작하는가'는 다뤘으나 '어떻게 타겟에 올라가 살아있게 되는가'(배포)는 다루지 않았고, boxwood 실타겟 실증이 두 사실을 드러냈다. D1: Distribution을 기층 4축에 직교하는 횡단 배포계약 축으로 정식화(5번째 멤버가 아니라 넷 각각에 걸리는 배포계약 행렬) — 훅은 self-contained 바이너리, 스킬은 CLI를 PATH에, Agents는 CLI PATH+State, State는 명시 `ditto init`이 필요했고 install-plugin.mjs 단계가 그 구현체, `ditto doctor distribution`이 점검 표면. D2: session-rooting invariant — cross-repo subagent 쓰기는 세션 repoRoot 밖이면 PreToolUse scope-out에 차단되고 충실한 subagent 위임 autopilot 루프는 타겟-루트 세션을 요구한다(main agent가 노드 owner를 대행하면 cross-repo도 완주). 이 차단은 버그가 아니라 repo 경계 보호 설계와 정합한 경계다. D3: ADR-0007의 cross_repo(정적분석 모듈간 참조)와 본 ADR의 cross-repo(런타임 세션 루팅)는 다른 층위라 충돌 안 함.",
+      "change_condition": "cross-repo 세션 운용이 제품 요구가 되면 scope-out 경계 재설계+D2 재개정+ADR-0008 동반 재검토. 기층 substrate가 새 하네스로 교체되면 D1 배포계약 표 갱신(ADR-0010 D3 변경조건 연동). 배포 단계가 install-plugin.mjs에서 다른 메커니즘(패키지 매니저 배포 등)으로 바뀌면 D1 구현체 문장·doctor 매핑 갱신.",
+      "path": ".ditto/knowledge/adr/ADR-0011-distribution-cross-cutting-axis-session-rooting.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0012",
+      "title": "제품/프로젝트전역/개인 3계층 격리 — `.ditto/local` 개인구획 + `dist/plugin` 배포조립",
+      "status": "accepted",
+      "rationale": "DITTO는 성격이 다른 세 자산(배포되는 제품 표면, git으로 팀과 공유할 프로젝트 전역 거버넌스, 개발자·머신마다 다른 개인 런타임 트레일)을 한 워크트리에 평면으로 섞어 둬, 개인 트레일과 거버넌스 경계가 경로상 드러나지 않았고 배포 단위가 레포 루트 전체(source './')라 소스·테스트·dogfooding 트레일까지 노출됐다(ADR-0005 2계층 gitignore를 3계층으로 정밀화). D1: 개인 런타임(work-items·runs·sessions·cache·logs·worktrees·handoff·surfaces.json)을 `.ditto/local/` 한 구획으로 물리 분리하고 모든 경로는 단일 헬퍼 `ditto-paths.ts`의 localDir을 경유(경계가 코드 한 곳에 모임). D2: gitignore가 `local/`만 ignore하고 knowledge/·agents/는 추적해 3계층 경계를 집행(개인 트레일 비커밋·거버넌스 공유). D3: 배포 단위를 `dist/plugin` 조립 산출물로 좁혀 제품 표면만 담는다(src·tests·.ditto는 제외, 라이브 bin/ditto를 빌드가 덮지 않게 dist/plugin/bin에 직접 컴파일). 신규 의존 0(기존 store·gitignore·Node 스크립트).",
+      "change_condition": "전역 거버넌스(knowledge ADR/glossary)를 .ditto 밖 소스트리로 승격할 실익이 실증되면 런타임 경로 규약 특례를 정의하고 D1 잔류 결정을 재검토. dist/plugin 조립 표면이 런타임에 부족한 파일(추가 정적 자산 등)을 요구하면 ALWAYS_DIRS/OPTIONAL_DIRS 목록을 명시 확장.",
+      "path": ".ditto/knowledge/adr/ADR-0012-three-tier-isolation-storage-deploy.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0016",
+      "title": "Dual-host 아키텍처 — DITTO는 Claude Code와 Codex 두 호스트에서 동작한다",
+      "status": "accepted",
+      "rationale": "DITTO는 단일 호스트가 아니라 Claude Code와 Codex 두 호스트에서 동작하는 제품이고, ADR-0008이 HostAdapter로 추상한 에이전트 호스트 축 위에 Codex를 실제 두 번째 호스트로 올린 결과를 구조 결정으로 고정한다(hook·surface·host 개발은 이 구조 전제). D1: 호스트-무관 코어 위 HostAdapter가 host별(claude-code|codex) 차이를 흡수하고 새 코드는 host를 하드코딩하지 않는다. D2: host divergence는 정확히 두 지점 — repoRoot 출처(Claude=CLAUDE_PROJECT_DIR, Codex=이벤트 cwd)와 파일 편집 도구 의미(Claude=Write/Edit+file_path, Codex=apply_patch+패치 본문, 같은 게이트를 모든 mutated path에 적용). D3: 빌드·배포는 host별로 분리하고 절대 교차 금지하며, 배포 seam에서 Codex 빌드가 복사본 hooks.json에 --host codex를 부착해 false-green을 막는다(Claude 소스 byte-identical 유지). D4: surface projection은 단방향·결정론(agents/*.md→Codex toml). D5: Codex 공식 발견 경로 명시(비공식 .codex/plugins 미스캔).",
+      "change_condition": "Codex 공식 plugin/hook/agent 계약이 바뀌면 D2/D5 재검토(fact-verification 재검증). 세 번째 host가 생기면 D1 어댑터 인터페이스가 2-host 가정에 새는지 점검(현재 host enum 2값 전제). 층위③ 라이브 검증에서 fixture-green과 실 동작이 갈리면 해당 D 항목을 실측 기준으로 개정.",
+      "path": ".ditto/knowledge/adr/ADR-0016-dual-host-claude-codex.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0017",
+      "title": "정리(Tidy/deslop) 절차를 ACG 게이트 위에 정립한다 — 2차 정적 엔진 없이",
+      "status": "accepted",
+      "rationale": "DITTO ACG는 변경의 계약·증거·완료차단·지속적합성을 강제하지만 정리(cleanup/refactoring) 자체를 돌리는 워크플로가 비어 있었다(게이트·기준은 있었으나 절차가 오케스트레이션으로 정립 안 됨). 이 ADR은 두 결정을 박는다: (1) 검증된 정리 전술(테스트 선잠금→저위험부터→병렬 cleanup→품질게이트)을 ACG 게이트 위 단일 동작보존 워크플로로 흡수하고, (2) 그 과정에서 2차 정적 엔진(ast-grep)을 도입하지 않는다(ADR-0006 유지, 정리에 구조분석 필요하면 CodeQL). D1: 정리는 구현 노드 DoD green 직후 도는 기존 ACG 원시구성요소의 배선이지 새 기계가 아니다. D2: 정리는 동작 보존만 하고 버그/위협 발견 시 고치지 않고 구현 단계로 복귀(Tidy First). D5: behavior lock은 risk-tiered 동등성 증거 사다리(L1 변경영역 커버리지 필수·L2 old↔new differential·trace는 회귀 탐지이지 보존 증명 아님). D8: full bar 충족 시 격리 브랜치에 자동 structural 커밋(push 금지) — 대량 diff 사람 승인은 검증 연극이라 측정 가능한 증거 bar가 게이트.",
+      "change_condition": "ast-grep 재고(D3 해제)는 (1) CodeQL/command provider가 정리 detection에서 비용 때문에 실사용 불가로 측정되고 그리고 (2) 동일 검출을 CodeQL 쿼리로 표현 시 표현력/비용이 명백히 열위임이 실측되면 별도 ADR로(둘 다 충족 전 도입 안 함). L2 강등 비율이 높으면 적용 범위/capture harness 전략 재검토(강등 비율과 강등된 코드에서 회귀가 새는지 함께 측정). fitness 델타 오탐·DB amortize 실패 시 각 정의/전략 재검토. ADR-0006이 바뀌면 D3·D4 전제 재검토.",
+      "path": ".ditto/knowledge/adr/ADR-0017-cleanup-deslop-on-acg.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0018",
+      "title": "선택적 외부도구 우아한 강등 불변식 — 도구 부재가 의도 실현을 막지 못한다 (집행됨)",
+      "status": "accepted",
+      "rationale": "DITTO는 자율주행처럼 호스트 위에서 사용자 의도를 단계별 집행으로 실현하며 여러 외부 도구(CodeQL·Playwright/브라우저·미래 LSP)를 활용하는데, 그 도구는 설치·실행 성공이 환경에 따라 갈린다. 도구 부재·실패가 집행을 깨뜨리면(크래시·계약 단절·work item 미완) 사용자 의도가 도구 가용성에 인질로 잡혀 목적과 충돌한다. 저장소는 이미 관례로 막아왔으나 새 도구 추가 시 일관 적용 보장이 없다. D1: 선택적 도구의 부재·실패는 집행을 절대 깨뜨리지 않고(우아한 강등) 우회(대체 또는 skip-and-continue)하며 남은 증거가 AC를 닫으면 완료한다. D2: 빠진 도구가 어떤 DoD/AC를 만족시키는 유일한 길이었을 때만 정직하게 unverified/fail로 표면화한다(가짜 pass 날조와 조용한 정지·크래시 둘 다 금지). D3: 이것은 best-effort가 아니라 가드로 집행되는 불변식(e2e blockedJourney·Stop 게이트 inert·fail-open fitness·evidence-gated completion이 사례). D4: git/bun/sh 같은 필수 전제와 producer-CLI exit code는 범위 밖.",
+      "change_condition": "어떤 선택적 도구의 강등이 work item 완료율을 실측으로 크게 떨어뜨려(유일-충족 AC 빈발) '선택적' 분류가 틀린 것으로 드러나면 필수 전제(D4)로 재분류 검토. 가드(n2)가 정당한 도구 사용 경로를 과검출해 마찰이 과하면 검출 표면을 좁히는 방향으로 재검토. ADR-0006의 분석기 폴백 정책이 바뀌면 '공개' 절 직교성 진술을 재확인. 선택적 도구가 곧 의도-실현의 핵심 증거 수단이 되는 새 단계가 생기면 D2의 '유일 충족 수단' 경계를 명시 보강.",
+      "path": ".ditto/knowledge/adr/ADR-0018-optional-tool-graceful-degradation-invariant.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0021",
+      "title": "조직·cross-repo 메모리를 별도 standalone 프로젝트로 — ditto memory seam 대체 (흡수=feature parity 아님)",
+      "status": "accepted",
+      "rationale": "조직·다중 저장소 횡단 장기기억·지식 시스템을 어디에 담을지 deep-interview로 합의했다(wi_260618o97, 6문 수렴). 1차 소비자가 '조직·cross-repo'로 결정되며 서버 그래프 DB가 정당화됐고 이는 ditto의 무서버·git-per-repo·단일 repo 기층(ADR-0005/0011/0013 D1)과 정면 충돌하며, 사용자는 이 기능이 ditto에 담기엔 너무 크다고 판단했다. D1: memory가 동작하는 seam(층위)을 별도 standalone 메모리 프로젝트로 대체하고 ditto는 그 MCP 또는 pluggable 표면을 호출하는 소비자가 된다(MCP vs pluggable 택일은 신규 프로젝트로 위임). D2: 흡수는 seam 대체이지 기능 이식이 아니다(feature parity 비목표 — 신규는 자체 최적 설계). D3: git=SoT + 그래프 투영 방향이고 이 'Neo4j는 projection일 뿐' 위치는 ADR-0005 D1 예외·ADR-0013 D1과 이미 정합해 supersede가 아니라 align. D4: seam 연속성 — 신규가 ditto seam에 실제 연결되기 전까지 현 동작을 유지(fail-closed). D5: 큐레이터 이원 능력(조합형+생성형)이며 생성형 출력은 출처+gap+confidence로 사실과 분리해 세탁 방지.",
+      "change_condition": "신규 프로젝트 deep-interview에서 통합 형태나 SoT 모델이 본 방향과 어긋나면 D1/D3 재검토(필요 시 supersede ADR). 그래프 투영이 rebuildable read-model 경계를 넘어 SoT 역할을 요구하면 ADR-0005/0013 supersede 여부 판정. seam 연속성(D4)이 깨져 신규 실증 전 현 memory가 폐지되는 경로가 생기면 전환조건 게이트 재집행. 신규 프로젝트 무산·cross-repo 요구 철회 시 ditto 내부 memory만으로 충분한지 재평가. 생성형 합성이 환각을 늘리면(세탁 발생) D5를 재검토해 조합형 우선 후퇴.",
+      "path": ".ditto/knowledge/adr/ADR-0021-memory-seam-external-project.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0022",
+      "title": "ditto 자기호스팅 도그푸딩·배포 생애주기 — 단일 repo dev+dogfood + 결정적 진입 + 게이트 배포",
+      "status": "accepted",
+      "rationale": "ditto는 자기 자신을 만들며 동시에 자기 자신으로 도그푸딩하는데 이 둘이 엉켜 반복 마찰을 낳았다 — 대표 사건: 워킹트리가 아니라 stale 설치본(plugin cache 0.0.0)을 로드해 편집 미반영을 도중에야 발견, 게다가 uninstall→install이 0.0.0을 고아로 만들어 그 경로 고정 세션의 훅이 깨짐. 핵심 사실: 분리축은 플러그인 로드 경로(워킹트리 vs 설치본)이지 git 브랜치가 아니고, 세션-freeze는 불변 제약(정의 변경 검증은 항상 새 세션 필요)이며, 도그푸딩=실제 자기개발이라 별도 테스트 격리가 불필요하고, stable은 폴더가 아니라 npx 설치본이다. 결정: ①단일 repo=dev+dogfood(별도 clone/worktree 미상주, stable은 npx 설치본) ②결정적 진입 `bun run dogfood [--host]`(claude=무상태 --plugin-dir, codex=유상태 격리 CODEX_HOME) ③SessionStart 배너(mode-doctor)가 src-stamp+표면-stamp 2축으로 로드 플러그인을 알림 ④codex CODEX_HOME 격리로 실제 환경 비오염 ⑤게이트된 배포(dogfood→main→릴리스→배포→throwaway 스모크 검증 통과해야 stable). 견고함은 폴더 분리가 아니라 진입 결정성+격리+게이트 배포에서 온다.",
+      "change_condition": "도그푸딩 대상이 ditto 자신이 아니라 외부 프로젝트로 확장되면 별도 소비자 환경(분리 상태)을 재검토. 배포 채널을 GitHub-소스 npx에서 npm 레지스트리로 전환하면 배포 표면(5번)만 부분 재검토(단일-repo·진입·안전망·격리 결정은 불변). Claude Code/codex가 세션-freeze를 푸는 라이브-reload를 제공하면 결정적 진입의 '새 세션 필요' 전제를 재검토.",
+      "path": ".ditto/knowledge/adr/ADR-0022-dogfood-deploy-lifecycle.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0023",
+      "title": "pre-mortem coverage 종료 재정의 — novelty-dry에서 카테고리-완전 종료 + 정당화-close 게이트로",
+      "status": "accepted",
+      "rationale": "pre-mortem coverage 엔진의 종료 판정 isCoverageTerminated가 novelty-dry(K 연속 라운드 새 가지 없음→종료) 하나에만 의존해, 시딩된 적 없는 간접 영향 분야(far-field) 실패 모드를 '새 가지 없음'으로 보여 dry로 닫아 false-green을 한 단계 상승시켰다. sweep judge input의 cross_cutting_constraints가 []로 하드코딩돼 먼 도메인 맵을 못 받았고, 노드 close에 정당화 기록이 없어 조용한 skip이 가능했다. 결정: 종료를 카테고리-완전 종료+정당화-close 게이트로 재정의(모두 가산·플래그·회귀 0). ①far-field floor taxonomy 각 카테고리를 coverage 노드로 시딩해 un-swept 카테고리가 열려 있으면 novelty-dry만으로 종료 불가(노드트리=per-category sweep ledger). ②정당화-close 게이트(fail-closed) — out_of_scope/user_owned로 닫을 때 close_reason 없으면 enforceClose가 거부. ③렌즈 주입(무조건) — cross_cutting_constraints를 farFieldLenses()로. ④강도=깊이(폭 불변) — 종료 깊이 K를 stakes tier에서 도출. ⑤보존(가산·플래그)로 기존 동작 보존. 망라 종료가 '시딩된 모든 카테고리가 명시적으로 다뤄졌다'로 증명 가능해진다.",
+      "change_condition": "카테고리-완전 종료가 실측에서 비용 때문에 기능 OFF를 유발하면 강도 dial 기본값·per-plan 예산을 재조정(종료 재정의 자체는 불변). ADR-0021 memory seam이 standalone로 이관되면 entanglement 주입 소스만 seam 뒤에서 교체. 하류 게이트가 dry로 닫았거나 미시딩한 카테고리의 실패를 반복 검출하면 사용자 귀속 결정으로 floor taxonomy를 보강(completeness critic이 새 카테고리를 시딩 가능). far-field 비용 구조 재측정은 별도 work item wi_26062227h로 분리(자동화 보류 재개 트리거).",
+      "path": ".ditto/knowledge/adr/ADR-0023-premortem-coverage-category-complete-termination.md",
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-20260624-adr-identifier-policy",
+      "title": "ADR 식별자 = 불변 파일명 (ADR-YYYYMMDD-slug) — 순차번호·uid 폐기",
+      "status": "accepted",
+      "rationale": "ADR 번호(ADR-NNNN)는 동시 개발에서 충돌한다 — 다른 브랜치가 같은 번호를 찍어도 slug가 다르면 파일명이 달라져 git 머지가 충돌을 안 내 두 ADR이 같은 번호를 들고 조용히 공존한다. 기존엔 자동 번호 할당·식별자 유니크성·index↔file 정합 검사가 전무했다(번호는 사람이 손으로 +1, 어긋나도 잡을 게이트 없음). 결정: 새 ADR 식별자는 파일명 ADR-YYYYMMDD-<slug>.md 전체(불변, bare 순차번호·별도 uid 없음)이고 모든 참조는 이 파일명 ID를 가리킨다. `ditto knowledge adr-new --slug`이 오늘 날짜 스켈레톤을 만들고, `ditto knowledge adr-check`이 형식+유니크성+index↔file 일관성을 fail-closed로 검사한다(CI/pre-merge 권장). 기존 ADR-NNNN-<slug>.md는 grandfather(rename 금지, 스키마가 legacy ∪ new 동시 수용). 근거: 충돌 시 renumber는 모든 참조 전수 고쳐쓰기를 요구하는데 참조가 코드·문서·불변 커밋 메시지에 퍼져 불가능하므로, 식별자를 생성 시점에 불변·충돌내성으로 파일명에 박아 renumber 자체를 없앤다(진짜 충돌=같은 날짜+같은 slug는 동일 파일명이 되어 git add/add 충돌로 감지).",
+      "change_condition": "중앙 조정점(ADR 번호 레지스트리/서비스)이 생겨 번호 충돌을 생성 시점에 막을 수 있으면 순차번호 재고 가능. 파일명 가독성이 실사용에서 문제되면(slug 길이·중복) slug 규약 재검토. cross-branch 사전 감지가 요구되면 pre-merge CI에서 adr-check 강제를 표준화.",
+      "path": ".ditto/knowledge/adr/ADR-20260624-adr-identifier-policy.md",
+      "superseded_by": null
     }
   ],
   "patterns": [],
