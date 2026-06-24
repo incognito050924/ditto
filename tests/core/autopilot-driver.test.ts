@@ -244,6 +244,43 @@ describe('allNodesTerminal (M2.5 — continuation stops only when nothing is lef
     };
     expect(allNodesTerminal(allPassed)).toBe(true);
   });
+
+  // ADR-0024 Decision 4 (ac-3): a `retro` node is NON-BLOCKING — its failed/blocked
+  // status must NOT keep the graph non-terminal. It still runs and reports; it never
+  // gates terminality. A non-retro blocked node is unaffected (stays non-terminal).
+  function retro(status: 'passed' | 'failed' | 'blocked') {
+    return {
+      id: 'R',
+      kind: 'retro' as const,
+      owner: 'retrospective' as const,
+      purpose: 'retrospective',
+      status,
+      depends_on: [] as string[],
+      acceptance_refs: [] as string[],
+      evidence_refs: [],
+      ac_verdicts: [],
+      attempts: { fix: 0, switch: 0 },
+    };
+  }
+
+  test('a BLOCKED retro alongside all-passed work is still terminal (non-blocking)', () => {
+    const passed = buildInitialNodes(['ac-1']).map((n) => ({ ...n, status: 'passed' as const }));
+    const g = graph({ nodes: [...passed, retro('blocked')] });
+    expect(allNodesTerminal(g)).toBe(true);
+  });
+
+  test('a FAILED retro alongside all-passed work is still terminal', () => {
+    const passed = buildInitialNodes(['ac-1']).map((n) => ({ ...n, status: 'passed' as const }));
+    const g = graph({ nodes: [...passed, retro('failed')] });
+    expect(allNodesTerminal(g)).toBe(true);
+  });
+
+  test('regression: a non-retro blocked node still keeps the graph non-terminal', () => {
+    const nodes = buildInitialNodes(['ac-1']).map((n, i) =>
+      i === 0 ? { ...n, status: 'blocked' as const } : { ...n, status: 'passed' as const },
+    );
+    expect(allNodesTerminal(graph({ nodes }))).toBe(false);
+  });
 });
 
 describe('rollbackOnRejection (G3: denied plan → rollback in-flight nodes)', () => {

@@ -1018,11 +1018,31 @@ const autopilotStatus = defineCommand({
       acc[n.status] = (acc[n.status] ?? 0) + 1;
       return acc;
     }, {});
+    // ADR-0024 결정5 (ac-1): surface each AC's frozen oracle, READ from
+    // work-item.acceptance_criteria[].oracle. View-only — recompute nothing, run
+    // no sweep. ACs without an oracle are omitted; a missing work-item.json
+    // (graph-only status) yields an empty list rather than a crash.
+    const items = new WorkItemStore(repoRoot);
+    const acceptanceOracles = (await items.exists(args.workItem))
+      ? (await items.get(args.workItem)).acceptance_criteria.flatMap((ac) =>
+          ac.oracle
+            ? [
+                {
+                  ac_id: ac.id,
+                  verification_method: ac.oracle.verification_method,
+                  maps_to: ac.oracle.maps_to,
+                  direction: ac.oracle.direction,
+                },
+              ]
+            : [],
+        )
+      : [];
     if (format === 'json') {
       writeJson({
         work_item_id: args.workItem,
         autopilot_id: graph.autopilot_id,
         approval_gate: gate,
+        acceptance_oracles: acceptanceOracles,
         nodes: { total: graph.nodes.length, by_status: byStatus },
       });
       return;
@@ -1038,6 +1058,12 @@ const autopilotStatus = defineCommand({
       for (const c of gate.plan_brief.interface_changes) writeHuman(`    interface: ${c}`);
       for (const d of gate.plan_brief.dod) writeHuman(`    dod:       ${d}`);
       for (const s of gate.plan_brief.test_scenarios) writeHuman(`    test:      ${s}`);
+    }
+    if (acceptanceOracles.length > 0) {
+      writeHuman('  acceptance_oracles:');
+      for (const o of acceptanceOracles) {
+        writeHuman(`    ${o.ac_id}: ${o.verification_method} · ${o.maps_to} · ${o.direction}`);
+      }
     }
     const counts = Object.entries(byStatus)
       .map(([s, n]) => `${s}=${n}`)

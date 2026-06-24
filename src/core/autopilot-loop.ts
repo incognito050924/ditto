@@ -5,8 +5,9 @@ import { collectTidyDiffStat, writeTidyClassification } from '~/acg/tidy/classif
 import { atomicWriteText, ensureDir, writeJson } from '~/core/fs';
 import { type Diagnostic, getDiagnostics, resolveServer } from '~/core/lsp/client';
 import { lspLanguageForPath } from '~/core/provision/lsp-detect';
-import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
+import { type Autopilot, type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
 import { evidenceRef, relativePath, verdict } from '~/schemas/common';
+import { isFarFieldEscape } from '~/schemas/coverage';
 import { decisionConflict, decisionConflictCarrier } from '~/schemas/decision-conflict-carrier';
 import { type AcOracle, acOracle } from '~/schemas/work-item';
 import { ActiveNodeLeaseStore } from './active-node-lease';
@@ -16,6 +17,7 @@ import {
   type DelegationPacket,
   type FailureClass,
   type FailureDecision,
+  type RetroContext,
   buildDelegationPacket,
   decideOnFailure,
   guardAcClosingEvidence,
@@ -33,12 +35,24 @@ import {
 } from './autopilot-graph';
 import { AutopilotStore } from './autopilot-store';
 import { planTidyOnImplementPass } from './autopilot-tidy';
+import { countUnitOnlyClosures } from './completion-coverage-doctor';
+import { CompletionStore } from './completion-store';
+import { CoverageFeedbackLedger } from './coverage-feedback';
 import { assertOracleFrozen, producePlanGate, validateAcOracle } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
 import { localDir } from './ditto-paths';
 import { decisionConflictRequiresApproval, oracleSatisfaction } from './gates';
+import { HandoffStore } from './handoff-store';
 import { IntentStore } from './intent-store';
+import { MemoryEventStore } from './memory-store';
 import { warmStartMemoryContext } from './memory-warmstart';
+import {
+  type RetroMetricInputs,
+  type RetroNarrativeRecords,
+  absorbRetroMemory,
+  assembleRetroMetrics,
+  projectRetroNarrative,
+} from './retro-measure';
 import { computeSpecDigest } from './tech-spec';
 import { WorkItemStore } from './work-item-store';
 
@@ -134,6 +148,153 @@ async function specDigestStale(
   };
 }
 
+/**
+ * Assemble the retro presentation context (ADR-0024 Decision 4, ac-4 & ac-5 live
+ * wiring) for a `retro` node's packet. The retro node PRESENTS what this assembles;
+ * it never invents the metrics or the narrative. PURE-of-judgment, fail-open: every
+ * grounding read is best-effort and a missing artifact yields an UNGROUNDED slot
+ * (null → the assembler OMITS it, never zeroes it — anti-SLOP), so the absence of a
+ * sidecar degrades the slot, never the dispatch (§4.4 / ADR-0018). Two SEPARATED
+ * metrics are kept apart by `assembleRetroMetrics`; the narrative is a copy-only
+ * projection of records the run already wrote.
+ *
+ * Groundings (each omitted when its source is absent):
+ *   ① outcome_floor.coverage  ← completion.json (passed acceptance / total).
+ *   ① outcome_floor.unit_only_closures ← the `isUnitOnlyClosure` aggregate over the
+ *      SAME completion.json (count of falsely-green closures: pass closed on
+ *      command-only evidence with no runtime/artifact). Grounded whenever completion
+ *      exists (a real 0 is a measurement); omitted when completion is absent.
+ *   ① outcome_floor.escape_recurrence ← the cross-WI coverage-feedback ledger rows
+ *      for THIS work item, counting only FAR-FIELD escapes (depth/breadth; residual
+ *      rows are excluded by `isFarFieldEscape`, matching the far-field cost stats).
+ *   ② process_health.post_cost ← the SAME formula `ditto doctor intent-quality`
+ *      uses (drift events + rework attempts + retry/switch decisions + handoff
+ *      rounds), derived from the graph + decisions + metrics + handoffs this loop
+ *      already reads. Always grounded once a graph exists (a real 0 is a measurement).
+ */
+async function collectRetroContext(
+  repoRoot: string,
+  workItemId: string,
+  graph: Autopilot,
+): Promise<RetroContext> {
+  // ① coverage + unit_only_closures — from completion.json when present. Both stay
+  // ungrounded (null → omitted) when completion is absent (anti-SLOP, never zeroed).
+  let coverage: number | null = null;
+  let unitOnlyClosures: number | null = null;
+  const unverifiedItems: string[] = [];
+  const residualRisks: string[] = [];
+  const evidenceRefs: string[] = [];
+  try {
+    const completion = new CompletionStore(repoRoot);
+    if (await completion.exists(workItemId)) {
+      const c = await completion.get(workItemId);
+      const total = c.acceptance.length;
+      if (total > 0) {
+        coverage = c.acceptance.filter((a) => a.verdict === 'pass').length / total;
+      }
+      // ① unit_only_closures — count of falsely-green closures (pass closed on
+      // command-only evidence, no runtime/artifact). Grounded whenever completion
+      // exists (a real 0 is a measurement); the count uses the SAME isUnitOnlyClosure
+      // probe the completion-coverage doctor uses, so the two never drift.
+      unitOnlyClosures = countUnitOnlyClosures(c);
+      for (const u of c.unverified) unverifiedItems.push(u.item);
+      for (const r of c.remaining_risks) residualRisks.push(r);
+      for (const a of c.acceptance)
+        for (const e of a.evidence) evidenceRefs.push(`${e.kind}: ${e.path}`);
+    }
+  } catch {
+    // completion absent/unreadable ⇒ coverage + unit_only_closures stay ungrounded
+    // (omitted), no throw.
+  }
+
+  // ① escape_recurrence — far-field escape rows for THIS work item in the cross-WI
+  // ledger (residual rows excluded). Ungrounded (null) when the ledger has no row
+  // for this work item, so the slot is omitted rather than asserting "zero escapes".
+  let escapeRecurrence: number | null = null;
+  try {
+    const rows = (await new CoverageFeedbackLedger(repoRoot).readAll()).filter(
+      (r) => r.work_item_id === workItemId,
+    );
+    if (rows.length > 0) {
+      escapeRecurrence = rows.filter((r) => isFarFieldEscape(r.fault_kind)).length;
+    }
+  } catch {
+    // ledger absent/corrupt ⇒ escape_recurrence stays ungrounded (omitted).
+  }
+
+  // close_reason narrative rows from the coverage map (skip/deferral justifications).
+  const closeReasons: string[] = [];
+  try {
+    const cov = new CoverageStore(repoRoot);
+    if (await cov.exists(workItemId)) {
+      for (const n of (await cov.getMap(workItemId)).nodes)
+        if (n.close_reason) closeReasons.push(n.close_reason);
+    }
+  } catch {
+    // coverage map absent ⇒ no close_reason rows.
+  }
+
+  // intent-drift narrative rows from the persisted metrics ledger.
+  const intentDrift: string[] = [];
+  try {
+    for (const m of await new WorkItemStore(repoRoot).readMetrics(workItemId))
+      for (const reason of m.blocking_reasons) intentDrift.push(reason);
+  } catch {
+    // metrics absent ⇒ no drift rows.
+  }
+
+  // ② post_cost — the doctor's formula, from the data the loop already reads. The
+  // graph is in hand (passed in); decisions/metrics/handoffs are best-effort 0.
+  const reworkAttempts = graph.nodes.reduce((sum, n) => sum + (n.attempts?.fix ?? 0), 0);
+  let retrySwitch = 0;
+  let driftEvents = 0;
+  let handoffRounds = 0;
+  try {
+    const decisions = await new AutopilotStore(repoRoot).readDecisions(workItemId);
+    retrySwitch = decisions.filter(
+      (d) => d.decision === 'retry' || d.decision === 'switch_approach',
+    ).length;
+  } catch {
+    /* decisions absent ⇒ 0 */
+  }
+  try {
+    driftEvents = (await new WorkItemStore(repoRoot).readMetrics(workItemId)).length;
+  } catch {
+    /* metrics absent ⇒ 0 */
+  }
+  try {
+    handoffRounds = (await new HandoffStore(repoRoot).listActive()).filter(
+      (h) => h.handoff.work_item_id === workItemId,
+    ).length;
+  } catch {
+    /* handoffs absent ⇒ 0 */
+  }
+  const postCost = driftEvents + reworkAttempts + retrySwitch + handoffRounds;
+
+  const inputs: RetroMetricInputs = {
+    coverage,
+    unit_only_closures: unitOnlyClosures,
+    escape_recurrence: escapeRecurrence,
+    post_cost: postCost,
+  };
+  const records: RetroNarrativeRecords = {
+    work_item_id: workItemId,
+    unverified: unverifiedItems,
+    residual_risks: residualRisks,
+    close_reasons: closeReasons,
+    intent_drift: intentDrift,
+    evidence_refs: evidenceRefs,
+    // Process-health context kept next to the narrative for the live retro view but
+    // FILTERED OUT of durable cross-WI absorption (post_cost noise must not pollute
+    // the warm-start prior).
+    process_health_note: `post_cost churn: ${postCost}`,
+  };
+  return {
+    metrics: assembleRetroMetrics(inputs),
+    narrative: projectRetroNarrative(records),
+  };
+}
+
 export async function nextNode(repoRoot: string, workItemId: string): Promise<NextNodeResult> {
   const aps = new AutopilotStore(repoRoot);
   const graph = await aps.get(workItemId);
@@ -163,7 +324,11 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
     // Terminal: every node passed/failed. Surface the completion disposition —
     // graph done is not acceptance closing (§6.8); completion judges with evidence.
     if (allNodesTerminal(graph)) {
-      const all_passed = graph.nodes.every((n) => n.status === 'passed');
+      // ADR-0024 Decision 4 (ac-3): a `retro` node is NON-BLOCKING — its failed/
+      // blocked status must NOT flip all_passed to false (which would degrade the
+      // work-item to partial/fail at completion). Exclude `retro` from the gate the
+      // same way allNodesTerminal does; every other node still counts as before.
+      const all_passed = graph.nodes.every((n) => n.kind === 'retro' || n.status === 'passed');
       // ADR-0024 Decision 6 (mechanism 1) — converged vs capped disposition. Only
       // meaningful on an all-passed done (else the run is partial/failed, not a
       // fixpoint): `capped` when a loop-level iteration cap was hit during the run
@@ -171,22 +336,32 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
       // derived, never a stored flag — the deterministic floor reads the recorded
       // escalations. capped ≠ converged (ADR-0024:38): a cap-forced close is not a
       // genuine oracle convergence, so completion is told to treat it as such.
+      const decisions = await aps.readDecisions(workItemId);
       let disposition: 'converged' | 'capped' | null = null;
       if (all_passed) {
-        const decisions = await aps.readDecisions(workItemId);
         const loopCapped = decisions.some((d) =>
           d.reason.includes('loop-level iteration cap reached'),
         );
         disposition = loopCapped ? 'capped' : 'converged';
       }
-      return {
-        action: 'done',
-        all_passed,
-        disposition,
-        reason: all_passed
-          ? 'all nodes passed — completion judgment owed: graph done ≠ acceptance criteria closed; run completion to close each AC with the collected evidence (§6.8)'
-          : 'all nodes terminal but ≥1 node failed — completion will judge partial/fail; run completion judgment (§6.8)',
-      };
+      const reason = all_passed
+        ? 'all nodes passed — completion judgment owed: graph done ≠ acceptance criteria closed; run completion to close each AC with the collected evidence (§6.8)'
+        : 'all nodes terminal but ≥1 node failed — completion will judge partial/fail; run completion judgment (§6.8)';
+      // ADR-0024 Decision 7 (ac-6): the loop termination is an EXPLICIT recorded
+      // decision, not a silent return value (charter §4-10). Record the SAME
+      // disposition through the convergence vocabulary in the append-only decision
+      // log — the one SoT (`capped` is already derived from this very log, so the
+      // record and the derivation cannot drift). A partial/failed close (all_passed
+      // false) is NOT a fixpoint, so the returned `disposition` stays null, but the
+      // loop still terminated — recorded as `blocked` (the convergence term for
+      // "closed without convergence"), since a failure-termination is exactly when
+      // the record matters most.
+      await recordLoopTermination(aps, workItemId, decisions, {
+        disposition: disposition ?? 'blocked',
+        reason,
+        now: new Date(),
+      });
+      return { action: 'done', all_passed, disposition, reason };
     }
     // Not terminal and nothing ready: a running node is transient (still working);
     // a blocked node with nothing else runnable is an escalated, user-owned
@@ -204,10 +379,19 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
             return why ? `${n.id} — ${why}` : n.id;
           })
           .join('; ');
+        const reason = `blocked on a user-owned decision (§4.3): ${detail}`;
+        // ADR-0024 Decision 7 (ac-6): a blocked-escalation IS a loop termination —
+        // record it explicitly (disposition=blocked) in the same decision-log SoT,
+        // not just as a return value (charter §4-10). Idempotent (append-once).
+        await recordLoopTermination(aps, workItemId, decisions, {
+          disposition: 'blocked',
+          reason,
+          now: new Date(),
+        });
         return {
           action: 'blocked',
           blocked_node_ids: blocked.map((n) => n.id),
-          reason: `blocked on a user-owned decision (§4.3): ${detail}`,
+          reason,
         };
       }
     }
@@ -302,10 +486,15 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
       // Warm-start memory push (§5-1 / §10-6 #1): fail-open query in the loop, the
       // builder stays pure. researcher/planner only; undefined ⇒ packet unchanged.
       const memory = await warmStartMemoryContext(repoRoot, node, workItem, { now });
+      // Retro presentation context (ADR-0024 Decision 4, ac-4): a `retro` node's
+      // packet carries the assembled SEPARATED metrics + projection-only narrative;
+      // every other node passes nothing (packet byte-for-byte unchanged).
+      const retro =
+        node.kind === 'retro' ? await collectRetroContext(repoRoot, workItemId, graph) : undefined;
       spawns.push({
         node_id: node.id,
         owner: node.owner,
-        packet: buildDelegationPacket(node, workItem, candidates, scopeOf(node), memory),
+        packet: buildDelegationPacket(node, workItem, candidates, scopeOf(node), memory, retro),
       });
     }
     return { action: 'spawn_wave', spawns };
@@ -388,11 +577,16 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   // Warm-start memory push (§5-1 / §10-6 #1): fail-open query in the loop, the
   // builder stays pure. researcher/planner only; undefined ⇒ packet unchanged.
   const memory = await warmStartMemoryContext(repoRoot, chosen, workItem, { now });
+  // Retro presentation context (ADR-0024 Decision 4, ac-4): a `retro` node's packet
+  // carries the assembled SEPARATED metrics + projection-only narrative; every other
+  // node passes nothing (packet byte-for-byte the no-retro path).
+  const retro =
+    chosen.kind === 'retro' ? await collectRetroContext(repoRoot, workItemId, graph) : undefined;
   return {
     action: 'spawn',
     node_id: chosen.id,
     owner: chosen.owner,
-    packet: buildDelegationPacket(chosen, workItem, candidates, scopeOf(chosen), memory),
+    packet: buildDelegationPacket(chosen, workItem, candidates, scopeOf(chosen), memory, retro),
   };
 }
 
@@ -782,18 +976,35 @@ function oracleUnsatisfiedReason(unmet: string[]): string {
 }
 
 /**
- * Same-oracle failure count for a node, derived from the append-only decision log
- * (NOT a driver-trusted stored counter, NOT `attempts.fix`). One entry per prior
- * in-loop oracle downgrade / wrong-fixpoint reopen on this node. K failures → the
+ * Same-oracle failure count for a (node, criterion) pair, derived from the append-only
+ * decision log (NOT a driver-trusted stored counter, NOT `attempts.fix`). One entry per
+ * prior in-loop oracle downgrade / wrong-fixpoint reopen on this node. K failures → the
  * caller blocks instead of re-opening (mechanism 5).
+ *
+ * PER-AC counting (wi_260624kcv): a multi-AC node must NOT conflate failures across
+ * DIFFERENT criteria toward one K threshold. So a prior `oracle-unsatisfied` decision
+ * counts toward `criterionIds` only when it concerns one of those criteria:
+ *  - decisions WITH a structured `criterion_ids` field count iff that field intersects
+ *    `criterionIds` (read the structured field — never parse the criterion out of the
+ *    free-text reason, which can itself contain `:`/`;` and may carry several ACs);
+ *  - LEGACY decisions WITHOUT `criterion_ids` (recorded before this change) fall back to
+ *    node-scoped counting — they ALWAYS count, so an in-flight multi-AC run mid-count is
+ *    never silently reset below threshold.
  */
 function sameOracleFailureCount(
-  decisions: { node_id: string; reason: string }[],
+  decisions: { node_id: string; reason: string; criterion_ids?: string[] }[],
   nodeId: string,
+  criterionIds: string[],
 ): number {
-  return decisions.filter(
-    (d) => d.node_id === nodeId && d.reason.startsWith(ORACLE_UNSATISFIED_MARKER),
-  ).length;
+  const target = new Set(criterionIds);
+  return decisions.filter((d) => {
+    if (d.node_id !== nodeId) return false;
+    if (!d.reason.startsWith(ORACLE_UNSATISFIED_MARKER)) return false;
+    // Legacy entry (no structured criterion_ids) → node-scoped fallback: always count.
+    if (d.criterion_ids === undefined) return true;
+    // Structured entry → count iff it concerns one of the target criteria.
+    return d.criterion_ids.some((id) => target.has(id));
+  }).length;
 }
 
 /**
@@ -803,14 +1014,16 @@ function sameOracleFailureCount(
  * each in-play AC the node judged `pass`, if that AC carries an oracle and the
  * node's recorded closing evidence does NOT meet it, the AC is unmet. The closing
  * evidence is the same union the completion stage reads (top-level ∪ per-AC).
- * Returns the unmet "acId: reason" strings (empty ⇒ every oracle satisfied / none
- * assigned → legacy path unchanged, presence-gated).
+ * Returns the unmet criterion ids alongside their "acId: reason" strings (both empty ⇒
+ * every oracle satisfied / none assigned → legacy path unchanged, presence-gated). The
+ * structured `criterionIds` are recorded on the decision (`criterion_ids`) so the K
+ * counter tallies per criterion — the reason text is NOT re-parsed for them.
  */
 function unmetOracles(
   node: AutopilotNode,
   payload: RecordResultPayload,
   oracleById: Map<string, AcOracle | undefined>,
-): string[] {
+): { criterionIds: string[]; reasons: string[] } {
   const inPlay = new Set(node.acceptance_refs);
   const topLevel = payload.evidence_refs ?? [];
   const verdicts = payload.ac_verdicts ?? [];
@@ -820,7 +1033,8 @@ function unmetOracles(
     verdicts.length > 0
       ? verdicts.filter((v) => v.verdict === 'pass').map((v) => v.criterion_id)
       : [...inPlay];
-  const unmet: string[] = [];
+  const criterionIds: string[] = [];
+  const reasons: string[] = [];
   for (const acId of passedAcs) {
     if (!inPlay.has(acId)) continue;
     const oracle = oracleById.get(acId);
@@ -830,9 +1044,55 @@ function unmetOracles(
       .flatMap((v) => v.evidence_refs ?? []);
     const closing = [...topLevel, ...perAc];
     const sat = oracleSatisfaction(acId, oracle, closing);
-    if (!sat.pass) unmet.push(sat.reasons[0] ?? `${acId}: oracle unsatisfied`);
+    if (!sat.pass) {
+      criterionIds.push(acId);
+      reasons.push(sat.reasons[0] ?? `${acId}: oracle unsatisfied`);
+    }
   }
-  return unmet;
+  return { criterionIds, reasons };
+}
+
+/**
+ * ADR-0024 Decision 7 (ac-6) — record the whole-graph loop termination as an
+ * EXPLICIT decision in the append-only decision log (the one SoT), not a silent
+ * return value (charter §4-10). The disposition uses the convergence vocabulary
+ * (`converged|capped|blocked`, cap_reached ≡ capped) so the whole-graph record and
+ * convergence.json's per-target `exit.reason` never disagree on the meaning of a
+ * close; the per-target sidecar stays the per-target SoT, this log stays the
+ * whole-graph SoT.
+ *
+ * Idempotent re-poll, but NOT a one-shot append: `nextNode` is polled and re-enters
+ * a terminal/blocked branch every call. A node can transition `blocked → running`
+ * (autopilot-graph), so a run that recorded `blocked` can later unblock and converge
+ * — keying the guard ONLY on "a loop_terminated exists" would freeze the STALE
+ * `blocked` record forever (the recorded disposition would no longer match the
+ * actual termination). So the guard keys on the DISPOSITION too: if the LATEST
+ * loop_terminated entry's disposition EQUALS the new one, this is an idempotent
+ * re-poll → skip; if it DIFFERS, append the new entry so the LATEST entry is the
+ * authoritative final disposition (append-only log, latest wins — consistent with
+ * how `capped` is derived from this same log). The caller passes the decisions it
+ * already read — no extra I/O.
+ */
+async function recordLoopTermination(
+  aps: AutopilotStore,
+  workItemId: string,
+  decisions: { decision: string; disposition?: 'converged' | 'capped' | 'blocked' }[],
+  spec: { disposition: 'converged' | 'capped' | 'blocked'; reason: string; now: Date },
+): Promise<void> {
+  const lastTermination = decisions.filter((d) => d.decision === 'loop_terminated').at(-1);
+  // Same disposition as the latest record ⇒ idempotent re-poll, nothing to add. A
+  // DIFFERENT disposition (e.g. blocked → converged after an unblock) appends a new
+  // entry so the latest one is the authoritative final disposition.
+  if (lastTermination?.disposition === spec.disposition) return;
+  await aps.appendDecision(workItemId, {
+    ts: spec.now.toISOString(),
+    // Graph-wide event, not tied to a single node — the convention used elsewhere
+    // for non-node-scoped decisions (e.g. e2e proposal) is the work item id.
+    node_id: workItemId,
+    decision: 'loop_terminated',
+    disposition: spec.disposition,
+    reason: `loop terminated (${spec.disposition}): ${spec.reason}`,
+  });
 }
 
 export async function recordResult(
@@ -967,10 +1227,12 @@ export async function recordResult(
       wi.acceptance_criteria.map((c) => [c.id, c.oracle]),
     );
     const unmet = unmetOracles(node, input.payload, oracleById);
-    if (unmet.length > 0) {
-      const reason = oracleUnsatisfiedReason(unmet);
+    if (unmet.reasons.length > 0) {
+      const reason = oracleUnsatisfiedReason(unmet.reasons);
       const decisions = await aps.readDecisions(input.workItemId);
-      const priorFailures = sameOracleFailureCount(decisions, node.id);
+      // Per-AC K counter (mechanism 5, wi_260624kcv): tally PRIOR failures only for the
+      // criteria THIS attempt left unmet, so a different AC's failures never count here.
+      const priorFailures = sameOracleFailureCount(decisions, node.id, unmet.criterionIds);
       // K boundary (mechanism 5): K failures → blocked. `priorFailures` counts the
       // PRIOR same-oracle decisions; this attempt is the (priorFailures+1)-th. So
       // `priorFailures + 1 >= K` (i.e. the cap counts attempts, not gaps) blocks.
@@ -987,9 +1249,10 @@ export async function recordResult(
         failure_class: blockNow ? 'user_decision_needed' : 'fixable',
         decision: blockNow ? 'escalate' : 'retry',
         reason: blockNow
-          ? `${reason} (same oracle failed ${priorFailures + 1}≥${k} times — blocked, user decision needed)`
+          ? `${reason} (criterion ${unmet.criterionIds.join(', ')} failed its oracle ${priorFailures + 1}≥${k} times — blocked, user decision needed)`
           : reason,
         attempts: node.attempts,
+        criterion_ids: unmet.criterionIds,
       });
       return {
         node_id: node.id,
@@ -1025,7 +1288,10 @@ export async function recordResult(
           `${fixpoint.criterion_id}: oracle marked closed but evidence mismatch (wrong-fixpoint reopen of ${target.id})`,
         ]);
         const decisions = await aps.readDecisions(input.workItemId);
-        const priorFailures = sameOracleFailureCount(decisions, target.id);
+        // Per-AC K counter (mechanism 5, wi_260624kcv): the wrong-fixpoint reopen
+        // concerns a SINGLE criterion (fixpoint.criterion_id) — tally only that one,
+        // sharing the same per-(node, criterion) counter as the in-loop downgrade.
+        const priorFailures = sameOracleFailureCount(decisions, target.id, [fixpoint.criterion_id]);
         const k = graph.caps.oracle_failures_to_block;
         const blockTarget = priorFailures + 1 >= k;
         // reopen takes passed → pending (the only legal exit from passed); a block
@@ -1047,9 +1313,10 @@ export async function recordResult(
           failure_class: blockTarget ? 'user_decision_needed' : 'fixable',
           decision: blockTarget ? 'escalate' : 'retry',
           reason: blockTarget
-            ? `${reason} (same oracle failed ${priorFailures + 1}≥${k} times — blocked, user decision needed)`
+            ? `${reason} (criterion ${fixpoint.criterion_id} failed its oracle ${priorFailures + 1}≥${k} times — blocked, user decision needed)`
             : reason,
           attempts: target.attempts,
+          criterion_ids: [fixpoint.criterion_id],
         });
       }
     }
@@ -1286,6 +1553,38 @@ export async function recordResult(
           ];
         }
       }
+      // ADR-0024 Decision 4 (ac-2) — retro bootstrap at design-close. Every work
+      // item's graph must include a `retro` node AFTER the final verify. It is NOT
+      // in the static seed: a seed retro depending on the seed verify makes
+      // supersede KEEP the seed verify (a survivor depends on it) while removing the
+      // seed verify's own dependency, so removeNodes throws `dangling depends_on` on
+      // every planner-EXPANDED work item. Adding it HERE — after promotion+supersede
+      // have settled — attaches it to the FINAL terminal verify (a verify node
+      // nothing else depends on), so there is no dangling edge and no crash. The
+      // retro carries no acceptance_refs (it measures the run, it covers no
+      // criterion → never a supersede candidate) and is NON-BLOCKING (the retro-exempt
+      // gates in autopilot-driver/loop keep its status from holding the work item
+      // open). Append-once: re-recording the design node finds the existing retro and
+      // skips. Splice via addNodes — the same integrity-gated path as promotion.
+      const grownAfterSupersede = await aps.get(input.workItemId);
+      const retroId = `${node.id}-retro`;
+      const retroExists = grownAfterSupersede.nodes.some((n) => n.id === retroId);
+      const terminalVerifyIds = grownAfterSupersede.nodes
+        .filter((n) => n.kind === 'verify')
+        .filter((v) => !grownAfterSupersede.nodes.some((m) => m.depends_on.includes(v.id)))
+        .map((v) => v.id);
+      if (!retroExists && terminalVerifyIds.length > 0) {
+        const [retroNode] = proposalsToNodes([
+          {
+            id: retroId,
+            kind: 'retro',
+            purpose: 'Retrospect on the run and record measurements',
+            depends_on: terminalVerifyIds,
+            acceptance_refs: [],
+          },
+        ]);
+        if (retroNode) await aps.addNodes(input.workItemId, [retroNode], allowedAcceptanceIds);
+      }
     }
     await aps.updateNode(input.workItemId, node.id, (n) => ({
       ...n,
@@ -1330,6 +1629,26 @@ export async function recordResult(
     if (node.kind === 'implement') {
       const tidyPromoted = await spliceTidyStage(repoRoot, input.workItemId, node, aps);
       promotedNodeIds = [...promotedNodeIds, ...tidyPromoted];
+    }
+    // Retro absorption (ADR-0024 Decision 4, ac-5): a contentful `retro` PASS
+    // absorbs the projection's DURABLE part into cross-WI memory. The narrative is
+    // re-projected from the SAME records the dispatch context was built from (a pure
+    // copy-only projection — the run already wrote them), and only `memory_eligible`
+    // items are absorbed (process-health noise is filtered by absorbRetroMemory).
+    // IDEMPOTENT: the event id is `retroMemoryEventId(work_item_id)` (a stable key),
+    // so re-driving the retro never double-appends (the immutable append rejects the
+    // duplicate → no-op). Fail-open — a memory-store hiccup must not undo the pass it
+    // annotates, so the absorb is best-effort (§4.4 / ADR-0018).
+    if (node.kind === 'retro') {
+      try {
+        const ctx = await collectRetroContext(repoRoot, input.workItemId, graph);
+        await absorbRetroMemory(new MemoryEventStore(repoRoot), ctx.narrative, {
+          createdAt: (input.now ?? new Date()).toISOString(),
+          actorRole: node.owner,
+        });
+      } catch {
+        // durable absorption is non-authoritative — swallow and keep the pass path
+      }
     }
     return {
       node_id: node.id,

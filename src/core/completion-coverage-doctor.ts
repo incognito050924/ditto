@@ -46,6 +46,16 @@ export function isUnitOnlyClosure(ac: CompletionContract['acceptance'][number]):
   return hasCommand && !hasRuntimeOrArtifact;
 }
 
+/**
+ * Aggregate the `isUnitOnlyClosure` probe over a completion's acceptance set
+ * (ADR-0024 결정4 ① 산출물 floor). The per-AC probe above is the unit; the retro
+ * needs the COUNT of unit-only (falsely-green) closures across the work item.
+ * Pure over the completion; absent acceptance ⇒ 0.
+ */
+export function countUnitOnlyClosures(completion: CompletionContract | null): number {
+  return (completion?.acceptance ?? []).filter(isUnitOnlyClosure).length;
+}
+
 export interface CompletionCoverageRow {
   work_item_id: string;
   title: string;

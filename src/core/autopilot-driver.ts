@@ -101,7 +101,15 @@ export function rollbackOnRejection(graph: Autopilot): RollbackResult {
 
 // ── M2.5: automatic continuation between nodes ──────────────────────────────
 
-/** All nodes are terminal (passed/failed) — nothing left to run. */
+/**
+ * All nodes are terminal (passed/failed) — nothing left to run. A `retro`-kind
+ * node is NON-BLOCKING for terminality (ADR-0024 Decision 4): its failed/blocked
+ * status must NOT keep the graph non-terminal, so the run can still reach `done`.
+ * The retro still runs and reports — it just never gates completion. Only the
+ * `retro` kind is exempt; every other node's blocked/failed status is unchanged.
+ */
 export function allNodesTerminal(graph: Autopilot): boolean {
-  return graph.nodes.every((n) => n.status === 'passed' || n.status === 'failed');
+  return graph.nodes.every(
+    (n) => n.kind === 'retro' || n.status === 'passed' || n.status === 'failed',
+  );
 }

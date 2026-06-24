@@ -3,8 +3,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildInitialNodes } from '~/core/autopilot-graph';
-import { recordResult } from '~/core/autopilot-loop';
+import { nextNode, recordResult } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
+import { CoverageStore } from '~/core/coverage-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import type { Autopilot } from '~/schemas/autopilot';
 
@@ -286,6 +287,239 @@ describe('M5 same-oracle K failures → blocked (K counter separate from attempt
   });
 });
 
+describe('M5 per-AC (criterion) K counter — a multi-AC node does NOT conflate failures across criteria (wi_260624kcv)', () => {
+  // The same-oracle K counter is per (node, criterion), not per node. A node closing
+  // two ACs (ac-1, ac-2) keeps a SEPARATE failure tally per criterion, so failures on
+  // ac-2 never push ac-1 toward its oracle_failures_to_block (K) threshold. Legacy
+  // decisions (no criterion_ids field) fall back to node-scoped counting so an
+  // in-flight multi-AC run is never silently reset below threshold.
+
+  // A judging node `V` that closes BOTH ac-1 and ac-2 (two oracles in play).
+  function multiAcVerifyNode(status: 'pending' | 'running' = 'running') {
+    return {
+      id: 'V',
+      kind: 'verify' as const,
+      owner: 'verifier' as const,
+      purpose: 'verify ac-1 and ac-2',
+      status,
+      depends_on: [] as string[],
+      acceptance_refs: ['ac-1', 'ac-2'],
+      evidence_refs: [],
+      attempts: { fix: 0, switch: 0 },
+    };
+  }
+
+  // Add ac-2 to the work item so the multi-AC node has a second criterion in play.
+  async function addAc2(): Promise<void> {
+    await wis.update(WI, (w) => ({
+      ...w,
+      acceptance_criteria: [
+        ...w.acceptance_criteria,
+        { id: 'ac-2', statement: 'second criterion', verdict: 'unverified', evidence: [] },
+      ],
+    }));
+  }
+
+  async function writeMultiAcGraph(k: number): Promise<void> {
+    await aps.write(WI, {
+      ...graph({
+        nodes: [multiAcVerifyNode('running')],
+        caps: { fix_per_node: 9, switch_per_node: 9, oracle_failures_to_block: k },
+      }),
+      work_item_id: WI,
+    });
+  }
+
+  // Record a note-only (oracle-unsatisfied) pass for a SINGLE criterion. Re-arms V to
+  // running for the next attempt (the driver re-dispatches a pending node).
+  async function recordOracleFailFor(
+    acId: string,
+  ): Promise<{ status: string; cap_exceeded: boolean }> {
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text: `Claims ${acId} pass but only a note backs the static_scan oracle.`,
+        outcome: 'pass',
+        ac_verdicts: [
+          {
+            criterion_id: acId,
+            verdict: 'pass',
+            evidence_refs: [{ kind: 'note', summary: 'looks clean' }],
+          },
+        ],
+      },
+    });
+    if (res.status === 'pending') {
+      await aps.updateNode(WI, 'V', (n) => ({ ...n, status: 'running' }));
+    }
+    return { status: res.status, cap_exceeded: res.cap_exceeded };
+  }
+
+  test('multi-AC separation: ac-1 fails K−1 times and ac-2 once → ac-1 NOT blocked; one more ac-1 failure blocks', async () => {
+    const K = 3;
+    await addAc2();
+    await assignOracle('ac-1', {
+      verification_method: 'static_scan',
+      maps_to: 'ac-1',
+      direction: 'forward',
+    });
+    await assignOracle('ac-2', {
+      verification_method: 'static_scan',
+      maps_to: 'ac-2',
+      direction: 'forward',
+    });
+    await writeMultiAcGraph(K);
+    // ac-1 fails K−1 = 2 times (re-opens, never blocks).
+    const a1 = await recordOracleFailFor('ac-1');
+    expect(a1.status).toBe('pending');
+    const a2 = await recordOracleFailFor('ac-1');
+    expect(a2.status).toBe('pending');
+    // ac-2 fails ONCE. If the counter conflated, this 3rd same-NODE failure would
+    // already be at K and block — it must NOT, because ac-2's own tally is just 1.
+    const b1 = await recordOracleFailFor('ac-2');
+    expect(b1.status).toBe('pending');
+    expect(b1.cap_exceeded).toBe(false);
+    // One MORE ac-1 failure is ac-1's K-th → ac-1 blocks (proving the per-criterion
+    // tally, not the node tally, drives the block).
+    const a3 = await recordOracleFailFor('ac-1');
+    expect(a3.status).toBe('blocked');
+    expect(a3.cap_exceeded).toBe(true);
+  });
+
+  test('single-AC regression: a single-criterion node still blocks at exactly the K-th failure', async () => {
+    const K = 3;
+    await assignOracle('ac-1', {
+      verification_method: 'static_scan',
+      maps_to: 'ac-1',
+      direction: 'forward',
+    });
+    await aps.write(WI, {
+      ...graph({
+        nodes: [verifyNode('running')],
+        caps: { fix_per_node: 9, switch_per_node: 9, oracle_failures_to_block: K },
+      }),
+      work_item_id: WI,
+    });
+    async function failAc1(): Promise<{ status: string; cap_exceeded: boolean }> {
+      const res = await recordResult(repo, {
+        workItemId: WI,
+        now: NOW,
+        payload: {
+          node_id: 'V',
+          result_text: 'Claims ac-1 pass but only a note backs the static_scan oracle.',
+          outcome: 'pass',
+          ac_verdicts: [
+            {
+              criterion_id: 'ac-1',
+              verdict: 'pass',
+              evidence_refs: [{ kind: 'note', summary: 'looks clean' }],
+            },
+          ],
+        },
+      });
+      if (res.status === 'pending') {
+        await aps.updateNode(WI, 'V', (n) => ({ ...n, status: 'running' }));
+      }
+      return { status: res.status, cap_exceeded: res.cap_exceeded };
+    }
+    expect((await failAc1()).status).toBe('pending'); // 1st
+    expect((await failAc1()).status).toBe('pending'); // 2nd
+    const third = await failAc1();
+    expect(third.status).toBe('blocked'); // K-th
+    expect(third.cap_exceeded).toBe(true);
+  });
+
+  test('legacy fallback: decisions without criterion_ids are counted node-scoped (in-flight node at K−1 legacy failures still blocks next)', async () => {
+    const K = 3;
+    await assignOracle('ac-1', {
+      verification_method: 'static_scan',
+      maps_to: 'ac-1',
+      direction: 'forward',
+    });
+    await aps.write(WI, {
+      ...graph({
+        nodes: [verifyNode('running')],
+        caps: { fix_per_node: 9, switch_per_node: 9, oracle_failures_to_block: K },
+      }),
+      work_item_id: WI,
+    });
+    // Seed K−1 = 2 LEGACY oracle-unsatisfied decisions on V (no criterion_ids field —
+    // an in-flight run recorded before this change). The next failure must block.
+    for (let i = 0; i < K - 1; i++) {
+      await aps.appendDecision(WI, {
+        ts: NOW.toISOString(),
+        node_id: 'V',
+        failure_class: 'fixable',
+        decision: 'retry',
+        reason: 'oracle-unsatisfied: ac-1: legacy entry (no criterion_ids)',
+        attempts: { fix: 0, switch: 0 },
+      });
+    }
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text: 'Claims ac-1 pass but only a note backs the static_scan oracle.',
+        outcome: 'pass',
+        ac_verdicts: [
+          {
+            criterion_id: 'ac-1',
+            verdict: 'pass',
+            evidence_refs: [{ kind: 'note', summary: 'looks clean' }],
+          },
+        ],
+      },
+    });
+    // 2 legacy (node-scoped) + this = 3 = K ⇒ blocked. The legacy entries are NOT
+    // silently dropped just because they lack criterion_ids.
+    expect(res.status).toBe('blocked');
+    expect(res.cap_exceeded).toBe(true);
+  });
+
+  test('block reason names the criterion (ADR-0024 Decision 7 SoT stays self-explanatory)', async () => {
+    const K = 1;
+    await assignOracle('ac-1', {
+      verification_method: 'static_scan',
+      maps_to: 'ac-1',
+      direction: 'forward',
+    });
+    await aps.write(WI, {
+      ...graph({
+        nodes: [verifyNode('running')],
+        caps: { fix_per_node: 9, switch_per_node: 9, oracle_failures_to_block: K },
+      }),
+      work_item_id: WI,
+    });
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text: 'Claims ac-1 pass but only a note backs the static_scan oracle.',
+        outcome: 'pass',
+        ac_verdicts: [
+          {
+            criterion_id: 'ac-1',
+            verdict: 'pass',
+            evidence_refs: [{ kind: 'note', summary: 'looks clean' }],
+          },
+        ],
+      },
+    });
+    const decisions = await aps.readDecisions(WI);
+    const blockDecision = decisions.find((d) => d.decision === 'escalate');
+    expect(blockDecision).toBeDefined();
+    // The block reason must name the criterion so the decision log is self-explanatory.
+    expect(blockDecision?.reason).toContain('ac-1');
+    expect(blockDecision?.reason).toContain('criterion');
+    // And the structured criterion_ids field is written.
+    expect(blockDecision?.criterion_ids).toEqual(['ac-1']);
+  });
+});
+
 describe('M4 wrong-fixpoint reopen (oracle closed yet evidence mismatch → reopen the passed node, append-only)', () => {
   // A passed node `P` (oracle was marked closed) is found, by a later re-checking
   // node `V`, to have an oracle/evidence mismatch. The wrong-fixpoint reopen returns
@@ -541,5 +775,373 @@ describe('M1 converged vs capped disposition at done (all_passed distinguishes o
     if (res.action !== 'done') throw new Error('expected done');
     expect(res.all_passed).toBe(true);
     expect(res.disposition).toBe('capped');
+  });
+});
+
+describe('ADR-0024 Decision 4 — retro is NON-BLOCKING for completion/terminality (ac-3)', () => {
+  // A `retro`-kind node must NOT gate work-item completion: a failed or blocked retro
+  // must still let the graph reach `done`, must NOT flip all_passed to false, and must
+  // NOT trigger the blocked escalation. The retro still runs and reports — it just never
+  // gates completion. A NON-retro failed/blocked node behaves exactly as before.
+  function retro(status: 'passed' | 'failed' | 'blocked') {
+    return {
+      id: 'R',
+      kind: 'retro' as const,
+      owner: 'retrospective' as const,
+      purpose: 'retrospective',
+      status,
+      depends_on: [] as string[],
+      acceptance_refs: [] as string[],
+      evidence_refs: [],
+      attempts: { fix: 0, switch: 0 },
+    };
+  }
+  const allPassedWork = () =>
+    buildInitialNodes(['ac-1']).map((n) => ({ ...n, status: 'passed' as const }));
+
+  test('a FAILED retro (only non-passed node) → done, all_passed true, disposition=converged', async () => {
+    await aps.write(WI, {
+      ...graph({ nodes: [...allPassedWork(), retro('failed')] }),
+      work_item_id: WI,
+    });
+    const { nextNode } = await import('~/core/autopilot-loop');
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('done');
+    if (res.action !== 'done') throw new Error('expected done');
+    // the failed retro must NOT degrade completion: all_passed stays true (retro excluded).
+    expect(res.all_passed).toBe(true);
+    expect(res.disposition).toBe('converged');
+  });
+
+  test('a BLOCKED retro (only non-passed node) → done, NOT blocked-escalation', async () => {
+    await aps.write(WI, {
+      ...graph({ nodes: [...allPassedWork(), retro('blocked')] }),
+      work_item_id: WI,
+    });
+    const { nextNode } = await import('~/core/autopilot-loop');
+    const res = await nextNode(repo, WI);
+    // the blocked retro must NOT halt the run via the blocked escalation — the graph
+    // is terminal and reaches `done` with completion not degraded.
+    expect(res.action).toBe('done');
+    if (res.action !== 'done') throw new Error('expected done');
+    expect(res.all_passed).toBe(true);
+    expect(res.disposition).toBe('converged');
+  });
+
+  test('regression: a FAILED NON-retro node still degrades completion (done, all_passed false)', async () => {
+    const nodes = buildInitialNodes(['ac-1']).map((n, i) =>
+      i === 2 ? { ...n, status: 'failed' as const } : { ...n, status: 'passed' as const },
+    );
+    await aps.write(WI, { ...graph({ nodes }), work_item_id: WI });
+    const { nextNode } = await import('~/core/autopilot-loop');
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('done');
+    if (res.action !== 'done') throw new Error('expected done');
+    expect(res.all_passed).toBe(false);
+    expect(res.disposition).toBe(null);
+  });
+
+  test('regression: a BLOCKED NON-retro node still halts via blocked escalation', async () => {
+    const nodes = buildInitialNodes(['ac-1']).map((n, i) =>
+      i === 2 ? { ...n, status: 'blocked' as const } : { ...n, status: 'passed' as const },
+    );
+    await aps.write(WI, { ...graph({ nodes }), work_item_id: WI });
+    const { nextNode } = await import('~/core/autopilot-loop');
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('blocked');
+  });
+});
+
+describe('ADR-0024 Decision 7 — loop termination is an EXPLICIT recorded decision (ac-6, not silent)', () => {
+  // The whole-graph loop disposition (converged | capped | blocked) is currently
+  // COMPUTED but never persisted — it lives only as the done-action return value.
+  // Decision 7 (의사결정 투명성): the loop termination must be recorded (확인 OR 문서
+  // OR 계약 중 최소 하나), with a reason. The single SoT is the autopilot decision
+  // log (the SAME log the `capped` disposition is already derived from), recorded
+  // via a `loop_terminated` decision carrying an explicit `disposition` field that
+  // MATCHES the returned action's disposition (no second drifting derivation).
+  const allPassed = () =>
+    buildInitialNodes(['ac-1']).map((n) => ({ ...n, status: 'passed' as const }));
+
+  function termination(decisions: Awaited<ReturnType<AutopilotStore['readDecisions']>>) {
+    return decisions.filter((d) => d.decision === 'loop_terminated');
+  }
+
+  test('converged termination records ONE loop_terminated decision with disposition=converged + a reason', async () => {
+    await aps.write(WI, { ...graph({ nodes: allPassed() }), work_item_id: WI });
+    const { nextNode } = await import('~/core/autopilot-loop');
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('done');
+    if (res.action !== 'done') throw new Error('expected done');
+    const recs = termination(await aps.readDecisions(WI));
+    expect(recs.length).toBe(1);
+    expect(recs[0]?.disposition).toBe('converged');
+    // recorded disposition matches the returned (computed) one — one SoT, no drift.
+    expect(recs[0]?.disposition).toBe(res.disposition);
+    expect((recs[0]?.reason ?? '').length).toBeGreaterThan(0);
+  });
+
+  test('capped termination records disposition=capped (matches convergence exit.reason cap_reached semantics)', async () => {
+    await aps.write(WI, { ...graph({ nodes: allPassed() }), work_item_id: WI });
+    await aps.appendDecision(WI, {
+      ts: NOW.toISOString(),
+      node_id: 'N3',
+      failure_class: 'user_decision_needed',
+      decision: 'escalate',
+      reason:
+        'loop-level iteration cap reached (12 forward rounds ≥ loop_rounds 12) with findings still open on N3; capped ≠ converged, escalate rather than expand',
+      attempts: { fix: 0, switch: 0 },
+    });
+    const { nextNode } = await import('~/core/autopilot-loop');
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('done');
+    if (res.action !== 'done') throw new Error('expected done');
+    expect(res.disposition).toBe('capped');
+    const recs = termination(await aps.readDecisions(WI));
+    expect(recs.length).toBe(1);
+    expect(recs[0]?.disposition).toBe('capped');
+  });
+
+  test('partial-fail termination (all_passed false at done) records disposition=blocked WITH a reason (this is when the record matters most)', async () => {
+    const nodes = buildInitialNodes(['ac-1']).map((n, i) =>
+      i === 2 ? { ...n, status: 'failed' as const } : { ...n, status: 'passed' as const },
+    );
+    await aps.write(WI, { ...graph({ nodes }), work_item_id: WI });
+    const { nextNode } = await import('~/core/autopilot-loop');
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('done');
+    if (res.action !== 'done') throw new Error('expected done');
+    expect(res.all_passed).toBe(false);
+    const recs = termination(await aps.readDecisions(WI));
+    expect(recs.length).toBe(1);
+    // a failure-termination is NOT a fixpoint — recorded as `blocked` (the
+    // convergence vocabulary for "closed without convergence"), never null/silent.
+    expect(recs[0]?.disposition).toBe('blocked');
+    expect((recs[0]?.reason ?? '').length).toBeGreaterThan(0);
+  });
+
+  test('blocked-escalation termination (a node blocked on a user-owned decision) records disposition=blocked', async () => {
+    const nodes = buildInitialNodes(['ac-1']).map((n, i) =>
+      i === 2 ? { ...n, status: 'blocked' as const } : { ...n, status: 'passed' as const },
+    );
+    await aps.write(WI, { ...graph({ nodes }), work_item_id: WI });
+    const { nextNode } = await import('~/core/autopilot-loop');
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('blocked');
+    const recs = termination(await aps.readDecisions(WI));
+    expect(recs.length).toBe(1);
+    expect(recs[0]?.disposition).toBe('blocked');
+  });
+
+  test('idempotent: a repeated next-node at terminal does NOT append a second termination record', async () => {
+    await aps.write(WI, { ...graph({ nodes: allPassed() }), work_item_id: WI });
+    const { nextNode } = await import('~/core/autopilot-loop');
+    await nextNode(repo, WI);
+    await nextNode(repo, WI);
+    await nextNode(repo, WI);
+    const recs = termination(await aps.readDecisions(WI));
+    expect(recs.length).toBe(1);
+  });
+
+  test('disposition drift: a blocked termination that later UNBLOCKS+CONVERGES records the LATEST disposition (converged), and a same-disposition re-poll appends nothing', async () => {
+    // A node can transition blocked → running (autopilot-graph), so a run can
+    // record `blocked`, then unblock and converge. The guard must key on the
+    // DISPOSITION too: the LATEST loop_terminated entry must be the authoritative
+    // final disposition (append-only log, latest wins) — not a stale `blocked`.
+    const { nextNode } = await import('~/core/autopilot-loop');
+
+    // Phase 1: one node blocked on a user-owned decision → blocked-escalation
+    // termination recorded as `blocked`.
+    const blockedNodes = buildInitialNodes(['ac-1']).map((n, i) =>
+      i === 2 ? { ...n, status: 'blocked' as const } : { ...n, status: 'passed' as const },
+    );
+    await aps.write(WI, { ...graph({ nodes: blockedNodes }), work_item_id: WI });
+    const blockedRes = await nextNode(repo, WI);
+    expect(blockedRes.action).toBe('blocked');
+    let recs = termination(await aps.readDecisions(WI));
+    expect(recs.length).toBe(1);
+    expect(recs.at(-1)?.disposition).toBe('blocked');
+
+    // A same-disposition re-poll (still blocked) must append NOTHING (idempotent).
+    await nextNode(repo, WI);
+    recs = termination(await aps.readDecisions(WI));
+    expect(recs.length).toBe(1);
+
+    // Phase 2: the node unblocks and the run converges (every node passed).
+    await aps.write(WI, { ...graph({ nodes: allPassed() }), work_item_id: WI });
+    const doneRes = await nextNode(repo, WI);
+    expect(doneRes.action).toBe('done');
+    if (doneRes.action !== 'done') throw new Error('expected done');
+    expect(doneRes.disposition).toBe('converged');
+
+    // The disposition DIFFERS (blocked → converged) ⇒ a new entry is appended, and
+    // the LATEST entry is the authoritative final disposition.
+    recs = termination(await aps.readDecisions(WI));
+    expect(recs.length).toBe(2);
+    expect(recs.at(-1)?.disposition).toBe('converged');
+
+    // A same-disposition re-poll now (still converged) appends nothing.
+    await nextNode(repo, WI);
+    recs = termination(await aps.readDecisions(WI));
+    expect(recs.length).toBe(2);
+    expect(recs.at(-1)?.disposition).toBe('converged');
+  });
+
+  test('a retro-only non-pass still terminates `converged` and records it (retro non-blocking preserved)', async () => {
+    const retro = {
+      id: 'R',
+      kind: 'retro' as const,
+      owner: 'retrospective' as const,
+      purpose: 'retrospective',
+      status: 'failed' as const,
+      depends_on: [] as string[],
+      acceptance_refs: [] as string[],
+      evidence_refs: [],
+      attempts: { fix: 0, switch: 0 },
+    };
+    await aps.write(WI, { ...graph({ nodes: [...allPassed(), retro] }), work_item_id: WI });
+    const { nextNode } = await import('~/core/autopilot-loop');
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('done');
+    if (res.action !== 'done') throw new Error('expected done');
+    expect(res.disposition).toBe('converged');
+    const recs = termination(await aps.readDecisions(WI));
+    expect(recs.length).toBe(1);
+    expect(recs[0]?.disposition).toBe('converged');
+  });
+});
+
+describe('ADR-0024 Decision 4 — a retro node is appended at design-close after the terminal verify (ac-2)', () => {
+  // Observable: every work-item graph includes a `retro` node after the FINAL verify.
+  // The retro is NOT in the static seed (that would leave a dangling depends_on when
+  // the seed verify is superseded); it is added when the design node CLOSES the plan
+  // stage (carries plan_brief), AFTER promotion + supersede have settled, so it
+  // attaches to the verify node nothing else depends on. owner=retrospective,
+  // acceptance_refs=[] (it measures, it covers no criterion).
+  const planBrief = {
+    change_surface: ['src/x.ts'],
+    interface_changes: [],
+    dod: ['done'],
+    test_scenarios: ['t'],
+    tier_inputs: {
+      changedFileCount: 1,
+      interfaceChanged: false,
+      risk: { non_local: false, irreversible: false, unaudited: false },
+      large: false,
+    },
+  };
+  const proposal = (
+    id: string,
+    kind: 'implement' | 'verify',
+    depends_on: string[],
+    acceptance_refs: string[],
+  ) => ({ id, kind, purpose: `p-${id}`, depends_on, acceptance_refs });
+
+  // A design pass carrying plan_brief is only valid after a real coverage sweep
+  // wrote coverage.json (the plan-stage-close precondition); seed it.
+  async function seedCoverage(): Promise<void> {
+    await new CoverageStore(repo).writeMap(WI, {
+      schema_version: '0.1.0',
+      work_item_id: WI,
+      root_id: 'cov-root',
+      nodes: [
+        {
+          id: 'cov-root',
+          parent_id: null,
+          label: 'intent',
+          origin: 'seed',
+          depth_weight: 0,
+          state: 'resolved',
+          children: [],
+        },
+      ],
+    });
+  }
+
+  function retros(g: Autopilot) {
+    return g.nodes.filter((n) => n.kind === 'retro');
+  }
+  // the terminal verify = a verify-kind node no NON-retro node depends on (the retro
+  // we appended depends on it by design, so it is excluded from the "depends on"
+  // scan — otherwise the very edge under test would mask the terminal verify).
+  function terminalVerifyIds(g: Autopilot): string[] {
+    const work = g.nodes.filter((n) => n.kind !== 'retro');
+    return work
+      .filter((n) => n.kind === 'verify')
+      .filter((v) => !work.some((m) => m.depends_on.includes(v.id)))
+      .map((v) => v.id);
+  }
+
+  test('design close with promoted generated_nodes → retro attaches to the promoted terminal verify', async () => {
+    await aps.write(WI, { ...graph(), work_item_id: WI });
+    await seedCoverage();
+    await nextNode(repo, WI); // dispatch N1 (design)
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text: 'plan: G1 implements ac-1, G2 verifies it; seed N2/N3 superseded',
+        outcome: 'pass',
+        plan_brief: planBrief,
+        generated_nodes: [
+          proposal('G1', 'implement', ['N1'], ['ac-1']),
+          proposal('G2', 'verify', ['G1'], ['ac-1']),
+        ],
+      },
+    });
+    expect(res.superseded_node_ids?.sort()).toEqual(['N2', 'N3']);
+    const g = await aps.get(WI);
+    const rs = retros(g);
+    expect(rs.length).toBe(1);
+    const retro = rs[0];
+    if (!retro) throw new Error('expected a retro node');
+    expect(retro.owner).toBe('retrospective');
+    expect(retro.acceptance_refs).toEqual([]);
+    // attaches to the terminal verify (G2, the promoted verify nothing depends on).
+    expect(terminalVerifyIds(g)).toEqual(['G2']);
+    expect(retro.depends_on).toEqual(['G2']);
+  });
+
+  test('design close with NO generated_nodes (3-node seed) → retro attaches to the seed verify N3', async () => {
+    await aps.write(WI, { ...graph(), work_item_id: WI });
+    await seedCoverage();
+    await nextNode(repo, WI); // dispatch N1 (design)
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text: 'plan: keep the seed chain; no subgraph generated',
+        outcome: 'pass',
+        plan_brief: planBrief,
+      },
+    });
+    const g = await aps.get(WI);
+    const rs = retros(g);
+    expect(rs.length).toBe(1);
+    const retro = rs[0];
+    if (!retro) throw new Error('expected a retro node');
+    expect(retro.owner).toBe('retrospective');
+    expect(retro.acceptance_refs).toEqual([]);
+    // the seed verify N3 is the terminal verify; the retro depends on it.
+    expect(terminalVerifyIds(g)).toEqual(['N3']);
+    expect(retro.depends_on).toEqual(['N3']);
+  });
+
+  test('a legacy design pass WITHOUT plan_brief does NOT add a retro (plan stage not closed)', async () => {
+    await aps.write(WI, { ...graph(), work_item_id: WI });
+    await nextNode(repo, WI);
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text: 'legacy design pass, no plan_brief',
+        outcome: 'pass',
+      },
+    });
+    const g = await aps.get(WI);
+    expect(retros(g).length).toBe(0);
   });
 });

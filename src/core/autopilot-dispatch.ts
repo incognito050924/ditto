@@ -1,6 +1,18 @@
 import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
 import type { AcOracle, WorkItem } from '~/schemas/work-item';
 import type { MemoryWarmStartContext } from './memory-warmstart';
+import type { RetroMetrics, RetroNarrative } from './retro-measure';
+
+/**
+ * Retro presentation context (ADR-0024 결정4): the assembled metrics + the
+ * projection-only narrative the retrospective agent PRESENTS (it does not invent
+ * them). Carried only on a retro node's packet. The two metrics are KEPT SEPARATE
+ * by `RetroMetrics`; the narrative is a pure projection of run records.
+ */
+export interface RetroContext {
+  metrics: RetroMetrics;
+  narrative: RetroNarrative;
+}
 
 /**
  * An addressed acceptance criterion resolved for the packet (ADR-0024 ac-3, ②
@@ -41,6 +53,11 @@ export interface DelegationPacket {
     // memory graph fail-open and injects the result here; absent/stale/no-coverage
     // ⇒ undefined ⇒ the packet is byte-for-byte what it was without memory.
     memory?: MemoryWarmStartContext;
+    // Retro presentation context (ADR-0024 결정4): the assembled SEPARATED metrics
+    // + projection-only narrative the retrospective agent presents (it does not
+    // invent them). Present only on a retro node's packet; absent ⇒ packet is
+    // byte-for-byte the no-retro path.
+    retro?: RetroContext;
   };
   // Variant routing: deterministically filtered specialized-subagent candidates
   // (role + file_scope match). The driver picks a `subagent_type` from these
@@ -121,6 +138,10 @@ export function buildDelegationPacket(
   // it never queries the memory graph — the loop does that fail-open and passes
   // the result here, or `undefined` (then `context.memory` is omitted entirely).
   memoryContext?: MemoryWarmStartContext,
+  // Retro presentation context (ADR-0024 결정4). Same purity contract as memory:
+  // the loop assembles the SEPARATED metrics + projection-only narrative fail-open
+  // and passes it here for a retro node; `undefined` ⇒ `context.retro` is omitted.
+  retroContext?: RetroContext,
 ): DelegationPacket {
   const isPlanner = node.owner === 'planner';
   // ADR-0024 ac-3 (② DELIVER): resolve each addressed AC id to its statement +
@@ -178,6 +199,9 @@ export function buildDelegationPacket(
       // Only present when the loop supplied a non-empty warm-start context; an
       // omitted field keeps the packet identical to the no-memory path.
       ...(memoryContext ? { memory: memoryContext } : {}),
+      // Only present on a retro node (loop assembles + passes it); omitted ⇒ the
+      // packet is byte-for-byte the no-retro path.
+      ...(retroContext ? { retro: retroContext } : {}),
     },
     variant_candidates: variantCandidates,
   };
