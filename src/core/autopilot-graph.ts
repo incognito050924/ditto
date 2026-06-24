@@ -340,6 +340,16 @@ export function validateNodeAddition(
     }
   }
 
+  // NOTE (wi_260624fe0): an earlier guard here rejected any read-only owner with
+  // a non-empty `file_scope`, but `file_scope` is dual-meaning — on a read-only
+  // node it is a READ/focus signal (and drives dispatch variant routing per
+  // agents/planner.md:24), not a write claim. `nodeProposal` carries no
+  // write-intent field, so no structured signal at splice time distinguishes
+  // read-focus from write-intent; a file_scope-keyed reject is the wrong
+  // mechanism. The rule "mutating work (test authoring, new files) goes to a
+  // mutating owner, not a read-only one" is carried by planner guidance
+  // (planner.md), not a deterministic splice guard.
+
   const merged = [...existing, ...newNodes];
   const byId = new Map(merged.map((n) => [n.id, n]));
   for (const node of newNodes) {

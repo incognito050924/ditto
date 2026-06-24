@@ -40826,13 +40826,11 @@ var setupCommand = defineCommand({
       const projectRoot = targetDir ? resolve22(targetDir) : await resolveRepoRootForCreate();
       const resourcesDir = resolveResourcesDir();
       const pluginRoot = resolve22(resourcesDir, "..", "..");
-      const selfHost = pluginRoot === projectRoot;
-      const setupHost = selfHost && includesCodex(host) ? "codex" : host;
-      if (selfHost && !includesCodex(host)) {
+      if (pluginRoot === projectRoot) {
         writeHuman(`setup: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
       }
-      if (!selfHost && process.stdin.isTTY && !args.yes) {
+      if (process.stdin.isTTY && !args.yes) {
         await runWizard(resourcesDir, projectRoot);
         return;
       }
@@ -40842,10 +40840,10 @@ var setupCommand = defineCommand({
         homeDir: homedir11(),
         ...process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {},
         now: new Date,
-        host: setupHost,
-        ...includesCodex(setupHost) ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) } : {}
+        host,
+        ...includesCodex(host) ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) } : {}
       });
-      writeHuman(`setup: installed into ${projectRoot} (host=${setupHost})`);
+      writeHuman(`setup: installed into ${projectRoot} (host=${host})`);
       for (const r3 of result2.resources) {
         const tag = r3.status === "corrupted" ? "SKIPPED (corrupted markers)" : r3.status === "kept" ? `\u2192 ${r3.destPath} (kept existing source)` : `\u2192 ${r3.destPath}`;
         const bak = r3.backupPath ? ` (backup ${r3.backupPath})` : "";
@@ -42025,4 +42023,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=d7dcb2be4b98ce0fc42857f628468d12eb73b3ac5c50d203baff1e5403a8fd1c
+//# ditto-src-stamp=07ffc7894239b5bf9201e440446f465305c9f435601beb1a3347bb99fbbc608e

@@ -228,6 +228,63 @@ describe('validateNodeAddition (A-1: integrity gate for node-add)', () => {
     const existing = buildInitialNodes(['ac-1']);
     expect(() => validateNodeAddition(existing, [refNode('N4', ['ac-9'])])).not.toThrow();
   });
+
+  // wi_260624fe0 (ac-1/ac-2, narrowed): `file_scope` is dual-meaning — on a
+  // read-only node it is a READ/focus signal (and drives variant routing), not a
+  // write claim. `nodeProposal` carries no write-intent field, so no structured
+  // signal at splice time distinguishes read-focus from write-intent. The earlier
+  // guard that rejected any read-only owner + non-empty file_scope was over-broad
+  // (it broke the legitimate read-focus / variant-routing pattern); the rule
+  // "mutating work goes to a mutating owner" is now carried by planner guidance.
+  // So a read-only owner WITH a file_scope must splice clean.
+  const ownedNode = (
+    id: string,
+    kind: AutopilotNode['kind'],
+    owner: AutopilotNode['owner'],
+    file_scope?: string[],
+  ): AutopilotNode => ({
+    ...node(id, ['N3']),
+    kind,
+    owner,
+    ...(file_scope !== undefined ? { file_scope } : {}),
+  });
+
+  test('accepts a read-only owner (verify) carrying a non-empty file_scope (read-focus / variant routing)', () => {
+    const existing = buildInitialNodes(['ac-1']);
+    expect(() =>
+      validateNodeAddition(existing, [ownedNode('N4', 'verify', 'verifier', ['src/core/x.ts'])]),
+    ).not.toThrow();
+  });
+
+  test('accepts a read-only owner (research) carrying a non-empty file_scope (read-focus)', () => {
+    const existing = buildInitialNodes(['ac-1']);
+    expect(() =>
+      validateNodeAddition(existing, [ownedNode('N4', 'research', 'researcher', ['src/core/x.ts'])]),
+    ).not.toThrow();
+  });
+
+  test('accepts a mutating owner (implement) carrying a non-empty file_scope', () => {
+    const existing = buildInitialNodes(['ac-1']);
+    expect(() =>
+      validateNodeAddition(existing, [
+        ownedNode('N4', 'implement', 'implementer', ['tests/x.test.ts']),
+      ]),
+    ).not.toThrow();
+  });
+
+  test('accepts a read-only owner (verify) with no file_scope (normal verify node)', () => {
+    const existing = buildInitialNodes(['ac-1']);
+    expect(() =>
+      validateNodeAddition(existing, [ownedNode('N4', 'verify', 'verifier')]),
+    ).not.toThrow();
+  });
+
+  test('accepts a read-only owner (verify) with an empty file_scope', () => {
+    const existing = buildInitialNodes(['ac-1']);
+    expect(() =>
+      validateNodeAddition(existing, [ownedNode('N4', 'verify', 'verifier', [])]),
+    ).not.toThrow();
+  });
 });
 
 describe('proposalsToNodes (A-3: intent-level proposal → full node)', () => {
