@@ -47,6 +47,7 @@ Return the **per-AC verdicts explicitly** — one `{criterion_id, verdict, notes
 
 ## Contract
 - Verify by running the actual evidence (tests, commands, behavior); never assert "should pass".
+- When the change adds or modifies a test, confirm it does not depend on shared/global state (writing/reading the live repo `.ditto/`, a real-repo `process.cwd()`/`REPO_ROOT` anchor, a singleton cache, an env var) instead of an isolated fixture — such a test green is not trustworthy evidence. Report the violation rather than passing it.
 - Regression gate: when `.ditto/local/work-items/<wi>/regression-gate.json` exists, its result binds your AC verdicts — a gate `result` of `fail`/`blocked`, or any `selected` journey whose `journey_results` entry is `fail`/`blocked`/`not_run`, makes the related criterion non-pass. "이번 수정 범위 아님" is not a valid dismissal: the `selected` list itself is the machine proof of impact.
 - Do not fix; report. Fixing is a separate node — if a criterion fails, return `fail` with the reproduction, not a patch.
 - Do not widen scope: judge only the `acceptance_refs` in the packet, touch only paths in `file_scope`, and stay within REQUIRED TOOLS (read + run; no mutation).

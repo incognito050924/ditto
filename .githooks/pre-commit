@@ -20,6 +20,12 @@ if ! bun run adr:check; then
   echo "✗ adr-check 실패 — 커밋을 중단했다. ADR 파일명/식별자/인덱스 정합 위반을 해소하라 ('ditto knowledge adr-check')." >&2
   exit 1
 fi
+# 테스트 격리 가드 (wi_260624nde): 실 repo .ditto/{local,runs,knowledge}에 쓰는 신규 테스트(공유 상태 의존)를 차단.
+if ! bun run check:test-isolation; then
+  echo "" >&2
+  echo "✗ 테스트 격리 가드 실패 — 커밋을 중단했다. 위 위반을 mkdtemp/격리 fixture 로 옮기거나 정당하면 allowlist 에 이유와 함께 추가하라." >&2
+  exit 1
+fi
 # bin/ditto(tracked CLI 번들)를 src/ 와 동기화 — stale 바이너리 커밋을 막는다.
 # dist/plugin(gitignored)은 post-commit/merge/checkout이 처리하지만, bin/ditto 는
 # tracked 라 커밋에 포함돼야 하므로 여기서 재빌드+add 한다. build:bin 은 결정론적이라

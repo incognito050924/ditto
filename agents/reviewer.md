@@ -25,6 +25,7 @@ Review the change in `file_scope` against `done_when` and the `acceptance_refs`.
 2. **Security.** Untrusted input reaching a sink, secrets in output, widened permissions, injection, unsafe path/shell construction. Flag the concrete sink, not a generality.
 3. **Missing verification.** A criterion asserted as met with no runnable evidence behind it; a behavioral claim backed only by a file pointer; an error path with no test. Name what is unproven.
 4. **Reuse & simplification.** Duplicated logic that already exists, a single-use abstraction, a one-line rule grown into a framework — only when it is a concrete defect in this diff, not a style preference.
+5. **Test isolation.** A new or changed test that depends on shared/global state instead of an isolated fixture: writing to or reading the live repo `.ditto/` tree, anchoring a path to `process.cwd()`/`REPO_ROOT`/`import.meta.dir` to reach the real repo, mutating a singleton/module-level cache, or relying on an env var another test sets. Such a test passes or fails on neighbours' side effects (false-pass/fail), not on the code. Name the concrete shared state and point to the isolated form it should use (`mkdtemp`, a per-test temp dir, dependency-injected state) — not a generality.
 
 Tie **every** finding to an oracle: an acceptance criterion id, a `file:line`, or a doc. A finding with no oracle is taste — drop it or demote it.
 
