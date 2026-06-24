@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { autopilot } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
+import { convergence } from '~/schemas/convergence';
 import { e2eJourney } from '~/schemas/e2e-journey';
 import { commandLogEntry } from '~/schemas/evidence-log';
 import { glossary } from '~/schemas/glossary';
@@ -83,6 +85,33 @@ describe('repo .ditto self-validation', () => {
     }
   });
 
+  // ADR-0024 Decision 6 (wi_260623u0d): autopilot.json is the artifact the
+  // loop-discipline change most plausibly breaks (it added optional caps:
+  // oracle_failures_to_block / loop_rounds). Validate any ON-DISK autopilot.json so
+  // an additive-but-mis-shaped schema change is caught against real in-flight state
+  // (readJson hard-throws on a mismatch — this is the migration guard, exercised).
+  test('every work-items/<id>/autopilot.json conforms to schema if present', async () => {
+    const dirs = await listWorkItemDirs();
+    for (const dir of dirs) {
+      const path = join(dir, 'autopilot.json');
+      const file = Bun.file(path);
+      if (!(await file.exists())) continue;
+      const data = JSON.parse(await file.text());
+      autopilot.parse(data);
+    }
+  });
+
+  test('every work-items/<id>/convergence.json conforms to schema if present', async () => {
+    const dirs = await listWorkItemDirs();
+    for (const dir of dirs) {
+      const path = join(dir, 'convergence.json');
+      const file = Bun.file(path);
+      if (!(await file.exists())) continue;
+      const data = JSON.parse(await file.text());
+      convergence.parse(data);
+    }
+  });
+
   test('every work-items/<id>/completion.json conforms to schema if present', async () => {
     const dirs = await listWorkItemDirs();
     for (const dir of dirs) {
@@ -146,6 +175,44 @@ describe('repo .ditto self-validation', () => {
         commandLogEntry.parse(parsed);
       });
     }
+  });
+
+  // ADR-0024 Decision 6 migration guard (wi_260623u0d): a LEGACY autopilot.json
+  // written before the loop-discipline caps (oracle_failures_to_block / loop_rounds)
+  // MUST still parse — the new fields are `.default()`, never required. This is the
+  // non-vacuous floor of the two "if present" cases above: it asserts the additive
+  // change does not break in-flight on-disk state (readJson hard-throws otherwise).
+  test('legacy autopilot.json (no loop-discipline caps) parses via .default() — migration safe', () => {
+    const legacy = {
+      schema_version: '0.1.0',
+      autopilot_id: 'orch_legacy01',
+      work_item_id: 'wi_legacy01',
+      mode: 'autopilot',
+      root_goal: 'legacy goal',
+      completion_boundary: 'entire_work_item',
+      approval_gate: {
+        status: 'not_required',
+        source: 'small_reversible_policy',
+        approved_at: null,
+        approved_by: null,
+        evidence_refs: [],
+      },
+      nodes: [],
+      // caps WITHOUT converge_rounds / oracle_failures_to_block / loop_rounds — the
+      // legacy shape a graph on disk carries before this change.
+      caps: { fix_per_node: 2, switch_per_node: 1 },
+      continue_policy: {
+        continue_after_approval: true,
+        continue_after_checkpoint: true,
+        continue_after_fixable_failure: true,
+        ask_user_only_for_user_owned_decisions: true,
+      },
+      stop_conditions: [],
+      user_interrupt_policy: 'ask_only_for_user_owned_decisions',
+    };
+    const parsed = autopilot.parse(legacy);
+    expect(parsed.caps.oracle_failures_to_block).toBe(3);
+    expect(parsed.caps.loop_rounds).toBe(12);
   });
 });
 

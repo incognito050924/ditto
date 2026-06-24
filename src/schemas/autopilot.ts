@@ -204,6 +204,20 @@ export const autopilot = z
       // the node-*between* convergence loop escalates. `.default` so a legacy
       // graph written before this field parses without regression.
       converge_rounds: z.number().int().positive().default(3),
+      // ADR-0024 Decision 6 (loop discipline): how many times the SAME AC oracle
+      // may fail on a node (in-loop downgrade or wrong-fixpoint reopen) before the
+      // node is blocked instead of re-opened. Counts attempts (the K-th failure
+      // blocks), derived from the append-only decision log — NOT folded into
+      // `attempts.fix` (the node-internal retry budget). `.default` keeps a legacy
+      // graph parsing without regression (migration-safe, additive).
+      oracle_failures_to_block: z.number().int().positive().default(3),
+      // ADR-0024 Decision 6 (loop discipline): loop-level forward-round cap across
+      // the WHOLE graph (sum of forward re-expansion rounds over all review chains),
+      // distinct from the per-chain `converge_rounds`. When the total reaches this
+      // cap the loop is `capped` (≠ converged) and stops re-expanding — the
+      // infinite-loop floor. Graph-derived (forwardRound over the nodes), never a
+      // driver-trusted stored counter. `.default` keeps legacy graphs parsing.
+      loop_rounds: z.number().int().positive().default(12),
     }),
     continue_policy: z.object({
       continue_after_approval: z.boolean().default(true),

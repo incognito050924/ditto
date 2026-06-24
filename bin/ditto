@@ -17511,7 +17511,9 @@ var autopilot = exports_external.object({
   caps: exports_external.object({
     fix_per_node: exports_external.number().int().nonnegative(),
     switch_per_node: exports_external.number().int().nonnegative(),
-    converge_rounds: exports_external.number().int().positive().default(3)
+    converge_rounds: exports_external.number().int().positive().default(3),
+    oracle_failures_to_block: exports_external.number().int().positive().default(3),
+    loop_rounds: exports_external.number().int().positive().default(12)
   }),
   continue_policy: exports_external.object({
     continue_after_approval: exports_external.boolean().default(true),
@@ -19690,6 +19692,9 @@ var FORWARD_FIX_MARKER = ".fix.r";
 var FORWARD_REVIEW_MARKER = ".rev.r";
 function forwardRound(reviewNodeId) {
   return reviewNodeId.split(FORWARD_REVIEW_MARKER).length - 1;
+}
+function totalForwardRounds(nodeIds) {
+  return nodeIds.filter((id) => id.includes(FORWARD_REVIEW_MARKER)).length;
 }
 function mkNode(id, kind, purpose, depends_on, acceptance_refs) {
   return {
@@ -22284,9 +22289,16 @@ async function nextNode(repoRoot, workItemId2) {
   if (ready.length === 0) {
     if (allNodesTerminal(graph)) {
       const all_passed = graph.nodes.every((n2) => n2.status === "passed");
+      let disposition = null;
+      if (all_passed) {
+        const decisions = await aps.readDecisions(workItemId2);
+        const loopCapped = decisions.some((d2) => d2.reason.includes("loop-level iteration cap reached"));
+        disposition = loopCapped ? "capped" : "converged";
+      }
       return {
         action: "done",
         all_passed,
+        disposition,
         reason: all_passed ? "all nodes passed \u2014 completion judgment owed: graph done \u2260 acceptance criteria closed; run completion to close each AC with the collected evidence (\xA76.8)" : "all nodes terminal but \u22651 node failed \u2014 completion will judge partial/fail; run completion judgment (\xA76.8)"
       };
     }
@@ -22452,7 +22464,11 @@ var recordResultPayload = exports_external.object({
   ac_oracles: exports_external.array(exports_external.object({
     criterion_id: exports_external.string().min(1),
     oracle: acOracle
-  })).optional().describe("A design node's per-AC oracle assignments (ADR-0024 ac-2). Written onto the " + "work-item AC and gated for completeness over the in-play set on a contentful design pass.")
+  })).optional().describe("A design node's per-AC oracle assignments (ADR-0024 ac-2). Written onto the " + "work-item AC and gated for completeness over the in-play set on a contentful design pass."),
+  oracle_fixpoint_reopen: exports_external.object({
+    target_node_id: exports_external.string().min(1),
+    criterion_id: exports_external.string().min(1)
+  }).optional().describe("A wrong-fixpoint signal (ADR-0024 Decision 6): the passed node whose oracle is marked " + "closed but whose evidence mismatches, to reopen (or block at K). Guarded on passed status.")
 }).superRefine((value, ctx) => {
   if (value.outcome === "fail" && value.failure_class === undefined) {
     ctx.addIssue({
@@ -22537,6 +22553,33 @@ async function planRequiresDecisionApproval(repoRoot, workItemId2) {
     return false;
   }
 }
+var ORACLE_UNSATISFIED_MARKER = "oracle-unsatisfied";
+function oracleUnsatisfiedReason(unmet) {
+  return `${ORACLE_UNSATISFIED_MARKER}: ${unmet.join("; ")}`;
+}
+function sameOracleFailureCount(decisions, nodeId) {
+  return decisions.filter((d2) => d2.node_id === nodeId && d2.reason.startsWith(ORACLE_UNSATISFIED_MARKER)).length;
+}
+function unmetOracles(node2, payload, oracleById) {
+  const inPlay = new Set(node2.acceptance_refs);
+  const topLevel = payload.evidence_refs ?? [];
+  const verdicts = payload.ac_verdicts ?? [];
+  const passedAcs = verdicts.length > 0 ? verdicts.filter((v2) => v2.verdict === "pass").map((v2) => v2.criterion_id) : [...inPlay];
+  const unmet = [];
+  for (const acId of passedAcs) {
+    if (!inPlay.has(acId))
+      continue;
+    const oracle = oracleById.get(acId);
+    if (oracle === undefined)
+      continue;
+    const perAc = verdicts.filter((v2) => v2.criterion_id === acId).flatMap((v2) => v2.evidence_refs ?? []);
+    const closing = [...topLevel, ...perAc];
+    const sat = oracleSatisfaction(acId, oracle, closing);
+    if (!sat.pass)
+      unmet.push(sat.reasons[0] ?? `${acId}: oracle unsatisfied`);
+  }
+  return unmet;
+}
 async function recordResult(repoRoot, input) {
   const aps = new AutopilotStore(repoRoot);
   const graph = await aps.get(input.workItemId);
@@ -22591,7 +22634,75 @@ async function recordResult(repoRoot, input) {
       guardReason = acGuard.reason;
     }
   }
+  if (contentful && outcome === "pass" && node2.kind !== "design") {
+    const wi = await new WorkItemStore(repoRoot).get(input.workItemId);
+    const oracleById = new Map(wi.acceptance_criteria.map((c3) => [c3.id, c3.oracle]));
+    const unmet = unmetOracles(node2, input.payload, oracleById);
+    if (unmet.length > 0) {
+      const reason = oracleUnsatisfiedReason(unmet);
+      const decisions = await aps.readDecisions(input.workItemId);
+      const priorFailures = sameOracleFailureCount(decisions, node2.id);
+      const k2 = graph.caps.oracle_failures_to_block;
+      const blockNow = priorFailures + 1 >= k2;
+      const event2 = blockNow ? "block" : "retry";
+      await aps.updateNode(input.workItemId, node2.id, (n2) => ({
+        ...n2,
+        status: nodeTransition(n2.status, event2)
+      }));
+      await aps.appendDecision(input.workItemId, {
+        ts: (input.now ?? new Date).toISOString(),
+        node_id: node2.id,
+        failure_class: blockNow ? "user_decision_needed" : "fixable",
+        decision: blockNow ? "escalate" : "retry",
+        reason: blockNow ? `${reason} (same oracle failed ${priorFailures + 1}\u2265${k2} times \u2014 blocked, user decision needed)` : reason,
+        attempts: node2.attempts
+      });
+      return {
+        node_id: node2.id,
+        status: blockNow ? "blocked" : "pending",
+        outcome: "fail",
+        guard_contentful: true,
+        decision: blockNow ? "escalate" : "retry",
+        failure_class: blockNow ? "user_decision_needed" : "fixable",
+        cap_exceeded: blockNow,
+        reason,
+        promoted_node_ids: [],
+        superseded_node_ids: []
+      };
+    }
+  }
   if (outcome === "pass") {
+    const fixpoint = input.payload.oracle_fixpoint_reopen;
+    if (fixpoint !== undefined) {
+      const target = graph.nodes.find((n2) => n2.id === fixpoint.target_node_id);
+      if (target !== undefined && target.status === "passed") {
+        const reason = oracleUnsatisfiedReason([
+          `${fixpoint.criterion_id}: oracle marked closed but evidence mismatch (wrong-fixpoint reopen of ${target.id})`
+        ]);
+        const decisions = await aps.readDecisions(input.workItemId);
+        const priorFailures = sameOracleFailureCount(decisions, target.id);
+        const k2 = graph.caps.oracle_failures_to_block;
+        const blockTarget = priorFailures + 1 >= k2;
+        await aps.updateNode(input.workItemId, target.id, (n2) => ({
+          ...n2,
+          status: nodeTransition(n2.status, "reopen")
+        }));
+        if (blockTarget) {
+          await aps.updateNode(input.workItemId, target.id, (n2) => ({
+            ...n2,
+            status: nodeTransition(n2.status, "block")
+          }));
+        }
+        await aps.appendDecision(input.workItemId, {
+          ts: (input.now ?? new Date).toISOString(),
+          node_id: target.id,
+          failure_class: blockTarget ? "user_decision_needed" : "fixable",
+          decision: blockTarget ? "escalate" : "retry",
+          reason: blockTarget ? `${reason} (same oracle failed ${priorFailures + 1}\u2265${k2} times \u2014 blocked, user decision needed)` : reason,
+          attempts: target.attempts
+        });
+      }
+    }
     if (node2.kind === "design" && input.payload.decision_conflicts !== undefined && input.payload.decision_conflicts.length > 0) {
       await ensureDir(localDir(repoRoot, "work-items", input.workItemId));
       await writeJson(localDir(repoRoot, "work-items", input.workItemId, "decision-conflict.json"), decisionConflictCarrier, {
@@ -22601,7 +22712,12 @@ async function recordResult(repoRoot, input) {
       });
     }
     if ((node2.kind === "review" || node2.kind === "security") && input.payload.has_findings === true) {
-      const plan = planForwardReexpansion({
+      const loopRoundsSoFar = totalForwardRounds(graph.nodes.map((n2) => n2.id));
+      const loopCapHit = loopRoundsSoFar >= graph.caps.loop_rounds;
+      const plan = loopCapHit ? {
+        decision: "escalate",
+        reason: `loop-level iteration cap reached (${loopRoundsSoFar} forward rounds \u2265 loop_rounds ${graph.caps.loop_rounds}) with findings still open on ${node2.id}; capped \u2260 converged, escalate rather than expand`
+      } : planForwardReexpansion({
         reviewNode: node2,
         hasFindings: true,
         round: forwardRound(node2.id),
@@ -41224,4 +41340,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=e0df498091e0303fbb693fc46af320dc5969fbf018e4812336f4759f3056e93d
+//# ditto-src-stamp=c7ba09528cf29ea3ad6904d8069ab98f56829294657a2b767ba44ec0ffb84dd9

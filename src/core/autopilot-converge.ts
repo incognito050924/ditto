@@ -60,6 +60,18 @@ export function forwardRound(reviewNodeId: string): number {
   return reviewNodeId.split(FORWARD_REVIEW_MARKER).length - 1;
 }
 
+/**
+ * Graph-derived loop-level forward-round total (ADR-0024 Decision 6). The per-chain
+ * `forwardRound` counts depth within ONE review chain; this sums the forward rounds
+ * spliced across the WHOLE graph — one per existing forward review node (each such
+ * node is one re-expansion that already happened). It is read off node ids, NOT a
+ * driver-trusted stored counter (the deterministic floor reconstructs it from the
+ * graph), so the loop-level iteration cap cannot be defeated by a lost counter.
+ */
+export function totalForwardRounds(nodeIds: readonly string[]): number {
+  return nodeIds.filter((id) => id.includes(FORWARD_REVIEW_MARKER)).length;
+}
+
 function mkNode(
   id: string,
   kind: AutopilotNode['kind'],

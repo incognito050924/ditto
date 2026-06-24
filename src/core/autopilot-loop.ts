@@ -8,10 +8,10 @@ import { lspLanguageForPath } from '~/core/provision/lsp-detect';
 import { type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
 import { evidenceRef, relativePath, verdict } from '~/schemas/common';
 import { decisionConflict, decisionConflictCarrier } from '~/schemas/decision-conflict-carrier';
-import { acOracle } from '~/schemas/work-item';
+import { type AcOracle, acOracle } from '~/schemas/work-item';
 import { ActiveNodeLeaseStore } from './active-node-lease';
 import { loadVariantCatalog, selectVariantCandidates } from './agent-variants';
-import { forwardRound, planForwardReexpansion } from './autopilot-converge';
+import { forwardRound, planForwardReexpansion, totalForwardRounds } from './autopilot-converge';
 import {
   type DelegationPacket,
   type FailureClass,
@@ -36,7 +36,7 @@ import { planTidyOnImplementPass } from './autopilot-tidy';
 import { assertOracleFrozen, producePlanGate, validateAcOracle } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
 import { localDir } from './ditto-paths';
-import { decisionConflictRequiresApproval } from './gates';
+import { decisionConflictRequiresApproval, oracleSatisfaction } from './gates';
 import { IntentStore } from './intent-store';
 import { warmStartMemoryContext } from './memory-warmstart';
 import { computeSpecDigest } from './tech-spec';
@@ -95,8 +95,17 @@ export type NextNodeResult =
   // Graph terminal. `all_passed` is the completion *disposition*, not a verdict:
   // graph done ≠ acceptance closed (§6.8). Completion still judges each AC with
   // evidence; this only tells the driver completion is owed and whether it can
-  // pass. It never auto-closes an AC.
-  | { action: 'done'; reason: string; all_passed: boolean };
+  // pass. It never auto-closes an AC. `disposition` (ADR-0024 Decision 6,
+  // mechanism 1) refines an all-passed done: `converged` = the loop closed on
+  // oracle satisfaction; `capped` = a loop-level iteration cap was hit during the
+  // run (capped ≠ converged), so the close is not a genuine convergence. Absent
+  // (`null`) when not all passed (the run is partial/failed, not a fixpoint at all).
+  | {
+      action: 'done';
+      reason: string;
+      all_passed: boolean;
+      disposition: 'converged' | 'capped' | null;
+    };
 
 /** Non-null when intent.source_digest no longer matches the spec document (ac-6). */
 async function specDigestStale(
@@ -155,9 +164,25 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
     // graph done is not acceptance closing (§6.8); completion judges with evidence.
     if (allNodesTerminal(graph)) {
       const all_passed = graph.nodes.every((n) => n.status === 'passed');
+      // ADR-0024 Decision 6 (mechanism 1) — converged vs capped disposition. Only
+      // meaningful on an all-passed done (else the run is partial/failed, not a
+      // fixpoint): `capped` when a loop-level iteration cap was hit during the run
+      // (recorded in the append-only decision log), else `converged`. Graph/log-
+      // derived, never a stored flag — the deterministic floor reads the recorded
+      // escalations. capped ≠ converged (ADR-0024:38): a cap-forced close is not a
+      // genuine oracle convergence, so completion is told to treat it as such.
+      let disposition: 'converged' | 'capped' | null = null;
+      if (all_passed) {
+        const decisions = await aps.readDecisions(workItemId);
+        const loopCapped = decisions.some((d) =>
+          d.reason.includes('loop-level iteration cap reached'),
+        );
+        disposition = loopCapped ? 'capped' : 'converged';
+      }
       return {
         action: 'done',
         all_passed,
+        disposition,
         reason: all_passed
           ? 'all nodes passed — completion judgment owed: graph done ≠ acceptance criteria closed; run completion to close each AC with the collected evidence (§6.8)'
           : 'all nodes terminal but ≥1 node failed — completion will judge partial/fail; run completion judgment (§6.8)',
@@ -495,6 +520,26 @@ export const recordResultPayload = z
         "A design node's per-AC oracle assignments (ADR-0024 ac-2). Written onto the " +
           'work-item AC and gated for completeness over the in-play set on a contentful design pass.',
       ),
+    // ADR-0024 Decision 6 (loop discipline, mechanism 4 — wrong-fixpoint reopen). A
+    // re-checking node may report that an ALREADY-PASSED node closed a criterion
+    // whose oracle is in fact NOT met (oracle marked closed yet evidence mismatch).
+    // On a contentful pass the engine returns that passed node to pending via the
+    // `reopen` transition — SILENTLY (no user interrupt), recorded append-only. It
+    // shares the same-oracle K counter with the in-loop downgrade (mechanism 3/5):
+    // the K-th wrong-fixpoint on the target blocks it instead of reopening. GUARDED:
+    // the transition runs only when the target is still `passed` (the forward loop
+    // may have moved it to blocked / spliced a successor — an illegal reopen would
+    // throw), so a collision is a no-op. Absent ⇒ no reopen (backward compat).
+    oracle_fixpoint_reopen: z
+      .object({
+        target_node_id: z.string().min(1),
+        criterion_id: z.string().min(1),
+      })
+      .optional()
+      .describe(
+        'A wrong-fixpoint signal (ADR-0024 Decision 6): the passed node whose oracle is marked ' +
+          'closed but whose evidence mismatches, to reopen (or block at K). Guarded on passed status.',
+      ),
   })
   .superRefine((value, ctx) => {
     if (value.outcome === 'fail' && value.failure_class === undefined) {
@@ -720,6 +765,76 @@ async function planRequiresDecisionApproval(
   }
 }
 
+// ── ADR-0024 Decision 6 (loop discipline): in-loop oracle authority ──────────
+//
+// Stable decision-log marker for a same-oracle failure on a node. The K counter
+// (mechanism 5) is derived by counting these markers in the append-only decision
+// log — it is kept SEPARATE from `node.attempts.fix` (the node-internal retry
+// budget), so the convergence layer never folds into the retry layer
+// (autopilot-converge.ts §forbids mixing). The reopen path (mechanism 4) records
+// the SAME marker, so a wrong-fixpoint reopen and an in-loop downgrade share the
+// one K counter.
+const ORACLE_UNSATISFIED_MARKER = 'oracle-unsatisfied';
+
+/** Decision-log reason line a same-oracle failure records (carries the AC id, K-countable). */
+function oracleUnsatisfiedReason(unmet: string[]): string {
+  return `${ORACLE_UNSATISFIED_MARKER}: ${unmet.join('; ')}`;
+}
+
+/**
+ * Same-oracle failure count for a node, derived from the append-only decision log
+ * (NOT a driver-trusted stored counter, NOT `attempts.fix`). One entry per prior
+ * in-loop oracle downgrade / wrong-fixpoint reopen on this node. K failures → the
+ * caller blocks instead of re-opening (mechanism 5).
+ */
+function sameOracleFailureCount(
+  decisions: { node_id: string; reason: string }[],
+  nodeId: string,
+): number {
+  return decisions.filter(
+    (d) => d.node_id === nodeId && d.reason.startsWith(ORACLE_UNSATISFIED_MARKER),
+  ).length;
+}
+
+/**
+ * In-loop oracle authority (ADR-0024 Decision 6, mechanism 3 — reuses
+ * `oracleSatisfaction` from gates.ts; the SAME function the completion stage runs
+ * via `nodeVerdictFor`, so completion stays the closing judge — ADR-0024:28). For
+ * each in-play AC the node judged `pass`, if that AC carries an oracle and the
+ * node's recorded closing evidence does NOT meet it, the AC is unmet. The closing
+ * evidence is the same union the completion stage reads (top-level ∪ per-AC).
+ * Returns the unmet "acId: reason" strings (empty ⇒ every oracle satisfied / none
+ * assigned → legacy path unchanged, presence-gated).
+ */
+function unmetOracles(
+  node: AutopilotNode,
+  payload: RecordResultPayload,
+  oracleById: Map<string, AcOracle | undefined>,
+): string[] {
+  const inPlay = new Set(node.acceptance_refs);
+  const topLevel = payload.evidence_refs ?? [];
+  const verdicts = payload.ac_verdicts ?? [];
+  // Which ACs did the node judge pass? A judging node uses ac_verdicts; a node
+  // without per-AC verdicts that passes implicitly closes its in-play refs.
+  const passedAcs =
+    verdicts.length > 0
+      ? verdicts.filter((v) => v.verdict === 'pass').map((v) => v.criterion_id)
+      : [...inPlay];
+  const unmet: string[] = [];
+  for (const acId of passedAcs) {
+    if (!inPlay.has(acId)) continue;
+    const oracle = oracleById.get(acId);
+    if (oracle === undefined) continue; // presence-gated: no oracle → legacy
+    const perAc = verdicts
+      .filter((v) => v.criterion_id === acId)
+      .flatMap((v) => v.evidence_refs ?? []);
+    const closing = [...topLevel, ...perAc];
+    const sat = oracleSatisfaction(acId, oracle, closing);
+    if (!sat.pass) unmet.push(sat.reasons[0] ?? `${acId}: oracle unsatisfied`);
+  }
+  return unmet;
+}
+
 export async function recordResult(
   repoRoot: string,
   input: RecordResultInput,
@@ -830,7 +945,114 @@ export async function recordResult(
     }
   }
 
+  // ADR-0024 Decision 6 (mechanism 3) — in-loop oracle authority. A node may claim
+  // an AC `pass`, but if that AC carries an oracle the recorded evidence does NOT
+  // meet (e.g. a static_scan with only a note), the in-loop check downgrades the
+  // pass: the node does NOT close, it stays open. This is the SAME `oracleSatisfaction`
+  // the completion stage runs (nodeVerdictFor) — completion remains the closing
+  // judge (ADR-0024:28); this only stops the loop from declaring a fixpoint the
+  // oracle does not back. Presence-gated: no oracle on any in-play AC ⇒ no-op
+  // (legacy pass path unchanged). The downgrade is recorded with the K-countable
+  // ORACLE_UNSATISFIED marker; once the same oracle fails K times the node blocks
+  // (mechanism 5) instead of re-opening.
+  //
+  // Excludes `design` nodes: a design/planner pass ASSIGNS oracles (ac_oracles →
+  // work-item AC, handled by the design-pass block below), it does not CLOSE an AC
+  // to pass — so its bare pass must not be held to an oracle it is in the act of
+  // setting (ADR-0024 §3 ① assign vs ③ judge are different stages on the same node
+  // pass, but only the judging stage is gated here).
+  if (contentful && outcome === 'pass' && node.kind !== 'design') {
+    const wi = await new WorkItemStore(repoRoot).get(input.workItemId);
+    const oracleById = new Map<string, AcOracle | undefined>(
+      wi.acceptance_criteria.map((c) => [c.id, c.oracle]),
+    );
+    const unmet = unmetOracles(node, input.payload, oracleById);
+    if (unmet.length > 0) {
+      const reason = oracleUnsatisfiedReason(unmet);
+      const decisions = await aps.readDecisions(input.workItemId);
+      const priorFailures = sameOracleFailureCount(decisions, node.id);
+      // K boundary (mechanism 5): K failures → blocked. `priorFailures` counts the
+      // PRIOR same-oracle decisions; this attempt is the (priorFailures+1)-th. So
+      // `priorFailures + 1 >= K` (i.e. the cap counts attempts, not gaps) blocks.
+      const k = graph.caps.oracle_failures_to_block;
+      const blockNow = priorFailures + 1 >= k;
+      const event = blockNow ? 'block' : 'retry';
+      await aps.updateNode(input.workItemId, node.id, (n) => ({
+        ...n,
+        status: nodeTransition(n.status, event),
+      }));
+      await aps.appendDecision(input.workItemId, {
+        ts: (input.now ?? new Date()).toISOString(),
+        node_id: node.id,
+        failure_class: blockNow ? 'user_decision_needed' : 'fixable',
+        decision: blockNow ? 'escalate' : 'retry',
+        reason: blockNow
+          ? `${reason} (same oracle failed ${priorFailures + 1}≥${k} times — blocked, user decision needed)`
+          : reason,
+        attempts: node.attempts,
+      });
+      return {
+        node_id: node.id,
+        status: blockNow ? 'blocked' : 'pending',
+        outcome: 'fail',
+        guard_contentful: true,
+        decision: blockNow ? 'escalate' : 'retry',
+        failure_class: blockNow ? 'user_decision_needed' : 'fixable',
+        cap_exceeded: blockNow,
+        reason,
+        promoted_node_ids: [],
+        superseded_node_ids: [],
+      };
+    }
+  }
+
   if (outcome === 'pass') {
+    // ADR-0024 Decision 6 (mechanism 4) — wrong-fixpoint reopen. A re-checking node
+    // may report that an ALREADY-PASSED node closed a criterion whose oracle is in
+    // fact not met. Return that passed node to pending via the `reopen` transition,
+    // SILENTLY (no user interrupt), recorded append-only. GUARDED on passed status:
+    // the forward loop can have moved the same node to blocked / spliced a successor,
+    // and `nodeTransition(blocked,'reopen')` is illegal (throws) — so a collision is
+    // a no-op. Shares the same-oracle K counter (mechanism 5): the K-th wrong-fixpoint
+    // on the target blocks it instead of reopening. Runs as a side-effect BEFORE the
+    // recording node's own pass-handling (mirrors the tidy-bug reopen of a passed
+    // implement node). Absent signal ⇒ no-op (backward compat).
+    const fixpoint = input.payload.oracle_fixpoint_reopen;
+    if (fixpoint !== undefined) {
+      const target = graph.nodes.find((n) => n.id === fixpoint.target_node_id);
+      if (target !== undefined && target.status === 'passed') {
+        const reason = oracleUnsatisfiedReason([
+          `${fixpoint.criterion_id}: oracle marked closed but evidence mismatch (wrong-fixpoint reopen of ${target.id})`,
+        ]);
+        const decisions = await aps.readDecisions(input.workItemId);
+        const priorFailures = sameOracleFailureCount(decisions, target.id);
+        const k = graph.caps.oracle_failures_to_block;
+        const blockTarget = priorFailures + 1 >= k;
+        // reopen takes passed → pending (the only legal exit from passed); a block
+        // then needs a pending→blocked hop, since `passed` has no direct `block`
+        // edge (the transition table is explicit, autopilot-graph.ts:64,72).
+        await aps.updateNode(input.workItemId, target.id, (n) => ({
+          ...n,
+          status: nodeTransition(n.status, 'reopen'),
+        }));
+        if (blockTarget) {
+          await aps.updateNode(input.workItemId, target.id, (n) => ({
+            ...n,
+            status: nodeTransition(n.status, 'block'),
+          }));
+        }
+        await aps.appendDecision(input.workItemId, {
+          ts: (input.now ?? new Date()).toISOString(),
+          node_id: target.id,
+          failure_class: blockTarget ? 'user_decision_needed' : 'fixable',
+          decision: blockTarget ? 'escalate' : 'retry',
+          reason: blockTarget
+            ? `${reason} (same oracle failed ${priorFailures + 1}≥${k} times — blocked, user decision needed)`
+            : reason,
+          attempts: target.attempts,
+        });
+      }
+    }
     // ADR-0020 D3 producer (wi_260616eu8): on a contentful `design` pass the
     // planner declares any ADR conflicts it detected; persist them as the carrier
     // BEFORE the plan-gate consults it (planRequiresDecisionApproval, below), so an
@@ -865,12 +1087,26 @@ export async function recordResult(
       (node.kind === 'review' || node.kind === 'security') &&
       input.payload.has_findings === true
     ) {
-      const plan = planForwardReexpansion({
-        reviewNode: node,
-        hasFindings: true,
-        round: forwardRound(node.id),
-        budget: graph.caps.converge_rounds,
-      });
+      // ADR-0024 Decision 6 (mechanism 2) — loop-level iteration cap. The per-chain
+      // convergence budget (converge_rounds) bounds ONE review chain; this is the
+      // GRAPH-WIDE floor: when the total forward rounds already spliced across the
+      // whole graph reach caps.loop_rounds, a further re-expansion is refused even if
+      // the per-chain budget remains. The total is graph-derived (forward-review node
+      // ids), never a stored counter, so it cannot be defeated by a lost counter.
+      // capped ≠ converged: this escalates (blocks), never closes to pass.
+      const loopRoundsSoFar = totalForwardRounds(graph.nodes.map((n) => n.id));
+      const loopCapHit = loopRoundsSoFar >= graph.caps.loop_rounds;
+      const plan: ReturnType<typeof planForwardReexpansion> = loopCapHit
+        ? {
+            decision: 'escalate',
+            reason: `loop-level iteration cap reached (${loopRoundsSoFar} forward rounds ≥ loop_rounds ${graph.caps.loop_rounds}) with findings still open on ${node.id}; capped ≠ converged, escalate rather than expand`,
+          }
+        : planForwardReexpansion({
+            reviewNode: node,
+            hasFindings: true,
+            round: forwardRound(node.id),
+            budget: graph.caps.converge_rounds,
+          });
       if (plan.decision === 'expand') {
         // Splice the fix+review pair before marking the review passed, mirroring
         // A-3: a rejected splice (addNodes throws) leaves the node still running.
