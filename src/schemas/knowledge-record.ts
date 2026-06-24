@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ADR_ID_FULL_RE } from './adr-id';
 import { evidenceRef, isoDateTime, relativePath, schemaVersion } from './common';
 
 /**
@@ -17,7 +18,7 @@ import { evidenceRef, isoDateTime, relativePath, schemaVersion } from './common'
 const adrId = z
   .string()
   .regex(
-    /^ADR-(?:\d{4}|\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*)$/,
+    ADR_ID_FULL_RE,
     'ADR id must be legacy ADR-NNNN or new ADR-YYYYMMDD-slug (slug = lowercase alphanumeric words, hyphen-separated)',
   )
   .describe(

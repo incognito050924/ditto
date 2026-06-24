@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ADR_ID_FULL_RE } from './adr-id';
 import { schemaVersion } from './common';
 
 /**
@@ -18,7 +19,7 @@ export const decisionConflict = z.object({
   adr_id: z
     .string()
     .regex(
-      /^ADR-(?:\d{4}|\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*)$/,
+      ADR_ID_FULL_RE,
       'adr_id must be legacy ADR-NNNN or new ADR-YYYYMMDD-slug (slug = lowercase alphanumeric words, hyphen-separated)',
     ),
   kind: z.enum(['forbid', 'require', 'prefer']),

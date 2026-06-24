@@ -19421,9 +19421,26 @@ var coverageFeedbackEntry = exports_external.object({
 
 // src/schemas/decision-conflict-carrier.ts
 init_zod();
+
+// src/schemas/adr-id.ts
+var SLUG = "[a-z0-9]+(?:-[a-z0-9]+)*";
+var DIGITS4 = "\\d{4}";
+var DIGITS8 = "\\d{8}";
+var ADR_ID_FULL_RE = new RegExp(`^ADR-(?:${DIGITS4}|${DIGITS8}-${SLUG})$`);
+var ADR_ID_EXTRACT_RE = new RegExp(`^ADR-(?:${DIGITS8}-${SLUG}|${DIGITS4})`);
+var ADR_TITLE_PREFIX_RE = new RegExp(`^ADR-(?:${DIGITS8}-${SLUG}|${DIGITS4}):\\s*`);
+var ADR_FILENAME_RE = new RegExp(`^ADR-(?:${DIGITS8}|${DIGITS4})-${SLUG}\\.md$`);
+var ADR_SLUG_RE = new RegExp(`^${SLUG}$`);
+function adrIdFromFilename(filename) {
+  if (!ADR_FILENAME_RE.test(filename))
+    return null;
+  return filename.match(ADR_ID_EXTRACT_RE)?.[0] ?? null;
+}
+
+// src/schemas/decision-conflict-carrier.ts
 init_common();
 var decisionConflict = exports_external.object({
-  adr_id: exports_external.string().regex(/^ADR-(?:\d{4}|\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*)$/, "adr_id must be legacy ADR-NNNN or new ADR-YYYYMMDD-slug (slug = lowercase alphanumeric words, hyphen-separated)"),
+  adr_id: exports_external.string().regex(ADR_ID_FULL_RE, "adr_id must be legacy ADR-NNNN or new ADR-YYYYMMDD-slug (slug = lowercase alphanumeric words, hyphen-separated)"),
   kind: exports_external.enum(["forbid", "require", "prefer"]),
   level: exports_external.enum(["intent", "method"]),
   basis: exports_external.string().min(1).describe("Evidence: what the ADR says and how the current work touches it")
@@ -26715,19 +26732,17 @@ init_fs();
 
 // src/core/knowledge-bridge.ts
 init_zod();
-init_fs();
 import { readdir as readdir15 } from "fs/promises";
 import { join as join42 } from "path";
+init_fs();
 var KNOWLEDGE_END = "<!-- ditto:knowledge:end -->";
 var KNOWLEDGE_BLOCK_RE_G = /<!--\s*ditto:knowledge:start\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:knowledge:end\s*-->/g;
 var glossarySummarySchema = exports_external.object({
   entries: exports_external.array(exports_external.object({ term: exports_external.string(), status: exports_external.string().optional() })).default([])
 });
 var KNOWLEDGE_DIR = join42(".ditto", "knowledge");
-var ADR_ID_RE = /^ADR-(?:\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*|\d{4})/;
-var ADR_TITLE_PREFIX_RE = /^ADR-(?:\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*|\d{4}):\s*/;
 function adrHeadline(filename, body) {
-  const id = filename.match(ADR_ID_RE)?.[0] ?? filename;
+  const id = filename.match(ADR_ID_EXTRACT_RE)?.[0] ?? filename;
   const titleLine = body.split(`
 `).find((l2) => l2.startsWith("# "));
   const title = titleLine ? titleLine.replace(/^#\s*/, "").trim() : "";
@@ -36509,7 +36524,6 @@ var knowledgeGate = defineCommand({
       process.exit(RUNTIME_ERROR_EXIT);
   }
 });
-var SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 function pad2(n2) {
   return String(n2).padStart(2, "0");
 }
@@ -36545,7 +36559,7 @@ function adrSkeletonBody(id, dateDashed) {
 }
 async function createAdrSkeleton(opts) {
   const now = opts.now ?? new Date;
-  if (!SLUG_RE.test(opts.slug)) {
+  if (!ADR_SLUG_RE.test(opts.slug)) {
     throw new Error(`invalid --slug "${opts.slug}"; expected lowercase alphanumeric words joined by single hyphens (e.g. my-feature)`);
   }
   const id = `ADR-${ymdCompact(now)}-${opts.slug}`;
@@ -36555,13 +36569,6 @@ async function createAdrSkeleton(opts) {
   }
   await writeFile3(path, adrSkeletonBody(id, ymdDashed(now)), "utf8");
   return { id, path };
-}
-var ADR_ID_RE2 = /^ADR-(?:\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*|\d{4})/;
-var ADR_FILENAME_RE = /^ADR-(?:\d{8}|\d{4})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
-function adrIdFromFilename(filename) {
-  if (!ADR_FILENAME_RE.test(filename))
-    return null;
-  return filename.match(ADR_ID_RE2)?.[0] ?? null;
 }
 var adrCheckIndexSchema = exports_external.object({
   decisions: exports_external.array(exports_external.object({ id: exports_external.string(), path: exports_external.string() })).default([])
@@ -41952,4 +41959,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=5596e8d0994a0e16e855ac3b4729362cc60f1953e10bcdb9ed7e15d0baff95b5
+//# ditto-src-stamp=8eb11f563eea7e7e1b04f5e451922183675c847fdb449ce12272b8d48a9465f3

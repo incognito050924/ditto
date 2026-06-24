@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { findRepoRoot, resolveRepoRootForCreate } from '~/core/fs';
 import { knowledgeUpdateGate } from '~/core/gates';
 import { fileExists } from '~/core/hosts/shared';
+import { ADR_SLUG_RE, adrIdFromFilename } from '~/schemas/adr-id';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -89,13 +90,6 @@ const knowledgeGate = defineCommand({
   },
 });
 
-/**
- * Slug charset: lowercase alphanumeric words joined by single hyphens.
- * Rejects uppercase, underscores, leading/trailing/double hyphens, and empties —
- * the slug becomes part of the ADR's immutable filename id, so it stays strict.
- */
-const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
 /** Two-digit zero-padded helper. */
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -154,7 +148,7 @@ export async function createAdrSkeleton(opts: {
   now?: Date;
 }): Promise<{ id: string; path: string }> {
   const now = opts.now ?? new Date();
-  if (!SLUG_RE.test(opts.slug)) {
+  if (!ADR_SLUG_RE.test(opts.slug)) {
     throw new Error(
       `invalid --slug "${opts.slug}"; expected lowercase alphanumeric words joined by single hyphens (e.g. my-feature)`,
     );
@@ -166,33 +160,6 @@ export async function createAdrSkeleton(opts: {
   }
   await writeFile(path, adrSkeletonBody(id, ymdDashed(now)), 'utf8');
   return { id, path };
-}
-
-/**
- * Extract an ADR's identifier from its filename, mirroring the canonical
- * extraction in `src/core/knowledge-bridge.ts` (`ADR_ID_RE`). That symbol is NOT
- * exported, and editing the bridge is out of this node's file_scope, so this is a
- * deliberate local copy. The 8-digit(+slug) branch MUST precede `\d{4}`: `\d{4}`
- * is a prefix of `\d{8}`, so a `\d{4}`-first alternation would truncate
- * `ADR-20260624-bar` to `ADR-2026`. For legacy `ADR-NNNN-<slug>.md` this yields
- * the 4-digit prefix `ADR-NNNN`; for new `ADR-YYYYMMDD-<slug>.md` it yields the
- * full stem `ADR-YYYYMMDD-<slug>`.
- * Canonical id grammar source: `src/schemas/knowledge-record.ts` (`adrId` regex).
- */
-const ADR_ID_RE = /^ADR-(?:\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*|\d{4})/;
-
-/**
- * Match a *whole* well-formed ADR filename. A legacy file is
- * `ADR-NNNN-<slug>.md` and a new file is `ADR-YYYYMMDD-<slug>.md`, where the
- * slug (`SLUG_RE`) is required after the number. Bare `ADR-NNNN.md` /
- * `ADR-YYYYMMDD.md` (no slug) and `ADR-xyz.md` are malformed.
- */
-const ADR_FILENAME_RE = /^ADR-(?:\d{8}|\d{4})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
-
-/** Extract the identifier from a filename, or null when the name is malformed. */
-function adrIdFromFilename(filename: string): string | null {
-  if (!ADR_FILENAME_RE.test(filename)) return null;
-  return filename.match(ADR_ID_RE)?.[0] ?? null;
 }
 
 export interface AdrConsistencyResult {
