@@ -23,6 +23,16 @@ The difference is that DITTO does not pretend otherwise.
 If it helps you ship faster, break things less often, or spend fewer hours
 fighting your tooling, then it has already exceeded its design goals.
 
+## Get Started
+
+```bash
+npx github:incognito050924/ditto install
+```
+
+Update with `npx github:incognito050924/ditto update`, remove with
+`npx github:incognito050924/ditto uninstall`. Full guide below — see
+[Installing](#installing).
+
 ## What It Is
 
 DITTO is a coding agent harness for running development work through a terminal
