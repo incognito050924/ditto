@@ -15,7 +15,12 @@ import { schemaVersion } from './common';
  * layer's judgement (ADR-0001/0020 D4); this schema only carries the declaration.
  */
 export const decisionConflict = z.object({
-  adr_id: z.string().regex(/^ADR-\d{4}$/, 'adr_id must be ADR-NNNN'),
+  adr_id: z
+    .string()
+    .regex(
+      /^ADR-(?:\d{4}|\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*)$/,
+      'adr_id must be legacy ADR-NNNN or new ADR-YYYYMMDD-slug (slug = lowercase alphanumeric words, hyphen-separated)',
+    ),
   kind: z.enum(['forbid', 'require', 'prefer']),
   level: z.enum(['intent', 'method']),
   basis: z

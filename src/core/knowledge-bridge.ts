@@ -58,14 +58,21 @@ export interface KnowledgeSyncResult {
 
 const KNOWLEDGE_DIR = join('.ditto', 'knowledge');
 
+// ADR id forms: legacy `ADR-NNNN` (4-digit prefix; knowledge.json uses this),
+// and new `ADR-YYYYMMDD-<slug>` (full stem). The 8-digit(+slug) branch MUST come
+// first: `\d{4}` is a prefix of `\d{8}`, so an unanchored alternation that tried
+// `\d{4}` first would truncate `ADR-20260624` to `ADR-2026`.
+const ADR_ID_RE = /^ADR-(?:\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*|\d{4})/;
+const ADR_TITLE_PREFIX_RE = /^ADR-(?:\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*|\d{4}):\s*/;
+
 function adrHeadline(filename: string, body: string): string {
-  const id = filename.match(/ADR-\d{4}/)?.[0] ?? filename;
+  const id = filename.match(ADR_ID_RE)?.[0] ?? filename;
   const titleLine = body.split('\n').find((l) => l.startsWith('# '));
   const title = titleLine ? titleLine.replace(/^#\s*/, '').trim() : '';
   const status = body.match(/상태:\s*(\S+)/)?.[1] ?? body.match(/status:\s*(\S+)/i)?.[1] ?? '';
   const parts = [id];
   if (status) parts.push(status);
-  if (title) parts.push(title.replace(/^ADR-\d{4}:\s*/, ''));
+  if (title) parts.push(title.replace(ADR_TITLE_PREFIX_RE, ''));
   return parts.join(' · ');
 }
 

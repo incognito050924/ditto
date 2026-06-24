@@ -82,6 +82,47 @@ describe('knowledge projection (M6)', () => {
     }
   });
 
+  test('new-format ADR filename projects to its full stem as id (not the 4-digit prefix)', async () => {
+    const dir = await stageRepo();
+    try {
+      await writeFile(
+        join(dir, '.ditto', 'knowledge', 'adr', 'ADR-20260624-some-slug.md'),
+        '# ADR-20260624-some-slug: a new-format decision\n\n상태: accepted\n',
+        'utf8',
+      );
+      const sources = await loadKnowledgeSources(dir);
+      const headline = sources.adrHeadlines.find((h) => h.startsWith('ADR-20260624-some-slug'));
+      expect(headline).toBeDefined();
+      // id is the full stem, NOT collapsed to ADR-2026
+      expect(headline).toContain('ADR-20260624-some-slug');
+      expect(sources.adrHeadlines.some((h) => h.startsWith('ADR-2026 '))).toBe(false);
+      // title's id prefix is stripped for the new form
+      expect(headline).toContain('a new-format decision');
+      expect(headline).not.toContain('ADR-20260624-some-slug: a new-format decision');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('REGRESSION: legacy ADR filename still projects to its 4-digit id', async () => {
+    const dir = await stageRepo();
+    try {
+      await writeFile(
+        join(dir, '.ditto', 'knowledge', 'adr', 'ADR-0099-legacy-guard.md'),
+        '# ADR-0099: a legacy decision\n\n상태: accepted\n',
+        'utf8',
+      );
+      const sources = await loadKnowledgeSources(dir);
+      const headline = sources.adrHeadlines.find((h) => h.startsWith('ADR-0099'));
+      expect(headline).toBeDefined();
+      expect(headline?.startsWith('ADR-0099 ·')).toBe(true);
+      expect(headline).toContain('a legacy decision');
+      expect(headline).not.toContain('ADR-0099: a legacy decision');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test('REGRESSION: real repo CLAUDE.md still has exactly one ditto:managed block (AGENTS.md)', () => {
     const claude = readFileSync(join(REPO, 'CLAUDE.md'), 'utf8');
     const blocks = claude.match(MANAGED_BLOCK_COUNT_RE) ?? [];

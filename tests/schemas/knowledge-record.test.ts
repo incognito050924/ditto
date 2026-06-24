@@ -29,18 +29,35 @@ describe('knowledgeRecord schema', () => {
     expect(r.decisions[0]?.superseded_by).toBe(null);
   });
 
-  test('ADR id must be ADR-NNNN', () => {
-    const bad = realistic();
-    bad.decisions[0].id = 'adr-1';
-    expect(knowledgeRecord.safeParse(bad).success).toBe(false);
+  test('accepts legacy ∪ new ADR-YYYYMMDD-slug, rejects malformed', () => {
+    const withId = (id: string) => {
+      const r = realistic();
+      // @ts-expect-error mutating the fixture's first decision in place
+      r.decisions[0].id = id;
+      return knowledgeRecord.safeParse(r).success;
+    };
+
+    // legacy form: ADR- + exactly 4 digits
+    expect(withId('ADR-0024')).toBe(true);
+    // new form: ADR- + YYYYMMDD + - + slug
+    expect(withId('ADR-20260624-some-slug')).toBe(true);
+
+    // still rejects the old malformed case
+    expect(withId('adr-1')).toBe(false);
+    // bare 8-digit with no slug tail is ambiguous → rejected
+    expect(withId('ADR-20260624')).toBe(false);
+    // slug charset is lowercase alphanumeric words; uppercase/underscore rejected
+    expect(withId('ADR-20260624-Bad_Slug')).toBe(false);
   });
 
   test('cross-field: status=superseded requires superseded_by', () => {
     const bad = realistic();
+    // @ts-expect-error mutating the fixture's first decision in place
     bad.decisions[0].status = 'superseded';
     expect(knowledgeRecord.safeParse(bad).success).toBe(false);
 
     const ok = realistic();
+    // @ts-expect-error mutating the fixture's first decision in place
     ok.decisions[0].status = 'superseded';
     // @ts-expect-error augmenting the fixture for the passing case
     ok.decisions[0].superseded_by = 'ADR-0009';
@@ -49,6 +66,7 @@ describe('knowledgeRecord schema', () => {
 
   test('cross-field: superseded_by must be a different ADR (no self-supersession)', () => {
     const selfRef = realistic();
+    // @ts-expect-error mutating the fixture's first decision in place
     selfRef.decisions[0].status = 'superseded';
     // @ts-expect-error augmenting the fixture: ADR points at itself → reject
     selfRef.decisions[0].superseded_by = selfRef.decisions[0].id;

@@ -16,8 +16,13 @@ import { evidenceRef, isoDateTime, relativePath, schemaVersion } from './common'
 
 const adrId = z
   .string()
-  .regex(/^ADR-\d{4}$/, 'ADR id must be ADR-NNNN')
-  .describe('Architecture decision record id, e.g. ADR-0001');
+  .regex(
+    /^ADR-(?:\d{4}|\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*)$/,
+    'ADR id must be legacy ADR-NNNN or new ADR-YYYYMMDD-slug (slug = lowercase alphanumeric words, hyphen-separated)',
+  )
+  .describe(
+    'Architecture decision record id: legacy ADR-NNNN (e.g. ADR-0001) or new ADR-YYYYMMDD-slug (e.g. ADR-20260624-some-slug)',
+  );
 
 export const adrStatus = z
   .enum(['proposed', 'accepted', 'superseded', 'deprecated'])

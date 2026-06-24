@@ -51,8 +51,8 @@
             "properties": {
               "id": {
                 "type": "string",
-                "pattern": "^ADR-\\d{4}$",
-                "description": "Architecture decision record id, e.g. ADR-0001"
+                "pattern": "^ADR-(?:\\d{4}|\\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*)$",
+                "description": "Architecture decision record id: legacy ADR-NNNN (e.g. ADR-0001) or new ADR-YYYYMMDD-slug (e.g. ADR-20260624-some-slug)"
               },
               "title": {
                 "type": "string",
@@ -87,14 +87,14 @@
                 "anyOf": [
                   {
                     "type": "string",
-                    "pattern": "^ADR-\\d{4}$",
-                    "description": "Architecture decision record id, e.g. ADR-0001"
+                    "pattern": "^ADR-(?:\\d{4}|\\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*)$",
+                    "description": "Architecture decision record id: legacy ADR-NNNN (e.g. ADR-0001) or new ADR-YYYYMMDD-slug (e.g. ADR-20260624-some-slug)"
                   },
                   {
                     "type": "null"
                   }
                 ],
-                "description": "Architecture decision record id, e.g. ADR-0001",
+                "description": "Architecture decision record id: legacy ADR-NNNN (e.g. ADR-0001) or new ADR-YYYYMMDD-slug (e.g. ADR-20260624-some-slug)",
                 "default": null
               }
             },
