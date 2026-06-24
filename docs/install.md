@@ -38,10 +38,33 @@ prints the exact manual command and continues — it never fails the install.
 
 ## Quick start
 
-Clone the repo, then install DITTO **into the project you want it to manage**:
+You do **not** need to clone the repo. From the project you want DITTO to manage
+(a git repo), one line installs the Claude Code plugin + the global `ditto` CLI
+and scaffolds that project's `.ditto/` — `npx` pulls the source straight from
+GitHub (no npm publish):
 
 ```bash
-git clone <ditto-repo-url> ditto
+npx github:incognito050924/ditto install
+```
+
+Update or remove the same way (see [Updating & dogfooding](#updating--dogfooding) and [Status & uninstall](#status--uninstall)):
+
+```bash
+npx github:incognito050924/ditto update      # pull the latest
+npx github:incognito050924/ditto uninstall   # remove plugin + global CLI
+```
+
+If you run the install from **outside a git repo**, it installs the global plugin
+only and skips the project step — then `cd` into your project and run
+`ditto setup`. The npx install does not provision the optional analysis tools
+(CodeQL/Playwright/LSP); add them later with `ditto setup --tools`.
+
+### From a local clone (contributors)
+
+If you have the repo checked out (developing DITTO itself, or dogfooding), use
+the install script — it builds from your working tree instead of GitHub:
+
+```bash
 cd /path/to/your/project           # the project DITTO should manage
 /path/to/ditto/scripts/install.sh  # bootstrap, then run the setup wizard
 ```
@@ -269,9 +292,13 @@ dogfooding state never leak in.
 
 ## Updating & dogfooding
 
-There is no dedicated `ditto update` command — **updating is re-running the
-bootstrap** (`install.sh` is idempotent: rebuild + idempotent `ditto setup`), plus
-the automatic `dist/plugin` rebuild below. The installed plugin reads
+**Installed via npx?** Update with `npx github:incognito050924/ditto update` — it
+refreshes the marketplace + plugin and re-runs `ditto setup` (idempotent). The
+rest of this section is about updating a **local clone** (contributors/dogfooding).
+
+For a local clone there is no dedicated `ditto update` command — **updating is
+re-running the bootstrap** (`install.sh` is idempotent: rebuild + idempotent
+`ditto setup`), plus the automatic `dist/plugin` rebuild below. The installed plugin reads
 `dist/plugin/` — a **copy** assembled by `build:plugin`, not the source tree — and
 Claude Code loads plugins only at **session start** (no hot reload). So:
 
@@ -314,13 +341,31 @@ so bumping it is exactly what makes `claude plugin update` meaningful: consumers
 
 ## Status & uninstall
 
+Removal has **two layers** — pick by how far you want to go:
+
+```bash
+# from a single project only (keeps the global plugin + CLI installed):
+ditto uninstall                                  # strip managed blocks + allowlist; keep .ditto/
+ditto uninstall --purge                          # also delete .ditto/ (work-item history + memory)
+
+# the global host install (plugin + global `ditto` CLI), if you used npx:
+npx github:incognito050924/ditto uninstall       # leaves each project's .ditto/ intact
+```
+
+`npx … uninstall` removes the plugin, the marketplace entry, and the global
+`ditto` symlink, but does **not** touch any project's `.ditto/` — run
+`ditto uninstall --purge` per project first if you also want that data gone.
+
+For a **local clone**, the install script does the global teardown and delegates
+the project step in one go:
+
 ```bash
 /path/to/ditto/scripts/install.sh status                       # JSON health report
 /path/to/ditto/scripts/install.sh uninstall                    # current directory
 /path/to/ditto/scripts/install.sh uninstall --target /the/project
 ```
 
-Uninstall removes the binary symlink and delegates to `ditto uninstall` (alias: `teardown`), which
+The script removes the binary symlink and delegates to `ditto uninstall` (alias: `teardown`), which
 strips the managed instruction blocks and the allowlist rule while **keeping** the
 target's `.ditto/` runtime data — that is your work-item history and memory.
 

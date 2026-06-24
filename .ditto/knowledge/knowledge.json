@@ -50,6 +50,15 @@
       "change_condition": "AC↔oracle 경화가 비용으로 실효 못 하면 검증법 범위(강도)를 조절하되 'AC는 재평가 가능 oracle로 닫힌다' 원칙은 불변. soft rung 과다(대부분 AC가 user-decision으로 닫힘)면 AC 관측성/검증법 배정 재점검. 구현 후 회고 측정 ①②가 '약한 기획자 분산 축소'를 못 보이면 모델 재검토. 알려진 갭: retro 노드가 completion보다 먼저 실행돼 outcome_floor의 completion-기반 슬롯이 ungrounded — 후속 WI에서 순서 재배치.",
       "path": ".ditto/knowledge/adr/ADR-0024-floor-raising-inplace-hardening.md",
       "superseded_by": null
+    },
+    {
+      "id": "ADR-0025",
+      "title": "Codex dogfood 수정은 Claude Code 표면과 분리한다",
+      "status": "accepted",
+      "rationale": "Codex dogfood 실패는 Codex의 stateful marketplace 진입에서 발생했다. Claude Code dogfood는 stateless `--plugin-dir` 경로로 이미 분리되어 있으므로, Codex 설치 결함을 Claude Code marketplace/build/manifest로 풀면 dual-host 분리가 약해지고 비목표 회귀가 생긴다. 따라서 수정은 Codex branch와 Codex build/setup 표면에만 두고, Claude Code 표면은 fresh 비회귀 검증으로 닫는다.",
+      "change_condition": "Claude Code가 Codex와 같은 stateful marketplace-only 모델로 바뀌거나 Codex가 stateless plugin-dir 등가 경로를 제공하면 dogfood 진입 분리를 재검토한다. Codex 공식 marketplace 발견 경로가 바뀌면 ADR-0016 D5와 함께 Codex 경로만 실측 기준으로 갱신한다. Claude Code 파일 변경 없이는 Codex dogfood를 고칠 수 없다는 코드 근거가 나오면 영향 범위와 비회귀 검증을 ADR amendment로 남긴다.",
+      "path": ".ditto/knowledge/adr/ADR-0025-codex-dogfood-host-isolation.md",
+      "superseded_by": null
     }
   ],
   "patterns": [],

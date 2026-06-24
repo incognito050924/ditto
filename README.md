@@ -60,16 +60,49 @@ It should avoid:
 
 ## Installing
 
-DITTO installs as a local Claude Code plugin via one idempotent script. See the
-install guide for prerequisites, commands, options, verification, and uninstall:
+No clone, no npm publish — `npx` pulls the source straight from GitHub. One line
+per lifecycle step. Prerequisites: **bun ≥ 1.3**, **git**, and **Claude Code** on
+your `PATH`.
+
+### Install
+
+Run it **from the project you want DITTO to manage** (a git repo): it installs the
+Claude Code plugin + a global `ditto` CLI and scaffolds that project's `.ditto/`
+in the same step.
+
+```bash
+npx github:incognito050924/ditto install
+```
+
+> Run from outside a git repo and it installs the global plugin only — then `cd`
+> into your project and run `ditto setup`. Optional analysis tools
+> (CodeQL/Playwright/LSP) aren't provisioned by npx; add them with `ditto setup --tools`.
+
+### Update
+
+Pull the latest published version (refreshes the plugin + CLI, re-runs setup; idempotent):
+
+```bash
+npx github:incognito050924/ditto update
+```
+
+### Uninstall — two layers
+
+```bash
+# from one project only (the global install stays):
+ditto uninstall            # remove DITTO's managed blocks + allowlist; keep .ditto/
+ditto uninstall --purge    # also delete .ditto/ (work-item history + memory)
+
+# the whole global host install:
+npx github:incognito050924/ditto uninstall   # remove plugin + global CLI; each project's .ditto/ stays
+```
+
+Maintainers publish a new version with `bun run release <patch|minor|major>` then
+`git push && git push origin v<version>`. Full guide — options, the setup wizard,
+the local-repo path for contributors, verification, and troubleshooting:
 
 - English: [docs/install.md](docs/install.md)
 - 한국어: [docs/install.ko.md](docs/install.ko.md)
-
-```bash
-# install into the project you want DITTO to manage
-/path/to/ditto/scripts/install.sh --target /path/to/your/project
-```
 
 ## Configuring agent variants
 
