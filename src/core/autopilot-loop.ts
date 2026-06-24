@@ -36,7 +36,7 @@ import {
 } from './autopilot-graph';
 import { AutopilotStore } from './autopilot-store';
 import { planTidyOnImplementPass } from './autopilot-tidy';
-import { countUnitOnlyClosures } from './completion-coverage-doctor';
+import { countUnitOnlyClosures, isClosed } from './completion-coverage-doctor';
 import { CompletionStore } from './completion-store';
 import { CoverageFeedbackLedger } from './coverage-feedback';
 import { assertOracleFrozen, producePlanGate, validateAcOracle } from './coverage-manager';
@@ -161,7 +161,9 @@ async function specDigestStale(
  * projection of records the run already wrote.
  *
  * Groundings (each omitted when its source is absent):
- *   ① outcome_floor.coverage  ← completion.json (passed acceptance / total).
+ *   ① outcome_floor.coverage  ← completion.json (evidence-CLOSED acceptance / total,
+ *      the SAME `isClosed` rule `ditto doctor completion-coverage` uses — pass with
+ *      no evidence is a claim, not a close).
  *   ① outcome_floor.unit_only_closures ← the `isUnitOnlyClosure` aggregate over the
  *      SAME completion.json (count of falsely-green closures: pass closed on
  *      command-only evidence with no runtime/artifact). Grounded whenever completion
@@ -213,7 +215,14 @@ async function collectRetroContext(
     if (floorSource) {
       const total = floorSource.acceptance.length;
       if (total > 0) {
-        coverage = floorSource.acceptance.filter((a) => a.verdict === 'pass').length / total;
+        // evidence-CLOSED / total — the SAME `isClosed` rule `ditto doctor
+        // completion-coverage` uses (verdict=pass AND ≥1 evidence ref), NOT a bare
+        // pass-ratio. A pass with no evidence is a claim, not proof, so it does not
+        // count (ADR-0024 결정4 anti-SLOP; claim ≠ proof). On the graph path a pass
+        // always carries evidence (deriveAcVerdicts is evidence-gated), so this only
+        // changes the PERSISTED-completion path — where an external pass-without-
+        // evidence could otherwise inflate the floor away from the doctor's value.
+        coverage = floorSource.acceptance.filter(isClosed).length / total;
       }
       // ① unit_only_closures — count of falsely-green closures (pass closed on
       // command-only evidence, no runtime/artifact). The count uses the SAME

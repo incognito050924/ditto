@@ -2,6 +2,75 @@ import { type RetroMetricSnapshot, retroMetricSnapshot } from '~/schemas/retro-m
 import { localDir } from './ditto-paths';
 import { atomicWriteText } from './fs';
 
+/** Trend stats for one metric across the grounded rows (recorded_at-ordered). */
+export interface MetricTrend {
+  /** number of rows that GROUNDED this metric (anti-SLOP: ungrounded rows excluded). */
+  n: number;
+  /** value at the earliest recorded_at among grounded rows. */
+  first: number;
+  /** value at the latest recorded_at among grounded rows. */
+  last: number;
+  mean: number;
+  min: number;
+  max: number;
+}
+
+/**
+ * Cross-WI retro-metric trend (ADR-0024 결정4 retract-condition input). Each metric
+ * is present ONLY when ≥1 row grounded it — a metric no WI recorded is OMITTED, never
+ * a fabricated zero (same anti-SLOP shape the ledger preserves). The reader can then
+ * see whether the floor's signals move over time (e.g. coverage up, post_cost down).
+ */
+export interface RetroTrendSummary {
+  /** total snapshot rows (one per WI). */
+  work_items: number;
+  /** rows whose retro found no measurable signal (carry no metric). */
+  no_measurable_signal: number;
+  coverage?: MetricTrend;
+  unit_only_closures?: MetricTrend;
+  escape_recurrence?: MetricTrend;
+  post_cost?: MetricTrend;
+}
+
+/** Build a MetricTrend from recorded_at-ordered grounded values, or undefined when none. */
+function metricTrend(values: number[]): MetricTrend | undefined {
+  if (values.length === 0) return undefined;
+  const sum = values.reduce((s, v) => s + v, 0);
+  return {
+    n: values.length,
+    first: values[0] as number,
+    last: values[values.length - 1] as number,
+    mean: sum / values.length,
+    min: Math.min(...values),
+    max: Math.max(...values),
+  };
+}
+
+/**
+ * Summarize the cross-WI retro-metric trend from ledger rows. Pure. Orders rows by
+ * `recorded_at` (ascending) so `first`/`last` reflect chronology regardless of input
+ * order, then collects each metric's grounded values; an ungrounded metric is omitted.
+ */
+export function summarizeRetroTrend(rows: RetroMetricSnapshot[]): RetroTrendSummary {
+  const ordered = [...rows].sort((a, b) => a.recorded_at.localeCompare(b.recorded_at));
+  const grounded = (pick: (r: RetroMetricSnapshot) => number | undefined): number[] =>
+    ordered.map(pick).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+
+  const summary: RetroTrendSummary = {
+    work_items: rows.length,
+    no_measurable_signal: rows.filter((r) => r.metrics.no_measurable_signal === true).length,
+  };
+  const coverage = metricTrend(grounded((r) => r.metrics.outcome_floor?.coverage));
+  const unitOnly = metricTrend(grounded((r) => r.metrics.outcome_floor?.unit_only_closures));
+  const escapeRecurrence = metricTrend(grounded((r) => r.metrics.outcome_floor?.escape_recurrence));
+  const postCost = metricTrend(grounded((r) => r.metrics.process_health?.post_cost));
+  if (coverage) summary.coverage = coverage;
+  if (unitOnly) summary.unit_only_closures = unitOnly;
+  if (escapeRecurrence) summary.escape_recurrence = escapeRecurrence;
+  if (postCost) summary.post_cost = postCost;
+  return summary;
+}
+
 /**
  * Append-only jsonl ledger of retro measurement snapshots (ADR-0024 Decision 4
  * trend preservation). One file for the whole repo

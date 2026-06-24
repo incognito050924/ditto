@@ -33,6 +33,11 @@ import { checkInstructionsForHosts } from '~/core/instruction-bridge';
 import { collectIntentQualityReport, defaultIntentQualityDeps } from '~/core/intent-quality-doctor';
 import { collectMcpInventory } from '~/core/mcp-inventory';
 import { collectPermissionFindings } from '~/core/permission-inventory';
+import {
+  type MetricTrend,
+  RetroMetricLedger,
+  summarizeRetroTrend,
+} from '~/core/retro-metric-ledger';
 import { collectSurfaceInventory } from '~/core/surface-inventory';
 import {
   InvalidOutputFormatError,
@@ -572,6 +577,65 @@ const completionCoverageCommand = defineCommand({
   },
 });
 
+const retroTrendCommand = defineCommand({
+  meta: {
+    name: 'retro-trend',
+    description:
+      'Read the cross-WI retro-metric ledger and surface the per-metric trend (coverage / unit_only_closures / escape_recurrence / post_cost) so the ADR-0024 floor retract condition can be evaluated from real data',
+  },
+  args: {
+    output: { type: 'string', default: 'human', description: 'Output format: human|json' },
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const rows = await new RetroMetricLedger(repoRoot).readAll();
+      const summary = summarizeRetroTrend(rows);
+      if (format === 'json') {
+        writeJson({ rows, summary });
+      } else if (rows.length === 0) {
+        writeHuman('retro-trend: no measurements (the retro-metric ledger is empty)');
+      } else {
+        const num = (v: number | undefined, digits = 0): string =>
+          typeof v === 'number' ? v.toFixed(digits) : '-';
+        writeHuman('work_item\trecorded_at\tcoverage\tunit_only\tescape\tpost_cost');
+        for (const r of rows) {
+          const o = r.metrics.outcome_floor;
+          const p = r.metrics.process_health;
+          const marker = r.metrics.no_measurable_signal ? '\t(no measurable signal)' : '';
+          writeHuman(
+            `${r.work_item_id}\t${r.recorded_at}\t${num(o?.coverage, 2)}\t${num(
+              o?.unit_only_closures,
+            )}\t${num(o?.escape_recurrence)}\t${num(p?.post_cost)}${marker}`,
+          );
+        }
+        // Per-metric trend: present only for grounded metrics (anti-SLOP), with the
+        // chronological first→last delta the retract condition reads.
+        writeHuman(
+          `\ntrend (${summary.work_items} work items, ${summary.no_measurable_signal} no_measurable_signal):`,
+        );
+        const trendLine = (label: string, t: MetricTrend | undefined, digits = 0): void => {
+          if (!t) return;
+          writeHuman(
+            `  ${label}\tn=${t.n}\tfirst=${t.first.toFixed(digits)}\tlast=${t.last.toFixed(
+              digits,
+            )}\tmean=${t.mean.toFixed(2)}\t[${t.min.toFixed(digits)}, ${t.max.toFixed(digits)}]`,
+          );
+        };
+        trendLine('coverage', summary.coverage, 2);
+        trendLine('unit_only_closures', summary.unit_only_closures);
+        trendLine('escape_recurrence', summary.escape_recurrence);
+        trendLine('post_cost', summary.post_cost);
+      }
+      // Informational measurement readout; never a drift exit.
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  },
+});
+
 const variantsCommand = defineCommand({
   meta: {
     name: 'variants',
@@ -643,6 +707,7 @@ export const doctorCommand = defineCommand({
     distribution: distributionCommand,
     'intent-quality': intentQualityCommand,
     'completion-coverage': completionCoverageCommand,
+    'retro-trend': retroTrendCommand,
     variants: variantsCommand,
   },
 });

@@ -112,7 +112,13 @@ describe('retro dispatch wiring (ac-4: context.retro carries the SEPARATED metri
       declaredBy: 'verifier',
       summary: 'partial close',
       verdicts: [
-        { criterion_id: 'ac-1', verdict: 'pass', evidence: [] },
+        // ac-1 closes pass WITH evidence (a real close); ac-2 unverified. 1 of 2
+        // closed ⇒ coverage 0.5 under the evidence-based rule shared with the doctor.
+        {
+          criterion_id: 'ac-1',
+          verdict: 'pass',
+          evidence: [{ kind: 'file', path: 'src/x.ts', summary: 'wired' }],
+        },
         { criterion_id: 'ac-2', verdict: 'unverified', evidence: [] },
       ],
       unverified: [{ item: 'migration not run', reason: 'no staging db', out_of_scope: true }],
@@ -135,6 +141,36 @@ describe('retro dispatch wiring (ac-4: context.retro carries the SEPARATED metri
     const narrativeText = JSON.stringify(retro?.narrative);
     expect(narrativeText).toContain('migration not run');
     expect(narrativeText).toContain('rollback path untested');
+  });
+
+  test('persisted completion: a pass WITHOUT evidence is EXCLUDED from coverage (evidence-based == doctor isClosed)', async () => {
+    // claim ≠ proof (ADR-0024 결정4 anti-SLOP): retro outcome_floor.coverage must use
+    // the SAME closure rule as `ditto doctor completion-coverage` — verdict=pass AND
+    // ≥1 evidence ref — not a bare pass-ratio. ac-1 closes pass WITH file evidence;
+    // ac-2 is pass with NO evidence (a claim, not proof). Only ac-1 is closed ⇒
+    // coverage = 1/2 = 0.5. A verdict-only ratio would wrongly count both ⇒ 1.0.
+    const wi = await wis.get(WI);
+    await new CompletionStore(repo).write(
+      buildCompletion({
+        workItem: wi,
+        declaredBy: 'verifier',
+        summary: 'evidence vs claim',
+        verdicts: [
+          {
+            criterion_id: 'ac-1',
+            verdict: 'pass',
+            evidence: [{ kind: 'file', path: 'src/x.ts', summary: 'wired' }],
+          },
+          { criterion_id: 'ac-2', verdict: 'pass', evidence: [] },
+        ],
+        now: NOW,
+      }),
+    );
+
+    await aps.write(WI, graph([retroNode()]));
+    const res = await nextNode(repo, WI);
+    if (res.action !== 'spawn') throw new Error('expected spawn');
+    expect(res.packet.context.retro?.metrics.outcome_floor?.coverage).toBe(0.5);
   });
 
   test('escape-ledger recurrence grounds outcome_floor.escape_recurrence', async () => {
@@ -391,7 +427,13 @@ describe('retro metric trend ledger wiring (ADR-0024 결정4 trend preservation)
         declaredBy: 'verifier',
         summary: 's',
         verdicts: [
-          { criterion_id: 'ac-1', verdict: 'pass', evidence: [] },
+          // ac-1 closes pass WITH evidence (1 of 2 closed ⇒ coverage 0.5 under the
+          // evidence-based rule); ac-2 unverified.
+          {
+            criterion_id: 'ac-1',
+            verdict: 'pass',
+            evidence: [{ kind: 'file', path: 'src/x.ts', summary: 'wired' }],
+          },
           { criterion_id: 'ac-2', verdict: 'unverified', evidence: [] },
         ],
         now: NOW,

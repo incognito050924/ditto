@@ -21,8 +21,13 @@ import { WorkItemStore, type WorkItemSummary } from './work-item-store';
  * and is NOT counted — mirroring the completion gate's evidence requirement.
  */
 
-/** Whether an acceptance verdict is closed by evidence (claim ≠ proof). */
-function isClosed(ac: CompletionContract['acceptance'][number]): boolean {
+/**
+ * Whether an acceptance verdict is closed by evidence (claim ≠ proof). The SINGLE
+ * closure rule shared by `ditto doctor completion-coverage` and the retro
+ * outcome_floor.coverage input (autopilot-loop.ts) so the two never drift — a bare
+ * pass with no evidence is a claim, not a closed criterion (ADR-0024 결정4 anti-SLOP).
+ */
+export function isClosed(ac: CompletionContract['acceptance'][number]): boolean {
   const hasEvidence = (ac.evidence?.length ?? 0) > 0 || (ac.evidence_records?.length ?? 0) > 0;
   return ac.verdict === 'pass' && hasEvidence;
 }
