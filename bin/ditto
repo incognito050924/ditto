@@ -34892,7 +34892,8 @@ async function writeWorkItemHandoff(repoRoot, store, workId, options = {}, now =
   if (await autopilotStore.exists(workId)) {
     const graph = await autopilotStore.get(workId);
     const acIds = item.acceptance_criteria.map((c3) => c3.id);
-    graphAcceptance = deriveAcVerdicts(graph, acIds).map((v2) => ({
+    const oracles = new Map(item.acceptance_criteria.map((c3) => [c3.id, c3.oracle]));
+    graphAcceptance = deriveAcVerdicts(graph, acIds, oracles).map((v2) => ({
       criterion_id: v2.criterion_id,
       verdict: v2.verdict,
       evidence: v2.evidence ?? [],
@@ -41340,4 +41341,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=c7ba09528cf29ea3ad6904d8069ab98f56829294657a2b767ba44ec0ffb84dd9
+//# ditto-src-stamp=c6f88f2d667db658af23da8505c743bcdfa7bc5d7199faf8a43331dbb255e9e4

@@ -253,7 +253,10 @@ export async function writeWorkItemHandoff(
   if (await autopilotStore.exists(workId)) {
     const graph = await autopilotStore.get(workId);
     const acIds = item.acceptance_criteria.map((c) => c.id);
-    graphAcceptance = deriveAcVerdicts(graph, acIds).map((v) => ({
+    // Thread each AC's oracle (ADR-0024 §3) — the SAME source as `assembleCompletionFromGraph`
+    // so the two completion paths AGREE on oracle-gated verdicts (no gate↔score gap).
+    const oracles = new Map(item.acceptance_criteria.map((c) => [c.id, c.oracle]));
+    graphAcceptance = deriveAcVerdicts(graph, acIds, oracles).map((v) => ({
       criterion_id: v.criterion_id,
       verdict: v.verdict,
       evidence: v.evidence ?? [],

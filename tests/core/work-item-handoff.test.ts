@@ -356,6 +356,60 @@ describe('writeWorkItemHandoff', () => {
     expect(updated.status).toBe('done');
   });
 
+  test('graph + oracle: handoff threads the AC oracle and AGREES with complete (N10 gate↔score)', async () => {
+    const created = await store.create(makeInput());
+    // ac-1 carries a static_scan oracle: closure needs file/artifact/command evidence.
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1'
+          ? {
+              ...c,
+              oracle: {
+                verification_method: 'static_scan' as const,
+                maps_to: 'src/x.ts:10',
+                direction: 'backward' as const,
+              },
+            }
+          : c,
+      ),
+    }));
+    // The graph closes ac-1 with a PASSED node, but its only evidence is a `note` —
+    // which does NOT satisfy a static_scan oracle (needs file/artifact/command). The
+    // oracle-gated verdict must therefore downgrade from pass.
+    const graph = autopilot.parse({
+      schema_version: '0.1.0',
+      autopilot_id: 'orch_oracletest',
+      work_item_id: created.id,
+      root_goal: 'goal',
+      approval_gate: { status: 'not_required', source: 'small_reversible_policy' },
+      nodes: [
+        {
+          id: 'N3',
+          kind: 'verify',
+          owner: 'verifier',
+          purpose: 'verify ac-1',
+          status: 'passed',
+          acceptance_refs: ['ac-1'],
+          evidence_refs: [{ kind: 'note', summary: 'looks fine' }],
+        },
+      ],
+      caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 },
+      continue_policy: {},
+      stop_conditions: [],
+    });
+    await new AutopilotStore(workDir).write(created.id, graph);
+
+    // `ditto autopilot complete` threads the oracle (→ downgrade). The handoff path
+    // MUST thread the SAME oracle or the two completion verdicts silently diverge.
+    const fromComplete = assembleCompletionFromGraph(graph, await store.get(created.id));
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    // No gate↔score gap: both paths produce identical per-AC verdicts.
+    expect(result.completion.acceptance.map((a) => a.verdict)).toEqual(
+      fromComplete.acceptance.map((a) => a.verdict),
+    );
+  });
+
   test('no graph: handoff still uses work-item AC verdicts (unchanged fallback)', async () => {
     const created = await store.create(makeInput());
     // ac-1 stays unverified, no graph → fallback path → partial (regression guard).
