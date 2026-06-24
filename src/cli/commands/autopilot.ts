@@ -366,6 +366,33 @@ const autopilotComplete = defineCommand({
       const completion = assembleCompletionFromGraph(graph, workItem, {
         ...(args.summary ? { summary: args.summary } : {}),
       });
+      // false-green 차단 (wi_260624xb8 ac-2): completion은 AC를 work-item에서
+      // 읽으므로, intent.json이 work-item보다 많은 AC를 선언했는데 동기화가 안 된
+      // 경우(scope shrink) ac-2..N이 조용히 빠진 채 final_verdict=pass가 날 수
+      // 있다. assemble 결과가 pass인데 intent-conservation(H1 AC id-set)이 깨졌으면
+      // pass completion을 디스크에 쓰지 않는다. e2e 게이트와 동일한 차단 패턴.
+      // (ADR-0024 §3: 여기서는 per-AC 판정이 아니라 AC id-set 보존만 강제한다 —
+      // 개별 verdict/oracle 판정은 deriveAcVerdicts에 그대로 둔다.)
+      const intentStore = new IntentStore(repoRoot);
+      if (completion.final_verdict === 'pass' && (await intentStore.exists(args.workItem))) {
+        const intent = await intentStore.get(args.workItem);
+        const drift = intentDriftGate({ intent, workItem, graph });
+        if (!drift.pass) {
+          if (format === 'json') {
+            writeJson({ work_item_id: args.workItem, intent_drift: drift.reasons });
+          } else {
+            writeError(
+              `complete blocked by intent-conservation (false-green guard, ${drift.reasons.length}):`,
+            );
+            for (const r of drift.reasons) writeError(`  - ${r}`);
+            writeError(
+              '  → sync the work item AC to intent (re-run bootstrap), then re-run complete',
+            );
+          }
+          process.exit(RUNTIME_ERROR_EXIT);
+          return;
+        }
+      }
       await new CompletionStore(repoRoot).write(completion);
       // ac-2 cite-or-abstain advisory gate: did the lineage-pushed nodes cite or
       // abstain against the governing decisions injected into their packets?

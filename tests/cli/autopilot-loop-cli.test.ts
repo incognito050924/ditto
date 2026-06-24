@@ -210,6 +210,79 @@ describe('ditto autopilot complete — e2e 완료 게이트 (O-4/O-18)', () => {
   });
 });
 
+describe('ditto autopilot complete — intent-drift conservation 게이트 (false-green 차단, wi_260624xb8 ac-2/ac-3)', () => {
+  async function writeIntent(acIds: string[]): Promise<void> {
+    const wiDir = join(dir, '.ditto', 'local', 'work-items', WI);
+    await writeFile(
+      join(wiDir, 'intent.json'),
+      `${JSON.stringify(
+        {
+          schema_version: '0.1.0',
+          work_item_id: WI,
+          source_request: 'drive the loop via CLI',
+          goal: 'next-node and record-result work end to end',
+          acceptance_criteria: acIds.map((id) => ({
+            id,
+            statement: `criterion ${id} is met`,
+            evidence_required: ['test'],
+          })),
+          question_policy: 'ask_only_if_user_only_can_answer',
+        },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+  }
+
+  // ac-1을 evidence와 함께 닫는다 → work-item이 ac-1만 보면 final_verdict=pass(=false-green
+  // 재현 조건). conservation 게이트가 없으면 complete가 pass를 방출한다.
+  async function closeAc1(): Promise<void> {
+    const graphPath = join(dir, '.ditto', 'local', 'work-items', WI, 'autopilot.json');
+    const graph = JSON.parse(await Bun.file(graphPath).text());
+    for (const n of graph.nodes) {
+      n.status = 'passed';
+      n.evidence_refs = [{ kind: 'note', summary: `ac-1 closed by ${n.id}` }];
+    }
+    await writeFile(graphPath, `${JSON.stringify(graph, null, 2)}\n`, 'utf8');
+  }
+
+  test('work item AC가 intent보다 적으면(scope shrink) complete가 final_verdict=pass를 산출하지 않는다', async () => {
+    // intent엔 ac-1..ac-5, work-item.json엔 seed의 ac-1만. bootstrap 동기화가
+    // 안 된 상태에서 complete가 ac-2..ac-5를 못 보고 false-green을 내던 경로.
+    await writeIntent(['ac-1', 'ac-2', 'ac-3', 'ac-4', 'ac-5']);
+    await closeAc1();
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    // 차단(non-zero) 또는 비-pass — 둘 다 false-green 방지로 허용. pass 방출만 금지.
+    if (res.exitCode === 0) {
+      const out = JSON.parse(res.stdout);
+      expect(out.final_verdict).not.toBe('pass');
+    } else {
+      // 차단 시 false-green completion.json이 디스크에 남지 않는다.
+      const written = await Bun.file(
+        join(dir, '.ditto', 'local', 'work-items', WI, 'completion.json'),
+      ).exists();
+      if (written) {
+        const comp = JSON.parse(
+          await Bun.file(
+            join(dir, '.ditto', 'local', 'work-items', WI, 'completion.json'),
+          ).text(),
+        );
+        expect(comp.final_verdict).not.toBe('pass');
+      }
+    }
+  });
+
+  test('work item AC = intent AC(정상 경로)면 complete가 종전대로 진행된다', async () => {
+    // seed work-item.json은 ac-1만 — intent도 ac-1만이면 conservation 통과.
+    await writeIntent(['ac-1']);
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    expect(res.exitCode).toBe(0);
+    const out = JSON.parse(res.stdout);
+    expect(out.final_verdict).toBeDefined();
+  });
+});
+
 describe('ditto autopilot complete — ac-4 표식 단독 성공판정 금지 (cite cross-check 배선)', () => {
   test('완료 경로가 cite_cross_check를 advisory로 방출한다 (push 없음 → not-applicable)', async () => {
     // 워밍스타트 usage 로그 없음 ⇒ cite verdict=skip ⇒ cross-check=not-applicable.

@@ -101,6 +101,42 @@ describe('bootstrapAutopilot', () => {
     }
   });
 
+  test('bootstrap syncs intent AC into the work item (work-item AC == intent AC after)', async () => {
+    // false-green seam (wi_260624xb8 ac-1): a draft work item may hold only a
+    // placeholder AC while intent.json carries the readied ac-1..ac-3. Bootstrap
+    // is the chokepoint all entry paths funnel through — it must mirror intent
+    // AC into the work item so completion later evaluates every intent AC.
+    const wi = await new WorkItemStore(repo).create({
+      title: 'pw',
+      source_request: 'add endpoint',
+      goal: 'POST /pw returns a score',
+      acceptance_criteria: [
+        { id: 'ac-1', statement: 'placeholder TBD', verdict: 'unverified', evidence: [] },
+      ],
+    });
+    const intent = intentContract.parse({
+      schema_version: '0.1.0',
+      work_item_id: wi.id,
+      source_request: 'add endpoint',
+      goal: 'POST /pw returns a score',
+      acceptance_criteria: [
+        { id: 'ac-1', statement: 'POST /pw returns 200', evidence_required: ['test'] },
+        { id: 'ac-2', statement: 'score is numeric', evidence_required: ['test'] },
+        { id: 'ac-3', statement: 'rejects empty body', evidence_required: ['test'] },
+      ],
+      question_policy: 'ask_only_if_user_only_can_answer',
+    });
+    const result = await bootstrapAutopilot(repo, { workItem: wi, intent, risk: safeRisk });
+    expect(result.status).toBe('created');
+    const synced = await new WorkItemStore(repo).get(wi.id);
+    expect(synced.acceptance_criteria.map((ac) => ac.id)).toEqual(['ac-1', 'ac-2', 'ac-3']);
+    expect(synced.acceptance_criteria.map((ac) => ac.statement)).toEqual([
+      'POST /pw returns 200',
+      'score is numeric',
+      'rejects empty body',
+    ]);
+  });
+
   test('default generator yields the 3-node seed kinds (behavior invariant)', async () => {
     const { wi, intent } = await setup('POST /pw returns 200 with a numeric score');
     const result = await bootstrapAutopilot(repo, { workItem: wi, intent, risk: safeRisk });

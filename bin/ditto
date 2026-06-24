@@ -18261,6 +18261,383 @@ async function generateId(prefix, existsCheck, options = {}) {
   throw new Error(`failed to generate unique ${prefix}_ id after ${maxAttempts} attempts; likely a clock or RNG issue`);
 }
 
+// src/core/work-item-store.ts
+init_zod();
+import { readdir as readdir4, rename as rename2, stat as stat2 } from "fs/promises";
+import { dirname as dirname4, join as join13 } from "path";
+
+// src/schemas/intent-metric.ts
+init_zod();
+init_common();
+var intentMetricHop = exports_external.enum(["H1", "H2", "H3"]).describe("Which intent-chain hop the drift was detected at (intentDriftGate H1/H2/H3)");
+var intentMetric = exports_external.object({
+  ts: isoDateTime,
+  work_item_id: workItemId,
+  kind: exports_external.literal("intent_drift").describe("Discriminator; only intent_drift is defined today"),
+  source: exports_external.enum(["stop_hook", "cli"]).describe("Where the measurement was taken (the Stop hook, or an explicit CLI run)"),
+  blocking_reasons: exports_external.array(exports_external.string()).default([]).describe("Blocking drift reasons (AC id-set scope grow/shrink)"),
+  advisories: exports_external.array(exports_external.string()).default([]).describe("Non-blocking drift advisories (goal/source_request string divergence)"),
+  hops: exports_external.array(intentMetricHop).default([]).describe("Distinct hops present in this event")
+}).describe("One line of .ditto/local/work-items/<id>/metrics.jsonl \u2014 a persisted drift event");
+
+// src/schemas/language-ledger.ts
+init_zod();
+init_common();
+var languageChange = exports_external.object({
+  op: exports_external.enum(["add", "modify", "deprecate", "alias"]).describe("What kind of glossary change this entry records"),
+  term: exports_external.string().min(1),
+  before: exports_external.string().optional().describe("Prior definition or surface form, if applicable"),
+  after: exports_external.string().optional().describe("New definition or surface form, if applicable"),
+  rationale: exports_external.string().min(1).describe("Why the change is needed; cite user statement when available"),
+  proposed_by: exports_external.string().min(1).describe("User handle or agent profile that proposed it"),
+  agreed_with_user: exports_external.boolean().describe("True only after explicit user confirmation; defaults to false on creation"),
+  decided_at: isoDateTime.optional()
+}).superRefine((value, ctx) => {
+  if (value.agreed_with_user === true && value.decided_at === undefined) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "agreed_with_user=true requires decided_at (confirmation timestamp)",
+      path: ["decided_at"]
+    });
+  }
+}).describe("One change to project language as observed during a work item");
+var languageLedger = exports_external.object({
+  schema_version: schemaVersion,
+  work_item_id: workItemId,
+  created_at: isoDateTime,
+  updated_at: isoDateTime,
+  changes: exports_external.array(languageChange).default([])
+}).describe("Per-work-item record of language negotiations; merged into glossary once agreed");
+
+// src/schemas/tech-spec-round.ts
+init_zod();
+init_common();
+var questionProperty = exports_external.enum(["blind-spot", "expansion", "orientation"]).describe("Which good-question property the candidate carries (SKILL.md \xA7good questions)");
+var questionScore = exports_external.object({
+  consensus: exports_external.number().int().nonnegative().describe("How many generators independently raised this question (necessity signal)"),
+  quality: exports_external.number().min(0).max(1).describe("Meets the three good-question properties [0..1]"),
+  necessity: exports_external.number().min(0).max(1).describe("Still open given the fixed facts [0..1]"),
+  answer_value: exports_external.number().min(0).max(1).describe("How much the spec changes depending on the answer [0..1]")
+}).describe("The gate 4-dimension score for one candidate question");
+var scoredQuestion = exports_external.object({
+  text: exports_external.string().min(1),
+  property: questionProperty,
+  why_matters: exports_external.string().optional(),
+  scores: questionScore,
+  rationale: exports_external.string().optional().describe("Why selected (present on selected questions)")
+}).describe("One candidate question with its gate score");
+var techSpecRoundPayload = exports_external.object({
+  round: exports_external.number().int().positive().describe("1-based round index within the interview"),
+  section: exports_external.string().optional().describe("Target spec section this round filled"),
+  generator_count: exports_external.number().int().positive().default(2).describe("N generators fanned out (--generators default 2, range 1..6; wi_260619yfw)"),
+  threshold: exports_external.number().optional().describe("Fixed selection threshold used this round (\xA79 #4)"),
+  dry: exports_external.boolean().describe("Gate found no candidate above the threshold \u2192 round/interview ends (\xA79 #4)"),
+  selected: exports_external.array(scoredQuestion).default([]).describe("Questions selected to ask the user"),
+  all_scored: exports_external.array(scoredQuestion).default([]).describe("Every candidate with its score (durable score trail for later tuning)")
+}).superRefine((val, ctx) => {
+  if (val.dry && val.selected.length > 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      path: ["selected"],
+      message: "dry=true \uB77C\uC6B4\uB4DC\uB294 selected\uAC00 \uBE44\uC5B4 \uC788\uC5B4\uC57C \uD55C\uB2E4 (\uC784\uACC4 \uC774\uC0C1 \uC9C8\uBB38 \uBD80\uC7AC\uAC00 dry\uC758 \uC815\uC758)"
+    });
+  }
+  if (!val.dry && val.selected.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      path: ["dry"],
+      message: "selected\uAC00 \uBE44\uC5B4 \uC788\uC73C\uBA74 dry=true\uC5EC\uC57C \uD55C\uB2E4 (\uC120\uC815\uB41C \uC9C8\uBB38\uC774 \uC5C6\uB294 \uB77C\uC6B4\uB4DC\uB294 dry)"
+    });
+  }
+});
+var techSpecRound = exports_external.object({
+  ts: isoDateTime,
+  work_item_id: workItemId,
+  round: exports_external.number().int().positive(),
+  section: exports_external.string().optional(),
+  generator_count: exports_external.number().int().positive().default(2),
+  threshold: exports_external.number().optional(),
+  dry: exports_external.boolean(),
+  selected: exports_external.array(scoredQuestion).default([]),
+  all_scored: exports_external.array(scoredQuestion).default([])
+}).describe("One line of .ditto/local/work-items/<id>/tech-spec-rounds.jsonl");
+
+// src/schemas/work-item.ts
+init_zod();
+init_common();
+var gitSha40 = exports_external.string().regex(/^[a-f0-9]{40}$/, "git sha must be 40 lowercase hex characters").describe("Full 40-char git commit sha");
+var verificationMethod = exports_external.enum(["dynamic_test", "static_scan", "soft_judgment"]).describe("Re-evaluability class of the oracle (ADR-0024 \xA73.1: hard\xB7dynamic / hard\xB7static / soft\xB7judgment). Distinct from evidenceRequiredKind (intent.ts), which is the kind of evidence, not its re-evaluability.");
+var codePointerMapsTo = /^[^\s]+\.[A-Za-z0-9]+:[^\s]+$/;
+var acOracle = exports_external.object({
+  verification_method: verificationMethod,
+  maps_to: exports_external.string().min(1).describe("AC, file:line, intent, or doc the oracle anchors to (same vocabulary as dialectic maps_to)"),
+  direction: exports_external.enum(["forward", "backward"]).describe("forward = post-change final state; backward = current-code finding (ADR-0024 \xA73.0)")
+}).superRefine((value, ctx) => {
+  if (value.direction === "forward" && codePointerMapsTo.test(value.maps_to)) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "forward oracle must be re-evaluable: a code-pointer maps_to (file:line / symbol) drifts on change \u2014 use direction=backward for a current-code finding (ADR-0024 \xA73.0)",
+      path: ["maps_to"]
+    });
+  }
+}).describe("Per-AC oracle: re-evaluable verification method + anchor target (ADR-0024 \xA73)");
+var acceptanceCriterion = exports_external.object({
+  id: exports_external.string().min(1).describe("Stable id within the work item (e.g., ac-1)"),
+  statement: exports_external.string().min(1).describe("Single observable behavior in user-facing terms"),
+  verdict: verdict.default("unverified"),
+  evidence: exports_external.array(evidenceRef).default([]),
+  oracle: acOracle.optional()
+}).describe("One acceptance criterion with its verification verdict");
+var riskNote = exports_external.object({
+  description: exports_external.string().min(1),
+  severity: exports_external.enum(["info", "low", "medium", "high", "critical"]).default("low"),
+  mitigation: exports_external.string().optional()
+}).describe("Outstanding risk that did not block completion but remains relevant");
+var reEntry = exports_external.object({
+  command: exports_external.string().optional().describe("Concrete next command to resume work"),
+  fresh_evidence_needed: exports_external.array(exports_external.string()).default([]).describe("What new evidence must be gathered before the next attempt"),
+  owner: exports_external.string().optional().describe("Profile or human handle expected to resume")
+}).describe("Instructions for resuming a partial/unverified/blocked work item");
+var workItem = exports_external.object({
+  schema_version: schemaVersion,
+  id: workItemId,
+  title: exports_external.string().min(1).max(200),
+  source_request: exports_external.string().min(1).describe("Verbatim or close-paraphrase of the original user request"),
+  goal: exports_external.string().min(1).describe("Observable outcome stated in project terms; not a list of steps"),
+  acceptance_criteria: exports_external.array(acceptanceCriterion).min(1),
+  status: workItemStatus.default("draft"),
+  owner_profile: profileName.default("workspace-write"),
+  parent_id: workItemId.optional().describe("Parent work item if this is a child task"),
+  child_ids: exports_external.array(workItemId).default([]),
+  changed_files: exports_external.array(relativePath).default([]),
+  autopilot_exempt: exports_external.boolean().optional().describe("Allow closing on completion.json alone without going through autopilot"),
+  risks: exports_external.array(riskNote).default([]),
+  re_entry: reEntry.optional(),
+  runs: exports_external.array(runId).default([]),
+  handoff_path: relativePath.optional(),
+  language_overrides: relativePath.optional().describe("Path to language.md if this work item modifies the glossary"),
+  started_at_sha: gitSha40.optional().describe("Git HEAD sha at the time this work item transitioned draft \u2192 in_progress; used as default base for handoff diff collection"),
+  created_at: isoDateTime,
+  updated_at: isoDateTime,
+  closed_at: isoDateTime.optional()
+}).superRefine((value, ctx) => {
+  const needsReEntry = ["partial", "unverified", "blocked"].includes(value.status);
+  if (!needsReEntry)
+    return;
+  if (!value.re_entry) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: `status=${value.status} requires re_entry with command or fresh_evidence_needed`,
+      path: ["re_entry"]
+    });
+    return;
+  }
+  const hasCommand = typeof value.re_entry.command === "string" && value.re_entry.command.length > 0;
+  const hasEvidence = value.re_entry.fresh_evidence_needed.length > 0;
+  if (!hasCommand && !hasEvidence) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: `status=${value.status} requires re_entry.command or non-empty re_entry.fresh_evidence_needed`,
+      path: ["re_entry"]
+    });
+  }
+}).describe("Authoritative state for a single DITTO work item");
+
+// src/core/work-item-store.ts
+init_ditto_paths();
+init_fs();
+function tryGitHeadSha(repoRoot) {
+  const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
+    cwd: repoRoot,
+    stdout: "pipe",
+    stderr: "pipe"
+  });
+  if (proc.exitCode !== 0)
+    return null;
+  const sha = (proc.stdout?.toString() ?? "").trim();
+  if (!/^[a-f0-9]{40}$/.test(sha))
+    return null;
+  return sha;
+}
+
+class WorkItemStore {
+  repoRoot;
+  constructor(repoRoot) {
+    this.repoRoot = repoRoot;
+  }
+  workItemDir(id) {
+    return localDir(this.repoRoot, "work-items", id);
+  }
+  workItemPath(id) {
+    return join13(this.workItemDir(id), "work-item.json");
+  }
+  languageLedgerPath(id) {
+    return join13(this.workItemDir(id), "language-ledger.json");
+  }
+  async exists(id) {
+    try {
+      await stat2(this.workItemPath(id));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  async create(input, now = new Date) {
+    const id = await generateId("wi", (candidate) => this.exists(candidate));
+    const nowIso = now.toISOString();
+    const draft = {
+      schema_version: "0.1.0",
+      id,
+      title: input.title,
+      source_request: input.source_request,
+      goal: input.goal,
+      acceptance_criteria: input.acceptance_criteria,
+      status: "draft",
+      owner_profile: input.owner_profile ?? "workspace-write",
+      ...input.parent_id !== undefined ? { parent_id: input.parent_id } : {},
+      child_ids: [],
+      changed_files: [],
+      risks: [],
+      runs: [],
+      created_at: nowIso,
+      updated_at: nowIso
+    };
+    await ensureDir(join13(this.workItemDir(id), "evidence"));
+    const written = await writeJson(this.workItemPath(id), workItem, draft);
+    await writeJson(this.languageLedgerPath(id), languageLedger, {
+      schema_version: "0.1.0",
+      work_item_id: id,
+      created_at: nowIso,
+      updated_at: nowIso,
+      changes: []
+    });
+    return written;
+  }
+  async get(id) {
+    return readJson(this.workItemPath(id), workItem);
+  }
+  async update(id, mutator) {
+    const current = await this.get(id);
+    const next = mutator(current);
+    if (next.id !== current.id) {
+      throw new Error(`update mutator changed work item id from ${current.id} to ${next.id}`);
+    }
+    let withSha = next;
+    if (next.status === "in_progress" && next.started_at_sha === undefined) {
+      const sha = tryGitHeadSha(this.repoRoot);
+      if (sha !== null) {
+        withSha = { ...next, started_at_sha: sha };
+      }
+    }
+    const withTouched = { ...withSha, updated_at: new Date().toISOString() };
+    return writeJson(this.workItemPath(id), workItem, withTouched);
+  }
+  async close(id, terminal, now = new Date) {
+    return this.update(id, (cur) => ({
+      ...cur,
+      status: terminal,
+      closed_at: now.toISOString()
+    }));
+  }
+  async archive(label) {
+    if (!/^[A-Za-z0-9._-]+$/.test(label) || label === "." || label === "..") {
+      throw new Error(`archive label must be a safe path segment ([A-Za-z0-9._-]+, not '.' or '..'; got: ${label})`);
+    }
+    const targets = (await this.list()).filter((s2) => s2.status === "done" || s2.status === "abandoned");
+    if (targets.length === 0)
+      return [];
+    const archiveBase = localDir(this.repoRoot, "archive", label);
+    await ensureDir(archiveBase);
+    for (const t2 of targets) {
+      await rename2(this.workItemDir(t2.id), join13(archiveBase, t2.id));
+    }
+    return targets.map((t2) => t2.id);
+  }
+  async list() {
+    const base = localDir(this.repoRoot, "work-items");
+    let entries;
+    try {
+      entries = await readdir4(base);
+    } catch {
+      return [];
+    }
+    const summaries = [];
+    for (const name of entries) {
+      const dir = join13(base, name);
+      let s2;
+      try {
+        s2 = await stat2(dir);
+      } catch {
+        continue;
+      }
+      if (!s2.isDirectory())
+        continue;
+      try {
+        const item = await readJson(join13(dir, "work-item.json"), workItem);
+        summaries.push({
+          id: item.id,
+          title: item.title,
+          status: item.status,
+          updated_at: item.updated_at
+        });
+      } catch {}
+    }
+    summaries.sort((a2, b2) => a2.updated_at < b2.updated_at ? 1 : -1);
+    return summaries;
+  }
+  async appendJsonlAtPath(path, jsonLine) {
+    await ensureDir(dirname4(path));
+    const file = Bun.file(path);
+    const existing = await file.exists() ? await file.text() : "";
+    const trimmedExisting = existing.endsWith(`
+`) || existing.length === 0 ? existing : `${existing}
+`;
+    await atomicWriteText(path, `${trimmedExisting}${jsonLine}
+`);
+  }
+  async appendEvidenceJsonl(workItemId2, filename, jsonLine) {
+    return this.appendJsonlAtPath(join13(this.workItemDir(workItemId2), "evidence", filename), jsonLine);
+  }
+  async appendCommandLogLine(workItemId2, jsonLine) {
+    return this.appendEvidenceJsonl(workItemId2, "commands.jsonl", jsonLine);
+  }
+  async appendEditLogLine(workItemId2, jsonLine) {
+    return this.appendEvidenceJsonl(workItemId2, "edits.jsonl", jsonLine);
+  }
+  metricsPath(workItemId2) {
+    return join13(this.workItemDir(workItemId2), "metrics.jsonl");
+  }
+  async appendMetricLine(workItemId2, jsonLine) {
+    return this.appendJsonlAtPath(this.metricsPath(workItemId2), jsonLine);
+  }
+  async readMetrics(workItemId2) {
+    const file = Bun.file(this.metricsPath(workItemId2));
+    if (!await file.exists())
+      return [];
+    const text = await file.text();
+    return text.split(`
+`).filter((line) => line.trim().length > 0).map((line) => intentMetric.parse(JSON.parse(line)));
+  }
+  techSpecRoundsPath(workItemId2) {
+    return join13(this.workItemDir(workItemId2), "tech-spec-rounds.jsonl");
+  }
+  async appendTechSpecRoundLine(workItemId2, jsonLine) {
+    return this.appendJsonlAtPath(this.techSpecRoundsPath(workItemId2), jsonLine);
+  }
+  async readTechSpecRounds(workItemId2) {
+    const file = Bun.file(this.techSpecRoundsPath(workItemId2));
+    if (!await file.exists())
+      return [];
+    const text = await file.text();
+    return text.split(`
+`).filter((line) => line.trim().length > 0).map((line) => techSpecRound.parse(JSON.parse(line)));
+  }
+}
+var acceptanceCriterionInputSchema = exports_external.object({
+  id: exports_external.string().min(1),
+  statement: exports_external.string().min(1)
+}).passthrough();
+
 // src/core/autopilot-bootstrap.ts
 function approvalGate(input) {
   const base = { approved_at: null, approved_by: null, evidence_refs: [] };
@@ -18300,6 +18677,15 @@ async function bootstrapAutopilot(repoRoot, input) {
   }
   if (reasons.length > 0)
     return { status: "intent_not_ready", reasons };
+  await new WorkItemStore(repoRoot).update(input.workItem.id, (current) => ({
+    ...current,
+    acceptance_criteria: input.intent.acceptance_criteria.map((ac) => ({
+      id: ac.id,
+      statement: ac.statement,
+      verdict: ac.verdict,
+      evidence: ac.evidence
+    }))
+  }));
   const store = new AutopilotStore(repoRoot);
   const autopilotId2 = await generateId("orch", async () => false, {
     ...input.now ? { now: input.now } : {}
@@ -18607,12 +18993,12 @@ function buildCompletion(input) {
   };
   return completionContract.parse(candidate);
 }
-function assembleCompletionFromWorkItem(workItem, opts) {
+function assembleCompletionFromWorkItem(workItem2, opts) {
   return buildCompletion({
-    workItem,
+    workItem: workItem2,
     declaredBy: opts.declaredBy,
     summary: opts.summary,
-    verdicts: workItem.acceptance_criteria.map((c3) => ({
+    verdicts: workItem2.acceptance_criteria.map((c3) => ({
       criterion_id: c3.id,
       verdict: c3.verdict,
       evidence: c3.evidence
@@ -18777,18 +19163,18 @@ function deriveAcVerdicts(graph, acIds, oracles) {
     return { criterion_id: acId, verdict: verdict2, evidence, ...notes ? { notes } : {} };
   });
 }
-function assembleCompletionFromGraph(graph, workItem, opts = {}) {
-  const acIds = workItem.acceptance_criteria.map((c3) => c3.id);
-  const oracles = new Map(workItem.acceptance_criteria.map((c3) => [c3.id, c3.oracle]));
+function assembleCompletionFromGraph(graph, workItem2, opts = {}) {
+  const acIds = workItem2.acceptance_criteria.map((c3) => c3.id);
+  const oracles = new Map(workItem2.acceptance_criteria.map((c3) => [c3.id, c3.oracle]));
   const verdicts = deriveAcVerdicts(graph, acIds, oracles);
-  const summary = opts.summary ?? `Completion assembled from autopilot ${graph.autopilot_id} (${graph.nodes.length} nodes) for "${workItem.goal}".`;
+  const summary = opts.summary ?? `Completion assembled from autopilot ${graph.autopilot_id} (${graph.nodes.length} nodes) for "${workItem2.goal}".`;
   const nonTerminal = graph.nodes.filter((n2) => n2.status !== "passed" && n2.status !== "failed");
   const remainingRisks = [
     ...opts.remainingRisks ?? [],
     ...nonTerminal.length > 0 ? [`non-terminal graph nodes (work unfinished): ${nonTerminal.map((n2) => n2.id).join(", ")}`] : []
   ];
   return buildCompletion({
-    workItem,
+    workItem: workItem2,
     declaredBy: "verifier",
     summary,
     verdicts,
@@ -18805,7 +19191,7 @@ import { join as join30 } from "path";
 // src/acg/tidy/classifier.ts
 init_ditto_paths();
 init_fs();
-import { join as join13 } from "path";
+import { join as join14 } from "path";
 
 // src/schemas/acg-tidy.ts
 init_zod();
@@ -18847,8 +19233,8 @@ function isCodePath(path) {
     return false;
   return CODE_EXTENSIONS.has(path.slice(dot).toLowerCase());
 }
-function classifyTidyEntry(stat2, thresholds = DEFAULT_TIDY_THRESHOLDS) {
-  const codeFilesArr = stat2.files.filter((f3) => f3.isCode);
+function classifyTidyEntry(stat3, thresholds = DEFAULT_TIDY_THRESHOLDS) {
+  const codeFilesArr = stat3.files.filter((f3) => f3.isCode);
   const codeFiles = codeFilesArr.length;
   const codeLines = codeFilesArr.reduce((n2, f3) => n2 + f3.added + f3.removed, 0);
   if (codeFiles === 0) {
@@ -18877,7 +19263,7 @@ function classifyTidyEntry(stat2, thresholds = DEFAULT_TIDY_THRESHOLDS) {
 async function writeTidyClassification(repoRoot, workItemId2, classification) {
   const dir = localDir(repoRoot, "work-items", workItemId2);
   await ensureDir(dir);
-  const path = join13(dir, "tidy-classification.json");
+  const path = join14(dir, "tidy-classification.json");
   await writeJson(path, tidyClassification, classification);
   return path;
 }
@@ -18913,12 +19299,12 @@ init_fs();
 // src/core/lsp/client.ts
 import { existsSync as existsSync3 } from "fs";
 import { homedir as homedir4 } from "os";
-import { dirname as dirname4, join as join15 } from "path";
+import { dirname as dirname5, join as join16 } from "path";
 
 // src/core/provision/lsp-servers.ts
 import { existsSync as existsSync2 } from "fs";
 import { homedir as homedir3 } from "os";
-import { join as join14 } from "path";
+import { join as join15 } from "path";
 function resolveServerPath(spec, deps) {
   const forced = deps.env(spec.envVar);
   if (forced && deps.fileExists(forced))
@@ -18926,7 +19312,7 @@ function resolveServerPath(spec, deps) {
   const onPath = deps.which(spec.bin);
   if (onPath)
     return onPath;
-  const managed = join14(deps.managedDir, spec.language, "bin", spec.bin);
+  const managed = join15(deps.managedDir, spec.language, "bin", spec.bin);
   if (deps.fileExists(managed))
     return managed;
   return null;
@@ -19057,7 +19443,7 @@ var LSP_SPECS = [
   }
 ];
 function lspManagedDir() {
-  return join14(homedir3(), ".local", "share", "ditto", "lsp");
+  return join15(homedir3(), ".local", "share", "ditto", "lsp");
 }
 var defaultLspServerDeps = {
   which: (bin) => Bun.which(bin),
@@ -19082,7 +19468,7 @@ function defaultLspDeps() {
   return {
     which: (b2) => Bun.which(b2),
     env: (n2) => process.env[n2],
-    managedDir: join15(homedir4(), ".local", "share", "ditto", "lsp"),
+    managedDir: join16(homedir4(), ".local", "share", "ditto", "lsp"),
     fileExists: existsSync3,
     run: async () => ({ exit_code: null, stderr: "" })
   };
@@ -19132,7 +19518,7 @@ async function getDiagnostics(filePath, opts = {}) {
   let proc;
   try {
     proc = Bun.spawn([binary, "--stdio"], {
-      cwd: dirname4(filePath),
+      cwd: dirname5(filePath),
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe"
@@ -19235,7 +19621,7 @@ async function getDiagnostics(filePath, opts = {}) {
       method: "initialize",
       params: {
         processId: process.pid,
-        rootUri: fileUri(dirname4(filePath)),
+        rootUri: fileUri(dirname5(filePath)),
         capabilities: {
           textDocument: { publishDiagnostics: {} },
           workspace: { configuration: true }
@@ -19250,8 +19636,8 @@ async function getDiagnostics(filePath, opts = {}) {
 }
 
 // src/core/source-extensions.ts
-import { readdir as readdir4 } from "fs/promises";
-import { join as join16 } from "path";
+import { readdir as readdir5 } from "fs/promises";
+import { join as join17 } from "path";
 var EXCLUDED_DIR = new Set([
   "node_modules",
   ".git",
@@ -19266,7 +19652,7 @@ var EXCLUDED_DIR = new Set([
 async function walkExtensions(dir, counts) {
   let entries;
   try {
-    entries = await readdir4(dir, { withFileTypes: true });
+    entries = await readdir5(dir, { withFileTypes: true });
   } catch {
     return;
   }
@@ -19274,7 +19660,7 @@ async function walkExtensions(dir, counts) {
     if (entry.isDirectory()) {
       if (EXCLUDED_DIR.has(entry.name))
         continue;
-      await walkExtensions(join16(dir, entry.name), counts);
+      await walkExtensions(join17(dir, entry.name), counts);
     } else if (entry.isFile()) {
       const dot = entry.name.lastIndexOf(".");
       if (dot < 0)
@@ -19464,93 +19850,12 @@ var decisionConflictCarrier = exports_external.object({
   conflicts: exports_external.array(decisionConflict).default([])
 }).describe("Persisted inputs to decisionConflictGate, written by the detecting node");
 
-// src/schemas/work-item.ts
-init_zod();
-init_common();
-var gitSha40 = exports_external.string().regex(/^[a-f0-9]{40}$/, "git sha must be 40 lowercase hex characters").describe("Full 40-char git commit sha");
-var verificationMethod = exports_external.enum(["dynamic_test", "static_scan", "soft_judgment"]).describe("Re-evaluability class of the oracle (ADR-0024 \xA73.1: hard\xB7dynamic / hard\xB7static / soft\xB7judgment). Distinct from evidenceRequiredKind (intent.ts), which is the kind of evidence, not its re-evaluability.");
-var codePointerMapsTo = /^[^\s]+\.[A-Za-z0-9]+:[^\s]+$/;
-var acOracle = exports_external.object({
-  verification_method: verificationMethod,
-  maps_to: exports_external.string().min(1).describe("AC, file:line, intent, or doc the oracle anchors to (same vocabulary as dialectic maps_to)"),
-  direction: exports_external.enum(["forward", "backward"]).describe("forward = post-change final state; backward = current-code finding (ADR-0024 \xA73.0)")
-}).superRefine((value, ctx) => {
-  if (value.direction === "forward" && codePointerMapsTo.test(value.maps_to)) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "forward oracle must be re-evaluable: a code-pointer maps_to (file:line / symbol) drifts on change \u2014 use direction=backward for a current-code finding (ADR-0024 \xA73.0)",
-      path: ["maps_to"]
-    });
-  }
-}).describe("Per-AC oracle: re-evaluable verification method + anchor target (ADR-0024 \xA73)");
-var acceptanceCriterion = exports_external.object({
-  id: exports_external.string().min(1).describe("Stable id within the work item (e.g., ac-1)"),
-  statement: exports_external.string().min(1).describe("Single observable behavior in user-facing terms"),
-  verdict: verdict.default("unverified"),
-  evidence: exports_external.array(evidenceRef).default([]),
-  oracle: acOracle.optional()
-}).describe("One acceptance criterion with its verification verdict");
-var riskNote = exports_external.object({
-  description: exports_external.string().min(1),
-  severity: exports_external.enum(["info", "low", "medium", "high", "critical"]).default("low"),
-  mitigation: exports_external.string().optional()
-}).describe("Outstanding risk that did not block completion but remains relevant");
-var reEntry = exports_external.object({
-  command: exports_external.string().optional().describe("Concrete next command to resume work"),
-  fresh_evidence_needed: exports_external.array(exports_external.string()).default([]).describe("What new evidence must be gathered before the next attempt"),
-  owner: exports_external.string().optional().describe("Profile or human handle expected to resume")
-}).describe("Instructions for resuming a partial/unverified/blocked work item");
-var workItem = exports_external.object({
-  schema_version: schemaVersion,
-  id: workItemId,
-  title: exports_external.string().min(1).max(200),
-  source_request: exports_external.string().min(1).describe("Verbatim or close-paraphrase of the original user request"),
-  goal: exports_external.string().min(1).describe("Observable outcome stated in project terms; not a list of steps"),
-  acceptance_criteria: exports_external.array(acceptanceCriterion).min(1),
-  status: workItemStatus.default("draft"),
-  owner_profile: profileName.default("workspace-write"),
-  parent_id: workItemId.optional().describe("Parent work item if this is a child task"),
-  child_ids: exports_external.array(workItemId).default([]),
-  changed_files: exports_external.array(relativePath).default([]),
-  autopilot_exempt: exports_external.boolean().optional().describe("Allow closing on completion.json alone without going through autopilot"),
-  risks: exports_external.array(riskNote).default([]),
-  re_entry: reEntry.optional(),
-  runs: exports_external.array(runId).default([]),
-  handoff_path: relativePath.optional(),
-  language_overrides: relativePath.optional().describe("Path to language.md if this work item modifies the glossary"),
-  started_at_sha: gitSha40.optional().describe("Git HEAD sha at the time this work item transitioned draft \u2192 in_progress; used as default base for handoff diff collection"),
-  created_at: isoDateTime,
-  updated_at: isoDateTime,
-  closed_at: isoDateTime.optional()
-}).superRefine((value, ctx) => {
-  const needsReEntry = ["partial", "unverified", "blocked"].includes(value.status);
-  if (!needsReEntry)
-    return;
-  if (!value.re_entry) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: `status=${value.status} requires re_entry with command or fresh_evidence_needed`,
-      path: ["re_entry"]
-    });
-    return;
-  }
-  const hasCommand = typeof value.re_entry.command === "string" && value.re_entry.command.length > 0;
-  const hasEvidence = value.re_entry.fresh_evidence_needed.length > 0;
-  if (!hasCommand && !hasEvidence) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: `status=${value.status} requires re_entry.command or non-empty re_entry.fresh_evidence_needed`,
-      path: ["re_entry"]
-    });
-  }
-}).describe("Authoritative state for a single DITTO work item");
-
 // src/core/active-node-lease.ts
 init_zod();
 init_common();
 init_ditto_paths();
 init_fs();
-import { join as join17 } from "path";
+import { join as join18 } from "path";
 var activeNodeLease = exports_external.object({
   node_id: exports_external.string().min(1),
   work_item_id: workItemId,
@@ -19572,7 +19877,7 @@ class ActiveNodeLeaseStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   path(workItemId2) {
-    return join17(this.dir(workItemId2), "active-leases.json");
+    return join18(this.dir(workItemId2), "active-leases.json");
   }
   async listActive(workItemId2) {
     try {
@@ -19606,13 +19911,13 @@ class ActiveNodeLeaseStore {
 // src/core/agent-variants.ts
 init_fs();
 init_shared();
-import { readdir as readdir5 } from "fs/promises";
-import { join as join18 } from "path";
+import { readdir as readdir6 } from "fs/promises";
+import { join as join19 } from "path";
 async function loadVariantCatalog(repoRoot) {
-  const dir = join18(repoRoot, ".ditto", "agents");
+  const dir = join19(repoRoot, ".ditto", "agents");
   let entries;
   try {
-    entries = await readdir5(dir);
+    entries = await readdir6(dir);
   } catch {
     return [];
   }
@@ -19620,7 +19925,7 @@ async function loadVariantCatalog(repoRoot) {
   for (const entry of entries.sort()) {
     if (!entry.endsWith(".md"))
       continue;
-    const text = await Bun.file(join18(dir, entry)).text();
+    const text = await Bun.file(join19(dir, entry)).text();
     const variant = parseVariant(text);
     if (variant)
       catalog.push(variant);
@@ -19722,11 +20027,11 @@ function recommendVariantRole(name, description) {
   return "implementer";
 }
 async function writeAgentVariants(repoRoot, variants) {
-  const dir = join18(repoRoot, ".ditto", "agents");
+  const dir = join19(repoRoot, ".ditto", "agents");
   const written = [];
   const skipped = [];
   for (const variant of variants) {
-    const file = join18(dir, `${variant.name}.md`);
+    const file = join19(dir, `${variant.name}.md`);
     if (await fileExists(file)) {
       skipped.push(variant.name);
       continue;
@@ -20042,304 +20347,6 @@ import { readdir as readdir7 } from "fs/promises";
 import { join as join20 } from "path";
 init_ditto_paths();
 init_fs();
-
-// src/core/work-item-store.ts
-init_zod();
-import { readdir as readdir6, rename as rename2, stat as stat2 } from "fs/promises";
-import { dirname as dirname5, join as join19 } from "path";
-
-// src/schemas/intent-metric.ts
-init_zod();
-init_common();
-var intentMetricHop = exports_external.enum(["H1", "H2", "H3"]).describe("Which intent-chain hop the drift was detected at (intentDriftGate H1/H2/H3)");
-var intentMetric = exports_external.object({
-  ts: isoDateTime,
-  work_item_id: workItemId,
-  kind: exports_external.literal("intent_drift").describe("Discriminator; only intent_drift is defined today"),
-  source: exports_external.enum(["stop_hook", "cli"]).describe("Where the measurement was taken (the Stop hook, or an explicit CLI run)"),
-  blocking_reasons: exports_external.array(exports_external.string()).default([]).describe("Blocking drift reasons (AC id-set scope grow/shrink)"),
-  advisories: exports_external.array(exports_external.string()).default([]).describe("Non-blocking drift advisories (goal/source_request string divergence)"),
-  hops: exports_external.array(intentMetricHop).default([]).describe("Distinct hops present in this event")
-}).describe("One line of .ditto/local/work-items/<id>/metrics.jsonl \u2014 a persisted drift event");
-
-// src/schemas/language-ledger.ts
-init_zod();
-init_common();
-var languageChange = exports_external.object({
-  op: exports_external.enum(["add", "modify", "deprecate", "alias"]).describe("What kind of glossary change this entry records"),
-  term: exports_external.string().min(1),
-  before: exports_external.string().optional().describe("Prior definition or surface form, if applicable"),
-  after: exports_external.string().optional().describe("New definition or surface form, if applicable"),
-  rationale: exports_external.string().min(1).describe("Why the change is needed; cite user statement when available"),
-  proposed_by: exports_external.string().min(1).describe("User handle or agent profile that proposed it"),
-  agreed_with_user: exports_external.boolean().describe("True only after explicit user confirmation; defaults to false on creation"),
-  decided_at: isoDateTime.optional()
-}).superRefine((value, ctx) => {
-  if (value.agreed_with_user === true && value.decided_at === undefined) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "agreed_with_user=true requires decided_at (confirmation timestamp)",
-      path: ["decided_at"]
-    });
-  }
-}).describe("One change to project language as observed during a work item");
-var languageLedger = exports_external.object({
-  schema_version: schemaVersion,
-  work_item_id: workItemId,
-  created_at: isoDateTime,
-  updated_at: isoDateTime,
-  changes: exports_external.array(languageChange).default([])
-}).describe("Per-work-item record of language negotiations; merged into glossary once agreed");
-
-// src/schemas/tech-spec-round.ts
-init_zod();
-init_common();
-var questionProperty = exports_external.enum(["blind-spot", "expansion", "orientation"]).describe("Which good-question property the candidate carries (SKILL.md \xA7good questions)");
-var questionScore = exports_external.object({
-  consensus: exports_external.number().int().nonnegative().describe("How many generators independently raised this question (necessity signal)"),
-  quality: exports_external.number().min(0).max(1).describe("Meets the three good-question properties [0..1]"),
-  necessity: exports_external.number().min(0).max(1).describe("Still open given the fixed facts [0..1]"),
-  answer_value: exports_external.number().min(0).max(1).describe("How much the spec changes depending on the answer [0..1]")
-}).describe("The gate 4-dimension score for one candidate question");
-var scoredQuestion = exports_external.object({
-  text: exports_external.string().min(1),
-  property: questionProperty,
-  why_matters: exports_external.string().optional(),
-  scores: questionScore,
-  rationale: exports_external.string().optional().describe("Why selected (present on selected questions)")
-}).describe("One candidate question with its gate score");
-var techSpecRoundPayload = exports_external.object({
-  round: exports_external.number().int().positive().describe("1-based round index within the interview"),
-  section: exports_external.string().optional().describe("Target spec section this round filled"),
-  generator_count: exports_external.number().int().positive().default(2).describe("N generators fanned out (--generators default 2, range 1..6; wi_260619yfw)"),
-  threshold: exports_external.number().optional().describe("Fixed selection threshold used this round (\xA79 #4)"),
-  dry: exports_external.boolean().describe("Gate found no candidate above the threshold \u2192 round/interview ends (\xA79 #4)"),
-  selected: exports_external.array(scoredQuestion).default([]).describe("Questions selected to ask the user"),
-  all_scored: exports_external.array(scoredQuestion).default([]).describe("Every candidate with its score (durable score trail for later tuning)")
-}).superRefine((val, ctx) => {
-  if (val.dry && val.selected.length > 0) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      path: ["selected"],
-      message: "dry=true \uB77C\uC6B4\uB4DC\uB294 selected\uAC00 \uBE44\uC5B4 \uC788\uC5B4\uC57C \uD55C\uB2E4 (\uC784\uACC4 \uC774\uC0C1 \uC9C8\uBB38 \uBD80\uC7AC\uAC00 dry\uC758 \uC815\uC758)"
-    });
-  }
-  if (!val.dry && val.selected.length === 0) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      path: ["dry"],
-      message: "selected\uAC00 \uBE44\uC5B4 \uC788\uC73C\uBA74 dry=true\uC5EC\uC57C \uD55C\uB2E4 (\uC120\uC815\uB41C \uC9C8\uBB38\uC774 \uC5C6\uB294 \uB77C\uC6B4\uB4DC\uB294 dry)"
-    });
-  }
-});
-var techSpecRound = exports_external.object({
-  ts: isoDateTime,
-  work_item_id: workItemId,
-  round: exports_external.number().int().positive(),
-  section: exports_external.string().optional(),
-  generator_count: exports_external.number().int().positive().default(2),
-  threshold: exports_external.number().optional(),
-  dry: exports_external.boolean(),
-  selected: exports_external.array(scoredQuestion).default([]),
-  all_scored: exports_external.array(scoredQuestion).default([])
-}).describe("One line of .ditto/local/work-items/<id>/tech-spec-rounds.jsonl");
-
-// src/core/work-item-store.ts
-init_ditto_paths();
-init_fs();
-function tryGitHeadSha(repoRoot) {
-  const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
-    cwd: repoRoot,
-    stdout: "pipe",
-    stderr: "pipe"
-  });
-  if (proc.exitCode !== 0)
-    return null;
-  const sha = (proc.stdout?.toString() ?? "").trim();
-  if (!/^[a-f0-9]{40}$/.test(sha))
-    return null;
-  return sha;
-}
-
-class WorkItemStore {
-  repoRoot;
-  constructor(repoRoot) {
-    this.repoRoot = repoRoot;
-  }
-  workItemDir(id) {
-    return localDir(this.repoRoot, "work-items", id);
-  }
-  workItemPath(id) {
-    return join19(this.workItemDir(id), "work-item.json");
-  }
-  languageLedgerPath(id) {
-    return join19(this.workItemDir(id), "language-ledger.json");
-  }
-  async exists(id) {
-    try {
-      await stat2(this.workItemPath(id));
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  async create(input, now = new Date) {
-    const id = await generateId("wi", (candidate) => this.exists(candidate));
-    const nowIso = now.toISOString();
-    const draft = {
-      schema_version: "0.1.0",
-      id,
-      title: input.title,
-      source_request: input.source_request,
-      goal: input.goal,
-      acceptance_criteria: input.acceptance_criteria,
-      status: "draft",
-      owner_profile: input.owner_profile ?? "workspace-write",
-      ...input.parent_id !== undefined ? { parent_id: input.parent_id } : {},
-      child_ids: [],
-      changed_files: [],
-      risks: [],
-      runs: [],
-      created_at: nowIso,
-      updated_at: nowIso
-    };
-    await ensureDir(join19(this.workItemDir(id), "evidence"));
-    const written = await writeJson(this.workItemPath(id), workItem, draft);
-    await writeJson(this.languageLedgerPath(id), languageLedger, {
-      schema_version: "0.1.0",
-      work_item_id: id,
-      created_at: nowIso,
-      updated_at: nowIso,
-      changes: []
-    });
-    return written;
-  }
-  async get(id) {
-    return readJson(this.workItemPath(id), workItem);
-  }
-  async update(id, mutator) {
-    const current = await this.get(id);
-    const next = mutator(current);
-    if (next.id !== current.id) {
-      throw new Error(`update mutator changed work item id from ${current.id} to ${next.id}`);
-    }
-    let withSha = next;
-    if (next.status === "in_progress" && next.started_at_sha === undefined) {
-      const sha = tryGitHeadSha(this.repoRoot);
-      if (sha !== null) {
-        withSha = { ...next, started_at_sha: sha };
-      }
-    }
-    const withTouched = { ...withSha, updated_at: new Date().toISOString() };
-    return writeJson(this.workItemPath(id), workItem, withTouched);
-  }
-  async close(id, terminal, now = new Date) {
-    return this.update(id, (cur) => ({
-      ...cur,
-      status: terminal,
-      closed_at: now.toISOString()
-    }));
-  }
-  async archive(label) {
-    if (!/^[A-Za-z0-9._-]+$/.test(label) || label === "." || label === "..") {
-      throw new Error(`archive label must be a safe path segment ([A-Za-z0-9._-]+, not '.' or '..'; got: ${label})`);
-    }
-    const targets = (await this.list()).filter((s2) => s2.status === "done" || s2.status === "abandoned");
-    if (targets.length === 0)
-      return [];
-    const archiveBase = localDir(this.repoRoot, "archive", label);
-    await ensureDir(archiveBase);
-    for (const t2 of targets) {
-      await rename2(this.workItemDir(t2.id), join19(archiveBase, t2.id));
-    }
-    return targets.map((t2) => t2.id);
-  }
-  async list() {
-    const base = localDir(this.repoRoot, "work-items");
-    let entries;
-    try {
-      entries = await readdir6(base);
-    } catch {
-      return [];
-    }
-    const summaries = [];
-    for (const name of entries) {
-      const dir = join19(base, name);
-      let s2;
-      try {
-        s2 = await stat2(dir);
-      } catch {
-        continue;
-      }
-      if (!s2.isDirectory())
-        continue;
-      try {
-        const item = await readJson(join19(dir, "work-item.json"), workItem);
-        summaries.push({
-          id: item.id,
-          title: item.title,
-          status: item.status,
-          updated_at: item.updated_at
-        });
-      } catch {}
-    }
-    summaries.sort((a2, b2) => a2.updated_at < b2.updated_at ? 1 : -1);
-    return summaries;
-  }
-  async appendJsonlAtPath(path, jsonLine) {
-    await ensureDir(dirname5(path));
-    const file = Bun.file(path);
-    const existing = await file.exists() ? await file.text() : "";
-    const trimmedExisting = existing.endsWith(`
-`) || existing.length === 0 ? existing : `${existing}
-`;
-    await atomicWriteText(path, `${trimmedExisting}${jsonLine}
-`);
-  }
-  async appendEvidenceJsonl(workItemId2, filename, jsonLine) {
-    return this.appendJsonlAtPath(join19(this.workItemDir(workItemId2), "evidence", filename), jsonLine);
-  }
-  async appendCommandLogLine(workItemId2, jsonLine) {
-    return this.appendEvidenceJsonl(workItemId2, "commands.jsonl", jsonLine);
-  }
-  async appendEditLogLine(workItemId2, jsonLine) {
-    return this.appendEvidenceJsonl(workItemId2, "edits.jsonl", jsonLine);
-  }
-  metricsPath(workItemId2) {
-    return join19(this.workItemDir(workItemId2), "metrics.jsonl");
-  }
-  async appendMetricLine(workItemId2, jsonLine) {
-    return this.appendJsonlAtPath(this.metricsPath(workItemId2), jsonLine);
-  }
-  async readMetrics(workItemId2) {
-    const file = Bun.file(this.metricsPath(workItemId2));
-    if (!await file.exists())
-      return [];
-    const text = await file.text();
-    return text.split(`
-`).filter((line) => line.trim().length > 0).map((line) => intentMetric.parse(JSON.parse(line)));
-  }
-  techSpecRoundsPath(workItemId2) {
-    return join19(this.workItemDir(workItemId2), "tech-spec-rounds.jsonl");
-  }
-  async appendTechSpecRoundLine(workItemId2, jsonLine) {
-    return this.appendJsonlAtPath(this.techSpecRoundsPath(workItemId2), jsonLine);
-  }
-  async readTechSpecRounds(workItemId2) {
-    const file = Bun.file(this.techSpecRoundsPath(workItemId2));
-    if (!await file.exists())
-      return [];
-    const text = await file.text();
-    return text.split(`
-`).filter((line) => line.trim().length > 0).map((line) => techSpecRound.parse(JSON.parse(line)));
-  }
-}
-var acceptanceCriterionInputSchema = exports_external.object({
-  id: exports_external.string().min(1),
-  statement: exports_external.string().min(1)
-}).passthrough();
-
-// src/core/completion-coverage-doctor.ts
 function isClosed2(ac) {
   const hasEvidence = (ac.evidence?.length ?? 0) > 0 || (ac.evidence_records?.length ?? 0) > 0;
   return ac.verdict === "pass" && hasEvidence;
@@ -25621,6 +25628,23 @@ var autopilotComplete = defineCommand({
       const completion = assembleCompletionFromGraph(graph, workItem2, {
         ...args.summary ? { summary: args.summary } : {}
       });
+      const intentStore = new IntentStore(repoRoot);
+      if (completion.final_verdict === "pass" && await intentStore.exists(args.workItem)) {
+        const intent = await intentStore.get(args.workItem);
+        const drift = intentDriftGate({ intent, workItem: workItem2, graph });
+        if (!drift.pass) {
+          if (format === "json") {
+            writeJson2({ work_item_id: args.workItem, intent_drift: drift.reasons });
+          } else {
+            writeError(`complete blocked by intent-conservation (false-green guard, ${drift.reasons.length}):`);
+            for (const r3 of drift.reasons)
+              writeError(`  - ${r3}`);
+            writeError("  \u2192 sync the work item AC to intent (re-run bootstrap), then re-run complete");
+          }
+          process.exit(RUNTIME_ERROR_EXIT);
+          return;
+        }
+      }
       await new CompletionStore(repoRoot).write(completion);
       const cite = await checkCiteGate(repoRoot, { workItemId: args.workItem, graph });
       const measurement = await measureReproposalForCompletion(repoRoot);
@@ -40802,11 +40826,13 @@ var setupCommand = defineCommand({
       const projectRoot = targetDir ? resolve22(targetDir) : await resolveRepoRootForCreate();
       const resourcesDir = resolveResourcesDir();
       const pluginRoot = resolve22(resourcesDir, "..", "..");
-      if (pluginRoot === projectRoot) {
+      const selfHost = pluginRoot === projectRoot;
+      const setupHost = selfHost && includesCodex(host) ? "codex" : host;
+      if (selfHost && !includesCodex(host)) {
         writeHuman(`setup: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
       }
-      if (process.stdin.isTTY && !args.yes) {
+      if (!selfHost && process.stdin.isTTY && !args.yes) {
         await runWizard(resourcesDir, projectRoot);
         return;
       }
@@ -40816,10 +40842,10 @@ var setupCommand = defineCommand({
         homeDir: homedir11(),
         ...process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {},
         now: new Date,
-        host,
-        ...includesCodex(host) ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) } : {}
+        host: setupHost,
+        ...includesCodex(setupHost) ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) } : {}
       });
-      writeHuman(`setup: installed into ${projectRoot} (host=${host})`);
+      writeHuman(`setup: installed into ${projectRoot} (host=${setupHost})`);
       for (const r3 of result2.resources) {
         const tag = r3.status === "corrupted" ? "SKIPPED (corrupted markers)" : r3.status === "kept" ? `\u2192 ${r3.destPath} (kept existing source)` : `\u2192 ${r3.destPath}`;
         const bak = r3.backupPath ? ` (backup ${r3.backupPath})` : "";
@@ -41999,4 +42025,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=f031940739e9dd335f699d9ab40999bc2879c3f8be3003154a1b1a5c0b9110a6
+//# ditto-src-stamp=d7dcb2be4b98ce0fc42857f628468d12eb73b3ac5c50d203baff1e5403a8fd1c

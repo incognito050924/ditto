@@ -5,6 +5,7 @@ import { type NodeGenerator, defaultNodeGenerator } from './autopilot-graph';
 import { AutopilotStore } from './autopilot-store';
 import { type RiskAxes, acceptanceTestable, highRiskAssumption } from './gates';
 import { generateId } from './id';
+import { WorkItemStore } from './work-item-store';
 
 /**
  * Bootstrap the autopilot graph from a ready intent (M2.1b). This is the
@@ -75,6 +76,23 @@ export async function bootstrapAutopilot(
     if (!t.pass) reasons.push(`criterion ${ac.id} not testable: ${t.reasons.join('; ')}`);
   }
   if (reasons.length > 0) return { status: 'intent_not_ready', reasons };
+
+  // Mirror the readied intent AC into the work item (false-green seam,
+  // wi_260624xb8). Bootstrap is the chokepoint every entry path funnels through;
+  // a draft work item may still hold placeholder AC from UserPromptSubmit while
+  // intent.json carries the readied set. Without this sync, completion (which
+  // reads AC from work-item.acceptance_criteria) silently evaluates fewer
+  // criteria than intent declares and can emit a false `pass`. Same shape as the
+  // canonical deep-interview finalize mirror (interview-driver.ts:432).
+  await new WorkItemStore(repoRoot).update(input.workItem.id, (current) => ({
+    ...current,
+    acceptance_criteria: input.intent.acceptance_criteria.map((ac) => ({
+      id: ac.id,
+      statement: ac.statement,
+      verdict: ac.verdict,
+      evidence: ac.evidence,
+    })),
+  }));
 
   const store = new AutopilotStore(repoRoot);
   const autopilotId = await generateId('orch', async () => false, {
