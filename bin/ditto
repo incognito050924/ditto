@@ -17649,13 +17649,18 @@ function addNode(map, child) {
   nodes.push({ ...child });
   return { ...map, nodes };
 }
-function closeNode(map, id, state, reason) {
+function closeNode(map, id, state, reason, residualRisk) {
   if (!map.nodes.some((n2) => n2.id === id)) {
     throw new Error(`unknown coverage node id: ${id}`);
   }
   return {
     ...map,
-    nodes: map.nodes.map((n2) => n2.id === id ? { ...n2, state, ...reason !== undefined ? { close_reason: reason } : {} } : n2)
+    nodes: map.nodes.map((n2) => n2.id === id ? {
+      ...n2,
+      state,
+      ...reason !== undefined ? { close_reason: reason } : {},
+      ...residualRisk !== undefined ? { residual_risk: residualRisk } : {}
+    } : n2)
   };
 }
 function selectReadyCoverageNodes(map) {
@@ -17751,7 +17756,13 @@ function serializePlanDialog(input) {
     lines.push("(none)");
   } else {
     for (const item of input.closedItems) {
-      lines.push(`- [${item.state}] ${item.id}: ${item.label}`);
+      const clauses = [];
+      if (item.close_reason)
+        clauses.push(`skip: ${item.close_reason}`);
+      if (item.residual_risk)
+        clauses.push(`risk: ${item.residual_risk}`);
+      const suffix = clauses.length > 0 ? ` \u2014 ${clauses.join(" \xB7 ")}` : "";
+      lines.push(`- [${item.state}] ${item.id}: ${item.label}${suffix}`);
     }
   }
   lines.push("");
@@ -19351,7 +19362,8 @@ var coverageNode = exports_external.object({
   depth_weight: exports_external.number().describe("Estimated needed depth (\xA74.4)"),
   state: coverageNodeState,
   children: exports_external.array(exports_external.string().min(1)).default([]).describe("Child node ids (flat array + parent_id represents the tree/DAG)"),
-  close_reason: exports_external.string().optional().describe("Recorded justification when the node is closed in a non-resolved state \u2014 a skip/deferral must be justified, never silent (\xA78-2, ac-2)")
+  close_reason: exports_external.string().optional().describe("Recorded justification when the node is closed in a non-resolved state \u2014 a skip/deferral must be justified, never silent (\xA78-2, ac-2)"),
+  residual_risk: exports_external.string().optional().describe("The surviving risk a non-resolved close leaves behind (out_of_scope/user_owned) \u2014 distinct from close_reason (WHY skipped); this names WHAT RISK survives the skip. Required for a non-resolved close, recorded on the node (surviving-risk self-description gap)")
 }).describe("One node in the coverage scope tree (\xA73.1)");
 var coverageTier = exports_external.enum(["light", "standard", "full"]).describe("Sweep intensity tier \u2014 scales sweepAngles and termination depth K (\xA78-4, ac-4)");
 var coverageMap = exports_external.object({
@@ -19375,6 +19387,7 @@ var coverageRoundPayload = exports_external.object({
   admissibleBranchesAdded: exports_external.number().int().nonnegative(),
   close_as: exports_external.enum(["resolved", "user_owned", "out_of_scope"]).optional(),
   close_reason: exports_external.string().optional().describe("Justification for a skip/deferral close (out_of_scope/user_owned) \u2014 required to skip a seeded category, recorded on the node (\xA78-2, ac-2)"),
+  residual_risk: exports_external.string().optional().describe("The surviving risk a skip/deferral close leaves behind \u2014 required alongside close_reason for a non-resolved close, recorded on the node (surviving-risk self-description gap)"),
   axis_signals: exports_external.object({
     neutrality: exports_external.object({
       opponent_ran: exports_external.boolean(),
@@ -23102,9 +23115,12 @@ async function collectRetroContext(repoRoot, workItemId2, graph) {
   try {
     const cov = new CoverageStore(repoRoot);
     if (await cov.exists(workItemId2)) {
-      for (const n2 of (await cov.getMap(workItemId2)).nodes)
+      for (const n2 of (await cov.getMap(workItemId2)).nodes) {
         if (n2.close_reason)
           closeReasons.push(n2.close_reason);
+        if (n2.residual_risk)
+          residualRisks.push(n2.residual_risk);
+      }
     }
   } catch {}
   const intentDrift = [];
@@ -24095,13 +24111,16 @@ async function nextCoverageNode(args) {
     dryCounter
   };
 }
-function enforceClose(map, node2, state, signals, reason) {
+function enforceClose(map, node2, state, signals, reason, residualRisk) {
   const reasons = [];
   const gate2 = coverageClosureGate(map, node2.id, state);
   if (!gate2.pass)
     reasons.push(...gate2.reasons);
   if (node2.id.startsWith(CATEGORY_NODE_PREFIX) && state !== "resolved" && (reason === undefined || reason.trim() === "")) {
     reasons.push(`category ${node2.id} skipped as ${state} without a reason: a category skip must be a recorded, justified decision (ac-2)`);
+  }
+  if (node2.id.startsWith(CATEGORY_NODE_PREFIX) && state !== "resolved" && (residualRisk === undefined || residualRisk.trim() === "")) {
+    reasons.push(`category ${node2.id} skipped as ${state} without a residual_risk: a skip must name the surviving risk it leaves behind, not only why it was skipped`);
   }
   if (state === "resolved" && signals.neutrality === undefined) {
     reasons.push(`neutrality axis required for resolved close of ${node2.id}: axis_signals.neutrality absent`);
@@ -24158,9 +24177,9 @@ async function recordCoverageRound(args) {
     if (node2 === undefined) {
       reasons = [`unknown coverage node id: ${payload.node_id}`];
     } else {
-      reasons = enforceClose(map, node2, payload.close_as, payload.axis_signals ?? {}, payload.close_reason);
+      reasons = enforceClose(map, node2, payload.close_as, payload.axis_signals ?? {}, payload.close_reason, payload.residual_risk);
       if (reasons.length === 0) {
-        map = closeNode(map, payload.node_id, payload.close_as, payload.close_reason);
+        map = closeNode(map, payload.node_id, payload.close_as, payload.close_reason, payload.residual_risk);
         closed = true;
       }
     }
@@ -24169,7 +24188,13 @@ async function recordCoverageRound(args) {
   const tier = args.intensity ?? map.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard");
   if (isCoverageTerminated(map, nextCounter, coverageDryK(tier))) {
     const delta = args.dialogDelta ?? {};
-    const closedItems = map.nodes.filter((n2) => n2.state !== "open").map((n2) => ({ id: n2.id, label: n2.label, state: n2.state }));
+    const closedItems = map.nodes.filter((n2) => n2.state !== "open").map((n2) => ({
+      id: n2.id,
+      label: n2.label,
+      state: n2.state,
+      ...n2.close_reason !== undefined ? { close_reason: n2.close_reason } : {},
+      ...n2.residual_risk !== undefined ? { residual_risk: n2.residual_risk } : {}
+    }));
     const openItems = map.nodes.filter((n2) => n2.state === "open").map((n2) => ({ id: n2.id, label: n2.label, state: n2.state }));
     const stage = args.stage ?? "plan";
     const dialogInput = {
@@ -41959,4 +41984,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=8eb11f563eea7e7e1b04f5e451922183675c847fdb449ce12272b8d48a9465f3
+//# ditto-src-stamp=c3d3f195ea421ceae669742a19d59dcf5e802fa2a1dc6121c2cb72d16f8d5ec8

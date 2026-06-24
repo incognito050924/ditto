@@ -63,6 +63,7 @@ export function closeNode(
   id: string,
   state: Exclude<CoverageNode['state'], 'open'>,
   reason?: string,
+  residualRisk?: string,
 ): CoverageMap {
   if (!map.nodes.some((n) => n.id === id)) {
     throw new Error(`unknown coverage node id: ${id}`);
@@ -70,7 +71,14 @@ export function closeNode(
   return {
     ...map,
     nodes: map.nodes.map((n) =>
-      n.id === id ? { ...n, state, ...(reason !== undefined ? { close_reason: reason } : {}) } : n,
+      n.id === id
+        ? {
+            ...n,
+            state,
+            ...(reason !== undefined ? { close_reason: reason } : {}),
+            ...(residualRisk !== undefined ? { residual_risk: residualRisk } : {}),
+          }
+        : n,
     ),
   };
 }
@@ -237,6 +245,10 @@ export interface PlanDialogItem {
   id: string;
   label: string;
   state: CoverageNode['state'];
+  /** Skip/deferral justification (WHY closed) for a non-resolved close — surfaced in the dialog. */
+  close_reason?: string;
+  /** The surviving risk a non-resolved close leaves behind — surfaced alongside close_reason. */
+  residual_risk?: string;
 }
 
 export interface PlanDialogInput {
@@ -312,7 +324,14 @@ export function serializePlanDialog(input: PlanDialogInput): string {
     lines.push('(none)');
   } else {
     for (const item of input.closedItems) {
-      lines.push(`- [${item.state}] ${item.id}: ${item.label}`);
+      // A non-resolved (skipped) item carries WHY it was skipped (close_reason) and
+      // WHAT RISK survives (residual_risk); render each clause only when present so a
+      // resolved/swept item shows no dangling markers (surviving-risk self-description).
+      const clauses: string[] = [];
+      if (item.close_reason) clauses.push(`skip: ${item.close_reason}`);
+      if (item.residual_risk) clauses.push(`risk: ${item.residual_risk}`);
+      const suffix = clauses.length > 0 ? ` — ${clauses.join(' · ')}` : '';
+      lines.push(`- [${item.state}] ${item.id}: ${item.label}${suffix}`);
     }
   }
   lines.push('');

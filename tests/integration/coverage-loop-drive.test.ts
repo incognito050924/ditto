@@ -289,6 +289,77 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
     const dialog = await readFile(join(localDir(repo, 'runs', WI), 'plan-dialog.md'), 'utf8');
     expect(dialog).toContain('# plan-dialog');
   });
+
+  // surviving-risk self-description: when a node is closed as a skip carrying a
+  // residual_risk, the written plan-dialog.md must surface BOTH the close_reason and
+  // the residual_risk on its 닫힌 항목 line — the surviving risk is no longer trapped in
+  // coverage.json / the agent's head.
+  test('a skipped node carries its close_reason + residual_risk into the written plan-dialog.md', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI }); // seed root
+    const SKIP = 'this scope is owned by the infra team, not this change';
+    const RISK = 'if infra changes the contract, this assumption silently breaks';
+    // Derive a child off the root (admissible novelty), then SKIP it out_of_scope with
+    // both a close_reason and a residual_risk.
+    let r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: 'cov-root',
+        derived_nodes: [
+          {
+            id: 'cov-infra',
+            parent_id: 'cov-root',
+            label: 'infra boundary',
+            origin: 'derived',
+            depth_weight: 0,
+          },
+        ],
+        admissibleBranchesAdded: 1,
+      },
+    });
+    expect(r.terminated).toBe(false);
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI });
+    r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: 'cov-infra',
+        admissibleBranchesAdded: 0,
+        close_as: 'out_of_scope',
+        close_reason: SKIP,
+        residual_risk: RISK,
+      },
+    });
+    expect(r.terminated).toBe(false);
+    if (r.terminated) return;
+    expect(r.closed).toBe(true);
+    // Close the root (subtree dry) and drive K dry rounds to termination.
+    r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: 'cov-root',
+        admissibleBranchesAdded: 0,
+        close_as: 'resolved',
+        axis_signals: passingSignals,
+      },
+      brief: { interface_changes: ['x'], dod: ['y'], test_scenarios: ['z'] },
+    });
+    if (!r.terminated) {
+      r = await recordCoverageRound({
+        repoRoot: repo,
+        workItemId: WI,
+        payload: { node_id: 'cov-root', admissibleBranchesAdded: 0 },
+        brief: { interface_changes: ['x'], dod: ['y'], test_scenarios: ['z'] },
+      });
+    }
+    expect(r.terminated).toBe(true);
+    if (!r.terminated) return;
+    const dialog = await readFile(join(localDir(repo, 'runs', WI), 'plan-dialog.md'), 'utf8');
+    expect(dialog).toContain('## 닫힌 항목');
+    expect(dialog).toContain(SKIP);
+    expect(dialog).toContain(RISK);
+  });
 });
 
 describe('design plan_brief precondition (ac-3 hard gate)', () => {

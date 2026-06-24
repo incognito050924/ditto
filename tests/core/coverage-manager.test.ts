@@ -510,6 +510,47 @@ describe('coverage Manager — plan-dialog.md serialization (§6, ac-6)', () => 
     expect(md).toMatch(/닫힌 항목/);
     expect(md).toMatch(/열린 항목/);
   });
+
+  // surviving-risk self-description: a closed item that was skipped (non-resolved)
+  // carries BOTH its close_reason (why) and its residual_risk (the surviving risk).
+  // Both must surface in the 닫힌 항목 section so the dialog is self-describing — the
+  // surviving risk no longer lives only in the agent's head / coverage.json.
+  test('a skipped closed item exposes both its close_reason and residual_risk', () => {
+    const md = serializePlanDialog({
+      workItemId: 'wi_risk',
+      userQa: [],
+      selfAnswers: [],
+      assumptions: [],
+      closedItems: [
+        {
+          id: 'cov-cat-auth',
+          label: 'authentication',
+          state: 'out_of_scope' as const,
+          close_reason: 'read-only internal calc, no auth path touched',
+          residual_risk: 'external caller could bypass the auth assumption',
+        },
+      ],
+      openItems: [],
+    });
+    expect(md).toContain('cov-cat-auth');
+    expect(md).toContain('read-only internal calc, no auth path touched');
+    expect(md).toContain('external caller could bypass the auth assumption');
+  });
+
+  test('a resolved closed item with no skip/risk renders neither clause (no empty labels)', () => {
+    const md = serializePlanDialog({
+      workItemId: 'wi_resolved',
+      userQa: [],
+      selfAnswers: [],
+      assumptions: [],
+      closedItems: [{ id: 'cov-cat-x', label: 'swept clean', state: 'resolved' as const }],
+      openItems: [],
+    });
+    expect(md).toContain('swept clean');
+    // no dangling skip/risk markers when the values are absent.
+    expect(md).not.toContain('skip:');
+    expect(md).not.toContain('risk:');
+  });
 });
 
 // ── ac-8: cost control — three tiers + caps, breadth-invariant ──────────────────

@@ -31,6 +31,12 @@ export const coverageNode = z
       .describe(
         'Recorded justification when the node is closed in a non-resolved state — a skip/deferral must be justified, never silent (§8-2, ac-2)',
       ),
+    residual_risk: z
+      .string()
+      .optional()
+      .describe(
+        'The surviving risk a non-resolved close leaves behind (out_of_scope/user_owned) — distinct from close_reason (WHY skipped); this names WHAT RISK survives the skip. Required for a non-resolved close, recorded on the node (surviving-risk self-description gap)',
+      ),
   })
   .describe('One node in the coverage scope tree (§3.1)');
 
@@ -80,6 +86,12 @@ export const coverageRoundPayload = z
       .optional()
       .describe(
         'Justification for a skip/deferral close (out_of_scope/user_owned) — required to skip a seeded category, recorded on the node (§8-2, ac-2)',
+      ),
+    residual_risk: z
+      .string()
+      .optional()
+      .describe(
+        'The surviving risk a skip/deferral close leaves behind — required alongside close_reason for a non-resolved close, recorded on the node (surviving-risk self-description gap)',
       ),
     axis_signals: z
       .object({

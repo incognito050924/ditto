@@ -251,6 +251,7 @@ function enforceClose(
   state: Exclude<CoverageNode['state'], 'open'>,
   signals: CoverageAxisSignals,
   reason: string | undefined,
+  residualRisk: string | undefined,
 ): string[] {
   const reasons: string[] = [];
 
@@ -268,6 +269,21 @@ function enforceClose(
   ) {
     reasons.push(
       `category ${node.id} skipped as ${state} without a reason: a category skip must be a recorded, justified decision (ac-2)`,
+    );
+  }
+
+  // surviving-risk self-description gap (fail-closed, same shape as the close_reason
+  // gate above): a non-resolved category close records WHY it was skipped but must ALSO
+  // name WHAT RISK survives that skip — close_reason is tactical (why), residual_risk is
+  // strategic (the surviving risk). A 'resolved' close swept the scope so no surviving
+  // risk is asserted.
+  if (
+    node.id.startsWith(CATEGORY_NODE_PREFIX) &&
+    state !== 'resolved' &&
+    (residualRisk === undefined || residualRisk.trim() === '')
+  ) {
+    reasons.push(
+      `category ${node.id} skipped as ${state} without a residual_risk: a skip must name the surviving risk it leaves behind, not only why it was skipped`,
     );
   }
 
@@ -385,9 +401,16 @@ export async function recordCoverageRound(args: {
         payload.close_as,
         payload.axis_signals ?? {},
         payload.close_reason,
+        payload.residual_risk,
       );
       if (reasons.length === 0) {
-        map = closeNode(map, payload.node_id, payload.close_as, payload.close_reason);
+        map = closeNode(
+          map,
+          payload.node_id,
+          payload.close_as,
+          payload.close_reason,
+          payload.residual_risk,
+        );
         closed = true;
       }
     }
@@ -406,7 +429,16 @@ export async function recordCoverageRound(args: {
     const delta = args.dialogDelta ?? {};
     const closedItems = map.nodes
       .filter((n) => n.state !== 'open')
-      .map((n) => ({ id: n.id, label: n.label, state: n.state }));
+      .map((n) => ({
+        id: n.id,
+        label: n.label,
+        state: n.state,
+        // Carry the skip justification + surviving risk so serializePlanDialog can
+        // surface WHY a node was skipped and WHAT RISK survives it (surviving-risk
+        // self-description). A resolved/swept node has neither, so they stay omitted.
+        ...(n.close_reason !== undefined ? { close_reason: n.close_reason } : {}),
+        ...(n.residual_risk !== undefined ? { residual_risk: n.residual_risk } : {}),
+      }));
     const openItems = map.nodes
       .filter((n) => n.state === 'open')
       .map((n) => ({ id: n.id, label: n.label, state: n.state }));

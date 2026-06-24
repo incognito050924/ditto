@@ -96,6 +96,10 @@ describe('justified category skip (wi_260622vjo §8-2 / ac-2)', () => {
         admissibleBranchesAdded: 0,
         close_as: 'out_of_scope',
         close_reason: reason,
+        // A non-resolved close now also requires the surviving risk (residual_risk
+        // gate); supply one so this close_reason-recording assertion still reaches a
+        // closed node. The residual_risk record itself is asserted separately below.
+        residual_risk: '잔여: 인증 가정이 외부 우회 경로에서 깨질 수 있음',
       },
     });
     expect(r.terminated).toBe(false);
@@ -108,6 +112,79 @@ describe('justified category skip (wi_260622vjo §8-2 / ac-2)', () => {
   });
 
   test('resolving a category (swept, not skipped) does not require a skip reason', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI, seedCategories: true });
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: AUTH,
+        admissibleBranchesAdded: 0,
+        close_as: 'resolved',
+        axis_signals: { neutrality: { opponent_ran: true, verdict: 'accept' } },
+      },
+    });
+    expect(r.terminated).toBe(false);
+    if (r.terminated) return;
+    expect(r.closed).toBe(true);
+  });
+});
+
+// surviving-risk self-description gap: a non-resolved category close records WHY it
+// was skipped (close_reason) but not WHAT RISK survives that skip. residual_risk is a
+// separate REQUIRED field for non-resolved closes (out_of_scope / user_owned),
+// mirroring close_reason's fail-closed gate; a resolved (swept) close does not require
+// it (the sweep settled the risk).
+describe('surviving-risk on a skipped category (residual_risk)', () => {
+  const AUTH = `${CATEGORY_NODE_PREFIX}authentication`;
+  const REASON = '이 변경은 인증 경로를 건드리지 않음 — 읽기 전용 내부 계산';
+  const RISK = '잔여: 외부 호출자가 우회 경로로 들어오면 인증 가정이 깨질 수 있음';
+
+  test('skipping a category with a close_reason but NO residual_risk is rejected — surviving risk must be named', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI, seedCategories: true });
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: AUTH,
+        admissibleBranchesAdded: 0,
+        close_as: 'out_of_scope',
+        close_reason: REASON,
+      },
+    });
+    expect(r.terminated).toBe(false);
+    if (r.terminated) return;
+    expect(r.closed).toBe(false);
+    expect(r.reasons.join(' ')).toContain('residual_risk');
+
+    // the category stays OPEN — it cannot be closed without naming the surviving risk.
+    const node = (await new CoverageStore(repo).getMap(WI)).nodes.find((n) => n.id === AUTH);
+    expect(node?.state).toBe('open');
+  });
+
+  test('a skipped category with both close_reason AND residual_risk closes and records both (auditable)', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI, seedCategories: true });
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: AUTH,
+        admissibleBranchesAdded: 0,
+        close_as: 'out_of_scope',
+        close_reason: REASON,
+        residual_risk: RISK,
+      },
+    });
+    expect(r.terminated).toBe(false);
+    if (r.terminated) return;
+    expect(r.closed).toBe(true);
+
+    const node = (await new CoverageStore(repo).getMap(WI)).nodes.find((n) => n.id === AUTH);
+    expect(node?.state).toBe('out_of_scope');
+    expect(node?.close_reason).toBe(REASON);
+    expect(node?.residual_risk).toBe(RISK);
+  });
+
+  test('resolving a category (swept, not skipped) does not require a residual_risk', async () => {
     await nextCoverageNode({ repoRoot: repo, workItemId: WI, seedCategories: true });
     const r = await recordCoverageRound({
       repoRoot: repo,

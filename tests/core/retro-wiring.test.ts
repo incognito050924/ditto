@@ -6,6 +6,7 @@ import { nextNode, recordResult } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { CompletionStore, buildCompletion } from '~/core/completion-store';
 import { CoverageFeedbackLedger } from '~/core/coverage-feedback';
+import { CoverageStore } from '~/core/coverage-store';
 import { MemoryEventStore } from '~/core/memory-store';
 import { retroMemoryEventId } from '~/core/retro-measure';
 import { RetroMetricLedger } from '~/core/retro-metric-ledger';
@@ -141,6 +142,53 @@ describe('retro dispatch wiring (ac-4: context.retro carries the SEPARATED metri
     const narrativeText = JSON.stringify(retro?.narrative);
     expect(narrativeText).toContain('migration not run');
     expect(narrativeText).toContain('rollback path untested');
+  });
+
+  // surviving-risk self-description: a coverage node closed as a skip carries the
+  // surviving risk on its `residual_risk` field. The retro must SURFACE that risk in
+  // its narrative — the same place completion `remaining_risks` surfaces — so the
+  // surviving risk is reflected on and carried forward, not lost when the sweep ends.
+  test('a coverage node residual_risk surfaces in the dispatched retro narrative', async () => {
+    const RISK = 'auth bypass survives the skip: external caller could re-enter';
+    await new CoverageStore(repo).writeMap(WI, {
+      schema_version: '0.1.0',
+      work_item_id: WI,
+      root_id: 'cov-root',
+      nodes: [
+        {
+          id: 'cov-root',
+          parent_id: null,
+          label: 'intent',
+          origin: 'seed',
+          depth_weight: 0,
+          state: 'resolved',
+          children: [],
+        },
+        {
+          id: 'cov-cat-auth',
+          parent_id: 'cov-root',
+          label: 'authentication',
+          origin: 'seed',
+          depth_weight: 0,
+          state: 'out_of_scope',
+          children: [],
+          close_reason: 'no auth path touched',
+          residual_risk: RISK,
+        },
+      ],
+    });
+
+    await aps.write(WI, graph([retroNode()]));
+    const res = await nextNode(repo, WI);
+    if (res.action !== 'spawn') throw new Error('expected spawn');
+    expect(res.node_id).toBe('N7');
+    const narrativeText = JSON.stringify(res.packet.context.retro?.narrative);
+    expect(narrativeText).toContain(RISK);
+    // it is projected as a 'residual' (surviving-risk) item, consistent with completion
+    // remaining_risks — not a 'close_reason' (which is the skip's WHY).
+    const items = res.packet.context.retro?.narrative.items ?? [];
+    const riskItem = items.find((i) => i.text === RISK);
+    expect(riskItem?.kind).toBe('residual');
   });
 
   test('persisted completion: a pass WITHOUT evidence is EXCLUDED from coverage (evidence-based == doctor isClosed)', async () => {

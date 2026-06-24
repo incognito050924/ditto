@@ -260,16 +260,23 @@ async function collectRetroContext(
     // ledger absent/corrupt ⇒ escape_recurrence stays ungrounded (omitted).
   }
 
-  // close_reason narrative rows from the coverage map (skip/deferral justifications).
+  // close_reason + residual_risk narrative rows from the coverage map. close_reason is
+  // the skip's WHY (its own narrative kind); residual_risk is the SURVIVING RISK a skip
+  // leaves behind, so it joins `residualRisks` and projects as a 'residual' item — the
+  // same kind completion `remaining_risks` use — so a skipped category's surviving risk
+  // is reflected on + carried forward, not lost when the sweep ends (surviving-risk
+  // self-description gap).
   const closeReasons: string[] = [];
   try {
     const cov = new CoverageStore(repoRoot);
     if (await cov.exists(workItemId)) {
-      for (const n of (await cov.getMap(workItemId)).nodes)
+      for (const n of (await cov.getMap(workItemId)).nodes) {
         if (n.close_reason) closeReasons.push(n.close_reason);
+        if (n.residual_risk) residualRisks.push(n.residual_risk);
+      }
     }
   } catch {
-    // coverage map absent ⇒ no close_reason rows.
+    // coverage map absent ⇒ no close_reason / residual_risk rows.
   }
 
   // intent-drift narrative rows from the persisted metrics ledger.
