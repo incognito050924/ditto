@@ -264,9 +264,7 @@ describe('ditto autopilot complete — intent-drift conservation 게이트 (fals
       ).exists();
       if (written) {
         const comp = JSON.parse(
-          await Bun.file(
-            join(dir, '.ditto', 'local', 'work-items', WI, 'completion.json'),
-          ).text(),
+          await Bun.file(join(dir, '.ditto', 'local', 'work-items', WI, 'completion.json')).text(),
         );
         expect(comp.final_verdict).not.toBe('pass');
       }

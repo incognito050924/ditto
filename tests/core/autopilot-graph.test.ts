@@ -259,7 +259,9 @@ describe('validateNodeAddition (A-1: integrity gate for node-add)', () => {
   test('accepts a read-only owner (research) carrying a non-empty file_scope (read-focus)', () => {
     const existing = buildInitialNodes(['ac-1']);
     expect(() =>
-      validateNodeAddition(existing, [ownedNode('N4', 'research', 'researcher', ['src/core/x.ts'])]),
+      validateNodeAddition(existing, [
+        ownedNode('N4', 'research', 'researcher', ['src/core/x.ts']),
+      ]),
     ).not.toThrow();
   });
 
