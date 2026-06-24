@@ -245,18 +245,21 @@ export const setupCommand = defineCommand({
       const projectRoot = targetDir ? resolve(targetDir) : await resolveRepoRootForCreate();
       const resourcesDir = resolveResourcesDir();
 
-      // Self-host no-op: the ditto repo must not manage itself. Detect by the
-      // bundled resources dir resolving inside the target (resourcesDir's plugin
-      // root == projectRoot), mirroring install-plugin.mjs's `target === repo`.
+      // Self-host no-op for Claude project management: the ditto repo must not
+      // be its own managed Claude target. Codex dogfood still needs setup to
+      // stage the built plugin under .agents/plugins/ditto so `codex plugin add`
+      // installs the artifact, not the whole source repo.
       const pluginRoot = resolve(resourcesDir, '..', '..');
-      if (pluginRoot === projectRoot) {
+      const selfHost = pluginRoot === projectRoot;
+      const setupHost: SetupHost = selfHost && includesCodex(host) ? 'codex' : host;
+      if (selfHost && !includesCodex(host)) {
         writeHuman(`setup: skipped (self-host — target IS the ditto repo at ${projectRoot})`);
         return;
       }
 
       // 사람이 터미널에서 직접 돌릴 때만 대화형 wizard. 비TTY(에이전트/CI)나 --yes면
       // 기존 비대화 경로(install-plugin.mjs·테스트가 의존)로 진행한다.
-      if (process.stdin.isTTY && !args.yes) {
+      if (!selfHost && process.stdin.isTTY && !args.yes) {
         await runWizard(resourcesDir, projectRoot);
         return;
       }
@@ -267,13 +270,13 @@ export const setupCommand = defineCommand({
         homeDir: homedir(),
         ...(process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {}),
         now: new Date(),
-        host,
-        ...(includesCodex(host)
+        host: setupHost,
+        ...(includesCodex(setupHost)
           ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) }
           : {}),
       });
 
-      writeHuman(`setup: installed into ${projectRoot} (host=${host})`);
+      writeHuman(`setup: installed into ${projectRoot} (host=${setupHost})`);
       for (const r of result.resources) {
         const tag =
           r.status === 'corrupted'

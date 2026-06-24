@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'citty';
@@ -15,6 +15,8 @@ import {
   selectVariantCandidates,
   writeAgentVariants,
 } from '~/core/agent-variants';
+
+const REPO_ROOT = join(import.meta.dir, '..', '..');
 
 describe('setup command', () => {
   test('source repo invocation prefers dist/codex-plugin over the source repo root', async () => {
@@ -36,6 +38,71 @@ describe('setup command', () => {
     } finally {
       await rm(repo, { recursive: true, force: true });
       await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('CLI self-host codex setup stages the Codex plugin marketplace', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-self-host-codex-repo-'));
+    const codexHome = await mkdtemp(join(tmpdir(), 'ditto-self-host-codex-home-'));
+    try {
+      const resourcesDir = join(repo, 'resources', 'managed');
+      const distRoot = join(repo, 'dist', 'codex-plugin');
+      await mkdir(resourcesDir, { recursive: true });
+      await mkdir(join(distRoot, '.codex-plugin'), { recursive: true });
+      await mkdir(join(distRoot, '.codex', 'agents'), { recursive: true });
+      await mkdir(join(distRoot, 'skills', 'memory-graph'), { recursive: true });
+
+      await writeFile(join(resourcesDir, 'AGENTS.md'), 'PROJECT AGENTS charter body\n');
+      await writeFile(join(resourcesDir, 'GLOBAL_AGENTS.md'), 'GLOBAL AGENTS charter body\n');
+      await writeFile(
+        join(distRoot, '.codex-plugin', 'plugin.json'),
+        JSON.stringify({ name: 'ditto', version: '0.0.0', description: 'test' }),
+      );
+      await writeFile(join(distRoot, '.codex', 'agents', 'reviewer.toml'), 'name = "reviewer"\n');
+      await writeFile(
+        join(distRoot, 'skills', 'memory-graph', 'SKILL.md'),
+        'Run `"${CLAUDE_PLUGIN_ROOT}/bin/ditto" memory query x`.\n',
+      );
+
+      const proc = Bun.spawnSync(
+        [
+          'bun',
+          join(REPO_ROOT, 'src', 'cli', 'index.ts'),
+          'setup',
+          '--host',
+          'codex',
+          '--dir',
+          repo,
+          '--yes',
+        ],
+        {
+          cwd: repo,
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env: {
+            ...process.env,
+            CLAUDE_PLUGIN_ROOT: repo,
+            CODEX_HOME: codexHome,
+          },
+        },
+      );
+      expect(proc.exitCode).toBe(0);
+
+      const marketplace = JSON.parse(
+        await readFile(join(repo, '.agents', 'plugins', 'marketplace.json'), 'utf8'),
+      );
+      expect(marketplace.plugins[0].source.path).toBe('./.agents/plugins/ditto');
+      expect(
+        JSON.parse(
+          await readFile(
+            join(repo, '.agents', 'plugins', 'ditto', '.codex-plugin', 'plugin.json'),
+            'utf8',
+          ),
+        ).name,
+      ).toBe('ditto');
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+      await rm(codexHome, { recursive: true, force: true });
     }
   });
 
