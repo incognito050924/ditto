@@ -43,9 +43,9 @@ describe('category seeding (wi_260622vjo §8-2)', () => {
     if (first.action !== 'interrogate') return;
 
     const map = await new CoverageStore(repo).getMap(WI);
-    // root + 19 category nodes
-    expect(map.nodes.filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX)).length).toBe(19);
-    expect(map.nodes.length).toBe(20);
+    // root + 23 category nodes
+    expect(map.nodes.filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX)).length).toBe(23);
+    expect(map.nodes.length).toBe(24);
 
     // root has open children → it is deferred; the leaf frontier is a category.
     expect(first.node.id.startsWith(CATEGORY_NODE_PREFIX)).toBe(true);
@@ -59,6 +59,51 @@ describe('category seeding (wi_260622vjo §8-2)', () => {
 
     const map = await new CoverageStore(repo).getMap(WI);
     expect(map.nodes.length).toBe(1);
+  });
+});
+
+// wi_260625l0v §3·§5 — the relevance gate pre-closes a not-relevant category AT SEED
+// (out_of_scope + reason + residual_risk) so it is never swept (cost saved) yet stays
+// in the audit ledger. Conservative default: absent verdicts → every category open.
+describe('relevance gate pre-close at seed (wi_260625l0v §3·§5)', () => {
+  const AUTH = `${CATEGORY_NODE_PREFIX}authentication`;
+
+  test('a not-relevant verdict pre-closes that category at seed — never scheduled, audited', async () => {
+    const first = await nextCoverageNode({
+      repoRoot: repo,
+      workItemId: WI,
+      seedCategories: true,
+      relevanceVerdicts: [
+        {
+          id: 'authentication',
+          relevant: false,
+          reason: '이 변경은 인증 경로를 건드리지 않음',
+          residual_risk: '오판 시 인증 실패가 사전점검에서 누락',
+        },
+      ],
+    });
+    expect(first.action).toBe('interrogate');
+    if (first.action !== 'interrogate') return;
+
+    const map = await new CoverageStore(repo).getMap(WI);
+    const auth = map.nodes.find((n) => n.id === AUTH);
+    expect(auth?.state).toBe('out_of_scope');
+    expect(auth?.close_reason).toBe('이 변경은 인증 경로를 건드리지 않음');
+    expect(auth?.residual_risk).toBe('오판 시 인증 실패가 사전점검에서 누락');
+    // ledger still complete: all 23 categories present (no silent drop)
+    expect(map.nodes.filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX)).length).toBe(23);
+    // the pre-closed category is never scheduled as the leaf frontier
+    expect(first.node.id).not.toBe(AUTH);
+  });
+
+  test('absent verdicts → every category open (unchanged, ac-7)', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI, seedCategories: true });
+    const map = await new CoverageStore(repo).getMap(WI);
+    expect(
+      map.nodes
+        .filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX))
+        .every((n) => n.state === 'open'),
+    ).toBe(true);
   });
 });
 

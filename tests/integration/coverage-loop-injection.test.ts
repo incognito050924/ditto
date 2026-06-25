@@ -44,7 +44,7 @@ describe('far-field injection seam (wi_260622vjo §8-1)', () => {
 
     // The gap closed: cross_cutting_constraints is the floor, not [].
     expect(first.judgeInput.cross_cutting_constraints).toEqual(farFieldLenses());
-    expect(first.judgeInput.cross_cutting_constraints.length).toBe(19);
+    expect(first.judgeInput.cross_cutting_constraints.length).toBe(23);
   });
 
   test('the injected lenses include the far-field domains the user motivated (auth/authz)', async () => {

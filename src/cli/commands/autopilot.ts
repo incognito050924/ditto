@@ -12,8 +12,17 @@ import { checkCiteGate, crossValidateCite, detectActiveConflicts } from '~/core/
 import { CompletionStore } from '~/core/completion-store';
 import { nextCoverageNode, recordCoverageRound } from '~/core/coverage-loop';
 import { COVERAGE_TIERS, type CoverageTier } from '~/core/coverage-manager';
+import {
+  type RawRelevanceJudgment,
+  type RelevanceRefute,
+  assembleRelevanceVerdicts,
+} from '~/core/coverage-relevance';
 import { CoverageStore } from '~/core/coverage-store';
-import { farFieldCategoriesEnabled, farFieldCoverageReport } from '~/core/coverage-taxonomy';
+import {
+  type CategoryRelevanceVerdict,
+  farFieldCategoriesEnabled,
+  farFieldCoverageReport,
+} from '~/core/coverage-taxonomy';
 import { dittoDir } from '~/core/ditto-paths';
 import { checkE2eCompletionGate } from '~/core/e2e/completion-gate';
 import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
@@ -809,6 +818,32 @@ function parseCoverageIntensity(raw: string | undefined): CoverageTier | undefin
   throw new Error(`--coverageIntensity must be one of ${COVERAGE_TIERS.join('|')} (got "${raw}")`);
 }
 
+/**
+ * Parse `--relevance` (design §5) — a JSON `{judgments, refutes}` of the host's
+ * grounded relevance judgments + adversarial refutes — and assemble it into the
+ * verdicts the seed gate consumes. The §5 safety rules (justified ∧ refute-survived)
+ * live in `assembleRelevanceVerdicts`, not here. Undefined → no gate (every category
+ * open, ac-7). Malformed → throws so the caller exits with a usage error.
+ */
+function parseRelevance(raw: string | undefined): CategoryRelevanceVerdict[] | undefined {
+  if (raw === undefined) return undefined;
+  let parsed: { judgments?: unknown; refutes?: unknown };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('--relevance must be JSON {judgments,refutes}');
+  }
+  if (!Array.isArray(parsed.judgments)) {
+    throw new Error(
+      '--relevance.judgments must be an array of {id,relevant,reason?,residual_risk?}',
+    );
+  }
+  return assembleRelevanceVerdicts(
+    parsed.judgments as RawRelevanceJudgment[],
+    Array.isArray(parsed.refutes) ? (parsed.refutes as RelevanceRefute[]) : [],
+  );
+}
+
 const autopilotCoverageNext = defineCommand({
   meta: {
     name: 'coverage-next',
@@ -820,14 +855,21 @@ const autopilotCoverageNext = defineCommand({
       type: 'string',
       description: `Override sweep intensity at entry: ${COVERAGE_TIERS.join('|')} (default: stakes-derived, ac-4)`,
     },
+    relevance: {
+      type: 'string',
+      description:
+        'Relevance gate input JSON {judgments,refutes} — pre-closes irrelevant categories at seed so only relevant ones are swept (§5). Consulted on the first (seed) call only.',
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
     let format: ReturnType<typeof parseOutputFormat>;
     let intensity: CoverageTier | undefined;
+    let relevanceVerdicts: CategoryRelevanceVerdict[] | undefined;
     try {
       format = parseOutputFormat(args.output);
       intensity = parseCoverageIntensity(args.coverageIntensity);
+      relevanceVerdicts = parseRelevance(args.relevance);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(USAGE_ERROR_EXIT);
@@ -840,6 +882,9 @@ const autopilotCoverageNext = defineCommand({
         workItemId: args.workItem,
         // §8-2: opt-in category-complete discovery (env toggle until ac-10 config).
         seedCategories: farFieldCategoriesEnabled(),
+        // §5 (wi_260625l0v): relevance gate verdicts pre-close irrelevant categories
+        // at seed (assembled from the host's grounded judgments + adversarial refutes).
+        ...(relevanceVerdicts ? { relevanceVerdicts } : {}),
         // ac-4: explicit user override wins over the stakes-derived/standard tier.
         ...(intensity ? { intensity } : {}),
       });

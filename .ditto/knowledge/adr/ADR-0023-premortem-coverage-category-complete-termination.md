@@ -27,6 +27,8 @@ pre-mortem coverage 종료를 novelty-dry 단독에서 **카테고리-완전 종
 
 4. **강도 = 깊이(폭 불변).** 종료 깊이 K를 고정 상수에서 stakes tier 도출로 바꾼다(`coverageDryK(tier)` → `TIER_DEPTH[tier].maxRoundsPerNode`: light=1 / standard=2 / full=3, `coverage-manager.ts:576-597`). tier 입력 없으면 standard(K=2) = 기존 기본값. **폭(카테고리 집합)은 항상 전수·불변, 깊이만 stakes 비례.**
 
+   > **Amendment (2026-06-25, wi_260625l0v)** — 이 항목의 "폭=항상 전수·불변"을 **ADR-20260625-premortem-relevance-gate**가 supersede한다: 폭은 이제 "관련 카테고리 전수"다(이진 관련성 게이트 — 무관 카테고리는 4중 안전장치를 거친 감사가능 skip). 비용이 1차 통증인데 전수 시딩이 무관 카테고리도 유료 dismiss하게 만들었기 때문이다. **이 항목의 깊이 축(tier=stakes 비례)과 ADR-0023의 나머지(결정 1·2·3·5 — 카테고리-완전 종료·정당화-close 게이트·렌즈 주입·보존)는 전부 불변.** skip이 근거+적대검증+기록을 거치므로 ADR-0023이 막으려던 false-green은 재도입되지 않는다.
+
 5. **보존(가산·플래그).** 카테고리-노드 시딩은 `farFieldCategoriesEnabled()`(env `DITTO_FARFIELD_CATEGORIES`=0/off/false로 끔, 기본 ON·opt-out, autopilot plan-stage CLI에서만 소비; `coverage-taxonomy.ts:172`)로 게이트. off = root-only 트리 = 기존 novelty-dry 동작 그대로. 엔진 직접 호출자 `nextCoverageNode`는 `seedCategories` 기본 false 유지. → 기존 autopilot plan-stage coverage 동작 보존(전체 2671 테스트 green).
 
 핵심: 망라 종료가 "novelty가 말랐다"가 아니라 **"시딩된 모든 카테고리가 명시적으로 다뤄졌다(swept-dry 또는 정당화-close)"**로 증명 가능해진다.

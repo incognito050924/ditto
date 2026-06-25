@@ -19,7 +19,7 @@ describe('DITTO plugin surface inventory (M1.6)', () => {
         readFileSync(join(REPO_ROOT, '.ditto', 'local', 'surfaces.json'), 'utf8'),
       );
       const parsed = surfaceCatalog.parse(raw);
-      expect(parsed.surfaces.length).toBe(40); // 13 skills + 20 agents (17 plugin + 3 .claude/agents variants, f95ebec) + 6 hooks + 1 plugin
+      expect(parsed.surfaces.length).toBe(41); // 13 skills + 21 agents (18 plugin + 3 .claude/agents variants, f95ebec) + 6 hooks + 1 plugin
     },
   );
 

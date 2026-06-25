@@ -20,8 +20,26 @@ import type { CoverageMap } from '~/schemas/coverage';
 // bare noun (ac-1). These lenses seed cross_cutting_constraints so the fresh judge
 // sees every far-field domain instead of only what it happens to recall (§2/§3).
 describe('far-field taxonomy floor (wi_260622vjo §6-floor)', () => {
-  test('floor enumerates the 19 cross-validated categories', () => {
-    expect(FAR_FIELD_TAXONOMY_FLOOR.length).toBe(19);
+  test('floor enumerates the 23 cross-validated categories', () => {
+    expect(FAR_FIELD_TAXONOMY_FLOOR.length).toBe(23);
+  });
+
+  test('the clear bundles are statically atomized into independently-groundable facets (§6-1)', () => {
+    const ids = new Set(FAR_FIELD_TAXONOMY_FLOOR.map((c) => c.id));
+    // security-privacy and resource-abuse were heterogeneous bundles; the binary
+    // relevance gate needs independently-groundable units, so they are split (§6).
+    expect(ids.has('security-privacy')).toBe(false);
+    expect(ids.has('resource-abuse')).toBe(false);
+    for (const facet of [
+      'injection',
+      'secret-exposure',
+      'pii-leak',
+      'regulatory',
+      'resource-exhaustion',
+      'abuse-vector',
+    ]) {
+      expect(ids.has(facet)).toBe(true);
+    }
   });
 
   test('category ids are unique and kebab-case', () => {
@@ -41,7 +59,7 @@ describe('far-field taxonomy floor (wi_260622vjo §6-floor)', () => {
   test('farFieldLenses() returns the floor lens strings for cross_cutting_constraints injection (§8-1)', () => {
     const lenses = farFieldLenses();
     expect(lenses).toEqual(FAR_FIELD_TAXONOMY_FLOOR.map((c) => c.lens));
-    expect(lenses.length).toBe(19);
+    expect(lenses.length).toBe(23);
   });
 
   test('the floor covers the security-relevant far-field domains the user emphasized (auth/authz/audit)', () => {
@@ -67,7 +85,7 @@ describe('far-field taxonomy floor (wi_260622vjo §6-floor)', () => {
 describe('far-field category seeding (wi_260622vjo §8-2)', () => {
   test('farFieldCoverageNodes seeds root + one open node per floor category', () => {
     const nodes = farFieldCoverageNodes('add login');
-    // root + 19 categories
+    // root + 23 categories
     expect(nodes.length).toBe(FAR_FIELD_TAXONOMY_FLOOR.length + 1);
 
     const root = nodes.find((n) => n.id === 'cov-root');
@@ -359,5 +377,60 @@ describe('far-field taxonomy project config (wi_260622vjo ac-10)', () => {
     const nodes = farFieldCoverageNodes('add login', 'cov-root', custom);
     const cats = nodes.filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX));
     expect(cats.map((n) => n.id).sort()).toEqual(['cov-cat-a', 'cov-cat-b']);
+  });
+});
+
+// wi_260625l0v — relevance gate (design §3·§5·§7). A category judged NOT relevant to
+// the change is seeded PRE-CLOSED (out_of_scope + close_reason + residual_risk) so the
+// ledger stays complete (no silent drop) and the pre-closed node is never swept (cost
+// saved). Conservative default: a category is skipped ONLY with a well-formed
+// justification (relevant:false ∧ reason ∧ residual_risk); anything else stays open
+// (애매하면 포함). Grounding/adversarial-refute that PRODUCE the verdict are upstream.
+describe('far-field relevance gate — pre-closed skip (wi_260625l0v §3·§5)', () => {
+  const taxo = [
+    { id: 'a', lens: 'lens A?' },
+    { id: 'b', lens: 'lens B?' },
+    { id: 'c', lens: 'lens C?' },
+  ];
+
+  test('a not-relevant verdict pre-closes that category out_of_scope with reason+residual_risk; others stay open', () => {
+    const nodes = farFieldCoverageNodes('refactor README', 'cov-root', taxo, [
+      {
+        id: 'b',
+        relevant: false,
+        reason: 'b 도메인을 이 변경이 건드리지 않음',
+        residual_risk: '오판 시 b 실패가 사전점검에서 누락',
+      },
+    ]);
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const b = byId.get('cov-cat-b');
+    expect(b?.state).toBe('out_of_scope');
+    expect(b?.close_reason).toBe('b 도메인을 이 변경이 건드리지 않음');
+    expect(b?.residual_risk).toBe('오판 시 b 실패가 사전점검에서 누락');
+    expect(byId.get('cov-cat-a')?.state).toBe('open');
+    expect(byId.get('cov-cat-c')?.state).toBe('open');
+    // ledger complete: every category still seeded + reachable from root (no silent drop)
+    const root = byId.get('cov-root');
+    expect([...(root?.children ?? [])].sort()).toEqual(['cov-cat-a', 'cov-cat-b', 'cov-cat-c']);
+  });
+
+  test('conservative default: a not-relevant verdict WITHOUT residual_risk cannot skip — stays open', () => {
+    const nodes = farFieldCoverageNodes('refactor README', 'cov-root', taxo, [
+      { id: 'b', relevant: false, reason: 'b 무관 (단 residual_risk 누락)' },
+    ]);
+    expect(nodes.find((n) => n.id === 'cov-cat-b')?.state).toBe('open');
+  });
+
+  test('a relevant:true verdict keeps the category open (covered fully)', () => {
+    const nodes = farFieldCoverageNodes('refactor README', 'cov-root', taxo, [
+      { id: 'a', relevant: true, reason: '', residual_risk: '' },
+    ]);
+    expect(nodes.find((n) => n.id === 'cov-cat-a')?.state).toBe('open');
+  });
+
+  test('no verdicts → every category open (backward compat, ac-7)', () => {
+    const nodes = farFieldCoverageNodes('refactor README', 'cov-root', taxo);
+    const cats = nodes.filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX));
+    expect(cats.every((c) => c.state === 'open')).toBe(true);
   });
 });

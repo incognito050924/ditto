@@ -26,10 +26,14 @@ export interface FarFieldCategory {
 }
 
 /**
- * The 18 floor categories (design §6-floor). Numbering follows the spec list; the
- * count lives HERE (not a hardcoded "14"/"15" in prose) so the taxonomy is the
- * single source of the category set. Lens text is the probing question the sweep
- * answers for the change's scope.
+ * The 23 floor categories (design §6-floor + §6-1 granularity hybrid). The count
+ * lives HERE (not a hardcoded number in prose) so the taxonomy is the single source
+ * of the category set. Lens text is the probing question the sweep answers for the
+ * change's scope. Clear bundles are statically atomized into independently-groundable
+ * facets (§6-1, wi_260625l0v): security-privacy → injection/secret-exposure/pii-leak/
+ * regulatory, resource-abuse → resource-exhaustion/abuse-vector, so the binary
+ * relevance gate (§3) can include/skip each facet on its own grounding rather than
+ * over-covering a whole bundle for one relevant facet.
  */
 export const FAR_FIELD_TAXONOMY_FLOOR: readonly FarFieldCategory[] = [
   {
@@ -65,16 +69,32 @@ export const FAR_FIELD_TAXONOMY_FLOOR: readonly FarFieldCategory[] = [
     lens: '실패 지점에서 부분 recovery가 필요한가, 전체 롤백인가? 무성 실패·연쇄 실패·fallback 정확성은?',
   },
   {
-    id: 'resource-abuse',
-    lens: '한도·고갈·타임아웃·공유 레이트리미터·메모리·N+1·스케일 문제가 있나? 오남용 벡터: 이 흐름을 한도/쿼터보다 빠르게 악용(대량·replay·스크래핑·credential stuffing)할 수 있나, 리미터는 공유인가?',
+    id: 'resource-exhaustion',
+    lens: '한도·고갈·타임아웃·메모리·N+1·스케일 문제가 있나? 정상 부하가 늘 때 자원이 고갈되거나 성능이 붕괴되나? (용량 한계 — 의도적 오남용은 #abuse-vector)',
+  },
+  {
+    id: 'abuse-vector',
+    lens: '이 흐름을 한도/쿼터보다 빠르게 악용할 수 있나(대량·replay·스크래핑·credential stuffing)? 레이트리미터가 공유라 우회·고갈시킬 수 있나? (의도적 오남용 벡터 — 정상 부하의 용량 한계는 #resource-exhaustion)',
   },
   {
     id: 'compat-version',
     lens: '하위/상위 호환·스키마/API 진화·파괴적 변경이 있나?',
   },
   {
-    id: 'security-privacy',
-    lens: '인젝션·시크릿 노출·PII/데이터 유출·규제 위험이 있나?',
+    id: 'injection',
+    lens: '신뢰할 수 없는 입력이 코드·쿼리·명령으로 해석되는 인젝션 경로가 있나? (SQL·NoSQL·OS 명령·LDAP·XPath·템플릿·역직렬화 싱크 — CWE-89/78/94, OWASP A03) 입력이 위험한 인터프리터에 도달하나? (입력 검증 게이트 자체는 #input-validation)',
+  },
+  {
+    id: 'secret-exposure',
+    lens: '시크릿·자격증명·토큰·키가 코드·로그·에러·설정·URL에 노출되나? 저장·전송 시 적절히 보호되나? (CWE-200/532, OWASP A02)',
+  },
+  {
+    id: 'pii-leak',
+    lens: '개인식별정보(PII)·민감 데이터가 수집·로깅·전송·노출되나? 최소수집·마스킹·암호화·접근통제가 적용되나?',
+  },
+  {
+    id: 'regulatory',
+    lens: '규제·컴플라이언스 의무가 이 변경에 걸리나? (GDPR·개인정보보호법·데이터 보존/삭제·국외이전·동의·감사요건 — 위반 시 법적/계약 위험)',
   },
   {
     id: 'cross-feature',
@@ -169,6 +189,22 @@ export async function loadFarFieldTaxonomy(
 export const CATEGORY_NODE_PREFIX = 'cov-cat-';
 
 /**
+ * A per-category relevance verdict feeding the relevance gate (design §3·§5,
+ * wi_260625l0v). PRODUCED upstream (grounded judgment + adversarial refute); this
+ * module only CONSUMES it. A category is skipped ONLY by a well-formed not-relevant
+ * verdict (`relevant:false` ∧ `reason` ∧ `residual_risk`) — the conservative default
+ * keeps everything else open (애매하면 포함). `reason` → `close_reason` (WHY skipped),
+ * `residual_risk` → WHAT survives the skip; both are required by the schema for a
+ * non-resolved close, so a justification-less skip can never pass.
+ */
+export interface CategoryRelevanceVerdict {
+  id: string;
+  relevant: boolean;
+  reason?: string;
+  residual_risk?: string;
+}
+
+/**
  * Build the seeded coverage nodes for category-complete discovery (§8-2): the
  * root (original intent) plus one OPEN node per floor category. Because the
  * categories are real nodes, the existing termination predicate
@@ -186,7 +222,17 @@ export function farFieldCoverageNodes(
   intent: string,
   rootId = 'cov-root',
   taxonomy: readonly FarFieldCategory[] = FAR_FIELD_TAXONOMY_FLOOR,
+  verdicts: readonly CategoryRelevanceVerdict[] = [],
 ): CoverageNode[] {
+  // Relevance gate (§3·§5): a category is pre-closed only by a WELL-FORMED not-relevant
+  // verdict — conservative default keeps every other category open. The skip lands as
+  // an out_of_scope node carrying close_reason+residual_risk so the ledger stays
+  // complete and auditable (no silent drop), and a pre-closed node is never swept.
+  const skips = new Map(
+    verdicts
+      .filter((v) => v.relevant === false && v.reason && v.residual_risk)
+      .map((v) => [v.id, v]),
+  );
   const categoryIds = taxonomy.map((c) => `${CATEGORY_NODE_PREFIX}${c.id}`);
   const root: CoverageNode = {
     id: rootId,
@@ -197,15 +243,25 @@ export function farFieldCoverageNodes(
     state: 'open',
     children: categoryIds,
   };
-  const categories: CoverageNode[] = taxonomy.map((c, i) => ({
-    id: categoryIds[i] as string,
-    parent_id: rootId,
-    label: c.lens,
-    origin: 'seed',
-    depth_weight: 1,
-    state: 'open',
-    children: [],
-  }));
+  const categories: CoverageNode[] = taxonomy.map((c, i) => {
+    const base = {
+      id: categoryIds[i] as string,
+      parent_id: rootId,
+      label: c.lens,
+      origin: 'seed' as const,
+      depth_weight: 1,
+      children: [],
+    };
+    const skip = skips.get(c.id);
+    return skip
+      ? {
+          ...base,
+          state: 'out_of_scope' as const,
+          close_reason: skip.reason,
+          residual_risk: skip.residual_risk,
+        }
+      : { ...base, state: 'open' as const };
+  });
   return [root, ...categories];
 }
 

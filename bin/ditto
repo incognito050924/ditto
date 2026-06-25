@@ -20501,16 +20501,32 @@ var FAR_FIELD_TAXONOMY_FLOOR = [
     lens: "\uC2E4\uD328 \uC9C0\uC810\uC5D0\uC11C \uBD80\uBD84 recovery\uAC00 \uD544\uC694\uD55C\uAC00, \uC804\uCCB4 \uB864\uBC31\uC778\uAC00? \uBB34\uC131 \uC2E4\uD328\xB7\uC5F0\uC1C4 \uC2E4\uD328\xB7fallback \uC815\uD655\uC131\uC740?"
   },
   {
-    id: "resource-abuse",
-    lens: "\uD55C\uB3C4\xB7\uACE0\uAC08\xB7\uD0C0\uC784\uC544\uC6C3\xB7\uACF5\uC720 \uB808\uC774\uD2B8\uB9AC\uBBF8\uD130\xB7\uBA54\uBAA8\uB9AC\xB7N+1\xB7\uC2A4\uCF00\uC77C \uBB38\uC81C\uAC00 \uC788\uB098? \uC624\uB0A8\uC6A9 \uBCA1\uD130: \uC774 \uD750\uB984\uC744 \uD55C\uB3C4/\uCFFC\uD130\uBCF4\uB2E4 \uBE60\uB974\uAC8C \uC545\uC6A9(\uB300\uB7C9\xB7replay\xB7\uC2A4\uD06C\uB798\uD551\xB7credential stuffing)\uD560 \uC218 \uC788\uB098, \uB9AC\uBBF8\uD130\uB294 \uACF5\uC720\uC778\uAC00?"
+    id: "resource-exhaustion",
+    lens: "\uD55C\uB3C4\xB7\uACE0\uAC08\xB7\uD0C0\uC784\uC544\uC6C3\xB7\uBA54\uBAA8\uB9AC\xB7N+1\xB7\uC2A4\uCF00\uC77C \uBB38\uC81C\uAC00 \uC788\uB098? \uC815\uC0C1 \uBD80\uD558\uAC00 \uB298 \uB54C \uC790\uC6D0\uC774 \uACE0\uAC08\uB418\uAC70\uB098 \uC131\uB2A5\uC774 \uBD95\uAD34\uB418\uB098? (\uC6A9\uB7C9 \uD55C\uACC4 \u2014 \uC758\uB3C4\uC801 \uC624\uB0A8\uC6A9\uC740 #abuse-vector)"
+  },
+  {
+    id: "abuse-vector",
+    lens: "\uC774 \uD750\uB984\uC744 \uD55C\uB3C4/\uCFFC\uD130\uBCF4\uB2E4 \uBE60\uB974\uAC8C \uC545\uC6A9\uD560 \uC218 \uC788\uB098(\uB300\uB7C9\xB7replay\xB7\uC2A4\uD06C\uB798\uD551\xB7credential stuffing)? \uB808\uC774\uD2B8\uB9AC\uBBF8\uD130\uAC00 \uACF5\uC720\uB77C \uC6B0\uD68C\xB7\uACE0\uAC08\uC2DC\uD0AC \uC218 \uC788\uB098? (\uC758\uB3C4\uC801 \uC624\uB0A8\uC6A9 \uBCA1\uD130 \u2014 \uC815\uC0C1 \uBD80\uD558\uC758 \uC6A9\uB7C9 \uD55C\uACC4\uB294 #resource-exhaustion)"
   },
   {
     id: "compat-version",
     lens: "\uD558\uC704/\uC0C1\uC704 \uD638\uD658\xB7\uC2A4\uD0A4\uB9C8/API \uC9C4\uD654\xB7\uD30C\uAD34\uC801 \uBCC0\uACBD\uC774 \uC788\uB098?"
   },
   {
-    id: "security-privacy",
-    lens: "\uC778\uC81D\uC158\xB7\uC2DC\uD06C\uB9BF \uB178\uCD9C\xB7PII/\uB370\uC774\uD130 \uC720\uCD9C\xB7\uADDC\uC81C \uC704\uD5D8\uC774 \uC788\uB098?"
+    id: "injection",
+    lens: "\uC2E0\uB8B0\uD560 \uC218 \uC5C6\uB294 \uC785\uB825\uC774 \uCF54\uB4DC\xB7\uCFFC\uB9AC\xB7\uBA85\uB839\uC73C\uB85C \uD574\uC11D\uB418\uB294 \uC778\uC81D\uC158 \uACBD\uB85C\uAC00 \uC788\uB098? (SQL\xB7NoSQL\xB7OS \uBA85\uB839\xB7LDAP\xB7XPath\xB7\uD15C\uD50C\uB9BF\xB7\uC5ED\uC9C1\uB82C\uD654 \uC2F1\uD06C \u2014 CWE-89/78/94, OWASP A03) \uC785\uB825\uC774 \uC704\uD5D8\uD55C \uC778\uD130\uD504\uB9AC\uD130\uC5D0 \uB3C4\uB2EC\uD558\uB098? (\uC785\uB825 \uAC80\uC99D \uAC8C\uC774\uD2B8 \uC790\uCCB4\uB294 #input-validation)"
+  },
+  {
+    id: "secret-exposure",
+    lens: "\uC2DC\uD06C\uB9BF\xB7\uC790\uACA9\uC99D\uBA85\xB7\uD1A0\uD070\xB7\uD0A4\uAC00 \uCF54\uB4DC\xB7\uB85C\uADF8\xB7\uC5D0\uB7EC\xB7\uC124\uC815\xB7URL\uC5D0 \uB178\uCD9C\uB418\uB098? \uC800\uC7A5\xB7\uC804\uC1A1 \uC2DC \uC801\uC808\uD788 \uBCF4\uD638\uB418\uB098? (CWE-200/532, OWASP A02)"
+  },
+  {
+    id: "pii-leak",
+    lens: "\uAC1C\uC778\uC2DD\uBCC4\uC815\uBCF4(PII)\xB7\uBBFC\uAC10 \uB370\uC774\uD130\uAC00 \uC218\uC9D1\xB7\uB85C\uAE45\xB7\uC804\uC1A1\xB7\uB178\uCD9C\uB418\uB098? \uCD5C\uC18C\uC218\uC9D1\xB7\uB9C8\uC2A4\uD0B9\xB7\uC554\uD638\uD654\xB7\uC811\uADFC\uD1B5\uC81C\uAC00 \uC801\uC6A9\uB418\uB098?"
+  },
+  {
+    id: "regulatory",
+    lens: "\uADDC\uC81C\xB7\uCEF4\uD50C\uB77C\uC774\uC5B8\uC2A4 \uC758\uBB34\uAC00 \uC774 \uBCC0\uACBD\uC5D0 \uAC78\uB9AC\uB098? (GDPR\xB7\uAC1C\uC778\uC815\uBCF4\uBCF4\uD638\uBC95\xB7\uB370\uC774\uD130 \uBCF4\uC874/\uC0AD\uC81C\xB7\uAD6D\uC678\uC774\uC804\xB7\uB3D9\uC758\xB7\uAC10\uC0AC\uC694\uAC74 \u2014 \uC704\uBC18 \uC2DC \uBC95\uC801/\uACC4\uC57D \uC704\uD5D8)"
   },
   {
     id: "cross-feature",
@@ -20572,7 +20588,8 @@ async function loadFarFieldTaxonomy(repoRoot, onMalformed) {
   }
 }
 var CATEGORY_NODE_PREFIX = "cov-cat-";
-function farFieldCoverageNodes(intent, rootId = "cov-root", taxonomy = FAR_FIELD_TAXONOMY_FLOOR) {
+function farFieldCoverageNodes(intent, rootId = "cov-root", taxonomy = FAR_FIELD_TAXONOMY_FLOOR, verdicts = []) {
+  const skips = new Map(verdicts.filter((v2) => v2.relevant === false && v2.reason && v2.residual_risk).map((v2) => [v2.id, v2]));
   const categoryIds = taxonomy.map((c3) => `${CATEGORY_NODE_PREFIX}${c3.id}`);
   const root = {
     id: rootId,
@@ -20583,15 +20600,23 @@ function farFieldCoverageNodes(intent, rootId = "cov-root", taxonomy = FAR_FIELD
     state: "open",
     children: categoryIds
   };
-  const categories = taxonomy.map((c3, i2) => ({
-    id: categoryIds[i2],
-    parent_id: rootId,
-    label: c3.lens,
-    origin: "seed",
-    depth_weight: 1,
-    state: "open",
-    children: []
-  }));
+  const categories = taxonomy.map((c3, i2) => {
+    const base = {
+      id: categoryIds[i2],
+      parent_id: rootId,
+      label: c3.lens,
+      origin: "seed",
+      depth_weight: 1,
+      children: []
+    };
+    const skip = skips.get(c3.id);
+    return skip ? {
+      ...base,
+      state: "out_of_scope",
+      close_reason: skip.reason,
+      residual_risk: skip.residual_risk
+    } : { ...base, state: "open" };
+  });
   return [root, ...categories];
 }
 function farFieldCategoriesEnabled() {
@@ -24077,7 +24102,7 @@ async function nextCoverageNode(args) {
       schema_version: "0.1.0",
       work_item_id: workItemId2,
       root_id: "cov-root",
-      nodes: args.seedCategories ? farFieldCoverageNodes(intent2, "cov-root", taxonomy) : [rootNode(intent2)],
+      nodes: args.seedCategories ? farFieldCoverageNodes(intent2, "cov-root", taxonomy, args.relevanceVerdicts) : [rootNode(intent2)],
       ...args.intensity ? { intensity: args.intensity } : {}
     };
     await store.writeMap(workItemId2, map);
@@ -24228,6 +24253,18 @@ async function recordCoverageRound(args) {
     };
   }
   return { terminated: false, closed, reasons, dryCounter: nextCounter };
+}
+
+// src/core/coverage-relevance.ts
+function assembleRelevanceVerdicts(judgments, refutes = []) {
+  const refuteById = new Map(refutes.map((r3) => [r3.id, r3]));
+  return judgments.map((j) => {
+    const refute = refuteById.get(j.id);
+    if (j.relevant === false && j.reason && j.residual_risk && refute !== undefined && refute.refuted === false) {
+      return { id: j.id, relevant: false, reason: j.reason, residual_risk: j.residual_risk };
+    }
+    return { id: j.id, relevant: true };
+  });
 }
 
 // src/cli/commands/autopilot.ts
@@ -25953,6 +25990,20 @@ function parseCoverageIntensity(raw) {
     return raw;
   throw new Error(`--coverageIntensity must be one of ${COVERAGE_TIERS.join("|")} (got "${raw}")`);
 }
+function parseRelevance(raw) {
+  if (raw === undefined)
+    return;
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("--relevance must be JSON {judgments,refutes}");
+  }
+  if (!Array.isArray(parsed.judgments)) {
+    throw new Error("--relevance.judgments must be an array of {id,relevant,reason?,residual_risk?}");
+  }
+  return assembleRelevanceVerdicts(parsed.judgments, Array.isArray(parsed.refutes) ? parsed.refutes : []);
+}
 var autopilotCoverageNext = defineCommand({
   meta: {
     name: "coverage-next",
@@ -25964,14 +26015,20 @@ var autopilotCoverageNext = defineCommand({
       type: "string",
       description: `Override sweep intensity at entry: ${COVERAGE_TIERS.join("|")} (default: stakes-derived, ac-4)`
     },
+    relevance: {
+      type: "string",
+      description: "Relevance gate input JSON {judgments,refutes} \u2014 pre-closes irrelevant categories at seed so only relevant ones are swept (\xA75). Consulted on the first (seed) call only."
+    },
     output: { type: "string", description: "Output format: human|json", default: "human" }
   },
   run: async ({ args }) => {
     let format;
     let intensity;
+    let relevanceVerdicts;
     try {
       format = parseOutputFormat(args.output);
       intensity = parseCoverageIntensity(args.coverageIntensity);
+      relevanceVerdicts = parseRelevance(args.relevance);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(USAGE_ERROR_EXIT);
@@ -25983,6 +26040,7 @@ var autopilotCoverageNext = defineCommand({
         repoRoot,
         workItemId: args.workItem,
         seedCategories: farFieldCategoriesEnabled(),
+        ...relevanceVerdicts ? { relevanceVerdicts } : {},
         ...intensity ? { intensity } : {}
       });
       if (format === "json") {
@@ -41983,4 +42041,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=f1ee8b96283cb5d982b833c95346f42dfe4ca7cc13bb43659d04b8540480400e
+//# ditto-src-stamp=eea869944eac3143c4d996033593713f51703bf3a2fe276a94c107a03e352c69

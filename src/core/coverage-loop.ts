@@ -20,6 +20,7 @@ import {
 import { CoverageStore } from './coverage-store';
 import {
   CATEGORY_NODE_PREFIX,
+  type CategoryRelevanceVerdict,
   farFieldCoverageNodes,
   farFieldLenses,
   loadFarFieldTaxonomy,
@@ -137,6 +138,15 @@ export async function nextCoverageNode(args: {
    * Only consulted on the first call (when the map is seeded).
    */
   seedCategories?: boolean;
+  /**
+   * Per-category relevance verdicts (design §3·§5, wi_260625l0v). When seeding
+   * categories, a WELL-FORMED not-relevant verdict pre-closes that category
+   * (out_of_scope + reason + residual_risk) so it is never swept (cost saved) yet
+   * stays in the audit ledger; the conservative default keeps every other category
+   * open. Produced upstream (grounded + adversarially-refuted judgment); absent →
+   * every category open (unchanged behavior, ac-7). Only consulted on the first call.
+   */
+  relevanceVerdicts?: readonly CategoryRelevanceVerdict[];
 }): Promise<NextCoverageNodeResult> {
   const { repoRoot, workItemId } = args;
   const store = new CoverageStore(repoRoot);
@@ -156,7 +166,7 @@ export async function nextCoverageNode(args: {
       // §8-2: category-complete discovery seeds every floor category as a node so
       // termination requires each one swept (ac-2); off → root-only tree (ac-7).
       nodes: args.seedCategories
-        ? farFieldCoverageNodes(intent, 'cov-root', taxonomy)
+        ? farFieldCoverageNodes(intent, 'cov-root', taxonomy, args.relevanceVerdicts)
         : [rootNode(intent)],
       // ac-4: persist the entry intensity override on the first seed so the tier (and
       // depth K) stay consistent across later calls that don't re-pass it — otherwise
