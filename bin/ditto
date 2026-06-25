@@ -24054,6 +24054,7 @@ async function detectActiveConflicts(repoRoot, input) {
 
 // src/core/coverage-loop.ts
 init_ditto_paths();
+init_fs();
 function dryCounterPath(repoRoot, workItemId2) {
   return localDir(repoRoot, "runs", workItemId2, "coverage-dry-counter");
 }
@@ -24065,7 +24066,7 @@ async function readDryCounter(repoRoot, workItemId2) {
   return Number.isFinite(n2) && n2 >= 0 ? n2 : 0;
 }
 async function writeDryCounter(repoRoot, workItemId2, n2) {
-  await Bun.write(dryCounterPath(repoRoot, workItemId2), String(n2));
+  await atomicWriteText(dryCounterPath(repoRoot, workItemId2), String(n2));
 }
 function rootNode(label) {
   return {
@@ -24185,7 +24186,8 @@ async function recordCoverageRound(args) {
   const { repoRoot, workItemId: workItemId2, payload } = args;
   const store = new CoverageStore(repoRoot);
   let map = await store.getMap(workItemId2);
-  const children = [...payload.derived_nodes ?? [], ...payload.discovered_nodes ?? []];
+  const existingIds = new Set(map.nodes.map((n2) => n2.id));
+  const children = [...payload.derived_nodes ?? [], ...payload.discovered_nodes ?? []].filter((c3) => !existingIds.has(c3.id));
   for (const child of children) {
     map = addNode(map, {
       id: child.id,
@@ -42041,4 +42043,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=eea869944eac3143c4d996033593713f51703bf3a2fe276a94c107a03e352c69
+//# ditto-src-stamp=45c7297a46ccb842636274733516d4d2a4882d80cb3d596e3fa8334d4303f37a

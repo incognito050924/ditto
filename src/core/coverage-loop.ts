@@ -26,6 +26,7 @@ import {
   loadFarFieldTaxonomy,
 } from './coverage-taxonomy';
 import { localDir } from './ditto-paths';
+import { atomicWriteText } from './fs';
 import { IntentStore } from './intent-store';
 import { WorkItemStore } from './work-item-store';
 
@@ -60,7 +61,11 @@ async function readDryCounter(repoRoot: string, workItemId: string): Promise<num
 }
 
 async function writeDryCounter(repoRoot: string, workItemId: string, n: number): Promise<void> {
-  await Bun.write(dryCounterPath(repoRoot, workItemId), String(n));
+  // atomicWriteText (temp + rename), matching CoverageStore.writeMap — the dry
+  // counter was the one coverage-state write using a bare Bun.write, so a crash
+  // mid-write could leave a truncated value that readDryCounter silently coerces
+  // to 0 (a silent dry-counter reset). Atomic write closes that (wi_260625txs).
+  await atomicWriteText(dryCounterPath(repoRoot, workItemId), String(n));
 }
 
 function rootNode(label: string): CoverageNode {
@@ -379,7 +384,14 @@ export async function recordCoverageRound(args: {
   const store = new CoverageStore(repoRoot);
   let map = await store.getMap(workItemId);
 
-  const children = [...(payload.derived_nodes ?? []), ...(payload.discovered_nodes ?? [])];
+  // Dedupe against ids already in the map so a retried/replayed round with the same
+  // payload is idempotent — addNode throws on a duplicate id, which would turn a benign
+  // retry into a hard failure (wi_260625txs, bug B). A node whose id is already present
+  // is skipped (append-only growth: same id ⇒ already recorded).
+  const existingIds = new Set(map.nodes.map((n) => n.id));
+  const children = [...(payload.derived_nodes ?? []), ...(payload.discovered_nodes ?? [])].filter(
+    (c) => !existingIds.has(c.id),
+  );
   for (const child of children) {
     map = addNode(map, {
       id: child.id,
