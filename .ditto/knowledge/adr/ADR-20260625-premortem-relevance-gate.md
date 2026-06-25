@@ -17,7 +17,7 @@ skip은 **4중 안전장치**를 통과해야만 가능하며, 그 집행은 에
 
 1. **보수적 기본값** — 애매하면 포함(커버). skip은 확신할 때만. (코드: well-formed not-relevant verdict가 아니면 무조건 `open`.)
 2. **근거 결박** — "이 변경이 해당 도메인 코드 경로·표면을 건드리나?"를 grep/AST/메모리 entanglement(ADR-0021 seam, gap=가서봐, fail-open=포함)로 확인한 뒤 판정. 순수 LLM 상상으로 skip 불가. (producer: `agents/relevance-judge.md`.)
-3. **적대 검증(refute-by-default)** — skip 후보당 별도 평가자(dialectic Opponent 재사용)가 "이 카테고리는 *관련 있다*"를 oracle-linked로 입증 시도. 그럴듯한 경로 하나라도 찾으면 skip 취소·카테고리 생존. (코드: `assembleRelevanceVerdicts`는 refute가 *생존*(`refuted:false`)할 때만 skip 허용 — refute가 없거나 뒤집으면 `open`.)
+3. **적대 검증(refute-by-default)** — 한 평가자(dialectic Opponent 재사용)가 **전 skip 후보를 일괄**로 "이 카테고리는 *관련 있다*"를 oracle-linked로 입증 시도(범위 1회 결박 후 후보별). 그럴듯한 경로 하나라도 찾으면 그 skip 취소·카테고리 생존. 일괄인 이유: 후보당 별도 spawn은 비용이 skip 수에 비례(§8-5 실측 — refute 1건 ≈ judge 전체 ~48.5k)하나, 안전 계약(refute-before-skip)은 일괄에서도 불변. (코드: `assembleRelevanceVerdicts`는 refute가 *생존*(`refuted:false`)할 때만 skip 허용 — 없거나 뒤집으면 `open`. 일괄 opponent의 다-id 출력 `{id,refuted}[]`을 그대로 소비.)
 4. **감사 + 하류 catch** — 모든 skip은 `out_of_scope` 노드로 `close_reason`+`residual_risk`를 기록(조용한 drop 금지). 하류 verify/review/e2e·`ditto verify`가 skip한 카테고리 실패를 잡으면 사용자 귀속.
 
 입도는 **하이브리드**(§6): 명백한 번들(security-privacy → injection/secret-exposure/pii-leak/regulatory, resource-abuse → resource-exhaustion/abuse-vector)을 정적 원자화해 seed 시점 게이트를 정밀하게 하고(facet 단위 include/skip), 나머지 long-tail은 기존 동적 분해(`coverage-loop` derived 노드)로 신규 기계 없이 처리한다.
@@ -30,7 +30,7 @@ skip은 **4중 안전장치**를 통과해야만 가능하며, 그 집행은 에
 
 관련 있는 카테고리를 얕게 보는 건 목적(실패를 미리 상상으로 겪어 재현을 막음)을 달성하지 못한다 — 인증을 1각도로 슬쩍 보는 건 "봤다는 표시"지 인증 실패를 진짜 상상한 게 아니다. 그래서 "관련=끝까지·무관=skip"의 이진이고, 중간(얕은 커버리지)이 없다.
 
-이진 게이트의 위험은 관련 카테고리를 잘못 skip하면 그 질문이 전멸하고 skip이 silent하다는 것 — 이게 ADR-0023이 막으려던 바로 그 false-green이다. 4중 안전장치가 이 위험을 강등한다: 보수적 기본값이 "필요한 거 OFF"를 "무관 facet 과잉 커버=비용 낭비(안전)"로 바꾸고, 적대검증이 skip 후보당 1패스(full 커버리지보다 쌈)로 잘못된 skip을 되살린다. 안전 규칙을 코드에 두어 에이전트가 카테고리 생사를 임의로 정하지 못하게 했다.
+이진 게이트의 위험은 관련 카테고리를 잘못 skip하면 그 질문이 전멸하고 skip이 silent하다는 것 — 이게 ADR-0023이 막으려던 바로 그 false-green이다. 4중 안전장치가 이 위험을 강등한다: 보수적 기본값이 "필요한 거 OFF"를 "무관 facet 과잉 커버=비용 낭비(안전)"로 바꾸고, 적대검증(전 skip 후보 일괄 1패스 — §8-5)이 잘못된 skip을 되살린다. 안전 규칙을 코드에 두어 에이전트가 카테고리 생사를 임의로 정하지 못하게 했다.
 
 기각된 대안:
 
