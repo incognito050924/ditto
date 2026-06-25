@@ -32,6 +32,7 @@ import { teardownCommand } from './commands/teardown';
 import { techSpecCommand } from './commands/tech-spec';
 import { verifyCommand } from './commands/verify';
 import { workCommand } from './commands/work';
+import { worktreeCommand } from './commands/worktree';
 
 const main = defineCommand({
   meta: {
@@ -45,6 +46,7 @@ const main = defineCommand({
     uninstall: teardownCommand,
     teardown: teardownCommand, // alias of uninstall (기존 참조·setup/teardown 대칭 호환)
     work: workCommand,
+    worktree: worktreeCommand,
     mode: modeCommand,
     run: runCommand,
     verify: verifyCommand,

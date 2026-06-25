@@ -77,6 +77,26 @@ export const acceptanceCriterion = z
   })
   .describe('One acceptance criterion with its verification verdict');
 
+// wi_260625k0w ac-1: a git worktree+branch DITTO created for a work item. For a
+// multi-repo workspace there is one entry per owning repo (`.` = the workspace
+// repo, else the sub-repo's path relative to the workspace root). Additive +
+// OPTIONAL on workItem (default []): legacy work-item.json omits it and parses
+// unchanged — same idiom as changed_files, so no schema_version bump.
+export const workItemWorktree = z
+  .object({
+    owning_repo: z
+      .string()
+      .min(1)
+      .describe(
+        "'.' for the workspace repo, else the sub-repo path relative to the workspace root",
+      ),
+    worktree_path: relativePath.describe(
+      'Worktree checkout path, relative to the workspace repo root',
+    ),
+    branch: z.string().min(1).describe('Branch checked out in this worktree'),
+  })
+  .describe('One git worktree+branch DITTO created for a work item (one per owning repo)');
+
 export const riskNote = z
   .object({
     description: z.string().min(1),
@@ -115,6 +135,10 @@ export const workItem = z
     parent_id: workItemId.optional().describe('Parent work item if this is a child task'),
     child_ids: z.array(workItemId).default([]),
     changed_files: z.array(relativePath).default([]),
+    // wi_260625k0w ac-1: git worktree(s)+branch(es) DITTO created for this work
+    // item, recorded so cleanup/teardown knows what to tear down. Additive +
+    // OPTIONAL (default []), no schema_version bump (same idiom as changed_files).
+    worktrees: z.array(workItemWorktree).default([]),
     // (B) plan→autopilot transition escape hatch (wi_260615xby). When true, the
     // Stop gate lets this work item close on a completion.json ALONE without ever
     // bootstrapping autopilot — the explicit "this work did not need the
@@ -167,6 +191,7 @@ export const workItem = z
   .describe('Authoritative state for a single DITTO work item');
 
 export type WorkItem = z.infer<typeof workItem>;
+export type WorkItemWorktree = z.infer<typeof workItemWorktree>;
 export type AcceptanceCriterion = z.infer<typeof acceptanceCriterion>;
 export type AcOracle = z.infer<typeof acOracle>;
 export type ReEntry = z.infer<typeof reEntry>;

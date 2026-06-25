@@ -126,6 +126,32 @@ describe('resolveActiveWorkItem (single-active invariant)', () => {
     expect(await new SessionPointerStore(repo).get('fresh-session')).toBeNull();
   });
 
+  // ac-6 (wi_260625k0w): an explicit work-item id in the prompt binds the session
+  // pointer via the runtime SessionPointerStore.set() call, so evidence/leases
+  // attribute to that work item. This is the only runtime caller of set().
+  test('explicit wi reference binds the session pointer (runtime set) and loads it', async () => {
+    const items = new WorkItemStore(repo);
+    const created = await items.create({
+      title: 'bindable',
+      source_request: 'b',
+      goal: 'b',
+      acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+    });
+    // pointer starts unset for this session
+    expect(await new SessionPointerStore(repo).get('sess-bind')).toBeNull();
+    const r = await resolveActiveWorkItem(repo, 'sess-bind', `resume ${created.id} please`);
+    expect(r.action).toBe('loaded');
+    expect(r.workItem?.id).toBe(created.id);
+    // the runtime set() ran: the pointer file now binds the session to this WI
+    expect(await new SessionPointerStore(repo).get('sess-bind')).toBe(created.id);
+  });
+
+  test('explicit reference to a non-existent wi does not bind; falls through', async () => {
+    const r = await resolveActiveWorkItem(repo, 'sess-noexist', 'resume wi_doesnotexist1 now');
+    expect(r.action).toBe('guide'); // empty store → guide, pointer untouched
+    expect(await new SessionPointerStore(repo).get('sess-noexist')).toBeNull();
+  });
+
   // ac-4 (wi_26060678y): no active work item + execution-intent prompt → surface a
   // duplicate-search over open WIs and nudge WI creation, while staying advisory.
   test('execution-intent + no pointer surfaces duplicate matches and nudges WI creation', async () => {

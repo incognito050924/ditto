@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,6 +6,7 @@ import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { ChangeContractStore } from '~/core/change-contract-store';
 import { SessionPointerStore } from '~/core/session-pointer';
+import { resolveRepoRoot } from '~/hooks/io';
 import { isSystemTmpPath, preToolUseHandler, windowsDestructiveReason } from '~/hooks/pre-tool-use';
 import { type HookInput, KILL_SWITCH, runHook } from '~/hooks/runtime';
 import { acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
@@ -389,6 +390,53 @@ describe('preToolUseHandler — ac-4 scope-out write', () => {
 
   test('a quoted INSIDE-repo redirect target stays allowed', async () => {
     expect((await bash('echo hi > "./build/out 1.txt"')).exitCode).toBe(0);
+  });
+});
+
+// ac-3 (wi_260625k0w): the session is rooted at the WORKSPACE rooting root
+// (nearest ancestor with `.ditto`), so a write to a sub-repo under it is
+// in-scope, while a write outside it stays a scope-out block. The boundary moves
+// to the workspace, it is not removed (ADR-20260626-worktree-subrepo-scope-clarify).
+describe('preToolUseHandler — workspace rooting + sub-repo scope-out (ac-3)', () => {
+  let workspace: string;
+  // A non-tmp absolute path: outside the workspace AND outside the system-tmp
+  // allow-exception, so it exercises the real scope-out boundary (a tmp path
+  // would be allowed by the separate tmp exception, masking the boundary).
+  const external = '/var/data/leak.ts';
+  beforeEach(async () => {
+    workspace = await mkdtemp(join(tmpdir(), 'ditto-ws-'));
+    await mkdir(join(workspace, '.ditto'), { recursive: true });
+    await mkdir(join(workspace, 'sub', '.git'), { recursive: true });
+  });
+  afterEach(async () => {
+    await rm(workspace, { recursive: true, force: true });
+  });
+
+  test('session in a sub-repo cwd roots at the workspace `.ditto`, not the sub-repo', async () => {
+    const root = await resolveRepoRoot('codex', { cwd: join(workspace, 'sub') });
+    expect(root).toBe(workspace);
+  });
+
+  test('single repo: rooting returns the repo root unchanged (no regression)', async () => {
+    const root = await resolveRepoRoot('codex', { cwd: workspace });
+    expect(root).toBe(workspace);
+  });
+
+  test('(1) a write to a sub-repo under the workspace is in-scope (allowed)', async () => {
+    const out = await file('Write', join(workspace, 'sub', 'feature.ts'), workspace);
+    expect(out.exitCode).toBe(0);
+  });
+
+  test('(2) a write outside the workspace rooting root is still scope-out blocked', async () => {
+    const out = await file('Write', external, workspace);
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('scope-out');
+  });
+
+  test('(4) the secret guard is preserved for a sub-repo path (.env still blocked)', async () => {
+    const out = await file('Write', join(workspace, 'sub', '.env'), workspace);
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('secret');
   });
 });
 

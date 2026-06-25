@@ -102,6 +102,17 @@ export function duplicateSearch(
     .sort((a, b) => b.overlap - a.overlap);
 }
 
+/**
+ * An explicit work-item id the user named in the prompt (e.g. "resume wi_…"),
+ * lowercased, or undefined. This is the EXPLICIT resume signal the ask-advisory
+ * tells the user to give; binding on it is a user action, NOT an arbitrary
+ * auto-pick, so the single-active no-auto-pick invariant (plan §3 F3) holds.
+ */
+export function explicitWorkItemRef(prompt: string): string | undefined {
+  const m = prompt.match(/\bwi_[a-z0-9]{8,}\b/i);
+  return m ? m[0].toLowerCase() : undefined;
+}
+
 export interface ActiveResolution {
   workItem?: WorkItem;
   /** Set when the active work item is ambiguous and the user must choose (no arbitrary pick). */
@@ -123,6 +134,19 @@ export async function resolveActiveWorkItem(
 ): Promise<ActiveResolution> {
   const items = new WorkItemStore(repoRoot);
   const pointers = new SessionPointerStore(repoRoot);
+
+  // Explicit resume (ac-6): the user named an existing work item id in the
+  // prompt. Bind the session pointer to it — the runtime SessionPointerStore.set()
+  // call — so evidence (post-tool-use command/changed-file log) and leases
+  // (pre-tool-use scope enforcement) attribute to THIS work item. Without this
+  // wiring the pointer was only ever set in tests, so a real session never bound
+  // and post-tool-use recorded no evidence. Explicit signal only, never an
+  // arbitrary pick.
+  const explicit = explicitWorkItemRef(prompt);
+  if (explicit && (await items.exists(explicit))) {
+    if ((await pointers.get(sessionId)) !== explicit) await pointers.set(sessionId, explicit);
+    return { workItem: await items.get(explicit), action: 'loaded' };
+  }
 
   const pointed = await pointers.get(sessionId);
   if (pointed && (await items.exists(pointed))) {

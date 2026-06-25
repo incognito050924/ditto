@@ -19,11 +19,20 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
+
+// Worktree isolation for the in-session terminal `ditto`. The hook path is
+// already isolated (claude: --plugin-dir <repoRoot>; codex: isolated CODEX_HOME),
+// but a shell `ditto` inside the session resolves via PATH to the single global
+// ~/.local/bin/ditto → dist/plugin/bin, which is shared across every worktree.
+// Prepending THIS worktree's freshly-built bin/ makes terminal `ditto` load the
+// worktree-local build, so worktree A's source never leaks into worktree B's
+// session. The global install is untouched (we only prepend to the child's PATH).
+const sessionPath = { PATH: `${join(repoRoot, 'bin')}${delimiter}${process.env.PATH ?? ''}` };
 
 const flag = (name) => argv.includes(`--${name}`);
 const value = (name, fallback) => {
@@ -64,7 +73,7 @@ if (host === 'claude' || host === 'claude-code') {
   launch(
     'claude',
     ['--plugin-dir', repoRoot, ...(SKIP_PERM ? ['--dangerously-skip-permissions'] : [])],
-    { cwd: target },
+    { cwd: target, env: sessionPath },
   );
 } else if (host === 'codex') {
   // Stateful: build the codex surface, stage it into the target, register a local
@@ -74,6 +83,8 @@ if (host === 'claude' || host === 'claude-code') {
   const codexHome = join(target, '.ditto', 'local', 'codex-home');
   const env = { CODEX_HOME: codexHome };
   step('bun', ['run', 'build:codex-plugin']);
+  // Build the worktree bin so the in-session terminal `ditto` is worktree-local too.
+  step('bun', ['run', 'build:bin']);
   if (!PRINT && !existsSync(target)) mkdirSync(target, { recursive: true });
   if (!PRINT) mkdirSync(codexHome, { recursive: true });
   step(
@@ -93,7 +104,7 @@ if (host === 'claude' || host === 'claude-code') {
   step('codex', ['plugin', 'add', 'ditto@ditto-local'], { cwd: target, env });
   launch('codex', SKIP_PERM ? ['--dangerously-bypass-approvals-and-sandbox'] : [], {
     cwd: target,
-    env,
+    env: { ...env, ...sessionPath },
   });
 } else {
   console.error(`unknown --host: ${host} (use: claude | codex)`);
