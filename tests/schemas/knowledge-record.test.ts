@@ -1,22 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { knowledgeRecord } from '~/schemas/knowledge-record';
 
-// A record modeled on the real .ditto/knowledge/ contents (CONTEXT.md, glossary.json,
-// adr/ADR-0001..0003). The glossary body is referenced by path, not embedded.
+// A record modeled on the real .ditto/knowledge/ contents (CONTEXT.md, glossary.json).
+// Architecture decisions live as adr/*.md files (the SoT), not in this record — the
+// hand-maintained decisions[] index was retired as drift-prone duplication
+// (ADR-20260624 amend, wi_2606247cx). The glossary body is referenced by path, not
+// embedded. ADR-id grammar coverage moved to tests/schemas/adr-id.test.ts.
 const realistic = () => ({
   schema_version: '0.1.0',
   project_name: 'ditto',
   updated_at: '2026-06-01T00:00:00.000Z',
-  decisions: [
-    {
-      id: 'ADR-0001',
-      title: '런타임 및 구현 스택',
-      status: 'accepted',
-      rationale: 'single binary 배포 + 빠른 startup + schema DX → TypeScript + Bun',
-      change_condition: 'Bun 생태계 단절 또는 startup 회귀 시 재검토',
-      path: '.ditto/knowledge/adr/ADR-0001-runtime-stack.md',
-    },
-  ],
 });
 
 describe('knowledgeRecord schema', () => {
@@ -26,51 +19,6 @@ describe('knowledgeRecord schema', () => {
     expect(r.glossary_path).toBe('.ditto/knowledge/glossary.json');
     expect(r.project_map_path).toBe(null);
     expect(r.projected_to_claude_md).toBe(false);
-    expect(r.decisions[0]?.superseded_by).toBe(null);
-  });
-
-  test('accepts legacy ∪ new ADR-YYYYMMDD-slug, rejects malformed', () => {
-    const withId = (id: string) => {
-      const r = realistic();
-      // @ts-expect-error mutating the fixture's first decision in place
-      r.decisions[0].id = id;
-      return knowledgeRecord.safeParse(r).success;
-    };
-
-    // legacy form: ADR- + exactly 4 digits
-    expect(withId('ADR-0024')).toBe(true);
-    // new form: ADR- + YYYYMMDD + - + slug
-    expect(withId('ADR-20260624-some-slug')).toBe(true);
-
-    // still rejects the old malformed case
-    expect(withId('adr-1')).toBe(false);
-    // bare 8-digit with no slug tail is ambiguous → rejected
-    expect(withId('ADR-20260624')).toBe(false);
-    // slug charset is lowercase alphanumeric words; uppercase/underscore rejected
-    expect(withId('ADR-20260624-Bad_Slug')).toBe(false);
-  });
-
-  test('cross-field: status=superseded requires superseded_by', () => {
-    const bad = realistic();
-    // @ts-expect-error mutating the fixture's first decision in place
-    bad.decisions[0].status = 'superseded';
-    expect(knowledgeRecord.safeParse(bad).success).toBe(false);
-
-    const ok = realistic();
-    // @ts-expect-error mutating the fixture's first decision in place
-    ok.decisions[0].status = 'superseded';
-    // @ts-expect-error augmenting the fixture for the passing case
-    ok.decisions[0].superseded_by = 'ADR-0009';
-    expect(knowledgeRecord.safeParse(ok).success).toBe(true);
-  });
-
-  test('cross-field: superseded_by must be a different ADR (no self-supersession)', () => {
-    const selfRef = realistic();
-    // @ts-expect-error mutating the fixture's first decision in place
-    selfRef.decisions[0].status = 'superseded';
-    // @ts-expect-error augmenting the fixture: ADR points at itself → reject
-    selfRef.decisions[0].superseded_by = selfRef.decisions[0].id;
-    expect(knowledgeRecord.safeParse(selfRef).success).toBe(false);
   });
 
   test('learnings carry evidence + learned_at; patterns are optional path', () => {

@@ -51,13 +51,13 @@
       "aliases": [
         "Architecture Decision Record"
       ],
-      "definition": "되돌리기 어려운 결정의 영속 기록. adr/ADR-NNNN-<slug>.md. 결정만 보존하고 토론은 decisions.md에 둔다.",
+      "definition": "되돌리기 어려운 결정의 영속 기록. adr/ADR-YYYYMMDD-<slug>.md (legacy ADR-NNNN grandfather, ADR-20260624). 이 .md 파일이 결정 내용의 SoT다 — 추론 시점엔 memory 이벤트 그래프(adrGist)로 닿고, 구조화된 결정 계보(rationale·supersedes 온톨로지)는 외부 메모리 프로젝트(ADR-0021)가 담는다.",
       "examples": [
         "ADR-0001-runtime-stack",
         "ADR-0002-schema-source-of-truth"
       ],
       "not_to_be_confused_with": [
-        "decisions.md"
+        "knowledge.json decisions[] (폐기된 손-인덱스, ADR-20260624 amend)"
       ],
       "status": "agreed",
       "forbidden_abbreviations": [],

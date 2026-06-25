@@ -1,4 +1,4 @@
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { defineCommand } from 'citty';
 import { z } from 'zod';
@@ -165,26 +165,20 @@ export async function createAdrSkeleton(opts: {
 export interface AdrConsistencyResult {
   ok: boolean;
   violations: string[];
-  /** Count of well-formed ADR files NOT referenced by knowledge.json (INFO only). */
-  unindexedCount: number;
 }
-
-const adrCheckIndexSchema = z.object({
-  decisions: z.array(z.object({ id: z.string(), path: z.string() })).default([]),
-});
 
 /**
  * Fail-closed consistency check over `.ditto/knowledge/adr/`. Returns the full
- * list of violations (empty ⇒ clean). Three checks:
+ * list of violations (empty ⇒ clean). Two checks, both file-driven:
  *   1. Filename format — every `*.md` must be legacy `ADR-NNNN-<slug>.md` or new
  *      `ADR-YYYYMMDD-<slug>.md`.
  *   2. Identifier uniqueness — no two files may extract the same identifier
  *      (e.g. two legacy `ADR-0026-*.md`).
- *   3. Index→file consistency — every `knowledge.json` `decisions[]` `path` must
- *      exist AND its extracted identifier must equal the entry's `id`.
- * Scope guards: files absent from the index are NOT a violation (known
- * out-of-scope index drift, surfaced as `unindexedCount`); number-sequence gaps
- * are never flagged; legacy `ADR-NNNN-*.md` files pass unchanged.
+ * The `adr/*.md` files are the source of truth; there is no separate index to
+ * reconcile (the hand-maintained `knowledge.json` `decisions[]` index was retired
+ * as drift-prone duplication — ADR-20260624 amend, wi_2606247cx). Scope guards:
+ * number-sequence gaps are never flagged; legacy `ADR-NNNN-*.md` files pass
+ * unchanged.
  */
 export async function checkAdrConsistency(repoRoot: string): Promise<AdrConsistencyResult> {
   const adrDir = join(repoRoot, '.ditto', 'knowledge', 'adr');
@@ -199,7 +193,6 @@ export async function checkAdrConsistency(repoRoot: string): Promise<AdrConsiste
 
   // Check 1 + identifier extraction.
   const idToFiles = new Map<string, string[]>();
-  const indexedIds = new Set<string>();
   for (const f of files) {
     const id = adrIdFromFilename(f);
     if (id === null) {
@@ -208,7 +201,6 @@ export async function checkAdrConsistency(repoRoot: string): Promise<AdrConsiste
       );
       continue;
     }
-    indexedIds.add(id);
     const bucket = idToFiles.get(id) ?? [];
     bucket.push(f);
     idToFiles.set(id, bucket);
@@ -221,59 +213,14 @@ export async function checkAdrConsistency(repoRoot: string): Promise<AdrConsiste
     }
   }
 
-  // Load the index (absence ⇒ no index→file checks, not a violation).
-  let decisions: { id: string; path: string }[] = [];
-  const indexPath = join(repoRoot, '.ditto', 'knowledge', 'knowledge.json');
-  try {
-    const raw = JSON.parse(await readFile(indexPath, 'utf8'));
-    const parsed = adrCheckIndexSchema.safeParse(raw);
-    if (parsed.success) decisions = parsed.data.decisions;
-  } catch {
-    decisions = [];
-  }
-
-  // Check 3: index→file consistency (path exists + id matches). One direction
-  // only — files missing from the index are intentionally NOT required here.
-  const referenced = new Set<string>();
-  for (const entry of decisions) {
-    const abs = join(repoRoot, entry.path);
-    let body: string | null = null;
-    try {
-      body = await readFile(abs, 'utf8');
-    } catch {
-      body = null;
-    }
-    if (body === null) {
-      violations.push(`index entry ${entry.id}: path does not exist: ${entry.path}`);
-      continue;
-    }
-    const filename = entry.path.split('/').pop() ?? entry.path;
-    referenced.add(filename);
-    const extracted = adrIdFromFilename(filename);
-    if (extracted === null) {
-      violations.push(
-        `index entry ${entry.id}: referenced file has a malformed name: ${entry.path}`,
-      );
-    } else if (extracted !== entry.id) {
-      violations.push(
-        `index entry id mismatch: ${entry.path} extracts ${extracted}, but the index says ${entry.id}`,
-      );
-    }
-  }
-
-  // INFO: well-formed files not referenced by the index (drift, never a violation).
-  const unindexedCount = files.filter(
-    (f) => adrIdFromFilename(f) !== null && !referenced.has(f),
-  ).length;
-
-  return { ok: violations.length === 0, violations, unindexedCount };
+  return { ok: violations.length === 0, violations };
 }
 
 const knowledgeAdrCheck = defineCommand({
   meta: {
     name: 'adr-check',
     description:
-      'Fail-closed consistency check over .ditto/knowledge/adr/ (filename format, id uniqueness, index→file)',
+      'Fail-closed consistency check over .ditto/knowledge/adr/ (filename format, id uniqueness)',
   },
   args: {
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
@@ -293,12 +240,10 @@ const knowledgeAdrCheck = defineCommand({
       writeJson({
         ok: result.ok,
         violations: result.violations,
-        unindexedCount: result.unindexedCount,
       });
     } else {
       writeHuman(`knowledge adr-check: ${result.ok ? 'OK' : 'FAIL'}`);
       for (const v of result.violations) writeHuman(`  - ${v}`);
-      writeHuman(`  (info) un-indexed ADR files: ${result.unindexedCount}`);
     }
     if (!result.ok) process.exit(RUNTIME_ERROR_EXIT);
   },

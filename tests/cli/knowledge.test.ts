@@ -76,10 +76,11 @@ describe('createAdrSkeleton (ditto knowledge adr-new)', () => {
 
 // wi_260624gm9 (node gN5): `ditto knowledge adr-check` is a fail-closed consistency
 // checker over `.ditto/knowledge/adr/`. Exit 0 when clean; non-zero listing every
-// violation otherwise. Checks: (1) filename format, (2) identifier uniqueness,
-// (3) index→file consistency (path exists + extracted id == entry.id). It must NOT
-// require every file to be indexed (known out-of-scope index drift), and must never
-// flag number-sequence gaps or suggest renaming legacy ADR-NNNN files.
+// violation otherwise. Two file-driven checks: (1) filename format, (2) identifier
+// uniqueness. The hand-maintained knowledge.json decisions[] index — and its
+// index→file consistency check — was retired (ADR-20260624 amend, wi_2606247cx);
+// the adr/*.md files are the SoT. adr-check must never flag number-sequence gaps or
+// suggest renaming legacy ADR-NNNN files.
 
 const adrDirOf = (repoRoot: string) => join(repoRoot, '.ditto', 'knowledge', 'adr');
 
@@ -87,23 +88,12 @@ async function writeAdr(repoRoot: string, filename: string, body = '# stub\n'): 
   await writeFile(join(adrDirOf(repoRoot), filename), body, 'utf8');
 }
 
-async function writeIndex(repoRoot: string, decisions: unknown[]): Promise<void> {
-  await writeFile(
-    join(repoRoot, '.ditto', 'knowledge', 'knowledge.json'),
-    JSON.stringify({ decisions }),
-    'utf8',
-  );
-}
-
 describe('checkAdrConsistency (ditto knowledge adr-check)', () => {
-  test('valid: legacy + new file, index pointing at one correctly → no violations', async () => {
+  test('valid: legacy + new file, both well-formed and unique → no violations', async () => {
     const repoRoot = await tempRepo();
     try {
       await writeAdr(repoRoot, 'ADR-0001-foo.md');
       await writeAdr(repoRoot, 'ADR-20260624-bar.md');
-      await writeIndex(repoRoot, [
-        { id: 'ADR-0001', path: '.ditto/knowledge/adr/ADR-0001-foo.md' },
-      ]);
       const result = await checkAdrConsistency(repoRoot);
       expect(result.violations).toEqual([]);
       expect(result.ok).toBe(true);
@@ -117,7 +107,6 @@ describe('checkAdrConsistency (ditto knowledge adr-check)', () => {
     try {
       await writeAdr(repoRoot, 'ADR-xyz.md');
       await writeAdr(repoRoot, 'ADR-20260624.md'); // 8-digit but no slug
-      await writeIndex(repoRoot, []);
       const result = await checkAdrConsistency(repoRoot);
       expect(result.ok).toBe(false);
       expect(result.violations.length).toBeGreaterThanOrEqual(2);
@@ -133,58 +122,9 @@ describe('checkAdrConsistency (ditto knowledge adr-check)', () => {
     try {
       await writeAdr(repoRoot, 'ADR-0026-a.md');
       await writeAdr(repoRoot, 'ADR-0026-b.md');
-      await writeIndex(repoRoot, []);
       const result = await checkAdrConsistency(repoRoot);
       expect(result.ok).toBe(false);
       expect(result.violations.join('\n')).toContain('ADR-0026');
-    } finally {
-      await rm(repoRoot, { recursive: true, force: true });
-    }
-  });
-
-  test('dangling index path → violation', async () => {
-    const repoRoot = await tempRepo();
-    try {
-      await writeAdr(repoRoot, 'ADR-0001-foo.md');
-      await writeIndex(repoRoot, [
-        { id: 'ADR-0099', path: '.ditto/knowledge/adr/ADR-0099-ghost.md' },
-      ]);
-      const result = await checkAdrConsistency(repoRoot);
-      expect(result.ok).toBe(false);
-      expect(result.violations.join('\n')).toContain('ADR-0099-ghost.md');
-    } finally {
-      await rm(repoRoot, { recursive: true, force: true });
-    }
-  });
-
-  test('index id mismatch (path exists but extracted id != entry.id) → violation', async () => {
-    const repoRoot = await tempRepo();
-    try {
-      await writeAdr(repoRoot, 'ADR-0001-foo.md');
-      await writeIndex(repoRoot, [
-        { id: 'ADR-0002', path: '.ditto/knowledge/adr/ADR-0001-foo.md' },
-      ]);
-      const result = await checkAdrConsistency(repoRoot);
-      expect(result.ok).toBe(false);
-      expect(result.violations.join('\n')).toContain('ADR-0001-foo.md');
-    } finally {
-      await rm(repoRoot, { recursive: true, force: true });
-    }
-  });
-
-  test('a file absent from the index does NOT fail (known out-of-scope drift)', async () => {
-    const repoRoot = await tempRepo();
-    try {
-      await writeAdr(repoRoot, 'ADR-0001-foo.md');
-      await writeAdr(repoRoot, 'ADR-0002-unindexed.md');
-      await writeIndex(repoRoot, [
-        { id: 'ADR-0001', path: '.ditto/knowledge/adr/ADR-0001-foo.md' },
-      ]);
-      const result = await checkAdrConsistency(repoRoot);
-      expect(result.ok).toBe(true);
-      expect(result.violations).toEqual([]);
-      // un-indexed count surfaced as INFO, never a violation.
-      expect(result.unindexedCount).toBe(1);
     } finally {
       await rm(repoRoot, { recursive: true, force: true });
     }
@@ -195,7 +135,6 @@ describe('checkAdrConsistency (ditto knowledge adr-check)', () => {
     try {
       await writeAdr(repoRoot, 'ADR-0001-foo.md');
       await writeAdr(repoRoot, 'ADR-0003-baz.md');
-      await writeIndex(repoRoot, []);
       const result = await checkAdrConsistency(repoRoot);
       expect(result.ok).toBe(true);
       expect(result.violations).toEqual([]);

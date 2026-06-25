@@ -133,21 +133,12 @@ describe('knowledge projection (M6)', () => {
 
 describe('knowledgeRecord runtime invariants (ac-4, ac-5)', () => {
   // ac-5: a curator-shaped record produced by the knowledge flow parses with 0 errors.
+  // ADRs live as adr/*.md files (the SoT), not in the record — the decisions[] index
+  // was retired (ADR-20260624 amend, wi_2606247cx).
   const curatorRecord = () => ({
     schema_version: '0.1.0',
     project_name: 'ditto',
     updated_at: '2026-06-01T00:00:00.000Z',
-    decisions: [
-      {
-        id: 'ADR-0004',
-        title: 'knowledge projection uses a separate marker family',
-        status: 'accepted',
-        rationale:
-          'CLAUDE.md hard-refuses a second ditto:managed block; a separate ditto:knowledge block keeps the AGENTS.md projection single.',
-        change_condition: 'instruction-bridge가 다중 managed block을 허용하도록 바뀌면 재검토',
-        path: '.ditto/knowledge/adr/ADR-0004-knowledge-projection.md',
-      },
-    ],
     patterns: [
       { name: 'separate-marker-family', summary: '다른 marker로 isomorphic projection 분리' },
     ],
@@ -164,12 +155,7 @@ describe('knowledgeRecord runtime invariants (ac-4, ac-5)', () => {
   test('curator-shaped record parses (0 errors) and projects', () => {
     const r = knowledgeRecord.parse(curatorRecord());
     expect(r.projected_to_claude_md).toBe(true);
-    expect(r.decisions[0]?.id).toBe('ADR-0004');
-  });
-
-  test('ADR cross-field at runtime: status=superseded without superseded_by rejects', () => {
-    const bad = curatorRecord();
-    bad.decisions[0].status = 'superseded';
-    expect(knowledgeRecord.safeParse(bad).success).toBe(false);
+    expect(r.patterns[0]?.name).toBe('separate-marker-family');
+    expect(r.learnings[0]?.evidence.length).toBe(1);
   });
 });
