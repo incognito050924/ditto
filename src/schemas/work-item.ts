@@ -89,13 +89,40 @@ export const acceptanceCriterion = z
   })
   .describe('One acceptance criterion with its verification verdict');
 
+// Shared severity scale. riskNote applies a `.default('low')`; ac-4 follow_ups
+// reference the SAME levels (info|low|medium|high|critical) without reinventing.
+export const severityLevel = z.enum(['info', 'low', 'medium', 'high', 'critical']);
+
 export const riskNote = z
   .object({
     description: z.string().min(1),
-    severity: z.enum(['info', 'low', 'medium', 'high', 'critical']).default('low'),
+    severity: severityLevel.default('low'),
     mitigation: z.string().optional(),
   })
   .describe('Outstanding risk that did not block completion but remains relevant');
+
+// ac-4 (wi_260626wnv): a discovered follow-up captured on the work item itself, so
+// a lightweight WI (no intent.json) has a structured slot instead of prose-dumping
+// on the user. kind=bug is materialized into a tracked, back-linked WI (its id is
+// stamped on materialized_wi); kind=idea is recorded as a candidate only. A
+// self-caused high/critical bug that is not resolved blocks the source WI's `done`.
+export const followUp = z
+  .object({
+    kind: z
+      .enum(['bug', 'idea'])
+      .describe('bug = a defect materialized into a tracked WI; idea = a candidate only'),
+    note: z.string().min(1).describe('What was discovered'),
+    severity: severityLevel.optional(),
+    self_caused: z
+      .boolean()
+      .optional()
+      .describe('True if this regression was introduced by the source work item itself'),
+    materialized_wi: workItemId
+      .optional()
+      .describe('The tracked work item this bug was materialized into (kind=bug only)'),
+    resolved: z.boolean().optional().describe('True once the follow-up has been addressed'),
+  })
+  .describe('A discovered follow-up (bug/idea) captured on the work item');
 
 // ac-3 (wi_260626wnv): a work item's own declared risk axis. Same vocabulary as
 // gates.ts RiskAxes / the deep-interview risk axis (non_local/irreversible/
@@ -162,6 +189,16 @@ export const workItem = z
       .boolean()
       .optional()
       .describe('Marked for the heavy (deep-interview) path via `work promote`'),
+    // ac-4 (wi_260626wnv): discovered follow-ups captured on the WI itself.
+    // Additive + OPTIONAL: a legacy work-item.json omits it and parses unchanged;
+    // no schema_version bump (same idiom as declared_risk / autopilot_exempt).
+    follow_ups: z.array(followUp).optional(),
+    // ac-4 (wi_260626wnv): provenance link — the WI whose `follow-up --kind bug`
+    // materialized THIS work item. Distinct from parent_id (task hierarchy); kept
+    // separate on purpose. Additive + OPTIONAL; no schema_version bump.
+    discovered_by: workItemId
+      .optional()
+      .describe('Work item whose discovered bug materialized this one (provenance, not hierarchy)'),
     risks: z.array(riskNote).default([]),
     re_entry: reEntry.optional(),
     runs: z.array(runId).default([]),
@@ -205,6 +242,7 @@ export const workItem = z
   .describe('Authoritative state for a single DITTO work item');
 
 export type WorkItem = z.infer<typeof workItem>;
+export type FollowUp = z.infer<typeof followUp>;
 export type DeclaredRisk = z.infer<typeof declaredRisk>;
 export type AcceptanceCriterion = z.infer<typeof acceptanceCriterion>;
 export type AcOracle = z.infer<typeof acOracle>;

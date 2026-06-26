@@ -18392,11 +18392,20 @@ var acceptanceCriterion = exports_external.object({
     reason: exports_external.string().min(1).describe("Why the prior criterion was superseded")
   })).optional()
 }).describe("One acceptance criterion with its verification verdict");
+var severityLevel = exports_external.enum(["info", "low", "medium", "high", "critical"]);
 var riskNote = exports_external.object({
   description: exports_external.string().min(1),
-  severity: exports_external.enum(["info", "low", "medium", "high", "critical"]).default("low"),
+  severity: severityLevel.default("low"),
   mitigation: exports_external.string().optional()
 }).describe("Outstanding risk that did not block completion but remains relevant");
+var followUp = exports_external.object({
+  kind: exports_external.enum(["bug", "idea"]).describe("bug = a defect materialized into a tracked WI; idea = a candidate only"),
+  note: exports_external.string().min(1).describe("What was discovered"),
+  severity: severityLevel.optional(),
+  self_caused: exports_external.boolean().optional().describe("True if this regression was introduced by the source work item itself"),
+  materialized_wi: workItemId.optional().describe("The tracked work item this bug was materialized into (kind=bug only)"),
+  resolved: exports_external.boolean().optional().describe("True once the follow-up has been addressed")
+}).describe("A discovered follow-up (bug/idea) captured on the work item");
 var declaredRisk = exports_external.object({
   non_local: exports_external.boolean().optional(),
   irreversible: exports_external.boolean().optional(),
@@ -18422,6 +18431,8 @@ var workItem = exports_external.object({
   autopilot_exempt: exports_external.boolean().optional().describe("Allow closing on completion.json alone without going through autopilot"),
   declared_risk: declaredRisk.optional(),
   promoted_to_heavy: exports_external.boolean().optional().describe("Marked for the heavy (deep-interview) path via `work promote`"),
+  follow_ups: exports_external.array(followUp).optional(),
+  discovered_by: workItemId.optional().describe("Work item whose discovered bug materialized this one (provenance, not hierarchy)"),
   risks: exports_external.array(riskNote).default([]),
   re_entry: reEntry.optional(),
   runs: exports_external.array(runId).default([]),
@@ -18507,6 +18518,7 @@ class WorkItemStore {
       owner_profile: input.owner_profile ?? "workspace-write",
       ...input.parent_id !== undefined ? { parent_id: input.parent_id } : {},
       ...input.declared_risk !== undefined ? { declared_risk: input.declared_risk } : {},
+      ...input.discovered_by !== undefined ? { discovered_by: input.discovered_by } : {},
       child_ids: [],
       changed_files: [],
       risks: [],
@@ -41646,6 +41658,10 @@ function hasDeclaredRisk(item) {
   const r3 = item.declared_risk;
   return !!r3 && (r3.non_local === true || r3.irreversible === true || r3.unaudited === true);
 }
+var DONE_BLOCKING_SEVERITIES = ["high", "critical"];
+function blockingFollowUp(item) {
+  return (item.follow_ups ?? []).find((f3) => f3.kind === "bug" && f3.self_caused === true && f3.resolved !== true && f3.severity !== undefined && DONE_BLOCKING_SEVERITIES.includes(f3.severity));
+}
 function rejectNonObservableCriteria(statements) {
   const errors3 = [];
   statements.forEach((statement, i2) => {
@@ -42186,6 +42202,12 @@ var workDone = defineCommand({
     }
     try {
       const item = await store.get(args.workId);
+      const blocking = blockingFollowUp(item);
+      if (blocking) {
+        writeError(`work ${args.workId} cannot close: unresolved self-caused ${blocking.severity}-severity bug follow-up "${blocking.note}"${blocking.materialized_wi ? ` (tracked as ${blocking.materialized_wi})` : ""}. Fix it, or mark the follow-up resolved, before closing.`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
       if (!await completions.exists(args.workId)) {
         const placeholders = item.acceptance_criteria.filter((c3) => c3.statement === PLACEHOLDER_AC_STATEMENT);
         if (placeholders.length > 0) {
@@ -42292,6 +42314,168 @@ var workPromote = defineCommand({
     }
   }
 });
+var FOLLOW_UP_KINDS = ["bug", "idea"];
+var workFollowUp = defineCommand({
+  meta: {
+    name: "follow-up",
+    description: "Capture a discovered follow-up on a work item (--kind bug|idea --note ...), or clear one with --resolve <n>: --kind bug materializes a tracked, back-linked WI; --kind idea records a candidate only"
+  },
+  args: {
+    workId: {
+      type: "positional",
+      description: "Source work item the follow-up was discovered on",
+      required: true
+    },
+    kind: {
+      type: "string",
+      description: "bug|idea \u2014 a bug materializes a tracked WI; an idea is a candidate only",
+      required: false
+    },
+    note: { type: "string", description: "What was discovered", required: false },
+    resolve: {
+      type: "string",
+      description: "Clear an existing follow-up instead of appending: 1-based index n sets follow_ups[n].resolved=true (mutually exclusive with --kind/--note)",
+      required: false
+    },
+    severity: {
+      type: "string",
+      description: "info|low|medium|high|critical \u2014 a self-caused high/critical bug blocks the source WI\u2019s done",
+      required: false
+    },
+    "self-caused": {
+      type: "boolean",
+      description: "Mark a regression introduced by this work item itself",
+      default: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    if (args.resolve !== undefined) {
+      if (args.kind !== undefined || args.note !== undefined) {
+        writeError("--resolve clears an existing follow-up and cannot be combined with --kind/--note (one mode per invocation)");
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const raw = String(args.resolve).trim();
+      if (!/^\d+$/.test(raw)) {
+        writeError(`--resolve must be a 1-based follow-up index (a positive integer); got "${args.resolve}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const n2 = Number(raw);
+      try {
+        const item = await store.get(args.workId);
+        const count = (item.follow_ups ?? []).length;
+        if (n2 < 1 || n2 > count) {
+          writeError(`--resolve ${n2} is out of range: work ${args.workId} has ${count} follow-up(s) \u2014 valid range is 1..${count} (1-based)`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const idx = n2 - 1;
+        const updated = await store.update(args.workId, (cur) => ({
+          ...cur,
+          follow_ups: (cur.follow_ups ?? []).map((f3, i2) => i2 === idx ? { ...f3, resolved: true } : f3)
+        }));
+        const cleared = updated.follow_ups?.[idx];
+        if (format === "json") {
+          writeJson2({ work_item_id: updated.id, resolved_index: n2, note: cleared?.note });
+        } else {
+          writeHuman(`Resolved follow-up ${n2} on ${updated.id}: ${cleared?.note ?? ""}`);
+        }
+      } catch (err) {
+        writeError(`work follow-up failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      return;
+    }
+    if (args.kind === undefined) {
+      writeError("--kind is required (bug|idea) when appending a follow-up \u2014 or use --resolve <n> to clear an existing one");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!FOLLOW_UP_KINDS.includes(args.kind)) {
+      writeError(`--kind must be one of ${FOLLOW_UP_KINDS.join("|")}; got "${args.kind}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const kind = args.kind;
+    const note = typeof args.note === "string" ? args.note.trim() : "";
+    if (note.length === 0) {
+      writeError("--note must be a non-empty description of the follow-up");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let severity2;
+    if (args.severity !== undefined) {
+      const parsed = severityLevel.safeParse(args.severity);
+      if (!parsed.success) {
+        writeError(`--severity must be one of ${severityLevel.options.join("|")}; got "${args.severity}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      severity2 = parsed.data;
+    }
+    const selfCaused = args["self-caused"] === true;
+    try {
+      const source = await store.get(args.workId);
+      let materializedWi;
+      if (kind === "bug") {
+        const created = await store.create({
+          title: `bug: ${note}`.slice(0, 200),
+          source_request: `Discovered while working on ${source.id}: ${note}`,
+          goal: `Fix: ${note}`,
+          acceptance_criteria: [
+            {
+              id: "ac-1",
+              statement: PLACEHOLDER_AC_STATEMENT,
+              verdict: "unverified",
+              evidence: []
+            }
+          ],
+          discovered_by: source.id
+        });
+        materializedWi = created.id;
+      }
+      const entry = {
+        kind,
+        note,
+        ...severity2 ? { severity: severity2 } : {},
+        ...selfCaused ? { self_caused: true } : {},
+        ...materializedWi ? { materialized_wi: materializedWi } : {}
+      };
+      const updated = await store.update(args.workId, (cur) => ({
+        ...cur,
+        follow_ups: [...cur.follow_ups ?? [], entry]
+      }));
+      if (format === "json") {
+        writeJson2({
+          work_item_id: updated.id,
+          kind,
+          note,
+          ...severity2 ? { severity: severity2 } : {},
+          ...materializedWi ? { materialized_wi: materializedWi } : {}
+        });
+      } else {
+        writeHuman(`Recorded ${kind} follow-up on ${updated.id}: ${note}`);
+        if (materializedWi)
+          writeHuman(`  materialized bug into ${materializedWi} (discovered_by ${updated.id})`);
+      }
+    } catch (err) {
+      writeError(`work follow-up failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
 var workArchive = defineCommand({
   meta: {
     name: "archive",
@@ -42364,6 +42548,7 @@ var workCommand = defineCommand({
     done: workDone,
     abandon: workAbandon,
     promote: workPromote,
+    "follow-up": workFollowUp,
     archive: workArchive
   }
 });
@@ -42415,4 +42600,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=f84f38897fba1c503d37407ac05b35ede97187e01ca0f3654aa7817de595fedc
+//# ditto-src-stamp=94e7255ff625c74cde01b10be3f7ee99a598e2320c8132ac473410c260d573a3

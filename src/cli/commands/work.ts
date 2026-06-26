@@ -11,7 +11,12 @@ import {
 } from '~/core/work-item-handoff';
 import { WorkItemStore } from '~/core/work-item-store';
 import { declarerRole } from '~/schemas/common';
-import type { AcceptanceCriterion, WorkItem } from '~/schemas/work-item';
+import {
+  type AcceptanceCriterion,
+  type FollowUp,
+  type WorkItem,
+  severityLevel,
+} from '~/schemas/work-item';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -62,6 +67,26 @@ function parseRiskFlags(raw: string): { risk?: WorkItem['declared_risk']; unknow
 function hasDeclaredRisk(item: WorkItem): boolean {
   const r = item.declared_risk;
   return !!r && (r.non_local === true || r.irreversible === true || r.unaudited === true);
+}
+
+// ac-4 C: "high-severity" threshold for the done block = severity ∈ {high, critical}.
+const DONE_BLOCKING_SEVERITIES = ['high', 'critical'] as const;
+
+/**
+ * ac-4 C: the first follow-up that blocks `done` — an UNRESOLVED, self-caused bug
+ * of high/critical severity (a self-caused high-severity regression). A follow-up
+ * that is resolved, not self_caused, kind=idea, or below the severity threshold
+ * does NOT block. Returns undefined when nothing blocks.
+ */
+function blockingFollowUp(item: WorkItem): FollowUp | undefined {
+  return (item.follow_ups ?? []).find(
+    (f) =>
+      f.kind === 'bug' &&
+      f.self_caused === true &&
+      f.resolved !== true &&
+      f.severity !== undefined &&
+      (DONE_BLOCKING_SEVERITIES as readonly string[]).includes(f.severity),
+  );
 }
 
 /**
@@ -708,6 +733,20 @@ const workDone = defineCommand({
     }
     try {
       const item = await store.get(args.workId); // throws with a clear error if unknown
+      // ac-4 C: an additional precondition (does NOT weaken the evidence gate
+      // below). A self-caused high/critical bug discovered during this WI must be
+      // resolved or fixed before the WI can close — you do not close work that
+      // shipped its own high-severity regression.
+      const blocking = blockingFollowUp(item);
+      if (blocking) {
+        writeError(
+          `work ${args.workId} cannot close: unresolved self-caused ${blocking.severity}-severity bug follow-up "${blocking.note}"${
+            blocking.materialized_wi ? ` (tracked as ${blocking.materialized_wi})` : ''
+          }. Fix it, or mark the follow-up resolved, before closing.`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
       // Evidence gate: done requires a completion contract with final_verdict=pass.
       // If none exists — a work item fixed directly, outside the autopilot pipeline
       // (wi_2606200ec) — synthesize one from the work item's OWN acceptance
@@ -859,6 +898,196 @@ const workPromote = defineCommand({
   },
 });
 
+// ac-4: the follow-up capture kinds. bug = a defect (materialized into a tracked
+// WI); idea = a candidate only (not materialized).
+const FOLLOW_UP_KINDS = ['bug', 'idea'] as const;
+
+const workFollowUp = defineCommand({
+  meta: {
+    name: 'follow-up',
+    description:
+      'Capture a discovered follow-up on a work item (--kind bug|idea --note ...), or clear one with --resolve <n>: --kind bug materializes a tracked, back-linked WI; --kind idea records a candidate only',
+  },
+  args: {
+    workId: {
+      type: 'positional',
+      description: 'Source work item the follow-up was discovered on',
+      required: true,
+    },
+    kind: {
+      type: 'string',
+      description: 'bug|idea — a bug materializes a tracked WI; an idea is a candidate only',
+      required: false,
+    },
+    note: { type: 'string', description: 'What was discovered', required: false },
+    resolve: {
+      type: 'string',
+      description:
+        'Clear an existing follow-up instead of appending: 1-based index n sets follow_ups[n].resolved=true (mutually exclusive with --kind/--note)',
+      required: false,
+    },
+    severity: {
+      type: 'string',
+      description:
+        'info|low|medium|high|critical — a self-caused high/critical bug blocks the source WI’s done',
+      required: false,
+    },
+    'self-caused': {
+      type: 'boolean',
+      description: 'Mark a regression introduced by this work item itself',
+      default: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+
+    // ── resolve mode: clear an existing follow-up (1-based index). Mutually
+    // exclusive with append (--kind/--note). This is the CLI path that clears the
+    // Part C done-block; index is 1-based (human-facing), so n=1 is the first entry.
+    if (args.resolve !== undefined) {
+      if (args.kind !== undefined || args.note !== undefined) {
+        writeError(
+          '--resolve clears an existing follow-up and cannot be combined with --kind/--note (one mode per invocation)',
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const raw = String(args.resolve).trim();
+      if (!/^\d+$/.test(raw)) {
+        writeError(
+          `--resolve must be a 1-based follow-up index (a positive integer); got "${args.resolve}"`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const n = Number(raw);
+      try {
+        const item = await store.get(args.workId); // clear error if the WI is unknown
+        const count = (item.follow_ups ?? []).length;
+        if (n < 1 || n > count) {
+          writeError(
+            `--resolve ${n} is out of range: work ${args.workId} has ${count} follow-up(s) — valid range is 1..${count} (1-based)`,
+          );
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const idx = n - 1;
+        const updated = await store.update(args.workId, (cur) => ({
+          ...cur,
+          follow_ups: (cur.follow_ups ?? []).map((f, i) =>
+            i === idx ? { ...f, resolved: true } : f,
+          ),
+        }));
+        const cleared = updated.follow_ups?.[idx];
+        if (format === 'json') {
+          writeJson({ work_item_id: updated.id, resolved_index: n, note: cleared?.note });
+        } else {
+          writeHuman(`Resolved follow-up ${n} on ${updated.id}: ${cleared?.note ?? ''}`);
+        }
+      } catch (err) {
+        writeError(`work follow-up failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      return;
+    }
+
+    // ── append mode (default): record a new follow-up.
+    if (args.kind === undefined) {
+      writeError(
+        '--kind is required (bug|idea) when appending a follow-up — or use --resolve <n> to clear an existing one',
+      );
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!(FOLLOW_UP_KINDS as readonly string[]).includes(args.kind)) {
+      writeError(`--kind must be one of ${FOLLOW_UP_KINDS.join('|')}; got "${args.kind}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const kind = args.kind as 'bug' | 'idea';
+    const note = typeof args.note === 'string' ? args.note.trim() : '';
+    if (note.length === 0) {
+      writeError('--note must be a non-empty description of the follow-up');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let severity: FollowUp['severity'];
+    if (args.severity !== undefined) {
+      const parsed = severityLevel.safeParse(args.severity);
+      if (!parsed.success) {
+        writeError(
+          `--severity must be one of ${severityLevel.options.join('|')}; got "${args.severity}"`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      severity = parsed.data;
+    }
+    const selfCaused = args['self-caused'] === true;
+    try {
+      const source = await store.get(args.workId); // clear error if the source is unknown
+      // (B) A bug is real, tracked work: materialize it into its OWN work item,
+      // back-linked to the source via the `discovered_by` provenance field (kept
+      // distinct from parent_id). An idea is a candidate only — no WI created.
+      let materializedWi: string | undefined;
+      if (kind === 'bug') {
+        const created = await store.create({
+          title: `bug: ${note}`.slice(0, 200),
+          source_request: `Discovered while working on ${source.id}: ${note}`,
+          goal: `Fix: ${note}`,
+          acceptance_criteria: [
+            {
+              id: 'ac-1',
+              statement: PLACEHOLDER_AC_STATEMENT,
+              verdict: 'unverified' as const,
+              evidence: [],
+            },
+          ],
+          discovered_by: source.id,
+        });
+        materializedWi = created.id;
+      }
+      const entry: FollowUp = {
+        kind,
+        note,
+        ...(severity ? { severity } : {}),
+        ...(selfCaused ? { self_caused: true } : {}),
+        ...(materializedWi ? { materialized_wi: materializedWi } : {}),
+      };
+      const updated = await store.update(args.workId, (cur) => ({
+        ...cur,
+        follow_ups: [...(cur.follow_ups ?? []), entry],
+      }));
+      if (format === 'json') {
+        writeJson({
+          work_item_id: updated.id,
+          kind,
+          note,
+          ...(severity ? { severity } : {}),
+          ...(materializedWi ? { materialized_wi: materializedWi } : {}),
+        });
+      } else {
+        writeHuman(`Recorded ${kind} follow-up on ${updated.id}: ${note}`);
+        if (materializedWi)
+          writeHuman(`  materialized bug into ${materializedWi} (discovered_by ${updated.id})`);
+      }
+    } catch (err) {
+      writeError(`work follow-up failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  },
+});
+
 const workArchive = defineCommand({
   meta: {
     name: 'archive',
@@ -933,6 +1162,7 @@ export const workCommand = defineCommand({
     done: workDone,
     abandon: workAbandon,
     promote: workPromote,
+    'follow-up': workFollowUp,
     archive: workArchive,
   },
 });

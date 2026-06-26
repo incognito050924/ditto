@@ -258,6 +258,61 @@
           "type": "boolean",
           "description": "Marked for the heavy (deep-interview) path via `work promote`"
         },
+        "follow_ups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "bug",
+                  "idea"
+                ],
+                "description": "bug = a defect materialized into a tracked WI; idea = a candidate only"
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "description": "What was discovered"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ]
+              },
+              "self_caused": {
+                "type": "boolean",
+                "description": "True if this regression was introduced by the source work item itself"
+              },
+              "materialized_wi": {
+                "type": "string",
+                "pattern": "^wi_[a-z0-9]{8,}$",
+                "description": "The tracked work item this bug was materialized into (kind=bug only)"
+              },
+              "resolved": {
+                "type": "boolean",
+                "description": "True once the follow-up has been addressed"
+              }
+            },
+            "required": [
+              "kind",
+              "note"
+            ],
+            "additionalProperties": false,
+            "description": "A discovered follow-up (bug/idea) captured on the work item"
+          }
+        },
+        "discovered_by": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Work item whose discovered bug materialized this one (provenance, not hierarchy)"
+        },
         "risks": {
           "type": "array",
           "items": {
