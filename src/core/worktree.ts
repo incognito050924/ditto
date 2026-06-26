@@ -41,6 +41,42 @@ export function toPosixSeparators(p: string, fromSep: string = sep): string {
   return p.split(fromSep).join('/');
 }
 
+export interface WorktreeRooting {
+  /** The owning workspace `<ws>` — the repo root a worktree session must root at. */
+  workspace: string;
+  /** The work item id `<wi>` whose worktree this path lives inside. */
+  workItemId: string;
+}
+
+/**
+ * If `start` is inside a per-work-item worktree DITTO created
+ * (`<ws>/.ditto/local/worktrees/<wi>[/...]`), return the owning workspace `<ws>`
+ * (the segment before `.ditto/local/worktrees/`) and the work item id `<wi>`.
+ * Otherwise null.
+ *
+ * A worktree checkout carries the tracked `.ditto/` (knowledge) with it, so a naive
+ * walk-up stops at the worktree's OWN `.ditto` and roots the session inside the
+ * worktree — where the main workspace's gitignored `.ditto/local` (work-items,
+ * autopilot, sessions) is not checked out and is therefore invisible. Rooting back at
+ * `<ws>` keeps code edits in the worktree but state in the single main source
+ * (wi_260626zzx ac-1/ac-2).
+ *
+ * Path-segment based and deterministic (no fs access), mirroring `listRunWorktrees`'
+ * prefix match: `start` is normalised to forward slashes so the `RUN_WORKTREE_PREFIX`
+ * (forward-slash) test works on Windows too. `pathSep` is injectable for per-platform
+ * testing; it defaults to the running platform's separator.
+ */
+export function parseWorktreePath(start: string, pathSep: string = sep): WorktreeRooting | null {
+  const posixPath = toPosixSeparators(start, pathSep);
+  const marker = `/${RUN_WORKTREE_PREFIX}`; // '/.ditto/local/worktrees/'
+  const idx = posixPath.indexOf(marker);
+  if (idx <= 0) return null; // not inside a run worktree (or no owning workspace before it)
+  const workspacePosix = posixPath.slice(0, idx);
+  const workItemId = posixPath.slice(idx + marker.length).split('/')[0];
+  if (!workItemId) return null; // `<ws>/.ditto/local/worktrees/` with no `<wi>` segment
+  return { workspace: workspacePosix.split('/').join(pathSep), workItemId };
+}
+
 /**
  * Repo-relative paths of the per-run worktrees DITTO created (`.ditto/local/worktrees/*`),
  * parsed from `git worktree list --porcelain`. Read-only and deterministic — the

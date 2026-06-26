@@ -3,12 +3,13 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, rmdir, unlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, win32 } from 'node:path';
+import { dirname, join, posix, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
   createWorktreeForWorkItem,
   listRunWorktrees,
+  parseWorktreePath,
   removeWorktreesForWorkItem,
   toPosixSeparators,
 } from '~/core/worktree';
@@ -419,5 +420,53 @@ describe('toPosixSeparators (listRunWorktrees Windows separator)', () => {
     expect(toPosixSeparators('.ditto/local/worktrees/run_x', '/')).toBe(
       '.ditto/local/worktrees/run_x',
     );
+  });
+});
+
+// wi_260626zzx ac-1/ac-2: parseWorktreePath maps a path inside a per-work-item
+// worktree (`<ws>/.ditto/local/worktrees/<wi>[/...]`) to its owning workspace `<ws>`
+// and the work item id `<wi>`. Pure/deterministic (no fs), so it runs on any path
+// shape and platform. Non-worktree paths return null so rooting stays unchanged.
+describe('parseWorktreePath (worktree session rooting)', () => {
+  const wtPrefix = '.ditto/local/worktrees';
+
+  test('worktree root → owning workspace + work item id', () => {
+    expect(parseWorktreePath(`/Users/x/dev/proj/${wtPrefix}/wi_abc`, posix.sep)).toEqual({
+      workspace: '/Users/x/dev/proj',
+      workItemId: 'wi_abc',
+    });
+  });
+
+  test('nested path inside the worktree → same workspace + wi (first segment only)', () => {
+    expect(parseWorktreePath(`/Users/x/dev/proj/${wtPrefix}/wi_abc/src/core`, posix.sep)).toEqual({
+      workspace: '/Users/x/dev/proj',
+      workItemId: 'wi_abc',
+    });
+  });
+
+  test('nested sub-repo worktree cwd → still the owning workspace (not the sub-repo)', () => {
+    expect(
+      parseWorktreePath(`/Users/x/dev/proj/${wtPrefix}/wi_abc/subrepo/lib`, posix.sep),
+    ).toEqual({ workspace: '/Users/x/dev/proj', workItemId: 'wi_abc' });
+  });
+
+  test('plain repo cwd → null (no worktree segment, rooting unchanged)', () => {
+    expect(parseWorktreePath('/Users/x/dev/proj/src/core', posix.sep)).toBeNull();
+  });
+
+  test('a path with .ditto/local but not the worktrees prefix → null', () => {
+    expect(
+      parseWorktreePath('/Users/x/dev/proj/.ditto/local/work-items/wi_abc', posix.sep),
+    ).toBeNull();
+  });
+
+  test('worktrees prefix with no <wi> segment → null', () => {
+    expect(parseWorktreePath(`/Users/x/dev/proj/${wtPrefix}/`, posix.sep)).toBeNull();
+  });
+
+  test('Windows backslash worktree path → owning workspace with native separators', () => {
+    expect(
+      parseWorktreePath('D:\\dev\\proj\\.ditto\\local\\worktrees\\wi_abc\\src', win32.sep),
+    ).toEqual({ workspace: 'D:\\dev\\proj', workItemId: 'wi_abc' });
   });
 });

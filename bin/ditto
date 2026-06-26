@@ -12825,31 +12825,823 @@ function localDir(repoRoot, ...segments) {
 }
 var init_ditto_paths = () => {};
 
-// src/core/fs.ts
+// src/core/git.ts
+import { execFileSync } from "child_process";
+function captureGitState(cwd) {
+  let head = "0".repeat(40);
+  let branch = "";
+  let dirty = false;
+  let untracked_count = 0;
+  try {
+    head = execFileSync("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8" }).trim();
+  } catch {}
+  try {
+    branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd,
+      encoding: "utf8"
+    }).trim();
+  } catch {}
+  try {
+    const status = execFileSync("git", ["status", "--porcelain"], { cwd, encoding: "utf8" });
+    const lines = status.split(`
+`).filter((line) => line.length > 0);
+    dirty = lines.length > 0;
+    untracked_count = lines.filter((line) => line.startsWith("??")).length;
+  } catch {}
+  return { head, branch, dirty, untracked_count };
+}
+function listChangedFiles(cwd, options = {}) {
+  try {
+    const status = execFileSync("git", ["status", "--porcelain"], { cwd, encoding: "utf8" });
+    return status.split(`
+`).filter((line) => line.length > 0).map((line) => line.slice(3).trim()).filter((path) => path.length > 0).filter((path) => !options.excludeDittoRuns || !path.startsWith(".ditto/local/runs/")).sort();
+  } catch {
+    return [];
+  }
+}
+function listChangedFilesVsRef(cwd, ref) {
+  try {
+    const out = execFileSync("git", ["diff", "--name-only", ref, "--"], { cwd, encoding: "utf8" });
+    return out.split(`
+`).map((l2) => l2.trim()).filter((p) => p.length > 0).sort();
+  } catch {
+    return [];
+  }
+}
+function diffVsRef(cwd, ref) {
+  try {
+    return execFileSync("git", ["diff", ref, "--"], { cwd, encoding: "utf8" });
+  } catch {
+    return "";
+  }
+}
+function gitRevParse(cwd, ref) {
+  return execFileSync("git", ["rev-parse", ref], { cwd, encoding: "utf8" }).trim();
+}
+function isWorkingTreeClean(cwd) {
+  try {
+    return execFileSync("git", ["status", "--porcelain"], { cwd, encoding: "utf8" }).trim() === "";
+  } catch {
+    return false;
+  }
+}
+function addDetachedWorktree(cwd, path, ref) {
+  execFileSync("git", ["worktree", "add", "--detach", "--force", path, ref], {
+    cwd,
+    stdio: ["ignore", "ignore", "pipe"]
+  });
+}
+function removeWorktree(cwd, path) {
+  try {
+    execFileSync("git", ["worktree", "remove", "--force", path], {
+      cwd,
+      stdio: ["ignore", "ignore", "pipe"]
+    });
+  } catch {}
+}
+function captureGitDiff(cwd) {
+  try {
+    return execFileSync("git", ["diff", "--binary", "HEAD"], { cwd, encoding: "utf8" });
+  } catch {
+    try {
+      return execFileSync("git", ["diff", "--binary"], { cwd, encoding: "utf8" });
+    } catch {
+      return "";
+    }
+  }
+}
+var init_git = () => {};
+
+// src/schemas/intent-metric.ts
+var intentMetricHop, intentMetric;
+var init_intent_metric = __esm(() => {
+  init_zod();
+  init_common();
+  intentMetricHop = exports_external.enum(["H1", "H2", "H3"]).describe("Which intent-chain hop the drift was detected at (intentDriftGate H1/H2/H3)");
+  intentMetric = exports_external.object({
+    ts: isoDateTime,
+    work_item_id: workItemId,
+    kind: exports_external.literal("intent_drift").describe("Discriminator; only intent_drift is defined today"),
+    source: exports_external.enum(["stop_hook", "cli"]).describe("Where the measurement was taken (the Stop hook, or an explicit CLI run)"),
+    blocking_reasons: exports_external.array(exports_external.string()).default([]).describe("Blocking drift reasons (AC id-set scope grow/shrink)"),
+    advisories: exports_external.array(exports_external.string()).default([]).describe("Non-blocking drift advisories (goal/source_request string divergence)"),
+    hops: exports_external.array(intentMetricHop).default([]).describe("Distinct hops present in this event")
+  }).describe("One line of .ditto/local/work-items/<id>/metrics.jsonl \u2014 a persisted drift event");
+});
+
+// src/schemas/language-ledger.ts
+var languageChange, languageLedger;
+var init_language_ledger = __esm(() => {
+  init_zod();
+  init_common();
+  languageChange = exports_external.object({
+    op: exports_external.enum(["add", "modify", "deprecate", "alias"]).describe("What kind of glossary change this entry records"),
+    term: exports_external.string().min(1),
+    before: exports_external.string().optional().describe("Prior definition or surface form, if applicable"),
+    after: exports_external.string().optional().describe("New definition or surface form, if applicable"),
+    rationale: exports_external.string().min(1).describe("Why the change is needed; cite user statement when available"),
+    proposed_by: exports_external.string().min(1).describe("User handle or agent profile that proposed it"),
+    agreed_with_user: exports_external.boolean().describe("True only after explicit user confirmation; defaults to false on creation"),
+    decided_at: isoDateTime.optional()
+  }).superRefine((value, ctx) => {
+    if (value.agreed_with_user === true && value.decided_at === undefined) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        message: "agreed_with_user=true requires decided_at (confirmation timestamp)",
+        path: ["decided_at"]
+      });
+    }
+  }).describe("One change to project language as observed during a work item");
+  languageLedger = exports_external.object({
+    schema_version: schemaVersion,
+    work_item_id: workItemId,
+    created_at: isoDateTime,
+    updated_at: isoDateTime,
+    changes: exports_external.array(languageChange).default([])
+  }).describe("Per-work-item record of language negotiations; merged into glossary once agreed");
+});
+
+// src/schemas/tech-spec-round.ts
+var questionProperty, questionScore, scoredQuestion, techSpecRoundPayload, techSpecRound;
+var init_tech_spec_round = __esm(() => {
+  init_zod();
+  init_common();
+  questionProperty = exports_external.enum(["blind-spot", "expansion", "orientation"]).describe("Which good-question property the candidate carries (SKILL.md \xA7good questions)");
+  questionScore = exports_external.object({
+    consensus: exports_external.number().int().nonnegative().describe("How many generators independently raised this question (necessity signal)"),
+    quality: exports_external.number().min(0).max(1).describe("Meets the three good-question properties [0..1]"),
+    necessity: exports_external.number().min(0).max(1).describe("Still open given the fixed facts [0..1]"),
+    answer_value: exports_external.number().min(0).max(1).describe("How much the spec changes depending on the answer [0..1]")
+  }).describe("The gate 4-dimension score for one candidate question");
+  scoredQuestion = exports_external.object({
+    text: exports_external.string().min(1),
+    property: questionProperty,
+    why_matters: exports_external.string().optional(),
+    scores: questionScore,
+    rationale: exports_external.string().optional().describe("Why selected (present on selected questions)")
+  }).describe("One candidate question with its gate score");
+  techSpecRoundPayload = exports_external.object({
+    round: exports_external.number().int().positive().describe("1-based round index within the interview"),
+    section: exports_external.string().optional().describe("Target spec section this round filled"),
+    generator_count: exports_external.number().int().positive().default(2).describe("N generators fanned out (--generators default 2, range 1..6; wi_260619yfw)"),
+    threshold: exports_external.number().optional().describe("Fixed selection threshold used this round (\xA79 #4)"),
+    dry: exports_external.boolean().describe("Gate found no candidate above the threshold \u2192 round/interview ends (\xA79 #4)"),
+    selected: exports_external.array(scoredQuestion).default([]).describe("Questions selected to ask the user"),
+    all_scored: exports_external.array(scoredQuestion).default([]).describe("Every candidate with its score (durable score trail for later tuning)")
+  }).superRefine((val, ctx) => {
+    if (val.dry && val.selected.length > 0) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["selected"],
+        message: "dry=true \uB77C\uC6B4\uB4DC\uB294 selected\uAC00 \uBE44\uC5B4 \uC788\uC5B4\uC57C \uD55C\uB2E4 (\uC784\uACC4 \uC774\uC0C1 \uC9C8\uBB38 \uBD80\uC7AC\uAC00 dry\uC758 \uC815\uC758)"
+      });
+    }
+    if (!val.dry && val.selected.length === 0) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        path: ["dry"],
+        message: "selected\uAC00 \uBE44\uC5B4 \uC788\uC73C\uBA74 dry=true\uC5EC\uC57C \uD55C\uB2E4 (\uC120\uC815\uB41C \uC9C8\uBB38\uC774 \uC5C6\uB294 \uB77C\uC6B4\uB4DC\uB294 dry)"
+      });
+    }
+  });
+  techSpecRound = exports_external.object({
+    ts: isoDateTime,
+    work_item_id: workItemId,
+    round: exports_external.number().int().positive(),
+    section: exports_external.string().optional(),
+    generator_count: exports_external.number().int().positive().default(2),
+    threshold: exports_external.number().optional(),
+    dry: exports_external.boolean(),
+    selected: exports_external.array(scoredQuestion).default([]),
+    all_scored: exports_external.array(scoredQuestion).default([])
+  }).describe("One line of .ditto/local/work-items/<id>/tech-spec-rounds.jsonl");
+});
+
+// src/schemas/work-item.ts
+var gitSha40, verificationMethod, codePointerMapsTo, acOracle, acceptanceCriterion, workItemWorktree, riskNote, reEntry, workItem;
+var init_work_item = __esm(() => {
+  init_zod();
+  init_common();
+  gitSha40 = exports_external.string().regex(/^[a-f0-9]{40}$/, "git sha must be 40 lowercase hex characters").describe("Full 40-char git commit sha");
+  verificationMethod = exports_external.enum(["dynamic_test", "static_scan", "soft_judgment"]).describe("Re-evaluability class of the oracle (ADR-0024 \xA73.1: hard\xB7dynamic / hard\xB7static / soft\xB7judgment). Distinct from evidenceRequiredKind (intent.ts), which is the kind of evidence, not its re-evaluability.");
+  codePointerMapsTo = /^[^\s]+\.[A-Za-z0-9]+:[^\s]+$/;
+  acOracle = exports_external.object({
+    verification_method: verificationMethod,
+    maps_to: exports_external.string().min(1).describe("AC, file:line, intent, or doc the oracle anchors to (same vocabulary as dialectic maps_to)"),
+    direction: exports_external.enum(["forward", "backward"]).describe("forward = post-change final state; backward = current-code finding (ADR-0024 \xA73.0)")
+  }).superRefine((value, ctx) => {
+    if (value.direction === "forward" && codePointerMapsTo.test(value.maps_to)) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        message: "forward oracle must be re-evaluable: a code-pointer maps_to (file:line / symbol) drifts on change \u2014 use direction=backward for a current-code finding (ADR-0024 \xA73.0)",
+        path: ["maps_to"]
+      });
+    }
+  }).describe("Per-AC oracle: re-evaluable verification method + anchor target (ADR-0024 \xA73)");
+  acceptanceCriterion = exports_external.object({
+    id: exports_external.string().min(1).describe("Stable id within the work item (e.g., ac-1)"),
+    statement: exports_external.string().min(1).describe("Single observable behavior in user-facing terms"),
+    verdict: verdict.default("unverified"),
+    evidence: exports_external.array(evidenceRef).default([]),
+    oracle: acOracle.optional()
+  }).describe("One acceptance criterion with its verification verdict");
+  workItemWorktree = exports_external.object({
+    owning_repo: exports_external.string().min(1).describe("'.' for the workspace repo, else the sub-repo path relative to the workspace root"),
+    worktree_path: relativePath.describe("Worktree checkout path, relative to the workspace repo root"),
+    branch: exports_external.string().min(1).describe("Branch checked out in this worktree")
+  }).describe("One git worktree+branch DITTO created for a work item (one per owning repo)");
+  riskNote = exports_external.object({
+    description: exports_external.string().min(1),
+    severity: exports_external.enum(["info", "low", "medium", "high", "critical"]).default("low"),
+    mitigation: exports_external.string().optional()
+  }).describe("Outstanding risk that did not block completion but remains relevant");
+  reEntry = exports_external.object({
+    command: exports_external.string().optional().describe("Concrete next command to resume work"),
+    fresh_evidence_needed: exports_external.array(exports_external.string()).default([]).describe("What new evidence must be gathered before the next attempt"),
+    owner: exports_external.string().optional().describe("Profile or human handle expected to resume")
+  }).describe("Instructions for resuming a partial/unverified/blocked work item");
+  workItem = exports_external.object({
+    schema_version: schemaVersion,
+    id: workItemId,
+    title: exports_external.string().min(1).max(200),
+    source_request: exports_external.string().min(1).describe("Verbatim or close-paraphrase of the original user request"),
+    goal: exports_external.string().min(1).describe("Observable outcome stated in project terms; not a list of steps"),
+    acceptance_criteria: exports_external.array(acceptanceCriterion).min(1),
+    status: workItemStatus.default("draft"),
+    owner_profile: profileName.default("workspace-write"),
+    parent_id: workItemId.optional().describe("Parent work item if this is a child task"),
+    child_ids: exports_external.array(workItemId).default([]),
+    changed_files: exports_external.array(relativePath).default([]),
+    worktrees: exports_external.array(workItemWorktree).default([]),
+    autopilot_exempt: exports_external.boolean().optional().describe("Allow closing on completion.json alone without going through autopilot"),
+    risks: exports_external.array(riskNote).default([]),
+    re_entry: reEntry.optional(),
+    runs: exports_external.array(runId).default([]),
+    handoff_path: relativePath.optional(),
+    language_overrides: relativePath.optional().describe("Path to language.md if this work item modifies the glossary"),
+    started_at_sha: gitSha40.optional().describe("Git HEAD sha at the time this work item transitioned draft \u2192 in_progress; used as default base for handoff diff collection"),
+    created_at: isoDateTime,
+    updated_at: isoDateTime,
+    closed_at: isoDateTime.optional()
+  }).superRefine((value, ctx) => {
+    const needsReEntry = ["partial", "unverified", "blocked"].includes(value.status);
+    if (!needsReEntry)
+      return;
+    if (!value.re_entry) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        message: `status=${value.status} requires re_entry with command or fresh_evidence_needed`,
+        path: ["re_entry"]
+      });
+      return;
+    }
+    const hasCommand = typeof value.re_entry.command === "string" && value.re_entry.command.length > 0;
+    const hasEvidence = value.re_entry.fresh_evidence_needed.length > 0;
+    if (!hasCommand && !hasEvidence) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        message: `status=${value.status} requires re_entry.command or non-empty re_entry.fresh_evidence_needed`,
+        path: ["re_entry"]
+      });
+    }
+  }).describe("Authoritative state for a single DITTO work item");
+});
+
+// src/core/id.ts
 import { randomBytes } from "crypto";
-import { mkdir, rename, unlink, writeFile } from "fs/promises";
+function randomSuffix(length) {
+  const bytes = randomBytes(length);
+  let out = "";
+  for (let i2 = 0;i2 < length; i2++) {
+    const byte = bytes[i2] ?? 0;
+    out += SUFFIX_CHARSET[byte % SUFFIX_CHARSET.length] ?? "a";
+  }
+  return out;
+}
+async function generateId(prefix, existsCheck, options = {}) {
+  const now = options.now ?? new Date;
+  const maxAttempts = options.maxAttempts ?? 8;
+  const yy = String(now.getUTCFullYear() % 100).padStart(2, "0");
+  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(now.getUTCDate()).padStart(2, "0");
+  const datePart = `${yy}${mm}${dd}`;
+  const randomLen = Math.max(SUFFIX_LENGTH - datePart.length, 3);
+  for (let attempt = 0;attempt < maxAttempts; attempt++) {
+    const candidate = `${prefix}_${datePart}${randomSuffix(randomLen)}`;
+    if (!await existsCheck(candidate))
+      return candidate;
+  }
+  throw new Error(`failed to generate unique ${prefix}_ id after ${maxAttempts} attempts; likely a clock or RNG issue`);
+}
+var SUFFIX_LENGTH = 9, SUFFIX_CHARSET = "abcdefghijklmnopqrstuvwxyz0123456789";
+var init_id = () => {};
+
+// src/core/work-item-store.ts
+import { readdir as readdir2, rename, stat as stat2 } from "fs/promises";
+import { dirname as dirname2, join as join6 } from "path";
+function tryGitHeadSha(repoRoot) {
+  const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
+    cwd: repoRoot,
+    stdout: "pipe",
+    stderr: "pipe"
+  });
+  if (proc.exitCode !== 0)
+    return null;
+  const sha = (proc.stdout?.toString() ?? "").trim();
+  if (!/^[a-f0-9]{40}$/.test(sha))
+    return null;
+  return sha;
+}
+
+class WorkItemStore {
+  repoRoot;
+  constructor(repoRoot) {
+    this.repoRoot = repoRoot;
+  }
+  workItemDir(id) {
+    return localDir(this.repoRoot, "work-items", id);
+  }
+  workItemPath(id) {
+    return join6(this.workItemDir(id), "work-item.json");
+  }
+  languageLedgerPath(id) {
+    return join6(this.workItemDir(id), "language-ledger.json");
+  }
+  async exists(id) {
+    try {
+      await stat2(this.workItemPath(id));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  async create(input, now = new Date) {
+    const id = await generateId("wi", (candidate) => this.exists(candidate));
+    const nowIso = now.toISOString();
+    const draft = {
+      schema_version: "0.1.0",
+      id,
+      title: input.title,
+      source_request: input.source_request,
+      goal: input.goal,
+      acceptance_criteria: input.acceptance_criteria,
+      status: "draft",
+      owner_profile: input.owner_profile ?? "workspace-write",
+      ...input.parent_id !== undefined ? { parent_id: input.parent_id } : {},
+      child_ids: [],
+      changed_files: [],
+      risks: [],
+      runs: [],
+      created_at: nowIso,
+      updated_at: nowIso
+    };
+    await ensureDir(join6(this.workItemDir(id), "evidence"));
+    const written = await writeJson(this.workItemPath(id), workItem, draft);
+    await writeJson(this.languageLedgerPath(id), languageLedger, {
+      schema_version: "0.1.0",
+      work_item_id: id,
+      created_at: nowIso,
+      updated_at: nowIso,
+      changes: []
+    });
+    return written;
+  }
+  async get(id) {
+    return readJson(this.workItemPath(id), workItem);
+  }
+  async update(id, mutator) {
+    const current = await this.get(id);
+    const next = mutator(current);
+    if (next.id !== current.id) {
+      throw new Error(`update mutator changed work item id from ${current.id} to ${next.id}`);
+    }
+    let withSha = next;
+    if (next.status === "in_progress" && next.started_at_sha === undefined) {
+      const sha = tryGitHeadSha(this.repoRoot);
+      if (sha !== null) {
+        withSha = { ...next, started_at_sha: sha };
+      }
+    }
+    const withTouched = { ...withSha, updated_at: new Date().toISOString() };
+    return writeJson(this.workItemPath(id), workItem, withTouched);
+  }
+  async close(id, terminal, now = new Date) {
+    return this.update(id, (cur) => ({
+      ...cur,
+      status: terminal,
+      closed_at: now.toISOString()
+    }));
+  }
+  async archive(label) {
+    if (!/^[A-Za-z0-9._-]+$/.test(label) || label === "." || label === "..") {
+      throw new Error(`archive label must be a safe path segment ([A-Za-z0-9._-]+, not '.' or '..'; got: ${label})`);
+    }
+    const targets = (await this.list()).filter((s2) => s2.status === "done" || s2.status === "abandoned");
+    if (targets.length === 0)
+      return [];
+    const archiveBase = localDir(this.repoRoot, "archive", label);
+    await ensureDir(archiveBase);
+    for (const t2 of targets) {
+      await rename(this.workItemDir(t2.id), join6(archiveBase, t2.id));
+    }
+    return targets.map((t2) => t2.id);
+  }
+  async list() {
+    const base = localDir(this.repoRoot, "work-items");
+    let entries;
+    try {
+      entries = await readdir2(base);
+    } catch {
+      return [];
+    }
+    const summaries = [];
+    for (const name of entries) {
+      const dir = join6(base, name);
+      let s2;
+      try {
+        s2 = await stat2(dir);
+      } catch {
+        continue;
+      }
+      if (!s2.isDirectory())
+        continue;
+      try {
+        const item = await readJson(join6(dir, "work-item.json"), workItem);
+        summaries.push({
+          id: item.id,
+          title: item.title,
+          status: item.status,
+          updated_at: item.updated_at
+        });
+      } catch {}
+    }
+    summaries.sort((a2, b2) => a2.updated_at < b2.updated_at ? 1 : -1);
+    return summaries;
+  }
+  async appendJsonlAtPath(path, jsonLine) {
+    await ensureDir(dirname2(path));
+    const file = Bun.file(path);
+    const existing = await file.exists() ? await file.text() : "";
+    const trimmedExisting = existing.endsWith(`
+`) || existing.length === 0 ? existing : `${existing}
+`;
+    await atomicWriteText(path, `${trimmedExisting}${jsonLine}
+`);
+  }
+  async appendEvidenceJsonl(workItemId2, filename, jsonLine) {
+    return this.appendJsonlAtPath(join6(this.workItemDir(workItemId2), "evidence", filename), jsonLine);
+  }
+  async appendCommandLogLine(workItemId2, jsonLine) {
+    return this.appendEvidenceJsonl(workItemId2, "commands.jsonl", jsonLine);
+  }
+  async appendEditLogLine(workItemId2, jsonLine) {
+    return this.appendEvidenceJsonl(workItemId2, "edits.jsonl", jsonLine);
+  }
+  metricsPath(workItemId2) {
+    return join6(this.workItemDir(workItemId2), "metrics.jsonl");
+  }
+  async appendMetricLine(workItemId2, jsonLine) {
+    return this.appendJsonlAtPath(this.metricsPath(workItemId2), jsonLine);
+  }
+  async readMetrics(workItemId2) {
+    const file = Bun.file(this.metricsPath(workItemId2));
+    if (!await file.exists())
+      return [];
+    const text = await file.text();
+    return text.split(`
+`).filter((line) => line.trim().length > 0).map((line) => intentMetric.parse(JSON.parse(line)));
+  }
+  techSpecRoundsPath(workItemId2) {
+    return join6(this.workItemDir(workItemId2), "tech-spec-rounds.jsonl");
+  }
+  async appendTechSpecRoundLine(workItemId2, jsonLine) {
+    return this.appendJsonlAtPath(this.techSpecRoundsPath(workItemId2), jsonLine);
+  }
+  async readTechSpecRounds(workItemId2) {
+    const file = Bun.file(this.techSpecRoundsPath(workItemId2));
+    if (!await file.exists())
+      return [];
+    const text = await file.text();
+    return text.split(`
+`).filter((line) => line.trim().length > 0).map((line) => techSpecRound.parse(JSON.parse(line)));
+  }
+}
+var acceptanceCriterionInputSchema;
+var init_work_item_store = __esm(() => {
+  init_zod();
+  init_intent_metric();
+  init_language_ledger();
+  init_tech_spec_round();
+  init_work_item();
+  init_ditto_paths();
+  init_fs();
+  init_id();
+  acceptanceCriterionInputSchema = exports_external.object({
+    id: exports_external.string().min(1),
+    statement: exports_external.string().min(1)
+  }).passthrough();
+});
+
+// src/core/worktree.ts
+import { execFileSync as execFileSync2 } from "child_process";
+import { realpathSync } from "fs";
+import { mkdir, readFile, readdir as readdir3, rmdir, stat as stat3, unlink, writeFile } from "fs/promises";
+import { join as join7, relative, sep as sep2 } from "path";
+async function createWorktreeForRun(repoRoot, runId2) {
+  const relativePath2 = `${RUN_WORKTREE_PREFIX}${runId2}`;
+  const absolutePath = localDir(repoRoot, "worktrees", runId2);
+  await ensureDir(localDir(repoRoot, "worktrees"));
+  execFileSync2("git", ["worktree", "add", "--detach", absolutePath, "HEAD"], {
+    cwd: repoRoot,
+    stdio: ["ignore", "ignore", "pipe"]
+  });
+  return { absolutePath, relativePath: relativePath2 };
+}
+function toPosixSeparators(p, fromSep = sep2) {
+  return p.split(fromSep).join("/");
+}
+function parseWorktreePath(start, pathSep = sep2) {
+  const posixPath = toPosixSeparators(start, pathSep);
+  const marker = `/${RUN_WORKTREE_PREFIX}`;
+  const idx = posixPath.indexOf(marker);
+  if (idx <= 0)
+    return null;
+  const workspacePosix = posixPath.slice(0, idx);
+  const workItemId2 = posixPath.slice(idx + marker.length).split("/")[0];
+  if (!workItemId2)
+    return null;
+  return { workspace: workspacePosix.split("/").join(pathSep), workItemId: workItemId2 };
+}
+function listRunWorktrees(repoRoot) {
+  const out = execFileSync2("git", ["worktree", "list", "--porcelain"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  const root = realpathSync(repoRoot);
+  const paths = [];
+  for (const line of out.split(`
+`)) {
+    if (!line.startsWith("worktree "))
+      continue;
+    const abs = line.slice("worktree ".length).trim();
+    const rel = toPosixSeparators(relative(root, abs));
+    if (rel.startsWith(RUN_WORKTREE_PREFIX))
+      paths.push(rel);
+  }
+  return paths;
+}
+function removeRunWorktree(repoRoot, relativePath2) {
+  execFileSync2("git", ["worktree", "remove", relativePath2], {
+    cwd: repoRoot,
+    stdio: ["ignore", "ignore", "pipe"]
+  });
+}
+function assertSafeArg(value, label) {
+  if (value.startsWith("-")) {
+    throw new Error(`${label} must not start with '-' (git option injection): ${value}`);
+  }
+}
+function detectBaseBranch(cwd) {
+  try {
+    const ref = execFileSync2("git", ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    if (ref.length > 0)
+      return ref;
+  } catch {}
+  return execFileSync2("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd,
+    encoding: "utf8"
+  }).trim();
+}
+async function detectSubRepos(repoRoot) {
+  let entries;
+  try {
+    entries = await readdir3(repoRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const subs = [];
+  for (const e2 of entries) {
+    if (!e2.isDirectory() || e2.name.startsWith("."))
+      continue;
+    if (await fileExists(join7(repoRoot, e2.name, ".git")))
+      subs.push(e2.name);
+  }
+  return subs.sort();
+}
+async function classifyLockHolder(lockPath) {
+  let raw;
+  try {
+    raw = await readFile(join7(lockPath, "pid"), "utf8");
+  } catch {
+    try {
+      const age = Date.now() - (await stat3(lockPath)).mtimeMs;
+      return age < PID_WRITE_GRACE_MS ? "alive" : "empty-stale";
+    } catch {
+      return "alive";
+    }
+  }
+  const pid = Number.parseInt(raw.trim(), 10);
+  if (!Number.isInteger(pid) || pid <= 0)
+    return "alive";
+  try {
+    process.kill(pid, 0);
+    return "alive";
+  } catch (err) {
+    return err.code === "EPERM" ? "alive" : "dead-pid";
+  }
+}
+async function withWorktreeLock(repoRoot, fn) {
+  const dir = localDir(repoRoot, "worktrees");
+  await ensureDir(dir);
+  const lockPath = join7(dir, ".lock");
+  const pidPath = join7(lockPath, "pid");
+  const deadlineMs = 30000;
+  const start = Date.now();
+  while (true) {
+    try {
+      await mkdir(lockPath);
+      await writeFile(pidPath, String(process.pid), "utf8");
+      break;
+    } catch (err) {
+      if (err.code !== "EEXIST")
+        throw err;
+      const state = await classifyLockHolder(lockPath);
+      if (state === "dead-pid") {
+        await unlink(pidPath).catch(() => {});
+        await rmdir(lockPath).catch(() => {});
+        continue;
+      }
+      if (state === "empty-stale") {
+        await rmdir(lockPath).catch(() => {});
+        continue;
+      }
+      if (Date.now() - start > deadlineMs) {
+        throw new Error(`worktree lock held >${deadlineMs}ms (${lockPath}); another worktree op in flight`);
+      }
+      await new Promise((resolve2) => setTimeout(resolve2, 15));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    await unlink(pidPath).catch(() => {});
+    await rmdir(lockPath).catch(() => {});
+  }
+}
+function addWorktree(cwd, branch, absPath, base) {
+  execFileSync2("git", ["worktree", "add", "-b", branch, "--", absPath, base], {
+    cwd,
+    stdio: ["ignore", "ignore", "pipe"]
+  });
+}
+async function createWorktreeForWorkItem(repoRoot, workItemId2) {
+  assertSafeArg(workItemId2, "work item id");
+  const branch = `${WORK_ITEM_BRANCH_PREFIX}${workItemId2}`;
+  return withWorktreeLock(repoRoot, async () => {
+    const workspaceRel = `${RUN_WORKTREE_PREFIX}${workItemId2}`;
+    const workspaceAbs = localDir(repoRoot, "worktrees", workItemId2);
+    await ensureDir(localDir(repoRoot, "worktrees"));
+    const created = [];
+    const meta = [];
+    try {
+      addWorktree(repoRoot, branch, workspaceAbs, detectBaseBranch(repoRoot));
+      created.push({ cwd: repoRoot, abs: workspaceAbs, branch });
+      meta.push({ owning_repo: ".", worktree_path: workspaceRel, branch });
+      for (const sub of await detectSubRepos(repoRoot)) {
+        assertSafeArg(sub, "sub-repo name");
+        const subMainCheckout = join7(repoRoot, sub);
+        const subAbs = join7(workspaceAbs, sub);
+        addWorktree(subMainCheckout, branch, subAbs, detectBaseBranch(subMainCheckout));
+        created.push({ cwd: subMainCheckout, abs: subAbs, branch });
+        meta.push({ owning_repo: sub, worktree_path: `${workspaceRel}/${sub}`, branch });
+      }
+    } catch (err) {
+      for (const c3 of [...created].reverse()) {
+        try {
+          execFileSync2("git", ["worktree", "remove", "--force", "--", c3.abs], {
+            cwd: c3.cwd,
+            stdio: ["ignore", "ignore", "ignore"]
+          });
+        } catch {}
+        try {
+          execFileSync2("git", ["branch", "-D", "--", c3.branch], {
+            cwd: c3.cwd,
+            stdio: ["ignore", "ignore", "ignore"]
+          });
+        } catch {}
+      }
+      throw err;
+    }
+    const store = new WorkItemStore(repoRoot);
+    await store.update(workItemId2, (cur) => ({ ...cur, worktrees: meta }));
+    return meta;
+  });
+}
+function branchHasUnmergedCommits(cwd, branch) {
+  try {
+    const head = execFileSync2("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8" }).trim();
+    const tip = execFileSync2("git", ["rev-parse", branch], { cwd, encoding: "utf8" }).trim();
+    try {
+      execFileSync2("git", ["merge-base", "--is-ancestor", tip, head], {
+        cwd,
+        stdio: ["ignore", "ignore", "ignore"]
+      });
+      return false;
+    } catch {
+      return true;
+    }
+  } catch {
+    return true;
+  }
+}
+async function removeWorktreesForWorkItem(repoRoot, workItemId2, opts = {}) {
+  assertSafeArg(workItemId2, "work item id");
+  const force = opts.force ?? false;
+  return withWorktreeLock(repoRoot, async () => {
+    const store = new WorkItemStore(repoRoot);
+    const item = await store.get(workItemId2);
+    const ordered = [...item.worktrees].sort((a2, b2) => (a2.owning_repo === "." ? 1 : 0) - (b2.owning_repo === "." ? 1 : 0));
+    const removed = [];
+    const blocked = [];
+    for (const wt of ordered) {
+      const ownerCwd = wt.owning_repo === "." ? repoRoot : join7(repoRoot, wt.owning_repo);
+      const wtAbs = join7(repoRoot, wt.worktree_path);
+      const dirty = !isWorkingTreeClean(wtAbs);
+      const unmerged = branchHasUnmergedCommits(ownerCwd, wt.branch);
+      if ((dirty || unmerged) && !force) {
+        const why = [dirty ? "uncommitted changes" : null, unmerged ? "unmerged commits" : null].filter(Boolean).join(" + ");
+        blocked.push({ worktree: wt, reason: `${why}; refusing to delete without --force` });
+        continue;
+      }
+      try {
+        const removeArgs = ["worktree", "remove"];
+        if (force)
+          removeArgs.push("--force");
+        removeArgs.push("--", wtAbs);
+        execFileSync2("git", removeArgs, { cwd: ownerCwd, stdio: ["ignore", "ignore", "pipe"] });
+        execFileSync2("git", ["branch", force ? "-D" : "-d", "--", wt.branch], {
+          cwd: ownerCwd,
+          stdio: ["ignore", "ignore", "pipe"]
+        });
+        removed.push(wt);
+      } catch (err) {
+        blocked.push({
+          worktree: wt,
+          reason: err instanceof Error ? err.message : String(err)
+        });
+      }
+    }
+    if (removed.length > 0) {
+      await store.update(workItemId2, (cur) => ({
+        ...cur,
+        worktrees: cur.worktrees.filter((w2) => !removed.some((r3) => r3.worktree_path === w2.worktree_path))
+      }));
+    }
+    return { removed, blocked };
+  });
+}
+var RUN_WORKTREE_PREFIX = ".ditto/local/worktrees/", WORK_ITEM_BRANCH_PREFIX = "ditto/", PID_WRITE_GRACE_MS = 2000;
+var init_worktree = __esm(() => {
+  init_ditto_paths();
+  init_fs();
+  init_git();
+  init_shared();
+  init_work_item_store();
+});
+
+// src/core/fs.ts
+import { randomBytes as randomBytes2 } from "crypto";
+import { mkdir as mkdir2, rename as rename2, unlink as unlink2, writeFile as writeFile2 } from "fs/promises";
 import { homedir as homedir3 } from "os";
-import { dirname as dirname2, extname, isAbsolute, join as join6, parse as parse2, relative, resolve as resolve2 } from "path";
+import { dirname as dirname3, extname, isAbsolute, join as join8, parse as parse2, relative as relative2, resolve as resolve2 } from "path";
 function isAtOrAboveHome(rel, isAbs = isAbsolute) {
   return rel === "" || !rel.startsWith("..") && !isAbs(rel);
 }
 async function findRepoRoot(start = process.cwd(), homeDir = homedir3()) {
   const resolved = resolve2(start);
+  const worktree = parseWorktreePath(resolved);
+  if (worktree !== null)
+    return worktree.workspace;
   let current = resolved;
   let firstGitMatch = null;
   const root = parse2(current).root;
   const home = resolve2(homeDir);
   while (true) {
-    if (isAtOrAboveHome(relative(current, home)))
+    if (isAtOrAboveHome(relative2(current, home)))
       break;
-    if (await fileExists(join6(current, ".ditto")))
+    if (await fileExists(join8(current, ".ditto")))
       return current;
-    if (firstGitMatch === null && await fileExists(join6(current, ".git"))) {
+    if (firstGitMatch === null && await fileExists(join8(current, ".git"))) {
       firstGitMatch = current;
     }
     if (current === root)
       break;
-    current = dirname2(current);
+    current = dirname3(current);
   }
   if (firstGitMatch !== null)
     return firstGitMatch;
@@ -12863,19 +13655,19 @@ async function resolveRepoRootForCreate(start = process.cwd(), homeDir = homedir
   }
 }
 async function ensureDir(path) {
-  await mkdir(path, { recursive: true });
+  await mkdir2(path, { recursive: true });
 }
 async function atomicWriteText(path, content) {
-  await ensureDir(dirname2(path));
-  const suffix = randomBytes(6).toString("hex");
+  await ensureDir(dirname3(path));
+  const suffix = randomBytes2(6).toString("hex");
   const tmp = `${path}.${process.pid}.${suffix}.tmp`;
   try {
-    await writeFile(tmp, content, "utf8");
-    await rename(tmp, path);
+    await writeFile2(tmp, content, "utf8");
+    await rename2(tmp, path);
   } catch (err) {
     if (await fileExists(tmp)) {
       try {
-        await unlink(tmp);
+        await unlink2(tmp);
       } catch {}
     }
     throw err;
@@ -12916,6 +13708,7 @@ async function writeJson(path, schema, value) {
 var RepoRootNotFoundError, SchemaValidationError;
 var init_fs = __esm(() => {
   init_shared();
+  init_worktree();
   RepoRootNotFoundError = class RepoRootNotFoundError extends Error {
     constructor(start) {
       super(`No .ditto or .git found from ${start} upward; cannot determine repo root`);
@@ -16075,11 +16868,11 @@ var acgReviewCommand = defineCommand({
 });
 
 // src/cli/commands/architecture.ts
-import { join as join11 } from "path";
+import { join as join13 } from "path";
 
 // src/acg/architecture/propose.ts
-import { readdir as readdir2 } from "fs/promises";
-import { join as join7, relative as relative2 } from "path";
+import { readdir as readdir4 } from "fs/promises";
+import { join as join9, relative as relative3 } from "path";
 
 // src/schemas/acg-architecture-spec.ts
 init_zod();
@@ -16125,18 +16918,18 @@ function buildCandidateSpec(obs, producedAt) {
 async function walkTsFiles(repoRoot, dir, acc) {
   let entries;
   try {
-    entries = await readdir2(dir, { withFileTypes: true });
+    entries = await readdir4(dir, { withFileTypes: true });
   } catch {
     return;
   }
   for (const e2 of entries) {
     if (e2.name === "node_modules" || e2.name.startsWith("."))
       continue;
-    const full = join7(dir, e2.name);
+    const full = join9(dir, e2.name);
     if (e2.isDirectory())
       await walkTsFiles(repoRoot, full, acc);
     else if (/\.[cm]?tsx?$/.test(e2.name) && !/\.(test|spec)\./.test(e2.name))
-      acc.push(relative2(repoRoot, full));
+      acc.push(relative3(repoRoot, full));
   }
 }
 async function observeArchitecture(repoRoot, sourceRoot, edgeAnalyzer) {
@@ -16175,10 +16968,10 @@ function ratifyCandidateSpec(candidate, opts) {
 }
 
 // src/acg/boundary/codeql-edges.ts
-import { join as join9 } from "path";
+import { join as join11 } from "path";
 
 // src/core/codeql/relations.ts
-import { dirname as dirname3, join as join8 } from "path";
+import { dirname as dirname4, join as join10 } from "path";
 
 // src/core/codeql/sarif.ts
 init_zod();
@@ -16657,7 +17450,7 @@ async function runRelationQuery(input, deps) {
   const binary = input.binary ?? CODEQL_BINARY2;
   const env2 = { set: {}, unset: ["LGTM_INDEX_FILTERS"] };
   if (!await deps.dirExists(input.dbPath)) {
-    await deps.ensureDir(dirname3(input.dbPath));
+    await deps.ensureDir(dirname4(input.dbPath));
     const buildMode = input.buildMode ?? selectBuildMode(input.language, input.buildCommand);
     const create = deps.spawn({
       binary,
@@ -16679,10 +17472,10 @@ async function runRelationQuery(input, deps) {
     }
   }
   await deps.ensureDir(input.workDir);
-  await deps.writeText(join8(input.workDir, "qlpack.yml"), qlpackYml(input.language));
-  const queryPath = join8(input.workDir, "relation.ql");
+  await deps.writeText(join10(input.workDir, "qlpack.yml"), qlpackYml(input.language));
+  const queryPath = join10(input.workDir, "relation.ql");
   await deps.writeText(queryPath, input.query);
-  const bqrsOut = join8(input.workDir, "relation.bqrs");
+  const bqrsOut = join10(input.workDir, "relation.bqrs");
   const run = deps.spawn({
     binary,
     args: buildQueryRunArgs({ dbPath: input.dbPath, queryPath, bqrsOut }),
@@ -16695,7 +17488,7 @@ async function runRelationQuery(input, deps) {
   if (runDone.exit_code !== 0) {
     throw new Error(`codeql query run failed (exit ${runDone.exit_code}${runDone.error ? `: ${runDone.error}` : ""})`);
   }
-  const csvOut = join8(input.workDir, "relation.csv");
+  const csvOut = join10(input.workDir, "relation.csv");
   const decode = deps.spawn({
     binary,
     args: buildBqrsDecodeArgs(bqrsOut, csvOut),
@@ -16739,8 +17532,8 @@ class CodeqlEdgeAnalyzer {
       repoRoot: this.config.repoRoot,
       sourceRoot: input.sourceRoot,
       language: this.config.language,
-      dbPath: join9(this.config.cacheDir, "db"),
-      workDir: join9(this.config.cacheDir, "q-edges"),
+      dbPath: join11(this.config.cacheDir, "db"),
+      workDir: join11(this.config.cacheDir, "q-edges"),
       query: renderEdgeQuery(input.changedFiles, this.config.language),
       ...this.config.buildMode ? { buildMode: this.config.buildMode } : {},
       ...this.config.buildCommand ? { buildCommand: this.config.buildCommand } : {},
@@ -16764,8 +17557,8 @@ class CodeqlEdgeAnalyzer {
 }
 
 // src/acg/internal-packages.ts
-import { readdir as readdir3 } from "fs/promises";
-import { join as join10, relative as relative3 } from "path";
+import { readdir as readdir5 } from "fs/promises";
+import { join as join12, relative as relative4 } from "path";
 
 // src/acg/boundary/boundary.ts
 function globToRegExp(glob) {
@@ -16886,17 +17679,17 @@ async function scanLocalJars(root, maxDepth = 6) {
       return;
     let entries;
     try {
-      entries = await readdir3(dir, { withFileTypes: true });
+      entries = await readdir5(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const e2 of entries) {
-      const full = join10(dir, e2.name);
+      const full = join12(dir, e2.name);
       if (e2.isDirectory()) {
         if (!SKIP_DIRS.has(e2.name))
           await walk(full, depth + 1);
       } else if (e2.isFile() && e2.name.endsWith(".jar")) {
-        out.push(relative3(root, full));
+        out.push(relative4(root, full));
       }
     }
   }
@@ -16908,7 +17701,7 @@ async function loadInternalPackages(repoRoot, specArg) {
     return (await readArchitectureSpec(specArg, acgArchitectureSpec)).internal_packages;
   }
   try {
-    const spec = await readArchitectureSpec(join10(repoRoot, ".ditto", "architecture-spec.json"), acgArchitectureSpec);
+    const spec = await readArchitectureSpec(join12(repoRoot, ".ditto", "architecture-spec.json"), acgArchitectureSpec);
     return spec.internal_packages;
   } catch {
     return [];
@@ -17036,13 +17829,13 @@ var architectureCommand = defineCommand({
           return;
         }
         const repoRoot = await resolveRepoRootForCreate();
-        const sourceRoot = args["source-root"] ?? join11(repoRoot, "src");
+        const sourceRoot = args["source-root"] ?? join13(repoRoot, "src");
         const edgeAnalyzer = new CodeqlEdgeAnalyzer({ language: "javascript", repoRoot, cacheDir: codeqlCacheDir(repoRoot, "javascript") }, makeRelationDeps());
         const obs = await observeArchitecture(repoRoot, sourceRoot, edgeAnalyzer);
         const candidate = buildCandidateSpec(obs, new Date().toISOString());
         if (args.write) {
-          await ensureDir(join11(repoRoot, ".ditto"));
-          await writeJson(join11(repoRoot, ".ditto", "architecture-spec.json"), acgArchitectureSpec, candidate);
+          await ensureDir(join13(repoRoot, ".ditto"));
+          await writeJson(join13(repoRoot, ".ditto", "architecture-spec.json"), acgArchitectureSpec, candidate);
         }
         if (format === "json") {
           writeJson2(candidate);
@@ -17086,7 +17879,7 @@ var architectureCommand = defineCommand({
         }
         try {
           const repoRoot = await resolveRepoRootForCreate();
-          const specPath = args.spec ?? join11(repoRoot, ".ditto", "architecture-spec.json");
+          const specPath = args.spec ?? join13(repoRoot, ".ditto", "architecture-spec.json");
           let candidate;
           try {
             candidate = await readArchitectureSpec(specPath, acgArchitectureSpec);
@@ -17158,7 +17951,7 @@ var architectureCommand = defineCommand({
         }
         try {
           const repoRoot = await resolveRepoRootForCreate();
-          const specPath = args.spec ?? join11(repoRoot, ".ditto", "architecture-spec.json");
+          const specPath = args.spec ?? join13(repoRoot, ".ditto", "architecture-spec.json");
           let existing;
           try {
             existing = await readArchitectureSpec(specPath, acgArchitectureSpec);
@@ -17166,7 +17959,7 @@ var architectureCommand = defineCommand({
             existing = undefined;
           }
           const next = withInternalPackages(existing, entries, new Date().toISOString());
-          await ensureDir(join11(repoRoot, ".ditto"));
+          await ensureDir(join13(repoRoot, ".ditto"));
           await writeJson(specPath, acgArchitectureSpec, next);
           if (format === "json") {
             writeJson2({ spec: specPath, internal_packages: next.internal_packages });
@@ -17419,7 +18212,7 @@ function validateNodeAddition(existing, newNodes, allowedAcceptanceIds) {
 }
 
 // src/core/autopilot-store.ts
-import { join as join12 } from "path";
+import { join as join14 } from "path";
 
 // src/schemas/autopilot.ts
 init_zod();
@@ -17545,10 +18338,10 @@ class AutopilotStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   graphPath(workItemId2) {
-    return join12(this.dir(workItemId2), "autopilot.json");
+    return join14(this.dir(workItemId2), "autopilot.json");
   }
   decisionsPath(workItemId2) {
-    return join12(this.dir(workItemId2), "autopilot-decisions.jsonl");
+    return join14(this.dir(workItemId2), "autopilot-decisions.jsonl");
   }
   async exists(workItemId2) {
     return Bun.file(this.graphPath(workItemId2)).exists();
@@ -18239,419 +19032,9 @@ function interfaceBaselineDriftGate(baseline, current) {
   return gate(reasons);
 }
 
-// src/core/id.ts
-import { randomBytes as randomBytes2 } from "crypto";
-var SUFFIX_LENGTH = 9;
-var SUFFIX_CHARSET = "abcdefghijklmnopqrstuvwxyz0123456789";
-function randomSuffix(length) {
-  const bytes = randomBytes2(length);
-  let out = "";
-  for (let i2 = 0;i2 < length; i2++) {
-    const byte = bytes[i2] ?? 0;
-    out += SUFFIX_CHARSET[byte % SUFFIX_CHARSET.length] ?? "a";
-  }
-  return out;
-}
-async function generateId(prefix, existsCheck, options = {}) {
-  const now = options.now ?? new Date;
-  const maxAttempts = options.maxAttempts ?? 8;
-  const yy = String(now.getUTCFullYear() % 100).padStart(2, "0");
-  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(now.getUTCDate()).padStart(2, "0");
-  const datePart = `${yy}${mm}${dd}`;
-  const randomLen = Math.max(SUFFIX_LENGTH - datePart.length, 3);
-  for (let attempt = 0;attempt < maxAttempts; attempt++) {
-    const candidate = `${prefix}_${datePart}${randomSuffix(randomLen)}`;
-    if (!await existsCheck(candidate))
-      return candidate;
-  }
-  throw new Error(`failed to generate unique ${prefix}_ id after ${maxAttempts} attempts; likely a clock or RNG issue`);
-}
-
-// src/core/work-item-store.ts
-init_zod();
-import { readdir as readdir4, rename as rename2, stat as stat2 } from "fs/promises";
-import { dirname as dirname4, join as join13 } from "path";
-
-// src/schemas/intent-metric.ts
-init_zod();
-init_common();
-var intentMetricHop = exports_external.enum(["H1", "H2", "H3"]).describe("Which intent-chain hop the drift was detected at (intentDriftGate H1/H2/H3)");
-var intentMetric = exports_external.object({
-  ts: isoDateTime,
-  work_item_id: workItemId,
-  kind: exports_external.literal("intent_drift").describe("Discriminator; only intent_drift is defined today"),
-  source: exports_external.enum(["stop_hook", "cli"]).describe("Where the measurement was taken (the Stop hook, or an explicit CLI run)"),
-  blocking_reasons: exports_external.array(exports_external.string()).default([]).describe("Blocking drift reasons (AC id-set scope grow/shrink)"),
-  advisories: exports_external.array(exports_external.string()).default([]).describe("Non-blocking drift advisories (goal/source_request string divergence)"),
-  hops: exports_external.array(intentMetricHop).default([]).describe("Distinct hops present in this event")
-}).describe("One line of .ditto/local/work-items/<id>/metrics.jsonl \u2014 a persisted drift event");
-
-// src/schemas/language-ledger.ts
-init_zod();
-init_common();
-var languageChange = exports_external.object({
-  op: exports_external.enum(["add", "modify", "deprecate", "alias"]).describe("What kind of glossary change this entry records"),
-  term: exports_external.string().min(1),
-  before: exports_external.string().optional().describe("Prior definition or surface form, if applicable"),
-  after: exports_external.string().optional().describe("New definition or surface form, if applicable"),
-  rationale: exports_external.string().min(1).describe("Why the change is needed; cite user statement when available"),
-  proposed_by: exports_external.string().min(1).describe("User handle or agent profile that proposed it"),
-  agreed_with_user: exports_external.boolean().describe("True only after explicit user confirmation; defaults to false on creation"),
-  decided_at: isoDateTime.optional()
-}).superRefine((value, ctx) => {
-  if (value.agreed_with_user === true && value.decided_at === undefined) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "agreed_with_user=true requires decided_at (confirmation timestamp)",
-      path: ["decided_at"]
-    });
-  }
-}).describe("One change to project language as observed during a work item");
-var languageLedger = exports_external.object({
-  schema_version: schemaVersion,
-  work_item_id: workItemId,
-  created_at: isoDateTime,
-  updated_at: isoDateTime,
-  changes: exports_external.array(languageChange).default([])
-}).describe("Per-work-item record of language negotiations; merged into glossary once agreed");
-
-// src/schemas/tech-spec-round.ts
-init_zod();
-init_common();
-var questionProperty = exports_external.enum(["blind-spot", "expansion", "orientation"]).describe("Which good-question property the candidate carries (SKILL.md \xA7good questions)");
-var questionScore = exports_external.object({
-  consensus: exports_external.number().int().nonnegative().describe("How many generators independently raised this question (necessity signal)"),
-  quality: exports_external.number().min(0).max(1).describe("Meets the three good-question properties [0..1]"),
-  necessity: exports_external.number().min(0).max(1).describe("Still open given the fixed facts [0..1]"),
-  answer_value: exports_external.number().min(0).max(1).describe("How much the spec changes depending on the answer [0..1]")
-}).describe("The gate 4-dimension score for one candidate question");
-var scoredQuestion = exports_external.object({
-  text: exports_external.string().min(1),
-  property: questionProperty,
-  why_matters: exports_external.string().optional(),
-  scores: questionScore,
-  rationale: exports_external.string().optional().describe("Why selected (present on selected questions)")
-}).describe("One candidate question with its gate score");
-var techSpecRoundPayload = exports_external.object({
-  round: exports_external.number().int().positive().describe("1-based round index within the interview"),
-  section: exports_external.string().optional().describe("Target spec section this round filled"),
-  generator_count: exports_external.number().int().positive().default(2).describe("N generators fanned out (--generators default 2, range 1..6; wi_260619yfw)"),
-  threshold: exports_external.number().optional().describe("Fixed selection threshold used this round (\xA79 #4)"),
-  dry: exports_external.boolean().describe("Gate found no candidate above the threshold \u2192 round/interview ends (\xA79 #4)"),
-  selected: exports_external.array(scoredQuestion).default([]).describe("Questions selected to ask the user"),
-  all_scored: exports_external.array(scoredQuestion).default([]).describe("Every candidate with its score (durable score trail for later tuning)")
-}).superRefine((val, ctx) => {
-  if (val.dry && val.selected.length > 0) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      path: ["selected"],
-      message: "dry=true \uB77C\uC6B4\uB4DC\uB294 selected\uAC00 \uBE44\uC5B4 \uC788\uC5B4\uC57C \uD55C\uB2E4 (\uC784\uACC4 \uC774\uC0C1 \uC9C8\uBB38 \uBD80\uC7AC\uAC00 dry\uC758 \uC815\uC758)"
-    });
-  }
-  if (!val.dry && val.selected.length === 0) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      path: ["dry"],
-      message: "selected\uAC00 \uBE44\uC5B4 \uC788\uC73C\uBA74 dry=true\uC5EC\uC57C \uD55C\uB2E4 (\uC120\uC815\uB41C \uC9C8\uBB38\uC774 \uC5C6\uB294 \uB77C\uC6B4\uB4DC\uB294 dry)"
-    });
-  }
-});
-var techSpecRound = exports_external.object({
-  ts: isoDateTime,
-  work_item_id: workItemId,
-  round: exports_external.number().int().positive(),
-  section: exports_external.string().optional(),
-  generator_count: exports_external.number().int().positive().default(2),
-  threshold: exports_external.number().optional(),
-  dry: exports_external.boolean(),
-  selected: exports_external.array(scoredQuestion).default([]),
-  all_scored: exports_external.array(scoredQuestion).default([])
-}).describe("One line of .ditto/local/work-items/<id>/tech-spec-rounds.jsonl");
-
-// src/schemas/work-item.ts
-init_zod();
-init_common();
-var gitSha40 = exports_external.string().regex(/^[a-f0-9]{40}$/, "git sha must be 40 lowercase hex characters").describe("Full 40-char git commit sha");
-var verificationMethod = exports_external.enum(["dynamic_test", "static_scan", "soft_judgment"]).describe("Re-evaluability class of the oracle (ADR-0024 \xA73.1: hard\xB7dynamic / hard\xB7static / soft\xB7judgment). Distinct from evidenceRequiredKind (intent.ts), which is the kind of evidence, not its re-evaluability.");
-var codePointerMapsTo = /^[^\s]+\.[A-Za-z0-9]+:[^\s]+$/;
-var acOracle = exports_external.object({
-  verification_method: verificationMethod,
-  maps_to: exports_external.string().min(1).describe("AC, file:line, intent, or doc the oracle anchors to (same vocabulary as dialectic maps_to)"),
-  direction: exports_external.enum(["forward", "backward"]).describe("forward = post-change final state; backward = current-code finding (ADR-0024 \xA73.0)")
-}).superRefine((value, ctx) => {
-  if (value.direction === "forward" && codePointerMapsTo.test(value.maps_to)) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "forward oracle must be re-evaluable: a code-pointer maps_to (file:line / symbol) drifts on change \u2014 use direction=backward for a current-code finding (ADR-0024 \xA73.0)",
-      path: ["maps_to"]
-    });
-  }
-}).describe("Per-AC oracle: re-evaluable verification method + anchor target (ADR-0024 \xA73)");
-var acceptanceCriterion = exports_external.object({
-  id: exports_external.string().min(1).describe("Stable id within the work item (e.g., ac-1)"),
-  statement: exports_external.string().min(1).describe("Single observable behavior in user-facing terms"),
-  verdict: verdict.default("unverified"),
-  evidence: exports_external.array(evidenceRef).default([]),
-  oracle: acOracle.optional()
-}).describe("One acceptance criterion with its verification verdict");
-var workItemWorktree = exports_external.object({
-  owning_repo: exports_external.string().min(1).describe("'.' for the workspace repo, else the sub-repo path relative to the workspace root"),
-  worktree_path: relativePath.describe("Worktree checkout path, relative to the workspace repo root"),
-  branch: exports_external.string().min(1).describe("Branch checked out in this worktree")
-}).describe("One git worktree+branch DITTO created for a work item (one per owning repo)");
-var riskNote = exports_external.object({
-  description: exports_external.string().min(1),
-  severity: exports_external.enum(["info", "low", "medium", "high", "critical"]).default("low"),
-  mitigation: exports_external.string().optional()
-}).describe("Outstanding risk that did not block completion but remains relevant");
-var reEntry = exports_external.object({
-  command: exports_external.string().optional().describe("Concrete next command to resume work"),
-  fresh_evidence_needed: exports_external.array(exports_external.string()).default([]).describe("What new evidence must be gathered before the next attempt"),
-  owner: exports_external.string().optional().describe("Profile or human handle expected to resume")
-}).describe("Instructions for resuming a partial/unverified/blocked work item");
-var workItem = exports_external.object({
-  schema_version: schemaVersion,
-  id: workItemId,
-  title: exports_external.string().min(1).max(200),
-  source_request: exports_external.string().min(1).describe("Verbatim or close-paraphrase of the original user request"),
-  goal: exports_external.string().min(1).describe("Observable outcome stated in project terms; not a list of steps"),
-  acceptance_criteria: exports_external.array(acceptanceCriterion).min(1),
-  status: workItemStatus.default("draft"),
-  owner_profile: profileName.default("workspace-write"),
-  parent_id: workItemId.optional().describe("Parent work item if this is a child task"),
-  child_ids: exports_external.array(workItemId).default([]),
-  changed_files: exports_external.array(relativePath).default([]),
-  worktrees: exports_external.array(workItemWorktree).default([]),
-  autopilot_exempt: exports_external.boolean().optional().describe("Allow closing on completion.json alone without going through autopilot"),
-  risks: exports_external.array(riskNote).default([]),
-  re_entry: reEntry.optional(),
-  runs: exports_external.array(runId).default([]),
-  handoff_path: relativePath.optional(),
-  language_overrides: relativePath.optional().describe("Path to language.md if this work item modifies the glossary"),
-  started_at_sha: gitSha40.optional().describe("Git HEAD sha at the time this work item transitioned draft \u2192 in_progress; used as default base for handoff diff collection"),
-  created_at: isoDateTime,
-  updated_at: isoDateTime,
-  closed_at: isoDateTime.optional()
-}).superRefine((value, ctx) => {
-  const needsReEntry = ["partial", "unverified", "blocked"].includes(value.status);
-  if (!needsReEntry)
-    return;
-  if (!value.re_entry) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: `status=${value.status} requires re_entry with command or fresh_evidence_needed`,
-      path: ["re_entry"]
-    });
-    return;
-  }
-  const hasCommand = typeof value.re_entry.command === "string" && value.re_entry.command.length > 0;
-  const hasEvidence = value.re_entry.fresh_evidence_needed.length > 0;
-  if (!hasCommand && !hasEvidence) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: `status=${value.status} requires re_entry.command or non-empty re_entry.fresh_evidence_needed`,
-      path: ["re_entry"]
-    });
-  }
-}).describe("Authoritative state for a single DITTO work item");
-
-// src/core/work-item-store.ts
-init_ditto_paths();
-init_fs();
-function tryGitHeadSha(repoRoot) {
-  const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
-    cwd: repoRoot,
-    stdout: "pipe",
-    stderr: "pipe"
-  });
-  if (proc.exitCode !== 0)
-    return null;
-  const sha = (proc.stdout?.toString() ?? "").trim();
-  if (!/^[a-f0-9]{40}$/.test(sha))
-    return null;
-  return sha;
-}
-
-class WorkItemStore {
-  repoRoot;
-  constructor(repoRoot) {
-    this.repoRoot = repoRoot;
-  }
-  workItemDir(id) {
-    return localDir(this.repoRoot, "work-items", id);
-  }
-  workItemPath(id) {
-    return join13(this.workItemDir(id), "work-item.json");
-  }
-  languageLedgerPath(id) {
-    return join13(this.workItemDir(id), "language-ledger.json");
-  }
-  async exists(id) {
-    try {
-      await stat2(this.workItemPath(id));
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  async create(input, now = new Date) {
-    const id = await generateId("wi", (candidate) => this.exists(candidate));
-    const nowIso = now.toISOString();
-    const draft = {
-      schema_version: "0.1.0",
-      id,
-      title: input.title,
-      source_request: input.source_request,
-      goal: input.goal,
-      acceptance_criteria: input.acceptance_criteria,
-      status: "draft",
-      owner_profile: input.owner_profile ?? "workspace-write",
-      ...input.parent_id !== undefined ? { parent_id: input.parent_id } : {},
-      child_ids: [],
-      changed_files: [],
-      risks: [],
-      runs: [],
-      created_at: nowIso,
-      updated_at: nowIso
-    };
-    await ensureDir(join13(this.workItemDir(id), "evidence"));
-    const written = await writeJson(this.workItemPath(id), workItem, draft);
-    await writeJson(this.languageLedgerPath(id), languageLedger, {
-      schema_version: "0.1.0",
-      work_item_id: id,
-      created_at: nowIso,
-      updated_at: nowIso,
-      changes: []
-    });
-    return written;
-  }
-  async get(id) {
-    return readJson(this.workItemPath(id), workItem);
-  }
-  async update(id, mutator) {
-    const current = await this.get(id);
-    const next = mutator(current);
-    if (next.id !== current.id) {
-      throw new Error(`update mutator changed work item id from ${current.id} to ${next.id}`);
-    }
-    let withSha = next;
-    if (next.status === "in_progress" && next.started_at_sha === undefined) {
-      const sha = tryGitHeadSha(this.repoRoot);
-      if (sha !== null) {
-        withSha = { ...next, started_at_sha: sha };
-      }
-    }
-    const withTouched = { ...withSha, updated_at: new Date().toISOString() };
-    return writeJson(this.workItemPath(id), workItem, withTouched);
-  }
-  async close(id, terminal, now = new Date) {
-    return this.update(id, (cur) => ({
-      ...cur,
-      status: terminal,
-      closed_at: now.toISOString()
-    }));
-  }
-  async archive(label) {
-    if (!/^[A-Za-z0-9._-]+$/.test(label) || label === "." || label === "..") {
-      throw new Error(`archive label must be a safe path segment ([A-Za-z0-9._-]+, not '.' or '..'; got: ${label})`);
-    }
-    const targets = (await this.list()).filter((s2) => s2.status === "done" || s2.status === "abandoned");
-    if (targets.length === 0)
-      return [];
-    const archiveBase = localDir(this.repoRoot, "archive", label);
-    await ensureDir(archiveBase);
-    for (const t2 of targets) {
-      await rename2(this.workItemDir(t2.id), join13(archiveBase, t2.id));
-    }
-    return targets.map((t2) => t2.id);
-  }
-  async list() {
-    const base = localDir(this.repoRoot, "work-items");
-    let entries;
-    try {
-      entries = await readdir4(base);
-    } catch {
-      return [];
-    }
-    const summaries = [];
-    for (const name of entries) {
-      const dir = join13(base, name);
-      let s2;
-      try {
-        s2 = await stat2(dir);
-      } catch {
-        continue;
-      }
-      if (!s2.isDirectory())
-        continue;
-      try {
-        const item = await readJson(join13(dir, "work-item.json"), workItem);
-        summaries.push({
-          id: item.id,
-          title: item.title,
-          status: item.status,
-          updated_at: item.updated_at
-        });
-      } catch {}
-    }
-    summaries.sort((a2, b2) => a2.updated_at < b2.updated_at ? 1 : -1);
-    return summaries;
-  }
-  async appendJsonlAtPath(path, jsonLine) {
-    await ensureDir(dirname4(path));
-    const file = Bun.file(path);
-    const existing = await file.exists() ? await file.text() : "";
-    const trimmedExisting = existing.endsWith(`
-`) || existing.length === 0 ? existing : `${existing}
-`;
-    await atomicWriteText(path, `${trimmedExisting}${jsonLine}
-`);
-  }
-  async appendEvidenceJsonl(workItemId2, filename, jsonLine) {
-    return this.appendJsonlAtPath(join13(this.workItemDir(workItemId2), "evidence", filename), jsonLine);
-  }
-  async appendCommandLogLine(workItemId2, jsonLine) {
-    return this.appendEvidenceJsonl(workItemId2, "commands.jsonl", jsonLine);
-  }
-  async appendEditLogLine(workItemId2, jsonLine) {
-    return this.appendEvidenceJsonl(workItemId2, "edits.jsonl", jsonLine);
-  }
-  metricsPath(workItemId2) {
-    return join13(this.workItemDir(workItemId2), "metrics.jsonl");
-  }
-  async appendMetricLine(workItemId2, jsonLine) {
-    return this.appendJsonlAtPath(this.metricsPath(workItemId2), jsonLine);
-  }
-  async readMetrics(workItemId2) {
-    const file = Bun.file(this.metricsPath(workItemId2));
-    if (!await file.exists())
-      return [];
-    const text = await file.text();
-    return text.split(`
-`).filter((line) => line.trim().length > 0).map((line) => intentMetric.parse(JSON.parse(line)));
-  }
-  techSpecRoundsPath(workItemId2) {
-    return join13(this.workItemDir(workItemId2), "tech-spec-rounds.jsonl");
-  }
-  async appendTechSpecRoundLine(workItemId2, jsonLine) {
-    return this.appendJsonlAtPath(this.techSpecRoundsPath(workItemId2), jsonLine);
-  }
-  async readTechSpecRounds(workItemId2) {
-    const file = Bun.file(this.techSpecRoundsPath(workItemId2));
-    if (!await file.exists())
-      return [];
-    const text = await file.text();
-    return text.split(`
-`).filter((line) => line.trim().length > 0).map((line) => techSpecRound.parse(JSON.parse(line)));
-  }
-}
-var acceptanceCriterionInputSchema = exports_external.object({
-  id: exports_external.string().min(1),
-  statement: exports_external.string().min(1)
-}).passthrough();
-
 // src/core/autopilot-bootstrap.ts
+init_id();
+init_work_item_store();
 function approvalGate(input) {
   const base = { approved_at: null, approved_by: null, evidence_refs: [] };
   if (input.approvedSource) {
@@ -18732,353 +19115,8 @@ async function bootstrapAutopilot(repoRoot, input) {
   return { status: "created", graph: written };
 }
 
-// src/core/worktree.ts
-init_ditto_paths();
-init_fs();
-import { execFileSync as execFileSync2 } from "child_process";
-import { realpathSync } from "fs";
-import { mkdir as mkdir2, readFile, readdir as readdir5, rmdir, stat as stat3, unlink as unlink2, writeFile as writeFile2 } from "fs/promises";
-import { join as join14, relative as relative4, sep as sep2 } from "path";
-
-// src/core/git.ts
-import { execFileSync } from "child_process";
-function captureGitState(cwd) {
-  let head = "0".repeat(40);
-  let branch = "";
-  let dirty = false;
-  let untracked_count = 0;
-  try {
-    head = execFileSync("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8" }).trim();
-  } catch {}
-  try {
-    branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-      cwd,
-      encoding: "utf8"
-    }).trim();
-  } catch {}
-  try {
-    const status = execFileSync("git", ["status", "--porcelain"], { cwd, encoding: "utf8" });
-    const lines = status.split(`
-`).filter((line) => line.length > 0);
-    dirty = lines.length > 0;
-    untracked_count = lines.filter((line) => line.startsWith("??")).length;
-  } catch {}
-  return { head, branch, dirty, untracked_count };
-}
-function listChangedFiles(cwd, options = {}) {
-  try {
-    const status = execFileSync("git", ["status", "--porcelain"], { cwd, encoding: "utf8" });
-    return status.split(`
-`).filter((line) => line.length > 0).map((line) => line.slice(3).trim()).filter((path) => path.length > 0).filter((path) => !options.excludeDittoRuns || !path.startsWith(".ditto/local/runs/")).sort();
-  } catch {
-    return [];
-  }
-}
-function listChangedFilesVsRef(cwd, ref) {
-  try {
-    const out = execFileSync("git", ["diff", "--name-only", ref, "--"], { cwd, encoding: "utf8" });
-    return out.split(`
-`).map((l2) => l2.trim()).filter((p) => p.length > 0).sort();
-  } catch {
-    return [];
-  }
-}
-function diffVsRef(cwd, ref) {
-  try {
-    return execFileSync("git", ["diff", ref, "--"], { cwd, encoding: "utf8" });
-  } catch {
-    return "";
-  }
-}
-function gitRevParse(cwd, ref) {
-  return execFileSync("git", ["rev-parse", ref], { cwd, encoding: "utf8" }).trim();
-}
-function isWorkingTreeClean(cwd) {
-  try {
-    return execFileSync("git", ["status", "--porcelain"], { cwd, encoding: "utf8" }).trim() === "";
-  } catch {
-    return false;
-  }
-}
-function addDetachedWorktree(cwd, path, ref) {
-  execFileSync("git", ["worktree", "add", "--detach", "--force", path, ref], {
-    cwd,
-    stdio: ["ignore", "ignore", "pipe"]
-  });
-}
-function removeWorktree(cwd, path) {
-  try {
-    execFileSync("git", ["worktree", "remove", "--force", path], {
-      cwd,
-      stdio: ["ignore", "ignore", "pipe"]
-    });
-  } catch {}
-}
-function captureGitDiff(cwd) {
-  try {
-    return execFileSync("git", ["diff", "--binary", "HEAD"], { cwd, encoding: "utf8" });
-  } catch {
-    try {
-      return execFileSync("git", ["diff", "--binary"], { cwd, encoding: "utf8" });
-    } catch {
-      return "";
-    }
-  }
-}
-
-// src/core/worktree.ts
-init_shared();
-async function createWorktreeForRun(repoRoot, runId2) {
-  const relativePath2 = `${RUN_WORKTREE_PREFIX}${runId2}`;
-  const absolutePath = localDir(repoRoot, "worktrees", runId2);
-  await ensureDir(localDir(repoRoot, "worktrees"));
-  execFileSync2("git", ["worktree", "add", "--detach", absolutePath, "HEAD"], {
-    cwd: repoRoot,
-    stdio: ["ignore", "ignore", "pipe"]
-  });
-  return { absolutePath, relativePath: relativePath2 };
-}
-var RUN_WORKTREE_PREFIX = ".ditto/local/worktrees/";
-function toPosixSeparators(p, fromSep = sep2) {
-  return p.split(fromSep).join("/");
-}
-function listRunWorktrees(repoRoot) {
-  const out = execFileSync2("git", ["worktree", "list", "--porcelain"], {
-    cwd: repoRoot,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-  const root = realpathSync(repoRoot);
-  const paths = [];
-  for (const line of out.split(`
-`)) {
-    if (!line.startsWith("worktree "))
-      continue;
-    const abs = line.slice("worktree ".length).trim();
-    const rel = toPosixSeparators(relative4(root, abs));
-    if (rel.startsWith(RUN_WORKTREE_PREFIX))
-      paths.push(rel);
-  }
-  return paths;
-}
-function removeRunWorktree(repoRoot, relativePath2) {
-  execFileSync2("git", ["worktree", "remove", relativePath2], {
-    cwd: repoRoot,
-    stdio: ["ignore", "ignore", "pipe"]
-  });
-}
-var WORK_ITEM_BRANCH_PREFIX = "ditto/";
-function assertSafeArg(value, label) {
-  if (value.startsWith("-")) {
-    throw new Error(`${label} must not start with '-' (git option injection): ${value}`);
-  }
-}
-function detectBaseBranch(cwd) {
-  try {
-    const ref = execFileSync2("git", ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], {
-      cwd,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"]
-    }).trim();
-    if (ref.length > 0)
-      return ref;
-  } catch {}
-  return execFileSync2("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-    cwd,
-    encoding: "utf8"
-  }).trim();
-}
-async function detectSubRepos(repoRoot) {
-  let entries;
-  try {
-    entries = await readdir5(repoRoot, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const subs = [];
-  for (const e2 of entries) {
-    if (!e2.isDirectory() || e2.name.startsWith("."))
-      continue;
-    if (await fileExists(join14(repoRoot, e2.name, ".git")))
-      subs.push(e2.name);
-  }
-  return subs.sort();
-}
-var PID_WRITE_GRACE_MS = 2000;
-async function classifyLockHolder(lockPath) {
-  let raw;
-  try {
-    raw = await readFile(join14(lockPath, "pid"), "utf8");
-  } catch {
-    try {
-      const age = Date.now() - (await stat3(lockPath)).mtimeMs;
-      return age < PID_WRITE_GRACE_MS ? "alive" : "empty-stale";
-    } catch {
-      return "alive";
-    }
-  }
-  const pid = Number.parseInt(raw.trim(), 10);
-  if (!Number.isInteger(pid) || pid <= 0)
-    return "alive";
-  try {
-    process.kill(pid, 0);
-    return "alive";
-  } catch (err) {
-    return err.code === "EPERM" ? "alive" : "dead-pid";
-  }
-}
-async function withWorktreeLock(repoRoot, fn) {
-  const dir = localDir(repoRoot, "worktrees");
-  await ensureDir(dir);
-  const lockPath = join14(dir, ".lock");
-  const pidPath = join14(lockPath, "pid");
-  const deadlineMs = 30000;
-  const start = Date.now();
-  while (true) {
-    try {
-      await mkdir2(lockPath);
-      await writeFile2(pidPath, String(process.pid), "utf8");
-      break;
-    } catch (err) {
-      if (err.code !== "EEXIST")
-        throw err;
-      const state = await classifyLockHolder(lockPath);
-      if (state === "dead-pid") {
-        await unlink2(pidPath).catch(() => {});
-        await rmdir(lockPath).catch(() => {});
-        continue;
-      }
-      if (state === "empty-stale") {
-        await rmdir(lockPath).catch(() => {});
-        continue;
-      }
-      if (Date.now() - start > deadlineMs) {
-        throw new Error(`worktree lock held >${deadlineMs}ms (${lockPath}); another worktree op in flight`);
-      }
-      await new Promise((resolve3) => setTimeout(resolve3, 15));
-    }
-  }
-  try {
-    return await fn();
-  } finally {
-    await unlink2(pidPath).catch(() => {});
-    await rmdir(lockPath).catch(() => {});
-  }
-}
-function addWorktree(cwd, branch, absPath, base) {
-  execFileSync2("git", ["worktree", "add", "-b", branch, "--", absPath, base], {
-    cwd,
-    stdio: ["ignore", "ignore", "pipe"]
-  });
-}
-async function createWorktreeForWorkItem(repoRoot, workItemId2) {
-  assertSafeArg(workItemId2, "work item id");
-  const branch = `${WORK_ITEM_BRANCH_PREFIX}${workItemId2}`;
-  return withWorktreeLock(repoRoot, async () => {
-    const workspaceRel = `${RUN_WORKTREE_PREFIX}${workItemId2}`;
-    const workspaceAbs = localDir(repoRoot, "worktrees", workItemId2);
-    await ensureDir(localDir(repoRoot, "worktrees"));
-    const created = [];
-    const meta = [];
-    try {
-      addWorktree(repoRoot, branch, workspaceAbs, detectBaseBranch(repoRoot));
-      created.push({ cwd: repoRoot, abs: workspaceAbs, branch });
-      meta.push({ owning_repo: ".", worktree_path: workspaceRel, branch });
-      for (const sub of await detectSubRepos(repoRoot)) {
-        assertSafeArg(sub, "sub-repo name");
-        const subMainCheckout = join14(repoRoot, sub);
-        const subAbs = join14(workspaceAbs, sub);
-        addWorktree(subMainCheckout, branch, subAbs, detectBaseBranch(subMainCheckout));
-        created.push({ cwd: subMainCheckout, abs: subAbs, branch });
-        meta.push({ owning_repo: sub, worktree_path: `${workspaceRel}/${sub}`, branch });
-      }
-    } catch (err) {
-      for (const c3 of [...created].reverse()) {
-        try {
-          execFileSync2("git", ["worktree", "remove", "--force", "--", c3.abs], {
-            cwd: c3.cwd,
-            stdio: ["ignore", "ignore", "ignore"]
-          });
-        } catch {}
-        try {
-          execFileSync2("git", ["branch", "-D", "--", c3.branch], {
-            cwd: c3.cwd,
-            stdio: ["ignore", "ignore", "ignore"]
-          });
-        } catch {}
-      }
-      throw err;
-    }
-    const store = new WorkItemStore(repoRoot);
-    await store.update(workItemId2, (cur) => ({ ...cur, worktrees: meta }));
-    return meta;
-  });
-}
-function branchHasUnmergedCommits(cwd, branch) {
-  try {
-    const head = execFileSync2("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8" }).trim();
-    const tip = execFileSync2("git", ["rev-parse", branch], { cwd, encoding: "utf8" }).trim();
-    try {
-      execFileSync2("git", ["merge-base", "--is-ancestor", tip, head], {
-        cwd,
-        stdio: ["ignore", "ignore", "ignore"]
-      });
-      return false;
-    } catch {
-      return true;
-    }
-  } catch {
-    return true;
-  }
-}
-async function removeWorktreesForWorkItem(repoRoot, workItemId2, opts = {}) {
-  assertSafeArg(workItemId2, "work item id");
-  const force = opts.force ?? false;
-  return withWorktreeLock(repoRoot, async () => {
-    const store = new WorkItemStore(repoRoot);
-    const item = await store.get(workItemId2);
-    const ordered = [...item.worktrees].sort((a2, b2) => (a2.owning_repo === "." ? 1 : 0) - (b2.owning_repo === "." ? 1 : 0));
-    const removed = [];
-    const blocked = [];
-    for (const wt of ordered) {
-      const ownerCwd = wt.owning_repo === "." ? repoRoot : join14(repoRoot, wt.owning_repo);
-      const wtAbs = join14(repoRoot, wt.worktree_path);
-      const dirty = !isWorkingTreeClean(wtAbs);
-      const unmerged = branchHasUnmergedCommits(ownerCwd, wt.branch);
-      if ((dirty || unmerged) && !force) {
-        const why = [dirty ? "uncommitted changes" : null, unmerged ? "unmerged commits" : null].filter(Boolean).join(" + ");
-        blocked.push({ worktree: wt, reason: `${why}; refusing to delete without --force` });
-        continue;
-      }
-      try {
-        const removeArgs = ["worktree", "remove"];
-        if (force)
-          removeArgs.push("--force");
-        removeArgs.push("--", wtAbs);
-        execFileSync2("git", removeArgs, { cwd: ownerCwd, stdio: ["ignore", "ignore", "pipe"] });
-        execFileSync2("git", ["branch", force ? "-D" : "-d", "--", wt.branch], {
-          cwd: ownerCwd,
-          stdio: ["ignore", "ignore", "pipe"]
-        });
-        removed.push(wt);
-      } catch (err) {
-        blocked.push({
-          worktree: wt,
-          reason: err instanceof Error ? err.message : String(err)
-        });
-      }
-    }
-    if (removed.length > 0) {
-      await store.update(workItemId2, (cur) => ({
-        ...cur,
-        worktrees: cur.worktrees.filter((w2) => !removed.some((r3) => r3.worktree_path === w2.worktree_path))
-      }));
-    }
-    return { removed, blocked };
-  });
-}
-
 // src/core/autopilot-cleanup.ts
+init_worktree();
 function planCleanup(repoRoot) {
   return { worktrees: listRunWorktrees(repoRoot) };
 }
@@ -20166,6 +20204,9 @@ var decisionConflictCarrier = exports_external.object({
   conflicts: exports_external.array(decisionConflict).default([])
 }).describe("Persisted inputs to decisionConflictGate, written by the detecting node");
 
+// src/core/autopilot-loop.ts
+init_work_item();
+
 // src/core/active-node-lease.ts
 init_zod();
 init_common();
@@ -20661,8 +20702,10 @@ function planTidyOnImplementPass(input) {
 // src/core/completion-coverage-doctor.ts
 import { readdir as readdir8 } from "fs/promises";
 import { join as join21 } from "path";
+init_work_item();
 init_ditto_paths();
 init_fs();
+init_work_item_store();
 function isClosed2(ac) {
   const hasEvidence = (ac.evidence?.length ?? 0) > 0 || (ac.evidence_records?.length ?? 0) > 0;
   return ac.verdict === "pass" && hasEvidence;
@@ -21141,6 +21184,7 @@ var handoff = exports_external.object({
 // src/core/handoff-store.ts
 init_ditto_paths();
 init_fs();
+init_work_item_store();
 function buildHandoff(input) {
   return handoff.parse({
     schema_version: "0.1.0",
@@ -21322,6 +21366,7 @@ import { join as join24 } from "path";
 // src/schemas/intent.ts
 init_zod();
 init_common();
+init_work_item();
 var evidenceRequiredKind = exports_external.enum(["test", "diff", "browser", "doc", "log"]).describe("Kind of evidence required to verify an acceptance criterion");
 var questionPolicy = exports_external.enum(["ask_only_if_user_only_can_answer", "ask_freely", "never_ask"]).default("ask_only_if_user_only_can_answer").describe("How freely the agent may ask the user questions for this work item");
 var intentAcceptanceCriterion = acceptanceCriterion.extend({
@@ -21389,6 +21434,8 @@ function isMemoryEnabled() {
 
 // src/core/memory-project.ts
 init_memory_event();
+init_git();
+init_id();
 import { resolve as resolve4 } from "path";
 
 // src/core/memory-ir.ts
@@ -22817,6 +22864,9 @@ var interviewState = exports_external.object({
   })
 }).describe("Deep interview sidecar tracking ambiguity dimensions and readiness (\xA76.3)");
 
+// src/core/tech-spec.ts
+init_tech_spec_round();
+
 // src/schemas/tech-spec-state.ts
 init_zod();
 init_common();
@@ -22986,6 +23036,7 @@ class TechSpecStore {
 }
 
 // src/core/tech-spec.ts
+init_work_item_store();
 var SPEC_SECTIONS = [
   { id: "feature", title: "\uAE30\uB2A5" },
   { id: "summary", title: "\uC694\uC57D" },
@@ -23320,6 +23371,7 @@ async function finalizeTechSpec(repoRoot, input) {
 }
 
 // src/core/autopilot-loop.ts
+init_work_item_store();
 function isMutatingNode(node2) {
   return isMutatingOwner(node2.owner);
 }
@@ -24292,6 +24344,7 @@ async function detectActiveConflicts(repoRoot, input) {
 // src/core/coverage-loop.ts
 init_ditto_paths();
 init_fs();
+init_work_item_store();
 function dryCounterPath(repoRoot, workItemId2) {
   return localDir(repoRoot, "runs", workItemId2, "coverage-dry-counter");
 }
@@ -25622,6 +25675,7 @@ async function checkE2eCompletionGate(repoRoot, input) {
 
 // src/cli/commands/autopilot.ts
 init_fs();
+init_work_item_store();
 var autopilotBootstrap = defineCommand({
   meta: {
     name: "bootstrap",
@@ -29437,6 +29491,7 @@ function sha256Hex2(content) {
 
 // src/cli/commands/codeql.ts
 init_fs();
+init_id();
 async function drainStream2(stream) {
   return new Response(stream).text();
 }
@@ -29599,6 +29654,7 @@ var codeqlCommand = defineCommand({
 // src/core/context-packet.ts
 init_common();
 init_fs();
+init_git();
 import { join as join55 } from "path";
 
 // src/core/run-store.ts
@@ -29649,6 +29705,8 @@ var runManifest = exports_external.object({
 // src/core/run-store.ts
 init_ditto_paths();
 init_fs();
+init_id();
+
 class RunStore {
   repoRoot;
   constructor(repoRoot) {
@@ -29708,6 +29766,8 @@ class RunStore {
 }
 
 // src/core/context-packet.ts
+init_work_item_store();
+
 class ContextBuildUsageError extends Error {
   constructor(message) {
     super(message);
@@ -30274,6 +30334,7 @@ init_fs();
 
 // src/core/interview-driver.ts
 init_zod();
+init_work_item_store();
 var DEFAULT_THRESHOLD = 0.7;
 var DEFAULT_QUESTION_CAP = 8;
 var DEFAULT_GENERATORS = 1;
@@ -30628,6 +30689,7 @@ function validateQuestionContext(candidate) {
 }
 
 // src/cli/commands/deep-interview.ts
+init_work_item_store();
 function parseJsonArg(raw) {
   try {
     return JSON.parse(raw);
@@ -31663,6 +31725,7 @@ function defaultDoctorFixDeps(repoRoot, homeDir) {
 init_fs();
 
 // src/core/intent-quality-doctor.ts
+init_work_item_store();
 function defaultIntentQualityDeps(repoRoot) {
   const workItems = new WorkItemStore(repoRoot);
   const interviews = new InterviewStore(repoRoot);
@@ -33852,6 +33915,7 @@ function commandProvider(repoRoot) {
 // src/acg/fitness/drift.ts
 init_ditto_paths();
 init_fs();
+init_work_item_store();
 function assessDrift(report, minNewViolations = 0) {
   const concerning = report.functions.filter((f3) => f3.direction === "rising" && f3.cumulative_new_violations >= minNewViolations);
   return {
@@ -34408,6 +34472,9 @@ class SessionPointerStore {
   }
 }
 
+// src/hooks/post-tool-use.ts
+init_work_item_store();
+
 // src/hooks/envelope.ts
 var APPLY_PATCH_HEADER = /^\s*\*\*\* (?:Add File|Update File|Delete File|Move to):\s*(.+?)\s*$/;
 function parseApplyPatchPaths(command) {
@@ -34510,6 +34577,7 @@ var postToolUseHandler = async (input) => {
 };
 
 // src/hooks/pre-compact.ts
+init_work_item_store();
 var preCompactHandler = async (input) => {
   const raw = input.raw ?? {};
   const sessionId = typeof raw.session_id === "string" ? raw.session_id : undefined;
@@ -35105,6 +35173,9 @@ function bashWriteTargets(cmd) {
   return out;
 }
 
+// src/hooks/session-start.ts
+import { resolve as resolve18 } from "path";
+
 // src/core/mode-doctor.ts
 import { spawnSync } from "child_process";
 import { createHash as createHash9 } from "crypto";
@@ -35308,7 +35379,24 @@ function collectModeReport(repoRoot, opts = {}) {
 }
 
 // src/hooks/session-start.ts
-var sessionStartHandler = (input) => {
+init_work_item_store();
+init_worktree();
+async function maybeBindWorktreeSession(input) {
+  const raw = input.raw;
+  const cwd = typeof raw?.cwd === "string" ? raw.cwd : undefined;
+  const sessionId = typeof raw?.session_id === "string" ? raw.session_id : undefined;
+  if (!cwd || !sessionId)
+    return;
+  const parsed = parseWorktreePath(resolve18(cwd));
+  if (parsed === null)
+    return;
+  const items = new WorkItemStore(input.repoRoot);
+  if (!await items.exists(parsed.workItemId))
+    return;
+  await new SessionPointerStore(input.repoRoot).set(sessionId, parsed.workItemId);
+}
+var sessionStartHandler = async (input) => {
+  await maybeBindWorktreeSession(input);
   const { report, inDittoRepo } = collectModeReport(input.repoRoot, { env: input.env });
   const banner = formatModeBanner(report, { inDittoRepo });
   if (!banner.text)
@@ -35327,6 +35415,7 @@ import { readFile as readFile16, readdir as readdir21 } from "fs/promises";
 import { join as join68 } from "path";
 init_ditto_paths();
 init_fs();
+init_work_item_store();
 
 // src/schemas/acg-semantic-compatibility.ts
 init_zod();
@@ -35471,6 +35560,9 @@ var dialectic = exports_external.object({
   synthesizer: dialecticSynthesizer
 }).describe("Full three-role dialectic deliberation artifact (\xA76.6)");
 
+// src/hooks/stop.ts
+init_intent_metric();
+
 // src/schemas/knowledge-gate-carrier.ts
 init_zod();
 init_common();
@@ -35527,6 +35619,7 @@ function buildScanObservation(input) {
 
 // src/hooks/semantic-nudge.ts
 init_ditto_paths();
+init_git();
 
 // src/core/work-item-handoff.ts
 import { join as join67 } from "path";
@@ -36225,6 +36318,7 @@ function charterProjection(ctx = {}) {
 // src/hooks/user-prompt-submit.ts
 init_ditto_paths();
 init_fs();
+init_work_item_store();
 var NON_TERMINAL = [
   "draft",
   "in_progress",
@@ -36683,7 +36777,7 @@ var impactCommand = defineCommand({
 });
 
 // src/cli/commands/init.ts
-import { resolve as resolve18 } from "path";
+import { resolve as resolve19 } from "path";
 init_fs();
 
 // src/core/init-scaffold.ts
@@ -36804,7 +36898,7 @@ var initCommand = defineCommand({
   run: async ({ args }) => {
     try {
       const format = parseOutputFormat(args.output);
-      const repoRoot = args.dir ? resolve18(args.dir) : await resolveRepoRootForCreate();
+      const repoRoot = args.dir ? resolve19(args.dir) : await resolveRepoRootForCreate();
       const result2 = await initScaffold(repoRoot, new Date);
       if (format === "json") {
         writeJson2(result2);
@@ -37059,6 +37153,8 @@ import { readFile as readFile18, readdir as readdir24 } from "fs/promises";
 import { isAbsolute as isAbsolute14, join as join75 } from "path";
 init_ditto_paths();
 init_fs();
+init_git();
+init_id();
 
 // src/core/memory-bootstrap.ts
 init_ditto_paths();
@@ -39199,12 +39295,16 @@ var reviewCommand = defineCommand({
 
 // src/cli/commands/run.ts
 init_fs();
+init_git();
 
 // src/core/run-with.ts
 init_common();
 init_fs();
+init_git();
 import { stat as stat9, writeFile as writeFile5 } from "fs/promises";
-import { dirname as dirname14, join as join78, relative as relative19, resolve as resolve19, sep as sep8 } from "path";
+import { dirname as dirname14, join as join78, relative as relative19, resolve as resolve20, sep as sep8 } from "path";
+init_work_item_store();
+init_worktree();
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
 
 class RunWithUsageError extends Error {
@@ -39230,8 +39330,8 @@ function resolveRepoCwd(repoRoot, cwd) {
   if (!parsed.success) {
     throw new RunWithUsageError(`invalid cwd: ${parsed.error.issues[0]?.message}`);
   }
-  const resolvedRoot = resolve19(repoRoot);
-  const resolvedCwd = resolve19(join78(repoRoot, cwd));
+  const resolvedRoot = resolve20(repoRoot);
+  const resolvedCwd = resolve20(join78(repoRoot, cwd));
   if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep8}`)) {
     throw new RunWithUsageError(`cwd escapes repo root: ${cwd}`);
   }
@@ -39488,6 +39588,7 @@ ${stderrText}` : ""}`;
 }
 
 // src/cli/commands/run.ts
+init_work_item_store();
 init_common();
 var runRecord = defineCommand({
   meta: {
@@ -39770,6 +39871,7 @@ import { existsSync as existsSync10 } from "fs";
 import { rm as rm2 } from "fs/promises";
 import { join as join79 } from "path";
 init_ditto_paths();
+init_git();
 var SIGNATURE_QUERY_JS = `/**
  * @name ditto signatures js
  * @id ditto/signature-relations
@@ -39938,6 +40040,8 @@ async function scanSignatureChanges(input, deps) {
 // src/cli/commands/semantic.ts
 init_ditto_paths();
 init_fs();
+init_git();
+init_work_item_store();
 function semanticPath(repoRoot, workItem2) {
   return localDir(repoRoot, "work-items", workItem2, "semantic-compatibility.json");
 }
@@ -40299,7 +40403,7 @@ var semanticCommand = defineCommand({
 
 // src/cli/commands/setup.ts
 import { homedir as homedir12 } from "os";
-import { dirname as dirname17, join as join85, resolve as resolve22 } from "path";
+import { dirname as dirname17, join as join85, resolve as resolve23 } from "path";
 init_fs();
 init_shared();
 
@@ -40500,7 +40604,7 @@ function defaultRegistry() {
 // src/core/setup.ts
 init_fs();
 import { cp, readFile as readFile19, rm as rm3, writeFile as writeFile6 } from "fs/promises";
-import { basename as basename4, dirname as dirname15, join as join83, resolve as resolve20 } from "path";
+import { basename as basename4, dirname as dirname15, join as join83, resolve as resolve21 } from "path";
 init_shared();
 
 // src/core/resource-routing.ts
@@ -40700,7 +40804,7 @@ async function installCodexSurface(opts) {
     throw new Error(`codex plugin manifest not found at ${manifestPath}; run build:codex-plugin first`);
   }
   const installedPluginDir = join83(projectRoot, CODEX_PLUGIN_DEST_REL);
-  if (resolve20(pluginRoot) === resolve20(installedPluginDir)) {
+  if (resolve21(pluginRoot) === resolve21(installedPluginDir)) {
     throw new Error(`codex plugin source is already the installed plugin directory: ${installedPluginDir}`);
   }
   await rm3(installedPluginDir, { recursive: true, force: true });
@@ -40777,7 +40881,7 @@ async function setup(opts) {
   if (allowlistApplied)
     await allowlistSettingsFile(allowlistPath);
   const codex = hosts.has("codex") ? await installCodexSurface({
-    pluginRoot: opts.pluginRoot ?? resolve20(resourcesDir, "..", ".."),
+    pluginRoot: opts.pluginRoot ?? resolve21(resourcesDir, "..", ".."),
     projectRoot
   }) : null;
   return { resources, scaffold, allowlistPath, allowlistApplied, codex };
@@ -40785,7 +40889,7 @@ async function setup(opts) {
 
 // src/cli/resources.ts
 import { existsSync as existsSync13 } from "fs";
-import { dirname as dirname16, join as join84, resolve as resolve21 } from "path";
+import { dirname as dirname16, join as join84, resolve as resolve22 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 function resolveResourcesDir(from) {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
@@ -40802,7 +40906,7 @@ function resolveResourcesDir(from) {
       break;
     dir = parent;
   }
-  return join84(resolve21(start, "..", ".."), "resources", "managed");
+  return join84(resolve22(start, "..", ".."), "resources", "managed");
 }
 
 // src/cli/wizard/agent-link-step.ts
@@ -40951,7 +41055,7 @@ function includesCodex(host) {
   return host === "codex" || host === "both";
 }
 async function resolveCodexPluginRoot(resourcesDir, projectRoot) {
-  const currentPluginRoot = resolve22(resourcesDir, "..", "..");
+  const currentPluginRoot = resolve23(resourcesDir, "..", "..");
   const sibling = join85(dirname17(currentPluginRoot), "codex-plugin");
   if (await fileExists(join85(sibling, ".codex-plugin", "plugin.json")))
     return sibling;
@@ -41092,9 +41196,9 @@ var setupCommand = defineCommand({
     try {
       const host = parseSetupHost(args.host);
       const targetDir = typeof args.dir === "string" ? args.dir : args.target;
-      const projectRoot = targetDir ? resolve22(targetDir) : await resolveRepoRootForCreate();
+      const projectRoot = targetDir ? resolve23(targetDir) : await resolveRepoRootForCreate();
       const resourcesDir = resolveResourcesDir();
-      const pluginRoot = resolve22(resourcesDir, "..", "..");
+      const pluginRoot = resolve23(resourcesDir, "..", "..");
       if (pluginRoot === projectRoot) {
         writeHuman(`setup: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
@@ -41141,7 +41245,7 @@ var setupCommand = defineCommand({
 // src/cli/commands/teardown.ts
 import { rm as rm4 } from "fs/promises";
 import { homedir as homedir13 } from "os";
-import { join as join87, resolve as resolve23 } from "path";
+import { join as join87, resolve as resolve24 } from "path";
 init_fs();
 
 // src/core/teardown.ts
@@ -41211,9 +41315,9 @@ var teardownCommand = defineCommand({
   },
   run: async ({ args }) => {
     try {
-      const projectRoot = args.dir ? resolve23(args.dir) : await resolveRepoRootForCreate();
+      const projectRoot = args.dir ? resolve24(args.dir) : await resolveRepoRootForCreate();
       const resourcesDir = resolveResourcesDir();
-      const pluginRoot = resolve23(resourcesDir, "..", "..");
+      const pluginRoot = resolve24(resourcesDir, "..", "..");
       if (pluginRoot === projectRoot) {
         writeHuman(`uninstall: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
@@ -41244,6 +41348,7 @@ var teardownCommand = defineCommand({
 
 // src/cli/commands/tech-spec.ts
 init_fs();
+init_work_item_store();
 function parseJsonArg2(raw) {
   try {
     return JSON.parse(raw);
@@ -41704,6 +41809,7 @@ var techSpecCommand = defineCommand({
 
 // src/cli/commands/verify.ts
 init_fs();
+init_work_item_store();
 function runChildCommand(tail) {
   if (tail.length === 0) {
     throw new Error("empty command tail");
@@ -41826,6 +41932,7 @@ var verifyCommand = defineCommand({
 
 // src/cli/commands/work.ts
 init_fs();
+init_work_item_store();
 init_common();
 var workStart = defineCommand({
   meta: {
@@ -42247,6 +42354,8 @@ var workCommand = defineCommand({
 
 // src/cli/commands/worktree.ts
 init_fs();
+init_work_item_store();
+init_worktree();
 init_common();
 function parseWorkId(value) {
   const parsed = workItemId.safeParse(value);
@@ -42411,4 +42520,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=f46051539a36fbf1f5ff58252dfe02b82f7e83bc98a7dc6e11e2ac185453b56a
+//# ditto-src-stamp=d931cdb2e077b77cbd54cdd0fb89aade67a648fda0977deeb910e7d66d97c857

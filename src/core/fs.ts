@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, extname, isAbsolute, join, parse, relative, resolve } from 'node:path';
 import type { ZodTypeAny, z } from 'zod';
 import { fileExists, parseYaml } from './hosts/shared';
+import { parseWorktreePath } from './worktree';
 
 export class RepoRootNotFoundError extends Error {
   constructor(start: string) {
@@ -53,6 +54,13 @@ export async function findRepoRoot(
   homeDir: string = homedir(),
 ): Promise<string> {
   const resolved = resolve(start);
+  // wi_260626zzx ac-1: a session opened inside a per-work-item worktree
+  // (`<ws>/.ditto/local/worktrees/<wi>/…`) must root at the OWNING workspace `<ws>`,
+  // not at the worktree's own checked-out `.ditto`. Detected by path segment BEFORE
+  // the walk-up, so the worktree's tracked `.ditto/knowledge` can never capture the
+  // root. Non-worktree paths return null here and fall through unchanged (no regression).
+  const worktree = parseWorktreePath(resolved);
+  if (worktree !== null) return worktree.workspace;
   let current = resolved;
   let firstGitMatch: string | null = null;
   const root = parse(current).root;

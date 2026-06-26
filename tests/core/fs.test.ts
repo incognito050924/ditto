@@ -98,6 +98,21 @@ describe('findRepoRoot', () => {
     expect(await findRepoRoot(start, home)).toBe(repo);
   });
 
+  // wi_260626zzx ac-1: a session opened inside a per-work-item worktree
+  // (`<ws>/.ditto/local/worktrees/<wi>/…`) roots at the OWNING workspace `<ws>`,
+  // NOT at the worktree's own checked-out `.ditto` — even though the worktree carries
+  // a tracked `.ditto/` that the walk-up would otherwise stop at first. State lives in
+  // the main `<ws>/.ditto/local`, which is not checked out into the worktree.
+  test('roots a worktree session at the owning workspace, not the worktree .ditto', async () => {
+    const ws = join(workDir, 'proj');
+    await ensureDir(join(ws, '.ditto')); // main workspace marker
+    const worktree = join(ws, '.ditto', 'local', 'worktrees', 'wi_abc');
+    await ensureDir(join(worktree, '.ditto')); // worktree's own tracked .ditto (the trap)
+    const start = join(worktree, 'src', 'core');
+    await ensureDir(start);
+    expect(await findRepoRoot(start)).toBe(ws);
+  });
+
   test('throws when neither .ditto nor .git found upward', async () => {
     // workDir is under tmpdir which has no .ditto/.git ancestors typically.
     // To be robust we assert error type and that message names the start dir.
