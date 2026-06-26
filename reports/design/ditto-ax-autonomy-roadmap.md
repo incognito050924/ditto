@@ -1,0 +1,124 @@
+# ditto AX/자율성 개선 — 계획 관리 SoT (living)
+
+> **목적**: ditto의 UX/AX 구조 결함(에이전트가 사람에게 절차·잔여·후속을 전가하고, WI가 안 닫혀 쌓이고, 실제 개발 절차(TDD)·다중 WI·격리가 자율적으로 안 굴러가는 문제)을 한 곳에서 진단·계획·**진척 추적**한다.
+> **소비자**: 이 개선을 이어서 착수하는 세션/PC. 이 문서가 계획의 단일 출처(SoT)다.
+> **갱신 주기**: 테마/항목이 착수·landed될 때마다 §0 대시보드 + 해당 테마의 체크리스트를 갱신한다.
+> **삭제 조건**: 3개 테마가 전부 코드+ADR로 흡수되면 폐기(그때 SoT는 코드·ADR). 부분 폐기는 테마 단위로.
+> **권위 주의(§4-11)**: 아래 `file:line`은 **2026-06-26 실측**(HEAD `b908061`). 이 문서는 *계획*이지 코드 SoT가 아니다 — 구현 세션은 착수 시 코드로 재확인할 것. 사실은 코드·테스트·ADR이 권위.
+
+---
+
+## 0. 진척 대시보드 (한눈에)
+
+상태 범례: ⬜ TODO · 🟦 진행중 · ✅ landed·검증 · ⏸ 보류(결정 대기) · ➖ 범위 밖
+
+| 테마 | 다루는 문제 | 상태 | WI | 비고 |
+|---|---|---|---|---|
+| **T1. autopilot 무-전가** | P3, P4 | ⬜ TODO | _(미생성)_ | 최우선 추천. 엔진 국소 |
+| **T2. 개발 절차 1급화** (TDD 표면·경량 기본값·자동 close·backlog 위생) | P1, P2, P7 | ⬜ TODO(부분 landed) | _(미생성)_ | 경량 close/stem/follow-up은 이미 landed(아래) |
+| **T3. 다중 WI·worktree 자율 구동** | P5, P6 | ⏸ 보류 | _(미생성)_ | ADR-0011 D2 충돌 — 비가역 결정 선행 |
+
+**이미 landed(부분 해결, b8d8163 이후)**: worktree 동시개발 1급 지원(T3 레인) · work-lifecycle 경량 경로 7 AC(T2 일부) · 이 세션 25→2 open WI 정리(T1/T2 사후 실증). 상세 §3.
+
+---
+
+## 1. 뿌리 진단 (두 조사가 수렴)
+
+> **상태는 풍부하고 명시적인데, 단일 work item 위의 자율 제어 루프가 없다.** 닫기(P1)·경량 라우팅(P2)·잔여 처리(P3)·다중 WI(P5)·worktree 구동(P6)이 **전부 "다음 명령을 사람이 친다"에서 끝난다.** 사용자가 겪는 "허송세월"과 "전가"가 같은 뿌리.
+
+추가 모순(P7): **헌장은 에이전트에게 test-first TDD를 강제**(글로벌 CLAUDE.md:50)하는데, **ditto의 표준 절차(autopilot)는 TDD를 모델링하지 않고**(implement-then-verify), TDD 표면은 아예 없다. 그래서 에이전트가 헌장대로 TDD를 하면 그게 "표준 절차 밖"이 되어 ditto가 추적·종결을 못 한다.
+
+---
+
+## 2. 문제 인벤토리 (7) — 근거 + 상태
+
+| # | 문제 | b8d8163 이후 | 정확한 공백 (file:line, 2026-06-26 실측) |
+|---|---|---|---|
+| **P1** | WI 종결 안 됨 → 쌓여서 SLOP. 나중에 완료/폐기·연관수정 판별 불가 | 경량 close·stem·follow-up landed | **자동 닫기 0**: autopilot은 `completion.json`만 쓰고 WI status 절대 안 바꿈(`src/cli/commands/autopilot.ts:330-444`; `autopilot-loop`에 `store.close` 0). **stale/backlog 위생 표면 0**(`work archive`는 terminal만; `doctor`는 intent-quality만). **연관 추적**: `follows`/`stem`은 양방향이라 "뒤이은 WI"는 답하나(`work-item-store.ts:330-339`), `changed_files` 교차참조 없어 *"나중에 같은 코드 만진 WI"는 불가*. memory-graph는 WI를 모델링 안 함 |
+| **P2** | autopilot 외 간단·가역 작업용 정규 경로 부재 → 무겁게 처리 | 경량 경로 fully built | **opt-in·미광고**: 매 턴 charter 투영은 *무거운* deep-interview만(`src/core/charter.ts:45-46,101-124`), `work start` Next-steps도 deep-interview+autopilot만(`work.ts:306-312`), 어떤 skill도 `--criteria`/`verify`/`work done` 언급 0. 라우팅은 risk→heavy 한 방향뿐(`work.ts:799-830`), simple→light 없음 |
+| **P3** | autopilot가 '미검증·남은위험·후속'을 사용자에게 전가 | **거의 0** | **미검증 누출**: non-pass 완료가 미검증 AC 안고 Stop 통과→exit 0. residual 게이트가 `completion.unverified[]`만 보고 `acceptance[].verdict`는 안 봄(`stop.ts:420-430`), verify 노드는 미검증 *기록만*·재구동 면제(`autopilot-loop.ts:1237-1238`). **위험**: review/security `has_findings`만 fix 자동(`autopilot-converge.ts:95-133`), `remaining_risks`·residual은 record+표면화만. **후속**: `work follow-up` 수동 CLI뿐(`work.ts:1067-1089`), 루프 배선 0, `intent.follow_up_candidates` 소비자 0 |
+| **P4** | 의도 축소 — 계획/검증에서 슬라이스로 일부만 구현·종결 | seed floor + Stop H2 백스톱 | **plan-time 완전성 게이트 0**. 커버리지는 seed가 모든 AC를 노드에 매핑(`autopilot-bootstrap.ts:114`) + Stop H2(`intentDriftGate`, `gates.ts:712-721`)가 "모든 AC가 ≥1 노드에 *id 매핑*" 확인 — **증거로 검증됐는지는 안 봄**. `validateNodeAddition`은 no-grow만(`autopilot-graph.ts:331-341`). P3 미검증-누출과 합쳐져 슬라이스로 "완료" 가능 |
+| **P5** | 다중 WI 순차/병렬 필요한데 사람이 매번 "다음" 입력 | 0 | autopilot=**단일 WI**(`completion_boundary:'entire_work_item'`, `autopilot-bootstrap.ts:106-129`), 드라이버는 *한 그래프 노드만* 구동(`autopilot-driver.ts:102-115`). 세션=single-active·no-auto-pick(`user-prompt-submit.ts:117-193`). **WI 위 큐/러너 부재** |
+| **P6** | 격리·병렬 진행 미고려(A 작업 중 다른 세션서 B 설계/개발) | worktree 1급 landed | 레인은 생김(격리+공유 `.ditto/local`+auto-bind: `worktree.ts:308-361`, `fs.ts:52-61`, `session-start.ts:20-36`) → "A 격리 중 B 설계"는 구조적 지원. but **차를 모는 게 없음**: auto-launch·auto-merge·cross-worktree 러너 0(`skills/worktree/SKILL.md:32,60,65-66`). 라이브 동시 autopilot·Windows·SessionStart-cwd 계약은 저자 미검증(SKILL.md:80-84) |
+| **P7** | 표준절차 아닌 즉흥 TDD로 임시구현 → WI 종결 불가 (구조적 모순) | **미해결** | **TDD 표면 0**(grep `tdd\|red-green\|failing test first` = skills/·cli/·agents/·core/ 0 파일). `implementer`는 **implement-then-check**(코드 먼저, 검사 나중; `agents/implementer.md:20`). 헌장은 **TDD 강제**(글로벌 CLAUDE.md:50). ditto 모델(delegate-and-verify) ⊥ 실제 실천(test-first) → TDD가 곧 "절차 밖" |
+
+---
+
+## 3. b8d8163 이후 landed (델타 — "어디까지" 답)
+
+`b8d81639..HEAD` = 16커밋. 비-doc 실작업 두 줄기:
+
+- **worktree 동시개발**(6aa95e0·36eee19·8cbcc14·20bd801·347e9e5): git worktree 1급, 격리+공유 `.ditto/local`, `ditto worktree create|list|remove` + `work start --worktree`. → **P6 레인** ✅ / **P6 드라이브** ⬜.
+- **work-lifecycle 경량 경로**(cf4a73a~e88e9d9 + 머지 a7440e1, 이번 세션·wi_260626wnv): `work set-criteria`/`--criteria`, 경량 `verify→done`, partial/blocked 상태, light/heavy logged-override 게이트+risk 트리거, `work follow-up`(버그→discovered_by WI), `work promote`, `follows`+`work stem`, pull-only `work push-ready`. ADR-20260626-work-lifecycle-lightweight-path. → **P1/P2 부분** ✅(닫는 메커니즘은 있으나 기본값·자동화 아님).
+- **이 세션 정리**: 25 open WI → 2(landed 증거로 23 done, lj6/t8o keep). 자기비판: residual 있던 WI(pcw 이중래핑·pyj 라이브검증)를 done으로 닫으며 후속 WI로 물질화 안 함 = **P3 재현**.
+- **배포**: release v0.3.0(b908061, 태그 v0.3.0).
+
+---
+
+## 4. 빌드 테마 (3) — 범위·변경지점·체크리스트
+
+> 각 테마는 착수 시 **deep-interview/tech-spec로 의도를 잠그고** 시작. 코드 변경은 사용자 허가 후. 아래 "변경 지점"은 조사 기반 *후보*이지 확정 설계 아님.
+
+### T1. autopilot 무-전가 (P3 + P4) — ⬜ TODO · **최우선 추천**
+
+목표: autopilot가 미검증/위험/후속을 사용자에게 떠넘기지 않는다. "verify가 진짜 게이트"가 되게.
+
+변경 지점(후보): `src/core/gates.ts` · `src/hooks/stop.ts` · `src/core/autopilot-loop.ts`(`recordResult`/`nextNode`) · `src/core/autopilot-complete.ts` · `src/core/autopilot-converge.ts`.
+
+- [ ] **미검증 누출 차단**: Stop 게이트가 `completion.acceptance[].verdict==='unverified'`를 읽어 non-terminal·non-pass WI를 차단(현재 `unverified[]` 리스트만 봄). 또는 verify 노드 미검증 시 재구동/fix 노드.
+- [ ] **agent-resolvable 위험 라우터**: `review/security`의 `has_findings`→fix 패턴을 일반화 — agent-resolvable residual/risk를 fix 노드로 자동 라우팅(`autopilot-converge.planForwardReexpansion` 확장). 진짜 user-owned만 사용자에 표면화.
+- [ ] **후속 자동 물질화·착수**: `recordResultPayload`에 discovered-work 필드 추가 → `store.create`(+`discovered_by`)로 WI 물질화. 원 의도 범위 안이면 즉시 착수(범위 밖/방향성 필요만 사용자). `intent.follow_up_candidates`도 소비.
+- [ ] **증거-완전성 커버리지 게이트**: H2를 "id 매핑"에서 "모든 in_scope AC가 *증거로 검증*"으로 강화 + plan-time 완전성 체크(planner subgraph가 전 AC 덮는지). 비-pass stop도 부분 종결 금지.
+- 검증: 미검증 AC 남은 run이 Stop에서 차단되는 테스트 · 위험/후속이 자동 처리되는 테스트 · 슬라이스-부분-완료가 거부되는 테스트.
+- 자율 경계(사용자 처방, 확정 필요): 위험·후속 **기본 처리**, 진짜 user-owned·범위 밖만 질문.
+
+### T2. 개발 절차 1급화 (P1 + P2 + P7) — ⬜ TODO(부분 landed)
+
+목표: 실제 개발 절차(TDD)를 ditto 1급 표면으로, 경량 경로를 기본값으로, 종결을 자동으로.
+
+- [ ] **ditto-native TDD 흐름**(빠진 중간 절차): AC 선언 → AC별 red(실패 테스트가 실제 실패) → green(최소 구현 + 전체 테스트) → refactor(전후 green) → 증거 누적 → 전 AC green이면 자동 close. 즉흥 TDD를 추적·종결 가능한 절차로 흡수. **결정 D3**: 새 표면(`ditto tdd`) vs `implementer` 노드를 red-first로 교정.
+- [ ] **경량 경로 기본값화**: charter 투영·`work start` Next-steps·skill에 `set-criteria→verify→done` 노출. 프롬프트를 simple/reversible로 분류해 light 안내(현재 heavy만 노출).
+- [ ] **autopilot 완료 시 자동 close**: pass 완료면 WI status를 done으로 flip(현재 `completion.json`만 쓰고 안 닫음).
+- [ ] **backlog 위생 표면**: stale/오래된 draft·"완료-미종결"·open-count를 보여주는 `doctor`/`work` 표면.
+- 검증: 간단작업이 light로 닫히는 e2e · TDD 흐름 red→green→close e2e · autopilot pass가 자동 done 되는 테스트 · 위생 표면 출력.
+
+### T3. 다중 WI·worktree 자율 구동 (P5 + P6) — ⏸ 보류(결정 선행)
+
+목표: 여러 WI(및 worktree)를 사람 개입 없이 순차/병렬로 완료까지 구동.
+
+- [ ] WI 큐/러너(autopilot 위 오케스트레이터): enqueue 다수 WI → 순차/병렬 구동, WI별 사람 프롬프트 없이.
+- [ ] worktree 자율 구동: worktree 세션 auto-launch·드라이브·auto-merge 조정.
+- **제약·결정 D2(비가역)**: ADR-0011 D2(session-rooting — "faithful subagent-delegating autopilot은 target repo에 rooted된 세션 필요, cross-root remote 오케스트레이션 unsupported")와 single-active·no-auto-pick 불변식과 **정면 충돌**. ADR 수정/우회 결정이 선행돼야 착수 가능.
+
+---
+
+## 5. 결정 로그
+
+미해결(사용자만 풀 수 있음):
+
+- **D1 — 테마 순서**: 추천 T1 → T2(둘은 "verify가 진짜 게이트"로 맞닿아 묶음 설계 가능) → T3. _(미정)_
+- **D2 — T3 ADR-0011 충돌(비가역)**: session-rooting 불변식을 풀지(ADR 수정) / 유지하며 우회할지. _(미정)_
+- **D3 — TDD 표면 형태**: 새 절차 표면(`ditto tdd`) vs 기존 `implementer` 노드 red-first 교정. _(미정)_
+- **D4 — 후속 "즉시 착수" 의미**: 현 run 내 자동 start vs 큐 등록(T3과 연동). _(미정)_
+
+확정:
+
+- (이번 세션) work-lifecycle 경량 경로 10결정·7 AC landed — ADR-20260626-work-lifecycle-lightweight-path 참조.
+
+---
+
+## 6. 제약 (착수 전 반드시 확인)
+
+- **ADR-0011 D2 — session-rooting 불변식**: faithful subagent-delegating autopilot은 target repo에 rooted된 세션을 요구; cross-root remote 오케스트레이션은 unsupported(`.ditto/knowledge/adr/ADR-0011-distribution-cross-cutting-axis-session-rooting.md:34-39`). T3의 상위 오케스트레이터가 여기에 걸린다.
+- **single-active-pointer / no-auto-pick**: 세션당 활성 WI 1개, 자동 선택 금지(`src/hooks/user-prompt-submit.ts:117-193`). 다중 WI 자동 진행과 충돌.
+- **컨텍스트 위생(§4-9)**: 각 테마 구현은 fresh 세션 + 핸드오프 권장(이 분석 세션은 매우 길어 context rot 위험). 결정(D1~D4)은 이 문서로 운반.
+
+---
+
+## 7. 이 SoT 사용·갱신 규칙
+
+1. 테마 착수 = `ditto work start`로 WI 생성 → 이 문서 §0 대시보드의 해당 WI 칸 채우고 상태 🟦.
+2. 테마 내 항목 landed = 체크박스 `[x]` + 커밋 sha 주석.
+3. 테마 완료 = §0 ✅ + 흡수된 결정은 ADR로, file:line 근거는 코드로 옮기고 해당 절을 폐기 표시.
+4. 결정 확정 = §5 미해결→확정 이동(근거 한 줄).
+5. 전 테마 완료 = 이 문서 폐기(삭제 조건 충족).
