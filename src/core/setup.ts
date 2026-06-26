@@ -4,7 +4,7 @@ import { atomicWriteText, ensureDir } from './fs';
 import { codexHostAdapter } from './hosts/codex';
 import { fileExists, listDirectories, listFiles, readJsonIfExists } from './hosts/shared';
 import { type InitScaffoldResult, initScaffold } from './init-scaffold';
-import { applyManagedFile } from './managed-resource';
+import { applyManagedFile, unwrapManagedBlock, writeBackupOnce } from './managed-resource';
 import { type RoutingScope, discoverResources, routeResource } from './resource-routing';
 import { allowlistSettingsFile } from './settings-allowlist';
 import { generateSurfaceCatalog } from './surface-inventory';
@@ -355,8 +355,20 @@ async function installResource(
     if (!existed) {
       const body = await readFile(join(resourcesDir, decision.filename), 'utf8');
       await atomicWriteText(decision.destPath, body);
+      return { ...common, status: 'written', backupPath: null };
     }
-    return { ...common, status: existed ? 'kept' : 'written', backupPath: null };
+    // AGENTS.md is the canonical RAW source. An older version wrapped it in a
+    // ditto-managed block, which then made the sibling CLAUDE.md projection
+    // double-wrap (nested markers). Heal by stripping ditto markers back to raw,
+    // preserving any other content; a file without markers is left untouched.
+    const current = await readFile(decision.destPath, 'utf8');
+    const unwrapped = unwrapManagedBlock(current);
+    if (unwrapped !== current) {
+      const backupPath = await writeBackupOnce(decision.destPath);
+      await atomicWriteText(decision.destPath, unwrapped);
+      return { ...common, status: 'written', backupPath };
+    }
+    return { ...common, status: 'kept', backupPath: null };
   }
 
   if (name === 'CLAUDE.md') {

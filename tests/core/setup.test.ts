@@ -10,6 +10,7 @@ import {
   loadProjection,
   loadSource,
 } from '~/core/instruction-bridge';
+import { buildManagedBlock } from '~/core/managed-resource';
 import { ALLOW_RULE } from '~/core/settings-allowlist';
 import { setup } from '~/core/setup';
 
@@ -344,6 +345,68 @@ describe('setup', () => {
       expect(await readFile(join(installedPluginDir, 'keep.txt'), 'utf8')).toBe('must survive\n');
     } finally {
       await cleanup(d);
+    }
+  });
+});
+
+describe('setup — global managed-block double-wrap heal', () => {
+  function startCount(text: string): number {
+    return (text.match(/ditto:managed:start/g) ?? []).length;
+  }
+  function endCount(text: string): number {
+    return (text.match(/ditto:managed:end/g) ?? []).length;
+  }
+
+  test('heals a legacy locked global ~/.claude (nested CLAUDE.md + wrapped AGENTS.md) to single clean blocks', async () => {
+    const d = await freshDirs();
+    try {
+      // Resources that route to the global ~/.claude/{AGENTS,CLAUDE}.md.
+      await writeFile(join(d.resourcesDir, 'GLOBAL_AGENTS.md'), 'GLOBAL charter body\n');
+      await writeFile(join(d.resourcesDir, 'GLOBAL_CLAUDE.md'), 'GLOBAL charter body\n');
+
+      // Reproduce the user's locked state, exactly as seen in a real ~/.claude:
+      //  - global AGENTS.md is itself wrapped in a ditto block (legacy bug)
+      //  - global CLAUDE.md is a NESTED double block (projection re-wrapped the above)
+      const globalDir = join(d.homeDir, '.claude');
+      await mkdir(globalDir, { recursive: true });
+      const wrappedAgents = buildManagedBlock('GLOBAL charter body\n', 'GLOBAL_AGENTS.md');
+      await writeFile(join(globalDir, 'AGENTS.md'), wrappedAgents);
+      const nestedClaude = buildManagedBlock(wrappedAgents, 'AGENTS.md');
+      await writeFile(join(globalDir, 'CLAUDE.md'), nestedClaude);
+      // precondition: the locked state really is doubled
+      expect(startCount(nestedClaude)).toBe(2);
+      expect(endCount(nestedClaude)).toBe(2);
+
+      await setup({
+        resourcesDir: d.resourcesDir,
+        projectRoot: d.projectRoot,
+        homeDir: d.homeDir,
+        now: NOW,
+      });
+
+      const claude = await readFile(join(globalDir, 'CLAUDE.md'), 'utf8');
+      const agents = await readFile(join(globalDir, 'AGENTS.md'), 'utf8');
+      // CLAUDE.md healed to exactly one managed block
+      expect(startCount(claude)).toBe(1);
+      expect(endCount(claude)).toBe(1);
+      // AGENTS.md healed back to raw (the canonical source carries no markers)
+      expect(startCount(agents)).toBe(0);
+      expect(endCount(agents)).toBe(0);
+
+      // and it stays healed on a second run (idempotent, not re-doubled)
+      await setup({
+        resourcesDir: d.resourcesDir,
+        projectRoot: d.projectRoot,
+        homeDir: d.homeDir,
+        now: NOW,
+      });
+      const claude2 = await readFile(join(globalDir, 'CLAUDE.md'), 'utf8');
+      expect(startCount(claude2)).toBe(1);
+      expect(endCount(claude2)).toBe(1);
+    } finally {
+      await rm(d.resourcesDir, { recursive: true, force: true });
+      await rm(d.projectRoot, { recursive: true, force: true });
+      await rm(d.homeDir, { recursive: true, force: true });
     }
   });
 });
