@@ -194,6 +194,12 @@ const workStart = defineCommand({
         'Declared risk flags, comma-separated: non_local,irreversible,unaudited (drives the heavy-path nudge + lightweight-close override gate)',
       required: false,
     },
+    follows: {
+      type: 'string',
+      description:
+        'Predecessor work item id this WI continues from (chain lineage; see `ditto work stem`)',
+      required: false,
+    },
     profile: {
       type: 'string',
       description: 'Owner profile: read-only|workspace-write|networked|reviewer|isolated',
@@ -244,6 +250,18 @@ const workStart = defineCommand({
       }
       declared_risk = parsed.risk;
     }
+    // ac-5: chain lineage edge. A brand-new WI has no successors, so no cycle is
+    // possible at creation; we only reject a predecessor that does not exist (a
+    // dangling lineage edge). Cycle protection lives on `work stem --follows`.
+    let follows: WorkItem['follows'];
+    if (args.follows !== undefined) {
+      if (!(await store.exists(args.follows))) {
+        writeError(`--follows predecessor ${args.follows} does not exist`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      follows = args.follows;
+    }
     const acceptance_criteria =
       realStatements.length > 0
         ? realStatements.map((statement, i) => ({
@@ -272,6 +290,7 @@ const workStart = defineCommand({
         owner_profile: profile,
         acceptance_criteria,
         ...(declared_risk !== undefined ? { declared_risk } : {}),
+        ...(follows !== undefined ? { follows } : {}),
       });
       if (format === 'json') {
         writeJson({
@@ -1088,6 +1107,135 @@ const workFollowUp = defineCommand({
   },
 });
 
+const workStem = defineCommand({
+  meta: {
+    name: 'stem',
+    description:
+      'Work with a chain of related work items (the lineage formed by `follows` edges): --follows <prev> wires this WI to its predecessor; with no flag, show the derived chain; --close rolls the chain up once every member is terminal',
+  },
+  args: {
+    workId: {
+      type: 'positional',
+      description: 'A work item anywhere in the chain',
+      required: true,
+    },
+    follows: {
+      type: 'string',
+      description:
+        'Wire <workId> to continue from this predecessor (chain lineage). Rejected if it would create a cycle.',
+      required: false,
+    },
+    close: {
+      type: 'boolean',
+      description:
+        'Roll the chain up: requires every member terminal (done/abandoned); emits the rolled-up verdict (all done → done; any abandoned → partial). Rejects and lists any non-terminal member.',
+      default: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const close = args.close === true;
+    // --follows (set one edge) and --close (roll the whole chain up) are distinct
+    // operations; combining them is ambiguous about what would mutate.
+    if (args.follows !== undefined && close) {
+      writeError('work stem takes either --follows <prev> or --close, not both');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+
+    // ── set-edge mode: wire <workId> to continue from <follows>. Cycle-guarded.
+    if (args.follows !== undefined) {
+      const prev = args.follows;
+      try {
+        await store.get(args.workId); // clear error if <workId> is unknown
+        if (!(await store.exists(prev))) {
+          writeError(`--follows predecessor ${prev} does not exist`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        // A cycle would form iff <prev> already reaches <workId> (or is <workId>
+        // itself) by walking its own `follows` chain upward.
+        const prevAncestors = await store.chainAncestors(prev);
+        if (prev === args.workId || prevAncestors.includes(args.workId)) {
+          writeError(
+            `--follows ${prev} would create a cycle (${args.workId} already precedes ${prev} in the chain); no write`,
+          );
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const updated = await store.update(args.workId, (cur) => ({ ...cur, follows: prev }));
+        if (format === 'json') {
+          writeJson({ work_item_id: updated.id, follows: updated.follows });
+        } else {
+          writeHuman(`Wired ${updated.id} to follow ${prev} (chain lineage).`);
+        }
+      } catch (err) {
+        writeError(`work stem failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      return;
+    }
+
+    // ── close mode: roll the chain up. Every member must already be terminal
+    // (done/abandoned) — the members are closed individually first; --close is the
+    // chain-level assertion + rolled-up verdict, it does NOT itself archive or
+    // mutate. If any member is non-terminal, reject and list those members.
+    if (close) {
+      try {
+        const view = await store.stem(args.workId);
+        const nonTerminal = view.members.filter(
+          (m) => !(TERMINAL_STATUSES as readonly string[]).includes(m.status),
+        );
+        if (nonTerminal.length > 0) {
+          writeError(
+            `work stem ${args.workId} cannot close: ${nonTerminal.length} non-terminal member(s) — ${nonTerminal
+              .map((m) => `${m.id}=${m.status}`)
+              .join(', ')}. Close (done/abandon) each before rolling the chain up.`,
+          );
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        if (format === 'json') {
+          writeJson({ rolled_up: view.rolled_up, members: view.members });
+        } else {
+          writeHuman(
+            `Chain rolled up for ${args.workId}: ${view.rolled_up} (${view.members.length} member(s)).`,
+          );
+          for (const m of view.members) writeHuman(`  ${m.id}\t${m.status}`);
+        }
+      } catch (err) {
+        writeError(`work stem failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      return;
+    }
+
+    // ── view mode (default): show the derived chain, root → tip, + rolled-up line.
+    try {
+      const view = await store.stem(args.workId);
+      if (format === 'json') {
+        writeJson({ members: view.members, rolled_up: view.rolled_up });
+      } else {
+        writeHuman(`Chain for ${args.workId} (rolled_up: ${view.rolled_up}):`);
+        for (const m of view.members) writeHuman(`  ${m.id}\t${m.status}`);
+      }
+    } catch (err) {
+      writeError(`work stem failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  },
+});
+
 const workArchive = defineCommand({
   meta: {
     name: 'archive',
@@ -1163,6 +1311,7 @@ export const workCommand = defineCommand({
     abandon: workAbandon,
     promote: workPromote,
     'follow-up': workFollowUp,
+    stem: workStem,
     archive: workArchive,
   },
 });

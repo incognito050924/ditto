@@ -199,6 +199,16 @@ export const workItem = z
     discovered_by: workItemId
       .optional()
       .describe('Work item whose discovered bug materialized this one (provenance, not hierarchy)'),
+    // ac-5 (wi_260626wnv): chain lineage edge — "this WI continues from the named
+    // predecessor". Models a sequential lineage (vjo→227h→258zu→…), which the
+    // parent_id tree / dead child_ids could not. Drives the derived `work stem`
+    // view + bulk close. Additive + OPTIONAL: a legacy work-item.json omits it and
+    // parses unchanged; no schema_version bump (same idiom as discovered_by).
+    follows: workItemId
+      .optional()
+      .describe(
+        'Predecessor work item this one continues from (chain lineage, not the parent_id tree)',
+      ),
     risks: z.array(riskNote).default([]),
     re_entry: reEntry.optional(),
     runs: z.array(runId).default([]),

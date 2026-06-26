@@ -313,6 +313,11 @@
           "pattern": "^wi_[a-z0-9]{8,}$",
           "description": "Work item whose discovered bug materialized this one (provenance, not hierarchy)"
         },
+        "follows": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Predecessor work item this one continues from (chain lineage, not the parent_id tree)"
+        },
         "risks": {
           "type": "array",
           "items": {

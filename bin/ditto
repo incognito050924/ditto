@@ -18433,6 +18433,7 @@ var workItem = exports_external.object({
   promoted_to_heavy: exports_external.boolean().optional().describe("Marked for the heavy (deep-interview) path via `work promote`"),
   follow_ups: exports_external.array(followUp).optional(),
   discovered_by: workItemId.optional().describe("Work item whose discovered bug materialized this one (provenance, not hierarchy)"),
+  follows: workItemId.optional().describe("Predecessor work item this one continues from (chain lineage, not the parent_id tree)"),
   risks: exports_external.array(riskNote).default([]),
   re_entry: reEntry.optional(),
   runs: exports_external.array(runId).default([]),
@@ -18481,6 +18482,13 @@ function tryGitHeadSha(repoRoot) {
     return null;
   return sha;
 }
+var TERMINAL_STEM_STATUSES = ["done", "abandoned"];
+function rollUpStem(members) {
+  const nonTerminal = members.filter((m2) => !TERMINAL_STEM_STATUSES.includes(m2.status));
+  if (nonTerminal.length > 0)
+    return "open";
+  return members.every((m2) => m2.status === "done") ? "done" : "partial";
+}
 
 class WorkItemStore {
   repoRoot;
@@ -18519,6 +18527,7 @@ class WorkItemStore {
       ...input.parent_id !== undefined ? { parent_id: input.parent_id } : {},
       ...input.declared_risk !== undefined ? { declared_risk: input.declared_risk } : {},
       ...input.discovered_by !== undefined ? { discovered_by: input.discovered_by } : {},
+      ...input.follows !== undefined ? { follows: input.follows } : {},
       child_ids: [],
       changed_files: [],
       risks: [],
@@ -18569,6 +18578,82 @@ class WorkItemStore {
       status,
       re_entry: reEntry2
     }));
+  }
+  async chainAncestors(id) {
+    const out = [];
+    const seen = new Set([id]);
+    let cur = await this.get(id);
+    while (cur.follows !== undefined) {
+      const next = cur.follows;
+      if (seen.has(next))
+        break;
+      seen.add(next);
+      out.push(next);
+      if (!await this.exists(next))
+        break;
+      cur = await this.get(next);
+    }
+    return out;
+  }
+  async stem(id) {
+    await this.get(id);
+    const all = new Map;
+    for (const s2 of await this.list()) {
+      const item = await this.get(s2.id);
+      all.set(item.id, {
+        status: item.status,
+        created_at: item.created_at,
+        ...item.follows !== undefined ? { follows: item.follows } : {}
+      });
+    }
+    const members = new Set;
+    const queue2 = [id];
+    while (queue2.length > 0) {
+      const cur = queue2.pop();
+      if (cur === undefined || members.has(cur))
+        continue;
+      members.add(cur);
+      const node = all.get(cur);
+      if (node?.follows !== undefined && all.has(node.follows))
+        queue2.push(node.follows);
+      for (const [oid, o3] of all)
+        if (o3.follows === cur)
+          queue2.push(oid);
+    }
+    const depthOf = (mid) => {
+      let d2 = 0;
+      let cur = mid;
+      const seen = new Set([cur]);
+      for (;; ) {
+        const f3 = all.get(cur)?.follows;
+        if (f3 === undefined || !members.has(f3) || seen.has(f3))
+          break;
+        seen.add(f3);
+        cur = f3;
+        d2++;
+      }
+      return d2;
+    };
+    const ordered = [...members].sort((a2, b2) => {
+      const da = depthOf(a2);
+      const db = depthOf(b2);
+      if (da !== db)
+        return da - db;
+      const ca = all.get(a2)?.created_at ?? "";
+      const cb = all.get(b2)?.created_at ?? "";
+      if (ca !== cb)
+        return ca < cb ? -1 : 1;
+      return a2 < b2 ? -1 : 1;
+    });
+    const memberList = ordered.map((mid) => {
+      const node = all.get(mid);
+      return {
+        id: mid,
+        status: node?.status ?? "draft",
+        ...node?.follows !== undefined ? { follows: node.follows } : {}
+      };
+    });
+    return { members: memberList, rolled_up: rollUpStem(memberList) };
   }
   async archive(label) {
     if (!/^[A-Za-z0-9._-]+$/.test(label) || label === "." || label === "..") {
@@ -41731,6 +41816,11 @@ var workStart = defineCommand({
       description: "Declared risk flags, comma-separated: non_local,irreversible,unaudited (drives the heavy-path nudge + lightweight-close override gate)",
       required: false
     },
+    follows: {
+      type: "string",
+      description: "Predecessor work item id this WI continues from (chain lineage; see `ditto work stem`)",
+      required: false
+    },
     profile: {
       type: "string",
       description: "Owner profile: read-only|workspace-write|networked|reviewer|isolated",
@@ -41774,6 +41864,15 @@ var workStart = defineCommand({
       }
       declared_risk = parsed.risk;
     }
+    let follows;
+    if (args.follows !== undefined) {
+      if (!await store.exists(args.follows)) {
+        writeError(`--follows predecessor ${args.follows} does not exist`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      follows = args.follows;
+    }
     const acceptance_criteria = realStatements.length > 0 ? realStatements.map((statement, i2) => ({
       id: `ac-${i2 + 1}`,
       statement,
@@ -41794,7 +41893,8 @@ var workStart = defineCommand({
         goal: args.goal,
         owner_profile: profile,
         acceptance_criteria,
-        ...declared_risk !== undefined ? { declared_risk } : {}
+        ...declared_risk !== undefined ? { declared_risk } : {},
+        ...follows !== undefined ? { follows } : {}
       });
       if (format === "json") {
         writeJson2({
@@ -42476,6 +42576,110 @@ var workFollowUp = defineCommand({
     }
   }
 });
+var workStem = defineCommand({
+  meta: {
+    name: "stem",
+    description: "Work with a chain of related work items (the lineage formed by `follows` edges): --follows <prev> wires this WI to its predecessor; with no flag, show the derived chain; --close rolls the chain up once every member is terminal"
+  },
+  args: {
+    workId: {
+      type: "positional",
+      description: "A work item anywhere in the chain",
+      required: true
+    },
+    follows: {
+      type: "string",
+      description: "Wire <workId> to continue from this predecessor (chain lineage). Rejected if it would create a cycle.",
+      required: false
+    },
+    close: {
+      type: "boolean",
+      description: "Roll the chain up: requires every member terminal (done/abandoned); emits the rolled-up verdict (all done \u2192 done; any abandoned \u2192 partial). Rejects and lists any non-terminal member.",
+      default: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const close = args.close === true;
+    if (args.follows !== undefined && close) {
+      writeError("work stem takes either --follows <prev> or --close, not both");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    if (args.follows !== undefined) {
+      const prev = args.follows;
+      try {
+        await store.get(args.workId);
+        if (!await store.exists(prev)) {
+          writeError(`--follows predecessor ${prev} does not exist`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const prevAncestors = await store.chainAncestors(prev);
+        if (prev === args.workId || prevAncestors.includes(args.workId)) {
+          writeError(`--follows ${prev} would create a cycle (${args.workId} already precedes ${prev} in the chain); no write`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const updated = await store.update(args.workId, (cur) => ({ ...cur, follows: prev }));
+        if (format === "json") {
+          writeJson2({ work_item_id: updated.id, follows: updated.follows });
+        } else {
+          writeHuman(`Wired ${updated.id} to follow ${prev} (chain lineage).`);
+        }
+      } catch (err) {
+        writeError(`work stem failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      return;
+    }
+    if (close) {
+      try {
+        const view = await store.stem(args.workId);
+        const nonTerminal = view.members.filter((m2) => !TERMINAL_STATUSES.includes(m2.status));
+        if (nonTerminal.length > 0) {
+          writeError(`work stem ${args.workId} cannot close: ${nonTerminal.length} non-terminal member(s) \u2014 ${nonTerminal.map((m2) => `${m2.id}=${m2.status}`).join(", ")}. Close (done/abandon) each before rolling the chain up.`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        if (format === "json") {
+          writeJson2({ rolled_up: view.rolled_up, members: view.members });
+        } else {
+          writeHuman(`Chain rolled up for ${args.workId}: ${view.rolled_up} (${view.members.length} member(s)).`);
+          for (const m2 of view.members)
+            writeHuman(`  ${m2.id}	${m2.status}`);
+        }
+      } catch (err) {
+        writeError(`work stem failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      return;
+    }
+    try {
+      const view = await store.stem(args.workId);
+      if (format === "json") {
+        writeJson2({ members: view.members, rolled_up: view.rolled_up });
+      } else {
+        writeHuman(`Chain for ${args.workId} (rolled_up: ${view.rolled_up}):`);
+        for (const m2 of view.members)
+          writeHuman(`  ${m2.id}	${m2.status}`);
+      }
+    } catch (err) {
+      writeError(`work stem failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
 var workArchive = defineCommand({
   meta: {
     name: "archive",
@@ -42549,6 +42753,7 @@ var workCommand = defineCommand({
     abandon: workAbandon,
     promote: workPromote,
     "follow-up": workFollowUp,
+    stem: workStem,
     archive: workArchive
   }
 });
@@ -42600,4 +42805,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=94e7255ff625c74cde01b10be3f7ee99a598e2320c8132ac473410c260d573a3
+//# ditto-src-stamp=c9fb1b465893ac39468ebeabc78a46ff73929df85bba98478d2a3f2c52de831a
