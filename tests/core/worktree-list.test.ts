@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { aheadBehind } from '~/core/git';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
+  createWorktreeForRun,
   createWorktreeForWorkItem,
   listWorktreesForWorkspace,
   worktreeBindingHint,
@@ -91,6 +92,37 @@ describe('listWorktreesForWorkspace (ac-1)', () => {
     expect(list[0]?.dirty).toBe(true);
     expect(list[0]?.ahead).toBe(1);
     expect(list[0]?.behind).toBe(0);
+  });
+});
+
+describe('orphan worktrees (ac-2: porcelain ∖ meta)', () => {
+  test('an on-disk run worktree with no work-item meta is listed as ORPHAN alongside meta rows', async () => {
+    const wi = await makeWorkItem();
+    await createWorktreeForWorkItem(repo, wi); // meta + on disk
+    // an on-disk worktree under .ditto/local/worktrees recorded in NO work-item meta
+    const orphanHandle = await createWorktreeForRun(repo, 'orphan_run');
+
+    const list = await listWorktreesForWorkspace(repo);
+    const metaRow = list.find((r) => r.work_item_id === wi);
+    const orphanRow = list.find((r) => r.orphan);
+    expect(metaRow?.orphan).toBe(false);
+    expect(metaRow?.exists).toBe(true);
+    expect(orphanRow).toBeDefined();
+    expect(orphanRow?.worktree_path).toBe(orphanHandle.relativePath);
+    expect(orphanRow?.exists).toBe(true);
+    expect(orphanRow?.work_item_id).toBe('');
+  });
+
+  test('a meta worktree removed out-of-band is MISSING, not ORPHAN', async () => {
+    const wi = await makeWorkItem();
+    await createWorktreeForWorkItem(repo, wi);
+    const wtAbs = join(repo, '.ditto', 'local', 'worktrees', wi);
+    git(repo, ['worktree', 'remove', '--force', wtAbs]); // dir gone, meta kept
+
+    const list = await listWorktreesForWorkspace(repo);
+    expect(list).toHaveLength(1);
+    expect(list[0]?.exists).toBe(false);
+    expect(list[0]?.orphan).toBe(false);
   });
 });
 

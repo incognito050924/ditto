@@ -226,6 +226,40 @@ export class HandoffStore {
     return active;
   }
 
+  /**
+   * The active handoff for this work item (body + path), or null when none /
+   * malformed. The scoped counterpart of listActive — used so a session picks up
+   * ONLY its own work item's handoff (ac-1, wi_260626r3f).
+   */
+  async getActive(workItemId: string): Promise<ActiveHandoff | null> {
+    const path = this.activePath(workItemId);
+    try {
+      const { handoff, body } = parseHandoffFile(await Bun.file(path).text());
+      return { handoff, body, path };
+    } catch {
+      return null; // missing or malformed → nothing to pick up (fail-open)
+    }
+  }
+
+  /**
+   * Move JUST this work item's active handoff into archive and return it (or
+   * null when there is none). The scoped counterpart of consume — a concurrent
+   * worktree session sharing this .ditto/local must never archive a sibling's
+   * handoff (ac-1, wi_260626r3f).
+   */
+  async consumeFor(workItemId: string, now: Date = new Date()): Promise<ActiveHandoff | null> {
+    const active = await this.getActive(workItemId);
+    if (active === null) return null;
+    await ensureDir(join(this.dir(), 'archive'));
+    const dest = join(this.repoRoot, this.archiveRel(workItemId, stamp(now)));
+    try {
+      await rename(active.path, dest);
+    } catch {
+      // best-effort: a failed move just leaves it active for the next turn
+    }
+    return active;
+  }
+
   /** Whether an active handoff exists for this work item. */
   async exists(workItemId: string): Promise<boolean> {
     return Bun.file(this.activePath(workItemId)).exists();

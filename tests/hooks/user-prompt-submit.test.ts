@@ -456,5 +456,67 @@ describe('userPromptSubmitHandler', () => {
       const ctx2 = additionalContext((await run({ session_id: 'sess-ho2', prompt: '또' })).stdout);
       expect(ctx2).not.toContain('one-shot body marker');
     });
+
+    // wi_260626r3f ac-1: a worktree session shares the main .ditto/local, so the
+    // OLD all-handoffs pickup let a concurrent session steal a sibling's handoff.
+    // A session BOUND to a work item now consumes only that work item's handoff.
+    async function seedHandoffFor(wi: { id: string }, currentState: string): Promise<void> {
+      const item = await new WorkItemStore(repo).get(wi.id);
+      await new HandoffStore(repo).write(
+        buildHandoff({ workItem: item, fromContext: 'prev', currentState, nextFirstCheck: 'c' }),
+      );
+    }
+    async function makeWI(title: string): Promise<{ id: string }> {
+      return new WorkItemStore(repo).create({
+        title,
+        source_request: 'r',
+        goal: 'g',
+        acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+      });
+    }
+
+    test('bound sessions each consume only their own handoff (no cross-pickup)', async () => {
+      const a = await makeWI('A');
+      const b = await makeWI('B');
+      await seedHandoffFor(a, 'A-state-marker');
+      await seedHandoffFor(b, 'B-state-marker');
+      await new SessionPointerStore(repo).set('sess-A', a.id);
+      await new SessionPointerStore(repo).set('sess-B', b.id);
+      const hs = new HandoffStore(repo);
+      // session A's first prompt: injects ONLY A's handoff, leaves B's active
+      const ctxA = additionalContext((await run({ session_id: 'sess-A', prompt: 'go' })).stdout);
+      expect(ctxA).toContain('A-state-marker');
+      expect(ctxA).not.toContain('B-state-marker');
+      expect(await hs.exists(a.id)).toBe(false); // A consumed
+      expect(await hs.exists(b.id)).toBe(true); // B NOT stolen
+      // session B still gets its own
+      const ctxB = additionalContext((await run({ session_id: 'sess-B', prompt: 'go' })).stdout);
+      expect(ctxB).toContain('B-state-marker');
+      expect(await hs.exists(b.id)).toBe(false);
+    });
+
+    test('bound session with no own handoff leaves a sibling handoff untouched', async () => {
+      const a = await makeWI('A');
+      const b = await makeWI('B');
+      await seedHandoffFor(b, 'B-only-marker');
+      await new SessionPointerStore(repo).set('sess-A', a.id);
+      const ctxA = additionalContext((await run({ session_id: 'sess-A', prompt: 'go' })).stdout);
+      expect(ctxA).not.toContain('B-only-marker');
+      expect(await new HandoffStore(repo).exists(b.id)).toBe(true);
+    });
+
+    test('unbound session with multiple active handoffs consumes none (concurrency-safe)', async () => {
+      const a = await makeWI('A');
+      const b = await makeWI('B');
+      await seedHandoffFor(a, 'A-state-marker');
+      await seedHandoffFor(b, 'B-state-marker');
+      // unbound session (no pointer)
+      const ctx = additionalContext((await run({ session_id: 'sess-none', prompt: 'go' })).stdout);
+      expect(ctx).not.toContain('A-state-marker');
+      expect(ctx).not.toContain('B-state-marker');
+      const hs = new HandoffStore(repo);
+      expect(await hs.exists(a.id)).toBe(true);
+      expect(await hs.exists(b.id)).toBe(true);
+    });
   });
 });

@@ -17,16 +17,22 @@ import type { HookHandler, HookInput } from './runtime';
  * (no-auto-pick preserved). A phantom `<wi>` not present in the main work-item store
  * is skipped, so we never bind to a non-existent work item.
  */
-async function maybeBindWorktreeSession(input: HookInput): Promise<void> {
+async function maybeBindWorktreeSession(input: HookInput): Promise<string | undefined> {
   const raw = input.raw as { cwd?: unknown; session_id?: unknown } | null;
   const cwd = typeof raw?.cwd === 'string' ? raw.cwd : undefined;
   const sessionId = typeof raw?.session_id === 'string' ? raw.session_id : undefined;
-  if (!cwd || !sessionId) return;
+  if (!cwd || !sessionId) return undefined;
   const parsed = parseWorktreePath(resolve(cwd));
-  if (parsed === null) return;
+  if (parsed === null) return undefined; // non-worktree cwd: silent, never auto-bound
   const items = new WorkItemStore(input.repoRoot);
-  if (!(await items.exists(parsed.workItemId))) return;
+  if (!(await items.exists(parsed.workItemId))) {
+    // ac-3 (wi_260626r3f): worktree-shaped cwd but `<wi>` is absent from the main
+    // store (phantom id / workspace mismatch) — we cannot auto-bind. Surface an
+    // advisory instead of the old silent return, so the user binds manually.
+    return `worktree 경로 같으나 work item(${parsed.workItemId}) 바인딩 못 함 — 수동 확인 필요`;
+  }
   await new SessionPointerStore(input.repoRoot).set(sessionId, parsed.workItemId);
+  return undefined; // bound successfully: silent
 }
 
 /**
@@ -37,14 +43,15 @@ async function maybeBindWorktreeSession(input: HookInput): Promise<void> {
  * outside the ditto repo (a normal project using npx ditto has nothing to warn).
  */
 export const sessionStartHandler: HookHandler = async (input) => {
-  await maybeBindWorktreeSession(input);
+  const bindAdvisory = await maybeBindWorktreeSession(input);
   const { report, inDittoRepo } = collectModeReport(input.repoRoot, { env: input.env });
   const banner = formatModeBanner(report, { inDittoRepo });
-  if (!banner.text) return { exitCode: 0 };
+  const text = [bindAdvisory, banner.text].filter(Boolean).join('\n');
+  if (!text) return { exitCode: 0 };
   return {
     exitCode: 0,
     stdout: JSON.stringify({
-      hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: banner.text },
+      hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: text },
     }),
   };
 };

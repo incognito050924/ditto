@@ -84,6 +84,35 @@ describe('ditto worktree list (ac-1)', () => {
   });
 });
 
+describe('ditto worktree list orphan (ac-2)', () => {
+  test('an on-disk worktree with no work-item meta shows ORPHAN in json + human', () => {
+    const wi = startItem();
+    expect(ditto(['worktree', 'create', wi]).exitCode).toBe(0); // ensures the worktrees dir exists
+    execFileSync(
+      'git',
+      [
+        'worktree',
+        'add',
+        '--detach',
+        join(dir, '.ditto', 'local', 'worktrees', 'orphan_x'),
+        'HEAD',
+      ],
+      { cwd: dir },
+    );
+
+    const j = ditto(['worktree', 'list', '--output', 'json']);
+    expect(j.exitCode).toBe(0);
+    const rows = JSON.parse(j.stdout).worktrees as { orphan: boolean; worktree_path: string }[];
+    const orphan = rows.find((r) => r.orphan);
+    expect(orphan).toBeDefined();
+    expect(orphan?.worktree_path).toBe('.ditto/local/worktrees/orphan_x');
+
+    const h = ditto(['worktree', 'list']);
+    expect(h.exitCode).toBe(0);
+    expect(h.stdout).toContain('ORPHAN');
+  });
+});
+
 describe('ditto worktree create guidance (ac-2)', () => {
   test('prints a cd binding hint with the worktree path and work item id', () => {
     const wi = startItem();

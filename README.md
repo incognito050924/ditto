@@ -135,6 +135,32 @@ options, how to choose among them, and per-developer defaults, see:
 
 - [skills/tech-spec/GUIDE.md](skills/tech-spec/GUIDE.md)
 
+## Concurrent development with worktrees
+
+Develop several independent features at once on one machine. DITTO can give each
+work item its own git worktree — an isolated checkout on its own branch under
+`.ditto/local/worktrees/<wi>` — so two efforts (and their autopilots) run side by
+side without colliding in the working tree. DITTO owns the worktree lifecycle.
+
+```bash
+# create a work item and its worktree in one step
+ditto work start "<goal>" --request "<verbatim request>" --worktree
+
+# or manage worktrees for existing work items
+ditto worktree create <wi>
+ditto worktree list
+ditto worktree remove <wi>     # blocks dirty/unmerged; --force to discard anyway
+
+ditto work status <wi>         # shows a work item's linked worktree(s)
+```
+
+Flow: create → `cd` to the printed path → opening a session there auto-binds to
+that work item (it shares the main workspace's `.ditto/local` state) → `list` /
+`status` for what is in flight → `remove` when done. Full guide, edge behavior,
+and known limits:
+
+- [skills/worktree/SKILL.md](skills/worktree/SKILL.md)
+
 ## Status
 
 This repository is just beginning.

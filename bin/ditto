@@ -13575,6 +13575,7 @@ async function listWorktreesForWorkspace(repoRoot) {
           branch: wt.branch,
           worktree_path: wt.worktree_path,
           exists: false,
+          orphan: false,
           dirty: false,
           base: "",
           ahead: 0,
@@ -13591,6 +13592,7 @@ async function listWorktreesForWorkspace(repoRoot) {
         branch: wt.branch,
         worktree_path: wt.worktree_path,
         exists: true,
+        orphan: false,
         dirty: !isWorkingTreeClean(wtAbs),
         base,
         ahead,
@@ -13598,7 +13600,41 @@ async function listWorktreesForWorkspace(repoRoot) {
       });
     }
   }
+  const metaPaths = new Set(rows.map((r3) => toPosixSeparators(r3.worktree_path)));
+  let onDisk;
+  try {
+    onDisk = listRunWorktrees(repoRoot);
+  } catch {
+    onDisk = [];
+  }
+  for (const rel of onDisk) {
+    if (metaPaths.has(rel))
+      continue;
+    const wtAbs = join7(repoRoot, rel);
+    rows.push({
+      work_item_id: "",
+      owning_repo: "",
+      branch: readWorktreeBranch(wtAbs),
+      worktree_path: rel,
+      exists: true,
+      orphan: true,
+      dirty: !isWorkingTreeClean(wtAbs),
+      base: "",
+      ahead: 0,
+      behind: 0
+    });
+  }
   return rows;
+}
+function readWorktreeBranch(cwd) {
+  try {
+    return execFileSync2("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd,
+      encoding: "utf8"
+    }).trim();
+  } catch {
+    return "";
+  }
 }
 function worktreeBindingHint(repoRoot, worktrees, workItemId2) {
   const ws = worktrees.find((w2) => w2.owning_repo === ".") ?? worktrees[0];
@@ -21414,6 +21450,26 @@ class HandoffStore {
         await rename3(a2.path, dest);
       } catch {}
     }
+    return active;
+  }
+  async getActive(workItemId2) {
+    const path = this.activePath(workItemId2);
+    try {
+      const { handoff: handoff2, body } = parseHandoffFile(await Bun.file(path).text());
+      return { handoff: handoff2, body, path };
+    } catch {
+      return null;
+    }
+  }
+  async consumeFor(workItemId2, now = new Date) {
+    const active = await this.getActive(workItemId2);
+    if (active === null)
+      return null;
+    await ensureDir(join23(this.dir(), "archive"));
+    const dest = join23(this.repoRoot, this.archiveRel(workItemId2, stamp(now)));
+    try {
+      await rename3(active.path, dest);
+    } catch {}
     return active;
   }
   async exists(workItemId2) {
@@ -35455,20 +35511,24 @@ async function maybeBindWorktreeSession(input) {
   if (parsed === null)
     return;
   const items = new WorkItemStore(input.repoRoot);
-  if (!await items.exists(parsed.workItemId))
-    return;
+  if (!await items.exists(parsed.workItemId)) {
+    return `worktree \uACBD\uB85C \uAC19\uC73C\uB098 work item(${parsed.workItemId}) \uBC14\uC778\uB529 \uBABB \uD568 \u2014 \uC218\uB3D9 \uD655\uC778 \uD544\uC694`;
+  }
   await new SessionPointerStore(input.repoRoot).set(sessionId, parsed.workItemId);
+  return;
 }
 var sessionStartHandler = async (input) => {
-  await maybeBindWorktreeSession(input);
+  const bindAdvisory = await maybeBindWorktreeSession(input);
   const { report, inDittoRepo } = collectModeReport(input.repoRoot, { env: input.env });
   const banner = formatModeBanner(report, { inDittoRepo });
-  if (!banner.text)
+  const text = [bindAdvisory, banner.text].filter(Boolean).join(`
+`);
+  if (!text)
     return { exitCode: 0 };
   return {
     exitCode: 0,
     stdout: JSON.stringify({
-      hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: banner.text }
+      hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: text }
     })
   };
 };
@@ -36507,10 +36567,18 @@ var userPromptSubmitHandler = async (input) => {
   const ctx = {};
   try {
     const hstore = new HandoffStore(input.repoRoot);
-    const active = await hstore.listActive();
-    if (active.length > 0) {
-      ctx.handoffBodies = active.map((a2) => a2.body);
-      await hstore.consume();
+    const boundId = resolved.workItem?.id;
+    if (boundId) {
+      const own = await hstore.consumeFor(boundId);
+      if (own)
+        ctx.handoffBodies = [own.body];
+    } else {
+      const active = await hstore.listActive();
+      const sole = active.length === 1 ? active[0] : undefined;
+      if (sole) {
+        ctx.handoffBodies = [sole.body];
+        await hstore.consumeFor(sole.handoff.work_item_id);
+      }
     }
   } catch {}
   const item = resolved.workItem;
@@ -42581,8 +42649,10 @@ var worktreeList = defineCommand({
       }
       writeHuman("work-item\trepo\tbranch\tstate\tpath");
       for (const r3 of rows) {
-        const state = r3.exists ? `${r3.dirty ? "dirty" : "clean"} +${r3.ahead}/-${r3.behind} (vs ${r3.base})` : "MISSING";
-        writeHuman(`${r3.work_item_id}	${r3.owning_repo}	${r3.branch}	${state}	${r3.worktree_path}`);
+        const state = r3.orphan ? `ORPHAN${r3.dirty ? " dirty" : ""}` : r3.exists ? `${r3.dirty ? "dirty" : "clean"} +${r3.ahead}/-${r3.behind} (vs ${r3.base})` : "MISSING";
+        const workItem2 = r3.orphan ? "orphan" : r3.work_item_id;
+        const repoCol = r3.owning_repo === "" ? "\u2014" : r3.owning_repo;
+        writeHuman(`${workItem2}	${repoCol}	${r3.branch}	${state}	${r3.worktree_path}`);
       }
     } catch (err) {
       writeError(`worktree list failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -42650,4 +42720,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=5229e770e6a2dacf919daf902b9bab8316cb1e207777705c9b81eaa05296fad3
+//# ditto-src-stamp=933f78db894619c9ca3cf8598ac4b56e0d5ba45499f4f0e7b4648b45dfdb7e75

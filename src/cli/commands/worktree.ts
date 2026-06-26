@@ -162,12 +162,14 @@ const worktreeList = defineCommand({
       }
       writeHuman('work-item\trepo\tbranch\tstate\tpath');
       for (const r of rows) {
-        const state = r.exists
-          ? `${r.dirty ? 'dirty' : 'clean'} +${r.ahead}/-${r.behind} (vs ${r.base})`
-          : 'MISSING';
-        writeHuman(
-          `${r.work_item_id}\t${r.owning_repo}\t${r.branch}\t${state}\t${r.worktree_path}`,
-        );
+        const state = r.orphan
+          ? `ORPHAN${r.dirty ? ' dirty' : ''}`
+          : r.exists
+            ? `${r.dirty ? 'dirty' : 'clean'} +${r.ahead}/-${r.behind} (vs ${r.base})`
+            : 'MISSING';
+        const workItem = r.orphan ? 'orphan' : r.work_item_id;
+        const repoCol = r.owning_repo === '' ? '—' : r.owning_repo;
+        writeHuman(`${workItem}\t${repoCol}\t${r.branch}\t${state}\t${r.worktree_path}`);
       }
     } catch (err) {
       writeError(`worktree list failed: ${err instanceof Error ? err.message : String(err)}`);

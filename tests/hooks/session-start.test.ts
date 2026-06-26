@@ -69,4 +69,27 @@ describe('sessionStartHandler worktree auto-binding (ac-2)', () => {
     const out = await run({ session_id: SESSION, cwd: join(repo, 'src') });
     expect(out.exitCode).toBe(0);
   });
+
+  // wi_260626r3f ac-3: a worktree-shaped cwd whose <wi> is not in the main store
+  // must NOT silently no-op — surface an advisory so the user binds manually.
+  test('worktree-shaped cwd with phantom <wi> emits a bind advisory (not silent)', async () => {
+    const cwd = join(repo, '.ditto', 'local', 'worktrees', 'wi_doesnotexist', 'src');
+    const out = await run({ session_id: SESSION, cwd });
+    expect(out.exitCode).toBe(0);
+    const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput?.additionalContext ?? '';
+    expect(ctx).toContain('wi_doesnotexist');
+    expect(ctx).toContain('수동');
+  });
+
+  test('successful bind and non-worktree cwd stay silent (no advisory)', async () => {
+    const bound = await run({
+      session_id: SESSION,
+      cwd: join(repo, '.ditto', 'local', 'worktrees', wiId),
+    });
+    const boundCtx = JSON.parse(bound.stdout ?? '{}').hookSpecificOutput?.additionalContext ?? '';
+    expect(boundCtx).not.toContain('수동');
+    const plain = await run({ session_id: SESSION, cwd: join(repo, 'src') });
+    const plainCtx = JSON.parse(plain.stdout ?? '{}').hookSpecificOutput?.additionalContext ?? '';
+    expect(plainCtx).not.toContain('수동');
+  });
 });

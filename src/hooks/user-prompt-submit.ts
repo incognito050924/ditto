@@ -240,12 +240,26 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
   // Active handoff 자동 로드 (wi_260605wf3): 파일명을 명시하지 않아도 본문을
   // 컨텍스트로 주입한 뒤 archive 로 옮긴다 → 정확히 1회 픽업, active 누적 0.
   // fail-open: handoff 읽기/이동 실패가 프롬프트 훅을 막지 않는다.
+  //
+  // ac-1 (wi_260626r3f): a worktree session shares the main .ditto/local, so the
+  // old "consume EVERY active handoff" let a concurrent session steal a sibling
+  // work item's handoff (silent, unrecoverable). Scope the pickup:
+  //  - session bound to a work item → inject+consume ONLY that work item's handoff.
+  //  - unbound + EXACTLY one active handoff → consume it (single-session back-compat).
+  //  - unbound + multiple → consume none (ambiguous; a sibling session owns one).
   try {
     const hstore = new HandoffStore(input.repoRoot);
-    const active = await hstore.listActive();
-    if (active.length > 0) {
-      ctx.handoffBodies = active.map((a) => a.body);
-      await hstore.consume();
+    const boundId = resolved.workItem?.id;
+    if (boundId) {
+      const own = await hstore.consumeFor(boundId);
+      if (own) ctx.handoffBodies = [own.body];
+    } else {
+      const active = await hstore.listActive();
+      const sole = active.length === 1 ? active[0] : undefined;
+      if (sole) {
+        ctx.handoffBodies = [sole.body];
+        await hstore.consumeFor(sole.handoff.work_item_id);
+      }
     }
   } catch {
     // handoff 자동 로드 실패는 무시 (관측적, non-blocking)

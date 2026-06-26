@@ -57,6 +57,43 @@ describe('HandoffStore', () => {
     expect(reloaded.handoff_path).toBe(`.ditto/local/handoff/${wi.id}.md`);
   });
 
+  // wi_260626r3f ac-1: per-work-item scoped pickup so a concurrent worktree
+  // session (sharing the main .ditto/local) never steals a sibling's handoff.
+  test('getActive returns the active handoff body or null', async () => {
+    const wi = await workItem();
+    const store = new HandoffStore(repo);
+    expect(await store.getActive(wi.id)).toBeNull();
+    await store.write(
+      buildHandoff({ workItem: wi, fromContext: 'c', currentState: 'mid', nextFirstCheck: 'c' }),
+    );
+    const got = await store.getActive(wi.id);
+    expect(got?.handoff.work_item_id).toBe(wi.id);
+    expect(got?.body).toContain('mid');
+  });
+
+  test('consumeFor archives only the named work item, leaving siblings active', async () => {
+    const a = await workItem();
+    const b = await new WorkItemStore(repo).create({
+      title: 'pw2',
+      source_request: 'r2',
+      goal: 'g2',
+      acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+    });
+    const store = new HandoffStore(repo);
+    await store.write(
+      buildHandoff({ workItem: a, fromContext: 'c', currentState: 'a-state', nextFirstCheck: 'c' }),
+    );
+    await store.write(
+      buildHandoff({ workItem: b, fromContext: 'c', currentState: 'b-state', nextFirstCheck: 'c' }),
+    );
+    const consumed = await store.consumeFor(a.id);
+    expect(consumed?.handoff.work_item_id).toBe(a.id);
+    expect(consumed?.body).toContain('a-state');
+    expect(await store.exists(a.id)).toBe(false); // archived
+    expect(await store.exists(b.id)).toBe(true); // sibling untouched
+    expect(await store.consumeFor(a.id)).toBeNull(); // idempotent: nothing left
+  });
+
   test('consume moves active handoffs to archive (picked up once, no accumulation)', async () => {
     const wi = await workItem();
     const store = new HandoffStore(repo);

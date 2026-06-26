@@ -371,6 +371,13 @@ export interface WorktreeStatus {
   worktree_path: string;
   /** false when the meta points at a directory that is no longer on disk. */
   exists: boolean;
+  /**
+   * true when the worktree is on disk under `.ditto/local/worktrees/` but recorded
+   * in NO work-item meta (porcelain ∖ meta): work item archived/abandoned, meta
+   * dropped out-of-band, or an external `git worktree add`. work_item_id/owning_repo
+   * are unknown ('') and base/ahead/behind are not computed.
+   */
+  orphan: boolean;
   dirty: boolean;
   /** Base branch ahead/behind is measured against (per owning repo, same as create-time). */
   base: string;
@@ -406,6 +413,7 @@ export async function listWorktreesForWorkspace(repoRoot: string): Promise<Workt
           branch: wt.branch,
           worktree_path: wt.worktree_path,
           exists: false,
+          orphan: false,
           dirty: false,
           base: '',
           ahead: 0,
@@ -422,6 +430,7 @@ export async function listWorktreesForWorkspace(repoRoot: string): Promise<Workt
         branch: wt.branch,
         worktree_path: wt.worktree_path,
         exists: true,
+        orphan: false,
         dirty: !isWorkingTreeClean(wtAbs),
         base,
         ahead,
@@ -429,7 +438,46 @@ export async function listWorktreesForWorkspace(repoRoot: string): Promise<Workt
       });
     }
   }
+
+  // porcelain ∖ meta: on-disk run worktrees not bound to any work-item meta → ORPHAN.
+  // The list surface would otherwise hide these leaks (the porcelain truth lives in
+  // listRunWorktrees, previously used only by cleanup).
+  const metaPaths = new Set(rows.map((r) => toPosixSeparators(r.worktree_path)));
+  let onDisk: string[];
+  try {
+    onDisk = listRunWorktrees(repoRoot);
+  } catch {
+    onDisk = []; // not a git repo / git unavailable — meta rows still list
+  }
+  for (const rel of onDisk) {
+    if (metaPaths.has(rel)) continue;
+    const wtAbs = join(repoRoot, rel);
+    rows.push({
+      work_item_id: '',
+      owning_repo: '',
+      branch: readWorktreeBranch(wtAbs),
+      worktree_path: rel,
+      exists: true,
+      orphan: true,
+      dirty: !isWorkingTreeClean(wtAbs),
+      base: '',
+      ahead: 0,
+      behind: 0,
+    });
+  }
   return rows;
+}
+
+/** Checked-out branch of a worktree ('HEAD' if detached, '' if unresolvable). */
+function readWorktreeBranch(cwd: string): string {
+  try {
+    return execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      cwd,
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    return '';
+  }
 }
 
 /**
