@@ -9,7 +9,7 @@ import {
   InvalidHeadRefError,
   writeWorkItemHandoff,
 } from '~/core/work-item-handoff';
-import { WorkItemStore } from '~/core/work-item-store';
+import { WorkItemStore, blockingFollowUp, pushReadiness } from '~/core/work-item-store';
 import { declarerRole } from '~/schemas/common';
 import {
   type AcceptanceCriterion,
@@ -67,26 +67,6 @@ function parseRiskFlags(raw: string): { risk?: WorkItem['declared_risk']; unknow
 function hasDeclaredRisk(item: WorkItem): boolean {
   const r = item.declared_risk;
   return !!r && (r.non_local === true || r.irreversible === true || r.unaudited === true);
-}
-
-// ac-4 C: "high-severity" threshold for the done block = severity ∈ {high, critical}.
-const DONE_BLOCKING_SEVERITIES = ['high', 'critical'] as const;
-
-/**
- * ac-4 C: the first follow-up that blocks `done` — an UNRESOLVED, self-caused bug
- * of high/critical severity (a self-caused high-severity regression). A follow-up
- * that is resolved, not self_caused, kind=idea, or below the severity threshold
- * does NOT block. Returns undefined when nothing blocks.
- */
-function blockingFollowUp(item: WorkItem): FollowUp | undefined {
-  return (item.follow_ups ?? []).find(
-    (f) =>
-      f.kind === 'bug' &&
-      f.self_caused === true &&
-      f.resolved !== true &&
-      f.severity !== undefined &&
-      (DONE_BLOCKING_SEVERITIES as readonly string[]).includes(f.severity),
-  );
 }
 
 /**
@@ -1236,6 +1216,53 @@ const workStem = defineCommand({
   },
 });
 
+const workPushReady = defineCommand({
+  meta: {
+    name: 'push-ready',
+    description:
+      'PULL-ONLY: report whether a work item meets the STRONG push-readiness bar (every AC pass + real command evidence + no unresolved self-caused high/critical follow-up + a fully-done stem chain). Surfaces ready + reasons ONLY when you ask; ditto never proposes a push itself (push is your irreversible decision).',
+  },
+  args: {
+    workId: {
+      type: 'positional',
+      description: 'Work item id to check push-readiness for',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const item = await store.get(args.workId); // clear error if the WI is unknown
+      // Pass the derived chain so condition 4 (a half-finished stem is not
+      // push-ready) can apply; pushReadiness ignores a single-member stem.
+      const stem = await store.stem(args.workId);
+      const result = pushReadiness(item, stem);
+      if (format === 'json') {
+        writeJson({ ready: result.ready, reasons: result.reasons });
+      } else {
+        writeHuman(`push-ready: ${result.ready}`);
+        if (result.reasons.length > 0) {
+          writeHuman('not ready because:');
+          for (const reason of result.reasons) writeHuman(`  - ${reason}`);
+        }
+      }
+    } catch (err) {
+      writeError(`work push-ready failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  },
+});
+
 const workArchive = defineCommand({
   meta: {
     name: 'archive',
@@ -1312,6 +1339,7 @@ export const workCommand = defineCommand({
     promote: workPromote,
     'follow-up': workFollowUp,
     stem: workStem,
+    'push-ready': workPushReady,
     archive: workArchive,
   },
 });

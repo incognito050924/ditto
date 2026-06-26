@@ -18489,6 +18489,29 @@ function rollUpStem(members) {
     return "open";
   return members.every((m2) => m2.status === "done") ? "done" : "partial";
 }
+var DONE_BLOCKING_SEVERITIES = ["high", "critical"];
+function blockingFollowUp(item) {
+  return (item.follow_ups ?? []).find((f3) => f3.kind === "bug" && f3.self_caused === true && f3.resolved !== true && f3.severity !== undefined && DONE_BLOCKING_SEVERITIES.includes(f3.severity));
+}
+function pushReadiness(item, stem) {
+  const reasons = [];
+  const notPass = item.acceptance_criteria.filter((c3) => c3.verdict !== "pass");
+  if (notPass.length > 0) {
+    reasons.push(`acceptance criteria not all pass: ${notPass.map((c3) => `${c3.id}=${c3.verdict}`).join(", ")}`);
+  }
+  const noCommandEvidence = item.acceptance_criteria.filter((c3) => !c3.evidence.some((e2) => e2.kind === "command"));
+  if (noCommandEvidence.length > 0) {
+    reasons.push(`acceptance criteria lack real (command-kind) evidence: ${noCommandEvidence.map((c3) => c3.id).join(", ")}`);
+  }
+  const blocking = blockingFollowUp(item);
+  if (blocking) {
+    reasons.push(`unresolved self-caused ${blocking.severity}-severity follow-up: "${blocking.note}"`);
+  }
+  if (stem !== undefined && stem.members.length > 1 && stem.rolled_up !== "done") {
+    reasons.push(`stem chain not fully done (rolled_up=${stem.rolled_up})`);
+  }
+  return { ready: reasons.length === 0, reasons };
+}
 
 class WorkItemStore {
   repoRoot;
@@ -41743,10 +41766,6 @@ function hasDeclaredRisk(item) {
   const r3 = item.declared_risk;
   return !!r3 && (r3.non_local === true || r3.irreversible === true || r3.unaudited === true);
 }
-var DONE_BLOCKING_SEVERITIES = ["high", "critical"];
-function blockingFollowUp(item) {
-  return (item.follow_ups ?? []).find((f3) => f3.kind === "bug" && f3.self_caused === true && f3.resolved !== true && f3.severity !== undefined && DONE_BLOCKING_SEVERITIES.includes(f3.severity));
-}
 function rejectNonObservableCriteria(statements) {
   const errors3 = [];
   statements.forEach((statement, i2) => {
@@ -42680,6 +42699,50 @@ var workStem = defineCommand({
     }
   }
 });
+var workPushReady = defineCommand({
+  meta: {
+    name: "push-ready",
+    description: "PULL-ONLY: report whether a work item meets the STRONG push-readiness bar (every AC pass + real command evidence + no unresolved self-caused high/critical follow-up + a fully-done stem chain). Surfaces ready + reasons ONLY when you ask; ditto never proposes a push itself (push is your irreversible decision)."
+  },
+  args: {
+    workId: {
+      type: "positional",
+      description: "Work item id to check push-readiness for",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const item = await store.get(args.workId);
+      const stem = await store.stem(args.workId);
+      const result2 = pushReadiness(item, stem);
+      if (format === "json") {
+        writeJson2({ ready: result2.ready, reasons: result2.reasons });
+      } else {
+        writeHuman(`push-ready: ${result2.ready}`);
+        if (result2.reasons.length > 0) {
+          writeHuman("not ready because:");
+          for (const reason of result2.reasons)
+            writeHuman(`  - ${reason}`);
+        }
+      }
+    } catch (err) {
+      writeError(`work push-ready failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
 var workArchive = defineCommand({
   meta: {
     name: "archive",
@@ -42754,6 +42817,7 @@ var workCommand = defineCommand({
     promote: workPromote,
     "follow-up": workFollowUp,
     stem: workStem,
+    "push-ready": workPushReady,
     archive: workArchive
   }
 });
@@ -42805,4 +42869,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=c9fb1b465893ac39468ebeabc78a46ff73929df85bba98478d2a3f2c52de831a
+//# ditto-src-stamp=cd1f76d9e87f1f343f10ecf9dadf1b77b813165ba3a8a6de7d0021e6108c23b4

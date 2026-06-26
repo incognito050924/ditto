@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { type IntentMetric, intentMetric } from '~/schemas/intent-metric';
 import { languageLedger } from '~/schemas/language-ledger';
 import { type TechSpecRound, techSpecRound } from '~/schemas/tech-spec-round';
-import { type WorkItem, workItem } from '~/schemas/work-item';
+import { type FollowUp, type WorkItem, workItem } from '~/schemas/work-item';
 import { localDir } from './ditto-paths';
 import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
 import { generateId } from './id';
@@ -73,6 +73,82 @@ export function rollUpStem(members: readonly StemMember[]): StemRollup {
   );
   if (nonTerminal.length > 0) return 'open';
   return members.every((m) => m.status === 'done') ? 'done' : 'partial';
+}
+
+// ac-4: "high-severity" threshold for the done block = severity ∈ {high, critical}.
+const DONE_BLOCKING_SEVERITIES = ['high', 'critical'] as const;
+
+/**
+ * ac-4: the first follow-up that blocks `done` — an UNRESOLVED, self-caused bug of
+ * high/critical severity (a self-caused high-severity regression). A follow-up that
+ * is resolved, not self_caused, kind=idea, or below the severity threshold does NOT
+ * block. Returns undefined when nothing blocks. Lives in core so both `work done`
+ * (ac-4) and `pushReadiness` (ac-6) consume one rule, not two copies.
+ */
+export function blockingFollowUp(item: WorkItem): FollowUp | undefined {
+  return (item.follow_ups ?? []).find(
+    (f) =>
+      f.kind === 'bug' &&
+      f.self_caused === true &&
+      f.resolved !== true &&
+      f.severity !== undefined &&
+      (DONE_BLOCKING_SEVERITIES as readonly string[]).includes(f.severity),
+  );
+}
+
+// ac-6: outcome of the strong push-readiness check. `ready` is the AND of all four
+// conditions; `reasons` lists exactly which failed (empty when ready).
+export interface PushReadiness {
+  ready: boolean;
+  reasons: string[];
+}
+
+/**
+ * ac-6 (wi_260626wnv): compute the STRONG push-readiness signal for a work item.
+ * Push/deploy is the user's irreversible decision (charter §4-8) — this only
+ * COMPUTES; it never proposes a push. A bare completion verdict=pass is too weak a
+ * bar (one lightweight `verify` earns it), so a WI is push-ready ONLY when ALL hold:
+ *   1. every acceptance criterion has verdict === 'pass';
+ *   2. every acceptance criterion carries ≥1 REAL evidence entry — a command-kind
+ *      evidence (not merely a note) — i.e. evidence depth beyond the bare verdict;
+ *   3. no UNRESOLVED self-caused high/critical follow-up (reuses blockingFollowUp);
+ *   4. if the WI participates in a stem (its derived stem has >1 member), the
+ *      stem's rolled-up status is `done` — a half-finished chain is not push-ready.
+ * Pure: the caller passes the derived `stem` (stem() is async); when omitted,
+ * condition 4 does not apply (a lone WI).
+ */
+export function pushReadiness(item: WorkItem, stem?: StemView): PushReadiness {
+  const reasons: string[] = [];
+  // 1. every AC verdict === 'pass'
+  const notPass = item.acceptance_criteria.filter((c) => c.verdict !== 'pass');
+  if (notPass.length > 0) {
+    reasons.push(
+      `acceptance criteria not all pass: ${notPass.map((c) => `${c.id}=${c.verdict}`).join(', ')}`,
+    );
+  }
+  // 2. every AC carries ≥1 command-kind evidence (depth stronger than bare verdict)
+  const noCommandEvidence = item.acceptance_criteria.filter(
+    (c) => !c.evidence.some((e) => e.kind === 'command'),
+  );
+  if (noCommandEvidence.length > 0) {
+    reasons.push(
+      `acceptance criteria lack real (command-kind) evidence: ${noCommandEvidence
+        .map((c) => c.id)
+        .join(', ')}`,
+    );
+  }
+  // 3. no unresolved self-caused high/critical follow-up (ac-4 rule reused)
+  const blocking = blockingFollowUp(item);
+  if (blocking) {
+    reasons.push(
+      `unresolved self-caused ${blocking.severity}-severity follow-up: "${blocking.note}"`,
+    );
+  }
+  // 4. a multi-member stem chain must be fully rolled up to done
+  if (stem !== undefined && stem.members.length > 1 && stem.rolled_up !== 'done') {
+    reasons.push(`stem chain not fully done (rolled_up=${stem.rolled_up})`);
+  }
+  return { ready: reasons.length === 0, reasons };
 }
 
 export class WorkItemStore {
