@@ -44,6 +44,33 @@ export const intentContract = z
       .array(z.string())
       .default([])
       .describe('Out-of-scope improvement ideas captured but not acted on (§6.1)'),
+    // ac-4 (T1, wi_2606266az): one-time batch materialization record for the
+    // out-of-scope `follow_up_candidates` above. ac-4 requires those follow-ups be
+    // materialized in ONE user-approved batch (per-item drip = SLOP), so the
+    // consumer (a later loop node) needs a place to record the one-time approval and
+    // the work items it created — the latter back-links like work-item
+    // followUp.materialized_wi and makes re-runs idempotent. Additive + OPTIONAL: a
+    // legacy intent.json omits it and parses unchanged; `follow_up_candidates` is
+    // itself NOT redesigned (stays a bare string[]).
+    follow_up_materialization: z
+      .object({
+        batch_approved: z
+          .boolean()
+          .default(false)
+          .describe(
+            'User granted the one-time batch approval to materialize out-of-scope follow-ups',
+          ),
+        materialized_wis: z
+          .array(workItemId)
+          .default([])
+          .describe(
+            'Work items the batch materialization created; non-empty makes re-runs idempotent (back-link)',
+          ),
+      })
+      .optional()
+      .describe(
+        'One-time batch materialization record for follow_up_candidates (ac-4); absent on legacy intents',
+      ),
     question_policy: questionPolicy,
     source_digest: sourceDigest.optional(),
   })

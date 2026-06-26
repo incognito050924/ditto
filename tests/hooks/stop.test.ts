@@ -1156,6 +1156,76 @@ describe('stopHandler — residual resolvability gate (ac-2 runtime wiring)', ()
   });
 });
 
+describe('stopHandler — residual-risk-record gate (ac-3 completion-side, riskRecordBlockers)', () => {
+  // A passing completion (all-AC pass, ran a command) carrying ONE structured
+  // remaining_risk_record. Unlike an in-scope `unverified` (forbidden on a pass by the
+  // superRefine), `remaining_risk_records` is unconstrained on a pass, so a would-close
+  // completion may carry one; the gate routes it through the SAME default-DENY
+  // classifier (`riskRecordBlockers`) the unverified[] residual gate uses (R11).
+  const passingWithRiskRecord = (rec: Record<string, unknown>) =>
+    completion({ acceptance: PASSING_ACCEPTANCE, remaining_risk_records: [rec] });
+
+  // a parked agent_resolvable record ALWAYS blocks (parking what the agent can resolve
+  // is the anti-pattern) — mirrors how unverified[]/ac-1 blocks.
+  test('agent_resolvable-record-blocks-Stop: a parked agent_resolvable risk record => exit 2', async () => {
+    await writeArtifact(
+      'completion.json',
+      passingWithRiskRecord({
+        risk: 'a missing null guard on the new path',
+        resolvability: 'agent_resolvable',
+      }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('resolvable');
+  });
+
+  // a blocked_external record WITH grounding releases (genuine residual).
+  test('blocked_external-releases: a grounded blocked_external risk record => exit 0', async () => {
+    await writeArtifact(
+      'completion.json',
+      passingWithRiskRecord({
+        risk: 'upstream vendor API outage',
+        resolvability: 'blocked_external',
+        grounding: 'vendor status page; ADR-0018 graceful-degrade',
+      }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  // R5/ADR-0018: a tool-absence record is blocked_external+grounding (releases),
+  // never agent_resolvable.
+  test('R5: an optional-tool-absence risk is blocked_external+grounding => releases (exit 0)', async () => {
+    await writeArtifact(
+      'completion.json',
+      passingWithRiskRecord({
+        risk: 'CodeQL re-scan not run (analyzer absent)',
+        resolvability: 'blocked_external',
+        grounding: 'ADR-0018: optional tool absent — graceful degrade',
+      }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  // an ungrounded blocked_external record blocks (default-deny on ungrounded residual).
+  test('an ungrounded blocked_external risk record => exit 2', async () => {
+    await writeArtifact(
+      'completion.json',
+      passingWithRiskRecord({ risk: 'flaky integration path', resolvability: 'blocked_external' }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('blocked_external');
+  });
+
+  // Regression: a pass completion with NO remaining_risk_records behaves exactly as
+  // before — the global Stop gate is unchanged when the field is absent.
+  test('regression: a pass completion with NO remaining_risk_records => exit 0 (unchanged)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+});
+
 describe('residualResolvabilityForcesContinuation', () => {
   const wi = { acceptance_criteria: [{ id: 'ac-1' }, { id: 'ac-2' }, { id: 'ac-3' }] };
   const comp = (unverified: unknown[]) => ({ unverified });
@@ -1395,5 +1465,142 @@ describe('dialecticForcesContinuation — backward-finding anchor existence (ac-
     const reasons = dialecticForcesContinuation(d);
     expect(reasons.some((r) => r.includes('does not resolve'))).toBe(false);
     expect(reasons).toEqual([]);
+  });
+});
+
+// ── n1i-stop wiring (wi_2606266az): nonPassTerminationGate (ac-1/ac-5) +
+//    attestAcVerdicts surfacing (ac-6) into the runtime Stop exit-code path ──
+describe('stopHandler — non-pass termination gate (ac-1) + no-progress (ac-5)', () => {
+  // A non-pass completion whose AC-set matches the work item (so completionGate
+  // passes) but that PARKS one in-scope criterion at unverified. Without the ac-1
+  // wiring this sails to exit 0 (the leak). `next_handoff_path` is required by the
+  // schema superRefine for any non-pass completion.
+  const nonPassParked = (overrides: Record<string, unknown> = {}) =>
+    completion({
+      acceptance: [
+        { criterion_id: 'ac-1', verdict: 'pass' },
+        { criterion_id: 'ac-2', verdict: 'pass' },
+        { criterion_id: 'ac-3', verdict: 'unverified' },
+      ],
+      final_verdict: 'partial',
+      next_handoff_path: '.ditto/handoff/x.md',
+      ...overrides,
+    });
+
+  test('CORE leak: a non-pass completion parking an in-scope unverified AC WITHOUT non_pass_status => exit 2 (blocks, no silent-terminate)', async () => {
+    await writeArtifact('completion.json', nonPassParked());
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('ac-3');
+    expect(out.stderr).toContain('non_pass_status');
+  });
+
+  test('a non-pass completion parking an in-scope FAIL AC without an honest declaration also blocks => exit 2', async () => {
+    await writeArtifact(
+      'completion.json',
+      nonPassParked({
+        acceptance: [
+          { criterion_id: 'ac-1', verdict: 'pass' },
+          { criterion_id: 'ac-2', verdict: 'pass' },
+          { criterion_id: 'ac-3', verdict: 'fail' },
+        ],
+        final_verdict: 'fail',
+      }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(2);
+  });
+
+  test('D2 alive: an HONEST partial (non_pass_status with reason+grounding) parking the SAME AC TERMINATES => exit 0', async () => {
+    await writeArtifact(
+      'completion.json',
+      nonPassParked({
+        non_pass_status: {
+          state: 'partial',
+          reason: 'ac-3 needs a downstream service not yet available',
+          grounding: 'depends on payments-svc#42',
+        },
+      }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('exit code differs per path: ungrounded parked unverified => 2, honest partial => 0', async () => {
+    await writeArtifact('completion.json', nonPassParked());
+    const blocked = await run({ stop_hook_active: false });
+    await writeArtifact(
+      'completion.json',
+      nonPassParked({
+        non_pass_status: { state: 'blocked', reason: 'cannot proceed', grounding: 'ADR-0013' },
+      }),
+    );
+    const terminated = await run({ stop_hook_active: false });
+    expect(blocked.exitCode).toBe(2);
+    expect(terminated.exitCode).toBe(0);
+    expect(blocked.exitCode).not.toBe(terminated.exitCode);
+  });
+
+  test('ac-5: a no-progress run surfacing as a non-pass completion with an ungrounded parked AC does NOT silent-terminate => exit 2', async () => {
+    // A no-progress halt that writes a non-pass completion (final_verdict unverified)
+    // parking an in-scope AC without an honest declaration must block, not pass.
+    await writeArtifact(
+      'completion.json',
+      nonPassParked({
+        acceptance: [
+          { criterion_id: 'ac-1', verdict: 'pass' },
+          { criterion_id: 'ac-2', verdict: 'unverified' },
+          { criterion_id: 'ac-3', verdict: 'unverified' },
+        ],
+        final_verdict: 'unverified',
+      }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(2);
+  });
+
+  // REGRESSION (hard constraint): a PASS completion still terminates exactly as
+  // before — the existing completionGate path owns it, ac-1 no-ops on pass.
+  test('REGRESSION: a passing completion still terminates => exit 0 (ac-1 no-ops on pass)', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  // REGRESSION (hard constraint): a work item with NO completion.json is unaffected
+  // by ac-1 — the strong-block (its own path) still blocks the no-verification-path
+  // stop, and the ac-1 message never appears (mirrors lj6/t8o).
+  test('REGRESSION: no completion.json => strong-block exit 2, ac-1 message absent', async () => {
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('no completion.json');
+    expect(out.stderr ?? '').not.toContain('non_pass_status');
+  });
+});
+
+describe('stopHandler — per-AC positive attestation surfaced (ac-6)', () => {
+  test('a terminating passing completion surfaces a per-AC attestation in the Stop output', async () => {
+    await writeArtifact('completion.json', completion({ acceptance: PASSING_ACCEPTANCE }));
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(0);
+    expect(out.stderr).toContain('attestation');
+    expect(out.stderr).toContain('ac-1');
+    expect(out.stderr).toContain('verified-by-evidence');
+  });
+
+  test('an honest-partial terminate surfaces reasoned-honest-partial for the parked AC', async () => {
+    await writeArtifact(
+      'completion.json',
+      completion({
+        acceptance: [
+          { criterion_id: 'ac-1', verdict: 'pass' },
+          { criterion_id: 'ac-2', verdict: 'pass' },
+          { criterion_id: 'ac-3', verdict: 'unverified' },
+        ],
+        final_verdict: 'partial',
+        next_handoff_path: '.ditto/handoff/x.md',
+        non_pass_status: { state: 'partial', reason: 'svc down', grounding: 'svc#42' },
+      }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(0);
+    expect(out.stderr).toContain('reasoned-honest-partial');
+    expect(out.stderr).toContain('ac-3');
   });
 });

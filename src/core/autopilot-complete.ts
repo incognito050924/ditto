@@ -1,8 +1,9 @@
 import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { AcOracle, WorkItem } from '~/schemas/work-item';
+import type { AutopilotDecision } from './autopilot-store';
 import { type CompletionInput, buildCompletion } from './completion-store';
-import { oracleSatisfaction } from './gates';
+import { type AcAttestation, attestAcVerdicts, oracleSatisfaction } from './gates';
 
 /** Per-AC oracle lookup threaded into the closure decision (ADR-0024 §3 ③ JUDGE). */
 type OracleMap = ReadonlyMap<string, AcOracle | undefined>;
@@ -270,10 +271,54 @@ export function deriveAcVerdicts(
   });
 }
 
+/** One structured residual-risk record (ac-3) as carried on the completion contract. */
+type RemainingRiskRecords = NonNullable<CompletionContract['remaining_risk_records']>;
+
+/**
+ * ac-3 (T1) completion-side PRODUCER. The agent_resolvable residual risks the loop
+ * AUTO-ROUTED to a forward fix round (`auto_fix` decisions, resolvability
+ * `agent_resolvable`) but whose re-verify did NOT converge — i.e. the risk was NOT
+ * actually resolved by completion-assembly time. Such a risk must reach the
+ * completion's structured `remaining_risk_records[]` so the Stop gate's
+ * `riskRecordBlockers` can block on it: an unhandled auto-resolvable risk cannot
+ * silently leak through completion. A risk IS resolved — and therefore NOT re-recorded
+ * (the finding's "resolved/auto-fixed ones not re-recorded") — when a spliced re-verify
+ * recheck for its node PASSED (the `<node>.rev.r<k>` recheck the auto-fix splice
+ * introduced; planForwardReexpansion naming). Pure: reads ONLY the append-only ledger
+ * + the final graph, never re-derives. Dedups by risk text.
+ */
+export function unresolvedAgentResolvableRiskRecords(
+  decisions: readonly AutopilotDecision[],
+  graph: Autopilot,
+): RemainingRiskRecords {
+  const records: RemainingRiskRecords = [];
+  const seen = new Set<string>();
+  for (const d of decisions) {
+    if (d.decision !== 'auto_fix' || d.resolvability !== 'agent_resolvable') continue;
+    // Resolved iff a spliced re-verify recheck for this node passed.
+    const recheckPassed = graph.nodes.some(
+      (n) => n.id.startsWith(`${d.node_id}.rev.`) && n.status === 'passed',
+    );
+    if (recheckPassed) continue;
+    const risk = d.reason.replace(/^auto-fix residual risk: /, '');
+    if (seen.has(risk)) continue;
+    seen.add(risk);
+    records.push({ risk, resolvability: 'agent_resolvable' });
+  }
+  return records;
+}
+
 export interface AssembleOptions {
   /** Operator/verifier narrative; a terse default is derived when omitted. */
   summary?: string;
   remainingRisks?: string[];
+  /**
+   * The loop's append-only decision ledger. When threaded, the assembly projects any
+   * UNRESOLVED agent_resolvable risk (auto-routed but its re-verify did not converge)
+   * into `remaining_risk_records` so the Stop gate can block on it (ac-3 producer).
+   * Absent ⇒ no records emitted (legacy completion shape, backward compat).
+   */
+  decisions?: readonly AutopilotDecision[];
   now?: Date;
 }
 
@@ -299,7 +344,7 @@ export function assembleCompletionFromGraph(
       ? [`non-terminal graph nodes (work unfinished): ${nonTerminal.map((n) => n.id).join(', ')}`]
       : []),
   ];
-  return buildCompletion({
+  const built = buildCompletion({
     workItem,
     declaredBy: 'verifier',
     summary,
@@ -307,4 +352,86 @@ export function assembleCompletionFromGraph(
     ...(remainingRisks.length > 0 ? { remainingRisks } : {}),
     ...(opts.now ? { now: opts.now } : {}),
   });
+  // ac-3 producer: project unresolved agent_resolvable risks from the ledger into the
+  // structured `remaining_risk_records` surface (additive — the field is optional, so a
+  // no-record assembly round-trips byte-identical to the legacy shape).
+  const riskRecords = opts.decisions
+    ? unresolvedAgentResolvableRiskRecords(opts.decisions, graph)
+    : [];
+  return riskRecords.length > 0 ? { ...built, remaining_risk_records: riskRecords } : built;
+}
+
+/**
+ * ac-6 (T1): the positive per-AC attestation at run termination, built from the
+ * SAME derived verdicts the completion was assembled from. `completion.acceptance`
+ * IS the projection of `deriveAcVerdicts` (verdict + notes) that
+ * `assembleCompletionFromGraph` wrote, so reading it here — rather than recomputing
+ * a parallel verdict — keeps the gate↔score invariant (charter §2): a
+ * `verified-by-evidence` attestation can never disagree with the verdict that
+ * closed the AC. `attestAcVerdicts` (gates.ts) folds the 4 verdicts into the 3
+ * attestation states; ids/order are preserved 1:1.
+ */
+export function attestCompletion(completion: CompletionContract): AcAttestation[] {
+  return attestAcVerdicts(
+    completion.acceptance.map((a) => ({
+      criterion_id: a.criterion_id,
+      verdict: a.verdict,
+      // Conditional spread: an absent note must not land as `notes: undefined`
+      // (exactOptionalPropertyTypes), so the basis is carried only when present.
+      ...(a.notes !== undefined ? { notes: a.notes } : {}),
+    })),
+  );
+}
+
+/** A single auto-handling decision projected from the loop's decision log (ac-6). */
+export interface AutoHandlingEntry {
+  node_id: string;
+  decision: 'auto_fix' | 'surface' | 'batch_escalate';
+  /** The resolvability reason-category the loop attributed (machine-attributable, ac-3). */
+  resolvability?: AutopilotDecision['resolvability'];
+  reason: string;
+}
+
+/**
+ * The auto-handling ledger surfaced at run termination (ac-6). Each bucket is a
+ * pure projection of the loop's append-only decision log — NOT a re-derivation:
+ *  - `auto_fixed`   ← `auto_fix` decisions (a risk the loop auto-routed to a forward
+ *    fix round; resolvability `agent_resolvable`);
+ *  - `surfaced`     ← `surface` decisions (a residual surfaced IN-FLOW without
+ *    terminating — one of the four surface classes or an R5 tool-blocked
+ *    `blocked_external`);
+ *  - `materialized` ← `batch_escalate` decisions (out-of-scope follow-ups signalled
+ *    for separate materialization; resolvability `out_of_scope`).
+ * Empty buckets when nothing was auto-handled.
+ */
+export interface AutoHandlingLedger {
+  auto_fixed: AutoHandlingEntry[];
+  surfaced: AutoHandlingEntry[];
+  materialized: AutoHandlingEntry[];
+}
+
+/**
+ * Project the loop's structured auto-handling decisions (`auto_fix` / `surface` /
+ * `batch_escalate`, each carrying its resolvability category) into the completion's
+ * auto-handling ledger. The loop (n1i-loop) already WRITES these entries; this only
+ * reads and groups them (charter §4-11: do not duplicate / re-derive). Every other
+ * decision kind (e.g. `loop_terminated`, `escalate`, `e2e_*`) is ignored.
+ */
+export function projectAutoHandling(decisions: readonly AutopilotDecision[]): AutoHandlingLedger {
+  const ledger: AutoHandlingLedger = { auto_fixed: [], surfaced: [], materialized: [] };
+  for (const d of decisions) {
+    if (d.decision !== 'auto_fix' && d.decision !== 'surface' && d.decision !== 'batch_escalate') {
+      continue;
+    }
+    const entry: AutoHandlingEntry = {
+      node_id: d.node_id,
+      decision: d.decision,
+      ...(d.resolvability ? { resolvability: d.resolvability } : {}),
+      reason: d.reason,
+    };
+    if (d.decision === 'auto_fix') ledger.auto_fixed.push(entry);
+    else if (d.decision === 'surface') ledger.surfaced.push(entry);
+    else ledger.materialized.push(entry);
+  }
+  return ledger;
 }

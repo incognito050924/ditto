@@ -329,3 +329,92 @@ describe('ditto autopilot complete — ac-4 표식 단독 성공판정 금지 (c
     expect(out.cite_cross_check.cite_verdict).toBe('pass');
   });
 });
+
+describe('ditto autopilot complete — ac-6 attestation + auto-handling ledger (T1 출력 배선)', () => {
+  test('per-AC 양성 attestation을 방출한다 (verified/reasoned/blocked)', async () => {
+    // seed 노드는 pending → ac-1 unverified → reasoned-honest-partial.
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    expect(res.exitCode).toBe(0);
+    const out = JSON.parse(res.stdout);
+    expect(out.attestation).toEqual([
+      {
+        criterion_id: 'ac-1',
+        state: 'reasoned-honest-partial',
+        basis: 'addressing node not terminal',
+      },
+    ]);
+  });
+
+  test('결정 로그의 auto_fix/surface/batch_escalate를 auto_handling 원장으로 투영한다', async () => {
+    const wiDir = join(dir, '.ditto', 'local', 'work-items', WI);
+    const decisions = [
+      {
+        ts: '2026-06-02T00:00:00.000Z',
+        node_id: 'N3',
+        decision: 'auto_fix',
+        resolvability: 'agent_resolvable',
+        reason: 'auto-fix residual risk: missing null guard',
+      },
+      {
+        ts: '2026-06-02T00:00:01.000Z',
+        node_id: 'N3',
+        decision: 'surface',
+        resolvability: 'blocked_external',
+        reason: 'surface residual risk in-flow (blocked_external): codeql absent',
+      },
+      {
+        ts: '2026-06-02T00:00:02.000Z',
+        node_id: 'N3',
+        decision: 'batch_escalate',
+        resolvability: 'out_of_scope',
+        reason: 'batch-escalate 1 out-of-scope follow-up(s)',
+      },
+      {
+        ts: '2026-06-02T00:00:03.000Z',
+        node_id: 'N3',
+        decision: 'loop_terminated',
+        disposition: 'blocked',
+        reason: 'partial run',
+      },
+    ];
+    await writeFile(
+      join(wiDir, 'autopilot-decisions.jsonl'),
+      `${decisions.map((d) => JSON.stringify(d)).join('\n')}\n`,
+      'utf8',
+    );
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    expect(res.exitCode).toBe(0);
+    const out = JSON.parse(res.stdout);
+    expect(out.auto_handling.auto_fixed).toEqual([
+      {
+        node_id: 'N3',
+        decision: 'auto_fix',
+        resolvability: 'agent_resolvable',
+        reason: 'auto-fix residual risk: missing null guard',
+      },
+    ]);
+    expect(out.auto_handling.surfaced).toEqual([
+      {
+        node_id: 'N3',
+        decision: 'surface',
+        resolvability: 'blocked_external',
+        reason: 'surface residual risk in-flow (blocked_external): codeql absent',
+      },
+    ]);
+    expect(out.auto_handling.materialized).toEqual([
+      {
+        node_id: 'N3',
+        decision: 'batch_escalate',
+        resolvability: 'out_of_scope',
+        reason: 'batch-escalate 1 out-of-scope follow-up(s)',
+      },
+    ]);
+  });
+
+  test('아무것도 자동처리 안 했으면 빈 원장 (human 출력에 none)', async () => {
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI]); // human
+    expect(res.exitCode).toBe(0);
+    expect(res.stdout).toContain('attestation (per-AC, ac-6):');
+    expect(res.stdout).toContain('auto-handling ledger (ac-6): none');
+  });
+});

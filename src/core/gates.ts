@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type { Autopilot } from '~/schemas/autopilot';
-import type { evidenceRef } from '~/schemas/common';
+import type { evidenceRef, verdict } from '~/schemas/common';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { Convergence } from '~/schemas/convergence';
 import type { ClosureMode } from '~/schemas/convergence';
@@ -10,6 +10,7 @@ import type { AcOracle, WorkItem } from '~/schemas/work-item';
 import { COVERAGE_AXIS_MECHANISMS } from './coverage-manager';
 
 type EvidenceRef = z.infer<typeof evidenceRef>;
+type Verdict = z.infer<typeof verdict>;
 
 /**
  * Deterministic gates (M0.4). Pure functions, no LLM calls (D5: 결정론 1차).
@@ -258,6 +259,46 @@ export function resolvabilityBlockers(
   return blockers;
 }
 
+// ── residual-risk-record classifier (ac-3: shares the resolvability default-DENY) ─
+
+/** One structured residual-risk record (ac-3) as declared in the completion contract. */
+export type RemainingRiskRecord = NonNullable<CompletionContract['remaining_risk_records']>[number];
+
+/**
+ * Classify the ac-3 structured residual-risk records the SAME way `unverified`
+ * items are classified — by REUSING `resolvabilityBlockers` over the shared
+ * resolvability label space (R11: one enum, not a parallel field). The two residual
+ * surfaces (`unverified[]` and `remaining_risk_records[]`) therefore route through a
+ * single default-DENY policy; there is no second classifier to drift.
+ *
+ *  - `agent_resolvable` → ALWAYS blocks (auto-fix it; surfacing what the agent can
+ *    resolve is the anti-pattern). grounding does not excuse it.
+ *  - `blocked_external` | `accepted_tradeoff` | `user_decision` → release ONLY with
+ *    grounding (default-deny on an ungrounded residual claim); `user_decision` is
+ *    flagged a user-decision surface when it blocks.
+ *  - R5: a risk blocked by an optional tool's absence is declared `blocked_external`
+ *    + grounding (ADR-0018 graceful-degrade) and therefore releases — it is NEVER
+ *    `agent_resolvable` (the agent cannot resolve a missing external tool).
+ *
+ * Each record is mapped onto the `UnverifiedItem` shape the classifier reads (its
+ * `risk` text fills both `item` and `reason`, so the structural owned-AC-id check
+ * still applies). Absent records (`undefined`, the legacy completion shape) → [].
+ */
+export function riskRecordBlockers(
+  records: readonly RemainingRiskRecord[] | undefined,
+  acceptanceIds: readonly string[],
+): ResolvabilityBlocker[] {
+  if (!records || records.length === 0) return [];
+  const asUnverified: UnverifiedItem[] = records.map((r) => ({
+    item: r.risk,
+    reason: r.risk,
+    out_of_scope: false,
+    ...(r.resolvability ? { resolvability: r.resolvability } : {}),
+    ...(r.grounding ? { grounding: r.grounding } : {}),
+  }));
+  return resolvabilityBlockers(asUnverified, acceptanceIds);
+}
+
 // ── per-AC oracle satisfaction (ADR-0024 §3 ③ JUDGE; consumed by deriveAcVerdicts) ─
 
 /**
@@ -306,6 +347,60 @@ export function oracleSatisfaction(
   return gate([
     `${acId}: ${oracle.verification_method} oracle unsatisfied (no closing evidence meets the oracle; not closed to pass)`,
   ]);
+}
+
+// ── positive per-AC attestation (ac-6; gate↔score: ONE derived-verdict input) ──
+
+/** Positive attestation state for one AC, derived ONLY from its already-derived verdict. */
+export type AttestationState =
+  | 'verified-by-evidence' // closed by evidence (derived `pass`)
+  | 'reasoned-honest-partial' // honest progress / not-yet-proven (derived `partial` | `unverified`)
+  | 'blocked-for-user'; // a hard failure the run cannot self-resolve (derived `fail`)
+
+/**
+ * The minimal derived-verdict shape the attestation reads. Both `deriveAcVerdicts`
+ * output and a completion's `acceptance[]` satisfy it, so the attestation consumes
+ * the SAME single source the closure decision used (no parallel input).
+ */
+export interface DerivedAcVerdict {
+  criterion_id: string;
+  verdict: Verdict;
+  notes?: string;
+}
+
+export interface AcAttestation {
+  criterion_id: string;
+  state: AttestationState;
+  /** The reasoning/evidence note carried straight from the SAME derived verdict. */
+  basis?: string;
+}
+
+const ATTESTATION_OF: Record<Verdict, AttestationState> = {
+  pass: 'verified-by-evidence',
+  partial: 'reasoned-honest-partial',
+  unverified: 'reasoned-honest-partial',
+  fail: 'blocked-for-user',
+};
+
+/**
+ * Build a positive per-AC attestation from the ALREADY-derived verdicts. CRITICAL
+ * (charter §2 gate↔score): the attestation reads the SAME per-AC verdicts the
+ * closure decision used — it consumes `deriveAcVerdicts`/`oracleSatisfaction` output
+ * (the source `assembleCompletionFromGraph` writes into `completion.acceptance`) and
+ * does NOT recompute a parallel verdict from the graph. So a `verified-by-evidence`
+ * attestation can never disagree with the verdict that closed the AC.
+ *
+ * The 4 verdicts fold into 3 attestation states: `pass` → verified-by-evidence;
+ * `partial`/`unverified` → reasoned-honest-partial (honest progress, basis carried
+ * from the derived note); `fail` → blocked-for-user (a defect the run cannot
+ * self-resolve, surfaced rather than silently parked). Order/ids are preserved 1:1.
+ */
+export function attestAcVerdicts(derived: readonly DerivedAcVerdict[]): AcAttestation[] {
+  return derived.map((d) => ({
+    criterion_id: d.criterion_id,
+    state: ATTESTATION_OF[d.verdict],
+    ...(d.notes ? { basis: d.notes } : {}),
+  }));
 }
 
 // ── completion gate (cross-checks completion against the work item) ─────────
@@ -374,6 +469,46 @@ export function completionEvidenceGate(completion: CompletionContract): GateResu
     ]);
   }
   return gate([]);
+}
+
+// ── non-pass termination gate (ac-1, CORE R1: enumerate acceptance[].verdict) ──
+
+/**
+ * The central leak fix. `completionGate` only enumerates per-AC verdicts when
+ * `final_verdict === 'pass'`, and the residual gate reads only `completion.unverified[]`
+ * — so a NON-pass completion that PARKS an in-scope criterion at `unverified`/`fail`
+ * WITHOUT mirroring it into `unverified[]` slips both and terminates at exit 0.
+ *
+ * This gate enumerates `acceptance[].verdict` DIRECTLY (not `unverified[]`): on a
+ * non-pass completion, any in-scope criterion whose verdict is `unverified`/`fail`
+ * is a parked criterion. It BLOCKS unless the completion carries an HONEST
+ * partial/blocked declaration — `non_pass_status` (state partial|blocked, with
+ * reason + grounding, which the schema guarantees present whenever the object
+ * exists). That declaration is the legitimate terminate (progress made / cannot
+ * proceed, grounded in an oracle); its absence is the silent park. A declared
+ * `partial` verdict is itself an honest signal, not a silent park, so it is not in
+ * the parked set (only `unverified`/`fail` are).
+ *
+ * ADR-20260626 D2 stays alive: block the SILENT park, allow the HONEST terminate.
+ * Pass completions are owned by `completionGate` + the schema superRefine (every AC
+ * must be pass), so this gate no-ops on them. The required-when-non-pass constraint
+ * lives HERE (a recoverable gate reason), NOT in the schema superRefine, so legacy
+ * on-disk non-pass completions still PARSE (R10).
+ */
+export function nonPassTerminationGate(completion: CompletionContract): GateResult {
+  if (completion.final_verdict === 'pass') return gate([]);
+  const parked = completion.acceptance.filter(
+    (a) => a.verdict === 'unverified' || a.verdict === 'fail',
+  );
+  if (parked.length === 0) return gate([]);
+  // An honest partial/blocked declaration unlocks the non-pass terminate; the schema
+  // guarantees reason + grounding present whenever the object is present.
+  if (completion.non_pass_status) return gate([]);
+  return gate([
+    `non-pass completion parks in-scope criterion/criteria at unverified/fail without an honest partial/blocked declaration (non_pass_status): ${parked
+      .map((a) => a.criterion_id)
+      .join(', ')} — resolve them or declare non_pass_status{state,reason,grounding}`,
+  ]);
 }
 
 // ── convergence gate (reads recorded fields only; no admissibility inference) ─

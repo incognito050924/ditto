@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { deriveAcVerdicts } from '~/core/autopilot-complete';
 import {
   type DecisionConflict,
   acceptanceTestable,
+  attestAcVerdicts,
   completionEvidenceGate,
   completionGate,
   convergenceGate,
@@ -17,7 +19,9 @@ import {
   interviewReadinessGate,
   knowledgeTriggerFired,
   knowledgeUpdateGate,
+  nonPassTerminationGate,
   resolvabilityBlockers,
+  riskRecordBlockers,
   safeDefaultable,
 } from '~/core/gates';
 import { autopilot } from '~/schemas/autopilot';
@@ -863,5 +867,246 @@ describe('decisionConflictRequiresApproval (front-load intent conflict to the ap
         C({ adr_id: 'ADR-0005', level: 'intent' }),
       ]),
     ).toBe(true);
+  });
+});
+
+describe('nonPassTerminationGate (ac-1: non-pass termination, CORE R1 leak)', () => {
+  const base = {
+    schema_version: '0.1.0',
+    work_item_id: 'wi_2606266az',
+    declared_by: 'verifier',
+    declared_at: '2026-06-26T00:00:00Z',
+    summary: 'partial work',
+    next_handoff_path: '.ditto/handoff/x.md',
+  };
+
+  test('a pass completion is not governed here (owned by completionGate / superRefine)', () => {
+    const c = completionContract.parse({
+      ...base,
+      acceptance: [{ criterion_id: 'ac-1', verdict: 'pass' }],
+      final_verdict: 'pass',
+    });
+    expect(nonPassTerminationGate(c).pass).toBe(true);
+  });
+
+  test('CORE leak / R10: a non-pass completion PARKING an unverified in-scope AC without non_pass_status BLOCKS — and the schema still PARSES it (gate, not schema)', () => {
+    const raw = {
+      ...base,
+      acceptance: [
+        { criterion_id: 'ac-1', verdict: 'pass' },
+        { criterion_id: 'ac-2', verdict: 'unverified' },
+      ],
+      final_verdict: 'partial',
+    };
+    // R10: a legacy on-disk non-pass completion must still PARSE; the gate (not the
+    // schema superRefine) is what blocks the ungrounded park.
+    expect(completionContract.safeParse(raw).success).toBe(true);
+    const c = completionContract.parse(raw);
+    const r = nonPassTerminationGate(c);
+    expect(r.pass).toBe(false);
+    expect(r.reasons.join(' ')).toContain('ac-2');
+  });
+
+  test('a fail in-scope AC without an honest declaration also blocks', () => {
+    const c = completionContract.parse({
+      ...base,
+      acceptance: [{ criterion_id: 'ac-1', verdict: 'fail' }],
+      final_verdict: 'fail',
+    });
+    expect(nonPassTerminationGate(c).pass).toBe(false);
+  });
+
+  test('an HONEST partial declaration (non_pass_status) lets a parked unverified AC terminate (ADR-20260626 D2 alive)', () => {
+    const c = completionContract.parse({
+      ...base,
+      acceptance: [
+        { criterion_id: 'ac-1', verdict: 'pass' },
+        { criterion_id: 'ac-2', verdict: 'unverified' },
+      ],
+      non_pass_status: {
+        state: 'partial',
+        reason: 'ac-2 needs a downstream service not yet available',
+        grounding: 'depends on payments-svc#42',
+      },
+      final_verdict: 'partial',
+    });
+    expect(nonPassTerminationGate(c).pass).toBe(true);
+  });
+
+  test('an HONEST blocked declaration also passes', () => {
+    const c = completionContract.parse({
+      ...base,
+      acceptance: [{ criterion_id: 'ac-1', verdict: 'unverified' }],
+      non_pass_status: {
+        state: 'blocked',
+        reason: 'cannot proceed without a user decision on retention policy',
+        grounding: 'ADR-0013',
+      },
+      final_verdict: 'unverified',
+    });
+    expect(nonPassTerminationGate(c).pass).toBe(true);
+  });
+
+  test('a declared partial AC is an honest signal, not a silent park (not blocked even without non_pass_status)', () => {
+    const c = completionContract.parse({
+      ...base,
+      acceptance: [{ criterion_id: 'ac-1', verdict: 'partial' }],
+      final_verdict: 'partial',
+    });
+    expect(nonPassTerminationGate(c).pass).toBe(true);
+  });
+
+  test('a non-pass completion whose every in-scope AC is pass parks nothing → passes', () => {
+    const c = completionContract.parse({
+      ...base,
+      acceptance: [{ criterion_id: 'ac-1', verdict: 'pass' }],
+      final_verdict: 'partial',
+    });
+    expect(nonPassTerminationGate(c).pass).toBe(true);
+  });
+});
+
+describe('riskRecordBlockers (ac-3: residual-risk records share the resolvability classifier)', () => {
+  const ACS = ['ac-1', 'ac-2'];
+
+  test('undefined or empty records → no blockers', () => {
+    expect(riskRecordBlockers(undefined, ACS)).toEqual([]);
+    expect(riskRecordBlockers([], ACS)).toEqual([]);
+  });
+
+  test('agent_resolvable risk ALWAYS blocks, even grounded (auto-fix, do not surface)', () => {
+    const b = riskRecordBlockers(
+      [
+        {
+          risk: 'a flaky retry the agent can fix',
+          resolvability: 'agent_resolvable',
+          grounding: 'ADR-0099',
+        },
+      ],
+      ACS,
+    );
+    expect(b).toHaveLength(1);
+    expect(b[0]?.kind).toBe('agent_resolvable');
+    expect(b[0]?.item).toBe('a flaky retry the agent can fix');
+  });
+
+  test('R5: optional-tool absence is blocked_external + grounding → releases (never agent_resolvable)', () => {
+    const b = riskRecordBlockers(
+      [
+        {
+          risk: 'CodeQL not installed; static scan skipped',
+          resolvability: 'blocked_external',
+          grounding: 'ADR-0018 optional-tool graceful-degrade',
+        },
+      ],
+      ACS,
+    );
+    expect(b).toEqual([]);
+  });
+
+  test('ungrounded blocked_external / accepted_tradeoff block; user_decision flags the surface', () => {
+    expect(
+      riskRecordBlockers([{ risk: 'upstream down', resolvability: 'blocked_external' }], ACS),
+    ).toHaveLength(1);
+    expect(
+      riskRecordBlockers([{ risk: 'perf untuned', resolvability: 'accepted_tradeoff' }], ACS),
+    ).toHaveLength(1);
+    const ud = riskRecordBlockers(
+      [{ risk: 'which retention policy?', resolvability: 'user_decision' }],
+      ACS,
+    );
+    expect(ud).toHaveLength(1);
+    expect(ud[0]?.userDecision).toBe(true);
+  });
+
+  test('grounded accepted_tradeoff releases', () => {
+    expect(
+      riskRecordBlockers(
+        [{ risk: 'perf untuned', resolvability: 'accepted_tradeoff', grounding: 'ADR-0017' }],
+        ACS,
+      ),
+    ).toEqual([]);
+  });
+
+  test('a risk naming an owned AC id blocks (structural) unless grounded', () => {
+    expect(riskRecordBlockers([{ risk: 'ac-2 path not exercised' }], ACS)).toHaveLength(1);
+    expect(
+      riskRecordBlockers([{ risk: 'ac-2 path not exercised', grounding: 'covered by e2e-7' }], ACS),
+    ).toEqual([]);
+  });
+});
+
+describe('attestAcVerdicts (ac-6: positive per-AC attestation, gate↔score single input)', () => {
+  test('folds the 4 derived verdicts into the 3 attestation states, carrying the note as basis', () => {
+    const att = attestAcVerdicts([
+      { criterion_id: 'ac-1', verdict: 'pass', notes: 'closed by test' },
+      { criterion_id: 'ac-2', verdict: 'partial', notes: 'half done' },
+      { criterion_id: 'ac-3', verdict: 'unverified', notes: 'no evidence' },
+      { criterion_id: 'ac-4', verdict: 'fail', notes: 'a node failed' },
+    ]);
+    expect(att.map((a) => [a.criterion_id, a.state])).toEqual([
+      ['ac-1', 'verified-by-evidence'],
+      ['ac-2', 'reasoned-honest-partial'],
+      ['ac-3', 'reasoned-honest-partial'],
+      ['ac-4', 'blocked-for-user'],
+    ]);
+    expect(att[0]?.basis).toBe('closed by test');
+    expect(att[3]?.basis).toBe('a node failed');
+  });
+
+  test('reads the SAME verdicts deriveAcVerdicts produces (one input, not a parallel recompute)', () => {
+    const graph = autopilot.parse({
+      schema_version: '0.1.0',
+      autopilot_id: 'orch_attest001',
+      work_item_id: 'wi_attest001',
+      root_goal: 'g',
+      approval_gate: { status: 'not_required' },
+      caps: { fix_per_node: 2, switch_per_node: 1 },
+      continue_policy: {},
+      nodes: [
+        {
+          id: 'N1',
+          kind: 'verify',
+          owner: 'verifier',
+          purpose: 'verify ac-1',
+          status: 'passed',
+          acceptance_refs: ['ac-1'],
+          evidence_refs: [{ kind: 'command', command: 'bun test', summary: 'green' }],
+        },
+      ],
+    });
+    const verdicts = deriveAcVerdicts(graph, ['ac-1']);
+    const att = attestAcVerdicts(verdicts);
+    // ac-1 was closed with evidence → derived pass → the attestation cannot disagree.
+    expect(verdicts[0]?.verdict).toBe('pass');
+    expect(att).toHaveLength(1);
+    expect(att[0]?.criterion_id).toBe('ac-1');
+    expect(att[0]?.state).toBe('verified-by-evidence');
+  });
+
+  test('an evidence-less passed node yields a derived unverified → reasoned-honest-partial (not verified)', () => {
+    const graph = autopilot.parse({
+      schema_version: '0.1.0',
+      autopilot_id: 'orch_attest002',
+      work_item_id: 'wi_attest002',
+      root_goal: 'g',
+      approval_gate: { status: 'not_required' },
+      caps: { fix_per_node: 2, switch_per_node: 1 },
+      continue_policy: {},
+      nodes: [
+        {
+          id: 'N1',
+          kind: 'implement',
+          owner: 'implementer',
+          purpose: 'do ac-1',
+          status: 'passed',
+          acceptance_refs: ['ac-1'],
+        },
+      ],
+    });
+    const verdicts = deriveAcVerdicts(graph, ['ac-1']);
+    const att = attestAcVerdicts(verdicts);
+    expect(verdicts[0]?.verdict).toBe('unverified');
+    expect(att[0]?.state).toBe('reasoned-honest-partial');
   });
 });

@@ -4,7 +4,11 @@ import { defineCommand } from 'citty';
 import { type ApprovalSourceValue, applyApproval, applyRejection } from '~/core/autopilot-approval';
 import { bootstrapAutopilot } from '~/core/autopilot-bootstrap';
 import { runCleanup } from '~/core/autopilot-cleanup';
-import { assembleCompletionFromGraph } from '~/core/autopilot-complete';
+import {
+  assembleCompletionFromGraph,
+  attestCompletion,
+  projectAutoHandling,
+} from '~/core/autopilot-complete';
 import { kindToOwner } from '~/core/autopilot-graph';
 import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
@@ -354,13 +358,16 @@ const autopilotComplete = defineCommand({
       const aps = new AutopilotStore(repoRoot);
       const graph = await aps.get(args.workItem);
       const workItem = await new WorkItemStore(repoRoot).get(args.workItem);
+      // Read the append-only decision log once: it feeds BOTH the e2e completion
+      // gate and the ac-6 auto-handling ledger projected below.
+      const decisions = await aps.readDecisions(args.workItem);
       // 완료측 결정론 체크 (dialectic-1 O-4/O-18): E2E 제안 결정과 회귀 게이트
       // 기록은 에이전트 기억이 아니라 여기서 기계로 강제된다 — 의무 미이행
       // 상태로는 completion을 조립하지 않는다.
       const e2eViolations = await checkE2eCompletionGate(repoRoot, {
         workItemId: args.workItem,
         changedFiles: workItem.changed_files,
-        decisions: await aps.readDecisions(args.workItem),
+        decisions,
       });
       if (e2eViolations.length > 0) {
         if (format === 'json') {
@@ -374,6 +381,10 @@ const autopilotComplete = defineCommand({
       }
       const completion = assembleCompletionFromGraph(graph, workItem, {
         ...(args.summary ? { summary: args.summary } : {}),
+        // ac-3 producer: thread the ledger so an UNRESOLVED agent_resolvable risk
+        // (auto-routed but its re-verify did not converge) lands in
+        // remaining_risk_records and the Stop gate can block on it (no silent leak).
+        decisions,
       });
       // false-green 차단 (wi_260624xb8 ac-2): completion은 AC를 work-item에서
       // 읽으므로, intent.json이 work-item보다 많은 AC를 선언했는데 동기화가 안 된
@@ -424,6 +435,12 @@ const autopilotComplete = defineCommand({
         workItemId: args.workItem,
         graph,
       });
+      // ac-6 (T1): emit the positive per-AC attestation + the auto-handling ledger
+      // at run termination. The attestation reads completion.acceptance (the SAME
+      // derived verdicts just assembled — gate↔score one input); the ledger projects
+      // the loop's existing auto_fix/surface/batch_escalate decisions (no re-derive).
+      const attestation = attestCompletion(completion);
+      const autoHandling = projectAutoHandling(decisions);
       if (format === 'json') {
         writeJson({
           work_item_id: args.workItem,
@@ -433,6 +450,8 @@ const autopilotComplete = defineCommand({
             verdict: a.verdict,
             evidence_count: a.evidence.length,
           })),
+          attestation,
+          auto_handling: autoHandling,
           cite_gate: {
             verdict: cite.verdict,
             pushed_node_ids: cite.pushed_node_ids,
@@ -448,6 +467,30 @@ const autopilotComplete = defineCommand({
         );
         for (const a of completion.acceptance) {
           writeHuman(`  ${a.criterion_id}: ${a.verdict} (${a.evidence.length} evidence)`);
+        }
+        writeHuman('  attestation (per-AC, ac-6):');
+        for (const a of attestation) {
+          writeHuman(`    ${a.criterion_id}: ${a.state}${a.basis ? ` — ${a.basis}` : ''}`);
+        }
+        const handledCount =
+          autoHandling.auto_fixed.length +
+          autoHandling.surfaced.length +
+          autoHandling.materialized.length;
+        if (handledCount === 0) {
+          writeHuman('  auto-handling ledger (ac-6): none (nothing auto-handled this run)');
+        } else {
+          writeHuman(
+            `  auto-handling ledger (ac-6): ${autoHandling.auto_fixed.length} auto-fixed, ${autoHandling.surfaced.length} surfaced, ${autoHandling.materialized.length} materialized`,
+          );
+          for (const e of [
+            ...autoHandling.auto_fixed,
+            ...autoHandling.surfaced,
+            ...autoHandling.materialized,
+          ]) {
+            writeHuman(
+              `    [${e.decision}] ${e.node_id}${e.resolvability ? ` (${e.resolvability})` : ''}: ${e.reason}`,
+            );
+          }
         }
         if (completion.final_verdict !== 'pass') {
           writeHuman(

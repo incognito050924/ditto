@@ -1145,3 +1145,476 @@ describe('ADR-0024 Decision 4 — a retro node is appended at design-close after
     expect(retros(g).length).toBe(0);
   });
 });
+
+// ── T1 (wi_2606266az) runtime driver wiring ─────────────────────────────────
+
+describe('T1 ac-2 reverify — an unverified-but-gatherable in-scope AC auto-splices a re-verify round', () => {
+  test('verify node leaves ac-1 unverified with a RUNNABLE (dynamic_test) oracle → splice reverify fix+verify', async () => {
+    await assignOracle('ac-1', {
+      verification_method: 'dynamic_test',
+      maps_to: 'ac-1',
+      direction: 'backward',
+    });
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text: 'inspected ac-1 by hand but the runnable test was not executed this round',
+        outcome: 'pass',
+        ac_verdicts: [
+          { criterion_id: 'ac-1', verdict: 'unverified', notes: 'runnable test not yet executed' },
+        ],
+      },
+    });
+    // the verify node itself passes; the loop keeps going through the spliced
+    // reverify round so the missing evidence is collected (residual → 0).
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual(['V.fix.r0', 'V.rev.r0']);
+    const g = await aps.get(WI);
+    const fix = g.nodes.find((n) => n.id === 'V.fix.r0');
+    expect(fix?.kind).toBe('fix');
+    expect(fix?.owner).toBe('implementer');
+    expect(fix?.depends_on).toEqual(['V']); // forward edge only
+    const recheck = g.nodes.find((n) => n.id === 'V.rev.r0');
+    expect(recheck?.kind).toBe('verify'); // ac-2 reverify converges through a verify recheck
+    expect(recheck?.depends_on).toEqual(['V.fix.r0']);
+  });
+
+  test('unverified AC with NO gatherable oracle (soft_judgment) stays honest-unverified → no splice', async () => {
+    await assignOracle('ac-1', {
+      verification_method: 'soft_judgment',
+      maps_to: 'ac-1',
+      direction: 'backward',
+    });
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text:
+          'ac-1 rests on a human judgment call; there is no runnable oracle to auto-collect',
+        outcome: 'pass',
+        ac_verdicts: [
+          {
+            criterion_id: 'ac-1',
+            verdict: 'unverified',
+            notes: 'soft judgment, not auto-collectable',
+          },
+        ],
+      },
+    });
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual([]); // honest-unverified, NOT re-verified
+    expect((await aps.get(WI)).nodes).toHaveLength(1);
+  });
+
+  test('the run does NOT close on a collectable unverified: nextNode drives the spliced re-verify forward', async () => {
+    await assignOracle('ac-1', {
+      verification_method: 'dynamic_test',
+      maps_to: 'ac-1',
+      direction: 'backward',
+    });
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text: 'inspected ac-1 by hand but did not run the available test this round',
+        outcome: 'pass',
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'unverified' }],
+      },
+    });
+    // Before the run can close, the loop keeps going: the spliced fix is dispatched,
+    // and the re-run trace (V.fix.r0 → V.rev.r0) lives in the graph the completion
+    // is assembled from.
+    const next = await nextNode(repo, WI);
+    expect(next.action).toBe('spawn');
+    if (next.action === 'spawn') expect(next.node_id).toBe('V.fix.r0');
+  });
+
+  test('unverified AC with NO oracle at all stays honest-unverified → no splice', async () => {
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text: 'ac-1 was not assigned an oracle, so there is no runnable evidence to gather',
+        outcome: 'pass',
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'unverified' }],
+      },
+    });
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual([]);
+    expect((await aps.get(WI)).nodes).toHaveLength(1);
+  });
+});
+
+describe('T1 ac-3 risk routing — agent_resolvable auto-fixes BY DEFAULT, the 4 reasons surface in-flow', () => {
+  test('an agent_resolvable residual risk auto-routes to a risk_fix forward round + ledger discloses auto_fix', async () => {
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text:
+          'verified ac-1; one residual the agent can resolve remains (a missing null guard)',
+        outcome: 'pass',
+        residual_risks: [
+          { risk: 'a missing null guard on the new path', resolvability: 'agent_resolvable' },
+        ],
+      },
+    });
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual(['V.fix.r0', 'V.rev.r0']);
+    const g = await aps.get(WI);
+    expect(g.nodes.find((n) => n.id === 'V.fix.r0')?.kind).toBe('fix');
+    expect(g.nodes.find((n) => n.id === 'V.rev.r0')?.kind).toBe('verify');
+    // ledger discloses the auto-fix + its structured reason-category (not free-text).
+    const decisions = await aps.readDecisions(WI);
+    const autoFix = decisions.find((d) => d.decision === 'auto_fix');
+    expect(autoFix?.resolvability).toBe('agent_resolvable');
+  });
+
+  test('default (unlabeled) residual risk auto-fixes BY DEFAULT', async () => {
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text: 'verified ac-1; one unlabeled residual the agent should just fix',
+        outcome: 'pass',
+        residual_risks: [{ risk: 'an unlabeled residual' }],
+      },
+    });
+    expect(res.promoted_node_ids).toEqual(['V.fix.r0', 'V.rev.r0']);
+    const decisions = await aps.readDecisions(WI);
+    expect(decisions.some((d) => d.decision === 'auto_fix')).toBe(true);
+  });
+
+  for (const reason of [
+    'decision_or_adr_conflict',
+    'multiple_comparable_solutions',
+    'out_of_scope',
+    'genuinely_dangerous',
+  ] as const) {
+    test(`a ${reason} residual risk SURFACES in-flow (no splice, flow continues) + ledger discloses the category`, async () => {
+      await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+      const res = await recordResult(repo, {
+        workItemId: WI,
+        now: NOW,
+        payload: {
+          node_id: 'V',
+          result_text: `verified ac-1; one residual must be surfaced to the user (${reason})`,
+          outcome: 'pass',
+          residual_risks: [
+            { risk: 'a residual the loop must not auto-fix', resolvability: reason },
+          ],
+        },
+      });
+      // flow CONTINUES: the node still passes, the loop does NOT terminate, no splice.
+      expect(res.status).toBe('passed');
+      expect(res.promoted_node_ids).toEqual([]);
+      expect((await aps.get(WI)).nodes).toHaveLength(1);
+      const decisions = await aps.readDecisions(WI);
+      const surfaced = decisions.find((d) => d.decision === 'surface');
+      expect(surfaced?.resolvability).toBe(reason);
+    });
+  }
+
+  test('mixed: an agent_resolvable + an out_of_scope risk → auto-fix spliced AND the surface disclosed', async () => {
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text:
+          'verified ac-1; one residual is auto-fixable, one is out of the approved scope',
+        outcome: 'pass',
+        residual_risks: [
+          { risk: 'auto-fixable residual', resolvability: 'agent_resolvable' },
+          { risk: 'scope-creep residual', resolvability: 'out_of_scope' },
+        ],
+      },
+    });
+    expect(res.promoted_node_ids).toEqual(['V.fix.r0', 'V.rev.r0']); // the auto-fix drives a round
+    const decisions = await aps.readDecisions(WI);
+    expect(
+      decisions.some((d) => d.decision === 'auto_fix' && d.resolvability === 'agent_resolvable'),
+    ).toBe(true);
+    expect(
+      decisions.some((d) => d.decision === 'surface' && d.resolvability === 'out_of_scope'),
+    ).toBe(true);
+  });
+});
+
+describe('T1 ac-4 follow-ups — in-scope driven as a graph node, out-of-scope = ONE batch-escalate signal (R9)', () => {
+  test('an IN-scope follow-up is DRIVEN as a current-graph node (a follow_up forward round)', async () => {
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text:
+          'verified ac-1; one in-scope follow-up should be done now as part of this work',
+        outcome: 'pass',
+        follow_ups: [{ item: 'tighten the in-scope error path', in_scope: true }],
+      },
+    });
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual(['V.fix.r0', 'V.rev.r0']); // driven in the current graph
+    const g = await aps.get(WI);
+    expect(g.nodes.find((n) => n.id === 'V.fix.r0')?.kind).toBe('fix');
+  });
+
+  test('an OUT-of-scope follow-up emits ONE batch-escalate signal and is NOT driven (materialize ≠ drive, R9)', async () => {
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text:
+          'verified ac-1; two follow-ups belong to a separate work item, out of this scope',
+        outcome: 'pass',
+        follow_ups: [
+          { item: 'a separate refactor', in_scope: false },
+          { item: 'a new feature idea', in_scope: false },
+        ],
+      },
+    });
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual([]); // NOT driven here
+    expect((await aps.get(WI)).nodes).toHaveLength(1); // no follow-up node materialized in this graph
+    const decisions = await aps.readDecisions(WI);
+    const signals = decisions.filter((d) => d.decision === 'batch_escalate');
+    expect(signals).toHaveLength(1); // exactly ONE in-flow batch-escalate signal
+    expect(signals[0]?.resolvability).toBe('out_of_scope');
+  });
+
+  test('mixed: in-scope is driven AND the out-of-scope batch-escalate signal is emitted', async () => {
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text:
+          'verified ac-1; one follow-up is in scope, one is out of scope for batch handling',
+        outcome: 'pass',
+        follow_ups: [
+          { item: 'in-scope tightening', in_scope: true },
+          { item: 'out-of-scope idea', in_scope: false },
+        ],
+      },
+    });
+    expect(res.promoted_node_ids).toEqual(['V.fix.r0', 'V.rev.r0']);
+    const decisions = await aps.readDecisions(WI);
+    expect(decisions.filter((d) => d.decision === 'batch_escalate')).toHaveLength(1);
+  });
+});
+
+describe('T1 #2 — generated_nodes/plan_brief ⊥ residual_risks/follow_ups (no silent promotion drop)', () => {
+  // The ac-2/3/4 auto-resolve lanes early-return BEFORE the generated_nodes/plan_brief
+  // promotion. A single payload carrying BOTH a promotion signal AND an auto-resolve
+  // lane would silently DROP the promotion — assert mutual exclusivity with a clear
+  // error instead.
+  test('both-fields guard: generated_nodes + residual_risks throws (mutually exclusive, not silent drop)', async () => {
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    await expect(
+      recordResult(repo, {
+        workItemId: WI,
+        now: NOW,
+        payload: {
+          node_id: 'V',
+          result_text: 'a pass that both promotes a subgraph and surfaces a residual risk',
+          outcome: 'pass',
+          generated_nodes: [
+            {
+              id: 'G1',
+              kind: 'implement',
+              purpose: 'p-G1',
+              depends_on: ['V'],
+              acceptance_refs: ['ac-1'],
+            },
+          ],
+          residual_risks: [{ risk: 'an auto-fixable residual', resolvability: 'agent_resolvable' }],
+        },
+      }),
+    ).rejects.toThrow(/mutually exclusive/);
+  });
+
+  test('both-fields guard: plan_brief + follow_ups throws', async () => {
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    await expect(
+      recordResult(repo, {
+        workItemId: WI,
+        now: NOW,
+        payload: {
+          node_id: 'V',
+          result_text: 'a pass that both carries a plan brief and surfaces an in-scope follow-up',
+          outcome: 'pass',
+          plan_brief: {
+            change_surface: ['src/x.ts'],
+            interface_changes: [],
+            dod: ['d'],
+            test_scenarios: ['t'],
+            tier_inputs: {
+              changedFileCount: 1,
+              interfaceChanged: false,
+              risk: { non_local: false, irreversible: false, unaudited: false },
+              large: false,
+            },
+          },
+          follow_ups: [{ item: 'an in-scope follow-up', in_scope: true }],
+        },
+      }),
+    ).rejects.toThrow(/mutually exclusive/);
+  });
+
+  // Regression: a promotion-only payload (no auto-resolve lane) still promotes.
+  test('regression: generated_nodes WITHOUT an auto-resolve lane still promotes (no throw)', async () => {
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text: 'a pass that promotes a subgraph, no residual/follow-up lane',
+        outcome: 'pass',
+        generated_nodes: [
+          {
+            id: 'G1',
+            kind: 'implement',
+            purpose: 'p-G1',
+            depends_on: ['V'],
+            acceptance_refs: ['ac-1'],
+          },
+        ],
+      },
+    });
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toContain('G1');
+  });
+});
+
+describe('T1 ac-5 / R5 / R2 — no-progress floor, optional-tool surface, loop-cap inheritance', () => {
+  test('ac-5 no-progress floor: a reverify chain at caps.no_progress_rounds escalates IN-FLOW (blocked, NOT a silent pass)', async () => {
+    await assignOracle('ac-1', {
+      verification_method: 'dynamic_test',
+      maps_to: 'ac-1',
+      direction: 'backward',
+    });
+    // seed id carries one .rev.r marker → forwardRound 1; no_progress_rounds 1 ⇒ 1 ≥ 1 escalate.
+    const seed = { ...verifyNode('running'), id: 'V.rev.r0' };
+    await aps.write(WI, {
+      ...graph({
+        nodes: [seed],
+        caps: {
+          fix_per_node: 2,
+          switch_per_node: 1,
+          no_progress_rounds: 1,
+          converge_rounds: 99,
+          loop_rounds: 99,
+        },
+      }),
+      work_item_id: WI,
+    });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V.rev.r0',
+        result_text:
+          'still cannot collect the runnable evidence after the prior round — no progress',
+        outcome: 'pass',
+        ac_verdicts: [
+          { criterion_id: 'ac-1', verdict: 'unverified', notes: 'still not collected' },
+        ],
+      },
+    });
+    // capped ≠ converged: in-flow escalate, NOT a silent pass; no further splice.
+    expect(res.status).toBe('blocked');
+    expect(res.outcome).toBe('fail');
+    expect(res.failure_class).toBe('user_decision_needed');
+    expect(res.promoted_node_ids).toEqual([]);
+    const decisions = await aps.readDecisions(WI);
+    expect(decisions.at(-1)?.decision).toBe('escalate');
+  });
+
+  test('R5/ADR-0018: an unverified AC blocked ONLY by an absent optional tool surfaces blocked_external, NOT an endless re-verify', async () => {
+    await assignOracle('ac-1', {
+      verification_method: 'static_scan',
+      maps_to: 'ac-1',
+      direction: 'backward',
+    });
+    await aps.write(WI, { ...graph({ nodes: [verifyNode('running')] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text:
+          'ac-1 needs the static scanner which is absent on this host; cannot collect this round',
+        outcome: 'pass',
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'unverified' }],
+        blocked_by_tool: {
+          tool: 'codeql',
+          grounding: 'ADR-0018: CodeQL optional; absent on this host',
+        },
+      },
+    });
+    expect(res.status).toBe('passed'); // honest-unverified — the node passes
+    expect(res.promoted_node_ids).toEqual([]); // NO re-verify splice (would loop forever)
+    expect((await aps.get(WI)).nodes).toHaveLength(1);
+    const decisions = await aps.readDecisions(WI);
+    const surfaced = decisions.find((d) => d.decision === 'surface');
+    expect(surfaced?.resolvability).toBe('blocked_external');
+  });
+
+  test('R2 loop-cap inheritance: an auto-resolve splice is refused once the graph reaches loop_rounds (capped, no new uncapped path)', async () => {
+    await assignOracle('ac-1', {
+      verification_method: 'dynamic_test',
+      maps_to: 'ac-1',
+      direction: 'backward',
+    });
+    // two existing forward-review nodes already consume loop_rounds=2 (counted by
+    // the SAME .rev.r marker the auto-resolve splices reuse).
+    const prior1 = { ...verifyNode('passed'), id: 'X.rev.r0' };
+    const prior2 = { ...verifyNode('passed'), id: 'X.rev.r0.rev.r1' };
+    await aps.write(WI, {
+      ...graph({
+        nodes: [prior1, prior2, verifyNode('running')],
+        caps: {
+          fix_per_node: 2,
+          switch_per_node: 1,
+          no_progress_rounds: 99,
+          converge_rounds: 99,
+          loop_rounds: 2,
+        },
+      }),
+      work_item_id: WI,
+    });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text: 'ac-1 is unverified+gatherable but the graph already hit the loop-level cap',
+        outcome: 'pass',
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'unverified' }],
+      },
+    });
+    expect(res.status).toBe('blocked');
+    expect(res.cap_exceeded).toBe(true);
+    expect(res.promoted_node_ids).toEqual([]); // refused — counted against loop_rounds
+  });
+});

@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { assembleCompletionFromGraph, deriveAcVerdicts } from '~/core/autopilot-complete';
+import {
+  assembleCompletionFromGraph,
+  attestCompletion,
+  deriveAcVerdicts,
+  projectAutoHandling,
+} from '~/core/autopilot-complete';
+import type { AutopilotDecision } from '~/core/autopilot-store';
+import { attestAcVerdicts } from '~/core/gates';
 import { type Autopilot, type AutopilotNode, autopilot } from '~/schemas/autopilot';
 import type { WorkItem } from '~/schemas/work-item';
 
@@ -618,5 +625,132 @@ describe('assembleCompletionFromGraph (deterministic completion from the graph; 
     ]);
     const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), { now: NOW });
     expect(c.summary.length).toBeGreaterThan(0);
+  });
+});
+
+// ── ac-6 attestation (gate↔score one input) ─────────────────────────────────
+describe('attestCompletion (ac-6: per-AC attestation from the SAME derived verdicts)', () => {
+  test('matches attestAcVerdicts(deriveAcVerdicts(...)) — one input, not a parallel recompute', () => {
+    const graph = graphWith([
+      // pass (evidence), fail, unverified (evidence-less pass) → 3 attestation states
+      node({ id: 'N1', acceptance_refs: ['ac-1'], status: 'passed', evidence_refs: [ev('t.log')] }),
+      node({ id: 'N2', acceptance_refs: ['ac-2'], status: 'failed', evidence_refs: [ev('f.log')] }),
+      node({ id: 'N3', acceptance_refs: ['ac-3'], status: 'passed', evidence_refs: [] }),
+    ]);
+    const wi = workItemWith(['ac-1', 'ac-2', 'ac-3']);
+    const acIds = wi.acceptance_criteria.map((c) => c.id);
+    const oracles = new Map(wi.acceptance_criteria.map((c) => [c.id, c.oracle]));
+    const verdicts = deriveAcVerdicts(graph, acIds, oracles);
+    const completion = assembleCompletionFromGraph(graph, wi, { now: NOW });
+    // The wired attestation reads completion.acceptance (what assembleCompletionFromGraph
+    // wrote from those verdicts) — so it cannot disagree with the raw deriveAcVerdicts output.
+    expect(attestCompletion(completion)).toEqual(attestAcVerdicts(verdicts));
+    expect(attestCompletion(completion).map((a) => [a.criterion_id, a.state])).toEqual([
+      ['ac-1', 'verified-by-evidence'],
+      ['ac-2', 'blocked-for-user'],
+      ['ac-3', 'reasoned-honest-partial'],
+    ]);
+  });
+});
+
+// ── ac-6 auto-handling ledger (project existing decision-log entries) ────────
+describe('projectAutoHandling (ac-6: project auto_fix/surface/batch_escalate, no re-derive)', () => {
+  const dec = (over: Partial<AutopilotDecision> & Pick<AutopilotDecision, 'decision'>) =>
+    ({ ts: '2026-06-02T00:00:00.000Z', node_id: 'N1', reason: 'r', ...over }) as AutopilotDecision;
+
+  test('groups the three auto-handling kinds with their resolvability category', () => {
+    const ledger = projectAutoHandling([
+      dec({ decision: 'auto_fix', resolvability: 'agent_resolvable', reason: 'auto-fix risk x' }),
+      dec({ decision: 'surface', resolvability: 'blocked_external', reason: 'surface x in-flow' }),
+      dec({
+        decision: 'batch_escalate',
+        resolvability: 'out_of_scope',
+        reason: 'batch 2 follow-ups',
+      }),
+      // non-auto-handling decisions are ignored (not re-derived into the ledger)
+      dec({ decision: 'loop_terminated', disposition: 'converged', reason: 'done' }),
+      dec({ decision: 'escalate', failure_class: 'user_decision_needed', reason: 'cap' }),
+    ]);
+    expect(ledger.auto_fixed).toEqual([
+      {
+        node_id: 'N1',
+        decision: 'auto_fix',
+        resolvability: 'agent_resolvable',
+        reason: 'auto-fix risk x',
+      },
+    ]);
+    expect(ledger.surfaced).toEqual([
+      {
+        node_id: 'N1',
+        decision: 'surface',
+        resolvability: 'blocked_external',
+        reason: 'surface x in-flow',
+      },
+    ]);
+    expect(ledger.materialized).toEqual([
+      {
+        node_id: 'N1',
+        decision: 'batch_escalate',
+        resolvability: 'out_of_scope',
+        reason: 'batch 2 follow-ups',
+      },
+    ]);
+  });
+
+  test('empty ledger when nothing was auto-handled', () => {
+    const ledger = projectAutoHandling([
+      dec({ decision: 'loop_terminated', disposition: 'capped', reason: 'capped' }),
+    ]);
+    expect(ledger).toEqual({ auto_fixed: [], surfaced: [], materialized: [] });
+    expect(projectAutoHandling([])).toEqual({ auto_fixed: [], surfaced: [], materialized: [] });
+  });
+});
+
+describe('ac-3 producer: an unresolved auto-resolvable risk lands in remaining_risk_records', () => {
+  const dec = (over: Partial<AutopilotDecision> & Pick<AutopilotDecision, 'decision'>) =>
+    ({ ts: '2026-06-02T00:00:00.000Z', node_id: 'V', reason: 'r', ...over }) as AutopilotDecision;
+  const autoFix = dec({
+    decision: 'auto_fix',
+    resolvability: 'agent_resolvable',
+    reason: 'auto-fix residual risk: a missing null guard on the new path',
+  });
+
+  // The auto-fix spliced a re-verify recheck (<node>.rev.r<k>) that did NOT pass, so
+  // the agent_resolvable risk is unresolved at completion assembly — it must reach
+  // `remaining_risk_records` so the Stop gate can block on it (no silent leak).
+  test('auto_fix(agent_resolvable) whose re-verify recheck did NOT pass → recorded', () => {
+    const graph = graphWith([
+      node({ id: 'V', acceptance_refs: ['ac-1'], evidence_refs: [ev('out.txt')] }),
+      node({ id: 'V.rev.r0', kind: 'verify', status: 'blocked', depends_on: [] }),
+    ]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+      now: NOW,
+      decisions: [autoFix],
+    });
+    expect(c.remaining_risk_records).toEqual([
+      { risk: 'a missing null guard on the new path', resolvability: 'agent_resolvable' },
+    ]);
+  });
+
+  // The recheck PASSED → the risk was actually resolved/auto-fixed → NOT re-recorded.
+  test('auto_fix(agent_resolvable) whose re-verify recheck PASSED → NOT re-recorded', () => {
+    const graph = graphWith([
+      node({ id: 'V', acceptance_refs: ['ac-1'], evidence_refs: [ev('out.txt')] }),
+      node({ id: 'V.rev.r0', kind: 'verify', status: 'passed', depends_on: [] }),
+    ]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+      now: NOW,
+      decisions: [autoFix],
+    });
+    expect(c.remaining_risk_records).toBeUndefined();
+  });
+
+  // No ledger threaded → field omitted (legacy completion shape, backward compat).
+  test('no decisions threaded → remaining_risk_records omitted', () => {
+    const graph = graphWith([
+      node({ id: 'V', acceptance_refs: ['ac-1'], evidence_refs: [ev('out.txt')] }),
+    ]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), { now: NOW });
+    expect(c.remaining_risk_records).toBeUndefined();
   });
 });

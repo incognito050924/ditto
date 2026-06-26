@@ -10,13 +10,16 @@ import { FitnessFunctionStore } from '~/core/fitness-function-store';
 import { ensureDir, writeJson } from '~/core/fs';
 import {
   type ConflictDisposition,
+  attestAcVerdicts,
   completionEvidenceGate,
   completionGate,
   convergenceGate,
   decisionConflictGate,
   intentDriftGate,
   knowledgeUpdateGate,
+  nonPassTerminationGate,
   resolvabilityBlockers,
+  riskRecordBlockers,
 } from '~/core/gates';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -430,6 +433,33 @@ export function residualResolvabilityForcesContinuation(
 }
 
 /**
+ * Does a structured residual-risk record in the completion's `remaining_risk_records[]`
+ * force continuation? (ac-3 completion-side enforcement — the structural sibling of
+ * `residualResolvabilityForcesContinuation`.) It delegates to `riskRecordBlockers`
+ * (gates.ts), which routes the records through the SAME default-DENY classifier the
+ * `unverified[]` residual gate uses, so the two residual surfaces share ONE label space
+ * (R11) and never drift. An `agent_resolvable` record ALWAYS blocks (parking what the
+ * agent can resolve is the anti-pattern — an unhandled auto-resolvable risk must not
+ * silently leak through completion); a `blocked_external`/`accepted_tradeoff`/
+ * `user_decision` record releases ONLY with grounding. R5/ADR-0018: a tool-absence
+ * record is `blocked_external`+grounding and therefore releases — never
+ * `agent_resolvable`. Absent records (the legacy completion shape) ⇒ []. The CALLER
+ * gates this on `completionWouldClose`, exactly like the unverified[] residual gate, so
+ * it fires only on a completion that passes its own gates (no double-message on a partial).
+ */
+export function riskRecordForcesContinuation(
+  completion: z.infer<typeof completionContract>,
+  workItem: WorkItem,
+): string[] {
+  const acceptanceIds = workItem.acceptance_criteria.map((c) => c.id);
+  return riskRecordBlockers(completion.remaining_risk_records, acceptanceIds).map((b) =>
+    b.userDecision
+      ? `residual-risk record deferred_needs_user_ok — ${b.item}: ${b.reason}`
+      : `residual-risk record blocks pass-close — ${b.item}: ${b.reason}`,
+  );
+}
+
+/**
  * Decision-conflict guardrail (ADR-0020). The detecting node declares the ADR
  * conflicts it judged in a carrier; this runs `decisionConflictGate` and splits the
  * dispositions two ways, mirroring the gate's routing:
@@ -675,6 +705,16 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     const e = completionEvidenceGate(completion.data);
     if (!e.pass) reasons.push(...e.reasons);
     completionWouldClose = g.pass && e.pass;
+    // (ac-1 / ac-5) Non-pass termination gate. completionGate enumerates per-AC
+    // verdicts only on a pass, and the residual gate reads only `unverified[]` — so a
+    // NON-pass completion that PARKS an in-scope unverified/fail criterion without an
+    // honest `non_pass_status` declaration slips both and silent-terminates at exit 0.
+    // This gate enumerates `acceptance[].verdict` directly and BLOCKS that silent park
+    // (ac-5: a no-progress run that writes such a completion does not terminate);
+    // an honest partial/blocked (non_pass_status) TERMINATES (ADR-20260626 D2). No-op
+    // on pass completions (owned by completionGate above) — no behaviour change there.
+    const np = nonPassTerminationGate(completion.data);
+    if (!np.pass) reasons.push(...np.reasons);
   }
   if (conv.status === 'ok') {
     const g = convergenceGate(conv.data);
@@ -701,6 +741,10 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   // autopilot.json required).
   if (completion.status === 'ok' && completionWouldClose) {
     reasons.push(...residualResolvabilityForcesContinuation(completion.data, workItem));
+    // (ac-3) the same default-DENY policy over the structured `remaining_risk_records[]`
+    // surface: a parked agent_resolvable record (or an ungrounded non-resolvable one)
+    // blocks a pass-close exactly as an unverified[] residual does (R11 — one label space).
+    reasons.push(...riskRecordForcesContinuation(completion.data, workItem));
   }
   // Axis-2 intent drift: the chain (intent → work-item → autopilot → completion)
   // is conserved by construction at finalize; this catches post-finalize
@@ -763,10 +807,35 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
       ? `DITTO Stop advisory (non-blocking) — ${advisories.length} item(s):\n- ${advisories.join('\n- ')}\n`
       : '';
 
+  // (ac-6) Per-AC positive attestation. Built from the SAME per-AC verdicts the
+  // completion recorded (`completion.acceptance`) — `attestAcVerdicts` folds the 4
+  // verdicts into 3 attestation states, so it can never disagree with what closed
+  // each AC. Non-blocking: appended (like advisoryBlock) to whatever this handler
+  // returns so the user sees what every AC is attested as at the run's stop. Empty
+  // when no completion is present.
+  const attestation =
+    completion.status === 'ok'
+      ? attestAcVerdicts(
+          // Map to the minimal DerivedAcVerdict shape; conditional-spread `notes` so
+          // an absent note never lands as `notes: undefined` (exactOptionalPropertyTypes).
+          completion.data.acceptance.map((a) => ({
+            criterion_id: a.criterion_id,
+            verdict: a.verdict,
+            ...(a.notes !== undefined ? { notes: a.notes } : {}),
+          })),
+        )
+      : [];
+  const attestationBlock =
+    attestation.length > 0
+      ? `DITTO Stop attestation (per-AC) — ${attestation.length} criterion/criteria:\n${attestation
+          .map((a) => `- ${a.criterion_id}: ${a.state}${a.basis ? ` — ${a.basis}` : ''}`)
+          .join('\n')}\n`
+      : '';
+
   if (reasons.length > 0) {
     return {
       exitCode: 2,
-      stderr: `DITTO Stop gate: keep going — ${reasons.length} item(s) remain:\n- ${reasons.join('\n- ')}\n${advisoryBlock}`,
+      stderr: `DITTO Stop gate: keep going — ${reasons.length} item(s) remain:\n- ${reasons.join('\n- ')}\n${advisoryBlock}${attestationBlock}`,
     };
   }
 
@@ -797,6 +866,6 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     semanticPresent: semantic.status === 'ok',
     isNonTerminal: NON_TERMINAL_STATUSES.includes(workItem.status),
   });
-  const tail = `${advisoryBlock}${nudge ?? ''}`;
+  const tail = `${advisoryBlock}${attestationBlock}${nudge ?? ''}`;
   return tail.length > 0 ? { exitCode: 0, stderr: tail } : { exitCode: 0 };
 };

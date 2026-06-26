@@ -7,13 +7,19 @@ import { type Diagnostic, getDiagnostics, resolveServer } from '~/core/lsp/clien
 import { lspLanguageForPath } from '~/core/provision/lsp-detect';
 import { type Autopilot, type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
 import { evidenceRef, relativePath, verdict } from '~/schemas/common';
+import { resolvability } from '~/schemas/completion-contract';
 import { isFarFieldEscape } from '~/schemas/coverage';
 import { decisionConflict, decisionConflictCarrier } from '~/schemas/decision-conflict-carrier';
 import { type AcOracle, acOracle } from '~/schemas/work-item';
 import { ActiveNodeLeaseStore } from './active-node-lease';
 import { loadVariantCatalog, selectVariantCandidates } from './agent-variants';
 import { assembleCompletionFromGraph } from './autopilot-complete';
-import { forwardRound, planForwardReexpansion, totalForwardRounds } from './autopilot-converge';
+import {
+  type ForwardTrigger,
+  forwardRound,
+  planForwardReexpansion,
+  totalForwardRounds,
+} from './autopilot-converge';
 import {
   type DelegationPacket,
   type FailureClass,
@@ -779,6 +785,52 @@ export const recordResultPayload = z
         'A wrong-fixpoint signal (ADR-0024 Decision 6): the passed node whose oracle is marked ' +
           'closed but whose evidence mismatches, to reopen (or block at K). Guarded on passed status.',
       ),
+    // T1 (wi_2606266az, ac-3): structured residual-risk records this node surfaced.
+    // Mirrors the completion contract's `remaining_risk_records` shape (same
+    // resolvability label space, R11). On a contentful pass each record is ROUTED:
+    // `agent_resolvable` (or unlabeled, the default) auto-routes to a forward
+    // risk_fix round (ac-3 "auto-fix BY DEFAULT"); the four surface-reason classes
+    // (decision_or_adr_conflict / multiple_comparable_solutions / out_of_scope /
+    // genuinely_dangerous) — and a tool-blocked blocked_external (R5) — are
+    // surfaced IN-FLOW (flow continues, never terminates). Every route is recorded
+    // in the decision-log ledger with its category. Absent ⇒ no-op (backward compat).
+    residual_risks: z
+      .array(
+        z.object({
+          risk: z.string().min(1),
+          resolvability: resolvability.optional(),
+          grounding: z.string().min(1).optional(),
+        }),
+      )
+      .optional()
+      .describe(
+        "A node's structured residual-risk records (ac-3); agent_resolvable auto-fixes, the four " +
+          'surface classes surface in-flow. Each route is disclosed in the decision-log ledger.',
+      ),
+    // T1 (wi_2606266az, ac-4): follow-ups this node surfaced. An IN-scope follow-up
+    // is DRIVEN as a current-graph node (a follow_up forward round). An OUT-of-scope
+    // follow-up emits ONE in-flow batch-escalate SIGNAL in the ledger — it is NOT
+    // materialized or driven here (that is the separate n1i-followup-batch node;
+    // materialize ≠ drive, R9). Absent ⇒ no-op (backward compat).
+    follow_ups: z
+      .array(z.object({ item: z.string().min(1), in_scope: z.boolean() }))
+      .optional()
+      .describe(
+        "A node's surfaced follow-ups (ac-4); in-scope ones are driven as graph nodes, out-of-scope " +
+          'ones emit a single batch-escalate signal (materialize ≠ drive, R9).',
+      ),
+    // T1 (wi_2606266az, R5/ADR-0018): the auto-resolve trigger this pass would
+    // splice is blocked ONLY by an OPTIONAL tool's absence — the planner then
+    // surfaces the residual blocked_external (honest-unverified) instead of looping
+    // a re-verify that can never gather the evidence (grounding releases
+    // blocked_external at the gate, never agent_resolvable). Absent ⇒ normal route.
+    blocked_by_tool: z
+      .object({ tool: z.string().min(1), grounding: z.string().min(1) })
+      .optional()
+      .describe(
+        'R5/ADR-0018: an auto-resolve item blocked only by an optional tool absence; surface ' +
+          'blocked_external rather than splice an endless re-verify.',
+      ),
   })
   .superRefine((value, ctx) => {
     if (value.outcome === 'fail' && value.failure_class === undefined) {
@@ -1140,6 +1192,144 @@ async function recordLoopTermination(
   });
 }
 
+// ── T1 (wi_2606266az) auto-resolve forward triggers (ac-2/3/4/5) ─────────────
+
+/** The three new forward triggers the loop drives (the `review` lane is unchanged). */
+type AutoResolveTrigger = Extract<ForwardTrigger, 'reverify' | 'risk_fix' | 'follow_up'>;
+
+/**
+ * A GATHERABLE oracle has a RUNNABLE re-evaluation path — a command/scan exists to
+ * collect fresh evidence (ac-2). `soft_judgment` (needs a human call) and an ABSENT
+ * oracle are NOT auto-collectable, so an AC left unverified under them stays
+ * honest-unverified (the loop never re-verifies what it cannot gather evidence for).
+ */
+function isGatherableOracle(oracle: AcOracle | undefined): boolean {
+  return (
+    oracle !== undefined &&
+    (oracle.verification_method === 'dynamic_test' || oracle.verification_method === 'static_scan')
+  );
+}
+
+/**
+ * Apply a T1 auto-resolve forward splice (ac-2 reverify / ac-3 risk_fix / ac-4
+ * follow_up) on a contentful node pass — the same fix→recheck shape the
+ * review/security forward re-expansion uses, driven by the three new triggers.
+ *
+ * R7 (single-writer): runs INSIDE `recordResult` (the serialized record-result
+ * path) and splices via the SAME `addNodes` integrity gate the review path uses —
+ * it adds NO new concurrent write path, so a concurrent record-result cannot drop
+ * a splice. R2 (cap inheritance): `planForwardReexpansion` reuses the `.rev.r`
+ * marker, so every splice is counted by `totalForwardRounds` against `loop_rounds`
+ * — no new uncapped path. ac-5 (no-progress floor): the per-chain budget is
+ * `caps.no_progress_rounds`; each unresolved forward round adds chain depth (= one
+ * consecutive no-progress round), so the chain escalates IN-FLOW (blocks, capped ≠
+ * converged) rather than spinning in place. R5/ADR-0018: when the planner returns
+ * `surface` (optional-tool absence) the node passes and the residual is recorded
+ * `blocked_external` — NEVER an endless re-verify.
+ */
+async function applyAutoResolveSplice(args: {
+  aps: AutopilotStore;
+  workItemId: string;
+  node: AutopilotNode;
+  graph: Autopilot;
+  trigger: AutoResolveTrigger;
+  evidenceRefs: RecordResultPayload['evidence_refs'];
+  guardReason: string;
+  now: Date;
+  allowedAcceptanceIds: Set<string> | undefined;
+  blockedByOptionalTool?: { tool: string; grounding: string };
+}): Promise<RecordResultOutcome> {
+  const { aps, workItemId, node, graph, trigger, evidenceRefs, guardReason, now } = args;
+  // Graph-wide loop-level cap (R2): the SUM of forward rounds across the whole graph.
+  const loopRoundsSoFar = totalForwardRounds(graph.nodes.map((n) => n.id));
+  const loopCapHit = loopRoundsSoFar >= graph.caps.loop_rounds;
+  const plan: ReturnType<typeof planForwardReexpansion> = loopCapHit
+    ? {
+        decision: 'escalate',
+        reason: `loop-level iteration cap reached (${loopRoundsSoFar} forward rounds ≥ loop_rounds ${graph.caps.loop_rounds}) with an unresolved ${trigger} item on ${node.id}; capped ≠ converged, escalate rather than expand`,
+      }
+    : planForwardReexpansion({
+        reviewNode: node,
+        hasFindings: true,
+        round: forwardRound(node.id),
+        // ac-5: the auto-resolve lanes converge under the no-progress floor — each
+        // unresolved forward round is one consecutive no-progress round.
+        budget: graph.caps.no_progress_rounds,
+        trigger,
+        ...(args.blockedByOptionalTool
+          ? { blockedByOptionalTool: args.blockedByOptionalTool }
+          : {}),
+      });
+  const passOutcome = (promoted: string[]): RecordResultOutcome => ({
+    node_id: node.id,
+    status: 'passed',
+    outcome: 'pass',
+    guard_contentful: true,
+    decision: null,
+    failure_class: null,
+    cap_exceeded: false,
+    reason: guardReason,
+    promoted_node_ids: promoted,
+    superseded_node_ids: [],
+  });
+  if (plan.decision === 'surface') {
+    // R5/ADR-0018: optional-tool absence — do NOT splice an endless re-verify. The
+    // node passes; the residual is left honest-unverified / blocked_external and
+    // recorded IN-FLOW (the loop never loops on what an absent tool blocks).
+    await aps.updateNode(workItemId, node.id, (n) => ({
+      ...n,
+      status: nodeTransition(n.status, 'pass'),
+      evidence_refs: evidenceRefs ?? n.evidence_refs,
+    }));
+    await aps.appendDecision(workItemId, {
+      ts: now.toISOString(),
+      node_id: node.id,
+      decision: 'surface',
+      resolvability: plan.resolvability,
+      reason: plan.reason,
+    });
+    return passOutcome([]);
+  }
+  if (plan.decision === 'expand') {
+    // Splice the fix+recheck pair BEFORE marking pass (a rejected splice leaves the
+    // node still running and re-recordable — mirrors the review path).
+    await aps.addNodes(workItemId, plan.nodes, args.allowedAcceptanceIds);
+    await aps.updateNode(workItemId, node.id, (n) => ({
+      ...n,
+      status: nodeTransition(n.status, 'pass'),
+      evidence_refs: evidenceRefs ?? n.evidence_refs,
+    }));
+    return passOutcome(plan.nodes.map((n) => n.id));
+  }
+  // escalate (ac-5): no-progress / loop cap reached with the item still open — STOP
+  // without closing (capped ≠ converged, never a silent pass). Block + record.
+  const reason = plan.decision === 'escalate' ? plan.reason : guardReason;
+  await aps.updateNode(workItemId, node.id, (n) => ({
+    ...n,
+    status: nodeTransition(n.status, 'block'),
+  }));
+  await aps.appendDecision(workItemId, {
+    ts: now.toISOString(),
+    node_id: node.id,
+    failure_class: 'user_decision_needed',
+    decision: 'escalate',
+    reason,
+    attempts: node.attempts,
+  });
+  return {
+    node_id: node.id,
+    status: 'blocked',
+    outcome: 'fail',
+    guard_contentful: true,
+    decision: 'escalate',
+    failure_class: 'user_decision_needed',
+    cap_exceeded: true,
+    reason,
+    promoted_node_ids: [],
+    superseded_node_ids: [],
+  };
+}
+
 export async function recordResult(
   repoRoot: string,
   input: RecordResultInput,
@@ -1315,6 +1505,24 @@ export async function recordResult(
   }
 
   if (outcome === 'pass') {
+    // FINDING #2 (wi_2606266az) mutual-exclusivity guard. The ac-2/3/4 auto-resolve
+    // lanes below (residual_risks → risk_fix splice, follow_ups → follow_up splice)
+    // EARLY-RETURN before the generated_nodes/plan_brief promotion. A single payload
+    // carrying BOTH a subgraph-promotion signal AND an auto-resolve lane would
+    // therefore SILENTLY DROP the promotion. These belong to different node
+    // responsibilities (a planner/design promotion vs. a verify-node residual), so they
+    // are mutually exclusive in one record-result call — fail fast with a clear error
+    // (before any pass-side mutation) rather than dropping work.
+    const promotes =
+      (input.payload.generated_nodes?.length ?? 0) > 0 || input.payload.plan_brief !== undefined;
+    const autoResolves =
+      (input.payload.residual_risks?.length ?? 0) > 0 ||
+      (input.payload.follow_ups?.length ?? 0) > 0;
+    if (promotes && autoResolves) {
+      throw new Error(
+        `record-result payload for node ${node.id} carries BOTH a subgraph-promotion signal (generated_nodes/plan_brief) AND an auto-resolve lane (residual_risks/follow_ups); these are mutually exclusive in one pass — an auto-resolve splice early-returns and would silently drop the promotion. Split them across separate record-result calls.`,
+      );
+    }
     // ADR-0024 Decision 6 (mechanism 4) — wrong-fixpoint reopen. A re-checking node
     // may report that an ALREADY-PASSED node closed a criterion whose oracle is in
     // fact not met. Return that passed node to pending via the `reopen` transition,
@@ -1470,6 +1678,148 @@ export async function recordResult(
         promoted_node_ids: [],
         superseded_node_ids: [],
       };
+    }
+
+    // ── T1 ac-2 (wi_2606266az): re-verify an unverified-but-GATHERABLE AC ──────
+    // A `verify` node that left an in-scope AC at `unverified` whose oracle is
+    // GATHERABLE (a runnable command/scan exists) auto-splices a re-verify forward
+    // round (converge `reverify` trigger) so the loop COLLECTS the missing evidence
+    // before the run closes — instead of terminating on a collectable unverified.
+    // An unverified AC with no gatherable oracle (soft_judgment / none) is honest-
+    // unverified and left alone (no splice). Single-writer (R7) via the SAME
+    // addNodes path; the spliced re-verify trace lands in the graph, so the
+    // assembled completion reads the re-run (record into completion).
+    if (node.kind === 'verify') {
+      const wi = await new WorkItemStore(repoRoot).get(input.workItemId);
+      const oracleById = new Map<string, AcOracle | undefined>(
+        wi.acceptance_criteria.map((c) => [c.id, c.oracle]),
+      );
+      const inPlay = new Set(node.acceptance_refs);
+      const gatherableUnverified = (input.payload.ac_verdicts ?? []).some(
+        (v) =>
+          v.verdict === 'unverified' &&
+          inPlay.has(v.criterion_id) &&
+          isGatherableOracle(oracleById.get(v.criterion_id)),
+      );
+      if (gatherableUnverified) {
+        return applyAutoResolveSplice({
+          aps,
+          workItemId: input.workItemId,
+          node,
+          graph,
+          trigger: 'reverify',
+          evidenceRefs: input.payload.evidence_refs,
+          guardReason,
+          now: input.now ?? new Date(),
+          allowedAcceptanceIds,
+          ...(input.payload.blocked_by_tool
+            ? { blockedByOptionalTool: input.payload.blocked_by_tool }
+            : {}),
+        });
+      }
+    }
+
+    // ── T1 ac-3 (wi_2606266az): route residual risks ──────────────────────────
+    // A node may surface structured residual-risk records. EACH is routed and the
+    // route disclosed in the append-only ledger (structured category, not free-
+    // text): `agent_resolvable` (or unlabeled, the DEFAULT) auto-routes to a
+    // forward risk_fix round; the four surface-reason classes — and a tool-blocked
+    // blocked_external (R5) — are surfaced IN-FLOW (flow continues, the node still
+    // passes, the loop does NOT terminate). The auto-fix splice reuses the single-
+    // writer addNodes path (R7) and the no-progress floor (ac-5).
+    const residualRisks = input.payload.residual_risks ?? [];
+    if (residualRisks.length > 0) {
+      const now = input.now ?? new Date();
+      const isAutoFix = (r: (typeof residualRisks)[number]): boolean =>
+        r.resolvability === undefined || r.resolvability === 'agent_resolvable';
+      // Surfaced (NOT auto-fixed) risks: disclose each in-flow with its category.
+      for (const r of residualRisks.filter((r) => !isAutoFix(r))) {
+        await aps.appendDecision(input.workItemId, {
+          ts: now.toISOString(),
+          node_id: node.id,
+          decision: 'surface',
+          // r is a surfaced (non-auto-fix) risk, so resolvability is one of the four
+          // surface classes (or blocked_external) — never undefined; the conditional
+          // spread keeps the type exact (exactOptionalPropertyTypes).
+          ...(r.resolvability ? { resolvability: r.resolvability } : {}),
+          reason: `surface residual risk in-flow (${r.resolvability}): ${r.risk}`,
+        });
+      }
+      const autoFix = residualRisks.filter(isAutoFix);
+      if (autoFix.length > 0) {
+        const outcome = await applyAutoResolveSplice({
+          aps,
+          workItemId: input.workItemId,
+          node,
+          graph,
+          trigger: 'risk_fix',
+          evidenceRefs: input.payload.evidence_refs,
+          guardReason,
+          now,
+          allowedAcceptanceIds,
+          ...(input.payload.blocked_by_tool
+            ? { blockedByOptionalTool: input.payload.blocked_by_tool }
+            : {}),
+        });
+        // Disclose the auto-fix route ONLY when the splice actually drove a round
+        // (an escalate/surface is already recorded by the helper, so a cap-hit or a
+        // tool-block is not falsely logged as an applied auto-fix).
+        if (outcome.status === 'passed' && outcome.promoted_node_ids.length > 0) {
+          for (const r of autoFix) {
+            await aps.appendDecision(input.workItemId, {
+              ts: now.toISOString(),
+              node_id: node.id,
+              decision: 'auto_fix',
+              resolvability: 'agent_resolvable',
+              reason: `auto-fix residual risk: ${r.risk}`,
+            });
+          }
+        }
+        return outcome;
+      }
+      // surface-only ⇒ no splice; flow CONTINUES (fall through to the normal pass).
+    }
+
+    // ── T1 ac-4 (wi_2606266az): drive in-scope follow-ups, signal out-of-scope ──
+    // An IN-scope follow-up is DRIVEN as a current-graph node (a follow_up forward
+    // round). OUT-of-scope follow-ups emit ONE in-flow batch-escalate SIGNAL in the
+    // ledger and are NOT materialized or driven here — that is the separate
+    // n1i-followup-batch node's job (materialize ≠ drive, R9). The loop only signals.
+    const followUps = input.payload.follow_ups ?? [];
+    if (followUps.length > 0) {
+      const now = input.now ?? new Date();
+      const outOfScope = followUps.filter((f) => !f.in_scope);
+      const inScope = followUps.filter((f) => f.in_scope);
+      if (outOfScope.length > 0) {
+        // Exactly ONE batch-escalate signal regardless of count — the batch node
+        // materializes them; the loop does not drip per-item nor drive them.
+        await aps.appendDecision(input.workItemId, {
+          ts: now.toISOString(),
+          node_id: node.id,
+          decision: 'batch_escalate',
+          resolvability: 'out_of_scope',
+          reason: `batch-escalate ${outOfScope.length} out-of-scope follow-up(s) for separate materialization (loop signals only, does not drive — R9): ${outOfScope
+            .map((f) => f.item)
+            .join('; ')}`,
+        });
+      }
+      if (inScope.length > 0) {
+        return applyAutoResolveSplice({
+          aps,
+          workItemId: input.workItemId,
+          node,
+          graph,
+          trigger: 'follow_up',
+          evidenceRefs: input.payload.evidence_refs,
+          guardReason,
+          now,
+          allowedAcceptanceIds,
+          ...(input.payload.blocked_by_tool
+            ? { blockedByOptionalTool: input.payload.blocked_by_tool }
+            : {}),
+        });
+      }
+      // out-of-scope only ⇒ signal emitted; flow CONTINUES (fall through to pass).
     }
 
     // Node promotion (A-3): a contentful pass may carry the subgraph this node

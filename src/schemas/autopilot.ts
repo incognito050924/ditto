@@ -218,6 +218,14 @@ export const autopilot = z
       // infinite-loop floor. Graph-derived (forwardRound over the nodes), never a
       // driver-trusted stored counter. `.default` keeps legacy graphs parsing.
       loop_rounds: z.number().int().positive().default(12),
+      // T1 ac-1 (wi_2606266az): no-progress floor — max consecutive loop rounds
+      // with no forward progress (no AC verdict advanced, no fix landed) before the
+      // loop halts instead of spinning in place. Hardcoded-at-bootstrap +
+      // schema-`.default` like converge_rounds/oracle_failures_to_block/loop_rounds
+      // above, so a legacy graph written before this field parses without
+      // regression (the default materializes on parse, as those caps already do).
+      // NOT a tier-②/config-overridable surface (out of scope, R12).
+      no_progress_rounds: z.number().int().positive().default(3),
     }),
     continue_policy: z.object({
       continue_after_approval: z.boolean().default(true),

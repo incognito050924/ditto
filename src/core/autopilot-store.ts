@@ -26,8 +26,31 @@ export interface AutopilotDecision {
     | 'escalate'
     | 'e2e_accept'
     | 'e2e_decline'
-    | 'loop_terminated';
+    | 'loop_terminated'
+    // T1 (wi_2606266az) auto-resolve ledger vocabulary: `auto_fix` = the loop
+    // auto-routed an agent_resolvable risk to a forward fix round (ac-3); `surface`
+    // = the loop surfaced a residual IN-FLOW to the user without terminating (ac-3
+    // 4-reason surface, or R5 optional-tool blocked_external); `batch_escalate` =
+    // the loop emitted the single out-of-scope follow-up batch signal (ac-4, the
+    // signal n1i-followup-batch materializes — loop only signals, R9).
+    | 'auto_fix'
+    | 'surface'
+    | 'batch_escalate';
   reason: string;
+  // T1 (wi_2606266az, ac-3): the structured reason-category for an `auto_fix` /
+  // `surface` / `batch_escalate` decision — the resolvability class the route was
+  // chosen from (machine-attributable, NOT parsed from `reason`). Present only on
+  // those auto-resolve decisions; the resolvability label space is the SAME enum
+  // the completion contract uses (one label space, R11). Additive + optional.
+  resolvability?:
+    | 'agent_resolvable'
+    | 'blocked_external'
+    | 'user_decision'
+    | 'accepted_tradeoff'
+    | 'decision_or_adr_conflict'
+    | 'multiple_comparable_solutions'
+    | 'out_of_scope'
+    | 'genuinely_dangerous';
   // ADR-0024 Decision 7 (ac-6): the whole-graph loop-termination disposition,
   // present ONLY on a `loop_terminated` decision. `converged` = the loop closed on
   // oracle satisfaction; `capped` = a loop-level iteration cap forced the close

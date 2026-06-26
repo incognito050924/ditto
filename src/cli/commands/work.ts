@@ -961,6 +961,12 @@ const workFollowUp = defineCommand({
       description: 'Mark a regression introduced by this work item itself',
       default: false,
     },
+    batch: {
+      type: 'boolean',
+      description:
+        'Materialize ALL captured out-of-scope follow-ups (intent.follow_up_candidates + unmaterialized idea follow_ups) into tracked, back-linked WIs on ONE approval; records the one-time approval in intent.follow_up_materialization (mutually exclusive with --kind/--note/--resolve)',
+      default: false,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
@@ -974,6 +980,146 @@ const workFollowUp = defineCommand({
     }
     const repoRoot = await resolveRepoRootForCreate();
     const store = new WorkItemStore(repoRoot);
+
+    // ── batch mode: materialize the WHOLE captured set of OUT-of-scope follow-ups
+    // on ONE approval (ac-4, T1). The single `--kind bug` path below materializes
+    // one bug per CLI call; this path takes the union of the intent sidecar's
+    // `follow_up_candidates` (bare strings) and the WI's own unmaterialized idea
+    // follow_ups, and turns each into a tracked, back-linked WI. A single
+    // invocation IS the one-time batch approval — there is no per-item prompt
+    // (per-item drip = SLOP). The approval + back-links are recorded in
+    // intent.follow_up_materialization, which makes a re-run idempotent.
+    // materialize != drive (R9): each created WI is a tracked record (status
+    // 'draft'), never auto-started — auto-driving separate WIs is out of scope
+    // (T3/ADR-0011 D2). Same-rooted sequential creation, no cross-root runner.
+    if (args.batch === true) {
+      if (args.kind !== undefined || args.note !== undefined || args.resolve !== undefined) {
+        writeError(
+          '--batch materializes all captured follow-ups at once and cannot be combined with --kind/--note/--resolve (one mode per invocation)',
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      try {
+        const source = await store.get(args.workId); // clear error if the WI is unknown
+        const intentStore = new IntentStore(repoRoot);
+        if (!(await intentStore.exists(args.workId))) {
+          writeError(
+            `work follow-up --batch records the one-time approval in intent.json, but ${args.workId} has none (a lightweight work item). Capture follow-ups with --kind idea, or run /ditto:deep-interview first.`,
+          );
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const intent = await intentStore.get(args.workId);
+
+        // Idempotent: the one-time batch already ran — the back-link is the record,
+        // so a re-run is a no-op (no duplicate WIs).
+        if (intent.follow_up_materialization?.batch_approved) {
+          const already = intent.follow_up_materialization.materialized_wis;
+          if (format === 'json') {
+            writeJson({
+              work_item_id: source.id,
+              batch_approved: true,
+              materialized_wis: already,
+              already_materialized: true,
+            });
+          } else {
+            writeHuman(
+              `Batch already materialized for ${source.id}: ${already.length} work item(s) — nothing to do.`,
+            );
+          }
+          return;
+        }
+
+        // Candidate set = intent.follow_up_candidates (bare strings, no parent entry
+        // yet) ∪ the WI's own unmaterialized idea follow_ups (candidate-only entries;
+        // bugs are already materialized by the single path, resolved ones are done).
+        const stringCandidates = intent.follow_up_candidates;
+        const ideaIndexes = (source.follow_ups ?? [])
+          .map((f, i) => ({ f, i }))
+          .filter(({ f }) => f.kind === 'idea' && !f.materialized_wi && f.resolved !== true);
+
+        if (stringCandidates.length === 0 && ideaIndexes.length === 0) {
+          if (format === 'json') {
+            writeJson({ work_item_id: source.id, batch_approved: true, materialized_wis: [] });
+          } else {
+            writeHuman(`No captured out-of-scope follow-ups to materialize for ${source.id}.`);
+          }
+          return;
+        }
+
+        const materializeOne = async (note: string): Promise<string> => {
+          const created = await store.create({
+            title: `follow-up: ${note}`.slice(0, 200),
+            source_request: `Out-of-scope follow-up discovered while working on ${source.id}: ${note}`,
+            goal: note,
+            acceptance_criteria: [
+              {
+                id: 'ac-1',
+                statement: PLACEHOLDER_AC_STATEMENT,
+                verdict: 'unverified' as const,
+                evidence: [],
+              },
+            ],
+            discovered_by: source.id,
+          });
+          return created.id;
+        };
+
+        const materializedWis: string[] = [];
+        // (1) bare string candidates → new WI + an APPENDED parent follow_up entry.
+        const appended: FollowUp[] = [];
+        for (const note of stringCandidates) {
+          const newId = await materializeOne(note);
+          materializedWis.push(newId);
+          appended.push({ kind: 'idea', note, materialized_wi: newId });
+        }
+        // (2) existing idea follow_ups → new WI + STAMP that entry's back-link.
+        const stampedByIndex = new Map<number, string>();
+        for (const { f, i } of ideaIndexes) {
+          const newId = await materializeOne(f.note);
+          materializedWis.push(newId);
+          stampedByIndex.set(i, newId);
+        }
+
+        // Two-sided provenance (parent side): stamp the existing idea entries and
+        // append the new string-candidate entries, each back-linking its WI. The
+        // child side (discovered_by) was stamped by store.create above.
+        await store.update(args.workId, (cur) => ({
+          ...cur,
+          follow_ups: [
+            ...(cur.follow_ups ?? []).map((f, i) =>
+              stampedByIndex.has(i) ? { ...f, materialized_wi: stampedByIndex.get(i) } : f,
+            ),
+            ...appended,
+          ],
+        }));
+
+        // Record the one-time batch approval + back-links in the intent sidecar.
+        await intentStore.write({
+          ...intent,
+          follow_up_materialization: { batch_approved: true, materialized_wis: materializedWis },
+        });
+
+        if (format === 'json') {
+          writeJson({
+            work_item_id: source.id,
+            batch_approved: true,
+            materialized_wis: materializedWis,
+          });
+        } else {
+          writeHuman(
+            `Batch-materialized ${materializedWis.length} out-of-scope follow-up(s) on one approval for ${source.id} (discovered_by ${source.id}); created: ${materializedWis.join(', ')}`,
+          );
+        }
+      } catch (err) {
+        writeError(
+          `work follow-up --batch failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      return;
+    }
 
     // ── resolve mode: clear an existing follow-up (1-based index). Mutually
     // exclusive with append (--kind/--note). This is the CLI path that clears the
