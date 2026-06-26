@@ -327,7 +327,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=401d4ce955295d12ac0b5aebaa07e623f86a038b4e5e333c9bdf4ad0a6ca8505 -->
+<!-- ditto:knowledge:start sha256=8a8fe4ee076776feeac8e88483bc5a7678925738cf048a0f6f83833a382252e4 -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -348,16 +348,19 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - context packet
 - context rot
 - cross_repo
+- declared risk
 - deep-interview
 - deployment seam
 - doctor
 - drifted_sources
 - dual host
 - evidence
+- follow-up materialization
 - handoff
 - host adapter
 - internal_packages
 - language ledger
+- lightweight path
 - memory event
 - memory projection
 - memory source
@@ -365,11 +368,13 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - pre-mortem
 - profile
 - provider
+- push-readiness
 - request
 - reviewer output
 - run
 - run manifest
 - self-check
+- stem (lineage chain)
 - supersedes chain
 - surface projection
 - unverified
@@ -404,5 +409,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-0025 · accepted · Codex dogfood 수정은 Claude Code 표면과 분리한다
 - ADR-20260624-adr-identifier-policy · accepted · ADR 식별자 = 불변 파일명 (ADR-YYYYMMDD-slug) — 순차번호·uid 폐기
 - ADR-20260625-premortem-relevance-gate · accepted · pre-mortem far-field 폭을 '관련 카테고리 전수'로 — 이진 관련성 게이트 (ADR-0023 폭 계약 부분 supersede)
+- ADR-20260626-work-lifecycle-lightweight-path · accepted · ditto work-lifecycle 경량 경로 — 경량/무거운 2-경로 + logged-override 스펙트럼 + 줄기·후속·push-ready 받침
 
 <!-- ditto:knowledge:end -->

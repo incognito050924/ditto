@@ -108,6 +108,21 @@ owning-repo 워킹트리가 더티(미커밋 편집·`git stash`)인 상태. 개
 ### drifted_sources
 축2 검출이 어긋났다고 판정한 source 목록(별도 필드, 축1의 `dirty_sources`와 분리). 소비자(memory-graph 스킬)는 이 목록에 든 source만 코드로 직접 검증하고 나머지는 신뢰한다. 결정 근거는 ADR-0015.
 
+### lightweight path (경량 경로)
+무거운 경로(`deep-interview`→`pre-mortem`→`autopilot`) 옆에 둔 세리머니 없는 작업 경로. `work start --criteria` 또는 `work set-criteria`로 관측 가능한 진짜 기준을 세우고 `verify`→`work done`으로 닫는다(`intent.json`·graph 불필요). 경량 vs 무거운 선택은 logged-override(차단 기본값 + 기록된 사유, ADR-0020 패턴 재사용)이고, 무거운 경로 트리거는 `declared_risk`다. `work promote`로 제자리 승격한다. 결정 근거는 ADR-20260626-work-lifecycle-lightweight-path.
+
+### declared risk (declared_risk)
+work item이 무거운 경로(`deep-interview`)를 요구하는지 판정하는 위험 신호 필드. `risk{non_local·irreversible·unaudited}` 축 + 미해결 unknown 수로 구성된다. placeholder-문자열 nudge를 *대체*해, 진짜 기준을 세팅해도 무거운-경로 검출이 조용히 사라지지 않게 한다. 결정 근거는 ADR-20260626-work-lifecycle-lightweight-path.
+
+### stem (줄기, lineage chain)
+관련 work item을 한 단위로 보는 묶음 모델. 저장된 epic 객체나 죽은 `child_ids` 트리가 아니라, work item의 `follows` 계보 엣지 위에서 `work stem`이 *파생*하는 뷰다. 일괄 종결은 줄기 전원이 terminal일 때만 가능(롤업 verdict, 부분-abandon 허용). 결정 근거는 ADR-20260626-work-lifecycle-lightweight-path.
+
+### follow-up materialization (후속 물질화)
+발굴된 작업을 추적 가능한 형태로 전환하는 절차. work item의 `work follow-up` 슬롯에 담기며, 발굴된 *버그*는 추적 WI로 물질화되어 `discovered_by`로 역링크되고, *아이디어*는 candidate로 남는다. 미해결 자기-유발 high/critical 회귀는 `work done`을 차단(`--resolve`로 해제). 발굴을 산문 목록으로 사용자에게 던지지 않기 위함. 결정 근거는 ADR-20260626-work-lifecycle-lightweight-path.
+
+### push-readiness (push-ready)
+한 작업 단위가 자기완결이라 푸시할 수 있다는 강한 신호. `work push-ready`가 *명시 요청 시에만* 계산해 노출한다 — 전 AC가 실 명령-증거로 pass + 미해결 회귀 없음 + 줄기 done. PULL-ONLY: 어디서도 능동적 push 제안을 하지 않는다(push는 사용자의 비가역 배포 결정, 헌장 §4-8). 결정 근거는 ADR-20260626-work-lifecycle-lightweight-path.
+
 ## 금지 표현
 
 다음 표현은 사용자 응답에서 self-check가 reject한다.

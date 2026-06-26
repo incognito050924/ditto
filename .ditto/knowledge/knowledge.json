@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-06-25T00:00:00+09:00",
+  "updated_at": "2026-06-26T00:00:00+09:00",
   "context_path": ".ditto/knowledge/CONTEXT.md",
   "glossary_path": ".ditto/knowledge/glossary.json",
   "project_map_path": null,
