@@ -1,7 +1,12 @@
 import { defineCommand } from 'citty';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { WorkItemStore } from '~/core/work-item-store';
-import { createWorktreeForWorkItem, removeWorktreesForWorkItem } from '~/core/worktree';
+import {
+  createWorktreeForWorkItem,
+  listWorktreesForWorkspace,
+  removeWorktreesForWorkItem,
+  worktreeBindingHint,
+} from '~/core/worktree';
 import { workItemId as workItemIdSchema } from '~/schemas/common';
 import {
   RUNTIME_ERROR_EXIT,
@@ -61,6 +66,8 @@ const worktreeCreate = defineCommand({
         for (const wt of worktrees) {
           writeHuman(`  ${wt.owning_repo}\t${wt.branch}\t${wt.worktree_path}`);
         }
+        const hint = worktreeBindingHint(repoRoot, worktrees, workId);
+        if (hint) writeHuman(hint);
       }
     } catch (err) {
       writeError(`worktree create failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -124,12 +131,58 @@ const worktreeRemove = defineCommand({
   },
 });
 
+const worktreeList = defineCommand({
+  meta: {
+    name: 'list',
+    description:
+      'List per-work-item worktrees across the workspace with their git state (dirty, ahead/behind base)',
+  },
+  args: {
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const rows = await listWorktreesForWorkspace(repoRoot);
+      if (format === 'json') {
+        writeJson({ worktrees: rows });
+        return;
+      }
+      if (rows.length === 0) {
+        writeHuman('No worktrees. Create one with: ditto worktree create <work-item-id>');
+        return;
+      }
+      writeHuman('work-item\trepo\tbranch\tstate\tpath');
+      for (const r of rows) {
+        const state = r.exists
+          ? `${r.dirty ? 'dirty' : 'clean'} +${r.ahead}/-${r.behind} (vs ${r.base})`
+          : 'MISSING';
+        writeHuman(
+          `${r.work_item_id}\t${r.owning_repo}\t${r.branch}\t${state}\t${r.worktree_path}`,
+        );
+      }
+    } catch (err) {
+      writeError(`worktree list failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const worktreeCommand = defineCommand({
   meta: {
     name: 'worktree',
-    description: 'Manage per-work-item git worktrees (create, remove)',
+    description: 'Manage per-work-item git worktrees (list, create, remove)',
   },
   subCommands: {
+    list: worktreeList,
     create: worktreeCreate,
     remove: worktreeRemove,
   },

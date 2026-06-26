@@ -5,7 +5,7 @@ import { join, relative, sep } from 'node:path';
 import type { WorkItemWorktree } from '~/schemas/work-item';
 import { localDir } from './ditto-paths';
 import { ensureDir } from './fs';
-import { isWorkingTreeClean } from './git';
+import { aheadBehind, isWorkingTreeClean } from './git';
 import { fileExists } from './hosts/shared';
 import { WorkItemStore } from './work-item-store';
 
@@ -358,6 +358,94 @@ export async function createWorktreeForWorkItem(
     await store.update(workItemId, (cur) => ({ ...cur, worktrees: meta }));
     return meta;
   });
+}
+
+// ── Read-only worktree surface (wi_260626hux: ac-1 list / ac-2 binding hint) ──
+
+/** One worktree's live state for `ditto worktree list`. */
+export interface WorktreeStatus {
+  work_item_id: string;
+  owning_repo: string;
+  branch: string;
+  /** Worktree checkout path, relative to the workspace repo root. */
+  worktree_path: string;
+  /** false when the meta points at a directory that is no longer on disk. */
+  exists: boolean;
+  dirty: boolean;
+  /** Base branch ahead/behind is measured against (per owning repo, same as create-time). */
+  base: string;
+  ahead: number;
+  behind: number;
+}
+
+/**
+ * ac-1: every per-work-item worktree recorded across the workspace's work items,
+ * with its live git state. The work-item meta (`worktrees[]`) is the source of
+ * truth for what exists; ahead/behind is measured against each owning repo's base
+ * (the same `detectBaseBranch` the worktree was forked from), computed inside the
+ * worktree checkout. A meta entry whose dir was removed out-of-band is reported with
+ * `exists:false` rather than crashing the listing. Read-only.
+ */
+export async function listWorktreesForWorkspace(repoRoot: string): Promise<WorktreeStatus[]> {
+  const store = new WorkItemStore(repoRoot);
+  const summaries = await store.list();
+  const rows: WorktreeStatus[] = [];
+  for (const s of summaries) {
+    let item: Awaited<ReturnType<typeof store.get>>;
+    try {
+      item = await store.get(s.id);
+    } catch {
+      continue; // malformed work item — skip in the listing
+    }
+    for (const wt of item.worktrees) {
+      const wtAbs = join(repoRoot, wt.worktree_path);
+      if (!(await fileExists(wtAbs))) {
+        rows.push({
+          work_item_id: item.id,
+          owning_repo: wt.owning_repo,
+          branch: wt.branch,
+          worktree_path: wt.worktree_path,
+          exists: false,
+          dirty: false,
+          base: '',
+          ahead: 0,
+          behind: 0,
+        });
+        continue;
+      }
+      const ownerCwd = wt.owning_repo === '.' ? repoRoot : join(repoRoot, wt.owning_repo);
+      const base = detectBaseBranch(ownerCwd);
+      const { ahead, behind } = aheadBehind(wtAbs, base);
+      rows.push({
+        work_item_id: item.id,
+        owning_repo: wt.owning_repo,
+        branch: wt.branch,
+        worktree_path: wt.worktree_path,
+        exists: true,
+        dirty: !isWorkingTreeClean(wtAbs),
+        base,
+        ahead,
+        behind,
+      });
+    }
+  }
+  return rows;
+}
+
+/**
+ * ac-2: next-step guidance after a worktree is created — opening a session inside it
+ * auto-binds to the owning work item (parseWorktreePath rooting). Points at the
+ * workspace ('.') worktree (the one that nests any sub-repo worktrees), as an
+ * absolute path. Null when there is no worktree to point at.
+ */
+export function worktreeBindingHint(
+  repoRoot: string,
+  worktrees: WorkItemWorktree[],
+  workItemId: string,
+): string | null {
+  const ws = worktrees.find((w) => w.owning_repo === '.') ?? worktrees[0];
+  if (!ws) return null;
+  return `→ cd ${join(repoRoot, ws.worktree_path)} 후 거기서 세션을 열면 자동으로 이 work item(${workItemId})에 바인딩됩니다`;
 }
 
 /** A branch has commits not reachable from the owning repo's HEAD (would be lost). */

@@ -12885,6 +12885,19 @@ function isWorkingTreeClean(cwd) {
     return false;
   }
 }
+function aheadBehind(cwd, base) {
+  try {
+    const out = execFileSync("git", ["rev-list", "--left-right", "--count", `${base}...HEAD`], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    const [behind, ahead] = out.split(/\s+/).map((n2) => Number.parseInt(n2, 10));
+    return { ahead: ahead || 0, behind: behind || 0 };
+  } catch {
+    return { ahead: 0, behind: 0 };
+  }
+}
 function addDetachedWorktree(cwd, path, ref) {
   execFileSync("git", ["worktree", "add", "--detach", "--force", path, ref], {
     cwd,
@@ -13541,6 +13554,57 @@ async function createWorktreeForWorkItem(repoRoot, workItemId2) {
     await store.update(workItemId2, (cur) => ({ ...cur, worktrees: meta }));
     return meta;
   });
+}
+async function listWorktreesForWorkspace(repoRoot) {
+  const store = new WorkItemStore(repoRoot);
+  const summaries = await store.list();
+  const rows = [];
+  for (const s2 of summaries) {
+    let item;
+    try {
+      item = await store.get(s2.id);
+    } catch {
+      continue;
+    }
+    for (const wt of item.worktrees) {
+      const wtAbs = join7(repoRoot, wt.worktree_path);
+      if (!await fileExists(wtAbs)) {
+        rows.push({
+          work_item_id: item.id,
+          owning_repo: wt.owning_repo,
+          branch: wt.branch,
+          worktree_path: wt.worktree_path,
+          exists: false,
+          dirty: false,
+          base: "",
+          ahead: 0,
+          behind: 0
+        });
+        continue;
+      }
+      const ownerCwd = wt.owning_repo === "." ? repoRoot : join7(repoRoot, wt.owning_repo);
+      const base = detectBaseBranch(ownerCwd);
+      const { ahead, behind } = aheadBehind(wtAbs, base);
+      rows.push({
+        work_item_id: item.id,
+        owning_repo: wt.owning_repo,
+        branch: wt.branch,
+        worktree_path: wt.worktree_path,
+        exists: true,
+        dirty: !isWorkingTreeClean(wtAbs),
+        base,
+        ahead,
+        behind
+      });
+    }
+  }
+  return rows;
+}
+function worktreeBindingHint(repoRoot, worktrees, workItemId2) {
+  const ws = worktrees.find((w2) => w2.owning_repo === ".") ?? worktrees[0];
+  if (!ws)
+    return null;
+  return `\u2192 cd ${join7(repoRoot, ws.worktree_path)} \uD6C4 \uAC70\uAE30\uC11C \uC138\uC158\uC744 \uC5F4\uBA74 \uC790\uB3D9\uC73C\uB85C \uC774 work item(${workItemId2})\uC5D0 \uBC14\uC778\uB529\uB429\uB2C8\uB2E4`;
 }
 function branchHasUnmergedCommits(cwd, branch) {
   try {
@@ -41933,6 +41997,7 @@ var verifyCommand = defineCommand({
 // src/cli/commands/work.ts
 init_fs();
 init_work_item_store();
+init_worktree();
 init_common();
 var workStart = defineCommand({
   meta: {
@@ -41959,6 +42024,11 @@ var workStart = defineCommand({
       type: "string",
       description: "Owner profile: read-only|workspace-write|networked|reviewer|isolated",
       default: "workspace-write"
+    },
+    worktree: {
+      type: "boolean",
+      description: "Also create the work item branch+worktree(s) (like `ditto worktree create`)",
+      default: false
     },
     output: {
       type: "string",
@@ -41994,18 +42064,29 @@ var workStart = defineCommand({
           }
         ]
       });
+      const worktrees = args.worktree ? await createWorktreeForWorkItem(repoRoot, created.id) : [];
       if (format === "json") {
         writeJson2({
           work_item_id: created.id,
           path: `.ditto/local/work-items/${created.id}/work-item.json`,
           status: created.status,
-          repo_root: repoRoot
+          repo_root: repoRoot,
+          worktrees
         });
       } else {
         writeHuman(`Created work item ${created.id}`);
         writeHuman(`  goal: ${created.goal}`);
         writeHuman(`  status: ${created.status}`);
         writeHuman(`  path: ${repoRoot}/.ditto/local/work-items/${created.id}/work-item.json`);
+        if (worktrees.length > 0) {
+          writeHuman(`Created ${worktrees.length} worktree(s):`);
+          for (const wt of worktrees) {
+            writeHuman(`  ${wt.owning_repo}	${wt.branch}	${wt.worktree_path}`);
+          }
+          const hint = worktreeBindingHint(repoRoot, worktrees, created.id);
+          if (hint)
+            writeHuman(hint);
+        }
         writeHuman("Next steps:");
         writeHuman("  1. /ditto:deep-interview (or: ditto deep-interview start \u2192 record-turn \u2192 check-readiness \u2192 finalize) \u2014 writes intent.json");
         writeHuman(`  2. ditto autopilot bootstrap --workItem ${created.id} (requires intent.json from finalize)`);
@@ -42077,6 +42158,12 @@ var workStatus = defineCommand({
         writeHuman("acceptance:");
         for (const ac of item.acceptance_criteria) {
           writeHuman(`  - ${ac.id} [${ac.verdict}] ${ac.statement}`);
+        }
+        if (item.worktrees.length > 0) {
+          writeHuman("worktrees:");
+          for (const wt of item.worktrees) {
+            writeHuman(`  - ${wt.owning_repo}	${wt.branch}	${wt.worktree_path}`);
+          }
         }
       }
     } catch (err) {
@@ -42404,6 +42491,9 @@ var worktreeCreate = defineCommand({
         for (const wt of worktrees) {
           writeHuman(`  ${wt.owning_repo}	${wt.branch}	${wt.worktree_path}`);
         }
+        const hint = worktreeBindingHint(repoRoot, worktrees, workId);
+        if (hint)
+          writeHuman(hint);
       }
     } catch (err) {
       writeError(`worktree create failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -42461,12 +42551,52 @@ var worktreeRemove = defineCommand({
     }
   }
 });
+var worktreeList = defineCommand({
+  meta: {
+    name: "list",
+    description: "List per-work-item worktrees across the workspace with their git state (dirty, ahead/behind base)"
+  },
+  args: {
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const rows = await listWorktreesForWorkspace(repoRoot);
+      if (format === "json") {
+        writeJson2({ worktrees: rows });
+        return;
+      }
+      if (rows.length === 0) {
+        writeHuman("No worktrees. Create one with: ditto worktree create <work-item-id>");
+        return;
+      }
+      writeHuman("work-item\trepo\tbranch\tstate\tpath");
+      for (const r3 of rows) {
+        const state = r3.exists ? `${r3.dirty ? "dirty" : "clean"} +${r3.ahead}/-${r3.behind} (vs ${r3.base})` : "MISSING";
+        writeHuman(`${r3.work_item_id}	${r3.owning_repo}	${r3.branch}	${state}	${r3.worktree_path}`);
+      }
+    } catch (err) {
+      writeError(`worktree list failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var worktreeCommand = defineCommand({
   meta: {
     name: "worktree",
-    description: "Manage per-work-item git worktrees (create, remove)"
+    description: "Manage per-work-item git worktrees (list, create, remove)"
   },
   subCommands: {
+    list: worktreeList,
     create: worktreeCreate,
     remove: worktreeRemove
   }
@@ -42520,4 +42650,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=d931cdb2e077b77cbd54cdd0fb89aade67a648fda0977deeb910e7d66d97c857
+//# ditto-src-stamp=5229e770e6a2dacf919daf902b9bab8316cb1e207777705c9b81eaa05296fad3

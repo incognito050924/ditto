@@ -85,6 +85,26 @@ export function isWorkingTreeClean(cwd: string): boolean {
   }
 }
 
+/**
+ * Commits the working tree at `cwd` is ahead of / behind `base`. Uses
+ * `git rev-list --left-right --count base...HEAD`: left = commits in base not HEAD
+ * (behind), right = commits in HEAD not base (ahead). Returns {ahead:0,behind:0} on
+ * any error (unresolvable ref, not a repo), matching the other helpers here.
+ */
+export function aheadBehind(cwd: string, base: string): { ahead: number; behind: number } {
+  try {
+    const out = execFileSync('git', ['rev-list', '--left-right', '--count', `${base}...HEAD`], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    const [behind, ahead] = out.split(/\s+/).map((n) => Number.parseInt(n, 10));
+    return { ahead: ahead || 0, behind: behind || 0 };
+  } catch {
+    return { ahead: 0, behind: 0 };
+  }
+}
+
 /** Add a detached worktree at `ref` under `path` (for analyzing a past state). */
 export function addDetachedWorktree(cwd: string, path: string, ref: string): void {
   execFileSync('git', ['worktree', 'add', '--detach', '--force', path, ref], {

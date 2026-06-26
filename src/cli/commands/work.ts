@@ -9,6 +9,7 @@ import {
   writeWorkItemHandoff,
 } from '~/core/work-item-handoff';
 import { WorkItemStore } from '~/core/work-item-store';
+import { createWorktreeForWorkItem, worktreeBindingHint } from '~/core/worktree';
 import { declarerRole } from '~/schemas/common';
 import {
   RUNTIME_ERROR_EXIT,
@@ -44,6 +45,11 @@ const workStart = defineCommand({
       type: 'string',
       description: 'Owner profile: read-only|workspace-write|networked|reviewer|isolated',
       default: 'workspace-write',
+    },
+    worktree: {
+      type: 'boolean',
+      description: 'Also create the work item branch+worktree(s) (like `ditto worktree create`)',
+      default: false,
     },
     output: {
       type: 'string',
@@ -88,18 +94,31 @@ const workStart = defineCommand({
           },
         ],
       });
+      // ac-3: --worktree also creates the branch+worktree(s) right after the work
+      // item exists, reusing the same path `ditto worktree create` uses. Without the
+      // flag, behavior is unchanged (work item only — no git repo required).
+      const worktrees = args.worktree ? await createWorktreeForWorkItem(repoRoot, created.id) : [];
       if (format === 'json') {
         writeJson({
           work_item_id: created.id,
           path: `.ditto/local/work-items/${created.id}/work-item.json`,
           status: created.status,
           repo_root: repoRoot,
+          worktrees,
         });
       } else {
         writeHuman(`Created work item ${created.id}`);
         writeHuman(`  goal: ${created.goal}`);
         writeHuman(`  status: ${created.status}`);
         writeHuman(`  path: ${repoRoot}/.ditto/local/work-items/${created.id}/work-item.json`);
+        if (worktrees.length > 0) {
+          writeHuman(`Created ${worktrees.length} worktree(s):`);
+          for (const wt of worktrees) {
+            writeHuman(`  ${wt.owning_repo}\t${wt.branch}\t${wt.worktree_path}`);
+          }
+          const hint = worktreeBindingHint(repoRoot, worktrees, created.id);
+          if (hint) writeHuman(hint);
+        }
         writeHuman('Next steps:');
         writeHuman(
           '  1. /ditto:deep-interview (or: ditto deep-interview start → record-turn → check-readiness → finalize) — writes intent.json',
@@ -176,6 +195,12 @@ const workStatus = defineCommand({
         writeHuman('acceptance:');
         for (const ac of item.acceptance_criteria) {
           writeHuman(`  - ${ac.id} [${ac.verdict}] ${ac.statement}`);
+        }
+        if (item.worktrees.length > 0) {
+          writeHuman('worktrees:');
+          for (const wt of item.worktrees) {
+            writeHuman(`  - ${wt.owning_repo}\t${wt.branch}\t${wt.worktree_path}`);
+          }
         }
       }
     } catch (err) {
