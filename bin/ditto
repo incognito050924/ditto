@@ -18543,6 +18543,13 @@ class WorkItemStore {
       closed_at: now.toISOString()
     }));
   }
+  async park(id, status, reEntry2) {
+    return this.update(id, (cur) => ({
+      ...cur,
+      status,
+      re_entry: reEntry2
+    }));
+  }
   async archive(label) {
     if (!/^[A-Za-z0-9._-]+$/.test(label) || label === "." || label === "..") {
       throw new Error(`archive label must be a safe path segment ([A-Za-z0-9._-]+, not '.' or '..'; got: ${label})`);
@@ -42024,13 +42031,29 @@ var workAbandon = defineCommand({
     }
   }
 });
+var PARK_STATUSES = ["partial", "blocked"];
 var workDone = defineCommand({
   meta: {
     name: "done",
-    description: "Mark a work item done \u2014 only when its completion final_verdict=pass (evidence gate)"
+    description: "Close a work item: done (completion final_verdict=pass evidence gate), or --status partial|blocked to park it as resumable with re_entry"
   },
   args: {
     workId: { type: "positional", description: "Work item id to mark done", required: true },
+    status: {
+      type: "string",
+      description: "Park as a resumable status instead of done: partial|blocked. Requires --re-entry-command or --needs (re_entry is mandatory for these statuses).",
+      required: false
+    },
+    "re-entry-command": {
+      type: "string",
+      description: "Concrete command to resume work, recorded in re_entry.command (with --status)",
+      required: false
+    },
+    needs: {
+      type: "string",
+      description: "Semicolon-separated evidence still needed before resuming \u2192 re_entry.fresh_evidence_needed (with --status)",
+      required: false
+    },
     output: { type: "string", description: "Output format: human|json", default: "human" }
   },
   run: async ({ args }) => {
@@ -42045,6 +42068,39 @@ var workDone = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     const store = new WorkItemStore(repoRoot);
     const completions = new CompletionStore(repoRoot);
+    if (args.status !== undefined) {
+      if (!PARK_STATUSES.includes(args.status)) {
+        writeError(`--status must be one of ${PARK_STATUSES.join("|")} (to park a resumable WI); got "${args.status}". Omit --status to close as done.`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const command = args["re-entry-command"];
+      const needs = args.needs ? parseCriteriaStatements(args.needs) : [];
+      if (!command && needs.length === 0) {
+        writeError(`--status ${args.status} requires re_entry: pass --re-entry-command "<resume cmd>" and/or --needs "<evidence; \u2026>".`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      try {
+        const parked = await store.park(args.workId, args.status, {
+          ...command ? { command } : {},
+          fresh_evidence_needed: needs
+        });
+        if (format === "json") {
+          writeJson2({ id: parked.id, status: parked.status, re_entry: parked.re_entry });
+        } else {
+          writeHuman(`Parked ${parked.id} as ${parked.status} (resumable).`);
+          if (parked.re_entry?.command)
+            writeHuman(`  resume: ${parked.re_entry.command}`);
+          if ((parked.re_entry?.fresh_evidence_needed ?? []).length > 0)
+            writeHuman(`  needs:  ${parked.re_entry?.fresh_evidence_needed.join(", ")}`);
+        }
+      } catch (err) {
+        writeError(`work done --status failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      return;
+    }
     try {
       const item = await store.get(args.workId);
       if (!await completions.exists(args.workId)) {
@@ -42211,4 +42267,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=04e00e18aed030deaf7b67676baea138ddc2ca9abf21734b81b441b5aee87ecb
+//# ditto-src-stamp=7efdbf5de36e2fbf2f4a0582985aa6fa86134dde085d2c09177e502b2d138e9a

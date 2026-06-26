@@ -151,6 +151,26 @@ export class WorkItemStore {
   }
 
   /**
+   * Park a work item in a resumable, non-terminal status (`partial`/`blocked`)
+   * with the `re_entry` instructions the schema requires for those statuses.
+   * Distinct from `close` (terminal done/abandoned): a parked item keeps no
+   * `closed_at` — it stays open for resume. The CLI enforces that re_entry carries
+   * a command or evidence need before calling this; the schema superRefine is the
+   * backstop (it rejects partial/blocked without re_entry).
+   */
+  async park(
+    id: string,
+    status: Extract<WorkItem['status'], 'partial' | 'blocked'>,
+    reEntry: WorkItem['re_entry'],
+  ): Promise<WorkItem> {
+    return this.update(id, (cur) => ({
+      ...cur,
+      status,
+      re_entry: reEntry,
+    }));
+  }
+
+  /**
    * Archive terminal (`done`/`abandoned`) work items out of the active set
    * (ADR-0005 D3): move `.ditto/local/work-items/<wi>` → `.ditto/local/archive/
    * <label>/<wi>`. Move-not-delete (restorable), no git history rewrite — the

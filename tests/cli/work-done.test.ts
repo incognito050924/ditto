@@ -86,3 +86,125 @@ describe('ditto work done — lightweight completion path', () => {
     expect(await new CompletionStore(dir).exists(wid)).toBe(false);
   });
 });
+
+// ac-2 (wi_260626wnv) Part A — prove the WHOLE lightweight close runs through the
+// user-typed surfaces end-to-end: `work start --criteria` (ac-1 real criteria) →
+// `verify` (grade pass) → `work done` (synthesize completion + close), with NO
+// intent.json and NO deep-interview ever present. Guards the no-graph path against
+// regression.
+describe('ditto work done — end-to-end lightweight close (ac-2 A)', () => {
+  test('work start --criteria → verify pass → work done closes with synthesized pass completion, no intent.json', async () => {
+    const s = ditto([
+      'work',
+      'start',
+      'the command returns 0',
+      '--request',
+      'fix the thing',
+      '--criteria',
+      'the command returns 0',
+      '--output',
+      'json',
+    ]);
+    expect(s.exitCode).toBe(0);
+    const wid = JSON.parse(s.stdout).work_item_id as string;
+
+    // No intent.json is created on this path — closing must not depend on one.
+    const intentPath = join(dir, '.ditto', 'local', 'work-items', wid, 'intent.json');
+    expect(await Bun.file(intentPath).exists()).toBe(false);
+
+    // Grade ac-1 pass with a real command (cat an existing file).
+    const wiPath = join(dir, '.ditto', 'local', 'work-items', wid, 'work-item.json');
+    expect(ditto(['verify', wid, '--criterion', 'ac-1', '--', 'cat', wiPath]).exitCode).toBe(0);
+
+    const d = ditto(['work', 'done', wid, '--output', 'json']);
+    expect(d.exitCode).toBe(0);
+
+    // Completion synthesized from the work item's OWN AC verdicts, final_verdict=pass.
+    const completion = await new CompletionStore(dir).get(wid);
+    expect(completion.final_verdict).toBe('pass');
+    expect(completion.acceptance.find((a) => a.criterion_id === 'ac-1')?.verdict).toBe('pass');
+
+    const item = await new WorkItemStore(dir).get(wid);
+    expect(item.status).toBe('done');
+    // Closed without ever writing an intent.json / running a deep-interview.
+    expect(await Bun.file(intentPath).exists()).toBe(false);
+  });
+});
+
+// ac-2 (wi_260626wnv) Part B — a partially-done-but-unverifiable WI must not be
+// forced into a false `done` or false `abandon`. `work done --status partial|blocked`
+// parks it in the resumable status (schema already has these + re_entry), populating
+// re_entry from --re-entry-command / --needs. re_entry is mandatory for these statuses
+// (schema superRefine) — the close is rejected when it is missing.
+describe('ditto work done --status partial|blocked — lightweight resumable close (ac-2 B)', () => {
+  async function startWithCriteria(): Promise<string> {
+    const s = ditto([
+      'work',
+      'start',
+      'the command returns 0',
+      '--request',
+      'fix the thing',
+      '--criteria',
+      'the command returns 0',
+      '--output',
+      'json',
+    ]);
+    expect(s.exitCode).toBe(0);
+    return JSON.parse(s.stdout).work_item_id as string;
+  }
+
+  test('--status partial with --re-entry-command parks the WI and records re_entry.command', async () => {
+    const wid = await startWithCriteria();
+    const r = ditto([
+      'work',
+      'done',
+      wid,
+      '--status',
+      'partial',
+      '--re-entry-command',
+      'bun test tests/cli/work-done.test.ts',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(0);
+    const item = await new WorkItemStore(dir).get(wid);
+    expect(item.status).toBe('partial');
+    expect(item.re_entry?.command).toBe('bun test tests/cli/work-done.test.ts');
+  });
+
+  test('--status blocked with --needs parks the WI and records re_entry.fresh_evidence_needed', async () => {
+    const wid = await startWithCriteria();
+    const r = ditto([
+      'work',
+      'done',
+      wid,
+      '--status',
+      'blocked',
+      '--needs',
+      'upstream API key; staging deploy',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(0);
+    const item = await new WorkItemStore(dir).get(wid);
+    expect(item.status).toBe('blocked');
+    expect(item.re_entry?.fresh_evidence_needed).toEqual(['upstream API key', 'staging deploy']);
+  });
+
+  test('--status partial without re_entry (no command, no needs) is rejected; status unchanged', async () => {
+    const wid = await startWithCriteria();
+    const r = ditto(['work', 'done', wid, '--status', 'partial', '--output', 'json']);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/re.?entry|re-entry-command|needs/i);
+    const item = await new WorkItemStore(dir).get(wid);
+    expect(item.status).not.toBe('partial');
+  });
+
+  test('--status done-path unaffected: existing pass close still works without --status', async () => {
+    const wid = await startWithCriteria();
+    const wiPath = join(dir, '.ditto', 'local', 'work-items', wid, 'work-item.json');
+    expect(ditto(['verify', wid, '--criterion', 'ac-1', '--', 'cat', wiPath]).exitCode).toBe(0);
+    expect(ditto(['work', 'done', wid, '--output', 'json']).exitCode).toBe(0);
+    expect((await new WorkItemStore(dir).get(wid)).status).toBe('done');
+  });
+});

@@ -541,14 +541,33 @@ const workAbandon = defineCommand({
   },
 });
 
+const PARK_STATUSES = ['partial', 'blocked'] as const;
+
 const workDone = defineCommand({
   meta: {
     name: 'done',
     description:
-      'Mark a work item done — only when its completion final_verdict=pass (evidence gate)',
+      'Close a work item: done (completion final_verdict=pass evidence gate), or --status partial|blocked to park it as resumable with re_entry',
   },
   args: {
     workId: { type: 'positional', description: 'Work item id to mark done', required: true },
+    status: {
+      type: 'string',
+      description:
+        'Park as a resumable status instead of done: partial|blocked. Requires --re-entry-command or --needs (re_entry is mandatory for these statuses).',
+      required: false,
+    },
+    're-entry-command': {
+      type: 'string',
+      description: 'Concrete command to resume work, recorded in re_entry.command (with --status)',
+      required: false,
+    },
+    needs: {
+      type: 'string',
+      description:
+        'Semicolon-separated evidence still needed before resuming → re_entry.fresh_evidence_needed (with --status)',
+      required: false,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
@@ -563,6 +582,48 @@ const workDone = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     const store = new WorkItemStore(repoRoot);
     const completions = new CompletionStore(repoRoot);
+
+    // Park path (ac-2 B): close as a resumable partial/blocked status instead of
+    // done. Distinct from the evidence-gated pass close below — a partially-done
+    // WI that cannot be verified is parked, not forced into a false done/abandon.
+    if (args.status !== undefined) {
+      if (!(PARK_STATUSES as readonly string[]).includes(args.status)) {
+        writeError(
+          `--status must be one of ${PARK_STATUSES.join('|')} (to park a resumable WI); got "${args.status}". Omit --status to close as done.`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const command = args['re-entry-command'];
+      const needs = args.needs ? parseCriteriaStatements(args.needs) : [];
+      if (!command && needs.length === 0) {
+        writeError(
+          `--status ${args.status} requires re_entry: pass --re-entry-command "<resume cmd>" and/or --needs "<evidence; …>".`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      try {
+        const parked = await store.park(args.workId, args.status as 'partial' | 'blocked', {
+          ...(command ? { command } : {}),
+          fresh_evidence_needed: needs,
+        });
+        if (format === 'json') {
+          writeJson({ id: parked.id, status: parked.status, re_entry: parked.re_entry });
+        } else {
+          writeHuman(`Parked ${parked.id} as ${parked.status} (resumable).`);
+          if (parked.re_entry?.command) writeHuman(`  resume: ${parked.re_entry.command}`);
+          if ((parked.re_entry?.fresh_evidence_needed ?? []).length > 0)
+            writeHuman(`  needs:  ${parked.re_entry?.fresh_evidence_needed.join(', ')}`);
+        }
+      } catch (err) {
+        writeError(
+          `work done --status failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      return;
+    }
     try {
       const item = await store.get(args.workId); // throws with a clear error if unknown
       // Evidence gate: done requires a completion contract with final_verdict=pass.
