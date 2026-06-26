@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import { MANAGED_END, MANAGED_START_RE } from '~/core/instruction-bridge';
 import {
   applyManagedFile,
+  buildManagedBlock,
   stripManagedBlock,
+  unwrapManagedBlock,
   upsertManagedBlock,
   writeBackupOnce,
 } from '~/core/managed-resource';
@@ -44,6 +46,28 @@ describe('upsertManagedBlock', () => {
     expect(second.content).not.toContain('old body');
     // exactly one block remains
     expect((second.content.match(/ditto:managed:start/g) ?? []).length).toBe(1);
+  });
+
+  test('collapses a nested double-wrapped ditto block into a single block (heals double-wrap)', () => {
+    // Reproduce the global CLAUDE.md double-wrap: an inner ditto block (the
+    // legacy GLOBAL_AGENTS.md-sourced block) wrapped again by an outer projection.
+    const inner = buildManagedBlock('charter body\n', 'GLOBAL_AGENTS.md');
+    const nested = buildManagedBlock(inner, 'AGENTS.md');
+    expect((nested.match(/ditto:managed:start/g) ?? []).length).toBe(2);
+    expect((nested.match(/ditto:managed:end/g) ?? []).length).toBe(2);
+
+    const result = upsertManagedBlock(`user before\n${nested}\nuser after\n`, 'fresh body');
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    // collapsed back to exactly one block
+    expect((result.content.match(/ditto:managed:start/g) ?? []).length).toBe(1);
+    expect((result.content.match(/ditto:managed:end/g) ?? []).length).toBe(1);
+    // content outside the outermost markers is preserved
+    expect(result.content).toContain('user before');
+    expect(result.content).toContain('user after');
+    // the fresh body replaced the old nested content
+    expect(result.content).toContain('fresh body');
+    expect(result.content).not.toContain('charter body');
   });
 
   test('re-running with the same body is a no-op outside the block', () => {
@@ -115,6 +139,23 @@ describe('stripManagedBlock', () => {
     expect(result.kind).toBe('corrupted');
     if (result.kind !== 'corrupted') return;
     expect(result.original).toBe(corrupt);
+  });
+});
+
+describe('unwrapManagedBlock', () => {
+  test('strips ditto marker lines back to raw, keeping inner body and outside content', () => {
+    const wrapped = `top\n${buildManagedBlock('charter line 1\ncharter line 2\n', 'GLOBAL_AGENTS.md')}\nbottom\n`;
+    const raw = unwrapManagedBlock(wrapped);
+    expect(countMarkers(raw)).toBe(0);
+    expect(raw).toContain('charter line 1');
+    expect(raw).toContain('charter line 2');
+    expect(raw).toContain('top');
+    expect(raw).toContain('bottom');
+  });
+
+  test('content without any markers is returned unchanged', () => {
+    const plain = 'just the charter\nno markers\n';
+    expect(unwrapManagedBlock(plain)).toBe(plain);
   });
 });
 

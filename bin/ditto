@@ -31793,6 +31793,24 @@ function locateBlock(content) {
     return "corrupted";
   return { start: startMatch.index, end: endMatch.index + endMatch[0].length };
 }
+function locateManagedSpan(content) {
+  const starts = [...content.matchAll(START_RE_G)];
+  const ends = [...content.matchAll(END_RE_G)];
+  if (starts.length === 0 && ends.length === 0)
+    return null;
+  if (starts.length !== ends.length)
+    return "corrupted";
+  const firstStart = starts[0];
+  const lastEnd = ends[ends.length - 1];
+  if (firstStart?.index === undefined || lastEnd?.index === undefined)
+    return "corrupted";
+  if ((ends[0]?.index ?? -1) < firstStart.index)
+    return "corrupted";
+  const lastStart = starts[starts.length - 1];
+  if ((lastStart?.index ?? -1) > lastEnd.index)
+    return "corrupted";
+  return { start: firstStart.index, end: lastEnd.index + lastEnd[0].length };
+}
 function buildManagedBlock(managedBody, source = "AGENTS.md") {
   const body = normalizeInstructionText(managedBody);
   const sha2562 = normalizedSha256(managedBody);
@@ -31804,7 +31822,7 @@ ${bodyWithBreak}${MANAGED_END}`;
 }
 function upsertManagedBlock(originalContent, managedBody, source = "AGENTS.md") {
   const block = buildManagedBlock(managedBody, source);
-  const bounds = locateBlock(originalContent);
+  const bounds = locateManagedSpan(originalContent);
   if (bounds === "corrupted")
     return { kind: "corrupted", original: originalContent };
   if (bounds === null) {
@@ -31839,6 +31857,16 @@ function stripManagedBlock(content) {
 `;
   const next = before.slice(0, before.length - beforeTail.length) + seam + after.slice(afterHead.length);
   return { kind: "ok", content: next };
+}
+var MARKER_LINE_RE = /^\s*<!--\s*ditto:managed:(?:start\s+source=[^\s]+\s+sha256=[a-f0-9]{64}|end)\s*-->\s*$/;
+function unwrapManagedBlock(content) {
+  const lines = content.split(`
+`);
+  const kept = lines.filter((line) => !MARKER_LINE_RE.test(line));
+  if (kept.length === lines.length)
+    return content;
+  return kept.join(`
+`);
 }
 var BACKUP_SUFFIX = ".ditto_bak";
 async function writeBackupOnce(targetPath) {
@@ -41128,8 +41156,16 @@ async function installResource(decision, resourcesDir) {
     if (!existed) {
       const body2 = await readFile19(join83(resourcesDir, decision.filename), "utf8");
       await atomicWriteText(decision.destPath, body2);
+      return { ...common, status: "written", backupPath: null };
     }
-    return { ...common, status: existed ? "kept" : "written", backupPath: null };
+    const current = await readFile19(decision.destPath, "utf8");
+    const unwrapped = unwrapManagedBlock(current);
+    if (unwrapped !== current) {
+      const backupPath = await writeBackupOnce(decision.destPath);
+      await atomicWriteText(decision.destPath, unwrapped);
+      return { ...common, status: "written", backupPath };
+    }
+    return { ...common, status: "kept", backupPath: null };
   }
   if (name === "CLAUDE.md") {
     const sourcePath = join83(dirname15(decision.destPath), "AGENTS.md");
@@ -43547,4 +43583,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=f61bbd86290170493665041775d6ea70df68bb610b0d050dee9ee8e3cb383584
+//# ditto-src-stamp=1ed39c94048ce1f537b4634e41cd905dcc06092cc129a320b05f8b93ed888801
