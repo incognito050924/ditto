@@ -74,6 +74,18 @@ export const acceptanceCriterion = z
     // Additive + OPTIONAL (ADR-0024 §3): legacy ACs omit it and parse unchanged;
     // no schema_version bump (same idiom as autopilot_exempt / sourceDigest).
     oracle: acOracle.optional(),
+    // Provenance of graded criteria replaced via `work set-criteria --supersede`
+    // (prior statement + reason). Lock-with-provenance so a verified criterion is
+    // not silently overwritten (goalpost-moving, charter §4-6). Additive + OPTIONAL:
+    // legacy ACs omit it and parse unchanged; no schema_version bump.
+    superseded: z
+      .array(
+        z.object({
+          statement: z.string().min(1).describe('The prior (graded) statement that was replaced'),
+          reason: z.string().min(1).describe('Why the prior criterion was superseded'),
+        }),
+      )
+      .optional(),
   })
   .describe('One acceptance criterion with its verification verdict');
 
@@ -97,13 +109,54 @@ export const workItemWorktree = z
   })
   .describe('One git worktree+branch DITTO created for a work item (one per owning repo)');
 
+// Shared severity scale. riskNote applies a `.default('low')`; ac-4 follow_ups
+// reference the SAME levels (info|low|medium|high|critical) without reinventing.
+export const severityLevel = z.enum(['info', 'low', 'medium', 'high', 'critical']);
+
 export const riskNote = z
   .object({
     description: z.string().min(1),
-    severity: z.enum(['info', 'low', 'medium', 'high', 'critical']).default('low'),
+    severity: severityLevel.default('low'),
     mitigation: z.string().optional(),
   })
   .describe('Outstanding risk that did not block completion but remains relevant');
+
+// ac-4 (wi_260626wnv): a discovered follow-up captured on the work item itself, so
+// a lightweight WI (no intent.json) has a structured slot instead of prose-dumping
+// on the user. kind=bug is materialized into a tracked, back-linked WI (its id is
+// stamped on materialized_wi); kind=idea is recorded as a candidate only. A
+// self-caused high/critical bug that is not resolved blocks the source WI's `done`.
+export const followUp = z
+  .object({
+    kind: z
+      .enum(['bug', 'idea'])
+      .describe('bug = a defect materialized into a tracked WI; idea = a candidate only'),
+    note: z.string().min(1).describe('What was discovered'),
+    severity: severityLevel.optional(),
+    self_caused: z
+      .boolean()
+      .optional()
+      .describe('True if this regression was introduced by the source work item itself'),
+    materialized_wi: workItemId
+      .optional()
+      .describe('The tracked work item this bug was materialized into (kind=bug only)'),
+    resolved: z.boolean().optional().describe('True once the follow-up has been addressed'),
+  })
+  .describe('A discovered follow-up (bug/idea) captured on the work item');
+
+// ac-3 (wi_260626wnv): a work item's own declared risk axis. Same vocabulary as
+// gates.ts RiskAxes / the deep-interview risk axis (non_local/irreversible/
+// unaudited) — do NOT invent new names. Drives the risk-driven heavy nudge
+// (user-prompt-submit) and the lightweight-close override gate (work done) when
+// no intent.json was ever produced. Each flag is optional so a partial
+// declaration (`--risk irreversible`) records only what was asserted.
+export const declaredRisk = z
+  .object({
+    non_local: z.boolean().optional(),
+    irreversible: z.boolean().optional(),
+    unaudited: z.boolean().optional(),
+  })
+  .describe('Work-item-declared risk flags (gates.ts RiskAxes vocabulary)');
 
 export const reEntry = z
   .object({
@@ -148,6 +201,38 @@ export const workItem = z
       .boolean()
       .optional()
       .describe('Allow closing on completion.json alone without going through autopilot'),
+    // ac-3 (wi_260626wnv): the work item's own declared risk axis. Additive +
+    // OPTIONAL: a legacy work-item.json omits it and parses unchanged; no
+    // schema_version bump (same idiom as autopilot_exempt).
+    declared_risk: declaredRisk.optional(),
+    // ac-3 (wi_260626wnv): set by `work promote` to mark a lightweight WI for the
+    // heavy (deep-interview) path in place — no abandon+recreate. Keeps the
+    // risk-driven heavy nudge firing after the placeholder was replaced by real
+    // criteria. Additive + OPTIONAL; no schema_version bump.
+    promoted_to_heavy: z
+      .boolean()
+      .optional()
+      .describe('Marked for the heavy (deep-interview) path via `work promote`'),
+    // ac-4 (wi_260626wnv): discovered follow-ups captured on the WI itself.
+    // Additive + OPTIONAL: a legacy work-item.json omits it and parses unchanged;
+    // no schema_version bump (same idiom as declared_risk / autopilot_exempt).
+    follow_ups: z.array(followUp).optional(),
+    // ac-4 (wi_260626wnv): provenance link — the WI whose `follow-up --kind bug`
+    // materialized THIS work item. Distinct from parent_id (task hierarchy); kept
+    // separate on purpose. Additive + OPTIONAL; no schema_version bump.
+    discovered_by: workItemId
+      .optional()
+      .describe('Work item whose discovered bug materialized this one (provenance, not hierarchy)'),
+    // ac-5 (wi_260626wnv): chain lineage edge — "this WI continues from the named
+    // predecessor". Models a sequential lineage (vjo→227h→258zu→…), which the
+    // parent_id tree / dead child_ids could not. Drives the derived `work stem`
+    // view + bulk close. Additive + OPTIONAL: a legacy work-item.json omits it and
+    // parses unchanged; no schema_version bump (same idiom as discovered_by).
+    follows: workItemId
+      .optional()
+      .describe(
+        'Predecessor work item this one continues from (chain lineage, not the parent_id tree)',
+      ),
     risks: z.array(riskNote).default([]),
     re_entry: reEntry.optional(),
     runs: z.array(runId).default([]),
@@ -192,6 +277,8 @@ export const workItem = z
 
 export type WorkItem = z.infer<typeof workItem>;
 export type WorkItemWorktree = z.infer<typeof workItemWorktree>;
+export type FollowUp = z.infer<typeof followUp>;
+export type DeclaredRisk = z.infer<typeof declaredRisk>;
 export type AcceptanceCriterion = z.infer<typeof acceptanceCriterion>;
 export type AcOracle = z.infer<typeof acOracle>;
 export type ReEntry = z.infer<typeof reEntry>;

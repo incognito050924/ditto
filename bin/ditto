@@ -13031,7 +13031,7 @@ var init_tech_spec_round = __esm(() => {
 });
 
 // src/schemas/work-item.ts
-var gitSha40, verificationMethod, codePointerMapsTo, acOracle, acceptanceCriterion, workItemWorktree, riskNote, reEntry, workItem;
+var gitSha40, verificationMethod, codePointerMapsTo, acOracle, acceptanceCriterion, workItemWorktree, severityLevel, riskNote, followUp, declaredRisk, reEntry, workItem;
 var init_work_item = __esm(() => {
   init_zod();
   init_common();
@@ -13056,18 +13056,36 @@ var init_work_item = __esm(() => {
     statement: exports_external.string().min(1).describe("Single observable behavior in user-facing terms"),
     verdict: verdict.default("unverified"),
     evidence: exports_external.array(evidenceRef).default([]),
-    oracle: acOracle.optional()
+    oracle: acOracle.optional(),
+    superseded: exports_external.array(exports_external.object({
+      statement: exports_external.string().min(1).describe("The prior (graded) statement that was replaced"),
+      reason: exports_external.string().min(1).describe("Why the prior criterion was superseded")
+    })).optional()
   }).describe("One acceptance criterion with its verification verdict");
   workItemWorktree = exports_external.object({
     owning_repo: exports_external.string().min(1).describe("'.' for the workspace repo, else the sub-repo path relative to the workspace root"),
     worktree_path: relativePath.describe("Worktree checkout path, relative to the workspace repo root"),
     branch: exports_external.string().min(1).describe("Branch checked out in this worktree")
   }).describe("One git worktree+branch DITTO created for a work item (one per owning repo)");
+  severityLevel = exports_external.enum(["info", "low", "medium", "high", "critical"]);
   riskNote = exports_external.object({
     description: exports_external.string().min(1),
-    severity: exports_external.enum(["info", "low", "medium", "high", "critical"]).default("low"),
+    severity: severityLevel.default("low"),
     mitigation: exports_external.string().optional()
   }).describe("Outstanding risk that did not block completion but remains relevant");
+  followUp = exports_external.object({
+    kind: exports_external.enum(["bug", "idea"]).describe("bug = a defect materialized into a tracked WI; idea = a candidate only"),
+    note: exports_external.string().min(1).describe("What was discovered"),
+    severity: severityLevel.optional(),
+    self_caused: exports_external.boolean().optional().describe("True if this regression was introduced by the source work item itself"),
+    materialized_wi: workItemId.optional().describe("The tracked work item this bug was materialized into (kind=bug only)"),
+    resolved: exports_external.boolean().optional().describe("True once the follow-up has been addressed")
+  }).describe("A discovered follow-up (bug/idea) captured on the work item");
+  declaredRisk = exports_external.object({
+    non_local: exports_external.boolean().optional(),
+    irreversible: exports_external.boolean().optional(),
+    unaudited: exports_external.boolean().optional()
+  }).describe("Work-item-declared risk flags (gates.ts RiskAxes vocabulary)");
   reEntry = exports_external.object({
     command: exports_external.string().optional().describe("Concrete next command to resume work"),
     fresh_evidence_needed: exports_external.array(exports_external.string()).default([]).describe("What new evidence must be gathered before the next attempt"),
@@ -13087,6 +13105,11 @@ var init_work_item = __esm(() => {
     changed_files: exports_external.array(relativePath).default([]),
     worktrees: exports_external.array(workItemWorktree).default([]),
     autopilot_exempt: exports_external.boolean().optional().describe("Allow closing on completion.json alone without going through autopilot"),
+    declared_risk: declaredRisk.optional(),
+    promoted_to_heavy: exports_external.boolean().optional().describe("Marked for the heavy (deep-interview) path via `work promote`"),
+    follow_ups: exports_external.array(followUp).optional(),
+    discovered_by: workItemId.optional().describe("Work item whose discovered bug materialized this one (provenance, not hierarchy)"),
+    follows: workItemId.optional().describe("Predecessor work item this one continues from (chain lineage, not the parent_id tree)"),
     risks: exports_external.array(riskNote).default([]),
     re_entry: reEntry.optional(),
     runs: exports_external.array(runId).default([]),
@@ -13165,6 +13188,34 @@ function tryGitHeadSha(repoRoot) {
     return null;
   return sha;
 }
+function rollUpStem(members) {
+  const nonTerminal = members.filter((m2) => !TERMINAL_STEM_STATUSES.includes(m2.status));
+  if (nonTerminal.length > 0)
+    return "open";
+  return members.every((m2) => m2.status === "done") ? "done" : "partial";
+}
+function blockingFollowUp(item) {
+  return (item.follow_ups ?? []).find((f3) => f3.kind === "bug" && f3.self_caused === true && f3.resolved !== true && f3.severity !== undefined && DONE_BLOCKING_SEVERITIES.includes(f3.severity));
+}
+function pushReadiness(item, stem) {
+  const reasons = [];
+  const notPass = item.acceptance_criteria.filter((c3) => c3.verdict !== "pass");
+  if (notPass.length > 0) {
+    reasons.push(`acceptance criteria not all pass: ${notPass.map((c3) => `${c3.id}=${c3.verdict}`).join(", ")}`);
+  }
+  const noCommandEvidence = item.acceptance_criteria.filter((c3) => !c3.evidence.some((e2) => e2.kind === "command"));
+  if (noCommandEvidence.length > 0) {
+    reasons.push(`acceptance criteria lack real (command-kind) evidence: ${noCommandEvidence.map((c3) => c3.id).join(", ")}`);
+  }
+  const blocking = blockingFollowUp(item);
+  if (blocking) {
+    reasons.push(`unresolved self-caused ${blocking.severity}-severity follow-up: "${blocking.note}"`);
+  }
+  if (stem !== undefined && stem.members.length > 1 && stem.rolled_up !== "done") {
+    reasons.push(`stem chain not fully done (rolled_up=${stem.rolled_up})`);
+  }
+  return { ready: reasons.length === 0, reasons };
+}
 
 class WorkItemStore {
   repoRoot;
@@ -13201,6 +13252,9 @@ class WorkItemStore {
       status: "draft",
       owner_profile: input.owner_profile ?? "workspace-write",
       ...input.parent_id !== undefined ? { parent_id: input.parent_id } : {},
+      ...input.declared_risk !== undefined ? { declared_risk: input.declared_risk } : {},
+      ...input.discovered_by !== undefined ? { discovered_by: input.discovered_by } : {},
+      ...input.follows !== undefined ? { follows: input.follows } : {},
       child_ids: [],
       changed_files: [],
       risks: [],
@@ -13244,6 +13298,89 @@ class WorkItemStore {
       status: terminal,
       closed_at: now.toISOString()
     }));
+  }
+  async park(id, status, reEntry2) {
+    return this.update(id, (cur) => ({
+      ...cur,
+      status,
+      re_entry: reEntry2
+    }));
+  }
+  async chainAncestors(id) {
+    const out = [];
+    const seen = new Set([id]);
+    let cur = await this.get(id);
+    while (cur.follows !== undefined) {
+      const next = cur.follows;
+      if (seen.has(next))
+        break;
+      seen.add(next);
+      out.push(next);
+      if (!await this.exists(next))
+        break;
+      cur = await this.get(next);
+    }
+    return out;
+  }
+  async stem(id) {
+    await this.get(id);
+    const all = new Map;
+    for (const s2 of await this.list()) {
+      const item = await this.get(s2.id);
+      all.set(item.id, {
+        status: item.status,
+        created_at: item.created_at,
+        ...item.follows !== undefined ? { follows: item.follows } : {}
+      });
+    }
+    const members = new Set;
+    const queue2 = [id];
+    while (queue2.length > 0) {
+      const cur = queue2.pop();
+      if (cur === undefined || members.has(cur))
+        continue;
+      members.add(cur);
+      const node = all.get(cur);
+      if (node?.follows !== undefined && all.has(node.follows))
+        queue2.push(node.follows);
+      for (const [oid, o3] of all)
+        if (o3.follows === cur)
+          queue2.push(oid);
+    }
+    const depthOf = (mid) => {
+      let d2 = 0;
+      let cur = mid;
+      const seen = new Set([cur]);
+      for (;; ) {
+        const f3 = all.get(cur)?.follows;
+        if (f3 === undefined || !members.has(f3) || seen.has(f3))
+          break;
+        seen.add(f3);
+        cur = f3;
+        d2++;
+      }
+      return d2;
+    };
+    const ordered = [...members].sort((a2, b2) => {
+      const da = depthOf(a2);
+      const db = depthOf(b2);
+      if (da !== db)
+        return da - db;
+      const ca = all.get(a2)?.created_at ?? "";
+      const cb = all.get(b2)?.created_at ?? "";
+      if (ca !== cb)
+        return ca < cb ? -1 : 1;
+      return a2 < b2 ? -1 : 1;
+    });
+    const memberList = ordered.map((mid) => {
+      const node = all.get(mid);
+      return {
+        id: mid,
+        status: node?.status ?? "draft",
+        ...node?.follows !== undefined ? { follows: node.follows } : {}
+      };
+    });
+    return { members: memberList, rolled_up: rollUpStem(memberList) };
   }
   async archive(label) {
     if (!/^[A-Za-z0-9._-]+$/.test(label) || label === "." || label === "..") {
@@ -13339,7 +13476,7 @@ class WorkItemStore {
 `).filter((line) => line.trim().length > 0).map((line) => techSpecRound.parse(JSON.parse(line)));
   }
 }
-var acceptanceCriterionInputSchema;
+var TERMINAL_STEM_STATUSES, DONE_BLOCKING_SEVERITIES, acceptanceCriterionInputSchema;
 var init_work_item_store = __esm(() => {
   init_zod();
   init_intent_metric();
@@ -13349,6 +13486,8 @@ var init_work_item_store = __esm(() => {
   init_ditto_paths();
   init_fs();
   init_id();
+  TERMINAL_STEM_STATUSES = ["done", "abandoned"];
+  DONE_BLOCKING_SEVERITIES = ["high", "critical"];
   acceptanceCriterionInputSchema = exports_external.object({
     id: exports_external.string().min(1),
     statement: exports_external.string().min(1)
@@ -36533,6 +36672,21 @@ function allAcceptancePlaceholders(item) {
     return false;
   return item.acceptance_criteria.every((ac) => ac.statement === PLACEHOLDER_AC_STATEMENT);
 }
+function hasHeavyRiskSignal(item) {
+  const r3 = item.declared_risk;
+  const declared = !!r3 && (r3.non_local === true || r3.irreversible === true || r3.unaudited === true);
+  return declared || item.promoted_to_heavy === true;
+}
+async function intentHasRiskSignal(repoRoot, workItemId2) {
+  try {
+    const intents = new IntentStore(repoRoot);
+    if (!await intents.exists(workItemId2))
+      return false;
+    return (await intents.get(workItemId2)).unknowns.length > 0;
+  } catch {
+    return false;
+  }
+}
 function pendingHandoffHint(item) {
   return item.re_entry?.command;
 }
@@ -36592,7 +36746,8 @@ var userPromptSubmitHandler = async (input) => {
     const placeholderOnly = allAcceptancePlaceholders(item);
     if (placeholderOnly)
       ctx.placeholderAcceptanceCriteria = true;
-    if (placeholderOnly && classification === "execution")
+    const riskSignal = hasHeavyRiskSignal(item) || await intentHasRiskSignal(input.repoRoot, item.id);
+    if ((placeholderOnly || riskSignal) && classification === "execution")
       ctx.deepInterviewDirective = true;
   }
   if (classification === "question" && looksCodebaseAnswerable(prompt2)) {
@@ -41942,6 +42097,14 @@ var techSpecCommand = defineCommand({
 // src/cli/commands/verify.ts
 init_fs();
 init_work_item_store();
+var NOOP_COMMANDS = new Set(["true", ":", "echo"]);
+function isNoOpCommand(tail) {
+  const cmd = tail[0];
+  if (cmd === undefined)
+    return false;
+  const base = cmd.includes("/") ? cmd.slice(cmd.lastIndexOf("/") + 1) : cmd;
+  return NOOP_COMMANDS.has(base);
+}
 function runChildCommand(tail) {
   if (tail.length === 0) {
     throw new Error("empty command tail");
@@ -41992,7 +42155,12 @@ var verifyCommand = defineCommand({
     }
     const tail = extractDashDashTail();
     if (tail === null || tail.length === 0) {
-      writeError("ditto verify requires a command after `--`. Example: ditto verify <wi> -- echo ok");
+      writeError("ditto verify requires a command after `--`. Example: ditto verify <wi> --criterion ac-1 -- bun test path/to.test.ts");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (isNoOpCommand(tail)) {
+      writeError(`ditto verify rejects the no-op command \`${tail.join(" ")}\` \u2014 a no-op (true, :, bare echo) cannot grade a criterion as pass. Provide a real verification command after \`--\`.`);
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
@@ -42067,6 +42235,65 @@ init_fs();
 init_work_item_store();
 init_worktree();
 init_common();
+init_work_item();
+function parseCriteriaStatements(raw) {
+  return raw.split(";").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+}
+var RISK_FLAGS = ["non_local", "irreversible", "unaudited"];
+function parseRiskFlags(raw) {
+  const tokens2 = raw.split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+  const unknown = [];
+  const risk = {};
+  for (const t2 of tokens2) {
+    if (RISK_FLAGS.includes(t2))
+      risk[t2] = true;
+    else
+      unknown.push(t2);
+  }
+  return { risk: Object.keys(risk).length > 0 ? risk : undefined, unknown };
+}
+function hasDeclaredRisk(item) {
+  const r3 = item.declared_risk;
+  return !!r3 && (r3.non_local === true || r3.irreversible === true || r3.unaudited === true);
+}
+function rejectNonObservableCriteria(statements) {
+  const errors3 = [];
+  statements.forEach((statement, i2) => {
+    const result2 = acceptanceTestable({ statement });
+    if (!result2.pass)
+      errors3.push(`ac-${i2 + 1} "${statement}": ${result2.reasons.join("; ")}`);
+  });
+  return errors3;
+}
+function supersededRecordsFor(prior, index, newCount, reason) {
+  const records = [];
+  const old = prior[index];
+  if (old) {
+    records.push(...old.superseded ?? []);
+    if (old.verdict !== "unverified")
+      records.push({ statement: old.statement, reason });
+  }
+  if (index === newCount - 1) {
+    for (const c3 of prior.slice(newCount)) {
+      if (c3.verdict !== "unverified")
+        records.push({ statement: c3.statement, reason });
+    }
+  }
+  return records;
+}
+function buildCriteria(statements, prior, reason) {
+  const newCount = statements.length;
+  return statements.map((statement, i2) => {
+    const records = reason === undefined ? [] : supersededRecordsFor(prior, i2, newCount, reason);
+    return {
+      id: `ac-${i2 + 1}`,
+      statement,
+      verdict: "unverified",
+      evidence: [],
+      ...records.length > 0 ? { superseded: records } : {}
+    };
+  });
+}
 var workStart = defineCommand({
   meta: {
     name: "start",
@@ -42086,6 +42313,21 @@ var workStart = defineCommand({
     title: {
       type: "string",
       description: "Short title; defaults to goal truncated",
+      required: false
+    },
+    criteria: {
+      type: "string",
+      description: "Real observable acceptance criteria, semicolon-separated \u2014 set at creation instead of the placeholder",
+      required: false
+    },
+    risk: {
+      type: "string",
+      description: "Declared risk flags, comma-separated: non_local,irreversible,unaudited (drives the heavy-path nudge + lightweight-close override gate)",
+      required: false
+    },
+    follows: {
+      type: "string",
+      description: "Predecessor work item id this WI continues from (chain lineage; see `ditto work stem`)",
       required: false
     },
     profile: {
@@ -42117,20 +42359,56 @@ var workStart = defineCommand({
     const store = new WorkItemStore(repoRoot);
     const profile = args.profile;
     const title = args.title ?? args.goal.slice(0, 80);
+    const realStatements = args.criteria ? parseCriteriaStatements(args.criteria) : [];
+    if (realStatements.length > 0) {
+      const errors3 = rejectNonObservableCriteria(realStatements);
+      if (errors3.length > 0) {
+        writeError(`--criteria rejected (not observable/testable): ${errors3.join("; ")}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+    }
+    let declared_risk;
+    if (args.risk !== undefined) {
+      const parsed = parseRiskFlags(args.risk);
+      if (parsed.unknown.length > 0) {
+        writeError(`--risk has unknown flag(s) ${parsed.unknown.join(", ")}; allowed: ${RISK_FLAGS.join(", ")}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      declared_risk = parsed.risk;
+    }
+    let follows;
+    if (args.follows !== undefined) {
+      if (!await store.exists(args.follows)) {
+        writeError(`--follows predecessor ${args.follows} does not exist`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      follows = args.follows;
+    }
+    const acceptance_criteria = realStatements.length > 0 ? realStatements.map((statement, i2) => ({
+      id: `ac-${i2 + 1}`,
+      statement,
+      verdict: "unverified",
+      evidence: []
+    })) : [
+      {
+        id: "ac-1",
+        statement: PLACEHOLDER_AC_STATEMENT,
+        verdict: "unverified",
+        evidence: []
+      }
+    ];
     try {
       const created = await store.create({
         title,
         source_request: args.request,
         goal: args.goal,
         owner_profile: profile,
-        acceptance_criteria: [
-          {
-            id: "ac-1",
-            statement: PLACEHOLDER_AC_STATEMENT,
-            verdict: "unverified",
-            evidence: []
-          }
-        ]
+        acceptance_criteria,
+        ...declared_risk !== undefined ? { declared_risk } : {},
+        ...follows !== undefined ? { follows } : {}
       });
       const worktrees = args.worktree ? await createWorktreeForWorkItem(repoRoot, created.id) : [];
       if (format === "json") {
@@ -42162,6 +42440,111 @@ var workStart = defineCommand({
     } catch (err) {
       writeError(`work start failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var workSetCriteria = defineCommand({
+  meta: {
+    name: "set-criteria",
+    description: "Replace placeholder acceptance criteria with real, observable criteria (semicolon-separated)"
+  },
+  args: {
+    workId: {
+      type: "positional",
+      description: "Work item id to set acceptance criteria on",
+      required: true
+    },
+    criteria: {
+      type: "string",
+      description: "Observable criteria, semicolon-separated \u2014 one acceptance criterion (ac-1, ac-2, \u2026) each",
+      required: true
+    },
+    supersede: {
+      type: "boolean",
+      description: "Override the lock on already-graded criteria. Requires --reason; prior statements are preserved as provenance.",
+      default: false
+    },
+    reason: {
+      type: "string",
+      description: "Why the graded criteria are being replaced (required with --supersede)",
+      required: false
+    },
+    risk: {
+      type: "string",
+      description: "Declared risk flags, comma-separated: non_local,irreversible,unaudited (recorded on the work item)",
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const supersede = args.supersede === true;
+    if (supersede && !args.reason) {
+      writeError('--supersede requires --reason "<why the graded criteria are being replaced>"');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const statements = parseCriteriaStatements(args.criteria);
+    if (statements.length === 0) {
+      writeError("--criteria must contain at least one non-empty statement (semicolon-separated)");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const observabilityErrors = rejectNonObservableCriteria(statements);
+    if (observabilityErrors.length > 0) {
+      writeError(`--criteria rejected (not observable/testable): ${observabilityErrors.join("; ")}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let declared_risk;
+    if (args.risk !== undefined) {
+      const parsed = parseRiskFlags(args.risk);
+      if (parsed.unknown.length > 0) {
+        writeError(`--risk has unknown flag(s) ${parsed.unknown.join(", ")}; allowed: ${RISK_FLAGS.join(", ")}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      declared_risk = parsed.risk;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const current = await store.get(args.workId);
+      const graded = current.acceptance_criteria.filter((c3) => c3.verdict !== "unverified");
+      if (graded.length > 0 && !supersede) {
+        writeError(`work ${args.workId} has graded criteria (${graded.map((c3) => `${c3.id}=${c3.verdict}`).join(", ")}); set-criteria would overwrite verified results. Re-run with --supersede --reason "<why>" to override (prior statements are preserved as provenance).`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const nextCriteria = buildCriteria(statements, current.acceptance_criteria, supersede ? args.reason : undefined);
+      const updated = await store.update(args.workId, (cur) => ({
+        ...cur,
+        acceptance_criteria: nextCriteria,
+        ...declared_risk !== undefined ? { declared_risk } : {}
+      }));
+      if (format === "json") {
+        writeJson2({
+          work_item_id: updated.id,
+          acceptance_criteria: updated.acceptance_criteria.map((c3) => ({
+            id: c3.id,
+            statement: c3.statement
+          }))
+        });
+      } else {
+        writeHuman(`Set ${updated.acceptance_criteria.length} acceptance criteria on ${updated.id}:`);
+        for (const c3 of updated.acceptance_criteria)
+          writeHuman(`  ${c3.id}: ${c3.statement}`);
+      }
+    } catch (err) {
+      writeError(`work set-criteria failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
     }
   }
 });
@@ -42368,13 +42751,39 @@ var workAbandon = defineCommand({
     }
   }
 });
+var PARK_STATUSES = ["partial", "blocked"];
 var workDone = defineCommand({
   meta: {
     name: "done",
-    description: "Mark a work item done \u2014 only when its completion final_verdict=pass (evidence gate)"
+    description: "Close a work item: done (completion final_verdict=pass evidence gate), or --status partial|blocked to park it as resumable with re_entry"
   },
   args: {
     workId: { type: "positional", description: "Work item id to mark done", required: true },
+    status: {
+      type: "string",
+      description: "Park as a resumable status instead of done: partial|blocked. Requires --re-entry-command or --needs (re_entry is mandatory for these statuses).",
+      required: false
+    },
+    "re-entry-command": {
+      type: "string",
+      description: "Concrete command to resume work, recorded in re_entry.command (with --status)",
+      required: false
+    },
+    needs: {
+      type: "string",
+      description: "Semicolon-separated evidence still needed before resuming \u2192 re_entry.fresh_evidence_needed (with --status)",
+      required: false
+    },
+    "override-heavy": {
+      type: "boolean",
+      description: "Allow the lightweight close on a declared-risk WI without going through the heavy (deep-interview) path. Requires --reason; the reason is recorded as an auditable risk note.",
+      default: false
+    },
+    reason: {
+      type: "string",
+      description: "Why a lightweight close is acceptable for a declared-risk WI (with --override-heavy)",
+      required: false
+    },
     output: { type: "string", description: "Output format: human|json", default: "human" }
   },
   run: async ({ args }) => {
@@ -42389,14 +42798,76 @@ var workDone = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     const store = new WorkItemStore(repoRoot);
     const completions = new CompletionStore(repoRoot);
+    if (args.status !== undefined) {
+      if (!PARK_STATUSES.includes(args.status)) {
+        writeError(`--status must be one of ${PARK_STATUSES.join("|")} (to park a resumable WI); got "${args.status}". Omit --status to close as done.`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const command = args["re-entry-command"];
+      const needs = args.needs ? parseCriteriaStatements(args.needs) : [];
+      if (!command && needs.length === 0) {
+        writeError(`--status ${args.status} requires re_entry: pass --re-entry-command "<resume cmd>" and/or --needs "<evidence; \u2026>".`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      try {
+        const parked = await store.park(args.workId, args.status, {
+          ...command ? { command } : {},
+          fresh_evidence_needed: needs
+        });
+        if (format === "json") {
+          writeJson2({ id: parked.id, status: parked.status, re_entry: parked.re_entry });
+        } else {
+          writeHuman(`Parked ${parked.id} as ${parked.status} (resumable).`);
+          if (parked.re_entry?.command)
+            writeHuman(`  resume: ${parked.re_entry.command}`);
+          if ((parked.re_entry?.fresh_evidence_needed ?? []).length > 0)
+            writeHuman(`  needs:  ${parked.re_entry?.fresh_evidence_needed.join(", ")}`);
+        }
+      } catch (err) {
+        writeError(`work done --status failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      return;
+    }
     try {
       const item = await store.get(args.workId);
+      const blocking = blockingFollowUp(item);
+      if (blocking) {
+        writeError(`work ${args.workId} cannot close: unresolved self-caused ${blocking.severity}-severity bug follow-up "${blocking.note}"${blocking.materialized_wi ? ` (tracked as ${blocking.materialized_wi})` : ""}. Fix it, or mark the follow-up resolved, before closing.`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
       if (!await completions.exists(args.workId)) {
         const placeholders = item.acceptance_criteria.filter((c3) => c3.statement === PLACEHOLDER_AC_STATEMENT);
         if (placeholders.length > 0) {
           writeError(`work ${args.workId} still has placeholder acceptance criteria (${placeholders.map((c3) => c3.id).join(", ")}) \u2014 lock real criteria via /ditto:deep-interview, or \`ditto work abandon\` to give up`);
           process.exit(USAGE_ERROR_EXIT);
           return;
+        }
+        if (hasDeclaredRisk(item) && !await new IntentStore(repoRoot).exists(args.workId)) {
+          const overrideHeavy = args["override-heavy"] === true;
+          if (!overrideHeavy) {
+            writeError(`work ${args.workId} declares risk (${RISK_FLAGS.filter((f3) => item.declared_risk?.[f3] === true).join(", ")}) but has no intent.json \u2014 the lightweight close skips the heavy review. Run /ditto:deep-interview (or \`ditto work promote ${args.workId}\`), or override with \`ditto work done ${args.workId} --override-heavy --reason "<why light is acceptable>"\`.`);
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          if (!args.reason) {
+            writeError('--override-heavy requires --reason "<why a lightweight close is acceptable for this declared-risk WI>"');
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          await store.update(args.workId, (cur) => ({
+            ...cur,
+            risks: [
+              ...cur.risks,
+              {
+                description: `lightweight-close override (declared_risk present): ${args.reason}`,
+                severity: "medium"
+              }
+            ]
+          }));
         }
         const synthesized = assembleCompletionFromWorkItem(item, {
           declaredBy: "main",
@@ -42429,6 +42900,357 @@ var workDone = defineCommand({
       }
     } catch (err) {
       writeError(`work done failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
+var workPromote = defineCommand({
+  meta: {
+    name: "promote",
+    description: "Upgrade a lightweight work item to the heavy (deep-interview) path IN PLACE \u2014 preserves the existing criteria, verdicts, evidence, and the WI id (no abandon+recreate)"
+  },
+  args: {
+    workId: { type: "positional", description: "Work item id to promote", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const promoted = await store.update(args.workId, (cur) => ({
+        ...cur,
+        promoted_to_heavy: true
+      }));
+      if (format === "json") {
+        writeJson2({
+          work_item_id: promoted.id,
+          promoted_to_heavy: promoted.promoted_to_heavy === true,
+          acceptance_criteria: promoted.acceptance_criteria.map((c3) => c3.id)
+        });
+      } else {
+        writeHuman(`Promoted ${promoted.id} to the heavy path (criteria + id preserved).`);
+        writeHuman("Next: /ditto:deep-interview to deepen the existing criteria.");
+      }
+    } catch (err) {
+      writeError(`work promote failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
+var FOLLOW_UP_KINDS = ["bug", "idea"];
+var workFollowUp = defineCommand({
+  meta: {
+    name: "follow-up",
+    description: "Capture a discovered follow-up on a work item (--kind bug|idea --note ...), or clear one with --resolve <n>: --kind bug materializes a tracked, back-linked WI; --kind idea records a candidate only"
+  },
+  args: {
+    workId: {
+      type: "positional",
+      description: "Source work item the follow-up was discovered on",
+      required: true
+    },
+    kind: {
+      type: "string",
+      description: "bug|idea \u2014 a bug materializes a tracked WI; an idea is a candidate only",
+      required: false
+    },
+    note: { type: "string", description: "What was discovered", required: false },
+    resolve: {
+      type: "string",
+      description: "Clear an existing follow-up instead of appending: 1-based index n sets follow_ups[n].resolved=true (mutually exclusive with --kind/--note)",
+      required: false
+    },
+    severity: {
+      type: "string",
+      description: "info|low|medium|high|critical \u2014 a self-caused high/critical bug blocks the source WI\u2019s done",
+      required: false
+    },
+    "self-caused": {
+      type: "boolean",
+      description: "Mark a regression introduced by this work item itself",
+      default: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    if (args.resolve !== undefined) {
+      if (args.kind !== undefined || args.note !== undefined) {
+        writeError("--resolve clears an existing follow-up and cannot be combined with --kind/--note (one mode per invocation)");
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const raw = String(args.resolve).trim();
+      if (!/^\d+$/.test(raw)) {
+        writeError(`--resolve must be a 1-based follow-up index (a positive integer); got "${args.resolve}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const n2 = Number(raw);
+      try {
+        const item = await store.get(args.workId);
+        const count = (item.follow_ups ?? []).length;
+        if (n2 < 1 || n2 > count) {
+          writeError(`--resolve ${n2} is out of range: work ${args.workId} has ${count} follow-up(s) \u2014 valid range is 1..${count} (1-based)`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const idx = n2 - 1;
+        const updated = await store.update(args.workId, (cur) => ({
+          ...cur,
+          follow_ups: (cur.follow_ups ?? []).map((f3, i2) => i2 === idx ? { ...f3, resolved: true } : f3)
+        }));
+        const cleared = updated.follow_ups?.[idx];
+        if (format === "json") {
+          writeJson2({ work_item_id: updated.id, resolved_index: n2, note: cleared?.note });
+        } else {
+          writeHuman(`Resolved follow-up ${n2} on ${updated.id}: ${cleared?.note ?? ""}`);
+        }
+      } catch (err) {
+        writeError(`work follow-up failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      return;
+    }
+    if (args.kind === undefined) {
+      writeError("--kind is required (bug|idea) when appending a follow-up \u2014 or use --resolve <n> to clear an existing one");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!FOLLOW_UP_KINDS.includes(args.kind)) {
+      writeError(`--kind must be one of ${FOLLOW_UP_KINDS.join("|")}; got "${args.kind}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const kind = args.kind;
+    const note = typeof args.note === "string" ? args.note.trim() : "";
+    if (note.length === 0) {
+      writeError("--note must be a non-empty description of the follow-up");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let severity2;
+    if (args.severity !== undefined) {
+      const parsed = severityLevel.safeParse(args.severity);
+      if (!parsed.success) {
+        writeError(`--severity must be one of ${severityLevel.options.join("|")}; got "${args.severity}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      severity2 = parsed.data;
+    }
+    const selfCaused = args["self-caused"] === true;
+    try {
+      const source = await store.get(args.workId);
+      let materializedWi;
+      if (kind === "bug") {
+        const created = await store.create({
+          title: `bug: ${note}`.slice(0, 200),
+          source_request: `Discovered while working on ${source.id}: ${note}`,
+          goal: `Fix: ${note}`,
+          acceptance_criteria: [
+            {
+              id: "ac-1",
+              statement: PLACEHOLDER_AC_STATEMENT,
+              verdict: "unverified",
+              evidence: []
+            }
+          ],
+          discovered_by: source.id
+        });
+        materializedWi = created.id;
+      }
+      const entry = {
+        kind,
+        note,
+        ...severity2 ? { severity: severity2 } : {},
+        ...selfCaused ? { self_caused: true } : {},
+        ...materializedWi ? { materialized_wi: materializedWi } : {}
+      };
+      const updated = await store.update(args.workId, (cur) => ({
+        ...cur,
+        follow_ups: [...cur.follow_ups ?? [], entry]
+      }));
+      if (format === "json") {
+        writeJson2({
+          work_item_id: updated.id,
+          kind,
+          note,
+          ...severity2 ? { severity: severity2 } : {},
+          ...materializedWi ? { materialized_wi: materializedWi } : {}
+        });
+      } else {
+        writeHuman(`Recorded ${kind} follow-up on ${updated.id}: ${note}`);
+        if (materializedWi)
+          writeHuman(`  materialized bug into ${materializedWi} (discovered_by ${updated.id})`);
+      }
+    } catch (err) {
+      writeError(`work follow-up failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
+var workStem = defineCommand({
+  meta: {
+    name: "stem",
+    description: "Work with a chain of related work items (the lineage formed by `follows` edges): --follows <prev> wires this WI to its predecessor; with no flag, show the derived chain; --close rolls the chain up once every member is terminal"
+  },
+  args: {
+    workId: {
+      type: "positional",
+      description: "A work item anywhere in the chain",
+      required: true
+    },
+    follows: {
+      type: "string",
+      description: "Wire <workId> to continue from this predecessor (chain lineage). Rejected if it would create a cycle.",
+      required: false
+    },
+    close: {
+      type: "boolean",
+      description: "Roll the chain up: requires every member terminal (done/abandoned); emits the rolled-up verdict (all done \u2192 done; any abandoned \u2192 partial). Rejects and lists any non-terminal member.",
+      default: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const close = args.close === true;
+    if (args.follows !== undefined && close) {
+      writeError("work stem takes either --follows <prev> or --close, not both");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    if (args.follows !== undefined) {
+      const prev = args.follows;
+      try {
+        await store.get(args.workId);
+        if (!await store.exists(prev)) {
+          writeError(`--follows predecessor ${prev} does not exist`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const prevAncestors = await store.chainAncestors(prev);
+        if (prev === args.workId || prevAncestors.includes(args.workId)) {
+          writeError(`--follows ${prev} would create a cycle (${args.workId} already precedes ${prev} in the chain); no write`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const updated = await store.update(args.workId, (cur) => ({ ...cur, follows: prev }));
+        if (format === "json") {
+          writeJson2({ work_item_id: updated.id, follows: updated.follows });
+        } else {
+          writeHuman(`Wired ${updated.id} to follow ${prev} (chain lineage).`);
+        }
+      } catch (err) {
+        writeError(`work stem failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      return;
+    }
+    if (close) {
+      try {
+        const view = await store.stem(args.workId);
+        const nonTerminal = view.members.filter((m2) => !TERMINAL_STATUSES.includes(m2.status));
+        if (nonTerminal.length > 0) {
+          writeError(`work stem ${args.workId} cannot close: ${nonTerminal.length} non-terminal member(s) \u2014 ${nonTerminal.map((m2) => `${m2.id}=${m2.status}`).join(", ")}. Close (done/abandon) each before rolling the chain up.`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        if (format === "json") {
+          writeJson2({ rolled_up: view.rolled_up, members: view.members });
+        } else {
+          writeHuman(`Chain rolled up for ${args.workId}: ${view.rolled_up} (${view.members.length} member(s)).`);
+          for (const m2 of view.members)
+            writeHuman(`  ${m2.id}	${m2.status}`);
+        }
+      } catch (err) {
+        writeError(`work stem failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      return;
+    }
+    try {
+      const view = await store.stem(args.workId);
+      if (format === "json") {
+        writeJson2({ members: view.members, rolled_up: view.rolled_up });
+      } else {
+        writeHuman(`Chain for ${args.workId} (rolled_up: ${view.rolled_up}):`);
+        for (const m2 of view.members)
+          writeHuman(`  ${m2.id}	${m2.status}`);
+      }
+    } catch (err) {
+      writeError(`work stem failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
+var workPushReady = defineCommand({
+  meta: {
+    name: "push-ready",
+    description: "PULL-ONLY: report whether a work item meets the STRONG push-readiness bar (every AC pass + real command evidence + no unresolved self-caused high/critical follow-up + a fully-done stem chain). Surfaces ready + reasons ONLY when you ask; ditto never proposes a push itself (push is your irreversible decision)."
+  },
+  args: {
+    workId: {
+      type: "positional",
+      description: "Work item id to check push-readiness for",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const item = await store.get(args.workId);
+      const stem = await store.stem(args.workId);
+      const result2 = pushReadiness(item, stem);
+      if (format === "json") {
+        writeJson2({ ready: result2.ready, reasons: result2.reasons });
+      } else {
+        writeHuman(`push-ready: ${result2.ready}`);
+        if (result2.reasons.length > 0) {
+          writeHuman("not ready because:");
+          for (const reason of result2.reasons)
+            writeHuman(`  - ${reason}`);
+        }
+      }
+    } catch (err) {
+      writeError(`work push-ready failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(USAGE_ERROR_EXIT);
     }
   }
@@ -42495,14 +43317,19 @@ var workArchive = defineCommand({
 var workCommand = defineCommand({
   meta: {
     name: "work",
-    description: "Manage work items (start, status, handoff, done, abandon, archive)"
+    description: "Manage work items (start, status, handoff, done, abandon, promote, archive)"
   },
   subCommands: {
     start: workStart,
+    "set-criteria": workSetCriteria,
     status: workStatus,
     handoff: workHandoff,
     done: workDone,
     abandon: workAbandon,
+    promote: workPromote,
+    "follow-up": workFollowUp,
+    stem: workStem,
+    "push-ready": workPushReady,
     archive: workArchive
   }
 });
@@ -42720,4 +43547,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=933f78db894619c9ca3cf8598ac4b56e0d5ba45499f4f0e7b4648b45dfdb7e75
+//# ditto-src-stamp=f12f20b9dbcc3cd8c9f9ff3ff6d741c1bd8abbe0de41938c1cdc2986a15af502

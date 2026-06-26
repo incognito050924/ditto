@@ -19,6 +19,19 @@ interface RunResult {
   stderr: string;
 }
 
+// Conservative no-op denylist: only unambiguous commands whose sole effect is to
+// exit 0 without verifying anything. A no-op must never grade a criterion as pass
+// (it would record a fake verification). Basename-matched so /bin/echo etc. is
+// caught; kept tiny on purpose — anything not here is treated as a real command.
+const NOOP_COMMANDS: ReadonlySet<string> = new Set(['true', ':', 'echo']);
+
+function isNoOpCommand(tail: string[]): boolean {
+  const cmd = tail[0];
+  if (cmd === undefined) return false;
+  const base = cmd.includes('/') ? cmd.slice(cmd.lastIndexOf('/') + 1) : cmd;
+  return NOOP_COMMANDS.has(base);
+}
+
 function runChildCommand(tail: string[]): RunResult {
   if (tail.length === 0) {
     throw new Error('empty command tail');
@@ -72,7 +85,14 @@ export const verifyCommand = defineCommand({
     const tail = extractDashDashTail();
     if (tail === null || tail.length === 0) {
       writeError(
-        'ditto verify requires a command after `--`. Example: ditto verify <wi> -- echo ok',
+        'ditto verify requires a command after `--`. Example: ditto verify <wi> --criterion ac-1 -- bun test path/to.test.ts',
+      );
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (isNoOpCommand(tail)) {
+      writeError(
+        `ditto verify rejects the no-op command \`${tail.join(' ')}\` — a no-op (true, :, bare echo) cannot grade a criterion as pass. Provide a real verification command after \`--\`.`,
       );
       process.exit(USAGE_ERROR_EXIT);
       return;

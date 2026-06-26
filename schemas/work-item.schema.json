@@ -117,6 +117,63 @@
                   "description": "Pointer to evidence stored outside the manifest itself"
                 },
                 "default": []
+              },
+              "oracle": {
+                "type": "object",
+                "properties": {
+                  "verification_method": {
+                    "type": "string",
+                    "enum": [
+                      "dynamic_test",
+                      "static_scan",
+                      "soft_judgment"
+                    ],
+                    "description": "Re-evaluability class of the oracle (ADR-0024 §3.1: hard·dynamic / hard·static / soft·judgment). Distinct from evidenceRequiredKind (intent.ts), which is the kind of evidence, not its re-evaluability."
+                  },
+                  "maps_to": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "AC, file:line, intent, or doc the oracle anchors to (same vocabulary as dialectic maps_to)"
+                  },
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "forward",
+                      "backward"
+                    ],
+                    "description": "forward = post-change final state; backward = current-code finding (ADR-0024 §3.0)"
+                  }
+                },
+                "required": [
+                  "verification_method",
+                  "maps_to",
+                  "direction"
+                ],
+                "additionalProperties": false,
+                "description": "Per-AC oracle: re-evaluable verification method + anchor target (ADR-0024 §3)"
+              },
+              "superseded": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "statement": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "The prior (graded) statement that was replaced"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Why the prior criterion was superseded"
+                    }
+                  },
+                  "required": [
+                    "statement",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [
@@ -176,6 +233,121 @@
             "description": "Repo-relative path; absolute paths and .. traversal are rejected"
           },
           "default": []
+        },
+        "worktrees": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "owning_repo": {
+                "type": "string",
+                "minLength": 1,
+                "description": "'.' for the workspace repo, else the sub-repo path relative to the workspace root"
+              },
+              "worktree_path": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Worktree checkout path, relative to the workspace repo root"
+              },
+              "branch": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Branch checked out in this worktree"
+              }
+            },
+            "required": [
+              "owning_repo",
+              "worktree_path",
+              "branch"
+            ],
+            "additionalProperties": false,
+            "description": "One git worktree+branch DITTO created for a work item (one per owning repo)"
+          },
+          "default": []
+        },
+        "autopilot_exempt": {
+          "type": "boolean",
+          "description": "Allow closing on completion.json alone without going through autopilot"
+        },
+        "declared_risk": {
+          "type": "object",
+          "properties": {
+            "non_local": {
+              "type": "boolean"
+            },
+            "irreversible": {
+              "type": "boolean"
+            },
+            "unaudited": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Work-item-declared risk flags (gates.ts RiskAxes vocabulary)"
+        },
+        "promoted_to_heavy": {
+          "type": "boolean",
+          "description": "Marked for the heavy (deep-interview) path via `work promote`"
+        },
+        "follow_ups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "bug",
+                  "idea"
+                ],
+                "description": "bug = a defect materialized into a tracked WI; idea = a candidate only"
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "description": "What was discovered"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ]
+              },
+              "self_caused": {
+                "type": "boolean",
+                "description": "True if this regression was introduced by the source work item itself"
+              },
+              "materialized_wi": {
+                "type": "string",
+                "pattern": "^wi_[a-z0-9]{8,}$",
+                "description": "The tracked work item this bug was materialized into (kind=bug only)"
+              },
+              "resolved": {
+                "type": "boolean",
+                "description": "True once the follow-up has been addressed"
+              }
+            },
+            "required": [
+              "kind",
+              "note"
+            ],
+            "additionalProperties": false,
+            "description": "A discovered follow-up (bug/idea) captured on the work item"
+          }
+        },
+        "discovered_by": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Work item whose discovered bug materialized this one (provenance, not hierarchy)"
+        },
+        "follows": {
+          "type": "string",
+          "pattern": "^wi_[a-z0-9]{8,}$",
+          "description": "Predecessor work item this one continues from (chain lineage, not the parent_id tree)"
         },
         "risks": {
           "type": "array",

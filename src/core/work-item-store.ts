@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { type IntentMetric, intentMetric } from '~/schemas/intent-metric';
 import { languageLedger } from '~/schemas/language-ledger';
 import { type TechSpecRound, techSpecRound } from '~/schemas/tech-spec-round';
-import { type WorkItem, workItem } from '~/schemas/work-item';
+import { type FollowUp, type WorkItem, workItem } from '~/schemas/work-item';
 import { localDir } from './ditto-paths';
 import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
 import { generateId } from './id';
@@ -33,6 +33,9 @@ export interface WorkItemCreateInput {
   acceptance_criteria: WorkItem['acceptance_criteria'];
   owner_profile?: WorkItem['owner_profile'];
   parent_id?: WorkItem['parent_id'];
+  declared_risk?: WorkItem['declared_risk'];
+  discovered_by?: WorkItem['discovered_by'];
+  follows?: WorkItem['follows'];
 }
 
 export interface WorkItemSummary {
@@ -40,6 +43,112 @@ export interface WorkItemSummary {
   title: string;
   status: WorkItem['status'];
   updated_at: string;
+}
+
+// ac-5: one member of a derived chain (stem) — the WI's id, current status, and
+// the predecessor it continues from (omitted on the root). Computed at query time
+// from `follows` edges; there is NO stored stem object.
+export interface StemMember {
+  id: string;
+  status: WorkItem['status'];
+  follows?: string;
+}
+
+// ac-5: rolled-up status of a chain. `open` = ≥1 member is non-terminal (not
+// closeable); `done` = every member is `done`; `partial` = all terminal but ≥1 was
+// `abandoned` (a partial-abandon rollup).
+export type StemRollup = 'done' | 'partial' | 'open';
+
+export interface StemView {
+  members: StemMember[];
+  rolled_up: StemRollup;
+}
+
+const TERMINAL_STEM_STATUSES = ['done', 'abandoned'] as const;
+
+/** ac-5: roll a chain's member statuses up into one verdict (see StemRollup). */
+export function rollUpStem(members: readonly StemMember[]): StemRollup {
+  const nonTerminal = members.filter(
+    (m) => !(TERMINAL_STEM_STATUSES as readonly string[]).includes(m.status),
+  );
+  if (nonTerminal.length > 0) return 'open';
+  return members.every((m) => m.status === 'done') ? 'done' : 'partial';
+}
+
+// ac-4: "high-severity" threshold for the done block = severity ∈ {high, critical}.
+const DONE_BLOCKING_SEVERITIES = ['high', 'critical'] as const;
+
+/**
+ * ac-4: the first follow-up that blocks `done` — an UNRESOLVED, self-caused bug of
+ * high/critical severity (a self-caused high-severity regression). A follow-up that
+ * is resolved, not self_caused, kind=idea, or below the severity threshold does NOT
+ * block. Returns undefined when nothing blocks. Lives in core so both `work done`
+ * (ac-4) and `pushReadiness` (ac-6) consume one rule, not two copies.
+ */
+export function blockingFollowUp(item: WorkItem): FollowUp | undefined {
+  return (item.follow_ups ?? []).find(
+    (f) =>
+      f.kind === 'bug' &&
+      f.self_caused === true &&
+      f.resolved !== true &&
+      f.severity !== undefined &&
+      (DONE_BLOCKING_SEVERITIES as readonly string[]).includes(f.severity),
+  );
+}
+
+// ac-6: outcome of the strong push-readiness check. `ready` is the AND of all four
+// conditions; `reasons` lists exactly which failed (empty when ready).
+export interface PushReadiness {
+  ready: boolean;
+  reasons: string[];
+}
+
+/**
+ * ac-6 (wi_260626wnv): compute the STRONG push-readiness signal for a work item.
+ * Push/deploy is the user's irreversible decision (charter §4-8) — this only
+ * COMPUTES; it never proposes a push. A bare completion verdict=pass is too weak a
+ * bar (one lightweight `verify` earns it), so a WI is push-ready ONLY when ALL hold:
+ *   1. every acceptance criterion has verdict === 'pass';
+ *   2. every acceptance criterion carries ≥1 REAL evidence entry — a command-kind
+ *      evidence (not merely a note) — i.e. evidence depth beyond the bare verdict;
+ *   3. no UNRESOLVED self-caused high/critical follow-up (reuses blockingFollowUp);
+ *   4. if the WI participates in a stem (its derived stem has >1 member), the
+ *      stem's rolled-up status is `done` — a half-finished chain is not push-ready.
+ * Pure: the caller passes the derived `stem` (stem() is async); when omitted,
+ * condition 4 does not apply (a lone WI).
+ */
+export function pushReadiness(item: WorkItem, stem?: StemView): PushReadiness {
+  const reasons: string[] = [];
+  // 1. every AC verdict === 'pass'
+  const notPass = item.acceptance_criteria.filter((c) => c.verdict !== 'pass');
+  if (notPass.length > 0) {
+    reasons.push(
+      `acceptance criteria not all pass: ${notPass.map((c) => `${c.id}=${c.verdict}`).join(', ')}`,
+    );
+  }
+  // 2. every AC carries ≥1 command-kind evidence (depth stronger than bare verdict)
+  const noCommandEvidence = item.acceptance_criteria.filter(
+    (c) => !c.evidence.some((e) => e.kind === 'command'),
+  );
+  if (noCommandEvidence.length > 0) {
+    reasons.push(
+      `acceptance criteria lack real (command-kind) evidence: ${noCommandEvidence
+        .map((c) => c.id)
+        .join(', ')}`,
+    );
+  }
+  // 3. no unresolved self-caused high/critical follow-up (ac-4 rule reused)
+  const blocking = blockingFollowUp(item);
+  if (blocking) {
+    reasons.push(
+      `unresolved self-caused ${blocking.severity}-severity follow-up: "${blocking.note}"`,
+    );
+  }
+  // 4. a multi-member stem chain must be fully rolled up to done
+  if (stem !== undefined && stem.members.length > 1 && stem.rolled_up !== 'done') {
+    reasons.push(`stem chain not fully done (rolled_up=${stem.rolled_up})`);
+  }
+  return { ready: reasons.length === 0, reasons };
 }
 
 export class WorkItemStore {
@@ -79,6 +188,9 @@ export class WorkItemStore {
       status: 'draft' as const,
       owner_profile: input.owner_profile ?? ('workspace-write' as const),
       ...(input.parent_id !== undefined ? { parent_id: input.parent_id } : {}),
+      ...(input.declared_risk !== undefined ? { declared_risk: input.declared_risk } : {}),
+      ...(input.discovered_by !== undefined ? { discovered_by: input.discovered_by } : {}),
+      ...(input.follows !== undefined ? { follows: input.follows } : {}),
       child_ids: [],
       changed_files: [],
       risks: [],
@@ -148,6 +260,116 @@ export class WorkItemStore {
       status: terminal,
       closed_at: now.toISOString(),
     }));
+  }
+
+  /**
+   * Park a work item in a resumable, non-terminal status (`partial`/`blocked`)
+   * with the `re_entry` instructions the schema requires for those statuses.
+   * Distinct from `close` (terminal done/abandoned): a parked item keeps no
+   * `closed_at` — it stays open for resume. The CLI enforces that re_entry carries
+   * a command or evidence need before calling this; the schema superRefine is the
+   * backstop (it rejects partial/blocked without re_entry).
+   */
+  async park(
+    id: string,
+    status: Extract<WorkItem['status'], 'partial' | 'blocked'>,
+    reEntry: WorkItem['re_entry'],
+  ): Promise<WorkItem> {
+    return this.update(id, (cur) => ({
+      ...cur,
+      status,
+      re_entry: reEntry,
+    }));
+  }
+
+  /**
+   * ac-5: walk the `follows` chain UPWARD from `id` (exclusive of `id`), returning
+   * predecessor ids in order [parent, grandparent, …root]. A missing predecessor
+   * stops the walk; a pre-existing cycle is broken by the visited set. Used to
+   * reject a `--follows` edge that would close a cycle.
+   */
+  async chainAncestors(id: string): Promise<string[]> {
+    const out: string[] = [];
+    const seen = new Set<string>([id]);
+    let cur = await this.get(id);
+    while (cur.follows !== undefined) {
+      const next = cur.follows;
+      if (seen.has(next)) break;
+      seen.add(next);
+      out.push(next);
+      if (!(await this.exists(next))) break;
+      cur = await this.get(next);
+    }
+    return out;
+  }
+
+  /**
+   * ac-5: derive the chain (stem) that contains `id` — the connected component of
+   * the `follows` graph, walked transitively in BOTH directions (up to predecessors,
+   * down to successors). Members are returned in lineage order (root → tip): sorted
+   * by chain depth, ties broken by `created_at` then id for determinism. There is NO
+   * stored stem object; this is computed each call.
+   */
+  async stem(id: string): Promise<StemView> {
+    await this.get(id); // clear error if `id` is unknown
+    // Load every WI's lineage-relevant fields once (follows for edges, status for
+    // the rollup, created_at to break ordering ties on a branch).
+    const all = new Map<
+      string,
+      { status: WorkItem['status']; follows?: string; created_at: string }
+    >();
+    for (const s of await this.list()) {
+      const item = await this.get(s.id);
+      all.set(item.id, {
+        status: item.status,
+        created_at: item.created_at,
+        ...(item.follows !== undefined ? { follows: item.follows } : {}),
+      });
+    }
+    // Connected component over follows edges (both directions).
+    const members = new Set<string>();
+    const queue = [id];
+    while (queue.length > 0) {
+      const cur = queue.pop();
+      if (cur === undefined || members.has(cur)) continue;
+      members.add(cur);
+      const node = all.get(cur);
+      if (node?.follows !== undefined && all.has(node.follows)) queue.push(node.follows);
+      for (const [oid, o] of all) if (o.follows === cur) queue.push(oid);
+    }
+    // Depth = follows-hops up to a component root (a member whose follows is outside
+    // the component). Linear chains get a strict order; branches order by depth.
+    const depthOf = (mid: string): number => {
+      let d = 0;
+      let cur = mid;
+      const seen = new Set<string>([cur]);
+      for (;;) {
+        const f = all.get(cur)?.follows;
+        if (f === undefined || !members.has(f) || seen.has(f)) break;
+        seen.add(f);
+        cur = f;
+        d++;
+      }
+      return d;
+    };
+    const ordered = [...members].sort((a, b) => {
+      const da = depthOf(a);
+      const db = depthOf(b);
+      if (da !== db) return da - db;
+      const ca = all.get(a)?.created_at ?? '';
+      const cb = all.get(b)?.created_at ?? '';
+      if (ca !== cb) return ca < cb ? -1 : 1;
+      return a < b ? -1 : 1;
+    });
+    const memberList: StemMember[] = ordered.map((mid) => {
+      const node = all.get(mid);
+      return {
+        id: mid,
+        status: node?.status ?? 'draft',
+        ...(node?.follows !== undefined ? { follows: node.follows } : {}),
+      };
+    });
+    return { members: memberList, rolled_up: rollUpStem(memberList) };
   }
 
   /**
