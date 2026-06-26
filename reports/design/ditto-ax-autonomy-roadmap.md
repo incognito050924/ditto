@@ -14,7 +14,7 @@
 
 | 테마 | 다루는 문제 | 상태 | WI | 비고 |
 |---|---|---|---|---|
-| **T1. autopilot 무-전가** | P3, P4 | ⬜ TODO | _(미생성)_ | 최우선 추천. 엔진 국소 |
+| **T1. autopilot 무-전가** | P3, P4 | ✅ landed | wi_2606266az | 6 AC final_verdict=pass(runtime-artifact 검증) · main 728c009 |
 | **T2. 개발 절차 1급화** (TDD 표면·경량 기본값·자동 close·backlog 위생) | P1, P2, P7 | ⬜ TODO(부분 landed) | _(미생성)_ | 경량 close/stem/follow-up은 이미 landed(아래) |
 | **T3. 다중 WI·worktree 자율 구동** | P5, P6 | ⏸ 보류 | _(미생성)_ | ADR-0011 D2 충돌 — 비가역 결정 선행 |
 
@@ -59,18 +59,20 @@
 
 > 각 테마는 착수 시 **deep-interview/tech-spec로 의도를 잠그고** 시작. 코드 변경은 사용자 허가 후. 아래 "변경 지점"은 조사 기반 *후보*이지 확정 설계 아님.
 
-### T1. autopilot 무-전가 (P3 + P4) — ⬜ TODO · **최우선 추천**
+### T1. autopilot 무-전가 (P3 + P4) — ✅ landed (wi_2606266az · main 728c009)
 
-목표: autopilot가 미검증/위험/후속을 사용자에게 떠넘기지 않는다. "verify가 진짜 게이트"가 되게.
+목표(달성): autopilot가 미검증/위험/후속을 사용자에게 전가하지 않고, 오케스트레이션 흐름이 작업 완결 또는 사용자 명시 종료 외에는 끊기지 않는다. verify가 단일 work item의 실질 종료 게이트.
 
-변경 지점(후보): `src/core/gates.ts` · `src/hooks/stop.ts` · `src/core/autopilot-loop.ts`(`recordResult`/`nextNode`) · `src/core/autopilot-complete.ts` · `src/core/autopilot-converge.ts`.
+구현 (6 AC, runtime-artifact 검증 — 라이브 `hook stop` exit code · `complete` ledger · `--batch` 실 WI):
 
-- [ ] **미검증 누출 차단**: Stop 게이트가 `completion.acceptance[].verdict==='unverified'`를 읽어 non-terminal·non-pass WI를 차단(현재 `unverified[]` 리스트만 봄). 또는 verify 노드 미검증 시 재구동/fix 노드.
-- [ ] **agent-resolvable 위험 라우터**: `review/security`의 `has_findings`→fix 패턴을 일반화 — agent-resolvable residual/risk를 fix 노드로 자동 라우팅(`autopilot-converge.planForwardReexpansion` 확장). 진짜 user-owned만 사용자에 표면화.
-- [ ] **후속 자동 물질화·착수**: `recordResultPayload`에 discovered-work 필드 추가 → `store.create`(+`discovered_by`)로 WI 물질화. 원 의도 범위 안이면 즉시 착수(범위 밖/방향성 필요만 사용자). `intent.follow_up_candidates`도 소비.
-- [ ] **증거-완전성 커버리지 게이트**: H2를 "id 매핑"에서 "모든 in_scope AC가 *증거로 검증*"으로 강화 + plan-time 완전성 체크(planner subgraph가 전 AC 덮는지). 비-pass stop도 부분 종결 금지.
-- 검증: 미검증 AC 남은 run이 Stop에서 차단되는 테스트 · 위험/후속이 자동 처리되는 테스트 · 슬라이스-부분-완료가 거부되는 테스트.
-- 자율 경계(사용자 처방, 확정 필요): 위험·후속 **기본 처리**, 진짜 user-owned·범위 밖만 질문.
+- [x] **ac-1 미검증 누출 차단**: Stop 게이트가 `acceptance[].verdict` 열거 — 비-pass 완료의 미검증 in-scope AC를 사유·근거 없이 park하면 차단(exit≠0), 정직한 partial/blocked는 종료 허용(D2 보존). `gates.ts nonPassTerminationGate` + `stop.ts riskRecordForcesContinuation`.
+- [x] **ac-2 자동 재검증**: 증거 gatherable한 미검증 AC 종료 전 자동 reverify; tool-absence는 `blocked_external`(ADR-0018, 무한루프 회피).
+- [x] **ac-3 위험 자동 라우터**: `planForwardReexpansion` **1개 확장**(3 fork 아님)으로 agent-resolvable 위험 자동 fix; **4사유**(결정/ADR충돌·복수해결방안·범위밖·정말위험)만 in-flow 표면화; 자동처리 원장(auto_fix/surface/batch_escalate + reason-category).
+- [x] **ac-4 후속**: in-scope=현재 그래프 노드 자동 / out-of-scope=1회 batch materialize(draft·미구동·idempotent, materialize≠drive, ADR-0011 D2 same-rooted).
+- [x] **ac-5 무중단 자기완결**: in-scope 잔여 0까지 구동 + `no_progress_rounds` in-flow escalate(capped≠converged, silent pass 아님); 모든 splice `loop_rounds`-capped.
+- [x] **ac-6 positive 완료 계약**: 종료 시 AC별 증언(검증됨|정직한 partial|사용자 결정) + 자동처리 원장 출력. status flip 없음.
+- 자율 경계(확정): 위험·후속 **기본 자동 처리**, 4사유만 in-flow 표면화. **무중단 north star** — 흐름은 완결 또는 사용자 명시 종료 외 안 끊긴다(deep-interview 잠금).
+- 잔여: P1 autopilot 자동 status close(현재 `complete`는 final_verdict만, status flip은 **T2** 범위). intent-drift file-level(change_surface 예측 < 실제 — `autopilot-store`/테스트/json 추가, AC scope 6개 보존).
 
 ### T2. 개발 절차 1급화 (P1 + P2 + P7) — ⬜ TODO(부분 landed)
 
