@@ -3,6 +3,7 @@ import { PLACEHOLDER_AC_STATEMENT } from '~/core/charter';
 import { CompletionStore, assembleCompletionFromWorkItem } from '~/core/completion-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { acceptanceTestable, completionEvidenceGate, completionGate } from '~/core/gates';
+import { IntentStore } from '~/core/intent-store';
 import {
   InvalidBaseRefError,
   InvalidHeadRefError,
@@ -10,7 +11,7 @@ import {
 } from '~/core/work-item-handoff';
 import { WorkItemStore } from '~/core/work-item-store';
 import { declarerRole } from '~/schemas/common';
-import type { AcceptanceCriterion } from '~/schemas/work-item';
+import type { AcceptanceCriterion, WorkItem } from '~/schemas/work-item';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -30,6 +31,37 @@ function parseCriteriaStatements(raw: string): string[] {
     .split(';')
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+// ac-3: the work item's declared risk axis. Same vocabulary as gates.ts RiskAxes
+// (non_local/irreversible/unaudited); shared by `work start --risk` and
+// `work set-criteria --risk`.
+const RISK_FLAGS = ['non_local', 'irreversible', 'unaudited'] as const;
+
+/**
+ * Parse a `--risk "non_local,irreversible"` string into `declared_risk` flags.
+ * Comma-separated; each token must be a known risk flag (an unknown token is
+ * reported so a typo is not silently dropped). `risk` is undefined when no flag
+ * was set (so an empty `--risk ""` records nothing).
+ */
+function parseRiskFlags(raw: string): { risk?: WorkItem['declared_risk']; unknown: string[] } {
+  const tokens = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const unknown: string[] = [];
+  const risk: Record<string, boolean> = {};
+  for (const t of tokens) {
+    if ((RISK_FLAGS as readonly string[]).includes(t)) risk[t] = true;
+    else unknown.push(t);
+  }
+  return { risk: Object.keys(risk).length > 0 ? risk : undefined, unknown };
+}
+
+/** True iff any declared_risk flag is set on the work item. */
+function hasDeclaredRisk(item: WorkItem): boolean {
+  const r = item.declared_risk;
+  return !!r && (r.non_local === true || r.irreversible === true || r.unaudited === true);
 }
 
 /**
@@ -131,6 +163,12 @@ const workStart = defineCommand({
         'Real observable acceptance criteria, semicolon-separated — set at creation instead of the placeholder',
       required: false,
     },
+    risk: {
+      type: 'string',
+      description:
+        'Declared risk flags, comma-separated: non_local,irreversible,unaudited (drives the heavy-path nudge + lightweight-close override gate)',
+      required: false,
+    },
     profile: {
       type: 'string',
       description: 'Owner profile: read-only|workspace-write|networked|reviewer|isolated',
@@ -169,6 +207,18 @@ const workStart = defineCommand({
         return;
       }
     }
+    let declared_risk: WorkItem['declared_risk'];
+    if (args.risk !== undefined) {
+      const parsed = parseRiskFlags(args.risk);
+      if (parsed.unknown.length > 0) {
+        writeError(
+          `--risk has unknown flag(s) ${parsed.unknown.join(', ')}; allowed: ${RISK_FLAGS.join(', ')}`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      declared_risk = parsed.risk;
+    }
     const acceptance_criteria =
       realStatements.length > 0
         ? realStatements.map((statement, i) => ({
@@ -196,6 +246,7 @@ const workStart = defineCommand({
         goal: args.goal,
         owner_profile: profile,
         acceptance_criteria,
+        ...(declared_risk !== undefined ? { declared_risk } : {}),
       });
       if (format === 'json') {
         writeJson({
@@ -253,6 +304,12 @@ const workSetCriteria = defineCommand({
       description: 'Why the graded criteria are being replaced (required with --supersede)',
       required: false,
     },
+    risk: {
+      type: 'string',
+      description:
+        'Declared risk flags, comma-separated: non_local,irreversible,unaudited (recorded on the work item)',
+      required: false,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
@@ -284,6 +341,18 @@ const workSetCriteria = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
+    let declared_risk: WorkItem['declared_risk'];
+    if (args.risk !== undefined) {
+      const parsed = parseRiskFlags(args.risk);
+      if (parsed.unknown.length > 0) {
+        writeError(
+          `--risk has unknown flag(s) ${parsed.unknown.join(', ')}; allowed: ${RISK_FLAGS.join(', ')}`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      declared_risk = parsed.risk;
+    }
     const repoRoot = await resolveRepoRootForCreate();
     const store = new WorkItemStore(repoRoot);
     try {
@@ -311,6 +380,7 @@ const workSetCriteria = defineCommand({
       const updated = await store.update(args.workId, (cur) => ({
         ...cur,
         acceptance_criteria: nextCriteria,
+        ...(declared_risk !== undefined ? { declared_risk } : {}),
       }));
       if (format === 'json') {
         writeJson({
@@ -568,6 +638,18 @@ const workDone = defineCommand({
         'Semicolon-separated evidence still needed before resuming → re_entry.fresh_evidence_needed (with --status)',
       required: false,
     },
+    'override-heavy': {
+      type: 'boolean',
+      description:
+        'Allow the lightweight close on a declared-risk WI without going through the heavy (deep-interview) path. Requires --reason; the reason is recorded as an auditable risk note.',
+      default: false,
+    },
+    reason: {
+      type: 'string',
+      description:
+        'Why a lightweight close is acceptable for a declared-risk WI (with --override-heavy)',
+      required: false,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
@@ -647,6 +729,42 @@ const workDone = defineCommand({
           process.exit(USAGE_ERROR_EXIT);
           return;
         }
+        // ac-3 C: a declared-risk WI must not close silently on the lightweight
+        // synthesis path (no intent.json = the heavy review never ran). Block
+        // unless an explicit, recorded override is given. A WI that went heavy
+        // (intent.json present) is unaffected — its review already happened.
+        if (hasDeclaredRisk(item) && !(await new IntentStore(repoRoot).exists(args.workId))) {
+          const overrideHeavy = args['override-heavy'] === true;
+          if (!overrideHeavy) {
+            writeError(
+              `work ${args.workId} declares risk (${RISK_FLAGS.filter(
+                (f) => item.declared_risk?.[f] === true,
+              ).join(
+                ', ',
+              )}) but has no intent.json — the lightweight close skips the heavy review. Run /ditto:deep-interview (or \`ditto work promote ${args.workId}\`), or override with \`ditto work done ${args.workId} --override-heavy --reason "<why light is acceptable>"\`.`,
+            );
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          if (!args.reason) {
+            writeError(
+              '--override-heavy requires --reason "<why a lightweight close is acceptable for this declared-risk WI>"',
+            );
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          // Persist the override as an auditable risk note (not just printed).
+          await store.update(args.workId, (cur) => ({
+            ...cur,
+            risks: [
+              ...cur.risks,
+              {
+                description: `lightweight-close override (declared_risk present): ${args.reason}`,
+                severity: 'medium' as const,
+              },
+            ],
+          }));
+        }
         const synthesized = assembleCompletionFromWorkItem(item, {
           declaredBy: 'main',
           summary: `Closed via lightweight completion path (ditto verify evidence) for ${args.workId}.`,
@@ -689,6 +807,53 @@ const workDone = defineCommand({
       }
     } catch (err) {
       writeError(`work done failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  },
+});
+
+const workPromote = defineCommand({
+  meta: {
+    name: 'promote',
+    description:
+      'Upgrade a lightweight work item to the heavy (deep-interview) path IN PLACE — preserves the existing criteria, verdicts, evidence, and the WI id (no abandon+recreate)',
+  },
+  args: {
+    workId: { type: 'positional', description: 'Work item id to promote', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      // In-place: set the heavy-path marker only. acceptance_criteria, verdicts,
+      // evidence, and the id are left untouched (no reset to placeholder), so a WI
+      // that already has real criteria carries them into the heavy path with no
+      // data loss. The marker keeps the risk-driven heavy nudge firing.
+      const promoted = await store.update(args.workId, (cur) => ({
+        ...cur,
+        promoted_to_heavy: true,
+      }));
+      if (format === 'json') {
+        writeJson({
+          work_item_id: promoted.id,
+          promoted_to_heavy: promoted.promoted_to_heavy === true,
+          acceptance_criteria: promoted.acceptance_criteria.map((c) => c.id),
+        });
+      } else {
+        writeHuman(`Promoted ${promoted.id} to the heavy path (criteria + id preserved).`);
+        writeHuman('Next: /ditto:deep-interview to deepen the existing criteria.');
+      }
+    } catch (err) {
+      writeError(`work promote failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(USAGE_ERROR_EXIT);
     }
   },
@@ -758,7 +923,7 @@ const workArchive = defineCommand({
 export const workCommand = defineCommand({
   meta: {
     name: 'work',
-    description: 'Manage work items (start, status, handoff, done, abandon, archive)',
+    description: 'Manage work items (start, status, handoff, done, abandon, promote, archive)',
   },
   subCommands: {
     start: workStart,
@@ -767,6 +932,7 @@ export const workCommand = defineCommand({
     handoff: workHandoff,
     done: workDone,
     abandon: workAbandon,
+    promote: workPromote,
     archive: workArchive,
   },
 });

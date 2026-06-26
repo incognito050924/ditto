@@ -33,6 +33,7 @@ export interface WorkItemCreateInput {
   acceptance_criteria: WorkItem['acceptance_criteria'];
   owner_profile?: WorkItem['owner_profile'];
   parent_id?: WorkItem['parent_id'];
+  declared_risk?: WorkItem['declared_risk'];
 }
 
 export interface WorkItemSummary {
@@ -79,6 +80,7 @@ export class WorkItemStore {
       status: 'draft' as const,
       owner_profile: input.owner_profile ?? ('workspace-write' as const),
       ...(input.parent_id !== undefined ? { parent_id: input.parent_id } : {}),
+      ...(input.declared_risk !== undefined ? { declared_risk: input.declared_risk } : {}),
       child_ids: [],
       changed_files: [],
       risks: [],

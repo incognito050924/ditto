@@ -3,6 +3,7 @@ import { type CharterContext, PLACEHOLDER_AC_STATEMENT, charterProjection } from
 import { localDir } from '~/core/ditto-paths';
 import { atomicWriteText, ensureDir } from '~/core/fs';
 import { HandoffStore } from '~/core/handoff-store';
+import { IntentStore } from '~/core/intent-store';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { type WorkItem, WorkItemStore } from '~/core/work-item-store';
 import type { HookHandler, HookInput } from './runtime';
@@ -163,6 +164,35 @@ export function allAcceptancePlaceholders(item: WorkItem): boolean {
   return item.acceptance_criteria.every((ac) => ac.statement === PLACEHOLDER_AC_STATEMENT);
 }
 
+/**
+ * ac-3 B: heavy-path risk signal carried by the work item itself — any
+ * `declared_risk` flag (gates.ts RiskAxes vocabulary) or a `work promote` marker.
+ * This is what keeps the deep-interview nudge alive AFTER `set-criteria` replaced
+ * the placeholder (so `allAcceptancePlaceholders` is false): heavy detection is
+ * risk-driven, not placeholder-string driven.
+ */
+export function hasHeavyRiskSignal(item: WorkItem): boolean {
+  const r = item.declared_risk;
+  const declared = !!r && (r.non_local === true || r.irreversible === true || r.unaudited === true);
+  return declared || item.promoted_to_heavy === true;
+}
+
+/**
+ * ac-3 B (intent side): a finalized intent.json with unresolved unknowns is a
+ * heavy signal too. (intent.json does NOT persist risk flags — gates.ts:418-420
+ * — so `unknowns` is the only re-evaluable signal on it.) Fail-open: a missing or
+ * malformed intent never breaks the advisory hook.
+ */
+async function intentHasRiskSignal(repoRoot: string, workItemId: string): Promise<boolean> {
+  try {
+    const intents = new IntentStore(repoRoot);
+    if (!(await intents.exists(workItemId))) return false;
+    return (await intents.get(workItemId)).unknowns.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 // re_entry 명령만 보조 힌트로 남긴다. handoff 본문은 더 이상 "see {path}" 로
 // 가리키지 않고, 아래 handler 가 .ditto/local/handoff/ 에서 본문을 자동으로 주입한다
 // (wi_260605wf3: 파일명 명시 없는 자동 읽기).
@@ -226,11 +256,15 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
     if (handoff) ctx.pendingHandoff = handoff;
     const placeholderOnly = allAcceptancePlaceholders(item);
     if (placeholderOnly) ctx.placeholderAcceptanceCriteria = true;
-    // §AC-1 deep-interview directive: only when BOTH conditions hold —
-    // placeholder-only AC AND execution-intent prompt. The conjunction guards
-    // against the §2#3 non-goal of auto-promoting small requests into a heavy
-    // interview workflow.
-    if (placeholderOnly && classification === 'execution') ctx.deepInterviewDirective = true;
+    // deep-interview directive: fire on execution intent when EITHER the AC are
+    // still placeholder-only OR the work carries a heavy risk signal (ac-3 B).
+    // The risk arm is what stops `set-criteria` (which clears placeholderOnly)
+    // from silently dropping the heavy nudge for high-risk work. The execution
+    // conjunction is preserved (§2#3: do not auto-promote small/question prompts).
+    const riskSignal =
+      hasHeavyRiskSignal(item) || (await intentHasRiskSignal(input.repoRoot, item.id));
+    if ((placeholderOnly || riskSignal) && classification === 'execution')
+      ctx.deepInterviewDirective = true;
   }
   // §AC-5 QuestionGate advisory: question-shaped + code-locatable surface
   // mention → hint to self-answer first. Independent of work item state.

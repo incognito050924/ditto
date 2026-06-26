@@ -97,6 +97,20 @@ export const riskNote = z
   })
   .describe('Outstanding risk that did not block completion but remains relevant');
 
+// ac-3 (wi_260626wnv): a work item's own declared risk axis. Same vocabulary as
+// gates.ts RiskAxes / the deep-interview risk axis (non_local/irreversible/
+// unaudited) — do NOT invent new names. Drives the risk-driven heavy nudge
+// (user-prompt-submit) and the lightweight-close override gate (work done) when
+// no intent.json was ever produced. Each flag is optional so a partial
+// declaration (`--risk irreversible`) records only what was asserted.
+export const declaredRisk = z
+  .object({
+    non_local: z.boolean().optional(),
+    irreversible: z.boolean().optional(),
+    unaudited: z.boolean().optional(),
+  })
+  .describe('Work-item-declared risk flags (gates.ts RiskAxes vocabulary)');
+
 export const reEntry = z
   .object({
     command: z.string().optional().describe('Concrete next command to resume work'),
@@ -136,6 +150,18 @@ export const workItem = z
       .boolean()
       .optional()
       .describe('Allow closing on completion.json alone without going through autopilot'),
+    // ac-3 (wi_260626wnv): the work item's own declared risk axis. Additive +
+    // OPTIONAL: a legacy work-item.json omits it and parses unchanged; no
+    // schema_version bump (same idiom as autopilot_exempt).
+    declared_risk: declaredRisk.optional(),
+    // ac-3 (wi_260626wnv): set by `work promote` to mark a lightweight WI for the
+    // heavy (deep-interview) path in place — no abandon+recreate. Keeps the
+    // risk-driven heavy nudge firing after the placeholder was replaced by real
+    // criteria. Additive + OPTIONAL; no schema_version bump.
+    promoted_to_heavy: z
+      .boolean()
+      .optional()
+      .describe('Marked for the heavy (deep-interview) path via `work promote`'),
     risks: z.array(riskNote).default([]),
     re_entry: reEntry.optional(),
     runs: z.array(runId).default([]),
@@ -179,6 +205,7 @@ export const workItem = z
   .describe('Authoritative state for a single DITTO work item');
 
 export type WorkItem = z.infer<typeof workItem>;
+export type DeclaredRisk = z.infer<typeof declaredRisk>;
 export type AcceptanceCriterion = z.infer<typeof acceptanceCriterion>;
 export type AcOracle = z.infer<typeof acOracle>;
 export type ReEntry = z.infer<typeof reEntry>;

@@ -18397,6 +18397,11 @@ var riskNote = exports_external.object({
   severity: exports_external.enum(["info", "low", "medium", "high", "critical"]).default("low"),
   mitigation: exports_external.string().optional()
 }).describe("Outstanding risk that did not block completion but remains relevant");
+var declaredRisk = exports_external.object({
+  non_local: exports_external.boolean().optional(),
+  irreversible: exports_external.boolean().optional(),
+  unaudited: exports_external.boolean().optional()
+}).describe("Work-item-declared risk flags (gates.ts RiskAxes vocabulary)");
 var reEntry = exports_external.object({
   command: exports_external.string().optional().describe("Concrete next command to resume work"),
   fresh_evidence_needed: exports_external.array(exports_external.string()).default([]).describe("What new evidence must be gathered before the next attempt"),
@@ -18415,6 +18420,8 @@ var workItem = exports_external.object({
   child_ids: exports_external.array(workItemId).default([]),
   changed_files: exports_external.array(relativePath).default([]),
   autopilot_exempt: exports_external.boolean().optional().describe("Allow closing on completion.json alone without going through autopilot"),
+  declared_risk: declaredRisk.optional(),
+  promoted_to_heavy: exports_external.boolean().optional().describe("Marked for the heavy (deep-interview) path via `work promote`"),
   risks: exports_external.array(riskNote).default([]),
   re_entry: reEntry.optional(),
   runs: exports_external.array(runId).default([]),
@@ -18499,6 +18506,7 @@ class WorkItemStore {
       status: "draft",
       owner_profile: input.owner_profile ?? "workspace-write",
       ...input.parent_id !== undefined ? { parent_id: input.parent_id } : {},
+      ...input.declared_risk !== undefined ? { declared_risk: input.declared_risk } : {},
       child_ids: [],
       changed_files: [],
       risks: [],
@@ -36077,6 +36085,21 @@ function allAcceptancePlaceholders(item) {
     return false;
   return item.acceptance_criteria.every((ac) => ac.statement === PLACEHOLDER_AC_STATEMENT);
 }
+function hasHeavyRiskSignal(item) {
+  const r3 = item.declared_risk;
+  const declared = !!r3 && (r3.non_local === true || r3.irreversible === true || r3.unaudited === true);
+  return declared || item.promoted_to_heavy === true;
+}
+async function intentHasRiskSignal(repoRoot, workItemId2) {
+  try {
+    const intents = new IntentStore(repoRoot);
+    if (!await intents.exists(workItemId2))
+      return false;
+    return (await intents.get(workItemId2)).unknowns.length > 0;
+  } catch {
+    return false;
+  }
+}
 function pendingHandoffHint(item) {
   return item.re_entry?.command;
 }
@@ -36128,7 +36151,8 @@ var userPromptSubmitHandler = async (input) => {
     const placeholderOnly = allAcceptancePlaceholders(item);
     if (placeholderOnly)
       ctx.placeholderAcceptanceCriteria = true;
-    if (placeholderOnly && classification === "execution")
+    const riskSignal = hasHeavyRiskSignal(item) || await intentHasRiskSignal(input.repoRoot, item.id);
+    if ((placeholderOnly || riskSignal) && classification === "execution")
       ctx.deepInterviewDirective = true;
   }
   if (classification === "question" && looksCodebaseAnswerable(prompt2)) {
@@ -41605,6 +41629,23 @@ init_common();
 function parseCriteriaStatements(raw) {
   return raw.split(";").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
 }
+var RISK_FLAGS = ["non_local", "irreversible", "unaudited"];
+function parseRiskFlags(raw) {
+  const tokens2 = raw.split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+  const unknown = [];
+  const risk = {};
+  for (const t2 of tokens2) {
+    if (RISK_FLAGS.includes(t2))
+      risk[t2] = true;
+    else
+      unknown.push(t2);
+  }
+  return { risk: Object.keys(risk).length > 0 ? risk : undefined, unknown };
+}
+function hasDeclaredRisk(item) {
+  const r3 = item.declared_risk;
+  return !!r3 && (r3.non_local === true || r3.irreversible === true || r3.unaudited === true);
+}
 function rejectNonObservableCriteria(statements) {
   const errors3 = [];
   statements.forEach((statement, i2) => {
@@ -41669,6 +41710,11 @@ var workStart = defineCommand({
       description: "Real observable acceptance criteria, semicolon-separated \u2014 set at creation instead of the placeholder",
       required: false
     },
+    risk: {
+      type: "string",
+      description: "Declared risk flags, comma-separated: non_local,irreversible,unaudited (drives the heavy-path nudge + lightweight-close override gate)",
+      required: false
+    },
     profile: {
       type: "string",
       description: "Owner profile: read-only|workspace-write|networked|reviewer|isolated",
@@ -41702,6 +41748,16 @@ var workStart = defineCommand({
         return;
       }
     }
+    let declared_risk;
+    if (args.risk !== undefined) {
+      const parsed = parseRiskFlags(args.risk);
+      if (parsed.unknown.length > 0) {
+        writeError(`--risk has unknown flag(s) ${parsed.unknown.join(", ")}; allowed: ${RISK_FLAGS.join(", ")}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      declared_risk = parsed.risk;
+    }
     const acceptance_criteria = realStatements.length > 0 ? realStatements.map((statement, i2) => ({
       id: `ac-${i2 + 1}`,
       statement,
@@ -41721,7 +41777,8 @@ var workStart = defineCommand({
         source_request: args.request,
         goal: args.goal,
         owner_profile: profile,
-        acceptance_criteria
+        acceptance_criteria,
+        ...declared_risk !== undefined ? { declared_risk } : {}
       });
       if (format === "json") {
         writeJson2({
@@ -41771,6 +41828,11 @@ var workSetCriteria = defineCommand({
       description: "Why the graded criteria are being replaced (required with --supersede)",
       required: false
     },
+    risk: {
+      type: "string",
+      description: "Declared risk flags, comma-separated: non_local,irreversible,unaudited (recorded on the work item)",
+      required: false
+    },
     output: { type: "string", description: "Output format: human|json", default: "human" }
   },
   run: async ({ args }) => {
@@ -41800,6 +41862,16 @@ var workSetCriteria = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
+    let declared_risk;
+    if (args.risk !== undefined) {
+      const parsed = parseRiskFlags(args.risk);
+      if (parsed.unknown.length > 0) {
+        writeError(`--risk has unknown flag(s) ${parsed.unknown.join(", ")}; allowed: ${RISK_FLAGS.join(", ")}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      declared_risk = parsed.risk;
+    }
     const repoRoot = await resolveRepoRootForCreate();
     const store = new WorkItemStore(repoRoot);
     try {
@@ -41813,7 +41885,8 @@ var workSetCriteria = defineCommand({
       const nextCriteria = buildCriteria(statements, current.acceptance_criteria, supersede ? args.reason : undefined);
       const updated = await store.update(args.workId, (cur) => ({
         ...cur,
-        acceptance_criteria: nextCriteria
+        acceptance_criteria: nextCriteria,
+        ...declared_risk !== undefined ? { declared_risk } : {}
       }));
       if (format === "json") {
         writeJson2({
@@ -42054,6 +42127,16 @@ var workDone = defineCommand({
       description: "Semicolon-separated evidence still needed before resuming \u2192 re_entry.fresh_evidence_needed (with --status)",
       required: false
     },
+    "override-heavy": {
+      type: "boolean",
+      description: "Allow the lightweight close on a declared-risk WI without going through the heavy (deep-interview) path. Requires --reason; the reason is recorded as an auditable risk note.",
+      default: false
+    },
+    reason: {
+      type: "string",
+      description: "Why a lightweight close is acceptable for a declared-risk WI (with --override-heavy)",
+      required: false
+    },
     output: { type: "string", description: "Output format: human|json", default: "human" }
   },
   run: async ({ args }) => {
@@ -42110,6 +42193,29 @@ var workDone = defineCommand({
           process.exit(USAGE_ERROR_EXIT);
           return;
         }
+        if (hasDeclaredRisk(item) && !await new IntentStore(repoRoot).exists(args.workId)) {
+          const overrideHeavy = args["override-heavy"] === true;
+          if (!overrideHeavy) {
+            writeError(`work ${args.workId} declares risk (${RISK_FLAGS.filter((f3) => item.declared_risk?.[f3] === true).join(", ")}) but has no intent.json \u2014 the lightweight close skips the heavy review. Run /ditto:deep-interview (or \`ditto work promote ${args.workId}\`), or override with \`ditto work done ${args.workId} --override-heavy --reason "<why light is acceptable>"\`.`);
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          if (!args.reason) {
+            writeError('--override-heavy requires --reason "<why a lightweight close is acceptable for this declared-risk WI>"');
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          await store.update(args.workId, (cur) => ({
+            ...cur,
+            risks: [
+              ...cur.risks,
+              {
+                description: `lightweight-close override (declared_risk present): ${args.reason}`,
+                severity: "medium"
+              }
+            ]
+          }));
+        }
         const synthesized = assembleCompletionFromWorkItem(item, {
           declaredBy: "main",
           summary: `Closed via lightweight completion path (ditto verify evidence) for ${args.workId}.`
@@ -42141,6 +42247,47 @@ var workDone = defineCommand({
       }
     } catch (err) {
       writeError(`work done failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
+var workPromote = defineCommand({
+  meta: {
+    name: "promote",
+    description: "Upgrade a lightweight work item to the heavy (deep-interview) path IN PLACE \u2014 preserves the existing criteria, verdicts, evidence, and the WI id (no abandon+recreate)"
+  },
+  args: {
+    workId: { type: "positional", description: "Work item id to promote", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const promoted = await store.update(args.workId, (cur) => ({
+        ...cur,
+        promoted_to_heavy: true
+      }));
+      if (format === "json") {
+        writeJson2({
+          work_item_id: promoted.id,
+          promoted_to_heavy: promoted.promoted_to_heavy === true,
+          acceptance_criteria: promoted.acceptance_criteria.map((c3) => c3.id)
+        });
+      } else {
+        writeHuman(`Promoted ${promoted.id} to the heavy path (criteria + id preserved).`);
+        writeHuman("Next: /ditto:deep-interview to deepen the existing criteria.");
+      }
+    } catch (err) {
+      writeError(`work promote failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(USAGE_ERROR_EXIT);
     }
   }
@@ -42207,7 +42354,7 @@ var workArchive = defineCommand({
 var workCommand = defineCommand({
   meta: {
     name: "work",
-    description: "Manage work items (start, status, handoff, done, abandon, archive)"
+    description: "Manage work items (start, status, handoff, done, abandon, promote, archive)"
   },
   subCommands: {
     start: workStart,
@@ -42216,6 +42363,7 @@ var workCommand = defineCommand({
     handoff: workHandoff,
     done: workDone,
     abandon: workAbandon,
+    promote: workPromote,
     archive: workArchive
   }
 });
@@ -42267,4 +42415,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=7efdbf5de36e2fbf2f4a0582985aa6fa86134dde085d2c09177e502b2d138e9a
+//# ditto-src-stamp=f84f38897fba1c503d37407ac05b35ede97187e01ca0f3654aa7817de595fedc

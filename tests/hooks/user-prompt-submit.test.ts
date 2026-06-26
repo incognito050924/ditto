@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HandoffStore, buildHandoff } from '~/core/handoff-store';
+import { IntentStore } from '~/core/intent-store';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
@@ -341,6 +342,83 @@ describe('userPromptSubmitHandler', () => {
       await new SessionPointerStore(repo).set('sess-dir-4', created.id);
       const out = await run({ session_id: 'sess-dir-4', prompt: 'what is the goal?' });
       expect(additionalContext(out.stdout)).not.toContain('Run /ditto:deep-interview now');
+    });
+  });
+
+  // ac-3 B (wi_260626wnv) — the heavy nudge is RISK-driven, not placeholder-string
+  // driven. Replacing the placeholder with real criteria must NOT silently lose the
+  // heavy-path nudge for high-risk work: a declared_risk flag (or a `work promote`
+  // marker, or non-empty intent unknowns) keeps it firing under execution intent.
+  describe('ac-3 B risk-driven deep-interview directive', () => {
+    async function seedRealCriteria(
+      sessionId: string,
+      extra: Partial<Parameters<WorkItemStore['create']>[0]> = {},
+    ): Promise<string> {
+      const items = new WorkItemStore(repo);
+      const created = await items.create({
+        title: 'real-risk',
+        source_request: 'r',
+        goal: 'r',
+        acceptance_criteria: [
+          { id: 'ac-1', statement: 'the command returns 0', verdict: 'unverified', evidence: [] },
+        ],
+        ...extra,
+      });
+      await new SessionPointerStore(repo).set(sessionId, created.id);
+      return created.id;
+    }
+
+    test('real criteria (placeholder replaced) + declared risk + execution → STILL nudges heavy', async () => {
+      // The KEY invariant: set-criteria replaced the placeholder (placeholderOnly=false),
+      // but a declared_risk flag keeps the heavy nudge alive.
+      await seedRealCriteria('sess-risk-1', { declared_risk: { irreversible: true } });
+      const out = await run({ session_id: 'sess-risk-1', prompt: 'implement the migration' });
+      expect(additionalContext(out.stdout)).toContain('Run /ditto:deep-interview now');
+    });
+
+    test('real criteria + declared risk + QUESTION prompt → directive NOT injected (conjunction preserved)', async () => {
+      await seedRealCriteria('sess-risk-2', { declared_risk: { irreversible: true } });
+      const out = await run({ session_id: 'sess-risk-2', prompt: 'what does the migration do?' });
+      expect(additionalContext(out.stdout)).not.toContain('Run /ditto:deep-interview now');
+    });
+
+    test('real criteria, NO risk + execution → directive NOT injected (no false heavy)', async () => {
+      await seedRealCriteria('sess-risk-3');
+      const out = await run({ session_id: 'sess-risk-3', prompt: 'implement the endpoint' });
+      expect(additionalContext(out.stdout)).not.toContain('Run /ditto:deep-interview now');
+    });
+
+    test('promoted_to_heavy marker + real criteria + execution → nudges heavy', async () => {
+      const id = await seedRealCriteria('sess-risk-4');
+      await new WorkItemStore(repo).update(id, (cur) => ({ ...cur, promoted_to_heavy: true }));
+      const out = await run({ session_id: 'sess-risk-4', prompt: 'continue the work' });
+      expect(additionalContext(out.stdout)).toContain('Run /ditto:deep-interview now');
+    });
+
+    test('intent.json with non-empty unknowns + real criteria + execution → nudges heavy', async () => {
+      const id = await seedRealCriteria('sess-risk-5');
+      await new IntentStore(repo).write({
+        schema_version: '0.1.0',
+        work_item_id: id,
+        source_request: 'r',
+        goal: 'g',
+        in_scope: [],
+        out_of_scope: [],
+        acceptance_criteria: [
+          {
+            id: 'ac-1',
+            statement: 'the command returns 0',
+            verdict: 'unverified',
+            evidence: [],
+            evidence_required: [],
+          },
+        ],
+        unknowns: ['which migration order is safe?'],
+        follow_up_candidates: [],
+        question_policy: 'ask_only_if_user_only_can_answer',
+      });
+      const out = await run({ session_id: 'sess-risk-5', prompt: 'continue the work' });
+      expect(additionalContext(out.stdout)).toContain('Run /ditto:deep-interview now');
     });
   });
 

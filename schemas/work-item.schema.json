@@ -238,6 +238,26 @@
           "type": "boolean",
           "description": "Allow closing on completion.json alone without going through autopilot"
         },
+        "declared_risk": {
+          "type": "object",
+          "properties": {
+            "non_local": {
+              "type": "boolean"
+            },
+            "irreversible": {
+              "type": "boolean"
+            },
+            "unaudited": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Work-item-declared risk flags (gates.ts RiskAxes vocabulary)"
+        },
+        "promoted_to_heavy": {
+          "type": "boolean",
+          "description": "Marked for the heavy (deep-interview) path via `work promote`"
+        },
         "risks": {
           "type": "array",
           "items": {
