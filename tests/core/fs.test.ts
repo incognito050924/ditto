@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { join, posix, sep, win32 } from 'node:path';
 import { z } from 'zod';
 import {
   RepoRootNotFoundError,
@@ -9,6 +9,7 @@ import {
   atomicWriteText,
   ensureDir,
   findRepoRoot,
+  isAtOrAboveHome,
   readJson,
   resolveRepoRootForCreate,
   writeJson,
@@ -76,6 +77,27 @@ describe('findRepoRoot', () => {
     expect(found).toBe(workDir);
   });
 
+  // ac-2 (wi_260625x74): walk-up is capped at $HOME. A stray ~/.git (or ~/.ditto)
+  // must NOT widen the session rooting to the whole home tree — when no marker
+  // exists strictly below $HOME the walk-up throws, so resolveRepoRootForCreate
+  // falls back to the caller's cwd (ADR-0011 session-rooting invariant).
+  test('caps walk-up at $HOME: a stray ~/.git does not root the session at home', async () => {
+    const home = join(workDir, 'home');
+    await ensureDir(join(home, '.git')); // stray marker at the home dir
+    const start = join(home, 'projects', 'app'); // no marker below home
+    await ensureDir(start);
+    await expect(findRepoRoot(start, home)).rejects.toBeInstanceOf(RepoRootNotFoundError);
+  });
+
+  test('still finds a marker that sits strictly below $HOME (no regression)', async () => {
+    const home = join(workDir, 'home');
+    const repo = join(home, 'projects', 'app');
+    await ensureDir(join(repo, '.ditto')); // marker below home
+    const start = join(repo, 'src', 'deep');
+    await ensureDir(start);
+    expect(await findRepoRoot(start, home)).toBe(repo);
+  });
+
   test('throws when neither .ditto nor .git found upward', async () => {
     // workDir is under tmpdir which has no .ditto/.git ancestors typically.
     // To be robust we assert error type and that message names the start dir.
@@ -104,6 +126,16 @@ describe('resolveRepoRootForCreate', () => {
     // The contract: if findRepoRoot throws, fall back to start. We assert the
     // returned path resolves to one of these two.
     expect(r === workDir || r.length < workDir.length).toBe(true);
+  });
+
+  // ac-2 (wi_260625x74): the $HOME cap flows through — when only ~/.git exists,
+  // resolveRepoRootForCreate falls back to the caller's cwd, NOT home.
+  test('falls back to the start cwd instead of rooting at $HOME', async () => {
+    const home = join(workDir, 'home');
+    await ensureDir(join(home, '.git'));
+    const start = join(home, 'projects', 'app');
+    await ensureDir(start);
+    expect(await resolveRepoRootForCreate(start, home)).toBe(start);
   });
 });
 
@@ -176,6 +208,42 @@ describe('writeJson + readJson round trip', () => {
     const path = join(workDir, 'notjson.json');
     await atomicWriteText(path, 'this is not json');
     await expect(readJson(path, tinySchema)).rejects.toBeInstanceOf(SchemaValidationError);
+  });
+});
+
+// wi_260625x74 n4 (f1): the $HOME walk-up cap must not mis-fire on Windows
+// cross-drive layouts. When the repo is on D: and $HOME on C:, `relative()` cannot
+// relativize across drives and returns an ABSOLUTE path; that must NOT be read as
+// "at/above home" (which would stop the walk-up at the first iteration and lose the
+// repo's marker). path.win32 lets us assert this on any OS.
+describe('isAtOrAboveHome (walk-up cap, cross-platform)', () => {
+  test('Windows cross-drive (D: repo vs C: home) does NOT stop the walk-up', () => {
+    const rel = win32.relative('D:\\proj', 'C:\\Users\\x');
+    expect(win32.isAbsolute(rel)).toBe(true); // cross-drive cannot be relativized
+    expect(isAtOrAboveHome(rel, win32.isAbsolute)).toBe(false);
+  });
+
+  test('current === home stops the walk-up', () => {
+    expect(isAtOrAboveHome(win32.relative('C:\\Users\\x', 'C:\\Users\\x'), win32.isAbsolute)).toBe(
+      true,
+    );
+    expect(isAtOrAboveHome(posix.relative('/home/x', '/home/x'), posix.isAbsolute)).toBe(true);
+  });
+
+  test('current is an ancestor of home stops the walk-up', () => {
+    expect(isAtOrAboveHome(win32.relative('C:\\Users', 'C:\\Users\\x'), win32.isAbsolute)).toBe(
+      true,
+    );
+    expect(isAtOrAboveHome(posix.relative('/home', '/home/x'), posix.isAbsolute)).toBe(true);
+  });
+
+  test('current strictly below home does NOT stop (marker search continues)', () => {
+    expect(
+      isAtOrAboveHome(win32.relative('C:\\Users\\x\\proj', 'C:\\Users\\x'), win32.isAbsolute),
+    ).toBe(false);
+    expect(isAtOrAboveHome(posix.relative('/home/x/proj', '/home/x'), posix.isAbsolute)).toBe(
+      false,
+    );
   });
 });
 

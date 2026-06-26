@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import { mkdir, readFile, readdir, rmdir, unlink, writeFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { mkdir, readFile, readdir, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { join, relative, sep } from 'node:path';
 import type { WorkItemWorktree } from '~/schemas/work-item';
 import { localDir } from './ditto-paths';
 import { ensureDir } from './fs';
@@ -31,6 +31,17 @@ export async function createWorktreeForRun(
 const RUN_WORKTREE_PREFIX = '.ditto/local/worktrees/';
 
 /**
+ * Rewrite OS path separators to forward slashes so a repo-relative path can be
+ * matched against the forward-slash `RUN_WORKTREE_PREFIX`. On Windows `relative()`
+ * yields backslashes, so without this the prefix test never matches and cleanup is
+ * silently disabled (wi_260625x74 n4 f2). `fromSep` is injectable for per-platform
+ * testing; it defaults to the running platform's separator.
+ */
+export function toPosixSeparators(p: string, fromSep: string = sep): string {
+  return p.split(fromSep).join('/');
+}
+
+/**
  * Repo-relative paths of the per-run worktrees DITTO created (`.ditto/local/worktrees/*`),
  * parsed from `git worktree list --porcelain`. Read-only and deterministic — the
  * cleanup planner uses it to know what teardown work exists. Other worktrees
@@ -50,7 +61,7 @@ export function listRunWorktrees(repoRoot: string): string[] {
   for (const line of out.split('\n')) {
     if (!line.startsWith('worktree ')) continue;
     const abs = line.slice('worktree '.length).trim();
-    const rel = relative(root, abs);
+    const rel = toPosixSeparators(relative(root, abs));
     if (rel.startsWith(RUN_WORKTREE_PREFIX)) paths.push(rel);
   }
   return paths;
@@ -129,27 +140,48 @@ async function detectSubRepos(repoRoot: string): Promise<string[]> {
 }
 
 /**
- * Is the recorded lock holder still a live process? Reads the holder PID written
- * inside the lock dir and probes it with signal 0. Returns true (conservative —
- * do NOT reclaim) when the holder cannot be proven dead: no pid file yet (a peer is
- * mid-acquisition between mkdir and the pid write), an unparseable pid, or EPERM
- * (the process exists but is owned by another user). Only an explicit ESRCH ("no
- * such process") is treated as dead.
+ * A holder writes its pid microseconds after `mkdir`, so a lock dir that is still
+ * empty (no pid file) AFTER this grace is a dead-window orphan, not a peer
+ * mid-acquisition. Kept far below the 30s live-holder deadline (wi_260625x74 ac-3).
  */
-async function isLockHolderAlive(lockPath: string): Promise<boolean> {
+const PID_WRITE_GRACE_MS = 2_000;
+
+type LockHolderState =
+  | 'alive' // do NOT reclaim — a live holder or an indistinguishable peer
+  | 'dead-pid' // a pid file naming a provably-dead process → reclaim (unlink+rmdir)
+  | 'empty-stale'; // empty dir older than the grace (mkdir→pid window death) → reclaim (rmdir only)
+
+/**
+ * Classify the lock holder by its pid file and the lock dir's age.
+ *  - pid file present + process probes alive (signalable) or EPERM → 'alive'.
+ *  - pid file present + ESRCH ("no such process") → 'dead-pid'.
+ *  - pid file present but unparseable → 'alive' (conservative).
+ *  - no pid file + dir younger than the grace → 'alive' (peer mid-acquisition).
+ *  - no pid file + dir older than the grace → 'empty-stale' (holder died in the
+ *    mkdir→pid micro-window, leaving an empty dir; ac-3).
+ * Only states other than 'alive' are reclaimable.
+ */
+async function classifyLockHolder(lockPath: string): Promise<LockHolderState> {
   let raw: string;
   try {
     raw = await readFile(join(lockPath, 'pid'), 'utf8');
   } catch {
-    return true; // holder mid-acquisition (pid not written yet) — treat as live
+    // No pid file: distinguish a peer mid-acquisition (young dir) from a holder
+    // that died after mkdir before writing its pid (old dir).
+    try {
+      const age = Date.now() - (await stat(lockPath)).mtimeMs;
+      return age < PID_WRITE_GRACE_MS ? 'alive' : 'empty-stale';
+    } catch {
+      return 'alive'; // cannot stat (raced with a reclaim) — conservative
+    }
   }
   const pid = Number.parseInt(raw.trim(), 10);
-  if (!Number.isInteger(pid) || pid <= 0) return true; // unparseable — conservative
+  if (!Number.isInteger(pid) || pid <= 0) return 'alive'; // unparseable — conservative
   try {
     process.kill(pid, 0);
-    return true; // signalable → alive
+    return 'alive'; // signalable → alive
   } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'EPERM'; // EPERM=alive, ESRCH=dead
+    return (err as NodeJS.ErrnoException).code === 'EPERM' ? 'alive' : 'dead-pid'; // EPERM=alive
   }
 }
 
@@ -160,12 +192,16 @@ async function isLockHolderAlive(lockPath: string): Promise<boolean> {
  * write would otherwise lost-update under concurrency, so both run under one lock.
  *
  * ac-3 (PID-liveness reclaim): the holder writes its `process.pid` into the lock dir
- * immediately after acquiring it. A waiter that hits EEXIST probes that pid; a dead
- * holder (SIGKILL before cleanup left the `.lock` dir orphaned) is reclaimed at once
- * instead of failing closed after the deadline. The deadline still bounds the wait
- * for a *live* holder. Reclaim is unlink(pid)+rmdir (never recursive): if a live peer
- * has already re-acquired and written its pid, the dir is non-empty so rmdir fails and
- * the live lock is never destroyed; mkdir atomicity then admits exactly one winner.
+ * immediately after acquiring it. A waiter that hits EEXIST classifies that lock; a
+ * dead holder (SIGKILL before cleanup left the `.lock` dir orphaned) is reclaimed at
+ * once instead of failing closed after the deadline. The deadline still bounds the
+ * wait for a *live* holder. Two reclaim shapes:
+ *  - 'dead-pid' (pid file names a dead process): unlink(pid)+rmdir.
+ *  - 'empty-stale' (mkdir→pid micro-window death left an EMPTY dir older than the
+ *    grace): rmdir ONLY — no unlink. rmdir is non-recursive, so if a peer has since
+ *    re-acquired and written its pid the dir is non-empty and rmdir fails, leaving the
+ *    live lock intact. Skipping the unlink is what makes this safe: we never delete a
+ *    pid we did not first observe absent. mkdir atomicity then admits one winner.
  */
 async function withWorktreeLock<T>(repoRoot: string, fn: () => Promise<T>): Promise<T> {
   const dir = localDir(repoRoot, 'worktrees');
@@ -182,9 +218,16 @@ async function withWorktreeLock<T>(repoRoot: string, fn: () => Promise<T>): Prom
       break;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
-      if (!(await isLockHolderAlive(lockPath))) {
-        // Holder is provably dead → reclaim the stale lock and retry immediately.
+      const state = await classifyLockHolder(lockPath);
+      if (state === 'dead-pid') {
+        // Holder is provably dead → drop its pid then the dir, and retry at once.
         await unlink(pidPath).catch(() => {});
+        await rmdir(lockPath).catch(() => {});
+        continue;
+      }
+      if (state === 'empty-stale') {
+        // mkdir→pid micro-window orphan: empty dir, no pid to unlink. rmdir-only is
+        // self-guarding against a peer that re-acquired (non-empty dir → rmdir fails).
         await rmdir(lockPath).catch(() => {});
         continue;
       }

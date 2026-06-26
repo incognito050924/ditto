@@ -1,15 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, rmdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, rmdir, unlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
   createWorktreeForWorkItem,
   listRunWorktrees,
   removeWorktreesForWorkItem,
+  toPosixSeparators,
 } from '~/core/worktree';
 
 const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -237,6 +238,44 @@ describe('worktree lock PID-liveness reclaim (ac-3)', () => {
     expect(existsSync(lockPath)).toBe(false);
   });
 
+  // wi_260625x74 ac-3: the mkdir→pid micro-window. A holder that died AFTER mkdir
+  // but BEFORE writing its pid leaves an EMPTY lock dir. Once that dir is older than
+  // the pid-write grace it is provably a dead-window orphan and must be reclaimed
+  // (not waited out to the 30s deadline). rmdir is non-recursive, so a peer that
+  // re-acquired and wrote a pid makes the dir non-empty and survives.
+  test('reclaims a stale EMPTY lock left by the mkdir→pid micro-window', async () => {
+    const lockPath = lockDir(repo);
+    await mkdir(lockPath, { recursive: true }); // empty: holder died before pid write
+    const old = new Date(Date.now() - 60_000); // backdate beyond the pid-write grace
+    await utimes(lockPath, old, old);
+    expect(existsSync(join(lockPath, 'pid'))).toBe(false);
+
+    const t0 = Date.now();
+    const meta = await createWorktreeForWorkItem(repo, WI);
+    expect(Date.now() - t0).toBeLessThan(5000); // reclaimed, not deadline-waited
+    expect(meta).toHaveLength(1);
+    expect(existsSync(lockPath)).toBe(false); // lock released after the op
+  });
+
+  test('does NOT immediately reclaim a YOUNG empty lock (mid-acquisition window)', async () => {
+    const lockPath = lockDir(repo);
+    await mkdir(lockPath, { recursive: true }); // empty + fresh: a peer just did mkdir
+    let settled = false;
+    const op = createWorktreeForWorkItem(repo, WI).then((r) => {
+      settled = true;
+      return r;
+    });
+    await delay(200); // well under the pid-write grace
+    expect(settled).toBe(false); // treated as mid-acquisition, not reclaimed
+    expect(existsSync(lockPath)).toBe(true);
+
+    // release the empty lock → the waiting op acquires and completes
+    await rmdir(lockPath).catch(() => {});
+    const meta = await op;
+    expect(settled).toBe(true);
+    expect(meta).toHaveLength(1);
+  });
+
   test('does not reclaim a live holder lock', async () => {
     const lockPath = lockDir(repo);
     await mkdir(lockPath, { recursive: true });
@@ -359,4 +398,26 @@ describe('cross-process worktree concurrency (ac-1)', () => {
       await rm(scriptDir, { recursive: true, force: true });
     }
   }, 30_000);
+});
+
+// wi_260625x74 n4 (f2): on Windows `relative()` yields backslash separators, so a raw
+// `rel.startsWith('.ditto/local/worktrees/')` (forward-slash prefix) never matches and
+// listRunWorktrees returns [], silently disabling cleanup. The rel is normalized to
+// posix separators before the prefix test. path.win32 lets us assert this on any OS.
+describe('toPosixSeparators (listRunWorktrees Windows separator)', () => {
+  const PREFIX = '.ditto/local/worktrees/';
+
+  test('Windows backslash rel normalizes and matches the forward-slash prefix', () => {
+    const rel = win32.relative('D:\\repo', 'D:\\repo\\.ditto\\local\\worktrees\\run_x');
+    expect(rel).toBe('.ditto\\local\\worktrees\\run_x'); // backslash on Windows
+    const norm = toPosixSeparators(rel, win32.sep);
+    expect(norm).toBe('.ditto/local/worktrees/run_x');
+    expect(norm.startsWith(PREFIX)).toBe(true);
+  });
+
+  test('POSIX rel is unchanged (no regression)', () => {
+    expect(toPosixSeparators('.ditto/local/worktrees/run_x', '/')).toBe(
+      '.ditto/local/worktrees/run_x',
+    );
+  });
 });

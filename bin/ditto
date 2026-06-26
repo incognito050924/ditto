@@ -12828,13 +12828,20 @@ var init_ditto_paths = () => {};
 // src/core/fs.ts
 import { randomBytes } from "crypto";
 import { mkdir, rename, unlink, writeFile } from "fs/promises";
-import { dirname as dirname2, extname, join as join6, parse as parse2, resolve as resolve2 } from "path";
-async function findRepoRoot(start = process.cwd()) {
+import { homedir as homedir3 } from "os";
+import { dirname as dirname2, extname, isAbsolute, join as join6, parse as parse2, relative, resolve as resolve2 } from "path";
+function isAtOrAboveHome(rel, isAbs = isAbsolute) {
+  return rel === "" || !rel.startsWith("..") && !isAbs(rel);
+}
+async function findRepoRoot(start = process.cwd(), homeDir = homedir3()) {
   const resolved = resolve2(start);
   let current = resolved;
   let firstGitMatch = null;
   const root = parse2(current).root;
+  const home = resolve2(homeDir);
   while (true) {
+    if (isAtOrAboveHome(relative(current, home)))
+      break;
     if (await fileExists(join6(current, ".ditto")))
       return current;
     if (firstGitMatch === null && await fileExists(join6(current, ".git"))) {
@@ -12848,9 +12855,9 @@ async function findRepoRoot(start = process.cwd()) {
     return firstGitMatch;
   throw new RepoRootNotFoundError(resolved);
 }
-async function resolveRepoRootForCreate(start = process.cwd()) {
+async function resolveRepoRootForCreate(start = process.cwd(), homeDir = homedir3()) {
   try {
-    return await findRepoRoot(start);
+    return await findRepoRoot(start, homeDir);
   } catch {
     return resolve2(start);
   }
@@ -13342,7 +13349,7 @@ var init_memory_store = __esm(() => {
 
 // src/core/memory-scan.ts
 import { readdir as readdir11 } from "fs/promises";
-import { isAbsolute, join as join26, relative as relative5, resolve as resolve3, sep as sep2 } from "path";
+import { isAbsolute as isAbsolute2, join as join26, relative as relative6, resolve as resolve3, sep as sep3 } from "path";
 function classifyType(name) {
   const dot = name.lastIndexOf(".");
   if (dot < 0)
@@ -13374,7 +13381,7 @@ async function findOwningRepo(absPath, rootingRoot) {
     const parent = resolve3(current, "..");
     if (parent === current)
       return null;
-    if (!resolve3(current).startsWith(root + sep2) && resolve3(current) !== root)
+    if (!resolve3(current).startsWith(root + sep3) && resolve3(current) !== root)
       return null;
     current = parent;
   }
@@ -13406,7 +13413,7 @@ async function walkFiles(root, maxDepth = 12) {
 }
 async function scanSources(repoRoot, options = {}) {
   const root = resolve3(repoRoot);
-  const sourceRoot = resolve3(options.sourceRoot && isAbsolute(options.sourceRoot) ? options.sourceRoot : join26(root, options.sourceRoot ?? "."));
+  const sourceRoot = resolve3(options.sourceRoot && isAbsolute2(options.sourceRoot) ? options.sourceRoot : join26(root, options.sourceRoot ?? "."));
   const now = (options.now ?? new Date).toISOString();
   const store = new MemorySourceStore(root);
   const existing = new Map;
@@ -13421,8 +13428,8 @@ async function scanSources(repoRoot, options = {}) {
   const changed = [];
   const unchanged = [];
   for (const abs of files) {
-    const repoRelative = relative5(root, abs);
-    if (repoRelative.startsWith("..") || isAbsolute(repoRelative))
+    const repoRelative = relative6(root, abs);
+    if (repoRelative.startsWith("..") || isAbsolute2(repoRelative))
       continue;
     const sourceType = classifyType(abs);
     if (sourceType === undefined)
@@ -13453,7 +13460,7 @@ async function scanSources(repoRoot, options = {}) {
       revision,
       sensitivity: prior?.sensitivity ?? "internal",
       word_count: content.split(/\s+/).filter((w2) => w2.length > 0).length,
-      ...isOwnRoot ? {} : { repo: relative5(root, owningRepo) },
+      ...isOwnRoot ? {} : { repo: relative6(root, owningRepo) },
       ...head ? { git_commit: head } : {}
     };
     let status;
@@ -13554,8 +13561,8 @@ var init_cleanup_index = __esm(() => {
 });
 
 // src/core/cleanup-store.ts
-import { mkdir as mkdir5, rename as rename4, stat as stat4 } from "fs/promises";
-import { isAbsolute as isAbsolute4, join as join48, relative as relative10, resolve as resolve8 } from "path";
+import { mkdir as mkdir5, rename as rename4, stat as stat5 } from "fs/promises";
+import { isAbsolute as isAbsolute5, join as join48, relative as relative11, resolve as resolve8 } from "path";
 function isProtectedBasename(base) {
   if (base === "CLAUDE.md" || base === "AGENTS.md")
     return true;
@@ -13579,7 +13586,7 @@ function runStamp(now) {
   return `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}` + `-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
 }
 function toRepoRel(repoRoot, absPath) {
-  return relative10(repoRoot, absPath).replace(/\\/g, "/");
+  return relative11(repoRoot, absPath).replace(/\\/g, "/");
 }
 
 class CleanupStore {
@@ -13629,7 +13636,7 @@ class CleanupStore {
   async stageDoc(runId2, input) {
     const abs = resolve8(input.absPath);
     const repoRel = toRepoRel(this.repoRoot, abs);
-    if (repoRel.startsWith("..") || isAbsolute4(repoRel)) {
+    if (repoRel.startsWith("..") || isAbsolute5(repoRel)) {
       throw new Error(`doc must live under repoRoot: ${input.absPath}`);
     }
     if (isProtectedPath(repoRel))
@@ -13675,7 +13682,7 @@ class CleanupStore {
   }
   async exists(runId2) {
     try {
-      await stat4(this.runDir(runId2));
+      await stat5(this.runDir(runId2));
       return true;
     } catch {
       return false;
@@ -13706,8 +13713,8 @@ var init_cleanup_store = __esm(() => {
 
 // src/core/cleanup-archive.ts
 import { execFileSync as execFileSync3 } from "child_process";
-import { mkdir as mkdir6, rm, stat as stat6 } from "fs/promises";
-import { dirname as dirname10, isAbsolute as isAbsolute7, join as join51, resolve as resolve10 } from "path";
+import { mkdir as mkdir6, rm, stat as stat7 } from "fs/promises";
+import { dirname as dirname10, isAbsolute as isAbsolute8, join as join51, resolve as resolve10 } from "path";
 function runDir(repoRoot, runId2) {
   return localDir(repoRoot, "cleanup", runId2);
 }
@@ -13716,7 +13723,7 @@ function archiveZipPath(repoRoot, runId2) {
 }
 async function assertRunExists(repoRoot, runId2) {
   try {
-    const s2 = await stat6(runDir(repoRoot, runId2));
+    const s2 = await stat7(runDir(repoRoot, runId2));
     if (!s2.isDirectory())
       throw new CleanupRunMissingError(runId2);
   } catch (err) {
@@ -13758,7 +13765,7 @@ async function deleteRun(repoRoot, runId2, confirm) {
 function subRepoAbs(repoRoot, owningRepo) {
   if (owningRepo === null || owningRepo === ".")
     return resolve10(repoRoot);
-  return isAbsolute7(owningRepo) ? owningRepo : join51(repoRoot, owningRepo);
+  return isAbsolute8(owningRepo) ? owningRepo : join51(repoRoot, owningRepo);
 }
 function unrelatedDirt(cwd, allowed) {
   let status = "";
@@ -16072,7 +16079,7 @@ import { join as join11 } from "path";
 
 // src/acg/architecture/propose.ts
 import { readdir as readdir2 } from "fs/promises";
-import { join as join7, relative } from "path";
+import { join as join7, relative as relative2 } from "path";
 
 // src/schemas/acg-architecture-spec.ts
 init_zod();
@@ -16129,7 +16136,7 @@ async function walkTsFiles(repoRoot, dir, acc) {
     if (e2.isDirectory())
       await walkTsFiles(repoRoot, full, acc);
     else if (/\.[cm]?tsx?$/.test(e2.name) && !/\.(test|spec)\./.test(e2.name))
-      acc.push(relative(repoRoot, full));
+      acc.push(relative2(repoRoot, full));
   }
 }
 async function observeArchitecture(repoRoot, sourceRoot, edgeAnalyzer) {
@@ -16758,7 +16765,7 @@ class CodeqlEdgeAnalyzer {
 
 // src/acg/internal-packages.ts
 import { readdir as readdir3 } from "fs/promises";
-import { join as join10, relative as relative2 } from "path";
+import { join as join10, relative as relative3 } from "path";
 
 // src/acg/boundary/boundary.ts
 function globToRegExp(glob) {
@@ -16889,7 +16896,7 @@ async function scanLocalJars(root, maxDepth = 6) {
         if (!SKIP_DIRS.has(e2.name))
           await walk(full, depth + 1);
       } else if (e2.isFile() && e2.name.endsWith(".jar")) {
-        out.push(relative2(root, full));
+        out.push(relative3(root, full));
       }
     }
   }
@@ -18730,8 +18737,8 @@ init_ditto_paths();
 init_fs();
 import { execFileSync as execFileSync2 } from "child_process";
 import { realpathSync } from "fs";
-import { mkdir as mkdir2, readFile, readdir as readdir5, rmdir, unlink as unlink2, writeFile as writeFile2 } from "fs/promises";
-import { join as join14, relative as relative3 } from "path";
+import { mkdir as mkdir2, readFile, readdir as readdir5, rmdir, stat as stat3, unlink as unlink2, writeFile as writeFile2 } from "fs/promises";
+import { join as join14, relative as relative4, sep as sep2 } from "path";
 
 // src/core/git.ts
 import { execFileSync } from "child_process";
@@ -18832,6 +18839,9 @@ async function createWorktreeForRun(repoRoot, runId2) {
   return { absolutePath, relativePath: relativePath2 };
 }
 var RUN_WORKTREE_PREFIX = ".ditto/local/worktrees/";
+function toPosixSeparators(p, fromSep = sep2) {
+  return p.split(fromSep).join("/");
+}
 function listRunWorktrees(repoRoot) {
   const out = execFileSync2("git", ["worktree", "list", "--porcelain"], {
     cwd: repoRoot,
@@ -18845,7 +18855,7 @@ function listRunWorktrees(repoRoot) {
     if (!line.startsWith("worktree "))
       continue;
     const abs = line.slice("worktree ".length).trim();
-    const rel = relative3(root, abs);
+    const rel = toPosixSeparators(relative4(root, abs));
     if (rel.startsWith(RUN_WORKTREE_PREFIX))
       paths.push(rel);
   }
@@ -18894,21 +18904,27 @@ async function detectSubRepos(repoRoot) {
   }
   return subs.sort();
 }
-async function isLockHolderAlive(lockPath) {
+var PID_WRITE_GRACE_MS = 2000;
+async function classifyLockHolder(lockPath) {
   let raw;
   try {
     raw = await readFile(join14(lockPath, "pid"), "utf8");
   } catch {
-    return true;
+    try {
+      const age = Date.now() - (await stat3(lockPath)).mtimeMs;
+      return age < PID_WRITE_GRACE_MS ? "alive" : "empty-stale";
+    } catch {
+      return "alive";
+    }
   }
   const pid = Number.parseInt(raw.trim(), 10);
   if (!Number.isInteger(pid) || pid <= 0)
-    return true;
+    return "alive";
   try {
     process.kill(pid, 0);
-    return true;
+    return "alive";
   } catch (err) {
-    return err.code === "EPERM";
+    return err.code === "EPERM" ? "alive" : "dead-pid";
   }
 }
 async function withWorktreeLock(repoRoot, fn) {
@@ -18926,8 +18942,13 @@ async function withWorktreeLock(repoRoot, fn) {
     } catch (err) {
       if (err.code !== "EEXIST")
         throw err;
-      if (!await isLockHolderAlive(lockPath)) {
+      const state = await classifyLockHolder(lockPath);
+      if (state === "dead-pid") {
         await unlink2(pidPath).catch(() => {});
+        await rmdir(lockPath).catch(() => {});
+        continue;
+      }
+      if (state === "empty-stale") {
         await rmdir(lockPath).catch(() => {});
         continue;
       }
@@ -19528,8 +19549,8 @@ function isCodePath(path) {
     return false;
   return CODE_EXTENSIONS.has(path.slice(dot).toLowerCase());
 }
-function classifyTidyEntry(stat3, thresholds = DEFAULT_TIDY_THRESHOLDS) {
-  const codeFilesArr = stat3.files.filter((f3) => f3.isCode);
+function classifyTidyEntry(stat4, thresholds = DEFAULT_TIDY_THRESHOLDS) {
+  const codeFilesArr = stat4.files.filter((f3) => f3.isCode);
   const codeFiles = codeFilesArr.length;
   const codeLines = codeFilesArr.reduce((n2, f3) => n2 + f3.added + f3.removed, 0);
   if (codeFiles === 0) {
@@ -19593,12 +19614,12 @@ init_fs();
 
 // src/core/lsp/client.ts
 import { existsSync as existsSync3 } from "fs";
-import { homedir as homedir4 } from "os";
+import { homedir as homedir5 } from "os";
 import { dirname as dirname5, join as join17 } from "path";
 
 // src/core/provision/lsp-servers.ts
 import { existsSync as existsSync2 } from "fs";
-import { homedir as homedir3 } from "os";
+import { homedir as homedir4 } from "os";
 import { join as join16 } from "path";
 function resolveServerPath(spec, deps) {
   const forced = deps.env(spec.envVar);
@@ -19738,7 +19759,7 @@ var LSP_SPECS = [
   }
 ];
 function lspManagedDir() {
-  return join16(homedir3(), ".local", "share", "ditto", "lsp");
+  return join16(homedir4(), ".local", "share", "ditto", "lsp");
 }
 var defaultLspServerDeps = {
   which: (bin) => Bun.which(bin),
@@ -19763,7 +19784,7 @@ function defaultLspDeps() {
   return {
     which: (b2) => Bun.which(b2),
     env: (n2) => process.env[n2],
-    managedDir: join17(homedir4(), ".local", "share", "ditto", "lsp"),
+    managedDir: join17(homedir5(), ".local", "share", "ditto", "lsp"),
     fileExists: existsSync3,
     run: async () => ({ exit_code: null, stderr: "" })
   };
@@ -21044,7 +21065,7 @@ async function attributeCoverageEscape(store, input, floor = FAR_FIELD_TAXONOMY_
 }
 
 // src/core/coverage-store.ts
-import { join as join22, relative as relative4 } from "path";
+import { join as join22, relative as relative5 } from "path";
 init_ditto_paths();
 init_fs();
 
@@ -21069,7 +21090,7 @@ class CoverageStore {
     return Bun.file(this.mapPath(workItemId2)).exists();
   }
   relMapPath(workItemId2) {
-    return relative4(this.repoRoot, this.mapPath(workItemId2));
+    return relative5(this.repoRoot, this.mapPath(workItemId2));
   }
   async getMap(workItemId2) {
     return readJson(this.mapPath(workItemId2), coverageMap);
@@ -21888,7 +21909,7 @@ async function memoryStatus(repoRoot) {
 
 // src/core/memory-query.ts
 import { appendFile, readFile as readFile2 } from "fs/promises";
-import { basename, dirname as dirname7, isAbsolute as isAbsolute2, join as join27 } from "path";
+import { basename, dirname as dirname7, isAbsolute as isAbsolute3, join as join27 } from "path";
 init_ditto_paths();
 init_fs();
 
@@ -22149,7 +22170,7 @@ async function loadGoverningDecisions(repoRoot) {
     let body = e2.text;
     if (rel) {
       try {
-        body = await readFile2(isAbsolute2(rel) ? rel : join27(repoRoot, rel), "utf8");
+        body = await readFile2(isAbsolute3(rel) ? rel : join27(repoRoot, rel), "utf8");
       } catch {}
     }
     byNodeId.set(`decision:${e2.event_id}`, {
@@ -24564,7 +24585,7 @@ init_ditto_paths();
 init_fs();
 
 // src/core/e2e/failure-report.ts
-import { isAbsolute as isAbsolute3, relative as relative6, resolve as resolve5 } from "path";
+import { isAbsolute as isAbsolute4, relative as relative7, resolve as resolve5 } from "path";
 var FAILED_STATUSES = new Set(["failed", "timedOut", "interrupted"]);
 var STEP_MARKER = /^\s*\/\/\s*@step\s+(\S+)\/([sb]\d+)\s*(.*)$/;
 var ANSI = /\u001b\[[0-9;]*m/g;
@@ -24646,10 +24667,10 @@ async function buildFailureReport(reporter, options) {
   collectFailures(root, rootDir, raw);
   const failures = [];
   for (const f3 of raw) {
-    const spec_file = isAbsolute3(f3.specFile) ? relative6(options.repoRoot, f3.specFile) : f3.specFile;
-    const sep3 = f3.title.indexOf(" \xB7 ");
-    const journey_id = sep3 >= 0 ? f3.title.slice(0, sep3) : "";
-    const case_name = sep3 >= 0 ? f3.title.slice(sep3 + " \xB7 ".length) : f3.title;
+    const spec_file = isAbsolute4(f3.specFile) ? relative7(options.repoRoot, f3.specFile) : f3.specFile;
+    const sep4 = f3.title.indexOf(" \xB7 ");
+    const journey_id = sep4 >= 0 ? f3.title.slice(0, sep4) : "";
+    const case_name = sep4 >= 0 ? f3.title.slice(sep4 + " \xB7 ".length) : f3.title;
     let step;
     const line = failingLine(f3.stack, spec_file);
     if (line !== undefined) {
@@ -24695,8 +24716,8 @@ import { join as join34 } from "path";
 // src/core/e2e/browser.ts
 import { createHash as createHash4 } from "crypto";
 import { mkdir as mkdir3, readFile as readFile6, readdir as readdir13, writeFile as writeFile3 } from "fs/promises";
-import { homedir as homedir5 } from "os";
-import { dirname as dirname9, join as join33, relative as relative7, sep as sep3 } from "path";
+import { homedir as homedir6 } from "os";
+import { dirname as dirname9, join as join33, relative as relative8, sep as sep4 } from "path";
 import { fileURLToPath } from "url";
 
 // src/schemas/e2e-journey.ts
@@ -24782,7 +24803,7 @@ function runnerScriptPath() {
   return join33(dirname9(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
 }
 async function resolvePlaywrightCore() {
-  const bunInstall = process.env.BUN_INSTALL ?? join33(homedir5(), ".bun");
+  const bunInstall = process.env.BUN_INSTALL ?? join33(homedir6(), ".bun");
   const cacheDir = join33(bunInstall, "install", "cache");
   let entries;
   try {
@@ -24808,7 +24829,7 @@ function compareSemver(a2, b2) {
   return 0;
 }
 async function findCachedChromium() {
-  const cacheRoot = join33(homedir5(), "Library", "Caches", "ms-playwright");
+  const cacheRoot = join33(homedir6(), "Library", "Caches", "ms-playwright");
   let entries;
   try {
     entries = await readdir13(cacheRoot);
@@ -24830,7 +24851,7 @@ async function findCachedChromium() {
   return null;
 }
 function repoRelative(repoRoot, path) {
-  return relative7(repoRoot, path).split(sep3).join("/");
+  return relative8(repoRoot, path).split(sep4).join("/");
 }
 async function sha256OfFile(path) {
   const bytes = await readFile6(path);
@@ -25059,8 +25080,8 @@ async function verifyGenerated(repoRoot, runId2, files, options = {}) {
 }
 
 // src/core/e2e/regression-select.ts
-import { readFile as readFile7, readdir as readdir14, stat as stat3 } from "fs/promises";
-import { join as join35, relative as relative8, resolve as resolve6, sep as sep4 } from "path";
+import { readFile as readFile7, readdir as readdir14, stat as stat4 } from "fs/promises";
+import { join as join35, relative as relative9, resolve as resolve6, sep as sep5 } from "path";
 
 // src/core/e2e/journey-dsl.ts
 init_shared();
@@ -25203,10 +25224,10 @@ function globToRegExp2(pattern) {
   }
   return new RegExp(`${out}$`);
 }
-var toPosix = (p) => p.split(sep4).join("/");
+var toPosix = (p) => p.split(sep5).join("/");
 async function fileExists2(path) {
   try {
-    return (await stat3(path)).isFile();
+    return (await stat4(path)).isFile();
   } catch {
     return false;
   }
@@ -25225,7 +25246,7 @@ async function loadJourneyEntries(journeysDir) {
   const invalid = [];
   for (const name of names) {
     const fileAbs = join35(journeysAbs, name);
-    const fileRel = toPosix(relative8(repoRoot, fileAbs));
+    const fileRel = toPosix(relative9(repoRoot, fileAbs));
     const parsed = parseJourneyDoc(await readFile7(fileAbs, "utf8"));
     if (!parsed.ok) {
       invalid.push({ file: fileRel, error: parsed.error });
@@ -25240,7 +25261,7 @@ async function loadJourneyEntries(journeysDir) {
       surfaces: parsed.frontMatter.surfaces,
       uses_blocks: parsed.frontMatter.uses_blocks,
       journey_file: fileRel,
-      generated_spec: toPosix(relative8(repoRoot, specAbs)),
+      generated_spec: toPosix(relative9(repoRoot, specAbs)),
       missing_generated: !await fileExists2(specAbs)
     });
   }
@@ -27967,7 +27988,7 @@ function zodErrors(error) {
   }));
 }
 // src/acg/scope/symbol-expand.ts
-import { join as join44, relative as relative9 } from "path";
+import { join as join44, relative as relative10 } from "path";
 async function expandForbiddenSymbols(contract, ctx) {
   if (!contract.forbidden_scope.some((r3) => r3.kind === "symbol")) {
     return { contract, resolved: 0, unresolved: [] };
@@ -27989,7 +28010,7 @@ async function expandForbiddenSymbols(contract, ctx) {
       workDir: join44(ctx.cacheDir, `q-symdecl-${ref.ref}`),
       ...ctx.binary ? { binary: ctx.binary } : {}
     }, ctx.deps);
-    const files = declFiles.map((f3) => relative9(ctx.repoRoot, join44(ctx.sourceRoot, f3)));
+    const files = declFiles.map((f3) => relative10(ctx.repoRoot, join44(ctx.sourceRoot, f3)));
     if (files.length === 0) {
       out.push(ref);
       unresolved.push(ref.ref);
@@ -28358,13 +28379,13 @@ var changeMapCommand = defineCommand({
 });
 
 // src/cli/commands/classify.ts
-import { isAbsolute as isAbsolute6, join as join50 } from "path";
+import { isAbsolute as isAbsolute7, join as join50 } from "path";
 
 // src/core/cleanup-scan.ts
 init_cleanup_store();
 init_memory_scan();
-import { readdir as readdir17, stat as stat5 } from "fs/promises";
-import { isAbsolute as isAbsolute5, join as join49, relative as relative11, resolve as resolve9 } from "path";
+import { readdir as readdir17, stat as stat6 } from "fs/promises";
+import { isAbsolute as isAbsolute6, join as join49, relative as relative12, resolve as resolve9 } from "path";
 var SKIP_DIRS3 = new Set([
   "node_modules",
   ".git",
@@ -28470,8 +28491,8 @@ async function scanCandidates(repoRoot, options) {
   const candidates = [];
   const excludedProtected = [];
   for (const abs of absFiles) {
-    const repoRel = relative11(root, abs).replace(/\\/g, "/");
-    if (repoRel.startsWith("..") || isAbsolute5(repoRel))
+    const repoRel = relative12(root, abs).replace(/\\/g, "/");
+    if (repoRel.startsWith("..") || isAbsolute6(repoRel))
       continue;
     if (isProtectedPath(repoRel)) {
       excludedProtected.push(repoRel);
@@ -28487,12 +28508,12 @@ async function scanCandidates(repoRoot, options) {
     if (scopeCommitDocs && !scopeCommitDocs.has(repoRel))
       continue;
     const owning = await findOwningRepo(abs, root);
-    const owningRepo = owning === null ? null : relative11(root, owning).replace(/\\/g, "/") || ".";
+    const owningRepo = owning === null ? null : relative12(root, owning).replace(/\\/g, "/") || ".";
     const signals = [];
     if (!hasInboundReference(root, repoRel)) {
       signals.push({ kind: "orphan", detail: `no inbound reference to ${repoRel}` });
     }
-    const docMtimeMs = (await stat5(abs)).mtimeMs;
+    const docMtimeMs = (await stat6(abs)).mtimeMs;
     const lastCommitMs = lastCommitTouchingMs(root, repoRel);
     if (lastCommitMs !== null && docMtimeMs < lastCommitMs) {
       signals.push({
@@ -28797,7 +28818,7 @@ var classifyStage = defineCommand({
       }
     }
     const repoRoot = await resolveRepoRootForCreate();
-    const absPath = isAbsolute6(args.path) ? args.path : join50(repoRoot, args.path);
+    const absPath = isAbsolute7(args.path) ? args.path : join50(repoRoot, args.path);
     try {
       const store = new CleanupStore(repoRoot);
       const entry = await store.stageDoc(args["run-id"], {
@@ -29189,12 +29210,12 @@ function toDataflowDoDs(findings) {
 }
 
 // src/core/codeql/review.ts
-import { relative as relative12 } from "path";
+import { relative as relative13 } from "path";
 async function runCodeqlReview(input, deps) {
   const result2 = await runCodeqlAnalysis(input, deps);
   const sarifText = await deps.readText(result2.sarifPath);
   const sha = deps.sha256(sarifText);
-  const relPath = relative12(input.repoRoot, result2.sarifPath);
+  const relPath = relative13(input.repoRoot, result2.sarifPath);
   const evidence = await deps.appendRecord(input.workItemId, {
     ref: {
       kind: "artifact",
@@ -29581,7 +29602,7 @@ init_fs();
 import { join as join55 } from "path";
 
 // src/core/run-store.ts
-import { stat as stat7 } from "fs/promises";
+import { stat as stat8 } from "fs/promises";
 import { join as join54 } from "path";
 
 // src/schemas/run-manifest.ts
@@ -29641,7 +29662,7 @@ class RunStore {
   }
   async exists(id) {
     try {
-      await stat7(this.manifestPath(id));
+      await stat8(this.manifestPath(id));
       return true;
     } catch {
       return false;
@@ -31076,7 +31097,7 @@ var deepInterviewCommand = defineCommand({
 });
 
 // src/cli/commands/doctor.ts
-import { homedir as homedir7 } from "os";
+import { homedir as homedir8 } from "os";
 import { join as join61 } from "path";
 
 // src/core/capability-inventory.ts
@@ -31159,7 +31180,7 @@ async function collectCapabilityInventory(adapters, repoRoot) {
 // src/core/codeql/install.ts
 import { existsSync as existsSync6 } from "fs";
 import { mkdir as mkdir7 } from "fs/promises";
-import { homedir as homedir6 } from "os";
+import { homedir as homedir7 } from "os";
 import { join as join57 } from "path";
 function detectPlatform(os = process.platform) {
   switch (os) {
@@ -31176,8 +31197,8 @@ function detectPlatform(os = process.platform) {
 function bundleUrl(platform2) {
   return `https://github.com/github/codeql-cli-binaries/releases/latest/download/codeql-${platform2}.zip`;
 }
-var DEFAULT_INSTALL_DIR = join57(homedir6(), ".local", "share", "ditto", "codeql");
-var DEFAULT_BIN_DIR = join57(homedir6(), ".local", "bin");
+var DEFAULT_INSTALL_DIR = join57(homedir7(), ".local", "share", "ditto", "codeql");
+var DEFAULT_BIN_DIR = join57(homedir7(), ".local", "bin");
 function managedBinary(installDir, platform2) {
   return join57(installDir, "codeql", platform2 === "win64" ? "codeql.exe" : "codeql");
 }
@@ -31255,7 +31276,7 @@ var defaultInstallDeps = {
     const onPath = Bun.which("codeql");
     if (onPath)
       return onPath;
-    const gh = join57(homedir6(), ".local", "share", "gh", "extensions", "gh-codeql");
+    const gh = join57(homedir7(), ".local", "share", "gh", "extensions", "gh-codeql");
     if (existsSync6(gh))
       return gh;
     const platform2 = detectPlatform();
@@ -31867,7 +31888,7 @@ async function collectPermissionFindings(adapters, repoRoot) {
 }
 
 // src/core/surface-inventory.ts
-import { relative as relative13, resolve as resolve11 } from "path";
+import { relative as relative14, resolve as resolve11 } from "path";
 
 // src/schemas/surface-catalog.ts
 init_zod();
@@ -31918,7 +31939,7 @@ async function generateSurfaceCatalog(adapters, repoRoot, catalogFile = "surface
     host: s2.host,
     kind: s2.kind,
     id: s2.id,
-    path: relative13(repoRoot, s2.path)
+    path: relative14(repoRoot, s2.path)
   })).sort((a2, b2) => keyOf(a2).localeCompare(keyOf(b2)) || a2.path.localeCompare(b2.path));
   return surfaceCatalog.parse({ schema_version: "0.1.0", surfaces });
 }
@@ -32044,7 +32065,7 @@ function exitForFindings(count, advisory) {
     process.exit(DRIFT_EXIT2);
 }
 async function runFix(repoRoot, items) {
-  const deps = defaultDoctorFixDeps(repoRoot, homedir7());
+  const deps = defaultDoctorFixDeps(repoRoot, homedir8());
   const io = createStdioPromptIO();
   try {
     const result2 = await applyDoctorFixes({
@@ -32111,7 +32132,7 @@ var instructionsCommand = defineCommand({
       const repoRoot = await resolveRepoRootForCreate();
       const report = await checkInstructionsForHosts(hosts, repoRoot);
       if (args.fix === true) {
-        await runFix(repoRoot, planInstructionFixes(report.findings, homedir7()));
+        await runFix(repoRoot, planInstructionFixes(report.findings, homedir8()));
         return;
       }
       if (format === "json") {
@@ -32588,7 +32609,7 @@ var doctorCommand = defineCommand({
 
 // src/cli/commands/e2e.ts
 import { mkdir as mkdir8, readFile as readFile15, readdir as readdir20 } from "fs/promises";
-import { dirname as dirname12, isAbsolute as isAbsolute9, join as join64, relative as relative15, resolve as resolve13, sep as sep6 } from "path";
+import { dirname as dirname12, isAbsolute as isAbsolute10, join as join64, relative as relative16, resolve as resolve13, sep as sep7 } from "path";
 init_zod();
 init_ditto_paths();
 
@@ -32826,7 +32847,7 @@ async function detectStale(sourceAbs, generatedAbs, expectedSource) {
 
 // src/core/e2e/lifecycle.ts
 import { readFile as readFile14, readdir as readdir19, unlink as unlink3 } from "fs/promises";
-import { basename as basename2, dirname as dirname11, isAbsolute as isAbsolute8, join as join63, relative as relative14, resolve as resolve12, sep as sep5 } from "path";
+import { basename as basename2, dirname as dirname11, isAbsolute as isAbsolute9, join as join63, relative as relative15, resolve as resolve12, sep as sep6 } from "path";
 
 // src/schemas/e2e-lifecycle.ts
 init_zod();
@@ -32858,7 +32879,7 @@ async function appendDecision(path, decision) {
   await atomicWriteText(path, `${prefix}${JSON.stringify(parsed)}
 `);
 }
-var toPosix2 = (p) => p.split(sep5).join("/");
+var toPosix2 = (p) => p.split(sep6).join("/");
 async function readOrNull(path) {
   try {
     return await readFile14(path, "utf8");
@@ -32874,8 +32895,8 @@ async function runLifecycleAction(repoRoot, req) {
     };
   }
   const journeyAbs = resolve12(repoRoot, req.journeyFile);
-  const repoRel = relative14(resolve12(repoRoot), journeyAbs);
-  if (repoRel.startsWith("..") || isAbsolute8(repoRel)) {
+  const repoRel = relative15(resolve12(repoRoot), journeyAbs);
+  if (repoRel.startsWith("..") || isAbsolute9(repoRel)) {
     return {
       ok: false,
       refusal: `journey \uACBD\uB85C\uAC00 \uC800\uC7A5\uC18C \uBC16\uC744 \uAC00\uB9AC\uD0A8\uB2E4(${req.journeyFile}) \u2014 \uC218\uBA85\uC8FC\uAE30 \uC9D1\uD589\uC740 \uC800\uC7A5\uC18C \uC548\uC758 \uD30C\uC0DD \uD14C\uC2A4\uD2B8\uC5D0\uB9CC \uC801\uC6A9\uB41C\uB2E4`
@@ -32896,7 +32917,7 @@ async function runLifecycleAction(repoRoot, req) {
   const slug = journeyName.slice(0, -".journey.md".length);
   const generatedDir = resolve12(dirname11(journeyAbs), "..", "generated");
   const specAbs = join63(generatedDir, `${slug}.spec.ts`);
-  const rel = (abs) => toPosix2(relative14(repoRoot, abs));
+  const rel = (abs) => toPosix2(relative15(repoRoot, abs));
   const specText = await readOrNull(specAbs);
   if (specText === null) {
     return {
@@ -33166,7 +33187,7 @@ var e2eConformance = defineCommand({
       } catch {}
       const report = checkStepConformance({ journeyText, blockTexts, generatedText, supportTexts });
       const repoRoot = await resolveRepoRootForCreate();
-      const repoRel = (abs) => relative15(repoRoot, abs).split(sep6).join("/");
+      const repoRel = (abs) => relative16(repoRoot, abs).split(sep7).join("/");
       const stale = [];
       const journeyVerdict = await detectStale(journeyAbs, generatedAbs, repoRel(journeyAbs));
       if (journeyVerdict.stale)
@@ -33374,8 +33395,8 @@ var e2eFailureVerdictCmd = defineCommand({
     try {
       const repoRoot = await resolveRepoRootForCreate();
       if (journeyFile !== undefined) {
-        const rel = relative15(repoRoot, resolve13(repoRoot, journeyFile));
-        if (rel.startsWith("..") || isAbsolute9(rel)) {
+        const rel = relative16(repoRoot, resolve13(repoRoot, journeyFile));
+        if (rel.startsWith("..") || isAbsolute10(rel)) {
           writeError(`--journey-file\uC774 \uC800\uC7A5\uC18C \uBC16\uC744 \uAC00\uB9AC\uD0A8\uB2E4: ${journeyFile} \u2014 \uAC70\uBD80\uD55C\uB2E4`);
           process.exit(USAGE_ERROR_EXIT);
           return;
@@ -33649,7 +33670,7 @@ var e2eCommand = defineCommand({
 });
 
 // src/acg/fitness/command-provider.ts
-import { isAbsolute as isAbsolute10, resolve as resolve14 } from "path";
+import { isAbsolute as isAbsolute11, resolve as resolve14 } from "path";
 
 // src/schemas/acg-assurance-snapshot.ts
 init_zod();
@@ -33807,7 +33828,7 @@ function commandProvider(repoRoot) {
       const spec = fn.evaluator.spec;
       if (spec.startsWith(CODEQL_SARIF_PREFIX)) {
         const rel = spec.slice(CODEQL_SARIF_PREFIX.length).trim();
-        const sarifPath = isAbsolute10(rel) ? rel : resolve14(repoRoot, rel);
+        const sarifPath = isAbsolute11(rel) ? rel : resolve14(repoRoot, rel);
         const file = Bun.file(sarifPath);
         if (!await file.exists()) {
           return {
@@ -33912,7 +33933,7 @@ async function loadAssuranceSnapshots(repoRoot) {
 }
 
 // src/acg/fitness/injected-provider.ts
-import { isAbsolute as isAbsolute11, resolve as resolve15 } from "path";
+import { isAbsolute as isAbsolute12, resolve as resolve15 } from "path";
 
 // src/schemas/acg-fitness-verdict.ts
 init_zod();
@@ -33948,7 +33969,7 @@ var acgFitnessVerdictFile = exports_external.object({
 
 // src/acg/fitness/injected-provider.ts
 function injectedProvider(verdictsPath2, repoRoot) {
-  const resolved = isAbsolute11(verdictsPath2) ? verdictsPath2 : resolve15(repoRoot, verdictsPath2);
+  const resolved = isAbsolute12(verdictsPath2) ? verdictsPath2 : resolve15(repoRoot, verdictsPath2);
   let loaded;
   async function load() {
     if (loaded !== undefined)
@@ -34522,9 +34543,9 @@ var preCompactHandler = async (input) => {
 };
 
 // src/hooks/pre-tool-use.ts
-import { homedir as homedir8, tmpdir } from "os";
+import { homedir as homedir9, tmpdir } from "os";
 import { join as join65 } from "path";
-import { isAbsolute as isAbsolute12, relative as relative16, resolve as resolve16 } from "path";
+import { isAbsolute as isAbsolute13, relative as relative17, resolve as resolve16 } from "path";
 
 // src/acg/scope/resolve.ts
 function stripModuleExt2(p) {
@@ -34735,17 +34756,17 @@ function bashSecretExposure(cmd) {
 }
 function isOutsideRepo(repoRoot, filePath) {
   const resolved = resolve16(repoRoot, filePath);
-  const rel = relative16(repoRoot, resolved);
-  return rel.startsWith("..") || isAbsolute12(rel);
+  const rel = relative17(repoRoot, resolved);
+  return rel.startsWith("..") || isAbsolute13(rel);
 }
 function isClaudeMemoryPath(repoRoot, filePath) {
-  const home = process.env.HOME ?? homedir8();
+  const home = process.env.HOME ?? homedir9();
   if (!home)
     return false;
   const slug = resolve16(repoRoot).replace(/[^a-zA-Z0-9]/g, "-");
   const base = resolve16(home, ".claude", "projects", slug, "memory");
-  const rel = relative16(base, resolve16(filePath));
-  return rel.length > 0 && !rel.startsWith("..") && !isAbsolute12(rel);
+  const rel = relative17(base, resolve16(filePath));
+  return rel.length > 0 && !rel.startsWith("..") && !isAbsolute13(rel);
 }
 var WIN_TMP = /(^|[\\/])%temp%([\\/]|$)|(^|[\\/])%tmp%([\\/]|$)|[\\/]appdata[\\/]local[\\/]temp([\\/]|$)|[\\/]windows[\\/]temp([\\/]|$)/i;
 function isSystemTmpPath(filePath) {
@@ -34755,8 +34776,8 @@ function isSystemTmpPath(filePath) {
   for (const root of ["/tmp", "/private/tmp", tmpdir()]) {
     if (!root)
       continue;
-    const rel = relative16(resolve16(root), resolved);
-    if (rel.length > 0 && !rel.startsWith("..") && !isAbsolute12(rel))
+    const rel = relative17(resolve16(root), resolved);
+    if (rel.length > 0 && !rel.startsWith("..") && !isAbsolute13(rel))
       return true;
   }
   return false;
@@ -34852,7 +34873,7 @@ function checkDestructive(cmd) {
     for (const target of rmTargets(normalized)) {
       if (/[$`*]/.test(target))
         continue;
-      if (!isAbsolute12(target))
+      if (!isAbsolute13(target))
         continue;
       const insideHome = HOME.length > 0 && (target === HOME || target.startsWith(`${HOME}/`));
       if (!insideHome) {
@@ -34880,7 +34901,7 @@ async function checkForbiddenScope(input, filePath) {
   const contract = await new ChangeContractStore(input.repoRoot).read(workItemId2);
   if (!contract)
     return;
-  const repoRel = relative16(input.repoRoot, resolve16(input.repoRoot, filePath));
+  const repoRel = relative17(input.repoRoot, resolve16(input.repoRoot, filePath));
   const archSpec = await loadArchSpec(input.repoRoot);
   if (contract.scope_mode === "whitelist" && contract.allowed_scope.length > 0) {
     const allowed = contract.allowed_scope.some((ref) => scopeRefMatches(ref, repoRel, archSpec));
@@ -34941,7 +34962,7 @@ async function checkAutopilotLease(input, filePath) {
     return;
   if (leases.some((l2) => l2.scope_source === "derived"))
     return;
-  const repoRel = relative16(input.repoRoot, resolve16(input.repoRoot, filePath));
+  const repoRel = relative17(input.repoRoot, resolve16(input.repoRoot, filePath));
   const inScope = leases.some((l2) => fileScopeContains(l2.file_scope, repoRel));
   if (inScope)
     return;
@@ -35088,7 +35109,7 @@ function bashWriteTargets(cmd) {
 import { spawnSync } from "child_process";
 import { createHash as createHash9 } from "crypto";
 import { existsSync as existsSync8, readFileSync as readFileSync4, readdirSync as readdirSync2 } from "fs";
-import { homedir as homedir9 } from "os";
+import { homedir as homedir10 } from "os";
 import { dirname as dirname13, join as join66, resolve as resolve17 } from "path";
 function classifySession(pluginRoot, repoRoot) {
   if (pluginRoot === null)
@@ -35247,7 +35268,7 @@ function gitState2(repoRoot) {
 function collectModeReport(repoRoot, opts = {}) {
   const env2 = opts.env ?? process.env;
   const argv1 = opts.argv1 ?? process.argv[1];
-  const home = opts.home ?? homedir9();
+  const home = opts.home ?? homedir10();
   const pluginRoot = resolvePluginRoot(env2, argv1);
   const inDittoRepo = isDittoSourceRepo(repoRoot);
   if (!inDittoRepo) {
@@ -36267,15 +36288,15 @@ function explicitWorkItemRef(prompt2) {
 async function resolveActiveWorkItem(repoRoot, sessionId, prompt2) {
   const items = new WorkItemStore(repoRoot);
   const pointers = new SessionPointerStore(repoRoot);
+  const pointed = await pointers.get(sessionId);
+  const activeWorkItem = pointed !== null && await items.exists(pointed) ? await items.get(pointed) : undefined;
   const explicit = explicitWorkItemRef(prompt2);
-  if (explicit && await items.exists(explicit)) {
-    if (await pointers.get(sessionId) !== explicit)
-      await pointers.set(sessionId, explicit);
+  if (!activeWorkItem && explicit && await items.exists(explicit)) {
+    await pointers.set(sessionId, explicit);
     return { workItem: await items.get(explicit), action: "loaded" };
   }
-  const pointed = await pointers.get(sessionId);
-  if (pointed && await items.exists(pointed)) {
-    return { workItem: await items.get(pointed), action: "loaded" };
+  if (activeWorkItem) {
+    return { workItem: activeWorkItem, action: "loaded" };
   }
   const open2 = (await items.list()).filter((s2) => NON_TERMINAL.includes(s2.status));
   if (open2.length > 0) {
@@ -37035,7 +37056,7 @@ var knowledgeCommand = defineCommand({
 // src/cli/commands/memory.ts
 import { randomBytes as randomBytes3 } from "crypto";
 import { readFile as readFile18, readdir as readdir24 } from "fs/promises";
-import { isAbsolute as isAbsolute13, join as join75 } from "path";
+import { isAbsolute as isAbsolute14, join as join75 } from "path";
 init_ditto_paths();
 init_fs();
 
@@ -37044,7 +37065,7 @@ init_ditto_paths();
 init_memory_scan();
 init_memory_store();
 import { readFile as readFile17, readdir as readdir23 } from "fs/promises";
-import { join as join74, relative as relative17 } from "path";
+import { join as join74, relative as relative18 } from "path";
 function bootstrapEventId(key) {
   return `memevt_${sha256Hex(key).slice(0, 12)}`;
 }
@@ -37174,7 +37195,7 @@ async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head
   const dir = join74(dittoDir(repoRoot), "knowledge", "adr");
   for (const abs of await listMarkdown(dir)) {
     const body = await readFile17(abs, "utf8");
-    const rel = relative17(repoRoot, abs);
+    const rel = relative18(repoRoot, abs);
     const sourceId = sourceIdForPath(rel);
     const source = {
       schema_version: "0.1.0",
@@ -37224,7 +37245,7 @@ async function ingestGlossary(repoRoot, sourceStore, eventStore, now, revision, 
   } catch {
     return result2;
   }
-  const rel = relative17(repoRoot, abs);
+  const rel = relative18(repoRoot, abs);
   const sourceId = sourceIdForPath(rel);
   const source = {
     schema_version: "0.1.0",
@@ -37298,7 +37319,7 @@ async function ingestHandoffs(repoRoot, sourceStore, eventStore, now, revision, 
   const dir = localDir(repoRoot, "handoff", "archive");
   for (const abs of await listMarkdown(dir)) {
     const body = await readFile17(abs, "utf8");
-    const rel = relative17(repoRoot, abs);
+    const rel = relative18(repoRoot, abs);
     const sourceId = sourceIdForPath(rel);
     const source = {
       schema_version: "0.1.0",
@@ -37855,7 +37876,7 @@ var memoryBuild = defineCommand({
     }
     try {
       if (args.fragments) {
-        const path = isAbsolute13(args.fragments) ? args.fragments : join75(repoRoot, args.fragments);
+        const path = isAbsolute14(args.fragments) ? args.fragments : join75(repoRoot, args.fragments);
         const raw = await readFile18(path, "utf8");
         const parsed = irFragmentsSchema.safeParse(JSON.parse(raw));
         if (!parsed.success) {
@@ -37896,7 +37917,7 @@ var memoryBuild = defineCommand({
         const path = s2.source.path;
         if (!path)
           continue;
-        const abs = isAbsolute13(path) ? path : join75(repoRoot, path);
+        const abs = isAbsolute14(path) ? path : join75(repoRoot, path);
         files.push({
           source_id: s2.source.source_id,
           path,
@@ -38670,7 +38691,7 @@ var memoryMeasure = defineCommand({
     try {
       const adrs = await Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile18(join75(adrDir, n2), "utf8") })));
       const candidateFiles = (args.against ?? "").split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
-      const candidates = await Promise.all(candidateFiles.map((f3) => readFile18(isAbsolute13(f3) ? f3 : join75(repoRoot, f3), "utf8")));
+      const candidates = await Promise.all(candidateFiles.map((f3) => readFile18(isAbsolute14(f3) ? f3 : join75(repoRoot, f3), "utf8")));
       const report = measureHallucination(adrs, candidates);
       if (format === "json") {
         writeJson2(report);
@@ -39182,8 +39203,8 @@ init_fs();
 // src/core/run-with.ts
 init_common();
 init_fs();
-import { stat as stat8, writeFile as writeFile5 } from "fs/promises";
-import { dirname as dirname14, join as join78, relative as relative18, resolve as resolve19, sep as sep7 } from "path";
+import { stat as stat9, writeFile as writeFile5 } from "fs/promises";
+import { dirname as dirname14, join as join78, relative as relative19, resolve as resolve19, sep as sep8 } from "path";
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
 
 class RunWithUsageError extends Error {
@@ -39202,7 +39223,7 @@ class RunWithRuntimeError extends Error {
   }
 }
 function repoRelative2(repoRoot, path) {
-  return relative18(repoRoot, path).split(sep7).join("/");
+  return relative19(repoRoot, path).split(sep8).join("/");
 }
 function resolveRepoCwd(repoRoot, cwd) {
   const parsed = relativePath.safeParse(cwd);
@@ -39211,7 +39232,7 @@ function resolveRepoCwd(repoRoot, cwd) {
   }
   const resolvedRoot = resolve19(repoRoot);
   const resolvedCwd = resolve19(join78(repoRoot, cwd));
-  if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep7}`)) {
+  if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep8}`)) {
     throw new RunWithUsageError(`cwd escapes repo root: ${cwd}`);
   }
   return parsed.data;
@@ -39244,7 +39265,7 @@ async function assertExistingPrompt(repoRoot, promptPath) {
     throw new RunWithUsageError(`invalid --prompt path: ${parsed.error.issues[0]?.message}`);
   }
   try {
-    await stat8(`${repoRoot}/${promptPath}`);
+    await stat9(`${repoRoot}/${promptPath}`);
   } catch {
     throw new RunWithUsageError(`--prompt path does not exist: ${promptPath}`);
   }
@@ -40277,7 +40298,7 @@ var semanticCommand = defineCommand({
 });
 
 // src/cli/commands/setup.ts
-import { homedir as homedir11 } from "os";
+import { homedir as homedir12 } from "os";
 import { dirname as dirname17, join as join85, resolve as resolve22 } from "path";
 init_fs();
 init_shared();
@@ -40295,10 +40316,10 @@ function ensureGitignored(deps) {
 `).map((l2) => l2.trim());
   if (lines.includes(GITIGNORE_ENTRY))
     return false;
-  const sep8 = current === "" || current.endsWith(`
+  const sep9 = current === "" || current.endsWith(`
 `) ? "" : `
 `;
-  deps.writeGitignore(`${current}${sep8}
+  deps.writeGitignore(`${current}${sep9}
 # ditto memory: \uBCC4\uB3C4 \uC800\uC7A5\uC18C\uB85C \uBD84\uB9AC\uB428(\uC911\uBCF5 \uAD00\uB9AC \uBC29\uC9C0)
 ${GITIGNORE_ENTRY}
 `);
@@ -40372,17 +40393,17 @@ function defaultMemorySeparateDeps(repoRoot) {
 
 // src/core/provision/playwright.ts
 import { existsSync as existsSync12, readdirSync as readdirSync3 } from "fs";
-import { homedir as homedir10, platform as osPlatform } from "os";
+import { homedir as homedir11, platform as osPlatform } from "os";
 import { join as join81 } from "path";
 function playwrightCacheRoot(os = osPlatform()) {
   if (os === "win32")
-    return join81(homedir10(), "AppData", "Local", "ms-playwright");
+    return join81(homedir11(), "AppData", "Local", "ms-playwright");
   if (os === "darwin")
-    return join81(homedir10(), "Library", "Caches", "ms-playwright");
-  return join81(homedir10(), ".cache", "ms-playwright");
+    return join81(homedir11(), "Library", "Caches", "ms-playwright");
+  return join81(homedir11(), ".cache", "ms-playwright");
 }
 function bunCacheDir() {
-  return join81(process.env.BUN_INSTALL ?? join81(homedir10(), ".bun"), "install", "cache");
+  return join81(process.env.BUN_INSTALL ?? join81(homedir11(), ".bun"), "install", "cache");
 }
 function detectPlaywright(deps) {
   const core = deps.listDir(deps.bunCache).some((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2));
@@ -40994,7 +41015,7 @@ async function runWizard(resourcesDir, projectRoot) {
       setup: async (host) => setup({
         resourcesDir,
         projectRoot,
-        homeDir: homedir11(),
+        homeDir: homedir12(),
         ...process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {},
         now: new Date,
         host,
@@ -41085,7 +41106,7 @@ var setupCommand = defineCommand({
       const result2 = await setup({
         resourcesDir,
         projectRoot,
-        homeDir: homedir11(),
+        homeDir: homedir12(),
         ...process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {},
         now: new Date,
         host,
@@ -41119,7 +41140,7 @@ var setupCommand = defineCommand({
 
 // src/cli/commands/teardown.ts
 import { rm as rm4 } from "fs/promises";
-import { homedir as homedir12 } from "os";
+import { homedir as homedir13 } from "os";
 import { join as join87, resolve as resolve23 } from "path";
 init_fs();
 
@@ -41197,7 +41218,7 @@ var teardownCommand = defineCommand({
         writeHuman(`uninstall: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
       }
-      const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir12() });
+      const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir13() });
       if (result2.files.length === 0) {
         writeError(`uninstall failed: no managed resources found at ${resourcesDir}`);
         process.exit(RUNTIME_ERROR_EXIT);
@@ -42390,4 +42411,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=ea8489045786a4848156e18174810607d1e099fb6e2daa914ea93e9f0167557c
+//# ditto-src-stamp=f46051539a36fbf1f5ff58252dfe02b82f7e83bc98a7dc6e11e2ac185453b56a

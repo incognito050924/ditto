@@ -152,6 +152,31 @@ describe('resolveActiveWorkItem (single-active invariant)', () => {
     expect(await new SessionPointerStore(repo).get('sess-noexist')).toBeNull();
   });
 
+  // ac-1 (wi_260625x74): an already-bound session must NOT be silently rebound by a
+  // mere wi_ mention of a different work item — that would re-route evidence/leases
+  // away from the active work item. The active binding is preserved.
+  test('active pointer is NOT rebound by a bare mention of another work item', async () => {
+    const items = new WorkItemStore(repo);
+    const active = await items.create({
+      title: 'active',
+      source_request: 'a',
+      goal: 'a',
+      acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+    });
+    const other = await items.create({
+      title: 'other',
+      source_request: 'o',
+      goal: 'o',
+      acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+    });
+    await new SessionPointerStore(repo).set('sess-active', active.id);
+    // prompt merely references the OTHER work item id — not an explicit rebind
+    const r = await resolveActiveWorkItem(repo, 'sess-active', `compare with ${other.id} behavior`);
+    expect(r.action).toBe('loaded');
+    expect(r.workItem?.id).toBe(active.id); // active binding preserved
+    expect(await new SessionPointerStore(repo).get('sess-active')).toBe(active.id); // not rebound
+  });
+
   // ac-4 (wi_26060678y): no active work item + execution-intent prompt → surface a
   // duplicate-search over open WIs and nudge WI creation, while staying advisory.
   test('execution-intent + no pointer surfaces duplicate matches and nudges WI creation', async () => {

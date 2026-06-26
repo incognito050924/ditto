@@ -135,6 +135,12 @@ export async function resolveActiveWorkItem(
   const items = new WorkItemStore(repoRoot);
   const pointers = new SessionPointerStore(repoRoot);
 
+  // A session is ACTIVELY bound when its pointer is set AND still resolves to an
+  // existing work item. A stale pointer (its work item was deleted) is not active.
+  const pointed = await pointers.get(sessionId);
+  const activeWorkItem =
+    pointed !== null && (await items.exists(pointed)) ? await items.get(pointed) : undefined;
+
   // Explicit resume (ac-6): the user named an existing work item id in the
   // prompt. Bind the session pointer to it — the runtime SessionPointerStore.set()
   // call — so evidence (post-tool-use command/changed-file log) and leases
@@ -142,15 +148,19 @@ export async function resolveActiveWorkItem(
   // wiring the pointer was only ever set in tests, so a real session never bound
   // and post-tool-use recorded no evidence. Explicit signal only, never an
   // arbitrary pick.
+  //
+  // ac-1 (wi_260625x74): bind ONLY when the session has no active pointer (first
+  // resume). An already-bound session is NOT rebound by a bare wi_ mention of a
+  // different work item — silent rebinding would re-route evidence/leases away
+  // from the active work item. The active binding wins.
   const explicit = explicitWorkItemRef(prompt);
-  if (explicit && (await items.exists(explicit))) {
-    if ((await pointers.get(sessionId)) !== explicit) await pointers.set(sessionId, explicit);
+  if (!activeWorkItem && explicit && (await items.exists(explicit))) {
+    await pointers.set(sessionId, explicit);
     return { workItem: await items.get(explicit), action: 'loaded' };
   }
 
-  const pointed = await pointers.get(sessionId);
-  if (pointed && (await items.exists(pointed))) {
-    return { workItem: await items.get(pointed), action: 'loaded' };
+  if (activeWorkItem) {
+    return { workItem: activeWorkItem, action: 'loaded' };
   }
 
   const open = (await items.list()).filter((s) => NON_TERMINAL.includes(s.status));

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdir, rename, unlink, writeFile } from 'node:fs/promises';
-import { dirname, extname, join, parse, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, extname, isAbsolute, join, parse, relative, resolve } from 'node:path';
 import type { ZodTypeAny, z } from 'zod';
 import { fileExists, parseYaml } from './hosts/shared';
 
@@ -26,13 +27,38 @@ export class SchemaValidationError extends Error {
  * If none exists, fall back to the nearest directory containing `.git`.
  * If neither exists, throw — callers that want to create a new repo root
  * must handle that explicitly via `resolveRepoRootForCreate`.
+ *
+ * The walk-up is CAPPED at `$HOME` (ADR-0011 session-rooting invariant,
+ * wi_260625x74 ac-2): the home directory and any ancestor of it are never
+ * matched, so a stray `~/.git` or `~/.ditto` cannot widen the session root to
+ * the whole home tree. When no marker exists strictly below `$HOME` this throws,
+ * and `resolveRepoRootForCreate` then falls back to the caller's cwd. `homeDir`
+ * is injectable for testing; it defaults to the real home directory.
  */
-export async function findRepoRoot(start: string = process.cwd()): Promise<string> {
+/**
+ * True when `current` is `$HOME` itself or one of its ancestors — the walk-up cap
+ * stops there so rooting never escapes the workspace up into the home tree. `rel` is
+ * `relative(current, home)`: it has no leading `..` exactly when `current` is at/above
+ * home. The ABSOLUTE check guards the Windows cross-drive case (wi_260625x74 n4): when
+ * the repo is on `D:` and home on `C:`, `relative()` cannot relativize across drives
+ * and returns an absolute path — that means home is UNRELATED to `current`, not above
+ * it, so we must NOT stop. `isAbs` is injectable so this is testable per-platform.
+ */
+export function isAtOrAboveHome(rel: string, isAbs: (p: string) => boolean = isAbsolute): boolean {
+  return rel === '' || (!rel.startsWith('..') && !isAbs(rel));
+}
+
+export async function findRepoRoot(
+  start: string = process.cwd(),
+  homeDir: string = homedir(),
+): Promise<string> {
   const resolved = resolve(start);
   let current = resolved;
   let firstGitMatch: string | null = null;
   const root = parse(current).root;
+  const home = resolve(homeDir);
   while (true) {
+    if (isAtOrAboveHome(relative(current, home))) break;
     if (await fileExists(join(current, '.ditto'))) return current;
     if (firstGitMatch === null && (await fileExists(join(current, '.git')))) {
       firstGitMatch = current;
@@ -49,9 +75,12 @@ export async function findRepoRoot(start: string = process.cwd()): Promise<strin
  * so DITTO state co-locates with the project. If neither `.ditto` nor `.git`
  * exists upward, use the caller's cwd.
  */
-export async function resolveRepoRootForCreate(start: string = process.cwd()): Promise<string> {
+export async function resolveRepoRootForCreate(
+  start: string = process.cwd(),
+  homeDir: string = homedir(),
+): Promise<string> {
   try {
-    return await findRepoRoot(start);
+    return await findRepoRoot(start, homeDir);
   } catch {
     return resolve(start);
   }
