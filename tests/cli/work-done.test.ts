@@ -46,7 +46,10 @@ describe('ditto work done — lightweight completion path', () => {
   test('verified AC (pass+evidence) → done synthesizes completion.json and closes', async () => {
     const wi = await workItemWithRealAC();
     // verify records a real (command) evidence ref and flips ac-1 to pass.
-    const v = ditto(['verify', wi.id, '--criterion', 'ac-1', '--', 'echo', 'ok']);
+    // A real command (cat an existing file) — `ditto verify` now rejects no-op
+    // commands (true / : / bare echo) so they cannot grade a criterion (ac-1 D).
+    const wiPath = join(dir, '.ditto', 'local', 'work-items', wi.id, 'work-item.json');
+    const v = ditto(['verify', wi.id, '--criterion', 'ac-1', '--', 'cat', wiPath]);
     expect(v.exitCode).toBe(0);
 
     expect(await new CompletionStore(dir).exists(wi.id)).toBe(false); // none yet
@@ -76,7 +79,8 @@ describe('ditto work done — lightweight completion path', () => {
     expect(s.exitCode).toBe(0);
     const wid = JSON.parse(s.stdout).work_item_id as string;
     // flip the placeholder AC to pass with evidence, but the statement is still TBD
-    ditto(['verify', wid, '--criterion', 'ac-1', '--', 'echo', 'ok']);
+    const wiPath = join(dir, '.ditto', 'local', 'work-items', wid, 'work-item.json');
+    ditto(['verify', wid, '--criterion', 'ac-1', '--', 'cat', wiPath]);
     const d = ditto(['work', 'done', wid, '--output', 'json']);
     expect(d.exitCode).not.toBe(0);
     expect(await new CompletionStore(dir).exists(wid)).toBe(false);

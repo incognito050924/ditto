@@ -2,7 +2,7 @@ import { defineCommand } from 'citty';
 import { PLACEHOLDER_AC_STATEMENT } from '~/core/charter';
 import { CompletionStore, assembleCompletionFromWorkItem } from '~/core/completion-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
-import { completionEvidenceGate, completionGate } from '~/core/gates';
+import { acceptanceTestable, completionEvidenceGate, completionGate } from '~/core/gates';
 import {
   InvalidBaseRefError,
   InvalidHeadRefError,
@@ -10,6 +10,7 @@ import {
 } from '~/core/work-item-handoff';
 import { WorkItemStore } from '~/core/work-item-store';
 import { declarerRole } from '~/schemas/common';
+import type { AcceptanceCriterion } from '~/schemas/work-item';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -18,6 +19,90 @@ import {
   writeHuman,
   writeJson,
 } from '../util';
+
+/**
+ * Parse a `--criteria` string into per-AC statements: split on `;`, trim, drop
+ * empties. Shared by `work start --criteria` and `work set-criteria` so both
+ * surfaces build acceptance criteria the same way.
+ */
+function parseCriteriaStatements(raw: string): string[] {
+  return raw
+    .split(';')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+/**
+ * Observability gate: reuse the deterministic `acceptanceTestable` (gates.ts) on
+ * each statement so the setter rejects a vague term or a statement with no
+ * observable predicate. Returns a per-statement rejection message for every
+ * statement that fails; empty when all are testable. Callers reject the WHOLE
+ * batch on any failure (no partial write).
+ */
+function rejectNonObservableCriteria(statements: string[]): string[] {
+  const errors: string[] = [];
+  statements.forEach((statement, i) => {
+    const result = acceptanceTestable({ statement });
+    if (!result.pass) errors.push(`ac-${i + 1} "${statement}": ${result.reasons.join('; ')}`);
+  });
+  return errors;
+}
+
+interface SupersededRecord {
+  statement: string;
+  reason: string;
+}
+
+/**
+ * Provenance records for the new criterion at `index`: the prior criterion's
+ * existing supersession history, plus its statement when it was graded
+ * (non-`unverified`) — replacing a graded statement is what we must not lose. The
+ * LAST new criterion also absorbs the provenance of any graded prior criteria
+ * beyond the new count, so a dropped graded statement is never silently lost.
+ */
+function supersededRecordsFor(
+  prior: readonly AcceptanceCriterion[],
+  index: number,
+  newCount: number,
+  reason: string,
+): SupersededRecord[] {
+  const records: SupersededRecord[] = [];
+  const old = prior[index];
+  if (old) {
+    records.push(...(old.superseded ?? []));
+    if (old.verdict !== 'unverified') records.push({ statement: old.statement, reason });
+  }
+  if (index === newCount - 1) {
+    for (const c of prior.slice(newCount)) {
+      if (c.verdict !== 'unverified') records.push({ statement: c.statement, reason });
+    }
+  }
+  return records;
+}
+
+/**
+ * Build fresh (`unverified`) acceptance criteria from the statements. When
+ * `reason` is defined (an explicit `--supersede`), prior graded statements are
+ * preserved in each new criterion's `superseded` provenance; when undefined
+ * (plain replace, no graded criteria locked), criteria carry no provenance.
+ */
+function buildCriteria(
+  statements: string[],
+  prior: readonly AcceptanceCriterion[],
+  reason: string | undefined,
+) {
+  const newCount = statements.length;
+  return statements.map((statement, i) => {
+    const records = reason === undefined ? [] : supersededRecordsFor(prior, i, newCount, reason);
+    return {
+      id: `ac-${i + 1}`,
+      statement,
+      verdict: 'unverified' as const,
+      evidence: [],
+      ...(records.length > 0 ? { superseded: records } : {}),
+    };
+  });
+}
 
 const workStart = defineCommand({
   meta: {
@@ -38,6 +123,12 @@ const workStart = defineCommand({
     title: {
       type: 'string',
       description: 'Short title; defaults to goal truncated',
+      required: false,
+    },
+    criteria: {
+      type: 'string',
+      description:
+        'Real observable acceptance criteria, semicolon-separated — set at creation instead of the placeholder',
       required: false,
     },
     profile: {
@@ -69,24 +160,42 @@ const workStart = defineCommand({
       | 'reviewer'
       | 'isolated';
     const title = args.title ?? args.goal.slice(0, 80);
+    const realStatements = args.criteria ? parseCriteriaStatements(args.criteria) : [];
+    if (realStatements.length > 0) {
+      const errors = rejectNonObservableCriteria(realStatements);
+      if (errors.length > 0) {
+        writeError(`--criteria rejected (not observable/testable): ${errors.join('; ')}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+    }
+    const acceptance_criteria =
+      realStatements.length > 0
+        ? realStatements.map((statement, i) => ({
+            id: `ac-${i + 1}`,
+            statement,
+            verdict: 'unverified' as const,
+            evidence: [],
+          }))
+        : [
+            {
+              id: 'ac-1',
+              // Single source of truth (V1): the placeholder detector in
+              // user-prompt-submit matches this exact string to fire the
+              // deep-interview directive, so the CLI must emit the same constant
+              // rather than a hand-written sibling that silently bypasses it.
+              statement: PLACEHOLDER_AC_STATEMENT,
+              verdict: 'unverified' as const,
+              evidence: [],
+            },
+          ];
     try {
       const created = await store.create({
         title,
         source_request: args.request,
         goal: args.goal,
         owner_profile: profile,
-        acceptance_criteria: [
-          {
-            id: 'ac-1',
-            // Single source of truth (V1): the placeholder detector in
-            // user-prompt-submit matches this exact string to fire the
-            // deep-interview directive, so the CLI must emit the same constant
-            // rather than a hand-written sibling that silently bypasses it.
-            statement: PLACEHOLDER_AC_STATEMENT,
-            verdict: 'unverified',
-            evidence: [],
-          },
-        ],
+        acceptance_criteria,
       });
       if (format === 'json') {
         writeJson({
@@ -111,6 +220,115 @@ const workStart = defineCommand({
     } catch (err) {
       writeError(`work start failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+const workSetCriteria = defineCommand({
+  meta: {
+    name: 'set-criteria',
+    description:
+      'Replace placeholder acceptance criteria with real, observable criteria (semicolon-separated)',
+  },
+  args: {
+    workId: {
+      type: 'positional',
+      description: 'Work item id to set acceptance criteria on',
+      required: true,
+    },
+    criteria: {
+      type: 'string',
+      description:
+        'Observable criteria, semicolon-separated — one acceptance criterion (ac-1, ac-2, …) each',
+      required: true,
+    },
+    supersede: {
+      type: 'boolean',
+      description:
+        'Override the lock on already-graded criteria. Requires --reason; prior statements are preserved as provenance.',
+      default: false,
+    },
+    reason: {
+      type: 'string',
+      description: 'Why the graded criteria are being replaced (required with --supersede)',
+      required: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const supersede = args.supersede === true;
+    if (supersede && !args.reason) {
+      writeError('--supersede requires --reason "<why the graded criteria are being replaced>"');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const statements = parseCriteriaStatements(args.criteria);
+    if (statements.length === 0) {
+      writeError('--criteria must contain at least one non-empty statement (semicolon-separated)');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const observabilityErrors = rejectNonObservableCriteria(statements);
+    if (observabilityErrors.length > 0) {
+      writeError(
+        `--criteria rejected (not observable/testable): ${observabilityErrors.join('; ')}`,
+      );
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const current = await store.get(args.workId);
+      // Lock-with-provenance (charter §4-6): a criterion that already carries a
+      // verdict must not be silently overwritten (goalpost-moving). Block by
+      // default; require explicit --supersede --reason to override.
+      const graded = current.acceptance_criteria.filter((c) => c.verdict !== 'unverified');
+      if (graded.length > 0 && !supersede) {
+        writeError(
+          `work ${args.workId} has graded criteria (${graded
+            .map((c) => `${c.id}=${c.verdict}`)
+            .join(
+              ', ',
+            )}); set-criteria would overwrite verified results. Re-run with --supersede --reason "<why>" to override (prior statements are preserved as provenance).`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const nextCriteria = buildCriteria(
+        statements,
+        current.acceptance_criteria,
+        supersede ? (args.reason as string) : undefined,
+      );
+      const updated = await store.update(args.workId, (cur) => ({
+        ...cur,
+        acceptance_criteria: nextCriteria,
+      }));
+      if (format === 'json') {
+        writeJson({
+          work_item_id: updated.id,
+          acceptance_criteria: updated.acceptance_criteria.map((c) => ({
+            id: c.id,
+            statement: c.statement,
+          })),
+        });
+      } else {
+        writeHuman(
+          `Set ${updated.acceptance_criteria.length} acceptance criteria on ${updated.id}:`,
+        );
+        for (const c of updated.acceptance_criteria) writeHuman(`  ${c.id}: ${c.statement}`);
+      }
+    } catch (err) {
+      writeError(`work set-criteria failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
     }
   },
 });
@@ -483,6 +701,7 @@ export const workCommand = defineCommand({
   },
   subCommands: {
     start: workStart,
+    'set-criteria': workSetCriteria,
     status: workStatus,
     handoff: workHandoff,
     done: workDone,

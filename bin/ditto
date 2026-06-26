@@ -18386,7 +18386,11 @@ var acceptanceCriterion = exports_external.object({
   statement: exports_external.string().min(1).describe("Single observable behavior in user-facing terms"),
   verdict: verdict.default("unverified"),
   evidence: exports_external.array(evidenceRef).default([]),
-  oracle: acOracle.optional()
+  oracle: acOracle.optional(),
+  superseded: exports_external.array(exports_external.object({
+    statement: exports_external.string().min(1).describe("The prior (graded) statement that was replaced"),
+    reason: exports_external.string().min(1).describe("Why the prior criterion was superseded")
+  })).optional()
 }).describe("One acceptance criterion with its verification verdict");
 var riskNote = exports_external.object({
   description: exports_external.string().min(1),
@@ -41455,6 +41459,14 @@ var techSpecCommand = defineCommand({
 
 // src/cli/commands/verify.ts
 init_fs();
+var NOOP_COMMANDS = new Set(["true", ":", "echo"]);
+function isNoOpCommand(tail) {
+  const cmd = tail[0];
+  if (cmd === undefined)
+    return false;
+  const base = cmd.includes("/") ? cmd.slice(cmd.lastIndexOf("/") + 1) : cmd;
+  return NOOP_COMMANDS.has(base);
+}
 function runChildCommand(tail) {
   if (tail.length === 0) {
     throw new Error("empty command tail");
@@ -41505,7 +41517,12 @@ var verifyCommand = defineCommand({
     }
     const tail = extractDashDashTail();
     if (tail === null || tail.length === 0) {
-      writeError("ditto verify requires a command after `--`. Example: ditto verify <wi> -- echo ok");
+      writeError("ditto verify requires a command after `--`. Example: ditto verify <wi> --criterion ac-1 -- bun test path/to.test.ts");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (isNoOpCommand(tail)) {
+      writeError(`ditto verify rejects the no-op command \`${tail.join(" ")}\` \u2014 a no-op (true, :, bare echo) cannot grade a criterion as pass. Provide a real verification command after \`--\`.`);
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
@@ -41578,6 +41595,47 @@ var verifyCommand = defineCommand({
 // src/cli/commands/work.ts
 init_fs();
 init_common();
+function parseCriteriaStatements(raw) {
+  return raw.split(";").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+}
+function rejectNonObservableCriteria(statements) {
+  const errors3 = [];
+  statements.forEach((statement, i2) => {
+    const result2 = acceptanceTestable({ statement });
+    if (!result2.pass)
+      errors3.push(`ac-${i2 + 1} "${statement}": ${result2.reasons.join("; ")}`);
+  });
+  return errors3;
+}
+function supersededRecordsFor(prior, index, newCount, reason) {
+  const records = [];
+  const old = prior[index];
+  if (old) {
+    records.push(...old.superseded ?? []);
+    if (old.verdict !== "unverified")
+      records.push({ statement: old.statement, reason });
+  }
+  if (index === newCount - 1) {
+    for (const c3 of prior.slice(newCount)) {
+      if (c3.verdict !== "unverified")
+        records.push({ statement: c3.statement, reason });
+    }
+  }
+  return records;
+}
+function buildCriteria(statements, prior, reason) {
+  const newCount = statements.length;
+  return statements.map((statement, i2) => {
+    const records = reason === undefined ? [] : supersededRecordsFor(prior, i2, newCount, reason);
+    return {
+      id: `ac-${i2 + 1}`,
+      statement,
+      verdict: "unverified",
+      evidence: [],
+      ...records.length > 0 ? { superseded: records } : {}
+    };
+  });
+}
 var workStart = defineCommand({
   meta: {
     name: "start",
@@ -41597,6 +41655,11 @@ var workStart = defineCommand({
     title: {
       type: "string",
       description: "Short title; defaults to goal truncated",
+      required: false
+    },
+    criteria: {
+      type: "string",
+      description: "Real observable acceptance criteria, semicolon-separated \u2014 set at creation instead of the placeholder",
       required: false
     },
     profile: {
@@ -41623,20 +41686,35 @@ var workStart = defineCommand({
     const store = new WorkItemStore(repoRoot);
     const profile = args.profile;
     const title = args.title ?? args.goal.slice(0, 80);
+    const realStatements = args.criteria ? parseCriteriaStatements(args.criteria) : [];
+    if (realStatements.length > 0) {
+      const errors3 = rejectNonObservableCriteria(realStatements);
+      if (errors3.length > 0) {
+        writeError(`--criteria rejected (not observable/testable): ${errors3.join("; ")}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+    }
+    const acceptance_criteria = realStatements.length > 0 ? realStatements.map((statement, i2) => ({
+      id: `ac-${i2 + 1}`,
+      statement,
+      verdict: "unverified",
+      evidence: []
+    })) : [
+      {
+        id: "ac-1",
+        statement: PLACEHOLDER_AC_STATEMENT,
+        verdict: "unverified",
+        evidence: []
+      }
+    ];
     try {
       const created = await store.create({
         title,
         source_request: args.request,
         goal: args.goal,
         owner_profile: profile,
-        acceptance_criteria: [
-          {
-            id: "ac-1",
-            statement: PLACEHOLDER_AC_STATEMENT,
-            verdict: "unverified",
-            evidence: []
-          }
-        ]
+        acceptance_criteria
       });
       if (format === "json") {
         writeJson2({
@@ -41657,6 +41735,95 @@ var workStart = defineCommand({
     } catch (err) {
       writeError(`work start failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var workSetCriteria = defineCommand({
+  meta: {
+    name: "set-criteria",
+    description: "Replace placeholder acceptance criteria with real, observable criteria (semicolon-separated)"
+  },
+  args: {
+    workId: {
+      type: "positional",
+      description: "Work item id to set acceptance criteria on",
+      required: true
+    },
+    criteria: {
+      type: "string",
+      description: "Observable criteria, semicolon-separated \u2014 one acceptance criterion (ac-1, ac-2, \u2026) each",
+      required: true
+    },
+    supersede: {
+      type: "boolean",
+      description: "Override the lock on already-graded criteria. Requires --reason; prior statements are preserved as provenance.",
+      default: false
+    },
+    reason: {
+      type: "string",
+      description: "Why the graded criteria are being replaced (required with --supersede)",
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const supersede = args.supersede === true;
+    if (supersede && !args.reason) {
+      writeError('--supersede requires --reason "<why the graded criteria are being replaced>"');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const statements = parseCriteriaStatements(args.criteria);
+    if (statements.length === 0) {
+      writeError("--criteria must contain at least one non-empty statement (semicolon-separated)");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const observabilityErrors = rejectNonObservableCriteria(statements);
+    if (observabilityErrors.length > 0) {
+      writeError(`--criteria rejected (not observable/testable): ${observabilityErrors.join("; ")}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const current = await store.get(args.workId);
+      const graded = current.acceptance_criteria.filter((c3) => c3.verdict !== "unverified");
+      if (graded.length > 0 && !supersede) {
+        writeError(`work ${args.workId} has graded criteria (${graded.map((c3) => `${c3.id}=${c3.verdict}`).join(", ")}); set-criteria would overwrite verified results. Re-run with --supersede --reason "<why>" to override (prior statements are preserved as provenance).`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const nextCriteria = buildCriteria(statements, current.acceptance_criteria, supersede ? args.reason : undefined);
+      const updated = await store.update(args.workId, (cur) => ({
+        ...cur,
+        acceptance_criteria: nextCriteria
+      }));
+      if (format === "json") {
+        writeJson2({
+          work_item_id: updated.id,
+          acceptance_criteria: updated.acceptance_criteria.map((c3) => ({
+            id: c3.id,
+            statement: c3.statement
+          }))
+        });
+      } else {
+        writeHuman(`Set ${updated.acceptance_criteria.length} acceptance criteria on ${updated.id}:`);
+        for (const c3 of updated.acceptance_criteria)
+          writeHuman(`  ${c3.id}: ${c3.statement}`);
+      }
+    } catch (err) {
+      writeError(`work set-criteria failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
     }
   }
 });
@@ -41988,6 +42155,7 @@ var workCommand = defineCommand({
   },
   subCommands: {
     start: workStart,
+    "set-criteria": workSetCriteria,
     status: workStatus,
     handoff: workHandoff,
     done: workDone,
@@ -42043,4 +42211,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=45c7297a46ccb842636274733516d4d2a4882d80cb3d596e3fa8334d4303f37a
+//# ditto-src-stamp=04e00e18aed030deaf7b67676baea138ddc2ca9abf21734b81b441b5aee87ecb

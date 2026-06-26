@@ -74,6 +74,18 @@ export const acceptanceCriterion = z
     // Additive + OPTIONAL (ADR-0024 §3): legacy ACs omit it and parse unchanged;
     // no schema_version bump (same idiom as autopilot_exempt / sourceDigest).
     oracle: acOracle.optional(),
+    // Provenance of graded criteria replaced via `work set-criteria --supersede`
+    // (prior statement + reason). Lock-with-provenance so a verified criterion is
+    // not silently overwritten (goalpost-moving, charter §4-6). Additive + OPTIONAL:
+    // legacy ACs omit it and parse unchanged; no schema_version bump.
+    superseded: z
+      .array(
+        z.object({
+          statement: z.string().min(1).describe('The prior (graded) statement that was replaced'),
+          reason: z.string().min(1).describe('Why the prior criterion was superseded'),
+        }),
+      )
+      .optional(),
   })
   .describe('One acceptance criterion with its verification verdict');
 

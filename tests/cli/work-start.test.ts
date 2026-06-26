@@ -53,4 +53,52 @@ describe('ditto work start', () => {
     expect(r.stdout).toContain('finalize');
     expect(r.stdout).toContain('intent.json');
   });
+
+  // ac-1 (B) — `--criteria` sets real observable criteria at creation instead of
+  // the placeholder (semicolon-separated → ac-1, ac-2, …).
+  test('B: --criteria sets real observable criteria instead of the placeholder', async () => {
+    const r = ditto([
+      'work',
+      'start',
+      'observable goal',
+      '--request',
+      'do the thing',
+      '--criteria',
+      'the command returns 0; the output contains ok',
+      '--output',
+      'json',
+    ]);
+    expect(r.exitCode).toBe(0);
+    const out = JSON.parse(r.stdout);
+    const item = JSON.parse(await readFile(join(dir, out.path), 'utf8'));
+    expect(item.acceptance_criteria).toHaveLength(2);
+    expect(item.acceptance_criteria[0].id).toBe('ac-1');
+    expect(item.acceptance_criteria[0].statement).toBe('the command returns 0');
+    expect(item.acceptance_criteria[1].id).toBe('ac-2');
+    expect(item.acceptance_criteria[1].statement).toBe('the output contains ok');
+    expect(
+      item.acceptance_criteria.some(
+        (c: { statement: string }) => c.statement === PLACEHOLDER_AC_STATEMENT,
+      ),
+    ).toBe(false);
+  });
+
+  // ac-1 (C) — observability gate: a vague/non-observable --criteria statement is
+  // rejected (non-zero exit) and no work item is created (no partial write).
+  test('C: --criteria with a vague statement rejects; no work item created', () => {
+    const r = ditto([
+      'work',
+      'start',
+      'observable goal',
+      '--request',
+      'do the thing',
+      '--criteria',
+      'make it robust',
+    ]);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/robust|vague|observable/i);
+    const s = ditto(['work', 'status', '--output', 'json']);
+    expect(s.exitCode).toBe(0);
+    expect(JSON.parse(s.stdout).items).toHaveLength(0);
+  });
 });

@@ -36,9 +36,17 @@ describe('Claude host surface — user CLI commands', () => {
     expect((cmd.meta?.description as string).length).toBeGreaterThan(0);
   });
 
-  test('`ditto work` exposes the start/status/handoff/done/abandon/archive subcommands the user types', () => {
+  test('`ditto work` exposes the start/status/handoff/done/abandon/archive/set-criteria subcommands the user types', () => {
     const subs = Object.keys(workCommand.subCommands ?? {}).sort();
-    expect(subs).toEqual(['abandon', 'archive', 'done', 'handoff', 'start', 'status']);
+    expect(subs).toEqual([
+      'abandon',
+      'archive',
+      'done',
+      'handoff',
+      'set-criteria',
+      'start',
+      'status',
+    ]);
   });
 
   // Live invocation of read-only commands, isolated to a tmp project dir so the
