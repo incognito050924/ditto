@@ -39,6 +39,20 @@ describe('charterProjection (D8)', () => {
     expect(out).toContain('ditto work start');
   });
 
+  // idea ② (wi_260627v93): weight-routing guidance — small/reversible → light path,
+  // heavy reserved for ambiguous/irreversible/multi-surface. Advisory (agent-judged,
+  // NOT an auto-classifier/auto-router) per D4 ADR (ADR-20260627). Always projected.
+  test('prime directive carries weight-routing guidance (small/reversible → light)', () => {
+    const out = charterProjection();
+    expect(out).toContain('Route by weight');
+    expect(out).toContain('lightweight path');
+    expect(out).toContain('ditto work set-criteria');
+    expect(out).toContain('deep-interview + autopilot');
+    expect(out).toContain('advisory');
+    expect(out.toLowerCase()).toContain('you judge');
+    expect(out).toContain('Declared risk defaults to the heavy path');
+  });
+
   test('selfAnswerHint → QuestionGate advisory (⚠)', () => {
     const out = charterProjection({ selfAnswerHint: true });
     expect(out).toContain('self-answer from code/docs/web first');
