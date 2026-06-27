@@ -33278,12 +33278,20 @@ var backlogCommand = defineCommand({
         }
       }
       const findingCount = staleDrafts.length + completedUnclosed.length;
+      const staleAction = (id) => `resume (ditto work set-criteria/deep-interview ${id}) or abandon (ditto work abandon ${id} --reason "<why>")`;
+      const closedAction = (id) => `ditto work done ${id}`;
       if (format === "json") {
         writeJson2({
           status: findingCount === 0 ? "ok" : "hygiene",
           open_count: openCount,
-          stale_drafts: staleDrafts,
-          completed_unclosed: completedUnclosed
+          stale_drafts: staleDrafts.map((s2) => ({
+            ...s2,
+            suggested_action: staleAction(s2.work_item_id)
+          })),
+          completed_unclosed: completedUnclosed.map((c3) => ({
+            ...c3,
+            suggested_action: closedAction(c3.work_item_id)
+          }))
         });
       } else {
         writeHuman(`open	${openCount} non-terminal work items`);
@@ -33292,9 +33300,11 @@ var backlogCommand = defineCommand({
         } else {
           for (const s2 of staleDrafts) {
             writeHuman(`stale_draft	${s2.work_item_id}	${s2.title}`);
+            writeHuman(`  \u2192 ${staleAction(s2.work_item_id)}`);
           }
           for (const c3 of completedUnclosed) {
             writeHuman(`completed_unclosed	${c3.work_item_id}	${c3.status}	${c3.title}`);
+            writeHuman(`  \u2192 ${closedAction(c3.work_item_id)}`);
           }
         }
       }
@@ -44199,4 +44209,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=8202a320bee36316a9c4c9bdf954d272cdea5b1299d331fbdf9b8bdf16ea641e
+//# ditto-src-stamp=8ae2e5eab89fd064f89dd55a722091e959d540ae8abfc699147d5459799d2042

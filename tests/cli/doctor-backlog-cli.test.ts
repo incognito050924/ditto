@@ -141,4 +141,34 @@ describe('ditto doctor backlog', () => {
     const res = spawnDitto(['doctor', 'backlog', '--output', 'xml']);
     expect(res.exitCode).toBe(65);
   });
+
+  // idea ②-A residual (wi_260627pfa): advisory next-action per surfaced item.
+  // Read-only — the suggestion names a command, the readout never runs it.
+  test('surfaced items carry an advisory suggested_action (json + human), read-only', async () => {
+    await seedWorkItem('wi_stale001', 'draft');
+    await seedWorkItem('wi_unclosed1', 'in_progress', { completion: 'pass' });
+
+    const json = spawnDitto(['doctor', 'backlog', '--output', 'json']);
+    expect(json.exitCode).toBe(0);
+    const payload = JSON.parse(json.stdout);
+    const stale = payload.stale_drafts.find(
+      (r: { work_item_id: string }) => r.work_item_id === 'wi_stale001',
+    );
+    // stale draft suggests resume OR abandon — never a silent auto-abandon.
+    expect(stale.suggested_action).toContain('ditto work abandon wi_stale001');
+    expect(stale.suggested_action.toLowerCase()).toContain('resume');
+    const unclosed = payload.completed_unclosed.find(
+      (r: { work_item_id: string }) => r.work_item_id === 'wi_unclosed1',
+    );
+    expect(unclosed.suggested_action).toContain('ditto work done wi_unclosed1');
+
+    // human output carries the same hints.
+    const human = spawnDitto(['doctor', 'backlog']);
+    expect(human.stdout).toContain('ditto work abandon wi_stale001');
+    expect(human.stdout).toContain('ditto work done wi_unclosed1');
+
+    // read-only: the draft is still a draft after the readout (nothing acted).
+    const after = spawnDitto(['work', 'status', 'wi_stale001']);
+    expect(after.stdout).toContain('draft');
+  });
 });

@@ -627,12 +627,26 @@ const backlogCommand = defineCommand({
       }
 
       const findingCount = staleDrafts.length + completedUnclosed.length;
+      // Advisory next-action per surfaced item (wi_260627pfa, idea ②-A residual):
+      // the readout names the command the USER can run — it NEVER acts. A stale
+      // draft is often real parked work, so the suggestion offers resume OR abandon
+      // (never a silent auto-abandon — that would destroy real backlog, D4 boundary
+      // ADR-20260627). completed-unclosed suggests the close that flips it to done.
+      const staleAction = (id: string): string =>
+        `resume (ditto work set-criteria/deep-interview ${id}) or abandon (ditto work abandon ${id} --reason "<why>")`;
+      const closedAction = (id: string): string => `ditto work done ${id}`;
       if (format === 'json') {
         writeJson({
           status: findingCount === 0 ? 'ok' : 'hygiene',
           open_count: openCount,
-          stale_drafts: staleDrafts,
-          completed_unclosed: completedUnclosed,
+          stale_drafts: staleDrafts.map((s) => ({
+            ...s,
+            suggested_action: staleAction(s.work_item_id),
+          })),
+          completed_unclosed: completedUnclosed.map((c) => ({
+            ...c,
+            suggested_action: closedAction(c.work_item_id),
+          })),
         });
       } else {
         writeHuman(`open\t${openCount} non-terminal work items`);
@@ -641,13 +655,16 @@ const backlogCommand = defineCommand({
         } else {
           for (const s of staleDrafts) {
             writeHuman(`stale_draft\t${s.work_item_id}\t${s.title}`);
+            writeHuman(`  → ${staleAction(s.work_item_id)}`);
           }
           for (const c of completedUnclosed) {
             writeHuman(`completed_unclosed\t${c.work_item_id}\t${c.status}\t${c.title}`);
+            writeHuman(`  → ${closedAction(c.work_item_id)}`);
           }
         }
       }
       // Read-only hygiene readout; never a drift exit and never an auto-cleanup action.
+      // The suggested_action strings are advisory text only — nothing is executed.
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(exitCodeForError(err));
