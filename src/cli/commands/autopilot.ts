@@ -470,6 +470,15 @@ const autopilotComplete = defineCommand({
       // the loop's existing auto_fix/surface/batch_escalate decisions (no re-derive).
       const attestation = attestCompletion(completion);
       const autoHandling = projectAutoHandling(decisions);
+      // D4 dialectic 결정 (a) (wi_2606278qa): this run materialized out-of-scope
+      // follow-ups as tracked draft WIs but does NOT auto-drive them (materialize
+      // != drive — per-WI approval + intent-lock is the intended control boundary,
+      // not relaxed here). Closing the T1 ac-4 residual-transference friction:
+      // surface each unresolved materialized follow-up WI + its precise pick-up
+      // command so the user doesn't have to hunt for the id. READ-ONLY — no auto-drive.
+      const followUpsToPickUp = (workItem.follow_ups ?? [])
+        .filter((f) => !f.resolved && f.materialized_wi)
+        .map((f) => ({ work_item_id: f.materialized_wi as string, note: f.note }));
       if (format === 'json') {
         writeJson({
           work_item_id: args.workItem,
@@ -492,6 +501,7 @@ const autopilotComplete = defineCommand({
           },
           cite_cross_check: citeCrossCheck,
           conflict_warnings: conflicts,
+          follow_ups_to_pick_up: followUpsToPickUp,
           path: `.ditto/local/work-items/${args.workItem}/completion.json`,
         });
       } else {
@@ -549,6 +559,19 @@ const autopilotComplete = defineCommand({
             `  능동 모순경고 (단계2, advisory — non-blocking): ${conflicts.length}건 — 기각된 대안 재제안 가능성`,
           );
           for (const c of conflicts) writeHuman(`    [${c.node_id}] ${c.message}`);
+        }
+        // D4 (a): surface this run's open materialized follow-ups + pick-up command
+        // (materialize != drive — never auto-started, the user picks them up).
+        if (followUpsToPickUp.length > 0) {
+          writeHuman(
+            `  이 run이 남긴 후속 ${followUpsToPickUp.length}건 (draft, 미착수 — materialize≠drive) — 착수 명령:`,
+          );
+          for (const f of followUpsToPickUp) {
+            writeHuman(`    - ${f.work_item_id}: ${f.note}`);
+            writeHuman(
+              `      착수: ditto work set-criteria ${f.work_item_id} --criteria "<…>" → ditto verify → ditto work done (경량) | /ditto:deep-interview (heavy)`,
+            );
+          }
         }
       }
     } catch (err) {

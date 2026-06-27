@@ -26611,6 +26611,7 @@ var autopilotComplete = defineCommand({
       });
       const attestation = attestCompletion(completion);
       const autoHandling = projectAutoHandling(decisions);
+      const followUpsToPickUp = (workItem2.follow_ups ?? []).filter((f3) => !f3.resolved && f3.materialized_wi).map((f3) => ({ work_item_id: f3.materialized_wi, note: f3.note }));
       if (format === "json") {
         writeJson2({
           work_item_id: args.workItem,
@@ -26633,6 +26634,7 @@ var autopilotComplete = defineCommand({
           },
           cite_cross_check: citeCrossCheck,
           conflict_warnings: conflicts,
+          follow_ups_to_pick_up: followUpsToPickUp,
           path: `.ditto/local/work-items/${args.workItem}/completion.json`
         });
       } else {
@@ -26671,6 +26673,13 @@ var autopilotComplete = defineCommand({
           writeHuman(`  \uB2A5\uB3D9 \uBAA8\uC21C\uACBD\uACE0 (\uB2E8\uACC42, advisory \u2014 non-blocking): ${conflicts.length}\uAC74 \u2014 \uAE30\uAC01\uB41C \uB300\uC548 \uC7AC\uC81C\uC548 \uAC00\uB2A5\uC131`);
           for (const c3 of conflicts)
             writeHuman(`    [${c3.node_id}] ${c3.message}`);
+        }
+        if (followUpsToPickUp.length > 0) {
+          writeHuman(`  \uC774 run\uC774 \uB0A8\uAE34 \uD6C4\uC18D ${followUpsToPickUp.length}\uAC74 (draft, \uBBF8\uCC29\uC218 \u2014 materialize\u2260drive) \u2014 \uCC29\uC218 \uBA85\uB839:`);
+          for (const f3 of followUpsToPickUp) {
+            writeHuman(`    - ${f3.work_item_id}: ${f3.note}`);
+            writeHuman(`      \uCC29\uC218: ditto work set-criteria ${f3.work_item_id} --criteria "<\u2026>" \u2192 ditto verify \u2192 ditto work done (\uACBD\uB7C9) | /ditto:deep-interview (heavy)`);
+          }
         }
       }
     } catch (err) {
@@ -44189,4 +44198,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=0ffd61d565fc4830df33b5d7ba81f65285227379cf80bb2292b9b6f358e975c5
+//# ditto-src-stamp=9a8dc87d5235cd37c36221d4f0f1dbefb0969cdf786d5bf401d9b42b76b4b8b8

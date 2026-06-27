@@ -144,3 +144,66 @@ describe('ditto autopilot complete — pass→done flip (ac-3)', () => {
     expect(await readStatus()).toBe('abandoned');
   });
 });
+
+// D4 dialectic 결정 (a) (wi_2606278qa): at done-flip, surface this run's unresolved
+// materialized follow-up WIs + their pick-up command (materialize != drive — the
+// control boundary is NOT relaxed; the user still starts each follow-up).
+describe('ditto autopilot complete — follow-ups to pick up (D4-a)', () => {
+  async function seedWithFollowUps(): Promise<void> {
+    await write('work-item.json', {
+      schema_version: '0.1.0',
+      id: WI,
+      title: 'flip cli',
+      source_request: 'add a thing',
+      goal: 'the thing works',
+      acceptance_criteria: [
+        { id: 'ac-1', statement: 'ac-1 holds', verdict: 'unverified', evidence: [] },
+      ],
+      status: 'in_progress',
+      owner_profile: 'workspace-write',
+      child_ids: [],
+      changed_files: ['src/x.ts'],
+      risks: [],
+      runs: [],
+      // one unresolved materialized (surface it), one resolved (skip), one idea
+      // candidate with no materialized_wi (skip — not a tracked WI to pick up).
+      follow_ups: [
+        { kind: 'bug', note: 'open materialized follow-up', materialized_wi: 'wi_followup01' },
+        {
+          kind: 'bug',
+          note: 'already resolved',
+          materialized_wi: 'wi_followup02',
+          resolved: true,
+        },
+        { kind: 'idea', note: 'candidate only, no WI' },
+      ],
+      created_at: '2026-06-06T00:00:00.000Z',
+      updated_at: '2026-06-06T00:00:00.000Z',
+    });
+  }
+
+  test('pass completion surfaces only unresolved materialized follow-ups + pick-up command', async () => {
+    await seedWithFollowUps();
+    await seedGraph(true);
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    expect(res.exitCode).toBe(0);
+    const out = JSON.parse(res.stdout.slice(res.stdout.indexOf('{')));
+    expect(out.auto_close?.outcome).toBe('flipped');
+    // only the unresolved + materialized one; resolved + idea-without-WI excluded.
+    expect(out.follow_ups_to_pick_up).toEqual([
+      { work_item_id: 'wi_followup01', note: 'open materialized follow-up' },
+    ]);
+    // human output carries the pick-up command for that WI.
+    const human = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'human']);
+    expect(human.stdout).toContain('wi_followup01');
+    expect(human.stdout).toContain('ditto work set-criteria wi_followup01');
+  });
+
+  test('no follow-ups → empty list', async () => {
+    await seedWorkItem('in_progress');
+    await seedGraph(true);
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    const out = JSON.parse(res.stdout.slice(res.stdout.indexOf('{')));
+    expect(out.follow_ups_to_pick_up).toEqual([]);
+  });
+});
