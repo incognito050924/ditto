@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_2606276fk",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] A push under --push triggering a git credential prompt/failure must surface as a halt, not hang — that is failure-recovery (relevant), not an auth-model gap.\n[residual] Auto-merge could write onto an unintended base branch — covered by data-integrity/boundary-edge (relevant), not an authz model.\n[residual] Irreversible merge/remove leave only an in-memory/stdout ledger — durable-record concern routed to observability (relevant).\n[residual] A crafted wi-id reaching git argv is option-injection — owned by injection/input-validation (relevant).\n[residual] If a halt reason echoes subprocess output with an author email it surfaces in the ledger — generic stderr scrubbing (secret-exposure, relevant), not a PII pipeline.\n[residual] None identified — neither collects nor transmits regulated data; push goes to a remote the user already controls under existing policy.\n[residual] A slow merge-back holding the worktree lock could approach the reused 30s deadline — exercised by concurrency-ordering (relevant), not new clock logic.\n[close_reason] Local single-machine dev CLI; no authentication path added or touched, runs as invoking user. Only credential interaction is git's own push auth, reused unchanged.\n[close_reason] No access-control model in this tool — single-user local git, all ops run with invoker's permissions. No who-may/may-not surface.\n[close_reason] No security audit/non-repudiation requirement for a local dev tool; no multiple parties, no tamper-evidence need.\n[close_reason] Local tool over a self-named WI list; no untrusted actor, no replay/bulk/scraping surface. Inputs from the operator.\n[close_reason] Handles wi-ids/branch names/refs only; no PII collected, logged, or transmitted. Merge-commit author identity is pre-existing git state.\n[close_reason] Local git dev tooling; no personal-data processing, no jurisdictional/consent/retention surface. No GDPR/compliance regime applies.\n[close_reason] Driver introduces no time/clock dependence. Lone time logic (withWorktreeLock wall-clock 30s, worktree.ts:183,247) is reused unchanged, not net-new.",
+  "created_at": "2026-06-27T10:00:17.514Z",
+  "status": "approved",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "approved_by": "hskim",
+  "decided_at": "2026-06-27T10:00:17.514Z",
+  "supersedes": "memevt_retro_6dbb00224ccc66a9",
+  "governs": []
+}
