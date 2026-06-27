@@ -109,9 +109,25 @@ export function duplicateSearch(
  * tells the user to give; binding on it is a user action, NOT an arbitrary
  * auto-pick, so the single-active no-auto-pick invariant (plan §3 F3) holds.
  */
+/**
+ * A resume-intent keyword that, alongside a wi_ id, marks the mention as an
+ * explicit resume command rather than an incidental reference. English verbs are
+ * word-bounded; Korean markers are matched as substrings (no word boundaries).
+ */
+const RESUME_KEYWORD = /\b(resume|reopen|switch to|work on)\b|이어서|이어받|재개/i;
+
 export function explicitWorkItemRef(prompt: string): string | undefined {
   const m = prompt.match(/\bwi_[a-z0-9]{8,}\b/i);
-  return m ? m[0].toLowerCase() : undefined;
+  if (!m) return undefined;
+  const id = m[0].toLowerCase();
+  // A bare wi_ token buried in prose is an INCIDENTAL mention (a quoted id, a
+  // "similar to wi_X" comparison, or an injected tool-result), NOT a resume
+  // command. Binding the session pointer on it falsely adopts an unrelated work
+  // item and trips its Stop gate (gotcha wi_260627jor). Count it as a resume
+  // signal only when the id LEADS the prompt (the user named it as the whole or
+  // leading instruction) or a resume-intent keyword co-occurs.
+  const leads = prompt.trimStart().toLowerCase().startsWith(id);
+  return leads || RESUME_KEYWORD.test(prompt) ? id : undefined;
 }
 
 export interface ActiveResolution {

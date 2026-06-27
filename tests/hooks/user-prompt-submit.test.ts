@@ -10,6 +10,7 @@ import { WorkItemStore } from '~/core/work-item-store';
 import {
   classifyPromptAdvisory,
   duplicateSearch,
+  explicitWorkItemRef,
   looksCodebaseAnswerable,
   resolveActiveWorkItem,
   userPromptSubmitHandler,
@@ -56,6 +57,27 @@ describe('looksCodebaseAnswerable Korean code surface (V4)', () => {
 
   test('a Korean prompt with no code surface stays false', () => {
     expect(looksCodebaseAnswerable('오늘 일정이 어떻게 돼?')).toBe(false);
+  });
+});
+
+// gotcha wi_260627jor: a bare wi_ token anywhere in the prompt (incidental prose
+// mention, a quoted id, or an injected tool-result) used to count as an explicit
+// resume signal and bind the session pointer — tripping an unrelated Stop gate.
+// A resume signal must be the id LEADING the prompt or a resume-intent keyword.
+describe('explicitWorkItemRef (resume signal, not incidental mention)', () => {
+  test('incidental prose mention does NOT count as a resume signal', () => {
+    expect(explicitWorkItemRef('이 버그는 wi_260627273 과 비슷하다 보고서 읽어줘')).toBeUndefined();
+    expect(explicitWorkItemRef('compare with wi_260627273 behavior')).toBeUndefined();
+  });
+
+  test('id leading the prompt counts as a resume signal', () => {
+    expect(explicitWorkItemRef('wi_260627273 이어서 해줘')).toBe('wi_260627273');
+    expect(explicitWorkItemRef('wi_260627273')).toBe('wi_260627273');
+  });
+
+  test('a resume-intent keyword with the id counts as a resume signal', () => {
+    expect(explicitWorkItemRef('resume wi_260627273')).toBe('wi_260627273');
+    expect(explicitWorkItemRef('wi_260627273 재개하자')).toBe('wi_260627273');
   });
 });
 
@@ -151,6 +173,27 @@ describe('resolveActiveWorkItem (single-active invariant)', () => {
     const r = await resolveActiveWorkItem(repo, 'sess-noexist', 'resume wi_doesnotexist1 now');
     expect(r.action).toBe('guide'); // empty store → guide, pointer untouched
     expect(await new SessionPointerStore(repo).get('sess-noexist')).toBeNull();
+  });
+
+  // gotcha wi_260627jor: no active pointer + an INCIDENTAL prose mention of an
+  // existing wi must NOT auto-bind. It falls through to the non-blocking "ask"
+  // advisory, leaving the pointer unset so no unrelated Stop gate fires.
+  test('no pointer + incidental mention of an existing wi does NOT bind', async () => {
+    const items = new WorkItemStore(repo);
+    const existing = await items.create({
+      title: 'mentioned',
+      source_request: 'm',
+      goal: 'm',
+      acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+    });
+    expect(await new SessionPointerStore(repo).get('sess-incidental')).toBeNull();
+    const r = await resolveActiveWorkItem(
+      repo,
+      'sess-incidental',
+      `이 버그는 ${existing.id} 과 구조가 비슷하다. 그냥 보고서나 읽어줘.`,
+    );
+    expect(r.action).toBe('ask'); // not 'loaded' — no false adoption
+    expect(await new SessionPointerStore(repo).get('sess-incidental')).toBeNull();
   });
 
   // ac-1 (wi_260625x74): an already-bound session must NOT be silently rebound by a

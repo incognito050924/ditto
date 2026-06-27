@@ -37349,9 +37349,14 @@ function duplicateSearch(prompt2, open2) {
     return { id: s2.id, title: s2.title, overlap };
   }).filter((m2) => m2.overlap > 0).sort((a2, b2) => b2.overlap - a2.overlap);
 }
+var RESUME_KEYWORD = /\b(resume|reopen|switch to|work on)\b|\uC774\uC5B4\uC11C|\uC774\uC5B4\uBC1B|\uC7AC\uAC1C/i;
 function explicitWorkItemRef(prompt2) {
   const m2 = prompt2.match(/\bwi_[a-z0-9]{8,}\b/i);
-  return m2 ? m2[0].toLowerCase() : undefined;
+  if (!m2)
+    return;
+  const id = m2[0].toLowerCase();
+  const leads = prompt2.trimStart().toLowerCase().startsWith(id);
+  return leads || RESUME_KEYWORD.test(prompt2) ? id : undefined;
 }
 async function resolveActiveWorkItem(repoRoot, sessionId, prompt2) {
   const items = new WorkItemStore(repoRoot);
@@ -44784,4 +44789,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=421baafcd2f62998f8d204a9dceecc8e4eae29333e37dad0d0777ec5bb3b73df
+//# ditto-src-stamp=480f53f986df04b981e52ca093411f7bac42234498b36c3e57f1d2bf4b84652e
