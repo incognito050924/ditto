@@ -78,7 +78,7 @@
 
 목표(달성): 실제 개발 절차(TDD)를 ditto 1급 표면으로, 경량 경로를 노출로, 종결을 자동으로.
 
-- [x] **red-first 교정**(D3 결정 = 새 `ditto tdd` 표면 아님, `implementer` 노드 교정): 코드-동작 AC(design-assigned `dynamic_test` oracle)인 implementer 노드는 dispatch packet에 red-first 지시를 받는다 — 실패 테스트 먼저, AC 단언 실패(헛-red 아님) 확인 후 최소 green. 비-코드(`soft_judgment`)·경량(no-oracle)·refactorer 면제. `autopilot-dispatch.ts isRedFirstImplement` + committed 테스트. _후속(R7): 새 흐름으로 실제 WI 하나를 red→green→close하는 behavioral 라이브 실증(자기참조 역설로 본 WI선 불가)._
+- [x] **red-first 교정**(D3 결정 = 새 `ditto tdd` 표면 아님, `implementer` 노드 교정): 코드-동작 AC(design-assigned `dynamic_test` oracle)인 implementer 노드는 dispatch packet에 red-first 지시를 받는다 — 실패 테스트 먼저, AC 단언 실패(헛-red 아님) 확인 후 최소 green. 비-코드(`soft_judgment`)·경량(no-oracle)·refactorer 면제. `autopilot-dispatch.ts isRedFirstImplement` + committed 테스트. _후속(R7) ✅: 별도 WI(wi_260627f2d, env-flag trim fix)를 autopilot으로 구동해 implementer red-first behavioral 라이브 실증 완료 — dispatch packet에 red-first 실림 + 두 코드-동작 AC 모두 RED(AC 단언 실패=헛-red 아님)→GREEN 관찰. main c81f23d._
 - [x] **경량 경로 노출**: charter 투영·`work start` Next-steps·deep-interview skill 3표면 모두 `set-criteria→verify→done` 노출. _범위 밖(후속): 프롬프트를 simple/reversible로 능동 분류해 라우팅(노출만 했고 자동 분류는 안 함)._
 - [x] **autopilot 완료 시 자동 close**: `complete` final_verdict=pass면 WI status를 done으로 flip(수동 `work done`과 동일 게이트). 비-pass 불변(양방향)·abandoned 미덮어쓰기(R1)·reopen 경로(R2). 본 WI 자신이 이 기능으로 done flip됨(ac-3 자기참조 실증).
 - [x] **backlog 위생 표면**: `doctor`가 stale draft(structural)·"완료-미종결"(completion pass인데 status≠done, terminal 제외)·open-count를 read-only 출력. parked-with-reason 미오판. 자동 정리 액션 없음.
@@ -100,12 +100,13 @@
 
 - **D1 — 테마 순서**: 추천 T1 → T2(둘은 "verify가 진짜 게이트"로 맞닿아 묶음 설계 가능) → T3. _(미정)_
 - **D2 — T3 ADR-0011 충돌(비가역)**: session-rooting 불변식을 풀지(ADR 수정) / 유지하며 우회할지. _(미정)_
-- **D3 — TDD 표면 형태**: 새 절차 표면(`ditto tdd`) vs 기존 `implementer` 노드 red-first 교정. _(미정)_
-- **D4 — 후속 "즉시 착수" 의미**: 현 run 내 자동 start vs 큐 등록(T3과 연동). _(미정)_
+- **D3 — TDD 표면 형태**: ✅ 확정 — 기존 `implementer` 노드 red-first 교정(새 `ditto tdd` 표면 아님). T2 landed(wi_2606264rm).
+- **D4 — 후속 "즉시 착수" 의미**: ✅ 확정 — no-auto-pick **완화 안 함**. (a) done-flip이 후속 착수명령 surface(wi_2606278qa) + (c) in-scope는 current-graph 노드로 구동. 진짜 cross-WI auto-drive는 명시 신호 뒤로(T3). dialectic verdict=revise(Opponent=Codex), ADR-20260627-autopilot-followup-autonomy-boundary 참조.
 
 확정:
 
 - (이번 세션) work-lifecycle 경량 경로 10결정·7 AC landed — ADR-20260626-work-lifecycle-lightweight-path 참조.
+- **D3·D4 (2026-06-27)**: D3=implementer red-first 교정(T2), D4=per-WI 승인이 의도된 자율성 경계·no-auto-pick 미완화(dialectic revise, ADR-20260627-autopilot-followup-autonomy-boundary). T3는 D1·D2 여전히 미정.
 
 ---
 
