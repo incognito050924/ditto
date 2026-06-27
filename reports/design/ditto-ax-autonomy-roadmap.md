@@ -16,7 +16,7 @@
 |---|---|---|---|---|
 | **T1. autopilot 무-전가** | P3, P4 | ✅ landed | wi_2606266az | 6 AC final_verdict=pass(runtime-artifact 검증) · main 728c009 |
 | **T2. 개발 절차 1급화** (TDD 표면·경량 기본값·자동 close·backlog 위생) | P1, P2, P7 | ✅ landed | wi_2606264rm | 4 AC final_verdict=pass · main c6e15a4 · autopilot complete가 자기 WI를 done flip(ac-3 자기참조 실증) |
-| **T3. 다중 WI·worktree 자율 구동** (same-repo로 재범위) | P5, P6 | ⬜ TODO(결정 해소, 구현 대기) | _(미생성)_ | D2 해소: ADR-0021이 cross-root를 ditto 범위 밖으로 foreclose → ADR-0011 유지·T3=same-repo. 구현은 fresh 세션 권장(§6) |
+| **T3. 다중 WI·worktree 자율 구동** (same-repo로 재범위) | P5, P6 | ⬜ TODO(결정 해소, fresh 세션 대기) | wi_2606277pt | D2 해소: ADR-0021이 cross-root를 ditto 범위 밖으로 foreclose → ADR-0011 유지·T3=same-repo. 핸드오프 작성됨(.ditto/local/handoff/wi_2606277pt.md), 구현은 fresh 세션(§6) |
 
 **이미 landed(부분 해결, b8d8163 이후)**: worktree 동시개발 1급 지원(T3 레인) · work-lifecycle 경량 경로 7 AC(T2 일부) · 이 세션 25→2 open WI 정리(T1/T2 사후 실증). 상세 §3.
 
