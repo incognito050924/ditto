@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { commitCleanup, commitPerSubRepo } from '~/core/cleanup-archive';
+import { CleanupDirtyRepoError, commitCleanup, commitPerSubRepo } from '~/core/cleanup-archive';
 import { landCommit } from '~/core/land-commit';
 import type { CleanupIndex } from '~/schemas/cleanup-index';
 
@@ -221,5 +221,90 @@ describe('shared commitPerSubRepo reuse (Tidy First extraction)', () => {
     // doc.md no longer tracked at HEAD
     const tracked = git(repo, ['ls-files']).split('\n');
     expect(tracked).not.toContain('doc.md');
+  });
+});
+
+// wi_260627sga: ① a gitignored path declared in changed_files must NOT crash the
+// land (a gitignored entry can never be committed → drop it). ② the run's own
+// tracked byproducts under `.ditto/memory/` ride along with the land commit
+// instead of tripping the unrelated-dirt abort, while genuinely foreign dirt STILL
+// aborts (the under-declaration safety net stays). cleanup's shared abort is
+// unchanged.
+describe('landCommit — gitignored filter + run-byproduct absorption (wi_260627sga)', () => {
+  // Track `.ditto/memory` (real repos gitignore only `.ditto/local`) so memory
+  // events register as working-tree dirt rather than being ignored. A baseline
+  // memory file is committed so the dir is tracked — matching production, where a
+  // NEW event shows individually in `git status` (default porcelain collapses a
+  // wholly-untracked dir to `.ditto/`, which only happens before any memory exists).
+  async function trackMemory(): Promise<void> {
+    await writeFile(join(repo, '.gitignore'), 'sub/\nsub2/\n.ditto/local/\n', 'utf8');
+    await mkdir(join(repo, '.ditto/memory/events'), { recursive: true });
+    await writeFile(join(repo, '.ditto/memory/events/baseline.json'), '{"e":0}\n', 'utf8');
+    git(repo, ['add', '.gitignore', '.ditto/memory/events/baseline.json']);
+    git(repo, ['commit', '-q', '-m', 'track .ditto/memory']);
+  }
+
+  test('ac-1: a gitignored changed_files path is dropped (no `git add` crash)', async () => {
+    await writeFile(join(repo, 'app.ts'), 'root\n', 'utf8');
+    // `.ditto/local/...` is gitignored (beforeEach). Declaring it (e.g. a stale
+    // completion.json reference) must be a silent no-op, not a crash.
+    await mkdir(join(repo, '.ditto/local/work-items/wi'), { recursive: true });
+    await writeFile(join(repo, '.ditto/local/work-items/wi/completion.json'), '{}\n', 'utf8');
+
+    const res = await landCommit(
+      repo,
+      ['app.ts', '.ditto/local/work-items/wi/completion.json'],
+      MSG,
+    );
+
+    expect(res.status).toBe('committed');
+    expect(res.commits.length).toBe(1);
+    // the gitignored path is NOT in the commit; only the real change landed
+    expect(committedPaths(repo, res.commits[0].sha)).toEqual(['app.ts']);
+  });
+
+  test('ac-2: a tracked-dirty `.ditto/memory/` byproduct is absorbed into the land commit', async () => {
+    await trackMemory();
+    await writeFile(join(repo, 'app.ts'), 'root\n', 'utf8');
+    // a memory event the run wrote — NOT declared in changed_files
+    await mkdir(join(repo, '.ditto/memory/events'), { recursive: true });
+    await writeFile(join(repo, '.ditto/memory/events/m1.json'), '{"e":1}\n', 'utf8');
+
+    const res = await landCommit(repo, ['app.ts'], MSG);
+
+    expect(res.status).toBe('committed'); // NOT aborted_dirty
+    // both the declared change and the byproduct landed in the (root) commit
+    const rootSha = res.commits.find((c) => c.repo === '.')?.sha;
+    expect(rootSha).toBeDefined();
+    expect(committedPaths(repo, rootSha ?? '')).toEqual(
+      ['.ditto/memory/events/m1.json', 'app.ts'].sort(),
+    );
+  });
+
+  test('ac-3: genuinely foreign tracked dirt (not byproduct, not declared) STILL aborts', async () => {
+    await trackMemory();
+    await writeFile(join(repo, 'app.ts'), 'root\n', 'utf8');
+    await writeFile(join(repo, 'other.ts'), 'foreign\n', 'utf8'); // not declared, not byproduct
+    const before = head(repo);
+
+    const res = await landCommit(repo, ['app.ts'], MSG);
+
+    expect(res.status).toBe('aborted_dirty');
+    expect(res.dirty.flatMap((d) => d.paths)).toContain('other.ts');
+    expect(head(repo)).toBe(before); // safety net intact: no commit at all
+  });
+
+  test('ac-4: cleanup path (commitPerSubRepo) keeps its strict dirt-abort, unaffected by byproduct absorption', async () => {
+    await trackMemory();
+    await writeFile(join(repo, 'doc.md'), 'x\n', 'utf8');
+    // a dirty `.ditto/memory` file present — for the LAND path it would absorb, but
+    // commitPerSubRepo (the shared cleanup primitive) must STILL treat ANY path
+    // outside its supplied set as unrelated dirt and throw.
+    await mkdir(join(repo, '.ditto/memory/events'), { recursive: true });
+    await writeFile(join(repo, '.ditto/memory/events/m1.json'), '{}\n', 'utf8');
+
+    expect(() => commitPerSubRepo(repo, new Map([['.', ['doc.md']]]), MSG)).toThrow(
+      CleanupDirtyRepoError,
+    );
   });
 });

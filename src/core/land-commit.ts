@@ -35,6 +35,57 @@ import { findOwningRepo } from './memory-scan';
 /** Run-artifact dir whose paths must never be landed. */
 const RUN_ARTIFACT_PREFIX = '.ditto/local/runs/';
 
+/**
+ * Engine-written tracked DITTO state a run legitimately produces (memory events
+ * the retro/absorb writes). When such a path is dirty but NOT in the declared
+ * changeset it is ABSORBED into the land commit instead of tripping the
+ * unrelated-dirt abort (wi_260627sga decision ③). Genuinely foreign dirt is still
+ * NOT absorbed → the under-declaration safety net stays intact.
+ */
+const BYPRODUCT_PREFIXES = ['.ditto/memory/'] as const;
+
+/**
+ * True when `rel` (repo-relative) is gitignored IN the repo at `repoAbs`. A
+ * gitignored entry can never be committed there, so declaring one in
+ * `changed_files` (e.g. a stale `.ditto/local/.../completion.json` reference) must
+ * be a silent no-op — without this, Phase-2 `git add -- <ignored>` exits non-zero
+ * and crashes the whole land. The check is PER OWNING REPO on purpose: a path like
+ * `sub/lib.ts` is gitignored at the workspace root yet committable in the `sub`
+ * sub-repo, so a root-level check would wrongly drop it.
+ */
+function isGitIgnoredInRepo(repoAbs: string, rel: string): boolean {
+  try {
+    // `git check-ignore -q` exits 0 when ignored, 1 when not (execFileSync throws).
+    execFileSync('git', ['check-ignore', '-q', '--', rel], { cwd: repoAbs, stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Tracked-or-untracked working-tree paths under a {@link BYPRODUCT_PREFIXES} dir
+ * (porcelain, workspace-relative). These are the run's own byproducts to absorb.
+ */
+function dirtyByproducts(root: string): string[] {
+  let status = '';
+  try {
+    status = execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' });
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const line of status.split('\n')) {
+    if (line.length === 0) continue;
+    // Porcelain v1: 2 status cols + space, then the path. Rename uses "old -> new".
+    const path = line.slice(3).trim();
+    const parts = path.split(' -> ');
+    const real = (parts.length > 1 ? parts[parts.length - 1] : path)?.trim() ?? path;
+    if (BYPRODUCT_PREFIXES.some((pre) => real.startsWith(pre))) out.push(real);
+  }
+  return out;
+}
+
 export type LandStatus = 'committed' | 'noop' | 'aborted_dirty' | 'aborted_detached';
 
 export interface LandResult {
@@ -72,15 +123,21 @@ export async function landCommit(
 ): Promise<LandResult> {
   const root = resolve(repoRoot);
 
-  // Drop run-artifact paths; the run dir is never part of the landed changeset.
-  const landable = changedFiles.filter((p) => !p.startsWith(RUN_ARTIFACT_PREFIX));
+  // Drop run-artifact paths (the run dir is never landed), then absorb the run's
+  // own tracked byproducts (.ditto/memory/…) so they ride this land commit instead
+  // of reading as unrelated dirt (wi_260627sga ③). Foreign dirt is NOT absorbed →
+  // it still aborts below (the under-declaration safety net stays intact).
+  const declared = changedFiles.filter((p) => !p.startsWith(RUN_ARTIFACT_PREFIX));
+  const landable = [...new Set([...declared, ...dirtyByproducts(root)])];
 
   // Empty changeset → no-op.
   if (landable.length === 0) {
     return { status: 'noop', commits: [], detached: [], dirty: [] };
   }
 
-  // Group sub-repo-relative paths by owning sub-repo ('.' = workspace root).
+  // Group sub-repo-relative paths by owning sub-repo ('.' = workspace root),
+  // dropping any path that is gitignored IN its owning repo (uncommittable → a
+  // silent no-op, not a `git add` crash).
   const byRepo = new Map<string, string[]>();
   for (const p of landable) {
     const abs = join(root, p);
@@ -88,9 +145,15 @@ export async function landCommit(
     const key = owningAbs === null ? '.' : relative(root, owningAbs).replace(/\\/g, '/') || '.';
     const repoAbs = subRepoAbs(root, key);
     const rel = relForRepo(root, repoAbs, p);
+    if (isGitIgnoredInRepo(repoAbs, rel)) continue;
     const group = byRepo.get(key) ?? [];
     group.push(rel);
     byRepo.set(key, group);
+  }
+
+  // Every path was gitignored/dropped → nothing to land.
+  if ([...byRepo.values()].every((g) => g.length === 0)) {
+    return { status: 'noop', commits: [], detached: [], dirty: [] };
   }
 
   // Guard — detached HEAD across ALL affected sub-repos before any commit.
