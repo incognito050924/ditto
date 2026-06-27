@@ -30,6 +30,15 @@ The DURABLE cross-WI learnings — `unverified`, `residual`, `close_reason`, `in
 ## You return
 Your full final text — the `result_text` — a short retrospective that PRESENTS the two separated metrics and the projection narrative from `context.retro`, each line tied to its record (decision id, commit, `file:line`). The orchestrator records this via `ditto autopilot record-result`; it is judged by the G7 contentfulness guard (an empty or ack-only result is forced to a fixable failure even if you claim `pass`). A durable learning worth keeping across work items is a candidate for the `knowledge` node / knowledge-curator — name it, do not write it yourself.
 
+Emit the structured **owner-return envelope** (the `envelope` field of `record-result`; schema `src/schemas/owner-return-envelope.ts`, gated by `guardOwnerEnvelope`/`guardEnvelopeArtifact`):
+- `summary` — the ONLY slot the main orchestrator loads into context.
+- `conclusion`, `verdict`, `evidence[]`, `uncertainty[] ({item, reason})` — the machine slots. Keep the **two metrics SEPARATE** (process-health vs. the durable learnings); never fold them into one number.
+- `owner_kind: retrospective` — this kind is EXEMPT from the substantive-detail rule, so a `verbatim_detail`/`artifact_location` is optional here (the metrics are presented, not a verbatim body).
+
+`verbatim_detail` may still carry the per-line record pointers if useful, but it is not required for this owner kind.
+
+**Preserve the four decisive classes.** Loading `summary` alone must lose NONE of: intent · decisions · irreversible-risks · uncertainty. `uncertainty[]` carries the uncertainties; any decision or irreversible / hard-to-reverse risk LEARNED from the run that has no dedicated slot goes in `verbatim_detail` (and is flagged in `summary`) — this is separate from, and never merged into, the two metrics.
+
 ## Contract
 - Projection-only: present the records' own content; no free reflection, no invented lessons.
 - Keep the two metrics SEPARATE — never collapse 산출물 floor and 과정 건강도 into one number.

@@ -23,6 +23,32 @@ export const handoff = z
     original_intent: z.string().min(1).describe('Original user intent'),
     current_state: z.string().min(1).describe('Where things stand now'),
     decisions_made: z.array(z.string()).default([]),
+    // ac-6 (wi_260627jhh): critical_decisions / irreversible_risks are SEPARATE
+    // structural fields, additive over decisions_made (NOT a rename). Both are
+    // `.default([])` so an OLD serialized handoff missing them still parses. The
+    // substance (rationale / why_irreversible) is preserved INLINE — these are the
+    // 재호출 불가 tier that cannot be re-derived, so they are kept, not pointered.
+    critical_decisions: z
+      .array(
+        z.object({
+          decision: z.string().min(1),
+          rationale: z.string().min(1).describe('Why this decision was made (preserved inline)'),
+        }),
+      )
+      .default([])
+      .describe('Decisions that cannot be re-derived from the codebase — kept inline'),
+    irreversible_risks: z
+      .array(
+        z.object({
+          risk: z.string().min(1),
+          why_irreversible: z
+            .string()
+            .min(1)
+            .describe('Why this risk cannot be undone (preserved inline)'),
+        }),
+      )
+      .default([])
+      .describe('Risks whose substance is non-recoverable — kept inline, not pointer-only'),
     changed_files: z.array(relativePath).default([]),
     evidence_refs: z
       .array(evidenceRef)

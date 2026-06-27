@@ -84,6 +84,37 @@ describe('instruction bridge', () => {
     expect(report.results[0]?.status).toBe('drift');
   });
 
+  test('charter source fires clause_missing when the delegation anchor (§4-9) is absent', async () => {
+    // A source that self-identifies as the Agent Behavior Charter but drops the
+    // §4-9 delegation clause must produce a clause_missing finding — projection
+    // integrity alone cannot catch deletion from both source and projection.
+    await writeFile(join(dir, 'AGENTS.md'), '# Agent Behavior Charter v1\n본문\n', 'utf8');
+    const report = await checkInstructionsForHosts(['codex'], dir);
+    const finding = report.findings.find((f) => f.kind === 'clause_missing');
+    expect(finding).toBeDefined();
+    expect(finding?.host).toBe('codex');
+    expect(report.results[0]?.status).toBe('drift');
+  });
+
+  test('charter source is clean when the delegation anchor (§4-9) is present', async () => {
+    await writeFile(
+      join(dir, 'AGENTS.md'),
+      '# Agent Behavior Charter v1\n### 4-9. 위임으로 컨텍스트를 지킨다\n본문\n',
+      'utf8',
+    );
+    const report = await checkInstructionsForHosts(['codex'], dir);
+    expect(report.findings.map((f) => f.kind)).not.toContain('clause_missing');
+    expect(report.results[0]?.status).toBe('ok');
+  });
+
+  test('a non-charter source is not flagged for lacking the delegation clause', async () => {
+    // The default fixture AGENTS.md ("# AGENTS") is not the charter — a downstream
+    // authored source must never be flagged for missing DITTO's §4-9 clause.
+    const report = await checkInstructionsForHosts(['codex'], dir);
+    expect(report.findings.map((f) => f.kind)).not.toContain('clause_missing');
+    expect(report.results[0]?.status).toBe('ok');
+  });
+
   test('projection-only adapters report source_missing without hard-binding codex registry', async () => {
     unregisterHostAdapter('codex');
     const projectionOnly: HostAdapter = {

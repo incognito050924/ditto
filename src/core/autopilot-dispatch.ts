@@ -1,4 +1,5 @@
 import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
+import { type OwnerReturnEnvelope, ownerReturnEnvelope } from '~/schemas/owner-return-envelope';
 import type { AcOracle, WorkItem } from '~/schemas/work-item';
 import type { MemoryWarmStartContext } from './memory-warmstart';
 import type { RetroMetrics, RetroNarrative } from './retro-measure';
@@ -354,6 +355,60 @@ export function guardAcClosingEvidence(args: {
     };
   }
   return { contentful: true };
+}
+
+/**
+ * Guard an owner-return ENVELOPE (ac-1, wi_260627jhh). The envelope formalizes the
+ * human return while keeping the structured machine slots distinct; this is a SHAPE
+ * gate (not SIZE — oversized verbatim_detail is fine). A non-conforming envelope is
+ * non-contentful and routed back as `fixable`. It NEVER throws — a throw on the
+ * record-result path would crash the orchestrator, the exact bug this work closes —
+ * so it `safeParse`s and returns a Result either way.
+ */
+export function guardOwnerEnvelope(raw: unknown): ChildResultGuard {
+  const parsed = ownerReturnEnvelope.safeParse(raw);
+  if (!parsed.success) {
+    const reason = parsed.error.issues
+      .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+      .join('; ');
+    return {
+      contentful: false,
+      failure_class: 'fixable',
+      reason: `owner-return envelope does not conform: ${reason}`,
+    };
+  }
+  return { contentful: true };
+}
+
+/**
+ * Guard that an envelope's `artifact_location`, when present, resolves to a
+ * NON-EMPTY artifact (a pointer to nothing is not evidence). Async (it reads the
+ * file via the injected `readFile`) but NEVER throws — an unresolvable or empty
+ * pointer is caught and returned as a non-contentful Result, never propagated.
+ * No `artifact_location` ⇒ no-op pass (the read is never attempted).
+ */
+export async function guardEnvelopeArtifact(
+  env: OwnerReturnEnvelope,
+  readFile: (path: string) => Promise<string>,
+): Promise<ChildResultGuard> {
+  if (env.artifact_location === undefined) return { contentful: true };
+  try {
+    const content = await readFile(env.artifact_location);
+    if (content.trim().length === 0) {
+      return {
+        contentful: false,
+        failure_class: 'fixable',
+        reason: `envelope artifact_location (${env.artifact_location}) resolves to an empty artifact — a pointer to nothing is not evidence`,
+      };
+    }
+    return { contentful: true };
+  } catch (err) {
+    return {
+      contentful: false,
+      failure_class: 'fixable',
+      reason: `envelope artifact_location (${env.artifact_location}) is unresolvable: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 }
 
 export type FailureDecision = 'retry' | 'switch_approach' | 'escalate';

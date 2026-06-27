@@ -33,6 +33,8 @@ export interface HandoffBuildInput {
   autopilotId?: string;
   toOwner?: string;
   decisionsMade?: string[];
+  criticalDecisions?: { decision: string; rationale: string }[];
+  irreversibleRisks?: { risk: string; why_irreversible: string }[];
   evidenceRefs?: EvidenceRef[];
   failedOrUnverified?: string[];
   openThreads?: string[];
@@ -52,6 +54,9 @@ export function buildHandoff(input: HandoffBuildInput): Handoff {
     original_intent: input.workItem.source_request,
     current_state: input.currentState,
     decisions_made: input.decisionsMade ?? [],
+    // ac-6: re-fetch-impossible substance preserved INLINE (tier rule).
+    critical_decisions: input.criticalDecisions ?? [],
+    irreversible_risks: input.irreversibleRisks ?? [],
     changed_files: input.changedFiles ?? input.workItem.changed_files,
     evidence_refs: input.evidenceRefs ?? [],
     failed_or_unverified: input.failedOrUnverified ?? [],
@@ -76,6 +81,16 @@ export function renderHandoff(h: Handoff): string {
   if (h.decisions_made.length > 0) {
     lines.push('## 내려진 결정');
     for (const d of h.decisions_made) lines.push(`- ${d}`);
+    lines.push('');
+  }
+  if (h.critical_decisions.length > 0) {
+    lines.push('## 핵심 결정 (재호출 불가)');
+    for (const d of h.critical_decisions) lines.push(`- ${d.decision} — ${d.rationale}`);
+    lines.push('');
+  }
+  if (h.irreversible_risks.length > 0) {
+    lines.push('## 비가역 위험');
+    for (const r of h.irreversible_risks) lines.push(`- ${r.risk} — ${r.why_irreversible}`);
     lines.push('');
   }
   if (h.changed_files.length > 0) {

@@ -26,6 +26,17 @@ Either way: make the smallest change — minimum viable, no unrequested refactor
 ## You return
 Your full final text — the `result_text` — stating the changed files and the evidence the change works: the command(s) you ran and their exit codes. The orchestrator records this text via `ditto autopilot record-result`; it is judged by the G7 contentfulness guard (an empty or ack-only result is forced to a fixable failure even if you claim `pass`) and any `evidence_refs` you supply are attached (`recordResultPayload` + the G7 guard in `src/core/autopilot-loop.ts`; `evidenceRef` in `src/schemas/common.ts`). There is no dedicated implementer-output schema — your text is the contract.
 
+Also emit the structured **owner-return envelope** (the `envelope` field of `record-result`; schema `src/schemas/owner-return-envelope.ts`, gated by `guardOwnerEnvelope`/`guardEnvelopeArtifact`):
+- `summary` — the ONLY slot the main orchestrator loads into context; a pointer-index, not the body.
+- `verbatim_detail` — the lossless detail (commands, exit codes, file:line changes), kept near-verbatim with NO size-cap. Distinct from `summary`; preserved and expandable.
+- `conclusion`, `verdict`, `evidence[]`, `uncertainty[] ({item, reason})` — the machine slots, kept distinct from the prose.
+- `artifact_location` — optional repo-relative pointer to a preserved non-empty artifact, for bulk detail instead of inline `verbatim_detail`.
+- `owner_kind: implementer`.
+
+A bare summary with neither `verbatim_detail` nor `artifact_location` is REJECTED by the in-process guard (the substantive detail must stay reachable) — never collapse the detail into the summary.
+
+**Preserve the four decisive classes.** Loading `summary` alone must lose NONE of: intent · decisions · irreversible-risks · uncertainty. `uncertainty[]` carries the uncertainties; the other three have no dedicated slot, so any intent, key decision, or irreversible / hard-to-reverse risk relevant to this change MUST be placed in `verbatim_detail` (and flagged in `summary`).
+
 ## Contract
 - Mutate only within the packet's `file_scope`.
 - For a code-behavior AC (heavy path: `dynamic_test` oracle / red-first directive), write the failing test first and confirm the red is the AC assertion (not a compile/import error) before the green change. Non-code AC (doc/prompt/config) are exempt — verify against the oracle.

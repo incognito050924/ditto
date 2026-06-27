@@ -10,6 +10,7 @@ import { evidenceRef, relativePath, verdict } from '~/schemas/common';
 import { resolvability } from '~/schemas/completion-contract';
 import { isFarFieldEscape } from '~/schemas/coverage';
 import { decisionConflict, decisionConflictCarrier } from '~/schemas/decision-conflict-carrier';
+import { ownerReturnEnvelope } from '~/schemas/owner-return-envelope';
 import { type AcOracle, acOracle } from '~/schemas/work-item';
 import { ActiveNodeLeaseStore } from './active-node-lease';
 import { loadVariantCatalog, selectVariantCandidates } from './agent-variants';
@@ -29,7 +30,9 @@ import {
   decideOnFailure,
   guardAcClosingEvidence,
   guardChildResult,
+  guardEnvelopeArtifact,
   guardMutatingEvidence,
+  guardOwnerEnvelope,
   isMutatingOwner,
 } from './autopilot-dispatch';
 import { allNodesTerminal, mutationGate, rollbackOnRejection } from './autopilot-driver';
@@ -832,6 +835,20 @@ export const recordResultPayload = z
         'R5/ADR-0018: an auto-resolve item blocked only by an optional tool absence; surface ' +
           'blocked_external rather than splice an endless re-verify.',
       ),
+    // Owner-return envelope (wi_260627jhh, ac-1). The structured form of the owner's
+    // return: `summary` is the only slot main loads into context (ac-2), the machine
+    // slots (evidence/verdict/uncertainty) ride distinct, and `verbatim_detail` /
+    // `artifact_location` carry the lossless detail. ADDITIVE + OPTIONAL — same idiom
+    // as `ac_oracles`/`plan_brief` — so a legacy payload omitting it round-trips
+    // byte-identical. When present and the node passes, recordResult gates its shape
+    // (guardOwnerEnvelope) and any artifact pointer (guardEnvelopeArtifact) as an
+    // additional contentfulness floor; absent ⇒ no-op.
+    envelope: ownerReturnEnvelope
+      .optional()
+      .describe(
+        'The owner-return envelope (ac-1): human return + distinct machine slots. Summary is the ' +
+          'only context-loaded slot (ac-2); verbatim_detail is lossless (no size-cap).',
+      ),
   })
   .superRefine((value, ctx) => {
     if (value.outcome === 'fail' && value.failure_class === undefined) {
@@ -1380,6 +1397,32 @@ export async function recordResult(
     outcome = 'fail';
     failureClass = 'fixable';
     guardReason = guard.reason;
+  }
+  // Owner-return envelope floor (wi_260627jhh, ac-1). When the result carries a
+  // structured envelope, gate it as an additional contentfulness floor BEFORE a
+  // claimed pass is honored: the SHAPE (guardOwnerEnvelope) and any artifact pointer
+  // (guardEnvelopeArtifact, which reads the file). Both return a Result and NEVER
+  // throw — a throw here would crash the orchestrator, the exact failure this work
+  // closes. Optional + present-gated: no envelope ⇒ no-op (legacy payloads
+  // unchanged). Mirrors the guardMutatingEvidence downgrade-to-fixable path.
+  if (contentful && outcome === 'pass' && input.payload.envelope !== undefined) {
+    const envGuard = guardOwnerEnvelope(input.payload.envelope);
+    if (!envGuard.contentful) {
+      contentful = false;
+      outcome = 'fail';
+      failureClass = 'fixable';
+      guardReason = envGuard.reason;
+    } else {
+      const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) =>
+        readFile(join(repoRoot, p), 'utf8'),
+      );
+      if (!artifactGuard.contentful) {
+        contentful = false;
+        outcome = 'fail';
+        failureClass = 'fixable';
+        guardReason = artifactGuard.reason;
+      }
+    }
   }
   // G7 확장 (wi_260606h9q): mutating 노드는 pass 주장 시 changed_files 증거가 필수.
   // 변경 0인 pass 는 fixable 로 강등 — spawn 없이 지어낸 빈 결과를 차단(claim ≠ proof).

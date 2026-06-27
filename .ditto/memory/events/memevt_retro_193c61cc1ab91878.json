@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_193c61cc1ab91878",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] 미래 --remote cross-machine handoff를 인증 채널로 취급하면 봉투/handoff에 결박할 principal이 없으나, 이 변경엔 그 auth 경계가 없다.\n[residual] 재귀 자가구동 autopilot이 append-only 결정 jsonl을 부풀릴 수 있으나 그건 용량 실패(#resource-exhaustion)지 의도적 abuse 아님.\n[residual] 축자 상세 슬롯·handoff free-text는 미파싱 보존. 미래 소비자가 eval/template하면 무손실 설계가 먹일 수 있으나 현재 그런 싱크 없음(역직렬화-검증 갭은 #input-validation/#data-integrity가 커버).\n[residual] handoff가 git-tracked 가능하고 축자 슬롯이 임의 반환 보존 — 반환에 시크릿이 들면 VCS에 남으나 이 경로는 변경 전부터 존재하고 신규 credential 흐름 추가 없음.\n[residual] 축자 상세·handoff free-text가 서브에이전트 표면 내용 echo. 사용자 제공 개인데이터가 반환에 있었다면 무손실 보존(git-tracked handoff)이 마스킹 없이 유지하나 이 도구에 PII 도메인 없음.\n[residual] git-tracked handoff에 규제 데이터가 발견되면 보존/삭제 의무 메커니즘이 없으나 규제 데이터를 다루지 않으므로 의무 미발생.\n[residual] 증분 readDecisions가 mtime/timestamp로 캐시 키하면 동초 append·클록 스큐로 오카운트 가능 — 증분이 position-based(byte-offset/line-count)인지 검증(stale-read race는 #concurrency-ordering이 커버).\n[close_reason] 내부 도구 변경(반환 봉투·결정로그·handoff 스키마·세션 훅)은 호출 주체의 신원을 수립/검사하지 않는다. API 토큰·웹세션·서버간 OAuth 경로 없음.\n[close_reason] 단일 사용자 로컬 개발 도구. 신뢰 못할 외부 행위자·레이트리밋 공유 흐름 없음. 결정로그·반환가드·handoff·훅 모두 적대적 진입점 없는 내부 오케스트레이션 표면.\n[close_reason] 신뢰 못할 입력이 코드/쿼리/명령 인터프리터에 도달하지 않음. eval/new Function/template-exec 없음. readDecisions는 JSON.parse(데이터). handoff 필드는 zod 검증 문자열로 markdown-render/LLM-read만. git args는 검증된 ref 보간이지 handoff/verbatim 내용 아님. CWE-94 싱크 없음.\n[close_reason] credential/token/key 취급·저장·전송을 도입하지 않음. 유일한 신규-내용 우려(verbatim→git)는 defeated: 축자 슬롯은 .ditto/local/.../evidence/ gitignored에 영속(git check-ignore exit 0), git-tracked handoff는 선재(ccb73fc)이며 curated. 오케스트레이터 적재량을 오히려 줄임.\n[close_reason] 내부 개발 도구로 work-item intent·코드변경 보고·오케스트레이션 결정만 처리. 개인식별정보 수집·로깅·전송 표면 없음.\n[close_reason] 규제 개인데이터·동의·보존/삭제·국경간 이전 의무가 autopilot 반환 계약·결정로그·handoff 스키마·세션 훅에 붙지 않음.\n[close_reason] 정확성이 append-order·정확 카운트(append-only jsonl의 line/offset)에 의존하지 클록/타임존/TTL 아님. 결정로그는 만료 시맨틱 없음(supersedes-only). 어떤 touched 경로에도 TTL/클록 비교 없음.\n[evidence] file: .ditto/local/runs/wi_260627jhh/coverage.json\n[evidence] file: .ditto/local/runs/wi_260627jhh/coverage.json\n[evidence] file: .ditto/local/runs/wi_260627jhh/coverage.json\n[evidence] file: .ditto/local/runs/wi_260627jhh/coverage.json\n[evidence] file: .ditto/local/runs/wi_260627jhh/coverage.json\n[evidence] file: .ditto/local/runs/wi_260627jhh/coverage.json\n[evidence] file: .ditto/local/runs/wi_260627jhh/coverage.json",
+  "created_at": "2026-06-27T14:36:34.270Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

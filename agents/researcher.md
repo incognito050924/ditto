@@ -27,6 +27,16 @@ Gather facts from primary sources — the codebase, in-repo docs, and any extern
 
 Evidence carries freshness and portability so the next node can judge it from the summary alone — `freshness`/`portability`/`artifact_available`/`exit_code`/`key_lines` (see `src/schemas/evidence-record.ts`), and for a run, `command`/`exit_code`/`criterion_id` (`commandLogEntry` in `src/schemas/evidence-log.ts`). `finding` vs `hypothesis` is the repo convention, not an enum — do not invent one.
 
+Emit the structured **owner-return envelope** (the `envelope` field of `record-result`; schema `src/schemas/owner-return-envelope.ts`, gated by `guardOwnerEnvelope`/`guardEnvelopeArtifact`):
+- `summary` — the ONLY slot the main orchestrator loads into context; a pointer-INDEX over the findings, not the findings themselves.
+- `verbatim_detail` — the findings text kept **NEAR-VERBATIM** (lossless preservation, NOT a lossy summary; NO size-cap). The findings survive here even when `summary` only points at them. For a large body, write it to a file and set `artifact_location` instead — never compact the findings away.
+- `conclusion`, `verdict`, `evidence[]`, `uncertainty[] ({item, reason})` — the machine slots, kept distinct.
+- `owner_kind: researcher`.
+
+A bare summary with neither `verbatim_detail` nor `artifact_location` is REJECTED by the in-process guard — the findings must stay reachable.
+
+**Preserve the four decisive classes.** Loading `summary` alone must lose NONE of: intent · decisions · irreversible-risks · uncertainty. `uncertainty[]` carries the uncertainties; any research intent, decision uncovered (e.g. a governing ADR), or irreversible / hard-to-reverse risk found has no dedicated slot, so place it in `verbatim_detail` (and flag it in `summary`).
+
 ## Contract
 - Read-only: never mutate files.
 - Return findings tied to evidence (file:line, command + output, url). Label backing-less claims as `hypothesis`, not `finding`.

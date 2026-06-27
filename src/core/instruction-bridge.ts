@@ -22,7 +22,26 @@ export type InstructionFindingKind =
   | 'multiple_markers'
   | 'source_mismatch'
   | 'sha256_mismatch'
-  | 'content_mismatch';
+  | 'content_mismatch'
+  | 'clause_missing';
+
+/**
+ * Stable anchor for the charter's delegation-discipline clause (§4-9
+ * "위임으로 컨텍스트를 지킨다"). Projection-INTEGRITY (sha/content match) cannot
+ * catch deleting the clause from BOTH source and projection — they'd still match.
+ * A clause-PRESENCE assertion on the source closes that gap. This runs on the
+ * always-on `ditto doctor instructions` CLI seam, NOT through `runHook`, so it is
+ * independent of the `DITTO_SKIP_HOOKS` kill-switch.
+ */
+export const DELEGATION_CLAUSE_ANCHOR = '위임으로 컨텍스트를 지킨다';
+
+/**
+ * Self-identifying title of the DITTO Agent Behavior Charter. The clause-presence
+ * assertion only applies to the charter itself — a downstream / user-authored
+ * AGENTS.md (different title, `create-if-missing` keeps it) must not be flagged for
+ * lacking DITTO's delegation clause.
+ */
+export const CHARTER_IDENTITY_MARKER = 'Agent Behavior Charter';
 
 export interface InstructionFinding {
   host: 'codex' | 'claude-code';
@@ -172,6 +191,30 @@ export function checkCodexInstructions(
   return [];
 }
 
+/**
+ * Clause-PRESENCE check on the charter source: when the source IS the Agent
+ * Behavior Charter, the delegation-discipline anchor (§4-9) must be present.
+ * Separate from `checkCodexInstructions` (which stays a pure marker/missing check)
+ * so it only contributes when a codex source result is actually produced — i.e.
+ * when the codex source surface is among the checked hosts.
+ */
+export function checkRequiredClauses(
+  source: InstructionSource | { kind: 'missing'; path: string },
+): InstructionFinding[] {
+  if ('kind' in source) return []; // source_missing already reported by checkCodexInstructions
+  if (!source.content.includes(CHARTER_IDENTITY_MARKER)) return []; // not the charter — nothing to assert
+  if (source.content.includes(DELEGATION_CLAUSE_ANCHOR)) return [];
+  return [
+    {
+      host: 'codex',
+      path: source.path,
+      kind: 'clause_missing',
+      message: `charter source is missing the delegation-discipline clause (§4-9 "${DELEGATION_CLAUSE_ANCHOR}")`,
+      sourceSha256: source.normalizedSha256,
+    },
+  ];
+}
+
 export function compareClaudeProjection(
   source: InstructionSource | { kind: 'missing'; path: string },
   projection: ProjectionLoadResult,
@@ -267,7 +310,7 @@ function resultStatus(findings: InstructionFinding[]): 'ok' | 'drift' {
 function codexInstructionResult(
   source: InstructionSource | { kind: 'missing'; path: string },
 ): InstructionHostResult {
-  const findings = checkCodexInstructions(source);
+  const findings = [...checkCodexInstructions(source), ...checkRequiredClauses(source)];
   return {
     host: 'codex',
     path: source.path,

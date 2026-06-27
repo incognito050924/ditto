@@ -1,8 +1,10 @@
+import { createHash } from 'node:crypto';
+import { appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type Autopilot, type AutopilotNode, autopilot } from '~/schemas/autopilot';
 import { validateNodeAddition } from './autopilot-graph';
 import { localDir } from './ditto-paths';
-import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
+import { ensureDir, readJson, writeJson } from './fs';
 
 /**
  * AutopilotStore (M2.1) — the ONLY path that mutates the autopilot graph.
@@ -187,20 +189,86 @@ export class AutopilotStore {
 
   async appendDecision(workItemId: string, decision: AutopilotDecision): Promise<void> {
     await ensureDir(this.dir(workItemId));
-    const path = this.decisionsPath(workItemId);
-    const file = Bun.file(path);
-    const existing = (await file.exists()) ? await file.text() : '';
-    const prefix = existing.length === 0 || existing.endsWith('\n') ? existing : `${existing}\n`;
-    await atomicWriteText(path, `${prefix}${JSON.stringify(decision)}\n`);
+    // Atomic O_APPEND (flag 'a'): a single append write is positioned-and-written
+    // atomically relative to other appenders, so two concurrent `record-result`
+    // calls cannot lose-update each other (the prior read-then-rewrite raced).
+    // Every record is newline-terminated, so the log stays line-delimited JSON.
+    // (idiom: memory-warmstart.ts:116)
+    await appendFile(this.decisionsPath(workItemId), `${JSON.stringify(decision)}\n`, 'utf8');
   }
 
+  /**
+   * Returns the full ordered `AutopilotDecision[]` — byte-identical to a fresh
+   * full parse of the append-only log. The PARSE is incrementalized: a parsed
+   * prefix (up to the last complete newline-terminated line) is cached per file,
+   * and a subsequent read parses only the appended tail. The cache is re-validated
+   * (size + hash of the prefix bytes it already parsed) every read and FAILS CLOSED
+   * to a full re-read on any mismatch — file shrank, prefix bytes changed, or no
+   * cache — so correctness always beats speed. The contract is unchanged.
+   */
   async readDecisions(workItemId: string): Promise<AutopilotDecision[]> {
-    const file = Bun.file(this.decisionsPath(workItemId));
-    if (!(await file.exists())) return [];
+    const path = this.decisionsPath(workItemId);
+    const file = Bun.file(path);
+    if (!(await file.exists())) {
+      decisionCache.delete(path);
+      return [];
+    }
     const text = await file.text();
-    return text
-      .split('\n')
-      .filter((line) => line.trim().length > 0)
-      .map((line) => JSON.parse(line) as AutopilotDecision);
+    return parseDecisionsIncremental(path, text);
   }
+}
+
+/** Cache of the parsed complete-line prefix, keyed by the absolute log path. */
+interface DecisionPrefixCache {
+  /** Byte length of the prefix (ends exactly at a newline) we already parsed. */
+  size: number;
+  /** Hash of those prefix bytes — re-validated each read to detect any change. */
+  hash: string;
+  /** Parsed decisions for that prefix, in order. */
+  decisions: AutopilotDecision[];
+}
+
+const decisionCache = new Map<string, DecisionPrefixCache>();
+
+function hashPrefix(bytes: string): string {
+  return createHash('sha1').update(bytes).digest('hex');
+}
+
+/** Parse newline-delimited JSON decisions; a corrupt line throws (fail-closed). */
+function parseLines(block: string): AutopilotDecision[] {
+  return block
+    .split('\n')
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line) as AutopilotDecision);
+}
+
+/**
+ * Incremental parse with prefix re-validation. The complete-line prefix is the
+ * text up to (and including) the last '\n'; any trailing partial line is parsed
+ * for the return value but NOT cached (it may be mid-write — and a corrupt partial
+ * line throws, exactly as the full read did).
+ */
+function parseDecisionsIncremental(path: string, text: string): AutopilotDecision[] {
+  const prefixEnd = text.lastIndexOf('\n') + 1; // 0 when there is no newline yet
+  const prefix = text.slice(0, prefixEnd);
+  const remainder = text.slice(prefixEnd);
+
+  const cached = decisionCache.get(path);
+  let decisions: AutopilotDecision[];
+  if (
+    cached !== undefined &&
+    prefixEnd >= cached.size &&
+    hashPrefix(text.slice(0, cached.size)) === cached.hash
+  ) {
+    // Cache hit: reuse the parsed prefix, parse only the appended complete-line tail.
+    decisions = cached.decisions.concat(parseLines(text.slice(cached.size, prefixEnd)));
+  } else {
+    // Fail closed to a FULL re-read: no cache, file shrank, or prefix bytes changed.
+    decisions = parseLines(prefix);
+  }
+  decisionCache.set(path, { size: prefixEnd, hash: hashPrefix(prefix), decisions });
+
+  // Trailing partial line (if any) is included in the return but never cached.
+  const tail = parseLines(remainder);
+  return tail.length > 0 ? decisions.concat(tail) : decisions;
 }
