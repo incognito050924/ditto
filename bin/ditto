@@ -12785,7 +12785,7 @@ var init_zod = __esm(() => {
 });
 
 // src/schemas/common.ts
-var isoDateTime, workItemId, runId, reviewId, autopilotId, profileName, declarerRole, providerName, verdict, workItemStatus, severity, sha256, relativePath, evidenceRef, schemaVersion;
+var isoDateTime, workItemId, runId, reviewId, autopilotId, profileName, declarerRole, providerName, verdict, workItemStatus, severity, sha256, relativePath, evidenceRef, uncertaintyItem, schemaVersion;
 var init_common = __esm(() => {
   init_zod();
   isoDateTime = exports_external.string().datetime({ offset: true }).describe("RFC 3339 / ISO 8601 datetime with timezone offset");
@@ -12812,6 +12812,10 @@ var init_common = __esm(() => {
     lines: exports_external.object({ start: exports_external.number().int().positive(), end: exports_external.number().int().positive() }).optional(),
     summary: exports_external.string().max(2000).optional()
   }).describe("Pointer to evidence stored outside the manifest itself");
+  uncertaintyItem = exports_external.object({
+    item: exports_external.string().min(1).describe("What is unresolved / was not verified"),
+    reason: exports_external.string().min(1).describe("Why it remains open / why verification did not happen")
+  }).describe("A single declared uncertainty: what is unresolved and why");
   schemaVersion = exports_external.literal("0.1.0").describe("Version of the DITTO schema set this document conforms to");
 });
 
@@ -14270,7 +14274,7 @@ var init_memory_projection_manifest = __esm(() => {
 });
 
 // src/core/memory-store.ts
-import { createHash } from "crypto";
+import { createHash as createHash2 } from "crypto";
 import { open, readdir as readdir10 } from "fs/promises";
 import { dirname as dirname6, join as join25 } from "path";
 
@@ -14430,7 +14434,7 @@ class MemoryProjectionStore {
   }
 }
 function sha256Hex(content) {
-  return createHash("sha256").update(content).digest("hex");
+  return createHash2("sha256").update(content).digest("hex");
 }
 var MemoryEventExistsError;
 var init_memory_store = __esm(() => {
@@ -18533,6 +18537,8 @@ function validateNodeAddition(existing, newNodes, allowedAcceptanceIds) {
 }
 
 // src/core/autopilot-store.ts
+import { createHash } from "crypto";
+import { appendFile } from "fs/promises";
 import { join as join14 } from "path";
 
 // src/schemas/autopilot.ts
@@ -18731,23 +18737,43 @@ class AutopilotStore {
   }
   async appendDecision(workItemId2, decision) {
     await ensureDir(this.dir(workItemId2));
-    const path = this.decisionsPath(workItemId2);
-    const file = Bun.file(path);
-    const existing = await file.exists() ? await file.text() : "";
-    const prefix = existing.length === 0 || existing.endsWith(`
-`) ? existing : `${existing}
-`;
-    await atomicWriteText(path, `${prefix}${JSON.stringify(decision)}
-`);
+    await appendFile(this.decisionsPath(workItemId2), `${JSON.stringify(decision)}
+`, "utf8");
   }
   async readDecisions(workItemId2) {
-    const file = Bun.file(this.decisionsPath(workItemId2));
-    if (!await file.exists())
+    const path = this.decisionsPath(workItemId2);
+    const file = Bun.file(path);
+    if (!await file.exists()) {
+      decisionCache.delete(path);
       return [];
+    }
     const text = await file.text();
-    return text.split(`
-`).filter((line) => line.trim().length > 0).map((line) => JSON.parse(line));
+    return parseDecisionsIncremental(path, text);
   }
+}
+var decisionCache = new Map;
+function hashPrefix(bytes) {
+  return createHash("sha1").update(bytes).digest("hex");
+}
+function parseLines(block) {
+  return block.split(`
+`).filter((line) => line.trim().length > 0).map((line) => JSON.parse(line));
+}
+function parseDecisionsIncremental(path, text) {
+  const prefixEnd = text.lastIndexOf(`
+`) + 1;
+  const prefix = text.slice(0, prefixEnd);
+  const remainder = text.slice(prefixEnd);
+  const cached = decisionCache.get(path);
+  let decisions;
+  if (cached !== undefined && prefixEnd >= cached.size && hashPrefix(text.slice(0, cached.size)) === cached.hash) {
+    decisions = cached.decisions.concat(parseLines(text.slice(cached.size, prefixEnd)));
+  } else {
+    decisions = parseLines(prefix);
+  }
+  decisionCache.set(path, { size: prefixEnd, hash: hashPrefix(prefix), decisions });
+  const tail = parseLines(remainder);
+  return tail.length > 0 ? decisions.concat(tail) : decisions;
 }
 
 // src/core/coverage-manager.ts
@@ -19639,9 +19665,7 @@ var completionContract = exports_external.object({
     run_id: runId.optional(),
     evidence: evidenceRef.optional()
   })).default([]).describe("Commands actually executed; not aspirational"),
-  unverified: exports_external.array(exports_external.object({
-    item: exports_external.string().min(1).describe("What was not verified"),
-    reason: exports_external.string().min(1).describe("Why verification did not happen"),
+  unverified: exports_external.array(uncertaintyItem.extend({
     out_of_scope: exports_external.boolean().default(false).describe("True when the item is intentionally outside acceptance scope; only such items are allowed when final_verdict=pass"),
     resolvability: resolvability.optional().describe("Declared class of why this is unverified; read by the gate, not computed here"),
     grounding: exports_external.string().min(1).optional().describe("Free-text oracle/ref (ADR id, dependency, decision pointer, file:line); a non-resolvable class attaches it and the gate later checks its presence")
@@ -20639,6 +20663,33 @@ var decisionConflictCarrier = exports_external.object({
   conflicts: exports_external.array(decisionConflict).default([])
 }).describe("Persisted inputs to decisionConflictGate, written by the detecting node");
 
+// src/schemas/owner-return-envelope.ts
+init_zod();
+init_common();
+var ownerKind = exports_external.enum(["implementer", "researcher", "retrospective", "refactorer"]).describe("Which owner role authored this owner-return envelope");
+var ownerReturnEnvelope = exports_external.object({
+  summary: exports_external.string().min(1).describe("The ONLY slot the main/driver loads into context (ac-2); a pointer-index, not the body"),
+  verbatim_detail: exports_external.string().optional().describe("Lossless detail kept near-verbatim; NO size-cap (oversized passes). Distinct from summary; " + "preserved and expandable (ac-2/ac-4)."),
+  artifact_location: relativePath.optional().describe("Repo-relative pointer to a preserved non-empty artifact holding the detail"),
+  conclusion: exports_external.string().min(1).describe("The bottom-line judgment of the return"),
+  evidence: exports_external.array(evidenceRef).default([]).describe("Evidence pointers (reuses evidenceRef)"),
+  uncertainty: exports_external.array(uncertaintyItem).default([]).describe("Declared open uncertainties (reuses the shared uncertaintyItem)"),
+  verdict,
+  owner_kind: ownerKind
+}).superRefine((env2, ctx) => {
+  if (env2.owner_kind === "retrospective")
+    return;
+  const hasInline = (env2.verbatim_detail?.trim().length ?? 0) > 0;
+  const hasPointer = env2.artifact_location !== undefined;
+  if (!hasInline && !hasPointer) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      path: ["verbatim_detail"],
+      message: "substantive detail must be reachable: provide a non-empty verbatim_detail or an " + "artifact_location (a bare summary with neither is rejected)"
+    });
+  }
+}).describe("Owner-return envelope: formalizes the human return while keeping the structured machine slots distinct");
+
 // src/core/autopilot-loop.ts
 init_work_item();
 
@@ -21084,6 +21135,39 @@ function guardAcClosingEvidence(args) {
     };
   }
   return { contentful: true };
+}
+function guardOwnerEnvelope(raw) {
+  const parsed = ownerReturnEnvelope.safeParse(raw);
+  if (!parsed.success) {
+    const reason = parsed.error.issues.map((i2) => `${i2.path.join(".") || "(root)"}: ${i2.message}`).join("; ");
+    return {
+      contentful: false,
+      failure_class: "fixable",
+      reason: `owner-return envelope does not conform: ${reason}`
+    };
+  }
+  return { contentful: true };
+}
+async function guardEnvelopeArtifact(env2, readFile2) {
+  if (env2.artifact_location === undefined)
+    return { contentful: true };
+  try {
+    const content = await readFile2(env2.artifact_location);
+    if (content.trim().length === 0) {
+      return {
+        contentful: false,
+        failure_class: "fixable",
+        reason: `envelope artifact_location (${env2.artifact_location}) resolves to an empty artifact \u2014 a pointer to nothing is not evidence`
+      };
+    }
+    return { contentful: true };
+  } catch (err) {
+    return {
+      contentful: false,
+      failure_class: "fixable",
+      reason: `envelope artifact_location (${env2.artifact_location}) is unresolvable: ${err instanceof Error ? err.message : String(err)}`
+    };
+  }
 }
 function decideOnFailure(failureClass, attempts, caps) {
   switch (failureClass) {
@@ -21650,6 +21734,14 @@ var handoff = exports_external.object({
   original_intent: exports_external.string().min(1).describe("Original user intent"),
   current_state: exports_external.string().min(1).describe("Where things stand now"),
   decisions_made: exports_external.array(exports_external.string()).default([]),
+  critical_decisions: exports_external.array(exports_external.object({
+    decision: exports_external.string().min(1),
+    rationale: exports_external.string().min(1).describe("Why this decision was made (preserved inline)")
+  })).default([]).describe("Decisions that cannot be re-derived from the codebase \u2014 kept inline"),
+  irreversible_risks: exports_external.array(exports_external.object({
+    risk: exports_external.string().min(1),
+    why_irreversible: exports_external.string().min(1).describe("Why this risk cannot be undone (preserved inline)")
+  })).default([]).describe("Risks whose substance is non-recoverable \u2014 kept inline, not pointer-only"),
   changed_files: exports_external.array(relativePath).default([]),
   evidence_refs: exports_external.array(evidenceRef).default([]).describe("Inline summaries/hashes/commands, not raw artifacts"),
   failed_or_unverified: exports_external.array(exports_external.string()).default([]),
@@ -21674,6 +21766,8 @@ function buildHandoff(input) {
     original_intent: input.workItem.source_request,
     current_state: input.currentState,
     decisions_made: input.decisionsMade ?? [],
+    critical_decisions: input.criticalDecisions ?? [],
+    irreversible_risks: input.irreversibleRisks ?? [],
     changed_files: input.changedFiles ?? input.workItem.changed_files,
     evidence_refs: input.evidenceRefs ?? [],
     failed_or_unverified: input.failedOrUnverified ?? [],
@@ -21698,6 +21792,18 @@ function renderHandoff(h2) {
     lines.push("## \uB0B4\uB824\uC9C4 \uACB0\uC815");
     for (const d2 of h2.decisions_made)
       lines.push(`- ${d2}`);
+    lines.push("");
+  }
+  if (h2.critical_decisions.length > 0) {
+    lines.push("## \uD575\uC2EC \uACB0\uC815 (\uC7AC\uD638\uCD9C \uBD88\uAC00)");
+    for (const d2 of h2.critical_decisions)
+      lines.push(`- ${d2.decision} \u2014 ${d2.rationale}`);
+    lines.push("");
+  }
+  if (h2.irreversible_risks.length > 0) {
+    lines.push("## \uBE44\uAC00\uC5ED \uC704\uD5D8");
+    for (const r3 of h2.irreversible_risks)
+      lines.push(`- ${r3.risk} \u2014 ${r3.why_irreversible}`);
     lines.push("");
   }
   if (h2.changed_files.length > 0) {
@@ -21926,7 +22032,7 @@ init_memory_store();
 // src/core/memory-warmstart.ts
 init_ditto_paths();
 init_fs();
-import { appendFile as appendFile2 } from "fs/promises";
+import { appendFile as appendFile3 } from "fs/promises";
 import { dirname as dirname8 } from "path";
 
 // src/core/memory-flag.ts
@@ -21962,7 +22068,7 @@ function artifactNodeId(path) {
 }
 
 // src/core/memory-reduce.ts
-import { createHash as createHash2 } from "crypto";
+import { createHash as createHash3 } from "crypto";
 function reduceEvents(events) {
   const byTarget = new Map;
   for (const e2 of events) {
@@ -21990,7 +22096,7 @@ function reduceEvents(events) {
       supersededIds.add(e2.supersedes);
   }
   const approvedHeads = events.filter((e2) => !supersededIds.has(e2.event_id) && e2.status === "approved").sort((a2, b2) => a2.event_id < b2.event_id ? -1 : a2.event_id > b2.event_id ? 1 : 0);
-  const setHash = createHash2("sha256").update(approvedHeads.map((e2) => e2.event_id).join(`
+  const setHash = createHash3("sha256").update(approvedHeads.map((e2) => e2.event_id).join(`
 `)).digest("hex");
   return { approvedHeads, setHash };
 }
@@ -22458,7 +22564,7 @@ async function memoryStatus(repoRoot) {
 }
 
 // src/core/memory-query.ts
-import { appendFile, readFile as readFile2 } from "fs/promises";
+import { appendFile as appendFile2, readFile as readFile2 } from "fs/promises";
 import { basename, dirname as dirname7, isAbsolute as isAbsolute3, join as join27 } from "path";
 init_ditto_paths();
 init_fs();
@@ -22584,7 +22690,7 @@ function pullUsageLogPath(repoRoot) {
 async function recordPullQuery(repoRoot, record) {
   const path = pullUsageLogPath(repoRoot);
   await ensureDir(dirname7(path));
-  await appendFile(path, `${JSON.stringify(record)}
+  await appendFile2(path, `${JSON.stringify(record)}
 `, "utf8");
 }
 async function readPullUsage(repoRoot) {
@@ -22839,7 +22945,7 @@ class MemoryAuditLogStore {
   async append(entry) {
     const p = this.path();
     await ensureDir(dirname7(p));
-    await appendFile(p, `${JSON.stringify(entry)}
+    await appendFile2(p, `${JSON.stringify(entry)}
 `, "utf8");
   }
   async list() {
@@ -22900,7 +23006,7 @@ function coverageRoots(graph, workItem2) {
 async function recordUsage(repoRoot, record) {
   const path = usageLogPath(repoRoot, record.work_item_id);
   await ensureDir(dirname8(path));
-  await appendFile2(path, `${JSON.stringify(record)}
+  await appendFile3(path, `${JSON.stringify(record)}
 `, "utf8");
 }
 function usageLogPath(repoRoot, workItemId2) {
@@ -23201,7 +23307,7 @@ class RetroMetricLedger {
 
 // src/core/tech-spec.ts
 init_zod();
-import { createHash as createHash3 } from "crypto";
+import { createHash as createHash4 } from "crypto";
 import { readFile as readFile3 } from "fs/promises";
 import { join as join30 } from "path";
 
@@ -23626,7 +23732,7 @@ function parseSpecSections(markdown) {
 }
 function computeSpecDigest(markdown) {
   const { sections } = parseSpecSections(markdown);
-  const hash = createHash3("sha256");
+  const hash = createHash4("sha256");
   for (const id of COMPILE_INPUT_SECTIONS) {
     hash.update(`${id}
 ${sections.get(id) ?? ""}\x00`);
@@ -24213,7 +24319,8 @@ var recordResultPayload = exports_external.object({
     grounding: exports_external.string().min(1).optional()
   })).optional().describe("A node's structured residual-risk records (ac-3); agent_resolvable auto-fixes, the four " + "surface classes surface in-flow. Each route is disclosed in the decision-log ledger."),
   follow_ups: exports_external.array(exports_external.object({ item: exports_external.string().min(1), in_scope: exports_external.boolean() })).optional().describe("A node's surfaced follow-ups (ac-4); in-scope ones are driven as graph nodes, out-of-scope " + "ones emit a single batch-escalate signal (materialize \u2260 drive, R9)."),
-  blocked_by_tool: exports_external.object({ tool: exports_external.string().min(1), grounding: exports_external.string().min(1) }).optional().describe("R5/ADR-0018: an auto-resolve item blocked only by an optional tool absence; surface " + "blocked_external rather than splice an endless re-verify.")
+  blocked_by_tool: exports_external.object({ tool: exports_external.string().min(1), grounding: exports_external.string().min(1) }).optional().describe("R5/ADR-0018: an auto-resolve item blocked only by an optional tool absence; surface " + "blocked_external rather than splice an endless re-verify."),
+  envelope: ownerReturnEnvelope.optional().describe("The owner-return envelope (ac-1): human return + distinct machine slots. Summary is the " + "only context-loaded slot (ac-2); verbatim_detail is lossless (no size-cap).")
 }).superRefine((value, ctx) => {
   if (value.outcome === "fail" && value.failure_class === undefined) {
     ctx.addIssue({
@@ -24451,6 +24558,23 @@ async function recordResult(repoRoot, input) {
     outcome = "fail";
     failureClass = "fixable";
     guardReason = guard.reason;
+  }
+  if (contentful && outcome === "pass" && input.payload.envelope !== undefined) {
+    const envGuard = guardOwnerEnvelope(input.payload.envelope);
+    if (!envGuard.contentful) {
+      contentful = false;
+      outcome = "fail";
+      failureClass = "fixable";
+      guardReason = envGuard.reason;
+    } else {
+      const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) => readFile4(join31(repoRoot, p), "utf8"));
+      if (!artifactGuard.contentful) {
+        contentful = false;
+        outcome = "fail";
+        failureClass = "fixable";
+        guardReason = artifactGuard.reason;
+      }
+    }
   }
   if (contentful && outcome === "pass") {
     const mut = guardMutatingEvidence(node2.owner, input.payload.outcome, input.payload.changed_files ?? []);
@@ -25473,7 +25597,7 @@ import { mkdir as mkdir4 } from "fs/promises";
 import { join as join34 } from "path";
 
 // src/core/e2e/browser.ts
-import { createHash as createHash4 } from "crypto";
+import { createHash as createHash5 } from "crypto";
 import { mkdir as mkdir3, readFile as readFile6, readdir as readdir13, writeFile as writeFile3 } from "fs/promises";
 import { homedir as homedir6 } from "os";
 import { dirname as dirname9, join as join33, relative as relative8, sep as sep4 } from "path";
@@ -25614,7 +25738,7 @@ function repoRelative(repoRoot, path) {
 }
 async function sha256OfFile(path) {
   const bytes = await readFile6(path);
-  return createHash4("sha256").update(bytes).digest("hex");
+  return createHash5("sha256").update(bytes).digest("hex");
 }
 async function probePlaywright(repoRoot) {
   let proc;
@@ -27684,10 +27808,12 @@ init_fs();
 import { join as join45 } from "path";
 
 // src/core/instruction-bridge.ts
-import { createHash as createHash5 } from "crypto";
+import { createHash as createHash6 } from "crypto";
 import { join as join44 } from "path";
 var MANAGED_END = "<!-- ditto:managed:end -->";
 var MANAGED_BLOCK_RE_G = /<!--\s*ditto:managed:start\s+source=([^\s]+)\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:managed:end\s*-->/g;
+var DELEGATION_CLAUSE_ANCHOR = "\uC704\uC784\uC73C\uB85C \uCEE8\uD14D\uC2A4\uD2B8\uB97C \uC9C0\uD0A8\uB2E4";
+var CHARTER_IDENTITY_MARKER = "Agent Behavior Charter";
 function normalizeInstructionText(text) {
   return text.replace(/\r\n/g, `
 `).replace(/\r/g, `
@@ -27696,7 +27822,7 @@ function normalizeInstructionText(text) {
 `);
 }
 function normalizedSha256(text) {
-  return createHash5("sha256").update(normalizeInstructionText(text)).digest("hex");
+  return createHash6("sha256").update(normalizeInstructionText(text)).digest("hex");
 }
 function sourceFromSurface(surface) {
   if (surface.role !== "source") {
@@ -27768,6 +27894,23 @@ function checkCodexInstructions(source) {
     ];
   }
   return [];
+}
+function checkRequiredClauses(source) {
+  if ("kind" in source)
+    return [];
+  if (!source.content.includes(CHARTER_IDENTITY_MARKER))
+    return [];
+  if (source.content.includes(DELEGATION_CLAUSE_ANCHOR))
+    return [];
+  return [
+    {
+      host: "codex",
+      path: source.path,
+      kind: "clause_missing",
+      message: `charter source is missing the delegation-discipline clause (\xA74-9 "${DELEGATION_CLAUSE_ANCHOR}")`,
+      sourceSha256: source.normalizedSha256
+    }
+  ];
 }
 function compareClaudeProjection(source, projection) {
   if ("kind" in source) {
@@ -27856,7 +27999,7 @@ function resultStatus(findings) {
   return findings.length === 0 ? "ok" : "drift";
 }
 function codexInstructionResult(source) {
-  const findings = checkCodexInstructions(source);
+  const findings = [...checkCodexInstructions(source), ...checkRequiredClauses(source)];
   return {
     host: "codex",
     path: source.path,
@@ -30241,7 +30384,7 @@ async function runCodeqlReviewToLedger(input, deps) {
 init_ditto_paths();
 
 // src/core/evidence-store.ts
-import { createHash as createHash6 } from "crypto";
+import { createHash as createHash7 } from "crypto";
 import { join as join53 } from "path";
 
 // src/schemas/evidence-log.ts
@@ -30336,7 +30479,7 @@ class EvidenceStore {
   }
 }
 function sha256Hex2(content) {
-  const hash = createHash6("sha256");
+  const hash = createHash7("sha256");
   hash.update(content);
   return hash.digest("hex");
 }
@@ -32227,7 +32370,7 @@ import { existsSync as existsSync7, readFileSync as readFileSync3 } from "fs";
 import { join as join60 } from "path";
 
 // src/core/build-stamp.ts
-import { createHash as createHash7 } from "crypto";
+import { createHash as createHash8 } from "crypto";
 import { readFileSync as readFileSync2, readdirSync } from "fs";
 import { join as join59 } from "path";
 var STAMP_PREFIX = "//# ditto-src-stamp=";
@@ -32244,7 +32387,7 @@ function listSourceFiles(repoRoot, rel = "src") {
   return out.sort();
 }
 function computeSourceStamp(repoRoot) {
-  const h2 = createHash7("sha256");
+  const h2 = createHash8("sha256");
   for (const rel of listSourceFiles(repoRoot)) {
     h2.update(rel);
     h2.update("\x00");
@@ -33768,12 +33911,12 @@ ${split.body}`);
 }
 
 // src/core/e2e/journey-digest.ts
-import { createHash as createHash8 } from "crypto";
+import { createHash as createHash9 } from "crypto";
 import { readFile as readFile13, readdir as readdir18 } from "fs/promises";
 init_dist2();
 init_shared();
 function sha256Hex3(bytes) {
-  return createHash8("sha256").update(bytes).digest("hex");
+  return createHash9("sha256").update(bytes).digest("hex");
 }
 function canonicalDigestText(text) {
   const split = splitFrontMatter(text);
@@ -36126,7 +36269,7 @@ import { resolve as resolve19 } from "path";
 
 // src/core/mode-doctor.ts
 import { spawnSync } from "child_process";
-import { createHash as createHash9 } from "crypto";
+import { createHash as createHash10 } from "crypto";
 import { existsSync as existsSync8, readFileSync as readFileSync4, readdirSync as readdirSync2 } from "fs";
 import { homedir as homedir10 } from "os";
 import { dirname as dirname13, join as join67, resolve as resolve18 } from "path";
@@ -36225,7 +36368,7 @@ function computeSurfaceStamp(root) {
   for (const d2 of SURFACE_DIRS)
     listSurfaceFiles(root, d2, files);
   files.sort();
-  const h2 = createHash9("sha256");
+  const h2 = createHash10("sha256");
   for (const rel of files) {
     h2.update(rel);
     h2.update("\x00");
@@ -44789,4 +44932,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=480f53f986df04b981e52ca093411f7bac42234498b36c3e57f1d2bf4b84652e
+//# ditto-src-stamp=2cc73c96dcbee6b0742f12f875220da5e46b0dc6a0a0efe938911e4e5f700c8c

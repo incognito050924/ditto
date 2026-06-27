@@ -87,6 +87,20 @@ export const evidenceRef = z
   })
   .describe('Pointer to evidence stored outside the manifest itself');
 
+// A single declared uncertainty: what is unresolved and why. Shared base
+// primitive (wi_260627jhh) reused by the owner-return envelope (`uncertainty[]`)
+// and the completion contract's `unverified[]` (which EXTENDS it with the
+// resolvability/grounding/out_of_scope fields the gate routes on). It lives here
+// in common.ts — not in completion-contract.ts where the richer shape lives — so
+// the envelope can reuse it WITHOUT an import cycle (envelope → completion-contract
+// would be one; common.ts depends on nothing in either).
+export const uncertaintyItem = z
+  .object({
+    item: z.string().min(1).describe('What is unresolved / was not verified'),
+    reason: z.string().min(1).describe('Why it remains open / why verification did not happen'),
+  })
+  .describe('A single declared uncertainty: what is unresolved and why');
+
 export const schemaVersion = z
   .literal('0.1.0')
   .describe('Version of the DITTO schema set this document conforms to');

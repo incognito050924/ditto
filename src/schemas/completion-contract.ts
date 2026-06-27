@@ -6,6 +6,7 @@ import {
   relativePath,
   runId,
   schemaVersion,
+  uncertaintyItem,
   verdict,
   workItemId,
 } from './common';
@@ -77,9 +78,12 @@ export const completionContract = z
       .describe('Commands actually executed; not aspirational'),
     unverified: z
       .array(
-        z.object({
-          item: z.string().min(1).describe('What was not verified'),
-          reason: z.string().min(1).describe('Why verification did not happen'),
+        // Reuses the shared `uncertaintyItem` base (`{item, reason}`, common.ts)
+        // and EXTENDS it with the resolvability/grounding/out_of_scope fields the
+        // gate routes on. Extending keeps `{item, reason}` byte-identical to the
+        // prior inline shape (same min(1) validation) — legacy completions
+        // round-trip unchanged — while the envelope reuses the same base.
+        uncertaintyItem.extend({
           out_of_scope: z
             .boolean()
             .default(false)
