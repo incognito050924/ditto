@@ -36,7 +36,7 @@ describe('Claude host surface — user CLI commands', () => {
     expect((cmd.meta?.description as string).length).toBeGreaterThan(0);
   });
 
-  test('`ditto work` exposes the start/status/handoff/done/abandon/promote/follow-up/stem/push-ready/archive/set-criteria subcommands the user types', () => {
+  test('`ditto work` exposes the start/status/handoff/done/abandon/reopen/promote/follow-up/stem/push-ready/archive/set-criteria subcommands the user types', () => {
     const subs = Object.keys(workCommand.subCommands ?? {}).sort();
     expect(subs).toEqual([
       'abandon',
@@ -46,6 +46,7 @@ describe('Claude host surface — user CLI commands', () => {
       'handoff',
       'promote',
       'push-ready',
+      'reopen',
       'set-criteria',
       'start',
       'status',

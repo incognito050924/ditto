@@ -255,11 +255,44 @@ export class WorkItemStore {
     terminal: Extract<WorkItem['status'], 'done' | 'abandoned'>,
     now: Date = new Date(),
   ): Promise<WorkItem> {
-    return this.update(id, (cur) => ({
-      ...cur,
-      status: terminal,
-      closed_at: now.toISOString(),
-    }));
+    return this.update(id, (cur) => {
+      // R1 terminal guard: this is the single chokepoint every terminal transition
+      // passes through — manual `work done`/`abandon` AND the autopilot pass→done
+      // flip. An already-terminal WI must not be silently overwritten (e.g. an
+      // `abandoned` item flipped to `done`). The mutator runs synchronously before
+      // any write, so this throw leaves the on-disk state untouched. The only
+      // legitimate way past this is reopen()→close().
+      if (cur.status === 'done' || cur.status === 'abandoned') {
+        throw new Error(
+          `work ${id} is already ${cur.status} (terminal); reopen first (ditto work reopen ${id}) before re-closing`,
+        );
+      }
+      return {
+        ...cur,
+        status: terminal,
+        closed_at: now.toISOString(),
+      };
+    });
+  }
+
+  /**
+   * Reopen a terminal work item (`done`/`abandoned`) back to `in_progress`,
+   * dropping `closed_at`. The inverse of `close`: since `close` now refuses to
+   * overwrite a terminal item, reopen→close is the ONLY sanctioned way to move a
+   * closed WI to a different terminal state — so the transition is explicit, never
+   * silent. Throws on a non-terminal WI (nothing to reopen). The `started_at_sha`
+   * backfill is handled by `update` (it stamps only when in_progress && undefined).
+   */
+  async reopen(id: string): Promise<WorkItem> {
+    return this.update(id, (cur) => {
+      if (cur.status !== 'done' && cur.status !== 'abandoned') {
+        throw new Error(
+          `work ${id} is ${cur.status} (not terminal); reopen only applies to a done/abandoned WI`,
+        );
+      }
+      const { closed_at: _dropped, ...rest } = cur;
+      return { ...rest, status: 'in_progress' as const };
+    });
   }
 
   /**

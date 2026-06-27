@@ -360,6 +360,49 @@ describe('WorkItemStore.close', () => {
     expect(closed.status).toBe('done');
     expect(closed.closed_at).toBeDefined();
   });
+
+  // R1 terminal guard: close() is the chokepoint protecting every terminal
+  // transition (manual done/abandon + the autopilot pass->done flip). An
+  // already-terminal WI must not be silently overwritten -- re-closing throws
+  // with no disk write, so abandoned can never be quietly flipped to done.
+  test('re-closing an already-done WI throws (already terminal)', async () => {
+    const created = await store.create(sampleInput());
+    await store.close(created.id, 'done');
+    expect(store.close(created.id, 'done')).rejects.toThrow(/terminal/);
+  });
+
+  test('closing an abandoned WI to done throws (no silent overwrite)', async () => {
+    const created = await store.create(sampleInput());
+    await store.close(created.id, 'abandoned');
+    expect(store.close(created.id, 'done')).rejects.toThrow(/terminal/);
+    // status unchanged on disk
+    expect((await store.get(created.id)).status).toBe('abandoned');
+  });
+});
+
+describe('WorkItemStore.reopen', () => {
+  test('done -> in_progress and clears closed_at', async () => {
+    const created = await store.create(sampleInput());
+    const done = await store.close(created.id, 'done');
+    expect(done.closed_at).toBeDefined();
+    const reopened = await store.reopen(created.id);
+    expect(reopened.status).toBe('in_progress');
+    expect(reopened.closed_at).toBeUndefined();
+    expect((await store.get(created.id)).status).toBe('in_progress');
+  });
+
+  test('abandoned -> in_progress (then closeable to done)', async () => {
+    const created = await store.create(sampleInput());
+    await store.close(created.id, 'abandoned');
+    await store.reopen(created.id);
+    const reclosed = await store.close(created.id, 'done');
+    expect(reclosed.status).toBe('done');
+  });
+
+  test('reopen on a non-terminal WI throws', async () => {
+    const created = await store.create(sampleInput());
+    expect(store.reopen(created.id)).rejects.toThrow(/not terminal/);
+  });
 });
 
 describe('WorkItemStore.archive', () => {

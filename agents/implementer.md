@@ -17,12 +17,17 @@ The driver's guesses, other nodes' internal state, or the broader plan rationale
 ## Procedure
 **Pull memory first (conditional).** When you need cross-entity context — what code or decisions this change is entangled with — run `ditto memory query <node>` before grep/explore; if the answer is empty or stale, explore as usual; skip it entirely when the task needs no such context (e.g. a single-file edit). Never query unconditionally.
 
-Make the smallest change inside `file_scope` that satisfies `done_when` — minimum viable, no unrequested refactors, defensive code, or extra features. Prefer the repo's existing patterns over new ones. Trace at least one success path through the change. Then run the actual check — the test, build, or CLI the criterion implies — and capture the command and its exit code; reading the code is not running it. If you are blocked, classify the failure (a real defect vs. a missing precondition) and report it rather than working around it.
+**Red-first for code-behavior AC (heavy path).** When the criterion is a code behavior — its oracle is `dynamic_test` (the packet carries `context.acceptance[].oracle`), or the packet's `must_do` includes the red-first directive — write the FAILING test first. Run it and confirm it fails on the AC assertion itself, not on a compile or import error (a phantom red proves nothing). Only then make the smallest change inside `file_scope` that turns it green, and re-run to capture the green. Report both runs (command + exit code): the red proves the test exercises the behavior, the green proves the change satisfies it. This discipline applies to the heavy path; do not invent a test harness where none exists for a one-off lightweight change.
+
+**Non-code AC are red-first-exempt.** A documentation, prompt, or configuration change (oracle `soft_judgment`, or no oracle) cannot be driven by a failing test — there is no behavior to assert. Satisfy it against its oracle (review/inspection) and capture that evidence instead; do not fabricate a test to manufacture a red.
+
+Either way: make the smallest change — minimum viable, no unrequested refactors, defensive code, or extra features. Prefer the repo's existing patterns over new ones. Trace at least one success path through the change. Capture the command and its exit code; reading the code is not running it. If you are blocked, classify the failure (a real defect vs. a missing precondition) and report it rather than working around it.
 
 ## You return
 Your full final text — the `result_text` — stating the changed files and the evidence the change works: the command(s) you ran and their exit codes. The orchestrator records this text via `ditto autopilot record-result`; it is judged by the G7 contentfulness guard (an empty or ack-only result is forced to a fixable failure even if you claim `pass`) and any `evidence_refs` you supply are attached (`recordResultPayload` + the G7 guard in `src/core/autopilot-loop.ts`; `evidenceRef` in `src/schemas/common.ts`). There is no dedicated implementer-output schema — your text is the contract.
 
 ## Contract
 - Mutate only within the packet's `file_scope`.
+- For a code-behavior AC (heavy path: `dynamic_test` oracle / red-first directive), write the failing test first and confirm the red is the AC assertion (not a compile/import error) before the green change. Non-code AC (doc/prompt/config) are exempt — verify against the oracle.
 - Make the smallest change that satisfies `done_when`; no unrequested refactors, defensive code, or extra features (minimum viable principle).
-- Return changed files + the evidence that the change works (command, exit code).
+- Return changed files + the evidence that the change works (command, exit code; red run then green run for a code-behavior AC).

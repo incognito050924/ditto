@@ -13293,11 +13293,25 @@ class WorkItemStore {
     return writeJson(this.workItemPath(id), workItem, withTouched);
   }
   async close(id, terminal, now = new Date) {
-    return this.update(id, (cur) => ({
-      ...cur,
-      status: terminal,
-      closed_at: now.toISOString()
-    }));
+    return this.update(id, (cur) => {
+      if (cur.status === "done" || cur.status === "abandoned") {
+        throw new Error(`work ${id} is already ${cur.status} (terminal); reopen first (ditto work reopen ${id}) before re-closing`);
+      }
+      return {
+        ...cur,
+        status: terminal,
+        closed_at: now.toISOString()
+      };
+    });
+  }
+  async reopen(id) {
+    return this.update(id, (cur) => {
+      if (cur.status !== "done" && cur.status !== "abandoned") {
+        throw new Error(`work ${id} is ${cur.status} (not terminal); reopen only applies to a done/abandoned WI`);
+      }
+      const { closed_at: _dropped, ...rest } = cur;
+      return { ...rest, status: "in_progress" };
+    });
   }
   async park(id, status, reEntry2) {
     return this.update(id, (cur) => ({
@@ -20903,6 +20917,10 @@ function isMutatingOwner(owner) {
 }
 var PLANNER_GENERATE_DIRECTIVE = "Emit a `generated_nodes` subgraph: pick the \xA72.2 lifecycle stages this task " + "actually needs (research\xB7design\xB7implement\xB7review\xB7verify\xB7\u2026), each node " + "{id, kind, purpose, depends_on, acceptance_refs} mapped to its acceptance " + "criteria; scale to task size (small tasks stay minimal \u2014 do not force a stage).";
 var CITE_OR_ABSTAIN_DIRECTIVE = "Consult the governing decisions in context.memory.decision_briefs: cite the " + "ones you relied on (follow them or justify any deviation), and if none apply " + "to this task, state that explicitly (cite-or-abstain).";
+var RED_FIRST_DIRECTIVE = "Red-first discipline (code-behavior AC): write the failing test that asserts " + "this criterion FIRST and run it; confirm it fails on the AC assertion itself, " + "not on a compile/import error (no phantom red), then make the smallest change " + "to turn it green. Report both the red run and the green run (command + exit code).";
+function isRedFirstImplement(owner, acceptance) {
+  return owner === "implementer" && acceptance.some((a2) => a2.oracle?.verification_method === "dynamic_test");
+}
 function buildDelegationPacket(node, workItem2, variantCandidates = [], fileScope = workItem2.changed_files, memoryContext, retroContext) {
   const isPlanner = node.owner === "planner";
   const acceptance = node.acceptance_refs.flatMap((id) => {
@@ -20924,6 +20942,7 @@ function buildDelegationPacket(node, workItem2, variantCandidates = [], fileScop
       "Work only from this packet.",
       "Return a single result with evidence (command + exit code, file:line).",
       ...isPlanner ? [PLANNER_GENERATE_DIRECTIVE] : [],
+      ...isRedFirstImplement(node.owner, acceptance) ? [RED_FIRST_DIRECTIVE] : [],
       ...memoryContext?.decisions?.length || memoryContext?.decision_briefs?.length ? [CITE_OR_ABSTAIN_DIRECTIVE] : [],
       `Stop when done_when is met: ${doneWhen}.`
     ],
@@ -26527,7 +26546,8 @@ var autopilotComplete = defineCommand({
     try {
       const aps = new AutopilotStore(repoRoot);
       const graph = await aps.get(args.workItem);
-      const workItem2 = await new WorkItemStore(repoRoot).get(args.workItem);
+      const workItemStore = new WorkItemStore(repoRoot);
+      const workItem2 = await workItemStore.get(args.workItem);
       const decisions = await aps.readDecisions(args.workItem);
       const e2eViolations = await checkE2eCompletionGate(repoRoot, {
         workItemId: args.workItem,
@@ -26567,6 +26587,21 @@ var autopilotComplete = defineCommand({
         }
       }
       await new CompletionStore(repoRoot).write(completion);
+      let autoClose = "skipped";
+      if (completion.final_verdict === "pass") {
+        if (workItem2.status === "done" || workItem2.status === "abandoned") {
+          autoClose = "skipped";
+        } else {
+          const blocking = blockingFollowUp(workItem2);
+          if (blocking) {
+            writeError(`complete: ${args.workItem} verified pass but cannot auto-close \u2014 unresolved self-caused ${blocking.severity}-severity follow-up "${blocking.note}". Resolve it (ditto work follow-up ${args.workItem} --resolve <n>), then re-run.`);
+            process.exit(RUNTIME_ERROR_EXIT);
+            return;
+          }
+          await workItemStore.close(args.workItem, "done");
+          autoClose = "flipped";
+        }
+      }
       const cite = await checkCiteGate(repoRoot, { workItemId: args.workItem, graph });
       const measurement = await measureReproposalForCompletion(repoRoot);
       const citeCrossCheck = crossValidateCite(cite, measurement);
@@ -26580,6 +26615,10 @@ var autopilotComplete = defineCommand({
         writeJson2({
           work_item_id: args.workItem,
           final_verdict: completion.final_verdict,
+          auto_close: {
+            outcome: autoClose,
+            status: autoClose === "flipped" ? "done" : workItem2.status
+          },
           acceptance: completion.acceptance.map((a2) => ({
             criterion_id: a2.criterion_id,
             verdict: a2.verdict,
@@ -26598,6 +26637,7 @@ var autopilotComplete = defineCommand({
         });
       } else {
         writeHuman(`Assembled completion for ${args.workItem}: final_verdict=${completion.final_verdict}`);
+        writeHuman(autoClose === "flipped" ? "  auto-close (ac-3): flipped \u2192 done" : `  auto-close (ac-3): skipped (status=${workItem2.status}${completion.final_verdict === "pass" ? ", already terminal" : ", non-pass"})`);
         for (const a2 of completion.acceptance) {
           writeHuman(`  ${a2.criterion_id}: ${a2.verdict} (${a2.evidence.length} evidence)`);
         }
@@ -33198,6 +33238,63 @@ total	${t2.with_completion}/${t2.work_items} with completion	${t2.closed_accepta
     }
   }
 });
+var TERMINAL_STATUSES = new Set(["done", "abandoned"]);
+var backlogCommand = defineCommand({
+  meta: {
+    name: "backlog",
+    description: "Read-only backlog hygiene: stale drafts, completed-but-unclosed work items, and the open count. Definitions are structural (no wall-clock age \u2014 cross-PC clock skew would flap boundaries); reports only, never closes/archives anything."
+  },
+  args: {
+    output: { type: "string", default: "human", description: "Output format: human|json" }
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const deps = defaultCompletionCoverageDeps(repoRoot);
+      const report = await collectCompletionCoverageReport(deps);
+      const staleDrafts = report.rows.filter((r3) => r3.status === "draft" && !r3.has_completion).map((r3) => ({ work_item_id: r3.work_item_id, title: r3.title }));
+      const openCount = report.rows.filter((r3) => !TERMINAL_STATUSES.has(r3.status)).length;
+      const completedUnclosed = [];
+      for (const r3 of report.rows) {
+        if (!r3.has_completion || TERMINAL_STATUSES.has(r3.status))
+          continue;
+        const completion = await deps.readCompletion(r3.work_item_id);
+        if (completion?.final_verdict === "pass") {
+          completedUnclosed.push({
+            work_item_id: r3.work_item_id,
+            title: r3.title,
+            status: r3.status
+          });
+        }
+      }
+      const findingCount = staleDrafts.length + completedUnclosed.length;
+      if (format === "json") {
+        writeJson2({
+          status: findingCount === 0 ? "ok" : "hygiene",
+          open_count: openCount,
+          stale_drafts: staleDrafts,
+          completed_unclosed: completedUnclosed
+        });
+      } else {
+        writeHuman(`open	${openCount} non-terminal work items`);
+        if (findingCount === 0) {
+          writeHuman("backlog: ok (no stale drafts, no completed-but-unclosed)");
+        } else {
+          for (const s2 of staleDrafts) {
+            writeHuman(`stale_draft	${s2.work_item_id}	${s2.title}`);
+          }
+          for (const c3 of completedUnclosed) {
+            writeHuman(`completed_unclosed	${c3.work_item_id}	${c3.status}	${c3.title}`);
+          }
+        }
+      }
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  }
+});
 var retroTrendCommand = defineCommand({
   meta: {
     name: "retro-trend",
@@ -33305,6 +33402,7 @@ var doctorCommand = defineCommand({
     distribution: distributionCommand,
     "intent-quality": intentQualityCommand,
     "completion-coverage": completionCoverageCommand,
+    backlog: backlogCommand,
     "retro-trend": retroTrendCommand,
     variants: variantsCommand
   }
@@ -36943,7 +37041,7 @@ var PRIME_DIRECTIVE = [
 var PLACEHOLDER_AC_STATEMENT = "TBD \u2014 derive observable criteria during interview/planning";
 var WORK_ITEM_GUIDE_ADVISORY = 'No active work item. Make the 1st-pass judgment yourself: if this request produces an artifact or makes an irreversible codebase change, it should become a work item (simple tasks, handoff, git ops are exceptions). If so, confirm the intent with the user, then register it YOURSELF by running `ditto work start "<goal>" --request "<verbatim request>"` \u2014 you create it automatically, the user does not type the command. Otherwise just proceed as normal work.';
 var PLACEHOLDER_AC_ADVISORY = "acceptance criteria are placeholders \u2014 narrow them via /ditto:deep-interview before acting (IntentContract)";
-var DEEP_INTERVIEW_DIRECTIVE = "Run /ditto:deep-interview now \u2014 placeholder acceptance criteria + execution intent detected. Recommended; may be skipped if the request is small or reversible (IntentContract entry).";
+var DEEP_INTERVIEW_DIRECTIVE = "Run /ditto:deep-interview now \u2014 placeholder acceptance criteria + execution intent detected. Recommended for complex/irreversible work; may be skipped if the request is small or reversible. Lightweight path for a simple/reversible task: `ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done` (no deep-interview/autopilot). (IntentContract entry).";
 var SELF_ANSWER_HINT = "self-answer from code/docs/web first before asking \u2014 this prompt looks answerable without user input (QuestionGate).";
 function charterProjection(ctx = {}) {
   const lines = [PRIME_DIRECTIVE];
@@ -42839,9 +42937,13 @@ var workStart = defineCommand({
           if (hint)
             writeHuman(hint);
         }
-        writeHuman("Next steps:");
+        writeHuman("Next steps \u2014 heavy path (complex/irreversible work):");
         writeHuman("  1. /ditto:deep-interview (or: ditto deep-interview start \u2192 record-turn \u2192 check-readiness \u2192 finalize) \u2014 writes intent.json");
         writeHuman(`  2. ditto autopilot bootstrap --workItem ${created.id} (requires intent.json from finalize)`);
+        writeHuman("Or the lightweight path (simple/reversible work \u2014 no deep-interview/autopilot):");
+        writeHuman(`  1. ditto work set-criteria ${created.id} --criteria "<observable criterion; \u2026>"`);
+        writeHuman(`  2. ditto verify ${created.id} --criterion <ac> -- <command>`);
+        writeHuman(`  3. ditto work done ${created.id}`);
       }
     } catch (err) {
       writeError(`work start failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -43117,7 +43219,7 @@ var workHandoff = defineCommand({
     }
   }
 });
-var TERMINAL_STATUSES = ["done", "abandoned"];
+var TERMINAL_STATUSES2 = ["done", "abandoned"];
 var workAbandon = defineCommand({
   meta: {
     name: "abandon",
@@ -43153,6 +43255,39 @@ var workAbandon = defineCommand({
       }
     } catch (err) {
       writeError(`work abandon failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
+var workReopen = defineCommand({
+  meta: {
+    name: "reopen",
+    description: "Reopen a terminal work item (done|abandoned) back to in_progress \u2014 the inverse of done/abandon (e.g. to re-close to a different terminal state). No evidence required."
+  },
+  args: {
+    workId: { type: "positional", description: "Work item id to reopen", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const reopened = await store.reopen(args.workId);
+      if (format === "json") {
+        writeJson2({ id: reopened.id, status: reopened.status });
+      } else {
+        writeHuman(`Reopened ${reopened.id} (now ${reopened.status}).`);
+      }
+    } catch (err) {
+      writeError(`work reopen failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(USAGE_ERROR_EXIT);
     }
   }
@@ -43683,7 +43818,7 @@ var workStem = defineCommand({
     if (close) {
       try {
         const view = await store.stem(args.workId);
-        const nonTerminal = view.members.filter((m2) => !TERMINAL_STATUSES.includes(m2.status));
+        const nonTerminal = view.members.filter((m2) => !TERMINAL_STATUSES2.includes(m2.status));
         if (nonTerminal.length > 0) {
           writeError(`work stem ${args.workId} cannot close: ${nonTerminal.length} non-terminal member(s) \u2014 ${nonTerminal.map((m2) => `${m2.id}=${m2.status}`).join(", ")}. Close (done/abandon) each before rolling the chain up.`);
           process.exit(USAGE_ERROR_EXIT);
@@ -43792,7 +43927,7 @@ var workArchive = defineCommand({
     const store = new WorkItemStore(repoRoot);
     try {
       if (args["dry-run"]) {
-        const candidates = (await store.list()).filter((s2) => TERMINAL_STATUSES.includes(s2.status));
+        const candidates = (await store.list()).filter((s2) => TERMINAL_STATUSES2.includes(s2.status));
         if (format === "json") {
           writeJson2({
             dry_run: true,
@@ -43832,6 +43967,7 @@ var workCommand = defineCommand({
     handoff: workHandoff,
     done: workDone,
     abandon: workAbandon,
+    reopen: workReopen,
     promote: workPromote,
     "follow-up": workFollowUp,
     stem: workStem,
@@ -44053,4 +44189,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=611b5d0fbbb7c2bc155a63d18bbe09f07db9f9bf9fd4c645efba02353cc41e51
+//# ditto-src-stamp=f5eeda582623d9175d81578368a4d0e16bd2cad8864e7374728438a09f029e65

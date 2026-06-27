@@ -34,7 +34,7 @@ import { resolveRepoRootForCreate } from '~/core/fs';
 import { intentDriftGate, interfaceBaselineDriftGate } from '~/core/gates';
 import { IntentStore } from '~/core/intent-store';
 import { type MeasurementReport, measureHallucination } from '~/core/memory-measure';
-import { WorkItemStore } from '~/core/work-item-store';
+import { WorkItemStore, blockingFollowUp } from '~/core/work-item-store';
 import { coverageRoundPayload } from '~/schemas/coverage';
 import {
   RUNTIME_ERROR_EXIT,
@@ -357,7 +357,8 @@ const autopilotComplete = defineCommand({
     try {
       const aps = new AutopilotStore(repoRoot);
       const graph = await aps.get(args.workItem);
-      const workItem = await new WorkItemStore(repoRoot).get(args.workItem);
+      const workItemStore = new WorkItemStore(repoRoot);
+      const workItem = await workItemStore.get(args.workItem);
       // Read the append-only decision log once: it feeds BOTH the e2e completion
       // gate and the ac-6 auto-handling ledger projected below.
       const decisions = await aps.readDecisions(args.workItem);
@@ -414,6 +415,34 @@ const autopilotComplete = defineCommand({
         }
       }
       await new CompletionStore(repoRoot).write(completion);
+      // ac-3 (wi_2606264rm): a pass completion is the work item's real finish line —
+      // `autopilot complete` becomes the single termination gate, flipping the WI to
+      // done here so no separate manual `work done` is needed. NON-pass leaves the
+      // status untouched (this if(pass) wrap is what guarantees the invariant —
+      // close() itself is verdict-blind). An already-terminal WI (a benign re-run of
+      // complete) is left alone. A self-caused high/critical follow-up still blocks
+      // the auto-close (parity with `work done`, blockingFollowUp): fix/resolve it,
+      // then re-run — never a silent done over an open regression. The terminal
+      // overwrite invariant (abandoned↛done) is enforced one level down in
+      // store.close (R1); the pre-check here is for a clean skipped signal, not a
+      // crash, on re-run.
+      let autoClose: 'flipped' | 'skipped' = 'skipped';
+      if (completion.final_verdict === 'pass') {
+        if (workItem.status === 'done' || workItem.status === 'abandoned') {
+          autoClose = 'skipped'; // already terminal — nothing to flip
+        } else {
+          const blocking = blockingFollowUp(workItem);
+          if (blocking) {
+            writeError(
+              `complete: ${args.workItem} verified pass but cannot auto-close — unresolved self-caused ${blocking.severity}-severity follow-up "${blocking.note}". Resolve it (ditto work follow-up ${args.workItem} --resolve <n>), then re-run.`,
+            );
+            process.exit(RUNTIME_ERROR_EXIT);
+            return;
+          }
+          await workItemStore.close(args.workItem, 'done');
+          autoClose = 'flipped';
+        }
+      }
       // ac-2 cite-or-abstain advisory gate: did the lineage-pushed nodes cite or
       // abstain against the governing decisions injected into their packets?
       // ADVISORY — warnings are surfaced but NEVER block completion (no exit
@@ -445,6 +474,10 @@ const autopilotComplete = defineCommand({
         writeJson({
           work_item_id: args.workItem,
           final_verdict: completion.final_verdict,
+          auto_close: {
+            outcome: autoClose,
+            status: autoClose === 'flipped' ? 'done' : workItem.status,
+          },
           acceptance: completion.acceptance.map((a) => ({
             criterion_id: a.criterion_id,
             verdict: a.verdict,
@@ -464,6 +497,11 @@ const autopilotComplete = defineCommand({
       } else {
         writeHuman(
           `Assembled completion for ${args.workItem}: final_verdict=${completion.final_verdict}`,
+        );
+        writeHuman(
+          autoClose === 'flipped'
+            ? '  auto-close (ac-3): flipped → done'
+            : `  auto-close (ac-3): skipped (status=${workItem.status}${completion.final_verdict === 'pass' ? ', already terminal' : ', non-pass'})`,
         );
         for (const a of completion.acceptance) {
           writeHuman(`  ${a.criterion_id}: ${a.verdict} (${a.evidence.length} evidence)`);

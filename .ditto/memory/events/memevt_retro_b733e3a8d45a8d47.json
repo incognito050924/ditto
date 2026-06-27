@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_b733e3a8d45a8d47",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] 향후 remote 트리거 생기면 미인증 호출자가 auto-flip 구동 가능하나 본 변경은 그 표면 추가 안 함\n[residual] auto-flip이 사용자 미승인 항목을 done 처리할 수 있으나 그건 evidence/불변식 실패(boundary-edge 소관)\n[residual] host 환경 회귀가 red-first 지시 전달을 막을 수 있으나 host-integration seam 안 건드림\n[residual] 위조 completion.json이 잘못된 auto-flip 구동 가능하나 외부 주입 경로 없음\n[residual] work item id가 경로 구성하나 ditto 생성, 새 sink 없음\n[residual] 기존 work item 본문에 secret 있으면 JSON에 있으나 본 변경이 secret 처리/로깅 추가 안 함\n[residual] 없음 — aggregate count/id만 출력\n[residual] 없음\n[residual] 이전 동작으로 만든 항목에 자동 flip 적용 window는 compat-version·boundary-edge가 carry\n[residual] stale을 wall-clock age로 정의하면 cross-PC 시계 불일치 위험 — structural 정의 권장(advisory, read-only라 medium)\n[close_reason] local 단일사용자 dev CLI, 인증/세션/토큰 경로 없음\n[close_reason] RBAC/소유권 모델 없음; ac-3 게이트는 evidence 게이트지 who-can-act 아님\n[close_reason] 내부 파일 편집, 새 3rd-party/네트워크/env var 의존 없음\n[close_reason] 외부 행위자 없음, completion.json 로컬 생성\n[close_reason] untrusted→interpreter sink 없음, JSON atomic write\n[close_reason] secret/token 미처리; flip은 status/closed_at, doctor는 count/id 출력\n[close_reason] dev 메타데이터(status/id/timestamp)만\n[close_reason] 규제 데이터 클래스 없음\n[close_reason] single-repo dogfood, migration/flag/mixed-version 없음; completion schema 0.1.0 uniform, flip은 per-run in-process\n[close_reason] closed_at wall-clock stamp만, 게이트/control-flow가 시간값 미의존; 현재 age 기반 stale 로직 없음",
+  "created_at": "2026-06-27T01:50:25.901Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

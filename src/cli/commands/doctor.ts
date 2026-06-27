@@ -577,6 +577,84 @@ const completionCoverageCommand = defineCommand({
   },
 });
 
+const TERMINAL_STATUSES: ReadonlySet<string> = new Set(['done', 'abandoned']);
+
+const backlogCommand = defineCommand({
+  meta: {
+    name: 'backlog',
+    description:
+      'Read-only backlog hygiene: stale drafts, completed-but-unclosed work items, and the open count. Definitions are structural (no wall-clock age — cross-PC clock skew would flap boundaries); reports only, never closes/archives anything.',
+  },
+  args: {
+    output: { type: 'string', default: 'human', description: 'Output format: human|json' },
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      // R6 — reuse the completion-coverage scan (active + archive listing, completion
+      // reads) instead of reinventing a parallel scan. The report rows already carry
+      // per-WI status + has_completion; calling it first also populates the deps'
+      // archive-label map so readCompletion below resolves archived completions.
+      const deps = defaultCompletionCoverageDeps(repoRoot);
+      const report = await collectCompletionCoverageReport(deps);
+
+      // Stale draft (structural): status=draft ∧ no completion.json. A parked WI is
+      // status partial/blocked (the schema requires re_entry for those), never
+      // 'draft', so the draft restriction already excludes parked-with-reason items.
+      const staleDrafts = report.rows
+        .filter((r) => r.status === 'draft' && !r.has_completion)
+        .map((r) => ({ work_item_id: r.work_item_id, title: r.title }));
+
+      // Open = work items in a non-terminal status (done/abandoned excluded).
+      const openCount = report.rows.filter((r) => !TERMINAL_STATUSES.has(r.status)).length;
+
+      // Completed-but-unclosed: completion.final_verdict=pass while status is
+      // non-terminal. Terminal (done/abandoned) is excluded — an abandoned WI that
+      // carries a pass completion is not a hygiene item. final_verdict is not on the
+      // coverage row, so read it from the same deps (only for rows with a completion).
+      const completedUnclosed: { work_item_id: string; title: string; status: string }[] = [];
+      for (const r of report.rows) {
+        if (!r.has_completion || TERMINAL_STATUSES.has(r.status)) continue;
+        const completion = await deps.readCompletion(r.work_item_id);
+        if (completion?.final_verdict === 'pass') {
+          completedUnclosed.push({
+            work_item_id: r.work_item_id,
+            title: r.title,
+            status: r.status,
+          });
+        }
+      }
+
+      const findingCount = staleDrafts.length + completedUnclosed.length;
+      if (format === 'json') {
+        writeJson({
+          status: findingCount === 0 ? 'ok' : 'hygiene',
+          open_count: openCount,
+          stale_drafts: staleDrafts,
+          completed_unclosed: completedUnclosed,
+        });
+      } else {
+        writeHuman(`open\t${openCount} non-terminal work items`);
+        if (findingCount === 0) {
+          writeHuman('backlog: ok (no stale drafts, no completed-but-unclosed)');
+        } else {
+          for (const s of staleDrafts) {
+            writeHuman(`stale_draft\t${s.work_item_id}\t${s.title}`);
+          }
+          for (const c of completedUnclosed) {
+            writeHuman(`completed_unclosed\t${c.work_item_id}\t${c.status}\t${c.title}`);
+          }
+        }
+      }
+      // Read-only hygiene readout; never a drift exit and never an auto-cleanup action.
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  },
+});
+
 const retroTrendCommand = defineCommand({
   meta: {
     name: 'retro-trend',
@@ -707,6 +785,7 @@ export const doctorCommand = defineCommand({
     distribution: distributionCommand,
     'intent-quality': intentQualityCommand,
     'completion-coverage': completionCoverageCommand,
+    backlog: backlogCommand,
     'retro-trend': retroTrendCommand,
     variants: variantsCommand,
   },

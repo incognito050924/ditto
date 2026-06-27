@@ -43,7 +43,7 @@ const PLACEHOLDER_AC_ADVISORY =
  * concrete next command. Recommended but not enforced — the hook is advisory.
  */
 const DEEP_INTERVIEW_DIRECTIVE =
-  'Run /ditto:deep-interview now — placeholder acceptance criteria + execution intent detected. Recommended; may be skipped if the request is small or reversible (IntentContract entry).';
+  'Run /ditto:deep-interview now — placeholder acceptance criteria + execution intent detected. Recommended for complex/irreversible work; may be skipped if the request is small or reversible. Lightweight path for a simple/reversible task: `ditto work set-criteria` → `ditto verify` → `ditto work done` (no deep-interview/autopilot). (IntentContract entry).';
 
 /**
  * Soft nudge attached to a question-shaped prompt that looks answerable from

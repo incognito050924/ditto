@@ -205,6 +205,66 @@ describe('buildDelegationPacket (6-section, Context Isolation)', () => {
   });
 });
 
+// wi_2606264rm ac-1: an implementer node addressing a code-behavior AC (a
+// design-assigned `dynamic_test` oracle) carries the red-first directive; every
+// other shape (non-code oracle, no oracle, non-implementer owner) is exempt. The
+// trigger is derived purely from owner + resolved acceptance, so these assert the
+// committed wiring, not the prose in implementer.md.
+describe('buildDelegationPacket red-first directive (ac-1)', () => {
+  const RED_FIRST = 'Red-first discipline (code-behavior AC)';
+  const mkNode = (owner: AutopilotNode['owner']): AutopilotNode => ({
+    id: 'NR',
+    kind: owner === 'refactorer' ? 'refactor' : 'implement',
+    owner,
+    purpose: 'make the change',
+    status: 'pending',
+    depends_on: [],
+    acceptance_refs: ['ac-1'],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  });
+  const wiWith = (oracleMethod?: string): WorkItem =>
+    ({
+      id: 'wi_redfirst',
+      changed_files: ['src/x.ts'],
+      acceptance_criteria: [
+        {
+          id: 'ac-1',
+          statement: 'login rejects an empty password',
+          ...(oracleMethod
+            ? {
+                oracle: {
+                  verification_method: oracleMethod,
+                  maps_to: 'ac-1',
+                  direction: 'forward',
+                },
+              }
+            : {}),
+        },
+      ],
+    }) as unknown as WorkItem;
+  const hasRedFirst = (owner: AutopilotNode['owner'], oracleMethod?: string) =>
+    buildDelegationPacket(mkNode(owner), wiWith(oracleMethod)).must_do.some((m) =>
+      m.includes(RED_FIRST),
+    );
+
+  test('implementer + dynamic_test oracle → red-first directive present', () => {
+    expect(hasRedFirst('implementer', 'dynamic_test')).toBe(true);
+  });
+
+  test('implementer + soft_judgment oracle (non-code AC) → exempt', () => {
+    expect(hasRedFirst('implementer', 'soft_judgment')).toBe(false);
+  });
+
+  test('implementer + no assigned oracle (lightweight path) → exempt', () => {
+    expect(hasRedFirst('implementer', undefined)).toBe(false);
+  });
+
+  test('refactorer + dynamic_test oracle (Tidy First, not implementer) → exempt', () => {
+    expect(hasRedFirst('refactorer', 'dynamic_test')).toBe(false);
+  });
+});
+
 describe('decideOnFailure (caps automatic; escalate to user beyond)', () => {
   test('fixable under cap => retry', () => {
     expect(decideOnFailure('fixable', { fix: 0, switch: 0 }, caps)).toEqual({

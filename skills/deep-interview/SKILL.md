@@ -20,7 +20,13 @@ Enter when ANY of the following is true:
 - Two or more materially different implementations are plausible and the difference is product-visible.
 - A pre-mortem would surface a hard-to-reverse risk that the request doesn't already constrain.
 
-Otherwise do NOT enter (§2 #3: small reversible requests should not be promoted into heavy workflows).
+Otherwise do NOT enter (§2 #3: small reversible requests should not be promoted into heavy workflows). For a small/reversible request, take the **lightweight path** instead — no deep-interview, no autopilot:
+
+```
+ditto work set-criteria <wi> --criteria "<observable criterion>; <criterion>; …"
+ditto verify <wi> --criterion <ac> -- <command>   # fresh evidence per criterion
+ditto work done <wi>                                # evidence-gated close
+```
 
 ## Procedure
 

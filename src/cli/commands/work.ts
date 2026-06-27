@@ -303,13 +303,21 @@ const workStart = defineCommand({
           const hint = worktreeBindingHint(repoRoot, worktrees, created.id);
           if (hint) writeHuman(hint);
         }
-        writeHuman('Next steps:');
+        writeHuman('Next steps — heavy path (complex/irreversible work):');
         writeHuman(
           '  1. /ditto:deep-interview (or: ditto deep-interview start → record-turn → check-readiness → finalize) — writes intent.json',
         );
         writeHuman(
           `  2. ditto autopilot bootstrap --workItem ${created.id} (requires intent.json from finalize)`,
         );
+        writeHuman(
+          'Or the lightweight path (simple/reversible work — no deep-interview/autopilot):',
+        );
+        writeHuman(
+          `  1. ditto work set-criteria ${created.id} --criteria "<observable criterion; …>"`,
+        );
+        writeHuman(`  2. ditto verify ${created.id} --criterion <ac> -- <command>`);
+        writeHuman(`  3. ditto work done ${created.id}`);
       }
     } catch (err) {
       writeError(`work start failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -655,6 +663,41 @@ const workAbandon = defineCommand({
       }
     } catch (err) {
       writeError(`work abandon failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  },
+});
+
+const workReopen = defineCommand({
+  meta: {
+    name: 'reopen',
+    description:
+      'Reopen a terminal work item (done|abandoned) back to in_progress — the inverse of done/abandon (e.g. to re-close to a different terminal state). No evidence required.',
+  },
+  args: {
+    workId: { type: 'positional', description: 'Work item id to reopen', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const reopened = await store.reopen(args.workId);
+      if (format === 'json') {
+        writeJson({ id: reopened.id, status: reopened.status });
+      } else {
+        writeHuman(`Reopened ${reopened.id} (now ${reopened.status}).`);
+      }
+    } catch (err) {
+      writeError(`work reopen failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(USAGE_ERROR_EXIT);
     }
   },
@@ -1507,6 +1550,7 @@ export const workCommand = defineCommand({
     handoff: workHandoff,
     done: workDone,
     abandon: workAbandon,
+    reopen: workReopen,
     promote: workPromote,
     'follow-up': workFollowUp,
     stem: workStem,

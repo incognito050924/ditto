@@ -123,6 +123,42 @@ const CITE_OR_ABSTAIN_DIRECTIVE =
   'ones you relied on (follow them or justify any deviation), and if none apply ' +
   'to this task, state that explicitly (cite-or-abstain).';
 
+/**
+ * Red-first directive (wi_2606264rm ac-1): an implementer node addressing a
+ * code-behavior AC must write the failing test FIRST, confirm the failure is the
+ * AC assertion (not a phantom compile/import red), then make the smallest change
+ * to green. The trigger is a design-assigned `dynamic_test` oracle, which is the
+ * heavy-path signal: oracles are assigned at the design (plan) stage, so a
+ * lightweight node carries none and this directive never fires for it. The other
+ * oracle classes are red-first-EXEMPT by construction — `soft_judgment` is a
+ * non-code (doc/prompt/config) AC judged by review, and `static_scan` is
+ * re-scanned, not driven by a failing unit test. refactorer mutates too but does
+ * Tidy-First behavior-preserving work (no new failing test), so the trigger is the
+ * implementer owner specifically.
+ */
+const RED_FIRST_DIRECTIVE =
+  'Red-first discipline (code-behavior AC): write the failing test that asserts ' +
+  'this criterion FIRST and run it; confirm it fails on the AC assertion itself, ' +
+  'not on a compile/import error (no phantom red), then make the smallest change ' +
+  'to turn it green. Report both the red run and the green run (command + exit code).';
+
+/**
+ * True when this node should carry the red-first directive: an implementer node
+ * whose resolved acceptance includes at least one code-behavior AC (a
+ * design-assigned `dynamic_test` oracle). Derived purely from the node owner +
+ * already-resolved acceptance, so the builder stays pure and the loop carries the
+ * directive by passing the work item it already passes.
+ */
+function isRedFirstImplement(
+  owner: AutopilotNode['owner'],
+  acceptance: ResolvedAcceptance[],
+): boolean {
+  return (
+    owner === 'implementer' &&
+    acceptance.some((a) => a.oracle?.verification_method === 'dynamic_test')
+  );
+}
+
 export function buildDelegationPacket(
   node: AutopilotNode,
   workItem: WorkItem,
@@ -180,6 +216,7 @@ export function buildDelegationPacket(
       'Work only from this packet.',
       'Return a single result with evidence (command + exit code, file:line).',
       ...(isPlanner ? [PLANNER_GENERATE_DIRECTIVE] : []),
+      ...(isRedFirstImplement(node.owner, acceptance) ? [RED_FIRST_DIRECTIVE] : []),
       ...(memoryContext?.decisions?.length || memoryContext?.decision_briefs?.length
         ? [CITE_OR_ABSTAIN_DIRECTIVE]
         : []),
