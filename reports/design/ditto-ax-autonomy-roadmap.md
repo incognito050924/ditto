@@ -16,7 +16,7 @@
 |---|---|---|---|---|
 | **T1. autopilot 무-전가** | P3, P4 | ✅ landed | wi_2606266az | 6 AC final_verdict=pass(runtime-artifact 검증) · main 728c009 |
 | **T2. 개발 절차 1급화** (TDD 표면·경량 기본값·자동 close·backlog 위생) | P1, P2, P7 | ✅ landed | wi_2606264rm | 4 AC final_verdict=pass · main c6e15a4 · autopilot complete가 자기 WI를 done flip(ac-3 자기참조 실증) |
-| **T3. 다중 WI·worktree 자율 구동** | P5, P6 | ⏸ 보류 | _(미생성)_ | ADR-0011 D2 충돌 — 비가역 결정 선행 |
+| **T3. 다중 WI·worktree 자율 구동** (same-repo로 재범위) | P5, P6 | ⬜ TODO(결정 해소, 구현 대기) | _(미생성)_ | D2 해소: ADR-0021이 cross-root를 ditto 범위 밖으로 foreclose → ADR-0011 유지·T3=same-repo. 구현은 fresh 세션 권장(§6) |
 
 **이미 landed(부분 해결, b8d8163 이후)**: worktree 동시개발 1급 지원(T3 레인) · work-lifecycle 경량 경로 7 AC(T2 일부) · 이 세션 25→2 open WI 정리(T1/T2 사후 실증). 상세 §3.
 
@@ -84,13 +84,15 @@
 - [x] **backlog 위생 표면**: `doctor`가 stale draft(structural)·"완료-미종결"(completion pass인데 status≠done, terminal 제외)·open-count를 read-only 출력. parked-with-reason 미오판. _후속 ✅: 각 항목에 advisory 제안 명령(stale→resume/abandon, unclosed→done) suggested_action 추가 — read-only 유지, silent auto-action은 D4 경계로 배제(stale draft=실제 미래작업, 자동 abandon=백로그 파괴). wi_260627pfa, main f12d6f4._
 - 검증: 4 AC final_verdict=pass(autopilot orch_2606268v8 무중단 구동) · `autopilot-complete-flip-cli`/`doctor-backlog-cli`/`autopilot-dispatch` 테스트 · full suite 3191 pass(4 fail은 pre-existing Codex host capability, T2 무관).
 
-### T3. 다중 WI·worktree 자율 구동 (P5 + P6) — ⏸ 보류(결정 선행)
+### T3. 다중 WI·worktree 자율 구동 (P5 + P6) — ⬜ TODO (결정 해소 · same-repo 재범위 · 구현은 fresh 세션)
 
-목표: 여러 WI(및 worktree)를 사람 개입 없이 순차/병렬로 완료까지 구동.
+목표(재범위): **same-repo** 다중 WI(및 worktree)를 사람 개입 없이 순차/병렬로 완료까지 구동. cross-root는 범위 밖(ADR-0021).
 
-- [ ] WI 큐/러너(autopilot 위 오케스트레이터): enqueue 다수 WI → 순차/병렬 구동, WI별 사람 프롬프트 없이.
-- [ ] worktree 자율 구동: worktree 세션 auto-launch·드라이브·auto-merge 조정.
-- **제약·결정 D2(비가역)**: ADR-0011 D2(session-rooting — "faithful subagent-delegating autopilot은 target repo에 rooted된 세션 필요, cross-root remote 오케스트레이션 unsupported")와 single-active·no-auto-pick 불변식과 **정면 충돌**. ADR 수정/우회 결정이 선행돼야 착수 가능.
+**결정 해소 (2026-06-27)**: 로드맵이 cross-reference하지 않았던 ADR-0021(accepted, 2026-06-18)이 D2를 실질 해소한다 — 조직·cross-repo는 ditto가 담기엔 너무 커 **별도 standalone 프로젝트로 라우팅**, "cross-repo는 ditto 범위 밖"으로 ADR-0011과 정합. 따라서 **ADR-0011 session-rooting 불변식은 유지(수정 안 함)**, cross-root remote 오케스트레이션은 foreclosed. T3는 same-repo로 재범위된다. (사용자가 cross-root를 다시 원하면 ADR-0021과 충돌하므로 그 ADR 재논의가 선행.)
+
+- [ ] **P5 same-repo 다중 WI 순차 구동**: D4(ADR-20260627)가 메커니즘을 이미 결정함 — 명시 신호 `ditto work chain drive`(사용자 행동, explicitWorkItemRef과 동형) 뒤에서만, 각 후속 WI는 여전히 per-WI 의도잠금(intent.json) 통과. no-auto-pick 불변식 무완화. ← **이 명령이 미구현, T3의 첫 구현 슬라이스.**
+- [ ] **P6 worktree 자율 구동(same-machine)**: worktree 세션 auto-launch·드라이브·auto-merge 조정. auto-merge는 비가역(git) → 명시 승인/gate 필요. 레인은 이미 landed(§3), 차를 모는 부분만 남음.
+- **제약(유지)**: single-active·no-auto-pick 불변식(`user-prompt-submit.ts`)은 same-repo 체인에서도 D4대로 명시 신호로만 우회. ADR-0011 D2 유지. **구현은 fresh 세션 + 의도잠금 권장(§6 context-rot)** — 이 분석/구현 세션이 이미 매우 길다.
 
 ---
 
@@ -98,15 +100,14 @@
 
 미해결(사용자만 풀 수 있음):
 
-- **D1 — 테마 순서**: 추천 T1 → T2(둘은 "verify가 진짜 게이트"로 맞닿아 묶음 설계 가능) → T3. _(미정)_
-- **D2 — T3 ADR-0011 충돌(비가역)**: session-rooting 불변식을 풀지(ADR 수정) / 유지하며 우회할지. _(미정)_
-- **D3 — TDD 표면 형태**: ✅ 확정 — 기존 `implementer` 노드 red-first 교정(새 `ditto tdd` 표면 아님). T2 landed(wi_2606264rm).
-- **D4 — 후속 "즉시 착수" 의미**: ✅ 확정 — no-auto-pick **완화 안 함**. (a) done-flip이 후속 착수명령 surface(wi_2606278qa) + (c) in-scope는 current-graph 노드로 구동. 진짜 cross-WI auto-drive는 명시 신호 뒤로(T3). dialectic verdict=revise(Opponent=Codex), ADR-20260627-autopilot-followup-autonomy-boundary 참조.
+- _(없음 — D1~D4 전부 확정)_
 
 확정:
 
 - (이번 세션) work-lifecycle 경량 경로 10결정·7 AC landed — ADR-20260626-work-lifecycle-lightweight-path 참조.
-- **D3·D4 (2026-06-27)**: D3=implementer red-first 교정(T2), D4=per-WI 승인이 의도된 자율성 경계·no-auto-pick 미완화(dialectic revise, ADR-20260627-autopilot-followup-autonomy-boundary). T3는 D1·D2 여전히 미정.
+- **D1 (2026-06-27)** — 테마 순서: ✅ 확정 — 실행으로 해소(T1→T2 landed, T3가 마지막).
+- **D2 (2026-06-27)** — T3 ADR-0011 충돌: ✅ 확정(ADR 정합, 비가역) — **ADR-0011 유지(수정 안 함)**. 로드맵이 누락했던 ADR-0021(accepted)이 cross-repo/org를 별도 standalone 프로젝트로 이미 라우팅("cross-repo는 ditto 범위 밖") → cross-root 오케스트레이션 foreclosed, T3=same-repo 재범위. (charter §4-10: accepted ADR을 따름·disclose. 사용자가 cross-root를 다시 원하면 ADR-0021 재논의 선행.)
+- **D3·D4 (2026-06-27)**: D3=implementer red-first 교정(T2), D4=per-WI 승인이 의도된 자율성 경계·no-auto-pick 미완화(dialectic revise, ADR-20260627-autopilot-followup-autonomy-boundary).
 
 ---
 
