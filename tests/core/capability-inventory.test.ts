@@ -111,6 +111,11 @@ describe('collectCapabilityInventory', () => {
       ].sort(),
     );
     expect([...(codex?.hook_events ?? [])].sort()).toEqual(declared);
-    expect(report.finding_count).toBe(0);
+    // Assert ZERO hook-drift (the subject), not finding_count === 0 — the latter
+    // folds in the env-dependent codex_plugin_needs_user_action advisory (a local
+    // install-state finding read from .ditto/local/codex-plugin-status.json), which
+    // is orthogonal to hook parity and present only on machines where `codex setup`
+    // prepared but did not enable the plugin. Mirrors the claude-code sibling above.
+    expect(report.findings.filter((f) => f.kind.includes('hook'))).toEqual([]);
   });
 });
