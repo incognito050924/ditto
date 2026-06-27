@@ -589,3 +589,106 @@ export async function removeWorktreesForWorkItem(
     return { removed, blocked };
   });
 }
+
+// ── Merge-back of a work item's worktree branch(es) (wi_260627t82) ────────────
+// The one net-new git MUTATION of the worktree-sequential driver. It lives here
+// (not git.ts) to reach the module-private helpers a safe merge needs:
+// withWorktreeLock, branchHasUnmergedCommits, assertSafeArg, and the ownerCwd
+// derivation. `git merge --no-edit <branch>` folds the worktree branch's commits
+// into the OWNING repo's current HEAD WITHOUT checking the branch out — exactly
+// the ref `branchHasUnmergedCommits(ownerCwd, branch)` (and the removal clean+merged
+// guard) inspect — so a clean merge makes `removeWorktreesForWorkItem` able to tear
+// the worktree down.
+
+type MergeStatus = 'merged' | 'conflicted' | 'skipped';
+
+export interface WorktreeMergeOutcome {
+  worktree: WorkItemWorktree;
+  status: MergeStatus;
+  reason?: string;
+}
+
+export interface WorktreeMergeResult {
+  outcomes: WorktreeMergeOutcome[];
+  /** Every owning repo's branch is now reachable from its HEAD (nothing left ahead). */
+  allMerged: boolean;
+}
+
+/**
+ * Merge `branch`'s commits into `ownerCwd`'s CURRENT HEAD (no checkout, no rebase).
+ *  - SELF-MERGE GUARD: if the owning checkout is itself on `branch` (the no-origin
+ *    fallback where `detectBaseBranch` returned the same branch) there is nothing to
+ *    merge into — `skipped`, never a degenerate self-merge.
+ *  - AHEAD GATE: if the branch is already an ancestor of HEAD (nothing ahead) the
+ *    merge is a no-op → `merged` (idempotent; safe to re-run on resume).
+ *  - Otherwise `git merge --no-edit -- <branch>` (`--` ends option parsing). A clean
+ *    fast-forward/3-way → `merged`; a conflict → `git merge --abort` (best effort) then
+ *    `conflicted` carrying the raw git stderr (the caller scrubs it). NEVER rebase.
+ */
+function mergeBranchIntoBase(
+  ownerCwd: string,
+  branch: string,
+): { status: MergeStatus; reason?: string } {
+  assertSafeArg(branch, 'branch');
+  const current = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+    cwd: ownerCwd,
+    encoding: 'utf8',
+  }).trim();
+  if (current === branch) {
+    return { status: 'skipped', reason: 'base checkout is on the work-item branch itself' };
+  }
+  if (!branchHasUnmergedCommits(ownerCwd, branch)) {
+    return { status: 'merged' }; // nothing ahead — idempotent no-op, removal-safe
+  }
+  try {
+    execFileSync('git', ['merge', '--no-edit', '--', branch], {
+      cwd: ownerCwd,
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    return { status: 'merged' };
+  } catch (err) {
+    try {
+      execFileSync('git', ['merge', '--abort'], { cwd: ownerCwd });
+    } catch {
+      // best effort: nothing to abort, or git unavailable — fall through to report
+    }
+    const stderr =
+      (err as { stderr?: Buffer | string }).stderr?.toString() ??
+      (err instanceof Error ? err.message : String(err));
+    return { status: 'conflicted', reason: stderr.trim() };
+  }
+}
+
+/**
+ * Merge every worktree branch a work item owns back into its owning repo's HEAD.
+ * Sub-repo branches first, the workspace ('.') branch last (mirror the removal
+ * ordering), under the same repo-level lock as create/remove. `allMerged` is true
+ * only when every owning repo's branch merged cleanly (or was already merged), which
+ * is the precondition the clean-only merge-back orchestrator requires before tearing
+ * the worktree down.
+ */
+export async function mergeWorktreesForWorkItem(
+  repoRoot: string,
+  workItemId: string,
+): Promise<WorktreeMergeResult> {
+  assertSafeArg(workItemId, 'work item id');
+  return withWorktreeLock(repoRoot, async () => {
+    const store = new WorkItemStore(repoRoot);
+    const item = await store.get(workItemId);
+    // Nested sub-repo worktrees first, workspace ('.') last (mirror removal order).
+    const ordered = [...item.worktrees].sort(
+      (a, b) => (a.owning_repo === '.' ? 1 : 0) - (b.owning_repo === '.' ? 1 : 0),
+    );
+    const outcomes: WorktreeMergeOutcome[] = [];
+    for (const wt of ordered) {
+      const ownerCwd = wt.owning_repo === '.' ? repoRoot : join(repoRoot, wt.owning_repo);
+      const r = mergeBranchIntoBase(ownerCwd, wt.branch);
+      outcomes.push({
+        worktree: wt,
+        status: r.status,
+        ...(r.reason !== undefined ? { reason: r.reason } : {}),
+      });
+    }
+    return { outcomes, allMerged: outcomes.every((o) => o.status === 'merged') };
+  });
+}

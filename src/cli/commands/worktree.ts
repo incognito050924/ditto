@@ -1,12 +1,16 @@
 import { defineCommand } from 'citty';
+import { productionAttemptPush, productionDriveMember } from '~/core/chain-drive';
 import { resolveRepoRootForCreate } from '~/core/fs';
+import { IntentStore } from '~/core/intent-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
   createWorktreeForWorkItem,
   listWorktreesForWorkspace,
+  mergeWorktreesForWorkItem,
   removeWorktreesForWorkItem,
   worktreeBindingHint,
 } from '~/core/worktree';
+import { DEFAULT_MAX_DEPTH, driveWorktrees } from '~/core/worktree-drive';
 import { workItemId as workItemIdSchema } from '~/schemas/common';
 import {
   RUNTIME_ERROR_EXIT,
@@ -178,14 +182,109 @@ const worktreeList = defineCommand({
   },
 });
 
+const worktreeDrive = defineCommand({
+  meta: {
+    name: 'drive',
+    description:
+      'Drive an INDEPENDENT set of named work items, each in its own DITTO worktree: drive each non-terminal intent-locked member through its autopilot inside its worktree, then clean-merge it back into its owning repo and tear the worktree down. Unlike `work chain drive`, the set is not a follows-spine — a halt on one member CONTINUES to the next; only the depth cap breaks the run. Skips done members (idempotent resume), halts (with a per-member verdict) on a missing intent.json, an abandoned member, or a member that ends not-done. Reports push-readiness on full completion; pushes ONLY with --push (never unasked, never force). This is the sanctioned explicit carve-out: only the named ids are driven (no auto-discovery).',
+  },
+  args: {
+    workIds: {
+      type: 'positional',
+      description: 'Work item ids to drive (each in its own worktree)',
+      required: true,
+    },
+    push: {
+      type: 'boolean',
+      description:
+        'On a fully driven-done set, push the current branch HEAD to origin (no force; any push failure degrades to skipped, exit 0). Default: report push-readiness without pushing.',
+      default: false,
+    },
+    'max-depth': {
+      type: 'string',
+      description: `Max members driven per invocation (stop-at-cap with a report; default ${DEFAULT_MAX_DEPTH})`,
+      required: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    // INPUT (security): validate every id shape BEFORE any path/subprocess use — the
+    // store trusts its caller and localDir does a bare join, so a malformed/`../` id
+    // must be rejected at the entry. `args._` holds the full variadic positional set.
+    const rawIds = (args._ ?? []).map((v) => String(v));
+    if (rawIds.length === 0) {
+      writeError('worktree drive: at least one work item id is required');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const workIds = rawIds.map((id) => parseWorkId(id));
+    let maxDepth = DEFAULT_MAX_DEPTH;
+    if (args['max-depth'] !== undefined) {
+      const raw = String(args['max-depth']).trim();
+      if (!/^\d+$/.test(raw) || Number(raw) < 1) {
+        writeError(`--max-depth must be a positive integer; got "${args['max-depth']}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      maxDepth = Number(raw);
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    const intentStore = new IntentStore(repoRoot);
+    try {
+      const result = await driveWorktrees(
+        {
+          store,
+          intentExists: (id) => intentStore.exists(id),
+          driveMember: (worktreeCwd, wiId) => productionDriveMember(worktreeCwd, wiId),
+          merge: (root, wiId) => mergeWorktreesForWorkItem(root, wiId),
+          removeWorktrees: (root, wiId) => removeWorktreesForWorkItem(root, wiId),
+          attemptPush: (members) => productionAttemptPush(repoRoot, members),
+        },
+        { workIds, push: args.push === true, maxDepth },
+      );
+      if (format === 'json') {
+        writeJson(result);
+      } else {
+        writeHuman(`Worktree drive (${result.work_ids.length} member(s)):`);
+        for (const e of result.ledger) {
+          const removed = e.disposition === 'driven-done' ? ` removed=${e.removed === true}` : '';
+          writeHuman(
+            `  ${e.member_id}\t${e.disposition}${removed}${e.reason ? `\t(${e.reason})` : ''}`,
+          );
+        }
+        if (result.halted_members.length > 0)
+          writeHuman(`  halted_members: ${result.halted_members.join(', ')}`);
+        if (result.stopped_at_cap)
+          writeHuman(`  stopped at depth cap (${maxDepth}) — re-invoke to continue`);
+        writeHuman(`  all_driven_done: ${result.all_driven_done}`);
+        writeHuman(`  push_ready: ${result.push_ready}`);
+        writeHuman(`  push: ${result.push}`);
+      }
+    } catch (err) {
+      writeError(`worktree drive failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const worktreeCommand = defineCommand({
   meta: {
     name: 'worktree',
-    description: 'Manage per-work-item git worktrees (list, create, remove)',
+    description: 'Manage per-work-item git worktrees (list, create, remove, drive)',
   },
   subCommands: {
     list: worktreeList,
     create: worktreeCreate,
     remove: worktreeRemove,
+    drive: worktreeDrive,
   },
 });

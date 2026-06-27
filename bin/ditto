@@ -13870,6 +13870,51 @@ async function removeWorktreesForWorkItem(repoRoot, workItemId2, opts = {}) {
     return { removed, blocked };
   });
 }
+function mergeBranchIntoBase(ownerCwd, branch) {
+  assertSafeArg(branch, "branch");
+  const current = execFileSync2("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: ownerCwd,
+    encoding: "utf8"
+  }).trim();
+  if (current === branch) {
+    return { status: "skipped", reason: "base checkout is on the work-item branch itself" };
+  }
+  if (!branchHasUnmergedCommits(ownerCwd, branch)) {
+    return { status: "merged" };
+  }
+  try {
+    execFileSync2("git", ["merge", "--no-edit", "--", branch], {
+      cwd: ownerCwd,
+      stdio: ["ignore", "ignore", "pipe"]
+    });
+    return { status: "merged" };
+  } catch (err) {
+    try {
+      execFileSync2("git", ["merge", "--abort"], { cwd: ownerCwd });
+    } catch {}
+    const stderr = err.stderr?.toString() ?? (err instanceof Error ? err.message : String(err));
+    return { status: "conflicted", reason: stderr.trim() };
+  }
+}
+async function mergeWorktreesForWorkItem(repoRoot, workItemId2) {
+  assertSafeArg(workItemId2, "work item id");
+  return withWorktreeLock(repoRoot, async () => {
+    const store = new WorkItemStore(repoRoot);
+    const item = await store.get(workItemId2);
+    const ordered = [...item.worktrees].sort((a2, b2) => (a2.owning_repo === "." ? 1 : 0) - (b2.owning_repo === "." ? 1 : 0));
+    const outcomes = [];
+    for (const wt of ordered) {
+      const ownerCwd = wt.owning_repo === "." ? repoRoot : join7(repoRoot, wt.owning_repo);
+      const r3 = mergeBranchIntoBase(ownerCwd, wt.branch);
+      outcomes.push({
+        worktree: wt,
+        status: r3.status,
+        ...r3.reason !== undefined ? { reason: r3.reason } : {}
+      });
+    }
+    return { outcomes, allMerged: outcomes.every((o3) => o3.status === "merged") };
+  });
+}
 var RUN_WORKTREE_PREFIX = ".ditto/local/worktrees/", WORK_ITEM_BRANCH_PREFIX = "ditto/", PID_WRITE_GRACE_MS = 2000;
 var init_worktree = __esm(() => {
   init_ditto_paths();
@@ -44341,6 +44386,90 @@ var workCommand = defineCommand({
 init_fs();
 init_work_item_store();
 init_worktree();
+
+// src/core/worktree-drive.ts
+import { join as join89 } from "path";
+var TERMINAL_STATUSES3 = ["done", "abandoned"];
+var DEFAULT_MAX_DEPTH2 = 20;
+async function driveWorktrees(deps, options) {
+  const repoRoot = deps.store.repoRoot;
+  const ledger = [];
+  let drivenCount = 0;
+  let stoppedAtCap = false;
+  const mergeAndRemove = async (member) => {
+    const mergeRes = await deps.merge(repoRoot, member);
+    if (mergeRes.allMerged) {
+      const rm5 = await deps.removeWorktrees(repoRoot, member);
+      return { member_id: member, disposition: "driven-done", removed: rm5.removed.length > 0 };
+    }
+    const firstUnmerged = mergeRes.outcomes.find((o3) => o3.status !== "merged");
+    return {
+      member_id: member,
+      disposition: "merge-conflicted",
+      reason: scrubCredentials(firstUnmerged?.reason ?? "merge did not complete")
+    };
+  };
+  for (const member of options.workIds) {
+    if (drivenCount >= options.maxDepth) {
+      stoppedAtCap = true;
+      break;
+    }
+    const item = await deps.store.get(member);
+    const ws = item.worktrees.find((w2) => w2.owning_repo === ".");
+    if (!ws) {
+      ledger.push({
+        member_id: member,
+        disposition: "halted",
+        reason: "no-worktree: no DITTO worktree to drive"
+      });
+      continue;
+    }
+    if (item.status !== "done" && TERMINAL_STATUSES3.includes(item.status)) {
+      ledger.push({
+        member_id: member,
+        disposition: "halted",
+        reason: `terminal-not-done: member is ${item.status}`
+      });
+      continue;
+    }
+    if (item.status === "done") {
+      ledger.push(await mergeAndRemove(member));
+      continue;
+    }
+    if (!await deps.intentExists(member)) {
+      ledger.push({ member_id: member, disposition: "halted", reason: "needs-intent-lock" });
+      continue;
+    }
+    drivenCount++;
+    const res = await deps.driveMember(join89(repoRoot, ws.worktree_path), member);
+    if (res.outcome !== "done") {
+      ledger.push({
+        member_id: member,
+        disposition: "halted",
+        reason: scrubCredentials(res.reason)
+      });
+      continue;
+    }
+    ledger.push(await mergeAndRemove(member));
+  }
+  const allDrivenDone = ledger.length > 0 && ledger.every((e2) => e2.disposition === "driven-done");
+  const haltedMembers = ledger.filter((e2) => e2.disposition !== "driven-done").map((e2) => e2.member_id);
+  let push = "not-requested";
+  if (options.push) {
+    push = allDrivenDone ? await deps.attemptPush(options.workIds) : "skipped-not-ready";
+  }
+  return {
+    work_ids: options.workIds,
+    ledger,
+    halted_members: haltedMembers,
+    all_driven_done: allDrivenDone,
+    stopped_at_cap: stoppedAtCap,
+    push,
+    push_ready: allDrivenDone
+  };
+}
+
+// src/cli/commands/worktree.ts
 init_common();
 function parseWorkId(value) {
   const parsed = workItemId.safeParse(value);
@@ -44490,15 +44619,99 @@ var worktreeList = defineCommand({
     }
   }
 });
+var worktreeDrive = defineCommand({
+  meta: {
+    name: "drive",
+    description: "Drive an INDEPENDENT set of named work items, each in its own DITTO worktree: drive each non-terminal intent-locked member through its autopilot inside its worktree, then clean-merge it back into its owning repo and tear the worktree down. Unlike `work chain drive`, the set is not a follows-spine \u2014 a halt on one member CONTINUES to the next; only the depth cap breaks the run. Skips done members (idempotent resume), halts (with a per-member verdict) on a missing intent.json, an abandoned member, or a member that ends not-done. Reports push-readiness on full completion; pushes ONLY with --push (never unasked, never force). This is the sanctioned explicit carve-out: only the named ids are driven (no auto-discovery)."
+  },
+  args: {
+    workIds: {
+      type: "positional",
+      description: "Work item ids to drive (each in its own worktree)",
+      required: true
+    },
+    push: {
+      type: "boolean",
+      description: "On a fully driven-done set, push the current branch HEAD to origin (no force; any push failure degrades to skipped, exit 0). Default: report push-readiness without pushing.",
+      default: false
+    },
+    "max-depth": {
+      type: "string",
+      description: `Max members driven per invocation (stop-at-cap with a report; default ${DEFAULT_MAX_DEPTH2})`,
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const rawIds = (args._ ?? []).map((v2) => String(v2));
+    if (rawIds.length === 0) {
+      writeError("worktree drive: at least one work item id is required");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const workIds = rawIds.map((id) => parseWorkId(id));
+    let maxDepth = DEFAULT_MAX_DEPTH2;
+    if (args["max-depth"] !== undefined) {
+      const raw = String(args["max-depth"]).trim();
+      if (!/^\d+$/.test(raw) || Number(raw) < 1) {
+        writeError(`--max-depth must be a positive integer; got "${args["max-depth"]}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      maxDepth = Number(raw);
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    const intentStore = new IntentStore(repoRoot);
+    try {
+      const result2 = await driveWorktrees({
+        store,
+        intentExists: (id) => intentStore.exists(id),
+        driveMember: (worktreeCwd, wiId) => productionDriveMember(worktreeCwd, wiId),
+        merge: (root, wiId) => mergeWorktreesForWorkItem(root, wiId),
+        removeWorktrees: (root, wiId) => removeWorktreesForWorkItem(root, wiId),
+        attemptPush: (members) => productionAttemptPush(repoRoot, members)
+      }, { workIds, push: args.push === true, maxDepth });
+      if (format === "json") {
+        writeJson2(result2);
+      } else {
+        writeHuman(`Worktree drive (${result2.work_ids.length} member(s)):`);
+        for (const e2 of result2.ledger) {
+          const removed = e2.disposition === "driven-done" ? ` removed=${e2.removed === true}` : "";
+          writeHuman(`  ${e2.member_id}	${e2.disposition}${removed}${e2.reason ? `	(${e2.reason})` : ""}`);
+        }
+        if (result2.halted_members.length > 0)
+          writeHuman(`  halted_members: ${result2.halted_members.join(", ")}`);
+        if (result2.stopped_at_cap)
+          writeHuman(`  stopped at depth cap (${maxDepth}) \u2014 re-invoke to continue`);
+        writeHuman(`  all_driven_done: ${result2.all_driven_done}`);
+        writeHuman(`  push_ready: ${result2.push_ready}`);
+        writeHuman(`  push: ${result2.push}`);
+      }
+    } catch (err) {
+      writeError(`worktree drive failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var worktreeCommand = defineCommand({
   meta: {
     name: "worktree",
-    description: "Manage per-work-item git worktrees (list, create, remove)"
+    description: "Manage per-work-item git worktrees (list, create, remove, drive)"
   },
   subCommands: {
     list: worktreeList,
     create: worktreeCreate,
-    remove: worktreeRemove
+    remove: worktreeRemove,
+    drive: worktreeDrive
   }
 });
 
@@ -44550,4 +44763,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=265dcb21c12cac348f7552b024103cd8844590a12e7b81de366484da40e7da16
+//# ditto-src-stamp=625a44bdba297e973808bf58dbdacd3233daea78a64d968af18f17772118991a
