@@ -23044,6 +23044,20 @@ function projectRetroNarrative(records) {
 function retroMemoryEventId(workItemId2) {
   return `memevt_retro_${sha256Hex(workItemId2).slice(0, 16)}`;
 }
+function codeSourceIdsForPaths(sources, paths) {
+  const wanted = new Set(paths);
+  const out = [];
+  const seen = new Set;
+  for (const s2 of sources) {
+    if (s2.source_type !== "code" || !s2.path || !wanted.has(s2.path))
+      continue;
+    if (seen.has(s2.source_id))
+      continue;
+    seen.add(s2.source_id);
+    out.push(s2.source_id);
+  }
+  return out;
+}
 var MEMORY_EVENT_TEXT_MAX = 4000;
 var TRUNCATION_MARKER = `
 \u2026[truncated]`;
@@ -23069,7 +23083,7 @@ async function absorbRetroMemory(store, narrative, opts) {
       text,
       created_at: opts.createdAt,
       status: "pending",
-      sources: [],
+      sources: opts.sources ?? [],
       confidence_kind: "EXTRACTED",
       sensitivity: "internal",
       governs: []
@@ -24829,9 +24843,16 @@ async function recordResult(repoRoot, input) {
       try {
         const ctx = await collectRetroContext(repoRoot, input.workItemId, graph);
         const now = (input.now ?? new Date).toISOString();
+        let retroSources = [];
+        try {
+          const wi = await new WorkItemStore(repoRoot).get(input.workItemId);
+          const manifestSources = await new MemorySourceStore(repoRoot).list();
+          retroSources = codeSourceIdsForPaths(manifestSources, wi.changed_files);
+        } catch {}
         await absorbRetroMemory(new MemoryEventStore(repoRoot), ctx.narrative, {
           createdAt: now,
-          actorRole: node2.owner
+          actorRole: node2.owner,
+          sources: retroSources
         });
         await new RetroMetricLedger(repoRoot).append({ work_item_id: input.workItemId, metrics: ctx.metrics }, now);
       } catch {}
@@ -44763,4 +44784,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=625a44bdba297e973808bf58dbdacd3233daea78a64d968af18f17772118991a
+//# ditto-src-stamp=421baafcd2f62998f8d204a9dceecc8e4eae29333e37dad0d0777ec5bb3b73df

@@ -51,13 +51,14 @@ import { localDir } from './ditto-paths';
 import { decisionConflictRequiresApproval, oracleSatisfaction } from './gates';
 import { HandoffStore } from './handoff-store';
 import { IntentStore } from './intent-store';
-import { MemoryEventStore } from './memory-store';
+import { MemoryEventStore, MemorySourceStore } from './memory-store';
 import { warmStartMemoryContext } from './memory-warmstart';
 import {
   type RetroMetricInputs,
   type RetroNarrativeRecords,
   absorbRetroMemory,
   assembleRetroMetrics,
+  codeSourceIdsForPaths,
   projectRetroNarrative,
 } from './retro-measure';
 import { RetroMetricLedger } from './retro-metric-ledger';
@@ -2038,9 +2039,24 @@ export async function recordResult(
       try {
         const ctx = await collectRetroContext(repoRoot, input.workItemId, graph);
         const now = (input.now ?? new Date()).toISOString();
+        // Ground the retro event in the code it reflects on: map this WI's
+        // changed_files to their code source_ids in the memory manifest (mirrors
+        // the `capture` command's code-source floor). Best-effort — a missing
+        // manifest or an unindexed path contributes nothing; the absorb still
+        // writes (text-level durable signal unchanged), it just carries provenance
+        // instead of an ungrounded `sources: []` (retro source-binding fix).
+        let retroSources: string[] = [];
+        try {
+          const wi = await new WorkItemStore(repoRoot).get(input.workItemId);
+          const manifestSources = await new MemorySourceStore(repoRoot).list();
+          retroSources = codeSourceIdsForPaths(manifestSources, wi.changed_files);
+        } catch {
+          // manifest/work-item unreadable ⇒ no sources bound (graceful degrade)
+        }
         await absorbRetroMemory(new MemoryEventStore(repoRoot), ctx.narrative, {
           createdAt: now,
           actorRole: node.owner,
+          sources: retroSources,
         });
         // ADR-0024 Decision 4 trend preservation: capture this WI's retro metrics in
         // the cross-WI ledger (one row per WI, idempotent) so the floor trend can be

@@ -6,9 +6,11 @@ import { MemoryEventStore } from '~/core/memory-store';
 import {
   type RetroNarrativeRecords,
   absorbRetroMemory,
+  codeSourceIdsForPaths,
   projectRetroNarrative,
   retroMemoryEventId,
 } from '~/core/retro-measure';
+import type { MemorySource } from '~/schemas/memory-source';
 
 let workDir: string;
 
@@ -122,6 +124,23 @@ describe('absorbRetroMemory (ac-5: idempotent + filtered cross-WI absorption)', 
     expect(await store.list()).toEqual([]);
   });
 
+  test('absorbed event BINDS the source_ids passed in opts (no longer hardcoded empty)', async () => {
+    const store = new MemoryEventStore(workDir);
+    await absorbRetroMemory(store, projection(), {
+      ...opts(),
+      sources: ['src_aaaa', 'src_bbbb'],
+    });
+    const e = await store.get(retroMemoryEventId('wi_retro001'));
+    expect(e.sources).toEqual(['src_aaaa', 'src_bbbb']);
+  });
+
+  test('absent opts.sources stays an empty array (backward compatible)', async () => {
+    const store = new MemoryEventStore(workDir);
+    await absorbRetroMemory(store, projection(), opts());
+    const e = await store.get(retroMemoryEventId('wi_retro001'));
+    expect(e.sources).toEqual([]);
+  });
+
   test('an OVERSIZED narrative (text > the 4000-char memory-event max) absorbs TRUNCATED, not silently dropped', async () => {
     // A legitimate large retro: many residual-risk rows whose joined text exceeds the
     // memory-event `.max(4000)`. The zod ceiling must NOT make the absorb throw (which
@@ -142,5 +161,39 @@ describe('absorbRetroMemory (ac-5: idempotent + filtered cross-WI absorption)', 
     const all = await store.list();
     expect(all).toHaveLength(1);
     expect(all[0]?.text.length ?? 0).toBeLessThanOrEqual(4000); // fits the schema ceiling
+  });
+});
+
+describe('codeSourceIdsForPaths (retro source binding: ground the event in changed code)', () => {
+  const src = (id: string, type: MemorySource['source_type'], path: string): MemorySource =>
+    ({ source_id: id, source_type: type, path }) as MemorySource;
+
+  test('maps a changed-file path to its code source_id', () => {
+    const sources = [src('src_a', 'code', 'src/core/worktree.ts')];
+    expect(codeSourceIdsForPaths(sources, ['src/core/worktree.ts'])).toEqual(['src_a']);
+  });
+
+  test('excludes non-code sources even when the path matches', () => {
+    const sources = [
+      src('doc_a', 'markdown', 'reports/x.md'),
+      src('src_a', 'code', 'src/core/a.ts'),
+    ];
+    expect(codeSourceIdsForPaths(sources, ['reports/x.md', 'src/core/a.ts'])).toEqual(['src_a']);
+  });
+
+  test('excludes code sources whose path is not in the changed set', () => {
+    const sources = [src('src_a', 'code', 'src/core/a.ts'), src('src_b', 'code', 'src/core/b.ts')];
+    expect(codeSourceIdsForPaths(sources, ['src/core/a.ts'])).toEqual(['src_a']);
+  });
+
+  test('dedups when the same path appears more than once', () => {
+    const sources = [src('src_a', 'code', 'src/core/a.ts')];
+    expect(codeSourceIdsForPaths(sources, ['src/core/a.ts', 'src/core/a.ts'])).toEqual(['src_a']);
+  });
+
+  test('empty when no changed path resolves to a code source', () => {
+    const sources = [src('src_a', 'code', 'src/core/a.ts')];
+    expect(codeSourceIdsForPaths(sources, ['unknown/path.ts'])).toEqual([]);
+    expect(codeSourceIdsForPaths([], ['src/core/a.ts'])).toEqual([]);
   });
 });

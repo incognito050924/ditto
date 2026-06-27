@@ -23,6 +23,7 @@
  */
 
 import type { MemoryEvent } from '~/schemas/memory-event';
+import type { MemorySource } from '~/schemas/memory-source';
 import type { MemoryEventStore } from './memory-store';
 import { sha256Hex } from './memory-store';
 
@@ -177,11 +178,39 @@ export function retroMemoryEventId(workItemId: string): string {
   return `memevt_retro_${sha256Hex(workItemId).slice(0, 16)}`;
 }
 
+/**
+ * Resolve the memory source_ids that ground a retro event: the manifest sources
+ * whose `source_type === 'code'` AND whose `path` is one of `paths` (the run's
+ * changed files). Code-only mirrors the `capture` command's code-source floor —
+ * a retro reflects on code, so its provenance must resolve to code. Deduped and
+ * order-stable over `sources`; an unresolvable path contributes nothing (the
+ * binding is best-effort, never invents a source). Pure — no I/O.
+ */
+export function codeSourceIdsForPaths(sources: MemorySource[], paths: string[]): string[] {
+  const wanted = new Set(paths);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const s of sources) {
+    if (s.source_type !== 'code' || !s.path || !wanted.has(s.path)) continue;
+    if (seen.has(s.source_id)) continue;
+    seen.add(s.source_id);
+    out.push(s.source_id);
+  }
+  return out;
+}
+
 export interface AbsorbOptions {
   /** RFC3339 timestamp, injected for determinism (never read from the clock here). */
   createdAt: string;
   /** Agent role recorded as the event author. */
   actorRole: string;
+  /**
+   * Memory source_ids grounding this retro event (the code the run reflects on).
+   * Bound onto the event so the absorbed analysis carries provenance instead of an
+   * ungrounded `sources: []`. Optional + defaulted-empty — a run with no resolvable
+   * code source still absorbs (the text-level durable signal is unchanged).
+   */
+  sources?: string[];
 }
 
 export interface AbsorbResult {
@@ -245,7 +274,7 @@ export async function absorbRetroMemory(
       text,
       created_at: opts.createdAt,
       status: 'pending',
-      sources: [],
+      sources: opts.sources ?? [],
       confidence_kind: 'EXTRACTED',
       sensitivity: 'internal',
       governs: [],
