@@ -149,7 +149,15 @@ export function subRepoAbs(repoRoot: string, owningRepo: string | null): string 
 export function unrelatedDirt(cwd: string, allowed: ReadonlySet<string>): string[] {
   let status = '';
   try {
-    status = execFileSync('git', ['status', '--porcelain'], { cwd, encoding: 'utf8' });
+    // `--untracked-files=all` lists individual files rather than collapsing a
+    // wholly-untracked directory to its top entry. This keeps the dirt check at the
+    // same granularity as the paths in `allowed` (always individual files), so the
+    // land byproduct-absorb side and this dirt-check side agree (wi_260627lus). The
+    // abort decision is unchanged: any path not in `allowed` is still dirt.
+    status = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
+      cwd,
+      encoding: 'utf8',
+    });
   } catch {
     return [];
   }

@@ -70,7 +70,14 @@ function isGitIgnoredInRepo(repoAbs: string, rel: string): boolean {
 function dirtyByproducts(root: string): string[] {
   let status = '';
   try {
-    status = execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' });
+    // `--untracked-files=all` lists individual files (default porcelain collapses a
+    // wholly-untracked dir to its top, e.g. `.ditto/` before any memory is
+    // committed — which would hide the byproduct). `unrelatedDirt` uses the same
+    // flag so the absorb side and the dirt-check side agree on granularity.
+    status = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
+      cwd: root,
+      encoding: 'utf8',
+    });
   } catch {
     return [];
   }

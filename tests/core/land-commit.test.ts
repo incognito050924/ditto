@@ -308,3 +308,46 @@ describe('landCommit — gitignored filter + run-byproduct absorption (wi_260627
     );
   });
 });
+
+// wi_260627lus: the byproduct absorption must also work when `.ditto/memory` has
+// NO committed baseline (a wholly-untracked dir, which default `git status`
+// collapses to `.ditto/`). Detecting + checking dirt with `--untracked-files=all`
+// lists individual files consistently on both the absorb side and the dirt-check
+// side. cleanup's unrelated-dirt abort semantics are preserved.
+describe('landCommit — byproduct absorption with no .ditto/memory baseline (wi_260627lus)', () => {
+  // gitignore only `.ditto/local`, commit it, but DO NOT commit any memory file →
+  // `.ditto/memory` is wholly untracked.
+  async function ignoreLocalOnly(): Promise<void> {
+    await writeFile(join(repo, '.gitignore'), 'sub/\nsub2/\n.ditto/local/\n', 'utf8');
+    git(repo, ['add', '.gitignore']);
+    git(repo, ['commit', '-q', '-m', 'gitignore .ditto/local only']);
+  }
+
+  test('ac-1: byproduct under a wholly-untracked .ditto/memory is absorbed (no collapse abort)', async () => {
+    await ignoreLocalOnly();
+    await writeFile(join(repo, 'app.ts'), 'root\n', 'utf8');
+    await mkdir(join(repo, '.ditto/memory/events'), { recursive: true });
+    await writeFile(join(repo, '.ditto/memory/events/m1.json'), '{"e":1}\n', 'utf8');
+
+    const res = await landCommit(repo, ['app.ts'], MSG);
+
+    expect(res.status).toBe('committed'); // NOT aborted_dirty via the `.ditto/` collapse
+    const rootSha = res.commits.find((c) => c.repo === '.')?.sha;
+    expect(committedPaths(repo, rootSha ?? '')).toEqual(
+      ['.ditto/memory/events/m1.json', 'app.ts'].sort(),
+    );
+  });
+
+  test('ac-2: cleanup abort preserved — commitPerSubRepo still throws on a wholly-untracked unrelated dir', async () => {
+    await ignoreLocalOnly();
+    await writeFile(join(repo, 'doc.md'), 'x\n', 'utf8');
+    // a wholly-untracked unrelated dir (collapses to `vendor/` under default
+    // porcelain). `vendor` matches no .gitignore pattern, so it is real dirt.
+    await mkdir(join(repo, 'vendor/inner'), { recursive: true });
+    await writeFile(join(repo, 'vendor/inner/foreign.ts'), 'foreign\n', 'utf8');
+
+    expect(() => commitPerSubRepo(repo, new Map([['.', ['doc.md']]]), MSG)).toThrow(
+      CleanupDirtyRepoError,
+    );
+  });
+});

@@ -14877,7 +14877,10 @@ function subRepoAbs(repoRoot, owningRepo) {
 function unrelatedDirt(cwd, allowed) {
   let status = "";
   try {
-    status = execFileSync3("git", ["status", "--porcelain"], { cwd, encoding: "utf8" });
+    status = execFileSync3("git", ["status", "--porcelain", "--untracked-files=all"], {
+      cwd,
+      encoding: "utf8"
+    });
   } catch {
     return [];
   }
@@ -26534,7 +26537,10 @@ function isGitIgnoredInRepo(repoAbs, rel) {
 function dirtyByproducts(root) {
   let status = "";
   try {
-    status = execFileSync4("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" });
+    status = execFileSync4("git", ["status", "--porcelain", "--untracked-files=all"], {
+      cwd: root,
+      encoding: "utf8"
+    });
   } catch {
     return [];
   }
@@ -44979,4 +44985,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=00c2fee335506119583a525ce98dd98e549ee05d50b2bd70e10ff74634765d95
+//# ditto-src-stamp=170027bf0feca11133ba138637057282e80dd65432d03f576943fb9831ad588e
