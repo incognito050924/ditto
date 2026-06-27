@@ -125,6 +125,39 @@ export function removeWorktree(cwd: string, path: string): void {
   }
 }
 
+export interface GitPushResult {
+  ok: boolean;
+  /** git's stderr on failure (credentials already scrubbed by the caller). */
+  stderr: string;
+}
+
+/**
+ * Push `ref` to `remote` from `cwd`. argv-array, NO force, with `--`
+ * end-of-options so a hostile ref cannot smuggle a flag (mirrors the
+ * end-of-options `--` other git.ts helpers use). Returns a structured result
+ * instead of throwing so the caller can graceful-degrade (any non-zero push
+ * exit → push-skipped, not an error). Never force-pushes.
+ */
+export function gitPush(cwd: string, remote: string, ref: string): GitPushResult {
+  try {
+    // argv-array; `--` ends options so `ref`/`remote` can never be read as a flag.
+    // NO `--force` — a non-fast-forward must fail, not clobber the remote.
+    execFileSync('git', ['push', remote, '--', ref], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { ok: true, stderr: '' };
+  } catch (err) {
+    const stderr =
+      err && typeof err === 'object' && 'stderr' in err && (err as { stderr?: unknown }).stderr
+        ? String((err as { stderr: unknown }).stderr)
+        : err instanceof Error
+          ? err.message
+          : String(err);
+    return { ok: false, stderr };
+  }
+}
+
 export function captureGitDiff(cwd: string): string {
   try {
     return execFileSync('git', ['diff', '--binary', 'HEAD'], { cwd, encoding: 'utf8' });

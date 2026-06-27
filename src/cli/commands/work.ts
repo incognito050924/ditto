@@ -1,4 +1,11 @@
 import { defineCommand } from 'citty';
+import {
+  BranchedStemError,
+  DEFAULT_MAX_DEPTH,
+  driveChain,
+  productionAttemptPush,
+  productionDriveMember,
+} from '~/core/chain-drive';
 import { PLACEHOLDER_AC_STATEMENT } from '~/core/charter';
 import { CompletionStore, assembleCompletionFromWorkItem } from '~/core/completion-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
@@ -11,7 +18,7 @@ import {
 } from '~/core/work-item-handoff';
 import { WorkItemStore, blockingFollowUp, pushReadiness } from '~/core/work-item-store';
 import { createWorktreeForWorkItem, worktreeBindingHint } from '~/core/worktree';
-import { declarerRole } from '~/schemas/common';
+import { declarerRole, workItemId } from '~/schemas/common';
 import {
   type AcceptanceCriterion,
   type FollowUp,
@@ -1538,6 +1545,110 @@ const workArchive = defineCommand({
   },
 });
 
+const workChainDrive = defineCommand({
+  meta: {
+    name: 'drive',
+    description:
+      'Drive a follows-stem sequentially (root→tip): resolves the linear spine through <wi>, drives each non-terminal intent-locked member through its autopilot, skipping done members and resuming from the first non-terminal one. Halts (with a per-member verdict) on a missing intent.json, an abandoned member, or a member that ends not-done. Reports push-readiness on full completion; pushes ONLY with --push (never unasked, never force).',
+  },
+  args: {
+    workId: {
+      type: 'positional',
+      description: 'A work item anywhere in the chain',
+      required: true,
+    },
+    push: {
+      type: 'boolean',
+      description:
+        'On a fully-done, push-ready chain, push the current branch HEAD to origin (no force; any push failure degrades to skipped, exit 0). Default: report push-readiness without pushing.',
+      default: false,
+    },
+    'max-depth': {
+      type: 'string',
+      description: `Max members driven per invocation (stop-at-cap with a report; default ${DEFAULT_MAX_DEPTH})`,
+      required: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    // INPUT (security): validate the id shape BEFORE any path/subprocess use — the
+    // store trusts its caller and localDir does a bare join, so a malformed/`../`
+    // id must be rejected at the entry.
+    const idCheck = workItemId.safeParse(args.workId);
+    if (!idCheck.success) {
+      writeError(`invalid work item id "${args.workId}": ${idCheck.error.issues[0]?.message}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let maxDepth = DEFAULT_MAX_DEPTH;
+    if (args['max-depth'] !== undefined) {
+      const raw = String(args['max-depth']).trim();
+      if (!/^\d+$/.test(raw) || Number(raw) < 1) {
+        writeError(`--max-depth must be a positive integer; got "${args['max-depth']}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      maxDepth = Number(raw);
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    const intentStore = new IntentStore(repoRoot);
+    try {
+      // Verify it is a real, known member before driving anything.
+      await store.get(idCheck.data);
+      const result = await driveChain(
+        {
+          store,
+          intentExists: (id) => intentStore.exists(id),
+          driveMember: productionDriveMember,
+          attemptPush: (members) => productionAttemptPush(repoRoot, members),
+        },
+        { workId: idCheck.data, push: args.push === true, maxDepth },
+      );
+      if (format === 'json') {
+        writeJson(result);
+      } else {
+        writeHuman(`Chain drive ${result.work_id} (rolled_up: ${result.rolled_up}):`);
+        for (const e of result.ledger) {
+          writeHuman(`  ${e.member_id}\t${e.disposition}${e.reason ? `\t(${e.reason})` : ''}`);
+        }
+        if (result.halted_member) writeHuman(`  HALTED at ${result.halted_member}`);
+        if (result.stopped_at_cap)
+          writeHuman(`  stopped at depth cap (${maxDepth}) — re-invoke to continue`);
+        writeHuman(`  push_ready: ${result.push_ready}`);
+        writeHuman(`  push: ${result.push}`);
+      }
+    } catch (err) {
+      if (err instanceof BranchedStemError) {
+        writeError(`work chain drive failed: ${err.message}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      writeError(`work chain drive failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  },
+});
+
+const workChain = defineCommand({
+  meta: {
+    name: 'chain',
+    description:
+      'Drive a chain (follows-stem) of related work items end-to-end (subcommand: drive)',
+  },
+  subCommands: {
+    drive: workChainDrive,
+  },
+});
+
 export const workCommand = defineCommand({
   meta: {
     name: 'work',
@@ -1554,6 +1665,7 @@ export const workCommand = defineCommand({
     promote: workPromote,
     'follow-up': workFollowUp,
     stem: workStem,
+    chain: workChain,
     'push-ready': workPushReady,
     archive: workArchive,
   },
