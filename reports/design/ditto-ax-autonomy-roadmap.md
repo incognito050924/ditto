@@ -16,7 +16,7 @@
 |---|---|---|---|---|
 | **T1. autopilot 무-전가** | P3, P4 | ✅ landed | wi_2606266az | 6 AC final_verdict=pass(runtime-artifact 검증) · main 728c009 |
 | **T2. 개발 절차 1급화** (TDD 표면·경량 기본값·자동 close·backlog 위생) | P1, P2, P7 | ✅ landed | wi_2606264rm | 4 AC final_verdict=pass · main c6e15a4 · autopilot complete가 자기 WI를 done flip(ac-3 자기참조 실증) |
-| **T3. 다중 WI·worktree 자율 구동** (same-repo로 재범위) | P5, P6 | 🟦 P5 landed · P6 TODO | wi_2606277pt | **P5 landed**: `ditto work chain drive <wi>` 5 AC final_verdict=pass · main 75c7799 · opt-in `--push`(불변식 보존). **P6**(worktree 자율 구동) 미착수. 잔여(미검증): production seam live round-trip(follow-up idea) |
+| **T3. 다중 WI·worktree 자율 구동** (same-repo로 재범위) | P5, P6 | ✅ landed | wi_2606277pt · wi_260627t82 | **P5 landed**: `ditto work chain drive <wi>` 5 AC final_verdict=pass · main 75c7799 · opt-in `--push`(불변식 보존). **P6 landed**: `ditto worktree drive <wi-ids...>` 얇은 순차 드라이버 + clean-only 머지백 5 AC final_verdict=pass(ac-2/4/5 real-git e2e) · main 9acc7fd · 불변식 무수정(ADR-20260627 change_condition 허가 경로). 잔여(미검증): fresh non-done 멤버 live subprocess round-trip(P5 공유 seam, follow-up idea) |
 
 **이미 landed(부분 해결, b8d8163 이후)**: worktree 동시개발 1급 지원(T3 레인) · work-lifecycle 경량 경로 7 AC(T2 일부) · 이 세션 25→2 open WI 정리(T1/T2 사후 실증). 상세 §3.
 
@@ -48,7 +48,7 @@
 
 `b8d81639..HEAD` = 16커밋. 비-doc 실작업 두 줄기:
 
-- **worktree 동시개발**(6aa95e0·36eee19·8cbcc14·20bd801·347e9e5): git worktree 1급, 격리+공유 `.ditto/local`, `ditto worktree create|list|remove` + `work start --worktree`. → **P6 레인** ✅ / **P6 드라이브** ⬜.
+- **worktree 동시개발**(6aa95e0·36eee19·8cbcc14·20bd801·347e9e5): git worktree 1급, 격리+공유 `.ditto/local`, `ditto worktree create|list|remove` + `work start --worktree`. → **P6 레인** ✅ / **P6 드라이브** ✅ (`ditto worktree drive`, main 9acc7fd).
 - **work-lifecycle 경량 경로**(cf4a73a~e88e9d9 + 머지 a7440e1, 이번 세션·wi_260626wnv): `work set-criteria`/`--criteria`, 경량 `verify→done`, partial/blocked 상태, light/heavy logged-override 게이트+risk 트리거, `work follow-up`(버그→discovered_by WI), `work promote`, `follows`+`work stem`, pull-only `work push-ready`. ADR-20260626-work-lifecycle-lightweight-path. → **P1/P2 부분** ✅(닫는 메커니즘은 있으나 기본값·자동화 아님).
 - **이 세션 정리**: 25 open WI → 2(landed 증거로 23 done, lj6/t8o keep). 자기비판: residual 있던 WI(pcw 이중래핑·pyj 라이브검증)를 done으로 닫으며 후속 WI로 물질화 안 함 = **P3 재현**.
 - **배포**: release v0.3.0(b908061) → v0.3.1 → v0.4.0(5104c7e, T1 무-전가) → v0.5.0(T2 개발 절차 1급화).
@@ -84,14 +84,14 @@
 - [x] **backlog 위생 표면**: `doctor`가 stale draft(structural)·"완료-미종결"(completion pass인데 status≠done, terminal 제외)·open-count를 read-only 출력. parked-with-reason 미오판. _후속 ✅: 각 항목에 advisory 제안 명령(stale→resume/abandon, unclosed→done) suggested_action 추가 — read-only 유지, silent auto-action은 D4 경계로 배제(stale draft=실제 미래작업, 자동 abandon=백로그 파괴). wi_260627pfa, main f12d6f4._
 - 검증: 4 AC final_verdict=pass(autopilot orch_2606268v8 무중단 구동) · `autopilot-complete-flip-cli`/`doctor-backlog-cli`/`autopilot-dispatch` 테스트 · full suite 3191 pass(4 fail은 pre-existing Codex host capability, T2 무관).
 
-### T3. 다중 WI·worktree 자율 구동 (P5 + P6) — 🟦 P5 landed (main 75c7799) · P6 TODO
+### T3. 다중 WI·worktree 자율 구동 (P5 + P6) — ✅ landed (P5 main 75c7799 · P6 main 9acc7fd)
 
 목표(재범위): **same-repo** 다중 WI(및 worktree)를 사람 개입 없이 순차/병렬로 완료까지 구동. cross-root는 범위 밖(ADR-0021).
 
 **결정 해소 (2026-06-27)**: 로드맵이 cross-reference하지 않았던 ADR-0021(accepted, 2026-06-18)이 D2를 실질 해소한다 — 조직·cross-repo는 ditto가 담기엔 너무 커 **별도 standalone 프로젝트로 라우팅**, "cross-repo는 ditto 범위 밖"으로 ADR-0011과 정합. 따라서 **ADR-0011 session-rooting 불변식은 유지(수정 안 함)**, cross-root remote 오케스트레이션은 foreclosed. T3는 same-repo로 재범위된다. (사용자가 cross-root를 다시 원하면 ADR-0021과 충돌하므로 그 ADR 재논의가 선행.)
 
 - [x] **P5 same-repo 다중 WI 순차 구동** (main 75c7799): `ditto work chain drive <wi>` 신설 — follows-stem linear spine를 root→tip 순차 구동, abandoned/blocked/partial/no-intent/user-decision 멤버에서 halt, idempotent resume. autopilot이 agent-in-the-loop이므로 orchestrator + 주입형 per-member driver seam(production은 `ditto autopilot complete` subprocess shell). 완료 시 기본 push 안 함(불변식 보존), **`--push` opt-in**만. no-auto-pick·per-WI 의도잠금 불변식 무완화(ADR-20260627). 5 AC final_verdict=pass. _잔여(미검증): production seam live round-trip — follow-up idea로 캡처._
-- [ ] **P6 worktree 자율 구동(same-machine)**: worktree 세션 auto-launch·드라이브·auto-merge 조정. auto-merge는 비가역(git) → 명시 승인/gate 필요. 레인은 이미 landed(§3), 차를 모는 부분만 남음.
+- [x] **P6 worktree 자율 구동(same-machine)** (main 9acc7fd): `ditto worktree drive <wi-ids...>` 신설 — 사용자 호출 얇은 순차 드라이버가 명시한 독립 worktree WI 집합을 각자 worktree에서 `autopilot complete` subprocess로 구동(P5 패턴의 worktree 변종), done+ahead 시 `ditto/<wi>`를 base로 **clean-only** 자동 머지(충돌/base-drift → `git merge --abort`, halt, 브랜치+worktree 보존, 자동 해소 없음), continue-on-halt, 성공 머지 후 worktree 자동 제거, push는 `--push`만. **auto-launch/병렬 live-session은 채택 안 함**(사용자 결정: 얇은 순차 — autopilot은 agent-in-the-loop, headless 없음). 불변식 무수정(no-auto-pick/single-active/ADR-0011 — ADR-20260627 change_condition이 명시 허가한 사용자 행동 명령 경로). 5 AC final_verdict=pass(ac-2/4/5 real-git e2e). _잔여(미검증): fresh non-done 멤버 live subprocess round-trip(P5 공유 seam) · 실제 충돌 reason 공란(wi_2606276nc)._
 - **제약(유지)**: single-active·no-auto-pick 불변식(`user-prompt-submit.ts`)은 same-repo 체인에서도 D4대로 명시 신호로만 우회. ADR-0011 D2 유지. **구현은 fresh 세션 + 의도잠금 권장(§6 context-rot)** — 이 분석/구현 세션이 이미 매우 길다.
 
 ---
