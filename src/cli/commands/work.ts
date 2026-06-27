@@ -7,7 +7,11 @@ import {
   productionDriveMember,
 } from '~/core/chain-drive';
 import { PLACEHOLDER_AC_STATEMENT } from '~/core/charter';
-import { CompletionStore, assembleCompletionFromWorkItem } from '~/core/completion-store';
+import {
+  CompletionStore,
+  assembleCompletionFromWorkItem,
+  mirrorAcceptanceVerdicts,
+} from '~/core/completion-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { acceptanceTestable, completionEvidenceGate, completionGate } from '~/core/gates';
 import { IntentStore } from '~/core/intent-store';
@@ -910,6 +914,12 @@ const workDone = defineCommand({
         process.exit(USAGE_ERROR_EXIT);
         return;
       }
+      // wi_260627273: mirror the completion's per-AC verdicts + evidence back onto
+      // the work item BEFORE the close flip, so `work status`/`push-ready` read the
+      // verified state instead of the stale `unverified` the criteria were created
+      // with. Idempotent; a non-pass verdict is copied as-is (this done path only
+      // reaches here on final_verdict=pass, but the mirror stays verdict-faithful).
+      await store.update(args.workId, (cur) => mirrorAcceptanceVerdicts(cur, completion));
       const closed = await store.close(args.workId, 'done');
       if (format === 'json') {
         writeJson({ id: closed.id, status: closed.status, closed_at: closed.closed_at });

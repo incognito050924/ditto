@@ -145,6 +145,30 @@ describe('ditto autopilot complete — pass→done flip (ac-3)', () => {
     expect(await readStatus()).toBe('done');
   });
 
+  test('pass flip mirrors derived verdict + evidence onto work-item acceptance (wi_260627273)', async () => {
+    await seedWorkItem('in_progress'); // ac-1 created as unverified, no evidence
+    await seedGraph(true); // verify node passed WITH command evidence → ac-1 pass
+    await stageChangedFile();
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    expect(res.exitCode).toBe(0);
+    expect(await readStatus()).toBe('done');
+    // The bug: the work item kept its stale `unverified` while completion.json said
+    // pass. The mirror reconciles work-item.json acceptance_criteria.
+    const raw = await readFile(
+      join(dir, '.ditto', 'local', 'work-items', WI, 'work-item.json'),
+      'utf8',
+    );
+    const acs = JSON.parse(raw).acceptance_criteria as Array<{
+      id: string;
+      verdict: string;
+      evidence: Array<{ kind: string }>;
+    }>;
+    const ac1 = acs.find((c) => c.id === 'ac-1');
+    expect(ac1?.verdict).toBe('pass');
+    expect(ac1?.evidence.some((e) => e.kind === 'command')).toBe(true);
+    expect(acs.filter((c) => c.verdict === 'unverified')).toHaveLength(0);
+  });
+
   test('non-pass completion leaves status untouched (in_progress)', async () => {
     await seedWorkItem('in_progress');
     await seedGraph(false);

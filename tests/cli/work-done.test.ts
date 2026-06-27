@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CompletionStore } from '~/core/completion-store';
+import { CompletionStore, buildCompletion } from '~/core/completion-store';
 import { WorkItemStore } from '~/core/work-item-store';
 
 // wi_2606200ec — lightweight completion path. A work item fixed directly (no
@@ -206,5 +206,54 @@ describe('ditto work done --status partial|blocked — lightweight resumable clo
     expect(ditto(['verify', wid, '--criterion', 'ac-1', '--', 'cat', wiPath]).exitCode).toBe(0);
     expect(ditto(['work', 'done', wid, '--output', 'json']).exitCode).toBe(0);
     expect((await new WorkItemStore(dir).get(wid)).status).toBe('done');
+  });
+});
+
+// wi_260627273: the autopilot path writes completion.json with derived pass
+// verdicts but leaves work-item.json acceptance_criteria at `unverified`. `work
+// done` reading that pre-existing completion must mirror the verdicts (+ evidence)
+// back so `work status`/`push-ready` are not stale.
+describe('ditto work done — mirrors completion verdicts onto work-item acceptance (wi_260627273)', () => {
+  test('pre-existing completion (pass) → done flips acceptance verdicts + evidence, 0 stale unverified', async () => {
+    const wi = await new WorkItemStore(dir).create({
+      title: 'autopilot-shaped',
+      source_request: 's',
+      goal: 'g',
+      acceptance_criteria: [
+        { id: 'ac-1', statement: 'the command exits 0', verdict: 'unverified', evidence: [] },
+        { id: 'ac-2', statement: 'the output is non-empty', verdict: 'unverified', evidence: [] },
+      ],
+    });
+    // Simulate the autopilot path: a completion.json already exists (final_verdict
+    // =pass, per-AC command evidence) while the work item's acceptance is still
+    // unverified — exactly the wi_260627jhh shape.
+    const completion = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 'autopilot run',
+      verdicts: [
+        {
+          criterion_id: 'ac-1',
+          verdict: 'pass',
+          evidence: [{ kind: 'command', summary: 'x → 0' }],
+        },
+        {
+          criterion_id: 'ac-2',
+          verdict: 'pass',
+          evidence: [{ kind: 'command', summary: 'y → 0' }],
+        },
+      ],
+    });
+    await new CompletionStore(dir).write(completion);
+
+    expect(ditto(['work', 'done', wi.id, '--output', 'json']).exitCode).toBe(0);
+
+    const item = await new WorkItemStore(dir).get(wi.id);
+    expect(item.status).toBe('done');
+    expect(item.acceptance_criteria.map((c) => c.verdict)).toEqual(['pass', 'pass']);
+    expect(item.acceptance_criteria.filter((c) => c.verdict === 'unverified')).toHaveLength(0);
+    for (const c of item.acceptance_criteria) {
+      expect(c.evidence.some((e) => e.kind === 'command')).toBe(true);
+    }
   });
 });

@@ -6,6 +6,7 @@ import {
   CompletionStore,
   assembleCompletionFromWorkItem,
   buildCompletion,
+  mirrorAcceptanceVerdicts,
 } from '~/core/completion-store';
 import { completionEvidenceGate, completionGate } from '~/core/gates';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -153,5 +154,94 @@ describe('assembleCompletionFromWorkItem (lightweight path, wi_2606200ec)', () =
     expect(completion.final_verdict).toBe('pass');
     // ...but the ack-only evidence is caught by the evidence gate.
     expect(completionEvidenceGate(completion).pass).toBe(false);
+  });
+});
+
+describe('mirrorAcceptanceVerdicts (wi_260627273)', () => {
+  // The bug: `autopilot complete`/`work done` write completion.json with per-AC
+  // pass verdicts and flip status=done, but leave work-item.json
+  // acceptance_criteria verdicts at the stale `unverified` they were created with.
+  // The mirror projects the completion's per-AC verdict + evidence back onto the
+  // work item so `work status`/`push-ready` reflect the verified state.
+  const cmdEvidence = [{ kind: 'command' as const, summary: 'bun test → exit 0' }];
+
+  test('ac-1: mirrors each completion verdict onto the matching work-item criterion (0 stale unverified)', async () => {
+    const wi = await workItem(); // ac-1, ac-2 both unverified
+    const completion = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 's',
+      verdicts: [
+        { criterion_id: 'ac-1', verdict: 'pass', evidence: cmdEvidence },
+        { criterion_id: 'ac-2', verdict: 'pass', evidence: cmdEvidence },
+      ],
+    });
+    const mirrored = mirrorAcceptanceVerdicts(wi, completion);
+    expect(mirrored.acceptance_criteria.map((c) => c.verdict)).toEqual(['pass', 'pass']);
+    expect(mirrored.acceptance_criteria.filter((c) => c.verdict === 'unverified')).toHaveLength(0);
+  });
+
+  test('ac-2: mirrors evidence so push-ready evidence gate is satisfiable', async () => {
+    const wi = await workItem();
+    const completion = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 's',
+      verdicts: [
+        { criterion_id: 'ac-1', verdict: 'pass', evidence: cmdEvidence },
+        { criterion_id: 'ac-2', verdict: 'pass', evidence: cmdEvidence },
+      ],
+    });
+    const mirrored = mirrorAcceptanceVerdicts(wi, completion);
+    // every criterion now carries ≥1 command-kind evidence (the push-ready bar)
+    for (const c of mirrored.acceptance_criteria) {
+      expect(c.evidence.some((e) => e.kind === 'command')).toBe(true);
+    }
+  });
+
+  test('ac-3: a non-pass verdict mirrors as-is (partial stays partial, not forced pass)', async () => {
+    const wi = await workItem();
+    const completion = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 's',
+      verdicts: [
+        { criterion_id: 'ac-1', verdict: 'pass', evidence: cmdEvidence },
+        { criterion_id: 'ac-2', verdict: 'partial', evidence: cmdEvidence },
+      ],
+    });
+    const mirrored = mirrorAcceptanceVerdicts(wi, completion);
+    expect(mirrored.acceptance_criteria.find((c) => c.id === 'ac-2')?.verdict).toBe('partial');
+  });
+
+  test('ac-3: idempotent — mirroring twice yields byte-identical acceptance_criteria', async () => {
+    const wi = await workItem();
+    const completion = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 's',
+      verdicts: [
+        { criterion_id: 'ac-1', verdict: 'pass', evidence: cmdEvidence },
+        { criterion_id: 'ac-2', verdict: 'partial', evidence: cmdEvidence },
+      ],
+    });
+    const once = mirrorAcceptanceVerdicts(wi, completion);
+    const twice = mirrorAcceptanceVerdicts(once, completion);
+    expect(JSON.stringify(twice.acceptance_criteria)).toBe(
+      JSON.stringify(once.acceptance_criteria),
+    );
+  });
+
+  test('a work-item criterion absent from the completion is left untouched', async () => {
+    const wi = await workItem();
+    const completion = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 's',
+      verdicts: [{ criterion_id: 'ac-1', verdict: 'pass', evidence: cmdEvidence }],
+    });
+    const mirrored = mirrorAcceptanceVerdicts(wi, completion);
+    // ac-2 had no completion entry → stays as it was
+    expect(mirrored.acceptance_criteria.find((c) => c.id === 'ac-2')?.verdict).toBe('unverified');
   });
 });

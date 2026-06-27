@@ -13,7 +13,7 @@ import { kindToOwner } from '~/core/autopilot-graph';
 import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { checkCiteGate, crossValidateCite, detectActiveConflicts } from '~/core/cite-gate';
-import { CompletionStore } from '~/core/completion-store';
+import { CompletionStore, mirrorAcceptanceVerdicts } from '~/core/completion-store';
 import { nextCoverageNode, recordCoverageRound } from '~/core/coverage-loop';
 import { COVERAGE_TIERS, type CoverageTier } from '~/core/coverage-manager';
 import {
@@ -416,6 +416,12 @@ const autopilotComplete = defineCommand({
         }
       }
       await new CompletionStore(repoRoot).write(completion);
+      // wi_260627273: mirror the derived per-AC verdicts + evidence back onto the
+      // work item so `work status`/`push-ready` read the verified state instead of
+      // the stale `unverified` the criteria were created with. Runs for EVERY verdict
+      // (not just the pass flip below), is idempotent, and copies a `partial`/`fail`
+      // as-is — the completion is the single source of the derived verdict.
+      await workItemStore.update(args.workItem, (cur) => mirrorAcceptanceVerdicts(cur, completion));
       // ac-3 (wi_2606264rm): a pass completion is the work item's real finish line —
       // `autopilot complete` becomes the single termination gate, flipping the WI to
       // done here so no separate manual `work done` is needed. NON-pass leaves the

@@ -19772,6 +19772,16 @@ function assembleCompletionFromWorkItem(workItem2, opts) {
     now: opts.now
   });
 }
+function mirrorAcceptanceVerdicts(workItem2, completion) {
+  const byId = new Map(completion.acceptance.map((a2) => [a2.criterion_id, a2]));
+  return {
+    ...workItem2,
+    acceptance_criteria: workItem2.acceptance_criteria.map((c3) => {
+      const match = byId.get(c3.id);
+      return match ? { ...c3, verdict: match.verdict, evidence: match.evidence } : c3;
+    })
+  };
+}
 
 class CompletionStore {
   repoRoot;
@@ -26862,6 +26872,7 @@ var autopilotComplete = defineCommand({
         }
       }
       await new CompletionStore(repoRoot).write(completion);
+      await workItemStore.update(args.workItem, (cur) => mirrorAcceptanceVerdicts(cur, completion));
       let autoClose = "skipped";
       let land;
       if (completion.final_verdict === "pass") {
@@ -43914,6 +43925,7 @@ var workDone = defineCommand({
         process.exit(USAGE_ERROR_EXIT);
         return;
       }
+      await store.update(args.workId, (cur) => mirrorAcceptanceVerdicts(cur, completion));
       const closed = await store.close(args.workId, "done");
       if (format === "json") {
         writeJson2({ id: closed.id, status: closed.status, closed_at: closed.closed_at });
@@ -44932,4 +44944,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=2cc73c96dcbee6b0742f12f875220da5e46b0dc6a0a0efe938911e4e5f700c8c
+//# ditto-src-stamp=c037b131ce213ad14a2d23124edb0212310d0128d29a4c6c5f753d73d4925c03

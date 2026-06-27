@@ -109,6 +109,32 @@ export function assembleCompletionFromWorkItem(
   });
 }
 
+/**
+ * The reverse projection of `assembleCompletionFromWorkItem`: copy a completion's
+ * per-AC verdict + evidence back onto the work item's `acceptance_criteria`
+ * (matched by criterion id ↔ `id`). `autopilot complete`/`work done` write
+ * completion.json with the derived verdicts and flip status=done, but leave the
+ * work-item.json acceptance_criteria at the stale `unverified` they were created
+ * with — so `work status`/`push-ready` read a verified-pass WI as unverified
+ * (wi_260627273). This mirror reconciles them. Pure + idempotent: the verdict and
+ * evidence are copied AS-IS (a `partial`/`fail` stays itself, never forced to
+ * pass — the completion is the single source of the derived verdict), and a
+ * criterion absent from the completion is left untouched.
+ */
+export function mirrorAcceptanceVerdicts(
+  workItem: WorkItem,
+  completion: CompletionContract,
+): WorkItem {
+  const byId = new Map(completion.acceptance.map((a) => [a.criterion_id, a]));
+  return {
+    ...workItem,
+    acceptance_criteria: workItem.acceptance_criteria.map((c) => {
+      const match = byId.get(c.id);
+      return match ? { ...c, verdict: match.verdict, evidence: match.evidence } : c;
+    }),
+  };
+}
+
 export class CompletionStore {
   constructor(public readonly repoRoot: string) {}
 
