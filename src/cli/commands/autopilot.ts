@@ -470,11 +470,11 @@ const autopilotComplete = defineCommand({
             // land FAILURE (aborted_dirty / aborted_detached) → do NOT flip done;
             // park as blocked with the precise reason so the operator can fix the
             // blocker and re-run (which reconciles via the idempotent land engine).
+            const dirtyCount = land.dirty.reduce((n, d) => n + d.paths.length, 0);
+            const dirtyList = land.dirty.map((d) => `${d.repo}: ${d.paths.join(', ')}`).join('; ');
             const reason =
               land.status === 'aborted_dirty'
-                ? `land aborted — unrelated working-tree dirt outside the changeset: ${land.dirty
-                    .map((d) => `${d.repo}: ${d.paths.join(', ')}`)
-                    .join('; ')}`
+                ? `land aborted — ${dirtyCount} working-tree path(s) outside the declared change_surface: ${dirtyList}. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against \`git status\`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run \`ditto autopilot complete\`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)`
                 : `land aborted — detached HEAD (commit would be orphaned) in: ${land.detached.join(', ')}`;
             await workItemStore.park(args.workItem, 'blocked', {
               command: `# resolve the land blocker, then re-run: ditto autopilot complete --workItem ${args.workItem}`,

@@ -26932,7 +26932,9 @@ var autopilotComplete = defineCommand({
             await workItemStore.close(args.workItem, "done");
             autoClose = "flipped";
           } else {
-            const reason = land.status === "aborted_dirty" ? `land aborted \u2014 unrelated working-tree dirt outside the changeset: ${land.dirty.map((d2) => `${d2.repo}: ${d2.paths.join(", ")}`).join("; ")}` : `land aborted \u2014 detached HEAD (commit would be orphaned) in: ${land.detached.join(", ")}`;
+            const dirtyCount = land.dirty.reduce((n2, d2) => n2 + d2.paths.length, 0);
+            const dirtyList = land.dirty.map((d2) => `${d2.repo}: ${d2.paths.join(", ")}`).join("; ");
+            const reason = land.status === "aborted_dirty" ? `land aborted \u2014 ${dirtyCount} working-tree path(s) outside the declared change_surface: ${dirtyList}. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against \`git status\`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work \u2014 then re-run \`ditto autopilot complete\`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)` : `land aborted \u2014 detached HEAD (commit would be orphaned) in: ${land.detached.join(", ")}`;
             await workItemStore.park(args.workItem, "blocked", {
               command: `# resolve the land blocker, then re-run: ditto autopilot complete --workItem ${args.workItem}`,
               fresh_evidence_needed: [reason]
@@ -44985,4 +44987,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=170027bf0feca11133ba138637057282e80dd65432d03f576943fb9831ad588e
+//# ditto-src-stamp=43716699e128e4796f6c66d12ae44e6572c0aa2611207909ad5a5dc7452abac0

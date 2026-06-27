@@ -240,6 +240,15 @@ describe('ditto autopilot complete — land FAILURE → status=blocked (ac-2)', 
     expect(wi.status).toBe('blocked'); // NOT done
     expect(wi.re_entry).toBeDefined();
     expect(head()).toBe(before); // no commit at all on a dirty abort
+
+    // wi_260627jwb: the recorded reason must be ACTIONABLE about a likely
+    // change_surface under-declaration (not a cryptic "unrelated dirt"): it names
+    // the offending path, frames the likely cause, and gives the next step.
+    const reEntry = wi.re_entry as { fresh_evidence_needed?: string[] };
+    const reason = (reEntry.fresh_evidence_needed ?? []).join(' ');
+    expect(reason).toContain('unrelated.ts');
+    expect(reason).toContain('change_surface');
+    expect(reason).toMatch(/git status|changed_files/);
   });
 
   test('detached HEAD (aborted_detached) blocks the WI instead of flipping to done', async () => {
