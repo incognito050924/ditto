@@ -19,6 +19,7 @@ import {
   interviewReadinessGate,
   knowledgeTriggerFired,
   knowledgeUpdateGate,
+  landGate,
   nonPassTerminationGate,
   resolvabilityBlockers,
   riskRecordBlockers,
@@ -1108,5 +1109,45 @@ describe('attestAcVerdicts (ac-6: positive per-AC attestation, gate↔score sing
     const att = attestAcVerdicts(verdicts);
     expect(verdicts[0]?.verdict).toBe('unverified');
     expect(att[0]?.state).toBe('reasoned-honest-partial');
+  });
+});
+
+describe('landGate (ac-3: verified→landed; no done+pass termination over uncommitted changes)', () => {
+  test('done + pass + uncommitted changed_files → BLOCKS (verified but not landed)', () => {
+    const r = landGate('done', 'pass', ['src/core/foo.ts', 'tests/core/foo.test.ts']);
+    expect(r.pass).toBe(false);
+    expect(r.reasons.join(' ')).toContain('src/core/foo.ts');
+    expect(r.reasons.join(' ')).toContain('not landed');
+  });
+
+  test('done + pass + all committed (empty uncommitted set) → passes', () => {
+    expect(landGate('done', 'pass', []).pass).toBe(true);
+  });
+
+  test('partial status is EXEMPT even with uncommitted files (preserves T1 ac-1)', () => {
+    expect(landGate('partial', 'partial', ['src/core/foo.ts']).pass).toBe(true);
+  });
+
+  test('blocked status is EXEMPT even with uncommitted files (honest cannot-proceed terminate)', () => {
+    expect(landGate('blocked', 'fail', ['src/core/foo.ts']).pass).toBe(true);
+    expect(landGate('blocked', 'unverified', ['src/core/foo.ts']).pass).toBe(true);
+  });
+
+  test('done but non-pass verdict is exempt (only done∧pass asserts landing)', () => {
+    expect(landGate('done', 'partial', ['src/core/foo.ts']).pass).toBe(true);
+  });
+
+  test('pass verdict but non-done status is exempt', () => {
+    expect(landGate('in_progress', 'pass', ['src/core/foo.ts']).pass).toBe(true);
+  });
+
+  test('pure: same input → same output (deterministic, no git/fs access in source)', () => {
+    const files = ['src/core/foo.ts'];
+    expect(landGate('done', 'pass', files)).toEqual(landGate('done', 'pass', files));
+    const src = readFileSync(join(import.meta.dir, '..', '..', 'src', 'core', 'gates.ts'), 'utf8');
+    const fnBody = src.slice(src.indexOf('export function landGate'));
+    expect(/execSync|spawnSync|child_process|readFileSync|Bun\.spawn|Bun\.\$/.test(fnBody)).toBe(
+      false,
+    );
   });
 });

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -1602,5 +1603,95 @@ describe('stopHandler — per-AC positive attestation surfaced (ac-6)', () => {
     expect(out.exitCode).toBe(0);
     expect(out.stderr).toContain('reasoned-honest-partial');
     expect(out.stderr).toContain('ac-3');
+  });
+});
+
+// (ac-3, wi_260627vl6) last-mile land gate: a done ∧ pass close whose own
+// changed_files are still uncommitted in git is hard-blocked (verified but not
+// landed); partial/blocked closes are exempt (honest termination, T1 ac-1).
+describe('stopHandler — last-mile land gate (ac-3)', () => {
+  const git = (args: string[]) =>
+    execFileSync('git', args, { cwd: repo, stdio: ['ignore', 'ignore', 'pipe'] });
+  const initGit = () => {
+    git(['init']);
+    git(['config', 'user.email', 't@t.t']);
+    git(['config', 'user.name', 't']);
+  };
+
+  test('done + pass + changed_files left UNCOMMITTED in git => exit 2 (verified but not landed)', async () => {
+    initGit();
+    await writeFile(join(repo, 'x.ts'), 'export const x = 1;\n'); // uncommitted
+    await store.update(wiId, (c) => ({ ...c, status: 'done', autopilot_exempt: true }));
+    await writeArtifact(
+      'completion.json',
+      completion({ acceptance: PASSING_ACCEPTANCE, changed_files: ['x.ts'] }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('uncommitted');
+    expect(out.stderr).toContain('x.ts');
+  });
+
+  test('done + pass + changed_files COMMITTED => exit 0 (landed)', async () => {
+    initGit();
+    await writeFile(join(repo, 'x.ts'), 'export const x = 1;\n');
+    git(['add', 'x.ts']);
+    git(['commit', '-m', 'land x.ts']);
+    await store.update(wiId, (c) => ({ ...c, status: 'done', autopilot_exempt: true }));
+    await writeArtifact(
+      'completion.json',
+      completion({ acceptance: PASSING_ACCEPTANCE, changed_files: ['x.ts'] }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('partial status + uncommitted changed_files => exit 0 (exempt, honest termination)', async () => {
+    initGit();
+    await writeFile(join(repo, 'x.ts'), 'export const x = 1;\n'); // uncommitted
+    await store.update(wiId, (c) => ({
+      ...c,
+      status: 'partial',
+      autopilot_exempt: true,
+      re_entry: { command: 'bun test', fresh_evidence_needed: [] },
+    }));
+    await writeArtifact(
+      'completion.json',
+      completion({
+        acceptance: [
+          { criterion_id: 'ac-1', verdict: 'partial' },
+          { criterion_id: 'ac-2', verdict: 'partial' },
+          { criterion_id: 'ac-3', verdict: 'partial' },
+        ],
+        final_verdict: 'partial',
+        next_handoff_path: '.ditto/handoff/x.md',
+        changed_files: ['x.ts'],
+      }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  test('blocked status + uncommitted changed_files => exit 0 (exempt, honest termination)', async () => {
+    initGit();
+    await writeFile(join(repo, 'x.ts'), 'export const x = 1;\n'); // uncommitted
+    await store.update(wiId, (c) => ({
+      ...c,
+      status: 'blocked',
+      autopilot_exempt: true,
+      re_entry: { command: 'bun test', fresh_evidence_needed: [] },
+    }));
+    await writeArtifact(
+      'completion.json',
+      completion({
+        acceptance: [
+          { criterion_id: 'ac-1', verdict: 'partial' },
+          { criterion_id: 'ac-2', verdict: 'partial' },
+          { criterion_id: 'ac-3', verdict: 'partial' },
+        ],
+        final_verdict: 'partial',
+        next_handoff_path: '.ditto/handoff/x.md',
+        changed_files: ['x.ts'],
+      }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
   });
 });

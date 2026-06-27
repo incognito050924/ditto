@@ -136,7 +136,7 @@ export async function deleteRun(
 }
 
 /** Absolute path of a sub-repo from its index `owning_repo` (null = workspace root). */
-function subRepoAbs(repoRoot: string, owningRepo: string | null): string {
+export function subRepoAbs(repoRoot: string, owningRepo: string | null): string {
   if (owningRepo === null || owningRepo === '.') return resolve(repoRoot);
   return isAbsolute(owningRepo) ? owningRepo : join(repoRoot, owningRepo);
 }
@@ -165,9 +165,64 @@ export function unrelatedDirt(cwd: string, allowed: ReadonlySet<string>): string
   return out.sort();
 }
 
+export interface PerRepoCommit {
+  /** owning_repo key (null → '.') */
+  repo: string;
+  /** commit sha, or the unchanged HEAD when the group had nothing to commit */
+  sha: string;
+  paths: string[];
+}
+
 export interface CommitResult {
-  /** owning_repo key (null → '.') → commit sha */
-  commits: { repo: string; sha: string; paths: string[] }[];
+  commits: PerRepoCommit[];
+}
+
+/**
+ * Commit a set of paths PER owning sub-repo (one commit each) so every sub-repo
+ * is independently `git revert`-recoverable. `pathsByRepo` keys are owning_repo
+ * values ('.' = workspace root) and values are sub-repo-relative paths.
+ *
+ * Dirty-tree abort: if ANY affected sub-repo has working-tree changes beyond the
+ * supplied paths, abort with NO commit at all — no auto `git clean`, no stash.
+ * The check runs across all sub-repos FIRST (Phase 1), then commits (Phase 2).
+ *
+ * Idempotent: a sub-repo with nothing staged for its paths after `git add`
+ * (already committed / clean) is skipped, so re-running reconciles a partial
+ * multi-repo commit instead of failing on an empty commit.
+ *
+ * This is the shared landing primitive used by both cleanup (`commitCleanup`)
+ * and the run land-commit step — keep the per-sub-repo mechanics here so the two
+ * callers cannot drift apart.
+ */
+export function commitPerSubRepo(
+  repoRoot: string,
+  pathsByRepo: ReadonlyMap<string, readonly string[]>,
+  message: string,
+): PerRepoCommit[] {
+  // Phase 1 — dirty check across ALL affected sub-repos before any commit.
+  for (const [repo, paths] of pathsByRepo) {
+    const abs = subRepoAbs(repoRoot, repo);
+    const dirt = unrelatedDirt(abs, new Set(paths));
+    if (dirt.length > 0) throw new CleanupDirtyRepoError(repo, dirt);
+  }
+
+  // Phase 2 — one commit per sub-repo (skip a sub-repo with nothing staged).
+  const commits: PerRepoCommit[] = [];
+  for (const [repo, paths] of pathsByRepo) {
+    const abs = subRepoAbs(repoRoot, repo);
+    for (const p of paths) {
+      execFileSync('git', ['add', '--all', '--', p], { cwd: abs, stdio: 'pipe' });
+    }
+    const staged = execFileSync('git', ['diff', '--cached', '--name-only', '--', ...paths], {
+      cwd: abs,
+      encoding: 'utf8',
+    }).trim();
+    if (staged === '') continue; // already committed / clean → idempotent skip
+    execFileSync('git', ['commit', '-m', message, '--', ...paths], { cwd: abs, stdio: 'pipe' });
+    const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: abs, encoding: 'utf8' }).trim();
+    commits.push({ repo, sha, paths: [...paths] });
+  }
+  return commits;
 }
 
 /**
@@ -177,48 +232,30 @@ export interface CommitResult {
  * removal of each entry's `original_path` (the doc was moved out during classify
  * staging, so it shows as a deletion in its owning sub-repo).
  *
- * Dirty-tree abort (ac-10): if ANY affected sub-repo has working-tree changes
- * beyond this cleanup's own removals, abort with NO commit at all — no auto
- * `git clean`, no stash. The check runs across all sub-repos FIRST, then commits.
+ * Delegates the dirty-abort + per-sub-repo commit mechanics to the shared
+ * `commitPerSubRepo` helper.
  */
 export function commitCleanup(
   repoRoot: string,
   index: CleanupIndex,
   message: string,
 ): CommitResult {
-  // Group original paths by owning sub-repo.
-  const byRepo = new Map<string, { abs: string; paths: string[] }>();
+  // Group original paths by owning sub-repo (sub-repo-relative).
+  const byRepo = new Map<string, string[]>();
   for (const e of index.entries) {
     const key = e.owning_repo ?? '.';
     const abs = subRepoAbs(repoRoot, e.owning_repo);
-    const group = byRepo.get(key) ?? { abs, paths: [] };
     // original_path is workspace-root-relative; re-relativize to the sub-repo.
     const rel = relForRepo(repoRoot, abs, e.original_path);
-    group.paths.push(rel);
+    const group = byRepo.get(key) ?? [];
+    group.push(rel);
     byRepo.set(key, group);
   }
-
-  // Phase 1 — dirty check across ALL affected sub-repos before any commit.
-  for (const [repo, { abs, paths }] of byRepo) {
-    const dirt = unrelatedDirt(abs, new Set(paths));
-    if (dirt.length > 0) throw new CleanupDirtyRepoError(repo, dirt);
-  }
-
-  // Phase 2 — one commit per sub-repo.
-  const commits: CommitResult['commits'] = [];
-  for (const [repo, { abs, paths }] of byRepo) {
-    for (const p of paths) {
-      execFileSync('git', ['add', '--all', '--', p], { cwd: abs, stdio: 'pipe' });
-    }
-    execFileSync('git', ['commit', '-m', message, '--', ...paths], { cwd: abs, stdio: 'pipe' });
-    const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: abs, encoding: 'utf8' }).trim();
-    commits.push({ repo, sha, paths });
-  }
-  return { commits };
+  return { commits: commitPerSubRepo(repoRoot, byRepo, message) };
 }
 
 /** Re-express a workspace-relative path as relative to a sub-repo abs dir. */
-function relForRepo(repoRoot: string, repoAbs: string, workspaceRelPath: string): string {
+export function relForRepo(repoRoot: string, repoAbs: string, workspaceRelPath: string): string {
   const abs = join(repoRoot, workspaceRelPath);
   const rel = abs.startsWith(`${repoAbs}/`) ? abs.slice(repoAbs.length + 1) : workspaceRelPath;
   return rel.replace(/\\/g, '/');

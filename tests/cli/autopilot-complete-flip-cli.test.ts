@@ -38,6 +38,15 @@ async function write(name: string, obj: unknown): Promise<void> {
   );
 }
 
+// A flip-eligible run LANDS its `changed_files` before the done-flip. Create the
+// declared changed file on disk + git-add it (leaving it uncommitted) so the land
+// step actually commits it (→ committed → flip done), matching a real run.
+async function stageChangedFile(): Promise<void> {
+  await mkdir(join(dir, 'src'), { recursive: true });
+  await writeFile(join(dir, 'src', 'x.ts'), 'export const x = 1;\n', 'utf8');
+  git(['add', 'src/x.ts']);
+}
+
 async function readStatus(): Promise<string> {
   const raw = await readFile(
     join(dir, '.ditto', 'local', 'work-items', WI, 'work-item.json'),
@@ -106,7 +115,18 @@ async function seedGraph(withEvidence: boolean): Promise<void> {
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'ditto-flipcli-'));
   git(['init']);
+  // Realistic repo. Real ditto repos gitignore `.ditto/` (runtime state is never
+  // committed), so `git status` never sees the work-item files. Without this the
+  // untracked `.ditto/` reads as unrelated working-tree dirt and the wired-in land
+  // step aborts (→ status=blocked) instead of flipping to done.
+  git(['config', 'user.email', 'flipcli@example.com']);
+  git(['config', 'user.name', 'flip cli']);
   await mkdir(join(dir, '.ditto', 'local', 'work-items', WI), { recursive: true });
+  await writeFile(join(dir, '.gitignore'), '.ditto/\n', 'utf8');
+  // Commit a clean baseline so land sees no unrelated dirt. The .gitignore itself
+  // must be tracked — left untracked it would read as dirt and abort the land.
+  git(['add', '.gitignore']);
+  git(['commit', '-m', 'baseline']);
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
@@ -116,6 +136,7 @@ describe('ditto autopilot complete — pass→done flip (ac-3)', () => {
   test('pass completion flips the work item to done', async () => {
     await seedWorkItem('in_progress');
     await seedGraph(true);
+    await stageChangedFile();
     const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
     expect(res.exitCode).toBe(0);
     const out = JSON.parse(res.stdout.slice(res.stdout.indexOf('{')));
@@ -185,6 +206,7 @@ describe('ditto autopilot complete — follow-ups to pick up (D4-a)', () => {
   test('pass completion surfaces only unresolved materialized follow-ups + pick-up command', async () => {
     await seedWithFollowUps();
     await seedGraph(true);
+    await stageChangedFile();
     const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
     expect(res.exitCode).toBe(0);
     const out = JSON.parse(res.stdout.slice(res.stdout.indexOf('{')));
@@ -202,6 +224,7 @@ describe('ditto autopilot complete — follow-ups to pick up (D4-a)', () => {
   test('no follow-ups → empty list', async () => {
     await seedWorkItem('in_progress');
     await seedGraph(true);
+    await stageChangedFile();
     const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
     const out = JSON.parse(res.stdout.slice(res.stdout.indexOf('{')));
     expect(out.follow_ups_to_pick_up).toEqual([]);

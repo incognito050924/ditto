@@ -33,6 +33,7 @@ import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { intentDriftGate, interfaceBaselineDriftGate } from '~/core/gates';
 import { IntentStore } from '~/core/intent-store';
+import { type LandResult, landCommit } from '~/core/land-commit';
 import { type MeasurementReport, measureHallucination } from '~/core/memory-measure';
 import { WorkItemStore, blockingFollowUp } from '~/core/work-item-store';
 import { coverageRoundPayload } from '~/schemas/coverage';
@@ -426,7 +427,20 @@ const autopilotComplete = defineCommand({
       // overwrite invariant (abandoned↛done) is enforced one level down in
       // store.close (R1); the pre-check here is for a clean skipped signal, not a
       // crash, on re-run.
-      let autoClose: 'flipped' | 'skipped' = 'skipped';
+      // T2 ac-1/ac-2 (wi_260627vl6): verified→landed. On a flip-eligible pass we
+      // LAND the run's changed_files (one git-revertable commit per owning sub-repo)
+      // BEFORE the status→done flip — "verified" only becomes "done" once the work
+      // is actually committed. The land step runs on the SAME path that would flip
+      // to done: AFTER the already-terminal skip AND AFTER the blocking-follow-up
+      // exit (which process.exit()s above), so a pass carrying an unresolved
+      // self-caused high/critical follow-up is NEVER committed-but-not-done. Engine
+      // mechanics (run-artifact exclusion, unrelated-dirt abort, empty→no-op,
+      // idempotent re-run, detached-HEAD failure, NO push) live in landCommit; this
+      // only sequences land→flip and routes a land FAILURE to status=blocked (not
+      // done). A re-run of an already-blocked WI re-drives landCommit idempotently
+      // (already-committed sub-repos are skipped) to reconcile a partial commit.
+      let autoClose: 'flipped' | 'skipped' | 'blocked' = 'skipped';
+      let land: LandResult | undefined;
       if (completion.final_verdict === 'pass') {
         if (workItem.status === 'done' || workItem.status === 'abandoned') {
           autoClose = 'skipped'; // already terminal — nothing to flip
@@ -439,8 +453,29 @@ const autopilotComplete = defineCommand({
             process.exit(RUNTIME_ERROR_EXIT);
             return;
           }
-          await workItemStore.close(args.workItem, 'done');
-          autoClose = 'flipped';
+          // Deterministic commit message from the WI id + title — never LLM-authored
+          // free text (ac-5: the land step stays deterministic, push-free).
+          const landMessage = `ditto land ${args.workItem}: ${workItem.title}`;
+          land = await landCommit(repoRoot, workItem.changed_files, landMessage);
+          if (land.status === 'committed' || land.status === 'noop') {
+            await workItemStore.close(args.workItem, 'done');
+            autoClose = 'flipped';
+          } else {
+            // land FAILURE (aborted_dirty / aborted_detached) → do NOT flip done;
+            // park as blocked with the precise reason so the operator can fix the
+            // blocker and re-run (which reconciles via the idempotent land engine).
+            const reason =
+              land.status === 'aborted_dirty'
+                ? `land aborted — unrelated working-tree dirt outside the changeset: ${land.dirty
+                    .map((d) => `${d.repo}: ${d.paths.join(', ')}`)
+                    .join('; ')}`
+                : `land aborted — detached HEAD (commit would be orphaned) in: ${land.detached.join(', ')}`;
+            await workItemStore.park(args.workItem, 'blocked', {
+              command: `# resolve the land blocker, then re-run: ditto autopilot complete --workItem ${args.workItem}`,
+              fresh_evidence_needed: [reason],
+            });
+            autoClose = 'blocked';
+          }
         }
       }
       // ac-2 cite-or-abstain advisory gate: did the lineage-pushed nodes cite or
@@ -485,8 +520,23 @@ const autopilotComplete = defineCommand({
           final_verdict: completion.final_verdict,
           auto_close: {
             outcome: autoClose,
-            status: autoClose === 'flipped' ? 'done' : workItem.status,
+            status:
+              autoClose === 'flipped'
+                ? 'done'
+                : autoClose === 'blocked'
+                  ? 'blocked'
+                  : workItem.status,
           },
+          // T2 ac-1/ac-2/ac-5: surface the land result (never silent). committed →
+          // per-repo sha; aborted_* → the abort reason that drove status=blocked.
+          land: land
+            ? {
+                status: land.status,
+                commits: land.commits.map((c) => ({ repo: c.repo, sha: c.sha })),
+                dirty: land.dirty,
+                detached: land.detached,
+              }
+            : null,
           acceptance: completion.acceptance.map((a) => ({
             criterion_id: a.criterion_id,
             verdict: a.verdict,
@@ -508,11 +558,35 @@ const autopilotComplete = defineCommand({
         writeHuman(
           `Assembled completion for ${args.workItem}: final_verdict=${completion.final_verdict}`,
         );
-        writeHuman(
-          autoClose === 'flipped'
-            ? '  auto-close (ac-3): flipped → done'
-            : `  auto-close (ac-3): skipped (status=${workItem.status}${completion.final_verdict === 'pass' ? ', already terminal' : ', non-pass'})`,
-        );
+        if (autoClose === 'flipped') {
+          writeHuman('  auto-close (ac-3): flipped → done');
+        } else if (autoClose === 'blocked') {
+          writeHuman('  auto-close: BLOCKED (land failed) → status=blocked (not done)');
+        } else {
+          writeHuman(
+            `  auto-close (ac-3): skipped (status=${workItem.status}${completion.final_verdict === 'pass' ? ', already terminal' : ', non-pass'})`,
+          );
+        }
+        // T2 ac-1/ac-2/ac-5: land-result line (mirror cleanup.ts "committed <repo>:
+        // <sha>"). Never silent — committed shas, no-op, or the abort reason.
+        if (land) {
+          if (land.status === 'committed') {
+            for (const c of land.commits) {
+              writeHuman(`  committed ${c.repo}: ${c.sha} (${c.paths.length} path(s))`);
+            }
+          } else if (land.status === 'noop') {
+            writeHuman('  land: no-op (empty or already-committed changeset)');
+          } else if (land.status === 'aborted_dirty') {
+            writeHuman('  land FAILED (aborted_dirty) → status=blocked:');
+            for (const d of land.dirty) {
+              writeHuman(`    unrelated dirt in ${d.repo}: ${d.paths.join(', ')}`);
+            }
+          } else {
+            writeHuman(
+              `  land FAILED (aborted_detached) → status=blocked: ${land.detached.join(', ')}`,
+            );
+          }
+        }
         for (const a of completion.acceptance) {
           writeHuman(`  ${a.criterion_id}: ${a.verdict} (${a.evidence.length} evidence)`);
         }

@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type { Autopilot } from '~/schemas/autopilot';
-import type { evidenceRef, verdict } from '~/schemas/common';
+import type { evidenceRef, verdict, workItemStatus } from '~/schemas/common';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { Convergence } from '~/schemas/convergence';
 import type { ClosureMode } from '~/schemas/convergence';
@@ -11,6 +11,7 @@ import { COVERAGE_AXIS_MECHANISMS } from './coverage-manager';
 
 type EvidenceRef = z.infer<typeof evidenceRef>;
 type Verdict = z.infer<typeof verdict>;
+type WorkItemStatus = z.infer<typeof workItemStatus>;
 
 /**
  * Deterministic gates (M0.4). Pure functions, no LLM calls (D5: 결정론 1차).
@@ -924,4 +925,43 @@ export function interfaceBaselineDriftGate(
     );
   }
   return gate(reasons);
+}
+
+// ── last-mile land gate (ac-3: verified→landed; no uncommitted pass termination) ─
+
+/**
+ * The last-mile Stop gate: a `done` work item closing at `final_verdict=pass`
+ * must have its own `changed_files` already landed in git — a pass that exits
+ * while its changed files sit UNCOMMITTED is the "verified-but-not-landed" leak
+ * the work item exists to close. It BLOCKS exactly that termination.
+ *
+ * PURE / deterministic (D5: 결정론 1차): this predicate NEVER shells out to git.
+ * The actual git state — which of the work item's `changed_files` are still
+ * uncommitted — is gathered by the CALLER (the Stop hook in stop.ts) and passed
+ * in as `uncommittedChangedFiles`. The gate only decides, given that set, whether
+ * the termination is admissible. A non-empty set means a pass is trying to exit
+ * over unlanded changes.
+ *
+ * Exemption (preserves T1 ac-1: honest partial/blocked termination): the gate is
+ * a no-op for ANY status other than `done` AND any verdict other than `pass`. A
+ * `partial`/`blocked`/`unverified` close — the honest "made progress / cannot
+ * proceed" terminate — must NEVER be blocked here, because landing was never
+ * claimed; only a `done ∧ pass` close asserts the work landed. When the land step
+ * cannot legitimately commit, the run closes `blocked` (not `done`), which this
+ * exemption lets terminate.
+ */
+export function landGate(
+  status: WorkItemStatus,
+  finalVerdict: Verdict,
+  uncommittedChangedFiles: readonly string[],
+): GateResult {
+  // Only a done ∧ pass close asserts the work landed; everything else is exempt
+  // (honest partial/blocked/unverified termination is never blocked here).
+  if (status !== 'done' || finalVerdict !== 'pass') return gate([]);
+  if (uncommittedChangedFiles.length === 0) return gate([]);
+  return gate([
+    `final_verdict=pass and status=done but changed_files remain uncommitted in git (verified but not landed): ${uncommittedChangedFiles.join(
+      ', ',
+    )} — land them (commit) before terminating, or close blocked`,
+  ]);
 }

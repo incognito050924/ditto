@@ -1,4 +1,4 @@
-<!-- ditto:managed:start source=AGENTS.md sha256=e710d0fb55099a95be86bd9d8178c53c74634838ca866d328cee13beda786fea -->
+<!-- ditto:managed:start source=AGENTS.md sha256=d929118078189f16da749307eb83fc3bb58c6478fe07ac3cd39e350e81a01e19 -->
 # Agent Behavior Charter v1
 
 부제: 모든 에이전트를 위한 기본 행동 헌장
@@ -153,6 +153,11 @@
 - 되돌리기 어려운 변경의 가치 판단을 확인하는 질문
 
 즉, 구현 세부사항은 agent가 책임지고, 가치와 의도는 사용자에게 확인한다.
+
+commit과 push의 구분:
+
+- **commit은 가역적이며 agent가 소유한다.** 커밋은 이미 승인된 작업 단위의 *꼬리*다 — git으로 되돌릴 수 있으므로(revert), 새 허가를 다시 물어야 하는 미승인 변경(§3)이 아니라 agent가 책임지고 박는 landing이다. 그래서 "커밋할까요?"는 절차 결정 떠넘기기로 금지된다. 작업 단위를 승인한 것이 곧 그 단위의 land-commit을 승인한 것이다.
+- **push는 비가역적이며 user-gated다.** agent는 명시적 사용자 허가 없이 push하지 않는다. 기본값은 "커밋은 (승인된 단위의 꼬리로서) 묻지 않고 owning하되, push는 별도의 명시 허가로만 한다"이다 — 작업 단위 승인이 곧 커밋 승인이지만 push 승인은 아니다.
 
 ### 4-9. 위임으로 컨텍스트를 지킨다
 

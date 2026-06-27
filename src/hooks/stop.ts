@@ -17,10 +17,12 @@ import {
   decisionConflictGate,
   intentDriftGate,
   knowledgeUpdateGate,
+  landGate,
   nonPassTerminationGate,
   resolvabilityBlockers,
   riskRecordBlockers,
 } from '~/core/gates';
+import { listChangedFiles } from '~/core/git';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import { type AcgAssuranceSnapshot, acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
@@ -745,6 +747,20 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     // surface: a parked agent_resolvable record (or an ungrounded non-resolvable one)
     // blocks a pass-close exactly as an unverified[] residual does (R11 — one label space).
     reasons.push(...riskRecordForcesContinuation(completion.data, workItem));
+    // (ac-3, wi_260627vl6) last-mile land gate. A done ∧ pass close whose own
+    // changed_files still sit UNCOMMITTED in git is "verified but not landed" —
+    // the leak this work item closes. The gate is PURE, so the actual git state
+    // is gathered HERE: intersect this completion's changed_files with the
+    // currently-uncommitted set (the work item's changed_files that git still
+    // reports dirty). partial/blocked/unverified closes are exempt INSIDE landGate
+    // (honest termination preserved, T1 ac-1). Gated on completionWouldClose like
+    // the residual gates above so it never double-messages with a non-closing
+    // checkpoint; the message (uncommitted changed_files) is disjoint from theirs.
+    const uncommitted = new Set(listChangedFiles(input.repoRoot));
+    const uncommittedChanged = completion.data.changed_files.filter((f) => uncommitted.has(f));
+    reasons.push(
+      ...landGate(workItem.status, completion.data.final_verdict, uncommittedChanged).reasons,
+    );
   }
   // Axis-2 intent drift: the chain (intent → work-item → autopilot → completion)
   // is conserved by construction at finalize; this catches post-finalize
