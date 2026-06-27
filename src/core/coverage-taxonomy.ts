@@ -277,7 +277,7 @@ export function farFieldCoverageNodes(
  * option (ac-4) + tier-② project config (ac-10).
  */
 export function farFieldCategoriesEnabled(): boolean {
-  const v = process.env.DITTO_FARFIELD_CATEGORIES?.toLowerCase();
+  const v = process.env.DITTO_FARFIELD_CATEGORIES?.trim().toLowerCase();
   return v !== '0' && v !== 'off' && v !== 'false';
 }
 

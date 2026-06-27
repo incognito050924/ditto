@@ -12,6 +12,6 @@
  * still run — disabling here targets auto-injection, not manual consultation.
  */
 export function isMemoryEnabled(): boolean {
-  const v = process.env.DITTO_MEMORY?.toLowerCase();
+  const v = process.env.DITTO_MEMORY?.trim().toLowerCase();
   return v !== 'off' && v !== '0';
 }

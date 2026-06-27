@@ -21381,7 +21381,7 @@ function farFieldCoverageNodes(intent, rootId = "cov-root", taxonomy = FAR_FIELD
   return [root, ...categories];
 }
 function farFieldCategoriesEnabled() {
-  const v2 = process.env.DITTO_FARFIELD_CATEGORIES?.toLowerCase();
+  const v2 = process.env.DITTO_FARFIELD_CATEGORIES?.trim().toLowerCase();
   return v2 !== "0" && v2 !== "off" && v2 !== "false";
 }
 function farFieldCoverageReport(map) {
@@ -21854,7 +21854,7 @@ import { dirname as dirname8 } from "path";
 
 // src/core/memory-flag.ts
 function isMemoryEnabled() {
-  const v2 = process.env.DITTO_MEMORY?.toLowerCase();
+  const v2 = process.env.DITTO_MEMORY?.trim().toLowerCase();
   return v2 !== "off" && v2 !== "0";
 }
 
@@ -44189,4 +44189,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=1a2a7ede3968f7bea319e77c9c5ac21c78a08786bffb4312b3c05adb90664a7e
+//# ditto-src-stamp=0ffd61d565fc4830df33b5d7ba81f65285227379cf80bb2292b9b6f358e975c5

@@ -262,6 +262,13 @@ describe('far-field category seeding (wi_260622vjo §8-2)', () => {
       expect(farFieldCategoriesEnabled()).toBe(false);
       process.env.DITTO_FARFIELD_CATEGORIES = '1';
       expect(farFieldCategoriesEnabled()).toBe(true);
+      // surrounding whitespace must not defeat the off switch (trim before compare)
+      process.env.DITTO_FARFIELD_CATEGORIES = ' 0 ';
+      expect(farFieldCategoriesEnabled()).toBe(false);
+      process.env.DITTO_FARFIELD_CATEGORIES = ' off ';
+      expect(farFieldCategoriesEnabled()).toBe(false);
+      process.env.DITTO_FARFIELD_CATEGORIES = ' false ';
+      expect(farFieldCategoriesEnabled()).toBe(false);
     } finally {
       if (saved === undefined) {
         // biome-ignore lint/performance/noDelete: restore the env var to truly unset
