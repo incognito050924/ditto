@@ -150,6 +150,20 @@ export async function buildGithubConfig(
   }
   const optionIds = new Set(options.map((o) => o.id));
 
+  // Capture the Project node id (PVT_…) — `project item-edit --project-id` needs it for
+  // board status reflection (ac-5). BEST-EFFORT (ADR-0018): projectView degraded or no id
+  // → config saved WITHOUT node_id (reflection later skips the board with a notice).
+  const viewRes = gh.projectView(ref.owner, ref.number);
+  const nodeId =
+    viewRes.ok && typeof (viewRes.value as { id?: unknown })?.id === 'string'
+      ? (viewRes.value as { id: string }).id
+      : undefined;
+  if (!nodeId) {
+    notices.push(
+      'Project node_id를 조회하지 못함 — 보드 status 반영(ac-5)은 skip된다(링크·표시는 정상).',
+    );
+  }
+
   // ④ D7 status_map 매핑 확정 — KEYS = done|abandoned ONLY.
   const statusMap: Partial<Record<StatusMapKey, string>> = {};
   if (opts.nonInteractive || opts.statusMap !== undefined) {
@@ -189,7 +203,7 @@ export async function buildGithubConfig(
 
   // ⑥ 스키마로 결박 검증(키 제약 재확인) 후 산출.
   const candidate = {
-    project: { owner: ref.owner, number: ref.number },
+    project: { owner: ref.owner, number: ref.number, ...(nodeId ? { node_id: nodeId } : {}) },
     status_map: statusMap,
     auto_reflect: autoReflect,
   };

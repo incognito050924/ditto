@@ -141,6 +141,41 @@ describe('buildGithubConfig - ac-14 (interactive == flag, idempotent)', () => {
     }
   });
 
+  // wi_260628p46: setup MUST persist the Project node_id — reflection's board status
+  // update (ac-5) requires cfg.project.node_id; without it the board update is skipped
+  // even when project_item_id is present. setup is the only place to capture it.
+  test('setup persists project.node_id from projectView so board reflection can run', async () => {
+    const { client } = createFakeGhClient({
+      values: { projectFieldList: STATUS_FIELD_LIST, projectView: { id: 'PVT_node1' } },
+    });
+    const outcome = await buildGithubConfig(fakeIO([]), client, {
+      nonInteractive: true,
+      project: 'incognito050924/5',
+      statusMap: 'done=opt_done',
+    });
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.config.project.node_id).toBe('PVT_node1');
+    }
+  });
+
+  // Best-effort (ADR-0018): projectView degraded → config still produced WITHOUT node_id
+  // (board reflection later skips with a notice; setup itself does not fail).
+  test('setup without a resolvable node_id still produces a valid config (graceful)', async () => {
+    const { client } = createFakeGhClient({
+      values: { projectFieldList: STATUS_FIELD_LIST }, // no projectView value → undefined
+    });
+    const outcome = await buildGithubConfig(fakeIO([]), client, {
+      nonInteractive: true,
+      project: 'incognito050924/5',
+      statusMap: 'done=opt_done',
+    });
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.config.project.node_id).toBeUndefined();
+    }
+  });
+
   test('access/permission failure -> clear reason, never crashes (ADR-0018)', async () => {
     const { client } = createFakeGhClient({
       degrade: { ok: false, reason: 'insufficient_perm', detail: 'HTTP 403' },

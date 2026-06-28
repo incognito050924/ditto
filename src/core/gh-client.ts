@@ -160,6 +160,9 @@ export interface GhClient {
   /** `gh project item-list` — read the board's CURRENT items + their single-select
    *  field values (status/priority), used to surface the board position (ac-6). */
   projectItemList(owner: string, projectNumber: number): GhResult<unknown>;
+  /** `gh project view` — read the Project's metadata incl. its node id (`PVT_…`),
+   *  which `project item-edit` needs as `--project-id` (captured by `github setup`). */
+  projectView(owner: string, projectNumber: number): GhResult<unknown>;
   /** `gh api graphql` — used for sub-issue reads (gh has no native sub-issue cmd). */
   apiGraphql(query: string, fields?: Record<string, string>): GhResult<unknown>;
 }
@@ -228,6 +231,12 @@ export function createGhClient(
         ['project', 'item-list', String(projectNumber), '--owner', owner, '--format', 'json'],
         timeoutMs,
       ),
+    projectView: (owner, projectNumber) =>
+      runJson(
+        exec,
+        ['project', 'view', String(projectNumber), '--owner', owner, '--format', 'json'],
+        timeoutMs,
+      ),
     apiGraphql: (query, fields) => {
       const args = ['api', 'graphql', '-f', `query=${query}`];
       for (const [k, v] of Object.entries(fields ?? {})) args.push('-F', `${k}=${v}`);
@@ -272,6 +281,7 @@ export function createFakeGhClient(options: FakeGhClientOptions = {}): {
     projectItemEdit: make('projectItemEdit'),
     projectFieldList: make('projectFieldList'),
     projectItemList: make('projectItemList'),
+    projectView: make('projectView'),
     apiGraphql: make('apiGraphql'),
   } as unknown as GhClient;
   return { client, calls };

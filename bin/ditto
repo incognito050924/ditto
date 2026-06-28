@@ -21859,6 +21859,7 @@ function createGhClient(exec = defaultGhExec, timeoutMs = DEFAULT_GH_TIMEOUT_MS)
     ], timeoutMs)),
     projectFieldList: (owner, projectNumber) => runJson(exec, ["project", "field-list", String(projectNumber), "--owner", owner, "--format", "json"], timeoutMs),
     projectItemList: (owner, projectNumber) => runJson(exec, ["project", "item-list", String(projectNumber), "--owner", owner, "--format", "json"], timeoutMs),
+    projectView: (owner, projectNumber) => runJson(exec, ["project", "view", String(projectNumber), "--owner", owner, "--format", "json"], timeoutMs),
     apiGraphql: (query, fields) => {
       const args = ["api", "graphql", "-f", `query=${query}`];
       for (const [k2, v2] of Object.entries(fields ?? {}))
@@ -36126,6 +36127,11 @@ async function buildGithubConfig(io, gh, opts) {
     };
   }
   const optionIds = new Set(options.map((o3) => o3.id));
+  const viewRes = gh.projectView(ref.owner, ref.number);
+  const nodeId2 = viewRes.ok && typeof viewRes.value?.id === "string" ? viewRes.value.id : undefined;
+  if (!nodeId2) {
+    notices.push("Project node_id\uB97C \uC870\uD68C\uD558\uC9C0 \uBABB\uD568 \u2014 \uBCF4\uB4DC status \uBC18\uC601(ac-5)\uC740 skip\uB41C\uB2E4(\uB9C1\uD06C\xB7\uD45C\uC2DC\uB294 \uC815\uC0C1).");
+  }
   const statusMap = {};
   if (opts.nonInteractive || opts.statusMap !== undefined) {
     const { map, dropped } = parseStatusMapFlag(opts.statusMap ?? "");
@@ -36154,7 +36160,7 @@ async function buildGithubConfig(io, gh, opts) {
   }
   const autoReflect = opts.autoReflect ?? (opts.nonInteractive ? false : await confirm(io, "\uC644\uB8CC \uC2DC Project status \uC790\uB3D9 \uBC18\uC601(auto-reflect)?", false));
   const candidate = {
-    project: { owner: ref.owner, number: ref.number },
+    project: { owner: ref.owner, number: ref.number, ...nodeId2 ? { node_id: nodeId2 } : {} },
     status_map: statusMap,
     auto_reflect: autoReflect
   };
@@ -46327,4 +46333,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=5d3f9ed75a0d23d24b45a2d424b45e11e392b7294c7e57971c346909f271ea0e
+//# ditto-src-stamp=b6ef3e45c9fe41bfc10407437b286fdd634daa23d5bb4a5e1168feda44df6767
