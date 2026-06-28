@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readDeepInterviewConfigDefaults, readQuestionConfigDefaults } from '~/core/ditto-config';
+import {
+  readDeepInterviewConfigDefaults,
+  readGithubConfig,
+  readQuestionConfigDefaults,
+  writeGithubConfig,
+} from '~/core/ditto-config';
 
 describe('readQuestionConfigDefaults — per-user .ditto/local/config.json (wi_260619jmu)', () => {
   let repo: string;
@@ -145,5 +150,69 @@ describe('readDeepInterviewConfigDefaults — deep_interview block (wi_260621p6a
     await writeConfig(JSON.stringify({ deep_interview: { threshold: 9 } }));
     await readDeepInterviewConfigDefaults(repo, onMalformed);
     expect(calls).toBe(2);
+  });
+});
+
+describe('readGithubConfig / writeGithubConfig — github block (wi_260628d79)', () => {
+  let repo: string;
+
+  beforeEach(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'ditto-config-gh-'));
+  });
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true });
+  });
+
+  const sample = {
+    project: { owner: 'incognito050924', number: 5 },
+    status_map: { done: 'opt_done', abandoned: 'opt_dropped' },
+    auto_reflect: false,
+  } as const;
+
+  test('absent file → undefined (fail-open)', async () => {
+    expect(await readGithubConfig(repo)).toBeUndefined();
+  });
+
+  test('write then read round-trips the github block', async () => {
+    await writeGithubConfig(repo, { ...sample });
+    expect(await readGithubConfig(repo)).toEqual({ ...sample });
+  });
+
+  test('write is idempotent — same value twice yields identical file bytes', async () => {
+    await writeGithubConfig(repo, { ...sample });
+    const first = await Bun.file(join(repo, '.ditto', 'local', 'config.json')).text();
+    await writeGithubConfig(repo, { ...sample });
+    const second = await Bun.file(join(repo, '.ditto', 'local', 'config.json')).text();
+    expect(second).toBe(first);
+  });
+
+  test('writing github PRESERVES an existing tech_spec block (single config store)', async () => {
+    const dir = join(repo, '.ditto', 'local');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'config.json'),
+      JSON.stringify({ tech_spec: { question: { generators: 3 } } }),
+      'utf8',
+    );
+    await writeGithubConfig(repo, { ...sample });
+    expect(await readQuestionConfigDefaults(repo)).toEqual({ generators: 3 });
+    expect(await readGithubConfig(repo)).toEqual({ ...sample });
+  });
+
+  test('schema-invalid github block (bad status_map key) → undefined (fail-open)', async () => {
+    const dir = join(repo, '.ditto', 'local');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'config.json'),
+      JSON.stringify({
+        github: {
+          project: { owner: 'o', number: 5 },
+          status_map: { in_progress: 'x' },
+          auto_reflect: false,
+        },
+      }),
+      'utf8',
+    );
+    expect(await readGithubConfig(repo)).toBeUndefined();
   });
 });

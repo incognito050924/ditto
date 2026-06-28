@@ -32,11 +32,14 @@ import {
   farFieldCategoriesEnabled,
   farFieldCoverageReport,
 } from '~/core/coverage-taxonomy';
+import { readGithubConfig } from '~/core/ditto-config';
 import { dittoDir } from '~/core/ditto-paths';
 import { checkE2eCompletionGate } from '~/core/e2e/completion-gate';
 import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { intentDriftGate, interfaceBaselineDriftGate } from '~/core/gates';
+import { createGhClient } from '~/core/gh-client';
+import { reflectAutopilotTermination } from '~/core/github-reflection';
 import { IntentStore } from '~/core/intent-store';
 import { type LandResult, landCommit } from '~/core/land-commit';
 import { type MeasurementReport, measureHallucination } from '~/core/memory-measure';
@@ -489,6 +492,31 @@ const autopilotComplete = defineCommand({
           }
         }
       }
+      // G4/G5 (wi_260628d79): GitHub termination reflection — fires ONLY on the real
+      // done-flip (autoClose==='flipped'), NEVER on a non-terminal complete. The
+      // verdict-blind CompletionStore.write() above persisted completion.json for
+      // EVERY verdict; posting there would notify GitHub on partial/fail/unverified
+      // (ac-4 cross-feature regression). auto_reflect is opt-in (default OFF); a
+      // MALFORMED config records a notice rather than silently disabling an opted-in
+      // reflection (absent config stays silent). Autopilot never closes the issue.
+      const reflectNotices: string[] = [];
+      {
+        let ghMalformed = false;
+        const ghConfig = await readGithubConfig(repoRoot, () => {
+          ghMalformed = true;
+        });
+        const reflection = reflectAutopilotTermination(
+          { client: createGhClient(), config: ghConfig, configMalformed: ghMalformed },
+          {
+            autoClose,
+            // Mirror the derived per-AC verdicts onto the WI so the posted comment
+            // shows the verified state, not the stale `unverified` it was created with.
+            workItem: mirrorAcceptanceVerdicts(workItem, completion),
+            completion,
+          },
+        );
+        reflectNotices.push(...reflection.notices);
+      }
       // ac-2 cite-or-abstain advisory gate: did the lineage-pushed nodes cite or
       // abstain against the governing decisions injected into their packets?
       // ADVISORY — warnings are surfaced but NEVER block completion (no exit
@@ -577,6 +605,7 @@ const autopilotComplete = defineCommand({
           cite_cross_check: citeCrossCheck,
           conflict_warnings: conflicts,
           follow_ups_to_pick_up: followUpsToPickUp,
+          github_reflection: { notices: reflectNotices },
           path: `.ditto/local/work-items/${args.workItem}/completion.json`,
         });
       } else {
@@ -671,6 +700,12 @@ const autopilotComplete = defineCommand({
               `      착수: ditto work set-criteria ${f.work_item_id} --criteria "<…>" → ditto verify → ditto work done (경량) | /ditto:deep-interview (heavy)`,
             );
           }
+        }
+        // G4/G5: GitHub reflection notices (skip/degradation; empty when reflection
+        // did not fire — non-terminal, default-OFF, or absent config).
+        if (reflectNotices.length > 0) {
+          writeHuman(`  GitHub reflection (${reflectNotices.length}):`);
+          for (const n of reflectNotices) writeHuman(`    - ${n}`);
         }
       }
     } catch (err) {

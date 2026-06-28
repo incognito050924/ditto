@@ -17,6 +17,7 @@ import { deepInterviewCommand } from './commands/deep-interview';
 import { doctorCommand } from './commands/doctor';
 import { e2eCommand } from './commands/e2e';
 import { fitnessCommand } from './commands/fitness';
+import { githubCommand } from './commands/github';
 import { hookCommand } from './commands/hook';
 import { impactCommand } from './commands/impact';
 import { initCommand } from './commands/init';
@@ -46,6 +47,7 @@ const main = defineCommand({
     uninstall: teardownCommand,
     teardown: teardownCommand, // alias of uninstall (기존 참조·setup/teardown 대칭 호환)
     work: workCommand,
+    github: githubCommand,
     worktree: worktreeCommand,
     mode: modeCommand,
     run: runCommand,

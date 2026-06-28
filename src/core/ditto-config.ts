@@ -1,4 +1,11 @@
-import { type DittoConfigDeepInterview, dittoConfig } from '~/schemas/ditto-config';
+import { mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import {
+  type DittoConfig,
+  type DittoConfigDeepInterview,
+  type DittoConfigGithub,
+  dittoConfig,
+} from '~/schemas/ditto-config';
 import { localDir } from './ditto-paths';
 import type { RawQuestionConfig } from './tech-spec-options';
 
@@ -71,4 +78,59 @@ export async function readDeepInterviewConfigDefaults(
     onMalformed?.();
     return {};
   }
+}
+
+/**
+ * Read the `github` block from `.ditto/local/config.json` (wi_260628d79, G9/D8).
+ *
+ * Same FAIL-OPEN contract as the readers above: a missing file, invalid JSON, or
+ * schema-invalid config returns `undefined` and never throws — a broken config
+ * must not block a completion/reflection path (ADR-0018 우아한 강등). Used by the
+ * later G4/G5 reflection nodes to discover the linked Project + D7 status_map.
+ */
+export async function readGithubConfig(
+  repoRoot: string,
+  onMalformed?: () => void,
+): Promise<DittoConfigGithub | undefined> {
+  const file = Bun.file(localDir(repoRoot, 'config.json'));
+  if (!(await file.exists())) return undefined;
+  try {
+    const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
+    if (!parsed.success) {
+      onMalformed?.();
+      return undefined;
+    }
+    return parsed.data.github;
+  } catch {
+    onMalformed?.();
+    return undefined;
+  }
+}
+
+/**
+ * Write the `github` block into `.ditto/local/config.json`, PRESERVING any other
+ * blocks (`tech_spec`, `deep_interview`) already present (wi_260628d79). The single
+ * config store (one file, the EXISTING dittoConfig schema) is reused — no parallel
+ * github-specific config file. A malformed/absent existing file is treated as `{}`
+ * (fail-open) so a broken sibling block does not block writing the github block.
+ * Idempotent: writing the same github value twice yields byte-identical content.
+ */
+export async function writeGithubConfig(
+  repoRoot: string,
+  github: DittoConfigGithub,
+): Promise<void> {
+  const path = localDir(repoRoot, 'config.json');
+  let existing: DittoConfig = {};
+  const file = Bun.file(path);
+  if (await file.exists()) {
+    try {
+      const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
+      if (parsed.success) existing = parsed.data;
+    } catch {
+      // fail-open: a malformed existing file is overwritten with just the github block.
+    }
+  }
+  const next: DittoConfig = { ...existing, github };
+  await mkdir(dirname(path), { recursive: true });
+  await Bun.write(path, `${JSON.stringify(next, null, 2)}\n`);
 }

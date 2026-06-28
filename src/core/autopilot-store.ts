@@ -76,6 +76,42 @@ export interface AutopilotDecision {
   criterion_ids?: string[];
 }
 
+/**
+ * Synthesize a stable-yet-per-occurrence id for one decision-log entry (G8 progress
+ * post idempotency, wi_260628d79). The decision shape carries NO `decision_id`, so we
+ * derive one — but NOT a pure content-hash: two genuinely distinct decisions with
+ * identical content (e.g. two escalations on the same node for the same reason) must
+ * get DIFFERENT ids, or the second is silently dropped (under-post). The discriminator
+ * is the decision's APPEND-POSITIONAL index in the log: it is unique per occurrence and
+ * stable across re-reads of the same append-only log (readDecisions returns
+ * append-positional order). Re-reading the SAME persisted line at the SAME index yields
+ * the SAME id (so a revisit dedups correctly). The index is mixed with the full content
+ * so the id also changes if a line is ever rewritten (fail-loud, not silent reuse).
+ */
+export function synthesizeDecisionId(decision: AutopilotDecision, index: number): string {
+  return createHash('sha1')
+    .update(`${index} ${JSON.stringify(decision)}`)
+    .digest('hex');
+}
+
+/**
+ * The G8 decisive-post predicate (wi_260628d79). True for the decision classes worth
+ * posting to the linked GitHub issue, evaluated on the REAL decision-log fields:
+ *   - `failure_class === 'user_decision_needed'` (a user-owned escalation),
+ *   - `decision ∈ {escalate, batch_escalate}` (an escalation / out-of-scope batch),
+ *   - `disposition === 'blocked'` (a loop terminated WITHOUT convergence).
+ * Routine churn (retry / auto_fix / surface / a converged loop_terminated) is EXCLUDED —
+ * it is in-flow progress, not a decision the issue's followers need surfaced.
+ */
+export function isDecisivePost(decision: AutopilotDecision): boolean {
+  return (
+    decision.failure_class === 'user_decision_needed' ||
+    decision.decision === 'escalate' ||
+    decision.decision === 'batch_escalate' ||
+    decision.disposition === 'blocked'
+  );
+}
+
 export class AutopilotStore {
   constructor(public readonly repoRoot: string) {}
 

@@ -55,7 +55,9 @@ import { assertOracleFrozen, producePlanGate, validateAcOracle } from './coverag
 import { CoverageStore } from './coverage-store';
 import { localDir } from './ditto-paths';
 import { decisionConflictRequiresApproval, oracleSatisfaction } from './gates';
+import { createGhClient } from './gh-client';
 import { captureGitDiff, listChangedFiles } from './git';
+import { postUnpostedDecisions } from './github-progress';
 import { HandoffStore } from './handoff-store';
 import { IntentStore } from './intent-store';
 import { MemoryEventStore, MemorySourceStore } from './memory-store';
@@ -1389,7 +1391,41 @@ async function applyAutoResolveSplice(args: {
   };
 }
 
+/**
+ * G8 autopilot DIRECT post (wi_260628d79, ac-10/11/12): after a record-result step
+ * appends its decision(s), post any UNPOSTED decisive decision to the linked GitHub
+ * issue through the single serialized posting path (shared with `work sync-issue`).
+ * Fail-open (ADR-0018, ac-11): wrapped so NO posting failure — gh absent, a degrade,
+ * an unexpected throw — can affect the recorded outcome or the execution/completion
+ * path. Resolves the target itself (own issue, else parent's with a `[child]` prefix,
+ * else skip) and is idempotent (posted_decision_ids pre-post check).
+ */
+async function directPostDecisions(repoRoot: string, workItemId: string): Promise<void> {
+  try {
+    await postUnpostedDecisions(
+      {
+        client: createGhClient(),
+        store: new WorkItemStore(repoRoot),
+        aps: new AutopilotStore(repoRoot),
+      },
+      workItemId,
+    );
+  } catch {
+    // Never let a progress-post failure perturb the recorded result (ac-11).
+  }
+}
+
 export async function recordResult(
+  repoRoot: string,
+  input: RecordResultInput,
+): Promise<RecordResultOutcome> {
+  const outcome = await recordResultCore(repoRoot, input);
+  // G8 direct post — fires AFTER the core appended its decision(s); fail-open.
+  await directPostDecisions(repoRoot, input.workItemId);
+  return outcome;
+}
+
+async function recordResultCore(
   repoRoot: string,
   input: RecordResultInput,
 ): Promise<RecordResultOutcome> {

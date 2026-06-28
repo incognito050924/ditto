@@ -158,6 +158,25 @@ export const declaredRisk = z
   })
   .describe('Work-item-declared risk flags (gates.ts RiskAxes vocabulary)');
 
+// M1 (wi_260628d79): singular link from a work item to ONE GitHub issue (1 WI ↔ 1
+// issue, v1 — not an array). `posted_decision_ids` tracks G8 direct-post idempotency
+// (a later node marks ids it has already posted; here we only declare the field).
+export const githubIssueLink = z
+  .object({
+    repo: z.string().min(1).describe('owner/name of the repo that owns the issue'),
+    number: z.number().int().describe('Issue number within the repo'),
+    node_id: z.string().optional().describe('GraphQL node id of the issue'),
+    project_item_id: z
+      .string()
+      .optional()
+      .describe('Projects v2 item id once the issue is added to a board'),
+    posted_decision_ids: z
+      .array(z.string())
+      .optional()
+      .describe('Decision-log ids already posted to this issue (G8 post idempotency)'),
+  })
+  .describe('Singular GitHub issue this work item is linked to (1 WI ↔ 1 issue, v1)');
+
 export const reEntry = z
   .object({
     command: z.string().optional().describe('Concrete next command to resume work'),
@@ -233,6 +252,10 @@ export const workItem = z
       .describe(
         'Predecessor work item this one continues from (chain lineage, not the parent_id tree)',
       ),
+    // M1 (wi_260628d79) ac-8: singular link to a GitHub issue. Additive + OPTIONAL:
+    // a legacy work-item.json omits it and parses + behaves unchanged; no
+    // schema_version bump (same idiom as declared_risk / autopilot_exempt).
+    github_issue: githubIssueLink.optional(),
     risks: z.array(riskNote).default([]),
     re_entry: reEntry.optional(),
     runs: z.array(runId).default([]),
@@ -282,3 +305,4 @@ export type DeclaredRisk = z.infer<typeof declaredRisk>;
 export type AcceptanceCriterion = z.infer<typeof acceptanceCriterion>;
 export type AcOracle = z.infer<typeof acOracle>;
 export type ReEntry = z.infer<typeof reEntry>;
+export type GithubIssueLink = z.infer<typeof githubIssueLink>;

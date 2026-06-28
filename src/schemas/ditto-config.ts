@@ -40,6 +40,29 @@ export const dittoConfigDeepInterview = z
   })
   .describe('Per-user defaults for deep-interview start (CLI-flag-shaped)');
 
+/**
+ * GitHub Project (백로그 SoT) 연결 config (`github` block; wi_260628d79, G9/D8).
+ *
+ * `ditto github setup` wizard writes this. `status_map` binds ditto's structured
+ * termination enum to a Project v2 single-select status option id (D7) — KEYS are
+ * limited to `done` | `abandoned` ONLY (the two terminal work-item states ditto
+ * mirrors to the board; any other key makes the whole config schema-invalid so the
+ * fail-open reader drops it). The map MAY be partial or empty (unmapped → skip +
+ * 안내, 우아한 강등). `auto_reflect` defaults to false (OFF) — the writer always
+ * sets it explicitly, so it is required here.
+ */
+export const dittoConfigGithub = z
+  .object({
+    project: z.object({
+      owner: z.string().min(1),
+      number: z.number().int().positive(),
+      node_id: z.string().min(1).optional(),
+    }),
+    status_map: z.record(z.enum(['done', 'abandoned']), z.string().min(1)),
+    auto_reflect: z.boolean(),
+  })
+  .describe('GitHub Project 연결 config — D7 status 매핑(키=done|abandoned) + auto-reflect');
+
 export const dittoConfig = z
   .object({
     tech_spec: z
@@ -48,9 +71,11 @@ export const dittoConfig = z
       })
       .optional(),
     deep_interview: dittoConfigDeepInterview.optional(),
+    github: dittoConfigGithub.optional(),
   })
   .describe('Per-developer ditto config — .ditto/local/config.json (tier ③, gitignored)');
 
 export type DittoConfigQuestion = z.infer<typeof dittoConfigQuestion>;
 export type DittoConfigDeepInterview = z.infer<typeof dittoConfigDeepInterview>;
+export type DittoConfigGithub = z.infer<typeof dittoConfigGithub>;
 export type DittoConfig = z.infer<typeof dittoConfig>;

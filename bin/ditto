@@ -13047,7 +13047,7 @@ var init_tech_spec_round = __esm(() => {
 });
 
 // src/schemas/work-item.ts
-var gitSha40, verificationMethod, codePointerMapsTo, acOracle, acceptanceCriterion, workItemWorktree, severityLevel, riskNote, followUp, declaredRisk, reEntry, workItem;
+var gitSha40, verificationMethod, codePointerMapsTo, acOracle, acceptanceCriterion, workItemWorktree, severityLevel, riskNote, followUp, declaredRisk, githubIssueLink, reEntry, workItem;
 var init_work_item = __esm(() => {
   init_zod();
   init_common();
@@ -13102,6 +13102,13 @@ var init_work_item = __esm(() => {
     irreversible: exports_external.boolean().optional(),
     unaudited: exports_external.boolean().optional()
   }).describe("Work-item-declared risk flags (gates.ts RiskAxes vocabulary)");
+  githubIssueLink = exports_external.object({
+    repo: exports_external.string().min(1).describe("owner/name of the repo that owns the issue"),
+    number: exports_external.number().int().describe("Issue number within the repo"),
+    node_id: exports_external.string().optional().describe("GraphQL node id of the issue"),
+    project_item_id: exports_external.string().optional().describe("Projects v2 item id once the issue is added to a board"),
+    posted_decision_ids: exports_external.array(exports_external.string()).optional().describe("Decision-log ids already posted to this issue (G8 post idempotency)")
+  }).describe("Singular GitHub issue this work item is linked to (1 WI \u2194 1 issue, v1)");
   reEntry = exports_external.object({
     command: exports_external.string().optional().describe("Concrete next command to resume work"),
     fresh_evidence_needed: exports_external.array(exports_external.string()).default([]).describe("What new evidence must be gathered before the next attempt"),
@@ -13126,6 +13133,7 @@ var init_work_item = __esm(() => {
     follow_ups: exports_external.array(followUp).optional(),
     discovered_by: workItemId.optional().describe("Work item whose discovered bug materialized this one (provenance, not hierarchy)"),
     follows: workItemId.optional().describe("Predecessor work item this one continues from (chain lineage, not the parent_id tree)"),
+    github_issue: githubIssueLink.optional(),
     risks: exports_external.array(riskNote).default([]),
     re_entry: reEntry.optional(),
     runs: exports_external.array(runId).default([]),
@@ -14456,7 +14464,7 @@ var init_memory_store = __esm(() => {
 
 // src/core/memory-scan.ts
 import { readdir as readdir11 } from "fs/promises";
-import { isAbsolute as isAbsolute2, join as join26, relative as relative6, resolve as resolve3, sep as sep3 } from "path";
+import { isAbsolute as isAbsolute2, join as join26, relative as relative7, resolve as resolve3, sep as sep3 } from "path";
 function classifyType(name) {
   const dot = name.lastIndexOf(".");
   if (dot < 0)
@@ -14535,7 +14543,7 @@ async function scanSources(repoRoot, options = {}) {
   const changed = [];
   const unchanged = [];
   for (const abs of files) {
-    const repoRelative = relative6(root, abs);
+    const repoRelative = relative7(root, abs);
     if (repoRelative.startsWith("..") || isAbsolute2(repoRelative))
       continue;
     const sourceType = classifyType(abs);
@@ -14567,7 +14575,7 @@ async function scanSources(repoRoot, options = {}) {
       revision,
       sensitivity: prior?.sensitivity ?? "internal",
       word_count: content.split(/\s+/).filter((w2) => w2.length > 0).length,
-      ...isOwnRoot ? {} : { repo: relative6(root, owningRepo) },
+      ...isOwnRoot ? {} : { repo: relative7(root, owningRepo) },
       ...head ? { git_commit: head } : {}
     };
     let status;
@@ -14668,8 +14676,8 @@ var init_cleanup_index = __esm(() => {
 });
 
 // src/core/cleanup-store.ts
-import { mkdir as mkdir5, rename as rename4, stat as stat5 } from "fs/promises";
-import { isAbsolute as isAbsolute5, join as join39, relative as relative10, resolve as resolve8 } from "path";
+import { mkdir as mkdir6, rename as rename4, stat as stat5 } from "fs/promises";
+import { isAbsolute as isAbsolute5, join as join39, relative as relative11, resolve as resolve8 } from "path";
 function isProtectedBasename(base) {
   if (base === "CLAUDE.md" || base === "AGENTS.md")
     return true;
@@ -14693,7 +14701,7 @@ function runStamp(now) {
   return `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}` + `-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
 }
 function toRepoRel(repoRoot, absPath) {
-  return relative10(repoRoot, absPath).replace(/\\/g, "/");
+  return relative11(repoRoot, absPath).replace(/\\/g, "/");
 }
 
 class CleanupStore {
@@ -14714,7 +14722,7 @@ class CleanupStore {
     await ensureDir(localDir(this.repoRoot, "cleanup"));
     while (true) {
       try {
-        await mkdir5(this.runDir(runId2), { recursive: false });
+        await mkdir6(this.runDir(runId2), { recursive: false });
         break;
       } catch (err) {
         if (err.code !== "EEXIST")
@@ -14819,9 +14827,9 @@ var init_cleanup_store = __esm(() => {
 });
 
 // src/core/cleanup-archive.ts
-import { execFileSync as execFileSync3 } from "child_process";
-import { mkdir as mkdir6, rm, stat as stat6 } from "fs/promises";
-import { dirname as dirname10, isAbsolute as isAbsolute6, join as join40, resolve as resolve9 } from "path";
+import { execFileSync as execFileSync4 } from "child_process";
+import { mkdir as mkdir7, rm, stat as stat6 } from "fs/promises";
+import { dirname as dirname11, isAbsolute as isAbsolute6, join as join40, resolve as resolve9 } from "path";
 function runDir(repoRoot, runId2) {
   return localDir(repoRoot, "cleanup", runId2);
 }
@@ -14842,9 +14850,9 @@ async function assertRunExists(repoRoot, runId2) {
 async function archiveRun(repoRoot, runId2) {
   await assertRunExists(repoRoot, runId2);
   const zip = archiveZipPath(repoRoot, runId2);
-  await mkdir6(dirname10(zip), { recursive: true });
+  await mkdir7(dirname11(zip), { recursive: true });
   await rm(zip, { force: true });
-  execFileSync3("zip", ["-r", "-q", "-y", zip, runId2], {
+  execFileSync4("zip", ["-r", "-q", "-y", zip, runId2], {
     cwd: localDir(repoRoot, "cleanup"),
     stdio: ["ignore", "ignore", "pipe"]
   });
@@ -14877,7 +14885,7 @@ function subRepoAbs(repoRoot, owningRepo) {
 function unrelatedDirt(cwd, allowed) {
   let status = "";
   try {
-    status = execFileSync3("git", ["status", "--porcelain", "--untracked-files=all"], {
+    status = execFileSync4("git", ["status", "--porcelain", "--untracked-files=all"], {
       cwd,
       encoding: "utf8"
     });
@@ -14908,16 +14916,16 @@ function commitPerSubRepo(repoRoot, pathsByRepo, message) {
   for (const [repo, paths] of pathsByRepo) {
     const abs = subRepoAbs(repoRoot, repo);
     for (const p of paths) {
-      execFileSync3("git", ["add", "--all", "--", p], { cwd: abs, stdio: "pipe" });
+      execFileSync4("git", ["add", "--all", "--", p], { cwd: abs, stdio: "pipe" });
     }
-    const staged = execFileSync3("git", ["diff", "--cached", "--name-only", "--", ...paths], {
+    const staged = execFileSync4("git", ["diff", "--cached", "--name-only", "--", ...paths], {
       cwd: abs,
       encoding: "utf8"
     }).trim();
     if (staged === "")
       continue;
-    execFileSync3("git", ["commit", "-m", message, "--", ...paths], { cwd: abs, stdio: "pipe" });
-    const sha = execFileSync3("git", ["rev-parse", "HEAD"], { cwd: abs, encoding: "utf8" }).trim();
+    execFileSync4("git", ["commit", "-m", message, "--", ...paths], { cwd: abs, stdio: "pipe" });
+    const sha = execFileSync4("git", ["rev-parse", "HEAD"], { cwd: abs, encoding: "utf8" }).trim();
     commits.push({ repo, sha, paths: [...paths] });
   }
   return commits;
@@ -18659,6 +18667,12 @@ var autopilot = exports_external.object({
 // src/core/autopilot-store.ts
 init_ditto_paths();
 init_fs();
+function synthesizeDecisionId(decision, index) {
+  return createHash("sha1").update(`${index} ${JSON.stringify(decision)}`).digest("hex");
+}
+function isDecisivePost(decision) {
+  return decision.failure_class === "user_decision_needed" || decision.decision === "escalate" || decision.decision === "batch_escalate" || decision.disposition === "blocked";
+}
 
 class AutopilotStore {
   repoRoot;
@@ -21744,7 +21758,245 @@ class CoverageStore {
 
 // src/core/autopilot-loop.ts
 init_ditto_paths();
+
+// src/core/gh-client.ts
+import { execFileSync as execFileSync3 } from "child_process";
+var DEFAULT_GH_TIMEOUT_MS = 30000;
+var defaultGhExec = (args, timeoutMs) => {
+  try {
+    const stdout3 = execFileSync3("gh", args, {
+      encoding: "utf8",
+      timeout: timeoutMs,
+      stdio: ["ignore", "pipe", "pipe"],
+      maxBuffer: 16 * 1024 * 1024
+    });
+    return { exitCode: 0, stdout: stdout3, stderr: "" };
+  } catch (err) {
+    const e2 = err;
+    if (e2.code === "ENOENT")
+      return { exitCode: null, stdout: "", stderr: "", spawnError: "absent" };
+    if (e2.killed && e2.signal === "SIGTERM") {
+      return { exitCode: null, stdout: "", stderr: "", spawnError: "timeout" };
+    }
+    const stdout3 = e2.stdout == null ? "" : e2.stdout.toString();
+    const stderr2 = e2.stderr == null ? "" : e2.stderr.toString();
+    return { exitCode: e2.status ?? 1, stdout: stdout3, stderr: stderr2 };
+  }
+};
+function classifyGhFailure(result2) {
+  if (result2.spawnError === "absent")
+    return "absent";
+  if (result2.spawnError === "timeout")
+    return "timeout";
+  const text = `${result2.stderr}
+${result2.stdout}`.toLowerCase();
+  if (/not logged in|gh auth login|authentication required|no oauth token|requires authentication/.test(text)) {
+    return "unauthenticated";
+  }
+  if (/http 403|permission|not accessible by|must have admin|forbidden|insufficient/.test(text)) {
+    return "insufficient_perm";
+  }
+  if (/unknown command|unknown flag|no such (sub)?command|accepts \d+ arg|not a gh command/.test(text)) {
+    return "unknown_command";
+  }
+  return "nonzero";
+}
+function invocationOk(result2) {
+  return result2.spawnError == null && result2.exitCode === 0;
+}
+function degradationFor(result2) {
+  const detail = (result2.stderr || result2.stdout || "").trim().slice(0, 200);
+  return { ok: false, reason: classifyGhFailure(result2), detail };
+}
+function run(exec, args, timeoutMs) {
+  const result2 = exec(args, timeoutMs);
+  if (!invocationOk(result2))
+    return degradationFor(result2);
+  return { ok: true, value: result2.stdout };
+}
+function runJson(exec, args, timeoutMs) {
+  const r3 = run(exec, args, timeoutMs);
+  if ("reason" in r3)
+    return r3;
+  try {
+    return { ok: true, value: JSON.parse(r3.value) };
+  } catch {
+    return { ok: false, reason: "unparseable", detail: r3.value.slice(0, 200) };
+  }
+}
+function toVoid(r3) {
+  if ("reason" in r3)
+    return r3;
+  return { ok: true, value: undefined };
+}
+function createGhClient(exec = defaultGhExec, timeoutMs = DEFAULT_GH_TIMEOUT_MS) {
+  return {
+    issueView: (repo, issueNumber) => runJson(exec, ["issue", "view", String(issueNumber), "-R", repo, "--json", "number,title,state,body,url"], timeoutMs),
+    issueComment: (repo, issueNumber, body) => toVoid(run(exec, ["issue", "comment", String(issueNumber), "-R", repo, "--body", body], timeoutMs)),
+    issueClose: (repo, issueNumber) => toVoid(run(exec, ["issue", "close", String(issueNumber), "-R", repo], timeoutMs)),
+    projectItemAdd: (owner, projectNumber, contentUrl) => runJson(exec, [
+      "project",
+      "item-add",
+      String(projectNumber),
+      "--owner",
+      owner,
+      "--url",
+      contentUrl,
+      "--format",
+      "json"
+    ], timeoutMs),
+    projectItemEdit: (edit) => toVoid(run(exec, [
+      "project",
+      "item-edit",
+      "--project-id",
+      edit.projectId,
+      "--id",
+      edit.itemId,
+      "--field-id",
+      edit.fieldId,
+      "--single-select-option-id",
+      edit.optionId
+    ], timeoutMs)),
+    projectFieldList: (owner, projectNumber) => runJson(exec, ["project", "field-list", String(projectNumber), "--owner", owner, "--format", "json"], timeoutMs),
+    projectItemList: (owner, projectNumber) => runJson(exec, ["project", "item-list", String(projectNumber), "--owner", owner, "--format", "json"], timeoutMs),
+    apiGraphql: (query, fields) => {
+      const args = ["api", "graphql", "-f", `query=${query}`];
+      for (const [k2, v2] of Object.entries(fields ?? {}))
+        args.push("-F", `${k2}=${v2}`);
+      return runJson(exec, args, timeoutMs);
+    }
+  };
+}
+
+// src/core/autopilot-loop.ts
 init_git();
+
+// src/core/github-redaction.ts
+import { relative as relative6 } from "path";
+var TOKEN_PATTERNS = [
+  /gh[pousr]_[A-Za-z0-9]{20,}/g,
+  /github_pat_[A-Za-z0-9_]{20,}/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\b[A-Za-z0-9_-]*(?:secret|token|api[_-]?key|password)[A-Za-z0-9_-]*\s*[:=]\s*\S+/gi
+];
+var WI_ID = /\bwi_[a-z0-9]+\b/g;
+var ABS_PATH = /(?<![:\w])(?:\/[A-Za-z0-9._@-]+)+/g;
+function relativizePaths(text, repoRoot) {
+  return text.replace(ABS_PATH, (match) => {
+    if (repoRoot && (match === repoRoot || match.startsWith(`${repoRoot}/`))) {
+      return relative6(repoRoot, match) || ".";
+    }
+    const base = match.slice(match.lastIndexOf("/") + 1);
+    return base || match;
+  });
+}
+function sanitizeFragment(text, repoRoot = process.cwd()) {
+  const firstLine = text.split(`
+`)[0] ?? "";
+  let out = relativizePaths(firstLine, repoRoot);
+  for (const re of TOKEN_PATTERNS)
+    out = out.replace(re, "[redacted]");
+  out = out.replace(WI_ID, "");
+  return out.replace(/\s{2,}/g, " ").trim();
+}
+function buildPublicSafeSummary(fields) {
+  const root = fields.repoRoot ?? process.cwd();
+  const lines = [
+    "## ditto: work item result",
+    "",
+    sanitizeFragment(fields.summaryLine, root)
+  ];
+  if (fields.sha)
+    lines.push("", `commit: \`${fields.sha}\``);
+  if (fields.finalVerdict)
+    lines.push("", `final_verdict: \`${fields.finalVerdict}\``);
+  if (fields.acVerdicts.length > 0) {
+    lines.push("", "Acceptance criteria:");
+    for (const ac of fields.acVerdicts)
+      lines.push(`- ${ac.id} [${ac.verdict}]`);
+  }
+  return lines.join(`
+`);
+}
+
+// src/core/github-progress.ts
+async function resolveTarget(store, workItemId2) {
+  const item = await store.get(workItemId2);
+  if (item.github_issue) {
+    return {
+      repo: item.github_issue.repo,
+      number: item.github_issue.number,
+      prefix: "",
+      link_owner_id: workItemId2
+    };
+  }
+  if (item.parent_id) {
+    const parent = await store.get(item.parent_id);
+    if (parent.github_issue) {
+      return {
+        repo: parent.github_issue.repo,
+        number: parent.github_issue.number,
+        prefix: `[${workItemId2}] `,
+        link_owner_id: item.parent_id
+      };
+    }
+  }
+  return null;
+}
+function decisionLabel(d2) {
+  const parts = [d2.decision];
+  if (d2.disposition)
+    parts.push(d2.disposition);
+  if (d2.failure_class)
+    parts.push(d2.failure_class);
+  return parts.join("/");
+}
+function buildProgressComment(workItemId2, prefix, entries) {
+  const lines = [`## ${prefix}ditto: autopilot decisions \u2014 ${workItemId2}`, ""];
+  for (const { d: d2 } of entries) {
+    lines.push(`- ${d2.ts} \xB7 \`${decisionLabel(d2)}\` \u2014 ${sanitizeFragment(d2.reason)}`);
+  }
+  return lines.join(`
+`);
+}
+async function postUnpostedDecisions(deps, workItemId2) {
+  const target = await resolveTarget(deps.store, workItemId2);
+  if (!target) {
+    return {
+      kind: "skipped",
+      posted_ids: [],
+      comment_count: 0,
+      notice: `${workItemId2} has no linked GitHub issue (own or parent) \u2014 progress post skipped.`
+    };
+  }
+  const linkOwner = await deps.store.get(target.link_owner_id);
+  const postedSet = new Set(linkOwner.github_issue?.posted_decision_ids ?? []);
+  const decisions = await deps.aps.readDecisions(workItemId2);
+  const unposted = decisions.map((d2, i2) => ({ d: d2, id: synthesizeDecisionId(d2, i2) })).filter(({ d: d2, id }) => isDecisivePost(d2) && !postedSet.has(id));
+  if (unposted.length === 0) {
+    return { kind: "no_new", posted_ids: [], comment_count: 0, target };
+  }
+  const body = buildProgressComment(workItemId2, target.prefix, unposted);
+  const res = deps.client.issueComment(target.repo, target.number, body);
+  if (!res.ok) {
+    return {
+      kind: "degraded",
+      posted_ids: [],
+      comment_count: 1,
+      target,
+      notice: `issue comment degraded (${res.reason}) \u2014 decisions held for a later sync, not marked.`
+    };
+  }
+  const newIds = unposted.map((u3) => u3.id);
+  await deps.store.update(target.link_owner_id, (cur) => {
+    const gi = cur.github_issue;
+    if (!gi)
+      return cur;
+    const merged = new Set([...gi.posted_decision_ids ?? [], ...newIds]);
+    return { ...cur, github_issue: { ...gi, posted_decision_ids: [...merged] } };
+  });
+  return { kind: "posted", posted_ids: newIds, comment_count: 1, target };
+}
 
 // src/core/handoff-store.ts
 import { readdir as readdir9, rename as rename3 } from "fs/promises";
@@ -24572,7 +24824,21 @@ async function applyAutoResolveSplice(args) {
     superseded_node_ids: []
   };
 }
+async function directPostDecisions(repoRoot, workItemId2) {
+  try {
+    await postUnpostedDecisions({
+      client: createGhClient(),
+      store: new WorkItemStore(repoRoot),
+      aps: new AutopilotStore(repoRoot)
+    }, workItemId2);
+  } catch {}
+}
 async function recordResult(repoRoot, input) {
+  const outcome = await recordResultCore(repoRoot, input);
+  await directPostDecisions(repoRoot, input.workItemId);
+  return outcome;
+}
+async function recordResultCore(repoRoot, input) {
   const aps = new AutopilotStore(repoRoot);
   const graph = await aps.get(input.workItemId);
   const intents = new IntentStore(repoRoot);
@@ -25445,6 +25711,112 @@ function assembleRelevanceVerdicts(judgments, refutes = []) {
   });
 }
 
+// src/core/ditto-config.ts
+import { mkdir as mkdir3 } from "fs/promises";
+import { dirname as dirname9 } from "path";
+
+// src/schemas/ditto-config.ts
+init_zod();
+var dittoConfigQuestion = exports_external.object({
+  intensity: exports_external.number().int().min(0).max(100).optional(),
+  generators: exports_external.number().int().min(1).max(6).optional(),
+  performance: exports_external.enum(["glance", "quick", "standard", "deep", "exhaustive"]).optional(),
+  generator_effort: exports_external.enum(["low", "medium", "high", "inherit"]).optional(),
+  gate_mode: exports_external.enum(["confirm", "draft"]).optional(),
+  max_questions: exports_external.number().int().nonnegative().optional(),
+  max_rounds: exports_external.number().int().nonnegative().optional(),
+  threshold: exports_external.number().min(0).max(1).optional(),
+  granularity: exports_external.enum(["low", "medium", "high"]).optional()
+}).describe("Per-user defaults for \xA76-6 question-elicitation (RawQuestionConfig-shaped)");
+var dittoConfigDeepInterview = exports_external.object({
+  threshold: exports_external.number().min(0).max(1).optional(),
+  question_cap: exports_external.number().int().positive().optional(),
+  generators: exports_external.number().int().positive().optional()
+}).describe("Per-user defaults for deep-interview start (CLI-flag-shaped)");
+var dittoConfigGithub = exports_external.object({
+  project: exports_external.object({
+    owner: exports_external.string().min(1),
+    number: exports_external.number().int().positive(),
+    node_id: exports_external.string().min(1).optional()
+  }),
+  status_map: exports_external.record(exports_external.enum(["done", "abandoned"]), exports_external.string().min(1)),
+  auto_reflect: exports_external.boolean()
+}).describe("GitHub Project \uC5F0\uACB0 config \u2014 D7 status \uB9E4\uD551(\uD0A4=done|abandoned) + auto-reflect");
+var dittoConfig = exports_external.object({
+  tech_spec: exports_external.object({
+    question: dittoConfigQuestion.optional()
+  }).optional(),
+  deep_interview: dittoConfigDeepInterview.optional(),
+  github: dittoConfigGithub.optional()
+}).describe("Per-developer ditto config \u2014 .ditto/local/config.json (tier \u2462, gitignored)");
+
+// src/core/ditto-config.ts
+init_ditto_paths();
+async function readQuestionConfigDefaults(repoRoot, onMalformed) {
+  const file = Bun.file(localDir(repoRoot, "config.json"));
+  if (!await file.exists())
+    return {};
+  try {
+    const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
+    if (!parsed.success) {
+      onMalformed?.();
+      return {};
+    }
+    return parsed.data.tech_spec?.question ?? {};
+  } catch {
+    onMalformed?.();
+    return {};
+  }
+}
+async function readDeepInterviewConfigDefaults(repoRoot, onMalformed) {
+  const file = Bun.file(localDir(repoRoot, "config.json"));
+  if (!await file.exists())
+    return {};
+  try {
+    const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
+    if (!parsed.success) {
+      onMalformed?.();
+      return {};
+    }
+    return parsed.data.deep_interview ?? {};
+  } catch {
+    onMalformed?.();
+    return {};
+  }
+}
+async function readGithubConfig(repoRoot, onMalformed) {
+  const file = Bun.file(localDir(repoRoot, "config.json"));
+  if (!await file.exists())
+    return;
+  try {
+    const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
+    if (!parsed.success) {
+      onMalformed?.();
+      return;
+    }
+    return parsed.data.github;
+  } catch {
+    onMalformed?.();
+    return;
+  }
+}
+async function writeGithubConfig(repoRoot, github) {
+  const path = localDir(repoRoot, "config.json");
+  let existing = {};
+  const file = Bun.file(path);
+  if (await file.exists()) {
+    try {
+      const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
+      if (parsed.success)
+        existing = parsed.data;
+    } catch {}
+  }
+  const next = { ...existing, github };
+  await mkdir3(dirname9(path), { recursive: true });
+  await Bun.write(path, `${JSON.stringify(next, null, 2)}
+`);
+}
+
 // src/cli/commands/autopilot.ts
 init_ditto_paths();
 
@@ -25524,7 +25896,7 @@ init_ditto_paths();
 init_fs();
 
 // src/core/e2e/failure-report.ts
-import { isAbsolute as isAbsolute4, relative as relative7, resolve as resolve5 } from "path";
+import { isAbsolute as isAbsolute4, relative as relative8, resolve as resolve5 } from "path";
 var FAILED_STATUSES = new Set(["failed", "timedOut", "interrupted"]);
 var STEP_MARKER = /^\s*\/\/\s*@step\s+(\S+)\/([sb]\d+)\s*(.*)$/;
 var ANSI = /\u001b\[[0-9;]*m/g;
@@ -25606,7 +25978,7 @@ async function buildFailureReport(reporter, options) {
   collectFailures(root, rootDir, raw);
   const failures = [];
   for (const f3 of raw) {
-    const spec_file = isAbsolute4(f3.specFile) ? relative7(options.repoRoot, f3.specFile) : f3.specFile;
+    const spec_file = isAbsolute4(f3.specFile) ? relative8(options.repoRoot, f3.specFile) : f3.specFile;
     const sep4 = f3.title.indexOf(" \xB7 ");
     const journey_id = sep4 >= 0 ? f3.title.slice(0, sep4) : "";
     const case_name = sep4 >= 0 ? f3.title.slice(sep4 + " \xB7 ".length) : f3.title;
@@ -25649,14 +26021,14 @@ function renderFailureLines(failure, journeyName) {
 // src/core/e2e/generated-verify.ts
 init_ditto_paths();
 init_fs();
-import { mkdir as mkdir4 } from "fs/promises";
+import { mkdir as mkdir5 } from "fs/promises";
 import { join as join34 } from "path";
 
 // src/core/e2e/browser.ts
 import { createHash as createHash5 } from "crypto";
-import { mkdir as mkdir3, readFile as readFile6, readdir as readdir13, writeFile as writeFile3 } from "fs/promises";
+import { mkdir as mkdir4, readFile as readFile6, readdir as readdir13, writeFile as writeFile3 } from "fs/promises";
 import { homedir as homedir6 } from "os";
-import { dirname as dirname9, join as join33, relative as relative8, sep as sep4 } from "path";
+import { dirname as dirname10, join as join33, relative as relative9, sep as sep4 } from "path";
 import { fileURLToPath } from "url";
 
 // src/schemas/e2e-journey.ts
@@ -25739,7 +26111,7 @@ var e2eJourney = exports_external.object({
 init_ditto_paths();
 init_shared();
 function runnerScriptPath() {
-  return join33(dirname9(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
+  return join33(dirname10(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
 }
 async function resolvePlaywrightCore() {
   const bunInstall = process.env.BUN_INSTALL ?? join33(homedir6(), ".bun");
@@ -25790,7 +26162,7 @@ async function findCachedChromium() {
   return null;
 }
 function repoRelative(repoRoot, path) {
-  return relative8(repoRoot, path).split(sep4).join("/");
+  return relative9(repoRoot, path).split(sep4).join("/");
 }
 async function sha256OfFile(path) {
   const bytes = await readFile6(path);
@@ -25862,7 +26234,7 @@ async function runJourney(repoRoot, runId2, spec) {
     return { journey: blockedJourney(spec, probe.reason), run_id: runId2, probe };
   }
   const runDir = localDir(repoRoot, "runs", runId2);
-  await mkdir3(runDir, { recursive: true });
+  await mkdir4(runDir, { recursive: true });
   const configAbs = join33(runDir, "runner-config.json");
   await writeFile3(configAbs, JSON.stringify({
     playwrightCore: probe.playwrightCore,
@@ -25987,7 +26359,7 @@ function outputTail(output) {
 async function verifyGenerated(repoRoot, runId2, files, options = {}) {
   const runner = options.runner ?? runPlaywrightTests;
   const runDir = localDir(repoRoot, "runs", runId2);
-  await mkdir4(runDir, { recursive: true });
+  await mkdir5(runDir, { recursive: true });
   const outcome = await withBrowserGuard(repoRoot, () => runner(repoRoot, files, join34(runDir, "playwright-report.json")), options.probe ? { probe: options.probe } : {});
   const verified_at = new Date().toISOString();
   let record;
@@ -26020,7 +26392,7 @@ async function verifyGenerated(repoRoot, runId2, files, options = {}) {
 
 // src/core/e2e/regression-select.ts
 import { readFile as readFile7, readdir as readdir14, stat as stat4 } from "fs/promises";
-import { join as join35, relative as relative9, resolve as resolve6, sep as sep5 } from "path";
+import { join as join35, relative as relative10, resolve as resolve6, sep as sep5 } from "path";
 
 // src/core/e2e/journey-dsl.ts
 init_shared();
@@ -26185,7 +26557,7 @@ async function loadJourneyEntries(journeysDir) {
   const invalid = [];
   for (const name of names) {
     const fileAbs = join35(journeysAbs, name);
-    const fileRel = toPosix(relative9(repoRoot, fileAbs));
+    const fileRel = toPosix(relative10(repoRoot, fileAbs));
     const parsed = parseJourneyDoc(await readFile7(fileAbs, "utf8"));
     if (!parsed.ok) {
       invalid.push({ file: fileRel, error: parsed.error });
@@ -26200,7 +26572,7 @@ async function loadJourneyEntries(journeysDir) {
       surfaces: parsed.frontMatter.surfaces,
       uses_blocks: parsed.frontMatter.uses_blocks,
       journey_file: fileRel,
-      generated_spec: toPosix(relative9(repoRoot, specAbs)),
+      generated_spec: toPosix(relative10(repoRoot, specAbs)),
       missing_generated: !await fileExists2(specAbs)
     });
   }
@@ -26562,16 +26934,128 @@ async function checkE2eCompletionGate(repoRoot, input) {
 // src/cli/commands/autopilot.ts
 init_fs();
 
+// src/core/github-reflection.ts
+function extractStatusFieldId(fieldList) {
+  if (typeof fieldList !== "object" || fieldList === null)
+    return null;
+  const fields = fieldList.fields;
+  if (!Array.isArray(fields))
+    return null;
+  const withOptions = fields.filter((f3) => typeof f3 === "object" && f3 !== null && Array.isArray(f3.options));
+  const status = withOptions.find((f3) => typeof f3.name === "string" && f3.name.toLowerCase() === "status") ?? withOptions[0];
+  if (!status || typeof status.id !== "string")
+    return null;
+  return status.id;
+}
+function buildResultSummary(input) {
+  const wi = input.workItem;
+  return buildPublicSafeSummary({
+    summaryLine: wi.title,
+    ...wi.started_at_sha ? { sha: wi.started_at_sha } : {},
+    ...input.completion ? { finalVerdict: input.completion.final_verdict } : {},
+    acVerdicts: (wi.acceptance_criteria ?? []).map((ac) => ({ id: ac.id, verdict: ac.verdict }))
+  });
+}
+function applyBoardStatus(deps, input) {
+  const notices = [];
+  const cfg = deps.config;
+  const optionId = cfg?.status_map?.[input.trigger];
+  if (!optionId) {
+    notices.push(`Project board: no status_map entry for '${input.trigger}' \u2014 board status update skipped (run \`ditto github setup\` to map it).`);
+    return { statusUpdated: false, notices };
+  }
+  if (!cfg?.project.node_id) {
+    notices.push("Project board: project node_id unknown in config \u2014 board status update skipped.");
+    return { statusUpdated: false, notices };
+  }
+  const itemId = input.workItem.github_issue?.project_item_id;
+  if (!itemId) {
+    notices.push("Project board: issue not on the board (no project_item_id) \u2014 board status update skipped.");
+    return { statusUpdated: false, notices };
+  }
+  const fieldList = deps.client.projectFieldList(cfg.project.owner, cfg.project.number);
+  if (!fieldList.ok) {
+    notices.push(`Project board: field-list degraded (${fieldList.reason}) \u2014 board status update skipped.`);
+    return { statusUpdated: false, notices };
+  }
+  const fieldId = extractStatusFieldId(fieldList.value);
+  if (!fieldId) {
+    notices.push("Project board: no Status single-select field on the Project \u2014 board status update skipped.");
+    return { statusUpdated: false, notices };
+  }
+  const edit = deps.client.projectItemEdit({
+    projectId: cfg.project.node_id,
+    itemId,
+    fieldId,
+    optionId
+  });
+  if (!edit.ok) {
+    notices.push(`Project board: status update degraded (${edit.reason}) \u2014 board left unchanged.`);
+    return { statusUpdated: false, notices };
+  }
+  return { statusUpdated: true, notices };
+}
+function reflectTermination(deps, input) {
+  const notices = [];
+  const gi = input.workItem.github_issue;
+  if (!gi) {
+    notices.push("No linked GitHub issue on the work item \u2014 reflection skipped.");
+    return { commentPosted: false, statusUpdated: false, issueClosed: false, notices };
+  }
+  const body = buildResultSummary(input);
+  const comment = deps.client.issueComment(gi.repo, gi.number, body);
+  const commentPosted = comment.ok;
+  if (!comment.ok) {
+    notices.push(`Issue comment degraded (${comment.reason}) \u2014 not posted.`);
+  }
+  const board = applyBoardStatus(deps, input);
+  notices.push(...board.notices);
+  let issueClosed = false;
+  if (input.closeIssue) {
+    const close = deps.client.issueClose(gi.repo, gi.number);
+    if (close.ok)
+      issueClosed = true;
+    else
+      notices.push(`Issue close degraded (${close.reason}) \u2014 issue left open.`);
+  }
+  return { commentPosted, statusUpdated: board.statusUpdated, issueClosed, notices };
+}
+function reflectAutopilotTermination(deps, input) {
+  const base = {
+    commentPosted: false,
+    statusUpdated: false,
+    issueClosed: false,
+    notices: []
+  };
+  if (input.autoClose !== "flipped")
+    return base;
+  if (deps.configMalformed) {
+    return {
+      ...base,
+      notices: [
+        "GitHub reflection: config is malformed \u2014 auto-reflect could not be honored (reflection skipped). Fix .ditto/local/config.json (run `ditto github setup`)."
+      ]
+    };
+  }
+  if (!deps.config?.auto_reflect)
+    return base;
+  return reflectTermination({ client: deps.client, config: deps.config }, {
+    workItem: input.workItem,
+    trigger: "done",
+    ...input.completion ? { completion: input.completion } : {}
+  });
+}
+
 // src/core/land-commit.ts
 init_cleanup_archive();
 init_memory_scan();
-import { execFileSync as execFileSync4 } from "child_process";
-import { join as join41, relative as relative11, resolve as resolve10 } from "path";
+import { execFileSync as execFileSync5 } from "child_process";
+import { join as join41, relative as relative12, resolve as resolve10 } from "path";
 var RUN_ARTIFACT_PREFIX = ".ditto/local/runs/";
 var BYPRODUCT_PREFIXES = [".ditto/memory/"];
 function isGitIgnoredInRepo(repoAbs, rel) {
   try {
-    execFileSync4("git", ["check-ignore", "-q", "--", rel], { cwd: repoAbs, stdio: "pipe" });
+    execFileSync5("git", ["check-ignore", "-q", "--", rel], { cwd: repoAbs, stdio: "pipe" });
     return true;
   } catch {
     return false;
@@ -26580,7 +27064,7 @@ function isGitIgnoredInRepo(repoAbs, rel) {
 function dirtyByproducts(root) {
   let status = "";
   try {
-    status = execFileSync4("git", ["status", "--porcelain", "--untracked-files=all"], {
+    status = execFileSync5("git", ["status", "--porcelain", "--untracked-files=all"], {
       cwd: root,
       encoding: "utf8"
     });
@@ -26602,7 +27086,7 @@ function dirtyByproducts(root) {
 }
 function isDetachedHead(cwd) {
   try {
-    execFileSync4("git", ["symbolic-ref", "-q", "HEAD"], { cwd, stdio: "pipe" });
+    execFileSync5("git", ["symbolic-ref", "-q", "HEAD"], { cwd, stdio: "pipe" });
     return false;
   } catch {
     return true;
@@ -26620,7 +27104,7 @@ async function landCommit(repoRoot, changedFiles, message) {
   for (const p of landable) {
     const abs = join41(root, p);
     const owningAbs = await findOwningRepo(abs, root);
-    const key = owningAbs === null ? "." : relative11(root, owningAbs).replace(/\\/g, "/") || ".";
+    const key = owningAbs === null ? "." : relative12(root, owningAbs).replace(/\\/g, "/") || ".";
     const repoAbs = subRepoAbs(root, key);
     const rel = relForRepo(root, repoAbs, p);
     if (isGitIgnoredInRepo(repoAbs, rel)) {
@@ -27002,6 +27486,19 @@ var autopilotComplete = defineCommand({
           }
         }
       }
+      const reflectNotices = [];
+      {
+        let ghMalformed = false;
+        const ghConfig = await readGithubConfig(repoRoot, () => {
+          ghMalformed = true;
+        });
+        const reflection = reflectAutopilotTermination({ client: createGhClient(), config: ghConfig, configMalformed: ghMalformed }, {
+          autoClose,
+          workItem: mirrorAcceptanceVerdicts(workItem2, completion),
+          completion
+        });
+        reflectNotices.push(...reflection.notices);
+      }
       const cite = await checkCiteGate(repoRoot, { workItemId: args.workItem, graph });
       const measurement = citeNeedsReproposalMeasurement(cite.verdict) ? await measureReproposalForCompletion(repoRoot) : measureHallucination([], []);
       const citeCrossCheck = crossValidateCite(cite, measurement);
@@ -27045,6 +27542,7 @@ var autopilotComplete = defineCommand({
           cite_cross_check: citeCrossCheck,
           conflict_warnings: conflicts,
           follow_ups_to_pick_up: followUpsToPickUp,
+          github_reflection: { notices: reflectNotices },
           path: `.ditto/local/work-items/${args.workItem}/completion.json`
         });
       } else {
@@ -27112,6 +27610,11 @@ var autopilotComplete = defineCommand({
             writeHuman(`    - ${f3.work_item_id}: ${f3.note}`);
             writeHuman(`      \uCC29\uC218: ditto work set-criteria ${f3.work_item_id} --criteria "<\u2026>" \u2192 ditto verify \u2192 ditto work done (\uACBD\uB7C9) | /ditto:deep-interview (heavy)`);
           }
+        }
+        if (reflectNotices.length > 0) {
+          writeHuman(`  GitHub reflection (${reflectNotices.length}):`);
+          for (const n2 of reflectNotices)
+            writeHuman(`    - ${n2}`);
         }
       }
     } catch (err) {
@@ -29160,7 +29663,7 @@ function zodErrors(error) {
   }));
 }
 // src/acg/scope/symbol-expand.ts
-import { join as join47, relative as relative12 } from "path";
+import { join as join47, relative as relative13 } from "path";
 async function expandForbiddenSymbols(contract, ctx) {
   if (!contract.forbidden_scope.some((r3) => r3.kind === "symbol")) {
     return { contract, resolved: 0, unresolved: [] };
@@ -29182,7 +29685,7 @@ async function expandForbiddenSymbols(contract, ctx) {
       workDir: join47(ctx.cacheDir, `q-symdecl-${ref.ref}`),
       ...ctx.binary ? { binary: ctx.binary } : {}
     }, ctx.deps);
-    const files = declFiles.map((f3) => relative12(ctx.repoRoot, join47(ctx.sourceRoot, f3)));
+    const files = declFiles.map((f3) => relative13(ctx.repoRoot, join47(ctx.sourceRoot, f3)));
     if (files.length === 0) {
       out.push(ref);
       unresolved.push(ref.ref);
@@ -29557,7 +30060,7 @@ import { isAbsolute as isAbsolute8, join as join52 } from "path";
 init_cleanup_store();
 init_memory_scan();
 import { readdir as readdir17, stat as stat7 } from "fs/promises";
-import { isAbsolute as isAbsolute7, join as join51, relative as relative13, resolve as resolve11 } from "path";
+import { isAbsolute as isAbsolute7, join as join51, relative as relative14, resolve as resolve11 } from "path";
 var SKIP_DIRS3 = new Set([
   "node_modules",
   ".git",
@@ -29663,7 +30166,7 @@ async function scanCandidates(repoRoot, options) {
   const candidates = [];
   const excludedProtected = [];
   for (const abs of absFiles) {
-    const repoRel = relative13(root, abs).replace(/\\/g, "/");
+    const repoRel = relative14(root, abs).replace(/\\/g, "/");
     if (repoRel.startsWith("..") || isAbsolute7(repoRel))
       continue;
     if (isProtectedPath(repoRel)) {
@@ -29680,7 +30183,7 @@ async function scanCandidates(repoRoot, options) {
     if (scopeCommitDocs && !scopeCommitDocs.has(repoRel))
       continue;
     const owning = await findOwningRepo(abs, root);
-    const owningRepo = owning === null ? null : relative13(root, owning).replace(/\\/g, "/") || ".";
+    const owningRepo = owning === null ? null : relative14(root, owning).replace(/\\/g, "/") || ".";
     const signals = [];
     if (!hasInboundReference(root, repoRel)) {
       signals.push({ kind: "orphan", detail: `no inbound reference to ${repoRel}` });
@@ -30382,12 +30885,12 @@ function toDataflowDoDs(findings) {
 }
 
 // src/core/codeql/review.ts
-import { relative as relative14 } from "path";
+import { relative as relative15 } from "path";
 async function runCodeqlReview(input, deps) {
   const result2 = await runCodeqlAnalysis(input, deps);
   const sarifText = await deps.readText(result2.sarifPath);
   const sha = deps.sha256(sarifText);
-  const relPath = relative14(input.repoRoot, result2.sarifPath);
+  const relPath = relative15(input.repoRoot, result2.sarifPath);
   const evidence = await deps.appendRecord(input.workItemId, {
     ref: {
       kind: "artifact",
@@ -30936,9 +31439,9 @@ async function buildContextPacket(repoRoot, input) {
     "",
     "## Runs",
     "",
-    ...runs.length === 0 ? ["- none"] : runs.map((run, index) => {
+    ...runs.length === 0 ? ["- none"] : runs.map((run2, index) => {
       const id = item.runs[index] ?? "(unknown)";
-      return run === null ? `- ${id}: missing` : `- ${run.id}: exit_code=${run.exit_code}`;
+      return run2 === null ? `- ${id}: missing` : `- ${run2.id}: exit_code=${run2.exit_code}`;
     }),
     ""
   ];
@@ -31386,66 +31889,6 @@ var decisionConflictCommand = defineCommand({
     gate: decisionConflictGateCmd
   }
 });
-
-// src/schemas/ditto-config.ts
-init_zod();
-var dittoConfigQuestion = exports_external.object({
-  intensity: exports_external.number().int().min(0).max(100).optional(),
-  generators: exports_external.number().int().min(1).max(6).optional(),
-  performance: exports_external.enum(["glance", "quick", "standard", "deep", "exhaustive"]).optional(),
-  generator_effort: exports_external.enum(["low", "medium", "high", "inherit"]).optional(),
-  gate_mode: exports_external.enum(["confirm", "draft"]).optional(),
-  max_questions: exports_external.number().int().nonnegative().optional(),
-  max_rounds: exports_external.number().int().nonnegative().optional(),
-  threshold: exports_external.number().min(0).max(1).optional(),
-  granularity: exports_external.enum(["low", "medium", "high"]).optional()
-}).describe("Per-user defaults for \xA76-6 question-elicitation (RawQuestionConfig-shaped)");
-var dittoConfigDeepInterview = exports_external.object({
-  threshold: exports_external.number().min(0).max(1).optional(),
-  question_cap: exports_external.number().int().positive().optional(),
-  generators: exports_external.number().int().positive().optional()
-}).describe("Per-user defaults for deep-interview start (CLI-flag-shaped)");
-var dittoConfig = exports_external.object({
-  tech_spec: exports_external.object({
-    question: dittoConfigQuestion.optional()
-  }).optional(),
-  deep_interview: dittoConfigDeepInterview.optional()
-}).describe("Per-developer ditto config \u2014 .ditto/local/config.json (tier \u2462, gitignored)");
-
-// src/core/ditto-config.ts
-init_ditto_paths();
-async function readQuestionConfigDefaults(repoRoot, onMalformed) {
-  const file = Bun.file(localDir(repoRoot, "config.json"));
-  if (!await file.exists())
-    return {};
-  try {
-    const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
-    if (!parsed.success) {
-      onMalformed?.();
-      return {};
-    }
-    return parsed.data.tech_spec?.question ?? {};
-  } catch {
-    onMalformed?.();
-    return {};
-  }
-}
-async function readDeepInterviewConfigDefaults(repoRoot, onMalformed) {
-  const file = Bun.file(localDir(repoRoot, "config.json"));
-  if (!await file.exists())
-    return {};
-  try {
-    const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
-    if (!parsed.success) {
-      onMalformed?.();
-      return {};
-    }
-    return parsed.data.deep_interview ?? {};
-  } catch {
-    onMalformed?.();
-    return {};
-  }
-}
 
 // src/cli/commands/deep-interview.ts
 init_fs();
@@ -32359,7 +32802,7 @@ async function collectCapabilityInventory(adapters, repoRoot) {
 
 // src/core/codeql/install.ts
 import { existsSync as existsSync6 } from "fs";
-import { mkdir as mkdir7 } from "fs/promises";
+import { mkdir as mkdir8 } from "fs/promises";
 import { homedir as homedir7 } from "os";
 import { join as join58 } from "path";
 function detectPlatform(os = process.platform) {
@@ -32482,7 +32925,7 @@ var defaultInstallDeps = {
   installDir: DEFAULT_INSTALL_DIR,
   binDir: DEFAULT_BIN_DIR,
   ensureDir: async (dir) => {
-    await mkdir7(dir, { recursive: true });
+    await mkdir8(dir, { recursive: true });
   },
   fileExists: (p) => existsSync6(p),
   pathIncludes: (dir) => (process.env.PATH ?? "").split(":").includes(dir)
@@ -33097,7 +33540,7 @@ async function collectPermissionFindings(adapters, repoRoot) {
 }
 
 // src/core/surface-inventory.ts
-import { relative as relative15, resolve as resolve12 } from "path";
+import { relative as relative16, resolve as resolve12 } from "path";
 
 // src/schemas/surface-catalog.ts
 init_zod();
@@ -33148,7 +33591,7 @@ async function generateSurfaceCatalog(adapters, repoRoot, catalogFile = "surface
     host: s2.host,
     kind: s2.kind,
     id: s2.id,
-    path: relative15(repoRoot, s2.path)
+    path: relative16(repoRoot, s2.path)
   })).sort((a2, b2) => keyOf(a2).localeCompare(keyOf(b2)) || a2.path.localeCompare(b2.path));
   return surfaceCatalog.parse({ schema_version: "0.1.0", surfaces });
 }
@@ -33885,8 +34328,8 @@ var doctorCommand = defineCommand({
 });
 
 // src/cli/commands/e2e.ts
-import { mkdir as mkdir8, readFile as readFile15, readdir as readdir20 } from "fs/promises";
-import { dirname as dirname12, isAbsolute as isAbsolute10, join as join65, relative as relative17, resolve as resolve14, sep as sep7 } from "path";
+import { mkdir as mkdir9, readFile as readFile15, readdir as readdir20 } from "fs/promises";
+import { dirname as dirname13, isAbsolute as isAbsolute10, join as join65, relative as relative18, resolve as resolve14, sep as sep7 } from "path";
 init_zod();
 init_ditto_paths();
 
@@ -34124,7 +34567,7 @@ async function detectStale(sourceAbs, generatedAbs, expectedSource) {
 
 // src/core/e2e/lifecycle.ts
 import { readFile as readFile14, readdir as readdir19, unlink as unlink3 } from "fs/promises";
-import { basename as basename2, dirname as dirname11, isAbsolute as isAbsolute9, join as join64, relative as relative16, resolve as resolve13, sep as sep6 } from "path";
+import { basename as basename2, dirname as dirname12, isAbsolute as isAbsolute9, join as join64, relative as relative17, resolve as resolve13, sep as sep6 } from "path";
 
 // src/schemas/e2e-lifecycle.ts
 init_zod();
@@ -34172,7 +34615,7 @@ async function runLifecycleAction(repoRoot, req) {
     };
   }
   const journeyAbs = resolve13(repoRoot, req.journeyFile);
-  const repoRel = relative16(resolve13(repoRoot), journeyAbs);
+  const repoRel = relative17(resolve13(repoRoot), journeyAbs);
   if (repoRel.startsWith("..") || isAbsolute9(repoRel)) {
     return {
       ok: false,
@@ -34192,9 +34635,9 @@ async function runLifecycleAction(repoRoot, req) {
     return { ok: false, refusal: `journey DSL \uD30C\uC2F1 \uC2E4\uD328: ${parsed.error}` };
   }
   const slug = journeyName.slice(0, -".journey.md".length);
-  const generatedDir = resolve13(dirname11(journeyAbs), "..", "generated");
+  const generatedDir = resolve13(dirname12(journeyAbs), "..", "generated");
   const specAbs = join64(generatedDir, `${slug}.spec.ts`);
-  const rel = (abs) => toPosix2(relative16(repoRoot, abs));
+  const rel = (abs) => toPosix2(relative17(repoRoot, abs));
   const specText = await readOrNull(specAbs);
   if (specText === null) {
     return {
@@ -34256,7 +34699,7 @@ async function runLifecycleAction(repoRoot, req) {
       refusal: `${rel(specAbs)} \uD5E4\uB354\uAC00 \uC774 journey\uB97C \uAC00\uB9AC\uD0A4\uC9C0 \uC54A\uB294\uB2E4 (@ditto-journey ${headerJourney ?? "\uC5C6\uC74C"} / @ditto-source ${headerSource ?? "\uC5C6\uC74C"} \u2260 ${journeyId} \xB7 ${rel(journeyAbs)}) \u2014 \uC0AD\uC81C \uAC70\uBD80`
     };
   }
-  const journeysDir = dirname11(journeyAbs);
+  const journeysDir = dirname12(journeyAbs);
   const referencedElsewhere = new Set;
   for (const name of (await readdir19(journeysDir)).filter((n2) => n2.endsWith(".journey.md"))) {
     const otherAbs = join64(journeysDir, name);
@@ -34361,7 +34804,7 @@ var e2eRun = defineCommand({
       const repoRoot = await resolveRepoRootForCreate();
       const result2 = await runJourney(repoRoot, args.runId, parsed.data);
       const runDir2 = localDir(repoRoot, "runs", args.runId);
-      await mkdir8(runDir2, { recursive: true });
+      await mkdir9(runDir2, { recursive: true });
       await atomicWriteText(join65(runDir2, "journey.json"), `${JSON.stringify(result2.journey, null, 2)}
 `);
       if (format === "json") {
@@ -34442,8 +34885,8 @@ var e2eConformance = defineCommand({
     try {
       const journeyAbs = resolve14(args.journey);
       const generatedAbs = resolve14(args.generated);
-      const blocksDir = resolve14(args["blocks-dir"] ?? join65(dirname12(journeyAbs), "blocks"));
-      const supportDir = resolve14(args["support-dir"] ?? join65(dirname12(generatedAbs), "support"));
+      const blocksDir = resolve14(args["blocks-dir"] ?? join65(dirname13(journeyAbs), "blocks"));
+      const supportDir = resolve14(args["support-dir"] ?? join65(dirname13(generatedAbs), "support"));
       const journeyText = await readFile15(journeyAbs, "utf8");
       const generatedText = await readFile15(generatedAbs, "utf8");
       const blockTexts = {};
@@ -34464,7 +34907,7 @@ var e2eConformance = defineCommand({
       } catch {}
       const report = checkStepConformance({ journeyText, blockTexts, generatedText, supportTexts });
       const repoRoot = await resolveRepoRootForCreate();
-      const repoRel = (abs) => relative17(repoRoot, abs).split(sep7).join("/");
+      const repoRel = (abs) => relative18(repoRoot, abs).split(sep7).join("/");
       const stale = [];
       const journeyVerdict = await detectStale(journeyAbs, generatedAbs, repoRel(journeyAbs));
       if (journeyVerdict.stale)
@@ -34672,7 +35115,7 @@ var e2eFailureVerdictCmd = defineCommand({
     try {
       const repoRoot = await resolveRepoRootForCreate();
       if (journeyFile !== undefined) {
-        const rel = relative17(repoRoot, resolve14(repoRoot, journeyFile));
+        const rel = relative18(repoRoot, resolve14(repoRoot, journeyFile));
         if (rel.startsWith("..") || isAbsolute10(rel)) {
           writeError(`--journey-file\uC774 \uC800\uC7A5\uC18C \uBC16\uC744 \uAC00\uB9AC\uD0A8\uB2E4: ${journeyFile} \u2014 \uAC70\uBD80\uD55C\uB2E4`);
           process.exit(USAGE_ERROR_EXIT);
@@ -35313,8 +35756,8 @@ function compositeProvider(repoRoot, verdictsPath2) {
 }
 
 // src/acg/fitness/executed-provider.ts
-function signature(run) {
-  return JSON.stringify([...run.violationIds].sort());
+function signature(run2) {
+  return JSON.stringify([...run2.violationIds].sort());
 }
 function decideExecutedOutcome(attempts, flakePolicy) {
   const ok = attempts.filter((a2) => !a2.errored);
@@ -35595,6 +36038,187 @@ GATE: ${assessment.concerning.length} function(s) on a rising trend:`);
   }
 });
 
+// src/cli/commands/github.ts
+init_fs();
+var STATUS_MAP_KEYS = ["done", "abandoned"];
+function parseProjectRef(input) {
+  const raw = input.trim();
+  if (raw === "")
+    return null;
+  if (/github\.com/i.test(raw) || raw.includes("://")) {
+    const m2 = /\/(?:users|orgs)\/([^/]+)\/projects\/(\d+)/i.exec(raw);
+    if (!m2)
+      return null;
+    const number2 = Number.parseInt(m2[2] ?? "", 10);
+    if (!Number.isInteger(number2) || number2 <= 0)
+      return null;
+    return { owner: m2[1] ?? "", number: number2 };
+  }
+  const parts = raw.split("/");
+  if (parts.length !== 2)
+    return null;
+  const owner = (parts[0] ?? "").trim();
+  const number = Number.parseInt((parts[1] ?? "").trim(), 10);
+  if (owner === "" || !Number.isInteger(number) || number <= 0)
+    return null;
+  return { owner, number };
+}
+function parseStatusMapFlag(input) {
+  const map = {};
+  const dropped = [];
+  for (const part of input.split(",")) {
+    const entry = part.trim();
+    if (entry === "")
+      continue;
+    const eq = entry.indexOf("=");
+    const key = (eq === -1 ? entry : entry.slice(0, eq)).trim();
+    const value = (eq === -1 ? "" : entry.slice(eq + 1)).trim();
+    if (STATUS_MAP_KEYS.includes(key) && value !== "") {
+      map[key] = value;
+    } else {
+      dropped.push(entry);
+    }
+  }
+  return { map, dropped };
+}
+function extractStatusOptions(fieldList) {
+  if (typeof fieldList !== "object" || fieldList === null)
+    return null;
+  const fields = fieldList.fields;
+  if (!Array.isArray(fields))
+    return null;
+  const withOptions = fields.filter((f3) => typeof f3 === "object" && f3 !== null && Array.isArray(f3.options));
+  const status = withOptions.find((f3) => (f3.name ?? "").toLowerCase() === "status") ?? withOptions[0];
+  if (!status)
+    return null;
+  const options = status.options.filter((o3) => o3 && typeof o3.id === "string" && typeof o3.name === "string").map((o3) => ({ id: o3.id, name: o3.name }));
+  return options.length === 0 ? null : options;
+}
+async function buildGithubConfig(io, gh, opts) {
+  const notices = [];
+  const rawRef = opts.project ?? (opts.nonInteractive ? "" : (await io.ask("\uB300\uC0C1 Project (owner/number \uB610\uB294 URL): ")).trim());
+  const ref = parseProjectRef(rawRef);
+  if (!ref) {
+    return { ok: false, reason: "invalid_project", detail: rawRef };
+  }
+  const res = gh.projectFieldList(ref.owner, ref.number);
+  if (!res.ok) {
+    return { ok: false, reason: res.reason, detail: res.detail };
+  }
+  const options = extractStatusOptions(res.value);
+  if (!options) {
+    return {
+      ok: false,
+      reason: "no_status_field",
+      detail: `Project ${ref.owner}/${ref.number}\uC5D0 status single-select \uD544\uB4DC\uAC00 \uC5C6\uC74C`
+    };
+  }
+  const optionIds = new Set(options.map((o3) => o3.id));
+  const statusMap = {};
+  if (opts.nonInteractive || opts.statusMap !== undefined) {
+    const { map, dropped } = parseStatusMapFlag(opts.statusMap ?? "");
+    for (const d2 of dropped)
+      notices.push(`status-map \uD56D\uBAA9 \uBB34\uC2DC(\uD0A4\uB294 done|abandoned\uB9CC): ${d2}`);
+    for (const key of STATUS_MAP_KEYS) {
+      const optId = map[key];
+      if (optId === undefined)
+        continue;
+      if (!optionIds.has(optId)) {
+        notices.push(`\uB9E4\uD551 \uC635\uC158 id '${optId}'(${key})\uAC00 Project status\uC5D0 \uC5C6\uC74C \u2014 skip`);
+        continue;
+      }
+      statusMap[key] = optId;
+    }
+  } else {
+    const choiceOptions = [
+      { label: "(\uB9E4\uD551 \uC548 \uD568 \u2014 \uBC18\uC601 \uC2DC skip)", value: "" },
+      ...options.map((o3) => ({ label: o3.name, value: o3.id }))
+    ];
+    for (const key of STATUS_MAP_KEYS) {
+      const picked = await select(io, `ditto '${key}' \u2192 Project status \uC635\uC158 \uC120\uD0DD`, choiceOptions, "");
+      if (picked !== "" && optionIds.has(picked))
+        statusMap[key] = picked;
+    }
+  }
+  const autoReflect = opts.autoReflect ?? (opts.nonInteractive ? false : await confirm(io, "\uC644\uB8CC \uC2DC Project status \uC790\uB3D9 \uBC18\uC601(auto-reflect)?", false));
+  const candidate = {
+    project: { owner: ref.owner, number: ref.number },
+    status_map: statusMap,
+    auto_reflect: autoReflect
+  };
+  const parsed = dittoConfigGithub.safeParse(candidate);
+  if (!parsed.success) {
+    return { ok: false, reason: "schema_invalid", detail: parsed.error.message.slice(0, 200) };
+  }
+  return { ok: true, config: parsed.data, notices };
+}
+var githubSetupCommand = defineCommand({
+  meta: {
+    name: "setup",
+    description: "GitHub Project(\uBC31\uB85C\uADF8 SoT)\uB97C \uC9C0\uC815\xB7\uAC80\uC99D\xB7\uB9E4\uD551\uD574 config\uC5D0 \uC5F0\uACB0"
+  },
+  args: {
+    dir: {
+      type: "string",
+      required: false,
+      description: "\uB300\uC0C1 \uD504\uB85C\uC81D\uD2B8 \uB8E8\uD2B8(\uAE30\uBCF8: \uAC00\uAE4C\uC6B4 repo \uB8E8\uD2B8)"
+    },
+    project: {
+      type: "string",
+      required: false,
+      description: '\uB300\uC0C1 Project \u2014 "owner/number" \uB610\uB294 URL'
+    },
+    "status-map": {
+      type: "string",
+      required: false,
+      description: 'D7 \uB9E4\uD551 "done=<optid>,abandoned=<optid>" (\uD0A4=done|abandoned)'
+    },
+    "auto-reflect": {
+      type: "boolean",
+      required: false,
+      description: "\uC644\uB8CC \uC2DC Project status \uC790\uB3D9 \uBC18\uC601(\uAE30\uBCF8 OFF)"
+    },
+    yes: {
+      type: "boolean",
+      required: false,
+      default: false,
+      description: "\uBE44\uB300\uD654\uD615(\uD50C\uB798\uADF8\uB9CC, CI)"
+    }
+  },
+  run: async ({ args }) => {
+    const repoRoot = typeof args.dir === "string" && args.dir !== "" ? args.dir : await resolveRepoRootForCreate();
+    const nonInteractive = Boolean(args.yes) || !process.stdin.isTTY;
+    const io = nonInteractive ? { isTTY: false, ask: async () => "", write: (t2) => process.stdout.write(t2) } : createStdioPromptIO();
+    try {
+      const opts = {
+        nonInteractive,
+        ...typeof args.project === "string" ? { project: args.project } : {},
+        ...typeof args["status-map"] === "string" ? { statusMap: args["status-map"] } : {},
+        ...typeof args["auto-reflect"] === "boolean" ? { autoReflect: args["auto-reflect"] } : {}
+      };
+      const outcome = await buildGithubConfig(io, createGhClient(), opts);
+      if (!outcome.ok) {
+        writeError(`github setup: ${outcome.reason}${outcome.detail ? ` \u2014 ${outcome.detail}` : ""}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+      }
+      await writeGithubConfig(repoRoot, outcome.config);
+      const p = outcome.config.project;
+      writeHuman(`github setup: linked Project ${p.owner}/${p.number} \u2192 .ditto/local/config.json`);
+      writeHuman(`  status_map: ${Object.keys(outcome.config.status_map).length === 0 ? "(none \u2014 \uB9E4\uD551 \uC5C6\uC74C, \uBC18\uC601 \uC2DC skip)" : Object.entries(outcome.config.status_map).map(([k2, v2]) => `${k2}=${v2}`).join(", ")}`);
+      writeHuman(`  auto_reflect: ${outcome.config.auto_reflect ? "ON" : "OFF"}`);
+      for (const n2 of outcome.notices)
+        writeHuman(`  note: ${n2}`);
+    } finally {
+      if ("close" in io && typeof io.close === "function")
+        io.close();
+    }
+  }
+});
+var githubCommand = defineCommand({
+  meta: { name: "github", description: "GitHub \uC5F0\uACC4 (Projects v2 \uBC31\uB85C\uADF8 \uC5F0\uACB0)" },
+  subCommands: { setup: githubSetupCommand }
+});
+
 // src/hooks/io.ts
 init_fs();
 
@@ -35827,7 +36451,7 @@ var preCompactHandler = async (input) => {
 // src/hooks/pre-tool-use.ts
 import { homedir as homedir9, tmpdir } from "os";
 import { join as join66 } from "path";
-import { isAbsolute as isAbsolute13, relative as relative18, resolve as resolve17 } from "path";
+import { isAbsolute as isAbsolute13, relative as relative19, resolve as resolve17 } from "path";
 
 // src/acg/scope/resolve.ts
 function stripModuleExt2(p) {
@@ -36038,7 +36662,7 @@ function bashSecretExposure(cmd) {
 }
 function isOutsideRepo(repoRoot, filePath) {
   const resolved = resolve17(repoRoot, filePath);
-  const rel = relative18(repoRoot, resolved);
+  const rel = relative19(repoRoot, resolved);
   return rel.startsWith("..") || isAbsolute13(rel);
 }
 function isClaudeMemoryPath(repoRoot, filePath) {
@@ -36047,7 +36671,7 @@ function isClaudeMemoryPath(repoRoot, filePath) {
     return false;
   const slug = resolve17(repoRoot).replace(/[^a-zA-Z0-9]/g, "-");
   const base = resolve17(home, ".claude", "projects", slug, "memory");
-  const rel = relative18(base, resolve17(filePath));
+  const rel = relative19(base, resolve17(filePath));
   return rel.length > 0 && !rel.startsWith("..") && !isAbsolute13(rel);
 }
 var WIN_TMP = /(^|[\\/])%temp%([\\/]|$)|(^|[\\/])%tmp%([\\/]|$)|[\\/]appdata[\\/]local[\\/]temp([\\/]|$)|[\\/]windows[\\/]temp([\\/]|$)/i;
@@ -36058,7 +36682,7 @@ function isSystemTmpPath(filePath) {
   for (const root of ["/tmp", "/private/tmp", tmpdir()]) {
     if (!root)
       continue;
-    const rel = relative18(resolve17(root), resolved);
+    const rel = relative19(resolve17(root), resolved);
     if (rel.length > 0 && !rel.startsWith("..") && !isAbsolute13(rel))
       return true;
   }
@@ -36183,7 +36807,7 @@ async function checkForbiddenScope(input, filePath) {
   const contract = await new ChangeContractStore(input.repoRoot).read(workItemId2);
   if (!contract)
     return;
-  const repoRel = relative18(input.repoRoot, resolve17(input.repoRoot, filePath));
+  const repoRel = relative19(input.repoRoot, resolve17(input.repoRoot, filePath));
   const archSpec = await loadArchSpec(input.repoRoot);
   if (contract.scope_mode === "whitelist" && contract.allowed_scope.length > 0) {
     const allowed = contract.allowed_scope.some((ref) => scopeRefMatches(ref, repoRel, archSpec));
@@ -36244,7 +36868,7 @@ async function checkAutopilotLease(input, filePath) {
     return;
   if (leases.some((l2) => l2.scope_source === "derived"))
     return;
-  const repoRel = relative18(input.repoRoot, resolve17(input.repoRoot, filePath));
+  const repoRel = relative19(input.repoRoot, resolve17(input.repoRoot, filePath));
   const inScope = leases.some((l2) => fileScopeContains(l2.file_scope, repoRel));
   if (inScope)
     return;
@@ -36395,7 +37019,7 @@ import { spawnSync } from "child_process";
 import { createHash as createHash10 } from "crypto";
 import { existsSync as existsSync8, readFileSync as readFileSync4, readdirSync as readdirSync2 } from "fs";
 import { homedir as homedir10 } from "os";
-import { dirname as dirname13, join as join67, resolve as resolve18 } from "path";
+import { dirname as dirname14, join as join67, resolve as resolve18 } from "path";
 function classifySession(pluginRoot, repoRoot) {
   if (pluginRoot === null)
     return "unknown";
@@ -36517,7 +37141,7 @@ function resolvePluginRoot(env2, argv1) {
   if (argv1 === undefined)
     return null;
   if (argv1.replace(/\\/g, "/").endsWith("/bin/ditto")) {
-    return resolve18(dirname13(argv1), "..");
+    return resolve18(dirname14(argv1), "..");
   }
   return null;
 }
@@ -38452,7 +39076,7 @@ init_ditto_paths();
 init_memory_scan();
 init_memory_store();
 import { readFile as readFile17, readdir as readdir23 } from "fs/promises";
-import { join as join75, relative as relative19 } from "path";
+import { join as join75, relative as relative20 } from "path";
 function bootstrapEventId(key) {
   return `memevt_${sha256Hex(key).slice(0, 12)}`;
 }
@@ -38582,7 +39206,7 @@ async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head
   const dir = join75(dittoDir(repoRoot), "knowledge", "adr");
   for (const abs of await listMarkdown(dir)) {
     const body = await readFile17(abs, "utf8");
-    const rel = relative19(repoRoot, abs);
+    const rel = relative20(repoRoot, abs);
     const sourceId = sourceIdForPath(rel);
     const source = {
       schema_version: "0.1.0",
@@ -38632,7 +39256,7 @@ async function ingestGlossary(repoRoot, sourceStore, eventStore, now, revision, 
   } catch {
     return result2;
   }
-  const rel = relative19(repoRoot, abs);
+  const rel = relative20(repoRoot, abs);
   const sourceId = sourceIdForPath(rel);
   const source = {
     schema_version: "0.1.0",
@@ -38706,7 +39330,7 @@ async function ingestHandoffs(repoRoot, sourceStore, eventStore, now, revision, 
   const dir = localDir(repoRoot, "handoff", "archive");
   for (const abs of await listMarkdown(dir)) {
     const body = await readFile17(abs, "utf8");
-    const rel = relative19(repoRoot, abs);
+    const rel = relative20(repoRoot, abs);
     const sourceId = sourceIdForPath(rel);
     const source = {
       schema_version: "0.1.0",
@@ -38913,12 +39537,12 @@ function pickConfidence(a2, b2) {
   }
   return a2.source_id <= b2.source_id ? a2 : b2;
 }
-function assembleSemanticIr(merged, run) {
+function assembleSemanticIr(merged, run2) {
   return {
     schema_version: SCHEMA_VERSION2,
-    ir_version: run.ir_version,
-    generated_at: run.generated_at,
-    extraction_run_id: run.extraction_run_id,
+    ir_version: run2.ir_version,
+    generated_at: run2.generated_at,
+    extraction_run_id: run2.extraction_run_id,
     nodes: merged.nodes,
     edges: merged.edges,
     hyperedges: []
@@ -40593,7 +41217,7 @@ init_common();
 init_fs();
 init_git();
 import { stat as stat9, writeFile as writeFile5 } from "fs/promises";
-import { dirname as dirname14, join as join79, relative as relative20, resolve as resolve21, sep as sep8 } from "path";
+import { dirname as dirname15, join as join79, relative as relative21, resolve as resolve21, sep as sep8 } from "path";
 init_work_item_store();
 init_worktree();
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
@@ -40614,7 +41238,7 @@ class RunWithRuntimeError extends Error {
   }
 }
 function repoRelative2(repoRoot, path) {
-  return relative20(repoRoot, path).split(sep8).join("/");
+  return relative21(repoRoot, path).split(sep8).join("/");
 }
 function resolveRepoCwd(repoRoot, cwd) {
   const parsed = relativePath.safeParse(cwd);
@@ -40667,7 +41291,7 @@ function parseRunnableProvider(provider) {
   throw new RunWithUsageError(`provider ${provider} is schema-valid but not runnable in v0.3`);
 }
 async function streamToFile(stream, path) {
-  await ensureDir(dirname14(path));
+  await ensureDir(dirname15(path));
   const bytes = await new Response(stream).arrayBuffer();
   await writeFile5(path, new Uint8Array(bytes));
 }
@@ -40825,7 +41449,7 @@ async function runVerifyStep(repoRoot, runRoot, runStore, runId2, rawCommand) {
   const tokens2 = command.split(/\s+/).filter(Boolean);
   const logAbsolute = runStore.pathFor(runId2, "verify.log");
   const logRelative = repoRelative2(repoRoot, logAbsolute);
-  await ensureDir(dirname14(logAbsolute));
+  await ensureDir(dirname15(logAbsolute));
   if (tokens2.length === 0) {
     await writeFile5(logAbsolute, "", "utf8");
     const entry2 = {
@@ -41274,7 +41898,7 @@ function diffSignatureMaps(before, after) {
   return changes;
 }
 async function extractSignatures(input, deps) {
-  const run = {
+  const run2 = {
     repoRoot: input.repoRoot,
     sourceRoot: input.sourceRoot,
     language: input.language,
@@ -41285,7 +41909,7 @@ async function extractSignatures(input, deps) {
     ...input.buildCommand ? { buildCommand: input.buildCommand } : {},
     ...input.binary ? { binary: input.binary } : {}
   };
-  return rowsToSignatureMap(await runRelationQuery(run, deps));
+  return rowsToSignatureMap(await runRelationQuery(run2, deps));
 }
 async function scanSignatureChanges(input, deps) {
   const baseSha = gitRevParse(input.repoRoot, input.baseRef);
@@ -41694,7 +42318,7 @@ var semanticCommand = defineCommand({
 
 // src/cli/commands/setup.ts
 import { homedir as homedir12 } from "os";
-import { dirname as dirname17, join as join86, resolve as resolve24 } from "path";
+import { dirname as dirname18, join as join86, resolve as resolve24 } from "path";
 init_fs();
 init_shared();
 
@@ -41895,7 +42519,7 @@ function defaultRegistry() {
 // src/core/setup.ts
 init_fs();
 import { cp, readFile as readFile19, rm as rm3, writeFile as writeFile6 } from "fs/promises";
-import { basename as basename4, dirname as dirname15, join as join84, resolve as resolve22 } from "path";
+import { basename as basename4, dirname as dirname16, join as join84, resolve as resolve22 } from "path";
 init_shared();
 
 // src/core/resource-routing.ts
@@ -42144,7 +42768,7 @@ async function installResource(decision, resourcesDir) {
     return { ...common, status: "kept", backupPath: null };
   }
   if (name === "CLAUDE.md") {
-    const sourcePath = join84(dirname15(decision.destPath), "AGENTS.md");
+    const sourcePath = join84(dirname16(decision.destPath), "AGENTS.md");
     const projectionBody = await fileExists(sourcePath) ? await readFile19(sourcePath, "utf8") : await readFile19(join84(resourcesDir, decision.filename), "utf8");
     const applied2 = await applyManagedFile(decision.destPath, projectionBody, "AGENTS.md");
     return {
@@ -42188,19 +42812,19 @@ async function setup(opts) {
 
 // src/cli/resources.ts
 import { existsSync as existsSync13 } from "fs";
-import { dirname as dirname16, join as join85, resolve as resolve23 } from "path";
+import { dirname as dirname17, join as join85, resolve as resolve23 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 function resolveResourcesDir(from) {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
     return join85(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
   }
-  const start = from ?? dirname16(fileURLToPath2(import.meta.url));
+  const start = from ?? dirname17(fileURLToPath2(import.meta.url));
   let dir = start;
   for (;; ) {
     const candidate = join85(dir, "resources", "managed");
     if (existsSync13(candidate))
       return candidate;
-    const parent = dirname16(dir);
+    const parent = dirname17(dir);
     if (parent === dir)
       break;
     dir = parent;
@@ -42355,7 +42979,7 @@ function includesCodex(host) {
 }
 async function resolveCodexPluginRoot(resourcesDir, projectRoot) {
   const currentPluginRoot = resolve24(resourcesDir, "..", "..");
-  const sibling = join86(dirname17(currentPluginRoot), "codex-plugin");
+  const sibling = join86(dirname18(currentPluginRoot), "codex-plugin");
   if (await fileExists(join86(sibling, ".codex-plugin", "plugin.json")))
     return sibling;
   const currentDist = join86(currentPluginRoot, "dist", "codex-plugin");
@@ -43424,6 +44048,211 @@ function buildCriteria(statements, prior, reason) {
     };
   });
 }
+function parseIssueCoord(raw) {
+  const m2 = /^([^/\s#]+)\/([^/\s#]+)#(\d+)$/.exec(raw.trim());
+  if (!m2)
+    return null;
+  return { repo: `${m2[1]}/${m2[2]}`, number: Number(m2[3]) };
+}
+function canonicalizeRepo(repo) {
+  return repo.trim().replace(/\.git$/i, "").toLowerCase();
+}
+function sameRepoCoord(a2, b2) {
+  return canonicalizeRepo(a2) === canonicalizeRepo(b2);
+}
+function readIssue(value) {
+  const v2 = value ?? {};
+  return {
+    title: typeof v2.title === "string" ? v2.title : "",
+    body: typeof v2.body === "string" ? v2.body : ""
+  };
+}
+async function findLinkedWorkItem(store, coord) {
+  for (const s2 of await store.list()) {
+    const item = await store.get(s2.id);
+    const gi = item.github_issue;
+    if (gi && gi.number === coord.number && sameRepoCoord(gi.repo, coord.repo))
+      return item.id;
+  }
+  return null;
+}
+async function createWorkItemFromIssue(store, coord, issue) {
+  const title = issue.title.trim() || `Issue ${coord.repo}#${coord.number}`;
+  const sourceRequest = [issue.title.trim(), issue.body.trim()].filter((s2) => s2.length > 0).join(`
+
+`) || `${coord.repo}#${coord.number}`;
+  const created = await store.create({
+    title: title.slice(0, 200),
+    source_request: sourceRequest,
+    goal: title,
+    acceptance_criteria: [
+      {
+        id: "ac-1",
+        statement: PLACEHOLDER_AC_STATEMENT,
+        verdict: "unverified",
+        evidence: []
+      }
+    ]
+  });
+  await store.update(created.id, (cur) => ({
+    ...cur,
+    github_issue: { repo: coord.repo, number: coord.number }
+  }));
+  return created.id;
+}
+async function pullIssue(deps, coord) {
+  const existingId = await findLinkedWorkItem(deps.store, coord);
+  if (existingId)
+    return { kind: "existing", id: existingId, coord };
+  const isSameRepo = deps.sessionRepo !== null && sameRepoCoord(coord.repo, deps.sessionRepo);
+  if (!isSameRepo) {
+    const foreignView = deps.client.issueView(coord.repo, coord.number);
+    const title = foreignView.ok ? readIssue(foreignView.value).title : "";
+    return { kind: "cross_repo", coord, sessionRepo: deps.sessionRepo, title };
+  }
+  const view = deps.client.issueView(coord.repo, coord.number);
+  if (!view.ok)
+    return { kind: "degraded", reason: view.reason, detail: view.detail };
+  const id = await createWorkItemFromIssue(deps.store, coord, readIssue(view.value));
+  return { kind: "created", id, coord };
+}
+var SUB_ISSUES_QUERY = "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){subIssues(first:100){nodes{number}}}}}";
+function parseSubIssueNumbers(value) {
+  const nodes = value?.data?.repository?.issue?.subIssues?.nodes;
+  if (!Array.isArray(nodes))
+    return [];
+  return nodes.map((n2) => n2?.number).filter((n2) => typeof n2 === "number" && Number.isInteger(n2));
+}
+function parseTaskListIssueNumbers(body) {
+  const re = /^\s*[-*]\s*\[[ xX]\]\s*#(\d+)\b/gm;
+  const out = [];
+  for (let m2 = re.exec(body);m2 !== null; m2 = re.exec(body))
+    out.push(Number(m2[1]));
+  return out;
+}
+async function mirrorHierarchy(deps, parentWorkId) {
+  const parent = await deps.store.get(parentWorkId);
+  const gi = parent.github_issue;
+  if (!gi) {
+    return {
+      kind: "degraded",
+      reason: "nonzero",
+      detail: `work item ${parentWorkId} is not linked to a GitHub issue \u2014 link it first with \`ditto work link-issue\``
+    };
+  }
+  const [owner, name] = gi.repo.split("/");
+  let childNumbers = [];
+  let source = null;
+  let lastDegrade = null;
+  const gql = deps.client.apiGraphql(SUB_ISSUES_QUERY, {
+    owner: owner ?? "",
+    name: name ?? "",
+    number: String(gi.number)
+  });
+  if (gql.ok) {
+    const nums = parseSubIssueNumbers(gql.value);
+    if (nums.length > 0) {
+      childNumbers = nums;
+      source = "graphql";
+    }
+  } else {
+    lastDegrade = gql;
+  }
+  if (source === null) {
+    const view = deps.client.issueView(gi.repo, gi.number);
+    if (view.ok) {
+      const nums = parseTaskListIssueNumbers(readIssue(view.value).body);
+      if (nums.length > 0) {
+        childNumbers = nums;
+        source = "task_list";
+      }
+    } else {
+      lastDegrade = view;
+    }
+  }
+  if (source === null) {
+    return {
+      kind: "degraded",
+      reason: lastDegrade?.reason ?? "unparseable",
+      detail: lastDegrade?.detail ?? "no sub-issues via graphql and no task-list refs in the issue body \u2014 provide the hierarchy manually"
+    };
+  }
+  const childWorkIds = [];
+  const unlinked = [];
+  for (const num of childNumbers) {
+    const childId = await findLinkedWorkItem(deps.store, { repo: gi.repo, number: num });
+    if (childId === null) {
+      unlinked.push(num);
+      continue;
+    }
+    if (childId === parentWorkId)
+      continue;
+    childWorkIds.push(childId);
+    await deps.store.update(childId, (cur) => ({ ...cur, parent_id: parentWorkId }));
+  }
+  await deps.store.update(parentWorkId, (cur) => ({
+    ...cur,
+    child_ids: Array.from(new Set([...cur.child_ids, ...childWorkIds]))
+  }));
+  return {
+    kind: "mirrored",
+    source,
+    parent_id: parentWorkId,
+    child_work_ids: childWorkIds,
+    child_issue_numbers: childNumbers,
+    unlinked_child_issues: unlinked
+  };
+}
+async function linkIssue(store, workId, coord) {
+  const item = await store.get(workId);
+  const existing = item.github_issue;
+  if (existing && existing.number === coord.number && sameRepoCoord(existing.repo, coord.repo)) {
+    return { kind: "linked", id: workId, coord, alreadyLinked: true };
+  }
+  if (existing)
+    return { kind: "conflict", id: workId, existing, coord };
+  await store.update(workId, (cur) => ({
+    ...cur,
+    github_issue: { repo: coord.repo, number: coord.number }
+  }));
+  return { kind: "linked", id: workId, coord, alreadyLinked: false };
+}
+function parseRemoteUrlToRepo(url) {
+  const m2 = /[:/]([^/:]+)\/([^/]+?)(?:\.git)?\/?$/.exec(url.trim());
+  return m2 ? `${m2[1]}/${m2[2]}` : null;
+}
+function resolveSessionRepoCoord(repoRoot) {
+  const proc = Bun.spawnSync(["git", "-C", repoRoot, "remote", "get-url", "origin"], {
+    stdout: "pipe",
+    stderr: "pipe"
+  });
+  if (proc.exitCode !== 0)
+    return null;
+  return parseRemoteUrlToRepo(proc.stdout?.toString() ?? "");
+}
+async function reflectManualTermination(repoRoot, item, trigger, opts) {
+  let ghMalformed = false;
+  const ghConfig = await readGithubConfig(repoRoot, () => {
+    ghMalformed = true;
+  });
+  const res = reflectTermination({ client: createGhClient(), config: ghConfig }, {
+    workItem: item,
+    trigger,
+    closeIssue: opts.closeIssue,
+    ...opts.completion ? { completion: opts.completion } : {}
+  });
+  if (res.commentPosted)
+    writeHuman("GitHub: posted result comment to the linked issue.");
+  if (res.statusUpdated)
+    writeHuman("GitHub: updated Project board status.");
+  if (res.issueClosed)
+    writeHuman("GitHub: closed the linked issue.");
+  if (ghMalformed) {
+    writeHuman("  GitHub reflection: config is malformed \u2014 board status update skipped (comment unaffected). Fix .ditto/local/config.json.");
+  }
+  for (const n2 of res.notices)
+    writeHuman(`  GitHub reflection: ${n2}`);
+}
 var workStart = defineCommand({
   meta: {
     name: "start",
@@ -43432,13 +44261,18 @@ var workStart = defineCommand({
   args: {
     goal: {
       type: "positional",
-      description: "Observable outcome stated in project terms",
-      required: true
+      description: "Observable outcome stated in project terms (omit with --issue: the issue title seeds it)",
+      required: false
     },
     request: {
       type: "string",
-      description: "Verbatim user request that produced this work item",
-      required: true
+      description: "Verbatim user request that produced this work item (omit with --issue)",
+      required: false
+    },
+    issue: {
+      type: "string",
+      description: "Pull a GitHub issue (owner/repo#n): fetch title/body via gh \u2192 seed source_request + save the github_issue coord. Idempotent; a cross-repo coord is link/display-only (execution blocked, ADR-0011).",
+      required: false
     },
     title: {
       type: "string",
@@ -43487,6 +44321,55 @@ var workStart = defineCommand({
     }
     const repoRoot = await resolveRepoRootForCreate();
     const store = new WorkItemStore(repoRoot);
+    if (args.issue !== undefined) {
+      const coord = parseIssueCoord(args.issue);
+      if (coord === null) {
+        writeError(`--issue must be an owner/repo#n coordinate (e.g. octo/app#42); got "${args.issue}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const sessionRepo = resolveSessionRepoCoord(repoRoot);
+      const result2 = await pullIssue({ client: createGhClient(), store, sessionRepo }, coord);
+      switch (result2.kind) {
+        case "created":
+          if (format === "json") {
+            writeJson2({
+              work_item_id: result2.id,
+              path: `.ditto/local/work-items/${result2.id}/work-item.json`,
+              github_issue: { repo: coord.repo, number: coord.number }
+            });
+          } else {
+            writeHuman(`Created work item ${result2.id} from ${coord.repo}#${coord.number}`);
+            writeHuman(`  path: ${repoRoot}/.ditto/local/work-items/${result2.id}/work-item.json`);
+          }
+          return;
+        case "existing":
+          if (format === "json") {
+            writeJson2({ work_item_id: result2.id, already_linked: true });
+          } else {
+            writeHuman(`${coord.repo}#${coord.number} is already linked to ${result2.id} \u2014 no duplicate created.`);
+          }
+          return;
+        case "cross_repo":
+          writeError(`cross-repo: ${coord.repo}#${coord.number} is not the session's rooted repo (${result2.sessionRepo ?? "unknown"}). Execution is blocked here (ADR-0011 session-rooting). Issue: "${result2.title}". Link it to an existing work item with: ditto work link-issue <wi> ${coord.repo}#${coord.number}`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        case "degraded":
+          writeError(`cannot pull ${coord.repo}#${coord.number}: gh ${result2.reason}${result2.detail ? ` (${result2.detail})` : ""}. Provide the link manually with: ditto work link-issue <wi> ${coord.repo}#${coord.number}`);
+          process.exit(RUNTIME_ERROR_EXIT);
+          return;
+      }
+    }
+    if (!args.goal) {
+      writeError("a goal positional is required (or use --issue <owner/repo#n> to pull one)");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.request) {
+      writeError("--request is required (or use --issue <owner/repo#n> to pull one)");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
     const profile = args.profile;
     const title = args.title ?? args.goal.slice(0, 80);
     const realStatements = args.criteria ? parseCriteriaStatements(args.criteria) : [];
@@ -43682,6 +44565,127 @@ var workSetCriteria = defineCommand({
     }
   }
 });
+function parseBoardPosition(itemList, issueNumber) {
+  const items = itemList?.items;
+  if (!Array.isArray(items))
+    return null;
+  for (const it of items) {
+    const content = it?.content;
+    if (!content || content.number !== issueNumber)
+      continue;
+    const status = it.status;
+    const priority = it.priority;
+    return {
+      status: typeof status === "string" ? status : null,
+      priority: typeof priority === "string" ? priority : null
+    };
+  }
+  return null;
+}
+function statusOptionNameById(fieldList) {
+  const out = new Map;
+  const fields = fieldList?.fields;
+  if (!Array.isArray(fields))
+    return out;
+  for (const f3 of fields) {
+    const options = f3?.options;
+    if (!Array.isArray(options))
+      continue;
+    for (const o3 of options) {
+      const id = o3?.id;
+      const name = o3?.name;
+      if (typeof id === "string" && typeof name === "string")
+        out.set(id, name);
+    }
+  }
+  return out;
+}
+var TERMINAL_WI_STATUSES = ["done", "abandoned"];
+function assessDivergence(wiStatus, boardStatusName, statusMap, optionNameById) {
+  if (!boardStatusName)
+    return { diverged: false, message: null };
+  const nameToTerminal = new Map;
+  for (const t2 of TERMINAL_WI_STATUSES) {
+    const optId = statusMap[t2];
+    if (!optId)
+      continue;
+    const name = optionNameById.get(optId);
+    if (name)
+      nameToTerminal.set(name.toLowerCase(), t2);
+  }
+  const boardTerminal = nameToTerminal.get(boardStatusName.toLowerCase());
+  if (boardTerminal) {
+    if (wiStatus === boardTerminal)
+      return { diverged: false, message: null };
+    return {
+      diverged: true,
+      message: `board=${boardStatusName} (ditto-terminal '${boardTerminal}') but WI=${wiStatus} \u2014 completion is ditto-gated (evidence unmet); the board is not backed by ditto evidence.`
+    };
+  }
+  if (TERMINAL_WI_STATUSES.includes(wiStatus)) {
+    return {
+      diverged: true,
+      message: `WI=${wiStatus} but board=${boardStatusName} \u2014 the board has not been reflected to the completed state.`
+    };
+  }
+  return { diverged: false, message: null };
+}
+function loadBoardView(deps, item) {
+  const gi = item.github_issue;
+  const coord = gi ? `${gi.repo}#${gi.number}` : "(no link)";
+  const noDivergence = { diverged: false, message: null };
+  if (!gi)
+    return {
+      coord,
+      position: null,
+      divergence: noDivergence,
+      unavailable: { reason: "no github_issue link" }
+    };
+  if (!deps.config) {
+    return {
+      coord,
+      position: null,
+      divergence: noDivergence,
+      unavailable: { reason: "no project config", detail: "run `ditto github setup`" }
+    };
+  }
+  const { owner, number } = deps.config.project;
+  const itemList = deps.client.projectItemList(owner, number);
+  if (!itemList.ok) {
+    return {
+      coord,
+      position: null,
+      divergence: noDivergence,
+      unavailable: { reason: itemList.reason, detail: itemList.detail }
+    };
+  }
+  const position = parseBoardPosition(itemList.value, gi.number);
+  if (!position) {
+    return {
+      coord,
+      position: null,
+      divergence: noDivergence,
+      unavailable: { reason: "issue not on the board" }
+    };
+  }
+  const fieldList = deps.client.projectFieldList(owner, number);
+  const optionNameById = fieldList.ok ? statusOptionNameById(fieldList.value) : new Map;
+  const divergence = assessDivergence(item.status, position.status, deps.config.status_map, optionNameById);
+  return { coord, position, divergence, unavailable: null };
+}
+function formatBoardLines(view) {
+  const lines = ["github:", `  issue:  ${view.coord}`];
+  if (view.unavailable) {
+    lines.push(`  board:  unavailable (${view.unavailable.reason}${view.unavailable.detail ? `: ${view.unavailable.detail}` : ""})`);
+  } else if (view.position) {
+    lines.push(`  board:  status=${view.position.status ?? "(none)"} \xB7 priority=${view.position.priority ?? "(none)"}`);
+  }
+  lines.push("  axes:   completion = ditto (write SoT) \xB7 priority = GitHub (read-only)");
+  if (view.divergence.diverged && view.divergence.message) {
+    lines.push(`  DIVERGENCE: ${view.divergence.message}`);
+  }
+  return lines;
+}
 var workStatus = defineCommand({
   meta: {
     name: "status",
@@ -43748,6 +44752,18 @@ var workStatus = defineCommand({
           writeHuman("worktrees:");
           for (const wt of item.worktrees) {
             writeHuman(`  - ${wt.owning_repo}	${wt.branch}	${wt.worktree_path}`);
+          }
+        }
+        if (item.github_issue) {
+          let ghMalformed = false;
+          const ghConfig = await readGithubConfig(repoRoot, () => {
+            ghMalformed = true;
+          });
+          const view = loadBoardView({ client: createGhClient(), config: ghConfig }, item);
+          for (const line of formatBoardLines(view))
+            writeHuman(line);
+          if (ghMalformed) {
+            writeHuman("  note:   github config malformed \u2014 board read skipped (fix .ditto/local/config.json).");
           }
         }
       }
@@ -43853,6 +44869,16 @@ var workAbandon = defineCommand({
   },
   args: {
     workId: { type: "positional", description: "Work item id to abandon", required: true },
+    "comment-issue": {
+      type: "boolean",
+      description: "Post a result-summary comment to the linked GitHub issue + reflect the abandoned status on the Project board (G4/G5). No-op when no issue is linked.",
+      default: false
+    },
+    "close-issue": {
+      type: "boolean",
+      description: "Also CLOSE the linked GitHub issue (implies --comment-issue). The only path that closes an issue.",
+      default: false
+    },
     output: { type: "string", description: "Output format: human|json", default: "human" }
   },
   run: async ({ args }) => {
@@ -43874,6 +44900,10 @@ var workAbandon = defineCommand({
         return;
       }
       const closed = await store.close(args.workId, "abandoned");
+      const closeIssue = args["close-issue"] === true;
+      if (args["comment-issue"] === true || closeIssue) {
+        await reflectManualTermination(repoRoot, closed, "abandoned", { closeIssue });
+      }
       if (format === "json") {
         writeJson2({ id: closed.id, status: closed.status, closed_at: closed.closed_at });
       } else {
@@ -43950,6 +44980,16 @@ var workDone = defineCommand({
       type: "string",
       description: "Why a lightweight close is acceptable for a declared-risk WI (with --override-heavy)",
       required: false
+    },
+    "comment-issue": {
+      type: "boolean",
+      description: "Post a result-summary comment to the linked GitHub issue + reflect the done status on the Project board (G4/G5). No-op when no issue is linked.",
+      default: false
+    },
+    "close-issue": {
+      type: "boolean",
+      description: "Also CLOSE the linked GitHub issue (implies --comment-issue). The only path that closes an issue.",
+      default: false
     },
     output: { type: "string", description: "Output format: human|json", default: "human" }
   },
@@ -44061,6 +45101,10 @@ var workDone = defineCommand({
       }
       await store.update(args.workId, (cur) => mirrorAcceptanceVerdicts(cur, completion));
       const closed = await store.close(args.workId, "done");
+      const closeIssue = args["close-issue"] === true;
+      if (args["comment-issue"] === true || closeIssue) {
+        await reflectManualTermination(repoRoot, closed, "done", { closeIssue, completion });
+      }
       if (format === "json") {
         writeJson2({ id: closed.id, status: closed.status, closed_at: closed.closed_at });
       } else {
@@ -44675,6 +45719,169 @@ var workChain = defineCommand({
     drive: workChainDrive
   }
 });
+var workLinkIssue = defineCommand({
+  meta: {
+    name: "link-issue",
+    description: "Link an EXISTING work item to a GitHub issue coordinate (owner/repo#n). Idempotent \u2014 the same coord twice is a no-op. A cross-repo coord is allowed (backlog link/display; execution stays per-repo, ADR-0011)."
+  },
+  args: {
+    workId: { type: "positional", description: "Work item id to link", required: true },
+    issue: {
+      type: "positional",
+      description: "GitHub issue coordinate: owner/repo#n",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const coord = parseIssueCoord(args.issue);
+    if (coord === null) {
+      writeError(`<issue> must be an owner/repo#n coordinate (e.g. octo/app#42); got "${args.issue}"`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const result2 = await linkIssue(store, args.workId, coord);
+      if (result2.kind === "conflict") {
+        writeError(`work ${args.workId} is already linked to ${result2.existing.repo}#${result2.existing.number} (1 work item \u2194 1 issue, v1). Unlink is not supported in v1; create a separate work item for ${coord.repo}#${coord.number}.`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      if (format === "json") {
+        writeJson2({
+          work_item_id: result2.id,
+          github_issue: { repo: coord.repo, number: coord.number },
+          already_linked: result2.alreadyLinked
+        });
+      } else if (result2.alreadyLinked) {
+        writeHuman(`${args.workId} is already linked to ${coord.repo}#${coord.number} \u2014 no change.`);
+      } else {
+        writeHuman(`Linked ${args.workId} to ${coord.repo}#${coord.number}.`);
+      }
+    } catch (err) {
+      writeError(`work link-issue failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
+var workMirrorHierarchy = defineCommand({
+  meta: {
+    name: "mirror-hierarchy",
+    description: "Mirror an EXISTING GitHub issue's sub-issue / task-list hierarchy into the work items' parent_id/child_ids. The <workId> must already be linked to the parent issue (`ditto work link-issue`). Resolution order: graphql sub-issues read \u2192 task-list `- [ ] #n` parse \u2192 manual degrade. ditto creates NO issues or work items \u2014 it only relates work items already linked to the child issues (an unlinked child issue is skipped)."
+  },
+  args: {
+    workId: {
+      type: "positional",
+      description: "Work item id linked to the PARENT GitHub issue",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const result2 = await mirrorHierarchy({ client: createGhClient(), store }, args.workId);
+      if (result2.kind === "degraded") {
+        if (format === "json") {
+          writeJson2({
+            work_item_id: args.workId,
+            mirrored: false,
+            reason: result2.reason,
+            detail: result2.detail
+          });
+        } else {
+          writeHuman(`No hierarchy mirrored for ${args.workId}: gh ${result2.reason} (${result2.detail}). Wire parent_id/child_ids manually if needed.`);
+        }
+        return;
+      }
+      if (format === "json") {
+        writeJson2({
+          work_item_id: result2.parent_id,
+          mirrored: true,
+          source: result2.source,
+          child_work_ids: result2.child_work_ids,
+          child_issue_numbers: result2.child_issue_numbers,
+          unlinked_child_issues: result2.unlinked_child_issues
+        });
+      } else {
+        writeHuman(`Mirrored ${result2.child_work_ids.length} child(ren) onto ${result2.parent_id} via ${result2.source}.`);
+        for (const id of result2.child_work_ids)
+          writeHuman(`  child: ${id}`);
+        if (result2.unlinked_child_issues.length > 0) {
+          writeHuman(`  skipped (no linked work item): #${result2.unlinked_child_issues.join(", #")}`);
+        }
+      }
+    } catch (err) {
+      writeError(`work mirror-hierarchy failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
+var workSyncIssue = defineCommand({
+  meta: {
+    name: "sync-issue",
+    description: "Roll up UNPOSTED autopilot decisions (escalations / batch-escalations / blocked terminations) and post them to the linked GitHub issue in ONE comment (G8). Posts unposted-only (idempotent \u2014 already-posted decisions are skipped); routine churn (retry/auto_fix/surface) is excluded. No-op when nothing new. No linked issue (own or parent) \u2192 skip + notice, not an error."
+  },
+  args: {
+    workId: { type: "positional", description: "Work item id to sync", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    try {
+      const res = await postUnpostedDecisions({ client: createGhClient(), store, aps: new AutopilotStore(repoRoot) }, args.workId);
+      if (format === "json") {
+        writeJson2(res);
+        return;
+      }
+      switch (res.kind) {
+        case "posted":
+          writeHuman(`Posted ${res.posted_ids.length} decision(s) to ${res.target.repo}#${res.target.number} in one comment.`);
+          break;
+        case "no_new":
+          writeHuman(`No new decisions to post for ${args.workId} \u2014 already in sync with ${res.target.repo}#${res.target.number}.`);
+          break;
+        case "skipped":
+          writeHuman(`  ${res.notice}`);
+          break;
+        case "degraded":
+          writeHuman(`  ${res.notice}`);
+          break;
+      }
+    } catch (err) {
+      writeError(`work sync-issue failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
 var workCommand = defineCommand({
   meta: {
     name: "work",
@@ -44682,6 +45889,9 @@ var workCommand = defineCommand({
   },
   subCommands: {
     start: workStart,
+    "link-issue": workLinkIssue,
+    "mirror-hierarchy": workMirrorHierarchy,
+    "sync-issue": workSyncIssue,
     "set-criteria": workSetCriteria,
     status: workStatus,
     handoff: workHandoff,
@@ -45043,6 +46253,7 @@ var main = defineCommand({
     uninstall: teardownCommand,
     teardown: teardownCommand,
     work: workCommand,
+    github: githubCommand,
     worktree: worktreeCommand,
     mode: modeCommand,
     run: runCommand2,
@@ -45078,4 +46289,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=6d65fc24f39477c3c4370626c9171960e204d5612ec241e57ec3582a14f062fa
+//# ditto-src-stamp=2bb66f5db1f0c4089b0fcb10e7f414cd1cbe9a013f7d443f7a260c779522816a
