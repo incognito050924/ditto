@@ -174,6 +174,20 @@ export const githubIssueLink = z
       .array(z.string())
       .optional()
       .describe('Decision-log ids already posted to this issue (G8 post idempotency)'),
+    // wi_2606287v9 (#5) ac-1: branch/session-grain CLAIM occupancy markers. These
+    // record whether THIS session/branch claimed the issue (so the same @me on a
+    // different branch is distinguishable). NOT a cache of the GitHub assignee —
+    // read-back stays SoT (ADR-20260628-github-backlog-sot); store only what
+    // idempotency + branch-grain needs. Additive + OPTIONAL; no schema_version bump.
+    claimed_branch: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Branch name THIS session claimed the issue on (branch-grain occupancy)'),
+    posted_claim_markers: z
+      .array(z.string())
+      .optional()
+      .describe('Claim markers already posted to this issue (claim-post idempotency)'),
   })
   .describe('Singular GitHub issue this work item is linked to (1 WI ↔ 1 issue, v1)');
 

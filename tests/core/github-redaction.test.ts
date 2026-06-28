@@ -5,7 +5,12 @@ import { join } from 'node:path';
 import { type AutopilotDecision, AutopilotStore } from '~/core/autopilot-store';
 import { createFakeGhClient } from '~/core/gh-client';
 import { postUnpostedDecisions } from '~/core/github-progress';
-import { buildPublicSafeSummary, sanitizeFragment } from '~/core/github-redaction';
+import {
+  buildPublicSafeSummary,
+  sanitizeBranchCoordinate,
+  sanitizeFragment,
+  scrubTokens,
+} from '~/core/github-redaction';
 import { reflectTermination } from '~/core/github-reflection';
 import { WorkItemStore } from '~/core/work-item-store';
 import type { DittoConfigGithub } from '~/schemas/ditto-config';
@@ -146,5 +151,43 @@ describe('ac-15: github-progress routes the decision rollup through redaction', 
     expect(body).not.toContain(ABS); // raw absolute path not emitted
     expect(body).not.toContain('/Users/x/dev'); // no internal dir prefix leaks
     expect(body).not.toContain('frame1'); // raw failure-log tail dropped
+  });
+});
+
+// branch coordinate redaction (n4-redaction / wi_2606287v9, issue #5).
+// "which branch is in flight" must surface on a public issue comment WITHOUT leaking
+// the internal wi_ id or a worktree absolute path, yet stay a usable coordinate (not
+// mangled to a bare `ditto/`). Asserts BOTH guards: the leak guard AND the
+// not-mangled-to-uselessness guard.
+describe('ac-4: sanitizeBranchCoordinate — branch exposure without leaking', () => {
+  const BRANCH = 'ditto/wi_2606287v9';
+  const WORKTREE = `${REPO}/wt/wi_2606287v9`; // an absolute worktree path
+
+  test('drops the wi_ id yet keeps a non-empty, non-mangled branch coordinate', () => {
+    const coord = sanitizeBranchCoordinate(BRANCH, REPO);
+    // leak guard: no internal wi_ identifier survives.
+    expect(coord).not.toContain('wi_');
+    // not-mangled guard: still useful — keeps the ditto/ namespace AND the suffix,
+    // i.e. NOT collapsed to a bare `ditto/` or emptied.
+    expect(coord.length).toBeGreaterThan('ditto/'.length);
+    expect(coord).not.toBe('ditto/');
+    expect(coord).toContain('ditto/');
+    expect(coord).toContain('2606287v9');
+  });
+
+  test('a notice carrying branch + worktree abs path leaks neither wi_ nor the path', () => {
+    const notice = `in flight on ${BRANCH} (worktree ${WORKTREE})`;
+    const coord = sanitizeBranchCoordinate(notice, REPO);
+    expect(coord).not.toContain('wi_'); // no internal id
+    expect(coord).not.toContain(WORKTREE); // no absolute worktree path
+    expect(coord).not.toContain(`${REPO}/wt`); // no internal dir prefix leaks
+    expect(coord).toContain('2606287v9'); // branch coordinate still survives
+  });
+
+  test('scrubTokens removes a leaked PAT token', () => {
+    const pat = `ghp_${'B'.repeat(36)}`;
+    const out = scrubTokens(`leaked ${pat} here`);
+    expect(out).not.toContain('ghp_');
+    expect(out).toContain('[redacted]');
   });
 });

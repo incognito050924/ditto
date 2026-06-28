@@ -26,6 +26,7 @@ export const DEFAULT_GH_TIMEOUT_MS = 30_000;
 export type GhDegradeReason =
   | 'absent' // gh binary not found (ENOENT)
   | 'unauthenticated' // not logged in
+  | 'rate_limited' // 403/429 secondary or primary rate limit — transient, surface retry/wait
   | 'insufficient_perm' // 403 / permission denied
   | 'unknown_command' // old gh lacks the subcommand/flag
   | 'timeout' // exec timed out — network-hang guard
@@ -95,6 +96,14 @@ export function classifyGhFailure(result: GhExecResult): GhDegradeReason {
   ) {
     return 'unauthenticated';
   }
+  // Rate limit MUST be tested BEFORE the 403/perm branch: GitHub returns HTTP 403
+  // (and sometimes 429) for a secondary/primary rate limit, which would otherwise
+  // mis-classify as a permanent permission error. This is transient — surface
+  // retry/wait guidance, NOT a retry loop (ADR-0018: a retry on a rate-limited
+  // endpoint worsens it; the notice suffices).
+  if (/rate limit|secondary rate limit|429|retry-after/.test(text)) {
+    return 'rate_limited';
+  }
   if (/http 403|permission|not accessible by|must have admin|forbidden|insufficient/.test(text)) {
     return 'insufficient_perm';
   }
@@ -106,6 +115,19 @@ export function classifyGhFailure(result: GhExecResult): GhDegradeReason {
   return 'nonzero';
 }
 
+/** Extract assignee `login`s from an `issue view --json …,assignees` payload.
+ *  Narrow-don't-cast (mirrors parseSubIssueNumbers / parseBoardPosition in work.ts):
+ *  an `Array.isArray` guard + per-element `typeof` narrowing. A missing/empty/odd
+ *  payload yields [], NEVER a throw — read-back stays inside the GhDegradation
+ *  envelope (ADR-0018) so a malformed gh response cannot crash a claim check. */
+export function parseAssigneeLogins(viewValue: unknown): string[] {
+  const assignees = (viewValue as { assignees?: unknown })?.assignees;
+  if (!Array.isArray(assignees)) return [];
+  return assignees
+    .map((a) => (a as { login?: unknown })?.login)
+    .filter((l): l is string => typeof l === 'string' && l.length > 0);
+}
+
 /** True iff the invocation ran and exited cleanly (no spawn error, exit 0). Any
  *  other shape — spawn failure, null exit, or non-zero — is a degradable condition. */
 function invocationOk(result: GhExecResult): boolean {
@@ -113,7 +135,7 @@ function invocationOk(result: GhExecResult): boolean {
 }
 
 /** Build the typed degradation for a failed invocation (pre-mortem: every failure
- *  class — absent/unauth/perm/unknown-cmd/timeout/non-zero — maps to a reason). */
+ *  class — absent/unauth/rate-limit/perm/unknown-cmd/timeout/non-zero — maps to a reason). */
 function degradationFor(result: GhExecResult): GhDegradation {
   const detail = (result.stderr || result.stdout || '').trim().slice(0, 200);
   return { ok: false, reason: classifyGhFailure(result), detail };
@@ -154,6 +176,12 @@ export interface GhClient {
   issueView(repo: string, issueNumber: number): GhResult<unknown>;
   issueComment(repo: string, issueNumber: number, body: string): GhResult<void>;
   issueClose(repo: string, issueNumber: number): GhResult<void>;
+  /** `gh issue edit <n> --add-assignee <who>` — claim/assign (ac-1). `who` is an
+   *  argv token (e.g. `@me`), never interpolated into a shell string. */
+  issueAddAssignee(repo: string, issueNumber: number, assignee: string): GhResult<void>;
+  /** `gh issue edit <n> --remove-assignee <who>` — unclaim (ac-7). Callers pass
+   *  `@me` to remove ONLY the current actor; this never clears other assignees. */
+  issueRemoveAssignee(repo: string, issueNumber: number, assignee: string): GhResult<void>;
   projectItemAdd(owner: string, projectNumber: number, contentUrl: string): GhResult<unknown>;
   projectItemEdit(edit: ProjectItemEdit): GhResult<void>;
   projectFieldList(owner: string, projectNumber: number): GhResult<unknown>;
@@ -175,7 +203,15 @@ export function createGhClient(
     issueView: (repo, issueNumber) =>
       runJson(
         exec,
-        ['issue', 'view', String(issueNumber), '-R', repo, '--json', 'number,title,state,body,url'],
+        [
+          'issue',
+          'view',
+          String(issueNumber),
+          '-R',
+          repo,
+          '--json',
+          'number,title,state,body,url,assignees',
+        ],
         timeoutMs,
       ),
     issueComment: (repo, issueNumber, body) =>
@@ -184,6 +220,22 @@ export function createGhClient(
       ),
     issueClose: (repo, issueNumber) =>
       toVoid(run(exec, ['issue', 'close', String(issueNumber), '-R', repo], timeoutMs)),
+    issueAddAssignee: (repo, issueNumber, assignee) =>
+      toVoid(
+        run(
+          exec,
+          ['issue', 'edit', String(issueNumber), '-R', repo, '--add-assignee', assignee],
+          timeoutMs,
+        ),
+      ),
+    issueRemoveAssignee: (repo, issueNumber, assignee) =>
+      toVoid(
+        run(
+          exec,
+          ['issue', 'edit', String(issueNumber), '-R', repo, '--remove-assignee', assignee],
+          timeoutMs,
+        ),
+      ),
     projectItemAdd: (owner, projectNumber, contentUrl) =>
       runJson(
         exec,
@@ -277,6 +329,8 @@ export function createFakeGhClient(options: FakeGhClientOptions = {}): {
     issueView: make('issueView'),
     issueComment: make('issueComment'),
     issueClose: make('issueClose'),
+    issueAddAssignee: make('issueAddAssignee'),
+    issueRemoveAssignee: make('issueRemoveAssignee'),
     projectItemAdd: make('projectItemAdd'),
     projectItemEdit: make('projectItemEdit'),
     projectFieldList: make('projectFieldList'),

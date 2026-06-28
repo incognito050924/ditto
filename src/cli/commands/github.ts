@@ -24,6 +24,14 @@ import { createStdioPromptIO } from '../wizard/prompt-io';
 const STATUS_MAP_KEYS = ['done', 'abandoned'] as const;
 type StatusMapKey = (typeof STATUS_MAP_KEYS)[number];
 
+/**
+ * ac-9/ac-5: claim_status_map 키는 ditto 비종료(non-terminal) 진행 상태로 제한된다.
+ * terminal `status_map`(done|abandoned)과 분리된 SEPARATE 매핑 — wizard·플래그·config가
+ * 어긋나지 않도록 이 단일 소스에서 키 집합을 끌어 쓴다(schema는 OPEN string 키라 enum이 없음).
+ */
+const CLAIM_STATUS_MAP_KEYS = ['in_progress', 'blocked'] as const;
+type ClaimStatusMapKey = (typeof CLAIM_STATUS_MAP_KEYS)[number];
+
 export interface ProjectRef {
   owner: string;
   number: number;
@@ -39,6 +47,8 @@ export interface GithubSetupOptions {
   project?: string;
   /** "done=optid,abandoned=optid2" — `--status-map`. */
   statusMap?: string;
+  /** "in_progress=optid,blocked=optid2" — `--claim-status-map` (비종료 보드 매핑, ac-9). */
+  claimStatusMap?: string;
   /** `--auto-reflect`. undefined면 대화형 confirm(기본 false) / 비대화형 false. */
   autoReflect?: boolean;
   /** true면 절대 묻지 않는다(플래그만, CI/자동화). */
@@ -70,26 +80,49 @@ export function parseProjectRef(input: string): ProjectRef | null {
   return { owner, number };
 }
 
-/** "done=optid,abandoned=optid2" 플래그를 파싱한다. done/abandoned 외 키·빈 값은 dropped로. */
-export function parseStatusMapFlag(input: string): {
-  map: Partial<Record<StatusMapKey, string>>;
-  dropped: string[];
-} {
-  const map: Partial<Record<StatusMapKey, string>> = {};
+/**
+ * "key=optid,key2=optid2" 플래그를 `allowedKeys`로 한정해 파싱한다.
+ * 허용되지 않은 키·빈 값은 dropped로 — terminal/비종료 두 매핑이 같은 규칙을 공유한다.
+ */
+function parseKeyedOptionFlag<K extends string>(
+  input: string,
+  allowedKeys: readonly K[],
+): { map: Partial<Record<K, string>>; dropped: string[] } {
+  const map: Partial<Record<K, string>> = {};
   const dropped: string[] = [];
+  const allowed = allowedKeys as readonly string[];
   for (const part of input.split(',')) {
     const entry = part.trim();
     if (entry === '') continue;
     const eq = entry.indexOf('=');
     const key = (eq === -1 ? entry : entry.slice(0, eq)).trim();
     const value = (eq === -1 ? '' : entry.slice(eq + 1)).trim();
-    if ((STATUS_MAP_KEYS as readonly string[]).includes(key) && value !== '') {
-      map[key as StatusMapKey] = value;
+    if (allowed.includes(key) && value !== '') {
+      map[key as K] = value;
     } else {
       dropped.push(entry);
     }
   }
   return { map, dropped };
+}
+
+/** "done=optid,abandoned=optid2" 플래그를 파싱한다. done/abandoned 외 키·빈 값은 dropped로. */
+export function parseStatusMapFlag(input: string): {
+  map: Partial<Record<StatusMapKey, string>>;
+  dropped: string[];
+} {
+  return parseKeyedOptionFlag(input, STATUS_MAP_KEYS);
+}
+
+/**
+ * "in_progress=optid,blocked=optid2" 플래그를 파싱한다(ac-9 비종료 보드 매핑).
+ * in_progress/blocked 외 키·빈 값은 dropped로 — terminal status_map과 동일 규칙.
+ */
+export function parseClaimStatusMapFlag(input: string): {
+  map: Partial<Record<ClaimStatusMapKey, string>>;
+  dropped: string[];
+} {
+  return parseKeyedOptionFlag(input, CLAIM_STATUS_MAP_KEYS);
 }
 
 /**
@@ -164,7 +197,13 @@ export async function buildGithubConfig(
     );
   }
 
-  // ④ D7 status_map 매핑 확정 — KEYS = done|abandoned ONLY.
+  // ④ status/claim 매핑에서 공유하는 선택지(대화형) — 한 번만 조립한다.
+  const choiceOptions: Option[] = [
+    { label: '(매핑 안 함 — 반영 시 skip)', value: '' },
+    ...options.map((o) => ({ label: o.name, value: o.id })),
+  ];
+
+  // ④a D7 terminal status_map 매핑 확정 — KEYS = done|abandoned ONLY.
   const statusMap: Partial<Record<StatusMapKey, string>> = {};
   if (opts.nonInteractive || opts.statusMap !== undefined) {
     const { map, dropped } = parseStatusMapFlag(opts.statusMap ?? '');
@@ -179,10 +218,6 @@ export async function buildGithubConfig(
       statusMap[key] = optId;
     }
   } else {
-    const choiceOptions: Option[] = [
-      { label: '(매핑 안 함 — 반영 시 skip)', value: '' },
-      ...options.map((o) => ({ label: o.name, value: o.id })),
-    ];
     for (const key of STATUS_MAP_KEYS) {
       const picked = await select(
         io,
@@ -191,6 +226,34 @@ export async function buildGithubConfig(
         '',
       );
       if (picked !== '' && optionIds.has(picked)) statusMap[key] = picked;
+    }
+  }
+
+  // ④b ac-9 비종료(claim) 보드 매핑 확정 — KEYS = in_progress|blocked. terminal
+  // status_map과 분리된 claim_status_map에 쓴다(터미널 enum은 그대로 둔다).
+  const claimStatusMap: Partial<Record<ClaimStatusMapKey, string>> = {};
+  if (opts.nonInteractive || opts.claimStatusMap !== undefined) {
+    const { map, dropped } = parseClaimStatusMapFlag(opts.claimStatusMap ?? '');
+    for (const d of dropped)
+      notices.push(`claim-status-map 항목 무시(키는 in_progress|blocked만): ${d}`);
+    for (const key of CLAIM_STATUS_MAP_KEYS) {
+      const optId = map[key];
+      if (optId === undefined) continue;
+      if (!optionIds.has(optId)) {
+        notices.push(`claim 매핑 옵션 id '${optId}'(${key})가 Project status에 없음 — skip`);
+        continue;
+      }
+      claimStatusMap[key] = optId;
+    }
+  } else {
+    for (const key of CLAIM_STATUS_MAP_KEYS) {
+      const picked = await select(
+        io,
+        `ditto '${key}' → Project status 옵션 선택(claim 보드 반영)`,
+        choiceOptions,
+        '',
+      );
+      if (picked !== '' && optionIds.has(picked)) claimStatusMap[key] = picked;
     }
   }
 
@@ -205,6 +268,7 @@ export async function buildGithubConfig(
   const candidate = {
     project: { owner: ref.owner, number: ref.number, ...(nodeId ? { node_id: nodeId } : {}) },
     status_map: statusMap,
+    ...(Object.keys(claimStatusMap).length > 0 ? { claim_status_map: claimStatusMap } : {}),
     auto_reflect: autoReflect,
   };
   const parsed = dittoConfigGithub.safeParse(candidate);
@@ -235,6 +299,12 @@ const githubSetupCommand = defineCommand({
       required: false,
       description: 'D7 매핑 "done=<optid>,abandoned=<optid>" (키=done|abandoned)',
     },
+    'claim-status-map': {
+      type: 'string',
+      required: false,
+      description:
+        '비종료 보드 매핑 "in_progress=<optid>,blocked=<optid>" (키=in_progress|blocked)',
+    },
     'auto-reflect': {
       type: 'boolean',
       required: false,
@@ -259,6 +329,9 @@ const githubSetupCommand = defineCommand({
         nonInteractive,
         ...(typeof args.project === 'string' ? { project: args.project } : {}),
         ...(typeof args['status-map'] === 'string' ? { statusMap: args['status-map'] } : {}),
+        ...(typeof args['claim-status-map'] === 'string'
+          ? { claimStatusMap: args['claim-status-map'] }
+          : {}),
         ...(typeof args['auto-reflect'] === 'boolean' ? { autoReflect: args['auto-reflect'] } : {}),
       };
       const outcome = await buildGithubConfig(io, createGhClient(), opts);
@@ -276,6 +349,16 @@ const githubSetupCommand = defineCommand({
           Object.keys(outcome.config.status_map).length === 0
             ? '(none — 매핑 없음, 반영 시 skip)'
             : Object.entries(outcome.config.status_map)
+                .map(([k, v]) => `${k}=${v}`)
+                .join(', ')
+        }`,
+      );
+      const claimMap = outcome.config.claim_status_map;
+      writeHuman(
+        `  claim_status_map: ${
+          !claimMap || Object.keys(claimMap).length === 0
+            ? '(none — 비종료 매핑 없음, 반영 시 skip)'
+            : Object.entries(claimMap)
                 .map(([k, v]) => `${k}=${v}`)
                 .join(', ')
         }`,

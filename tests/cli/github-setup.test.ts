@@ -3,6 +3,7 @@ import {
   type GithubSetupOptions,
   buildGithubConfig,
   extractStatusOptions,
+  parseClaimStatusMapFlag,
   parseProjectRef,
   parseStatusMapFlag,
 } from '~/cli/commands/github';
@@ -69,6 +70,20 @@ describe('parseStatusMapFlag - keys limited to done|abandoned (D7)', () => {
   });
 });
 
+describe('parseClaimStatusMapFlag - keys limited to in_progress|blocked (ac-9)', () => {
+  test('valid in_progress+blocked', () => {
+    expect(parseClaimStatusMapFlag('in_progress=opt_inprog,blocked=opt_todo')).toEqual({
+      map: { in_progress: 'opt_inprog', blocked: 'opt_todo' },
+      dropped: [],
+    });
+  });
+  test('terminal key (done) is dropped here — claim map only carries non-terminal keys', () => {
+    const r = parseClaimStatusMapFlag('in_progress=opt_inprog,done=opt_done');
+    expect(r.map).toEqual({ in_progress: 'opt_inprog' });
+    expect(r.dropped).toEqual(['done=opt_done']);
+  });
+});
+
 describe('extractStatusOptions', () => {
   test('picks the Status single-select options', () => {
     expect(extractStatusOptions(STATUS_FIELD_LIST)).toEqual([
@@ -115,8 +130,10 @@ describe('buildGithubConfig - ac-14 (interactive == flag, idempotent)', () => {
   test('interactive (PromptIO + fake gh) and non-interactive flags produce IDENTICAL config', async () => {
     const { client } = createFakeGhClient({ values: { projectFieldList: STATUS_FIELD_LIST } });
 
+    // Interactive select order: project, done, abandoned, in_progress, blocked, auto-reflect.
+    // choiceOptions index: 1='(none)', 2=opt_todo, 3=opt_inprog, 4=opt_done, 5=opt_dropped.
     const interactive = await buildGithubConfig(
-      fakeIO(['incognito050924/5', '4', '5', '']),
+      fakeIO(['incognito050924/5', '4', '5', '3', '2', '']),
       client,
       { nonInteractive: false },
     );
@@ -125,6 +142,7 @@ describe('buildGithubConfig - ac-14 (interactive == flag, idempotent)', () => {
       nonInteractive: true,
       project: 'incognito050924/5',
       statusMap: 'done=opt_done,abandoned=opt_dropped',
+      claimStatusMap: 'in_progress=opt_inprog,blocked=opt_todo',
       autoReflect: false,
     };
     const noninteractive = await buildGithubConfig(fakeIO([]), client, flags);
@@ -136,8 +154,86 @@ describe('buildGithubConfig - ac-14 (interactive == flag, idempotent)', () => {
       expect(interactive.config).toEqual({
         project: { owner: 'incognito050924', number: 5 },
         status_map: { done: 'opt_done', abandoned: 'opt_dropped' },
+        claim_status_map: { in_progress: 'opt_inprog', blocked: 'opt_todo' },
         auto_reflect: false,
       });
+    }
+  });
+
+  // ac-9: a re-run with identical inputs yields a byte-identical config (canonical key
+  // order in both status_map and claim_status_map — JSON.stringify must match exactly).
+  test('ac-9 re-run with same flags is idempotent (byte-identical JSON)', async () => {
+    const { client } = createFakeGhClient({ values: { projectFieldList: STATUS_FIELD_LIST } });
+    const flags: GithubSetupOptions = {
+      nonInteractive: true,
+      project: 'incognito050924/5',
+      statusMap: 'done=opt_done,abandoned=opt_dropped',
+      claimStatusMap: 'blocked=opt_todo,in_progress=opt_inprog',
+      autoReflect: false,
+    };
+    const a = await buildGithubConfig(fakeIO([]), client, flags);
+    const b = await buildGithubConfig(fakeIO([]), client, flags);
+    expect(a.ok && b.ok).toBe(true);
+    if (a.ok && b.ok) {
+      expect(JSON.stringify(a.config)).toBe(JSON.stringify(b.config));
+      // claim_status_map key order is canonical (in_progress before blocked) regardless
+      // of the order the flag listed them.
+      expect(JSON.stringify(a.config.claim_status_map)).toBe(
+        JSON.stringify({ in_progress: 'opt_inprog', blocked: 'opt_todo' }),
+      );
+    }
+  });
+
+  // ac-9: each claim option id is re-checked against the live Project status options;
+  // an id that is not a real option is skipped with a notice (terminal path's guard).
+  test('ac-9 invalid claim option id is skipped with a notice (live option re-check)', async () => {
+    const { client } = createFakeGhClient({ values: { projectFieldList: STATUS_FIELD_LIST } });
+    const outcome = await buildGithubConfig(fakeIO([]), client, {
+      nonInteractive: true,
+      project: 'incognito050924/5',
+      claimStatusMap: 'in_progress=opt_inprog,blocked=opt_nonexistent',
+      autoReflect: false,
+    });
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.config.claim_status_map).toEqual({ in_progress: 'opt_inprog' });
+      expect(outcome.notices.join(' ')).toContain('opt_nonexistent');
+    }
+  });
+
+  // ac-9: a terminal key handed to --claim-status-map is dropped (notice); terminal
+  // status_map continues to work unchanged via --status-map.
+  test('ac-9 claim flag drops terminal keys; terminal status_map unaffected', async () => {
+    const { client } = createFakeGhClient({ values: { projectFieldList: STATUS_FIELD_LIST } });
+    const outcome = await buildGithubConfig(fakeIO([]), client, {
+      nonInteractive: true,
+      project: 'incognito050924/5',
+      statusMap: 'done=opt_done',
+      claimStatusMap: 'in_progress=opt_inprog,done=opt_done',
+      autoReflect: false,
+    });
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.config.status_map).toEqual({ done: 'opt_done' });
+      expect(outcome.config.claim_status_map).toEqual({ in_progress: 'opt_inprog' });
+      expect(outcome.notices.join(' ')).toContain('done=opt_done');
+    }
+  });
+
+  // ac-9: terminal-only setup (no claim flag) omits claim_status_map entirely — the
+  // separate optional field is absent, not an empty object (back-compat preserved).
+  test('ac-9 terminal-only config omits claim_status_map (no empty object)', async () => {
+    const { client } = createFakeGhClient({ values: { projectFieldList: STATUS_FIELD_LIST } });
+    const outcome = await buildGithubConfig(fakeIO([]), client, {
+      nonInteractive: true,
+      project: 'incognito050924/5',
+      statusMap: 'done=opt_done,abandoned=opt_dropped',
+      autoReflect: false,
+    });
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.config.claim_status_map).toBeUndefined();
+      expect(Object.keys(outcome.config)).not.toContain('claim_status_map');
     }
   });
 

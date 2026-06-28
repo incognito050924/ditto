@@ -15,10 +15,13 @@ import { buildPublicSafeSummary } from './github-redaction';
  * which persists completion.json for EVERY verdict (cross-feature regression
  * guard: a non-terminal complete must post NOTHING).
  *
- * Reflection is two independent, separately-degradable effects (ADR-0018 우아한
+ * Reflection is independent, separately-degradable effects (ADR-0018 우아한
  * 강등 — every gh failure is a notice, never a throw, never a block):
  *   1. a result-summary issue comment on the linked github_issue (ac-4);
- *   2. a Project v2 board status update via the D7 `status_map` (ac-5).
+ *   2. a Project v2 board status update via the D7 `status_map` (ac-5);
+ *   3. wi_2606287v9 ac-7 — a terminal @me claim release (drop the @me assignee) so
+ *      the board/assignee is clean on close; the result-summary comment above is the
+ *      durable audit, so NO second comment is posted (the 1-comment contract holds).
  * The issue is CLOSED only on the explicit manual `--close-issue` path; autopilot
  * NEVER auto-closes. completion stays ditto-evidence — GitHub status is never
  * pulled back into the verdict.
@@ -45,6 +48,9 @@ export interface ReflectionResult {
   commentPosted: boolean;
   statusUpdated: boolean;
   issueClosed: boolean;
+  /** wi_2606287v9 ac-7: whether the terminal @me claim was released (assignee dropped)
+   *  on close. Best-effort + degradable — false on no-link / degraded / non-terminal. */
+  assigneeReleased: boolean;
   /** Human-readable skip/degradation notices (never thrown — surfaced by the caller). */
   notices: string[];
 }
@@ -89,30 +95,27 @@ export function buildResultSummary(input: ReflectionInput): string {
 }
 
 /**
- * Resolve + apply the Project v2 board status update for a terminal trigger via
- * the D7 `status_map`. Every miss is a skip + notice (unmapped option, unknown
- * project node id, issue not on the board, no Status field, gh degradation) — the
- * completion stays ditto-evidence and the board is never allowed to fail the
- * close. Returns whether the edit landed plus any notices.
+ * Resolve + apply ONE Project v2 board status update to a known single-select
+ * `optionId`, sharing the WHOLE resolution chain (project node id → board item id →
+ * field-list → Status field id → `projectItemEdit`) between the terminal reflection
+ * path (this file, via `status_map`) and the non-terminal claim path (github-claim,
+ * via `claim_status_map`). Option-id-parameterized so the caller owns ONLY the
+ * map→option lookup; every miss here is a skip + notice (unknown project node id,
+ * issue not on the board, no Status field, gh degradation). The board is never
+ * allowed to fail the caller. Returns whether the edit landed plus any notices.
  */
-function applyBoardStatus(
+export function applyBoardStatusOption(
   deps: ReflectionDeps,
-  input: ReflectionInput,
+  workItem: WorkItem,
+  optionId: string,
 ): { statusUpdated: boolean; notices: string[] } {
   const notices: string[] = [];
   const cfg = deps.config;
-  const optionId = cfg?.status_map?.[input.trigger];
-  if (!optionId) {
-    notices.push(
-      `Project board: no status_map entry for '${input.trigger}' — board status update skipped (run \`ditto github setup\` to map it).`,
-    );
-    return { statusUpdated: false, notices };
-  }
   if (!cfg?.project.node_id) {
     notices.push('Project board: project node_id unknown in config — board status update skipped.');
     return { statusUpdated: false, notices };
   }
-  const itemId = input.workItem.github_issue?.project_item_id;
+  const itemId = workItem.github_issue?.project_item_id;
   if (!itemId) {
     notices.push(
       'Project board: issue not on the board (no project_item_id) — board status update skipped.',
@@ -147,6 +150,27 @@ function applyBoardStatus(
 }
 
 /**
+ * Resolve + apply the Project v2 board status update for a TERMINAL trigger via the
+ * D7 `status_map`. Owns only the trigger→option lookup (an unmapped trigger is a skip
+ * + notice); the shared resolution chain lives in `applyBoardStatusOption`.
+ */
+function applyBoardStatus(
+  deps: ReflectionDeps,
+  input: ReflectionInput,
+): { statusUpdated: boolean; notices: string[] } {
+  const optionId = deps.config?.status_map?.[input.trigger];
+  if (!optionId) {
+    return {
+      statusUpdated: false,
+      notices: [
+        `Project board: no status_map entry for '${input.trigger}' — board status update skipped (run \`ditto github setup\` to map it).`,
+      ],
+    };
+  }
+  return applyBoardStatusOption(deps, input.workItem, optionId);
+}
+
+/**
  * Perform the reflection effects for an established terminal transition. The
  * caller has ALREADY decided to reflect (autopilot: `auto_reflect` opt-in; manual:
  * an explicit flag) — this function does the posting, gracefully degrading each
@@ -157,7 +181,13 @@ export function reflectTermination(deps: ReflectionDeps, input: ReflectionInput)
   const gi = input.workItem.github_issue;
   if (!gi) {
     notices.push('No linked GitHub issue on the work item — reflection skipped.');
-    return { commentPosted: false, statusUpdated: false, issueClosed: false, notices };
+    return {
+      commentPosted: false,
+      statusUpdated: false,
+      issueClosed: false,
+      assigneeReleased: false,
+      notices,
+    };
   }
 
   // 1. result-summary comment (ac-4). Public-safe via the redaction allow-list (ac-15).
@@ -172,7 +202,17 @@ export function reflectTermination(deps: ReflectionDeps, input: ReflectionInput)
   const board = applyBoardStatus(deps, input);
   notices.push(...board.notices);
 
-  // 3. close ONLY on the explicit manual --close-issue path. Autopilot never closes.
+  // 3. terminal @me claim release (wi_2606287v9 ac-7): drop the @me assignee so the
+  //    board/assignee is clean on close. @me-only (issueRemoveAssignee never clears
+  //    other assignees). Best-effort + degradable; the summary comment above is the
+  //    durable audit, so NO second comment is posted.
+  const release = deps.client.issueRemoveAssignee(gi.repo, gi.number, '@me');
+  const assigneeReleased = release.ok;
+  if (!release.ok) {
+    notices.push(`Assignee release degraded (${release.reason}) — @me left assigned.`);
+  }
+
+  // 4. close ONLY on the explicit manual --close-issue path. Autopilot never closes.
   let issueClosed = false;
   if (input.closeIssue) {
     const close = deps.client.issueClose(gi.repo, gi.number);
@@ -180,7 +220,13 @@ export function reflectTermination(deps: ReflectionDeps, input: ReflectionInput)
     else notices.push(`Issue close degraded (${close.reason}) — issue left open.`);
   }
 
-  return { commentPosted, statusUpdated: board.statusUpdated, issueClosed, notices };
+  return {
+    commentPosted,
+    statusUpdated: board.statusUpdated,
+    issueClosed,
+    assigneeReleased,
+    notices,
+  };
 }
 
 /**
@@ -205,6 +251,7 @@ export function reflectAutopilotTermination(
     commentPosted: false,
     statusUpdated: false,
     issueClosed: false,
+    assigneeReleased: false,
     notices: [],
   };
   // Only the actual terminal flip reflects — partial/unverified/blocked post nothing.

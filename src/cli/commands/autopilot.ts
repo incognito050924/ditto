@@ -39,7 +39,7 @@ import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { intentDriftGate, interfaceBaselineDriftGate } from '~/core/gates';
 import { createGhClient } from '~/core/gh-client';
-import { reflectAutopilotTermination } from '~/core/github-reflection';
+import { applyBoardStatusOption, reflectAutopilotTermination } from '~/core/github-reflection';
 import { IntentStore } from '~/core/intent-store';
 import { type LandResult, landCommit } from '~/core/land-commit';
 import { type MeasurementReport, measureHallucination } from '~/core/memory-measure';
@@ -53,6 +53,7 @@ import {
   writeHuman,
   writeJson,
 } from '../util';
+import { autoClaimOnInProgressEdge, buildClaimWiring, releaseClaimOnTerminal } from './work';
 
 /**
  * `ditto autopilot bootstrap` — surface bootstrapAutopilot as a thin CLI so the
@@ -153,6 +154,34 @@ const autopilotBootstrap = defineCommand({
       process.exit(RUNTIME_ERROR_EXIT);
       return;
     }
+    // wi_2606287v9 ac-2: the AUTOPILOT in_progress transition. Bootstrapping the graph
+    // is the start of the heavy path — promote the WI (non-terminal, not already
+    // in_progress) draft→in_progress and fire the claim ONCE on that edge (idempotent
+    // branch-grain sentinel). The gh claim only runs when the WI is actually linked to
+    // an issue (otherwise the status promotion stands alone, no gh subprocess). Every
+    // gh failure is a notice, never a throw (ADR-0018), so it can NOT undo bootstrap.
+    const claimNotices: string[] = [];
+    if (
+      workItem.status !== 'in_progress' &&
+      workItem.status !== 'done' &&
+      workItem.status !== 'abandoned'
+    ) {
+      const promoted = await items.update(args.workItem, (cur) => ({
+        ...cur,
+        status: 'in_progress' as const,
+      }));
+      if (workItem.github_issue) {
+        const wiring = await buildClaimWiring(repoRoot);
+        const claimRes = await autoClaimOnInProgressEdge(
+          items,
+          args.workItem,
+          workItem.status,
+          promoted,
+          wiring,
+        );
+        claimNotices.push(...claimRes.warnings, ...claimRes.notices);
+      }
+    }
     if (format === 'json') {
       writeJson({
         work_item_id: args.workItem,
@@ -163,6 +192,7 @@ const autopilotBootstrap = defineCommand({
       });
     } else {
       writeHuman(`Bootstrapped autopilot ${result.graph.autopilot_id}`);
+      for (const n of claimNotices) writeHuman(`  GitHub claim: ${n}`);
       writeHuman(`  work_item:     ${args.workItem}`);
       writeHuman(`  approval_gate: ${result.graph.approval_gate.status}`);
       writeHuman(`  nodes:         ${result.graph.nodes.map((n) => n.id).join(' -> ')}`);
@@ -516,6 +546,29 @@ const autopilotComplete = defineCommand({
           },
         );
         reflectNotices.push(...reflection.notices);
+        // wi_2606287v9 ac-5: a land-blocked terminal park is NON-terminal but the board
+        // must reflect it — move the linked issue to the Blocked column via
+        // claim_status_map.blocked. Independent, degradable; never throws.
+        if (autoClose === 'blocked' && ghConfig?.claim_status_map?.blocked) {
+          const blockedBoard = applyBoardStatusOption(
+            { client: createGhClient(), config: ghConfig },
+            workItem,
+            ghConfig.claim_status_map.blocked,
+          );
+          reflectNotices.push(...blockedBoard.notices);
+        }
+        // wi_2606287v9 ac-5: unconditional terminal @me release on the real done-flip
+        // (only when THIS session claimed the issue), independent of the auto_reflect
+        // opt-in — the bootstrap auto-claim is unconditional, so the release must be too.
+        // Comment-free (the reflection's result-summary is the durable audit); degradable.
+        if (autoClose === 'flipped' && workItem.github_issue?.claimed_branch) {
+          const rel = await releaseClaimOnTerminal(
+            workItemStore,
+            args.workItem,
+            await buildClaimWiring(repoRoot),
+          );
+          reflectNotices.push(...rel.notices);
+        }
       }
       // ac-2 cite-or-abstain advisory gate: did the lineage-pushed nodes cite or
       // abstain against the governing decisions injected into their packets?

@@ -349,6 +349,53 @@
           "pattern": "^wi_[a-z0-9]{8,}$",
           "description": "Predecessor work item this one continues from (chain lineage, not the parent_id tree)"
         },
+        "github_issue": {
+          "type": "object",
+          "properties": {
+            "repo": {
+              "type": "string",
+              "minLength": 1,
+              "description": "owner/name of the repo that owns the issue"
+            },
+            "number": {
+              "type": "integer",
+              "description": "Issue number within the repo"
+            },
+            "node_id": {
+              "type": "string",
+              "description": "GraphQL node id of the issue"
+            },
+            "project_item_id": {
+              "type": "string",
+              "description": "Projects v2 item id once the issue is added to a board"
+            },
+            "posted_decision_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Decision-log ids already posted to this issue (G8 post idempotency)"
+            },
+            "claimed_branch": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Branch name THIS session claimed the issue on (branch-grain occupancy)"
+            },
+            "posted_claim_markers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Claim markers already posted to this issue (claim-post idempotency)"
+            }
+          },
+          "required": [
+            "repo",
+            "number"
+          ],
+          "additionalProperties": false,
+          "description": "Singular GitHub issue this work item is linked to (1 WI ↔ 1 issue, v1)"
+        },
         "risks": {
           "type": "array",
           "items": {

@@ -180,6 +180,21 @@ describe('impl-reflection ac-4/ac-5 — terminal GitHub reflection', () => {
     expect(res.notices.join(' ')).toContain("no status_map entry for 'abandoned'");
   });
 
+  // wi_2606287v9 ac-7: a terminal close ALSO releases the @me claim (drops the
+  // assignee), @me-only, without posting a second comment (the summary is the audit).
+  test('(release) terminal done -> @me assignee released (no second comment)', () => {
+    const { client, calls } = fake();
+    const res = reflectTermination(
+      { client, config: cfg() },
+      { workItem: workItem(), completion: completion('pass'), trigger: 'done' },
+    );
+    expect(res.assigneeReleased).toBe(true);
+    const rm = calls.filter((c) => c.method === 'issueRemoveAssignee');
+    expect(rm).toHaveLength(1);
+    expect(rm[0]?.args[2]).toBe('@me'); // @me-only
+    expect(calls.filter((c) => c.method === 'issueComment')).toHaveLength(1); // no 2nd comment
+  });
+
   // manual --close-issue closes the issue (the ONLY path that closes).
   test('(close) manual --close-issue → issueClose called once', () => {
     const { client, calls } = fake();
