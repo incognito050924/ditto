@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { WorkItem } from '~/schemas/work-item';
 import {
   type AutopilotDecision,
@@ -8,6 +9,20 @@ import {
 import type { GhClient } from './gh-client';
 import { sanitizeFragment } from './github-redaction';
 import type { WorkItemStore } from './work-item-store';
+
+/** One captured follow-up on a work item (D6 second progress-post source). */
+type FollowUp = NonNullable<WorkItem['follow_ups']>[number];
+
+/**
+ * Synthesize a stable id for a captured follow-up (D6), discriminated by its
+ * append-positional index — mirroring `synthesizeDecisionId` so a follow-up shares
+ * the SAME `posted_decision_ids` idempotency set as the decision-log entries.
+ */
+export function synthesizeFollowUpId(fu: FollowUp, index: number): string {
+  return createHash('sha1')
+    .update(`followup ${index} ${JSON.stringify(fu)}`)
+    .digest('hex');
+}
 
 /**
  * G8 progress posting (wi_260628d79, ac-9/10/11/12). Posts autopilot decision-log
@@ -99,11 +114,17 @@ function decisionLabel(d: AutopilotDecision): string {
 function buildProgressComment(
   workItemId: string,
   prefix: string,
-  entries: { d: AutopilotDecision }[],
+  decisions: { d: AutopilotDecision }[],
+  followUps: { fu: FollowUp }[],
 ): string {
   const lines = [`## ${prefix}ditto: autopilot decisions — ${workItemId}`, ''];
-  for (const { d } of entries) {
+  for (const { d } of decisions) {
     lines.push(`- ${d.ts} · \`${decisionLabel(d)}\` — ${sanitizeFragment(d.reason)}`);
+  }
+  // Second source (D6): materialized-bug follow-ups captured on the work item.
+  for (const { fu } of followUps) {
+    const link = fu.materialized_wi ? ` (${fu.materialized_wi})` : '';
+    lines.push(`- follow-up bug${link} — ${sanitizeFragment(fu.note)}`);
   }
   return lines.join('\n');
 }
@@ -138,12 +159,22 @@ export async function postUnpostedDecisions(
   const unposted = decisions
     .map((d, i) => ({ d, id: synthesizeDecisionId(d, i) }))
     .filter(({ d, id }) => isDecisivePost(d) && !postedSet.has(id));
-  if (unposted.length === 0) {
+
+  // Second progress-post source (D6/ac-9): materialized-bug follow-ups captured on the
+  // work item `follow_ups` field. Only kind='bug' + unresolved (an `idea` is a candidate
+  // only, a resolved bug is done). They share the SAME posted_decision_ids set, so
+  // synthesizeFollowUpId discriminates by index and the unposted filter dedups them too.
+  const sourceItem = await deps.store.get(workItemId);
+  const unpostedFollowUps = (sourceItem.follow_ups ?? [])
+    .map((fu, i) => ({ fu, id: synthesizeFollowUpId(fu, i) }))
+    .filter(({ fu, id }) => fu.kind === 'bug' && !fu.resolved && !postedSet.has(id));
+
+  if (unposted.length === 0 && unpostedFollowUps.length === 0) {
     return { kind: 'no_new', posted_ids: [], comment_count: 0, target };
   }
 
-  // (3) compute ids BEFORE posting; post ONE rollup comment (reasons redacted, ac-15).
-  const body = buildProgressComment(workItemId, target.prefix, unposted);
+  // (3) compute ids BEFORE posting; post ONE rollup comment (reasons/notes redacted, ac-15).
+  const body = buildProgressComment(workItemId, target.prefix, unposted, unpostedFollowUps);
   const res = deps.client.issueComment(target.repo, target.number, body);
   if (!res.ok) {
     // HOLD the marking: do NOT write posted ids, so a later sync-issue rolls them up.
@@ -158,7 +189,7 @@ export async function postUnpostedDecisions(
 
   // Mark AFTER a confirmed post; the mutator re-reads `cur` (the latest on-disk work
   // item) and SET-MERGES, so a concurrent writer's marks are never clobbered (2).
-  const newIds = unposted.map((u) => u.id);
+  const newIds = [...unposted.map((u) => u.id), ...unpostedFollowUps.map((u) => u.id)];
   await deps.store.update(target.link_owner_id, (cur) => {
     const gi = cur.github_issue;
     if (!gi) return cur; // defensive: link resolved through it, so this never fires

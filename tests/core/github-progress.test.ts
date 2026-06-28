@@ -81,6 +81,44 @@ describe('G8 progress posting', () => {
     expect(res.kind === 'posted' && res.posted_ids).toHaveLength(2);
   });
 
+  // ac-9: the SECOND follow-up source — a materialized bug captured on the work item
+  // `follow_ups` field (D6) — is posted; an `idea` candidate and a resolved bug are not.
+  test('ac-9: materialized-bug follow_ups (work item source) are posted, idea/resolved excluded', async () => {
+    const wi = await makeLinkedWi();
+    await wis.update(wi, (cur) => ({
+      ...cur,
+      follow_ups: [
+        { kind: 'bug', note: 'null deref in parser', materialized_wi: 'wi_child0001' },
+        { kind: 'idea', note: 'maybe cache this' }, // idea candidate — must NOT post
+        { kind: 'bug', note: 'already addressed', resolved: true }, // resolved — must NOT post
+      ],
+    }));
+    const { client, calls } = createFakeGhClient();
+    const res = await postUnpostedDecisions({ client, store: wis, aps }, wi);
+    expect(res.kind).toBe('posted');
+    expect(calls.filter((c) => c.method === 'issueComment')).toHaveLength(1);
+    const body = String(calls[0]?.args[2]);
+    expect(body).toContain('null deref in parser');
+    expect(body).not.toContain('maybe cache this');
+    expect(body).not.toContain('already addressed');
+    expect(res.kind === 'posted' && res.posted_ids).toHaveLength(1);
+  });
+
+  // ac-9: follow_ups posting shares the posted_decision_ids idempotency — revisit no re-post.
+  test('ac-9: follow_ups posting is idempotent (revisit -> no re-post)', async () => {
+    const wi = await makeLinkedWi();
+    await wis.update(wi, (cur) => ({
+      ...cur,
+      follow_ups: [{ kind: 'bug', note: 'a real bug', materialized_wi: 'wi_xbug0001' }],
+    }));
+    const first = createFakeGhClient();
+    await postUnpostedDecisions({ client: first.client, store: wis, aps }, wi);
+    const second = createFakeGhClient();
+    const res = await postUnpostedDecisions({ client: second.client, store: wis, aps }, wi);
+    expect(res.kind).toBe('no_new');
+    expect(second.calls.filter((c) => c.method === 'issueComment')).toHaveLength(0);
+  });
+
   // ac-9: 0 new -> no-op, 0 gh calls.
   test('ac-9: 0 new unposted decisive -> no gh call (no-op)', async () => {
     const wi = await makeLinkedWi();
