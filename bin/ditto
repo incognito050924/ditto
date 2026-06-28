@@ -21161,6 +21161,16 @@ function guardOwnerEnvelope(raw) {
   }
   return { contentful: true };
 }
+function guardEnvelopeOwnerMatch(env2, nodeOwner2) {
+  if (env2.owner_kind !== nodeOwner2) {
+    return {
+      contentful: false,
+      failure_class: "fixable",
+      reason: `owner-return envelope owner_kind="${env2.owner_kind}" does not match the dispatched node owner="${nodeOwner2}" \u2014 the role (and its reachability exemption) cannot be self-relabeled`
+    };
+  }
+  return { contentful: true };
+}
 async function guardEnvelopeArtifact(env2, readFile2) {
   if (env2.artifact_location === undefined)
     return { contentful: true };
@@ -24580,12 +24590,20 @@ async function recordResult(repoRoot, input) {
       failureClass = "fixable";
       guardReason = envGuard.reason;
     } else {
-      const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) => readFile4(join31(repoRoot, p), "utf8"));
-      if (!artifactGuard.contentful) {
+      const ownerGuard = guardEnvelopeOwnerMatch(input.payload.envelope, node2.owner);
+      if (!ownerGuard.contentful) {
         contentful = false;
         outcome = "fail";
         failureClass = "fixable";
-        guardReason = artifactGuard.reason;
+        guardReason = ownerGuard.reason;
+      } else {
+        const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) => readFile4(join31(repoRoot, p), "utf8"));
+        if (!artifactGuard.contentful) {
+          contentful = false;
+          outcome = "fail";
+          failureClass = "fixable";
+          guardReason = artifactGuard.reason;
+        }
       }
     }
   }
@@ -44987,4 +45005,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=43716699e128e4796f6c66d12ae44e6572c0aa2611207909ad5a5dc7452abac0
+//# ditto-src-stamp=04d34ac335f90e87201484c9bbf65fad6b2e7f1b0f811981906130227ad5a022

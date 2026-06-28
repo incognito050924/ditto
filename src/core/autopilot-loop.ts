@@ -31,6 +31,7 @@ import {
   guardAcClosingEvidence,
   guardChildResult,
   guardEnvelopeArtifact,
+  guardEnvelopeOwnerMatch,
   guardMutatingEvidence,
   guardOwnerEnvelope,
   isMutatingOwner,
@@ -1413,14 +1414,26 @@ export async function recordResult(
       failureClass = 'fixable';
       guardReason = envGuard.reason;
     } else {
-      const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) =>
-        readFile(join(repoRoot, p), 'utf8'),
-      );
-      if (!artifactGuard.contentful) {
+      // Cross-check owner_kind against the dispatched role BEFORE the artifact read
+      // (wi_2606274be): a relabeled `retrospective` envelope clears the shape guard
+      // via the reachability exemption, so the role match is what actually blocks
+      // the bare-summary bypass.
+      const ownerGuard = guardEnvelopeOwnerMatch(input.payload.envelope, node.owner);
+      if (!ownerGuard.contentful) {
         contentful = false;
         outcome = 'fail';
         failureClass = 'fixable';
-        guardReason = artifactGuard.reason;
+        guardReason = ownerGuard.reason;
+      } else {
+        const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) =>
+          readFile(join(repoRoot, p), 'utf8'),
+        );
+        if (!artifactGuard.contentful) {
+          contentful = false;
+          outcome = 'fail';
+          failureClass = 'fixable';
+          guardReason = artifactGuard.reason;
+        }
       }
     }
   }

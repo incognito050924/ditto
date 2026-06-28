@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { guardEnvelopeArtifact, guardOwnerEnvelope } from '~/core/autopilot-dispatch';
+import {
+  guardEnvelopeArtifact,
+  guardEnvelopeOwnerMatch,
+  guardOwnerEnvelope,
+} from '~/core/autopilot-dispatch';
 import { recordResultPayload } from '~/core/autopilot-loop';
 import { ownerReturnEnvelope } from '~/schemas/owner-return-envelope';
 
@@ -38,6 +42,47 @@ describe('guardOwnerEnvelope (ac-1: rejects non-conforming WITHOUT throwing)', (
       owner_kind: 'implementer',
     };
     expect(guardOwnerEnvelope(bare)).toMatchObject({ contentful: false, failure_class: 'fixable' });
+  });
+});
+
+describe('guardEnvelopeOwnerMatch (wi_2606274be: owner_kind cannot be self-relabeled to dodge the exemption)', () => {
+  test('owner_kind matching the dispatched node owner passes', () => {
+    expect(guardEnvelopeOwnerMatch(conforming, 'implementer').contentful).toBe(true);
+  });
+
+  test('owner_kind that disagrees with the dispatched node owner is a fixable reject', () => {
+    const relabeled = { ...conforming, owner_kind: 'retrospective' } as const;
+    expect(guardEnvelopeOwnerMatch(relabeled, 'implementer')).toMatchObject({
+      contentful: false,
+      failure_class: 'fixable',
+    });
+  });
+
+  test('REGRESSION: a bare retrospective-labeled envelope (passes the exemption) is still caught when the node owner is not retrospective', () => {
+    // This bare envelope clears guardOwnerEnvelope because owner_kind=retrospective
+    // is exempt from the verbatim_detail reachability rule (superRefine). The
+    // owner-match guard is what stops an implementer from claiming that exemption.
+    const bareRetro = {
+      summary: 'just a summary, no detail',
+      conclusion: 'done',
+      verdict: 'pass',
+      owner_kind: 'retrospective',
+    } as const;
+    expect(guardOwnerEnvelope(bareRetro).contentful).toBe(true);
+    expect(guardEnvelopeOwnerMatch(bareRetro, 'implementer')).toMatchObject({
+      contentful: false,
+      failure_class: 'fixable',
+    });
+  });
+
+  test('a genuine retrospective node with a retrospective envelope still passes', () => {
+    const retro = {
+      summary: 'retro metrics',
+      conclusion: 'two separate metrics presented',
+      verdict: 'pass',
+      owner_kind: 'retrospective',
+    } as const;
+    expect(guardEnvelopeOwnerMatch(retro, 'retrospective').contentful).toBe(true);
   });
 });
 

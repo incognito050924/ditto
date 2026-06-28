@@ -381,6 +381,32 @@ export function guardOwnerEnvelope(raw: unknown): ChildResultGuard {
 }
 
 /**
+ * Cross-check that the envelope's self-declared `owner_kind` matches the role the
+ * node was ACTUALLY dispatched to (wi_2606274be). `guardOwnerEnvelope` only checks
+ * shape, and the schema's reachability exemption (superRefine) lets an
+ * `owner_kind: 'retrospective'` envelope pass with an empty `verbatim_detail`.
+ * Without this match, any owner could relabel itself `retrospective` to claim that
+ * exemption and slip a bare summary through — defeating the lossless-detail
+ * guarantee the envelope exists to enforce. The owner_kind is authored by the
+ * subagent; the dispatched `nodeOwner` is engine-controlled, so it is the
+ * authority. Never throws (pure comparison) — same orchestrator-safety contract as
+ * the sibling guards.
+ */
+export function guardEnvelopeOwnerMatch(
+  env: { owner_kind: string },
+  nodeOwner: string,
+): ChildResultGuard {
+  if (env.owner_kind !== nodeOwner) {
+    return {
+      contentful: false,
+      failure_class: 'fixable',
+      reason: `owner-return envelope owner_kind="${env.owner_kind}" does not match the dispatched node owner="${nodeOwner}" — the role (and its reachability exemption) cannot be self-relabeled`,
+    };
+  }
+  return { contentful: true };
+}
+
+/**
  * Guard that an envelope's `artifact_location`, when present, resolves to a
  * NON-EMPTY artifact (a pointer to nothing is not evidence). Async (it reads the
  * file via the injected `readFile`) but NEVER throws — an unresolvable or empty

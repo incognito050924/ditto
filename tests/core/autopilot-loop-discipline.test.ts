@@ -186,6 +186,52 @@ describe('M3 in-loop oracle authoritative (oracleSatisfaction in the recordResul
   });
 });
 
+describe('wi_2606274be: envelope owner_kind must match the dispatched node owner (no self-relabel bypass)', () => {
+  function implementNode() {
+    return {
+      id: 'V',
+      kind: 'implement' as const,
+      owner: 'implementer' as const,
+      purpose: 'implement ac-1',
+      status: 'running' as const,
+      depends_on: [] as string[],
+      acceptance_refs: ['ac-1'],
+      evidence_refs: [],
+      attempts: { fix: 0, switch: 0 },
+    };
+  }
+
+  test('an implementer pass carrying a relabeled retrospective envelope (bare summary) is downgraded to fail', async () => {
+    await aps.write(WI, { ...graph({ nodes: [implementNode()] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'V',
+        result_text: 'Implemented ac-1.',
+        outcome: 'pass',
+        changed_files: ['src/x.ts'],
+        // owner_kind=retrospective clears the schema reachability exemption with an
+        // empty verbatim_detail — the owner-match guard is what blocks the relabel.
+        envelope: {
+          summary: 'did the thing',
+          conclusion: 'done',
+          verdict: 'pass',
+          owner_kind: 'retrospective',
+        },
+        ac_verdicts: [
+          {
+            criterion_id: 'ac-1',
+            verdict: 'pass',
+            evidence_refs: [{ kind: 'command', summary: 'bun test' }],
+          },
+        ],
+      },
+    });
+    expect(res.outcome).toBe('fail');
+  });
+});
+
 describe('M5 same-oracle K failures → blocked (K counter separate from attempts.fix)', () => {
   // The K counter is derived from the append-only decision log (ORACLE_UNSATISFIED
   // markers), NOT from node.attempts.fix. With caps.oracle_failures_to_block=K, the
