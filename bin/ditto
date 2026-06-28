@@ -22280,6 +22280,8 @@ function parseHandoffFile(text) {
 function stamp(now) {
   return now.toISOString().replace(/[:.]/g, "-");
 }
+var STALE_ACTIVE_RETENTION_DAYS = 7;
+var STALE_ACTIVE_RETENTION_MS = STALE_ACTIVE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 class HandoffStore {
   repoRoot;
@@ -22367,6 +22369,28 @@ class HandoffStore {
       await rename3(active.path, dest);
     } catch {}
     return active;
+  }
+  async sweepStaleActive(now = new Date) {
+    const active = await this.listActive();
+    const swept = [];
+    let ensured = false;
+    for (const a2 of active) {
+      const created = Date.parse(a2.handoff.created_at);
+      if (Number.isNaN(created))
+        continue;
+      if (now.getTime() - created <= STALE_ACTIVE_RETENTION_MS)
+        continue;
+      if (!ensured) {
+        await ensureDir(join23(this.dir(), "archive"));
+        ensured = true;
+      }
+      const dest = join23(this.repoRoot, this.archiveRel(a2.handoff.work_item_id, stamp(now)));
+      try {
+        await rename3(a2.path, dest);
+        swept.push(a2);
+      } catch {}
+    }
+    return swept;
   }
   async exists(workItemId2) {
     return Bun.file(this.activePath(workItemId2)).exists();
@@ -37750,6 +37774,9 @@ async function writeWorkItemHandoff(repoRoot, store, workId, options = {}, now =
   const hstore = new HandoffStore(repoRoot);
   const handoffRel = completion.final_verdict === "pass" ? await hstore.writeArchived(handoffArtifact, now) : await hstore.write(handoffArtifact);
   const handoffPath = join68(repoRoot, handoffRel);
+  try {
+    await hstore.sweepStaleActive(now);
+  } catch {}
   await store.update(workId, (cur) => {
     const { re_entry: _existingReEntry, ...rest } = cur;
     if (completion.final_verdict === "pass") {
@@ -38461,6 +38488,7 @@ var userPromptSubmitHandler = async (input) => {
         await hstore.consumeFor(sole.handoff.work_item_id);
       }
     }
+    await hstore.sweepStaleActive();
   } catch {}
   const item = resolved.workItem;
   if (item) {
@@ -46470,4 +46498,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=984873ff7dd76fb5429878af7ebf0b29123a14b37989c4efc616c38d1db8dd3b
+//# ditto-src-stamp=84d895a1c807abe31d81ef630776408cd91e76b5033f86849d59a87dc2650c1d

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -638,6 +638,62 @@ describe('userPromptSubmitHandler', () => {
       const hs = new HandoffStore(repo);
       expect(await hs.exists(a.id)).toBe(true);
       expect(await hs.exists(b.id)).toBe(true);
+    });
+  });
+
+  // wi_2606289nt: the consume path also sweeps STALE active handoffs into archive
+  // (move-not-delete) so an un-picked-up handoff can never re-inject forever.
+  describe('stale active sweep on prompt', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    async function makeWI(title: string): Promise<{ id: string }> {
+      return new WorkItemStore(repo).create({
+        title,
+        source_request: 'r',
+        goal: 'g',
+        acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+      });
+    }
+    async function seedStaleHandoffFor(wi: { id: string }, currentState: string): Promise<void> {
+      const item = await new WorkItemStore(repo).get(wi.id);
+      await new HandoffStore(repo).write(
+        buildHandoff({
+          workItem: item,
+          fromContext: 'prev',
+          currentState,
+          nextFirstCheck: 'c',
+          now: new Date(Date.now() - 30 * DAY), // far past the retention limit
+        }),
+      );
+    }
+
+    // ac-4: the consume path actually invokes sweepStaleActive — observe its effect.
+    // Session is BOUND to A (no handoff), so consume never touches B's STALE handoff;
+    // only sweepStaleActive can remove it. After the prompt, B is gone from active.
+    test('a stale sibling handoff is swept out of active by the prompt (invocation effect)', async () => {
+      const a = await makeWI('A');
+      const b = await makeWI('B');
+      await seedStaleHandoffFor(b, 'B-stale-marker');
+      await new SessionPointerStore(repo).set('sess-A', a.id);
+      const hs = new HandoffStore(repo);
+      expect(await hs.exists(b.id)).toBe(true); // present before
+      await run({ session_id: 'sess-A', prompt: 'go' });
+      expect(await hs.exists(b.id)).toBe(false); // swept into archive
+      expect(await hs.listActive()).toHaveLength(0); // never re-injectable
+    });
+
+    // ac-5: a sweep error does not break the hook — it still returns its context.
+    test('a sweep failure does not break the prompt hook (fail-open)', async () => {
+      const spy = spyOn(HandoffStore.prototype, 'sweepStaleActive').mockRejectedValue(
+        new Error('sweep boom'),
+      );
+      try {
+        const res = await run({ session_id: 'sess-boom', prompt: 'go' });
+        expect(res.stdout).toBeDefined();
+        // still produces the charter/context output despite the sweep throwing
+        expect(additionalContext(res.stdout).length).toBeGreaterThan(0);
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 });

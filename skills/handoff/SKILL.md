@@ -44,6 +44,8 @@ The format is a one-line JSON frontmatter (machine round-trip) + a human-readabl
 
 **Auto-read**: the next session does NOT need to be told a filename. The UserPromptSubmit hook reads every active handoff in `.ditto/local/handoff/`, injects its body into context, then moves it to archive — so a handoff is picked up exactly once and `active` never accumulates. Do not paste handoff paths into prompts; just continue.
 
+**Stale sweep**: a handoff that no session ever picks up would otherwise re-inject into an unrelated session's context forever. So on both prompt (consume) and work-done, any active handoff older than 7 days is **moved into `archive/` (move-not-delete, never pruned)** — out of `active`, so it can never re-inject, but preserved for audit.
+
 ### Output contract
 - `handoff` artifact conforming to the handoff schema (§6.10), written through `HandoffStore`.
 - Resume target keeps the same `autopilot_id`; scope is never narrowed because "this turn ran out".

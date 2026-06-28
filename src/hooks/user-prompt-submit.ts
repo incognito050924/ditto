@@ -307,8 +307,13 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
         await hstore.consumeFor(sole.handoff.work_item_id);
       }
     }
+    // stale active sweep (wi_2606289nt): a handoff no session ever picked up,
+    // once past the retention limit, is MOVED into archive so it never re-injects
+    // into an unrelated session's context. Observational, in the same fail-open
+    // try/catch — a sweep error must not break the prompt hook.
+    await hstore.sweepStaleActive();
   } catch {
-    // handoff 자동 로드 실패는 무시 (관측적, non-blocking)
+    // handoff 자동 로드/sweep 실패는 무시 (관측적, non-blocking)
   }
 
   const item = resolved.workItem;

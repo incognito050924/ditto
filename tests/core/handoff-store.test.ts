@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import * as fsp from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HandoffStore, buildHandoff } from '~/core/handoff-store';
@@ -93,6 +94,98 @@ describe('HandoffStore', () => {
     expect(await store.exists(a.id)).toBe(false); // archived
     expect(await store.exists(b.id)).toBe(true); // sibling untouched
     expect(await store.consumeFor(a.id)).toBeNull(); // idempotent: nothing left
+  });
+
+  // wi_2606289nt: stale active sweep — an active handoff no session ever picked
+  // up, once older than the retention limit, is MOVED into archive (never deleted)
+  // so it can never re-inject into an unrelated session's context.
+  const DAY = 24 * 60 * 60 * 1000;
+  async function writeAged(workItemId: string, currentState: string, createdAt: Date) {
+    const items = new WorkItemStore(repo);
+    const wi = await items.create({
+      title: workItemId,
+      source_request: `r-${workItemId}`,
+      goal: 'g',
+      acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+    });
+    const store = new HandoffStore(repo);
+    await store.write(
+      buildHandoff({
+        workItem: wi,
+        fromContext: 'c',
+        currentState,
+        nextFirstCheck: 'c',
+        now: createdAt,
+      }),
+    );
+    return wi;
+  }
+
+  test('ac-1: sweepStaleActive moves an age>7d active to archive, keeps a recent (<7d) active', async () => {
+    const now = new Date('2026-06-29T00:00:00.000Z');
+    const stale = await writeAged('stale', 'old-marker', new Date(now.getTime() - 8 * DAY));
+    const recent = await writeAged('recent', 'fresh-marker', new Date(now.getTime() - 1 * DAY));
+    const store = new HandoffStore(repo);
+
+    const swept = await store.sweepStaleActive(now);
+
+    expect(swept.map((s) => s.handoff.work_item_id)).toEqual([stale.id]);
+    // move-not-delete: stale gone from active, recent still active
+    expect(await store.exists(stale.id)).toBe(false);
+    expect(await store.exists(recent.id)).toBe(true);
+    // and it lives in archive/ (moved, not deleted)
+    const archived = await readdir(join(repo, '.ditto/local/handoff/archive'));
+    expect(archived.some((n) => n.startsWith(`${stale.id}__`))).toBe(true);
+  });
+
+  test('ac-1 boundary: an active exactly at the limit (not strictly older) stays active', async () => {
+    const now = new Date('2026-06-29T00:00:00.000Z');
+    const edge = await writeAged('edge', 'edge-marker', new Date(now.getTime() - 7 * DAY));
+    const store = new HandoffStore(repo);
+    const swept = await store.sweepStaleActive(now);
+    expect(swept).toHaveLength(0);
+    expect(await store.exists(edge.id)).toBe(true);
+  });
+
+  test('ac-2: an active file with unparseable/missing created_at is NOT moved (safe-preserve)', async () => {
+    const store = new HandoffStore(repo);
+    // a recent valid one (so the sweep dir/code path runs) + a malformed file
+    await writeAged('valid', 'v', new Date('2026-06-28T00:00:00.000Z'));
+    const dir = join(repo, '.ditto/local/handoff');
+    const malformed = join(dir, 'wi_malformed0.md');
+    await writeFile(malformed, 'not a handoff: no frontmatter, no created_at\n');
+
+    await store.sweepStaleActive(new Date('2099-01-01T00:00:00.000Z'));
+
+    // malformed file untouched (never a sweep candidate / unknown age → preserved)
+    expect(await Bun.file(malformed).exists()).toBe(true);
+  });
+
+  // ac-3: context non-injection invariant. After sweep the handoff is in archive/,
+  // which listActive() excludes → it can never be injected into any session again.
+  test('ac-3: a swept handoff is excluded from listActive (never re-injectable)', async () => {
+    const now = new Date('2026-06-29T00:00:00.000Z');
+    await writeAged('ghost', 'ghost-marker', new Date(now.getTime() - 30 * DAY));
+    const store = new HandoffStore(repo);
+    expect(await store.listActive()).toHaveLength(1);
+    await store.sweepStaleActive(now);
+    expect(await store.listActive()).toHaveLength(0);
+  });
+
+  // ac-5: fail-open at store level — a rename failure leaves the file active and
+  // does not throw (mirror consume()'s best-effort try/catch).
+  test('ac-5: a rename failure leaves the stale file active and does not throw', async () => {
+    const now = new Date('2026-06-29T00:00:00.000Z');
+    const stale = await writeAged('stuck', 'stuck-marker', new Date(now.getTime() - 30 * DAY));
+    const store = new HandoffStore(repo);
+    const spy = spyOn(fsp, 'rename').mockRejectedValue(new Error('boom'));
+    try {
+      const swept = await store.sweepStaleActive(now);
+      expect(swept).toHaveLength(0); // nothing successfully swept
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await store.exists(stale.id)).toBe(true); // still active, not lost
   });
 
   test('consume moves active handoffs to archive (picked up once, no accumulation)', async () => {

@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assembleCompletionFromGraph } from '~/core/autopilot-complete';
 import { AutopilotStore } from '~/core/autopilot-store';
+import { HandoffStore, buildHandoff } from '~/core/handoff-store';
 import {
   InvalidBaseRefError,
   InvalidHeadRefError,
@@ -456,5 +457,50 @@ describe('writeWorkItemHandoff', () => {
     // work-item.json도 갱신되어 가짜 entry가 사라져야 한다.
     const after = await store.get(created.id);
     expect(after.changed_files).not.toContain('never-existed.txt');
+  });
+});
+
+// wi_2606289nt: work-done also sweeps STALE active handoffs into archive
+// (move-not-delete), fail-open.
+describe('writeWorkItemHandoff stale active sweep', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  // ac-4: the work-done path actually invokes sweepStaleActive — effect-observable.
+  // A stale sibling handoff (created long ago) is gone from active after work-done;
+  // only sweepStaleActive removes it (work-done writes a handoff for ITS own item).
+  test('a stale sibling active handoff is swept out on work-done (invocation effect)', async () => {
+    const subject = await store.create(makeInput());
+    const sibling = await store.create(makeInput());
+    const hstore = new HandoffStore(workDir);
+    const now = new Date('2026-06-29T00:00:00.000Z');
+    const siblingItem = await store.get(sibling.id);
+    await hstore.write(
+      buildHandoff({
+        workItem: siblingItem,
+        fromContext: 'prev',
+        currentState: 'sibling-stale',
+        nextFirstCheck: 'c',
+        now: new Date(now.getTime() - 30 * DAY),
+      }),
+    );
+    expect(await hstore.exists(sibling.id)).toBe(true); // present before
+
+    await writeWorkItemHandoff(workDir, store, subject.id, {}, now);
+
+    expect(await hstore.exists(sibling.id)).toBe(false); // swept into archive
+  });
+
+  // ac-5: a sweep error does not break work-done (fail-open).
+  test('a sweep failure does not break work-done', async () => {
+    const created = await store.create(makeInput());
+    const spy = spyOn(HandoffStore.prototype, 'sweepStaleActive').mockRejectedValue(
+      new Error('sweep boom'),
+    );
+    try {
+      const result = await writeWorkItemHandoff(workDir, store, created.id);
+      expect(result.completion.final_verdict).toBe('partial'); // completed despite sweep throwing
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

@@ -310,6 +310,15 @@ export async function writeWorkItemHandoff(
       : await hstore.write(handoffArtifact);
   const handoffPath = join(repoRoot, handoffRel);
 
+  // stale active sweep (wi_2606289nt): on work-done, move any active handoff past
+  // the retention limit into archive so it never re-injects into an unrelated
+  // session. fail-open — a sweep error must not break work done.
+  try {
+    await hstore.sweepStaleActive(now);
+  } catch {
+    // observational; never blocks completion
+  }
+
   // status/changed_files/re_entry만 갱신. handoff_path는 위 store가 이미 링크했으므로
   // 여기서 건드리지 않는다(...rest로 보존).
   await store.update(workId, (cur) => {

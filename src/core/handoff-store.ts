@@ -153,6 +153,10 @@ function stamp(now: Date): string {
   return now.toISOString().replace(/[:.]/g, '-');
 }
 
+/** Active handoffs older than this are swept into archive (move-not-delete). */
+const STALE_ACTIVE_RETENTION_DAYS = 7;
+const STALE_ACTIVE_RETENTION_MS = STALE_ACTIVE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
 export class HandoffStore {
   constructor(public readonly repoRoot: string) {}
 
@@ -273,6 +277,40 @@ export class HandoffStore {
       // best-effort: a failed move just leaves it active for the next turn
     }
     return active;
+  }
+
+  /**
+   * Sweep stale active handoffs into archive (MOVE, never delete). An active
+   * handoff older than STALE_ACTIVE_RETENTION_DAYS that no session ever picked
+   * up would otherwise re-inject into an unrelated session's context forever;
+   * moving it into archive/ (which listActive excludes) stops that injection
+   * while preserving the artifact. Returns what was swept (oldest first).
+   *
+   * Safe-preserve: a handoff whose created_at can't be parsed to a real time is
+   * NOT moved (unknown age never sweeps). Best-effort, fail-open like consume():
+   * a failed rename just leaves the file active for a later turn — never throws.
+   */
+  async sweepStaleActive(now: Date = new Date()): Promise<ActiveHandoff[]> {
+    const active = await this.listActive();
+    const swept: ActiveHandoff[] = [];
+    let ensured = false;
+    for (const a of active) {
+      const created = Date.parse(a.handoff.created_at);
+      if (Number.isNaN(created)) continue; // safe-preserve: unknown age never swept
+      if (now.getTime() - created <= STALE_ACTIVE_RETENTION_MS) continue; // within limit → stays active
+      if (!ensured) {
+        await ensureDir(join(this.dir(), 'archive'));
+        ensured = true;
+      }
+      const dest = join(this.repoRoot, this.archiveRel(a.handoff.work_item_id, stamp(now)));
+      try {
+        await rename(a.path, dest);
+        swept.push(a);
+      } catch {
+        // best-effort: a failed move just leaves it active for the next turn
+      }
+    }
+    return swept;
   }
 
   /** Whether an active handoff exists for this work item. */
