@@ -226,6 +226,12 @@ export interface PullIssueDeps {
    * same-repo, so the guard FAILS CLOSED — it treats the pull as cross-repo.
    */
   sessionRepo: string | null;
+  /**
+   * The linked Project config (from `ditto github setup`), or undefined. When present
+   * and the issue is on the board, `project_item_id` is populated so completion
+   * reflection can update the board status (best-effort; absent config is a no-op).
+   */
+  config?: DittoConfigGithub | undefined;
 }
 
 export type PullIssueResult =
@@ -248,6 +254,7 @@ async function createWorkItemFromIssue(
   store: WorkItemStore,
   coord: IssueCoord,
   issue: FetchedIssue,
+  projectItemId: string | null,
 ): Promise<string> {
   const title = issue.title.trim() || `Issue ${coord.repo}#${coord.number}`;
   const sourceRequest =
@@ -268,7 +275,11 @@ async function createWorkItemFromIssue(
   });
   await store.update(created.id, (cur) => ({
     ...cur,
-    github_issue: { repo: coord.repo, number: coord.number },
+    github_issue: {
+      repo: coord.repo,
+      number: coord.number,
+      ...(projectItemId ? { project_item_id: projectItemId } : {}),
+    },
   }));
   return created.id;
 }
@@ -298,7 +309,12 @@ export async function pullIssue(deps: PullIssueDeps, coord: IssueCoord): Promise
 
   const view = deps.client.issueView(coord.repo, coord.number);
   if (!view.ok) return { kind: 'degraded', reason: view.reason, detail: view.detail };
-  const id = await createWorkItemFromIssue(deps.store, coord, readIssue(view.value));
+  // Best-effort board item id so completion reflection (ac-5) has an item to edit.
+  const projectItemId = resolveProjectItemId(
+    { client: deps.client, config: deps.config },
+    coord.number,
+  );
+  const id = await createWorkItemFromIssue(deps.store, coord, readIssue(view.value), projectItemId);
   return { kind: 'created', id, coord };
 }
 
@@ -465,6 +481,7 @@ export async function linkIssue(
   store: WorkItemStore,
   workId: string,
   coord: IssueCoord,
+  opts?: { client: GhClient; config: DittoConfigGithub | undefined },
 ): Promise<LinkIssueResult> {
   const item = await store.get(workId); // throws a clear error if the WI is unknown
   const existing = item.github_issue;
@@ -473,9 +490,17 @@ export async function linkIssue(
     return { kind: 'linked', id: workId, coord, alreadyLinked: true };
   }
   if (existing) return { kind: 'conflict', id: workId, existing, coord };
+  // Best-effort board item id (ac-5 reflection target); absent when gh/config missing.
+  const projectItemId = opts
+    ? resolveProjectItemId({ client: opts.client, config: opts.config }, coord.number)
+    : null;
   await store.update(workId, (cur) => ({
     ...cur,
-    github_issue: { repo: coord.repo, number: coord.number },
+    github_issue: {
+      repo: coord.repo,
+      number: coord.number,
+      ...(projectItemId ? { project_item_id: projectItemId } : {}),
+    },
   }));
   return { kind: 'linked', id: workId, coord, alreadyLinked: false };
 }
@@ -621,7 +646,13 @@ const workStart = defineCommand({
         return;
       }
       const sessionRepo = resolveSessionRepoCoord(repoRoot);
-      const result = await pullIssue({ client: createGhClient(), store, sessionRepo }, coord);
+      // Project config (if `ditto github setup` ran) lets pull populate project_item_id
+      // so completion reflection can update the board status (ac-5). Best-effort.
+      const ghConfig = await readGithubConfig(repoRoot);
+      const result = await pullIssue(
+        { client: createGhClient(), store, sessionRepo, config: ghConfig },
+        coord,
+      );
       switch (result.kind) {
         case 'created':
           if (format === 'json') {
@@ -932,6 +963,8 @@ const workSetCriteria = defineCommand({
 
 /** The board's current single-select field values for the linked issue (display only). */
 export interface BoardPosition {
+  /** The Projects v2 item id (`PVTI_…`) — used to populate `project_item_id` on link. */
+  itemId: string | null;
   status: string | null;
   priority: string | null;
 }
@@ -967,14 +1000,35 @@ export function parseBoardPosition(itemList: unknown, issueNumber: number): Boar
   for (const it of items) {
     const content = (it as { content?: { number?: unknown } })?.content;
     if (!content || (content as { number?: unknown }).number !== issueNumber) continue;
+    const id = (it as { id?: unknown }).id;
     const status = (it as { status?: unknown }).status;
     const priority = (it as { priority?: unknown }).priority;
     return {
+      itemId: typeof id === 'string' ? id : null,
       status: typeof status === 'string' ? status : null,
       priority: typeof priority === 'string' ? priority : null,
     };
   }
   return null;
+}
+
+/**
+ * Resolve the Projects v2 board item id (`PVTI_…`) for an issue on the configured
+ * Project, so pull/link can save it as `github_issue.project_item_id` — without it,
+ * completion reflection (ac-5) has no item to edit and skips the board update.
+ * BEST-EFFORT (ADR-0018): no project config / gh degraded / issue not on the board
+ * all return null and the caller leaves the field absent — never a throw, never a
+ * block on the pull/link itself.
+ */
+export function resolveProjectItemId(
+  deps: { client: GhClient; config: DittoConfigGithub | undefined },
+  issueNumber: number,
+): string | null {
+  if (!deps.config) return null;
+  const { owner, number } = deps.config.project;
+  const itemList = deps.client.projectItemList(owner, number);
+  if (!itemList.ok) return null;
+  return parseBoardPosition(itemList.value, issueNumber)?.itemId ?? null;
 }
 
 /**
@@ -2406,7 +2460,12 @@ const workLinkIssue = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     const store = new WorkItemStore(repoRoot);
     try {
-      const result = await linkIssue(store, args.workId, coord);
+      // Best-effort project_item_id population from the configured board (ac-5 target).
+      const ghConfig = await readGithubConfig(repoRoot);
+      const result = await linkIssue(store, args.workId, coord, {
+        client: createGhClient(),
+        config: ghConfig,
+      });
       if (result.kind === 'conflict') {
         writeError(
           `work ${args.workId} is already linked to ${result.existing.repo}#${result.existing.number} (1 work item ↔ 1 issue, v1). Unlink is not supported in v1; create a separate work item for ${coord.repo}#${coord.number}.`,

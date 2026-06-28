@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { linkIssue, parseIssueCoord, pullIssue } from '~/cli/commands/work';
+import { linkIssue, parseIssueCoord, pullIssue, resolveProjectItemId } from '~/cli/commands/work';
 import { createFakeGhClient } from '~/core/gh-client';
 import { WorkItemStore } from '~/core/work-item-store';
+import type { DittoConfigGithub } from '~/schemas/ditto-config';
 
 const coordOf = (s: string) => {
   const c = parseIssueCoord(s);
@@ -116,5 +117,110 @@ describe('M3 GitHub issue pull/link', () => {
     const linked = await linkIssue(store, wi.id, coord);
     expect(linked.kind).toBe('linked');
     expect((await store.get(wi.id)).github_issue).toEqual({ repo: 'other/app', number: 5 });
+  });
+});
+
+// wi_260628p46 — populate github_issue.project_item_id from the configured Project
+// board so completion reflection (ac-5) can reach projectItemEdit instead of the
+// "no project_item_id → skip" dead branch. Population is BEST-EFFORT (ADR-0018):
+// no config / gh degraded / issue not on the board → field stays absent, no throw.
+const cfg = (overrides: Partial<DittoConfigGithub> = {}): DittoConfigGithub => ({
+  project: { owner: 'owner', number: 2 },
+  status_map: { done: 'opt-done' },
+  auto_reflect: false,
+  ...overrides,
+});
+
+// A board item-list payload where issue #1 is item PVTI_x (gh project item-list shape).
+const boardWith = (issueNumber: number, itemId: string) => ({
+  items: [{ id: itemId, content: { type: 'Issue', number: issueNumber }, status: 'Backlog' }],
+});
+
+function fakeClientWithBoard(title: string, board: unknown) {
+  return createFakeGhClient({
+    values: { issueView: { number: 1, title, body: 'b', state: 'open' }, projectItemList: board },
+  }).client;
+}
+
+describe('wi_260628p46 project_item_id population', () => {
+  test('resolveProjectItemId returns the board item id when the issue is on the board', () => {
+    const client = createFakeGhClient({
+      values: { projectItemList: boardWith(1, 'PVTI_x') },
+    }).client;
+    expect(resolveProjectItemId({ client, config: cfg() }, 1)).toBe('PVTI_x');
+  });
+
+  test('resolveProjectItemId returns null when no project config', () => {
+    const client = createFakeGhClient({
+      values: { projectItemList: boardWith(1, 'PVTI_x') },
+    }).client;
+    expect(resolveProjectItemId({ client, config: undefined }, 1)).toBeNull();
+  });
+
+  test('resolveProjectItemId returns null when the issue is not on the board', () => {
+    const client = createFakeGhClient({
+      values: { projectItemList: boardWith(99, 'PVTI_x') },
+    }).client;
+    expect(resolveProjectItemId({ client, config: cfg() }, 1)).toBeNull();
+  });
+
+  test('resolveProjectItemId returns null when gh degrades (best-effort, no throw)', () => {
+    const client = createFakeGhClient({
+      degrade: { ok: false, reason: 'unauth', detail: 'x' },
+    }).client;
+    expect(resolveProjectItemId({ client, config: cfg() }, 1)).toBeNull();
+  });
+
+  // ac-1: pull with a configured project populates project_item_id from the board.
+  test('ac-1: pull populates github_issue.project_item_id from the configured board', async () => {
+    const coord = coordOf('owner/app#1');
+    const r = await pullIssue(
+      {
+        client: fakeClientWithBoard('Add retry', boardWith(1, 'PVTI_x')),
+        store,
+        sessionRepo: 'owner/app',
+        config: cfg(),
+      },
+      coord,
+    );
+    expect(r.kind).toBe('created');
+    if (r.kind !== 'created') throw new Error('expected created');
+    const item = await store.get(r.id);
+    expect(item.github_issue).toEqual({ repo: 'owner/app', number: 1, project_item_id: 'PVTI_x' });
+  });
+
+  // ac-2: pull WITHOUT config keeps the existing contract — no project_item_id, no throw.
+  test('ac-2: pull without project config leaves project_item_id absent (graceful)', async () => {
+    const coord = coordOf('owner/app#1');
+    const r = await pullIssue(
+      { client: fakeClient('Add retry', 'b'), store, sessionRepo: 'owner/app' },
+      coord,
+    );
+    expect(r.kind).toBe('created');
+    if (r.kind !== 'created') throw new Error('expected created');
+    expect((await store.get(r.id)).github_issue).toEqual({ repo: 'owner/app', number: 1 });
+  });
+
+  // ac-1: link with config+client populates project_item_id on the actual link write.
+  test('ac-1: link populates github_issue.project_item_id from the configured board', async () => {
+    const wi = await store.create({
+      title: 'wi',
+      source_request: 'req',
+      goal: 'goal',
+      acceptance_criteria: [
+        { id: 'ac-1', statement: 'x is observable', verdict: 'unverified', evidence: [] },
+      ],
+    });
+    const coord = coordOf('owner/app#1');
+    const client = createFakeGhClient({
+      values: { projectItemList: boardWith(1, 'PVTI_y') },
+    }).client;
+    const linked = await linkIssue(store, wi.id, coord, { client, config: cfg() });
+    expect(linked.kind).toBe('linked');
+    expect((await store.get(wi.id)).github_issue).toEqual({
+      repo: 'owner/app',
+      number: 1,
+      project_item_id: 'PVTI_y',
+    });
   });
 });
