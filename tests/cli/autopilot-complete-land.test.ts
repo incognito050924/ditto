@@ -173,6 +173,33 @@ describe('ditto autopilot complete — verified→landed flip-after-land (ac-1/a
     expect(git(['ls-files']).split('\n')).toContain('src.ts');
   });
 
+  test('wi_260627s2d: a gitignored declared path is dropped AND surfaced (warning), real change still lands', async () => {
+    await writeFile(join(dir, 'src.ts'), 'change\n', 'utf8');
+    // `.ditto/` is gitignored (beforeEach) — declaring a path under it (e.g. a
+    // stale completion.json reference) must drop silently from the commit but be
+    // SURFACED in the output so a wrongly-gitignored real file cannot vanish.
+    await writeFile(join(dir, '.ditto', 'stale.json'), '{}\n', 'utf8');
+    await seedWorkItem({ changedFiles: ['src.ts', '.ditto/stale.json'] });
+    await seedGraph(true);
+
+    const res = complete('json');
+    expect(res.exitCode).toBe(0);
+    const out = parseJson(res.stdout);
+    const land = out.land as {
+      status: string;
+      dropped_gitignored: { repo: string; path: string }[];
+      dropped_gitignored_warning?: string;
+    };
+    // the real change committed; the gitignored declaration was dropped...
+    expect(land.status).toBe('committed');
+    expect(git(['ls-files']).split('\n')).toContain('src.ts');
+    expect(git(['ls-files']).split('\n')).not.toContain('.ditto/stale.json');
+    // ...but it is surfaced, not silent (≥1 dropped path + a warning string)
+    expect(land.dropped_gitignored.map((d) => d.path)).toContain('.ditto/stale.json');
+    expect(typeof land.dropped_gitignored_warning).toBe('string');
+    expect(land.dropped_gitignored_warning).toContain('.ditto/stale.json');
+  });
+
   test('empty changeset → land no-op, still flips to done', async () => {
     await seedWorkItem({ changedFiles: [] });
     await seedGraph(true);

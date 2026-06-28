@@ -351,3 +351,32 @@ describe('landCommit — byproduct absorption with no .ditto/memory baseline (wi
     );
   });
 });
+
+// wi_260627s2d: dropping a gitignored declared path must be SURFACED, not silent —
+// a silently-dropped path masks a genuine "declared an uncommittable file" mistake
+// (e.g. a real source file wrongly gitignored), which the change_surface safety net
+// cannot otherwise catch. landCommit reports the dropped paths so the CLI warns.
+describe('landCommit — gitignored drop is surfaced (wi_260627s2d)', () => {
+  test('ac-1: a dropped gitignored changed_files path is reported in droppedGitignored', async () => {
+    await writeFile(join(repo, 'app.ts'), 'root\n', 'utf8');
+    await mkdir(join(repo, '.ditto/local/work-items/wi'), { recursive: true });
+    await writeFile(join(repo, '.ditto/local/work-items/wi/completion.json'), '{}\n', 'utf8');
+
+    const res = await landCommit(
+      repo,
+      ['app.ts', '.ditto/local/work-items/wi/completion.json'],
+      MSG,
+    );
+
+    expect(res.status).toBe('committed');
+    expect(res.droppedGitignored.map((d) => d.path)).toContain(
+      '.ditto/local/work-items/wi/completion.json',
+    );
+  });
+
+  test('ac-1: no gitignored declaration ⇒ droppedGitignored is empty', async () => {
+    await writeFile(join(repo, 'app.ts'), 'root\n', 'utf8');
+    const res = await landCommit(repo, ['app.ts'], MSG);
+    expect(res.droppedGitignored).toEqual([]);
+  });
+});

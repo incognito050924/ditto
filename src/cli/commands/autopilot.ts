@@ -541,6 +541,15 @@ const autopilotComplete = defineCommand({
                 commits: land.commits.map((c) => ({ repo: c.repo, sha: c.sha })),
                 dirty: land.dirty,
                 detached: land.detached,
+                // wi_260627s2d: gitignored declared paths are dropped (uncommittable),
+                // but SURFACED — a wrongly-gitignored real source file would otherwise
+                // vanish silently past the change_surface safety net.
+                dropped_gitignored: land.droppedGitignored,
+                ...(land.droppedGitignored.length > 0
+                  ? {
+                      dropped_gitignored_warning: `${land.droppedGitignored.length} declared changed_files path(s) were gitignored and NOT committed: ${land.droppedGitignored.map((d) => d.path).join(', ')}. If any is a real source file, fix its .gitignore and re-run; if it is a stale reference, remove it from the work item's changed_files.`,
+                    }
+                  : {}),
               }
             : null,
           acceptance: completion.acceptance.map((a) => ({

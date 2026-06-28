@@ -103,6 +103,13 @@ export interface LandResult {
   detached: string[];
   /** Unrelated dirty paths that blocked the land (only for status='aborted_dirty'). */
   dirty: { repo: string; paths: string[] }[];
+  /**
+   * Declared `changed_files` paths dropped because they are gitignored in their
+   * owning repo (uncommittable). Surfaced (not silent) so the caller can warn —
+   * a wrongly-gitignored real source file would otherwise vanish unnoticed
+   * (wi_260627s2d). `path` is the original workspace-relative declaration.
+   */
+  droppedGitignored: { repo: string; path: string }[];
 }
 
 /**
@@ -137,14 +144,18 @@ export async function landCommit(
   const declared = changedFiles.filter((p) => !p.startsWith(RUN_ARTIFACT_PREFIX));
   const landable = [...new Set([...declared, ...dirtyByproducts(root)])];
 
+  // Surfaced (not silent) gitignored drops — populated in the grouping loop below.
+  const droppedGitignored: { repo: string; path: string }[] = [];
+
   // Empty changeset → no-op.
   if (landable.length === 0) {
-    return { status: 'noop', commits: [], detached: [], dirty: [] };
+    return { status: 'noop', commits: [], detached: [], dirty: [], droppedGitignored };
   }
 
   // Group sub-repo-relative paths by owning sub-repo ('.' = workspace root),
   // dropping any path that is gitignored IN its owning repo (uncommittable → a
-  // silent no-op, not a `git add` crash).
+  // silent no-op, not a `git add` crash). Each drop is RECORDED so the caller can
+  // warn instead of letting a wrongly-gitignored real file vanish (wi_260627s2d).
   const byRepo = new Map<string, string[]>();
   for (const p of landable) {
     const abs = join(root, p);
@@ -152,7 +163,10 @@ export async function landCommit(
     const key = owningAbs === null ? '.' : relative(root, owningAbs).replace(/\\/g, '/') || '.';
     const repoAbs = subRepoAbs(root, key);
     const rel = relForRepo(root, repoAbs, p);
-    if (isGitIgnoredInRepo(repoAbs, rel)) continue;
+    if (isGitIgnoredInRepo(repoAbs, rel)) {
+      droppedGitignored.push({ repo: key, path: p });
+      continue;
+    }
     const group = byRepo.get(key) ?? [];
     group.push(rel);
     byRepo.set(key, group);
@@ -160,21 +174,33 @@ export async function landCommit(
 
   // Every path was gitignored/dropped → nothing to land.
   if ([...byRepo.values()].every((g) => g.length === 0)) {
-    return { status: 'noop', commits: [], detached: [], dirty: [] };
+    return { status: 'noop', commits: [], detached: [], dirty: [], droppedGitignored };
   }
 
   // Guard — detached HEAD across ALL affected sub-repos before any commit.
   // A detached commit is orphaned (durability silently false) → land FAILURE.
   const detached = [...byRepo.keys()].filter((repo) => isDetachedHead(subRepoAbs(root, repo)));
   if (detached.length > 0) {
-    return { status: 'aborted_detached', commits: [], detached: detached.sort(), dirty: [] };
+    return {
+      status: 'aborted_detached',
+      commits: [],
+      detached: detached.sort(),
+      dirty: [],
+      droppedGitignored,
+    };
   }
 
   // Shared mechanics: Phase-1 dirty check (NO commit on dirt) + Phase-2 commit.
   try {
     const commits = commitPerSubRepo(root, byRepo, message);
     // All groups skipped (already committed) → idempotent no-op.
-    return { status: commits.length > 0 ? 'committed' : 'noop', commits, detached: [], dirty: [] };
+    return {
+      status: commits.length > 0 ? 'committed' : 'noop',
+      commits,
+      detached: [],
+      dirty: [],
+      droppedGitignored,
+    };
   } catch (err) {
     if (err instanceof CleanupDirtyRepoError) {
       return {
@@ -182,6 +208,7 @@ export async function landCommit(
         commits: [],
         detached: [],
         dirty: [{ repo: err.repo, paths: err.dirty }],
+        droppedGitignored,
       };
     }
     throw err;

@@ -26587,8 +26587,9 @@ async function landCommit(repoRoot, changedFiles, message) {
   const root = resolve10(repoRoot);
   const declared = changedFiles.filter((p) => !p.startsWith(RUN_ARTIFACT_PREFIX));
   const landable = [...new Set([...declared, ...dirtyByproducts(root)])];
+  const droppedGitignored = [];
   if (landable.length === 0) {
-    return { status: "noop", commits: [], detached: [], dirty: [] };
+    return { status: "noop", commits: [], detached: [], dirty: [], droppedGitignored };
   }
   const byRepo = new Map;
   for (const p of landable) {
@@ -26597,29 +26598,44 @@ async function landCommit(repoRoot, changedFiles, message) {
     const key = owningAbs === null ? "." : relative11(root, owningAbs).replace(/\\/g, "/") || ".";
     const repoAbs = subRepoAbs(root, key);
     const rel = relForRepo(root, repoAbs, p);
-    if (isGitIgnoredInRepo(repoAbs, rel))
+    if (isGitIgnoredInRepo(repoAbs, rel)) {
+      droppedGitignored.push({ repo: key, path: p });
       continue;
+    }
     const group = byRepo.get(key) ?? [];
     group.push(rel);
     byRepo.set(key, group);
   }
   if ([...byRepo.values()].every((g3) => g3.length === 0)) {
-    return { status: "noop", commits: [], detached: [], dirty: [] };
+    return { status: "noop", commits: [], detached: [], dirty: [], droppedGitignored };
   }
   const detached = [...byRepo.keys()].filter((repo) => isDetachedHead(subRepoAbs(root, repo)));
   if (detached.length > 0) {
-    return { status: "aborted_detached", commits: [], detached: detached.sort(), dirty: [] };
+    return {
+      status: "aborted_detached",
+      commits: [],
+      detached: detached.sort(),
+      dirty: [],
+      droppedGitignored
+    };
   }
   try {
     const commits = commitPerSubRepo(root, byRepo, message);
-    return { status: commits.length > 0 ? "committed" : "noop", commits, detached: [], dirty: [] };
+    return {
+      status: commits.length > 0 ? "committed" : "noop",
+      commits,
+      detached: [],
+      dirty: [],
+      droppedGitignored
+    };
   } catch (err) {
     if (err instanceof CleanupDirtyRepoError) {
       return {
         status: "aborted_dirty",
         commits: [],
         detached: [],
-        dirty: [{ repo: err.repo, paths: err.dirty }]
+        dirty: [{ repo: err.repo, paths: err.dirty }],
+        droppedGitignored
       };
     }
     throw err;
@@ -26983,7 +26999,11 @@ var autopilotComplete = defineCommand({
             status: land.status,
             commits: land.commits.map((c3) => ({ repo: c3.repo, sha: c3.sha })),
             dirty: land.dirty,
-            detached: land.detached
+            detached: land.detached,
+            dropped_gitignored: land.droppedGitignored,
+            ...land.droppedGitignored.length > 0 ? {
+              dropped_gitignored_warning: `${land.droppedGitignored.length} declared changed_files path(s) were gitignored and NOT committed: ${land.droppedGitignored.map((d2) => d2.path).join(", ")}. If any is a real source file, fix its .gitignore and re-run; if it is a stale reference, remove it from the work item's changed_files.`
+            } : {}
           } : null,
           acceptance: completion.acceptance.map((a2) => ({
             criterion_id: a2.criterion_id,
@@ -45005,4 +45025,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=04d34ac335f90e87201484c9bbf65fad6b2e7f1b0f811981906130227ad5a022
+//# ditto-src-stamp=c3e740eff3f4b4dfe680232643bbd1e73d612bc8b74dbf2d8759d36f72b97684
