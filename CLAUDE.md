@@ -420,5 +420,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-20260628-append-decision-atomicity · accepted · autopilot 결정 로그는 O_APPEND 단일쓰기 + single-writer로 충분 — 파일 락 불필요
 - ADR-20260628-decisive-class-lossless-channel · accepted · owner-return 결정 4클래스는 무손실 free-text 채널 — per-class 구조 필드 거부
 - ADR-20260628-delegation-enforcement-boundary · accepted · 위임 규율 집행 경계 — codified-artifact까지, 행동 강제는 불가
+- ADR-20260628-github-backlog-sot · accepted · GitHub 연계 SoT 3층 + repo 좌표 일원화 — 백로그=GitHub read, 완료=ditto write
 
 <!-- ditto:knowledge:end -->
