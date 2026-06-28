@@ -2,6 +2,7 @@ import { defineCommand } from 'citty';
 import { readQuestionConfigDefaults } from '~/core/ditto-config';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
+  checkQuestionContext,
   finalizeTechSpec,
   finalizeTechSpecPayload,
   nextRound,
@@ -20,6 +21,7 @@ import {
   resolveQuestionConfig,
 } from '~/core/tech-spec-options';
 import { WorkItemStore } from '~/core/work-item-store';
+import { scoredQuestion } from '~/schemas/tech-spec-round';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -537,6 +539,63 @@ const nextRoundCmd = defineCommand({
   },
 });
 
+const checkQuestionCmd = defineCommand({
+  meta: {
+    name: 'check-question',
+    description:
+      'Pre-ask presentation-contract gate for a SELECTED tech-spec question (ac-6): rejects an un-glossed internal identifier on the user-reaching face and a missing user_explanation/why_matters — same contract as deep-interview. Non-zero exit on rejection so the §6-6 loop can regenerate.',
+  },
+  args: {
+    json: {
+      type: 'string',
+      description:
+        'Scored question JSON: {text, property, scores, why_matters?, user_explanation?, background?, grounding?}',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw: unknown;
+    try {
+      raw = parseJsonArg(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = scoredQuestion.safeParse(raw);
+    if (!parsed.success) {
+      writeError('--json failed schema validation:');
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const verdict = checkQuestionContext(parsed.data);
+    if (format === 'json') {
+      writeJson(verdict);
+    } else if (verdict.ok) {
+      writeHuman('check-question: ok (presentation contract satisfied)');
+    } else {
+      writeError('check-question: REJECTED — under-contextualized, do not ask as-is:');
+      for (const v of verdict.violations) {
+        writeError(`  - ${v.field}: ${v.reason}`);
+      }
+    }
+    // Non-zero exit on rejection so the SKILL/driver can branch (regenerate) on it.
+    if (!verdict.ok) process.exit(RUNTIME_ERROR_EXIT);
+  },
+});
+
 export const techSpecCommand = defineCommand({
   meta: {
     name: 'tech-spec',
@@ -548,6 +607,7 @@ export const techSpecCommand = defineCommand({
     'record-section': recordSectionCmd,
     'record-round': recordRoundCmd,
     'next-round': nextRoundCmd,
+    'check-question': checkQuestionCmd,
     finalize: finalizeCmd,
   },
 });

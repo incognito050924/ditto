@@ -13006,6 +13006,9 @@ var init_tech_spec_round = __esm(() => {
     text: exports_external.string().min(1),
     property: questionProperty,
     why_matters: exports_external.string().optional(),
+    user_explanation: exports_external.string().optional(),
+    background: exports_external.string().optional(),
+    grounding: exports_external.string().optional(),
     scores: questionScore,
     rationale: exports_external.string().optional().describe("Why selected (present on selected questions)")
   }).describe("One candidate question with its gate score");
@@ -18793,6 +18796,112 @@ function parseDecisionsIncremental(path, text) {
   return tail.length > 0 ? decisions.concat(tail) : decisions;
 }
 
+// src/core/question-context.ts
+init_zod();
+
+// src/schemas/question-gate.ts
+init_zod();
+init_common();
+var selfAnswerSource = exports_external.enum(["code", "docs", "repo-artifact", "web", "memory"]).describe("Where the agent tried to answer the question before asking the user");
+var selfAnswerAttempt = exports_external.object({
+  source: selfAnswerSource,
+  result: exports_external.string().min(1).describe("Evidence found, or the reason the source did not resolve it")
+}).describe("One self-answer attempt that must precede asking the user (\xA76.2)");
+var questionGateDecision = exports_external.enum(["ask", "do_not_ask", "answer_with_assumption", "deep_interview"]).describe("Outcome of the question gate evaluation");
+var questionGate = exports_external.object({
+  schema_version: schemaVersion,
+  work_item_id: workItemId,
+  question: exports_external.string().min(1).describe("The question the agent considered asking the user"),
+  why_needed: exports_external.string().min(1).describe("Why only the user can answer this"),
+  self_answer_attempts: exports_external.array(selfAnswerAttempt).default([]).describe("Sources checked before asking; gate cannot be ask without these"),
+  decision: questionGateDecision,
+  risk_if_not_asked: exports_external.string().min(1).describe("How the implementation result changes if this is not asked")
+}).describe("Pre-ask judgement that blocks unnecessary and responsibility-shifting questions (\xA76.2)");
+
+// src/core/question-context.ts
+var questionContextCandidate = exports_external.object({
+  text: exports_external.string().min(1),
+  why_matters: exports_external.string().min(1),
+  user_explanation: exports_external.string().optional(),
+  background: exports_external.string().optional(),
+  grounding: exports_external.string().optional(),
+  self_answer_attempts: exports_external.array(selfAnswerAttempt).optional()
+}).describe("A gate-selected question candidate checked against the presentation contract");
+var isBlank = (s2) => s2 === undefined || s2.trim().length === 0;
+var IDENTIFIER_PATTERNS = [
+  /ac-\d+/g,
+  /T-\d+/g,
+  /D\d+/g,
+  /(?:wi|orch|memevt|adr)_[0-9a-z]+/g
+];
+var EXPLANATORY_WORD = "[\uAC00-\uD7A3]{2,}|[A-Za-z]{3,}";
+var stripCode = (s2) => s2.replace(/```[\s\S]*?```/g, " ").replace(/`[^`]*`/g, " ");
+var hasIdentifierBoundary = (text, start, end) => {
+  const before = start === 0 || !/[A-Za-z0-9_-]/.test(text[start - 1] ?? "");
+  const after = end === text.length || !/[A-Za-z0-9_]/.test(text[end] ?? "");
+  return before && after;
+};
+var isGlossed = (text, start, end) => {
+  const before = text.slice(Math.max(0, start - 40), start);
+  const after = text.slice(end, end + 40);
+  if (new RegExp(`^\\s*[\uFF08(][^)\uFF09]*?(?:${EXPLANATORY_WORD})`).test(after))
+    return true;
+  if (new RegExp(`^\\s*[:\uFF1A\\-\u2014\u2013][^\\n]*?(?:${EXPLANATORY_WORD})`).test(after))
+    return true;
+  if (new RegExp(`(?:${EXPLANATORY_WORD})[^()\uFF08\uFF09]*[\uFF08(][^()\uFF08\uFF09]*$`).test(before) && /^\s*[)\uFF09]/.test(after)) {
+    return true;
+  }
+  return false;
+};
+function findUnexplainedIdentifiers(s2) {
+  if (s2 === undefined)
+    return [];
+  const text = stripCode(s2);
+  const found = [];
+  for (const pattern of IDENTIFIER_PATTERNS) {
+    pattern.lastIndex = 0;
+    for (let m2 = pattern.exec(text);m2 !== null; m2 = pattern.exec(text)) {
+      const start = m2.index;
+      const end = start + m2[0].length;
+      if (!hasIdentifierBoundary(text, start, end))
+        continue;
+      if (!isGlossed(text, start, end))
+        found.push(m2[0]);
+    }
+  }
+  return found;
+}
+function validateQuestionContext(candidate) {
+  const violations = [];
+  if (isBlank(candidate.user_explanation)) {
+    violations.push({
+      field: "user_explanation",
+      reason: "a plain-language why-we-ask + what-the-answer-decides (user language, no raw code/jargon) is required before asking the user"
+    });
+  }
+  if (isBlank(candidate.why_matters)) {
+    violations.push({
+      field: "why_matters",
+      reason: "the value of the answer (what it decides) must be stated"
+    });
+  }
+  const leaked = [
+    ...findUnexplainedIdentifiers(candidate.text),
+    ...findUnexplainedIdentifiers(candidate.user_explanation)
+  ];
+  if (leaked.length > 0) {
+    violations.push({
+      field: "unexplained_identifier",
+      reason: `internal identifier(s) ${[...new Set(leaked)].join(", ")} surfaced to the user with no inline gloss \u2014 restate in user language or add a (parenthetical / colon) explanation`
+    });
+  }
+  return { ok: violations.length === 0, violations };
+}
+var OPTION_DESCRIPTION_BUDGET = 160;
+function needsBriefing(rendered, limit = OPTION_DESCRIPTION_BUDGET) {
+  return rendered.length > limit;
+}
+
 // src/core/coverage-manager.ts
 var CLOSED_STATES = new Set([
   "resolved",
@@ -18888,7 +18997,16 @@ function serializePlanDialog(input) {
     lines.push("(none)");
   } else {
     for (const qa of input.userQa) {
+      const briefFirst = qa.context !== undefined && needsBriefing(qa.context);
+      if (briefFirst) {
+        lines.push("### \uCEE8\uD14D\uC2A4\uD2B8 \uBE0C\uB9AC\uD551");
+        lines.push(qa.context);
+        lines.push("");
+      }
       lines.push(`- Q: ${qa.question}`);
+      if (qa.context !== undefined && !briefFirst) {
+        lines.push(`  - context: ${qa.context}`);
+      }
       lines.push(`  - why_matters: ${qa.why_matters}`);
       lines.push(`  - A: ${qa.answer}`);
     }
@@ -23672,25 +23790,6 @@ var convergence = exports_external.object({
   })
 }).describe("Convergence sidecar; records refinement closure, does not set verdict (\xA76.9)");
 
-// src/schemas/question-gate.ts
-init_zod();
-init_common();
-var selfAnswerSource = exports_external.enum(["code", "docs", "repo-artifact", "web", "memory"]).describe("Where the agent tried to answer the question before asking the user");
-var selfAnswerAttempt = exports_external.object({
-  source: selfAnswerSource,
-  result: exports_external.string().min(1).describe("Evidence found, or the reason the source did not resolve it")
-}).describe("One self-answer attempt that must precede asking the user (\xA76.2)");
-var questionGateDecision = exports_external.enum(["ask", "do_not_ask", "answer_with_assumption", "deep_interview"]).describe("Outcome of the question gate evaluation");
-var questionGate = exports_external.object({
-  schema_version: schemaVersion,
-  work_item_id: workItemId,
-  question: exports_external.string().min(1).describe("The question the agent considered asking the user"),
-  why_needed: exports_external.string().min(1).describe("Why only the user can answer this"),
-  self_answer_attempts: exports_external.array(selfAnswerAttempt).default([]).describe("Sources checked before asking; gate cannot be ask without these"),
-  decision: questionGateDecision,
-  risk_if_not_asked: exports_external.string().min(1).describe("How the implementation result changes if this is not asked")
-}).describe("Pre-ask judgement that blocks unnecessary and responsibility-shifting questions (\xA76.2)");
-
 // src/schemas/interview-state.ts
 var interviewStatus = exports_external.enum(["active", "converged", "deferred", "aborted"]).describe("Lifecycle of the deep interview");
 var dimensionState = exports_external.enum(["unknown", "partial", "resolved"]).describe("Resolution state of one ambiguity dimension");
@@ -23715,6 +23814,7 @@ var interviewQuestion = exports_external.object({
   user_explanation: exports_external.string().min(1).optional().describe("Plain-language why-we-ask + what-the-answer-decides \u2014 user language, no raw code/jargon (default-shown)"),
   background: exports_external.string().min(1).optional().describe('Deeper context for progressive disclosure ("more") \u2014 optional expansion beyond user_explanation'),
   grounding: exports_external.string().min(1).optional().describe("Evidence the question stems from (file:line | doc | domain) \u2014 the source behind why-we-ask"),
+  review_status: exports_external.enum(["reviewed", "unverified-degraded"]).optional().describe("Session-blind context-review outcome (critical questions only)"),
   answer: exports_external.string().optional(),
   answer_kind: exports_external.enum(["user", "assumption"]).optional(),
   answer_self_report: answerSelfReport.optional().describe("User self-report of decision-ability after answering (presentation-sufficiency signal)"),
@@ -24153,6 +24253,15 @@ async function recordSection(repoRoot, input) {
   return store.write({ ...state, sections, updated_at: nowIso });
 }
 var recordRoundPayload = techSpecRoundPayload;
+function checkQuestionContext(q2) {
+  return validateQuestionContext({
+    text: q2.text,
+    why_matters: q2.why_matters ?? "",
+    user_explanation: q2.user_explanation,
+    background: q2.background,
+    grounding: q2.grounding
+  });
+}
 async function recordRound(repoRoot, input) {
   const store = new WorkItemStore(repoRoot);
   if (!await store.exists(input.workItemId)) {
@@ -32232,34 +32341,6 @@ async function promotePremortem(repoRoot, workItemId2, payload, now) {
     premortem: [...state.premortem, ...payload.items]
   });
   return { state: written, unpromoted };
-}
-
-// src/core/question-context.ts
-init_zod();
-var questionContextCandidate = exports_external.object({
-  text: exports_external.string().min(1),
-  why_matters: exports_external.string().min(1),
-  user_explanation: exports_external.string().optional(),
-  background: exports_external.string().optional(),
-  grounding: exports_external.string().optional(),
-  self_answer_attempts: exports_external.array(selfAnswerAttempt).optional()
-}).describe("A gate-selected question candidate checked against the presentation contract");
-var isBlank = (s2) => s2 === undefined || s2.trim().length === 0;
-function validateQuestionContext(candidate) {
-  const violations = [];
-  if (isBlank(candidate.user_explanation)) {
-    violations.push({
-      field: "user_explanation",
-      reason: "a plain-language why-we-ask + what-the-answer-decides (user language, no raw code/jargon) is required before asking the user"
-    });
-  }
-  if (isBlank(candidate.why_matters)) {
-    violations.push({
-      field: "why_matters",
-      reason: "the value of the answer (what it decides) must be stated"
-    });
-  }
-  return { ok: violations.length === 0, violations };
 }
 
 // src/cli/commands/deep-interview.ts
@@ -43290,6 +43371,7 @@ var teardownCommand = defineCommand({
 // src/cli/commands/tech-spec.ts
 init_fs();
 init_work_item_store();
+init_tech_spec_round();
 function parseJsonArg2(raw) {
   try {
     return JSON.parse(raw);
@@ -43734,6 +43816,60 @@ var nextRoundCmd = defineCommand({
     }
   }
 });
+var checkQuestionCmd2 = defineCommand({
+  meta: {
+    name: "check-question",
+    description: "Pre-ask presentation-contract gate for a SELECTED tech-spec question (ac-6): rejects an un-glossed internal identifier on the user-reaching face and a missing user_explanation/why_matters \u2014 same contract as deep-interview. Non-zero exit on rejection so the \xA76-6 loop can regenerate."
+  },
+  args: {
+    json: {
+      type: "string",
+      description: "Scored question JSON: {text, property, scores, why_matters?, user_explanation?, background?, grounding?}",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw;
+    try {
+      raw = parseJsonArg2(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = scoredQuestion.safeParse(raw);
+    if (!parsed.success) {
+      writeError("--json failed schema validation:");
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const verdict2 = checkQuestionContext(parsed.data);
+    if (format === "json") {
+      writeJson2(verdict2);
+    } else if (verdict2.ok) {
+      writeHuman("check-question: ok (presentation contract satisfied)");
+    } else {
+      writeError("check-question: REJECTED \u2014 under-contextualized, do not ask as-is:");
+      for (const v2 of verdict2.violations) {
+        writeError(`  - ${v2.field}: ${v2.reason}`);
+      }
+    }
+    if (!verdict2.ok)
+      process.exit(RUNTIME_ERROR_EXIT);
+  }
+});
 var techSpecCommand = defineCommand({
   meta: {
     name: "tech-spec",
@@ -43744,6 +43880,7 @@ var techSpecCommand = defineCommand({
     "record-section": recordSectionCmd,
     "record-round": recordRoundCmd,
     "next-round": nextRoundCmd,
+    "check-question": checkQuestionCmd2,
     finalize: finalizeCmd2
   }
 });
@@ -46333,4 +46470,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=b6ef3e45c9fe41bfc10407437b286fdd634daa23d5bb4a5e1168feda44df6767
+//# ditto-src-stamp=984873ff7dd76fb5429878af7ebf0b29123a14b37989c4efc616c38d1db8dd3b

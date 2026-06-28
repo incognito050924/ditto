@@ -6,6 +6,7 @@ import type { Autopilot } from '~/schemas/autopilot';
 import type { IntentContract } from '~/schemas/intent';
 import { userConfirmation } from '~/schemas/interview-state';
 import {
+  type ScoredQuestion,
   type TechSpecRound,
   type TechSpecRoundPayload,
   techSpecRound,
@@ -23,6 +24,7 @@ import { bootstrapAutopilot } from './autopilot-bootstrap';
 import { type GateResult, type RiskAxes, interviewReadinessGate } from './gates';
 import { IntentStore } from './intent-store';
 import { InterviewStore } from './interview-store';
+import { type QuestionContextVerdict, validateQuestionContext } from './question-context';
 import { resolveQuestionConfig } from './tech-spec-options';
 import { TechSpecStore } from './tech-spec-store';
 import { WorkItemStore } from './work-item-store';
@@ -342,6 +344,32 @@ export async function recordSection(
 /** The driver records one gate round's scores; ts + work_item_id are stamped on persist. */
 export const recordRoundPayload = techSpecRoundPayload;
 export type RecordRoundPayload = TechSpecRoundPayload;
+
+// ── check-question (ac-1/ac-2/ac-6 — pre-ask presentation-contract gate) ──
+//
+// tech-spec previously never referenced question-context; this is the wiring. Before a
+// gate-SELECTED candidate is asked/recorded, the SKILL §6-6 loop runs THIS check (mirroring
+// deep-interview's `check-question`): the user-reaching face must carry a plain-language
+// why-we-ask + what-the-answer-decides (`user_explanation` + `why_matters`) and leak no
+// un-glossed internal identifier. The same `validateQuestionContext` core enforces both
+// surfaces, so the contract stays consistent (ac-6). The record-round score trail
+// (instrumentation) stays ungated by design — the gate is a pre-ask step, not a persist gate.
+
+export type CheckQuestionInput = Pick<
+  ScoredQuestion,
+  'text' | 'why_matters' | 'user_explanation' | 'background' | 'grounding'
+>;
+
+/** Run the presentation-contract gate on one selected tech-spec question (pure). */
+export function checkQuestionContext(q: CheckQuestionInput): QuestionContextVerdict {
+  return validateQuestionContext({
+    text: q.text,
+    why_matters: q.why_matters ?? '',
+    user_explanation: q.user_explanation,
+    background: q.background,
+    grounding: q.grounding,
+  });
+}
 
 export interface RecordRoundInput {
   workItemId: string;

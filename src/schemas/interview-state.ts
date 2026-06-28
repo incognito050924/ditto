@@ -69,6 +69,15 @@ export const interviewQuestion = z
       .describe(
         'Evidence the question stems from (file:line | doc | domain) — the source behind why-we-ask',
       ),
+    // Session-blind context-review outcome for a critical question (wi_260628, D2).
+    // Optional so pre-existing interview-state.json parse unchanged; only critical
+    // questions carry it. 'reviewed' = the session-blind reviewer passed it;
+    // 'unverified-degraded' = reviewer unavailable or the regeneration cap was
+    // exhausted — surfaced to the user honestly, never silently asked (ADR-0018 D2).
+    review_status: z
+      .enum(['reviewed', 'unverified-degraded'])
+      .optional()
+      .describe('Session-blind context-review outcome (critical questions only)'),
     answer: z.string().optional(),
     answer_kind: z.enum(['user', 'assumption']).optional(),
     answer_self_report: answerSelfReport

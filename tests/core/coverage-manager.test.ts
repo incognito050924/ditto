@@ -553,6 +553,76 @@ describe('coverage Manager — plan-dialog.md serialization (§6, ac-6)', () => 
   });
 });
 
+// ── ac-5: user Q&A carries 배경+해결결과 context; over-budget context briefs first ──
+// The coverage surface is the second context-contract path (the check-question path
+// being the first). A user Q&A item now carries its 배경(왜 물었는지)+해결결과(답이 정한
+// 것) context. When that context overflows the compact option UI (needsBriefing from
+// question-context.ts — the SHARED threshold, not a re-implementation), the serializer
+// renders a context briefing as a dialog-body section BEFORE the question; a short
+// context rides inline. The briefing is the caller's context rendered verbatim (§4.1:
+// the Manager serializes, never interprets) so it does not inject a leading frame.
+describe('coverage Manager — over-budget user Q&A context briefs first (§6, ac-5/ac-6)', () => {
+  test('a context exceeding the budget renders a briefing section BEFORE the question', () => {
+    // > OPTION_DESCRIPTION_BUDGET (160): '상세' (2 chars) ×90 = 180, plus framing.
+    const longContext = `배경 ${'상세'.repeat(90)} 해결결과 결정됨`;
+    const md = serializePlanDialog({
+      workItemId: 'wi_brief',
+      userQa: [
+        {
+          question: 'GATE-Q-MARKER 어느 경로로 갈까?',
+          why_matters: 'decides routing',
+          answer: 'A',
+          context: longContext,
+        },
+      ],
+      selfAnswers: [],
+      assumptions: [],
+      closedItems: [],
+      openItems: [],
+    });
+    // the briefing section exists and carries the context verbatim …
+    expect(md).toContain('컨텍스트 브리핑');
+    expect(md).toContain(longContext);
+    // … and is rendered BEFORE the question text (브리핑 먼저, 질문은 그 뒤).
+    expect(md.indexOf('컨텍스트 브리핑')).toBeLessThan(md.indexOf('GATE-Q-MARKER'));
+  });
+
+  test('a context within the budget rides inline with the question — no briefing section', () => {
+    const shortContext = '배경: 라우팅 결정 / 해결결과: A 선택';
+    const md = serializePlanDialog({
+      workItemId: 'wi_inline',
+      userQa: [
+        {
+          question: 'SHORT-Q 어디로?',
+          why_matters: 'routing',
+          answer: 'A',
+          context: shortContext,
+        },
+      ],
+      selfAnswers: [],
+      assumptions: [],
+      closedItems: [],
+      openItems: [],
+    });
+    expect(md).not.toContain('컨텍스트 브리핑');
+    // the short context is still surfaced, inline alongside the question.
+    expect(md).toContain(shortContext);
+  });
+
+  test('a Q&A with no context is unchanged (backward compatible, no briefing)', () => {
+    const md = serializePlanDialog({
+      workItemId: 'wi_nocontext',
+      userQa: [{ question: 'plain Q', why_matters: 'm', answer: 'a' }],
+      selfAnswers: [],
+      assumptions: [],
+      closedItems: [],
+      openItems: [],
+    });
+    expect(md).not.toContain('컨텍스트 브리핑');
+    expect(md).toContain('plain Q');
+  });
+});
+
 // ── ac-8: cost control — three tiers + caps, breadth-invariant ──────────────────
 // §8.2: lightweight 3등급(light/standard/full, 규모+risk 기반) + caps 상한(노드당
 // 호출 수·트리 노드 수·총 라운드 수). light는 brief를 not_required로 자동승인.

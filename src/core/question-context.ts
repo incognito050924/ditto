@@ -43,6 +43,72 @@ export interface QuestionContextVerdict {
 
 const isBlank = (s: string | undefined): boolean => s === undefined || s.trim().length === 0;
 
+// --- ac-1 (D1): internal-identifier gloss detection ---------------------------
+//
+// An internal identifier surfaced on the user-reaching face (text + user_explanation)
+// without a plain-language gloss leaks DITTO-internal vocabulary at the user. We
+// detect a CLOSED whitelist of identifier shapes (NOT a broad \w+ — that regressed on
+// Korean before): ac-{n} · T-{n} · D{n} · (wi|orch|memevt|adr)_{lowhex…}. A token is
+// "glossed" when a ±40-char window carries a parenthetical OR a colon/dash separator
+// followed by an explanatory word (Korean ≥2 syllables or a Latin word ≥3 letters).
+// Code blocks (``` fenced ```) and inline `code` are stripped first.
+
+const IDENTIFIER_PATTERNS: readonly RegExp[] = [
+  /ac-\d+/g,
+  /T-\d+/g,
+  /D\d+/g,
+  /(?:wi|orch|memevt|adr)_[0-9a-z]+/g,
+];
+
+// An explanatory word: a Korean run (≥2 syllables) or a Latin word (≥3 letters). Short
+// identifier fragments (e.g. "T", "D1") do not qualify, so "ac-1 (T-2)" stays unglossed.
+const EXPLANATORY_WORD = '[가-힣]{2,}|[A-Za-z]{3,}';
+
+const stripCode = (s: string): string => s.replace(/```[\s\S]*?```/g, ' ').replace(/`[^`]*`/g, ' ');
+
+// Unicode-safe boundaries: before = start | non-[A-Za-z0-9_-]; after = end | non-[A-Za-z0-9_].
+const hasIdentifierBoundary = (text: string, start: number, end: number): boolean => {
+  const before = start === 0 || !/[A-Za-z0-9_-]/.test(text[start - 1] ?? '');
+  const after = end === text.length || !/[A-Za-z0-9_]/.test(text[end] ?? '');
+  return before && after;
+};
+
+const isGlossed = (text: string, start: number, end: number): boolean => {
+  const before = text.slice(Math.max(0, start - 40), start);
+  const after = text.slice(end, end + 40);
+  // "(설명…" or ": 설명" / "- 설명" / "— 설명" directly after the token.
+  if (new RegExp(`^\\s*[（(][^)）]*?(?:${EXPLANATORY_WORD})`).test(after)) return true;
+  if (new RegExp(`^\\s*[:：\\-—–][^\\n]*?(?:${EXPLANATORY_WORD})`).test(after)) return true;
+  // token wrapped in parens with an explanatory word before it: "설명…(token)".
+  if (
+    new RegExp(`(?:${EXPLANATORY_WORD})[^()（）]*[（(][^()（）]*$`).test(before) &&
+    /^\s*[)）]/.test(after)
+  ) {
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Returns the unglossed internal identifiers surfaced in `s` (after stripping code).
+ * Pure and deterministic — the unit of evidence for ac-1.
+ */
+export function findUnexplainedIdentifiers(s: string | undefined): string[] {
+  if (s === undefined) return [];
+  const text = stripCode(s);
+  const found: string[] = [];
+  for (const pattern of IDENTIFIER_PATTERNS) {
+    pattern.lastIndex = 0;
+    for (let m = pattern.exec(text); m !== null; m = pattern.exec(text)) {
+      const start = m.index;
+      const end = start + m[0].length;
+      if (!hasIdentifierBoundary(text, start, end)) continue;
+      if (!isGlossed(text, start, end)) found.push(m[0]);
+    }
+  }
+  return found;
+}
+
 /**
  * Returns `{ ok, violations }`. `ok` is true only when every required context field
  * is present and non-blank. Pure and deterministic — the unit of evidence for ac-2.
@@ -64,5 +130,83 @@ export function validateQuestionContext(
       reason: 'the value of the answer (what it decides) must be stated',
     });
   }
+  // ac-1 (D1): the user-reaching face (text + user_explanation) must not leak an
+  // un-glossed internal identifier. background/grounding/self_answer_attempts are not
+  // user-default surfaces, so they are excluded from this check.
+  const leaked = [
+    ...findUnexplainedIdentifiers(candidate.text),
+    ...findUnexplainedIdentifiers(candidate.user_explanation),
+  ];
+  if (leaked.length > 0) {
+    violations.push({
+      field: 'unexplained_identifier',
+      reason: `internal identifier(s) ${[...new Set(leaked)].join(', ')} surfaced to the user with no inline gloss — restate in user language or add a (parenthetical / colon) explanation`,
+    });
+  }
   return { ok: violations.length === 0, violations };
+}
+
+// --- ac-5 (D4): briefing threshold -------------------------------------------
+//
+// Budget for an AskUserQuestion option `description` (the rendered text the user reads
+// against each choice). No host-documented hard char limit was found in this repo or
+// the bundled skills/docs as of 2026-06; this is a CONSERVATIVE default chosen so a
+// long explanation triggers a separate briefing rather than overflowing the compact
+// option UI. Revise if the host publishes an exact limit. (D4: "못 찾으면 보수적 기본값+주석".)
+export const OPTION_DESCRIPTION_BUDGET = 160;
+
+/**
+ * True when the rendered option description is too long to fit the option UI and the
+ * user should be briefed first. `rendered` = user_explanation (falling back to text).
+ * Pure and limit-agnostic (the caller may pass any limit).
+ */
+export function needsBriefing(
+  rendered: string,
+  limit: number = OPTION_DESCRIPTION_BUDGET,
+): boolean {
+  return rendered.length > limit;
+}
+
+// --- ac-4 (D2): reviewer routing + regeneration cap (judgment logic only) -----
+//
+// Per-question regeneration cap (fixed, small). Distinct from deep-interview's
+// question_cap (total question count) — do not reuse that. The reviewer is the
+// session-blind context-reviewer (D5); spawning is the SKILL node's job. These pure
+// functions are only the judgment: who gets reviewed, and what terminal/next state the
+// cap implies. Honesty over silence: a failed/absent review degrades visibly
+// ('unverified-degraded'), never a silent ask or a stall (ADR-0018 D1/D2).
+export const REVIEW_REGENERATE_CAP = 2;
+
+export type ReviewRouting = { action: 'review' } | { action: 'skip-review' };
+
+/** critical questions need the session-blind reviewer; others skip it. */
+export function routeForReview(input: { critical: boolean }): ReviewRouting {
+  return input.critical ? { action: 'review' } : { action: 'skip-review' };
+}
+
+export type ReviewDecision =
+  | { status: 'reviewed' }
+  | { status: 'regenerate'; attempt: number }
+  | { status: 'unverified-degraded'; reason: 'cap-exhausted' | 'reviewer-unavailable' };
+
+/**
+ * Decide the review outcome for one critical question:
+ *  - reviewer passed                       → 'reviewed'
+ *  - reviewer unavailable (spawn failed)   → 'unverified-degraded' (reviewer-unavailable)
+ *  - cap (2) already exhausted             → 'unverified-degraded' (cap-exhausted)
+ *  - otherwise                             → 'regenerate' (attempt = regenerations + 1)
+ */
+export function resolveReviewDecision(input: {
+  passed: boolean;
+  regenerations: number;
+  reviewerAvailable: boolean;
+}): ReviewDecision {
+  if (input.passed) return { status: 'reviewed' };
+  if (!input.reviewerAvailable) {
+    return { status: 'unverified-degraded', reason: 'reviewer-unavailable' };
+  }
+  if (input.regenerations >= REVIEW_REGENERATE_CAP) {
+    return { status: 'unverified-degraded', reason: 'cap-exhausted' };
+  }
+  return { status: 'regenerate', attempt: input.regenerations + 1 };
 }

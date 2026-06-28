@@ -40,10 +40,21 @@ export const scoredQuestion = z
     text: z.string().min(1),
     property: questionProperty,
     why_matters: z.string().optional(),
+    // Presentation-contract fields (wi_260628wr8 ac-6) — the same user-facing context
+    // deep-interview carries (src/core/question-context.ts). A plain-language why-we-ask
+    // + what-the-answer-decides (`user_explanation`) and the progressive-disclosure tiers
+    // (`background`/`grounding`). Optional so the raw score trail (all_scored) and existing
+    // tech-spec-rounds.jsonl lines stay valid; the `tech-spec check-question` pre-ask gate
+    // (checkQuestionContext) hard-requires them on SELECTED (user-reaching) questions.
+    user_explanation: z.string().optional(),
+    background: z.string().optional(),
+    grounding: z.string().optional(),
     scores: questionScore,
     rationale: z.string().optional().describe('Why selected (present on selected questions)'),
   })
   .describe('One candidate question with its gate score');
+
+export type ScoredQuestion = z.infer<typeof scoredQuestion>;
 
 /** The CLI payload (what the driver records); ts + work_item_id are stamped on persist. */
 export const techSpecRoundPayload = z

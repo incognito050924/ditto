@@ -78,12 +78,19 @@ Do NOT generate questions inline in your accumulated context: your interview nar
 
    1. **Gate the context (hard, before asking).** Run `ditto deep-interview check-question --json '{…candidate…}'`. It rejects (non-zero exit) a candidate that lacks a plain-language `user_explanation` — do **not** ask a rejected question; send the dimension back to the generators with the gap noted. This is the structural half of the success bar: a question reaches the user only with the context to act on it.
 
-   2. **Present with the presentation contract (comprehensible + sufficient).** Ask the user in *their* language, not the code's:
+   2. **Session-blind review of critical questions (ac-4).** A `critical` dimension's question reaches the user only after the **session-blind** `ditto:context-reviewer` clears it. The `check-question` gate (step 1) proved the context *fields exist*; this proves a context-less user could actually *decide* from them — the curse-of-knowledge catch the grounded generator/gate structurally cannot make. (`routeForReview` is the judgment: only `critical` candidates route here; non-critical skip it.)
+      - **Spawn** `ditto:context-reviewer` (Task, one level deep) with ONLY the user-reaching surface — `text` + `user_explanation` + any option labels — and NEVER the transcript / fixed facts / grounding (session-blind *is* the check). It returns `{verdict, reason}` and is read-only.
+      - **Reject → regenerate within the cap.** On `reject`, send the dimension back to the generators with the reviewer's `reason` noted, up to the per-question regeneration cap `REVIEW_REGENERATE_CAP = 2` (fixed and small — NOT the §3 `question_cap` total). A pass within the cap → record `question.review_status="reviewed"`.
+      - **Terminal fallback — honesty over silence (ADR-0018 D2).** When the host cannot spawn the reviewer (capability absent) OR the cap is exhausted with no pass, do NOT stall the interview, silently drop the question, or ask it as if it had been reviewed: record `question.review_status="unverified-degraded"` and present it **flagged** as not-yet-verified context, so the user sees the degradation. The interview continues either way.
+      - **Single writer.** The reviewer records nothing; YOU (the driver) are the sole writer of `review_status` via `record-turn`. When several critical questions are reviewed in parallel, fold each verdict back **sequentially** so no two writes clobber the state.
+
+   3. **Present with the presentation contract (comprehensible + sufficient).** Ask the user in *their* language, not the code's:
+      - **Briefing first when the context overflows (ac-5).** Before asking, test the rendered option text (`user_explanation`, else `text`) against `needsBriefing` (the shared `OPTION_DESCRIPTION_BUDGET` threshold in `src/core/question-context.ts`). When it overflows the compact AskUserQuestion option UI, present that context as a short **briefing in the conversation body FIRST**, then ask the question — never cram a long explanation into an option `description` where the host truncates it.
       - **Default view** = the question + its `user_explanation` (plain *why we ask + what your answer decides*). This must be enough to decide on its own, yet free of raw code, `file:line`, schema fields, axis names, or `[from-code]`-style tags. Translating the agent's reasoning into the user's language IS the work — a correct but unreadable explanation is a failure (curse of knowledge).
       - **Progressive disclosure** = offer the deeper `background` and the `grounding` evidence as an opt-in ("필요하면 근거/배경 더 보여줄게"). Keep the default short by moving depth here, never by dropping it — the user decides how far to drill.
       - **Sufficiency** = if the user can't decide from the default, that is a context gap, not a user failure: expand `background`, or record the unknown — do not push them to answer blind.
 
-   3. **Record the turn** with `record-turn`, carrying the full context: `question.user_explanation`, `question.background`/`question.grounding` (when present), and `question.self_answer_attempts` (the sources you checked in step 1 — so "why we ask you" is backed by "what we already checked"). Fold the answer back via the same turn's `answer`, and capture the user's decision-ability via `answer.self_report` (`confident`|`partial`|`unsure`) — the self-report half of the success bar. Set `question.marginal_gain` to the round's score-gated marginal information gain.
+   4. **Record the turn** with `record-turn`, carrying the full context: `question.user_explanation`, `question.background`/`question.grounding` (when present), `question.self_answer_attempts` (the sources you checked in step 1 — so "why we ask you" is backed by "what we already checked"), and — for a `critical` question — the `question.review_status` from step 2. Fold the answer back via the same turn's `answer`, and capture the user's decision-ability via `answer.self_report` (`confident`|`partial`|`unsure`) — the self-report half of the success bar. Set `question.marginal_gain` to the round's score-gated marginal information gain.
 
 5. **Dry → propose ending.** If the round is `dry` (no candidate cleared the threshold) — equivalently, the recorded `marginal_gain` falls below the dry floor — the driver records `exit.reason=diminishing_returns` and you propose ending the interview. Ending is a *proposal*, not a close: finalize (§6) still requires the readiness gate ∧ user confirmation to pass — never bypass the gate just because a round went dry.
 
@@ -96,7 +103,8 @@ ditto deep-interview record-turn --work-item <wi> --json '{
     "user_explanation": "<plain why-we-ask + what-your-answer-decides, user language>",
     "background": "<optional deeper context for 더 보기>",
     "grounding": "<file:line | doc — evidence behind the question>",
-    "self_answer_attempts": [{"source": "code", "result": "<what you checked and why it did not resolve it>"}]},
+    "self_answer_attempts": [{"source": "code", "result": "<what you checked and why it did not resolve it>"}],
+    "review_status": "reviewed"},
   "answer": {"text": "…", "kind": "user", "self_report": "confident"},
   "readiness_score": 0.55
 }' --output json
@@ -108,7 +116,7 @@ ditto deep-interview record-turn --work-item <wi> --json '{
 - **A `critical` dimension cannot be closed by your own assumption.** If `answer.kind="assumption"` on a critical dimension, the gate keeps it unresolved (the state is demoted to `partial`) — an agent's guess must not pass as the user's answer. The only exception is an *explicit user delegation* ("you decide"): record it as `{"kind": "assumption", "delegated": true}`, which is allowed to resolve the critical dimension. Default (`delegated` absent) = your guess = cannot close a critical.
 - `marginal_gain` (optional, 0..1) is the round's score-gated marginal information gain from the gate. A round whose value falls below the dry floor flips `exit.reason` to `diminishing_returns` (ending becomes a proposal; the finalize gate still applies).
 - `readiness_score` is your honest estimate after the turn; the deterministic floor caps it so high self-reports cannot escape unresolved-critical reality.
-- `question.user_explanation` / `background` / `grounding` are the presentation-contract context (carried from the gate-selected candidate); `question.self_answer_attempts` is the §6.2 ledger of sources you checked before asking. `answer.self_report` (`confident`|`partial`|`unsure`) records whether the user had enough context to decide — the observable sufficiency signal. All optional in the schema (old state parses unchanged), but `user_explanation` is required to clear `check-question`.
+- `question.user_explanation` / `background` / `grounding` are the presentation-contract context (carried from the gate-selected candidate); `question.self_answer_attempts` is the §6.2 ledger of sources you checked before asking. `question.review_status` (`reviewed` | `unverified-degraded`, critical questions only — step 2's outcome) is the session-blind review record; absent on non-critical questions. `answer.self_report` (`confident`|`partial`|`unsure`) records whether the user had enough context to decide — the observable sufficiency signal. All optional in the schema (old state parses unchanged), but `user_explanation` is required to clear `check-question`.
 
 ### 4. Pre-mortem (before finalize, not in record-turn)
 
@@ -186,6 +194,7 @@ Do not echo the full payload. The artifacts are authoritative.
 ## Hard rules
 
 - Never silently exit. Always set `exit.reason`.
+- Never present a critical question as reviewed when it was not: a reviewer-absent or cap-exhausted question is asked only with `review_status="unverified-degraded"` shown — never a silent ask, silent drop, or stall (ADR-0018 D2). The reviewer is read-only; only the driver writes `review_status`.
 - Never finalize past `not_ready` — fix the gate or hand off.
 - Never lower the readiness threshold to escape the gate.
 - Never paste raw command output into the chat — the artifacts in `.ditto/local/work-items/<wi>/` are the record.

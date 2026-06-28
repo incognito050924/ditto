@@ -3,6 +3,7 @@ import type { DialecticVerdict } from '~/schemas/dialectic';
 import type { SelfAnswerAttempt } from '~/schemas/question-gate';
 import type { AcOracle } from '~/schemas/work-item';
 import { type RiskAxes, deterministicFloor, safeDefaultable } from './gates';
+import { needsBriefing } from './question-context';
 
 /**
  * Deterministic coverage Manager (premortem-coverage-contract §4.1·§4.5·§5).
@@ -225,6 +226,14 @@ export interface PlanDialogUserQa {
   question: string;
   why_matters: string;
   answer: string;
+  /**
+   * 배경(왜 물었는지) + 해결 결과(답이 무엇을 정했는지) — the user-facing context for this
+   * Q&A (ac-5). When this context is too long for the compact AskUserQuestion option
+   * UI (`needsBriefing`), the serializer renders it as a briefing section in the
+   * dialog body BEFORE the question; a short context rides inline with the Q. Optional
+   * so existing coverage.json / plan-dialog deltas (no context) stay compatible.
+   */
+  context?: string;
 }
 
 export interface PlanDialogSelfAnswer {
@@ -285,7 +294,23 @@ export function serializePlanDialog(input: PlanDialogInput): string {
     lines.push('(none)');
   } else {
     for (const qa of input.userQa) {
+      // ac-5/ac-6: the coverage surface honors the same context contract as the
+      // check-question path. The Q&A carries its 배경+해결결과 context; when that context
+      // overflows the compact option UI (needsBriefing — the SHARED threshold from
+      // question-context.ts, not a re-implementation), brief the user FIRST as a
+      // dialog-body section, then ask. A short context rides inline under the Q. The
+      // briefing renders the caller's context verbatim (§4.1: serialize, never
+      // interpret), so it adds no leading frame of its own.
+      const briefFirst = qa.context !== undefined && needsBriefing(qa.context);
+      if (briefFirst) {
+        lines.push('### 컨텍스트 브리핑');
+        lines.push(qa.context as string);
+        lines.push('');
+      }
       lines.push(`- Q: ${qa.question}`);
+      if (qa.context !== undefined && !briefFirst) {
+        lines.push(`  - context: ${qa.context}`);
+      }
       lines.push(`  - why_matters: ${qa.why_matters}`);
       lines.push(`  - A: ${qa.answer}`);
     }

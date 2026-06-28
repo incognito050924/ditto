@@ -7,6 +7,7 @@ import { AutopilotStore } from '~/core/autopilot-store';
 import { IntentStore } from '~/core/intent-store';
 import { startInterview } from '~/core/interview-driver';
 import {
+  checkQuestionContext,
   compileSpecDoc,
   computeSpecDigest,
   finalizeTechSpec,
@@ -454,6 +455,48 @@ describe('recordRound (증분 3 — 점수 영속 sink)', () => {
         payload: recordRoundPayload.parse({ round: 1, dry: true }),
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe('checkQuestionContext (ac-1/ac-2/ac-6 — tech-spec 질문 표면 컨텍스트 게이트)', () => {
+  const base = {
+    why_matters: '검증 방식이 결정된다',
+    user_explanation: '완료 조건을 어떤 증거로 닫을지 정하려고 묻습니다',
+  };
+
+  test('풀이 없는 내부 식별자를 노출하는 질문은 거부된다 (ac-1)', () => {
+    const v = checkQuestionContext({ ...base, text: 'ac-1 을 어떻게 검증할까요?' });
+    expect(v.ok).toBe(false);
+    expect(v.violations.map((x) => x.field)).toContain('unexplained_identifier');
+  });
+
+  test('식별자를 풀이한 질문은 통과한다 (ac-1)', () => {
+    const v = checkQuestionContext({
+      ...base,
+      text: 'ac-1 (비밀번호 해시 정책) 을 어떤 증거로 검증할까요?',
+    });
+    expect(v.ok).toBe(true);
+  });
+
+  test('사용자 설명(배경)이 없으면 거부된다 (ac-2)', () => {
+    const v = checkQuestionContext({ text: '무엇을 정할까요?', why_matters: '결과가 갈린다' });
+    expect(v.ok).toBe(false);
+    expect(v.violations.map((x) => x.field)).toContain('user_explanation');
+  });
+
+  test('선택 결과(why_matters)가 없으면 거부된다 (ac-2)', () => {
+    const v = checkQuestionContext({
+      text: '무엇을 정할까요?',
+      user_explanation: base.user_explanation,
+    });
+    expect(v.ok).toBe(false);
+    expect(v.violations.map((x) => x.field)).toContain('why_matters');
+  });
+
+  test('식별자 없고 배경·결과를 갖춘 질문은 통과한다 (ac-6)', () => {
+    const v = checkQuestionContext({ ...base, text: '비밀번호 해시는 무엇으로 할까요?' });
+    expect(v.ok).toBe(true);
+    expect(v.violations).toHaveLength(0);
   });
 });
 
