@@ -332,7 +332,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=759cdf1710b33817b3cdb773a0ddc95ba7128486545425159496f4f24a1eb915 -->
+<!-- ditto:knowledge:start sha256=73b15b3661b006769e493ad7c07d3d08aea2958a28ac3ea012b7f01fbbc3ce70 -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -417,5 +417,8 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-20260626-work-lifecycle-lightweight-path · accepted · ditto work-lifecycle 경량 경로 — 경량/무거운 2-경로 + logged-override 스펙트럼 + 줄기·후속·push-ready 받침
 - ADR-20260626-worktree-subrepo-scope-clarify · accepted · per-feature ephemeral worktree · workspace rootingRoot 하위 sub-repo 쓰기 (ADR-0022·ADR-0011 clarify — supersede 아님)
 - ADR-20260627-autopilot-followup-autonomy-boundary · accepted · autopilot 후속 자율성 경계 — materialize≠drive, no-auto-pick 불변식 무완화
+- ADR-20260628-append-decision-atomicity · accepted · autopilot 결정 로그는 O_APPEND 단일쓰기 + single-writer로 충분 — 파일 락 불필요
+- ADR-20260628-decisive-class-lossless-channel · accepted · owner-return 결정 4클래스는 무손실 free-text 채널 — per-class 구조 필드 거부
+- ADR-20260628-delegation-enforcement-boundary · accepted · 위임 규율 집행 경계 — codified-artifact까지, 행동 강제는 불가
 
 <!-- ditto:knowledge:end -->
