@@ -37,7 +37,7 @@ import { worktreeCommand } from './commands/worktree';
 const main = defineCommand({
   meta: {
     name: 'ditto',
-    version: '0.5.0',
+    version: '0.6.0',
     description: 'Coding agent work orchestration layer',
   },
   subCommands: {
