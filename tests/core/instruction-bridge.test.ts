@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -9,6 +9,8 @@ import {
   unregisterHostAdapter,
 } from '~/core/hosts';
 import {
+  CHARTER_IDENTITY_MARKER,
+  DELEGATION_CLAUSE_ANCHOR,
   checkInstructionsForAdapters,
   checkInstructionsForHosts,
   loadProjection,
@@ -147,5 +149,18 @@ describe('instruction bridge', () => {
     } finally {
       registerHostAdapter(codexHostAdapter);
     }
+  });
+
+  // wi_260627sey: the clause-presence guard self-disables silently if the charter
+  // is RENAMED — `checkRequiredClauses` returns [] when the source no longer
+  // contains CHARTER_IDENTITY_MARKER (it cannot tell a renamed charter from a
+  // downstream non-charter source). This pins THIS repo's canonical codex source
+  // (AGENTS.md) to BOTH code constants, so renaming the charter title or moving the
+  // §4-9 clause out of lockstep with the code fails loudly here instead of quietly
+  // turning the guard off.
+  test('the repo charter source (AGENTS.md) carries both code-coupled markers (rename → loud failure)', async () => {
+    const charter = await readFile(join(process.cwd(), 'AGENTS.md'), 'utf8');
+    expect(charter).toContain(CHARTER_IDENTITY_MARKER);
+    expect(charter).toContain(DELEGATION_CLAUSE_ANCHOR);
   });
 });
