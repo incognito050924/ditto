@@ -42,9 +42,11 @@ const DEFAULT_QUESTION_CAP = 8;
 // lightweight, ac-4). >1 fans out parallel fresh-context generators in the SKILL loop.
 const DEFAULT_GENERATORS = 1;
 // Dry floor: a round whose score-gated marginal_gain falls below this is treated
-// as diminishing returns. Small constant — at this level a round's incremental
-// information no longer justifies another user turn (the dry termination signal).
-const DRY_FLOOR = 0.05;
+// as diminishing returns. Raised from 0.05 (which almost never fired, so low-value
+// tail rounds kept asking the user) to a level where a round's incremental
+// information no longer justifies another user turn — closes tail rounds earlier
+// without touching question quality (the floor gates termination, not the questions).
+const DRY_FLOOR = 0.12;
 
 export interface StartInput {
   workItemId: string;

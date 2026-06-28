@@ -198,6 +198,17 @@ export function conflictsFromHits(
   });
 }
 
+/**
+ * AC2 (6번): the completion-path re-proposal measurement reads the WHOLE ADR corpus,
+ * but `crossValidateCite` consumes it ONLY when the cite verdict is a `pass` (it
+ * early-returns not-applicable for any non-pass). A `skip` (no pushed node) or a
+ * `warning` therefore makes that whole-corpus read pure waste on every completion —
+ * so the caller gates the read on this predicate.
+ */
+export function citeNeedsReproposalMeasurement(verdict: CiteGateResult['verdict']): boolean {
+  return verdict === 'pass';
+}
+
 /** Best-effort load of ADR bodies for the completion-path re-proposal scan. */
 async function loadAdrBodies(repoRoot: string): Promise<Array<{ id: string; body: string }>> {
   const adrDir = join(dittoDir(repoRoot), 'knowledge', 'adr');

@@ -16,6 +16,19 @@ export interface RetroContext {
 }
 
 /**
+ * Pre-computed change surface for a read-only review node (AC1). The orchestrator
+ * computes the diff ONCE per dispatch and injects it here so reviewer/verifier/
+ * security-reviewer do not each re-run `git diff` and re-Read the changed files.
+ * This carries only the MECHANICAL "what changed" — never a judgment — so the
+ * reviewers' independent verdicts stay independent (charter §4-9). Present only on
+ * a review-owner packet; absent ⇒ the packet is byte-for-byte the no-surface path.
+ */
+export interface ChangeSurface {
+  changed_files: string[];
+  diff: string;
+}
+
+/**
  * An addressed acceptance criterion resolved for the packet (ADR-0024 ac-3, ②
  * DELIVER): the implementer needs the AC's STATEMENT TEXT and its assigned ORACLE
  * (what to satisfy + how it is judged), not just the id. `oracle` is omitted for a
@@ -59,6 +72,11 @@ export interface DelegationPacket {
     // invent them). Present only on a retro node's packet; absent ⇒ packet is
     // byte-for-byte the no-retro path.
     retro?: RetroContext;
+    // Pre-computed change surface (AC1): the diff + changed files computed ONCE by
+    // the orchestrator for a review-owner node, so reviewer/verifier/security do not
+    // each re-run git. Present only on a review packet; absent ⇒ byte-for-byte the
+    // no-surface path. Mechanical fact only — does not touch verdict independence.
+    change_surface?: ChangeSurface;
   };
   // Variant routing: deterministically filtered specialized-subagent candidates
   // (role + file_scope match). The driver picks a `subagent_type` from these
@@ -102,6 +120,15 @@ export function isMutatingOwner(owner: AutopilotNode['owner']): boolean {
   return OWNER_TOOLS[owner].includes('Edit');
 }
 
+/**
+ * A read-only review owner judges an already-made change (AC1): it needs the diff
+ * but produces no edit. These are exactly the owners that would otherwise each
+ * re-run `git diff` — so the loop pre-computes the change surface once for them.
+ */
+export function isReviewOwner(owner: AutopilotNode['owner']): boolean {
+  return owner === 'reviewer' || owner === 'verifier' || owner === 'security-reviewer';
+}
+
 // Planner-intelligence contract (계약 우선 · §2.4): a planner node is the graph
 // generator, so its packet *requests* a `generated_nodes` lifecycle subgraph.
 // DITTO supplies the deterministic request + the validation floor (addNodes /
@@ -110,8 +137,14 @@ export function isMutatingOwner(owner: AutopilotNode['owner']): boolean {
 const PLANNER_GENERATE_DIRECTIVE =
   'Emit a `generated_nodes` subgraph: pick the §2.2 lifecycle stages this task ' +
   'actually needs (research·design·implement·review·verify·…), each node ' +
-  '{id, kind, purpose, depends_on, acceptance_refs} mapped to its acceptance ' +
-  'criteria; scale to task size (small tasks stay minimal — do not force a stage).';
+  '{id, kind, purpose, depends_on, acceptance_refs, file_scope} mapped to its ' +
+  'acceptance criteria; scale to task size (small tasks stay minimal — do not ' +
+  'force a stage). For each MUTATING node declare `file_scope` (the repo-relative ' +
+  'paths it will edit) as precisely and DISJOINTLY as you can: non-overlapping ' +
+  'scopes let independent mutators run in parallel, while leaving it off forces the ' +
+  'engine to serialize that node conservatively (one scope-unknown mutator at a ' +
+  'time). Omit it ONLY when the scope is genuinely unknown — never guess a scope ' +
+  'that might overlap another node (a wrong disjoint claim risks a clobber).';
 
 /**
  * Cite-or-abstain directive (memory-librarian §8 inc.2, ac-2): when the packet
@@ -179,6 +212,11 @@ export function buildDelegationPacket(
   // the loop assembles the SEPARATED metrics + projection-only narrative fail-open
   // and passes it here for a retro node; `undefined` ⇒ `context.retro` is omitted.
   retroContext?: RetroContext,
+  // Pre-computed change surface (AC1). Same purity contract as memory/retro: the
+  // builder NEVER runs git — the loop computes the diff once (fail-open) and passes
+  // it here for a review node, or `undefined` (then `context.change_surface` is
+  // omitted entirely, keeping the packet identical to the no-surface path).
+  changeSurface?: ChangeSurface,
 ): DelegationPacket {
   const isPlanner = node.owner === 'planner';
   // ADR-0024 ac-3 (② DELIVER): resolve each addressed AC id to its statement +
@@ -240,6 +278,9 @@ export function buildDelegationPacket(
       // Only present on a retro node (loop assembles + passes it); omitted ⇒ the
       // packet is byte-for-byte the no-retro path.
       ...(retroContext ? { retro: retroContext } : {}),
+      // Only present when the loop supplied a pre-computed surface for a review
+      // node; omitted ⇒ packet is byte-for-byte the no-surface path.
+      ...(changeSurface ? { change_surface: changeSurface } : {}),
     },
     variant_candidates: variantCandidates,
   };

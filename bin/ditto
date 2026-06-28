@@ -21056,13 +21056,16 @@ var OWNER_TOOLS = {
 function isMutatingOwner(owner) {
   return OWNER_TOOLS[owner].includes("Edit");
 }
-var PLANNER_GENERATE_DIRECTIVE = "Emit a `generated_nodes` subgraph: pick the \xA72.2 lifecycle stages this task " + "actually needs (research\xB7design\xB7implement\xB7review\xB7verify\xB7\u2026), each node " + "{id, kind, purpose, depends_on, acceptance_refs} mapped to its acceptance " + "criteria; scale to task size (small tasks stay minimal \u2014 do not force a stage).";
+function isReviewOwner(owner) {
+  return owner === "reviewer" || owner === "verifier" || owner === "security-reviewer";
+}
+var PLANNER_GENERATE_DIRECTIVE = "Emit a `generated_nodes` subgraph: pick the \xA72.2 lifecycle stages this task " + "actually needs (research\xB7design\xB7implement\xB7review\xB7verify\xB7\u2026), each node " + "{id, kind, purpose, depends_on, acceptance_refs, file_scope} mapped to its " + "acceptance criteria; scale to task size (small tasks stay minimal \u2014 do not " + "force a stage). For each MUTATING node declare `file_scope` (the repo-relative " + "paths it will edit) as precisely and DISJOINTLY as you can: non-overlapping " + "scopes let independent mutators run in parallel, while leaving it off forces the " + "engine to serialize that node conservatively (one scope-unknown mutator at a " + "time). Omit it ONLY when the scope is genuinely unknown \u2014 never guess a scope " + "that might overlap another node (a wrong disjoint claim risks a clobber).";
 var CITE_OR_ABSTAIN_DIRECTIVE = "Consult the governing decisions in context.memory.decision_briefs: cite the " + "ones you relied on (follow them or justify any deviation), and if none apply " + "to this task, state that explicitly (cite-or-abstain).";
 var RED_FIRST_DIRECTIVE = "Red-first discipline (code-behavior AC): write the failing test that asserts " + "this criterion FIRST and run it; confirm it fails on the AC assertion itself, " + "not on a compile/import error (no phantom red), then make the smallest change " + "to turn it green. Report both the red run and the green run (command + exit code).";
 function isRedFirstImplement(owner, acceptance) {
   return owner === "implementer" && acceptance.some((a2) => a2.oracle?.verification_method === "dynamic_test");
 }
-function buildDelegationPacket(node, workItem2, variantCandidates = [], fileScope = workItem2.changed_files, memoryContext, retroContext) {
+function buildDelegationPacket(node, workItem2, variantCandidates = [], fileScope = workItem2.changed_files, memoryContext, retroContext, changeSurface) {
   const isPlanner = node.owner === "planner";
   const acceptance = node.acceptance_refs.flatMap((id) => {
     const ac = workItem2.acceptance_criteria?.find((c3) => c3.id === id);
@@ -21099,7 +21102,8 @@ function buildDelegationPacket(node, workItem2, variantCandidates = [], fileScop
       acceptance_refs: node.acceptance_refs,
       acceptance,
       ...memoryContext ? { memory: memoryContext } : {},
-      ...retroContext ? { retro: retroContext } : {}
+      ...retroContext ? { retro: retroContext } : {},
+      ...changeSurface ? { change_surface: changeSurface } : {}
     },
     variant_candidates: variantCandidates
   };
@@ -21740,6 +21744,7 @@ class CoverageStore {
 
 // src/core/autopilot-loop.ts
 init_ditto_paths();
+init_git();
 
 // src/core/handoff-store.ts
 import { readdir as readdir9, rename as rename3 } from "fs/promises";
@@ -24131,6 +24136,12 @@ async function collectRetroContext(repoRoot, workItemId2, graph) {
     narrative: projectRetroNarrative(records)
   };
 }
+function collectChangeSurface(repoRoot) {
+  return {
+    changed_files: listChangedFiles(repoRoot, { excludeDittoRuns: true }),
+    diff: captureGitDiff(repoRoot)
+  };
+}
 async function nextNode(repoRoot, workItemId2) {
   const aps = new AutopilotStore(repoRoot);
   const graph = await aps.get(workItemId2);
@@ -24219,6 +24230,7 @@ async function nextNode(repoRoot, workItemId2) {
   const now = new Date;
   if (waveEligible.length >= 2) {
     const catalog2 = await loadVariantCatalog(repoRoot);
+    const waveReviewSurface = waveEligible.some((n2) => isReviewOwner(n2.owner)) ? collectChangeSurface(repoRoot) : undefined;
     const spawns = [];
     for (const node2 of waveEligible) {
       await aps.updateNode(workItemId2, node2.id, (n2) => ({
@@ -24238,7 +24250,7 @@ async function nextNode(repoRoot, workItemId2) {
       spawns.push({
         node_id: node2.id,
         owner: node2.owner,
-        packet: buildDelegationPacket(node2, workItem2, candidates2, scopeOf(node2), memory2, retro2)
+        packet: buildDelegationPacket(node2, workItem2, candidates2, scopeOf(node2), memory2, retro2, isReviewOwner(node2.owner) ? waveReviewSurface : undefined)
       });
     }
     return { action: "spawn_wave", spawns };
@@ -24287,11 +24299,12 @@ async function nextNode(repoRoot, workItemId2) {
   const candidates = selectVariantCandidates(catalog, chosen.owner, scopeOf(chosen), chosen.agent_hint, { scopeDeclared: chosen.file_scope !== undefined });
   const memory = await warmStartMemoryContext(repoRoot, chosen, workItem2, { now });
   const retro = chosen.kind === "retro" ? await collectRetroContext(repoRoot, workItemId2, graph) : undefined;
+  const changeSurface = isReviewOwner(chosen.owner) ? collectChangeSurface(repoRoot) : undefined;
   return {
     action: "spawn",
     node_id: chosen.id,
     owner: chosen.owner,
-    packet: buildDelegationPacket(chosen, workItem2, candidates, scopeOf(chosen), memory, retro)
+    packet: buildDelegationPacket(chosen, workItem2, candidates, scopeOf(chosen), memory, retro, changeSurface)
   };
 }
 var recordResultPayload = exports_external.object({
@@ -25176,6 +25189,9 @@ function conflictsFromHits(pushedNodeIds, report) {
     };
   });
 }
+function citeNeedsReproposalMeasurement(verdict2) {
+  return verdict2 === "pass";
+}
 async function loadAdrBodies(repoRoot) {
   const adrDir = join32(dittoDir(repoRoot), "knowledge", "adr");
   let names;
@@ -25267,29 +25283,38 @@ async function nextCoverageNode(args) {
   }
   const ready = selectReadyCoverageNodes(map);
   const node2 = ready[0];
+  const lenses = farFieldLenses(taxonomy);
   if (node2 === undefined) {
+    const rootJudge = buildJudgeInput({
+      node: map.nodes[0] ?? rootNode(workItemId2),
+      originalIntent: await originalIntent(repoRoot, workItemId2),
+      crossCuttingConstraints: lenses
+    });
     return {
       action: "interrogate",
       node: rootNode(map.nodes[0]?.label ?? workItemId2),
-      judgeInput: buildJudgeInput({
-        node: map.nodes[0] ?? rootNode(workItemId2),
-        originalIntent: await originalIntent(repoRoot, workItemId2),
-        crossCuttingConstraints: farFieldLenses(taxonomy)
-      }),
+      judgeInput: rootJudge,
+      wave: [{ node: rootNode(map.nodes[0]?.label ?? workItemId2), judgeInput: rootJudge }],
+      dryProbe: true,
       tier,
       sweepAngles,
       dryCounter
     };
   }
   const intent = await originalIntent(repoRoot, workItemId2);
+  const wave = ready.map((n2) => ({
+    node: { ...n2 },
+    judgeInput: buildJudgeInput({
+      node: n2,
+      originalIntent: intent,
+      crossCuttingConstraints: lenses
+    })
+  }));
   return {
     action: "interrogate",
-    node: { ...node2 },
-    judgeInput: buildJudgeInput({
-      node: node2,
-      originalIntent: intent,
-      crossCuttingConstraints: farFieldLenses(taxonomy)
-    }),
+    node: wave[0].node,
+    judgeInput: wave[0].judgeInput,
+    wave,
     tier,
     sweepAngles,
     dryCounter
@@ -26978,7 +27003,7 @@ var autopilotComplete = defineCommand({
         }
       }
       const cite = await checkCiteGate(repoRoot, { workItemId: args.workItem, graph });
-      const measurement = await measureReproposalForCompletion(repoRoot);
+      const measurement = citeNeedsReproposalMeasurement(cite.verdict) ? await measureReproposalForCompletion(repoRoot) : measureHallucination([], []);
       const citeCrossCheck = crossValidateCite(cite, measurement);
       const conflicts = await detectActiveConflicts(repoRoot, {
         workItemId: args.workItem,
@@ -27408,12 +27433,18 @@ var autopilotCoverageNext = defineCommand({
         writeJson2(res);
       } else if (res.action === "dry") {
         writeHuman("Coverage: dry \u2014 sweep terminated (breadth + depth). Record the design result.");
+      } else if (res.dryProbe) {
+        writeHuman(`Coverage: DRY ROUND (all nodes closed, dry_counter=${res.dryCounter}) \u2014 nothing to close`);
+        writeHuman("  \u2192 spawn ONE completeness-critic only (NO sweep angles, NO 3-role dialectic, NO per-axis judges); the only signal that matters is whether a new admissible branch appears. Then coverage-round.");
       } else {
-        writeHuman(`Coverage: interrogate ${res.node.id} (tier=${res.tier})`);
-        writeHuman(`  label:        ${res.node.label}`);
+        const n2 = res.wave.length;
+        writeHuman(`Coverage: interrogate ${n2} ready node(s)${n2 > 1 ? " \u2014 sweep in PARALLEL" : ""} (tier=${res.tier})`);
+        for (const item of res.wave) {
+          writeHuman(`  - ${item.node.id}: ${item.node.label}`);
+        }
         writeHuman(`  sweep_angles: ${res.sweepAngles}`);
         writeHuman(`  dry_counter:  ${res.dryCounter}`);
-        writeHuman("  \u2192 run fresh sweep + 3-role dialectic + judges with ONLY judgeInput, then coverage-round");
+        writeHuman("  \u2192 spawn EACH wave node in parallel (fresh sweep + 3-role dialectic + judges, ONLY its judgeInput), then coverage-round EACH result sequentially (record stays single-writer)");
       }
     } catch (err) {
       writeError(`coverage-next failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -31425,7 +31456,7 @@ init_work_item_store();
 var DEFAULT_THRESHOLD = 0.7;
 var DEFAULT_QUESTION_CAP = 8;
 var DEFAULT_GENERATORS = 1;
-var DRY_FLOOR = 0.05;
+var DRY_FLOOR = 0.12;
 async function startInterview(repoRoot, input) {
   const now = (input.now ?? new Date).toISOString();
   const generators = input.generators ?? DEFAULT_GENERATORS;
@@ -36597,6 +36628,7 @@ var sessionStartHandler = async (input) => {
 };
 
 // src/hooks/stop.ts
+import { createHash as createHash11 } from "crypto";
 import { existsSync as existsSync9 } from "fs";
 import { readFile as readFile16, readdir as readdir21 } from "fs/promises";
 import { join as join69 } from "path";
@@ -37269,11 +37301,30 @@ function decisionConflictForcesContinuation(carrier) {
     advisories: dispositions.filter((d2) => !blocks(d2)).map((d2) => `decision conflict (disclosed, agent followed ADR) \u2014 ${line(d2)}`)
   };
 }
+function fitnessInputFingerprint(repoRoot) {
+  try {
+    const head = gitRevParse(repoRoot, "HEAD");
+    const diff = captureGitDiff(repoRoot);
+    const files = listChangedFiles(repoRoot).filter((p) => !p.startsWith(".ditto/")).join(`
+`);
+    return createHash11("sha256").update(`${head}
+${files}
+${diff}`).digest("hex");
+  } catch {
+    return null;
+  }
+}
 async function maybeRunFitness(repoRoot, workItemId2, dir) {
   try {
     const fns = await new FitnessFunctionStore(repoRoot).read(workItemId2);
     if (!fns || fns.length === 0)
       return;
+    const snapshotPath = join69(dir, "assurance-snapshot.json");
+    const fingerprintPath = join69(dir, "fitness-input-fingerprint");
+    const fingerprint = fitnessInputFingerprint(repoRoot);
+    if (fingerprint !== null && await Bun.file(snapshotPath).exists() && await Bun.file(fingerprintPath).exists() && (await Bun.file(fingerprintPath).text()).trim() === fingerprint) {
+      return;
+    }
     const ctx = {
       trigger: "per_change",
       changeRef: workItemId2,
@@ -37284,7 +37335,9 @@ async function maybeRunFitness(repoRoot, workItemId2, dir) {
     const provider = await Bun.file(verdictsPath2).exists() ? compositeProvider(repoRoot, verdictsPath2) : commandProvider(repoRoot);
     const snapshot = await runFitness(fns, ctx, provider);
     await ensureDir(dir);
-    await writeJson(join69(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, snapshot);
+    await writeJson(snapshotPath, acgAssuranceSnapshot, snapshot);
+    if (fingerprint !== null)
+      await atomicWriteText(fingerprintPath, fingerprint);
   } catch {}
 }
 var DRIFT_HOPS = ["H1", "H2", "H3"];
@@ -45025,4 +45078,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=73a3b9f645035fe175e9f130bfc2d905d860ef236985ac4eed8fc2efe17689b3
+//# ditto-src-stamp=f4951f1690e1c3b43057500e88c41865015f1a9753f37093a7f951e5dffcb4b9

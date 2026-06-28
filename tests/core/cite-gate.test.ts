@@ -5,6 +5,7 @@ import { dirname } from 'node:path';
 import { join } from 'node:path';
 import {
   checkCiteGate,
+  citeNeedsReproposalMeasurement,
   conflictsFromHits,
   crossValidateCite,
   detectActiveConflicts,
@@ -69,6 +70,17 @@ const usage = (over: Record<string, unknown>) => ({
   hit: true,
   actionable: true,
   ...over,
+});
+
+// AC2 (6번): the completion-path re-proposal measurement reads the WHOLE ADR
+// corpus, but crossValidateCite consumes it ONLY on a cite `pass`. A `skip` (no
+// pushed node) or `warning` makes the read pure waste — so it is gated on pass.
+describe('citeNeedsReproposalMeasurement (AC2/6번 — gate the ADR-corpus read)', () => {
+  test('only a pass verdict needs the ADR-corpus measurement', () => {
+    expect(citeNeedsReproposalMeasurement('pass')).toBe(true);
+    expect(citeNeedsReproposalMeasurement('skip')).toBe(false); // no pushed node → skip read
+    expect(citeNeedsReproposalMeasurement('warning')).toBe(false);
+  });
 });
 
 describe('checkCiteGate (ac-2 완료측 cite-or-abstain advisory gate)', () => {

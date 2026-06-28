@@ -102,6 +102,29 @@ describe('buildDelegationPacket (6-section, Context Isolation)', () => {
     expect(p.must_do).toEqual(baseline.must_do);
   });
 
+  test('buildDelegationPacket injects the passed changeSurface into context.change_surface', () => {
+    const changeSurface = {
+      changed_files: ['src/a.ts'],
+      diff: 'diff --git a/src/a.ts b/src/a.ts\n@@ -1 +1 @@\n-old\n+new\n',
+    };
+    const p = buildDelegationPacket(
+      verifyNode,
+      workItem,
+      [],
+      workItem.changed_files,
+      undefined,
+      undefined,
+      changeSurface,
+    );
+    expect(p.context.change_surface).toEqual(changeSurface);
+    // additive: absent ⇒ byte-for-byte the no-change-surface baseline (no field).
+    const baseline = buildDelegationPacket(verifyNode, workItem);
+    expect(baseline.context.change_surface).toBeUndefined();
+    expect(p.task).toBe(baseline.task);
+    expect(p.context.file_scope).toEqual(baseline.context.file_scope);
+    expect(p.must_do).toEqual(baseline.must_do);
+  });
+
   test('non-planner nodes carry no subgraph-generation directive (surgical)', () => {
     for (const node of [implementNode, verifyNode]) {
       const p = buildDelegationPacket(node, workItem);
@@ -202,6 +225,17 @@ describe('buildDelegationPacket (6-section, Context Isolation)', () => {
       expect(p.must_not_do.some((m) => m.includes('read-only'))).toBe(true);
       expect(isMutatingOwner(owner)).toBe(false);
     }
+  });
+
+  // AC4: the planner is the graph generator, so its directive must ask for a
+  // per-node `file_scope` — declaring disjoint scopes lets the orchestrator run
+  // non-overlapping mutators in parallel instead of falling back to the
+  // conservative one-at-a-time cap for scope-unknown nodes (fallback unchanged).
+  test('planner directive requests per-node file_scope (AC4)', () => {
+    const p = buildDelegationPacket(node('planner', 'design'), workItem);
+    const directive = p.must_do.find((m) => m.includes('generated_nodes'));
+    expect(directive).toBeDefined();
+    expect(directive).toContain('file_scope');
   });
 });
 

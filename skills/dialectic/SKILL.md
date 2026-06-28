@@ -16,7 +16,7 @@ How (role separation, host-aware model/context routing, round policy, admissibil
 - **Synthesizer** — verdict (`accept|revise|reject|blocked`) + agreed final position; rejections carry as much grounding as a raise.
 
 ## Procedure (driver)
-Run as the main agent; spawn each role as its own Task (1-level). The roles are **separate spawns even within one turn** — never simulate three voices in one prompt (dialectic-contract §2).
+Run as the main agent; spawn each role as its own Task (1-level). The roles are **separate spawns even within one turn** — never simulate three voices in one prompt (dialectic-contract §2). **Producer and Opponent are data-independent** — the Opponent reads the original `target_artifact` + its oracles, NOT the Producer's text (steps 2–3 below both take only `input`) — so for a small / low-stakes artifact you MAY spawn them in PARALLEL (one message, two Task calls) and join at the Synthesizer, removing a serial leg while preserving the separate-context isolation. For a large or contested artifact keep them sequential so the Opponent can attack the Producer's strongest framing. The Synthesizer always runs last (it needs both outputs).
 
 1. **Build `input`** (dialectic schema §5.2) from the node/decision: `mode`, `target_artifact`, `question`, `intent_refs`, `acceptance_refs`, `evidence_refs`, `constraints`, `model_policy`.
 2. **Producer** — spawn `dialectic-producer` with the input only. Capture its `position`/`proposal`/`evidence`/`assumptions`/`known_limits`.

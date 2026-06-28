@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -7,7 +8,7 @@ import { type FitnessContext, runFitness } from '~/acg/fitness/fitness-runner';
 import { compositeProvider } from '~/acg/fitness/injected-provider';
 import { localDir } from '~/core/ditto-paths';
 import { FitnessFunctionStore } from '~/core/fitness-function-store';
-import { ensureDir, writeJson } from '~/core/fs';
+import { atomicWriteText, ensureDir, writeJson } from '~/core/fs';
 import {
   type ConflictDisposition,
   attestAcVerdicts,
@@ -22,7 +23,7 @@ import {
   resolvabilityBlockers,
   riskRecordBlockers,
 } from '~/core/gates';
-import { listChangedFiles } from '~/core/git';
+import { captureGitDiff, gitRevParse, listChangedFiles } from '~/core/git';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import { type AcgAssuranceSnapshot, acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
@@ -497,6 +498,26 @@ export function decisionConflictForcesContinuation(carrier: DecisionConflictCarr
  * 없으면 기존 동작(provider가 skip → fail-open)을 유지한다.
  * fail-open: 정의 없음·실행 에러는 조용히 반환해 기존 게이트(이전 snapshot/없음)로 폴백한다.
  */
+/**
+ * Fingerprint of the fitness INPUT — the tracked working tree (HEAD + diff +
+ * non-.ditto changed paths). Two stops with an identical tree share a fingerprint,
+ * so the snapshot can be reused instead of recomputed. `.ditto/` is excluded so
+ * writing the snapshot/fingerprint itself never invalidates the next comparison.
+ * Returns null on any git error → caller treats it as "changed" (fail-open: re-run).
+ */
+function fitnessInputFingerprint(repoRoot: string): string | null {
+  try {
+    const head = gitRevParse(repoRoot, 'HEAD');
+    const diff = captureGitDiff(repoRoot);
+    const files = listChangedFiles(repoRoot)
+      .filter((p) => !p.startsWith('.ditto/'))
+      .join('\n');
+    return createHash('sha256').update(`${head}\n${files}\n${diff}`).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
 export async function maybeRunFitness(
   repoRoot: string,
   workItemId: string,
@@ -505,6 +526,21 @@ export async function maybeRunFitness(
   try {
     const fns = await new FitnessFunctionStore(repoRoot).read(workItemId);
     if (!fns || fns.length === 0) return;
+    const snapshotPath = join(dir, 'assurance-snapshot.json');
+    const fingerprintPath = join(dir, 'fitness-input-fingerprint');
+    const fingerprint = fitnessInputFingerprint(repoRoot);
+    // Skip when the input is unchanged since the last snapshot: a valid fingerprint
+    // that matches the stored one AND a snapshot already on disk means re-running
+    // would reproduce the same result. A null fingerprint (no git) falls through to
+    // re-run (fail-open) — the prior always-run behavior.
+    if (
+      fingerprint !== null &&
+      (await Bun.file(snapshotPath).exists()) &&
+      (await Bun.file(fingerprintPath).exists()) &&
+      (await Bun.file(fingerprintPath).text()).trim() === fingerprint
+    ) {
+      return;
+    }
     const ctx: FitnessContext = {
       trigger: 'per_change',
       changeRef: workItemId,
@@ -517,7 +553,9 @@ export async function maybeRunFitness(
       : commandProvider(repoRoot);
     const snapshot = await runFitness(fns, ctx, provider);
     await ensureDir(dir);
-    await writeJson(join(dir, 'assurance-snapshot.json'), acgAssuranceSnapshot, snapshot);
+    await writeJson(snapshotPath, acgAssuranceSnapshot, snapshot);
+    // Stamp the input fingerprint so the next stop can skip an unchanged re-run.
+    if (fingerprint !== null) await atomicWriteText(fingerprintPath, fingerprint);
   } catch {
     // fail-open
   }

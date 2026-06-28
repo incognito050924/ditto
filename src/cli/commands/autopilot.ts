@@ -12,7 +12,12 @@ import {
 import { kindToOwner } from '~/core/autopilot-graph';
 import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
-import { checkCiteGate, crossValidateCite, detectActiveConflicts } from '~/core/cite-gate';
+import {
+  checkCiteGate,
+  citeNeedsReproposalMeasurement,
+  crossValidateCite,
+  detectActiveConflicts,
+} from '~/core/cite-gate';
 import { CompletionStore, mirrorAcceptanceVerdicts } from '~/core/completion-store';
 import { nextCoverageNode, recordCoverageRound } from '~/core/coverage-loop';
 import { COVERAGE_TIERS, type CoverageTier } from '~/core/coverage-manager';
@@ -496,7 +501,12 @@ const autopilotComplete = defineCommand({
       // is surfaced as cited-but-unvalidated / cannot-confirm. NEVER blocks
       // (mirrors the cite-gate; never touches final_verdict or exit code). A
       // non-pass cite verdict ⇒ not-applicable (no clean cite to validate).
-      const measurement = await measureReproposalForCompletion(repoRoot);
+      // AC2 (6번): crossValidateCite only consumes the measurement on a pass, so
+      // skip the whole-ADR-corpus read entirely on skip/warning (no pushed node /
+      // nothing to validate) — the empty report is byte-identical for those paths.
+      const measurement = citeNeedsReproposalMeasurement(cite.verdict)
+        ? await measureReproposalForCompletion(repoRoot)
+        : measureHallucination([], []);
       const citeCrossCheck = crossValidateCite(cite, measurement);
       // 단계2 능동 모순경고: where a pushed node's OUTPUT re-proposes a rejected
       // alternative of a governing ADR, surface it per-node. ADVISORY · FN우선;
@@ -1085,13 +1095,25 @@ const autopilotCoverageNext = defineCommand({
         writeJson(res);
       } else if (res.action === 'dry') {
         writeHuman('Coverage: dry — sweep terminated (breadth + depth). Record the design result.');
+      } else if (res.dryProbe) {
+        writeHuman(
+          `Coverage: DRY ROUND (all nodes closed, dry_counter=${res.dryCounter}) — nothing to close`,
+        );
+        writeHuman(
+          '  → spawn ONE completeness-critic only (NO sweep angles, NO 3-role dialectic, NO per-axis judges); the only signal that matters is whether a new admissible branch appears. Then coverage-round.',
+        );
       } else {
-        writeHuman(`Coverage: interrogate ${res.node.id} (tier=${res.tier})`);
-        writeHuman(`  label:        ${res.node.label}`);
+        const n = res.wave.length;
+        writeHuman(
+          `Coverage: interrogate ${n} ready node(s)${n > 1 ? ' — sweep in PARALLEL' : ''} (tier=${res.tier})`,
+        );
+        for (const item of res.wave) {
+          writeHuman(`  - ${item.node.id}: ${item.node.label}`);
+        }
         writeHuman(`  sweep_angles: ${res.sweepAngles}`);
         writeHuman(`  dry_counter:  ${res.dryCounter}`);
         writeHuman(
-          '  → run fresh sweep + 3-role dialectic + judges with ONLY judgeInput, then coverage-round',
+          '  → spawn EACH wave node in parallel (fresh sweep + 3-role dialectic + judges, ONLY its judgeInput), then coverage-round EACH result sequentially (record stays single-writer)',
         );
       }
     } catch (err) {

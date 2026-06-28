@@ -80,6 +80,37 @@ const passingSignals = {
 };
 
 describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () => {
+  // AC1 (5번): once every node is closed but the K dry rounds aren't met, the step
+  // is a DRY ROUND — there is nothing to close, so a full sweep + dialectic + judges
+  // is wasted. The step flags `dryProbe:true` so the caller spawns only a single
+  // completeness-critic (the one signal that matters: did a new admissible branch
+  // appear?). A normal interrogate over a ready node is NOT a dryProbe.
+  test('dry round (all closed, counter<K) flags dryProbe for a critic-only step (AC1/5번)', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI }); // seed root
+    const r = await recordCoverageRound({
+      repoRoot: repo,
+      workItemId: WI,
+      payload: {
+        node_id: 'cov-root',
+        admissibleBranchesAdded: 0,
+        close_as: 'resolved',
+        axis_signals: passingSignals,
+      },
+    });
+    expect(r.terminated).toBe(false); // dry counter 1 < K=2 → not yet terminated
+    const next = await nextCoverageNode({ repoRoot: repo, workItemId: WI });
+    expect(next.action).toBe('interrogate');
+    if (next.action !== 'interrogate') return;
+    expect(next.dryProbe).toBe(true);
+  });
+
+  test('a normal interrogate over a ready node is not a dryProbe (AC1)', async () => {
+    const first = await nextCoverageNode({ repoRoot: repo, workItemId: WI }); // ready root
+    expect(first.action).toBe('interrogate');
+    if (first.action !== 'interrogate') return;
+    expect(first.dryProbe ?? false).toBe(false);
+  });
+
   test('happy: next→round loop terminates and writes coverage.json + plan-dialog.md ON DISK', async () => {
     // First call seeds the root from the work item goal and persists coverage.json.
     const first = await nextCoverageNode({ repoRoot: repo, workItemId: WI });

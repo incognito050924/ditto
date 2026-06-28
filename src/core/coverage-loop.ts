@@ -106,6 +106,23 @@ export type NextCoverageNodeResult =
       action: 'interrogate';
       node: CoverageNode;
       judgeInput: JudgeInput;
+      /**
+       * AC2 (parallel sweep): the FULL ready leaf-frontier, each node paired with
+       * its own fresh judge input. The frontier is independent sibling leaves
+       * (selectReadyCoverageNodes), so the caller may interrogate them in PARALLEL.
+       * `node`/`judgeInput` above mirror `wave[0]` for backward-compat; the caller
+       * still records each result sequentially via `recordCoverageRound` (the
+       * single-writer aggregation stays serial — only the sweep fans out).
+       */
+      wave: { node: CoverageNode; judgeInput: JudgeInput }[];
+      /**
+       * AC1 (5번): true on a DRY ROUND — every node is already closed but the K
+       * dry rounds aren't met yet, so there is nothing to close. A full sweep +
+       * dialectic + per-axis judges is wasted here; the only signal that matters is
+       * whether a new admissible branch appears, so the caller spawns just ONE
+       * completeness-critic. Absent/false on a normal interrogate over a ready node.
+       */
+      dryProbe?: boolean;
       tier: CoverageTier;
       /**
        * How many blind sweep angles to spawn for this node — the tier's effort
@@ -199,19 +216,26 @@ export async function nextCoverageNode(args: {
 
   const ready = selectReadyCoverageNodes(map);
   const node = ready[0];
+  const lenses = farFieldLenses(taxonomy);
   if (node === undefined) {
     // No open node but counter not yet dry: still need K dry rounds. The caller
-    // records empty rounds (no new branches) to drive the counter to K.
+    // records empty rounds (no new branches) to drive the counter to K. The wave
+    // is the single root-interrogation (no frontier to fan out over).
+    const rootJudge = buildJudgeInput({
+      node: map.nodes[0] ?? rootNode(workItemId),
+      originalIntent: await originalIntent(repoRoot, workItemId),
+      // Far-field floor lenses (design §8-1) — the fresh judge now sees every
+      // category instead of the previous empty slot (cross_cutting_constraints:[]).
+      crossCuttingConstraints: lenses,
+    });
     return {
       action: 'interrogate',
       node: rootNode(map.nodes[0]?.label ?? workItemId),
-      judgeInput: buildJudgeInput({
-        node: map.nodes[0] ?? rootNode(workItemId),
-        originalIntent: await originalIntent(repoRoot, workItemId),
-        // Far-field floor lenses (design §8-1) — the fresh judge now sees every
-        // category instead of the previous empty slot (cross_cutting_constraints:[]).
-        crossCuttingConstraints: farFieldLenses(taxonomy),
-      }),
+      judgeInput: rootJudge,
+      wave: [{ node: rootNode(map.nodes[0]?.label ?? workItemId), judgeInput: rootJudge }],
+      // AC1: no ready node ⇒ this is a dry round (all closed, counter < K). Flag it so
+      // the caller runs a completeness-critic only, not a full sweep + dialectic.
+      dryProbe: true,
       tier,
       sweepAngles,
       dryCounter,
@@ -219,15 +243,22 @@ export async function nextCoverageNode(args: {
   }
 
   const intent = await originalIntent(repoRoot, workItemId);
+  // AC2: the whole ready frontier becomes the wave — independent sibling leaves the
+  // caller can sweep in parallel. Each node gets its own fresh, stateless judge input
+  // (§4.1 zero accumulated context). `node`/`judgeInput` mirror wave[0].
+  const wave = ready.map((n) => ({
+    node: { ...n },
+    judgeInput: buildJudgeInput({
+      node: n,
+      originalIntent: intent,
+      crossCuttingConstraints: lenses,
+    }),
+  }));
   return {
     action: 'interrogate',
-    node: { ...node },
-    judgeInput: buildJudgeInput({
-      node,
-      originalIntent: intent,
-      // Far-field floor lenses (design §8-1) — see the no-ready-node path above.
-      crossCuttingConstraints: farFieldLenses(taxonomy),
-    }),
+    node: wave[0].node,
+    judgeInput: wave[0].judgeInput,
+    wave,
     tier,
     sweepAngles,
     dryCounter,

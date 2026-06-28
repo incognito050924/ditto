@@ -320,6 +320,40 @@ describe('nextNode terminal surfacing (작은 고정: §6.8 done disposition + A
     const res = await nextNode(repo, WI);
     expect(res.action).toBe('waiting');
   });
+
+  // AC1: a review-owner node receives the change surface (diff + changed files)
+  // PRE-COMPUTED ONCE by the loop, so reviewer/verifier/security do not each re-run
+  // git. Mechanical fact only — does not touch verdict independence (§4-9).
+  test('a review-owner node receives a pre-computed change_surface in its packet (AC1)', async () => {
+    const reviewNode = {
+      id: 'N3',
+      kind: 'review' as const,
+      owner: 'reviewer' as const,
+      purpose: 'review the change',
+      status: 'pending' as const,
+      depends_on: [] as string[],
+      acceptance_refs: ['ac-1'],
+      evidence_refs: [],
+      attempts: { fix: 0, switch: 0 },
+    };
+    await seed(graph({ nodes: [reviewNode] }));
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('spawn');
+    if (res.action !== 'spawn') throw new Error('expected spawn');
+    const surface = res.packet.context.change_surface;
+    expect(surface).toBeDefined();
+    expect(surface).toHaveProperty('diff');
+    expect(surface).toHaveProperty('changed_files');
+  });
+
+  test('a non-review node carries no change_surface (surgical, byte-for-byte baseline)', async () => {
+    // N1 from the seed graph is a design node (non-review owner).
+    await seed(graph());
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('spawn');
+    if (res.action !== 'spawn') throw new Error('expected spawn');
+    expect(res.packet.context.change_surface).toBeUndefined();
+  });
 });
 
 describe('recordResult (loop step 6: G7 guard → classify → decide → persist)', () => {

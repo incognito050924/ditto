@@ -1,10 +1,22 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FitnessFunctionStore } from '~/core/fitness-function-store';
 import { maybeRunFitness } from '~/hooks/stop';
 import { type AcgFitnessFunction, acgFitnessFunction } from '~/schemas/acg-fitness-function';
+
+/** git repo with one committed tracked file, so a fingerprint over HEAD+diff is stable. */
+function gitInit(dir: string): void {
+  execFileSync('git', ['init', '-q'], { cwd: dir });
+  execFileSync('git', ['add', '-A'], { cwd: dir });
+  execFileSync(
+    'git',
+    ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'init'],
+    { cwd: dir },
+  );
+}
 
 function fn(spec: string): AcgFitnessFunction {
   return acgFitnessFunction.parse({
@@ -50,6 +62,47 @@ describe('maybeRunFitness — stop 자동 트리거', () => {
       await new FitnessFunctionStore(dir).write('wi_stopfit0001', [fn('echo violation-1')]);
       await maybeRunFitness(dir, 'wi_stopfit0001', wdir);
       expect(await outcome(wdir)).toBe('fail');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  // AC2: when the fitness input (tracked tree) is unchanged since the last snapshot,
+  // a second stop must NOT re-run fitness or rewrite assurance-snapshot.json.
+  test('입력 불변 → 두 번째 호출은 재실행하지 않는다 (AC2 skip)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-stopfit-'));
+    try {
+      gitInit(dir);
+      const wdir = join(dir, '.ditto', 'work-items', 'wi_stopfit0001');
+      await new FitnessFunctionStore(dir).write('wi_stopfit0001', [fn('true')]);
+      const snap = join(wdir, 'assurance-snapshot.json');
+      await maybeRunFitness(dir, 'wi_stopfit0001', wdir); // 1st: writes snapshot + fingerprint
+      // Overwrite with a sentinel so a rewrite is detectable.
+      await writeFile(snap, JSON.stringify({ sentinel: true }));
+      await maybeRunFitness(dir, 'wi_stopfit0001', wdir); // 2nd: same input → skip
+      const after = JSON.parse(await readFile(snap, 'utf8'));
+      expect(after.sentinel).toBe(true); // snapshot was NOT rewritten
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('입력 변경 → 재실행한다 (AC2)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-stopfit-'));
+    try {
+      await writeFile(join(dir, 'tracked.ts'), 'original');
+      gitInit(dir);
+      const wdir = join(dir, '.ditto', 'work-items', 'wi_stopfit0001');
+      await new FitnessFunctionStore(dir).write('wi_stopfit0001', [fn('true')]);
+      const snap = join(wdir, 'assurance-snapshot.json');
+      await maybeRunFitness(dir, 'wi_stopfit0001', wdir); // 1st
+      await writeFile(snap, JSON.stringify({ sentinel: true }));
+      // Mutate a tracked file → the input fingerprint changes.
+      await writeFile(join(dir, 'tracked.ts'), 'changed');
+      await maybeRunFitness(dir, 'wi_stopfit0001', wdir); // 2nd: changed → re-run
+      const after = JSON.parse(await readFile(snap, 'utf8'));
+      expect(after.sentinel).toBeUndefined(); // rewritten
+      expect(after.results?.[0]?.outcome).toBe('pass');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

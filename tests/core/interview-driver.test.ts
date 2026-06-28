@@ -275,6 +275,26 @@ describe('recordTurn', () => {
     });
     expect(state.exit.reason).not.toBe('diminishing_returns');
   });
+
+  // AC4 (8번): the raised dry floor closes low-value tail rounds earlier. 0.08 was
+  // above the old 0.05 floor (the round kept going) but is below the raised floor,
+  // so it now terminates as diminishing_returns — without touching question quality.
+  test('a marginal_gain between the old and new dry floor now closes the tail round (AC4)', async () => {
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
+        question: {
+          text: 'q?',
+          why_matters: 'x',
+          info_gain_estimate: 'low',
+          marginal_gain: 0.08,
+        },
+      },
+    });
+    expect(state.readiness.gate).toBe('blocked');
+    expect(state.exit.reason).toBe('diminishing_returns');
+  });
 });
 
 describe('startInterview generators lever (ac-4)', () => {

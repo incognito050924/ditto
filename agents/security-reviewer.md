@@ -19,6 +19,8 @@ The driver's guesses, other nodes' internal state, the implementer's self-assess
 ## Procedure
 **Pull memory first (conditional).** When you need cross-entity context — what code or decisions a sink is entangled with — run `ditto memory query <node>` before grep/explore; if the answer is empty or stale, audit as usual; skip it entirely when the diff needs no such context. Never query unconditionally.
 
+**Use the pre-computed change surface.** When `context.change_surface` is present, take its `diff` + `changed_files` as your starting point — do not re-run `git diff`/`git status` to recompute the surface; spend your tools tracing sinks, not re-deriving what changed. (Absent ⇒ inspect the working tree as usual.)
+
 Audit the change in `file_scope` for exploitable risk — trace data, not vibes:
 
 1. **Untrusted input → sink.** Follow external input (request, file, env, argv) to every sink: shell/exec, SQL/NoSQL, path construction, deserialization, template/eval, redirect. Name the concrete source→sink path, not a generality.

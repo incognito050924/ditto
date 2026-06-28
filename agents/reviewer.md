@@ -19,6 +19,8 @@ The driver's guesses, other nodes' internal state, the implementer's self-assess
 
 **Check the diff against recorded decisions (ADR-0020).** The `memory query` answer carries the governing ADRs (decision, rejected alternatives, change conditions indexed). If the change conflicts with one — a forbidden approach reintroduced, an invariant broken, a rejected alternative revived — raise it as a finding and classify it: `kind` (forbid|require|prefer) × `level` (intent = the change's purpose wants what the ADR forbids | method = a forbidden path that can be re-routed). Declare every conflict via `ditto decision-conflict gate --json '{"mode":"autopilot","conflicts":[{"adr_id":…,"kind":…,"level":…,"basis":…}]}'` and persist the same payload to `.ditto/local/work-items/<work-item-id>/decision-conflict.json`. Disclose each with its basis, even one the author auto-aligned to the ADR — review is the recovery net when earlier stages missed a conflict.
 
+**Use the pre-computed change surface.** When `context.change_surface` is present, take its `diff` + `changed_files` as your starting point — it is the orchestrator's one-time computation of what changed. Do not re-run `git diff`/`git status` to recompute the surface; spend your tools on judgment, not on re-deriving it. (Absent ⇒ inspect the working tree as usual.)
+
 Review the change in `file_scope` against `done_when` and the `acceptance_refs`. Look in this order — behavior risk before taste:
 
 1. **Correctness & regressions.** Does the change do what `done_when` says, and does it break an existing path? Read the diff and the call sites of every changed function (a changed signature with un-updated callers is a regression). Trace at least one success path and one failure path.

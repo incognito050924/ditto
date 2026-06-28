@@ -51,6 +51,28 @@ describe('category seeding (wi_260622vjo §8-2)', () => {
     expect(first.node.id.startsWith(CATEGORY_NODE_PREFIX)).toBe(true);
   });
 
+  // AC2 (parallel sweep): the ready frontier is independent sibling leaves, so the
+  // step surfaces ALL of them as a `wave` the caller can interrogate in parallel —
+  // not just ready[0]. The single `node`/`judgeInput` still mirror wave[0] for
+  // backward-compat; record stays a sequential single-writer (unchanged).
+  test('interrogate surfaces the full ready frontier as a wave (AC2)', async () => {
+    const first = await nextCoverageNode({ repoRoot: repo, workItemId: WI, seedCategories: true });
+    expect(first.action).toBe('interrogate');
+    if (first.action !== 'interrogate') return;
+
+    expect(first.wave).toBeDefined();
+    // root is deferred (open children); all 23 category leaves form the frontier.
+    expect(first.wave.length).toBe(23);
+    for (const item of first.wave) {
+      expect(item.node.id.startsWith(CATEGORY_NODE_PREFIX)).toBe(true);
+      // each wave entry carries its own fresh judge input for that node.
+      expect(item.judgeInput.node.id).toBe(item.node.id);
+    }
+    // backward-compat: the single node/judgeInput equal wave[0].
+    expect(first.node.id).toBe(first.wave[0].node.id);
+    expect(first.judgeInput.node.id).toBe(first.wave[0].node.id);
+  });
+
   test('default (no seedCategories) keeps the existing root-only tree (ac-7)', async () => {
     const first = await nextCoverageNode({ repoRoot: repo, workItemId: WI });
     expect(first.action).toBe('interrogate');

@@ -22,6 +22,7 @@ import {
   totalForwardRounds,
 } from './autopilot-converge';
 import {
+  type ChangeSurface,
   type DelegationPacket,
   type FailureClass,
   type FailureDecision,
@@ -35,6 +36,7 @@ import {
   guardMutatingEvidence,
   guardOwnerEnvelope,
   isMutatingOwner,
+  isReviewOwner,
 } from './autopilot-dispatch';
 import { allNodesTerminal, mutationGate, rollbackOnRejection } from './autopilot-driver';
 import {
@@ -53,6 +55,7 @@ import { assertOracleFrozen, producePlanGate, validateAcOracle } from './coverag
 import { CoverageStore } from './coverage-store';
 import { localDir } from './ditto-paths';
 import { decisionConflictRequiresApproval, oracleSatisfaction } from './gates';
+import { captureGitDiff, listChangedFiles } from './git';
 import { HandoffStore } from './handoff-store';
 import { IntentStore } from './intent-store';
 import { MemoryEventStore, MemorySourceStore } from './memory-store';
@@ -351,6 +354,19 @@ async function collectRetroContext(
   };
 }
 
+/**
+ * Pre-compute the change surface (diff + changed files) ONCE for a review-owner
+ * node (AC1), so reviewer/verifier/security do not each re-run git. fail-open: the
+ * underlying git helpers never throw, so a review node always gets a surface (empty
+ * when there is nothing to diff) and never needs to run git itself.
+ */
+function collectChangeSurface(repoRoot: string): ChangeSurface {
+  return {
+    changed_files: listChangedFiles(repoRoot, { excludeDittoRuns: true }),
+    diff: captureGitDiff(repoRoot),
+  };
+}
+
 export async function nextNode(repoRoot: string, workItemId: string): Promise<NextNodeResult> {
   const aps = new AutopilotStore(repoRoot);
   const graph = await aps.get(workItemId);
@@ -513,6 +529,11 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   const now = new Date();
   if (waveEligible.length >= 2) {
     const catalog = await loadVariantCatalog(repoRoot);
+    // AC1: compute the change surface ONCE for the whole wave (not per review node)
+    // when any admitted node is a review owner; non-review nodes pass undefined.
+    const waveReviewSurface = waveEligible.some((n) => isReviewOwner(n.owner))
+      ? collectChangeSurface(repoRoot)
+      : undefined;
     const spawns: WaveSpawn[] = [];
     for (const node of waveEligible) {
       // Dispatch each admitted node: pending → running via the explicit
@@ -550,7 +571,15 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
       spawns.push({
         node_id: node.id,
         owner: node.owner,
-        packet: buildDelegationPacket(node, workItem, candidates, scopeOf(node), memory, retro),
+        packet: buildDelegationPacket(
+          node,
+          workItem,
+          candidates,
+          scopeOf(node),
+          memory,
+          retro,
+          isReviewOwner(node.owner) ? waveReviewSurface : undefined,
+        ),
       });
     }
     return { action: 'spawn_wave', spawns };
@@ -638,11 +667,22 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   // node passes nothing (packet byte-for-byte the no-retro path).
   const retro =
     chosen.kind === 'retro' ? await collectRetroContext(repoRoot, workItemId, graph) : undefined;
+  // AC1: a review-owner node gets the change surface pre-computed once; every other
+  // owner passes undefined (packet byte-for-byte the no-surface path).
+  const changeSurface = isReviewOwner(chosen.owner) ? collectChangeSurface(repoRoot) : undefined;
   return {
     action: 'spawn',
     node_id: chosen.id,
     owner: chosen.owner,
-    packet: buildDelegationPacket(chosen, workItem, candidates, scopeOf(chosen), memory, retro),
+    packet: buildDelegationPacket(
+      chosen,
+      workItem,
+      candidates,
+      scopeOf(chosen),
+      memory,
+      retro,
+      changeSurface,
+    ),
   };
 }
 

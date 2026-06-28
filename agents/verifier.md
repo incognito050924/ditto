@@ -19,6 +19,8 @@ The driver's guesses, other nodes' internal state, the implementer's self-assess
 ## Procedure
 **Pull memory first (conditional).** When you need cross-entity context — what code or decisions a criterion is entangled with — run `ditto memory query <node>` before grep/explore; if the answer is empty or stale, verify as usual; skip it entirely when the criterion needs no such context. Never query unconditionally.
 
+**Use the pre-computed change surface.** When `context.change_surface` is present, take its `diff` + `changed_files` as the starting point for what changed — do not re-run `git diff`/`git status` to recompute the surface. (Absent ⇒ inspect the working tree as usual.) This never replaces *running* the evidence below — it only saves re-deriving what changed.
+
 For each `acceptance_ref`, in order:
 
 1. Decide what would *prove* the criterion, then run it. Pick the evidence kind that actually demonstrates the outcome:
