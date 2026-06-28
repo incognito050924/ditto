@@ -74,3 +74,45 @@ describe('workItem github_issue (wi_260628d79 ac-8)', () => {
     expect(parsed.github_issue?.posted_decision_ids).toBeUndefined();
   });
 });
+
+// wi_2606287v9 (#5) ac-1: branch/session-grain CLAIM markers on the issue link.
+// These record whether THIS session/branch posted a claim — so the same @me on a
+// different branch is distinguishable. They are NOT a cache of the GitHub assignee
+// (read-back stays SoT, ADR-20260628-github-backlog-sot); they store only what
+// idempotency + branch-grain occupancy needs. Additive + OPTIONAL (no
+// schema_version bump): a legacy github_issue omits them and parses unchanged.
+describe('workItem github_issue claim markers (wi_2606287v9 ac-1)', () => {
+  test('a github_issue WITHOUT claim markers parses unchanged (back-compat)', () => {
+    const parsed = workItem.parse(
+      workItemLiteral({ github_issue: { repo: 'owner/name', number: 7 } }),
+    );
+    expect(parsed.github_issue?.claimed_branch).toBeUndefined();
+    expect(parsed.github_issue?.posted_claim_markers).toBeUndefined();
+  });
+
+  test('claimed_branch + posted_claim_markers parse and round-trip', () => {
+    const parsed = workItem.parse(
+      workItemLiteral({
+        github_issue: {
+          repo: 'owner/name',
+          number: 42,
+          claimed_branch: 'ditto/wi_2606287v9',
+          posted_claim_markers: ['claim:ditto/wi_2606287v9'],
+        },
+      }),
+    );
+    expect(parsed.github_issue?.claimed_branch).toBe('ditto/wi_2606287v9');
+    expect(parsed.github_issue?.posted_claim_markers).toEqual(['claim:ditto/wi_2606287v9']);
+    expect(workItem.parse(parsed)).toEqual(parsed);
+  });
+
+  test('posted_claim_markers stays undefined when absent (no injected default)', () => {
+    const parsed = workItem.parse(
+      workItemLiteral({
+        github_issue: { repo: 'owner/name', number: 7, claimed_branch: 'feature/x' },
+      }),
+    );
+    expect(parsed.github_issue?.claimed_branch).toBe('feature/x');
+    expect(parsed.github_issue?.posted_claim_markers).toBeUndefined();
+  });
+});

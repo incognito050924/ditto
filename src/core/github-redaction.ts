@@ -48,15 +48,42 @@ function relativizePaths(text: string, repoRoot: string): string {
 }
 
 /**
+ * Strip token-shaped substrings (PATs, access-key ids, key=value secrets) from any
+ * free-text fragment so they can never be persisted or posted. Pure; reusable for any
+ * gh-detail / notice text, not just the completion summary.
+ */
+export function scrubTokens(text: string): string {
+  let out = text;
+  for (const re of TOKEN_PATTERNS) out = out.replace(re, '[redacted]');
+  return out;
+}
+
+/**
  * Harden one free-text fragment for a public body: keep ONLY the first line (drop a
  * raw multi-line log tail), relativize internal absolute paths, strip internal
  * `wi_…` ids, and scrub credential / token patterns. Pure.
  */
 export function sanitizeFragment(text: string, repoRoot: string = process.cwd()): string {
   const firstLine = text.split('\n')[0] ?? '';
-  let out = relativizePaths(firstLine, repoRoot);
-  for (const re of TOKEN_PATTERNS) out = out.replace(re, '[redacted]');
-  out = out.replace(WI_ID, '');
+  const out = scrubTokens(relativizePaths(firstLine, repoRoot)).replace(WI_ID, '');
+  return out.replace(/\s{2,}/g, ' ').trim();
+}
+
+/**
+ * A public-safe branch coordinate: surfaces WHICH branch is in flight on a public
+ * issue comment without leaking internals. ditto branches are `ditto/<wi_id>`; routing
+ * through sanitizeFragment strips the whole `wi_...` token and mangles
+ * `ditto/wi_2606287v9` down to a useless `ditto/`. Instead, drop only the `wi_` PREFIX
+ * and keep the bare identifier suffix (`ditto/wi_2606287v9` -> `ditto/2606287v9`) so the
+ * result carries NO `wi_` substring yet stays an actionable branch coordinate. Absolute
+ * paths are relativized and token shapes scrubbed (no worktree path can leak). Pure.
+ */
+export function sanitizeBranchCoordinate(branch: string, repoRoot: string = process.cwd()): string {
+  const firstLine = branch.split('\n')[0] ?? '';
+  const out = scrubTokens(relativizePaths(firstLine, repoRoot)).replace(
+    /\bwi_([a-z0-9]+)\b/g,
+    '$1',
+  );
   return out.replace(/\s{2,}/g, ' ').trim();
 }
 

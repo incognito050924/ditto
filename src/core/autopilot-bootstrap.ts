@@ -86,6 +86,19 @@ export async function bootstrapAutopilot(
   // canonical deep-interview finalize mirror (interview-driver.ts:432).
   await new WorkItemStore(repoRoot).update(input.workItem.id, (current) => ({
     ...current,
+    // wi_2606287v9 (#5) ac-2 / n8-review F1: the in_progress transition is the
+    // START of the heavy path. Promote a non-terminal, not-already-in_progress WI
+    // to in_progress HERE — the chokepoint every entry path funnels through (CLI
+    // `ditto autopilot bootstrap` AND the canonical `ditto deep-interview finalize`
+    // → finalizeInterview). Promoting in core makes both entry points symmetric.
+    // gh-free: the claim/gh reflection on this edge belongs to the CLI wrapper
+    // (autopilot.ts / deep-interview.ts finalizeCmd), which fires the n6 claim edge
+    // helper once it sees this promotion + a github_issue link.
+    ...(current.status !== 'in_progress' &&
+    current.status !== 'done' &&
+    current.status !== 'abandoned'
+      ? { status: 'in_progress' as const }
+      : {}),
     acceptance_criteria: input.intent.acceptance_criteria.map((ac) => ({
       id: ac.id,
       statement: ac.statement,

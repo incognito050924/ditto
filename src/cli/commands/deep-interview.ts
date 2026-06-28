@@ -22,6 +22,7 @@ import {
   writeHuman,
   writeJson,
 } from '../util';
+import { autoClaimOnInProgressEdge, buildClaimWiring } from './work';
 
 function parseJsonArg(raw: string): unknown {
   try {
@@ -297,6 +298,10 @@ const finalizeCmd = defineCommand({
     }
     const repoRoot = await resolveRepoRootForCreate();
     try {
+      // wi_2606287v9 (#5) ac-2: capture the WI status BEFORE finalize. finalize funnels
+      // through core bootstrapAutopilot, which promotes draft→in_progress at the chokepoint.
+      const items = new WorkItemStore(repoRoot);
+      const before = await items.get(args.workItem);
       const result = await finalizeInterview(repoRoot, {
         workItemId: args.workItem,
         payload: parsed.data,
@@ -315,6 +320,26 @@ const finalizeCmd = defineCommand({
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
+      // wi_2606287v9 (#5) ac-2 / n8-review F1: fire the claim ONCE on the in_progress
+      // edge that core bootstrapAutopilot just produced — the SAME n6 helper the CLI
+      // `ditto autopilot bootstrap` path fires (autopilot.ts), so both entry points are
+      // symmetric. Only when the WI is actually linked to an issue (else the status
+      // promotion stands alone, no gh subprocess). Idempotent: a re-finalize finds the WI
+      // already in_progress, so the prev=in_progress edge is a zero-gh no-op. gh failures
+      // are notices, never throws (ADR-0018) — they cannot undo the finalize.
+      const claimNotices: string[] = [];
+      const after = await items.get(args.workItem);
+      if (after.github_issue && before.status !== 'in_progress' && after.status === 'in_progress') {
+        const wiring = await buildClaimWiring(repoRoot);
+        const claimRes = await autoClaimOnInProgressEdge(
+          items,
+          args.workItem,
+          before.status,
+          after,
+          wiring,
+        );
+        claimNotices.push(...claimRes.warnings, ...claimRes.notices);
+      }
       if (format === 'json') {
         writeJson({
           work_item_id: result.intent.work_item_id,
@@ -327,6 +352,7 @@ const finalizeCmd = defineCommand({
         });
       } else {
         writeHuman(`Finalized interview for ${result.intent.work_item_id}`);
+        for (const n of claimNotices) writeHuman(`  GitHub claim: ${n}`);
         writeHuman(
           `  intent:        .ditto/local/work-items/${result.intent.work_item_id}/intent.json`,
         );

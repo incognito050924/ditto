@@ -21,7 +21,9 @@ import {
   type GhDegradation,
   type GhDegradeReason,
   createGhClient,
+  parseAssigneeLogins,
 } from '~/core/gh-client';
+import { type Occupancy, claim, unclaim } from '~/core/github-claim';
 import { postUnpostedDecisions } from '~/core/github-progress';
 import { reflectTermination } from '~/core/github-reflection';
 import { IntentStore } from '~/core/intent-store';
@@ -558,6 +560,281 @@ async function reflectManualTermination(
     );
   }
   for (const n of res.notices) writeHuman(`  GitHub reflection: ${n}`);
+}
+
+// ── wi_2606287v9 (#5): GitHub claim/occupancy wiring (CLI/core layer) ────────────
+// The pure WorkItemStore stays gh-free; this layer OBSERVES the work-item status
+// transition edge and drives the remote-first claim (github-claim.ts). claim() is
+// idempotent via a branch-grain sentinel, so a steady-state re-claim is a zero-gh
+// no-op. Every gh failure is a notice, never a throw (ADR-0018).
+
+/** The branch THIS session claims on: the rooted repo's current branch. Falls back
+ *  to 'HEAD' (detached); claim() relativizes it to a public-safe coordinate. */
+function resolveClaimBranch(repoRoot: string): string {
+  const proc = Bun.spawnSync(['git', '-C', repoRoot, 'rev-parse', '--abbrev-ref', 'HEAD'], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  if (proc.exitCode !== 0) return 'HEAD';
+  const name = (proc.stdout?.toString() ?? '').trim();
+  return name.length > 0 ? name : 'HEAD';
+}
+
+/** Best-effort current GitHub login (`gh api user`) for read-back conflict attribution
+ *  (self vs foreign assignee). Absent ⇒ claim() degrades to occupancy-only. Never throws. */
+function resolveActorLogin(): string | undefined {
+  try {
+    const proc = Bun.spawnSync(['gh', 'api', 'user', '--jq', '.login'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    if (proc.exitCode !== 0) return undefined;
+    const login = (proc.stdout?.toString() ?? '').trim();
+    return login.length > 0 ? login : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export interface ClaimWiring {
+  client: GhClient;
+  config: DittoConfigGithub | undefined;
+  branch: string;
+  actorLogin?: string;
+  repoRoot: string;
+}
+
+/** Assemble the live claim wiring (real gh client + git branch + gh login). Tests
+ *  inject a ClaimWiring directly instead of calling this (so no gh subprocess runs). */
+export async function buildClaimWiring(repoRoot: string): Promise<ClaimWiring> {
+  const config = await readGithubConfig(repoRoot);
+  const actorLogin = resolveActorLogin();
+  return {
+    client: createGhClient(),
+    config,
+    branch: resolveClaimBranch(repoRoot),
+    ...(actorLogin ? { actorLogin } : {}),
+    repoRoot,
+  };
+}
+
+export interface ClaimWiringResult {
+  fired: boolean;
+  occupancy: Occupancy;
+  notices: string[];
+  warnings: string[];
+}
+
+/** Run claim() against the linked issue and PERSIST the returned local sentinel marker
+ *  back onto the work item's github_issue. Shared by the explicit `work claim` command
+ *  (forced) and the in_progress edge auto-wire. No-link ⇒ skip + notice (claim() owns
+ *  that). The marker persist is a status-preserving update, so it never re-triggers an
+ *  edge. Never throws. */
+async function runClaim(
+  store: WorkItemStore,
+  workId: string,
+  item: WorkItem,
+  wiring: ClaimWiring,
+): Promise<ClaimWiringResult> {
+  const res = claim(
+    { client: wiring.client, config: wiring.config },
+    {
+      workItem: item,
+      branch: wiring.branch,
+      repoRoot: wiring.repoRoot,
+      ...(wiring.actorLogin ? { actorLogin: wiring.actorLogin } : {}),
+    },
+  );
+  if (res.localClaim) {
+    const lc = res.localClaim;
+    await store.update(workId, (cur) =>
+      cur.github_issue
+        ? {
+            ...cur,
+            github_issue: {
+              ...cur.github_issue,
+              claimed_branch: lc.claimed_branch,
+              posted_claim_markers: lc.posted_claim_markers,
+            },
+          }
+        : cur,
+    );
+  }
+  return {
+    fired: res.assigneeAdded && !res.noop,
+    occupancy: res.occupancy,
+    notices: res.notices,
+    warnings: res.warnings,
+  };
+}
+
+/**
+ * ac-1 (`work claim`): explicit, idempotent claim. Promotes a non-terminal WI to
+ * in_progress (the work-start transition — claiming IS starting work) and claims the
+ * linked issue. Re-running on an already-claimed branch is a zero-gh no-op (sentinel).
+ * A terminal WI is left untouched (reopen first). No link ⇒ skip + notice (status is
+ * still promoted; only the github reflection is skipped).
+ */
+export async function claimWorkItem(
+  store: WorkItemStore,
+  workId: string,
+  wiring: ClaimWiring,
+): Promise<ClaimWiringResult & { promotedToInProgress: boolean }> {
+  const item = await store.get(workId);
+  if (item.status === 'done' || item.status === 'abandoned') {
+    return {
+      fired: false,
+      occupancy: 'skipped',
+      notices: [
+        `Work item ${workId} is ${item.status} (terminal) — claim skipped; reopen it first (ditto work reopen ${workId}).`,
+      ],
+      warnings: [],
+      promotedToInProgress: false,
+    };
+  }
+  let current = item;
+  let promotedToInProgress = false;
+  if (item.status !== 'in_progress') {
+    current = await store.update(workId, (cur) => ({ ...cur, status: 'in_progress' as const }));
+    promotedToInProgress = true;
+  }
+  const res = await runClaim(store, workId, current, wiring);
+  return { ...res, promotedToInProgress };
+}
+
+/**
+ * ac-2: fire the claim ONCE on the non-in_progress → in_progress edge. `prevStatus` is
+ * captured BEFORE the transition; `next` is the just-written WI. Off-edge (prev already
+ * in_progress, or next not in_progress) ⇒ no gh call. On a reopen edge (terminal →
+ * in_progress) the branch-grain sentinel in claim() makes it a zero-gh no-op when the
+ * marker is already present (no re-fire). Steady state = zero gh calls.
+ */
+export async function autoClaimOnInProgressEdge(
+  store: WorkItemStore,
+  workId: string,
+  prevStatus: WorkItem['status'],
+  next: WorkItem,
+  wiring: ClaimWiring,
+): Promise<ClaimWiringResult> {
+  if (prevStatus === 'in_progress' || next.status !== 'in_progress') {
+    return { fired: false, occupancy: 'skipped', notices: [], warnings: [] };
+  }
+  return runClaim(store, workId, next, wiring);
+}
+
+/**
+ * ac-7 (`work unclaim`): release the claim — drop @me ONLY (never clears another
+ * session's assignee), post the durable release comment, optionally move the board,
+ * and CLEAR the local sentinel marker. No link ⇒ skip + notice.
+ */
+export async function unclaimWorkItem(
+  store: WorkItemStore,
+  workId: string,
+  wiring: ClaimWiring,
+  opts: { reason?: string; boardStatusKey?: string } = {},
+): Promise<{ released: boolean; notices: string[] }> {
+  const item = await store.get(workId);
+  const res = unclaim(
+    { client: wiring.client, config: wiring.config },
+    {
+      workItem: item,
+      ...(opts.reason ? { reason: opts.reason } : {}),
+      ...(opts.boardStatusKey ? { boardStatusKey: opts.boardStatusKey } : {}),
+    },
+  );
+  if (res.cleared) {
+    await store.update(workId, (cur) => {
+      if (!cur.github_issue) return cur;
+      const { claimed_branch: _b, posted_claim_markers: _m, ...giRest } = cur.github_issue;
+      return { ...cur, github_issue: giRest };
+    });
+  }
+  return { released: res.assigneeRemoved, notices: res.notices };
+}
+
+/**
+ * ac-6 reconcile: bring the linked issue's assignee/board state in line with the WI
+ * (claim-omission + post-hoc recovery). Re-reads the REMOTE assignee FIRST and REFUSES
+ * to clobber a foreign assignee (another session may own it). For an active
+ * (non-terminal) WI it ensures @me + the in_progress board column via claim(); a
+ * terminal WI is left to the termination reflection. Never throws.
+ */
+export async function reconcileClaimState(
+  store: WorkItemStore,
+  workId: string,
+  wiring: ClaimWiring,
+): Promise<{ reconciled: boolean; notices: string[]; warnings: string[] }> {
+  const item = await store.get(workId);
+  const gi = item.github_issue;
+  if (!gi) {
+    return {
+      reconciled: false,
+      notices: ['No linked GitHub issue — claim reconcile skipped.'],
+      warnings: [],
+    };
+  }
+  if (item.status === 'done' || item.status === 'abandoned') {
+    return {
+      reconciled: false,
+      notices: [
+        `Work item is ${item.status} (terminal) — claim reconcile is for active work; nothing to do.`,
+      ],
+      warnings: [],
+    };
+  }
+  // Read the REMOTE assignee FIRST — do not clobber a foreign session's claim.
+  const view = wiring.client.issueView(gi.repo, gi.number);
+  if (view.ok) {
+    const logins = parseAssigneeLogins(view.value);
+    const actor = wiring.actorLogin;
+    const foreign = actor ? logins.filter((l) => l !== actor) : logins;
+    const selfPresent = actor ? logins.includes(actor) : false;
+    if (foreign.length > 0 && !selfPresent) {
+      return {
+        reconciled: false,
+        notices: [],
+        warnings: [
+          `Claim reconcile refused: the issue is assigned to ${foreign.join(', ')} (a foreign assignee) — NOT clobbering another session's claim.`,
+        ],
+      };
+    }
+  }
+  // No foreign holder (or degraded read) — (re-)assert the claim. claim() is itself
+  // remote-first + read-back advisory, so a degraded pre-read stays safe.
+  const res = await runClaim(store, workId, item, wiring);
+  return { reconciled: res.fired, notices: res.notices, warnings: res.warnings };
+}
+
+/**
+ * ac-5: UNCONDITIONAL terminal @me release. The auto-claim on the in_progress edge
+ * fires regardless of the reflection opt-in, so the release must too — else @me
+ * dangles on a claimed issue whenever reflection is OFF. Fires ONLY for an issue THIS
+ * session actually claimed (a local `claimed_branch` sentinel is present), so a close
+ * never touches an issue we did not claim. Comment-FREE: the termination reflection's
+ * result-summary is the durable audit (the 1-comment contract holds); this only drops
+ * the @me assignee + clears the local marker. Idempotent (a re-release is a no-op);
+ * @me-only (never clears another session). Never throws.
+ */
+export async function releaseClaimOnTerminal(
+  store: WorkItemStore,
+  workId: string,
+  wiring: ClaimWiring,
+): Promise<{ released: boolean; notices: string[] }> {
+  const item = await store.get(workId);
+  const gi = item.github_issue;
+  if (!gi || !gi.claimed_branch) {
+    return { released: false, notices: [] };
+  }
+  const notices: string[] = [];
+  const rm = wiring.client.issueRemoveAssignee(gi.repo, gi.number, '@me');
+  if (!rm.ok) notices.push(`Terminal claim release degraded (${rm.reason}) — @me left assigned.`);
+  // Clear the local sentinel regardless (the WI is terminal; the branch claim is done).
+  await store.update(workId, (cur) => {
+    if (!cur.github_issue) return cur;
+    const { claimed_branch: _b, posted_claim_markers: _m, ...giRest } = cur.github_issue;
+    return { ...cur, github_issue: giRest };
+  });
+  return { released: rm.ok, notices };
 }
 
 const workStart = defineCommand({
@@ -1412,6 +1689,18 @@ const workAbandon = defineCommand({
       if (args['comment-issue'] === true || closeIssue) {
         await reflectManualTermination(repoRoot, closed, 'abandoned', { closeIssue });
       }
+      // ac-5: unconditional terminal @me release (only when THIS session claimed it),
+      // independent of the reflection opt-in — the auto-claim is unconditional, so the
+      // release must be too. Comment-free; degradable.
+      if (closed.github_issue?.claimed_branch) {
+        const rel = await releaseClaimOnTerminal(
+          store,
+          args.workId,
+          await buildClaimWiring(repoRoot),
+        );
+        if (rel.released) writeHuman('GitHub: released the @me claim on close.');
+        for (const n of rel.notices) writeHuman(`  ${n}`);
+      }
       if (format === 'json') {
         writeJson({ id: closed.id, status: closed.status, closed_at: closed.closed_at });
       } else {
@@ -1686,6 +1975,17 @@ const workDone = defineCommand({
       const closeIssue = args['close-issue'] === true;
       if (args['comment-issue'] === true || closeIssue) {
         await reflectManualTermination(repoRoot, closed, 'done', { closeIssue, completion });
+      }
+      // ac-5: unconditional terminal @me release (only when THIS session claimed it),
+      // independent of the reflection opt-in. Comment-free; degradable.
+      if (closed.github_issue?.claimed_branch) {
+        const rel = await releaseClaimOnTerminal(
+          store,
+          args.workId,
+          await buildClaimWiring(repoRoot),
+        );
+        if (rel.released) writeHuman('GitHub: released the @me claim on close.');
+        for (const n of rel.notices) writeHuman(`  ${n}`);
       }
       if (format === 'json') {
         writeJson({ id: closed.id, status: closed.status, closed_at: closed.closed_at });
@@ -2592,10 +2892,20 @@ const workSyncIssue = defineCommand({
         { client: createGhClient(), store, aps: new AutopilotStore(repoRoot) },
         args.workId,
       );
+      // ac-6: ALSO reconcile the current assignee/board/claim state to GitHub
+      // (claim-omission + post-hoc recovery) — re-read the remote assignee FIRST and
+      // refuse to clobber a foreign one. Best-effort + degradable; independent of the
+      // decision-post above. Resolve the claim wiring (gh client + branch + login) ONCE
+      // for the command (no per-transition refetch).
+      const wiring = await buildClaimWiring(repoRoot);
+      const reconcile = await reconcileClaimState(store, args.workId, wiring);
       if (format === 'json') {
-        writeJson(res);
+        writeJson({ ...res, reconcile });
         return;
       }
+      for (const w of reconcile.warnings) writeHuman(`  claim reconcile: ${w}`);
+      if (reconcile.reconciled)
+        writeHuman('GitHub: reconciled the claim (assignee/board re-asserted).');
       switch (res.kind) {
         case 'posted':
           writeHuman(
@@ -2621,6 +2931,107 @@ const workSyncIssue = defineCommand({
   },
 });
 
+const workClaim = defineCommand({
+  meta: {
+    name: 'claim',
+    description:
+      'Claim the linked GitHub issue for THIS branch: assign @me, move the board to the in-progress column, post a public-safe claim comment, and mark the work item in_progress. Idempotent (a re-claim on the same branch is a no-op). No linked issue → skip + notice, not an error.',
+  },
+  args: {
+    workId: { type: 'positional', description: 'Work item id to claim', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    if (!(await store.exists(args.workId))) {
+      writeError(`work item ${args.workId} not found`);
+      process.exit(RUNTIME_ERROR_EXIT);
+      return;
+    }
+    try {
+      const wiring = await buildClaimWiring(repoRoot);
+      const res = await claimWorkItem(store, args.workId, wiring);
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.workId,
+          claimed: res.fired,
+          occupancy: res.occupancy,
+          promoted_to_in_progress: res.promotedToInProgress,
+          notices: res.notices,
+          warnings: res.warnings,
+        });
+        return;
+      }
+      if (res.promotedToInProgress) writeHuman(`Work item ${args.workId} → in_progress.`);
+      if (res.fired)
+        writeHuman('GitHub: claimed the linked issue (assigned @me, board → in progress).');
+      for (const w of res.warnings) writeHuman(`  ${w}`);
+      for (const n of res.notices) writeHuman(`  ${n}`);
+    } catch (err) {
+      writeError(`work claim failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+const workUnclaim = defineCommand({
+  meta: {
+    name: 'unclaim',
+    description:
+      'Release the claim on the linked GitHub issue: drop the @me assignee ONLY (never clears another session), post a durable release comment, and clear the local claim marker. No linked issue → skip + notice, not an error.',
+  },
+  args: {
+    workId: { type: 'positional', description: 'Work item id to unclaim', required: true },
+    reason: {
+      type: 'string',
+      description: 'Optional audit text for the release/takeover timeline comment',
+      required: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new WorkItemStore(repoRoot);
+    if (!(await store.exists(args.workId))) {
+      writeError(`work item ${args.workId} not found`);
+      process.exit(RUNTIME_ERROR_EXIT);
+      return;
+    }
+    try {
+      const wiring = await buildClaimWiring(repoRoot);
+      const res = await unclaimWorkItem(store, args.workId, wiring, {
+        ...(args.reason ? { reason: args.reason as string } : {}),
+      });
+      if (format === 'json') {
+        writeJson({ work_item_id: args.workId, released: res.released, notices: res.notices });
+        return;
+      }
+      if (res.released) writeHuman('GitHub: released the claim (dropped @me assignee).');
+      for (const n of res.notices) writeHuman(`  ${n}`);
+    } catch (err) {
+      writeError(`work unclaim failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const workCommand = defineCommand({
   meta: {
     name: 'work',
@@ -2628,6 +3039,8 @@ export const workCommand = defineCommand({
   },
   subCommands: {
     start: workStart,
+    claim: workClaim,
+    unclaim: workUnclaim,
     'link-issue': workLinkIssue,
     'mirror-hierarchy': workMirrorHierarchy,
     'sync-issue': workSyncIssue,

@@ -59,6 +59,17 @@ export const dittoConfigGithub = z
       node_id: z.string().min(1).optional(),
     }),
     status_map: z.record(z.enum(['done', 'abandoned']), z.string().min(1)),
+    // wi_2606287v9 (#5) ac-5/ac-9: NON-TERMINAL board-status mapping (claim ->
+    // "In Progress", blocked -> "Blocked"). Kept in a SEPARATE optional field rather
+    // than extending the terminal status_map enum above: a non-terminal key added to
+    // that closed enum makes an OLD/stale-bundle reader reject the WHOLE github config
+    // (zod), and the fail-open reader then drops the entire github block AND poisons
+    // sibling tech_spec/deep_interview defaults. As a separate field with OPEN string
+    // keys, an old reader simply STRIPS the unknown key (z.object is non-strict) and a
+    // future non-terminal key is just carried — per-key degradation, never a
+    // whole-config drop. The writer validates which keys it emits (in_progress,
+    // blocked). Additive + OPTIONAL; no schema_version bump.
+    claim_status_map: z.record(z.string().min(1), z.string().min(1)).optional(),
     auto_reflect: z.boolean(),
   })
   .describe('GitHub Project 연결 config — D7 status 매핑(키=done|abandoned) + auto-reflect');
