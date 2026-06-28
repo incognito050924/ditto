@@ -44088,7 +44088,7 @@ async function findLinkedWorkItem(store, coord) {
   }
   return null;
 }
-async function createWorkItemFromIssue(store, coord, issue) {
+async function createWorkItemFromIssue(store, coord, issue, projectItemId) {
   const title = issue.title.trim() || `Issue ${coord.repo}#${coord.number}`;
   const sourceRequest = [issue.title.trim(), issue.body.trim()].filter((s2) => s2.length > 0).join(`
 
@@ -44108,7 +44108,11 @@ async function createWorkItemFromIssue(store, coord, issue) {
   });
   await store.update(created.id, (cur) => ({
     ...cur,
-    github_issue: { repo: coord.repo, number: coord.number }
+    github_issue: {
+      repo: coord.repo,
+      number: coord.number,
+      ...projectItemId ? { project_item_id: projectItemId } : {}
+    }
   }));
   return created.id;
 }
@@ -44125,7 +44129,8 @@ async function pullIssue(deps, coord) {
   const view = deps.client.issueView(coord.repo, coord.number);
   if (!view.ok)
     return { kind: "degraded", reason: view.reason, detail: view.detail };
-  const id = await createWorkItemFromIssue(deps.store, coord, readIssue(view.value));
+  const projectItemId = resolveProjectItemId({ client: deps.client, config: deps.config }, coord.number);
+  const id = await createWorkItemFromIssue(deps.store, coord, readIssue(view.value), projectItemId);
   return { kind: "created", id, coord };
 }
 var SUB_ISSUES_QUERY = "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){subIssues(first:100){nodes{number}}}}}";
@@ -44215,7 +44220,7 @@ async function mirrorHierarchy(deps, parentWorkId) {
     unlinked_child_issues: unlinked
   };
 }
-async function linkIssue(store, workId, coord) {
+async function linkIssue(store, workId, coord, opts) {
   const item = await store.get(workId);
   const existing = item.github_issue;
   if (existing && existing.number === coord.number && sameRepoCoord(existing.repo, coord.repo)) {
@@ -44223,9 +44228,14 @@ async function linkIssue(store, workId, coord) {
   }
   if (existing)
     return { kind: "conflict", id: workId, existing, coord };
+  const projectItemId = opts ? resolveProjectItemId({ client: opts.client, config: opts.config }, coord.number) : null;
   await store.update(workId, (cur) => ({
     ...cur,
-    github_issue: { repo: coord.repo, number: coord.number }
+    github_issue: {
+      repo: coord.repo,
+      number: coord.number,
+      ...projectItemId ? { project_item_id: projectItemId } : {}
+    }
   }));
   return { kind: "linked", id: workId, coord, alreadyLinked: false };
 }
@@ -44341,7 +44351,8 @@ var workStart = defineCommand({
         return;
       }
       const sessionRepo = resolveSessionRepoCoord(repoRoot);
-      const result2 = await pullIssue({ client: createGhClient(), store, sessionRepo }, coord);
+      const ghConfig = await readGithubConfig(repoRoot);
+      const result2 = await pullIssue({ client: createGhClient(), store, sessionRepo, config: ghConfig }, coord);
       switch (result2.kind) {
         case "created":
           if (format === "json") {
@@ -44585,14 +44596,25 @@ function parseBoardPosition(itemList, issueNumber) {
     const content = it?.content;
     if (!content || content.number !== issueNumber)
       continue;
+    const id = it.id;
     const status = it.status;
     const priority = it.priority;
     return {
+      itemId: typeof id === "string" ? id : null,
       status: typeof status === "string" ? status : null,
       priority: typeof priority === "string" ? priority : null
     };
   }
   return null;
+}
+function resolveProjectItemId(deps, issueNumber) {
+  if (!deps.config)
+    return null;
+  const { owner, number } = deps.config.project;
+  const itemList = deps.client.projectItemList(owner, number);
+  if (!itemList.ok)
+    return null;
+  return parseBoardPosition(itemList.value, issueNumber)?.itemId ?? null;
 }
 function statusOptionNameById(fieldList) {
   const out = new Map;
@@ -45763,7 +45785,11 @@ var workLinkIssue = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     const store = new WorkItemStore(repoRoot);
     try {
-      const result2 = await linkIssue(store, args.workId, coord);
+      const ghConfig = await readGithubConfig(repoRoot);
+      const result2 = await linkIssue(store, args.workId, coord, {
+        client: createGhClient(),
+        config: ghConfig
+      });
       if (result2.kind === "conflict") {
         writeError(`work ${args.workId} is already linked to ${result2.existing.repo}#${result2.existing.number} (1 work item \u2194 1 issue, v1). Unlink is not supported in v1; create a separate work item for ${coord.repo}#${coord.number}.`);
         process.exit(USAGE_ERROR_EXIT);
@@ -46301,4 +46327,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=09b1e0d76879b71edf41e693eb071c577dcb58af5c1b70ed9b95f7ebd2f03836
+//# ditto-src-stamp=5d3f9ed75a0d23d24b45a2d424b45e11e392b7294c7e57971c346909f271ea0e
