@@ -12,6 +12,11 @@ if ! command -v bun >/dev/null 2>&1; then
   echo "[ditto] pre-push: bun 없음 — 테스트 게이트 skip" >&2
   exit 0
 fi
+# surface catalog(.ditto/local/surfaces.json)는 ADR-0012 에 따라 gitignored per-developer
+# runtime 이다 — 커밋되지 않으므로 stale 해질 수 있고, 그러면 surface-inventory 테스트가
+# 실패해 이 게이트가 코드와 무관하게 push 를 막는다. 게이트 직전에 재생성해 그 spurious-block
+# 을 없앤다(내구성). 실제 surface 변경(하드코딩된 count/list)은 여전히 테스트가 잡아 차단한다.
+bun run surfaces:gen >/dev/null 2>&1 || echo "[ditto] pre-push: surfaces:gen 실패 — stale catalog 로 진행" >&2
 echo "[ditto] pre-push: bun test 실행 중… (실패 시 push 중단)" >&2
 if ! bun test; then
   echo "" >&2
