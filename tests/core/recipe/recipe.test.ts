@@ -125,6 +125,73 @@ describe('parseRecipe — push_gate block (wi_260629i9c)', () => {
   });
 });
 
+describe('parseRecipe — repos array (multi-repo manifest, wi_260629i9c)', () => {
+  // One recipe describes a multi-repo workspace: top-level push_gate = root repo,
+  // each `repos[]` entry = a sub-repo (or submodule) by its dir, with its OWN gate.
+  test('repos with per-repo push_gate parses and is retained', () => {
+    const text = [
+      'repos:',
+      '  - dir: frontend',
+      '    push_gate:',
+      '      protected_branches: [main]',
+      '      test_command: turbo run test',
+      '  - dir: portal-backend',
+      '    push_gate:',
+      '      protected_branches: [main]',
+      '      test_command: gradle test',
+    ].join('\n');
+    const r = parseRecipe(text);
+    expect(r.ok).toBe(true);
+    if (r.ok)
+      expect(r.recipe.repos).toEqual([
+        {
+          dir: 'frontend',
+          push_gate: { protected_branches: ['main'], test_command: 'turbo run test' },
+        },
+        {
+          dir: 'portal-backend',
+          push_gate: { protected_branches: ['main'], test_command: 'gradle test' },
+        },
+      ]);
+  });
+
+  test('repos entry without dir → fail', () => {
+    expect(
+      parseRecipe(
+        'repos:\n  - push_gate:\n      protected_branches: [main]\n      test_command: x\n',
+      ).ok,
+    ).toBe(false);
+  });
+
+  test('repos entry may omit push_gate (dir-only is valid — gate inactive for it)', () => {
+    const r = parseRecipe('repos:\n  - dir: docs\n');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.recipe.repos).toEqual([{ dir: 'docs' }]);
+  });
+
+  test('top-level push_gate (root) and repos (sub-repos) coexist', () => {
+    const text = [
+      'push_gate:',
+      '  protected_branches: [main]',
+      '  test_command: bun test',
+      'repos:',
+      '  - dir: frontend',
+      '    push_gate:',
+      '      protected_branches: [main]',
+      '      test_command: turbo run test',
+    ].join('\n');
+    const r = parseRecipe(text);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.recipe.push_gate).toEqual({
+        protected_branches: ['main'],
+        test_command: 'bun test',
+      });
+      expect(r.recipe.repos?.length).toBe(1);
+    }
+  });
+});
+
 describe('loadRecipeFile — explicit vs discovered malformed policy (ac-5)', () => {
   let repo: string;
   beforeEach(async () => {

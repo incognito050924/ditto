@@ -55,6 +55,21 @@ export const recipePushGate = z
   })
   .describe('Push gate: branches whose push requires test_command to pass');
 
+/**
+ * One nested repo (sub-repo or submodule) of a multi-repo workspace, keyed by its
+ * `dir` relative to this recipe's location. Carries that repo's own config — for
+ * now its `push_gate` (room to grow per-repo settings later). The TOP-LEVEL recipe
+ * blocks describe the ROOT repo; each `repos[]` entry describes one nested repo.
+ * Lets a single workspace recipe.yaml express boxwood-style multi-repo gates
+ * (each sub-repo its own protected branches + test command).
+ */
+export const recipeRepoEntry = z
+  .object({
+    dir: z.string().min(1),
+    push_gate: recipePushGate.optional(),
+  })
+  .describe('A nested repo of the workspace (by dir) with its own config');
+
 export const recipe = z
   .object({
     host: recipeHost.optional(),
@@ -64,9 +79,11 @@ export const recipe = z
     agents: z.array(recipeAgentLink).optional(),
     memory: recipeMemoryMode.optional(),
     push_gate: recipePushGate.optional(),
+    repos: z.array(recipeRepoEntry).optional(),
   })
   .describe('Headless ditto setup recipe (recipe.yaml)');
 
 export type Recipe = z.infer<typeof recipe>;
 export type RecipeAgentLink = z.infer<typeof recipeAgentLink>;
 export type RecipePushGate = z.infer<typeof recipePushGate>;
+export type RecipeRepoEntry = z.infer<typeof recipeRepoEntry>;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parsePushedBranches, pushGateDecision } from '~/core/push-gate';
+import { parsePushedBranches, pushGateDecision, resolvePushGate } from '~/core/push-gate';
 
 const Z = '0000000000000000000000000000000000000000';
 
@@ -63,5 +63,44 @@ describe('pushGateDecision — fires only for a protected branch', () => {
 
   test('no branches (deletion-only push) → no run', () => {
     expect(pushGateDecision([], cfg)).toEqual({ run: false });
+  });
+});
+
+describe("resolvePushGate — pick a repo's gate from the workspace manifest", () => {
+  const manifest = {
+    push_gate: { protected_branches: ['main'], test_command: 'bun test' },
+    repos: [
+      {
+        dir: 'frontend',
+        push_gate: { protected_branches: ['main'], test_command: 'turbo run test' },
+      },
+      { dir: 'docs' }, // declared but no gate
+    ],
+  };
+
+  test('root repo ("." or "") → top-level push_gate', () => {
+    expect(resolvePushGate(manifest, '.')).toEqual(manifest.push_gate);
+    expect(resolvePushGate(manifest, '')).toEqual(manifest.push_gate);
+  });
+
+  test('sub-repo by dir → its own push_gate', () => {
+    expect(resolvePushGate(manifest, 'frontend')).toEqual({
+      protected_branches: ['main'],
+      test_command: 'turbo run test',
+    });
+    // trailing slash / ./ prefix normalize to the same entry
+    expect(resolvePushGate(manifest, './frontend/')).toEqual(manifest.repos[0].push_gate);
+  });
+
+  test('sub-repo declared without a gate → undefined (inactive)', () => {
+    expect(resolvePushGate(manifest, 'docs')).toBeUndefined();
+  });
+
+  test('unknown dir → undefined', () => {
+    expect(resolvePushGate(manifest, 'nope')).toBeUndefined();
+  });
+
+  test('no repos + non-root dir → undefined', () => {
+    expect(resolvePushGate({ push_gate: manifest.push_gate }, 'frontend')).toBeUndefined();
   });
 });

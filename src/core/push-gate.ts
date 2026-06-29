@@ -1,4 +1,4 @@
-import type { RecipePushGate } from '~/schemas/recipe';
+import type { Recipe, RecipePushGate } from '~/schemas/recipe';
 
 /**
  * Push-gate core (wi_260629i9c) — PURE, no I/O. The CLI/hook layer reads git
@@ -47,4 +47,23 @@ export function pushGateDecision(
   const matched = pushedBranches.filter((b) => protectedSet.has(b));
   if (matched.length === 0) return { run: false };
   return { run: true, test_command: config.test_command, matched };
+}
+
+/** Normalize a workspace-relative dir: drop a leading `./` and trailing slashes. */
+function normDir(d: string): string {
+  return d.replace(/^\.\//, '').replace(/\/+$/, '');
+}
+
+/**
+ * Resolve the push_gate for ONE repo inside a workspace manifest. `repoRelDir` is
+ * the repo's path relative to the recipe's location — the ROOT repo is `.` / `''`
+ * (→ top-level `push_gate`); a nested repo matches a `repos[].dir` (→ that entry's
+ * `push_gate`). An unknown dir, or a repo declared without a gate, yields undefined
+ * (gate inactive there). Lets one recipe.yaml drive per-repo gates across a
+ * boxwood-style multi-repo workspace.
+ */
+export function resolvePushGate(recipe: Recipe, repoRelDir: string): RecipePushGate | undefined {
+  const dir = normDir(repoRelDir);
+  if (dir === '' || dir === '.') return recipe.push_gate;
+  return recipe.repos?.find((r) => normDir(r.dir) === dir)?.push_gate;
 }
