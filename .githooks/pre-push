@@ -1,0 +1,26 @@
+#!/bin/sh
+# pre-push: 전체 테스트(bun test)가 통과해야 push 를 허용한다 (wi_2606298or).
+# 활성화(클론당 1회): git config core.hooksPath .githooks  ← postinstall 이 자동 수행.
+#
+# 짝가드: PreToolUse 하네스 훅(src/hooks/pre-tool-use.ts)이 `git push --no-verify`
+# 를 막아 에이전트가 이 게이트를 건너뛰지 못하게 한다. 둘이 맞물려
+# "테스트 통과 없이 push 불가 + 에이전트가 쉽게 우회 못 함"을 이룬다.
+#
+# bun 부재는 graceful skip(테스트 못 도는 환경까지 push 를 막지 않는다 — pre-commit 과
+# 동일 스탠스). 테스트 실패는 차단(exit 1).
+if ! command -v bun >/dev/null 2>&1; then
+  echo "[ditto] pre-push: bun 없음 — 테스트 게이트 skip" >&2
+  exit 0
+fi
+# surface catalog(.ditto/local/surfaces.json)는 ADR-0012 에 따라 gitignored per-developer
+# runtime 이다 — 커밋되지 않으므로 stale 해질 수 있고, 그러면 surface-inventory 테스트가
+# 실패해 이 게이트가 코드와 무관하게 push 를 막는다. 게이트 직전에 재생성해 그 spurious-block
+# 을 없앤다(내구성). 실제 surface 변경(하드코딩된 count/list)은 여전히 테스트가 잡아 차단한다.
+bun run surfaces:gen >/dev/null 2>&1 || echo "[ditto] pre-push: surfaces:gen 실패 — stale catalog 로 진행" >&2
+echo "[ditto] pre-push: bun test 실행 중… (실패 시 push 중단)" >&2
+if ! bun test; then
+  echo "" >&2
+  echo "✗ bun test 실패 — push 를 중단했다. 테스트를 통과시킨 뒤 다시 push 하라." >&2
+  echo "  (정말 우회해야 하면 'git push --no-verify' — 단 하네스에서 차단되며, DITTO_SKIP_HOOKS=1 가 필요하다.)" >&2
+  exit 1
+fi

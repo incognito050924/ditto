@@ -67,6 +67,12 @@ function launch(cmd, args, { cwd = target, env } = {}) {
   process.exit(r.status ?? 0);
 }
 
+// Sync node_modules with package.json before any bundle step. A dependency added
+// in a recent commit (e.g. @clack/prompts) is otherwise missing from node_modules
+// and the bundler fails to resolve it. `bun install` is idempotent and a near
+// no-op when already in sync.
+step('bun', ['install']);
+
 if (host === 'claude' || host === 'claude-code') {
   // Stateless: build the repo-root bin (hooks run it), load the repo as the plugin.
   step('bun', ['run', 'build:bin']);
