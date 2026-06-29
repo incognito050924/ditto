@@ -8,6 +8,21 @@ function fakeIO(answers: string[], isTTY = true): PromptIO {
   return { isTTY, ask: async () => q.shift() ?? '', write: () => {} };
 }
 
+/** asked 프롬프트를 캡처하는 가짜 IO(프롬프트 라운드 수 검증용). */
+function fakeIOCap(answers: string[], isTTY = true): { io: PromptIO; asked: string[] } {
+  const q = [...answers];
+  const asked: string[] = [];
+  const io: PromptIO = {
+    isTTY,
+    ask: async (query) => {
+      asked.push(query);
+      return q.shift() ?? '';
+    },
+    write: () => {},
+  };
+  return { io, asked };
+}
+
 const DISCOVERED = [
   { name: 'sec-bot', description: 'finds vulnerabilities' },
   { name: 'feature-builder', description: 'writes code' },
@@ -64,26 +79,26 @@ describe('runAgentLinkStep', () => {
     expect(r.written).toEqual([]);
   });
 
-  test('ac-5: TTY can override the recommended role per agent', async () => {
+  test('ac-2: override는 follow-up 다중선택으로만 추천 role을 바꾼다', async () => {
     const { deps: d, writes } = deps();
-    // multiSelect "1" → sec-bot; role select "4" → reviewer (overrides recommended security-reviewer)
-    const r = await runAgentLinkStep(fakeIO(['1', '4'], true), d);
+    // link "1" → sec-bot; override-multiSelect "1" → sec-bot; role select "4" → reviewer.
+    const r = await runAgentLinkStep(fakeIO(['1', '1', '4'], true), d);
     expect(writes.map((v) => v.name)).toEqual(['sec-bot']);
     expect(writes[0]?.role).toBe('reviewer');
     expect(r.written).toEqual(['sec-bot']);
   });
 
-  test('ac-5: empty role input keeps the recommended role', async () => {
+  test('ac-2: override 다중선택을 비우면(Enter) 추천 role을 유지', async () => {
     const { deps: d, writes } = deps();
-    // multiSelect "1" → sec-bot; role select "" → default = recommended security-reviewer
+    // link "1" → sec-bot; override-multiSelect "" → 아무도 안 바꿈 → 추천 security-reviewer.
     await runAgentLinkStep(fakeIO(['1', ''], true), d);
     expect(writes[0]?.role).toBe('security-reviewer');
   });
 
-  test('ac-5: can override to a role the heuristic never recommends (planner)', async () => {
+  test('ac-2: override로 휴리스틱이 추천하지 않는 role(planner)로도 바꿀 수 있다', async () => {
     const { deps: d, writes } = deps();
-    // pick "1" → sec-bot; role select "2" → planner (recommendVariantRole never returns this)
-    await runAgentLinkStep(fakeIO(['1', '2'], true), d);
+    // link "1" → sec-bot; override "1" → sec-bot; role select "2" → planner.
+    await runAgentLinkStep(fakeIO(['1', '1', '2'], true), d);
     expect(writes[0]?.role).toBe('planner');
   });
 
@@ -93,6 +108,17 @@ describe('runAgentLinkStep', () => {
     });
     const r = await runAgentLinkStep(fakeIO(['1'], true), d);
     expect(r.skipped).toEqual(['sec-bot']);
+  });
+
+  test('ac-2: 다중선택한 모든 agent에 추천 role을 per-agent 번호 재질문 없이 적용', async () => {
+    const { deps: d, writes } = deps();
+    // link "1,2" → 둘 다 선택, 이후 override multiSelect는 Enter(빈 입력)로 추천 수락.
+    const { io, asked } = fakeIOCap(['1,2'], true);
+    await runAgentLinkStep(io, d);
+    expect(writes.map((v) => v.name)).toEqual(['sec-bot', 'feature-builder']);
+    expect(writes.map((v) => v.role)).toEqual(['security-reviewer', 'implementer']);
+    // 2단 번호 재질문 제거: link 1회 + override 1회 = 2회. per-agent role 재질문이면 3회.
+    expect(asked.length).toBe(2);
   });
 
   test('no discovered agents → empty report, no prompt', async () => {

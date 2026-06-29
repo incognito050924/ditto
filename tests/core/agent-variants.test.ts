@@ -276,6 +276,43 @@ describe('writeAgentVariants (ac-4: idempotent writer)', () => {
     ]);
   });
 
+  test('rejects an unsafe variant name (path traversal) at the write boundary (ac-3/ac-6)', async () => {
+    // A recipe is an untrusted source (checked-in project recipe is cloned untrusted),
+    // so a `../`-bearing name must NOT escape the agents dir.
+    await expect(
+      writeAgentVariants(repo, [
+        { name: '../../evil', role: 'implementer', description: 'x', match: [] },
+      ]),
+    ).rejects.toThrow();
+
+    // nothing escaped the repo: no `evil.md` written above the agents dir
+    await expect(Bun.file(join(repo, 'evil.md')).exists()).resolves.toBe(false);
+    await expect(Bun.file(join(repo, '..', 'evil.md')).exists()).resolves.toBe(false);
+  });
+
+  test('accepts benign discovered ids (dotted `*.agent`, spaces) while blocking traversal (ac-7 no regression)', async () => {
+    // Discovered agent ids legitimately carry inner dots (a `foo.agent.md` file →
+    // id `foo.agent`) or spaces; the guard must not reject those, only traversal.
+    const result = await writeAgentVariants(repo, [
+      { name: 'playwright-test-planner.agent', role: 'implementer', description: 'x', match: [] },
+      { name: 'my agent', role: 'implementer', description: 'y', match: [] },
+    ]);
+    expect(result.written).toContain('playwright-test-planner.agent');
+    expect(result.written).toContain('my agent');
+    await expect(
+      Bun.file(join(repo, '.ditto', 'agents', 'playwright-test-planner.agent.md')).exists(),
+    ).resolves.toBe(true);
+
+    // path separators and dot-entries are rejected; an embedded `..` with no
+    // separator (e.g. `a..b` → `a..b.md`, contained) is benign and allowed.
+    await expect(
+      writeAgentVariants(repo, [{ name: 'a/b', role: 'implementer', description: 'x', match: [] }]),
+    ).rejects.toThrow();
+    await expect(
+      writeAgentVariants(repo, [{ name: '..', role: 'implementer', description: 'x', match: [] }]),
+    ).rejects.toThrow();
+  });
+
   test('existing file is skipped, never overwritten (preserves user edits)', async () => {
     await writeVariant(
       'sec.md',

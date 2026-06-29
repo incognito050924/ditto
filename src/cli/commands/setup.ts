@@ -1,21 +1,32 @@
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { defineCommand } from 'citty';
-import { writeAgentVariants } from '~/core/agent-variants';
+import { type AgentVariant, writeAgentVariants } from '~/core/agent-variants';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { claudeCodeHostAdapter } from '~/core/hosts/claude-code';
 import { codexHostAdapter } from '~/core/hosts/codex';
 import { fileExists } from '~/core/hosts/shared';
 import { detectLspLanguages } from '~/core/provision/lsp-detect';
-import { defaultMemorySeparateDeps, separateMemoryRepo } from '~/core/provision/memory-separate';
-import { defaultRegistry } from '~/core/provision/provisioner';
-import { type SetupHost, setup } from '~/core/setup';
+import {
+  type MemorySeparateMode,
+  type MemorySeparateResult,
+  defaultMemorySeparateDeps,
+  separateMemoryRepo,
+} from '~/core/provision/memory-separate';
+import { type ProvisionerRegistry, defaultRegistry } from '~/core/provision/provisioner';
+import { loadResolvedRecipe } from '~/core/recipe/load';
+import { type SetupHost, type SetupResult, setup } from '~/core/setup';
+import type { Recipe } from '~/schemas/recipe';
 import { resolveResourcesDir } from '../resources';
 import { RUNTIME_ERROR_EXIT, writeError, writeHuman } from '../util';
 import { runAgentLinkStep } from '../wizard/agent-link-step';
 import type { PromptIO } from '../wizard/prompt';
 import { createStdioPromptIO } from '../wizard/prompt-io';
-import { runProvisionStep } from '../wizard/provision-step';
+import {
+  type ProvisionAction,
+  type ProvisionOutcome,
+  runProvisionStep,
+} from '../wizard/provision-step';
 import { runSetupWizard } from '../wizard/setup-wizard';
 
 /** 비대화 도구 provisioning: 강제 non-TTY io로 추론된 빠진 도구를 프롬프트 없이 설치. */
@@ -35,6 +46,114 @@ async function provisionToolsNonInteractive(projectRoot: string): Promise<void> 
   if (summary.unservicedLanguages.length > 0) {
     writeHuman(`  감지됐으나 서버 미등록: ${summary.unservicedLanguages.join(', ')}`);
   }
+}
+
+/**
+ * Headless tools stage (ac-3). Drive provisioning from the recipe's EXPLICIT tool
+ * ids — resolve each id against the registry (single-instance tools first, then
+ * LSP servers), install absent ones — bypassing the wizard's detect+multiSelect.
+ * Reuses the Provisioner building blocks (resolveExisting/install); fail-soft.
+ */
+async function provisionRecipeTools(
+  registry: ProvisionerRegistry,
+  toolIds: string[],
+): Promise<ProvisionOutcome[]> {
+  const outcomes: ProvisionOutcome[] = [];
+  for (const id of toolIds) {
+    const p = registry.tools.get(id) ?? registry.lsp.get(id);
+    if (!p) {
+      outcomes.push({ id, action: 'skipped', message: `${id}: 등록된 provisioner 없음 — 건너뜀` });
+      continue;
+    }
+    if ((await p.resolveExisting()) !== null) {
+      outcomes.push({ id, action: 'already-present', message: `${p.label}: 이미 설치됨` });
+      continue;
+    }
+    const r = await p.install();
+    const action: ProvisionAction =
+      r.status === 'installed'
+        ? 'installed'
+        : r.status === 'already-present'
+          ? 'already-present'
+          : 'failed';
+    outcomes.push({
+      id,
+      action,
+      message: `${p.label}: ${r.message}`,
+      ...(r.manual ? { manual: r.manual } : {}),
+    });
+  }
+  return outcomes;
+}
+
+/** Injected building blocks for the headless recipe drive (test-seam). */
+export interface RecipeSetupDeps {
+  setup: (host: SetupHost) => Promise<SetupResult>;
+  provisionTools: (toolIds: string[]) => Promise<ProvisionOutcome[]>;
+  writeVariants: (variants: AgentVariant[]) => Promise<{ written: string[]; skipped: string[] }>;
+  separateMemory: (mode: MemorySeparateMode) => Promise<MemorySeparateResult>;
+}
+
+export interface RecipeSetupSummary {
+  host: SetupHost;
+  setup: SetupResult;
+  tools: ProvisionOutcome[];
+  agents: { written: string[]; skipped: string[] };
+  memory: { mode: MemorySeparateMode | 'in-project'; result: MemorySeparateResult | null };
+}
+
+/**
+ * A recipe is "present" when an explicit `--recipe` path was given OR a discovered
+ * recipe resolved to at least one set field (ac-3). An empty resolved recipe (no
+ * source set anything) is ABSENT, so setup falls through to the legacy paths
+ * unchanged (ac-6).
+ */
+export function isRecipePresent(cliPath: string | undefined, resolved: Recipe): boolean {
+  return cliPath !== undefined || Object.keys(resolved).length > 0;
+}
+
+/**
+ * Drive all four `ditto setup` stages headlessly from a resolved recipe (ac-3):
+ * host(setup) + tools(provision) + agent-link(writeVariants) + memory(separate) —
+ * no prompts, driven by recipe values. The interactive multiselect is bypassed:
+ * the recipe's `agents[]` ARE the chosen links and `tools[]` ARE the chosen tools.
+ *
+ * minimal-increment (ac-3): `memory: submodule` only prints manual instructions
+ * (it cannot be automated without a pre-existing remote), so a headless recipe
+ * MUST reject it rather than report a false success. Only the fully-automatable
+ * `gitignore` mode runs headless. The guard fails closed BEFORE any side effect.
+ */
+export async function runRecipeSetup(
+  recipe: Recipe,
+  host: SetupHost,
+  deps: RecipeSetupDeps,
+): Promise<RecipeSetupSummary> {
+  if (recipe.memory === 'submodule') {
+    throw new Error(
+      'headless recipe는 memory: submodule를 자동화할 수 없다(원격 선행 필요) — memory: gitignore를 쓰거나 대화형 setup으로 분리하라',
+    );
+  }
+
+  const setupResult = await deps.setup(host);
+
+  const tools =
+    recipe.tools && recipe.tools.length > 0 ? await deps.provisionTools(recipe.tools) : [];
+
+  const variants: AgentVariant[] = (recipe.agents ?? []).map((a) => ({
+    name: a.name,
+    role: a.role,
+    description: '',
+    match: [],
+  }));
+  const agents =
+    variants.length > 0 ? await deps.writeVariants(variants) : { written: [], skipped: [] };
+
+  let memory: RecipeSetupSummary['memory'] = { mode: 'in-project', result: null };
+  if (recipe.memory === 'gitignore') {
+    memory = { mode: 'gitignore', result: await deps.separateMemory('gitignore') };
+  }
+
+  return { host, setup: setupResult, tools, agents, memory };
 }
 
 function parseSetupHost(value: unknown): SetupHost {
@@ -237,6 +356,12 @@ export const setupCommand = defineCommand({
       default: false,
       description: 'Non-interactive only: also provision detected tools (codeql/playwright/LSP)',
     },
+    recipe: {
+      type: 'string',
+      required: false,
+      description:
+        'Path to a recipe.yaml that drives all 4 setup stages headlessly (overrides discovery)',
+    },
   },
   run: async ({ args }) => {
     try {
@@ -251,6 +376,66 @@ export const setupCommand = defineCommand({
       const pluginRoot = resolve(resourcesDir, '..', '..');
       if (pluginRoot === projectRoot) {
         writeHuman(`setup: skipped (self-host — target IS the ditto repo at ${projectRoot})`);
+        return;
+      }
+
+      // Recipe resolution at command ENTRY, BEFORE the TTY/--yes branch (ac-3): a
+      // present recipe (explicit --recipe, or a discovered non-empty recipe.yaml)
+      // drives the FULL 4-stage headless path regardless of isTTY/--yes — it must
+      // NOT fall through to the legacy host+scaffold-only path. Explicit --recipe
+      // malformed/missing throws (ac-5, caught below); a discovered malformed file
+      // warns and is ignored, naming which file (ac-5).
+      const cliRecipePath = typeof args.recipe === 'string' ? args.recipe : undefined;
+      const resolvedRecipe = await loadResolvedRecipe(projectRoot, cliRecipePath, (origin, msg) =>
+        writeError(`recipe ignored (${origin} recipe.yaml malformed): ${msg}`),
+      );
+      if (isRecipePresent(cliRecipePath, resolvedRecipe)) {
+        // recipe.host wins over the --host flag (the recipe is the authoritative
+        // headless declaration); --host/default fills in when the recipe omits it.
+        const recipeHost = resolvedRecipe.host ?? host;
+        const summary = await runRecipeSetup(resolvedRecipe, recipeHost, {
+          setup: async (h) =>
+            setup({
+              resourcesDir,
+              projectRoot,
+              homeDir: homedir(),
+              ...(process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {}),
+              now: new Date(),
+              host: h,
+              ...(includesCodex(h)
+                ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) }
+                : {}),
+            }),
+          provisionTools: (ids) => provisionRecipeTools(defaultRegistry(), ids),
+          writeVariants: (variants) => writeAgentVariants(projectRoot, variants),
+          separateMemory: (mode) =>
+            separateMemoryRepo(defaultMemorySeparateDeps(projectRoot), mode),
+        });
+
+        writeHuman(`setup: installed into ${projectRoot} (host=${summary.host}, recipe-driven)`);
+        writeHuman(
+          `.ditto/: ${summary.setup.scaffold.alreadyInitialized ? 'already initialized' : 'created'} · allowlist: ${
+            summary.setup.allowlistApplied ? summary.setup.allowlistPath : 'skipped'
+          }`,
+        );
+        if (summary.tools.length > 0) {
+          writeHuman('tools:');
+          for (const o of summary.tools) writeHuman(`  ${o.action}\t${o.message}`);
+        }
+        if (summary.agents.written.length > 0 || summary.agents.skipped.length > 0) {
+          writeHuman(
+            `agents linked: ${summary.agents.written.length ? summary.agents.written.join(', ') : '(none)'}${
+              summary.agents.skipped.length
+                ? ` · skipped(existing): ${summary.agents.skipped.join(', ')}`
+                : ''
+            }`,
+          );
+        }
+        if (summary.memory.result) {
+          writeHuman(`memory: ${summary.memory.mode} — ${summary.memory.result.message}`);
+        } else {
+          writeHuman('memory: 프로젝트 git에 포함(기본)');
+        }
         return;
       }
 

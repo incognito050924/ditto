@@ -14,6 +14,23 @@ export interface PromptIO {
   ask: (query: string) => Promise<string>;
   /** 안내/목록 출력. */
   write: (text: string) => void;
+  /**
+   * 화살표/체크박스 TUI 위젯(실제 단말 전용). 있으면 TTY 경로에서 우선 사용한다.
+   * raw-mode init이 throw하거나 사용자가 취소하면 `undefined`를 돌려주고, 그러면
+   * 기존 line-based(ask/write) 경로로 fallback한다(ADR-0018). 단위테스트의 주입 IO는
+   * 이 필드를 제공하지 않으므로 항상 line-based 순수 로직을 탄다.
+   */
+  tui?: TuiPrompts;
+}
+
+/** 실제 단말에서 화살표+space 체크 TUI를 제공하는 어댑터. fallback이 필요하면 undefined 반환. */
+export interface TuiPrompts {
+  /** 화살표+Enter 단일선택. */
+  select: (message: string, options: Option[], defaultValue: string) => Promise<string | undefined>;
+  /** space 체크박스 다중선택. */
+  multiSelect: (message: string, choices: Choice[]) => Promise<string[] | undefined>;
+  /** y/n 확인. */
+  confirm: (message: string, defaultYes: boolean) => Promise<boolean | undefined>;
 }
 
 /** y/n 확인. 비TTY거나 빈 입력이면 defaultYes. */
@@ -23,6 +40,10 @@ export async function confirm(
   defaultYes: boolean,
 ): Promise<boolean> {
   if (!io.isTTY) return defaultYes;
+  if (io.tui) {
+    const r = await io.tui.confirm(message, defaultYes);
+    if (r !== undefined) return r;
+  }
   const hint = defaultYes ? '[Y/n]' : '[y/N]';
   const ans = (await io.ask(`${message} ${hint} `)).trim().toLowerCase();
   if (ans === '') return defaultYes;
@@ -54,6 +75,10 @@ export async function select(
   defaultValue: string,
 ): Promise<string> {
   if (!io.isTTY || options.length === 0) return defaultValue;
+  if (io.tui) {
+    const r = await io.tui.select(message, options, defaultValue);
+    if (r !== undefined) return r;
+  }
   const defaultIdx = options.findIndex((o) => o.value === defaultValue);
   io.write(`${message}\n`);
   options.forEach((o, i) => {
@@ -79,6 +104,10 @@ export async function multiSelect(
 ): Promise<string[]> {
   const defaults = choices.filter((c) => c.checked).map((c) => c.value);
   if (!io.isTTY || choices.length === 0) return defaults;
+  if (io.tui) {
+    const r = await io.tui.multiSelect(message, choices);
+    if (r !== undefined) return r;
+  }
 
   io.write(`${message}\n`);
   choices.forEach((c, i) => io.write(`  ${i + 1}. [${c.checked ? 'x' : ' '}] ${c.label}\n`));

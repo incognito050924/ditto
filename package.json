@@ -28,6 +28,7 @@
     "surfaces:gen": "bun run scripts/gen-surfaces.ts"
   },
   "dependencies": {
+    "@clack/prompts": "^1.6.0",
     "citty": "^0.1.6",
     "smol-toml": "^1.6.1",
     "yaml": "^2.5.0",

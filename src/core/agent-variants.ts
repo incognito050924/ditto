@@ -1,5 +1,5 @@
 import { readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { ensureDir } from './fs';
 import { fileExists } from './hosts/shared';
 
@@ -207,6 +207,26 @@ export async function writeAgentVariants(
   const written: string[] = [];
   const skipped: string[] = [];
   for (const variant of variants) {
+    // Injection guard (untrusted source): a variant name becomes a path segment
+    // (`<name>.md`). A recipe is untrusted (a checked-in project recipe is cloned
+    // from elsewhere), so reject anything that could escape the agents dir. The
+    // guard is precise — it blocks ONLY path traversal (separators, `.`/`..`,
+    // NUL), not benign characters: discovered agent ids legitimately carry dots
+    // (Claude Code's `*.agent.md` → `foo.agent`), spaces, or unicode, and the
+    // interactive discovery path must not abort on those. A name is safe iff it
+    // is a single path segment that is its own basename and not a dot-entry.
+    const name = variant.name;
+    if (
+      name === '' ||
+      name === '.' ||
+      name === '..' ||
+      name.includes('/') ||
+      name.includes('\\') ||
+      name.includes('\0') ||
+      basename(name) !== name
+    ) {
+      throw new Error(`unsafe agent variant name (must be a single safe path segment): ${name}`);
+    }
     const file = join(dir, `${variant.name}.md`);
     if (await fileExists(file)) {
       skipped.push(variant.name);

@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_f9f51e3fecc75e56",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] 향후 recipe가 auth 토큰 필드를 담으면 무인 mis-config 가능 — 현재 그런 필드 없음\n[residual] 개인 .ditto/local recipe 파일 모드가 과도 개방이면 노출 — secret-exposure에 가까움\n[residual] 무인 recipe-drive가 per-run 감사 추적 안 남김 — git diff로만 재구성\n[residual] 동시 ditto setup 2개가 .ditto/local 쓰기 인터리브 — 비정상 수동 시나리오\n[residual] 병적으로 큰/깊은 recipe.yaml이 파서 메모리 고갈 — input-validation/boundary-edge가 커버\n[residual] 악성 체크인 recipe가 클론서 무인 provisioning 구동 — input-validation/configuration 소관\n[residual] 체크인 recipe에 로컬 username/절대경로 우발 포함 가능 — 의도적 PII 수집 없음\n[residual] recipe를 규제데이터 저장에 재용도화하면 — 본 변경 스키마 밖\n[residual] 향후 recipe가 timestamp/TTL 필드 인코딩하면 무검증 파싱 — 현재 없음\n[close_reason] 로컬 단일사용자 개발 CLI, 네트워크/서버 표면 없음, 자격증명 수집 안 함\n[close_reason] 권한/역할 모델 없음, 호출자 fs 권한으로 로컬 repo만 씀\n[close_reason] 로컬 dev setup, 비부인/변조내성 요구 없음, git history가 기록\n[close_reason] one-shot 단일프로세스 CLI, precedence 동기 해석, 공유 가변 상태/락 없음\n[close_reason] one-shot 소형 recipe 파싱 + opt-in 설치, 스케일/부하 차원 없음\n[close_reason] 네트워크 엔드포인트/공유 레이트리미터/replay 표면 없음, 로컬 파일 read/write만\n[close_reason] host/tool/agent/memory 선택만 수집, 개인식별자 없음\n[close_reason] 규제 데이터 미처리, 로컬 dev-tool config wizard\n[close_reason] 만료/TTL/타임존/clock 비교 로직 없음, now는 timestamp pass-through",
+  "created_at": "2026-06-29T01:02:17.343Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

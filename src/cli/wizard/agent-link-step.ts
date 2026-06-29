@@ -63,16 +63,34 @@ export async function runAgentLinkStep(
   }));
   const picked = new Set(await multiSelect(io, '프로젝트 agent를 ditto role에 연결', choices));
 
-  // 승인된 agent마다 role을 고른다 — 추천 role이 기본값, 사용자가 다른 owner role로 override 가능.
-  // 비TTY/Enter면 select가 기본값(추천 role)을 그대로 돌려준다(기존 동작 보존).
-  const approved: AgentVariant[] = [];
-  for (const a of discovered) {
-    if (!picked.has(a.name)) continue;
+  // 선택한 agent는 추천 role을 기본 수락한다 — per-agent 재질문 없음(ac-2: 2단 번호 재질문 제거).
+  const linked = discovered.filter((a) => picked.has(a.name));
+  if (linked.length === 0) return { discovered, written: [], skipped: [] };
+
+  const roleByName = new Map(linked.map((a) => [a.name, a.role]));
+
+  // override는 공통 경로 밖. "추천을 바꿀 agent"만 골라(기본 미체크 → Enter로 전부 수락)
+  // 고른 것에 한해 role을 다시 고른다. 아무도 안 고르면 추천 role 그대로다.
+  const overrideChoices: Choice[] = linked.map((a) => ({
+    label: `${a.name} (추천: ${a.role})`,
+    value: a.name,
+    checked: false,
+  }));
+  const toOverride = new Set(
+    await multiSelect(io, '추천 role을 바꿀 agent (없으면 Enter)', overrideChoices),
+  );
+  for (const a of linked) {
+    if (!toOverride.has(a.name)) continue;
     const role = await select(io, `'${a.name}' role 선택 (추천: ${a.role})`, ROLE_OPTIONS, a.role);
-    approved.push({ name: a.name, role, description: a.description, match: [] });
+    roleByName.set(a.name, role);
   }
 
-  if (approved.length === 0) return { discovered, written: [], skipped: [] };
+  const approved: AgentVariant[] = linked.map((a) => ({
+    name: a.name,
+    role: roleByName.get(a.name) ?? a.role,
+    description: a.description,
+    match: [],
+  }));
 
   const result = await deps.writeVariants(approved);
   return { discovered, written: result.written, skipped: result.skipped };
