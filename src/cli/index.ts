@@ -34,6 +34,7 @@ import { teardownCommand } from './commands/teardown';
 import { techSpecCommand } from './commands/tech-spec';
 import { verifyCommand } from './commands/verify';
 import { workCommand } from './commands/work';
+import { workspaceCommand } from './commands/workspace';
 import { worktreeCommand } from './commands/worktree';
 
 const main = defineCommand({
@@ -50,6 +51,7 @@ const main = defineCommand({
     work: workCommand,
     github: githubCommand,
     worktree: worktreeCommand,
+    workspace: workspaceCommand,
     'push-gate': pushGateCommand,
     mode: modeCommand,
     run: runCommand,

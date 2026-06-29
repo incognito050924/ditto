@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -118,10 +119,14 @@ describe('execPushGate — DITTO_SKIP_HOOKS sanctioned escape (ac-4)', () => {
 const cli = join(process.cwd(), 'src/cli/index.ts');
 let workDir: string;
 
-function runGate(stdin: string, env: Record<string, string> = {}) {
-  const proc = Bun.spawnSync(['bun', cli, 'push-gate'], {
-    cwd: workDir,
-    env: { ...process.env, ...env },
+function runGateIn(
+  dir: string,
+  stdin: string,
+  opts: { args?: string[]; env?: Record<string, string> } = {},
+) {
+  const proc = Bun.spawnSync(['bun', cli, 'push-gate', ...(opts.args ?? [])], {
+    cwd: dir,
+    env: { ...process.env, ...(opts.env ?? {}) },
     stdin: new TextEncoder().encode(stdin),
   });
   return {
@@ -129,6 +134,10 @@ function runGate(stdin: string, env: Record<string, string> = {}) {
     stderr: proc.stderr?.toString() ?? '',
     exitCode: proc.exitCode,
   };
+}
+
+function runGate(stdin: string, env: Record<string, string> = {}) {
+  return runGateIn(workDir, stdin, { env });
 }
 
 async function writeRecipe(yaml: string) {
@@ -197,5 +206,72 @@ describe('ditto push-gate (integration) — real recipe + real spawn', () => {
     await writeRecipe('push_gate:\n  protected_branches:\n    - main\n  test_command: "false"\n');
     const r = runGate(PUSH_MAIN, { DITTO_SKIP_HOOKS: '1' });
     expect(r.exitCode).toBe(0);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// ROOT-ONLY trust (wi_2606299kn ac-3): `ditto workspace sync` clones declared
+// sub-repos into the workspace. A cloned sub-repo may ship its OWN
+// `.ditto/recipe.yaml`; pushing from inside it must resolve the WORKSPACE-ROOT
+// recipe — NEVER the sub-repo's own — else its `push_gate.test_command` is
+// push-time RCE. `workDir` is the trusted workspace root (has `.ditto`).
+// ───────────────────────────────────────────────────────────────────────────
+describe('ditto push-gate — ROOT-ONLY trust: a cloned sub-repo never runs its OWN recipe (ac-3)', () => {
+  /** Plant a cloned sub-repo `evil` whose OWN recipe would `touch` an RCE marker. */
+  async function plantMaliciousSubRepo(): Promise<{ sub: string; pwned: string }> {
+    const sub = join(workDir, 'evil');
+    await mkdir(join(sub, '.ditto'), { recursive: true }); // the clone's own `.ditto`
+    const pwned = join(workDir, 'PWNED');
+    await writeFile(
+      join(sub, 'recipe.yaml'),
+      `push_gate:\n  protected_branches:\n    - main\n  test_command: "touch '${pwned}'"\n`,
+    );
+    return { sub, pwned };
+  }
+
+  test('push from inside a cloned sub-repo resolves the ROOT recipe, NOT the sub-repo own (walk-up)', async () => {
+    // The ROOT recipe is the ONLY place a sub-repo may be declared trusted; here it
+    // declares `evil` with NO gate of its own.
+    await writeRecipe('repos:\n  - dir: evil\n');
+    const { sub, pwned } = await plantMaliciousSubRepo();
+
+    const r = runGateIn(sub, PUSH_MAIN);
+
+    // INVARIANT: the cloned sub-repo's own test_command must NEVER execute.
+    expect(existsSync(pwned)).toBe(false);
+    // ROOT recipe declares `evil` without a gate → inactive → push allowed.
+    expect(r.exitCode).toBe(0);
+  });
+
+  test('ROOT recipe gate for the sub-repo dir runs (not the sub-repo own gate)', async () => {
+    // The root declares `evil` WITH its own (trusted) gate that FAILS → blocks the
+    // push; the sub-repo's own `touch` command must still never run.
+    await writeRecipe(
+      'repos:\n  - dir: evil\n    push_gate:\n      protected_branches:\n        - main\n      test_command: "false"\n',
+    );
+    const { sub, pwned } = await plantMaliciousSubRepo();
+
+    const r = runGateIn(sub, PUSH_MAIN);
+
+    expect(existsSync(pwned)).toBe(false); // sub-repo's command never ran
+    expect(r.exitCode).not.toBe(0); // the ROOT's `false` gate blocked the push
+  });
+
+  test('--workspace-root pins the trusted root (the N5-wired seam) over the sub-repo own', async () => {
+    await writeRecipe('repos:\n  - dir: evil\n');
+    const { sub, pwned } = await plantMaliciousSubRepo();
+
+    // The installed sub-repo hook passes the absolute trusted workspace root.
+    const r = runGateIn(sub, PUSH_MAIN, { args: ['--workspace-root', workDir] });
+
+    expect(existsSync(pwned)).toBe(false);
+    expect(r.exitCode).toBe(0);
+  });
+
+  test('NO regression: a normal single-repo push still resolves its OWN recipe', async () => {
+    // workDir is a standalone repo (no parent declares it) → its own recipe governs.
+    await writeRecipe('push_gate:\n  protected_branches:\n    - main\n  test_command: "false"\n');
+    const r = runGateIn(workDir, PUSH_MAIN);
+    expect(r.exitCode).not.toBe(0); // own gate fires and fails → blocked
   });
 });

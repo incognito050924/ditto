@@ -61,6 +61,20 @@ function normDir(d: string): string {
 }
 
 /**
+ * True when `repoRelDir` names a repo this recipe DECLARES in `repos[]` — i.e. the
+ * recipe's owner has explicitly adopted that nested dir as a member of its workspace.
+ * The ROOT-ONLY trust check (wi_2606299kn ac-3): only a workspace-root recipe that
+ * declares a sub-repo is trusted to govern its push gate, so a cloned sub-repo's own
+ * recipe is never consulted. The empty/`.` dir is the recipe's OWN root, not a nested
+ * repo, so it is NOT a `repos[]` declaration (returns false).
+ */
+export function isRepoDeclared(recipe: Recipe, repoRelDir: string): boolean {
+  const dir = normDir(repoRelDir);
+  if (dir === '' || dir === '.') return false;
+  return recipe.repos?.some((r) => normDir(r.dir) === dir) ?? false;
+}
+
+/**
  * Resolve the push_gate for ONE repo inside a workspace manifest. `repoRelDir` is
  * the repo's path relative to the recipe's location — the ROOT repo is `.` / `''`
  * (→ top-level `push_gate`); a nested repo matches a `repos[].dir` (→ that entry's

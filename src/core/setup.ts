@@ -448,6 +448,14 @@ export interface InstallPushGateHookOptions {
   projectRoot: string;
   /** Path to the bundled `resources/hooks/pre-push` template. */
   hookTemplatePath: string;
+  /**
+   * Absolute path of the TRUSTED workspace root, for a CLONED SUB-REPO install
+   * (wi_2606299kn ac-4). When set, the substitutable `WS_ROOT=""` line in the hook
+   * template is rewritten to `WS_ROOT="<workspaceRoot>"` so the installed hook
+   * resolves the ROOT recipe (ROOT-ONLY trust), not the cloned sub-repo's own.
+   * Omit for a normal/root install (the template's empty WS_ROOT is left as-is).
+   */
+  workspaceRoot?: string;
 }
 
 /** Derive the bundled hook template path from the `resources/managed` dir. */
@@ -521,7 +529,11 @@ export async function installPushGateHook(
 
   const hookPath = join(hooksDir, 'pre-push');
   const backupPath = `${hookPath}${PUSH_GATE_HOOK_BACKUP_SUFFIX}`;
-  const template = await readFile(hookTemplatePath, 'utf8');
+  // For a CLONED SUB-REPO install (workspaceRoot set), bake the trusted workspace
+  // root into the template's substitutable WS_ROOT line BEFORE writing. The bake
+  // runs against the on-disk template every time, so both the install and refresh
+  // write paths stay idempotent (a re-run re-derives WS_ROOT from the clean template).
+  const template = bakeWorkspaceRoot(await readFile(hookTemplatePath, 'utf8'), opts.workspaceRoot);
 
   await ensureDir(hooksDir);
 
@@ -551,6 +563,27 @@ export async function installPushGateHook(
   await rename(hookPath, backupPath);
   await writeHookFile(hookPath, template);
   return { status: 'backed-up', hookPath, backupPath, message: null };
+}
+
+/**
+ * Rewrite the template's substitutable `WS_ROOT=""` line to `WS_ROOT="<workspaceRoot>"`
+ * for a cloned sub-repo install (wi_2606299kn ac-4), so the installed hook resolves the
+ * ROOT recipe (ROOT-ONLY trust). A normal/root install (`workspaceRoot` absent) leaves
+ * the template untouched. Throws if the template lost the substitutable line — a baked
+ * sub-repo hook with an empty WS_ROOT would silently resolve the CLONE's own recipe.
+ */
+function bakeWorkspaceRoot(template: string, workspaceRoot?: string): string {
+  if (workspaceRoot === undefined || workspaceRoot === '') return template;
+  const baked = template.replace(
+    /^WS_ROOT=""$/m,
+    `WS_ROOT=${JSON.stringify(resolve(workspaceRoot))}`,
+  );
+  if (baked === template) {
+    throw new Error(
+      'pre-push template is missing the substitutable `WS_ROOT=""` line — cannot pin the workspace root for a sub-repo install',
+    );
+  }
+  return baked;
 }
 
 /** Write the hook body and set the POSIX exec bit (no-op effect on Windows). */

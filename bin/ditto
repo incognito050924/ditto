@@ -45391,7 +45391,8 @@ var modeCommand = defineCommand({
 });
 
 // src/cli/commands/push-gate.ts
-import { relative as relative21 } from "path";
+import { homedir as homedir11 } from "os";
+import { dirname as dirname15, parse as parse4, relative as relative21, resolve as resolve21 } from "path";
 init_fs();
 
 // src/core/push-gate.ts
@@ -45423,6 +45424,12 @@ function pushGateDecision(pushedBranches, config) {
 }
 function normDir(d2) {
   return d2.replace(/^\.\//, "").replace(/\/+$/, "");
+}
+function isRepoDeclared(recipe, repoRelDir) {
+  const dir = normDir(repoRelDir);
+  if (dir === "" || dir === ".")
+    return false;
+  return recipe.repos?.some((r4) => normDir(r4.dir) === dir) ?? false;
 }
 function resolvePushGate(recipe, repoRelDir) {
   const dir = normDir(repoRelDir);
@@ -45574,6 +45581,29 @@ var defaultRunTest = async (testCommand, cwd) => {
   }
   return { kind: "failed", exitCode: code };
 };
+async function resolvePushGateRoot(cwd, explicitRoot, homeDir = homedir11()) {
+  const start = resolve21(cwd);
+  if (explicitRoot !== undefined && explicitRoot !== "") {
+    const recipeRoot2 = resolve21(explicitRoot);
+    return { recipeRoot: recipeRoot2, repoRelDir: relative21(recipeRoot2, start) };
+  }
+  const home = resolve21(homeDir);
+  const fsRoot = parse4(start).root;
+  let current = dirname15(start);
+  while (true) {
+    if (isAtOrAboveHome(relative21(current, home)))
+      break;
+    const recipe2 = await loadResolvedRecipe(current, undefined);
+    if (isRepoDeclared(recipe2, relative21(current, start))) {
+      return { recipeRoot: current, repoRelDir: relative21(current, start) };
+    }
+    if (current === fsRoot)
+      break;
+    current = dirname15(current);
+  }
+  const recipeRoot = await resolveRepoRootForCreate(start, homeDir);
+  return { recipeRoot, repoRelDir: relative21(recipeRoot, start) };
+}
 async function readStdin() {
   try {
     return await Bun.stdin.text();
@@ -45586,15 +45616,20 @@ var pushGateCommand = defineCommand({
     name: "push-gate",
     description: "Pre-push gate: read git pre-push stdin, resolve the recipe push_gate for this repo, and run its test_command before allowing a push to a protected branch. Blocks (non-zero) on a failing/unrunnable gate or a malformed recipe; exits 0 otherwise. Bypass with DITTO_SKIP_HOOKS=1."
   },
-  run: async () => {
+  args: {
+    "workspace-root": {
+      type: "string",
+      description: "Absolute path to the TRUSTED workspace root whose recipe.yaml governs this push. The installed sub-repo pre-push hook passes this (wired by setup/workspace sync) so a cloned sub-repo NEVER resolves its own recipe (ROOT-ONLY trust). Omit for a normal single-repo push."
+    }
+  },
+  run: async ({ args }) => {
     const stdin3 = await readStdin();
     const cwd = process.cwd();
-    const recipeRoot = await resolveRepoRootForCreate(cwd);
+    const { recipeRoot, repoRelDir } = await resolvePushGateRoot(cwd, args["workspace-root"]);
     let malformedRecipe = false;
     const recipe2 = await loadResolvedRecipe(recipeRoot, undefined, () => {
       malformedRecipe = true;
     });
-    const repoRelDir = relative21(recipeRoot, cwd);
     const gate2 = resolvePushGate(recipe2, repoRelDir);
     const result2 = await execPushGate({
       stdin: stdin3,
@@ -45991,7 +46026,7 @@ init_common();
 init_fs();
 init_git();
 import { stat as stat9, writeFile as writeFile5 } from "fs/promises";
-import { dirname as dirname15, join as join80, relative as relative22, resolve as resolve21, sep as sep8 } from "path";
+import { dirname as dirname16, join as join80, relative as relative22, resolve as resolve22, sep as sep8 } from "path";
 init_work_item_store();
 init_worktree();
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
@@ -46019,8 +46054,8 @@ function resolveRepoCwd(repoRoot, cwd) {
   if (!parsed.success) {
     throw new RunWithUsageError(`invalid cwd: ${parsed.error.issues[0]?.message}`);
   }
-  const resolvedRoot = resolve21(repoRoot);
-  const resolvedCwd = resolve21(join80(repoRoot, cwd));
+  const resolvedRoot = resolve22(repoRoot);
+  const resolvedCwd = resolve22(join80(repoRoot, cwd));
   if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep8}`)) {
     throw new RunWithUsageError(`cwd escapes repo root: ${cwd}`);
   }
@@ -46065,7 +46100,7 @@ function parseRunnableProvider(provider) {
   throw new RunWithUsageError(`provider ${provider} is schema-valid but not runnable in v0.3`);
 }
 async function streamToFile(stream, path) {
-  await ensureDir(dirname15(path));
+  await ensureDir(dirname16(path));
   const bytes = await new Response(stream).arrayBuffer();
   await writeFile5(path, new Uint8Array(bytes));
 }
@@ -46223,7 +46258,7 @@ async function runVerifyStep(repoRoot, runRoot, runStore, runId2, rawCommand) {
   const tokens2 = command.split(/\s+/).filter(Boolean);
   const logAbsolute = runStore.pathFor(runId2, "verify.log");
   const logRelative = repoRelative2(repoRoot, logAbsolute);
-  await ensureDir(dirname15(logAbsolute));
+  await ensureDir(dirname16(logAbsolute));
   if (tokens2.length === 0) {
     await writeFile5(logAbsolute, "", "utf8");
     const entry2 = {
@@ -47091,8 +47126,8 @@ var semanticCommand = defineCommand({
 });
 
 // src/cli/commands/setup.ts
-import { homedir as homedir12 } from "os";
-import { dirname as dirname18, join as join87, resolve as resolve24 } from "path";
+import { homedir as homedir13 } from "os";
+import { dirname as dirname19, join as join87, resolve as resolve25 } from "path";
 init_fs();
 init_shared();
 
@@ -47186,17 +47221,17 @@ function defaultMemorySeparateDeps(repoRoot) {
 
 // src/core/provision/playwright.ts
 import { existsSync as existsSync12, readdirSync as readdirSync3 } from "fs";
-import { homedir as homedir11, platform as osPlatform } from "os";
+import { homedir as homedir12, platform as osPlatform } from "os";
 import { join as join83 } from "path";
 function playwrightCacheRoot(os = osPlatform()) {
   if (os === "win32")
-    return join83(homedir11(), "AppData", "Local", "ms-playwright");
+    return join83(homedir12(), "AppData", "Local", "ms-playwright");
   if (os === "darwin")
-    return join83(homedir11(), "Library", "Caches", "ms-playwright");
-  return join83(homedir11(), ".cache", "ms-playwright");
+    return join83(homedir12(), "Library", "Caches", "ms-playwright");
+  return join83(homedir12(), ".cache", "ms-playwright");
 }
 function bunCacheDir() {
-  return join83(process.env.BUN_INSTALL ?? join83(homedir11(), ".bun"), "install", "cache");
+  return join83(process.env.BUN_INSTALL ?? join83(homedir12(), ".bun"), "install", "cache");
 }
 function detectPlaywright(deps) {
   const core = deps.listDir(deps.bunCache).some((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2));
@@ -47294,7 +47329,7 @@ function defaultRegistry() {
 init_fs();
 import { execFileSync as execFileSync6 } from "child_process";
 import { chmod, cp, readFile as readFile19, rename as rename5, rm as rm3, writeFile as writeFile6 } from "fs/promises";
-import { basename as basename5, dirname as dirname16, isAbsolute as isAbsolute15, join as join85, resolve as resolve22 } from "path";
+import { basename as basename5, dirname as dirname17, isAbsolute as isAbsolute15, join as join85, resolve as resolve23 } from "path";
 init_shared();
 
 // src/core/resource-routing.ts
@@ -47494,7 +47529,7 @@ async function installCodexSurface(opts) {
     throw new Error(`codex plugin manifest not found at ${manifestPath}; run build:codex-plugin first`);
   }
   const installedPluginDir = join85(projectRoot, CODEX_PLUGIN_DEST_REL);
-  if (resolve22(pluginRoot) === resolve22(installedPluginDir)) {
+  if (resolve23(pluginRoot) === resolve23(installedPluginDir)) {
     throw new Error(`codex plugin source is already the installed plugin directory: ${installedPluginDir}`);
   }
   await rm3(installedPluginDir, { recursive: true, force: true });
@@ -47543,7 +47578,7 @@ async function installResource(decision, resourcesDir) {
     return { ...common, status: "kept", backupPath: null };
   }
   if (name === "CLAUDE.md") {
-    const sourcePath = join85(dirname16(decision.destPath), "AGENTS.md");
+    const sourcePath = join85(dirname17(decision.destPath), "AGENTS.md");
     const projectionBody = await fileExists(sourcePath) ? await readFile19(sourcePath, "utf8") : await readFile19(join85(resourcesDir, decision.filename), "utf8");
     const applied2 = await applyManagedFile(decision.destPath, projectionBody, "AGENTS.md");
     return {
@@ -47563,7 +47598,7 @@ async function installResource(decision, resourcesDir) {
 var PUSH_GATE_HOOK_MARKER = "ditto:managed:pre-push";
 var PUSH_GATE_HOOK_BACKUP_SUFFIX = ".ditto-backup";
 function defaultHookTemplatePath(resourcesDir) {
-  return join85(dirname16(resourcesDir), "hooks", "pre-push");
+  return join85(dirname17(resourcesDir), "hooks", "pre-push");
 }
 function customHooksPath(cwd) {
   try {
@@ -47609,7 +47644,7 @@ async function installPushGateHook(opts) {
   }
   const hookPath = join85(hooksDir, "pre-push");
   const backupPath = `${hookPath}${PUSH_GATE_HOOK_BACKUP_SUFFIX}`;
-  const template = await readFile19(hookTemplatePath, "utf8");
+  const template = bakeWorkspaceRoot(await readFile19(hookTemplatePath, "utf8"), opts.workspaceRoot);
   await ensureDir(hooksDir);
   if (!await fileExists(hookPath)) {
     await writeHookFile(hookPath, template);
@@ -47631,6 +47666,15 @@ async function installPushGateHook(opts) {
   await rename5(hookPath, backupPath);
   await writeHookFile(hookPath, template);
   return { status: "backed-up", hookPath, backupPath, message: null };
+}
+function bakeWorkspaceRoot(template, workspaceRoot) {
+  if (workspaceRoot === undefined || workspaceRoot === "")
+    return template;
+  const baked = template.replace(/^WS_ROOT=""$/m, `WS_ROOT=${JSON.stringify(resolve23(workspaceRoot))}`);
+  if (baked === template) {
+    throw new Error('pre-push template is missing the substitutable `WS_ROOT=""` line \u2014 cannot pin the workspace root for a sub-repo install');
+  }
+  return baked;
 }
 async function writeHookFile(hookPath, body) {
   await writeFile6(hookPath, body);
@@ -47655,7 +47699,7 @@ async function setup(opts) {
   if (allowlistApplied)
     await allowlistSettingsFile(allowlistPath);
   const codex = hosts.has("codex") ? await installCodexSurface({
-    pluginRoot: opts.pluginRoot ?? resolve22(resourcesDir, "..", ".."),
+    pluginRoot: opts.pluginRoot ?? resolve23(resourcesDir, "..", ".."),
     projectRoot
   }) : null;
   const pushGateHook = opts.pushGate ? await installPushGateHook({
@@ -47667,24 +47711,24 @@ async function setup(opts) {
 
 // src/cli/resources.ts
 import { existsSync as existsSync13 } from "fs";
-import { dirname as dirname17, join as join86, resolve as resolve23 } from "path";
+import { dirname as dirname18, join as join86, resolve as resolve24 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 function resolveResourcesDir(from) {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
     return join86(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
   }
-  const start = from ?? dirname17(fileURLToPath2(import.meta.url));
+  const start = from ?? dirname18(fileURLToPath2(import.meta.url));
   let dir = start;
   for (;; ) {
     const candidate = join86(dir, "resources", "managed");
     if (existsSync13(candidate))
       return candidate;
-    const parent = dirname17(dir);
+    const parent = dirname18(dir);
     if (parent === dir)
       break;
     dir = parent;
   }
-  return join86(resolve23(start, "..", ".."), "resources", "managed");
+  return join86(resolve24(start, "..", ".."), "resources", "managed");
 }
 
 // src/cli/wizard/agent-link-step.ts
@@ -47891,8 +47935,8 @@ function includesCodex(host) {
   return host === "codex" || host === "both";
 }
 async function resolveCodexPluginRoot(resourcesDir, projectRoot) {
-  const currentPluginRoot = resolve24(resourcesDir, "..", "..");
-  const sibling = join87(dirname18(currentPluginRoot), "codex-plugin");
+  const currentPluginRoot = resolve25(resourcesDir, "..", "..");
+  const sibling = join87(dirname19(currentPluginRoot), "codex-plugin");
   if (await fileExists(join87(sibling, ".codex-plugin", "plugin.json")))
     return sibling;
   const currentDist = join87(currentPluginRoot, "dist", "codex-plugin");
@@ -47955,7 +47999,7 @@ async function runWizard(resourcesDir, projectRoot) {
       setup: async (host) => setup({
         resourcesDir,
         projectRoot,
-        homeDir: homedir12(),
+        homeDir: homedir13(),
         ...process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {},
         now: new Date,
         host,
@@ -48037,9 +48081,9 @@ var setupCommand = defineCommand({
     try {
       const host = parseSetupHost(args.host);
       const targetDir = typeof args.dir === "string" ? args.dir : args.target;
-      const projectRoot = targetDir ? resolve24(targetDir) : await resolveRepoRootForCreate();
+      const projectRoot = targetDir ? resolve25(targetDir) : await resolveRepoRootForCreate();
       const resourcesDir = resolveResourcesDir();
-      const pluginRoot = resolve24(resourcesDir, "..", "..");
+      const pluginRoot = resolve25(resourcesDir, "..", "..");
       if (pluginRoot === projectRoot) {
         writeHuman(`setup: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
@@ -48052,7 +48096,7 @@ var setupCommand = defineCommand({
           setup: async (h3) => setup({
             resourcesDir,
             projectRoot,
-            homeDir: homedir12(),
+            homeDir: homedir13(),
             ...process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {},
             now: new Date,
             host: h3,
@@ -48093,7 +48137,7 @@ var setupCommand = defineCommand({
       const result2 = await setup({
         resourcesDir,
         projectRoot,
-        homeDir: homedir12(),
+        homeDir: homedir13(),
         ...process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {},
         now: new Date,
         host,
@@ -48127,8 +48171,8 @@ var setupCommand = defineCommand({
 
 // src/cli/commands/teardown.ts
 import { rm as rm5 } from "fs/promises";
-import { homedir as homedir13 } from "os";
-import { join as join89, resolve as resolve25 } from "path";
+import { homedir as homedir14 } from "os";
+import { join as join89, resolve as resolve26 } from "path";
 init_fs();
 
 // src/core/teardown.ts
@@ -48224,14 +48268,14 @@ var teardownCommand = defineCommand({
   },
   run: async ({ args }) => {
     try {
-      const projectRoot = args.dir ? resolve25(args.dir) : await resolveRepoRootForCreate();
+      const projectRoot = args.dir ? resolve26(args.dir) : await resolveRepoRootForCreate();
       const resourcesDir = resolveResourcesDir();
-      const pluginRoot = resolve25(resourcesDir, "..", "..");
+      const pluginRoot = resolve26(resourcesDir, "..", "..");
       if (pluginRoot === projectRoot) {
         writeHuman(`uninstall: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
       }
-      const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir13() });
+      const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir14() });
       if (result2.files.length === 0) {
         writeError(`uninstall failed: no managed resources found at ${resourcesDir}`);
         process.exit(RUNTIME_ERROR_EXIT);
@@ -48911,13 +48955,258 @@ var verifyCommand = defineCommand({
   }
 });
 
+// src/cli/commands/workspace.ts
+init_fs();
+
+// src/core/workspace/clone.ts
+init_shared();
+import { execFileSync as execFileSync7 } from "child_process";
+import { existsSync as existsSync14, lstatSync, realpathSync as realpathSync2 } from "fs";
+import { readFile as readFile21, readdir as readdir25, rm as rm6, writeFile as writeFile7 } from "fs/promises";
+import { basename as basename6, dirname as dirname20, isAbsolute as isAbsolute16, join as join90, relative as relative23, resolve as resolve27 } from "path";
+var LOCAL_CLONE_ENV_FLAG = "DITTO_ALLOW_LOCAL_CLONE";
+function localTransportAllowed(env2 = process.env) {
+  return env2[LOCAL_CLONE_ENV_FLAG] === "1";
+}
+var ALLOWED_SCHEME = /^(https:\/\/|git:\/\/|ssh:\/\/|[^\s/]+@[^\s/]+:)/;
+var RCE_TRANSPORT = /^(ext|fd)::/i;
+function isAllowedCloneUrl(url, allowLocal = false) {
+  if (url.length === 0)
+    return false;
+  if (url.startsWith("-"))
+    return false;
+  if (RCE_TRANSPORT.test(url))
+    return false;
+  if (ALLOWED_SCHEME.test(url))
+    return true;
+  return allowLocal;
+}
+
+class WorkspaceContainmentError extends Error {
+  dir;
+  constructor(dir) {
+    super(`repo dir "${dir}" is not strictly under the workspace root \u2014 refusing to write outside it (ADR-0011 session-rooting)`);
+    this.dir = dir;
+    this.name = "WorkspaceContainmentError";
+  }
+}
+function escapesRoot(rel) {
+  return rel === "" || rel === "." || rel.startsWith("..") || isAbsolute16(rel);
+}
+function realpathNearestExisting(p2) {
+  let cur = resolve27(p2);
+  const tail = [];
+  while (!existsSync14(cur)) {
+    const parent = dirname20(cur);
+    if (parent === cur)
+      return join90(realpathSync2(cur), ...tail);
+    tail.unshift(basename6(cur));
+    cur = parent;
+  }
+  return tail.length === 0 ? realpathSync2(cur) : join90(realpathSync2(cur), ...tail);
+}
+function resolveContainedDir(workspaceRoot, dir) {
+  const root = resolve27(workspaceRoot);
+  const target = resolve27(root, dir);
+  if (escapesRoot(relative23(root, target))) {
+    throw new WorkspaceContainmentError(dir);
+  }
+  if (lstatSync(target, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    throw new WorkspaceContainmentError(dir);
+  }
+  if (escapesRoot(relative23(realpathNearestExisting(root), realpathNearestExisting(target)))) {
+    throw new WorkspaceContainmentError(dir);
+  }
+  return target;
+}
+var NONINTERACTIVE_GIT = {
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+};
+function gitOriginUrl(dir) {
+  try {
+    const v2 = execFileSync7("git", ["config", "--get", "remote.origin.url"], {
+      cwd: dir,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    return v2.length > 0 ? v2 : null;
+  } catch {
+    return null;
+  }
+}
+function normalizeUrl(u6) {
+  return u6.replace(/\.git$/, "").replace(/\/+$/, "");
+}
+async function classifyDir(target, url) {
+  if (!await fileExists(target))
+    return "empty";
+  let entries;
+  try {
+    entries = await readdir25(target);
+  } catch {
+    return "foreign";
+  }
+  if (entries.length === 0)
+    return "empty";
+  const origin = gitOriginUrl(target);
+  if (origin !== null && normalizeUrl(origin) === normalizeUrl(url))
+    return "same-url";
+  return "foreign";
+}
+function scrub(err) {
+  const raw = err && typeof err === "object" && "stderr" in err && err.stderr ? String(err.stderr) : err instanceof Error ? err.message : String(err);
+  return raw.trim().split(`
+`)[0] ?? "clone failed";
+}
+async function installRootGateHook(target, workspaceRoot, hookTemplatePath) {
+  const r4 = await installPushGateHook({ projectRoot: target, hookTemplatePath, workspaceRoot });
+  return r4.status;
+}
+async function addToParentGitignore(workspaceRoot, dir) {
+  const giPath = join90(workspaceRoot, ".gitignore");
+  const entry = `${dir.replace(/\/+$/, "")}/`;
+  const bare = dir.replace(/\/+$/, "");
+  let cur = "";
+  if (await fileExists(giPath))
+    cur = await readFile21(giPath, "utf8");
+  const lines = cur.split(`
+`).map((l2) => l2.trim());
+  if (lines.includes(entry) || lines.includes(bare))
+    return;
+  const next = cur.length === 0 ? `${entry}
+` : cur.endsWith(`
+`) ? `${cur}${entry}
+` : `${cur}
+${entry}
+`;
+  await writeFile7(giPath, next);
+}
+async function cloneRepoEntry(inp) {
+  const { workspaceRoot, dir, url, hookTemplatePath, allowLocal, env: env2 } = inp;
+  if (!isAllowedCloneUrl(url, allowLocal)) {
+    return {
+      dir,
+      url,
+      status: "refused",
+      reason: `url scheme not allowed (only https / ssh / git:// are accepted): ${url}`
+    };
+  }
+  let target;
+  try {
+    target = resolveContainedDir(workspaceRoot, dir);
+  } catch (err) {
+    return { dir, url, status: "refused", reason: scrub(err) };
+  }
+  const state = await classifyDir(target, url);
+  if (state === "foreign") {
+    return {
+      dir,
+      url,
+      status: "refused",
+      reason: `${dir} already holds non-matching content \u2014 refusing to overwrite. Remove it or point the recipe elsewhere.`
+    };
+  }
+  if (state === "same-url") {
+    const hook2 = await installRootGateHook(target, workspaceRoot, hookTemplatePath);
+    return { dir, url, status: "skipped", reason: "already cloned (same url)", hook: hook2 };
+  }
+  try {
+    execFileSync7("git", ["clone", "--", url, target], {
+      env: { ...env2, ...NONINTERACTIVE_GIT },
+      stdio: ["ignore", "ignore", "pipe"]
+    });
+  } catch (err) {
+    await rm6(target, { recursive: true, force: true });
+    return { dir, url, status: "failed", reason: scrub(err) };
+  }
+  await addToParentGitignore(workspaceRoot, dir);
+  const hook = await installRootGateHook(target, workspaceRoot, hookTemplatePath);
+  return { dir, url, status: "cloned", hook };
+}
+async function syncWorkspace(opts) {
+  const env2 = opts.env ?? process.env;
+  const allowLocal = opts.allowLocal ?? localTransportAllowed(env2);
+  const repos = (opts.recipe.repos ?? []).filter((r4) => typeof r4.url === "string" && r4.url.length > 0);
+  const outcomes = [];
+  for (const r4 of repos) {
+    outcomes.push(await cloneRepoEntry({
+      workspaceRoot: opts.workspaceRoot,
+      dir: r4.dir,
+      url: r4.url,
+      hookTemplatePath: opts.hookTemplatePath,
+      allowLocal,
+      env: env2
+    }));
+  }
+  return { outcomes, anyFailed: outcomes.some((o4) => o4.status === "failed") };
+}
+
+// src/cli/commands/workspace.ts
+var workspaceSync = defineCommand({
+  meta: {
+    name: "sync",
+    description: "Assemble the multi-repo workspace: clone each recipe repos[] entry that declares a `url` into its `dir` (idempotent \u2014 same-url skip, foreign/dirty dir refused, NEVER overwritten), then install the ROOT-recipe pre-push gate hook into each clone (WS_ROOT pinned to the workspace root). Continues past a failed clone, prints a per-repo summary, exits non-zero if any clone FAILED. Auth is ambient git (public/pre-authed urls only). URL scheme allowlist + dir containment + non-interactive git are enforced."
+  },
+  args: {
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const workspaceRoot = await resolveRepoRootForCreate();
+    const recipe2 = await loadResolvedRecipe(workspaceRoot, undefined, (origin, message) => {
+      writeError(`recipe (${origin}) ignored \u2014 malformed: ${message}`);
+    });
+    const hookTemplatePath = defaultHookTemplatePath(resolveResourcesDir());
+    try {
+      const result2 = await syncWorkspace({ workspaceRoot, recipe: recipe2, hookTemplatePath });
+      if (format === "json") {
+        writeJson2(result2);
+      } else if (result2.outcomes.length === 0) {
+        writeHuman("No recipe repos[] entries declare a url \u2014 nothing to sync.");
+      } else {
+        writeHuman(`Workspace sync (${result2.outcomes.length} repo(s) with a url):`);
+        for (const o4 of result2.outcomes) {
+          const hook = o4.hook ? `	hook=${o4.hook}` : "";
+          const reason = o4.reason ? `	(${o4.reason})` : "";
+          writeHuman(`  ${o4.status.toUpperCase()}	${o4.dir}	${o4.url}${hook}${reason}`);
+        }
+        if (result2.anyFailed) {
+          writeHuman("At least one clone FAILED \u2014 re-run after resolving the cause above.");
+        }
+      }
+      if (result2.anyFailed)
+        process.exit(RUNTIME_ERROR_EXIT);
+    } catch (err) {
+      writeError(`workspace sync failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var workspaceCommand = defineCommand({
+  meta: {
+    name: "workspace",
+    description: "Manage the multi-repo workspace declared in recipe.yaml (sync clones declared repos[] and gates them by the root recipe)"
+  },
+  subCommands: {
+    sync: workspaceSync
+  }
+});
+
 // src/cli/commands/worktree.ts
 init_fs();
 init_work_item_store();
 init_worktree();
 
 // src/core/worktree-drive.ts
-import { join as join90 } from "path";
+import { join as join91 } from "path";
 var TERMINAL_STATUSES3 = ["done", "abandoned"];
 var DEFAULT_MAX_DEPTH2 = 20;
 async function driveWorktrees(deps, options) {
@@ -48928,8 +49217,8 @@ async function driveWorktrees(deps, options) {
   const mergeAndRemove = async (member) => {
     const mergeRes = await deps.merge(repoRoot, member);
     if (mergeRes.allMerged) {
-      const rm6 = await deps.removeWorktrees(repoRoot, member);
-      return { member_id: member, disposition: "driven-done", removed: rm6.removed.length > 0 };
+      const rm7 = await deps.removeWorktrees(repoRoot, member);
+      return { member_id: member, disposition: "driven-done", removed: rm7.removed.length > 0 };
     }
     const firstUnmerged = mergeRes.outcomes.find((o4) => o4.status !== "merged");
     return {
@@ -48970,7 +49259,7 @@ async function driveWorktrees(deps, options) {
       continue;
     }
     drivenCount++;
-    const res = await deps.driveMember(join90(repoRoot, ws.worktree_path), member);
+    const res = await deps.driveMember(join91(repoRoot, ws.worktree_path), member);
     if (res.outcome !== "done") {
       ledger.push({
         member_id: member,
@@ -49259,6 +49548,7 @@ var main = defineCommand({
     work: workCommand,
     github: githubCommand,
     worktree: worktreeCommand,
+    workspace: workspaceCommand,
     "push-gate": pushGateCommand,
     mode: modeCommand,
     run: runCommand2,
@@ -49294,4 +49584,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=379606c5d32f9e10af8b1a7621b1af22c4c9b35558b8496233ec939e5b74f5e4
+//# ditto-src-stamp=1f954b5f05d5900ce7de3fc87bf49cf119dedbef5903045910c80037bfc97e63

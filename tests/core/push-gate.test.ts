@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { parsePushedBranches, pushGateDecision, resolvePushGate } from '~/core/push-gate';
+import {
+  isRepoDeclared,
+  parsePushedBranches,
+  pushGateDecision,
+  resolvePushGate,
+} from '~/core/push-gate';
 
 const Z = '0000000000000000000000000000000000000000';
 
@@ -141,5 +146,38 @@ describe("resolvePushGate — pick a repo's gate from the workspace manifest", (
 
   test('no repos + non-root dir → undefined', () => {
     expect(resolvePushGate({ push_gate: manifest.push_gate }, 'frontend')).toBeUndefined();
+  });
+});
+
+describe('isRepoDeclared — ROOT-ONLY trust anchor: is this dir a declared workspace member? (ac-3)', () => {
+  const manifest = {
+    repos: [{ dir: 'frontend' }, { dir: 'docs', push_gate: undefined }],
+  };
+
+  test('a declared repos[] dir → true (the root recipe adopts it)', () => {
+    expect(isRepoDeclared(manifest, 'frontend')).toBe(true);
+    expect(isRepoDeclared(manifest, 'docs')).toBe(true);
+  });
+
+  test('normalizes trailing slash / "./" prefix to the same declaration', () => {
+    expect(isRepoDeclared(manifest, './frontend/')).toBe(true);
+  });
+
+  test('an UNDECLARED dir → false (a cloned sub-repo the root never adopted)', () => {
+    expect(isRepoDeclared(manifest, 'evil')).toBe(false);
+  });
+
+  test('the recipe own root ("" / ".") is NOT a repos[] declaration → false', () => {
+    expect(isRepoDeclared(manifest, '')).toBe(false);
+    expect(isRepoDeclared(manifest, '.')).toBe(false);
+  });
+
+  test('a recipe with no repos[] → false for any dir', () => {
+    expect(
+      isRepoDeclared(
+        { push_gate: { protected_branches: ['main'], test_command: 'x' } },
+        'frontend',
+      ),
+    ).toBe(false);
   });
 });
