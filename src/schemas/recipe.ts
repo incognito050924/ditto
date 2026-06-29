@@ -40,6 +40,21 @@ export const recipeAgentLink = z.object({
   role: recipeAgentRole,
 });
 
+/**
+ * Push gate — declares which branches require a passing test run before a push
+ * is allowed (wi_260629i9c). Consumed at push time by the git pre-push gate, not
+ * by `ditto setup`. Like every recipe block it carries ONLY explicit config: an
+ * absent `push_gate` means the gate is inactive (no default-on). When present it
+ * is fully specified — at least one protected branch and a non-empty command — so
+ * a half-declared gate fails validation rather than silently doing nothing.
+ */
+export const recipePushGate = z
+  .object({
+    protected_branches: z.array(z.string().min(1)).min(1),
+    test_command: z.string().min(1),
+  })
+  .describe('Push gate: branches whose push requires test_command to pass');
+
 export const recipe = z
   .object({
     host: recipeHost.optional(),
@@ -48,8 +63,10 @@ export const recipe = z
     tools: z.array(z.string()).optional(),
     agents: z.array(recipeAgentLink).optional(),
     memory: recipeMemoryMode.optional(),
+    push_gate: recipePushGate.optional(),
   })
   .describe('Headless ditto setup recipe (recipe.yaml)');
 
 export type Recipe = z.infer<typeof recipe>;
 export type RecipeAgentLink = z.infer<typeof recipeAgentLink>;
+export type RecipePushGate = z.infer<typeof recipePushGate>;

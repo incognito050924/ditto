@@ -88,6 +88,43 @@ describe('parseRecipe — yaml parse + zod validate (ac-4 enum / ac-5 policy)', 
   });
 });
 
+describe('parseRecipe — push_gate block (wi_260629i9c)', () => {
+  // recipe 철학(load.ts:16-22): default 없음, 명시 override만 — push_gate 부재 = 게이트 비활성.
+  test('valid push_gate parses and is retained', () => {
+    const text = [
+      'push_gate:',
+      '  protected_branches:',
+      '    - main',
+      '    - master',
+      '  test_command: bun test',
+    ].join('\n');
+    const r = parseRecipe(text);
+    expect(r.ok).toBe(true);
+    if (r.ok)
+      expect(r.recipe.push_gate).toEqual({
+        protected_branches: ['main', 'master'],
+        test_command: 'bun test',
+      });
+  });
+
+  test('absent push_gate → undefined (gate inactive)', () => {
+    const r = parseRecipe('host: codex\n');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.recipe.push_gate).toBeUndefined();
+  });
+
+  // present-but-incomplete must FAIL (not silently drop) — a half-declared gate is dead config.
+  test('push_gate with empty protected_branches → fail', () => {
+    expect(parseRecipe('push_gate:\n  protected_branches: []\n  test_command: bun test\n').ok).toBe(
+      false,
+    );
+  });
+
+  test('push_gate missing test_command → fail', () => {
+    expect(parseRecipe('push_gate:\n  protected_branches:\n    - main\n').ok).toBe(false);
+  });
+});
+
 describe('loadRecipeFile — explicit vs discovered malformed policy (ac-5)', () => {
   let repo: string;
   beforeEach(async () => {

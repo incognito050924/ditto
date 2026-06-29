@@ -47087,11 +47087,16 @@ var recipeAgentLink = exports_external.object({
   name: exports_external.string().min(1),
   role: recipeAgentRole
 });
+var recipePushGate = exports_external.object({
+  protected_branches: exports_external.array(exports_external.string().min(1)).min(1),
+  test_command: exports_external.string().min(1)
+}).describe("Push gate: branches whose push requires test_command to pass");
 var recipe = exports_external.object({
   host: recipeHost.optional(),
   tools: exports_external.array(exports_external.string()).optional(),
   agents: exports_external.array(recipeAgentLink).optional(),
-  memory: recipeMemoryMode.optional()
+  memory: recipeMemoryMode.optional(),
+  push_gate: recipePushGate.optional()
 }).describe("Headless ditto setup recipe (recipe.yaml)");
 
 // src/core/recipe/parse.ts
@@ -49036,4 +49041,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=390e24eb515dec9c0f81fe9f9b3b025a6e867e9317fac238d1a21372dfa758e5
+//# ditto-src-stamp=811993d6e8d38dd0888f52c0bfa008a33d76c50fd855e5cc57bcb4a9b22c6f58
