@@ -1,7 +1,13 @@
 import { defineCommand } from 'citty';
-import { writeGithubConfig } from '~/core/ditto-config';
+import { readGithubConfig, writeGithubConfig } from '~/core/ditto-config';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { type GhClient, createGhClient } from '~/core/gh-client';
+import { selectStatusField } from '~/core/github-reflection';
+import {
+  CLAIM_AUTODETECT_TABLE,
+  STATUS_AUTODETECT_TABLE,
+  autodetectStatusMaps,
+} from '~/core/github-status-match';
 import { type DittoConfigGithub, dittoConfigGithub } from '~/schemas/ditto-config';
 import { RUNTIME_ERROR_EXIT, writeError, writeHuman } from '../util';
 import { type Option, type PromptIO, confirm, select } from '../wizard/prompt';
@@ -130,20 +136,9 @@ export function parseClaimStatusMapFlag(input: string): {
  * "Status"(대소문자 무시) 우선, 없으면 옵션을 가진 첫 single-select 필드. 없으면 null.
  */
 export function extractStatusOptions(fieldList: unknown): StatusOption[] | null {
-  if (typeof fieldList !== 'object' || fieldList === null) return null;
-  const fields = (fieldList as { fields?: unknown }).fields;
-  if (!Array.isArray(fields)) return null;
-  const withOptions = fields.filter(
-    (f): f is { name?: string; options: { id: string; name: string }[] } =>
-      typeof f === 'object' && f !== null && Array.isArray((f as { options?: unknown }).options),
-  );
-  const status =
-    withOptions.find((f) => (f.name ?? '').toLowerCase() === 'status') ?? withOptions[0];
-  if (!status) return null;
-  const options = status.options
-    .filter((o) => o && typeof o.id === 'string' && typeof o.name === 'string')
-    .map((o) => ({ id: o.id, name: o.name }));
-  return options.length === 0 ? null : options;
+  const field = selectStatusField(fieldList);
+  if (!field) return null;
+  return field.options.length === 0 ? null : field.options;
 }
 
 /**
@@ -182,6 +177,13 @@ export async function buildGithubConfig(
     };
   }
   const optionIds = new Set(options.map((o) => o.id));
+
+  // wi_2606289h9: auto-detect board columns so the interactive prompts PROPOSE the
+  // detected option as the default (대화형 제안+확인). Ambiguous detections surface as
+  // notices (C4) and get no default. The flag/non-interactive path stays explicit-only
+  // (결정성) — it does not consume these defaults.
+  const detected = autodetectStatusMaps(options);
+  for (const w of detected.warnings) notices.push(w);
 
   // Capture the Project node id (PVT_…) — `project item-edit --project-id` needs it for
   // board status reflection (ac-5). BEST-EFFORT (ADR-0018): projectView degraded or no id
@@ -223,7 +225,7 @@ export async function buildGithubConfig(
         io,
         `ditto '${key}' → Project status 옵션 선택`,
         choiceOptions,
-        '',
+        detected.statusMap[key] ?? '',
       );
       if (picked !== '' && optionIds.has(picked)) statusMap[key] = picked;
     }
@@ -251,7 +253,7 @@ export async function buildGithubConfig(
         io,
         `ditto '${key}' → Project status 옵션 선택(claim 보드 반영)`,
         choiceOptions,
-        '',
+        detected.claimStatusMap[key] ?? '',
       );
       if (picked !== '' && optionIds.has(picked)) claimStatusMap[key] = picked;
     }
@@ -276,6 +278,134 @@ export async function buildGithubConfig(
     return { ok: false, reason: 'schema_invalid', detail: parsed.error.message.slice(0, 200) };
   }
   return { ok: true, config: parsed.data, notices };
+}
+
+export type SyncMode = 'fill' | 'overwrite';
+
+export interface SyncStatusOptions {
+  /** 'fill' = backfill ABSENT keys only (C6); 'overwrite' = board-authoritative re-sync. */
+  mode: SyncMode;
+}
+
+export type SyncStatusOutcome =
+  | { ok: true; config: DittoConfigGithub; notices: string[]; warnings: string[] }
+  | { ok: false; reason: string; detail: string };
+
+/**
+ * Merge auto-detected board options into ONE existing map, surgically.
+ *  - 'fill'      : set a KNOWN key only if detected AND absent in existing (C6 — never
+ *                  overwrites an existing value).
+ *  - 'overwrite' : set a KNOWN key from the board when detected; a known key NOT
+ *                  re-derivable from the board is preserved + warned (C3b). Keys outside
+ *                  `knownKeys` (blocked/abandoned, future keys) are ALWAYS preserved via
+ *                  the spread (C3a).
+ */
+function mergeDetectedMap(
+  existing: Record<string, string>,
+  detected: Record<string, string>,
+  knownKeys: readonly string[],
+  mode: SyncMode,
+  mapLabel: string,
+  notices: string[],
+): Record<string, string> {
+  const result: Record<string, string> = { ...existing };
+  for (const key of knownKeys) {
+    const det = detected[key];
+    if (mode === 'fill') {
+      if (det !== undefined && result[key] === undefined) {
+        result[key] = det;
+        notices.push(`${mapLabel}: backfilled '${key}'=${det} (auto-detected from board).`);
+      }
+    } else if (det !== undefined) {
+      if (result[key] !== det) {
+        notices.push(
+          result[key] === undefined
+            ? `${mapLabel}: set '${key}'=${det} (auto-detected from board).`
+            : `${mapLabel}: re-synced '${key}'=${det} (was ${result[key]}; board-authoritative).`,
+        );
+      }
+      result[key] = det;
+    } else if (result[key] !== undefined) {
+      notices.push(
+        `${mapLabel}: kept existing '${key}'=${result[key]} — not re-derivable from the board this run (preserved, not deleted).`,
+      );
+    }
+  }
+  return result;
+}
+
+/**
+ * Auto-detect the board's Status options and merge them into an EXISTING github
+ * config (wi_2606289h9 ac-1·2·3·4). SURGICAL: starts FROM `existing` and preserves
+ * project owner/number, node_id, auto_reflect, and every map entry the merge does
+ * not touch (C1). gh fetch failure/degraded → abort BEFORE any write (C3c) so an
+ * empty/partial board never replaces the maps. node_id is refreshed best-effort but
+ * the existing value is kept if projectView degrades (C1). Reuses the SAME
+ * field-selection rule (selectStatusField via extractStatusOptions) and the
+ * validate(dittoConfigGithub)/writeGithubConfig path as setup — no cloned pipeline (C3).
+ */
+export function syncStatusMaps(
+  gh: GhClient,
+  existing: DittoConfigGithub,
+  opts: SyncStatusOptions,
+): SyncStatusOutcome {
+  const notices: string[] = [];
+  const ref = { owner: existing.project.owner, number: existing.project.number };
+
+  // Fetch board — abort on degrade (C3c): never wipe maps with an empty result.
+  const res = gh.projectFieldList(ref.owner, ref.number);
+  if (!res.ok) return { ok: false, reason: res.reason, detail: res.detail };
+  const options = extractStatusOptions(res.value);
+  if (!options) {
+    return {
+      ok: false,
+      reason: 'no_status_field',
+      detail: `Project ${ref.owner}/${ref.number}에 status single-select 필드가 없음`,
+    };
+  }
+  const detected = autodetectStatusMaps(options);
+
+  // node_id: refresh best-effort, PRESERVE existing on degrade (C1).
+  let nodeId = existing.project.node_id;
+  const viewRes = gh.projectView(ref.owner, ref.number);
+  if (viewRes.ok && typeof (viewRes.value as { id?: unknown })?.id === 'string') {
+    nodeId = (viewRes.value as { id: string }).id;
+  } else if (!nodeId) {
+    notices.push('Project node_id 미해결 — 보드 이동(claim/reflect)은 여전히 skip된다.');
+  }
+
+  const statusMap = mergeDetectedMap(
+    existing.status_map,
+    detected.statusMap,
+    Object.keys(STATUS_AUTODETECT_TABLE),
+    opts.mode,
+    'status_map',
+    notices,
+  );
+  const claimMap = mergeDetectedMap(
+    existing.claim_status_map ?? {},
+    detected.claimStatusMap,
+    Object.keys(CLAIM_AUTODETECT_TABLE),
+    opts.mode,
+    'claim_status_map',
+    notices,
+  );
+
+  const candidate = {
+    project: {
+      owner: existing.project.owner,
+      number: existing.project.number,
+      ...(nodeId ? { node_id: nodeId } : {}),
+    },
+    status_map: statusMap,
+    ...(Object.keys(claimMap).length > 0 ? { claim_status_map: claimMap } : {}),
+    auto_reflect: existing.auto_reflect,
+  };
+  const parsed = dittoConfigGithub.safeParse(candidate);
+  if (!parsed.success) {
+    return { ok: false, reason: 'schema_invalid', detail: parsed.error.message.slice(0, 200) };
+  }
+  return { ok: true, config: parsed.data, notices, warnings: detected.warnings };
 }
 
 const githubSetupCommand = defineCommand({
@@ -310,6 +440,19 @@ const githubSetupCommand = defineCommand({
       required: false,
       description: '완료 시 Project status 자동 반영(기본 OFF)',
     },
+    'resync-status': {
+      type: 'boolean',
+      required: false,
+      default: false,
+      description:
+        '보드 Status를 다시 읽어 known 키(in_progress/done)를 덮어쓰기 — 미래/미매칭 키는 보존',
+    },
+    'autodetect-status': {
+      type: 'boolean',
+      required: false,
+      default: false,
+      description: '보드 Status에서 미설정 claim_status_map/status_map 키만 백필(기존 값 보존)',
+    },
     yes: {
       type: 'boolean',
       required: false,
@@ -320,6 +463,60 @@ const githubSetupCommand = defineCommand({
   run: async ({ args }) => {
     const repoRoot =
       typeof args.dir === 'string' && args.dir !== '' ? args.dir : await resolveRepoRootForCreate();
+
+    // wi_2606289h9: board-driven status backfill / re-sync. Explicit-flag only
+    // (deterministic, no prompt). Shares the validate/write path via syncStatusMaps;
+    // writeGithubConfig preserves sibling config blocks (tech_spec/deep_interview).
+    const resync = Boolean(args['resync-status']);
+    const autodetect = Boolean(args['autodetect-status']);
+    if (resync || autodetect) {
+      const existing = await readGithubConfig(repoRoot);
+      if (!existing) {
+        writeError(
+          'github setup: 기존 github config가 없음 — 먼저 `ditto github setup --project <owner/number>`로 연결하세요.',
+        );
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const outcome = syncStatusMaps(createGhClient(), existing, {
+        mode: resync ? 'overwrite' : 'fill',
+      });
+      if (!outcome.ok) {
+        writeError(
+          `github setup: ${outcome.reason}${outcome.detail ? ` — ${outcome.detail}` : ''} (no write — config left unchanged).`,
+        );
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      await writeGithubConfig(repoRoot, outcome.config);
+      const p = outcome.config.project;
+      writeHuman(
+        `github ${resync ? 're-sync' : 'autodetect'}: Project ${p.owner}/${p.number} → .ditto/local/config.json`,
+      );
+      writeHuman(
+        `  status_map: ${
+          Object.keys(outcome.config.status_map).length === 0
+            ? '(none)'
+            : Object.entries(outcome.config.status_map)
+                .map(([k, v]) => `${k}=${v}`)
+                .join(', ')
+        }`,
+      );
+      const cm = outcome.config.claim_status_map;
+      writeHuman(
+        `  claim_status_map: ${
+          !cm || Object.keys(cm).length === 0
+            ? '(none)'
+            : Object.entries(cm)
+                .map(([k, v]) => `${k}=${v}`)
+                .join(', ')
+        }`,
+      );
+      for (const n of outcome.notices) writeHuman(`  note: ${n}`);
+      for (const w of outcome.warnings) writeHuman(`  warning: ${w}`);
+      return;
+    }
+
     const nonInteractive = Boolean(args.yes) || !process.stdin.isTTY;
     const io = nonInteractive
       ? { isTTY: false, ask: async () => '', write: (t: string) => process.stdout.write(t) }

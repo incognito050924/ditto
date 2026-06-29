@@ -18,7 +18,7 @@ var __export = (target, all) => {
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = import.meta.require;
 
-// node_modules/consola/dist/chunks/prompt.mjs
+// ../../../../node_modules/consola/dist/chunks/prompt.mjs
 var exports_prompt = {};
 __export(exports_prompt, {
   prompt: () => prompt,
@@ -774,7 +774,7 @@ var init_prompt = __esm(() => {
   kCancel = Symbol.for("cancel");
 });
 
-// node_modules/smol-toml/dist/error.js
+// ../../../../node_modules/smol-toml/dist/error.js
 function getLineColFromPtr(string, ptr) {
   let lines = string.slice(0, ptr).split(/\r\n|\n|\r/g);
   return [lines.length, lines.pop().length + 1];
@@ -846,7 +846,7 @@ ${codeblock}`, options);
   };
 });
 
-// node_modules/smol-toml/dist/util.js
+// ../../../../node_modules/smol-toml/dist/util.js
 function isEscaped(str, ptr) {
   let i2 = 0;
   while (str[ptr - ++i2] === "\\")
@@ -962,7 +962,7 @@ var init_util = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/date.js
+// ../../../../node_modules/smol-toml/dist/date.js
 var DATE_TIME_RE, TomlDate;
 var init_date = __esm(() => {
   /*!
@@ -1084,7 +1084,7 @@ var init_date = __esm(() => {
   };
 });
 
-// node_modules/smol-toml/dist/primitive.js
+// ../../../../node_modules/smol-toml/dist/primitive.js
 function parseString(str, ptr = 0, endPtr = str.length) {
   let isLiteral = str[ptr] === "'";
   let isMultiline = str[ptr++] === str[ptr] && str[ptr] === str[ptr + 1];
@@ -1262,7 +1262,7 @@ var init_primitive = __esm(() => {
   };
 });
 
-// node_modules/smol-toml/dist/extract.js
+// ../../../../node_modules/smol-toml/dist/extract.js
 function sliceAndTrimEndOf(str, startPtr, endPtr) {
   let value = str.slice(startPtr, endPtr);
   let commentIdx = value.indexOf("#");
@@ -1363,7 +1363,7 @@ var init_extract = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/struct.js
+// ../../../../node_modules/smol-toml/dist/struct.js
 function parseKey(str, ptr, end = "=") {
   let dot = ptr - 1;
   let parsed = [];
@@ -1547,7 +1547,7 @@ var init_struct = __esm(() => {
   KEY_PART_RE = /^[a-zA-Z0-9-_]+[ \t]*$/;
 });
 
-// node_modules/smol-toml/dist/parse.js
+// ../../../../node_modules/smol-toml/dist/parse.js
 function peekTable(key, table, meta, type) {
   let t2 = table;
   let m2 = meta;
@@ -1694,7 +1694,7 @@ var init_parse = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/stringify.js
+// ../../../../node_modules/smol-toml/dist/stringify.js
 var init_stringify = __esm(() => {
   /*!
    * Copyright (c) Squirrel Chat et al., All rights reserved.
@@ -1725,7 +1725,7 @@ var init_stringify = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/index.js
+// ../../../../node_modules/smol-toml/dist/index.js
 var init_dist = __esm(() => {
   init_parse();
   init_stringify();
@@ -1760,7 +1760,7 @@ var init_dist = __esm(() => {
    */
 });
 
-// node_modules/yaml/dist/nodes/identity.js
+// ../../../../node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS((exports) => {
   var ALIAS = Symbol.for("yaml.alias");
   var DOC = Symbol.for("yaml.document");
@@ -1814,7 +1814,7 @@ var require_identity = __commonJS((exports) => {
   exports.isSeq = isSeq;
 });
 
-// node_modules/yaml/dist/visit.js
+// ../../../../node_modules/yaml/dist/visit.js
 var require_visit = __commonJS((exports) => {
   var identity = require_identity();
   var BREAK = Symbol("break visit");
@@ -1969,7 +1969,7 @@ var require_visit = __commonJS((exports) => {
   exports.visitAsync = visitAsync;
 });
 
-// node_modules/yaml/dist/doc/directives.js
+// ../../../../node_modules/yaml/dist/doc/directives.js
 var require_directives = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2121,7 +2121,7 @@ var require_directives = __commonJS((exports) => {
   exports.Directives = Directives;
 });
 
-// node_modules/yaml/dist/doc/anchors.js
+// ../../../../node_modules/yaml/dist/doc/anchors.js
 var require_anchors = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2183,7 +2183,7 @@ var require_anchors = __commonJS((exports) => {
   exports.findNewAnchor = findNewAnchor;
 });
 
-// node_modules/yaml/dist/doc/applyReviver.js
+// ../../../../node_modules/yaml/dist/doc/applyReviver.js
 var require_applyReviver = __commonJS((exports) => {
   function applyReviver(reviver, obj, key, val) {
     if (val && typeof val === "object") {
@@ -2230,7 +2230,7 @@ var require_applyReviver = __commonJS((exports) => {
   exports.applyReviver = applyReviver;
 });
 
-// node_modules/yaml/dist/nodes/toJS.js
+// ../../../../node_modules/yaml/dist/nodes/toJS.js
 var require_toJS = __commonJS((exports) => {
   var identity = require_identity();
   function toJS(value, arg, ctx) {
@@ -2257,7 +2257,7 @@ var require_toJS = __commonJS((exports) => {
   exports.toJS = toJS;
 });
 
-// node_modules/yaml/dist/nodes/Node.js
+// ../../../../node_modules/yaml/dist/nodes/Node.js
 var require_Node = __commonJS((exports) => {
   var applyReviver = require_applyReviver();
   var identity = require_identity();
@@ -2294,7 +2294,7 @@ var require_Node = __commonJS((exports) => {
   exports.NodeBase = NodeBase;
 });
 
-// node_modules/yaml/dist/nodes/Alias.js
+// ../../../../node_modules/yaml/dist/nodes/Alias.js
 var require_Alias = __commonJS((exports) => {
   var anchors = require_anchors();
   var visit = require_visit();
@@ -2404,7 +2404,7 @@ var require_Alias = __commonJS((exports) => {
   exports.Alias = Alias;
 });
 
-// node_modules/yaml/dist/nodes/Scalar.js
+// ../../../../node_modules/yaml/dist/nodes/Scalar.js
 var require_Scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Node = require_Node();
@@ -2432,7 +2432,7 @@ var require_Scalar = __commonJS((exports) => {
   exports.isScalarValue = isScalarValue;
 });
 
-// node_modules/yaml/dist/doc/createNode.js
+// ../../../../node_modules/yaml/dist/doc/createNode.js
 var require_createNode = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -2504,7 +2504,7 @@ var require_createNode = __commonJS((exports) => {
   exports.createNode = createNode;
 });
 
-// node_modules/yaml/dist/nodes/Collection.js
+// ../../../../node_modules/yaml/dist/nodes/Collection.js
 var require_Collection = __commonJS((exports) => {
   var createNode = require_createNode();
   var identity = require_identity();
@@ -2619,7 +2619,7 @@ var require_Collection = __commonJS((exports) => {
   exports.isEmptyPath = isEmptyPath;
 });
 
-// node_modules/yaml/dist/stringify/stringifyComment.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyComment.js
 var require_stringifyComment = __commonJS((exports) => {
   var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
   function indentComment(comment, indent) {
@@ -2636,7 +2636,7 @@ var require_stringifyComment = __commonJS((exports) => {
   exports.stringifyComment = stringifyComment;
 });
 
-// node_modules/yaml/dist/stringify/foldFlowLines.js
+// ../../../../node_modules/yaml/dist/stringify/foldFlowLines.js
 var require_foldFlowLines = __commonJS((exports) => {
   var FOLD_FLOW = "flow";
   var FOLD_BLOCK = "block";
@@ -2773,7 +2773,7 @@ ${indent}${text.slice(fold + 1, end2)}`;
   exports.foldFlowLines = foldFlowLines;
 });
 
-// node_modules/yaml/dist/stringify/stringifyString.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyString.js
 var require_stringifyString = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var foldFlowLines = require_foldFlowLines();
@@ -3071,7 +3071,7 @@ ${indent}`);
   exports.stringifyString = stringifyString;
 });
 
-// node_modules/yaml/dist/stringify/stringify.js
+// ../../../../node_modules/yaml/dist/stringify/stringify.js
 var require_stringify = __commonJS((exports) => {
   var anchors = require_anchors();
   var identity = require_identity();
@@ -3192,7 +3192,7 @@ ${ctx.indent}${str}`;
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/stringify/stringifyPair.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyPair.js
 var require_stringifyPair = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3328,7 +3328,7 @@ ${ctx.indent}`;
   exports.stringifyPair = stringifyPair;
 });
 
-// node_modules/yaml/dist/log.js
+// ../../../../node_modules/yaml/dist/log.js
 var require_log = __commonJS((exports) => {
   var node_process = __require("process");
   function debug(logLevel, ...messages) {
@@ -3347,7 +3347,7 @@ var require_log = __commonJS((exports) => {
   exports.warn = warn;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/merge.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/merge.js
 var require_merge = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3404,7 +3404,7 @@ var require_merge = __commonJS((exports) => {
   exports.merge = merge;
 });
 
-// node_modules/yaml/dist/nodes/addPairToJSMap.js
+// ../../../../node_modules/yaml/dist/nodes/addPairToJSMap.js
 var require_addPairToJSMap = __commonJS((exports) => {
   var log = require_log();
   var merge = require_merge();
@@ -3465,7 +3465,7 @@ var require_addPairToJSMap = __commonJS((exports) => {
   exports.addPairToJSMap = addPairToJSMap;
 });
 
-// node_modules/yaml/dist/nodes/Pair.js
+// ../../../../node_modules/yaml/dist/nodes/Pair.js
 var require_Pair = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyPair = require_stringifyPair();
@@ -3503,7 +3503,7 @@ var require_Pair = __commonJS((exports) => {
   exports.createPair = createPair;
 });
 
-// node_modules/yaml/dist/stringify/stringifyCollection.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyCollection.js
 var require_stringifyCollection = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -3655,7 +3655,7 @@ ${indent}${end}`;
   exports.stringifyCollection = stringifyCollection;
 });
 
-// node_modules/yaml/dist/nodes/YAMLMap.js
+// ../../../../node_modules/yaml/dist/nodes/YAMLMap.js
 var require_YAMLMap = __commonJS((exports) => {
   var stringifyCollection = require_stringifyCollection();
   var addPairToJSMap = require_addPairToJSMap();
@@ -3782,7 +3782,7 @@ var require_YAMLMap = __commonJS((exports) => {
   exports.findPair = findPair;
 });
 
-// node_modules/yaml/dist/schema/common/map.js
+// ../../../../node_modules/yaml/dist/schema/common/map.js
 var require_map = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLMap = require_YAMLMap();
@@ -3801,7 +3801,7 @@ var require_map = __commonJS((exports) => {
   exports.map = map;
 });
 
-// node_modules/yaml/dist/nodes/YAMLSeq.js
+// ../../../../node_modules/yaml/dist/nodes/YAMLSeq.js
 var require_YAMLSeq = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyCollection = require_stringifyCollection();
@@ -3894,7 +3894,7 @@ var require_YAMLSeq = __commonJS((exports) => {
   exports.YAMLSeq = YAMLSeq;
 });
 
-// node_modules/yaml/dist/schema/common/seq.js
+// ../../../../node_modules/yaml/dist/schema/common/seq.js
 var require_seq = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLSeq = require_YAMLSeq();
@@ -3913,7 +3913,7 @@ var require_seq = __commonJS((exports) => {
   exports.seq = seq;
 });
 
-// node_modules/yaml/dist/schema/common/string.js
+// ../../../../node_modules/yaml/dist/schema/common/string.js
 var require_string = __commonJS((exports) => {
   var stringifyString = require_stringifyString();
   var string = {
@@ -3929,7 +3929,7 @@ var require_string = __commonJS((exports) => {
   exports.string = string;
 });
 
-// node_modules/yaml/dist/schema/common/null.js
+// ../../../../node_modules/yaml/dist/schema/common/null.js
 var require_null = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var nullTag = {
@@ -3944,7 +3944,7 @@ var require_null = __commonJS((exports) => {
   exports.nullTag = nullTag;
 });
 
-// node_modules/yaml/dist/schema/core/bool.js
+// ../../../../node_modules/yaml/dist/schema/core/bool.js
 var require_bool = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var boolTag = {
@@ -3965,7 +3965,7 @@ var require_bool = __commonJS((exports) => {
   exports.boolTag = boolTag;
 });
 
-// node_modules/yaml/dist/stringify/stringifyNumber.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyNumber.js
 var require_stringifyNumber = __commonJS((exports) => {
   function stringifyNumber({ format, minFractionDigits, tag, value }) {
     if (typeof value === "bigint")
@@ -3989,7 +3989,7 @@ var require_stringifyNumber = __commonJS((exports) => {
   exports.stringifyNumber = stringifyNumber;
 });
 
-// node_modules/yaml/dist/schema/core/float.js
+// ../../../../node_modules/yaml/dist/schema/core/float.js
 var require_float = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4032,7 +4032,7 @@ var require_float = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// node_modules/yaml/dist/schema/core/int.js
+// ../../../../node_modules/yaml/dist/schema/core/int.js
 var require_int = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4074,7 +4074,7 @@ var require_int = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// node_modules/yaml/dist/schema/core/schema.js
+// ../../../../node_modules/yaml/dist/schema/core/schema.js
 var require_schema = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4099,7 +4099,7 @@ var require_schema = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/json/schema.js
+// ../../../../node_modules/yaml/dist/schema/json/schema.js
 var require_schema2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var map = require_map();
@@ -4163,7 +4163,7 @@ var require_schema2 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/binary.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/binary.js
 var require_binary = __commonJS((exports) => {
   var node_buffer = __require("buffer");
   var Scalar = require_Scalar();
@@ -4218,7 +4218,7 @@ var require_binary = __commonJS((exports) => {
   exports.binary = binary;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/pairs.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/pairs.js
 var require_pairs = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4293,7 +4293,7 @@ ${cn.comment}` : item.comment;
   exports.resolvePairs = resolvePairs;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/omap.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/omap.js
 var require_omap = __commonJS((exports) => {
   var identity = require_identity();
   var toJS = require_toJS();
@@ -4365,7 +4365,7 @@ var require_omap = __commonJS((exports) => {
   exports.omap = omap;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/bool.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/bool.js
 var require_bool2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function boolStringify({ value, source }, ctx) {
@@ -4394,7 +4394,7 @@ var require_bool2 = __commonJS((exports) => {
   exports.trueTag = trueTag;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/float.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/float.js
 var require_float2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4440,7 +4440,7 @@ var require_float2 = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/int.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/int.js
 var require_int2 = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4516,7 +4516,7 @@ var require_int2 = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/set.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/set.js
 var require_set = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4599,7 +4599,7 @@ var require_set = __commonJS((exports) => {
   exports.set = set;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
 var require_timestamp = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   function parseSexagesimal(str, asBigInt) {
@@ -4681,7 +4681,7 @@ var require_timestamp = __commonJS((exports) => {
   exports.timestamp = timestamp;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/schema.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/schema.js
 var require_schema3 = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4722,7 +4722,7 @@ var require_schema3 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/tags.js
+// ../../../../node_modules/yaml/dist/schema/tags.js
 var require_tags = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4813,7 +4813,7 @@ var require_tags = __commonJS((exports) => {
   exports.getTags = getTags;
 });
 
-// node_modules/yaml/dist/schema/Schema.js
+// ../../../../node_modules/yaml/dist/schema/Schema.js
 var require_Schema = __commonJS((exports) => {
   var identity = require_identity();
   var map = require_map();
@@ -4843,7 +4843,7 @@ var require_Schema = __commonJS((exports) => {
   exports.Schema = Schema;
 });
 
-// node_modules/yaml/dist/stringify/stringifyDocument.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyDocument.js
 var require_stringifyDocument = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -4923,7 +4923,7 @@ var require_stringifyDocument = __commonJS((exports) => {
   exports.stringifyDocument = stringifyDocument;
 });
 
-// node_modules/yaml/dist/doc/Document.js
+// ../../../../node_modules/yaml/dist/doc/Document.js
 var require_Document = __commonJS((exports) => {
   var Alias = require_Alias();
   var Collection = require_Collection();
@@ -5158,7 +5158,7 @@ var require_Document = __commonJS((exports) => {
   exports.Document = Document;
 });
 
-// node_modules/yaml/dist/errors.js
+// ../../../../node_modules/yaml/dist/errors.js
 var require_errors = __commonJS((exports) => {
   class YAMLError extends Error {
     constructor(name, pos, code, message) {
@@ -5223,7 +5223,7 @@ ${pointer}
   exports.prettifyError = prettifyError;
 });
 
-// node_modules/yaml/dist/compose/resolve-props.js
+// ../../../../node_modules/yaml/dist/compose/resolve-props.js
 var require_resolve_props = __commonJS((exports) => {
   function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
     let spaceBefore = false;
@@ -5353,7 +5353,7 @@ var require_resolve_props = __commonJS((exports) => {
   exports.resolveProps = resolveProps;
 });
 
-// node_modules/yaml/dist/compose/util-contains-newline.js
+// ../../../../node_modules/yaml/dist/compose/util-contains-newline.js
 var require_util_contains_newline = __commonJS((exports) => {
   function containsNewline(key) {
     if (!key)
@@ -5393,7 +5393,7 @@ var require_util_contains_newline = __commonJS((exports) => {
   exports.containsNewline = containsNewline;
 });
 
-// node_modules/yaml/dist/compose/util-flow-indent-check.js
+// ../../../../node_modules/yaml/dist/compose/util-flow-indent-check.js
 var require_util_flow_indent_check = __commonJS((exports) => {
   var utilContainsNewline = require_util_contains_newline();
   function flowIndentCheck(indent, fc, onError) {
@@ -5408,7 +5408,7 @@ var require_util_flow_indent_check = __commonJS((exports) => {
   exports.flowIndentCheck = flowIndentCheck;
 });
 
-// node_modules/yaml/dist/compose/util-map-includes.js
+// ../../../../node_modules/yaml/dist/compose/util-map-includes.js
 var require_util_map_includes = __commonJS((exports) => {
   var identity = require_identity();
   function mapIncludes(ctx, items, search) {
@@ -5421,7 +5421,7 @@ var require_util_map_includes = __commonJS((exports) => {
   exports.mapIncludes = mapIncludes;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-map.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-map.js
 var require_resolve_block_map = __commonJS((exports) => {
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -5528,7 +5528,7 @@ var require_resolve_block_map = __commonJS((exports) => {
   exports.resolveBlockMap = resolveBlockMap;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-seq.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-seq.js
 var require_resolve_block_seq = __commonJS((exports) => {
   var YAMLSeq = require_YAMLSeq();
   var resolveProps = require_resolve_props();
@@ -5576,7 +5576,7 @@ var require_resolve_block_seq = __commonJS((exports) => {
   exports.resolveBlockSeq = resolveBlockSeq;
 });
 
-// node_modules/yaml/dist/compose/resolve-end.js
+// ../../../../node_modules/yaml/dist/compose/resolve-end.js
 var require_resolve_end = __commonJS((exports) => {
   function resolveEnd(end, offset, reqSpace, onError) {
     let comment = "";
@@ -5616,7 +5616,7 @@ var require_resolve_end = __commonJS((exports) => {
   exports.resolveEnd = resolveEnd;
 });
 
-// node_modules/yaml/dist/compose/resolve-flow-collection.js
+// ../../../../node_modules/yaml/dist/compose/resolve-flow-collection.js
 var require_resolve_flow_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -5807,7 +5807,7 @@ var require_resolve_flow_collection = __commonJS((exports) => {
   exports.resolveFlowCollection = resolveFlowCollection;
 });
 
-// node_modules/yaml/dist/compose/compose-collection.js
+// ../../../../node_modules/yaml/dist/compose/compose-collection.js
 var require_compose_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -5869,7 +5869,7 @@ var require_compose_collection = __commonJS((exports) => {
   exports.composeCollection = composeCollection;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-scalar.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-scalar.js
 var require_resolve_block_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function resolveBlockScalar(ctx, scalar, onError) {
@@ -6062,7 +6062,7 @@ var require_resolve_block_scalar = __commonJS((exports) => {
   exports.resolveBlockScalar = resolveBlockScalar;
 });
 
-// node_modules/yaml/dist/compose/resolve-flow-scalar.js
+// ../../../../node_modules/yaml/dist/compose/resolve-flow-scalar.js
 var require_resolve_flow_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var resolveEnd = require_resolve_end();
@@ -6279,7 +6279,7 @@ var require_resolve_flow_scalar = __commonJS((exports) => {
   exports.resolveFlowScalar = resolveFlowScalar;
 });
 
-// node_modules/yaml/dist/compose/compose-scalar.js
+// ../../../../node_modules/yaml/dist/compose/compose-scalar.js
 var require_compose_scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -6357,7 +6357,7 @@ var require_compose_scalar = __commonJS((exports) => {
   exports.composeScalar = composeScalar;
 });
 
-// node_modules/yaml/dist/compose/util-empty-scalar-position.js
+// ../../../../node_modules/yaml/dist/compose/util-empty-scalar-position.js
 var require_util_empty_scalar_position = __commonJS((exports) => {
   function emptyScalarPosition(offset, before, pos) {
     if (before) {
@@ -6384,7 +6384,7 @@ var require_util_empty_scalar_position = __commonJS((exports) => {
   exports.emptyScalarPosition = emptyScalarPosition;
 });
 
-// node_modules/yaml/dist/compose/compose-node.js
+// ../../../../node_modules/yaml/dist/compose/compose-node.js
 var require_compose_node = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -6487,7 +6487,7 @@ var require_compose_node = __commonJS((exports) => {
   exports.composeNode = composeNode;
 });
 
-// node_modules/yaml/dist/compose/compose-doc.js
+// ../../../../node_modules/yaml/dist/compose/compose-doc.js
 var require_compose_doc = __commonJS((exports) => {
   var Document = require_Document();
   var composeNode = require_compose_node();
@@ -6527,7 +6527,7 @@ var require_compose_doc = __commonJS((exports) => {
   exports.composeDoc = composeDoc;
 });
 
-// node_modules/yaml/dist/compose/composer.js
+// ../../../../node_modules/yaml/dist/compose/composer.js
 var require_composer = __commonJS((exports) => {
   var node_process = __require("process");
   var directives = require_directives();
@@ -6718,7 +6718,7 @@ ${end.comment}` : end.comment;
   exports.Composer = Composer;
 });
 
-// node_modules/yaml/dist/parse/cst-scalar.js
+// ../../../../node_modules/yaml/dist/parse/cst-scalar.js
 var require_cst_scalar = __commonJS((exports) => {
   var resolveBlockScalar = require_resolve_block_scalar();
   var resolveFlowScalar = require_resolve_flow_scalar();
@@ -6908,7 +6908,7 @@ var require_cst_scalar = __commonJS((exports) => {
   exports.setScalarValue = setScalarValue;
 });
 
-// node_modules/yaml/dist/parse/cst-stringify.js
+// ../../../../node_modules/yaml/dist/parse/cst-stringify.js
 var require_cst_stringify = __commonJS((exports) => {
   var stringify2 = (cst) => ("type" in cst) ? stringifyToken(cst) : stringifyItem(cst);
   function stringifyToken(token) {
@@ -6966,7 +6966,7 @@ var require_cst_stringify = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/parse/cst-visit.js
+// ../../../../node_modules/yaml/dist/parse/cst-visit.js
 var require_cst_visit = __commonJS((exports) => {
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
@@ -7025,7 +7025,7 @@ var require_cst_visit = __commonJS((exports) => {
   exports.visit = visit;
 });
 
-// node_modules/yaml/dist/parse/cst.js
+// ../../../../node_modules/yaml/dist/parse/cst.js
 var require_cst = __commonJS((exports) => {
   var cstScalar = require_cst_scalar();
   var cstStringify = require_cst_stringify();
@@ -7126,7 +7126,7 @@ var require_cst = __commonJS((exports) => {
   exports.tokenType = tokenType;
 });
 
-// node_modules/yaml/dist/parse/lexer.js
+// ../../../../node_modules/yaml/dist/parse/lexer.js
 var require_lexer = __commonJS((exports) => {
   var cst = require_cst();
   function isEmpty(ch) {
@@ -7723,7 +7723,7 @@ var require_lexer = __commonJS((exports) => {
   exports.Lexer = Lexer;
 });
 
-// node_modules/yaml/dist/parse/line-counter.js
+// ../../../../node_modules/yaml/dist/parse/line-counter.js
 var require_line_counter = __commonJS((exports) => {
   class LineCounter {
     constructor() {
@@ -7751,7 +7751,7 @@ var require_line_counter = __commonJS((exports) => {
   exports.LineCounter = LineCounter;
 });
 
-// node_modules/yaml/dist/parse/parser.js
+// ../../../../node_modules/yaml/dist/parse/parser.js
 var require_parser = __commonJS((exports) => {
   var node_process = __require("process");
   var cst = require_cst();
@@ -8607,7 +8607,7 @@ var require_parser = __commonJS((exports) => {
   exports.Parser = Parser;
 });
 
-// node_modules/yaml/dist/public-api.js
+// ../../../../node_modules/yaml/dist/public-api.js
 var require_public_api = __commonJS((exports) => {
   var composer = require_composer();
   var Document = require_Document();
@@ -8701,7 +8701,7 @@ var require_public_api = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/index.js
+// ../../../../node_modules/yaml/dist/index.js
 var composer, Document, Schema, errors, Alias, identity, Pair, Scalar, YAMLMap, YAMLSeq, cst, lexer, lineCounter, parser, publicApi, visit, $Composer, $Document, $Schema, $YAMLError, $YAMLParseError, $YAMLWarning, $Alias, $isAlias, $isCollection, $isDocument, $isMap, $isNode, $isPair, $isScalar, $isSeq, $Pair, $Scalar, $YAMLMap, $YAMLSeq, $Lexer, $LineCounter, $Parser, $parse, $parseAllDocuments, $parseDocument, $stringify, $visit, $visitAsync;
 var init_dist2 = __esm(() => {
   composer = require_composer();
@@ -8818,7 +8818,7 @@ var init_shared = __esm(() => {
   init_dist2();
 });
 
-// node_modules/zod/v3/helpers/util.js
+// ../../../../node_modules/zod/v3/helpers/util.js
 var util, objectUtil, ZodParsedType, getParsedType = (data) => {
   const t2 = typeof data;
   switch (t2) {
@@ -8949,7 +8949,7 @@ var init_util2 = __esm(() => {
   ]);
 });
 
-// node_modules/zod/v3/ZodError.js
+// ../../../../node_modules/zod/v3/ZodError.js
 var ZodIssueCode, quotelessJson = (obj) => {
   const json = JSON.stringify(obj, null, 2);
   return json.replace(/"([^"]+)":/g, "$1:");
@@ -9070,7 +9070,7 @@ var init_ZodError = __esm(() => {
   };
 });
 
-// node_modules/zod/v3/locales/en.js
+// ../../../../node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -9177,7 +9177,7 @@ var init_en = __esm(() => {
   en_default = errorMap;
 });
 
-// node_modules/zod/v3/errors.js
+// ../../../../node_modules/zod/v3/errors.js
 function setErrorMap(map) {
   overrideErrorMap = map;
 }
@@ -9190,7 +9190,7 @@ var init_errors = __esm(() => {
   overrideErrorMap = en_default;
 });
 
-// node_modules/zod/v3/helpers/parseUtil.js
+// ../../../../node_modules/zod/v3/helpers/parseUtil.js
 function addIssueToContext(ctx, issueData) {
   const overrideMap = getErrorMap();
   const issue = makeIssue({
@@ -9295,10 +9295,10 @@ var init_parseUtil = __esm(() => {
   });
 });
 
-// node_modules/zod/v3/helpers/typeAliases.js
+// ../../../../node_modules/zod/v3/helpers/typeAliases.js
 var init_typeAliases = () => {};
 
-// node_modules/zod/v3/helpers/errorUtil.js
+// ../../../../node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 var init_errorUtil = __esm(() => {
   (function(errorUtil2) {
@@ -9307,7 +9307,7 @@ var init_errorUtil = __esm(() => {
   })(errorUtil || (errorUtil = {}));
 });
 
-// node_modules/zod/v3/types.js
+// ../../../../node_modules/zod/v3/types.js
 class ParseInputLazyPath {
   constructor(parent, value, path, key) {
     this._cachedPath = [];
@@ -12658,7 +12658,7 @@ var init_types = __esm(() => {
   NEVER = INVALID;
 });
 
-// node_modules/zod/v3/external.js
+// ../../../../node_modules/zod/v3/external.js
 var exports_external = {};
 __export(exports_external, {
   void: () => voidType,
@@ -12778,7 +12778,7 @@ var init_external = __esm(() => {
   init_ZodError();
 });
 
-// node_modules/zod/index.js
+// ../../../../node_modules/zod/index.js
 var init_zod = __esm(() => {
   init_external();
   init_external();
@@ -14985,7 +14985,7 @@ var init_cleanup_archive = __esm(() => {
   };
 });
 
-// node_modules/consola/dist/core.mjs
+// ../../../../node_modules/consola/dist/core.mjs
 var LogLevels = {
   silent: Number.NEGATIVE_INFINITY,
   fatal: 0,
@@ -15381,7 +15381,7 @@ Consola.prototype.resume = Consola.prototype.resumeLogs;
 function createConsola(options = {}) {
   return new Consola(options);
 }
-// node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
+// ../../../../node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
 import { formatWithOptions } from "util";
 import { sep } from "path";
 function parseStack(stack, message) {
@@ -15458,10 +15458,10 @@ ${indent}`);
   }
 }
 
-// node_modules/consola/dist/index.mjs
+// ../../../../node_modules/consola/dist/index.mjs
 import g$1 from "process";
 
-// node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
+// ../../../../node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
 import * as tty from "tty";
 var {
   env = {},
@@ -15674,7 +15674,7 @@ function box(text, _opts = {}) {
 `);
 }
 
-// node_modules/consola/dist/index.mjs
+// ../../../../node_modules/consola/dist/index.mjs
 var r2 = Object.create(null);
 var i = (e2) => globalThis.process?.env || import.meta.env || globalThis.Deno?.env.toObject() || globalThis.__env__ || (e2 ? r2 : globalThis);
 var o2 = new Proxy(r2, { get(e2, s) {
@@ -15957,7 +15957,7 @@ function _getDefaultLogLevel() {
   return LogLevels.info;
 }
 var consola = createConsola2();
-// node_modules/citty/dist/index.mjs
+// ../../../../node_modules/citty/dist/index.mjs
 function toArray(val) {
   if (Array.isArray(val)) {
     return val;
@@ -27113,7 +27113,7 @@ async function checkE2eCompletionGate(repoRoot, input) {
 init_fs();
 
 // src/core/github-reflection.ts
-function extractStatusFieldId(fieldList) {
+function selectStatusField(fieldList) {
   if (typeof fieldList !== "object" || fieldList === null)
     return null;
   const fields = fieldList.fields;
@@ -27123,7 +27123,11 @@ function extractStatusFieldId(fieldList) {
   const status = withOptions.find((f3) => typeof f3.name === "string" && f3.name.toLowerCase() === "status") ?? withOptions[0];
   if (!status || typeof status.id !== "string")
     return null;
-  return status.id;
+  const options = status.options.filter((o3) => typeof o3 === "object" && o3 !== null && typeof o3.id === "string" && typeof o3.name === "string").map((o3) => ({ id: o3.id, name: o3.name }));
+  return { id: status.id, options };
+}
+function extractStatusFieldId(fieldList) {
+  return selectStatusField(fieldList)?.id ?? null;
 }
 function buildResultSummary(input) {
   const wi = input.workItem;
@@ -30207,7 +30211,8 @@ var autopilotBootstrap = defineCommand({
         autopilot_id: result2.graph.autopilot_id,
         approval_gate: result2.graph.approval_gate.status,
         node_ids: result2.graph.nodes.map((n2) => n2.id),
-        path: `.ditto/local/work-items/${args.workItem}/autopilot.json`
+        path: `.ditto/local/work-items/${args.workItem}/autopilot.json`,
+        claim_notices: claimNotices
       });
     } else {
       writeHuman(`Bootstrapped autopilot ${result2.graph.autopilot_id}`);
@@ -35475,7 +35480,8 @@ var finalizeCmd = defineCommand({
           autopilot_path: `.ditto/local/work-items/${result2.intent.work_item_id}/autopilot.json`,
           approval_gate: result2.autopilot.approval_gate.status,
           node_ids: result2.autopilot.nodes.map((n2) => n2.id),
-          acceptance_criteria: result2.intent.acceptance_criteria.map((ac) => ac.id)
+          acceptance_criteria: result2.intent.acceptance_criteria.map((ac) => ac.id),
+          claim_notices: claimNotices
         });
       } else {
         writeHuman(`Finalized interview for ${result2.intent.work_item_id}`);
@@ -36269,6 +36275,32 @@ function defaultDoctorFixDeps(repoRoot, homeDir) {
 
 // src/cli/commands/doctor.ts
 init_fs();
+
+// src/core/github-config-doctor.ts
+var IN_PROGRESS_KEY2 = "in_progress";
+function evaluateGithubConfig(github) {
+  const configured = github !== undefined;
+  const mapped = Boolean(github?.claim_status_map?.[IN_PROGRESS_KEY2]);
+  const findings = configured && !mapped ? [
+    {
+      kind: "claim_status_map_missing",
+      message: "claim_status_map.in_progress \uBBF8\uC124\uC815 \u2192 \uCC29\uC218 \uC2DC \uBCF4\uB4DC\uAC00 In progress\uB85C \uC548 \uC62E\uACA8\uC9D0",
+      remediation: "ditto github setup"
+    }
+  ] : [];
+  return {
+    github_configured: configured,
+    claim_in_progress_mapped: mapped,
+    findings,
+    finding_count: findings.length
+  };
+}
+function defaultGithubConfigDoctorDeps(repoRoot) {
+  return { readGithub: () => readGithubConfig(repoRoot) };
+}
+async function collectGithubConfigReport(deps) {
+  return evaluateGithubConfig(await deps.readGithub());
+}
 
 // src/core/intent-quality-doctor.ts
 init_work_item_store();
@@ -37263,6 +37295,43 @@ var variantsCommand = defineCommand({
     }
   }
 });
+var githubConfigCommand = defineCommand({
+  meta: {
+    name: "github",
+    description: 'Check the local github config for a \uAD6C\uBC84\uC804 shape missing claim_status_map.in_progress (claim-time board move to "In progress" silently skipped). Local-only (no gh/network probe), read-only (no auto-fix).'
+  },
+  args: {
+    output: { type: "string", default: "human", description: "Output format: human|json" },
+    advisory: { type: "boolean", default: false, description: "Report findings but exit 0" }
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const report = await collectGithubConfigReport(defaultGithubConfigDoctorDeps(repoRoot));
+      if (format === "json") {
+        writeJson2({
+          status: report.finding_count === 0 ? "ok" : "drift",
+          github_configured: report.github_configured,
+          claim_in_progress_mapped: report.claim_in_progress_mapped,
+          finding_count: report.finding_count,
+          findings: report.findings
+        });
+      } else if (report.finding_count === 0) {
+        writeHuman(report.github_configured ? "github: ok (claim_status_map.in_progress mapped)" : "github: ok (no github integration configured)");
+      } else {
+        for (const finding2 of report.findings) {
+          writeHuman(`github	${finding2.kind}	${finding2.message}`);
+          writeHuman(`  \u2192 ${finding2.remediation}`);
+        }
+      }
+      exitForFindings(report.finding_count, args.advisory);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  }
+});
 var doctorCommand = defineCommand({
   meta: {
     name: "doctor",
@@ -37280,7 +37349,8 @@ var doctorCommand = defineCommand({
     "completion-coverage": completionCoverageCommand,
     backlog: backlogCommand,
     "retro-trend": retroTrendCommand,
-    variants: variantsCommand
+    variants: variantsCommand,
+    github: githubConfigCommand
   }
 });
 
@@ -38997,6 +39067,44 @@ GATE: ${assessment.concerning.length} function(s) on a rising trend:`);
 
 // src/cli/commands/github.ts
 init_fs();
+
+// src/core/github-status-match.ts
+function normalizeStatusName(name) {
+  return name.toLowerCase().replace(/[\s_-]+/g, "");
+}
+var CLAIM_AUTODETECT_TABLE = {
+  in_progress: ["inprogress"]
+};
+var STATUS_AUTODETECT_TABLE = {
+  done: ["done"]
+};
+function matchStatusOptions(options, table) {
+  const matched = {};
+  const ambiguous = {};
+  for (const [key, aliases] of Object.entries(table)) {
+    const aliasSet = new Set(aliases);
+    const hits = options.filter((o3) => aliasSet.has(normalizeStatusName(o3.name)));
+    if (hits.length === 1) {
+      const hit = hits[0];
+      if (hit)
+        matched[key] = hit.id;
+    } else if (hits.length > 1) {
+      ambiguous[key] = hits.map((o3) => o3.name);
+    }
+  }
+  return { matched, ambiguous };
+}
+function autodetectStatusMaps(options) {
+  const claim2 = matchStatusOptions(options, CLAIM_AUTODETECT_TABLE);
+  const status = matchStatusOptions(options, STATUS_AUTODETECT_TABLE);
+  const warnings = [];
+  for (const [key, names] of Object.entries({ ...claim2.ambiguous, ...status.ambiguous })) {
+    warnings.push(`Auto-detect ambiguous for '${key}': multiple board options normalize alike (${names.join(", ")}) \u2014 left unset, map it explicitly with \`ditto github setup --claim-status-map\`/\`--status-map\`.`);
+  }
+  return { statusMap: status.matched, claimStatusMap: claim2.matched, warnings };
+}
+
+// src/cli/commands/github.ts
 var STATUS_MAP_KEYS = ["done", "abandoned"];
 var CLAIM_STATUS_MAP_KEYS = ["in_progress", "blocked"];
 function parseProjectRef(input) {
@@ -39047,17 +39155,10 @@ function parseClaimStatusMapFlag(input) {
   return parseKeyedOptionFlag(input, CLAIM_STATUS_MAP_KEYS);
 }
 function extractStatusOptions(fieldList) {
-  if (typeof fieldList !== "object" || fieldList === null)
+  const field = selectStatusField(fieldList);
+  if (!field)
     return null;
-  const fields = fieldList.fields;
-  if (!Array.isArray(fields))
-    return null;
-  const withOptions = fields.filter((f3) => typeof f3 === "object" && f3 !== null && Array.isArray(f3.options));
-  const status = withOptions.find((f3) => (f3.name ?? "").toLowerCase() === "status") ?? withOptions[0];
-  if (!status)
-    return null;
-  const options = status.options.filter((o3) => o3 && typeof o3.id === "string" && typeof o3.name === "string").map((o3) => ({ id: o3.id, name: o3.name }));
-  return options.length === 0 ? null : options;
+  return field.options.length === 0 ? null : field.options;
 }
 async function buildGithubConfig(io, gh, opts) {
   const notices = [];
@@ -39079,6 +39180,9 @@ async function buildGithubConfig(io, gh, opts) {
     };
   }
   const optionIds = new Set(options.map((o3) => o3.id));
+  const detected = autodetectStatusMaps(options);
+  for (const w2 of detected.warnings)
+    notices.push(w2);
   const viewRes = gh.projectView(ref.owner, ref.number);
   const nodeId2 = viewRes.ok && typeof viewRes.value?.id === "string" ? viewRes.value.id : undefined;
   if (!nodeId2) {
@@ -39105,7 +39209,7 @@ async function buildGithubConfig(io, gh, opts) {
     }
   } else {
     for (const key of STATUS_MAP_KEYS) {
-      const picked = await select(io, `ditto '${key}' \u2192 Project status \uC635\uC158 \uC120\uD0DD`, choiceOptions, "");
+      const picked = await select(io, `ditto '${key}' \u2192 Project status \uC635\uC158 \uC120\uD0DD`, choiceOptions, detected.statusMap[key] ?? "");
       if (picked !== "" && optionIds.has(picked))
         statusMap[key] = picked;
     }
@@ -39127,7 +39231,7 @@ async function buildGithubConfig(io, gh, opts) {
     }
   } else {
     for (const key of CLAIM_STATUS_MAP_KEYS) {
-      const picked = await select(io, `ditto '${key}' \u2192 Project status \uC635\uC158 \uC120\uD0DD(claim \uBCF4\uB4DC \uBC18\uC601)`, choiceOptions, "");
+      const picked = await select(io, `ditto '${key}' \u2192 Project status \uC635\uC158 \uC120\uD0DD(claim \uBCF4\uB4DC \uBC18\uC601)`, choiceOptions, detected.claimStatusMap[key] ?? "");
       if (picked !== "" && optionIds.has(picked))
         claimStatusMap[key] = picked;
     }
@@ -39144,6 +39248,66 @@ async function buildGithubConfig(io, gh, opts) {
     return { ok: false, reason: "schema_invalid", detail: parsed.error.message.slice(0, 200) };
   }
   return { ok: true, config: parsed.data, notices };
+}
+function mergeDetectedMap(existing, detected, knownKeys, mode, mapLabel, notices) {
+  const result2 = { ...existing };
+  for (const key of knownKeys) {
+    const det = detected[key];
+    if (mode === "fill") {
+      if (det !== undefined && result2[key] === undefined) {
+        result2[key] = det;
+        notices.push(`${mapLabel}: backfilled '${key}'=${det} (auto-detected from board).`);
+      }
+    } else if (det !== undefined) {
+      if (result2[key] !== det) {
+        notices.push(result2[key] === undefined ? `${mapLabel}: set '${key}'=${det} (auto-detected from board).` : `${mapLabel}: re-synced '${key}'=${det} (was ${result2[key]}; board-authoritative).`);
+      }
+      result2[key] = det;
+    } else if (result2[key] !== undefined) {
+      notices.push(`${mapLabel}: kept existing '${key}'=${result2[key]} \u2014 not re-derivable from the board this run (preserved, not deleted).`);
+    }
+  }
+  return result2;
+}
+function syncStatusMaps(gh, existing, opts) {
+  const notices = [];
+  const ref = { owner: existing.project.owner, number: existing.project.number };
+  const res = gh.projectFieldList(ref.owner, ref.number);
+  if (!res.ok)
+    return { ok: false, reason: res.reason, detail: res.detail };
+  const options = extractStatusOptions(res.value);
+  if (!options) {
+    return {
+      ok: false,
+      reason: "no_status_field",
+      detail: `Project ${ref.owner}/${ref.number}\uC5D0 status single-select \uD544\uB4DC\uAC00 \uC5C6\uC74C`
+    };
+  }
+  const detected = autodetectStatusMaps(options);
+  let nodeId2 = existing.project.node_id;
+  const viewRes = gh.projectView(ref.owner, ref.number);
+  if (viewRes.ok && typeof viewRes.value?.id === "string") {
+    nodeId2 = viewRes.value.id;
+  } else if (!nodeId2) {
+    notices.push("Project node_id \uBBF8\uD574\uACB0 \u2014 \uBCF4\uB4DC \uC774\uB3D9(claim/reflect)\uC740 \uC5EC\uC804\uD788 skip\uB41C\uB2E4.");
+  }
+  const statusMap = mergeDetectedMap(existing.status_map, detected.statusMap, Object.keys(STATUS_AUTODETECT_TABLE), opts.mode, "status_map", notices);
+  const claimMap = mergeDetectedMap(existing.claim_status_map ?? {}, detected.claimStatusMap, Object.keys(CLAIM_AUTODETECT_TABLE), opts.mode, "claim_status_map", notices);
+  const candidate = {
+    project: {
+      owner: existing.project.owner,
+      number: existing.project.number,
+      ...nodeId2 ? { node_id: nodeId2 } : {}
+    },
+    status_map: statusMap,
+    ...Object.keys(claimMap).length > 0 ? { claim_status_map: claimMap } : {},
+    auto_reflect: existing.auto_reflect
+  };
+  const parsed = dittoConfigGithub.safeParse(candidate);
+  if (!parsed.success) {
+    return { ok: false, reason: "schema_invalid", detail: parsed.error.message.slice(0, 200) };
+  }
+  return { ok: true, config: parsed.data, notices, warnings: detected.warnings };
 }
 var githubSetupCommand = defineCommand({
   meta: {
@@ -39176,6 +39340,18 @@ var githubSetupCommand = defineCommand({
       required: false,
       description: "\uC644\uB8CC \uC2DC Project status \uC790\uB3D9 \uBC18\uC601(\uAE30\uBCF8 OFF)"
     },
+    "resync-status": {
+      type: "boolean",
+      required: false,
+      default: false,
+      description: "\uBCF4\uB4DC Status\uB97C \uB2E4\uC2DC \uC77D\uC5B4 known \uD0A4(in_progress/done)\uB97C \uB36E\uC5B4\uC4F0\uAE30 \u2014 \uBBF8\uB798/\uBBF8\uB9E4\uCE6D \uD0A4\uB294 \uBCF4\uC874"
+    },
+    "autodetect-status": {
+      type: "boolean",
+      required: false,
+      default: false,
+      description: "\uBCF4\uB4DC Status\uC5D0\uC11C \uBBF8\uC124\uC815 claim_status_map/status_map \uD0A4\uB9CC \uBC31\uD544(\uAE30\uC874 \uAC12 \uBCF4\uC874)"
+    },
     yes: {
       type: "boolean",
       required: false,
@@ -39185,6 +39361,35 @@ var githubSetupCommand = defineCommand({
   },
   run: async ({ args }) => {
     const repoRoot = typeof args.dir === "string" && args.dir !== "" ? args.dir : await resolveRepoRootForCreate();
+    const resync = Boolean(args["resync-status"]);
+    const autodetect = Boolean(args["autodetect-status"]);
+    if (resync || autodetect) {
+      const existing = await readGithubConfig(repoRoot);
+      if (!existing) {
+        writeError("github setup: \uAE30\uC874 github config\uAC00 \uC5C6\uC74C \u2014 \uBA3C\uC800 `ditto github setup --project <owner/number>`\uB85C \uC5F0\uACB0\uD558\uC138\uC694.");
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const outcome = syncStatusMaps(createGhClient(), existing, {
+        mode: resync ? "overwrite" : "fill"
+      });
+      if (!outcome.ok) {
+        writeError(`github setup: ${outcome.reason}${outcome.detail ? ` \u2014 ${outcome.detail}` : ""} (no write \u2014 config left unchanged).`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      await writeGithubConfig(repoRoot, outcome.config);
+      const p = outcome.config.project;
+      writeHuman(`github ${resync ? "re-sync" : "autodetect"}: Project ${p.owner}/${p.number} \u2192 .ditto/local/config.json`);
+      writeHuman(`  status_map: ${Object.keys(outcome.config.status_map).length === 0 ? "(none)" : Object.entries(outcome.config.status_map).map(([k2, v2]) => `${k2}=${v2}`).join(", ")}`);
+      const cm = outcome.config.claim_status_map;
+      writeHuman(`  claim_status_map: ${!cm || Object.keys(cm).length === 0 ? "(none)" : Object.entries(cm).map(([k2, v2]) => `${k2}=${v2}`).join(", ")}`);
+      for (const n2 of outcome.notices)
+        writeHuman(`  note: ${n2}`);
+      for (const w2 of outcome.warnings)
+        writeHuman(`  warning: ${w2}`);
+      return;
+    }
     const nonInteractive = Boolean(args.yes) || !process.stdin.isTTY;
     const io = nonInteractive ? { isTTY: false, ask: async () => "", write: (t2) => process.stdout.write(t2) } : createStdioPromptIO();
     try {
@@ -47050,4 +47255,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=4ed6a3951c098e917efe180f81f527f5405ae165d74467c15d0c0683f3d2a194
+//# ditto-src-stamp=826c7d1bb9880147c97d025ce447514980b4489b71651d4d1365f484831a70a0
