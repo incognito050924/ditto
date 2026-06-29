@@ -134,3 +134,59 @@ export async function writeGithubConfig(
   await mkdir(dirname(path), { recursive: true });
   await Bun.write(path, `${JSON.stringify(next, null, 2)}\n`);
 }
+
+/**
+ * Bootstrap-once seed of the `github` block into `.ditto/local/config.json` from a
+ * TEAM-shared source (recipe.backlog), used by `ditto setup` (wi_260629vnt). 개인 우선:
+ * a per-developer github config already present is NEVER overwritten — the seed only
+ * fills the block when it is *provably* absent.
+ *
+ * THREE-STATE predicate (raw file read, NOT `readGithubConfig()===undefined`, which
+ * conflates absent and malformed and would let a seed write CLOBBER sibling blocks):
+ *   (a) config.json file absent                                  → seed (reason 'absent')
+ *   (b) file present + parses + schema-valid + no `github` field → seed (reason 'absent')
+ *   (c) file present + `github` field present                    → keep (reason 'existing')
+ *   (d) file present + malformed JSON / schema-invalid           → NO seed, fail-closed
+ *                                                                  (reason 'malformed', warn)
+ * Fail-closed on (d) protects siblings: seeding a malformed file would route through
+ * writeGithubConfig's catch (existing→{}) and ERASE tech_spec/deep_interview. Only a
+ * provably-valid existing file is ever written through.
+ *
+ * `onMalformed` fires only in case (d) — so the CLI can warn the user their config was
+ * ignored rather than silently skipping the seed.
+ */
+export async function seedGithubConfigIfAbsent(
+  repoRoot: string,
+  github: DittoConfigGithub,
+  onMalformed?: () => void,
+): Promise<{ seeded: boolean; reason: 'absent' | 'existing' | 'malformed' }> {
+  const file = Bun.file(localDir(repoRoot, 'config.json'));
+
+  // (a) file absent → seed.
+  if (!(await file.exists())) {
+    await writeGithubConfig(repoRoot, github);
+    return { seeded: true, reason: 'absent' };
+  }
+
+  // File present — parse ONCE to distinguish provable-absence (b) from malformed (d).
+  let parsed: ReturnType<typeof dittoConfig.safeParse>;
+  try {
+    parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
+  } catch {
+    // (d) invalid JSON → fail-closed, never seed (would clobber siblings).
+    onMalformed?.();
+    return { seeded: false, reason: 'malformed' };
+  }
+  if (!parsed.success) {
+    // (d) schema-invalid → fail-closed.
+    onMalformed?.();
+    return { seeded: false, reason: 'malformed' };
+  }
+  if (parsed.data.github !== undefined) {
+    // (c) personal github config present → 개인 우선, never overwrite.
+    return { seeded: false, reason: 'existing' };
+  }
+  // (b) parse-valid file, github provably absent → seed (writeGithubConfig preserves siblings).
+  await writeGithubConfig(repoRoot, github);
+  return { seeded: true, reason: 'absent' };
+}

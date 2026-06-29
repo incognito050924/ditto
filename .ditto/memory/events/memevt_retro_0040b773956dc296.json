@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_0040b773956dc296",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] 시드된 좌표가 나중에 개발자가 인증 못하는 Project로 gh 호출을 유도하면 downstream 401/403, seed 시점엔 무신호.\n[residual] 팀 recipe가 개발자 비멤버 Project 좌표를 시드해도 seed는 감지 못함; 후속 gh 권한 실패로만 발현.\n[residual] github 블록 출처(팀 recipe seed vs 개인 wizard)가 기록 안 됨 — 놀라운 config의 provenance 사후 추적 불가(observability gap).\n[residual] dittoConfigGithub가 미래에 unbounded 컬렉션 필드를 가지면 통째 쓰기 — 현 스키마는 고정 스칼라+소형 맵 2개로 한정.\n[residual] 악의적 recipe.yaml이 반복 seed 시도해도 bootstrap-once+로컬 한정이라 개발자가 이미 통제하는 단일 파일 너머 증폭 없음.\n[residual] 불투명 owner/option-id가 나중에 별개 미수정 소비자의 gh GraphQL/CLI로 보간 — 그 위험은 그 소비자에 있지 이 변경 아님.\n[residual] 미래 스키마가 토큰 필드를 추가하면 공유 recipe seed가 로컬로 전파 — 현 스키마엔 그 필드 없어 zod가 stray secret 키를 strip.\n[residual] 공개 org/user 핸들이 로컬 config에 — 최소 노출, 이 변경이 어디로도 전송 안 함.\n[residual] 없음 — 보드 좌표·상태맵은 GDPR/컴플라이언스 범위 데이터 아님.\n[residual] seed가 일부 소비자(G4/G5 reflection)의 구번들보다 먼저 배포되면 시드된 claim_status_map이 부분 inert — harmless 강등이나 미검증 롤아웃 순서 가정.\n[residual] bootstrap-once는 재seed 안 함 — 갱신된 팀 recipe가 개발자 config를 새로고침 안 함, 단 이는 의도된 personal-wins 설계이지 결함 아님.\n[close_reason] Seed는 로컬 파일 쓰기만; 인증 경로 미실행. gh 인증은 별개 미수정 소비자.\n[close_reason] 자기 소유 gitignored .ditto/local/config.json 쓰기; RBAC/테넌트 체크 없음. personal-wins는 config layering이지 접근제어 아님.\n[close_reason] 일회성 로컬 dev-config 쓰기; 부인방지/변조내성 불필요, 감사 대상 없음.\n[close_reason] zod-bounded 고정 shape 1회 멱등 쓰기; 루프/스케일/타임아웃/N+1 없음.\n[close_reason] 외부 표면 없음 — 로컬 CLI bootstrap이 gitignored 파일 씀. 레이트리밋 엔드포인트/replay/스크래핑 표적 없음.\n[close_reason] 불투명 식별자를 JSON.stringify로 씀(코드/쿼리/명령 싱크로 보간 안 됨). gh 싱크(gh-client.ts:18)는 execFileSync argv 배열·no shell이라 별개 소비자도 파라미터화.\n[close_reason] dittoConfigGithub(ditto-config.ts:54)에 토큰/자격증명/키 필드 없음 — 좌표+상태맵+bool뿐. 대상 config.json은 gitignored tier③. 시크릿 코드/로그/URL 미진입.\n[close_reason] 유일한 person-adjacent 값=GitHub owner login(공개 핸들), gitignored 로컬 파일. PII 수집/로깅/전송 없음.\n[close_reason] 규제 데이터 카테고리(건강/금융/민감개인) 미처리; 보드 연동 좌표를 로컬 dev config에 씀.\n[close_reason] 마이그레이션 엔진 out-of-scope; 로컬 CLI 동작, 기존 config 미변경(bootstrap-once)이라 롤아웃 benign. 스키마진화는 open-key z.object stripping(per-key 강등)으로 흡수(version bump 아님).\n[close_reason] seed 경로에 타임스탬프/만료/타임존/시계비교 없음; bootstrap-once=존재 확인이지 시간 기반 아님.",
+  "created_at": "2026-06-29T16:58:19.622Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

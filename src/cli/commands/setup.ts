@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { defineCommand } from 'citty';
 import { type AgentVariant, writeAgentVariants } from '~/core/agent-variants';
+import { seedGithubConfigIfAbsent } from '~/core/ditto-config';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { claudeCodeHostAdapter } from '~/core/hosts/claude-code';
 import { codexHostAdapter } from '~/core/hosts/codex';
@@ -16,6 +17,7 @@ import {
 import { type ProvisionerRegistry, defaultRegistry } from '~/core/provision/provisioner';
 import { loadResolvedRecipe } from '~/core/recipe/load';
 import { type SetupHost, type SetupResult, setup } from '~/core/setup';
+import type { DittoConfigGithub } from '~/schemas/ditto-config';
 import type { Recipe } from '~/schemas/recipe';
 import { resolveResourcesDir } from '../resources';
 import { RUNTIME_ERROR_EXIT, writeError, writeHuman } from '../util';
@@ -92,6 +94,9 @@ export interface RecipeSetupDeps {
   provisionTools: (toolIds: string[]) => Promise<ProvisionOutcome[]>;
   writeVariants: (variants: AgentVariant[]) => Promise<{ written: string[]; skipped: string[] }>;
   separateMemory: (mode: MemorySeparateMode) => Promise<MemorySeparateResult>;
+  seedGithubConfig: (
+    github: DittoConfigGithub,
+  ) => Promise<{ seeded: boolean; reason: 'absent' | 'existing' | 'malformed' }>;
 }
 
 export interface RecipeSetupSummary {
@@ -100,6 +105,10 @@ export interface RecipeSetupSummary {
   tools: ProvisionOutcome[];
   agents: { written: string[]; skipped: string[] };
   memory: { mode: MemorySeparateMode | 'in-project'; result: MemorySeparateResult | null };
+  // recipe.backlog → personal github config bootstrap-once seed (wi_260629vnt). reason
+  // discloses why (no silent seed): seeded | kept-existing | malformed-skipped | no-backlog.
+  // `reason` is absent on a caught write/IO failure (graceful degradation, ADR-0018).
+  githubSeed: { seeded: boolean; reason?: 'absent' | 'existing' | 'malformed' | 'no-backlog' };
 }
 
 /**
@@ -153,7 +162,20 @@ export async function runRecipeSetup(
     memory = { mode: 'gitignore', result: await deps.separateMemory('gitignore') };
   }
 
-  return { host, setup: setupResult, tools, agents, memory };
+  // GitHub backlog seed — bootstrap-once, AFTER deps.setup so the `.ditto/.gitignore`
+  // (ignoring local/) already exists and the personal coordinate config never leaks as
+  // git-addable (C3). A seed write failure (EACCES/ENOSPC) must NOT break setup — the
+  // seed is a convenience, not a gate (C2, ADR-0018 우아한 강등): catch, disclose, continue.
+  let githubSeed: RecipeSetupSummary['githubSeed'] = { seeded: false, reason: 'no-backlog' };
+  if (recipe.backlog) {
+    try {
+      githubSeed = await deps.seedGithubConfig(recipe.backlog);
+    } catch {
+      githubSeed = { seeded: false };
+    }
+  }
+
+  return { host, setup: setupResult, tools, agents, memory, githubSeed };
 }
 
 function parseSetupHost(value: unknown): SetupHost {
@@ -413,6 +435,12 @@ export const setupCommand = defineCommand({
           writeVariants: (variants) => writeAgentVariants(projectRoot, variants),
           separateMemory: (mode) =>
             separateMemoryRepo(defaultMemorySeparateDeps(projectRoot), mode),
+          seedGithubConfig: (github) =>
+            seedGithubConfigIfAbsent(projectRoot, github, () =>
+              writeError(
+                'github backlog seed skipped: 개인 .ditto/local/config.json malformed/invalid — 무시(fail-closed)',
+              ),
+            ),
         });
 
         writeHuman(`setup: installed into ${projectRoot} (host=${summary.host}, recipe-driven)`);
@@ -443,6 +471,16 @@ export const setupCommand = defineCommand({
         if (hook) {
           writeHuman(`push-gate hook: ${hook.status} → ${hook.hookPath || '(not installed)'}`);
           if (hook.message) writeHuman(`  ${hook.message}`);
+        }
+        // C4 disclosure — never seed silently. Only surfaced when the recipe declared a
+        // backlog (reason !== 'no-backlog'); otherwise there is nothing to report.
+        if (summary.githubSeed.reason !== 'no-backlog') {
+          const s = summary.githubSeed;
+          writeHuman(
+            `github backlog: ${
+              s.seeded ? 'seeded personal github config' : `skipped (${s.reason ?? 'write failed'})`
+            }`,
+          );
         }
         return;
       }

@@ -6,6 +6,7 @@ import {
   readDeepInterviewConfigDefaults,
   readGithubConfig,
   readQuestionConfigDefaults,
+  seedGithubConfigIfAbsent,
   writeGithubConfig,
 } from '~/core/ditto-config';
 
@@ -214,5 +215,110 @@ describe('readGithubConfig / writeGithubConfig — github block (wi_260628d79)',
       'utf8',
     );
     expect(await readGithubConfig(repo)).toBeUndefined();
+  });
+});
+
+describe('seedGithubConfigIfAbsent — bootstrap-once github seed (wi_260629vnt)', () => {
+  let repo: string;
+
+  beforeEach(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'ditto-config-seed-'));
+  });
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true });
+  });
+
+  // Full team-shared backlog block: coordinates + status_map + claim_status_map + auto_reflect.
+  const backlog = {
+    project: { owner: 'team-org', number: 7, node_id: 'PVT_abc' },
+    status_map: { done: 'opt_done', abandoned: 'opt_dropped' },
+    claim_status_map: { in_progress: 'opt_ip', blocked: 'opt_blk' },
+    auto_reflect: true,
+  } as const;
+
+  async function writeConfig(content: string): Promise<void> {
+    const dir = join(repo, '.ditto', 'local');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'config.json'), content, 'utf8');
+  }
+
+  function configPath(): string {
+    return join(repo, '.ditto', 'local', 'config.json');
+  }
+
+  test('absent config file → seeds full block (ac-1, reason absent)', async () => {
+    const r = await seedGithubConfigIfAbsent(repo, { ...backlog });
+    expect(r).toEqual({ seeded: true, reason: 'absent' });
+    // ac-4: consumer reads the FULL block — coordinates + status_map + claim_status_map + auto_reflect.
+    expect(await readGithubConfig(repo)).toEqual({ ...backlog });
+  });
+
+  test('config present but no github field → seeds, PRESERVES tech_spec/deep_interview siblings (ac-4)', async () => {
+    await writeConfig(
+      JSON.stringify({
+        tech_spec: { question: { generators: 3 } },
+        deep_interview: { generators: 4 },
+      }),
+    );
+    const r = await seedGithubConfigIfAbsent(repo, { ...backlog });
+    expect(r).toEqual({ seeded: true, reason: 'absent' });
+    expect(await readGithubConfig(repo)).toEqual({ ...backlog });
+    expect(await readQuestionConfigDefaults(repo)).toEqual({ generators: 3 });
+    expect(await readDeepInterviewConfigDefaults(repo)).toEqual({ generators: 4 });
+  });
+
+  test('existing personal github config → NOT overwritten, 개인 우선 (ac-2, reason existing)', async () => {
+    const personal = {
+      project: { owner: 'me', number: 1 },
+      status_map: { done: 'mine_done' },
+      auto_reflect: false,
+    } as const;
+    await writeGithubConfig(repo, { ...personal });
+    const r = await seedGithubConfigIfAbsent(repo, { ...backlog });
+    expect(r).toEqual({ seeded: false, reason: 'existing' });
+    expect(await readGithubConfig(repo)).toEqual({ ...personal });
+  });
+
+  test('idempotent — seeding twice yields byte-identical file (ac-2 멱등)', async () => {
+    await seedGithubConfigIfAbsent(repo, { ...backlog });
+    const first = await Bun.file(configPath()).text();
+    const second = await seedGithubConfigIfAbsent(repo, { ...backlog });
+    const afterBytes = await Bun.file(configPath()).text();
+    // Second call sees the now-present github block → keeps it, writes nothing.
+    expect(second).toEqual({ seeded: false, reason: 'existing' });
+    expect(afterBytes).toBe(first);
+  });
+
+  test('malformed JSON existing → fail-closed (no seed), onMalformed warns, file untouched (C1)', async () => {
+    const raw = '{ tech_spec is here but not valid json';
+    await writeConfig(raw);
+    let warned = 0;
+    const r = await seedGithubConfigIfAbsent(repo, { ...backlog }, () => {
+      warned++;
+    });
+    expect(r).toEqual({ seeded: false, reason: 'malformed' });
+    expect(warned).toBe(1);
+    // siblings NOT clobbered — the malformed file is left exactly as it was.
+    expect(await Bun.file(configPath()).text()).toBe(raw);
+  });
+
+  test('schema-invalid existing (valid tech_spec + invalid github) → fail-closed, sibling preserved (C1)', async () => {
+    const raw = JSON.stringify({
+      tech_spec: { question: { generators: 3 } },
+      github: {
+        project: { owner: 'o', number: 5 },
+        status_map: { in_progress: 'x' },
+        auto_reflect: false,
+      },
+    });
+    await writeConfig(raw);
+    let warned = 0;
+    const r = await seedGithubConfigIfAbsent(repo, { ...backlog }, () => {
+      warned++;
+    });
+    expect(r).toEqual({ seeded: false, reason: 'malformed' });
+    expect(warned).toBe(1);
+    // tech_spec sibling NOT destroyed by a seed write — the whole file stays byte-identical.
+    expect(await Bun.file(configPath()).text()).toBe(raw);
   });
 });
