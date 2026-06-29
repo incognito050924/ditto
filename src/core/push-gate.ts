@@ -43,8 +43,14 @@ export function pushGateDecision(
   config: RecipePushGate | undefined,
 ): PushGateDecision {
   if (!config) return { run: false };
+  // A literal "*" entry is the all-branches sentinel: EVERY pushed branch is
+  // protected. Otherwise it's exact-match against the listed names (additive — the
+  // exact path is unchanged for non-"*" entries). Only "*" is special; partial
+  // patterns like "release/*" are NOT globbed.
   const protectedSet = new Set(config.protected_branches);
-  const matched = pushedBranches.filter((b) => protectedSet.has(b));
+  const matched = protectedSet.has('*')
+    ? [...pushedBranches]
+    : pushedBranches.filter((b) => protectedSet.has(b));
   if (matched.length === 0) return { run: false };
   return { run: true, test_command: config.test_command, matched };
 }

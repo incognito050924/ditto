@@ -1,5 +1,7 @@
-import { cp, readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { chmod, cp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import type { RecipePushGate } from '~/schemas/recipe';
 import { atomicWriteText, ensureDir } from './fs';
 import { codexHostAdapter } from './hosts/codex';
 import { fileExists, listDirectories, listFiles, readJsonIfExists } from './hosts/shared';
@@ -30,6 +32,15 @@ export interface SetupOptions {
   now: Date;
   host?: SetupHost;
   pluginRoot?: string;
+  /**
+   * When the resolved recipe declares a `push_gate` (ac-5), install the portable
+   * pre-push gate hook into `projectRoot`. Absent → the hook stage is skipped, so
+   * a recipe without a push_gate (or the interactive wizard, which only runs when
+   * no recipe is present) leaves git hooks untouched.
+   */
+  pushGate?: RecipePushGate;
+  /** Override the bundled hook template; defaults to `<resourcesDir>/../hooks/pre-push`. */
+  hookTemplatePath?: string;
 }
 
 export type SetupHost = 'claude-code' | 'codex' | 'both';
@@ -50,6 +61,11 @@ export interface SetupResult {
   allowlistPath: string;
   allowlistApplied: boolean;
   codex: CodexSetupResult | null;
+  /**
+   * Push-gate hook stage outcome; null when the recipe declared no push_gate.
+   * Optional (additive field) so pre-existing `SetupResult` literals stay valid.
+   */
+  pushGateHook?: PushGateHookResult | null;
 }
 
 export interface CodexSetupResult {
@@ -393,6 +409,156 @@ async function installResource(
   };
 }
 
+// ---------------------------------------------------------------- push-gate hook
+// Install seam for the recipe-driven git pre-push gate (wi_260629i9c, ac-5). When
+// the resolved recipe declares a `push_gate`, setup drops a portable pre-push hook
+// into the target repo that invokes `ditto push-gate`. The seam is NON-DESTRUCTIVE
+// (an existing non-ditto hook is backed up, never clobbered), IDEMPOTENT (our own
+// hook is recognised by its marker and refreshed, not re-backed-up), and FAILS
+// SAFE on the `core.hooksPath` indirection (a husky/lefthook repo is refused with
+// guidance rather than installing an inert `.git/hooks` hook or silently disabling
+// the user's hooks).
+
+/** Marker line in the installed hook that proves the hook is ditto-managed. */
+export const PUSH_GATE_HOOK_MARKER = 'ditto:managed:pre-push';
+
+/** Suffix for the snapshot of a prior, non-ditto pre-push hook. */
+export const PUSH_GATE_HOOK_BACKUP_SUFFIX = '.ditto-backup';
+
+export type PushGateHookStatus =
+  | 'installed' // no prior hook → wrote ours
+  | 'refreshed' // our hook already there → rewrote in place (idempotent re-run)
+  | 'backed-up' // a non-ditto hook existed → moved to `.ditto-backup`, wrote ours
+  | 'refused-existing' // non-ditto hook AND a backup already present → refused (no clobber)
+  | 'refused-hookspath' // custom non-ditto core.hooksPath → refused with guidance
+  | 'no-git-repo'; // target is not a git repo → cannot install a git hook
+
+export interface PushGateHookResult {
+  status: PushGateHookStatus;
+  /** The `.git/hooks/pre-push` path we targeted (best-effort; empty when no git repo). */
+  hookPath: string;
+  /** The `.ditto-backup` snapshot path when we backed one up, else null. */
+  backupPath: string | null;
+  /** Actionable guidance, set on the refuse / no-git outcomes. */
+  message: string | null;
+}
+
+export interface InstallPushGateHookOptions {
+  /** Target git repo root. */
+  projectRoot: string;
+  /** Path to the bundled `resources/hooks/pre-push` template. */
+  hookTemplatePath: string;
+}
+
+/** Derive the bundled hook template path from the `resources/managed` dir. */
+export function defaultHookTemplatePath(resourcesDir: string): string {
+  return join(dirname(resourcesDir), 'hooks', 'pre-push');
+}
+
+/** `git config --get core.hooksPath` for `cwd`, or null when unset/not-a-repo. */
+function customHooksPath(cwd: string): string | null {
+  try {
+    const v = execFileSync('git', ['config', '--get', 'core.hooksPath'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return v.length > 0 ? v : null;
+  } catch {
+    return null; // unset → git exits non-zero
+  }
+}
+
+/**
+ * Resolve the repo's hooks directory via `git rev-parse --git-path hooks` (correct
+ * for linked worktrees/submodules, where `.git` is a file). Throws when `cwd` is
+ * not a git repo. NOTE: this honours `core.hooksPath`, so callers MUST screen out a
+ * custom hooksPath first (we install only into the real `.git/hooks`).
+ */
+export function gitHooksDir(cwd: string): string {
+  const p = execFileSync('git', ['rev-parse', '--git-path', 'hooks'], {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
+  return isAbsolute(p) ? p : join(cwd, p);
+}
+
+/**
+ * Install the pre-push gate hook into `projectRoot`. See the section comment for
+ * the non-destructive / idempotent / fail-safe contract.
+ */
+export async function installPushGateHook(
+  opts: InstallPushGateHookOptions,
+): Promise<PushGateHookResult> {
+  const { projectRoot, hookTemplatePath } = opts;
+
+  // core.hooksPath indirection (COVERAGE-CRITICAL): a custom hooksPath means git
+  // honours that dir over `.git/hooks`. Writing `.git/hooks/pre-push` would be
+  // silently ignored, and repointing hooksPath would silently disable the user's
+  // husky/lefthook hooks — either is a silent failure on a SAFETY gate. Refuse.
+  const hooksPath = customHooksPath(projectRoot);
+  if (hooksPath !== null) {
+    return {
+      status: 'refused-hookspath',
+      hookPath: '',
+      backupPath: null,
+      message: `core.hooksPath is set to "${hooksPath}" (custom hooks dir, e.g. husky/lefthook). ditto will not write .git/hooks/pre-push (git would ignore it) nor repoint core.hooksPath (that would disable your hooks). Add the ditto pre-push call to "${hooksPath}/pre-push" manually: it should pipe stdin into \`ditto push-gate\`.`,
+    };
+  }
+
+  let hooksDir: string;
+  try {
+    hooksDir = gitHooksDir(projectRoot);
+  } catch {
+    return {
+      status: 'no-git-repo',
+      hookPath: '',
+      backupPath: null,
+      message: `${projectRoot} is not a git repository — a pre-push hook cannot be installed. Run \`git init\` (or \`ditto setup\` from inside the repo), then re-run setup.`,
+    };
+  }
+
+  const hookPath = join(hooksDir, 'pre-push');
+  const backupPath = `${hookPath}${PUSH_GATE_HOOK_BACKUP_SUFFIX}`;
+  const template = await readFile(hookTemplatePath, 'utf8');
+
+  await ensureDir(hooksDir);
+
+  if (!(await fileExists(hookPath))) {
+    await writeHookFile(hookPath, template);
+    return { status: 'installed', hookPath, backupPath: null, message: null };
+  }
+
+  // A hook already exists. If it is OURS (marker present), refresh in place — a
+  // re-run must not double-install nor back up our own hook.
+  const existing = await readFile(hookPath, 'utf8');
+  if (existing.includes(PUSH_GATE_HOOK_MARKER)) {
+    await writeHookFile(hookPath, template);
+    return { status: 'refreshed', hookPath, backupPath: null, message: null };
+  }
+
+  // A non-ditto hook. NEVER clobber it. Back it up ONCE; if a backup already
+  // exists we refuse rather than overwrite either the user's hook or its backup.
+  if (await fileExists(backupPath)) {
+    return {
+      status: 'refused-existing',
+      hookPath,
+      backupPath,
+      message: `${hookPath} is a non-ditto pre-push hook and ${backupPath} already exists — refusing to overwrite either. Remove/merge them manually, or pipe stdin into \`ditto push-gate\` from your existing hook.`,
+    };
+  }
+  await rename(hookPath, backupPath);
+  await writeHookFile(hookPath, template);
+  return { status: 'backed-up', hookPath, backupPath, message: null };
+}
+
+/** Write the hook body and set the POSIX exec bit (no-op effect on Windows). */
+async function writeHookFile(hookPath: string, body: string): Promise<void> {
+  await writeFile(hookPath, body);
+  await chmod(hookPath, 0o755);
+}
+
 /**
  * Discover bundled resources, route + merge each into its destination as a
  * managed block, scaffold `.ditto/` under the project, and allowlist the
@@ -429,5 +595,13 @@ export async function setup(opts: SetupOptions): Promise<SetupResult> {
       })
     : null;
 
-  return { resources, scaffold, allowlistPath, allowlistApplied, codex };
+  // Push-gate hook stage (ac-5): install only when the recipe declared a push_gate.
+  const pushGateHook = opts.pushGate
+    ? await installPushGateHook({
+        projectRoot,
+        hookTemplatePath: opts.hookTemplatePath ?? defaultHookTemplatePath(resourcesDir),
+      })
+    : null;
+
+  return { resources, scaffold, allowlistPath, allowlistApplied, codex, pushGateHook };
 }

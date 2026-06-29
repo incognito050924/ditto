@@ -1,5 +1,8 @@
 #!/bin/sh
-# pre-push: 전체 테스트(bun test)가 통과해야 push 를 허용한다 (wi_2606298or).
+# pre-push: recipe.yaml 의 push_gate 가 통과해야 push 를 허용한다 (wi_260629i9c — wi_2606298or 일반화).
+# 게이트 자체는 `ditto push-gate` 에 위임한다: git pre-push stdin → recipe.yaml 의 push_gate
+# 해석 → protected_branches("*" = 전체 브랜치) 에 걸리면 test_command("bun test") 실행
+# → 실패 시 차단. ditto 자신의 게이트를 하드코딩 대신 recipe 기반으로 도그푸딩한다.
 # 활성화(클론당 1회): git config core.hooksPath .githooks  ← postinstall 이 자동 수행.
 #
 # 짝가드: PreToolUse 하네스 훅(src/hooks/pre-tool-use.ts)이 `git push --no-verify`
@@ -7,7 +10,7 @@
 # "테스트 통과 없이 push 불가 + 에이전트가 쉽게 우회 못 함"을 이룬다.
 #
 # bun 부재는 graceful skip(테스트 못 도는 환경까지 push 를 막지 않는다 — pre-commit 과
-# 동일 스탠스). 테스트 실패는 차단(exit 1).
+# 동일 스탠스). 게이트 실패는 차단(exit 1).
 if ! command -v bun >/dev/null 2>&1; then
   echo "[ditto] pre-push: bun 없음 — 테스트 게이트 skip" >&2
   exit 0
@@ -15,12 +18,15 @@ fi
 # surface catalog(.ditto/local/surfaces.json)는 ADR-0012 에 따라 gitignored per-developer
 # runtime 이다 — 커밋되지 않으므로 stale 해질 수 있고, 그러면 surface-inventory 테스트가
 # 실패해 이 게이트가 코드와 무관하게 push 를 막는다. 게이트 직전에 재생성해 그 spurious-block
-# 을 없앤다(내구성). 실제 surface 변경(하드코딩된 count/list)은 여전히 테스트가 잡아 차단한다.
-bun run surfaces:gen >/dev/null 2>&1 || echo "[ditto] pre-push: surfaces:gen 실패 — stale catalog 로 진행" >&2
-echo "[ditto] pre-push: bun test 실행 중… (실패 시 push 중단)" >&2
-if ! bun test; then
+# 을 없앤다(내구성, 실패해도 비차단). 실제 surface 변경(하드코딩된 count/list)은 여전히 테스트가 잡아 차단한다.
+# </dev/null: git 이 넘긴 ref stdin 을 prestep 이 삼키지 않게 한다 — 그 stdin 은 아래 push-gate 가 그대로 읽는다.
+bun run surfaces:gen >/dev/null 2>&1 </dev/null || echo "[ditto] pre-push: surfaces:gen 실패 — stale catalog 로 진행" >&2
+echo "[ditto] pre-push: push-gate 실행 중… (recipe.yaml push_gate → 실패 시 push 중단)" >&2
+# 실제 테스트 게이트는 일반화된 ./bin/ditto push-gate 에 위임한다. git 의 ref stdin 을
+# 파이프 없이 그대로 상속시켜 push-gate 가 push_gate 를 해석·실행하게 한다.
+if ! ./bin/ditto push-gate; then
   echo "" >&2
-  echo "✗ bun test 실패 — push 를 중단했다. 테스트를 통과시킨 뒤 다시 push 하라." >&2
+  echo "✗ push-gate 실패 — push 를 중단했다. 테스트를 통과시킨 뒤 다시 push 하라." >&2
   echo "  (정말 우회해야 하면 'git push --no-verify' — 단 하네스에서 차단되며, DITTO_SKIP_HOOKS=1 가 필요하다.)" >&2
   exit 1
 fi

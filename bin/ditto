@@ -45390,8 +45390,229 @@ var modeCommand = defineCommand({
   }
 });
 
-// src/cli/commands/refactor.ts
+// src/cli/commands/push-gate.ts
+import { relative as relative21 } from "path";
+init_fs();
+
+// src/core/push-gate.ts
+var ZERO_SHA = /^0{40}$/;
+function parsePushedBranches(stdin3) {
+  const out = [];
+  for (const line of stdin3.split(`
+`)) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 4)
+      continue;
+    const localSha = parts[1] ?? "";
+    if (ZERO_SHA.test(localSha))
+      continue;
+    const branch = (parts[2] ?? "").match(/^refs\/heads\/(.+)$/)?.[1];
+    if (branch)
+      out.push(branch);
+  }
+  return out;
+}
+function pushGateDecision(pushedBranches, config) {
+  if (!config)
+    return { run: false };
+  const protectedSet = new Set(config.protected_branches);
+  const matched = protectedSet.has("*") ? [...pushedBranches] : pushedBranches.filter((b3) => protectedSet.has(b3));
+  if (matched.length === 0)
+    return { run: false };
+  return { run: true, test_command: config.test_command, matched };
+}
+function normDir(d2) {
+  return d2.replace(/^\.\//, "").replace(/\/+$/, "");
+}
+function resolvePushGate(recipe, repoRelDir) {
+  const dir = normDir(repoRelDir);
+  if (dir === "" || dir === ".")
+    return recipe.push_gate;
+  return recipe.repos?.find((r4) => normDir(r4.dir) === dir)?.push_gate;
+}
+
+// src/core/recipe/load.ts
+init_ditto_paths();
 import { join as join77 } from "path";
+
+// src/core/recipe/parse.ts
+init_dist2();
+
+// src/schemas/recipe.ts
+init_zod();
+var recipeHost = exports_external.enum(["claude-code", "codex", "both"]).describe("Install target host (claude-code | codex | both)");
+var recipeMemoryMode = exports_external.enum(["gitignore", "submodule"]).describe("Memory separation mode (gitignore | submodule)");
+var PSEUDO_OWNERS = new Set(["driver", "main-session"]);
+var RECIPE_ROLE_VALUES = nodeOwner.options.filter((role) => !PSEUDO_OWNERS.has(role));
+var recipeAgentRole = exports_external.enum(RECIPE_ROLE_VALUES).describe("Agent role link target (autopilot owner role minus driver/main-session)");
+var recipeAgentLink = exports_external.object({
+  name: exports_external.string().min(1),
+  role: recipeAgentRole
+});
+var recipePushGate = exports_external.object({
+  protected_branches: exports_external.array(exports_external.string().min(1)).min(1),
+  test_command: exports_external.string().min(1)
+}).describe("Push gate: branches whose push requires test_command to pass");
+var recipeRepoEntry = exports_external.object({
+  dir: exports_external.string().min(1),
+  url: exports_external.string().min(1).optional(),
+  push_gate: recipePushGate.optional()
+}).describe("A nested repo of the workspace (by dir, optional url) with its own config");
+var recipe = exports_external.object({
+  host: recipeHost.optional(),
+  tools: exports_external.array(exports_external.string()).optional(),
+  agents: exports_external.array(recipeAgentLink).optional(),
+  memory: recipeMemoryMode.optional(),
+  push_gate: recipePushGate.optional(),
+  repos: exports_external.array(recipeRepoEntry).optional(),
+  backlog: dittoConfigGithub.optional()
+}).describe("Headless ditto setup recipe (recipe.yaml)");
+
+// src/core/recipe/parse.ts
+function parseRecipe(text) {
+  let raw;
+  try {
+    raw = $parse(text);
+  } catch (error) {
+    return { ok: false, error: `recipe YAML parse failed: ${describe(error)}` };
+  }
+  const candidate = raw === undefined || raw === null ? {} : raw;
+  const parsed = recipe.safeParse(candidate);
+  if (!parsed.success) {
+    return { ok: false, error: `recipe schema validation failed: ${parsed.error.message}` };
+  }
+  return { ok: true, recipe: parsed.data };
+}
+function describe(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+// src/core/recipe/load.ts
+var PROJECT_RECIPE_FILENAME = "recipe.yaml";
+var BUILTIN_DEFAULT_RECIPE = {};
+function definedFields(r4) {
+  return Object.fromEntries(Object.entries(r4).filter(([, v2]) => v2 !== undefined));
+}
+function mergeRecipes(base, override) {
+  return { ...base, ...definedFields(override) };
+}
+function resolveRecipe(sources) {
+  return [sources.builtinDefault, sources.project, sources.personal, sources.cli].filter((r4) => r4 !== undefined).reduce((acc, r4) => mergeRecipes(acc, r4), {});
+}
+async function loadRecipeFile(path, source, onMalformed) {
+  const file = Bun.file(path);
+  if (!await file.exists()) {
+    if (source === "explicit") {
+      throw new Error(`recipe not found at explicit path: ${path}`);
+    }
+    return;
+  }
+  const result2 = parseRecipe(await file.text());
+  if (!result2.ok) {
+    if (source === "explicit") {
+      throw new Error(`${result2.error} (${path})`);
+    }
+    onMalformed?.(`${result2.error} (${path})`);
+    return;
+  }
+  return result2.recipe;
+}
+async function loadResolvedRecipe(repoRoot, cliPath, onMalformed) {
+  const project = await loadRecipeFile(join77(repoRoot, PROJECT_RECIPE_FILENAME), "discovered", (m4) => onMalformed?.("project", m4));
+  const personal = await loadRecipeFile(localDir(repoRoot, "recipe.yaml"), "discovered", (m4) => onMalformed?.("personal", m4));
+  const cli = cliPath === undefined ? undefined : await loadRecipeFile(cliPath, "explicit");
+  return resolveRecipe({ cli, personal, project, builtinDefault: BUILTIN_DEFAULT_RECIPE });
+}
+
+// src/cli/commands/push-gate.ts
+var GUIDANCE = "Push a non-protected branch, or set DITTO_SKIP_HOOKS=1 to bypass.";
+async function execPushGate(inp) {
+  if (inp.env[KILL_SWITCH])
+    return { exitCode: 0 };
+  if (inp.malformedRecipe) {
+    return {
+      exitCode: 1,
+      message: `push-gate: recipe.yaml is malformed \u2014 cannot evaluate the push gate, blocking. ${GUIDANCE}`
+    };
+  }
+  const decision = pushGateDecision(parsePushedBranches(inp.stdin), inp.gate);
+  if (!decision.run)
+    return { exitCode: 0 };
+  const outcome = await inp.runTest(decision.test_command, inp.cwd);
+  switch (outcome.kind) {
+    case "passed":
+      return { exitCode: 0 };
+    case "failed":
+      return {
+        exitCode: 1,
+        message: `push-gate: \`${decision.test_command}\` failed \u2014 push blocked. Fix the tests, or set DITTO_SKIP_HOOKS=1 to bypass.`
+      };
+    case "unrunnable":
+      return {
+        exitCode: 1,
+        message: `push-gate: cannot run \`${decision.test_command}\` (${outcome.reason}) \u2014 blocking. ${GUIDANCE}`
+      };
+  }
+}
+var defaultRunTest = async (testCommand, cwd) => {
+  let proc;
+  try {
+    proc = Bun.spawn(["sh", "-c", testCommand], {
+      cwd,
+      stdin: "ignore",
+      stdout: "inherit",
+      stderr: "inherit"
+    });
+  } catch (err) {
+    return { kind: "unrunnable", reason: err instanceof Error ? err.message : String(err) };
+  }
+  const code = await proc.exited;
+  if (code === 0)
+    return { kind: "passed" };
+  if (code === 126 || code === 127) {
+    return { kind: "unrunnable", reason: `test command not found (exit ${code})` };
+  }
+  return { kind: "failed", exitCode: code };
+};
+async function readStdin() {
+  try {
+    return await Bun.stdin.text();
+  } catch {
+    return "";
+  }
+}
+var pushGateCommand = defineCommand({
+  meta: {
+    name: "push-gate",
+    description: "Pre-push gate: read git pre-push stdin, resolve the recipe push_gate for this repo, and run its test_command before allowing a push to a protected branch. Blocks (non-zero) on a failing/unrunnable gate or a malformed recipe; exits 0 otherwise. Bypass with DITTO_SKIP_HOOKS=1."
+  },
+  run: async () => {
+    const stdin3 = await readStdin();
+    const cwd = process.cwd();
+    const recipeRoot = await resolveRepoRootForCreate(cwd);
+    let malformedRecipe = false;
+    const recipe2 = await loadResolvedRecipe(recipeRoot, undefined, () => {
+      malformedRecipe = true;
+    });
+    const repoRelDir = relative21(recipeRoot, cwd);
+    const gate2 = resolvePushGate(recipe2, repoRelDir);
+    const result2 = await execPushGate({
+      stdin: stdin3,
+      gate: gate2,
+      malformedRecipe,
+      env: process.env,
+      cwd,
+      runTest: defaultRunTest
+    });
+    if (result2.message)
+      process.stderr.write(`${result2.message}
+`);
+    process.exit(result2.exitCode);
+  }
+});
+
+// src/cli/commands/refactor.ts
+import { join as join78 } from "path";
 
 // src/acg/scope/unit-resolve.ts
 var API_LAYERS = ["controller", "controllers", "route", "routes"];
@@ -45517,7 +45738,7 @@ function trackedSrcFiles(repoRoot) {
 `).map((s2) => s2.trim()).filter((s2) => s2.length > 0 && /\.[cm]?tsx?$/.test(s2) && !/\.(test|spec)\./.test(s2));
 }
 async function loadArchSpec2(repoRoot) {
-  const specPath = join77(repoRoot, ".ditto", "architecture-spec.json");
+  const specPath = join78(repoRoot, ".ditto", "architecture-spec.json");
   try {
     return await readArchitectureSpec(specPath, acgArchitectureSpec);
   } catch {
@@ -45588,7 +45809,7 @@ var refactorCommand = defineCommand({
 });
 
 // src/cli/commands/review.ts
-import { join as join78 } from "path";
+import { join as join79 } from "path";
 
 // src/acg/review/unit-review.ts
 var REVIEW_ROLES = ["code-reviewer", "security-reviewer"];
@@ -45647,7 +45868,7 @@ function trackedSrcFiles2(repoRoot) {
 `).map((s2) => s2.trim()).filter((s2) => s2.length > 0 && /\.[cm]?tsx?$/.test(s2) && !/\.(test|spec)\./.test(s2));
 }
 async function loadArchSpec3(repoRoot) {
-  const specPath = join78(repoRoot, ".ditto", "architecture-spec.json");
+  const specPath = join79(repoRoot, ".ditto", "architecture-spec.json");
   try {
     return await readArchitectureSpec(specPath, acgArchitectureSpec);
   } catch {
@@ -45770,7 +45991,7 @@ init_common();
 init_fs();
 init_git();
 import { stat as stat9, writeFile as writeFile5 } from "fs/promises";
-import { dirname as dirname15, join as join79, relative as relative21, resolve as resolve21, sep as sep8 } from "path";
+import { dirname as dirname15, join as join80, relative as relative22, resolve as resolve21, sep as sep8 } from "path";
 init_work_item_store();
 init_worktree();
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
@@ -45791,7 +46012,7 @@ class RunWithRuntimeError extends Error {
   }
 }
 function repoRelative2(repoRoot, path) {
-  return relative21(repoRoot, path).split(sep8).join("/");
+  return relative22(repoRoot, path).split(sep8).join("/");
 }
 function resolveRepoCwd(repoRoot, cwd) {
   const parsed = relativePath.safeParse(cwd);
@@ -45799,7 +46020,7 @@ function resolveRepoCwd(repoRoot, cwd) {
     throw new RunWithUsageError(`invalid cwd: ${parsed.error.issues[0]?.message}`);
   }
   const resolvedRoot = resolve21(repoRoot);
-  const resolvedCwd = resolve21(join79(repoRoot, cwd));
+  const resolvedCwd = resolve21(join80(repoRoot, cwd));
   if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep8}`)) {
     throw new RunWithUsageError(`cwd escapes repo root: ${cwd}`);
   }
@@ -46337,7 +46558,7 @@ function applySemanticVerdict(seed, v2) {
 // src/acg/semantic/signature-codeql.ts
 import { existsSync as existsSync10 } from "fs";
 import { rm as rm2 } from "fs/promises";
-import { join as join80 } from "path";
+import { join as join81 } from "path";
 init_ditto_paths();
 init_git();
 var SIGNATURE_QUERY_JS = `/**
@@ -46467,20 +46688,20 @@ async function extractSignatures(input, deps) {
 async function scanSignatureChanges(input, deps) {
   const baseSha = gitRevParse(input.repoRoot, input.baseRef);
   const cacheBase = localDir(input.repoRoot, "cache", "codeql");
-  const baseCache = join80(cacheBase, `${baseSha}-${input.language}`);
-  const baseDb = join80(baseCache, "db");
+  const baseCache = join81(cacheBase, `${baseSha}-${input.language}`);
+  const baseDb = join81(baseCache, "db");
   const needWorktree = !existsSync10(baseDb);
-  const worktree = join80(cacheBase, "worktrees", `${baseSha}-${input.language}`);
+  const worktree = join81(cacheBase, "worktrees", `${baseSha}-${input.language}`);
   if (needWorktree)
     addDetachedWorktree(input.repoRoot, worktree, baseSha);
   let before;
   try {
     before = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join80(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
+      sourceRoot: join81(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
       language: input.language,
       dbPath: baseDb,
-      workDir: join80(baseCache, "q-sig"),
+      workDir: join81(baseCache, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -46488,14 +46709,14 @@ async function scanSignatureChanges(input, deps) {
     if (needWorktree)
       removeWorktree(input.repoRoot, worktree);
   }
-  const afterDir = join80(cacheBase, `after-${process.pid}-${input.language}`);
+  const afterDir = join81(cacheBase, `after-${process.pid}-${input.language}`);
   try {
     const after = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join80(input.repoRoot, input.sourceRootRel),
+      sourceRoot: join81(input.repoRoot, input.sourceRootRel),
       language: input.language,
-      dbPath: join80(afterDir, "db"),
-      workDir: join80(afterDir, "q-sig"),
+      dbPath: join81(afterDir, "db"),
+      workDir: join81(afterDir, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -46879,7 +47100,7 @@ init_shared();
 import { existsSync as existsSync11, readFileSync as readFileSync6, writeFileSync } from "fs";
 import { join as pathJoin } from "path";
 var GITIGNORE_ENTRY = ".ditto/memory/";
-function join81(...parts) {
+function join82(...parts) {
   return parts.join("/");
 }
 function ensureGitignored(deps) {
@@ -46903,7 +47124,7 @@ var submoduleManual = (memoryDir) => [
   "# \uADF8\uB2E4\uC74C \uBD80\uBAA8\uC5D0\uC11C: git rm -r --cached .ditto/memory && git submodule add <URL> .ditto/memory"
 ];
 async function separateMemoryRepo(deps, mode = "gitignore") {
-  const memoryDir = join81(deps.repoRoot, ".ditto", "memory");
+  const memoryDir = join82(deps.repoRoot, ".ditto", "memory");
   if (!deps.pathExists(memoryDir)) {
     return {
       status: "failed",
@@ -46917,7 +47138,7 @@ async function separateMemoryRepo(deps, mode = "gitignore") {
       manual: submoduleManual(memoryDir)
     };
   }
-  const alreadyRepo = deps.pathExists(join81(memoryDir, ".git"));
+  const alreadyRepo = deps.pathExists(join82(memoryDir, ".git"));
   if (!alreadyRepo) {
     const r4 = await deps.run("git", ["init"], memoryDir);
     if (r4.exit_code !== 0) {
@@ -46966,16 +47187,16 @@ function defaultMemorySeparateDeps(repoRoot) {
 // src/core/provision/playwright.ts
 import { existsSync as existsSync12, readdirSync as readdirSync3 } from "fs";
 import { homedir as homedir11, platform as osPlatform } from "os";
-import { join as join82 } from "path";
+import { join as join83 } from "path";
 function playwrightCacheRoot(os = osPlatform()) {
   if (os === "win32")
-    return join82(homedir11(), "AppData", "Local", "ms-playwright");
+    return join83(homedir11(), "AppData", "Local", "ms-playwright");
   if (os === "darwin")
-    return join82(homedir11(), "Library", "Caches", "ms-playwright");
-  return join82(homedir11(), ".cache", "ms-playwright");
+    return join83(homedir11(), "Library", "Caches", "ms-playwright");
+  return join83(homedir11(), ".cache", "ms-playwright");
 }
 function bunCacheDir() {
-  return join82(process.env.BUN_INSTALL ?? join82(homedir11(), ".bun"), "install", "cache");
+  return join83(process.env.BUN_INSTALL ?? join83(homedir11(), ".bun"), "install", "cache");
 }
 function detectPlaywright(deps) {
   const core = deps.listDir(deps.bunCache).some((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2));
@@ -47069,103 +47290,11 @@ function defaultRegistry() {
   };
 }
 
-// src/core/recipe/load.ts
-init_ditto_paths();
-import { join as join83 } from "path";
-
-// src/core/recipe/parse.ts
-init_dist2();
-
-// src/schemas/recipe.ts
-init_zod();
-var recipeHost = exports_external.enum(["claude-code", "codex", "both"]).describe("Install target host (claude-code | codex | both)");
-var recipeMemoryMode = exports_external.enum(["gitignore", "submodule"]).describe("Memory separation mode (gitignore | submodule)");
-var PSEUDO_OWNERS = new Set(["driver", "main-session"]);
-var RECIPE_ROLE_VALUES = nodeOwner.options.filter((role) => !PSEUDO_OWNERS.has(role));
-var recipeAgentRole = exports_external.enum(RECIPE_ROLE_VALUES).describe("Agent role link target (autopilot owner role minus driver/main-session)");
-var recipeAgentLink = exports_external.object({
-  name: exports_external.string().min(1),
-  role: recipeAgentRole
-});
-var recipePushGate = exports_external.object({
-  protected_branches: exports_external.array(exports_external.string().min(1)).min(1),
-  test_command: exports_external.string().min(1)
-}).describe("Push gate: branches whose push requires test_command to pass");
-var recipeRepoEntry = exports_external.object({
-  dir: exports_external.string().min(1),
-  url: exports_external.string().min(1).optional(),
-  push_gate: recipePushGate.optional()
-}).describe("A nested repo of the workspace (by dir, optional url) with its own config");
-var recipe = exports_external.object({
-  host: recipeHost.optional(),
-  tools: exports_external.array(exports_external.string()).optional(),
-  agents: exports_external.array(recipeAgentLink).optional(),
-  memory: recipeMemoryMode.optional(),
-  push_gate: recipePushGate.optional(),
-  repos: exports_external.array(recipeRepoEntry).optional(),
-  backlog: dittoConfigGithub.optional()
-}).describe("Headless ditto setup recipe (recipe.yaml)");
-
-// src/core/recipe/parse.ts
-function parseRecipe(text) {
-  let raw;
-  try {
-    raw = $parse(text);
-  } catch (error) {
-    return { ok: false, error: `recipe YAML parse failed: ${describe(error)}` };
-  }
-  const candidate = raw === undefined || raw === null ? {} : raw;
-  const parsed = recipe.safeParse(candidate);
-  if (!parsed.success) {
-    return { ok: false, error: `recipe schema validation failed: ${parsed.error.message}` };
-  }
-  return { ok: true, recipe: parsed.data };
-}
-function describe(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-// src/core/recipe/load.ts
-var PROJECT_RECIPE_FILENAME = "recipe.yaml";
-var BUILTIN_DEFAULT_RECIPE = {};
-function definedFields(r4) {
-  return Object.fromEntries(Object.entries(r4).filter(([, v2]) => v2 !== undefined));
-}
-function mergeRecipes(base, override) {
-  return { ...base, ...definedFields(override) };
-}
-function resolveRecipe(sources) {
-  return [sources.builtinDefault, sources.project, sources.personal, sources.cli].filter((r4) => r4 !== undefined).reduce((acc, r4) => mergeRecipes(acc, r4), {});
-}
-async function loadRecipeFile(path, source, onMalformed) {
-  const file = Bun.file(path);
-  if (!await file.exists()) {
-    if (source === "explicit") {
-      throw new Error(`recipe not found at explicit path: ${path}`);
-    }
-    return;
-  }
-  const result2 = parseRecipe(await file.text());
-  if (!result2.ok) {
-    if (source === "explicit") {
-      throw new Error(`${result2.error} (${path})`);
-    }
-    onMalformed?.(`${result2.error} (${path})`);
-    return;
-  }
-  return result2.recipe;
-}
-async function loadResolvedRecipe(repoRoot, cliPath, onMalformed) {
-  const project = await loadRecipeFile(join83(repoRoot, PROJECT_RECIPE_FILENAME), "discovered", (m4) => onMalformed?.("project", m4));
-  const personal = await loadRecipeFile(localDir(repoRoot, "recipe.yaml"), "discovered", (m4) => onMalformed?.("personal", m4));
-  const cli = cliPath === undefined ? undefined : await loadRecipeFile(cliPath, "explicit");
-  return resolveRecipe({ cli, personal, project, builtinDefault: BUILTIN_DEFAULT_RECIPE });
-}
-
 // src/core/setup.ts
 init_fs();
-import { cp, readFile as readFile19, rm as rm3, writeFile as writeFile6 } from "fs/promises";
-import { basename as basename5, dirname as dirname16, join as join85, resolve as resolve22 } from "path";
+import { execFileSync as execFileSync6 } from "child_process";
+import { chmod, cp, readFile as readFile19, rename as rename5, rm as rm3, writeFile as writeFile6 } from "fs/promises";
+import { basename as basename5, dirname as dirname16, isAbsolute as isAbsolute15, join as join85, resolve as resolve22 } from "path";
 init_shared();
 
 // src/core/resource-routing.ts
@@ -47431,6 +47560,82 @@ async function installResource(decision, resourcesDir) {
     backupPath: applied.kind === "ok" ? applied.backupPath : null
   };
 }
+var PUSH_GATE_HOOK_MARKER = "ditto:managed:pre-push";
+var PUSH_GATE_HOOK_BACKUP_SUFFIX = ".ditto-backup";
+function defaultHookTemplatePath(resourcesDir) {
+  return join85(dirname16(resourcesDir), "hooks", "pre-push");
+}
+function customHooksPath(cwd) {
+  try {
+    const v2 = execFileSync6("git", ["config", "--get", "core.hooksPath"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    return v2.length > 0 ? v2 : null;
+  } catch {
+    return null;
+  }
+}
+function gitHooksDir(cwd) {
+  const p2 = execFileSync6("git", ["rev-parse", "--git-path", "hooks"], {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"]
+  }).trim();
+  return isAbsolute15(p2) ? p2 : join85(cwd, p2);
+}
+async function installPushGateHook(opts) {
+  const { projectRoot, hookTemplatePath } = opts;
+  const hooksPath = customHooksPath(projectRoot);
+  if (hooksPath !== null) {
+    return {
+      status: "refused-hookspath",
+      hookPath: "",
+      backupPath: null,
+      message: `core.hooksPath is set to "${hooksPath}" (custom hooks dir, e.g. husky/lefthook). ditto will not write .git/hooks/pre-push (git would ignore it) nor repoint core.hooksPath (that would disable your hooks). Add the ditto pre-push call to "${hooksPath}/pre-push" manually: it should pipe stdin into \`ditto push-gate\`.`
+    };
+  }
+  let hooksDir;
+  try {
+    hooksDir = gitHooksDir(projectRoot);
+  } catch {
+    return {
+      status: "no-git-repo",
+      hookPath: "",
+      backupPath: null,
+      message: `${projectRoot} is not a git repository \u2014 a pre-push hook cannot be installed. Run \`git init\` (or \`ditto setup\` from inside the repo), then re-run setup.`
+    };
+  }
+  const hookPath = join85(hooksDir, "pre-push");
+  const backupPath = `${hookPath}${PUSH_GATE_HOOK_BACKUP_SUFFIX}`;
+  const template = await readFile19(hookTemplatePath, "utf8");
+  await ensureDir(hooksDir);
+  if (!await fileExists(hookPath)) {
+    await writeHookFile(hookPath, template);
+    return { status: "installed", hookPath, backupPath: null, message: null };
+  }
+  const existing = await readFile19(hookPath, "utf8");
+  if (existing.includes(PUSH_GATE_HOOK_MARKER)) {
+    await writeHookFile(hookPath, template);
+    return { status: "refreshed", hookPath, backupPath: null, message: null };
+  }
+  if (await fileExists(backupPath)) {
+    return {
+      status: "refused-existing",
+      hookPath,
+      backupPath,
+      message: `${hookPath} is a non-ditto pre-push hook and ${backupPath} already exists \u2014 refusing to overwrite either. Remove/merge them manually, or pipe stdin into \`ditto push-gate\` from your existing hook.`
+    };
+  }
+  await rename5(hookPath, backupPath);
+  await writeHookFile(hookPath, template);
+  return { status: "backed-up", hookPath, backupPath, message: null };
+}
+async function writeHookFile(hookPath, body) {
+  await writeFile6(hookPath, body);
+  await chmod(hookPath, 493);
+}
 async function setup(opts) {
   const { resourcesDir, projectRoot, homeDir, now } = opts;
   const codexHome = opts.codexHome ?? join85(homeDir, ".codex");
@@ -47453,7 +47658,11 @@ async function setup(opts) {
     pluginRoot: opts.pluginRoot ?? resolve22(resourcesDir, "..", ".."),
     projectRoot
   }) : null;
-  return { resources, scaffold, allowlistPath, allowlistApplied, codex };
+  const pushGateHook = opts.pushGate ? await installPushGateHook({
+    projectRoot,
+    hookTemplatePath: opts.hookTemplatePath ?? defaultHookTemplatePath(resourcesDir)
+  }) : null;
+  return { resources, scaffold, allowlistPath, allowlistApplied, codex, pushGateHook };
 }
 
 // src/cli/resources.ts
@@ -47847,6 +48056,7 @@ var setupCommand = defineCommand({
             ...process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {},
             now: new Date,
             host: h3,
+            ...resolvedRecipe.push_gate ? { pushGate: resolvedRecipe.push_gate } : {},
             ...includesCodex(h3) ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) } : {}
           }),
           provisionTools: (ids) => provisionRecipeTools(defaultRegistry(), ids),
@@ -47867,6 +48077,12 @@ var setupCommand = defineCommand({
           writeHuman(`memory: ${summary.memory.mode} \u2014 ${summary.memory.result.message}`);
         } else {
           writeHuman("memory: \uD504\uB85C\uC81D\uD2B8 git\uC5D0 \uD3EC\uD568(\uAE30\uBCF8)");
+        }
+        const hook = summary.setup.pushGateHook;
+        if (hook) {
+          writeHuman(`push-gate hook: ${hook.status} \u2192 ${hook.hookPath || "(not installed)"}`);
+          if (hook.message)
+            writeHuman(`  ${hook.message}`);
         }
         return;
       }
@@ -47910,14 +48126,15 @@ var setupCommand = defineCommand({
 });
 
 // src/cli/commands/teardown.ts
-import { rm as rm4 } from "fs/promises";
+import { rm as rm5 } from "fs/promises";
 import { homedir as homedir13 } from "os";
 import { join as join89, resolve as resolve25 } from "path";
 init_fs();
 
 // src/core/teardown.ts
 init_fs();
-import { copyFile as copyFile2, readFile as readFile20 } from "fs/promises";
+init_shared();
+import { copyFile as copyFile2, readFile as readFile20, rm as rm4 } from "fs/promises";
 import { join as join88 } from "path";
 var BACKUP_SUFFIX2 = ".ditto_bak";
 async function teardown(opts) {
@@ -47930,7 +48147,32 @@ async function teardown(opts) {
   }
   const allowlistPath = join88(projectRoot, ".claude", "settings.json");
   await unallowlistSettingsFile(allowlistPath);
-  return { files, allowlistPath };
+  const pushGateHook = await uninstallPushGateHook({ projectRoot });
+  return { files, allowlistPath, pushGateHook };
+}
+async function uninstallPushGateHook(opts) {
+  let hooksDir;
+  try {
+    hooksDir = gitHooksDir(opts.projectRoot);
+  } catch {
+    return { status: "left-untouched", hookPath: "", backupPath: null };
+  }
+  const hookPath = join88(hooksDir, "pre-push");
+  const backupPath = `${hookPath}${PUSH_GATE_HOOK_BACKUP_SUFFIX}`;
+  if (!await fileExists(hookPath)) {
+    return { status: "left-untouched", hookPath, backupPath: null };
+  }
+  const current = await readFile20(hookPath, "utf8");
+  if (!current.includes(PUSH_GATE_HOOK_MARKER)) {
+    return { status: "left-untouched", hookPath, backupPath: null };
+  }
+  if (await fileExists(backupPath)) {
+    await copyFile2(backupPath, hookPath);
+    await rm4(backupPath, { force: true });
+    return { status: "restored-prior", hookPath, backupPath };
+  }
+  await rm4(hookPath, { force: true });
+  return { status: "removed", hookPath, backupPath: null };
 }
 async function teardownFile(destPath) {
   if (!await Bun.file(destPath).exists())
@@ -47998,10 +48240,13 @@ var teardownCommand = defineCommand({
       for (const f4 of result2.files) {
         writeHuman(`  ${f4.filename} [${f4.scope}] ${f4.action} \u2192 ${f4.destPath}`);
       }
+      if (result2.pushGateHook.status !== "left-untouched") {
+        writeHuman(`  pre-push hook ${result2.pushGateHook.status} \u2192 ${result2.pushGateHook.hookPath}`);
+      }
       const purge = await shouldPurge(Boolean(args.purge));
       if (purge) {
         const dittoDir2 = join89(projectRoot, ".ditto");
-        await rm4(dittoDir2, { recursive: true, force: true });
+        await rm5(dittoDir2, { recursive: true, force: true });
         writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ PURGED (${dittoDir2})`);
       } else {
         writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ kept`);
@@ -48683,8 +48928,8 @@ async function driveWorktrees(deps, options) {
   const mergeAndRemove = async (member) => {
     const mergeRes = await deps.merge(repoRoot, member);
     if (mergeRes.allMerged) {
-      const rm5 = await deps.removeWorktrees(repoRoot, member);
-      return { member_id: member, disposition: "driven-done", removed: rm5.removed.length > 0 };
+      const rm6 = await deps.removeWorktrees(repoRoot, member);
+      return { member_id: member, disposition: "driven-done", removed: rm6.removed.length > 0 };
     }
     const firstUnmerged = mergeRes.outcomes.find((o4) => o4.status !== "merged");
     return {
@@ -49014,6 +49259,7 @@ var main = defineCommand({
     work: workCommand,
     github: githubCommand,
     worktree: worktreeCommand,
+    "push-gate": pushGateCommand,
     mode: modeCommand,
     run: runCommand2,
     verify: verifyCommand,
@@ -49048,4 +49294,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=719fd66ad58b00c4ab99aeef6bd1c71d0d590164665c28593ca48d85fbe4742a
+//# ditto-src-stamp=379606c5d32f9e10af8b1a7621b1af22c4c9b35558b8496233ec939e5b74f5e4

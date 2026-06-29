@@ -402,6 +402,9 @@ export const setupCommand = defineCommand({
               ...(process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {}),
               now: new Date(),
               host: h,
+              // Install the pre-push gate hook when the recipe declares a push_gate
+              // for the ROOT repo (ac-5). resolvePushGate(recipe, '') === recipe.push_gate.
+              ...(resolvedRecipe.push_gate ? { pushGate: resolvedRecipe.push_gate } : {}),
               ...(includesCodex(h)
                 ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) }
                 : {}),
@@ -435,6 +438,11 @@ export const setupCommand = defineCommand({
           writeHuman(`memory: ${summary.memory.mode} — ${summary.memory.result.message}`);
         } else {
           writeHuman('memory: 프로젝트 git에 포함(기본)');
+        }
+        const hook = summary.setup.pushGateHook;
+        if (hook) {
+          writeHuman(`push-gate hook: ${hook.status} → ${hook.hookPath || '(not installed)'}`);
+          if (hook.message) writeHuman(`  ${hook.message}`);
         }
         return;
       }

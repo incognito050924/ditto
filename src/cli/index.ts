@@ -24,6 +24,7 @@ import { initCommand } from './commands/init';
 import { knowledgeCommand } from './commands/knowledge';
 import { memoryCommand } from './commands/memory';
 import { modeCommand } from './commands/mode';
+import { pushGateCommand } from './commands/push-gate';
 import { refactorCommand } from './commands/refactor';
 import { reviewCommand } from './commands/review';
 import { runCommand } from './commands/run';
@@ -49,6 +50,7 @@ const main = defineCommand({
     work: workCommand,
     github: githubCommand,
     worktree: worktreeCommand,
+    'push-gate': pushGateCommand,
     mode: modeCommand,
     run: runCommand,
     verify: verifyCommand,

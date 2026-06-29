@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_ca217db0393d56a4",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] non-terminal graph nodes (work unfinished): N1-retro\n[residual] 미래 test_command/clone이 인증 네트워크 호출을 내포하면 인증 실패가 테스트 실패로 오인될 수 있음\n[residual] 강제 접근통제로 오해되면 미검증 코드가 보호 브랜치 도달\n[residual] bypass 행위자/시각 기록 없음 — 사후 추적 불가\n[residual] 동시 push가 각각 test_command 실행해 공유 빌드산출물에 경합 가능(게이트가 직렬화 안 함)\n[residual] test_command가 우연히 개인정보를 출력하면 콘솔 노출(사용자 명령 소관)\n[residual] 이 계층에 실질 위험 없음\n[residual] 추후 test_command 타임아웃 추가 시 wall-clock vs monotonic 선택이 생김(현 범위 밖)\n[close_reason] 인증/로그인/세션 경로 없음; git transport auth는 불변\n[close_reason] 역할기반 접근모델 없음; 게이트는 권고적 로컬 정책, DITTO_SKIP_HOOKS로 우회 가능\n[close_reason] 단일 개발자 로컬도구, 감사로그/부인방지 요건 없음\n[close_reason] 공유 가변상태/락 없음; 각 push가 독립 훅 프로세스, recipe read-only, 설치 멱등\n[close_reason] PII 범위 외; 브랜치명·SHA·recipe·exit code만 다룸, 게이트 자체는 네트워크 싱크 없음\n[close_reason] 규제 데이터(GDPR/PII/금융/건강) 없음; 컴플라이언스 표면 없음\n[close_reason] 결정은 브랜치매치+exit code 순수; 만료/타임존/monotonic 로직 없음\n[intent_drift] H3: intent AC id(s) missing from completion (scope shrink): ac-5, ac-6, ac-7\n[evidence] file: .ditto/local/runs/wi_260629i9c/coverage.json\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] file: .ditto/local/runs/wi_260629i9c/coverage.json\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] file: .ditto/local/runs/wi_260629i9c/coverage.json\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] file: .ditto/local/runs/wi_260629i9c/coverage.json\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] file: .ditto/local/runs/wi_260629i9c/coverage.json\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] file: .ditto/local/runs/wi_260629i9c/coverage.json\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] file: .ditto/local/runs/wi_260629i9c/coverage.json\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined\n[evidence] command: undefined",
+  "created_at": "2026-06-29T12:00:42.717Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

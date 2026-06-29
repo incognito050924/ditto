@@ -1,0 +1,10 @@
+# ditto 워크스페이스 recipe (checked-in, tier ② — git-shared).
+# wi_260629i9c: ditto 자신의 하드코딩 pre-push 게이트를 recipe 기반 게이트로 일반화(도그푸드).
+#
+# push_gate: 푸시 전 test_command 가 통과해야 하는 브랜치를 선언한다. git pre-push 게이트
+# (`ditto push-gate`)가 push 시점에 소비한다 — `ditto setup` 이 아니다.
+# protected_branches 의 "*" 는 전체 브랜치 sentinel: 모든 브랜치 push 가 게이트된다
+# (DoD 테스트는 매 push 마다 돌아야 한다 — 기존 .githooks/pre-push 동작 유지).
+push_gate:
+  protected_branches: ["*"]
+  test_command: "bun test"

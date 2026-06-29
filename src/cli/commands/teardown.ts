@@ -70,6 +70,11 @@ export const teardownCommand = defineCommand({
       for (const f of result.files) {
         writeHuman(`  ${f.filename} [${f.scope}] ${f.action} → ${f.destPath}`);
       }
+      if (result.pushGateHook.status !== 'left-untouched') {
+        writeHuman(
+          `  pre-push hook ${result.pushGateHook.status} → ${result.pushGateHook.hookPath}`,
+        );
+      }
 
       const purge = await shouldPurge(Boolean(args.purge));
       if (purge) {

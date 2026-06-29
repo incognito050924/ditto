@@ -66,6 +66,45 @@ describe('pushGateDecision — fires only for a protected branch', () => {
   });
 });
 
+describe('pushGateDecision — "*" wildcard protects EVERY branch (additive)', () => {
+  const star = { protected_branches: ['*'], test_command: 'bun test' };
+
+  test('"*" matches any single pushed branch (matched = the real branch name)', () => {
+    expect(pushGateDecision(['feature'], star)).toEqual({
+      run: true,
+      test_command: 'bun test',
+      matched: ['feature'],
+    });
+  });
+
+  test('"*" matches ALL branches in a multi-branch push', () => {
+    expect(pushGateDecision(['a', 'b'], star)).toEqual({
+      run: true,
+      test_command: 'bun test',
+      matched: ['a', 'b'],
+    });
+  });
+
+  test('"*" mixed with an exact entry still fires for an unlisted branch', () => {
+    const mixed = { protected_branches: ['main', '*'], test_command: 'bun test' };
+    expect(pushGateDecision(['random'], mixed)).toEqual({
+      run: true,
+      test_command: 'bun test',
+      matched: ['random'],
+    });
+  });
+
+  test('"*" with a deletion-only push (no branches) → no run', () => {
+    expect(pushGateDecision([], star)).toEqual({ run: false });
+  });
+
+  test('GUARD: a non-"*" exact list still does NOT match an unlisted branch (exact path unchanged)', () => {
+    expect(
+      pushGateDecision(['feature'], { protected_branches: ['main'], test_command: 'bun test' }),
+    ).toEqual({ run: false });
+  });
+});
+
 describe("resolvePushGate — pick a repo's gate from the workspace manifest", () => {
   const manifest = {
     push_gate: { protected_branches: ['main'], test_command: 'bun test' },
@@ -89,7 +128,7 @@ describe("resolvePushGate — pick a repo's gate from the workspace manifest", (
       test_command: 'turbo run test',
     });
     // trailing slash / ./ prefix normalize to the same entry
-    expect(resolvePushGate(manifest, './frontend/')).toEqual(manifest.repos[0].push_gate);
+    expect(resolvePushGate(manifest, './frontend/')).toEqual(manifest.repos?.[0]?.push_gate);
   });
 
   test('sub-repo declared without a gate → undefined (inactive)', () => {
