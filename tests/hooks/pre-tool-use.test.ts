@@ -180,6 +180,33 @@ describe('preToolUseHandler — ac-2 destructive Bash', () => {
   });
 });
 
+describe('preToolUseHandler — push test-gate bypass guard (git push --no-verify)', () => {
+  // L2.5: `--no-verify` skips git's own pre-push hook (the bun-test gate). Block it
+  // in-harness so an agent cannot silently bypass the gate; DITTO_SKIP_HOOKS=1 stays
+  // the one sanctioned escape (enforced by runHook, exercised in ac-1 above).
+  test.each([
+    'git push --no-verify origin main',
+    'git push --no-verify',
+    'git push origin feature --no-verify',
+    'git status && git push --no-verify origin main', // later segment still blocks
+    'GIT_FOO=1 git push --no-verify', // env-prefixed still detected
+  ])('blocks: %s', async (cmd) => {
+    const out = await bash(cmd);
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('DITTO PreToolUse: blocked');
+  });
+
+  test.each([
+    'git push origin main', // normal push: the pre-push git hook still runs tests
+    'git commit --no-verify -m "wip"', // commit --no-verify is not a push
+    'git commit --no-verify && git push origin main', // push segment carries no --no-verify
+    'echo "git push --no-verify"', // a quoted/echoed mention does not RUN git push
+    'git commit -m "later: git push --no-verify"', // --no-verify inside a message is inert
+  ])('allows: %s', async (cmd) => {
+    expect((await bash(cmd)).exitCode).toBe(0);
+  });
+});
+
 describe('windowsDestructiveReason (Windows footgun matcher; pure, OS-agnostic)', () => {
   test.each([
     'format c:',

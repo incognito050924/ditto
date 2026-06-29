@@ -41572,6 +41572,14 @@ function checkDestructive(cmd) {
   if (pushSegments.some((seg) => /(--force-with-lease|--force|(^|\s)-\w*f)/.test(seg) && /\b(main|master)\b/.test(seg))) {
     return block2("destructive", "force-push to a default branch");
   }
+  for (const seg of commandSegments(normalized)) {
+    if (operativeShellCommand(seg) !== "git")
+      continue;
+    const words = shellWords(seg);
+    if (words.includes("push") && words.includes("--no-verify")) {
+      return block2("no-verify-push", "git push --no-verify skips the pre-push test gate");
+    }
+  }
   if (RM_LITERAL_BLOCK.includes(normalized)) {
     return block2("destructive", "recursive force remove of a root/home path");
   }
@@ -49028,4 +49036,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=909cb109820893470ee27d6e381de8edb603396bafd10e92c59302508c243ac9
+//# ditto-src-stamp=390e24eb515dec9c0f81fe9f9b3b025a6e867e9317fac238d1a21372dfa758e5

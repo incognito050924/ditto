@@ -36,12 +36,13 @@ describe('Claude host surface — user CLI commands', () => {
     expect((cmd.meta?.description as string).length).toBeGreaterThan(0);
   });
 
-  test('`ditto work` exposes the start/status/handoff/done/abandon/reopen/promote/follow-up/stem/chain/push-ready/archive/set-criteria/link-issue/mirror-hierarchy/sync-issue subcommands the user types', () => {
+  test('`ditto work` exposes the start/status/handoff/done/abandon/reopen/promote/follow-up/stem/chain/claim/unclaim/push-ready/archive/set-criteria/link-issue/mirror-hierarchy/sync-issue subcommands the user types', () => {
     const subs = Object.keys(workCommand.subCommands ?? {}).sort();
     expect(subs).toEqual([
       'abandon',
       'archive',
       'chain',
+      'claim',
       'done',
       'follow-up',
       'handoff',
@@ -55,6 +56,7 @@ describe('Claude host surface — user CLI commands', () => {
       'status',
       'stem',
       'sync-issue',
+      'unclaim',
     ]);
   });
 

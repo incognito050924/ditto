@@ -479,6 +479,20 @@ function checkDestructive(cmd: string) {
     return block('destructive', 'force-push to a default branch');
   }
 
+  // git push --no-verify skips git's own pre-push hook (the bun-test gate), so an
+  // agent could silently push untested code. Block it in-harness. Keyed on the
+  // segment's OPERATIVE command being `git` with `push` + `--no-verify` as real
+  // words (shellWords keeps quoted spans whole), so an echoed/commit-message
+  // mention of "git push --no-verify" stays inert. DITTO_SKIP_HOOKS=1 (surfaced in
+  // the block message, enforced by runHook) is the one sanctioned escape.
+  for (const seg of commandSegments(normalized)) {
+    if (operativeShellCommand(seg) !== 'git') continue;
+    const words = shellWords(seg);
+    if (words.includes('push') && words.includes('--no-verify')) {
+      return block('no-verify-push', 'git push --no-verify skips the pre-push test gate');
+    }
+  }
+
   // rm -rf wipes
   if (RM_LITERAL_BLOCK.includes(normalized)) {
     return block('destructive', 'recursive force remove of a root/home path');
