@@ -17,7 +17,7 @@
     "dev": "bun run src/cli/index.ts",
     "dev:plugin": "bun run build:bin && claude --plugin-dir .",
     "dogfood": "bun scripts/dogfood.mjs",
-    "test": "bun test",
+    "test": "bun test src tests",
     "lint": "biome check src tests scripts",
     "lint:fix": "biome check --write src tests scripts",
     "format": "biome format --write src tests scripts",

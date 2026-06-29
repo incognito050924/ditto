@@ -26085,6 +26085,29 @@ async function writeGithubConfig(repoRoot, github) {
   await Bun.write(path, `${JSON.stringify(next, null, 2)}
 `);
 }
+async function seedGithubConfigIfAbsent(repoRoot, github, onMalformed) {
+  const file = Bun.file(localDir(repoRoot, "config.json"));
+  if (!await file.exists()) {
+    await writeGithubConfig(repoRoot, github);
+    return { seeded: true, reason: "absent" };
+  }
+  let parsed;
+  try {
+    parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
+  } catch {
+    onMalformed?.();
+    return { seeded: false, reason: "malformed" };
+  }
+  if (!parsed.success) {
+    onMalformed?.();
+    return { seeded: false, reason: "malformed" };
+  }
+  if (parsed.data.github !== undefined) {
+    return { seeded: false, reason: "existing" };
+  }
+  await writeGithubConfig(repoRoot, github);
+  return { seeded: true, reason: "absent" };
+}
 
 // src/cli/commands/autopilot.ts
 init_ditto_paths();
@@ -47922,7 +47945,15 @@ async function runRecipeSetup(recipe2, host, deps) {
   if (recipe2.memory === "gitignore") {
     memory = { mode: "gitignore", result: await deps.separateMemory("gitignore") };
   }
-  return { host, setup: setupResult, tools, agents, memory };
+  let githubSeed = { seeded: false, reason: "no-backlog" };
+  if (recipe2.backlog) {
+    try {
+      githubSeed = await deps.seedGithubConfig(recipe2.backlog);
+    } catch {
+      githubSeed = { seeded: false };
+    }
+  }
+  return { host, setup: setupResult, tools, agents, memory, githubSeed };
 }
 function parseSetupHost(value) {
   if (value === undefined || value === null || value === "")
@@ -48105,7 +48136,8 @@ var setupCommand = defineCommand({
           }),
           provisionTools: (ids) => provisionRecipeTools(defaultRegistry(), ids),
           writeVariants: (variants) => writeAgentVariants(projectRoot, variants),
-          separateMemory: (mode) => separateMemoryRepo(defaultMemorySeparateDeps(projectRoot), mode)
+          separateMemory: (mode) => separateMemoryRepo(defaultMemorySeparateDeps(projectRoot), mode),
+          seedGithubConfig: (github) => seedGithubConfigIfAbsent(projectRoot, github, () => writeError("github backlog seed skipped: \uAC1C\uC778 .ditto/local/config.json malformed/invalid \u2014 \uBB34\uC2DC(fail-closed)"))
         });
         writeHuman(`setup: installed into ${projectRoot} (host=${summary.host}, recipe-driven)`);
         writeHuman(`.ditto/: ${summary.setup.scaffold.alreadyInitialized ? "already initialized" : "created"} \xB7 allowlist: ${summary.setup.allowlistApplied ? summary.setup.allowlistPath : "skipped"}`);
@@ -48127,6 +48159,10 @@ var setupCommand = defineCommand({
           writeHuman(`push-gate hook: ${hook.status} \u2192 ${hook.hookPath || "(not installed)"}`);
           if (hook.message)
             writeHuman(`  ${hook.message}`);
+        }
+        if (summary.githubSeed.reason !== "no-backlog") {
+          const s2 = summary.githubSeed;
+          writeHuman(`github backlog: ${s2.seeded ? "seeded personal github config" : `skipped (${s2.reason ?? "write failed"})`}`);
         }
         return;
       }
@@ -49584,4 +49620,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=1f954b5f05d5900ce7de3fc87bf49cf119dedbef5903045910c80037bfc97e63
+//# ditto-src-stamp=32f5ccbf870e41f4105e43a496d5be0a1c71b497dc551ddf0ebf2455d8a80178
