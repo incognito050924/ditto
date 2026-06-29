@@ -124,9 +124,16 @@ function runGateIn(
   stdin: string,
   opts: { args?: string[]; env?: Record<string, string> } = {},
 ) {
+  // Strip an INHERITED DITTO_SKIP_HOOKS from the spawned gate's env: it is the gate's
+  // kill switch (execPushGate → exit 0), so a developer running the suite with
+  // `DITTO_SKIP_HOOKS=1` (the sanctioned PreToolUse-hook bypass) would otherwise leak it
+  // into every real-spawn gate and make the block-expecting tests falsely pass exit 0.
+  // An EXPLICIT opts.env value is preserved (applied after), so the sanctioned-bypass
+  // test can still set it to exercise the kill switch on purpose.
+  const { DITTO_SKIP_HOOKS: _inheritedKillSwitch, ...inheritedEnv } = process.env;
   const proc = Bun.spawnSync(['bun', cli, 'push-gate', ...(opts.args ?? [])], {
     cwd: dir,
-    env: { ...process.env, ...(opts.env ?? {}) },
+    env: { ...inheritedEnv, ...(opts.env ?? {}) },
     stdin: new TextEncoder().encode(stdin),
   });
   return {
