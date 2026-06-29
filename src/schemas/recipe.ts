@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { nodeOwner } from './autopilot';
+import { dittoConfigGithub } from './ditto-config';
 
 /**
  * `recipe.yaml` schema — a headless declaration of the four `ditto setup` wizard
@@ -66,9 +67,13 @@ export const recipePushGate = z
 export const recipeRepoEntry = z
   .object({
     dir: z.string().min(1),
+    // git URL of the repo. Optional: when present, ditto CAN clone it into `dir`
+    // (boxwood.json-style workspace assembly). The clone BEHAVIOR is a separate
+    // follow-up — only the field lands now so a recipe can fully describe a repo.
+    url: z.string().min(1).optional(),
     push_gate: recipePushGate.optional(),
   })
-  .describe('A nested repo of the workspace (by dir) with its own config');
+  .describe('A nested repo of the workspace (by dir, optional url) with its own config');
 
 export const recipe = z
   .object({
@@ -80,6 +85,10 @@ export const recipe = z
     memory: recipeMemoryMode.optional(),
     push_gate: recipePushGate.optional(),
     repos: z.array(recipeRepoEntry).optional(),
+    // GitHub backlog (Project + status mapping). REUSES dittoConfigGithub (one SoT,
+    // no duplicate). The shape lands now; migrating the existing per-developer github
+    // config into the recipe + the ADR-20260628 reconcile is a SEPARATE follow-up.
+    backlog: dittoConfigGithub.optional(),
   })
   .describe('Headless ditto setup recipe (recipe.yaml)');
 

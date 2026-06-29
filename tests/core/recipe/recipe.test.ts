@@ -190,6 +190,50 @@ describe('parseRecipe — repos array (multi-repo manifest, wi_260629i9c)', () =
       expect(r.recipe.repos?.length).toBe(1);
     }
   });
+
+  test('repos entry may carry a url (auto-clone source) with dir/push_gate', () => {
+    const text = [
+      'repos:',
+      '  - dir: frontend',
+      '    url: https://github.com/ecoletree/boxwood-portal-svelte.git',
+      '    push_gate: { protected_branches: [main], test_command: turbo run test }',
+    ].join('\n');
+    const r = parseRecipe(text);
+    expect(r.ok).toBe(true);
+    if (r.ok)
+      expect(r.recipe.repos?.[0]).toEqual({
+        dir: 'frontend',
+        url: 'https://github.com/ecoletree/boxwood-portal-svelte.git',
+        push_gate: { protected_branches: ['main'], test_command: 'turbo run test' },
+      });
+  });
+});
+
+describe('parseRecipe — backlog block (github project; schema pre-reflected, wi_260629i9c)', () => {
+  // Reuses dittoConfigGithub (no duplicate SoT). Migration of the existing per-dev
+  // github config + ADR-20260628 reconcile is a SEPARATE WI — only the shape lands now.
+  test('valid backlog parses and is retained', () => {
+    const text = [
+      'backlog:',
+      '  project: { owner: ecoletree, number: 8 }',
+      '  status_map: { done: Done, abandoned: Cancelled }',
+      '  auto_reflect: true',
+    ].join('\n');
+    const r = parseRecipe(text);
+    expect(r.ok).toBe(true);
+    if (r.ok)
+      expect(r.recipe.backlog).toEqual({
+        project: { owner: 'ecoletree', number: 8 },
+        status_map: { done: 'Done', abandoned: 'Cancelled' },
+        auto_reflect: true,
+      });
+  });
+
+  test('backlog missing required project → fail', () => {
+    expect(parseRecipe('backlog:\n  status_map: { done: Done }\n  auto_reflect: true\n').ok).toBe(
+      false,
+    );
+  });
 });
 
 describe('loadRecipeFile — explicit vs discovered malformed policy (ac-5)', () => {
