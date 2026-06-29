@@ -189,6 +189,9 @@ const autopilotBootstrap = defineCommand({
         approval_gate: result.graph.approval_gate.status,
         node_ids: result.graph.nodes.map((n) => n.id),
         path: `.ditto/local/work-items/${args.workItem}/autopilot.json`,
+        // wi_2606289h9 C5: surface GitHub claim/board-move notices to the JSON consumer
+        // too (was human-branch only — the silent-skip this WI kills).
+        claim_notices: claimNotices,
       });
     } else {
       writeHuman(`Bootstrapped autopilot ${result.graph.autopilot_id}`);

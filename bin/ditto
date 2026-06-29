@@ -27204,7 +27204,7 @@ async function checkE2eCompletionGate(repoRoot, input) {
 init_fs();
 
 // src/core/github-reflection.ts
-function extractStatusFieldId(fieldList) {
+function selectStatusField(fieldList) {
   if (typeof fieldList !== "object" || fieldList === null)
     return null;
   const fields = fieldList.fields;
@@ -27214,7 +27214,11 @@ function extractStatusFieldId(fieldList) {
   const status = withOptions.find((f3) => typeof f3.name === "string" && f3.name.toLowerCase() === "status") ?? withOptions[0];
   if (!status || typeof status.id !== "string")
     return null;
-  return status.id;
+  const options = status.options.filter((o3) => typeof o3 === "object" && o3 !== null && typeof o3.id === "string" && typeof o3.name === "string").map((o3) => ({ id: o3.id, name: o3.name }));
+  return { id: status.id, options };
+}
+function extractStatusFieldId(fieldList) {
+  return selectStatusField(fieldList)?.id ?? null;
 }
 function buildResultSummary(input) {
   const wi = input.workItem;
@@ -30298,7 +30302,8 @@ var autopilotBootstrap = defineCommand({
         autopilot_id: result2.graph.autopilot_id,
         approval_gate: result2.graph.approval_gate.status,
         node_ids: result2.graph.nodes.map((n2) => n2.id),
-        path: `.ditto/local/work-items/${args.workItem}/autopilot.json`
+        path: `.ditto/local/work-items/${args.workItem}/autopilot.json`,
+        claim_notices: claimNotices
       });
     } else {
       writeHuman(`Bootstrapped autopilot ${result2.graph.autopilot_id}`);
@@ -35566,7 +35571,8 @@ var finalizeCmd = defineCommand({
           autopilot_path: `.ditto/local/work-items/${result2.intent.work_item_id}/autopilot.json`,
           approval_gate: result2.autopilot.approval_gate.status,
           node_ids: result2.autopilot.nodes.map((n2) => n2.id),
-          acceptance_criteria: result2.intent.acceptance_criteria.map((ac) => ac.id)
+          acceptance_criteria: result2.intent.acceptance_criteria.map((ac) => ac.id),
+          claim_notices: claimNotices
         });
       } else {
         writeHuman(`Finalized interview for ${result2.intent.work_item_id}`);
@@ -36360,6 +36366,32 @@ function defaultDoctorFixDeps(repoRoot, homeDir) {
 
 // src/cli/commands/doctor.ts
 init_fs();
+
+// src/core/github-config-doctor.ts
+var IN_PROGRESS_KEY2 = "in_progress";
+function evaluateGithubConfig(github) {
+  const configured = github !== undefined;
+  const mapped = Boolean(github?.claim_status_map?.[IN_PROGRESS_KEY2]);
+  const findings = configured && !mapped ? [
+    {
+      kind: "claim_status_map_missing",
+      message: "claim_status_map.in_progress \uBBF8\uC124\uC815 \u2192 \uCC29\uC218 \uC2DC \uBCF4\uB4DC\uAC00 In progress\uB85C \uC548 \uC62E\uACA8\uC9D0",
+      remediation: "ditto github setup"
+    }
+  ] : [];
+  return {
+    github_configured: configured,
+    claim_in_progress_mapped: mapped,
+    findings,
+    finding_count: findings.length
+  };
+}
+function defaultGithubConfigDoctorDeps(repoRoot) {
+  return { readGithub: () => readGithubConfig(repoRoot) };
+}
+async function collectGithubConfigReport(deps) {
+  return evaluateGithubConfig(await deps.readGithub());
+}
 
 // src/core/intent-quality-doctor.ts
 init_work_item_store();
@@ -38857,6 +38889,43 @@ var variantsCommand = defineCommand({
     }
   }
 });
+var githubConfigCommand = defineCommand({
+  meta: {
+    name: "github",
+    description: 'Check the local github config for a \uAD6C\uBC84\uC804 shape missing claim_status_map.in_progress (claim-time board move to "In progress" silently skipped). Local-only (no gh/network probe), read-only (no auto-fix).'
+  },
+  args: {
+    output: { type: "string", default: "human", description: "Output format: human|json" },
+    advisory: { type: "boolean", default: false, description: "Report findings but exit 0" }
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const report = await collectGithubConfigReport(defaultGithubConfigDoctorDeps(repoRoot));
+      if (format === "json") {
+        writeJson2({
+          status: report.finding_count === 0 ? "ok" : "drift",
+          github_configured: report.github_configured,
+          claim_in_progress_mapped: report.claim_in_progress_mapped,
+          finding_count: report.finding_count,
+          findings: report.findings
+        });
+      } else if (report.finding_count === 0) {
+        writeHuman(report.github_configured ? "github: ok (claim_status_map.in_progress mapped)" : "github: ok (no github integration configured)");
+      } else {
+        for (const finding2 of report.findings) {
+          writeHuman(`github	${finding2.kind}	${finding2.message}`);
+          writeHuman(`  \u2192 ${finding2.remediation}`);
+        }
+      }
+      exitForFindings(report.finding_count, args.advisory);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  }
+});
 var doctorCommand = defineCommand({
   meta: {
     name: "doctor",
@@ -38874,7 +38943,8 @@ var doctorCommand = defineCommand({
     "completion-coverage": completionCoverageCommand,
     backlog: backlogCommand,
     "retro-trend": retroTrendCommand,
-    variants: variantsCommand
+    variants: variantsCommand,
+    github: githubConfigCommand
   }
 });
 
@@ -40591,6 +40661,44 @@ GATE: ${assessment.concerning.length} function(s) on a rising trend:`);
 
 // src/cli/commands/github.ts
 init_fs();
+
+// src/core/github-status-match.ts
+function normalizeStatusName(name) {
+  return name.toLowerCase().replace(/[\s_-]+/g, "");
+}
+var CLAIM_AUTODETECT_TABLE = {
+  in_progress: ["inprogress"]
+};
+var STATUS_AUTODETECT_TABLE = {
+  done: ["done"]
+};
+function matchStatusOptions(options, table) {
+  const matched = {};
+  const ambiguous = {};
+  for (const [key, aliases] of Object.entries(table)) {
+    const aliasSet = new Set(aliases);
+    const hits = options.filter((o4) => aliasSet.has(normalizeStatusName(o4.name)));
+    if (hits.length === 1) {
+      const hit = hits[0];
+      if (hit)
+        matched[key] = hit.id;
+    } else if (hits.length > 1) {
+      ambiguous[key] = hits.map((o4) => o4.name);
+    }
+  }
+  return { matched, ambiguous };
+}
+function autodetectStatusMaps(options) {
+  const claim2 = matchStatusOptions(options, CLAIM_AUTODETECT_TABLE);
+  const status = matchStatusOptions(options, STATUS_AUTODETECT_TABLE);
+  const warnings = [];
+  for (const [key, names] of Object.entries({ ...claim2.ambiguous, ...status.ambiguous })) {
+    warnings.push(`Auto-detect ambiguous for '${key}': multiple board options normalize alike (${names.join(", ")}) \u2014 left unset, map it explicitly with \`ditto github setup --claim-status-map\`/\`--status-map\`.`);
+  }
+  return { statusMap: status.matched, claimStatusMap: claim2.matched, warnings };
+}
+
+// src/cli/commands/github.ts
 var STATUS_MAP_KEYS = ["done", "abandoned"];
 var CLAIM_STATUS_MAP_KEYS = ["in_progress", "blocked"];
 function parseProjectRef(input) {
@@ -40641,17 +40749,10 @@ function parseClaimStatusMapFlag(input) {
   return parseKeyedOptionFlag(input, CLAIM_STATUS_MAP_KEYS);
 }
 function extractStatusOptions(fieldList) {
-  if (typeof fieldList !== "object" || fieldList === null)
+  const field = selectStatusField(fieldList);
+  if (!field)
     return null;
-  const fields = fieldList.fields;
-  if (!Array.isArray(fields))
-    return null;
-  const withOptions = fields.filter((f4) => typeof f4 === "object" && f4 !== null && Array.isArray(f4.options));
-  const status = withOptions.find((f4) => (f4.name ?? "").toLowerCase() === "status") ?? withOptions[0];
-  if (!status)
-    return null;
-  const options = status.options.filter((o4) => o4 && typeof o4.id === "string" && typeof o4.name === "string").map((o4) => ({ id: o4.id, name: o4.name }));
-  return options.length === 0 ? null : options;
+  return field.options.length === 0 ? null : field.options;
 }
 async function buildGithubConfig(io, gh, opts) {
   const notices = [];
@@ -40673,6 +40774,9 @@ async function buildGithubConfig(io, gh, opts) {
     };
   }
   const optionIds = new Set(options.map((o4) => o4.id));
+  const detected = autodetectStatusMaps(options);
+  for (const w2 of detected.warnings)
+    notices.push(w2);
   const viewRes = gh.projectView(ref.owner, ref.number);
   const nodeId2 = viewRes.ok && typeof viewRes.value?.id === "string" ? viewRes.value.id : undefined;
   if (!nodeId2) {
@@ -40699,7 +40803,7 @@ async function buildGithubConfig(io, gh, opts) {
     }
   } else {
     for (const key of STATUS_MAP_KEYS) {
-      const picked = await select(io, `ditto '${key}' \u2192 Project status \uC635\uC158 \uC120\uD0DD`, choiceOptions, "");
+      const picked = await select(io, `ditto '${key}' \u2192 Project status \uC635\uC158 \uC120\uD0DD`, choiceOptions, detected.statusMap[key] ?? "");
       if (picked !== "" && optionIds.has(picked))
         statusMap[key] = picked;
     }
@@ -40721,7 +40825,7 @@ async function buildGithubConfig(io, gh, opts) {
     }
   } else {
     for (const key of CLAIM_STATUS_MAP_KEYS) {
-      const picked = await select(io, `ditto '${key}' \u2192 Project status \uC635\uC158 \uC120\uD0DD(claim \uBCF4\uB4DC \uBC18\uC601)`, choiceOptions, "");
+      const picked = await select(io, `ditto '${key}' \u2192 Project status \uC635\uC158 \uC120\uD0DD(claim \uBCF4\uB4DC \uBC18\uC601)`, choiceOptions, detected.claimStatusMap[key] ?? "");
       if (picked !== "" && optionIds.has(picked))
         claimStatusMap[key] = picked;
     }
@@ -40738,6 +40842,66 @@ async function buildGithubConfig(io, gh, opts) {
     return { ok: false, reason: "schema_invalid", detail: parsed.error.message.slice(0, 200) };
   }
   return { ok: true, config: parsed.data, notices };
+}
+function mergeDetectedMap(existing, detected, knownKeys, mode, mapLabel, notices) {
+  const result2 = { ...existing };
+  for (const key of knownKeys) {
+    const det = detected[key];
+    if (mode === "fill") {
+      if (det !== undefined && result2[key] === undefined) {
+        result2[key] = det;
+        notices.push(`${mapLabel}: backfilled '${key}'=${det} (auto-detected from board).`);
+      }
+    } else if (det !== undefined) {
+      if (result2[key] !== det) {
+        notices.push(result2[key] === undefined ? `${mapLabel}: set '${key}'=${det} (auto-detected from board).` : `${mapLabel}: re-synced '${key}'=${det} (was ${result2[key]}; board-authoritative).`);
+      }
+      result2[key] = det;
+    } else if (result2[key] !== undefined) {
+      notices.push(`${mapLabel}: kept existing '${key}'=${result2[key]} \u2014 not re-derivable from the board this run (preserved, not deleted).`);
+    }
+  }
+  return result2;
+}
+function syncStatusMaps(gh, existing, opts) {
+  const notices = [];
+  const ref = { owner: existing.project.owner, number: existing.project.number };
+  const res = gh.projectFieldList(ref.owner, ref.number);
+  if (!res.ok)
+    return { ok: false, reason: res.reason, detail: res.detail };
+  const options = extractStatusOptions(res.value);
+  if (!options) {
+    return {
+      ok: false,
+      reason: "no_status_field",
+      detail: `Project ${ref.owner}/${ref.number}\uC5D0 status single-select \uD544\uB4DC\uAC00 \uC5C6\uC74C`
+    };
+  }
+  const detected = autodetectStatusMaps(options);
+  let nodeId2 = existing.project.node_id;
+  const viewRes = gh.projectView(ref.owner, ref.number);
+  if (viewRes.ok && typeof viewRes.value?.id === "string") {
+    nodeId2 = viewRes.value.id;
+  } else if (!nodeId2) {
+    notices.push("Project node_id \uBBF8\uD574\uACB0 \u2014 \uBCF4\uB4DC \uC774\uB3D9(claim/reflect)\uC740 \uC5EC\uC804\uD788 skip\uB41C\uB2E4.");
+  }
+  const statusMap = mergeDetectedMap(existing.status_map, detected.statusMap, Object.keys(STATUS_AUTODETECT_TABLE), opts.mode, "status_map", notices);
+  const claimMap = mergeDetectedMap(existing.claim_status_map ?? {}, detected.claimStatusMap, Object.keys(CLAIM_AUTODETECT_TABLE), opts.mode, "claim_status_map", notices);
+  const candidate = {
+    project: {
+      owner: existing.project.owner,
+      number: existing.project.number,
+      ...nodeId2 ? { node_id: nodeId2 } : {}
+    },
+    status_map: statusMap,
+    ...Object.keys(claimMap).length > 0 ? { claim_status_map: claimMap } : {},
+    auto_reflect: existing.auto_reflect
+  };
+  const parsed = dittoConfigGithub.safeParse(candidate);
+  if (!parsed.success) {
+    return { ok: false, reason: "schema_invalid", detail: parsed.error.message.slice(0, 200) };
+  }
+  return { ok: true, config: parsed.data, notices, warnings: detected.warnings };
 }
 var githubSetupCommand = defineCommand({
   meta: {
@@ -40770,6 +40934,18 @@ var githubSetupCommand = defineCommand({
       required: false,
       description: "\uC644\uB8CC \uC2DC Project status \uC790\uB3D9 \uBC18\uC601(\uAE30\uBCF8 OFF)"
     },
+    "resync-status": {
+      type: "boolean",
+      required: false,
+      default: false,
+      description: "\uBCF4\uB4DC Status\uB97C \uB2E4\uC2DC \uC77D\uC5B4 known \uD0A4(in_progress/done)\uB97C \uB36E\uC5B4\uC4F0\uAE30 \u2014 \uBBF8\uB798/\uBBF8\uB9E4\uCE6D \uD0A4\uB294 \uBCF4\uC874"
+    },
+    "autodetect-status": {
+      type: "boolean",
+      required: false,
+      default: false,
+      description: "\uBCF4\uB4DC Status\uC5D0\uC11C \uBBF8\uC124\uC815 claim_status_map/status_map \uD0A4\uB9CC \uBC31\uD544(\uAE30\uC874 \uAC12 \uBCF4\uC874)"
+    },
     yes: {
       type: "boolean",
       required: false,
@@ -40779,6 +40955,35 @@ var githubSetupCommand = defineCommand({
   },
   run: async ({ args }) => {
     const repoRoot = typeof args.dir === "string" && args.dir !== "" ? args.dir : await resolveRepoRootForCreate();
+    const resync = Boolean(args["resync-status"]);
+    const autodetect = Boolean(args["autodetect-status"]);
+    if (resync || autodetect) {
+      const existing = await readGithubConfig(repoRoot);
+      if (!existing) {
+        writeError("github setup: \uAE30\uC874 github config\uAC00 \uC5C6\uC74C \u2014 \uBA3C\uC800 `ditto github setup --project <owner/number>`\uB85C \uC5F0\uACB0\uD558\uC138\uC694.");
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const outcome = syncStatusMaps(createGhClient(), existing, {
+        mode: resync ? "overwrite" : "fill"
+      });
+      if (!outcome.ok) {
+        writeError(`github setup: ${outcome.reason}${outcome.detail ? ` \u2014 ${outcome.detail}` : ""} (no write \u2014 config left unchanged).`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      await writeGithubConfig(repoRoot, outcome.config);
+      const p2 = outcome.config.project;
+      writeHuman(`github ${resync ? "re-sync" : "autodetect"}: Project ${p2.owner}/${p2.number} \u2192 .ditto/local/config.json`);
+      writeHuman(`  status_map: ${Object.keys(outcome.config.status_map).length === 0 ? "(none)" : Object.entries(outcome.config.status_map).map(([k2, v2]) => `${k2}=${v2}`).join(", ")}`);
+      const cm = outcome.config.claim_status_map;
+      writeHuman(`  claim_status_map: ${!cm || Object.keys(cm).length === 0 ? "(none)" : Object.entries(cm).map(([k2, v2]) => `${k2}=${v2}`).join(", ")}`);
+      for (const n3 of outcome.notices)
+        writeHuman(`  note: ${n3}`);
+      for (const w2 of outcome.warnings)
+        writeHuman(`  warning: ${w2}`);
+      return;
+    }
     const nonInteractive = Boolean(args.yes) || !process.stdin.isTTY;
     const io = nonInteractive ? { isTTY: false, ask: async () => "", write: (t3) => process.stdout.write(t3) } : createStdioPromptIO();
     try {
@@ -48823,4 +49028,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=a461a1049935103757496763a2024ce464ef9260efdaaee3567562755bfd4980
+//# ditto-src-stamp=909cb109820893470ee27d6e381de8edb603396bafd10e92c59302508c243ac9

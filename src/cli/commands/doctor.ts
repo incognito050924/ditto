@@ -22,6 +22,10 @@ import {
 } from '~/core/doctor-fix';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
+  collectGithubConfigReport,
+  defaultGithubConfigDoctorDeps,
+} from '~/core/github-config-doctor';
+import {
   type BuiltinHostId,
   type HostAdapter,
   InvalidHostError,
@@ -786,6 +790,51 @@ const variantsCommand = defineCommand({
   },
 });
 
+const githubConfigCommand = defineCommand({
+  meta: {
+    name: 'github',
+    description:
+      'Check the local github config for a 구버전 shape missing claim_status_map.in_progress (claim-time board move to "In progress" silently skipped). Local-only (no gh/network probe), read-only (no auto-fix).',
+  },
+  args: {
+    output: { type: 'string', default: 'human', description: 'Output format: human|json' },
+    advisory: { type: 'boolean', default: false, description: 'Report findings but exit 0' },
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      // Local-only: reads only `.ditto/local/config.json` (no board probe), so it
+      // never hangs or false-fails offline.
+      const report = await collectGithubConfigReport(defaultGithubConfigDoctorDeps(repoRoot));
+      if (format === 'json') {
+        writeJson({
+          status: report.finding_count === 0 ? 'ok' : 'drift',
+          github_configured: report.github_configured,
+          claim_in_progress_mapped: report.claim_in_progress_mapped,
+          finding_count: report.finding_count,
+          findings: report.findings,
+        });
+      } else if (report.finding_count === 0) {
+        writeHuman(
+          report.github_configured
+            ? 'github: ok (claim_status_map.in_progress mapped)'
+            : 'github: ok (no github integration configured)',
+        );
+      } else {
+        for (const finding of report.findings) {
+          writeHuman(`github	${finding.kind}	${finding.message}`);
+          writeHuman(`  → ${finding.remediation}`);
+        }
+      }
+      exitForFindings(report.finding_count, args.advisory);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(exitCodeForError(err));
+    }
+  },
+});
+
 export const doctorCommand = defineCommand({
   meta: {
     name: 'doctor',
@@ -805,5 +854,6 @@ export const doctorCommand = defineCommand({
     backlog: backlogCommand,
     'retro-trend': retroTrendCommand,
     variants: variantsCommand,
+    github: githubConfigCommand,
   },
 });

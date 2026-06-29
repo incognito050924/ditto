@@ -349,6 +349,10 @@ const finalizeCmd = defineCommand({
           approval_gate: result.autopilot.approval_gate.status,
           node_ids: result.autopilot.nodes.map((n) => n.id),
           acceptance_criteria: result.intent.acceptance_criteria.map((ac) => ac.id),
+          // wi_2606289h9 C5: surface GitHub claim/board-move notices to the JSON consumer
+          // too — the canonical path used to drop them on the human-only branch (the
+          // silent-skip this WI kills).
+          claim_notices: claimNotices,
         });
       } else {
         writeHuman(`Finalized interview for ${result.intent.work_item_id}`);

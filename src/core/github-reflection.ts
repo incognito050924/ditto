@@ -55,14 +55,20 @@ export interface ReflectionResult {
   notices: string[];
 }
 
+export interface StatusField {
+  id: string;
+  options: { id: string; name: string }[];
+}
+
 /**
- * Extract the Project v2 Status single-select FIELD id from a `gh project
- * field-list --format json` payload (the id `projectItemEdit` needs as
- * `--field-id`). "Status" (case-insensitive) wins, else the first single-select
- * field that carries options. Returns null on an absent/odd shape — a missing
- * field is a skip, not a crash.
+ * SHARED field-selection rule (wi_2606289h9 C2): "Status" (case-insensitive) wins,
+ * else the first single-select field that carries options. The SINGLE source both
+ * the apply-time field id (`extractStatusFieldId`) and the setup-time option list
+ * (`extractStatusOptions`, github.ts) derive from — so an auto-detected/backfilled
+ * option id is always valid at claim time (no divergent 3rd copy of the rule).
+ * Returns null on an absent/odd shape — a missing field is a skip, not a crash.
  */
-export function extractStatusFieldId(fieldList: unknown): string | null {
+export function selectStatusField(fieldList: unknown): StatusField | null {
   if (typeof fieldList !== 'object' || fieldList === null) return null;
   const fields = (fieldList as { fields?: unknown }).fields;
   if (!Array.isArray(fields)) return null;
@@ -74,7 +80,24 @@ export function extractStatusFieldId(fieldList: unknown): string | null {
     withOptions.find((f) => typeof f.name === 'string' && f.name.toLowerCase() === 'status') ??
     withOptions[0];
   if (!status || typeof status.id !== 'string') return null;
-  return status.id;
+  const options = status.options
+    .filter(
+      (o): o is { id: string; name: string } =>
+        typeof o === 'object' &&
+        o !== null &&
+        typeof (o as { id?: unknown }).id === 'string' &&
+        typeof (o as { name?: unknown }).name === 'string',
+    )
+    .map((o) => ({ id: o.id, name: o.name }));
+  return { id: status.id, options };
+}
+
+/**
+ * Extract the Project v2 Status single-select FIELD id (the id `projectItemEdit`
+ * needs as `--field-id`) via the shared `selectStatusField` rule.
+ */
+export function extractStatusFieldId(fieldList: unknown): string | null {
+  return selectStatusField(fieldList)?.id ?? null;
 }
 
 /**
