@@ -27599,6 +27599,7 @@ var PRIME_DIRECTIVE = [
   "- Preserve the original request. Do not grow scope (IntentContract); do not shrink it or split one request into many work items without user approval.",
   "- The hook does not blindly auto-create a work item on every prompt \u2014 YOU do the deciding. Make a 1st-pass judgment per request: a request that produces an artifact OR makes an irreversible codebase change should become a work item; simple tasks, handoff, and git operations are exceptions (no work item). When it should, confirm the creation intent with the user, then register it YOURSELF by running `ditto work start` \u2014 you (the agent) create it automatically; the user does not type the command.",
   "- If a request slips past this judgment, just handle it as normal work; you may still register one with `ditto work start` if it turns out to warrant tracking. There is no hard backstop.",
+  "- TWO standard paths only for any codebase change \u2014 heavy (`/ditto:deep-interview` \u2192 pre-mortem \u2192 `ditto autopilot`) or light (`ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done`) \u2014 and every change runs through one of them under a registered work item. NEVER make ad-hoc/freestyle edits or drive console-TDD outside a work item: that third path is FORBIDDEN \u2014 it leaves work untracked, never reaching done/retrospective/cleanup (the exact rot the user is forcing out). WHICH of the two paths is your judgment (Route by weight, below); choosing NEITHER is not allowed. TDD is HOW you implement inside a path, never a substitute for one.",
   "- Route by weight (advisory \u2014 you judge, not an auto-classifier): a small, reversible request (localized/\u2248single-file change, no irreversible/external effect, expressible in 1\u20132 observable criteria) takes the lightweight path (`ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done`); reserve deep-interview + autopilot for genuinely ambiguous, irreversible, or multi-surface work. Declared risk defaults to the heavy path (override is audited); when unsure, escalate to heavy.",
   "- Ask the user only what only the user can answer (QuestionGate); answer the rest from code/docs/web yourself.",
   "- Completion is gated by evidence, not by claim: every acceptance criterion must be closed with evidence before final_verdict=pass.",
@@ -49620,4 +49621,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=32f5ccbf870e41f4105e43a496d5be0a1c71b497dc551ddf0ebf2455d8a80178
+//# ditto-src-stamp=3594e714578243db0489b3a5692c82a78f65e01945e9f1068213ef23eadc0648

@@ -108,6 +108,9 @@ owning-repo 워킹트리가 더티(미커밋 편집·`git stash`)인 상태. 개
 ### drifted_sources
 축2 검출이 어긋났다고 판정한 source 목록(별도 필드, 축1의 `dirty_sources`와 분리). 소비자(memory-graph 스킬)는 이 목록에 든 source만 코드로 직접 검증하고 나머지는 신뢰한다. 결정 근거는 ADR-0015.
 
+### 표준 work-lifecycle 2경로 (정식/약식)
+코드를 바꾸는 모든 작업은 **딱 두 경로** 중 하나로만, 등록된 work item 아래에서 진행한다. **정식(heavy)** = `deep-interview`→`pre-mortem`→`autopilot`(모호·비가역·다중표면 작업). **약식(light)** = `work set-criteria`→`verify`→`work done`(작고 가역적인 작업). 둘 중 *어느* 경로냐는 에이전트 판단(advisory, weight 라우팅)이지만, **둘 다 우회한 ad-hoc 직접수정·콘솔 TDD는 금지된 세 번째 경로**다 — 추적·완료·회고·정리가 빠져 작업이 닫히지 않는 rot을 남기기 때문. TDD는 경로 *안의* 구현 기법이지 경로의 대체가 아니다. 이 강제는 런타임 PRIME_DIRECTIVE(`src/core/charter.ts`, 권위)가 매 턴 주입하고, 입문 가이드는 루트 `WORKFLOW.md`다. 결정 근거는 ADR-20260626-work-lifecycle-lightweight-path.
+
 ### lightweight path (경량 경로)
 무거운 경로(`deep-interview`→`pre-mortem`→`autopilot`) 옆에 둔 세리머니 없는 작업 경로. `work start --criteria` 또는 `work set-criteria`로 관측 가능한 진짜 기준을 세우고 `verify`→`work done`으로 닫는다(`intent.json`·graph 불필요). 경량 vs 무거운 선택은 logged-override(차단 기본값 + 기록된 사유, ADR-0020 패턴 재사용)이고, 무거운 경로 트리거는 `declared_risk`다. `work promote`로 제자리 승격한다. 결정 근거는 ADR-20260626-work-lifecycle-lightweight-path.
 

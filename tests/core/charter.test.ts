@@ -53,6 +53,20 @@ describe('charterProjection (D8)', () => {
     expect(out).toContain('Declared risk defaults to the heavy path');
   });
 
+  // wi_2606290xm: only two standard paths exist; the ad-hoc/console-TDD third
+  // path is forbidden. The *choice* between the two stays advisory (above), but
+  // *bypassing* both is hard-forbidden — this is the always-projected guard.
+  test('prime directive forbids the ad-hoc third path (only two standard paths)', () => {
+    const out = charterProjection();
+    expect(out).toContain('TWO standard paths only');
+    expect(out).toContain('NEVER make ad-hoc');
+    expect(out).toContain('FORBIDDEN');
+    expect(out).toContain('TDD is HOW you implement inside a path');
+    // The path *choice* must remain agent-judged (no regression on routing tone).
+    expect(out).toContain('Route by weight');
+    expect(out.toLowerCase()).toContain('you judge');
+  });
+
   test('selfAnswerHint → QuestionGate advisory (⚠)', () => {
     const out = charterProjection({ selfAnswerHint: true });
     expect(out).toContain('self-answer from code/docs/web first');
