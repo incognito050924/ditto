@@ -1,0 +1,85 @@
+{
+  "$ref": "#/definitions/acg-story-spec",
+  "definitions": {
+    "acg-story-spec": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1.0",
+          "description": "Version of the DITTO schema set this document conforms to"
+        },
+        "kind": {
+          "type": "string",
+          "const": "acg.story-spec.v1"
+        },
+        "produced_by": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "description": "Who produced this ACG artifact"
+        },
+        "produced_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 / ISO 8601 datetime with timezone offset"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^us-[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "description": "Story id: us- prefix + kebab-case (machine identity other schemas reference)"
+        },
+        "title": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Product owner of the story — freshness/judgment subject"
+        },
+        "actor": {
+          "type": "string",
+          "minLength": 1,
+          "description": "\"As a <actor>\" — who the story serves"
+        },
+        "want": {
+          "type": "string",
+          "minLength": 1,
+          "description": "\"I want <want>\" — the capability the actor seeks"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "description": "\"so that <value>\" — the value the capability delivers"
+        },
+        "journey_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^jrn-[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "Journey id: jrn- prefix + kebab-case (machine identity of the journey)"
+          },
+          "minItems": 1,
+          "description": "Journeys (jrn- ids) that realize this story — story→journey is 1:N"
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "produced_by",
+        "produced_at",
+        "id",
+        "owner",
+        "actor",
+        "want",
+        "value",
+        "journey_ids"
+      ],
+      "additionalProperties": false,
+      "description": "ACG StorySpec — first-class user-story catalog entry (owns journeys 1:N)"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

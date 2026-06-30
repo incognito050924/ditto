@@ -28,8 +28,23 @@
         },
         "id": {
           "type": "string",
-          "minLength": 1,
-          "description": "Stable identifier other schemas reference (e.g. jrn-process-run)"
+          "pattern": "^jrn-[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "description": "Stable journey identifier (jrn-<kebab>) other schemas reference (e.g. jrn-process-run)"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "spec_first",
+            "awaiting_validation",
+            "validated",
+            "superseded"
+          ],
+          "description": "Journey lifecycle status (spec_first → awaiting_validation → validated | superseded)"
+        },
+        "story_id": {
+          "type": "string",
+          "pattern": "^us-[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "description": "Back-link to the story (us- id) this journey belongs to (traceability anchor)"
         },
         "title": {
           "type": "string"

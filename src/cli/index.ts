@@ -21,6 +21,7 @@ import { githubCommand } from './commands/github';
 import { hookCommand } from './commands/hook';
 import { impactCommand } from './commands/impact';
 import { initCommand } from './commands/init';
+import { journeyAuthorCommand } from './commands/journey-author';
 import { knowledgeCommand } from './commands/knowledge';
 import { memoryCommand } from './commands/memory';
 import { modeCommand } from './commands/mode';
@@ -66,6 +67,7 @@ const main = defineCommand({
     'deep-interview': deepInterviewCommand,
     'tech-spec': techSpecCommand,
     e2e: e2eCommand,
+    'journey-author': journeyAuthorCommand,
     knowledge: knowledgeCommand,
     memory: memoryCommand,
     'acg-review': acgReviewCommand,
