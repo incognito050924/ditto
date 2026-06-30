@@ -135,6 +135,42 @@ options, how to choose among them, and per-developer defaults, see:
 
 - [skills/tech-spec/GUIDE.md](skills/tech-spec/GUIDE.md)
 
+## Authoring user journeys & stories
+
+`ditto:journey-author` co-authors product user journeys — and the user stories
+behind them — with you, then on finalize compiles them into a journey DSL plus a
+per-entity journey catalog: the same DSL the E2E tooling consumes. Two entry
+points, chosen by where you start:
+
+- **story → journey → E2E** (`--kind story`): design the user *value* (story)
+  first, then the journeys that realize it.
+- **journey → E2E** (`--kind journey`): value already settled — author the
+  journey directly.
+
+```bash
+# start an authoring buffer (story-first or journey-first)
+ditto journey-author start --workItem <wi> --kind story
+ditto journey-author start --workItem <wi> --kind journey
+
+# propose journey steps from a one-line intent — review-only, writes nothing
+ditto journey-author decompose --intent "<one-line intent>"
+
+# record drafts, then finalize
+ditto journey-author record-journey --json '<journey draft>'
+ditto journey-author record-story   --json '<story draft>'
+ditto journey-author finalize --workItem <wi>
+```
+
+Finalize writes per-entity journey/story files under
+`.ditto/local/{journeys,stories}/` and a journey DSL under `e2e/journeys/` (the
+catalog is a read-side projection, never hand-edited). Step decomposition is a
+*proposal* you confirm — nothing is authored without your WHAT. Journeys for
+not-yet-built screens are kept `spec_first`. Turning the DSL into runnable
+Playwright stays with `ditto:e2e-author`. Full flow, the spec-first vs
+implemented status model, and the authoring rules:
+
+- [skills/journey-author/SKILL.md](skills/journey-author/SKILL.md)
+
 ## Concurrent development with worktrees
 
 Develop several independent features at once on one machine. DITTO can give each
