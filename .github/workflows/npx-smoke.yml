@@ -1,0 +1,67 @@
+name: npx-smoke
+
+# 사용자의 유일한 배포 표면 `npx github:incognito050924/ditto <install|update|uninstall>`
+# 을 push 후 격리 환경에서 실제로 왕복 실행해 "배포 실물이 도는가"를 자동 검증한다(wi_260701hdx).
+# scripts/check-npx-distribution.ts(pre-commit 정적 가드)가 못 잡는, 실제 실행 조합에서만
+# 드러나는 회귀를 잡는 서버측 방어선이다.
+#
+# 전제(2026-07-01 격리 실측): `claude plugin` 조작은 zero-auth 다 — 로컬 config 조작 +
+# public repo git clone 뿐이라 ANTHROPIC_API_KEY/로그인이 필요 없다. 따라서 secret 을 안 쓴다.
+# npx 는 default 브랜치(main) HEAD 를 가져오므로, main push 직후 이 잡이 곧 사용자가 받게 될
+# 실물을 그대로 스모크한다.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  round-trip:
+    runs-on: ubuntu-latest
+    env:
+      npm_config_yes: 'true' # npx "Ok to proceed?" 프롬프트 억제(비대화형)
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2 # 설치된 bin/ditto 번들이 bun 셔뱅이라 --version 실행에 필요
+
+      - name: Install Claude Code CLI (plugin 조작용 — LLM 추론 아님)
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Versions
+        run: |
+          node --version
+          npm --version
+          bun --version
+          claude --version
+
+      - name: npx round-trip smoke (install → update → uninstall), zero secrets
+        run: |
+          set -euxo pipefail
+          # 격리: throwaway HOME/CLAUDE_CONFIG_DIR + 비-git cwd(→ `ditto setup` self-skip).
+          # 실 러너 상태를 안 건드리고, 실 사용자 첫 설치와 같은 fresh 조건을 만든다.
+          export HOME="$RUNNER_TEMP/smoke-home"
+          export CLAUDE_CONFIG_DIR="$RUNNER_TEMP/smoke-cfg"
+          mkdir -p "$HOME" "$CLAUDE_CONFIG_DIR"
+          cd "$RUNNER_TEMP"
+
+          echo "::group::install"
+          npx -y github:incognito050924/ditto install
+          echo "::endgroup::"
+
+          # 설치된 CLI 가 PATH(~/.local/bin)에 놓이고 버전을 보고하는지 (실행 가능 = 번들 온전)
+          test -x "$HOME/.local/bin/ditto"
+          "$HOME/.local/bin/ditto" --version
+
+          echo "::group::update"
+          npx -y github:incognito050924/ditto update
+          echo "::endgroup::"
+
+          echo "::group::uninstall"
+          npx -y github:incognito050924/ditto uninstall
+          echo "::endgroup::"
+
+          # uninstall 후 CLI 심링크가 제거됐는지(잔여 0)
+          test ! -e "$HOME/.local/bin/ditto"
+          echo "round-trip OK"
