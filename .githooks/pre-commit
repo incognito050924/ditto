@@ -26,6 +26,14 @@ if ! bun run check:test-isolation; then
   echo "✗ 테스트 격리 가드 실패 — 커밋을 중단했다. 위 위반을 mkdtemp/격리 fixture 로 옮기거나 정당하면 allowlist 에 이유와 함께 추가하라." >&2
   exit 1
 fi
+# npx 배포경로 가드 (wi_260701dms): 사용자의 유일한 배포 표면
+# `npx github:incognito050924/ditto <install|update|uninstall>` 가 의존하는 구조 불변식
+# (bin 진입점·부트스트랩 3 verb·clone-깨는 npm 훅 부재·marketplace 정합)이 깨진 커밋을 차단.
+if ! bun run check:npx-dist; then
+  echo "" >&2
+  echo "✗ npx 배포경로 가드 실패 — 커밋을 중단했다. 위 위반을 해소하라 (배포 3-verb 경로가 깨진다)." >&2
+  exit 1
+fi
 # bin/ditto(tracked CLI 번들)를 src/ 와 동기화 — stale 바이너리 커밋을 막는다.
 # dist/plugin(gitignored)은 post-commit/merge/checkout이 처리하지만, bin/ditto 는
 # tracked 라 커밋에 포함돼야 하므로 여기서 재빌드+add 한다. build:bin 은 결정론적이라

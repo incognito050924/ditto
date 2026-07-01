@@ -24,6 +24,7 @@
     "adr:guard": "bun run scripts/adr-guard.ts",
     "adr:check": "bun run src/cli/index.ts knowledge adr-check",
     "check:test-isolation": "bun run scripts/check-test-isolation.ts",
+    "check:npx-dist": "bun run scripts/check-npx-distribution.ts",
     "schemas:export": "bun run scripts/export-schemas.ts",
     "surfaces:gen": "bun run scripts/gen-surfaces.ts"
   },
