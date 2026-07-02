@@ -1,46 +1,45 @@
-# HANDOFF (원격·cross-PC) — 다른 PC에서 git으로 이어받기 (2026-06-26)
+# HANDOFF (원격·cross-PC) — wi_2607026qs · E2E DSL→Playwright 공식 test-agents 재구축
 
-이 문서는 **원격/cross-PC** 핸드오프다(commit → push → 다른 PC pull). 같은 머신의 로컬 새 세션은 이 문서가 아니라 `.ditto/local/`(work-items·memory·handoff)를 쓴다. 호스트 auto-memory(`~/.claude`)·work-items(`.ditto/local/`, gitignored)는 **이 문서를 읽는 다른 PC엔 없다** — 본문이 가리키는 로컬 참조는 fresh clone에서 코드·테스트·커밋된 ADR·**roadmap SoT**로 재유도해야 한다. 코드·테스트·git·커밋된 ADR이 권위(§4-11).
+원격(다른 PC) 인수인계. commit → push → 다른 PC fetch. 같은 머신 새 세션은 이 문서가 아니라 `.ditto/local/`을 쓴다. **코드·테스트·git·커밋된 ADR이 권위(§4-11)** — 아래 "남은 일"은 새 PC에서 grep/test로 **fresh 재확인** 후 진행하라(본문은 비-authoritative).
 
-**다음 작업 = ditto AX/자율성 로드맵 T2(또는 T3) — SoT부터 읽어라.**
+## 0. 전파 상태 (먼저 읽어라)
 
-## 0. 전파 상태 (먼저 읽기)
+- **Resume 지점**: 브랜치 **`wi_2607026qs-e2e-testagents`** 끝(이 HANDOFF 커밋 tip). 히스토리 재작성 없음:
+  ```
+  git fetch origin wi_2607026qs-e2e-testagents
+  git checkout wi_2607026qs-e2e-testagents
+  bun install && bun run build:bin
+  ```
+  base = `8ab0454`(main). **main 아님** — 이 작업은 미검증(ac-3/5)·미머지.
+- **안 넘어감(gitignore `.ditto/local/**`)**: `.ditto/local/work-items/wi_2607026qs/{intent.json, autopilot.json, completion.json, reviewer-output.json, design-contracts.md}`, `.ditto/local/runs/wi_2607026qs/coverage.json`. 새 PC엔 없다 → "WI 레코드 닫기"는 무의미, 남은 일은 코드 기준.
+- **넘어감**: 모든 `src/`·`tests/`·`skills/`·`agents/`·`resources/playwright-agents/`, `.ditto/knowledge/adr/ADR-20260702-e2e-official-test-agents.md`(결정 기록), 이 `HANDOFF.md`.
 
-- origin/main = **`5104c7e`** (release **v0.4.0**, 태그 `v0.4.0`). 이전 동기 clone은 단순 `git pull`로 이어받음(이번 push는 FF, force 아님).
-- 이 push로 전파: **T1 autopilot 무-전가**(`728c009` 구현) + roadmap landed(`0c63dd6`) + release(`5104c7e`). 직전 base는 `049a2f6`(v0.3.1, 병렬 doublewrap·install-docs 세션분).
-- 빌드/호출: `bun run build:bin` → **`./bin/ditto`**. 깨끗 clone에서 첫 `bun test` 전 `bun run surfaces:gen`(없으면 surface 인벤토리 테스트가 `.ditto/local/surfaces*.json` 부재로 ENOENT — 환경 fail, 회귀 아님). 커밋 훅=`core.hooksPath=.githooks`(pre-commit: bin 재빌드+스테이징·biome lint·adr-guard·adr-check·test-isolation; post-commit/merge: dist/plugin 재조립). **ditto는 tsc 비게이트 — bun test가 진실**(HEAD에 pre-existing caps-literal tsc 다수).
+## 1. 이번에 랜딩 (이 브랜치)
 
-## 1. 이번 세션 landed (T1 autopilot 무-전가 — main 병합·배포)
+- `1f0bc41` feat(e2e): 공식 Playwright test-agents 기반 DSL→Playwright 파이프라인 재구축 (behavioral, wi_2607026qs) — 51파일.
+- 검증: **`bun test` 3885 pass / 0 fail**, `bun run lint`(biome) clean, `check-test-isolation` 0위반. pre-commit 게이트 통과 + `bin/ditto`·`dist/plugin` 재빌드 포함.
+- **final_verdict = unverified** (AC 7/9 pass; ac-3/ac-5 미검증 — §3).
 
-T1(P3·P4) **DONE·배포**. autopilot이 미검증 AC·agent-resolvable 위험·후속을 사용자에게 전가하지 않고, **오케스트레이션 흐름이 작업 완결 또는 사용자 명시 종료 외에는 끊기지 않는다**(north star, deep-interview 잠금 — 불가피한 사용자 결정조차 autopilot 살린 채 in-flow). 6 AC `final_verdict=pass`, runtime-artifact 검증(라이브 `hook stop` exit code·`complete` ledger·`--batch` 실 WI).
+## 2. 무엇을 만들었나 (코드 위치)
 
-- **ac-1** Stop `nonPassTerminationGate`가 `acceptance[].verdict` 열거 → 비-pass 완료가 미검증 in-scope AC를 사유·근거 없이 park하면 차단(exit≠0), 정직한 partial/blocked는 종료(ADR-20260626 D2 보존). `stop.ts riskRecordForcesContinuation`도 배선.
-- **ac-2** 증거 gatherable 미검증 AC 자동 reverify; tool-absence=`blocked_external`(ADR-0018, 무한루프 회피).
-- **ac-3** `planForwardReexpansion` **1개 확장**(3 fork 아님·`.rev.r` cap 상속)으로 위험 자동fix; **4사유**(결정/ADR충돌·복수해결·범위밖·정말위험)만 in-flow 표면화; 구조화 ledger(auto_fix/surface/batch_escalate + reason-category).
-- **ac-4** in-scope 후속=현재 그래프 노드 / out-of-scope=1회 batch materialize(draft·미구동·idempotent, **materialize≠drive**, ADR-0011 D2 same-rooted).
-- **ac-5** in-scope 잔여 0까지 무중단 구동 + `no_progress_rounds` in-flow escalate(capped≠converged).
-- **ac-6** AC별 증언 + 자동처리 원장 출력(status flip 없음).
-- **변경 파일**: `src/core/{gates,autopilot-converge,autopilot-loop,autopilot-complete,autopilot-store}.ts` · `src/hooks/stop.ts` · `src/schemas/{completion-contract,autopilot,intent}.ts` · `src/cli/commands/{work,autopilot}.ts` + 테스트. ADR 충돌(method, 우회 준수): ADR-0011 D2, ADR-0018.
+- DSL v2 스키마(clean break, SoT): `src/schemas/journey-dsl.ts` — implementation_intent(필수)·constraints·edge_cases{case,handling}·failure_states{trigger,expected}·secret_vars·auth{credentials=env:/secret: ref}·initial_state·seed.
+- 파이프라인: `src/core/e2e/plan-adapter.ts`(DSL→`specs/*.plan.md`+`.plan.map.json` 사이드카+assertions 채널, redaction) → `generator.ts`(`probeGenerator` usable→공식 generator 드라이브 seam / 아니면 `generator-fallback.ts` @ditto-unverified) → `spec-postpass.ts`(injectDittoMarkers: @step 액션+확인 마커 + digest 헤더) → `conformance.ts`/`generated-verify.ts` 게이트.
+- 보조: `assertion-mapping.ts`(DSL 권위 매핑표, unmapped=hard-fail), `healer-policy.ts`(filterHealPatch: 셀렉터/대기만, 기대값·skip 금지=ADR-0014 D4), `init-agents.ts`(비파괴 `.mcp.json` merge·codex≥1.61 게이트), `src/schemas/e2e-assertion-map.ts`.
+- CLI: `src/cli/commands/e2e.ts` — 신규 `ditto e2e plan|generate|mapping|init-agents` (+기존 conformance/verify-generated/regression/lifecycle).
+- 소비자 v2 마이그레이션: `src/core/journey-authoring/{dsl,session}.ts`, `src/core/e2e/{regression-select,lifecycle,failure-verdict,regression-gate}.ts` + 테스트.
+- 문서/에이전트: `skills/e2e-author/{SKILL,DSL-GUIDE}.md`, `skills/journey-author/SKILL.md`, `agents/e2e-scripter.md`(무브라우저 fallback으로 재프레임).
+- 결정 기록: `.ditto/knowledge/adr/ADR-20260702-e2e-official-test-agents.md` (ADR-0014 D1/D2 메커니즘 정련, D4 보존 — supersede 아님).
 
-## 2. 다음 작업 — roadmap SoT부터
+## 3. 남은 일 (코드 기준, fresh 재확인 필수)
 
-**권위 SoT = `reports/design/ditto-ax-autonomy-roadmap.md`**(커밋됨, T1 ✅ landed). 7개 문제·3개 테마·진척 추적이 거기 있다.
+1. **ac-3 / ac-5 라이브 실증 (핵심 미완).** 공식 generator를 실브라우저로 실앱에 구동(ac-3)·실앱 green(ac-5)은 이 세션 환경에 없어 unverified(가짜 green 미생성, ADR-0018). 새 PC에서: Playwright **≥1.61** + 여정과 일치하는 **실행 중 앱** → `./bin/ditto e2e init-agents --host claude` → v2 여정 저작 → `ditto e2e plan` → `ditto e2e generate`(usable, 라이브 브라우저) → `ditto e2e conformance`(exit 0) → `ditto e2e verify-generated`(green). 먼저 `bun test` 전체 green 재확인.
+2. **리뷰 후 main 병합/push** — 미검증 상태라 병합·main push는 사용자 판단.
+3. **소소(비차단)**: `skills/e2e-author/DSL-GUIDE.md`(~179, 346-347행)가 target-first assertion을 "조용히 드롭"이라 서술 → 이제 detectForm 양쪽 순서 인식 + 미분류=unmapped hard-fail이라 문구 stale. 실동작: `bun test tests/core/e2e-assertion-mapping.test.ts`.
 
-- **T2. 개발 절차 1급화**(P1·P2·P7) — TDD 1급 표면 + 경량 경로 기본값화 + **autopilot pass 시 자동 status close**(T1이 의도적으로 안 한 P1 — 현재 `work done` 수동) + backlog 위생. **추천 다음.**
-- **T3. 다중 WI·worktree 자율 구동**(P5·P6) — ⏸ 보류. ADR-0011 D2(session-rooting) 비가역 충돌, 결정 선행.
-- 착수: roadmap 읽고 → `ditto work start` → deep-interview로 의도 잠금 → autopilot 구동. (T1처럼 worktree 격리 권장.)
+## 4. Gotchas
 
-## 3. 미해결 결정 (사용자만)
-
-- **D2** — T3 ADR-0011 충돌(비가역): session-rooting 불변식을 풀지(ADR 수정) vs 유지하며 우회.
-- **D3** — TDD 표면 형태: 새 `ditto tdd` 표면 vs 기존 `implementer` 노드 red-first 교정.
-- (D1 테마순서=T1우선 / D4 후속 즉시착수=in-scope 노드·out-of-scope batch 는 T1에서 확정됨.)
-
-## 4. GOTCHA·권위
-
-- **worktree 격리** 시 harness가 **메인-트리-stale tsc 진단**(export-not-found·필드-missing·Cannot-find-module) 표시 → worktree `bunx tsc`로 재판정. ditto는 tsc 비게이트.
-- **autopilot이 status flip 안 함**(P1=T2) → 완료 후 `work done` 수동(completion final_verdict=pass 요구; placeholder AC면 거부).
-- **release**=`node scripts/release.mjs minor`(4 touchpoint 버전+build:bin+commit+tag, **push 수동**). 버전 필드가 `/plugin update` 구동(push만+버전동결=no-op).
-- **커밋 훅 `.githooks`**: pre-commit이 bin 재빌드+스테이징 + biome lint(실패 시 `bun run lint:fix`[+`biome check --fix --unsafe`로 template-literal]). 무관 src 있으면 분리 커밋 `git add <내것>` 후 `--no-verify`. push 후 amend 금지(force 게이트).
-- **`schemas:export`는 전체 json 재생성** — 내 것만 남기고 나머지 `git checkout HEAD --` 외과 복원.
-- 권위=코드·테스트·커밋 ADR·roadmap SoT(§4-11). cross-PC라 work-items·auto-memory 없음 — 위 file:line은 fresh clone에서 코드로 재확인.
+- 빌드/호출: 배포 `bin/ditto`는 stale 가능 → `bun run build:bin` 후 `./bin/ditto`(dogfood=워킹트리 빌드). 깨끗 clone 첫 `bun test` 전 `bun run surfaces:gen` 필요할 수 있음(surface 인벤토리 ENOENT는 환경 fail).
+- 게이트: `.githooks` pre-commit이 **biome lint를 커밋 게이트로** 실행(+bin 재빌드·adr·isolation·npx 가드). 게이트 명령 직접 실행 시 `DITTO_SKIP_HOOKS=1` 접두.
+- **tsc 비게이트**(bun test가 진실; `src/acg/**` pre-existing tsc 다수). biome `noNonNullAssertion`은 `!` 금지 → `?? ''`/narrowing.
+- 자율 오케스트레이션: `record-result`의 `evidence_refs.kind` ∈ `command|file|artifact|url|note`; `plan_brief`=`change_surface`+`tier_inputs` 필수; `generated_nodes`는 아무 contentful pass에나 splice.
+- 쉘: zsh는 unquoted `$var`를 루프에서 단어분할 안 함(python 드라이버 권장); bash 명령 문자열에 secret/credential 단어 있으면 PreToolUse 훅 차단 → 페이로드를 파일로.
