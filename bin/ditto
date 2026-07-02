@@ -40287,6 +40287,10 @@ function parseCaseTable(body) {
   }
   return { names, rows };
 }
+var UNSET_CELL = "\u2014";
+function isCellSet(v2) {
+  return v2 !== undefined && v2.trim() !== "" && v2.trim() !== UNSET_CELL;
+}
 function stepActiveInCase(condition, caseName, caseRow) {
   if (!condition)
     return true;
@@ -40295,8 +40299,7 @@ function stepActiveInCase(condition, caseName, caseRow) {
     return caseMatch[1]?.trim() === caseName;
   const presence = /^(.+?)\s*(\uC788\uC74C|\uC5C6\uC74C)$/.exec(condition);
   if (presence) {
-    const val = caseRow[presence[1]?.trim() ?? ""];
-    const present = val !== undefined && val.trim() !== "";
+    const present = isCellSet(caseRow[presence[1]?.trim() ?? ""]);
     return presence[2] === "\uC788\uC74C" ? present : !present;
   }
   return true;
@@ -40304,10 +40307,9 @@ function stepActiveInCase(condition, caseName, caseRow) {
 function substituteVars(text, caseRow, secretVars, resolveVar) {
   return text.replace(/\{([^}]+)\}/g, (_m, raw) => {
     const key = String(raw).trim();
-    let value = caseRow[key];
-    if (value === undefined || value === "")
-      value = resolveVar?.(key);
-    if (value === undefined || value === "") {
+    const direct = caseRow[key];
+    const value = isCellSet(direct) ? direct : resolveVar?.(key);
+    if (!isCellSet(value)) {
       return secretVars.includes(key) ? `<env:${key}>` : `{${key}}`;
     }
     return value;
@@ -51853,4 +51855,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=1ac4c8733f2b250e7dd938fef73004ae50e1f2e2373d38daf8cdcb29bd1b3f60
+//# ditto-src-stamp=be0b9873d48207b8338e668be63cdc00a4e594db90e1c5a0c43942515c8bf80f

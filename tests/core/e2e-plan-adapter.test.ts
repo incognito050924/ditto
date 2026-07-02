@@ -174,3 +174,57 @@ describe('projectJourneyToPlan — block inlining', () => {
     expect(plan).toContain('클릭: "로그인" 버튼');
   });
 });
+
+describe('projectJourneyToPlan — 미설정 센티널(—) 조건 필터·치환', () => {
+  // DSL-GUIDE §5/§7: 케이스표 셀 `—`(em-dash) = 그 변수 미설정. (변수 있음)은
+  // 설정된 케이스에서만, (변수 없음)은 미설정 케이스에서만 활성이어야 한다.
+  const couponJourney = journeyFrontMatter.parse({
+    ditto_journey: 'v2',
+    id: 'jrn-coupon',
+    name: '쿠폰',
+    description: '쿠폰 유무에 따라 단계가 갈린다.',
+    surfaces: ['page:/checkout'],
+    implementation_intent: '쿠폰이 있으면 입력하고, 없으면 할인 없음을 확인한다.',
+  });
+
+  const couponBody = `
+1. [s1] 방문: /checkout
+2. [s2] (coupon 있음) 입력: "쿠폰" 칸에 {coupon}
+3. [s3] (coupon 없음) 확인: "할인 없음" visible
+4. [s4] 클릭: "주문" 버튼
+
+## 케이스
+
+| 케이스 | coupon |
+|---|---|
+| 쿠폰있음 | WELCOME10 |
+| 쿠폰없음 | — |
+`;
+
+  function projectCoupon() {
+    return projectJourneyToPlan({
+      journey: couponJourney,
+      body: couponBody,
+      blocks: {},
+      sourcePath: 'e2e/journeys/coupon.journey.md',
+      digest: 'sha256:coupon',
+    });
+  }
+
+  test('(변수 있음) 액션 단계는 미설정(—) 케이스 map에서 제외되고 설정 케이스엔 남는다', () => {
+    const { map } = projectCoupon();
+    expect(Object.values(map[1]?.쿠폰없음 ?? {})).not.toContain('s2');
+    expect(Object.values(map[1]?.쿠폰있음 ?? {})).toContain('s2');
+  });
+
+  test('(변수 없음) 확인 단계는 미설정(—) 케이스에서만 활성이다', () => {
+    const { assertions } = projectCoupon();
+    expect(assertions[1]?.쿠폰없음).toContain('s3');
+    expect(assertions[1]?.쿠폰있음 ?? []).not.toContain('s3');
+  });
+
+  test('미설정(—) 값을 리터럴 —로 치환하지 않는다', () => {
+    const { plan } = projectCoupon();
+    expect(plan).not.toContain('칸에 —');
+  });
+});

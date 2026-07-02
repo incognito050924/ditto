@@ -118,6 +118,12 @@ function parseCaseTable(body: string): CaseTable {
   return { names, rows };
 }
 
+/** Case-table "not set" sentinel: em-dash (U+2014), per DSL-GUIDE §5/§7. */
+const UNSET_CELL = '—';
+function isCellSet(v: string | undefined): v is string {
+  return v !== undefined && v.trim() !== '' && v.trim() !== UNSET_CELL;
+}
+
 /** Apply v1 condition semantics: 없음 condition → always active. */
 function stepActiveInCase(
   condition: string | undefined,
@@ -129,8 +135,7 @@ function stepActiveInCase(
   if (caseMatch) return caseMatch[1]?.trim() === caseName;
   const presence = /^(.+?)\s*(있음|없음)$/.exec(condition);
   if (presence) {
-    const val = caseRow[presence[1]?.trim() ?? ''];
-    const present = val !== undefined && val.trim() !== '';
+    const present = isCellSet(caseRow[presence[1]?.trim() ?? '']);
     return presence[2] === '있음' ? present : !present;
   }
   return true; // unknown parenthetical is a note, not a filter
@@ -145,10 +150,10 @@ function substituteVars(
 ): string {
   return text.replace(/\{([^}]+)\}/g, (_m, raw) => {
     const key = String(raw).trim();
-    let value: string | undefined = caseRow[key];
-    if (value === undefined || value === '') value = resolveVar?.(key);
-    if (value === undefined || value === '') {
-      // Unresolvable: never risk a literal for a declared secret.
+    const direct = caseRow[key];
+    const value = isCellSet(direct) ? direct : resolveVar?.(key);
+    if (!isCellSet(value)) {
+      // Unresolvable (unset/blank/— sentinel): never risk a literal for a secret.
       return secretVars.includes(key) ? `<env:${key}>` : `{${key}}`;
     }
     return value;
