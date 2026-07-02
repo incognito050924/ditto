@@ -17,8 +17,9 @@
 ## 1. 이번에 랜딩 (이 브랜치)
 
 - `1f0bc41` feat(e2e): 공식 Playwright test-agents 기반 DSL→Playwright 파이프라인 재구축 (behavioral, wi_2607026qs) — 51파일.
-- 검증: **`bun test` 3885 pass / 0 fail**, `bun run lint`(biome) clean, `check-test-isolation` 0위반. pre-commit 게이트 통과 + `bin/ditto`·`dist/plugin` 재빌드 포함.
-- **final_verdict = unverified** (AC 7/9 pass; ac-3/ac-5 미검증 — §3).
+- `21d7a44` fix(e2e): plan-adapter 미설정 센티널(—) 조건필터·치환 결함 수정 (behavioral, wi_260702hsa) — 라이브 실증 배관 검증 중 발견. `isCellSet()` 헬퍼(—=U+2014=미설정, DSL-GUIDE §5/§7)로, `(변수 있음/없음)` 조건이 `—` 케이스에서 오작동하고 `substituteVars`가 `—`를 리터럴 치환하던 결함 수정. 3 AC verify pass.
+- 검증: **`bun test` 3882 pass / 0 fail**, biome clean, pre-commit 게이트(biome·adr·isolation·npx) 통과 + `bin/ditto`·`dist/plugin` 재빌드 포함.
+- **final_verdict = unverified** (wi_2607026qs AC 7/9 pass; ac-3/ac-5 미검증 — §3). wi_260702hsa(버그수정)는 done·pass.
 
 ## 2. 무엇을 만들었나 (코드 위치)
 
@@ -32,7 +33,7 @@
 
 ## 3. 남은 일 (코드 기준, fresh 재확인 필수)
 
-1. **ac-3 / ac-5 라이브 실증 (핵심 미완).** 공식 generator를 실브라우저로 실앱에 구동(ac-3)·실앱 green(ac-5)은 이 세션 환경에 없어 unverified(가짜 green 미생성, ADR-0018). 새 PC에서: Playwright **≥1.61** + 여정과 일치하는 **실행 중 앱** → `./bin/ditto e2e init-agents --host claude` → v2 여정 저작 → `ditto e2e plan` → `ditto e2e generate`(usable, 라이브 브라우저) → `ditto e2e conformance`(exit 0) → `ditto e2e verify-generated`(green). 먼저 `bun test` 전체 green 재확인.
+1. **ac-3 / ac-5 라이브 실증 (핵심 미완).** 실앱 green은 여전히 unverified. **구조 확정(이번 세션)**: `generate` usable 경로는 CLI 단독으로 완주 못 한다 — host agent(e2e-author skill)가 MCP `playwright-test`로 실브라우저를 관측해 raw spec을 만들고 `--from-raw`로 주입해야 하며, CLI는 probe/post-pass/게이트만 한다(ADR-20260702). MCP는 새 세션부터 로드된다. **배관 검증(이번 세션, fallback 경로)**: `.ditto/local/e2e-proof/target-app`에 checkout-coupon 여정을 v2로 재저작 + `init-agents`(.mcp.json/e2e-agents.json 배선) + `plan`(exit 0) → `generate`(fallback=정직한 `@ditto-unverified`) → `conformance`(fallback엔 @step 없어 정직한 FAIL)까지 돌려 배관 동작을 확인했다. **이 배선·여정은 `.ditto/local` gitignored → 새 PC엔 안 넘어감, 재배선 필요.** 새 PC 실증 순서: target-app에 **Playwright ≥1.61 설치**(주의: ditto 버전 게이트는 `bunx playwright`를 쓴다 — `npx`만 1.61이면 게이트가 못 본다) → `e2e init-agents --host claude` → delegated `npx playwright init-agents --loop=claude` → v2 여정 → `plan` → **e2e-author skill로 MCP 실브라우저 드라이브** → `generate --from-raw` → `conformance`(exit 0) → `verify-generated`(green). 먼저 `bun test` 전체 green 재확인.
 2. **리뷰 후 main 병합/push** — 미검증 상태라 병합·main push는 사용자 판단.
 3. **소소(비차단)**: `skills/e2e-author/DSL-GUIDE.md`(~179, 346-347행)가 target-first assertion을 "조용히 드롭"이라 서술 → 이제 detectForm 양쪽 순서 인식 + 미분류=unmapped hard-fail이라 문구 stale. 실동작: `bun test tests/core/e2e-assertion-mapping.test.ts`.
 
