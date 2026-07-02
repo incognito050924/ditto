@@ -9,13 +9,34 @@ import {
 } from '~/core/e2e/journey-dsl';
 
 const journeyDoc = `---
-ditto_journey: v1
+ditto_journey: v2
 id: jrn-checkout-coupon
 name: 쿠폰 적용 결제
 description: 쿠폰을 적용해 결제가 완료되는 핵심 가치 경로
 surfaces:
   - "page:/checkout"
   - "api:POST /api/orders"
+implementation_intent: 로그인 사용자가 유효 쿠폰으로 할인 결제를 완료한다
+constraints:
+  - 쿠폰은 1회만 적용
+edge_cases:
+  - case: 만료 쿠폰
+    handling: 만료 안내 후 원가 결제 허용
+failure_states:
+  - trigger: 재고 없음
+    expected: 품절 오류 노출
+secret_vars:
+  - coupon_code
+auth:
+  credentials:
+    admin: "env:ADMIN_PASSWORD"
+  login_block: login-as-user
+  storage_state: "e2e/.auth/admin.json"
+initial_state:
+  description: 카트에 상품 1개
+seed:
+  spec_ref: "e2e/seed.spec.ts"
+  data_ref: "env:SEED_DATA"
 uses_blocks:
   - login-as-user
 flaky_history:
@@ -32,7 +53,7 @@ flaky_history:
 `;
 
 const blockDoc = `---
-ditto_block: v1
+ditto_block: v2
 id: login-as-user
 name: 사용자로 로그인
 params:
@@ -43,14 +64,23 @@ params:
 2. [b2] 입력: {email}
 `;
 
-describe('parseJourneyDoc', () => {
-  test('parses front-matter through the zod schema and extracts step ids', () => {
+describe('parseJourneyDoc (v2)', () => {
+  test('parses rich v2 front-matter through the zod schema and extracts step ids', () => {
     const out = parseJourneyDoc(journeyDoc);
     if (!out.ok) throw new Error(out.error);
+    expect(out.frontMatter.ditto_journey).toBe('v2');
     expect(out.frontMatter.id).toBe('jrn-checkout-coupon');
     expect(out.frontMatter.surfaces).toEqual(['page:/checkout', 'api:POST /api/orders']);
+    expect(out.frontMatter.implementation_intent).toBe(
+      '로그인 사용자가 유효 쿠폰으로 할인 결제를 완료한다',
+    );
+    expect(out.frontMatter.edge_cases[0]?.handling).toBe('만료 안내 후 원가 결제 허용');
+    expect(out.frontMatter.failure_states[0]?.trigger).toBe('재고 없음');
+    expect(out.frontMatter.auth?.credentials.admin).toBe('env:ADMIN_PASSWORD');
+    expect(out.frontMatter.seed?.data_ref).toBe('env:SEED_DATA');
     expect(out.frontMatter.uses_blocks).toEqual(['login-as-user']);
     expect(out.frontMatter.flaky_history[0]?.note).toBe('CI only');
+    // structural extraction on a v2 body still returns the [sN] ids
     expect(out.stepIds).toEqual(['s1', 's2', 's3']);
   });
 
@@ -59,11 +89,21 @@ describe('parseJourneyDoc', () => {
     expect(out.ok).toBe(false);
   });
 
+  test('fails on a v1 front-matter (clean break, no auto-migration)', () => {
+    const v1 = journeyDoc.replace('ditto_journey: v2', 'ditto_journey: v1');
+    expect(parseJourneyDoc(v1).ok).toBe(false);
+  });
+
   test('fails on front-matter that violates the schema (bad id)', () => {
     const bad = journeyDoc.replace('id: jrn-checkout-coupon', 'id: checkout');
     const out = parseJourneyDoc(bad);
     expect(out.ok).toBe(false);
     if (!out.ok) expect(out.error).toContain('id');
+  });
+
+  test('fails on a literal credential in the front-matter (envRef)', () => {
+    const bad = journeyDoc.replace('admin: "env:ADMIN_PASSWORD"', 'admin: "a@b.com"');
+    expect(parseJourneyDoc(bad).ok).toBe(false);
   });
 
   test('fails when a block document is fed as a journey', () => {
@@ -113,10 +153,11 @@ describe('extractCaseNames (O-13: ## 케이스 테이블 파싱)', () => {
   });
 });
 
-describe('parseBlockDoc', () => {
-  test('parses block front-matter and extracts [bN] step ids', () => {
+describe('parseBlockDoc (v2)', () => {
+  test('parses v2 block front-matter and extracts [bN] step ids', () => {
     const out = parseBlockDoc(blockDoc);
     if (!out.ok) throw new Error(out.error);
+    expect(out.frontMatter.ditto_block).toBe('v2');
     expect(out.frontMatter.id).toBe('login-as-user');
     expect(out.frontMatter.params).toEqual(['email']);
     expect(out.stepIds).toEqual(['b1', 'b2']);

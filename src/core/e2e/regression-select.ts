@@ -1,6 +1,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, relative, resolve, sep } from 'node:path';
-import { parseJourneyDoc } from './journey-dsl';
+import { parseYaml } from '../hosts/shared';
+import { parseJourneyDoc, splitFrontMatter } from './journey-dsl';
 
 /**
  * 회귀 게이트 영향 추림 (wi_260610p9h ac-7).
@@ -86,6 +87,37 @@ export interface JourneyInventory {
 
 const toPosix = (p: string): string => p.split(sep).join('/');
 
+const V1_VERSION_MISMATCH_REASON =
+  'DSL v1 no longer supported — re-author as v2 (clean break, no auto-migration)';
+
+/**
+ * Turn a journey parse failure into an author-actionable reason. A file that
+ * declares a non-`v2` `ditto_journey` version (i.e. a v1 journey after the clean
+ * break) gets the explicit version-mismatch guidance instead of the raw zod
+ * literal blob, so the regression gate names WHY it refused. Any other failure
+ * (malformed YAML, missing front-matter, unknown v2 field) keeps its specific
+ * parser message so it can be fixed. Never silently drops the file.
+ */
+function invalidJourneyReason(text: string, parseError: string): string {
+  const split = splitFrontMatter(text);
+  if (split) {
+    try {
+      const raw = parseYaml(split.frontMatter);
+      if (
+        raw !== null &&
+        typeof raw === 'object' &&
+        'ditto_journey' in raw &&
+        (raw as { ditto_journey?: unknown }).ditto_journey !== 'v2'
+      ) {
+        return V1_VERSION_MISMATCH_REASON;
+      }
+    } catch {
+      // Malformed YAML has its own parser message — fall through.
+    }
+  }
+  return parseError;
+}
+
 async function fileExists(path: string): Promise<boolean> {
   try {
     return (await stat(path)).isFile();
@@ -111,9 +143,10 @@ export async function loadJourneyEntries(journeysDir: string): Promise<JourneyIn
   for (const name of names) {
     const fileAbs = join(journeysAbs, name);
     const fileRel = toPosix(relative(repoRoot, fileAbs));
-    const parsed = parseJourneyDoc(await readFile(fileAbs, 'utf8'));
+    const text = await readFile(fileAbs, 'utf8');
+    const parsed = parseJourneyDoc(text);
     if (!parsed.ok) {
-      invalid.push({ file: fileRel, error: parsed.error });
+      invalid.push({ file: fileRel, error: invalidJourneyReason(text, parsed.error) });
       continue;
     }
     const slug = name.slice(0, -'.journey.md'.length);

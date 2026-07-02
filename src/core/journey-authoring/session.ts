@@ -155,6 +155,7 @@ export async function finalizeAuthoring(
       id: spec.id,
       name: d.name,
       description: d.description,
+      intent: d.intent,
       surfaces: d.surfaces,
       steps: d.steps,
     });

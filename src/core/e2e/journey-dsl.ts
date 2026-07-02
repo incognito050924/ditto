@@ -7,9 +7,12 @@ import {
 import { parseYaml } from '../hosts/shared';
 
 /**
- * Journey DSL v1 file parser (wi_260610p9h). Reads `*.journey.md` / `*.block.md`
- * documents: YAML front-matter (validated through the zod schemas — ADR-0002)
- * plus STRUCTURE from the body. DESIGN BOUNDARY: the machine extracts structure
+ * Journey DSL v2 file parser (wi_2607026qs, clean break). Reads `*.journey.md` /
+ * `*.block.md` documents: YAML front-matter (validated through the v2 zod schemas
+ * — ADR-0002) plus STRUCTURE from the body. A v1 file no longer parses (the
+ * ditto_journey/ditto_block literal is now 'v2'); safeParse fails with the
+ * version-mismatch message, which downstream gates escalate (Contract 7).
+ * DESIGN BOUNDARY: the machine extracts structure
  * only — step ids, `블록:` call targets, `## 케이스` table case names — and
  * never interprets step semantics (verbs/objects stay human-read). The
  * structural set was widened from "step ids only" by dialectic-1 (wi_260611uzs

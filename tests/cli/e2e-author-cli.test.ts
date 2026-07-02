@@ -24,12 +24,13 @@ function run(args: string[]) {
 }
 
 const JOURNEY = `---
-ditto_journey: v1
+ditto_journey: v2
 id: jrn-login-basic
 name: 기본 로그인
 description: 등록 사용자가 로그인할 수 있다.
 surfaces:
   - page:/login
+implementation_intent: 등록 사용자가 로그인해 대시보드로 이동하는 흐름을 검증한다.
 uses_blocks:
   - blk-login
 flaky_history: []
@@ -40,7 +41,7 @@ flaky_history: []
 `;
 
 const BLOCK = `---
-ditto_block: v1
+ditto_block: v2
 id: blk-login
 name: 로그인
 params:

@@ -105,12 +105,13 @@ describe('featureFixAllowed (ac-12: fix path locked until user verdict)', () => 
 });
 
 const JOURNEY = `---
-ditto_journey: v1
+ditto_journey: v2
 id: jrn-login
 name: 로그인 여정
 description: 로그인 흐름 보호
 surfaces:
   - "page:/login"
+implementation_intent: 로그인 흐름이 정상 동작하는지 검증한다
 ---
 
 ## 단계

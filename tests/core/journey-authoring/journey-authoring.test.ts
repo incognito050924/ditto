@@ -109,12 +109,13 @@ describe('id conflict fail-closed (ac-4)', () => {
 
 describe('hand-authored DSL overwrite fail-closed (ac-4: no silent data loss)', () => {
   const HAND_AUTHORED = `---
-ditto_journey: v1
+ditto_journey: v2
 id: jrn-checkout
 name: 결제 여정
 description: 비회원이 결제를 완료한다
 surfaces:
   - page:/checkout
+implementation_intent: 손으로 작성한 결제 여정 — 쿠폰 적용 케이스 포함
 uses_blocks:
   - auth-login
 flaky_history: []
@@ -193,7 +194,9 @@ describe('finalize writes DSL + per-entity (ac-2)', () => {
       const res = await finalizeAuthoring(repo, { workItemId: WI, now: NOW });
       expect(res.status).toBe('finalized');
       const dsl = await readFile(join(repo, 'e2e/journeys/checkout.journey.md'), 'utf8');
+      expect(dsl).toContain('ditto_journey: v2');
       expect(dsl).toContain('id: jrn-checkout');
+      expect(dsl).toContain('implementation_intent:');
       expect(dsl).toContain('[s1]');
     } finally {
       await rm(repo, { recursive: true, force: true });

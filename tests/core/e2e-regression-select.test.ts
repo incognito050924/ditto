@@ -26,12 +26,13 @@ afterEach(async () => {
 function journeyDoc(id: string, name: string, surfaces: string[]): string {
   return [
     '---',
-    'ditto_journey: v1',
+    'ditto_journey: v2',
     `id: ${id}`,
     `name: ${name}`,
     `description: ${name} 보호`,
     'surfaces:',
     ...surfaces.map((s) => `  - "${s}"`),
+    `implementation_intent: ${name} 흐름을 검증한다`,
     '---',
     '',
     '1. [s1] 무언가 한다',

@@ -47,12 +47,13 @@ const SPEC_TEXT = [
 ].join('\n');
 
 const JOURNEY = `---
-ditto_journey: v1
+ditto_journey: v2
 id: jrn-login
 name: 로그인 여정
 description: 로그인 흐름 보호
 surfaces:
   - "page:/login"
+implementation_intent: 로그인 흐름이 깨지지 않도록 보호한다
 ---
 
 1. [s1] 사용자가 /login에 간다

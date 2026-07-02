@@ -14,7 +14,7 @@ import {
 } from '~/core/e2e/journey-digest';
 
 const journeySource = `---
-ditto_journey: v1
+ditto_journey: v2
 id: jrn-checkout-coupon
 ---
 1. [s1] 이동: /checkout
@@ -100,12 +100,13 @@ describe('detectStale (ac-4: DSL 변경 후 미재생성 감지)', () => {
 
 // Full valid journey front-matter (appendFlakyHistory re-validates the schema).
 const fullJourneySource = `---
-ditto_journey: v1
+ditto_journey: v2
 id: jrn-checkout-coupon
 name: 쿠폰 적용 결제
 description: 쿠폰 할인이 결제 금액에 반영된다.
 surfaces:
   - page:/checkout
+implementation_intent: 쿠폰 할인이 결제 금액에 정확히 반영되는지 검증한다
 uses_blocks: []
 flaky_history: []
 ---

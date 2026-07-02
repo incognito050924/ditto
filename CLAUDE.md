@@ -332,7 +332,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=73b15b3661b006769e493ad7c07d3d08aea2958a28ac3ea012b7f01fbbc3ce70 -->
+<!-- ditto:knowledge:start sha256=c2a8ae5bcb7419ea1a7e2e51541931e1a824d9526074e326567990248315d0d0 -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -421,6 +421,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-20260628-decisive-class-lossless-channel · accepted · owner-return 결정 4클래스는 무손실 free-text 채널 — per-class 구조 필드 거부
 - ADR-20260628-delegation-enforcement-boundary · accepted · 위임 규율 집행 경계 — codified-artifact까지, 행동 강제는 불가
 - ADR-20260628-github-backlog-sot · accepted · GitHub 연계 SoT 3층 + repo 좌표 일원화 — 백로그=GitHub read, 완료=ditto write
-- ADR-20260630-recipe-backlog-seed-model · accepted · recipe.backlog → 개인 github config bootstrap-once seed (ADR-20260628 정합·clarify — supersede 아님) — 불변식 4(bootstrap-once·개인 우선·형제 보존·malformed fail-closed) + out-of-scope
+- ADR-20260630-recipe-backlog-seed-model · accepted · recipe.backlog → 개인 github config bootstrap-once seed — ADR-20260628 정합 + out-of-scope
+- ADR-20260702-e2e-official-test-agents · accepted · 공식 Playwright test-generator를 주 DSL→spec 변환기로 · e2e-scripter는 무브라우저 강등 fallback (ADR-0014 D1/D2 메커니즘 정련, D4 보존)
 
 <!-- ditto:knowledge:end -->

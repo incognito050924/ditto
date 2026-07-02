@@ -1,14 +1,14 @@
 ---
 name: journey-author
-description: Author user stories and journeys in dialogue with the user, then compile them into per-entity story/journey files + journey DSL (e2e/journeys/*.md). Two entry points — ① story→journey→E2E (user-value first) and ② journey→E2E (value already fixed). The user owns the WHAT/WHY; the agent fills code facts and proposes a decomposition the user reviews. DSL→Playwright conversion/run is out of scope — it reuses e2e-author/e2e-scripter (ADR-0014).
+description: Author user stories and journeys in dialogue with the user, then compile them into per-entity story/journey files + v2 journey DSL (e2e/journeys/*.journey.md). Two entry points — ① story→journey→E2E (user-value first) and ② journey→E2E (value already fixed). The user owns the WHAT/WHY; the agent fills code facts and proposes a decomposition the user reviews. DSL→Playwright conversion/run is out of scope — it hands off to the e2e-author pipeline (official Playwright test-generator; ADR-0014, ADR-20260702-e2e-official-test-agents).
 argument-hint: "[--kind=story|journey] [story or journey description]"
 ---
 
 # Journey Author
 
-Turn user value into traceable E2E artifacts. The authoring buffer (`ditto journey-author start/record-*/decompose/finalize`) is the working source; `finalize` compiles it into **ADR-0005 per-entity** story/journey files + journey DSL (`e2e/journeys/*.md`). The catalog is never written directly — it is a **read-side projection** reduced from the per-entity files (`src/core/journey-authoring/store.ts`).
+Turn user value into traceable E2E artifacts. The authoring buffer (`ditto journey-author start/record-*/decompose/finalize`) is the working source; `finalize` compiles it into **ADR-0005 per-entity** story/journey files + **v2** journey DSL (`e2e/journeys/*.journey.md`). The catalog is never written directly — it is a **read-side projection** reduced from the per-entity files (`src/core/journey-authoring/store.ts`).
 
-This is the value→DSL stage. Turning the DSL into runnable Playwright specs and verifying them is the **e2e-author** skill's job (via the `e2e-scripter` agent) — do not duplicate that pipeline here (ADR-0014).
+This is the value→DSL stage. Turning the DSL into runnable Playwright specs and verifying them is the **e2e-author** skill's job (the official Playwright test-generator over a live browser, with the `e2e-scripter` agent as the no-browser fallback) — do not duplicate that pipeline here (ADR-0014, ADR-20260702-e2e-official-test-agents).
 
 ## When to enter
 
@@ -68,9 +68,9 @@ ditto journey-author start --work-item <wi> --kind story|journey --output json
    ditto journey-author finalize --work-item <wi> --output json
    ```
 
-   Every conflict/reference gate runs **before any write**: an id conflict or a story referencing an absent journey rejects the whole compile with the defect location — fix the buffer, never bypass. On success it writes the **per-entity** story/journey files and the journey DSL (`e2e/journeys/*.md`), and reports the ids + `dsl_paths` + any `superseded`.
+   Every conflict/reference gate runs **before any write**: an id conflict or a story referencing an absent journey rejects the whole compile with the defect location — fix the buffer, never bypass. On success it writes the **per-entity** story/journey files and the **v2** journey DSL (`e2e/journeys/*.journey.md`) — `implementation_intent` is derived from the journey's description + intent; the richer v2 context (constraints, edge/failure cases, auth/initial_state/seed) is added later during e2e-author's guided authoring, not here — and reports the ids + `dsl_paths` + any `superseded`.
 
-6. **Hand off to E2E.** The journey DSL is now the contract. Turning it into a runnable Playwright spec and verifying it is **e2e-author**'s pipeline (`e2e-scripter` + `ditto e2e conformance`/`verify-generated`) — continue there, do not script it here.
+6. **Hand off to E2E.** The v2 journey DSL is now the contract. Turning it into a runnable Playwright spec and verifying it is **e2e-author**'s pipeline: enrich the v2 context (constraints, edge/failure cases, auth/initial_state/seed), `ditto e2e plan`, then the official Playwright test-generator writes the spec over a live browser (`ditto e2e init-agents` + `ditto e2e generate`; the `e2e-scripter` agent is the no-browser fallback), gated by `ditto e2e conformance`/`mapping`/`verify-generated`. Continue there — do not script it here (ADR-20260702-e2e-official-test-agents).
 
 ## Hard rules
 
@@ -79,5 +79,5 @@ ditto journey-author start --work-item <wi> --kind story|journey --output json
 - **Unimplemented screens are `spec_first` (ac-6)** — set `implemented: false` when no product code exists yet; never claim a binding the code cannot satisfy.
 - **The catalog is a read-side projection**, reduced from the per-entity files — never hand-write or hand-edit a catalog file, and never hand-edit the compiled per-entity story/journey files (re-run `finalize` from the buffer instead).
 - **Finalize is fail-closed** — id conflicts and missing journey references reject the whole compile before any write; fix the buffer, never bypass a gate.
-- **DSL→Playwright conversion/run is out of scope** — reuse e2e-author/e2e-scripter for that stage (ADR-0014); this skill ends at the DSL + per-entity artifacts.
+- **DSL→Playwright conversion/run is out of scope** — hand off to the e2e-author pipeline for that stage (official Playwright test-generator, with e2e-scripter as the no-browser fallback; ADR-0014, ADR-20260702-e2e-official-test-agents); this skill ends at the v2 DSL + per-entity artifacts.
 - Never commit; the pipeline ends at the report.

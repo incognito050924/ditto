@@ -1,9 +1,10 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { localDir } from '../ditto-paths';
 import { atomicWriteText } from '../fs';
 import { spawnProviderProcess } from '../hosts/spawn';
 import { type BrowserGuardOptions, withBrowserGuard } from './authoring-guard';
+import { isFallbackUnverified } from './generator-fallback';
 
 /**
  * Pre-commit verification of generated specs (wi_260610p9h ac-2, ac-9 wiring).
@@ -83,6 +84,35 @@ function outputTail(output: string): string[] {
   return lines.slice(-OUTPUT_TAIL_LINES);
 }
 
+/**
+ * Tests the runner exited 0 report as PASS. Playwright's line reporter prints a
+ * `N passed` summary only when at least one test actually ran to a pass; an
+ * all-skipped run (e.g. every case is `test.fixme`) prints `N skipped` with no
+ * `passed` line. Parsing the passed count is how we tell "verified" from "the
+ * runner exited clean but exercised nothing".
+ */
+function passedCount(output: string): number {
+  const m = output.match(/(\d+)\s+passed/);
+  return m ? Number(m[1]) : 0;
+}
+
+/**
+ * A spec branded `@ditto-unverified fallback:e2e-scripter` is a degraded
+ * scaffold produced without a live browser — inherently unverified. Reading the
+ * files is best-effort: an unreadable path (never authored / mocked in tests)
+ * cannot be branded a fallback, so it falls through to the count-based check.
+ */
+async function anyFallbackUnverified(repoRoot: string, files: string[]): Promise<boolean> {
+  for (const file of files) {
+    try {
+      if (isFallbackUnverified(await readFile(join(repoRoot, file), 'utf8'))) return true;
+    } catch {
+      // Unreadable spec — not brandable as a fallback; leave the decision to counts.
+    }
+  }
+  return false;
+}
+
 export async function verifyGenerated(
   repoRoot: string,
   runId: string,
@@ -110,14 +140,36 @@ export async function verifyGenerated(
       verified_at,
     };
   } else {
-    const pass = outcome.value.exit_code === 0;
+    const exitCode = outcome.value.exit_code;
+    const output = outcome.value.output;
+    // Gate-honesty (ac-5/ac-8): exit 0 alone is not a pass. A degraded
+    // @ditto-unverified fallback (never live-run) and an all-skipped run
+    // (0 tests exercised — e.g. every case is `test.fixme`) both exit 0 yet
+    // verify no behavior; recording 'pass' would let a completion gate mistake
+    // them for a real pass. Both map to 'blocked' (the schema's "did not run").
+    let result: GeneratedVerifyRecord['result'];
+    let reason: string;
+    if (exitCode !== 0) {
+      result = 'fail';
+      reason = `npx playwright test exited ${exitCode ?? 'null'}`;
+    } else if (await anyFallbackUnverified(repoRoot, files)) {
+      result = 'blocked';
+      reason =
+        'spec is an @ditto-unverified fallback (scaffolded without a live browser) — inherently unverified, not a pass';
+    } else if (passedCount(output) === 0) {
+      result = 'blocked';
+      reason = `runner exited 0 but all tests skipped — no behavior verified (${outputTail(output).slice(-1)[0] ?? 'no summary'})`;
+    } else {
+      result = 'pass';
+      reason = `npx playwright test exited ${exitCode ?? 'null'}`;
+    }
     record = {
       run_id: runId,
       files,
-      result: pass ? 'pass' : 'fail',
-      reason: `npx playwright test exited ${outcome.value.exit_code ?? 'null'}`,
-      exit_code: outcome.value.exit_code,
-      output_tail: outputTail(outcome.value.output),
+      result,
+      reason,
+      exit_code: exitCode,
+      output_tail: outputTail(output),
       verified_at,
     };
   }
