@@ -243,6 +243,8 @@ prism의 모든 재사용을 빼면 남는 진짜 신규는 **가치/방향 taxo
   [무게] 무거움 / 다표면·비가역·마이그레이션 동반. [의존] 없음(모든 것의 토대). **dialectic-review + pre-mortem 선행 필수** — P0 pre-mortem 완료(§9).
 
 - **WS0-T1 · 공유 백로그 projection + `ditto work list` 집계·질의 뷰**
+  [상태 2026-07-07] ✅ **DONE · landed · pushed(main=`faf739f`)** — wi_260706aka. 6/6 AC fresh-verify(67 real items, full suite 3997 pass/0 fail), n-verify 독립 확증. 신규 `src/core/work-item-project.ts`(recompute-on-read·no cache, memory-project 패턴) + `WorkItemSummary` OPTIONAL 위젠(unresolved_follow_ups·blocking_reason·github_issue·push_ready·lineage) + `work list` 필터(--status enum검증·--has-followups 미해결·--orphan-drafts draft∧>14d∧계보없음 AND) + --wide/--all + active-first 그룹. **O(n) 제약**: `computeStemViews` 단일 스냅샷(per-row stem 금지). 정식 경로(deep-interview → relevance-gated coverage sweep 24→13 → autopilot). 권위=코드(이 문서 아님).
+  ⚠ **구현 편차(WS0-T4가 이어받을 것)**: projection을 committed-tier 단독으로 짜면 `work list`가 70→3개 붕괴(67 레거시 WI가 Run-tier 미마이그레이션) — **fresh 검증이 잡음**. 사용자 결정으로 **dual-base 브릿지**(committed+legacy 둘 다 표시, `store.listAll()`) + **ac-5 rescope**: "Run 삭제 후 목록 동일"(원문) → "committed Record의 결정성 보장(Run 삭제 후 committed 행 동일), 레거시는 표시 브릿지". **레거시→committed 마이그레이션이 WS0-T4** — 완료 시 dual-base 브릿지 은퇴. 별도 follow-up: intent-drift 과다선언 오탐(안 건드린 파일 change_surface 선언), land-dirt/tidy-diff-base/AC-mirror 인프라 gotcha 재발.
   [변경] Record들을 공유 tier에서 읽는 read-optimized 백로그 projection(memory projection 패턴). `WorkItemSummary`(현재 4필드) → status·follow_ups 수·blocking 사유·github_issue·push-ready·계보로 확장. `ditto work list [--status …] [--has-followups] [--orphan-drafts]`.
   [파일] `work-item-store.ts:433-466`, `src/cli/commands/work.ts`, projection 모듈(memory projection 참조)
   [검증] 63개 WI를 필터별 나열; projection이 공유 tier에서 재생성 가능(결정적).
@@ -513,12 +515,12 @@ prism-now(`wi_260705lc8`) 실측 파일 footprint(§10-A) = `interview-driver.ts
 
 | 트랙 | 태스크 | 성격 | 공유파일·주의 |
 |---|---|---|---|
-| **B · 척추 (임계경로 루트)** | ~~WS0-T0~~ ✅ **DONE**(0a0fc96, 미push) → 다음 spine = WS0-T1 | prism과 파일 완전분리(§10-C1) → 조기 랜딩 완료 | 스키마 split 랜딩됨(`work-item.ts` 등). A1이 아직이면 A1은 이 랜딩분 위에 얹을 것. |
+| **B · 척추 (임계경로 루트)** | ~~WS0-T0~~ ✅ **DONE** · ~~WS0-T1~~ ✅ **DONE**(둘 다 main `faf739f` pushed) → 다음 spine = **WS0-T2**(고아 draft 차단) | prism과 파일 완전분리(§10-C1) → 조기 랜딩 완료 | 스키마 split + projection 랜딩됨(`work-item.ts`·`work-item-project.ts`·`work.ts`). WS0-T1 dual-base 브릿지라 **WS0-T4 마이그레이션 후 브릿지 은퇴**. A1이 아직이면 이 랜딩분 위에 얹을 것. |
 | **A1 · AC-품질 (단일 직렬, 병렬 금지)** | WS-ACQ-T1→T2 · WS1-T5→WS-ACQ-T3 | 네 태스크가 한 워크스트림 | `gates.ts`·`work-item.ts`·`completion-contract.ts`·`verify/SKILL.md`·`verifier.md`·`intent.ts` 공유 → 서로 직렬. B와 `work-item.ts`/`completion-contract.ts` 조율(§10-c). |
 | **A2 · 병렬-안전 (파일 분리)** | WS-HND-T1·T3 · WS3-T3 · WS5-T1·T3 · WS4-T2→T4 · WS4-T3 · WS5-T2 · WS1-T3 · WS2-T3 · WS2-T1 | 상호·prism 무충돌 → cross-PC 분산(§4.2) | WS2-T1 `gates.ts:815-884`는 A1의 141-158과 다른 리전(머지 가능하나 통합주의). WS2-T3은 `cli/index.ts` hotspot. |
 | **LOOP · autopilot-loop 조율 (prism과 병렬)** | WS3-T1→T2 · WS4-T1(=`wi_260615lj6` 재개) | prism이 `autopilot-loop.ts` 안 건드림(§10-F) → **prism 게이트 아님, 병렬 가능** | `autopilot-loop.ts`·`fitness.ts`·`drift.ts` 내부 직렬. ⚠ prism 예약리전 150-166 — 머지 시 확인. |
 | **C · 진짜 prism 충돌만 (prism 랜딩 대기)** | WS1-T1 · WS1-T2 · WS-PRISM residual T2·T4 · WS-HND-T4 | `interview-driver.ts` 충돌 or prism 소유 | WS-HND-T4 결속 dep = WS-PRISM-T0/§9-B1(digest 은퇴 원자성), **WS0-T0 아님**(흡수처 knowledge tier는 기존·committed). WS-HND-T1(A2) 선행. |
-| **D · WS0-T0 랜딩 대기** | WS0-T1→T2→T3→T4 · WS-HND-T0→T2 · WS2-T2·T4 · **WS-PRISM-T5** | 전부 Record(WS0-T0) 의존 | **WS-PRISM-T5 이동(§10-a): "정련 의도→Record 이관"이라 WS0-T0 필요 — 원 [의존]에 WS-PRISM-T0만 있어 잘못 Track C에 있었음.** |
+| **D · WS0-T0 랜딩 대기** | ~~WS0-T1~~✅→WS0-T2→T3→T4 · WS-HND-T0→T2 · WS2-T2·T4 · **WS-PRISM-T5** | 전부 Record(WS0-T0) 의존; **WS0-T4는 WS0-T1 dual-base 브릿지 은퇴도 겸함** | **WS-PRISM-T5 이동(§10-a): "정련 의도→Record 이관"이라 WS0-T0 필요 — 원 [의존]에 WS-PRISM-T0만 있어 잘못 Track C에 있었음.** |
 
 ### 4.2 cross-PC 병렬 디스패치 레인 (파일 분리 = 무충돌 머지)
 
