@@ -187,14 +187,13 @@ export async function postUnpostedDecisions(
     };
   }
 
-  // Mark AFTER a confirmed post; the mutator re-reads `cur` (the latest on-disk work
-  // item) and SET-MERGES, so a concurrent writer's marks are never clobbered (2).
+  // Mark AFTER a confirmed post as COMMITTED `github_post` events (§4-C5): the fold
+  // set-unions them onto the immutable coords, so a concurrent writer's marks are never
+  // clobbered (2) AND the idempotency survives a Run-tier delete. Re-appending an
+  // already-folded id is naturally deduped (fold uses a Set).
   const newIds = [...unposted.map((u) => u.id), ...unpostedFollowUps.map((u) => u.id)];
-  await deps.store.update(target.link_owner_id, (cur) => {
-    const gi = cur.github_issue;
-    if (!gi) return cur; // defensive: link resolved through it, so this never fires
-    const merged = new Set([...(gi.posted_decision_ids ?? []), ...newIds]);
-    return { ...cur, github_issue: { ...gi, posted_decision_ids: [...merged] } };
-  });
+  for (const decisionId of newIds) {
+    await deps.store.recordGithubPost(target.link_owner_id, { posted_decision_id: decisionId });
+  }
   return { kind: 'posted', posted_ids: newIds, comment_count: 1, target };
 }

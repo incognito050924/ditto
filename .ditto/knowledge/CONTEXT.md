@@ -126,6 +126,12 @@ work item이 무거운 경로(`deep-interview`)를 요구하는지 판정하는 
 ### push-readiness (push-ready)
 한 작업 단위가 자기완결이라 푸시할 수 있다는 강한 신호. `work push-ready`가 *명시 요청 시에만* 계산해 노출한다 — 전 AC가 실 명령-증거로 pass + 미해결 회귀 없음 + 줄기 done. PULL-ONLY: 어디서도 능동적 push 제안을 하지 않는다(push는 사용자의 비가역 배포 결정, 헌장 §4-8). 결정 근거는 ADR-20260626-work-lifecycle-lightweight-path.
 
+### Record (work-item tier) / Run (work-item tier)
+work item 상태는 두 tier로 쪼개진다. **Record** = 커밋·공유·git-tracked tier(`.ditto/work-items/<id>/` = `record.json`(AC 멤버십·scope·`evidence_required`) + `events/`(전이당 불변 이벤트)). 프로젝트 메모리(status·AC verdict·github 멱등)가 여기 durable하게 남아 팀·다른 PC가 pull해 진행 상태를 본다. **Run** = 개인·폐기가능·gitignored tier(`.ditto/local/work-items/<id>/` = reduced view 미러 + intent.json·runs·graph). Run은 언제든 삭제 가능하고 삭제해도 Record는 무손실로 남는다. spec-freshness 스탬프 `source_digest`는 Run(intent.json)에 남고 Record엔 없다(droppable). `run`(한 번의 provider 호출, `run_*`)과 혼동하지 않는다. 결정 근거는 ADR-20260706-work-item-record-run-split(사용자 backlog §7 Q1 공유 백로그·Q2 스키마 수준 분할; ADR-0012 D1 부분 supersede).
+
+### first-terminal-wins
+work-item 이벤트 reducer(`reduceWorkItem`)의 status fold 규칙. terminal status(`done`/`abandoned`)는 배타적이라 최초 terminal이 이기고 경쟁하는 2번째 terminal은 거부된다(비-terminal reopen만 정당한 재진입). 비-terminal은 latest-wins. 이벤트는 `event_id`로 dedupe, `(seq,actor,event_id)`로 결정적 정렬(`ts`는 clock-skew-unsafe라 정렬 키 아님). 전이는 `appendEvent`가 `open(wx)`로 이벤트당 불변 파일을 append한다(파일 락 없이 원자성 — 논거는 ADR-20260628-append-decision-atomicity). 코드: `src/core/work-item-store.ts`.
+
 ## 금지 표현
 
 다음 표현은 사용자 응답에서 self-check가 reject한다.

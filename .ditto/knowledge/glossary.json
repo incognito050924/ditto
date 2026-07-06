@@ -1,7 +1,7 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-06-26T00:00:00+09:00",
+  "updated_at": "2026-07-06T00:00:00+09:00",
   "entries": [
     {
       "term": "autopilot",
@@ -594,6 +594,56 @@
       "status": "agreed",
       "forbidden_abbreviations": [],
       "agreed_at": "2026-06-26T00:00:00+09:00"
+    },
+    {
+      "term": "Record (work-item tier)",
+      "aliases": [
+        "work-item Record"
+      ],
+      "definition": "work item 상태의 커밋·공유·git-tracked tier. `.ditto/work-items/<id>/` = record.json(저작 필드: AC 멤버십·scope·evidence_required) + events/(전이당 불변 이벤트, open(wx)로 append, reduceWorkItem이 fold). 프로젝트 메모리(status·AC verdict·github 멱등)가 durable하게 여기 산다 — Run 삭제에도 살아남는다. 팀·다른 PC가 pull해 진행 상태를 본다. 결정 근거는 ADR-20260706-work-item-record-run-split(사용자 backlog §7 Q1·Q2). 코드: src/core/work-item-store.ts, src/core/ditto-paths.ts committedWorkItemDir.",
+      "examples": [
+        ".ditto/work-items/wi_2607069bk/record.json + events/"
+      ],
+      "not_to_be_confused_with": [
+        "Run (work-item tier) — Record는 커밋·durable, Run은 개인·폐기가능",
+        "run (한 번의 provider 호출, run_*)"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-07-06T00:00:00+09:00"
+    },
+    {
+      "term": "Run (work-item tier)",
+      "aliases": [
+        "work-item Run"
+      ],
+      "definition": "work item 상태의 개인·폐기가능·gitignored tier. `.ditto/local/work-items/<id>/` = Record의 reduced view 미러 + 실행 트레일(intent.json·runs·graph). 언제든 삭제 가능하고 삭제해도 Record는 무손실로 남는다(ac-2 실증). spec-freshness 스탬프 source_digest는 이 tier(intent.json)에 남고 Record엔 없다(droppable). 결정 근거는 ADR-20260706-work-item-record-run-split. 코드: src/core/ditto-paths.ts localDir('work-items').",
+      "examples": [
+        ".ditto/local/work-items/wi_2607069bk/"
+      ],
+      "not_to_be_confused_with": [
+        "Record (work-item tier) — Run은 개인·폐기가능",
+        "run (한 번의 provider 호출, run_*)"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-07-06T00:00:00+09:00"
+    },
+    {
+      "term": "first-terminal-wins",
+      "aliases": [
+        "terminal-first-wins"
+      ],
+      "definition": "work-item 이벤트 reducer(reduceWorkItem)의 status fold 규칙. terminal status(done/abandoned)는 배타적이라 최초 terminal이 이기고 경쟁하는 2번째 terminal은 거부된다(R1 배타성) — 비-terminal reopen만 정당한 재진입. 비-terminal status는 latest-(seq,actor)-wins. 이벤트는 event_id로 dedupe되고 (seq,actor,event_id)로 결정적 정렬된다(ts는 clock-skew-unsafe라 정렬 키 아님). 코드: src/core/work-item-store.ts reduceWorkItem/isTerminalStatus/compareWorkItemEvents.",
+      "examples": [
+        "done 이벤트 후 두번째 terminal 이벤트는 reduce에서 거부(stale status revive 방지)"
+      ],
+      "not_to_be_confused_with": [
+        "latest-wins (비-terminal status의 fold 규칙)"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-07-06T00:00:00+09:00"
     }
   ]
 }

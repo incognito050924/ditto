@@ -13401,6 +13401,26 @@ function foldGithubIssue(record, ordered) {
     ...claimedBranch !== undefined ? { claimed_branch: claimedBranch } : {}
   };
 }
+function recordGithubIssueForWrite(next, rawRecord) {
+  if (next.github_issue === undefined)
+    return next;
+  const {
+    posted_decision_ids: _pd,
+    posted_claim_markers: _pc,
+    claimed_branch: _cb,
+    ...coords
+  } = next.github_issue;
+  const base = rawRecord?.github_issue;
+  return {
+    ...next,
+    github_issue: {
+      ...coords,
+      ...base?.posted_decision_ids ? { posted_decision_ids: base.posted_decision_ids } : {},
+      ...base?.posted_claim_markers ? { posted_claim_markers: base.posted_claim_markers } : {},
+      ...base?.claimed_branch ? { claimed_branch: base.claimed_branch } : {}
+    }
+  };
+}
 function reduceWorkItem(record, events) {
   const byId = new Map;
   for (const e2 of events)
@@ -13557,13 +13577,30 @@ class WorkItemStore {
   async writeMirror(id, item) {
     await writeJson(this.workItemPath(id), workItem, item);
   }
+  committedArchiveDir(label, id) {
+    return join6(dittoDir(this.repoRoot), "work-items-archive", label, id);
+  }
   async exists(id) {
+    if (await Bun.file(this.recordPath(id)).exists())
+      return true;
     try {
       await stat2(this.workItemPath(id));
       return true;
     } catch {
       return false;
     }
+  }
+  async ensureMigrated(id) {
+    if (await Bun.file(this.recordPath(id)).exists())
+      return;
+    if (!await Bun.file(this.workItemPath(id)).exists())
+      return;
+    const legacy = await readJson(this.workItemPath(id), workItem);
+    await writeJson(this.recordPath(id), workItem, legacy);
+    await this.appendEvent(id, legacy.owner_profile, "status", {
+      to: legacy.status,
+      closed_at: legacy.closed_at ?? null
+    });
   }
   async create(input, now = new Date) {
     const id = await generateId("wi", (candidate) => this.exists(candidate));
@@ -13609,7 +13646,9 @@ class WorkItemStore {
     return reduceWorkItem(record, await this.readEvents(id));
   }
   async update(id, mutator) {
+    await this.ensureMigrated(id);
     const current = await this.get(id);
+    const rawRecord = await this.readRecord(id);
     const next = mutator(current);
     if (next.id !== current.id) {
       throw new Error(`update mutator changed work item id from ${current.id} to ${next.id}`);
@@ -13624,10 +13663,24 @@ class WorkItemStore {
     const withTouched = { ...withSha, updated_at: new Date().toISOString() };
     const validated = workItem.parse(withTouched);
     await this.emitTransitionEvents(id, current, validated);
-    await writeJson(this.recordPath(id), workItem, validated);
+    await writeJson(this.recordPath(id), workItem, recordGithubIssueForWrite(validated, rawRecord));
     const reduced = await this.get(id);
     await this.writeMirror(id, reduced);
     return reduced;
+  }
+  async appendGithubEvent(id, kind, payload) {
+    const actor = (await this.get(id)).owner_profile;
+    await this.appendEvent(id, actor, kind, payload);
+    await this.writeMirror(id, await this.get(id));
+  }
+  async recordGithubPost(id, payload) {
+    await this.appendGithubEvent(id, "github_post", payload);
+  }
+  async recordClaim(id, payload) {
+    await this.appendGithubEvent(id, "claim", payload);
+  }
+  async releaseClaim(id, payload) {
+    await this.appendGithubEvent(id, "claim_release", payload);
   }
   async close(id, terminal, now = new Date) {
     return this.update(id, (cur) => {
@@ -13740,34 +13793,46 @@ class WorkItemStore {
     const targets = (await this.list()).filter((s2) => s2.status === "done" || s2.status === "abandoned");
     if (targets.length === 0)
       return [];
-    const archiveBase = localDir(this.repoRoot, "archive", label);
-    await ensureDir(archiveBase);
+    const runArchiveBase = localDir(this.repoRoot, "archive", label);
+    await ensureDir(runArchiveBase);
     for (const t2 of targets) {
-      await rename(this.workItemDir(t2.id), join6(archiveBase, t2.id));
+      if (await Bun.file(this.recordPath(t2.id)).exists()) {
+        const dest = this.committedArchiveDir(label, t2.id);
+        await ensureDir(dirname2(dest));
+        await rename(committedWorkItemDir(this.repoRoot, t2.id), dest);
+      }
+      try {
+        await rename(this.workItemDir(t2.id), join6(runArchiveBase, t2.id));
+      } catch (err) {
+        if (err.code !== "ENOENT")
+          throw err;
+      }
     }
     return targets.map((t2) => t2.id);
   }
   async list() {
-    const base = localDir(this.repoRoot, "work-items");
-    let entries;
-    try {
-      entries = await readdir2(base);
-    } catch {
-      return [];
-    }
-    const summaries = [];
-    for (const name of entries) {
-      const dir = join6(base, name);
-      let s2;
+    const ids = new Set;
+    for (const base of [
+      join6(dittoDir(this.repoRoot), "work-items"),
+      localDir(this.repoRoot, "work-items")
+    ]) {
+      let entries;
       try {
-        s2 = await stat2(dir);
+        entries = await readdir2(base);
       } catch {
         continue;
       }
-      if (!s2.isDirectory())
-        continue;
+      for (const name of entries) {
+        try {
+          if ((await stat2(join6(base, name))).isDirectory())
+            ids.add(name);
+        } catch {}
+      }
+    }
+    const summaries = [];
+    for (const id of ids) {
       try {
-        const item = await readJson(join6(dir, "work-item.json"), workItem);
+        const item = await this.get(id);
         summaries.push({
           id: item.id,
           title: item.title,
@@ -13778,6 +13843,46 @@ class WorkItemStore {
     }
     summaries.sort((a2, b2) => a2.updated_at < b2.updated_at ? 1 : -1);
     return summaries;
+  }
+  async reconcile(id) {
+    const dir = this.eventsDir(id);
+    const parseable = [];
+    const unparseable = [];
+    let names = [];
+    try {
+      names = await readdir2(dir);
+    } catch {
+      names = [];
+    }
+    for (const name of names) {
+      if (!name.endsWith(".json"))
+        continue;
+      const path = join6(dir, name);
+      try {
+        parseable.push(await readJson(path, workItemEvent));
+      } catch {
+        unparseable.push(path);
+      }
+    }
+    const record = await this.readRecord(id);
+    let headStatus = null;
+    let headClosedAt;
+    if (record !== null) {
+      const reduced = reduceWorkItem(record, parseable);
+      headStatus = reduced.status;
+      headClosedAt = reduced.closed_at;
+    } else if (await Bun.file(this.workItemPath(id)).exists()) {
+      const legacy = await readJson(this.workItemPath(id), workItem);
+      headStatus = legacy.status;
+      headClosedAt = legacy.closed_at;
+    }
+    return {
+      id,
+      head_status: headStatus,
+      ...headClosedAt !== undefined ? { head_closed_at: headClosedAt } : {},
+      event_count: parseable.length,
+      unparseable_events: unparseable.sort()
+    };
   }
   async appendJsonlAtPath(path, jsonLine) {
     await ensureDir(dirname2(path));
@@ -22531,13 +22636,9 @@ async function postUnpostedDecisions(deps, workItemId2) {
     };
   }
   const newIds = [...unposted.map((u3) => u3.id), ...unpostedFollowUps.map((u3) => u3.id)];
-  await deps.store.update(target.link_owner_id, (cur) => {
-    const gi = cur.github_issue;
-    if (!gi)
-      return cur;
-    const merged = new Set([...gi.posted_decision_ids ?? [], ...newIds]);
-    return { ...cur, github_issue: { ...gi, posted_decision_ids: [...merged] } };
-  });
+  for (const decisionId of newIds) {
+    await deps.store.recordGithubPost(target.link_owner_id, { posted_decision_id: decisionId });
+  }
   return { kind: "posted", posted_ids: newIds, comment_count: 1, target };
 }
 
@@ -28501,23 +28602,26 @@ async function writeWorkItemHandoff(repoRoot, store, workId, options = {}, now =
   try {
     await hstore.sweepStaleActive(now);
   } catch {}
-  await store.update(workId, (cur) => {
-    const { re_entry: _existingReEntry, ...rest } = cur;
-    if (completion.final_verdict === "pass") {
+  if (completion.final_verdict === "pass") {
+    const current = await store.get(workId);
+    if (current.status !== "done") {
+      await store.close(workId, "done", now);
+    }
+    await store.update(workId, (cur) => {
+      const { re_entry: _existingReEntry, ...rest } = cur;
+      return { ...rest, changed_files: merged };
+    });
+  } else {
+    await store.update(workId, (cur) => {
+      const { re_entry: _existingReEntry, ...rest } = cur;
       return {
         ...rest,
         changed_files: merged,
-        status: "done",
-        closed_at: now.toISOString()
+        status: "partial",
+        re_entry: effectiveReEntry
       };
-    }
-    return {
-      ...rest,
-      changed_files: merged,
-      status: "partial",
-      re_entry: effectiveReEntry
-    };
-  });
+    });
+  }
   return { completion, completionPath, handoffPath, collectedChangedFiles: merged, baseUsed };
 }
 
@@ -28843,14 +28947,11 @@ async function runClaim(store, workId, item, wiring) {
   });
   if (res.localClaim) {
     const lc = res.localClaim;
-    await store.update(workId, (cur) => cur.github_issue ? {
-      ...cur,
-      github_issue: {
-        ...cur.github_issue,
-        claimed_branch: lc.claimed_branch,
-        posted_claim_markers: lc.posted_claim_markers
-      }
-    } : cur);
+    const newMarker = lc.posted_claim_markers.at(-1);
+    await store.recordClaim(workId, {
+      claimed_branch: lc.claimed_branch,
+      ...newMarker ? { posted_claim_marker: newMarker } : {}
+    });
   }
   return {
     fired: res.assigneeAdded && !res.noop,
@@ -28887,6 +28988,21 @@ async function autoClaimOnInProgressEdge(store, workId, prevStatus, next, wiring
   }
   return runClaim(store, workId, next, wiring);
 }
+async function persistClaimRelease(store, workId, gi) {
+  const markers = gi.posted_claim_markers ?? [];
+  const branch = gi.claimed_branch;
+  if (markers.length === 0) {
+    if (branch)
+      await store.releaseClaim(workId, { claimed_branch: branch });
+    return;
+  }
+  for (const marker of markers) {
+    await store.releaseClaim(workId, {
+      posted_claim_marker: marker,
+      ...branch ? { claimed_branch: branch } : {}
+    });
+  }
+}
 async function unclaimWorkItem(store, workId, wiring, opts = {}) {
   const item = await store.get(workId);
   const res = unclaim({ client: wiring.client, config: wiring.config }, {
@@ -28894,13 +29010,8 @@ async function unclaimWorkItem(store, workId, wiring, opts = {}) {
     ...opts.reason ? { reason: opts.reason } : {},
     ...opts.boardStatusKey ? { boardStatusKey: opts.boardStatusKey } : {}
   });
-  if (res.cleared) {
-    await store.update(workId, (cur) => {
-      if (!cur.github_issue)
-        return cur;
-      const { claimed_branch: _b, posted_claim_markers: _m, ...giRest } = cur.github_issue;
-      return { ...cur, github_issue: giRest };
-    });
+  if (res.cleared && item.github_issue) {
+    await persistClaimRelease(store, workId, item.github_issue);
   }
   return { released: res.assigneeRemoved, notices: res.notices };
 }
@@ -28952,12 +29063,7 @@ async function releaseClaimOnTerminal(store, workId, wiring) {
   const rm2 = wiring.client.issueRemoveAssignee(gi.repo, gi.number, "@me");
   if (!rm2.ok)
     notices.push(`Terminal claim release degraded (${rm2.reason}) \u2014 @me left assigned.`);
-  await store.update(workId, (cur) => {
-    if (!cur.github_issue)
-      return cur;
-    const { claimed_branch: _b, posted_claim_markers: _m, ...giRest } = cur.github_issue;
-    return { ...cur, github_issue: giRest };
-  });
+  await persistClaimRelease(store, workId, gi);
   return { released: rm2.ok, notices };
 }
 var workStart = defineCommand({
@@ -52142,4 +52248,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=818f9a85adf6730a537ff515f10d1675764b33fade15b9c614b9e0aa6f808370
+//# ditto-src-stamp=88a95379174d6fca656534c4f0e8a63e2ed3e485c8f1d3b72def5592b083a5f9

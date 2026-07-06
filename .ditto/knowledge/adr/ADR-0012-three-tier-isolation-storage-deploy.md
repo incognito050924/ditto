@@ -19,6 +19,8 @@ ADR-0005는 이미 durable/ephemeral 2계층을 `.gitignore`로 갈라 두었지
 
 ### D1 — 개인 런타임은 `.ditto/local/` 한 구획으로 물리 분리한다 (축2)
 
+> **부분 supersede (2026-07-06, wi_2607069bk)** — D1의 "work-items를 개인 tier로 전부 `.ditto/local/`에 둔다"는 부분은 **ADR-20260706-work-item-record-run-split**이 supersede한다. work item은 이제 Record(커밋·공유, `.ditto/work-items/<id>/` = record.json + events/)와 Run(개인·폐기가능, `.ditto/local/work-items/<id>/`)으로 쪼개진다 — 프로젝트 메모리(status·AC verdict·github 멱등)는 커밋된 Record에 durable하게 남고, Run 삭제는 무손실이다. runs·sessions·cache·logs·worktrees·handoff의 개인 tier 분류와 D2·D3·3계층 골격은 불변.
+
 - 개인 런타임 디렉터리/파일(work-items·runs·sessions·cache·logs·worktrees·handoff·surfaces.json)을 전부 `.ditto/local/<name>` 아래로 이전한다.
 - 모든 store/모듈의 경로 상수는 단일 헬퍼 `src/core/ditto-paths.ts`의 `localDir(repoRoot, ...segments)`를 경유한다(약 30곳). 직접 `join(root,'.ditto','work-items',...)` 문자열을 더 이상 쓰지 않는다 — 경계가 코드 한 곳에 모인다.
 - `.ditto/knowledge/`·`.ditto/architecture-spec.json`·`.ditto/agents/`는 `.ditto/` 직속(전역)에 그대로 둔다. `findRepoRoot` 마커(`.ditto`)와 스캔 제외 리스트(`.ditto` 전체)도 그대로다.

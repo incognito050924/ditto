@@ -81,15 +81,23 @@ async function setupWi(opts: {
     ...(opts.link === false
       ? {}
       : {
-          github_issue: {
-            repo: 'owner/app',
-            number: 42,
-            project_item_id: 'PVTI_1',
-            ...(opts.claimed_branch ? { claimed_branch: opts.claimed_branch } : {}),
-            ...(opts.markers ? { posted_claim_markers: opts.markers } : {}),
-          },
+          github_issue: { repo: 'owner/app', number: 42, project_item_id: 'PVTI_1' },
         }),
   }));
+  // §4-C5: claim idempotency now lives in COMMITTED events, not on record.json — seed
+  // the precondition via the canonical event API (recordClaim), never a record mutation.
+  if (opts.link !== false && (opts.claimed_branch || opts.markers)) {
+    const markers = opts.markers ?? [];
+    if (markers.length === 0 && opts.claimed_branch) {
+      await store.recordClaim(created.id, { claimed_branch: opts.claimed_branch });
+    }
+    for (const marker of markers) {
+      await store.recordClaim(created.id, {
+        posted_claim_marker: marker,
+        ...(opts.claimed_branch ? { claimed_branch: opts.claimed_branch } : {}),
+      });
+    }
+  }
   return { dir, store, id: created.id };
 }
 

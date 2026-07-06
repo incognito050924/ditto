@@ -319,25 +319,40 @@ export async function writeWorkItemHandoff(
     // observational; never blocks completion
   }
 
-  // status/changed_files/re_entry만 갱신. handoff_path는 위 store가 이미 링크했으므로
+  // changed_files/status/re_entry 갱신. handoff_path는 위 store가 이미 링크했으므로
   // 여기서 건드리지 않는다(...rest로 보존).
-  await store.update(workId, (cur) => {
-    const { re_entry: _existingReEntry, ...rest } = cur;
-    if (completion.final_verdict === 'pass') {
-      // pass 시점에는 resume 지시를 남기지 않는다 (stale handoff 방지).
+  if (completion.final_verdict === 'pass') {
+    // D1 terminal chokepoint (ac-5): route the terminal (done) transition through the
+    // SINGLE R1 chokepoint (store.close) instead of a direct `status:'done'` write.
+    // close() reduces-then-checks and THROWS if the WI already raced to a DIFFERENT
+    // terminal (e.g. user `work abandon`) — the silent-overwrite guard the old direct
+    // write bypassed. first-terminal-wins for the truly concurrent case is guaranteed
+    // by reduceWorkItem (n2), not re-implemented here. An already-`done` WI is the
+    // idempotent re-handoff case: close() would reject a same-terminal re-close, so
+    // skip it and only refresh the non-status fields below.
+    const current = await store.get(workId);
+    if (current.status !== 'done') {
+      await store.close(workId, 'done', now);
+    }
+    // Non-status fields only (changed_files) + drop any stale re_entry (pass 시점에는
+    // resume 지시를 남기지 않는다). This update keeps status=done, so no status event is
+    // emitted — close() alone owns the terminal transition.
+    await store.update(workId, (cur) => {
+      const { re_entry: _existingReEntry, ...rest } = cur;
+      return { ...rest, changed_files: merged };
+    });
+  } else {
+    // partial은 NON-terminal (re-entry 마커일 뿐 terminal 이벤트가 아니다) → 평범한
+    // update; R1 관심사 없음. 더는 직접 terminal write로 경쟁하지 않는다.
+    await store.update(workId, (cur) => {
+      const { re_entry: _existingReEntry, ...rest } = cur;
       return {
         ...rest,
         changed_files: merged,
-        status: 'done' as const,
-        closed_at: now.toISOString(),
+        status: 'partial' as const,
+        re_entry: effectiveReEntry,
       };
-    }
-    return {
-      ...rest,
-      changed_files: merged,
-      status: 'partial' as const,
-      re_entry: effectiveReEntry,
-    };
-  });
+    });
+  }
   return { completion, completionPath, handoffPath, collectedChangedFiles: merged, baseUsed };
 }
