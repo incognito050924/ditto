@@ -12,7 +12,7 @@ import {
   workItem,
   workItemEvent,
 } from '~/schemas/work-item';
-import { committedWorkItemDir, localDir } from './ditto-paths';
+import { committedWorkItemDir, dittoDir, localDir } from './ditto-paths';
 import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
 import { generateId } from './id';
 
@@ -249,6 +249,37 @@ function foldGithubIssue(record: WorkItem, ordered: WorkItemEvent[]): WorkItem['
 }
 
 /**
+ * §4-C5 WRITE side: the github idempotency sets (`posted_decision_ids`/
+ * `posted_claim_markers`/`claimed_branch`) live in COMMITTED github events, not on
+ * record.json. So when re-writing record.json we must NOT bake the event-FOLDED view
+ * back onto the authored Record — that would re-couple idempotency to the Record and
+ * lose it whenever the events are dropped. We take the coords from the (possibly
+ * mutated) `next` github_issue but keep the idempotency fields at whatever the RAW
+ * Record base already held (legacy/migrated records keep theirs — foldGithubIssue
+ * reads them as a base; a fresh Record has none). New idempotency only ever arrives
+ * as events.
+ */
+function recordGithubIssueForWrite(next: WorkItem, rawRecord: WorkItem | null): WorkItem {
+  if (next.github_issue === undefined) return next;
+  const {
+    posted_decision_ids: _pd,
+    posted_claim_markers: _pc,
+    claimed_branch: _cb,
+    ...coords
+  } = next.github_issue;
+  const base = rawRecord?.github_issue;
+  return {
+    ...next,
+    github_issue: {
+      ...coords,
+      ...(base?.posted_decision_ids ? { posted_decision_ids: base.posted_decision_ids } : {}),
+      ...(base?.posted_claim_markers ? { posted_claim_markers: base.posted_claim_markers } : {}),
+      ...(base?.claimed_branch ? { claimed_branch: base.claimed_branch } : {}),
+    },
+  };
+}
+
+/**
  * wi_2607069bk §2.1 — the fold. Overlay the immutable per-event log onto the authored
  * `record`, producing a schema-valid WorkItem. Events are ordered by (seq, actor),
  * deduped by event_id, then folded per kind:
@@ -339,6 +370,24 @@ export class WorkItemEventCorruptError extends Error {
     );
     this.name = 'WorkItemEventCorruptError';
   }
+}
+
+/**
+ * §2.2 / R6 (§10.1): the surface-don't-mutate view of a work item's committed event
+ * log. `head_status`/`head_closed_at` are RE-DERIVED from the parseable events (the
+ * fold over `events/`); `unparseable_events` ENUMERATES the corrupt event files by
+ * path so `ditto work reconcile` / doctor can report them. reconcile never repairs
+ * or GCs (that is out of scope, §0) — it only counts and surfaces.
+ */
+export interface WorkItemReconcileReport {
+  id: string;
+  /** Re-derived head status from parseable events, or null when no Record/legacy WI exists. */
+  head_status: WorkItem['status'] | null;
+  head_closed_at?: string;
+  /** Count of parseable event files under `events/`. */
+  event_count: number;
+  /** Absolute paths of event files that failed to parse (R6 surface, sorted). */
+  unparseable_events: string[];
 }
 
 export class WorkItemStore {
@@ -488,13 +537,45 @@ export class WorkItemStore {
     await writeJson(this.workItemPath(id), workItem, item);
   }
 
+  // §3.3 D2: committed archive namespace for a Record moved out of the active set.
+  // A SIBLING of the active committed base (`.ditto/work-items/`), so the moved
+  // Record stays git-tracked (restorable, move-not-delete) yet dual-base list()
+  // no longer resurfaces it.
+  private committedArchiveDir(label: string, id: string): string {
+    return join(dittoDir(this.repoRoot), 'work-items-archive', label, id);
+  }
+
   async exists(id: string): Promise<boolean> {
+    // §6 dual base: a committed Record OR a legacy personal work-item.json counts.
+    if (await Bun.file(this.recordPath(id)).exists()) return true;
     try {
       await stat(this.workItemPath(id));
       return true;
     } catch {
       return false;
     }
+  }
+
+  /**
+   * §6 forced lazy-migrate (Finding B-F2, "TBD" forbidden): the first committed write
+   * of a LEGACY work item (one with only `.ditto/local/.../work-item.json`, no
+   * committed record.json) FIRST synthesizes a COMPLETE record.json from the legacy
+   * file — title, goal, ALL acceptance criteria, lineage, everything — plus a
+   * `created` status event capturing the legacy status, so the fold reproduces the
+   * pre-migration state. Writing the full record BEFORE any patch event guarantees
+   * every subsequent event folds onto a complete Record; a status-only event can
+   * never make `workItem.parse` throw on a missing required field. No-op when a
+   * committed Record already exists or when the id is brand-new (create() owns that).
+   */
+  private async ensureMigrated(id: string): Promise<void> {
+    if (await Bun.file(this.recordPath(id)).exists()) return;
+    if (!(await Bun.file(this.workItemPath(id)).exists())) return;
+    const legacy = await readJson(this.workItemPath(id), workItem);
+    await writeJson(this.recordPath(id), workItem, legacy);
+    await this.appendEvent(id, legacy.owner_profile, 'status', {
+      to: legacy.status,
+      closed_at: legacy.closed_at ?? null,
+    });
   }
 
   async create(input: WorkItemCreateInput, now: Date = new Date()): Promise<WorkItem> {
@@ -553,7 +634,13 @@ export class WorkItemStore {
    * work item entirely.
    */
   async update(id: string, mutator: (current: WorkItem) => WorkItem): Promise<WorkItem> {
+    // §6: migrate a legacy WI to a complete committed Record BEFORE the first patch,
+    // so every emitted event folds onto a full Record (no partial-field corruption).
+    await this.ensureMigrated(id);
     const current = await this.get(id);
+    // §4-C5: the RAW Record base (pre-fold) — its github idempotency is what record.json
+    // keeps on write; the event-folded additions in `current` are NOT baked back.
+    const rawRecord = await this.readRecord(id);
     const next = mutator(current);
     if (next.id !== current.id) {
       throw new Error(`update mutator changed work item id from ${current.id} to ${next.id}`);
@@ -580,10 +667,56 @@ export class WorkItemStore {
     // started_at_sha backfill) ride on record.json. reduce re-derives status/verdict/
     // github from events on top of the record, so the two never disagree.
     await this.emitTransitionEvents(id, current, validated);
-    await writeJson(this.recordPath(id), workItem, validated);
+    // §4-C5: persist only coords + the raw github idempotency base — never the
+    // event-folded sets (those are re-derived by foldGithubIssue from committed events).
+    await writeJson(this.recordPath(id), workItem, recordGithubIssueForWrite(validated, rawRecord));
     const reduced = await this.get(id);
     await this.writeMirror(id, reduced);
     return reduced;
+  }
+
+  /**
+   * §4-C5 github idempotency WRITE side. The posted-decision / claim-marker /
+   * claimed-branch idempotency state is appended as COMMITTED events (`github_post` /
+   * `claim` / `claim_release`) that `foldGithubIssue` unions onto the immutable
+   * coordinates — so the state survives a Run-tier delete (the whole point of the
+   * split) and never rides on the authored record.json. Consumers READ the folded
+   * view via `get()`; these are the only WRITE paths. Re-appending an already-folded
+   * marker is naturally idempotent (fold uses a Set), so a re-post never duplicates.
+   * The mirror is refreshed so legacy `work-item.json` readers see the new fold.
+   */
+  private async appendGithubEvent(
+    id: string,
+    kind: 'github_post' | 'claim' | 'claim_release',
+    payload: { posted_decision_id?: string; posted_claim_marker?: string; claimed_branch?: string },
+  ): Promise<void> {
+    const actor = (await this.get(id)).owner_profile;
+    await this.appendEvent(id, actor, kind, payload);
+    await this.writeMirror(id, await this.get(id));
+  }
+
+  /** Append a `github_post` idempotency event (a decision/claim marker posted to the issue). */
+  async recordGithubPost(
+    id: string,
+    payload: { posted_decision_id?: string; posted_claim_marker?: string; claimed_branch?: string },
+  ): Promise<void> {
+    await this.appendGithubEvent(id, 'github_post', payload);
+  }
+
+  /** Append a `claim` event (branch claimed the issue; marker + branch fold in). */
+  async recordClaim(
+    id: string,
+    payload: { posted_claim_marker?: string; claimed_branch?: string },
+  ): Promise<void> {
+    await this.appendGithubEvent(id, 'claim', payload);
+  }
+
+  /** Append a `claim_release` event (un-claim): removes the folded marker and clears the branch. */
+  async releaseClaim(
+    id: string,
+    payload: { posted_claim_marker?: string; claimed_branch?: string },
+  ): Promise<void> {
+    await this.appendGithubEvent(id, 'claim_release', payload);
   }
 
   /**
@@ -750,9 +883,25 @@ export class WorkItemStore {
 
   /**
    * Archive terminal (`done`/`abandoned`) work items out of the active set
-   * (ADR-0005 D3): move `.ditto/local/work-items/<wi>` → `.ditto/local/archive/
-   * <label>/<wi>`. Move-not-delete (restorable), no git history rewrite — the
-   * goal is to lighten the agent's active working set, not shrink `.git`.
+   * (ADR-0005 D3 / §3.3 D2). Move-not-delete (restorable), no git history rewrite —
+   * the goal is to lighten the agent's active working set, not shrink `.git`.
+   * Targets are found via the DUAL base (committed Record + legacy personal), so a
+   * legacy-only or committed-only terminal WI is archived too.
+   *
+   * DECOMPOSE (D2): the Run/personal dir moves to `.ditto/local/archive/<label>/<id>`
+   * (unchanged), and the committed Record moves to the SIBLING committed archive
+   * namespace `.ditto/work-items-archive/<label>/<id>` — still git-tracked and
+   * restorable, so the Record survives, yet dual-base list() stops resurfacing it.
+   *
+   * DEVIATION (surfaced, charter §4-11): the design §3.3 sketch "append a
+   * status(→archived) event, move ONLY the Run" is NOT implementable against the
+   * landed schema — 'archived' is not a `workItemStatus` (common.ts:55) and the
+   * first-terminal-wins reducer rejects a 2nd terminal status (it would also erase
+   * the done/abandoned distinction). So the committed Record is RELOCATED (still
+   * git-tracked) instead, which honors the existing archive contract "archived items
+   * leave the active list" and Record durability. Adding an 'archived' status +
+   * list-filter is a cross-cutting schema change outside n3's surgical scope.
+   *
    * Returns the ids moved. `label` must be a safe path segment.
    */
   async archive(label: string): Promise<string[]> {
@@ -765,34 +914,53 @@ export class WorkItemStore {
       (s) => s.status === 'done' || s.status === 'abandoned',
     );
     if (targets.length === 0) return [];
-    const archiveBase = localDir(this.repoRoot, 'archive', label);
-    await ensureDir(archiveBase);
+    const runArchiveBase = localDir(this.repoRoot, 'archive', label);
+    await ensureDir(runArchiveBase);
     for (const t of targets) {
-      await rename(this.workItemDir(t.id), join(archiveBase, t.id));
+      // Committed Record → committed archive (git-tracked move, restorable).
+      if (await Bun.file(this.recordPath(t.id)).exists()) {
+        const dest = this.committedArchiveDir(label, t.id);
+        await ensureDir(dirname(dest));
+        await rename(committedWorkItemDir(this.repoRoot, t.id), dest);
+      }
+      // Run/personal tier → personal archive (unchanged, ADR-0005). Absent for a
+      // committed-only WI.
+      try {
+        await rename(this.workItemDir(t.id), join(runArchiveBase, t.id));
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      }
     }
     return targets.map((t) => t.id);
   }
 
   async list(): Promise<WorkItemSummary[]> {
-    const base = localDir(this.repoRoot, 'work-items');
-    let entries: string[];
-    try {
-      entries = await readdir(base);
-    } catch {
-      return [];
-    }
-    const summaries: WorkItemSummary[] = [];
-    for (const name of entries) {
-      const dir = join(base, name);
-      let s: Awaited<ReturnType<typeof stat>>;
+    // §6 dual base: enumerate the committed Record base AND the legacy personal base,
+    // dedup by id (committed Record wins via get()'s record.json-first fallback).
+    // Both cohorts stay visible during the migration window.
+    const ids = new Set<string>();
+    for (const base of [
+      join(dittoDir(this.repoRoot), 'work-items'),
+      localDir(this.repoRoot, 'work-items'),
+    ]) {
+      let entries: string[];
       try {
-        s = await stat(dir);
+        entries = await readdir(base);
       } catch {
         continue;
       }
-      if (!s.isDirectory()) continue;
+      for (const name of entries) {
+        try {
+          if ((await stat(join(base, name))).isDirectory()) ids.add(name);
+        } catch {
+          // skip a vanished/unreadable entry
+        }
+      }
+    }
+    const summaries: WorkItemSummary[] = [];
+    for (const id of ids) {
       try {
-        const item = await readJson(join(dir, 'work-item.json'), workItem);
+        const item = await this.get(id);
         summaries.push({
           id: item.id,
           title: item.title,
@@ -800,12 +968,60 @@ export class WorkItemStore {
           updated_at: item.updated_at,
         });
       } catch {
-        // skip malformed work items in list; they will fail
-        // on explicit get() with a clear schema error.
+        // skip malformed / corrupt-event work items in list; an explicit get()
+        // surfaces the schema / WorkItemEventCorruptError with a clear message.
       }
     }
     summaries.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
     return summaries;
+  }
+
+  /**
+   * §2.2 / R6: re-derive a work item's head from its committed events AND enumerate +
+   * count the unparseable event files, SURFACING them (surface-don't-mutate — no
+   * repair/GC, §0). Unlike get()/reduceWorkItem (which THROW on a corrupt event so a
+   * stale status can never be served), reconcile never throws: it re-derives the head
+   * from the PARSEABLE subset and reports the corrupt paths so `ditto work reconcile`
+   * / doctor can show what needs attention. Backs the reconcile/doctor surface.
+   */
+  async reconcile(id: string): Promise<WorkItemReconcileReport> {
+    const dir = this.eventsDir(id);
+    const parseable: WorkItemEvent[] = [];
+    const unparseable: string[] = [];
+    let names: string[] = [];
+    try {
+      names = await readdir(dir);
+    } catch {
+      names = [];
+    }
+    for (const name of names) {
+      if (!name.endsWith('.json')) continue;
+      const path = join(dir, name);
+      try {
+        parseable.push(await readJson(path, workItemEvent));
+      } catch {
+        unparseable.push(path);
+      }
+    }
+    const record = await this.readRecord(id);
+    let headStatus: WorkItem['status'] | null = null;
+    let headClosedAt: string | undefined;
+    if (record !== null) {
+      const reduced = reduceWorkItem(record, parseable);
+      headStatus = reduced.status;
+      headClosedAt = reduced.closed_at;
+    } else if (await Bun.file(this.workItemPath(id)).exists()) {
+      const legacy = await readJson(this.workItemPath(id), workItem);
+      headStatus = legacy.status;
+      headClosedAt = legacy.closed_at;
+    }
+    return {
+      id,
+      head_status: headStatus,
+      ...(headClosedAt !== undefined ? { head_closed_at: headClosedAt } : {}),
+      event_count: parseable.length,
+      unparseable_events: unparseable.sort(),
+    };
   }
 
   /** Newline-safe append of one JSONL line at an absolute path (creates the dir). */

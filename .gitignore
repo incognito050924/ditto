@@ -477,9 +477,6 @@ dist/
 .ditto/local/
 # Bypass audit log stays at .ditto root (not part of the local/ runtime tier).
 .ditto/autopilot-bypass.jsonl
-# Legacy pre-isolation runtime path: reviewer/verifier outputs still land here for
-# some flows (canonical is .ditto/local/work-items/). Runtime state, never tracked.
-.ditto/work-items/
 # `ditto setup` writes a defensive per-checkout .ditto/.gitignore, but this root
 # .gitignore is the single source of the tier policy above — the .ditto-local one
 # is a redundant duplicate, so ignore it rather than track two copies.

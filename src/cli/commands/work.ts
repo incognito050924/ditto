@@ -647,18 +647,14 @@ async function runClaim(
   );
   if (res.localClaim) {
     const lc = res.localClaim;
-    await store.update(workId, (cur) =>
-      cur.github_issue
-        ? {
-            ...cur,
-            github_issue: {
-              ...cur.github_issue,
-              claimed_branch: lc.claimed_branch,
-              posted_claim_markers: lc.posted_claim_markers,
-            },
-          }
-        : cur,
-    );
+    // §4-C5: persist the claim as a COMMITTED `claim` event (not a record.json mutation).
+    // claim() appends the just-claimed marker LAST, so `.at(-1)` is THIS edge's marker;
+    // the fold set-unions branch + marker onto the immutable coords.
+    const newMarker = lc.posted_claim_markers.at(-1);
+    await store.recordClaim(workId, {
+      claimed_branch: lc.claimed_branch,
+      ...(newMarker ? { posted_claim_marker: newMarker } : {}),
+    });
   }
   return {
     fired: res.assigneeAdded && !res.noop,
@@ -723,6 +719,31 @@ export async function autoClaimOnInProgressEdge(
 }
 
 /**
+ * §4-C5: persist a claim RELEASE as COMMITTED `claim_release` events — one per folded
+ * marker (each carrying the branch so the fold clears it), or a branch-only release
+ * when no markers are folded. Replaces the old record.json field-delete; the fold then
+ * removes the marker(s) and clears `claimed_branch`. No-op when nothing is claimed.
+ */
+async function persistClaimRelease(
+  store: WorkItemStore,
+  workId: string,
+  gi: NonNullable<WorkItem['github_issue']>,
+): Promise<void> {
+  const markers = gi.posted_claim_markers ?? [];
+  const branch = gi.claimed_branch;
+  if (markers.length === 0) {
+    if (branch) await store.releaseClaim(workId, { claimed_branch: branch });
+    return;
+  }
+  for (const marker of markers) {
+    await store.releaseClaim(workId, {
+      posted_claim_marker: marker,
+      ...(branch ? { claimed_branch: branch } : {}),
+    });
+  }
+}
+
+/**
  * ac-7 (`work unclaim`): release the claim — drop @me ONLY (never clears another
  * session's assignee), post the durable release comment, optionally move the board,
  * and CLEAR the local sentinel marker. No link ⇒ skip + notice.
@@ -742,12 +763,8 @@ export async function unclaimWorkItem(
       ...(opts.boardStatusKey ? { boardStatusKey: opts.boardStatusKey } : {}),
     },
   );
-  if (res.cleared) {
-    await store.update(workId, (cur) => {
-      if (!cur.github_issue) return cur;
-      const { claimed_branch: _b, posted_claim_markers: _m, ...giRest } = cur.github_issue;
-      return { ...cur, github_issue: giRest };
-    });
+  if (res.cleared && item.github_issue) {
+    await persistClaimRelease(store, workId, item.github_issue);
   }
   return { released: res.assigneeRemoved, notices: res.notices };
 }
@@ -828,12 +845,9 @@ export async function releaseClaimOnTerminal(
   const notices: string[] = [];
   const rm = wiring.client.issueRemoveAssignee(gi.repo, gi.number, '@me');
   if (!rm.ok) notices.push(`Terminal claim release degraded (${rm.reason}) — @me left assigned.`);
-  // Clear the local sentinel regardless (the WI is terminal; the branch claim is done).
-  await store.update(workId, (cur) => {
-    if (!cur.github_issue) return cur;
-    const { claimed_branch: _b, posted_claim_markers: _m, ...giRest } = cur.github_issue;
-    return { ...cur, github_issue: giRest };
-  });
+  // Clear the local sentinel regardless (the WI is terminal; the branch claim is done)
+  // via a COMMITTED claim_release event (§4-C5), not a record.json field-delete.
+  await persistClaimRelease(store, workId, gi);
   return { released: rm.ok, notices };
 }
 

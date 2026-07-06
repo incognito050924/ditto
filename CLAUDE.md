@@ -332,7 +332,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=c2a8ae5bcb7419ea1a7e2e51541931e1a824d9526074e326567990248315d0d0 -->
+<!-- ditto:knowledge:start sha256=964d13941da733fffabb2b00566a13151eed7ca6dccb29126439ade830c506e6 -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -345,6 +345,8 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR
 - DITTO 기능 4축
 - Journey DSL
+- Record (work-item tier)
+- Run (work-item tier)
 - autopilot
 - code_dirty
 - code_drift
@@ -360,6 +362,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - drifted_sources
 - dual host
 - evidence
+- first-terminal-wins
 - follow-up materialization
 - handoff
 - host adapter
@@ -423,5 +426,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-20260628-github-backlog-sot · accepted · GitHub 연계 SoT 3층 + repo 좌표 일원화 — 백로그=GitHub read, 완료=ditto write
 - ADR-20260630-recipe-backlog-seed-model · accepted · recipe.backlog → 개인 github config bootstrap-once seed — ADR-20260628 정합 + out-of-scope
 - ADR-20260702-e2e-official-test-agents · accepted · 공식 Playwright test-generator를 주 DSL→spec 변환기로 · e2e-scripter는 무브라우저 강등 fallback (ADR-0014 D1/D2 메커니즘 정련, D4 보존)
+- ADR-20260706-work-item-record-run-split · accepted · work-item 상태를 Record(공유·커밋)와 Run(개인·폐기가능) 2-tier로 분할 — ADR-0012 D1 부분 supersede
 
 <!-- ditto:knowledge:end -->

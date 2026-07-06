@@ -461,6 +461,53 @@ describe('writeWorkItemHandoff', () => {
   });
 });
 
+// wi_2607069bk WS0-T0 n5 — D1 terminal chokepoint (ac-5). The handoff was the last
+// path doing a DIRECT `status:'done'` write, bypassing the R1 already-terminal guard
+// that store.close() enforces. These prove the handoff now routes the terminal
+// transition through the single chokepoint (§2.3 line 90 / V6 line 172).
+describe('writeWorkItemHandoff terminal chokepoint (ac-5)', () => {
+  // (b) A pass-handoff on a WI that ALREADY raced to a different terminal must be
+  // REJECTED, not silently overwritten. Under the old direct `status:'done'` write
+  // the handoff resolved silently (the reducer kept `abandoned` but the handoff
+  // returned success + wrote a spurious done event); routing through close() surfaces
+  // the collision as an error instead.
+  test('pass-handoff on an already-terminal (abandoned) WI is rejected (no silent overwrite)', async () => {
+    const created = await store.create(makeInput());
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
+      ),
+    }));
+    // A racing terminal (e.g. user `work abandon`) lands FIRST.
+    await store.close(created.id, 'abandoned');
+    // The pass-handoff must go through the R1 chokepoint, which rejects an
+    // already-terminal transition rather than silently flipping to done.
+    await expect(writeWorkItemHandoff(workDir, store, created.id)).rejects.toThrow(/terminal/);
+    // status unchanged on disk (no silent overwrite of the abandoned terminal).
+    expect((await store.get(created.id)).status).toBe('abandoned');
+  });
+
+  // (a)/(b) tied to the handoff: after the handoff completes the terminal (done)
+  // via the close()/event path, a SECOND competing terminal transition through
+  // close() is rejected — first-terminal-wins, the chokepoint holds.
+  test('after pass-handoff completes done via the chokepoint, a competing close() is rejected', async () => {
+    const created = await store.create(makeInput());
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
+      ),
+    }));
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    expect(result.completion.final_verdict).toBe('pass');
+    // Terminal status arrived via the close()/event path (not a direct write).
+    expect((await store.get(created.id)).status).toBe('done');
+    // A second terminal transition is rejected by the R1 chokepoint.
+    await expect(store.close(created.id, 'done')).rejects.toThrow(/terminal/);
+  });
+});
+
 // wi_2606289nt: work-done also sweeps STALE active handoffs into archive
 // (move-not-delete), fail-open.
 describe('writeWorkItemHandoff stale active sweep', () => {
