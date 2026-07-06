@@ -50,6 +50,19 @@ export interface WorkItemSummary {
   title: string;
   status: WorkItem['status'];
   updated_at: string;
+  // WS0-T1 (wi_260706aka) backlog projection fields — all OPTIONAL and all derived
+  // from the committed Record tier. A bare `list()` summary (and external builders
+  // like completion-coverage-doctor's) omit them; `projectBacklog` populates them.
+  /** Count of UNRESOLVED follow-ups (resolved !== true). */
+  unresolved_follow_ups?: number;
+  /** Reason this WI is blocked from `done`, when an unresolved self-caused high/critical bug exists. */
+  blocking_reason?: string;
+  /** Compact coordinate of the linked GitHub issue (repo + number), when linked. */
+  github_issue?: { repo: string; number: number };
+  /** Strong push-readiness signal (pushReadiness().ready over this WI + its stem). */
+  push_ready?: boolean;
+  /** Derived lineage/rollup marker: the stem (chain) this WI belongs to. */
+  lineage?: StemView;
 }
 
 // ac-5: one member of a derived chain (stem) — the WI's id, current status, and
@@ -80,6 +93,104 @@ export function rollUpStem(members: readonly StemMember[]): StemRollup {
   );
   if (nonTerminal.length > 0) return 'open';
   return members.every((m) => m.status === 'done') ? 'done' : 'partial';
+}
+
+// WS0-T1 (wi_260706aka): the lineage-relevant slice of a work item that stem
+// derivation needs — id + status (for the rollup), `follows` (the chain edge), and
+// created_at (to break ordering ties on a branch). Loaded ONCE per backlog snapshot
+// so lineage/rollup is an O(n) single pass, not an O(n²) per-row stem() re-scan.
+export interface StemInput {
+  id: string;
+  status: WorkItem['status'];
+  follows?: string;
+  created_at: string;
+}
+
+/**
+ * Order one component's member ids root → tip: by follows-depth up to the component
+ * root, ties broken by created_at then id (fully deterministic). Extracted from the
+ * inline logic in `stem()` so the single-pass `computeStemViews` and the per-id
+ * `stem()` share ONE ordering rule (no divergence).
+ */
+function orderStemMembers(
+  members: ReadonlySet<string>,
+  all: ReadonlyMap<string, StemInput>,
+): string[] {
+  const depthOf = (mid: string): number => {
+    let d = 0;
+    let cur = mid;
+    const seen = new Set<string>([cur]);
+    for (;;) {
+      const f = all.get(cur)?.follows;
+      if (f === undefined || !members.has(f) || seen.has(f)) break;
+      seen.add(f);
+      cur = f;
+      d++;
+    }
+    return d;
+  };
+  return [...members].sort((a, b) => {
+    const da = depthOf(a);
+    const db = depthOf(b);
+    if (da !== db) return da - db;
+    const ca = all.get(a)?.created_at ?? '';
+    const cb = all.get(b)?.created_at ?? '';
+    if (ca !== cb) return ca < cb ? -1 : 1;
+    return a < b ? -1 : 1;
+  });
+}
+
+/**
+ * ac-5 / WS0-T1: derive the stem (chain) of EVERY work item in one pass over an
+ * already-loaded backlog snapshot. Builds the `follows` connected components once
+ * (forward edge + a precomputed reverse-adjacency), orders + rolls up each component
+ * ONCE, and maps every member to its shared StemView. O(n) over the loaded map — no
+ * disk IO — so a caller projecting N rows reads lineage/rollup off this single result
+ * instead of calling the disk-reading `stem(id)` per row (which would be O(n²) reads).
+ * There is NO stored stem object; this is a pure derivation.
+ */
+export function computeStemViews(items: readonly StemInput[]): Map<string, StemView> {
+  const all = new Map<string, StemInput>();
+  for (const it of items) all.set(it.id, it);
+  // Precompute reverse adjacency (predecessor id → its successors) once, so the
+  // component BFS does not re-scan every node to find successors per step.
+  const successors = new Map<string, string[]>();
+  for (const it of items) {
+    if (it.follows !== undefined && all.has(it.follows)) {
+      const bucket = successors.get(it.follows) ?? [];
+      bucket.push(it.id);
+      successors.set(it.follows, bucket);
+    }
+  }
+  const result = new Map<string, StemView>();
+  const visited = new Set<string>();
+  for (const start of all.keys()) {
+    if (visited.has(start)) continue;
+    // Connected component over follows edges (both directions).
+    const members = new Set<string>();
+    const queue = [start];
+    while (queue.length > 0) {
+      const cur = queue.pop();
+      if (cur === undefined || members.has(cur)) continue;
+      members.add(cur);
+      visited.add(cur);
+      const node = all.get(cur);
+      if (node?.follows !== undefined && all.has(node.follows)) queue.push(node.follows);
+      for (const s of successors.get(cur) ?? []) queue.push(s);
+    }
+    const ordered = orderStemMembers(members, all);
+    const memberList: StemMember[] = ordered.map((mid) => {
+      const node = all.get(mid);
+      return {
+        id: mid,
+        status: node?.status ?? 'draft',
+        ...(node?.follows !== undefined ? { follows: node.follows } : {}),
+      };
+    });
+    const view: StemView = { members: memberList, rolled_up: rollUpStem(memberList) };
+    for (const mid of members) result.set(mid, view);
+  }
+  return result;
 }
 
 // ac-4: "high-severity" threshold for the done block = severity ∈ {high, critical}.
@@ -822,63 +933,63 @@ export class WorkItemStore {
   async stem(id: string): Promise<StemView> {
     await this.get(id); // clear error if `id` is unknown
     // Load every WI's lineage-relevant fields once (follows for edges, status for
-    // the rollup, created_at to break ordering ties on a branch).
-    const all = new Map<
-      string,
-      { status: WorkItem['status']; follows?: string; created_at: string }
-    >();
+    // the rollup, created_at to break ordering ties on a branch), then derive all
+    // stems in ONE pass. The single-WI view is read off the shared result.
+    const items: StemInput[] = [];
+    let sawId = false;
     for (const s of await this.list()) {
       const item = await this.get(s.id);
-      all.set(item.id, {
+      if (item.id === id) sawId = true;
+      items.push({
+        id: item.id,
         status: item.status,
         created_at: item.created_at,
         ...(item.follows !== undefined ? { follows: item.follows } : {}),
       });
     }
-    // Connected component over follows edges (both directions).
-    const members = new Set<string>();
-    const queue = [id];
-    while (queue.length > 0) {
-      const cur = queue.pop();
-      if (cur === undefined || members.has(cur)) continue;
-      members.add(cur);
-      const node = all.get(cur);
-      if (node?.follows !== undefined && all.has(node.follows)) queue.push(node.follows);
-      for (const [oid, o] of all) if (o.follows === cur) queue.push(oid);
+    // Belt: an item resolvable via get() but not surfaced by list() (races/edge
+    // cases) is still projected as at least a one-member stem.
+    if (!sawId) {
+      const item = await this.get(id);
+      items.push({
+        id: item.id,
+        status: item.status,
+        created_at: item.created_at,
+        ...(item.follows !== undefined ? { follows: item.follows } : {}),
+      });
     }
-    // Depth = follows-hops up to a component root (a member whose follows is outside
-    // the component). Linear chains get a strict order; branches order by depth.
-    const depthOf = (mid: string): number => {
-      let d = 0;
-      let cur = mid;
-      const seen = new Set<string>([cur]);
-      for (;;) {
-        const f = all.get(cur)?.follows;
-        if (f === undefined || !members.has(f) || seen.has(f)) break;
-        seen.add(f);
-        cur = f;
-        d++;
+    const views = computeStemViews(items);
+    return views.get(id) ?? { members: [{ id, status: 'draft' }], rolled_up: 'open' };
+  }
+
+  /**
+   * WS0-T1 (wi_260706aka): enumerate + reduce ONLY the committed Record tier
+   * (`.ditto/work-items/<id>/` — record.json folded with events/). It deliberately
+   * NEVER reads the Run/legacy base (`.ditto/local/...`, gitignored) — deriving the
+   * backlog projection strictly from the committed Record is what makes its output
+   * deterministic across a Run-tier wipe (ac-5). A malformed record / corrupt-event
+   * WI is skipped (an explicit get() still surfaces its error elsewhere).
+   */
+  async listCommittedRecords(): Promise<WorkItem[]> {
+    const base = join(dittoDir(this.repoRoot), 'work-items');
+    let entries: string[];
+    try {
+      entries = await readdir(base);
+    } catch {
+      return [];
+    }
+    const items: WorkItem[] = [];
+    for (const name of entries) {
+      try {
+        if (!(await stat(join(base, name))).isDirectory()) continue;
+        const record = await this.readRecord(name);
+        if (record === null) continue;
+        items.push(reduceWorkItem(record, await this.readEvents(name)));
+      } catch {
+        // skip malformed record / corrupt-event WI (surfaced via an explicit get()).
       }
-      return d;
-    };
-    const ordered = [...members].sort((a, b) => {
-      const da = depthOf(a);
-      const db = depthOf(b);
-      if (da !== db) return da - db;
-      const ca = all.get(a)?.created_at ?? '';
-      const cb = all.get(b)?.created_at ?? '';
-      if (ca !== cb) return ca < cb ? -1 : 1;
-      return a < b ? -1 : 1;
-    });
-    const memberList: StemMember[] = ordered.map((mid) => {
-      const node = all.get(mid);
-      return {
-        id: mid,
-        status: node?.status ?? 'draft',
-        ...(node?.follows !== undefined ? { follows: node.follows } : {}),
-      };
-    });
-    return { members: memberList, rolled_up: rollUpStem(memberList) };
+    }
+    return items;
   }
 
   /**
@@ -934,10 +1045,14 @@ export class WorkItemStore {
     return targets.map((t) => t.id);
   }
 
-  async list(): Promise<WorkItemSummary[]> {
-    // §6 dual base: enumerate the committed Record base AND the legacy personal base,
-    // dedup by id (committed Record wins via get()'s record.json-first fallback).
-    // Both cohorts stay visible during the migration window.
+  /**
+   * §6 dual base: the ids of every active work item — the union of the committed
+   * Record base (`.ditto/work-items/`) AND the legacy personal base
+   * (`.ditto/local/work-items/`), deduped. Both cohorts stay visible during the
+   * migration window (WS0-T4 migrates the legacy tier). The single enumeration path
+   * shared by `list()` and `listAll()` so neither reinvents the dual-base scan.
+   */
+  private async collectWorkItemIds(): Promise<Set<string>> {
     const ids = new Set<string>();
     for (const base of [
       join(dittoDir(this.repoRoot), 'work-items'),
@@ -957,6 +1072,34 @@ export class WorkItemStore {
         }
       }
     }
+    return ids;
+  }
+
+  /**
+   * WS0-T1 (wi_260706aka): the FULL reduced WorkItem for every active id, dual-base
+   * (committed Record ⋃ legacy personal). Unlike `listCommittedRecords()` (committed
+   * tier only), this keeps the ~67 not-yet-migrated legacy items visible — so the
+   * backlog projection (`ditto work list`) is not truncated to the committed few. A
+   * malformed / corrupt-event WI is skipped (an explicit get() still surfaces it).
+   * The lineage/rollup pass over this set stays O(n): the caller builds stems ONCE.
+   */
+  async listAll(): Promise<WorkItem[]> {
+    const items: WorkItem[] = [];
+    for (const id of await this.collectWorkItemIds()) {
+      try {
+        items.push(await this.get(id));
+      } catch {
+        // skip malformed / corrupt-event work items; an explicit get() surfaces it.
+      }
+    }
+    return items;
+  }
+
+  async list(): Promise<WorkItemSummary[]> {
+    // §6 dual base: enumerate the committed Record base AND the legacy personal base,
+    // dedup by id (committed Record wins via get()'s record.json-first fallback).
+    // Both cohorts stay visible during the migration window.
+    const ids = await this.collectWorkItemIds();
     const summaries: WorkItemSummary[] = [];
     for (const id of ids) {
       try {

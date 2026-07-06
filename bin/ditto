@@ -47,7 +47,7 @@ var __export = (target, all) => {
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = import.meta.require;
 
-// ../../../../node_modules/consola/dist/chunks/prompt.mjs
+// node_modules/consola/dist/chunks/prompt.mjs
 var exports_prompt = {};
 __export(exports_prompt, {
   prompt: () => prompt,
@@ -803,7 +803,7 @@ var init_prompt = __esm(() => {
   kCancel = Symbol.for("cancel");
 });
 
-// ../../../../node_modules/smol-toml/dist/error.js
+// node_modules/smol-toml/dist/error.js
 function getLineColFromPtr(string, ptr) {
   let lines = string.slice(0, ptr).split(/\r\n|\n|\r/g);
   return [lines.length, lines.pop().length + 1];
@@ -875,7 +875,7 @@ ${codeblock}`, options);
   };
 });
 
-// ../../../../node_modules/smol-toml/dist/util.js
+// node_modules/smol-toml/dist/util.js
 function isEscaped(str, ptr) {
   let i2 = 0;
   while (str[ptr - ++i2] === "\\")
@@ -991,7 +991,7 @@ var init_util = __esm(() => {
    */
 });
 
-// ../../../../node_modules/smol-toml/dist/date.js
+// node_modules/smol-toml/dist/date.js
 var DATE_TIME_RE, TomlDate;
 var init_date = __esm(() => {
   /*!
@@ -1113,7 +1113,7 @@ var init_date = __esm(() => {
   };
 });
 
-// ../../../../node_modules/smol-toml/dist/primitive.js
+// node_modules/smol-toml/dist/primitive.js
 function parseString(str, ptr = 0, endPtr = str.length) {
   let isLiteral = str[ptr] === "'";
   let isMultiline = str[ptr++] === str[ptr] && str[ptr] === str[ptr + 1];
@@ -1291,7 +1291,7 @@ var init_primitive = __esm(() => {
   };
 });
 
-// ../../../../node_modules/smol-toml/dist/extract.js
+// node_modules/smol-toml/dist/extract.js
 function sliceAndTrimEndOf(str, startPtr, endPtr) {
   let value = str.slice(startPtr, endPtr);
   let commentIdx = value.indexOf("#");
@@ -1392,7 +1392,7 @@ var init_extract = __esm(() => {
    */
 });
 
-// ../../../../node_modules/smol-toml/dist/struct.js
+// node_modules/smol-toml/dist/struct.js
 function parseKey(str, ptr, end = "=") {
   let dot = ptr - 1;
   let parsed = [];
@@ -1576,7 +1576,7 @@ var init_struct = __esm(() => {
   KEY_PART_RE = /^[a-zA-Z0-9-_]+[ \t]*$/;
 });
 
-// ../../../../node_modules/smol-toml/dist/parse.js
+// node_modules/smol-toml/dist/parse.js
 function peekTable(key, table, meta, type) {
   let t2 = table;
   let m2 = meta;
@@ -1723,7 +1723,7 @@ var init_parse = __esm(() => {
    */
 });
 
-// ../../../../node_modules/smol-toml/dist/stringify.js
+// node_modules/smol-toml/dist/stringify.js
 var init_stringify = __esm(() => {
   /*!
    * Copyright (c) Squirrel Chat et al., All rights reserved.
@@ -1754,7 +1754,7 @@ var init_stringify = __esm(() => {
    */
 });
 
-// ../../../../node_modules/smol-toml/dist/index.js
+// node_modules/smol-toml/dist/index.js
 var init_dist = __esm(() => {
   init_parse();
   init_stringify();
@@ -1789,7 +1789,7 @@ var init_dist = __esm(() => {
    */
 });
 
-// ../../../../node_modules/yaml/dist/nodes/identity.js
+// node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS((exports) => {
   var ALIAS = Symbol.for("yaml.alias");
   var DOC = Symbol.for("yaml.document");
@@ -1843,7 +1843,7 @@ var require_identity = __commonJS((exports) => {
   exports.isSeq = isSeq;
 });
 
-// ../../../../node_modules/yaml/dist/visit.js
+// node_modules/yaml/dist/visit.js
 var require_visit = __commonJS((exports) => {
   var identity = require_identity();
   var BREAK = Symbol("break visit");
@@ -1998,7 +1998,7 @@ var require_visit = __commonJS((exports) => {
   exports.visitAsync = visitAsync;
 });
 
-// ../../../../node_modules/yaml/dist/doc/directives.js
+// node_modules/yaml/dist/doc/directives.js
 var require_directives = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2150,7 +2150,7 @@ var require_directives = __commonJS((exports) => {
   exports.Directives = Directives;
 });
 
-// ../../../../node_modules/yaml/dist/doc/anchors.js
+// node_modules/yaml/dist/doc/anchors.js
 var require_anchors = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2212,7 +2212,7 @@ var require_anchors = __commonJS((exports) => {
   exports.findNewAnchor = findNewAnchor;
 });
 
-// ../../../../node_modules/yaml/dist/doc/applyReviver.js
+// node_modules/yaml/dist/doc/applyReviver.js
 var require_applyReviver = __commonJS((exports) => {
   function applyReviver(reviver, obj, key, val) {
     if (val && typeof val === "object") {
@@ -2259,7 +2259,7 @@ var require_applyReviver = __commonJS((exports) => {
   exports.applyReviver = applyReviver;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/toJS.js
+// node_modules/yaml/dist/nodes/toJS.js
 var require_toJS = __commonJS((exports) => {
   var identity = require_identity();
   function toJS(value, arg, ctx) {
@@ -2286,7 +2286,7 @@ var require_toJS = __commonJS((exports) => {
   exports.toJS = toJS;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Node.js
+// node_modules/yaml/dist/nodes/Node.js
 var require_Node = __commonJS((exports) => {
   var applyReviver = require_applyReviver();
   var identity = require_identity();
@@ -2323,7 +2323,7 @@ var require_Node = __commonJS((exports) => {
   exports.NodeBase = NodeBase;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Alias.js
+// node_modules/yaml/dist/nodes/Alias.js
 var require_Alias = __commonJS((exports) => {
   var anchors = require_anchors();
   var visit = require_visit();
@@ -2433,7 +2433,7 @@ var require_Alias = __commonJS((exports) => {
   exports.Alias = Alias;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Scalar.js
+// node_modules/yaml/dist/nodes/Scalar.js
 var require_Scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Node = require_Node();
@@ -2461,7 +2461,7 @@ var require_Scalar = __commonJS((exports) => {
   exports.isScalarValue = isScalarValue;
 });
 
-// ../../../../node_modules/yaml/dist/doc/createNode.js
+// node_modules/yaml/dist/doc/createNode.js
 var require_createNode = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -2533,7 +2533,7 @@ var require_createNode = __commonJS((exports) => {
   exports.createNode = createNode;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Collection.js
+// node_modules/yaml/dist/nodes/Collection.js
 var require_Collection = __commonJS((exports) => {
   var createNode = require_createNode();
   var identity = require_identity();
@@ -2648,7 +2648,7 @@ var require_Collection = __commonJS((exports) => {
   exports.isEmptyPath = isEmptyPath;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyComment.js
+// node_modules/yaml/dist/stringify/stringifyComment.js
 var require_stringifyComment = __commonJS((exports) => {
   var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
   function indentComment(comment, indent) {
@@ -2665,7 +2665,7 @@ var require_stringifyComment = __commonJS((exports) => {
   exports.stringifyComment = stringifyComment;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/foldFlowLines.js
+// node_modules/yaml/dist/stringify/foldFlowLines.js
 var require_foldFlowLines = __commonJS((exports) => {
   var FOLD_FLOW = "flow";
   var FOLD_BLOCK = "block";
@@ -2802,7 +2802,7 @@ ${indent}${text.slice(fold + 1, end2)}`;
   exports.foldFlowLines = foldFlowLines;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyString.js
+// node_modules/yaml/dist/stringify/stringifyString.js
 var require_stringifyString = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var foldFlowLines = require_foldFlowLines();
@@ -3100,7 +3100,7 @@ ${indent}`);
   exports.stringifyString = stringifyString;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringify.js
+// node_modules/yaml/dist/stringify/stringify.js
 var require_stringify = __commonJS((exports) => {
   var anchors = require_anchors();
   var identity = require_identity();
@@ -3221,7 +3221,7 @@ ${ctx.indent}${str}`;
   exports.stringify = stringify2;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyPair.js
+// node_modules/yaml/dist/stringify/stringifyPair.js
 var require_stringifyPair = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3357,7 +3357,7 @@ ${ctx.indent}`;
   exports.stringifyPair = stringifyPair;
 });
 
-// ../../../../node_modules/yaml/dist/log.js
+// node_modules/yaml/dist/log.js
 var require_log = __commonJS((exports) => {
   var node_process = __require("process");
   function debug(logLevel, ...messages) {
@@ -3376,7 +3376,7 @@ var require_log = __commonJS((exports) => {
   exports.warn = warn;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/merge.js
+// node_modules/yaml/dist/schema/yaml-1.1/merge.js
 var require_merge = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3433,7 +3433,7 @@ var require_merge = __commonJS((exports) => {
   exports.merge = merge;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/addPairToJSMap.js
+// node_modules/yaml/dist/nodes/addPairToJSMap.js
 var require_addPairToJSMap = __commonJS((exports) => {
   var log = require_log();
   var merge = require_merge();
@@ -3494,7 +3494,7 @@ var require_addPairToJSMap = __commonJS((exports) => {
   exports.addPairToJSMap = addPairToJSMap;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Pair.js
+// node_modules/yaml/dist/nodes/Pair.js
 var require_Pair = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyPair = require_stringifyPair();
@@ -3532,7 +3532,7 @@ var require_Pair = __commonJS((exports) => {
   exports.createPair = createPair;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyCollection.js
+// node_modules/yaml/dist/stringify/stringifyCollection.js
 var require_stringifyCollection = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -3684,7 +3684,7 @@ ${indent}${end}`;
   exports.stringifyCollection = stringifyCollection;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/YAMLMap.js
+// node_modules/yaml/dist/nodes/YAMLMap.js
 var require_YAMLMap = __commonJS((exports) => {
   var stringifyCollection = require_stringifyCollection();
   var addPairToJSMap = require_addPairToJSMap();
@@ -3811,7 +3811,7 @@ var require_YAMLMap = __commonJS((exports) => {
   exports.findPair = findPair;
 });
 
-// ../../../../node_modules/yaml/dist/schema/common/map.js
+// node_modules/yaml/dist/schema/common/map.js
 var require_map = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLMap = require_YAMLMap();
@@ -3830,7 +3830,7 @@ var require_map = __commonJS((exports) => {
   exports.map = map;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/YAMLSeq.js
+// node_modules/yaml/dist/nodes/YAMLSeq.js
 var require_YAMLSeq = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyCollection = require_stringifyCollection();
@@ -3923,7 +3923,7 @@ var require_YAMLSeq = __commonJS((exports) => {
   exports.YAMLSeq = YAMLSeq;
 });
 
-// ../../../../node_modules/yaml/dist/schema/common/seq.js
+// node_modules/yaml/dist/schema/common/seq.js
 var require_seq = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLSeq = require_YAMLSeq();
@@ -3942,7 +3942,7 @@ var require_seq = __commonJS((exports) => {
   exports.seq = seq;
 });
 
-// ../../../../node_modules/yaml/dist/schema/common/string.js
+// node_modules/yaml/dist/schema/common/string.js
 var require_string = __commonJS((exports) => {
   var stringifyString = require_stringifyString();
   var string = {
@@ -3958,7 +3958,7 @@ var require_string = __commonJS((exports) => {
   exports.string = string;
 });
 
-// ../../../../node_modules/yaml/dist/schema/common/null.js
+// node_modules/yaml/dist/schema/common/null.js
 var require_null = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var nullTag = {
@@ -3973,7 +3973,7 @@ var require_null = __commonJS((exports) => {
   exports.nullTag = nullTag;
 });
 
-// ../../../../node_modules/yaml/dist/schema/core/bool.js
+// node_modules/yaml/dist/schema/core/bool.js
 var require_bool = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var boolTag = {
@@ -3994,7 +3994,7 @@ var require_bool = __commonJS((exports) => {
   exports.boolTag = boolTag;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyNumber.js
+// node_modules/yaml/dist/stringify/stringifyNumber.js
 var require_stringifyNumber = __commonJS((exports) => {
   function stringifyNumber({ format, minFractionDigits, tag, value }) {
     if (typeof value === "bigint")
@@ -4018,7 +4018,7 @@ var require_stringifyNumber = __commonJS((exports) => {
   exports.stringifyNumber = stringifyNumber;
 });
 
-// ../../../../node_modules/yaml/dist/schema/core/float.js
+// node_modules/yaml/dist/schema/core/float.js
 var require_float = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4061,7 +4061,7 @@ var require_float = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// ../../../../node_modules/yaml/dist/schema/core/int.js
+// node_modules/yaml/dist/schema/core/int.js
 var require_int = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4103,7 +4103,7 @@ var require_int = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// ../../../../node_modules/yaml/dist/schema/core/schema.js
+// node_modules/yaml/dist/schema/core/schema.js
 var require_schema = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4128,7 +4128,7 @@ var require_schema = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// ../../../../node_modules/yaml/dist/schema/json/schema.js
+// node_modules/yaml/dist/schema/json/schema.js
 var require_schema2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var map = require_map();
@@ -4192,7 +4192,7 @@ var require_schema2 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/binary.js
+// node_modules/yaml/dist/schema/yaml-1.1/binary.js
 var require_binary = __commonJS((exports) => {
   var node_buffer = __require("buffer");
   var Scalar = require_Scalar();
@@ -4247,7 +4247,7 @@ var require_binary = __commonJS((exports) => {
   exports.binary = binary;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/pairs.js
+// node_modules/yaml/dist/schema/yaml-1.1/pairs.js
 var require_pairs = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4322,7 +4322,7 @@ ${cn.comment}` : item.comment;
   exports.resolvePairs = resolvePairs;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/omap.js
+// node_modules/yaml/dist/schema/yaml-1.1/omap.js
 var require_omap = __commonJS((exports) => {
   var identity = require_identity();
   var toJS = require_toJS();
@@ -4394,7 +4394,7 @@ var require_omap = __commonJS((exports) => {
   exports.omap = omap;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/bool.js
+// node_modules/yaml/dist/schema/yaml-1.1/bool.js
 var require_bool2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function boolStringify({ value, source }, ctx) {
@@ -4423,7 +4423,7 @@ var require_bool2 = __commonJS((exports) => {
   exports.trueTag = trueTag;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/float.js
+// node_modules/yaml/dist/schema/yaml-1.1/float.js
 var require_float2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4469,7 +4469,7 @@ var require_float2 = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/int.js
+// node_modules/yaml/dist/schema/yaml-1.1/int.js
 var require_int2 = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4545,7 +4545,7 @@ var require_int2 = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/set.js
+// node_modules/yaml/dist/schema/yaml-1.1/set.js
 var require_set = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4628,7 +4628,7 @@ var require_set = __commonJS((exports) => {
   exports.set = set;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
+// node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
 var require_timestamp = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   function parseSexagesimal(str, asBigInt) {
@@ -4710,7 +4710,7 @@ var require_timestamp = __commonJS((exports) => {
   exports.timestamp = timestamp;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/schema.js
+// node_modules/yaml/dist/schema/yaml-1.1/schema.js
 var require_schema3 = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4751,7 +4751,7 @@ var require_schema3 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// ../../../../node_modules/yaml/dist/schema/tags.js
+// node_modules/yaml/dist/schema/tags.js
 var require_tags = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4842,7 +4842,7 @@ var require_tags = __commonJS((exports) => {
   exports.getTags = getTags;
 });
 
-// ../../../../node_modules/yaml/dist/schema/Schema.js
+// node_modules/yaml/dist/schema/Schema.js
 var require_Schema = __commonJS((exports) => {
   var identity = require_identity();
   var map = require_map();
@@ -4872,7 +4872,7 @@ var require_Schema = __commonJS((exports) => {
   exports.Schema = Schema;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyDocument.js
+// node_modules/yaml/dist/stringify/stringifyDocument.js
 var require_stringifyDocument = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -4952,7 +4952,7 @@ var require_stringifyDocument = __commonJS((exports) => {
   exports.stringifyDocument = stringifyDocument;
 });
 
-// ../../../../node_modules/yaml/dist/doc/Document.js
+// node_modules/yaml/dist/doc/Document.js
 var require_Document = __commonJS((exports) => {
   var Alias = require_Alias();
   var Collection = require_Collection();
@@ -5187,7 +5187,7 @@ var require_Document = __commonJS((exports) => {
   exports.Document = Document;
 });
 
-// ../../../../node_modules/yaml/dist/errors.js
+// node_modules/yaml/dist/errors.js
 var require_errors = __commonJS((exports) => {
   class YAMLError extends Error {
     constructor(name, pos, code, message) {
@@ -5252,7 +5252,7 @@ ${pointer}
   exports.prettifyError = prettifyError;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-props.js
+// node_modules/yaml/dist/compose/resolve-props.js
 var require_resolve_props = __commonJS((exports) => {
   function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
     let spaceBefore = false;
@@ -5382,7 +5382,7 @@ var require_resolve_props = __commonJS((exports) => {
   exports.resolveProps = resolveProps;
 });
 
-// ../../../../node_modules/yaml/dist/compose/util-contains-newline.js
+// node_modules/yaml/dist/compose/util-contains-newline.js
 var require_util_contains_newline = __commonJS((exports) => {
   function containsNewline(key) {
     if (!key)
@@ -5422,7 +5422,7 @@ var require_util_contains_newline = __commonJS((exports) => {
   exports.containsNewline = containsNewline;
 });
 
-// ../../../../node_modules/yaml/dist/compose/util-flow-indent-check.js
+// node_modules/yaml/dist/compose/util-flow-indent-check.js
 var require_util_flow_indent_check = __commonJS((exports) => {
   var utilContainsNewline = require_util_contains_newline();
   function flowIndentCheck(indent, fc, onError) {
@@ -5437,7 +5437,7 @@ var require_util_flow_indent_check = __commonJS((exports) => {
   exports.flowIndentCheck = flowIndentCheck;
 });
 
-// ../../../../node_modules/yaml/dist/compose/util-map-includes.js
+// node_modules/yaml/dist/compose/util-map-includes.js
 var require_util_map_includes = __commonJS((exports) => {
   var identity = require_identity();
   function mapIncludes(ctx, items, search) {
@@ -5450,7 +5450,7 @@ var require_util_map_includes = __commonJS((exports) => {
   exports.mapIncludes = mapIncludes;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-block-map.js
+// node_modules/yaml/dist/compose/resolve-block-map.js
 var require_resolve_block_map = __commonJS((exports) => {
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -5557,7 +5557,7 @@ var require_resolve_block_map = __commonJS((exports) => {
   exports.resolveBlockMap = resolveBlockMap;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-block-seq.js
+// node_modules/yaml/dist/compose/resolve-block-seq.js
 var require_resolve_block_seq = __commonJS((exports) => {
   var YAMLSeq = require_YAMLSeq();
   var resolveProps = require_resolve_props();
@@ -5605,7 +5605,7 @@ var require_resolve_block_seq = __commonJS((exports) => {
   exports.resolveBlockSeq = resolveBlockSeq;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-end.js
+// node_modules/yaml/dist/compose/resolve-end.js
 var require_resolve_end = __commonJS((exports) => {
   function resolveEnd(end, offset, reqSpace, onError) {
     let comment = "";
@@ -5645,7 +5645,7 @@ var require_resolve_end = __commonJS((exports) => {
   exports.resolveEnd = resolveEnd;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-flow-collection.js
+// node_modules/yaml/dist/compose/resolve-flow-collection.js
 var require_resolve_flow_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -5836,7 +5836,7 @@ var require_resolve_flow_collection = __commonJS((exports) => {
   exports.resolveFlowCollection = resolveFlowCollection;
 });
 
-// ../../../../node_modules/yaml/dist/compose/compose-collection.js
+// node_modules/yaml/dist/compose/compose-collection.js
 var require_compose_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -5898,7 +5898,7 @@ var require_compose_collection = __commonJS((exports) => {
   exports.composeCollection = composeCollection;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-block-scalar.js
+// node_modules/yaml/dist/compose/resolve-block-scalar.js
 var require_resolve_block_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function resolveBlockScalar(ctx, scalar, onError) {
@@ -6091,7 +6091,7 @@ var require_resolve_block_scalar = __commonJS((exports) => {
   exports.resolveBlockScalar = resolveBlockScalar;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-flow-scalar.js
+// node_modules/yaml/dist/compose/resolve-flow-scalar.js
 var require_resolve_flow_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var resolveEnd = require_resolve_end();
@@ -6308,7 +6308,7 @@ var require_resolve_flow_scalar = __commonJS((exports) => {
   exports.resolveFlowScalar = resolveFlowScalar;
 });
 
-// ../../../../node_modules/yaml/dist/compose/compose-scalar.js
+// node_modules/yaml/dist/compose/compose-scalar.js
 var require_compose_scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -6386,7 +6386,7 @@ var require_compose_scalar = __commonJS((exports) => {
   exports.composeScalar = composeScalar;
 });
 
-// ../../../../node_modules/yaml/dist/compose/util-empty-scalar-position.js
+// node_modules/yaml/dist/compose/util-empty-scalar-position.js
 var require_util_empty_scalar_position = __commonJS((exports) => {
   function emptyScalarPosition(offset, before, pos) {
     if (before) {
@@ -6413,7 +6413,7 @@ var require_util_empty_scalar_position = __commonJS((exports) => {
   exports.emptyScalarPosition = emptyScalarPosition;
 });
 
-// ../../../../node_modules/yaml/dist/compose/compose-node.js
+// node_modules/yaml/dist/compose/compose-node.js
 var require_compose_node = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -6516,7 +6516,7 @@ var require_compose_node = __commonJS((exports) => {
   exports.composeNode = composeNode;
 });
 
-// ../../../../node_modules/yaml/dist/compose/compose-doc.js
+// node_modules/yaml/dist/compose/compose-doc.js
 var require_compose_doc = __commonJS((exports) => {
   var Document = require_Document();
   var composeNode = require_compose_node();
@@ -6556,7 +6556,7 @@ var require_compose_doc = __commonJS((exports) => {
   exports.composeDoc = composeDoc;
 });
 
-// ../../../../node_modules/yaml/dist/compose/composer.js
+// node_modules/yaml/dist/compose/composer.js
 var require_composer = __commonJS((exports) => {
   var node_process = __require("process");
   var directives = require_directives();
@@ -6747,7 +6747,7 @@ ${end.comment}` : end.comment;
   exports.Composer = Composer;
 });
 
-// ../../../../node_modules/yaml/dist/parse/cst-scalar.js
+// node_modules/yaml/dist/parse/cst-scalar.js
 var require_cst_scalar = __commonJS((exports) => {
   var resolveBlockScalar = require_resolve_block_scalar();
   var resolveFlowScalar = require_resolve_flow_scalar();
@@ -6937,7 +6937,7 @@ var require_cst_scalar = __commonJS((exports) => {
   exports.setScalarValue = setScalarValue;
 });
 
-// ../../../../node_modules/yaml/dist/parse/cst-stringify.js
+// node_modules/yaml/dist/parse/cst-stringify.js
 var require_cst_stringify = __commonJS((exports) => {
   var stringify2 = (cst) => ("type" in cst) ? stringifyToken(cst) : stringifyItem(cst);
   function stringifyToken(token) {
@@ -6995,7 +6995,7 @@ var require_cst_stringify = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// ../../../../node_modules/yaml/dist/parse/cst-visit.js
+// node_modules/yaml/dist/parse/cst-visit.js
 var require_cst_visit = __commonJS((exports) => {
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
@@ -7054,7 +7054,7 @@ var require_cst_visit = __commonJS((exports) => {
   exports.visit = visit;
 });
 
-// ../../../../node_modules/yaml/dist/parse/cst.js
+// node_modules/yaml/dist/parse/cst.js
 var require_cst = __commonJS((exports) => {
   var cstScalar = require_cst_scalar();
   var cstStringify = require_cst_stringify();
@@ -7155,7 +7155,7 @@ var require_cst = __commonJS((exports) => {
   exports.tokenType = tokenType;
 });
 
-// ../../../../node_modules/yaml/dist/parse/lexer.js
+// node_modules/yaml/dist/parse/lexer.js
 var require_lexer = __commonJS((exports) => {
   var cst = require_cst();
   function isEmpty(ch) {
@@ -7752,7 +7752,7 @@ var require_lexer = __commonJS((exports) => {
   exports.Lexer = Lexer;
 });
 
-// ../../../../node_modules/yaml/dist/parse/line-counter.js
+// node_modules/yaml/dist/parse/line-counter.js
 var require_line_counter = __commonJS((exports) => {
   class LineCounter {
     constructor() {
@@ -7780,7 +7780,7 @@ var require_line_counter = __commonJS((exports) => {
   exports.LineCounter = LineCounter;
 });
 
-// ../../../../node_modules/yaml/dist/parse/parser.js
+// node_modules/yaml/dist/parse/parser.js
 var require_parser = __commonJS((exports) => {
   var node_process = __require("process");
   var cst = require_cst();
@@ -8636,7 +8636,7 @@ var require_parser = __commonJS((exports) => {
   exports.Parser = Parser;
 });
 
-// ../../../../node_modules/yaml/dist/public-api.js
+// node_modules/yaml/dist/public-api.js
 var require_public_api = __commonJS((exports) => {
   var composer = require_composer();
   var Document = require_Document();
@@ -8730,7 +8730,7 @@ var require_public_api = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// ../../../../node_modules/yaml/dist/index.js
+// node_modules/yaml/dist/index.js
 var composer, Document, Schema, errors, Alias, identity, Pair, Scalar, YAMLMap, YAMLSeq, cst, lexer, lineCounter, parser, publicApi, visit, $Composer, $Document, $Schema, $YAMLError, $YAMLParseError, $YAMLWarning, $Alias, $isAlias, $isCollection, $isDocument, $isMap, $isNode, $isPair, $isScalar, $isSeq, $Pair, $Scalar, $YAMLMap, $YAMLSeq, $Lexer, $LineCounter, $Parser, $parse, $parseAllDocuments, $parseDocument, $stringify, $visit, $visitAsync;
 var init_dist2 = __esm(() => {
   composer = require_composer();
@@ -8847,7 +8847,7 @@ var init_shared = __esm(() => {
   init_dist2();
 });
 
-// ../../../../node_modules/zod/v3/helpers/util.js
+// node_modules/zod/v3/helpers/util.js
 var util, objectUtil, ZodParsedType, getParsedType = (data) => {
   const t2 = typeof data;
   switch (t2) {
@@ -8978,7 +8978,7 @@ var init_util2 = __esm(() => {
   ]);
 });
 
-// ../../../../node_modules/zod/v3/ZodError.js
+// node_modules/zod/v3/ZodError.js
 var ZodIssueCode, quotelessJson = (obj) => {
   const json = JSON.stringify(obj, null, 2);
   return json.replace(/"([^"]+)":/g, "$1:");
@@ -9099,7 +9099,7 @@ var init_ZodError = __esm(() => {
   };
 });
 
-// ../../../../node_modules/zod/v3/locales/en.js
+// node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -9206,7 +9206,7 @@ var init_en = __esm(() => {
   en_default = errorMap;
 });
 
-// ../../../../node_modules/zod/v3/errors.js
+// node_modules/zod/v3/errors.js
 function setErrorMap(map) {
   overrideErrorMap = map;
 }
@@ -9219,7 +9219,7 @@ var init_errors = __esm(() => {
   overrideErrorMap = en_default;
 });
 
-// ../../../../node_modules/zod/v3/helpers/parseUtil.js
+// node_modules/zod/v3/helpers/parseUtil.js
 function addIssueToContext(ctx, issueData) {
   const overrideMap = getErrorMap();
   const issue = makeIssue({
@@ -9324,10 +9324,10 @@ var init_parseUtil = __esm(() => {
   });
 });
 
-// ../../../../node_modules/zod/v3/helpers/typeAliases.js
+// node_modules/zod/v3/helpers/typeAliases.js
 var init_typeAliases = () => {};
 
-// ../../../../node_modules/zod/v3/helpers/errorUtil.js
+// node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 var init_errorUtil = __esm(() => {
   (function(errorUtil2) {
@@ -9336,7 +9336,7 @@ var init_errorUtil = __esm(() => {
   })(errorUtil || (errorUtil = {}));
 });
 
-// ../../../../node_modules/zod/v3/types.js
+// node_modules/zod/v3/types.js
 class ParseInputLazyPath {
   constructor(parent, value, path, key) {
     this._cachedPath = [];
@@ -12687,7 +12687,7 @@ var init_types = __esm(() => {
   NEVER = INVALID;
 });
 
-// ../../../../node_modules/zod/v3/external.js
+// node_modules/zod/v3/external.js
 var exports_external = {};
 __export(exports_external, {
   void: () => voidType,
@@ -12807,14 +12807,14 @@ var init_external = __esm(() => {
   init_ZodError();
 });
 
-// ../../../../node_modules/zod/index.js
+// node_modules/zod/index.js
 var init_zod = __esm(() => {
   init_external();
   init_external();
 });
 
 // src/schemas/common.ts
-var isoDateTime, workItemId, runId, reviewId, autopilotId, profileName, declarerRole, providerName, verdict, workItemStatus, severity, sha256, relativePath, evidenceRef, uncertaintyItem, schemaVersion;
+var isoDateTime, workItemId, runId, reviewId, autopilotId, profileName, declarerRole, providerName, verdict, workItemStatus, severity, sha256, relativePath, evidenceRef, evidenceRequiredKind, uncertaintyItem, schemaVersion;
 var init_common = __esm(() => {
   init_zod();
   isoDateTime = exports_external.string().datetime({ offset: true }).describe("RFC 3339 / ISO 8601 datetime with timezone offset");
@@ -12841,6 +12841,7 @@ var init_common = __esm(() => {
     lines: exports_external.object({ start: exports_external.number().int().positive(), end: exports_external.number().int().positive() }).optional(),
     summary: exports_external.string().max(2000).optional()
   }).describe("Pointer to evidence stored outside the manifest itself");
+  evidenceRequiredKind = exports_external.enum(["test", "diff", "browser", "doc", "log"]).describe("Kind of evidence required to verify an acceptance criterion");
   uncertaintyItem = exports_external.object({
     item: exports_external.string().min(1).describe("What is unresolved / was not verified"),
     reason: exports_external.string().min(1).describe("Why it remains open / why verification did not happen")
@@ -12855,6 +12856,9 @@ function dittoDir(repoRoot) {
 }
 function localDir(repoRoot, ...segments) {
   return join5(repoRoot, ".ditto", "local", ...segments);
+}
+function committedWorkItemDir(repoRoot, id) {
+  return join5(dittoDir(repoRoot), "work-items", id);
 }
 var init_ditto_paths = () => {};
 
@@ -13079,7 +13083,7 @@ var init_tech_spec_round = __esm(() => {
 });
 
 // src/schemas/work-item.ts
-var gitSha40, verificationMethod, codePointerMapsTo, acOracle, acceptanceCriterion, workItemWorktree, severityLevel, riskNote, followUp, declaredRisk, githubIssueLink, reEntry, workItem;
+var gitSha40, verificationMethod, codePointerMapsTo, acOracle, acceptanceCriterion, workItemWorktree, severityLevel, riskNote, followUp, declaredRisk, githubIssueLink, reEntry, workItem, workItemEventBase, workItemStatusEventPayload, workItemVerdictEventPayload, workItemGithubPostEventPayload, workItemClaimEventPayload, workItemEvent;
 var init_work_item = __esm(() => {
   init_zod();
   init_common();
@@ -13108,7 +13112,8 @@ var init_work_item = __esm(() => {
     superseded: exports_external.array(exports_external.object({
       statement: exports_external.string().min(1).describe("The prior (graded) statement that was replaced"),
       reason: exports_external.string().min(1).describe("Why the prior criterion was superseded")
-    })).optional()
+    })).optional(),
+    evidence_required: exports_external.array(evidenceRequiredKind).optional()
   }).describe("One acceptance criterion with its verification verdict");
   workItemWorktree = exports_external.object({
     owning_repo: exports_external.string().min(1).describe("'.' for the workspace repo, else the sub-repo path relative to the workspace root"),
@@ -13199,6 +13204,59 @@ var init_work_item = __esm(() => {
       });
     }
   }).describe("Authoritative state for a single DITTO work item");
+  workItemEventBase = {
+    schema_version: schemaVersion,
+    work_item_id: workItemId,
+    seq: exports_external.number().int().nonnegative().describe("Per-writer monotonic sequence; (seq,actor) orders"),
+    actor: exports_external.string().min(1).describe("Writer identity (profile/session); (seq,actor) order tiebreak"),
+    event_id: exports_external.string().min(1).describe("Content-hash dedupe key (idempotent re-append)"),
+    ts: isoDateTime.describe("When the event was written; informational only, not an ordering key")
+  };
+  workItemStatusEventPayload = exports_external.object({
+    to: workItemStatus,
+    closed_at: isoDateTime.nullable().optional().describe("Set on terminal; null clears on reopen")
+  }).describe("status event payload (\xA71.1)");
+  workItemVerdictEventPayload = exports_external.object({
+    criterion_id: exports_external.string().min(1).describe("The AC id this verdict is for"),
+    verdict,
+    evidence: exports_external.array(evidenceRef).default([])
+  }).describe("AC verdict event payload (\xA71.1)");
+  workItemGithubPostEventPayload = exports_external.object({
+    posted_decision_id: exports_external.string().optional().describe("Decision-log id posted to the issue"),
+    posted_claim_marker: exports_external.string().optional().describe("Claim marker posted to the issue"),
+    claimed_branch: exports_external.string().optional().describe("Branch this post claimed the issue on")
+  }).describe("github_post idempotency event payload (\xA71.1 / C5)");
+  workItemClaimEventPayload = exports_external.object({
+    claimed_branch: exports_external.string().optional().describe("Branch claiming/releasing the issue"),
+    posted_claim_marker: exports_external.string().optional().describe("Claim marker this event claims/releases")
+  }).describe("claim / claim_release event payload (\xA71.1 / C5)");
+  workItemEvent = exports_external.discriminatedUnion("kind", [
+    exports_external.object({
+      ...workItemEventBase,
+      kind: exports_external.literal("status"),
+      payload: workItemStatusEventPayload
+    }),
+    exports_external.object({
+      ...workItemEventBase,
+      kind: exports_external.literal("verdict"),
+      payload: workItemVerdictEventPayload
+    }),
+    exports_external.object({
+      ...workItemEventBase,
+      kind: exports_external.literal("github_post"),
+      payload: workItemGithubPostEventPayload
+    }),
+    exports_external.object({
+      ...workItemEventBase,
+      kind: exports_external.literal("claim"),
+      payload: workItemClaimEventPayload
+    }),
+    exports_external.object({
+      ...workItemEventBase,
+      kind: exports_external.literal("claim_release"),
+      payload: workItemClaimEventPayload
+    })
+  ]).describe("One entry of the committed per-event immutable work-item log (wi_2607069bk \xA72.1)");
 });
 
 // src/core/id.ts
@@ -13231,7 +13289,8 @@ var SUFFIX_LENGTH = 9, SUFFIX_CHARSET = "abcdefghijklmnopqrstuvwxyz0123456789";
 var init_id = () => {};
 
 // src/core/work-item-store.ts
-import { readdir as readdir2, rename, stat as stat2 } from "fs/promises";
+import { createHash } from "crypto";
+import { open, readdir as readdir2, rename, stat as stat2 } from "fs/promises";
 import { dirname as dirname2, join as join6 } from "path";
 function tryGitHeadSha(repoRoot) {
   const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
@@ -13251,6 +13310,79 @@ function rollUpStem(members) {
   if (nonTerminal.length > 0)
     return "open";
   return members.every((m2) => m2.status === "done") ? "done" : "partial";
+}
+function orderStemMembers(members, all) {
+  const depthOf = (mid) => {
+    let d2 = 0;
+    let cur = mid;
+    const seen = new Set([cur]);
+    for (;; ) {
+      const f3 = all.get(cur)?.follows;
+      if (f3 === undefined || !members.has(f3) || seen.has(f3))
+        break;
+      seen.add(f3);
+      cur = f3;
+      d2++;
+    }
+    return d2;
+  };
+  return [...members].sort((a2, b2) => {
+    const da = depthOf(a2);
+    const db = depthOf(b2);
+    if (da !== db)
+      return da - db;
+    const ca = all.get(a2)?.created_at ?? "";
+    const cb = all.get(b2)?.created_at ?? "";
+    if (ca !== cb)
+      return ca < cb ? -1 : 1;
+    return a2 < b2 ? -1 : 1;
+  });
+}
+function computeStemViews(items) {
+  const all = new Map;
+  for (const it of items)
+    all.set(it.id, it);
+  const successors = new Map;
+  for (const it of items) {
+    if (it.follows !== undefined && all.has(it.follows)) {
+      const bucket = successors.get(it.follows) ?? [];
+      bucket.push(it.id);
+      successors.set(it.follows, bucket);
+    }
+  }
+  const result = new Map;
+  const visited = new Set;
+  for (const start of all.keys()) {
+    if (visited.has(start))
+      continue;
+    const members = new Set;
+    const queue2 = [start];
+    while (queue2.length > 0) {
+      const cur = queue2.pop();
+      if (cur === undefined || members.has(cur))
+        continue;
+      members.add(cur);
+      visited.add(cur);
+      const node = all.get(cur);
+      if (node?.follows !== undefined && all.has(node.follows))
+        queue2.push(node.follows);
+      for (const s2 of successors.get(cur) ?? [])
+        queue2.push(s2);
+    }
+    const ordered = orderStemMembers(members, all);
+    const memberList = ordered.map((mid) => {
+      const node = all.get(mid);
+      return {
+        id: mid,
+        status: node?.status ?? "draft",
+        ...node?.follows !== undefined ? { follows: node.follows } : {}
+      };
+    });
+    const view = { members: memberList, rolled_up: rollUpStem(memberList) };
+    for (const mid of members)
+      result.set(mid, view);
+  }
+  return result;
 }
 function blockingFollowUp(item) {
   return (item.follow_ups ?? []).find((f3) => f3.kind === "bug" && f3.self_caused === true && f3.resolved !== true && f3.severity !== undefined && DONE_BLOCKING_SEVERITIES.includes(f3.severity));
@@ -13274,6 +13406,141 @@ function pushReadiness(item, stem) {
   }
   return { ready: reasons.length === 0, reasons };
 }
+function isTerminalStatus(s2) {
+  return TERMINAL_STATUSES.has(s2);
+}
+function compareWorkItemEvents(a2, b2) {
+  if (a2.seq !== b2.seq)
+    return a2.seq - b2.seq;
+  if (a2.actor !== b2.actor)
+    return a2.actor < b2.actor ? -1 : 1;
+  if (a2.event_id !== b2.event_id)
+    return a2.event_id < b2.event_id ? -1 : 1;
+  return 0;
+}
+function stableStringify(value) {
+  if (Array.isArray(value))
+    return `[${value.map(stableStringify).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const obj = value;
+    const keys = Object.keys(obj).sort();
+    return `{${keys.map((k2) => `${JSON.stringify(k2)}:${stableStringify(obj[k2])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+function computeEventId(kind, actor, seq, payload) {
+  return createHash("sha256").update(stableStringify({ kind, actor, seq, payload })).digest("hex");
+}
+function foldGithubIssue(record, ordered) {
+  if (record.github_issue === undefined)
+    return;
+  const hasGithubEvents = ordered.some((e2) => e2.kind === "github_post" || e2.kind === "claim" || e2.kind === "claim_release");
+  if (!hasGithubEvents)
+    return record.github_issue;
+  const decisionIds = new Set(record.github_issue.posted_decision_ids ?? []);
+  const claimMarkers = new Set(record.github_issue.posted_claim_markers ?? []);
+  let claimedBranch = record.github_issue.claimed_branch;
+  for (const e2 of ordered) {
+    if (e2.kind === "github_post") {
+      if (e2.payload.posted_decision_id)
+        decisionIds.add(e2.payload.posted_decision_id);
+      if (e2.payload.posted_claim_marker)
+        claimMarkers.add(e2.payload.posted_claim_marker);
+      if (e2.payload.claimed_branch)
+        claimedBranch = e2.payload.claimed_branch;
+    } else if (e2.kind === "claim") {
+      if (e2.payload.posted_claim_marker)
+        claimMarkers.add(e2.payload.posted_claim_marker);
+      if (e2.payload.claimed_branch)
+        claimedBranch = e2.payload.claimed_branch;
+    } else if (e2.kind === "claim_release") {
+      if (e2.payload.posted_claim_marker)
+        claimMarkers.delete(e2.payload.posted_claim_marker);
+      if (e2.payload.claimed_branch && claimedBranch === e2.payload.claimed_branch) {
+        claimedBranch = undefined;
+      }
+    }
+  }
+  const {
+    posted_decision_ids: _pd,
+    posted_claim_markers: _pc,
+    claimed_branch: _cb,
+    ...coords
+  } = record.github_issue;
+  return {
+    ...coords,
+    ...decisionIds.size > 0 ? { posted_decision_ids: [...decisionIds] } : {},
+    ...claimMarkers.size > 0 ? { posted_claim_markers: [...claimMarkers] } : {},
+    ...claimedBranch !== undefined ? { claimed_branch: claimedBranch } : {}
+  };
+}
+function recordGithubIssueForWrite(next, rawRecord) {
+  if (next.github_issue === undefined)
+    return next;
+  const {
+    posted_decision_ids: _pd,
+    posted_claim_markers: _pc,
+    claimed_branch: _cb,
+    ...coords
+  } = next.github_issue;
+  const base = rawRecord?.github_issue;
+  return {
+    ...next,
+    github_issue: {
+      ...coords,
+      ...base?.posted_decision_ids ? { posted_decision_ids: base.posted_decision_ids } : {},
+      ...base?.posted_claim_markers ? { posted_claim_markers: base.posted_claim_markers } : {},
+      ...base?.claimed_branch ? { claimed_branch: base.claimed_branch } : {}
+    }
+  };
+}
+function reduceWorkItem(record, events) {
+  const byId = new Map;
+  for (const e2 of events)
+    if (!byId.has(e2.event_id))
+      byId.set(e2.event_id, e2);
+  const ordered = [...byId.values()].sort(compareWorkItemEvents);
+  let status = record.status;
+  let closedAt = record.closed_at;
+  let sawStatusEvent = false;
+  let latestTs = record.updated_at;
+  for (const e2 of ordered) {
+    if (e2.ts > latestTs)
+      latestTs = e2.ts;
+    if (e2.kind !== "status")
+      continue;
+    if (isTerminalStatus(status) && isTerminalStatus(e2.payload.to))
+      continue;
+    sawStatusEvent = true;
+    status = e2.payload.to;
+    closedAt = e2.payload.closed_at ?? undefined;
+  }
+  const verdicts = new Map;
+  for (const e2 of ordered) {
+    if (e2.kind !== "verdict")
+      continue;
+    verdicts.set(e2.payload.criterion_id, {
+      verdict: e2.payload.verdict,
+      evidence: e2.payload.evidence
+    });
+  }
+  const acceptance_criteria = record.acceptance_criteria.map((ac) => {
+    const v2 = verdicts.get(ac.id);
+    return v2 ? { ...ac, verdict: v2.verdict, evidence: v2.evidence } : ac;
+  });
+  const githubIssue = foldGithubIssue(record, ordered);
+  const { closed_at: _rc, github_issue: _rg, ...restRecord } = record;
+  const effectiveClosedAt = sawStatusEvent ? isTerminalStatus(status) ? closedAt : undefined : record.closed_at;
+  const assembled = {
+    ...restRecord,
+    status,
+    acceptance_criteria,
+    updated_at: latestTs,
+    ...effectiveClosedAt !== undefined ? { closed_at: effectiveClosedAt } : {},
+    ...githubIssue !== undefined ? { github_issue: githubIssue } : {}
+  };
+  return workItem.parse(assembled);
+}
 
 class WorkItemStore {
   repoRoot;
@@ -13289,13 +13556,124 @@ class WorkItemStore {
   languageLedgerPath(id) {
     return join6(this.workItemDir(id), "language-ledger.json");
   }
+  recordPath(id) {
+    return join6(committedWorkItemDir(this.repoRoot, id), "record.json");
+  }
+  eventsDir(id) {
+    return join6(committedWorkItemDir(this.repoRoot, id), "events");
+  }
+  async readRecord(id) {
+    if (!await Bun.file(this.recordPath(id)).exists())
+      return null;
+    return readJson(this.recordPath(id), workItem);
+  }
+  async readEvents(id) {
+    let names;
+    try {
+      names = await readdir2(this.eventsDir(id));
+    } catch {
+      return [];
+    }
+    const events = [];
+    const corrupt = [];
+    for (const name of names) {
+      if (!name.endsWith(".json"))
+        continue;
+      const path = join6(this.eventsDir(id), name);
+      try {
+        events.push(await readJson(path, workItemEvent));
+      } catch {
+        corrupt.push(path);
+      }
+    }
+    if (corrupt.length > 0)
+      throw new WorkItemEventCorruptError(id, corrupt.sort());
+    return events;
+  }
+  async appendEvent(id, actor, kind, payload) {
+    const events = await this.readEvents(id);
+    const seq = events.reduce((max, e2) => Math.max(max, e2.seq), -1) + 1;
+    const eventId = computeEventId(kind, actor, seq, payload);
+    const validated = workItemEvent.parse({
+      schema_version: "0.1.0",
+      work_item_id: id,
+      seq,
+      actor,
+      event_id: eventId,
+      ts: new Date().toISOString(),
+      kind,
+      payload
+    });
+    await ensureDir(this.eventsDir(id));
+    const safeActor = actor.replace(/[^A-Za-z0-9._-]/g, "_");
+    const fileName = `${String(seq).padStart(6, "0")}.${safeActor}.${eventId.slice(0, 12)}.json`;
+    const path = join6(this.eventsDir(id), fileName);
+    let handle;
+    try {
+      handle = await open(path, "wx");
+    } catch (err) {
+      if (err.code === "EEXIST")
+        return;
+      throw err;
+    }
+    try {
+      await handle.writeFile(`${JSON.stringify(validated, null, 2)}
+`, "utf8");
+    } finally {
+      await handle.close();
+    }
+  }
+  async emitTransitionEvents(id, prev, next) {
+    const actor = next.owner_profile;
+    const statusChanged = prev.status !== next.status || (prev.closed_at ?? null) !== (next.closed_at ?? null);
+    if (statusChanged) {
+      await this.appendEvent(id, actor, "status", {
+        to: next.status,
+        closed_at: next.closed_at ?? null
+      });
+    }
+    const prevAc = new Map(prev.acceptance_criteria.map((c3) => [c3.id, c3]));
+    for (const ac of next.acceptance_criteria) {
+      const before = prevAc.get(ac.id);
+      if (before === undefined)
+        continue;
+      const changed = before.verdict !== ac.verdict || JSON.stringify(before.evidence) !== JSON.stringify(ac.evidence);
+      if (changed) {
+        await this.appendEvent(id, actor, "verdict", {
+          criterion_id: ac.id,
+          verdict: ac.verdict,
+          evidence: ac.evidence
+        });
+      }
+    }
+  }
+  async writeMirror(id, item) {
+    await writeJson(this.workItemPath(id), workItem, item);
+  }
+  committedArchiveDir(label, id) {
+    return join6(dittoDir(this.repoRoot), "work-items-archive", label, id);
+  }
   async exists(id) {
+    if (await Bun.file(this.recordPath(id)).exists())
+      return true;
     try {
       await stat2(this.workItemPath(id));
       return true;
     } catch {
       return false;
     }
+  }
+  async ensureMigrated(id) {
+    if (await Bun.file(this.recordPath(id)).exists())
+      return;
+    if (!await Bun.file(this.workItemPath(id)).exists())
+      return;
+    const legacy = await readJson(this.workItemPath(id), workItem);
+    await writeJson(this.recordPath(id), workItem, legacy);
+    await this.appendEvent(id, legacy.owner_profile, "status", {
+      to: legacy.status,
+      closed_at: legacy.closed_at ?? null
+    });
   }
   async create(input, now = new Date) {
     const id = await generateId("wi", (candidate) => this.exists(candidate));
@@ -13320,8 +13698,8 @@ class WorkItemStore {
       created_at: nowIso,
       updated_at: nowIso
     };
-    await ensureDir(join6(this.workItemDir(id), "evidence"));
-    const written = await writeJson(this.workItemPath(id), workItem, draft);
+    const record = await writeJson(this.recordPath(id), workItem, draft);
+    await this.appendEvent(id, record.owner_profile, "status", { to: "draft" });
     await writeJson(this.languageLedgerPath(id), languageLedger, {
       schema_version: "0.1.0",
       work_item_id: id,
@@ -13329,13 +13707,21 @@ class WorkItemStore {
       updated_at: nowIso,
       changes: []
     });
-    return written;
+    const reduced = await this.get(id);
+    await this.writeMirror(id, reduced);
+    return reduced;
   }
   async get(id) {
-    return readJson(this.workItemPath(id), workItem);
+    const record = await this.readRecord(id);
+    if (record === null) {
+      return readJson(this.workItemPath(id), workItem);
+    }
+    return reduceWorkItem(record, await this.readEvents(id));
   }
   async update(id, mutator) {
+    await this.ensureMigrated(id);
     const current = await this.get(id);
+    const rawRecord = await this.readRecord(id);
     const next = mutator(current);
     if (next.id !== current.id) {
       throw new Error(`update mutator changed work item id from ${current.id} to ${next.id}`);
@@ -13348,7 +13734,26 @@ class WorkItemStore {
       }
     }
     const withTouched = { ...withSha, updated_at: new Date().toISOString() };
-    return writeJson(this.workItemPath(id), workItem, withTouched);
+    const validated = workItem.parse(withTouched);
+    await this.emitTransitionEvents(id, current, validated);
+    await writeJson(this.recordPath(id), workItem, recordGithubIssueForWrite(validated, rawRecord));
+    const reduced = await this.get(id);
+    await this.writeMirror(id, reduced);
+    return reduced;
+  }
+  async appendGithubEvent(id, kind, payload) {
+    const actor = (await this.get(id)).owner_profile;
+    await this.appendEvent(id, actor, kind, payload);
+    await this.writeMirror(id, await this.get(id));
+  }
+  async recordGithubPost(id, payload) {
+    await this.appendGithubEvent(id, "github_post", payload);
+  }
+  async recordClaim(id, payload) {
+    await this.appendGithubEvent(id, "claim", payload);
+  }
+  async releaseClaim(id, payload) {
+    await this.appendGithubEvent(id, "claim_release", payload);
   }
   async close(id, terminal, now = new Date) {
     return this.update(id, (cur) => {
@@ -13396,63 +13801,51 @@ class WorkItemStore {
   }
   async stem(id) {
     await this.get(id);
-    const all = new Map;
+    const items = [];
+    let sawId = false;
     for (const s2 of await this.list()) {
       const item = await this.get(s2.id);
-      all.set(item.id, {
+      if (item.id === id)
+        sawId = true;
+      items.push({
+        id: item.id,
         status: item.status,
         created_at: item.created_at,
         ...item.follows !== undefined ? { follows: item.follows } : {}
       });
     }
-    const members = new Set;
-    const queue2 = [id];
-    while (queue2.length > 0) {
-      const cur = queue2.pop();
-      if (cur === undefined || members.has(cur))
-        continue;
-      members.add(cur);
-      const node = all.get(cur);
-      if (node?.follows !== undefined && all.has(node.follows))
-        queue2.push(node.follows);
-      for (const [oid, o3] of all)
-        if (o3.follows === cur)
-          queue2.push(oid);
+    if (!sawId) {
+      const item = await this.get(id);
+      items.push({
+        id: item.id,
+        status: item.status,
+        created_at: item.created_at,
+        ...item.follows !== undefined ? { follows: item.follows } : {}
+      });
     }
-    const depthOf = (mid) => {
-      let d2 = 0;
-      let cur = mid;
-      const seen = new Set([cur]);
-      for (;; ) {
-        const f3 = all.get(cur)?.follows;
-        if (f3 === undefined || !members.has(f3) || seen.has(f3))
-          break;
-        seen.add(f3);
-        cur = f3;
-        d2++;
-      }
-      return d2;
-    };
-    const ordered = [...members].sort((a2, b2) => {
-      const da = depthOf(a2);
-      const db = depthOf(b2);
-      if (da !== db)
-        return da - db;
-      const ca = all.get(a2)?.created_at ?? "";
-      const cb = all.get(b2)?.created_at ?? "";
-      if (ca !== cb)
-        return ca < cb ? -1 : 1;
-      return a2 < b2 ? -1 : 1;
-    });
-    const memberList = ordered.map((mid) => {
-      const node = all.get(mid);
-      return {
-        id: mid,
-        status: node?.status ?? "draft",
-        ...node?.follows !== undefined ? { follows: node.follows } : {}
-      };
-    });
-    return { members: memberList, rolled_up: rollUpStem(memberList) };
+    const views = computeStemViews(items);
+    return views.get(id) ?? { members: [{ id, status: "draft" }], rolled_up: "open" };
+  }
+  async listCommittedRecords() {
+    const base = join6(dittoDir(this.repoRoot), "work-items");
+    let entries;
+    try {
+      entries = await readdir2(base);
+    } catch {
+      return [];
+    }
+    const items = [];
+    for (const name of entries) {
+      try {
+        if (!(await stat2(join6(base, name))).isDirectory())
+          continue;
+        const record = await this.readRecord(name);
+        if (record === null)
+          continue;
+        items.push(reduceWorkItem(record, await this.readEvents(name)));
+      } catch {}
+    }
+    return items;
   }
   async archive(label) {
     if (!/^[A-Za-z0-9._-]+$/.test(label) || label === "." || label === "..") {
@@ -13461,34 +13854,59 @@ class WorkItemStore {
     const targets = (await this.list()).filter((s2) => s2.status === "done" || s2.status === "abandoned");
     if (targets.length === 0)
       return [];
-    const archiveBase = localDir(this.repoRoot, "archive", label);
-    await ensureDir(archiveBase);
+    const runArchiveBase = localDir(this.repoRoot, "archive", label);
+    await ensureDir(runArchiveBase);
     for (const t2 of targets) {
-      await rename(this.workItemDir(t2.id), join6(archiveBase, t2.id));
+      if (await Bun.file(this.recordPath(t2.id)).exists()) {
+        const dest = this.committedArchiveDir(label, t2.id);
+        await ensureDir(dirname2(dest));
+        await rename(committedWorkItemDir(this.repoRoot, t2.id), dest);
+      }
+      try {
+        await rename(this.workItemDir(t2.id), join6(runArchiveBase, t2.id));
+      } catch (err) {
+        if (err.code !== "ENOENT")
+          throw err;
+      }
     }
     return targets.map((t2) => t2.id);
   }
-  async list() {
-    const base = localDir(this.repoRoot, "work-items");
-    let entries;
-    try {
-      entries = await readdir2(base);
-    } catch {
-      return [];
-    }
-    const summaries = [];
-    for (const name of entries) {
-      const dir = join6(base, name);
-      let s2;
+  async collectWorkItemIds() {
+    const ids = new Set;
+    for (const base of [
+      join6(dittoDir(this.repoRoot), "work-items"),
+      localDir(this.repoRoot, "work-items")
+    ]) {
+      let entries;
       try {
-        s2 = await stat2(dir);
+        entries = await readdir2(base);
       } catch {
         continue;
       }
-      if (!s2.isDirectory())
-        continue;
+      for (const name of entries) {
+        try {
+          if ((await stat2(join6(base, name))).isDirectory())
+            ids.add(name);
+        } catch {}
+      }
+    }
+    return ids;
+  }
+  async listAll() {
+    const items = [];
+    for (const id of await this.collectWorkItemIds()) {
       try {
-        const item = await readJson(join6(dir, "work-item.json"), workItem);
+        items.push(await this.get(id));
+      } catch {}
+    }
+    return items;
+  }
+  async list() {
+    const ids = await this.collectWorkItemIds();
+    const summaries = [];
+    for (const id of ids) {
+      try {
+        const item = await this.get(id);
         summaries.push({
           id: item.id,
           title: item.title,
@@ -13499,6 +13917,46 @@ class WorkItemStore {
     }
     summaries.sort((a2, b2) => a2.updated_at < b2.updated_at ? 1 : -1);
     return summaries;
+  }
+  async reconcile(id) {
+    const dir = this.eventsDir(id);
+    const parseable = [];
+    const unparseable = [];
+    let names = [];
+    try {
+      names = await readdir2(dir);
+    } catch {
+      names = [];
+    }
+    for (const name of names) {
+      if (!name.endsWith(".json"))
+        continue;
+      const path = join6(dir, name);
+      try {
+        parseable.push(await readJson(path, workItemEvent));
+      } catch {
+        unparseable.push(path);
+      }
+    }
+    const record = await this.readRecord(id);
+    let headStatus = null;
+    let headClosedAt;
+    if (record !== null) {
+      const reduced = reduceWorkItem(record, parseable);
+      headStatus = reduced.status;
+      headClosedAt = reduced.closed_at;
+    } else if (await Bun.file(this.workItemPath(id)).exists()) {
+      const legacy = await readJson(this.workItemPath(id), workItem);
+      headStatus = legacy.status;
+      headClosedAt = legacy.closed_at;
+    }
+    return {
+      id,
+      head_status: headStatus,
+      ...headClosedAt !== undefined ? { head_closed_at: headClosedAt } : {},
+      event_count: parseable.length,
+      unparseable_events: unparseable.sort()
+    };
   }
   async appendJsonlAtPath(path, jsonLine) {
     await ensureDir(dirname2(path));
@@ -13548,7 +14006,7 @@ class WorkItemStore {
 `).filter((line) => line.trim().length > 0).map((line) => techSpecRound.parse(JSON.parse(line)));
   }
 }
-var TERMINAL_STEM_STATUSES, DONE_BLOCKING_SEVERITIES, acceptanceCriterionInputSchema;
+var TERMINAL_STEM_STATUSES, DONE_BLOCKING_SEVERITIES, TERMINAL_STATUSES, WorkItemEventCorruptError, acceptanceCriterionInputSchema;
 var init_work_item_store = __esm(() => {
   init_zod();
   init_intent_metric();
@@ -13560,6 +14018,17 @@ var init_work_item_store = __esm(() => {
   init_id();
   TERMINAL_STEM_STATUSES = ["done", "abandoned"];
   DONE_BLOCKING_SEVERITIES = ["high", "critical"];
+  TERMINAL_STATUSES = new Set(["done", "abandoned"]);
+  WorkItemEventCorruptError = class WorkItemEventCorruptError extends Error {
+    workItemId;
+    corruptPaths;
+    constructor(workItemId2, corruptPaths) {
+      super(`work item ${workItemId2} has ${corruptPaths.length} unparseable event file(s): ${corruptPaths.join(", ")}. Work-item events are state-bearing; refusing to reduce with a dropped event (would revive a stale status). Inspect via reconcile.`);
+      this.workItemId = workItemId2;
+      this.corruptPaths = corruptPaths;
+      this.name = "WorkItemEventCorruptError";
+    }
+  };
   acceptanceCriterionInputSchema = exports_external.object({
     id: exports_external.string().min(1),
     statement: exports_external.string().min(1)
@@ -14316,8 +14785,8 @@ var init_memory_projection_manifest = __esm(() => {
 });
 
 // src/core/memory-store.ts
-import { createHash as createHash3 } from "crypto";
-import { open, readdir as readdir10 } from "fs/promises";
+import { createHash as createHash4 } from "crypto";
+import { open as open2, readdir as readdir10 } from "fs/promises";
 import { dirname as dirname6, join as join25 } from "path";
 
 class MemorySourceStore {
@@ -14376,7 +14845,7 @@ class MemoryEventStore {
     await ensureDir(dirname6(path));
     let handle;
     try {
-      handle = await open(path, "wx");
+      handle = await open2(path, "wx");
     } catch (err) {
       if (err.code === "EEXIST") {
         throw new MemoryEventExistsError(validated.event_id);
@@ -14476,7 +14945,7 @@ class MemoryProjectionStore {
   }
 }
 function sha256Hex(content) {
-  return createHash3("sha256").update(content).digest("hex");
+  return createHash4("sha256").update(content).digest("hex");
 }
 var MemoryEventExistsError;
 var init_memory_store = __esm(() => {
@@ -15014,7 +15483,7 @@ var init_cleanup_archive = __esm(() => {
   };
 });
 
-// ../../../../node_modules/sisteransi/src/index.js
+// node_modules/sisteransi/src/index.js
 var require_src = __commonJS((exports, module) => {
   var ESC2 = "\x1B";
   var CSI2 = `${ESC2}[`;
@@ -15072,7 +15541,7 @@ var require_src = __commonJS((exports, module) => {
   module.exports = { cursor, scroll, erase, beep };
 });
 
-// ../../../../node_modules/consola/dist/core.mjs
+// node_modules/consola/dist/core.mjs
 var LogLevels = {
   silent: Number.NEGATIVE_INFINITY,
   fatal: 0,
@@ -15468,7 +15937,7 @@ Consola.prototype.resume = Consola.prototype.resumeLogs;
 function createConsola(options = {}) {
   return new Consola(options);
 }
-// ../../../../node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
+// node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
 import { formatWithOptions } from "util";
 import { sep } from "path";
 function parseStack(stack, message) {
@@ -15545,10 +16014,10 @@ ${indent}`);
   }
 }
 
-// ../../../../node_modules/consola/dist/index.mjs
+// node_modules/consola/dist/index.mjs
 import g$1 from "process";
 
-// ../../../../node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
+// node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
 import * as tty from "tty";
 var {
   env = {},
@@ -15761,7 +16230,7 @@ function box(text, _opts = {}) {
 `);
 }
 
-// ../../../../node_modules/consola/dist/index.mjs
+// node_modules/consola/dist/index.mjs
 var r2 = Object.create(null);
 var i = (e2) => globalThis.process?.env || import.meta.env || globalThis.Deno?.env.toObject() || globalThis.__env__ || (e2 ? r2 : globalThis);
 var o2 = new Proxy(r2, { get(e2, s) {
@@ -16044,7 +16513,7 @@ function _getDefaultLogLevel() {
   return LogLevels.info;
 }
 var consola = createConsola2();
-// ../../../../node_modules/citty/dist/index.mjs
+// node_modules/citty/dist/index.mjs
 function toArray(val) {
   if (Array.isArray(val)) {
     return val;
@@ -18640,7 +19109,7 @@ function validateNodeAddition(existing, newNodes, allowedAcceptanceIds) {
 }
 
 // src/core/autopilot-store.ts
-import { createHash } from "crypto";
+import { createHash as createHash2 } from "crypto";
 import { appendFile } from "fs/promises";
 import { join as join14 } from "path";
 
@@ -18760,7 +19229,7 @@ var autopilot = exports_external.object({
 init_ditto_paths();
 init_fs();
 function synthesizeDecisionId(decision, index) {
-  return createHash("sha1").update(`${index} ${JSON.stringify(decision)}`).digest("hex");
+  return createHash2("sha1").update(`${index} ${JSON.stringify(decision)}`).digest("hex");
 }
 function isDecisivePost(decision) {
   return decision.failure_class === "user_decision_needed" || decision.decision === "escalate" || decision.decision === "batch_escalate" || decision.disposition === "blocked";
@@ -18862,7 +19331,7 @@ class AutopilotStore {
 }
 var decisionCache = new Map;
 function hashPrefix(bytes) {
-  return createHash("sha1").update(bytes).digest("hex");
+  return createHash2("sha1").update(bytes).digest("hex");
 }
 function parseLines(block) {
   return block.split(`
@@ -19281,11 +19750,11 @@ function deterministicFloor(s2) {
   return Math.min(1, Math.max(0, raw));
 }
 function ambiguityFromInterview(state) {
-  const open = state.dimensions.filter((d2) => d2.critical && d2.state !== "resolved").length;
+  const open2 = state.dimensions.filter((d2) => d2.critical && d2.state !== "resolved").length;
   const asked = state.questions.length;
   const assumption_ratio = asked === 0 ? state.assumptions.length > 0 ? 1 : 0 : state.assumptions.length / asked;
   return {
-    open_required_sections: open,
+    open_required_sections: open2,
     conflicting: 0,
     assumption_ratio: Math.min(1, assumption_ratio)
   };
@@ -19684,7 +20153,7 @@ async function bootstrapAutopilot(repoRoot, input) {
   for (const ac of input.intent.acceptance_criteria) {
     const t2 = acceptanceTestable({
       statement: ac.statement,
-      evidence_required: ac.evidence_required
+      evidence_required: ac.evidence_required ?? []
     });
     if (!t2.pass)
       reasons.push(`criterion ${ac.id} not testable: ${t2.reasons.join("; ")}`);
@@ -21819,7 +22288,7 @@ function farFieldCategoriesEnabled() {
 }
 function farFieldCoverageReport(map) {
   const cats = map.nodes.filter((n2) => n2.id.startsWith(CATEGORY_NODE_PREFIX));
-  const open = cats.filter((n2) => n2.state === "open").length;
+  const open2 = cats.filter((n2) => n2.state === "open").length;
   const skipped = cats.filter((n2) => n2.state === "out_of_scope" || n2.state === "user_owned").map((n2) => ({
     id: n2.id,
     state: n2.state,
@@ -21828,7 +22297,7 @@ function farFieldCoverageReport(map) {
   return {
     seeded: cats.length,
     resolved: cats.filter((n2) => n2.state === "resolved").length,
-    open,
+    open: open2,
     skipped,
     complete: cats.length > 0 && map.nodes.every((n2) => n2.state !== "open")
   };
@@ -22123,7 +22592,7 @@ function createGhClient(exec = defaultGhExec, timeoutMs = DEFAULT_GH_TIMEOUT_MS)
 init_git();
 
 // src/core/github-progress.ts
-import { createHash as createHash2 } from "crypto";
+import { createHash as createHash3 } from "crypto";
 
 // src/core/github-redaction.ts
 import { relative as relative6 } from "path";
@@ -22184,7 +22653,7 @@ function buildPublicSafeSummary(fields) {
 
 // src/core/github-progress.ts
 function synthesizeFollowUpId(fu, index) {
-  return createHash2("sha1").update(`followup ${index} ${JSON.stringify(fu)}`).digest("hex");
+  return createHash3("sha1").update(`followup ${index} ${JSON.stringify(fu)}`).digest("hex");
 }
 async function resolveTarget(store, workItemId2) {
   const item = await store.get(workItemId2);
@@ -22260,13 +22729,9 @@ async function postUnpostedDecisions(deps, workItemId2) {
     };
   }
   const newIds = [...unposted.map((u3) => u3.id), ...unpostedFollowUps.map((u3) => u3.id)];
-  await deps.store.update(target.link_owner_id, (cur) => {
-    const gi = cur.github_issue;
-    if (!gi)
-      return cur;
-    const merged = new Set([...gi.posted_decision_ids ?? [], ...newIds]);
-    return { ...cur, github_issue: { ...gi, posted_decision_ids: [...merged] } };
-  });
+  for (const decisionId of newIds) {
+    await deps.store.recordGithubPost(target.link_owner_id, { posted_decision_id: decisionId });
+  }
   return { kind: "posted", posted_ids: newIds, comment_count: 1, target };
 }
 
@@ -22570,11 +23035,8 @@ import { join as join24 } from "path";
 init_zod();
 init_common();
 init_work_item();
-var evidenceRequiredKind = exports_external.enum(["test", "diff", "browser", "doc", "log"]).describe("Kind of evidence required to verify an acceptance criterion");
 var questionPolicy = exports_external.enum(["ask_only_if_user_only_can_answer", "ask_freely", "never_ask"]).default("ask_only_if_user_only_can_answer").describe("How freely the agent may ask the user questions for this work item");
-var intentAcceptanceCriterion = acceptanceCriterion.extend({
-  evidence_required: exports_external.array(evidenceRequiredKind).default([])
-}).describe("Acceptance criterion in the intent sidecar; reuses work-item criterion shape");
+var intentAcceptanceCriterion = acceptanceCriterion.describe("Acceptance criterion in the intent sidecar; reuses work-item criterion shape");
 var sourceDigest = exports_external.object({
   doc_path: exports_external.string().min(1).describe("Spec document path relative to repo root"),
   sha256: exports_external.string().regex(/^[0-9a-f]{64}$/).describe("Digest over the compile-input sections (\uC694\uC57D\xB7\uBAA9\uD45C\xB7\uBE44\uBAA9\uD45C\xB7\uC644\uB8CC \uC870\uAC74\xB7\uC704\uD5D8)")
@@ -22666,7 +23128,7 @@ function artifactNodeId(path) {
 }
 
 // src/core/memory-reduce.ts
-import { createHash as createHash4 } from "crypto";
+import { createHash as createHash5 } from "crypto";
 function reduceEvents(events) {
   const byTarget = new Map;
   for (const e2 of events) {
@@ -22694,7 +23156,7 @@ function reduceEvents(events) {
       supersededIds.add(e2.supersedes);
   }
   const approvedHeads = events.filter((e2) => !supersededIds.has(e2.event_id) && e2.status === "approved").sort((a2, b2) => a2.event_id < b2.event_id ? -1 : a2.event_id > b2.event_id ? 1 : 0);
-  const setHash = createHash4("sha256").update(approvedHeads.map((e2) => e2.event_id).join(`
+  const setHash = createHash5("sha256").update(approvedHeads.map((e2) => e2.event_id).join(`
 `)).digest("hex");
   return { approvedHeads, setHash };
 }
@@ -23905,7 +24367,7 @@ class RetroMetricLedger {
 
 // src/core/tech-spec.ts
 init_zod();
-import { createHash as createHash5 } from "crypto";
+import { createHash as createHash6 } from "crypto";
 import { readFile as readFile3 } from "fs/promises";
 import { join as join30 } from "path";
 
@@ -24312,7 +24774,7 @@ function parseSpecSections(markdown) {
 }
 function computeSpecDigest(markdown) {
   const { sections } = parseSpecSections(markdown);
-  const hash = createHash5("sha256");
+  const hash = createHash6("sha256");
   for (const id of COMPILE_INPUT_SECTIONS) {
     hash.update(`${id}
 ${sections.get(id) ?? ""}\x00`);
@@ -26520,7 +26982,7 @@ import { mkdir as mkdir5, readFile as readFile8 } from "fs/promises";
 import { join as join34 } from "path";
 
 // src/core/e2e/browser.ts
-import { createHash as createHash6 } from "crypto";
+import { createHash as createHash7 } from "crypto";
 import { mkdir as mkdir4, readFile as readFile6, readdir as readdir13, writeFile as writeFile3 } from "fs/promises";
 import { homedir as homedir6 } from "os";
 import { dirname as dirname10, join as join33, relative as relative9, sep as sep4 } from "path";
@@ -26661,7 +27123,7 @@ function repoRelative(repoRoot, path) {
 }
 async function sha256OfFile(path) {
   const bytes = await readFile6(path);
-  return createHash6("sha256").update(bytes).digest("hex");
+  return createHash7("sha256").update(bytes).digest("hex");
 }
 async function probePlaywright(repoRoot) {
   let proc;
@@ -26822,7 +27284,7 @@ async function withBrowserGuard(repoRoot, action, options = {}) {
 }
 
 // src/core/e2e/journey-digest.ts
-import { createHash as createHash7 } from "crypto";
+import { createHash as createHash8 } from "crypto";
 import { readFile as readFile7, readdir as readdir14 } from "fs/promises";
 init_dist2();
 init_shared();
@@ -26942,7 +27404,7 @@ function parseBlockDoc(text) {
 
 // src/core/e2e/journey-digest.ts
 function sha256Hex2(bytes) {
-  return createHash7("sha256").update(bytes).digest("hex");
+  return createHash8("sha256").update(bytes).digest("hex");
 }
 function canonicalDigestText(text) {
   const split = splitFrontMatter(text);
@@ -28386,24 +28848,64 @@ async function writeWorkItemHandoff(repoRoot, store, workId, options = {}, now =
   try {
     await hstore.sweepStaleActive(now);
   } catch {}
-  await store.update(workId, (cur) => {
-    const { re_entry: _existingReEntry, ...rest } = cur;
-    if (completion.final_verdict === "pass") {
+  if (completion.final_verdict === "pass") {
+    const current = await store.get(workId);
+    if (current.status !== "done") {
+      await store.close(workId, "done", now);
+    }
+    await store.update(workId, (cur) => {
+      const { re_entry: _existingReEntry, ...rest } = cur;
+      return { ...rest, changed_files: merged };
+    });
+  } else {
+    await store.update(workId, (cur) => {
+      const { re_entry: _existingReEntry, ...rest } = cur;
       return {
         ...rest,
         changed_files: merged,
-        status: "done",
-        closed_at: now.toISOString()
+        status: "partial",
+        re_entry: effectiveReEntry
       };
-    }
+    });
+  }
+  return { completion, completionPath, handoffPath, collectedChangedFiles: merged, baseUsed };
+}
+
+// src/core/work-item-project.ts
+init_work_item_store();
+function projectBacklogRows(items) {
+  const stems = computeStemViews(items.map((it) => ({
+    id: it.id,
+    status: it.status,
+    created_at: it.created_at,
+    ...it.follows !== undefined ? { follows: it.follows } : {}
+  })));
+  const rows = items.map((item) => {
+    const stem = stems.get(item.id);
+    const unresolved = (item.follow_ups ?? []).filter((f3) => f3.resolved !== true);
+    const blocking = blockingFollowUp(item);
+    const ready = pushReadiness(item, stem);
     return {
-      ...rest,
-      changed_files: merged,
-      status: "partial",
-      re_entry: effectiveReEntry
+      id: item.id,
+      title: item.title,
+      status: item.status,
+      updated_at: item.updated_at,
+      unresolved_follow_ups: unresolved.length,
+      ...blocking !== undefined ? {
+        blocking_reason: `unresolved self-caused ${blocking.severity}-severity ${blocking.kind}: "${blocking.note}"`
+      } : {},
+      ...item.github_issue !== undefined ? { github_issue: { repo: item.github_issue.repo, number: item.github_issue.number } } : {},
+      push_ready: ready.ready,
+      ...stem !== undefined ? { lineage: stem } : {}
     };
   });
-  return { completion, completionPath, handoffPath, collectedChangedFiles: merged, baseUsed };
+  rows.sort((a2, b2) => a2.updated_at < b2.updated_at ? 1 : -1);
+  return rows;
+}
+async function projectBacklog(repoRoot) {
+  const store = new WorkItemStore(repoRoot);
+  const items = await store.listAll();
+  return projectBacklogRows(items);
 }
 
 // src/cli/commands/work.ts
@@ -28728,14 +29230,11 @@ async function runClaim(store, workId, item, wiring) {
   });
   if (res.localClaim) {
     const lc = res.localClaim;
-    await store.update(workId, (cur) => cur.github_issue ? {
-      ...cur,
-      github_issue: {
-        ...cur.github_issue,
-        claimed_branch: lc.claimed_branch,
-        posted_claim_markers: lc.posted_claim_markers
-      }
-    } : cur);
+    const newMarker = lc.posted_claim_markers.at(-1);
+    await store.recordClaim(workId, {
+      claimed_branch: lc.claimed_branch,
+      ...newMarker ? { posted_claim_marker: newMarker } : {}
+    });
   }
   return {
     fired: res.assigneeAdded && !res.noop,
@@ -28772,6 +29271,21 @@ async function autoClaimOnInProgressEdge(store, workId, prevStatus, next, wiring
   }
   return runClaim(store, workId, next, wiring);
 }
+async function persistClaimRelease(store, workId, gi) {
+  const markers = gi.posted_claim_markers ?? [];
+  const branch = gi.claimed_branch;
+  if (markers.length === 0) {
+    if (branch)
+      await store.releaseClaim(workId, { claimed_branch: branch });
+    return;
+  }
+  for (const marker of markers) {
+    await store.releaseClaim(workId, {
+      posted_claim_marker: marker,
+      ...branch ? { claimed_branch: branch } : {}
+    });
+  }
+}
 async function unclaimWorkItem(store, workId, wiring, opts = {}) {
   const item = await store.get(workId);
   const res = unclaim({ client: wiring.client, config: wiring.config }, {
@@ -28779,13 +29293,8 @@ async function unclaimWorkItem(store, workId, wiring, opts = {}) {
     ...opts.reason ? { reason: opts.reason } : {},
     ...opts.boardStatusKey ? { boardStatusKey: opts.boardStatusKey } : {}
   });
-  if (res.cleared) {
-    await store.update(workId, (cur) => {
-      if (!cur.github_issue)
-        return cur;
-      const { claimed_branch: _b, posted_claim_markers: _m, ...giRest } = cur.github_issue;
-      return { ...cur, github_issue: giRest };
-    });
+  if (res.cleared && item.github_issue) {
+    await persistClaimRelease(store, workId, item.github_issue);
   }
   return { released: res.assigneeRemoved, notices: res.notices };
 }
@@ -28837,12 +29346,7 @@ async function releaseClaimOnTerminal(store, workId, wiring) {
   const rm2 = wiring.client.issueRemoveAssignee(gi.repo, gi.number, "@me");
   if (!rm2.ok)
     notices.push(`Terminal claim release degraded (${rm2.reason}) \u2014 @me left assigned.`);
-  await store.update(workId, (cur) => {
-    if (!cur.github_issue)
-      return cur;
-    const { claimed_branch: _b, posted_claim_markers: _m, ...giRest } = cur.github_issue;
-    return { ...cur, github_issue: giRest };
-  });
+  await persistClaimRelease(store, workId, gi);
   return { released: rm2.ok, notices };
 }
 var workStart = defineCommand({
@@ -29290,6 +29794,32 @@ function formatBoardLines(view) {
   }
   return lines;
 }
+var STATUS_ORDER = workItemStatus.options;
+function isTerminalWorkStatus(status) {
+  return status === "done" || status === "abandoned";
+}
+function isOrphanDraft(row, now) {
+  if (row.status !== "draft")
+    return false;
+  const ageDays = (now - Date.parse(row.updated_at)) / 86400000;
+  if (ageDays <= 14)
+    return false;
+  const members = row.lineage?.members ?? [];
+  return members.length <= 1;
+}
+function formatWideRow(row) {
+  const parts = [row.id, row.status, row.updated_at, row.title];
+  parts.push(`followups=${row.unresolved_follow_ups ?? 0}`);
+  parts.push(`push_ready=${row.push_ready === true}`);
+  if (row.github_issue)
+    parts.push(`issue=${row.github_issue.repo}#${row.github_issue.number}`);
+  if (row.lineage && row.lineage.members.length > 1) {
+    parts.push(`lineage=${row.lineage.rolled_up}(${row.lineage.members.length})`);
+  }
+  if (row.blocking_reason)
+    parts.push(`blocking=${row.blocking_reason}`);
+  return parts.join("\t");
+}
 var workStatus = defineCommand({
   meta: {
     name: "status",
@@ -29305,6 +29835,31 @@ var workStatus = defineCommand({
       type: "string",
       description: "Output format: human|json",
       default: "human"
+    },
+    status: {
+      type: "string",
+      description: "List filter: only work items with this status (draft|in_progress|\u2026|abandoned)",
+      required: false
+    },
+    "has-followups": {
+      type: "boolean",
+      description: "List filter: only items with \u22651 unresolved follow-up",
+      default: false
+    },
+    "orphan-drafts": {
+      type: "boolean",
+      description: "List filter: only stale (>14d) un-chained drafts",
+      default: false
+    },
+    wide: {
+      type: "boolean",
+      description: "List view: show the widened backlog fields",
+      default: false
+    },
+    all: {
+      type: "boolean",
+      description: "List view: include terminal (done/abandoned) items",
+      default: false
     }
   },
   run: async ({ args }) => {
@@ -29326,15 +29881,42 @@ var workStatus = defineCommand({
     }
     const store = new WorkItemStore(repoRoot);
     if (!args.workId) {
-      const list = await store.list();
-      if (format === "json") {
-        writeJson2({ items: list });
-      } else if (list.length === 0) {
-        writeHuman("No work items.");
-      } else {
-        for (const s2 of list) {
-          writeHuman(`${s2.id}	${s2.status}	${s2.updated_at}	${s2.title}`);
+      let statusFilter;
+      if (args.status !== undefined && args.status !== "") {
+        const parsed = workItemStatus.safeParse(args.status);
+        if (!parsed.success) {
+          writeError(`invalid --status value "${args.status}"; expected one of: ${STATUS_ORDER.join(", ")}`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
         }
+        statusFilter = parsed.data;
+      }
+      const now = Date.now();
+      let rows = await projectBacklog(repoRoot);
+      if (statusFilter !== undefined)
+        rows = rows.filter((r3) => r3.status === statusFilter);
+      if (args["has-followups"])
+        rows = rows.filter((r3) => (r3.unresolved_follow_ups ?? 0) > 0);
+      if (args["orphan-drafts"])
+        rows = rows.filter((r3) => isOrphanDraft(r3, now));
+      if (format === "json") {
+        writeJson2({ items: rows });
+        return;
+      }
+      const showTerminal = args.all === true || statusFilter !== undefined;
+      const visible = rows.filter((r3) => showTerminal || !isTerminalWorkStatus(r3.status)).sort((a2, b2) => {
+        const oa = STATUS_ORDER.indexOf(a2.status);
+        const ob = STATUS_ORDER.indexOf(b2.status);
+        if (oa !== ob)
+          return oa - ob;
+        return a2.updated_at < b2.updated_at ? 1 : -1;
+      });
+      if (visible.length === 0) {
+        writeHuman("No work items.");
+        return;
+      }
+      for (const r3 of visible) {
+        writeHuman(args.wide ? formatWideRow(r3) : `${r3.id}	${r3.status}	${r3.updated_at}	${r3.title}`);
       }
       return;
     }
@@ -29465,7 +30047,7 @@ var workHandoff = defineCommand({
     }
   }
 });
-var TERMINAL_STATUSES = ["done", "abandoned"];
+var TERMINAL_STATUSES2 = ["done", "abandoned"];
 var workAbandon = defineCommand({
   meta: {
     name: "abandon",
@@ -30107,7 +30689,7 @@ var workStem = defineCommand({
     if (close) {
       try {
         const view = await store.stem(args.workId);
-        const nonTerminal = view.members.filter((m2) => !TERMINAL_STATUSES.includes(m2.status));
+        const nonTerminal = view.members.filter((m2) => !TERMINAL_STATUSES2.includes(m2.status));
         if (nonTerminal.length > 0) {
           writeError(`work stem ${args.workId} cannot close: ${nonTerminal.length} non-terminal member(s) \u2014 ${nonTerminal.map((m2) => `${m2.id}=${m2.status}`).join(", ")}. Close (done/abandon) each before rolling the chain up.`);
           process.exit(USAGE_ERROR_EXIT);
@@ -30216,7 +30798,7 @@ var workArchive = defineCommand({
     const store = new WorkItemStore(repoRoot);
     try {
       if (args["dry-run"]) {
-        const candidates = (await store.list()).filter((s2) => TERMINAL_STATUSES.includes(s2.status));
+        const candidates = (await store.list()).filter((s2) => TERMINAL_STATUSES2.includes(s2.status));
         if (format === "json") {
           writeJson2({
             dry_run: true,
@@ -31944,7 +32526,7 @@ init_fs();
 import { join as join46 } from "path";
 
 // src/core/instruction-bridge.ts
-import { createHash as createHash8 } from "crypto";
+import { createHash as createHash9 } from "crypto";
 import { join as join45 } from "path";
 var MANAGED_END = "<!-- ditto:managed:end -->";
 var MANAGED_BLOCK_RE_G = /<!--\s*ditto:managed:start\s+source=([^\s]+)\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:managed:end\s*-->/g;
@@ -31958,7 +32540,7 @@ function normalizeInstructionText(text) {
 `);
 }
 function normalizedSha256(text) {
-  return createHash8("sha256").update(normalizeInstructionText(text)).digest("hex");
+  return createHash9("sha256").update(normalizeInstructionText(text)).digest("hex");
 }
 function sourceFromSurface(surface) {
   if (surface.role !== "source") {
@@ -34520,7 +35102,7 @@ async function runCodeqlReviewToLedger(input, deps) {
 init_ditto_paths();
 
 // src/core/evidence-store.ts
-import { createHash as createHash9 } from "crypto";
+import { createHash as createHash10 } from "crypto";
 import { join as join54 } from "path";
 
 // src/schemas/evidence-log.ts
@@ -34615,7 +35197,7 @@ class EvidenceStore {
   }
 }
 function sha256Hex3(content) {
-  const hash = createHash9("sha256");
+  const hash = createHash10("sha256");
   hash.update(content);
   return hash.digest("hex");
 }
@@ -36430,7 +37012,7 @@ import { existsSync as existsSync7, readFileSync as readFileSync3 } from "fs";
 import { join as join61 } from "path";
 
 // src/core/build-stamp.ts
-import { createHash as createHash10 } from "crypto";
+import { createHash as createHash11 } from "crypto";
 import { readFileSync as readFileSync2, readdirSync } from "fs";
 import { join as join60 } from "path";
 var STAMP_PREFIX = "//# ditto-src-stamp=";
@@ -36447,7 +37029,7 @@ function listSourceFiles(repoRoot, rel = "src") {
   return out.sort();
 }
 function computeSourceStamp(repoRoot) {
-  const h2 = createHash10("sha256");
+  const h2 = createHash11("sha256");
   for (const rel of listSourceFiles(repoRoot)) {
     h2.update(rel);
     h2.update("\x00");
@@ -37221,12 +37803,12 @@ async function multiSelect(io, message, choices) {
 // src/cli/wizard/prompt-io.ts
 import { createInterface } from "readline/promises";
 
-// ../../../../node_modules/@clack/core/dist/index.mjs
+// node_modules/@clack/core/dist/index.mjs
 import { styleText } from "util";
 import { stdout as stdout3, stdin as stdin2 } from "process";
 import l__default from "readline";
 
-// ../../../../node_modules/fast-string-truncated-width/dist/utils.js
+// node_modules/fast-string-truncated-width/dist/utils.js
 var getCodePointsLength = (() => {
   const SURROGATE_PAIR_RE = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
   return (input) => {
@@ -37245,7 +37827,7 @@ var isWideNotCJKTNotEmoji = (x2) => {
   return x2 === 8987 || x2 === 9001 || x2 >= 12272 && x2 <= 12287 || x2 >= 12289 && x2 <= 12350 || x2 >= 12441 && x2 <= 12543 || x2 >= 12549 && x2 <= 12591 || x2 >= 12593 && x2 <= 12686 || x2 >= 12688 && x2 <= 12771 || x2 >= 12783 && x2 <= 12830 || x2 >= 12832 && x2 <= 12871 || x2 >= 12880 && x2 <= 19903 || x2 >= 65040 && x2 <= 65049 || x2 >= 65072 && x2 <= 65106 || x2 >= 65108 && x2 <= 65126 || x2 >= 65128 && x2 <= 65131 || x2 >= 127488 && x2 <= 127490 || x2 >= 127504 && x2 <= 127547 || x2 >= 127552 && x2 <= 127560 || x2 >= 131072 && x2 <= 196605 || x2 >= 196608 && x2 <= 262141;
 };
 
-// ../../../../node_modules/fast-string-truncated-width/dist/index.js
+// node_modules/fast-string-truncated-width/dist/index.js
 var ANSI_RE = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]|\u001b\]8;[^;]*;.*?(?:\u0007|\u001b\u005c)/y;
 var CONTROL_RE = /[\x00-\x08\x0A-\x1F\x7F-\x9F]{1,1000}/y;
 var CJKT_WIDE_RE = /(?:(?![\uFF61-\uFF9F\uFF00-\uFFEF])[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Tangut}]){1,1000}/yu;
@@ -37344,7 +37926,7 @@ var getStringTruncatedWidth = (input, truncationOptions = {}, widthOptions = {})
 };
 var dist_default = getStringTruncatedWidth;
 
-// ../../../../node_modules/fast-string-width/dist/index.js
+// node_modules/fast-string-width/dist/index.js
 var NO_TRUNCATION2 = {
   limit: Infinity,
   ellipsis: "",
@@ -37355,7 +37937,7 @@ var fastStringWidth = (input, options = {}) => {
 };
 var dist_default2 = fastStringWidth;
 
-// ../../../../node_modules/fast-wrap-ansi/lib/main.js
+// node_modules/fast-wrap-ansi/lib/main.js
 var ESC = "\x1B";
 var CSI = "\x9B";
 var END_CODE = 39;
@@ -37567,7 +38149,7 @@ function wrapAnsi(string, columns, options) {
 `);
 }
 
-// ../../../../node_modules/@clack/core/dist/index.mjs
+// node_modules/@clack/core/dist/index.mjs
 var import_sisteransi = __toESM(require_src(), 1);
 function findCursor(s2, o3, l2) {
   if (!l2.some((r3) => !r3.disabled))
@@ -38359,7 +38941,7 @@ class a3 extends V2 {
   }
 }
 
-// ../../../../node_modules/@clack/prompts/dist/index.mjs
+// node_modules/@clack/prompts/dist/index.mjs
 import { styleText as styleText2, stripVTControlCharacters } from "util";
 import process$1 from "process";
 var import_sisteransi2 = __toESM(require_src(), 1);
@@ -39170,7 +39752,7 @@ total	${t3.with_completion}/${t3.work_items} with completion	${t3.closed_accepta
     }
   }
 });
-var TERMINAL_STATUSES2 = new Set(["done", "abandoned"]);
+var TERMINAL_STATUSES3 = new Set(["done", "abandoned"]);
 var backlogCommand = defineCommand({
   meta: {
     name: "backlog",
@@ -39186,10 +39768,10 @@ var backlogCommand = defineCommand({
       const deps = defaultCompletionCoverageDeps(repoRoot);
       const report = await collectCompletionCoverageReport(deps);
       const staleDrafts = report.rows.filter((r4) => r4.status === "draft" && !r4.has_completion).map((r4) => ({ work_item_id: r4.work_item_id, title: r4.title }));
-      const openCount = report.rows.filter((r4) => !TERMINAL_STATUSES2.has(r4.status)).length;
+      const openCount = report.rows.filter((r4) => !TERMINAL_STATUSES3.has(r4.status)).length;
       const completedUnclosed = [];
       for (const r4 of report.rows) {
-        if (!r4.has_completion || TERMINAL_STATUSES2.has(r4.status))
+        if (!r4.has_completion || TERMINAL_STATUSES3.has(r4.status))
           continue;
         const completion = await deps.readCompletion(r4.work_item_id);
         if (completion?.final_verdict === "pass") {
@@ -43640,7 +44222,7 @@ import { resolve as resolve19 } from "path";
 
 // src/core/mode-doctor.ts
 import { spawnSync } from "child_process";
-import { createHash as createHash11 } from "crypto";
+import { createHash as createHash12 } from "crypto";
 import { existsSync as existsSync8, readFileSync as readFileSync4, readdirSync as readdirSync2 } from "fs";
 import { homedir as homedir10 } from "os";
 import { dirname as dirname15, join as join70, resolve as resolve18 } from "path";
@@ -43739,7 +44321,7 @@ function computeSurfaceStamp(root) {
   for (const d2 of SURFACE_DIRS)
     listSurfaceFiles(root, d2, files);
   files.sort();
-  const h3 = createHash11("sha256");
+  const h3 = createHash12("sha256");
   for (const rel of files) {
     h3.update(rel);
     h3.update("\x00");
@@ -43876,7 +44458,7 @@ var sessionStartHandler = async (input) => {
 };
 
 // src/hooks/stop.ts
-import { createHash as createHash12 } from "crypto";
+import { createHash as createHash13 } from "crypto";
 import { existsSync as existsSync9 } from "fs";
 import { readFile as readFile17, readdir as readdir22 } from "fs/promises";
 import { join as join71 } from "path";
@@ -44349,7 +44931,7 @@ function fitnessInputFingerprint(repoRoot) {
     const diff = captureGitDiff(repoRoot);
     const files = listChangedFiles(repoRoot).filter((p2) => !p2.startsWith(".ditto/")).join(`
 `);
-    return createHash12("sha256").update(`${head}
+    return createHash13("sha256").update(`${head}
 ${files}
 ${diff}`).digest("hex");
   } catch {
@@ -44617,11 +45199,11 @@ function looksCodebaseAnswerable(prompt2) {
 function tokens(s2) {
   return new Set(s2.toLowerCase().split(/[^a-z0-9\uAC00-\uD7A3]+/).filter((t3) => t3.length >= 3));
 }
-function duplicateSearch(prompt2, open2) {
+function duplicateSearch(prompt2, open3) {
   const promptTokens = tokens(prompt2);
   if (promptTokens.size === 0)
     return [];
-  return open2.map((s2) => {
+  return open3.map((s2) => {
     let overlap = 0;
     for (const t3 of tokens(s2.title))
       if (promptTokens.has(t3))
@@ -44651,14 +45233,14 @@ async function resolveActiveWorkItem(repoRoot, sessionId, prompt2) {
   if (activeWorkItem) {
     return { workItem: activeWorkItem, action: "loaded" };
   }
-  const open2 = (await items.list()).filter((s2) => NON_TERMINAL.includes(s2.status));
-  if (open2.length > 0) {
-    const ids = open2.map((s2) => s2.id).join(", ");
-    const matches = classifyPromptAdvisory(prompt2) === "execution" ? duplicateSearch(prompt2, open2) : [];
+  const open3 = (await items.list()).filter((s2) => NON_TERMINAL.includes(s2.status));
+  if (open3.length > 0) {
+    const ids = open3.map((s2) => s2.id).join(", ");
+    const matches = classifyPromptAdvisory(prompt2) === "execution" ? duplicateSearch(prompt2, open3) : [];
     const dupLine = matches.length > 0 ? ` Possible duplicates by title overlap: ${matches.map((m4) => `${m4.id} ("${m4.title}")`).join("; ")}.` : "";
     return {
       action: "ask",
-      advisory: `No active work item pointer for this session and ${open2.length} open work item(s) exist (${ids}).${dupLine} Resume one explicitly, or create a NEW work item before acting \u2014 not picking arbitrarily.`
+      advisory: `No active work item pointer for this session and ${open3.length} open work item(s) exist (${ids}).${dupLine} Resume one explicitly, or create a NEW work item before acting \u2014 not picking arbitrarily.`
     };
   }
   return { action: "guide" };
@@ -50040,7 +50622,7 @@ async function rewriteCodexTextFile(path, dittoCommand) {
     await writeFile6(path, after);
 }
 function rewriteCodexAgentTomlReferences(text, dittoCommand) {
-  return text.replace(/(\bdeveloper_instructions\s*=\s*""")([\s\S]*?)("""\s*)/, (_match, open2, body, close) => `${open2}${rewriteCodexDittoReferences(body, dittoCommand)}${close}`);
+  return text.replace(/(\bdeveloper_instructions\s*=\s*""")([\s\S]*?)("""\s*)/, (_match, open3, body, close) => `${open3}${rewriteCodexDittoReferences(body, dittoCommand)}${close}`);
 }
 async function rewriteCodexAgentTomlFile(path, dittoCommand) {
   const before = await readFile20(path, "utf8");
@@ -51784,7 +52366,7 @@ init_worktree();
 
 // src/core/worktree-drive.ts
 import { join as join96 } from "path";
-var TERMINAL_STATUSES3 = ["done", "abandoned"];
+var TERMINAL_STATUSES4 = ["done", "abandoned"];
 var DEFAULT_MAX_DEPTH2 = 20;
 async function driveWorktrees(deps, options) {
   const repoRoot = deps.store.repoRoot;
@@ -51819,7 +52401,7 @@ async function driveWorktrees(deps, options) {
       });
       continue;
     }
-    if (item.status !== "done" && TERMINAL_STATUSES3.includes(item.status)) {
+    if (item.status !== "done" && TERMINAL_STATUSES4.includes(item.status)) {
       ledger.push({
         member_id: member,
         disposition: "halted",
@@ -52162,4 +52744,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=3f0765c8ba521a5f2543c6a8c024adc51453a648058208da9fb34ec2b68d96c3
+//# ditto-src-stamp=c0acf8e3108802f8a3510dfa5bc3cfffcb568c3926abccd5766d72e3cd824cd4

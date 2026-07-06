@@ -32,9 +32,15 @@ import {
   InvalidHeadRefError,
   writeWorkItemHandoff,
 } from '~/core/work-item-handoff';
-import { WorkItemStore, blockingFollowUp, pushReadiness } from '~/core/work-item-store';
+import { projectBacklog } from '~/core/work-item-project';
+import {
+  WorkItemStore,
+  type WorkItemSummary,
+  blockingFollowUp,
+  pushReadiness,
+} from '~/core/work-item-store';
 import { createWorktreeForWorkItem, worktreeBindingHint } from '~/core/worktree';
-import { declarerRole, workItemId } from '~/schemas/common';
+import { declarerRole, workItemId, workItemStatus } from '~/schemas/common';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { DittoConfigGithub } from '~/schemas/ditto-config';
 import {
@@ -1470,6 +1476,47 @@ export function formatBoardLines(view: BoardView): string[] {
   return lines;
 }
 
+// WS0-T1 (wi_260706aka): the backlog list view groups ACTIVE (non-terminal) work
+// items first, by status, in the workItemStatus enum's own order (draft → … →
+// unverified), with terminal (done/abandoned) last. Reusing the enum's `options`
+// keeps this ordering the single source of the status vocabulary.
+const STATUS_ORDER = workItemStatus.options;
+
+function isTerminalWorkStatus(status: WorkItem['status']): boolean {
+  return status === 'done' || status === 'abandoned';
+}
+
+/**
+ * ac-2 orphan-draft predicate: a `draft` older than 14 days that continues NO chain
+ * (single-member or absent lineage). Age is read off the projection's `updated_at`;
+ * lineage is the projection's derived stem — neither is recomputed here.
+ */
+function isOrphanDraft(row: WorkItemSummary, now: number): boolean {
+  if (row.status !== 'draft') return false;
+  const ageDays = (now - Date.parse(row.updated_at)) / 86400000;
+  if (ageDays <= 14) return false;
+  const members = row.lineage?.members ?? [];
+  return members.length <= 1;
+}
+
+/**
+ * ac-3 `--wide` row: the default 4 columns (id/status/updated_at/title) followed by
+ * the widened backlog fields as `key=value` columns. The leading 4 columns stay
+ * byte-identical to the default view so a script slicing the first four fields is
+ * unaffected.
+ */
+function formatWideRow(row: WorkItemSummary): string {
+  const parts = [row.id, row.status, row.updated_at, row.title];
+  parts.push(`followups=${row.unresolved_follow_ups ?? 0}`);
+  parts.push(`push_ready=${row.push_ready === true}`);
+  if (row.github_issue) parts.push(`issue=${row.github_issue.repo}#${row.github_issue.number}`);
+  if (row.lineage && row.lineage.members.length > 1) {
+    parts.push(`lineage=${row.lineage.rolled_up}(${row.lineage.members.length})`);
+  }
+  if (row.blocking_reason) parts.push(`blocking=${row.blocking_reason}`);
+  return parts.join('\t');
+}
+
 const workStatus = defineCommand({
   meta: {
     name: 'status',
@@ -1485,6 +1532,33 @@ const workStatus = defineCommand({
       type: 'string',
       description: 'Output format: human|json',
       default: 'human',
+    },
+    // WS0-T1 (wi_260706aka) backlog list filters/modes — apply only to the no-workId
+    // (list) branch. All additive + default-off, so a bare `work status` is unchanged.
+    status: {
+      type: 'string',
+      description: 'List filter: only work items with this status (draft|in_progress|…|abandoned)',
+      required: false,
+    },
+    'has-followups': {
+      type: 'boolean',
+      description: 'List filter: only items with ≥1 unresolved follow-up',
+      default: false,
+    },
+    'orphan-drafts': {
+      type: 'boolean',
+      description: 'List filter: only stale (>14d) un-chained drafts',
+      default: false,
+    },
+    wide: {
+      type: 'boolean',
+      description: 'List view: show the widened backlog fields',
+      default: false,
+    },
+    all: {
+      type: 'boolean',
+      description: 'List view: include terminal (done/abandoned) items',
+      default: false,
     },
   },
   run: async ({ args }) => {
@@ -1506,15 +1580,57 @@ const workStatus = defineCommand({
     }
     const store = new WorkItemStore(repoRoot);
     if (!args.workId) {
-      const list = await store.list();
-      if (format === 'json') {
-        writeJson({ items: list });
-      } else if (list.length === 0) {
-        writeHuman('No work items.');
-      } else {
-        for (const s of list) {
-          writeHuman(`${s.id}\t${s.status}\t${s.updated_at}\t${s.title}`);
+      // WS0-T1 (wi_260706aka): validate --status against the workItemStatus enum
+      // (precedent: parseOutputFormat) — an invalid value is a usage error, NEVER a
+      // silent empty result.
+      let statusFilter: WorkItem['status'] | undefined;
+      if (args.status !== undefined && args.status !== '') {
+        const parsed = workItemStatus.safeParse(args.status);
+        if (!parsed.success) {
+          writeError(
+            `invalid --status value "${args.status}"; expected one of: ${STATUS_ORDER.join(', ')}`,
+          );
+          process.exit(USAGE_ERROR_EXIT);
+          return;
         }
+        statusFilter = parsed.data;
+      }
+      // Consume the landed projection (widened fields derived once); apply the
+      // AND-combined filters (ac-2).
+      const now = Date.now();
+      let rows = await projectBacklog(repoRoot);
+      if (statusFilter !== undefined) rows = rows.filter((r) => r.status === statusFilter);
+      if (args['has-followups']) rows = rows.filter((r) => (r.unresolved_follow_ups ?? 0) > 0);
+      if (args['orphan-drafts']) rows = rows.filter((r) => isOrphanDraft(r, now));
+
+      // json (ac-3): ALWAYS the full widened field set, additively, keeping the
+      // {items:[…]} shape. Terminal items are NOT hidden here — a legacy script
+      // reading `work status --output json` must keep seeing every matching item.
+      if (format === 'json') {
+        writeJson({ items: rows });
+        return;
+      }
+
+      // human (ac-4): active-first, grouped by status. Terminal (done/abandoned) is
+      // hidden unless --all OR an explicit --status was given (an explicit terminal
+      // filter must not be suppressed).
+      const showTerminal = args.all === true || statusFilter !== undefined;
+      const visible = rows
+        .filter((r) => showTerminal || !isTerminalWorkStatus(r.status))
+        .sort((a, b) => {
+          const oa = STATUS_ORDER.indexOf(a.status);
+          const ob = STATUS_ORDER.indexOf(b.status);
+          if (oa !== ob) return oa - ob;
+          return a.updated_at < b.updated_at ? 1 : -1;
+        });
+      if (visible.length === 0) {
+        writeHuman('No work items.');
+        return;
+      }
+      for (const r of visible) {
+        writeHuman(
+          args.wide ? formatWideRow(r) : `${r.id}\t${r.status}\t${r.updated_at}\t${r.title}`,
+        );
       }
       return;
     }
