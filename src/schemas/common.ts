@@ -87,6 +87,16 @@ export const evidenceRef = z
   })
   .describe('Pointer to evidence stored outside the manifest itself');
 
+// The *kind of evidence* required to verify an acceptance criterion
+// (test|diff|browser|doc|log). Lives in common.ts (not intent.ts) so BOTH the
+// work-item base AC (Record) and the intent sidecar AC can reference it without an
+// import cycle (work-item.ts → intent.ts → work-item.ts). Re-exported from intent.ts
+// for existing consumers. Distinct axis from work-item.ts verificationMethod
+// (re-evaluability class), which is the kind of oracle, not the kind of evidence.
+export const evidenceRequiredKind = z
+  .enum(['test', 'diff', 'browser', 'doc', 'log'])
+  .describe('Kind of evidence required to verify an acceptance criterion');
+
 // A single declared uncertainty: what is unresolved and why. Shared base
 // primitive (wi_260627jhh) reused by the owner-return envelope (`uncertainty[]`)
 // and the completion contract's `unverified[]` (which EXTENDS it with the

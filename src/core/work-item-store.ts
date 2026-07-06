@@ -1,11 +1,18 @@
-import { readdir, rename, stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { open, readdir, rename, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { type IntentMetric, intentMetric } from '~/schemas/intent-metric';
 import { languageLedger } from '~/schemas/language-ledger';
 import { type TechSpecRound, techSpecRound } from '~/schemas/tech-spec-round';
-import { type FollowUp, type WorkItem, workItem } from '~/schemas/work-item';
-import { localDir } from './ditto-paths';
+import {
+  type FollowUp,
+  type WorkItem,
+  type WorkItemEvent,
+  workItem,
+  workItemEvent,
+} from '~/schemas/work-item';
+import { committedWorkItemDir, localDir } from './ditto-paths';
 import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
 import { generateId } from './id';
 
@@ -151,6 +158,189 @@ export function pushReadiness(item: WorkItem, stem?: StemView): PushReadiness {
   return { ready: reasons.length === 0, reasons };
 }
 
+// wi_2607069bk §2.1: terminal statuses. `done`/`abandoned` are the only exclusive
+// (first-terminal-wins) transitions; everything else is a plain "latest wins".
+const TERMINAL_STATUSES: ReadonlySet<WorkItem['status']> = new Set(['done', 'abandoned']);
+function isTerminalStatus(s: WorkItem['status']): boolean {
+  return TERMINAL_STATUSES.has(s);
+}
+
+/**
+ * Deterministic event ordering by (seq, actor, event_id) — NEVER by `ts`. `ts` is
+ * informational and clock-skew-unsafe (§2.1); event_id is the final tiebreak so two
+ * concurrent writers that raced onto the same (seq, actor) still order stably.
+ */
+function compareWorkItemEvents(a: WorkItemEvent, b: WorkItemEvent): number {
+  if (a.seq !== b.seq) return a.seq - b.seq;
+  if (a.actor !== b.actor) return a.actor < b.actor ? -1 : 1;
+  if (a.event_id !== b.event_id) return a.event_id < b.event_id ? -1 : 1;
+  return 0;
+}
+
+/** Canonical (key-sorted) JSON so the content hash is order-independent. */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * §2.1 event_id — content hash over {kind, actor, seq, payload-core}. `seq` is
+ * INCLUDED so a genuinely repeated transition (e.g. in_progress → done → in_progress
+ * via reopen) is NOT collapsed with an earlier identical-content event. `ts` is
+ * excluded (non-deterministic wall clock). Store-path idempotency (re-run / re-mirror)
+ * is provided by the DIFF-gated emission in `emitTransitionEvents` — an update that
+ * changes nothing emits no event — so the id need not be stable across re-runs.
+ */
+function computeEventId(
+  kind: WorkItemEvent['kind'],
+  actor: string,
+  seq: number,
+  payload: unknown,
+): string {
+  return createHash('sha256').update(stableStringify({ kind, actor, seq, payload })).digest('hex');
+}
+
+/** github idempotency fold (§1.1 / C5): set-union of posted markers; claim_release removes. */
+function foldGithubIssue(record: WorkItem, ordered: WorkItemEvent[]): WorkItem['github_issue'] {
+  // n2 boundary: repo/number are AUTHORED coordinates on record.json — without them a
+  // github event cannot be materialized, so absent-coordinate WIs ignore github events.
+  if (record.github_issue === undefined) return undefined;
+  const hasGithubEvents = ordered.some(
+    (e) => e.kind === 'github_post' || e.kind === 'claim' || e.kind === 'claim_release',
+  );
+  if (!hasGithubEvents) return record.github_issue;
+  const decisionIds = new Set(record.github_issue.posted_decision_ids ?? []);
+  const claimMarkers = new Set(record.github_issue.posted_claim_markers ?? []);
+  let claimedBranch = record.github_issue.claimed_branch;
+  for (const e of ordered) {
+    if (e.kind === 'github_post') {
+      if (e.payload.posted_decision_id) decisionIds.add(e.payload.posted_decision_id);
+      if (e.payload.posted_claim_marker) claimMarkers.add(e.payload.posted_claim_marker);
+      if (e.payload.claimed_branch) claimedBranch = e.payload.claimed_branch;
+    } else if (e.kind === 'claim') {
+      if (e.payload.posted_claim_marker) claimMarkers.add(e.payload.posted_claim_marker);
+      if (e.payload.claimed_branch) claimedBranch = e.payload.claimed_branch;
+    } else if (e.kind === 'claim_release') {
+      if (e.payload.posted_claim_marker) claimMarkers.delete(e.payload.posted_claim_marker);
+      if (e.payload.claimed_branch && claimedBranch === e.payload.claimed_branch) {
+        claimedBranch = undefined;
+      }
+    }
+  }
+  // Rebuild from the immutable coordinates + the folded idempotency sets (empty sets
+  // are simply omitted — no key-delete needed).
+  const {
+    posted_decision_ids: _pd,
+    posted_claim_markers: _pc,
+    claimed_branch: _cb,
+    ...coords
+  } = record.github_issue;
+  return {
+    ...coords,
+    ...(decisionIds.size > 0 ? { posted_decision_ids: [...decisionIds] } : {}),
+    ...(claimMarkers.size > 0 ? { posted_claim_markers: [...claimMarkers] } : {}),
+    ...(claimedBranch !== undefined ? { claimed_branch: claimedBranch } : {}),
+  };
+}
+
+/**
+ * wi_2607069bk §2.1 — the fold. Overlay the immutable per-event log onto the authored
+ * `record`, producing a schema-valid WorkItem. Events are ordered by (seq, actor),
+ * deduped by event_id, then folded per kind:
+ *  - status: latest (seq,actor) wins, EXCEPT terminal (done/abandoned) is
+ *    first-terminal-wins (a competing 2nd terminal is rejected — R1 exclusivity).
+ *    `closed_at` derives from the winning status event; a later NON-terminal status
+ *    with closed_at=null CLEARS it (reopen — key-deletion via an event, not a merge).
+ *  - verdict: per criterion_id, latest (seq,actor) wins (a late fail beats an early
+ *    pass — no regression masking); merged onto the matching record AC.
+ *  - github_post/claim/claim_release: set-union of posted markers; release removes.
+ * Pure: no IO. Callers surface corrupt event files BEFORE reaching here (readEvents).
+ */
+export function reduceWorkItem(record: WorkItem, events: WorkItemEvent[]): WorkItem {
+  const byId = new Map<string, WorkItemEvent>();
+  for (const e of events) if (!byId.has(e.event_id)) byId.set(e.event_id, e);
+  const ordered = [...byId.values()].sort(compareWorkItemEvents);
+
+  // status + closed_at
+  let status: WorkItem['status'] = record.status;
+  let closedAt: string | undefined = record.closed_at;
+  let sawStatusEvent = false;
+  let latestTs = record.updated_at;
+  for (const e of ordered) {
+    if (e.ts > latestTs) latestTs = e.ts;
+    if (e.kind !== 'status') continue;
+    // R1: once terminal, a competing terminal is rejected (first-terminal-wins). A
+    // NON-terminal `to` (reopen) is still applied — that is the legitimate exit.
+    if (isTerminalStatus(status) && isTerminalStatus(e.payload.to)) continue;
+    sawStatusEvent = true;
+    status = e.payload.to;
+    closedAt = e.payload.closed_at ?? undefined; // null/absent → cleared
+  }
+
+  // verdicts (latest per criterion_id)
+  const verdicts = new Map<
+    string,
+    Pick<WorkItem['acceptance_criteria'][number], 'verdict' | 'evidence'>
+  >();
+  for (const e of ordered) {
+    if (e.kind !== 'verdict') continue;
+    verdicts.set(e.payload.criterion_id, {
+      verdict: e.payload.verdict,
+      evidence: e.payload.evidence,
+    });
+  }
+  const acceptance_criteria = record.acceptance_criteria.map((ac) => {
+    const v = verdicts.get(ac.id);
+    return v ? { ...ac, verdict: v.verdict, evidence: v.evidence } : ac;
+  });
+
+  const githubIssue = foldGithubIssue(record, ordered);
+
+  // closed_at is fully event-derived once ANY status event exists (terminal → its
+  // closed_at; non-terminal/reopen → cleared); with no status events the record's own
+  // value is kept (pure-fold robustness). Rebuild without closed_at/github_issue so
+  // they are added back only when present (no key-delete).
+  const { closed_at: _rc, github_issue: _rg, ...restRecord } = record;
+  const effectiveClosedAt = sawStatusEvent
+    ? isTerminalStatus(status)
+      ? closedAt
+      : undefined
+    : record.closed_at;
+  const assembled: Record<string, unknown> = {
+    ...restRecord,
+    status,
+    acceptance_criteria,
+    updated_at: latestTs,
+    ...(effectiveClosedAt !== undefined ? { closed_at: effectiveClosedAt } : {}),
+    ...(githubIssue !== undefined ? { github_issue: githubIssue } : {}),
+  };
+
+  return workItem.parse(assembled);
+}
+
+/**
+ * R6 (§10.1): a work-item event file failed to parse. Work-item events are
+ * STATE-BEARING — a silently-dropped terminal event would revive a stale status
+ * (regression). Unlike memory-store's bare `catch {}` skip, reduction of a work item
+ * REFUSES to proceed and surfaces the corrupt paths so reconcile/doctor can report.
+ */
+export class WorkItemEventCorruptError extends Error {
+  constructor(
+    public readonly workItemId: string,
+    public readonly corruptPaths: string[],
+  ) {
+    super(
+      `work item ${workItemId} has ${corruptPaths.length} unparseable event file(s): ${corruptPaths.join(', ')}. Work-item events are state-bearing; refusing to reduce with a dropped event (would revive a stale status). Inspect via reconcile.`,
+    );
+    this.name = 'WorkItemEventCorruptError';
+  }
+}
+
 export class WorkItemStore {
   constructor(public readonly repoRoot: string) {}
 
@@ -164,6 +354,138 @@ export class WorkItemStore {
 
   private languageLedgerPath(id: string): string {
     return join(this.workItemDir(id), 'language-ledger.json');
+  }
+
+  // §1.1 committed Record base: record.json (authored WorkItem) + events/ (immutable log).
+  private recordPath(id: string): string {
+    return join(committedWorkItemDir(this.repoRoot, id), 'record.json');
+  }
+
+  private eventsDir(id: string): string {
+    return join(committedWorkItemDir(this.repoRoot, id), 'events');
+  }
+
+  /** record.json (authored fields) or null when this WI has no committed Record yet. */
+  private async readRecord(id: string): Promise<WorkItem | null> {
+    if (!(await Bun.file(this.recordPath(id)).exists())) return null;
+    return readJson(this.recordPath(id), workItem);
+  }
+
+  /**
+   * Read the immutable event log. R6 (§10.1): a file that fails to parse is NOT
+   * silently dropped — corrupt paths are collected and surfaced (throw), because a
+   * dropped terminal event would revive a stale status.
+   */
+  private async readEvents(id: string): Promise<WorkItemEvent[]> {
+    let names: string[];
+    try {
+      names = await readdir(this.eventsDir(id));
+    } catch {
+      return [];
+    }
+    const events: WorkItemEvent[] = [];
+    const corrupt: string[] = [];
+    for (const name of names) {
+      if (!name.endsWith('.json')) continue;
+      const path = join(this.eventsDir(id), name);
+      try {
+        events.push(await readJson(path, workItemEvent));
+      } catch {
+        corrupt.push(path);
+      }
+    }
+    if (corrupt.length > 0) throw new WorkItemEventCorruptError(id, corrupt.sort());
+    return events;
+  }
+
+  /**
+   * Append one immutable event. seq is the WI-global max+1 (a natural causal order for
+   * the common single-writer case; (seq,actor) still orders concurrent writers).
+   * `open(wx)` gives exclusive creation (immutable, no TOCTOU). Idempotency is NOT done
+   * here — the DIFF in `emitTransitionEvents`/create already gates emission, so a
+   * re-run/retry (whose event is already reflected in get()) produces no diff and no
+   * duplicate append.
+   */
+  private async appendEvent(
+    id: string,
+    actor: string,
+    kind: WorkItemEvent['kind'],
+    payload: WorkItemEvent['payload'],
+  ): Promise<void> {
+    const events = await this.readEvents(id);
+    const seq = events.reduce((max, e) => Math.max(max, e.seq), -1) + 1;
+    const eventId = computeEventId(kind, actor, seq, payload);
+    const validated = workItemEvent.parse({
+      schema_version: '0.1.0',
+      work_item_id: id,
+      seq,
+      actor,
+      event_id: eventId,
+      ts: new Date().toISOString(),
+      kind,
+      payload,
+    });
+    await ensureDir(this.eventsDir(id));
+    const safeActor = actor.replace(/[^A-Za-z0-9._-]/g, '_');
+    const fileName = `${String(seq).padStart(6, '0')}.${safeActor}.${eventId.slice(0, 12)}.json`;
+    const path = join(this.eventsDir(id), fileName);
+    let handle: Awaited<ReturnType<typeof open>>;
+    try {
+      handle = await open(path, 'wx');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') return; // belt: already present
+      throw err;
+    }
+    try {
+      await handle.writeFile(`${JSON.stringify(validated, null, 2)}\n`, 'utf8');
+    } finally {
+      await handle.close();
+    }
+  }
+
+  /**
+   * Emit the transition events for a `prev → next` mutation (diff-based, §5). Status
+   * and AC-verdict changes become events; AUTHORED-field changes (title/goal/AC
+   * membership/lineage/…) ride on record.json (rewritten by the caller). github
+   * idempotency stays record-authored in n2 (n6 rewires those consumers to emit
+   * github events, which reduceWorkItem then folds).
+   */
+  private async emitTransitionEvents(id: string, prev: WorkItem, next: WorkItem): Promise<void> {
+    const actor = next.owner_profile;
+    const statusChanged =
+      prev.status !== next.status || (prev.closed_at ?? null) !== (next.closed_at ?? null);
+    if (statusChanged) {
+      await this.appendEvent(id, actor, 'status', {
+        to: next.status,
+        closed_at: next.closed_at ?? null,
+      });
+    }
+    const prevAc = new Map(prev.acceptance_criteria.map((c) => [c.id, c]));
+    for (const ac of next.acceptance_criteria) {
+      const before = prevAc.get(ac.id);
+      if (before === undefined) continue; // a new AC is authored (record.json), not a verdict
+      const changed =
+        before.verdict !== ac.verdict ||
+        JSON.stringify(before.evidence) !== JSON.stringify(ac.evidence);
+      if (changed) {
+        await this.appendEvent(id, actor, 'verdict', {
+          criterion_id: ac.id,
+          verdict: ac.verdict,
+          evidence: ac.evidence,
+        });
+      }
+    }
+  }
+
+  /**
+   * Legacy compatibility bridge: exists()/list()/archive() and ~consumers still read
+   * `.ditto/local/work-items/<id>/work-item.json`. Keep the reduced view mirrored
+   * there (personal tier, gitignored — no committed leak) until n3 repoints those
+   * readers at the committed Record. Not the source of truth; get() reduces the
+   * Record + events.
+   */
+  private async writeMirror(id: string, item: WorkItem): Promise<void> {
+    await writeJson(this.workItemPath(id), workItem, item);
   }
 
   async exists(id: string): Promise<boolean> {
@@ -198,8 +520,10 @@ export class WorkItemStore {
       created_at: nowIso,
       updated_at: nowIso,
     };
-    await ensureDir(join(this.workItemDir(id), 'evidence'));
-    const written = await writeJson(this.workItemPath(id), workItem, draft);
+    // §3.2 A2: NO eager ensureDir(evidence/). A lightweight Record is record.json +
+    // a `created` status event; evidence/ is created lazily by the Run tier on append.
+    const record = await writeJson(this.recordPath(id), workItem, draft);
+    await this.appendEvent(id, record.owner_profile, 'status', { to: 'draft' });
     await writeJson(this.languageLedgerPath(id), languageLedger, {
       schema_version: '0.1.0',
       work_item_id: id,
@@ -207,11 +531,20 @@ export class WorkItemStore {
       updated_at: nowIso,
       changes: [],
     });
-    return written;
+    const reduced = await this.get(id);
+    await this.writeMirror(id, reduced);
+    return reduced;
   }
 
   async get(id: string): Promise<WorkItem> {
-    return readJson(this.workItemPath(id), workItem);
+    const record = await this.readRecord(id);
+    if (record === null) {
+      // Legacy fallback for a pre-split WI (record.json absent) — full dual-base
+      // migration is n3; this keeps pre-split `.ditto/local/.../work-item.json` reads
+      // working during the migration window.
+      return readJson(this.workItemPath(id), workItem);
+    }
+    return reduceWorkItem(record, await this.readEvents(id));
   }
 
   /**
@@ -240,7 +573,17 @@ export class WorkItemStore {
       }
     }
     const withTouched = { ...withSha, updated_at: new Date().toISOString() };
-    return writeJson(this.workItemPath(id), workItem, withTouched);
+    // Validate BEFORE any write so a schema-breaking mutation throws with disk
+    // untouched (e.g. status=blocked without re_entry).
+    const validated = workItem.parse(withTouched);
+    // Promote status/verdict transitions to immutable events; authored fields (and the
+    // started_at_sha backfill) ride on record.json. reduce re-derives status/verdict/
+    // github from events on top of the record, so the two never disagree.
+    await this.emitTransitionEvents(id, current, validated);
+    await writeJson(this.recordPath(id), workItem, validated);
+    const reduced = await this.get(id);
+    await this.writeMirror(id, reduced);
+    return reduced;
   }
 
   /**

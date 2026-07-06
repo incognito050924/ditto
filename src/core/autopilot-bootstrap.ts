@@ -71,7 +71,7 @@ export async function bootstrapAutopilot(
   for (const ac of input.intent.acceptance_criteria) {
     const t = acceptanceTestable({
       statement: ac.statement,
-      evidence_required: ac.evidence_required,
+      evidence_required: ac.evidence_required ?? [],
     });
     if (!t.pass) reasons.push(`criterion ${ac.id} not testable: ${t.reasons.join('; ')}`);
   }
