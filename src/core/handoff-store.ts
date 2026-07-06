@@ -1,4 +1,4 @@
-import { readdir, rename } from 'node:fs/promises';
+import { readdir, rename, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { z } from 'zod';
 import type { evidenceRef } from '~/schemas/common';
@@ -149,6 +149,20 @@ export interface ActiveHandoff {
   path: string;
 }
 
+/**
+ * One entry moved by the content-blind stale sweep. `handoff` is present only
+ * when the file was schema-valid; a malformed / non-WI file is still swept by
+ * age (mtime) but carries no parsed handoff (null).
+ */
+export interface SweptHandoff {
+  /** the active path that was archived (no longer present in active/) */
+  path: string;
+  /** repo-relative archive destination the file was moved to */
+  archivePath: string;
+  /** parsed handoff when the file was valid; null for malformed / non-WI files */
+  handoff: Handoff | null;
+}
+
 function stamp(now: Date): string {
   return now.toISOString().replace(/[:.]/g, '-');
 }
@@ -171,6 +185,15 @@ export class HandoffStore {
   }
   private archiveRel(workItemId: string, ts: string): string {
     return `.ditto/local/handoff/archive/${workItemId}__${ts}.md`;
+  }
+  /**
+   * Archive destination for a file we can't parse into a work_item_id: derive
+   * the name from the file's own basename stem so nothing is lost and the
+   * `stamp(now)` suffix keeps it collision-free (WS-HND-T1).
+   */
+  private archiveRelFromBasename(name: string, ts: string): string {
+    const stem = name.replace(/\.md$/, '');
+    return `.ditto/local/handoff/archive/${stem}__${ts}.md`;
   }
 
   private async link(workItemId: string, rel: string): Promise<void> {
@@ -281,31 +304,58 @@ export class HandoffStore {
 
   /**
    * Sweep stale active handoffs into archive (MOVE, never delete). An active
-   * handoff older than STALE_ACTIVE_RETENTION_DAYS that no session ever picked
-   * up would otherwise re-inject into an unrelated session's context forever;
+   * file older than STALE_ACTIVE_RETENTION_DAYS that no session ever picked up
+   * would otherwise re-inject into an unrelated session's context forever;
    * moving it into archive/ (which listActive excludes) stops that injection
-   * while preserving the artifact. Returns what was swept (oldest first).
+   * while preserving the artifact.
    *
-   * Safe-preserve: a handoff whose created_at can't be parsed to a real time is
-   * NOT moved (unknown age never sweeps). Best-effort, fail-open like consume():
-   * a failed rename just leaves the file active for a later turn — never throws.
+   * CONTENT-BLIND (WS-HND-T1): the sweep iterates the active-dir `.md` files
+   * directly and decides staleness by the filesystem mtime — NOT the parsed
+   * created_at. A malformed / non-WI hand-authored file (which listActive skips,
+   * fail-open) therefore still retires by age; a valid handoff keeps the
+   * `<work_item_id>__<ts>` archive scheme, a malformed one is archived under its
+   * own basename stem so nothing is lost. Best-effort, fail-open like consume():
+   * a failed stat/rename just leaves the file active for a later turn — never
+   * throws. Returns what was swept.
    */
-  async sweepStaleActive(now: Date = new Date()): Promise<ActiveHandoff[]> {
-    const active = await this.listActive();
-    const swept: ActiveHandoff[] = [];
+  async sweepStaleActive(now: Date = new Date()): Promise<SweptHandoff[]> {
+    const dir = this.dir();
+    let names: string[];
+    try {
+      names = await readdir(dir);
+    } catch {
+      return []; // no handoff dir yet
+    }
+    const swept: SweptHandoff[] = [];
     let ensured = false;
-    for (const a of active) {
-      const created = Date.parse(a.handoff.created_at);
-      if (Number.isNaN(created)) continue; // safe-preserve: unknown age never swept
-      if (now.getTime() - created <= STALE_ACTIVE_RETENTION_MS) continue; // within limit → stays active
+    for (const name of names) {
+      if (!name.endsWith('.md')) continue; // skip the archive/ subdir and stray files
+      const path = join(dir, name);
+      let mtimeMs: number;
+      try {
+        mtimeMs = (await stat(path)).mtimeMs;
+      } catch {
+        continue; // can't stat → skip (fail-open)
+      }
+      if (now.getTime() - mtimeMs <= STALE_ACTIVE_RETENTION_MS) continue; // within limit → stays active
+      // Parse is best-effort: it only picks the archive name; a parse-failure
+      // does NOT exempt the file from the age sweep (that was the old bug).
+      let handoff: Handoff | null = null;
+      try {
+        handoff = parseHandoffFile(await Bun.file(path).text()).handoff;
+      } catch {
+        handoff = null;
+      }
+      const archivePath = handoff
+        ? this.archiveRel(handoff.work_item_id, stamp(now))
+        : this.archiveRelFromBasename(name, stamp(now));
       if (!ensured) {
-        await ensureDir(join(this.dir(), 'archive'));
+        await ensureDir(join(dir, 'archive'));
         ensured = true;
       }
-      const dest = join(this.repoRoot, this.archiveRel(a.handoff.work_item_id, stamp(now)));
       try {
-        await rename(a.path, dest);
-        swept.push(a);
+        await rename(path, join(this.repoRoot, archivePath));
+        swept.push({ path, archivePath, handoff });
       } catch {
         // best-effort: a failed move just leaves it active for the next turn
       }

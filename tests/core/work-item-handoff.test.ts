@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { utimesSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -483,6 +484,10 @@ describe('writeWorkItemHandoff stale active sweep', () => {
         now: new Date(now.getTime() - 30 * DAY),
       }),
     );
+    // WS-HND-T1: the stale sweep keys on filesystem mtime, so age the file on
+    // disk too (created_at alone no longer triggers the sweep).
+    const aged = new Date(now.getTime() - 30 * DAY);
+    utimesSync(join(workDir, `.ditto/local/handoff/${sibling.id}.md`), aged, aged);
     expect(await hstore.exists(sibling.id)).toBe(true); // present before
 
     await writeWorkItemHandoff(workDir, store, subject.id, {}, now);

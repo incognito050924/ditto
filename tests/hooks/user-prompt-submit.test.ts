@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { utimesSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -664,6 +665,10 @@ describe('userPromptSubmitHandler', () => {
           now: new Date(Date.now() - 30 * DAY), // far past the retention limit
         }),
       );
+      // WS-HND-T1: the stale sweep keys on filesystem mtime, so age the file on
+      // disk too (created_at alone no longer triggers the sweep).
+      const old = new Date(Date.now() - 30 * DAY);
+      utimesSync(join(repo, `.ditto/local/handoff/${wi.id}.md`), old, old);
     }
 
     // ac-4: the consume path actually invokes sweepStaleActive — observe its effect.

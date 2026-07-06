@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { utimesSync } from 'node:fs';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import * as fsp from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -118,6 +119,10 @@ describe('HandoffStore', () => {
         now: createdAt,
       }),
     );
+    // WS-HND-T1: the stale sweep is content-blind — it keys staleness on the
+    // filesystem mtime, not the parsed created_at. Age the file itself so the
+    // written handoff is genuinely old on disk (createdAt alone is not enough).
+    utimesSync(join(repo, `.ditto/local/handoff/${wi.id}.md`), createdAt, createdAt);
     return wi;
   }
 
@@ -129,7 +134,7 @@ describe('HandoffStore', () => {
 
     const swept = await store.sweepStaleActive(now);
 
-    expect(swept.map((s) => s.handoff.work_item_id)).toEqual([stale.id]);
+    expect(swept.map((s) => s.handoff?.work_item_id)).toEqual([stale.id]);
     // move-not-delete: stale gone from active, recent still active
     expect(await store.exists(stale.id)).toBe(false);
     expect(await store.exists(recent.id)).toBe(true);
@@ -147,18 +152,56 @@ describe('HandoffStore', () => {
     expect(await store.exists(edge.id)).toBe(true);
   });
 
-  test('ac-2: an active file with unparseable/missing created_at is NOT moved (safe-preserve)', async () => {
-    const store = new HandoffStore(repo);
-    // a recent valid one (so the sweep dir/code path runs) + a malformed file
-    await writeAged('valid', 'v', new Date('2026-06-28T00:00:00.000Z'));
+  // WS-HND-T1 (wi_2607065tn): content-blind stale sweep. A malformed / non-WI
+  // handoff file (parse-fails, no work_item_id, no created_at) must ALSO retire
+  // by age — otherwise a hand-authored file (e.g. the real lingering
+  // session_260622_risks_processed.md) stays active forever and re-injects into
+  // unrelated sessions. Age is decided by the filesystem mtime, not the parsed
+  // created_at, so a file that never parses is still sweepable.
+  async function writeRawActive(basename: string, body: string, mtime: Date): Promise<string> {
     const dir = join(repo, '.ditto/local/handoff');
-    const malformed = join(dir, 'wi_malformed0.md');
-    await writeFile(malformed, 'not a handoff: no frontmatter, no created_at\n');
+    await mkdir(dir, { recursive: true });
+    const path = join(dir, basename);
+    await writeFile(path, body);
+    utimesSync(path, mtime, mtime);
+    return path;
+  }
 
-    await store.sweepStaleActive(new Date('2099-01-01T00:00:00.000Z'));
+  test('ac-1 content-blind: a malformed active file older than 7d (by mtime) is swept to archive', async () => {
+    const now = new Date('2026-07-06T00:00:00.000Z');
+    // reproduces the real lingering file: hand-authored, no frontmatter → parse-fails
+    const path = await writeRawActive(
+      'session_260622_risks_processed.md',
+      '# risks processed\n\nhand-authored notes, no JSON frontmatter, not a work item.\n',
+      new Date(now.getTime() - 8 * DAY),
+    );
+    const store = new HandoffStore(repo);
 
-    // malformed file untouched (never a sweep candidate / unknown age → preserved)
-    expect(await Bun.file(malformed).exists()).toBe(true);
+    const swept = await store.sweepStaleActive(now);
+
+    // move-not-delete: gone from active/, present under archive/
+    expect(await Bun.file(path).exists()).toBe(false);
+    const archived = await readdir(join(repo, '.ditto/local/handoff/archive'));
+    expect(archived.some((n) => n.startsWith('session_260622_risks_processed__'))).toBe(true);
+    // reported as swept even though it never parsed (handoff === null, no work item)
+    expect(swept).toHaveLength(1);
+    expect(swept[0]?.handoff).toBeNull();
+  });
+
+  test('ac-2 content-blind: a malformed active file within 7d (by mtime) is preserved', async () => {
+    const now = new Date('2026-07-06T00:00:00.000Z');
+    const path = await writeRawActive(
+      'session_recent_notes.md',
+      'not a handoff: no frontmatter, freshly written\n',
+      new Date(now.getTime() - 1 * DAY),
+    );
+    const store = new HandoffStore(repo);
+
+    const swept = await store.sweepStaleActive(now);
+
+    // recent → safe-preserve (still active, not moved)
+    expect(swept).toHaveLength(0);
+    expect(await Bun.file(path).exists()).toBe(true);
   });
 
   // ac-3: context non-injection invariant. After sweep the handoff is in archive/,

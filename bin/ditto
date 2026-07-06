@@ -14692,7 +14692,7 @@ var init_cleanup_index = __esm(() => {
 });
 
 // src/core/cleanup-store.ts
-import { mkdir as mkdir6, rename as rename4, stat as stat5 } from "fs/promises";
+import { mkdir as mkdir6, rename as rename4, stat as stat6 } from "fs/promises";
 import { isAbsolute as isAbsolute5, join as join39, relative as relative11, resolve as resolve8 } from "path";
 function isProtectedBasename(base) {
   if (base === "CLAUDE.md" || base === "AGENTS.md")
@@ -14813,7 +14813,7 @@ class CleanupStore {
   }
   async exists(runId2) {
     try {
-      await stat5(this.runDir(runId2));
+      await stat6(this.runDir(runId2));
       return true;
     } catch {
       return false;
@@ -14844,7 +14844,7 @@ var init_cleanup_store = __esm(() => {
 
 // src/core/cleanup-archive.ts
 import { execFileSync as execFileSync4 } from "child_process";
-import { mkdir as mkdir7, rm, stat as stat6 } from "fs/promises";
+import { mkdir as mkdir7, rm, stat as stat7 } from "fs/promises";
 import { dirname as dirname11, isAbsolute as isAbsolute6, join as join40, resolve as resolve9 } from "path";
 function runDir(repoRoot, runId2) {
   return localDir(repoRoot, "cleanup", runId2);
@@ -14854,7 +14854,7 @@ function archiveZipPath(repoRoot, runId2) {
 }
 async function assertRunExists(repoRoot, runId2) {
   try {
-    const s2 = await stat6(runDir(repoRoot, runId2));
+    const s2 = await stat7(runDir(repoRoot, runId2));
     if (!s2.isDirectory())
       throw new CleanupRunMissingError(runId2);
   } catch (err) {
@@ -22234,7 +22234,7 @@ async function postUnpostedDecisions(deps, workItemId2) {
 }
 
 // src/core/handoff-store.ts
-import { readdir as readdir9, rename as rename3 } from "fs/promises";
+import { readdir as readdir9, rename as rename3, stat as stat4 } from "fs/promises";
 import { join as join23 } from "path";
 
 // src/schemas/handoff.ts
@@ -22404,6 +22404,10 @@ class HandoffStore {
   archiveRel(workItemId2, ts) {
     return `.ditto/local/handoff/archive/${workItemId2}__${ts}.md`;
   }
+  archiveRelFromBasename(name, ts) {
+    const stem = name.replace(/\.md$/, "");
+    return `.ditto/local/handoff/archive/${stem}__${ts}.md`;
+  }
   async link(workItemId2, rel) {
     const items = new WorkItemStore(this.repoRoot);
     if (await items.exists(workItemId2)) {
@@ -22475,23 +22479,41 @@ class HandoffStore {
     return active;
   }
   async sweepStaleActive(now = new Date) {
-    const active = await this.listActive();
+    const dir = this.dir();
+    let names;
+    try {
+      names = await readdir9(dir);
+    } catch {
+      return [];
+    }
     const swept = [];
     let ensured = false;
-    for (const a2 of active) {
-      const created = Date.parse(a2.handoff.created_at);
-      if (Number.isNaN(created))
+    for (const name of names) {
+      if (!name.endsWith(".md"))
         continue;
-      if (now.getTime() - created <= STALE_ACTIVE_RETENTION_MS)
+      const path = join23(dir, name);
+      let mtimeMs;
+      try {
+        mtimeMs = (await stat4(path)).mtimeMs;
+      } catch {
         continue;
+      }
+      if (now.getTime() - mtimeMs <= STALE_ACTIVE_RETENTION_MS)
+        continue;
+      let handoff2 = null;
+      try {
+        handoff2 = parseHandoffFile(await Bun.file(path).text()).handoff;
+      } catch {
+        handoff2 = null;
+      }
+      const archivePath = handoff2 ? this.archiveRel(handoff2.work_item_id, stamp(now)) : this.archiveRelFromBasename(name, stamp(now));
       if (!ensured) {
-        await ensureDir(join23(this.dir(), "archive"));
+        await ensureDir(join23(dir, "archive"));
         ensured = true;
       }
-      const dest = join23(this.repoRoot, this.archiveRel(a2.handoff.work_item_id, stamp(now)));
       try {
-        await rename3(a2.path, dest);
-        swept.push(a2);
+        await rename3(path, join23(this.repoRoot, archivePath));
+        swept.push({ path, archivePath, handoff: handoff2 });
       } catch {}
     }
     return swept;
@@ -27141,7 +27163,7 @@ async function verifyGenerated(repoRoot, runId2, files, options = {}) {
 
 // src/core/e2e/regression-select.ts
 init_shared();
-import { readFile as readFile9, readdir as readdir15, stat as stat4 } from "fs/promises";
+import { readFile as readFile9, readdir as readdir15, stat as stat5 } from "fs/promises";
 import { join as join35, relative as relative10, resolve as resolve6, sep as sep5 } from "path";
 var COMPONENT_PREFIX = "component:";
 function matchesComponentPattern(pattern, path) {
@@ -27186,7 +27208,7 @@ function invalidJourneyReason(text, parseError) {
 }
 async function fileExists2(path) {
   try {
-    return (await stat4(path)).isFile();
+    return (await stat5(path)).isFile();
   } catch {
     return false;
   }
@@ -33510,7 +33532,7 @@ import { isAbsolute as isAbsolute8, join as join53 } from "path";
 // src/core/cleanup-scan.ts
 init_cleanup_store();
 init_memory_scan();
-import { readdir as readdir18, stat as stat7 } from "fs/promises";
+import { readdir as readdir18, stat as stat8 } from "fs/promises";
 import { isAbsolute as isAbsolute7, join as join52, relative as relative14, resolve as resolve11 } from "path";
 var SKIP_DIRS3 = new Set([
   "node_modules",
@@ -33639,7 +33661,7 @@ async function scanCandidates(repoRoot, options) {
     if (!hasInboundReference(root, repoRel)) {
       signals.push({ kind: "orphan", detail: `no inbound reference to ${repoRel}` });
     }
-    const docMtimeMs = (await stat7(abs)).mtimeMs;
+    const docMtimeMs = (await stat8(abs)).mtimeMs;
     const lastCommitMs = lastCommitTouchingMs(root, repoRel);
     if (lastCommitMs !== null && docMtimeMs < lastCommitMs) {
       signals.push({
@@ -34730,7 +34752,7 @@ init_git();
 import { join as join57 } from "path";
 
 // src/core/run-store.ts
-import { stat as stat8 } from "fs/promises";
+import { stat as stat9 } from "fs/promises";
 import { join as join56 } from "path";
 
 // src/schemas/run-manifest.ts
@@ -34792,7 +34814,7 @@ class RunStore {
   }
   async exists(id) {
     try {
-      await stat8(this.manifestPath(id));
+      await stat9(this.manifestPath(id));
       return true;
     } catch {
       return false;
@@ -48395,7 +48417,7 @@ init_git();
 init_common();
 init_fs();
 init_git();
-import { stat as stat9, writeFile as writeFile5 } from "fs/promises";
+import { stat as stat10, writeFile as writeFile5 } from "fs/promises";
 import { dirname as dirname17, join as join83, relative as relative22, resolve as resolve22, sep as sep8 } from "path";
 init_work_item_store();
 init_worktree();
@@ -48459,7 +48481,7 @@ async function assertExistingPrompt(repoRoot, promptPath) {
     throw new RunWithUsageError(`invalid --prompt path: ${parsed.error.issues[0]?.message}`);
   }
   try {
-    await stat9(`${repoRoot}/${promptPath}`);
+    await stat10(`${repoRoot}/${promptPath}`);
   } catch {
     throw new RunWithUsageError(`--prompt path does not exist: ${promptPath}`);
   }
@@ -51968,4 +51990,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=6e9ee89396efee23c52bbb3c97923f1678dad2826f604f36363fef1620f5a543
+//# ditto-src-stamp=99c03f9e5f03523e73e18b0ceda892c72c80d8748e3caecfb6a73ea57dc9393e
