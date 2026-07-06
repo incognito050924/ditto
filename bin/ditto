@@ -5,31 +5,49 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = import.meta.require;
 
-// node_modules/consola/dist/chunks/prompt.mjs
+// ../../../../node_modules/consola/dist/chunks/prompt.mjs
 var exports_prompt = {};
 __export(exports_prompt, {
   prompt: () => prompt,
@@ -785,7 +803,7 @@ var init_prompt = __esm(() => {
   kCancel = Symbol.for("cancel");
 });
 
-// node_modules/smol-toml/dist/error.js
+// ../../../../node_modules/smol-toml/dist/error.js
 function getLineColFromPtr(string, ptr) {
   let lines = string.slice(0, ptr).split(/\r\n|\n|\r/g);
   return [lines.length, lines.pop().length + 1];
@@ -857,7 +875,7 @@ ${codeblock}`, options);
   };
 });
 
-// node_modules/smol-toml/dist/util.js
+// ../../../../node_modules/smol-toml/dist/util.js
 function isEscaped(str, ptr) {
   let i2 = 0;
   while (str[ptr - ++i2] === "\\")
@@ -973,7 +991,7 @@ var init_util = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/date.js
+// ../../../../node_modules/smol-toml/dist/date.js
 var DATE_TIME_RE, TomlDate;
 var init_date = __esm(() => {
   /*!
@@ -1095,7 +1113,7 @@ var init_date = __esm(() => {
   };
 });
 
-// node_modules/smol-toml/dist/primitive.js
+// ../../../../node_modules/smol-toml/dist/primitive.js
 function parseString(str, ptr = 0, endPtr = str.length) {
   let isLiteral = str[ptr] === "'";
   let isMultiline = str[ptr++] === str[ptr] && str[ptr] === str[ptr + 1];
@@ -1273,7 +1291,7 @@ var init_primitive = __esm(() => {
   };
 });
 
-// node_modules/smol-toml/dist/extract.js
+// ../../../../node_modules/smol-toml/dist/extract.js
 function sliceAndTrimEndOf(str, startPtr, endPtr) {
   let value = str.slice(startPtr, endPtr);
   let commentIdx = value.indexOf("#");
@@ -1374,7 +1392,7 @@ var init_extract = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/struct.js
+// ../../../../node_modules/smol-toml/dist/struct.js
 function parseKey(str, ptr, end = "=") {
   let dot = ptr - 1;
   let parsed = [];
@@ -1558,7 +1576,7 @@ var init_struct = __esm(() => {
   KEY_PART_RE = /^[a-zA-Z0-9-_]+[ \t]*$/;
 });
 
-// node_modules/smol-toml/dist/parse.js
+// ../../../../node_modules/smol-toml/dist/parse.js
 function peekTable(key, table, meta, type) {
   let t2 = table;
   let m2 = meta;
@@ -1705,7 +1723,7 @@ var init_parse = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/stringify.js
+// ../../../../node_modules/smol-toml/dist/stringify.js
 var init_stringify = __esm(() => {
   /*!
    * Copyright (c) Squirrel Chat et al., All rights reserved.
@@ -1736,7 +1754,7 @@ var init_stringify = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/index.js
+// ../../../../node_modules/smol-toml/dist/index.js
 var init_dist = __esm(() => {
   init_parse();
   init_stringify();
@@ -1771,7 +1789,7 @@ var init_dist = __esm(() => {
    */
 });
 
-// node_modules/yaml/dist/nodes/identity.js
+// ../../../../node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS((exports) => {
   var ALIAS = Symbol.for("yaml.alias");
   var DOC = Symbol.for("yaml.document");
@@ -1825,7 +1843,7 @@ var require_identity = __commonJS((exports) => {
   exports.isSeq = isSeq;
 });
 
-// node_modules/yaml/dist/visit.js
+// ../../../../node_modules/yaml/dist/visit.js
 var require_visit = __commonJS((exports) => {
   var identity = require_identity();
   var BREAK = Symbol("break visit");
@@ -1980,7 +1998,7 @@ var require_visit = __commonJS((exports) => {
   exports.visitAsync = visitAsync;
 });
 
-// node_modules/yaml/dist/doc/directives.js
+// ../../../../node_modules/yaml/dist/doc/directives.js
 var require_directives = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2132,7 +2150,7 @@ var require_directives = __commonJS((exports) => {
   exports.Directives = Directives;
 });
 
-// node_modules/yaml/dist/doc/anchors.js
+// ../../../../node_modules/yaml/dist/doc/anchors.js
 var require_anchors = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2194,7 +2212,7 @@ var require_anchors = __commonJS((exports) => {
   exports.findNewAnchor = findNewAnchor;
 });
 
-// node_modules/yaml/dist/doc/applyReviver.js
+// ../../../../node_modules/yaml/dist/doc/applyReviver.js
 var require_applyReviver = __commonJS((exports) => {
   function applyReviver(reviver, obj, key, val) {
     if (val && typeof val === "object") {
@@ -2241,7 +2259,7 @@ var require_applyReviver = __commonJS((exports) => {
   exports.applyReviver = applyReviver;
 });
 
-// node_modules/yaml/dist/nodes/toJS.js
+// ../../../../node_modules/yaml/dist/nodes/toJS.js
 var require_toJS = __commonJS((exports) => {
   var identity = require_identity();
   function toJS(value, arg, ctx) {
@@ -2268,7 +2286,7 @@ var require_toJS = __commonJS((exports) => {
   exports.toJS = toJS;
 });
 
-// node_modules/yaml/dist/nodes/Node.js
+// ../../../../node_modules/yaml/dist/nodes/Node.js
 var require_Node = __commonJS((exports) => {
   var applyReviver = require_applyReviver();
   var identity = require_identity();
@@ -2305,7 +2323,7 @@ var require_Node = __commonJS((exports) => {
   exports.NodeBase = NodeBase;
 });
 
-// node_modules/yaml/dist/nodes/Alias.js
+// ../../../../node_modules/yaml/dist/nodes/Alias.js
 var require_Alias = __commonJS((exports) => {
   var anchors = require_anchors();
   var visit = require_visit();
@@ -2415,7 +2433,7 @@ var require_Alias = __commonJS((exports) => {
   exports.Alias = Alias;
 });
 
-// node_modules/yaml/dist/nodes/Scalar.js
+// ../../../../node_modules/yaml/dist/nodes/Scalar.js
 var require_Scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Node = require_Node();
@@ -2443,7 +2461,7 @@ var require_Scalar = __commonJS((exports) => {
   exports.isScalarValue = isScalarValue;
 });
 
-// node_modules/yaml/dist/doc/createNode.js
+// ../../../../node_modules/yaml/dist/doc/createNode.js
 var require_createNode = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -2515,7 +2533,7 @@ var require_createNode = __commonJS((exports) => {
   exports.createNode = createNode;
 });
 
-// node_modules/yaml/dist/nodes/Collection.js
+// ../../../../node_modules/yaml/dist/nodes/Collection.js
 var require_Collection = __commonJS((exports) => {
   var createNode = require_createNode();
   var identity = require_identity();
@@ -2630,7 +2648,7 @@ var require_Collection = __commonJS((exports) => {
   exports.isEmptyPath = isEmptyPath;
 });
 
-// node_modules/yaml/dist/stringify/stringifyComment.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyComment.js
 var require_stringifyComment = __commonJS((exports) => {
   var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
   function indentComment(comment, indent) {
@@ -2647,7 +2665,7 @@ var require_stringifyComment = __commonJS((exports) => {
   exports.stringifyComment = stringifyComment;
 });
 
-// node_modules/yaml/dist/stringify/foldFlowLines.js
+// ../../../../node_modules/yaml/dist/stringify/foldFlowLines.js
 var require_foldFlowLines = __commonJS((exports) => {
   var FOLD_FLOW = "flow";
   var FOLD_BLOCK = "block";
@@ -2784,7 +2802,7 @@ ${indent}${text.slice(fold + 1, end2)}`;
   exports.foldFlowLines = foldFlowLines;
 });
 
-// node_modules/yaml/dist/stringify/stringifyString.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyString.js
 var require_stringifyString = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var foldFlowLines = require_foldFlowLines();
@@ -3082,7 +3100,7 @@ ${indent}`);
   exports.stringifyString = stringifyString;
 });
 
-// node_modules/yaml/dist/stringify/stringify.js
+// ../../../../node_modules/yaml/dist/stringify/stringify.js
 var require_stringify = __commonJS((exports) => {
   var anchors = require_anchors();
   var identity = require_identity();
@@ -3203,7 +3221,7 @@ ${ctx.indent}${str}`;
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/stringify/stringifyPair.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyPair.js
 var require_stringifyPair = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3339,7 +3357,7 @@ ${ctx.indent}`;
   exports.stringifyPair = stringifyPair;
 });
 
-// node_modules/yaml/dist/log.js
+// ../../../../node_modules/yaml/dist/log.js
 var require_log = __commonJS((exports) => {
   var node_process = __require("process");
   function debug(logLevel, ...messages) {
@@ -3358,7 +3376,7 @@ var require_log = __commonJS((exports) => {
   exports.warn = warn;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/merge.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/merge.js
 var require_merge = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3415,7 +3433,7 @@ var require_merge = __commonJS((exports) => {
   exports.merge = merge;
 });
 
-// node_modules/yaml/dist/nodes/addPairToJSMap.js
+// ../../../../node_modules/yaml/dist/nodes/addPairToJSMap.js
 var require_addPairToJSMap = __commonJS((exports) => {
   var log = require_log();
   var merge = require_merge();
@@ -3476,7 +3494,7 @@ var require_addPairToJSMap = __commonJS((exports) => {
   exports.addPairToJSMap = addPairToJSMap;
 });
 
-// node_modules/yaml/dist/nodes/Pair.js
+// ../../../../node_modules/yaml/dist/nodes/Pair.js
 var require_Pair = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyPair = require_stringifyPair();
@@ -3514,7 +3532,7 @@ var require_Pair = __commonJS((exports) => {
   exports.createPair = createPair;
 });
 
-// node_modules/yaml/dist/stringify/stringifyCollection.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyCollection.js
 var require_stringifyCollection = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -3666,7 +3684,7 @@ ${indent}${end}`;
   exports.stringifyCollection = stringifyCollection;
 });
 
-// node_modules/yaml/dist/nodes/YAMLMap.js
+// ../../../../node_modules/yaml/dist/nodes/YAMLMap.js
 var require_YAMLMap = __commonJS((exports) => {
   var stringifyCollection = require_stringifyCollection();
   var addPairToJSMap = require_addPairToJSMap();
@@ -3793,7 +3811,7 @@ var require_YAMLMap = __commonJS((exports) => {
   exports.findPair = findPair;
 });
 
-// node_modules/yaml/dist/schema/common/map.js
+// ../../../../node_modules/yaml/dist/schema/common/map.js
 var require_map = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLMap = require_YAMLMap();
@@ -3812,7 +3830,7 @@ var require_map = __commonJS((exports) => {
   exports.map = map;
 });
 
-// node_modules/yaml/dist/nodes/YAMLSeq.js
+// ../../../../node_modules/yaml/dist/nodes/YAMLSeq.js
 var require_YAMLSeq = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyCollection = require_stringifyCollection();
@@ -3905,7 +3923,7 @@ var require_YAMLSeq = __commonJS((exports) => {
   exports.YAMLSeq = YAMLSeq;
 });
 
-// node_modules/yaml/dist/schema/common/seq.js
+// ../../../../node_modules/yaml/dist/schema/common/seq.js
 var require_seq = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLSeq = require_YAMLSeq();
@@ -3924,7 +3942,7 @@ var require_seq = __commonJS((exports) => {
   exports.seq = seq;
 });
 
-// node_modules/yaml/dist/schema/common/string.js
+// ../../../../node_modules/yaml/dist/schema/common/string.js
 var require_string = __commonJS((exports) => {
   var stringifyString = require_stringifyString();
   var string = {
@@ -3940,7 +3958,7 @@ var require_string = __commonJS((exports) => {
   exports.string = string;
 });
 
-// node_modules/yaml/dist/schema/common/null.js
+// ../../../../node_modules/yaml/dist/schema/common/null.js
 var require_null = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var nullTag = {
@@ -3955,7 +3973,7 @@ var require_null = __commonJS((exports) => {
   exports.nullTag = nullTag;
 });
 
-// node_modules/yaml/dist/schema/core/bool.js
+// ../../../../node_modules/yaml/dist/schema/core/bool.js
 var require_bool = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var boolTag = {
@@ -3976,7 +3994,7 @@ var require_bool = __commonJS((exports) => {
   exports.boolTag = boolTag;
 });
 
-// node_modules/yaml/dist/stringify/stringifyNumber.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyNumber.js
 var require_stringifyNumber = __commonJS((exports) => {
   function stringifyNumber({ format, minFractionDigits, tag, value }) {
     if (typeof value === "bigint")
@@ -4000,7 +4018,7 @@ var require_stringifyNumber = __commonJS((exports) => {
   exports.stringifyNumber = stringifyNumber;
 });
 
-// node_modules/yaml/dist/schema/core/float.js
+// ../../../../node_modules/yaml/dist/schema/core/float.js
 var require_float = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4043,7 +4061,7 @@ var require_float = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// node_modules/yaml/dist/schema/core/int.js
+// ../../../../node_modules/yaml/dist/schema/core/int.js
 var require_int = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4085,7 +4103,7 @@ var require_int = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// node_modules/yaml/dist/schema/core/schema.js
+// ../../../../node_modules/yaml/dist/schema/core/schema.js
 var require_schema = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4110,7 +4128,7 @@ var require_schema = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/json/schema.js
+// ../../../../node_modules/yaml/dist/schema/json/schema.js
 var require_schema2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var map = require_map();
@@ -4174,7 +4192,7 @@ var require_schema2 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/binary.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/binary.js
 var require_binary = __commonJS((exports) => {
   var node_buffer = __require("buffer");
   var Scalar = require_Scalar();
@@ -4229,7 +4247,7 @@ var require_binary = __commonJS((exports) => {
   exports.binary = binary;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/pairs.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/pairs.js
 var require_pairs = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4304,7 +4322,7 @@ ${cn.comment}` : item.comment;
   exports.resolvePairs = resolvePairs;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/omap.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/omap.js
 var require_omap = __commonJS((exports) => {
   var identity = require_identity();
   var toJS = require_toJS();
@@ -4376,7 +4394,7 @@ var require_omap = __commonJS((exports) => {
   exports.omap = omap;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/bool.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/bool.js
 var require_bool2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function boolStringify({ value, source }, ctx) {
@@ -4405,7 +4423,7 @@ var require_bool2 = __commonJS((exports) => {
   exports.trueTag = trueTag;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/float.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/float.js
 var require_float2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4451,7 +4469,7 @@ var require_float2 = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/int.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/int.js
 var require_int2 = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4527,7 +4545,7 @@ var require_int2 = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/set.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/set.js
 var require_set = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4610,7 +4628,7 @@ var require_set = __commonJS((exports) => {
   exports.set = set;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
 var require_timestamp = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   function parseSexagesimal(str, asBigInt) {
@@ -4692,7 +4710,7 @@ var require_timestamp = __commonJS((exports) => {
   exports.timestamp = timestamp;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/schema.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/schema.js
 var require_schema3 = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4733,7 +4751,7 @@ var require_schema3 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/tags.js
+// ../../../../node_modules/yaml/dist/schema/tags.js
 var require_tags = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4824,7 +4842,7 @@ var require_tags = __commonJS((exports) => {
   exports.getTags = getTags;
 });
 
-// node_modules/yaml/dist/schema/Schema.js
+// ../../../../node_modules/yaml/dist/schema/Schema.js
 var require_Schema = __commonJS((exports) => {
   var identity = require_identity();
   var map = require_map();
@@ -4854,7 +4872,7 @@ var require_Schema = __commonJS((exports) => {
   exports.Schema = Schema;
 });
 
-// node_modules/yaml/dist/stringify/stringifyDocument.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyDocument.js
 var require_stringifyDocument = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -4934,7 +4952,7 @@ var require_stringifyDocument = __commonJS((exports) => {
   exports.stringifyDocument = stringifyDocument;
 });
 
-// node_modules/yaml/dist/doc/Document.js
+// ../../../../node_modules/yaml/dist/doc/Document.js
 var require_Document = __commonJS((exports) => {
   var Alias = require_Alias();
   var Collection = require_Collection();
@@ -5169,7 +5187,7 @@ var require_Document = __commonJS((exports) => {
   exports.Document = Document;
 });
 
-// node_modules/yaml/dist/errors.js
+// ../../../../node_modules/yaml/dist/errors.js
 var require_errors = __commonJS((exports) => {
   class YAMLError extends Error {
     constructor(name, pos, code, message) {
@@ -5234,7 +5252,7 @@ ${pointer}
   exports.prettifyError = prettifyError;
 });
 
-// node_modules/yaml/dist/compose/resolve-props.js
+// ../../../../node_modules/yaml/dist/compose/resolve-props.js
 var require_resolve_props = __commonJS((exports) => {
   function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
     let spaceBefore = false;
@@ -5364,7 +5382,7 @@ var require_resolve_props = __commonJS((exports) => {
   exports.resolveProps = resolveProps;
 });
 
-// node_modules/yaml/dist/compose/util-contains-newline.js
+// ../../../../node_modules/yaml/dist/compose/util-contains-newline.js
 var require_util_contains_newline = __commonJS((exports) => {
   function containsNewline(key) {
     if (!key)
@@ -5404,7 +5422,7 @@ var require_util_contains_newline = __commonJS((exports) => {
   exports.containsNewline = containsNewline;
 });
 
-// node_modules/yaml/dist/compose/util-flow-indent-check.js
+// ../../../../node_modules/yaml/dist/compose/util-flow-indent-check.js
 var require_util_flow_indent_check = __commonJS((exports) => {
   var utilContainsNewline = require_util_contains_newline();
   function flowIndentCheck(indent, fc, onError) {
@@ -5419,7 +5437,7 @@ var require_util_flow_indent_check = __commonJS((exports) => {
   exports.flowIndentCheck = flowIndentCheck;
 });
 
-// node_modules/yaml/dist/compose/util-map-includes.js
+// ../../../../node_modules/yaml/dist/compose/util-map-includes.js
 var require_util_map_includes = __commonJS((exports) => {
   var identity = require_identity();
   function mapIncludes(ctx, items, search) {
@@ -5432,7 +5450,7 @@ var require_util_map_includes = __commonJS((exports) => {
   exports.mapIncludes = mapIncludes;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-map.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-map.js
 var require_resolve_block_map = __commonJS((exports) => {
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -5539,7 +5557,7 @@ var require_resolve_block_map = __commonJS((exports) => {
   exports.resolveBlockMap = resolveBlockMap;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-seq.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-seq.js
 var require_resolve_block_seq = __commonJS((exports) => {
   var YAMLSeq = require_YAMLSeq();
   var resolveProps = require_resolve_props();
@@ -5587,7 +5605,7 @@ var require_resolve_block_seq = __commonJS((exports) => {
   exports.resolveBlockSeq = resolveBlockSeq;
 });
 
-// node_modules/yaml/dist/compose/resolve-end.js
+// ../../../../node_modules/yaml/dist/compose/resolve-end.js
 var require_resolve_end = __commonJS((exports) => {
   function resolveEnd(end, offset, reqSpace, onError) {
     let comment = "";
@@ -5627,7 +5645,7 @@ var require_resolve_end = __commonJS((exports) => {
   exports.resolveEnd = resolveEnd;
 });
 
-// node_modules/yaml/dist/compose/resolve-flow-collection.js
+// ../../../../node_modules/yaml/dist/compose/resolve-flow-collection.js
 var require_resolve_flow_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -5818,7 +5836,7 @@ var require_resolve_flow_collection = __commonJS((exports) => {
   exports.resolveFlowCollection = resolveFlowCollection;
 });
 
-// node_modules/yaml/dist/compose/compose-collection.js
+// ../../../../node_modules/yaml/dist/compose/compose-collection.js
 var require_compose_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -5880,7 +5898,7 @@ var require_compose_collection = __commonJS((exports) => {
   exports.composeCollection = composeCollection;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-scalar.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-scalar.js
 var require_resolve_block_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function resolveBlockScalar(ctx, scalar, onError) {
@@ -6073,7 +6091,7 @@ var require_resolve_block_scalar = __commonJS((exports) => {
   exports.resolveBlockScalar = resolveBlockScalar;
 });
 
-// node_modules/yaml/dist/compose/resolve-flow-scalar.js
+// ../../../../node_modules/yaml/dist/compose/resolve-flow-scalar.js
 var require_resolve_flow_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var resolveEnd = require_resolve_end();
@@ -6290,7 +6308,7 @@ var require_resolve_flow_scalar = __commonJS((exports) => {
   exports.resolveFlowScalar = resolveFlowScalar;
 });
 
-// node_modules/yaml/dist/compose/compose-scalar.js
+// ../../../../node_modules/yaml/dist/compose/compose-scalar.js
 var require_compose_scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -6368,7 +6386,7 @@ var require_compose_scalar = __commonJS((exports) => {
   exports.composeScalar = composeScalar;
 });
 
-// node_modules/yaml/dist/compose/util-empty-scalar-position.js
+// ../../../../node_modules/yaml/dist/compose/util-empty-scalar-position.js
 var require_util_empty_scalar_position = __commonJS((exports) => {
   function emptyScalarPosition(offset, before, pos) {
     if (before) {
@@ -6395,7 +6413,7 @@ var require_util_empty_scalar_position = __commonJS((exports) => {
   exports.emptyScalarPosition = emptyScalarPosition;
 });
 
-// node_modules/yaml/dist/compose/compose-node.js
+// ../../../../node_modules/yaml/dist/compose/compose-node.js
 var require_compose_node = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -6498,7 +6516,7 @@ var require_compose_node = __commonJS((exports) => {
   exports.composeNode = composeNode;
 });
 
-// node_modules/yaml/dist/compose/compose-doc.js
+// ../../../../node_modules/yaml/dist/compose/compose-doc.js
 var require_compose_doc = __commonJS((exports) => {
   var Document = require_Document();
   var composeNode = require_compose_node();
@@ -6538,7 +6556,7 @@ var require_compose_doc = __commonJS((exports) => {
   exports.composeDoc = composeDoc;
 });
 
-// node_modules/yaml/dist/compose/composer.js
+// ../../../../node_modules/yaml/dist/compose/composer.js
 var require_composer = __commonJS((exports) => {
   var node_process = __require("process");
   var directives = require_directives();
@@ -6729,7 +6747,7 @@ ${end.comment}` : end.comment;
   exports.Composer = Composer;
 });
 
-// node_modules/yaml/dist/parse/cst-scalar.js
+// ../../../../node_modules/yaml/dist/parse/cst-scalar.js
 var require_cst_scalar = __commonJS((exports) => {
   var resolveBlockScalar = require_resolve_block_scalar();
   var resolveFlowScalar = require_resolve_flow_scalar();
@@ -6919,7 +6937,7 @@ var require_cst_scalar = __commonJS((exports) => {
   exports.setScalarValue = setScalarValue;
 });
 
-// node_modules/yaml/dist/parse/cst-stringify.js
+// ../../../../node_modules/yaml/dist/parse/cst-stringify.js
 var require_cst_stringify = __commonJS((exports) => {
   var stringify2 = (cst) => ("type" in cst) ? stringifyToken(cst) : stringifyItem(cst);
   function stringifyToken(token) {
@@ -6977,7 +6995,7 @@ var require_cst_stringify = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/parse/cst-visit.js
+// ../../../../node_modules/yaml/dist/parse/cst-visit.js
 var require_cst_visit = __commonJS((exports) => {
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
@@ -7036,7 +7054,7 @@ var require_cst_visit = __commonJS((exports) => {
   exports.visit = visit;
 });
 
-// node_modules/yaml/dist/parse/cst.js
+// ../../../../node_modules/yaml/dist/parse/cst.js
 var require_cst = __commonJS((exports) => {
   var cstScalar = require_cst_scalar();
   var cstStringify = require_cst_stringify();
@@ -7137,7 +7155,7 @@ var require_cst = __commonJS((exports) => {
   exports.tokenType = tokenType;
 });
 
-// node_modules/yaml/dist/parse/lexer.js
+// ../../../../node_modules/yaml/dist/parse/lexer.js
 var require_lexer = __commonJS((exports) => {
   var cst = require_cst();
   function isEmpty(ch) {
@@ -7734,7 +7752,7 @@ var require_lexer = __commonJS((exports) => {
   exports.Lexer = Lexer;
 });
 
-// node_modules/yaml/dist/parse/line-counter.js
+// ../../../../node_modules/yaml/dist/parse/line-counter.js
 var require_line_counter = __commonJS((exports) => {
   class LineCounter {
     constructor() {
@@ -7762,7 +7780,7 @@ var require_line_counter = __commonJS((exports) => {
   exports.LineCounter = LineCounter;
 });
 
-// node_modules/yaml/dist/parse/parser.js
+// ../../../../node_modules/yaml/dist/parse/parser.js
 var require_parser = __commonJS((exports) => {
   var node_process = __require("process");
   var cst = require_cst();
@@ -8618,7 +8636,7 @@ var require_parser = __commonJS((exports) => {
   exports.Parser = Parser;
 });
 
-// node_modules/yaml/dist/public-api.js
+// ../../../../node_modules/yaml/dist/public-api.js
 var require_public_api = __commonJS((exports) => {
   var composer = require_composer();
   var Document = require_Document();
@@ -8712,7 +8730,7 @@ var require_public_api = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/index.js
+// ../../../../node_modules/yaml/dist/index.js
 var composer, Document, Schema, errors, Alias, identity, Pair, Scalar, YAMLMap, YAMLSeq, cst, lexer, lineCounter, parser, publicApi, visit, $Composer, $Document, $Schema, $YAMLError, $YAMLParseError, $YAMLWarning, $Alias, $isAlias, $isCollection, $isDocument, $isMap, $isNode, $isPair, $isScalar, $isSeq, $Pair, $Scalar, $YAMLMap, $YAMLSeq, $Lexer, $LineCounter, $Parser, $parse, $parseAllDocuments, $parseDocument, $stringify, $visit, $visitAsync;
 var init_dist2 = __esm(() => {
   composer = require_composer();
@@ -8829,7 +8847,7 @@ var init_shared = __esm(() => {
   init_dist2();
 });
 
-// node_modules/zod/v3/helpers/util.js
+// ../../../../node_modules/zod/v3/helpers/util.js
 var util, objectUtil, ZodParsedType, getParsedType = (data) => {
   const t2 = typeof data;
   switch (t2) {
@@ -8960,7 +8978,7 @@ var init_util2 = __esm(() => {
   ]);
 });
 
-// node_modules/zod/v3/ZodError.js
+// ../../../../node_modules/zod/v3/ZodError.js
 var ZodIssueCode, quotelessJson = (obj) => {
   const json = JSON.stringify(obj, null, 2);
   return json.replace(/"([^"]+)":/g, "$1:");
@@ -9081,7 +9099,7 @@ var init_ZodError = __esm(() => {
   };
 });
 
-// node_modules/zod/v3/locales/en.js
+// ../../../../node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -9188,7 +9206,7 @@ var init_en = __esm(() => {
   en_default = errorMap;
 });
 
-// node_modules/zod/v3/errors.js
+// ../../../../node_modules/zod/v3/errors.js
 function setErrorMap(map) {
   overrideErrorMap = map;
 }
@@ -9201,7 +9219,7 @@ var init_errors = __esm(() => {
   overrideErrorMap = en_default;
 });
 
-// node_modules/zod/v3/helpers/parseUtil.js
+// ../../../../node_modules/zod/v3/helpers/parseUtil.js
 function addIssueToContext(ctx, issueData) {
   const overrideMap = getErrorMap();
   const issue = makeIssue({
@@ -9306,10 +9324,10 @@ var init_parseUtil = __esm(() => {
   });
 });
 
-// node_modules/zod/v3/helpers/typeAliases.js
+// ../../../../node_modules/zod/v3/helpers/typeAliases.js
 var init_typeAliases = () => {};
 
-// node_modules/zod/v3/helpers/errorUtil.js
+// ../../../../node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 var init_errorUtil = __esm(() => {
   (function(errorUtil2) {
@@ -9318,7 +9336,7 @@ var init_errorUtil = __esm(() => {
   })(errorUtil || (errorUtil = {}));
 });
 
-// node_modules/zod/v3/types.js
+// ../../../../node_modules/zod/v3/types.js
 class ParseInputLazyPath {
   constructor(parent, value, path, key) {
     this._cachedPath = [];
@@ -12669,7 +12687,7 @@ var init_types = __esm(() => {
   NEVER = INVALID;
 });
 
-// node_modules/zod/v3/external.js
+// ../../../../node_modules/zod/v3/external.js
 var exports_external = {};
 __export(exports_external, {
   void: () => voidType,
@@ -12789,7 +12807,7 @@ var init_external = __esm(() => {
   init_ZodError();
 });
 
-// node_modules/zod/index.js
+// ../../../../node_modules/zod/index.js
 var init_zod = __esm(() => {
   init_external();
   init_external();
@@ -14996,7 +15014,7 @@ var init_cleanup_archive = __esm(() => {
   };
 });
 
-// node_modules/sisteransi/src/index.js
+// ../../../../node_modules/sisteransi/src/index.js
 var require_src = __commonJS((exports, module) => {
   var ESC2 = "\x1B";
   var CSI2 = `${ESC2}[`;
@@ -15054,7 +15072,7 @@ var require_src = __commonJS((exports, module) => {
   module.exports = { cursor, scroll, erase, beep };
 });
 
-// node_modules/consola/dist/core.mjs
+// ../../../../node_modules/consola/dist/core.mjs
 var LogLevels = {
   silent: Number.NEGATIVE_INFINITY,
   fatal: 0,
@@ -15450,7 +15468,7 @@ Consola.prototype.resume = Consola.prototype.resumeLogs;
 function createConsola(options = {}) {
   return new Consola(options);
 }
-// node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
+// ../../../../node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
 import { formatWithOptions } from "util";
 import { sep } from "path";
 function parseStack(stack, message) {
@@ -15527,10 +15545,10 @@ ${indent}`);
   }
 }
 
-// node_modules/consola/dist/index.mjs
+// ../../../../node_modules/consola/dist/index.mjs
 import g$1 from "process";
 
-// node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
+// ../../../../node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
 import * as tty from "tty";
 var {
   env = {},
@@ -15743,7 +15761,7 @@ function box(text, _opts = {}) {
 `);
 }
 
-// node_modules/consola/dist/index.mjs
+// ../../../../node_modules/consola/dist/index.mjs
 var r2 = Object.create(null);
 var i = (e2) => globalThis.process?.env || import.meta.env || globalThis.Deno?.env.toObject() || globalThis.__env__ || (e2 ? r2 : globalThis);
 var o2 = new Proxy(r2, { get(e2, s) {
@@ -16026,7 +16044,7 @@ function _getDefaultLogLevel() {
   return LogLevels.info;
 }
 var consola = createConsola2();
-// node_modules/citty/dist/index.mjs
+// ../../../../node_modules/citty/dist/index.mjs
 function toArray(val) {
   if (Array.isArray(val)) {
     return val;
@@ -37203,12 +37221,12 @@ async function multiSelect(io, message, choices) {
 // src/cli/wizard/prompt-io.ts
 import { createInterface } from "readline/promises";
 
-// node_modules/@clack/core/dist/index.mjs
+// ../../../../node_modules/@clack/core/dist/index.mjs
 import { styleText } from "util";
 import { stdout as stdout3, stdin as stdin2 } from "process";
 import l__default from "readline";
 
-// node_modules/fast-string-truncated-width/dist/utils.js
+// ../../../../node_modules/fast-string-truncated-width/dist/utils.js
 var getCodePointsLength = (() => {
   const SURROGATE_PAIR_RE = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
   return (input) => {
@@ -37227,7 +37245,7 @@ var isWideNotCJKTNotEmoji = (x2) => {
   return x2 === 8987 || x2 === 9001 || x2 >= 12272 && x2 <= 12287 || x2 >= 12289 && x2 <= 12350 || x2 >= 12441 && x2 <= 12543 || x2 >= 12549 && x2 <= 12591 || x2 >= 12593 && x2 <= 12686 || x2 >= 12688 && x2 <= 12771 || x2 >= 12783 && x2 <= 12830 || x2 >= 12832 && x2 <= 12871 || x2 >= 12880 && x2 <= 19903 || x2 >= 65040 && x2 <= 65049 || x2 >= 65072 && x2 <= 65106 || x2 >= 65108 && x2 <= 65126 || x2 >= 65128 && x2 <= 65131 || x2 >= 127488 && x2 <= 127490 || x2 >= 127504 && x2 <= 127547 || x2 >= 127552 && x2 <= 127560 || x2 >= 131072 && x2 <= 196605 || x2 >= 196608 && x2 <= 262141;
 };
 
-// node_modules/fast-string-truncated-width/dist/index.js
+// ../../../../node_modules/fast-string-truncated-width/dist/index.js
 var ANSI_RE = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]|\u001b\]8;[^;]*;.*?(?:\u0007|\u001b\u005c)/y;
 var CONTROL_RE = /[\x00-\x08\x0A-\x1F\x7F-\x9F]{1,1000}/y;
 var CJKT_WIDE_RE = /(?:(?![\uFF61-\uFF9F\uFF00-\uFFEF])[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Tangut}]){1,1000}/yu;
@@ -37326,7 +37344,7 @@ var getStringTruncatedWidth = (input, truncationOptions = {}, widthOptions = {})
 };
 var dist_default = getStringTruncatedWidth;
 
-// node_modules/fast-string-width/dist/index.js
+// ../../../../node_modules/fast-string-width/dist/index.js
 var NO_TRUNCATION2 = {
   limit: Infinity,
   ellipsis: "",
@@ -37337,7 +37355,7 @@ var fastStringWidth = (input, options = {}) => {
 };
 var dist_default2 = fastStringWidth;
 
-// node_modules/fast-wrap-ansi/lib/main.js
+// ../../../../node_modules/fast-wrap-ansi/lib/main.js
 var ESC = "\x1B";
 var CSI = "\x9B";
 var END_CODE = 39;
@@ -37549,7 +37567,7 @@ function wrapAnsi(string, columns, options) {
 `);
 }
 
-// node_modules/@clack/core/dist/index.mjs
+// ../../../../node_modules/@clack/core/dist/index.mjs
 var import_sisteransi = __toESM(require_src(), 1);
 function findCursor(s2, o3, l2) {
   if (!l2.some((r3) => !r3.disabled))
@@ -38341,7 +38359,7 @@ class a3 extends V2 {
   }
 }
 
-// node_modules/@clack/prompts/dist/index.mjs
+// ../../../../node_modules/@clack/prompts/dist/index.mjs
 import { styleText as styleText2, stripVTControlCharacters } from "util";
 import process$1 from "process";
 var import_sisteransi2 = __toESM(require_src(), 1);
@@ -47842,6 +47860,7 @@ var modeCommand = defineCommand({
 });
 
 // src/cli/commands/push-gate.ts
+import { mkdirSync, readFileSync as readFileSync6, writeFileSync } from "fs";
 import { homedir as homedir11 } from "os";
 import { dirname as dirname16, parse as parse4, relative as relative21, resolve as resolve21 } from "path";
 init_fs();
@@ -47889,9 +47908,29 @@ function resolvePushGate(recipe, repoRelDir) {
   return recipe.repos?.find((r4) => normDir(r4.dir) === dir)?.push_gate;
 }
 
+// src/core/push-gate-cache.ts
+import { join as join81 } from "path";
+var MAX_GREEN_TREES = 20;
+function shouldSkipGate(state, cache) {
+  if (!state.clean)
+    return false;
+  return cache.trees.some((t3) => t3.tree === state.tree);
+}
+function shouldRecordGreen(commandRun, gateCommand, clean) {
+  return clean && commandRun === gateCommand;
+}
+function addGreenTree(cache, tree, command, recordedAt) {
+  const kept = cache.trees.filter((t3) => t3.tree !== tree);
+  kept.push({ tree, recorded_at: recordedAt, command });
+  return { trees: kept.slice(-MAX_GREEN_TREES) };
+}
+function greenCachePath(cwd) {
+  return join81(cwd, ".ditto", "local", "push-gate-green.json");
+}
+
 // src/core/recipe/load.ts
 init_ditto_paths();
-import { join as join81 } from "path";
+import { join as join82 } from "path";
 
 // src/core/recipe/parse.ts
 init_dist2();
@@ -47976,7 +48015,7 @@ async function loadRecipeFile(path, source, onMalformed) {
   return result2.recipe;
 }
 async function loadResolvedRecipe(repoRoot, cliPath, onMalformed) {
-  const project = await loadRecipeFile(join81(repoRoot, PROJECT_RECIPE_FILENAME), "discovered", (m4) => onMalformed?.("project", m4));
+  const project = await loadRecipeFile(join82(repoRoot, PROJECT_RECIPE_FILENAME), "discovered", (m4) => onMalformed?.("project", m4));
   const personal = await loadRecipeFile(localDir(repoRoot, "recipe.yaml"), "discovered", (m4) => onMalformed?.("personal", m4));
   const cli = cliPath === undefined ? undefined : await loadRecipeFile(cliPath, "explicit");
   return resolveRecipe({ cli, personal, project, builtinDefault: BUILTIN_DEFAULT_RECIPE });
@@ -47996,9 +48035,18 @@ async function execPushGate(inp) {
   const decision = pushGateDecision(parsePushedBranches(inp.stdin), inp.gate);
   if (!decision.run)
     return { exitCode: 0 };
+  if (inp.treeState && inp.greenCache && shouldSkipGate(inp.treeState, inp.greenCache)) {
+    return {
+      exitCode: 0,
+      message: `push-gate: green-tree cache hit (${inp.treeState.tree.slice(0, 12)}) \u2014 \`${decision.test_command}\` already passed on this exact clean tree, skipping re-run.`
+    };
+  }
   const outcome = await inp.runTest(decision.test_command, inp.cwd);
   switch (outcome.kind) {
     case "passed":
+      if (inp.treeState && inp.recordGreen && shouldRecordGreen(decision.test_command, decision.test_command, inp.treeState.clean)) {
+        inp.recordGreen(inp.treeState.tree, decision.test_command);
+      }
       return { exitCode: 0 };
     case "failed":
       return {
@@ -48055,6 +48103,65 @@ async function resolvePushGateRoot(cwd, explicitRoot, homeDir = homedir11()) {
   const recipeRoot = await resolveRepoRootForCreate(start, homeDir);
   return { recipeRoot, repoRelDir: relative21(recipeRoot, start) };
 }
+function gitOut(gitArgs, cwd) {
+  try {
+    const p2 = Bun.spawnSync(["git", ...gitArgs], {
+      cwd,
+      stdout: "pipe",
+      stderr: "ignore",
+      stdin: "ignore"
+    });
+    if (p2.exitCode !== 0)
+      return null;
+    return (p2.stdout?.toString() ?? "").trim();
+  } catch {
+    return null;
+  }
+}
+function computeTreeState(cwd) {
+  const tree = gitOut(["rev-parse", "HEAD^{tree}"], cwd);
+  if (!tree)
+    return;
+  const status = gitOut(["status", "--porcelain"], cwd);
+  return { tree, clean: status === "" };
+}
+function readGreenCache(cwd) {
+  try {
+    const parsed = JSON.parse(readFileSync6(greenCachePath(cwd), "utf8"));
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.trees)) {
+      return parsed;
+    }
+  } catch {}
+  return { trees: [] };
+}
+function makeRecordGreen(cwd, cache) {
+  return (tree, command) => {
+    try {
+      const next = addGreenTree(cache, tree, command, new Date().toISOString());
+      const path = greenCachePath(cwd);
+      mkdirSync(dirname16(path), { recursive: true });
+      writeFileSync(path, `${JSON.stringify(next, null, 2)}
+`);
+    } catch {}
+  };
+}
+async function maybeRecordGreenForGate(cwd, commandRun, exitCode) {
+  try {
+    if (exitCode !== 0)
+      return;
+    const { recipeRoot, repoRelDir } = await resolvePushGateRoot(cwd);
+    const recipe2 = await loadResolvedRecipe(recipeRoot, undefined, () => {});
+    const gate2 = resolvePushGate(recipe2, repoRelDir);
+    if (!gate2)
+      return;
+    const treeState = computeTreeState(cwd);
+    if (!treeState)
+      return;
+    if (!shouldRecordGreen(commandRun, gate2.test_command, treeState.clean))
+      return;
+    makeRecordGreen(recipeRoot, readGreenCache(recipeRoot))(treeState.tree, gate2.test_command);
+  } catch {}
+}
 async function readStdin() {
   try {
     return await Bun.stdin.text();
@@ -48082,13 +48189,18 @@ var pushGateCommand = defineCommand({
       malformedRecipe = true;
     });
     const gate2 = resolvePushGate(recipe2, repoRelDir);
+    const treeState = computeTreeState(cwd);
+    const greenCache = readGreenCache(recipeRoot);
     const result2 = await execPushGate({
       stdin: stdin3,
       gate: gate2,
       malformedRecipe,
       env: process.env,
       cwd,
-      runTest: defaultRunTest
+      runTest: defaultRunTest,
+      ...treeState ? { treeState } : {},
+      greenCache,
+      recordGreen: makeRecordGreen(recipeRoot, greenCache)
     });
     if (result2.message)
       process.stderr.write(`${result2.message}
@@ -48098,7 +48210,7 @@ var pushGateCommand = defineCommand({
 });
 
 // src/cli/commands/refactor.ts
-import { join as join82 } from "path";
+import { join as join83 } from "path";
 
 // src/acg/scope/unit-resolve.ts
 var API_LAYERS = ["controller", "controllers", "route", "routes"];
@@ -48224,7 +48336,7 @@ function trackedSrcFiles(repoRoot) {
 `).map((s2) => s2.trim()).filter((s2) => s2.length > 0 && /\.[cm]?tsx?$/.test(s2) && !/\.(test|spec)\./.test(s2));
 }
 async function loadArchSpec2(repoRoot) {
-  const specPath = join82(repoRoot, ".ditto", "architecture-spec.json");
+  const specPath = join83(repoRoot, ".ditto", "architecture-spec.json");
   try {
     return await readArchitectureSpec(specPath, acgArchitectureSpec);
   } catch {
@@ -48295,7 +48407,7 @@ var refactorCommand = defineCommand({
 });
 
 // src/cli/commands/review.ts
-import { join as join83 } from "path";
+import { join as join84 } from "path";
 
 // src/acg/review/unit-review.ts
 var REVIEW_ROLES = ["code-reviewer", "security-reviewer"];
@@ -48354,7 +48466,7 @@ function trackedSrcFiles2(repoRoot) {
 `).map((s2) => s2.trim()).filter((s2) => s2.length > 0 && /\.[cm]?tsx?$/.test(s2) && !/\.(test|spec)\./.test(s2));
 }
 async function loadArchSpec3(repoRoot) {
-  const specPath = join83(repoRoot, ".ditto", "architecture-spec.json");
+  const specPath = join84(repoRoot, ".ditto", "architecture-spec.json");
   try {
     return await readArchitectureSpec(specPath, acgArchitectureSpec);
   } catch {
@@ -48477,7 +48589,7 @@ init_common();
 init_fs();
 init_git();
 import { stat as stat11, writeFile as writeFile5 } from "fs/promises";
-import { dirname as dirname17, join as join84, relative as relative22, resolve as resolve22, sep as sep8 } from "path";
+import { dirname as dirname17, join as join85, relative as relative22, resolve as resolve22, sep as sep8 } from "path";
 init_work_item_store();
 init_worktree();
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
@@ -48506,7 +48618,7 @@ function resolveRepoCwd(repoRoot, cwd) {
     throw new RunWithUsageError(`invalid cwd: ${parsed.error.issues[0]?.message}`);
   }
   const resolvedRoot = resolve22(repoRoot);
-  const resolvedCwd = resolve22(join84(repoRoot, cwd));
+  const resolvedCwd = resolve22(join85(repoRoot, cwd));
   if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep8}`)) {
     throw new RunWithUsageError(`cwd escapes repo root: ${cwd}`);
   }
@@ -49044,7 +49156,7 @@ function applySemanticVerdict(seed, v2) {
 // src/acg/semantic/signature-codeql.ts
 import { existsSync as existsSync10 } from "fs";
 import { rm as rm2 } from "fs/promises";
-import { join as join85 } from "path";
+import { join as join86 } from "path";
 init_ditto_paths();
 init_git();
 var SIGNATURE_QUERY_JS = `/**
@@ -49174,20 +49286,20 @@ async function extractSignatures(input, deps) {
 async function scanSignatureChanges(input, deps) {
   const baseSha = gitRevParse(input.repoRoot, input.baseRef);
   const cacheBase = localDir(input.repoRoot, "cache", "codeql");
-  const baseCache = join85(cacheBase, `${baseSha}-${input.language}`);
-  const baseDb = join85(baseCache, "db");
+  const baseCache = join86(cacheBase, `${baseSha}-${input.language}`);
+  const baseDb = join86(baseCache, "db");
   const needWorktree = !existsSync10(baseDb);
-  const worktree = join85(cacheBase, "worktrees", `${baseSha}-${input.language}`);
+  const worktree = join86(cacheBase, "worktrees", `${baseSha}-${input.language}`);
   if (needWorktree)
     addDetachedWorktree(input.repoRoot, worktree, baseSha);
   let before;
   try {
     before = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join85(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
+      sourceRoot: join86(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
       language: input.language,
       dbPath: baseDb,
-      workDir: join85(baseCache, "q-sig"),
+      workDir: join86(baseCache, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -49195,14 +49307,14 @@ async function scanSignatureChanges(input, deps) {
     if (needWorktree)
       removeWorktree(input.repoRoot, worktree);
   }
-  const afterDir = join85(cacheBase, `after-${process.pid}-${input.language}`);
+  const afterDir = join86(cacheBase, `after-${process.pid}-${input.language}`);
   try {
     const after = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join85(input.repoRoot, input.sourceRootRel),
+      sourceRoot: join86(input.repoRoot, input.sourceRootRel),
       language: input.language,
-      dbPath: join85(afterDir, "db"),
-      workDir: join85(afterDir, "q-sig"),
+      dbPath: join86(afterDir, "db"),
+      workDir: join86(afterDir, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -49578,15 +49690,15 @@ var semanticCommand = defineCommand({
 
 // src/cli/commands/setup.ts
 import { homedir as homedir13 } from "os";
-import { dirname as dirname20, join as join91, resolve as resolve25 } from "path";
+import { dirname as dirname20, join as join92, resolve as resolve25 } from "path";
 init_fs();
 init_shared();
 
 // src/core/provision/memory-separate.ts
-import { existsSync as existsSync11, readFileSync as readFileSync6, writeFileSync } from "fs";
+import { existsSync as existsSync11, readFileSync as readFileSync7, writeFileSync as writeFileSync2 } from "fs";
 import { join as pathJoin } from "path";
 var GITIGNORE_ENTRY = ".ditto/memory/";
-function join86(...parts) {
+function join87(...parts) {
   return parts.join("/");
 }
 function ensureGitignored(deps) {
@@ -49610,7 +49722,7 @@ var submoduleManual = (memoryDir) => [
   "# \uADF8\uB2E4\uC74C \uBD80\uBAA8\uC5D0\uC11C: git rm -r --cached .ditto/memory && git submodule add <URL> .ditto/memory"
 ];
 async function separateMemoryRepo(deps, mode = "gitignore") {
-  const memoryDir = join86(deps.repoRoot, ".ditto", "memory");
+  const memoryDir = join87(deps.repoRoot, ".ditto", "memory");
   if (!deps.pathExists(memoryDir)) {
     return {
       status: "failed",
@@ -49624,7 +49736,7 @@ async function separateMemoryRepo(deps, mode = "gitignore") {
       manual: submoduleManual(memoryDir)
     };
   }
-  const alreadyRepo = deps.pathExists(join86(memoryDir, ".git"));
+  const alreadyRepo = deps.pathExists(join87(memoryDir, ".git"));
   if (!alreadyRepo) {
     const r4 = await deps.run("git", ["init"], memoryDir);
     if (r4.exit_code !== 0) {
@@ -49665,24 +49777,24 @@ function defaultMemorySeparateDeps(repoRoot) {
       return { exit_code, stderr: stderr2 };
     },
     pathExists: (p2) => existsSync11(p2),
-    readGitignore: () => existsSync11(gitignorePath) ? readFileSync6(gitignorePath, "utf8") : "",
-    writeGitignore: (content) => writeFileSync(gitignorePath, content, "utf8")
+    readGitignore: () => existsSync11(gitignorePath) ? readFileSync7(gitignorePath, "utf8") : "",
+    writeGitignore: (content) => writeFileSync2(gitignorePath, content, "utf8")
   };
 }
 
 // src/core/provision/playwright.ts
 import { existsSync as existsSync12, readdirSync as readdirSync3 } from "fs";
 import { homedir as homedir12, platform as osPlatform } from "os";
-import { join as join87 } from "path";
+import { join as join88 } from "path";
 function playwrightCacheRoot(os = osPlatform()) {
   if (os === "win32")
-    return join87(homedir12(), "AppData", "Local", "ms-playwright");
+    return join88(homedir12(), "AppData", "Local", "ms-playwright");
   if (os === "darwin")
-    return join87(homedir12(), "Library", "Caches", "ms-playwright");
-  return join87(homedir12(), ".cache", "ms-playwright");
+    return join88(homedir12(), "Library", "Caches", "ms-playwright");
+  return join88(homedir12(), ".cache", "ms-playwright");
 }
 function bunCacheDir() {
-  return join87(process.env.BUN_INSTALL ?? join87(homedir12(), ".bun"), "install", "cache");
+  return join88(process.env.BUN_INSTALL ?? join88(homedir12(), ".bun"), "install", "cache");
 }
 function detectPlaywright(deps) {
   const core = deps.listDir(deps.bunCache).some((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2));
@@ -49780,12 +49892,12 @@ function defaultRegistry() {
 init_fs();
 import { execFileSync as execFileSync6 } from "child_process";
 import { chmod, cp, readFile as readFile20, rename as rename5, rm as rm3, writeFile as writeFile6 } from "fs/promises";
-import { basename as basename6, dirname as dirname18, isAbsolute as isAbsolute15, join as join89, resolve as resolve23 } from "path";
+import { basename as basename6, dirname as dirname18, isAbsolute as isAbsolute15, join as join90, resolve as resolve23 } from "path";
 init_shared();
 
 // src/core/resource-routing.ts
 import { readdirSync as readdirSync4 } from "fs";
-import { join as join88 } from "path";
+import { join as join89 } from "path";
 var GLOBAL_PREFIX = "GLOBAL_";
 function routeResource(filename, ctx) {
   if (filename.startsWith(GLOBAL_PREFIX)) {
@@ -49793,13 +49905,13 @@ function routeResource(filename, ctx) {
     return {
       scope: "global",
       destName,
-      destPath: join88(ctx.homeDir, ".claude", destName)
+      destPath: join89(ctx.homeDir, ".claude", destName)
     };
   }
   return {
     scope: "project",
     destName: filename,
-    destPath: join88(ctx.projectRoot, filename)
+    destPath: join89(ctx.projectRoot, filename)
   };
 }
 function discoverResources(resourcesDir) {
@@ -49813,7 +49925,7 @@ function discoverResources(resourcesDir) {
 // src/core/setup.ts
 var CODEX_MARKETPLACE_NAME = "ditto-local";
 var CODEX_PLUGIN_NAME = "ditto";
-var CODEX_PLUGIN_DEST_REL = join89(".agents", "plugins", CODEX_PLUGIN_NAME);
+var CODEX_PLUGIN_DEST_REL = join90(".agents", "plugins", CODEX_PLUGIN_NAME);
 var CODEX_BIN_NAME = "ditto";
 function setupHosts(host) {
   if (host === "codex")
@@ -49838,14 +49950,14 @@ function resourceDecisions(resourcesDir, projectRoot, homeDir, codexHome, hosts)
           host: "codex",
           filename,
           scope: "project",
-          destPath: join89(projectRoot, "AGENTS.md")
+          destPath: join90(projectRoot, "AGENTS.md")
         });
       } else if (filename === "GLOBAL_AGENTS.md") {
         out.push({
           host: "codex",
           filename,
           scope: "global",
-          destPath: join89(codexHome, "AGENTS.md")
+          destPath: join90(codexHome, "AGENTS.md")
         });
       }
     }
@@ -49900,23 +50012,23 @@ async function writeCodexMarketplace(path) {
 `);
 }
 async function installCodexAgents(pluginRoot, projectRoot) {
-  const srcDir = join89(pluginRoot, ".codex", "agents");
+  const srcDir = join90(pluginRoot, ".codex", "agents");
   if (!await fileExists(srcDir)) {
     throw new Error(`codex custom agents not found at ${srcDir}; run build:codex-plugin first`);
   }
-  const destDir = join89(projectRoot, ".codex", "agents");
+  const destDir = join90(projectRoot, ".codex", "agents");
   await ensureDir(destDir);
   let count = 0;
   for (const file of await listFiles(srcDir)) {
     if (!file.id.endsWith(".toml"))
       continue;
-    await cp(file.path, join89(destDir, file.id));
+    await cp(file.path, join90(destDir, file.id));
     count += 1;
   }
   return count;
 }
 function codexDittoCommand(installedPluginDir) {
-  return `"${join89(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
+  return `"${join90(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
 }
 function rewriteCodexDittoReferences(text, dittoCommand) {
   return text.replace(/"\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?"/g, dittoCommand).replace(/\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?/g, dittoCommand).replace(/`ditto(?=\s)/g, `\`${dittoCommand}`);
@@ -49938,26 +50050,26 @@ async function rewriteCodexAgentTomlFile(path, dittoCommand) {
 }
 async function rewriteCodexInstalledReferences(installedPluginDir) {
   const dittoCommand = codexDittoCommand(installedPluginDir);
-  for (const dir of await listDirectories(join89(installedPluginDir, "skills"))) {
-    const skillPath = join89(dir.path, "SKILL.md");
+  for (const dir of await listDirectories(join90(installedPluginDir, "skills"))) {
+    const skillPath = join90(dir.path, "SKILL.md");
     if (await fileExists(skillPath))
       await rewriteCodexTextFile(skillPath, dittoCommand);
   }
-  for (const file of await listFiles(join89(installedPluginDir, ".codex", "agents"))) {
+  for (const file of await listFiles(join90(installedPluginDir, ".codex", "agents"))) {
     if (file.id.endsWith(".toml"))
       await rewriteCodexAgentTomlFile(file.path, dittoCommand);
   }
 }
 async function writeCodexSurfaceCatalog(projectRoot) {
-  const surfaceCatalogPath = join89(projectRoot, ".ditto", "local", "surfaces.codex.json");
-  await ensureDir(join89(projectRoot, ".ditto", "local"));
+  const surfaceCatalogPath = join90(projectRoot, ".ditto", "local", "surfaces.codex.json");
+  await ensureDir(join90(projectRoot, ".ditto", "local"));
   const catalog = await generateSurfaceCatalog([codexHostAdapter], projectRoot, "surfaces.codex.json");
   await atomicWriteText(surfaceCatalogPath, `${JSON.stringify(catalog, null, 2)}
 `);
   return surfaceCatalogPath;
 }
 async function writeCodexPluginStatus(projectRoot) {
-  const statusPath = join89(projectRoot, ".ditto", "local", "codex-plugin-status.json");
+  const statusPath = join90(projectRoot, ".ditto", "local", "codex-plugin-status.json");
   const enableCommands = [
     `codex plugin marketplace add ${JSON.stringify(projectRoot)}`,
     `codex plugin add ${CODEX_PLUGIN_NAME}@${CODEX_MARKETPLACE_NAME}`
@@ -49975,19 +50087,19 @@ async function writeCodexPluginStatus(projectRoot) {
 }
 async function installCodexSurface(opts) {
   const { pluginRoot, projectRoot } = opts;
-  const manifestPath = join89(pluginRoot, ".codex-plugin", "plugin.json");
+  const manifestPath = join90(pluginRoot, ".codex-plugin", "plugin.json");
   if (!await fileExists(manifestPath)) {
     throw new Error(`codex plugin manifest not found at ${manifestPath}; run build:codex-plugin first`);
   }
-  const installedPluginDir = join89(projectRoot, CODEX_PLUGIN_DEST_REL);
+  const installedPluginDir = join90(projectRoot, CODEX_PLUGIN_DEST_REL);
   if (resolve23(pluginRoot) === resolve23(installedPluginDir)) {
     throw new Error(`codex plugin source is already the installed plugin directory: ${installedPluginDir}`);
   }
   await rm3(installedPluginDir, { recursive: true, force: true });
-  await ensureDir(join89(projectRoot, ".agents", "plugins"));
+  await ensureDir(join90(projectRoot, ".agents", "plugins"));
   await cp(pluginRoot, installedPluginDir, { recursive: true });
   await rewriteCodexInstalledReferences(installedPluginDir);
-  const marketplacePath = join89(projectRoot, ".agents", "plugins", "marketplace.json");
+  const marketplacePath = join90(projectRoot, ".agents", "plugins", "marketplace.json");
   await writeCodexMarketplace(marketplacePath);
   const agentsInstalled = await installCodexAgents(installedPluginDir, projectRoot);
   const surfaceCatalogPath = await writeCodexSurfaceCatalog(projectRoot);
@@ -50000,7 +50112,7 @@ async function installCodexSurface(opts) {
     statusPath,
     pluginLoadStatus: "needs_user_action",
     enableCommands,
-    agentsDir: join89(projectRoot, ".codex", "agents"),
+    agentsDir: join90(projectRoot, ".codex", "agents"),
     agentsInstalled
   };
 }
@@ -50015,7 +50127,7 @@ async function installResource(decision, resourcesDir) {
   if (name === "AGENTS.md") {
     const existed = await fileExists(decision.destPath);
     if (!existed) {
-      const body2 = await readFile20(join89(resourcesDir, decision.filename), "utf8");
+      const body2 = await readFile20(join90(resourcesDir, decision.filename), "utf8");
       await atomicWriteText(decision.destPath, body2);
       return { ...common, status: "written", backupPath: null };
     }
@@ -50029,8 +50141,8 @@ async function installResource(decision, resourcesDir) {
     return { ...common, status: "kept", backupPath: null };
   }
   if (name === "CLAUDE.md") {
-    const sourcePath = join89(dirname18(decision.destPath), "AGENTS.md");
-    const projectionBody = await fileExists(sourcePath) ? await readFile20(sourcePath, "utf8") : await readFile20(join89(resourcesDir, decision.filename), "utf8");
+    const sourcePath = join90(dirname18(decision.destPath), "AGENTS.md");
+    const projectionBody = await fileExists(sourcePath) ? await readFile20(sourcePath, "utf8") : await readFile20(join90(resourcesDir, decision.filename), "utf8");
     const applied2 = await applyManagedFile(decision.destPath, projectionBody, "AGENTS.md");
     return {
       ...common,
@@ -50038,7 +50150,7 @@ async function installResource(decision, resourcesDir) {
       backupPath: applied2.kind === "ok" ? applied2.backupPath : null
     };
   }
-  const body = await readFile20(join89(resourcesDir, decision.filename), "utf8");
+  const body = await readFile20(join90(resourcesDir, decision.filename), "utf8");
   const applied = await applyManagedFile(decision.destPath, body, decision.filename);
   return {
     ...common,
@@ -50049,7 +50161,7 @@ async function installResource(decision, resourcesDir) {
 var PUSH_GATE_HOOK_MARKER = "ditto:managed:pre-push";
 var PUSH_GATE_HOOK_BACKUP_SUFFIX = ".ditto-backup";
 function defaultHookTemplatePath(resourcesDir) {
-  return join89(dirname18(resourcesDir), "hooks", "pre-push");
+  return join90(dirname18(resourcesDir), "hooks", "pre-push");
 }
 function customHooksPath(cwd) {
   try {
@@ -50069,7 +50181,7 @@ function gitHooksDir(cwd) {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"]
   }).trim();
-  return isAbsolute15(p2) ? p2 : join89(cwd, p2);
+  return isAbsolute15(p2) ? p2 : join90(cwd, p2);
 }
 async function installPushGateHook(opts) {
   const { projectRoot, hookTemplatePath } = opts;
@@ -50093,7 +50205,7 @@ async function installPushGateHook(opts) {
       message: `${projectRoot} is not a git repository \u2014 a pre-push hook cannot be installed. Run \`git init\` (or \`ditto setup\` from inside the repo), then re-run setup.`
     };
   }
-  const hookPath = join89(hooksDir, "pre-push");
+  const hookPath = join90(hooksDir, "pre-push");
   const backupPath = `${hookPath}${PUSH_GATE_HOOK_BACKUP_SUFFIX}`;
   const template = bakeWorkspaceRoot(await readFile20(hookTemplatePath, "utf8"), opts.workspaceRoot);
   await ensureDir(hooksDir);
@@ -50133,7 +50245,7 @@ async function writeHookFile(hookPath, body) {
 }
 async function setup(opts) {
   const { resourcesDir, projectRoot, homeDir, now } = opts;
-  const codexHome = opts.codexHome ?? join89(homeDir, ".codex");
+  const codexHome = opts.codexHome ?? join90(homeDir, ".codex");
   const hosts = setupHosts(opts.host);
   const decisions = resourceDecisions(resourcesDir, projectRoot, homeDir, codexHome, hosts);
   const ordered = [
@@ -50145,7 +50257,7 @@ async function setup(opts) {
     resources.push(await installResource(decision, resourcesDir));
   }
   const scaffold = await initScaffold(projectRoot, now);
-  const allowlistPath = join89(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join90(projectRoot, ".claude", "settings.json");
   const allowlistApplied = hosts.has("claude-code");
   if (allowlistApplied)
     await allowlistSettingsFile(allowlistPath);
@@ -50162,16 +50274,16 @@ async function setup(opts) {
 
 // src/cli/resources.ts
 import { existsSync as existsSync13 } from "fs";
-import { dirname as dirname19, join as join90, resolve as resolve24 } from "path";
+import { dirname as dirname19, join as join91, resolve as resolve24 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 function resolveResourcesDir(from) {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
-    return join90(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
+    return join91(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
   }
   const start = from ?? dirname19(fileURLToPath2(import.meta.url));
   let dir = start;
   for (;; ) {
-    const candidate = join90(dir, "resources", "managed");
+    const candidate = join91(dir, "resources", "managed");
     if (existsSync13(candidate))
       return candidate;
     const parent = dirname19(dir);
@@ -50179,7 +50291,7 @@ function resolveResourcesDir(from) {
       break;
     dir = parent;
   }
-  return join90(resolve24(start, "..", ".."), "resources", "managed");
+  return join91(resolve24(start, "..", ".."), "resources", "managed");
 }
 
 // src/cli/wizard/agent-link-step.ts
@@ -50395,16 +50507,16 @@ function includesCodex(host) {
 }
 async function resolveCodexPluginRoot(resourcesDir, projectRoot) {
   const currentPluginRoot = resolve25(resourcesDir, "..", "..");
-  const sibling = join91(dirname20(currentPluginRoot), "codex-plugin");
-  if (await fileExists(join91(sibling, ".codex-plugin", "plugin.json")))
+  const sibling = join92(dirname20(currentPluginRoot), "codex-plugin");
+  if (await fileExists(join92(sibling, ".codex-plugin", "plugin.json")))
     return sibling;
-  const currentDist = join91(currentPluginRoot, "dist", "codex-plugin");
-  if (await fileExists(join91(currentDist, ".codex-plugin", "plugin.json")))
+  const currentDist = join92(currentPluginRoot, "dist", "codex-plugin");
+  if (await fileExists(join92(currentDist, ".codex-plugin", "plugin.json")))
     return currentDist;
-  const projectDist = join91(projectRoot, "dist", "codex-plugin");
-  if (await fileExists(join91(projectDist, ".codex-plugin", "plugin.json")))
+  const projectDist = join92(projectRoot, "dist", "codex-plugin");
+  if (await fileExists(join92(projectDist, ".codex-plugin", "plugin.json")))
     return projectDist;
-  if (await fileExists(join91(currentPluginRoot, ".codex", "agents")))
+  if (await fileExists(join92(currentPluginRoot, ".codex", "agents")))
     return currentPluginRoot;
   return currentPluginRoot;
 }
@@ -50636,14 +50748,14 @@ var setupCommand = defineCommand({
 // src/cli/commands/teardown.ts
 import { rm as rm5 } from "fs/promises";
 import { homedir as homedir14 } from "os";
-import { join as join93, resolve as resolve26 } from "path";
+import { join as join94, resolve as resolve26 } from "path";
 init_fs();
 
 // src/core/teardown.ts
 init_fs();
 init_shared();
 import { copyFile as copyFile2, readFile as readFile21, rm as rm4 } from "fs/promises";
-import { join as join92 } from "path";
+import { join as join93 } from "path";
 var BACKUP_SUFFIX2 = ".ditto_bak";
 async function teardown(opts) {
   const { resourcesDir, projectRoot, homeDir } = opts;
@@ -50653,7 +50765,7 @@ async function teardown(opts) {
     const action = await teardownFile(decision.destPath);
     files.push({ filename, scope: decision.scope, destPath: decision.destPath, action });
   }
-  const allowlistPath = join92(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join93(projectRoot, ".claude", "settings.json");
   await unallowlistSettingsFile(allowlistPath);
   const pushGateHook = await uninstallPushGateHook({ projectRoot });
   return { files, allowlistPath, pushGateHook };
@@ -50665,7 +50777,7 @@ async function uninstallPushGateHook(opts) {
   } catch {
     return { status: "left-untouched", hookPath: "", backupPath: null };
   }
-  const hookPath = join92(hooksDir, "pre-push");
+  const hookPath = join93(hooksDir, "pre-push");
   const backupPath = `${hookPath}${PUSH_GATE_HOOK_BACKUP_SUFFIX}`;
   if (!await fileExists(hookPath)) {
     return { status: "left-untouched", hookPath, backupPath: null };
@@ -50753,7 +50865,7 @@ var teardownCommand = defineCommand({
       }
       const purge = await shouldPurge(Boolean(args.purge));
       if (purge) {
-        const dittoDir2 = join93(projectRoot, ".ditto");
+        const dittoDir2 = join94(projectRoot, ".ditto");
         await rm5(dittoDir2, { recursive: true, force: true });
         writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ PURGED (${dittoDir2})`);
       } else {
@@ -51365,6 +51477,7 @@ var verifyCommand = defineCommand({
       }
       const startedAt = new Date().toISOString();
       const result2 = runChildCommand(tail);
+      await maybeRecordGreenForGate(process.cwd(), tail.join(" "), result2.exit_code);
       const entry = {
         ts: startedAt,
         kind: "command",
@@ -51427,7 +51540,7 @@ init_shared();
 import { execFileSync as execFileSync7 } from "child_process";
 import { existsSync as existsSync14, lstatSync, realpathSync as realpathSync2 } from "fs";
 import { readFile as readFile22, readdir as readdir27, rm as rm6, writeFile as writeFile7 } from "fs/promises";
-import { basename as basename7, dirname as dirname21, isAbsolute as isAbsolute16, join as join94, relative as relative23, resolve as resolve27 } from "path";
+import { basename as basename7, dirname as dirname21, isAbsolute as isAbsolute16, join as join95, relative as relative23, resolve as resolve27 } from "path";
 var LOCAL_CLONE_ENV_FLAG = "DITTO_ALLOW_LOCAL_CLONE";
 function localTransportAllowed(env2 = process.env) {
   return env2[LOCAL_CLONE_ENV_FLAG] === "1";
@@ -51463,11 +51576,11 @@ function realpathNearestExisting(p2) {
   while (!existsSync14(cur)) {
     const parent = dirname21(cur);
     if (parent === cur)
-      return join94(realpathSync2(cur), ...tail);
+      return join95(realpathSync2(cur), ...tail);
     tail.unshift(basename7(cur));
     cur = parent;
   }
-  return tail.length === 0 ? realpathSync2(cur) : join94(realpathSync2(cur), ...tail);
+  return tail.length === 0 ? realpathSync2(cur) : join95(realpathSync2(cur), ...tail);
 }
 function resolveContainedDir(workspaceRoot, dir) {
   const root = resolve27(workspaceRoot);
@@ -51528,7 +51641,7 @@ async function installRootGateHook(target, workspaceRoot, hookTemplatePath) {
   return r4.status;
 }
 async function addToParentGitignore(workspaceRoot, dir) {
-  const giPath = join94(workspaceRoot, ".gitignore");
+  const giPath = join95(workspaceRoot, ".gitignore");
   const entry = `${dir.replace(/\/+$/, "")}/`;
   const bare = dir.replace(/\/+$/, "");
   let cur = "";
@@ -51670,7 +51783,7 @@ init_work_item_store();
 init_worktree();
 
 // src/core/worktree-drive.ts
-import { join as join95 } from "path";
+import { join as join96 } from "path";
 var TERMINAL_STATUSES3 = ["done", "abandoned"];
 var DEFAULT_MAX_DEPTH2 = 20;
 async function driveWorktrees(deps, options) {
@@ -51723,7 +51836,7 @@ async function driveWorktrees(deps, options) {
       continue;
     }
     drivenCount++;
-    const res = await deps.driveMember(join95(repoRoot, ws.worktree_path), member);
+    const res = await deps.driveMember(join96(repoRoot, ws.worktree_path), member);
     if (res.outcome !== "done") {
       ledger.push({
         member_id: member,
@@ -52049,4 +52162,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=1a6876c6ea341d7b1f22e0ed093838ccacd69d2b4be5c06640d525e757e0da34
+//# ditto-src-stamp=3f0765c8ba521a5f2543c6a8c024adc51453a648058208da9fb34ec2b68d96c3

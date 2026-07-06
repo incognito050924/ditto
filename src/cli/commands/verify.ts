@@ -1,4 +1,5 @@
 import { defineCommand } from 'citty';
+import { maybeRecordGreenForGate } from '~/cli/commands/push-gate';
 import { EvidenceStore } from '~/core/evidence-store';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -109,6 +110,10 @@ export const verifyCommand = defineCommand({
       }
       const startedAt = new Date().toISOString();
       const result = runChildCommand(tail);
+      // Cross-tool green-tree cache (wi_260706d0i): if this run WAS the push gate's
+      // exact test_command and it passed on a clean tree, prime the push cache so the
+      // next push of this tree skips the redundant re-run. Best-effort, never blocks.
+      await maybeRecordGreenForGate(process.cwd(), tail.join(' '), result.exit_code);
       const entry = {
         ts: startedAt,
         kind: 'command' as const,

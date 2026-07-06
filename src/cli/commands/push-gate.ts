@@ -1,3 +1,4 @@
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, parse, relative, resolve } from 'node:path';
 import { defineCommand } from 'citty';
@@ -8,6 +9,14 @@ import {
   pushGateDecision,
   resolvePushGate,
 } from '~/core/push-gate';
+import {
+  type GreenCache,
+  type TreeState,
+  addGreenTree,
+  greenCachePath,
+  shouldRecordGreen,
+  shouldSkipGate,
+} from '~/core/push-gate-cache';
 import { loadResolvedRecipe } from '~/core/recipe/load';
 import { KILL_SWITCH } from '~/hooks/runtime';
 import type { RecipePushGate } from '~/schemas/recipe';
@@ -43,6 +52,16 @@ export interface ExecPushGateInput {
   env: Record<string, string | undefined>;
   cwd: string;
   runTest: RunTest;
+  /**
+   * Green-tree cache wiring (wi_260706d0i). All optional → absent means "no cache"
+   * (never skip, never record — the pre-cache behavior, so existing callers are
+   * unchanged). When provided: skip the re-run iff `treeState` is clean and its hash
+   * is in `greenCache`; on a gate pass, `recordGreen` records the tree so the next
+   * push of the identical clean tree skips.
+   */
+  treeState?: TreeState;
+  greenCache?: GreenCache;
+  recordGreen?: (tree: string, command: string) => void;
 }
 
 export interface ExecPushGateResult {
@@ -79,9 +98,28 @@ export async function execPushGate(inp: ExecPushGateInput): Promise<ExecPushGate
   const decision = pushGateDecision(parsePushedBranches(inp.stdin), inp.gate);
   if (!decision.run) return { exitCode: 0 };
 
+  // Green-tree cache (wi_260706d0i): a CLEAN tree whose exact hash already passed
+  // this gate's command needs no re-run. A dirty tree or an unknown hash falls
+  // through to the full run — the skip can never be reached without an exact match.
+  if (inp.treeState && inp.greenCache && shouldSkipGate(inp.treeState, inp.greenCache)) {
+    return {
+      exitCode: 0,
+      message: `push-gate: green-tree cache hit (${inp.treeState.tree.slice(0, 12)}) — \`${decision.test_command}\` already passed on this exact clean tree, skipping re-run.`,
+    };
+  }
+
   const outcome = await inp.runTest(decision.test_command, inp.cwd);
   switch (outcome.kind) {
     case 'passed':
+      // Record this tree as green so a later push of the identical clean tree skips.
+      // The command IS the gate command here (shouldRecordGreen guards clean).
+      if (
+        inp.treeState &&
+        inp.recordGreen &&
+        shouldRecordGreen(decision.test_command, decision.test_command, inp.treeState.clean)
+      ) {
+        inp.recordGreen(inp.treeState.tree, decision.test_command);
+      }
       return { exitCode: 0 };
     case 'failed':
       return {
@@ -177,6 +215,89 @@ export async function resolvePushGateRoot(
   return { recipeRoot, repoRelDir: relative(recipeRoot, start) };
 }
 
+/** Run a git subcommand in `cwd`, returning trimmed stdout or null on any failure. */
+function gitOut(gitArgs: string[], cwd: string): string | null {
+  try {
+    const p = Bun.spawnSync(['git', ...gitArgs], {
+      cwd,
+      stdout: 'pipe',
+      stderr: 'ignore',
+      stdin: 'ignore',
+    });
+    if (p.exitCode !== 0) return null;
+    return (p.stdout?.toString() ?? '').trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compute the tree identity of the push (HEAD's tree hash) + whether the working
+ * tree is clean. Returns undefined when there is no HEAD (unborn branch) or git is
+ * unavailable — the caller then never skips (fail-safe: run the full gate).
+ */
+function computeTreeState(cwd: string): TreeState | undefined {
+  const tree = gitOut(['rev-parse', 'HEAD^{tree}'], cwd);
+  if (!tree) return undefined;
+  const status = gitOut(['status', '--porcelain'], cwd);
+  return { tree, clean: status === '' };
+}
+
+/** Read the green-tree cache; an absent/corrupt file reads as empty (never a false skip). */
+function readGreenCache(cwd: string): GreenCache {
+  try {
+    const parsed = JSON.parse(readFileSync(greenCachePath(cwd), 'utf8')) as unknown;
+    if (parsed && typeof parsed === 'object' && Array.isArray((parsed as GreenCache).trees)) {
+      return parsed as GreenCache;
+    }
+  } catch {
+    // absent or corrupt → treat as empty
+  }
+  return { trees: [] };
+}
+
+/** A recorder that read-modify-writes the cache file; any failure is swallowed (never blocks a push). */
+function makeRecordGreen(cwd: string, cache: GreenCache): (tree: string, command: string) => void {
+  return (tree, command) => {
+    try {
+      const next = addGreenTree(cache, tree, command, new Date().toISOString());
+      const path = greenCachePath(cwd);
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`);
+    } catch {
+      // a cache write failure must never block a legitimate push
+    }
+  };
+}
+
+/**
+ * Cross-tool producer (wi_260706d0i): when ANOTHER command (e.g. `ditto verify -- bun test`)
+ * runs the push gate's EXACT `test_command` and passes on a clean tree, prime the
+ * green-tree cache so the following push of that tree skips the redundant re-run.
+ * The exact-command match is the poison barrier — a scoped subset command proves
+ * nothing about the full gate and never records. Best-effort: any error is swallowed,
+ * so a cache failure never affects the caller's own outcome.
+ */
+export async function maybeRecordGreenForGate(
+  cwd: string,
+  commandRun: string,
+  exitCode: number,
+): Promise<void> {
+  try {
+    if (exitCode !== 0) return;
+    const { recipeRoot, repoRelDir } = await resolvePushGateRoot(cwd);
+    const recipe = await loadResolvedRecipe(recipeRoot, undefined, () => {});
+    const gate = resolvePushGate(recipe, repoRelDir);
+    if (!gate) return;
+    const treeState = computeTreeState(cwd);
+    if (!treeState) return;
+    if (!shouldRecordGreen(commandRun, gate.test_command, treeState.clean)) return;
+    makeRecordGreen(recipeRoot, readGreenCache(recipeRoot))(treeState.tree, gate.test_command);
+  } catch {
+    // never let a cache write disturb the caller
+  }
+}
+
 /** Read all of stdin to a string (git pre-push feeds the ref lines here). */
 async function readStdin(): Promise<string> {
   try {
@@ -212,6 +333,10 @@ export const pushGateCommand = defineCommand({
       malformedRecipe = true;
     });
     const gate = resolvePushGate(recipe, repoRelDir);
+    // Green-tree cache is keyed off THIS repo's git tree (cwd), stored under the
+    // trusted recipe root's `.ditto/local/` so worktrees of one workspace share it.
+    const treeState = computeTreeState(cwd);
+    const greenCache = readGreenCache(recipeRoot);
     const result = await execPushGate({
       stdin,
       gate,
@@ -219,6 +344,9 @@ export const pushGateCommand = defineCommand({
       env: process.env,
       cwd,
       runTest: defaultRunTest,
+      ...(treeState ? { treeState } : {}),
+      greenCache,
+      recordGreen: makeRecordGreen(recipeRoot, greenCache),
     });
     if (result.message) process.stderr.write(`${result.message}\n`);
     process.exit(result.exitCode);

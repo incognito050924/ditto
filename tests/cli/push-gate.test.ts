@@ -1,9 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type ExecPushGateInput, type RunTest, execPushGate } from '~/cli/commands/push-gate';
+import {
+  type ExecPushGateInput,
+  type RunTest,
+  execPushGate,
+  maybeRecordGreenForGate,
+} from '~/cli/commands/push-gate';
+import { type GreenCache, greenCachePath } from '~/core/push-gate-cache';
 import type { RecipePushGate } from '~/schemas/recipe';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -280,5 +287,158 @@ describe('ditto push-gate — ROOT-ONLY trust: a cloned sub-repo never runs its 
     await writeRecipe('push_gate:\n  protected_branches:\n    - main\n  test_command: "false"\n');
     const r = runGateIn(workDir, PUSH_MAIN);
     expect(r.exitCode).not.toBe(0); // own gate fires and fails → blocked
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// UNIT — green-tree cache (wi_260706d0i): skip a re-run only on clean + exact
+// tree match; record on a gate pass; dirty/mismatch always run the full command.
+// ───────────────────────────────────────────────────────────────────────────
+describe('execPushGate — green-tree cache', () => {
+  const cacheOf = (trees: string[]) => ({
+    trees: trees.map((t) => ({
+      tree: t,
+      recorded_at: '2026-07-07T00:00:00.000Z',
+      command: 'bun test',
+    })),
+  });
+
+  test('ac-1: clean tree recorded green → SKIP (runTest never called, cache-hit message)', async () => {
+    const r = await execPushGate(
+      input({
+        runTest: never,
+        treeState: { tree: 'abc', clean: true },
+        greenCache: cacheOf(['abc']),
+      }),
+    );
+    expect(r.exitCode).toBe(0);
+    expect(r.message).toContain('green-tree cache hit');
+  });
+
+  test('ac-2: DIRTY tree with a matching hash still RUNS the gate (no skip)', async () => {
+    let ran = false;
+    const spy: RunTest = async () => {
+      ran = true;
+      return { kind: 'passed' };
+    };
+    const r = await execPushGate(
+      input({
+        runTest: spy,
+        treeState: { tree: 'abc', clean: false },
+        greenCache: cacheOf(['abc']),
+      }),
+    );
+    expect(ran).toBe(true);
+    expect(r.exitCode).toBe(0);
+  });
+
+  test('ac-3: clean tree whose hash is NOT recorded → RUNS the gate', async () => {
+    let ran = false;
+    const spy: RunTest = async () => {
+      ran = true;
+      return { kind: 'passed' };
+    };
+    const r = await execPushGate(
+      input({
+        runTest: spy,
+        treeState: { tree: 'zzz', clean: true },
+        greenCache: cacheOf(['abc']),
+      }),
+    );
+    expect(ran).toBe(true);
+    expect(r.exitCode).toBe(0);
+  });
+
+  test('records the tree as green on a gate PASS (clean)', async () => {
+    const recorded: Array<[string, string]> = [];
+    await execPushGate(
+      input({
+        runTest: passes,
+        treeState: { tree: 'newtree', clean: true },
+        greenCache: cacheOf([]),
+        recordGreen: (tree, command) => recorded.push([tree, command]),
+      }),
+    );
+    expect(recorded).toEqual([['newtree', 'bun test']]);
+  });
+
+  test('does NOT record when a gate pass ran on a DIRTY tree (tested tree ≠ HEAD tree)', async () => {
+    const recorded: Array<[string, string]> = [];
+    await execPushGate(
+      input({
+        runTest: passes,
+        treeState: { tree: 'newtree', clean: false },
+        greenCache: cacheOf([]),
+        recordGreen: (tree, command) => recorded.push([tree, command]),
+      }),
+    );
+    expect(recorded).toEqual([]);
+  });
+
+  test('a cache HIT does not re-record (skip path never calls recordGreen)', async () => {
+    const recorded: Array<[string, string]> = [];
+    await execPushGate(
+      input({
+        runTest: never,
+        treeState: { tree: 'abc', clean: true },
+        greenCache: cacheOf(['abc']),
+        recordGreen: (tree, command) => recorded.push([tree, command]),
+      }),
+    );
+    expect(recorded).toEqual([]);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// INTEGRATION — maybeRecordGreenForGate: the cross-tool producer (ac-4). Only a
+// run of the gate's EXACT test_command on a clean tree primes the cache; a subset
+// command or a failing run never does (the poison barrier).
+// ───────────────────────────────────────────────────────────────────────────
+describe('maybeRecordGreenForGate (cross-tool producer, ac-4)', () => {
+  let dir: string;
+  const git = (args: string[]) => Bun.spawnSync(['git', ...args], { cwd: dir });
+  const readCache = (): GreenCache => {
+    try {
+      return JSON.parse(readFileSync(greenCachePath(dir), 'utf8')) as GreenCache;
+    } catch {
+      return { trees: [] };
+    }
+  };
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'ditto-greenprod-'));
+    await mkdir(join(dir, '.ditto'), { recursive: true });
+    await writeFile(join(dir, '.gitignore'), '.ditto/local/\n', 'utf8');
+    await writeFile(
+      join(dir, 'recipe.yaml'),
+      'push_gate:\n  protected_branches: ["*"]\n  test_command: "bun test"\n',
+      'utf8',
+    );
+    git(['init', '-q']);
+    git(['config', 'user.email', 't@t']);
+    git(['config', 'user.name', 't']);
+    git(['add', '-A']);
+    git(['commit', '-qm', 'init']);
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('exact gate command + pass on a clean tree → records the HEAD tree', async () => {
+    await maybeRecordGreenForGate(dir, 'bun test', 0);
+    const tree = (
+      Bun.spawnSync(['git', 'rev-parse', 'HEAD^{tree}'], { cwd: dir }).stdout?.toString() ?? ''
+    ).trim();
+    expect(readCache().trees.map((t) => t.tree)).toEqual([tree]);
+  });
+
+  test('a SUBSET command never records (poison barrier)', async () => {
+    await maybeRecordGreenForGate(dir, 'bun test tests/foo.test.ts', 0);
+    expect(readCache().trees).toEqual([]);
+  });
+
+  test('a FAILING run (exit ≠ 0) never records', async () => {
+    await maybeRecordGreenForGate(dir, 'bun test', 1);
+    expect(readCache().trees).toEqual([]);
   });
 });
