@@ -430,17 +430,19 @@ prism의 모든 재사용을 빼면 남는 진짜 신규는 **가치/방향 taxo
 
 ### WS3 — 관제탑 컨텍스트 로트 (명제 D)
 
-- **WS3-T1 · 오케스트레이터 컨텍스트 회계**
+- **WS3-T1 · 오케스트레이터 컨텍스트 회계** — ✅ **완료 (2026-07-06, wi_2607068bo · commit 1e79d04)**
   [변경] 메인 루프에 경량 컨텍스트 회계(라운드 수·spawn/collect 서사 크기 proxy) + 임계치.
   [파일] `autopilot-loop.ts`(post_cost 인접, `:307-333`)
   [검증] 임계치 초과 시 신호 발화(합성 긴 run).
   [무게] 중.
+  [상태] 구현됨: `readContextPressure`(디스크 파생 프록시 = `2*(decisionCount+nodeCount)+postCost`, `CONTEXT_PRESSURE_THRESHOLD`, 신규 stored counter 없음) + additive-optional `ContextPressureSignal`을 `RecordResultOutcome`/`NextNodeResult`에 부착(임계 미만이면 byte-identical). `computePostCost` 헬퍼 추출로 중복 제거. ac-1·ac-2 fresh 증거 pass.
 
-- **WS3-T2 · 경계 자동 handoff/reset**
+- **WS3-T2 · 경계 자동 handoff/reset** — ✅ **완료 (2026-07-06, wi_2607068bo · commit 1e79d04) · 단 접근 재정의됨(아래 [상태])**
   [변경] 프롬프트 규율 의존을 코드로 대체 — 컨텍스트 압력 경계에서 자동 checkpoint→handoff로 관제탑을 fresh context로 리셋(그래프는 이미 디스크에 있음).
   [파일] `autopilot-loop.ts`, `skills/handoff`
   [검증] 긴 run이 경계에서 실제로 리셋되며 그래프 무손실 이어감.
   [무게] 무거움. ← **컨텍스트 로트의 진짜 수리.** [의존] WS3-T1.
+  [상태] **위 [변경]의 "checkpoint→handoff→reset" 프레이밍은 구현 중 사용자가 기각**(강제 중단·새 세션 유도가 의도 아님). 실제 산출물 = **서브에이전트 적극 위임 + 보고 체계**(§4-9): 임계 크로싱 시 **edge-triggered `ReportDirective`**(디스크 band-artifact 존재를 latch로 → 매 라운드 재발화 없음) + `assembleProgressReport`(decisions.jsonl+autopilot.json 결정적 합성, `collectRetroContext` 확장·`projectRetroNarrative` 재사용, fail-open distinct degraded 상태) → 드라이버가 fresh 요약 subagent를 spawn해 누적 서사를 shed. **세션 리셋/강제 중단 없음**, `autopilot_id` 유지. 파일 = `autopilot-loop.ts` + **`skills/autopilot`**(`skills/handoff` 아님 — reset 프레이밍 폐기). 잔여(수용): shed 실행 여부를 구분하는 on-disk observability 신호 없음(SKILL.md 명시). ac-3·ac-4·ac-5 fresh 증거 pass.
 
 - **WS3-T3 · 역할 분리 실측 가드(테스트)**
   [변경] 오케스트레이터가 콘텐츠 생성을 인라인하지 않음을 확인하는 테스트/가드.
