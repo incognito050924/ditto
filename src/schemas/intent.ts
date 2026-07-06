@@ -1,21 +1,23 @@
 import { z } from 'zod';
-import { schemaVersion, workItemId } from './common';
+import { evidenceRequiredKind, schemaVersion, workItemId } from './common';
 import { acceptanceCriterion } from './work-item';
 
-export const evidenceRequiredKind = z
-  .enum(['test', 'diff', 'browser', 'doc', 'log'])
-  .describe('Kind of evidence required to verify an acceptance criterion');
+// Re-exported from common.ts (moved there so the work-item base AC can reference it
+// without an import cycle). Kept exported here for existing intent-side consumers.
+export { evidenceRequiredKind };
 
 export const questionPolicy = z
   .enum(['ask_only_if_user_only_can_answer', 'ask_freely', 'never_ask'])
   .default('ask_only_if_user_only_can_answer')
   .describe('How freely the agent may ask the user questions for this work item');
 
-export const intentAcceptanceCriterion = acceptanceCriterion
-  .extend({
-    evidence_required: z.array(evidenceRequiredKind).default([]),
-  })
-  .describe('Acceptance criterion in the intent sidecar; reuses work-item criterion shape');
+// wi_2607069bk §1.2 Finding E: `evidence_required` is now inherited from the base
+// work-item AC (Record SoT), so the intent sidecar AC is a derived view — no local
+// re-declaration. Shape is identical to before (base carries evidence_required),
+// so intent.json parses unchanged.
+export const intentAcceptanceCriterion = acceptanceCriterion.describe(
+  'Acceptance criterion in the intent sidecar; reuses work-item criterion shape',
+);
 
 // Stamped only by tech-spec finalize (the spec document is the source; intent is
 // its one-way compile artifact). Additive + optional: interview-finalized intents

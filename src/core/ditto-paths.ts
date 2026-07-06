@@ -24,3 +24,15 @@ export function dittoDir(repoRoot: string): string {
 export function localDir(repoRoot: string, ...segments: string[]): string {
   return join(repoRoot, '.ditto', 'local', ...segments);
 }
+
+/**
+ * wi_2607069bk WS0-T0 §1.1: the committed (git-shared) base for a work item's
+ * Record — `<root>/.ditto/work-items/<id>/`. Holds `record.json` (the authored
+ * WorkItem) and `events/<seq>.<actor>.<eid>.json` (the immutable per-event log).
+ * This is an ISOLATED new namespace (no producer wrote here before this change),
+ * so it is project-global tier — NOT routed through `localDir`. Personal Run
+ * artifacts (evidence/, autopilot.json, metrics.jsonl, …) stay under `localDir`.
+ */
+export function committedWorkItemDir(repoRoot: string, id: string): string {
+  return join(dittoDir(repoRoot), 'work-items', id);
+}

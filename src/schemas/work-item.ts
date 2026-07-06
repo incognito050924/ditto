@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   evidenceRef,
+  evidenceRequiredKind,
   isoDateTime,
   profileName,
   relativePath,
@@ -86,6 +87,13 @@ export const acceptanceCriterion = z
         }),
       )
       .optional(),
+    // wi_2607069bk §1.2 Finding E: the *kind of evidence* required per AC, lifted
+    // from the intent sidecar (Run) onto the base AC (record.json / Record) so that
+    // deleting intent.json loses no durable "required evidence kinds" info. Additive
+    // + OPTIONAL (same idiom as oracle / superseded): a legacy work-item.json AC
+    // omits it and parses unchanged — no schema_version bump. intentAcceptanceCriterion
+    // now inherits this instead of re-declaring it (membership SoT = Record).
+    evidence_required: z.array(evidenceRequiredKind).optional(),
   })
   .describe('One acceptance criterion with its verification verdict');
 
@@ -311,6 +319,100 @@ export const workItem = z
     }
   })
   .describe('Authoritative state for a single DITTO work item');
+
+// wi_2607069bk §1.1/§2.1 — one entry of the committed per-event immutable log
+// (`.ditto/work-items/<id>/events/<seq>.<actor>.<eid>.json`, one event per file,
+// `open(wx)`). get() = record.json + fold over these events. Ordering is by
+// (seq, actor), NEVER by ts (clock-skew safe); event_id is the content-hash dedupe
+// key that makes re-append idempotent. This node adds the SCHEMA only — the
+// reducer / store / consumer wiring lands in later nodes.
+//
+// B1 boundary (§4 B1): the spec-freshness stamp `source_digest` deliberately stays
+// on intent.json (Run, intent.ts sourceDigest); neither the work-item Record
+// (record.json) nor this event log models it — durable decisions (AC, scope,
+// evidence_required) live in the Record, the digest is Run-tier and droppable.
+const workItemEventBase = {
+  schema_version: schemaVersion,
+  work_item_id: workItemId,
+  // REQUIRED, per-writer monotonic (Lamport-like); with `actor` it is the ordering
+  // key. NOT nullable/defaulted — a missing seq is an invalid event.
+  seq: z.number().int().nonnegative().describe('Per-writer monotonic sequence; (seq,actor) orders'),
+  // REQUIRED, writer identity (profile/session). Tiebreaks equal seq across writers.
+  actor: z
+    .string()
+    .min(1)
+    .describe('Writer identity (profile/session); (seq,actor) order tiebreak'),
+  // REQUIRED, content-hash over {kind, payload core}; the dedupe / idempotency key.
+  event_id: z.string().min(1).describe('Content-hash dedupe key (idempotent re-append)'),
+  // Informational ONLY — never used for ordering (clock-skew safe).
+  ts: isoDateTime.describe('When the event was written; informational only, not an ordering key'),
+};
+
+// status transition: to + derived closed_at (nullable so reopen DROPS the timestamp).
+const workItemStatusEventPayload = z
+  .object({
+    to: workItemStatus,
+    closed_at: isoDateTime.nullable().optional().describe('Set on terminal; null clears on reopen'),
+  })
+  .describe('status event payload (§1.1)');
+
+// AC verdict: criterion_id + verdict + evidence pointers (evidenceRef, digest-safe).
+const workItemVerdictEventPayload = z
+  .object({
+    criterion_id: z.string().min(1).describe('The AC id this verdict is for'),
+    verdict,
+    evidence: z.array(evidenceRef).default([]),
+  })
+  .describe('AC verdict event payload (§1.1)');
+
+// github idempotency markers (posted decision / claim). union-folded; a
+// claim_release invalidates the matching marker.
+const workItemGithubPostEventPayload = z
+  .object({
+    posted_decision_id: z.string().optional().describe('Decision-log id posted to the issue'),
+    posted_claim_marker: z.string().optional().describe('Claim marker posted to the issue'),
+    claimed_branch: z.string().optional().describe('Branch this post claimed the issue on'),
+  })
+  .describe('github_post idempotency event payload (§1.1 / C5)');
+
+const workItemClaimEventPayload = z
+  .object({
+    claimed_branch: z.string().optional().describe('Branch claiming/releasing the issue'),
+    posted_claim_marker: z.string().optional().describe('Claim marker this event claims/releases'),
+  })
+  .describe('claim / claim_release event payload (§1.1 / C5)');
+
+export const workItemEvent = z
+  .discriminatedUnion('kind', [
+    z.object({
+      ...workItemEventBase,
+      kind: z.literal('status'),
+      payload: workItemStatusEventPayload,
+    }),
+    z.object({
+      ...workItemEventBase,
+      kind: z.literal('verdict'),
+      payload: workItemVerdictEventPayload,
+    }),
+    z.object({
+      ...workItemEventBase,
+      kind: z.literal('github_post'),
+      payload: workItemGithubPostEventPayload,
+    }),
+    z.object({
+      ...workItemEventBase,
+      kind: z.literal('claim'),
+      payload: workItemClaimEventPayload,
+    }),
+    z.object({
+      ...workItemEventBase,
+      kind: z.literal('claim_release'),
+      payload: workItemClaimEventPayload,
+    }),
+  ])
+  .describe('One entry of the committed per-event immutable work-item log (wi_2607069bk §2.1)');
+
+export type WorkItemEvent = z.infer<typeof workItemEvent>;
 
 export type WorkItem = z.infer<typeof workItem>;
 export type WorkItemWorktree = z.infer<typeof workItemWorktree>;
