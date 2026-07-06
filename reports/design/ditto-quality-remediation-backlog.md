@@ -372,7 +372,7 @@ prism의 모든 재사용을 빼면 남는 진짜 신규는 **가치/방향 taxo
   [변경] 정련 의도 Record → deep-interview 이관 시 손실 방지(§4-9 계약). 두 표면이 의도를 두 번 깎지 않도록.
   [파일] 신규 skill ↔ `interview-driver.ts` 진입
   [검증] 정련 Record의 결정이 deep-interview AC에 100% 반영(누락 0, 재현).
-  [무게] 중. [의존] WS-PRISM-T0.
+  [무게] 중. [의존] WS-PRISM-T0, **WS0-T0(§10-a: 정련 의도를 Record로 이관 → Record 스키마 필요. Track D — 원 [의존]에 T0만 있어 오배치였음). ac-5가 이미 '이중 컴파일 방지'를 담당하므로 잔여 실체 = 무손실 매핑뿐(재구현 금지).**
 
 ### WS1 — deep-interview 수렴 품질 (명제 B) — *수렴 유지, 품질만 개선*
 
@@ -484,11 +484,11 @@ prism의 모든 재사용을 빼면 남는 진짜 신규는 **가치/방향 taxo
   [검증] run당 토큰/시간 측정 전후 비교(품질 회귀 없음 확인).
   [무게] 중.
 
-- **WS5-T2 · 진짜 additive 변경용 싼 레인** *(기존 wi_26062227h와 reconcile)*
+- **WS5-T2 · 진짜 additive 변경용 싼 레인** *(독립 — §10-B: reconcile 대상 부재)*
   [변경] plan 닫기 전 필수 sweep(23 cat, breadth-full)이 지배 비용 — 증명된 additive 변경에서 breadth를 full 카테고리 밑으로 좁힘(현재 설계상 안 좁혀짐).
   [파일] `coverage-loop.ts:129-133`, `coverage-taxonomy.ts:279-282`, `relevance-judge.md:20`
   [검증] additive 변경에서 열린 카테고리 수·spawn 수 감소(품질 게이트 유지).
-  [무게] 중~무거움. [의존] **wi_26062227h(③약함 카테고리 deep-interview 이관)와 중복 — 합쳐서 진행.**
+  [무게] 중~무거움. [의존] 없음(파일 분리, A2/ACG 레인). ⚠ **§10-B 정정**: 지목했던 `wi_26062227h`는 스토어에 없고 그 far-field 재설계는 이미 `wi_2606258zu`+`wi_260625l0v`(둘 다 done)로 실현됨 — '합쳐서 진행' 지시 폐기, 독립 진행.
 
 - **WS5-T3 · 병렬화 감사**
   [변경] map-parallel/reduce-serial 경계 최적성 확인 + 다른 serial 경로 발굴.
@@ -498,21 +498,53 @@ prism의 모든 재사용을 빼면 남는 진짜 신규는 **가치/방향 taxo
 
 ---
 
-## 4. 우선순위·시퀀싱 (추천)
+## 4. 우선순위·시퀀싱 (prism 진행중 기준 재시퀀싱, 2026-07-06)
 
-Q3(설계만·착수 보류)에 따라 **당장은 코딩이 아니라 아키텍처 검증이 다음 단계다.**
+P0 아키텍처 검증 완료(§8 dialectic + §9 pre-mortem). **WS-PRISM(원안 P3)이 앞당겨져 `wi_260705lc8`로 진행 중** — 나머지 워크스트림을 prism 병렬 기준으로 재시퀀싱한다. 이 재시퀀싱은 3-축 fresh-context 적대 검증(§10: 파일-충돌 / 커버리지 / 의존-시퀀스)으로 초안을 압박·교정한 결과다. Q3 유지 — 설계·계획만, 코드 착수는 사용자 허가 후.
 
-| 단계 | 목표 | 항목 | 근거 |
+> **원안 P0~P4 가치-단계 프레이밍은 §10 감사가 뒤집었다** — P1 "출혈 멈춤"의 병렬 가정은 과대(공유 파일에서 직렬), WS0-T0는 side-parallel이 아니라 **임계경로 루트**, Track C는 prism과 무충돌인 태스크 ~5개를 잘못 결박. 아래가 교정본이다. (P0~P4 값-단계 용어는 §2·§9의 기존 참조 보존용으로만 유지.)
+
+prism-now(`wi_260705lc8`) 실측 파일 footprint(§10-A) = `interview-driver.ts`·`tech-spec.ts`·`skills/tech-spec→prism/*`·`cli/index.ts`(서브커맨드 등록·부분)·`prism-*`·`bin/ditto`. **예약**(설계상 잡히나 아직 git-clean, WI in_progress라 성장 가능) = `autopilot-loop.ts:150-166`·`tech-spec-state.ts`·`skills/deep-interview/*`.
+
+### 4.1 실행 트랙 — 의존/파일 기반 (무엇이 무엇을 막나)
+
+| 트랙 | 태스크 | 성격 | 공유파일·주의 |
 |---|---|---|---|
-| **P0 — 아키텍처 검증 (설계, 코드 없음)** | §2.5 기록/실행 분리 + WS-PRISM 표면 설계를 dialectic-review + pre-mortem으로 압박 | WS0-T0 설계, **WS-PRISM-T0 설계** | 모든 WS0가 WS0-T0에 의존. prism는 moat라 착수 전 검증이 정도. 실행 아님 → Q3 준수. |
-| **P1 — 출혈 멈춤 (분리에 비의존)** | 가장 아픈 통증을 작은 변경으로 — 스키마 분리 없이 가능 | **WS-ACQ-T1·T2·T3**, **WS-HND-T1·T3**, WS1-T2, WS1-T5, WS5-T1 | AC 품질(시급 최우선)·핸드오프 GC·stale 상태 은퇴·self-answer 투명성·anti-stub·모델 다운티어는 Record/Run 분리와 독립. 컨텍스트 오염을 즉시 멈춤. |
-| **P2 — 척추 구축** | 분리 승인 후 공유 백로그 실체화 | WS0-T0→T1→T2→T3→T4, **WS-HND-T0·T2**, WS2-T1·T2·T4, WS2-T3 | WS0-T0·WS-HND-T0 검증 통과가 전제. 순서 의존 큼. |
-| **P3 — 의도 표면 (moat 구축)** | 수렴 품질(WS1) + 발산 정련 표면(WS-PRISM) | WS1-T1·T2·T3, **WS-PRISM T1(발산·신규)→T3(가치·신규)→T2(재사용)→T4(재조준)→T5(handoff)** | ditto의 유일 차별. WS-PRISM-T0 검증 통과가 전제. 발산·가치가 net-new, 나머지 재사용. |
-| **P4 — 시스템** | context·ACG·성능 | WS3, WS4, WS5-T2·T3 | WS4-T3(Glean 연구)는 아무 때나 병렬. WS5-T2는 wi_26062227h와 합침. |
+| **B · 척추 (임계경로 루트)** | WS0-T0 | prism과 파일 완전분리(§10-C1) → **지금 병렬 설계 착수, 조기 랜딩 최우선** | 스키마 split이 `schemas/work-item.ts`·`completion-contract.ts`를 A1과 공유 → **B의 스키마 split을 A1보다 먼저 랜딩**(또는 A1 추가분 보존 설계). 자체 pre-mortem 선행(heavy). |
+| **A1 · AC-품질 (단일 직렬, 병렬 금지)** | WS-ACQ-T1→T2 · WS1-T5→WS-ACQ-T3 | 네 태스크가 한 워크스트림 | `gates.ts`·`work-item.ts`·`completion-contract.ts`·`verify/SKILL.md`·`verifier.md`·`intent.ts` 공유 → 서로 직렬. B와 `work-item.ts`/`completion-contract.ts` 조율(§10-c). |
+| **A2 · 병렬-안전 (파일 분리)** | WS-HND-T1·T3 · WS3-T3 · WS5-T1·T3 · WS4-T2→T4 · WS4-T3 · WS5-T2 · WS1-T3 · WS2-T3 · WS2-T1 | 상호·prism 무충돌 → cross-PC 분산(§4.2) | WS2-T1 `gates.ts:815-884`는 A1의 141-158과 다른 리전(머지 가능하나 통합주의). WS2-T3은 `cli/index.ts` hotspot. |
+| **LOOP · autopilot-loop 조율 (prism과 병렬)** | WS3-T1→T2 · WS4-T1(=`wi_260615lj6` 재개) | prism이 `autopilot-loop.ts` 안 건드림(§10-F) → **prism 게이트 아님, 병렬 가능** | `autopilot-loop.ts`·`fitness.ts`·`drift.ts` 내부 직렬. ⚠ prism 예약리전 150-166 — 머지 시 확인. |
+| **C · 진짜 prism 충돌만 (prism 랜딩 대기)** | WS1-T1 · WS1-T2 · WS-PRISM residual T2·T4 · WS-HND-T4 | `interview-driver.ts` 충돌 or prism 소유 | WS-HND-T4 결속 dep = WS-PRISM-T0/§9-B1(digest 은퇴 원자성), **WS0-T0 아님**(흡수처 knowledge tier는 기존·committed). WS-HND-T1(A2) 선행. |
+| **D · WS0-T0 랜딩 대기** | WS0-T1→T2→T3→T4 · WS-HND-T0→T2 · WS2-T2·T4 · **WS-PRISM-T5** | 전부 Record(WS0-T0) 의존 | **WS-PRISM-T5 이동(§10-a): "정련 의도→Record 이관"이라 WS0-T0 필요 — 원 [의존]에 WS-PRISM-T0만 있어 잘못 Track C에 있었음.** |
 
-autopilot 루프를 만지는 WS0-T3·WS3·WS4·WS5는 서로 조율 필요.
+### 4.2 cross-PC 병렬 디스패치 레인 (파일 분리 = 무충돌 머지)
 
-> **주의 (명제 I).** 이 시퀀싱은 "ditto 쓰다 아픈 순서"로 매겨졌다 — 편향된 우선순위일 수 있다. 설치자 관점 우선순위는 다를 수 있다(새 설치자에겐 §2.7 E축 first-run 가치가 WS3 context rot보다 앞설 여지). P1~P4는 잠정이며, moat(WS-PRISM)·설치자 가치 기준으로 재검 대상.
+다른 PC는 커밋된 main을 `git pull`(prism의 미커밋 작업은 안 옴)해 **파일 분리 레인**을 독립 WI+브랜치로 구동→push→머지. 분리이므로 머지 무충돌. 공유트리 머신(prism+계획 세션)에선 prism dirty와 겹치는 코드 레인을 돌리지 않는다.
+
+| 레인 | 태스크 | 분리 파일셋 | 포장 |
+|---|---|---|---|
+| **P** (진행중·공유트리) | prism `wi_260705lc8` | interview-driver·tech-spec·skills/prism·prism-*·cli/index(부분) | — |
+| **SPINE** (PC-2·임계경로) | WS0-T0 (스키마 split 먼저) | work-item-store·schemas/work-item·schemas/autopilot·completion-contract·.gitignore | 신규 WI, heavy, 자체 pre-mortem |
+| **LOOP** (PC-3) | WS3-T1→T2 · WS4-T1 | autopilot-loop·fitness·drift | `wi_260615lj6` 재개, 내부직렬 |
+| **HYG** (PC-4) | WS-HND-T1·T3 · WS3-T3 · WS5-T1·T3 · WS1-T3 | handoff-store·user-prompt-submit·session-pointer·active-node-lease·autopilot-dispatch·agent-variants·opponent-router·coverage-manager·question-context·interview-state | 다수 소형 WI 또는 묶음 |
+| **ACG** (PC-5) | WS4-T2→T4 · WS5-T2 | src/acg/tidy·l2-differential·autopilot-tidy·coverage-loop·coverage-taxonomy | `wi_260615t8o` 재개, ⚠prism이 coverage 엔진 재사용(임포트)—시맨틱 조율 |
+| **RESEARCH** (아무데나) | WS4-T3 Glean | 코드 없음 | 위임 가능 |
+
+**A1(AC-품질)은 별도 동시 PC가 아니다** — SPINE과 `work-item.ts`·`completion-contract.ts`를 공유하므로 SPINE 스키마 split *뒤에* (같은/하류 PC에서) 직렬. PC 수가 적으면 HYG·ACG를 한 PC에서 순차로 접어도 무충돌(파일 분리라 아무 순서나 안전).
+
+**cross-레인 직렬화 hotspot (반드시 조율):**
+1. **`cli/index.ts`** — prism + 서브커맨드 추가 레인 전부(WS0-T1 `work list`·WS2-T3·WS-HND). +`skills.surface.test.ts`·`surfaces.json` 카탈로그. 서브커맨드 등록은 additive지만 인접 라인 충돌 가능 → 등록 블록만 마지막에 순차 반영.
+2. `schemas/work-item.ts`·`completion-contract.ts` — SPINE ↔ A1.
+3. `gates.ts` — A1 내부(+WS2-T1 다른 리전).
+4. `autopilot-loop.ts` — LOOP 내부 + prism 예약.
+
+### 4.3 임계경로·우선순위 원칙
+
+- **임계경로 = WS0-T0→T1→T2→WS2-T4**(WS0 내부 체인이 지배, Track A 아님). ⇒ **spine-first가 최상위 원칙** — WS0-T0를 조기 랜딩하도록 적극 구동(side-parallel 방치 금지). Track A 병렬 churn이 WS0-T0 주의를 굶기면 전체 경로가 늘어난다.
+- **WS-ACQ(AC품질) "시급 최우선"은 유지되나 blind 선착이 아니다** — B의 스키마 split과 `work-item.ts`/`completion-contract.ts`를 공유하므로, split을 먼저 랜딩하거나 A1 추가분(oracle class·evidence-kind)을 보존하도록 설계해야 재작업이 없다.
+- **installer-value-first는 최상위 원칙이 아니다** — P4 내부(WS4 health-delta vs WS3 context-rot)의 tiebreak일 뿐, **boxwood 스택 확인(Q10) 게이트**(미확인 스택이면 WS4-T1 purpose-2 실증 불가). spine-first를 넘지 않는다. WS3(관제탑 context rot)은 사용자 최상위 불만이라 의존 없이 즉효 가치가 있다.
+
+> **주의(명제 I 유지).** 위 트랙은 파일-의존으로 결정되나, prism 랜딩 이후의 가치 우선순위(C/D 내부)는 여전히 "ditto 쓰다 아픈 순서" 편향 가능 — 설치자 관점(§2.7 E축 first-run)으로 재검 대상.
 
 ---
 
@@ -554,10 +586,15 @@ autopilot 루프를 만지는 WS0-T3·WS3·WS4·WS5는 서로 조율 필요.
 
 | 기존 WI | 관계 |
 |---|---|
-| `wi_26062227h` (far-field pre-mortem 재설계: ③약함 deep-interview 이관 + ①강함 oracle 결정) | **WS5-T2·WS1-T4와 겹침** — 별도 생성 말고 이 WI를 확장/재개. |
-| `wi_260628sx5` (GitHub 백로그 tech-spec, partial) | 실질은 이미 shipped(spec+2 ADR+코드). WS0-T3·T4는 이 WI가 **의도적으로 비목표로 둔** 것(보드→ditto read, 잔여→보드)을 역전 — 새 결정 필요(§7-Q1). |
+| `wi_26062227h` (far-field pre-mortem 재설계) | ⚠ **§10-B: 스토어에 부재(유령).** 그 far-field 재설계는 이미 `wi_2606258zu`+`wi_260625l0v`(done)로 실현됨 — **재개할 실체 없음.** WS5-T2는 독립 진행(재개 아님). |
+| `wi_260628sx5` (GitHub 백로그 tech-spec) | ⚠ **§10-B: 스토어에 부재(완전 유령).** 참조 대상 WI 자체가 없음 — 실질은 이미 shipped(spec+2 ADR+코드)로 흡수. WS0-T3·T4는 그 shipped 결정(보드→ditto read, 잔여→보드)을 **역전**하는 새 결정(§7-Q1). |
 | `wi_2606276nc` (worktree ledger reason 빈문자열 버그) | 무관한 구체 버그 — WS0 백로그의 **실사용 예시**. 그대로 항목으로 편입. |
 | `wi_260624a6d`·`wi_260625mrf`·`wi_260623rbb` | 무관. 별개 유지. |
+
+**열린 WI housekeeping (§10-B 실측 `ditto work status`):**
+- `wi_260629skv`(draft, push 게이트 *기획*)는 `wi_260629i9c`(done, push-gate *기능화*)에 **superseded** → 고아 draft 종료(abandon) 권장.
+- `wi_260626099`(install 문서 엔드유저 재편)는 WS2-T3(경량경로/verify 문서)와 **대상이 다름** → 독립 install-doc 항목으로 취급(WS2-T3 흡수 아님).
+- `wi_260615lj6`(in_progress)=WS4-T1(LOOP 레인 재개), `wi_260615t8o`(in_progress)=WS4-T2(ACG 레인 재개). `wi_2607026qs`·`wi_26070300p`는 별개 E2E 스레드(이 백로그 무관).
 
 ---
 
@@ -656,3 +693,32 @@ autopilot 루프를 만지는 WS0-T3·WS3·WS4·WS5는 서로 조율 필요.
 - **malformed 핸드오프가 sweep/consume skip** — 실재하나 §2.5 tier seam 아닌 WS-HND-T1 기존 타깃, 이 검증 범위 밖.
 
 **착수 전제 상태.** P0 = dialectic-review(§8) + pre-mortem(§9) 둘 다 완료. **신규 CRITICAL B1(spec 은퇴↔digest 게이트)은 두 워크스트림(WS-HND-T4·WS-PRISM-T0)이 조정해야 하는 unmitigated 갭**이므로, 그 둘의 T0 상세설계는 이 조정을 명시적 의존으로 물고 착수해야. 나머지는 partial 정합 갭으로 각 T0 상세설계·개별 pre-mortem에서 닫는다. Q3(설계-only) 유지 — 코드 착수는 사용자 허가 후.
+
+---
+
+## 10. 재시퀀싱 적대 검증 — 3축 fresh-context 감사 (2026-07-06)
+
+§4를 prism 진행중(`wi_260705lc8`) 기준으로 재시퀀싱하며, 초안 v1을 3개 독립 fresh-context 적대 감사로 압박했다(charter §4-9: 자기맥락 검증 금지). 모든 발견은 git 상태·file:line·§ 참조로 결박(anti-SLOP). 코드 미변경.
+
+**축 A — 파일-충돌 감사 (실측 git).**
+- prism-now 실측 footprint 확정: `interview-driver.ts`(신규 `compileIntent`)·`tech-spec.ts`(finalize 재라우팅)·`skills/tech-spec→prism/*` rename·`cli/index.ts`(서브커맨드 등록)·`prism-*`·`bin/ditto`.
+- **C1 확정** — WS0-T0의 5개 파일 전부 git-clean → **prism ⟂ WS0-T0**, 병렬 랜딩 안전.
+- **C2 교정(과대·과소 둘 다).** 과대: `autopilot-loop.ts`·`tech-spec-state.ts`·`skills/deep-interview/*`는 실제 clean — ac-6 digest 면제를 게이트가 아니라 `interview-driver.ts` `compileIntent` 안 조건부 `sourceDigest`로 해결. 과소: `cli/index.ts`·`skills.surface.test.ts`·`tests/cli/prism-alias.test.ts` 누락 — 특히 `cli/index.ts`는 서브커맨드 추가 레인 공통 hotspot.
+- **C7 교정.** intent *스키마*(`schemas/intent.ts`)·`intent-store.ts`는 clean(안전) → WS1-T5의 AC provenance *필드 추가*는 안전. 그러나 intent *컴파일 오케스트레이션*은 prism이 재구조화(ac-5) → "어떻게 컴파일하나"를 바꾸는 변경은 prism 존과 충돌.
+
+**축 B — 커버리지 감사 (누락 0 규율).**
+- §3 태스크 37개(WS-PRISM 6 포함; WS1-T4는 이동 포인터라 태스크 아님) 전수 → 전부 정확히 한 트랙, **누락·중복·하드 미스트랙 0**.
+- WS-PRISM COVERED = {T0·T1·T3}(wi_260705lc8 ac-1~7 매핑), residual = {T2·T4·T5}. 단 **T5는 클린 residual 아님** — ac-5가 "이중 컴파일 방지" 절반 담당, 잔여 실체 = "정련 Record 결정의 deep-interview AC 100% 반영"뿐.
+- **§6 유령 WI**: `wi_26062227h`(스토어 부재, far-field는 이미 `wi_2606258zu`+`wi_260625l0v` done으로 실현)·`wi_260628sx5`(완전 부재). ⇒ WS5-T2 "합쳐서 진행" stale, §6 reconcile 재개 실체 없음(위 §6 정정).
+- **housekeeping**: `wi_260629skv`(draft)=`wi_260629i9c`(done)에 superseded → 종료 권장. `wi_260626099`(install 문서)는 WS2-T3 아닌 독립 항목.
+
+**축 C — 의존/시퀀스 스켑틱 (더 나은 계획).**
+- **v1 sequencing does NOT stand → revise.** 교정 4건:
+  - **(a) WS-PRISM-T5는 Record 의존 → Track C에서 D로 이동** (missing dep WS0-T0; 원 [의존]엔 WS-PRISM-T0만).
+  - **(b) Track A 13-way 병렬 과대** — AC-품질 클러스터 {WS-ACQ-T1·T2·T3, WS1-T5}는 `gates.ts`/`verify`/`verifier`/`intent.ts` 공유 → 단일 직렬. **A1(직렬)/A2(병렬-안전) 분리.**
+  - **(c) WS0-T0는 side-parallel 아닌 임계경로 루트** — 조기 랜딩 최우선. +A1과 `work-item.ts`/`completion-contract.ts` 충돌(스키마 split 먼저).
+  - **(f) Track C 과결박** — WS3-T1/T2·WS4-T1(`autopilot-loop.ts`)·WS1-T3(`question-context.ts`)는 prism 무충돌 → **LOOP 레인/A2로 해방(prism 게이트 제거).** 진짜 prism 충돌은 WS1-T1/T2·WS-PRISM residual T2/T4뿐.
+  - (d) WS-HND-T4 = Track C 유지 정당 — 결속 dep는 WS-PRISM-T0/§9-B1(digest 은퇴 원자성), WS0-T0 아님(흡수처 knowledge tier 기존).
+  - (e) installer-value-first = P4 tiebreak, boxwood-stack(Q10) 게이트, spine-first 미초과.
+
+**반영.** 위 교정을 §4(트랙 B/A1/A2/LOOP/C/D + §4.2 cross-PC 레인 + §4.3 임계경로 원칙)·WS-PRISM-T5 [의존]·WS5-T2·§6에 반영. **cross-PC 요구(사용자)**: 파일-분리 레인이 곧 무충돌 머지 단위 — §4.2가 그 partition. Q3 유지 — 착수는 사용자 허가 후.
