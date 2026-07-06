@@ -61,6 +61,51 @@ export const coverageMap = z
 export type CoverageNode = z.infer<typeof coverageNode>;
 export type CoverageMap = z.infer<typeof coverageMap>;
 
+// Relevance provenance (wi_26062227h) — the audit sidecar the relevance gate leaves
+// at seed. coverage.json persists only the ASSEMBLED node state, so a category kept
+// relevant loses whether the judge proposed skipping it and a refute overturned that
+// (the §5-3 path). Persisting the RAW judgments + refutes makes the skip-cause
+// diagnosable post-hoc (b: conservative-correct vs c: proposed-skip-then-refuted) and
+// carries the structural cost tally. Token/wall-time is deliberately absent: subagent
+// cost is host-delegated (ADR-0001), never visible to the deterministic engine.
+export const rawRelevanceJudgment = z
+  .object({
+    id: z.string().min(1).describe('Floor category id (bare, no cov-cat- prefix)'),
+    relevant: z.boolean(),
+    reason: z.string().optional().describe('Why irrelevant — becomes close_reason on a skip'),
+    residual_risk: z.string().optional().describe('What risk survives the skip'),
+  })
+  .describe('One raw per-category relevance judgment from the grounded relevance agent (§5-2)');
+
+export const relevanceRefute = z
+  .object({
+    id: z.string().min(1),
+    refuted: z
+      .boolean()
+      .describe('true = refuter found the category IS relevant → skip overturned'),
+  })
+  .describe('One adversarial refute outcome for a proposed skip (§5-3)');
+
+export const relevanceProvenance = z
+  .object({
+    schema_version: schemaVersion,
+    work_item_id: workItemId,
+    judgments: z.array(rawRelevanceJudgment).describe('Raw grounded judgments, pre-assembly'),
+    refutes: z.array(relevanceRefute).describe('Raw adversarial refutes, pre-assembly'),
+    tally: z
+      .object({
+        seeded: z.number().int().nonnegative().describe('Category nodes seeded (breadth floor)'),
+        skipped: z.number().int().nonnegative().describe('Categories pre-closed out_of_scope'),
+        relevant: z.number().int().nonnegative().describe('Categories left open to be swept'),
+      })
+      .describe('Structural cost tally — the only run-cost proxy the engine can see (no tokens)'),
+  })
+  .describe('Relevance gate audit sidecar (relevance-provenance.json, §9) — wi_26062227h');
+
+export type RawRelevanceJudgment = z.infer<typeof rawRelevanceJudgment>;
+export type RelevanceRefute = z.infer<typeof relevanceRefute>;
+export type RelevanceProvenance = z.infer<typeof relevanceProvenance>;
+
 // Plan-stage coverage-round payload (§4·§5 wiring) — the structural signals the
 // fresh fan-out hands back to the deterministic Manager via `coverage-round`. The
 // Manager appends children (append-only), steps the dry counter, and — on

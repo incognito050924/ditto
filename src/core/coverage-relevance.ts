@@ -11,26 +11,13 @@
  * output.
  */
 
+import type { RawRelevanceJudgment, RelevanceRefute } from '~/schemas/coverage';
 import type { CategoryRelevanceVerdict } from './coverage-taxonomy';
 
-/** Raw per-category relevance judgment from the grounded relevance agent (§5-2). */
-export interface RawRelevanceJudgment {
-  id: string;
-  relevant: boolean;
-  /** Why the category is irrelevant — becomes close_reason on a skip. */
-  reason?: string;
-  /** What risk survives the skip — becomes residual_risk on a skip. */
-  residual_risk?: string;
-}
-
-/**
- * Adversarial refute outcome for a proposed skip (§5-3). `refuted:true` means the
- * refuter found the category IS relevant after all → the skip is overturned.
- */
-export interface RelevanceRefute {
-  id: string;
-  refuted: boolean;
-}
+// The judgment/refute shapes are defined once in the schema (SoT, ADR-0002) so the
+// relevance-provenance sidecar and this assembler never drift; re-exported here for the
+// existing consumers (autopilot.ts).
+export type { RawRelevanceJudgment, RelevanceRefute };
 
 /**
  * Assemble final relevance verdicts from grounded judgments + adversarial refutes,

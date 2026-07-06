@@ -21276,6 +21276,27 @@ var coverageMap = exports_external.object({
   nodes: exports_external.array(coverageNode).default([]),
   intensity: coverageTier.optional().describe("Entry intensity override (ac-4) persisted on the first seed so the tier and termination depth K stay consistent across every round without the caller re-passing it (\xA78-4)")
 }).describe("Coverage map sidecar (coverage.json) \u2014 additive dynamic-growth scope tree (\xA79)");
+var rawRelevanceJudgment = exports_external.object({
+  id: exports_external.string().min(1).describe("Floor category id (bare, no cov-cat- prefix)"),
+  relevant: exports_external.boolean(),
+  reason: exports_external.string().optional().describe("Why irrelevant \u2014 becomes close_reason on a skip"),
+  residual_risk: exports_external.string().optional().describe("What risk survives the skip")
+}).describe("One raw per-category relevance judgment from the grounded relevance agent (\xA75-2)");
+var relevanceRefute = exports_external.object({
+  id: exports_external.string().min(1),
+  refuted: exports_external.boolean().describe("true = refuter found the category IS relevant \u2192 skip overturned")
+}).describe("One adversarial refute outcome for a proposed skip (\xA75-3)");
+var relevanceProvenance = exports_external.object({
+  schema_version: schemaVersion,
+  work_item_id: workItemId,
+  judgments: exports_external.array(rawRelevanceJudgment).describe("Raw grounded judgments, pre-assembly"),
+  refutes: exports_external.array(relevanceRefute).describe("Raw adversarial refutes, pre-assembly"),
+  tally: exports_external.object({
+    seeded: exports_external.number().int().nonnegative().describe("Category nodes seeded (breadth floor)"),
+    skipped: exports_external.number().int().nonnegative().describe("Categories pre-closed out_of_scope"),
+    relevant: exports_external.number().int().nonnegative().describe("Categories left open to be swept")
+  }).describe("Structural cost tally \u2014 the only run-cost proxy the engine can see (no tokens)")
+}).describe("Relevance gate audit sidecar (relevance-provenance.json, \xA79) \u2014 wi_26062227h");
 var coverageChildInput = exports_external.object({
   id: exports_external.string().min(1),
   parent_id: exports_external.string().min(1),
@@ -22433,6 +22454,9 @@ class CoverageStore {
   intentDialogPath(workItemId2) {
     return join22(this.dir(workItemId2), "intent-dialog.md");
   }
+  provenancePath(workItemId2) {
+    return join22(this.dir(workItemId2), "relevance-provenance.json");
+  }
   async exists(workItemId2) {
     return Bun.file(this.mapPath(workItemId2)).exists();
   }
@@ -22453,6 +22477,16 @@ class CoverageStore {
   async writeIntentDialog(workItemId2, markdown) {
     await ensureDir(this.dir(workItemId2));
     await atomicWriteText(this.intentDialogPath(workItemId2), markdown);
+  }
+  async hasRelevanceProvenance(workItemId2) {
+    return Bun.file(this.provenancePath(workItemId2)).exists();
+  }
+  async getRelevanceProvenance(workItemId2) {
+    return readJson(this.provenancePath(workItemId2), relevanceProvenance);
+  }
+  async writeRelevanceProvenance(workItemId2, provenance) {
+    await ensureDir(this.dir(workItemId2));
+    return writeJson(this.provenancePath(workItemId2), relevanceProvenance, provenance);
   }
 }
 
@@ -26442,6 +26476,21 @@ async function nextCoverageNode(args) {
       ...args.intensity ? { intensity: args.intensity } : {}
     };
     await store.writeMap(workItemId2, map);
+    if (args.rawRelevance) {
+      const categoryNodes = map.nodes.filter((n2) => n2.id.startsWith(CATEGORY_NODE_PREFIX));
+      const skipped = categoryNodes.filter((n2) => n2.state === "out_of_scope").length;
+      await store.writeRelevanceProvenance(workItemId2, {
+        schema_version: "0.1.0",
+        work_item_id: workItemId2,
+        judgments: [...args.rawRelevance.judgments],
+        refutes: [...args.rawRelevance.refutes],
+        tally: {
+          seeded: categoryNodes.length,
+          skipped,
+          relevant: categoryNodes.length - skipped
+        }
+      });
+    }
   }
   const dryCounter = await readDryCounter(repoRoot, workItemId2);
   const tier = args.intensity ?? map.intensity ?? (args.tierInputs ? selectCoverageTier(args.tierInputs) : "standard");
@@ -31983,7 +32032,9 @@ function parseRelevance(raw) {
   if (!Array.isArray(parsed.judgments)) {
     throw new Error("--relevance.judgments must be an array of {id,relevant,reason?,residual_risk?}");
   }
-  return assembleRelevanceVerdicts(parsed.judgments, Array.isArray(parsed.refutes) ? parsed.refutes : []);
+  const judgments = parsed.judgments;
+  const refutes = Array.isArray(parsed.refutes) ? parsed.refutes : [];
+  return { verdicts: assembleRelevanceVerdicts(judgments, refutes), raw: { judgments, refutes } };
 }
 var autopilotCoverageNext = defineCommand({
   meta: {
@@ -32005,11 +32056,11 @@ var autopilotCoverageNext = defineCommand({
   run: async ({ args }) => {
     let format;
     let intensity;
-    let relevanceVerdicts;
+    let relevance;
     try {
       format = parseOutputFormat(args.output);
       intensity = parseCoverageIntensity(args.coverageIntensity);
-      relevanceVerdicts = parseRelevance(args.relevance);
+      relevance = parseRelevance(args.relevance);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(USAGE_ERROR_EXIT);
@@ -32021,7 +32072,8 @@ var autopilotCoverageNext = defineCommand({
         repoRoot,
         workItemId: args.workItem,
         seedCategories: farFieldCategoriesEnabled(),
-        ...relevanceVerdicts ? { relevanceVerdicts } : {},
+        ...relevance ? { relevanceVerdicts: relevance.verdicts } : {},
+        ...relevance ? { rawRelevance: relevance.raw } : {},
         ...intensity ? { intensity } : {}
       });
       if (format === "json") {
@@ -52744,4 +52796,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=c0acf8e3108802f8a3510dfa5bc3cfffcb568c3926abccd5766d72e3cd824cd4
+//# ditto-src-stamp=8226930662a55eee286c31fd072e5999450fc58e9bc8dd12185e6feb2dba65d5
