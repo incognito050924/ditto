@@ -686,6 +686,20 @@ describe('userPromptSubmitHandler', () => {
       expect(await hs.listActive()).toHaveLength(0); // never re-injectable
     });
 
+    // WS-HND-T3 (wi_260706kdx): the same prompt tick also GCs stale session
+    // pointers. Seed an aged pointer file, run the prompt, assert it was swept —
+    // proves SessionPointerStore.sweepStale is actually wired next to the handoff sweep.
+    test('a stale session pointer is swept out by the prompt (pointer GC wiring)', async () => {
+      const a = await makeWI('A');
+      const store = new SessionPointerStore(repo);
+      await store.set('sess-stale', a.id);
+      const ptr = join(repo, '.ditto/local/sessions/sess-stale.json');
+      const old = new Date(Date.now() - 30 * DAY);
+      utimesSync(ptr, old, old); // age past the 7d retention
+      await run({ session_id: 'sess-A', prompt: 'go' });
+      expect(await store.get('sess-stale')).toBeNull(); // pointer GC'd
+    });
+
     // ac-5: a sweep error does not break the hook — it still returns its context.
     test('a sweep failure does not break the prompt hook (fail-open)', async () => {
       const spy = spyOn(HandoffStore.prototype, 'sweepStaleActive').mockRejectedValue(

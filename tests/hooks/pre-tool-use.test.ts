@@ -705,7 +705,7 @@ describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease a
         node_id: 'N1',
         work_item_id: WI,
         file_scope: opts.leaseScope,
-        created_at: '2026-06-06T00:00:00.000Z',
+        created_at: new Date().toISOString(), // live node (>24h would be reaped: WS-HND-T3)
       });
     }
     return dir;
@@ -745,7 +745,7 @@ describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease a
         work_item_id: WI,
         file_scope: ['src/core/'],
         scope_source: 'derived',
-        created_at: '2026-06-06T00:00:00.000Z',
+        created_at: new Date().toISOString(), // live node (>24h would be reaped: WS-HND-T3)
       });
       expect((await edit(dir, 'src/hooks/elsewhere.ts')).exitCode).toBe(0);
     } finally {
@@ -761,7 +761,7 @@ describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease a
         work_item_id: WI,
         file_scope: ['src/x.ts'],
         scope_source: 'derived',
-        created_at: '2026-06-06T00:00:00.000Z',
+        created_at: new Date().toISOString(), // live node (>24h would be reaped: WS-HND-T3)
       });
       expect((await edit(dir, 'docs/outside-everything.md')).exitCode).toBe(0);
     } finally {

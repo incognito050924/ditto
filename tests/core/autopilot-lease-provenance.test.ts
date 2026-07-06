@@ -99,7 +99,9 @@ describe('nextNode lease scope provenance', () => {
       node_id: 'N9',
       work_item_id: WI,
       file_scope: ['src/core/'],
-      created_at: NOW.toISOString(),
+      // fresh: listActive reaps leases >24h old (WS-HND-T3); this test asserts
+      // scope_source back-compat parsing, so the lease must read as still-live.
+      created_at: new Date().toISOString(),
     } as never);
     const leases = await store.listActive(WI);
     expect(leases[0]?.scope_source).toBe('declared');

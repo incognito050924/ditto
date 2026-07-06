@@ -38,6 +38,27 @@ export const activeNodeLease = z
 
 export type ActiveNodeLease = z.infer<typeof activeNodeLease>;
 
+/**
+ * A lease older than this (by its `created_at`) is treated as leaked and reaped on
+ * read (WS-HND-T3, wi_260706kdx). A lease is supposed to live only for one node's
+ * dispatch (seconds-to-minutes); record-result removes it on every terminal
+ * transition. But a node that dies without that removal leaves a lease PreToolUse
+ * keeps honoring as an allow-list forever. 24h is deliberately generous — far
+ * beyond any real node runtime — so a live lease is NEVER reaped; only a truly
+ * abandoned one is.
+ */
+const LEAKED_LEASE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a lease is a leaked one to reap. Content-safe: an unparseable / non-finite
+ * `created_at` yields an unknown age, so we PRESERVE it (never reap on unknown age).
+ */
+function isLeaked(lease: ActiveNodeLease, now: number): boolean {
+  const createdMs = Date.parse(lease.created_at);
+  if (Number.isNaN(createdMs)) return false; // unknown age → safe-preserve
+  return now - createdMs > LEAKED_LEASE_MAX_AGE_MS;
+}
+
 const leaseFile = z
   .object({
     schema_version: z.literal('0.1.0'),
@@ -56,13 +77,35 @@ export class ActiveNodeLeaseStore {
     return join(this.dir(workItemId), 'active-leases.json');
   }
 
-  /** All active leases for the work item ([] when none / unreadable). */
+  /**
+   * All active leases for the work item ([] when none / unreadable).
+   *
+   * Reap-on-read (WS-HND-T3, wi_260706kdx): a leaked lease (owning node died
+   * without record-result's removeByNode) older than LEAKED_LEASE_MAX_AGE_MS is
+   * filtered out so PreToolUse stops honoring its allow-list. Only when something
+   * was actually reaped is the pruned list written back — the common no-stale path
+   * stays read-only. Keeps the []-on-unreadable fail-open.
+   */
   async listActive(workItemId: string): Promise<ActiveNodeLease[]> {
+    let leases: ActiveNodeLease[];
     try {
-      return (await readJson(this.path(workItemId), leaseFile)).leases;
+      leases = (await readJson(this.path(workItemId), leaseFile)).leases;
     } catch {
       return [];
     }
+    const now = Date.now();
+    const live = leases.filter((l) => !isLeaked(l, now));
+    if (live.length !== leases.length) {
+      try {
+        await writeJson(this.path(workItemId), leaseFile, {
+          schema_version: '0.1.0',
+          leases: live,
+        });
+      } catch {
+        // best-effort: a failed prune-write just leaves the file for a later read
+      }
+    }
+    return live;
   }
 
   /** Create or replace the lease for a node (keyed by node_id). */

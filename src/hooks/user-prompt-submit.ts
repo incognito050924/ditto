@@ -312,6 +312,10 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
     // into an unrelated session's context. Observational, in the same fail-open
     // try/catch — a sweep error must not break the prompt hook.
     await hstore.sweepStaleActive();
+    // Sibling GC (WS-HND-T3, wi_260706kdx): retire stale session pointers on the
+    // same once-per-prompt tick so a reused session id never re-binds to a
+    // long-dead work item. Same fail-open envelope — never breaks the prompt hook.
+    await new SessionPointerStore(input.repoRoot).sweepStale();
   } catch {
     // handoff 자동 로드/sweep 실패는 무시 (관측적, non-blocking)
   }
