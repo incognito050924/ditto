@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { nextCoverageNode, recordCoverageRound } from '~/core/coverage-loop';
+import { assembleRelevanceVerdicts } from '~/core/coverage-relevance';
 import { CoverageStore } from '~/core/coverage-store';
 import { CATEGORY_NODE_PREFIX } from '~/core/coverage-taxonomy';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -126,6 +127,53 @@ describe('relevance gate pre-close at seed (wi_260625l0v §3·§5)', () => {
         .filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX))
         .every((n) => n.state === 'open'),
     ).toBe(true);
+  });
+});
+
+// wi_26062227h — relevance provenance + structural cost tally persisted at seed.
+// The relevance gate consumes raw judgments/refutes, but coverage.json keeps only the
+// ASSEMBLED node state — a kept-relevant category loses its judge proposal + refute
+// outcome, so the skip-cause (b: conservative-correct vs c: proposed-skip-then-refuted)
+// is undiagnosable post-hoc. Persisting the RAW input at seed makes it diagnosable and
+// records the structural cost tally the run-cost metric needs. Token/wall-time stays out
+// (ADR-0001 — subagent cost is host-delegated, not engine-visible).
+describe('relevance provenance persisted at seed (wi_26062227h)', () => {
+  const judgments = [
+    { id: 'authentication', relevant: false, reason: '읽기 전용', residual_risk: '우회 시 누락' },
+    { id: 'boundary-edge', relevant: true },
+    // proposed skip but refuted back to relevant → the (c) weak-signal case that
+    // coverage.json alone cannot distinguish from a plain kept-relevant category.
+    { id: 'observability', relevant: false, reason: '로깅 없음', residual_risk: '무성 실패' },
+  ];
+  const refutes = [
+    { id: 'authentication', refuted: false }, // skip survives → out_of_scope
+    { id: 'observability', refuted: true }, // skip overturned → stays relevant
+  ];
+
+  test('rawRelevance at seed writes relevance-provenance.json with raw judgments/refutes + tally', async () => {
+    await nextCoverageNode({
+      repoRoot: repo,
+      workItemId: WI,
+      seedCategories: true,
+      relevanceVerdicts: assembleRelevanceVerdicts(judgments, refutes),
+      rawRelevance: { judgments, refutes },
+    });
+
+    const store = new CoverageStore(repo);
+    const prov = await store.getRelevanceProvenance(WI);
+    // raw preserved verbatim → b/c diagnosable (observability shows the refuted-skip path)
+    expect(prov.judgments).toEqual(judgments);
+    expect(prov.refutes).toEqual(refutes);
+    // tally reflects the ASSEMBLED result: 23 seeded, only authentication skipped
+    // (observability's proposed skip was refuted back to relevant), 22 relevant.
+    expect(prov.tally.seeded).toBe(23);
+    expect(prov.tally.skipped).toBe(1);
+    expect(prov.tally.relevant).toBe(22);
+  });
+
+  test('no rawRelevance → no provenance file (no gate = no record, ac-3)', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI, seedCategories: true });
+    expect(await new CoverageStore(repo).hasRelevanceProvenance(WI)).toBe(false);
   });
 });
 

@@ -1,4 +1,10 @@
-import type { CoverageMap, CoverageNode, CoverageRoundPayload } from '~/schemas/coverage';
+import type {
+  CoverageMap,
+  CoverageNode,
+  CoverageRoundPayload,
+  RawRelevanceJudgment,
+  RelevanceRefute,
+} from '~/schemas/coverage';
 import {
   COVERAGE_AXIS_MECHANISMS,
   type CoverageTier,
@@ -169,6 +175,17 @@ export async function nextCoverageNode(args: {
    * every category open (unchanged behavior, ac-7). Only consulted on the first call.
    */
   relevanceVerdicts?: readonly CategoryRelevanceVerdict[];
+  /**
+   * Raw relevance gate input (wi_26062227h) — the grounded judgments + adversarial
+   * refutes BEFORE assembly. When present at seed they are persisted as the audit
+   * sidecar (relevance-provenance.json) so the skip-cause stays diagnosable: assembly
+   * discards whether a kept-relevant category was a proposed-skip-then-refuted (§5-3)
+   * case. Seed-only, optional; absent → no sidecar written (no gate = no record, ac-3).
+   */
+  rawRelevance?: {
+    judgments: readonly RawRelevanceJudgment[];
+    refutes: readonly RelevanceRefute[];
+  };
 }): Promise<NextCoverageNodeResult> {
   const { repoRoot, workItemId } = args;
   const store = new CoverageStore(repoRoot);
@@ -196,6 +213,24 @@ export async function nextCoverageNode(args: {
       ...(args.intensity ? { intensity: args.intensity } : {}),
     };
     await store.writeMap(workItemId, map);
+    // wi_26062227h: when the relevance gate ran, persist its raw input + structural cost
+    // tally as an audit sidecar. Done at seed only (the gate is seed-only) and only when
+    // rawRelevance is present, so absence unambiguously means "no gate" (ac-3).
+    if (args.rawRelevance) {
+      const categoryNodes = map.nodes.filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX));
+      const skipped = categoryNodes.filter((n) => n.state === 'out_of_scope').length;
+      await store.writeRelevanceProvenance(workItemId, {
+        schema_version: '0.1.0',
+        work_item_id: workItemId,
+        judgments: [...args.rawRelevance.judgments],
+        refutes: [...args.rawRelevance.refutes],
+        tally: {
+          seeded: categoryNodes.length,
+          skipped,
+          relevant: categoryNodes.length - skipped,
+        },
+      });
+    }
   }
 
   const dryCounter = await readDryCounter(repoRoot, workItemId);

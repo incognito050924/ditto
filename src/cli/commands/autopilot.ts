@@ -1119,7 +1119,12 @@ function parseCoverageIntensity(raw: string | undefined): CoverageTier | undefin
  * live in `assembleRelevanceVerdicts`, not here. Undefined → no gate (every category
  * open, ac-7). Malformed → throws so the caller exits with a usage error.
  */
-function parseRelevance(raw: string | undefined): CategoryRelevanceVerdict[] | undefined {
+function parseRelevance(raw: string | undefined):
+  | {
+      verdicts: CategoryRelevanceVerdict[];
+      raw: { judgments: RawRelevanceJudgment[]; refutes: RelevanceRefute[] };
+    }
+  | undefined {
   if (raw === undefined) return undefined;
   let parsed: { judgments?: unknown; refutes?: unknown };
   try {
@@ -1132,10 +1137,12 @@ function parseRelevance(raw: string | undefined): CategoryRelevanceVerdict[] | u
       '--relevance.judgments must be an array of {id,relevant,reason?,residual_risk?}',
     );
   }
-  return assembleRelevanceVerdicts(
-    parsed.judgments as RawRelevanceJudgment[],
-    Array.isArray(parsed.refutes) ? (parsed.refutes as RelevanceRefute[]) : [],
-  );
+  const judgments = parsed.judgments as RawRelevanceJudgment[];
+  const refutes = Array.isArray(parsed.refutes) ? (parsed.refutes as RelevanceRefute[]) : [];
+  // Keep the raw judgments/refutes alongside the assembled verdicts: assembly (§5) is
+  // lossy (a refuted skip flips to relevant), so the raw is persisted at seed as the
+  // provenance sidecar for post-hoc skip-cause diagnosis (wi_26062227h).
+  return { verdicts: assembleRelevanceVerdicts(judgments, refutes), raw: { judgments, refutes } };
 }
 
 const autopilotCoverageNext = defineCommand({
@@ -1159,11 +1166,11 @@ const autopilotCoverageNext = defineCommand({
   run: async ({ args }) => {
     let format: ReturnType<typeof parseOutputFormat>;
     let intensity: CoverageTier | undefined;
-    let relevanceVerdicts: CategoryRelevanceVerdict[] | undefined;
+    let relevance: ReturnType<typeof parseRelevance>;
     try {
       format = parseOutputFormat(args.output);
       intensity = parseCoverageIntensity(args.coverageIntensity);
-      relevanceVerdicts = parseRelevance(args.relevance);
+      relevance = parseRelevance(args.relevance);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(USAGE_ERROR_EXIT);
@@ -1178,7 +1185,9 @@ const autopilotCoverageNext = defineCommand({
         seedCategories: farFieldCategoriesEnabled(),
         // §5 (wi_260625l0v): relevance gate verdicts pre-close irrelevant categories
         // at seed (assembled from the host's grounded judgments + adversarial refutes).
-        ...(relevanceVerdicts ? { relevanceVerdicts } : {}),
+        ...(relevance ? { relevanceVerdicts: relevance.verdicts } : {}),
+        // wi_26062227h: raw judgments/refutes persisted at seed as the provenance sidecar.
+        ...(relevance ? { rawRelevance: relevance.raw } : {}),
         // ac-4: explicit user override wins over the stakes-derived/standard tier.
         ...(intensity ? { intensity } : {}),
       });

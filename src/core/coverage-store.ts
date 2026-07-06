@@ -1,5 +1,10 @@
 import { join, relative } from 'node:path';
-import { type CoverageMap, coverageMap } from '~/schemas/coverage';
+import {
+  type CoverageMap,
+  type RelevanceProvenance,
+  coverageMap,
+  relevanceProvenance,
+} from '~/schemas/coverage';
 import { localDir } from './ditto-paths';
 import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
 
@@ -27,6 +32,10 @@ export class CoverageStore {
 
   private intentDialogPath(workItemId: string): string {
     return join(this.dir(workItemId), 'intent-dialog.md');
+  }
+
+  private provenancePath(workItemId: string): string {
+    return join(this.dir(workItemId), 'relevance-provenance.json');
   }
 
   /** True once a coverage sweep has produced coverage.json for this work item. */
@@ -66,5 +75,27 @@ export class CoverageStore {
   async writeIntentDialog(workItemId: string, markdown: string): Promise<void> {
     await ensureDir(this.dir(workItemId));
     await atomicWriteText(this.intentDialogPath(workItemId), markdown);
+  }
+
+  /** True once the relevance gate has written its provenance sidecar (wi_26062227h). */
+  async hasRelevanceProvenance(workItemId: string): Promise<boolean> {
+    return Bun.file(this.provenancePath(workItemId)).exists();
+  }
+
+  async getRelevanceProvenance(workItemId: string): Promise<RelevanceProvenance> {
+    return readJson(this.provenancePath(workItemId), relevanceProvenance);
+  }
+
+  /**
+   * Persist the relevance gate's raw judgments/refutes + structural cost tally at seed
+   * (wi_26062227h). Written ONLY when the gate ran (--relevance passed) so absence means
+   * "no gate", not "lost record" (ac-3). Validated + atomic, mirroring writeMap.
+   */
+  async writeRelevanceProvenance(
+    workItemId: string,
+    provenance: RelevanceProvenance,
+  ): Promise<RelevanceProvenance> {
+    await ensureDir(this.dir(workItemId));
+    return writeJson(this.provenancePath(workItemId), relevanceProvenance, provenance);
   }
 }
