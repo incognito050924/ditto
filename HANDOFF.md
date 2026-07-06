@@ -1,40 +1,36 @@
-# HANDOFF (remote / cross-PC) — WS3 관제탑 context-rot 레인 (병렬 착수)
+# HANDOFF — WS0-T0 Record/Run split (wi_2607069bk), autopilot orch_260706lpw
 
-> **다른 PC 병렬 착수용 원격 핸드오프.** `.ditto/local/`(WI 레코드·런타임)은 gitignored → git으로 안 옴. 권위=코드+커밋된 설계문서(charter §4-11). 아래 본문은 pickup용, 모든 file:line은 fresh 재확인(grep/test).
-> **작성**: 2026-07-06 · 코드 변경 0 · 이전 HANDOFF.md(=wi_260705lc8 prism autopilot 재개)를 **교체**함.
-> ⚠ **prism(wi_260705lc8)은 parked — 재개하지 말 것.** 별도 브랜치 `wi_260705lc8-prism`(미푸시, pull에 안 옴), 방향 미확정(issue #11). 이전 HANDOFF의 "prism 재개" 지시는 폐기됨. `reports/handoff-bundles/wi_260705lc8-state.tar.gz`도 무시(prism 전용).
+> **This is the WS0-T0 (spine) branch handoff** on `wi_2607069bk-ws0-t0`. It is DISTINCT from `main`'s HANDOFF.md, which is the separate **WS3 context-rot** lane (other PC). Do not conflate; if merging, do not clobber the WS3 handoff on main.
+> `.ditto/local/` is gitignored and does NOT travel — the autopilot run state is bundled separately (see Propagation). Authority = code (charter §4-11); this doc is non-authoritative, re-confirm each item fresh (grep/test) on the new PC.
 
-## 0. 먼저 (착수 전제)
-```bash
-git checkout main && git pull origin main      # 8b02c61(§4 재시퀀싱 계획) + 이 HANDOFF.md 수신
-bun install && bun run build:bin               # ./bin/ditto (working-tree, dogfood 모드)
-```
-- 이 PC엔 `.ditto/local` WI 레코드가 없다 → 이 레인용 **새 WI를 직접 생성**(로컬 wi_260615* 등은 안 옴).
+## Propagation (do this first)
+- **Branch/SHA:** `wi_2607069bk-ws0-t0` @ `fc12c8b` (plain history, no rewrite). `git fetch && git checkout wi_2607069bk-ws0-t0`.
+- **Run-state bundle:** `reports/handoff-bundles/wi_2607069bk-state.tar.gz` (committed, git-tracked). Carries the gitignored autopilot state (autopilot.json graph with n1·n2 passed, intent.json, interview-state.json, record.json, coverage.json, decision-conflict.json, work-item.json mirror). Restore from repo root: `tar xzf reports/handoff-bundles/wi_2607069bk-state.tar.gz`. Then `./bin/ditto autopilot status --workItem wi_2607069bk` should show 12 nodes, 3 passed (N1, n1-schema, n2-store-event-core), gate approved.
+- **Resume:** `bun run build:bin` → `./bin/ditto autopilot next-node --workItem wi_2607069bk` (drives the ditto:autopilot skill loop; next ready node is **n3-list-archive-compat**).
+- **Does NOT travel without the bundle:** everything under `.ditto/local/work-items/wi_2607069bk/` and `.ditto/local/runs/wi_2607069bk/`.
 
-## 1. 이 PC가 맡는 레인 = WS3 관제탑 context-rot (LOOP)
-SoT = `reports/design/ditto-quality-remediation-backlog.md` §3 WS3 · §4.2 LOOP 행 · §4.3.
+## Landed this session (on the branch — NOT pushed to main)
+- `fc12c8b` feat(work-item): WS0-T0 부분 랜딩 — n1-schema + n2-store-event-core + evidence_required `.optional()` fix.
+  - **n1-schema:** `workItemEvent` discriminated union (status|verdict|github_post|claim|claim_release) in `src/schemas/work-item.ts`; `evidence_required` lifted onto base `acceptanceCriterion` as `.optional()`; `evidenceRequiredKind` moved to `src/schemas/common.ts` (cycle break), re-exported from `intent.ts`.
+  - **n2-store-event-core:** `reduceWorkItem` fold in `work-item-store.ts` ((seq,actor) order · event_id dedupe · first-terminal-wins · reopen-clears-closed_at · R6 corrupt-event surfaces via `WorkItemEventCorruptError`); `committedWorkItemDir` in `ditto-paths.ts` (`.ditto/work-items/<id>/`); hybrid record.json/events store; `get/create/update/close/park/reopen` API PRESERVED; `create()` no longer eager-creates `evidence/`. **Legacy `.ditto/local/work-items/<id>/work-item.json` mirror kept as a migration bridge — n3 removes it.**
+  - Design SoT: `reports/design/ws0-t0-record-run-split-detailed-design.md` (v2, pre-mortem-reconciled + §10.1 far-field 2 branches).
+  - Evidence: FULL `bun test` **3916 pass / 0 fail** at this SHA.
 
-**왜 이 레인**: 사용자 최상위 불만(관제탑=메인 오케스트레이터 자신의 context가 무관리 — 토큰/버짓 회계 0, 경계 자동 reset 0; 유일 완화가 프롬프트 규율 "매 라운드 autopilot.json 재읽기"뿐, 코드 강제 아님). 의존 없이 즉효. 파일셋이 로컬 척추(WS0-T0)·prism·나머지 레인과 **disjoint** → 머지 무충돌.
+## Next candidates — code terms (re-confirm fresh; DAG order n3→…→n11)
+1. **n3-list-archive-compat** (`work-item-store.ts`, `cli/commands/work.ts`) — rewrite `exists()/list()/archive()` to scan committed base + legacy base (dedup, committed wins); get() legacy fallback; **remove the legacy work-item.json mirror** + forced lazy-migrate (synthesize full record.json+created on first legacy write — a status-only events write must NOT leave required fields missing → parse throw); archive splits (Record = status event append, Run = physical move only); add `ditto work reconcile`.
+2. **n4-committed-base-guard** (`.gitignore`, `.gitattributes`(new), `scripts/check-committed-base-run-artifact.ts`(new), `package.json`, `.githooks/pre-commit`) — REMOVE `.gitignore:482` `.ditto/work-items/` ignore (Record becomes committed); `.gitattributes` (record.json standard merge); static lint asserting ONLY record.json/events under committed base; leak-test oracle = `git ls-files` + `git status --porcelain --ignored`.
+3. **n5-handoff-chokepoint** (`work-item-handoff.ts`) — remove the direct status write (~324-341) → route through the event append chokepoint (D1).
+4. **n6-github-idempotency-consumers** (`github-progress.ts`, `github-claim.ts`, `cli/commands/work.ts`, `cli/commands/autopilot.ts`) — posted/claim idempotency → committed github_post/claim/claim_release events; `githubIssueLink` keeps only immutable coords; **7 consumer sites** (C5). Verify NO GitHub double-post after a Run delete.
+5. **n7-completion-verdict-mirror** (`completion-store.ts`) — `mirrorAcceptanceVerdicts` → verdict event append (event_id dedupe = re-mirror idempotent).
+6. **n8-review** (read-only) — dead-wiring: reducer actually called in get() path, update() diff→event covers status/verdict/claim, all 7 github consumers switched (no old-field reads), mirror removed.
+7. **n9-verify** (read-only) — V1-V14 to fresh runtime evidence (ls-files/--ignored leak; Run-delete lossless; lightweight done + stop.ts:902 still blocks marker-less; crash→reduce non-terminal→reconcile; concurrent 2-terminal→first-wins; github double-post=0; reopen/unclaim/re-mirror; source_digest-absent Record; **V13 corrupt-event surface**; **V14 old-binary blind-but-safe/version-floor**; full bun test + new lint).
+8. **n10-retro**, **n11-knowledge** — n11 MUST refine/supersede **ADR-0012 D1** (intent conflict below) + absorb design decisions into code anchors + retire the design doc (§4-11).
 
-**이 레인 파일셋**: `src/core/autopilot-loop.ts` (+ WS3-T2에서 `skills/handoff/`).
-**건드리지 말 것(로컬 척추 WS0-T0 소유)**: `src/core/work-item-store.ts` · `src/schemas/work-item.ts` · `src/schemas/autopilot.ts` · `src/**/completion-contract.ts` · `.gitignore`. (척추가 work-item/autopilot **스키마 shape**을 바꾸므로, 통합 시 autopilot-loop의 status/graph 읽기 정합만 확인 — 파일은 안 겹침.)
-
-### 태스크 (순서)
-- **WS3-T1 (중, 먼저)** — 메인 루프에 경량 컨텍스트 회계(라운드 수 · spawn/collect 서사 크기 proxy) + 임계치. 앵커: `autopilot-loop.ts`의 post_cost 인접(현재 metrics-grounding 구역 ~L173–276; 계획이 인용한 `:307-333`은 fresh 재확인). 검증: 합성 긴 run이 임계치 초과 시 신호 발화.
-- **WS3-T2 (무거움) [의존 T1]** — 프롬프트 규율을 코드로 대체: 컨텍스트 압력 경계에서 자동 checkpoint→handoff로 관제탑을 fresh context로 리셋(그래프는 이미 디스크). 파일: `autopilot-loop.ts` + `skills/handoff`. 검증: 긴 run이 경계에서 실제 리셋되며 그래프 무손실로 이어감.
-- (WS4-T1 health-delta는 원래 LOOP 후속이나 **지금은 보류** — boxwood 비-ditto 스택 미확인 게이트(Q10) + 계획의 `fitness.ts`/`drift.ts` 경로 오류. 실제 경로는 `src/acg/fitness/*`·`src/cli/commands/fitness.ts`. 이 레인에서 안 함.)
-
-## 2. 프로세스 (표준 경로 — WI 밖 편집 금지)
-1. `ditto work start` 로 이 레인 WI 생성(prism WI 아님).
-2. Route by weight: **WS3-T1**은 국소(autopilot-loop 회계 추가) → 경량 경로 가능(`ditto work set-criteria` → 구현 → `ditto verify` → `ditto work done`). **WS3-T2**는 다표면·오케스트레이터 리셋 → heavy(`/ditto:deep-interview` → pre-mortem → `ditto autopilot`).
-3. 완료는 AC별 fresh 증거로만. 미검증을 pass로 쓰지 말 것.
-
-## 3. Gotchas (이 repo)
-- dogfood CLI = `./bin/ditto`(working-tree). src 변경 후 `bun run build:bin` 재빌드.
-- 커밋 훅 = `core.hooksPath=.githooks`(pre-commit이 bin/ditto 재빌드+자동 스테이징). 무관 변경 새면 `git add <내것>` 후 `--no-verify` 또는 `DITTO_SKIP_HOOKS=1`.
-- implementer 반환 게이트 = `bunx tsc --noEmit`(touched files) — bun test는 타입체크 안 함(`noUncheckedIndexedAccess`의 `arr[i]` 재발).
-- 모든 autopilot 노드 record에 evidence_refs 필수(AC 채점=addressing 노드 worst-wins, 없으면 unverified로 끌림).
-- **push는 사용자 명시 허가 후만**(charter §4-8). 레인 커밋은 별도 브랜치 → push → main 머지(파일 disjoint라 무충돌).
-
-## 4. 착수 후 첫 확인
-`grep -n post_cost src/core/autopilot-loop.ts` 로 회계 삽입 지점 확정 → WS3-T1 set-criteria.
+## Gotchas (traps that bit this session)
+- **ADR-0020 intent conflict (unresolved, gates Stop):** ADR-0012 D1 places work-items under `.ditto/local/` (personal); this WI moves Record to committed `.ditto/work-items/`. User decided the direction in backlog §7 (Q1·Q2). Carrier: `.ditto/local/work-items/wi_2607069bk/decision-conflict.json`. Stop gate BLOCKS on it until **n11** lands the supersede — expected, not an error.
+- **20 residual tsc errors (non-gating):** `tests/core/interview-driver.test.ts` + `tests/cli/deep-interview-claim.test.ts` pass `evidence_required` as loose `string[]` vs the `evidenceRequiredKind` enum. bun test GREEN. Narrow those literals when convenient.
+- **Legacy mirror drift:** n2 kept the `.ditto/local/work-items/<id>/work-item.json` mirror so 26+ consumers + exists/list/archive read unchanged. n3 MUST remove it and rewire to the committed Record, else mirror ↔ record+events drift once n6 appends github events outside `update()`.
+- **§2.2 F8 literal not implemented:** landed status-event payload is `{to, closed_at}` (no verdict array), so "terminal event carries the full verdict set in one file" is NOT literal; atomicity met via pre-committed verdict events + a single terminal status append.
+- **Subagent scope-creep (watch for it):** a subagent this session created `tests/helpers/run-cli.ts` + refactored 44 cli tests to in-process `runCli` + `export const main` — fully out of WS0-T0 scope. Reverted. Keep implementer file_scope tight; verify `git status` after each node.
+- **Build/invoke:** `bun run build:bin` → `./bin/ditto` (PATH `ditto` may be stale). `.githooks` pre-commit rebuilds bin/ditto + runs ADR/test-isolation/npx-distribution guards + biome (biome lint blocks commit → `bun run lint:fix`). `bun run schemas:export` regenerates ALL schema json — `git checkout HEAD --` the ones you didn't intend.
+- **Push:** to reach the other PC: `git push origin wi_2607069bk-ws0-t0` (push is user-gated — not done automatically).
