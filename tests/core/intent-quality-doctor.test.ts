@@ -5,7 +5,7 @@ import type { WorkItemSummary } from '~/core/work-item-store';
 import type { Autopilot } from '~/schemas/autopilot';
 import type { IntentMetric } from '~/schemas/intent-metric';
 import type { InterviewState } from '~/schemas/interview-state';
-import type { TechSpecRound } from '~/schemas/tech-spec-round';
+import type { QuestionRound } from '~/schemas/question-round';
 
 function summary(id: string, over: Partial<WorkItemSummary> = {}): WorkItemSummary {
   return {
@@ -56,7 +56,7 @@ function driftMetric(hops: ('H1' | 'H2' | 'H3')[]): IntentMetric {
   };
 }
 
-function techRound(over: Partial<TechSpecRound> = {}): TechSpecRound {
+function questionRoundFixture(over: Partial<QuestionRound> = {}): QuestionRound {
   return {
     ts: '2026-06-19T05:00:00.000Z',
     work_item_id: 'wi_aaaaaaaa',
@@ -72,7 +72,7 @@ function techRound(over: Partial<TechSpecRound> = {}): TechSpecRound {
     ],
     all_scored: [],
     ...over,
-  } as TechSpecRound;
+  } as QuestionRound;
 }
 
 function deps(over: Partial<IntentQualityDeps> = {}): IntentQualityDeps {
@@ -83,7 +83,7 @@ function deps(over: Partial<IntentQualityDeps> = {}): IntentQualityDeps {
     readDecisions: async () => [],
     countHandoffRounds: async () => 0,
     readMetrics: async () => [],
-    readTechSpecRounds: async () => [],
+    readQuestionRounds: async () => [],
     ...over,
   };
 }
@@ -198,8 +198,8 @@ describe('collectIntentQualityReport', () => {
     expect(report.correlation.every((b) => b.questions_range === null)).toBe(true);
   });
 
-  test('tech-spec question-value signal maps onto the row (증분 3 — 점수 소비)', async () => {
-    const av = (v: number): TechSpecRound['selected'] => [
+  test('question-value signal maps onto the row (증분 3 — 점수 소비)', async () => {
+    const av = (v: number): QuestionRound['selected'] => [
       {
         text: 'q',
         property: 'blind-spot',
@@ -209,37 +209,39 @@ describe('collectIntentQualityReport', () => {
     const report = await collectIntentQualityReport(
       deps({
         listWorkItems: async () => [summary('wi_aaaaaaaa')],
-        readTechSpecRounds: async () => [
-          techRound({ round: 1, dry: false, selected: av(0.8) }),
-          techRound({ round: 2, dry: false, selected: av(0.4) }),
+        readQuestionRounds: async () => [
+          questionRoundFixture({ round: 1, dry: false, selected: av(0.8) }),
+          questionRoundFixture({ round: 2, dry: false, selected: av(0.4) }),
         ],
       }),
     );
     const row = report.rows[0];
-    expect(row.tech_spec_rounds).toBe(2);
-    expect(row.tech_spec_selected).toBe(2);
-    expect(row.tech_spec_dry_rounds).toBe(0);
-    expect(row.tech_spec_mean_answer_value).toBeCloseTo(0.6, 5); // (0.8 + 0.4)/2
-    expect(report.totals.total_tech_spec_rounds).toBe(2);
+    expect(row.question_rounds).toBe(2);
+    expect(row.question_selected).toBe(2);
+    expect(row.question_dry_rounds).toBe(0);
+    expect(row.question_mean_answer_value).toBeCloseTo(0.6, 5); // (0.8 + 0.4)/2
+    expect(report.totals.total_question_rounds).toBe(2);
   });
 
-  test('dry rounds counted; absent tech-spec rounds → zeroed signal, null mean (fail-open)', async () => {
+  test('dry rounds counted; absent question rounds → zeroed signal, null mean (fail-open)', async () => {
     const withDry = await collectIntentQualityReport(
       deps({
         listWorkItems: async () => [summary('wi_aaaaaaaa')],
-        readTechSpecRounds: async () => [techRound({ round: 1, dry: true, selected: [] })],
+        readQuestionRounds: async () => [
+          questionRoundFixture({ round: 1, dry: true, selected: [] }),
+        ],
       }),
     );
-    expect(withDry.rows[0].tech_spec_rounds).toBe(1);
-    expect(withDry.rows[0].tech_spec_dry_rounds).toBe(1);
-    expect(withDry.rows[0].tech_spec_selected).toBe(0);
-    expect(withDry.rows[0].tech_spec_mean_answer_value).toBeNull();
+    expect(withDry.rows[0].question_rounds).toBe(1);
+    expect(withDry.rows[0].question_dry_rounds).toBe(1);
+    expect(withDry.rows[0].question_selected).toBe(0);
+    expect(withDry.rows[0].question_mean_answer_value).toBeNull();
 
     const absent = await collectIntentQualityReport(
       deps({ listWorkItems: async () => [summary('wi_bbbbbbbb')] }),
     );
-    expect(absent.rows[0].tech_spec_rounds).toBe(0);
-    expect(absent.rows[0].tech_spec_mean_answer_value).toBeNull();
-    expect(absent.totals.total_tech_spec_rounds).toBe(0);
+    expect(absent.rows[0].question_rounds).toBe(0);
+    expect(absent.rows[0].question_mean_answer_value).toBeNull();
+    expect(absent.totals.total_question_rounds).toBe(0);
   });
 });

@@ -16,10 +16,10 @@ import { JourneyAuthoringStore } from './store';
 
 /**
  * Journey-authoring state machine (start → record → finalize), the shared core of
- * both surfaces (① story→journey→E2E, ② journey→E2E). Mirrors the tech-spec
- * start/recordSection/finalize shape: a per-work-item working buffer that finalize
+ * both surfaces (① story→journey→E2E, ② journey→E2E). Mirrors a
+ * start/record-section/finalize shape: a per-work-item working buffer that finalize
  * compiles into durable per-entity artifacts. finalize is fail-closed — every
- * conflict/reference gate runs BEFORE any file is written (tech-spec invariant).
+ * conflict/reference gate runs BEFORE any file is written (fail-closed invariant).
  */
 
 /** A jrn- id was already taken by a journey this session does not own (ac-4). */

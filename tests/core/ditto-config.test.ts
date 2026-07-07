@@ -26,9 +26,9 @@ describe('readQuestionConfigDefaults — per-user .ditto/local/config.json (wi_2
     await writeFile(join(dir, 'config.json'), content, 'utf8');
   }
 
-  test('reads tech_spec.question back from the config file', async () => {
+  test('reads prism.question back from the config file', async () => {
     await writeConfig(
-      JSON.stringify({ tech_spec: { question: { performance: 'exhaustive', generators: 5 } } }),
+      JSON.stringify({ prism: { question: { performance: 'exhaustive', generators: 5 } } }),
     );
     expect(await readQuestionConfigDefaults(repo)).toEqual({
       performance: 'exhaustive',
@@ -47,12 +47,12 @@ describe('readQuestionConfigDefaults — per-user .ditto/local/config.json (wi_2
 
   test('schema-invalid (out-of-bounds) → {} (fail-open)', async () => {
     // generators 99 violates the 1..6 bound → whole config rejected, returns {}
-    await writeConfig(JSON.stringify({ tech_spec: { question: { generators: 99 } } }));
+    await writeConfig(JSON.stringify({ prism: { question: { generators: 99 } } }));
     expect(await readQuestionConfigDefaults(repo)).toEqual({});
   });
 
-  test('config present but no tech_spec.question block → {}', async () => {
-    await writeConfig(JSON.stringify({ tech_spec: {} }));
+  test('config present but no prism.question block → {}', async () => {
+    await writeConfig(JSON.stringify({ prism: {} }));
     expect(await readQuestionConfigDefaults(repo)).toEqual({});
   });
 
@@ -65,7 +65,7 @@ describe('readQuestionConfigDefaults — per-user .ditto/local/config.json (wi_2
     await readQuestionConfigDefaults(repo, onMalformed);
     expect(calls).toBe(0);
     // valid config → no warning
-    await writeConfig(JSON.stringify({ tech_spec: { question: { generators: 3 } } }));
+    await writeConfig(JSON.stringify({ prism: { question: { generators: 3 } } }));
     await readQuestionConfigDefaults(repo, onMalformed);
     expect(calls).toBe(0);
     // present + invalid JSON → warning (fail-open still returns {})
@@ -73,7 +73,7 @@ describe('readQuestionConfigDefaults — per-user .ditto/local/config.json (wi_2
     expect(await readQuestionConfigDefaults(repo, onMalformed)).toEqual({});
     expect(calls).toBe(1);
     // present + schema-invalid → warning
-    await writeConfig(JSON.stringify({ tech_spec: { question: { generators: 99 } } }));
+    await writeConfig(JSON.stringify({ prism: { question: { generators: 99 } } }));
     await readQuestionConfigDefaults(repo, onMalformed);
     expect(calls).toBe(2);
   });
@@ -126,7 +126,7 @@ describe('readDeepInterviewConfigDefaults — deep_interview block (wi_260621p6a
   });
 
   test('config present but no deep_interview block → {}', async () => {
-    await writeConfig(JSON.stringify({ tech_spec: { question: { generators: 3 } } }));
+    await writeConfig(JSON.stringify({ prism: { question: { generators: 3 } } }));
     expect(await readDeepInterviewConfigDefaults(repo)).toEqual({});
   });
 
@@ -187,16 +187,35 @@ describe('readGithubConfig / writeGithubConfig — github block (wi_260628d79)',
     expect(second).toBe(first);
   });
 
-  test('writing github PRESERVES an existing tech_spec block (single config store)', async () => {
+  test('writing github PRESERVES an existing prism block (single config store)', async () => {
     const dir = join(repo, '.ditto', 'local');
     await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'config.json'),
+      JSON.stringify({ prism: { question: { generators: 3 } } }),
+      'utf8',
+    );
+    await writeGithubConfig(repo, { ...sample });
+    expect(await readQuestionConfigDefaults(repo)).toEqual({ generators: 3 });
+    expect(await readGithubConfig(repo)).toEqual({ ...sample });
+  });
+
+  test('writing github does NOT silently strip a legacy sibling block the schema no longer declares (wi_260707oi1 DI-2)', async () => {
+    const dir = join(repo, '.ditto', 'local');
+    await mkdir(dir, { recursive: true });
+    // A legacy `tech_spec` block from the retired surface: unknown to the current
+    // schema, but must survive a github write rather than be dropped.
     await writeFile(
       join(dir, 'config.json'),
       JSON.stringify({ tech_spec: { question: { generators: 3 } } }),
       'utf8',
     );
     await writeGithubConfig(repo, { ...sample });
-    expect(await readQuestionConfigDefaults(repo)).toEqual({ generators: 3 });
+    const raw = JSON.parse(await Bun.file(join(dir, 'config.json')).text()) as Record<
+      string,
+      unknown
+    >;
+    expect(raw.tech_spec).toEqual({ question: { generators: 3 } });
     expect(await readGithubConfig(repo)).toEqual({ ...sample });
   });
 
@@ -253,10 +272,10 @@ describe('seedGithubConfigIfAbsent — bootstrap-once github seed (wi_260629vnt)
     expect(await readGithubConfig(repo)).toEqual({ ...backlog });
   });
 
-  test('config present but no github field → seeds, PRESERVES tech_spec/deep_interview siblings (ac-4)', async () => {
+  test('config present but no github field → seeds, PRESERVES prism/deep_interview siblings (ac-4)', async () => {
     await writeConfig(
       JSON.stringify({
-        tech_spec: { question: { generators: 3 } },
+        prism: { question: { generators: 3 } },
         deep_interview: { generators: 4 },
       }),
     );
@@ -290,7 +309,7 @@ describe('seedGithubConfigIfAbsent — bootstrap-once github seed (wi_260629vnt)
   });
 
   test('malformed JSON existing → fail-closed (no seed), onMalformed warns, file untouched (C1)', async () => {
-    const raw = '{ tech_spec is here but not valid json';
+    const raw = '{ prism is here but not valid json';
     await writeConfig(raw);
     let warned = 0;
     const r = await seedGithubConfigIfAbsent(repo, { ...backlog }, () => {
@@ -302,9 +321,9 @@ describe('seedGithubConfigIfAbsent — bootstrap-once github seed (wi_260629vnt)
     expect(await Bun.file(configPath()).text()).toBe(raw);
   });
 
-  test('schema-invalid existing (valid tech_spec + invalid github) → fail-closed, sibling preserved (C1)', async () => {
+  test('schema-invalid existing (valid prism + invalid github) → fail-closed, sibling preserved (C1)', async () => {
     const raw = JSON.stringify({
-      tech_spec: { question: { generators: 3 } },
+      prism: { question: { generators: 3 } },
       github: {
         project: { owner: 'o', number: 5 },
         status_map: { in_progress: 'x' },
@@ -318,7 +337,7 @@ describe('seedGithubConfigIfAbsent — bootstrap-once github seed (wi_260629vnt)
     });
     expect(r).toEqual({ seeded: false, reason: 'malformed' });
     expect(warned).toBe(1);
-    // tech_spec sibling NOT destroyed by a seed write — the whole file stays byte-identical.
+    // prism sibling NOT destroyed by a seed write — the whole file stays byte-identical.
     expect(await Bun.file(configPath()).text()).toBe(raw);
   });
 });

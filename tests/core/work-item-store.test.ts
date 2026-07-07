@@ -199,7 +199,7 @@ describe('WorkItemStore', () => {
     expect(await store.readMetrics(created.id)).toEqual([]);
   });
 
-  test('appendTechSpecRoundLine writes tech-spec-rounds.jsonl at the work-item root', async () => {
+  test('appendQuestionRoundLine writes question-rounds.jsonl at the work-item root', async () => {
     const created = await store.create(sampleInput());
     const line = JSON.stringify({
       ts: '2026-06-19T05:00:00.000Z',
@@ -210,19 +210,19 @@ describe('WorkItemStore', () => {
       all_scored: [],
       generator_count: 3,
     });
-    await store.appendTechSpecRoundLine(created.id, line);
+    await store.appendQuestionRoundLine(created.id, line);
     const rootPath = join(
       workDir,
       '.ditto',
       'local',
       'work-items',
       created.id,
-      'tech-spec-rounds.jsonl',
+      'question-rounds.jsonl',
     );
     expect(await Bun.file(rootPath).exists()).toBe(true);
   });
 
-  test('readTechSpecRounds round-trips appended lines and validates the schema', async () => {
+  test('readQuestionRounds round-trips appended lines and validates the schema', async () => {
     const created = await store.create(sampleInput());
     const mk = (round: number, dry: boolean) =>
       JSON.stringify({
@@ -242,18 +242,18 @@ describe('WorkItemStore', () => {
         all_scored: [],
         generator_count: 3,
       });
-    await store.appendTechSpecRoundLine(created.id, mk(1, false));
-    await store.appendTechSpecRoundLine(created.id, mk(2, true));
-    const rounds = await store.readTechSpecRounds(created.id);
+    await store.appendQuestionRoundLine(created.id, mk(1, false));
+    await store.appendQuestionRoundLine(created.id, mk(2, true));
+    const rounds = await store.readQuestionRounds(created.id);
     expect(rounds.length).toBe(2);
     expect(rounds[0]?.round).toBe(1);
     expect(rounds[0]?.selected[0]?.scores.answer_value).toBe(0.9);
     expect(rounds[1]?.dry).toBe(true);
   });
 
-  test('readTechSpecRounds returns empty when no rounds file exists', async () => {
+  test('readQuestionRounds returns empty when no rounds file exists', async () => {
     const created = await store.create(sampleInput());
-    expect(await store.readTechSpecRounds(created.id)).toEqual([]);
+    expect(await store.readQuestionRounds(created.id)).toEqual([]);
   });
 });
 

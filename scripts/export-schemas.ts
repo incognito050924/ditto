@@ -32,6 +32,7 @@ import { memoryEvent } from '~/schemas/memory-event';
 import { memoryGraphIr } from '~/schemas/memory-graph-ir';
 import { memoryProjectionManifest } from '~/schemas/memory-projection-manifest';
 import { memorySource } from '~/schemas/memory-source';
+import { prismIssueMap } from '~/schemas/prism';
 import { questionGate } from '~/schemas/question-gate';
 import { reviewerOutput } from '~/schemas/reviewer-output';
 import { runManifest } from '~/schemas/run-manifest';
@@ -58,6 +59,7 @@ export const schemaExports: ReadonlyArray<{ name: string; schema: ZodTypeAny }> 
   { name: 'intent', schema: intentContract },
   { name: 'intent-metric', schema: intentMetric },
   { name: 'question-gate', schema: questionGate },
+  { name: 'prism-issue-map', schema: prismIssueMap },
   { name: 'interview-state', schema: interviewState },
   { name: 'autopilot', schema: autopilot },
   { name: 'dialectic', schema: dialectic },

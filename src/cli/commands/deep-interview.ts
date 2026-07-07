@@ -12,6 +12,7 @@ import {
   recordTurnPayload,
   startInterview,
 } from '~/core/interview-driver';
+import { finalizeFromDesignDoc } from '~/core/prism/finalize';
 import { questionContextCandidate, validateQuestionContext } from '~/core/question-context';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
@@ -567,6 +568,91 @@ const checkQuestionCmd = defineCommand({
   },
 });
 
+const finalizeFromDocCmd = defineCommand({
+  meta: {
+    name: 'finalize-from-doc',
+    description:
+      'Compile a confirmed prism/spec design document into intent.json THROUGH finalizeInterview, binding it by digest (prism → deep-interview compile)',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    doc: {
+      type: 'string',
+      description: 'Design doc path (default .ditto/specs/<wi>-design.md)',
+      required: false,
+    },
+    statement: {
+      type: 'string',
+      description: "The user's own words confirming the refined design (확정)",
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.statement || args.statement.trim().length === 0) {
+      writeError(
+        'finalize-from-doc requires --statement "<원문 확정>": the user confirmation is the 2차 gate half',
+      );
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const result = await finalizeFromDesignDoc(repoRoot, {
+        workItemId: args.workItem,
+        ...(args.doc ? { docPath: args.doc } : {}),
+        userConfirmation: { confirmed: true, statement: args.statement },
+      });
+      if (result.status === 'compile_rejected') {
+        writeError('design document did not compile — fix the compile-input sections and re-run:');
+        for (const r of result.reasons) writeError(`  - ${r}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (result.status === 'not_ready') {
+        writeError('interview is not ready; cannot finalize:');
+        for (const r of result.gate.reasons) writeError(`  - ${r}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (result.status === 'not_confirmed') {
+        writeError(
+          'readiness gate passed (1차) but the user confirmation is missing (2차 게이트) — pass --statement',
+        );
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (format === 'json') {
+        writeJson({
+          work_item_id: result.intent.work_item_id,
+          intent_path: `.ditto/local/work-items/${result.intent.work_item_id}/intent.json`,
+          source_digest: result.intent.source_digest,
+          autopilot_id: result.autopilot.autopilot_id,
+          acceptance_criteria: result.intent.acceptance_criteria.map((ac) => ac.id),
+        });
+      } else {
+        writeHuman(`Compiled design doc → intent for ${result.intent.work_item_id}`);
+        writeHuman(`  source_digest: ${result.intent.source_digest?.sha256 ?? '(none)'}`);
+        writeHuman(`  autopilot:     ${result.autopilot.autopilot_id}`);
+        writeHuman(
+          `  acceptance:    ${result.intent.acceptance_criteria.map((ac) => ac.id).join(', ')}`,
+        );
+      }
+    } catch (err) {
+      writeError(`finalize-from-doc failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const deepInterviewCommand = defineCommand({
   meta: {
     name: 'deep-interview',
@@ -581,5 +667,6 @@ export const deepInterviewCommand = defineCommand({
     'project-coverage': projectCoverageCmd,
     premortem: premortemCmd,
     finalize: finalizeCmd,
+    'finalize-from-doc': finalizeFromDocCmd,
   },
 });

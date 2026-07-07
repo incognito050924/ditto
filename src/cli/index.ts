@@ -25,6 +25,7 @@ import { journeyAuthorCommand } from './commands/journey-author';
 import { knowledgeCommand } from './commands/knowledge';
 import { memoryCommand } from './commands/memory';
 import { modeCommand } from './commands/mode';
+import { prismCommand } from './commands/prism';
 import { pushGateCommand } from './commands/push-gate';
 import { refactorCommand } from './commands/refactor';
 import { reviewCommand } from './commands/review';
@@ -32,7 +33,6 @@ import { runCommand } from './commands/run';
 import { semanticCommand } from './commands/semantic';
 import { setupCommand } from './commands/setup';
 import { teardownCommand } from './commands/teardown';
-import { techSpecCommand } from './commands/tech-spec';
 import { verifyCommand } from './commands/verify';
 import { workCommand } from './commands/work';
 import { workspaceCommand } from './commands/workspace';
@@ -55,6 +55,7 @@ const main = defineCommand({
     workspace: workspaceCommand,
     'push-gate': pushGateCommand,
     mode: modeCommand,
+    prism: prismCommand,
     run: runCommand,
     verify: verifyCommand,
     doctor: doctorCommand,
@@ -65,7 +66,6 @@ const main = defineCommand({
     hook: hookCommand,
     'decision-conflict': decisionConflictCommand,
     'deep-interview': deepInterviewCommand,
-    'tech-spec': techSpecCommand,
     e2e: e2eCommand,
     'journey-author': journeyAuthorCommand,
     knowledge: knowledgeCommand,

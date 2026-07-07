@@ -506,7 +506,7 @@ const intentQualityCommand = defineCommand({
           writeHuman(
             `${r.work_item_id}\t${r.questions_asked ?? '-'}\t${r.closure_mode ?? '-'}\t${
               r.readiness_score ?? '-'
-            }\t${r.fix_nodes}\t${r.rework_attempts}\t${r.retry_switch_decisions}\t${r.handoff_rounds}\t${r.drift_events}\t${r.post_cost}\t${r.tech_spec_rounds}\t${r.tech_spec_mean_answer_value ?? '-'}`,
+            }\t${r.fix_nodes}\t${r.rework_attempts}\t${r.retry_switch_decisions}\t${r.handoff_rounds}\t${r.drift_events}\t${r.post_cost}\t${r.question_rounds}\t${r.question_mean_answer_value ?? '-'}`,
           );
         }
         // D4 correlation only makes sense over the full interviewed set, so it is

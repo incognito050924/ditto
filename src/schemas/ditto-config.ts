@@ -3,12 +3,12 @@ import { z } from 'zod';
 /**
  * Per-developer ditto config (tier ③) — `.ditto/local/config.json`, gitignored.
  *
- * `tech_spec.question` carries per-option defaults for the §6-6
- * question-elicitation tuning (wi_260619jmu). It is RawQuestionConfig-shaped:
- * every field optional, same bounds as the CLI flags. When a CLI flag is absent
- * the config value is used; an explicit CLI flag still wins. Fail-open belongs at
- * the READER (a broken config returns `{}`), so the schema keeps the strict
- * bounds rather than loosening them.
+ * `prism.question` carries per-option defaults for the question-elicitation
+ * tuning (wi_260619jmu, renamed from the retired authoring surface's config
+ * block in wi_260707oi1). Every field optional, same bounds as the CLI flags. When
+ * a CLI flag is absent the config value is used; an explicit CLI flag still wins.
+ * Fail-open belongs at the READER (a broken config returns `{}`), so the schema
+ * keeps the strict bounds rather than loosening them.
  */
 export const dittoConfigQuestion = z
   .object({
@@ -22,15 +22,15 @@ export const dittoConfigQuestion = z
     threshold: z.number().min(0).max(1).optional(),
     granularity: z.enum(['low', 'medium', 'high']).optional(),
   })
-  .describe('Per-user defaults for §6-6 question-elicitation (RawQuestionConfig-shaped)');
+  .describe('Per-user defaults for question-elicitation (every field optional, CLI-flag-shaped)');
 
 /**
  * Per-developer defaults for the deep-interview lifecycle (`deep_interview` block).
  * Each field optional, same bounds as the `ditto deep-interview start` CLI flags
  * (threshold ∈ [0,1], question_cap a positive int, generators a positive int).
  * When a CLI flag is absent the config value is used; an explicit CLI flag wins.
- * Distinct from `tech_spec.question` — deep-interview and tech-spec are separate
- * surfaces with their own option sets, so they do not share a config block.
+ * Distinct from `prism.question` — deep-interview and the intent-authoring surface
+ * are separate surfaces with their own option sets, so they do not share a block.
  */
 export const dittoConfigDeepInterview = z
   .object({
@@ -64,7 +64,7 @@ export const dittoConfigGithub = z
     // than extending the terminal status_map enum above: a non-terminal key added to
     // that closed enum makes an OLD/stale-bundle reader reject the WHOLE github config
     // (zod), and the fail-open reader then drops the entire github block AND poisons
-    // sibling tech_spec/deep_interview defaults. As a separate field with OPEN string
+    // sibling prism/deep_interview defaults. As a separate field with OPEN string
     // keys, an old reader simply STRIPS the unknown key (z.object is non-strict) and a
     // future non-terminal key is just carried — per-key degradation, never a
     // whole-config drop. The writer validates which keys it emits (in_progress,
@@ -76,7 +76,7 @@ export const dittoConfigGithub = z
 
 export const dittoConfig = z
   .object({
-    tech_spec: z
+    prism: z
       .object({
         question: dittoConfigQuestion.optional(),
       })

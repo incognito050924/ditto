@@ -2,7 +2,7 @@ import type { Autopilot } from '~/schemas/autopilot';
 import type { ClosureMode } from '~/schemas/convergence';
 import type { IntentMetric } from '~/schemas/intent-metric';
 import type { InterviewState } from '~/schemas/interview-state';
-import type { TechSpecRound } from '~/schemas/tech-spec-round';
+import type { QuestionRound } from '~/schemas/question-round';
 import { type AutopilotDecision, AutopilotStore } from './autopilot-store';
 import { HandoffStore } from './handoff-store';
 import { InterviewStore } from './interview-store';
@@ -48,17 +48,17 @@ export interface IntentQualityRow {
   /** Combined post-intent cost: drift + rework + retries + handoffs. */
   post_cost: number;
   /**
-   * tech-spec question-VALUE signal (증분 3), additive next to the deep-interview
-   * question-COUNT signal — read from tech-spec-rounds.jsonl, never folded into
+   * question-VALUE signal (증분 3), additive next to the deep-interview
+   * question-COUNT signal — read from question-rounds.jsonl, never folded into
    * post_cost or the correlation (those keep their deep-interview semantics).
    */
-  tech_spec_rounds: number;
+  question_rounds: number;
   /** Total questions selected across all recorded rounds. */
-  tech_spec_selected: number;
+  question_selected: number;
   /** Rounds the gate marked dry (no candidate above threshold). */
-  tech_spec_dry_rounds: number;
+  question_dry_rounds: number;
   /** Mean answer_value over selected questions; null when none were selected. */
-  tech_spec_mean_answer_value: number | null;
+  question_mean_answer_value: number | null;
 }
 
 export interface IntentQualityTotals {
@@ -70,7 +70,7 @@ export interface IntentQualityTotals {
   total_retry_switch_decisions: number;
   total_handoff_rounds: number;
   total_drift_events: number;
-  total_tech_spec_rounds: number;
+  total_question_rounds: number;
 }
 
 /** One questions-asked quantile bucket with its mean post-intent cost (D4). */
@@ -102,8 +102,8 @@ export interface IntentQualityDeps {
   countHandoffRounds(workItemId: string): Promise<number>;
   /** Read persisted intent-metric drift events (metrics.jsonl; empty when absent). */
   readMetrics(workItemId: string): Promise<IntentMetric[]>;
-  /** Read persisted tech-spec question rounds (tech-spec-rounds.jsonl; empty when absent). */
-  readTechSpecRounds(workItemId: string): Promise<TechSpecRound[]>;
+  /** Read persisted question rounds (question-rounds.jsonl; empty when absent). */
+  readQuestionRounds(workItemId: string): Promise<QuestionRound[]>;
 }
 
 /** Wire the real stores. Each reader is fail-open: a missing sidecar is null/0, never a throw. */
@@ -120,7 +120,7 @@ export function defaultIntentQualityDeps(repoRoot: string): IntentQualityDeps {
     countHandoffRounds: async (id) =>
       (await handoffs.listActive()).filter((h) => h.handoff.work_item_id === id).length,
     readMetrics: (id) => workItems.readMetrics(id),
-    readTechSpecRounds: (id) => workItems.readTechSpecRounds(id),
+    readQuestionRounds: (id) => workItems.readQuestionRounds(id),
   };
 }
 
@@ -131,7 +131,7 @@ function buildRow(
   decisions: AutopilotDecision[],
   handoffRounds: number,
   driftEvents: number,
-  rounds: TechSpecRound[],
+  rounds: QuestionRound[],
 ): IntentQualityRow {
   const fixNodes = graph ? graph.nodes.filter((n) => n.kind === 'fix') : [];
   const reworkAttempts = graph
@@ -156,10 +156,10 @@ function buildRow(
     handoff_rounds: handoffRounds,
     drift_events: driftEvents,
     post_cost: driftEvents + reworkAttempts + retrySwitch + handoffRounds,
-    tech_spec_rounds: rounds.length,
-    tech_spec_selected: selectedScores.length,
-    tech_spec_dry_rounds: rounds.filter((r) => r.dry).length,
-    tech_spec_mean_answer_value: selectedScores.length === 0 ? null : mean(selectedScores),
+    question_rounds: rounds.length,
+    question_selected: selectedScores.length,
+    question_dry_rounds: rounds.filter((r) => r.dry).length,
+    question_mean_answer_value: selectedScores.length === 0 ? null : mean(selectedScores),
   };
 }
 
@@ -173,7 +173,7 @@ function totalsOf(rows: IntentQualityRow[]): IntentQualityTotals {
     total_retry_switch_decisions: rows.reduce((s, r) => s + r.retry_switch_decisions, 0),
     total_handoff_rounds: rows.reduce((s, r) => s + r.handoff_rounds, 0),
     total_drift_events: rows.reduce((s, r) => s + r.drift_events, 0),
-    total_tech_spec_rounds: rows.reduce((s, r) => s + r.tech_spec_rounds, 0),
+    total_question_rounds: rows.reduce((s, r) => s + r.question_rounds, 0),
   };
 }
 
@@ -224,7 +224,7 @@ export async function collectIntentQualityReport(
       deps.readDecisions(summary.id),
       deps.countHandoffRounds(summary.id),
       deps.readMetrics(summary.id),
-      deps.readTechSpecRounds(summary.id),
+      deps.readQuestionRounds(summary.id),
     ]);
     rows.push(
       buildRow(summary, interview, graph, decisions, handoffRounds, metrics.length, rounds),

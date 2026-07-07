@@ -2,19 +2,25 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { bootstrapAutopilot } from '~/core/autopilot-bootstrap';
 import { nextNode } from '~/core/autopilot-loop';
-import { finalizeTechSpec, finalizeTechSpecPayload, startTechSpec } from '~/core/tech-spec';
+import { IntentStore } from '~/core/intent-store';
+import { compileSpecDoc } from '~/core/spec-doc';
 import { WorkItemStore } from '~/core/work-item-store';
+import type { IntentContract } from '~/schemas/intent';
 
 /**
- * ac-6: finalize 이후 digest 범위(컴파일 입력 섹션)에 포함된 섹션이 수정되면
- * 불일치가 감지되어 autopilot 실행이 차단되고 재-finalize가 요구된다.
+ * ac-6: after finalize, if a section inside the digest range (the compile-input
+ * sections) is edited, the mismatch is detected, autopilot execution is blocked,
+ * and re-finalize is required. The digest freshness gate is surface-agnostic — it
+ * reuses the preserved spec-doc compiler; the fixture stamps intent.source_digest
+ * directly (no removed tech-spec surface).
  */
 
 const DOC_PATH = '.ditto/specs/demo.md';
 
 function specDoc(goals = '- 점수 API 제공'): string {
-  return `# 데모 — 테크스펙
+  return `# 데모 — 스펙 문서
 
 ## 2. 요약
 
@@ -55,6 +61,51 @@ async function writeDoc(content: string): Promise<void> {
   await writeFile(join(repo, DOC_PATH), content, 'utf8');
 }
 
+/**
+ * Compile the spec doc, write intent.json with source_digest, mirror AC into the
+ * work item, and bootstrap autopilot — the finalize essentials, minus the retired
+ * tech-spec state machine. Returns the finalize disposition string for assertions.
+ */
+async function finalizeFixture(): Promise<'finalized'> {
+  const doc = await Bun.file(join(repo, DOC_PATH)).text();
+  const compiled = compileSpecDoc(doc);
+  if (compiled.status !== 'compiled')
+    throw new Error(`fixture compile failed: ${compiled.reasons.join('; ')}`);
+  const items = new WorkItemStore(repo);
+  const workItem = await items.get(wiId);
+  const intent: IntentContract = {
+    schema_version: '0.1.0',
+    work_item_id: wiId,
+    source_request: workItem.source_request,
+    goal: compiled.fields.goal,
+    in_scope: compiled.fields.in_scope,
+    out_of_scope: compiled.fields.out_of_scope,
+    acceptance_criteria: compiled.fields.acceptance_criteria,
+    unknowns: compiled.fields.unknowns,
+    follow_up_candidates: [],
+    question_policy: 'ask_only_if_user_only_can_answer',
+    source_digest: { doc_path: DOC_PATH, sha256: compiled.digest },
+  };
+  const writtenIntent = await new IntentStore(repo).write(intent);
+  await items.update(wiId, (current) => ({
+    ...current,
+    acceptance_criteria: compiled.fields.acceptance_criteria.map((ac) => ({
+      id: ac.id,
+      statement: ac.statement,
+      verdict: ac.verdict,
+      evidence: ac.evidence,
+    })),
+    goal: compiled.fields.goal,
+  }));
+  const boot = await bootstrapAutopilot(repo, {
+    workItem: await items.get(wiId),
+    intent: writtenIntent,
+    risk: { non_local: false, irreversible: false, unaudited: false },
+  });
+  if (boot.status !== 'created') throw new Error(`fixture bootstrap failed: ${boot.status}`);
+  return 'finalized';
+}
+
 beforeEach(async () => {
   repo = await mkdtemp(join(tmpdir(), 'ditto-dg-'));
   const wi = await new WorkItemStore(repo).create({
@@ -65,14 +116,7 @@ beforeEach(async () => {
   });
   wiId = wi.id;
   await writeDoc(specDoc());
-  await startTechSpec(repo, { workItemId: wiId, docPath: DOC_PATH });
-  const res = await finalizeTechSpec(repo, {
-    workItemId: wiId,
-    payload: finalizeTechSpecPayload.parse({
-      user_confirmation: { confirmed: true, statement: '의도 일치 확인' },
-    }),
-  });
-  if (res.status !== 'finalized') throw new Error(`fixture finalize failed: ${res.status}`);
+  expect(await finalizeFixture()).toBe('finalized');
 });
 afterEach(async () => {
   await rm(repo, { recursive: true, force: true });
@@ -89,7 +133,7 @@ describe('autopilot digest freshness gate (ac-6)', () => {
     const res = await nextNode(repo, wiId);
     expect(res.action).toBe('blocked');
     if (res.action === 'blocked') {
-      expect(res.reason).toContain('tech-spec finalize');
+      expect(res.reason).toContain('deep-interview finalize');
     }
   });
 
@@ -108,13 +152,7 @@ describe('autopilot digest freshness gate (ac-6)', () => {
   test('re-finalize after the edit unblocks the loop', async () => {
     await writeDoc(specDoc('- 완전히 다른 목표'));
     expect((await nextNode(repo, wiId)).action).toBe('blocked');
-    const res = await finalizeTechSpec(repo, {
-      workItemId: wiId,
-      payload: finalizeTechSpecPayload.parse({
-        user_confirmation: { confirmed: true, statement: '변경 반영 확인' },
-      }),
-    });
-    expect(res.status).toBe('finalized');
+    expect(await finalizeFixture()).toBe('finalized');
     expect((await nextNode(repo, wiId)).action).not.toBe('blocked');
   });
 });

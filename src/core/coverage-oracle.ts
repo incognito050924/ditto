@@ -60,7 +60,7 @@ export type AbsenceCheckResult =
  * Containment gate over an untrusted repo-relative path (cleanup-scan:188-189
  * precedent + the pathspec-magic and traversal cases a claim can smuggle).
  */
-function containScopePath(
+export function containScopePath(
   p: string,
   repoRoot: string,
 ): { ok: true; abs: string } | { ok: false; detail: string } {

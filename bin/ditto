@@ -47,7 +47,7 @@ var __export = (target, all) => {
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = import.meta.require;
 
-// node_modules/consola/dist/chunks/prompt.mjs
+// ../../../../node_modules/consola/dist/chunks/prompt.mjs
 var exports_prompt = {};
 __export(exports_prompt, {
   prompt: () => prompt,
@@ -803,7 +803,7 @@ var init_prompt = __esm(() => {
   kCancel = Symbol.for("cancel");
 });
 
-// node_modules/smol-toml/dist/error.js
+// ../../../../node_modules/smol-toml/dist/error.js
 function getLineColFromPtr(string, ptr) {
   let lines = string.slice(0, ptr).split(/\r\n|\n|\r/g);
   return [lines.length, lines.pop().length + 1];
@@ -875,7 +875,7 @@ ${codeblock}`, options);
   };
 });
 
-// node_modules/smol-toml/dist/util.js
+// ../../../../node_modules/smol-toml/dist/util.js
 function isEscaped(str, ptr) {
   let i2 = 0;
   while (str[ptr - ++i2] === "\\")
@@ -991,7 +991,7 @@ var init_util = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/date.js
+// ../../../../node_modules/smol-toml/dist/date.js
 var DATE_TIME_RE, TomlDate;
 var init_date = __esm(() => {
   /*!
@@ -1113,7 +1113,7 @@ var init_date = __esm(() => {
   };
 });
 
-// node_modules/smol-toml/dist/primitive.js
+// ../../../../node_modules/smol-toml/dist/primitive.js
 function parseString(str, ptr = 0, endPtr = str.length) {
   let isLiteral = str[ptr] === "'";
   let isMultiline = str[ptr++] === str[ptr] && str[ptr] === str[ptr + 1];
@@ -1291,7 +1291,7 @@ var init_primitive = __esm(() => {
   };
 });
 
-// node_modules/smol-toml/dist/extract.js
+// ../../../../node_modules/smol-toml/dist/extract.js
 function sliceAndTrimEndOf(str, startPtr, endPtr) {
   let value = str.slice(startPtr, endPtr);
   let commentIdx = value.indexOf("#");
@@ -1392,7 +1392,7 @@ var init_extract = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/struct.js
+// ../../../../node_modules/smol-toml/dist/struct.js
 function parseKey(str, ptr, end = "=") {
   let dot = ptr - 1;
   let parsed = [];
@@ -1576,7 +1576,7 @@ var init_struct = __esm(() => {
   KEY_PART_RE = /^[a-zA-Z0-9-_]+[ \t]*$/;
 });
 
-// node_modules/smol-toml/dist/parse.js
+// ../../../../node_modules/smol-toml/dist/parse.js
 function peekTable(key, table, meta, type) {
   let t2 = table;
   let m2 = meta;
@@ -1723,7 +1723,7 @@ var init_parse = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/stringify.js
+// ../../../../node_modules/smol-toml/dist/stringify.js
 var init_stringify = __esm(() => {
   /*!
    * Copyright (c) Squirrel Chat et al., All rights reserved.
@@ -1754,7 +1754,7 @@ var init_stringify = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/index.js
+// ../../../../node_modules/smol-toml/dist/index.js
 var init_dist = __esm(() => {
   init_parse();
   init_stringify();
@@ -1789,7 +1789,7 @@ var init_dist = __esm(() => {
    */
 });
 
-// node_modules/yaml/dist/nodes/identity.js
+// ../../../../node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS((exports) => {
   var ALIAS = Symbol.for("yaml.alias");
   var DOC = Symbol.for("yaml.document");
@@ -1843,7 +1843,7 @@ var require_identity = __commonJS((exports) => {
   exports.isSeq = isSeq;
 });
 
-// node_modules/yaml/dist/visit.js
+// ../../../../node_modules/yaml/dist/visit.js
 var require_visit = __commonJS((exports) => {
   var identity = require_identity();
   var BREAK = Symbol("break visit");
@@ -1998,7 +1998,7 @@ var require_visit = __commonJS((exports) => {
   exports.visitAsync = visitAsync;
 });
 
-// node_modules/yaml/dist/doc/directives.js
+// ../../../../node_modules/yaml/dist/doc/directives.js
 var require_directives = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2150,7 +2150,7 @@ var require_directives = __commonJS((exports) => {
   exports.Directives = Directives;
 });
 
-// node_modules/yaml/dist/doc/anchors.js
+// ../../../../node_modules/yaml/dist/doc/anchors.js
 var require_anchors = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2212,7 +2212,7 @@ var require_anchors = __commonJS((exports) => {
   exports.findNewAnchor = findNewAnchor;
 });
 
-// node_modules/yaml/dist/doc/applyReviver.js
+// ../../../../node_modules/yaml/dist/doc/applyReviver.js
 var require_applyReviver = __commonJS((exports) => {
   function applyReviver(reviver, obj, key, val) {
     if (val && typeof val === "object") {
@@ -2259,7 +2259,7 @@ var require_applyReviver = __commonJS((exports) => {
   exports.applyReviver = applyReviver;
 });
 
-// node_modules/yaml/dist/nodes/toJS.js
+// ../../../../node_modules/yaml/dist/nodes/toJS.js
 var require_toJS = __commonJS((exports) => {
   var identity = require_identity();
   function toJS(value, arg, ctx) {
@@ -2286,7 +2286,7 @@ var require_toJS = __commonJS((exports) => {
   exports.toJS = toJS;
 });
 
-// node_modules/yaml/dist/nodes/Node.js
+// ../../../../node_modules/yaml/dist/nodes/Node.js
 var require_Node = __commonJS((exports) => {
   var applyReviver = require_applyReviver();
   var identity = require_identity();
@@ -2323,7 +2323,7 @@ var require_Node = __commonJS((exports) => {
   exports.NodeBase = NodeBase;
 });
 
-// node_modules/yaml/dist/nodes/Alias.js
+// ../../../../node_modules/yaml/dist/nodes/Alias.js
 var require_Alias = __commonJS((exports) => {
   var anchors = require_anchors();
   var visit = require_visit();
@@ -2433,7 +2433,7 @@ var require_Alias = __commonJS((exports) => {
   exports.Alias = Alias;
 });
 
-// node_modules/yaml/dist/nodes/Scalar.js
+// ../../../../node_modules/yaml/dist/nodes/Scalar.js
 var require_Scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Node = require_Node();
@@ -2461,7 +2461,7 @@ var require_Scalar = __commonJS((exports) => {
   exports.isScalarValue = isScalarValue;
 });
 
-// node_modules/yaml/dist/doc/createNode.js
+// ../../../../node_modules/yaml/dist/doc/createNode.js
 var require_createNode = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -2533,7 +2533,7 @@ var require_createNode = __commonJS((exports) => {
   exports.createNode = createNode;
 });
 
-// node_modules/yaml/dist/nodes/Collection.js
+// ../../../../node_modules/yaml/dist/nodes/Collection.js
 var require_Collection = __commonJS((exports) => {
   var createNode = require_createNode();
   var identity = require_identity();
@@ -2648,7 +2648,7 @@ var require_Collection = __commonJS((exports) => {
   exports.isEmptyPath = isEmptyPath;
 });
 
-// node_modules/yaml/dist/stringify/stringifyComment.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyComment.js
 var require_stringifyComment = __commonJS((exports) => {
   var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
   function indentComment(comment, indent) {
@@ -2665,7 +2665,7 @@ var require_stringifyComment = __commonJS((exports) => {
   exports.stringifyComment = stringifyComment;
 });
 
-// node_modules/yaml/dist/stringify/foldFlowLines.js
+// ../../../../node_modules/yaml/dist/stringify/foldFlowLines.js
 var require_foldFlowLines = __commonJS((exports) => {
   var FOLD_FLOW = "flow";
   var FOLD_BLOCK = "block";
@@ -2802,7 +2802,7 @@ ${indent}${text.slice(fold + 1, end2)}`;
   exports.foldFlowLines = foldFlowLines;
 });
 
-// node_modules/yaml/dist/stringify/stringifyString.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyString.js
 var require_stringifyString = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var foldFlowLines = require_foldFlowLines();
@@ -3100,7 +3100,7 @@ ${indent}`);
   exports.stringifyString = stringifyString;
 });
 
-// node_modules/yaml/dist/stringify/stringify.js
+// ../../../../node_modules/yaml/dist/stringify/stringify.js
 var require_stringify = __commonJS((exports) => {
   var anchors = require_anchors();
   var identity = require_identity();
@@ -3221,7 +3221,7 @@ ${ctx.indent}${str}`;
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/stringify/stringifyPair.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyPair.js
 var require_stringifyPair = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3357,7 +3357,7 @@ ${ctx.indent}`;
   exports.stringifyPair = stringifyPair;
 });
 
-// node_modules/yaml/dist/log.js
+// ../../../../node_modules/yaml/dist/log.js
 var require_log = __commonJS((exports) => {
   var node_process = __require("process");
   function debug(logLevel, ...messages) {
@@ -3376,7 +3376,7 @@ var require_log = __commonJS((exports) => {
   exports.warn = warn;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/merge.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/merge.js
 var require_merge = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3433,7 +3433,7 @@ var require_merge = __commonJS((exports) => {
   exports.merge = merge;
 });
 
-// node_modules/yaml/dist/nodes/addPairToJSMap.js
+// ../../../../node_modules/yaml/dist/nodes/addPairToJSMap.js
 var require_addPairToJSMap = __commonJS((exports) => {
   var log = require_log();
   var merge = require_merge();
@@ -3494,7 +3494,7 @@ var require_addPairToJSMap = __commonJS((exports) => {
   exports.addPairToJSMap = addPairToJSMap;
 });
 
-// node_modules/yaml/dist/nodes/Pair.js
+// ../../../../node_modules/yaml/dist/nodes/Pair.js
 var require_Pair = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyPair = require_stringifyPair();
@@ -3532,7 +3532,7 @@ var require_Pair = __commonJS((exports) => {
   exports.createPair = createPair;
 });
 
-// node_modules/yaml/dist/stringify/stringifyCollection.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyCollection.js
 var require_stringifyCollection = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -3684,7 +3684,7 @@ ${indent}${end}`;
   exports.stringifyCollection = stringifyCollection;
 });
 
-// node_modules/yaml/dist/nodes/YAMLMap.js
+// ../../../../node_modules/yaml/dist/nodes/YAMLMap.js
 var require_YAMLMap = __commonJS((exports) => {
   var stringifyCollection = require_stringifyCollection();
   var addPairToJSMap = require_addPairToJSMap();
@@ -3811,7 +3811,7 @@ var require_YAMLMap = __commonJS((exports) => {
   exports.findPair = findPair;
 });
 
-// node_modules/yaml/dist/schema/common/map.js
+// ../../../../node_modules/yaml/dist/schema/common/map.js
 var require_map = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLMap = require_YAMLMap();
@@ -3830,7 +3830,7 @@ var require_map = __commonJS((exports) => {
   exports.map = map;
 });
 
-// node_modules/yaml/dist/nodes/YAMLSeq.js
+// ../../../../node_modules/yaml/dist/nodes/YAMLSeq.js
 var require_YAMLSeq = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyCollection = require_stringifyCollection();
@@ -3923,7 +3923,7 @@ var require_YAMLSeq = __commonJS((exports) => {
   exports.YAMLSeq = YAMLSeq;
 });
 
-// node_modules/yaml/dist/schema/common/seq.js
+// ../../../../node_modules/yaml/dist/schema/common/seq.js
 var require_seq = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLSeq = require_YAMLSeq();
@@ -3942,7 +3942,7 @@ var require_seq = __commonJS((exports) => {
   exports.seq = seq;
 });
 
-// node_modules/yaml/dist/schema/common/string.js
+// ../../../../node_modules/yaml/dist/schema/common/string.js
 var require_string = __commonJS((exports) => {
   var stringifyString = require_stringifyString();
   var string = {
@@ -3958,7 +3958,7 @@ var require_string = __commonJS((exports) => {
   exports.string = string;
 });
 
-// node_modules/yaml/dist/schema/common/null.js
+// ../../../../node_modules/yaml/dist/schema/common/null.js
 var require_null = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var nullTag = {
@@ -3973,7 +3973,7 @@ var require_null = __commonJS((exports) => {
   exports.nullTag = nullTag;
 });
 
-// node_modules/yaml/dist/schema/core/bool.js
+// ../../../../node_modules/yaml/dist/schema/core/bool.js
 var require_bool = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var boolTag = {
@@ -3994,7 +3994,7 @@ var require_bool = __commonJS((exports) => {
   exports.boolTag = boolTag;
 });
 
-// node_modules/yaml/dist/stringify/stringifyNumber.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyNumber.js
 var require_stringifyNumber = __commonJS((exports) => {
   function stringifyNumber({ format, minFractionDigits, tag, value }) {
     if (typeof value === "bigint")
@@ -4018,7 +4018,7 @@ var require_stringifyNumber = __commonJS((exports) => {
   exports.stringifyNumber = stringifyNumber;
 });
 
-// node_modules/yaml/dist/schema/core/float.js
+// ../../../../node_modules/yaml/dist/schema/core/float.js
 var require_float = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4061,7 +4061,7 @@ var require_float = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// node_modules/yaml/dist/schema/core/int.js
+// ../../../../node_modules/yaml/dist/schema/core/int.js
 var require_int = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4103,7 +4103,7 @@ var require_int = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// node_modules/yaml/dist/schema/core/schema.js
+// ../../../../node_modules/yaml/dist/schema/core/schema.js
 var require_schema = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4128,7 +4128,7 @@ var require_schema = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/json/schema.js
+// ../../../../node_modules/yaml/dist/schema/json/schema.js
 var require_schema2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var map = require_map();
@@ -4192,7 +4192,7 @@ var require_schema2 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/binary.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/binary.js
 var require_binary = __commonJS((exports) => {
   var node_buffer = __require("buffer");
   var Scalar = require_Scalar();
@@ -4247,7 +4247,7 @@ var require_binary = __commonJS((exports) => {
   exports.binary = binary;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/pairs.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/pairs.js
 var require_pairs = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4322,7 +4322,7 @@ ${cn.comment}` : item.comment;
   exports.resolvePairs = resolvePairs;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/omap.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/omap.js
 var require_omap = __commonJS((exports) => {
   var identity = require_identity();
   var toJS = require_toJS();
@@ -4394,7 +4394,7 @@ var require_omap = __commonJS((exports) => {
   exports.omap = omap;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/bool.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/bool.js
 var require_bool2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function boolStringify({ value, source }, ctx) {
@@ -4423,7 +4423,7 @@ var require_bool2 = __commonJS((exports) => {
   exports.trueTag = trueTag;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/float.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/float.js
 var require_float2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4469,7 +4469,7 @@ var require_float2 = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/int.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/int.js
 var require_int2 = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4545,7 +4545,7 @@ var require_int2 = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/set.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/set.js
 var require_set = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4628,7 +4628,7 @@ var require_set = __commonJS((exports) => {
   exports.set = set;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
 var require_timestamp = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   function parseSexagesimal(str, asBigInt) {
@@ -4710,7 +4710,7 @@ var require_timestamp = __commonJS((exports) => {
   exports.timestamp = timestamp;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/schema.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/schema.js
 var require_schema3 = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4751,7 +4751,7 @@ var require_schema3 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/tags.js
+// ../../../../node_modules/yaml/dist/schema/tags.js
 var require_tags = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4842,7 +4842,7 @@ var require_tags = __commonJS((exports) => {
   exports.getTags = getTags;
 });
 
-// node_modules/yaml/dist/schema/Schema.js
+// ../../../../node_modules/yaml/dist/schema/Schema.js
 var require_Schema = __commonJS((exports) => {
   var identity = require_identity();
   var map = require_map();
@@ -4872,7 +4872,7 @@ var require_Schema = __commonJS((exports) => {
   exports.Schema = Schema;
 });
 
-// node_modules/yaml/dist/stringify/stringifyDocument.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyDocument.js
 var require_stringifyDocument = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -4952,7 +4952,7 @@ var require_stringifyDocument = __commonJS((exports) => {
   exports.stringifyDocument = stringifyDocument;
 });
 
-// node_modules/yaml/dist/doc/Document.js
+// ../../../../node_modules/yaml/dist/doc/Document.js
 var require_Document = __commonJS((exports) => {
   var Alias = require_Alias();
   var Collection = require_Collection();
@@ -5187,7 +5187,7 @@ var require_Document = __commonJS((exports) => {
   exports.Document = Document;
 });
 
-// node_modules/yaml/dist/errors.js
+// ../../../../node_modules/yaml/dist/errors.js
 var require_errors = __commonJS((exports) => {
   class YAMLError extends Error {
     constructor(name, pos, code, message) {
@@ -5252,7 +5252,7 @@ ${pointer}
   exports.prettifyError = prettifyError;
 });
 
-// node_modules/yaml/dist/compose/resolve-props.js
+// ../../../../node_modules/yaml/dist/compose/resolve-props.js
 var require_resolve_props = __commonJS((exports) => {
   function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
     let spaceBefore = false;
@@ -5382,7 +5382,7 @@ var require_resolve_props = __commonJS((exports) => {
   exports.resolveProps = resolveProps;
 });
 
-// node_modules/yaml/dist/compose/util-contains-newline.js
+// ../../../../node_modules/yaml/dist/compose/util-contains-newline.js
 var require_util_contains_newline = __commonJS((exports) => {
   function containsNewline(key) {
     if (!key)
@@ -5422,7 +5422,7 @@ var require_util_contains_newline = __commonJS((exports) => {
   exports.containsNewline = containsNewline;
 });
 
-// node_modules/yaml/dist/compose/util-flow-indent-check.js
+// ../../../../node_modules/yaml/dist/compose/util-flow-indent-check.js
 var require_util_flow_indent_check = __commonJS((exports) => {
   var utilContainsNewline = require_util_contains_newline();
   function flowIndentCheck(indent, fc, onError) {
@@ -5437,7 +5437,7 @@ var require_util_flow_indent_check = __commonJS((exports) => {
   exports.flowIndentCheck = flowIndentCheck;
 });
 
-// node_modules/yaml/dist/compose/util-map-includes.js
+// ../../../../node_modules/yaml/dist/compose/util-map-includes.js
 var require_util_map_includes = __commonJS((exports) => {
   var identity = require_identity();
   function mapIncludes(ctx, items, search) {
@@ -5450,7 +5450,7 @@ var require_util_map_includes = __commonJS((exports) => {
   exports.mapIncludes = mapIncludes;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-map.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-map.js
 var require_resolve_block_map = __commonJS((exports) => {
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -5557,7 +5557,7 @@ var require_resolve_block_map = __commonJS((exports) => {
   exports.resolveBlockMap = resolveBlockMap;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-seq.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-seq.js
 var require_resolve_block_seq = __commonJS((exports) => {
   var YAMLSeq = require_YAMLSeq();
   var resolveProps = require_resolve_props();
@@ -5605,7 +5605,7 @@ var require_resolve_block_seq = __commonJS((exports) => {
   exports.resolveBlockSeq = resolveBlockSeq;
 });
 
-// node_modules/yaml/dist/compose/resolve-end.js
+// ../../../../node_modules/yaml/dist/compose/resolve-end.js
 var require_resolve_end = __commonJS((exports) => {
   function resolveEnd(end, offset, reqSpace, onError) {
     let comment = "";
@@ -5645,7 +5645,7 @@ var require_resolve_end = __commonJS((exports) => {
   exports.resolveEnd = resolveEnd;
 });
 
-// node_modules/yaml/dist/compose/resolve-flow-collection.js
+// ../../../../node_modules/yaml/dist/compose/resolve-flow-collection.js
 var require_resolve_flow_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -5836,7 +5836,7 @@ var require_resolve_flow_collection = __commonJS((exports) => {
   exports.resolveFlowCollection = resolveFlowCollection;
 });
 
-// node_modules/yaml/dist/compose/compose-collection.js
+// ../../../../node_modules/yaml/dist/compose/compose-collection.js
 var require_compose_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -5898,7 +5898,7 @@ var require_compose_collection = __commonJS((exports) => {
   exports.composeCollection = composeCollection;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-scalar.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-scalar.js
 var require_resolve_block_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function resolveBlockScalar(ctx, scalar, onError) {
@@ -6091,7 +6091,7 @@ var require_resolve_block_scalar = __commonJS((exports) => {
   exports.resolveBlockScalar = resolveBlockScalar;
 });
 
-// node_modules/yaml/dist/compose/resolve-flow-scalar.js
+// ../../../../node_modules/yaml/dist/compose/resolve-flow-scalar.js
 var require_resolve_flow_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var resolveEnd = require_resolve_end();
@@ -6308,7 +6308,7 @@ var require_resolve_flow_scalar = __commonJS((exports) => {
   exports.resolveFlowScalar = resolveFlowScalar;
 });
 
-// node_modules/yaml/dist/compose/compose-scalar.js
+// ../../../../node_modules/yaml/dist/compose/compose-scalar.js
 var require_compose_scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -6386,7 +6386,7 @@ var require_compose_scalar = __commonJS((exports) => {
   exports.composeScalar = composeScalar;
 });
 
-// node_modules/yaml/dist/compose/util-empty-scalar-position.js
+// ../../../../node_modules/yaml/dist/compose/util-empty-scalar-position.js
 var require_util_empty_scalar_position = __commonJS((exports) => {
   function emptyScalarPosition(offset, before, pos) {
     if (before) {
@@ -6413,7 +6413,7 @@ var require_util_empty_scalar_position = __commonJS((exports) => {
   exports.emptyScalarPosition = emptyScalarPosition;
 });
 
-// node_modules/yaml/dist/compose/compose-node.js
+// ../../../../node_modules/yaml/dist/compose/compose-node.js
 var require_compose_node = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -6516,7 +6516,7 @@ var require_compose_node = __commonJS((exports) => {
   exports.composeNode = composeNode;
 });
 
-// node_modules/yaml/dist/compose/compose-doc.js
+// ../../../../node_modules/yaml/dist/compose/compose-doc.js
 var require_compose_doc = __commonJS((exports) => {
   var Document = require_Document();
   var composeNode = require_compose_node();
@@ -6556,7 +6556,7 @@ var require_compose_doc = __commonJS((exports) => {
   exports.composeDoc = composeDoc;
 });
 
-// node_modules/yaml/dist/compose/composer.js
+// ../../../../node_modules/yaml/dist/compose/composer.js
 var require_composer = __commonJS((exports) => {
   var node_process = __require("process");
   var directives = require_directives();
@@ -6747,7 +6747,7 @@ ${end.comment}` : end.comment;
   exports.Composer = Composer;
 });
 
-// node_modules/yaml/dist/parse/cst-scalar.js
+// ../../../../node_modules/yaml/dist/parse/cst-scalar.js
 var require_cst_scalar = __commonJS((exports) => {
   var resolveBlockScalar = require_resolve_block_scalar();
   var resolveFlowScalar = require_resolve_flow_scalar();
@@ -6937,7 +6937,7 @@ var require_cst_scalar = __commonJS((exports) => {
   exports.setScalarValue = setScalarValue;
 });
 
-// node_modules/yaml/dist/parse/cst-stringify.js
+// ../../../../node_modules/yaml/dist/parse/cst-stringify.js
 var require_cst_stringify = __commonJS((exports) => {
   var stringify2 = (cst) => ("type" in cst) ? stringifyToken(cst) : stringifyItem(cst);
   function stringifyToken(token) {
@@ -6995,7 +6995,7 @@ var require_cst_stringify = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/parse/cst-visit.js
+// ../../../../node_modules/yaml/dist/parse/cst-visit.js
 var require_cst_visit = __commonJS((exports) => {
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
@@ -7054,7 +7054,7 @@ var require_cst_visit = __commonJS((exports) => {
   exports.visit = visit;
 });
 
-// node_modules/yaml/dist/parse/cst.js
+// ../../../../node_modules/yaml/dist/parse/cst.js
 var require_cst = __commonJS((exports) => {
   var cstScalar = require_cst_scalar();
   var cstStringify = require_cst_stringify();
@@ -7155,7 +7155,7 @@ var require_cst = __commonJS((exports) => {
   exports.tokenType = tokenType;
 });
 
-// node_modules/yaml/dist/parse/lexer.js
+// ../../../../node_modules/yaml/dist/parse/lexer.js
 var require_lexer = __commonJS((exports) => {
   var cst = require_cst();
   function isEmpty(ch) {
@@ -7752,7 +7752,7 @@ var require_lexer = __commonJS((exports) => {
   exports.Lexer = Lexer;
 });
 
-// node_modules/yaml/dist/parse/line-counter.js
+// ../../../../node_modules/yaml/dist/parse/line-counter.js
 var require_line_counter = __commonJS((exports) => {
   class LineCounter {
     constructor() {
@@ -7780,7 +7780,7 @@ var require_line_counter = __commonJS((exports) => {
   exports.LineCounter = LineCounter;
 });
 
-// node_modules/yaml/dist/parse/parser.js
+// ../../../../node_modules/yaml/dist/parse/parser.js
 var require_parser = __commonJS((exports) => {
   var node_process = __require("process");
   var cst = require_cst();
@@ -8636,7 +8636,7 @@ var require_parser = __commonJS((exports) => {
   exports.Parser = Parser;
 });
 
-// node_modules/yaml/dist/public-api.js
+// ../../../../node_modules/yaml/dist/public-api.js
 var require_public_api = __commonJS((exports) => {
   var composer = require_composer();
   var Document = require_Document();
@@ -8730,7 +8730,7 @@ var require_public_api = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/index.js
+// ../../../../node_modules/yaml/dist/index.js
 var composer, Document, Schema, errors, Alias, identity, Pair, Scalar, YAMLMap, YAMLSeq, cst, lexer, lineCounter, parser, publicApi, visit, $Composer, $Document, $Schema, $YAMLError, $YAMLParseError, $YAMLWarning, $Alias, $isAlias, $isCollection, $isDocument, $isMap, $isNode, $isPair, $isScalar, $isSeq, $Pair, $Scalar, $YAMLMap, $YAMLSeq, $Lexer, $LineCounter, $Parser, $parse, $parseAllDocuments, $parseDocument, $stringify, $visit, $visitAsync;
 var init_dist2 = __esm(() => {
   composer = require_composer();
@@ -8847,7 +8847,7 @@ var init_shared = __esm(() => {
   init_dist2();
 });
 
-// node_modules/zod/v3/helpers/util.js
+// ../../../../node_modules/zod/v3/helpers/util.js
 var util, objectUtil, ZodParsedType, getParsedType = (data) => {
   const t2 = typeof data;
   switch (t2) {
@@ -8978,7 +8978,7 @@ var init_util2 = __esm(() => {
   ]);
 });
 
-// node_modules/zod/v3/ZodError.js
+// ../../../../node_modules/zod/v3/ZodError.js
 var ZodIssueCode, quotelessJson = (obj) => {
   const json = JSON.stringify(obj, null, 2);
   return json.replace(/"([^"]+)":/g, "$1:");
@@ -9099,7 +9099,7 @@ var init_ZodError = __esm(() => {
   };
 });
 
-// node_modules/zod/v3/locales/en.js
+// ../../../../node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -9206,7 +9206,7 @@ var init_en = __esm(() => {
   en_default = errorMap;
 });
 
-// node_modules/zod/v3/errors.js
+// ../../../../node_modules/zod/v3/errors.js
 function setErrorMap(map) {
   overrideErrorMap = map;
 }
@@ -9219,7 +9219,7 @@ var init_errors = __esm(() => {
   overrideErrorMap = en_default;
 });
 
-// node_modules/zod/v3/helpers/parseUtil.js
+// ../../../../node_modules/zod/v3/helpers/parseUtil.js
 function addIssueToContext(ctx, issueData) {
   const overrideMap = getErrorMap();
   const issue = makeIssue({
@@ -9324,10 +9324,10 @@ var init_parseUtil = __esm(() => {
   });
 });
 
-// node_modules/zod/v3/helpers/typeAliases.js
+// ../../../../node_modules/zod/v3/helpers/typeAliases.js
 var init_typeAliases = () => {};
 
-// node_modules/zod/v3/helpers/errorUtil.js
+// ../../../../node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 var init_errorUtil = __esm(() => {
   (function(errorUtil2) {
@@ -9336,7 +9336,7 @@ var init_errorUtil = __esm(() => {
   })(errorUtil || (errorUtil = {}));
 });
 
-// node_modules/zod/v3/types.js
+// ../../../../node_modules/zod/v3/types.js
 class ParseInputLazyPath {
   constructor(parent, value, path, key) {
     this._cachedPath = [];
@@ -12687,7 +12687,7 @@ var init_types = __esm(() => {
   NEVER = INVALID;
 });
 
-// node_modules/zod/v3/external.js
+// ../../../../node_modules/zod/v3/external.js
 var exports_external = {};
 __export(exports_external, {
   void: () => voidType,
@@ -12807,7 +12807,7 @@ var init_external = __esm(() => {
   init_ZodError();
 });
 
-// node_modules/zod/index.js
+// ../../../../node_modules/zod/index.js
 var init_zod = __esm(() => {
   init_external();
   init_external();
@@ -13023,12 +13023,12 @@ var init_language_ledger = __esm(() => {
   }).describe("Per-work-item record of language negotiations; merged into glossary once agreed");
 });
 
-// src/schemas/tech-spec-round.ts
-var questionProperty, questionScore, scoredQuestion, techSpecRoundPayload, techSpecRound;
-var init_tech_spec_round = __esm(() => {
+// src/schemas/question-round.ts
+var questionProperty, questionScore, scoredQuestion, questionRoundPayload, questionRound;
+var init_question_round = __esm(() => {
   init_zod();
   init_common();
-  questionProperty = exports_external.enum(["blind-spot", "expansion", "orientation"]).describe("Which good-question property the candidate carries (SKILL.md \xA7good questions)");
+  questionProperty = exports_external.enum(["blind-spot", "expansion", "orientation"]).describe("Which good-question property the candidate carries (blind-spot / expansion / orientation)");
   questionScore = exports_external.object({
     consensus: exports_external.number().int().nonnegative().describe("How many generators independently raised this question (necessity signal)"),
     quality: exports_external.number().min(0).max(1).describe("Meets the three good-question properties [0..1]"),
@@ -13045,7 +13045,7 @@ var init_tech_spec_round = __esm(() => {
     scores: questionScore,
     rationale: exports_external.string().optional().describe("Why selected (present on selected questions)")
   }).describe("One candidate question with its gate score");
-  techSpecRoundPayload = exports_external.object({
+  questionRoundPayload = exports_external.object({
     round: exports_external.number().int().positive().describe("1-based round index within the interview"),
     section: exports_external.string().optional().describe("Target spec section this round filled"),
     generator_count: exports_external.number().int().positive().default(2).describe("N generators fanned out (--generators default 2, range 1..6; wi_260619yfw)"),
@@ -13069,7 +13069,7 @@ var init_tech_spec_round = __esm(() => {
       });
     }
   });
-  techSpecRound = exports_external.object({
+  questionRound = exports_external.object({
     ts: isoDateTime,
     work_item_id: workItemId,
     round: exports_external.number().int().positive(),
@@ -13079,7 +13079,7 @@ var init_tech_spec_round = __esm(() => {
     dry: exports_external.boolean(),
     selected: exports_external.array(scoredQuestion).default([]),
     all_scored: exports_external.array(scoredQuestion).default([])
-  }).describe("One line of .ditto/local/work-items/<id>/tech-spec-rounds.jsonl");
+  }).describe("One line of .ditto/local/work-items/<id>/question-rounds.jsonl");
 });
 
 // src/schemas/coverage.ts
@@ -14170,19 +14170,19 @@ class WorkItemStore {
     return text.split(`
 `).filter((line) => line.trim().length > 0).map((line) => intentMetric.parse(JSON.parse(line)));
   }
-  techSpecRoundsPath(workItemId2) {
-    return join6(this.workItemDir(workItemId2), "tech-spec-rounds.jsonl");
+  questionRoundsPath(workItemId2) {
+    return join6(this.workItemDir(workItemId2), "question-rounds.jsonl");
   }
-  async appendTechSpecRoundLine(workItemId2, jsonLine) {
-    return this.appendJsonlAtPath(this.techSpecRoundsPath(workItemId2), jsonLine);
+  async appendQuestionRoundLine(workItemId2, jsonLine) {
+    return this.appendJsonlAtPath(this.questionRoundsPath(workItemId2), jsonLine);
   }
-  async readTechSpecRounds(workItemId2) {
-    const file = Bun.file(this.techSpecRoundsPath(workItemId2));
+  async readQuestionRounds(workItemId2) {
+    const file = Bun.file(this.questionRoundsPath(workItemId2));
     if (!await file.exists())
       return [];
     const text = await file.text();
     return text.split(`
-`).filter((line) => line.trim().length > 0).map((line) => techSpecRound.parse(JSON.parse(line)));
+`).filter((line) => line.trim().length > 0).map((line) => questionRound.parse(JSON.parse(line)));
   }
 }
 var TERMINAL_STEM_STATUSES, DONE_BLOCKING_SEVERITIES, TERMINAL_STATUSES, WorkItemEventCorruptError, acceptanceCriterionInputSchema;
@@ -14190,7 +14190,7 @@ var init_work_item_store = __esm(() => {
   init_zod();
   init_intent_metric();
   init_language_ledger();
-  init_tech_spec_round();
+  init_question_round();
   init_work_item();
   init_ditto_paths();
   init_fs();
@@ -15359,7 +15359,7 @@ var init_cleanup_index = __esm(() => {
 
 // src/core/cleanup-store.ts
 import { mkdir as mkdir6, rename as rename4, stat as stat6 } from "fs/promises";
-import { isAbsolute as isAbsolute6, join as join39, relative as relative11, resolve as resolve9 } from "path";
+import { isAbsolute as isAbsolute6, join as join36, relative as relative11, resolve as resolve9 } from "path";
 function isProtectedBasename(base) {
   if (base === "CLAUDE.md" || base === "AGENTS.md")
     return true;
@@ -15395,7 +15395,7 @@ class CleanupStore {
     return localDir(this.repoRoot, "cleanup", runId2);
   }
   indexPath(runId2) {
-    return join39(this.runDir(runId2), "index.json");
+    return join36(this.runDir(runId2), "index.json");
   }
   async createRun(params, now = new Date) {
     const stamp2 = runStamp(now);
@@ -15414,7 +15414,7 @@ class CleanupStore {
       }
     }
     for (const action of CLEANUP_ACTIONS) {
-      await ensureDir(join39(this.runDir(runId2), action));
+      await ensureDir(join36(this.runDir(runId2), action));
     }
     const index = {
       schema_version: "0.1.0",
@@ -15443,8 +15443,8 @@ class CleanupStore {
     const name = input.name ?? repoRel.split("/").pop() ?? repoRel;
     const owning = await findOwningRepo(abs, this.repoRoot);
     const owningRepo = owning === null ? null : toRepoRel(this.repoRoot, owning) || ".";
-    const destAbs = join39(this.runDir(runId2), input.action, name);
-    await ensureDir(join39(this.runDir(runId2), input.action));
+    const destAbs = join36(this.runDir(runId2), input.action, name);
+    await ensureDir(join36(this.runDir(runId2), input.action));
     await rename4(abs, destAbs);
     const entry = {
       name,
@@ -15471,9 +15471,9 @@ class CleanupStore {
     if (entry === undefined) {
       throw new Error(`no staged entry for original_path: ${originalPath}`);
     }
-    const stagedAbs = join39(this.repoRoot, entry.staged_path);
-    const originalAbs = join39(this.repoRoot, entry.original_path);
-    await ensureDir(join39(originalAbs, ".."));
+    const stagedAbs = join36(this.repoRoot, entry.staged_path);
+    const originalAbs = join36(this.repoRoot, entry.original_path);
+    await ensureDir(join36(originalAbs, ".."));
     await rename4(stagedAbs, originalAbs);
     return entry;
   }
@@ -15511,7 +15511,7 @@ var init_cleanup_store = __esm(() => {
 // src/core/cleanup-archive.ts
 import { execFileSync as execFileSync4 } from "child_process";
 import { mkdir as mkdir7, rm, stat as stat7 } from "fs/promises";
-import { dirname as dirname11, isAbsolute as isAbsolute7, join as join40, resolve as resolve10 } from "path";
+import { dirname as dirname11, isAbsolute as isAbsolute7, join as join37, resolve as resolve10 } from "path";
 function runDir(repoRoot, runId2) {
   return localDir(repoRoot, "cleanup", runId2);
 }
@@ -15562,7 +15562,7 @@ async function deleteRun(repoRoot, runId2, confirm) {
 function subRepoAbs(repoRoot, owningRepo) {
   if (owningRepo === null || owningRepo === ".")
     return resolve10(repoRoot);
-  return isAbsolute7(owningRepo) ? owningRepo : join40(repoRoot, owningRepo);
+  return isAbsolute7(owningRepo) ? owningRepo : join37(repoRoot, owningRepo);
 }
 function unrelatedDirt(cwd, allowed) {
   let status = "";
@@ -15625,7 +15625,7 @@ function commitCleanup(repoRoot, index, message) {
   return { commits: commitPerSubRepo(repoRoot, byRepo, message) };
 }
 function relForRepo(repoRoot, repoAbs, workspaceRelPath) {
-  const abs = join40(repoRoot, workspaceRelPath);
+  const abs = join37(repoRoot, workspaceRelPath);
   const rel = abs.startsWith(`${repoAbs}/`) ? abs.slice(repoAbs.length + 1) : workspaceRelPath;
   return rel.replace(/\\/g, "/");
 }
@@ -15662,7 +15662,7 @@ var init_cleanup_archive = __esm(() => {
   };
 });
 
-// node_modules/sisteransi/src/index.js
+// ../../../../node_modules/sisteransi/src/index.js
 var require_src = __commonJS((exports, module) => {
   var ESC2 = "\x1B";
   var CSI2 = `${ESC2}[`;
@@ -15720,7 +15720,7 @@ var require_src = __commonJS((exports, module) => {
   module.exports = { cursor, scroll, erase, beep };
 });
 
-// node_modules/consola/dist/core.mjs
+// ../../../../node_modules/consola/dist/core.mjs
 var LogLevels = {
   silent: Number.NEGATIVE_INFINITY,
   fatal: 0,
@@ -16116,7 +16116,7 @@ Consola.prototype.resume = Consola.prototype.resumeLogs;
 function createConsola(options = {}) {
   return new Consola(options);
 }
-// node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
+// ../../../../node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
 import { formatWithOptions } from "util";
 import { sep } from "path";
 function parseStack(stack, message) {
@@ -16193,10 +16193,10 @@ ${indent}`);
   }
 }
 
-// node_modules/consola/dist/index.mjs
+// ../../../../node_modules/consola/dist/index.mjs
 import g$1 from "process";
 
-// node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
+// ../../../../node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
 import * as tty from "tty";
 var {
   env = {},
@@ -16409,7 +16409,7 @@ function box(text, _opts = {}) {
 `);
 }
 
-// node_modules/consola/dist/index.mjs
+// ../../../../node_modules/consola/dist/index.mjs
 var r2 = Object.create(null);
 var i = (e2) => globalThis.process?.env || import.meta.env || globalThis.Deno?.env.toObject() || globalThis.__env__ || (e2 ? r2 : globalThis);
 var o2 = new Proxy(r2, { get(e2, s) {
@@ -16692,7 +16692,7 @@ function _getDefaultLogLevel() {
   return LogLevels.info;
 }
 var consola = createConsola2();
-// node_modules/citty/dist/index.mjs
+// ../../../../node_modules/citty/dist/index.mjs
 function toArray(val) {
   if (Array.isArray(val)) {
     return val;
@@ -19054,8 +19054,8 @@ var architectureCommand = defineCommand({
 });
 
 // src/cli/commands/autopilot.ts
-import { readFile as readFile11, readdir as readdir16 } from "fs/promises";
-import { join as join43 } from "path";
+import { readFile as readFile10, readdir as readdir16 } from "fs/promises";
+import { join as join40 } from "path";
 
 // src/core/autopilot-approval.ts
 function requirePending(gate, action) {
@@ -19569,7 +19569,7 @@ var IDENTIFIER_PATTERNS = [
   /ac-\d+/g,
   /T-\d+/g,
   /D\d+/g,
-  /(?:wi|orch|memevt|adr)_[0-9a-z]+/g
+  /(?:wi|orch|memevt|adr|prism)_[0-9a-z]+/g
 ];
 var EXPLANATORY_WORD = "[\uAC00-\uD7A3]{2,}|[A-Za-z]{3,}";
 var stripCode = (s2) => s2.replace(/```[\s\S]*?```/g, " ").replace(/`[^`]*`/g, " ");
@@ -19918,6 +19918,19 @@ function tierDepthBudget(tier) {
 }
 function coverageDryK(tier) {
   return tierDepthBudget(tier).maxRoundsPerNode;
+}
+function capStatus(caps, usage) {
+  const reasons = [];
+  if (usage.callsThisNode >= caps.callsPerNode) {
+    reasons.push(`per-node call cap reached: ${usage.callsThisNode}/${caps.callsPerNode}`);
+  }
+  if (usage.treeNodeCount >= caps.treeNodeCount) {
+    reasons.push(`tree node-count cap reached: ${usage.treeNodeCount}/${caps.treeNodeCount}`);
+  }
+  if (usage.roundsRun >= caps.totalRounds) {
+    reasons.push(`total round cap reached: ${usage.roundsRun}/${caps.totalRounds}`);
+  }
+  return { capped: reasons.length > 0, converged: false, reasons };
 }
 
 // src/core/gates.ts
@@ -20881,8 +20894,8 @@ function projectAutoHandling(decisions) {
 
 // src/core/autopilot-loop.ts
 init_zod();
-import { readFile as readFile4 } from "fs/promises";
-import { join as join31 } from "path";
+import { readFile as readFile3 } from "fs/promises";
+import { join as join28 } from "path";
 
 // src/acg/tidy/classifier.ts
 init_ditto_paths();
@@ -24593,343 +24606,8 @@ class RetroMetricLedger {
   }
 }
 
-// src/core/tech-spec.ts
-init_zod();
+// src/core/spec-doc.ts
 import { createHash as createHash6 } from "crypto";
-import { readFile as readFile3 } from "fs/promises";
-import { join as join30 } from "path";
-
-// src/schemas/interview-state.ts
-init_zod();
-init_common();
-
-// src/schemas/convergence.ts
-init_zod();
-init_common();
-var honestyKind = exports_external.enum(["finding", "hypothesis", "taste"]).describe("What the item is; backing-less claims are hypothesis, not finding");
-var confidenceLevel = exports_external.enum(["high", "medium", "low"]).describe("Confidence in a claim; backing-less claims must be low");
-var ledgerStatus = exports_external.enum(["acted", "deferred", "dismissed"]).describe("What was done with the item; deferred/dismissed require a reason");
-var closureMode = exports_external.enum(["mutual_agreement", "ledger_only", "safe_default"]).describe("How the closure was reached, not why (that is exit.reason)");
-var convergenceVersion = exports_external.object({
-  version: exports_external.number().int().positive(),
-  score: exports_external.number(),
-  evidence_refs: exports_external.array(evidenceRef).default([])
-}).describe("One scored version of the refined artifact");
-var decisionLedgerEntry = exports_external.object({
-  id: exports_external.string().min(1),
-  round: exports_external.number().int().nonnegative(),
-  objection: exports_external.string().min(1),
-  kind: honestyKind,
-  criterion_id: exports_external.string().min(1).nullable().default(null),
-  severity,
-  admissible: exports_external.boolean(),
-  status: ledgerStatus,
-  confidence: confidenceLevel,
-  backed_by: exports_external.array(evidenceRef).default([]),
-  reason: exports_external.string().min(1).describe("Why acted/dismissed; required for symmetry (\xA73.2)"),
-  supersedes: exports_external.string().min(1).nullable().default(null)
-}).superRefine((value, ctx) => {
-  if (value.kind === "finding" && value.backed_by.length === 0) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "kind=finding requires non-empty backed_by",
-      path: ["backed_by"]
-    });
-  }
-  if (value.admissible === true && value.severity !== "high" && value.severity !== "critical") {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "admissible=true requires severity high or critical (ADMISSIBLE_SEVERITIES)",
-      path: ["admissible"]
-    });
-  }
-}).describe("Append-only decision ledger entry with honesty labels (\xA74.1, \xA76.1)");
-var convergence = exports_external.object({
-  schema_version: schemaVersion,
-  work_item_id: workItemId,
-  target_ref: exports_external.string().min(1).describe("Node id, review id, or AC-set this refinement targets"),
-  round_cap: exports_external.number().int().positive(),
-  rounds_run: exports_external.number().int().nonnegative(),
-  versions: exports_external.array(convergenceVersion).min(1),
-  selected_version: exports_external.number().int().positive(),
-  decision_ledger: exports_external.array(decisionLedgerEntry).default([]),
-  open_admissible_count: exports_external.number().int().nonnegative(),
-  gate: exports_external.object({
-    completion_gate: verdict,
-    convergence_gate: exports_external.enum(["no_open_admissible", "open_admissible"]),
-    converged: exports_external.boolean()
-  }),
-  exit: exports_external.object({
-    reason: exports_external.enum(["converged", "cap_reached", "blocked"]),
-    closure_mode: closureMode,
-    verdict_delegated_to_completion: exports_external.boolean().default(true),
-    next_handoff_path: relativePath.nullable().default(null)
-  })
-}).describe("Convergence sidecar; records refinement closure, does not set verdict (\xA76.9)");
-
-// src/schemas/interview-state.ts
-var interviewStatus = exports_external.enum(["active", "converged", "deferred", "aborted"]).describe("Lifecycle of the deep interview");
-var dimensionState = exports_external.enum(["unknown", "partial", "resolved"]).describe("Resolution state of one ambiguity dimension");
-var infoGain = exports_external.enum(["high", "medium", "low"]).describe("Estimated information gain of a question");
-var answerSelfReport = exports_external.enum(["confident", "partial", "unsure"]).describe("User self-report of decision-ability after answering (presentation-sufficiency signal)");
-var interviewDimension = exports_external.object({
-  id: exports_external.string().min(1),
-  critical: exports_external.boolean().default(false),
-  state: dimensionState,
-  ambiguity: exports_external.number().min(0).max(1),
-  resolved_by: exports_external.array(exports_external.string()).default([]),
-  notes: exports_external.string().default("")
-}).describe("One ambiguity dimension tracked during the interview");
-var interviewQuestion = exports_external.object({
-  id: exports_external.string().min(1),
-  asked_at: isoDateTime,
-  dimension: exports_external.string().min(1),
-  question: exports_external.string().min(1),
-  why_matters: exports_external.string().min(1).describe("What changes depending on the answer"),
-  info_gain_estimate: infoGain,
-  self_answer_attempts: exports_external.array(selfAnswerAttempt).default([]),
-  user_explanation: exports_external.string().min(1).optional().describe("Plain-language why-we-ask + what-the-answer-decides \u2014 user language, no raw code/jargon (default-shown)"),
-  background: exports_external.string().min(1).optional().describe('Deeper context for progressive disclosure ("more") \u2014 optional expansion beyond user_explanation'),
-  grounding: exports_external.string().min(1).optional().describe("Evidence the question stems from (file:line | doc | domain) \u2014 the source behind why-we-ask"),
-  review_status: exports_external.enum(["reviewed", "unverified-degraded"]).optional().describe("Session-blind context-review outcome (critical questions only)"),
-  answer: exports_external.string().optional(),
-  answer_kind: exports_external.enum(["user", "assumption"]).optional(),
-  answer_self_report: answerSelfReport.optional().describe("User self-report of decision-ability after answering (presentation-sufficiency signal)"),
-  ambiguity_delta: exports_external.number().optional(),
-  marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal")
-}).describe("One asked question with its self-answer attempts and outcome");
-var interviewAssumption = exports_external.object({
-  statement: exports_external.string().min(1),
-  label: honestyKind,
-  confidence: confidenceLevel,
-  because_no_answer_to: exports_external.string().min(1).describe("Question id left unanswered")
-}).describe("Assumption recorded when a question was not answered (\xA76.9)");
-var premortemItem = exports_external.object({
-  scenario: exports_external.string().min(1).describe("What failed / caused harm if this shipped"),
-  likelihood: exports_external.enum(["low", "medium", "high"]),
-  blast_radius: exports_external.enum(["low", "medium", "high", "critical"]),
-  reversibility: exports_external.enum(["reversible", "hard", "irreversible"]),
-  early_signal: exports_external.string().default("").describe("What you would observe if this risk is materializing"),
-  promoted_to: exports_external.enum(["ac", "out_of_scope", "user_owned_decision", "none"]).describe("Where a critical item was promoted (\xA75 \uC2B9\uACA9 \uADDC\uCE59)"),
-  ref: exports_external.string().default("").describe("Pointer to the AC / out_of_scope[i] / question id")
-}).describe("One pre-mortem risk item with its promotion outcome (deep-interview \xA75)");
-var userConfirmation = exports_external.object({
-  confirmed: exports_external.boolean().describe("The user confirmed the synthesized intent matches their understanding"),
-  statement: exports_external.string().default("").describe("The user's own words confirming; required (non-empty) when confirmed=true"),
-  confirmed_at: isoDateTime.optional().describe("When the confirmation was captured")
-}).superRefine((value, ctx) => {
-  if (value.confirmed && value.statement.trim().length === 0) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "confirmed=true requires the user statement (evidence, not a bare boolean)",
-      path: ["statement"]
-    });
-  }
-}).describe("\uCD951 2\uCC28 \uAC8C\uC774\uD2B8: explicit, evidence-bearing user confirmation of the intent");
-var interviewState = exports_external.object({
-  schema_version: schemaVersion,
-  work_item_id: workItemId,
-  status: interviewStatus,
-  started_at: isoDateTime,
-  updated_at: isoDateTime,
-  dimensions: exports_external.array(interviewDimension).default([]),
-  readiness: exports_external.object({
-    score: exports_external.number().min(0).max(1),
-    threshold: exports_external.number().min(0).max(1),
-    critical_unresolved: exports_external.array(exports_external.string()).default([]),
-    gate: exports_external.enum(["blocked", "ready"])
-  }),
-  questions: exports_external.array(interviewQuestion).default([]),
-  assumptions: exports_external.array(interviewAssumption).default([]),
-  premortem: exports_external.array(premortemItem).default([]),
-  user_confirmation: userConfirmation.optional(),
-  exit: exports_external.object({
-    reason: exports_external.enum([
-      "readiness_met",
-      "diminishing_returns",
-      "user_deferred",
-      "user_owned_decision",
-      "cap_reached"
-    ]),
-    closure_mode: closureMode,
-    question_cap: exports_external.number().int().positive(),
-    questions_asked: exports_external.number().int().nonnegative()
-  })
-}).describe("Deep interview sidecar tracking ambiguity dimensions and readiness (\xA76.3)");
-
-// src/core/tech-spec.ts
-init_tech_spec_round();
-
-// src/schemas/tech-spec-state.ts
-init_zod();
-init_common();
-var specSectionId = exports_external.enum([
-  "feature",
-  "summary",
-  "background",
-  "goals",
-  "non-goals",
-  "acceptance-criteria",
-  "risks",
-  "plan",
-  "impact",
-  "rejected-alternatives",
-  "milestones",
-  "interview-log",
-  "post-build"
-]).describe("Template section ids (skills/tech-spec/TEMPLATE.md, 13 sections)");
-var specGroundingEvidence = exports_external.discriminatedUnion("kind", [
-  exports_external.object({
-    kind: exports_external.literal("memory"),
-    projection_id: exports_external.string().min(1).describe("projection_id from a ditto memory query answer"),
-    freshness: exports_external.enum(["fresh", "stale", "absent"]).optional()
-  }),
-  exports_external.object({
-    kind: exports_external.literal("acg"),
-    path: exports_external.string().min(1).describe("Path to an ACG artifact backing the claim")
-  })
-]).describe("Grounding-query evidence for factual sections (ac-9)");
-var specReviewState = exports_external.enum(["pending", "reviewed", "skipped"]).describe("Per-section review coverage; skipped is recorded honestly, never as agreement");
-var specSectionRecord = exports_external.object({
-  id: specSectionId,
-  review: specReviewState,
-  evidence: exports_external.array(specGroundingEvidence).default([]),
-  recorded_at: exports_external.string().min(1)
-});
-var questionConfig = exports_external.object({
-  intensity: exports_external.number().int().min(0).max(100).default(60),
-  generators: exports_external.number().int().min(1).max(6).default(2),
-  performance: exports_external.enum(["glance", "quick", "standard", "deep", "exhaustive"]).default("standard"),
-  generator_effort: exports_external.enum(["low", "medium", "high", "inherit"]).default("inherit"),
-  gate_mode: exports_external.enum(["confirm", "draft"]).default("confirm"),
-  max_questions: exports_external.number().int().nonnegative().default(0).describe("0 = unlimited (opt-in cap)"),
-  max_rounds: exports_external.number().int().nonnegative().default(0).describe("0 = unlimited (opt-in cap)"),
-  threshold: exports_external.number().min(0).max(1).default(0.6).describe("Intensity-derived unless overridden"),
-  granularity: exports_external.enum(["low", "medium", "high"]).default("medium"),
-  count_hint: exports_external.number().int().positive().default(2),
-  threshold_override: exports_external.boolean().default(false),
-  granularity_override: exports_external.boolean().default(false)
-}).describe("Resolved question-elicitation tuning; defaults preserve current behavior");
-var techSpecState = exports_external.object({
-  schema_version: schemaVersion,
-  work_item_id: workItemId,
-  doc_path: exports_external.string().min(1).describe("Spec document path relative to repo root"),
-  mode: exports_external.enum(["stepwise", "oneshot"]).describe("Writing/review rhythm; gates are mode-invariant"),
-  sections: exports_external.array(specSectionRecord).default([]),
-  question_config: questionConfig.default({}).describe("Resolved \xA76-6 question-elicitation tuning (wi_260619yfw)"),
-  finalized: exports_external.object({
-    at: exports_external.string().min(1),
-    digest: exports_external.string().regex(/^[0-9a-f]{64}$/),
-    review_coverage: exports_external.array(exports_external.object({ id: specSectionId, review: specReviewState }))
-  }).nullable().default(null).describe("Finalize stamp incl. per-section review coverage (design \xA78)"),
-  updated_at: exports_external.string().min(1)
-}).describe("tech-spec co-authoring machine state for one work item");
-
-// src/core/interview-store.ts
-import { join as join28 } from "path";
-init_ditto_paths();
-init_fs();
-
-class InterviewStore {
-  repoRoot;
-  constructor(repoRoot) {
-    this.repoRoot = repoRoot;
-  }
-  dir(workItemId2) {
-    return localDir(this.repoRoot, "work-items", workItemId2);
-  }
-  path(workItemId2) {
-    return join28(this.dir(workItemId2), "interview-state.json");
-  }
-  async exists(workItemId2) {
-    return Bun.file(this.path(workItemId2)).exists();
-  }
-  async get(workItemId2) {
-    return readJson(this.path(workItemId2), interviewState);
-  }
-  async write(state) {
-    await ensureDir(this.dir(state.work_item_id));
-    return writeJson(this.path(state.work_item_id), interviewState, state);
-  }
-}
-
-// src/core/tech-spec-options.ts
-var MAX_SELECTION_BAR = 0.9;
-var PERFORMANCE_PRESETS = {
-  glance: { intensity: 15, generators: 1, effort: "low" },
-  quick: { intensity: 35, generators: 2, effort: "low" },
-  standard: { intensity: 60, generators: 2, effort: "inherit" },
-  deep: { intensity: 85, generators: 3, effort: "high" },
-  exhaustive: { intensity: 100, generators: 4, effort: "high" }
-};
-function intensityToSubLevers(intensity) {
-  const threshold = Math.min(MAX_SELECTION_BAR, Math.round(intensity / 100 * 100) / 100);
-  const granularity = intensity < 34 ? "low" : intensity < 67 ? "medium" : "high";
-  const count_hint = Math.max(1, Math.round(intensity / 25));
-  return { threshold, granularity, count_hint };
-}
-function resolveQuestionConfig(cliRaw, configRaw = {}) {
-  const performance2 = cliRaw.performance ?? configRaw.performance ?? "standard";
-  const preset = PERFORMANCE_PRESETS[performance2];
-  const intensity = cliRaw.intensity ?? configRaw.intensity ?? preset.intensity;
-  const generators = cliRaw.generators ?? configRaw.generators ?? preset.generators;
-  const generator_effort = cliRaw.generator_effort ?? configRaw.generator_effort ?? preset.effort;
-  const gate_mode = cliRaw.gate_mode ?? configRaw.gate_mode ?? "confirm";
-  const max_questions = cliRaw.max_questions ?? configRaw.max_questions ?? 0;
-  const max_rounds = cliRaw.max_rounds ?? configRaw.max_rounds ?? 0;
-  const derived = intensityToSubLevers(intensity);
-  const rawThreshold = cliRaw.threshold ?? configRaw.threshold;
-  const rawGranularity = cliRaw.granularity ?? configRaw.granularity;
-  const threshold_override = rawThreshold !== undefined;
-  const granularity_override = rawGranularity !== undefined;
-  const threshold = threshold_override ? rawThreshold : derived.threshold;
-  const granularity = granularity_override ? rawGranularity : derived.granularity;
-  return {
-    intensity,
-    generators,
-    performance: performance2,
-    generator_effort,
-    gate_mode,
-    max_questions,
-    max_rounds,
-    threshold,
-    granularity,
-    count_hint: derived.count_hint,
-    threshold_override,
-    granularity_override
-  };
-}
-
-// src/core/tech-spec-store.ts
-import { join as join29 } from "path";
-init_ditto_paths();
-init_fs();
-
-class TechSpecStore {
-  repoRoot;
-  constructor(repoRoot) {
-    this.repoRoot = repoRoot;
-  }
-  dir(workItemId2) {
-    return localDir(this.repoRoot, "work-items", workItemId2);
-  }
-  path(workItemId2) {
-    return join29(this.dir(workItemId2), "tech-spec-state.json");
-  }
-  async exists(workItemId2) {
-    return Bun.file(this.path(workItemId2)).exists();
-  }
-  async get(workItemId2) {
-    return readJson(this.path(workItemId2), techSpecState);
-  }
-  async write(state) {
-    await ensureDir(this.dir(state.work_item_id));
-    return writeJson(this.path(state.work_item_id), techSpecState, state);
-  }
-}
-
-// src/core/tech-spec.ts
-init_work_item_store();
 var SPEC_SECTIONS = [
   { id: "feature", title: "\uAE30\uB2A5" },
   { id: "summary", title: "\uC694\uC57D" },
@@ -24952,7 +24630,6 @@ var COMPILE_INPUT_SECTIONS = [
   "acceptance-criteria",
   "risks"
 ];
-var FACTUAL_SECTIONS = ["background", "impact"];
 var EVIDENCE_KINDS = new Set(["test", "diff", "doc", "browser", "log"]);
 function headingText(line) {
   return line.replace(/^##\s+/, "").replace(/^\d+\.\s*/, "").trim();
@@ -24978,6 +24655,8 @@ function parseSpecSections(markdown) {
   const duplicates = [];
   let current = null;
   let buf = [];
+  let inFence = false;
+  const fenceLine = /^\s*(```+|~~~+)/;
   const flush = () => {
     if (current === null)
       return;
@@ -24989,7 +24668,9 @@ function parseSpecSections(markdown) {
       sections.set(current, body);
   };
   for (const line of lines) {
-    if (line.startsWith("## ")) {
+    if (fenceLine.test(line))
+      inFence = !inFence;
+    if (!inFence && line.startsWith("## ")) {
       flush();
       current = sectionIdFor(headingText(line));
       buf = [];
@@ -25087,190 +24768,6 @@ function compileSpecDoc(markdown) {
     digest: computeSpecDigest(markdown)
   };
 }
-var recordSectionPayload = exports_external.object({
-  section: exports_external.object({
-    id: specSectionId,
-    review: specReviewState.default("pending"),
-    evidence: exports_external.array(specGroundingEvidence).default([])
-  })
-}).superRefine((val, ctx) => {
-  if (FACTUAL_SECTIONS.includes(val.section.id) && val.section.evidence.length === 0) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      path: ["section", "evidence"],
-      message: `\uC0AC\uC2E4 \uC139\uC158 "${val.section.id}"\uC740 \uADFC\uAC70 \uC870\uD68C \uC99D\uAC70(memory projection_id \uB610\uB294 ACG \uC0B0\uCD9C\uBB3C \uACBD\uB85C)\uAC00 \uC2A4\uD0A4\uB9C8 \uD544\uC218\uB2E4 \u2014 \uC99D\uAC70 \uC5C6\uC774 \uAE30\uB85D\uD560 \uC218 \uC5C6\uC74C (ac-9)`
-    });
-  }
-});
-async function startTechSpec(repoRoot, input) {
-  const nowIso = (input.now ?? new Date).toISOString();
-  return new TechSpecStore(repoRoot).write({
-    schema_version: "0.1.0",
-    work_item_id: input.workItemId,
-    doc_path: input.docPath,
-    mode: input.mode ?? "stepwise",
-    sections: [],
-    question_config: input.questionConfig ?? resolveQuestionConfig({}),
-    finalized: null,
-    updated_at: nowIso
-  });
-}
-async function recordSection(repoRoot, input) {
-  const store = new TechSpecStore(repoRoot);
-  const state = await store.get(input.workItemId);
-  const nowIso = (input.now ?? new Date).toISOString();
-  const record = {
-    id: input.payload.section.id,
-    review: input.payload.section.review,
-    evidence: input.payload.section.evidence,
-    recorded_at: nowIso
-  };
-  const idx = state.sections.findIndex((s2) => s2.id === record.id);
-  const sections = idx === -1 ? [...state.sections, record] : state.sections.map((s2, i2) => i2 === idx ? record : s2);
-  return store.write({ ...state, sections, updated_at: nowIso });
-}
-var recordRoundPayload = techSpecRoundPayload;
-function checkQuestionContext(q2) {
-  return validateQuestionContext({
-    text: q2.text,
-    why_matters: q2.why_matters ?? "",
-    user_explanation: q2.user_explanation,
-    background: q2.background,
-    grounding: q2.grounding
-  });
-}
-async function recordRound(repoRoot, input) {
-  const store = new WorkItemStore(repoRoot);
-  if (!await store.exists(input.workItemId)) {
-    throw new Error(`work item ${input.workItemId} not found`);
-  }
-  const record = techSpecRound.parse({
-    ts: (input.now ?? new Date).toISOString(),
-    work_item_id: input.workItemId,
-    ...input.payload
-  });
-  await store.appendTechSpecRoundLine(input.workItemId, JSON.stringify(record));
-  return record;
-}
-async function nextRound(repoRoot, input) {
-  const techStore = new TechSpecStore(repoRoot);
-  if (!await techStore.exists(input.workItemId)) {
-    throw new Error(`tech-spec was never started for ${input.workItemId} \u2014 run 'ditto tech-spec start' first`);
-  }
-  const cfg = (await techStore.get(input.workItemId)).question_config;
-  const rounds = await new WorkItemStore(repoRoot).readTechSpecRounds(input.workItemId);
-  const rounds_so_far = rounds.length;
-  const questions_so_far = rounds.reduce((n2, r3) => n2 + r3.selected.length, 0);
-  const roundCapHit = cfg.max_rounds > 0 && rounds_so_far >= cfg.max_rounds;
-  const questionCapHit = cfg.max_questions > 0 && questions_so_far >= cfg.max_questions;
-  const cap_reason = roundCapHit ? "max_rounds" : questionCapHit ? "max_questions" : null;
-  return {
-    round: rounds_so_far + 1,
-    generators: cfg.generators,
-    threshold: cfg.threshold,
-    granularity: cfg.granularity,
-    generator_effort: cfg.generator_effort,
-    gate_mode: cfg.gate_mode,
-    count_hint: cfg.count_hint,
-    max_rounds: cfg.max_rounds,
-    max_questions: cfg.max_questions,
-    rounds_so_far,
-    questions_so_far,
-    cap_reached: cap_reason !== null,
-    cap_reason
-  };
-}
-var finalizeTechSpecPayload = exports_external.object({
-  risk: exports_external.object({
-    non_local: exports_external.boolean().default(false),
-    irreversible: exports_external.boolean().default(false),
-    unaudited: exports_external.boolean().default(false)
-  }).default({ non_local: false, irreversible: false, unaudited: false }),
-  approved_source: exports_external.enum(["approved_spec", "issue", "prd", "user"]).optional(),
-  user_confirmation: userConfirmation
-});
-async function finalizeTechSpec(repoRoot, input) {
-  const specStore = new TechSpecStore(repoRoot);
-  if (!await specStore.exists(input.workItemId))
-    return { status: "not_started" };
-  const state = await specStore.get(input.workItemId);
-  let markdown;
-  try {
-    markdown = await readFile3(join30(repoRoot, state.doc_path), "utf8");
-  } catch {
-    return { status: "doc_missing", doc_path: state.doc_path };
-  }
-  const compiled = compileSpecDoc(markdown);
-  if (compiled.status === "rejected") {
-    return { status: "compile_rejected", reasons: compiled.reasons };
-  }
-  const interviews = new InterviewStore(repoRoot);
-  if (await interviews.exists(input.workItemId)) {
-    const gate2 = interviewReadinessGate(await interviews.get(input.workItemId));
-    if (!gate2.pass)
-      return { status: "interview_not_ready", gate: gate2 };
-  }
-  if (!input.payload.user_confirmation.confirmed)
-    return { status: "not_confirmed" };
-  const items = new WorkItemStore(repoRoot);
-  const workItem2 = await items.get(input.workItemId);
-  const intent = {
-    schema_version: "0.1.0",
-    work_item_id: input.workItemId,
-    source_request: workItem2.source_request,
-    goal: compiled.fields.goal,
-    in_scope: compiled.fields.in_scope,
-    out_of_scope: compiled.fields.out_of_scope,
-    acceptance_criteria: compiled.fields.acceptance_criteria,
-    unknowns: compiled.fields.unknowns,
-    follow_up_candidates: [],
-    question_policy: "ask_only_if_user_only_can_answer",
-    source_digest: { doc_path: state.doc_path, sha256: compiled.digest }
-  };
-  const writtenIntent = await new IntentStore(repoRoot).write(intent);
-  await items.update(input.workItemId, (current) => ({
-    ...current,
-    acceptance_criteria: compiled.fields.acceptance_criteria.map((ac) => ({
-      id: ac.id,
-      statement: ac.statement,
-      verdict: ac.verdict,
-      evidence: ac.evidence
-    })),
-    goal: compiled.fields.goal
-  }));
-  const nowIso = (input.now ?? new Date).toISOString();
-  const recorded = new Map(state.sections.map((s2) => [s2.id, s2.review]));
-  const finalizedState = await specStore.write({
-    ...state,
-    finalized: {
-      at: nowIso,
-      digest: compiled.digest,
-      review_coverage: SPEC_SECTIONS.map((s2) => ({
-        id: s2.id,
-        review: recorded.get(s2.id) ?? "pending"
-      }))
-    },
-    updated_at: nowIso
-  });
-  const refreshedItem = await items.get(input.workItemId);
-  const risk = input.payload.risk;
-  const boot = await bootstrapAutopilot(repoRoot, {
-    workItem: refreshedItem,
-    intent: writtenIntent,
-    risk,
-    ...input.payload.approved_source ? { approvedSource: input.payload.approved_source } : {},
-    ...input.now ? { now: input.now } : {}
-  });
-  if (boot.status !== "created") {
-    throw new Error(`spec compiled but bootstrapAutopilot failed (${boot.status}): ${boot.reasons.join("; ")}`);
-  }
-  return {
-    status: "finalized",
-    intent: writtenIntent,
-    autopilot: boot.graph,
-    state: finalizedState
-  };
-}
 
 // src/core/autopilot-loop.ts
 init_work_item_store();
@@ -25289,7 +24786,7 @@ async function specDigestStale(repoRoot, workItemId2) {
   const { doc_path, sha256: sha2562 } = intent.source_digest;
   let doc;
   try {
-    doc = await readFile4(join31(repoRoot, doc_path), "utf8");
+    doc = await readFile3(join28(repoRoot, doc_path), "utf8");
   } catch {
     doc = null;
   }
@@ -25298,7 +24795,7 @@ async function specDigestStale(repoRoot, workItemId2) {
   return {
     action: "blocked",
     blocked_node_ids: [],
-    reason: doc === null ? `spec document ${doc_path} is missing but intent.json was compiled from it \u2014 restore the document or re-run \`ditto tech-spec finalize\` (ac-6)` : `spec document ${doc_path} changed after finalize (source_digest mismatch) \u2014 re-run \`ditto tech-spec finalize\` to re-compile intent.json before executing (ac-6)`
+    reason: doc === null ? `spec document ${doc_path} is missing but intent.json was compiled from it \u2014 restore the document or re-run \`ditto deep-interview finalize\` (ac-6)` : `spec document ${doc_path} changed after finalize (source_digest mismatch) \u2014 re-run \`ditto deep-interview finalize\` to re-compile intent.json before executing (ac-6)`
   };
 }
 async function collectRetroContext(repoRoot, workItemId2, graph) {
@@ -25446,7 +24943,7 @@ function progressReportPath(repoRoot, workItemId2, band) {
   return localDir(repoRoot, "runs", workItemId2, `progress-report-band-${band}.json`);
 }
 function progressReportRelPath(workItemId2, band) {
-  return join31(".ditto", "local", "runs", workItemId2, `progress-report-band-${band}.json`);
+  return join28(".ditto", "local", "runs", workItemId2, `progress-report-band-${band}.json`);
 }
 function fenceProgressReport(report, band) {
   const body = [
@@ -25779,7 +25276,7 @@ async function surfaceLspDiagnostics(repoRoot, workItemId2, changedFiles) {
   const surfaced = [];
   for (let i2 = 0;i2 < checked.length; i2 += GATE_CONCURRENCY) {
     const batch = await Promise.all(checked.slice(i2, i2 + GATE_CONCURRENCY).map(async ({ file, language }) => {
-      const diags = await getDiagnostics(join31(repoRoot, file), {
+      const diags = await getDiagnostics(join28(repoRoot, file), {
         language,
         timeoutMs: GATE_TIMEOUT_MS
       });
@@ -25806,7 +25303,7 @@ async function surfaceLspDiagnostics(repoRoot, workItemId2, changedFiles) {
 async function planRequiresDecisionApproval(repoRoot, workItemId2) {
   let text;
   try {
-    text = await readFile4(localDir(repoRoot, "work-items", workItemId2, "decision-conflict.json"), "utf8");
+    text = await readFile3(localDir(repoRoot, "work-items", workItemId2, "decision-conflict.json"), "utf8");
   } catch {
     return false;
   }
@@ -26006,7 +25503,7 @@ async function recordResultCore(repoRoot, input) {
         failureClass = "fixable";
         guardReason = ownerGuard.reason;
       } else {
-        const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) => readFile4(join31(repoRoot, p), "utf8"));
+        const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) => readFile3(join28(repoRoot, p), "utf8"));
         if (!artifactGuard.contentful) {
           contentful = false;
           outcome = "fail";
@@ -26516,8 +26013,8 @@ async function recordResultCore(repoRoot, input) {
 
 // src/core/cite-gate.ts
 init_ditto_paths();
-import { readFile as readFile5, readdir as readdir12 } from "fs/promises";
-import { join as join32 } from "path";
+import { readFile as readFile4, readdir as readdir12 } from "fs/promises";
+import { join as join29 } from "path";
 var CITE_RE = /\bdecision:|\bADR-\d/i;
 var ABSTAIN_RE = /\babstain|none\s+(?:of\s+the\s+)?(?:governing\s+)?decisions?\s+apply|none\s+apply/i;
 function evidenceText(node2) {
@@ -26589,14 +26086,14 @@ function citeNeedsReproposalMeasurement(verdict2) {
   return verdict2 === "pass";
 }
 async function loadAdrBodies(repoRoot) {
-  const adrDir = join32(dittoDir(repoRoot), "knowledge", "adr");
+  const adrDir = join29(dittoDir(repoRoot), "knowledge", "adr");
   let names;
   try {
     names = (await readdir12(adrDir)).filter((n2) => n2.endsWith(".md")).sort();
   } catch {
     return [];
   }
-  return Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile5(join32(adrDir, n2), "utf8") })));
+  return Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile4(join29(adrDir, n2), "utf8") })));
 }
 async function detectActiveConflicts(repoRoot, input) {
   const report = await readUsageReport(repoRoot, input.workItemId);
@@ -27117,7 +26614,7 @@ var dittoConfigQuestion = exports_external.object({
   max_rounds: exports_external.number().int().nonnegative().optional(),
   threshold: exports_external.number().min(0).max(1).optional(),
   granularity: exports_external.enum(["low", "medium", "high"]).optional()
-}).describe("Per-user defaults for \xA76-6 question-elicitation (RawQuestionConfig-shaped)");
+}).describe("Per-user defaults for question-elicitation (every field optional, CLI-flag-shaped)");
 var dittoConfigDeepInterview = exports_external.object({
   threshold: exports_external.number().min(0).max(1).optional(),
   question_cap: exports_external.number().int().positive().optional(),
@@ -27134,7 +26631,7 @@ var dittoConfigGithub = exports_external.object({
   auto_reflect: exports_external.boolean()
 }).describe("GitHub Project \uC5F0\uACB0 config \u2014 D7 status \uB9E4\uD551(\uD0A4=done|abandoned) + auto-reflect");
 var dittoConfig = exports_external.object({
-  tech_spec: exports_external.object({
+  prism: exports_external.object({
     question: dittoConfigQuestion.optional()
   }).optional(),
   deep_interview: dittoConfigDeepInterview.optional(),
@@ -27143,22 +26640,6 @@ var dittoConfig = exports_external.object({
 
 // src/core/ditto-config.ts
 init_ditto_paths();
-async function readQuestionConfigDefaults(repoRoot, onMalformed) {
-  const file = Bun.file(localDir(repoRoot, "config.json"));
-  if (!await file.exists())
-    return {};
-  try {
-    const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
-    if (!parsed.success) {
-      onMalformed?.();
-      return {};
-    }
-    return parsed.data.tech_spec?.question ?? {};
-  } catch {
-    onMalformed?.();
-    return {};
-  }
-}
 async function readDeepInterviewConfigDefaults(repoRoot, onMalformed) {
   const file = Bun.file(localDir(repoRoot, "config.json"));
   if (!await file.exists())
@@ -27197,9 +26678,10 @@ async function writeGithubConfig(repoRoot, github) {
   const file = Bun.file(path);
   if (await file.exists()) {
     try {
-      const parsed = dittoConfig.safeParse(JSON.parse(await file.text()));
-      if (parsed.success)
-        existing = parsed.data;
+      const raw = JSON.parse(await file.text());
+      if (dittoConfig.safeParse(raw).success && raw !== null && typeof raw === "object") {
+        existing = raw;
+      }
     } catch {}
   }
   const next = { ...existing, github };
@@ -27235,7 +26717,7 @@ async function seedGithubConfigIfAbsent(repoRoot, github, onMalformed) {
 init_ditto_paths();
 
 // src/core/e2e/completion-gate.ts
-import { join as join38 } from "path";
+import { join as join35 } from "path";
 
 // src/schemas/e2e-regression-gate.ts
 init_zod();
@@ -27335,8 +26817,8 @@ var regressionGateRecord = exports_external.object({
 }).describe("Regression gate record (.ditto/local/work-items/<wi>/regression-gate.json)");
 
 // src/core/e2e/regression-gate.ts
-import { readFile as readFile10 } from "fs/promises";
-import { join as join36, resolve as resolve8 } from "path";
+import { readFile as readFile9 } from "fs/promises";
+import { join as join33, resolve as resolve8 } from "path";
 init_ditto_paths();
 init_fs();
 
@@ -27466,14 +26948,14 @@ function renderFailureLines(failure, journeyName) {
 // src/core/e2e/generated-verify.ts
 init_ditto_paths();
 init_fs();
-import { mkdir as mkdir5, readFile as readFile8 } from "fs/promises";
-import { join as join34 } from "path";
+import { mkdir as mkdir5, readFile as readFile7 } from "fs/promises";
+import { join as join31 } from "path";
 
 // src/core/e2e/browser.ts
 import { createHash as createHash7 } from "crypto";
-import { mkdir as mkdir4, readFile as readFile6, readdir as readdir13, writeFile as writeFile3 } from "fs/promises";
+import { mkdir as mkdir4, readFile as readFile5, readdir as readdir13, writeFile as writeFile3 } from "fs/promises";
 import { homedir as homedir6 } from "os";
-import { dirname as dirname10, join as join33, relative as relative9, sep as sep5 } from "path";
+import { dirname as dirname10, join as join30, relative as relative9, sep as sep5 } from "path";
 import { fileURLToPath } from "url";
 
 // src/schemas/e2e-journey.ts
@@ -27556,11 +27038,11 @@ var e2eJourney = exports_external.object({
 init_ditto_paths();
 init_shared();
 function runnerScriptPath() {
-  return join33(dirname10(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
+  return join30(dirname10(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
 }
 async function resolvePlaywrightCore() {
-  const bunInstall = process.env.BUN_INSTALL ?? join33(homedir6(), ".bun");
-  const cacheDir = join33(bunInstall, "install", "cache");
+  const bunInstall = process.env.BUN_INSTALL ?? join30(homedir6(), ".bun");
+  const cacheDir = join30(bunInstall, "install", "cache");
   let entries;
   try {
     entries = await readdir13(cacheDir);
@@ -27569,7 +27051,7 @@ async function resolvePlaywrightCore() {
   }
   const versions = entries.filter((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2)).sort((a2, b2) => compareSemver(b2.split("@")[1], a2.split("@")[1]));
   for (const v2 of versions) {
-    const mjs = join33(cacheDir, v2, "index.mjs");
+    const mjs = join30(cacheDir, v2, "index.mjs");
     if (await fileExists(mjs))
       return mjs;
   }
@@ -27585,7 +27067,7 @@ function compareSemver(a2, b2) {
   return 0;
 }
 async function findCachedChromium() {
-  const cacheRoot = join33(homedir6(), "Library", "Caches", "ms-playwright");
+  const cacheRoot = join30(homedir6(), "Library", "Caches", "ms-playwright");
   let entries;
   try {
     entries = await readdir13(cacheRoot);
@@ -27599,7 +27081,7 @@ async function findCachedChromium() {
   ];
   for (const dir of chromiumDirs) {
     for (const rel of candidates) {
-      const abs = join33(cacheRoot, dir, rel);
+      const abs = join30(cacheRoot, dir, rel);
       if (await fileExists(abs))
         return abs;
     }
@@ -27610,7 +27092,7 @@ function repoRelative(repoRoot, path) {
   return relative9(repoRoot, path).split(sep5).join("/");
 }
 async function sha256OfFile(path) {
-  const bytes = await readFile6(path);
+  const bytes = await readFile5(path);
   return createHash7("sha256").update(bytes).digest("hex");
 }
 async function probePlaywright(repoRoot) {
@@ -27680,7 +27162,7 @@ async function runJourney(repoRoot, runId2, spec) {
   }
   const runDir = localDir(repoRoot, "runs", runId2);
   await mkdir4(runDir, { recursive: true });
-  const configAbs = join33(runDir, "runner-config.json");
+  const configAbs = join30(runDir, "runner-config.json");
   await writeFile3(configAbs, JSON.stringify({
     playwrightCore: probe.playwrightCore,
     executablePath: probe.executablePath,
@@ -27713,10 +27195,10 @@ async function runJourney(repoRoot, runId2, spec) {
       probe
     };
   }
-  const screenshotAbs = join33(runDir, "journey.png");
-  const traceAbs = join33(runDir, "trace.zip");
-  const consoleAbs = join33(runDir, "console.log");
-  const networkAbs = join33(runDir, "network.log");
+  const screenshotAbs = join30(runDir, "journey.png");
+  const traceAbs = join30(runDir, "trace.zip");
+  const consoleAbs = join30(runDir, "console.log");
+  const networkAbs = join30(runDir, "network.log");
   const screenshots = [];
   if (await fileExists(screenshotAbs)) {
     screenshots.push({
@@ -27727,7 +27209,7 @@ async function runJourney(repoRoot, runId2, spec) {
   const trace = await fileExists(traceAbs) ? { path: repoRelative(repoRoot, traceAbs) } : null;
   const consoleArtifact = await fileExists(consoleAbs) ? { path: repoRelative(repoRoot, consoleAbs) } : null;
   const network = await fileExists(networkAbs) ? { path: repoRelative(repoRoot, networkAbs) } : null;
-  const outcomeAbs = join33(runDir, "outcome.json");
+  const outcomeAbs = join30(runDir, "outcome.json");
   if (!await fileExists(outcomeAbs)) {
     return {
       journey: blockedJourney(spec, "Playwright present but no capture outcome was produced; treating as blocked rather than asserting an unobserved pass"),
@@ -27737,7 +27219,7 @@ async function runJourney(repoRoot, runId2, spec) {
   }
   let outcome;
   try {
-    outcome = JSON.parse(await readFile6(outcomeAbs, "utf8"));
+    outcome = JSON.parse(await readFile5(outcomeAbs, "utf8"));
   } catch (err) {
     return {
       journey: blockedJourney(spec, `capture outcome unreadable: ${err instanceof Error ? err.message : String(err)}`),
@@ -27773,7 +27255,7 @@ async function withBrowserGuard(repoRoot, action, options = {}) {
 
 // src/core/e2e/journey-digest.ts
 import { createHash as createHash8 } from "crypto";
-import { readFile as readFile7, readdir as readdir14 } from "fs/promises";
+import { readFile as readFile6, readdir as readdir14 } from "fs/promises";
 init_dist2();
 init_shared();
 
@@ -27950,13 +27432,13 @@ function parseGeneratedHeader(content) {
 async function detectStale(sourceAbs, generatedAbs, expectedSource) {
   let sourceText;
   try {
-    sourceText = await readFile7(sourceAbs, "utf8");
+    sourceText = await readFile6(sourceAbs, "utf8");
   } catch {
     return { stale: true, reason: `source DSL not readable: ${sourceAbs}` };
   }
   let generated;
   try {
-    generated = await readFile7(generatedAbs, "utf8");
+    generated = await readFile6(generatedAbs, "utf8");
   } catch {
     return {
       stale: true,
@@ -28092,7 +27574,7 @@ function passedCount(output) {
 async function anyFallbackUnverified(repoRoot, files) {
   for (const file of files) {
     try {
-      if (isFallbackUnverified(await readFile8(join34(repoRoot, file), "utf8")))
+      if (isFallbackUnverified(await readFile7(join31(repoRoot, file), "utf8")))
         return true;
     } catch {}
   }
@@ -28102,7 +27584,7 @@ async function verifyGenerated(repoRoot, runId2, files, options = {}) {
   const runner = options.runner ?? runPlaywrightTests;
   const runDir = localDir(repoRoot, "runs", runId2);
   await mkdir5(runDir, { recursive: true });
-  const outcome = await withBrowserGuard(repoRoot, () => runner(repoRoot, files, join34(runDir, "playwright-report.json")), options.probe ? { probe: options.probe } : {});
+  const outcome = await withBrowserGuard(repoRoot, () => runner(repoRoot, files, join31(runDir, "playwright-report.json")), options.probe ? { probe: options.probe } : {});
   const verified_at = new Date().toISOString();
   let record;
   if (outcome.result === "blocked") {
@@ -28143,15 +27625,15 @@ async function verifyGenerated(repoRoot, runId2, files, options = {}) {
       verified_at
     };
   }
-  await atomicWriteText(join34(runDir, "generated-verify.json"), `${JSON.stringify(record, null, 2)}
+  await atomicWriteText(join31(runDir, "generated-verify.json"), `${JSON.stringify(record, null, 2)}
 `);
   return record;
 }
 
 // src/core/e2e/regression-select.ts
 init_shared();
-import { readFile as readFile9, readdir as readdir15, stat as stat5 } from "fs/promises";
-import { join as join35, relative as relative10, resolve as resolve7, sep as sep6 } from "path";
+import { readFile as readFile8, readdir as readdir15, stat as stat5 } from "fs/promises";
+import { join as join32, relative as relative10, resolve as resolve7, sep as sep6 } from "path";
 var COMPONENT_PREFIX = "component:";
 function matchesComponentPattern(pattern, path) {
   if (!pattern.includes("*")) {
@@ -28213,16 +27695,16 @@ async function loadJourneyEntries(journeysDir) {
   const entries = [];
   const invalid = [];
   for (const name of names) {
-    const fileAbs = join35(journeysAbs, name);
+    const fileAbs = join32(journeysAbs, name);
     const fileRel = toPosix(relative10(repoRoot, fileAbs));
-    const text = await readFile9(fileAbs, "utf8");
+    const text = await readFile8(fileAbs, "utf8");
     const parsed = parseJourneyDoc(text);
     if (!parsed.ok) {
       invalid.push({ file: fileRel, error: invalidJourneyReason(text, parsed.error) });
       continue;
     }
     const slug = name.slice(0, -".journey.md".length);
-    const specAbs = join35(generatedDir, `${slug}.spec.ts`);
+    const specAbs = join32(generatedDir, `${slug}.spec.ts`);
     entries.push({
       id: parsed.frontMatter.id,
       name: parsed.frontMatter.name,
@@ -28267,10 +27749,10 @@ async function selectImpactedJourneys(journeysDir, changedPaths) {
 
 // src/core/e2e/regression-gate.ts
 function regressionGatePath(repoRoot, workItemId2) {
-  return join36(localDir(repoRoot, "work-items", workItemId2), "regression-gate.json");
+  return join33(localDir(repoRoot, "work-items", workItemId2), "regression-gate.json");
 }
 async function mapRunFailures(repoRoot, runId2, selected) {
-  const reportFile = Bun.file(join36(localDir(repoRoot, "runs", runId2), "playwright-report.json"));
+  const reportFile = Bun.file(join33(localDir(repoRoot, "runs", runId2), "playwright-report.json"));
   if (!await reportFile.exists())
     return [];
   let reporter;
@@ -28283,7 +27765,7 @@ async function mapRunFailures(repoRoot, runId2, selected) {
     repoRoot,
     readSpec: async (specFile) => {
       try {
-        return await readFile10(resolve8(repoRoot, specFile), "utf8");
+        return await readFile9(resolve8(repoRoot, specFile), "utf8");
       } catch {
         return null;
       }
@@ -28297,7 +27779,7 @@ async function mapRunFailures(repoRoot, runId2, selected) {
   }));
 }
 async function runRegressionGate(repoRoot, input, options = {}) {
-  const journeysDir = join36(repoRoot, "e2e", "journeys");
+  const journeysDir = join33(repoRoot, "e2e", "journeys");
   const selection = await selectImpactedJourneys(journeysDir, input.changedPaths);
   let selected;
   if (input.journeyIds !== undefined) {
@@ -28385,7 +27867,7 @@ async function runRegressionGate(repoRoot, input, options = {}) {
 
 // src/core/e2e/applicability.ts
 import { existsSync as existsSync5, readFileSync as readFileSync2 } from "fs";
-import { join as join37 } from "path";
+import { join as join34 } from "path";
 var WEB_FRAMEWORKS = [
   "react",
   "react-dom",
@@ -28440,7 +27922,7 @@ function dependencyNames(pkg) {
 var UI_EXTENSIONS = [".tsx", ".jsx", ".vue", ".svelte", ".html"];
 function defaultReadPackageJson(repoRoot) {
   return () => {
-    const path = join37(repoRoot, "package.json");
+    const path = join34(repoRoot, "package.json");
     if (!existsSync5(path))
       return null;
     try {
@@ -28453,7 +27935,7 @@ function defaultReadPackageJson(repoRoot) {
 }
 function defaultCountUiFiles(repoRoot) {
   return () => {
-    const srcDir = join37(repoRoot, "src");
+    const srcDir = join34(repoRoot, "src");
     if (!existsSync5(srcDir))
       return 0;
     const glob = new Bun.Glob(`**/*{${UI_EXTENSIONS.join(",")}}`);
@@ -28545,7 +28027,7 @@ async function checkE2eCompletionGate(repoRoot, input) {
       });
     }
   }
-  const selection = await selectImpactedJourneys(join38(repoRoot, "e2e", "journeys"), input.changedFiles);
+  const selection = await selectImpactedJourneys(join35(repoRoot, "e2e", "journeys"), input.changedFiles);
   const impacted = selection.journeys.length > 0 || selection.invalid_journeys.length > 0;
   if (!impacted)
     return violations;
@@ -28737,7 +28219,7 @@ function reflectAutopilotTermination(deps, input) {
 init_cleanup_archive();
 init_memory_scan();
 import { execFileSync as execFileSync5 } from "child_process";
-import { join as join41, relative as relative12, resolve as resolve11 } from "path";
+import { join as join38, relative as relative12, resolve as resolve11 } from "path";
 var RUN_ARTIFACT_PREFIX = ".ditto/local/runs/";
 var BYPRODUCT_PREFIXES = [".ditto/memory/"];
 function isGitIgnoredInRepo(repoAbs, rel) {
@@ -28789,7 +28271,7 @@ async function landCommit(repoRoot, changedFiles, message) {
   }
   const byRepo = new Map;
   for (const p of landable) {
-    const abs = join41(root, p);
+    const abs = join38(root, p);
     const owningAbs = await findOwningRepo(abs, root);
     const key = owningAbs === null ? "." : relative12(root, owningAbs).replace(/\\/g, "/") || ".";
     const repoAbs = subRepoAbs(root, key);
@@ -29100,7 +28582,7 @@ ${input.reason ?? "Claim released \u2014 the issue is free for takeover."}`;
 }
 
 // src/core/work-item-handoff.ts
-import { join as join42 } from "path";
+import { join as join39 } from "path";
 init_ditto_paths();
 init_fs();
 class InvalidBaseRefError extends Error {
@@ -29284,7 +28766,7 @@ async function writeWorkItemHandoff(repoRoot, store, workId, options = {}, now =
   });
   const hstore = new HandoffStore(repoRoot);
   const handoffRel = completion.final_verdict === "pass" ? await hstore.writeArchived(handoffArtifact, now) : await hstore.write(handoffArtifact);
-  const handoffPath = join42(repoRoot, handoffRel);
+  const handoffPath = join39(repoRoot, handoffRel);
   try {
     await hstore.sweepStaleActive(now);
   } catch {}
@@ -31902,14 +31384,14 @@ var autopilotRecordResult = defineCommand({
   }
 });
 async function measureReproposalForCompletion(repoRoot) {
-  const adrDir = join43(dittoDir(repoRoot), "knowledge", "adr");
+  const adrDir = join40(dittoDir(repoRoot), "knowledge", "adr");
   let names;
   try {
     names = (await readdir16(adrDir)).filter((n2) => n2.endsWith(".md")).sort();
   } catch {
     names = [];
   }
-  const adrs = await Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile11(join43(adrDir, n2), "utf8") })));
+  const adrs = await Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile10(join40(adrDir, n2), "utf8") })));
   return measureHallucination(adrs, []);
 }
 var autopilotComplete = defineCommand({
@@ -32853,7 +32335,7 @@ var autopilotCommand = defineCommand({
 });
 
 // src/cli/commands/boundary.ts
-import { join as join44 } from "path";
+import { join as join41 } from "path";
 init_fs();
 function violationsToReviewGraph(violations) {
   return acgReviewGraph.parse({
@@ -32928,7 +32410,7 @@ var boundaryCommand = defineCommand({
           }
           const changedFiles = args.file.split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
           const language = args.language ?? "javascript";
-          const sourceRoot = args["source-root"] ?? join44(repoRoot, "src");
+          const sourceRoot = args["source-root"] ?? join41(repoRoot, "src");
           const guard = await runInternalPackagesGuard({
             language,
             entries: spec.internal_packages,
@@ -32982,11 +32464,11 @@ var boundaryCommand = defineCommand({
 
 // src/core/bridge-sync.ts
 init_fs();
-import { join as join46 } from "path";
+import { join as join43 } from "path";
 
 // src/core/instruction-bridge.ts
 import { createHash as createHash9 } from "crypto";
-import { join as join45 } from "path";
+import { join as join42 } from "path";
 var MANAGED_END = "<!-- ditto:managed:end -->";
 var MANAGED_BLOCK_RE_G = /<!--\s*ditto:managed:start\s+source=([^\s]+)\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:managed:end\s*-->/g;
 var DELEGATION_CLAUSE_ANCHOR = "\uC704\uC784\uC73C\uB85C \uCEE8\uD14D\uC2A4\uD2B8\uB97C \uC9C0\uD0A8\uB2E4";
@@ -33003,7 +32485,7 @@ function normalizedSha256(text) {
 }
 function sourceFromSurface(surface) {
   if (surface.role !== "source") {
-    return { kind: "missing", path: join45(surface.path, "..", "AGENTS.md") };
+    return { kind: "missing", path: join42(surface.path, "..", "AGENTS.md") };
   }
   if (!surface.exists || surface.content === undefined)
     return { kind: "missing", path: surface.path };
@@ -33213,7 +32695,7 @@ async function checkInstructionsForAdapters(adapters, repoRoot) {
     sourceSurface = registered.find((surface) => surface.role === "source");
   }
   if (!sourceSurface) {
-    const sourcePath = join45(repoRoot, "AGENTS.md");
+    const sourcePath = join42(repoRoot, "AGENTS.md");
     sourceSurface = { role: "source", host: "codex", path: sourcePath, exists: false };
   }
   const source = sourceFromSurface(sourceSurface);
@@ -33244,7 +32726,7 @@ async function syncClaudeCodeProjection(repoRoot, options = {}) {
   const source = await loadSource(repoRoot);
   if ("kind" in source)
     throw new Error("AGENTS.md is missing; cannot sync Claude projection");
-  const path = join46(repoRoot, "CLAUDE.md");
+  const path = join43(repoRoot, "CLAUDE.md");
   const projection = await loadProjection(repoRoot);
   const block = managedBlock(source.content, source.normalizedSha256);
   const check = options.check === true;
@@ -33305,14 +32787,14 @@ init_fs();
 // src/core/knowledge-bridge.ts
 init_zod();
 import { readdir as readdir17 } from "fs/promises";
-import { join as join47 } from "path";
+import { join as join44 } from "path";
 init_fs();
 var KNOWLEDGE_END = "<!-- ditto:knowledge:end -->";
 var KNOWLEDGE_BLOCK_RE_G = /<!--\s*ditto:knowledge:start\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:knowledge:end\s*-->/g;
 var glossarySummarySchema = exports_external.object({
   entries: exports_external.array(exports_external.object({ term: exports_external.string(), status: exports_external.string().optional() })).default([])
 });
-var KNOWLEDGE_DIR = join47(".ditto", "knowledge");
+var KNOWLEDGE_DIR = join44(".ditto", "knowledge");
 function adrHeadline(filename, body) {
   const id = filename.match(ADR_ID_EXTRACT_RE)?.[0] ?? filename;
   const titleLine = body.split(`
@@ -33327,12 +32809,12 @@ function adrHeadline(filename, body) {
   return parts.join(" \xB7 ");
 }
 async function loadKnowledgeSources(repoRoot) {
-  const dir = join47(repoRoot, KNOWLEDGE_DIR);
-  const contextPath = join47(KNOWLEDGE_DIR, "CONTEXT.md");
-  const glossaryPath = join47(KNOWLEDGE_DIR, "glossary.json");
-  const adrDir = join47(KNOWLEDGE_DIR, "adr");
+  const dir = join44(repoRoot, KNOWLEDGE_DIR);
+  const contextPath = join44(KNOWLEDGE_DIR, "CONTEXT.md");
+  const glossaryPath = join44(KNOWLEDGE_DIR, "glossary.json");
+  const adrDir = join44(KNOWLEDGE_DIR, "adr");
   let termHeadlines = [];
-  const glossaryFile = Bun.file(join47(dir, "glossary.json"));
+  const glossaryFile = Bun.file(join44(dir, "glossary.json"));
   if (await glossaryFile.exists()) {
     const parsed = glossarySummarySchema.safeParse(JSON.parse(await glossaryFile.text()));
     if (parsed.success) {
@@ -33340,7 +32822,7 @@ async function loadKnowledgeSources(repoRoot) {
     }
   }
   const adrHeadlines = [];
-  const adrPath = join47(dir, "adr");
+  const adrPath = join44(dir, "adr");
   let adrEntries = [];
   try {
     adrEntries = (await readdir17(adrPath)).filter((f3) => /^ADR-\d{4}.*\.md$/.test(f3));
@@ -33348,7 +32830,7 @@ async function loadKnowledgeSources(repoRoot) {
     adrEntries = [];
   }
   for (const rel of adrEntries) {
-    const body = await Bun.file(join47(adrPath, rel)).text();
+    const body = await Bun.file(join44(adrPath, rel)).text();
     adrHeadlines.push(adrHeadline(rel, body));
   }
   adrHeadlines.sort();
@@ -33413,7 +32895,7 @@ async function syncKnowledgeProjection(repoRoot, options = {}) {
   const summary = renderKnowledgeSummary(sources);
   const sha2562 = knowledgeSummarySha256(summary);
   const block = knowledgeBlock(summary, sha2562);
-  const path = join47(repoRoot, "CLAUDE.md");
+  const path = join44(repoRoot, "CLAUDE.md");
   const check = options.check === true;
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : null;
@@ -33562,8 +33044,8 @@ var bridgeCommand = defineCommand({
 });
 
 // src/cli/commands/change-contract.ts
-import { readFile as readFile12 } from "fs/promises";
-import { join as join51 } from "path";
+import { readFile as readFile11 } from "fs/promises";
+import { join as join48 } from "path";
 
 // src/schemas/acg-change-contract.ts
 init_zod();
@@ -34214,7 +33696,7 @@ function zodErrors(error) {
   }));
 }
 // src/acg/scope/symbol-expand.ts
-import { join as join48, relative as relative13 } from "path";
+import { join as join45, relative as relative13 } from "path";
 async function expandForbiddenSymbols(contract, ctx) {
   if (!contract.forbidden_scope.some((r3) => r3.kind === "symbol")) {
     return { contract, resolved: 0, unresolved: [] };
@@ -34232,11 +33714,11 @@ async function expandForbiddenSymbols(contract, ctx) {
       repoRoot: ctx.repoRoot,
       sourceRoot: ctx.sourceRoot,
       language: ctx.language,
-      dbPath: join48(ctx.cacheDir, "db"),
-      workDir: join48(ctx.cacheDir, `q-symdecl-${ref.ref}`),
+      dbPath: join45(ctx.cacheDir, "db"),
+      workDir: join45(ctx.cacheDir, `q-symdecl-${ref.ref}`),
       ...ctx.binary ? { binary: ctx.binary } : {}
     }, ctx.deps);
-    const files = declFiles.map((f3) => relative13(ctx.repoRoot, join48(ctx.sourceRoot, f3)));
+    const files = declFiles.map((f3) => relative13(ctx.repoRoot, join45(ctx.sourceRoot, f3)));
     if (files.length === 0) {
       out.push(ref);
       unresolved.push(ref.ref);
@@ -34253,7 +33735,7 @@ async function expandForbiddenSymbols(contract, ctx) {
 // src/core/change-contract-store.ts
 init_ditto_paths();
 init_fs();
-import { join as join49 } from "path";
+import { join as join46 } from "path";
 class ChangeContractStore {
   repoRoot;
   constructor(repoRoot) {
@@ -34263,7 +33745,7 @@ class ChangeContractStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   path(workItemId2) {
-    return join49(this.dir(workItemId2), "change-contract.json");
+    return join46(this.dir(workItemId2), "change-contract.json");
   }
   async read(workItemId2) {
     try {
@@ -34282,7 +33764,7 @@ class ChangeContractStore {
 init_zod();
 init_ditto_paths();
 init_fs();
-import { join as join50 } from "path";
+import { join as join47 } from "path";
 var fitnessFunctionArray = exports_external.array(acgFitnessFunction);
 
 class FitnessFunctionStore {
@@ -34294,7 +33776,7 @@ class FitnessFunctionStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   path(workItemId2) {
-    return join50(this.dir(workItemId2), "fitness-functions.json");
+    return join47(this.dir(workItemId2), "fitness-functions.json");
   }
   async read(workItemId2) {
     try {
@@ -34336,7 +33818,7 @@ var changeContractCommand = defineCommand({
     }
     let source;
     try {
-      source = await readFile12(args.file, "utf8");
+      source = await readFile11(args.file, "utf8");
     } catch {
       writeError(`change-contract: cannot read ICL file ${args.file}`);
       process.exit(USAGE_ERROR_EXIT);
@@ -34364,7 +33846,7 @@ var changeContractCommand = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     const expanded = await expandForbiddenSymbols(result2.changeContract, {
       repoRoot,
-      sourceRoot: join51(repoRoot, "src"),
+      sourceRoot: join48(repoRoot, "src"),
       language: "javascript",
       cacheDir: codeqlCacheDir(repoRoot, "javascript"),
       deps: makeRelationDeps()
@@ -34605,13 +34087,13 @@ var changeMapCommand = defineCommand({
 });
 
 // src/cli/commands/classify.ts
-import { isAbsolute as isAbsolute9, join as join53 } from "path";
+import { isAbsolute as isAbsolute9, join as join50 } from "path";
 
 // src/core/cleanup-scan.ts
 init_cleanup_store();
 init_memory_scan();
 import { readdir as readdir18, stat as stat8 } from "fs/promises";
-import { isAbsolute as isAbsolute8, join as join52, relative as relative14, resolve as resolve12 } from "path";
+import { isAbsolute as isAbsolute8, join as join49, relative as relative14, resolve as resolve12 } from "path";
 var SKIP_DIRS3 = new Set([
   "node_modules",
   ".git",
@@ -34642,7 +34124,7 @@ async function walkDocs(root, maxDepth = 12) {
       return;
     }
     for (const e2 of entries) {
-      const full = join52(dir, e2.name);
+      const full = join49(dir, e2.name);
       if (e2.isDirectory()) {
         if (!SKIP_DIRS3.has(e2.name))
           await walk(full, depth + 1);
@@ -35044,7 +34526,7 @@ var classifyStage = defineCommand({
       }
     }
     const repoRoot = await resolveRepoRootForCreate();
-    const absPath = isAbsolute9(args.path) ? args.path : join53(repoRoot, args.path);
+    const absPath = isAbsolute9(args.path) ? args.path : join50(repoRoot, args.path);
     try {
       const store = new CleanupStore(repoRoot);
       const entry = await store.stageDoc(args["run-id"], {
@@ -35303,7 +34785,7 @@ var cleanupCommand = defineCommand({
 });
 
 // src/cli/commands/codeql.ts
-import { join as join55 } from "path";
+import { join as join52 } from "path";
 
 // src/core/codeql/doctor.ts
 import { existsSync as existsSync6 } from "fs";
@@ -35562,7 +35044,7 @@ init_ditto_paths();
 
 // src/core/evidence-store.ts
 import { createHash as createHash10 } from "crypto";
-import { join as join54 } from "path";
+import { join as join51 } from "path";
 
 // src/schemas/evidence-log.ts
 init_zod();
@@ -35599,13 +35081,13 @@ class EvidenceStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   evidenceDir(workItemId2) {
-    return join54(this.workItemDir(workItemId2), "evidence");
+    return join51(this.workItemDir(workItemId2), "evidence");
   }
   commandsPath(workItemId2) {
-    return join54(this.evidenceDir(workItemId2), "commands.jsonl");
+    return join51(this.evidenceDir(workItemId2), "commands.jsonl");
   }
   evidenceIndexPath(workItemId2) {
-    return join54(this.workItemDir(workItemId2), "evidence-index.json");
+    return join51(this.workItemDir(workItemId2), "evidence-index.json");
   }
   async appendCommand(workItemId2, entry) {
     const parsed = commandLogEntry.parse(entry);
@@ -35773,7 +35255,7 @@ var reviewSubcommand = defineCommand({
     try {
       const repoRoot = await resolveRepoRootForCreate();
       const language = args.language ?? "javascript";
-      const sourceRoot = args["source-root"] ?? join55(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join52(repoRoot, "src");
       const commitSha = await gitHeadSha2(repoRoot);
       const key = cacheKey(commitSha, language);
       const dbPath = localDir(repoRoot, "cache", "codeql", key, "db");
@@ -35827,11 +35309,11 @@ var codeqlCommand = defineCommand({
 init_common();
 init_fs();
 init_git();
-import { join as join57 } from "path";
+import { join as join54 } from "path";
 
 // src/core/run-store.ts
 import { stat as stat9 } from "fs/promises";
-import { join as join56 } from "path";
+import { join as join53 } from "path";
 
 // src/schemas/run-manifest.ts
 init_zod();
@@ -35888,7 +35370,7 @@ class RunStore {
     return localDir(this.repoRoot, "runs", id);
   }
   manifestPath(id) {
-    return join56(this.runDir(id), "manifest.json");
+    return join53(this.runDir(id), "manifest.json");
   }
   async exists(id) {
     try {
@@ -35899,7 +35381,7 @@ class RunStore {
     }
   }
   pathFor(id, kind) {
-    return join56(this.runDir(id), kind);
+    return join53(this.runDir(id), kind);
   }
   async create(input, now = new Date) {
     const id = await generateId("run", (candidate) => this.exists(candidate));
@@ -35998,7 +35480,7 @@ async function buildContextPacket(repoRoot, input) {
   ];
   const content = `${lines.join(`
 `)}`;
-  await atomicWriteText(join57(repoRoot, outputPath), content);
+  await atomicWriteText(join54(repoRoot, outputPath), content);
   return {
     work_item_id: item.id,
     output_path: outputPath,
@@ -36447,6 +35929,194 @@ init_fs();
 
 // src/core/interview-driver.ts
 init_zod();
+
+// src/schemas/interview-state.ts
+init_zod();
+init_common();
+
+// src/schemas/convergence.ts
+init_zod();
+init_common();
+var honestyKind = exports_external.enum(["finding", "hypothesis", "taste"]).describe("What the item is; backing-less claims are hypothesis, not finding");
+var confidenceLevel = exports_external.enum(["high", "medium", "low"]).describe("Confidence in a claim; backing-less claims must be low");
+var ledgerStatus = exports_external.enum(["acted", "deferred", "dismissed"]).describe("What was done with the item; deferred/dismissed require a reason");
+var closureMode = exports_external.enum(["mutual_agreement", "ledger_only", "safe_default"]).describe("How the closure was reached, not why (that is exit.reason)");
+var convergenceVersion = exports_external.object({
+  version: exports_external.number().int().positive(),
+  score: exports_external.number(),
+  evidence_refs: exports_external.array(evidenceRef).default([])
+}).describe("One scored version of the refined artifact");
+var decisionLedgerEntry = exports_external.object({
+  id: exports_external.string().min(1),
+  round: exports_external.number().int().nonnegative(),
+  objection: exports_external.string().min(1),
+  kind: honestyKind,
+  criterion_id: exports_external.string().min(1).nullable().default(null),
+  severity,
+  admissible: exports_external.boolean(),
+  status: ledgerStatus,
+  confidence: confidenceLevel,
+  backed_by: exports_external.array(evidenceRef).default([]),
+  reason: exports_external.string().min(1).describe("Why acted/dismissed; required for symmetry (\xA73.2)"),
+  supersedes: exports_external.string().min(1).nullable().default(null)
+}).superRefine((value, ctx) => {
+  if (value.kind === "finding" && value.backed_by.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "kind=finding requires non-empty backed_by",
+      path: ["backed_by"]
+    });
+  }
+  if (value.admissible === true && value.severity !== "high" && value.severity !== "critical") {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "admissible=true requires severity high or critical (ADMISSIBLE_SEVERITIES)",
+      path: ["admissible"]
+    });
+  }
+}).describe("Append-only decision ledger entry with honesty labels (\xA74.1, \xA76.1)");
+var convergence = exports_external.object({
+  schema_version: schemaVersion,
+  work_item_id: workItemId,
+  target_ref: exports_external.string().min(1).describe("Node id, review id, or AC-set this refinement targets"),
+  round_cap: exports_external.number().int().positive(),
+  rounds_run: exports_external.number().int().nonnegative(),
+  versions: exports_external.array(convergenceVersion).min(1),
+  selected_version: exports_external.number().int().positive(),
+  decision_ledger: exports_external.array(decisionLedgerEntry).default([]),
+  open_admissible_count: exports_external.number().int().nonnegative(),
+  gate: exports_external.object({
+    completion_gate: verdict,
+    convergence_gate: exports_external.enum(["no_open_admissible", "open_admissible"]),
+    converged: exports_external.boolean()
+  }),
+  exit: exports_external.object({
+    reason: exports_external.enum(["converged", "cap_reached", "blocked"]),
+    closure_mode: closureMode,
+    verdict_delegated_to_completion: exports_external.boolean().default(true),
+    next_handoff_path: relativePath.nullable().default(null)
+  })
+}).describe("Convergence sidecar; records refinement closure, does not set verdict (\xA76.9)");
+
+// src/schemas/interview-state.ts
+var interviewStatus = exports_external.enum(["active", "converged", "deferred", "aborted"]).describe("Lifecycle of the deep interview");
+var dimensionState = exports_external.enum(["unknown", "partial", "resolved"]).describe("Resolution state of one ambiguity dimension");
+var infoGain = exports_external.enum(["high", "medium", "low"]).describe("Estimated information gain of a question");
+var answerSelfReport = exports_external.enum(["confident", "partial", "unsure"]).describe("User self-report of decision-ability after answering (presentation-sufficiency signal)");
+var interviewDimension = exports_external.object({
+  id: exports_external.string().min(1),
+  critical: exports_external.boolean().default(false),
+  state: dimensionState,
+  ambiguity: exports_external.number().min(0).max(1),
+  resolved_by: exports_external.array(exports_external.string()).default([]),
+  notes: exports_external.string().default("")
+}).describe("One ambiguity dimension tracked during the interview");
+var interviewQuestion = exports_external.object({
+  id: exports_external.string().min(1),
+  asked_at: isoDateTime,
+  dimension: exports_external.string().min(1),
+  question: exports_external.string().min(1),
+  why_matters: exports_external.string().min(1).describe("What changes depending on the answer"),
+  info_gain_estimate: infoGain,
+  self_answer_attempts: exports_external.array(selfAnswerAttempt).default([]),
+  user_explanation: exports_external.string().min(1).optional().describe("Plain-language why-we-ask + what-the-answer-decides \u2014 user language, no raw code/jargon (default-shown)"),
+  background: exports_external.string().min(1).optional().describe('Deeper context for progressive disclosure ("more") \u2014 optional expansion beyond user_explanation'),
+  grounding: exports_external.string().min(1).optional().describe("Evidence the question stems from (file:line | doc | domain) \u2014 the source behind why-we-ask"),
+  review_status: exports_external.enum(["reviewed", "unverified-degraded"]).optional().describe("Session-blind context-review outcome (critical questions only)"),
+  answer: exports_external.string().optional(),
+  answer_kind: exports_external.enum(["user", "assumption"]).optional(),
+  answer_self_report: answerSelfReport.optional().describe("User self-report of decision-ability after answering (presentation-sufficiency signal)"),
+  ambiguity_delta: exports_external.number().optional(),
+  marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal")
+}).describe("One asked question with its self-answer attempts and outcome");
+var interviewAssumption = exports_external.object({
+  statement: exports_external.string().min(1),
+  label: honestyKind,
+  confidence: confidenceLevel,
+  because_no_answer_to: exports_external.string().min(1).describe("Question id left unanswered")
+}).describe("Assumption recorded when a question was not answered (\xA76.9)");
+var premortemItem = exports_external.object({
+  scenario: exports_external.string().min(1).describe("What failed / caused harm if this shipped"),
+  likelihood: exports_external.enum(["low", "medium", "high"]),
+  blast_radius: exports_external.enum(["low", "medium", "high", "critical"]),
+  reversibility: exports_external.enum(["reversible", "hard", "irreversible"]),
+  early_signal: exports_external.string().default("").describe("What you would observe if this risk is materializing"),
+  promoted_to: exports_external.enum(["ac", "out_of_scope", "user_owned_decision", "none"]).describe("Where a critical item was promoted (\xA75 \uC2B9\uACA9 \uADDC\uCE59)"),
+  ref: exports_external.string().default("").describe("Pointer to the AC / out_of_scope[i] / question id")
+}).describe("One pre-mortem risk item with its promotion outcome (deep-interview \xA75)");
+var userConfirmation = exports_external.object({
+  confirmed: exports_external.boolean().describe("The user confirmed the synthesized intent matches their understanding"),
+  statement: exports_external.string().default("").describe("The user's own words confirming; required (non-empty) when confirmed=true"),
+  confirmed_at: isoDateTime.optional().describe("When the confirmation was captured")
+}).superRefine((value, ctx) => {
+  if (value.confirmed && value.statement.trim().length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "confirmed=true requires the user statement (evidence, not a bare boolean)",
+      path: ["statement"]
+    });
+  }
+}).describe("\uCD951 2\uCC28 \uAC8C\uC774\uD2B8: explicit, evidence-bearing user confirmation of the intent");
+var interviewState = exports_external.object({
+  schema_version: schemaVersion,
+  work_item_id: workItemId,
+  status: interviewStatus,
+  started_at: isoDateTime,
+  updated_at: isoDateTime,
+  dimensions: exports_external.array(interviewDimension).default([]),
+  readiness: exports_external.object({
+    score: exports_external.number().min(0).max(1),
+    threshold: exports_external.number().min(0).max(1),
+    critical_unresolved: exports_external.array(exports_external.string()).default([]),
+    gate: exports_external.enum(["blocked", "ready"])
+  }),
+  questions: exports_external.array(interviewQuestion).default([]),
+  assumptions: exports_external.array(interviewAssumption).default([]),
+  premortem: exports_external.array(premortemItem).default([]),
+  user_confirmation: userConfirmation.optional(),
+  exit: exports_external.object({
+    reason: exports_external.enum([
+      "readiness_met",
+      "diminishing_returns",
+      "user_deferred",
+      "user_owned_decision",
+      "cap_reached"
+    ]),
+    closure_mode: closureMode,
+    question_cap: exports_external.number().int().positive(),
+    questions_asked: exports_external.number().int().nonnegative()
+  })
+}).describe("Deep interview sidecar tracking ambiguity dimensions and readiness (\xA76.3)");
+
+// src/core/interview-store.ts
+import { join as join55 } from "path";
+init_ditto_paths();
+init_fs();
+
+class InterviewStore {
+  repoRoot;
+  constructor(repoRoot) {
+    this.repoRoot = repoRoot;
+  }
+  dir(workItemId2) {
+    return localDir(this.repoRoot, "work-items", workItemId2);
+  }
+  path(workItemId2) {
+    return join55(this.dir(workItemId2), "interview-state.json");
+  }
+  async exists(workItemId2) {
+    return Bun.file(this.path(workItemId2)).exists();
+  }
+  async get(workItemId2) {
+    return readJson(this.path(workItemId2), interviewState);
+  }
+  async write(state) {
+    await ensureDir(this.dir(state.work_item_id));
+    return writeJson(this.path(state.work_item_id), interviewState, state);
+  }
+}
+
+// src/core/interview-driver.ts
 init_work_item_store();
 var DEFAULT_THRESHOLD = 0.7;
 var DEFAULT_QUESTION_CAP = 8;
@@ -36649,7 +36319,8 @@ async function finalizeInterview(repoRoot, input) {
     acceptance_criteria: input.payload.acceptance_criteria,
     unknowns: input.payload.unknowns,
     follow_up_candidates: input.payload.follow_up_candidates,
-    question_policy: input.payload.question_policy
+    question_policy: input.payload.question_policy,
+    ...input.sourceDigest ? { source_digest: input.sourceDigest } : {}
   };
   const writtenIntent = await intentStore.write(intent);
   await items.update(input.workItemId, (current) => ({
@@ -36779,6 +36450,303 @@ async function promotePremortem(repoRoot, workItemId2, payload, now) {
     premortem: [...state.premortem, ...payload.items]
   });
   return { state: written, unpromoted };
+}
+
+// src/core/prism/finalize.ts
+import { readFile as readFile12 } from "fs/promises";
+import { join as join57 } from "path";
+
+// src/core/prism/store.ts
+init_ditto_paths();
+init_fs();
+init_work_item_store();
+import { join as join56 } from "path";
+
+// src/schemas/prism.ts
+init_zod();
+init_common();
+init_coverage();
+var prismSeverity = exports_external.enum(["critical", "noncritical"]).describe("Prism node severity \u2014 critical nodes gate minimal-launch (MODEL-2)");
+var prismSeverityAssignment = exports_external.object({
+  node_id: exports_external.string().min(1),
+  severity: prismSeverity,
+  demotion_reason: exports_external.string().optional().describe("Explicit justification recorded on a critical\u2192noncritical demotion (MODEL-2)")
+}).describe("One code-gated per-node severity assignment (MODEL-2)");
+var prismIssueMap = exports_external.object({
+  schema_version: schemaVersion,
+  work_item_id: workItemId,
+  tree: coverageMap,
+  severities: exports_external.array(prismSeverityAssignment).default([]).describe("Per-node severity authority state (MODEL-2)"),
+  notified_at: isoDateTime.optional().describe("When minimal-launch was announced (one-shot; retracted on regression, ac-4)")
+}).describe("Prism issue map \u2014 coverage tree + severity authority + launch notification (oi1)");
+var prismDecisionKind = exports_external.enum(["severity_demotion", "unknown_close", "skip", "early_exit", "notified", "challenge_admit"]).describe("Kind of decision-grade prism record kept in the durable Record tier");
+var prismDecision = exports_external.object({
+  schema_version: schemaVersion,
+  work_item_id: workItemId,
+  kind: prismDecisionKind,
+  node_id: exports_external.string().min(1).optional(),
+  reason: exports_external.string().min(1).describe("Why this decision was made (never silent)"),
+  residual_risk: exports_external.string().optional().describe("Surviving risk, when the decision leaves one"),
+  recorded_at: isoDateTime
+}).describe("One append-only decision-grade prism record (Record tier)");
+
+// src/core/prism/store.ts
+init_question_round();
+
+// src/core/prism/backlog.ts
+init_zod();
+init_common();
+init_work_item();
+var prismSplitItemAc = exports_external.object({
+  statement: exports_external.string().min(1).describe("Observable criterion in user-facing terms (not a placeholder)"),
+  verification_method: verificationMethod
+}).describe("One split-item acceptance criterion: statement + verification method");
+var prismSplitItem = exports_external.object({
+  title: exports_external.string().min(1),
+  goal: exports_external.string().min(1),
+  acceptance_criteria: exports_external.array(prismSplitItemAc).min(1)
+}).describe("One proposed backlog-split item (materializes into one WI draft)");
+var prismSplitApproval = exports_external.object({
+  confirmed: exports_external.boolean().describe("The user approved the backlog-split proposal"),
+  statement: exports_external.string().default("").describe("The user's own words approving; required (non-empty) when confirmed=true"),
+  approved_by: exports_external.string().min(1).describe("Who approved (attribution)"),
+  approved_at: isoDateTime.describe("When the approval was captured")
+}).superRefine((value, ctx) => {
+  if (value.confirmed && value.statement.trim().length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "confirmed=true requires the user statement (evidence, not a bare boolean)",
+      path: ["statement"]
+    });
+  }
+}).describe("Evidence-bearing user approval of the split (user words + who/when)");
+var prismBacklogSplit = exports_external.object({
+  schema_version: schemaVersion,
+  work_item_id: workItemId,
+  items: exports_external.array(prismSplitItem).default([]),
+  approval: prismSplitApproval.optional(),
+  materialized: exports_external.array(exports_external.object({ item_key: exports_external.string().min(1), wi_id: workItemId })).default([]).describe("Per-item back-link ledger (item_key \u2192 materialized WI id) \u2014 the idempotency record")
+}).describe("Prism backlog-split record: proposal + approval + per-item materialization ledger");
+function isPlaceholderStatement(statement) {
+  const s2 = statement.trim();
+  return s2 === PLACEHOLDER_AC_STATEMENT || /^TBD\b/i.test(s2);
+}
+function zodReasons(prefix, err) {
+  return `${prefix}: ${err.issues.map((i2) => `${i2.path.join(".")} ${i2.message}`).join("; ")}`;
+}
+function validateSplitItems(items) {
+  const reasons = [];
+  const parsed = [];
+  items.forEach((raw, i2) => {
+    const p = prismSplitItem.safeParse(raw);
+    if (!p.success) {
+      reasons.push(zodReasons(`\uBD84\uD560 \uD56D\uBAA9 ${i2 + 1} \uD615\uC2DD \uC624\uB958`, p.error));
+      return;
+    }
+    for (const ac of p.data.acceptance_criteria) {
+      if (isPlaceholderStatement(ac.statement)) {
+        reasons.push(`\uBD84\uD560 \uD56D\uBAA9 ${i2 + 1}\uC758 \uC644\uB8CC \uC870\uAC74\uC774 placeholder/\uBAA8\uD638\uD568\uC785\uB2C8\uB2E4: "${ac.statement}" \u2014 \uAD00\uCC30 \uAC00\uB2A5\uD55C \uAE30\uC900\uC73C\uB85C \uB300\uCCB4\uD558\uC138\uC694`);
+      }
+    }
+    parsed.push(p.data);
+  });
+  if (reasons.length > 0)
+    return { ok: false, reasons };
+  return { ok: true, items: parsed };
+}
+function proposeBacklogSplit(doc, items) {
+  const reasons = [];
+  if (doc.feature.trim().length === 0)
+    reasons.push("design doc\uAC00 \uBBF8\uD655\uC815\uC785\uB2C8\uB2E4: \uAE30\uB2A5 \uC774\uB984\uC774 \uBE44\uC5B4 \uC788\uC74C");
+  if (doc.summary.trim().length === 0)
+    reasons.push("design doc\uAC00 \uBBF8\uD655\uC815\uC785\uB2C8\uB2E4: \uC694\uC57D\uC774 \uBE44\uC5B4 \uC788\uC74C");
+  if (doc.acceptanceCriteria.length === 0)
+    reasons.push("design doc\uAC00 \uBBF8\uD655\uC815\uC785\uB2C8\uB2E4: \uC644\uB8CC \uC870\uAC74\uC774 \uC5C6\uC74C \u2014 \uBE48 \uBC31\uB85C\uADF8\uB294 \uBD84\uD560\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4");
+  const itemCheck = validateSplitItems(items);
+  if (!itemCheck.ok)
+    reasons.push(...itemCheck.reasons);
+  if (reasons.length > 0)
+    return { status: "rejected", reasons };
+  return { status: "proposed", items: itemCheck.ok ? itemCheck.items : [] };
+}
+function itemKey(index) {
+  return `item-${index}`;
+}
+async function materializeBacklogSplit(deps) {
+  const { workItems, prism, parentId, approval } = deps;
+  const parsedApproval = prismSplitApproval.safeParse(approval);
+  if (!parsedApproval.success || !parsedApproval.data.confirmed || parsedApproval.data.statement.trim().length === 0) {
+    return {
+      status: "rejected",
+      reasons: [
+        "\uC2B9\uC778 \uC5C6\uC74C: \uBB3C\uD654\uC5D0\uB294 \uC0AC\uC6A9\uC790 \uC6D0\uBB38 \uC2B9\uC778(statement)\uC774 \uD544\uC694\uD569\uB2C8\uB2E4 \u2014 bare \uD638\uCD9C\uC740 \uC2B9\uC778\uC774 \uC544\uB2D9\uB2C8\uB2E4"
+      ]
+    };
+  }
+  const split = await prism.readBacklogSplit(parentId);
+  if (split === null) {
+    return {
+      status: "rejected",
+      reasons: [`\uBD84\uD560\uC548\uC774 \uC5C6\uC2B5\uB2C8\uB2E4: ${parentId}\uC5D0 \uB300\uD55C \uC81C\uC548\uC744 \uBA3C\uC800 propose \uD558\uC138\uC694`]
+    };
+  }
+  const itemCheck = validateSplitItems(split.items);
+  if (!itemCheck.ok)
+    return { status: "rejected", reasons: itemCheck.reasons };
+  const ledger = new Map(split.materialized.map((m2) => [m2.item_key, m2.wi_id]));
+  const materialized_wis = [];
+  let current = split;
+  for (const [i2, item] of itemCheck.items.entries()) {
+    const key = itemKey(i2);
+    const already = ledger.get(key);
+    if (already !== undefined) {
+      materialized_wis.push(already);
+      continue;
+    }
+    const created = await workItems.create({
+      title: item.title.slice(0, 200),
+      source_request: `Backlog split of ${parentId}: ${item.goal}`,
+      goal: item.goal,
+      acceptance_criteria: item.acceptance_criteria.map((ac, j) => ({
+        id: `ac-${j + 1}`,
+        statement: ac.statement,
+        verdict: "unverified",
+        evidence: [],
+        oracle: {
+          verification_method: ac.verification_method,
+          maps_to: "intent",
+          direction: "forward"
+        }
+      })),
+      discovered_by: parentId
+    });
+    materialized_wis.push(created.id);
+    current = await prism.writeBacklogSplit({
+      ...current,
+      materialized: [...current.materialized, { item_key: key, wi_id: created.id }]
+    });
+    ledger.set(key, created.id);
+  }
+  await prism.writeBacklogSplit({ ...current, approval: parsedApproval.data });
+  return { status: "materialized", materialized_wis };
+}
+
+// src/core/prism/store.ts
+class PrismStore {
+  repoRoot;
+  workItems;
+  constructor(repoRoot) {
+    this.repoRoot = repoRoot;
+    this.workItems = new WorkItemStore(repoRoot);
+  }
+  dir(workItemId2) {
+    return localDir(this.repoRoot, "work-items", workItemId2, "prism");
+  }
+  mapPath(workItemId2) {
+    return join56(this.dir(workItemId2), "issue-map.json");
+  }
+  decisionsPath(workItemId2) {
+    return join56(committedWorkItemDir(this.repoRoot, workItemId2), "prism-decisions.jsonl");
+  }
+  backlogSplitPath(workItemId2) {
+    return join56(committedWorkItemDir(this.repoRoot, workItemId2), "prism-backlog-split.json");
+  }
+  async exists(workItemId2) {
+    return Bun.file(this.mapPath(workItemId2)).exists();
+  }
+  async getMap(workItemId2) {
+    return readJson(this.mapPath(workItemId2), prismIssueMap);
+  }
+  async writeMap(map) {
+    await ensureDir(this.dir(map.work_item_id));
+    return writeJson(this.mapPath(map.work_item_id), prismIssueMap, map);
+  }
+  async appendDecision(decision) {
+    const validated = prismDecision.parse(decision);
+    const path = this.decisionsPath(validated.work_item_id);
+    await ensureDir(committedWorkItemDir(this.repoRoot, validated.work_item_id));
+    const file = Bun.file(path);
+    const existing = await file.exists() ? await file.text() : "";
+    const prefix = existing.length === 0 || existing.endsWith(`
+`) ? existing : `${existing}
+`;
+    await Bun.write(path, `${prefix}${JSON.stringify(validated)}
+`);
+    return validated;
+  }
+  async readDecisions(workItemId2) {
+    const file = Bun.file(this.decisionsPath(workItemId2));
+    if (!await file.exists())
+      return [];
+    return (await file.text()).split(`
+`).filter((l2) => l2.trim().length > 0).map((l2) => prismDecision.parse(JSON.parse(l2)));
+  }
+  async writeBacklogSplit(split) {
+    await ensureDir(committedWorkItemDir(this.repoRoot, split.work_item_id));
+    return writeJson(this.backlogSplitPath(split.work_item_id), prismBacklogSplit, split);
+  }
+  async readBacklogSplit(workItemId2) {
+    const file = Bun.file(this.backlogSplitPath(workItemId2));
+    if (!await file.exists())
+      return null;
+    return readJson(this.backlogSplitPath(workItemId2), prismBacklogSplit);
+  }
+  async appendValueRound(workItemId2, round) {
+    const validated = questionRound.parse(round);
+    await this.workItems.appendQuestionRoundLine(workItemId2, JSON.stringify(validated));
+    return validated;
+  }
+  async readValueRounds(workItemId2) {
+    return this.workItems.readQuestionRounds(workItemId2);
+  }
+}
+
+// src/core/prism/finalize.ts
+async function finalizeFromDesignDoc(repoRoot, input) {
+  const docPath = input.docPath ?? `.ditto/specs/${input.workItemId}-design.md`;
+  let markdown;
+  try {
+    markdown = await readFile12(join57(repoRoot, docPath), "utf8");
+  } catch {
+    return { status: "compile_rejected", reasons: [`design document not found: ${docPath}`] };
+  }
+  const compiled = compileSpecDoc(markdown);
+  if (compiled.status !== "compiled") {
+    return { status: "compile_rejected", reasons: compiled.reasons };
+  }
+  const prismRisks = await collectOpenPrismRiskLabels(repoRoot, input.workItemId);
+  const seen = new Set;
+  const unknowns = [...compiled.fields.unknowns, ...prismRisks].filter((u3) => {
+    const key = u3.trim();
+    if (key.length === 0 || seen.has(key))
+      return false;
+    seen.add(key);
+    return true;
+  });
+  return finalizeInterview(repoRoot, {
+    workItemId: input.workItemId,
+    payload: {
+      goal: compiled.fields.goal,
+      in_scope: compiled.fields.in_scope,
+      out_of_scope: compiled.fields.out_of_scope,
+      acceptance_criteria: compiled.fields.acceptance_criteria,
+      unknowns,
+      follow_up_candidates: [],
+      question_policy: "ask_only_if_user_only_can_answer",
+      risk: input.risk ?? { non_local: false, irreversible: false, unaudited: false },
+      user_confirmation: input.userConfirmation,
+      ...input.approvedSource ? { approved_source: input.approvedSource } : {}
+    },
+    sourceDigest: { doc_path: docPath, sha256: compiled.digest },
+    ...input.now ? { now: input.now } : {}
+  });
+}
+async function collectOpenPrismRiskLabels(repoRoot, workItemId2) {
+  const store = new PrismStore(repoRoot);
+  if (!await store.exists(workItemId2))
+    return [];
+  const map = await store.getMap(workItemId2);
+  return map.tree.nodes.filter((n2) => n2.state === "open" && n2.id !== map.tree.root_id).map((n2) => n2.label);
 }
 
 // src/cli/commands/deep-interview.ts
@@ -37251,6 +37219,85 @@ var checkQuestionCmd = defineCommand({
       process.exit(RUNTIME_ERROR_EXIT);
   }
 });
+var finalizeFromDocCmd = defineCommand({
+  meta: {
+    name: "finalize-from-doc",
+    description: "Compile a confirmed prism/spec design document into intent.json THROUGH finalizeInterview, binding it by digest (prism \u2192 deep-interview compile)"
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    doc: {
+      type: "string",
+      description: "Design doc path (default .ditto/specs/<wi>-design.md)",
+      required: false
+    },
+    statement: {
+      type: "string",
+      description: "The user's own words confirming the refined design (\uD655\uC815)",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.statement || args.statement.trim().length === 0) {
+      writeError('finalize-from-doc requires --statement "<\uC6D0\uBB38 \uD655\uC815>": the user confirmation is the 2\uCC28 gate half');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const result2 = await finalizeFromDesignDoc(repoRoot, {
+        workItemId: args.workItem,
+        ...args.doc ? { docPath: args.doc } : {},
+        userConfirmation: { confirmed: true, statement: args.statement }
+      });
+      if (result2.status === "compile_rejected") {
+        writeError("design document did not compile \u2014 fix the compile-input sections and re-run:");
+        for (const r3 of result2.reasons)
+          writeError(`  - ${r3}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (result2.status === "not_ready") {
+        writeError("interview is not ready; cannot finalize:");
+        for (const r3 of result2.gate.reasons)
+          writeError(`  - ${r3}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (result2.status === "not_confirmed") {
+        writeError("readiness gate passed (1\uCC28) but the user confirmation is missing (2\uCC28 \uAC8C\uC774\uD2B8) \u2014 pass --statement");
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (format === "json") {
+        writeJson2({
+          work_item_id: result2.intent.work_item_id,
+          intent_path: `.ditto/local/work-items/${result2.intent.work_item_id}/intent.json`,
+          source_digest: result2.intent.source_digest,
+          autopilot_id: result2.autopilot.autopilot_id,
+          acceptance_criteria: result2.intent.acceptance_criteria.map((ac) => ac.id)
+        });
+      } else {
+        writeHuman(`Compiled design doc \u2192 intent for ${result2.intent.work_item_id}`);
+        writeHuman(`  source_digest: ${result2.intent.source_digest?.sha256 ?? "(none)"}`);
+        writeHuman(`  autopilot:     ${result2.autopilot.autopilot_id}`);
+        writeHuman(`  acceptance:    ${result2.intent.acceptance_criteria.map((ac) => ac.id).join(", ")}`);
+      }
+    } catch (err) {
+      writeError(`finalize-from-doc failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var deepInterviewCommand = defineCommand({
   meta: {
     name: "deep-interview",
@@ -37263,7 +37310,8 @@ var deepInterviewCommand = defineCommand({
     "check-readiness": checkReadinessCmd,
     "project-coverage": projectCoverageCmd,
     premortem: premortemCmd,
-    finalize: finalizeCmd
+    finalize: finalizeCmd,
+    "finalize-from-doc": finalizeFromDocCmd
   }
 });
 
@@ -37901,7 +37949,7 @@ function defaultIntentQualityDeps(repoRoot) {
     readDecisions: (id) => autopilots.readDecisions(id),
     countHandoffRounds: async (id) => (await handoffs.listActive()).filter((h2) => h2.handoff.work_item_id === id).length,
     readMetrics: (id) => workItems.readMetrics(id),
-    readTechSpecRounds: (id) => workItems.readTechSpecRounds(id)
+    readQuestionRounds: (id) => workItems.readQuestionRounds(id)
   };
 }
 function buildRow2(summary, interview, graph, decisions, handoffRounds, driftEvents, rounds) {
@@ -37924,10 +37972,10 @@ function buildRow2(summary, interview, graph, decisions, handoffRounds, driftEve
     handoff_rounds: handoffRounds,
     drift_events: driftEvents,
     post_cost: driftEvents + reworkAttempts + retrySwitch + handoffRounds,
-    tech_spec_rounds: rounds.length,
-    tech_spec_selected: selectedScores.length,
-    tech_spec_dry_rounds: rounds.filter((r3) => r3.dry).length,
-    tech_spec_mean_answer_value: selectedScores.length === 0 ? null : mean(selectedScores)
+    question_rounds: rounds.length,
+    question_selected: selectedScores.length,
+    question_dry_rounds: rounds.filter((r3) => r3.dry).length,
+    question_mean_answer_value: selectedScores.length === 0 ? null : mean(selectedScores)
   };
 }
 function totalsOf2(rows) {
@@ -37940,7 +37988,7 @@ function totalsOf2(rows) {
     total_retry_switch_decisions: rows.reduce((s2, r3) => s2 + r3.retry_switch_decisions, 0),
     total_handoff_rounds: rows.reduce((s2, r3) => s2 + r3.handoff_rounds, 0),
     total_drift_events: rows.reduce((s2, r3) => s2 + r3.drift_events, 0),
-    total_tech_spec_rounds: rows.reduce((s2, r3) => s2 + r3.tech_spec_rounds, 0)
+    total_question_rounds: rows.reduce((s2, r3) => s2 + r3.question_rounds, 0)
   };
 }
 var QUANTILES = ["low", "mid", "high"];
@@ -37972,7 +38020,7 @@ async function collectIntentQualityReport(deps) {
       deps.readDecisions(summary.id),
       deps.countHandoffRounds(summary.id),
       deps.readMetrics(summary.id),
-      deps.readTechSpecRounds(summary.id)
+      deps.readQuestionRounds(summary.id)
     ]);
     rows.push(buildRow2(summary, interview, graph, decisions, handoffRounds, metrics.length, rounds));
   }
@@ -38275,12 +38323,12 @@ async function multiSelect(io, message, choices) {
 // src/cli/wizard/prompt-io.ts
 import { createInterface } from "readline/promises";
 
-// node_modules/@clack/core/dist/index.mjs
+// ../../../../node_modules/@clack/core/dist/index.mjs
 import { styleText } from "util";
 import { stdout as stdout3, stdin as stdin2 } from "process";
 import l__default from "readline";
 
-// node_modules/fast-string-truncated-width/dist/utils.js
+// ../../../../node_modules/fast-string-truncated-width/dist/utils.js
 var getCodePointsLength = (() => {
   const SURROGATE_PAIR_RE = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
   return (input) => {
@@ -38299,7 +38347,7 @@ var isWideNotCJKTNotEmoji = (x2) => {
   return x2 === 8987 || x2 === 9001 || x2 >= 12272 && x2 <= 12287 || x2 >= 12289 && x2 <= 12350 || x2 >= 12441 && x2 <= 12543 || x2 >= 12549 && x2 <= 12591 || x2 >= 12593 && x2 <= 12686 || x2 >= 12688 && x2 <= 12771 || x2 >= 12783 && x2 <= 12830 || x2 >= 12832 && x2 <= 12871 || x2 >= 12880 && x2 <= 19903 || x2 >= 65040 && x2 <= 65049 || x2 >= 65072 && x2 <= 65106 || x2 >= 65108 && x2 <= 65126 || x2 >= 65128 && x2 <= 65131 || x2 >= 127488 && x2 <= 127490 || x2 >= 127504 && x2 <= 127547 || x2 >= 127552 && x2 <= 127560 || x2 >= 131072 && x2 <= 196605 || x2 >= 196608 && x2 <= 262141;
 };
 
-// node_modules/fast-string-truncated-width/dist/index.js
+// ../../../../node_modules/fast-string-truncated-width/dist/index.js
 var ANSI_RE = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]|\u001b\]8;[^;]*;.*?(?:\u0007|\u001b\u005c)/y;
 var CONTROL_RE = /[\x00-\x08\x0A-\x1F\x7F-\x9F]{1,1000}/y;
 var CJKT_WIDE_RE = /(?:(?![\uFF61-\uFF9F\uFF00-\uFFEF])[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Tangut}]){1,1000}/yu;
@@ -38398,7 +38446,7 @@ var getStringTruncatedWidth = (input, truncationOptions = {}, widthOptions = {})
 };
 var dist_default = getStringTruncatedWidth;
 
-// node_modules/fast-string-width/dist/index.js
+// ../../../../node_modules/fast-string-width/dist/index.js
 var NO_TRUNCATION2 = {
   limit: Infinity,
   ellipsis: "",
@@ -38409,7 +38457,7 @@ var fastStringWidth = (input, options = {}) => {
 };
 var dist_default2 = fastStringWidth;
 
-// node_modules/fast-wrap-ansi/lib/main.js
+// ../../../../node_modules/fast-wrap-ansi/lib/main.js
 var ESC = "\x1B";
 var CSI = "\x9B";
 var END_CODE = 39;
@@ -38621,7 +38669,7 @@ function wrapAnsi(string, columns, options) {
 `);
 }
 
-// node_modules/@clack/core/dist/index.mjs
+// ../../../../node_modules/@clack/core/dist/index.mjs
 var import_sisteransi = __toESM(require_src(), 1);
 function findCursor(s2, o3, l2) {
   if (!l2.some((r3) => !r3.disabled))
@@ -39413,7 +39461,7 @@ class a3 extends V2 {
   }
 }
 
-// node_modules/@clack/prompts/dist/index.mjs
+// ../../../../node_modules/@clack/prompts/dist/index.mjs
 import { styleText as styleText2, stripVTControlCharacters } from "util";
 import process$1 from "process";
 var import_sisteransi2 = __toESM(require_src(), 1);
@@ -40167,7 +40215,7 @@ var intentQualityCommand = defineCommand({
       } else {
         writeHuman("work_item\tquestions\tclosure\treadiness\tfix\trework\tretry/switch\thandoff\tdrift\tpost_cost\ttspec_rounds\ttspec_q");
         for (const r4 of rows) {
-          writeHuman(`${r4.work_item_id}	${r4.questions_asked ?? "-"}	${r4.closure_mode ?? "-"}	${r4.readiness_score ?? "-"}	${r4.fix_nodes}	${r4.rework_attempts}	${r4.retry_switch_decisions}	${r4.handoff_rounds}	${r4.drift_events}	${r4.post_cost}	${r4.tech_spec_rounds}	${r4.tech_spec_mean_answer_value ?? "-"}`);
+          writeHuman(`${r4.work_item_id}	${r4.questions_asked ?? "-"}	${r4.closure_mode ?? "-"}	${r4.readiness_score ?? "-"}	${r4.fix_nodes}	${r4.rework_attempts}	${r4.retry_switch_decisions}	${r4.handoff_rounds}	${r4.drift_events}	${r4.post_cost}	${r4.question_rounds}	${r4.question_mean_answer_value ?? "-"}`);
         }
         if (!args["work-item"]) {
           writeHuman(`
@@ -48919,6 +48967,986 @@ var modeCommand = defineCommand({
   }
 });
 
+// src/cli/commands/prism.ts
+import { randomBytes as randomBytes4 } from "crypto";
+init_fs();
+
+// src/core/prism/designdoc.ts
+function title(id) {
+  return SPEC_SECTIONS.find((s2) => s2.id === id)?.title ?? id;
+}
+var FENCE = /(^|\n)\s*(```+|~~~+)/;
+function isGroundingRef(s2) {
+  if (!s2 || s2.trim().length === 0)
+    return false;
+  return /\S+\.\w+:\d+/.test(s2) || /\[.+\]\(.+\)/.test(s2) || /\bADR-/.test(s2) || /\b(?:proj_|memevt_|src_)/.test(s2);
+}
+function renderFactual(claims) {
+  if (!claims || claims.length === 0)
+    return "\uC5C6\uC74C";
+  return claims.map((c5) => c5.grounding ? `- ${c5.claim} (\uADFC\uAC70: ${c5.grounding})` : `- ${c5.claim} (\uADFC\uAC70 \uC5C6\uC74C \u2014 \uBBF8\uD574\uACB0)`).join(`
+`);
+}
+function renderDesignDoc(input) {
+  const acRows = input.acceptanceCriteria.map((a4) => `| ${a4.id} | ${a4.statement} | ${a4.evidence} |`).join(`
+`);
+  const riskRows = input.risks.map((r4) => `| ${r4.risk} | ${r4.handling} | ${r4.flag ?? "\u2014"} |`).join(`
+`);
+  const parts = [
+    `# ${input.feature} \u2014 \uC124\uACC4 \uBB38\uC11C`,
+    "",
+    "> \uC18C\uBE44\uC790: DITTO(design \u2192 implement \u2192 verify) + \uC0AC\uB78C. \uC6D0\uBB38 \uC804\uC0AC \uAE08\uC9C0 \u2014 \uC694\uC57D+\uB9C1\uD06C.",
+    "",
+    `## 1. ${title("feature")}`,
+    "",
+    `- \uC774\uB984: ${input.feature}`,
+    "",
+    `## 2. ${title("summary")}`,
+    "",
+    input.summary,
+    "",
+    `## 3. ${title("background")}`,
+    "",
+    renderFactual(input.background),
+    "",
+    `## 4. ${title("goals")}`,
+    "",
+    input.goals.map((g4) => `- ${g4}`).join(`
+`),
+    "",
+    `## 5. ${title("non-goals")}`,
+    "",
+    input.nonGoals.map((g4) => `- ${g4}`).join(`
+`),
+    "",
+    `## 6. ${title("acceptance-criteria")}`,
+    "",
+    "| id | \uC644\uB8CC \uC870\uAC74 | evidence |",
+    "|---|---|---|",
+    acRows,
+    "",
+    `## 7. ${title("risks")}`,
+    "",
+    "| \uC704\uD5D8 | \uCC98\uB9AC | \uD50C\uB798\uADF8 |",
+    "|---|---|---|",
+    riskRows,
+    "",
+    `## 8. ${title("impact")}`,
+    "",
+    renderFactual(input.impact),
+    "",
+    `## 9. ${title("interview-log")}`,
+    "",
+    input.interviewSummary ?? "\uC5C6\uC74C",
+    ""
+  ];
+  return parts.join(`
+`);
+}
+function emitDesignDoc(input, opts) {
+  const reasons = [];
+  const contained = containScopePath(opts.targetPath, opts.repoRoot);
+  if (!contained.ok)
+    reasons.push(`\uBB38\uC11C \uACBD\uB85C\uAC00 repo \uBC16\uC785\uB2C8\uB2E4: ${contained.detail}`);
+  if (input.summary.trim().length === 0)
+    reasons.push("\uD544\uC218 \uC808\uC774 \uBE44\uC5B4 \uC788\uC74C: \uC694\uC57D");
+  if (input.goals.filter((g4) => g4.trim().length > 0).length === 0)
+    reasons.push("\uD544\uC218 \uC808\uC774 \uBE44\uC5B4 \uC788\uC74C: \uBAA9\uD45C");
+  if (input.nonGoals.filter((g4) => g4.trim().length > 0).length === 0)
+    reasons.push("\uD544\uC218 \uC808\uC774 \uBE44\uC5B4 \uC788\uC74C: \uBE44\uBAA9\uD45C");
+  if (input.acceptanceCriteria.length === 0)
+    reasons.push("\uD544\uC218 \uC808\uC774 \uBE44\uC5B4 \uC788\uC74C: \uC644\uB8CC \uC870\uAC74");
+  if (input.risks.length === 0)
+    reasons.push("\uD544\uC218 \uC808\uC774 \uBE44\uC5B4 \uC788\uC74C: \uC704\uD5D8");
+  const factual = [
+    ...(input.background ?? []).map((c5) => ({ section: "\uBC30\uACBD", claim: c5 })),
+    ...(input.impact ?? []).map((c5) => ({ section: "\uC601\uD5A5\uB3C4", claim: c5 }))
+  ];
+  for (const { section, claim: claim2 } of factual) {
+    if (FENCE.test(claim2.claim))
+      reasons.push(`${section} \uC808\uC5D0 \uC6D0\uBB38 \uC804\uC0AC(\uCF54\uB4DC\uBE14\uB85D)\uAC00 \uC788\uC2B5\uB2C8\uB2E4 \u2014 \uC694\uC57D+\uB9C1\uD06C\uB9CC \uD5C8\uC6A9`);
+  }
+  if (input.interviewSummary && FENCE.test(input.interviewSummary))
+    reasons.push("\uC778\uD130\uBDF0 \uC808\uC5D0 \uC6D0\uBB38 \uC804\uC0AC(\uCF54\uB4DC\uBE14\uB85D)\uAC00 \uC788\uC2B5\uB2C8\uB2E4 \u2014 \uC694\uC57D+\uB9C1\uD06C\uB9CC \uD5C8\uC6A9");
+  const ungrounded = factual.filter(({ claim: claim2 }) => !isGroundingRef(claim2.grounding));
+  const unresolved = ungrounded.map(({ section, claim: claim2 }) => `${section}: ${claim2.claim}`);
+  if (ungrounded.length > 0 && !opts.allowUngrounded) {
+    for (const { section, claim: claim2 } of ungrounded)
+      reasons.push(`${section} \uC808\uC758 \uC0AC\uC2E4 \uC8FC\uC7A5\uC5D0 \uADFC\uAC70\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4: "${claim2.claim}"`);
+  }
+  if (reasons.length > 0)
+    return { status: "rejected", reasons };
+  const markdown = scrubTokens(renderDesignDoc(input));
+  return {
+    status: "emitted",
+    markdown,
+    digest: computeSpecDigest(markdown),
+    abs: contained.ok ? contained.abs : opts.targetPath,
+    unresolved
+  };
+}
+
+// src/core/prism/engine.ts
+function severityOf(prism, nodeId2) {
+  return prism.severities.find((s2) => s2.node_id === nodeId2)?.severity ?? "noncritical";
+}
+function assignSeverity(prism, nodeId2, severity2, reason) {
+  if (!prism.tree.nodes.some((n3) => n3.id === nodeId2)) {
+    return { ok: false, reasons: [`unknown prism node id: ${nodeId2}`] };
+  }
+  const current = severityOf(prism, nodeId2);
+  const isDemotion = current === "critical" && severity2 === "noncritical";
+  if (isDemotion && (reason === undefined || reason.trim().length === 0)) {
+    return {
+      ok: false,
+      reasons: [
+        `critical\u2192noncritical demotion of ${nodeId2} requires an explicit reason (MODEL-2 \u2014 a severity demotion is decision-grade, never silent)`
+      ]
+    };
+  }
+  const others = prism.severities.filter((s2) => s2.node_id !== nodeId2);
+  const assignment = {
+    node_id: nodeId2,
+    severity: severity2,
+    ...isDemotion ? { demotion_reason: reason } : {}
+  };
+  return { ok: true, prism: { ...prism, severities: [...others, assignment] }, reasons: [] };
+}
+function isUnknownCloseState(state) {
+  return state === "out_of_scope" || state === "user_owned";
+}
+function closePrismNode(prism, nodeId2, state, reason, residualRisk) {
+  const gate2 = coverageClosureGate(prism.tree, nodeId2, state);
+  if (!gate2.pass)
+    return { ok: false, reasons: gate2.reasons };
+  const isCritical = severityOf(prism, nodeId2) === "critical";
+  const noResidual = residualRisk === undefined || residualRisk.trim().length === 0;
+  if (isCritical && isUnknownCloseState(state) && noResidual) {
+    return {
+      ok: false,
+      reasons: [
+        `unknown-close (${state}) of critical node ${nodeId2} requires a recorded residual_risk \u2014 a no-residual "\uBAA8\uB984-\uB2EB\uAE30" of critical scope is rejected and never counts as critical resolution (MODEL-1)`
+      ]
+    };
+  }
+  const tree = closeNode(prism.tree, nodeId2, state, reason, residualRisk);
+  return { ok: true, prism: { ...prism, tree }, reasons: [] };
+}
+function isCriticalResolved(node2) {
+  if (node2.state === "open")
+    return false;
+  if (node2.state === "resolved")
+    return true;
+  return node2.residual_risk !== undefined && node2.residual_risk.trim().length > 0;
+}
+function criticalTermination(prism) {
+  if (prism.tree.nodes.length === 0) {
+    return {
+      terminated: false,
+      reason: "empty map \u2014 no scope explored yet (B1 vacuous-truth guard)"
+    };
+  }
+  const criticalIds = new Set(prism.severities.filter((s2) => s2.severity === "critical").map((s2) => s2.node_id));
+  const criticalNodes = prism.tree.nodes.filter((n3) => criticalIds.has(n3.id));
+  if (criticalNodes.length === 0) {
+    return {
+      terminated: false,
+      reason: "no critical nodes \u2014 termination/notification does NOT fire on a 0-critical map (B1 vacuous-truth guard)"
+    };
+  }
+  const unresolved = criticalNodes.filter((n3) => !isCriticalResolved(n3));
+  if (unresolved.length > 0) {
+    return {
+      terminated: false,
+      reason: `${unresolved.length} critical node(s) still unresolved`
+    };
+  }
+  return {
+    terminated: true,
+    reason: "every critical node resolved (non-critical scope may survive \u2014 the user decides)"
+  };
+}
+var MINIMAL_LAUNCH_MESSAGE = "\uD575\uC2EC\uC73C\uB85C \uAF2D \uC815\uD574\uC57C \uD560 \uAC83\uC740 \uBAA8\uB450 \uC815\uB9AC\uB410\uC5B4\uC694. \uC9C0\uAE08 \uCD5C\uC18C\uD55C\uC73C\uB85C \uCC29\uC218\uD560 \uC218 \uC788\uC5B4\uC694. (\uB0A8\uC740 \uD56D\uBAA9\uC740 \uCC29\uC218\uD558\uBA74\uC11C \uC815\uD574\uB3C4 \uB429\uB2C8\uB2E4.)";
+function resolveLaunchNotification(prism, now) {
+  const { terminated } = criticalTermination(prism);
+  const alreadyNotified = prism.notified_at !== undefined;
+  if (terminated) {
+    if (alreadyNotified)
+      return { prism, notify: false, retracted: false };
+    return {
+      prism: { ...prism, notified_at: now.toISOString() },
+      notify: true,
+      retracted: false,
+      message: MINIMAL_LAUNCH_MESSAGE
+    };
+  }
+  if (alreadyNotified) {
+    const { notified_at: _dropped, ...rest } = prism;
+    return { prism: rest, notify: false, retracted: true };
+  }
+  return { prism, notify: false, retracted: false };
+}
+function renderProgressSummary(prism) {
+  return prism.tree.nodes.filter((n3) => n3.state === "open" && n3.id !== prism.tree.root_id).map((n3) => n3.label);
+}
+function normalizeSignature(signature2) {
+  return signature2.trim().toLowerCase().replace(/\s+/g, " ");
+}
+var TRIVIAL_STREAK_CAP = 3;
+function detectDivergence(round, history) {
+  if (round.challenge) {
+    if (round.challenge.new_evidence) {
+      return {
+        diverged: false,
+        action: "challenge-node",
+        reason: `challenge to decided ${round.challenge.decided_id} carries NEW evidence \u2014 admit as a visible challenge node (once)`
+      };
+    }
+    return {
+      diverged: true,
+      kind: "decided_conflict_no_evidence",
+      action: "cap-stop",
+      reason: `re-challenge to decided ${round.challenge.decided_id} with no new evidence \u2014 flagged divergence (visibly suppressed, not silent)`
+    };
+  }
+  if (round.question) {
+    const key = normalizeSignature(round.question.signature);
+    if (history.some((h3) => normalizeSignature(h3.signature) === key)) {
+      return {
+        diverged: true,
+        kind: "repeat_question",
+        action: "cap-stop",
+        reason: "near-duplicate of an earlier question \u2014 repeated with no new signal (\uCCC7\uBC14\uD034)"
+      };
+    }
+    if (round.question.trivial) {
+      let streak = 1;
+      for (let i3 = history.length - 1;i3 >= 0; i3--) {
+        if (history[i3]?.trivial)
+          streak += 1;
+        else
+          break;
+      }
+      if (streak >= TRIVIAL_STREAK_CAP) {
+        return {
+          diverged: true,
+          kind: "trivial_streak",
+          action: "cap-stop",
+          reason: `${streak} consecutive trivial questions \u2014 flagged divergence`
+        };
+      }
+    }
+  }
+  return { diverged: false, action: "continue", reason: "no divergence signal" };
+}
+var PRISM_CAPS = {
+  callsPerNode: 8,
+  treeNodeCount: 60,
+  totalRounds: 40
+};
+function runPrismRounds(rounds, caps = PRISM_CAPS, start = {}) {
+  let usage = {
+    callsThisNode: start.callsThisNode ?? 0,
+    treeNodeCount: start.treeNodeCount ?? 0,
+    roundsRun: start.roundsRun ?? 0
+  };
+  const history = [];
+  const divergences = [];
+  for (const round of rounds) {
+    const cap = capStatus(caps, usage);
+    if (cap.capped) {
+      return {
+        roundsRun: usage.roundsRun,
+        treeNodeCount: usage.treeNodeCount,
+        halted: true,
+        escalation: cap.reasons,
+        divergences
+      };
+    }
+    if (round.question || round.challenge) {
+      divergences.push(detectDivergence(round, history));
+      if (round.question)
+        history.push(round.question);
+    }
+    usage = {
+      ...usage,
+      treeNodeCount: usage.treeNodeCount + (round.addedNodeCount ?? 0),
+      roundsRun: usage.roundsRun + 1
+    };
+  }
+  return {
+    roundsRun: usage.roundsRun,
+    treeNodeCount: usage.treeNodeCount,
+    halted: false,
+    escalation: [],
+    divergences
+  };
+}
+
+// src/core/prism/loop.ts
+async function runDivergenceRound(store, input) {
+  const verdict2 = detectDivergence(input.round, input.history);
+  const recordedAt = (input.now ?? new Date).toISOString();
+  if (verdict2.action === "challenge-node") {
+    const decision = await store.appendDecision({
+      schema_version: "0.1.0",
+      work_item_id: input.workItemId,
+      kind: "challenge_admit",
+      ...input.round.challenge ? { node_id: input.round.challenge.decided_id } : {},
+      reason: verdict2.reason,
+      recorded_at: recordedAt
+    });
+    return { verdict: verdict2, decision };
+  }
+  if (verdict2.diverged) {
+    const decision = await store.appendDecision({
+      schema_version: "0.1.0",
+      work_item_id: input.workItemId,
+      kind: "early_exit",
+      reason: verdict2.reason,
+      recorded_at: recordedAt
+    });
+    return { verdict: verdict2, decision };
+  }
+  return { verdict: verdict2 };
+}
+
+// src/cli/commands/prism.ts
+init_work_item_store();
+function prismNodeId() {
+  return `prism_${randomBytes4(6).toString("hex")}`;
+}
+function asArray3(value) {
+  if (value === undefined)
+    return [];
+  return Array.isArray(value) ? value : [value];
+}
+async function loadOrInit(store, workItemId2) {
+  if (await store.exists(workItemId2))
+    return store.getMap(workItemId2);
+  const rootId = prismNodeId();
+  return {
+    schema_version: "0.1.0",
+    work_item_id: workItemId2,
+    tree: {
+      schema_version: "0.1.0",
+      work_item_id: workItemId2,
+      root_id: rootId,
+      nodes: [
+        {
+          id: rootId,
+          parent_id: null,
+          label: "original intent",
+          origin: "seed",
+          depth_weight: 1,
+          state: "open",
+          children: []
+        }
+      ]
+    },
+    severities: []
+  };
+}
+var prismSeedCommand = defineCommand({
+  meta: { name: "seed", description: "Add one issue-map node (interview round; cap-enforced)" },
+  args: {
+    wi: { type: "string", description: "Work item id (wi_*)" },
+    label: { type: "string", description: "Plain-language label of the issue" },
+    critical: { type: "boolean", description: "Mark the node critical (MODEL-2)", default: false },
+    "max-nodes": { type: "string", description: "Tree-node cap override (default 60)" },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.wi || !args.label) {
+      writeError("prism seed requires --wi <wi_*> and --label <text>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new PrismStore(repoRoot);
+    try {
+      const prism = await loadOrInit(store, args.wi);
+      const roundsRun = (await store.readValueRounds(args.wi)).length;
+      const caps = {
+        ...PRISM_CAPS,
+        ...args["max-nodes"] ? { treeNodeCount: Number(args["max-nodes"]) } : {}
+      };
+      const drive = runPrismRounds([{ addedNodeCount: 1 }], caps, {
+        treeNodeCount: prism.tree.nodes.length,
+        roundsRun
+      });
+      if (drive.halted) {
+        if (format === "json") {
+          writeJson2({ work_item_id: args.wi, halted: true, escalation: drive.escalation });
+        } else {
+          writeError("prism seed HALTED \u2014 cap reached (escalate, not success):");
+          for (const r4 of drive.escalation)
+            writeError(`  - ${r4}`);
+        }
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const nodeId2 = prismNodeId();
+      const child = {
+        id: nodeId2,
+        parent_id: prism.tree.root_id,
+        label: args.label,
+        origin: "derived",
+        depth_weight: 0.5,
+        state: "open",
+        children: []
+      };
+      let next = { ...prism, tree: addNode(prism.tree, child) };
+      if (args.critical) {
+        const gate2 = assignSeverity(next, nodeId2, "critical");
+        if (!gate2.ok) {
+          writeError(gate2.reasons.join("; "));
+          process.exit(RUNTIME_ERROR_EXIT);
+          return;
+        }
+        next = gate2.prism;
+      }
+      await store.writeMap(next);
+      await store.appendValueRound(args.wi, {
+        ts: new Date().toISOString(),
+        work_item_id: args.wi,
+        round: roundsRun + 1,
+        section: "prism-issue-map",
+        generator_count: 1,
+        dry: true,
+        selected: [],
+        all_scored: []
+      });
+      if (format === "json") {
+        writeJson2({
+          work_item_id: args.wi,
+          node_id: nodeId2,
+          severity: severityOf(next, nodeId2),
+          node_count: next.tree.nodes.length
+        });
+      } else {
+        writeHuman(`seeded: ${args.label} [${severityOf(next, nodeId2)}] (${nodeId2})`);
+      }
+    } catch (err) {
+      writeError(`prism seed failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var prismDivergeCommand = defineCommand({
+  meta: {
+    name: "diverge",
+    description: "Evaluate one interview round for divergence and emit the verdict (ac-10)"
+  },
+  args: {
+    wi: { type: "string", description: "Work item id (wi_*)" },
+    question: { type: "string", description: "The current question signature (question round)" },
+    trivial: { type: "boolean", description: "Mark the current question trivial", default: false },
+    seen: { type: "string", description: "A prior question signature (repeatable) \u2014 history" },
+    "challenge-of": {
+      type: "string",
+      description: "Decided node id being re-challenged (challenge round)"
+    },
+    signature: { type: "string", description: "The re-challenge signature (with --challenge-of)" },
+    "new-evidence": {
+      type: "boolean",
+      description: "The re-challenge carries NEW grounding evidence (admissible once)",
+      default: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.wi) {
+      writeError("prism diverge requires --wi <wi_*>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const hasQuestion = Boolean(args.question);
+    const hasChallenge = Boolean(args["challenge-of"]);
+    if (hasQuestion === hasChallenge) {
+      writeError("prism diverge requires exactly one of --question <sig> or --challenge-of <node>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (hasChallenge && !args.signature) {
+      writeError("prism diverge --challenge-of also requires --signature <text>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const round = hasChallenge ? {
+      challenge: {
+        decided_id: args["challenge-of"],
+        signature: args.signature,
+        new_evidence: args["new-evidence"]
+      }
+    } : { question: { signature: args.question, trivial: args.trivial } };
+    const history = asArray3(args.seen).map((signature2) => ({
+      signature: signature2,
+      trivial: false
+    }));
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new PrismStore(repoRoot);
+    try {
+      const { verdict: verdict2, decision } = await runDivergenceRound(store, {
+        workItemId: args.wi,
+        round,
+        history
+      });
+      if (format === "json") {
+        writeJson2({ work_item_id: args.wi, verdict: verdict2, ...decision ? { decision } : {} });
+      } else {
+        writeHuman(`\uD310\uC815: ${verdict2.action} \u2014 ${verdict2.reason}`);
+        if (decision)
+          writeHuman(`\uAE30\uB85D\uB428(Record tier): ${decision.kind}`);
+      }
+      if (verdict2.diverged)
+        process.exit(RUNTIME_ERROR_EXIT);
+    } catch (err) {
+      writeError(`prism diverge failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var prismCloseCommand = defineCommand({
+  meta: { name: "close", description: "Close an issue-map node (MODEL-1 unknown-close gate)" },
+  args: {
+    wi: { type: "string", description: "Work item id (wi_*)" },
+    node: { type: "string", description: "Node id to close" },
+    state: { type: "string", description: "resolved | out_of_scope | user_owned" },
+    reason: { type: "string", description: "Why closed (justification)" },
+    residual: {
+      type: "string",
+      description: "Surviving risk (required for a critical unknown-close)"
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const state = args.state;
+    if (!args.wi || !args.node || !state) {
+      writeError("prism close requires --wi, --node, and --state");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (state !== "resolved" && state !== "out_of_scope" && state !== "user_owned") {
+      writeError(`--state must be resolved | out_of_scope | user_owned (got: ${state})`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new PrismStore(repoRoot);
+    try {
+      const prism = await store.getMap(args.wi);
+      const result2 = closePrismNode(prism, args.node, state, args.reason, args.residual);
+      if (!result2.ok) {
+        if (format === "json") {
+          writeJson2({ work_item_id: args.wi, ok: false, reasons: result2.reasons });
+        } else {
+          writeError("prism close REJECTED:");
+          for (const r4 of result2.reasons)
+            writeError(`  - ${r4}`);
+        }
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const next = result2.prism;
+      await store.writeMap(next);
+      if (state !== "resolved") {
+        await store.appendDecision({
+          schema_version: "0.1.0",
+          work_item_id: args.wi,
+          kind: state === "user_owned" ? "unknown_close" : "skip",
+          node_id: args.node,
+          reason: args.reason ?? `closed as ${state}`,
+          ...args.residual ? { residual_risk: args.residual } : {},
+          recorded_at: new Date().toISOString()
+        });
+      }
+      if (format === "json") {
+        writeJson2({ work_item_id: args.wi, ok: true, node_id: args.node, state });
+      } else {
+        writeHuman(`closed: ${args.node} \u2192 ${state}`);
+      }
+    } catch (err) {
+      writeError(`prism close failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var prismSummaryCommand = defineCommand({
+  meta: { name: "summary", description: "Label-only progress summary of remaining scope (ac-3)" },
+  args: {
+    wi: { type: "string", description: "Work item id (wi_*)" },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.wi) {
+      writeError("prism summary requires --wi <wi_*>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new PrismStore(repoRoot);
+    try {
+      const prism = await store.getMap(args.wi);
+      const labels = renderProgressSummary(prism);
+      if (format === "json") {
+        writeJson2({ remaining: labels });
+        return;
+      }
+      if (labels.length === 0) {
+        writeHuman("\uB0A8\uC740 \uD56D\uBAA9\uC774 \uC5C6\uC5B4\uC694.");
+        return;
+      }
+      writeHuman("\uC544\uC9C1 \uC815\uD560 \uD56D\uBAA9:");
+      for (const label2 of labels)
+        writeHuman(`  - ${label2}`);
+    } catch (err) {
+      writeError(`prism summary failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var prismStatusCommand = defineCommand({
+  meta: {
+    name: "status",
+    description: "Critical-termination status + one-shot launch notification (ac-2/ac-4)"
+  },
+  args: {
+    wi: { type: "string", description: "Work item id (wi_*)" },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.wi) {
+      writeError("prism status requires --wi <wi_*>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new PrismStore(repoRoot);
+    try {
+      const prism = await store.getMap(args.wi);
+      const term = criticalTermination(prism);
+      const notif = resolveLaunchNotification(prism, new Date);
+      if (notif.notify || notif.retracted) {
+        await store.writeMap(notif.prism);
+      }
+      if (notif.notify) {
+        await store.appendDecision({
+          schema_version: "0.1.0",
+          work_item_id: args.wi,
+          kind: "notified",
+          reason: "minimal-launch reachable \u2014 critical scope all resolved",
+          recorded_at: new Date().toISOString()
+        });
+      }
+      if (format === "json") {
+        writeJson2({
+          work_item_id: args.wi,
+          terminated: term.terminated,
+          reason: term.reason,
+          notified: notif.notify,
+          retracted: notif.retracted
+        });
+        return;
+      }
+      writeHuman(`\uCC29\uC218 \uAC00\uB2A5: ${term.terminated ? "\uC608" : "\uC544\uB2C8\uC624"} (${term.reason})`);
+      if (notif.notify && notif.message)
+        writeHuman(notif.message);
+      if (notif.retracted)
+        writeHuman("\uC0C1\uD669\uC774 \uB418\uB3CC\uC544\uAC00 \uCC29\uC218 \uC54C\uB9BC\uC744 \uCCA0\uD68C\uD588\uC5B4\uC694 (\uC0C8 \uD575\uC2EC \uD56D\uBAA9).");
+    } catch (err) {
+      writeError(`prism status failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var prismDocCommand = defineCommand({
+  meta: {
+    name: "doc",
+    description: "Emit the design document with grounding + digest binding (ac-5/ac-6)"
+  },
+  args: {
+    wi: { type: "string", description: "Work item id (wi_*)" },
+    input: { type: "string", description: "Path to the design-doc payload JSON" },
+    out: {
+      type: "string",
+      description: "Repo-relative output path (default .ditto/specs/<wi>-design.md)"
+    },
+    "allow-ungrounded": {
+      type: "boolean",
+      description: "Explicit decision: emit even with ungrounded factual claims (marks them unresolved)",
+      default: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.wi || !args.input) {
+      writeError("prism doc requires --wi <wi_*> and --input <payload.json>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const targetPath = args.out ?? `.ditto/specs/${args.wi}-design.md`;
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const payloadFile = Bun.file(args.input);
+      if (!await payloadFile.exists()) {
+        writeError(`payload not found: ${args.input}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const input = await payloadFile.json();
+      const result2 = emitDesignDoc(input, {
+        targetPath,
+        repoRoot,
+        allowUngrounded: args["allow-ungrounded"]
+      });
+      if (result2.status === "rejected") {
+        if (format === "json") {
+          writeJson2({ work_item_id: args.wi, ok: false, reasons: result2.reasons });
+        } else {
+          writeError("prism doc REJECTED:");
+          for (const r4 of result2.reasons)
+            writeError(`  - ${r4}`);
+        }
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      await Bun.write(result2.abs, result2.markdown);
+      if (format === "json") {
+        writeJson2({
+          work_item_id: args.wi,
+          ok: true,
+          path: targetPath,
+          digest: result2.digest,
+          unresolved: result2.unresolved
+        });
+        return;
+      }
+      writeHuman(`design doc emitted: ${targetPath}`);
+      writeHuman(`  digest: ${result2.digest}`);
+      if (result2.unresolved.length > 0) {
+        writeHuman("  \uBBF8\uD574\uACB0(\uADFC\uAC70 \uC5C6\uC74C) \uD56D\uBAA9:");
+        for (const u6 of result2.unresolved)
+          writeHuman(`    - ${u6}`);
+      }
+    } catch (err) {
+      writeError(`prism doc failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var prismBacklogProposeCommand = defineCommand({
+  meta: {
+    name: "propose",
+    description: "Propose a backlog split from a confirmed design doc (ac-8)"
+  },
+  args: {
+    wi: { type: "string", description: "Parent work item id (wi_*)" },
+    input: { type: "string", description: "Path to the split payload JSON ({ doc, items })" },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.wi || !args.input) {
+      writeError("prism backlog propose requires --wi <wi_*> and --input <payload.json>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new PrismStore(repoRoot);
+    try {
+      const payloadFile = Bun.file(args.input);
+      if (!await payloadFile.exists()) {
+        writeError(`payload not found: ${args.input}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const payload = await payloadFile.json();
+      const result2 = proposeBacklogSplit(payload.doc, payload.items ?? []);
+      if (result2.status === "rejected") {
+        if (format === "json") {
+          writeJson2({ work_item_id: args.wi, ok: false, reasons: result2.reasons });
+        } else {
+          writeError("prism backlog propose REJECTED:");
+          for (const r4 of result2.reasons)
+            writeError(`  - ${r4}`);
+        }
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      await store.writeBacklogSplit({
+        schema_version: "0.1.0",
+        work_item_id: args.wi,
+        items: result2.items,
+        materialized: []
+      });
+      if (format === "json") {
+        writeJson2({ work_item_id: args.wi, ok: true, proposed: result2.items.length });
+        return;
+      }
+      writeHuman(`\uBD84\uD560\uC548\uC744 \uC81C\uC548\uD588\uC5B4\uC694 (${result2.items.length}\uAC74). \uC2B9\uC778 \uD6C4\uC5D0\uB9CC \uBB3C\uD654\uB429\uB2C8\uB2E4:`);
+      for (const item of result2.items)
+        writeHuman(`  - ${item.title}`);
+      writeHuman('\uC2B9\uC778\uD558\uB824\uBA74: ditto prism backlog materialize --wi <wi> --statement "<\uC6D0\uBB38 \uC2B9\uC778>"');
+    } catch (err) {
+      writeError(`prism backlog propose failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var prismBacklogMaterializeCommand = defineCommand({
+  meta: {
+    name: "materialize",
+    description: "Materialize the approved split into per-item WI drafts (user statement required, ac-8)"
+  },
+  args: {
+    wi: { type: "string", description: "Parent work item id (wi_*)" },
+    statement: {
+      type: "string",
+      description: "The user's own approval words (required \u2014 a bare call is NOT approval)"
+    },
+    by: { type: "string", description: "Who approved (attribution)", default: "user" },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.wi) {
+      writeError("prism backlog materialize requires --wi <wi_*>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.statement || args.statement.trim().length === 0) {
+      writeError('prism backlog materialize requires --statement "<\uC6D0\uBB38 \uC2B9\uC778>": bare \uD638\uCD9C\uC740 \uC2B9\uC778\uC774 \uC544\uB2D9\uB2C8\uB2E4 (\uC0AC\uC6A9\uC790 \uC6D0\uBB38 \uD544\uC694)');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const prism = new PrismStore(repoRoot);
+    const workItems = new WorkItemStore(repoRoot);
+    try {
+      const result2 = await materializeBacklogSplit({
+        workItems,
+        prism,
+        parentId: args.wi,
+        approval: {
+          confirmed: true,
+          statement: args.statement,
+          approved_by: args.by ?? "user",
+          approved_at: new Date().toISOString()
+        }
+      });
+      if (result2.status === "rejected") {
+        if (format === "json") {
+          writeJson2({ work_item_id: args.wi, ok: false, reasons: result2.reasons });
+        } else {
+          writeError("prism backlog materialize REJECTED:");
+          for (const r4 of result2.reasons)
+            writeError(`  - ${r4}`);
+        }
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (format === "json") {
+        writeJson2({ work_item_id: args.wi, ok: true, materialized_wis: result2.materialized_wis });
+        return;
+      }
+      writeHuman(`\uC2B9\uC778 \uD655\uC778 \u2014 ${result2.materialized_wis.length}\uAC74\uC744 draft \uC791\uC5C5\uC73C\uB85C \uBB3C\uD654\uD588\uC5B4\uC694 (\uC790\uB3D9 \uCC29\uC218 \uC5C6\uC74C):`);
+      for (const id of result2.materialized_wis)
+        writeHuman(`  - ${id}`);
+    } catch (err) {
+      writeError(`prism backlog materialize failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var prismBacklogCommand = defineCommand({
+  meta: {
+    name: "backlog",
+    description: "Backlog split (ac-8): propose a split from a confirmed design doc, then materialize per-item WI drafts ONLY after the user\u2019s explicit statement approval"
+  },
+  subCommands: {
+    propose: prismBacklogProposeCommand,
+    materialize: prismBacklogMaterializeCommand
+  }
+});
+var prismCommand = defineCommand({
+  meta: {
+    name: "prism",
+    description: "Prism issue-map engine: grow (seed), evaluate a round for divergence + emit (diverge, ac-10), close (MODEL-1 gate), label-only summary (ac-3), critical-termination + minimal-launch notification (ac-2/ac-4), and backlog split (ac-8)"
+  },
+  subCommands: {
+    seed: prismSeedCommand,
+    diverge: prismDivergeCommand,
+    close: prismCloseCommand,
+    summary: prismSummaryCommand,
+    status: prismStatusCommand,
+    doc: prismDocCommand,
+    backlog: prismBacklogCommand
+  }
+});
+
 // src/cli/commands/push-gate.ts
 import { mkdirSync, readFileSync as readFileSync7, writeFileSync } from "fs";
 import { homedir as homedir11 } from "os";
@@ -51938,523 +52966,6 @@ var teardownCommand = defineCommand({
   }
 });
 
-// src/cli/commands/tech-spec.ts
-init_fs();
-init_work_item_store();
-init_tech_spec_round();
-function parseJsonArg3(raw) {
-  try {
-    return JSON.parse(raw);
-  } catch (err) {
-    throw new Error(`--json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
-var PERFORMANCE_VALUES = ["glance", "quick", "standard", "deep", "exhaustive"];
-var EFFORT_VALUES = ["low", "medium", "high", "inherit"];
-var GATE_MODE_VALUES = ["confirm", "draft"];
-var GRANULARITY_VALUES = ["low", "medium", "high"];
-function intArg(raw, label2, min, max) {
-  const n3 = Number(raw);
-  if (!Number.isInteger(n3) || n3 < min || n3 > max) {
-    throw new Error(`--${label2} must be an integer in [${min}, ${max}]; got "${raw}"`);
-  }
-  return n3;
-}
-function enumArg(raw, label2, values) {
-  if (!values.includes(raw)) {
-    throw new Error(`--${label2} must be ${values.join("|")}; got "${raw}"`);
-  }
-  return raw;
-}
-function parseQuestionConfigArgs(args, configRaw) {
-  const raw = {};
-  const intensity = args.intensity;
-  if (intensity !== undefined)
-    raw.intensity = intArg(intensity, "intensity", 0, 100);
-  const generators = args.generators;
-  if (generators !== undefined)
-    raw.generators = intArg(generators, "generators", 1, 6);
-  const maxQuestions = args["max-questions"];
-  if (maxQuestions !== undefined)
-    raw.max_questions = intArg(maxQuestions, "max-questions", 0, 1e6);
-  const maxRounds = args["max-rounds"];
-  if (maxRounds !== undefined)
-    raw.max_rounds = intArg(maxRounds, "max-rounds", 0, 1e6);
-  const performance2 = args.performance;
-  if (performance2 !== undefined) {
-    raw.performance = enumArg(performance2, "performance", PERFORMANCE_VALUES);
-  }
-  const effort = args["generator-effort"];
-  if (effort !== undefined) {
-    raw.generator_effort = enumArg(effort, "generator-effort", EFFORT_VALUES);
-  }
-  const gateMode = args["gate-mode"];
-  if (gateMode !== undefined) {
-    raw.gate_mode = enumArg(gateMode, "gate-mode", GATE_MODE_VALUES);
-  }
-  const granularity = args.granularity;
-  if (granularity !== undefined) {
-    raw.granularity = enumArg(granularity, "granularity", GRANULARITY_VALUES);
-  }
-  const threshold = args.threshold;
-  if (threshold !== undefined) {
-    const t3 = Number(threshold);
-    if (!Number.isFinite(t3) || t3 < 0 || t3 > 1) {
-      throw new Error(`--threshold must be a number in [0, 1]; got "${threshold}"`);
-    }
-    raw.threshold = t3;
-  }
-  return resolveQuestionConfig(raw, configRaw);
-}
-var startCmd3 = defineCommand({
-  meta: {
-    name: "start",
-    description: "Initialize tech-spec-state.json for a work item (doc path + mode + question tuning)"
-  },
-  args: {
-    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
-    doc: {
-      type: "string",
-      description: "Spec document path relative to repo root (e.g. .ditto/specs/<slug>.md)",
-      required: true
-    },
-    mode: {
-      type: "string",
-      description: "Writing/review rhythm: stepwise (default) | oneshot",
-      default: "stepwise"
-    },
-    intensity: {
-      type: "string",
-      alias: "i",
-      description: "Unified dial 0..100 over {gate threshold, granularity, count/rounds} (default 60)"
-    },
-    generators: {
-      type: "string",
-      alias: "g",
-      description: "Generator fan-out count 1..6 (default 2)"
-    },
-    performance: {
-      type: "string",
-      alias: "p",
-      description: `Preset ${PERFORMANCE_VALUES.join("|")} (default standard)`
-    },
-    "generator-effort": {
-      type: "string",
-      alias: "e",
-      description: `Generator effort ${EFFORT_VALUES.join("|")} (default inherit)`
-    },
-    "gate-mode": {
-      type: "string",
-      alias: "m",
-      description: `Gate mode ${GATE_MODE_VALUES.join("|")} (default confirm)`
-    },
-    "max-questions": {
-      type: "string",
-      alias: "q",
-      description: "Question ceiling (default 0 = unlimited, opt-in cap)"
-    },
-    "max-rounds": {
-      type: "string",
-      alias: "r",
-      description: "Round ceiling (default 0 = unlimited, opt-in cap)"
-    },
-    threshold: {
-      type: "string",
-      alias: "t",
-      description: "Selection threshold 0..1 \u2014 advanced override of the intensity-derived value"
-    },
-    granularity: {
-      type: "string",
-      alias: "d",
-      description: `Granularity ${GRANULARITY_VALUES.join("|")} \u2014 advanced override of the intensity-derived value`
-    },
-    output: { type: "string", description: "Output format: human|json", default: "human" }
-  },
-  run: async ({ args }) => {
-    let format;
-    try {
-      format = parseOutputFormat(args.output);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    if (args.mode !== "stepwise" && args.mode !== "oneshot") {
-      writeError(`--mode must be stepwise|oneshot; got "${args.mode}"`);
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    const repoRoot = await resolveRepoRootForCreate();
-    let questionConfig2;
-    try {
-      const configRaw = await readQuestionConfigDefaults(repoRoot, () => writeError("warning: .ditto/local/config.json could not be parsed \u2014 ignoring it and using defaults"));
-      questionConfig2 = parseQuestionConfigArgs(args, configRaw);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    if (!await new WorkItemStore(repoRoot).exists(args.workItem)) {
-      writeError(`work item ${args.workItem} not found`);
-      process.exit(RUNTIME_ERROR_EXIT);
-      return;
-    }
-    const state = await startTechSpec(repoRoot, {
-      workItemId: args.workItem,
-      docPath: args.doc,
-      mode: args.mode,
-      questionConfig: questionConfig2
-    });
-    if (format === "json") {
-      writeJson2({
-        work_item_id: state.work_item_id,
-        doc_path: state.doc_path,
-        mode: state.mode,
-        path: `.ditto/local/work-items/${state.work_item_id}/tech-spec-state.json`
-      });
-    } else {
-      writeHuman(`Started tech-spec for ${state.work_item_id}`);
-      writeHuman(`  doc:  ${state.doc_path}`);
-      writeHuman(`  mode: ${state.mode}`);
-    }
-  }
-});
-var recordSectionCmd = defineCommand({
-  meta: {
-    name: "record-section",
-    description: "Upsert one section record (review state + grounding evidence; factual sections reject without evidence \u2014 ac-9)"
-  },
-  args: {
-    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
-    json: {
-      type: "string",
-      description: "JSON payload matching recordSectionPayload schema",
-      required: true
-    },
-    output: { type: "string", description: "Output format: human|json", default: "human" }
-  },
-  run: async ({ args }) => {
-    let format;
-    try {
-      format = parseOutputFormat(args.output);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    let raw;
-    try {
-      raw = parseJsonArg3(args.json);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    const parsed = recordSectionPayload.safeParse(raw);
-    if (!parsed.success) {
-      writeError("--json failed schema validation:");
-      for (const issue of parsed.error.issues) {
-        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
-      }
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    const repoRoot = await resolveRepoRootForCreate();
-    try {
-      const state = await recordSection(repoRoot, {
-        workItemId: args.workItem,
-        payload: parsed.data
-      });
-      if (format === "json") {
-        writeJson2({
-          work_item_id: state.work_item_id,
-          sections: state.sections.map((s2) => ({ id: s2.id, review: s2.review }))
-        });
-      } else {
-        writeHuman(`Recorded section ${parsed.data.section.id} for ${state.work_item_id}`);
-        writeHuman(`  coverage: ${state.sections.map((s2) => `${s2.id}=${s2.review}`).join(", ")}`);
-      }
-    } catch (err) {
-      writeError(`record-section failed: ${err instanceof Error ? err.message : String(err)}`);
-      process.exit(RUNTIME_ERROR_EXIT);
-    }
-  }
-});
-var recordRoundCmd = defineCommand({
-  meta: {
-    name: "record-round",
-    description: "Append one question-generation round\u2019s gate scores to the durable score trail (selected + all_scored + dry; consumed by doctor intent-quality)"
-  },
-  args: {
-    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
-    json: {
-      type: "string",
-      description: "JSON payload matching recordRoundPayload schema (round, dry, selected, all_scored, ...)",
-      required: true
-    },
-    output: { type: "string", description: "Output format: human|json", default: "human" }
-  },
-  run: async ({ args }) => {
-    let format;
-    try {
-      format = parseOutputFormat(args.output);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    let raw;
-    try {
-      raw = parseJsonArg3(args.json);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    const parsed = recordRoundPayload.safeParse(raw);
-    if (!parsed.success) {
-      writeError("--json failed schema validation:");
-      for (const issue of parsed.error.issues) {
-        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
-      }
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    const repoRoot = await resolveRepoRootForCreate();
-    try {
-      const record = await recordRound(repoRoot, {
-        workItemId: args.workItem,
-        payload: parsed.data
-      });
-      if (format === "json") {
-        writeJson2({
-          work_item_id: record.work_item_id,
-          round: record.round,
-          dry: record.dry,
-          selected: record.selected.length,
-          all_scored: record.all_scored.length
-        });
-      } else {
-        writeHuman(`Recorded round ${record.round} for ${record.work_item_id} (selected ${record.selected.length}, scored ${record.all_scored.length}${record.dry ? ", dry" : ""})`);
-      }
-    } catch (err) {
-      writeError(`record-round failed: ${err instanceof Error ? err.message : String(err)}`);
-      process.exit(RUNTIME_ERROR_EXIT);
-    }
-  }
-});
-var finalizeCmd3 = defineCommand({
-  meta: {
-    name: "finalize",
-    description: "Compile the spec document into intent.json (+source_digest), record review coverage, bootstrap autopilot"
-  },
-  args: {
-    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
-    json: {
-      type: "string",
-      description: "JSON payload matching finalizeTechSpecPayload schema (risk + user_confirmation)",
-      required: true
-    },
-    output: { type: "string", description: "Output format: human|json", default: "human" }
-  },
-  run: async ({ args }) => {
-    let format;
-    try {
-      format = parseOutputFormat(args.output);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    let raw;
-    try {
-      raw = parseJsonArg3(args.json);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    const parsed = finalizeTechSpecPayload.safeParse(raw);
-    if (!parsed.success) {
-      writeError("--json failed schema validation:");
-      for (const issue of parsed.error.issues) {
-        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
-      }
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    const repoRoot = await resolveRepoRootForCreate();
-    try {
-      const result2 = await finalizeTechSpec(repoRoot, {
-        workItemId: args.workItem,
-        payload: parsed.data
-      });
-      if (result2.status !== "finalized") {
-        switch (result2.status) {
-          case "not_started":
-            writeError("tech-spec was never started for this work item \u2014 run `ditto tech-spec start` first");
-            break;
-          case "doc_missing":
-            writeError(`spec document not found: ${result2.doc_path}`);
-            break;
-          case "compile_rejected":
-            writeError("spec document failed to compile (fail-closed):");
-            for (const r4 of result2.reasons)
-              writeError(`  - ${r4}`);
-            break;
-          case "interview_not_ready":
-            writeError("an interview happened and its readiness gate is still blocked \u2014 finalize never bypasses it:");
-            for (const r4 of result2.gate.reasons)
-              writeError(`  - ${r4}`);
-            break;
-          case "not_confirmed":
-            writeError("the user has not confirmed the intent (2\uCC28 \uAC8C\uC774\uD2B8, \uBAA8\uB4DC \uBD88\uBCC0): capture user_confirmation.confirmed=true with their statement and re-run");
-            break;
-        }
-        process.exit(RUNTIME_ERROR_EXIT);
-        return;
-      }
-      if (format === "json") {
-        writeJson2({
-          work_item_id: result2.intent.work_item_id,
-          intent_path: `.ditto/local/work-items/${result2.intent.work_item_id}/intent.json`,
-          source_digest: result2.intent.source_digest,
-          autopilot_id: result2.autopilot.autopilot_id,
-          approval_gate: result2.autopilot.approval_gate.status,
-          acceptance_criteria: result2.intent.acceptance_criteria.map((ac) => ac.id),
-          review_coverage: result2.state.finalized?.review_coverage ?? []
-        });
-      } else {
-        writeHuman(`Finalized tech-spec for ${result2.intent.work_item_id}`);
-        writeHuman(`  intent:        .ditto/local/work-items/${result2.intent.work_item_id}/intent.json`);
-        writeHuman(`  source_digest: ${result2.intent.source_digest?.sha256.slice(0, 12)}\u2026 (${result2.intent.source_digest?.doc_path})`);
-        writeHuman(`  autopilot:     ${result2.autopilot.autopilot_id} (gate: ${result2.autopilot.approval_gate.status})`);
-        writeHuman(`  acceptance:    ${result2.intent.acceptance_criteria.map((ac) => ac.id).join(", ")}`);
-        const cov = result2.state.finalized?.review_coverage ?? [];
-        const reviewed = cov.filter((c5) => c5.review === "reviewed").length;
-        writeHuman(`  review:        ${reviewed}/${cov.length} sections reviewed (rest pending/skipped \u2014 recorded honestly)`);
-      }
-    } catch (err) {
-      writeError(`finalize failed: ${err instanceof Error ? err.message : String(err)}`);
-      process.exit(RUNTIME_ERROR_EXIT);
-    }
-  }
-});
-var nextRoundCmd = defineCommand({
-  meta: {
-    name: "next-round",
-    description: "Hand the \xA76-6 driver this round\u2019s resolved levers + an opt-in cap signal: code enforces only the numeric cap (max_rounds/max_questions, counted from the round trail); the quality levers (threshold/granularity/count_hint) are relayed for the gate agent to obey with judgment, not a mechanical cutoff"
-  },
-  args: {
-    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
-    output: { type: "string", description: "Output format: human|json", default: "human" }
-  },
-  run: async ({ args }) => {
-    let format;
-    try {
-      format = parseOutputFormat(args.output);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    const repoRoot = await resolveRepoRootForCreate();
-    try {
-      const r4 = await nextRound(repoRoot, { workItemId: args.workItem });
-      if (format === "json") {
-        writeJson2(r4);
-      } else {
-        writeHuman(`Round ${r4.round} for ${args.workItem}`);
-        writeHuman(`  generators:  ${r4.generators} (effort: ${r4.generator_effort})`);
-        writeHuman(`  quality dial: threshold ${r4.threshold}, granularity ${r4.granularity}, count_hint ${r4.count_hint} \u2014 anchors for the gate, judged not cut`);
-        writeHuman(`  gate_mode:   ${r4.gate_mode}`);
-        writeHuman(`  progress:    ${r4.rounds_so_far} rounds / ${r4.questions_so_far} questions so far`);
-        if (r4.cap_reached) {
-          writeHuman(`  CAP REACHED (${r4.cap_reason}): stop the question loop \u2014 ceiling set by config`);
-        } else {
-          const caps = [];
-          if (r4.max_rounds > 0)
-            caps.push(`rounds\u2264${r4.max_rounds}`);
-          if (r4.max_questions > 0)
-            caps.push(`questions\u2264${r4.max_questions}`);
-          writeHuman(`  cap:         ${caps.length ? caps.join(", ") : "none \u2014 score-based termination (dry)"}`);
-        }
-      }
-    } catch (err) {
-      writeError(`next-round failed: ${err instanceof Error ? err.message : String(err)}`);
-      process.exit(RUNTIME_ERROR_EXIT);
-    }
-  }
-});
-var checkQuestionCmd2 = defineCommand({
-  meta: {
-    name: "check-question",
-    description: "Pre-ask presentation-contract gate for a SELECTED tech-spec question (ac-6): rejects an un-glossed internal identifier on the user-reaching face and a missing user_explanation/why_matters \u2014 same contract as deep-interview. Non-zero exit on rejection so the \xA76-6 loop can regenerate."
-  },
-  args: {
-    json: {
-      type: "string",
-      description: "Scored question JSON: {text, property, scores, why_matters?, user_explanation?, background?, grounding?}",
-      required: true
-    },
-    output: { type: "string", description: "Output format: human|json", default: "human" }
-  },
-  run: ({ args }) => {
-    let format;
-    try {
-      format = parseOutputFormat(args.output);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    let raw;
-    try {
-      raw = parseJsonArg3(args.json);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    const parsed = scoredQuestion.safeParse(raw);
-    if (!parsed.success) {
-      writeError("--json failed schema validation:");
-      for (const issue of parsed.error.issues) {
-        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
-      }
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    const verdict2 = checkQuestionContext(parsed.data);
-    if (format === "json") {
-      writeJson2(verdict2);
-    } else if (verdict2.ok) {
-      writeHuman("check-question: ok (presentation contract satisfied)");
-    } else {
-      writeError("check-question: REJECTED \u2014 under-contextualized, do not ask as-is:");
-      for (const v2 of verdict2.violations) {
-        writeError(`  - ${v2.field}: ${v2.reason}`);
-      }
-    }
-    if (!verdict2.ok)
-      process.exit(RUNTIME_ERROR_EXIT);
-  }
-});
-var techSpecCommand = defineCommand({
-  meta: {
-    name: "tech-spec",
-    description: "Drive the tech-spec co-authoring machine (start/record-section/finalize) \u2014 doc is the source, intent.json the compile artifact"
-  },
-  subCommands: {
-    start: startCmd3,
-    "record-section": recordSectionCmd,
-    "record-round": recordRoundCmd,
-    "next-round": nextRoundCmd,
-    "check-question": checkQuestionCmd2,
-    finalize: finalizeCmd3
-  }
-});
-
 // src/cli/commands/verify.ts
 init_fs();
 init_work_item_store();
@@ -53188,6 +53699,7 @@ var main = defineCommand({
     workspace: workspaceCommand,
     "push-gate": pushGateCommand,
     mode: modeCommand,
+    prism: prismCommand,
     run: runCommand2,
     verify: verifyCommand,
     doctor: doctorCommand,
@@ -53198,7 +53710,6 @@ var main = defineCommand({
     hook: hookCommand,
     "decision-conflict": decisionConflictCommand,
     "deep-interview": deepInterviewCommand,
-    "tech-spec": techSpecCommand,
     e2e: e2eCommand,
     "journey-author": journeyAuthorCommand,
     knowledge: knowledgeCommand,
@@ -53222,4 +53733,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=63d4f6934ba5310c54c75e22537637a638941d9d8460d5699ccd28058b17a26a
+//# ditto-src-stamp=0a58ca88587ce19494e6322dabbe531646d8786d2e617bc53e770283a199a39f
