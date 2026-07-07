@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260707k2g",
+  "title": "follow-up: heavy path cov-cat ungated 설계 결정: deep-interview가 coverage.json을 먼저 projection하면 plan-stage coverage-next가 map-exists로 cov-cat-* seeding을 스킵(coverage-loop.ts:298-316 기존 동작) — ledger는 seeded",
+  "source_request": "Out-of-scope follow-up discovered while working on wi_260706n4w: heavy path cov-cat ungated 설계 결정: deep-interview가 coverage.json을 먼저 projection하면 plan-stage coverage-next가 map-exists로 cov-cat-* seeding을 스킵(coverage-loop.ts:298-316 기존 동작) — ledger는 seeded:0/complete:false로 정직 보고하나(보이는 hole) 이 complete:false를 소비하는 게이트가 없음(report CLI만). code-verify/runtime 카테고리의 heavy-path 노드 단위 종결 강제를 게이트로 살릴지(§8-2), 현행 유지할지는 설계 결정 — n8 verify가 silent hole 아님으로 판정했으므로 긴급 아님",
+  "goal": "heavy path cov-cat ungated 설계 결정: deep-interview가 coverage.json을 먼저 projection하면 plan-stage coverage-next가 map-exists로 cov-cat-* seeding을 스킵(coverage-loop.ts:298-316 기존 동작) — ledger는 seeded:0/complete:false로 정직 보고하나(보이는 hole) 이 complete:false를 소비하는 게이트가 없음(report CLI만). code-verify/runtime 카테고리의 heavy-path 노드 단위 종결 강제를 게이트로 살릴지(§8-2), 현행 유지할지는 설계 결정 — n8 verify가 silent hole 아님으로 판정했으므로 긴급 아님",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "discovered_by": "wi_260706n4w",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-07T06:43:03.005Z",
+  "updated_at": "2026-07-07T06:43:03.005Z"
+}
