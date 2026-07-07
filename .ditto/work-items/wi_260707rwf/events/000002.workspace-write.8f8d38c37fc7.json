@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260707rwf",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "8f8d38c37fc7f30bb41ba109d1c5cd6952f4f0ec55da75b219c908540d759cba",
+  "ts": "2026-07-07T05:54:57.410Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/autopilot-coverage-report-cli.test.ts -t map-exists",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

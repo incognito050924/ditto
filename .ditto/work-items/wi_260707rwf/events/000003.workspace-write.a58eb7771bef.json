@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260707rwf",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "a58eb7771befd36b05c0c77c366e061c50c5af39e38d2096585cef39e7caf952",
+  "ts": "2026-07-07T05:54:57.715Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/coverage-feedback.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

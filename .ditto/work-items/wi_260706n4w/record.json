@@ -906,6 +906,28 @@
   "declared_risk": {
     "non_local": true
   },
+  "follow_ups": [
+    {
+      "kind": "bug",
+      "note": "autopilot lease 가드 갭(이번 런 실측, bypass 감사 17건): ①impl/fix 노드 lease file_scope가 테스트 경로를 일괄 누락해 packet이 명시 배정한 테스트 파일 편집이 PreToolUse autopilot-path 게이트에 막힘 ②checkAutopilotLease(src/hooks/pre-tool-use.ts:625-680)에 system-tmp/scratchpad 예외가 없어(scope-out 검사 :784-786에는 있음) 오케스트레이터·서브에이전트의 임시 파일 쓰기까지 차단. 테스트 파일과 scratchpad 쓰기가 bypass 없이 결정적으로 허용돼야 함",
+      "severity": "medium",
+      "materialized_wi": "wi_260707j1e"
+    },
+    {
+      "kind": "bug",
+      "note": "라우팅된 카테고리의 관측 표면 3건: ①coverage-report CLI human 포맷이 routed_out 미출력 + coverage.json 부재 early-return의 하드코딩 report에도 routed_out 없음(src/cli/commands/autopilot.ts:1352-1374 부근, JSON 경로는 포함) ②heavy path에서 cov-cat 미seed 시 human 출력이 원인을 'far-field seeding off'로 오표기(:1387 — 실제 원인은 map-exists skip) ③attributeCoverageEscape(src/core/coverage-feedback.ts:245-247)가 FAR_FIELD_ROUTED_OUT 카테고리 escape를 breadth(렌즈 누락)로 오분류 — 라우팅된 도메인은 수신 게이트(charter self-check) escape로 구분돼야 함",
+      "severity": "low",
+      "materialized_wi": "wi_260707rwf"
+    },
+    {
+      "kind": "idea",
+      "note": "ac-5 AFTER 측정 + 라이브 에이전트 행동 검증: 다음 실 heavy WI의 plan-stage sweep에서 재설계 후 taxonomy로 oracle_claims를 emit(coverage-round --json oracle_claims)→oracle-provenance.json 영속→fresh verdict-blind 라벨러 세션이 labeler_labels 채움→correlateFabrication 실행→reports/coverage/wi_260706n4w-fabrication-baseline.md §2에 AFTER append. 동시에 SKILL 계약 실준수(main agent가 oracle_claims를 실제 제출)·cov-dim seed 질문 승격도 그 라이브 런에서 검증. 절차 전문=baseline 로그 §2(5단계)+labeler-contract.md"
+    },
+    {
+      "kind": "idea",
+      "note": "heavy path cov-cat ungated 설계 결정: deep-interview가 coverage.json을 먼저 projection하면 plan-stage coverage-next가 map-exists로 cov-cat-* seeding을 스킵(coverage-loop.ts:298-316 기존 동작) — ledger는 seeded:0/complete:false로 정직 보고하나(보이는 hole) 이 complete:false를 소비하는 게이트가 없음(report CLI만). code-verify/runtime 카테고리의 heavy-path 노드 단위 종결 강제를 게이트로 살릴지(§8-2), 현행 유지할지는 설계 결정 — n8 verify가 silent hole 아님으로 판정했으므로 긴급 아님"
+    }
+  ],
   "follows": "wi_26062227h",
   "risks": [],
   "re_entry": {
@@ -917,6 +939,6 @@
   "runs": [],
   "started_at_sha": "ca796bc5ed38b8aed9a5a3e11de46e67cf093684",
   "created_at": "2026-07-06T23:50:39.068Z",
-  "updated_at": "2026-07-07T05:02:16.797Z",
+  "updated_at": "2026-07-07T05:32:48.091Z",
   "closed_at": "2026-07-07T05:02:16.794Z"
 }

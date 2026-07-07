@@ -1,0 +1,68 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260707rwf",
+  "title": "bug: 라우팅된 카테고리의 관측 표면 3건: ①coverage-report CLI human 포맷이 routed_out 미출력 + coverage.json 부재 early-return의 하드코딩 report에도 routed_out 없음(src/cli/commands/autopilot.ts:1352-1374 부근, JSON 경로는 포함) ②heavy pat",
+  "source_request": "Discovered while working on wi_260706n4w: 라우팅된 카테고리의 관측 표면 3건: ①coverage-report CLI human 포맷이 routed_out 미출력 + coverage.json 부재 early-return의 하드코딩 report에도 routed_out 없음(src/cli/commands/autopilot.ts:1352-1374 부근, JSON 경로는 포함) ②heavy path에서 cov-cat 미seed 시 human 출력이 원인을 'far-field seeding off'로 오표기(:1387 — 실제 원인은 map-exists skip) ③attributeCoverageEscape(src/core/coverage-feedback.ts:245-247)가 FAR_FIELD_ROUTED_OUT 카테고리 escape를 breadth(렌즈 누락)로 오분류 — 라우팅된 도메인은 수신 게이트(charter self-check) escape로 구분돼야 함",
+  "goal": "Fix: 라우팅된 카테고리의 관측 표면 3건: ①coverage-report CLI human 포맷이 routed_out 미출력 + coverage.json 부재 early-return의 하드코딩 report에도 routed_out 없음(src/cli/commands/autopilot.ts:1352-1374 부근, JSON 경로는 포함) ②heavy path에서 cov-cat 미seed 시 human 출력이 원인을 'far-field seeding off'로 오표기(:1387 — 실제 원인은 map-exists skip) ③attributeCoverageEscape(src/core/coverage-feedback.ts:245-247)가 FAR_FIELD_ROUTED_OUT 카테고리 escape를 breadth(렌즈 누락)로 오분류 — 라우팅된 도메인은 수신 게이트(charter self-check) escape로 구분돼야 함",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "coverage-report human 출력에 routed_out 섹션(카테고리 id·route·reason)이 나타나고 coverage.json 부재 early-return 경로에서도 나타난다 — 두 경로 모두 CLI 출력 단언 테스트가 exit 0으로 통과",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/autopilot-coverage-report-cli.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "heavy path 미seed 상황의 human 출력 문구가 'far-field seeding off' 대신 map-exists skip을 가리키는 문구를 포함한다 — 해당 상황 재현 테스트가 문구를 단언하고 exit 0",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/autopilot-coverage-report-cli.test.ts -t map-exists",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "attributeCoverageEscape가 FAR_FIELD_ROUTED_OUT에 든 category_id 입력에 대해 fault_kind=breadth를 반환하지 않고 반환값에 라우팅 근거 문자열이 포함된다 — 유닛테스트 exit 0",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-feedback.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "bun test src tests가 0 fail로 통과하고 기존 coverage-report JSON 출력 테스트가 무수정으로 green",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "discovered_by": "wi_260706n4w",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-07T05:32:29.442Z",
+  "updated_at": "2026-07-07T05:58:38.480Z",
+  "closed_at": "2026-07-07T05:58:38.479Z"
+}

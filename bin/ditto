@@ -22609,6 +22609,13 @@ async function attributeCoverageEscape(store, input, floor = FAR_FIELD_TAXONOMY_
       reason: node2 ? `floor category '${bare}' is '${node2.state}', not a dry-closed (resolved) escape` : `floor category '${bare}' is not seeded in this work item's coverage map`
     };
   }
+  const routedOut = FAR_FIELD_ROUTED_OUT.find((r3) => r3.id === bare);
+  if (routedOut) {
+    return {
+      accepted: false,
+      reason: `category '${bare}' was routed out of the far-field floor to '${routedOut.route}' (${routedOut.reason}) \u2014 this escape is a receiving-gate escape of '${routedOut.route}', not a missing floor lens (no breadth fault)`
+    };
+  }
   if (!node2) {
     return { accepted: true, fault_kind: "breadth" };
   }
@@ -32570,6 +32577,12 @@ var autopilotCoverageRound = defineCommand({
     }
   }
 });
+function writeRoutedOutSection(routedOut) {
+  writeHuman(`  routed out: ${routedOut.length} (left the far-field floor \u2014 see receiving gate)`);
+  for (const r3 of routedOut) {
+    writeHuman(`    - ${r3.id} \u2192 ${r3.route}: ${r3.reason}`);
+  }
+}
 var autopilotCoverageReport = defineCommand({
   meta: {
     name: "coverage-report",
@@ -32595,6 +32608,7 @@ var autopilotCoverageReport = defineCommand({
         writeJson2({ seeded: 0, resolved: 0, open: 0, skipped: [], complete: false });
       } else {
         writeHuman("Far-field coverage: no sweep recorded (coverage.json absent).");
+        writeRoutedOutSection(FAR_FIELD_ROUTED_OUT);
       }
       return;
     }
@@ -32611,7 +32625,9 @@ var autopilotCoverageReport = defineCommand({
     for (const s2 of report.skipped) {
       writeHuman(`    - ${s2.id} [${s2.state}]: ${s2.reason ?? "(no reason recorded!)"}`);
     }
-    writeHuman(`  complete: ${report.complete}${report.seeded === 0 ? " (far-field seeding off)" : ""}`);
+    writeRoutedOutSection(report.routed_out);
+    const unseededNote = report.seeded === 0 ? farFieldCategoriesEnabled() ? " (0 categories \u2014 map-exists skip: coverage.json predates category seeding)" : " (far-field seeding off)" : "";
+    writeHuman(`  complete: ${report.complete}${unseededNote}`);
   }
 });
 var autopilotStatus = defineCommand({
@@ -44505,7 +44521,10 @@ async function appendBypassRecord(repoRoot, entry) {
 function fileScopeContains(scope, repoRelPath) {
   return scope.some((s2) => scopeRefMatches(/[*?[\]]/.test(s2) ? { kind: "glob", ref: s2 } : { kind: "path", ref: s2 }, repoRelPath));
 }
+var TESTS_ALLOW_NODE_KINDS = new Set(["implement", "fix", "refactor"]);
 async function checkAutopilotLease(input, filePath) {
+  if (isOutsideRepo(input.repoRoot, filePath) && isSystemTmpPath(filePath))
+    return;
   const raw = input.raw ?? {};
   const sessionId = typeof raw.session_id === "string" ? raw.session_id : undefined;
   if (!sessionId)
@@ -44516,13 +44535,13 @@ async function checkAutopilotLease(input, filePath) {
   const aps = new AutopilotStore(input.repoRoot);
   if (!await aps.exists(workItemId2))
     return;
-  let hasNonTerminal;
+  let graph;
   try {
-    const graph = await aps.get(workItemId2);
-    hasNonTerminal = graph.nodes.some((n3) => n3.status === "pending" || n3.status === "running" || n3.status === "blocked");
+    graph = await aps.get(workItemId2);
   } catch {
     return;
   }
+  const hasNonTerminal = graph.nodes.some((n3) => n3.status === "pending" || n3.status === "running" || n3.status === "blocked");
   if (!hasNonTerminal)
     return;
   const leases = await new ActiveNodeLeaseStore(input.repoRoot).listActive(workItemId2);
@@ -44534,6 +44553,9 @@ async function checkAutopilotLease(input, filePath) {
   const inScope = leases.some((l2) => fileScopeContains(l2.file_scope, repoRel2));
   if (inScope)
     return;
+  if (repoRel2.startsWith("tests/") && leases.some((l2) => TESTS_ALLOW_NODE_KINDS.has(graph.nodes.find((n3) => n3.id === l2.node_id)?.kind ?? ""))) {
+    return;
+  }
   if (autopilotBypassActive(input)) {
     await appendBypassRecord(input.repoRoot, {
       ts: new Date().toISOString(),
@@ -53200,4 +53222,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=81909bad40d2501159cf59d5d141424a22232eb7bc901479a27980a14225f0aa
+//# ditto-src-stamp=63d4f6934ba5310c54c75e22537637a638941d9d8460d5699ccd28058b17a26a

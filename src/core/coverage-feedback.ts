@@ -29,6 +29,7 @@ import type { CoverageMap, CoverageNode } from '~/schemas/coverage';
 import type { CoverageStore } from './coverage-store';
 import {
   CATEGORY_NODE_PREFIX,
+  FAR_FIELD_ROUTED_OUT,
   FAR_FIELD_TAXONOMY_FLOOR,
   type FarFieldCategory,
 } from './coverage-taxonomy';
@@ -208,6 +209,9 @@ function findCoverageNode(map: CoverageMap, categoryId: string): CoverageNode | 
  *
  *   - floor category whose node is `resolved` (dry-closed — judged safe yet broke)
  *       → accept as `depth` (under-probed; an existing lens that should have caught it)
+ *   - category routed OUT of the floor (FAR_FIELD_ROUTED_OUT ledger)
+ *       → reject with the routing rationale: a receiving-gate escape, never `breadth`
+ *         (wi_260707rwf ac-3)
  *   - category absent from BOTH the floor taxonomy AND the coverage map
  *       → accept as `breadth` (a missing lens — the floor never seeded this domain)
  *   - anything else (still-open floor node, a non-floor node handled normally, a
@@ -238,6 +242,19 @@ export async function attributeCoverageEscape(
       reason: node
         ? `floor category '${bare}' is '${node.state}', not a dry-closed (resolved) escape`
         : `floor category '${bare}' is not seeded in this work item's coverage map`,
+    };
+  }
+
+  // Not a floor category — but a ROUTED-OUT one is not a missing lens either
+  // (wi_260707rwf ac-3): the category left the floor deliberately, with a ledger
+  // record naming its receiving gate. Its escape is a RECEIVING-GATE escape (that
+  // gate was not consumed), never a breadth fault — accepting it as breadth would
+  // propose re-adding a lens the routing decision removed.
+  const routedOut = FAR_FIELD_ROUTED_OUT.find((r) => r.id === bare);
+  if (routedOut) {
+    return {
+      accepted: false,
+      reason: `category '${bare}' was routed out of the far-field floor to '${routedOut.route}' (${routedOut.reason}) — this escape is a receiving-gate escape of '${routedOut.route}', not a missing floor lens (no breadth fault)`,
     };
   }
 

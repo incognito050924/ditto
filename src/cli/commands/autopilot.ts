@@ -29,6 +29,8 @@ import {
 import { CoverageStore } from '~/core/coverage-store';
 import {
   type CategoryRelevanceVerdict,
+  FAR_FIELD_ROUTED_OUT,
+  type RoutedOutCategory,
   farFieldCategoriesEnabled,
   farFieldCoverageReport,
 } from '~/core/coverage-taxonomy';
@@ -1336,6 +1338,20 @@ const autopilotCoverageRound = defineCommand({
 });
 
 /**
+ * Human-format routed-out section (wi_260707rwf ac-1): id · route · reason for
+ * every category removed from the far-field floor, so a human reader of the
+ * report — including the coverage.json-absent early return, where the ledger is
+ * static — sees the narrowing, never a silently smaller universe. JSON output
+ * already carries `routed_out` via farFieldCoverageReport (contract unchanged).
+ */
+function writeRoutedOutSection(routedOut: readonly RoutedOutCategory[]): void {
+  writeHuman(`  routed out: ${routedOut.length} (left the far-field floor — see receiving gate)`);
+  for (const r of routedOut) {
+    writeHuman(`    - ${r.id} → ${r.route}: ${r.reason}`);
+  }
+}
+
+/**
  * `ditto autopilot coverage-report` — deterministic far-field process coverage
  * (ac-11a, design §8-6): read the work item's coverage.json and report how the
  * far-field breadth was handled (swept / skipped-with-reason / open) and whether
@@ -1367,6 +1383,8 @@ const autopilotCoverageReport = defineCommand({
         writeJson({ seeded: 0, resolved: 0, open: 0, skipped: [], complete: false });
       } else {
         writeHuman('Far-field coverage: no sweep recorded (coverage.json absent).');
+        // ac-1: the routed-out ledger is static — it holds without a sweep too.
+        writeRoutedOutSection(FAR_FIELD_ROUTED_OUT);
       }
       return;
     }
@@ -1383,9 +1401,19 @@ const autopilotCoverageReport = defineCommand({
     for (const s of report.skipped) {
       writeHuman(`    - ${s.id} [${s.state}]: ${s.reason ?? '(no reason recorded!)'}`);
     }
-    writeHuman(
-      `  complete: ${report.complete}${report.seeded === 0 ? ' (far-field seeding off)' : ''}`,
-    );
+    writeRoutedOutSection(report.routed_out);
+    // ac-2 (wi_260707rwf): seeded=0 with seeding ON means the map existed before
+    // category seeding ran (e.g. deep-interview projected coverage.json first —
+    // coverage-loop seeds categories only on first write), NOT that seeding is
+    // off. Best-available signal: the report-time env toggle; the seed-time
+    // decision itself is not persisted in the map.
+    const unseededNote =
+      report.seeded === 0
+        ? farFieldCategoriesEnabled()
+          ? ' (0 categories — map-exists skip: coverage.json predates category seeding)'
+          : ' (far-field seeding off)'
+        : '';
+    writeHuman(`  complete: ${report.complete}${unseededNote}`);
   },
 });
 

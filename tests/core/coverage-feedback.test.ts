@@ -9,7 +9,7 @@ import {
   recurrenceCounts,
 } from '~/core/coverage-feedback';
 import { CoverageStore } from '~/core/coverage-store';
-import { CATEGORY_NODE_PREFIX } from '~/core/coverage-taxonomy';
+import { CATEGORY_NODE_PREFIX, FAR_FIELD_ROUTED_OUT } from '~/core/coverage-taxonomy';
 import type { CoverageMap, CoverageNode } from '~/schemas/coverage';
 
 const TS = '2026-06-23T00:00:00.000Z';
@@ -290,6 +290,34 @@ describe('attributeCoverageEscape (structural guard, ac-2)', () => {
       });
       expect(verdict.accepted).toBe(false);
       expect(verdict.reason).toBeDefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test('routed-out category → NOT breadth; reason names the receiving gate (wi_260707rwf ac-3)', async () => {
+    const root = await freshRepo();
+    try {
+      const store = new CoverageStore(root);
+      const wi = 'wi_88888888';
+      // A routed-out category is by design absent from BOTH the floor and the map
+      // — exactly the shape the breadth fallback would otherwise accept.
+      await store.writeMap(
+        wi,
+        mapWith(wi, [node(`${CATEGORY_NODE_PREFIX}authentication`, 'resolved')]),
+      );
+      const routed = FAR_FIELD_ROUTED_OUT[0];
+      if (!routed) throw new Error('routed-out ledger unexpectedly empty');
+      const verdict = await attributeCoverageEscape(store, {
+        work_item_id: wi,
+        category_id: routed.id,
+        evidence: 'the routed-out domain broke anyway',
+      });
+      // Not a missing floor lens: never a breadth fault.
+      expect(verdict.fault_kind).not.toBe('breadth');
+      expect(verdict.accepted).toBe(false);
+      // The routing rationale must surface: the escape belongs to the receiving gate.
+      expect(verdict.reason).toContain(routed.route);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
