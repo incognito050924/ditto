@@ -616,6 +616,15 @@ function fileScopeContains(scope: string[], repoRelPath: string): boolean {
 }
 
 /**
+ * Node kinds whose in-flight lease also covers `tests/**` (wi_260707j1e ac-1): a
+ * mutating node's packet routinely assigns the RED test file alongside its src
+ * `file_scope`, but dispatched leases register only the src side — which blocked
+ * the exact TDD edit the packet ordered (17 audited Bash-bypass records in one
+ * run). Gate-side allowance keyed on the node's kind; src containment untouched.
+ */
+const TESTS_ALLOW_NODE_KINDS: ReadonlySet<string> = new Set(['implement', 'fix', 'refactor']);
+
+/**
  * Allow-list lease check. Returns a block when the edit is OUTSIDE every active
  * lease's file_scope under an autopilot graph; undefined (ALLOW) otherwise. All
  * preconditions fail OPEN (no session / no active WI / no graph / no non-terminal
@@ -626,6 +635,12 @@ async function checkAutopilotLease(
   input: HookInput,
   filePath: string,
 ): Promise<ReturnType<typeof block> | undefined> {
+  // Same narrow exception as the scope-out gate (wi_260707j1e ac-2): a write
+  // OUTSIDE the repo into system tmp (harness scratchpads) is not a repo
+  // mutation, so the lease allow-list has no say over it. Repo files stay gated
+  // even when the repo itself lives under tmp (isOutsideRepo guards that).
+  if (isOutsideRepo(input.repoRoot, filePath) && isSystemTmpPath(filePath)) return undefined;
+
   const raw = (input.raw ?? {}) as Record<string, unknown>;
   const sessionId = typeof raw.session_id === 'string' ? raw.session_id : undefined;
   if (!sessionId) return undefined; // fail-open: untracked session
@@ -635,15 +650,15 @@ async function checkAutopilotLease(
 
   const aps = new AutopilotStore(input.repoRoot);
   if (!(await aps.exists(workItemId))) return undefined; // fail-open: not under autopilot
-  let hasNonTerminal: boolean;
+  let graph: Awaited<ReturnType<AutopilotStore['get']>>;
   try {
-    const graph = await aps.get(workItemId);
-    hasNonTerminal = graph.nodes.some(
-      (n) => n.status === 'pending' || n.status === 'running' || n.status === 'blocked',
-    );
+    graph = await aps.get(workItemId);
   } catch {
     return undefined; // fail-open: unreadable graph
   }
+  const hasNonTerminal = graph.nodes.some(
+    (n) => n.status === 'pending' || n.status === 'running' || n.status === 'blocked',
+  );
   if (!hasNonTerminal) return undefined; // fail-open: graph fully terminal
 
   const leases = await new ActiveNodeLeaseStore(input.repoRoot).listActive(workItemId);
@@ -659,6 +674,18 @@ async function checkAutopilotLease(
   const repoRel = relative(input.repoRoot, resolve(input.repoRoot, filePath));
   const inScope = leases.some((l) => fileScopeContains(l.file_scope, repoRel));
   if (inScope) return undefined; // allow-list hit
+
+  // tests/** companion allowance (wi_260707j1e ac-1): deterministic ALLOW — not
+  // the audited bypass — while some active lease belongs to a MUTATING node
+  // (implement/fix/refactor). Never matches src/**, so containment holds (ac-3).
+  if (
+    repoRel.startsWith('tests/') &&
+    leases.some((l) =>
+      TESTS_ALLOW_NODE_KINDS.has(graph.nodes.find((n) => n.id === l.node_id)?.kind ?? ''),
+    )
+  ) {
+    return undefined;
+  }
 
   // Out of every active lease scope. Bypass (ac-3) overrides the block and logs.
   if (autopilotBypassActive(input)) {

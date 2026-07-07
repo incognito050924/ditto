@@ -640,6 +640,7 @@ describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease a
 
   function graphWith(
     nodeStatus: 'pending' | 'running' | 'passed',
+    node: { kind: string; owner: string } = { kind: 'implement', owner: 'implementer' },
   ): Parameters<AutopilotStore['write']>[1] {
     return {
       schema_version: '0.1.0',
@@ -658,8 +659,8 @@ describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease a
       nodes: [
         {
           id: 'N1',
-          kind: 'implement',
-          owner: 'implementer',
+          kind: node.kind,
+          owner: node.owner,
           purpose: 'edit src/core',
           status: nodeStatus,
           depends_on: [],
@@ -696,10 +697,11 @@ describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease a
   async function setup(opts: {
     leaseScope?: string[];
     nodeStatus?: 'pending' | 'running' | 'passed';
+    node?: { kind: string; owner: string };
   }): Promise<string> {
     const dir = await mkdtemp(join(tmpdir(), 'ditto-appath-'));
     await new SessionPointerStore(dir).set(SESS, WI);
-    await new AutopilotStore(dir).write(WI, graphWith(opts.nodeStatus ?? 'running'));
+    await new AutopilotStore(dir).write(WI, graphWith(opts.nodeStatus ?? 'running', opts.node));
     if (opts.leaseScope) {
       await new ActiveNodeLeaseStore(dir).set({
         node_id: 'N1',
@@ -821,6 +823,54 @@ describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease a
       const out = await edit(dir, 'src/cli/commands/autopilot.ts');
       expect(out.exitCode).toBe(2);
       expect(out.stderr).toContain('autopilot-path');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('wi_260707j1e ac-1: mutating-node lease → tests/** edit allows deterministically (no bypass record); src stays gated', async () => {
+    // N1 is kind=implement (mutating): its packet routinely assigns the RED test
+    // file alongside the src file_scope, but the dispatched lease registers only
+    // the src side. The tests/** edit must pass the gate itself — NOT via bypass.
+    const dir = await setup({ leaseScope: ['src/core/coverage-oracle.ts'] });
+    try {
+      const out = await edit(dir, 'tests/core/coverage-oracle.test.ts');
+      expect(out.exitCode).toBe(0);
+      // Deterministic allow, not an audited bypass: no record may be written.
+      expect(await Bun.file(join(dir, '.ditto', 'autopilot-bypass.jsonl')).exists()).toBe(false);
+      // ac-3: the SAME lease still blocks an out-of-scope src edit (containment intact).
+      expect((await edit(dir, 'src/hooks/elsewhere.ts')).exitCode).toBe(2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('wi_260707j1e ac-1 boundary: a NON-mutating node lease does not unlock tests/**', async () => {
+    const dir = await setup({
+      leaseScope: ['src/core/'],
+      node: { kind: 'review', owner: 'reviewer' },
+    });
+    try {
+      const out = await edit(dir, 'tests/core/anything.test.ts');
+      expect(out.exitCode).toBe(2);
+      expect(out.stderr).toContain('autopilot-path');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('wi_260707j1e ac-2: system-tmp write outside the repo passes the lease gate (same exception as scope-out)', async () => {
+    const dir = await setup({ leaseScope: ['src/core/'] });
+    try {
+      // `dir` lives under os.tmpdir(); `../…` is OUTSIDE the repo but inside system
+      // tmp — the harness-scratchpad shape the orchestrator was blocked on.
+      const scratch = join(dir, '..', `${WI}-scratch`, 'note.md');
+      const out = await preToolUseHandler({
+        raw: { tool_name: 'Write', tool_input: { file_path: scratch }, session_id: SESS },
+        repoRoot: dir,
+        env: {},
+      });
+      expect(out.exitCode).toBe(0);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

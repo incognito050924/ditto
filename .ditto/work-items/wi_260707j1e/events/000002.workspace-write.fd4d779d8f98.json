@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260707j1e",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "fd4d779d8f98a1d1cb8de883a88818a8589a15184b14ff5a0132e4519f26867f",
+  "ts": "2026-07-07T05:51:13.415Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/hooks/pre-tool-use.test.ts -t wi_260707j1e ac-2",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
