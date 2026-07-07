@@ -418,3 +418,208 @@ describe('ditto autopilot complete — ac-6 attestation + auto-handling ledger (
     expect(res.stdout).toContain('auto-handling ledger (ac-6): none');
   });
 });
+
+describe('ditto autopilot complete — ac-4 방향 결정 섹션 (dedicated direction ledger)', () => {
+  async function seedDirection(): Promise<void> {
+    const wiDir = join(dir, '.ditto', 'local', 'work-items', WI);
+    const decision = {
+      ts: '2026-06-02T00:00:00.000Z',
+      node_id: 'N2',
+      decision: 'direction',
+      reason: 'autonomous direction fork on the frozen purpose',
+      direction_record: {
+        fork_node_id: 'N1',
+        trigger: 'seed 접근이 AC를 만족 못 함',
+        options: ['A: 어댑터 확장', 'B: 스키마 우회'],
+        choice: 'A: 어댑터 확장',
+        intent_basis: 'frozen purpose는 스키마 SoT 보존을 요구',
+        blast_radius: 'src/core/x.ts + 2 callers',
+        reverse_cost: 'single revert commit',
+      },
+    };
+    await writeFile(
+      join(wiDir, 'autopilot-decisions.jsonl'),
+      `${JSON.stringify(decision)}\n`,
+      'utf8',
+    );
+  }
+
+  test('JSON 출력이 direction_decisions를 4개 공개 필드와 함께 방출한다', async () => {
+    await seedDirection();
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    expect(res.exitCode).toBe(0);
+    const out = JSON.parse(res.stdout);
+    expect(out.direction_decisions).toHaveLength(1);
+    const d = out.direction_decisions[0];
+    expect(d.node_id).toBe('N2');
+    expect(d.fork_node_id).toBe('N1');
+    expect(typeof d.decision_id).toBe('string');
+    expect(d.trigger).toBe('seed 접근이 AC를 만족 못 함');
+    expect(d.options).toEqual(['A: 어댑터 확장', 'B: 스키마 우회']);
+    expect(d.choice).toBe('A: 어댑터 확장');
+    expect(d.intent_basis).toBe('frozen purpose는 스키마 SoT 보존을 요구');
+    expect(d.blast_radius).toBe('src/core/x.ts + 2 callers');
+    expect(d.reverse_cost).toBe('single revert commit');
+  });
+
+  test('human 출력이 전용 방향 결정 섹션에 4개 필드를 렌더한다', async () => {
+    await seedDirection();
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI]); // human
+    expect(res.exitCode).toBe(0);
+    expect(res.stdout).toContain('방향 결정 (direction forks, ac-4): 1건');
+    expect(res.stdout).toContain('무엇때문에: seed 접근이 AC를 만족 못 함');
+    expect(res.stdout).toContain('선택지: A: 어댑터 확장; B: 스키마 우회');
+    expect(res.stdout).toContain(
+      '선택+의도근거: A: 어댑터 확장 — frozen purpose는 스키마 SoT 보존을 요구',
+    );
+    expect(res.stdout).toContain(
+      '파급/되돌리기비용: src/core/x.ts + 2 callers / single revert commit',
+    );
+  });
+
+  test('방향 결정이 없으면 none 을 렌더한다', async () => {
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI]); // human
+    expect(res.exitCode).toBe(0);
+    expect(res.stdout).toContain('방향 결정 (direction forks, ac-4): none');
+  });
+});
+
+describe('ditto autopilot revise — ac-5 방향 fork 하류 재구동 (fresh ids, K-block 회피)', () => {
+  const decisionsPath = () =>
+    join(dir, '.ditto', 'local', 'work-items', WI, 'autopilot-decisions.jsonl');
+  const graphPath = () => join(dir, '.ditto', 'local', 'work-items', WI, 'autopilot.json');
+
+  async function readGraph(): Promise<{
+    nodes: Array<{ id: string; status: string; depends_on: string[] }>;
+  }> {
+    return JSON.parse(await Bun.file(graphPath()).text());
+  }
+  async function readDecisions(): Promise<
+    Array<{ node_id: string; reason: string; decision: string }>
+  > {
+    const text = await Bun.file(decisionsPath()).text();
+    return text
+      .split('\n')
+      .filter((l) => l.trim().length > 0)
+      .map((l) => JSON.parse(l));
+  }
+
+  // Seed: N3 (a downstream node of fork N1) already accumulated K stale
+  // `oracle-unsatisfied` failures, then a `direction` fork was taken at N1.
+  async function seedForkAndStaleFailures(): Promise<void> {
+    const staleFailures = [0, 1, 2].map((k) => ({
+      ts: `2026-06-02T00:00:0${k}.000Z`,
+      node_id: 'N3',
+      decision: 'retry',
+      reason: `oracle-unsatisfied: ac-1 recheck ${k}`,
+      criterion_ids: ['ac-1'],
+    }));
+    const direction = {
+      ts: '2026-06-02T00:00:09.000Z',
+      node_id: 'N2',
+      decision: 'direction',
+      reason: 'autonomous direction fork on the frozen purpose',
+      direction_record: {
+        fork_node_id: 'N1',
+        trigger: 'seed 접근이 AC를 만족 못 함',
+        options: ['A', 'B'],
+        choice: 'A',
+        intent_basis: 'frozen purpose 보존',
+        blast_radius: 'src/core/x.ts',
+        reverse_cost: 'single revert',
+      },
+    };
+    await writeFile(
+      decisionsPath(),
+      `${[...staleFailures, direction].map((d) => JSON.stringify(d)).join('\n')}\n`,
+      'utf8',
+    );
+  }
+
+  test('fork(N1) 하류 노드를 fresh id로 재생성하고 fork를 pending으로 되돌린다', async () => {
+    await seedForkAndStaleFailures();
+    const res = spawnDitto([
+      'autopilot',
+      'revise',
+      '--workItem',
+      WI,
+      '--decision',
+      'N1', // target by fork node id
+      '--output',
+      'json',
+    ]);
+    expect(res.exitCode).toBe(0);
+    const out = JSON.parse(res.stdout);
+    expect(out.fork_node_id).toBe('N1');
+    expect(out.removed_node_ids.sort()).toEqual(['N2', 'N3']);
+    expect(out.regenerated.map((r: { from: string; to: string }) => [r.from, r.to])).toEqual([
+      ['N2', 'N2~r1'],
+      ['N3', 'N3~r1'],
+    ]);
+    expect(out.fork_reset_to).toBe('pending');
+
+    const graph = await readGraph();
+    const ids = graph.nodes.map((n) => n.id).sort();
+    // fresh ids present, old downstream ids gone (no collision)
+    expect(ids).toEqual(['N1', 'N2~r1', 'N3~r1']);
+    // fork reset to pending
+    expect(graph.nodes.find((n) => n.id === 'N1')?.status).toBe('pending');
+    // regenerated edges: fresh root depends on the (kept) fork; chain remapped to fresh ids
+    expect(graph.nodes.find((n) => n.id === 'N2~r1')?.depends_on).toEqual(['N1']);
+    expect(graph.nodes.find((n) => n.id === 'N3~r1')?.depends_on).toEqual(['N2~r1']);
+    expect(graph.nodes.find((n) => n.id === 'N2~r1')?.status).toBe('pending');
+  });
+
+  // The load-bearing property (sweep HIGH-2): sameOracleFailureCount keys the
+  // stale-K-block on node_id and the decision log is never truncated. A REUSED id
+  // would inherit N3's prior failures and K-block immediately; a FRESH id counts 0.
+  test('재구동 노드는 stale oracle-unsatisfied 실패를 물려받지 않는다 (pre-K-block 아님)', async () => {
+    await seedForkAndStaleFailures();
+    spawnDitto(['autopilot', 'revise', '--workItem', WI, '--decision', 'N1', '--output', 'json']);
+    const decisions = await readDecisions();
+    const oracleFailCount = (nodeId: string) =>
+      decisions.filter((d) => d.node_id === nodeId && d.reason.startsWith('oracle-unsatisfied'))
+        .length;
+    // the OLD downstream id carried K=3 stale failures — a reused id would be blocked
+    expect(oracleFailCount('N3')).toBe(3);
+    // the FRESH regenerated id inherits ZERO — the count that gates the K-block is 0
+    expect(oracleFailCount('N3~r1')).toBe(0);
+    // and the log was NOT truncated (the stale entries still exist)
+    expect(decisions.length).toBeGreaterThanOrEqual(4);
+  });
+
+  test('decision_id로도 대상 direction 결정을 지정할 수 있다', async () => {
+    await seedForkAndStaleFailures();
+    // discover the decision_id the complete report surfaces, then revise by it.
+    const complete = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    const decisionId = JSON.parse(complete.stdout).direction_decisions[0].decision_id;
+    const res = spawnDitto([
+      'autopilot',
+      'revise',
+      '--workItem',
+      WI,
+      '--decision',
+      decisionId,
+      '--output',
+      'json',
+    ]);
+    expect(res.exitCode).toBe(0);
+    expect(JSON.parse(res.stdout).fork_node_id).toBe('N1');
+  });
+
+  test('일치하는 direction 결정이 없으면 오류로 종료한다', async () => {
+    await seedForkAndStaleFailures();
+    const res = spawnDitto([
+      'autopilot',
+      'revise',
+      '--workItem',
+      WI,
+      '--decision',
+      'no-such-fork',
+      '--output',
+      'json',
+    ]);
+    expect(res.exitCode).not.toBe(0);
+    expect(res.stderr).toContain('no direction decision');
+  });
+});

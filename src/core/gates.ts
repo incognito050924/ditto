@@ -4,6 +4,7 @@ import type { evidenceRef, verdict, workItemStatus } from '~/schemas/common';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { Convergence } from '~/schemas/convergence';
 import type { ClosureMode } from '~/schemas/convergence';
+import type { DirectionForkCarrier } from '~/schemas/direction-fork-carrier';
 import type { IntentContract } from '~/schemas/intent';
 import type { InterviewState } from '~/schemas/interview-state';
 import type { AcOracle, WorkItem } from '~/schemas/work-item';
@@ -881,6 +882,104 @@ export function intentDriftGate(a: IntentChainArtifacts): IntentDriftResult {
   }
 
   return { ...gate(reasons), advisories };
+}
+
+// ── direction-fork gate (wi_260707loq: autonomy stop is purpose-fork-only) ────
+
+/**
+ * The optional deterministic corroboration for `directionForkGate`'s `purpose_change`
+ * condition (the `where applicable` path). REUSES the exact AC id-set conservation
+ * `intentDriftGate` applies (`missingFrom` over the id sets): a fork genuinely
+ * changes the frozen purpose iff the chosen path's AC id-set DIVERGES from the
+ * intent's (a grow or a shrink). When supplied, this deterministic fact — not the
+ * node's self-report — decides whether purpose_change holds, so a fork that conserves
+ * the id-set can never masquerade as a purpose change (root goal: stop only for
+ * purpose-CHANGING forks). Omitted → not applicable, and the carrier's `present`
+ * self-report stands.
+ */
+export interface PurposeChangeCheck {
+  /** Frozen intent AC id-set. */
+  intentAcIds: readonly string[];
+  /** AC id-set the chosen fork path would address. */
+  forkAcIds: readonly string[];
+}
+
+export interface DirectionForkResult extends GateResult {
+  /**
+   * Per-condition satisfaction: `present` ∧ non-empty `basis` (and, for
+   * purpose_change where applicable, corroborated by AC id-set divergence). The Stop
+   * hook uses `pass` to yield-vs-continue and this map / `reasons` to name a gap.
+   */
+  conditions: {
+    purpose_change: boolean;
+    no_clear_advantage: boolean;
+    intent_cannot_break_tie: boolean;
+  };
+}
+
+/**
+ * Validate a direction-fork carrier: a fork YIELDS (pass=true → Stop hook exit0,
+ * ac-2) ONLY when all three conditions are present AND carry non-empty evidence —
+ * 목적 변경 ∧ 명확한 우위 없음 ∧ 최초 의도로 tie 해소 불가. Any missing / evidence-less
+ * condition fails the gate (→ force-continue exit2) and is NAMED in `reasons`, so
+ * the Stop hook can tell the user which condition was absent.
+ *
+ * Mirrors `decisionConflictGate`: pure and deterministic (D5: 결정론 1차), reading only
+ * already-recorded carrier fields with no I/O. It does NOT judge whether a fork
+ * exists — that is the LLM layer's declaration — only whether the declared evidence
+ * is complete.
+ *
+ * `purposeCheck` (optional, `where applicable`): reuses intentDriftGate's AC id-set
+ * conservation to corroborate purpose_change deterministically (see PurposeChangeCheck).
+ * Omitted → the carrier's self-reported `present` stands.
+ */
+export function directionForkGate(
+  carrier: DirectionForkCarrier,
+  purposeCheck?: PurposeChangeCheck,
+): DirectionForkResult {
+  const reasons: string[] = [];
+  const hasEvidence = (c: { basis: string }): boolean => c.basis.trim().length > 0;
+
+  // purpose_change: evidence is always required; PRESENCE is the deterministic
+  // id-set conservation fact where applicable, else the carrier's self-report.
+  let purposeChanged: boolean;
+  let purposeConserved = false;
+  if (purposeCheck) {
+    const grew = missingFrom(purposeCheck.forkAcIds, new Set(purposeCheck.intentAcIds));
+    const shrank = missingFrom(purposeCheck.intentAcIds, new Set(purposeCheck.forkAcIds));
+    purposeChanged = grew.length > 0 || shrank.length > 0;
+    purposeConserved = !purposeChanged;
+  } else {
+    purposeChanged = carrier.purpose_change.present;
+  }
+  const purposeOk = purposeChanged && hasEvidence(carrier.purpose_change);
+  if (!purposeOk) {
+    reasons.push(
+      purposeConserved
+        ? 'purpose_change: not corroborated — the intent AC id-set is conserved (no purpose change)'
+        : 'purpose_change: missing (present:false or empty basis)',
+    );
+  }
+
+  const advantageOk = carrier.no_clear_advantage.present && hasEvidence(carrier.no_clear_advantage);
+  if (!advantageOk) {
+    reasons.push('no_clear_advantage: missing (present:false or empty basis)');
+  }
+
+  const tieOk =
+    carrier.intent_cannot_break_tie.present && hasEvidence(carrier.intent_cannot_break_tie);
+  if (!tieOk) {
+    reasons.push('intent_cannot_break_tie: missing (present:false or empty basis)');
+  }
+
+  return {
+    ...gate(reasons),
+    conditions: {
+      purpose_change: purposeOk,
+      no_clear_advantage: advantageOk,
+      intent_cannot_break_tie: tieOk,
+    },
+  };
 }
 
 // ── interface/scope baseline drift gate (axis-2 temporal: frozen plan baseline) ─

@@ -16,6 +16,7 @@ export * from './interview-state';
 export * from './tech-spec-state';
 export * from './ditto-config';
 export * from './autopilot';
+export * from './direction-fork-carrier';
 export * from './dialectic';
 export * from './e2e-journey';
 export * from './e2e-failure-verdict';

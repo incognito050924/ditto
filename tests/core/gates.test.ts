@@ -13,6 +13,7 @@ import {
   decisionConflictRequiresApproval,
   deriveClosureMode,
   deterministicFloor,
+  directionForkGate,
   highRiskAssumption,
   intentDriftGate,
   interfaceBaselineDriftGate,
@@ -28,6 +29,7 @@ import {
 import { autopilot } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
 import { convergence } from '~/schemas/convergence';
+import { directionForkCarrier } from '~/schemas/direction-fork-carrier';
 import { intentContract } from '~/schemas/intent';
 import { interviewState } from '~/schemas/interview-state';
 import { workItem } from '~/schemas/work-item';
@@ -1147,6 +1149,140 @@ describe('landGate (ac-3: verified→landed; no done+pass termination over uncom
     const src = readFileSync(join(import.meta.dir, '..', '..', 'src', 'core', 'gates.ts'), 'utf8');
     const fnBody = src.slice(src.indexOf('export function landGate'));
     expect(/execSync|spawnSync|child_process|readFileSync|Bun\.spawn|Bun\.\$/.test(fnBody)).toBe(
+      false,
+    );
+  });
+});
+
+describe('direction-fork carrier schema (wi_260707loq: partial PARSES, malformed SHAPE fails)', () => {
+  const cond = (over: Partial<{ present: boolean; basis: string }> = {}) => ({
+    present: true,
+    basis: 'evidence',
+    ...over,
+  });
+  const raw = (over: Record<string, unknown> = {}) => ({
+    schema_version: '0.1.0',
+    mode: 'autopilot',
+    node_id: 'impl-x',
+    purpose_change: cond(),
+    no_clear_advantage: cond(),
+    intent_cannot_break_tie: cond(),
+    ...over,
+  });
+
+  test('a full valid carrier parses', () => {
+    expect(directionForkCarrier.safeParse(raw()).success).toBe(true);
+  });
+
+  test('a PARTIAL carrier PARSES (present:false / empty basis) so the Stop hook can name the missing condition', () => {
+    const partial = directionForkCarrier.safeParse(
+      raw({ intent_cannot_break_tie: cond({ present: false, basis: '' }) }),
+    );
+    expect(partial.success).toBe(true);
+  });
+
+  test('a malformed SHAPE fails (a condition key missing)', () => {
+    const bad = raw();
+    // biome-ignore lint/performance/noDelete: test intentionally drops a required key
+    delete (bad as Record<string, unknown>).intent_cannot_break_tie;
+    expect(directionForkCarrier.safeParse(bad).success).toBe(false);
+  });
+
+  test('a malformed SHAPE fails (present is not a boolean)', () => {
+    expect(
+      directionForkCarrier.safeParse(raw({ purpose_change: { present: 'yes', basis: 'x' } }))
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe('directionForkGate (wi_260707loq: valid 3-condition fork yields, else force-continue)', () => {
+  const cond = (over: Partial<{ present: boolean; basis: string }> = {}) => ({
+    present: true,
+    basis: 'evidence',
+    ...over,
+  });
+  const carrier = (over: Record<string, unknown> = {}) =>
+    directionForkCarrier.parse({
+      schema_version: '0.1.0',
+      mode: 'autopilot',
+      node_id: 'impl-x',
+      purpose_change: cond(),
+      no_clear_advantage: cond(),
+      intent_cannot_break_tie: cond(),
+      ...over,
+    });
+
+  test('all three conditions present + non-empty basis → pass (yield / exit0)', () => {
+    const r = directionForkGate(carrier());
+    expect(r.pass).toBe(true);
+    expect(r.reasons).toEqual([]);
+    expect(r.conditions).toEqual({
+      purpose_change: true,
+      no_clear_advantage: true,
+      intent_cannot_break_tie: true,
+    });
+  });
+
+  test('a missing condition (present:false) → fail, reason NAMES it (force-continue / exit2)', () => {
+    const r = directionForkGate(carrier({ no_clear_advantage: cond({ present: false }) }));
+    expect(r.pass).toBe(false);
+    expect(r.conditions.no_clear_advantage).toBe(false);
+    expect(r.reasons.some((x) => x.includes('no_clear_advantage'))).toBe(true);
+  });
+
+  test('present:true but empty basis → fail (evidence is required, not just the flag)', () => {
+    const r = directionForkGate(carrier({ purpose_change: cond({ basis: '   ' }) }));
+    expect(r.pass).toBe(false);
+    expect(r.conditions.purpose_change).toBe(false);
+    expect(r.reasons.some((x) => x.includes('purpose_change'))).toBe(true);
+  });
+
+  test('all three missing → every missing condition is named', () => {
+    const r = directionForkGate(
+      carrier({
+        purpose_change: cond({ present: false }),
+        no_clear_advantage: cond({ present: false }),
+        intent_cannot_break_tie: cond({ present: false }),
+      }),
+    );
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => x.includes('purpose_change'))).toBe(true);
+    expect(r.reasons.some((x) => x.includes('no_clear_advantage'))).toBe(true);
+    expect(r.reasons.some((x) => x.includes('intent_cannot_break_tie'))).toBe(true);
+  });
+
+  test('where applicable: purpose_change corroborated by intent AC id-set divergence (reuses intentDriftGate conservation)', () => {
+    // fork drops ac-2 → id-set diverges → a genuine purpose change → corroborated
+    const r = directionForkGate(carrier(), {
+      intentAcIds: ['ac-1', 'ac-2'],
+      forkAcIds: ['ac-1'],
+    });
+    expect(r.conditions.purpose_change).toBe(true);
+    expect(r.pass).toBe(true);
+  });
+
+  test('where applicable: purpose_change UNcorroborated when the AC id-set is conserved → fails even if present:true', () => {
+    // fork preserves the id-set → NOT a purpose change → the claim is uncorroborated
+    const r = directionForkGate(carrier(), {
+      intentAcIds: ['ac-1', 'ac-2'],
+      forkAcIds: ['ac-1', 'ac-2'],
+    });
+    expect(r.conditions.purpose_change).toBe(false);
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => x.includes('purpose_change') && x.includes('conserved'))).toBe(
+      true,
+    );
+  });
+
+  test('pure: same input → same output (deterministic, no I/O in source)', () => {
+    const c = carrier();
+    expect(directionForkGate(c)).toEqual(directionForkGate(c));
+    const src = readFileSync(join(import.meta.dir, '..', '..', 'src', 'core', 'gates.ts'), 'utf8');
+    const fnBody = src.slice(src.indexOf('export function directionForkGate'));
+    const nextExport = fnBody.indexOf('\nexport ', 1);
+    const scoped = nextExport > 0 ? fnBody.slice(0, nextExport) : fnBody;
+    expect(/execSync|spawnSync|child_process|readFileSync|Bun\.spawn|Bun\.\$/.test(scoped)).toBe(
       false,
     );
   });

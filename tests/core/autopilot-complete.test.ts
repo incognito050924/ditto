@@ -4,8 +4,9 @@ import {
   attestCompletion,
   deriveAcVerdicts,
   projectAutoHandling,
+  projectDirectionDecisions,
 } from '~/core/autopilot-complete';
-import type { AutopilotDecision } from '~/core/autopilot-store';
+import { type AutopilotDecision, synthesizeDecisionId } from '~/core/autopilot-store';
 import { attestAcVerdicts } from '~/core/gates';
 import { type Autopilot, type AutopilotNode, autopilot } from '~/schemas/autopilot';
 import type { WorkItem } from '~/schemas/work-item';
@@ -52,6 +53,9 @@ const workItemWith = (acIds: string[]): WorkItem =>
   }) as unknown as WorkItem;
 
 const ev = (path: string) => ({ kind: 'file' as const, path, summary: `evidence ${path}` });
+// A command-kind evidence entry — the shape `ditto verify --criterion` records on a
+// work-item criterion (verify.ts). This is the "REAL evidence" push-readiness keys on.
+const cmdEv = (command: string) => ({ kind: 'command' as const, command, summary: 'exit 0' });
 
 describe('deriveAcVerdicts (evidence-gated: pass only with evidence; never auto-pass a claim)', () => {
   test('a passed addressing node WITH evidence → pass, carrying that evidence', () => {
@@ -545,6 +549,87 @@ describe('deriveAcVerdicts (evidence-gated: pass only with evidence; never auto-
   });
 });
 
+// wi_2607074rs: a fresh `ditto verify` pass recorded on the WORK-ITEM criterion —
+// AFTER the autopilot run — must supersede a stale node verdict, so a genuinely
+// re-verified WI can close. The supersession is EVIDENCE-GATED: only a criterion
+// pass carrying command-kind evidence (what `ditto verify` writes) supersedes; a
+// bare/placeholder pass is powerless (false-green protection preserved).
+describe('work-item criterion fresh verify evidence supersedes a stale node verdict (wi_2607074rs)', () => {
+  // The real bug shape (wi_260707loq): a terminal verify node recorded ac-1 fail
+  // via a per-AC verdict; the node itself passed as a node (it ran, evidence present).
+  const staleFailNode = () =>
+    node({
+      id: 'N3',
+      kind: 'verify',
+      acceptance_refs: ['ac-1'],
+      status: 'passed',
+      evidence_refs: [ev('verify.log')],
+      ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'fail' }],
+    });
+
+  test('ac-1: node fail + fresh evidence-backed criterion pass → deriveAcVerdicts returns pass', () => {
+    const graph = graphWith([staleFailNode()]);
+    const criteria = new Map([
+      ['ac-1', { verdict: 'pass' as const, evidence: [cmdEv('bun test')] }],
+    ]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1'], undefined, criteria);
+    expect(v?.verdict).toBe('pass');
+    // the verify evidence is carried into the derived verdict (so the mirror keeps
+    // the command-kind proof push-readiness needs).
+    expect(v?.evidence).toContainEqual(cmdEv('bun test'));
+  });
+
+  test('ac-1: node fail + fresh criterion pass → assembleCompletionFromGraph final_verdict=pass', () => {
+    const graph = graphWith([staleFailNode()]);
+    const wi = {
+      id: 'wi_completetest',
+      changed_files: ['src/x.ts'],
+      goal: 'the goal',
+      acceptance_criteria: [
+        { id: 'ac-1', statement: 'ac-1 is met', verdict: 'pass', evidence: [cmdEv('bun test')] },
+      ],
+    } as unknown as WorkItem;
+    const c = assembleCompletionFromGraph(graph, wi, { now: NOW });
+    expect(c.final_verdict).toBe('pass');
+    expect(c.acceptance.find((a) => a.criterion_id === 'ac-1')?.verdict).toBe('pass');
+  });
+
+  test('ac-2 (false-green guard): criterion pass with NO command evidence + node fail → stays fail', () => {
+    const graph = graphWith([staleFailNode()]);
+    // a bare/placeholder pass — verdict flipped to pass but no recorded verify evidence.
+    const criteria = new Map([['ac-1', { verdict: 'pass' as const, evidence: [] }]]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1'], undefined, criteria);
+    expect(v?.verdict).toBe('fail');
+  });
+
+  test('ac-2 (false-green guard): a note-only criterion pass (no command evidence) + node fail → stays fail', () => {
+    const graph = graphWith([staleFailNode()]);
+    const criteria = new Map([
+      [
+        'ac-1',
+        { verdict: 'pass' as const, evidence: [{ kind: 'note' as const, summary: 'looks fine' }] },
+      ],
+    ]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1'], undefined, criteria);
+    expect(v?.verdict).toBe('fail');
+  });
+
+  test('a criterion whose own verdict is NOT pass never supersedes (even with command evidence)', () => {
+    const graph = graphWith([staleFailNode()]);
+    const criteria = new Map([
+      ['ac-1', { verdict: 'fail' as const, evidence: [cmdEv('bun test')] }],
+    ]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1'], undefined, criteria);
+    expect(v?.verdict).toBe('fail');
+  });
+
+  test('absent criteria map → exact prior behavior (regression-safe): node fail stays fail', () => {
+    const graph = graphWith([staleFailNode()]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1']);
+    expect(v?.verdict).toBe('fail');
+  });
+});
+
 describe('assembleCompletionFromGraph (deterministic completion from the graph; final_verdict derived)', () => {
   test('all ACs covered by passed nodes with evidence → final_verdict=pass', () => {
     const graph = graphWith([
@@ -703,6 +788,72 @@ describe('projectAutoHandling (ac-6: project auto_fix/surface/batch_escalate, no
     ]);
     expect(ledger).toEqual({ auto_fixed: [], surfaced: [], materialized: [] });
     expect(projectAutoHandling([])).toEqual({ auto_fixed: [], surfaced: [], materialized: [] });
+  });
+});
+
+// ── ac-4 direction ledger (dedicated section, distinct from auto-handling) ────
+describe('projectDirectionDecisions (ac-4: expose autonomous direction forks with the 4 disclosure fields)', () => {
+  const dir = (fork: string): AutopilotDecision => ({
+    ts: '2026-06-02T00:00:00.000Z',
+    node_id: 'N2',
+    decision: 'direction',
+    reason: 'autonomous direction fork on the frozen purpose',
+    direction_record: {
+      fork_node_id: fork,
+      trigger: '기존 접근이 AC를 만족 못 함',
+      options: ['A: 어댑터 확장', 'B: 스키마 우회'],
+      choice: 'A: 어댑터 확장',
+      intent_basis: 'frozen purpose는 스키마 SoT 보존을 요구 (ADR-0002)',
+      blast_radius: 'src/core/adapter.ts + 3 callers',
+      reverse_cost: 'single revert commit',
+    },
+  });
+
+  test('projects each direction decision with node_id, fork, decision_id and the 4 disclosure fields', () => {
+    const decisions: AutopilotDecision[] = [
+      { ts: '2026-06-02T00:00:00.000Z', node_id: 'N1', decision: 'retry', reason: 'r' },
+      dir('N1'),
+    ];
+    const entries = projectDirectionDecisions(decisions);
+    expect(entries).toHaveLength(1);
+    const [e] = entries;
+    expect(e?.node_id).toBe('N2');
+    expect(e?.fork_node_id).toBe('N1');
+    // the decision_id is the handle `revise --decision` takes — same synthesis, index 1.
+    expect(e?.decision_id).toBe(synthesizeDecisionId(decisions[1] as AutopilotDecision, 1));
+    // the 4 disclosure fields (무엇때문에 · 선택지 · 선택+의도근거 · 파급/되돌리기비용)
+    expect(e?.trigger).toBe('기존 접근이 AC를 만족 못 함');
+    expect(e?.options).toEqual(['A: 어댑터 확장', 'B: 스키마 우회']);
+    expect(e?.choice).toBe('A: 어댑터 확장');
+    expect(e?.intent_basis).toBe('frozen purpose는 스키마 SoT 보존을 요구 (ADR-0002)');
+    expect(e?.blast_radius).toBe('src/core/adapter.ts + 3 callers');
+    expect(e?.reverse_cost).toBe('single revert commit');
+  });
+
+  test('non-direction decisions are ignored (not folded into the direction ledger)', () => {
+    const entries = projectDirectionDecisions([
+      { ts: '2026-06-02T00:00:00.000Z', node_id: 'N1', decision: 'auto_fix', reason: 'x' },
+      { ts: '2026-06-02T00:00:00.000Z', node_id: 'N1', decision: 'surface', reason: 'y' },
+    ]);
+    expect(entries).toEqual([]);
+  });
+
+  test('a malformed direction decision missing direction_record is skipped (defensive)', () => {
+    const entries = projectDirectionDecisions([
+      { ts: '2026-06-02T00:00:00.000Z', node_id: 'N2', decision: 'direction', reason: 'no record' },
+    ]);
+    expect(entries).toEqual([]);
+  });
+
+  test('decision_id is stable per append-position across multiple direction forks', () => {
+    const decisions: AutopilotDecision[] = [dir('N1'), dir('N5')];
+    const entries = projectDirectionDecisions(decisions);
+    expect(entries.map((e) => e.decision_id)).toEqual([
+      synthesizeDecisionId(decisions[0] as AutopilotDecision, 0),
+      synthesizeDecisionId(decisions[1] as AutopilotDecision, 1),
+    ]);
+    // distinct fork nodes → distinct ids (append-position discriminates, not just content).
+    expect(entries[0]?.decision_id).not.toBe(entries[1]?.decision_id);
   });
 });
 

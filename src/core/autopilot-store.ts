@@ -37,7 +37,18 @@ export interface AutopilotDecision {
     // signal n1i-followup-batch materializes — loop only signals, R9).
     | 'auto_fix'
     | 'surface'
-    | 'batch_escalate';
+    | 'batch_escalate'
+    // wi_260707loq autonomy vocabulary. `direction` = the loop took an autonomous
+    // direction fork with a clear advantage on the frozen purpose (ac-3) — recorded
+    // with the structured `direction_record` below so the completion report exposes
+    // it (ac-4) and `revise` can re-drive from its fork point (ac-5).
+    // `procedure_punt_continued` = the Stop hook force-continued a procedure-punt
+    // pause (진행확인/플랜승인/AB선택) instead of yielding (ac-1). Both are in-flow
+    // progress, NOT user-owned escalations: `isDecisivePost` is false for both by
+    // construction (no failure_class:'user_decision_needed', no decision∈{escalate,
+    // batch_escalate}, no disposition:'blocked'), so neither is posted to GitHub.
+    | 'direction'
+    | 'procedure_punt_continued';
   reason: string;
   // T1 (wi_2606266az, ac-3): the structured reason-category for an `auto_fix` /
   // `surface` / `batch_escalate` decision — the resolvability class the route was
@@ -74,6 +85,22 @@ export interface AutopilotDecision {
   // compatible, no schema_version bump): legacy entries lack it and fall back to
   // node-scoped counting.
   criterion_ids?: string[];
+  // wi_260707loq (ac-3/ac-4): the autonomous direction-fork record, present ONLY on
+  // a `direction` decision. The exact ac-4 disclosure fields — 무엇때문에 (`trigger`),
+  // 선택지 (`options`), 선택+의도근거 (`choice` + `intent_basis`), 파급·되돌리기비용
+  // (`blast_radius` + `reverse_cost`) — plus `fork_node_id`, the anchor `revise`
+  // re-drives from (ac-5). Additive + optional (same convention as `disposition?`/
+  // `criterion_ids?` — backward compatible, NO schema_version bump): legacy readers
+  // and the JSON.parse-only `parseLines` path ignore it.
+  direction_record?: {
+    fork_node_id: string;
+    trigger: string;
+    options: string[];
+    choice: string;
+    intent_basis: string;
+    blast_radius: string;
+    reverse_cost: string;
+  };
 }
 
 /**

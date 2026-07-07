@@ -5,11 +5,15 @@ import { join } from 'node:path';
 import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
 import { buildInitialNodes } from '~/core/autopilot-graph';
 import { nextNode, recordResult } from '~/core/autopilot-loop';
-import { AutopilotStore } from '~/core/autopilot-store';
+import { AutopilotStore, isDecisivePost } from '~/core/autopilot-store';
 import { CoverageStore } from '~/core/coverage-store';
 import { localDir } from '~/core/ditto-paths';
+import { directionForkGate } from '~/core/gates';
+import { IntentStore } from '~/core/intent-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import type { Autopilot } from '~/schemas/autopilot';
+import { directionForkCarrier } from '~/schemas/direction-fork-carrier';
+import { intentContract } from '~/schemas/intent';
 
 let repo: string;
 let aps: AutopilotStore;
@@ -562,6 +566,174 @@ describe('recordResult changed_files union (#1: owner reports → work-item accu
   });
 });
 
+describe('recordResult autonomous direction fork (wi_260707loq ac-3: clear-advantage, purpose preserved)', () => {
+  // Seed intent.json so intentDriftGate can CONFIRM the fork preserved the frozen
+  // purpose (its AC id-set). The work-item (beforeEach), graph, and intent all
+  // conserve {ac-1}, and the intent goal/source_request match the work-item so no
+  // blocking drift reason fires — purpose preserved.
+  async function seedIntent(): Promise<void> {
+    await new IntentStore(repo).write(
+      intentContract.parse({
+        schema_version: '0.1.0',
+        work_item_id: WI,
+        source_request: 'test the loop',
+        goal: 'the loop step CLI works',
+        acceptance_criteria: [{ id: 'ac-1', statement: 'loop runs', evidence_required: ['test'] }],
+        question_policy: 'ask_only_if_user_only_can_answer',
+      }),
+    );
+  }
+
+  const forkRecord = {
+    trigger: 'two viable ways to wire the parser hook surfaced mid-implementation',
+    options: ['inline helper', 'shared util'],
+    choice: 'shared util',
+    intent_basis: 'both satisfy ac-1; shared util avoids duplication with existing code',
+    blast_radius: 'one new file, no interface change',
+    reverse_cost: 'low — single-file revert',
+  };
+
+  test('a clear-advantage, purpose-preserving fork appends a `direction` decision (no stop, not a decisive-post)', async () => {
+    await seedIntent();
+    // design passed → implement running: the node that hit the implementation fork.
+    await seed(
+      graph({
+        nodes: buildInitialNodes(['ac-1']).map((n) =>
+          n.id === 'N1'
+            ? { ...n, status: 'passed' as const }
+            : n.id === 'N2'
+              ? { ...n, status: 'running' as const }
+              : n,
+        ),
+      }),
+    );
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N2',
+        result_text:
+          'implemented the change; resolved a fork between an inline helper and a shared util — chose the shared util (clear advantage), same AC',
+        outcome: 'pass',
+        changed_files: ['src/x.ts'],
+        direction_fork: forkRecord,
+      },
+      now: NOW,
+    });
+    // Proceeded AUTONOMOUSLY — the node passed, the loop did not stop.
+    expect(res.outcome).toBe('pass');
+    expect(res.status).toBe('passed');
+    const decisions = await aps.readDecisions(WI);
+    const direction = decisions.find((d) => d.decision === 'direction');
+    if (!direction) throw new Error('expected a `direction` decision in the log');
+    expect(direction.direction_record).toEqual({ fork_node_id: 'N2', ...forkRecord });
+    // In-flow progress: never surfaced to the linked issue.
+    expect(isDecisivePost(direction)).toBe(false);
+  });
+
+  test('no intent.json ⇒ no frozen purpose to confirm ⇒ no `direction` decision (fork still passes)', async () => {
+    await seed(
+      graph({
+        nodes: buildInitialNodes(['ac-1']).map((n) =>
+          n.id === 'N1'
+            ? { ...n, status: 'passed' as const }
+            : n.id === 'N2'
+              ? { ...n, status: 'running' as const }
+              : n,
+        ),
+      }),
+    );
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N2',
+        result_text: 'implemented the change; picked the shared util path (clear advantage)',
+        outcome: 'pass',
+        changed_files: ['src/x.ts'],
+        direction_fork: forkRecord,
+      },
+      now: NOW,
+    });
+    expect(res.status).toBe('passed');
+    const decisions = await aps.readDecisions(WI);
+    expect(decisions.some((d) => d.decision === 'direction')).toBe(false);
+  });
+});
+
+describe('recordResult direction-fork STOP carrier producer (wi_260707loq ac-2: the P1/P5 write path)', () => {
+  // The Stop hook READS direction-fork.json (P1 yield / P5 force-continue) but nothing
+  // wrote it in production — the genuine 3-condition STOP fork could never fire in a
+  // real run. This is the producer: a node that hits a purpose-changing fork it cannot
+  // resolve autonomously declares the three conditions via `direction_fork_stop`; the
+  // loop PERSISTS the carrier the Stop hook already reads. Distinct from the ac-3
+  // autonomous-proceed `direction_fork` (a clear-advantage, purpose-PRESERVING choice).
+  const runningImplement = (): Autopilot =>
+    graph({
+      nodes: buildInitialNodes(['ac-1']).map((n) =>
+        n.id === 'N1'
+          ? { ...n, status: 'passed' as const }
+          : n.id === 'N2'
+            ? { ...n, status: 'running' as const }
+            : n,
+      ),
+    });
+  const carrierPath = (): string => join(localDir(repo, 'work-items', WI), 'direction-fork.json');
+
+  test('a genuine 3-condition stop payload writes a VALID carrier (Stop P1 → yield)', async () => {
+    await seed(runningImplement());
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N2',
+        result_text:
+          'hit a genuine direction fork mid-implementation: the only viable path redefines the frozen purpose, no option has a clear advantage, and the original intent cannot break the tie',
+        outcome: 'fail',
+        failure_class: 'user_decision_needed',
+        direction_fork_stop: {
+          purpose_change: { present: true, basis: 'the chosen path grows the frozen AC id-set' },
+          no_clear_advantage: { present: true, basis: 'both options trade off equally on intent' },
+          intent_cannot_break_tie: {
+            present: true,
+            basis: 'the frozen intent is silent on this axis',
+          },
+        },
+      },
+      now: NOW,
+    });
+    const carrier = directionForkCarrier.parse(JSON.parse(await readFile(carrierPath(), 'utf8')));
+    expect(carrier.node_id).toBe('N2');
+    // The Stop hook's directionForkGate reads exactly this carrier and yields (P1, exit 0).
+    expect(directionForkGate(carrier).pass).toBe(true);
+  });
+
+  test('an INCOMPLETE stop payload writes a carrier that is NOT valid (Stop P5 → names the gap)', async () => {
+    await seed(runningImplement());
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N2',
+        result_text: 'a direction fork surfaced but only some conditions are grounded so far',
+        outcome: 'fail',
+        failure_class: 'user_decision_needed',
+        direction_fork_stop: {
+          purpose_change: { present: true, basis: 'the chosen path grows the frozen AC id-set' },
+          no_clear_advantage: { present: false, basis: '' },
+          intent_cannot_break_tie: {
+            present: true,
+            basis: 'the frozen intent is silent on this axis',
+          },
+        },
+      },
+      now: NOW,
+    });
+    // A PARTIAL carrier still PARSES (schema contract) so the Stop hook can name the gap;
+    // the GATE is what fails it (pass=false → P5 force-continue).
+    const carrier = directionForkCarrier.parse(JSON.parse(await readFile(carrierPath(), 'utf8')));
+    const g = directionForkGate(carrier);
+    expect(g.pass).toBe(false);
+    expect(g.reasons.join(' ')).toContain('no_clear_advantage');
+  });
+});
+
 describe('recordResult node promotion (A-3: planner 콘텐츠 승격 — addNodes의 첫 live 호출자)', () => {
   const designOnly = (): Autopilot =>
     graph({
@@ -808,6 +980,54 @@ describe('recordResult plan-stage coverage wiring (premortem-coverage §7.2/§12
     expect(g.approval_gate.change_surface).toEqual(['src/x.ts']);
     expect(g.approval_gate.plan_brief).toBeDefined();
     expect(g.approval_gate.status).toBe('not_required');
+  });
+
+  test('purpose-preserving non-forced light-tier design close ⇒ not_required (caller computes purposePreserving/highRisk, no present_plan)', async () => {
+    // wi_260707loq (impl-enforcement pairing): the caller computes purposePreserving
+    // (intentDriftGate AC id-set conservation over the seeded intent — H1+H2 mid-run,
+    // no completion) + highRisk (declared risk) and PASSES both to producePlanGate. Seed
+    // intent.json so the drift read actually runs on this pass. A light-tier,
+    // purpose-preserving, low-risk plan close stays not_required and the autonomous drive
+    // dispatches the promoted implement node (spawn), never present_plan.
+    await new IntentStore(repo).write(
+      intentContract.parse({
+        schema_version: '0.1.0',
+        work_item_id: WI,
+        source_request: 'test the loop',
+        goal: 'the loop step CLI works',
+        acceptance_criteria: [{ id: 'ac-1', statement: 'loop runs', evidence_required: ['test'] }],
+        question_policy: 'ask_only_if_user_only_can_answer',
+      }),
+    );
+    await seed(designOnly());
+    await seedCoverage();
+    await nextNode(repo, WI);
+    await recordResult(repo, {
+      workItemId: WI,
+      payload: {
+        node_id: 'N1',
+        result_text: 'plan: small reversible change; purpose preserved; coverage sweep ran',
+        outcome: 'pass',
+        generated_nodes: [proposal('G1', 'implement', ['N1'])],
+        plan_brief: {
+          change_surface: ['src/x.ts'],
+          interface_changes: [],
+          dod: ['x still works'],
+          test_scenarios: ['unit test for x'],
+          tier_inputs: {
+            changedFileCount: 1,
+            interfaceChanged: false,
+            risk: { non_local: false, irreversible: false, unaudited: false },
+            large: false,
+          },
+        },
+      },
+      now: NOW,
+    });
+    const g = await aps.get(WI);
+    expect(g.approval_gate.status).toBe('not_required');
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('spawn');
   });
 
   test('design pass WITHOUT plan_brief leaves approval_gate untouched (backward compat)', async () => {

@@ -1,7 +1,7 @@
-import type { Autopilot } from '~/schemas/autopilot';
+import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
 import type { IntentContract } from '~/schemas/intent';
 import type { WorkItem } from '~/schemas/work-item';
-import { type NodeGenerator, defaultNodeGenerator } from './autopilot-graph';
+import { type NodeGenerator, defaultNodeGenerator, kindToOwner } from './autopilot-graph';
 import { AutopilotStore } from './autopilot-store';
 import { type RiskAxes, acceptanceTestable, highRiskAssumption } from './gates';
 import { generateId } from './id';
@@ -23,6 +23,50 @@ export interface BootstrapInput {
   now?: Date;
   /** Node generation seam (A-1); defaults to the 3-node seed when omitted. */
   generateNodes?: NodeGenerator;
+  /**
+   * E2E entry-phase opt-in (wi_260707loq ac-6). When true, seed a `main-session`
+   * e2e-author node BETWEEN design and implement, so the single user dialogue that
+   * authors the e2e journey runs at ENTRY — before the autonomous implement→verify
+   * run, which then carries no main-session node and never yields `main_session`
+   * mid-run. Omitted/false ⇒ no e2e-author node ⇒ the loop never yields main_session
+   * ⇒ e2e is skipped (ac-6 skip clause).
+   */
+  e2eOptIn?: boolean;
+}
+
+/**
+ * Splice a `main-session` e2e-author node BETWEEN the design node and everything
+ * that followed it (wi_260707loq ac-6): design → e2e-author → (implement → …). The
+ * e2e-author node depends on the design node, and every node that depended DIRECTLY
+ * on design is re-pointed onto the e2e-author node instead — so the single entry
+ * dialogue gates the autonomous run. Carries no acceptance_refs (it authors the
+ * journey, it judges no criterion — the retro-node convention), keeping it out of
+ * the completion per-AC scoring. Idempotent, and a no-op when the generator produced
+ * no design anchor (a non-standard chain is left untouched).
+ */
+function seedE2eAuthorNode(nodes: AutopilotNode[]): AutopilotNode[] {
+  const design = nodes.find((n) => n.kind === 'design');
+  if (!design) return nodes;
+  const e2eAuthorId = `${design.id}-e2e-author`;
+  if (nodes.some((n) => n.id === e2eAuthorId)) return nodes;
+  const e2eAuthor: AutopilotNode = {
+    id: e2eAuthorId,
+    kind: 'e2e-author',
+    owner: kindToOwner('e2e-author'),
+    purpose: 'Author the e2e journey with the user before implementation (entry-phase dialogue)',
+    status: 'pending',
+    depends_on: [design.id],
+    acceptance_refs: [],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  };
+  const rewired = nodes.map((n) =>
+    n.id !== design.id && n.depends_on.includes(design.id)
+      ? { ...n, depends_on: n.depends_on.map((d) => (d === design.id ? e2eAuthorId : d)) }
+      : n,
+  );
+  // Insert the e2e-author node right after the design node (positional clarity).
+  return rewired.flatMap((n) => (n.id === design.id ? [n, e2eAuthor] : [n]));
 }
 
 export type BootstrapResult =
@@ -116,6 +160,9 @@ export async function bootstrapAutopilot(
   // UserPromptSubmit). plan §4 M2.1b — gate ↔ score consistency.
   const acceptanceIds = input.intent.acceptance_criteria.map((c) => c.id);
 
+  const seededNodes = (input.generateNodes ?? defaultNodeGenerator)(acceptanceIds);
+  const nodes = input.e2eOptIn ? seedE2eAuthorNode(seededNodes) : seededNodes;
+
   const graph: Autopilot = {
     schema_version: '0.1.0',
     autopilot_id: autopilotId,
@@ -124,7 +171,7 @@ export async function bootstrapAutopilot(
     root_goal: input.intent.goal,
     completion_boundary: 'entire_work_item',
     approval_gate: approvalGate(input),
-    nodes: (input.generateNodes ?? defaultNodeGenerator)(acceptanceIds),
+    nodes,
     caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 },
     continue_policy: {
       continue_after_approval: true,

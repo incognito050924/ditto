@@ -8,8 +8,9 @@ import {
   assembleCompletionFromGraph,
   attestCompletion,
   projectAutoHandling,
+  projectDirectionDecisions,
 } from '~/core/autopilot-complete';
-import { kindToOwner } from '~/core/autopilot-graph';
+import { computeDownstream, kindToOwner, proposalsToNodes } from '~/core/autopilot-graph';
 import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
 import {
@@ -46,6 +47,7 @@ import { IntentStore } from '~/core/intent-store';
 import { type LandResult, landCommit } from '~/core/land-commit';
 import { type MeasurementReport, measureHallucination } from '~/core/memory-measure';
 import { WorkItemStore, blockingFollowUp } from '~/core/work-item-store';
+import type { NodeProposal } from '~/schemas/autopilot';
 import { coverageRoundPayload } from '~/schemas/coverage';
 import {
   RUNTIME_ERROR_EXIT,
@@ -88,6 +90,12 @@ const autopilotBootstrap = defineCommand({
     riskUnaudited: {
       type: 'boolean',
       description: 'Set when the change introduces dependencies / surfaces nobody has reviewed',
+      default: false,
+    },
+    e2e: {
+      type: 'boolean',
+      description:
+        'Opt in to entry-phase E2E authoring: seed a main-session e2e-author node between design and implement (wi_260707loq ac-6)',
       default: false,
     },
     approvedSource: {
@@ -146,6 +154,9 @@ const autopilotBootstrap = defineCommand({
         irreversible: args.riskIrreversible,
         unaudited: args.riskUnaudited,
       },
+      // wi_260707loq ac-6: the caller for e2eOptIn — pass the `--e2e` flag through so the
+      // entry-phase e2e-author node can actually be seeded (default false ⇒ skip preserved).
+      e2eOptIn: args.e2e,
       ...(approvedSource
         ? { approvedSource: approvedSource as 'approved_spec' | 'issue' | 'prd' | 'user' }
         : {}),
@@ -607,6 +618,13 @@ const autopilotComplete = defineCommand({
       // the loop's existing auto_fix/surface/batch_escalate decisions (no re-derive).
       const attestation = attestCompletion(completion);
       const autoHandling = projectAutoHandling(decisions);
+      // ac-4 (wi_260707loq): the DEDICATED direction-fork ledger. Separate from the
+      // auto-handling ledger above (which admits only auto_fix/surface/batch_escalate) —
+      // an autonomous `direction` fork is disclosed on its own with the four ac-4 fields
+      // (무엇때문에 · 선택지 · 선택+의도근거 · 파급/되돌리기비용) so a run's autonomy is
+      // never buried. Each entry carries the `decision_id` handle `ditto autopilot revise`
+      // targets (ac-5). Pure projection of the append-only log (no re-derive).
+      const directionDecisions = projectDirectionDecisions(decisions);
       // D4 dialectic 결정 (a) (wi_2606278qa): this run materialized out-of-scope
       // follow-ups as tracked draft WIs but does NOT auto-drive them (materialize
       // != drive — per-WI approval + intent-lock is the intended control boundary,
@@ -655,6 +673,7 @@ const autopilotComplete = defineCommand({
           })),
           attestation,
           auto_handling: autoHandling,
+          direction_decisions: directionDecisions,
           cite_gate: {
             verdict: cite.verdict,
             pushed_node_ids: cite.pushed_node_ids,
@@ -726,6 +745,20 @@ const autopilotComplete = defineCommand({
             );
           }
         }
+        // ac-4: the dedicated direction-fork section (autonomy disclosure). Each entry
+        // shows the four fields + the decision_id handle for `ditto autopilot revise`.
+        if (directionDecisions.length === 0) {
+          writeHuman('  방향 결정 (direction forks, ac-4): none (자율 방향분기 없음)');
+        } else {
+          writeHuman(`  방향 결정 (direction forks, ac-4): ${directionDecisions.length}건`);
+          for (const d of directionDecisions) {
+            writeHuman(`    [${d.node_id}] fork=${d.fork_node_id} (decision ${d.decision_id})`);
+            writeHuman(`      무엇때문에: ${d.trigger}`);
+            writeHuman(`      선택지: ${d.options.join('; ')}`);
+            writeHuman(`      선택+의도근거: ${d.choice} — ${d.intent_basis}`);
+            writeHuman(`      파급/되돌리기비용: ${d.blast_radius} / ${d.reverse_cost}`);
+          }
+        }
         if (completion.final_verdict !== 'pass') {
           writeHuman(
             '  (non-pass: criteria without evidence stay unverified — close them, then re-run)',
@@ -768,6 +801,186 @@ const autopilotComplete = defineCommand({
       }
     } catch (err) {
       writeError(`complete failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/**
+ * Next fork-generation token for `revise` (ac-5). Scans existing node ids for the
+ * `~r<gen>` suffix and returns max+1 (1 when none present). Monotonic, so a second
+ * revise of an already-revised subgraph mints ids that never collide with the first
+ * round — the fresh-id guarantee the K-block avoidance rests on.
+ */
+function nextForkGeneration(nodeIds: string[]): number {
+  let max = 0;
+  for (const id of nodeIds) {
+    const g = /~r(\d+)$/.exec(id)?.[1];
+    if (g !== undefined) {
+      const n = Number(g);
+      if (n > max) max = n;
+    }
+  }
+  return max + 1;
+}
+
+/**
+ * Mint a fresh id for `origId` at generation `gen`, stripping any prior `~r<n>`
+ * suffix so ids never accumulate suffixes across repeated revises.
+ */
+function freshForkId(origId: string, gen: number): string {
+  return `${origId.replace(/~r\d+$/, '')}~r${gen}`;
+}
+
+/**
+ * `ditto autopilot revise` — re-drive the subgraph DOWNSTREAM of a direction fork
+ * with FRESH node ids (ac-5). Given the target `direction` decision (matched by its
+ * decision_id or fork node id), it: (1) resolves the fork from
+ * `direction_record.fork_node_id`; (2) computes the transitive dependents
+ * (`computeDownstream`); (3) tears them down (`removeNodes`); (4) regenerates that
+ * subgraph via `proposalsToNodes` with a monotonic `~r<gen>` id suffix — edges
+ * re-rooted on the fork, inner edges remapped to the fresh ids — and splices it
+ * (integrity-gated `addNodes`); (5) resets the fork node to pending so the SAME work
+ * item re-drives from that point.
+ *
+ * The fresh ids are LOAD-BEARING (sweep HIGH-2): `sameOracleFailureCount` keys the
+ * stale-K-block on node_id and the append-only decision log is never truncated, so a
+ * REUSED id would inherit the fork's prior oracle-unsatisfied failures and K-block
+ * immediately. A fresh id makes that count zero — the re-driven node starts clean.
+ */
+const autopilotRevise = defineCommand({
+  meta: {
+    name: 'revise',
+    description: 'Re-drive the subgraph downstream of a direction fork with fresh node ids (ac-5)',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    decision: {
+      type: 'string',
+      description:
+        'Target direction decision — its decision_id (from `complete`) or the fork node id',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    try {
+      const aps = new AutopilotStore(repoRoot);
+      const decisions = await aps.readDecisions(args.workItem);
+      // Resolve the target fork. `--decision` matches EITHER the stable decision_id the
+      // completion report surfaces OR the fork node id (friendlier for a single fork).
+      const directions = projectDirectionDecisions(decisions);
+      const matches = directions.filter(
+        (d) => d.decision_id === args.decision || d.fork_node_id === args.decision,
+      );
+      if (matches.length === 0) {
+        writeError(
+          `no direction decision matched "${args.decision}" for ${args.workItem}. Available: ${
+            directions.map((d) => `${d.decision_id} (fork ${d.fork_node_id})`).join(', ') ||
+            '(none)'
+          }`,
+        );
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (matches.length > 1) {
+        writeError(
+          `"${args.decision}" is ambiguous (${matches.length} direction decisions share it). Re-run with a specific decision_id: ${matches
+            .map((d) => d.decision_id)
+            .join(', ')}`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const [target] = matches;
+      if (!target) {
+        writeError(`no direction decision matched "${args.decision}"`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const forkNodeId = target.fork_node_id;
+      const graph = await aps.get(args.workItem);
+      const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+      if (!byId.has(forkNodeId)) {
+        writeError(`fork node ${forkNodeId} is no longer in the graph for ${args.workItem}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      // (2) downstream = transitive dependents of the fork.
+      const downstreamIds = computeDownstream(graph.nodes, forkNodeId);
+      // (4) fresh ids via a monotonic ~r<gen> suffix (the K-block avoidance).
+      const gen = nextForkGeneration(graph.nodes.map((n) => n.id));
+      const idMap = new Map(downstreamIds.map((id) => [id, freshForkId(id, gen)]));
+      const proposals: NodeProposal[] = [];
+      for (const id of downstreamIds) {
+        const n = byId.get(id);
+        const freshId = idMap.get(id);
+        if (!n || freshId === undefined) continue; // computeDownstream guarantees both
+        proposals.push({
+          id: freshId,
+          kind: n.kind,
+          purpose: n.purpose,
+          // Re-rooted on the fork: a dep that is itself downstream is remapped to its
+          // fresh id; the fork (and any surviving upstream/sibling) is kept as-is.
+          depends_on: n.depends_on.map((dep) => idMap.get(dep) ?? dep),
+          acceptance_refs: n.acceptance_refs,
+          ...(n.agent_hint !== undefined ? { agent_hint: n.agent_hint } : {}),
+          ...(n.file_scope !== undefined ? { file_scope: n.file_scope } : {}),
+        });
+      }
+      const fresh = proposalsToNodes(proposals);
+      // (3) tear down the downstream subgraph. removeNodes guards pending-only, so
+      // re-arm any non-pending downstream node to pending first (it is removed next).
+      for (const id of downstreamIds) {
+        const n = byId.get(id);
+        if (n && n.status !== 'pending') {
+          await aps.updateNode(args.workItem, id, (cur) => ({ ...cur, status: 'pending' }));
+        }
+      }
+      await aps.removeNodes(args.workItem, downstreamIds);
+      // (4/5) splice the fresh subgraph (integrity-gated) then reset the fork to
+      // pending so the SAME work item re-drives from the fork point.
+      await aps.addNodes(args.workItem, fresh);
+      await aps.updateNode(args.workItem, forkNodeId, (cur) => ({ ...cur, status: 'pending' }));
+
+      const regenerated = downstreamIds
+        .map((from) => ({ from, to: idMap.get(from) }))
+        .filter((r): r is { from: string; to: string } => r.to !== undefined);
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.workItem,
+          fork_node_id: forkNodeId,
+          decision_id: target.decision_id,
+          removed_node_ids: downstreamIds,
+          regenerated,
+          fork_reset_to: 'pending',
+        });
+      } else {
+        writeHuman(
+          `Revised ${args.workItem} from direction fork ${forkNodeId} (decision ${target.decision_id}):`,
+        );
+        writeHuman(
+          `  removed downstream (${downstreamIds.length}): ${downstreamIds.join(', ') || '(none)'}`,
+        );
+        if (regenerated.length > 0) {
+          writeHuman(`  regenerated with fresh ids (${regenerated.length}):`);
+          for (const r of regenerated) writeHuman(`    ${r.from} -> ${r.to}`);
+        }
+        writeHuman(
+          `  fork ${forkNodeId} reset to pending — re-drive: ditto autopilot next-node --workItem ${args.workItem}`,
+        );
+      }
+    } catch (err) {
+      writeError(`revise failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
     }
   },
@@ -1678,6 +1891,7 @@ export const autopilotCommand = defineCommand({
     'next-node': autopilotNextNode,
     'record-result': autopilotRecordResult,
     complete: autopilotComplete,
+    revise: autopilotRevise,
     cleanup: autopilotCleanup,
     'propose-e2e': autopilotProposeE2e,
     'intent-drift': autopilotIntentDrift,

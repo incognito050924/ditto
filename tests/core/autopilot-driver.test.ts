@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { allNodesTerminal, mutationGate, rollbackOnRejection } from '~/core/autopilot-driver';
 import { buildInitialNodes } from '~/core/autopilot-graph';
+import { producePlanGate } from '~/core/coverage-manager';
 import { type Autopilot, autopilot } from '~/schemas/autopilot';
 
 function graph(overrides: Partial<Autopilot> = {}): Autopilot {
@@ -280,6 +281,65 @@ describe('allNodesTerminal (M2.5 — continuation stops only when nothing is lef
       i === 0 ? { ...n, status: 'blocked' as const } : { ...n, status: 'passed' as const },
     );
     expect(allNodesTerminal(graph({ nodes }))).toBe(false);
+  });
+});
+
+// §2 livelock fix (wi_260707loq): mutationGate returns present_plan while the
+// approval gate is 'pending', so force-continuing a routine pending at Stop alone
+// re-hits present_plan → livelock. producePlanGate is where the pending is cleared
+// AT SOURCE: a purpose-preserving, non-forced change auto-waives to not_required so
+// mutationGate proceeds; a forced pending (requireApproval / oracleAssignmentIncomplete
+// / highRisk) STILL blocks. forcePending WINS over purposePreserving (ternary order).
+describe('producePlanGate — livelock-fix status logic (purposePreserving / highRisk)', () => {
+  const lightInputs = {
+    changeSurface: ['src/x.ts'],
+    brief: { interface_changes: [], dod: [], test_scenarios: [] },
+    tierInputs: {
+      changedFileCount: 1,
+      interfaceChanged: false,
+      risk: { non_local: false, irreversible: false, unaudited: false },
+      large: false,
+    },
+  };
+  // 5 changed files ⇒ not "few files" ⇒ standard tier ⇒ tierBriefApproval = 'pending'.
+  const standardInputs = {
+    ...lightInputs,
+    tierInputs: { ...lightInputs.tierInputs, changedFileCount: 5 },
+  };
+
+  test('neither flag ⇒ falls back to the tier (backward compatible)', () => {
+    // light auto-waives, standard requires approval — the pre-existing behavior.
+    expect(producePlanGate(lightInputs).status).toBe('not_required');
+    expect(producePlanGate(standardInputs).status).toBe('pending');
+  });
+
+  test('purposePreserving auto-waives even a standard tier to not_required (livelock fix)', () => {
+    expect(producePlanGate({ ...standardInputs, purposePreserving: true }).status).toBe(
+      'not_required',
+    );
+  });
+
+  test('highRisk forces pending even on an otherwise auto-waivable light tier', () => {
+    expect(producePlanGate({ ...lightInputs, highRisk: true }).status).toBe('pending');
+  });
+
+  test('forcePending WINS over purposePreserving (highRisk + purposePreserving ⇒ pending)', () => {
+    expect(
+      producePlanGate({ ...lightInputs, highRisk: true, purposePreserving: true }).status,
+    ).toBe('pending');
+  });
+
+  test('requireApproval / oracleAssignmentIncomplete keep forcing pending over purposePreserving', () => {
+    expect(
+      producePlanGate({ ...standardInputs, requireApproval: true, purposePreserving: true }).status,
+    ).toBe('pending');
+    expect(
+      producePlanGate({
+        ...standardInputs,
+        oracleAssignmentIncomplete: true,
+        purposePreserving: true,
+      }).status,
+    ).toBe('pending');
   });
 });
 

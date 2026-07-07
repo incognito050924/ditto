@@ -10,6 +10,7 @@ import { evidenceRef, relativePath, verdict } from '~/schemas/common';
 import { resolvability } from '~/schemas/completion-contract';
 import { isFarFieldEscape } from '~/schemas/coverage';
 import { decisionConflict, decisionConflictCarrier } from '~/schemas/decision-conflict-carrier';
+import { directionForkCarrier, directionForkCondition } from '~/schemas/direction-fork-carrier';
 import { ownerReturnEnvelope } from '~/schemas/owner-return-envelope';
 import { type AcOracle, acOracle } from '~/schemas/work-item';
 import { ActiveNodeLeaseStore } from './active-node-lease';
@@ -54,7 +55,12 @@ import { CoverageFeedbackLedger } from './coverage-feedback';
 import { assertOracleFrozen, producePlanGate, validateAcOracle } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
 import { localDir } from './ditto-paths';
-import { decisionConflictRequiresApproval, oracleSatisfaction } from './gates';
+import {
+  decisionConflictRequiresApproval,
+  highRiskAssumption,
+  intentDriftGate,
+  oracleSatisfaction,
+} from './gates';
 import { createGhClient } from './gh-client';
 import { captureGitDiff, listChangedFiles } from './git';
 import { postUnpostedDecisions } from './github-progress';
@@ -1203,6 +1209,53 @@ export const recordResultPayload = z
         'R5/ADR-0018: an auto-resolve item blocked only by an optional tool absence; surface ' +
           'blocked_external rather than splice an endless re-verify.',
       ),
+    // wi_260707loq (ac-3): a node that resolved an IMPLEMENTATION fork by picking a
+    // clear-advantage option that PRESERVES the frozen purpose declares it here. On a
+    // contentful pass the loop CONFIRMS purpose preservation deterministically (reuses
+    // intentDriftGate's AC id-set conservation) and, when confirmed, appends a
+    // `direction` decision carrying this record (the ac-4 disclosure fields + the ac-5
+    // revise anchor `fork_node_id`, which is the recording node) and proceeds
+    // AUTONOMOUSLY — no stop. Absent ⇒ no-op (backward compat). Ignored when no
+    // intent.json exists (no frozen purpose to preserve). A purpose-CHANGING fork is
+    // NOT recorded here — that is the Stop hook's directionForkGate yield.
+    direction_fork: z
+      .object({
+        trigger: z.string().min(1),
+        options: z.array(z.string().min(1)),
+        choice: z.string().min(1),
+        intent_basis: z.string().min(1),
+        blast_radius: z.string().min(1),
+        reverse_cost: z.string().min(1),
+      })
+      .optional()
+      .describe(
+        'A node-declared autonomous direction fork (ac-3): a clear-advantage, purpose-preserving ' +
+          'choice. The loop confirms purpose preservation (intentDriftGate id-set conservation) and ' +
+          'appends a `direction` decision, proceeding without a stop.',
+      ),
+    // wi_260707loq (ac-2): a node that hit a GENUINE direction fork it CANNOT resolve
+    // autonomously — the three stop conditions (purpose_change ∧ no_clear_advantage ∧
+    // intent_cannot_break_tie) — declares them here. On record-result the loop PERSISTS
+    // the direction-fork.json CARRIER the Stop hook already reads, so the next Stop
+    // YIELDS (P1, exit 0) on a complete declaration or FORCE-continues naming the gap
+    // (P5) on a partial one. Genuineness is the Stop hook's directionForkGate judgment,
+    // not this producer's — a partial carrier is written too (it PARSES), so P5 can name
+    // the missing condition. DISTINCT from the ac-3 autonomous-proceed `direction_fork`
+    // above (a clear-advantage, purpose-PRESERVING choice that proceeds without a stop).
+    // Absent ⇒ no carrier written (backward compat). Persisted outcome-independent (a
+    // stop-fork is a user-decision punt, not a pass), so it is not gated on the pass block.
+    direction_fork_stop: z
+      .object({
+        purpose_change: directionForkCondition,
+        no_clear_advantage: directionForkCondition,
+        intent_cannot_break_tie: directionForkCondition,
+      })
+      .optional()
+      .describe(
+        'A node-declared GENUINE 3-condition direction-fork STOP (ac-2). The loop writes the ' +
+          'direction-fork.json carrier the Stop hook reads (P1 yield on complete, P5 force + named ' +
+          'gap on partial). Distinct from the ac-3 autonomous-proceed `direction_fork`.',
+      ),
     // Owner-return envelope (wi_260627jhh, ac-1). The structured form of the owner's
     // return: `summary` is the only slot main loads into context (ac-2), the machine
     // slots (evidence/verdict/uncertainty) ride distinct, and `verbatim_detail` /
@@ -1805,6 +1858,33 @@ async function recordResultCore(
   // with no leak on the findings-expand / escalate / pass / fail branches below.
   await new ActiveNodeLeaseStore(repoRoot).removeByNode(input.workItemId, node.id);
 
+  // wi_260707loq (ac-2): the direction-fork STOP carrier PRODUCER — the missing write
+  // path for the P1/P5 yield the Stop hook already READS. A node that hit a GENUINE
+  // purpose-changing fork it cannot resolve autonomously declares the three conditions
+  // via `direction_fork_stop`; persist them as the carrier (work-item dir, the exact
+  // path stop.ts readArtifact-s: absent → inert, malformed → fail-closed) so the NEXT
+  // Stop YIELDS (P1) on a complete declaration or FORCE-continues naming the gap (P5)
+  // on a partial one. Written outcome-independent (a stop-fork is a user-decision punt,
+  // not a pass) BEFORE the pass/fail branches below, mirroring how the design-pass
+  // decision-conflict.json writer persists a carrier the Stop hook re-checks. Genuineness
+  // is directionForkGate's job — a partial carrier is written too (it parses), so P5 can
+  // name the missing condition. DISTINCT from the ac-3 autonomous-proceed `direction_fork`.
+  if (input.payload.direction_fork_stop !== undefined) {
+    await ensureDir(localDir(repoRoot, 'work-items', input.workItemId));
+    await writeJson(
+      localDir(repoRoot, 'work-items', input.workItemId, 'direction-fork.json'),
+      directionForkCarrier,
+      {
+        schema_version: '0.1.0',
+        mode: 'autopilot',
+        node_id: node.id,
+        purpose_change: input.payload.direction_fork_stop.purpose_change,
+        no_clear_advantage: input.payload.direction_fork_stop.no_clear_advantage,
+        intent_cannot_break_tie: input.payload.direction_fork_stop.intent_cannot_break_tie,
+      },
+    );
+  }
+
   // G7 floor: a completion *signal* is not completion *proof*. An empty or
   // ack-only result is non-contentful and is forced to a fixable failure even if
   // the caller claimed pass — acknowledgement is not evidence.
@@ -2300,6 +2380,49 @@ async function recordResultCore(
       // out-of-scope only ⇒ signal emitted; flow CONTINUES (fall through to pass).
     }
 
+    // ── wi_260707loq ac-3: autonomous direction fork (clear advantage, purpose kept) ──
+    // A node that resolved an implementation fork by picking a clear-advantage option
+    // declares it in `direction_fork`. The loop CONFIRMS the choice PRESERVED the frozen
+    // purpose by REUSING intentDriftGate's AC id-set conservation (the id-set IS the
+    // purpose): when the chain conserves the id-set (no blocking drift reason) the chosen
+    // option did not change the purpose, so the loop proceeds AUTONOMOUSLY (no stop) and
+    // appends a `direction` decision carrying the disclosure record (ac-4) anchored at the
+    // fork node (`revise` re-drives from `fork_node_id`, ac-5). A `direction` decision is
+    // NOT a decisive-post by construction — no `user_decision_needed` failure_class, no
+    // `escalate`/`batch_escalate`, no `blocked` disposition — so `isDecisivePost` stays
+    // false and it is never surfaced to the linked issue (in-flow progress). A
+    // purpose-CHANGING fork is NOT recorded here; that is the Stop hook's directionForkGate
+    // yield. No intent.json ⇒ no frozen purpose to preserve ⇒ no `direction` decision.
+    const directionFork = input.payload.direction_fork;
+    if (directionFork) {
+      const intent = (await intents.exists(input.workItemId))
+        ? await intents.get(input.workItemId)
+        : undefined;
+      if (intent) {
+        const workItem = await new WorkItemStore(repoRoot).get(input.workItemId);
+        const currentGraph = await aps.get(input.workItemId);
+        const drift = intentDriftGate({ intent, workItem, graph: currentGraph });
+        if (drift.reasons.length === 0) {
+          await aps.appendDecision(input.workItemId, {
+            ts: (input.now ?? new Date()).toISOString(),
+            node_id: node.id,
+            decision: 'direction',
+            reason: `autonomous direction fork resolved with a clear advantage; frozen purpose preserved (AC id-set conserved): ${directionFork.trigger}`,
+            direction_record: {
+              fork_node_id: node.id,
+              trigger: directionFork.trigger,
+              options: directionFork.options,
+              choice: directionFork.choice,
+              intent_basis: directionFork.intent_basis,
+              blast_radius: directionFork.blast_radius,
+              reverse_cost: directionFork.reverse_cost,
+            },
+          });
+        }
+      }
+      // flow CONTINUES (fall through to the normal pass) — autonomous, no stop.
+    }
+
     // Node promotion (A-3): a contentful pass may carry the subgraph this node
     // generated. Splice it *before* marking pass so a rejected splice (cycle /
     // dup / dangling — addNodes throws) leaves the node still running and
@@ -2390,6 +2513,30 @@ async function recordResultCore(
           (ac) => inPlay.has(ac.id) && ac.oracle === undefined,
         );
       }
+      // wi_260707loq (impl-enforcement pairing): compute the purpose-preserving +
+      // high-risk flags producePlanGate uses to auto-waive a low-risk, purpose-
+      // preserving plan close. `purposePreserving` = the frozen AC id-set is conserved
+      // (intentDriftGate has no blocking drift reason — mid-run there is no completion,
+      // so it does H1+H2 AC id-set conservation only). `highRisk` = the work item's
+      // declared risk trips the high-risk assumption. Read the intent.json (like
+      // planRequiresDecisionApproval) + the GROWN graph (post promotion/supersede)
+      // BEFORE the gate call. No intent ⇒ no frozen purpose to confirm ⇒ not
+      // purpose-preserving (conservative; producePlanGate then falls back to the tier).
+      const grownGraph = await aps.get(input.workItemId);
+      const workItem = await new WorkItemStore(repoRoot).get(input.workItemId);
+      const planIntent = (await intents.exists(input.workItemId))
+        ? await intents.get(input.workItemId)
+        : undefined;
+      const drift = planIntent
+        ? intentDriftGate({ intent: planIntent, workItem, graph: grownGraph })
+        : { reasons: ['no intent.json — frozen purpose cannot be confirmed'] };
+      const purposePreserving = drift.reasons.length === 0;
+      const declaredRisk = workItem.declared_risk ?? {};
+      const highRisk = highRiskAssumption({
+        non_local: declaredRisk.non_local ?? false,
+        irreversible: declaredRisk.irreversible ?? false,
+        unaudited: declaredRisk.unaudited ?? false,
+      });
       const patch = producePlanGate({
         changeSurface: pb.change_surface,
         brief: {
@@ -2400,6 +2547,8 @@ async function recordResultCore(
         tierInputs: pb.tier_inputs,
         requireApproval,
         oracleAssignmentIncomplete,
+        purposePreserving,
+        highRisk,
       });
       const current = await aps.get(input.workItemId);
       await aps.write(input.workItemId, {

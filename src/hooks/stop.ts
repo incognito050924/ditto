@@ -6,16 +6,21 @@ import type { ZodTypeAny, z } from 'zod';
 import { commandProvider } from '~/acg/fitness/command-provider';
 import { type FitnessContext, runFitness } from '~/acg/fitness/fitness-runner';
 import { compositeProvider } from '~/acg/fitness/injected-provider';
+import { AutopilotStore } from '~/core/autopilot-store';
 import { localDir } from '~/core/ditto-paths';
 import { FitnessFunctionStore } from '~/core/fitness-function-store';
 import { atomicWriteText, ensureDir, writeJson } from '~/core/fs';
 import {
   type ConflictDisposition,
+  type RiskAxes,
   attestAcVerdicts,
   completionEvidenceGate,
   completionGate,
   convergenceGate,
   decisionConflictGate,
+  decisionConflictRequiresApproval,
+  directionForkGate,
+  highRiskAssumption,
   intentDriftGate,
   knowledgeUpdateGate,
   landGate,
@@ -41,6 +46,7 @@ import {
   decisionConflictCarrier,
 } from '~/schemas/decision-conflict-carrier';
 import { type Dialectic, dialectic as dialecticSchema } from '~/schemas/dialectic';
+import { directionForkCarrier } from '~/schemas/direction-fork-carrier';
 import { intentContract } from '~/schemas/intent';
 import { intentMetric } from '~/schemas/intent-metric';
 import { type KnowledgeGateCarrier, knowledgeGateCarrier } from '~/schemas/knowledge-gate-carrier';
@@ -607,6 +613,77 @@ async function recordIntentDriftMetric(
   }
 }
 
+/**
+ * Disk-derived risk axes for the Stop-hook P3 high-risk yield (wi_260707loq §1).
+ * Mirrors the work-item `declared_risk` read in user-prompt-submit.ts
+ * (`hasHeavyRiskSignal`): a `declared_risk` flag is the ONLY persisted risk signal
+ * on the work item, and an absent flag defaults to false (safe). No LLM.
+ */
+function riskOf(workItem: WorkItem): RiskAxes {
+  const r = workItem.declared_risk;
+  return {
+    non_local: !!r?.non_local,
+    irreversible: !!r?.irreversible,
+    unaudited: !!r?.unaudited,
+  };
+}
+
+/**
+ * ADR-0024 oracle-gap presence check for the Stop-hook P4 yield (wi_260707loq §1).
+ * A faithful RECOMPUTE of the design-pass check in autopilot-loop.ts: assignment is
+ * in play iff some AC carries an oracle; then every AC a design node covers (its
+ * `acceptance_refs`) must carry one. An in-play covered AC WITHOUT an oracle is the
+ * gap the pending plan awaits. Pure over the persisted work item + graph (no LLM).
+ */
+function oracleGapPending(workItem: WorkItem, graph: Autopilot): boolean {
+  const assignmentInPlay = workItem.acceptance_criteria.some((ac) => ac.oracle !== undefined);
+  if (!assignmentInPlay) return false;
+  const inPlay = new Set(
+    graph.nodes.filter((n) => n.kind === 'design').flatMap((n) => n.acceptance_refs),
+  );
+  return workItem.acceptance_criteria.some((ac) => inPlay.has(ac.id) && ac.oracle === undefined);
+}
+
+/**
+ * Record a Stop-hook procedure-punt force-continuation (wi_260707loq §1 P6, ac-1) to
+ * the append-only decision log, ONCE per pending-node signature. Stop fires repeatedly
+ * on the same pending state, so a dedup guard — skip when the log already carries a
+ * `procedure_punt_continued` for the same signature (the sorted pending mutating-node
+ * ids) — keeps the log from being polluted by the Stop count (same idiom as
+ * `recordIntentDriftMetric`). Best-effort: a ledger-write failure never changes the
+ * Stop verdict (the reason push + exit 2 happen regardless of this write).
+ */
+async function maybeRecordProcedurePunt(
+  repoRoot: string,
+  workItemId: string,
+  graph: Autopilot,
+): Promise<void> {
+  try {
+    const signature = graph.nodes
+      .filter((n) => n.owner === 'implementer' && n.status === 'pending')
+      .map((n) => n.id)
+      .sort()
+      .join(',');
+    if (signature.length === 0) return;
+    const store = new AutopilotStore(repoRoot);
+    const existing = await store.readDecisions(workItemId);
+    if (
+      existing.some((d) => d.decision === 'procedure_punt_continued' && d.node_id === signature)
+    ) {
+      return;
+    }
+    await store.appendDecision(workItemId, {
+      ts: new Date().toISOString(),
+      node_id: signature,
+      decision: 'procedure_punt_continued',
+      reason:
+        'Stop hook force-continued a routine procedure-punt pause (approval pending, no intent-conflict / high-risk / oracle-gap decision to yield for)',
+    });
+  } catch {
+    // best-effort ledger write; never let it affect the Stop verdict
+  }
+}
+
 export const stopHandler: HookHandler = async (input: HookInput) => {
   const raw = (input.raw ?? {}) as Record<string, unknown>;
 
@@ -698,6 +775,14 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     decisionConflictCarrier,
     'decision-conflict.json',
   );
+  // Direction-fork carrier (wi_260707loq §1) — the three-condition fork evidence a
+  // node declares when it hits a genuine direction fork. Same work-item-dir home +
+  // absent/malformed discipline; a malformed carrier fail-closes below (P0, outermost).
+  const directionFork = await readArtifact(
+    join(dir, 'direction-fork.json'),
+    directionForkCarrier,
+    'direction-fork.json',
+  );
 
   // Malformed artifact = gate-input violation → fail CLOSED (exit 2).
   const malformed = [
@@ -712,6 +797,7 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     semantic,
     knowledge,
     decisionConflicts,
+    directionFork,
   ].find((a) => a.status === 'malformed');
   if (malformed && malformed.status === 'malformed') {
     return {
@@ -720,22 +806,65 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     };
   }
 
-  // Yield precedence: an autopilot waiting on approval/blocker stops the loop so
-  // the plan/decision can surface (plan M1.4 branch 나 exceptions).
-  if (
-    pilot.status === 'ok' &&
-    pilot.data.approval_gate.status === 'pending' &&
-    hasPendingMutatingNode(pilot.data)
-  ) {
-    return { exitCode: 0 };
-  }
-
   const reasons: string[] = [];
   // Non-blocking intent-drift advisories (goal/source_request string divergence):
   // surfaced so the user can judge a re-statement vs real drift, but they never
   // force continuation (dialectic P1 — ACG assigns goal-wording judgment to
   // human/LLM review, not a deterministic block).
   const advisories: string[] = [];
+
+  // ── Stop-hook yield precedence classifier (wi_260707loq §1) ────────────────────
+  // Replaces the old broad "any pending yields exit 0" early-return with an ORDERED
+  // classifier. YIELDS (P1-P4) are checked FIRST and early-return exit 0; FORCES
+  // (P5-P6) push a blocking reason so the cascade below exits 2. A MALFORMED carrier
+  // (P0) already fail-closed in the malformed array above. All inputs are disk-derived
+  // (no LLM). The livelock fix's partner: a routine pending force-continues (P6)
+  // instead of yielding forever, while a REAL decision (P2 intent-conflict, P3
+  // high-risk, P4 oracle-gap) still yields so it can surface to the user.
+
+  // P1 / P5 pivot on the direction-fork carrier. Self-report only (no purposeCheck):
+  // P1 needs all three conditions present + non-empty basis (ac-2).
+  const forkGate =
+    directionFork.status === 'ok' ? directionForkGate(directionFork.data) : undefined;
+  // P1: a VALID 3-condition direction fork yields so it can surface (ac-2). Yielding
+  // skips the completion cascade — the fork, not a completion, is what stops the loop.
+  if (forkGate?.pass === true) return { exitCode: 0 };
+
+  // P2-P4 / P6: a pending mutating plan. It YIELDS for a real decision only the user
+  // (or a governed gate) can make, and otherwise FORCE-continues a routine procedure
+  // punt (approve-plan / progress-check) — never stalling on a pending nobody approves.
+  if (
+    pilot.status === 'ok' &&
+    pilot.data.approval_gate.status === 'pending' &&
+    hasPendingMutatingNode(pilot.data)
+  ) {
+    // P2: ADR-0020 intent-level conflict front-loaded to the approval gate — only the
+    // user can resolve it (align / supersede / drop), so YIELD (ac-7, DO NOT regress).
+    // Disjoint from the non-pending 851 residual catch, which stays untouched.
+    if (
+      decisionConflicts.status === 'ok' &&
+      decisionConflictRequiresApproval(decisionConflicts.data.conflicts)
+    ) {
+      return { exitCode: 0 };
+    }
+    // P3: a high-risk bootstrap (non_local / irreversible / unaudited declared) — YIELD.
+    if (highRiskAssumption(riskOf(workItem))) return { exitCode: 0 };
+    // P4: ADR-0024 oracle gap (assignment in play, an in-play AC still lacks its
+    // oracle) — YIELD so the gap surfaces rather than being force-continued past.
+    if (oracleGapPending(workItem, pilot.data)) return { exitCode: 0 };
+    // P6: none of P2-P4 — a ROUTINE procedure punt. FORCE-continue (exit 2 via the
+    // cascade) and RECORD the force once per node signature (ac-1, dedup-guarded).
+    await maybeRecordProcedurePunt(input.repoRoot, pointer, pilot.data);
+    reasons.push(
+      `autopilot approval is pending on a routine procedure-punt (no intent-conflict / high-risk / oracle-gap decision to yield for) — force-continuing; approve the plan ("ditto autopilot approve ${workItem.id}") to stop being re-prompted`,
+    );
+  }
+
+  // P5: a direction-fork carrier is PRESENT but INCOMPLETE — force-continue (exit 2)
+  // and NAME the missing / empty condition (ac-2 fail-closed).
+  if (forkGate && forkGate.pass === false) {
+    reasons.push(...forkGate.reasons.map((r) => `direction fork incomplete — ${r}`));
+  }
   // Whether the completion passes its OWN gates (so the work is actually closing,
   // not a partial/handoff checkpoint). Gates the (B) bypass check below.
   let completionWouldClose = false;

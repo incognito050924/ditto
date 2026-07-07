@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildInitialNodes } from '~/core/autopilot-graph';
-import { type AutopilotDecision, AutopilotStore } from '~/core/autopilot-store';
+import { type AutopilotDecision, AutopilotStore, isDecisivePost } from '~/core/autopilot-store';
 import { localDir } from '~/core/ditto-paths';
 import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
 
@@ -325,5 +325,68 @@ describe('AutopilotStore', () => {
     const decisions = await store.readDecisions(WI);
     expect(decisions).toHaveLength(2);
     expect(decisions[1]?.decision).toBe('switch_approach');
+  });
+
+  // ── net-new autonomy decisions (wi_260707loq: direction / procedure_punt) ──
+  test('a `direction` decision round-trips with its structured direction_record', async () => {
+    await store.write(WI, graph());
+    const direction: AutopilotDecision = {
+      ts: '2026-07-07T00:00:00.000Z',
+      node_id: 'impl-x',
+      decision: 'direction',
+      reason: 'chose adapter A: clear advantage on the frozen purpose',
+      direction_record: {
+        fork_node_id: 'impl-x',
+        trigger: 'two viable adapter shapes surfaced during implement',
+        options: ['adapter A (thin)', 'adapter B (framework)'],
+        choice: 'adapter A (thin)',
+        intent_basis: 'A preserves the AC id-set and is simplest per the frozen goal',
+        blast_radius: 'src/core only; no schema change',
+        reverse_cost: 'low — single-file revert, fork anchor recorded',
+      },
+    };
+    await store.appendDecision(WI, direction);
+    const read = await store.readDecisions(WI);
+    expect(read).toHaveLength(1);
+    expect(read[0]?.decision).toBe('direction');
+    expect(read[0]?.direction_record?.fork_node_id).toBe('impl-x');
+    expect(read[0]?.direction_record?.options).toEqual([
+      'adapter A (thin)',
+      'adapter B (framework)',
+    ]);
+    // additive/optional field survives the JSON.parse-only read path unchanged
+    expect(read[0]).toEqual(direction);
+  });
+
+  test('isDecisivePost is FALSE for a `direction` decision (must not reach GitHub)', () => {
+    const direction: AutopilotDecision = {
+      ts: '2026-07-07T00:00:00.000Z',
+      node_id: 'impl-x',
+      decision: 'direction',
+      reason: 'autonomous clear-advantage choice',
+    };
+    expect(isDecisivePost(direction)).toBe(false);
+  });
+
+  test('isDecisivePost is FALSE for a `procedure_punt_continued` decision', () => {
+    const punt: AutopilotDecision = {
+      ts: '2026-07-07T00:00:00.000Z',
+      node_id: 'impl-x',
+      decision: 'procedure_punt_continued',
+      reason: 'Stop hook force-continued a procedure-punt pause',
+    };
+    expect(isDecisivePost(punt)).toBe(false);
+  });
+
+  test('isDecisivePost stays TRUE for escalate (guard: the new enum values did not soften the predicate)', () => {
+    expect(
+      isDecisivePost({
+        ts: '2026-07-07T00:00:00.000Z',
+        node_id: 'impl-x',
+        decision: 'escalate',
+        failure_class: 'user_decision_needed',
+        reason: 'user-owned decision',
+      }),
+    ).toBe(true);
   });
 });

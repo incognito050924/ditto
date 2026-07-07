@@ -144,6 +144,41 @@ describe('bootstrapAutopilot', () => {
     expect(result.graph.nodes.map((n) => n.kind)).toEqual(['design', 'implement', 'verify']);
   });
 
+  test('e2eOptIn seeds an e2e-author node between design and implement (implement depends_on e2e-author)', async () => {
+    // wi_260707loq ac-6: the single main-session e2e dialogue runs at ENTRY, before
+    // the autonomous implement→verify run. So the seed becomes
+    // design → e2e-author → implement → verify, with implement re-pointed onto the
+    // e2e-author node (never depending on design directly).
+    const { wi, intent } = await setup('POST /pw returns 200 with a numeric score');
+    const result = await bootstrapAutopilot(repo, {
+      workItem: wi,
+      intent,
+      risk: safeRisk,
+      e2eOptIn: true,
+    });
+    if (result.status !== 'created') throw new Error(`expected created, got ${result.status}`);
+    expect(result.graph.nodes.map((n) => n.kind)).toEqual([
+      'design',
+      'e2e-author',
+      'implement',
+      'verify',
+    ]);
+    const design = result.graph.nodes.find((n) => n.kind === 'design');
+    const e2e = result.graph.nodes.find((n) => n.kind === 'e2e-author');
+    const implement = result.graph.nodes.find((n) => n.kind === 'implement');
+    expect(e2e?.owner).toBe('main-session');
+    expect(e2e?.depends_on).toEqual([design?.id]);
+    expect(implement?.depends_on).toEqual([e2e?.id]);
+  });
+
+  test('e2eOptIn off (default) seeds no e2e-author node (autonomous run has no main-session step)', async () => {
+    const { wi, intent } = await setup('POST /pw returns 200 with a numeric score');
+    const result = await bootstrapAutopilot(repo, { workItem: wi, intent, risk: safeRisk });
+    if (result.status !== 'created') throw new Error('expected created');
+    expect(result.graph.nodes.map((n) => n.kind)).toEqual(['design', 'implement', 'verify']);
+    expect(result.graph.nodes.some((n) => n.kind === 'e2e-author')).toBe(false);
+  });
+
   test('a custom generateNodes seam is used by bootstrap (>3-node valid chain)', async () => {
     const { wi, intent } = await setup('POST /pw returns 200 with a numeric score');
     const generateNodes = (acceptanceIds: string[]) => {

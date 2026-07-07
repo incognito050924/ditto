@@ -131,6 +131,22 @@ function dependsOnNode(
 }
 
 /**
+ * Transitive DEPENDENTS of `forkNodeId` — every node that (directly or
+ * transitively) `depends_on` the fork. This is the reverse-reachability of
+ * `supersededByPromotion`'s `dependsOnGenerator`: there we ask "does X reach the
+ * generator upstream?", here we collect every X that reaches `forkNodeId`. Pure,
+ * read-only; the fork node is never in its own downstream set. Output preserves
+ * input node order. `revise` (ac-5) uses this to name the subgraph to tear down
+ * and re-drive from a direction fork.
+ */
+export function computeDownstream(nodes: AutopilotNode[], forkNodeId: string): string[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  return nodes
+    .filter((n) => n.id !== forkNodeId && dependsOnNode(n, forkNodeId, byId))
+    .map((n) => n.id);
+}
+
+/**
  * file-overlap serialization gate (W4-1). Two owners that write the same file
  * must not run concurrently or they clobber each other. Greedily admit nodes
  * whose `file_scope` is disjoint from every already-admitted node's scope;

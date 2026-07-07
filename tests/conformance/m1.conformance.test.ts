@@ -399,7 +399,17 @@ describe('M1.4 — Stop hook 최소 동작 (완료/수렴/노드상태 게이트
     expect((await run()).exitCode).toBe(0);
   });
 
-  test('approval_gate=pending (+ 남은 노드) → exit 0 (plan 제시에 양보)', async () => {
+  test('approval_gate=pending 루틴 punt → exit 2 force-continue (ac-1, wi_260707loq)', async () => {
+    // plan §M1.4 originally yielded exit 0 here ("plan 제시에 양보"): ANY pending
+    // approval_gate + a remaining node stopped so the plan could surface. wi_260707loq
+    // superseded that broad early-yield with the ordered P1-P6 Stop classifier. This
+    // fixture is a BARE routine pending — create() declares no risk, ac() assigns no
+    // oracle, and no decision-conflict.json / direction-fork.json carrier is present —
+    // so it is a P6 procedure-punt that FORCE-continues (exit 2) rather than stalling
+    // forever on a pending nobody approves. A GENUINE decision pending still yields exit
+    // 0 (P1 direction-fork / P2 intent-conflict / P3 high-risk / P4 oracle-gap); those
+    // yield paths are exercised in the Stop-hook suite (tests/hooks/stop.test.ts), not
+    // this bare-fixture conformance case.
     await write(
       'autopilot.json',
       pilot({
@@ -413,7 +423,7 @@ describe('M1.4 — Stop hook 최소 동작 (완료/수렴/노드상태 게이트
         nodes: [node({ status: 'pending' })],
       }),
     );
-    expect((await run()).exitCode).toBe(0);
+    expect((await run()).exitCode).toBe(2);
   });
 
   test('blocked 노드만 남음(external/user-owned 양보) → exit 0', async () => {

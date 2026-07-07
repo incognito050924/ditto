@@ -1,12 +1,32 @@
 import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
 import type { CompletionContract } from '~/schemas/completion-contract';
-import type { AcOracle, WorkItem } from '~/schemas/work-item';
-import type { AutopilotDecision } from './autopilot-store';
+import type { AcOracle, AcceptanceCriterion, WorkItem } from '~/schemas/work-item';
+import { type AutopilotDecision, synthesizeDecisionId } from './autopilot-store';
 import { type CompletionInput, buildCompletion } from './completion-store';
 import { type AcAttestation, attestAcVerdicts, oracleSatisfaction } from './gates';
 
 /** Per-AC oracle lookup threaded into the closure decision (ADR-0024 §3 ③ JUDGE). */
 type OracleMap = ReadonlyMap<string, AcOracle | undefined>;
+
+/**
+ * Per-AC work-item criterion state (verdict + recorded evidence) threaded into the
+ * closure so a fresh `ditto verify` pass — recorded on the WORK-ITEM criterion AFTER
+ * the autopilot run — can supersede a stale node verdict (wi_2607074rs). Only the two
+ * fields the reconciliation reads are required.
+ */
+type CriterionEvidenceMap = ReadonlyMap<string, Pick<AcceptanceCriterion, 'verdict' | 'evidence'>>;
+
+/**
+ * Does a work-item criterion carry EVIDENCE-BACKED proof — i.e. a command-kind
+ * evidence entry, the shape `ditto verify --criterion` records (verify.ts) and the
+ * SAME "REAL evidence" bar push-readiness enforces (work-item-store.pushReadiness).
+ * A bare/placeholder pass (verdict flipped to `pass` with no command evidence) does
+ * NOT qualify — this is the false-green guard: only a real verify supersedes a node
+ * verdict, never a claim.
+ */
+function hasVerifyEvidence(criterion: Pick<AcceptanceCriterion, 'evidence'>): boolean {
+  return criterion.evidence.some((e) => e.kind === 'command');
+}
 
 /**
  * Assemble a completion contract from a finished autopilot graph (done→completion
@@ -186,6 +206,7 @@ export function deriveAcVerdicts(
   graph: Autopilot,
   acIds: string[],
   oracles?: OracleMap,
+  criteria?: CriterionEvidenceMap,
 ): DerivedVerdict[] {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   return acIds.map((acId) => {
@@ -267,7 +288,30 @@ export function deriveAcVerdicts(
       notes = `evidence-less implementation pass covered by a downstream verified pass (${acId})`;
     }
 
-    return { criterion_id: acId, verdict, evidence, ...(notes ? { notes } : {}) };
+    // wi_2607074rs: reconcile with the WORK-ITEM criterion, which is strictly FRESHER
+    // than the graph — a `ditto verify` pass is recorded AFTER the autopilot run. When
+    // the criterion carries an EVIDENCE-BACKED pass (command-kind evidence, the
+    // `ditto verify` shape / the push-readiness "REAL evidence" bar), it SUPERSEDES a
+    // stale node non-pass so a genuinely re-verified WI can close. False-green guard: a
+    // bare/placeholder criterion pass (no command evidence) is powerless — it can never
+    // override a node fail; only a real, evidence-backed verify supersedes (claim ≠ proof).
+    let finalEvidence = evidence;
+    const criterion = criteria?.get(acId);
+    if (
+      verdict !== 'pass' &&
+      criterion &&
+      criterion.verdict === 'pass' &&
+      hasVerifyEvidence(criterion)
+    ) {
+      verdict = 'pass';
+      notes = `stale node verdict superseded by a fresh evidence-backed \`ditto verify\` pass (${acId})`;
+      // Carry the verify evidence into the derived verdict so the mirror-back
+      // (mirrorAcceptanceVerdicts) preserves the command-kind proof rather than
+      // overwriting the criterion with evidence-thin node refs.
+      finalEvidence = [...evidence, ...criterion.evidence];
+    }
+
+    return { criterion_id: acId, verdict, evidence: finalEvidence, ...(notes ? { notes } : {}) };
   });
 }
 
@@ -331,7 +375,12 @@ export function assembleCompletionFromGraph(
   // ADR-0024 §3 ③ JUDGE: thread each AC's oracle (if any) into the closure
   // decision. Absent oracle → prior evidence-gated behavior (presence-gated).
   const oracles: OracleMap = new Map(workItem.acceptance_criteria.map((c) => [c.id, c.oracle]));
-  const verdicts = deriveAcVerdicts(graph, acIds, oracles);
+  // wi_2607074rs: thread each AC's own criterion state so a fresh evidence-backed
+  // `ditto verify` pass (recorded after the run) supersedes a stale node verdict.
+  const criteria: CriterionEvidenceMap = new Map(
+    workItem.acceptance_criteria.map((c) => [c.id, c]),
+  );
+  const verdicts = deriveAcVerdicts(graph, acIds, oracles, criteria);
   const summary =
     opts.summary ??
     `Completion assembled from autopilot ${graph.autopilot_id} (${graph.nodes.length} nodes) for "${workItem.goal}".`;
@@ -434,4 +483,65 @@ export function projectAutoHandling(decisions: readonly AutopilotDecision[]): Au
     else ledger.materialized.push(entry);
   }
   return ledger;
+}
+
+/**
+ * One autonomous direction-fork decision projected for the completion report (ac-4).
+ * The DEDICATED disclosure section — separate from `projectAutoHandling`, which only
+ * admits auto_fix/surface/batch_escalate — carries the four ac-4 fields verbatim from
+ * the decision's `direction_record`: 무엇때문에 (`trigger`) · 선택지 (`options`) ·
+ * 선택+의도근거 (`choice` + `intent_basis`) · 파급/되돌리기비용 (`blast_radius` +
+ * `reverse_cost`). `decision_id` is the append-positional handle `ditto autopilot
+ * revise --decision` targets (ac-5); `fork_node_id` is the anchor it re-drives from.
+ */
+export interface DirectionDecisionEntry {
+  /** Append-positional decision handle (synthesizeDecisionId) — `revise` targets this. */
+  decision_id: string;
+  node_id: string;
+  fork_node_id: string;
+  /** 무엇때문에 — what triggered the autonomous fork. */
+  trigger: string;
+  /** 선택지 — the options the loop weighed. */
+  options: string[];
+  /** 선택 — the direction chosen. */
+  choice: string;
+  /** 의도근거 — why that choice advances the frozen purpose. */
+  intent_basis: string;
+  /** 파급 — the blast radius the fork touches. */
+  blast_radius: string;
+  /** 되돌리기비용 — the cost to reverse it. */
+  reverse_cost: string;
+  reason: string;
+}
+
+/**
+ * Project the loop's `direction` decisions into the dedicated direction ledger (ac-4).
+ * A pure projection of the append-only log — NOT a re-derivation (charter §4-11): the
+ * loop already WROTE each `direction_record`; this only reads, indexes (for the stable
+ * `decision_id` handle) and reshapes. A `direction` decision missing its structured
+ * `direction_record` is skipped (defensive — the record is where the disclosure lives).
+ * Every non-direction decision kind is ignored (auto-handling lives in its own ledger).
+ */
+export function projectDirectionDecisions(
+  decisions: readonly AutopilotDecision[],
+): DirectionDecisionEntry[] {
+  const entries: DirectionDecisionEntry[] = [];
+  decisions.forEach((d, index) => {
+    if (d.decision !== 'direction') return;
+    const record = d.direction_record;
+    if (!record) return;
+    entries.push({
+      decision_id: synthesizeDecisionId(d, index),
+      node_id: d.node_id,
+      fork_node_id: record.fork_node_id,
+      trigger: record.trigger,
+      options: record.options,
+      choice: record.choice,
+      intent_basis: record.intent_basis,
+      blast_radius: record.blast_radius,
+      reverse_cost: record.reverse_cost,
+      reason: d.reason,
+    });
+  });
+  return entries;
 }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   buildInitialNodes,
+  computeDownstream,
   fileOverlapGate,
   kindToOwner,
   nodeTransition,
@@ -342,6 +343,50 @@ describe('proposalsToNodes (A-3: intent-level proposal → full node)', () => {
       { id: 'G4', kind: 'review', purpose: 'r', depends_on: [], acceptance_refs: ['ac-1'] },
     ]);
     expect(bare[0]?.file_scope).toBeUndefined();
+  });
+});
+
+describe('computeDownstream (ac-5: transitive DEPENDENTS of a fork node — reverse reachability)', () => {
+  const mk = (id: string, depends_on: string[]): AutopilotNode => ({
+    id,
+    kind: 'implement',
+    owner: 'implementer',
+    purpose: 'p',
+    status: 'pending',
+    depends_on,
+    acceptance_refs: ['ac-1'],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  });
+
+  test('linear chain: every node after the fork is downstream (in input order)', () => {
+    const nodes = buildInitialNodes(['ac-1']); // N1 -> N2 -> N3
+    expect(computeDownstream(nodes, 'N1')).toEqual(['N2', 'N3']);
+    expect(computeDownstream(nodes, 'N2')).toEqual(['N3']);
+  });
+
+  test('a leaf fork (no dependents) has an empty downstream set', () => {
+    const nodes = buildInitialNodes(['ac-1']);
+    expect(computeDownstream(nodes, 'N3')).toEqual([]);
+  });
+
+  test('the fork node itself is never in its own downstream set', () => {
+    const nodes = buildInitialNodes(['ac-1']);
+    expect(computeDownstream(nodes, 'N1')).not.toContain('N1');
+  });
+
+  test('a sibling branch that does NOT depend on the fork is excluded', () => {
+    // N1 -> N2 -> N3 ; N4 depends only on N1 (sibling of N2). Fork=N2.
+    const nodes = [mk('N1', []), mk('N2', ['N1']), mk('N3', ['N2']), mk('N4', ['N1'])];
+    expect(computeDownstream(nodes, 'N2')).toEqual(['N3']); // N4 not downstream of N2
+    expect(computeDownstream(nodes, 'N1')).toEqual(['N2', 'N3', 'N4']); // all depend on N1
+  });
+
+  test('diamond: a join node reachable via two paths is listed once', () => {
+    // N1 -> {N2, N3} -> N4 (join). Fork=N1 → all three; Fork=N2 → only the join N4.
+    const nodes = [mk('N1', []), mk('N2', ['N1']), mk('N3', ['N1']), mk('N4', ['N2', 'N3'])];
+    expect(computeDownstream(nodes, 'N1')).toEqual(['N2', 'N3', 'N4']);
+    expect(computeDownstream(nodes, 'N2')).toEqual(['N4']);
   });
 });
 

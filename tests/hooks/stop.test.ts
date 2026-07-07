@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { AutopilotStore } from '~/core/autopilot-store';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
@@ -405,7 +406,10 @@ describe('stopHandler', () => {
     });
   });
 
-  test('approval_gate pending (with remaining nodes) => exit 0 (yield to surface plan)', async () => {
+  test('approval_gate pending on a ROUTINE plan (no real decision) => exit 2 force-continue (P6, wi_260707loq §1)', async () => {
+    // OLD contract yielded exit 0 for ANY pending; the §1 classifier force-continues a
+    // routine procedure-punt (no intent-conflict / high-risk / oracle-gap to yield for)
+    // so the loop keeps going instead of stalling on a pending nobody approves.
     await writeArtifact(
       'autopilot.json',
       autopilot({
@@ -419,7 +423,9 @@ describe('stopHandler', () => {
         nodes: [node({ status: 'pending' })],
       }),
     );
-    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('procedure-punt');
   });
 
   test('approval_gate pending but NO pending implementer node => does not yield; completion gate runs (exit 2)', async () => {
@@ -476,7 +482,10 @@ describe('stopHandler', () => {
     expect(out.stderr).toContain('no real verification path');
   });
 
-  test('approval_gate pending WITH a pending implementer node => still yields (exit 0)', async () => {
+  test('approval_gate pending on a HIGH-RISK plan => still yields (exit 0, P3 — never force past a risk decision)', async () => {
+    // A declared-risk (irreversible) work item whose plan awaits approval is a real
+    // decision to surface — the §1 classifier YIELDS (P3), it must NOT force-continue.
+    await store.update(wiId, (w) => ({ ...w, declared_risk: { irreversible: true } }));
     await writeArtifact(
       'autopilot.json',
       autopilot({
@@ -490,7 +499,7 @@ describe('stopHandler', () => {
         nodes: [node({ kind: 'implement', owner: 'implementer', status: 'pending' })],
       }),
     );
-    // Even with a failing completion present, a legitimate approval wait yields.
+    // Even with a failing completion present, a legitimate risk-decision wait yields.
     await writeArtifact(
       'completion.json',
       completion({
@@ -1312,6 +1321,180 @@ describe('decisionConflictForcesContinuation (ADR-0020: fail-closed block + alwa
     const r = decisionConflictForcesContinuation(carrier([]));
     expect(r.reasons).toHaveLength(0);
     expect(r.advisories).toHaveLength(0);
+  });
+});
+
+// wi_260707loq §1 — Stop-hook yield precedence classifier. The old broad early-return
+// yielded exit 0 for ANY pending; the classifier is ORDERED: YIELDS (P1 valid fork,
+// P2 intent-conflict, P3 high-risk, P4 oracle-gap) before FORCES (P5 incomplete fork,
+// P6 routine procedure-punt); malformed (P0) fail-closes outermost. All disk-derived.
+describe('stopHandler — yield precedence classifier (wi_260707loq §1)', () => {
+  const forkCondition = (present: boolean, basis: string) => ({ present, basis });
+  const directionFork = (over: Record<string, unknown> = {}) => ({
+    schema_version: '0.1.0',
+    mode: 'autopilot',
+    node_id: 'N1',
+    purpose_change: forkCondition(true, 'the chosen path grows the AC id-set'),
+    no_clear_advantage: forkCondition(true, 'both options score equally on the intent'),
+    intent_cannot_break_tie: forkCondition(true, 'the frozen intent is silent on the tie'),
+    ...over,
+  });
+  const pendingGate = {
+    status: 'pending',
+    source: null,
+    approved_at: null,
+    approved_by: null,
+    evidence_refs: [],
+  };
+  const pendingImplNode = node({ kind: 'implement', owner: 'implementer', status: 'pending' });
+
+  // ── P1: a VALID 3-condition fork yields (ac-2) ──────────────────────────────
+  test('P1: a valid 3-condition direction fork yields => exit 0', async () => {
+    await writeArtifact('direction-fork.json', directionFork());
+    // No autopilot/completion — without the fork this draft item would strong-block (exit 2).
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  // ── P5: a PRESENT-but-INCOMPLETE fork force-continues + names the gap (ac-2) ──
+  test('P5: a fork missing a condition => exit 2 naming the missing condition', async () => {
+    await writeArtifact(
+      'direction-fork.json',
+      directionFork({ no_clear_advantage: forkCondition(false, '') }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('direction fork incomplete');
+    expect(out.stderr).toContain('no_clear_advantage');
+  });
+
+  test('P5: a fork with an EMPTY basis => exit 2 (fail-closed, evidence required)', async () => {
+    await writeArtifact(
+      'direction-fork.json',
+      directionFork({ intent_cannot_break_tie: forkCondition(true, '   ') }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('intent_cannot_break_tie');
+  });
+
+  // ── P0: malformed carrier fail-closes (outermost) ───────────────────────────
+  test('P0: malformed direction-fork.json => exit 2 malformed (fail-closed, precedes every yield)', async () => {
+    await writeArtifact('direction-fork.json', '{ not valid json');
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('malformed');
+    expect(out.stderr).toContain('direction-fork.json');
+  });
+
+  // ── P2: ADR-0020 intent-conflict pending yields (ac-7, must not regress) ─────
+  test('P2: an intent-conflict pending plan yields => exit 0', async () => {
+    await writeArtifact('decision-conflict.json', {
+      schema_version: '0.1.0',
+      mode: 'autopilot',
+      conflicts: [
+        {
+          adr_id: 'ADR-0006',
+          kind: 'forbid',
+          level: 'intent',
+          basis: 'the request itself wants what ADR-0006 forbids',
+        },
+      ],
+    });
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({ approval_gate: pendingGate, nodes: [pendingImplNode] }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  // ── P4: ADR-0024 oracle-gap pending yields ──────────────────────────────────
+  test('P4: an oracle-gap pending plan yields => exit 0', async () => {
+    // Assignment IS in play (ac-1 has an oracle) but ac-2 — covered by the design
+    // node — has none: the gap a pending plan awaits.
+    await store.update(wiId, (w) => ({
+      ...w,
+      acceptance_criteria: w.acceptance_criteria.map((ac) =>
+        ac.id === 'ac-1'
+          ? {
+              ...ac,
+              oracle: {
+                verification_method: 'soft_judgment',
+                maps_to: 'ac-1',
+                direction: 'backward',
+              },
+            }
+          : ac,
+      ),
+    }));
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({
+        approval_gate: pendingGate,
+        nodes: [
+          node({
+            id: 'D1',
+            kind: 'design',
+            owner: 'planner',
+            status: 'passed',
+            acceptance_refs: ['ac-1', 'ac-2'],
+          }),
+          pendingImplNode,
+        ],
+      }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  // ── P6: routine punt force-continues + records the decision (ac-1) ───────────
+  test('P6: a routine pending force-continues (exit 2) and RECORDS procedure_punt_continued once', async () => {
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({ approval_gate: pendingGate, nodes: [pendingImplNode] }),
+    );
+    const out1 = await run({ stop_hook_active: false });
+    expect(out1.exitCode).toBe(2);
+    expect(out1.stderr).toContain('procedure-punt');
+    // dedup: a second Stop on the same pending state records nothing new.
+    const out2 = await run({ stop_hook_active: false });
+    expect(out2.exitCode).toBe(2);
+    const decisions = await new AutopilotStore(repo).readDecisions(wiId);
+    const punts = decisions.filter((d) => d.decision === 'procedure_punt_continued');
+    expect(punts).toHaveLength(1);
+    expect(punts[0]?.node_id).toContain('N1');
+  });
+
+  // ── NEGATIVE: never force-continue past a real decision (P2/P3/P4 yields) ─────
+  test('NEGATIVE: a high-risk pending is NEVER force-continued (no procedure_punt recorded)', async () => {
+    await store.update(wiId, (w) => ({ ...w, declared_risk: { non_local: true } }));
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({ approval_gate: pendingGate, nodes: [pendingImplNode] }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+    const decisions = await new AutopilotStore(repo).readDecisions(wiId);
+    expect(decisions.some((d) => d.decision === 'procedure_punt_continued')).toBe(false);
+  });
+
+  test('NEGATIVE: an intent-conflict pending is NEVER force-continued', async () => {
+    await writeArtifact('decision-conflict.json', {
+      schema_version: '0.1.0',
+      mode: 'autopilot',
+      conflicts: [
+        {
+          adr_id: 'ADR-0005',
+          kind: 'require',
+          level: 'intent',
+          basis: 'request contradicts ADR-0005',
+        },
+      ],
+    });
+    await writeArtifact(
+      'autopilot.json',
+      autopilot({ approval_gate: pendingGate, nodes: [pendingImplNode] }),
+    );
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+    const decisions = await new AutopilotStore(repo).readDecisions(wiId);
+    expect(decisions.some((d) => d.decision === 'procedure_punt_continued')).toBe(false);
   });
 });
 

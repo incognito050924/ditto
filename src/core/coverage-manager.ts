@@ -588,6 +588,33 @@ export interface PlanGateInput {
    * is a pure presence flag, keeping `producePlanGate` deterministic.
    */
   oracleAssignmentIncomplete?: boolean;
+  /**
+   * Livelock fix (wi_260707loq §2). `mutationGate` returns `present_plan` while the
+   * approval gate is `pending`, so force-continuing a routine pending at Stop alone
+   * re-hits `present_plan` → a Stop/drive livelock. This clears the pending AT SOURCE:
+   * when the chosen plan PRESERVES the frozen purpose (its AC id-set is CONSERVED vs
+   * the frozen intent — the caller computes this reusing `intentDriftGate`'s AC id-set
+   * conservation, exactly the same fact) AND nothing else forces approval, the plan
+   * stage auto-waives to `not_required` so `mutationGate` proceeds instead of stalling
+   * on a pending nobody will approve. A purpose-CHANGING plan is NOT purpose-preserving,
+   * so it never auto-waives here. Optional + backward-compatible: absent ⇒ the status
+   * falls back to `tierBriefApproval(tier)` (the prior behavior).
+   *
+   * CALLER CONTRACT (impl-loop owns the call site, autopilot-loop.ts design-pass):
+   * pass `purposePreserving` = AC id-set conserved (intentDriftGate conservation) and
+   * `highRisk` = highRiskAssumption(riskOf(workItem)). Both are optional so existing
+   * callers that omit them keep the current tier-driven behavior.
+   */
+  purposePreserving?: boolean;
+  /**
+   * Force `status='pending'` for a high-risk change (gates.ts `highRiskAssumption`:
+   * non_local ∨ irreversible ∨ unaudited). Computed caller-side from the work item's
+   * `declared_risk` (the same `riskOf` the Stop hook's P3 yield uses), so a high-risk
+   * plan cannot auto-waive past the approval gate. This WINS over `purposePreserving`
+   * (a high-risk purpose-preserving change still requires approval). Optional +
+   * backward-compatible: absent ⇒ not forced.
+   */
+  highRisk?: boolean;
 }
 
 export interface PlanGatePatch {
@@ -598,10 +625,16 @@ export interface PlanGatePatch {
 
 export function producePlanGate(input: PlanGateInput): PlanGatePatch {
   const tier = selectCoverageTier(input.tierInputs);
+  // forcePending WINS over purposePreserving (ternary order — the guard): an intent
+  // conflict / oracle gap / high-risk change may not auto-waive. Only a NON-forced,
+  // purpose-preserving plan clears to not_required (the §2 livelock fix); otherwise
+  // fall back to the tier (backward compatible when both new flags are absent).
+  const forcePending = input.requireApproval || input.oracleAssignmentIncomplete || input.highRisk;
   return {
-    status:
-      input.requireApproval || input.oracleAssignmentIncomplete
-        ? 'pending'
+    status: forcePending
+      ? 'pending'
+      : input.purposePreserving
+        ? 'not_required'
         : tierBriefApproval(tier),
     change_surface: [...input.changeSurface],
     plan_brief: {

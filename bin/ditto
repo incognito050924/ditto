@@ -19155,6 +19155,10 @@ function dependsOnNode(node, targetId, byId) {
   };
   return visit2(node.id);
 }
+function computeDownstream(nodes, forkNodeId) {
+  const byId = new Map(nodes.map((n2) => [n2.id, n2]));
+  return nodes.filter((n2) => n2.id !== forkNodeId && dependsOnNode(n2, forkNodeId, byId)).map((n2) => n2.id);
+}
 function fileOverlapGate(wave) {
   const claimed = new Set;
   const dispatch = [];
@@ -19868,8 +19872,9 @@ function tierBriefApproval(tier) {
 }
 function producePlanGate(input) {
   const tier = selectCoverageTier(input.tierInputs);
+  const forcePending = input.requireApproval || input.oracleAssignmentIncomplete || input.highRisk;
   return {
-    status: input.requireApproval || input.oracleAssignmentIncomplete ? "pending" : tierBriefApproval(tier),
+    status: forcePending ? "pending" : input.purposePreserving ? "not_required" : tierBriefApproval(tier),
     change_surface: [...input.changeSurface],
     plan_brief: {
       interface_changes: [...input.brief.interface_changes],
@@ -20270,6 +20275,40 @@ function intentDriftGate(a2) {
   }
   return { ...gate(reasons), advisories };
 }
+function directionForkGate(carrier, purposeCheck) {
+  const reasons = [];
+  const hasEvidence = (c3) => c3.basis.trim().length > 0;
+  let purposeChanged;
+  let purposeConserved = false;
+  if (purposeCheck) {
+    const grew = missingFrom(purposeCheck.forkAcIds, new Set(purposeCheck.intentAcIds));
+    const shrank = missingFrom(purposeCheck.intentAcIds, new Set(purposeCheck.forkAcIds));
+    purposeChanged = grew.length > 0 || shrank.length > 0;
+    purposeConserved = !purposeChanged;
+  } else {
+    purposeChanged = carrier.purpose_change.present;
+  }
+  const purposeOk = purposeChanged && hasEvidence(carrier.purpose_change);
+  if (!purposeOk) {
+    reasons.push(purposeConserved ? "purpose_change: not corroborated \u2014 the intent AC id-set is conserved (no purpose change)" : "purpose_change: missing (present:false or empty basis)");
+  }
+  const advantageOk = carrier.no_clear_advantage.present && hasEvidence(carrier.no_clear_advantage);
+  if (!advantageOk) {
+    reasons.push("no_clear_advantage: missing (present:false or empty basis)");
+  }
+  const tieOk = carrier.intent_cannot_break_tie.present && hasEvidence(carrier.intent_cannot_break_tie);
+  if (!tieOk) {
+    reasons.push("intent_cannot_break_tie: missing (present:false or empty basis)");
+  }
+  return {
+    ...gate(reasons),
+    conditions: {
+      purpose_change: purposeOk,
+      no_clear_advantage: advantageOk,
+      intent_cannot_break_tie: tieOk
+    }
+  };
+}
 function interfaceBaselineDriftGate(baseline, current) {
   if (baseline === undefined)
     return gate([]);
@@ -20301,6 +20340,27 @@ function landGate(status, finalVerdict, uncommittedChangedFiles) {
 // src/core/autopilot-bootstrap.ts
 init_id();
 init_work_item_store();
+function seedE2eAuthorNode(nodes) {
+  const design = nodes.find((n2) => n2.kind === "design");
+  if (!design)
+    return nodes;
+  const e2eAuthorId = `${design.id}-e2e-author`;
+  if (nodes.some((n2) => n2.id === e2eAuthorId))
+    return nodes;
+  const e2eAuthor = {
+    id: e2eAuthorId,
+    kind: "e2e-author",
+    owner: kindToOwner("e2e-author"),
+    purpose: "Author the e2e journey with the user before implementation (entry-phase dialogue)",
+    status: "pending",
+    depends_on: [design.id],
+    acceptance_refs: [],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 }
+  };
+  const rewired = nodes.map((n2) => n2.id !== design.id && n2.depends_on.includes(design.id) ? { ...n2, depends_on: n2.depends_on.map((d2) => d2 === design.id ? e2eAuthorId : d2) } : n2);
+  return rewired.flatMap((n2) => n2.id === design.id ? [n2, e2eAuthor] : [n2]);
+}
 function approvalGate(input) {
   const base = { approved_at: null, approved_by: null, evidence_refs: [] };
   if (input.approvedSource) {
@@ -20354,6 +20414,8 @@ async function bootstrapAutopilot(repoRoot, input) {
     ...input.now ? { now: input.now } : {}
   });
   const acceptanceIds = input.intent.acceptance_criteria.map((c3) => c3.id);
+  const seededNodes = (input.generateNodes ?? defaultNodeGenerator)(acceptanceIds);
+  const nodes = input.e2eOptIn ? seedE2eAuthorNode(seededNodes) : seededNodes;
   const graph = {
     schema_version: "0.1.0",
     autopilot_id: autopilotId2,
@@ -20362,7 +20424,7 @@ async function bootstrapAutopilot(repoRoot, input) {
     root_goal: input.intent.goal,
     completion_boundary: "entire_work_item",
     approval_gate: approvalGate(input),
-    nodes: (input.generateNodes ?? defaultNodeGenerator)(acceptanceIds),
+    nodes,
     caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 },
     continue_policy: {
       continue_after_approval: true,
@@ -20676,6 +20738,9 @@ class CompletionStore {
 }
 
 // src/core/autopilot-complete.ts
+function hasVerifyEvidence(criterion) {
+  return criterion.evidence.some((e2) => e2.kind === "command");
+}
 var SEVERITY = { fail: 0, partial: 1, unverified: 2, pass: 3 };
 var worst = (a2, b2) => SEVERITY[a2] <= SEVERITY[b2] ? a2 : b2;
 function perAcEvidence(node, acId) {
@@ -20770,7 +20835,7 @@ function dependsOnNode2(node, targetId, byId) {
 function isStructuralUnverified(node, acId) {
   return node.status === "passed" && !hasClosingEvidence(node, acId) && node.ac_verdicts.every((v2) => v2.criterion_id !== acId || v2.verdict === "pass");
 }
-function deriveAcVerdicts(graph, acIds, oracles) {
+function deriveAcVerdicts(graph, acIds, oracles, criteria) {
   const byId = new Map(graph.nodes.map((n2) => [n2.id, n2]));
   return acIds.map((acId) => {
     const oracle = oracles?.get(acId);
@@ -20809,7 +20874,14 @@ function deriveAcVerdicts(graph, acIds, oracles) {
     } else if (structuralSuperseded && verdict2 === "pass") {
       notes = `evidence-less implementation pass covered by a downstream verified pass (${acId})`;
     }
-    return { criterion_id: acId, verdict: verdict2, evidence, ...notes ? { notes } : {} };
+    let finalEvidence = evidence;
+    const criterion = criteria?.get(acId);
+    if (verdict2 !== "pass" && criterion && criterion.verdict === "pass" && hasVerifyEvidence(criterion)) {
+      verdict2 = "pass";
+      notes = `stale node verdict superseded by a fresh evidence-backed \`ditto verify\` pass (${acId})`;
+      finalEvidence = [...evidence, ...criterion.evidence];
+    }
+    return { criterion_id: acId, verdict: verdict2, evidence: finalEvidence, ...notes ? { notes } : {} };
   });
 }
 function unresolvedAgentResolvableRiskRecords(decisions, graph) {
@@ -20832,7 +20904,8 @@ function unresolvedAgentResolvableRiskRecords(decisions, graph) {
 function assembleCompletionFromGraph(graph, workItem2, opts = {}) {
   const acIds = workItem2.acceptance_criteria.map((c3) => c3.id);
   const oracles = new Map(workItem2.acceptance_criteria.map((c3) => [c3.id, c3.oracle]));
-  const verdicts = deriveAcVerdicts(graph, acIds, oracles);
+  const criteria = new Map(workItem2.acceptance_criteria.map((c3) => [c3.id, c3]));
+  const verdicts = deriveAcVerdicts(graph, acIds, oracles, criteria);
   const summary = opts.summary ?? `Completion assembled from autopilot ${graph.autopilot_id} (${graph.nodes.length} nodes) for "${workItem2.goal}".`;
   const nonTerminal = graph.nodes.filter((n2) => n2.status !== "passed" && n2.status !== "failed");
   const remainingRisks = [
@@ -20877,6 +20950,29 @@ function projectAutoHandling(decisions) {
       ledger.materialized.push(entry);
   }
   return ledger;
+}
+function projectDirectionDecisions(decisions) {
+  const entries = [];
+  decisions.forEach((d2, index) => {
+    if (d2.decision !== "direction")
+      return;
+    const record = d2.direction_record;
+    if (!record)
+      return;
+    entries.push({
+      decision_id: synthesizeDecisionId(d2, index),
+      node_id: d2.node_id,
+      fork_node_id: record.fork_node_id,
+      trigger: record.trigger,
+      options: record.options,
+      choice: record.choice,
+      intent_basis: record.intent_basis,
+      blast_radius: record.blast_radius,
+      reverse_cost: record.reverse_cost,
+      reason: d2.reason
+    });
+  });
+  return entries;
 }
 
 // src/core/autopilot-loop.ts
@@ -21463,6 +21559,22 @@ var decisionConflictCarrier = exports_external.object({
   mode: exports_external.enum(["interactive", "autopilot"]),
   conflicts: exports_external.array(decisionConflict).default([])
 }).describe("Persisted inputs to decisionConflictGate, written by the detecting node");
+
+// src/schemas/direction-fork-carrier.ts
+init_zod();
+init_common();
+var directionForkCondition = exports_external.object({
+  present: exports_external.boolean().describe("The declaring node asserts this condition holds for the fork"),
+  basis: exports_external.string().describe("Evidence for the condition (empty in a partial carrier)")
+}).describe("One of the three direction-fork conditions: an assertion plus its evidence");
+var directionForkCarrier = exports_external.object({
+  schema_version: schemaVersion,
+  mode: exports_external.enum(["interactive", "autopilot"]),
+  node_id: exports_external.string().min(1).describe("The node at which the direction fork occurred"),
+  purpose_change: directionForkCondition,
+  no_clear_advantage: directionForkCondition,
+  intent_cannot_break_tie: directionForkCondition
+}).describe("Persisted inputs to directionForkGate, written by the node that hit the fork");
 
 // src/schemas/owner-return-envelope.ts
 init_zod();
@@ -25732,6 +25844,19 @@ var recordResultPayload = exports_external.object({
   })).optional().describe("A node's structured residual-risk records (ac-3); agent_resolvable auto-fixes, the four " + "surface classes surface in-flow. Each route is disclosed in the decision-log ledger."),
   follow_ups: exports_external.array(exports_external.object({ item: exports_external.string().min(1), in_scope: exports_external.boolean() })).optional().describe("A node's surfaced follow-ups (ac-4); in-scope ones are driven as graph nodes, out-of-scope " + "ones emit a single batch-escalate signal (materialize \u2260 drive, R9)."),
   blocked_by_tool: exports_external.object({ tool: exports_external.string().min(1), grounding: exports_external.string().min(1) }).optional().describe("R5/ADR-0018: an auto-resolve item blocked only by an optional tool absence; surface " + "blocked_external rather than splice an endless re-verify."),
+  direction_fork: exports_external.object({
+    trigger: exports_external.string().min(1),
+    options: exports_external.array(exports_external.string().min(1)),
+    choice: exports_external.string().min(1),
+    intent_basis: exports_external.string().min(1),
+    blast_radius: exports_external.string().min(1),
+    reverse_cost: exports_external.string().min(1)
+  }).optional().describe("A node-declared autonomous direction fork (ac-3): a clear-advantage, purpose-preserving " + "choice. The loop confirms purpose preservation (intentDriftGate id-set conservation) and " + "appends a `direction` decision, proceeding without a stop."),
+  direction_fork_stop: exports_external.object({
+    purpose_change: directionForkCondition,
+    no_clear_advantage: directionForkCondition,
+    intent_cannot_break_tie: directionForkCondition
+  }).optional().describe("A node-declared GENUINE 3-condition direction-fork STOP (ac-2). The loop writes the " + "direction-fork.json carrier the Stop hook reads (P1 yield on complete, P5 force + named " + "gap on partial). Distinct from the ac-3 autonomous-proceed `direction_fork`."),
   envelope: ownerReturnEnvelope.optional().describe("The owner-return envelope (ac-1): human return + distinct machine slots. Summary is the " + "only context-loaded slot (ac-2); verbatim_detail is lossless (no size-cap).")
 }).superRefine((value, ctx) => {
   if (value.outcome === "fail" && value.failure_class === undefined) {
@@ -25981,6 +26106,17 @@ async function recordResultCore(repoRoot, input) {
     throw new Error(`node ${node2.id} is not running (status=${node2.status}); call next-node first to dispatch it`);
   }
   await new ActiveNodeLeaseStore(repoRoot).removeByNode(input.workItemId, node2.id);
+  if (input.payload.direction_fork_stop !== undefined) {
+    await ensureDir(localDir(repoRoot, "work-items", input.workItemId));
+    await writeJson(localDir(repoRoot, "work-items", input.workItemId, "direction-fork.json"), directionForkCarrier, {
+      schema_version: "0.1.0",
+      mode: "autopilot",
+      node_id: node2.id,
+      purpose_change: input.payload.direction_fork_stop.purpose_change,
+      no_clear_advantage: input.payload.direction_fork_stop.no_clear_advantage,
+      intent_cannot_break_tie: input.payload.direction_fork_stop.intent_cannot_break_tie
+    });
+  }
   const guard = guardChildResult(input.payload.result_text);
   let contentful = guard.contentful;
   let outcome = input.payload.outcome;
@@ -26279,6 +26415,32 @@ async function recordResultCore(repoRoot, input) {
         });
       }
     }
+    const directionFork = input.payload.direction_fork;
+    if (directionFork) {
+      const intent = await intents.exists(input.workItemId) ? await intents.get(input.workItemId) : undefined;
+      if (intent) {
+        const workItem2 = await new WorkItemStore(repoRoot).get(input.workItemId);
+        const currentGraph = await aps.get(input.workItemId);
+        const drift = intentDriftGate({ intent, workItem: workItem2, graph: currentGraph });
+        if (drift.reasons.length === 0) {
+          await aps.appendDecision(input.workItemId, {
+            ts: (input.now ?? new Date).toISOString(),
+            node_id: node2.id,
+            decision: "direction",
+            reason: `autonomous direction fork resolved with a clear advantage; frozen purpose preserved (AC id-set conserved): ${directionFork.trigger}`,
+            direction_record: {
+              fork_node_id: node2.id,
+              trigger: directionFork.trigger,
+              options: directionFork.options,
+              choice: directionFork.choice,
+              intent_basis: directionFork.intent_basis,
+              blast_radius: directionFork.blast_radius,
+              reverse_cost: directionFork.reverse_cost
+            }
+          });
+        }
+      }
+    }
     const proposals = input.payload.generated_nodes ?? [];
     let promotedNodeIds = [];
     let supersededNodeIds = [];
@@ -26325,6 +26487,17 @@ async function recordResultCore(repoRoot, input) {
         const inPlay = new Set(node2.acceptance_refs);
         oracleAssignmentIncomplete = updated.acceptance_criteria.some((ac) => inPlay.has(ac.id) && ac.oracle === undefined);
       }
+      const grownGraph = await aps.get(input.workItemId);
+      const workItem2 = await new WorkItemStore(repoRoot).get(input.workItemId);
+      const planIntent = await intents.exists(input.workItemId) ? await intents.get(input.workItemId) : undefined;
+      const drift = planIntent ? intentDriftGate({ intent: planIntent, workItem: workItem2, graph: grownGraph }) : { reasons: ["no intent.json \u2014 frozen purpose cannot be confirmed"] };
+      const purposePreserving = drift.reasons.length === 0;
+      const declaredRisk2 = workItem2.declared_risk ?? {};
+      const highRisk = highRiskAssumption({
+        non_local: declaredRisk2.non_local ?? false,
+        irreversible: declaredRisk2.irreversible ?? false,
+        unaudited: declaredRisk2.unaudited ?? false
+      });
       const patch = producePlanGate({
         changeSurface: pb.change_surface,
         brief: {
@@ -26334,7 +26507,9 @@ async function recordResultCore(repoRoot, input) {
         },
         tierInputs: pb.tier_inputs,
         requireApproval,
-        oracleAssignmentIncomplete
+        oracleAssignmentIncomplete,
+        purposePreserving,
+        highRisk
       });
       const current = await aps.get(input.workItemId);
       await aps.write(input.workItemId, {
@@ -31688,6 +31863,11 @@ var autopilotBootstrap = defineCommand({
       description: "Set when the change introduces dependencies / surfaces nobody has reviewed",
       default: false
     },
+    e2e: {
+      type: "boolean",
+      description: "Opt in to entry-phase E2E authoring: seed a main-session e2e-author node between design and implement (wi_260707loq ac-6)",
+      default: false
+    },
     approvedSource: {
       type: "string",
       description: "Pre-approval source: approved_spec|issue|prd|user (omit for auto risk gate)",
@@ -31737,6 +31917,7 @@ var autopilotBootstrap = defineCommand({
         irreversible: args.riskIrreversible,
         unaudited: args.riskUnaudited
       },
+      e2eOptIn: args.e2e,
       ...approvedSource ? { approvedSource } : {}
     });
     if (result2.status !== "created") {
@@ -32040,6 +32221,7 @@ var autopilotComplete = defineCommand({
       });
       const attestation = attestCompletion(completion);
       const autoHandling = projectAutoHandling(decisions);
+      const directionDecisions = projectDirectionDecisions(decisions);
       const followUpsToPickUp = (workItem2.follow_ups ?? []).filter((f3) => !f3.resolved && f3.materialized_wi).map((f3) => ({ work_item_id: f3.materialized_wi, note: f3.note }));
       if (format === "json") {
         writeJson2({
@@ -32066,6 +32248,7 @@ var autopilotComplete = defineCommand({
           })),
           attestation,
           auto_handling: autoHandling,
+          direction_decisions: directionDecisions,
           cite_gate: {
             verdict: cite.verdict,
             pushed_node_ids: cite.pushed_node_ids,
@@ -32122,6 +32305,18 @@ var autopilotComplete = defineCommand({
             writeHuman(`    [${e2.decision}] ${e2.node_id}${e2.resolvability ? ` (${e2.resolvability})` : ""}: ${e2.reason}`);
           }
         }
+        if (directionDecisions.length === 0) {
+          writeHuman("  \uBC29\uD5A5 \uACB0\uC815 (direction forks, ac-4): none (\uC790\uC728 \uBC29\uD5A5\uBD84\uAE30 \uC5C6\uC74C)");
+        } else {
+          writeHuman(`  \uBC29\uD5A5 \uACB0\uC815 (direction forks, ac-4): ${directionDecisions.length}\uAC74`);
+          for (const d2 of directionDecisions) {
+            writeHuman(`    [${d2.node_id}] fork=${d2.fork_node_id} (decision ${d2.decision_id})`);
+            writeHuman(`      \uBB34\uC5C7\uB54C\uBB38\uC5D0: ${d2.trigger}`);
+            writeHuman(`      \uC120\uD0DD\uC9C0: ${d2.options.join("; ")}`);
+            writeHuman(`      \uC120\uD0DD+\uC758\uB3C4\uADFC\uAC70: ${d2.choice} \u2014 ${d2.intent_basis}`);
+            writeHuman(`      \uD30C\uAE09/\uB418\uB3CC\uB9AC\uAE30\uBE44\uC6A9: ${d2.blast_radius} / ${d2.reverse_cost}`);
+          }
+        }
         if (completion.final_verdict !== "pass") {
           writeHuman("  (non-pass: criteria without evidence stay unverified \u2014 close them, then re-run)");
         }
@@ -32151,6 +32346,129 @@ var autopilotComplete = defineCommand({
       }
     } catch (err) {
       writeError(`complete failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+function nextForkGeneration(nodeIds) {
+  let max = 0;
+  for (const id of nodeIds) {
+    const g3 = /~r(\d+)$/.exec(id)?.[1];
+    if (g3 !== undefined) {
+      const n2 = Number(g3);
+      if (n2 > max)
+        max = n2;
+    }
+  }
+  return max + 1;
+}
+function freshForkId(origId, gen) {
+  return `${origId.replace(/~r\d+$/, "")}~r${gen}`;
+}
+var autopilotRevise = defineCommand({
+  meta: {
+    name: "revise",
+    description: "Re-drive the subgraph downstream of a direction fork with fresh node ids (ac-5)"
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    decision: {
+      type: "string",
+      description: "Target direction decision \u2014 its decision_id (from `complete`) or the fork node id",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    try {
+      const aps = new AutopilotStore(repoRoot);
+      const decisions = await aps.readDecisions(args.workItem);
+      const directions = projectDirectionDecisions(decisions);
+      const matches = directions.filter((d2) => d2.decision_id === args.decision || d2.fork_node_id === args.decision);
+      if (matches.length === 0) {
+        writeError(`no direction decision matched "${args.decision}" for ${args.workItem}. Available: ${directions.map((d2) => `${d2.decision_id} (fork ${d2.fork_node_id})`).join(", ") || "(none)"}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (matches.length > 1) {
+        writeError(`"${args.decision}" is ambiguous (${matches.length} direction decisions share it). Re-run with a specific decision_id: ${matches.map((d2) => d2.decision_id).join(", ")}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const [target] = matches;
+      if (!target) {
+        writeError(`no direction decision matched "${args.decision}"`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const forkNodeId = target.fork_node_id;
+      const graph = await aps.get(args.workItem);
+      const byId = new Map(graph.nodes.map((n2) => [n2.id, n2]));
+      if (!byId.has(forkNodeId)) {
+        writeError(`fork node ${forkNodeId} is no longer in the graph for ${args.workItem}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const downstreamIds = computeDownstream(graph.nodes, forkNodeId);
+      const gen = nextForkGeneration(graph.nodes.map((n2) => n2.id));
+      const idMap = new Map(downstreamIds.map((id) => [id, freshForkId(id, gen)]));
+      const proposals = [];
+      for (const id of downstreamIds) {
+        const n2 = byId.get(id);
+        const freshId = idMap.get(id);
+        if (!n2 || freshId === undefined)
+          continue;
+        proposals.push({
+          id: freshId,
+          kind: n2.kind,
+          purpose: n2.purpose,
+          depends_on: n2.depends_on.map((dep) => idMap.get(dep) ?? dep),
+          acceptance_refs: n2.acceptance_refs,
+          ...n2.agent_hint !== undefined ? { agent_hint: n2.agent_hint } : {},
+          ...n2.file_scope !== undefined ? { file_scope: n2.file_scope } : {}
+        });
+      }
+      const fresh = proposalsToNodes(proposals);
+      for (const id of downstreamIds) {
+        const n2 = byId.get(id);
+        if (n2 && n2.status !== "pending") {
+          await aps.updateNode(args.workItem, id, (cur) => ({ ...cur, status: "pending" }));
+        }
+      }
+      await aps.removeNodes(args.workItem, downstreamIds);
+      await aps.addNodes(args.workItem, fresh);
+      await aps.updateNode(args.workItem, forkNodeId, (cur) => ({ ...cur, status: "pending" }));
+      const regenerated = downstreamIds.map((from) => ({ from, to: idMap.get(from) })).filter((r3) => r3.to !== undefined);
+      if (format === "json") {
+        writeJson2({
+          work_item_id: args.workItem,
+          fork_node_id: forkNodeId,
+          decision_id: target.decision_id,
+          removed_node_ids: downstreamIds,
+          regenerated,
+          fork_reset_to: "pending"
+        });
+      } else {
+        writeHuman(`Revised ${args.workItem} from direction fork ${forkNodeId} (decision ${target.decision_id}):`);
+        writeHuman(`  removed downstream (${downstreamIds.length}): ${downstreamIds.join(", ") || "(none)"}`);
+        if (regenerated.length > 0) {
+          writeHuman(`  regenerated with fresh ids (${regenerated.length}):`);
+          for (const r3 of regenerated)
+            writeHuman(`    ${r3.from} -> ${r3.to}`);
+        }
+        writeHuman(`  fork ${forkNodeId} reset to pending \u2014 re-drive: ditto autopilot next-node --workItem ${args.workItem}`);
+      }
+    } catch (err) {
+      writeError(`revise failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
     }
   }
@@ -32843,6 +33161,7 @@ var autopilotCommand = defineCommand({
     "next-node": autopilotNextNode,
     "record-result": autopilotRecordResult,
     complete: autopilotComplete,
+    revise: autopilotRevise,
     cleanup: autopilotCleanup,
     "propose-e2e": autopilotProposeE2e,
     "intent-drift": autopilotIntentDrift,
@@ -45467,6 +45786,39 @@ async function recordIntentDriftMetric(repoRoot, workItemId2, drift) {
     await store.appendMetricLine(workItemId2, JSON.stringify(record));
   } catch {}
 }
+function riskOf(workItem2) {
+  const r4 = workItem2.declared_risk;
+  return {
+    non_local: !!r4?.non_local,
+    irreversible: !!r4?.irreversible,
+    unaudited: !!r4?.unaudited
+  };
+}
+function oracleGapPending(workItem2, graph) {
+  const assignmentInPlay = workItem2.acceptance_criteria.some((ac) => ac.oracle !== undefined);
+  if (!assignmentInPlay)
+    return false;
+  const inPlay = new Set(graph.nodes.filter((n3) => n3.kind === "design").flatMap((n3) => n3.acceptance_refs));
+  return workItem2.acceptance_criteria.some((ac) => inPlay.has(ac.id) && ac.oracle === undefined);
+}
+async function maybeRecordProcedurePunt(repoRoot, workItemId2, graph) {
+  try {
+    const signature2 = graph.nodes.filter((n3) => n3.owner === "implementer" && n3.status === "pending").map((n3) => n3.id).sort().join(",");
+    if (signature2.length === 0)
+      return;
+    const store = new AutopilotStore(repoRoot);
+    const existing = await store.readDecisions(workItemId2);
+    if (existing.some((d2) => d2.decision === "procedure_punt_continued" && d2.node_id === signature2)) {
+      return;
+    }
+    await store.appendDecision(workItemId2, {
+      ts: new Date().toISOString(),
+      node_id: signature2,
+      decision: "procedure_punt_continued",
+      reason: "Stop hook force-continued a routine procedure-punt pause (approval pending, no intent-conflict / high-risk / oracle-gap decision to yield for)"
+    });
+  } catch {}
+}
 var stopHandler = async (input) => {
   const raw = input.raw ?? {};
   if (raw.stop_hook_active === true)
@@ -45500,6 +45852,7 @@ var stopHandler = async (input) => {
   const semantic = await readArtifact(join71(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
   const knowledge = await readArtifact(join71(dir, "knowledge-gate.json"), knowledgeGateCarrier, "knowledge-gate.json");
   const decisionConflicts = await readArtifact(join71(dir, "decision-conflict.json"), decisionConflictCarrier, "decision-conflict.json");
+  const directionFork = await readArtifact(join71(dir, "direction-fork.json"), directionForkCarrier, "direction-fork.json");
   const malformed = [
     completion,
     conv,
@@ -45511,7 +45864,8 @@ var stopHandler = async (input) => {
     impact,
     semantic,
     knowledge,
-    decisionConflicts
+    decisionConflicts,
+    directionFork
   ].find((a4) => a4.status === "malformed");
   if (malformed && malformed.status === "malformed") {
     return {
@@ -45520,11 +45874,25 @@ var stopHandler = async (input) => {
 `
     };
   }
-  if (pilot.status === "ok" && pilot.data.approval_gate.status === "pending" && hasPendingMutatingNode(pilot.data)) {
-    return { exitCode: 0 };
-  }
   const reasons = [];
   const advisories = [];
+  const forkGate = directionFork.status === "ok" ? directionForkGate(directionFork.data) : undefined;
+  if (forkGate?.pass === true)
+    return { exitCode: 0 };
+  if (pilot.status === "ok" && pilot.data.approval_gate.status === "pending" && hasPendingMutatingNode(pilot.data)) {
+    if (decisionConflicts.status === "ok" && decisionConflictRequiresApproval(decisionConflicts.data.conflicts)) {
+      return { exitCode: 0 };
+    }
+    if (highRiskAssumption(riskOf(workItem2)))
+      return { exitCode: 0 };
+    if (oracleGapPending(workItem2, pilot.data))
+      return { exitCode: 0 };
+    await maybeRecordProcedurePunt(input.repoRoot, pointer, pilot.data);
+    reasons.push(`autopilot approval is pending on a routine procedure-punt (no intent-conflict / high-risk / oracle-gap decision to yield for) \u2014 force-continuing; approve the plan ("ditto autopilot approve ${workItem2.id}") to stop being re-prompted`);
+  }
+  if (forkGate && forkGate.pass === false) {
+    reasons.push(...forkGate.reasons.map((r4) => `direction fork incomplete \u2014 ${r4}`));
+  }
   let completionWouldClose = false;
   if (completion.status === "ok") {
     const g4 = completionGate(workItem2, completion.data);
@@ -53222,4 +53590,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=63d4f6934ba5310c54c75e22537637a638941d9d8460d5699ccd28058b17a26a
+//# ditto-src-stamp=525bd4adda53c0e6969fc233040793801a36cb12a72b2928271f7ef38f2ca899
