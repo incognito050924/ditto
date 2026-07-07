@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -110,5 +110,44 @@ describe('deep-interview start ← .ditto/local/config.json deep_interview block
     expect(res.exitCode).toBe(0);
     expect(JSON.parse(res.stdout).generators).toBe(1);
     expect(res.stderr).toContain('config.json');
+  });
+});
+
+// 기제 C (wi_260706n4w): the CLI `deep-interview start` is the seam that turns
+// user-intent dimension seeding ON (driver default stays false, ac-6) — mirroring
+// the coverage-next seam for `seedCategories`. The seeded ids are surfaced so the
+// SKILL driver knows which user-intent lenses to carry into the interview.
+describe('deep-interview start seeds user-intent far-field dimensions at the CLI seam (wi_260706n4w)', () => {
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'ditto-di-seed-'));
+    git(['init']);
+  });
+
+  test('start seeds floor user-intent categories as dimensions and surfaces them in JSON', async () => {
+    const wi = JSON.parse(
+      spawnDitto(['work', 'start', 'seed target', '--request', 'seed e2e', '--output', 'json'])
+        .stdout,
+    ).work_item_id as string;
+    const res = spawnDitto(['deep-interview', 'start', '--workItem', wi, '--output', 'json']);
+    expect(res.exitCode).toBe(0);
+    const parsed = JSON.parse(res.stdout) as { seeded_dimensions: string[] };
+    expect(parsed.seeded_dimensions).toContain('authorization-model');
+    expect(parsed.seeded_dimensions).toContain('regulatory');
+    // persisted in interview-state.json on disk, not just printed.
+    const stateRaw = await readFile(
+      join(dir, '.ditto', 'local', 'work-items', wi, 'interview-state.json'),
+      'utf8',
+    );
+    const state = JSON.parse(stateRaw) as {
+      dimensions: { id: string; critical: boolean; state: string }[];
+    };
+    const seeded = state.dimensions.filter(
+      (d) => d.id === 'authorization-model' || d.id === 'regulatory',
+    );
+    expect(seeded).toHaveLength(2);
+    for (const d of seeded) {
+      expect(d.critical).toBe(false);
+      expect(d.state).toBe('unknown');
+    }
   });
 });

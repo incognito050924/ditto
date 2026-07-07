@@ -44,7 +44,9 @@ describe('category seeding (wi_260622vjo §8-2)', () => {
     if (first.action !== 'interrogate') return;
 
     const map = await new CoverageStore(repo).getMap(WI);
-    // root + 23 category nodes
+    // root + 23 category nodes — still 23 after wi_260706n4w (minimal-increment
+    // routed out to the charter self-check, authorization facet-split back in;
+    // the removal is ledgered in the report's routed_out, not silently dropped)
     expect(map.nodes.filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX)).length).toBe(23);
     expect(map.nodes.length).toBe(24);
 
@@ -82,6 +84,23 @@ describe('category seeding (wi_260622vjo §8-2)', () => {
 
     const map = await new CoverageStore(repo).getMap(WI);
     expect(map.nodes.length).toBe(1);
+  });
+});
+
+// wi_260706n4w ac-2/ac-3 — disposition routing metadata must survive the seed →
+// coverage.json → read round-trip (the schema seam), and a routed category seeds
+// OPEN (fail-open: ac-4's deep-interview wiring closes it downstream, never seed).
+describe('disposition routing metadata at seed (wi_260706n4w ac-2/ac-3)', () => {
+  test('a routed floor category persists its disposition through coverage.json and stays open', async () => {
+    await nextCoverageNode({ repoRoot: repo, workItemId: WI, seedCategories: true });
+    const map = await new CoverageStore(repo).getMap(WI);
+    const model = map.nodes.find((n) => n.id === `${CATEGORY_NODE_PREFIX}authorization-model`);
+    expect(model?.disposition).toBe('user-intent');
+    expect(model?.state).toBe('open');
+    const enforce = map.nodes.find((n) => n.id === `${CATEGORY_NODE_PREFIX}authorization`);
+    expect(enforce?.disposition).toBe('code-verify');
+    // minimal-increment no longer seeds a node — its removal is ledgered instead
+    expect(map.nodes.some((n) => n.id === `${CATEGORY_NODE_PREFIX}minimal-increment`)).toBe(false);
   });
 });
 

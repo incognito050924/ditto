@@ -17,6 +17,7 @@ import { bootstrapAutopilot } from './autopilot-bootstrap';
 import { nextCoverageNode, recordCoverageRound } from './coverage-loop';
 import { serializePlanDialog } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
+import { loadFarFieldTaxonomy } from './coverage-taxonomy';
 import { type GateResult, type RiskAxes, deriveClosureMode, interviewReadinessGate } from './gates';
 import { IntentStore } from './intent-store';
 import { InterviewStore } from './interview-store';
@@ -54,6 +55,17 @@ export interface StartInput {
   questionCap?: number;
   /** Fan-out count for the SKILL question-generator loop (default 1 = serial-equivalent). */
   generators?: number;
+  /**
+   * 기제 C (wi_260706n4w): seed each `user-intent`-disposition far-field category
+   * (resolved taxonomy: floor + tier-② config) as an interview DIMENSION so the
+   * user answers it at the intent stage. Seeds are non-critical + `unknown` —
+   * fail-open (ac-4): an unanswered seed never blocks readiness, projects as an
+   * OPEN closeable `cov-dim-*` node, and the category stays in the plan-stage
+   * sweep; only an actual interview resolution closes it. Default false so every
+   * existing caller is unchanged (ac-6); the CLI `deep-interview start` seam
+   * enables it (same pattern as coverage-loop `seedCategories` + coverage-next).
+   */
+  seedUserIntentDimensions?: boolean;
   now?: Date;
 }
 
@@ -63,13 +75,28 @@ export async function startInterview(
 ): Promise<InterviewState & { generators: number }> {
   const now = (input.now ?? new Date()).toISOString();
   const generators = input.generators ?? DEFAULT_GENERATORS;
+  // 기제 C: user-intent categories become closeable interview dimensions. The lens
+  // rides `notes` so the interviewer sees the probing question and the projected
+  // cov-dim node inherits it as its label (projectInterviewDimensions).
+  const seededDimensions = input.seedUserIntentDimensions
+    ? (await loadFarFieldTaxonomy(repoRoot))
+        .filter((c) => c.disposition === 'user-intent')
+        .map((c) => ({
+          id: c.id,
+          critical: false,
+          state: 'unknown' as const,
+          ambiguity: 1,
+          resolved_by: [],
+          notes: c.lens,
+        }))
+    : [];
   const initial: InterviewState = {
     schema_version: '0.1.0',
     work_item_id: input.workItemId,
     status: 'active',
     started_at: now,
     updated_at: now,
-    dimensions: [],
+    dimensions: seededDimensions,
     readiness: {
       score: 0,
       threshold: input.threshold ?? DEFAULT_THRESHOLD,

@@ -1,9 +1,13 @@
-import type {
-  CoverageMap,
-  CoverageNode,
-  CoverageRoundPayload,
-  RawRelevanceJudgment,
-  RelevanceRefute,
+import {
+  type CoverageDisposition,
+  type CoverageMap,
+  type CoverageNode,
+  type CoverageRoundPayload,
+  DEFAULT_COVERAGE_DISPOSITION,
+  type OracleVerdict,
+  type RawRelevanceJudgment,
+  type RelevanceRefute,
+  oracleProvenance,
 } from '~/schemas/coverage';
 import {
   COVERAGE_AXIS_MECHANISMS,
@@ -23,6 +27,12 @@ import {
   serializePlanDialog,
   tierDepthBudget,
 } from './coverage-manager';
+import {
+  type OracleClaimInput,
+  type OracleExecOptions,
+  evaluateOracleClaim,
+  isHardRejected,
+} from './coverage-oracle';
 import { CoverageStore } from './coverage-store';
 import {
   CATEGORY_NODE_PREFIX,
@@ -32,7 +42,7 @@ import {
   loadFarFieldTaxonomy,
 } from './coverage-taxonomy';
 import { localDir } from './ditto-paths';
-import { atomicWriteText } from './fs';
+import { atomicWriteText, readJson, writeJson } from './fs';
 import { IntentStore } from './intent-store';
 import { WorkItemStore } from './work-item-store';
 
@@ -72,6 +82,97 @@ async function writeDryCounter(repoRoot: string, workItemId: string, n: number):
   // mid-write could leave a truncated value that readDryCounter silently coerces
   // to 0 (a silent dry-counter reset). Atomic write closes that (wi_260625txs).
   await atomicWriteText(dryCounterPath(repoRoot, workItemId), String(n));
+}
+
+/**
+ * Oracle-verdict audit sidecar (wi_260706n4w ac-1) — mirrors the
+ * relevance-provenance.json precedent: raw ENFORCE-set verdicts persist next to
+ * coverage.json. Written from the loop (dry-counter precedent for a loop-owned
+ * sidecar) because the verdicts are ROUND artifacts, not seed artifacts.
+ */
+function oracleProvenancePath(repoRoot: string, workItemId: string): string {
+  return localDir(repoRoot, 'runs', workItemId, 'oracle-provenance.json');
+}
+
+/**
+ * Merge this round's verdicts into the sidecar, keyed by claim_id: a re-evaluated
+ * claim REPLACES its previous verdict (the oracle's truth is the CURRENT working
+ * tree) and a retried/replayed round stays idempotent — no double counting
+ * (same shape as the round's node-id dedupe). `labeler_labels` is preserved
+ * untouched: the verdict-blind labeler (ac-5, n9) owns that array; this loop only
+ * owns the ENFORCE set. The tally is recomputed deterministically here — the
+ * CORRELATE slot is ditto code, never an agent.
+ */
+async function appendOracleVerdicts(
+  repoRoot: string,
+  workItemId: string,
+  verdicts: readonly OracleVerdict[],
+): Promise<void> {
+  const path = oracleProvenancePath(repoRoot, workItemId);
+  const existing = (await Bun.file(path).exists())
+    ? await readJson(path, oracleProvenance)
+    : {
+        // `as const` keeps the literal type — a plain literal widens to `string`,
+        // mismatching oracleProvenance's z.literal('0.1.0') parameter type (n7 LOW).
+        schema_version: '0.1.0' as const,
+        work_item_id: workItemId,
+        oracle_verdicts: [] as OracleVerdict[],
+        labeler_labels: [],
+        tally: {
+          claims: 0,
+          oracle: { confirmed: 0, refuted: 0, advisory_unverified: 0 },
+          labeler: { real: 0, fabricated: 0 },
+        },
+      };
+  const byId = new Map(existing.oracle_verdicts.map((v) => [v.claim_id, v]));
+  for (const v of verdicts) byId.set(v.claim_id, v);
+  const merged = [...byId.values()];
+  const count = (outcome: OracleVerdict['outcome']): number =>
+    merged.filter((v) => v.outcome === outcome).length;
+  await writeJson(path, oracleProvenance, {
+    ...existing,
+    oracle_verdicts: merged,
+    tally: {
+      claims: merged.length,
+      oracle: {
+        confirmed: count('confirmed'),
+        refuted: count('refuted'),
+        advisory_unverified: count('advisory_unverified'),
+      },
+      labeler: {
+        real: existing.labeler_labels.filter((l) => l.label === 'real').length,
+        fabricated: existing.labeler_labels.filter((l) => l.label === 'fabricated').length,
+      },
+    },
+  });
+}
+
+/**
+ * Disposition route of one claim (wi_260706n4w ac-1): the claim's own category
+ * (bare floor id or cov-cat-*) when it names one in the map; otherwise inherited
+ * from the round's node via its ancestor chain (a derived child belongs to its
+ * category's route). No carrier anywhere → DEFAULT_COVERAGE_DISPOSITION
+ * ('code-verify', the pre-disposition behavior). The walk terminates because
+ * tree growth is append-only with parent-must-exist (no cycles by construction).
+ */
+function claimDisposition(
+  map: CoverageMap,
+  roundNodeId: string,
+  categoryId: string | undefined,
+): CoverageDisposition {
+  if (categoryId !== undefined) {
+    const cat = map.nodes.find(
+      (n) => n.id === categoryId || n.id === `${CATEGORY_NODE_PREFIX}${categoryId}`,
+    );
+    return cat?.disposition ?? DEFAULT_COVERAGE_DISPOSITION;
+  }
+  let cur = map.nodes.find((n) => n.id === roundNodeId);
+  while (cur !== undefined) {
+    if (cur.disposition !== undefined) return cur.disposition;
+    const parentId = cur.parent_id;
+    cur = parentId === null ? undefined : map.nodes.find((n) => n.id === parentId);
+  }
+  return DEFAULT_COVERAGE_DISPOSITION;
 }
 
 function rootNode(label: string): CoverageNode {
@@ -333,8 +434,26 @@ function enforceClose(
   signals: CoverageAxisSignals,
   reason: string | undefined,
   residualRisk: string | undefined,
+  oracleVerdicts: readonly OracleVerdict[] = [],
 ): string[] {
   const reasons: string[] = [];
+
+  // Oracle signal (wi_260706n4w ac-1): CONDITIONAL + present-only, following the
+  // balance/priority/temporal pattern below — NEVER unconditionally required
+  // (the intent-stage dimension close supplies only neutrality and must keep
+  // closing, interview-driver.ts). Fail-open: confirmed and every advisory
+  // verdict (shape gate / exec error / tool_absent, ADR-0018 ac-7) pass; ONLY a
+  // decidable-refuted claim in the risk tier (injection/secret-exposure) fails
+  // closed — the round's evidence was fabricated where it matters most.
+  for (const v of oracleVerdicts) {
+    if (isHardRejected(v)) {
+      reasons.push(
+        `oracle hard-rejected close of ${node.id}: risk-tier claim ${v.claim_id}${
+          v.category_id !== undefined ? ` (${v.category_id})` : ''
+        } was refuted against the working tree${v.detail !== undefined ? ` — ${v.detail}` : ''}`,
+      );
+    }
+  }
 
   const gate = coverageClosureGate(map, node.id, state);
   if (!gate.pass) reasons.push(...gate.reasons);
@@ -445,6 +564,18 @@ export async function recordCoverageRound(args: {
   dialogDelta?: Partial<PlanDialogInput>;
   /** Stage selecting the dialog artifact on termination (default 'plan', §6/§9). */
   stage?: CoverageStage;
+  /**
+   * Raw oracle claims this round's sweep surfaced (wi_260706n4w ac-1) — the
+   * oracle-linked evidence behind surfaced risks. Claims whose disposition
+   * resolves to 'code-verify' are evaluated by the deterministic 2-mode oracle
+   * (coverage-oracle.ts); verdicts persist to the oracle-provenance.json sidecar
+   * and feed the close gate (a risk-tier refuted claim blocks THIS round's
+   * close). user-intent / runtime-post-impl claims are NOT oracle-routed (they
+   * belong to other seams). Absent → unchanged behavior (additive-only, ac-6).
+   */
+  oracleClaims?: readonly OracleClaimInput[];
+  /** ADR-0018 tool seam passthrough (gitBin): tool absence degrades to an advisory verdict, never a gate (ac-7). */
+  oracleExec?: OracleExecOptions;
 }): Promise<RecordCoverageRoundResult> {
   const { repoRoot, workItemId, payload } = args;
   const store = new CoverageStore(repoRoot);
@@ -476,6 +607,21 @@ export async function recordCoverageRound(args: {
   });
   await writeDryCounter(repoRoot, workItemId, nextCounter);
 
+  // wi_260706n4w ac-1 (runtime wiring): route this round's 'code-verify' claims
+  // through the deterministic oracle against the actual working tree. Verdicts
+  // persist to the oracle-provenance.json sidecar (advisory verdicts included —
+  // a degradation is evidence too) and feed enforceClose below, where ONLY a
+  // risk-tier refuted claim blocks the close (everything else is fail-open).
+  let oracleVerdicts: OracleVerdict[] = [];
+  if (args.oracleClaims !== undefined && args.oracleClaims.length > 0) {
+    oracleVerdicts = args.oracleClaims
+      .filter((c) => claimDisposition(map, payload.node_id, c.category_id) === 'code-verify')
+      .map((c) => evaluateOracleClaim(c, repoRoot, args.oracleExec ?? {}));
+    if (oracleVerdicts.length > 0) {
+      await appendOracleVerdicts(repoRoot, workItemId, oracleVerdicts);
+    }
+  }
+
   let closed = false;
   let reasons: string[] = [];
   if (payload.close_as !== undefined) {
@@ -490,6 +636,7 @@ export async function recordCoverageRound(args: {
         payload.axis_signals ?? {},
         payload.close_reason,
         payload.residual_risk,
+        oracleVerdicts,
       );
       if (reasons.length === 0) {
         map = closeNode(

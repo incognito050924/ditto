@@ -145,6 +145,62 @@ describe('intent-stage coverage projection drives the SHARED engine to disk (ac-
     expect(after2).toBe(after1);
   });
 
+  // 기제 C fail-open (wi_260706n4w ac-4): a seeded-but-unanswered user-intent
+  // dimension projects as an OPEN closeable cov-dim-* node — it REMAINS in the
+  // sweep (no silent hole). Only an actual interview resolution closes it.
+  test('seeded user-intent dims stay OPEN in the sweep until the interview actually resolves them (ac-4)', async () => {
+    // fresh WI: start WITH user-intent seeding (the beforeEach start has none).
+    const wi2 = await new WorkItemStore(repo).create(
+      {
+        title: 'fail-open seed drive',
+        source_request: 'seed user-intent dims',
+        goal: 'user-intent categories ride the interview, fail-open',
+        acceptance_criteria: [
+          { id: 'ac-1', statement: 'projected', verdict: 'unverified', evidence: [] },
+        ],
+      },
+      NOW,
+    );
+    await startInterview(repo, { workItemId: wi2.id, now: NOW, seedUserIntentDimensions: true });
+
+    // project with NO answers — both seeds must land as OPEN cov-dim nodes.
+    await projectInterviewDimensions(repo, wi2.id);
+    const store = new CoverageStore(repo);
+    let map = await store.getMap(wi2.id);
+    const authModel = map.nodes.find((n) => n.id === 'cov-dim-authorization-model');
+    const regulatory = map.nodes.find((n) => n.id === 'cov-dim-regulatory');
+    expect(authModel?.state).toBe('open');
+    expect(regulatory?.state).toBe('open');
+    // the probing question (lens) rides the node label — the sweep sees the question.
+    expect(authModel?.label ?? '').toContain('인가');
+
+    // the user answers ONE of them → only that one leaves the sweep.
+    await recordTurn(repo, {
+      workItemId: wi2.id,
+      now: NOW,
+      payload: {
+        dimension: {
+          id: 'authorization-model',
+          critical: false,
+          state: 'resolved',
+          ambiguity: 0,
+          notes: '',
+        },
+        question: {
+          text: '누가 접근 가능해야 하나요?',
+          why_matters: '인가 모델이 의도를 결정',
+          info_gain_estimate: 'high',
+        },
+        answer: { text: '소유자 단일 사용자만', kind: 'user' },
+      },
+    });
+    await projectInterviewDimensions(repo, wi2.id);
+    map = await store.getMap(wi2.id);
+    expect(map.nodes.find((n) => n.id === 'cov-dim-authorization-model')?.state).toBe('resolved');
+    // the unanswered seed is STILL open — fail-open, never silently dropped.
+    expect(map.nodes.find((n) => n.id === 'cov-dim-regulatory')?.state).toBe('open');
+  });
+
   test('(3) premortem 승격: recorded into interview-state + §5 gate enforced', async () => {
     // A promoted critical item passes; an unpromoted critical item is flagged.
     const ok = await promotePremortem(

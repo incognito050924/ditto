@@ -5,6 +5,40 @@
  * never the whole charter — tokens/noise).
  */
 
+/**
+ * One executable charter self-check — a probing question the agent must answer
+ * for every change, exported as DATA (id + question + provenance) so a receiving
+ * gate can inject/enforce it rather than paraphrase it (single SoT, no drift).
+ */
+export interface CharterSelfCheck {
+  /** Stable id (kebab) — keeps the lineage to its origin (e.g. a routed-out far-field category). */
+  id: string;
+  /** The probing question, verbatim — the enforcement surface. */
+  question: string;
+  /** Where the check came from and why it lives here. */
+  origin: string;
+}
+
+/**
+ * minimal-increment, routed OUT of the far-field taxonomy floor (wi_260706n4w
+ * ac-2): it probes design-META quality (right-sized increment), not a far RISK,
+ * so it belongs to the charter — the projection re-injected every turn — instead
+ * of the pre-mortem sweep. The far-field completeness ledger keeps the removal
+ * auditable (FAR_FIELD_ROUTED_OUT in coverage-taxonomy — ac-3, no silent
+ * narrowing); this constant is the live receiving end. The question text is the
+ * single SoT: the taxonomy-side ledger record references it verbatim.
+ */
+export const MINIMAL_INCREMENT_SELF_CHECK: CharterSelfCheck = {
+  id: 'minimal-increment',
+  question:
+    '이게 의도를 달성하는 가장 명료하고 작은 증분인가? 추상화가 지금의 실제 복잡도에 비례하나 — 요청되지 않은 기능·설정가능성·확장성, 미래 대비/단일 사용/얕은 추상화로 과하지 않나(과잉이 흔한 실패)? 거꾸로, 이 변경이 새로 들이는 중복·반복을 마땅히 묶지 않아 모자라지 않나(중복은 버그·드리프트의 원천)? 변경한 모든 줄에 요청과 연결된 이유가 있고, 관련 없는 리팩터·포맷 정리가 섞이지 않았나? (목표는 추상화 회피가 아니라 적정 — 실제 복잡도를 줄일 때만 추상화한다. 기존 재사용 가능 자산을 채택했는지는 far-field #reuse-build-vs-buy의 몫)',
+  origin:
+    'far-field taxonomy floor → charter self-check (wi_260706n4w — 설계-메타 품질이라 먼 위험 sweep이 아니라 매 턴 재주입되는 charter가 집행한다)',
+};
+
+/** All executable charter self-checks (projected every turn, below). */
+export const CHARTER_SELF_CHECKS: readonly CharterSelfCheck[] = [MINIMAL_INCREMENT_SELF_CHECK];
+
 const PRIME_DIRECTIVE = [
   'DITTO prime directive:',
   '- Preserve the original request. Do not grow scope (IntentContract); do not shrink it or split one request into many work items without user approval.',
@@ -15,6 +49,10 @@ const PRIME_DIRECTIVE = [
   '- Ask the user only what only the user can answer (QuestionGate); answer the rest from code/docs/web yourself.',
   '- Completion is gated by evidence, not by claim: every acceptance criterion must be closed with evidence before final_verdict=pass.',
   '- Internal checkpoint completion is not a final answer; the whole work item is the bar.',
+  // Executable self-checks routed into the charter (wi_260706n4w): projected
+  // verbatim from CHARTER_SELF_CHECKS so the check that left the far-field sweep
+  // stays enforced every turn, not archived as documentation.
+  ...CHARTER_SELF_CHECKS.map((c) => `- Self-check (${c.id}): ${c.question}`),
 ].join('\n');
 
 /**

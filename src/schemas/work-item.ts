@@ -11,6 +11,7 @@ import {
   workItemId,
   workItemStatus,
 } from './common';
+import { oracleMode } from './coverage';
 
 const gitSha40 = z
   .string()
@@ -31,7 +32,9 @@ export const verificationMethod = z
 // path:symbol) names a frozen current-code position that drifts as code changes.
 // Valid for a `backward` oracle (a current-code finding); rejected for a `forward`
 // oracle (evaluated on the post-change final state — must stay re-evaluable).
-const codePointerMapsTo = /^[^\s]+\.[A-Za-z0-9]+:[^\s]+$/;
+// Exported (wi_260706n4w): the presence-mode oracle reuses THIS grammar as its
+// citation shape — no new citation syntax is introduced.
+export const codePointerMapsTo = /^[^\s]+\.[A-Za-z0-9]+:[^\s]+$/;
 
 export const acOracle = z
   .object({
@@ -52,6 +55,28 @@ export const acOracle = z
       .enum(['forward', 'backward'])
       .describe(
         'forward = post-change final state; backward = current-code finding (ADR-0024 §3.0)',
+      ),
+    // wi_260706n4w ac-1: 2-mode oracle claim — EXACTLY two additive fields
+    // (pattern + mode), both OPTIONAL: a legacy oracle omits them and parses
+    // unchanged (no schema_version bump). mode='absence' ⇒ the claim is
+    // "`pattern` does not occur under maps_to (= repo-relative scope_path)" with
+    // verification_method='static_scan' + direction='backward' (a current-code
+    // finding); mode='presence' reuses the file:line maps_to citation
+    // (codePointerMapsTo) — no new citation grammar. Decidability (single
+    // non-whitespace token + length cap + scope containment) is gated by core
+    // validateAcOracle / the executor shape gate, NOT at parse time — a
+    // non-decidable claim routes to advisory (coverage.ts isDecidableOraclePattern).
+    pattern: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Fixed-string token claimed ABSENT under maps_to (mode=absence). Decidable iff single non-whitespace token within the length cap (coverage.ts ORACLE_PATTERN_TOKEN_RE / ORACLE_PATTERN_MAX_LENGTH)',
+      ),
+    mode: oracleMode
+      .optional()
+      .describe(
+        'presence = cited file:line anchor exists; absence = pattern does not occur under maps_to (wi_260706n4w)',
       ),
   })
   .superRefine((value, ctx) => {

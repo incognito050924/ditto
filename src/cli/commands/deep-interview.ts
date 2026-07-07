@@ -114,7 +114,15 @@ const startCmd = defineCommand({
       ...(threshold !== undefined ? { threshold } : {}),
       ...(questionCap !== undefined ? { questionCap } : {}),
       ...(generators !== undefined ? { generators } : {}),
+      // 기제 C (wi_260706n4w): the CLI is the seam that turns user-intent dimension
+      // seeding ON (driver default stays false for direct callers, ac-6) — same
+      // pattern as coverage-next enabling `seedCategories`. Fail-open (ac-4): an
+      // unanswered seed never blocks readiness and its category stays in the sweep.
+      seedUserIntentDimensions: true,
     });
+    // Surface the seeded user-intent lenses so the SKILL driver carries them into
+    // the interview (at start, dimensions == exactly the seeds).
+    const seededDimensions = state.dimensions.map((d) => d.id);
     if (format === 'json') {
       writeJson({
         work_item_id: state.work_item_id,
@@ -122,6 +130,7 @@ const startCmd = defineCommand({
         threshold: state.readiness.threshold,
         question_cap: state.exit.question_cap,
         generators: state.generators,
+        seeded_dimensions: seededDimensions,
         path: `.ditto/local/work-items/${state.work_item_id}/interview-state.json`,
       });
     } else {
@@ -129,6 +138,7 @@ const startCmd = defineCommand({
       writeHuman(`  threshold:    ${state.readiness.threshold}`);
       writeHuman(`  question_cap: ${state.exit.question_cap}`);
       writeHuman(`  generators:   ${state.generators}`);
+      writeHuman(`  seeded_dims:  ${seededDimensions.join(', ') || '(none)'}`);
       writeHuman(
         `  path:         .ditto/local/work-items/${state.work_item_id}/interview-state.json`,
       );

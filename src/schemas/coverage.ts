@@ -13,6 +13,30 @@ export const coverageNodeState = z
   .enum(['open', 'resolved', 'user_owned', 'out_of_scope'])
   .describe('Closure state of a coverage node (§3.3)');
 
+// wi_260706n4w ac-1: far-field disposition routing — WHO answers a category, WHEN.
+// code-verify = an oracle claim checked against the current code, now;
+// user-intent = a user-intent question routed to deep-interview;
+// runtime-post-impl = only observable at runtime after the change lands.
+// Attached OPTIONAL everywhere it appears (persisted nodes must keep parsing
+// pre-change coverage.json — compat); a category with no disposition takes
+// DEFAULT_COVERAGE_DISPOSITION.
+export const coverageDisposition = z
+  .enum(['code-verify', 'user-intent', 'runtime-post-impl'])
+  .describe(
+    'Far-field category disposition route (who answers, when): code-verify = oracle vs current code now; user-intent = deep-interview question; runtime-post-impl = post-change runtime observation (wi_260706n4w)',
+  );
+
+export type CoverageDisposition = z.infer<typeof coverageDisposition>;
+
+/**
+ * Default route for a category with no declared disposition (unspecified
+ * categories exist — the floor predates this field). `code-verify` preserves the
+ * current behavior: the category stays in the pre-mortem sweep and its claims
+ * flow through the (fail-open) oracle path, instead of being re-routed to the
+ * user or deferred to runtime.
+ */
+export const DEFAULT_COVERAGE_DISPOSITION: CoverageDisposition = 'code-verify';
+
 export const coverageNode = z
   .object({
     id: z.string().min(1),
@@ -37,6 +61,11 @@ export const coverageNode = z
       .describe(
         'The surviving risk a non-resolved close leaves behind (out_of_scope/user_owned) — distinct from close_reason (WHY skipped); this names WHAT RISK survives the skip. Required for a non-resolved close, recorded on the node (surviving-risk self-description gap)',
       ),
+    // wi_260706n4w ac-1: additive + OPTIONAL (pre-change coverage.json parses
+    // unchanged, no schema_version bump); absent = DEFAULT_COVERAGE_DISPOSITION.
+    disposition: coverageDisposition
+      .optional()
+      .describe('Disposition route of a category node; absent = DEFAULT_COVERAGE_DISPOSITION'),
   })
   .describe('One node in the coverage scope tree (§3.1)');
 
@@ -106,6 +135,208 @@ export type RawRelevanceJudgment = z.infer<typeof rawRelevanceJudgment>;
 export type RelevanceRefute = z.infer<typeof relevanceRefute>;
 export type RelevanceProvenance = z.infer<typeof relevanceProvenance>;
 
+// ── 2-mode oracle claim + verdict (wi_260706n4w ac-1/ac-2) ─────────────────
+// A claim is UNTRUSTED LLM output. The schema persists it RAW (loose strings):
+// rejecting a malformed claim at parse time would make a fabricated claim
+// unpersistable and therefore unlabelable (the ac-5 verdict-blind labeler needs
+// the raw claim). Decidability — token-shaped pattern + containment-valid
+// scope_path — is the executor shape gate's call (n4), NOT the parser's; a
+// non-decidable claim routes to advisory, never to a hard verdict.
+
+export const oracleMode = z
+  .enum(['presence', 'absence'])
+  .describe(
+    'Oracle claim mode: presence = the cited anchor exists (file:line, codePointerMapsTo vocabulary); absence = the token does not occur in scope (wi_260706n4w)',
+  );
+
+/**
+ * Decidable-pattern token shape — mirrors ANCHOR_TOKEN (core coverage-manager
+ * isReEvaluableAnchor): a single non-whitespace token, never prose. The shape
+ * gate's SoT; deliberately NOT applied at parse time (raw claims persist).
+ */
+export const ORACLE_PATTERN_TOKEN_RE = /^[^\s]+$/;
+
+/** Length cap on a decidable pattern (shape gate, with ORACLE_PATTERN_TOKEN_RE). */
+export const ORACLE_PATTERN_MAX_LENGTH = 200;
+
+/**
+ * Shape-gate predicate (wi_260706n4w): hard-verdict eligible iff the pattern is
+ * a single non-whitespace fixed-string token within the length cap. Prose /
+ * whitespace / oversize → not decidable → advisory (tier-independent). Same
+ * anchor-vs-label separation as core isReEvaluableAnchor.
+ */
+export function isDecidableOraclePattern(pattern: string): boolean {
+  return (
+    pattern.length > 0 &&
+    pattern.length <= ORACLE_PATTERN_MAX_LENGTH &&
+    ORACLE_PATTERN_TOKEN_RE.test(pattern)
+  );
+}
+
+export const oracleClaim = z
+  .discriminatedUnion('mode', [
+    z.object({
+      mode: z.literal('presence'),
+      maps_to: z
+        .string()
+        .min(1)
+        .describe(
+          'file:line citation the claim says EXISTS — reuses the codePointerMapsTo grammar (work-item.ts); no new citation syntax. Existence (file real + line present) is checked by the executor',
+        ),
+    }),
+    z.object({
+      mode: z.literal('absence'),
+      pattern: z
+        .string()
+        .min(1)
+        .describe(
+          'Fixed-string token the claim says does NOT occur under scope_path. Decidable iff ORACLE_PATTERN_TOKEN_RE + ORACLE_PATTERN_MAX_LENGTH (n4 shape gate); non-decidable → advisory',
+        ),
+      scope_path: z
+        .string()
+        .min(1)
+        .describe(
+          'Repo-relative scope of the absence claim. Containment-checked before any exec (n4 trust boundary), NOT at parse time — a fabricated path must still persist for labeling',
+        ),
+    }),
+  ])
+  .describe(
+    'One 2-mode oracle claim: presence = cited anchor exists; absence = "pattern does not occur under scope_path" (wi_260706n4w ac-1)',
+  );
+
+export type OracleMode = z.infer<typeof oracleMode>;
+export type OracleClaim = z.infer<typeof oracleClaim>;
+
+// Verdict — the exit 3-way branch is representable WITHOUT coercion (`git grep`
+// semantics: 0 = match, 1 = no match, ≥2 = error). For an absence claim:
+// exit 1 → confirmed(-absent), exit 0 → refuted (the claimed-absent token is
+// real → fabricated claim), exit ≥2 → advisory_unverified. An exec error is
+// NEVER coerced to "absent" (the cleanup-scan exitCode!==0 collapse is the
+// documented anti-pattern — do not copy).
+export const oracleVerdictOutcome = z
+  .enum(['confirmed', 'refuted', 'advisory_unverified'])
+  .describe(
+    'Exit 3-way verdict: confirmed = claim held (absence: exit 1); refuted = claim contradicted (absence: exit 0); advisory_unverified = could not decide — never coerced to absent (wi_260706n4w ac-2)',
+  );
+
+// Strictness applied to a DECIDABLE refuted claim: risk-tier categories
+// (injection / secret-exposure) fail closed (hard_reject); everything else is
+// advisory. A non-decidable claim is advisory regardless of tier (shape gate
+// first, tier strength on top).
+export const oracleEnforcementTier = z
+  .enum(['hard_reject', 'advisory'])
+  .describe(
+    'Enforcement strength applied to the claim: hard_reject = decidable-refuted fails closed (injection/secret risk tier); advisory = signal only (wi_260706n4w ac-2)',
+  );
+
+export const oracleAdvisoryReason = z
+  .enum(['shape_gate', 'exec_error', 'tool_absent'])
+  .describe(
+    'Why the verdict degraded to advisory: shape_gate = non-decidable claim shape (prose pattern / containment-invalid scope); exec_error = executor exit ≥2; tool_absent = optional tool missing (ADR-0018 graceful degradation)',
+  );
+
+export const oracleVerdict = z
+  .object({
+    claim_id: z
+      .string()
+      .min(1)
+      .describe(
+        'Stable claim id — the correlation key shared with labeler_labels[] (the deterministic tally joins the two independent sets on it)',
+      ),
+    category_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Coverage category the claim belongs to (bare floor id or cov-cat-*)'),
+    claim: oracleClaim,
+    outcome: oracleVerdictOutcome,
+    tier: oracleEnforcementTier,
+    advisory_reason: oracleAdvisoryReason.optional(),
+    exit_code: z
+      .number()
+      .int()
+      .optional()
+      .describe(
+        'Raw executor exit code evidence (git grep semantics: 0 match / 1 no-match / ≥2 error)',
+      ),
+    detail: z.string().optional().describe('Free-text executor detail (e.g., stderr excerpt)'),
+  })
+  .superRefine((value, ctx) => {
+    if (value.outcome === 'advisory_unverified' && !value.advisory_reason) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'advisory_unverified requires advisory_reason (shape_gate | exec_error | tool_absent) — degradation must be self-describing, never silent (wi_260706n4w ac-2)',
+        path: ['advisory_reason'],
+      });
+    }
+  })
+  .describe('One raw oracle verdict over a 2-mode claim (ENFORCE set, wi_260706n4w)');
+
+export type OracleVerdictOutcome = z.infer<typeof oracleVerdictOutcome>;
+export type OracleEnforcementTier = z.infer<typeof oracleEnforcementTier>;
+export type OracleAdvisoryReason = z.infer<typeof oracleAdvisoryReason>;
+export type OracleVerdict = z.infer<typeof oracleVerdict>;
+
+// Oracle/labeler audit sidecar (wi_260706n4w ac-4/ac-5) — mirrors
+// relevanceProvenance above: raw judgments persist as SEPARATE arrays plus a
+// deterministic tally. oracle = ENFORCE, labeler = JUDGE (verdict-blind: its
+// input is the raw claim + the codebase, never an oracle verdict), and the
+// tally is the CORRELATE slot — computed by deterministic ditto code over the
+// two independent sets (fabrication-rate measurement), never by either agent.
+export const labelerLabel = z
+  .object({
+    claim_id: z
+      .string()
+      .min(1)
+      .describe('Correlation key — same id space as oracle_verdicts[].claim_id'),
+    label: z
+      .enum(['real', 'fabricated'])
+      .describe('Labeler judgment of the raw claim against the codebase'),
+    reason: z.string().optional().describe('Labeler justification'),
+  })
+  .describe(
+    'One raw verdict-blind labeler judgment (input = raw claim + codebase, NEVER the oracle verdict — wi_260706n4w ac-5)',
+  );
+
+export const oracleProvenance = z
+  .object({
+    schema_version: schemaVersion,
+    work_item_id: workItemId,
+    oracle_verdicts: z
+      .array(oracleVerdict)
+      .describe('Raw oracle verdicts (ENFORCE set), pre-correlation'),
+    labeler_labels: z
+      .array(labelerLabel)
+      .describe('Raw verdict-blind labeler labels (JUDGE set), pre-correlation'),
+    tally: z
+      .object({
+        claims: z.number().int().nonnegative().describe('Total raw claims considered'),
+        oracle: z
+          .object({
+            confirmed: z.number().int().nonnegative(),
+            refuted: z.number().int().nonnegative(),
+            advisory_unverified: z.number().int().nonnegative(),
+          })
+          .describe('Oracle outcome counts (ENFORCE set)'),
+        labeler: z
+          .object({
+            real: z.number().int().nonnegative(),
+            fabricated: z.number().int().nonnegative(),
+          })
+          .describe('Labeler label counts (JUDGE set)'),
+      })
+      .describe(
+        'Deterministic CORRELATE slot — computed by ditto code over the two independent sets (never by either agent); the fabrication-rate before/after measurement reads this (n9)',
+      ),
+  })
+  .describe(
+    'Oracle-verdict + labeler audit sidecar (oracle-provenance.json) — mirrors relevanceProvenance (wi_260706n4w ac-4/ac-5)',
+  );
+
+export type LabelerLabel = z.infer<typeof labelerLabel>;
+export type OracleProvenance = z.infer<typeof oracleProvenance>;
+
 // Plan-stage coverage-round payload (§4·§5 wiring) — the structural signals the
 // fresh fan-out hands back to the deterministic Manager via `coverage-round`. The
 // Manager appends children (append-only), steps the dry counter, and — on
@@ -137,6 +368,29 @@ export const coverageRoundPayload = z
       .optional()
       .describe(
         'The surviving risk a skip/deferral close leaves behind — required alongside close_reason for a non-resolved close, recorded on the node (surviving-risk self-description gap)',
+      ),
+    oracle_claims: z
+      .array(
+        z.object({
+          claim_id: z
+            .string()
+            .min(1)
+            .describe(
+              'Stable claim id — correlation key shared with oracle_verdicts[]/labeler_labels[]',
+            ),
+          category_id: z
+            .string()
+            .min(1)
+            .optional()
+            .describe(
+              'Coverage category the claim belongs to (bare floor id or cov-cat-*); absent → inherited from the round node (ancestor walk)',
+            ),
+          claim: oracleClaim,
+        }),
+      )
+      .optional()
+      .describe(
+        "Raw oracle-linked claims this round's sweep surfaced (wi_260706n4w ac-1) — the CLI threads them to recordCoverageRound's oracle seam, where code-verify claims are evaluated by the deterministic 2-mode oracle. Additive optional: absent → unchanged behavior (ac-6)",
       ),
     axis_signals: z
       .object({
@@ -185,12 +439,24 @@ export const coverageTaxonomyConfig = z
         z.object({
           id: z.string().min(1),
           lens: z.string().min(1).describe('Probing-question lens the sweep answers (ac-1)'),
+          // wi_260706n4w ac-1: additive + OPTIONAL — legacy configs parse unchanged.
+          disposition: coverageDisposition
+            .optional()
+            .describe('Disposition route of the added category; absent = default'),
         }),
       )
       .optional()
       .describe(
         'Project-added categories (id + probing-question lens); id collision overrides a floor lens',
       ),
+    // wi_260706n4w ac-1: tier-② disposition override for FLOOR categories (the
+    // `added` entries carry their own `disposition` field; this map re-routes a
+    // category the code floor ships). Additive + OPTIONAL — legacy configs parse
+    // unchanged; absent/malformed follows the config-wide fail-open rule.
+    dispositions: z
+      .record(z.string().min(1), coverageDisposition)
+      .optional()
+      .describe('Floor-category id → disposition route override (tier-②, wi_260706n4w)'),
   })
   .describe(
     'Tier-② project far-field taxonomy config (.ditto/coverage-taxonomy.json, git-tracked) — ac-10',

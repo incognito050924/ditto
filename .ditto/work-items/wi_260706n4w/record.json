@@ -1,0 +1,922 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260706n4w",
+  "title": "far-field 신뢰성 재설계 — oracle 결박 + who/when 라우팅",
+  "source_request": "wi_26062227h 측정으로 비용 전제는 약화됐으나 신뢰성 절반(③ deep-interview 이관 + ① oracle 검증)은 미구현으로 남음. 사용자 지시 '신뢰성 절반 신규 wi로 이어가'로 별도 담지체 생성.",
+  "goal": "far-field pre-mortem을 '누가·언제 답하나'로 라우팅하되, 코드-집행 신뢰성의 핵심을 2모드 oracle(존재+부재 결정적 검증)에 둔다. A(라우팅 재분할)+B(2모드 oracle, 위험-티어 strictness)+C(요구사항형 카테고리 deep-interview 이관)를 한 heavy work item으로 짓고, dogfood before/after 날조율 + oracle과 분리된 독립 라벨러로 신뢰성 개선을 증명한다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "2모드 oracle이 presence 위험(인용 file:line 실재)과 absence 위험('없다' 주장의 grep/AST 반증)을 각각 결정적으로 검증하고, 근거 못 대는 강-카테고리 위험을 티어 규칙대로 처리한다(injection/secret hard-reject, 나머지 advisory)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260706n4w/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/oracle-coverage.test.ts",
+          "summary": "exit 0 — 45 pass / 0 fail (TDD 6슬라이스)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4033 pass / 0 fail / 11 skip, 331 files, 216.4s"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome check exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "tests/schemas/oracle-coverage.test.ts",
+          "summary": "legacy-compat 핵심: prose pattern raw-persist(:136), advisory_unverified without reason rejected(:211), legacy triple-only oracle parses(:277), legacy map disposition absent(:392)"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/coverage.ts",
+          "summary": "disposition enum(:23,38), oracleClaim(:176), oracleVerdictOutcome 3분기(:216), oracleProvenance 사이드카(:302), n4용 shape-gate SoT export(:157-168)"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/work-item.ts",
+          "summary": "AcOracle pattern(:69)+mode(:76) .optional() additive, codePointerMapsTo export(:37)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-oracle.test.ts",
+          "summary": "landing 후 오케스트레이터 fresh 실행: exit 0 — 30 pass / 0 fail / 68 expect"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "서브에이전트 실행 exit 0 — 4044 pass / 0 fail / 11 skip (중간 1회 4043/1은 병렬 노드 파일 순간 상태, 직후 fresh 2회 0 fail — 최종 판정은 n8)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git grep -F -e tok -- does/not/exist; git grep -F -e tok -- ':(exclude)*'",
+          "summary": "실측: 둘 다 exit 1 — 3분기 편차 2건(scope 실재 확인 + ':' 거부 → advisory)의 근거"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/coverage-oracle.ts",
+          "summary": "2모드 executor + shape gate + exit 3분기 + tier + tool-absent advisory(ac-7)"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/coverage-oracle.test.ts",
+          "summary": "30 tests: presence/absence/injection 방어/tier/tool-absent/편차 2건 문서화"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/autopilot-bypass.jsonl",
+          "summary": "테스트 파일 landing 감사 레코드(session_id orchestrator:main)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/integration/coverage-loop-oracle-wiring.test.ts",
+          "summary": "RED(사이드카 ENOENT) → GREEN 7 pass/0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4086 pass/0 fail/11 skip"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "오케스트레이터 lint:fix(2파일, 기계적) 후 fresh exit 0 — No fixes applied"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-oracle.test.ts tests/core/interview-driver.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts",
+          "summary": "format 후 sanity 68 pass/0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/coverage-loop.ts",
+          "summary": "+152/-7: oracleClaims 라우팅·enforceClose conditional 신호·사이드카 영속"
+        },
+        {
+          "kind": "file",
+          "path": "tests/integration/coverage-loop-oracle-wiring.test.ts",
+          "summary": "7 tests: hard-reject 차단/advisory fail-open/tool_absent/미라우팅/additive"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/autopilot-bypass.jsonl",
+          "summary": "n5 테스트 파일 감사 레코드 1건"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-oracle.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts tests/cli/coverage-round-oracle-claims-cli.test.ts",
+          "summary": "exit 0 — 39/0 (ac-1)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts",
+          "summary": "exit 0 — 38/0 (ac-2)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/integration/coverage-category-seeding.test.ts",
+          "summary": "exit 0 — 14/0 (ac-3)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts tests/integration/intent-coverage-drive.test.ts tests/cli/deep-interview-config-cli.test.ts",
+          "summary": "exit 0 — 41/0 (ac-4)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4088 pass/0 fail/11 skip, 334 files, 227.9s (ac-6)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint; bun run check:test-isolation",
+          "summary": "둘 다 exit 0 — biome 686파일 clean, 격리 위반 0/332"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/oracle-coverage.test.ts",
+          "summary": "exit 0 — 45/0 legacy-compat (ac-6)"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "각 far-field 카테고리가 정적 disposition(code-verify/user-intent/runtime)을 갖고, 이중성격 카테고리는 facet로 분할되며, tier-② config로 override 가능하다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260706n4w/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/oracle-coverage.test.ts",
+          "summary": "exit 0 — 45 pass / 0 fail (TDD 6슬라이스)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4033 pass / 0 fail / 11 skip, 331 files, 216.4s"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome check exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "tests/schemas/oracle-coverage.test.ts",
+          "summary": "legacy-compat 핵심: prose pattern raw-persist(:136), advisory_unverified without reason rejected(:211), legacy triple-only oracle parses(:277), legacy map disposition absent(:392)"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/coverage.ts",
+          "summary": "disposition enum(:23,38), oracleClaim(:176), oracleVerdictOutcome 3분기(:216), oracleProvenance 사이드카(:302), n4용 shape-gate SoT export(:157-168)"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/work-item.ts",
+          "summary": "AcOracle pattern(:69)+mode(:76) .optional() additive, codePointerMapsTo export(:37)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts tests/integration/coverage-category-seeding.test.ts",
+          "summary": "exit 0 — 52 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4044 pass / 0 fail / 11 skip (기준 4033 + 신규 테스트, 병렬 n4 산출 포함)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/coverage-taxonomy.test.ts",
+          "summary": "핵심: minimal-increment routed OUT with route+reason never silent(:74), tier-② dispositions re-route without touching lens, disposition routing describe 9 tests"
+        },
+        {
+          "kind": "file",
+          "path": "tests/integration/coverage-category-seeding.test.ts",
+          "summary": "routed floor category persists disposition through coverage.json and stays open(:92) — ac-3 왕복 증거"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/charter.ts",
+          "summary": "CharterSelfCheck/MINIMAL_INCREMENT_SELF_CHECK/CHARTER_SELF_CHECKS + PRIME_DIRECTIVE 매 턴 주입(기존 hook 무변경 소비)"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/autopilot-bypass.jsonl",
+          "summary": "테스트 파일 편집 lease-스코프 불일치 bypass 감사 레코드 3건(session_id subagent:n3-impl-taxonomy-routing)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-oracle.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts tests/cli/coverage-round-oracle-claims-cli.test.ts",
+          "summary": "exit 0 — 39/0 (ac-1)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts",
+          "summary": "exit 0 — 38/0 (ac-2)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/integration/coverage-category-seeding.test.ts",
+          "summary": "exit 0 — 14/0 (ac-3)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts tests/integration/intent-coverage-drive.test.ts tests/cli/deep-interview-config-cli.test.ts",
+          "summary": "exit 0 — 41/0 (ac-4)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4088 pass/0 fail/11 skip, 334 files, 227.9s (ac-6)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint; bun run check:test-isolation",
+          "summary": "둘 다 exit 0 — biome 686파일 clean, 격리 위반 0/332"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/oracle-coverage.test.ts",
+          "summary": "exit 0 — 45/0 legacy-compat (ac-6)"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "라우팅되어 sweep에서 빠진 카테고리가 완전성 ledger에 disposition과 함께 남아 'complete'가 조용히 좁아지지 않는다(no silent narrowing, 기존 no-silent-skip 정합)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260706n4w/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts tests/integration/coverage-category-seeding.test.ts",
+          "summary": "exit 0 — 52 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4044 pass / 0 fail / 11 skip (기준 4033 + 신규 테스트, 병렬 n4 산출 포함)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/coverage-taxonomy.test.ts",
+          "summary": "핵심: minimal-increment routed OUT with route+reason never silent(:74), tier-② dispositions re-route without touching lens, disposition routing describe 9 tests"
+        },
+        {
+          "kind": "file",
+          "path": "tests/integration/coverage-category-seeding.test.ts",
+          "summary": "routed floor category persists disposition through coverage.json and stays open(:92) — ac-3 왕복 증거"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/charter.ts",
+          "summary": "CharterSelfCheck/MINIMAL_INCREMENT_SELF_CHECK/CHARTER_SELF_CHECKS + PRIME_DIRECTIVE 매 턴 주입(기존 hook 무변경 소비)"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/autopilot-bypass.jsonl",
+          "summary": "테스트 파일 편집 lease-스코프 불일치 bypass 감사 레코드 3건(session_id subagent:n3-impl-taxonomy-routing)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260706n4w/reviewer-output.json",
+          "summary": "리뷰 산출물 전문(lens verdicts + findings + 편차 판정)"
+        },
+        {
+          "kind": "command",
+          "command": "ditto acg-review --from .ditto/local/work-items/wi_260706n4w/reviewer-output.json",
+          "summary": "exit 0 — acg-review.json 프로젝션 생성, high 1건이 완료 게이트에 걸린 상태"
+        },
+        {
+          "kind": "command",
+          "command": "git grep -n oracleClaims -- src/cli src/skills scripts agents",
+          "summary": "프로덕션 호출자 0건 — HIGH 死배선 근거"
+        },
+        {
+          "kind": "command",
+          "command": "fresh temp repo에서 git grep -F -e tok -- nonexistent / ':(exclude)*'",
+          "summary": "둘 다 exit 1 재현 — n4 편차 2건 승인 근거"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-oracle.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts tests/cli/coverage-round-oracle-claims-cli.test.ts",
+          "summary": "exit 0 — 39/0 (ac-1)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts",
+          "summary": "exit 0 — 38/0 (ac-2)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/integration/coverage-category-seeding.test.ts",
+          "summary": "exit 0 — 14/0 (ac-3)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts tests/integration/intent-coverage-drive.test.ts tests/cli/deep-interview-config-cli.test.ts",
+          "summary": "exit 0 — 41/0 (ac-4)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4088 pass/0 fail/11 skip, 334 files, 227.9s (ac-6)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint; bun run check:test-isolation",
+          "summary": "둘 다 exit 0 — biome 686파일 clean, 격리 위반 0/332"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/oracle-coverage.test.ts",
+          "summary": "exit 0 — 45/0 legacy-compat (ac-6)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/coverage-round-oracle-claims-cli.test.ts",
+          "summary": "RED 0/2(사이드카 exists=false + closed=true, 死배선 재현) → GREEN 2/0 (CLI subprocess 실검증)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/coverage-round-oracle-claims-cli.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts",
+          "summary": "9 pass/0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4088 pass/0 fail/11 skip"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit | grep 'coverage-loop.ts(130'",
+          "summary": "0건 — LOW 해소"
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/autopilot.ts",
+          "summary": "coverage-round 핸들러 oracle_claims 전달 배선(:1300-1313)"
+        },
+        {
+          "kind": "file",
+          "path": "skills/autopilot/SKILL.md",
+          "summary": "step 3 payload 계약에 oracle_claims 문서화(:39)"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/autopilot-bypass.jsonl",
+          "summary": "fix.r0 감사 레코드 4건"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/coverage-round-oracle-claims-cli.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts",
+          "summary": "exit 0 — 9 pass/0 fail (fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4088 pass/0 fail/11 skip, 334 files, 229s (기준선 일치)"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "462 errors = n7 시점 463 - 1(:130 소멸), 신규 CLI 테스트 진단 0건"
+        },
+        {
+          "kind": "command",
+          "command": "bun run check:test-isolation",
+          "summary": "exit 0 — 위반 0/332 files"
+        },
+        {
+          "kind": "command",
+          "command": "malformed oracle_claims CLI probe(scope_path 누락)",
+          "summary": "exit 65 USAGE_ERROR — 상태 변이 전 fail-closed"
+        },
+        {
+          "kind": "command",
+          "command": "DITTO_SKIP_HOOKS=1 bun bin/ditto acg-review --from .ditto/local/work-items/wi_260706n4w/reviewer-output.json",
+          "summary": "exit 0 — 8 files, 0 high-risk without evidence"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260706n4w/reviewer-output.json",
+          "summary": "재검토 결과로 갱신(HIGH resolved 반영)"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "요구사항형 카테고리가 deep-interview 차원으로 seed되고, deep-interview 없는 경로(lightweight/prism)에서 fail-open으로 sweep에 잔류해 silent hole이 없다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260706n4w/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/oracle-coverage.test.ts",
+          "summary": "exit 0 — 45 pass / 0 fail (TDD 6슬라이스)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4033 pass / 0 fail / 11 skip, 331 files, 216.4s"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome check exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "tests/schemas/oracle-coverage.test.ts",
+          "summary": "legacy-compat 핵심: prose pattern raw-persist(:136), advisory_unverified without reason rejected(:211), legacy triple-only oracle parses(:277), legacy map disposition absent(:392)"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/coverage.ts",
+          "summary": "disposition enum(:23,38), oracleClaim(:176), oracleVerdictOutcome 3분기(:216), oracleProvenance 사이드카(:302), n4용 shape-gate SoT export(:157-168)"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/work-item.ts",
+          "summary": "AcOracle pattern(:69)+mode(:76) .optional() additive, codePointerMapsTo export(:37)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts",
+          "summary": "RED(:327 AC assertion) → GREEN 30 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/deep-interview-config-cli.test.ts",
+          "summary": "RED(:134 seeded_dimensions 부재) → GREEN 6 pass/0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4079 pass/0 fail/11 skip"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts tests/integration/intent-coverage-drive.test.ts tests/cli/deep-interview-config-cli.test.ts tests/cli/deep-interview-claim.test.ts tests/core/tech-spec.test.ts tests/conformance/m2.conformance.test.ts tests/core/coverage-taxonomy.test.ts",
+          "summary": "인접 7파일 139 pass/0 fail — tech-spec/prism finalize gate 무영향 확인"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "seed 구현 :66-100, seedCategories 미설정 구간(:534) 무수정"
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/deep-interview.ts",
+          "summary": "start seam :112-146, seeded_dimensions additive"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/autopilot-bypass.jsonl",
+          "summary": "n6 테스트 파일 편집 감사 레코드 4건"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-oracle.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts tests/cli/coverage-round-oracle-claims-cli.test.ts",
+          "summary": "exit 0 — 39/0 (ac-1)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts",
+          "summary": "exit 0 — 38/0 (ac-2)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/integration/coverage-category-seeding.test.ts",
+          "summary": "exit 0 — 14/0 (ac-3)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts tests/integration/intent-coverage-drive.test.ts tests/cli/deep-interview-config-cli.test.ts",
+          "summary": "exit 0 — 41/0 (ac-4)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4088 pass/0 fail/11 skip, 334 files, 227.9s (ac-6)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint; bun run check:test-isolation",
+          "summary": "둘 다 exit 0 — biome 686파일 clean, 격리 위반 0/332"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/oracle-coverage.test.ts",
+          "summary": "exit 0 — 45/0 legacy-compat (ac-6)"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "dogfood 실제 work item에서 재설계 전/후 날조 위험율을 oracle과 분리된 독립 라벨러로 측정한 before/after 증거가 있다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260706n4w/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4092 pass/0 fail/11 skip (기준 4088+4, format 후 fresh 전체 재실행)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "reports/coverage/wi_260706n4w-fabrication-baseline.md",
+          "summary": "ac-5 evidence=log — BEFORE 실증(측정 불가성 소견 포함) + AFTER 잔여 5단계 + 재현 스크립트 부록 A"
+        },
+        {
+          "kind": "file",
+          "path": "reports/coverage/labeler-contract.md",
+          "summary": "라벨러 계약 — 순환 차단 3조건 + blind spot(§6) + 독립성 residual(§7)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/coverage-oracle.ts",
+          "summary": "correlateFabrication 결정적 상관(테스트 4개, 34/0)"
+        },
+        {
+          "kind": "command",
+          "command": "git check-ignore reports/coverage/labeler-contract.md",
+          "summary": "exit 1 — .gitignore 재포함으로 evidence 커밋 가능"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/autopilot-bypass.jsonl",
+          "summary": "n9 감사 레코드 5건"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "FarFieldCategory·nextCoverageNode·완전성 술어 변경이 additive-only이며 기존 호출부(interview-driver.ts)·prism에 무파급, 전체 테스트 suite가 green이다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260706n4w/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/integration/coverage-loop-oracle-wiring.test.ts",
+          "summary": "RED(사이드카 ENOENT) → GREEN 7 pass/0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4086 pass/0 fail/11 skip"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "오케스트레이터 lint:fix(2파일, 기계적) 후 fresh exit 0 — No fixes applied"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-oracle.test.ts tests/core/interview-driver.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts",
+          "summary": "format 후 sanity 68 pass/0 fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/coverage-loop.ts",
+          "summary": "+152/-7: oracleClaims 라우팅·enforceClose conditional 신호·사이드카 영속"
+        },
+        {
+          "kind": "file",
+          "path": "tests/integration/coverage-loop-oracle-wiring.test.ts",
+          "summary": "7 tests: hard-reject 차단/advisory fail-open/tool_absent/미라우팅/additive"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/autopilot-bypass.jsonl",
+          "summary": "n5 테스트 파일 감사 레코드 1건"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260706n4w/reviewer-output.json",
+          "summary": "리뷰 산출물 전문(lens verdicts + findings + 편차 판정)"
+        },
+        {
+          "kind": "command",
+          "command": "ditto acg-review --from .ditto/local/work-items/wi_260706n4w/reviewer-output.json",
+          "summary": "exit 0 — acg-review.json 프로젝션 생성, high 1건이 완료 게이트에 걸린 상태"
+        },
+        {
+          "kind": "command",
+          "command": "git grep -n oracleClaims -- src/cli src/skills scripts agents",
+          "summary": "프로덕션 호출자 0건 — HIGH 死배선 근거"
+        },
+        {
+          "kind": "command",
+          "command": "fresh temp repo에서 git grep -F -e tok -- nonexistent / ':(exclude)*'",
+          "summary": "둘 다 exit 1 재현 — n4 편차 2건 승인 근거"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-oracle.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts tests/cli/coverage-round-oracle-claims-cli.test.ts",
+          "summary": "exit 0 — 39/0 (ac-1)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts",
+          "summary": "exit 0 — 38/0 (ac-2)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/integration/coverage-category-seeding.test.ts",
+          "summary": "exit 0 — 14/0 (ac-3)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts tests/integration/intent-coverage-drive.test.ts tests/cli/deep-interview-config-cli.test.ts",
+          "summary": "exit 0 — 41/0 (ac-4)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4088 pass/0 fail/11 skip, 334 files, 227.9s (ac-6)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint; bun run check:test-isolation",
+          "summary": "둘 다 exit 0 — biome 686파일 clean, 격리 위반 0/332"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/oracle-coverage.test.ts",
+          "summary": "exit 0 — 45/0 legacy-compat (ac-6)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/coverage-round-oracle-claims-cli.test.ts",
+          "summary": "RED 0/2(사이드카 exists=false + closed=true, 死배선 재현) → GREEN 2/0 (CLI subprocess 실검증)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/coverage-round-oracle-claims-cli.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts",
+          "summary": "9 pass/0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4088 pass/0 fail/11 skip"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit | grep 'coverage-loop.ts(130'",
+          "summary": "0건 — LOW 해소"
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/autopilot.ts",
+          "summary": "coverage-round 핸들러 oracle_claims 전달 배선(:1300-1313)"
+        },
+        {
+          "kind": "file",
+          "path": "skills/autopilot/SKILL.md",
+          "summary": "step 3 payload 계약에 oracle_claims 문서화(:39)"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/autopilot-bypass.jsonl",
+          "summary": "fix.r0 감사 레코드 4건"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/coverage-round-oracle-claims-cli.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts",
+          "summary": "exit 0 — 9 pass/0 fail (fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4088 pass/0 fail/11 skip, 334 files, 229s (기준선 일치)"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "462 errors = n7 시점 463 - 1(:130 소멸), 신규 CLI 테스트 진단 0건"
+        },
+        {
+          "kind": "command",
+          "command": "bun run check:test-isolation",
+          "summary": "exit 0 — 위반 0/332 files"
+        },
+        {
+          "kind": "command",
+          "command": "malformed oracle_claims CLI probe(scope_path 누락)",
+          "summary": "exit 65 USAGE_ERROR — 상태 변이 전 fail-closed"
+        },
+        {
+          "kind": "command",
+          "command": "DITTO_SKIP_HOOKS=1 bun bin/ditto acg-review --from .ditto/local/work-items/wi_260706n4w/reviewer-output.json",
+          "summary": "exit 0 — 8 files, 0 high-risk without evidence"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260706n4w/reviewer-output.json",
+          "summary": "재검토 결과로 갱신(HIGH resolved 반영)"
+        }
+      ]
+    },
+    {
+      "id": "ac-7",
+      "statement": "검사도구 부재 시 oracle이 advisory로 강등되어 hard-gate가 의도 실현을 막지 않는다(ADR-0018 정합)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260706n4w/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-oracle.test.ts",
+          "summary": "landing 후 오케스트레이터 fresh 실행: exit 0 — 30 pass / 0 fail / 68 expect"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "서브에이전트 실행 exit 0 — 4044 pass / 0 fail / 11 skip (중간 1회 4043/1은 병렬 노드 파일 순간 상태, 직후 fresh 2회 0 fail — 최종 판정은 n8)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git grep -F -e tok -- does/not/exist; git grep -F -e tok -- ':(exclude)*'",
+          "summary": "실측: 둘 다 exit 1 — 3분기 편차 2건(scope 실재 확인 + ':' 거부 → advisory)의 근거"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/coverage-oracle.ts",
+          "summary": "2모드 executor + shape gate + exit 3분기 + tier + tool-absent advisory(ac-7)"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/coverage-oracle.test.ts",
+          "summary": "30 tests: presence/absence/injection 방어/tier/tool-absent/편차 2건 문서화"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/autopilot-bypass.jsonl",
+          "summary": "테스트 파일 landing 감사 레코드(session_id orchestrator:main)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-oracle.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts tests/cli/coverage-round-oracle-claims-cli.test.ts",
+          "summary": "exit 0 — 39/0 (ac-1)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts",
+          "summary": "exit 0 — 38/0 (ac-2)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/integration/coverage-category-seeding.test.ts",
+          "summary": "exit 0 — 14/0 (ac-3)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts tests/integration/intent-coverage-drive.test.ts tests/cli/deep-interview-config-cli.test.ts",
+          "summary": "exit 0 — 41/0 (ac-4)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0 — 4088 pass/0 fail/11 skip, 334 files, 227.9s (ac-6)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint; bun run check:test-isolation",
+          "summary": "둘 다 exit 0 — biome 686파일 clean, 격리 위반 0/332"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/oracle-coverage.test.ts",
+          "summary": "exit 0 — 45/0 legacy-compat (ac-6)"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/schemas/coverage.ts",
+    "src/schemas/work-item.ts",
+    "schemas/work-item.schema.json",
+    "tests/schemas/oracle-coverage.test.ts",
+    "src/core/coverage-taxonomy.ts",
+    "src/core/charter.ts",
+    "tests/core/coverage-taxonomy.test.ts",
+    "tests/integration/coverage-category-seeding.test.ts",
+    "src/core/coverage-oracle.ts",
+    "tests/core/coverage-oracle.test.ts",
+    "src/core/interview-driver.ts",
+    "src/cli/commands/deep-interview.ts",
+    "tests/core/interview-driver.test.ts",
+    "tests/integration/intent-coverage-drive.test.ts",
+    "tests/cli/deep-interview-config-cli.test.ts",
+    "src/core/coverage-loop.ts",
+    "tests/integration/coverage-loop-oracle-wiring.test.ts",
+    "src/cli/commands/autopilot.ts",
+    "skills/autopilot/SKILL.md",
+    "tests/cli/coverage-round-oracle-claims-cli.test.ts",
+    "reports/coverage/labeler-contract.md",
+    "reports/coverage/wi_260706n4w-fabrication-baseline.md",
+    ".gitignore"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true
+  },
+  "follows": "wi_26062227h",
+  "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260706n4w",
+    "fresh_evidence_needed": [
+      "land aborted — 20 working-tree path(s) outside the declared change_surface: .: .ditto/local/handoff/session_260622_risks_processed.md, .ditto/work-items/wi_260705lc8/events/000000.workspace-write.051bf4df2e24.json, .ditto/work-items/wi_260705lc8/events/000001.workspace-write.fc21cf528d15.json, .ditto/work-items/wi_260705lc8/record.json, .ditto/work-items/wi_2607069bk/record.json, .ditto/work-items/wi_260706n4w/events/000000.workspace-write.b0aabb221bc8.json, .ditto/work-items/wi_260706n4w/events/000001.workspace-write.168885a6bfbe.json, .ditto/work-items/wi_260706n4w/events/000002.workspace-write.19baedb81457.json, .ditto/work-items/wi_260706n4w/events/000003.workspace-write.96c67d5c6df2.json, .ditto/work-items/wi_260706n4w/events/000004.workspace-write.aaea2285c7a3.json, .ditto/work-items/wi_260706n4w/events/000005.workspace-write.2867d0ffe395.json, .ditto/work-items/wi_260706n4w/events/000006.workspace-write.e50f95b7b1b0.json, .ditto/work-items/wi_260706n4w/events/000007.workspace-write.3ac4e3f71295.json, .ditto/work-items/wi_260706n4w/record.json, .ditto/work-items/wi_260706zha/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260706zha/record.json, .ditto/work-items/wi_260707loq/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260707loq/record.json, .ditto/work-items/wi_260707oi1/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260707oi1/record.json. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
+  "runs": [],
+  "started_at_sha": "ca796bc5ed38b8aed9a5a3e11de46e67cf093684",
+  "created_at": "2026-07-06T23:50:39.068Z",
+  "updated_at": "2026-07-07T05:02:16.797Z",
+  "closed_at": "2026-07-07T05:02:16.794Z"
+}

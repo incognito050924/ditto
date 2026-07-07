@@ -142,6 +142,19 @@
                       "backward"
                     ],
                     "description": "forward = post-change final state; backward = current-code finding (ADR-0024 §3.0)"
+                  },
+                  "pattern": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Fixed-string token claimed ABSENT under maps_to (mode=absence). Decidable iff single non-whitespace token within the length cap (coverage.ts ORACLE_PATTERN_TOKEN_RE / ORACLE_PATTERN_MAX_LENGTH)"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "presence",
+                      "absence"
+                    ],
+                    "description": "presence = cited file:line anchor exists; absence = pattern does not occur under maps_to (wi_260706n4w)"
                   }
                 },
                 "required": [

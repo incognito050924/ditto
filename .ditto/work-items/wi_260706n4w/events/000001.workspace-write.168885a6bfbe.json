@@ -1,0 +1,167 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260706n4w",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "168885a6bfbeea24a2066e91dcc1f27525ee290f66813deb575152615406131b",
+  "ts": "2026-07-07T04:54:35.419Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260706n4w/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "artifact"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/schemas/oracle-coverage.test.ts",
+        "summary": "exit 0 — 45 pass / 0 fail (TDD 6슬라이스)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "exit 0 — 4033 pass / 0 fail / 11 skip, 331 files, 216.4s"
+      },
+      {
+        "kind": "command",
+        "command": "bun run lint",
+        "summary": "biome check exit 0"
+      },
+      {
+        "kind": "file",
+        "path": "tests/schemas/oracle-coverage.test.ts",
+        "summary": "legacy-compat 핵심: prose pattern raw-persist(:136), advisory_unverified without reason rejected(:211), legacy triple-only oracle parses(:277), legacy map disposition absent(:392)"
+      },
+      {
+        "kind": "file",
+        "path": "src/schemas/coverage.ts",
+        "summary": "disposition enum(:23,38), oracleClaim(:176), oracleVerdictOutcome 3분기(:216), oracleProvenance 사이드카(:302), n4용 shape-gate SoT export(:157-168)"
+      },
+      {
+        "kind": "file",
+        "path": "src/schemas/work-item.ts",
+        "summary": "AcOracle pattern(:69)+mode(:76) .optional() additive, codePointerMapsTo export(:37)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/coverage-oracle.test.ts",
+        "summary": "landing 후 오케스트레이터 fresh 실행: exit 0 — 30 pass / 0 fail / 68 expect"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "서브에이전트 실행 exit 0 — 4044 pass / 0 fail / 11 skip (중간 1회 4043/1은 병렬 노드 파일 순간 상태, 직후 fresh 2회 0 fail — 최종 판정은 n8)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run lint",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "git grep -F -e tok -- does/not/exist; git grep -F -e tok -- ':(exclude)*'",
+        "summary": "실측: 둘 다 exit 1 — 3분기 편차 2건(scope 실재 확인 + ':' 거부 → advisory)의 근거"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/coverage-oracle.ts",
+        "summary": "2모드 executor + shape gate + exit 3분기 + tier + tool-absent advisory(ac-7)"
+      },
+      {
+        "kind": "file",
+        "path": "tests/core/coverage-oracle.test.ts",
+        "summary": "30 tests: presence/absence/injection 방어/tier/tool-absent/편차 2건 문서화"
+      },
+      {
+        "kind": "artifact",
+        "path": ".ditto/autopilot-bypass.jsonl",
+        "summary": "테스트 파일 landing 감사 레코드(session_id orchestrator:main)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/integration/coverage-loop-oracle-wiring.test.ts",
+        "summary": "RED(사이드카 ENOENT) → GREEN 7 pass/0 fail, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "exit 0 — 4086 pass/0 fail/11 skip"
+      },
+      {
+        "kind": "command",
+        "command": "bun run lint",
+        "summary": "오케스트레이터 lint:fix(2파일, 기계적) 후 fresh exit 0 — No fixes applied"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/coverage-oracle.test.ts tests/core/interview-driver.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts",
+        "summary": "format 후 sanity 68 pass/0 fail"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/coverage-loop.ts",
+        "summary": "+152/-7: oracleClaims 라우팅·enforceClose conditional 신호·사이드카 영속"
+      },
+      {
+        "kind": "file",
+        "path": "tests/integration/coverage-loop-oracle-wiring.test.ts",
+        "summary": "7 tests: hard-reject 차단/advisory fail-open/tool_absent/미라우팅/additive"
+      },
+      {
+        "kind": "artifact",
+        "path": ".ditto/autopilot-bypass.jsonl",
+        "summary": "n5 테스트 파일 감사 레코드 1건"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/coverage-oracle.test.ts tests/integration/coverage-loop-oracle-wiring.test.ts tests/cli/coverage-round-oracle-claims-cli.test.ts",
+        "summary": "exit 0 — 39/0 (ac-1)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/coverage-taxonomy.test.ts",
+        "summary": "exit 0 — 38/0 (ac-2)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/integration/coverage-category-seeding.test.ts",
+        "summary": "exit 0 — 14/0 (ac-3)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/interview-driver.test.ts tests/integration/intent-coverage-drive.test.ts tests/cli/deep-interview-config-cli.test.ts",
+        "summary": "exit 0 — 41/0 (ac-4)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "exit 0 — 4088 pass/0 fail/11 skip, 334 files, 227.9s (ac-6)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run lint; bun run check:test-isolation",
+        "summary": "둘 다 exit 0 — biome 686파일 clean, 격리 위반 0/332"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/schemas/oracle-coverage.test.ts",
+        "summary": "exit 0 — 45/0 legacy-compat (ac-6)"
+      }
+    ]
+  }
+}

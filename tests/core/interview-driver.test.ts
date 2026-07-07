@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AutopilotStore } from '~/core/autopilot-store';
@@ -311,6 +311,88 @@ describe('startInterview generators lever (ac-4)', () => {
   test('defaults generators to 1 when omitted (serial-equivalent)', async () => {
     const result = await startInterview(repo, { workItemId: wiId });
     expect(result.generators).toBe(1);
+  });
+});
+
+// 기제 C (wi_260706n4w ac-4/ac-6): user-intent far-field categories seed as
+// deep-interview DIMENSIONS (closeable cov-dim-*, not permanently-open cov-cat-*).
+// Opt-in on StartInput (default false → existing callers unchanged, ac-6); the
+// CLI `deep-interview start` seam turns it on — mirroring the coverage-loop
+// `seedCategories` engine-default-false / CLI-seam-on precedent.
+describe('startInterview seeds user-intent dimensions (기제 C, wi_260706n4w)', () => {
+  test('seedUserIntentDimensions:true seeds one non-critical unknown dimension per floor user-intent category, notes = lens', async () => {
+    const state = await startInterview(repo, { workItemId: wiId, seedUserIntentDimensions: true });
+    const ids = state.dimensions.map((d) => d.id);
+    // floor user-intent categories (coverage-taxonomy.ts): authorization-model + regulatory.
+    expect(ids).toContain('authorization-model');
+    expect(ids).toContain('regulatory');
+    // code-verify categories are NOT seeded as interview dimensions.
+    expect(ids).not.toContain('injection');
+    for (const d of state.dimensions) {
+      // fail-open (ac-4): non-critical + unknown — an unanswered seed never
+      // hard-blocks readiness; it stays an OPEN cov-dim node in the sweep.
+      expect(d.critical).toBe(false);
+      expect(d.state).toBe('unknown');
+      // the probing question rides notes → becomes the cov-dim label at projection.
+      expect(d.notes.length).toBeGreaterThan(0);
+    }
+    // persisted on disk, not just returned.
+    const onDisk = await new InterviewStore(repo).get(wiId);
+    expect(onDisk.dimensions.map((d) => d.id)).toEqual(ids);
+  });
+
+  test('seeding respects the RESOLVED taxonomy (tier-② dispositions re-route), not the raw floor', async () => {
+    // re-route `auditing` (floor: code-verify) to user-intent via tier-② config.
+    await mkdir(join(repo, '.ditto'), { recursive: true });
+    await writeFile(
+      join(repo, '.ditto', 'coverage-taxonomy.json'),
+      JSON.stringify({ dispositions: { auditing: 'user-intent' } }),
+      'utf8',
+    );
+    const state = await startInterview(repo, { workItemId: wiId, seedUserIntentDimensions: true });
+    const ids = state.dimensions.map((d) => d.id);
+    expect(ids).toContain('auditing');
+    expect(ids).toContain('authorization-model');
+    expect(ids).toContain('regulatory');
+  });
+
+  test('seeded dims never block the readiness gate (fail-open, ac-4): normal flow still finalizes with seeds unanswered', async () => {
+    await startInterview(repo, { workItemId: wiId, seedUserIntentDimensions: true });
+    const r0 = await checkReadiness(repo, wiId);
+    // non-critical seeds are absent from critical_unresolved.
+    expect(r0.critical_unresolved).toEqual([]);
+    await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
+        question: { text: 'shape?', why_matters: 'response', info_gain_estimate: 'high' },
+        answer: { text: 'integer', kind: 'user' },
+        readiness_score: 0.85,
+      },
+    });
+    const result = await finalizeInterview(repo, {
+      workItemId: wiId,
+      payload: {
+        goal: 'g',
+        in_scope: [],
+        out_of_scope: [],
+        acceptance_criteria: [
+          {
+            id: 'ac-1',
+            statement: 'returns 200',
+            verdict: 'unverified',
+            evidence: [],
+            evidence_required: [],
+          },
+        ],
+        unknowns: [],
+        follow_up_candidates: [],
+        question_policy: 'ask_only_if_user_only_can_answer',
+        risk: { non_local: false, irreversible: false, unaudited: false },
+        user_confirmation: { confirmed: true, statement: '맞아요' },
+      },
+    });
+    expect(result.status).toBe('finalized');
   });
 });
 

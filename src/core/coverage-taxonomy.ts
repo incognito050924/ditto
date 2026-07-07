@@ -15,7 +15,8 @@
  */
 
 import { type CoverageTaxonomyConfig, coverageTaxonomyConfig } from '~/schemas/coverage';
-import type { CoverageMap, CoverageNode } from '~/schemas/coverage';
+import type { CoverageDisposition, CoverageMap, CoverageNode } from '~/schemas/coverage';
+import { MINIMAL_INCREMENT_SELF_CHECK } from './charter';
 import { dittoDir } from './ditto-paths';
 
 export interface FarFieldCategory {
@@ -23,6 +24,15 @@ export interface FarFieldCategory {
   id: string;
   /** The probing question handed to the sweep as a cross-cutting lens (ac-1). */
   lens: string;
+  /**
+   * Static disposition route — WHO answers this category, WHEN (wi_260706n4w
+   * ac-2): code-verify = oracle claim vs current code, now (stays in the sweep);
+   * user-intent = a user-intent question (deep-interview routes it, fail-OPEN —
+   * without an interview it stays in the sweep, ac-4); runtime-post-impl = only
+   * observable at runtime after the change lands. Additive + optional (custom
+   * taxonomies without it keep working); absent = DEFAULT_COVERAGE_DISPOSITION.
+   */
+  disposition?: CoverageDisposition;
 }
 
 /**
@@ -34,99 +44,174 @@ export interface FarFieldCategory {
  * regulatory, resource-abuse → resource-exhaustion/abuse-vector, so the binary
  * relevance gate (§3) can include/skip each facet on its own grounding rather than
  * over-covering a whole bundle for one relevant facet.
+ *
+ * Disposition routing (wi_260706n4w ac-2): every floor category declares a static
+ * `disposition`. Dual-personality categories are facet-split so each facet routes
+ * whole: authorization → authorization (enforcement, code-verify) +
+ * authorization-model (model/who-should-access, user-intent). regulatory routes
+ * user-intent whole (which obligations apply is user domain knowledge; their
+ * enforcement materializes in pii-leak/auditing/data-integrity). No floor category
+ * is runtime-post-impl — every floor lens has a pre-impl-answerable core; that
+ * route exists for tier-② overrides/additions (e.g. post-deploy canary tracking).
+ * minimal-increment left the floor entirely — design-META quality, not a far
+ * risk — to the charter self-check; the removal stays ledgered in
+ * FAR_FIELD_ROUTED_OUT below (ac-3, no silent narrowing).
  */
 export const FAR_FIELD_TAXONOMY_FLOOR: readonly FarFieldCategory[] = [
   {
     id: 'authentication',
     lens: '이 기능에 도달하는 인증 경로·방식은? (API 토큰·웹 세션·서버간 OAuth·서비스 토큰 등) 경로별 인증이 이 변경에서 일관·정확한가? 한 방식만 가정하고 다른 진입 경로를 빠뜨리지 않나?',
+    disposition: 'code-verify',
   },
   {
     id: 'authorization',
-    lens: '이 제품의 인가(authorization) 모델은 무엇인가? (역할기반 RBAC·속성기반 ABAC·관계기반 ReBAC·ACL·소유권·테넌트 경계·OAuth 스코프·정책엔진 등 — 제품마다 다르며 RBAC가 기본값이 아니다) 이 변경이 요구·부여하는 권한이 그 모델과 일관·정확한가? 한 모델만 가정하고 다른 인가 경로를 빠뜨리지 않나? 누가 접근 가능/불가해야 하나?',
+    lens: '이 변경이 요구·부여·검사하는 권한을 코드가 실제로 강제하나 — 검사가 누락된 경로(우회 진입·간접 호출·배치/내부 API)는 없나? 한 인가 방식만 가정하고 다른 인가 경로를 빠뜨리지 않나? (인가 모델 자체가 맞는지·누가 접근해야 하는지는 #authorization-model의 몫)',
+    disposition: 'code-verify',
+  },
+  {
+    id: 'authorization-model',
+    lens: '이 제품의 인가(authorization) 모델은 무엇인가? (역할기반 RBAC·속성기반 ABAC·관계기반 ReBAC·ACL·소유권·테넌트 경계·OAuth 스코프·정책엔진 등 — 제품마다 다르며 RBAC가 기본값이 아니다) 이 변경 범위에서 누가 접근 가능/불가해야 하나 — 그 권한 모델 자체가 의도에 맞나? (코드가 그 모델을 강제하는지는 #authorization의 몫)',
+    disposition: 'user-intent',
   },
   {
     id: 'auditing',
     lens: '이 동작에 감사 로그·추적이 필요한가? 누가·언제·무엇을 했는지 남나? 행위자가 행위를 부인할 수 있나, 기록은 변조내성·귀속가능(tamper-evident)한가?',
+    disposition: 'code-verify',
   },
   {
     id: 'data-integrity',
     lens: '데이터 손실·손상·부분쓰기·멱등·마이그레이션 영향이 있나?',
+    disposition: 'code-verify',
   },
   {
     id: 'boundary-edge',
     lens: '경계값/극단 입력이 있나? (0·최대·빈값·오버플로·경계 전환)',
+    disposition: 'code-verify',
   },
   {
     id: 'concurrency-ordering',
     lens: '레이스·락·중복·이벤트 순서 문제가 있나?',
+    disposition: 'code-verify',
   },
   {
     id: 'external-env',
     lens: '외부 환경(env/배포/3rd-party)으로 깨질 우려가 있나? 이 변경의 side-effect는 무엇인가(외부 API 호출·메시지 발행 등)?',
+    disposition: 'code-verify',
   },
   {
     id: 'failure-recovery',
     lens: '실패 지점에서 부분 recovery가 필요한가, 전체 롤백인가? 무성 실패·연쇄 실패·fallback 정확성은?',
+    disposition: 'code-verify',
   },
   {
     id: 'resource-exhaustion',
     lens: '한도·고갈·타임아웃·메모리·N+1·스케일 문제가 있나? 정상 부하가 늘 때 자원이 고갈되거나 성능이 붕괴되나? (용량 한계 — 의도적 오남용은 #abuse-vector)',
+    disposition: 'code-verify',
   },
   {
     id: 'abuse-vector',
     lens: '이 흐름을 한도/쿼터보다 빠르게 악용할 수 있나(대량·replay·스크래핑·credential stuffing)? 레이트리미터가 공유라 우회·고갈시킬 수 있나? (의도적 오남용 벡터 — 정상 부하의 용량 한계는 #resource-exhaustion)',
+    disposition: 'code-verify',
   },
   {
     id: 'compat-version',
     lens: '하위/상위 호환·스키마/API 진화·파괴적 변경이 있나?',
+    disposition: 'code-verify',
   },
   {
     id: 'injection',
     lens: '신뢰할 수 없는 입력이 코드·쿼리·명령으로 해석되는 인젝션 경로가 있나? (SQL·NoSQL·OS 명령·LDAP·XPath·템플릿·역직렬화 싱크 — CWE-89/78/94, OWASP A03) 입력이 위험한 인터프리터에 도달하나? (입력 검증 게이트 자체는 #input-validation)',
+    disposition: 'code-verify',
   },
   {
     id: 'secret-exposure',
     lens: '시크릿·자격증명·토큰·키가 코드·로그·에러·설정·URL에 노출되나? 저장·전송 시 적절히 보호되나? (CWE-200/532, OWASP A02)',
+    disposition: 'code-verify',
   },
   {
     id: 'pii-leak',
     lens: '개인식별정보(PII)·민감 데이터가 수집·로깅·전송·노출되나? 최소수집·마스킹·암호화·접근통제가 적용되나?',
+    disposition: 'code-verify',
   },
   {
     id: 'regulatory',
     lens: '규제·컴플라이언스 의무가 이 변경에 걸리나? (GDPR·개인정보보호법·데이터 보존/삭제·국외이전·동의·감사요건 — 위반 시 법적/계약 위험)',
+    disposition: 'user-intent',
   },
   {
     id: 'cross-feature',
     lens: '기능적으로 먼 feature와 공유 자원/상태를 건드리나? (memory graph entanglement가 주로 채움)',
+    disposition: 'code-verify',
   },
   {
     id: 'observability',
     lens: '로깅 공백·알림 부재·디버깅성 문제가 있나? 무성/부분 실패를 어떤 signal이 잡고, 인지까지 얼마나 걸리나?',
+    disposition: 'code-verify',
   },
   {
     id: 'deployment-rollout',
     lens: '적용/배포 타이밍·순서가 중요한가? 의존(받는/하는) 타 기능보다 먼저/나중 배포돼야 하나? git·릴리스 정책(브랜치 전략·feature flag·릴리스 트레인·핫픽스)과 맞나? 부분 롤아웃 중 혼재 버전이 깨지나? 마이그레이션-코드 배포 순서는?',
+    disposition: 'code-verify',
   },
   {
     id: 'reuse-build-vs-buy',
-    lens: '신규 구현 전에 reuse→adopt→build 순으로 따졌나? (내부) 코드베이스에 이미 있는 재사용 가능한 패턴·컴포넌트를 채택했나, 아니면 재발명했나? (외부) 검증된 OSS·SDK가 있나 — 라이선스(copyleft)·비용·CVE·유지보수 활성도·공급망 위험은? 신규 구현이면 reinvent 비용·품질 리스크는? (이 렌즈는 기존 자산 채택 vs 재발명 결정 — 만들기로 한 뒤 이 변경 자체의 추상화 적정선·과잉/과소는 #minimal-increment의 몫)',
+    lens: '신규 구현 전에 reuse→adopt→build 순으로 따졌나? (내부) 코드베이스에 이미 있는 재사용 가능한 패턴·컴포넌트를 채택했나, 아니면 재발명했나? (외부) 검증된 OSS·SDK가 있나 — 라이선스(copyleft)·비용·CVE·유지보수 활성도·공급망 위험은? 신규 구현이면 reinvent 비용·품질 리스크는? (이 렌즈는 기존 자산 채택 vs 재발명 결정 — 만들기로 한 뒤 이 변경 자체의 추상화 적정선·과잉/과소는 charter의 minimal-increment self-check 몫, wi_260706n4w에서 far-field 밖으로 이관)',
+    disposition: 'code-verify',
   },
   {
     id: 'input-validation',
     lens: '신뢰할 수 없는 입력의 형태·타입·의미가 사용 전에 검증되나? (malformed payload·type confusion·역직렬화 — CWE-20/502, OWASP A03/A08)',
+    disposition: 'code-verify',
   },
   {
     id: 'configuration',
     lens: '코드가 아닌 설정·플래그·기본값·env 값이 실패를 부르나? 새 설정이 라이브 전에 검증되나? (OWASP A05 misconfiguration)',
+    disposition: 'code-verify',
   },
   {
     id: 'time-clock',
     lens: '정확성이 시간 자체에 의존하나 — 만료(토큰·TTL·인증서)·타임존/DST·monotonic vs wall clock·노드 간 시계 일치?',
+    disposition: 'code-verify',
   },
+];
+
+/**
+ * One category routed OUT of the far-field floor entirely — the completeness
+ * ledger record of the removal (wi_260706n4w ac-3, no silent narrowing). A
+ * category may only leave the floor WITH this record: id + the question it
+ * carried (verbatim, single SoT with the receiving gate) + where it went +
+ * why + what risk survives if the receiving route is not consumed. Mirrors
+ * the justified-skip vocabulary (close_reason/residual_risk) so 'complete'
+ * never quietly means "fewer categories than before".
+ */
+export interface RoutedOutCategory {
+  /** The floor id the category had (kebab). */
+  id: string;
+  /** The probing question, verbatim — identical to the receiving gate's copy. */
+  lens: string;
+  /** Where the category now lives (the receiving enforcement gate). */
+  route: 'charter-self-check';
+  /** WHY it left the far-field floor (mirrors close_reason). */
+  reason: string;
+  /** WHAT RISK survives when the receiving route is not consumed (mirrors residual_risk). */
+  residual_risk: string;
+}
+
+/**
+ * Categories removed from the floor with their routing record (ac-3). Surfaced on
+ * every {@link farFieldCoverageReport} so each completeness claim self-describes
+ * what was routed out — a reader of 'complete' sees the narrowing and its reason,
+ * never a silently smaller universe.
+ */
+export const FAR_FIELD_ROUTED_OUT: readonly RoutedOutCategory[] = [
   {
     id: 'minimal-increment',
-    lens: '이게 의도를 달성하는 가장 명료하고 작은 증분인가? 추상화가 지금의 실제 복잡도에 비례하나 — 요청되지 않은 기능·설정가능성·확장성, 미래 대비/단일 사용/얕은 추상화로 과하지 않나(과잉이 흔한 실패)? 거꾸로, 이 변경이 새로 들이는 중복·반복을 마땅히 묶지 않아 모자라지 않나(중복은 버그·드리프트의 원천)? 변경한 모든 줄에 요청과 연결된 이유가 있고, 관련 없는 리팩터·포맷 정리가 섞이지 않았나? (목표는 추상화 회피가 아니라 적정 — 실제 복잡도를 줄일 때만 추상화한다. 기존 재사용 가능 자산을 채택했는지는 #reuse-build-vs-buy의 몫)',
+    lens: MINIMAL_INCREMENT_SELF_CHECK.question,
+    route: 'charter-self-check',
+    reason:
+      'minimal-increment는 먼 위험(far-field)이 아니라 설계-메타 품질 — 매 턴 재주입되는 charter self-check(MINIMAL_INCREMENT_SELF_CHECK)가 집행한다 (wi_260706n4w ac-2)',
+    residual_risk:
+      'charter projection을 소비하지 않는 경로(비 hook 진입·직접 엔진 호출)에서는 이 self-check가 주입되지 않아 과잉/과소 증분이 사전 점검 없이 지나갈 수 있다',
   },
 ];
 
@@ -147,6 +232,15 @@ export function farFieldLenses(
  * (ac-10): drop `disabled` floor ids, append `added` categories, and let an added
  * id that collides with a floor id OVERRIDE that floor lens (no duplicate id).
  * Pure — the caller supplies floor + config so this stays trivially testable.
+ *
+ * Disposition resolution (wi_260706n4w ac-2) is a PARTIAL override, deliberately
+ * not the whole-object replacement the `added` collision rule uses: the tier-②
+ * `dispositions` record re-routes a kept floor category without touching its
+ * lens, and an added entry that collides with a floor id but declares no
+ * disposition INHERITS the floor's — replacing a lens can never silently drop a
+ * routing decision. Precedence per id: added.disposition (explicit on the entry)
+ * > config.dispositions[id] > the floor's static disposition > absent
+ * (= DEFAULT_COVERAGE_DISPOSITION downstream).
  */
 export function resolveTaxonomy(
   floor: readonly FarFieldCategory[],
@@ -154,9 +248,24 @@ export function resolveTaxonomy(
 ): FarFieldCategory[] {
   const disabled = new Set(config.disabled ?? []);
   const added = config.added ?? [];
+  const routes = config.dispositions ?? {};
+  const floorById = new Map(floor.map((c) => [c.id, c]));
   const overridden = new Set(added.map((c) => c.id));
-  const kept = floor.filter((c) => !disabled.has(c.id) && !overridden.has(c.id));
-  return [...kept, ...added];
+  const kept = floor
+    .filter((c) => !disabled.has(c.id) && !overridden.has(c.id))
+    .map((c) => {
+      const route = routes[c.id];
+      return route ? { ...c, disposition: route } : c;
+    });
+  const resolvedAdded = added.map((a) => {
+    const disposition = a.disposition ?? routes[a.id] ?? floorById.get(a.id)?.disposition;
+    return {
+      id: a.id,
+      lens: a.lens,
+      ...(disposition ? { disposition } : {}),
+    };
+  });
+  return [...kept, ...resolvedAdded];
 }
 
 /**
@@ -251,6 +360,12 @@ export function farFieldCoverageNodes(
       origin: 'seed' as const,
       depth_weight: 1,
       children: [],
+      // wi_260706n4w ac-2/ac-3: the seeded node carries its category's disposition
+      // so the routing decision rides the ledger (a later routed close stays
+      // diagnosable). Metadata only at seed — a routed category still seeds OPEN
+      // (fail-open, ac-4): the deep-interview/runtime wiring closes it downstream,
+      // never the seed itself.
+      ...(c.disposition ? { disposition: c.disposition } : {}),
     };
     const skip = skips.get(c.id);
     return skip
@@ -287,6 +402,8 @@ export interface FarFieldSkip {
   state: 'out_of_scope' | 'user_owned';
   /** The recorded close_reason; null only for a legacy node missing one (the close gate forbids this going forward). */
   reason: string | null;
+  /** The node's disposition route, when it carries one — a routed skip stays diagnosable (wi_260706n4w ac-3, additive). */
+  disposition?: CoverageDisposition;
 }
 
 /** Process-coverage summary of one work item's far-field sweep (ac-11a, deterministic). */
@@ -301,6 +418,13 @@ export interface FarFieldCoverageReport {
   skipped: FarFieldSkip[];
   /** Breadth complete — at least one category seeded AND none still open (ac-2). */
   complete: boolean;
+  /**
+   * Categories removed from the floor, with route + reason (wi_260706n4w ac-3):
+   * every completeness claim self-describes the narrowing — 'complete' can never
+   * quietly mean "fewer categories than before". Additive; sourced from the
+   * static FAR_FIELD_ROUTED_OUT ledger, so it is present on every report.
+   */
+  routed_out: RoutedOutCategory[];
 }
 
 /**
@@ -320,12 +444,14 @@ export function farFieldCoverageReport(map: CoverageMap): FarFieldCoverageReport
       id: n.id,
       state: n.state as 'out_of_scope' | 'user_owned',
       reason: n.close_reason ?? null,
+      ...(n.disposition ? { disposition: n.disposition } : {}),
     }));
   return {
     seeded: cats.length,
     resolved: cats.filter((n) => n.state === 'resolved').length,
     open,
     skipped,
+    routed_out: [...FAR_FIELD_ROUTED_OUT],
     // Structural completeness must agree with isCoverageTerminated's `allClosed`
     // (every node, incl. derived sub-scopes that are NOT cov-cat-*), not just the
     // categories — else a closed-category report reads complete while a derived

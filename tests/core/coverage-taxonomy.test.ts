@@ -2,9 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { MINIMAL_INCREMENT_SELF_CHECK, charterProjection } from '~/core/charter';
 import { isCoverageTerminated } from '~/core/coverage-manager';
 import {
   CATEGORY_NODE_PREFIX,
+  FAR_FIELD_ROUTED_OUT,
   FAR_FIELD_TAXONOMY_FLOOR,
   farFieldCategoriesEnabled,
   farFieldCoverageNodes,
@@ -21,6 +23,10 @@ import type { CoverageMap } from '~/schemas/coverage';
 // sees every far-field domain instead of only what it happens to recall (§2/§3).
 describe('far-field taxonomy floor (wi_260622vjo §6-floor)', () => {
   test('floor enumerates the 23 cross-validated categories', () => {
+    // Still 23, but the composition changed (wi_260706n4w ac-2): minimal-increment
+    // was routed OUT to the charter self-check (design-meta, not a far risk - the
+    // removal is ledgered in FAR_FIELD_ROUTED_OUT, ac-3) and authorization was
+    // facet-split into authorization (enforcement) + authorization-model (model).
     expect(FAR_FIELD_TAXONOMY_FLOOR.length).toBe(23);
   });
 
@@ -69,12 +75,25 @@ describe('far-field taxonomy floor (wi_260622vjo §6-floor)', () => {
     }
   });
 
-  test('the floor includes the minimal-increment design-discipline lens (user-added)', () => {
-    const cat = FAR_FIELD_TAXONOMY_FLOOR.find((c) => c.id === 'minimal-increment');
-    expect(cat).toBeDefined();
-    // the lens probes for the smallest/clearest increment (over-engineering is the
-    // most common failure — charter §4-3/§4-4, 범위 axiom)
-    expect(cat?.lens).toContain('증분');
+  test('minimal-increment is routed OUT of the floor to the charter self-check — recorded with route+reason, never silent (wi_260706n4w ac-3)', () => {
+    // It is design-META quality (charter §4-3/§4-4, 범위 axiom), not a far risk,
+    // so it leaves the pre-mortem sweep — but the removal itself stays in the
+    // completeness ledger (no silent 23→22 narrowing).
+    expect(FAR_FIELD_TAXONOMY_FLOOR.some((c) => c.id === 'minimal-increment')).toBe(false);
+    const routed = FAR_FIELD_ROUTED_OUT.find((r) => r.id === 'minimal-increment');
+    expect(routed).toBeDefined();
+    expect(routed?.route).toBe('charter-self-check');
+    expect(routed?.reason).toBeTruthy();
+    expect(routed?.residual_risk).toBeTruthy();
+    // single SoT: the ledger record carries the exact question the charter enforces
+    expect(routed?.lens).toBe(MINIMAL_INCREMENT_SELF_CHECK.question);
+    expect(MINIMAL_INCREMENT_SELF_CHECK.question).toContain('증분');
+  });
+
+  test('the charter receiver is executable, not documentation — the projection injects the self-check question every turn', () => {
+    // charterProjection is what the UserPromptSubmit hook re-injects each turn;
+    // carrying the question there makes the transfer live enforcement, not prose.
+    expect(charterProjection()).toContain(MINIMAL_INCREMENT_SELF_CHECK.question);
   });
 });
 
@@ -384,6 +403,130 @@ describe('far-field taxonomy project config (wi_260622vjo ac-10)', () => {
     const nodes = farFieldCoverageNodes('add login', 'cov-root', custom);
     const cats = nodes.filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX));
     expect(cats.map((n) => n.id).sort()).toEqual(['cov-cat-a', 'cov-cat-b']);
+  });
+});
+
+// wi_260706n4w ac-2/ac-3 — static disposition routing. Every floor category
+// declares WHO answers it WHEN (code-verify / user-intent / runtime-post-impl);
+// dual-personality categories are facet-split so each facet routes whole; tier-②
+// config can re-route per project. Routing must never silently narrow the
+// completeness ledger: seeded nodes carry their disposition, and a category
+// removed from the floor stays visible in every report via FAR_FIELD_ROUTED_OUT.
+describe('far-field disposition routing (wi_260706n4w ac-2/ac-3)', () => {
+  const floor = FAR_FIELD_TAXONOMY_FLOOR;
+
+  test('every floor category declares a static disposition (ac-2)', () => {
+    for (const c of floor) {
+      expect(['code-verify', 'user-intent', 'runtime-post-impl']).toContain(c.disposition);
+    }
+  });
+
+  test('authorization is facet-split: enforcement stays code-verify, model routes user-intent (ac-2)', () => {
+    const enforce = floor.find((c) => c.id === 'authorization');
+    const model = floor.find((c) => c.id === 'authorization-model');
+    expect(enforce?.disposition).toBe('code-verify');
+    expect(model?.disposition).toBe('user-intent');
+    // each facet is independently a probing question and cross-references its twin
+    expect(model?.lens).toContain('?');
+    expect(enforce?.lens).toContain('#authorization-model');
+    expect(model?.lens).toContain('#authorization의');
+  });
+
+  test('regulatory routes user-intent whole (which obligations apply is user domain knowledge)', () => {
+    expect(floor.find((c) => c.id === 'regulatory')?.disposition).toBe('user-intent');
+  });
+
+  test('farFieldCoverageNodes stamps the category disposition onto the seeded node — and the node stays OPEN (fail-open seed, ac-4 wiring is downstream)', () => {
+    const nodes = farFieldCoverageNodes('add login');
+    const model = nodes.find((n) => n.id === 'cov-cat-authorization-model');
+    expect(model?.disposition).toBe('user-intent');
+    expect(model?.state).toBe('open');
+    // a custom taxonomy entry without a disposition seeds a node without one
+    // (absent = DEFAULT_COVERAGE_DISPOSITION downstream — additive compat)
+    const custom = farFieldCoverageNodes('x', 'cov-root', [{ id: 'a', lens: 'lens A?' }]);
+    expect(custom.find((n) => n.id === 'cov-cat-a')?.disposition).toBeUndefined();
+  });
+
+  test('tier-② dispositions record re-routes a floor category WITHOUT touching its lens (partial override — never whole-object replacement)', () => {
+    const out = resolveTaxonomy(floor, { dispositions: { auditing: 'user-intent' } });
+    const auditing = out.find((c) => c.id === 'auditing');
+    expect(auditing?.disposition).toBe('user-intent');
+    expect(auditing?.lens).toBe(floor.find((c) => c.id === 'auditing')?.lens ?? 'MISSING');
+    // untouched categories keep their static disposition
+    expect(out.find((c) => c.id === 'injection')?.disposition).toBe('code-verify');
+  });
+
+  test('added[].disposition is honored; an added id colliding with a floor id WITHOUT one inherits the floor disposition (lens replacement cannot silently drop the route)', () => {
+    const out = resolveTaxonomy(floor, {
+      added: [
+        { id: 'tenancy', lens: '테넌트 경계?', disposition: 'runtime-post-impl' },
+        { id: 'authorization-model', lens: 'OVERRIDDEN model lens?' },
+      ],
+    });
+    expect(out.find((c) => c.id === 'tenancy')?.disposition).toBe('runtime-post-impl');
+    const model = out.find((c) => c.id === 'authorization-model');
+    expect(model?.lens).toBe('OVERRIDDEN model lens?');
+    expect(model?.disposition).toBe('user-intent'); // inherited from the floor twin
+  });
+
+  test('disposition precedence: added.disposition > dispositions[id] > floor static', () => {
+    const explicit = resolveTaxonomy(floor, {
+      added: [{ id: 'authorization-model', lens: 'L?', disposition: 'code-verify' }],
+      dispositions: { 'authorization-model': 'runtime-post-impl' },
+    });
+    expect(explicit.find((c) => c.id === 'authorization-model')?.disposition).toBe('code-verify');
+    const viaRecord = resolveTaxonomy(floor, {
+      added: [{ id: 'authorization-model', lens: 'L?' }],
+      dispositions: { 'authorization-model': 'runtime-post-impl' },
+    });
+    expect(viaRecord.find((c) => c.id === 'authorization-model')?.disposition).toBe(
+      'runtime-post-impl',
+    );
+  });
+
+  test('farFieldCoverageReport carries the routed-out ledger — a removed category stays visible with route+reason (ac-3 no silent narrowing)', () => {
+    const map: CoverageMap = {
+      schema_version: '0.1.0',
+      work_item_id: 'wi_test',
+      root_id: 'cov-root',
+      nodes: farFieldCoverageNodes('add login'),
+    };
+    const r = farFieldCoverageReport(map);
+    expect(r.routed_out.map((x) => x.id)).toContain('minimal-increment');
+    for (const ro of r.routed_out) {
+      expect(ro.route).toBe('charter-self-check');
+      expect(ro.reason).toBeTruthy();
+      expect(ro.residual_risk).toBeTruthy();
+    }
+    // the completeness predicate itself is unchanged (additive-only, ac-6)
+    expect(r.complete).toBe(false);
+  });
+
+  test('report.skipped carries the closed node disposition (a routed skip stays diagnosable in the ledger)', () => {
+    const nodes = farFieldCoverageNodes('add login').map((n) =>
+      n.id === 'cov-cat-authorization-model'
+        ? {
+            ...n,
+            state: 'user_owned' as const,
+            close_reason: 'deep-interview 차원으로 라우팅됨',
+            residual_risk: '인터뷰 미실행 시 이 질문이 누락된다',
+          }
+        : n,
+    );
+    const r = farFieldCoverageReport({
+      schema_version: '0.1.0',
+      work_item_id: 'wi_test',
+      root_id: 'cov-root',
+      nodes,
+    });
+    const skip = r.skipped.find((s) => s.id === 'cov-cat-authorization-model');
+    expect(skip?.disposition).toBe('user-intent');
+    // a skip on a node without a disposition stays undefined (additive)
+    expect(
+      r.skipped
+        .filter((s) => s.id !== 'cov-cat-authorization-model')
+        .every((s) => s.disposition === undefined),
+    ).toBe(true);
   });
 });
 

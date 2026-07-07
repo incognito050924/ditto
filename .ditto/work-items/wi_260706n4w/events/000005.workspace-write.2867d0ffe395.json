@@ -1,0 +1,67 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260706n4w",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "2867d0ffe39535fe6355e5d876e05d6a9a897c2b3d9b4c238138026251569663",
+  "ts": "2026-07-07T04:54:35.426Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260706n4w/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "artifact"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "exit 0 — 4092 pass/0 fail/11 skip (기준 4088+4, format 후 fresh 전체 재실행)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run lint",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "file",
+        "path": "reports/coverage/wi_260706n4w-fabrication-baseline.md",
+        "summary": "ac-5 evidence=log — BEFORE 실증(측정 불가성 소견 포함) + AFTER 잔여 5단계 + 재현 스크립트 부록 A"
+      },
+      {
+        "kind": "file",
+        "path": "reports/coverage/labeler-contract.md",
+        "summary": "라벨러 계약 — 순환 차단 3조건 + blind spot(§6) + 독립성 residual(§7)"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/coverage-oracle.ts",
+        "summary": "correlateFabrication 결정적 상관(테스트 4개, 34/0)"
+      },
+      {
+        "kind": "command",
+        "command": "git check-ignore reports/coverage/labeler-contract.md",
+        "summary": "exit 1 — .gitignore 재포함으로 evidence 커밋 가능"
+      },
+      {
+        "kind": "artifact",
+        "path": ".ditto/autopilot-bypass.jsonl",
+        "summary": "n9 감사 레코드 5건"
+      }
+    ]
+  }
+}

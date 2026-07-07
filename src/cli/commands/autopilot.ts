@@ -1297,6 +1297,20 @@ const autopilotCoverageRound = defineCommand({
               },
             }
           : {}),
+        // wi_260706n4w n7 fix (ac-1 reachability): thread the payload's oracle_claims to
+        // recordCoverageRound's oracle seam — without this the injection/secret
+        // fail-closed tier was unreachable from the product surface. The conditional
+        // spread bridges zod's `category_id?: string | undefined` inference to the
+        // exact-optional OracleClaimInput (exactOptionalPropertyTypes).
+        ...(parsed.data.oracle_claims
+          ? {
+              oracleClaims: parsed.data.oracle_claims.map((c) => ({
+                claim_id: c.claim_id,
+                ...(c.category_id !== undefined ? { category_id: c.category_id } : {}),
+                claim: c.claim,
+              })),
+            }
+          : {}),
         // ac-4: explicit user override wins over stakes-derived tier_inputs.
         ...(intensity ? { intensity } : {}),
       });

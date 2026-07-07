@@ -492,3 +492,7 @@ bin/*
 # launcher (bin/ditto.cmd, runs `bun bin/ditto`) ships for the same no-build guarantee.
 !bin/ditto
 !bin/ditto.cmd
+
+# reports/coverage holds committed measurement evidence (wi_260706n4w ac-5),
+# not istanbul output — re-include it past the bare `coverage` rule above.
+!reports/coverage/
