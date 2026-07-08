@@ -555,7 +555,11 @@ async function checkForbiddenScope(
   const contract = await new ChangeContractStore(input.repoRoot).read(workItemId);
   if (!contract) return undefined;
 
-  const repoRel = relative(input.repoRoot, resolve(input.repoRoot, filePath));
+  // Worktree-aware (wi_2607085ow): this gate shares the lease-gate's scope comparison,
+  // so it needs the same worktree-root relativization — else a worktree edit's
+  // `.ditto/local/worktrees/<wi>/` prefix makes the whitelist FALSE-BLOCK and the
+  // blacklist UNDER-ENFORCE (a forbidden path slips through).
+  const repoRel = leaseScopeRelPath(input.repoRoot, filePath);
   const archSpec = await loadArchSpec(input.repoRoot);
 
   // whitelist (cleanup profile): only allowed_scope is editable; 그외 blocks.
@@ -627,7 +631,8 @@ function fileScopeContains(scope: string[], repoRelPath: string): boolean {
 const TESTS_ALLOW_NODE_KINDS: ReadonlySet<string> = new Set(['implement', 'fix', 'refactor']);
 
 /**
- * Repo-relative path for a lease file_scope comparison, WORKTREE-AWARE (wi_260707cp7).
+ * Repo-relative path for an autopilot scope comparison, WORKTREE-AWARE — shared by the
+ * lease-gate (wi_260707cp7) AND the ChangeContract forbidden/whitelist gate (wi_2607085ow).
  * A per-work-item run worktree checks out at `<ws>/.ditto/local/worktrees/<wi>/`,
  * mirroring the repo tree, but the session roots at the OWNING workspace `<ws>`
  * (findRepoRoot). So an absolute worktree edit path relativized against `<ws>` carries

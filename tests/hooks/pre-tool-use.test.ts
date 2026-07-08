@@ -620,6 +620,25 @@ describe('preToolUseHandler — (d) forbidden_scope 집행', () => {
     }
   });
 
+  // wi_2607085ow: this gate shared the lease-gate's repoRoot-relative bug (wi_260707cp7).
+  // In a worktree the edit path carries a .ditto/local/worktrees/<wi>/ prefix, so a
+  // forbidden path went UNMATCHED and slipped the deny-list — the gate must enforce in
+  // worktrees too.
+  test('forbidden_scope is enforced for a worktree edit of a forbidden path (no worktree under-match)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-fsenf-'));
+    try {
+      await new SessionPointerStore(dir).set('sess-fs', 'wi_fsenforce1');
+      await new ChangeContractStore(dir).write(
+        'wi_fsenforce1',
+        contract('wi_fsenforce1', 'src/core/locked.ts'),
+      );
+      const wtRel = '.ditto/local/worktrees/wi_fsenforce1/src/core/locked.ts';
+      expect((await edit(dir, wtRel, 'sess-fs')).exitCode).toBe(2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test('fail-open: 세션 없음 / 계약 없음 → allow', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'ditto-fsenf-'));
     try {
@@ -940,6 +959,24 @@ describe('preToolUseHandler — (d2) whitelist scope_mode (Tidy cleanup profile,
       const blocked = await edit(dir, 'src/core/other.ts', 'sess-wl');
       expect(blocked.exitCode).toBe(2);
       expect(blocked.stderr).toContain('allowed_scope');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  // wi_2607085ow: the whitelist face of the same worktree bug — a worktree edit inside
+  // allowed_scope carried the .ditto/local/worktrees/<wi>/ prefix, failed the whitelist
+  // match, and was FALSE-BLOCKED (the tidy/cleanup profile could not run in a worktree).
+  test('whitelist: a worktree edit inside allowed_scope is allowed (worktree prefix must not false-block)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-wl-'));
+    try {
+      await new SessionPointerStore(dir).set('sess-wl', 'wi_whitelist1');
+      await new ChangeContractStore(dir).write(
+        'wi_whitelist1',
+        whitelist('wi_whitelist1', ['src/core/']),
+      );
+      const wtRel = '.ditto/local/worktrees/wi_whitelist1/src/core/keep.ts';
+      expect((await edit(dir, wtRel, 'sess-wl')).exitCode).toBe(0);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

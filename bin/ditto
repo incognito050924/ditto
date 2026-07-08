@@ -44866,7 +44866,7 @@ async function checkForbiddenScope(input, filePath) {
   const contract = await new ChangeContractStore(input.repoRoot).read(workItemId2);
   if (!contract)
     return;
-  const repoRel2 = relative19(input.repoRoot, resolve18(input.repoRoot, filePath));
+  const repoRel2 = leaseScopeRelPath(input.repoRoot, filePath);
   const archSpec = await loadArchSpec(input.repoRoot);
   if (contract.scope_mode === "whitelist" && contract.allowed_scope.length > 0) {
     const allowed = contract.allowed_scope.some((ref) => scopeRefMatches(ref, repoRel2, archSpec));
@@ -54700,4 +54700,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=c480ab3360fa9bf6c38de415f17538db7bf1d7550fba7203162713772617e466
+//# ditto-src-stamp=4cb0bb878df464b78f3c28f1f8903fb11d08c8afaa4acedc1de7341babf4cfc4
