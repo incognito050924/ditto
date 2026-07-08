@@ -1,0 +1,142 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708tzs",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "b798c75cd446e6bdd8551db1db421b7b4199512c2413081577f280a121b54ae5",
+  "ts": "2026-07-08T07:45:32.949Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260708tzs/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/prism-engine.test.ts tests/schemas/sidecar-registration.test.ts tests/schemas/no-transfer-additive-fields.test.ts",
+        "summary": "76 pass / 0 fail, exit 0 (broader run 358 pass/0)"
+      },
+      {
+        "kind": "command",
+        "command": "git diff --stat",
+        "summary": "src/schemas/prism.ts +97, schemas/prism-issue-map.schema.json +52 — only 2 in-scope files, no pollution"
+      },
+      {
+        "kind": "note",
+        "summary": "backward/forward-compat round-trip: old-shape gains default([]), idempotent, unknown evaluation enum rejected (fail-closed), unknown record key stripped — all passed"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/prism-engine.test.ts",
+        "summary": "36 pass / 0 fail, 81 expect, exit 0 (driver fresh re-run confirmed)"
+      },
+      {
+        "kind": "command",
+        "command": "git diff --stat",
+        "summary": "engine.ts +226, prism-engine.test.ts +214 (2 files, 433 ins / 7 del)"
+      },
+      {
+        "kind": "note",
+        "summary": "ac-2 seed severity=noncritical justified by cap-interaction measurement (avoids unterminatable loop). LSP reAnchor/3-arg diagnostics were STALE tsc artifacts — fresh bun test green."
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/prism-cli.test.ts",
+        "summary": "17 pass / 0 fail (was 1 fail at :153 pre-change), exit 0 (driver fresh re-run confirmed)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (full suite, node-reported)",
+        "summary": "4184 pass / 11 skip / 0 fail — the earlier 1 fail resolved; to be re-confirmed fresh by tzs-verify"
+      },
+      {
+        "kind": "command",
+        "command": "./bin/ditto prism tree --wi <seeded>",
+        "summary": "renders tree; unseeded WI prints clean no-map message, exit 0 (post build:bin)"
+      },
+      {
+        "kind": "note",
+        "summary": "REVIEW TARGET: new tsc type error src/cli/commands/prism.ts(104,3) evaluations missing on a PrismIssueMap literal (zod default fills at runtime → tests green, but type-required). Pre-existing tsc errors in autopilot-loop.ts/coverage-loop.ts are baseline (files untouched). ac-1 happy-path (green gated close) not smoke-able in bare CLI (needs host artifact/child); covered by tzs-engine unit tests instead."
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260708tzs/reviewer-output.json",
+        "summary": "2 findings (1 HIGH ac-2 dead-wire, 1 LOW type literal), verdict=partial/revise"
+      },
+      {
+        "kind": "command",
+        "command": "grep -c seedUncoveredFragments bin/ditto",
+        "summary": "0 — dead-wire proof (tree-shaken, no production caller)"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "src/cli/commands/prism.ts:104 evaluations missing (real type gap, runtime-harmless)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "4191 pass / 11 skip / 0 fail, exit 0, 338 files (verifier fresh, ~230s)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/prism-engine.test.ts tests/core/prism-opponent.test.ts tests/cli/prism-cli.test.ts",
+        "summary": "68 pass / 0 fail, 213 expect, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "grep -c seedUncoveredFragments bin/ditto",
+        "summary": "2 (>0) — ac-2 reachable in bundle"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "0 errors in the 5 prism source files (LSP unreachable-code warnings are not tsc errors)"
+      },
+      {
+        "kind": "command",
+        "command": "./bin/ditto prism tree / prism opponent --concern critique|dissent",
+        "summary": "live smokes: tree pure (sha256 unchanged) exit 0; opponent host-absent graceful degrade stamp exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "grep -c seedUncoveredFragments bin/ditto",
+        "summary": "2 (was 0) after bun run build:bin — dead-wire gone, ac-2 reachable in production (driver-verified)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/prism-engine.test.ts tests/cli/prism-cli.test.ts",
+        "summary": "60 pass / 0 fail, 177 expect, exit 0 (driver fresh re-run; RED->GREEN on the new ac-2 wiring test)"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit | grep -c 'commands/prism.ts'",
+        "summary": "0 — evaluations:[] fix landed; the earlier 'unreachable code' LSP warnings are NOT tsc errors (stale artifact)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (full, fix-implementer run)",
+        "summary": "4191 pass / 11 skip / 0 fail — to be re-confirmed fresh by tzs-verify"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/prism-engine.test.ts tests/cli/prism-cli.test.ts",
+        "summary": "60 pass / 0 fail, exit 0 (re-reviewer fresh run)"
+      },
+      {
+        "kind": "command",
+        "command": "grep -c seedUncoveredFragments bin/ditto",
+        "summary": "2 (>0) — dead-wire resolved, ac-2 reachable in bundle"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260708tzs/acg-review.json",
+        "summary": "re-ran acg-review: 0 high-risk without evidence — gate cleared"
+      }
+    ]
+  }
+}

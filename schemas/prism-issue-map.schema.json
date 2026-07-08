@@ -170,6 +170,58 @@
           "default": [],
           "description": "Per-node severity authority state (MODEL-2)"
         },
+        "evaluations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "node_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evaluation": {
+                "type": "string",
+                "enum": [
+                  "justified",
+                  "defeated",
+                  "unevaluated"
+                ],
+                "description": "Argumentation 3-value stamp for this node (ac-1)"
+              },
+              "justifying_reason": {
+                "type": "string",
+                "description": "The actual reason justifying a critical resolved-close (A2 close-gate input, ac-1)"
+              },
+              "refutation_attempted": {
+                "type": "boolean",
+                "description": "Whether a strongest-rebuttal (Popper refutation) was attempted before closing — the field-presence gate closePrismNode reads (A2, ac-1)"
+              },
+              "opponent_critique": {
+                "type": "string",
+                "description": "Dialectic-opponent critique + Popper refutation recorded on a flagged critical node (ac-5)"
+              },
+              "opponent_dissent": {
+                "type": "string",
+                "description": "Codex independent 2nd-perspective dissent re-derived from original intent at anchor re-facing (ac-6)"
+              },
+              "opponent_status": {
+                "type": "string",
+                "enum": [
+                  "engaged",
+                  "host_absent"
+                ],
+                "description": "Self-describing opponent-seam status; host_absent when the host degrades (OBJ-3 / ADR-0018)"
+              }
+            },
+            "required": [
+              "node_id"
+            ],
+            "additionalProperties": false,
+            "description": "One prism-level per-node evaluation annotation — argumentation state + opponent seam (ac-1/ac-5/ac-6)"
+          },
+          "default": [],
+          "description": "Per-node prism-level argumentation + opponent-seam evaluation state (ac-1/ac-5/ac-6)"
+        },
         "notified_at": {
           "type": "string",
           "format": "date-time",

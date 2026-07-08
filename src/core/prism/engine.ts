@@ -1,12 +1,18 @@
 import {
   type CapUsage,
   type CoverageCaps,
+  addNode,
   capStatus,
   closeNode,
   coverageClosureGate,
 } from '~/core/coverage-manager';
 import type { CoverageNode } from '~/schemas/coverage';
-import type { PrismIssueMap, PrismSeverity } from '~/schemas/prism';
+import type {
+  PrismEvaluation,
+  PrismIssueMap,
+  PrismNodeEvaluation,
+  PrismSeverity,
+} from '~/schemas/prism';
 
 /**
  * Prism issue-map engine (wi_260707oi1, node oi1-issuemap-engine).
@@ -71,6 +77,48 @@ export function assignSeverity(
   return { ok: true, prism: { ...prism, severities: [...others, assignment] }, reasons: [] };
 }
 
+// ── prism-level per-node evaluation annotation (ac-1) ─────────────────────────
+
+/** The prism-level evaluation record for a node, if any. */
+function evaluationOf(prism: PrismIssueMap, nodeId: string): PrismNodeEvaluation | undefined {
+  return (prism.evaluations ?? []).find((e) => e.node_id === nodeId);
+}
+
+/**
+ * Upsert a per-node evaluation annotation (replace the single record for the node,
+ * append if absent — the `evaluations` array is a per-node sidecar, not a log). Pure.
+ */
+function upsertEvaluation(
+  prism: PrismIssueMap,
+  nodeId: string,
+  patch: Partial<Omit<PrismNodeEvaluation, 'node_id'>>,
+): PrismIssueMap {
+  const existing = prism.evaluations ?? [];
+  const current = existing.find((e) => e.node_id === nodeId);
+  const others = existing.filter((e) => e.node_id !== nodeId);
+  const merged: PrismNodeEvaluation = { ...(current ?? {}), ...patch, node_id: nodeId };
+  return { ...prism, evaluations: [...others, merged] };
+}
+
+/**
+ * OBJ-1 trivial-proxy floor (research §8-A.2 "증거추가 0이면 차단"). A critical
+ * resolved-close must have contributed NEW grounding — not just self-authored prose:
+ * either a child decomposition (the node branched into sub-issues) OR a recorded
+ * opponent artifact (critique/dissent). STRUCTURAL presence only — this never judges
+ * the reason's *quality* (that is the model's job, out of scope). Pure.
+ */
+function evidenceAddedForNode(prism: PrismIssueMap, nodeId: string): boolean {
+  const node = prism.tree.nodes.find((n) => n.id === nodeId);
+  if (node !== undefined && node.children.length > 0) return true;
+  const evalRec = evaluationOf(prism, nodeId);
+  const critique = evalRec?.opponent_critique;
+  const dissent = evalRec?.opponent_dissent;
+  return (
+    (critique !== undefined && critique.trim().length > 0) ||
+    (dissent !== undefined && dissent.trim().length > 0)
+  );
+}
+
 // ── close gate (MODEL-1 unknown-close residual) ──────────────────────────────
 
 /** An unknown-close state — a "모름-닫기" that defers rather than resolves. */
@@ -85,6 +133,11 @@ function isUnknownCloseState(state: Exclude<CoverageNode['state'], 'open'>): boo
  *   - MODEL-1: an unknown-close (out_of_scope/user_owned) of a CRITICAL node
  *     requires a recorded residual_risk. A no-residual "모름-닫기" of critical
  *     scope is REJECTED (it must not silently count as critical resolution).
+ *   - ac-1 A2: a `resolved` close of a CRITICAL node requires BOTH a non-empty
+ *     justifying_reason AND an attempted refutation (from the node's evaluation
+ *     annotation), PLUS added grounding this round (OBJ-1). Any miss REJECTS the
+ *     close and stamps the node prism-level `unevaluated`. Homomorphic with the
+ *     MODEL-1 residual gate above (same critical-severity condition).
  * Pure: returns the new prism on success, reasons on rejection.
  */
 export function closePrismNode(
@@ -106,8 +159,43 @@ export function closePrismNode(
       ],
     };
   }
+  // ac-1 A2 critical resolved-close gate — homomorphic with MODEL-1 above.
+  if (isCritical && state === 'resolved') {
+    const evalRec = evaluationOf(prism, nodeId);
+    const missing: string[] = [];
+    const hasReason =
+      evalRec?.justifying_reason !== undefined && evalRec.justifying_reason.trim().length > 0;
+    if (!hasReason) missing.push('a non-empty justifying_reason');
+    if (evalRec?.refutation_attempted !== true) {
+      missing.push('an attempted refutation (refutation_attempted)');
+    }
+    if (!evidenceAddedForNode(prism, nodeId)) {
+      missing.push(
+        'added grounding this round — a child decomposition or a recorded opponent artifact, not a self-authored reason alone (OBJ-1)',
+      );
+    }
+    if (missing.length > 0) {
+      return {
+        ok: false,
+        // Stamp `unevaluated`: closed with neither real justification nor a survived
+        // rebuttal (argumentation 3-value). The score reads the SAME stamp (below).
+        prism: upsertEvaluation(prism, nodeId, { evaluation: 'unevaluated' }),
+        reasons: [
+          `resolved-close of critical node ${nodeId} requires ${missing.join(', ')} — the close is rejected and the node is stamped prism-level unevaluated (A2, ac-1; homomorphic with the MODEL-1 residual gate)`,
+        ],
+      };
+    }
+  }
   const tree = closeNode(prism.tree, nodeId, state, reason, residualRisk);
-  return { ok: true, prism: { ...prism, tree }, reasons: [] };
+  const closed: PrismIssueMap = { ...prism, tree };
+  // A passing critical resolved-close is argumentation-`justified` (real reason +
+  // attempted refutation + added grounding) — stamp it so the termination score reads
+  // the same input as this gate (gate↔score self-check, CLAUDE.md).
+  const next =
+    isCritical && state === 'resolved'
+      ? upsertEvaluation(closed, nodeId, { evaluation: 'justified' })
+      : closed;
+  return { ok: true, prism: next, reasons: [] };
 }
 
 // ── ac-2 critical termination (B1 vacuous-truth guard) ───────────────────────
@@ -117,8 +205,14 @@ export function closePrismNode(
  * when it is an unknown-close (out_of_scope/user_owned) that carries a recorded
  * residual_risk. A no-residual unknown-close does NOT count (double-checked here
  * even though closePrismNode already rejects it).
+ *
+ * ac-1 gate↔score self-check: a node the A2 gate stamped `unevaluated` (closed with
+ * neither a real justification nor a survived rebuttal) NEVER counts as resolved —
+ * even if it reached `resolved` state or bypassed the close gate. The score reads the
+ * SAME evaluation input the close gate writes.
  */
-function isCriticalResolved(node: CoverageNode): boolean {
+function isCriticalResolved(node: CoverageNode, evaluation?: PrismEvaluation): boolean {
+  if (evaluation === 'unevaluated') return false;
   if (node.state === 'open') return false;
   if (node.state === 'resolved') return true;
   return node.residual_risk !== undefined && node.residual_risk.trim().length > 0;
@@ -157,7 +251,9 @@ export function criticalTermination(prism: PrismIssueMap): CriticalTerminationVe
         'no critical nodes — termination/notification does NOT fire on a 0-critical map (B1 vacuous-truth guard)',
     };
   }
-  const unresolved = criticalNodes.filter((n) => !isCriticalResolved(n));
+  const unresolved = criticalNodes.filter(
+    (n) => !isCriticalResolved(n, evaluationOf(prism, n.id)?.evaluation),
+  );
   if (unresolved.length > 0) {
     return {
       terminated: false,
@@ -170,6 +266,157 @@ export function criticalTermination(prism: PrismIssueMap): CriticalTerminationVe
   };
 }
 
+// ── ac-2 completeness-termination seed (original-intent coverage) ─────────────
+
+/** One original-intent fragment (from intent.json source_request/goal/in_scope). */
+export interface IntentFragment {
+  /** Stable fragment id (e.g. 'goal', 'in_scope[0]'). */
+  id: string;
+  /** The fragment text — becomes the seeded node's label when the fragment is uncovered. */
+  text: string;
+}
+
+/** One explicit reverse-map entry: a node the agent declares addresses a fragment. */
+export interface FragmentMapping {
+  fragment_id: string;
+  node_id: string;
+}
+
+export interface CompletenessSeedResult {
+  prism: PrismIssueMap;
+  /** Fragment ids that had zero addressing node and were seeded as unresolved. */
+  seededFragmentIds: string[];
+  reason: string;
+}
+
+/**
+ * Deterministic seed-node id for an uncovered fragment — stable, so re-running the
+ * completeness check never duplicates the seed (idempotent).
+ */
+export function completenessSeedId(fragmentId: string): string {
+  return `prism_seed_${fragmentId}`;
+}
+
+/** Seeded gap nodes are shallow surface markers — they carry no depth expectation. */
+const COMPLETENESS_SEED_DEPTH_WEIGHT = 0.5;
+
+/**
+ * ac-2 completeness-termination seed. Reverse-maps the original-intent fragments
+ * (intent.json source_request/goal/in_scope — NOT the root node's `'original intent'`
+ * placeholder label) against the explicit node→fragment mappings, and for every
+ * fragment that NO node addresses, seeds an `open` node so the gap is SURFACED rather
+ * than silently dropped.
+ *
+ * DETERMINISTIC = explicit-mapping-absence ONLY: a fragment with zero addressing node.
+ * The semantic "characterize vs achieve" judgment is out of scope (the model's job) —
+ * the mapping itself is supplied by the caller; this shell only detects absence + seeds.
+ *
+ * Seed severity = NONCRITICAL (the severity default — no assignment added). This is the
+ * measured cap-interaction decision (intent unknown). A CRITICAL seed would block
+ * `criticalTermination` until resolved, and an unresolvable gap could only be relieved by
+ * hitting a divergence cap (cap-halt ≠ termination) — i.e. it would HARD-BLOCK termination,
+ * exactly what the intent forbids ("must not create an unterminatable loop"). A noncritical
+ * seed surfaces the gap (visible in `renderProgressSummary`) yet provably can NEVER flip
+ * `criticalTermination` off (non-critical survivors do not block), so it cannot cause an
+ * unterminatable loop. Append-only via `addNode` (rejects dup/dangling); idempotent via
+ * `completenessSeedId`. Pure.
+ */
+export function seedUncoveredFragments(
+  prism: PrismIssueMap,
+  fragments: readonly IntentFragment[],
+  mappings: readonly FragmentMapping[],
+): CompletenessSeedResult {
+  const nodeIds = new Set(prism.tree.nodes.map((n) => n.id));
+  // Covered = a fragment explicitly mapped to an EXISTING node (a mapping to a
+  // non-existent node is not coverage — the addressing node must be real).
+  const covered = new Set(mappings.filter((m) => nodeIds.has(m.node_id)).map((m) => m.fragment_id));
+  const rootExists = nodeIds.has(prism.tree.root_id);
+  let tree = prism.tree;
+  const seededFragmentIds: string[] = [];
+  for (const frag of fragments) {
+    if (covered.has(frag.id)) continue;
+    const seedId = completenessSeedId(frag.id);
+    if (nodeIds.has(seedId)) continue; // already seeded — idempotent, no duplicate
+    tree = addNode(tree, {
+      id: seedId,
+      parent_id: rootExists ? prism.tree.root_id : null,
+      label: frag.text,
+      origin: 'discovered',
+      depth_weight: COMPLETENESS_SEED_DEPTH_WEIGHT,
+      state: 'open',
+      children: [],
+    });
+    nodeIds.add(seedId);
+    seededFragmentIds.push(frag.id);
+  }
+  return {
+    prism: { ...prism, tree },
+    seededFragmentIds,
+    reason:
+      seededFragmentIds.length === 0
+        ? 'every original-intent fragment is addressed by ≥1 node — no completeness gap'
+        : `seeded ${seededFragmentIds.length} uncovered original-intent fragment(s) as noncritical surface node(s) — gap surfaced, termination not hard-blocked (ac-2)`,
+  };
+}
+
+/**
+ * Split the original intent (intent.json) into deterministic ac-2 completeness
+ * fragments: the `goal` plus each `in_scope` item, each with a STABLE id
+ * (`goal` / `in_scope[i]`, index preserved). Blank entries are dropped — an empty
+ * fragment can never be "addressed" by a node. Pure: the CLI reads intent.json, this
+ * shapes it into the `IntentFragment[]` that `seedUncoveredFragments` consumes.
+ */
+export function buildIntentFragments(intent: {
+  goal?: string;
+  in_scope?: readonly string[];
+}): IntentFragment[] {
+  const fragments: IntentFragment[] = [];
+  const goal = intent.goal?.trim();
+  if (goal) fragments.push({ id: 'goal', text: goal });
+  (intent.in_scope ?? []).forEach((raw, i) => {
+    const text = raw.trim();
+    if (text) fragments.push({ id: `in_scope[${i}]`, text });
+  });
+  return fragments;
+}
+
+/** Distinctive tokens of a fragment — whitespace/punct-split words of length ≥ 2. */
+function fragmentKeywords(text: string): string[] {
+  return text
+    .split(/[\s,.;:!?·—…()[\]{}"'`/\\]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+}
+
+/**
+ * Derive the explicit node→fragment mappings STRING-LEVEL (no model call): a fragment
+ * is mapped to a node when the node's `label` or `close_reason` contains a distinctive
+ * keyword from the fragment. A fragment addressed by zero node stays unmapped, so
+ * `seedUncoveredFragments` surfaces it as a gap. This is exactly the intent's
+ * deterministic scope ("explicit-mapping-absence ONLY") — no semantic achieve-vs-
+ * characterize judgment (that stays the model's job, out of scope). Pure.
+ */
+export function deriveFragmentMappings(
+  fragments: readonly IntentFragment[],
+  prism: PrismIssueMap,
+): FragmentMapping[] {
+  const nodeTexts = prism.tree.nodes.map((n) => ({
+    id: n.id,
+    text: `${n.label} ${n.close_reason ?? ''}`,
+  }));
+  const mappings: FragmentMapping[] = [];
+  for (const frag of fragments) {
+    const keywords = fragmentKeywords(frag.text);
+    if (keywords.length === 0) continue;
+    for (const node of nodeTexts) {
+      if (keywords.some((kw) => node.text.includes(kw))) {
+        mappings.push({ fragment_id: frag.id, node_id: node.id });
+      }
+    }
+  }
+  return mappings;
+}
+
 // ── ac-4 minimal-launch notification (one-shot + retract on regression) ───────
 
 /**
@@ -179,6 +426,15 @@ export function criticalTermination(prism: PrismIssueMap): CriticalTerminationVe
 export const MINIMAL_LAUNCH_MESSAGE =
   '핵심으로 꼭 정해야 할 것은 모두 정리됐어요. 지금 최소한으로 착수할 수 있어요. (남은 항목은 착수하면서 정해도 됩니다.)';
 
+/** ac-3 achieve-vs-characterize re-facing prompt shown with the launch re-anchor. */
+export const REANCHOR_PROMPT =
+  '착수 전에 원래 의도를 다시 봅니다 — 아래 원문을 실제로 "달성"했는지, 아니면 "특징만 서술"하고 넘어갔는지 확인하세요.';
+
+/** Compose the ac-3 re-anchor surface: the re-facing prompt above the intent verbatim. */
+function buildReAnchor(originalIntent: string): string {
+  return `${REANCHOR_PROMPT}\n\n${originalIntent.trim()}`;
+}
+
 export interface LaunchNotification {
   prism: PrismIssueMap;
   /** Emit the one-shot console message NOW. */
@@ -186,6 +442,13 @@ export interface LaunchNotification {
   /** A prior notification was CLEARED because the map regressed (new/reopened critical). */
   retracted: boolean;
   message?: string;
+  /**
+   * ac-3 re-anchor surface — the original-intent text re-faced with an
+   * achieve-vs-characterize prompt. Present ONLY when the one-shot launch message
+   * fires AND the caller supplied the original intent. NON-BLOCKING: a surface the
+   * caller prints beside the launch line, never a gate on termination/launch.
+   */
+  reAnchor?: string;
 }
 
 /**
@@ -194,17 +457,28 @@ export interface LaunchNotification {
  * `notified_at` (durable one-shot). When the map has regressed out of termination
  * yet still carries a stamp → RETRACT it (clear `notified_at`) so re-reaching
  * re-announces. Pure; the caller owns the console write + persistence.
+ *
+ * ac-3: when the launch message fires and `originalIntent` is supplied, the returned
+ * notification ALSO carries the `reAnchor` surface (original intent + achieve-vs-
+ * characterize prompt). It is NON-BLOCKING — added to the payload only, it never
+ * changes the notify/retract flow.
  */
-export function resolveLaunchNotification(prism: PrismIssueMap, now: Date): LaunchNotification {
+export function resolveLaunchNotification(
+  prism: PrismIssueMap,
+  now: Date,
+  originalIntent?: string,
+): LaunchNotification {
   const { terminated } = criticalTermination(prism);
   const alreadyNotified = prism.notified_at !== undefined;
   if (terminated) {
     if (alreadyNotified) return { prism, notify: false, retracted: false };
+    const hasIntent = originalIntent !== undefined && originalIntent.trim().length > 0;
     return {
       prism: { ...prism, notified_at: now.toISOString() },
       notify: true,
       retracted: false,
       message: MINIMAL_LAUNCH_MESSAGE,
+      ...(hasIntent ? { reAnchor: buildReAnchor(originalIntent as string) } : {}),
     };
   }
   if (alreadyNotified) {

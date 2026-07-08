@@ -2,17 +2,21 @@ import { describe, expect, test } from 'bun:test';
 import {
   type PrismRound,
   assignSeverity,
+  buildIntentFragments,
   closePrismNode,
+  completenessSeedId,
   criticalTermination,
+  deriveFragmentMappings,
   detectDivergence,
   renderProgressSummary,
   resolveLaunchNotification,
   runPrismRounds,
+  seedUncoveredFragments,
   severityOf,
 } from '~/core/prism/engine';
 import { findUnexplainedIdentifiers } from '~/core/question-context';
 import type { CoverageMap, CoverageNode } from '~/schemas/coverage';
-import type { PrismIssueMap, PrismSeverityAssignment } from '~/schemas/prism';
+import type { PrismIssueMap, PrismNodeEvaluation, PrismSeverityAssignment } from '~/schemas/prism';
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
 
@@ -29,16 +33,26 @@ function tree(nodes: CoverageNode[]): CoverageMap {
   };
 }
 
-function prism(nodes: CoverageNode[], severities: PrismSeverityAssignment[] = []): PrismIssueMap {
+function prism(
+  nodes: CoverageNode[],
+  severities: PrismSeverityAssignment[] = [],
+  evaluations: PrismNodeEvaluation[] = [],
+): PrismIssueMap {
   return {
     schema_version: '0.1.0',
     work_item_id: 'wi_prismtest',
     tree: tree(nodes),
     severities,
+    evaluations,
   };
 }
 
 const critical = (id: string): PrismSeverityAssignment => ({ node_id: id, severity: 'critical' });
+
+const evalRec = (
+  nodeId: string,
+  patch: Partial<Omit<PrismNodeEvaluation, 'node_id'>>,
+): PrismNodeEvaluation => ({ node_id: nodeId, ...patch });
 
 // ── ac-2 · B1 vacuous-truth guard ────────────────────────────────────────────
 
@@ -99,6 +113,87 @@ describe('closePrismNode — MODEL-1 unknown-close requires residual_risk (ac-2)
   });
 });
 
+// ── ac-1 · A2 critical resolved-close gate + gate↔score self-check ───────────
+
+describe('closePrismNode — A2 critical resolved-close gate (ac-1)', () => {
+  test('a critical resolved-close with no justifying_reason is REJECTED and stamped unevaluated', () => {
+    const p = prism([node('prism_c0000001', '인증 경계')], [critical('prism_c0000001')]);
+    const r = closePrismNode(p, 'prism_c0000001', 'resolved');
+    expect(r.ok).toBe(false);
+    const ev = (r.prism as PrismIssueMap).evaluations.find((e) => e.node_id === 'prism_c0000001');
+    expect(ev?.evaluation).toBe('unevaluated');
+  });
+
+  test('OBJ-1 trivial-proxy floor: reason + refutation but NO added evidence is still REJECTED', () => {
+    // justifying_reason + refutation_attempted present, but the node has no child
+    // decomposition and no recorded opponent artifact → evidence-added == 0.
+    const p = prism(
+      [node('prism_c0000001', '인증 경계')],
+      [critical('prism_c0000001')],
+      [evalRec('prism_c0000001', { justifying_reason: '검토함', refutation_attempted: true })],
+    );
+    const r = closePrismNode(p, 'prism_c0000001', 'resolved');
+    expect(r.ok).toBe(false);
+    expect(r.reasons.join(' ')).toContain('grounding');
+    const ev = (r.prism as PrismIssueMap).evaluations.find((e) => e.node_id === 'prism_c0000001');
+    expect(ev?.evaluation).toBe('unevaluated');
+  });
+
+  test('reason + refutation + a child decomposition passes and is stamped justified', () => {
+    // parent has a (closed) child → evidence-added > 0 (decomposition grounding).
+    const parent = { ...node('prism_c0000001', '인증 경계'), children: ['prism_ch000002'] };
+    const child = {
+      ...node('prism_ch000002', '토큰 검증', 'resolved'),
+      parent_id: 'prism_c0000001',
+    };
+    const p = prism(
+      [parent, child],
+      [critical('prism_c0000001')],
+      [
+        evalRec('prism_c0000001', {
+          justifying_reason: '토큰 검증 완료',
+          refutation_attempted: true,
+        }),
+      ],
+    );
+    const r = closePrismNode(p, 'prism_c0000001', 'resolved');
+    expect(r.ok).toBe(true);
+    const ev = (r.prism as PrismIssueMap).evaluations.find((e) => e.node_id === 'prism_c0000001');
+    expect(ev?.evaluation).toBe('justified');
+  });
+
+  test('a recorded opponent critique counts as added evidence', () => {
+    const p = prism(
+      [node('prism_c0000001', '인증 경계')],
+      [critical('prism_c0000001')],
+      [
+        evalRec('prism_c0000001', {
+          justifying_reason: '반박 검토 완료',
+          refutation_attempted: true,
+          opponent_critique: 'DA: 세션 고정 미검토 → 반박: scope 밖으로 확인',
+        }),
+      ],
+    );
+    expect(closePrismNode(p, 'prism_c0000001', 'resolved').ok).toBe(true);
+  });
+
+  test('the A2 gate applies to critical ONLY — a noncritical resolved-close needs no justification', () => {
+    const p = prism([node('prism_n0000001', '로그 포맷')]);
+    expect(closePrismNode(p, 'prism_n0000001', 'resolved').ok).toBe(true);
+  });
+});
+
+describe('criticalTermination — gate↔score: unevaluated critical does NOT count (ac-1)', () => {
+  test('a critical node resolved-in-state but unevaluated-in-annotation does NOT count as resolved', () => {
+    const p = prism(
+      [node('prism_c0000001', '인증 경계', 'resolved')],
+      [critical('prism_c0000001')],
+      [evalRec('prism_c0000001', { evaluation: 'unevaluated' })],
+    );
+    expect(criticalTermination(p).terminated).toBe(false);
+  });
+});
+
 // ── ac-2 · MODEL-2 severity authority ────────────────────────────────────────
 
 describe('assignSeverity — MODEL-2 severity authority gate', () => {
@@ -118,6 +213,129 @@ describe('assignSeverity — MODEL-2 severity authority gate', () => {
       (s) => s.node_id === 'prism_c0000001',
     );
     expect(assign?.demotion_reason).toBe('실측 결과 저위험으로 확인');
+  });
+});
+
+// ── ac-2 · completeness-termination seed ─────────────────────────────────────
+
+describe('seedUncoveredFragments — original-intent completeness seed (ac-2)', () => {
+  const fragments = [
+    { id: 'goal', text: '결제 안정화' },
+    { id: 'in_scope[0]', text: '재시도 정책' },
+  ];
+
+  test('a fragment with zero addressing node is seeded as an open node (gap surfaced)', () => {
+    const p = prism([node('prism_a0000001', '결제 안정화 작업')]);
+    // only 'goal' is explicitly mapped; 'in_scope[0]' has no addressing node.
+    const r = seedUncoveredFragments(p, fragments, [
+      { fragment_id: 'goal', node_id: 'prism_a0000001' },
+    ]);
+    expect(r.seededFragmentIds).toEqual(['in_scope[0]']);
+    const seeded = r.prism.tree.nodes.find((n) => n.label === '재시도 정책');
+    expect(seeded?.state).toBe('open');
+    // surfaced in the label-only progress summary (the user sees the gap)
+    expect(renderProgressSummary(r.prism)).toContain('재시도 정책');
+  });
+
+  test('a fully-mapped intent seeds nothing (explicit-mapping-absence only)', () => {
+    const p = prism([node('prism_a0000001', 'g'), node('prism_b0000002', 's')]);
+    const r = seedUncoveredFragments(p, fragments, [
+      { fragment_id: 'goal', node_id: 'prism_a0000001' },
+      { fragment_id: 'in_scope[0]', node_id: 'prism_b0000002' },
+    ]);
+    expect(r.seededFragmentIds).toEqual([]);
+  });
+
+  test('a mapping to a NON-existent node does not count as coverage → still seeds', () => {
+    const p = prism([node('prism_a0000001', 'g')]);
+    const r = seedUncoveredFragments(p, fragments, [
+      { fragment_id: 'goal', node_id: 'prism_a0000001' },
+      { fragment_id: 'in_scope[0]', node_id: 'ghost_node_00' },
+    ]);
+    expect(r.seededFragmentIds).toEqual(['in_scope[0]']);
+  });
+
+  test('idempotent — re-seeding the same gap does not duplicate', () => {
+    const p = prism([node('prism_a0000001', 'g')]);
+    const once = seedUncoveredFragments(p, fragments, [
+      { fragment_id: 'goal', node_id: 'prism_a0000001' },
+    ]);
+    const twice = seedUncoveredFragments(once.prism, fragments, [
+      { fragment_id: 'goal', node_id: 'prism_a0000001' },
+    ]);
+    expect(twice.seededFragmentIds).toEqual([]);
+    const seedCount = twice.prism.tree.nodes.filter((n) => n.label === '재시도 정책').length;
+    expect(seedCount).toBe(1);
+  });
+
+  test('the seed is NONCRITICAL — it surfaces the gap but cannot flip termination off (no unterminatable loop)', () => {
+    // all critical scope resolved → termination fires.
+    const p = prism([node('prism_c0000001', '인증', 'resolved')], [critical('prism_c0000001')]);
+    expect(criticalTermination(p).terminated).toBe(true);
+    // seeding uncovered fragments must NOT convert termination → non-termination.
+    const r = seedUncoveredFragments(p, fragments, []);
+    expect(r.seededFragmentIds.length).toBeGreaterThan(0);
+    expect(severityOf(r.prism, completenessSeedId('goal'))).toBe('noncritical');
+    expect(criticalTermination(r.prism).terminated).toBe(true);
+  });
+
+  test('seeds attach under the root when it exists (append-only, no dangling)', () => {
+    const rootNode = { ...node('prism_root0001', '원 의도'), children: [] as string[] };
+    const p = prism([rootNode]);
+    const r = seedUncoveredFragments(p, fragments, []);
+    expect(r.seededFragmentIds).toEqual(['goal', 'in_scope[0]']);
+    const seeded = r.prism.tree.nodes.find((n) => n.id === completenessSeedId('goal'));
+    expect(seeded?.parent_id).toBe('prism_root0001');
+  });
+});
+
+describe('buildIntentFragments — deterministic intent split (ac-2)', () => {
+  test('goal + each in_scope item become stable-id fragments; blank entries dropped (index preserved)', () => {
+    const frags = buildIntentFragments({
+      goal: '결제 안정화',
+      in_scope: ['재시도 정책', '  ', '알림 채널'],
+    });
+    expect(frags).toEqual([
+      { id: 'goal', text: '결제 안정화' },
+      { id: 'in_scope[0]', text: '재시도 정책' },
+      { id: 'in_scope[2]', text: '알림 채널' },
+    ]);
+  });
+
+  test('a missing goal / empty in_scope yields no fragment', () => {
+    expect(buildIntentFragments({ in_scope: [] })).toEqual([]);
+    expect(buildIntentFragments({ goal: '   ' })).toEqual([]);
+  });
+});
+
+describe('deriveFragmentMappings — string-level explicit mapping (ac-2)', () => {
+  const frags = [
+    { id: 'goal', text: '결제 재시도 정책' },
+    { id: 'in_scope[0]', text: '배송 추적 알림' },
+  ];
+
+  test('a fragment whose keyword appears in a node label maps to it; a fragment no node references stays unmapped', () => {
+    const p = prism([node('prism_a0000001', '결제 재시도 정책 로직')]);
+    const m = deriveFragmentMappings(frags, p);
+    expect(m).toContainEqual({ fragment_id: 'goal', node_id: 'prism_a0000001' });
+    // '배송 추적 알림' has no addressing node → it is NOT mapped (so it would be seeded).
+    expect(m.some((x) => x.fragment_id === 'in_scope[0]')).toBe(false);
+  });
+
+  test('close_reason text also counts as addressing a fragment', () => {
+    const n = {
+      ...node('prism_b0000002', '무관 라벨', 'resolved'),
+      close_reason: '배송 추적 알림 처리 완료',
+    };
+    const p = prism([n]);
+    const m = deriveFragmentMappings(frags, p);
+    expect(m).toContainEqual({ fragment_id: 'in_scope[0]', node_id: 'prism_b0000002' });
+  });
+
+  test('the derived mappings drive seedUncoveredFragments: only the uncovered fragment is seeded', () => {
+    const p = prism([node('prism_a0000001', '결제 재시도 정책 로직')]);
+    const r = seedUncoveredFragments(p, frags, deriveFragmentMappings(frags, p));
+    expect(r.seededFragmentIds).toEqual(['in_scope[0]']);
   });
 });
 
@@ -205,6 +423,50 @@ describe('resolveLaunchNotification — one-shot + retract on regression (ac-4)'
     expect(resolveLaunchNotification(rerecovered, new Date('2026-07-07T03:00:00Z')).notify).toBe(
       true,
     );
+  });
+});
+
+// ── ac-3 · launch re-anchor surface (achieve vs characterize, non-blocking) ──
+
+describe('resolveLaunchNotification — original-intent re-anchor surface (ac-3)', () => {
+  const terminatedMap = () =>
+    prism([node('prism_c0000001', '인증', 'resolved')], [critical('prism_c0000001')]);
+
+  test('when launch fires, the notification surfaces the original intent + an achieve-vs-characterize prompt', () => {
+    const r = resolveLaunchNotification(
+      terminatedMap(),
+      new Date('2026-07-08T00:00:00Z'),
+      '결제 재시도 정책을 안정화한다',
+    );
+    expect(r.notify).toBe(true);
+    expect(r.reAnchor).toBeDefined();
+    expect(r.reAnchor as string).toContain('결제 재시도 정책을 안정화한다');
+    // the re-facing prompt distinguishes 달성(achieve) vs 특징 서술(characterize)
+    expect(r.reAnchor as string).toContain('특징');
+    // NON-BLOCKING: the surface does not change launch/retraction flow
+    expect(r.retracted).toBe(false);
+  });
+
+  test('backward-compatible: no original intent → no reAnchor, launch unchanged', () => {
+    const r = resolveLaunchNotification(terminatedMap(), new Date('2026-07-08T00:00:00Z'));
+    expect(r.notify).toBe(true);
+    expect(r.reAnchor).toBeUndefined();
+  });
+
+  test('re-anchor rides the one-shot notify only, not the silent second read', () => {
+    const first = resolveLaunchNotification(
+      terminatedMap(),
+      new Date('2026-07-08T00:00:00Z'),
+      '원 의도',
+    );
+    expect(first.reAnchor).toBeDefined();
+    const second = resolveLaunchNotification(
+      first.prism,
+      new Date('2026-07-08T01:00:00Z'),
+      '원 의도',
+    );
+    expect(second.notify).toBe(false);
+    expect(second.reAnchor).toBeUndefined();
   });
 });
 

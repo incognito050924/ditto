@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { defineCommand } from 'citty';
 import { addNode } from '~/core/coverage-manager';
 import { resolveRepoRootForCreate } from '~/core/fs';
+import { IntentStore } from '~/core/intent-store';
 import {
   type MaterializeSplitResult,
   type ProposeSplitResult,
@@ -10,22 +11,31 @@ import {
 } from '~/core/prism/backlog';
 import { type DesignDocInput, emitDesignDoc } from '~/core/prism/designdoc';
 import {
+  type IntentFragment,
   PRISM_CAPS,
   type PrismRound,
   type PrismRoundSignature,
   assignSeverity,
+  buildIntentFragments,
   closePrismNode,
   criticalTermination,
+  deriveFragmentMappings,
   renderProgressSummary,
   resolveLaunchNotification,
   runPrismRounds,
+  seedUncoveredFragments,
   severityOf,
 } from '~/core/prism/engine';
-import { runDivergenceRound } from '~/core/prism/loop';
+import {
+  runDivergenceRound,
+  runOpponentCritiqueRound,
+  runOpponentDissentRound,
+} from '~/core/prism/loop';
+import type { DialecticHost, OpponentSeamConfig } from '~/core/prism/opponent';
 import { PrismStore } from '~/core/prism/store';
 import { WorkItemStore } from '~/core/work-item-store';
 import type { CoverageNode } from '~/schemas/coverage';
-import type { PrismIssueMap } from '~/schemas/prism';
+import type { PrismIssueMap, PrismNodeEvaluation } from '~/schemas/prism';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -45,6 +55,66 @@ function asArray(value: string | string[] | undefined): string[] {
   if (value === undefined) return [];
   return Array.isArray(value) ? value : [value];
 }
+
+/**
+ * ac-1: upsert the A2 close-gate inputs (justifying_reason / refutation_attempted)
+ * onto a node's prism-level evaluation annotation BEFORE `closePrismNode` reads them.
+ * Replace the single record for the node, append when absent (the `evaluations` array
+ * is a per-node sidecar). Pure — mirrors the engine's own private upsert.
+ */
+function upsertPrismEvaluation(
+  prism: PrismIssueMap,
+  nodeId: string,
+  patch: Partial<Omit<PrismNodeEvaluation, 'node_id'>>,
+): PrismIssueMap {
+  const existing = prism.evaluations ?? [];
+  const current = existing.find((e) => e.node_id === nodeId);
+  const others = existing.filter((e) => e.node_id !== nodeId);
+  const merged: PrismNodeEvaluation = { ...(current ?? {}), ...patch, node_id: nodeId };
+  return { ...prism, evaluations: [...others, merged] };
+}
+
+/**
+ * Read the ORIGINAL intent text (source_request) from the work item's intent.json,
+ * or `undefined` when the WI has no intent sidecar (e.g. a bare prism draft that
+ * precedes deep-interview finalize). Used by the ac-3 launch re-anchor and the ac-5/
+ * ac-6 opponent brief.
+ */
+async function readOriginalIntent(
+  repoRoot: string,
+  workItemId: string,
+): Promise<string | undefined> {
+  const intents = new IntentStore(repoRoot);
+  if (!(await intents.exists(workItemId))) return undefined;
+  return (await intents.get(workItemId)).source_request;
+}
+
+/**
+ * ac-2 completeness fragments — the original-intent pieces (intent.json goal +
+ * in_scope) the termination check reverse-maps against the issue-map nodes. Returns
+ * `[]` when the WI has no intent sidecar (a bare prism draft precedes finalize). The
+ * split itself is the pure, unit-tested `buildIntentFragments`.
+ */
+async function readIntentFragments(
+  repoRoot: string,
+  workItemId: string,
+): Promise<IntentFragment[]> {
+  const intents = new IntentStore(repoRoot);
+  if (!(await intents.exists(workItemId))) return [];
+  return buildIntentFragments(await intents.get(workItemId));
+}
+
+/**
+ * The opponent model policy for a bare CLI run (dialecticInput.model_policy defaults):
+ * Codex preferred, claude-opus synthesizer. opponent-router resolves the candidate
+ * order from this; the actual invocation is host-delegated (ADR-0001) and absent here.
+ */
+const BARE_MODEL_POLICY: OpponentSeamConfig['policy'] = {
+  producer: 'current-host',
+  opponent_preferred: 'codex',
+  opponent_fallback: [],
+  synthesizer: 'claude-opus',
+};
 
 /** Load the Run-tier draft, or seed an empty map with a root container. */
 async function loadOrInit(store: PrismStore, workItemId: string): Promise<PrismIssueMap> {
@@ -70,6 +140,7 @@ async function loadOrInit(store: PrismStore, workItemId: string): Promise<PrismI
       ],
     },
     severities: [],
+    evaluations: [],
   };
 }
 
@@ -291,6 +362,16 @@ const prismCloseCommand = defineCommand({
       type: 'string',
       description: 'Surviving risk (required for a critical unknown-close)',
     },
+    'justifying-reason': {
+      type: 'string',
+      description: 'The reason justifying a critical resolved-close (A2 gate input, ac-1)',
+    },
+    'refutation-attempted': {
+      type: 'boolean',
+      description:
+        'A strongest-rebuttal (Popper refutation) was attempted before closing (A2 gate input, ac-1)',
+      default: false,
+    },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
   run: async ({ args }) => {
@@ -317,8 +398,23 @@ const prismCloseCommand = defineCommand({
     const store = new PrismStore(repoRoot);
     try {
       const prism = await store.getMap(args.wi);
-      const result = closePrismNode(prism, args.node, state, args.reason, args.residual);
+      // ac-1: wire the A2 gate inputs into the node's evaluation annotation BEFORE the
+      // gate reads them — closePrismNode requires BOTH on a critical `resolved` close.
+      const evalPatch: Partial<Omit<PrismNodeEvaluation, 'node_id'>> = {};
+      if (args['justifying-reason']) evalPatch.justifying_reason = args['justifying-reason'];
+      if (args['refutation-attempted']) evalPatch.refutation_attempted = true;
+      const prismForClose =
+        Object.keys(evalPatch).length > 0
+          ? upsertPrismEvaluation(prism, args.node, evalPatch)
+          : prism;
+      const result = closePrismNode(prismForClose, args.node, state, args.reason, args.residual);
       if (!result.ok) {
+        // OBJ-4: an A2 rejection stamps the node prism-level `unevaluated` in
+        // result.prism — persist that Run-tier trace so the under-think catch is
+        // durable/measurable, never a silent exit with no record. Run tier ONLY (the
+        // committed-base decisions tier is OFF-LIMITS, wi_260708cdl); other rejections
+        // (false-green / residual gate) carry no prism and write nothing.
+        if (result.prism) await store.writeMap(result.prism as PrismIssueMap);
         if (format === 'json') {
           writeJson({ work_item_id: args.wi, ok: false, reasons: result.reasons });
         } else {
@@ -430,9 +526,28 @@ const prismStatusCommand = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     const store = new PrismStore(repoRoot);
     try {
-      const prism = await store.getMap(args.wi);
+      const loaded = await store.getMap(args.wi);
+      // ac-2 completeness seed: this is the production path where termination is
+      // evaluated, so it is where the original-intent coverage check must fire. Split
+      // intent.json into fragments, derive the explicit node→fragment mappings string-
+      // level, and seed a NONCRITICAL `open` node for every fragment no node addresses.
+      // The gap then SURFACES (prism tree / summary) but — being noncritical — can never
+      // hard-block criticalTermination (no over-think loop). Run-tier persist only.
+      const fragments = await readIntentFragments(repoRoot, args.wi);
+      const seedResult = seedUncoveredFragments(
+        loaded,
+        fragments,
+        deriveFragmentMappings(fragments, loaded),
+      );
+      const prism = seedResult.prism;
+      if (seedResult.seededFragmentIds.length > 0) {
+        await store.writeMap(prism);
+      }
       const term = criticalTermination(prism);
-      const notif = resolveLaunchNotification(prism, new Date());
+      // ac-3: pass the ORIGINAL intent (source_request) so a firing launch notification
+      // carries the achieve-vs-characterize re-anchor surface (non-blocking, console only).
+      const originalIntent = await readOriginalIntent(repoRoot, args.wi);
+      const notif = resolveLaunchNotification(prism, new Date(), originalIntent);
       if (notif.notify || notif.retracted) {
         await store.writeMap(notif.prism);
       }
@@ -452,14 +567,240 @@ const prismStatusCommand = defineCommand({
           reason: term.reason,
           notified: notif.notify,
           retracted: notif.retracted,
+          ...(notif.reAnchor ? { re_anchor: notif.reAnchor } : {}),
         });
         return;
       }
       writeHuman(`착수 가능: ${term.terminated ? '예' : '아니오'} (${term.reason})`);
       if (notif.notify && notif.message) writeHuman(notif.message);
+      // ac-3 re-anchor surface: original intent verbatim + achieve-vs-characterize prompt.
+      if (notif.notify && notif.reAnchor) writeHuman(`\n${notif.reAnchor}`);
       if (notif.retracted) writeHuman('상황이 되돌아가 착수 알림을 철회했어요 (새 핵심 항목).');
     } catch (err) {
       writeError(`prism status failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/**
+ * `ditto prism tree` — PURE QUERY of the issue-map tree (ac-4). Renders the tree
+ * structure + each node's label · severity · state · close_reason (+ residual /
+ * argumentation eval / opponent status when present) and the question-round
+ * timestamps. Reads ONLY (getMap + readValueRounds) — never writeMap / appendDecision,
+ * so `ditto prism tree` cannot mutate state. A not-yet-seeded map is a clean message,
+ * not a crash.
+ */
+const prismTreeCommand = defineCommand({
+  meta: {
+    name: 'tree',
+    description:
+      'Render the issue-map tree (label·severity·state·close_reason) + question-round timestamps — pure query, no mutation (ac-4)',
+  },
+  args: {
+    wi: { type: 'string', description: 'Work item id (wi_*)' },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.wi) {
+      writeError('prism tree requires --wi <wi_*>');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new PrismStore(repoRoot);
+    try {
+      // A not-yet-seeded map is a clean message, never a crash (missing/partial map).
+      if (!(await store.exists(args.wi))) {
+        if (format === 'json') {
+          writeJson({
+            work_item_id: args.wi,
+            exists: false,
+            nodes: [],
+            question_round_timestamps: [],
+          });
+          return;
+        }
+        writeHuman(
+          `아직 이슈맵이 없어요 (${args.wi}) — 먼저 \`ditto prism seed\`로 항목을 추가하세요.`,
+        );
+        return;
+      }
+      // PURE READ — no writeMap / appendDecision anywhere below.
+      const prism = await store.getMap(args.wi);
+      const timestamps = (await store.readValueRounds(args.wi)).map((r) => r.ts);
+      const byId = new Map(prism.tree.nodes.map((n) => [n.id, n]));
+      const evalOf = (nodeId: string) => prism.evaluations.find((e) => e.node_id === nodeId);
+      const nodeView = (nodeId: string) => {
+        const node = byId.get(nodeId);
+        const evalRec = evalOf(nodeId);
+        return {
+          id: nodeId,
+          label: node?.label,
+          severity: severityOf(prism, nodeId),
+          state: node?.state,
+          ...(node?.close_reason ? { close_reason: node.close_reason } : {}),
+          ...(node?.residual_risk ? { residual_risk: node.residual_risk } : {}),
+          ...(evalRec?.evaluation ? { evaluation: evalRec.evaluation } : {}),
+          ...(evalRec?.opponent_status ? { opponent_status: evalRec.opponent_status } : {}),
+          children: node?.children ?? [],
+        };
+      };
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.wi,
+          root_id: prism.tree.root_id,
+          nodes: prism.tree.nodes.map((n) => nodeView(n.id)),
+          question_round_timestamps: timestamps,
+        });
+        return;
+      }
+      const lines: string[] = [];
+      const rendered = new Set<string>();
+      const walk = (nodeId: string, depth: number): void => {
+        const node = byId.get(nodeId);
+        if (!node || rendered.has(nodeId)) return;
+        rendered.add(nodeId);
+        const evalRec = evalOf(nodeId);
+        const parts = [
+          `${'  '.repeat(depth)}- ${node.label}`,
+          `[${severityOf(prism, nodeId)}]`,
+          `<${node.state}>`,
+        ];
+        if (evalRec?.evaluation) parts.push(`{${evalRec.evaluation}}`);
+        if (evalRec?.opponent_status) parts.push(`(opponent: ${evalRec.opponent_status})`);
+        if (node.close_reason) parts.push(`— close: ${node.close_reason}`);
+        if (node.residual_risk) parts.push(`— residual: ${node.residual_risk}`);
+        lines.push(parts.join(' '));
+        for (const childId of node.children) walk(childId, depth + 1);
+      };
+      walk(prism.tree.root_id, 0);
+      // Any node not reachable from root (defensive completeness) — never drop a node.
+      for (const node of prism.tree.nodes) walk(node.id, 0);
+      writeHuman(`이슈맵 (${args.wi}):`);
+      for (const line of lines) writeHuman(line);
+      if (timestamps.length > 0) {
+        writeHuman('질문 라운드 시각:');
+        for (const ts of timestamps) writeHuman(`  - ${ts}`);
+      } else {
+        writeHuman('질문 라운드 기록 없음');
+      }
+    } catch (err) {
+      writeError(`prism tree failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/**
+ * `ditto prism opponent` — the PRODUCTION CALLER of the model-assist opponent seam
+ * (ac-5 critique over A2-flagged critical nodes · ac-6 dissent at the anchor). It
+ * genuinely INVOKES `runOpponentCritiqueRound` / `runOpponentDissentRound` (no dead
+ * wire): the seam runs, resolves the opponent via opponent-router, and persists its
+ * Run-tier annotation in one writeMap.
+ *
+ * ADR-0001 boundary: this bare CLI carries NO host delegate. `isAvailable`=false /
+ * `delegate`→null means opponent-router resolves no usable host, so the seam DEGRADES
+ * to the deterministic shell and stamps `opponent_status='host_absent'` (ADR-0018 /
+ * OBJ-3). That degrade — the call happens, the stamp is written, no crash / no fake
+ * pass — IS the observable wiring proof in the bare CLI; a host-driven skill would
+ * inject a real availability predicate + delegate here.
+ */
+const prismOpponentCommand = defineCommand({
+  meta: {
+    name: 'opponent',
+    description:
+      'Drive the model-assist opponent seam: critique over A2-flagged critical nodes (ac-5) or independent dissent at the anchor (ac-6). Host-delegated (ADR-0001); with no host it degrades gracefully and stamps host_absent (ADR-0018).',
+  },
+  args: {
+    wi: { type: 'string', description: 'Work item id (wi_*)' },
+    concern: {
+      type: 'string',
+      description: 'critique (ac-5, A2-flagged critical nodes) | dissent (ac-6, anchor)',
+      default: 'critique',
+    },
+    host: {
+      type: 'string',
+      description: 'Current host for opponent-router candidate resolution: claude-code | codex',
+      default: 'claude-code',
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.wi) {
+      writeError('prism opponent requires --wi <wi_*>');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const concern = args.concern ?? 'critique';
+    if (concern !== 'critique' && concern !== 'dissent') {
+      writeError(`--concern must be critique | dissent (got: ${concern})`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const currentHost: DialecticHost = args.host === 'codex' ? 'codex' : 'claude-code';
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new PrismStore(repoRoot);
+    try {
+      if (!(await store.exists(args.wi))) {
+        writeError(`prism opponent: no issue map for ${args.wi} — seed one first`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const config: OpponentSeamConfig = {
+        policy: BARE_MODEL_POLICY,
+        currentHost,
+        // No host delegate in the bare CLI → the seam degrades (host_absent), ADR-0018.
+        isAvailable: () => ({ available: false, reason: 'runtime' }),
+        delegate: async () => null,
+        intent: (await readOriginalIntent(repoRoot, args.wi)) ?? '',
+      };
+      const outcome =
+        concern === 'critique'
+          ? await runOpponentCritiqueRound(store, args.wi, config)
+          : await runOpponentDissentRound(store, args.wi, config);
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.wi,
+          concern,
+          host_available: outcome.host_available,
+          engaged: outcome.engaged,
+          degraded: outcome.degraded,
+          skipped_by_cap: outcome.skipped_by_cap,
+        });
+        return;
+      }
+      if (!outcome.host_available) {
+        writeHuman(
+          `opponent host 없음 — 결정적 shell로 우아하게 강등했어요 (${concern}, host_absent). (ADR-0018)`,
+        );
+      } else {
+        writeHuman(
+          `opponent 실행 (${concern}): ${outcome.engaged.length}건 기록, ${outcome.degraded.length}건 강등.`,
+        );
+      }
+      if (outcome.degraded.length > 0) {
+        writeHuman('강등된 노드(host_absent 스탬프):');
+        for (const id of outcome.degraded) writeHuman(`  - ${id}`);
+      }
+    } catch (err) {
+      writeError(`prism opponent failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(RUNTIME_ERROR_EXIT);
     }
   },
@@ -729,7 +1070,7 @@ export const prismCommand = defineCommand({
   meta: {
     name: 'prism',
     description:
-      'Prism issue-map engine: grow (seed), evaluate a round for divergence + emit (diverge, ac-10), close (MODEL-1 gate), label-only summary (ac-3), critical-termination + minimal-launch notification (ac-2/ac-4), and backlog split (ac-8)',
+      'Prism issue-map engine: grow (seed), evaluate a round for divergence + emit (diverge, ac-10), close (MODEL-1 + A2 resolved-close gate), label-only summary (ac-3), critical-termination + minimal-launch re-anchor (ac-2/ac-3/ac-4), pure-query tree view (ac-4), model-assist opponent seam (ac-5/ac-6), and backlog split (ac-8)',
   },
   subCommands: {
     seed: prismSeedCommand,
@@ -737,6 +1078,8 @@ export const prismCommand = defineCommand({
     close: prismCloseCommand,
     summary: prismSummaryCommand,
     status: prismStatusCommand,
+    tree: prismTreeCommand,
+    opponent: prismOpponentCommand,
     doc: prismDocCommand,
     backlog: prismBacklogCommand,
   },
