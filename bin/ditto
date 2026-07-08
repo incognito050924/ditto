@@ -22590,6 +22590,57 @@ async function loadFarFieldTaxonomy(repoRoot, onMalformed) {
 function warnMalformedTaxonomy(repoRoot) {
   console.warn(`ditto: malformed ${dittoDir(repoRoot)}/coverage-taxonomy.json \u2014 ignoring the tier-\u2461 taxonomy override and falling back to the built-in far-field floor (fix the file to re-enable it)`);
 }
+function isPlainRecord(v2) {
+  return typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
+}
+async function readRawTaxonomyConfig(path) {
+  const file = Bun.file(path);
+  if (!await file.exists())
+    return {};
+  let raw;
+  try {
+    raw = JSON.parse(await file.text());
+  } catch (err) {
+    throw new SchemaValidationError(path, err);
+  }
+  if (!isPlainRecord(raw)) {
+    throw new SchemaValidationError(path, new Error("coverage-taxonomy.json must be a JSON object"));
+  }
+  return raw;
+}
+function mutateRawConfig(current, mutation) {
+  const next = { ...current };
+  if (mutation.kind === "add") {
+    const existing = Array.isArray(next.added) ? next.added : [];
+    const entry = {
+      id: mutation.id,
+      lens: mutation.lens,
+      ...mutation.disposition ? { disposition: mutation.disposition } : {}
+    };
+    const idx = existing.findIndex((e2) => isPlainRecord(e2) && e2.id === mutation.id);
+    next.added = idx >= 0 ? existing.map((e2, i2) => i2 === idx ? entry : e2) : [...existing, entry];
+  } else if (mutation.kind === "disable") {
+    const disabled = Array.isArray(next.disabled) ? next.disabled : [];
+    next.disabled = disabled.includes(mutation.id) ? disabled : [...disabled, mutation.id];
+    const reasons = isPlainRecord(next.disabled_reasons) ? next.disabled_reasons : {};
+    next.disabled_reasons = { ...reasons, [mutation.id]: mutation.reason };
+  } else {
+    const dispositions = isPlainRecord(next.dispositions) ? next.dispositions : {};
+    next.dispositions = { ...dispositions, [mutation.id]: mutation.disposition };
+  }
+  return next;
+}
+async function applyTaxonomyMutation(repoRoot, mutation) {
+  const path = `${dittoDir(repoRoot)}/coverage-taxonomy.json`;
+  const current = await readRawTaxonomyConfig(path);
+  const next = mutateRawConfig(current, mutation);
+  const parsed = coverageTaxonomyConfig.safeParse(next);
+  if (!parsed.success)
+    throw new SchemaValidationError(path, parsed.error);
+  await atomicWriteText(path, `${JSON.stringify(next, null, 2)}
+`);
+  return { path, config: parsed.data };
+}
 var CATEGORY_NODE_PREFIX = "cov-cat-";
 function farFieldCoverageNodes(intent, rootId = "cov-root", taxonomy = FAR_FIELD_TAXONOMY_FLOOR, verdicts = []) {
   const skips = new Map(verdicts.filter((v2) => v2.relevant === false && v2.reason && v2.residual_risk).map((v2) => [v2.id, v2]));
@@ -35866,6 +35917,42 @@ var contextCommand = defineCommand({
   }
 });
 
+// src/core/coverage-discovery.ts
+init_work_item();
+var DEPENDENCY_REF_RE = /^@[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+function bareId(id) {
+  return id.startsWith(CATEGORY_NODE_PREFIX) ? id.slice(CATEGORY_NODE_PREFIX.length) : id;
+}
+function citesCode(evidence) {
+  return evidence.split(/\s+/).some((tok) => tok.length > 0 && (codePointerMapsTo.test(tok) || DEPENDENCY_REF_RE.test(tok)));
+}
+function admitDiscoveredCategories(candidates, taxonomy) {
+  const covered = new Set([
+    ...taxonomy.map((c3) => bareId(c3.id)),
+    ...FAR_FIELD_ROUTED_OUT.map((r3) => bareId(r3.id))
+  ]);
+  return candidates.map((cand) => {
+    if (!citesCode(cand.evidence)) {
+      return {
+        id: cand.id,
+        admitted: false,
+        reason: "no_evidence",
+        detail: "candidate evidence carries no verifiable code citation (file:line or dependency reference) \u2014 a proposal without grounding never surfaces (ac-5)"
+      };
+    }
+    const bare = bareId(cand.id);
+    if (covered.has(bare)) {
+      return {
+        id: cand.id,
+        admitted: false,
+        reason: "reconfirms_covered",
+        detail: `category '${bare}' is already covered by the effective taxonomy (or routed out to a receiving gate) \u2014 re-confirming it adds no gap (ac-6)`
+      };
+    }
+    return { id: cand.id, admitted: true, lens: cand.lens, evidence: cand.evidence };
+  });
+}
+
 // src/cli/commands/coverage.ts
 init_fs();
 init_coverage();
@@ -36172,16 +36259,375 @@ var coverageSuggestCommand = defineCommand({
     }
   }
 });
+async function loadEffectiveTaxonomy(repoRoot) {
+  return loadFarFieldTaxonomy(repoRoot, () => warnMalformedTaxonomy(repoRoot));
+}
+function taxonomyUniverse(effective) {
+  return new Set([
+    ...FAR_FIELD_TAXONOMY_FLOOR.map((c3) => c3.id),
+    ...effective.map((c3) => c3.id)
+  ]);
+}
+function parseDispositionArg(value) {
+  if (value === undefined)
+    return;
+  const parsed = coverageDisposition.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+var coverageTaxonomyListCommand = defineCommand({
+  meta: {
+    name: "list",
+    description: "Print the effective far-field taxonomy (floor + tier-\u2461 overrides), marking floor / added / rerouted / disabled (ac-1)"
+  },
+  args: {
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const effective = await loadEffectiveTaxonomy(repoRoot);
+      const floorById = new Map(FAR_FIELD_TAXONOMY_FLOOR.map((c3) => [c3.id, c3]));
+      const effectiveIds = new Set(effective.map((c3) => c3.id));
+      const entries = effective.map((c3) => {
+        const floor = floorById.get(c3.id);
+        const disposition = c3.disposition ?? DEFAULT_COVERAGE_DISPOSITION;
+        let status;
+        if (!floor || c3.lens !== floor.lens) {
+          status = "added";
+        } else if (disposition !== (floor.disposition ?? DEFAULT_COVERAGE_DISPOSITION)) {
+          status = "rerouted";
+        } else {
+          status = "floor";
+        }
+        return { id: c3.id, lens: c3.lens, disposition, status };
+      });
+      const disabled = FAR_FIELD_TAXONOMY_FLOOR.filter((c3) => !effectiveIds.has(c3.id)).map((c3) => ({
+        id: c3.id,
+        lens: c3.lens,
+        disposition: c3.disposition ?? DEFAULT_COVERAGE_DISPOSITION
+      }));
+      if (format === "json") {
+        writeJson2({ entries, disabled });
+        return;
+      }
+      writeHuman(`coverage taxonomy: ${entries.length} active categor${entries.length === 1 ? "y" : "ies"}`);
+      for (const e2 of entries) {
+        writeHuman(`  [${e2.status}] ${e2.id} (${e2.disposition})`);
+        writeHuman(`    ${e2.lens}`);
+      }
+      if (disabled.length > 0) {
+        writeHuman(`  ${disabled.length} disabled floor categor${disabled.length === 1 ? "y" : "ies"}:`);
+        for (const d2 of disabled)
+          writeHuman(`  [disabled] ${d2.id}`);
+      }
+    } catch (err) {
+      writeError(`coverage list failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var coverageTaxonomyAddCommand = defineCommand({
+  meta: {
+    name: "add",
+    description: "Add a project far-field category to the tier-\u2461 taxonomy override (ac-2)"
+  },
+  args: {
+    id: { type: "string", description: "Category id (kebab-case)" },
+    lens: { type: "string", description: "Probing-question lens the sweep answers (ac-1)" },
+    disposition: {
+      type: "string",
+      description: "Route: code-verify|user-intent|runtime-post-impl (default code-verify)",
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const id = args.id ? bareFloorId2(args.id.trim()) : "";
+    if (!id || !args.lens) {
+      writeError("coverage add requires --id <kebab-id> and --lens <probing question>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const disposition = parseDispositionArg(args.disposition);
+    if (disposition === null) {
+      writeError(`invalid --disposition "${args.disposition}"; expected one of: code-verify, user-intent, runtime-post-impl`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const effective = await loadEffectiveTaxonomy(repoRoot);
+      if (taxonomyUniverse(effective).has(id)) {
+        writeError(`coverage add: category '${id}' already exists (floor or project-added) \u2014 pick a new id, or use 'coverage reroute'/'coverage disable'`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const result2 = await applyTaxonomyMutation(repoRoot, {
+        kind: "add",
+        id,
+        lens: args.lens,
+        ...disposition ? { disposition } : {}
+      });
+      if (format === "json") {
+        writeJson2({
+          added: id,
+          disposition: disposition ?? DEFAULT_COVERAGE_DISPOSITION,
+          path: result2.path
+        });
+      } else {
+        writeHuman(`coverage taxonomy: added '${id}' (${disposition ?? DEFAULT_COVERAGE_DISPOSITION})`);
+        writeHuman(`  \u2192 ${result2.path}`);
+      }
+    } catch (err) {
+      writeError(`coverage add failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var coverageTaxonomyDisableCommand = defineCommand({
+  meta: {
+    name: "disable",
+    description: "Disable a floor far-field category for this project, with a recorded reason (ac-2)"
+  },
+  args: {
+    id: { type: "string", description: "Floor category id to disable" },
+    reason: { type: "string", description: "Why this category is disabled (recorded, required)" },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const id = args.id ? bareFloorId2(args.id.trim()) : "";
+    if (!id) {
+      writeError("coverage disable requires --id <category-id>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.reason) {
+      writeError("coverage disable requires --reason <why> \u2014 a disable is recorded, never silent (ac-4)");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const effective = await loadEffectiveTaxonomy(repoRoot);
+      if (!taxonomyUniverse(effective).has(id)) {
+        writeError(`coverage disable: '${id}' is not a known category (floor or project-added) \u2014 nothing to disable (check the id with 'coverage list')`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const result2 = await applyTaxonomyMutation(repoRoot, {
+        kind: "disable",
+        id,
+        reason: args.reason
+      });
+      if (format === "json") {
+        writeJson2({ disabled: id, reason: args.reason, path: result2.path });
+      } else {
+        writeHuman(`coverage taxonomy: disabled '${id}'`);
+        writeHuman(`  reason: ${args.reason}`);
+        writeHuman(`  \u2192 ${result2.path}`);
+      }
+    } catch (err) {
+      writeError(`coverage disable failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var coverageTaxonomyRerouteCommand = defineCommand({
+  meta: {
+    name: "reroute",
+    description: "Change a far-field category disposition route in the tier-\u2461 override (ac-2)"
+  },
+  args: {
+    id: { type: "string", description: "Category id to re-route" },
+    disposition: {
+      type: "string",
+      description: "New route: code-verify|user-intent|runtime-post-impl"
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const id = args.id ? bareFloorId2(args.id.trim()) : "";
+    if (!id) {
+      writeError("coverage reroute requires --id <category-id>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const disposition = parseDispositionArg(args.disposition);
+    if (disposition === undefined) {
+      writeError("coverage reroute requires --disposition <code-verify|user-intent|runtime-post-impl>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (disposition === null) {
+      writeError(`invalid --disposition "${args.disposition}"; expected one of: code-verify, user-intent, runtime-post-impl`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const effective = await loadEffectiveTaxonomy(repoRoot);
+      if (!taxonomyUniverse(effective).has(id)) {
+        writeError(`coverage reroute: '${id}' is not a known category (floor or project-added) \u2014 nothing to re-route (check the id with 'coverage list')`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const result2 = await applyTaxonomyMutation(repoRoot, { kind: "reroute", id, disposition });
+      if (format === "json") {
+        writeJson2({ rerouted: id, disposition, path: result2.path });
+      } else {
+        writeHuman(`coverage taxonomy: rerouted '${id}' \u2192 ${disposition}`);
+        writeHuman(`  \u2192 ${result2.path}`);
+      }
+    } catch (err) {
+      writeError(`coverage reroute failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+async function readDiscoveryInput(file) {
+  if (file) {
+    const f3 = Bun.file(file);
+    if (!await f3.exists())
+      throw new Error(`candidate file not found: ${file}`);
+    return f3.text();
+  }
+  if (process.stdin.isTTY) {
+    throw new Error("coverage discover requires --file <candidates.json> or candidates piped on stdin");
+  }
+  return Bun.stdin.text();
+}
+function parseDiscoveryCandidates(text) {
+  const raw = JSON.parse(text);
+  const list = Array.isArray(raw) ? raw : Array.isArray(raw?.candidates) ? raw.candidates : null;
+  if (!list)
+    throw new Error('expected a JSON array of candidates or { "candidates": [...] }');
+  return list.map((c3, i2) => {
+    if (typeof c3 !== "object" || c3 === null)
+      throw new Error(`candidate[${i2}] must be an object`);
+    const { id, lens, evidence } = c3;
+    if (typeof id !== "string" || id.trim().length === 0)
+      throw new Error(`candidate[${i2}] needs a non-empty string 'id'`);
+    if (typeof lens !== "string" || lens.trim().length === 0)
+      throw new Error(`candidate[${i2}] needs a non-empty string 'lens'`);
+    if (typeof evidence !== "string" || evidence.trim().length === 0)
+      throw new Error(`candidate[${i2}] needs a non-empty string 'evidence'`);
+    return { id, lens, evidence };
+  });
+}
+var coverageTaxonomyDiscoverCommand = defineCommand({
+  meta: {
+    name: "discover",
+    description: "Gate host-produced candidate far-field categories (grounded + gap-only) and, with --confirm, add the admits (ac-5/ac-6/ac-7)"
+  },
+  args: {
+    file: {
+      type: "string",
+      description: "Path to candidate proposals JSON (omit to read piped stdin)",
+      required: false
+    },
+    confirm: {
+      type: "boolean",
+      description: "Add the admitted candidates (default off: propose-only, mutates nothing, ac-7)",
+      default: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let candidates;
+    try {
+      candidates = parseDiscoveryCandidates(await readDiscoveryInput(args.file));
+    } catch (err) {
+      writeError(`coverage discover input invalid: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const effective = await loadEffectiveTaxonomy(repoRoot);
+      const verdicts = admitDiscoveredCategories(candidates, effective);
+      const admitted = verdicts.filter((v2) => v2.admitted).map((v2) => ({ id: v2.id, lens: v2.lens ?? "", evidence: v2.evidence ?? "" }));
+      const dropped = verdicts.filter((v2) => !v2.admitted).map((v2) => ({ id: v2.id, reason: v2.reason, detail: v2.detail }));
+      const added = [];
+      if (args.confirm) {
+        for (const a2 of admitted) {
+          const id = bareFloorId2(a2.id);
+          await applyTaxonomyMutation(repoRoot, { kind: "add", id, lens: a2.lens });
+          added.push(id);
+        }
+      }
+      if (format === "json") {
+        writeJson2({ admitted, dropped, confirmed: Boolean(args.confirm), added });
+        return;
+      }
+      writeHuman(`coverage discover: ${admitted.length} admitted, ${dropped.length} dropped${args.confirm ? ` (${added.length} added)` : " (propose-only \u2014 nothing written)"}`);
+      for (const a2 of admitted) {
+        writeHuman(`  [admit] ${a2.id}`);
+        writeHuman(`    ${a2.lens}`);
+        writeHuman(`    evidence: ${a2.evidence}`);
+      }
+      for (const d2 of dropped)
+        writeHuman(`  [drop:${d2.reason}] ${d2.id} \u2014 ${d2.detail}`);
+    } catch (err) {
+      writeError(`coverage discover failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var coverageCommand = defineCommand({
   meta: {
     name: "coverage",
-    description: "Coverage outcome loop (ac-11b): record far-field escapes (feedback), record general followup/residual-risk excluded from far-field cost stats (residual), surface taxonomy-augmentation candidates (propose), and suggest feedback templates for a verify miss (suggest)"
+    description: "Coverage outcome loop + far-field taxonomy management: record escapes (feedback) / residual rows (residual), surface augmentation candidates (propose), suggest feedback templates (suggest); and manage the tier-\u2461 taxonomy \u2014 list, add, disable, reroute, discover (wi_260707phi)"
   },
   subCommands: {
     feedback: coverageFeedbackCommand,
     residual: coverageResidualCommand,
     propose: coverageProposeCommand,
-    suggest: coverageSuggestCommand
+    suggest: coverageSuggestCommand,
+    list: coverageTaxonomyListCommand,
+    add: coverageTaxonomyAddCommand,
+    disable: coverageTaxonomyDisableCommand,
+    reroute: coverageTaxonomyRerouteCommand,
+    discover: coverageTaxonomyDiscoverCommand
   }
 });
 
@@ -54112,4 +54558,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=cdfccac8c9e4604d4dbd0e560eecbff6208f78505ff84a1376473cbcc2d2b635
+//# ditto-src-stamp=1981545a82024149e2120d15a41154305030f05a9e63e1c085d94e47b740b430

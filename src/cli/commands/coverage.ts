@@ -1,11 +1,23 @@
 import { defineCommand } from 'citty';
+import { type DiscoveryCandidate, admitDiscoveredCategories } from '~/core/coverage-discovery';
 import { CoverageFeedbackLedger, recordResidual, recurrenceCounts } from '~/core/coverage-feedback';
 import { attributeCoverageEscape, suggestCoverageFeedback } from '~/core/coverage-feedback';
 import { CoverageStore } from '~/core/coverage-store';
-import { CATEGORY_NODE_PREFIX, FAR_FIELD_TAXONOMY_FLOOR } from '~/core/coverage-taxonomy';
+import {
+  CATEGORY_NODE_PREFIX,
+  FAR_FIELD_TAXONOMY_FLOOR,
+  applyTaxonomyMutation,
+  loadFarFieldTaxonomy,
+  warnMalformedTaxonomy,
+} from '~/core/coverage-taxonomy';
 import { resolveRepoRootForCreate } from '~/core/fs';
-import { coverageFeedback, isFarFieldEscape } from '~/schemas/coverage';
-import type { CoverageFeedbackEntry } from '~/schemas/coverage';
+import {
+  DEFAULT_COVERAGE_DISPOSITION,
+  coverageDisposition,
+  coverageFeedback,
+  isFarFieldEscape,
+} from '~/schemas/coverage';
+import type { CoverageDisposition, CoverageFeedbackEntry } from '~/schemas/coverage';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -415,16 +427,487 @@ const coverageSuggestCommand = defineCommand({
   },
 });
 
+/**
+ * Load the project's EFFECTIVE far-field taxonomy (floor + tier-② overrides) and
+ * warn (never silently) if the override file is malformed — so every taxonomy CLI
+ * command surfaces a bad `.ditto/coverage-taxonomy.json` the same way the live
+ * readers do (ac-1/ac-3). The pure merge lives in `resolveTaxonomy`;
+ * `loadFarFieldTaxonomy` is the single I/O entry point.
+ */
+async function loadEffectiveTaxonomy(repoRoot: string) {
+  return loadFarFieldTaxonomy(repoRoot, () => warnMalformedTaxonomy(repoRoot));
+}
+
+/**
+ * The KNOWN category universe = every floor id ∪ every effective id (which already
+ * folds in project-added ids). `add` rejects an id already IN this set (a duplicate,
+ * sweep #6); `disable`/`reroute` reject an id NOT in it (a typo'd target would be a
+ * silent no-op, sweep #4). Floor ids come from the constant so a DISABLED floor id
+ * still counts as known.
+ */
+function taxonomyUniverse(effective: readonly { id: string }[]): Set<string> {
+  return new Set<string>([
+    ...FAR_FIELD_TAXONOMY_FLOOR.map((c) => c.id),
+    ...effective.map((c) => c.id),
+  ]);
+}
+
+/**
+ * Validate an optional `--disposition` value against the enum. Returns the parsed
+ * route, `undefined` when absent, or `null` when present-but-invalid (the caller
+ * renders a usage error). Kept separate from citty's arg layer so a bad value is a
+ * clean exit-65 usage error, not citty's bare exit 1.
+ */
+function parseDispositionArg(value: string | undefined): CoverageDisposition | undefined | null {
+  if (value === undefined) return undefined;
+  const parsed = coverageDisposition.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * `ditto coverage list` — print the EFFECTIVE far-field taxonomy (the code floor
+ * merged with the tier-② `.ditto/coverage-taxonomy.json` override via
+ * `resolveTaxonomy`, ac-1), annotating each active entry as `floor` (unchanged),
+ * `added` (a project category / a floor lens overridden), or `rerouted` (a floor
+ * category whose disposition the project changed), and listing separately the floor
+ * categories the project `disabled`. Read-only. A malformed override warns here too
+ * (fail-open to the floor WITH a signal).
+ */
+const coverageTaxonomyListCommand = defineCommand({
+  meta: {
+    name: 'list',
+    description:
+      'Print the effective far-field taxonomy (floor + tier-② overrides), marking floor / added / rerouted / disabled (ac-1)',
+  },
+  args: {
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const effective = await loadEffectiveTaxonomy(repoRoot);
+      const floorById = new Map(FAR_FIELD_TAXONOMY_FLOOR.map((c) => [c.id, c]));
+      const effectiveIds = new Set(effective.map((c) => c.id));
+      const entries = effective.map((c) => {
+        const floor = floorById.get(c.id);
+        const disposition = c.disposition ?? DEFAULT_COVERAGE_DISPOSITION;
+        let status: 'floor' | 'added' | 'rerouted';
+        if (!floor || c.lens !== floor.lens) {
+          // Not a floor id, or a floor id whose lens the project overrode.
+          status = 'added';
+        } else if (disposition !== (floor.disposition ?? DEFAULT_COVERAGE_DISPOSITION)) {
+          status = 'rerouted';
+        } else {
+          status = 'floor';
+        }
+        return { id: c.id, lens: c.lens, disposition, status };
+      });
+      // A floor id absent from the effective set was turned off (resolveTaxonomy only
+      // drops a floor entry when it is disabled or overridden — an override keeps the id).
+      const disabled = FAR_FIELD_TAXONOMY_FLOOR.filter((c) => !effectiveIds.has(c.id)).map((c) => ({
+        id: c.id,
+        lens: c.lens,
+        disposition: c.disposition ?? DEFAULT_COVERAGE_DISPOSITION,
+      }));
+      if (format === 'json') {
+        writeJson({ entries, disabled });
+        return;
+      }
+      writeHuman(
+        `coverage taxonomy: ${entries.length} active categor${entries.length === 1 ? 'y' : 'ies'}`,
+      );
+      for (const e of entries) {
+        writeHuman(`  [${e.status}] ${e.id} (${e.disposition})`);
+        writeHuman(`    ${e.lens}`);
+      }
+      if (disabled.length > 0) {
+        writeHuman(
+          `  ${disabled.length} disabled floor categor${disabled.length === 1 ? 'y' : 'ies'}:`,
+        );
+        for (const d of disabled) writeHuman(`  [disabled] ${d.id}`);
+      }
+    } catch (err) {
+      writeError(`coverage list failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/**
+ * `ditto coverage add` — add a project far-field category (id + probing-question
+ * lens, ac-1 shape) to the tier-② override via `applyTaxonomyMutation` (ac-2). The
+ * id is rejected if it already names a known category (floor or project-added) — a
+ * duplicate id would seed two coverage nodes with the same id (sweep #6). An
+ * optional `--disposition` routes the category; absent = DEFAULT_COVERAGE_DISPOSITION.
+ */
+const coverageTaxonomyAddCommand = defineCommand({
+  meta: {
+    name: 'add',
+    description: 'Add a project far-field category to the tier-② taxonomy override (ac-2)',
+  },
+  args: {
+    id: { type: 'string', description: 'Category id (kebab-case)' },
+    lens: { type: 'string', description: 'Probing-question lens the sweep answers (ac-1)' },
+    disposition: {
+      type: 'string',
+      description: 'Route: code-verify|user-intent|runtime-post-impl (default code-verify)',
+      required: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const id = args.id ? bareFloorId(args.id.trim()) : '';
+    if (!id || !args.lens) {
+      writeError('coverage add requires --id <kebab-id> and --lens <probing question>');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const disposition = parseDispositionArg(args.disposition);
+    if (disposition === null) {
+      writeError(
+        `invalid --disposition "${args.disposition}"; expected one of: code-verify, user-intent, runtime-post-impl`,
+      );
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const effective = await loadEffectiveTaxonomy(repoRoot);
+      if (taxonomyUniverse(effective).has(id)) {
+        writeError(
+          `coverage add: category '${id}' already exists (floor or project-added) — pick a new id, or use 'coverage reroute'/'coverage disable'`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const result = await applyTaxonomyMutation(repoRoot, {
+        kind: 'add',
+        id,
+        lens: args.lens,
+        ...(disposition ? { disposition } : {}),
+      });
+      if (format === 'json') {
+        writeJson({
+          added: id,
+          disposition: disposition ?? DEFAULT_COVERAGE_DISPOSITION,
+          path: result.path,
+        });
+      } else {
+        writeHuman(
+          `coverage taxonomy: added '${id}' (${disposition ?? DEFAULT_COVERAGE_DISPOSITION})`,
+        );
+        writeHuman(`  → ${result.path}`);
+      }
+    } catch (err) {
+      writeError(`coverage add failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/**
+ * `ditto coverage disable` — turn off a floor category for this project via
+ * `applyTaxonomyMutation` (ac-2). REQUIRES `--reason` (stored in
+ * `disabled_reasons[id]` so a removal is never silent, ac-4). The target must be a
+ * known category (floor ∪ project-added); a typo'd id is rejected rather than
+ * silently doing nothing (sweep #4).
+ */
+const coverageTaxonomyDisableCommand = defineCommand({
+  meta: {
+    name: 'disable',
+    description:
+      'Disable a floor far-field category for this project, with a recorded reason (ac-2)',
+  },
+  args: {
+    id: { type: 'string', description: 'Floor category id to disable' },
+    reason: { type: 'string', description: 'Why this category is disabled (recorded, required)' },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const id = args.id ? bareFloorId(args.id.trim()) : '';
+    if (!id) {
+      writeError('coverage disable requires --id <category-id>');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.reason) {
+      writeError(
+        'coverage disable requires --reason <why> — a disable is recorded, never silent (ac-4)',
+      );
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const effective = await loadEffectiveTaxonomy(repoRoot);
+      if (!taxonomyUniverse(effective).has(id)) {
+        writeError(
+          `coverage disable: '${id}' is not a known category (floor or project-added) — nothing to disable (check the id with 'coverage list')`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const result = await applyTaxonomyMutation(repoRoot, {
+        kind: 'disable',
+        id,
+        reason: args.reason,
+      });
+      if (format === 'json') {
+        writeJson({ disabled: id, reason: args.reason, path: result.path });
+      } else {
+        writeHuman(`coverage taxonomy: disabled '${id}'`);
+        writeHuman(`  reason: ${args.reason}`);
+        writeHuman(`  → ${result.path}`);
+      }
+    } catch (err) {
+      writeError(`coverage disable failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/**
+ * `ditto coverage reroute` — change a category's disposition route via
+ * `applyTaxonomyMutation` (ac-2). REQUIRES `--disposition`. The target must be a
+ * known category (floor ∪ project-added); a typo'd id is rejected (sweep #4).
+ */
+const coverageTaxonomyRerouteCommand = defineCommand({
+  meta: {
+    name: 'reroute',
+    description: 'Change a far-field category disposition route in the tier-② override (ac-2)',
+  },
+  args: {
+    id: { type: 'string', description: 'Category id to re-route' },
+    disposition: {
+      type: 'string',
+      description: 'New route: code-verify|user-intent|runtime-post-impl',
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const id = args.id ? bareFloorId(args.id.trim()) : '';
+    if (!id) {
+      writeError('coverage reroute requires --id <category-id>');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const disposition = parseDispositionArg(args.disposition);
+    if (disposition === undefined) {
+      writeError(
+        'coverage reroute requires --disposition <code-verify|user-intent|runtime-post-impl>',
+      );
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (disposition === null) {
+      writeError(
+        `invalid --disposition "${args.disposition}"; expected one of: code-verify, user-intent, runtime-post-impl`,
+      );
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const effective = await loadEffectiveTaxonomy(repoRoot);
+      if (!taxonomyUniverse(effective).has(id)) {
+        writeError(
+          `coverage reroute: '${id}' is not a known category (floor or project-added) — nothing to re-route (check the id with 'coverage list')`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      const result = await applyTaxonomyMutation(repoRoot, { kind: 'reroute', id, disposition });
+      if (format === 'json') {
+        writeJson({ rerouted: id, disposition, path: result.path });
+      } else {
+        writeHuman(`coverage taxonomy: rerouted '${id}' → ${disposition}`);
+        writeHuman(`  → ${result.path}`);
+      }
+    } catch (err) {
+      writeError(`coverage reroute failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/** Read host-produced candidate proposals from a file or piped stdin (ac-5). */
+async function readDiscoveryInput(file: string | undefined): Promise<string> {
+  if (file) {
+    const f = Bun.file(file);
+    if (!(await f.exists())) throw new Error(`candidate file not found: ${file}`);
+    return f.text();
+  }
+  // No --file: the agent piped its proposals on stdin. Refuse an interactive TTY so
+  // the command never hangs waiting for input the caller did not provide.
+  if (process.stdin.isTTY) {
+    throw new Error(
+      'coverage discover requires --file <candidates.json> or candidates piped on stdin',
+    );
+  }
+  return Bun.stdin.text();
+}
+
+/**
+ * Parse + shape-validate the candidate proposals. Accepts either a bare array or a
+ * `{ candidates: [...] }` envelope. Each candidate must carry a non-empty string
+ * id, lens, and evidence — the CLI never invents these (the discovery agent
+ * produced them); it only shapes them before the deterministic gate. Throws on
+ * malformed input so the caller renders a usage error (the gate never sees garbage).
+ */
+function parseDiscoveryCandidates(text: string): DiscoveryCandidate[] {
+  const raw = JSON.parse(text);
+  const list = Array.isArray(raw) ? raw : Array.isArray(raw?.candidates) ? raw.candidates : null;
+  if (!list) throw new Error('expected a JSON array of candidates or { "candidates": [...] }');
+  return list.map((c: unknown, i: number) => {
+    if (typeof c !== 'object' || c === null) throw new Error(`candidate[${i}] must be an object`);
+    const { id, lens, evidence } = c as Record<string, unknown>;
+    if (typeof id !== 'string' || id.trim().length === 0)
+      throw new Error(`candidate[${i}] needs a non-empty string 'id'`);
+    if (typeof lens !== 'string' || lens.trim().length === 0)
+      throw new Error(`candidate[${i}] needs a non-empty string 'lens'`);
+    if (typeof evidence !== 'string' || evidence.trim().length === 0)
+      throw new Error(`candidate[${i}] needs a non-empty string 'evidence'`);
+    return { id, lens, evidence };
+  });
+}
+
+/**
+ * `ditto coverage discover` — CONSUME host-produced candidate category proposals
+ * (from `--file` or stdin — the codebase-scan reasoning is the discovery agent's
+ * job, NOT the CLI's, per ADR-0001) and run them through the deterministic gate
+ * `admitDiscoveredCategories` against the effective taxonomy (ac-5/ac-6): surface
+ * only the grounded, gap-only admits, and the dropped ones WITH their machine
+ * reason (no_evidence / reconfirms_covered) for audit — no floor re-confirmation
+ * noise. PROPOSE-ONLY by default (mutates nothing, ac-7); pass `--confirm` to route
+ * each admitted candidate through the same `applyTaxonomyMutation` add path (ac-2).
+ */
+const coverageTaxonomyDiscoverCommand = defineCommand({
+  meta: {
+    name: 'discover',
+    description:
+      'Gate host-produced candidate far-field categories (grounded + gap-only) and, with --confirm, add the admits (ac-5/ac-6/ac-7)',
+  },
+  args: {
+    file: {
+      type: 'string',
+      description: 'Path to candidate proposals JSON (omit to read piped stdin)',
+      required: false,
+    },
+    confirm: {
+      type: 'boolean',
+      description: 'Add the admitted candidates (default off: propose-only, mutates nothing, ac-7)',
+      default: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let candidates: DiscoveryCandidate[];
+    try {
+      candidates = parseDiscoveryCandidates(await readDiscoveryInput(args.file));
+    } catch (err) {
+      writeError(
+        `coverage discover input invalid: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const effective = await loadEffectiveTaxonomy(repoRoot);
+      const verdicts = admitDiscoveredCategories(candidates, effective);
+      const admitted = verdicts
+        .filter((v) => v.admitted)
+        .map((v) => ({ id: v.id, lens: v.lens ?? '', evidence: v.evidence ?? '' }));
+      const dropped = verdicts
+        .filter((v) => !v.admitted)
+        .map((v) => ({ id: v.id, reason: v.reason, detail: v.detail }));
+
+      // ac-7: proposing is the default and mutates NOTHING. Only an explicit
+      // --confirm routes each admitted candidate through the ac-2 add path.
+      const added: string[] = [];
+      if (args.confirm) {
+        for (const a of admitted) {
+          const id = bareFloorId(a.id);
+          await applyTaxonomyMutation(repoRoot, { kind: 'add', id, lens: a.lens });
+          added.push(id);
+        }
+      }
+
+      if (format === 'json') {
+        writeJson({ admitted, dropped, confirmed: Boolean(args.confirm), added });
+        return;
+      }
+      writeHuman(
+        `coverage discover: ${admitted.length} admitted, ${dropped.length} dropped${args.confirm ? ` (${added.length} added)` : ' (propose-only — nothing written)'}`,
+      );
+      for (const a of admitted) {
+        writeHuman(`  [admit] ${a.id}`);
+        writeHuman(`    ${a.lens}`);
+        writeHuman(`    evidence: ${a.evidence}`);
+      }
+      for (const d of dropped) writeHuman(`  [drop:${d.reason}] ${d.id} — ${d.detail}`);
+    } catch (err) {
+      writeError(`coverage discover failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 export const coverageCommand = defineCommand({
   meta: {
     name: 'coverage',
     description:
-      'Coverage outcome loop (ac-11b): record far-field escapes (feedback), record general followup/residual-risk excluded from far-field cost stats (residual), surface taxonomy-augmentation candidates (propose), and suggest feedback templates for a verify miss (suggest)',
+      'Coverage outcome loop + far-field taxonomy management: record escapes (feedback) / residual rows (residual), surface augmentation candidates (propose), suggest feedback templates (suggest); and manage the tier-② taxonomy — list, add, disable, reroute, discover (wi_260707phi)',
   },
   subCommands: {
     feedback: coverageFeedbackCommand,
     residual: coverageResidualCommand,
     propose: coverageProposeCommand,
     suggest: coverageSuggestCommand,
+    list: coverageTaxonomyListCommand,
+    add: coverageTaxonomyAddCommand,
+    disable: coverageTaxonomyDisableCommand,
+    reroute: coverageTaxonomyRerouteCommand,
+    discover: coverageTaxonomyDiscoverCommand,
   },
 });
