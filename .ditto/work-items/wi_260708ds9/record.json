@@ -398,6 +398,33 @@
       "note": "console.txt/console2.txt(진단 wi_260708yx5 관찰 스크래치)가 이번 chore 커밋으로 repo root에 들어감 → .gitignore 추가 또는 적절 위치로 이전. bootstrap seed의 tsc-literal 노이즈(ac_verdicts/caps 생략, zod-defaulted 비게이팅)도 일관성 위해 정리 후보(리뷰가 수용 판정한 debt).",
       "severity": "info",
       "resolved": true
+    },
+    {
+      "kind": "bug",
+      "note": "P0 worktree × 배리어 cwd = stale-green(false-green 클래스). 배리어 cwd가 findRepoRoot 재-루팅으로 main 체크아웃 <ws>를 가리키나(fs.ts:62-63·autopilot-loop.ts:783-787,1222) WI 편집은 worktree(.ditto/local/worktrees/<wi>/)에 있음(pre-tool-use.ts:636-643) → 편집 안 된 코드 테스트 → stale-green/헛-RED. latent(명령 미선언+worktree opt-in)이나 ditto가 worktree 활성 사용 중이라 배리어 명령 선언 순간 live. 수정=배리어 cwd worktree-aware. 리포트 §1: reports/design/barrier-test-tier-followup-investigation.md",
+      "severity": "medium",
+      "self_caused": true,
+      "materialized_wi": "wi_2607080d2"
+    },
+    {
+      "kind": "idea",
+      "note": "P1 배리어 DORMANT: ditto·boxwood 둘 다 barrier_test_command 미선언→매 완료 degrade(final≠pass). resolveBarrierCommand는 push_gate로 fallback 안 함(autopilot-loop.ts:725-733). ditto는 'bun test' 1줄로 켜나 P0(worktree) 선결 필요. 리포트 §2: reports/design/barrier-test-tier-followup-investigation.md",
+      "severity": "medium"
+    },
+    {
+      "kind": "idea",
+      "note": "#1 값싼 guidance fix 2개(구조적 강제는 ADR-20260708 변경조건상 incident 전 보류=수용): ①seed purpose 'full test suite'→'unit/mock subset' 모순 수정(autopilot-bootstrap.ts:98) ②recipe caveat에 fail-safe 탈출구(안전 서브셋 못 만들면 비워둬라→degrade, push_gate 복사 금지)(recipe.ts:60-67). 리포트 §4: reports/design/barrier-test-tier-followup-investigation.md",
+      "severity": "medium"
+    },
+    {
+      "kind": "idea",
+      "note": "통합 검증 표면 부재(설계 결정, deep-interview급): '통합=push-gate/CI/e2e'가 boxwood에선 셋 다 백엔드 통합 안 돌림→자동 통합 검증 부재. 단위-only 배리어는 통합-only 노드간 깨짐에 silent(완료 per-AC oracle AND라 통합 AC엔 통합-요구 oracle 필요; 진단 P4 미해결). push-gate 명령은 caveat 없이 같은 무강제 gap. oracle-tiering 강제/push-gate 안전화/별도 integration 러너 중 결정 필요. 리포트 §3: reports/design/barrier-test-tier-followup-investigation.md",
+      "severity": "medium"
+    },
+    {
+      "kind": "idea",
+      "note": "멀티-repo root-drag degrade(safe 방향·값 침식): 혼합 변경이 root 파일(package.json·docs·lockfile)을 root('')로 귀속(autopilot-loop.ts:754-769)→root 명령 없으면 sub-repo 전부 green이어도 배리어 전체 degrade. root 파일 변경 거의 불가피→멀티-repo 만성 degrade. 수정=root 무명령+≥1 sub-repo면 root run skip. 리포트 §5: reports/design/barrier-test-tier-followup-investigation.md",
+      "severity": "low"
     }
   ],
   "follows": "wi_260708yx5",
@@ -412,6 +439,6 @@
   "handoff_path": ".ditto/local/handoff/wi_260708ds9.md",
   "started_at_sha": "4558e864f2be4b273bc879f9cc03814a464b684e",
   "created_at": "2026-07-08T09:30:11.274Z",
-  "updated_at": "2026-07-08T17:15:11.578Z",
+  "updated_at": "2026-07-08T18:20:06.726Z",
   "closed_at": "2026-07-08T15:03:22.222Z"
 }
