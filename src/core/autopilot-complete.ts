@@ -352,6 +352,56 @@ export function unresolvedAgentResolvableRiskRecords(
   return records;
 }
 
+/**
+ * Settled-tree TEST BARRIER completion seam (wi_260708ds9 ac-1, the load-bearing
+ * one). A `test` barrier node carries acceptance_refs:[], so it never contributes a
+ * per-AC verdict — deriveAcVerdicts folds it away. Yet its disposition MUST be AND'd
+ * into the final verdict, else a graph whose per-AC oracles all pass folds to
+ * final_verdict=pass while the suite never actually ran GREEN (false-green).
+ *
+ * The `unverified[]` entry is the seam: deriveFinalVerdict floors final_verdict≠pass
+ * whenever an IN-SCOPE unverified item remains, so injecting one for any barrier that
+ * is NOT proven-green makes completion honest (ADR-0018 — never claim pass when the
+ * suite did not run green) without giving the barrier acceptance_refs=all (which would
+ * spring the structural-unverified supersession trap → permanent deadlock).
+ *
+ * A barrier is proven-GREEN only when it PASSED as a node AND carries command-kind
+ * evidence (the `bun test` run — the same "REAL evidence" bar hasVerifyEvidence keys
+ * on). Any other present barrier disposition floors the verdict:
+ *  - RED (status=failed): the suite is red — a hard non-pass (also caught at the loop
+ *    via all_passed=false, but the completion path must be honest independently).
+ *  - DEGRADE (passed but no command evidence — it could not execute the suite): it
+ *    PROCEEDS as a node (never blocks), but completion records the tests-never-ran gap.
+ *  - non-terminal (pending/running/blocked): the barrier has not settled.
+ *
+ * STRUCTURAL ABSENCE (zero `test` nodes = a pre-barrier legacy graph) yields NO entry
+ * — the grandfathered AC-only completion, so the 30+ in-flight legacy graphs never
+ * deadlock (migration-safe). Only a PRESENT non-green barrier floors the verdict.
+ */
+function barrierRanGreen(node: AutopilotNode): boolean {
+  return node.status === 'passed' && node.evidence_refs.some((e) => e.kind === 'command');
+}
+
+function testBarrierUnverified(graph: Autopilot): NonNullable<CompletionInput['unverified']> {
+  const barriers = graph.nodes.filter((n) => n.kind === 'test');
+  if (barriers.length === 0) return []; // structural absence → grandfather (ac-1 part e)
+  return barriers
+    .filter((b) => !barrierRanGreen(b))
+    .map((b) => ({
+      item: `settled-tree test barrier ${b.id}`,
+      reason:
+        b.status === 'failed'
+          ? `the settled-tree test barrier (${b.id}) is RED — the suite failed, so acceptance-criteria closure is not proven`
+          : `the settled-tree test barrier (${b.id}) did not run GREEN (degraded / not executed / non-terminal) — the suite never proved green, so acceptance-criteria closure is unverified (ADR-0018: proceed but never claim pass)`,
+      // IN-SCOPE (out_of_scope:false) so deriveFinalVerdict floors final_verdict≠pass.
+      out_of_scope: false,
+      // Tool/host-blocked class: the suite could not be proven green. The gate reads
+      // this label; grounding points at the barrier node.
+      resolvability: 'blocked_external' as const,
+      grounding: b.id,
+    }));
+}
+
 export interface AssembleOptions {
   /** Operator/verifier narrative; a terse default is derived when omitted. */
   summary?: string;
@@ -393,12 +443,18 @@ export function assembleCompletionFromGraph(
       ? [`non-terminal graph nodes (work unfinished): ${nonTerminal.map((n) => n.id).join(', ')}`]
       : []),
   ];
+  // Settled-tree test barrier seam (ac-1 part d): AND the barrier's GREEN/RED/degrade
+  // disposition into the final verdict via an IN-SCOPE unverified entry. Empty on a
+  // green barrier OR structural absence (legacy grandfather) → byte-identical to the
+  // no-barrier completion.
+  const barrierUnverified = testBarrierUnverified(graph);
   const built = buildCompletion({
     workItem,
     declaredBy: 'verifier',
     summary,
     verdicts,
     ...(remainingRisks.length > 0 ? { remainingRisks } : {}),
+    ...(barrierUnverified.length > 0 ? { unverified: barrierUnverified } : {}),
     ...(opts.now ? { now: opts.now } : {}),
   });
   // ac-3 producer: project unresolved agent_resolvable risks from the ledger into the

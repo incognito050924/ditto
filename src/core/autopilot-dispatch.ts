@@ -84,7 +84,7 @@ export interface DelegationPacket {
   variant_candidates: { name: string; description: string }[];
 }
 
-const OWNER_TOOLS: Record<AutopilotNode['owner'], string[]> = {
+export const OWNER_TOOLS: Record<AutopilotNode['owner'], string[]> = {
   researcher: ['Read', 'Grep', 'Glob', 'Bash', 'WebSearch', 'WebFetch'],
   planner: ['Read', 'Grep', 'Glob'],
   implementer: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash'],
@@ -108,6 +108,12 @@ const OWNER_TOOLS: Record<AutopilotNode['owner'], string[]> = {
   // ditto:e2e-author skill inline in the main session. No Edit here — the node
   // is non-mutating for the approval gate (isMutatingOwner).
   'main-session': [],
+  // The settled-tree test barrier owner (wi_260708ds9): it RUNS the full suite and
+  // reports GREEN/RED/degrade. Read/Grep/Glob/Bash ONLY — deliberately NO Edit/Write.
+  // If Edit leaked in, isMutatingOwner(tester) would be true and guardMutatingEvidence
+  // would reject every 0-changed-file GREEN barrier as a bogus mutation → completion
+  // deadlock. A barrier changes no files; it only judges the suite.
+  tester: ['Read', 'Grep', 'Glob', 'Bash'],
 };
 
 /**
@@ -175,6 +181,24 @@ const RED_FIRST_DIRECTIVE =
   'this criterion FIRST and run it; confirm it fails on the AC assertion itself, ' +
   'not on a compile/import error (no phantom red), then make the smallest change ' +
   'to turn it green. Report both the red run and the green run (command + exit code).';
+
+/**
+ * Scope-local-unit directive (wi_260708ds9 ac-2). The implementer full-suite pressure is
+ * NOT in this packet — it is the GLOBAL CHARTER ('매 단계 전체 테스트 실행') the subagent
+ * inherits. Mid-wave, though, running the FULL/cross suite is wrong: other implementers may
+ * be editing in parallel (a transiently-red cross-module suite), and re-running the whole
+ * suite per node is wasteful. So this ADDS (never removes — RED_FIRST stays for ac-3) a
+ * directive to run ONLY the node's own file_scope mock-unit subset mid-wave. The whole-suite
+ * GREEN is proven ONCE, after the wave settles, by the DETERMINISTIC settled-tree test
+ * barrier (autopilot-loop.executeTestBarrier) — not by the implementer. Implementer-only:
+ * the barrier owns the full-suite proof, and read-only roles run no unit subset.
+ */
+const SCOPE_LOCAL_UNIT_DIRECTIVE =
+  'Scope-local unit tests (mid-wave): run ONLY the mock-unit tests for your own ' +
+  'file_scope — do NOT run the full or cross-module suite while other implementers may ' +
+  'be editing in parallel. The whole-suite GREEN is proven ONCE after the wave settles by ' +
+  'the deterministic settled-tree test barrier, not by you. Report the command + exit code ' +
+  'of your scoped unit run.';
 
 /**
  * True when this node should carry the red-first directive: an implementer node
@@ -256,6 +280,9 @@ export function buildDelegationPacket(
       'Return a single result with evidence (command + exit code, file:line).',
       ...(isPlanner ? [PLANNER_GENERATE_DIRECTIVE] : []),
       ...(isRedFirstImplement(node.owner, acceptance) ? [RED_FIRST_DIRECTIVE] : []),
+      // ac-2 (additive): an implementer runs only its own scope's mock-unit tests mid-wave;
+      // the full-suite GREEN is proven once by the settled-tree barrier, not per-node.
+      ...(node.owner === 'implementer' ? [SCOPE_LOCAL_UNIT_DIRECTIVE] : []),
       ...(memoryContext?.decisions?.length || memoryContext?.decision_briefs?.length
         ? [CITE_OR_ABSTAIN_DIRECTIVE]
         : []),

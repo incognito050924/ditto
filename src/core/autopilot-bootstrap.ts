@@ -69,6 +69,42 @@ function seedE2eAuthorNode(nodes: AutopilotNode[]): AutopilotNode[] {
   return rewired.flatMap((n) => (n.id === design.id ? [n, e2eAuthor] : [n]));
 }
 
+/**
+ * Seed the settled-tree TEST BARRIER (wi_260708ds9 ac-1) — the analogue of
+ * `seedE2eAuthorNode`, applied UNCONDITIONALLY so every new graph gets a barrier
+ * (its ABSENCE, not its presence, is the pre-barrier legacy grandfather signal the
+ * completion seam reads). Mirrors the seed convention:
+ *  - `acceptance_refs:[]` keeps it OUT of the per-AC deriveAcVerdicts fold (it judges
+ *    no single criterion — it is a whole-suite barrier), like the retro/e2e-author node;
+ *  - it depends on the IMPLEMENT FRONTIER (the implement nodes no other implement node
+ *    depends on — the last implements), so isNodeReady tracks a real node, while the
+ *    `selectReadyNodes` settled-tree HOLD does the actual "wait for every implement"
+ *    gating. On planner expansion the seed implement is superseded, so recordResult
+ *    RE-ATTACHES this barrier onto the promoted implement frontier (the retro analogue).
+ * No-op when the generator produced no implement node (nothing to gate) or a barrier
+ * already exists (idempotent).
+ */
+function seedTestBarrier(nodes: AutopilotNode[]): AutopilotNode[] {
+  if (nodes.some((n) => n.kind === 'test')) return nodes;
+  const implementIds = nodes.filter((n) => n.kind === 'implement').map((n) => n.id);
+  if (implementIds.length === 0) return nodes;
+  const frontier = implementIds.filter(
+    (id) => !nodes.some((m) => m.kind === 'implement' && m.depends_on.includes(id)),
+  );
+  const barrier: AutopilotNode = {
+    id: 'test-barrier',
+    kind: 'test',
+    owner: kindToOwner('test'),
+    purpose: 'Run the full test suite as a settled-tree barrier after the implement wave settles',
+    status: 'pending',
+    depends_on: frontier,
+    acceptance_refs: [],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  };
+  return [...nodes, barrier];
+}
+
 export type BootstrapResult =
   | { status: 'created'; graph: Autopilot }
   | { status: 'intent_not_ready'; reasons: string[] }
@@ -161,7 +197,11 @@ export async function bootstrapAutopilot(
   const acceptanceIds = input.intent.acceptance_criteria.map((c) => c.id);
 
   const seededNodes = (input.generateNodes ?? defaultNodeGenerator)(acceptanceIds);
-  const nodes = input.e2eOptIn ? seedE2eAuthorNode(seededNodes) : seededNodes;
+  const withE2e = input.e2eOptIn ? seedE2eAuthorNode(seededNodes) : seededNodes;
+  // Settled-tree test barrier (ac-1 part b): seeded unconditionally on the implement
+  // frontier. Applied AFTER e2e-author (which sits between design and implement) so
+  // the two seams never conflict — the barrier only anchors on implement nodes.
+  const nodes = seedTestBarrier(withE2e);
 
   const graph: Autopilot = {
     schema_version: '0.1.0',

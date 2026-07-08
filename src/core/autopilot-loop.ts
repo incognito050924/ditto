@@ -12,6 +12,7 @@ import { isFarFieldEscape } from '~/schemas/coverage';
 import { decisionConflict, decisionConflictCarrier } from '~/schemas/decision-conflict-carrier';
 import { directionForkCarrier, directionForkCondition } from '~/schemas/direction-fork-carrier';
 import { ownerReturnEnvelope } from '~/schemas/owner-return-envelope';
+import type { Recipe } from '~/schemas/recipe';
 import { type AcOracle, acOracle } from '~/schemas/work-item';
 import { ActiveNodeLeaseStore } from './active-node-lease';
 import { loadVariantCatalog, selectVariantCandidates } from './agent-variants';
@@ -43,6 +44,7 @@ import { allNodesTerminal, mutationGate, rollbackOnRejection } from './autopilot
 import {
   fileOverlapGate,
   nodeTransition,
+  promotedImplementFrontier,
   proposalsToNodes,
   selectReadyNodes,
   supersededByPromotion,
@@ -68,6 +70,7 @@ import { HandoffStore } from './handoff-store';
 import { IntentStore } from './intent-store';
 import { MemoryEventStore, MemorySourceStore } from './memory-store';
 import { warmStartMemoryContext } from './memory-warmstart';
+import { loadResolvedRecipe } from './recipe/load';
 import {
   type RetroMetricInputs,
   type RetroNarrative,
@@ -79,6 +82,7 @@ import {
 } from './retro-measure';
 import { RetroMetricLedger } from './retro-metric-ledger';
 import { computeSpecDigest } from './spec-doc';
+import { type TestRunner, runTestCommand } from './test-runner';
 import { WorkItemStore } from './work-item-store';
 
 /**
@@ -207,6 +211,20 @@ export type NextNodeResult =
   // no subagent to spawn. The driver runs the skill inline in the main session
   // and records the outcome via record-result as usual.
   | { action: 'main_session'; node_id: string; reason: string }
+  // A settled-tree `test` BARRIER (wi_260708ds9): a DETERMINISTIC engine step run
+  // IN-PROCESS — nextNode resolves the recipe barrier command, runs it (exit code →
+  // verdict), and records the node status here, with NO LLM spawned. Distinct from
+  // `cleanup` (which defers to a CLI verb): the barrier self-executes and reports its
+  // disposition. GREEN → node passed WITH command evidence; DEGRADE/TIMEOUT → proceed
+  // (passed, no command evidence → completion floors ≠pass, ADR-0018); RED → bounded
+  // retry (`red_retry` → node back to pending) then a persistent `red_failed`
+  // (node failed → all_passed=false → decisive).
+  | {
+      action: 'barrier';
+      node_id: string;
+      disposition: 'green' | 'red_retry' | 'red_failed' | 'degrade' | 'timeout';
+      reason: string;
+    }
   // A blocked (escalated) node with nothing else runnable is a user-owned
   // decision, not a transient wait (§4.3). Surfaced distinctly so the driver
   // yields to the user instead of polling `waiting` forever.
@@ -693,6 +711,168 @@ function collectChangeSurface(repoRoot: string): ChangeSurface {
   };
 }
 
+/**
+ * Resolve the recipe's settled-tree BARRIER command (wi_260708ds9). Per-repo
+ * (`repos[].barrier_test_command`) with a fall-back to the top-level command — the same
+ * `dir==='' → top-level` shape `resolvePushGate` uses. The autopilot loop is session-rooted
+ * at the workspace root (ADR-0011), so it resolves the ROOT command (`repoRelDir=''`); the
+ * per-repo branch stays symmetric with push-gate (a sub-repo dir falls back to top-level
+ * when it declares no own command) and is exercised directly by unit tests. ABSENT (and
+ * undiscoverable) ⇒ `undefined` ⇒ the barrier DEGRADES (records tests-unverified, proceeds
+ * — never a validation error, never a claimed pass). A NON-CODE WI with no command hits the
+ * same degrade path (natural no-op).
+ */
+export function resolveBarrierCommand(recipe: Recipe, repoRelDir: string): string | undefined {
+  const norm = (d: string): string => d.replace(/^\.\//, '').replace(/\/+$/, '');
+  const dir = norm(repoRelDir);
+  if (dir === '' || dir === '.') return recipe.barrier_test_command;
+  return (
+    recipe.repos?.find((r) => norm(r.dir) === dir)?.barrier_test_command ??
+    recipe.barrier_test_command
+  );
+}
+
+/** A settled-tree-barrier command evidence ref (the `command`-kind proof `barrierRanGreen` reads). */
+function barrierGreenEvidence(
+  command: string,
+): NonNullable<AutopilotNode['evidence_refs']>[number] {
+  return {
+    kind: 'command',
+    command,
+    summary: `settled-tree test barrier ran GREEN (exit 0): ${command}`,
+  };
+}
+
+/**
+ * Execute the settled-tree test BARRIER in-process (wi_260708ds9 ac-2/ac-5/ac-6). The
+ * verdict is DETERMINISTIC — derived from the command's EXIT CODE via {@link TestRunner},
+ * never an LLM's read (this WI exists to stop false-green). Owns the full transition:
+ * dispatch (pending → running) → run → terminal. Disposition routing:
+ *
+ *  - GREEN (exit 0)                → node `passed` WITH a `command`-kind evidence ref, so
+ *    the completion seam's `barrierRanGreen` sees proven-green. No decision entry (a green
+ *    run is not churn — the evidence ref is the audit record).
+ *  - RED (ran, non-zero)          → bounded auto-retry (reuses `decideOnFailure`/`caps`,
+ *    the SAME fixable budget the loop uses): under the cap → `retry` (running → pending,
+ *    `attempts.fix++`, `red_retry`); at the cap → `fail` (running → `failed`, `red_failed`)
+ *    → all_passed=false → decisive. Each is logged auditably (retry / escalate decision).
+ *  - DEGRADE (unrunnable: 126/127 / spawn-throw, OR no command resolved) → INVERTS push-gate
+ *    (ADR-0018): the node PROCEEDS (`passed`) but carries NO command evidence, so the
+ *    completion seam records the tests-never-ran gap (≠pass, never a claimed pass). Logged
+ *    as a `surface` (blocked_external) decision.
+ *  - TIMEOUT/HANG                 → same proceed-degrade path (never an infinite stall),
+ *    logged distinctly (`timeout`).
+ */
+export async function executeTestBarrier(args: {
+  aps: AutopilotStore;
+  workItemId: string;
+  node: AutopilotNode;
+  caps: Autopilot['caps'];
+  command: string | undefined;
+  runner: TestRunner;
+  cwd: string;
+  now: Date;
+}): Promise<Extract<NextNodeResult, { action: 'barrier' }>> {
+  const { aps, workItemId, node, caps, command, runner, cwd, now } = args;
+  // Dispatch pending → running (the explicit transition table), same as every owner path.
+  await aps.updateNode(workItemId, node.id, (n) => ({
+    ...n,
+    status: nodeTransition(n.status, 'dispatch'),
+  }));
+
+  // Pass the barrier PROCEEDING but WITHOUT command evidence (degrade/timeout): the
+  // completion seam floors final_verdict≠pass, but the node never blocks (ADR-0018).
+  const proceedDegraded = async (
+    disposition: 'degrade' | 'timeout',
+    reason: string,
+  ): Promise<Extract<NextNodeResult, { action: 'barrier' }>> => {
+    await aps.updateNode(workItemId, node.id, (n) => ({
+      ...n,
+      status: nodeTransition(n.status, 'pass'),
+    }));
+    await aps.appendDecision(workItemId, {
+      ts: now.toISOString(),
+      node_id: node.id,
+      decision: 'surface',
+      resolvability: 'blocked_external',
+      reason,
+    });
+    return { action: 'barrier', node_id: node.id, disposition, reason };
+  };
+
+  if (command === undefined) {
+    return proceedDegraded(
+      'degrade',
+      `settled-tree test barrier ${node.id}: no barrier_test_command resolved (absent / non-code work item) — tests unverified, proceeding without a claimed pass (ADR-0018)`,
+    );
+  }
+
+  const outcome = await runner(command, cwd);
+  switch (outcome.kind) {
+    case 'passed': {
+      // GREEN — pass WITH command evidence (proven-green for the completion seam).
+      await aps.updateNode(workItemId, node.id, (n) => ({
+        ...n,
+        status: nodeTransition(n.status, 'pass'),
+        evidence_refs: [...n.evidence_refs, barrierGreenEvidence(command)],
+      }));
+      return {
+        action: 'barrier',
+        node_id: node.id,
+        disposition: 'green',
+        reason: `settled-tree test barrier ${node.id}: \`${command}\` ran GREEN (exit 0)`,
+      };
+    }
+    case 'unrunnable':
+      return proceedDegraded(
+        'degrade',
+        `settled-tree test barrier ${node.id}: \`${command}\` is unrunnable (${outcome.reason}) — tests unverified, proceeding without a claimed pass (ADR-0018)`,
+      );
+    case 'timeout':
+      return proceedDegraded(
+        'timeout',
+        `settled-tree test barrier ${node.id}: \`${command}\` did not finish within ${outcome.timeoutMs}ms (killed) — tests unverified, proceeding without a claimed pass (never an infinite stall)`,
+      );
+    case 'failed': {
+      // RED — bounded auto-retry via the SAME fixable budget the loop uses (retry while
+      // fix < caps.fix_per_node, else the escalate branch fails the node terminally).
+      const { decision } = decideOnFailure('fixable', node.attempts, caps);
+      if (decision === 'retry') {
+        await aps.updateNode(workItemId, node.id, (n) => ({
+          ...n,
+          status: nodeTransition(n.status, 'retry'),
+          attempts: { ...n.attempts, fix: n.attempts.fix + 1 },
+        }));
+        const reason = `settled-tree test barrier ${node.id}: \`${command}\` is RED (exit ${outcome.exitCode}) — retry ${node.attempts.fix + 1}/${caps.fix_per_node}`;
+        await aps.appendDecision(workItemId, {
+          ts: now.toISOString(),
+          node_id: node.id,
+          failure_class: 'fixable',
+          decision: 'retry',
+          reason,
+          attempts: { ...node.attempts, fix: node.attempts.fix + 1 },
+        });
+        return { action: 'barrier', node_id: node.id, disposition: 'red_retry', reason };
+      }
+      // Persistent RED after N retries → failed (terminal) → all_passed=false → decisive.
+      await aps.updateNode(workItemId, node.id, (n) => ({
+        ...n,
+        status: nodeTransition(n.status, 'fail'),
+      }));
+      const reason = `settled-tree test barrier ${node.id}: \`${command}\` still RED (exit ${outcome.exitCode}) after ${node.attempts.fix} retries (cap ${caps.fix_per_node}) — the suite failed, blocking completion (a persistent red barrier is a user-owned decision)`;
+      await aps.appendDecision(workItemId, {
+        ts: now.toISOString(),
+        node_id: node.id,
+        failure_class: 'user_decision_needed',
+        decision: 'escalate',
+        reason,
+        attempts: node.attempts,
+      });
+      return { action: 'barrier', node_id: node.id, disposition: 'red_failed', reason };
+    }
+  }
+}
+
 export async function nextNode(repoRoot: string, workItemId: string): Promise<NextNodeResult> {
   const aps = new AutopilotStore(repoRoot);
   const graph = await aps.get(workItemId);
@@ -831,7 +1011,13 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   // conservative single-node path.
   const gate = mutationGate(graph);
   const isWaveEligible = (n: AutopilotNode): boolean =>
-    n.owner !== 'driver' && n.owner !== 'main-session' && (!isMutatingNode(n) || gate.allowed);
+    n.owner !== 'driver' &&
+    n.owner !== 'main-session' &&
+    // A `test` BARRIER is a deterministic single-node engine step (run in-process below),
+    // never a wave member — excluded by KIND so a legacy `tester`-owned barrier is caught
+    // too, not just the repointed `driver`-owned one.
+    n.kind !== 'test' &&
+    (!isMutatingNode(n) || gate.allowed);
   // F1 conservative cap (the unknown-scope fallback): a mutating node WITHOUT a
   // declared `file_scope` falls back to the shared workItem.changed_files (often
   // empty at implement time), so the file-overlap gate can't actually keep two
@@ -918,6 +1104,27 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   const chosen = admitted[0];
   if (!chosen) {
     return { action: 'waiting', reason: 'all ready nodes deferred by the file-overlap gate' };
+  }
+
+  // A settled-tree `test` BARRIER (wi_260708ds9) is a DETERMINISTIC engine step run
+  // IN-PROCESS — resolve the recipe barrier command and RUN it (exit code → verdict),
+  // never spawn an LLM tester (an LLM could rationalize a red result into a green claim —
+  // the false-green this WI closes). Intercepted by KIND before the driver→cleanup branch
+  // below: the barrier's repointed owner is `driver`, so it would otherwise be treated as
+  // cleanup; keying on kind also catches a legacy `tester`-owned barrier. The command is
+  // resolved at the session-rooted workspace root (repoRelDir=''); ABSENT ⇒ degrade.
+  if (chosen.kind === 'test') {
+    const recipe = await loadResolvedRecipe(repoRoot, undefined, () => {});
+    return executeTestBarrier({
+      aps,
+      workItemId,
+      node: chosen,
+      caps: graph.caps,
+      command: resolveBarrierCommand(recipe, ''),
+      runner: runTestCommand,
+      cwd: repoRoot,
+      now: new Date(),
+    });
   }
 
   // A `driver`-owned node (cleanup, §2.2) is a deterministic engine step, not an
@@ -2435,6 +2642,25 @@ async function recordResultCore(
       const promoted = proposalsToNodes(proposals);
       await aps.addNodes(input.workItemId, promoted, allowedAcceptanceIds);
       promotedNodeIds = promoted.map((n) => n.id);
+      // Settled-tree test barrier re-attachment (wi_260708ds9 ac-1 part c). The
+      // barrier was seeded on the seed implement node; the promotion is about to
+      // supersede that seed. Re-point the barrier onto the PROMOTED implement frontier
+      // FIRST (the retro-node re-attachment analogue) so (i) its depends_on tracks the
+      // FINAL implement frontier rather than a superseded seed, and (ii) the seed
+      // implement is freed to be removed below — else the barrier, a survivor depending
+      // on the seed implement, would keep the redundant seed alive (a regression).
+      // No-op when the promoted subgraph carries no implement work.
+      const barrierFrontier = promotedImplementFrontier(promoted);
+      if (barrierFrontier.length > 0) {
+        const beforeSupersede = await aps.get(input.workItemId);
+        const barrier = beforeSupersede.nodes.find((n) => n.kind === 'test');
+        if (barrier) {
+          await aps.updateNode(input.workItemId, barrier.id, (n) => ({
+            ...n,
+            depends_on: barrierFrontier,
+          }));
+        }
+      }
       // Seed supersession (wi_260610iex): the promoted subgraph refines the work
       // of still-pending successors it fully covers (the seed N2/N3 overlap) —
       // remove them under the conservative closure so the graph carries one

@@ -35,6 +35,13 @@ export const nodeKind = z
     // authoring needs a user dialogue, which only the session-rooted main agent
     // can hold (wi_260610p9h). The driver runs the ditto:e2e-author skill inline.
     'e2e-author',
+    // `test` is the settled-tree TEST BARRIER (wi_260708ds9): a single node that
+    // runs the FULL test suite AFTER the implement wave settles. Owner `tester` is
+    // read-only+Bash (it executes, never edits — see OWNER_TOOLS). It carries no
+    // acceptance_refs (it is a barrier, it judges no single criterion), so it stays
+    // OUT of the per-AC fold; its GREEN/RED/degrade disposition is AND'd into the
+    // final verdict by the completion seam (autopilot-complete), never a per-AC one.
+    'test',
   ])
   .describe('Kind of work a node represents');
 
@@ -60,6 +67,12 @@ export const nodeOwner = z
     // scenario authoring requires a user dialogue (session rooting), so the
     // driver executes the skill inline in the main session, never spawns.
     'main-session',
+    // Owns the settled-tree `test` barrier (wi_260708ds9). A read-only+Bash owner:
+    // it RUNS the suite and reports GREEN/RED/degrade, it never edits. Keeping Edit
+    // OUT of its toolset is load-bearing — an Edit leak makes isMutatingOwner(tester)
+    // true, so guardMutatingEvidence would reject every 0-file GREEN barrier as a
+    // "mutation with no changed files" and deadlock completion.
+    'tester',
   ])
   .describe('Subagent role that owns the node');
 

@@ -299,6 +299,63 @@ describe('buildDelegationPacket red-first directive (ac-1)', () => {
   });
 });
 
+// wi_260708ds9 ac-2: the implementer full-suite pressure is the GLOBAL CHARTER ('매
+// 단계 전체 테스트 실행') the subagent inherits — so the packet ADDS a scope-local-unit
+// directive telling an implementer to run ONLY its own scope's mock-unit tests mid-wave,
+// not the full/cross suite (the whole-suite GREEN is proven once by the settled-tree
+// barrier). ADDITIVE — it never removes RED_FIRST (ac-3).
+describe('buildDelegationPacket scope-local-unit directive (ac-2)', () => {
+  const SCOPE_LOCAL = 'Scope-local unit tests';
+  const RED_FIRST = 'Red-first discipline (code-behavior AC)';
+  const mkNode = (owner: AutopilotNode['owner']): AutopilotNode => ({
+    id: 'NS',
+    kind: owner === 'refactorer' ? 'refactor' : owner === 'verifier' ? 'verify' : 'implement',
+    owner,
+    purpose: 'make the change',
+    status: 'pending',
+    depends_on: [],
+    acceptance_refs: ['ac-1'],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  });
+  const wiWith = (oracleMethod?: string): WorkItem =>
+    ({
+      id: 'wi_scopelocal',
+      changed_files: ['src/x.ts'],
+      acceptance_criteria: [
+        {
+          id: 'ac-1',
+          statement: 'login rejects an empty password',
+          ...(oracleMethod
+            ? {
+                oracle: {
+                  verification_method: oracleMethod,
+                  maps_to: 'ac-1',
+                  direction: 'forward',
+                },
+              }
+            : {}),
+        },
+      ],
+    }) as unknown as WorkItem;
+
+  test('an implementer node packet carries the scope-local-unit directive', () => {
+    const p = buildDelegationPacket(mkNode('implementer'), wiWith());
+    expect(p.must_do.some((m) => m.includes(SCOPE_LOCAL))).toBe(true);
+  });
+
+  test('ADDITIVE: an implementer + dynamic_test oracle carries BOTH RED_FIRST and the scope-local directive', () => {
+    const p = buildDelegationPacket(mkNode('implementer'), wiWith('dynamic_test'));
+    expect(p.must_do.some((m) => m.includes(RED_FIRST))).toBe(true);
+    expect(p.must_do.some((m) => m.includes(SCOPE_LOCAL))).toBe(true);
+  });
+
+  test('a read-only (verifier) node does NOT carry the implementer scope-local directive', () => {
+    const p = buildDelegationPacket(mkNode('verifier'), wiWith());
+    expect(p.must_do.some((m) => m.includes(SCOPE_LOCAL))).toBe(false);
+  });
+});
+
 describe('decideOnFailure (caps automatic; escalate to user beyond)', () => {
   test('fixable under cap => retry', () => {
     expect(decideOnFailure('fixable', { fix: 0, switch: 0 }, caps)).toEqual({

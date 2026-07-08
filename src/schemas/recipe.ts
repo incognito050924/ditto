@@ -57,12 +57,34 @@ export const recipePushGate = z
   .describe('Push gate: branches whose push requires test_command to pass');
 
 /**
+ * Barrier test command — the side-effect-free UNIT SUBSET a tester barrier runs
+ * during autopilot (wi_260708ds9). DISTINCT from `push_gate.test_command`: that is
+ * the push-time FULL-suite guard; this is the fast in-loop barrier oracle.
+ *
+ * CAVEAT (the ONLY thing holding the safe-by-construction premise): this MUST be a
+ * side-effect-free unit subset — do NOT point it at infra-touching / integration
+ * tests (no live DB, no network, no shared fixtures). A barrier that hits real
+ * infra can corrupt shared state under parallel node execution.
+ *
+ * Like every recipe field it is OVERRIDE-ONLY (recipe.ts:8-13): ABSENT drives a
+ * runtime DEGRADE (the barrier has no command to run — not a validation failure).
+ * Present-but-empty fails `min(1)`. It is declarable at BOTH the top level (ROOT
+ * repo) and inside each `repos[]` entry — PER-REPO symmetric with `push_gate`, so a
+ * multi-repo workspace's sub-repos resolve their own barrier command.
+ */
+export const recipeBarrierTestCommand = z
+  .string()
+  .min(1)
+  .describe('Side-effect-free unit-subset barrier command (distinct from push_gate.test_command)');
+
+/**
  * One nested repo (sub-repo or submodule) of a multi-repo workspace, keyed by its
  * `dir` relative to this recipe's location. Carries that repo's own config — for
- * now its `push_gate` (room to grow per-repo settings later). The TOP-LEVEL recipe
- * blocks describe the ROOT repo; each `repos[]` entry describes one nested repo.
- * Lets a single workspace recipe.yaml express boxwood-style multi-repo gates
- * (each sub-repo its own protected branches + test command).
+ * now its `push_gate` and `barrier_test_command` (room to grow per-repo settings
+ * later). The TOP-LEVEL recipe blocks describe the ROOT repo; each `repos[]` entry
+ * describes one nested repo. Lets a single workspace recipe.yaml express
+ * boxwood-style multi-repo gates (each sub-repo its own protected branches + test
+ * command) and its own barrier command.
  */
 export const recipeRepoEntry = z
   .object({
@@ -72,6 +94,7 @@ export const recipeRepoEntry = z
     // follow-up — only the field lands now so a recipe can fully describe a repo.
     url: z.string().min(1).optional(),
     push_gate: recipePushGate.optional(),
+    barrier_test_command: recipeBarrierTestCommand.optional(),
   })
   .describe('A nested repo of the workspace (by dir, optional url) with its own config');
 
@@ -84,6 +107,9 @@ export const recipe = z
     agents: z.array(recipeAgentLink).optional(),
     memory: recipeMemoryMode.optional(),
     push_gate: recipePushGate.optional(),
+    // Barrier unit-subset command for the ROOT repo. Per-repo symmetric field lives
+    // in repos[]. See recipeBarrierTestCommand for the side-effect-free caveat.
+    barrier_test_command: recipeBarrierTestCommand.optional(),
     repos: z.array(recipeRepoEntry).optional(),
     // GitHub backlog (Project + status mapping). REUSES dittoConfigGithub (one SoT,
     // no duplicate). The shape lands now; migrating the existing per-developer github
@@ -96,3 +122,4 @@ export type Recipe = z.infer<typeof recipe>;
 export type RecipeAgentLink = z.infer<typeof recipeAgentLink>;
 export type RecipePushGate = z.infer<typeof recipePushGate>;
 export type RecipeRepoEntry = z.infer<typeof recipeRepoEntry>;
+export type RecipeBarrierTestCommand = z.infer<typeof recipeBarrierTestCommand>;

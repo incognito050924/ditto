@@ -39,13 +39,19 @@ const safeRisk = { non_local: false, irreversible: false, unaudited: false };
 const riskyRisk = { non_local: false, irreversible: true, unaudited: false };
 
 describe('bootstrapAutopilot', () => {
-  test('ready intent + safe risk => created graph (design→implement→verify, not_required)', async () => {
+  test('ready intent + safe risk => created graph (design→implement→verify + settled-tree test barrier, not_required)', async () => {
     const { wi, intent } = await setup('POST /pw returns 200 with a numeric score');
     const result = await bootstrapAutopilot(repo, { workItem: wi, intent, risk: safeRisk });
     expect(result.status).toBe('created');
     if (result.status !== 'created') return;
     expect(result.graph.root_goal).toBe('POST /pw returns a score');
-    expect(result.graph.nodes.map((n) => n.kind)).toEqual(['design', 'implement', 'verify']);
+    // wi_260708ds9 ac-1: bootstrap now also seeds a settled-tree `test` barrier.
+    expect(result.graph.nodes.map((n) => n.kind)).toEqual([
+      'design',
+      'implement',
+      'verify',
+      'test',
+    ]);
     expect(result.graph.approval_gate.status).toBe('not_required');
     // persisted via store
     expect(await new AutopilotStore(repo).exists(wi.id)).toBe(true);
@@ -96,9 +102,12 @@ describe('bootstrapAutopilot', () => {
     });
     const result = await bootstrapAutopilot(repo, { workItem: wi, intent, risk: safeRisk });
     if (result.status !== 'created') throw new Error(`expected created, got ${result.status}`);
-    for (const node of result.graph.nodes) {
+    // The settled-tree `test` barrier carries acceptance_refs:[] by design (it judges
+    // no single criterion), so only AC-carrying nodes are checked for the intent id.
+    for (const node of result.graph.nodes.filter((n) => n.acceptance_refs.length > 0)) {
       expect(node.acceptance_refs).toEqual(['intent-1']);
     }
+    expect(result.graph.nodes.find((n) => n.kind === 'test')?.acceptance_refs).toEqual([]);
   });
 
   test('bootstrap syncs intent AC into the work item (work-item AC == intent AC after)', async () => {
@@ -137,11 +146,17 @@ describe('bootstrapAutopilot', () => {
     ]);
   });
 
-  test('default generator yields the 3-node seed kinds (behavior invariant)', async () => {
+  test('default generator seed + settled-tree test barrier (behavior invariant)', async () => {
     const { wi, intent } = await setup('POST /pw returns 200 with a numeric score');
     const result = await bootstrapAutopilot(repo, { workItem: wi, intent, risk: safeRisk });
     if (result.status !== 'created') throw new Error('expected created');
-    expect(result.graph.nodes.map((n) => n.kind)).toEqual(['design', 'implement', 'verify']);
+    // wi_260708ds9 ac-1: the design→implement→verify seed is now barrier-terminated.
+    expect(result.graph.nodes.map((n) => n.kind)).toEqual([
+      'design',
+      'implement',
+      'verify',
+      'test',
+    ]);
   });
 
   test('e2eOptIn seeds an e2e-author node between design and implement (implement depends_on e2e-author)', async () => {
@@ -162,6 +177,7 @@ describe('bootstrapAutopilot', () => {
       'e2e-author',
       'implement',
       'verify',
+      'test',
     ]);
     const design = result.graph.nodes.find((n) => n.kind === 'design');
     const e2e = result.graph.nodes.find((n) => n.kind === 'e2e-author');
@@ -175,7 +191,12 @@ describe('bootstrapAutopilot', () => {
     const { wi, intent } = await setup('POST /pw returns 200 with a numeric score');
     const result = await bootstrapAutopilot(repo, { workItem: wi, intent, risk: safeRisk });
     if (result.status !== 'created') throw new Error('expected created');
-    expect(result.graph.nodes.map((n) => n.kind)).toEqual(['design', 'implement', 'verify']);
+    expect(result.graph.nodes.map((n) => n.kind)).toEqual([
+      'design',
+      'implement',
+      'verify',
+      'test',
+    ]);
     expect(result.graph.nodes.some((n) => n.kind === 'e2e-author')).toBe(false);
   });
 
@@ -205,7 +226,10 @@ describe('bootstrapAutopilot', () => {
       generateNodes,
     });
     if (result.status !== 'created') throw new Error('expected created');
-    expect(result.graph.nodes.map((n) => n.id)).toEqual(['N1', 'N2', 'N3', 'N4']);
+    // The custom chain is preserved and barrier-terminated (seeded on the implement
+    // frontier N2 — the only implement node; N3=verify, N4=review are not implements).
+    expect(result.graph.nodes.map((n) => n.id)).toEqual(['N1', 'N2', 'N3', 'N4', 'test-barrier']);
+    expect(result.graph.nodes.find((n) => n.id === 'test-barrier')?.depends_on).toEqual(['N2']);
   });
 
   test('intent.work_item_id ≠ workItem.id => work_item_mismatch, no graph created', async () => {

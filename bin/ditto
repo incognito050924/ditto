@@ -47,7 +47,7 @@ var __export = (target, all) => {
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = import.meta.require;
 
-// ../../../../node_modules/consola/dist/chunks/prompt.mjs
+// node_modules/consola/dist/chunks/prompt.mjs
 var exports_prompt = {};
 __export(exports_prompt, {
   prompt: () => prompt,
@@ -803,7 +803,7 @@ var init_prompt = __esm(() => {
   kCancel = Symbol.for("cancel");
 });
 
-// ../../../../node_modules/smol-toml/dist/error.js
+// node_modules/smol-toml/dist/error.js
 function getLineColFromPtr(string, ptr) {
   let lines = string.slice(0, ptr).split(/\r\n|\n|\r/g);
   return [lines.length, lines.pop().length + 1];
@@ -875,7 +875,7 @@ ${codeblock}`, options);
   };
 });
 
-// ../../../../node_modules/smol-toml/dist/util.js
+// node_modules/smol-toml/dist/util.js
 function isEscaped(str, ptr) {
   let i2 = 0;
   while (str[ptr - ++i2] === "\\")
@@ -991,7 +991,7 @@ var init_util = __esm(() => {
    */
 });
 
-// ../../../../node_modules/smol-toml/dist/date.js
+// node_modules/smol-toml/dist/date.js
 var DATE_TIME_RE, TomlDate;
 var init_date = __esm(() => {
   /*!
@@ -1113,7 +1113,7 @@ var init_date = __esm(() => {
   };
 });
 
-// ../../../../node_modules/smol-toml/dist/primitive.js
+// node_modules/smol-toml/dist/primitive.js
 function parseString(str, ptr = 0, endPtr = str.length) {
   let isLiteral = str[ptr] === "'";
   let isMultiline = str[ptr++] === str[ptr] && str[ptr] === str[ptr + 1];
@@ -1291,7 +1291,7 @@ var init_primitive = __esm(() => {
   };
 });
 
-// ../../../../node_modules/smol-toml/dist/extract.js
+// node_modules/smol-toml/dist/extract.js
 function sliceAndTrimEndOf(str, startPtr, endPtr) {
   let value = str.slice(startPtr, endPtr);
   let commentIdx = value.indexOf("#");
@@ -1392,7 +1392,7 @@ var init_extract = __esm(() => {
    */
 });
 
-// ../../../../node_modules/smol-toml/dist/struct.js
+// node_modules/smol-toml/dist/struct.js
 function parseKey(str, ptr, end = "=") {
   let dot = ptr - 1;
   let parsed = [];
@@ -1576,7 +1576,7 @@ var init_struct = __esm(() => {
   KEY_PART_RE = /^[a-zA-Z0-9-_]+[ \t]*$/;
 });
 
-// ../../../../node_modules/smol-toml/dist/parse.js
+// node_modules/smol-toml/dist/parse.js
 function peekTable(key, table, meta, type) {
   let t2 = table;
   let m2 = meta;
@@ -1723,7 +1723,7 @@ var init_parse = __esm(() => {
    */
 });
 
-// ../../../../node_modules/smol-toml/dist/stringify.js
+// node_modules/smol-toml/dist/stringify.js
 var init_stringify = __esm(() => {
   /*!
    * Copyright (c) Squirrel Chat et al., All rights reserved.
@@ -1754,7 +1754,7 @@ var init_stringify = __esm(() => {
    */
 });
 
-// ../../../../node_modules/smol-toml/dist/index.js
+// node_modules/smol-toml/dist/index.js
 var init_dist = __esm(() => {
   init_parse();
   init_stringify();
@@ -1789,7 +1789,7 @@ var init_dist = __esm(() => {
    */
 });
 
-// ../../../../node_modules/yaml/dist/nodes/identity.js
+// node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS((exports) => {
   var ALIAS = Symbol.for("yaml.alias");
   var DOC = Symbol.for("yaml.document");
@@ -1843,7 +1843,7 @@ var require_identity = __commonJS((exports) => {
   exports.isSeq = isSeq;
 });
 
-// ../../../../node_modules/yaml/dist/visit.js
+// node_modules/yaml/dist/visit.js
 var require_visit = __commonJS((exports) => {
   var identity = require_identity();
   var BREAK = Symbol("break visit");
@@ -1998,7 +1998,7 @@ var require_visit = __commonJS((exports) => {
   exports.visitAsync = visitAsync;
 });
 
-// ../../../../node_modules/yaml/dist/doc/directives.js
+// node_modules/yaml/dist/doc/directives.js
 var require_directives = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2150,7 +2150,7 @@ var require_directives = __commonJS((exports) => {
   exports.Directives = Directives;
 });
 
-// ../../../../node_modules/yaml/dist/doc/anchors.js
+// node_modules/yaml/dist/doc/anchors.js
 var require_anchors = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2212,7 +2212,7 @@ var require_anchors = __commonJS((exports) => {
   exports.findNewAnchor = findNewAnchor;
 });
 
-// ../../../../node_modules/yaml/dist/doc/applyReviver.js
+// node_modules/yaml/dist/doc/applyReviver.js
 var require_applyReviver = __commonJS((exports) => {
   function applyReviver(reviver, obj, key, val) {
     if (val && typeof val === "object") {
@@ -2259,7 +2259,7 @@ var require_applyReviver = __commonJS((exports) => {
   exports.applyReviver = applyReviver;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/toJS.js
+// node_modules/yaml/dist/nodes/toJS.js
 var require_toJS = __commonJS((exports) => {
   var identity = require_identity();
   function toJS(value, arg, ctx) {
@@ -2286,7 +2286,7 @@ var require_toJS = __commonJS((exports) => {
   exports.toJS = toJS;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Node.js
+// node_modules/yaml/dist/nodes/Node.js
 var require_Node = __commonJS((exports) => {
   var applyReviver = require_applyReviver();
   var identity = require_identity();
@@ -2323,7 +2323,7 @@ var require_Node = __commonJS((exports) => {
   exports.NodeBase = NodeBase;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Alias.js
+// node_modules/yaml/dist/nodes/Alias.js
 var require_Alias = __commonJS((exports) => {
   var anchors = require_anchors();
   var visit = require_visit();
@@ -2433,7 +2433,7 @@ var require_Alias = __commonJS((exports) => {
   exports.Alias = Alias;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Scalar.js
+// node_modules/yaml/dist/nodes/Scalar.js
 var require_Scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Node = require_Node();
@@ -2461,7 +2461,7 @@ var require_Scalar = __commonJS((exports) => {
   exports.isScalarValue = isScalarValue;
 });
 
-// ../../../../node_modules/yaml/dist/doc/createNode.js
+// node_modules/yaml/dist/doc/createNode.js
 var require_createNode = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -2533,7 +2533,7 @@ var require_createNode = __commonJS((exports) => {
   exports.createNode = createNode;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Collection.js
+// node_modules/yaml/dist/nodes/Collection.js
 var require_Collection = __commonJS((exports) => {
   var createNode = require_createNode();
   var identity = require_identity();
@@ -2648,7 +2648,7 @@ var require_Collection = __commonJS((exports) => {
   exports.isEmptyPath = isEmptyPath;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyComment.js
+// node_modules/yaml/dist/stringify/stringifyComment.js
 var require_stringifyComment = __commonJS((exports) => {
   var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
   function indentComment(comment, indent) {
@@ -2665,7 +2665,7 @@ var require_stringifyComment = __commonJS((exports) => {
   exports.stringifyComment = stringifyComment;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/foldFlowLines.js
+// node_modules/yaml/dist/stringify/foldFlowLines.js
 var require_foldFlowLines = __commonJS((exports) => {
   var FOLD_FLOW = "flow";
   var FOLD_BLOCK = "block";
@@ -2802,7 +2802,7 @@ ${indent}${text.slice(fold + 1, end2)}`;
   exports.foldFlowLines = foldFlowLines;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyString.js
+// node_modules/yaml/dist/stringify/stringifyString.js
 var require_stringifyString = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var foldFlowLines = require_foldFlowLines();
@@ -3100,7 +3100,7 @@ ${indent}`);
   exports.stringifyString = stringifyString;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringify.js
+// node_modules/yaml/dist/stringify/stringify.js
 var require_stringify = __commonJS((exports) => {
   var anchors = require_anchors();
   var identity = require_identity();
@@ -3221,7 +3221,7 @@ ${ctx.indent}${str}`;
   exports.stringify = stringify2;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyPair.js
+// node_modules/yaml/dist/stringify/stringifyPair.js
 var require_stringifyPair = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3357,7 +3357,7 @@ ${ctx.indent}`;
   exports.stringifyPair = stringifyPair;
 });
 
-// ../../../../node_modules/yaml/dist/log.js
+// node_modules/yaml/dist/log.js
 var require_log = __commonJS((exports) => {
   var node_process = __require("process");
   function debug(logLevel, ...messages) {
@@ -3376,7 +3376,7 @@ var require_log = __commonJS((exports) => {
   exports.warn = warn;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/merge.js
+// node_modules/yaml/dist/schema/yaml-1.1/merge.js
 var require_merge = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3433,7 +3433,7 @@ var require_merge = __commonJS((exports) => {
   exports.merge = merge;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/addPairToJSMap.js
+// node_modules/yaml/dist/nodes/addPairToJSMap.js
 var require_addPairToJSMap = __commonJS((exports) => {
   var log = require_log();
   var merge = require_merge();
@@ -3494,7 +3494,7 @@ var require_addPairToJSMap = __commonJS((exports) => {
   exports.addPairToJSMap = addPairToJSMap;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Pair.js
+// node_modules/yaml/dist/nodes/Pair.js
 var require_Pair = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyPair = require_stringifyPair();
@@ -3532,7 +3532,7 @@ var require_Pair = __commonJS((exports) => {
   exports.createPair = createPair;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyCollection.js
+// node_modules/yaml/dist/stringify/stringifyCollection.js
 var require_stringifyCollection = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -3684,7 +3684,7 @@ ${indent}${end}`;
   exports.stringifyCollection = stringifyCollection;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/YAMLMap.js
+// node_modules/yaml/dist/nodes/YAMLMap.js
 var require_YAMLMap = __commonJS((exports) => {
   var stringifyCollection = require_stringifyCollection();
   var addPairToJSMap = require_addPairToJSMap();
@@ -3811,7 +3811,7 @@ var require_YAMLMap = __commonJS((exports) => {
   exports.findPair = findPair;
 });
 
-// ../../../../node_modules/yaml/dist/schema/common/map.js
+// node_modules/yaml/dist/schema/common/map.js
 var require_map = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLMap = require_YAMLMap();
@@ -3830,7 +3830,7 @@ var require_map = __commonJS((exports) => {
   exports.map = map;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/YAMLSeq.js
+// node_modules/yaml/dist/nodes/YAMLSeq.js
 var require_YAMLSeq = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyCollection = require_stringifyCollection();
@@ -3923,7 +3923,7 @@ var require_YAMLSeq = __commonJS((exports) => {
   exports.YAMLSeq = YAMLSeq;
 });
 
-// ../../../../node_modules/yaml/dist/schema/common/seq.js
+// node_modules/yaml/dist/schema/common/seq.js
 var require_seq = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLSeq = require_YAMLSeq();
@@ -3942,7 +3942,7 @@ var require_seq = __commonJS((exports) => {
   exports.seq = seq;
 });
 
-// ../../../../node_modules/yaml/dist/schema/common/string.js
+// node_modules/yaml/dist/schema/common/string.js
 var require_string = __commonJS((exports) => {
   var stringifyString = require_stringifyString();
   var string = {
@@ -3958,7 +3958,7 @@ var require_string = __commonJS((exports) => {
   exports.string = string;
 });
 
-// ../../../../node_modules/yaml/dist/schema/common/null.js
+// node_modules/yaml/dist/schema/common/null.js
 var require_null = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var nullTag = {
@@ -3973,7 +3973,7 @@ var require_null = __commonJS((exports) => {
   exports.nullTag = nullTag;
 });
 
-// ../../../../node_modules/yaml/dist/schema/core/bool.js
+// node_modules/yaml/dist/schema/core/bool.js
 var require_bool = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var boolTag = {
@@ -3994,7 +3994,7 @@ var require_bool = __commonJS((exports) => {
   exports.boolTag = boolTag;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyNumber.js
+// node_modules/yaml/dist/stringify/stringifyNumber.js
 var require_stringifyNumber = __commonJS((exports) => {
   function stringifyNumber({ format, minFractionDigits, tag, value }) {
     if (typeof value === "bigint")
@@ -4018,7 +4018,7 @@ var require_stringifyNumber = __commonJS((exports) => {
   exports.stringifyNumber = stringifyNumber;
 });
 
-// ../../../../node_modules/yaml/dist/schema/core/float.js
+// node_modules/yaml/dist/schema/core/float.js
 var require_float = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4061,7 +4061,7 @@ var require_float = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// ../../../../node_modules/yaml/dist/schema/core/int.js
+// node_modules/yaml/dist/schema/core/int.js
 var require_int = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4103,7 +4103,7 @@ var require_int = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// ../../../../node_modules/yaml/dist/schema/core/schema.js
+// node_modules/yaml/dist/schema/core/schema.js
 var require_schema = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4128,7 +4128,7 @@ var require_schema = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// ../../../../node_modules/yaml/dist/schema/json/schema.js
+// node_modules/yaml/dist/schema/json/schema.js
 var require_schema2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var map = require_map();
@@ -4192,7 +4192,7 @@ var require_schema2 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/binary.js
+// node_modules/yaml/dist/schema/yaml-1.1/binary.js
 var require_binary = __commonJS((exports) => {
   var node_buffer = __require("buffer");
   var Scalar = require_Scalar();
@@ -4247,7 +4247,7 @@ var require_binary = __commonJS((exports) => {
   exports.binary = binary;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/pairs.js
+// node_modules/yaml/dist/schema/yaml-1.1/pairs.js
 var require_pairs = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4322,7 +4322,7 @@ ${cn.comment}` : item.comment;
   exports.resolvePairs = resolvePairs;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/omap.js
+// node_modules/yaml/dist/schema/yaml-1.1/omap.js
 var require_omap = __commonJS((exports) => {
   var identity = require_identity();
   var toJS = require_toJS();
@@ -4394,7 +4394,7 @@ var require_omap = __commonJS((exports) => {
   exports.omap = omap;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/bool.js
+// node_modules/yaml/dist/schema/yaml-1.1/bool.js
 var require_bool2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function boolStringify({ value, source }, ctx) {
@@ -4423,7 +4423,7 @@ var require_bool2 = __commonJS((exports) => {
   exports.trueTag = trueTag;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/float.js
+// node_modules/yaml/dist/schema/yaml-1.1/float.js
 var require_float2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4469,7 +4469,7 @@ var require_float2 = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/int.js
+// node_modules/yaml/dist/schema/yaml-1.1/int.js
 var require_int2 = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4545,7 +4545,7 @@ var require_int2 = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/set.js
+// node_modules/yaml/dist/schema/yaml-1.1/set.js
 var require_set = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4628,7 +4628,7 @@ var require_set = __commonJS((exports) => {
   exports.set = set;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
+// node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
 var require_timestamp = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   function parseSexagesimal(str, asBigInt) {
@@ -4710,7 +4710,7 @@ var require_timestamp = __commonJS((exports) => {
   exports.timestamp = timestamp;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/schema.js
+// node_modules/yaml/dist/schema/yaml-1.1/schema.js
 var require_schema3 = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4751,7 +4751,7 @@ var require_schema3 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// ../../../../node_modules/yaml/dist/schema/tags.js
+// node_modules/yaml/dist/schema/tags.js
 var require_tags = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4842,7 +4842,7 @@ var require_tags = __commonJS((exports) => {
   exports.getTags = getTags;
 });
 
-// ../../../../node_modules/yaml/dist/schema/Schema.js
+// node_modules/yaml/dist/schema/Schema.js
 var require_Schema = __commonJS((exports) => {
   var identity = require_identity();
   var map = require_map();
@@ -4872,7 +4872,7 @@ var require_Schema = __commonJS((exports) => {
   exports.Schema = Schema;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyDocument.js
+// node_modules/yaml/dist/stringify/stringifyDocument.js
 var require_stringifyDocument = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -4952,7 +4952,7 @@ var require_stringifyDocument = __commonJS((exports) => {
   exports.stringifyDocument = stringifyDocument;
 });
 
-// ../../../../node_modules/yaml/dist/doc/Document.js
+// node_modules/yaml/dist/doc/Document.js
 var require_Document = __commonJS((exports) => {
   var Alias = require_Alias();
   var Collection = require_Collection();
@@ -5187,7 +5187,7 @@ var require_Document = __commonJS((exports) => {
   exports.Document = Document;
 });
 
-// ../../../../node_modules/yaml/dist/errors.js
+// node_modules/yaml/dist/errors.js
 var require_errors = __commonJS((exports) => {
   class YAMLError extends Error {
     constructor(name, pos, code, message) {
@@ -5252,7 +5252,7 @@ ${pointer}
   exports.prettifyError = prettifyError;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-props.js
+// node_modules/yaml/dist/compose/resolve-props.js
 var require_resolve_props = __commonJS((exports) => {
   function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
     let spaceBefore = false;
@@ -5382,7 +5382,7 @@ var require_resolve_props = __commonJS((exports) => {
   exports.resolveProps = resolveProps;
 });
 
-// ../../../../node_modules/yaml/dist/compose/util-contains-newline.js
+// node_modules/yaml/dist/compose/util-contains-newline.js
 var require_util_contains_newline = __commonJS((exports) => {
   function containsNewline(key) {
     if (!key)
@@ -5422,7 +5422,7 @@ var require_util_contains_newline = __commonJS((exports) => {
   exports.containsNewline = containsNewline;
 });
 
-// ../../../../node_modules/yaml/dist/compose/util-flow-indent-check.js
+// node_modules/yaml/dist/compose/util-flow-indent-check.js
 var require_util_flow_indent_check = __commonJS((exports) => {
   var utilContainsNewline = require_util_contains_newline();
   function flowIndentCheck(indent, fc, onError) {
@@ -5437,7 +5437,7 @@ var require_util_flow_indent_check = __commonJS((exports) => {
   exports.flowIndentCheck = flowIndentCheck;
 });
 
-// ../../../../node_modules/yaml/dist/compose/util-map-includes.js
+// node_modules/yaml/dist/compose/util-map-includes.js
 var require_util_map_includes = __commonJS((exports) => {
   var identity = require_identity();
   function mapIncludes(ctx, items, search) {
@@ -5450,7 +5450,7 @@ var require_util_map_includes = __commonJS((exports) => {
   exports.mapIncludes = mapIncludes;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-block-map.js
+// node_modules/yaml/dist/compose/resolve-block-map.js
 var require_resolve_block_map = __commonJS((exports) => {
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -5557,7 +5557,7 @@ var require_resolve_block_map = __commonJS((exports) => {
   exports.resolveBlockMap = resolveBlockMap;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-block-seq.js
+// node_modules/yaml/dist/compose/resolve-block-seq.js
 var require_resolve_block_seq = __commonJS((exports) => {
   var YAMLSeq = require_YAMLSeq();
   var resolveProps = require_resolve_props();
@@ -5605,7 +5605,7 @@ var require_resolve_block_seq = __commonJS((exports) => {
   exports.resolveBlockSeq = resolveBlockSeq;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-end.js
+// node_modules/yaml/dist/compose/resolve-end.js
 var require_resolve_end = __commonJS((exports) => {
   function resolveEnd(end, offset, reqSpace, onError) {
     let comment = "";
@@ -5645,7 +5645,7 @@ var require_resolve_end = __commonJS((exports) => {
   exports.resolveEnd = resolveEnd;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-flow-collection.js
+// node_modules/yaml/dist/compose/resolve-flow-collection.js
 var require_resolve_flow_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -5836,7 +5836,7 @@ var require_resolve_flow_collection = __commonJS((exports) => {
   exports.resolveFlowCollection = resolveFlowCollection;
 });
 
-// ../../../../node_modules/yaml/dist/compose/compose-collection.js
+// node_modules/yaml/dist/compose/compose-collection.js
 var require_compose_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -5898,7 +5898,7 @@ var require_compose_collection = __commonJS((exports) => {
   exports.composeCollection = composeCollection;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-block-scalar.js
+// node_modules/yaml/dist/compose/resolve-block-scalar.js
 var require_resolve_block_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function resolveBlockScalar(ctx, scalar, onError) {
@@ -6091,7 +6091,7 @@ var require_resolve_block_scalar = __commonJS((exports) => {
   exports.resolveBlockScalar = resolveBlockScalar;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-flow-scalar.js
+// node_modules/yaml/dist/compose/resolve-flow-scalar.js
 var require_resolve_flow_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var resolveEnd = require_resolve_end();
@@ -6308,7 +6308,7 @@ var require_resolve_flow_scalar = __commonJS((exports) => {
   exports.resolveFlowScalar = resolveFlowScalar;
 });
 
-// ../../../../node_modules/yaml/dist/compose/compose-scalar.js
+// node_modules/yaml/dist/compose/compose-scalar.js
 var require_compose_scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -6386,7 +6386,7 @@ var require_compose_scalar = __commonJS((exports) => {
   exports.composeScalar = composeScalar;
 });
 
-// ../../../../node_modules/yaml/dist/compose/util-empty-scalar-position.js
+// node_modules/yaml/dist/compose/util-empty-scalar-position.js
 var require_util_empty_scalar_position = __commonJS((exports) => {
   function emptyScalarPosition(offset, before, pos) {
     if (before) {
@@ -6413,7 +6413,7 @@ var require_util_empty_scalar_position = __commonJS((exports) => {
   exports.emptyScalarPosition = emptyScalarPosition;
 });
 
-// ../../../../node_modules/yaml/dist/compose/compose-node.js
+// node_modules/yaml/dist/compose/compose-node.js
 var require_compose_node = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -6516,7 +6516,7 @@ var require_compose_node = __commonJS((exports) => {
   exports.composeNode = composeNode;
 });
 
-// ../../../../node_modules/yaml/dist/compose/compose-doc.js
+// node_modules/yaml/dist/compose/compose-doc.js
 var require_compose_doc = __commonJS((exports) => {
   var Document = require_Document();
   var composeNode = require_compose_node();
@@ -6556,7 +6556,7 @@ var require_compose_doc = __commonJS((exports) => {
   exports.composeDoc = composeDoc;
 });
 
-// ../../../../node_modules/yaml/dist/compose/composer.js
+// node_modules/yaml/dist/compose/composer.js
 var require_composer = __commonJS((exports) => {
   var node_process = __require("process");
   var directives = require_directives();
@@ -6747,7 +6747,7 @@ ${end.comment}` : end.comment;
   exports.Composer = Composer;
 });
 
-// ../../../../node_modules/yaml/dist/parse/cst-scalar.js
+// node_modules/yaml/dist/parse/cst-scalar.js
 var require_cst_scalar = __commonJS((exports) => {
   var resolveBlockScalar = require_resolve_block_scalar();
   var resolveFlowScalar = require_resolve_flow_scalar();
@@ -6937,7 +6937,7 @@ var require_cst_scalar = __commonJS((exports) => {
   exports.setScalarValue = setScalarValue;
 });
 
-// ../../../../node_modules/yaml/dist/parse/cst-stringify.js
+// node_modules/yaml/dist/parse/cst-stringify.js
 var require_cst_stringify = __commonJS((exports) => {
   var stringify2 = (cst) => ("type" in cst) ? stringifyToken(cst) : stringifyItem(cst);
   function stringifyToken(token) {
@@ -6995,7 +6995,7 @@ var require_cst_stringify = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// ../../../../node_modules/yaml/dist/parse/cst-visit.js
+// node_modules/yaml/dist/parse/cst-visit.js
 var require_cst_visit = __commonJS((exports) => {
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
@@ -7054,7 +7054,7 @@ var require_cst_visit = __commonJS((exports) => {
   exports.visit = visit;
 });
 
-// ../../../../node_modules/yaml/dist/parse/cst.js
+// node_modules/yaml/dist/parse/cst.js
 var require_cst = __commonJS((exports) => {
   var cstScalar = require_cst_scalar();
   var cstStringify = require_cst_stringify();
@@ -7155,7 +7155,7 @@ var require_cst = __commonJS((exports) => {
   exports.tokenType = tokenType;
 });
 
-// ../../../../node_modules/yaml/dist/parse/lexer.js
+// node_modules/yaml/dist/parse/lexer.js
 var require_lexer = __commonJS((exports) => {
   var cst = require_cst();
   function isEmpty(ch) {
@@ -7752,7 +7752,7 @@ var require_lexer = __commonJS((exports) => {
   exports.Lexer = Lexer;
 });
 
-// ../../../../node_modules/yaml/dist/parse/line-counter.js
+// node_modules/yaml/dist/parse/line-counter.js
 var require_line_counter = __commonJS((exports) => {
   class LineCounter {
     constructor() {
@@ -7780,7 +7780,7 @@ var require_line_counter = __commonJS((exports) => {
   exports.LineCounter = LineCounter;
 });
 
-// ../../../../node_modules/yaml/dist/parse/parser.js
+// node_modules/yaml/dist/parse/parser.js
 var require_parser = __commonJS((exports) => {
   var node_process = __require("process");
   var cst = require_cst();
@@ -8636,7 +8636,7 @@ var require_parser = __commonJS((exports) => {
   exports.Parser = Parser;
 });
 
-// ../../../../node_modules/yaml/dist/public-api.js
+// node_modules/yaml/dist/public-api.js
 var require_public_api = __commonJS((exports) => {
   var composer = require_composer();
   var Document = require_Document();
@@ -8730,7 +8730,7 @@ var require_public_api = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// ../../../../node_modules/yaml/dist/index.js
+// node_modules/yaml/dist/index.js
 var composer, Document, Schema, errors, Alias, identity, Pair, Scalar, YAMLMap, YAMLSeq, cst, lexer, lineCounter, parser, publicApi, visit, $Composer, $Document, $Schema, $YAMLError, $YAMLParseError, $YAMLWarning, $Alias, $isAlias, $isCollection, $isDocument, $isMap, $isNode, $isPair, $isScalar, $isSeq, $Pair, $Scalar, $YAMLMap, $YAMLSeq, $Lexer, $LineCounter, $Parser, $parse, $parseAllDocuments, $parseDocument, $stringify, $visit, $visitAsync;
 var init_dist2 = __esm(() => {
   composer = require_composer();
@@ -8847,7 +8847,7 @@ var init_shared = __esm(() => {
   init_dist2();
 });
 
-// ../../../../node_modules/zod/v3/helpers/util.js
+// node_modules/zod/v3/helpers/util.js
 var util, objectUtil, ZodParsedType, getParsedType = (data) => {
   const t2 = typeof data;
   switch (t2) {
@@ -8978,7 +8978,7 @@ var init_util2 = __esm(() => {
   ]);
 });
 
-// ../../../../node_modules/zod/v3/ZodError.js
+// node_modules/zod/v3/ZodError.js
 var ZodIssueCode, quotelessJson = (obj) => {
   const json = JSON.stringify(obj, null, 2);
   return json.replace(/"([^"]+)":/g, "$1:");
@@ -9099,7 +9099,7 @@ var init_ZodError = __esm(() => {
   };
 });
 
-// ../../../../node_modules/zod/v3/locales/en.js
+// node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -9206,7 +9206,7 @@ var init_en = __esm(() => {
   en_default = errorMap;
 });
 
-// ../../../../node_modules/zod/v3/errors.js
+// node_modules/zod/v3/errors.js
 function setErrorMap(map) {
   overrideErrorMap = map;
 }
@@ -9219,7 +9219,7 @@ var init_errors = __esm(() => {
   overrideErrorMap = en_default;
 });
 
-// ../../../../node_modules/zod/v3/helpers/parseUtil.js
+// node_modules/zod/v3/helpers/parseUtil.js
 function addIssueToContext(ctx, issueData) {
   const overrideMap = getErrorMap();
   const issue = makeIssue({
@@ -9324,10 +9324,10 @@ var init_parseUtil = __esm(() => {
   });
 });
 
-// ../../../../node_modules/zod/v3/helpers/typeAliases.js
+// node_modules/zod/v3/helpers/typeAliases.js
 var init_typeAliases = () => {};
 
-// ../../../../node_modules/zod/v3/helpers/errorUtil.js
+// node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 var init_errorUtil = __esm(() => {
   (function(errorUtil2) {
@@ -9336,7 +9336,7 @@ var init_errorUtil = __esm(() => {
   })(errorUtil || (errorUtil = {}));
 });
 
-// ../../../../node_modules/zod/v3/types.js
+// node_modules/zod/v3/types.js
 class ParseInputLazyPath {
   constructor(parent, value, path, key) {
     this._cachedPath = [];
@@ -12687,7 +12687,7 @@ var init_types = __esm(() => {
   NEVER = INVALID;
 });
 
-// ../../../../node_modules/zod/v3/external.js
+// node_modules/zod/v3/external.js
 var exports_external = {};
 __export(exports_external, {
   void: () => voidType,
@@ -12807,7 +12807,7 @@ var init_external = __esm(() => {
   init_ZodError();
 });
 
-// ../../../../node_modules/zod/index.js
+// node_modules/zod/index.js
 var init_zod = __esm(() => {
   init_external();
   init_external();
@@ -15366,7 +15366,7 @@ var init_cleanup_index = __esm(() => {
 
 // src/core/cleanup-store.ts
 import { mkdir as mkdir6, rename as rename4, stat as stat6 } from "fs/promises";
-import { isAbsolute as isAbsolute6, join as join36, relative as relative11, resolve as resolve9 } from "path";
+import { isAbsolute as isAbsolute6, join as join37, relative as relative11, resolve as resolve9 } from "path";
 function isProtectedBasename(base) {
   if (base === "CLAUDE.md" || base === "AGENTS.md")
     return true;
@@ -15402,7 +15402,7 @@ class CleanupStore {
     return localDir(this.repoRoot, "cleanup", runId2);
   }
   indexPath(runId2) {
-    return join36(this.runDir(runId2), "index.json");
+    return join37(this.runDir(runId2), "index.json");
   }
   async createRun(params, now = new Date) {
     const stamp2 = runStamp(now);
@@ -15421,7 +15421,7 @@ class CleanupStore {
       }
     }
     for (const action of CLEANUP_ACTIONS) {
-      await ensureDir(join36(this.runDir(runId2), action));
+      await ensureDir(join37(this.runDir(runId2), action));
     }
     const index = {
       schema_version: "0.1.0",
@@ -15450,8 +15450,8 @@ class CleanupStore {
     const name = input.name ?? repoRel.split("/").pop() ?? repoRel;
     const owning = await findOwningRepo(abs, this.repoRoot);
     const owningRepo = owning === null ? null : toRepoRel(this.repoRoot, owning) || ".";
-    const destAbs = join36(this.runDir(runId2), input.action, name);
-    await ensureDir(join36(this.runDir(runId2), input.action));
+    const destAbs = join37(this.runDir(runId2), input.action, name);
+    await ensureDir(join37(this.runDir(runId2), input.action));
     await rename4(abs, destAbs);
     const entry = {
       name,
@@ -15478,9 +15478,9 @@ class CleanupStore {
     if (entry === undefined) {
       throw new Error(`no staged entry for original_path: ${originalPath}`);
     }
-    const stagedAbs = join36(this.repoRoot, entry.staged_path);
-    const originalAbs = join36(this.repoRoot, entry.original_path);
-    await ensureDir(join36(originalAbs, ".."));
+    const stagedAbs = join37(this.repoRoot, entry.staged_path);
+    const originalAbs = join37(this.repoRoot, entry.original_path);
+    await ensureDir(join37(originalAbs, ".."));
     await rename4(stagedAbs, originalAbs);
     return entry;
   }
@@ -15518,7 +15518,7 @@ var init_cleanup_store = __esm(() => {
 // src/core/cleanup-archive.ts
 import { execFileSync as execFileSync4 } from "child_process";
 import { mkdir as mkdir7, rm, stat as stat7 } from "fs/promises";
-import { dirname as dirname11, isAbsolute as isAbsolute7, join as join37, resolve as resolve10 } from "path";
+import { dirname as dirname11, isAbsolute as isAbsolute7, join as join38, resolve as resolve10 } from "path";
 function runDir(repoRoot, runId2) {
   return localDir(repoRoot, "cleanup", runId2);
 }
@@ -15569,7 +15569,7 @@ async function deleteRun(repoRoot, runId2, confirm) {
 function subRepoAbs(repoRoot, owningRepo) {
   if (owningRepo === null || owningRepo === ".")
     return resolve10(repoRoot);
-  return isAbsolute7(owningRepo) ? owningRepo : join37(repoRoot, owningRepo);
+  return isAbsolute7(owningRepo) ? owningRepo : join38(repoRoot, owningRepo);
 }
 function unrelatedDirt(cwd, allowed) {
   let status = "";
@@ -15632,7 +15632,7 @@ function commitCleanup(repoRoot, index, message) {
   return { commits: commitPerSubRepo(repoRoot, byRepo, message) };
 }
 function relForRepo(repoRoot, repoAbs, workspaceRelPath) {
-  const abs = join37(repoRoot, workspaceRelPath);
+  const abs = join38(repoRoot, workspaceRelPath);
   const rel = abs.startsWith(`${repoAbs}/`) ? abs.slice(repoAbs.length + 1) : workspaceRelPath;
   return rel.replace(/\\/g, "/");
 }
@@ -15669,7 +15669,7 @@ var init_cleanup_archive = __esm(() => {
   };
 });
 
-// ../../../../node_modules/sisteransi/src/index.js
+// node_modules/sisteransi/src/index.js
 var require_src = __commonJS((exports, module) => {
   var ESC2 = "\x1B";
   var CSI2 = `${ESC2}[`;
@@ -15727,7 +15727,7 @@ var require_src = __commonJS((exports, module) => {
   module.exports = { cursor, scroll, erase, beep };
 });
 
-// ../../../../node_modules/consola/dist/core.mjs
+// node_modules/consola/dist/core.mjs
 var LogLevels = {
   silent: Number.NEGATIVE_INFINITY,
   fatal: 0,
@@ -16123,7 +16123,7 @@ Consola.prototype.resume = Consola.prototype.resumeLogs;
 function createConsola(options = {}) {
   return new Consola(options);
 }
-// ../../../../node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
+// node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
 import { formatWithOptions } from "util";
 import { sep } from "path";
 function parseStack(stack, message) {
@@ -16200,10 +16200,10 @@ ${indent}`);
   }
 }
 
-// ../../../../node_modules/consola/dist/index.mjs
+// node_modules/consola/dist/index.mjs
 import g$1 from "process";
 
-// ../../../../node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
+// node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
 import * as tty from "tty";
 var {
   env = {},
@@ -16416,7 +16416,7 @@ function box(text, _opts = {}) {
 `);
 }
 
-// ../../../../node_modules/consola/dist/index.mjs
+// node_modules/consola/dist/index.mjs
 var r2 = Object.create(null);
 var i = (e2) => globalThis.process?.env || import.meta.env || globalThis.Deno?.env.toObject() || globalThis.__env__ || (e2 ? r2 : globalThis);
 var o2 = new Proxy(r2, { get(e2, s) {
@@ -16699,7 +16699,7 @@ function _getDefaultLogLevel() {
   return LogLevels.info;
 }
 var consola = createConsola2();
-// ../../../../node_modules/citty/dist/index.mjs
+// node_modules/citty/dist/index.mjs
 function toArray(val) {
   if (Array.isArray(val)) {
     return val;
@@ -19062,7 +19062,7 @@ var architectureCommand = defineCommand({
 
 // src/cli/commands/autopilot.ts
 import { readFile as readFile10, readdir as readdir16 } from "fs/promises";
-import { join as join40 } from "path";
+import { join as join41 } from "path";
 
 // src/core/autopilot-approval.ts
 function requirePending(gate, action) {
@@ -19101,10 +19101,16 @@ var KIND_TO_OWNER = {
   refactor: "refactorer",
   retro: "retrospective",
   cleanup: "driver",
-  "e2e-author": "main-session"
+  "e2e-author": "main-session",
+  test: "driver"
 };
 function kindToOwner(kind) {
   return KIND_TO_OWNER[kind];
+}
+function promotedImplementFrontier(promoted) {
+  const implementIds = promoted.filter((n2) => n2.kind === "implement").map((n2) => n2.id);
+  const leaves = implementIds.filter((id) => !promoted.some((m2) => m2.kind === "implement" && m2.depends_on.includes(id)));
+  return leaves.length > 0 ? leaves : implementIds;
 }
 var NODE_TRANSITIONS = {
   pending: { dispatch: "running", block: "blocked" },
@@ -19135,10 +19141,13 @@ function selectReadyNodes(nodes) {
   const nonTerminalImplements = nodes.filter((n2) => n2.kind === "implement" && n2.status !== "passed" && n2.status !== "failed");
   const implementPending = nonTerminalImplements.length > 0;
   const isImplementPrecondition = (verifyId) => nonTerminalImplements.some((impl) => dependsOnNode(impl, verifyId, byId));
+  const mutatingInFlight = nodes.some((n2) => kindToOwner(n2.kind) === "implementer" && n2.status !== "passed" && n2.status !== "failed");
   return nodes.filter((n2) => {
     if (!isNodeReady(n2, byId))
       return false;
     if (n2.kind === "verify" && implementPending && !isImplementPrecondition(n2.id))
+      return false;
+    if (n2.kind === "test" && mutatingInFlight)
       return false;
     return true;
   });
@@ -19320,7 +19329,8 @@ var nodeKind = exports_external.enum([
   "refactor",
   "retro",
   "cleanup",
-  "e2e-author"
+  "e2e-author",
+  "test"
 ]).describe("Kind of work a node represents");
 var nodeOwner = exports_external.enum([
   "researcher",
@@ -19335,7 +19345,8 @@ var nodeOwner = exports_external.enum([
   "refactorer",
   "retrospective",
   "driver",
-  "main-session"
+  "main-session",
+  "tester"
 ]).describe("Subagent role that owns the node");
 var nodeStatus = exports_external.enum(["pending", "running", "passed", "failed", "blocked"]).describe("Execution state of a node");
 var approvalStatus = exports_external.enum(["pending", "approved", "not_required", "rejected"]).describe("Plan approval gate state for mutating work");
@@ -20381,6 +20392,26 @@ function seedE2eAuthorNode(nodes) {
   const rewired = nodes.map((n2) => n2.id !== design.id && n2.depends_on.includes(design.id) ? { ...n2, depends_on: n2.depends_on.map((d2) => d2 === design.id ? e2eAuthorId : d2) } : n2);
   return rewired.flatMap((n2) => n2.id === design.id ? [n2, e2eAuthor] : [n2]);
 }
+function seedTestBarrier(nodes) {
+  if (nodes.some((n2) => n2.kind === "test"))
+    return nodes;
+  const implementIds = nodes.filter((n2) => n2.kind === "implement").map((n2) => n2.id);
+  if (implementIds.length === 0)
+    return nodes;
+  const frontier = implementIds.filter((id) => !nodes.some((m2) => m2.kind === "implement" && m2.depends_on.includes(id)));
+  const barrier = {
+    id: "test-barrier",
+    kind: "test",
+    owner: kindToOwner("test"),
+    purpose: "Run the full test suite as a settled-tree barrier after the implement wave settles",
+    status: "pending",
+    depends_on: frontier,
+    acceptance_refs: [],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 }
+  };
+  return [...nodes, barrier];
+}
 function approvalGate(input) {
   const base = { approved_at: null, approved_by: null, evidence_refs: [] };
   if (input.approvedSource) {
@@ -20435,7 +20466,8 @@ async function bootstrapAutopilot(repoRoot, input) {
   });
   const acceptanceIds = input.intent.acceptance_criteria.map((c3) => c3.id);
   const seededNodes = (input.generateNodes ?? defaultNodeGenerator)(acceptanceIds);
-  const nodes = input.e2eOptIn ? seedE2eAuthorNode(seededNodes) : seededNodes;
+  const withE2e = input.e2eOptIn ? seedE2eAuthorNode(seededNodes) : seededNodes;
+  const nodes = seedTestBarrier(withE2e);
   const graph = {
     schema_version: "0.1.0",
     autopilot_id: autopilotId2,
@@ -20921,6 +20953,21 @@ function unresolvedAgentResolvableRiskRecords(decisions, graph) {
   }
   return records;
 }
+function barrierRanGreen(node) {
+  return node.status === "passed" && node.evidence_refs.some((e2) => e2.kind === "command");
+}
+function testBarrierUnverified(graph) {
+  const barriers = graph.nodes.filter((n2) => n2.kind === "test");
+  if (barriers.length === 0)
+    return [];
+  return barriers.filter((b2) => !barrierRanGreen(b2)).map((b2) => ({
+    item: `settled-tree test barrier ${b2.id}`,
+    reason: b2.status === "failed" ? `the settled-tree test barrier (${b2.id}) is RED \u2014 the suite failed, so acceptance-criteria closure is not proven` : `the settled-tree test barrier (${b2.id}) did not run GREEN (degraded / not executed / non-terminal) \u2014 the suite never proved green, so acceptance-criteria closure is unverified (ADR-0018: proceed but never claim pass)`,
+    out_of_scope: false,
+    resolvability: "blocked_external",
+    grounding: b2.id
+  }));
+}
 function assembleCompletionFromGraph(graph, workItem2, opts = {}) {
   const acIds = workItem2.acceptance_criteria.map((c3) => c3.id);
   const oracles = new Map(workItem2.acceptance_criteria.map((c3) => [c3.id, c3.oracle]));
@@ -20932,12 +20979,14 @@ function assembleCompletionFromGraph(graph, workItem2, opts = {}) {
     ...opts.remainingRisks ?? [],
     ...nonTerminal.length > 0 ? [`non-terminal graph nodes (work unfinished): ${nonTerminal.map((n2) => n2.id).join(", ")}`] : []
   ];
+  const barrierUnverified = testBarrierUnverified(graph);
   const built = buildCompletion({
     workItem: workItem2,
     declaredBy: "verifier",
     summary,
     verdicts,
     ...remainingRisks.length > 0 ? { remainingRisks } : {},
+    ...barrierUnverified.length > 0 ? { unverified: barrierUnverified } : {},
     ...opts.now ? { now: opts.now } : {}
   });
   const riskRecords = opts.decisions ? unresolvedAgentResolvableRiskRecords(opts.decisions, graph) : [];
@@ -20998,7 +21047,7 @@ function projectDirectionDecisions(decisions) {
 // src/core/autopilot-loop.ts
 init_zod();
 import { readFile as readFile3 } from "fs/promises";
-import { join as join28 } from "path";
+import { join as join29 } from "path";
 
 // src/acg/tidy/classifier.ts
 init_ditto_paths();
@@ -21994,7 +22043,8 @@ var OWNER_TOOLS = {
   refactorer: ["Read", "Grep", "Glob", "Edit", "Write", "Bash"],
   retrospective: ["Read", "Grep", "Glob", "Bash"],
   driver: [],
-  "main-session": []
+  "main-session": [],
+  tester: ["Read", "Grep", "Glob", "Bash"]
 };
 function isMutatingOwner(owner) {
   return OWNER_TOOLS[owner].includes("Edit");
@@ -22005,6 +22055,7 @@ function isReviewOwner(owner) {
 var PLANNER_GENERATE_DIRECTIVE = "Emit a `generated_nodes` subgraph: pick the \xA72.2 lifecycle stages this task " + "actually needs (research\xB7design\xB7implement\xB7review\xB7verify\xB7\u2026), each node " + "{id, kind, purpose, depends_on, acceptance_refs, file_scope} mapped to its " + "acceptance criteria; scale to task size (small tasks stay minimal \u2014 do not " + "force a stage). For each MUTATING node declare `file_scope` (the repo-relative " + "paths it will edit) as precisely and DISJOINTLY as you can: non-overlapping " + "scopes let independent mutators run in parallel, while leaving it off forces the " + "engine to serialize that node conservatively (one scope-unknown mutator at a " + "time). Omit it ONLY when the scope is genuinely unknown \u2014 never guess a scope " + "that might overlap another node (a wrong disjoint claim risks a clobber).";
 var CITE_OR_ABSTAIN_DIRECTIVE = "Consult the governing decisions in context.memory.decision_briefs: cite the " + "ones you relied on (follow them or justify any deviation), and if none apply " + "to this task, state that explicitly (cite-or-abstain).";
 var RED_FIRST_DIRECTIVE = "Red-first discipline (code-behavior AC): write the failing test that asserts " + "this criterion FIRST and run it; confirm it fails on the AC assertion itself, " + "not on a compile/import error (no phantom red), then make the smallest change " + "to turn it green. Report both the red run and the green run (command + exit code).";
+var SCOPE_LOCAL_UNIT_DIRECTIVE = "Scope-local unit tests (mid-wave): run ONLY the mock-unit tests for your own " + "file_scope \u2014 do NOT run the full or cross-module suite while other implementers may " + "be editing in parallel. The whole-suite GREEN is proven ONCE after the wave settles by " + "the deterministic settled-tree test barrier, not by you. Report the command + exit code " + "of your scoped unit run.";
 function isRedFirstImplement(owner, acceptance) {
   return owner === "implementer" && acceptance.some((a2) => a2.oracle?.verification_method === "dynamic_test");
 }
@@ -22030,6 +22081,7 @@ function buildDelegationPacket(node, workItem2, variantCandidates = [], fileScop
       "Return a single result with evidence (command + exit code, file:line).",
       ...isPlanner ? [PLANNER_GENERATE_DIRECTIVE] : [],
       ...isRedFirstImplement(node.owner, acceptance) ? [RED_FIRST_DIRECTIVE] : [],
+      ...node.owner === "implementer" ? [SCOPE_LOCAL_UNIT_DIRECTIVE] : [],
       ...memoryContext?.decisions?.length || memoryContext?.decision_briefs?.length ? [CITE_OR_ABSTAIN_DIRECTIVE] : [],
       `Stop when done_when is met: ${doneWhen}.`
     ],
@@ -24582,6 +24634,140 @@ async function warmStartMemoryContext(repoRoot, node2, workItem2, options = {}) 
   }
 }
 
+// src/core/recipe/load.ts
+init_ditto_paths();
+import { join as join28 } from "path";
+
+// src/core/recipe/parse.ts
+init_dist2();
+
+// src/schemas/recipe.ts
+init_zod();
+
+// src/schemas/ditto-config.ts
+init_zod();
+var dittoConfigQuestion = exports_external.object({
+  intensity: exports_external.number().int().min(0).max(100).optional(),
+  generators: exports_external.number().int().min(1).max(6).optional(),
+  performance: exports_external.enum(["glance", "quick", "standard", "deep", "exhaustive"]).optional(),
+  generator_effort: exports_external.enum(["low", "medium", "high", "inherit"]).optional(),
+  gate_mode: exports_external.enum(["confirm", "draft"]).optional(),
+  max_questions: exports_external.number().int().nonnegative().optional(),
+  max_rounds: exports_external.number().int().nonnegative().optional(),
+  threshold: exports_external.number().min(0).max(1).optional(),
+  granularity: exports_external.enum(["low", "medium", "high"]).optional()
+}).describe("Per-user defaults for question-elicitation (every field optional, CLI-flag-shaped)");
+var dittoConfigDeepInterview = exports_external.object({
+  threshold: exports_external.number().min(0).max(1).optional(),
+  question_cap: exports_external.number().int().positive().optional(),
+  generators: exports_external.number().int().positive().optional()
+}).describe("Per-user defaults for deep-interview start (CLI-flag-shaped)");
+var dittoConfigGithub = exports_external.object({
+  project: exports_external.object({
+    owner: exports_external.string().min(1),
+    number: exports_external.number().int().positive(),
+    node_id: exports_external.string().min(1).optional()
+  }),
+  status_map: exports_external.record(exports_external.enum(["done", "abandoned"]), exports_external.string().min(1)),
+  claim_status_map: exports_external.record(exports_external.string().min(1), exports_external.string().min(1)).optional(),
+  auto_reflect: exports_external.boolean()
+}).describe("GitHub Project \uC5F0\uACB0 config \u2014 D7 status \uB9E4\uD551(\uD0A4=done|abandoned) + auto-reflect");
+var dittoConfig = exports_external.object({
+  prism: exports_external.object({
+    question: dittoConfigQuestion.optional()
+  }).optional(),
+  deep_interview: dittoConfigDeepInterview.optional(),
+  github: dittoConfigGithub.optional()
+}).describe("Per-developer ditto config \u2014 .ditto/local/config.json (tier \u2462, gitignored)");
+
+// src/schemas/recipe.ts
+var recipeHost = exports_external.enum(["claude-code", "codex", "both"]).describe("Install target host (claude-code | codex | both)");
+var recipeMemoryMode = exports_external.enum(["gitignore", "submodule"]).describe("Memory separation mode (gitignore | submodule)");
+var PSEUDO_OWNERS = new Set(["driver", "main-session"]);
+var RECIPE_ROLE_VALUES = nodeOwner.options.filter((role) => !PSEUDO_OWNERS.has(role));
+var recipeAgentRole = exports_external.enum(RECIPE_ROLE_VALUES).describe("Agent role link target (autopilot owner role minus driver/main-session)");
+var recipeAgentLink = exports_external.object({
+  name: exports_external.string().min(1),
+  role: recipeAgentRole
+});
+var recipePushGate = exports_external.object({
+  protected_branches: exports_external.array(exports_external.string().min(1)).min(1),
+  test_command: exports_external.string().min(1)
+}).describe("Push gate: branches whose push requires test_command to pass");
+var recipeBarrierTestCommand = exports_external.string().min(1).describe("Side-effect-free unit-subset barrier command (distinct from push_gate.test_command)");
+var recipeRepoEntry = exports_external.object({
+  dir: exports_external.string().min(1),
+  url: exports_external.string().min(1).optional(),
+  push_gate: recipePushGate.optional(),
+  barrier_test_command: recipeBarrierTestCommand.optional()
+}).describe("A nested repo of the workspace (by dir, optional url) with its own config");
+var recipe = exports_external.object({
+  host: recipeHost.optional(),
+  tools: exports_external.array(exports_external.string()).optional(),
+  agents: exports_external.array(recipeAgentLink).optional(),
+  memory: recipeMemoryMode.optional(),
+  push_gate: recipePushGate.optional(),
+  barrier_test_command: recipeBarrierTestCommand.optional(),
+  repos: exports_external.array(recipeRepoEntry).optional(),
+  backlog: dittoConfigGithub.optional()
+}).describe("Headless ditto setup recipe (recipe.yaml)");
+
+// src/core/recipe/parse.ts
+function parseRecipe(text) {
+  let raw;
+  try {
+    raw = $parse(text);
+  } catch (error) {
+    return { ok: false, error: `recipe YAML parse failed: ${describe(error)}` };
+  }
+  const candidate = raw === undefined || raw === null ? {} : raw;
+  const parsed = recipe.safeParse(candidate);
+  if (!parsed.success) {
+    return { ok: false, error: `recipe schema validation failed: ${parsed.error.message}` };
+  }
+  return { ok: true, recipe: parsed.data };
+}
+function describe(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+// src/core/recipe/load.ts
+var PROJECT_RECIPE_FILENAME = "recipe.yaml";
+var BUILTIN_DEFAULT_RECIPE = {};
+function definedFields(r3) {
+  return Object.fromEntries(Object.entries(r3).filter(([, v2]) => v2 !== undefined));
+}
+function mergeRecipes(base, override) {
+  return { ...base, ...definedFields(override) };
+}
+function resolveRecipe(sources) {
+  return [sources.builtinDefault, sources.project, sources.personal, sources.cli].filter((r3) => r3 !== undefined).reduce((acc, r3) => mergeRecipes(acc, r3), {});
+}
+async function loadRecipeFile(path, source, onMalformed) {
+  const file = Bun.file(path);
+  if (!await file.exists()) {
+    if (source === "explicit") {
+      throw new Error(`recipe not found at explicit path: ${path}`);
+    }
+    return;
+  }
+  const result2 = parseRecipe(await file.text());
+  if (!result2.ok) {
+    if (source === "explicit") {
+      throw new Error(`${result2.error} (${path})`);
+    }
+    onMalformed?.(`${result2.error} (${path})`);
+    return;
+  }
+  return result2.recipe;
+}
+async function loadResolvedRecipe(repoRoot, cliPath, onMalformed) {
+  const project = await loadRecipeFile(join28(repoRoot, PROJECT_RECIPE_FILENAME), "discovered", (m2) => onMalformed?.("project", m2));
+  const personal = await loadRecipeFile(localDir(repoRoot, "recipe.yaml"), "discovered", (m2) => onMalformed?.("personal", m2));
+  const cli = cliPath === undefined ? undefined : await loadRecipeFile(cliPath, "explicit");
+  return resolveRecipe({ cli, personal, project, builtinDefault: BUILTIN_DEFAULT_RECIPE });
+}
+
 // src/core/retro-measure.ts
 init_memory_store();
 function grounded(v2) {
@@ -24943,6 +25129,44 @@ function compileSpecDoc(markdown) {
   };
 }
 
+// src/core/test-runner.ts
+var DEFAULT_BARRIER_TIMEOUT_MS = 10 * 60 * 1000;
+var runTestCommand = async (command, cwd, opts = {}) => {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_BARRIER_TIMEOUT_MS;
+  let proc;
+  try {
+    proc = Bun.spawn(["sh", "-c", command], {
+      cwd,
+      stdin: "ignore",
+      stdout: "inherit",
+      stderr: "inherit"
+    });
+  } catch (err) {
+    return { kind: "unrunnable", reason: err instanceof Error ? err.message : String(err) };
+  }
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    proc.kill(9);
+  }, timeoutMs);
+  try {
+    const code = await proc.exited;
+    if (timedOut)
+      return { kind: "timeout", timeoutMs };
+    if (code === 0)
+      return { kind: "passed" };
+    if (code === 126 || code === 127) {
+      return {
+        kind: "unrunnable",
+        reason: `test command not found or not executable (exit ${code})`
+      };
+    }
+    return { kind: "failed", exitCode: code };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 // src/core/autopilot-loop.ts
 init_work_item_store();
 function isMutatingNode(node2) {
@@ -24960,7 +25184,7 @@ async function specDigestStale(repoRoot, workItemId2) {
   const { doc_path, sha256: sha2562 } = intent.source_digest;
   let doc;
   try {
-    doc = await readFile3(join28(repoRoot, doc_path), "utf8");
+    doc = await readFile3(join29(repoRoot, doc_path), "utf8");
   } catch {
     doc = null;
   }
@@ -25117,7 +25341,7 @@ function progressReportPath(repoRoot, workItemId2, band) {
   return localDir(repoRoot, "runs", workItemId2, `progress-report-band-${band}.json`);
 }
 function progressReportRelPath(workItemId2, band) {
-  return join28(".ditto", "local", "runs", workItemId2, `progress-report-band-${band}.json`);
+  return join29(".ditto", "local", "runs", workItemId2, `progress-report-band-${band}.json`);
 }
 function fenceProgressReport(report, band) {
   const body = [
@@ -25185,6 +25409,98 @@ function collectChangeSurface(repoRoot) {
     changed_files: listChangedFiles(repoRoot, { excludeDittoRuns: true }),
     diff: captureGitDiff(repoRoot)
   };
+}
+function resolveBarrierCommand(recipe2, repoRelDir) {
+  const norm = (d2) => d2.replace(/^\.\//, "").replace(/\/+$/, "");
+  const dir = norm(repoRelDir);
+  if (dir === "" || dir === ".")
+    return recipe2.barrier_test_command;
+  return recipe2.repos?.find((r3) => norm(r3.dir) === dir)?.barrier_test_command ?? recipe2.barrier_test_command;
+}
+function barrierGreenEvidence(command) {
+  return {
+    kind: "command",
+    command,
+    summary: `settled-tree test barrier ran GREEN (exit 0): ${command}`
+  };
+}
+async function executeTestBarrier(args) {
+  const { aps, workItemId: workItemId2, node: node2, caps, command, runner, cwd, now } = args;
+  await aps.updateNode(workItemId2, node2.id, (n2) => ({
+    ...n2,
+    status: nodeTransition(n2.status, "dispatch")
+  }));
+  const proceedDegraded = async (disposition, reason) => {
+    await aps.updateNode(workItemId2, node2.id, (n2) => ({
+      ...n2,
+      status: nodeTransition(n2.status, "pass")
+    }));
+    await aps.appendDecision(workItemId2, {
+      ts: now.toISOString(),
+      node_id: node2.id,
+      decision: "surface",
+      resolvability: "blocked_external",
+      reason
+    });
+    return { action: "barrier", node_id: node2.id, disposition, reason };
+  };
+  if (command === undefined) {
+    return proceedDegraded("degrade", `settled-tree test barrier ${node2.id}: no barrier_test_command resolved (absent / non-code work item) \u2014 tests unverified, proceeding without a claimed pass (ADR-0018)`);
+  }
+  const outcome = await runner(command, cwd);
+  switch (outcome.kind) {
+    case "passed": {
+      await aps.updateNode(workItemId2, node2.id, (n2) => ({
+        ...n2,
+        status: nodeTransition(n2.status, "pass"),
+        evidence_refs: [...n2.evidence_refs, barrierGreenEvidence(command)]
+      }));
+      return {
+        action: "barrier",
+        node_id: node2.id,
+        disposition: "green",
+        reason: `settled-tree test barrier ${node2.id}: \`${command}\` ran GREEN (exit 0)`
+      };
+    }
+    case "unrunnable":
+      return proceedDegraded("degrade", `settled-tree test barrier ${node2.id}: \`${command}\` is unrunnable (${outcome.reason}) \u2014 tests unverified, proceeding without a claimed pass (ADR-0018)`);
+    case "timeout":
+      return proceedDegraded("timeout", `settled-tree test barrier ${node2.id}: \`${command}\` did not finish within ${outcome.timeoutMs}ms (killed) \u2014 tests unverified, proceeding without a claimed pass (never an infinite stall)`);
+    case "failed": {
+      const { decision } = decideOnFailure("fixable", node2.attempts, caps);
+      if (decision === "retry") {
+        await aps.updateNode(workItemId2, node2.id, (n2) => ({
+          ...n2,
+          status: nodeTransition(n2.status, "retry"),
+          attempts: { ...n2.attempts, fix: n2.attempts.fix + 1 }
+        }));
+        const reason2 = `settled-tree test barrier ${node2.id}: \`${command}\` is RED (exit ${outcome.exitCode}) \u2014 retry ${node2.attempts.fix + 1}/${caps.fix_per_node}`;
+        await aps.appendDecision(workItemId2, {
+          ts: now.toISOString(),
+          node_id: node2.id,
+          failure_class: "fixable",
+          decision: "retry",
+          reason: reason2,
+          attempts: { ...node2.attempts, fix: node2.attempts.fix + 1 }
+        });
+        return { action: "barrier", node_id: node2.id, disposition: "red_retry", reason: reason2 };
+      }
+      await aps.updateNode(workItemId2, node2.id, (n2) => ({
+        ...n2,
+        status: nodeTransition(n2.status, "fail")
+      }));
+      const reason = `settled-tree test barrier ${node2.id}: \`${command}\` still RED (exit ${outcome.exitCode}) after ${node2.attempts.fix} retries (cap ${caps.fix_per_node}) \u2014 the suite failed, blocking completion (a persistent red barrier is a user-owned decision)`;
+      await aps.appendDecision(workItemId2, {
+        ts: now.toISOString(),
+        node_id: node2.id,
+        failure_class: "user_decision_needed",
+        decision: "escalate",
+        reason,
+        attempts: node2.attempts
+      });
+      return { action: "barrier", node_id: node2.id, disposition: "red_failed", reason };
+    }
+  }
 }
 async function nextNode(repoRoot, workItemId2) {
   const aps = new AutopilotStore(repoRoot);
@@ -25256,7 +25572,7 @@ async function nextNode(repoRoot, workItemId2) {
     return { action: "waiting", reason: "all ready nodes deferred by the file-overlap gate" };
   }
   const gate2 = mutationGate(graph);
-  const isWaveEligible = (n2) => n2.owner !== "driver" && n2.owner !== "main-session" && (!isMutatingNode(n2) || gate2.allowed);
+  const isWaveEligible = (n2) => n2.owner !== "driver" && n2.owner !== "main-session" && n2.kind !== "test" && (!isMutatingNode(n2) || gate2.allowed);
   let unknownMutatingAdmitted = false;
   const waveEligible = admitted.filter((n2) => {
     if (!isWaveEligible(n2))
@@ -25303,6 +25619,19 @@ async function nextNode(repoRoot, workItemId2) {
   const chosen = admitted[0];
   if (!chosen) {
     return { action: "waiting", reason: "all ready nodes deferred by the file-overlap gate" };
+  }
+  if (chosen.kind === "test") {
+    const recipe2 = await loadResolvedRecipe(repoRoot, undefined, () => {});
+    return executeTestBarrier({
+      aps,
+      workItemId: workItemId2,
+      node: chosen,
+      caps: graph.caps,
+      command: resolveBarrierCommand(recipe2, ""),
+      runner: runTestCommand,
+      cwd: repoRoot,
+      now: new Date
+    });
   }
   if (chosen.owner === "driver") {
     await aps.updateNode(workItemId2, chosen.id, (n2) => ({
@@ -25463,7 +25792,7 @@ async function surfaceLspDiagnostics(repoRoot, workItemId2, changedFiles) {
   const surfaced = [];
   for (let i2 = 0;i2 < checked.length; i2 += GATE_CONCURRENCY) {
     const batch = await Promise.all(checked.slice(i2, i2 + GATE_CONCURRENCY).map(async ({ file, language }) => {
-      const diags = await getDiagnostics(join28(repoRoot, file), {
+      const diags = await getDiagnostics(join29(repoRoot, file), {
         language,
         timeoutMs: GATE_TIMEOUT_MS
       });
@@ -25701,7 +26030,7 @@ async function recordResultCore(repoRoot, input) {
         failureClass = "fixable";
         guardReason = ownerGuard.reason;
       } else {
-        const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) => readFile3(join28(repoRoot, p), "utf8"));
+        const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) => readFile3(join29(repoRoot, p), "utf8"));
         if (!artifactGuard.contentful) {
           contentful = false;
           outcome = "fail";
@@ -26007,6 +26336,17 @@ async function recordResultCore(repoRoot, input) {
       const promoted = proposalsToNodes(proposals);
       await aps.addNodes(input.workItemId, promoted, allowedAcceptanceIds);
       promotedNodeIds = promoted.map((n2) => n2.id);
+      const barrierFrontier = promotedImplementFrontier(promoted);
+      if (barrierFrontier.length > 0) {
+        const beforeSupersede = await aps.get(input.workItemId);
+        const barrier = beforeSupersede.nodes.find((n2) => n2.kind === "test");
+        if (barrier) {
+          await aps.updateNode(input.workItemId, barrier.id, (n2) => ({
+            ...n2,
+            depends_on: barrierFrontier
+          }));
+        }
+      }
       const grown = await aps.get(input.workItemId);
       supersededNodeIds = supersededByPromotion(grown.nodes, node2.id, promoted);
       if (supersededNodeIds.length > 0) {
@@ -26251,7 +26591,7 @@ async function recordResultCore(repoRoot, input) {
 // src/core/cite-gate.ts
 init_ditto_paths();
 import { readFile as readFile4, readdir as readdir12 } from "fs/promises";
-import { join as join29 } from "path";
+import { join as join30 } from "path";
 var CITE_RE = /\bdecision:|\bADR-\d/i;
 var ABSTAIN_RE = /\babstain|none\s+(?:of\s+the\s+)?(?:governing\s+)?decisions?\s+apply|none\s+apply/i;
 function evidenceText(node2) {
@@ -26323,14 +26663,14 @@ function citeNeedsReproposalMeasurement(verdict2) {
   return verdict2 === "pass";
 }
 async function loadAdrBodies(repoRoot) {
-  const adrDir = join29(dittoDir(repoRoot), "knowledge", "adr");
+  const adrDir = join30(dittoDir(repoRoot), "knowledge", "adr");
   let names;
   try {
     names = (await readdir12(adrDir)).filter((n2) => n2.endsWith(".md")).sort();
   } catch {
     return [];
   }
-  return Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile4(join29(adrDir, n2), "utf8") })));
+  return Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile4(join30(adrDir, n2), "utf8") })));
 }
 async function detectActiveConflicts(repoRoot, input) {
   const report = await readUsageReport(repoRoot, input.workItemId);
@@ -26838,44 +27178,6 @@ function assembleRelevanceVerdicts(judgments, refutes = []) {
 // src/core/ditto-config.ts
 import { mkdir as mkdir3 } from "fs/promises";
 import { dirname as dirname9 } from "path";
-
-// src/schemas/ditto-config.ts
-init_zod();
-var dittoConfigQuestion = exports_external.object({
-  intensity: exports_external.number().int().min(0).max(100).optional(),
-  generators: exports_external.number().int().min(1).max(6).optional(),
-  performance: exports_external.enum(["glance", "quick", "standard", "deep", "exhaustive"]).optional(),
-  generator_effort: exports_external.enum(["low", "medium", "high", "inherit"]).optional(),
-  gate_mode: exports_external.enum(["confirm", "draft"]).optional(),
-  max_questions: exports_external.number().int().nonnegative().optional(),
-  max_rounds: exports_external.number().int().nonnegative().optional(),
-  threshold: exports_external.number().min(0).max(1).optional(),
-  granularity: exports_external.enum(["low", "medium", "high"]).optional()
-}).describe("Per-user defaults for question-elicitation (every field optional, CLI-flag-shaped)");
-var dittoConfigDeepInterview = exports_external.object({
-  threshold: exports_external.number().min(0).max(1).optional(),
-  question_cap: exports_external.number().int().positive().optional(),
-  generators: exports_external.number().int().positive().optional()
-}).describe("Per-user defaults for deep-interview start (CLI-flag-shaped)");
-var dittoConfigGithub = exports_external.object({
-  project: exports_external.object({
-    owner: exports_external.string().min(1),
-    number: exports_external.number().int().positive(),
-    node_id: exports_external.string().min(1).optional()
-  }),
-  status_map: exports_external.record(exports_external.enum(["done", "abandoned"]), exports_external.string().min(1)),
-  claim_status_map: exports_external.record(exports_external.string().min(1), exports_external.string().min(1)).optional(),
-  auto_reflect: exports_external.boolean()
-}).describe("GitHub Project \uC5F0\uACB0 config \u2014 D7 status \uB9E4\uD551(\uD0A4=done|abandoned) + auto-reflect");
-var dittoConfig = exports_external.object({
-  prism: exports_external.object({
-    question: dittoConfigQuestion.optional()
-  }).optional(),
-  deep_interview: dittoConfigDeepInterview.optional(),
-  github: dittoConfigGithub.optional()
-}).describe("Per-developer ditto config \u2014 .ditto/local/config.json (tier \u2462, gitignored)");
-
-// src/core/ditto-config.ts
 init_ditto_paths();
 async function readDeepInterviewConfigDefaults(repoRoot, onMalformed) {
   const file = Bun.file(localDir(repoRoot, "config.json"));
@@ -26954,7 +27256,7 @@ async function seedGithubConfigIfAbsent(repoRoot, github, onMalformed) {
 init_ditto_paths();
 
 // src/core/e2e/completion-gate.ts
-import { join as join35 } from "path";
+import { join as join36 } from "path";
 
 // src/schemas/e2e-regression-gate.ts
 init_zod();
@@ -27055,7 +27357,7 @@ var regressionGateRecord = exports_external.object({
 
 // src/core/e2e/regression-gate.ts
 import { readFile as readFile9 } from "fs/promises";
-import { join as join33, resolve as resolve8 } from "path";
+import { join as join34, resolve as resolve8 } from "path";
 init_ditto_paths();
 init_fs();
 
@@ -27186,13 +27488,13 @@ function renderFailureLines(failure, journeyName) {
 init_ditto_paths();
 init_fs();
 import { mkdir as mkdir5, readFile as readFile7 } from "fs/promises";
-import { join as join31 } from "path";
+import { join as join32 } from "path";
 
 // src/core/e2e/browser.ts
 import { createHash as createHash7 } from "crypto";
 import { mkdir as mkdir4, readFile as readFile5, readdir as readdir13, writeFile as writeFile3 } from "fs/promises";
 import { homedir as homedir6 } from "os";
-import { dirname as dirname10, join as join30, relative as relative9, sep as sep5 } from "path";
+import { dirname as dirname10, join as join31, relative as relative9, sep as sep5 } from "path";
 import { fileURLToPath } from "url";
 
 // src/schemas/e2e-journey.ts
@@ -27275,11 +27577,11 @@ var e2eJourney = exports_external.object({
 init_ditto_paths();
 init_shared();
 function runnerScriptPath() {
-  return join30(dirname10(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
+  return join31(dirname10(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
 }
 async function resolvePlaywrightCore() {
-  const bunInstall = process.env.BUN_INSTALL ?? join30(homedir6(), ".bun");
-  const cacheDir = join30(bunInstall, "install", "cache");
+  const bunInstall = process.env.BUN_INSTALL ?? join31(homedir6(), ".bun");
+  const cacheDir = join31(bunInstall, "install", "cache");
   let entries;
   try {
     entries = await readdir13(cacheDir);
@@ -27288,7 +27590,7 @@ async function resolvePlaywrightCore() {
   }
   const versions = entries.filter((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2)).sort((a2, b2) => compareSemver(b2.split("@")[1], a2.split("@")[1]));
   for (const v2 of versions) {
-    const mjs = join30(cacheDir, v2, "index.mjs");
+    const mjs = join31(cacheDir, v2, "index.mjs");
     if (await fileExists(mjs))
       return mjs;
   }
@@ -27304,7 +27606,7 @@ function compareSemver(a2, b2) {
   return 0;
 }
 async function findCachedChromium() {
-  const cacheRoot = join30(homedir6(), "Library", "Caches", "ms-playwright");
+  const cacheRoot = join31(homedir6(), "Library", "Caches", "ms-playwright");
   let entries;
   try {
     entries = await readdir13(cacheRoot);
@@ -27318,7 +27620,7 @@ async function findCachedChromium() {
   ];
   for (const dir of chromiumDirs) {
     for (const rel of candidates) {
-      const abs = join30(cacheRoot, dir, rel);
+      const abs = join31(cacheRoot, dir, rel);
       if (await fileExists(abs))
         return abs;
     }
@@ -27399,7 +27701,7 @@ async function runJourney(repoRoot, runId2, spec) {
   }
   const runDir = localDir(repoRoot, "runs", runId2);
   await mkdir4(runDir, { recursive: true });
-  const configAbs = join30(runDir, "runner-config.json");
+  const configAbs = join31(runDir, "runner-config.json");
   await writeFile3(configAbs, JSON.stringify({
     playwrightCore: probe.playwrightCore,
     executablePath: probe.executablePath,
@@ -27432,10 +27734,10 @@ async function runJourney(repoRoot, runId2, spec) {
       probe
     };
   }
-  const screenshotAbs = join30(runDir, "journey.png");
-  const traceAbs = join30(runDir, "trace.zip");
-  const consoleAbs = join30(runDir, "console.log");
-  const networkAbs = join30(runDir, "network.log");
+  const screenshotAbs = join31(runDir, "journey.png");
+  const traceAbs = join31(runDir, "trace.zip");
+  const consoleAbs = join31(runDir, "console.log");
+  const networkAbs = join31(runDir, "network.log");
   const screenshots = [];
   if (await fileExists(screenshotAbs)) {
     screenshots.push({
@@ -27446,7 +27748,7 @@ async function runJourney(repoRoot, runId2, spec) {
   const trace = await fileExists(traceAbs) ? { path: repoRelative(repoRoot, traceAbs) } : null;
   const consoleArtifact = await fileExists(consoleAbs) ? { path: repoRelative(repoRoot, consoleAbs) } : null;
   const network = await fileExists(networkAbs) ? { path: repoRelative(repoRoot, networkAbs) } : null;
-  const outcomeAbs = join30(runDir, "outcome.json");
+  const outcomeAbs = join31(runDir, "outcome.json");
   if (!await fileExists(outcomeAbs)) {
     return {
       journey: blockedJourney(spec, "Playwright present but no capture outcome was produced; treating as blocked rather than asserting an unobserved pass"),
@@ -27811,7 +28113,7 @@ function passedCount(output) {
 async function anyFallbackUnverified(repoRoot, files) {
   for (const file of files) {
     try {
-      if (isFallbackUnverified(await readFile7(join31(repoRoot, file), "utf8")))
+      if (isFallbackUnverified(await readFile7(join32(repoRoot, file), "utf8")))
         return true;
     } catch {}
   }
@@ -27821,7 +28123,7 @@ async function verifyGenerated(repoRoot, runId2, files, options = {}) {
   const runner = options.runner ?? runPlaywrightTests;
   const runDir = localDir(repoRoot, "runs", runId2);
   await mkdir5(runDir, { recursive: true });
-  const outcome = await withBrowserGuard(repoRoot, () => runner(repoRoot, files, join31(runDir, "playwright-report.json")), options.probe ? { probe: options.probe } : {});
+  const outcome = await withBrowserGuard(repoRoot, () => runner(repoRoot, files, join32(runDir, "playwright-report.json")), options.probe ? { probe: options.probe } : {});
   const verified_at = new Date().toISOString();
   let record;
   if (outcome.result === "blocked") {
@@ -27862,7 +28164,7 @@ async function verifyGenerated(repoRoot, runId2, files, options = {}) {
       verified_at
     };
   }
-  await atomicWriteText(join31(runDir, "generated-verify.json"), `${JSON.stringify(record, null, 2)}
+  await atomicWriteText(join32(runDir, "generated-verify.json"), `${JSON.stringify(record, null, 2)}
 `);
   return record;
 }
@@ -27870,7 +28172,7 @@ async function verifyGenerated(repoRoot, runId2, files, options = {}) {
 // src/core/e2e/regression-select.ts
 init_shared();
 import { readFile as readFile8, readdir as readdir15, stat as stat5 } from "fs/promises";
-import { join as join32, relative as relative10, resolve as resolve7, sep as sep6 } from "path";
+import { join as join33, relative as relative10, resolve as resolve7, sep as sep6 } from "path";
 var COMPONENT_PREFIX = "component:";
 function matchesComponentPattern(pattern, path) {
   if (!pattern.includes("*")) {
@@ -27932,7 +28234,7 @@ async function loadJourneyEntries(journeysDir) {
   const entries = [];
   const invalid = [];
   for (const name of names) {
-    const fileAbs = join32(journeysAbs, name);
+    const fileAbs = join33(journeysAbs, name);
     const fileRel = toPosix(relative10(repoRoot, fileAbs));
     const text = await readFile8(fileAbs, "utf8");
     const parsed = parseJourneyDoc(text);
@@ -27941,7 +28243,7 @@ async function loadJourneyEntries(journeysDir) {
       continue;
     }
     const slug = name.slice(0, -".journey.md".length);
-    const specAbs = join32(generatedDir, `${slug}.spec.ts`);
+    const specAbs = join33(generatedDir, `${slug}.spec.ts`);
     entries.push({
       id: parsed.frontMatter.id,
       name: parsed.frontMatter.name,
@@ -27986,10 +28288,10 @@ async function selectImpactedJourneys(journeysDir, changedPaths) {
 
 // src/core/e2e/regression-gate.ts
 function regressionGatePath(repoRoot, workItemId2) {
-  return join33(localDir(repoRoot, "work-items", workItemId2), "regression-gate.json");
+  return join34(localDir(repoRoot, "work-items", workItemId2), "regression-gate.json");
 }
 async function mapRunFailures(repoRoot, runId2, selected) {
-  const reportFile = Bun.file(join33(localDir(repoRoot, "runs", runId2), "playwright-report.json"));
+  const reportFile = Bun.file(join34(localDir(repoRoot, "runs", runId2), "playwright-report.json"));
   if (!await reportFile.exists())
     return [];
   let reporter;
@@ -28016,7 +28318,7 @@ async function mapRunFailures(repoRoot, runId2, selected) {
   }));
 }
 async function runRegressionGate(repoRoot, input, options = {}) {
-  const journeysDir = join33(repoRoot, "e2e", "journeys");
+  const journeysDir = join34(repoRoot, "e2e", "journeys");
   const selection = await selectImpactedJourneys(journeysDir, input.changedPaths);
   let selected;
   if (input.journeyIds !== undefined) {
@@ -28104,7 +28406,7 @@ async function runRegressionGate(repoRoot, input, options = {}) {
 
 // src/core/e2e/applicability.ts
 import { existsSync as existsSync5, readFileSync as readFileSync2 } from "fs";
-import { join as join34 } from "path";
+import { join as join35 } from "path";
 var WEB_FRAMEWORKS = [
   "react",
   "react-dom",
@@ -28159,7 +28461,7 @@ function dependencyNames(pkg) {
 var UI_EXTENSIONS = [".tsx", ".jsx", ".vue", ".svelte", ".html"];
 function defaultReadPackageJson(repoRoot) {
   return () => {
-    const path = join34(repoRoot, "package.json");
+    const path = join35(repoRoot, "package.json");
     if (!existsSync5(path))
       return null;
     try {
@@ -28172,7 +28474,7 @@ function defaultReadPackageJson(repoRoot) {
 }
 function defaultCountUiFiles(repoRoot) {
   return () => {
-    const srcDir = join34(repoRoot, "src");
+    const srcDir = join35(repoRoot, "src");
     if (!existsSync5(srcDir))
       return 0;
     const glob = new Bun.Glob(`**/*{${UI_EXTENSIONS.join(",")}}`);
@@ -28264,7 +28566,7 @@ async function checkE2eCompletionGate(repoRoot, input) {
       });
     }
   }
-  const selection = await selectImpactedJourneys(join35(repoRoot, "e2e", "journeys"), input.changedFiles);
+  const selection = await selectImpactedJourneys(join36(repoRoot, "e2e", "journeys"), input.changedFiles);
   const impacted = selection.journeys.length > 0 || selection.invalid_journeys.length > 0;
   if (!impacted)
     return violations;
@@ -28456,7 +28758,7 @@ function reflectAutopilotTermination(deps, input) {
 init_cleanup_archive();
 init_memory_scan();
 import { execFileSync as execFileSync5 } from "child_process";
-import { join as join38, relative as relative12, resolve as resolve11 } from "path";
+import { join as join39, relative as relative12, resolve as resolve11 } from "path";
 var RUN_ARTIFACT_PREFIX = ".ditto/local/runs/";
 var BYPRODUCT_PREFIXES = [".ditto/memory/"];
 function isGitIgnoredInRepo(repoAbs, rel) {
@@ -28508,7 +28810,7 @@ async function landCommit(repoRoot, changedFiles, message) {
   }
   const byRepo = new Map;
   for (const p of landable) {
-    const abs = join38(root, p);
+    const abs = join39(root, p);
     const owningAbs = await findOwningRepo(abs, root);
     const key = owningAbs === null ? "." : relative12(root, owningAbs).replace(/\\/g, "/") || ".";
     const repoAbs = subRepoAbs(root, key);
@@ -28819,7 +29121,7 @@ ${input.reason ?? "Claim released \u2014 the issue is free for takeover."}`;
 }
 
 // src/core/work-item-handoff.ts
-import { join as join39 } from "path";
+import { join as join40 } from "path";
 init_ditto_paths();
 init_fs();
 class InvalidBaseRefError extends Error {
@@ -29003,7 +29305,7 @@ async function writeWorkItemHandoff(repoRoot, store, workId, options = {}, now =
   });
   const hstore = new HandoffStore(repoRoot);
   const handoffRel = completion.final_verdict === "pass" ? await hstore.writeArchived(handoffArtifact, now) : await hstore.write(handoffArtifact);
-  const handoffPath = join39(repoRoot, handoffRel);
+  const handoffPath = join40(repoRoot, handoffRel);
   try {
     await hstore.sweepStaleActive(now);
   } catch {}
@@ -31627,14 +31929,14 @@ var autopilotRecordResult = defineCommand({
   }
 });
 async function measureReproposalForCompletion(repoRoot) {
-  const adrDir = join40(dittoDir(repoRoot), "knowledge", "adr");
+  const adrDir = join41(dittoDir(repoRoot), "knowledge", "adr");
   let names;
   try {
     names = (await readdir16(adrDir)).filter((n2) => n2.endsWith(".md")).sort();
   } catch {
     names = [];
   }
-  const adrs = await Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile10(join40(adrDir, n2), "utf8") })));
+  const adrs = await Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile10(join41(adrDir, n2), "utf8") })));
   return measureHallucination(adrs, []);
 }
 var autopilotComplete = defineCommand({
@@ -32716,7 +33018,7 @@ var autopilotCommand = defineCommand({
 });
 
 // src/cli/commands/boundary.ts
-import { join as join41 } from "path";
+import { join as join42 } from "path";
 init_fs();
 function violationsToReviewGraph(violations) {
   return acgReviewGraph.parse({
@@ -32791,7 +33093,7 @@ var boundaryCommand = defineCommand({
           }
           const changedFiles = args.file.split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
           const language = args.language ?? "javascript";
-          const sourceRoot = args["source-root"] ?? join41(repoRoot, "src");
+          const sourceRoot = args["source-root"] ?? join42(repoRoot, "src");
           const guard = await runInternalPackagesGuard({
             language,
             entries: spec.internal_packages,
@@ -32845,11 +33147,11 @@ var boundaryCommand = defineCommand({
 
 // src/core/bridge-sync.ts
 init_fs();
-import { join as join43 } from "path";
+import { join as join44 } from "path";
 
 // src/core/instruction-bridge.ts
 import { createHash as createHash9 } from "crypto";
-import { join as join42 } from "path";
+import { join as join43 } from "path";
 var MANAGED_END = "<!-- ditto:managed:end -->";
 var MANAGED_BLOCK_RE_G = /<!--\s*ditto:managed:start\s+source=([^\s]+)\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:managed:end\s*-->/g;
 var DELEGATION_CLAUSE_ANCHOR = "\uC704\uC784\uC73C\uB85C \uCEE8\uD14D\uC2A4\uD2B8\uB97C \uC9C0\uD0A8\uB2E4";
@@ -32866,7 +33168,7 @@ function normalizedSha256(text) {
 }
 function sourceFromSurface(surface) {
   if (surface.role !== "source") {
-    return { kind: "missing", path: join42(surface.path, "..", "AGENTS.md") };
+    return { kind: "missing", path: join43(surface.path, "..", "AGENTS.md") };
   }
   if (!surface.exists || surface.content === undefined)
     return { kind: "missing", path: surface.path };
@@ -33076,7 +33378,7 @@ async function checkInstructionsForAdapters(adapters, repoRoot) {
     sourceSurface = registered.find((surface) => surface.role === "source");
   }
   if (!sourceSurface) {
-    const sourcePath = join42(repoRoot, "AGENTS.md");
+    const sourcePath = join43(repoRoot, "AGENTS.md");
     sourceSurface = { role: "source", host: "codex", path: sourcePath, exists: false };
   }
   const source = sourceFromSurface(sourceSurface);
@@ -33107,7 +33409,7 @@ async function syncClaudeCodeProjection(repoRoot, options = {}) {
   const source = await loadSource(repoRoot);
   if ("kind" in source)
     throw new Error("AGENTS.md is missing; cannot sync Claude projection");
-  const path = join43(repoRoot, "CLAUDE.md");
+  const path = join44(repoRoot, "CLAUDE.md");
   const projection = await loadProjection(repoRoot);
   const block = managedBlock(source.content, source.normalizedSha256);
   const check = options.check === true;
@@ -33168,14 +33470,14 @@ init_fs();
 // src/core/knowledge-bridge.ts
 init_zod();
 import { readdir as readdir17 } from "fs/promises";
-import { join as join44 } from "path";
+import { join as join45 } from "path";
 init_fs();
 var KNOWLEDGE_END = "<!-- ditto:knowledge:end -->";
 var KNOWLEDGE_BLOCK_RE_G = /<!--\s*ditto:knowledge:start\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:knowledge:end\s*-->/g;
 var glossarySummarySchema = exports_external.object({
   entries: exports_external.array(exports_external.object({ term: exports_external.string(), status: exports_external.string().optional() })).default([])
 });
-var KNOWLEDGE_DIR = join44(".ditto", "knowledge");
+var KNOWLEDGE_DIR = join45(".ditto", "knowledge");
 function adrHeadline(filename, body) {
   const id = filename.match(ADR_ID_EXTRACT_RE)?.[0] ?? filename;
   const titleLine = body.split(`
@@ -33190,12 +33492,12 @@ function adrHeadline(filename, body) {
   return parts.join(" \xB7 ");
 }
 async function loadKnowledgeSources(repoRoot) {
-  const dir = join44(repoRoot, KNOWLEDGE_DIR);
-  const contextPath = join44(KNOWLEDGE_DIR, "CONTEXT.md");
-  const glossaryPath = join44(KNOWLEDGE_DIR, "glossary.json");
-  const adrDir = join44(KNOWLEDGE_DIR, "adr");
+  const dir = join45(repoRoot, KNOWLEDGE_DIR);
+  const contextPath = join45(KNOWLEDGE_DIR, "CONTEXT.md");
+  const glossaryPath = join45(KNOWLEDGE_DIR, "glossary.json");
+  const adrDir = join45(KNOWLEDGE_DIR, "adr");
   let termHeadlines = [];
-  const glossaryFile = Bun.file(join44(dir, "glossary.json"));
+  const glossaryFile = Bun.file(join45(dir, "glossary.json"));
   if (await glossaryFile.exists()) {
     const parsed = glossarySummarySchema.safeParse(JSON.parse(await glossaryFile.text()));
     if (parsed.success) {
@@ -33203,7 +33505,7 @@ async function loadKnowledgeSources(repoRoot) {
     }
   }
   const adrHeadlines = [];
-  const adrPath = join44(dir, "adr");
+  const adrPath = join45(dir, "adr");
   let adrEntries = [];
   try {
     adrEntries = (await readdir17(adrPath)).filter((f3) => /^ADR-\d{4}.*\.md$/.test(f3));
@@ -33211,7 +33513,7 @@ async function loadKnowledgeSources(repoRoot) {
     adrEntries = [];
   }
   for (const rel of adrEntries) {
-    const body = await Bun.file(join44(adrPath, rel)).text();
+    const body = await Bun.file(join45(adrPath, rel)).text();
     adrHeadlines.push(adrHeadline(rel, body));
   }
   adrHeadlines.sort();
@@ -33276,7 +33578,7 @@ async function syncKnowledgeProjection(repoRoot, options = {}) {
   const summary = renderKnowledgeSummary(sources);
   const sha2562 = knowledgeSummarySha256(summary);
   const block = knowledgeBlock(summary, sha2562);
-  const path = join44(repoRoot, "CLAUDE.md");
+  const path = join45(repoRoot, "CLAUDE.md");
   const check = options.check === true;
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : null;
@@ -33426,7 +33728,7 @@ var bridgeCommand = defineCommand({
 
 // src/cli/commands/change-contract.ts
 import { readFile as readFile11 } from "fs/promises";
-import { join as join48 } from "path";
+import { join as join49 } from "path";
 
 // src/schemas/acg-change-contract.ts
 init_zod();
@@ -34077,7 +34379,7 @@ function zodErrors(error) {
   }));
 }
 // src/acg/scope/symbol-expand.ts
-import { join as join45, relative as relative13 } from "path";
+import { join as join46, relative as relative13 } from "path";
 async function expandForbiddenSymbols(contract, ctx) {
   if (!contract.forbidden_scope.some((r3) => r3.kind === "symbol")) {
     return { contract, resolved: 0, unresolved: [] };
@@ -34095,11 +34397,11 @@ async function expandForbiddenSymbols(contract, ctx) {
       repoRoot: ctx.repoRoot,
       sourceRoot: ctx.sourceRoot,
       language: ctx.language,
-      dbPath: join45(ctx.cacheDir, "db"),
-      workDir: join45(ctx.cacheDir, `q-symdecl-${ref.ref}`),
+      dbPath: join46(ctx.cacheDir, "db"),
+      workDir: join46(ctx.cacheDir, `q-symdecl-${ref.ref}`),
       ...ctx.binary ? { binary: ctx.binary } : {}
     }, ctx.deps);
-    const files = declFiles.map((f3) => relative13(ctx.repoRoot, join45(ctx.sourceRoot, f3)));
+    const files = declFiles.map((f3) => relative13(ctx.repoRoot, join46(ctx.sourceRoot, f3)));
     if (files.length === 0) {
       out.push(ref);
       unresolved.push(ref.ref);
@@ -34116,7 +34418,7 @@ async function expandForbiddenSymbols(contract, ctx) {
 // src/core/change-contract-store.ts
 init_ditto_paths();
 init_fs();
-import { join as join46 } from "path";
+import { join as join47 } from "path";
 class ChangeContractStore {
   repoRoot;
   constructor(repoRoot) {
@@ -34126,7 +34428,7 @@ class ChangeContractStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   path(workItemId2) {
-    return join46(this.dir(workItemId2), "change-contract.json");
+    return join47(this.dir(workItemId2), "change-contract.json");
   }
   async read(workItemId2) {
     try {
@@ -34145,7 +34447,7 @@ class ChangeContractStore {
 init_zod();
 init_ditto_paths();
 init_fs();
-import { join as join47 } from "path";
+import { join as join48 } from "path";
 var fitnessFunctionArray = exports_external.array(acgFitnessFunction);
 
 class FitnessFunctionStore {
@@ -34157,7 +34459,7 @@ class FitnessFunctionStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   path(workItemId2) {
-    return join47(this.dir(workItemId2), "fitness-functions.json");
+    return join48(this.dir(workItemId2), "fitness-functions.json");
   }
   async read(workItemId2) {
     try {
@@ -34227,7 +34529,7 @@ var changeContractCommand = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     const expanded = await expandForbiddenSymbols(result2.changeContract, {
       repoRoot,
-      sourceRoot: join48(repoRoot, "src"),
+      sourceRoot: join49(repoRoot, "src"),
       language: "javascript",
       cacheDir: codeqlCacheDir(repoRoot, "javascript"),
       deps: makeRelationDeps()
@@ -34468,13 +34770,13 @@ var changeMapCommand = defineCommand({
 });
 
 // src/cli/commands/classify.ts
-import { isAbsolute as isAbsolute9, join as join50 } from "path";
+import { isAbsolute as isAbsolute9, join as join51 } from "path";
 
 // src/core/cleanup-scan.ts
 init_cleanup_store();
 init_memory_scan();
 import { readdir as readdir18, stat as stat8 } from "fs/promises";
-import { isAbsolute as isAbsolute8, join as join49, relative as relative14, resolve as resolve12 } from "path";
+import { isAbsolute as isAbsolute8, join as join50, relative as relative14, resolve as resolve12 } from "path";
 var SKIP_DIRS3 = new Set([
   "node_modules",
   ".git",
@@ -34505,7 +34807,7 @@ async function walkDocs(root, maxDepth = 12) {
       return;
     }
     for (const e2 of entries) {
-      const full = join49(dir, e2.name);
+      const full = join50(dir, e2.name);
       if (e2.isDirectory()) {
         if (!SKIP_DIRS3.has(e2.name))
           await walk(full, depth + 1);
@@ -34907,7 +35209,7 @@ var classifyStage = defineCommand({
       }
     }
     const repoRoot = await resolveRepoRootForCreate();
-    const absPath = isAbsolute9(args.path) ? args.path : join50(repoRoot, args.path);
+    const absPath = isAbsolute9(args.path) ? args.path : join51(repoRoot, args.path);
     try {
       const store = new CleanupStore(repoRoot);
       const entry = await store.stageDoc(args["run-id"], {
@@ -35166,7 +35468,7 @@ var cleanupCommand = defineCommand({
 });
 
 // src/cli/commands/codeql.ts
-import { join as join52 } from "path";
+import { join as join53 } from "path";
 
 // src/core/codeql/doctor.ts
 import { existsSync as existsSync6 } from "fs";
@@ -35425,7 +35727,7 @@ init_ditto_paths();
 
 // src/core/evidence-store.ts
 import { createHash as createHash10 } from "crypto";
-import { join as join51 } from "path";
+import { join as join52 } from "path";
 
 // src/schemas/evidence-log.ts
 init_zod();
@@ -35462,13 +35764,13 @@ class EvidenceStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   evidenceDir(workItemId2) {
-    return join51(this.workItemDir(workItemId2), "evidence");
+    return join52(this.workItemDir(workItemId2), "evidence");
   }
   commandsPath(workItemId2) {
-    return join51(this.evidenceDir(workItemId2), "commands.jsonl");
+    return join52(this.evidenceDir(workItemId2), "commands.jsonl");
   }
   evidenceIndexPath(workItemId2) {
-    return join51(this.workItemDir(workItemId2), "evidence-index.json");
+    return join52(this.workItemDir(workItemId2), "evidence-index.json");
   }
   async appendCommand(workItemId2, entry) {
     const parsed = commandLogEntry.parse(entry);
@@ -35636,7 +35938,7 @@ var reviewSubcommand = defineCommand({
     try {
       const repoRoot = await resolveRepoRootForCreate();
       const language = args.language ?? "javascript";
-      const sourceRoot = args["source-root"] ?? join52(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join53(repoRoot, "src");
       const commitSha = await gitHeadSha2(repoRoot);
       const key = cacheKey(commitSha, language);
       const dbPath = localDir(repoRoot, "cache", "codeql", key, "db");
@@ -35690,11 +35992,11 @@ var codeqlCommand = defineCommand({
 init_common();
 init_fs();
 init_git();
-import { join as join54 } from "path";
+import { join as join55 } from "path";
 
 // src/core/run-store.ts
 import { stat as stat9 } from "fs/promises";
-import { join as join53 } from "path";
+import { join as join54 } from "path";
 
 // src/schemas/run-manifest.ts
 init_zod();
@@ -35751,7 +36053,7 @@ class RunStore {
     return localDir(this.repoRoot, "runs", id);
   }
   manifestPath(id) {
-    return join53(this.runDir(id), "manifest.json");
+    return join54(this.runDir(id), "manifest.json");
   }
   async exists(id) {
     try {
@@ -35762,7 +36064,7 @@ class RunStore {
     }
   }
   pathFor(id, kind) {
-    return join53(this.runDir(id), kind);
+    return join54(this.runDir(id), kind);
   }
   async create(input, now = new Date) {
     const id = await generateId("run", (candidate) => this.exists(candidate));
@@ -35861,7 +36163,7 @@ async function buildContextPacket(repoRoot, input) {
   ];
   const content = `${lines.join(`
 `)}`;
-  await atomicWriteText(join54(repoRoot, outputPath), content);
+  await atomicWriteText(join55(repoRoot, outputPath), content);
   return {
     work_item_id: item.id,
     output_path: outputPath,
@@ -36865,7 +37167,7 @@ var interviewState = exports_external.object({
 }).describe("Deep interview sidecar tracking ambiguity dimensions and readiness (\xA76.3)");
 
 // src/core/interview-store.ts
-import { join as join55 } from "path";
+import { join as join56 } from "path";
 init_ditto_paths();
 init_fs();
 
@@ -36878,7 +37180,7 @@ class InterviewStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   path(workItemId2) {
-    return join55(this.dir(workItemId2), "interview-state.json");
+    return join56(this.dir(workItemId2), "interview-state.json");
   }
   async exists(workItemId2) {
     return Bun.file(this.path(workItemId2)).exists();
@@ -37230,13 +37532,13 @@ async function promotePremortem(repoRoot, workItemId2, payload, now) {
 
 // src/core/prism/finalize.ts
 import { readFile as readFile12 } from "fs/promises";
-import { join as join57 } from "path";
+import { join as join58 } from "path";
 
 // src/core/prism/store.ts
 init_ditto_paths();
 init_fs();
 init_work_item_store();
-import { join as join56 } from "path";
+import { join as join57 } from "path";
 
 // src/schemas/prism.ts
 init_zod();
@@ -37431,13 +37733,13 @@ class PrismStore {
     return localDir(this.repoRoot, "work-items", workItemId2, "prism");
   }
   mapPath(workItemId2) {
-    return join56(this.dir(workItemId2), "issue-map.json");
+    return join57(this.dir(workItemId2), "issue-map.json");
   }
   decisionsPath(workItemId2) {
-    return join56(this.dir(workItemId2), "prism-decisions.jsonl");
+    return join57(this.dir(workItemId2), "prism-decisions.jsonl");
   }
   backlogSplitPath(workItemId2) {
-    return join56(this.dir(workItemId2), "prism-backlog-split.json");
+    return join57(this.dir(workItemId2), "prism-backlog-split.json");
   }
   async exists(workItemId2) {
     return Bun.file(this.mapPath(workItemId2)).exists();
@@ -37494,7 +37796,7 @@ async function finalizeFromDesignDoc(repoRoot, input) {
   const docPath = input.docPath ?? `.ditto/specs/${input.workItemId}-design.md`;
   let markdown;
   try {
-    markdown = await readFile12(join57(repoRoot, docPath), "utf8");
+    markdown = await readFile12(join58(repoRoot, docPath), "utf8");
   } catch {
     return { status: "compile_rejected", reasons: [`design document not found: ${docPath}`] };
   }
@@ -38105,14 +38407,14 @@ var deepInterviewCommand = defineCommand({
 
 // src/cli/commands/doctor.ts
 import { homedir as homedir8 } from "os";
-import { join as join63 } from "path";
+import { join as join64 } from "path";
 
 // src/core/capability-inventory.ts
 init_shared();
-import { join as join58 } from "path";
+import { join as join59 } from "path";
 var REQUIRED_CAPABILITIES = ["instructions", "permissions", "mcp", "surface"];
 async function codexPluginNeedsUserAction(repoRoot) {
-  const raw = asRecord(await readJsonIfExists(join58(repoRoot, ".ditto", "local", "codex-plugin-status.json")).catch(() => null));
+  const raw = asRecord(await readJsonIfExists(join59(repoRoot, ".ditto", "local", "codex-plugin-status.json")).catch(() => null));
   if (!raw || raw.plugin !== "ditto" || raw.status !== "needs_user_action")
     return null;
   const commands = Array.isArray(raw.commands) ? raw.commands.filter((command) => typeof command === "string") : [];
@@ -38188,7 +38490,7 @@ async function collectCapabilityInventory(adapters, repoRoot) {
 import { existsSync as existsSync7 } from "fs";
 import { mkdir as mkdir8 } from "fs/promises";
 import { homedir as homedir7 } from "os";
-import { join as join59 } from "path";
+import { join as join60 } from "path";
 function detectPlatform(os = process.platform) {
   switch (os) {
     case "darwin":
@@ -38204,10 +38506,10 @@ function detectPlatform(os = process.platform) {
 function bundleUrl(platform2) {
   return `https://github.com/github/codeql-cli-binaries/releases/latest/download/codeql-${platform2}.zip`;
 }
-var DEFAULT_INSTALL_DIR = join59(homedir7(), ".local", "share", "ditto", "codeql");
-var DEFAULT_BIN_DIR = join59(homedir7(), ".local", "bin");
+var DEFAULT_INSTALL_DIR = join60(homedir7(), ".local", "share", "ditto", "codeql");
+var DEFAULT_BIN_DIR = join60(homedir7(), ".local", "bin");
 function managedBinary(installDir, platform2) {
-  return join59(installDir, "codeql", platform2 === "win64" ? "codeql.exe" : "codeql");
+  return join60(installDir, "codeql", platform2 === "win64" ? "codeql.exe" : "codeql");
 }
 function manualInstructions(platform2) {
   const lines = [
@@ -38239,7 +38541,7 @@ async function installCodeqlCli(deps) {
   }
   await deps.ensureDir(deps.installDir);
   await deps.ensureDir(deps.binDir);
-  const zip = join59(deps.installDir, `codeql-${platform2}.zip`);
+  const zip = join60(deps.installDir, `codeql-${platform2}.zip`);
   const url = bundleUrl(platform2);
   const fail = (why, stderr2) => ({
     status: "failed",
@@ -38262,10 +38564,10 @@ async function installCodeqlCli(deps) {
     return {
       status: "installed",
       binary,
-      message: `codeql installed at ${binary} \u2014 ${join59(deps.installDir, "codeql")}\uB97C PATH\uC5D0 \uCD94\uAC00\uD558\uB77C.`
+      message: `codeql installed at ${binary} \u2014 ${join60(deps.installDir, "codeql")}\uB97C PATH\uC5D0 \uCD94\uAC00\uD558\uB77C.`
     };
   }
-  const link = join59(deps.binDir, "codeql");
+  const link = join60(deps.binDir, "codeql");
   const ln = await deps.run("ln", ["-sf", binary, link]);
   if (ln.exit_code !== 0)
     return fail(`\uC2EC\uB9C1\uD06C \uC2E4\uD328 (ln exit=${ln.exit_code ?? "null"})`, ln.stderr);
@@ -38283,7 +38585,7 @@ var defaultInstallDeps = {
     const onPath = Bun.which("codeql");
     if (onPath)
       return onPath;
-    const gh = join59(homedir7(), ".local", "share", "gh", "extensions", "gh-codeql");
+    const gh = join60(homedir7(), ".local", "share", "gh", "extensions", "gh-codeql");
     if (existsSync7(gh))
       return gh;
     const platform2 = detectPlatform();
@@ -38317,16 +38619,16 @@ var defaultInstallDeps = {
 
 // src/core/distribution-doctor.ts
 import { existsSync as existsSync8, readFileSync as readFileSync4 } from "fs";
-import { join as join61 } from "path";
+import { join as join62 } from "path";
 
 // src/core/build-stamp.ts
 import { createHash as createHash11 } from "crypto";
 import { readFileSync as readFileSync3, readdirSync } from "fs";
-import { join as join60 } from "path";
+import { join as join61 } from "path";
 var STAMP_PREFIX = "//# ditto-src-stamp=";
 function listSourceFiles(repoRoot, rel = "src") {
   const out = [];
-  const entries = readdirSync(join60(repoRoot, rel), { withFileTypes: true });
+  const entries = readdirSync(join61(repoRoot, rel), { withFileTypes: true });
   for (const e2 of entries) {
     const childRel = `${rel}/${e2.name}`;
     if (e2.isDirectory())
@@ -38341,7 +38643,7 @@ function computeSourceStamp(repoRoot) {
   for (const rel of listSourceFiles(repoRoot)) {
     h2.update(rel);
     h2.update("\x00");
-    h2.update(readFileSync3(join60(repoRoot, rel)));
+    h2.update(readFileSync3(join61(repoRoot, rel)));
     h2.update("\x00");
   }
   return h2.digest("hex");
@@ -38403,7 +38705,7 @@ function defaultDistributionDeps(targetRoot, pluginRoot) {
     pluginRoot,
     targetRoot,
     whichDitto: () => Bun.which("ditto"),
-    readProjectSettings: () => readJsonObject(join61(targetRoot, ".claude", "settings.json")),
+    readProjectSettings: () => readJsonObject(join62(targetRoot, ".claude", "settings.json")),
     exists: (p) => existsSync8(p),
     readText: (p) => {
       try {
@@ -38416,7 +38718,7 @@ function defaultDistributionDeps(targetRoot, pluginRoot) {
   };
 }
 function pluginSurfacePresent(pluginRoot, exists) {
-  return exists(join61(pluginRoot, ".claude-plugin", "plugin.json")) && exists(join61(pluginRoot, "skills")) && exists(join61(pluginRoot, "agents"));
+  return exists(join62(pluginRoot, ".claude-plugin", "plugin.json")) && exists(join62(pluginRoot, "skills")) && exists(join62(pluginRoot, "agents"));
 }
 function allowlisted(settings) {
   const permissions = settings.permissions;
@@ -38424,9 +38726,9 @@ function allowlisted(settings) {
   return Array.isArray(allow) && allow.includes(ALLOW_RULE);
 }
 function binaryFresh(deps, binaryName) {
-  if (!deps.exists(join61(deps.pluginRoot, "src")))
+  if (!deps.exists(join62(deps.pluginRoot, "src")))
     return true;
-  const text = deps.readText(join61(deps.pluginRoot, "bin", binaryName));
+  const text = deps.readText(join62(deps.pluginRoot, "bin", binaryName));
   if (text === null)
     return false;
   const embedded = readEmbeddedStamp(text);
@@ -38441,12 +38743,12 @@ function binaryFresh(deps, binaryName) {
 function collectDistributionChecks(deps) {
   const binaryName = "ditto";
   return {
-    binary_built: deps.exists(join61(deps.pluginRoot, "bin", binaryName)),
+    binary_built: deps.exists(join62(deps.pluginRoot, "bin", binaryName)),
     binary_fresh: binaryFresh(deps, binaryName),
-    hooks_registered: deps.exists(join61(deps.pluginRoot, "hooks", "hooks.json")),
+    hooks_registered: deps.exists(join62(deps.pluginRoot, "hooks", "hooks.json")),
     plugin_surface_present: pluginSurfacePresent(deps.pluginRoot, deps.exists),
     binary_on_path: deps.whichDitto() !== null,
-    target_initialized: deps.exists(join61(deps.targetRoot, ".ditto", "knowledge", "glossary.json")),
+    target_initialized: deps.exists(join62(deps.targetRoot, ".ditto", "knowledge", "glossary.json")),
     allowlisted: allowlisted(deps.readProjectSettings())
   };
 }
@@ -38455,7 +38757,7 @@ function collectDistributionReport(deps) {
 }
 
 // src/core/doctor-fix.ts
-import { join as join62 } from "path";
+import { join as join63 } from "path";
 init_fs();
 init_shared();
 
@@ -38618,7 +38920,7 @@ async function unallowlistSettingsFile(settingsPath) {
 
 // src/core/doctor-fix.ts
 function classifyReversible(targetPath, homeDir) {
-  const globalRoot = join62(homeDir, ".claude");
+  const globalRoot = join63(homeDir, ".claude");
   return !(targetPath === globalRoot || targetPath.startsWith(`${globalRoot}/`));
 }
 function planInstructionFixes(findings, homeDir) {
@@ -38672,22 +38974,22 @@ function defaultDoctorFixDeps(repoRoot, homeDir) {
     homeDir,
     confirmNonReversible: async () => false,
     syncProjection: async () => {
-      const path = join62(repoRoot, "CLAUDE.md");
+      const path = join63(repoRoot, "CLAUDE.md");
       const backupPath = await writeBackupOnce(path);
       const result2 = await syncClaudeCodeProjection(repoRoot);
       const applied = result2.action === "created" || result2.action === "updated";
       return { applied, backupPath };
     },
     ensureAllowlist: async () => {
-      await allowlistSettingsFile(join62(repoRoot, ".claude", "settings.json"));
+      await allowlistSettingsFile(join63(repoRoot, ".claude", "settings.json"));
       return { applied: true };
     },
     registerVariant: async (name) => {
-      const dest = join62(repoRoot, ".claude", "agents", `${name}.md`);
+      const dest = join63(repoRoot, ".claude", "agents", `${name}.md`);
       if (await fileExists(dest))
         return { applied: false };
-      const src2 = join62(repoRoot, ".ditto", "agents", `${name}.md`);
-      await ensureDir(join62(repoRoot, ".claude", "agents"));
+      const src2 = join63(repoRoot, ".ditto", "agents", `${name}.md`);
+      await ensureDir(join63(repoRoot, ".claude", "agents"));
       await Bun.write(dest, await Bun.file(src2).text());
       return { applied: true };
     }
@@ -39111,12 +39413,12 @@ async function multiSelect(io, message, choices) {
 // src/cli/wizard/prompt-io.ts
 import { createInterface } from "readline/promises";
 
-// ../../../../node_modules/@clack/core/dist/index.mjs
+// node_modules/@clack/core/dist/index.mjs
 import { styleText } from "util";
 import { stdout as stdout3, stdin as stdin2 } from "process";
 import l__default from "readline";
 
-// ../../../../node_modules/fast-string-truncated-width/dist/utils.js
+// node_modules/fast-string-truncated-width/dist/utils.js
 var getCodePointsLength = (() => {
   const SURROGATE_PAIR_RE = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
   return (input) => {
@@ -39135,7 +39437,7 @@ var isWideNotCJKTNotEmoji = (x2) => {
   return x2 === 8987 || x2 === 9001 || x2 >= 12272 && x2 <= 12287 || x2 >= 12289 && x2 <= 12350 || x2 >= 12441 && x2 <= 12543 || x2 >= 12549 && x2 <= 12591 || x2 >= 12593 && x2 <= 12686 || x2 >= 12688 && x2 <= 12771 || x2 >= 12783 && x2 <= 12830 || x2 >= 12832 && x2 <= 12871 || x2 >= 12880 && x2 <= 19903 || x2 >= 65040 && x2 <= 65049 || x2 >= 65072 && x2 <= 65106 || x2 >= 65108 && x2 <= 65126 || x2 >= 65128 && x2 <= 65131 || x2 >= 127488 && x2 <= 127490 || x2 >= 127504 && x2 <= 127547 || x2 >= 127552 && x2 <= 127560 || x2 >= 131072 && x2 <= 196605 || x2 >= 196608 && x2 <= 262141;
 };
 
-// ../../../../node_modules/fast-string-truncated-width/dist/index.js
+// node_modules/fast-string-truncated-width/dist/index.js
 var ANSI_RE = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]|\u001b\]8;[^;]*;.*?(?:\u0007|\u001b\u005c)/y;
 var CONTROL_RE = /[\x00-\x08\x0A-\x1F\x7F-\x9F]{1,1000}/y;
 var CJKT_WIDE_RE = /(?:(?![\uFF61-\uFF9F\uFF00-\uFFEF])[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Tangut}]){1,1000}/yu;
@@ -39234,7 +39536,7 @@ var getStringTruncatedWidth = (input, truncationOptions = {}, widthOptions = {})
 };
 var dist_default = getStringTruncatedWidth;
 
-// ../../../../node_modules/fast-string-width/dist/index.js
+// node_modules/fast-string-width/dist/index.js
 var NO_TRUNCATION2 = {
   limit: Infinity,
   ellipsis: "",
@@ -39245,7 +39547,7 @@ var fastStringWidth = (input, options = {}) => {
 };
 var dist_default2 = fastStringWidth;
 
-// ../../../../node_modules/fast-wrap-ansi/lib/main.js
+// node_modules/fast-wrap-ansi/lib/main.js
 var ESC = "\x1B";
 var CSI = "\x9B";
 var END_CODE = 39;
@@ -39457,7 +39759,7 @@ function wrapAnsi(string, columns, options) {
 `);
 }
 
-// ../../../../node_modules/@clack/core/dist/index.mjs
+// node_modules/@clack/core/dist/index.mjs
 var import_sisteransi = __toESM(require_src(), 1);
 function findCursor(s2, o3, l2) {
   if (!l2.some((r3) => !r3.disabled))
@@ -40249,7 +40551,7 @@ class a3 extends V2 {
   }
 }
 
-// ../../../../node_modules/@clack/prompts/dist/index.mjs
+// node_modules/@clack/prompts/dist/index.mjs
 import { styleText as styleText2, stripVTControlCharacters } from "util";
 import process$1 from "process";
 var import_sisteransi2 = __toESM(require_src(), 1);
@@ -40656,7 +40958,7 @@ function planAllowlistFixes(allowlisted2, repoRoot) {
     {
       kind: "allowlist",
       reversible: true,
-      targetPath: join63(repoRoot, ".claude", "settings.json"),
+      targetPath: join64(repoRoot, ".claude", "settings.json"),
       describe: "add Bash(ditto:*) to project .claude/settings.json allow"
     }
   ];
@@ -40665,7 +40967,7 @@ function planVariantFixes(orphans, repoRoot) {
   return orphans.map((name) => ({
     kind: "register-variant",
     reversible: true,
-    targetPath: join63(repoRoot, ".claude", "agents", `${name}.md`),
+    targetPath: join64(repoRoot, ".claude", "agents", `${name}.md`),
     variantName: name,
     describe: `register orphan variant ${name} into .claude/agents`
   }));
@@ -40907,7 +41209,7 @@ var codeqlCommand2 = defineCommand({
         return;
       }
       const repoRoot = await resolveRepoRootForCreate();
-      const sourceRoot = args["source-root"] ?? join63(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join64(repoRoot, "src");
       const report = await inspectCodeqlTarget({ sourceRoot, buildVerified: args["build-verified"] }, defaultDoctorDeps);
       if (format === "json") {
         writeJson2({
@@ -41280,7 +41582,7 @@ var doctorCommand = defineCommand({
 
 // src/cli/commands/e2e.ts
 import { mkdir as mkdir9, readFile as readFile16, readdir as readdir20 } from "fs/promises";
-import { basename as basename4, dirname as dirname14, isAbsolute as isAbsolute11, join as join67, relative as relative18, resolve as resolve15, sep as sep8 } from "path";
+import { basename as basename4, dirname as dirname14, isAbsolute as isAbsolute11, join as join68, relative as relative18, resolve as resolve15, sep as sep8 } from "path";
 init_zod();
 init_ditto_paths();
 
@@ -41629,7 +41931,7 @@ function checkStepConformance(input) {
 // src/core/e2e/failure-verdict.ts
 init_dist2();
 import { readFile as readFile14 } from "fs/promises";
-import { join as join64 } from "path";
+import { join as join65 } from "path";
 
 // src/schemas/e2e-failure-verdict.ts
 init_zod();
@@ -41648,7 +41950,7 @@ init_ditto_paths();
 init_fs();
 init_shared();
 function verdictsPath(repoRoot, workItemId2) {
-  return join64(localDir(repoRoot, "work-items", workItemId2), "e2e-verdicts.jsonl");
+  return join65(localDir(repoRoot, "work-items", workItemId2), "e2e-verdicts.jsonl");
 }
 async function appendFailureVerdict(repoRoot, workItemId2, verdict2) {
   const parsed = e2eFailureVerdict.parse(verdict2);
@@ -41715,7 +42017,7 @@ ${split.body}`);
 
 // src/core/e2e/generator.ts
 init_ditto_paths();
-import { join as join65 } from "path";
+import { join as join66 } from "path";
 
 // src/core/e2e/init-agents.ts
 init_zod();
@@ -42017,7 +42319,7 @@ async function safe(fn, onError) {
 async function probeGenerator(repoRoot, host, seams = {}) {
   const probeBrowser = seams.probeBrowser ?? probePlaywright;
   const readVersion = seams.readPlaywrightVersion ?? defaultReadPlaywrightVersion;
-  const readAgents = seams.readAgentsRecord ?? ((root) => readE2eAgentsRecord(join65(localDir(root), "e2e-agents.json")));
+  const readAgents = seams.readAgentsRecord ?? ((root) => readE2eAgentsRecord(join66(localDir(root), "e2e-agents.json")));
   const probeMcp = seams.probeMcp ?? (async () => true);
   const probe = await safe(() => probeBrowser(repoRoot), {
     available: false,
@@ -42105,7 +42407,7 @@ async function runGenerator(input, seams) {
 
 // src/core/e2e/lifecycle.ts
 import { readFile as readFile15, readdir as readdir19, unlink as unlink3 } from "fs/promises";
-import { basename as basename3, dirname as dirname13, isAbsolute as isAbsolute10, join as join66, relative as relative17, resolve as resolve14, sep as sep7 } from "path";
+import { basename as basename3, dirname as dirname13, isAbsolute as isAbsolute10, join as join67, relative as relative17, resolve as resolve14, sep as sep7 } from "path";
 
 // src/schemas/e2e-lifecycle.ts
 init_zod();
@@ -42125,7 +42427,7 @@ var e2eLifecycleDecision = exports_external.object({
 init_ditto_paths();
 init_fs();
 function lifecycleLedgerPath(repoRoot, workItemId2) {
-  return workItemId2 === undefined ? localDir(repoRoot, "e2e-lifecycle.jsonl") : join66(localDir(repoRoot, "work-items", workItemId2), "e2e-lifecycle.jsonl");
+  return workItemId2 === undefined ? localDir(repoRoot, "e2e-lifecycle.jsonl") : join67(localDir(repoRoot, "work-items", workItemId2), "e2e-lifecycle.jsonl");
 }
 async function appendDecision(path, decision) {
   const parsed = e2eLifecycleDecision.parse(decision);
@@ -42174,7 +42476,7 @@ async function runLifecycleAction(repoRoot, req) {
   }
   const slug = journeyName.slice(0, -".journey.md".length);
   const generatedDir = resolve14(dirname13(journeyAbs), "..", "generated");
-  const specAbs = join66(generatedDir, `${slug}.spec.ts`);
+  const specAbs = join67(generatedDir, `${slug}.spec.ts`);
   const rel = (abs) => toPosix2(relative17(repoRoot, abs));
   const specText = await readOrNull(specAbs);
   if (specText === null) {
@@ -42189,8 +42491,8 @@ async function runLifecycleAction(repoRoot, req) {
       refusal: `${rel(specAbs)}\uB294 @ditto-generated \uB9C8\uCEE4\uAC00 \uC5C6\uB294 \uC218\uB3D9 \uD30C\uC77C \u2014 \uC218\uBA85\uC8FC\uAE30 \uC9D1\uD589\uC740 DSL \uD30C\uC0DD \uD14C\uC2A4\uD2B8\uC5D0\uB9CC \uC801\uC6A9\uB41C\uB2E4`
     };
   }
-  const supportDir = join66(generatedDir, "support");
-  const helperOf = (blockId) => join66(supportDir, `${blockId}.block.ts`);
+  const supportDir = join67(generatedDir, "support");
+  const helperOf = (blockId) => join67(supportDir, `${blockId}.block.ts`);
   for (const blockId of parsed.frontMatter.uses_blocks) {
     const helperText = await readOrNull(helperOf(blockId));
     if (helperText !== null && !isDittoGenerated(helperText)) {
@@ -42240,7 +42542,7 @@ async function runLifecycleAction(repoRoot, req) {
   const journeysDir = dirname13(journeyAbs);
   const referencedElsewhere = new Set;
   for (const name of (await readdir19(journeysDir)).filter((n3) => n3.endsWith(".journey.md"))) {
-    const otherAbs = join66(journeysDir, name);
+    const otherAbs = join67(journeysDir, name);
     if (otherAbs === journeyAbs)
       continue;
     const other = await readOrNull(otherAbs);
@@ -42622,7 +42924,7 @@ var e2eRun = defineCommand({
       const result2 = await runJourney(repoRoot, args.runId, parsed.data);
       const runDir2 = localDir(repoRoot, "runs", args.runId);
       await mkdir9(runDir2, { recursive: true });
-      await atomicWriteText(join67(runDir2, "journey.json"), `${JSON.stringify(result2.journey, null, 2)}
+      await atomicWriteText(join68(runDir2, "journey.json"), `${JSON.stringify(result2.journey, null, 2)}
 `);
       if (format === "json") {
         writeJson2(result2);
@@ -42702,8 +43004,8 @@ var e2eConformance = defineCommand({
     try {
       const journeyAbs = resolve15(args.journey);
       const generatedAbs = resolve15(args.generated);
-      const blocksDir = resolve15(args["blocks-dir"] ?? join67(dirname14(journeyAbs), "blocks"));
-      const supportDir = resolve15(args["support-dir"] ?? join67(dirname14(generatedAbs), "support"));
+      const blocksDir = resolve15(args["blocks-dir"] ?? join68(dirname14(journeyAbs), "blocks"));
+      const supportDir = resolve15(args["support-dir"] ?? join68(dirname14(generatedAbs), "support"));
       const journeyText = await readFile16(journeyAbs, "utf8");
       const generatedText = await readFile16(generatedAbs, "utf8");
       const blockTexts = {};
@@ -42711,7 +43013,7 @@ var e2eConformance = defineCommand({
         for (const name of await readdir20(blocksDir)) {
           if (!name.endsWith(".block.md"))
             continue;
-          blockTexts[name.slice(0, -".block.md".length)] = await readFile16(join67(blocksDir, name), "utf8");
+          blockTexts[name.slice(0, -".block.md".length)] = await readFile16(join68(blocksDir, name), "utf8");
         }
       } catch {}
       const supportTexts = [];
@@ -42719,7 +43021,7 @@ var e2eConformance = defineCommand({
         for (const name of await readdir20(supportDir)) {
           if (!name.endsWith(".ts"))
             continue;
-          supportTexts.push(await readFile16(join67(supportDir, name), "utf8"));
+          supportTexts.push(await readFile16(join68(supportDir, name), "utf8"));
         }
       } catch {}
       const report = checkStepConformance({ journeyText, blockTexts, generatedText, supportTexts });
@@ -42734,8 +43036,8 @@ var e2eConformance = defineCommand({
         for (const blockId of parsedJourney.frontMatter.uses_blocks) {
           if (blockTexts[blockId] === undefined)
             continue;
-          const helperAbs = join67(supportDir, `${blockId}.block.ts`);
-          const blockMdAbs = join67(blocksDir, `${blockId}.block.md`);
+          const helperAbs = join68(supportDir, `${blockId}.block.ts`);
+          const blockMdAbs = join68(blocksDir, `${blockId}.block.md`);
           const verdict2 = await detectStale(blockMdAbs, helperAbs, repoRel(blockMdAbs));
           if (verdict2.stale)
             stale.push(`support/${blockId}.block.ts: ${verdict2.reason}`);
@@ -42809,12 +43111,12 @@ var e2eVerifyGenerated = defineCommand({
 });
 async function loadJourneyNames(repoRoot) {
   const names = {};
-  const journeysDir = join67(repoRoot, "e2e", "journeys");
+  const journeysDir = join68(repoRoot, "e2e", "journeys");
   try {
     for (const name of await readdir20(journeysDir)) {
       if (!name.endsWith(".journey.md"))
         continue;
-      const parsed = parseJourneyDoc(await readFile16(join67(journeysDir, name), "utf8"));
+      const parsed = parseJourneyDoc(await readFile16(join68(journeysDir, name), "utf8"));
       if (parsed.ok)
         names[parsed.frontMatter.id] = parsed.frontMatter.name;
     }
@@ -42841,7 +43143,7 @@ var e2eFailureReport = defineCommand({
     }
     try {
       const repoRoot = await resolveRepoRootForCreate();
-      const reportPath = join67(localDir(repoRoot, "runs", args.runId), "playwright-report.json");
+      const reportPath = join68(localDir(repoRoot, "runs", args.runId), "playwright-report.json");
       const reportFile = Bun.file(reportPath);
       if (!await reportFile.exists()) {
         writeError(`no playwright-report.json for run ${args.runId} \u2014 run \`ditto e2e verify-generated --runId ${args.runId} --files <specs>\` first`);
@@ -43196,10 +43498,10 @@ function slugFromJourney(journeyPath) {
 }
 async function loadBlockBodies(journeyAbs, useBlocks) {
   const out = {};
-  const blocksDir = join67(dirname14(journeyAbs), "blocks");
+  const blocksDir = join68(dirname14(journeyAbs), "blocks");
   for (const id of useBlocks) {
     try {
-      const text = await readFile16(join67(blocksDir, `${id}.block.md`), "utf8");
+      const text = await readFile16(join68(blocksDir, `${id}.block.md`), "utf8");
       out[id] = { body: splitFrontMatter(text)?.body ?? text };
     } catch {}
   }
@@ -43411,7 +43713,7 @@ var e2eGenerate = defineCommand({
       const mapDocRel = `specs/${slug}.assertion-map.md`;
       await atomicWriteText(resolve15(repoRoot, mapDocRel), renderAssertionMapDoc(amap));
       if (args["work-item"] !== undefined) {
-        await atomicWriteText(join67(localDir(repoRoot, "work-items", wi), "e2e-assertion-map.json"), `${JSON.stringify(amap, null, 2)}
+        await atomicWriteText(join68(localDir(repoRoot, "work-items", wi), "e2e-assertion-map.json"), `${JSON.stringify(amap, null, 2)}
 `);
       }
       const gate2 = assertionMapGate(amap);
@@ -43505,7 +43807,7 @@ var e2eMapping = defineCommand({
       const docRel = `specs/${slug}.assertion-map.md`;
       await atomicWriteText(resolve15(repoRoot, docRel), renderAssertionMapDoc(amap));
       if (args["work-item"] !== undefined) {
-        await atomicWriteText(join67(localDir(repoRoot, "work-items", wi), "e2e-assertion-map.json"), `${JSON.stringify(amap, null, 2)}
+        await atomicWriteText(join68(localDir(repoRoot, "work-items", wi), "e2e-assertion-map.json"), `${JSON.stringify(amap, null, 2)}
 `);
       }
       const gate2 = assertionMapGate(amap);
@@ -43625,7 +43927,7 @@ var e2eInitAgents = defineCommand({
         mcpServers = merged.servers;
       }
       const record = buildE2eAgentsRecord({ playwrightVersion, loop });
-      await writeE2eAgentsRecord(join67(localDir(repoRoot), "e2e-agents.json"), record);
+      await writeE2eAgentsRecord(join68(localDir(repoRoot), "e2e-agents.json"), record);
       if (gate2.warn)
         writeError(gate2.warn);
       if (format === "json") {
@@ -44741,7 +45043,7 @@ init_common();
 init_ditto_paths();
 init_fs();
 import { readdir as readdir21, stat as stat10, unlink as unlink4 } from "fs/promises";
-import { join as join68 } from "path";
+import { join as join69 } from "path";
 var sessionPointer = exports_external.object({
   schema_version: exports_external.literal("0.1.0"),
   session_id: exports_external.string().min(1),
@@ -44763,7 +45065,7 @@ class SessionPointerStore {
     return localDir(this.repoRoot, "sessions");
   }
   path(sessionId) {
-    return join68(this.dir(), `${safeSessionId(sessionId)}.json`);
+    return join69(this.dir(), `${safeSessionId(sessionId)}.json`);
   }
   async get(sessionId) {
     try {
@@ -44798,7 +45100,7 @@ class SessionPointerStore {
     for (const name of names) {
       if (!name.endsWith(".json"))
         continue;
-      const path = join68(this.dir(), name);
+      const path = join69(this.dir(), name);
       let mtimeMs;
       try {
         mtimeMs = (await stat10(path)).mtimeMs;
@@ -44956,7 +45258,7 @@ var preCompactHandler = async (input) => {
 
 // src/hooks/pre-tool-use.ts
 import { homedir as homedir9, tmpdir } from "os";
-import { join as join69 } from "path";
+import { join as join70 } from "path";
 import { isAbsolute as isAbsolute14, relative as relative19, resolve as resolve18, sep as sep9 } from "path";
 
 // src/acg/scope/resolve.ts
@@ -45345,9 +45647,9 @@ function autopilotBypassActive(input) {
   return env2.DITTO_AUTOPILOT_BYPASS === "1" || process.env.DITTO_AUTOPILOT_BYPASS === "1";
 }
 async function appendBypassRecord(repoRoot, entry) {
-  const dir = join69(repoRoot, ".ditto");
+  const dir = join70(repoRoot, ".ditto");
   await ensureDir(dir);
-  const path = join69(dir, "autopilot-bypass.jsonl");
+  const path = join70(dir, "autopilot-bypass.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -45552,7 +45854,7 @@ import { spawnSync } from "child_process";
 import { createHash as createHash12 } from "crypto";
 import { existsSync as existsSync9, readFileSync as readFileSync5, readdirSync as readdirSync2 } from "fs";
 import { homedir as homedir10 } from "os";
-import { dirname as dirname15, join as join70, resolve as resolve19 } from "path";
+import { dirname as dirname15, join as join71, resolve as resolve19 } from "path";
 function classifySession(pluginRoot, repoRoot) {
   if (pluginRoot === null)
     return "unknown";
@@ -45632,7 +45934,7 @@ function formatModeHuman(report, inDittoRepo) {
 }
 var SURFACE_DIRS = ["agents", "skills", "hooks"];
 function listSurfaceFiles(root, rel, out) {
-  const dir = join70(root, rel);
+  const dir = join71(root, rel);
   if (!existsSync9(dir))
     return;
   for (const e2 of readdirSync2(dir, { withFileTypes: true })) {
@@ -45652,18 +45954,18 @@ function computeSurfaceStamp(root) {
   for (const rel of files) {
     h3.update(rel);
     h3.update("\x00");
-    h3.update(readFileSync5(join70(root, rel)));
+    h3.update(readFileSync5(join71(root, rel)));
     h3.update("\x00");
   }
   return h3.digest("hex");
 }
 function isDittoSourceRepo(repoRoot) {
-  const pkgPath = join70(repoRoot, "package.json");
+  const pkgPath = join71(repoRoot, "package.json");
   if (!existsSync9(pkgPath))
     return false;
   try {
     const pkg = JSON.parse(readFileSync5(pkgPath, "utf8"));
-    return pkg.name === "ditto" && existsSync9(join70(repoRoot, "src", "cli", "index.ts"));
+    return pkg.name === "ditto" && existsSync9(join71(repoRoot, "src", "cli", "index.ts"));
   } catch {
     return false;
   }
@@ -45679,7 +45981,7 @@ function resolvePluginRoot(env2, argv1) {
   return null;
 }
 function readInstalledIdentity(home) {
-  const base = join70(home, ".claude", "plugins", "cache", "ditto-local", "ditto");
+  const base = join71(home, ".claude", "plugins", "cache", "ditto-local", "ditto");
   const absent = { present: false, version: null, srcStamp: null, surfaceStamp: null };
   if (!existsSync9(base))
     return absent;
@@ -45687,10 +45989,10 @@ function readInstalledIdentity(home) {
   const version = versions[versions.length - 1];
   if (!version)
     return absent;
-  const dir = join70(base, version);
+  const dir = join71(base, version);
   let srcStamp = null;
   try {
-    srcStamp = readEmbeddedStamp(readFileSync5(join70(dir, "bin", "ditto"), "utf8"));
+    srcStamp = readEmbeddedStamp(readFileSync5(join71(dir, "bin", "ditto"), "utf8"));
   } catch {
     srcStamp = null;
   }
@@ -45788,7 +46090,7 @@ var sessionStartHandler = async (input) => {
 import { createHash as createHash13 } from "crypto";
 import { existsSync as existsSync10 } from "fs";
 import { readFile as readFile17, readdir as readdir22 } from "fs/promises";
-import { join as join71 } from "path";
+import { join as join72 } from "path";
 init_ditto_paths();
 init_fs();
 init_git();
@@ -46096,7 +46398,7 @@ function dialecticForcesContinuation(d2, repoRoot) {
     }
     if (admissible && repoRoot !== undefined) {
       const anchor = fileAnchorPath(obj.maps_to);
-      if (anchor !== undefined && !existsSync10(join71(repoRoot, anchor))) {
+      if (anchor !== undefined && !existsSync10(join72(repoRoot, anchor))) {
         reasons.push(`dialectic ${d2.review_id}: objection maps_to '${obj.maps_to}' does not resolve to an existing file \u2014 backward-finding oracle unverifiable/stale`);
       }
     }
@@ -46127,7 +46429,7 @@ async function readArtifact(path, schema, name) {
   }
 }
 async function readDialecticLedgers(dir) {
-  const reviewsDir = join71(dir, "reviews");
+  const reviewsDir = join72(dir, "reviews");
   let names;
   try {
     names = await readdir22(reviewsDir);
@@ -46137,7 +46439,7 @@ async function readDialecticLedgers(dir) {
   const files = names.filter((n3) => /^dialectic-.*\.json$/.test(n3)).sort();
   const items = [];
   for (const name of files) {
-    const read = await readArtifact(join71(reviewsDir, name), dialectic, `reviews/${name}`);
+    const read = await readArtifact(join72(reviewsDir, name), dialectic, `reviews/${name}`);
     if (read.status === "malformed")
       return { status: "malformed", name: read.name };
     if (read.status === "ok")
@@ -46270,8 +46572,8 @@ async function maybeRunFitness(repoRoot, workItemId2, dir) {
     const fns = await new FitnessFunctionStore(repoRoot).read(workItemId2);
     if (!fns || fns.length === 0)
       return;
-    const snapshotPath = join71(dir, "assurance-snapshot.json");
-    const fingerprintPath = join71(dir, "fitness-input-fingerprint");
+    const snapshotPath = join72(dir, "assurance-snapshot.json");
+    const fingerprintPath = join72(dir, "fitness-input-fingerprint");
     const fingerprint = fitnessInputFingerprint(repoRoot);
     if (fingerprint !== null && await Bun.file(snapshotPath).exists() && await Bun.file(fingerprintPath).exists() && (await Bun.file(fingerprintPath).text()).trim() === fingerprint) {
       return;
@@ -46282,7 +46584,7 @@ async function maybeRunFitness(repoRoot, workItemId2, dir) {
       riskKnown: false,
       producedAt: new Date().toISOString()
     };
-    const verdictsPath2 = join71(dir, "fitness-verdicts.json");
+    const verdictsPath2 = join72(dir, "fitness-verdicts.json");
     const provider = await Bun.file(verdictsPath2).exists() ? compositeProvider(repoRoot, verdictsPath2) : commandProvider(repoRoot);
     const snapshot = await runFitness(fns, ctx, provider);
     await ensureDir(dir);
@@ -46371,18 +46673,18 @@ var stopHandler = async (input) => {
   }
   const dir = localDir(input.repoRoot, "work-items", pointer);
   await maybeRunFitness(input.repoRoot, pointer, dir);
-  const completion = await readArtifact(join71(dir, "completion.json"), completionContract, "completion.json");
-  const conv = await readArtifact(join71(dir, "convergence.json"), convergence, "convergence.json");
-  const pilot = await readArtifact(join71(dir, "autopilot.json"), autopilot, "autopilot.json");
-  const intent = await readArtifact(join71(dir, "intent.json"), intentContract, "intent.json");
+  const completion = await readArtifact(join72(dir, "completion.json"), completionContract, "completion.json");
+  const conv = await readArtifact(join72(dir, "convergence.json"), convergence, "convergence.json");
+  const pilot = await readArtifact(join72(dir, "autopilot.json"), autopilot, "autopilot.json");
+  const intent = await readArtifact(join72(dir, "intent.json"), intentContract, "intent.json");
   const dialectics = await readDialecticLedgers(dir);
-  const acgReview = await readArtifact(join71(dir, "acg-review.json"), acgReviewGraph, "acg-review.json");
-  const assurance = await readArtifact(join71(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json");
-  const impact = await readArtifact(join71(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json");
-  const semantic = await readArtifact(join71(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
-  const knowledge = await readArtifact(join71(dir, "knowledge-gate.json"), knowledgeGateCarrier, "knowledge-gate.json");
-  const decisionConflicts = await readArtifact(join71(dir, "decision-conflict.json"), decisionConflictCarrier, "decision-conflict.json");
-  const directionFork = await readArtifact(join71(dir, "direction-fork.json"), directionForkCarrier, "direction-fork.json");
+  const acgReview = await readArtifact(join72(dir, "acg-review.json"), acgReviewGraph, "acg-review.json");
+  const assurance = await readArtifact(join72(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json");
+  const impact = await readArtifact(join72(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json");
+  const semantic = await readArtifact(join72(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
+  const knowledge = await readArtifact(join72(dir, "knowledge-gate.json"), knowledgeGateCarrier, "knowledge-gate.json");
+  const decisionConflicts = await readArtifact(join72(dir, "decision-conflict.json"), decisionConflictCarrier, "decision-conflict.json");
+  const directionFork = await readArtifact(join72(dir, "direction-fork.json"), directionForkCarrier, "direction-fork.json");
   const malformed = [
     completion,
     conv,
@@ -46527,7 +46829,7 @@ ${advisoryBlock}${attestationBlock}`
 };
 
 // src/hooks/user-prompt-submit.ts
-import { join as join72 } from "path";
+import { join as join73 } from "path";
 init_ditto_paths();
 init_fs();
 init_work_item_store();
@@ -46647,7 +46949,7 @@ function pendingHandoffHint(item) {
 async function logClassification(repoRoot, entry) {
   const dir = localDir(repoRoot, "logs");
   await ensureDir(dir);
-  const path = join72(dir, "user-prompt.jsonl");
+  const path = join73(dir, "user-prompt.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -46778,10 +47080,10 @@ var hookCommand = defineCommand({
 });
 
 // src/cli/commands/impact.ts
-import { join as join74 } from "path";
+import { join as join75 } from "path";
 
 // src/acg/impact/codeql-analyzer.ts
-import { join as join73 } from "path";
+import { join as join74 } from "path";
 function isTestFile(path, language) {
   if (language === "java") {
     return path.includes("/test/") || /(Test|Tests|IT)\.java$/.test(path);
@@ -46810,8 +47112,8 @@ class CodeqlImpactAnalyzer {
       repoRoot: this.target.repoRoot,
       sourceRoot: input.sourceRoot,
       language: this.target.language,
-      dbPath: join73(this.target.cacheDir, "db"),
-      workDir: join73(this.target.cacheDir, `q-impact-${this.target.symbol}`),
+      dbPath: join74(this.target.cacheDir, "db"),
+      workDir: join74(this.target.cacheDir, `q-impact-${this.target.symbol}`),
       query: renderQuery(relationQueries(this.target.language).impact, this.target.symbol, this.target.declFile),
       ...this.target.buildMode ? { buildMode: this.target.buildMode } : {},
       ...this.target.buildCommand ? { buildCommand: this.target.buildCommand } : {},
@@ -46847,8 +47149,8 @@ class CodeqlImpactAnalyzer {
       repoRoot: this.target.repoRoot,
       sourceRoot,
       language: this.target.language,
-      dbPath: join73(this.target.cacheDir, "db"),
-      workDir: join73(this.target.cacheDir, "q-xrepo"),
+      dbPath: join74(this.target.cacheDir, "db"),
+      workDir: join74(this.target.cacheDir, "q-xrepo"),
       query: relationQueries(this.target.language).unresolved,
       ...this.target.buildMode ? { buildMode: this.target.buildMode } : {},
       ...this.target.buildCommand ? { buildCommand: this.target.buildCommand } : {},
@@ -46962,7 +47264,7 @@ var impactCommand = defineCommand({
     const changeType = args["change-type"] ?? "signature";
     try {
       const repoRoot = await resolveRepoRootForCreate();
-      const sourceRoot = args["source-root"] ?? join74(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join75(repoRoot, "src");
       const language = args.language ?? "javascript";
       const buildCommand = args["build-command"];
       const buildMode = !buildCommand && language === "java" ? "none" : undefined;
@@ -47024,7 +47326,7 @@ import { resolve as resolve21 } from "path";
 init_fs();
 
 // src/core/init-scaffold.ts
-import { basename as basename5, join as join75 } from "path";
+import { basename as basename5, join as join76 } from "path";
 
 // src/schemas/glossary.ts
 init_zod();
@@ -47053,15 +47355,15 @@ var glossary = exports_external.object({
 init_fs();
 init_shared();
 var SCAFFOLD_DIRS = [
-  join75("local", "work-items"),
-  join75("local", "runs"),
-  join75("local", "handoff"),
-  join75("local", "sessions"),
-  join75("local", "logs"),
-  join75("local", "cache"),
+  join76("local", "work-items"),
+  join76("local", "runs"),
+  join76("local", "handoff"),
+  join76("local", "sessions"),
+  join76("local", "logs"),
+  join76("local", "cache"),
   "agents",
   "knowledge",
-  join75("knowledge", "adr")
+  join76("knowledge", "adr")
 ];
 var DITTO_GITIGNORE = `# DITTO per-developer runtime \u2014 volatile, not for version control.
 # Managed by \`ditto init\`; safe to edit.
@@ -47098,18 +47400,18 @@ async function seedFileIfAbsent(absPath, relPath, write, created, skipped) {
   return true;
 }
 async function initScaffold(repoRoot, now) {
-  const dittoDir2 = join75(repoRoot, ".ditto");
+  const dittoDir2 = join76(repoRoot, ".ditto");
   const createdDirs = [];
   const createdFiles = [];
   const skippedFiles = [];
-  const glossaryAbs = join75(dittoDir2, "knowledge", "glossary.json");
+  const glossaryAbs = join76(dittoDir2, "knowledge", "glossary.json");
   const alreadyInitialized = await fileExists(glossaryAbs);
   await ensureDirTracked(dittoDir2, ".ditto", createdDirs);
   for (const sub of SCAFFOLD_DIRS) {
-    await ensureDirTracked(join75(dittoDir2, sub), join75(".ditto", sub), createdDirs);
+    await ensureDirTracked(join76(dittoDir2, sub), join76(".ditto", sub), createdDirs);
   }
   const projectName = basename5(repoRoot) || "project";
-  await seedFileIfAbsent(glossaryAbs, join75(".ditto", "knowledge", "glossary.json"), () => writeJson(glossaryAbs, glossary, {
+  await seedFileIfAbsent(glossaryAbs, join76(".ditto", "knowledge", "glossary.json"), () => writeJson(glossaryAbs, glossary, {
     schema_version: "0.1.0",
     project_name: projectName,
     updated_at: now.toISOString(),
@@ -47117,10 +47419,10 @@ async function initScaffold(repoRoot, now) {
   }).then(() => {
     return;
   }), createdFiles, skippedFiles);
-  const contextAbs = join75(dittoDir2, "knowledge", "CONTEXT.md");
-  await seedFileIfAbsent(contextAbs, join75(".ditto", "knowledge", "CONTEXT.md"), () => atomicWriteText(contextAbs, emptyContext(projectName)), createdFiles, skippedFiles);
-  const gitignoreAbs = join75(dittoDir2, ".gitignore");
-  await seedFileIfAbsent(gitignoreAbs, join75(".ditto", ".gitignore"), () => atomicWriteText(gitignoreAbs, DITTO_GITIGNORE), createdFiles, skippedFiles);
+  const contextAbs = join76(dittoDir2, "knowledge", "CONTEXT.md");
+  await seedFileIfAbsent(contextAbs, join76(".ditto", "knowledge", "CONTEXT.md"), () => atomicWriteText(contextAbs, emptyContext(projectName)), createdFiles, skippedFiles);
+  const gitignoreAbs = join76(dittoDir2, ".gitignore");
+  await seedFileIfAbsent(gitignoreAbs, join76(".ditto", ".gitignore"), () => atomicWriteText(gitignoreAbs, DITTO_GITIGNORE), createdFiles, skippedFiles);
   return { repoRoot, createdDirs, createdFiles, skippedFiles, alreadyInitialized };
 }
 
@@ -47218,7 +47520,7 @@ ${body}
 }
 // src/core/journey-authoring/store.ts
 import { readdir as readdir23 } from "fs/promises";
-import { join as join76 } from "path";
+import { join as join77 } from "path";
 
 // src/schemas/acg-journey-spec.ts
 init_zod();
@@ -47315,10 +47617,10 @@ class JourneyAuthoringStore {
     return localDir(this.repoRoot, "stories");
   }
   journeyPath(id) {
-    return join76(this.journeysDir(), `${id}.json`);
+    return join77(this.journeysDir(), `${id}.json`);
   }
   storyPath(id) {
-    return join76(this.storiesDir(), `${id}.json`);
+    return join77(this.storiesDir(), `${id}.json`);
   }
   async getJourney(id) {
     if (!await Bun.file(this.journeyPath(id)).exists())
@@ -47356,12 +47658,12 @@ class JourneyAuthoringStore {
     }
     const out = [];
     for (const name of names) {
-      out.push(await readJson(join76(dir, name), schema));
+      out.push(await readJson(join77(dir, name), schema));
     }
     return out;
   }
   sessionPath(workItemId2) {
-    return join76(localDir(this.repoRoot, "work-items", workItemId2), "journey-authoring-state.json");
+    return join77(localDir(this.repoRoot, "work-items", workItemId2), "journey-authoring-state.json");
   }
   async sessionExists(workItemId2) {
     return Bun.file(this.sessionPath(workItemId2)).exists();
@@ -47375,7 +47677,7 @@ class JourneyAuthoringStore {
   }
 }
 // src/core/journey-authoring/session.ts
-import { join as join77 } from "path";
+import { join as join78 } from "path";
 init_fs();
 init_shared();
 class IdConflictError extends Error {
@@ -47477,7 +47779,7 @@ async function finalizeAuthoring(repoRoot, input) {
         reason: `already owned by ${existing.story_id ?? "(journey-only)"}`
       });
     }
-    const dslPath = join77(repoRoot, "e2e", "journeys", `${dslSlug(spec.id)}.journey.md`);
+    const dslPath = join78(repoRoot, "e2e", "journeys", `${dslSlug(spec.id)}.journey.md`);
     if (await fileExists(dslPath)) {
       const existingText = await Bun.file(dslPath).text();
       const parsed = parseJourneyDoc(existingText);
@@ -47497,8 +47799,8 @@ async function finalizeAuthoring(repoRoot, input) {
   const dslPaths = [];
   for (const { spec, dsl } of built) {
     writtenJourneys.push(await store.writeJourney(spec));
-    const rel = join77("e2e", "journeys", `${dslSlug(spec.id)}.journey.md`);
-    await atomicWriteText(join77(repoRoot, rel), dsl);
+    const rel = join78("e2e", "journeys", `${dslSlug(spec.id)}.journey.md`);
+    await atomicWriteText(join78(repoRoot, rel), dsl);
     dslPaths.push(rel);
   }
   const superseded = [];
@@ -47818,7 +48120,7 @@ var journeyAuthorCommand = defineCommand({
 
 // src/cli/commands/knowledge.ts
 import { readdir as readdir24, writeFile as writeFile4 } from "fs/promises";
-import { join as join78 } from "path";
+import { join as join79 } from "path";
 init_zod();
 init_fs();
 init_shared();
@@ -47925,7 +48227,7 @@ async function createAdrSkeleton(opts) {
     throw new Error(`invalid --slug "${opts.slug}"; expected lowercase alphanumeric words joined by single hyphens (e.g. my-feature)`);
   }
   const id = `ADR-${ymdCompact(now)}-${opts.slug}`;
-  const path = join78(opts.repoRoot, ".ditto", "knowledge", "adr", `${id}.md`);
+  const path = join79(opts.repoRoot, ".ditto", "knowledge", "adr", `${id}.md`);
   if (await fileExists(path)) {
     throw new Error(`refusing to overwrite existing ADR: ${path}`);
   }
@@ -47933,7 +48235,7 @@ async function createAdrSkeleton(opts) {
   return { id, path };
 }
 async function checkAdrConsistency(repoRoot) {
-  const adrDir = join78(repoRoot, ".ditto", "knowledge", "adr");
+  const adrDir = join79(repoRoot, ".ditto", "knowledge", "adr");
   const violations = [];
   let files = [];
   try {
@@ -48045,7 +48347,7 @@ var knowledgeCommand = defineCommand({
 // src/cli/commands/memory.ts
 import { randomBytes as randomBytes3 } from "crypto";
 import { readFile as readFile19, readdir as readdir26 } from "fs/promises";
-import { isAbsolute as isAbsolute15, join as join80 } from "path";
+import { isAbsolute as isAbsolute15, join as join81 } from "path";
 init_ditto_paths();
 init_fs();
 init_git();
@@ -48056,7 +48358,7 @@ init_ditto_paths();
 init_memory_scan();
 init_memory_store();
 import { readFile as readFile18, readdir as readdir25 } from "fs/promises";
-import { join as join79, relative as relative20 } from "path";
+import { join as join80, relative as relative20 } from "path";
 function bootstrapEventId(key) {
   return `memevt_${sha256Hex(key).slice(0, 12)}`;
 }
@@ -48167,7 +48469,7 @@ async function listMarkdown(dir) {
   } catch {
     return [];
   }
-  return entries.filter((n3) => n3.endsWith(".md")).sort().map((n3) => join79(dir, n3));
+  return entries.filter((n3) => n3.endsWith(".md")).sort().map((n3) => join80(dir, n3));
 }
 async function bootstrapIngest(repoRoot, options = {}) {
   const now = (options.now ?? new Date).toISOString();
@@ -48183,7 +48485,7 @@ async function bootstrapIngest(repoRoot, options = {}) {
 }
 async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head) {
   const result2 = emptyResult();
-  const dir = join79(dittoDir(repoRoot), "knowledge", "adr");
+  const dir = join80(dittoDir(repoRoot), "knowledge", "adr");
   for (const abs of await listMarkdown(dir)) {
     const body = await readFile18(abs, "utf8");
     const rel = relative20(repoRoot, abs);
@@ -48223,7 +48525,7 @@ async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head
 }
 async function ingestGlossary(repoRoot, sourceStore, eventStore, now, revision, head) {
   const result2 = emptyResult();
-  const abs = join79(dittoDir(repoRoot), "knowledge", "glossary.json");
+  const abs = join80(dittoDir(repoRoot), "knowledge", "glossary.json");
   let raw;
   try {
     raw = await readFile18(abs, "utf8");
@@ -48867,7 +49169,7 @@ var memoryBuild = defineCommand({
     }
     try {
       if (args.fragments) {
-        const path = isAbsolute15(args.fragments) ? args.fragments : join80(repoRoot, args.fragments);
+        const path = isAbsolute15(args.fragments) ? args.fragments : join81(repoRoot, args.fragments);
         const raw = await readFile19(path, "utf8");
         const parsed = irFragmentsSchema.safeParse(JSON.parse(raw));
         if (!parsed.success) {
@@ -48908,7 +49210,7 @@ var memoryBuild = defineCommand({
         const path = s2.source.path;
         if (!path)
           continue;
-        const abs = isAbsolute15(path) ? path : join80(repoRoot, path);
+        const abs = isAbsolute15(path) ? path : join81(repoRoot, path);
         files.push({
           source_id: s2.source.source_id,
           path,
@@ -49665,7 +49967,7 @@ var memoryMeasure = defineCommand({
       return;
     }
     const repoRoot = await resolveRepoRootForCreate();
-    const adrDir = join80(dittoDir(repoRoot), "knowledge", "adr");
+    const adrDir = join81(dittoDir(repoRoot), "knowledge", "adr");
     let names;
     try {
       names = (await readdir26(adrDir)).filter((n3) => n3.endsWith(".md")).sort();
@@ -49680,9 +49982,9 @@ var memoryMeasure = defineCommand({
       return;
     }
     try {
-      const adrs = await Promise.all(names.map(async (n3) => ({ id: n3, body: await readFile19(join80(adrDir, n3), "utf8") })));
+      const adrs = await Promise.all(names.map(async (n3) => ({ id: n3, body: await readFile19(join81(adrDir, n3), "utf8") })));
       const candidateFiles = (args.against ?? "").split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
-      const candidates = await Promise.all(candidateFiles.map((f4) => readFile19(isAbsolute15(f4) ? f4 : join80(repoRoot, f4), "utf8")));
+      const candidates = await Promise.all(candidateFiles.map((f4) => readFile19(isAbsolute15(f4) ? f4 : join81(repoRoot, f4), "utf8")));
       const report = measureHallucination(adrs, candidates);
       if (format === "json") {
         writeJson2(report);
@@ -51412,21 +51714,21 @@ function pushGateDecision(pushedBranches, config) {
 function normDir(d2) {
   return d2.replace(/^\.\//, "").replace(/\/+$/, "");
 }
-function isRepoDeclared(recipe, repoRelDir) {
+function isRepoDeclared(recipe2, repoRelDir) {
   const dir = normDir(repoRelDir);
   if (dir === "" || dir === ".")
     return false;
-  return recipe.repos?.some((r4) => normDir(r4.dir) === dir) ?? false;
+  return recipe2.repos?.some((r4) => normDir(r4.dir) === dir) ?? false;
 }
-function resolvePushGate(recipe, repoRelDir) {
+function resolvePushGate(recipe2, repoRelDir) {
   const dir = normDir(repoRelDir);
   if (dir === "" || dir === ".")
-    return recipe.push_gate;
-  return recipe.repos?.find((r4) => normDir(r4.dir) === dir)?.push_gate;
+    return recipe2.push_gate;
+  return recipe2.repos?.find((r4) => normDir(r4.dir) === dir)?.push_gate;
 }
 
 // src/core/push-gate-cache.ts
-import { join as join81 } from "path";
+import { join as join82 } from "path";
 var MAX_GREEN_TREES = 20;
 function shouldSkipGate(state, cache) {
   if (!state.clean)
@@ -51442,100 +51744,7 @@ function addGreenTree(cache, tree, command, recordedAt) {
   return { trees: kept.slice(-MAX_GREEN_TREES) };
 }
 function greenCachePath(cwd) {
-  return join81(cwd, ".ditto", "local", "push-gate-green.json");
-}
-
-// src/core/recipe/load.ts
-init_ditto_paths();
-import { join as join82 } from "path";
-
-// src/core/recipe/parse.ts
-init_dist2();
-
-// src/schemas/recipe.ts
-init_zod();
-var recipeHost = exports_external.enum(["claude-code", "codex", "both"]).describe("Install target host (claude-code | codex | both)");
-var recipeMemoryMode = exports_external.enum(["gitignore", "submodule"]).describe("Memory separation mode (gitignore | submodule)");
-var PSEUDO_OWNERS = new Set(["driver", "main-session"]);
-var RECIPE_ROLE_VALUES = nodeOwner.options.filter((role) => !PSEUDO_OWNERS.has(role));
-var recipeAgentRole = exports_external.enum(RECIPE_ROLE_VALUES).describe("Agent role link target (autopilot owner role minus driver/main-session)");
-var recipeAgentLink = exports_external.object({
-  name: exports_external.string().min(1),
-  role: recipeAgentRole
-});
-var recipePushGate = exports_external.object({
-  protected_branches: exports_external.array(exports_external.string().min(1)).min(1),
-  test_command: exports_external.string().min(1)
-}).describe("Push gate: branches whose push requires test_command to pass");
-var recipeRepoEntry = exports_external.object({
-  dir: exports_external.string().min(1),
-  url: exports_external.string().min(1).optional(),
-  push_gate: recipePushGate.optional()
-}).describe("A nested repo of the workspace (by dir, optional url) with its own config");
-var recipe = exports_external.object({
-  host: recipeHost.optional(),
-  tools: exports_external.array(exports_external.string()).optional(),
-  agents: exports_external.array(recipeAgentLink).optional(),
-  memory: recipeMemoryMode.optional(),
-  push_gate: recipePushGate.optional(),
-  repos: exports_external.array(recipeRepoEntry).optional(),
-  backlog: dittoConfigGithub.optional()
-}).describe("Headless ditto setup recipe (recipe.yaml)");
-
-// src/core/recipe/parse.ts
-function parseRecipe(text) {
-  let raw;
-  try {
-    raw = $parse(text);
-  } catch (error) {
-    return { ok: false, error: `recipe YAML parse failed: ${describe(error)}` };
-  }
-  const candidate = raw === undefined || raw === null ? {} : raw;
-  const parsed = recipe.safeParse(candidate);
-  if (!parsed.success) {
-    return { ok: false, error: `recipe schema validation failed: ${parsed.error.message}` };
-  }
-  return { ok: true, recipe: parsed.data };
-}
-function describe(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-// src/core/recipe/load.ts
-var PROJECT_RECIPE_FILENAME = "recipe.yaml";
-var BUILTIN_DEFAULT_RECIPE = {};
-function definedFields(r4) {
-  return Object.fromEntries(Object.entries(r4).filter(([, v2]) => v2 !== undefined));
-}
-function mergeRecipes(base, override) {
-  return { ...base, ...definedFields(override) };
-}
-function resolveRecipe(sources) {
-  return [sources.builtinDefault, sources.project, sources.personal, sources.cli].filter((r4) => r4 !== undefined).reduce((acc, r4) => mergeRecipes(acc, r4), {});
-}
-async function loadRecipeFile(path, source, onMalformed) {
-  const file = Bun.file(path);
-  if (!await file.exists()) {
-    if (source === "explicit") {
-      throw new Error(`recipe not found at explicit path: ${path}`);
-    }
-    return;
-  }
-  const result2 = parseRecipe(await file.text());
-  if (!result2.ok) {
-    if (source === "explicit") {
-      throw new Error(`${result2.error} (${path})`);
-    }
-    onMalformed?.(`${result2.error} (${path})`);
-    return;
-  }
-  return result2.recipe;
-}
-async function loadResolvedRecipe(repoRoot, cliPath, onMalformed) {
-  const project = await loadRecipeFile(join82(repoRoot, PROJECT_RECIPE_FILENAME), "discovered", (m4) => onMalformed?.("project", m4));
-  const personal = await loadRecipeFile(localDir(repoRoot, "recipe.yaml"), "discovered", (m4) => onMalformed?.("personal", m4));
-  const cli = cliPath === undefined ? undefined : await loadRecipeFile(cliPath, "explicit");
-  return resolveRecipe({ cli, personal, project, builtinDefault: BUILTIN_DEFAULT_RECIPE });
+  return join82(cwd, ".ditto", "local", "push-gate-green.json");
 }
 
 // src/cli/commands/push-gate.ts
@@ -55162,4 +55371,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=5545b3880a707ed31d4672f007b8cb4f8e2251779f222377253c466db32fad7e
+//# ditto-src-stamp=a3fc527d2e7d13b76227cbd89bc5e8fab02ba5fb36dbf9595f0c2434af7f28b3

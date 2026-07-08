@@ -209,6 +209,72 @@ describe('parseRecipe — repos array (multi-repo manifest, wi_260629i9c)', () =
   });
 });
 
+describe('parseRecipe — barrier_test_command (unit-subset barrier, wi_260708ds9 ac-4)', () => {
+  // Distinct from push_gate.test_command (push-time full-suite guard). This is the
+  // side-effect-free UNIT SUBSET a tester barrier runs. Per-repo symmetric with
+  // push_gate so a multi-repo workspace's sub-repos declare their own barrier.
+  test('top-level barrier_test_command parses and is retained', () => {
+    const r = parseRecipe('barrier_test_command: bun test tests/unit\n');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.recipe.barrier_test_command).toBe('bun test tests/unit');
+  });
+
+  test('per-repo barrier_test_command parses and is retained', () => {
+    const text = [
+      'repos:',
+      '  - dir: portal-backend',
+      '    barrier_test_command: gradle test --tests "*UnitTest"',
+    ].join('\n');
+    const r = parseRecipe(text);
+    expect(r.ok).toBe(true);
+    if (r.ok)
+      expect(r.recipe.repos).toEqual([
+        { dir: 'portal-backend', barrier_test_command: 'gradle test --tests "*UnitTest"' },
+      ]);
+  });
+
+  // Absent → runtime degrade, NOT a validation failure (recipe override-only convention).
+  test('absent barrier_test_command → undefined (valid, does not throw)', () => {
+    const r = parseRecipe('host: codex\n');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.recipe.barrier_test_command).toBeUndefined();
+    expect(recipe.safeParse({}).success).toBe(true);
+  });
+
+  test('per-repo absent barrier_test_command → valid (dir-only)', () => {
+    const r = parseRecipe('repos:\n  - dir: docs\n');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.recipe.repos?.[0]?.barrier_test_command).toBeUndefined();
+  });
+
+  // present-but-empty must FAIL min(1) at both levels — a blank command is dead config.
+  test('top-level present-but-empty barrier_test_command → fail (min(1))', () => {
+    expect(recipe.safeParse({ barrier_test_command: '' }).success).toBe(false);
+  });
+
+  test('per-repo present-but-empty barrier_test_command → fail (min(1))', () => {
+    expect(
+      recipe.safeParse({ repos: [{ dir: 'portal-backend', barrier_test_command: '' }] }).success,
+    ).toBe(false);
+  });
+
+  // Coexists with push_gate.test_command as a DISTINCT field (no collision).
+  test('barrier_test_command coexists with push_gate.test_command (distinct fields)', () => {
+    const text = [
+      'push_gate:',
+      '  protected_branches: [main]',
+      '  test_command: bun test',
+      'barrier_test_command: bun test tests/unit',
+    ].join('\n');
+    const r = parseRecipe(text);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.recipe.push_gate?.test_command).toBe('bun test');
+      expect(r.recipe.barrier_test_command).toBe('bun test tests/unit');
+    }
+  });
+});
+
 describe('parseRecipe — backlog block (github project; schema pre-reflected, wi_260629i9c)', () => {
   // Reuses dittoConfigGithub (no duplicate SoT). Migration of the existing per-dev
   // github config + ADR-20260628 reconcile is a SEPARATE WI — only the shape lands now.

@@ -25,10 +25,38 @@ const KIND_TO_OWNER: Record<AutopilotNode['kind'], AutopilotNode['owner']> = {
   // `e2e-author` maps to the `main-session` pseudo-owner: journey authoring needs
   // a user dialogue, so the driver runs the skill inline (intercepted before spawn).
   'e2e-author': 'main-session',
+  // `test` (settled-tree barrier) maps to the `driver` pseudo-owner (wi_260708ds9):
+  // it is a DETERMINISTIC engine step the loop RUNS in-process (recipe barrier command
+  // → exit code → verdict), NOT an LLM `tester` subagent — an LLM tester could
+  // rationalize a red result into a green claim, the false-green this WI closes. Its
+  // verdict is derived from the command exit code, never a subagent's read. (The
+  // `tester` owner + OWNER_TOOLS.tester entry the plumbing added are now vestigial but
+  // kept — `tester` is still in the nodeOwner enum, so OWNER_TOOLS must stay total.)
+  test: 'driver',
 };
 
 export function kindToOwner(kind: AutopilotNode['kind']): AutopilotNode['owner'] {
   return KIND_TO_OWNER[kind];
+}
+
+/**
+ * The promoted IMPLEMENT frontier for the settled-tree test barrier re-attachment
+ * (wi_260708ds9 ac-1 part c). The barrier is seeded on the seed implement node, which
+ * a planner promotion supersedes; so on promotion the barrier must track the PROMOTED
+ * implement frontier instead — the retro-node re-attachment analogue. Doing this
+ * BEFORE supersede also frees the seed implement to be removed (else the barrier, a
+ * survivor depending on the seed implement, would keep it — a regression). Frontier =
+ * the implement-kind promoted nodes no OTHER promoted implement depends on (the last
+ * implements); falls back to all promoted implements when none is a clean leaf. Empty
+ * when the promoted subgraph carries no implement work (nothing to re-anchor on — the
+ * caller then leaves the barrier on its seed anchor, which owns the implement).
+ */
+export function promotedImplementFrontier(promoted: AutopilotNode[]): string[] {
+  const implementIds = promoted.filter((n) => n.kind === 'implement').map((n) => n.id);
+  const leaves = implementIds.filter(
+    (id) => !promoted.some((m) => m.kind === 'implement' && m.depends_on.includes(id)),
+  );
+  return leaves.length > 0 ? leaves : implementIds;
 }
 
 /**
@@ -102,9 +130,27 @@ export function selectReadyNodes(nodes: AutopilotNode[]): AutopilotNode[] {
   // depends on it. The B3 case (seed verify nothing depends on) is unaffected.
   const isImplementPrecondition = (verifyId: string): boolean =>
     nonTerminalImplements.some((impl) => dependsOnNode(impl, verifyId, byId));
+  // Settled-tree barrier hold set (wi_260708ds9 review-fix): the barrier runs the FULL
+  // suite, so it must fire only on a tree with NO mutating work in flight. `implementPending`
+  // above counts `implement` kinds ONLY, but converge forward-splices `fix` nodes (owner
+  // implementer = MUTATING) when review/verify find defects — a fix subagent editing the
+  // tree while the barrier runs yields a false RED or a STALE GREEN (the barrier passes
+  // before the fix lands and never re-runs). Count every non-terminal node whose kind maps
+  // to the mutating `implementer` owner (implement + fix, plus any future implementer kind),
+  // derived from this file's KIND_TO_OWNER classification rather than a hardcoded kind list.
+  const mutatingInFlight = nodes.some(
+    (n) => kindToOwner(n.kind) === 'implementer' && n.status !== 'passed' && n.status !== 'failed',
+  );
   return nodes.filter((n) => {
     if (!isNodeReady(n, byId)) return false;
     if (n.kind === 'verify' && implementPending && !isImplementPrecondition(n.id)) return false;
+    // Settled-tree hold (wi_260708ds9 ac-1 part c): the `test` BARRIER runs the FULL
+    // suite, so it must fire only on a SETTLED tree — hold it while ANY mutating (implementer-
+    // owned: implement/fix) node is still non-terminal, the same B3 protection the verify hold
+    // gives. Unlike verify, a barrier is never a mutating node's precondition (it runs strictly
+    // after; nothing depends_on the barrier), so it takes no precondition exemption — a plain
+    // unconditional hold that cannot deadlock.
+    if (n.kind === 'test' && mutatingInFlight) return false;
     return true;
   });
 }

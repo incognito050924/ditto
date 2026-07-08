@@ -129,7 +129,8 @@ describe('M2.1b — autopilot 그래프 bootstrap (intent → graph → approval
     expect(res.status).toBe('created');
     if (res.status !== 'created') return;
     expect(res.graph.root_goal).toBe(readyIntent().goal);
-    expect(res.graph.nodes.map((n) => n.kind)).toEqual(['design', 'implement', 'verify']);
+    // wi_260708ds9 ac-1: the seed is barrier-terminated with a settled-tree `test` node.
+    expect(res.graph.nodes.map((n) => n.kind)).toEqual(['design', 'implement', 'verify', 'test']);
     expect(res.graph.work_item_id).toBe(wi.id);
   });
 
