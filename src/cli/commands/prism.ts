@@ -32,7 +32,7 @@ import {
   runOpponentDissentRound,
 } from '~/core/prism/loop';
 import type { DialecticHost, OpponentSeamConfig } from '~/core/prism/opponent';
-import { PrismStore } from '~/core/prism/store';
+import { PrismStore, deriveNovelty } from '~/core/prism/store';
 import { WorkItemStore } from '~/core/work-item-store';
 import type { CoverageNode } from '~/schemas/coverage';
 import type { PrismIssueMap, PrismNodeEvaluation } from '~/schemas/prism';
@@ -220,7 +220,9 @@ const prismSeedCommand = defineCommand({
         next = gate.prism as PrismIssueMap;
       }
       await store.writeMap(next);
-      // VALUE trail — one dry round line into the preserved question-round sink.
+      // VALUE trail — one dry round line into the preserved question-round sink. A seed
+      // ALWAYS appends a node, so it carries admissible novelty by construction
+      // (wi_260708yut — consistent with the diverge path's derived novelty).
       await store.appendValueRound(args.wi, {
         ts: new Date().toISOString(),
         work_item_id: args.wi,
@@ -230,6 +232,7 @@ const prismSeedCommand = defineCommand({
         dry: true,
         selected: [],
         all_scored: [],
+        novelty: true,
       });
       if (format === 'json') {
         writeJson({
@@ -342,6 +345,22 @@ const prismDivergeCommand = defineCommand({
         workItemId: args.wi,
         round,
         history,
+      });
+      // VALUE trail (wi_260708yut) — persist this round's deterministically-derived
+      // admissible novelty into the preserved question-round sink so an offline replay
+      // can later demonstrate value-of-information (B6 data premise). dry=true/selected=[]
+      // keeps the dry⟺selected constraint satisfied (a divergence round asks nothing new).
+      const roundsRun = (await store.readValueRounds(args.wi)).length;
+      await store.appendValueRound(args.wi, {
+        ts: new Date().toISOString(),
+        work_item_id: args.wi,
+        round: roundsRun + 1,
+        section: 'prism-divergence',
+        generator_count: 1,
+        dry: true,
+        selected: [],
+        all_scored: [],
+        novelty: deriveNovelty(verdict),
       });
       if (format === 'json') {
         writeJson({ work_item_id: args.wi, verdict, ...(decision ? { decision } : {}) });

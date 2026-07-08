@@ -118,6 +118,21 @@ export const prismNodeEvaluation = z
       .describe(
         'Self-describing opponent-seam status; host_absent when the host degrades (OBJ-3 / ADR-0018)',
       ),
+    // A1 semantic critic (achieve-vs-characterize) — advisory, NON-blocking. A SEPARATE
+    // field pair from opponent_* so per-seam degrade attribution never mixes (the model
+    // seam ac-5/ac-6 stamps opponent_status; the A1 seam stamps semantic_status). Reuses
+    // the same status enum but stays a distinct field.
+    semantic_critique: z
+      .string()
+      .optional()
+      .describe(
+        'A1 achieve-vs-characterize judgment on a covered (fragment,node) pair — advisory, non-blocking (A1)',
+      ),
+    semantic_status: prismOpponentStatus
+      .optional()
+      .describe(
+        'Self-describing A1 semantic-critic seam status; host_absent on degrade — SEPARATE from opponent_status per-seam attribution (A1 / ADR-0018)',
+      ),
   })
   .describe(
     'One prism-level per-node evaluation annotation — argumentation state + opponent seam (ac-1/ac-5/ac-6)',

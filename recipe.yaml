@@ -8,3 +8,8 @@
 push_gate:
   protected_branches: ["*"]
   test_command: "bun test"
+
+# barrier_test_command: autopilot 안정-트리 배리어(settled-tree barrier)가 implement
+# wave 정착 후 돌리는 전체 스위트 명령. 미설정 시 배리어가 명령 없음으로 degrade하여
+# (ADR-0018) 완료가 green을 주장하지 못한다. push_gate 와 동일 명령으로 둔다.
+barrier_test_command: "bun test"

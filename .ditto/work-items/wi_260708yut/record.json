@@ -3,26 +3,255 @@
   "id": "wi_260708yut",
   "title": "prism 모델-보조 심화 (B6 VoI · A1 의미적 완전성)",
   "source_request": "prism 과소수렴 가드 후속 심화 (연구 §8-B 모델-보조). 선행 wi_260708tzs(커밋 22f3978)에서 결정적 A(완전성 seed·unevaluated close 게이트·재앵커·prism tree) + B4/B5(dialectic/Codex opponent 배선)는 done·검증완료. 이 WI는 이월된 2건.  [B6 VoI/optimal-stopping 원리적 종결기준] '한 질문 더가 값진가'를 기대정보이득 대 비용으로 판정(연구 §4·§8-B). 선결: prism 노드별 잔여 불확실성·비용 정량화 — 현재 prism은 확률 미보유이고 결정적 프록시(closePrismNode의 evidence-added floor, engine.ts)만 있음. 착수 전 답할 것: 노드 불확실성을 싸게 정량화 가능한가(결정적 프록시 vs LLM 크레던스)? 연구 §9 전이갭(N=2, '설계 패턴이지 plug-in 공식 아님').  [A1 의미적 완전성 (특징짓기 vs 달성)] 현재 criticalTermination의 seedUncoveredFragments + deriveFragmentMappings(engine.ts)는 '명시-매핑 부재'만 잡음(결정적 string match, some()-단일키워드 len>=2 in label/close_reason). gap: 노드가 조각을 '다룬다'고 매핑됐으나 실제론 특징짓기만 하고 달성 안 한 경우는 결정적으로 못 잡음 → 모델 판정 필요(연구 §9 미해결4). residual(현재): deriveFragmentMappings 관대성 → 긴 조각에서 false-coverage 여지(under-seed 방향이라 over-think 불변식엔 안전).  [권위] reports/research/prism-epistemology-research.md(§8 시퀀스·§9 미해결), reports/design/prism-convergence-quality-gaps.md, 코드 SoT: src/core/prism/*(engine·opponent·loop·store·backlog)·src/cli/commands/prism.ts·src/schemas/prism.ts, 테스트 tests/core/prism-*.test.ts.  [경로] heavy — deep-interview로 B6 불확실성 정량화 설계 + A1 semantic critic 설계를 확정(둘 다 모델-보조·비용 국소화가 관건) → autopilot.  [reuse] 기존 dialectic 스킬/dialectic-opponent·Codex opponent(far-field refute 사용처), coverage-manager의 completeness critic(loop-until-dry) — 신규 구축 아니라 배선 우선.  [빌드/gotcha] src 변경 후 bun run build:bin; committed base는 record.json+events만(prism decision/backlog은 Run tier, wi_260708cdl); tsc/LSP는 아티팩트·bun test가 진실.",
-  "goal": "prism 모델-보조 심화 — 연구 §8-B의 B6(VoI/optimal-stopping 종결기준)와 A1 의미적 완전성(모델 판정: 특징짓기 vs 달성)",
+  "goal": "prism 모델-보조 심화 — (A1) deriveFragmentMappings가 string-match로 covered라 표시한 노드에만 발화하는 achieve-vs-characterize semantic critic를 opponent seam 패턴으로 배선해 advisory(기록만·non-blocking)로 판정 흔적을 남기고, (novelty 계측) 라운드별 admissible novelty를 question-round durable trace에 영속시켜 B6 VoI 라이브 실증의 데이터 전제를 확보한다. VoI 종결 규칙 자체는 도입하지 않는다.",
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "TBD — derive observable criteria during interview/planning",
-      "verdict": "unverified",
-      "evidence": []
+      "statement": "A1 semantic critic의 발화 대상 selector는 deriveFragmentMappings가 covered로 매핑한 (fragment,node) 쌍만 반환하고, 매핑이 0이면 빈 목록을 반환한다 (블랭킷 sweep 아님 · flaggedCriticalNodeIds 국소화 패턴 상속).",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260708yut/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-opponent.test.ts",
+          "summary": "16 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin",
+          "summary": "exit 0 build-bin OK"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-opponent.test.ts tests/core/prism-store.test.ts",
+          "summary": "driver fresh re-run 25 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin",
+          "summary": "exit 0 build-bin OK (driver fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4324 pass/17 skip/0 fail exit 0 (driver fresh + verifier fresh 둘 다)"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "host가 있을 때 critic delegate가 반환한 achieve-vs-characterize 판정을 해당 node evaluation의 advisory 필드에 기록하고, host가 없거나 delegate가 빈 문자열을 반환하면 그 노드는 발화 없이 host_absent로 self-describing 강등된다 (ADR-0018).",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260708yut/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-opponent.test.ts",
+          "summary": "16 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin",
+          "summary": "exit 0 build-bin OK"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-opponent.test.ts tests/core/prism-store.test.ts",
+          "summary": "driver fresh re-run 25 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin",
+          "summary": "exit 0 build-bin OK (driver fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4324 pass/17 skip/0 fail exit 0 (driver fresh + verifier fresh 둘 다)"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "A1 critic 기록 전후로 criticalTermination 판정이 동일하다 — critic은 종료·close 게이트를 변경하지 않는 non-blocking advisory임을 테스트로 확인한다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260708yut/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-opponent.test.ts",
+          "summary": "16 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin",
+          "summary": "exit 0 build-bin OK"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-opponent.test.ts tests/core/prism-store.test.ts",
+          "summary": "driver fresh re-run 25 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin",
+          "summary": "exit 0 build-bin OK (driver fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4324 pass/17 skip/0 fail exit 0 (driver fresh + verifier fresh 둘 다)"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "prism 라운드를 question-round durable trace에 영속할 때 additive-optional novelty 신호가 함께 기록되고, appendValueRound로 쓴 뒤 readValueRounds로 읽으면 그 값이 round-trip된다 — 세션 종료 후 question-rounds.jsonl에서 라운드별 admissible novelty가 복원된다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260708yut/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-store.test.ts",
+          "summary": "9 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-store.test.ts tests/core/prism-opponent.test.ts",
+          "summary": "driver fresh re-run 25 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin",
+          "summary": "exit 0 build-bin OK (driver fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4324 pass/17 skip/0 fail exit 0 (driver fresh + verifier fresh 둘 다)"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "기록되는 novelty 값이 detectDivergence 결과에서 결정적으로 파생됨을 테스트로 확인한다 — admissible challenge(challenge-node)와 새 non-repeat 질문은 novel=true, repeat_question·trivial_streak·decided_conflict_no_evidence는 novel=false로 매핑되며 신규 확률 필드는 도입되지 않는다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260708yut/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-store.test.ts",
+          "summary": "9 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-store.test.ts tests/core/prism-opponent.test.ts",
+          "summary": "driver fresh re-run 25 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin",
+          "summary": "exit 0 build-bin OK (driver fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4324 pass/17 skip/0 fail exit 0 (driver fresh + verifier fresh 둘 다)"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "src 변경 후 bun run build:bin이 성공하고 전체 bun test가 회귀 없이 green이다 (기존 prism 테스트 tests/core/prism-*.test.ts 포함).",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260708yut/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin",
+          "summary": "exit 0 build-bin OK (driver fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4324 pass/17 skip/0 fail exit 0 (driver fresh + verifier fresh 둘 다)"
+        }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "blocked",
   "owner_profile": "workspace-write",
   "child_ids": [],
-  "changed_files": [],
+  "changed_files": [
+    ".ditto/local/work-items/wi_260708yut/completion.json",
+    ".ditto/local/work-items/wi_260708yut/work-item.json",
+    ".ditto/memory/events/memevt_retro_0f73eda3d072c65f.json",
+    ".ditto/memory/events/memevt_retro_7a96c4f594622c56.json",
+    ".ditto/work-items/wi_26062227h/",
+    ".ditto/work-items/wi_260706aka/",
+    ".ditto/work-items/wi_260706d0i/",
+    ".ditto/work-items/wi_260706tu6/",
+    ".ditto/work-items/wi_260708700/",
+    ".ditto/work-items/wi_260708e1x/",
+    "reports/design/palimpsest-ditto-convergence-design.md",
+    "src/core/prism/opponent.ts",
+    "src/schemas/prism.ts",
+    "tests/core/prism-opponent.test.ts",
+    "src/schemas/question-round.ts",
+    "src/core/prism/store.ts",
+    "src/cli/commands/prism.ts",
+    "tests/core/prism-store.test.ts",
+    "bin/ditto"
+  ],
   "worktrees": [],
   "declared_risk": {
     "non_local": true
   },
   "follows": "wi_260708tzs",
   "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260708yut",
+    "fresh_evidence_needed": [
+      "land aborted — 47 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_26062227h/events/000000.workspace-write.8096952847b5.json, .ditto/work-items/wi_26062227h/events/000001.workspace-write.156fc8a60318.json, .ditto/work-items/wi_26062227h/events/000002.workspace-write.2f1461c077f0.json, .ditto/work-items/wi_26062227h/events/000003.workspace-write.e3b8a6dd498c.json, .ditto/work-items/wi_26062227h/events/000004.workspace-write.85506a66f33b.json, .ditto/work-items/wi_26062227h/events/000005.workspace-write.10839af1b0cf.json, .ditto/work-items/wi_26062227h/record.json, .ditto/work-items/wi_260706aka/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260706aka/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260706aka/events/000002.workspace-write.f6144f82eae6.json, .ditto/work-items/wi_260706aka/events/000003.workspace-write.44d4ea0add69.json, .ditto/work-items/wi_260706aka/events/000004.workspace-write.81ca2c5e4f02.json, .ditto/work-items/wi_260706aka/events/000005.workspace-write.762cd40ce772.json, .ditto/work-items/wi_260706aka/events/000006.workspace-write.8c2429d7201b.json, .ditto/work-items/wi_260706aka/events/000007.workspace-write.de8b586b55f3.json, .ditto/work-items/wi_260706aka/events/000008.workspace-write.9ca996a1341d.json, .ditto/work-items/wi_260706aka/events/000009.workspace-write.e4724a31e425.json, .ditto/work-items/wi_260706aka/record.json, .ditto/work-items/wi_260706d0i/events/000000.workspace-write.939021107f6c.json, .ditto/work-items/wi_260706d0i/record.json, .ditto/work-items/wi_260706tu6/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260706tu6/events/000001.workspace-write.f3f10706ee95.json, .ditto/work-items/wi_260706tu6/record.json, .ditto/work-items/wi_2607083ch/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607083ch/record.json, .ditto/work-items/wi_260708700/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708700/events/000001.workspace-write.20262cda9cea.json, .ditto/work-items/wi_260708700/events/000002.workspace-write.d30a19a4ed08.json, .ditto/work-items/wi_260708700/events/000003.workspace-write.9ced3369f539.json, .ditto/work-items/wi_260708700/events/000004.workspace-write.5ba66cbdf53a.json, .ditto/work-items/wi_260708700/record.json, .ditto/work-items/wi_260708e1x/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708e1x/events/000001.workspace-write.b6e05c4e419f.json, .ditto/work-items/wi_260708e1x/events/000002.workspace-write.479ef70041cc.json, .ditto/work-items/wi_260708e1x/record.json, .ditto/work-items/wi_260708xgo/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708xgo/record.json, .ditto/work-items/wi_260708yut/events/000001.workspace-write.b6e05c4e419f.json, .ditto/work-items/wi_260708yut/events/000002.workspace-write.b1ffb2860cfd.json, .ditto/work-items/wi_260708yut/events/000003.workspace-write.cfda87c9aab4.json, .ditto/work-items/wi_260708yut/events/000004.workspace-write.f534a7caba3d.json, .ditto/work-items/wi_260708yut/events/000005.workspace-write.f21f561b936c.json, .ditto/work-items/wi_260708yut/events/000006.workspace-write.e83c470a32d1.json, .ditto/work-items/wi_260708yut/events/000007.workspace-write.2496e91987e5.json, .ditto/work-items/wi_260708yut/events/000008.workspace-write.48d838f6e467.json, .ditto/work-items/wi_260708yut/record.json, recipe.yaml. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
   "runs": [],
+  "handoff_path": ".ditto/local/handoff/wi_260708yut.md",
+  "started_at_sha": "bd51cd8b86f3b0c94e7691e8040480aa2dcd95e0",
   "created_at": "2026-07-08T09:20:56.163Z",
-  "updated_at": "2026-07-08T09:21:08.779Z"
+  "updated_at": "2026-07-08T19:56:23.596Z"
 }

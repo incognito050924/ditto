@@ -9,7 +9,8 @@ import {
 } from '~/core/opponent-router';
 import type { dialecticInput } from '~/schemas/dialectic';
 import type { PrismIssueMap, PrismNodeEvaluation } from '~/schemas/prism';
-import { severityOf } from './engine';
+import { deriveFragmentMappings, severityOf } from './engine';
+import type { FragmentMapping, IntentFragment } from './engine';
 
 /**
  * Model-assist opponent CONSUMPTION seam (wi_260708tzs, node tzs-opponent).
@@ -49,7 +50,7 @@ type ModelPolicy = z.infer<typeof dialecticInput>['model_policy'];
 export type DialecticHost = 'claude-code' | 'codex';
 
 /** The concern the resolved opponent is driven for — routes the record-back field. */
-export type OpponentConcern = 'critique' | 'dissent';
+export type OpponentConcern = 'critique' | 'dissent' | 'semantic';
 
 /**
  * The brief handed to the host-delegated invocation. The thin host layer runs the
@@ -62,6 +63,8 @@ export interface OpponentBrief {
   node_id: string;
   label: string;
   intent: string;
+  /** A1 semantic critic only: the covered intent fragment this (fragment,node) pair maps. */
+  fragment?: { id: string; text: string };
   selection: OpponentSelection;
 }
 
@@ -319,4 +322,138 @@ export async function engageIndependentDissent(
     degraded: [anchor],
     skipped_by_cap: 0,
   };
+}
+
+// ── A1 · semantic critic (achieve-vs-characterize) · advisory, non-blocking ───
+
+/**
+ * A1 semantic-critic targets: EXACTLY the covered (fragment,node) pairs the deterministic
+ * string-match `deriveFragmentMappings` yields — the cost-localizing trigger. The A1 seam
+ * fires ONLY on these pairs (mirroring {@link flaggedCriticalNodeIds}), never a blanket
+ * sweep; zero covered mappings → empty list. `fragments` are the caller-injected
+ * `buildIntentFragments(intent)` output. This module does NOT touch `deriveFragmentMappings`'
+ * substring behavior (out of scope) — it consumes its result verbatim.
+ */
+export function semanticCriticTargets(
+  prism: PrismIssueMap,
+  fragments: readonly IntentFragment[],
+): FragmentMapping[] {
+  return deriveFragmentMappings(fragments, prism);
+}
+
+/** Record an A1 achieve-vs-characterize outcome onto the node's SEPARATE advisory field. */
+export function recordSemanticCritique(
+  prism: PrismIssueMap,
+  nodeId: string,
+  outcome: OpponentOutcome,
+): PrismIssueMap {
+  const patch: Partial<PrismNodeEvaluation> =
+    outcome.status === 'engaged'
+      ? { semantic_critique: outcome.text, semantic_status: 'engaged' }
+      : { semantic_status: 'host_absent' };
+  return upsertEvaluation(prism, nodeId, patch);
+}
+
+/** Per-run outcome the A1 seam returns; the driver persists `prism` in one writeMap. */
+export interface SemanticCriticOutcome {
+  prism: PrismIssueMap;
+  host_available: boolean;
+  selection: OpponentSelection | null;
+  /** Node ids stamped `engaged` (achieve-vs-characterize text recorded). */
+  engaged: string[];
+  /** Node ids stamped `host_absent` (self-describing degrade). */
+  degraded: string[];
+  /** Covered pairs NOT invoked this run because of the per-run ceiling. */
+  skipped_by_cap: number;
+}
+
+/**
+ * A1 semantic critic (achieve-vs-characterize) — ADVISORY, NON-BLOCKING. Drives the host
+ * delegate over every covered (fragment,node) pair (up to the per-run cap) to judge whether
+ * the node ACHIEVED the fragment or only CHARACTERIZED it, recording the verdict to the
+ * SEPARATE `semantic_*` fields (never opponent_*, so per-seam degrade attribution stays
+ * clean). It is recorded ONLY — criticalTermination never reads these fields, so the launch/
+ * close gate is structurally unchanged (ac-3).
+ *
+ * ADR-0018 degrade: no host (resolveOpponentSelection null) → every target degrades to a
+ * self-describing `host_absent` stamp with NO invocation. Host present but the delegate
+ * returns null/empty OR THROWS → THAT pair degrades host_absent (throw is caught per-node so
+ * it is symmetric to the null path — no retry, no propagation). Sequential await (never
+ * Promise.all) keeps the single writeMap race-free.
+ */
+export async function engageSemanticCritique(
+  prism: PrismIssueMap,
+  fragments: readonly IntentFragment[],
+  config: OpponentSeamConfig,
+): Promise<SemanticCriticOutcome> {
+  const targets = semanticCriticTargets(prism, fragments);
+  const selection = resolveOpponentSelection(config);
+
+  if (selection === null) {
+    // No host → deterministic shell only: stamp every covered node host_absent, no invocation.
+    let next = prism;
+    const degraded: string[] = [];
+    for (const t of targets) {
+      next = recordSemanticCritique(next, t.node_id, { status: 'host_absent' });
+      degraded.push(t.node_id);
+    }
+    return {
+      prism: next,
+      host_available: false,
+      selection: null,
+      engaged: [],
+      degraded,
+      skipped_by_cap: 0,
+    };
+  }
+
+  const cap = config.cap ?? OPPONENT_FANOUT_CAP;
+  let next = prism;
+  const engaged: string[] = [];
+  const degraded: string[] = [];
+  let invoked = 0;
+  let skippedByCap = 0;
+
+  for (const t of targets) {
+    if (invoked >= cap) {
+      skippedByCap += 1;
+      continue;
+    }
+    invoked += 1;
+    // Sequential await + per-node try/catch: a delegate throw is caught and mapped to the
+    // SAME host_absent degrade as a null return (symmetry, no retry — failure-recovery finding).
+    let text: string | null = null;
+    try {
+      text = await config.delegate({
+        concern: 'semantic',
+        node_id: t.node_id,
+        label: labelOf(next, t.node_id),
+        intent: config.intent,
+        fragment: { id: t.fragment_id, text: fragmentTextOf(fragments, t.fragment_id) },
+        selection,
+      });
+    } catch {
+      text = null;
+    }
+    if (text && text.trim().length > 0) {
+      next = recordSemanticCritique(next, t.node_id, { status: 'engaged', text });
+      engaged.push(t.node_id);
+    } else {
+      next = recordSemanticCritique(next, t.node_id, { status: 'host_absent' });
+      degraded.push(t.node_id);
+    }
+  }
+
+  return {
+    prism: next,
+    host_available: true,
+    selection,
+    engaged,
+    degraded,
+    skipped_by_cap: skippedByCap,
+  };
+}
+
+function fragmentTextOf(fragments: readonly IntentFragment[], fragmentId: string): string {
+  return fragments.find((f) => f.id === fragmentId)?.text ?? '';
 }

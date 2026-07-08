@@ -78,6 +78,14 @@ export const questionRoundPayload = z
       .array(scoredQuestion)
       .default([])
       .describe('Every candidate with its score (durable score trail for later tuning)'),
+    // wi_260708yut: did THIS round add admissible novelty? Additive-optional so legacy
+    // lines (field absent) stay valid; derived deterministically from the prism
+    // detectDivergence verdict (no new probability field). Persisted so an offline
+    // replay can later demonstrate value-of-information (B6 data premise).
+    novelty: z
+      .boolean()
+      .optional()
+      .describe('Whether this round added admissible novelty (deterministic; wi_260708yut)'),
   })
   .superRefine((val, ctx) => {
     // dry ⟺ nothing selected: the gate signals dry only when no candidate clears
@@ -113,6 +121,8 @@ export const questionRound = z
     dry: z.boolean(),
     selected: z.array(scoredQuestion).default([]),
     all_scored: z.array(scoredQuestion).default([]),
+    // wi_260708yut — additive-optional; see questionRoundPayload.novelty above.
+    novelty: z.boolean().optional(),
   })
   .describe('One line of .ditto/local/work-items/<id>/question-rounds.jsonl');
 

@@ -10,6 +10,22 @@ import {
 } from '~/schemas/prism';
 import { type QuestionRound, questionRound } from '~/schemas/question-round';
 import { type PrismBacklogSplit, prismBacklogSplit } from './backlog';
+import type { DivergenceVerdict } from './engine';
+
+/**
+ * Deterministically derive per-round admissible novelty from the existing prism
+ * divergence verdict (wi_260708yut ac-5) — no new probability/credence field, only the
+ * already-deterministic detectDivergence judgement reused:
+ *   - `challenge-node` (admissible re-challenge with new evidence) → true;
+ *   - `continue` with `diverged=false` (a fresh non-repeat question) → true;
+ *   - any flagged divergence (`diverged=true`, cap-stop: repeat_question /
+ *     trivial_streak / decided_conflict_no_evidence) → false.
+ * All three collapse to `!verdict.diverged` (challenge-node and continue are both
+ * non-diverged; every cap-stop kind is diverged).
+ */
+export function deriveNovelty(verdict: DivergenceVerdict): boolean {
+  return !verdict.diverged;
+}
 
 /**
  * PrismStore — persistence for the prism issue map (wi_260707oi1).

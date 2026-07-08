@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708yut",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "f21f561b936c07b4005f8e7f30d07867be16ed7a8c784dc6a65c9a6764031a2a",
+  "ts": "2026-07-08T19:51:02.601Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260708yut/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/prism-opponent.test.ts",
+        "summary": "16 pass/0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run build:bin",
+        "summary": "exit 0 build-bin OK"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/prism-opponent.test.ts tests/core/prism-store.test.ts",
+        "summary": "driver fresh re-run 25 pass/0 fail"
+      },
+      {
+        "kind": "command",
+        "command": "bun run build:bin",
+        "summary": "exit 0 build-bin OK (driver fresh)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "4324 pass/17 skip/0 fail exit 0 (driver fresh + verifier fresh 둘 다)"
+      }
+    ]
+  }
+}

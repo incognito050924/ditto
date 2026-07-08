@@ -3,12 +3,19 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { OpponentAvailability, OpponentCandidate } from '~/core/opponent-router';
+import {
+  buildIntentFragments,
+  criticalTermination,
+  deriveFragmentMappings,
+} from '~/core/prism/engine';
 import { runOpponentCritiqueRound, runOpponentDissentRound } from '~/core/prism/loop';
 import {
   OPPONENT_FANOUT_CAP,
   engageDialecticCritique,
   engageIndependentDissent,
+  engageSemanticCritique,
   flaggedCriticalNodeIds,
+  semanticCriticTargets,
 } from '~/core/prism/opponent';
 import { PrismStore } from '~/core/prism/store';
 import type { CoverageNode } from '~/schemas/coverage';
@@ -228,6 +235,152 @@ describe('engageIndependentDissent — anchor re-facing (ac-6)', () => {
     expect(ev?.opponent_status).toBe('host_absent');
     expect(ev?.opponent_dissent).toBeUndefined();
     expect(out.host_available).toBe(false);
+  });
+});
+
+// ── A1 semantic critic · achieve-vs-characterize (advisory, non-blocking) ─────
+
+describe('semanticCriticTargets — localized to covered (fragment,node) pairs (A1 ac-1)', () => {
+  test('returns exactly the covered pairs deriveFragmentMappings yields', () => {
+    const p = prism([
+      node('prism_a0000001', '결제 재시도 흐름'),
+      node('prism_b0000002', '로그 포맷'),
+    ]);
+    const fragments = buildIntentFragments({ goal: '결제 재시도', in_scope: ['로그 포맷 정리'] });
+    const targets = semanticCriticTargets(p, fragments);
+    // identical to the deterministic covered mapping — no blanket sweep, no extra pairs
+    expect(targets).toEqual(deriveFragmentMappings(fragments, p));
+    expect(targets).toContainEqual({ fragment_id: 'goal', node_id: 'prism_a0000001' });
+    expect(targets).toContainEqual({ fragment_id: 'in_scope[0]', node_id: 'prism_b0000002' });
+  });
+
+  test('zero covered mapping → empty list (localized, never a blanket sweep)', () => {
+    const p = prism([node('prism_a0000001', '완전히 무관한 라벨')]);
+    const fragments = buildIntentFragments({ goal: '결제 재시도' });
+    expect(semanticCriticTargets(p, fragments)).toEqual([]);
+  });
+});
+
+describe('engageSemanticCritique — record advisory + self-describing degrade (A1 ac-2)', () => {
+  const fragments = buildIntentFragments({ goal: '결제 재시도' });
+
+  test('delegate present → records semantic_critique + semantic_status=engaged (SEPARATE field)', async () => {
+    const p = prism([node('prism_a0000001', '결제 재시도 흐름')]);
+    const out = await engageSemanticCritique(p, fragments, {
+      policy: POLICY,
+      currentHost: 'claude-code',
+      isAvailable: CODEX_AVAILABLE,
+      delegate: async (brief) => {
+        expect(brief.concern).toBe('semantic');
+        expect(brief.fragment?.id).toBe('goal');
+        expect(brief.fragment?.text).toBe('결제 재시도');
+        return 'achieve: 노드가 fragment를 실제 달성함';
+      },
+      intent: '결제 흐름을 안전하게 만든다',
+    });
+    const ev = out.prism.evaluations.find((e) => e.node_id === 'prism_a0000001');
+    expect(ev?.semantic_status).toBe('engaged');
+    expect(ev?.semantic_critique).toContain('achieve');
+    // seam-separate: the shared opponent_* fields are NOT touched (observability finding)
+    expect(ev?.opponent_status).toBeUndefined();
+    expect(ev?.opponent_critique).toBeUndefined();
+    expect(out.engaged).toContain('prism_a0000001');
+  });
+
+  test('delegate null/empty → host_absent, never a fake record', async () => {
+    const p = prism([node('prism_a0000001', '결제 재시도 흐름')]);
+    const out = await engageSemanticCritique(p, fragments, {
+      policy: POLICY,
+      currentHost: 'claude-code',
+      isAvailable: CODEX_AVAILABLE,
+      delegate: async () => '   ', // whitespace-only = produced nothing
+      intent: 'x',
+    });
+    const ev = out.prism.evaluations.find((e) => e.node_id === 'prism_a0000001');
+    expect(ev?.semantic_status).toBe('host_absent');
+    expect(ev?.semantic_critique).toBeUndefined();
+    expect(out.degraded).toContain('prism_a0000001');
+  });
+
+  test('no opponent host → host_absent, NO delegate invocation', async () => {
+    const p = prism([node('prism_a0000001', '결제 재시도 흐름')]);
+    let called = 0;
+    const out = await engageSemanticCritique(p, fragments, {
+      policy: POLICY,
+      currentHost: 'claude-code',
+      isAvailable: NONE_AVAILABLE,
+      delegate: async () => {
+        called++;
+        return 'MUST NOT record';
+      },
+      intent: 'x',
+    });
+    expect(called).toBe(0);
+    expect(out.host_available).toBe(false);
+    const ev = out.prism.evaluations.find((e) => e.node_id === 'prism_a0000001');
+    expect(ev?.semantic_status).toBe('host_absent');
+    expect(ev?.semantic_critique).toBeUndefined();
+  });
+
+  test('delegate throw → host_absent (no exception propagation, symmetric to null)', async () => {
+    const p = prism([node('prism_a0000001', '결제 재시도 흐름')]);
+    const out = await engageSemanticCritique(p, fragments, {
+      policy: POLICY,
+      currentHost: 'claude-code',
+      isAvailable: CODEX_AVAILABLE,
+      delegate: async () => {
+        throw new Error('host boom');
+      },
+      intent: 'x',
+    });
+    const ev = out.prism.evaluations.find((e) => e.node_id === 'prism_a0000001');
+    expect(ev?.semantic_status).toBe('host_absent');
+    expect(ev?.semantic_critique).toBeUndefined();
+    expect(out.degraded).toContain('prism_a0000001');
+  });
+
+  test('per-run cap bounds delegate calls and reports skipped_by_cap', async () => {
+    const nodes = Array.from({ length: OPPONENT_FANOUT_CAP + 2 }, (_, i) =>
+      node(`prism_n000000${i}`, `결제 재시도 ${i}`),
+    );
+    const p = prism(nodes); // goal keyword matches EVERY node → cap+2 covered pairs
+    let invoked = 0;
+    const out = await engageSemanticCritique(p, fragments, {
+      policy: POLICY,
+      currentHost: 'claude-code',
+      isAvailable: CODEX_AVAILABLE,
+      delegate: async () => {
+        invoked++;
+        return 'achieve';
+      },
+      intent: 'x',
+    });
+    expect(invoked).toBe(OPPONENT_FANOUT_CAP); // never balloons past the ceiling
+    expect(out.skipped_by_cap).toBe(2);
+  });
+});
+
+describe('engageSemanticCritique — non-blocking (A1 ac-3)', () => {
+  test('A1 record does NOT change the criticalTermination verdict', async () => {
+    const p = prism(
+      [node('prism_a0000001', '결제 재시도 흐름')],
+      [critical('prism_a0000001')],
+      [{ node_id: 'prism_a0000001', evaluation: 'justified' }],
+    );
+    const before = criticalTermination(p);
+    const out = await engageSemanticCritique(p, buildIntentFragments({ goal: '결제 재시도' }), {
+      policy: POLICY,
+      currentHost: 'claude-code',
+      isAvailable: CODEX_AVAILABLE,
+      delegate: async () => 'characterize only — 실제 달성 아님',
+      intent: 'x',
+    });
+    const after = criticalTermination(out.prism);
+    expect(after).toEqual(before); // gate verdict unchanged before/after A1 record
+    // and the advisory WAS recorded (so it's the record, not a no-op, that left the gate still)
+    expect(out.prism.evaluations.find((e) => e.node_id === 'prism_a0000001')?.semantic_status).toBe(
+      'engaged',
+    );
   });
 });
 

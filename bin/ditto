@@ -13052,7 +13052,8 @@ var init_question_round = __esm(() => {
     threshold: exports_external.number().optional().describe("Fixed selection threshold used this round (\xA79 #4)"),
     dry: exports_external.boolean().describe("Gate found no candidate above the threshold \u2192 round/interview ends (\xA79 #4)"),
     selected: exports_external.array(scoredQuestion).default([]).describe("Questions selected to ask the user"),
-    all_scored: exports_external.array(scoredQuestion).default([]).describe("Every candidate with its score (durable score trail for later tuning)")
+    all_scored: exports_external.array(scoredQuestion).default([]).describe("Every candidate with its score (durable score trail for later tuning)"),
+    novelty: exports_external.boolean().optional().describe("Whether this round added admissible novelty (deterministic; wi_260708yut)")
   }).superRefine((val, ctx) => {
     if (val.dry && val.selected.length > 0) {
       ctx.addIssue({
@@ -13078,7 +13079,8 @@ var init_question_round = __esm(() => {
     threshold: exports_external.number().optional(),
     dry: exports_external.boolean(),
     selected: exports_external.array(scoredQuestion).default([]),
-    all_scored: exports_external.array(scoredQuestion).default([])
+    all_scored: exports_external.array(scoredQuestion).default([]),
+    novelty: exports_external.boolean().optional()
   }).describe("One line of .ditto/local/work-items/<id>/question-rounds.jsonl");
 });
 
@@ -37587,7 +37589,9 @@ var prismNodeEvaluation = exports_external.object({
   refutation_attempted: exports_external.boolean().optional().describe("Whether a strongest-rebuttal (Popper refutation) was attempted before closing \u2014 the field-presence gate closePrismNode reads (A2, ac-1)"),
   opponent_critique: exports_external.string().optional().describe("Dialectic-opponent critique + Popper refutation recorded on a flagged critical node (ac-5)"),
   opponent_dissent: exports_external.string().optional().describe("Codex independent 2nd-perspective dissent re-derived from original intent at anchor re-facing (ac-6)"),
-  opponent_status: prismOpponentStatus.optional().describe("Self-describing opponent-seam status; host_absent when the host degrades (OBJ-3 / ADR-0018)")
+  opponent_status: prismOpponentStatus.optional().describe("Self-describing opponent-seam status; host_absent when the host degrades (OBJ-3 / ADR-0018)"),
+  semantic_critique: exports_external.string().optional().describe("A1 achieve-vs-characterize judgment on a covered (fragment,node) pair \u2014 advisory, non-blocking (A1)"),
+  semantic_status: prismOpponentStatus.optional().describe("Self-describing A1 semantic-critic seam status; host_absent on degrade \u2014 SEPARATE from opponent_status per-seam attribution (A1 / ADR-0018)")
 }).describe("One prism-level per-node evaluation annotation \u2014 argumentation state + opponent seam (ac-1/ac-5/ac-6)");
 var prismIssueMap = exports_external.object({
   schema_version: schemaVersion,
@@ -37750,6 +37754,10 @@ async function materializeBacklogSplit(deps) {
 }
 
 // src/core/prism/store.ts
+function deriveNovelty(verdict2) {
+  return !verdict2.diverged;
+}
+
 class PrismStore {
   repoRoot;
   workItems;
@@ -50937,7 +50945,8 @@ var prismSeedCommand = defineCommand({
         generator_count: 1,
         dry: true,
         selected: [],
-        all_scored: []
+        all_scored: [],
+        novelty: true
       });
       if (format === "json") {
         writeJson2({
@@ -51028,6 +51037,18 @@ var prismDivergeCommand = defineCommand({
         workItemId: args.wi,
         round,
         history
+      });
+      const roundsRun = (await store.readValueRounds(args.wi)).length;
+      await store.appendValueRound(args.wi, {
+        ts: new Date().toISOString(),
+        work_item_id: args.wi,
+        round: roundsRun + 1,
+        section: "prism-divergence",
+        generator_count: 1,
+        dry: true,
+        selected: [],
+        all_scored: [],
+        novelty: deriveNovelty(verdict2)
       });
       if (format === "json") {
         writeJson2({ work_item_id: args.wi, verdict: verdict2, ...decision ? { decision } : {} });
@@ -55372,4 +55393,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=72ec8a9edc5a80b7211ac5e3540ffcf70f92272a80b0d9af72359e35d144717b
+//# ditto-src-stamp=eea8018de27f4411a49d39899eff9eb9bb1b8fe658711b24a6d0f0f977acab7e
