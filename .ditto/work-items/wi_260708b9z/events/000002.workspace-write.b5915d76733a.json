@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708b9z",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "b5915d76733a46c007e7cd2fc65a8b81640f36bfc296697094805e43be430671",
+  "ts": "2026-07-08T16:02:47.870Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c test -z \"$(git ls-files console.txt console2.txt)\" && test -f console.txt && test -f console2.txt",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

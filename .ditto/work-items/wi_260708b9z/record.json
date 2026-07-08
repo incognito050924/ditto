@@ -1,0 +1,43 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260708b9z",
+  "title": "console.txt/console2.txt(진단 스크래치)를 gitignore하고 추적 해제한다 — repo root 오염 제거",
+  "source_request": "4번 수행 (후속: console.txt/console2.txt gitignore; tsc-literal 정리는 비게이팅 churn이라 드롭 권장)",
+  "goal": "console.txt/console2.txt(진단 스크래치)를 gitignore하고 추적 해제한다 — repo root 오염 제거",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "console.txt와 console2.txt가 .gitignore에 매칭되어 무시된다 (git check-ignore 통과)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "git check-ignore console.txt console2.txt",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "console.txt와 console2.txt가 더 이상 git에 추적되지 않는다 (git ls-files에 없음), 단 워킹트리 파일 자체는 보존된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "sh -c test -z \"$(git ls-files console.txt console2.txt)\" && test -f console.txt && test -f console2.txt",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-08T16:01:31.992Z",
+  "updated_at": "2026-07-08T16:02:59.073Z",
+  "closed_at": "2026-07-08T16:02:59.072Z"
+}
