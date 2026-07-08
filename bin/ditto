@@ -44531,7 +44531,9 @@ function matchForbiddenScope(refs, repoRelPath, archSpec) {
 }
 
 // src/hooks/pre-tool-use.ts
+init_ditto_paths();
 init_fs();
+init_worktree();
 var HOME = process.env.HOME ?? process.env.USERPROFILE ?? "";
 var IS_WIN = process.platform === "win32";
 function block2(category, reason) {
@@ -44901,6 +44903,12 @@ function fileScopeContains(scope, repoRelPath) {
   return scope.some((s2) => scopeRefMatches(/[*?[\]]/.test(s2) ? { kind: "glob", ref: s2 } : { kind: "path", ref: s2 }, repoRelPath));
 }
 var TESTS_ALLOW_NODE_KINDS = new Set(["implement", "fix", "refactor"]);
+function leaseScopeRelPath(repoRoot, filePath) {
+  const resolved = resolve18(repoRoot, filePath);
+  const worktree = parseWorktreePath(resolved);
+  const scopeRoot = worktree ? localDir(worktree.workspace, "worktrees", worktree.workItemId) : repoRoot;
+  return relative19(scopeRoot, resolved);
+}
 async function checkAutopilotLease(input, filePath) {
   if (isOutsideRepo(input.repoRoot, filePath) && isSystemTmpPath(filePath))
     return;
@@ -44928,7 +44936,7 @@ async function checkAutopilotLease(input, filePath) {
     return;
   if (leases.some((l2) => l2.scope_source === "derived"))
     return;
-  const repoRel2 = relative19(input.repoRoot, resolve18(input.repoRoot, filePath));
+  const repoRel2 = leaseScopeRelPath(input.repoRoot, filePath);
   const inScope = leases.some((l2) => fileScopeContains(l2.file_scope, repoRel2));
   if (inScope)
     return;
@@ -50178,7 +50186,10 @@ var prismDivergeCommand = defineCommand({
     wi: { type: "string", description: "Work item id (wi_*)" },
     question: { type: "string", description: "The current question signature (question round)" },
     trivial: { type: "boolean", description: "Mark the current question trivial", default: false },
-    seen: { type: "string", description: "A prior question signature (repeatable) \u2014 non-trivial history" },
+    seen: {
+      type: "string",
+      description: "A prior question signature (repeatable) \u2014 non-trivial history"
+    },
     "seen-trivial": {
       type: "string",
       description: "A prior TRIVIAL question signature (repeatable) \u2014 appended to the history tail; the trivial_streak shape counts consecutive trivial entries at the tail, so these make it CLI-reachable (wi_2607075vc)"
@@ -54689,4 +54700,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=9ede5b2d3c019d968524edd4cdde8dda1f376e5ecc7643ed53c4ddb758a53c58
+//# ditto-src-stamp=96545e24c612f298d1a1f15b1080ed94b9168c3eeeb4e63e87bcf6b1c1a89ff7

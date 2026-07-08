@@ -6,8 +6,10 @@ import { matchForbiddenScope, scopeRefMatches } from '~/acg/scope/resolve';
 import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { ChangeContractStore } from '~/core/change-contract-store';
+import { localDir } from '~/core/ditto-paths';
 import { atomicWriteText, ensureDir, readArchitectureSpec } from '~/core/fs';
 import { SessionPointerStore } from '~/core/session-pointer';
+import { parseWorktreePath } from '~/core/worktree';
 import { type AcgArchitectureSpec, acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import { mutatedPaths, parseApplyPatchPaths } from './envelope';
 import type { HookHandler, HookInput } from './runtime';
@@ -625,6 +627,26 @@ function fileScopeContains(scope: string[], repoRelPath: string): boolean {
 const TESTS_ALLOW_NODE_KINDS: ReadonlySet<string> = new Set(['implement', 'fix', 'refactor']);
 
 /**
+ * Repo-relative path for a lease file_scope comparison, WORKTREE-AWARE (wi_260707cp7).
+ * A per-work-item run worktree checks out at `<ws>/.ditto/local/worktrees/<wi>/`,
+ * mirroring the repo tree, but the session roots at the OWNING workspace `<ws>`
+ * (findRepoRoot). So an absolute worktree edit path relativized against `<ws>` carries
+ * a `.ditto/local/worktrees/<wi>/` prefix that matches NO lease file_scope (which is
+ * plain repo-relative) — false-blocking every worktree write (the bug forced
+ * DITTO_SKIP_HOOKS=1 workarounds). Relativize against the worktree root instead, so the
+ * path is the same repo-relative form the file_scope uses. Non-worktree paths are
+ * unchanged (parseWorktreePath → null), so there is no regression outside worktrees.
+ */
+function leaseScopeRelPath(repoRoot: string, filePath: string): string {
+  const resolved = resolve(repoRoot, filePath);
+  const worktree = parseWorktreePath(resolved);
+  const scopeRoot = worktree
+    ? localDir(worktree.workspace, 'worktrees', worktree.workItemId)
+    : repoRoot;
+  return relative(scopeRoot, resolved);
+}
+
+/**
  * Allow-list lease check. Returns a block when the edit is OUTSIDE every active
  * lease's file_scope under an autopilot graph; undefined (ALLOW) otherwise. All
  * preconditions fail OPEN (no session / no active WI / no graph / no non-terminal
@@ -671,7 +693,7 @@ async function checkAutopilotLease(
   // (wi_260610iex — the dogfooding run blocked legitimate new artifact paths).
   if (leases.some((l) => l.scope_source === 'derived')) return undefined;
 
-  const repoRel = relative(input.repoRoot, resolve(input.repoRoot, filePath));
+  const repoRel = leaseScopeRelPath(input.repoRoot, filePath);
   const inScope = leases.some((l) => fileScopeContains(l.file_scope, repoRel));
   if (inScope) return undefined; // allow-list hit
 

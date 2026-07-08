@@ -738,6 +738,33 @@ describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease a
     }
   });
 
+  // wi_260707cp7: a per-work-item run worktree checks out under
+  // .ditto/local/worktrees/<wi>/, mirroring the repo. The session roots at the OWNING
+  // workspace `dir`, so a worktree edit path carries a .ditto/local/worktrees/<wi>/
+  // prefix — which must be stripped for the file_scope comparison, or EVERY worktree
+  // write false-blocks (the bug forced DITTO_SKIP_HOOKS=1 workarounds).
+  test('ac-1: a worktree edit INSIDE the lease scope is allowed (worktree prefix must not false-block)', async () => {
+    const dir = await setup({ leaseScope: ['src/core/'] });
+    try {
+      const wtRel = `.ditto/local/worktrees/${WI}/src/core/active-node-lease.ts`;
+      expect((await edit(dir, wtRel)).exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('ac-2: a worktree edit OUTSIDE the lease scope still blocks (the fix must not over-allow)', async () => {
+    const dir = await setup({ leaseScope: ['src/core/'] });
+    try {
+      const wtRel = `.ditto/local/worktrees/${WI}/src/hooks/elsewhere.ts`;
+      const out = await edit(dir, wtRel);
+      expect(out.exitCode).toBe(2);
+      expect(out.stderr).toContain('autopilot-path');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test('derived-scope lease does NOT block (fallback scope is a concurrency heuristic, not an allow-list)', async () => {
     const dir = await setup({ leaseScope: ['src/core/'] });
     try {
