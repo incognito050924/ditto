@@ -97,6 +97,61 @@ describe('coverageTaxonomyConfig disposition override (tier-②)', () => {
   });
 });
 
+// wi_260707phi (ac-2/ac-3/ac-4) — taxonomy-management additive extensions:
+//  • disabled_reasons is an ADDITIVE SIBLING (id → reason), NOT a union-widen of
+//    `disabled`: `disabled` stays bare id[] so legacy configs parse unchanged AND
+//    an older ditto that only knows `disabled: string[]` still reads the ids
+//    (drops only the reasons) instead of fail-open dropping every override.
+//  • .passthrough() preserves config keys this schema version does not know about
+//    across a read-mutate-write round-trip (ac-2 "preserve unrelated fields").
+//  • duplicate added[].id is rejected — a dup id would seed two same-id coverage
+//    nodes → corrupts first-match lookup + breaks ac-2 idempotency (sweep #6).
+describe('coverageTaxonomyConfig taxonomy-management extensions (wi_260707phi)', () => {
+  test('disabled_reasons (id → reason) parses AND is preserved next to bare disabled id[]', () => {
+    const cfg = {
+      disabled: ['authentication'],
+      disabled_reasons: { authentication: 'in-process engine, no auth surface' },
+    };
+    const parsed = coverageTaxonomyConfig.parse(cfg);
+    expect(parsed.disabled).toEqual(['authentication']);
+    expect(parsed.disabled_reasons).toEqual({
+      authentication: 'in-process engine, no auth surface',
+    });
+  });
+
+  test('legacy bare-id[] disabled config still parses unchanged (ac-4 backward)', () => {
+    const parsed = coverageTaxonomyConfig.parse({ disabled: ['authentication'] });
+    expect(parsed.disabled).toEqual(['authentication']);
+    expect(parsed.disabled_reasons).toBeUndefined();
+  });
+
+  test('passthrough preserves an unknown config key across parse (ac-2)', () => {
+    const cfg = { disabled: ['authentication'], future_field: { nested: 'keep me' } };
+    const parsed = coverageTaxonomyConfig.parse(cfg) as Record<string, unknown>;
+    expect(parsed.future_field).toEqual({ nested: 'keep me' });
+  });
+
+  test('duplicate added[].id is rejected (id-uniqueness, sweep #6)', () => {
+    const cfg = {
+      added: [
+        { id: 'tenancy', lens: '테넌트 경계를 넘는 접근 A?' },
+        { id: 'tenancy', lens: '테넌트 경계를 넘는 접근 B?' },
+      ],
+    };
+    expect(coverageTaxonomyConfig.safeParse(cfg).success).toBe(false);
+  });
+
+  test('distinct added[].id values still parse (refine is not over-broad)', () => {
+    const cfg = {
+      added: [
+        { id: 'tenancy', lens: '테넌트 경계를 넘는 접근은?' },
+        { id: 'rate-limit', lens: '속도 제한 우회 경로는?' },
+      ],
+    };
+    expect(coverageTaxonomyConfig.safeParse(cfg).success).toBe(true);
+  });
+});
+
 // ── 2-mode oracle claim (ac-1) ──────────────────────────────────────────────
 // A claim is untrusted LLM output: the schema persists it RAW; decidability
 // (token shape + containment) is the n4 shape gate's call, not parse-time.

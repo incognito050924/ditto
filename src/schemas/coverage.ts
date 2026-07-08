@@ -434,6 +434,17 @@ export const coverageTaxonomyConfig = z
       .array(z.string().min(1))
       .optional()
       .describe('Floor category ids to turn off for this project (ac-10)'),
+    // wi_260707phi (ac-3/ac-4): additive SIBLING map (id → reason), NOT a
+    // union-widen of `disabled`. Keeping `disabled` a bare id[] means (a) legacy
+    // bare-id[] configs parse unchanged, and (b) an older ditto whose schema only
+    // knows `disabled: string[]` still reads the ids and merely ignores these
+    // reasons — whereas a union-widen would make the old schema's safeParse fail
+    // on the WHOLE config and fail-open, dropping EVERY override. A reason is
+    // optional per-id metadata; a disabled id without a reason stays valid.
+    disabled_reasons: z
+      .record(z.string().min(1), z.string().min(1))
+      .optional()
+      .describe('Optional disable justification per floor-category id (wi_260707phi, ac-3)'),
     added: z
       .array(
         z.object({
@@ -458,6 +469,24 @@ export const coverageTaxonomyConfig = z
       .optional()
       .describe('Floor-category id → disposition route override (tier-②, wi_260706n4w)'),
   })
+  // wi_260707phi (ac-2): preserve config keys this schema version does not know
+  // about. A read-parse-mutate-write round-trip must not strip a newer field the
+  // running ditto has not learned yet; default z.object() strips unknown keys.
+  .passthrough()
+  // wi_260707phi (sweep #6): reject duplicate added[].id. A duplicate id would
+  // later seed two coverage nodes with the same id → corrupts first-match node
+  // lookup and breaks ac-2 idempotency.
+  .refine(
+    (cfg) => {
+      const ids = (cfg.added ?? []).map((c) => c.id);
+      return ids.length === new Set(ids).size;
+    },
+    {
+      message:
+        'added[].id must be unique — a duplicate id seeds two coverage nodes with the same id (wi_260707phi)',
+      path: ['added'],
+    },
+  )
   .describe(
     'Tier-② project far-field taxonomy config (.ditto/coverage-taxonomy.json, git-tracked) — ac-10',
   );
