@@ -891,7 +891,16 @@ function bashWriteTargets(cmd: string): string[] {
   // in a typed command, so an index wrapped in it never collides with text.
   const P = String.fromCharCode(1);
   const spans: string[] = [];
-  const skeleton = cmd.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (q) => {
+  // Heredoc BODIES are DATA, not shell syntax (wi_260708ye6): a `>` inside a commit
+  // message passed via `git commit -F - <<'EOF' … EOF` is prose, and an angle-bracket
+  // placeholder like `<id>` is not an input+output redirect — both live FPs that
+  // blocked legitimate commits. Drop the body (keep the OPENER line, which can carry a
+  // real redirect) before the scan, mirroring the quoted-span handling below.
+  const deheredoc = cmd.replace(
+    /(<<-?\s*(['"]?)([A-Za-z_]\w*)\2[^\n]*)\n[\s\S]*?\n[ \t]*\3(?=\s|$)/g,
+    '$1',
+  );
+  const skeleton = deheredoc.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (q) => {
     spans.push(q.slice(1, -1));
     return `${P}${spans.length - 1}${P}`;
   });

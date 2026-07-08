@@ -418,6 +418,24 @@ describe('preToolUseHandler — ac-4 scope-out write', () => {
   test('a quoted INSIDE-repo redirect target stays allowed', async () => {
     expect((await bash('echo hi > "./build/out 1.txt"')).exitCode).toBe(0);
   });
+
+  // wi_260708ye6: a heredoc BODY is DATA, not shell syntax — a `>` inside a commit
+  // message passed via `git commit -F - <<'EOF' … EOF` is prose, and an angle-bracket
+  // placeholder like `<id>` is not an input+output redirect. Mirrors the quoted-span
+  // handling. The heredoc OPENER line is preserved (it can carry a real redirect).
+  test('a `>` inside a heredoc body is prose, not a redirect (commit-message FP via -F -)', async () => {
+    const msg =
+      "git commit -F - <<'EOF'\n" +
+      'fix: store writes under .ditto/work-items/<id>/ (Record base)\n' +
+      'a prose redirect example like > /tmp/elsewhere is not a real write\n' +
+      'EOF';
+    expect((await bash(msg)).exitCode).toBe(0);
+  });
+
+  test('a REAL redirect on the heredoc opener line is still caught (the fix must not over-relax)', async () => {
+    const cmd = "cat <<'EOF' > /var/data/x.txt\nbody line\nEOF";
+    expect((await bash(cmd)).exitCode).toBe(2);
+  });
 });
 
 // ac-3 (wi_260625k0w): the session is rooted at the WORKSPACE rooting root

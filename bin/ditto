@@ -45051,7 +45051,8 @@ async function checkMutatedPath(input, filePath) {
 function bashWriteTargets(cmd) {
   const P4 = String.fromCharCode(1);
   const spans = [];
-  const skeleton = cmd.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (q2) => {
+  const deheredoc = cmd.replace(/(<<-?\s*(['"]?)([A-Za-z_]\w*)\2[^\n]*)\n[\s\S]*?\n[ \t]*\3(?=\s|$)/g, "$1");
+  const skeleton = deheredoc.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (q2) => {
     spans.push(q2.slice(1, -1));
     return `${P4}${spans.length - 1}${P4}`;
   });
@@ -54700,4 +54701,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=4cb0bb878df464b78f3c28f1f8903fb11d08c8afaa4acedc1de7341babf4cfc4
+//# ditto-src-stamp=0f1a53985a47e966350fd7b6fe04df7c23b2e90526b8c2d80b5ed60836f5f960
