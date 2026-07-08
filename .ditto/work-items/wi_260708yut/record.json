@@ -217,25 +217,15 @@
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [
-    ".ditto/local/work-items/wi_260708yut/completion.json",
-    ".ditto/local/work-items/wi_260708yut/work-item.json",
-    ".ditto/memory/events/memevt_retro_0f73eda3d072c65f.json",
-    ".ditto/memory/events/memevt_retro_7a96c4f594622c56.json",
-    ".ditto/work-items/wi_26062227h/",
-    ".ditto/work-items/wi_260706aka/",
-    ".ditto/work-items/wi_260706d0i/",
-    ".ditto/work-items/wi_260706tu6/",
-    ".ditto/work-items/wi_260708700/",
-    ".ditto/work-items/wi_260708e1x/",
-    "reports/design/palimpsest-ditto-convergence-design.md",
     "src/core/prism/opponent.ts",
     "src/schemas/prism.ts",
-    "tests/core/prism-opponent.test.ts",
     "src/schemas/question-round.ts",
     "src/core/prism/store.ts",
     "src/cli/commands/prism.ts",
+    "tests/core/prism-opponent.test.ts",
     "tests/core/prism-store.test.ts",
-    "bin/ditto"
+    "bin/ditto",
+    "recipe.yaml"
   ],
   "worktrees": [],
   "declared_risk": {
