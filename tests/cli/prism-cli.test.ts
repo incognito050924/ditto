@@ -318,6 +318,53 @@ describe('ditto prism diverge — divergence emit is reachable from a shipped co
     expect(JSON.parse(res.stdout).verdict.action).toBe('continue');
     expect(await decisionKinds()).toHaveLength(0);
   });
+
+  // wi_2607075vc: the trivial_streak shape was CLI-unreachable — every --seen history
+  // entry was hardcoded trivial:false, so a streak could never reach TRIVIAL_STREAK_CAP.
+  // --seen-trivial carries prior trivial questions so the shape is reachable (ac-1).
+  test('a trivial-streak divergence is reachable via --seen-trivial (ac-1)', async () => {
+    const res = spawnDitto([
+      'prism',
+      'diverge',
+      '--wi',
+      WI,
+      '--question',
+      '이것도 사소한 질문?',
+      '--trivial',
+      '--seen-trivial',
+      '사소한 질문 1',
+      '--seen-trivial',
+      '사소한 질문 2',
+      '--output',
+      'json',
+    ]);
+    // trivial (current) + 2 prior trivial = streak 3 = TRIVIAL_STREAK_CAP → cap-stop.
+    expect(res.exitCode).not.toBe(0);
+    const payload = JSON.parse(res.stdout);
+    expect(payload.verdict.diverged).toBe(true);
+    expect(payload.verdict.kind).toBe('trivial_streak');
+  });
+
+  test('a trivial current question with only non-trivial --seen history does NOT falsely trigger the streak (ac-2)', async () => {
+    const res = spawnDitto([
+      'prism',
+      'diverge',
+      '--wi',
+      WI,
+      '--question',
+      '사소한 현재 질문?',
+      '--trivial',
+      '--seen',
+      '진지한 질문 1',
+      '--seen',
+      '진지한 질문 2',
+      '--output',
+      'json',
+    ]);
+    // streak = 1 (only the current trivial; non-trivial history breaks it) → continue.
+    expect(res.exitCode).toBe(0);
+    expect(JSON.parse(res.stdout).verdict.diverged).toBe(false);
+  });
 });
 
 describe('ditto prism seed — cap really stops growth (ac-10)', () => {

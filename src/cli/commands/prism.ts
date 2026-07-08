@@ -271,7 +271,15 @@ const prismDivergeCommand = defineCommand({
     wi: { type: 'string', description: 'Work item id (wi_*)' },
     question: { type: 'string', description: 'The current question signature (question round)' },
     trivial: { type: 'boolean', description: 'Mark the current question trivial', default: false },
-    seen: { type: 'string', description: 'A prior question signature (repeatable) — history' },
+    seen: {
+      type: 'string',
+      description: 'A prior question signature (repeatable) — non-trivial history',
+    },
+    'seen-trivial': {
+      type: 'string',
+      description:
+        'A prior TRIVIAL question signature (repeatable) — appended to the history tail; the trivial_streak shape counts consecutive trivial entries at the tail, so these make it CLI-reachable (wi_2607075vc)',
+    },
     'challenge-of': {
       type: 'string',
       description: 'Decided node id being re-challenged (challenge round)',
@@ -319,10 +327,14 @@ const prismDivergeCommand = defineCommand({
           },
         }
       : { question: { signature: args.question as string, trivial: args.trivial } };
-    const history: PrismRoundSignature[] = asArray(args.seen).map((signature) => ({
-      signature,
-      trivial: false,
-    }));
+    // Non-trivial history first, then the trivial ones at the tail: detectDivergence
+    // counts consecutive trivial entries from the tail, so --seen-trivial is what makes
+    // the trivial_streak shape reachable (wi_2607075vc — previously all history was
+    // hardcoded trivial:false, so the streak could never reach TRIVIAL_STREAK_CAP).
+    const history: PrismRoundSignature[] = [
+      ...asArray(args.seen).map((signature) => ({ signature, trivial: false })),
+      ...asArray(args['seen-trivial']).map((signature) => ({ signature, trivial: true })),
+    ];
     const repoRoot = await resolveRepoRootForCreate();
     const store = new PrismStore(repoRoot);
     try {

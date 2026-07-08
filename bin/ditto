@@ -50178,7 +50178,11 @@ var prismDivergeCommand = defineCommand({
     wi: { type: "string", description: "Work item id (wi_*)" },
     question: { type: "string", description: "The current question signature (question round)" },
     trivial: { type: "boolean", description: "Mark the current question trivial", default: false },
-    seen: { type: "string", description: "A prior question signature (repeatable) \u2014 history" },
+    seen: { type: "string", description: "A prior question signature (repeatable) \u2014 non-trivial history" },
+    "seen-trivial": {
+      type: "string",
+      description: "A prior TRIVIAL question signature (repeatable) \u2014 appended to the history tail; the trivial_streak shape counts consecutive trivial entries at the tail, so these make it CLI-reachable (wi_2607075vc)"
+    },
     "challenge-of": {
       type: "string",
       description: "Decided node id being re-challenged (challenge round)"
@@ -50224,10 +50228,10 @@ var prismDivergeCommand = defineCommand({
         new_evidence: args["new-evidence"]
       }
     } : { question: { signature: args.question, trivial: args.trivial } };
-    const history = asArray3(args.seen).map((signature2) => ({
-      signature: signature2,
-      trivial: false
-    }));
+    const history = [
+      ...asArray3(args.seen).map((signature2) => ({ signature: signature2, trivial: false })),
+      ...asArray3(args["seen-trivial"]).map((signature2) => ({ signature: signature2, trivial: true }))
+    ];
     const repoRoot = await resolveRepoRootForCreate();
     const store = new PrismStore(repoRoot);
     try {
@@ -54685,4 +54689,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=f78bc5c91fc581d909f8290d235f24c64fbf3dae4788d081235d78c776e64802
+//# ditto-src-stamp=9ede5b2d3c019d968524edd4cdde8dda1f376e5ecc7643ed53c4ddb758a53c58

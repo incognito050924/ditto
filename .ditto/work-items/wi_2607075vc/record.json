@@ -1,0 +1,48 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607075vc",
+  "title": "bug: prism 발산 감지: trivial_streak shape가 'ditto prism diverge' CLI로 도달 불가 — --seen 히스토리 엔트리가 trivial:false 하드코딩(src/cli/commands/prism.ts:249)이라 streak가 3에 못 미침. repeat_question·decided_conflict 2 shap",
+  "source_request": "Discovered while working on wi_260707oi1: prism 발산 감지: trivial_streak shape가 'ditto prism diverge' CLI로 도달 불가 — --seen 히스토리 엔트리가 trivial:false 하드코딩(src/cli/commands/prism.ts:249)이라 streak가 3에 못 미침. repeat_question·decided_conflict 2 shape는 발화·persist 실증됨. trivial_streak는 detectDivergence(engine.ts:310) 결정적+unit 테스트되나 shipped 표면 미도달. 수정: --seen에 per-entry trivial 플래그 허용 또는 별도 라운드 입력.",
+  "goal": "Fix: prism 발산 감지: trivial_streak shape가 'ditto prism diverge' CLI로 도달 불가 — --seen 히스토리 엔트리가 trivial:false 하드코딩(src/cli/commands/prism.ts:249)이라 streak가 3에 못 미침. repeat_question·decided_conflict 2 shape는 발화·persist 실증됨. trivial_streak는 detectDivergence(engine.ts:310) 결정적+unit 테스트되나 shipped 표면 미도달. 수정: --seen에 per-entry trivial 플래그 허용 또는 별도 라운드 입력.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "ditto prism diverge --wi <wi> --question q --trivial --seen-trivial s1 --seen-trivial s2 실행이 diverged=true·kind=trivial_streak 판정을 출력하고 non-zero exit code로 종료한다 (trivial_streak shape가 CLI로 도달 가능)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/prism-cli.test.ts -t trivial-streak divergence is reachable",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "ditto prism diverge --wi <wi> --question q --trivial --seen s1 --seen s2 (non-trivial seen만) 실행은 diverged=false를 출력하고 exit 0으로 종료한다 (오발동 없음)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/prism-cli.test.ts -t does NOT falsely trigger",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/cli/commands/prism.ts",
+    "tests/cli/prism-cli.test.ts",
+    "bin/ditto"
+  ],
+  "worktrees": [],
+  "discovered_by": "wi_260707oi1",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-07T15:57:20.284Z",
+  "updated_at": "2026-07-08T08:11:51.588Z",
+  "closed_at": "2026-07-08T08:11:51.587Z"
+}
