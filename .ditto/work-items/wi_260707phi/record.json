@@ -3,23 +3,591 @@
   "id": "wi_260707phi",
   "title": "follow-up: tier-② config로 프로젝트별 disposition override UX",
   "source_request": "Out-of-scope follow-up discovered while working on wi_260706n4w: tier-② config로 프로젝트별 disposition override UX",
-  "goal": "tier-② config로 프로젝트별 disposition override UX",
+  "goal": "far-field pre-mortem 카테고리(taxonomy) 큐레이션의 인지비용을 낮추는 사람용 표면(스킬+CLI)을 만든다: ① 코드베이스 근거로 범용 floor가 못 덮는 프로젝트 특유 카테고리를 발견하고, ② 유효 taxonomy 조회·add·disable·re-route를 관리하며, ③ 발견 후보를 근거와 함께 능동 제안하고 사용자 확인 후 .ditto/coverage-taxonomy.json에 안전하게 반영한다. 기존 override 병합엔진(resolveTaxonomy)·relevance-judge·breadth-귀속·memory-entanglement를 재사용해 신규 엔진을 최소화한다.",
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "TBD — derive observable criteria during interview/planning",
-      "verdict": "unverified",
-      "evidence": []
+      "statement": "ditto coverage 하위 명령으로 현재 유효 taxonomy(floor+override 병합 결과: id+lens+disposition)를 조회할 수 있고, floor-only와 override 적용분을 구분해 보여준다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260707phi/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/coverage-taxonomy-cli.test.ts",
+          "summary": "19 pass/0 fail — each command wired to core, disable --reason gate, discover gap-only propose-no-mutation"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin && isolated bin/ditto smoke",
+          "summary": "add writes config; disable w/o --reason exit 65; discover propose admits gap/drops reconfirm/no mutation"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4193 pass/13 skip/5 fail (5 pre-existing env)"
+        },
+        {
+          "kind": "artifact",
+          "path": "src/cli/commands/coverage.ts",
+          "summary": "5 taxonomy subcommands wired to cores; commit aa0bf3a"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts tests/cli/coverage-taxonomy-cli.test.ts tests/schemas/oracle-coverage.test.ts",
+          "summary": "114 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage add/disable/reroute/list in /tmp/phi-verify scratch",
+          "summary": "write-back reflected on reload; disable×2 sha256 identical (idempotent); passthrough preserves unknown+added; disable --reason→disabled_reasons; legacy bare-id[] parses"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage reroute (dup added.id) + list (corrupt config)",
+          "summary": "invalid mutation exit 1 sha unchanged (fail-closed); malformed read warns to stderr + floor fallback (onMalformed live)"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "add/disable/re-route 명령이 .ditto/coverage-taxonomy.json에 write-back하며, resolveTaxonomy로 재로드 시 반영된다; 무관 기존 필드는 보존되고 재실행이 멱등이다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260707phi/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts",
+          "summary": "45 pass/0 fail exit 0 — write-back fail-closed/idempotent/preserve-fields, disable reason, onMalformed warn+fail-open"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4174 pass/13 skip/5 fail (5 pre-existing env, none import the 3 modules)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome 697 files, no fixes, exit 0"
+        },
+        {
+          "kind": "artifact",
+          "path": "src/core/coverage-taxonomy.ts",
+          "summary": "applyTaxonomyMutation + warnMalformedTaxonomy; onMalformed wired at 2 callers; commit ab07a67"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/coverage-taxonomy-cli.test.ts",
+          "summary": "19 pass/0 fail — each command wired to core, disable --reason gate, discover gap-only propose-no-mutation"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin && isolated bin/ditto smoke",
+          "summary": "add writes config; disable w/o --reason exit 65; discover propose admits gap/drops reconfirm/no mutation"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4193 pass/13 skip/5 fail (5 pre-existing env)"
+        },
+        {
+          "kind": "artifact",
+          "path": "src/cli/commands/coverage.ts",
+          "summary": "5 taxonomy subcommands wired to cores; commit aa0bf3a"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260707phi/reviewer-output.json",
+          "summary": "verdict pass, findings []"
+        },
+        {
+          "kind": "command",
+          "command": "ditto acg-review",
+          "summary": "high_risk_without_evidence: 0, exit 0 — Stop gate will not block"
+        },
+        {
+          "kind": "note",
+          "summary": "onMalformed wired at all 3 loadFarFieldTaxonomy call sites (coverage-loop.ts:297, interview-driver.ts:82, coverage.ts:438) — 3×-recurring dead-wire closed"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts tests/cli/coverage-taxonomy-cli.test.ts tests/schemas/oracle-coverage.test.ts",
+          "summary": "114 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage add/disable/reroute/list in /tmp/phi-verify scratch",
+          "summary": "write-back reflected on reload; disable×2 sha256 identical (idempotent); passthrough preserves unknown+added; disable --reason→disabled_reasons; legacy bare-id[] parses"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage reroute (dup added.id) + list (corrupt config)",
+          "summary": "invalid mutation exit 1 sha unchanged (fail-closed); malformed read warns to stderr + floor fallback (onMalformed live)"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "write-back은 기록 전 zod 검증을 통과해야 하며 실패 시 파일을 쓰지 않고 오류를 알린다(조용한 malformed·fail-open 방지)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260707phi/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/oracle-coverage.test.ts",
+          "summary": "RED 47 pass/3 fail before impl → GREEN 50 pass/0 fail after; 4 required cases pass"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4151 pass/13 skip/5 fail (exit 1); 5 fail are pre-existing env failures (.ditto/local absent), proven no-regression by revert+reproduce"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome check src tests scripts — 695 files, no fixes, exit 0"
+        },
+        {
+          "kind": "artifact",
+          "path": "src/schemas/coverage.ts",
+          "summary": "disabled_reasons sibling + passthrough + added id-uniqueness refine; commit 0daa8ec"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts",
+          "summary": "45 pass/0 fail exit 0 — write-back fail-closed/idempotent/preserve-fields, disable reason, onMalformed warn+fail-open"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4174 pass/13 skip/5 fail (5 pre-existing env, none import the 3 modules)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome 697 files, no fixes, exit 0"
+        },
+        {
+          "kind": "artifact",
+          "path": "src/core/coverage-taxonomy.ts",
+          "summary": "applyTaxonomyMutation + warnMalformedTaxonomy; onMalformed wired at 2 callers; commit ab07a67"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260707phi/reviewer-output.json",
+          "summary": "verdict pass, findings []"
+        },
+        {
+          "kind": "command",
+          "command": "ditto acg-review",
+          "summary": "high_risk_without_evidence: 0, exit 0 — Stop gate will not block"
+        },
+        {
+          "kind": "note",
+          "summary": "onMalformed wired at all 3 loadFarFieldTaxonomy call sites (coverage-loop.ts:297, interview-driver.ts:82, coverage.ts:438) — 3×-recurring dead-wire closed"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts tests/cli/coverage-taxonomy-cli.test.ts tests/schemas/oracle-coverage.test.ts",
+          "summary": "114 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage add/disable/reroute/list in /tmp/phi-verify scratch",
+          "summary": "write-back reflected on reload; disable×2 sha256 identical (idempotent); passthrough preserves unknown+added; disable --reason→disabled_reasons; legacy bare-id[] parses"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage reroute (dup added.id) + list (corrupt config)",
+          "summary": "invalid mutation exit 1 sha unchanged (fail-closed); malformed read warns to stderr + floor fallback (onMalformed live)"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "disable은 사유(문자열)를 요구하고 그 사유가 override 파일에 함께 기록된다; 기존 bare-id[] disabled config는 여전히 파싱된다(additive-optional)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260707phi/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/oracle-coverage.test.ts",
+          "summary": "RED 47 pass/3 fail before impl → GREEN 50 pass/0 fail after; 4 required cases pass"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4151 pass/13 skip/5 fail (exit 1); 5 fail are pre-existing env failures (.ditto/local absent), proven no-regression by revert+reproduce"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome check src tests scripts — 695 files, no fixes, exit 0"
+        },
+        {
+          "kind": "artifact",
+          "path": "src/schemas/coverage.ts",
+          "summary": "disabled_reasons sibling + passthrough + added id-uniqueness refine; commit 0daa8ec"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts",
+          "summary": "45 pass/0 fail exit 0 — write-back fail-closed/idempotent/preserve-fields, disable reason, onMalformed warn+fail-open"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4174 pass/13 skip/5 fail (5 pre-existing env, none import the 3 modules)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "biome 697 files, no fixes, exit 0"
+        },
+        {
+          "kind": "artifact",
+          "path": "src/core/coverage-taxonomy.ts",
+          "summary": "applyTaxonomyMutation + warnMalformedTaxonomy; onMalformed wired at 2 callers; commit ab07a67"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-taxonomy.test.ts tests/cli/coverage-taxonomy-cli.test.ts tests/schemas/oracle-coverage.test.ts",
+          "summary": "114 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage add/disable/reroute/list in /tmp/phi-verify scratch",
+          "summary": "write-back reflected on reload; disable×2 sha256 identical (idempotent); passthrough preserves unknown+added; disable --reason→disabled_reasons; legacy bare-id[] parses"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage reroute (dup added.id) + list (corrupt config)",
+          "summary": "invalid mutation exit 1 sha unchanged (fail-closed); malformed read warns to stderr + floor fallback (onMalformed live)"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "발견 명령이 코드베이스 근거로 add 후보 카테고리를 제안하며, 각 후보는 검증 가능한 코드 인용(파일:라인 또는 의존성)을 동반한다; 근거 없는 후보는 내지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260707phi/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test ./tests/core/coverage-discovery.test.ts",
+          "summary": "16 pass/0 fail — gap-only accept/drop, evidence reject, non-blanket-reject contrast"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4174 pass/5 fail (5 pre-existing env, none reference discovery/feedback)"
+        },
+        {
+          "kind": "artifact",
+          "path": "src/core/coverage-discovery.ts",
+          "summary": "admitDiscoveredCategories gap-only+evidence-bound+project-scoped; commit 0cab4cf"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/coverage-taxonomy-cli.test.ts",
+          "summary": "19 pass/0 fail — each command wired to core, disable --reason gate, discover gap-only propose-no-mutation"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin && isolated bin/ditto smoke",
+          "summary": "add writes config; disable w/o --reason exit 65; discover propose admits gap/drops reconfirm/no mutation"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4193 pass/13 skip/5 fail (5 pre-existing env)"
+        },
+        {
+          "kind": "artifact",
+          "path": "src/cli/commands/coverage.ts",
+          "summary": "5 taxonomy subcommands wired to cores; commit aa0bf3a"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260707phi/reviewer-output.json",
+          "summary": "verdict pass, findings []"
+        },
+        {
+          "kind": "command",
+          "command": "ditto acg-review",
+          "summary": "high_risk_without_evidence: 0, exit 0 — Stop gate will not block"
+        },
+        {
+          "kind": "note",
+          "summary": "onMalformed wired at all 3 loadFarFieldTaxonomy call sites (coverage-loop.ts:297, interview-driver.ts:82, coverage.ts:438) — 3×-recurring dead-wire closed"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage discover --file candidates-combined.json --output json (scratch)",
+          "summary": "grounded admitted, ungrounded no_evidence dropped, floor authentication reconfirms_covered dropped"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage discover (no --confirm vs --confirm) + list",
+          "summary": "no-confirm: no file created; --confirm: supply-chain written + read back status:added (ac-7)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin && build:plugin && build:codex-plugin + validate-skill",
+          "summary": "all OK; 4 artifacts on both hosts; validator OK exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-discovery.test.ts tests/cli/coverage-taxonomy-cli.test.ts",
+          "summary": "16/0 + 19/0"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "발견은 gap-only — 코드 신호가 있는데 그를 덮는 floor 렌즈가 없는 경우만 제안하고 기존 floor를 재확인하는 잡음을 내지 않는다; relevance/breadth 재사용으로 근거 결박",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260707phi/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test ./tests/core/coverage-discovery.test.ts",
+          "summary": "16 pass/0 fail — gap-only accept/drop, evidence reject, non-blanket-reject contrast"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4174 pass/5 fail (5 pre-existing env, none reference discovery/feedback)"
+        },
+        {
+          "kind": "artifact",
+          "path": "src/core/coverage-discovery.ts",
+          "summary": "admitDiscoveredCategories gap-only+evidence-bound+project-scoped; commit 0cab4cf"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/coverage-taxonomy-cli.test.ts",
+          "summary": "19 pass/0 fail — each command wired to core, disable --reason gate, discover gap-only propose-no-mutation"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin && isolated bin/ditto smoke",
+          "summary": "add writes config; disable w/o --reason exit 65; discover propose admits gap/drops reconfirm/no mutation"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4193 pass/13 skip/5 fail (5 pre-existing env)"
+        },
+        {
+          "kind": "artifact",
+          "path": "src/cli/commands/coverage.ts",
+          "summary": "5 taxonomy subcommands wired to cores; commit aa0bf3a"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage discover --file candidates-combined.json --output json (scratch)",
+          "summary": "grounded admitted, ungrounded no_evidence dropped, floor authentication reconfirms_covered dropped"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage discover (no --confirm vs --confirm) + list",
+          "summary": "no-confirm: no file created; --confirm: supply-chain written + read back status:added (ac-7)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin && build:plugin && build:codex-plugin + validate-skill",
+          "summary": "all OK; 4 artifacts on both hosts; validator OK exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-discovery.test.ts tests/cli/coverage-taxonomy-cli.test.ts",
+          "summary": "16/0 + 19/0"
+        }
+      ]
+    },
+    {
+      "id": "ac-7",
+      "statement": "제안은 propose→confirm — 사용자 확정 없이는 taxonomy를 변경하지 않으며, 확정 시 ac-2 write-back 경로로 반영된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260707phi/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/coverage-taxonomy-cli.test.ts",
+          "summary": "19 pass/0 fail — each command wired to core, disable --reason gate, discover gap-only propose-no-mutation"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin && isolated bin/ditto smoke",
+          "summary": "add writes config; disable w/o --reason exit 65; discover propose admits gap/drops reconfirm/no mutation"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4193 pass/13 skip/5 fail (5 pre-existing env)"
+        },
+        {
+          "kind": "artifact",
+          "path": "src/cli/commands/coverage.ts",
+          "summary": "5 taxonomy subcommands wired to cores; commit aa0bf3a"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage discover --file candidates-combined.json --output json (scratch)",
+          "summary": "grounded admitted, ungrounded no_evidence dropped, floor authentication reconfirms_covered dropped"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage discover (no --confirm vs --confirm) + list",
+          "summary": "no-confirm: no file created; --confirm: supply-chain written + read back status:added (ac-7)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin && build:plugin && build:codex-plugin + validate-skill",
+          "summary": "all OK; 4 artifacts on both hosts; validator OK exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-discovery.test.ts tests/cli/coverage-taxonomy-cli.test.ts",
+          "summary": "16/0 + 19/0"
+        }
+      ]
+    },
+    {
+      "id": "ac-8",
+      "statement": "발견·관리·제안을 사람이 쓰는 스킬 표면(/ditto:<name>)으로 제공하고 양 호스트 플러그인에 빌드된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260707phi/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "node skills/ditto-skill-creator/scripts/validate-skill.mjs skills/coverage-taxonomy/SKILL.md",
+          "summary": "OK exit 0 — skill contract valid"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin && dist artifact check",
+          "summary": "build exit 0; all 4 skill/agent artifacts ship to both hosts; catalog 46→48"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4195 pass/13 skip/5 fail (5 pre-existing env); the 4 count-pin edits red→green"
+        },
+        {
+          "kind": "artifact",
+          "path": "skills/coverage-taxonomy/SKILL.md",
+          "summary": "/ditto:coverage-taxonomy skill + coverage-discovery agent; commit ba9dd28"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260707phi/reviewer-output.json",
+          "summary": "verdict pass, findings []"
+        },
+        {
+          "kind": "command",
+          "command": "ditto acg-review",
+          "summary": "high_risk_without_evidence: 0, exit 0 — Stop gate will not block"
+        },
+        {
+          "kind": "note",
+          "summary": "onMalformed wired at all 3 loadFarFieldTaxonomy call sites (coverage-loop.ts:297, interview-driver.ts:82, coverage.ts:438) — 3×-recurring dead-wire closed"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage discover --file candidates-combined.json --output json (scratch)",
+          "summary": "grounded admitted, ungrounded no_evidence dropped, floor authentication reconfirms_covered dropped"
+        },
+        {
+          "kind": "command",
+          "command": "ditto coverage discover (no --confirm vs --confirm) + list",
+          "summary": "no-confirm: no file created; --confirm: supply-chain written + read back status:added (ac-7)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run build:bin && build:plugin && build:codex-plugin + validate-skill",
+          "summary": "all OK; 4 artifacts on both hosts; validator OK exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/coverage-discovery.test.ts tests/cli/coverage-taxonomy-cli.test.ts",
+          "summary": "16/0 + 19/0"
+        }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
-  "changed_files": [],
+  "changed_files": [
+    "src/schemas/coverage.ts",
+    "tests/schemas/oracle-coverage.test.ts",
+    "src/core/coverage-discovery.ts",
+    "tests/core/coverage-discovery.test.ts",
+    "src/core/coverage-taxonomy.ts",
+    "src/core/coverage-loop.ts",
+    "src/core/interview-driver.ts",
+    "tests/core/coverage-taxonomy.test.ts",
+    "src/cli/commands/coverage.ts",
+    "tests/cli/coverage-taxonomy-cli.test.ts",
+    "skills/coverage-taxonomy/SKILL.md",
+    "agents/coverage-discovery.md",
+    "tests/host/claude/agents.surface.test.ts",
+    "tests/core/agent-projection.test.ts",
+    "tests/host/codex/build.surface.test.ts",
+    "tests/core/surface-inventory.plugin.test.ts"
+  ],
   "worktrees": [],
+  "follow_ups": [
+    {
+      "kind": "bug",
+      "note": "tidy false-positive: collectTidyDiffStat(src/acg/tidy/classifier.ts:131)가 git diff base...HEAD를 cwd=MAIN repoRoot에서 계산 → 동시 세션이 main HEAD를 전진시키면(예: prism 커밋) 무관 파일이 가짜 refactor(tidy) 노드로 seed됨. worktree 기반 WI에서 매 implement pass마다 무관 파일 대상 tidy 노드가 생겨 제거해야 함. base(started_at_sha)는 정확; 결함은 diff를 worktree가 아닌 main repoRoot에서 계산하는 것. 수정: tidy diff-stat을 worktree cwd/HEAD 기준으로 계산.",
+      "materialized_wi": "wi_260708yyf"
+    }
+  ],
   "discovered_by": "wi_260706n4w",
   "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260707phi",
+    "fresh_evidence_needed": [
+      "land aborted — 66 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_260705lc8/events/000000.workspace-write.051bf4df2e24.json, .ditto/work-items/wi_260705lc8/events/000001.workspace-write.fc21cf528d15.json, .ditto/work-items/wi_260705lc8/record.json, .ditto/work-items/wi_2607069bk/record.json, .ditto/work-items/wi_260706zha/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260706zha/record.json, .ditto/work-items/wi_2607074rs/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607074rs/events/000001.workspace-write.dd8500ba3ac8.json, .ditto/work-items/wi_2607074rs/events/000002.workspace-write.c102c12021ff.json, .ditto/work-items/wi_2607074rs/events/000003.workspace-write.7e49878b5f3b.json, .ditto/work-items/wi_2607074rs/events/000004.workspace-write.43e3519f2b2e.json, .ditto/work-items/wi_2607074rs/record.json, .ditto/work-items/wi_260707loq/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260707loq/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260707loq/events/000002.workspace-write.6fefd16e4d57.json, .ditto/work-items/wi_260707loq/events/000003.workspace-write.b78b36e22031.json, .ditto/work-items/wi_260707loq/events/000004.workspace-write.61bd50f62314.json, .ditto/work-items/wi_260707loq/events/000005.workspace-write.8998aa11410e.json, .ditto/work-items/wi_260707loq/events/000006.workspace-write.b93e1d73f0cf.json, .ditto/work-items/wi_260707loq/events/000007.workspace-write.8828e26e7bc1.json, .ditto/work-items/wi_260707loq/events/000008.workspace-write.431041fc0df5.json, .ditto/work-items/wi_260707loq/events/000009.workspace-write.e0d59f2fb17b.json, .ditto/work-items/wi_260707loq/events/000010.workspace-write.9262ca74aa3d.json, .ditto/work-items/wi_260707loq/events/000011.workspace-write.67fe27df4993.json, .ditto/work-items/wi_260707loq/events/000012.workspace-write.e35c38feb67d.json, .ditto/work-items/wi_260707loq/events/000013.workspace-write.15c9f5e818fe.json, .ditto/work-items/wi_260707loq/events/000014.workspace-write.434424fa9d35.json, .ditto/work-items/wi_260707loq/events/000015.workspace-write.e4cbb9c52988.json, .ditto/work-items/wi_260707loq/events/000016.workspace-write.a75bd4c00738.json, .ditto/work-items/wi_260707loq/events/000017.workspace-write.5ef8fff971ab.json, .ditto/work-items/wi_260707loq/events/000018.workspace-write.c275a29907f4.json, .ditto/work-items/wi_260707loq/events/000019.workspace-write.82d1d821d7e4.json, .ditto/work-items/wi_260707loq/events/000020.workspace-write.072249a325eb.json, .ditto/work-items/wi_260707loq/events/000021.workspace-write.4c7732ac2eaf.json, .ditto/work-items/wi_260707loq/events/000022.workspace-write.35d39319ae35.json, .ditto/work-items/wi_260707loq/record.json, .ditto/work-items/wi_260707oi1/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260707oi1/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260707oi1/events/000002.workspace-write.3e642c91c99e.json, .ditto/work-items/wi_260707oi1/record.json, .ditto/work-items/wi_260707phi/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260707phi/events/000002.workspace-write.c8b14f6ad535.json, .ditto/work-items/wi_260707phi/events/000003.workspace-write.47487de2ec91.json, .ditto/work-items/wi_260707phi/events/000004.workspace-write.d82c9ecc358e.json, .ditto/work-items/wi_260707phi/events/000005.workspace-write.efd2c2d2a0f7.json, .ditto/work-items/wi_260707phi/events/000006.workspace-write.12e1f37d4af4.json, .ditto/work-items/wi_260707phi/events/000007.workspace-write.dc8f28033d41.json, .ditto/work-items/wi_260707phi/events/000008.workspace-write.36377a683871.json, .ditto/work-items/wi_260707phi/events/000009.workspace-write.7b76cd404a36.json, .ditto/work-items/wi_260707phi/record.json, .ditto/work-items/wi_2607082xk/events/000000.read-only.199ef11fd56c.json, .ditto/work-items/wi_2607082xk/record.json, .ditto/work-items/wi_2607084du/record.json, .ditto/work-items/wi_260708ort/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708ort/events/000001.workspace-write.d76e6498bbc1.json, .ditto/work-items/wi_260708ort/record.json, .ditto/work-items/wi_260708qcn/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708qcn/events/000001.workspace-write.3ba80be90bd0.json, .ditto/work-items/wi_260708qcn/events/000002.workspace-write.d9ae8774622a.json, .ditto/work-items/wi_260708qcn/events/000003.workspace-write.fd39cae10471.json, .ditto/work-items/wi_260708qcn/events/000004.workspace-write.e58cc3b4b84d.json, .ditto/work-items/wi_260708qcn/record.json, console.txt, console2.txt, reports/design/prism-convergence-quality-gaps.md, reports/research/prism-epistemology-research.md. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
   "runs": [],
+  "started_at_sha": "6795f5c421868afd9f56a3997b87e2c403f37739",
   "created_at": "2026-07-07T06:43:02.997Z",
-  "updated_at": "2026-07-07T06:43:02.997Z"
+  "updated_at": "2026-07-08T10:26:12.455Z",
+  "closed_at": "2026-07-08T10:26:12.453Z"
 }

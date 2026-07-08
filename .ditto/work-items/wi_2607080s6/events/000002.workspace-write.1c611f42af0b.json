@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607080s6",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "1c611f42af0b4a6caf1722036e5c27309534321b5ec76124e7142fe95abff85b",
+  "ts": "2026-07-08T10:50:37.777Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c test -f skills/coverage-taxonomy/GUIDE.md && grep -q \"\\*\\*Purpose\\*\\*\" skills/coverage-taxonomy/GUIDE.md && grep -q \"\\*\\*Consumer\\*\\*\" skills/coverage-taxonomy/GUIDE.md && grep -q \"Authority is code\" skills/coverage-taxonomy/GUIDE.md && grep -q \"Update this guide\" skills/coverage-taxonomy/GUIDE.md && bad=$(grep -oE \"ditto coverage [a-z]+\" skills/coverage-taxonomy/GUIDE.md | grep -vwE \"list|add|disable|reroute|discover\"); test -z \"$bad\" && echo HEADERS_OK_NO_INVALID_CMD || { echo \"INVALID: $bad\"; exit 1; }",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

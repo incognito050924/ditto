@@ -1,0 +1,89 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260707phi",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "47487de2ec9194438d7fde1466156e72b08d473aab4b03b7369fc356d391b62a",
+  "ts": "2026-07-08T10:23:01.244Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260707phi/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/coverage-taxonomy.test.ts",
+        "summary": "45 pass/0 fail exit 0 — write-back fail-closed/idempotent/preserve-fields, disable reason, onMalformed warn+fail-open"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "4174 pass/13 skip/5 fail (5 pre-existing env, none import the 3 modules)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run lint",
+        "summary": "biome 697 files, no fixes, exit 0"
+      },
+      {
+        "kind": "artifact",
+        "path": "src/core/coverage-taxonomy.ts",
+        "summary": "applyTaxonomyMutation + warnMalformedTaxonomy; onMalformed wired at 2 callers; commit ab07a67"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/coverage-taxonomy-cli.test.ts",
+        "summary": "19 pass/0 fail — each command wired to core, disable --reason gate, discover gap-only propose-no-mutation"
+      },
+      {
+        "kind": "command",
+        "command": "bun run build:bin && isolated bin/ditto smoke",
+        "summary": "add writes config; disable w/o --reason exit 65; discover propose admits gap/drops reconfirm/no mutation"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "4193 pass/13 skip/5 fail (5 pre-existing env)"
+      },
+      {
+        "kind": "artifact",
+        "path": "src/cli/commands/coverage.ts",
+        "summary": "5 taxonomy subcommands wired to cores; commit aa0bf3a"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260707phi/reviewer-output.json",
+        "summary": "verdict pass, findings []"
+      },
+      {
+        "kind": "command",
+        "command": "ditto acg-review",
+        "summary": "high_risk_without_evidence: 0, exit 0 — Stop gate will not block"
+      },
+      {
+        "kind": "note",
+        "summary": "onMalformed wired at all 3 loadFarFieldTaxonomy call sites (coverage-loop.ts:297, interview-driver.ts:82, coverage.ts:438) — 3×-recurring dead-wire closed"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/coverage-taxonomy.test.ts tests/cli/coverage-taxonomy-cli.test.ts tests/schemas/oracle-coverage.test.ts",
+        "summary": "114 pass/0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "ditto coverage add/disable/reroute/list in /tmp/phi-verify scratch",
+        "summary": "write-back reflected on reload; disable×2 sha256 identical (idempotent); passthrough preserves unknown+added; disable --reason→disabled_reasons; legacy bare-id[] parses"
+      },
+      {
+        "kind": "command",
+        "command": "ditto coverage reroute (dup added.id) + list (corrupt config)",
+        "summary": "invalid mutation exit 1 sha unchanged (fail-closed); malformed read warns to stderr + floor fallback (onMalformed live)"
+      }
+    ]
+  }
+}

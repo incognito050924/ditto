@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_feea95ec7664d0b9",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] 이 도구가 훗날 네트워크·다중사용자 표면으로 노출되면 config write-back에 인증 게이트가 없다 — 현재 스코프엔 그런 진입점이 없다.\n[residual] repo 쓰기 권한을 가진 로컬 행위자의 taxonomy 편집을 코드가 막지 않는다 — 이 변경이 바꾸지 않는 기존 git 신뢰경계다.\n[residual] 훗날 disable을 특정 역할로 제한하려면 모델이 미정이나, 이 변경 의도에 그런 요구는 없다.\n[residual] 매우 큰 코드베이스에서 discovery가 느려질 수 있으나 정상 부하에서 고갈되는 용량 한계는 없다.\n[residual] 로컬 범위 내 없음 — 악의적 로컬 행위자는 이미 repo 쓰기 권한을 가진 더 넓은 신뢰경계다.\n[residual] 사용자가 lens/reason 자유텍스트에 시크릿을 직접 입력하면 git 평문 커밋되나, 이 변경은 설계상 자격증명을 수집·처리하지 않는다. (discovery 코어 착지 후 재확인)\n[residual] 자유텍스트에 사용자가 개인정보를 입력하면 git 평문에 남을 수 있으나, 이 도구는 개인데이터를 요청·처리하지 않는다.\n[residual] 스코프 내 없음 — lens가 규제 도메인 규칙을 담더라도 콘텐츠이지 이 도구의 컴플라이언스 의무가 아니다.\n[residual] 훗날 카테고리 staleness 타임스탬프를 추가하면 시계 의존이 생기나, 이 변경엔 그런 필드가 없다.\n[close_reason] 로컬 dev-tooling CLI+라이브러리 변경으로 인증 진입 경로가 스코프에 없다. 유일한 I/O는 로컬 git-tracked JSON 읽기/쓰기다.\n[close_reason] 코드가 강제하는 권한 검사 경로가 스코프에 없다. taxonomy 편집 권한은 기존 git 신뢰경계가 통제하고 propose→confirm은 접근제어가 아닌 UX 게이트다.\n[close_reason] 이 변경은 인가 모델(RBAC/ABAC/테넌트)을 도입하지 않는다. config 편집 권한은 repo git 접근이며 새 권한 모델이 없다.\n[close_reason] 로컬 일회성 CLI+작은 config+스코프 한정 discovery로 부하 증가 시 고갈되는 자원 풀·쿼터·스케일 표면이 없다.\n[close_reason] 네트워크/다중테넌트/공유 rate-limiter/자격증명 표면이 없어 의도적 오남용 벡터가 성립하지 않는다. 로컬 단일사용자 CLI다.\n[close_reason] 시크릿·토큰·키가 스코프에 없다. config는 카테고리 메타데이터만 담고 discovery는 코드 인용(file:line)만 저장하며 수집 evidence는 gitignored .ditto/local ledger로 간다.\n[close_reason] PII·민감 개인데이터가 스코프에 없다. config는 taxonomy 메타데이터이고 discovery는 ditto 자체 소스를 읽는다(사용자 데이터 아님).\n[close_reason] 내부 dev-tooling으로 규제/개인데이터·보존/삭제·동의·국외이전 표면이 없어 컴플라이언스 의무가 걸리지 않는다.\n[close_reason] 정확성이 시간에 의존하는 경로가 없다. recorded_at은 호출자 주입 메타데이터 라벨이지 정확성 입력이 아니다.",
+  "created_at": "2026-07-08T10:22:45.918Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

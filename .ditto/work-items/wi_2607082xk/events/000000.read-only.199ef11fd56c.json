@@ -1,0 +1,12 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607082xk",
+  "seq": 0,
+  "actor": "read-only",
+  "event_id": "199ef11fd56cee5126bd9418592fee29b3fe80229c99be928e52206bbbb2b4cf",
+  "ts": "2026-07-08T07:23:26.741Z",
+  "kind": "status",
+  "payload": {
+    "to": "draft"
+  }
+}

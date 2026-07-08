@@ -1,0 +1,62 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260707loq",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "61bd50f6231495b7e5e88c44239c321f9003a4b891532376f5130ef1a84fc3de",
+  "ts": "2026-07-07T10:26:57.050Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260707loq/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "note",
+        "summary": "grounded at stop.ts:703-731,851; coverage-manager.ts:599-613; gates.ts:566,733,815; autopilot-loop.ts:1486-1500,2347-2413; autopilot-store.ts:15-113; autopilot-graph.ts:171-221; autopilot-bootstrap.ts:127"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-store.test.ts tests/core/gates.test.ts",
+        "summary": "132 pass / 0 fail, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (full)",
+        "summary": "4115 pass / 11 skip / 0 fail, exit 0"
+      },
+      {
+        "kind": "note",
+        "summary": "driver fresh-verify: enum values at autopilot-store.ts:50-51, direction_record at :95; fresh tsc cleared stale direction errors; residual tsc errors pre-existing per git diff HEAD"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-loop.test.ts tests/core/autopilot-bootstrap.test.ts",
+        "summary": "93 pass / 0 fail / 265 assertions, exit 0 (TDD RED->GREEN)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run lint",
+        "summary": "exit 0, 688 files no errors"
+      },
+      {
+        "kind": "note",
+        "summary": "coordination resolved: producePlanGate purposePreserving/highRisk landed by enforcement, caller wired here, auto-waive live"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (FULL)",
+        "summary": "4149 pass / 11 skip / 1 fail — sole failure m1.conformance.test.ts:416 old-contract assertion"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-loop.test.ts (ac-3/4/5 batch)",
+        "summary": "149 pass / 0 fail; loop.test:594 clear-advantage appends direction, :631 no-intent no-append"
+      }
+    ]
+  }
+}

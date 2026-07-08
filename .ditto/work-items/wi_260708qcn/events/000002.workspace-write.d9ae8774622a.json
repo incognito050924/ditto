@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708qcn",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "d9ae8774622aa99dceff1616b5b6cff74b1c6a30645a8455d75478cd0c222bad",
+  "ts": "2026-07-08T02:53:55.348Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c grep -q '조기-종결' reports/research/prism-epistemology-research.md && grep -q '앵커 드리프트' reports/research/prism-epistemology-research.md && grep -q '완전성' reports/research/prism-epistemology-research.md && grep -q 'engine.ts:90' reports/research/prism-epistemology-research.md && grep -q 'criticalTermination' reports/research/prism-epistemology-research.md && echo 'PASS: 3 gaps + code hooks in mapping table'",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607069bk",
+  "title": "WS0-T0 기록/실행 분리 + 공유 tier 이동 (아키텍처 코어)",
+  "source_request": "백로그 §4 spine-first에 따라 WS0-T0(work item 기록/실행 분리 + 공유 tier 이동) 착수. Record(영속·공유·committed)/Run(일회성·개인·gitignored) 스키마 분리. 순서: 상세설계에서 §9 미봉합 갭(A1·A2·B1·C1·C5) 닫기 → pre-mortem → autopilot. Q5·Q11 반영. 원격 WS3(autopilot-loop.ts)와 파일 분리.",
+  "goal": "work item이 Record(영속·공유·committed tier)와 Run(일회성·개인·gitignored tier)으로 스키마·물리 분리되어, Record가 git으로 공유되고 Run을 지워도 프로젝트 기억이 보존되며, A1·A2·B1·C1·C5 정합 갭이 닫힌 상태로 전체 테스트가 GREEN이다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "Record가 committed 경로 .ditto/work-items/<id>/(record.json+events/)로 생성되어 git ls-files에 노출된다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "Run 디렉터리 .ditto/local/work-items/<id>/를 지워도 status·AC verdict·github 멱등셋이 Record에서 무손실 재현된다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "경량 Record가 Run 없이 done으로 전이하고 stop.ts strong-block이 경량·in_progress·completion-부재 WI를 마커 없이 여전히 차단한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "상태 전이가 per-event immutable 파일 1개로 생성되고 terminal 이벤트 이전 크래시 시 reduce된 status가 non-terminal로 재현되어 재실행이 정합 복원한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "동시 2개 terminal 이벤트에서 reducer가 first-terminal-wins로 하나만 채택하고 work-item-handoff 직접 status write 제거로 already-terminal append가 거부된다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    },
+    {
+      "id": "ac-6",
+      "statement": "create()가 Run 없이 evidence/를 생성하지 않고 committed base에 record.json·events 외 0건이 git ls-files와 git status --ignored로 재현되며 정적 lint가 위반을 차단한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    },
+    {
+      "id": "ac-7",
+      "statement": "github posted·claim 멱등이 committed 이벤트로 갱신되고 Record엔 불변 좌표만 남으며 Run 삭제 후 재포스트 중복이 0으로 차단되고 7개 소비자가 통과한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    },
+    {
+      "id": "ac-8",
+      "statement": "source_digest·spec-doc 포인터가 Run(intent.json)에 durable AC·evidence_required가 Record에 노출되어 self-contained Record가 digest를 무보유한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    },
+    {
+      "id": "ac-9",
+      "statement": "legacy WI 첫 write 시 완전한 record.json이 합성 생성되고 list·exists·archive가 committed·legacy 이중 base를 집계해 두 코호트를 노출한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    },
+    {
+      "id": "ac-10",
+      "statement": "bun test 전체가 통과하고 schema·surface drift와 신규 lint 가드가 통과한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    }
+  ],
+  "status": "in_progress",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/schemas/work-item.ts",
+    "src/schemas/common.ts",
+    "src/schemas/intent.ts",
+    "schemas/work-item.schema.json",
+    "tests/schemas/work-item-event.test.ts",
+    "src/core/work-item-store.ts",
+    "src/core/ditto-paths.ts",
+    "tests/core/work-item-record-reduce.test.ts"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true,
+    "irreversible": true
+  },
+  "risks": [],
+  "runs": [],
+  "started_at_sha": "dee9d5f97887033a63665388150f015c3a0292b8",
+  "created_at": "2026-07-06T05:27:30.426Z",
+  "updated_at": "2026-07-06T08:15:27.700Z"
+}

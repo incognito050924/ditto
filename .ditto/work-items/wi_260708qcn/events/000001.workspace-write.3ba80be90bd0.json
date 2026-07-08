@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708qcn",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "3ba80be90bd02b6a4c1fcc04841908e2c4dc30e70484d623427545b41d2d3970",
+  "ts": "2026-07-08T02:53:55.136Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c test $(grep -cE '^## [2-6]\\. Q[1-5]' reports/research/prism-epistemology-research.md) -eq 5 && echo 'PASS: 5 question sections'",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

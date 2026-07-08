@@ -1,0 +1,485 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260705lc8",
+  "title": "WS-PRISM 의도 표면(prism) 구현 — tech-spec 진화·대체",
+  "source_request": "실제 구현 착수. WS-PRISM(의도 표면 moat)부터 — vibe→프로덕트급 의도를 끌어내는 정련 표면. tech-spec을 prism으로 진화·대체(WS-PRISM-T0), §2.7 가치/방향 taxonomy(net-new) + 발산·가치심문·grounding·dialectic 재조준. 설계 SoT=reports/design/ditto-quality-remediation-backlog.md §2.6·2.7·WS-PRISM, P0 검증=§8·§9(pre-mortem).",
+  "goal": "개발자가 vibe에서 시작한 요청을 prism 표면(발산→가치/방향 압박→구체화)에 통과시켜 프로덕트급 의도로 정련하고, tech-spec을 prism으로 진화·대체(alias+마이그레이션)한다. prism은 정련 설계만 산출하고 intent.json은 만들지 않으며, deep-interview가 그 설계를 수렴시켜 intent.json을 단일 생성한다. 두 표면 모두 사용자 진입 가능.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "합성 vibe 입력에서 prism이 물질적으로 다른 3~5개 방향을 산출하고, admissibility 미달(무근거) 방향은 카운트에서 제외되며, admissible 방향이 hard cap 5에 도달하면 발산이 결정적으로 정지한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260705lc8/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-divergence.test.ts",
+          "summary": "11 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 3906 pass / 11 skip / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit | grep -c prism-divergence",
+          "summary": "0 errors on prism-divergence.ts after entries() fix"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/prism-divergence.ts",
+          "summary": "predicate L35 (ungrounded L39, near_dup L44); cap-5 stop L76 (const L53)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-divergence.test.ts",
+          "summary": "11 pass / 0 fail, exit 0 (ac-1 fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-termination.test.ts",
+          "summary": "7 pass / 0 fail, exit 0 (ac-2 fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-taxonomy.test.ts",
+          "summary": "20 pass / 0 fail, exit 0 (ac-3 fresh)"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "발산이 dry-floor(새 라운드 marginal gain이 floor 미만)에 닿거나 사용자가 새 신호 없이 미결을 반복(쳇바퀴)하면 prism이 강제 출구를 발화한다 — 근거 붙은 강한버전 추천+확정요구 또는 park/deep-interview 인계 — 무한 발산·무한 미루기가 발생하지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260705lc8/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-termination.test.ts",
+          "summary": "7 pass / 0 fail, 19 expect, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit | grep prism-termination",
+          "summary": "0 errors on prism-termination files"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/prism-termination.ts",
+          "summary": "dry_floor L44, spin L45, park routing L53-54, DIRECTION_DRY_FLOOR=0.2 L32 (not 0.12), ADMISSIBLE_FLOOR=3 L40"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-divergence.test.ts",
+          "summary": "11 pass / 0 fail, exit 0 (ac-1 fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-termination.test.ts",
+          "summary": "7 pass / 0 fail, exit 0 (ac-2 fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-taxonomy.test.ts",
+          "summary": "20 pass / 0 fail, exit 0 (ac-3 fresh)"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "prism이 가치/방향 taxonomy의 각 차원에 대해 결정/출력을 강제 elicitation한다 — groundable 차원은 근거를 제시하고 judgment 차원은 사용자 대면으로 강제하며, 도구가 가치를 자동 판정(auto-assert)하지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260705lc8/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-taxonomy.test.ts",
+          "summary": "20 pass / 0 fail, 76 expect, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 3926 pass / 11 skip / 0 fail, exit 0 (all 3 prism cores present)"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit | grep prism-taxonomy",
+          "summary": "0 errors on prism-taxonomy files"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/prism-taxonomy.ts",
+          "summary": "force-elicit L186-196, anti-auto-assert L200-209, loud-fail config L102-123, loader auditable-skip L137-156"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/prism-taxonomy.ts",
+          "summary": "prismResolutionAudit L81-99, status enum L54-56"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-divergence.test.ts",
+          "summary": "11 pass / 0 fail, exit 0 (ac-1 fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-termination.test.ts",
+          "summary": "7 pass / 0 fail, exit 0 (ac-2 fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-taxonomy.test.ts",
+          "summary": "20 pass / 0 fail, exit 0 (ac-3 fresh)"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "prism이 tech-spec을 대체한 뒤에도 6 compat 표면군(ditto tech-spec CLI·tech_spec.* config·doctor 필드·surface 카탈로그·트레일/state 경로·기존 7 spec 문서)이 alias로 계속 동작하고, 진행 중이던(옛 source_digest 결박) work item이 계속 resolve된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260705lc8/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "FULL suite 3944 pass / 11 skip / 0 fail, exit 0 (integration-confirmed)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/skills/tech-spec-template.test.ts",
+          "summary": "16 pass / 0 fail (12 previously-failing fixed)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/prism-alias.test.ts",
+          "summary": "5 pass / 0 fail, red-first captured"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/prism-migration-completeness.test.ts",
+          "summary": "3 pass / 0 fail, dry-run clean + legacy fixture + negative control"
+        },
+        {
+          "kind": "command",
+          "command": "bun run surfaces:gen + surface-inventory",
+          "summary": "toBe(46)/toBe(11) invariant, claude+codex drift 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/prism.ts",
+          "summary": "ditto prism primary reusing techSpecCommand.subCommands; tech-spec alias in index.ts"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260705lc8/reviewer-output.json",
+          "summary": "behavioral review verdict — 6 mandated risks clean, 2 LOW doc-drift (F1 fixed, F2 residual)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260705lc8/acg-review.json",
+          "summary": "acg-review projection: 0 high-risk without evidence (non-blocking)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/prism-alias.test.ts",
+          "summary": "5 pass/0 fail exit0 (CLI+config back-read)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/prism-migration-completeness.test.ts",
+          "summary": "3 pass/0 fail exit0 (legacy digest fixture + negative control)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test skills.surface + surface-inventory + intent-quality-doctor + tech-spec",
+          "summary": "13/0+17/0+8/0+35/0 exit0 (counts invariant, doctor fields, state paths)"
+        },
+        {
+          "kind": "command",
+          "command": "git grep -n skills/tech-spec -- .ditto/specs/",
+          "summary": "0 lines (exit 1) — no dangling refs remain"
+        },
+        {
+          "kind": "command",
+          "command": "git grep -c src/core/tech-spec.ts (.ditto/specs)",
+          "summary": "checker=3 oneshot=4 — code citations preserved"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260705lc8/reviewer-output.json",
+          "summary": "re-review confirm: F1 resolved (git grep skills/tech-spec -- .ditto/specs = 0), no new issue, F2 accepted residual"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260705lc8/acg-review.json",
+          "summary": "re-review acg projection: 0 high-risk without evidence (non-blocking)"
+        },
+        {
+          "kind": "command",
+          "command": "git grep -n skills/tech-spec -- .ditto/specs/",
+          "summary": "0 lines (exit 1) — F1 fully resolved"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "prism은 intent.json을 생성하지 않는다(prism 경로의 intent.json 컴파일 0). deep-interview가 유일 컴파일러로 intent.json을 생성하며, prism→deep-interview 체인에서 이중 컴파일이 발생하지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260705lc8/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-pipeline.test.ts",
+          "summary": "red 2p/8f exit1 -> green 10 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "FULL suite 3936 pass / 11 skip / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (tech-spec+interview+digest-gate+deep-interview-claim)",
+          "summary": "targeted regression 71 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit | grep prism|tech-spec|interview-driver",
+          "summary": "0 NEW errors on touched files (2 pre-existing in projectInterviewDimensions, verified at HEAD)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "compileIntent single writer :425, conditional source_digest :442"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/tech-spec.ts",
+          "summary": "finalize routes to compileIntent :572, frozen COMPILE_INPUT_SECTIONS :66/computeSpecDigest :135, prism-chain digest bind :584"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260705lc8/reviewer-output.json",
+          "summary": "behavioral review verdict — 6 mandated risks clean, 2 LOW doc-drift (F1 fixed, F2 residual)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260705lc8/acg-review.json",
+          "summary": "acg-review projection: 0 high-risk without evidence (non-blocking)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-pipeline.test.ts",
+          "summary": "10 pass / 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (7 prism+tech-spec files)",
+          "summary": "91 pass / 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git grep -n skills/tech-spec -- .ditto/specs/",
+          "summary": "0 lines (exit 1) — no dangling refs remain"
+        },
+        {
+          "kind": "command",
+          "command": "git grep -c src/core/tech-spec.ts (.ditto/specs)",
+          "summary": "checker=3 oneshot=4 — code citations preserved"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260705lc8/reviewer-output.json",
+          "summary": "re-review confirm: F1 resolved (git grep skills/tech-spec -- .ditto/specs = 0), no new issue, F2 accepted residual"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260705lc8/acg-review.json",
+          "summary": "re-review acg projection: 0 high-risk without evidence (non-blocking)"
+        },
+        {
+          "kind": "command",
+          "command": "git grep -n skills/tech-spec -- .ditto/specs/",
+          "summary": "0 lines (exit 1) — F1 fully resolved"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "prism 정련 산출물이 specDigestStale 게이트를 만족하고 산문 은퇴가 일어나지 않아, prism을 거친 work item의 autopilot이 문서-missing/digest-mismatch로 block되지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260705lc8/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-pipeline.test.ts",
+          "summary": "red 2p/8f exit1 -> green 10 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "FULL suite 3936 pass / 11 skip / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (tech-spec+interview+digest-gate+deep-interview-claim)",
+          "summary": "targeted regression 71 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit | grep prism|tech-spec|interview-driver",
+          "summary": "0 NEW errors on touched files (2 pre-existing in projectInterviewDimensions, verified at HEAD)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "compileIntent single writer :425, conditional source_digest :442"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/tech-spec.ts",
+          "summary": "finalize routes to compileIntent :572, frozen COMPILE_INPUT_SECTIONS :66/computeSpecDigest :135, prism-chain digest bind :584"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260705lc8/reviewer-output.json",
+          "summary": "behavioral review verdict — 6 mandated risks clean, 2 LOW doc-drift (F1 fixed, F2 residual)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260705lc8/acg-review.json",
+          "summary": "acg-review projection: 0 high-risk without evidence (non-blocking)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-pipeline.test.ts",
+          "summary": "10 pass / 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (7 prism+tech-spec files)",
+          "summary": "91 pass / 0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "git grep -n skills/tech-spec -- .ditto/specs/",
+          "summary": "0 lines (exit 1) — no dangling refs remain"
+        },
+        {
+          "kind": "command",
+          "command": "git grep -c src/core/tech-spec.ts (.ditto/specs)",
+          "summary": "checker=3 oneshot=4 — code citations preserved"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260705lc8/reviewer-output.json",
+          "summary": "re-review confirm: F1 resolved (git grep skills/tech-spec -- .ditto/specs = 0), no new issue, F2 accepted residual"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260705lc8/acg-review.json",
+          "summary": "re-review acg projection: 0 high-risk without evidence (non-blocking)"
+        },
+        {
+          "kind": "command",
+          "command": "git grep -n skills/tech-spec -- .ditto/specs/",
+          "summary": "0 lines (exit 1) — F1 fully resolved"
+        }
+      ]
+    },
+    {
+      "id": "ac-7",
+      "statement": "[moat 증명·비결정적] 최소 1회 라이브(비-additive) 실행에서 prism의 발산·가치심문이 사용자가 초기 vibe의 방향을 재고 또는 변경하게 만든다",
+      "verdict": "unverified",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260705lc8/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/prism-alias.test.ts (6 prism suites)",
+          "summary": "56 pass / 0 fail exit 0 — prism CLI routes (mechanism reachable)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/prism.ts",
+          "summary": "refinePrism :61-71 composes real diverge/taxonomy-audit/termination (mechanism live-ready)"
+        },
+        {
+          "kind": "file",
+          "path": "skills/prism/SKILL.md",
+          "summary": "drives divergence+7-dim taxonomy+forced-exit — real mechanism, not placeholder"
+        }
+      ]
+    }
+  ],
+  "status": "abandoned",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/local/work-items/wi_260705lc8/completion.json",
+    ".ditto/local/work-items/wi_260705lc8/work-item.json",
+    "HANDOFF.md",
+    "reports/design/ditto-quality-remediation-backlog.md",
+    "reports/handoff-bundles/wi_260705lc8-state.tar.gz"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true,
+    "irreversible": true
+  },
+  "follow_ups": [
+    {
+      "kind": "idea",
+      "note": "ditto gap (dogfood): Stop/ac-1 gate (gates.ts:507) requires completion.non_pass_status{state,reason,grounding} for an honest partial/blocked termination, but NO CLI writes it — neither 'autopilot complete' nor 'work done --status partial' sets it on completion.json. A driver honestly parking a non-pass WI must hand-edit completion.json. Add a writer: e.g. 'autopilot complete --non-pass-status partial --reason .. --grounding ..' or have 'work done --status partial' mirror re_entry into completion.non_pass_status."
+    },
+    {
+      "kind": "idea",
+      "note": "prism 목적(사용자 의도 파악) 미실현 — 재설계/폐기 판단 필요. 라이브 실증(ac-7)에서 prism이 의도를 파악·되비추지 못하고 옵션을 생성·압박해 사용자를 더 혼란시킴('모르겠어'). 근본원인은 실행이 아니라 설계: (1) 메커니즘(발산 3~5+가치심문)이 comprehend-then-reflect가 아니라 generate-then-pressure — 이해가 아니라 확산; (2) 파악 전 발산이라 순서가 거꾸로(도구 프레임 투사, vibe 오독이 그 증상). ac-1..6은 메커니즘만 검증, 목적은 무검증. §2.7이 예견한 최대리스크(가치심문 환각취약) 실현. 재검토 축: prism(발산 프론트엔드) 전제 유지 vs 이해-먼저 표면(deep-interview 수렴쪽으로 흡수). 코드는 브랜치 wi_260705lc8-prism(148efa6) 미푸시 보존."
+    }
+  ],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 11
+  },
+  "risks": [],
+  "re_entry": {
+    "command": "ditto prism start --work-item wi_260705lc8 --doc <your-open-vibe>   # run live, observe+log the direction change, then re-verify ac-7",
+    "fresh_evidence_needed": [
+      "ac-7 moat proof: a live (non-additive) prism session logging that divergence+value-interrogation made the user reconsider/change their initial vibe direction (transcript, or .ditto/specs rejected-alternatives / tech-spec-rounds.jsonl before->after)"
+    ]
+  },
+  "runs": [],
+  "handoff_path": ".ditto/local/handoff/wi_260705lc8.md",
+  "started_at_sha": "bc6473d35b257b48651caaedcc68d4557d1aa5ec",
+  "created_at": "2026-07-05T22:03:09.973Z",
+  "updated_at": "2026-07-07T04:23:26.029Z",
+  "closed_at": "2026-07-07T04:23:26.021Z"
+}

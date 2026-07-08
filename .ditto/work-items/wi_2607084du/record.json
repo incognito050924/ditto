@@ -41,7 +41,8 @@
   "worktrees": [],
   "risks": [],
   "runs": [],
+  "handoff_path": ".ditto/local/handoff/wi_2607084du.md",
   "created_at": "2026-07-08T09:14:29.606Z",
-  "updated_at": "2026-07-08T09:17:09.399Z",
+  "updated_at": "2026-07-08T09:20:56.043Z",
   "closed_at": "2026-07-08T09:17:09.398Z"
 }

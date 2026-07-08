@@ -1,0 +1,171 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260707oi1",
+  "title": "prism 재설계 — 이해-먼저 이슈맵 의도 표면 (tech-spec 절연)",
+  "source_request": "지금 prism 은 잘못 구현된 것도 있는데. ditto:tech-spec 를 대신 호출하는 프록시처럼 되어 있지? 이걸 끊어내고 새로 만들고 싶은데. (+직전 메시지의 의도 진술: 이해-먼저, 이슈맵 종료 계약, 근거 규율, 사용자 친화 언어, 백로그 산출, 무의미 발산 감지)",
+  "goal": "prism을 tech-spec 프록시가 아닌 독립 표면으로 재구축 — 이해-먼저·이슈맵 기반 의도 정련: 코드 변경 요청 발화를 인터뷰로 구체화해 사람-읽는 설계 문서 + 사용자 승인 다중 분할 백로그 + deep-interview 경유 intent 컴파일을 산출한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "tech-spec 표면(스킬·CLI 진입점)이 제거되고 참조가 전수 정리되며(git grep 잔존 0), 공용 부품(question-generator/gate, check-question, compileSpecDoc, computeSpecDigest)은 보존된 채 전체 테스트가 green이다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "이슈맵 엔진이 노드 생성·확장·해소·모름-닫기(잔여위험 기록 없인 거부)·정당화 skip을 스키마+결정적 코드로 제공하고, critical 노드 전부 해소 시에만 종료 판정을 산출한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "진행 요약 뷰가 남은 항목 제목을 일상 언어 목록으로 출력하고, 내부 식별자(노드 id·축 이름·스키마 필드)가 사용자 출력에 노출되지 않는 게이트를 통과한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "critical 전부 해소·비critical 잔존 시점에 '최소 착수 가능 수준' 콘솔 알림이 1회 출력되고 인터랙티브 질문 훅은 사용되지 않는다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "설계 문서의 사실 주장에 근거 참조가 없으면 확정이 거부되고(fail-closed), 미달 상태 방출은 사용자 명시 결정으로만 가능하며 그때 미해결 항목이 산출물에 표기된다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-6",
+      "statement": "정련 완료 시 .ditto/specs 동형의 사람-읽는 설계 문서가 생성되고, 확정 시 compile-input 절이 digest로 결박되어 사후 변경이 자동 실행을 차단한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-7",
+      "statement": "prism 확정이 deep-interview 컴파일로 이어지고 intent.json writer 경로 수가 늘지 않는다(deep-interview 유일)",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-8",
+      "statement": "백로그 분할안이 제시되고 사용자 승인 후에만 항목별 work item(각각 AC+검증 방법 포함)이 물화되며, 승인 없는 물화와 자동 착수는 불가능하다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-9",
+      "statement": "실제 코드 변경 요구 하나로 prism 전 과정(정련→설계 문서→백로그 승인→intent 컴파일)을 사용자가 라이브로 완주·관측한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-10",
+      "statement": "무의미 발산 감지 — 유사 질문 반복·자잘한 질문 연속·기결정과 충돌하는 발산(새 근거 없는 재도전)을 이슈맵 엔진이 결정적으로 감지하고, 감지 시 cap 정지 또는 표시된 도전 노드로 처리한다(조용한 억제 금지). cap(노드/이벤트/라운드)이 정의만이 아니라 실제 인터뷰 루프에서 호출된다.",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "partial",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/local/work-items/wi_260707oi1/completion.json",
+    ".ditto/local/work-items/wi_260707oi1/work-item.json",
+    ".ditto/work-items/wi_260705lc8/",
+    ".ditto/work-items/wi_2607069bk/",
+    ".ditto/work-items/wi_260706zha/",
+    ".ditto/work-items/wi_260707loq/",
+    ".ditto/work-items/wi_260707oi1/",
+    "reports/coverage/far-field-cost-optimization-analysis.md",
+    "src/cli/commands/autopilot.ts",
+    "src/core/autopilot-bootstrap.ts",
+    "src/core/autopilot-complete.ts",
+    "src/core/autopilot-graph.ts",
+    "src/core/autopilot-store.ts",
+    "src/core/coverage-manager.ts",
+    "src/core/gates.ts",
+    "src/hooks/stop.ts",
+    "src/schemas/direction-fork-carrier.ts",
+    "src/schemas/index.ts",
+    "tests/cli/autopilot-loop-cli.test.ts",
+    "tests/core/autopilot-bootstrap.test.ts",
+    "tests/core/autopilot-complete.test.ts",
+    "tests/core/autopilot-driver.test.ts",
+    "tests/core/autopilot-graph.test.ts",
+    "tests/core/autopilot-loop.test.ts",
+    "tests/core/autopilot-store.test.ts",
+    "tests/core/gates.test.ts",
+    "tests/hooks/stop.test.ts",
+    "src/core/prism/backlog.ts",
+    "src/core/prism/store.ts",
+    "src/cli/commands/prism.ts",
+    "tests/core/prism-backlog.test.ts",
+    "bin/ditto",
+    "src/core/interview-driver.ts",
+    "src/core/prism/finalize.ts",
+    "src/core/prism/loop.ts",
+    "src/cli/commands/deep-interview.ts",
+    "tests/core/interview-compile.test.ts",
+    "skills/prism/SKILL.md",
+    "tests/host/claude/skills.surface.test.ts",
+    "README.md",
+    "tests/cli/prism-cli.test.ts"
+  ],
+  "worktrees": [
+    {
+      "owning_repo": ".",
+      "worktree_path": ".ditto/local/worktrees/wi_260707oi1",
+      "branch": "ditto/wi_260707oi1"
+    }
+  ],
+  "declared_risk": {
+    "non_local": true
+  },
+  "follow_ups": [
+    {
+      "kind": "bug",
+      "note": "prism 발산 감지: trivial_streak shape가 'ditto prism diverge' CLI로 도달 불가 — --seen 히스토리 엔트리가 trivial:false 하드코딩(src/cli/commands/prism.ts:249)이라 streak가 3에 못 미침. repeat_question·decided_conflict 2 shape는 발화·persist 실증됨. trivial_streak는 detectDivergence(engine.ts:310) 결정적+unit 테스트되나 shipped 표면 미도달. 수정: --seen에 per-entry trivial 플래그 허용 또는 별도 라운드 입력.",
+      "materialized_wi": "wi_2607075vc"
+    },
+    {
+      "kind": "idea",
+      "note": "prism event cap(callsPerNode)이 capStatus로 매 라운드 평가되나 runPrismRounds가 callsThisNode를 증가 안 시켜, event cap의 독립 halt 경로가 prism 테스트로 실증 안 됨(node·round cap은 halt 실증). '호출됨'은 성립하나 standalone halt 테스트 공백."
+    },
+    {
+      "kind": "bug",
+      "note": "autopilot lease-gate PreToolUse 훅이 worktree 경로를 main-repo file_scope에 대해 오해석해 worktree 모든 경로의 Write/Edit를 차단 → 두 implementer 모두 DITTO_SKIP_HOOKS=1 우회로 in-scope 쓰기 수행. worktree 기반 WI에 대해 lease 게이트가 실질적 containment를 제공하지 못함. 수정: 훅의 worktree-상대 경로 해석.",
+      "materialized_wi": "wi_260707cp7"
+    },
+    {
+      "kind": "idea",
+      "note": "prism 관측성 갭: 질문 트리 lineage 열람용 사용자 CLI 부재. 데이터는 다 있음(issue-map.json 트리+question-rounds.jsonl 타임스탬프+노드별 close_reason/residual) — summary/status는 label-only(ac-3) 최소뷰라 '어떤 질문이 언제 추가·어떻게 해소'를 볼 수 없음. 제안: 'ditto prism tree'(또는 log) — 트리 구조+추가 라운드/시각+해소 사유를 일상어로 표시(내부 id는 계속 비노출). 실증 세션에서 사용자가 명시 요구."
+    },
+    {
+      "kind": "idea",
+      "note": "prism 갭: 조기-종결(premature-closure) 가드 부재. detectDivergence는 과잉 질문(쳇바퀴/trivial/decided-conflict)은 결정적으로 잡지만, 반대 실패 — critical/net-new/고불확실 노드를 얕은 close_reason으로 조기 종결하는 것 — 은 안 막는다. 실증에서 오퍼레이터가 '화면-기반 관측 저작'(net-new 코어)을 '관측 단계만 net-new'로 hand-wave 종결→빈 설계문서 산출, 사용자가 '왜 바로 끝났냐, 하위 질문이 이어져야 하지 않냐'로 포착. 제안: net-new/critical 노드에 종결 전 최소 드릴다운(하위 노드 N개) 또는 uncertainty-weight 게이트 — 얕은 close 거부. 비대칭(over-ask 가드 有, under-ask 가드 無) 해소."
+    },
+    {
+      "kind": "idea",
+      "note": "prism 갭: 원-의도 앵커 드리프트. root 'original intent' 노드가 있어도 하위 노드가 그것을 *달성*하는지 강제하는 게 없어, 이해-먼저의 중복/차별점 검사가 프레임을 하이재킹해 '무엇이 다른가'가 '어떻게 만드나(원 의도의 HOW)'를 밀어낼 수 있다. 실증: 최초 의도='playwright agent E2E 작성 표면 추가'였으나 설계 문서가 e2e-author 대비 포지셔닝만 담고 저작 HOW가 빔 — 사용자가 '최초 의도 달성 어떻게가 빠졌다'로 포착. 제안: 각 노드가 원 의도의 어느 부분을 진전시키는지 링크 강제, 또는 종결 전 '이 맵이 원 의도를 달성하나' 커버리지 체크(intent-completeness critic). premature-closure 가드와 형제 문제."
+    },
+    {
+      "kind": "bug",
+      "note": "prism store가 decision(prism-decisions.jsonl)·backlog(prism-backlog-split.json)을 committed base .ditto/work-items/<wi>/에 씀(store.ts committedWorkItemDir) — 그러나 main이 들여온 check-committed-base-run-artifact 가드는 record.json+events/만 허용, 나머지는 Run/개인 산출물로 커밋 차단. 병합 시 표면화(prism 013436d 시절 store vs main의 강화된 가드). ADR-20260628 decisive-class + ADR-20260706 Record/Run: 승인·결정급은 Record(durable)여야 맞지만 committed 채널은 events/여야 함. 수정: prism decision/backlog을 events/로 접거나 .ditto/local로. prism 사용 후 매 커밋이 이 가드에 막힘.",
+      "materialized_wi": "wi_260708cdl"
+    }
+  ],
+  "follows": "wi_260705lc8",
+  "risks": [],
+  "re_entry": {
+    "command": "ditto work resume wi_260707oi1",
+    "fresh_evidence_needed": [
+      "미pass acceptance에 대한 검증 결과"
+    ]
+  },
+  "runs": [],
+  "handoff_path": ".ditto/local/handoff/wi_260707oi1.md",
+  "started_at_sha": "013436d4bd23fec2e0acd81a85eae633ffe285e9",
+  "created_at": "2026-07-07T04:23:26.169Z",
+  "updated_at": "2026-07-08T04:30:26.430Z"
+}

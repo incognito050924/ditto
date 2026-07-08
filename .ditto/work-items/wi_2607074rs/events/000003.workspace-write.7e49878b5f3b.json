@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607074rs",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "7e49878b5f3b21bd32f561dcd5d63167cf3b94eb77babed781ba64644e767d5f",
+  "ts": "2026-07-07T12:57:28.659Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "python3 -c import json,sys; sys.exit(0 if json.load(open('.ditto/work-items/wi_260707loq/record.json'))['status']=='done' else 1)",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

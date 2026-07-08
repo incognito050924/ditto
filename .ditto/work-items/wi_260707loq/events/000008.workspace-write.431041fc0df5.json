@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260707loq",
+  "seq": 8,
+  "actor": "workspace-write",
+  "event_id": "431041fc0df543cea9650d529e1dac68404e8293508bb1d2a3402e0b46f898f7",
+  "ts": "2026-07-07T10:26:57.054Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-7",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260707loq/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "note",
+        "summary": "grounded at stop.ts:703-731,851; coverage-manager.ts:599-613; gates.ts:566,733,815; autopilot-loop.ts:1486-1500,2347-2413; autopilot-store.ts:15-113; autopilot-graph.ts:171-221; autopilot-bootstrap.ts:127"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/hooks/stop.test.ts tests/core/autopilot-driver.test.ts tests/core/autopilot-approval.test.ts",
+        "summary": "154 pass / 0 fail, exit 0 (scoped, TDD RED->GREEN)"
+      },
+      {
+        "kind": "note",
+        "summary": "full suite 1 fail = m1.conformance.test.ts:402 old-contract assertion (intended migration, out-of-scope); driver spot-verified classifier landed in stop.ts + coverage-manager.ts"
+      },
+      {
+        "kind": "note",
+        "summary": "reviewer-output.json persisted; 1 high (conformance) blocks completion; 2 medium dead-wiring (ac-2 carrier producer, ac-6 opt-in caller)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (e2e guardrail + coverage-manager scope)",
+        "summary": "72 pass / 0 fail"
+      },
+      {
+        "kind": "note",
+        "summary": "decisionConflictGate/producer/catch outside every git diff HEAD hunk; autopilot-driver.ts 0-diff"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (FULL)",
+        "summary": "4149 pass / 11 skip / 1 fail — sole failure m1.conformance.test.ts:416 old-contract assertion"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (ac-2/6/7 batch + decision-conflict-guardrail-e2e)",
+        "summary": "285 pass / 0 fail; P2 intent-conflict yield stop.test:1390, decisionConflictGate untouched"
+      }
+    ]
+  }
+}

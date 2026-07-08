@@ -1,0 +1,46 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260706zha",
+  "title": "테스트 스위트 213s→<100s: CLI 테스트 spawn→in-process 전환 + 중복 테스트 근거기반 cull",
+  "source_request": "bun test 213초, 매 반복 부담. 불필요·중복 삭제하고 필요한 것만 남겨 빠르게. 실측상 tests/cli가 61%(135s), 매 케이스 bun 프로세스 spawn이 원인.",
+  "goal": "테스트 스위트 213s→<100s: CLI 테스트 spawn→in-process 전환 + 중복 테스트 근거기반 cull",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "time bun test로 측정한 전체 wall time이 100초 이하다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "grep 'Bun.spawnSync' tests/cli 결과가 0건이다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "삭제원장 파일이 존재하고 그 안의 모든 삭제 항목이 대체 커버 테스트(파일:테스트명) 참조를 1개 이상 포함한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "정리 후 bun test가 0 fail로 통과한다",
+      "verdict": "unverified",
+      "evidence": [],
+      "evidence_required": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-06T08:26:50.460Z",
+  "updated_at": "2026-07-06T08:26:50.460Z"
+}
