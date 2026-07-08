@@ -154,9 +154,18 @@ export async function resolveActiveWorkItem(
 
   // A session is ACTIVELY bound when its pointer is set AND still resolves to an
   // existing work item. A stale pointer (its work item was deleted) is not active.
+  //
+  // wi_2607083ch: a pointer left bound to a TERMINAL work item (done/abandoned) is
+  // ALSO stale — the work is closed. Treating it as active kept injecting a closed
+  // WI as "Active work item" and blocked a new/explicit-resume item from binding
+  // (the CLI `work start` cannot set the pointer — it has no session id). A terminal
+  // pointer is therefore inactive: the resolution falls through to explicit-resume
+  // binding or the open-items/guide path below.
   const pointed = await pointers.get(sessionId);
-  const activeWorkItem =
+  const pointedItem =
     pointed !== null && (await items.exists(pointed)) ? await items.get(pointed) : undefined;
+  const activeWorkItem =
+    pointedItem && NON_TERMINAL.includes(pointedItem.status) ? pointedItem : undefined;
 
   // Explicit resume (ac-6): the user named an existing work item id in the
   // prompt. Bind the session pointer to it — the runtime SessionPointerStore.set()

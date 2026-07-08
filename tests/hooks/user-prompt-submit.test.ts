@@ -106,6 +106,35 @@ describe('resolveActiveWorkItem (single-active invariant)', () => {
     expect(r.workItem?.id).toBe(created.id);
   });
 
+  // wi_2607083ch: a pointer left bound to a TERMINAL work item (done/abandoned)
+  // is stale — the work is closed. It must not load as the active work item, so a
+  // new/explicit-resume item can bind and the hook stops injecting a closed WI as
+  // "Active work item". A non-terminal pointer still loads (no regression).
+  test('pointer to a TERMINAL work item is inactive; a non-terminal pointer still loads', async () => {
+    const items = new WorkItemStore(repo);
+    const closed = await items.create({
+      title: 'closed',
+      source_request: 'r',
+      goal: 'r',
+      acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+    });
+    await items.update(closed.id, (c) => ({ ...c, status: 'abandoned' }));
+    await new SessionPointerStore(repo).set('sess-term', closed.id);
+    const r = await resolveActiveWorkItem(repo, 'sess-term', 'do something new');
+    expect(r.workItem).toBeUndefined(); // terminal pointer does not load as active
+
+    const live = await items.create({
+      title: 'live',
+      source_request: 'r',
+      goal: 'r',
+      acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+    });
+    await new SessionPointerStore(repo).set('sess-live', live.id);
+    const r2 = await resolveActiveWorkItem(repo, 'sess-live', 'x');
+    expect(r2.action).toBe('loaded');
+    expect(r2.workItem?.id).toBe(live.id);
+  });
+
   test('pointer present wins even when other open drafts exist (ignores the rest)', async () => {
     const items = new WorkItemStore(repo);
     const mine = await items.create({

@@ -870,20 +870,29 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   let completionWouldClose = false;
   if (completion.status === 'ok') {
     const g = completionGate(workItem, completion.data);
-    if (!g.pass) reasons.push(...g.reasons);
     const e = completionEvidenceGate(completion.data);
-    if (!e.pass) reasons.push(...e.reasons);
     completionWouldClose = g.pass && e.pass;
-    // (ac-1 / ac-5) Non-pass termination gate. completionGate enumerates per-AC
-    // verdicts only on a pass, and the residual gate reads only `unverified[]` — so a
-    // NON-pass completion that PARKS an in-scope unverified/fail criterion without an
-    // honest `non_pass_status` declaration slips both and silent-terminates at exit 0.
-    // This gate enumerates `acceptance[].verdict` directly and BLOCKS that silent park
-    // (ac-5: a no-progress run that writes such a completion does not terminate);
-    // an honest partial/blocked (non_pass_status) TERMINATES (ADR-20260626 D2). No-op
-    // on pass completions (owned by completionGate above) — no behaviour change there.
-    const np = nonPassTerminationGate(completion.data);
-    if (!np.pass) reasons.push(...np.reasons);
+    // wi_2607083ch: a TERMINAL work item (done/abandoned) is already closed by an
+    // explicit decision — the completion-CONTINUATION checks are moot for it. A
+    // stale non-pass completion.json left on an ABANDONED item must not re-force
+    // continuation (the Stop gate kept nagging a closed item). Only push these
+    // reasons for a NON-terminal item. `completionWouldClose` stays computed above
+    // so the landGate below still fires on a done∧pass close that is not yet
+    // committed (the done-landing check is preserved, not skipped).
+    if (NON_TERMINAL_STATUSES.includes(workItem.status)) {
+      if (!g.pass) reasons.push(...g.reasons);
+      if (!e.pass) reasons.push(...e.reasons);
+      // (ac-1 / ac-5) Non-pass termination gate. completionGate enumerates per-AC
+      // verdicts only on a pass, and the residual gate reads only `unverified[]` — so a
+      // NON-pass completion that PARKS an in-scope unverified/fail criterion without an
+      // honest `non_pass_status` declaration slips both and silent-terminates at exit 0.
+      // This gate enumerates `acceptance[].verdict` directly and BLOCKS that silent park
+      // (ac-5: a no-progress run that writes such a completion does not terminate);
+      // an honest partial/blocked (non_pass_status) TERMINATES (ADR-20260626 D2). No-op
+      // on pass completions (owned by completionGate above) — no behaviour change there.
+      const np = nonPassTerminationGate(completion.data);
+      if (!np.pass) reasons.push(...np.reasons);
+    }
   }
   if (conv.status === 'ok') {
     const g = convergenceGate(conv.data);

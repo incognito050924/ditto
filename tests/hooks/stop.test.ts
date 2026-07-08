@@ -328,6 +328,35 @@ describe('stopHandler', () => {
     expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
   });
 
+  // wi_2607083ch: a TERMINAL work item that carries a STALE non-pass completion
+  // (e.g. an abandoned item whose completion.json was left at partial) must not
+  // re-force continuation — the completion-continuation checks are moot once the
+  // work is closed by explicit decision. The prior abandoned test above has NO
+  // completion; this one specifically exercises the non-pass completion path.
+  // A stale non-pass completion parks an in-scope criterion at unverified without
+  // a non_pass_status declaration — the shape that trips nonPassTerminationGate.
+  // (next_handoff_path is required by the schema for any non-pass final_verdict.)
+  const stalePartialCompletion = () =>
+    completion({
+      final_verdict: 'partial',
+      next_handoff_path: '.ditto/local/handoff/x.md',
+      acceptance: [{ criterion_id: 'ac-1', verdict: 'unverified' }],
+    });
+
+  test('terminal (abandoned) + a stale NON-PASS completion => exit 0 (no re-force on a closed item)', async () => {
+    await store.update(wiId, (c) => ({ ...c, status: 'abandoned' }));
+    await writeArtifact('completion.json', stalePartialCompletion());
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  // Guard against over-skipping: only TERMINAL items are exempted. A NON-terminal
+  // (in_progress) item with the same non-pass completion still force-continues.
+  test('NON-terminal (in_progress) + a NON-PASS completion still => exit 2 (no over-skip)', async () => {
+    await store.update(wiId, (c) => ({ ...c, status: 'in_progress' }));
+    await writeArtifact('completion.json', stalePartialCompletion());
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(2);
+  });
+
   describe('(B) plan→autopilot transition gate (wi_260615xby)', () => {
     // PASSING_ACCEPTANCE closes the completion gate so only the (B) gate decides.
     const passingCompletion = (overrides: Record<string, unknown> = {}) =>

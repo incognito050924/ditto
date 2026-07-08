@@ -46764,15 +46764,17 @@ var stopHandler = async (input) => {
   let completionWouldClose = false;
   if (completion.status === "ok") {
     const g4 = completionGate(workItem2, completion.data);
-    if (!g4.pass)
-      reasons.push(...g4.reasons);
     const e2 = completionEvidenceGate(completion.data);
-    if (!e2.pass)
-      reasons.push(...e2.reasons);
     completionWouldClose = g4.pass && e2.pass;
-    const np = nonPassTerminationGate(completion.data);
-    if (!np.pass)
-      reasons.push(...np.reasons);
+    if (NON_TERMINAL_STATUSES.includes(workItem2.status)) {
+      if (!g4.pass)
+        reasons.push(...g4.reasons);
+      if (!e2.pass)
+        reasons.push(...e2.reasons);
+      const np = nonPassTerminationGate(completion.data);
+      if (!np.pass)
+        reasons.push(...np.reasons);
+    }
   }
   if (conv.status === "ok") {
     const g4 = convergenceGate(conv.data);
@@ -46938,7 +46940,8 @@ async function resolveActiveWorkItem(repoRoot, sessionId, prompt2) {
   const items = new WorkItemStore(repoRoot);
   const pointers = new SessionPointerStore(repoRoot);
   const pointed = await pointers.get(sessionId);
-  const activeWorkItem = pointed !== null && await items.exists(pointed) ? await items.get(pointed) : undefined;
+  const pointedItem = pointed !== null && await items.exists(pointed) ? await items.get(pointed) : undefined;
+  const activeWorkItem = pointedItem && NON_TERMINAL.includes(pointedItem.status) ? pointedItem : undefined;
   const explicit = explicitWorkItemRef(prompt2);
   if (!activeWorkItem && explicit && await items.exists(explicit)) {
     await pointers.set(sessionId, explicit);
@@ -55393,4 +55396,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=b36e42f5401e396fe01b2bc680e16036c0836045eb048f9e0c1f8661ecb0550a
+//# ditto-src-stamp=a1e2b625b65af1b5761d9b69ef245f4ca109db55a4ca1ab072f2cc860687cc30
