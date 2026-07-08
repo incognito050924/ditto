@@ -56,7 +56,7 @@ Mark each as `critical` when the gate must resolve it before finalize.
 
 ### 3. Ask questions — fan out to fresh generators, fan in through the gate
 
-Do NOT generate questions inline in your accumulated context: your interview narrative acts as a prior (bias) and quality degrades non-uniformly as the transcript grows (context rot) — the two failure modes the charter §4-9 separates. Generation is pulled out of the driver into fresh, minimal-context subagents (same pattern as `skills/tech-spec/SKILL.md` "Question generation workflow (multi-agent)", adapted to deep-interview's intent dimensions).
+Do NOT generate questions inline in your accumulated context: your interview narrative acts as a prior (bias) and quality degrades non-uniformly as the transcript grows (context rot) — the two failure modes the charter §4-9 separates. Generation is pulled out of the driver into fresh, minimal-context subagents (the `question-generator` fan-out + `question-gate` fan-in, applied to deep-interview's intent dimensions).
 
 **Per-round loop** (`N` = the resolved generators count that `start` reported — a CLI `--generators` flag if given, else the `deep_interview.generators` config default, else 1):
 

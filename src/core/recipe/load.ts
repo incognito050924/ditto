@@ -41,8 +41,7 @@ function definedFields(r: Recipe): Partial<Recipe> {
 
 /**
  * Per-field merge: `override` replaces ONLY the fields it sets; every other field
- * of `base` survives (granular, NOT whole-file replace). Matches the precedence
- * style of resolveQuestionConfig (src/core/tech-spec-options.ts).
+ * of `base` survives (granular, NOT whole-file replace).
  */
 export function mergeRecipes(base: Recipe, override: Recipe): Recipe {
   return { ...base, ...definedFields(override) };

@@ -22,7 +22,7 @@ import {
 
 /**
  * `ditto journey-author` — thin citty surface over the n3 journey-authoring core
- * (`~/core/journey-authoring`). Mirrors the tech-spec start/record/finalize shape:
+ * (`~/core/journey-authoring`). Mirrors a start/record/finalize co-authoring shape:
  * the command parses args, validates the payload fail-closed (parseJsonArg + the
  * core's own zod draft schemas), calls the core machine, renders the result, and
  * sets exit codes. No authoring logic lives here — the state machine, conflict

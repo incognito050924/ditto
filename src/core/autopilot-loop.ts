@@ -78,7 +78,7 @@ import {
   projectRetroNarrative,
 } from './retro-measure';
 import { RetroMetricLedger } from './retro-metric-ledger';
-import { computeSpecDigest } from './tech-spec';
+import { computeSpecDigest } from './spec-doc';
 import { WorkItemStore } from './work-item-store';
 
 /**
@@ -248,8 +248,8 @@ async function specDigestStale(
     blocked_node_ids: [],
     reason:
       doc === null
-        ? `spec document ${doc_path} is missing but intent.json was compiled from it — restore the document or re-run \`ditto tech-spec finalize\` (ac-6)`
-        : `spec document ${doc_path} changed after finalize (source_digest mismatch) — re-run \`ditto tech-spec finalize\` to re-compile intent.json before executing (ac-6)`,
+        ? `spec document ${doc_path} is missing but intent.json was compiled from it — restore the document or re-run \`ditto deep-interview finalize\` (ac-6)`
+        : `spec document ${doc_path} changed after finalize (source_digest mismatch) — re-run \`ditto deep-interview finalize\` to re-compile intent.json before executing (ac-6)`,
   };
 }
 

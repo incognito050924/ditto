@@ -23,7 +23,7 @@ const SKILLS = [
   'handoff',
   'knowledge-update',
   'memory-graph',
-  'tech-spec',
+  'prism',
   'verify',
 ] as const;
 

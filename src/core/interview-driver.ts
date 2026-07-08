@@ -408,6 +408,14 @@ export type FinalizeResult =
 export interface FinalizeInput {
   workItemId: string;
   payload: FinalizePayload;
+  /**
+   * Stamped onto intent.source_digest when the intent was compiled from a spec/design
+   * document (the prism → deep-interview compile path). Absent for a plain interview
+   * finalize (design §5 zero-diff): the intent carries no source_digest and the
+   * autopilot digest-freshness gate stays dormant. Keeps finalizeInterview the SINGLE
+   * intent.json writer (ac-7) — the prism compile routes THROUGH it, never around it.
+   */
+  sourceDigest?: { doc_path: string; sha256: string };
   now?: Date;
 }
 
@@ -450,6 +458,10 @@ export async function finalizeInterview(
     unknowns: input.payload.unknowns,
     follow_up_candidates: input.payload.follow_up_candidates,
     question_policy: input.payload.question_policy,
+    // ac-6: when the intent was compiled from a spec/design document, bind it to that
+    // document by digest. The preserved autopilot digest-freshness gate reads this and
+    // blocks execution if a compile-input section changed after finalize.
+    ...(input.sourceDigest ? { source_digest: input.sourceDigest } : {}),
   };
   const writtenIntent = await intentStore.write(intent);
 

@@ -19,9 +19,9 @@ export const intentAcceptanceCriterion = acceptanceCriterion.describe(
   'Acceptance criterion in the intent sidecar; reuses work-item criterion shape',
 );
 
-// Stamped only by tech-spec finalize (the spec document is the source; intent is
-// its one-way compile artifact). Additive + optional: interview-finalized intents
-// never carry it, and deep-interview is unchanged (design §5 zero-diff).
+// Stamped by the spec-document compile/finalize path (the spec document is the
+// source; intent is its one-way compile artifact). Additive + optional:
+// interview-finalized intents never carry it (design §5 zero-diff).
 export const sourceDigest = z
   .object({
     doc_path: z.string().min(1).describe('Spec document path relative to repo root'),

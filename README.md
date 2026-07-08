@@ -126,14 +126,35 @@ nothing changes.
 See [docs/agent-variants.md](docs/agent-variants.md) for the frontmatter fields
 and routing rules.
 
-## Authoring a tech-spec
+## Refining intent before you build
 
-`ditto:tech-spec` co-authors a structured spec document with you and compiles it
-into a work intent — useful when you want to agree on *what* to build, in writing,
-before implementation starts. For the usage flow, the question-elicitation
-options, how to choose among them, and per-developer defaults, see:
+`ditto:prism` is the understand-first front door for a fuzzy or many-part code
+change. Rather than jumping to code, it interviews the ambiguity into a small issue
+map, emits a plain-language design document, and — only on your explicit approval —
+splits the request into per-item work items, then compiles the confirmed design into
+intent.
 
-- [skills/tech-spec/GUIDE.md](skills/tech-spec/GUIDE.md)
+```bash
+# grow the issue map, one plain-language item per round
+ditto prism seed --wi <wi> --label "<정할 것>" [--critical]
+
+# read what is still open (plain titles only), and whether you can start now
+ditto prism summary --wi <wi>
+ditto prism status  --wi <wi>
+
+# emit the design document, then split + compile (both need your verbatim approval)
+ditto prism doc --wi <wi> --input <payload.json>
+ditto prism backlog propose     --wi <wi> --input <split.json>
+ditto prism backlog materialize --wi <wi> --statement "<원문 승인>"
+ditto deep-interview finalize-from-doc --work-item <wi> --statement "<원문 확정>"
+```
+
+Remaining scope is shown in everyday language — no internal ids. When every critical
+item is settled and only optional ones remain, prism tells you **once**, on the
+console, that you can start minimally — it never interrupts with a question prompt.
+Full contract, the design-document template, and the divergence caps:
+
+- [skills/prism/SKILL.md](skills/prism/SKILL.md)
 
 ## Authoring user journeys & stories
 

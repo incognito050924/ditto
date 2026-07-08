@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { type IntentMetric, intentMetric } from '~/schemas/intent-metric';
 import { languageLedger } from '~/schemas/language-ledger';
-import { type TechSpecRound, techSpecRound } from '~/schemas/tech-spec-round';
+import { type QuestionRound, questionRound } from '~/schemas/question-round';
 import {
   type FollowUp,
   type WorkItem,
@@ -1220,26 +1220,26 @@ export class WorkItemStore {
       .map((line) => intentMetric.parse(JSON.parse(line)));
   }
 
-  private techSpecRoundsPath(workItemId: string): string {
+  private questionRoundsPath(workItemId: string): string {
     // Root level (sibling of metrics.jsonl), not under evidence/: a question-score
     // trail is measurement instrumentation, not per-AC work evidence (ADR-0005 D1).
-    return join(this.workItemDir(workItemId), 'tech-spec-rounds.jsonl');
+    return join(this.workItemDir(workItemId), 'question-rounds.jsonl');
   }
 
-  /** Append one tech-spec question-round line. Caller pre-serializes (mirrors appendMetricLine). */
-  async appendTechSpecRoundLine(workItemId: string, jsonLine: string): Promise<void> {
-    return this.appendJsonlAtPath(this.techSpecRoundsPath(workItemId), jsonLine);
+  /** Append one question-round line. Caller pre-serializes (mirrors appendMetricLine). */
+  async appendQuestionRoundLine(workItemId: string, jsonLine: string): Promise<void> {
+    return this.appendJsonlAtPath(this.questionRoundsPath(workItemId), jsonLine);
   }
 
-  /** Read tech-spec-rounds.jsonl, schema-validating each line. Absent file → empty. */
-  async readTechSpecRounds(workItemId: string): Promise<TechSpecRound[]> {
-    const file = Bun.file(this.techSpecRoundsPath(workItemId));
+  /** Read question-rounds.jsonl, schema-validating each line. Absent file → empty. */
+  async readQuestionRounds(workItemId: string): Promise<QuestionRound[]> {
+    const file = Bun.file(this.questionRoundsPath(workItemId));
     if (!(await file.exists())) return [];
     const text = await file.text();
     return text
       .split('\n')
       .filter((line) => line.trim().length > 0)
-      .map((line) => techSpecRound.parse(JSON.parse(line)));
+      .map((line) => questionRound.parse(JSON.parse(line)));
   }
 }
 

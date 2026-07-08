@@ -57,7 +57,9 @@ const IDENTIFIER_PATTERNS: readonly RegExp[] = [
   /ac-\d+/g,
   /T-\d+/g,
   /D\d+/g,
-  /(?:wi|orch|memevt|adr)_[0-9a-z]+/g,
+  // `prism` added (wi_260707oi1 ac-3, 2nd defense): a leaked prism issue-map node id
+  // (prism_<lowhex>) is caught on the user-reaching face just like wi/orch/etc.
+  /(?:wi|orch|memevt|adr|prism)_[0-9a-z]+/g,
 ];
 
 // An explanatory word: a Korean run (≥2 syllables) or a Latin word (≥3 letters). Short

@@ -2,21 +2,23 @@ import { z } from 'zod';
 import { isoDateTime, workItemId } from './common';
 
 /**
- * tech-spec question-generation round (증분 3 — 점수 영속 sink). One persisted
- * record of the multi-agent question workflow (SKILL.md §"Question generation
- * workflow"): the selection gate's scored candidates for one round, appended to
- * `.ditto/local/work-items/<id>/tech-spec-rounds.jsonl` (root level, mirroring
- * metrics.jsonl — measurement instrumentation, not per-AC evidence; ADR-0005 D1,
- * gitignored tier ③). `ditto doctor intent-quality` reads it as the question-VALUE
- * signal alongside the deep-interview question-COUNT signal. Scores are recorded
- * for later tuning; analysis consumption stays additive (no new instrumentation).
+ * question-generation round (증분 3 — 점수 영속 sink). One persisted record of
+ * the multi-agent question workflow: the selection gate's scored candidates for
+ * one round, appended to `.ditto/local/work-items/<id>/question-rounds.jsonl`
+ * (root level, mirroring metrics.jsonl — measurement instrumentation, not per-AC
+ * evidence; ADR-0005 D1, gitignored tier ③). `ditto doctor intent-quality` reads
+ * it as the question-VALUE signal alongside the deep-interview question-COUNT
+ * signal. Scores are recorded for later tuning; analysis consumption stays
+ * additive (no new instrumentation).
  *
- * Distinct from the OLD `question-gate.ts` (deep-interview §6.2 pre-ask gate) —
- * this is the tech-spec 4-dim selection score.
+ * Distinct from `question-gate.ts` (deep-interview §6.2 pre-ask gate) — this is
+ * the 4-dim selection score of the question-elicitation workflow.
  */
 export const questionProperty = z
   .enum(['blind-spot', 'expansion', 'orientation'])
-  .describe('Which good-question property the candidate carries (SKILL.md §good questions)');
+  .describe(
+    'Which good-question property the candidate carries (blind-spot / expansion / orientation)',
+  );
 
 export const questionScore = z
   .object({
@@ -44,8 +46,8 @@ export const scoredQuestion = z
     // deep-interview carries (src/core/question-context.ts). A plain-language why-we-ask
     // + what-the-answer-decides (`user_explanation`) and the progressive-disclosure tiers
     // (`background`/`grounding`). Optional so the raw score trail (all_scored) and existing
-    // tech-spec-rounds.jsonl lines stay valid; the `tech-spec check-question` pre-ask gate
-    // (checkQuestionContext) hard-requires them on SELECTED (user-reaching) questions.
+    // question-rounds.jsonl lines stay valid; the driver's pre-ask gate
+    // (`ditto deep-interview check-question`) hard-requires them on SELECTED (user-reaching) questions.
     user_explanation: z.string().optional(),
     background: z.string().optional(),
     grounding: z.string().optional(),
@@ -57,7 +59,7 @@ export const scoredQuestion = z
 export type ScoredQuestion = z.infer<typeof scoredQuestion>;
 
 /** The CLI payload (what the driver records); ts + work_item_id are stamped on persist. */
-export const techSpecRoundPayload = z
+export const questionRoundPayload = z
   .object({
     round: z.number().int().positive().describe('1-based round index within the interview'),
     section: z.string().optional().describe('Target spec section this round filled'),
@@ -97,10 +99,10 @@ export const techSpecRoundPayload = z
     }
   });
 
-export type TechSpecRoundPayload = z.infer<typeof techSpecRoundPayload>;
+export type QuestionRoundPayload = z.infer<typeof questionRoundPayload>;
 
 /** The persisted JSONL line: payload + provenance stamp. */
-export const techSpecRound = z
+export const questionRound = z
   .object({
     ts: isoDateTime,
     work_item_id: workItemId,
@@ -112,6 +114,6 @@ export const techSpecRound = z
     selected: z.array(scoredQuestion).default([]),
     all_scored: z.array(scoredQuestion).default([]),
   })
-  .describe('One line of .ditto/local/work-items/<id>/tech-spec-rounds.jsonl');
+  .describe('One line of .ditto/local/work-items/<id>/question-rounds.jsonl');
 
-export type TechSpecRound = z.infer<typeof techSpecRound>;
+export type QuestionRound = z.infer<typeof questionRound>;

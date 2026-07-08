@@ -10,7 +10,7 @@ import { join } from 'node:path';
  * conflict gates, supersede) are covered by core tests; here we verify the CLI
  * actually wires start/record/decompose/finalize to the core and produces the
  * durable per-entity + DSL artifacts on disk (the wiring AC), plus fail-closed
- * payload/arg validation (tech-spec pattern).
+ * payload/arg validation (thin-surface-over-core pattern).
  */
 
 const cli = join(process.cwd(), 'src/cli/index.ts');

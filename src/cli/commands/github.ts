@@ -466,7 +466,7 @@ const githubSetupCommand = defineCommand({
 
     // wi_2606289h9: board-driven status backfill / re-sync. Explicit-flag only
     // (deterministic, no prompt). Shares the validate/write path via syncStatusMaps;
-    // writeGithubConfig preserves sibling config blocks (tech_spec/deep_interview).
+    // writeGithubConfig preserves sibling config blocks (prism/deep_interview).
     const resync = Boolean(args['resync-status']);
     const autodetect = Boolean(args['autodetect-status']);
     if (resync || autodetect) {
