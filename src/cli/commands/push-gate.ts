@@ -18,6 +18,7 @@ import {
   shouldSkipGate,
 } from '~/core/push-gate-cache';
 import { loadResolvedRecipe } from '~/core/recipe/load';
+import { type TestRunOutcome, type TestRunner, runTestCommand } from '~/core/test-runner';
 import { KILL_SWITCH } from '~/hooks/runtime';
 import type { RecipePushGate } from '~/schemas/recipe';
 
@@ -33,14 +34,15 @@ import type { RecipePushGate } from '~/schemas/recipe';
  * is the sanctioned bypass (mirrors the hook kill-switch).
  */
 
-/** Outcome of attempting to run the gate's test command. */
-export type PushTestOutcome =
-  | { kind: 'passed' }
-  | { kind: 'failed'; exitCode: number }
-  | { kind: 'unrunnable'; reason: string };
+/**
+ * Outcome of attempting to run the gate's test command — the shared four-terminal
+ * classification (passed/failed/unrunnable/timeout) from `~/core/test-runner`, so
+ * push-gate and the settled-tree barrier discriminate exit codes through ONE source.
+ */
+export type PushTestOutcome = TestRunOutcome;
 
 /** Run the gate's test command in `cwd` and report the outcome. Injectable for tests. */
-export type RunTest = (testCommand: string, cwd: string) => Promise<PushTestOutcome>;
+export type RunTest = TestRunner;
 
 export interface ExecPushGateInput {
   /** Raw git pre-push stdin (`<localref> <localsha> <remoteref> <remotesha>` lines). */
@@ -85,7 +87,8 @@ const GUIDANCE = 'Push a non-protected branch, or set DITTO_SKIP_HOOKS=1 to bypa
  *     allowing a push that should have been gated.
  *  3. No protected branch in the push (non-protected, or absent gate) → allow.
  *  4. Protected push → run the gate's test command: passed → allow; failed →
- *     block; unrunnable (runner absent) → BLOCK with guidance.
+ *     block; unrunnable (runner absent) → BLOCK with guidance; timeout (hang past
+ *     the wall clock) → BLOCK. Every non-pass terminal fails closed.
  */
 export async function execPushGate(inp: ExecPushGateInput): Promise<ExecPushGateResult> {
   if (inp.env[KILL_SWITCH]) return { exitCode: 0 };
@@ -131,34 +134,35 @@ export async function execPushGate(inp: ExecPushGateInput): Promise<ExecPushGate
         exitCode: 1,
         message: `push-gate: cannot run \`${decision.test_command}\` (${outcome.reason}) — blocking. ${GUIDANCE}`,
       };
+    case 'timeout':
+      // A hang (deadlock / waiting on stdin) trips the wall clock. push-gate FAILS CLOSED
+      // — it BLOCKS (the OPPOSITE of the barrier's degrade-proceed): an unverifiable gate
+      // must never silently allow a push.
+      return {
+        exitCode: 1,
+        message: `push-gate: \`${decision.test_command}\` timed out after ${outcome.timeoutMs}ms — blocking. ${GUIDANCE}`,
+      };
   }
 }
 
 /**
- * Production test runner: spawn the command through a shell (so the recipe's
- * `test_command` may use pipes/`&&`), streaming its output to the user's terminal.
- * A POSIX `127`/`126` exit means the command itself was not found / not
- * executable — the runner is ABSENT, distinct from tests that ran and failed.
+ * Generous wall-clock ceiling for the push gate. push-gate runs the FULL project suite
+ * (~200s for the real suite), so only a genuine HANG (deadlock / waiting on stdin) may
+ * trip this — never a slow-but-progressing run. This is push-gate's OWN value, distinct
+ * from the barrier's default (the barrier runs a unit subset): a short shared default
+ * must never be reused here.
  */
-const defaultRunTest: RunTest = async (testCommand, cwd) => {
-  let proc: ReturnType<typeof Bun.spawn>;
-  try {
-    proc = Bun.spawn(['sh', '-c', testCommand], {
-      cwd,
-      stdin: 'ignore',
-      stdout: 'inherit',
-      stderr: 'inherit',
-    });
-  } catch (err) {
-    return { kind: 'unrunnable', reason: err instanceof Error ? err.message : String(err) };
-  }
-  const code = await proc.exited;
-  if (code === 0) return { kind: 'passed' };
-  if (code === 126 || code === 127) {
-    return { kind: 'unrunnable', reason: `test command not found (exit ${code})` };
-  }
-  return { kind: 'failed', exitCode: code };
-};
+export const PUSH_GATE_TIMEOUT_MS = 10 * 60 * 1000;
+
+/**
+ * Production test runner: the shared `runTestCommand` (single tested spawn + exit-code
+ * classifier in `~/core/test-runner`) bound to push-gate's generous timeout. Kept as the
+ * injectable seam's DEFAULT so tests still override `runTest`. The `sh -c` invocation,
+ * inherited streams, and 0/126/127/other classification are all now sourced from that one
+ * helper; push-gate merely adds the wall-clock ceiling and the fail-closed disposition.
+ */
+const defaultRunTest: RunTest = (testCommand, cwd) =>
+  runTestCommand(testCommand, cwd, { timeoutMs: PUSH_GATE_TIMEOUT_MS });
 
 /** The trusted recipe location for a push, plus this repo's dir relative to it. */
 export interface PushGateRoot {

@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708zjt",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "9ffa4b3efcdf1f9c869a68ee8b779a31993a30ebec3fba79396688687c62ad3f",
+  "ts": "2026-07-08T16:21:34.556Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c bun test tests/core/push-gate.test.ts -t \"wi_260708zjt\" 2>&1 | grep -q \"0 fail\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

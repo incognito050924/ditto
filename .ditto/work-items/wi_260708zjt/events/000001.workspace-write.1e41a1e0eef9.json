@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708zjt",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "1e41a1e0eef952920719f3514898dbe487cc5d6bb8127509c9e46b69ec417d61",
+  "ts": "2026-07-08T16:21:33.859Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "fail",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c grep -q \"runTestCommand\" src/cli/commands/push-gate.ts && ! grep -qE \"126|127\" src/cli/commands/push-gate.ts",
+        "summary": "exit 1"
+      }
+    ]
+  }
+}

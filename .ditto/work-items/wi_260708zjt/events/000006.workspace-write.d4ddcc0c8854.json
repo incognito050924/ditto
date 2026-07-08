@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708zjt",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "d4ddcc0c8854e65eb74342604106afa795fa1e8d8fa9ea5fd82b0ff181a24c94",
+  "ts": "2026-07-08T16:22:17.502Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c bun test tests/core/push-gate.test.ts -t \"wi_260708zjt\" 2>&1 | grep -qiE \"timeout|sleep\"",
+        "summary": "exit 1"
+      },
+      {
+        "kind": "command",
+        "command": "sh -c grep -qi \"timeout\" tests/core/push-gate.test.ts && bun test tests/core/push-gate.test.ts >/dev/null 2>&1",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

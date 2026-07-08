@@ -51784,28 +51784,15 @@ async function execPushGate(inp) {
         exitCode: 1,
         message: `push-gate: cannot run \`${decision.test_command}\` (${outcome.reason}) \u2014 blocking. ${GUIDANCE}`
       };
+    case "timeout":
+      return {
+        exitCode: 1,
+        message: `push-gate: \`${decision.test_command}\` timed out after ${outcome.timeoutMs}ms \u2014 blocking. ${GUIDANCE}`
+      };
   }
 }
-var defaultRunTest = async (testCommand, cwd) => {
-  let proc;
-  try {
-    proc = Bun.spawn(["sh", "-c", testCommand], {
-      cwd,
-      stdin: "ignore",
-      stdout: "inherit",
-      stderr: "inherit"
-    });
-  } catch (err) {
-    return { kind: "unrunnable", reason: err instanceof Error ? err.message : String(err) };
-  }
-  const code = await proc.exited;
-  if (code === 0)
-    return { kind: "passed" };
-  if (code === 126 || code === 127) {
-    return { kind: "unrunnable", reason: `test command not found (exit ${code})` };
-  }
-  return { kind: "failed", exitCode: code };
-};
+var PUSH_GATE_TIMEOUT_MS = 10 * 60 * 1000;
+var defaultRunTest = (testCommand, cwd) => runTestCommand(testCommand, cwd, { timeoutMs: PUSH_GATE_TIMEOUT_MS });
 async function resolvePushGateRoot(cwd, explicitRoot, homeDir = homedir11()) {
   const start = resolve22(cwd);
   if (explicitRoot !== undefined && explicitRoot !== "") {
@@ -55371,4 +55358,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=a3fc527d2e7d13b76227cbd89bc5e8fab02ba5fb36dbf9595f0c2434af7f28b3
+//# ditto-src-stamp=325c7feeaa1302fce04ff203dadb36c81334705bde16564491f8816056f1ca7b

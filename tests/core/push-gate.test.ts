@@ -1,10 +1,14 @@
 import { describe, expect, test } from 'bun:test';
+import { tmpdir } from 'node:os';
+import { type ExecPushGateInput, execPushGate } from '~/cli/commands/push-gate';
 import {
   isRepoDeclared,
   parsePushedBranches,
   pushGateDecision,
   resolvePushGate,
 } from '~/core/push-gate';
+import { runTestCommand } from '~/core/test-runner';
+import type { RecipePushGate } from '~/schemas/recipe';
 
 const Z = '0000000000000000000000000000000000000000';
 
@@ -146,6 +150,68 @@ describe("resolvePushGate — pick a repo's gate from the workspace manifest", (
 
   test('no repos + non-root dir → undefined', () => {
     expect(resolvePushGate({ push_gate: manifest.push_gate }, 'frontend')).toBeUndefined();
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// wi_260708zjt — push-gate migrates its test runner to the shared `runTestCommand`
+// (single tested source) and GAINS a wall-clock timeout. The shared helper returns
+// the four-terminal classification; push-gate applies the fail-closed BLOCK
+// disposition: passed → allow (exit 0); failed | unrunnable | timeout → block
+// (exit 1). This is the OPPOSITE of the settled-tree barrier, which degrades-PROCEEDs
+// on unrunnable/timeout — push-gate BLOCKS. runTest is injected so each terminal is
+// deterministic; the last case exercises the REAL runner + a short-timeout override.
+// ───────────────────────────────────────────────────────────────────────────
+describe('execPushGate — shared-runner terminal → fail-closed disposition (wi_260708zjt)', () => {
+  const PUSH_MAIN = 'refs/heads/main a refs/heads/main b\n';
+  const gate: RecipePushGate = { protected_branches: ['main'], test_command: 'bun test' };
+  const input = (over: Partial<ExecPushGateInput>): ExecPushGateInput => ({
+    stdin: PUSH_MAIN,
+    gate,
+    malformedRecipe: false,
+    env: {},
+    cwd: '/repo',
+    runTest: async () => ({ kind: 'passed' }),
+    ...over,
+  });
+
+  test('passed → allow (exit 0)', async () => {
+    const r = await execPushGate(input({ runTest: async () => ({ kind: 'passed' }) }));
+    expect(r.exitCode).toBe(0);
+  });
+
+  test('failed → BLOCK (exit 1)', async () => {
+    const r = await execPushGate(input({ runTest: async () => ({ kind: 'failed', exitCode: 2 }) }));
+    expect(r.exitCode).toBe(1);
+  });
+
+  test('unrunnable → BLOCK (exit 1) — fail-closed, NOT the barrier degrade-proceed', async () => {
+    const r = await execPushGate(
+      input({ runTest: async () => ({ kind: 'unrunnable', reason: 'bun: command not found' }) }),
+    );
+    expect(r.exitCode).toBe(1);
+  });
+
+  test('timeout → BLOCK (exit 1) — a hang blocks, never an infinite stall', async () => {
+    const r = await execPushGate(
+      input({ runTest: async () => ({ kind: 'timeout', timeoutMs: 50 }) }),
+    );
+    expect(r.exitCode).toBe(1);
+  });
+
+  test('a REAL hanging command under a short-timeout override → killed and BLOCK (ac-3)', async () => {
+    const start = Date.now();
+    const r = await execPushGate(
+      input({
+        cwd: tmpdir(), // a REAL cwd so `sleep` actually spawns (not a spawn-throw → unrunnable)
+        gate: { protected_branches: ['main'], test_command: 'sleep 5' },
+        // Short timeout override so the test is fast; production binds a generous ceiling.
+        runTest: (cmd, cwd) => runTestCommand(cmd, cwd, { timeoutMs: 50 }),
+      }),
+    );
+    expect(r.exitCode).toBe(1);
+    // Proof it was KILLED, not that `sleep 5` ran to completion (~5000ms).
+    expect(Date.now() - start).toBeLessThan(2000);
   });
 });
 

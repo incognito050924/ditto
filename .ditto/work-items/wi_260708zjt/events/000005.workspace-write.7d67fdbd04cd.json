@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708zjt",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "7d67fdbd04cd3a0324a978936a3f71aeefd97a585aeb93f2cde67a00a694c9cb",
+  "ts": "2026-07-08T16:22:17.145Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c grep -q \"runTestCommand\" src/cli/commands/push-gate.ts && ! grep -qE \"126|127\" src/cli/commands/push-gate.ts",
+        "summary": "exit 1"
+      },
+      {
+        "kind": "command",
+        "command": "sh -c grep -q \"runTestCommand(testCommand\" src/cli/commands/push-gate.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
