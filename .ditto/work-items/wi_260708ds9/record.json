@@ -375,6 +375,31 @@
   "declared_risk": {
     "non_local": true
   },
+  "follow_ups": [
+    {
+      "kind": "idea",
+      "note": "배리어 명령 구조적 안전: 자유형식 barrier_test_command가 통합/실DB 스위트를 가리킬 수 있고 배리어는 매 완료마다 발동 → wi_260708yx5 공유-인프라 실패 재도입 가능. safe-by-construction은 guidance-guaranteed(단위-only 캐비엇)일 뿐 강제 아님. 구조적 강제(infra-touching 정적 검출/샌드박스) 또는 최소한 opt-in shared-infra 선언 재검토. ADR-20260708 잔여로 기록됨. (사용자가 의도적으로 out-of-scope 한 축이라 착수는 재확인 필요)",
+      "severity": "medium"
+    },
+    {
+      "kind": "idea",
+      "note": "per-repo 배리어 명령 resolution을 loop에 배선: recipe barrier_test_command는 top-level+repos[] per-repo로 선언 가능하나, resolveBarrierCommand(autopilot-loop.ts)는 root(repoRelDir='')만 해소 → 멀티-repo sub-repo가 자기 배리어 명령을 런타임에 못 씀. ac-4 필드는 대칭인데 소비자가 미대칭. 멀티-repo 워크스페이스에서 배리어가 sole-authority가 되려면 필요.",
+      "severity": "low",
+      "resolved": true
+    },
+    {
+      "kind": "idea",
+      "note": "push-gate를 공유 src/core/test-runner.ts 헬퍼로 이관: push-gate.ts defaultRunTest는 여전히 자체 exit-code 판별(timeout 없음). 배리어는 새 test-runner.ts(passed/failed/unrunnable/timeout)를 씀 → 로직 중복. push-gate를 헬퍼로 이관하면 dedup + push-gate도 wall-clock timeout 획득. 단 처분 비대칭(배리어 degrade-PROCEED vs push-gate fail-closed BLOCK)은 유지.",
+      "severity": "low",
+      "resolved": true
+    },
+    {
+      "kind": "idea",
+      "note": "console.txt/console2.txt(진단 wi_260708yx5 관찰 스크래치)가 이번 chore 커밋으로 repo root에 들어감 → .gitignore 추가 또는 적절 위치로 이전. bootstrap seed의 tsc-literal 노이즈(ac_verdicts/caps 생략, zod-defaulted 비게이팅)도 일관성 위해 정리 후보(리뷰가 수용 판정한 debt).",
+      "severity": "info",
+      "resolved": true
+    }
+  ],
   "follows": "wi_260708yx5",
   "risks": [],
   "re_entry": {
@@ -387,6 +412,6 @@
   "handoff_path": ".ditto/local/handoff/wi_260708ds9.md",
   "started_at_sha": "4558e864f2be4b273bc879f9cc03814a464b684e",
   "created_at": "2026-07-08T09:30:11.274Z",
-  "updated_at": "2026-07-08T15:03:22.224Z",
+  "updated_at": "2026-07-08T17:15:11.578Z",
   "closed_at": "2026-07-08T15:03:22.222Z"
 }
