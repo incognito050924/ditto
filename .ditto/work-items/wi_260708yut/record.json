@@ -213,7 +213,7 @@
       ]
     }
   ],
-  "status": "blocked",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [
@@ -253,5 +253,6 @@
   "handoff_path": ".ditto/local/handoff/wi_260708yut.md",
   "started_at_sha": "bd51cd8b86f3b0c94e7691e8040480aa2dcd95e0",
   "created_at": "2026-07-08T09:20:56.163Z",
-  "updated_at": "2026-07-08T19:56:23.596Z"
+  "updated_at": "2026-07-08T19:58:14.059Z",
+  "closed_at": "2026-07-08T19:58:14.058Z"
 }
