@@ -22418,20 +22418,17 @@ init_coverage();
 // src/core/charter.ts
 var MINIMAL_INCREMENT_SELF_CHECK = {
   id: "minimal-increment",
-  question: "\uC774\uAC8C \uC758\uB3C4\uB97C \uB2EC\uC131\uD558\uB294 \uAC00\uC7A5 \uBA85\uB8CC\uD558\uACE0 \uC791\uC740 \uC99D\uBD84\uC778\uAC00? \uCD94\uC0C1\uD654\uAC00 \uC9C0\uAE08\uC758 \uC2E4\uC81C \uBCF5\uC7A1\uB3C4\uC5D0 \uBE44\uB840\uD558\uB098 \u2014 \uC694\uCCAD\uB418\uC9C0 \uC54A\uC740 \uAE30\uB2A5\xB7\uC124\uC815\uAC00\uB2A5\uC131\xB7\uD655\uC7A5\uC131, \uBBF8\uB798 \uB300\uBE44/\uB2E8\uC77C \uC0AC\uC6A9/\uC595\uC740 \uCD94\uC0C1\uD654\uB85C \uACFC\uD558\uC9C0 \uC54A\uB098(\uACFC\uC789\uC774 \uD754\uD55C \uC2E4\uD328)? \uAC70\uAFB8\uB85C, \uC774 \uBCC0\uACBD\uC774 \uC0C8\uB85C \uB4E4\uC774\uB294 \uC911\uBCF5\xB7\uBC18\uBCF5\uC744 \uB9C8\uB545\uD788 \uBB36\uC9C0 \uC54A\uC544 \uBAA8\uC790\uB77C\uC9C0 \uC54A\uB098(\uC911\uBCF5\uC740 \uBC84\uADF8\xB7\uB4DC\uB9AC\uD504\uD2B8\uC758 \uC6D0\uCC9C)? \uBCC0\uACBD\uD55C \uBAA8\uB4E0 \uC904\uC5D0 \uC694\uCCAD\uACFC \uC5F0\uACB0\uB41C \uC774\uC720\uAC00 \uC788\uACE0, \uAD00\uB828 \uC5C6\uB294 \uB9AC\uD329\uD130\xB7\uD3EC\uB9F7 \uC815\uB9AC\uAC00 \uC11E\uC774\uC9C0 \uC54A\uC558\uB098? (\uBAA9\uD45C\uB294 \uCD94\uC0C1\uD654 \uD68C\uD53C\uAC00 \uC544\uB2C8\uB77C \uC801\uC815 \u2014 \uC2E4\uC81C \uBCF5\uC7A1\uB3C4\uB97C \uC904\uC77C \uB54C\uB9CC \uCD94\uC0C1\uD654\uD55C\uB2E4. \uAE30\uC874 \uC7AC\uC0AC\uC6A9 \uAC00\uB2A5 \uC790\uC0B0\uC744 \uCC44\uD0DD\uD588\uB294\uC9C0\uB294 far-field #reuse-build-vs-buy\uC758 \uBAAB)",
+  question: "\uC774\uAC8C \uC758\uB3C4\uB97C \uB2EC\uC131\uD558\uB294 \uAC00\uC7A5 \uC791\uACE0 \uBA85\uB8CC\uD55C \uC99D\uBD84\uC778\uAC00? \uCD94\uC0C1\uD654\uAC00 \uC2E4\uC81C \uBCF5\uC7A1\uB3C4\uC5D0 \uBE44\uB840\uD558\uB098 \u2014 \uC694\uCCAD\uB418\uC9C0 \uC54A\uC740 \uAE30\uB2A5\xB7\uC124\uC815\xB7\uD655\uC7A5\uC131\uC774\uB098 \uB2E8\uC77C \uC0AC\uC6A9\xB7\uC595\uC740 \uCD94\uC0C1\uD654\uB85C \uACFC\uD558\uC9C0 \uC54A\uACE0(\uD754\uD55C \uC2E4\uD328), \uAC70\uAFB8\uB85C \uC0C8\uB85C \uC0DD\uAE30\uB294 \uC911\uBCF5\uC744 \uBC29\uCE58\uD574 \uBAA8\uC790\uB77C\uC9C0\uB3C4 \uC54A\uB098? \uBCC0\uACBD\uD55C \uBAA8\uB4E0 \uC904\uC774 \uC694\uCCAD\uACFC \uC5F0\uACB0\uB418\uACE0, \uBB34\uAD00\uD55C \uB9AC\uD329\uD130\xB7\uD3EC\uB9F7 \uC815\uB9AC\uAC00 \uC11E\uC774\uC9C0 \uC54A\uC558\uB098?",
   origin: "far-field taxonomy floor \u2192 charter self-check (wi_260706n4w \u2014 \uC124\uACC4-\uBA54\uD0C0 \uD488\uC9C8\uC774\uB77C \uBA3C \uC704\uD5D8 sweep\uC774 \uC544\uB2C8\uB77C \uB9E4 \uD134 \uC7AC\uC8FC\uC785\uB418\uB294 charter\uAC00 \uC9D1\uD589\uD55C\uB2E4)"
 };
 var CHARTER_SELF_CHECKS = [MINIMAL_INCREMENT_SELF_CHECK];
 var PRIME_DIRECTIVE = [
   "DITTO prime directive:",
-  "- Preserve the original request. Do not grow scope (IntentContract); do not shrink it or split one request into many work items without user approval.",
-  "- The hook does not blindly auto-create a work item on every prompt \u2014 YOU do the deciding. Make a 1st-pass judgment per request: a request that produces an artifact OR makes an irreversible codebase change should become a work item; simple tasks, handoff, and git operations are exceptions (no work item). When it should, confirm the creation intent with the user, then register it YOURSELF by running `ditto work start` \u2014 you (the agent) create it automatically; the user does not type the command.",
-  "- If a request slips past this judgment, just handle it as normal work; you may still register one with `ditto work start` if it turns out to warrant tracking. There is no hard backstop.",
-  "- TWO standard paths only for any codebase change \u2014 heavy (`/ditto:deep-interview` \u2192 pre-mortem \u2192 `ditto autopilot`) or light (`ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done`) \u2014 and every change runs through one of them under a registered work item. NEVER make ad-hoc/freestyle edits or drive console-TDD outside a work item: that third path is FORBIDDEN \u2014 it leaves work untracked, never reaching done/retrospective/cleanup (the exact rot the user is forcing out). WHICH of the two paths is your judgment (Route by weight, below); choosing NEITHER is not allowed. TDD is HOW you implement inside a path, never a substitute for one.",
-  "- Route by weight (advisory \u2014 you judge, not an auto-classifier): a small, reversible request (localized/\u2248single-file change, no irreversible/external effect, expressible in 1\u20132 observable criteria) takes the lightweight path (`ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done`); reserve deep-interview + autopilot for genuinely ambiguous, irreversible, or multi-surface work. Declared risk defaults to the heavy path (override is audited); when unsure, escalate to heavy.",
-  "- Ask the user only what only the user can answer (QuestionGate); answer the rest from code/docs/web yourself.",
-  "- Completion is gated by evidence, not by claim: every acceptance criterion must be closed with evidence before final_verdict=pass.",
-  "- Internal checkpoint completion is not a final answer; the whole work item is the bar.",
+  "- Preserve the original request (IntentContract): do not grow scope, nor shrink/split it without user approval.",
+  "- Every codebase change runs under a work item via TWO standard paths only \u2014 heavy (/ditto:deep-interview \u2192 autopilot) or light (ditto work set-criteria \u2192 verify \u2192 done). Ad-hoc/console-TDD editing outside a work item is a FORBIDDEN third path; TDD is HOW you implement inside a path, not a substitute.",
+  "- YOU judge whether a request needs a work item, and which path (Route by weight, advisory): small/reversible \u2192 light; ambiguous/irreversible/multi-surface or declared risk \u2192 heavy. The hook never auto-creates one; when warranted, register it YOURSELF: `ditto work start`.",
+  "- Ask only what only the user can answer (QuestionGate); self-answer the rest from code/docs/web.",
+  "- Completion is evidence-gated: every acceptance criterion closed with evidence before final_verdict=pass; the whole work item is the bar, not a checkpoint.",
   ...CHARTER_SELF_CHECKS.map((c3) => `- Self-check (${c3.id}): ${c3.question}`)
 ].join(`
 `);
@@ -22449,11 +22446,6 @@ function charterProjection(ctx = {}) {
       ctx.workItemStatus ? `status=${ctx.workItemStatus}` : null
     ].filter(Boolean).join(", ");
     lines.push("", detail ? `${head} (${detail})` : head);
-  }
-  if (ctx.handoffBodies && ctx.handoffBodies.length > 0) {
-    lines.push("", "== Pending handoff (auto-loaded from .ditto/local/handoff/, now archived) ==");
-    for (const body of ctx.handoffBodies)
-      lines.push("", body);
   }
   if (ctx.pendingHandoff)
     lines.push(`Pending handoff/re-entry: ${ctx.pendingHandoff}`);
@@ -47012,21 +47004,7 @@ var userPromptSubmitHandler = async (input) => {
   });
   const ctx = {};
   try {
-    const hstore = new HandoffStore(input.repoRoot);
-    const boundId = resolved.workItem?.id;
-    if (boundId) {
-      const own = await hstore.consumeFor(boundId);
-      if (own)
-        ctx.handoffBodies = [own.body];
-    } else {
-      const active = await hstore.listActive();
-      const sole = active.length === 1 ? active[0] : undefined;
-      if (sole) {
-        ctx.handoffBodies = [sole.body];
-        await hstore.consumeFor(sole.handoff.work_item_id);
-      }
-    }
-    await hstore.sweepStaleActive();
+    await new HandoffStore(input.repoRoot).sweepStaleActive();
     await new SessionPointerStore(input.repoRoot).sweepStale();
   } catch {}
   const item = resolved.workItem;
@@ -55394,4 +55372,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=b5719561f4439087cd7b937f76614d6f511ecf85fdab0d5375d9313f1ac95544
+//# ditto-src-stamp=72ec8a9edc5a80b7211ac5e3540ffcf70f92272a80b0d9af72359e35d144717b

@@ -235,15 +235,22 @@ describe('M4 — active work item context injection (M1.3 charter projection cro
     expect(ctx).toContain(wi.id); // active work item 식별자 주입
   });
 
-  test('pending handoff 가 있으면 hint 가 charter context 에 포함된다', async () => {
-    // PreCompact 가 handoff 를 작성 → work item handoff_path 세팅
+  test('pending handoff 재진입 hint 가 있으면 charter context 에 포함된다', async () => {
+    // 핸드오프 본문 auto-load 는 제거됐다(wi_260708700): 효능이 없었고 매 재개 턴에
+    // 본문을 통째로 주입했다. 재개 신호는 이제 re_entry hint(= `ditto work handoff`
+    // 가 남기는 재개 명령)로만 surfacing 된다 — 본문은 수동 로드(별도 후속).
     await preCompactHandler({ raw: { session_id: SESSION }, repoRoot: tmp, env: {} });
+    await items.update(wi.id, (cur) => ({
+      ...cur,
+      re_entry: { command: `ditto work resume ${wi.id}`, fresh_evidence_needed: [] },
+    }));
     const out = await userPromptSubmitHandler({
       raw: { session_id: SESSION, prompt: 'next session' },
       repoRoot: tmp,
       env: {},
     });
     const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
-    expect(ctx).toContain('handoff'); // pending handoff hint 가 보여야 한다
+    expect(ctx).toContain('Pending handoff/re-entry'); // 재진입 hint 가 보여야 한다
+    expect(ctx).not.toContain('auto-loaded'); // 본문 auto-load 는 더 이상 하지 않는다
   });
 });

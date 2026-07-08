@@ -31,7 +31,7 @@ export interface CharterSelfCheck {
 export const MINIMAL_INCREMENT_SELF_CHECK: CharterSelfCheck = {
   id: 'minimal-increment',
   question:
-    '이게 의도를 달성하는 가장 명료하고 작은 증분인가? 추상화가 지금의 실제 복잡도에 비례하나 — 요청되지 않은 기능·설정가능성·확장성, 미래 대비/단일 사용/얕은 추상화로 과하지 않나(과잉이 흔한 실패)? 거꾸로, 이 변경이 새로 들이는 중복·반복을 마땅히 묶지 않아 모자라지 않나(중복은 버그·드리프트의 원천)? 변경한 모든 줄에 요청과 연결된 이유가 있고, 관련 없는 리팩터·포맷 정리가 섞이지 않았나? (목표는 추상화 회피가 아니라 적정 — 실제 복잡도를 줄일 때만 추상화한다. 기존 재사용 가능 자산을 채택했는지는 far-field #reuse-build-vs-buy의 몫)',
+    '이게 의도를 달성하는 가장 작고 명료한 증분인가? 추상화가 실제 복잡도에 비례하나 — 요청되지 않은 기능·설정·확장성이나 단일 사용·얕은 추상화로 과하지 않고(흔한 실패), 거꾸로 새로 생기는 중복을 방치해 모자라지도 않나? 변경한 모든 줄이 요청과 연결되고, 무관한 리팩터·포맷 정리가 섞이지 않았나?',
   origin:
     'far-field taxonomy floor → charter self-check (wi_260706n4w — 설계-메타 품질이라 먼 위험 sweep이 아니라 매 턴 재주입되는 charter가 집행한다)',
 };
@@ -39,17 +39,19 @@ export const MINIMAL_INCREMENT_SELF_CHECK: CharterSelfCheck = {
 /** All executable charter self-checks (projected every turn, below). */
 export const CHARTER_SELF_CHECKS: readonly CharterSelfCheck[] = [MINIMAL_INCREMENT_SELF_CHECK];
 
+// Compressed to tight anchors (wi_260708700): re-injected EVERY turn, so each
+// rule is one compact line — enough to re-anchor against drift, without the
+// verbose command-lists/how-to that already live in CLAUDE.md/WORKFLOW/skills.
+// The minimal-increment self-check is projected VERBATIM (it is a cross-
+// referenced SoT — see MINIMAL_INCREMENT_SELF_CHECK) and stays uncompressed.
 const PRIME_DIRECTIVE = [
   'DITTO prime directive:',
-  '- Preserve the original request. Do not grow scope (IntentContract); do not shrink it or split one request into many work items without user approval.',
-  '- The hook does not blindly auto-create a work item on every prompt — YOU do the deciding. Make a 1st-pass judgment per request: a request that produces an artifact OR makes an irreversible codebase change should become a work item; simple tasks, handoff, and git operations are exceptions (no work item). When it should, confirm the creation intent with the user, then register it YOURSELF by running `ditto work start` — you (the agent) create it automatically; the user does not type the command.',
-  '- If a request slips past this judgment, just handle it as normal work; you may still register one with `ditto work start` if it turns out to warrant tracking. There is no hard backstop.',
-  '- TWO standard paths only for any codebase change — heavy (`/ditto:deep-interview` → pre-mortem → `ditto autopilot`) or light (`ditto work set-criteria` → `ditto verify` → `ditto work done`) — and every change runs through one of them under a registered work item. NEVER make ad-hoc/freestyle edits or drive console-TDD outside a work item: that third path is FORBIDDEN — it leaves work untracked, never reaching done/retrospective/cleanup (the exact rot the user is forcing out). WHICH of the two paths is your judgment (Route by weight, below); choosing NEITHER is not allowed. TDD is HOW you implement inside a path, never a substitute for one.',
-  '- Route by weight (advisory — you judge, not an auto-classifier): a small, reversible request (localized/≈single-file change, no irreversible/external effect, expressible in 1–2 observable criteria) takes the lightweight path (`ditto work set-criteria` → `ditto verify` → `ditto work done`); reserve deep-interview + autopilot for genuinely ambiguous, irreversible, or multi-surface work. Declared risk defaults to the heavy path (override is audited); when unsure, escalate to heavy.',
-  '- Ask the user only what only the user can answer (QuestionGate); answer the rest from code/docs/web yourself.',
-  '- Completion is gated by evidence, not by claim: every acceptance criterion must be closed with evidence before final_verdict=pass.',
-  '- Internal checkpoint completion is not a final answer; the whole work item is the bar.',
-  // Executable self-checks routed into the charter (wi_260706n4w): projected
+  '- Preserve the original request (IntentContract): do not grow scope, nor shrink/split it without user approval.',
+  '- Every codebase change runs under a work item via TWO standard paths only — heavy (/ditto:deep-interview → autopilot) or light (ditto work set-criteria → verify → done). Ad-hoc/console-TDD editing outside a work item is a FORBIDDEN third path; TDD is HOW you implement inside a path, not a substitute.',
+  '- YOU judge whether a request needs a work item, and which path (Route by weight, advisory): small/reversible → light; ambiguous/irreversible/multi-surface or declared risk → heavy. The hook never auto-creates one; when warranted, register it YOURSELF: `ditto work start`.',
+  '- Ask only what only the user can answer (QuestionGate); self-answer the rest from code/docs/web.',
+  '- Completion is evidence-gated: every acceptance criterion closed with evidence before final_verdict=pass; the whole work item is the bar, not a checkpoint.',
+  // Executable self-check routed into the charter (wi_260706n4w): projected
   // verbatim from CHARTER_SELF_CHECKS so the check that left the far-field sweep
   // stays enforced every turn, not archived as documentation.
   ...CHARTER_SELF_CHECKS.map((c) => `- Self-check (${c.id}): ${c.question}`),
@@ -99,13 +101,6 @@ export interface CharterContext {
   workItemStatus?: string;
   /** Concrete resume hint from a pending handoff / re_entry, if any. */
   pendingHandoff?: string;
-  /**
-   * Bodies of active handoffs auto-loaded this turn (wi_260605wf3). The
-   * UserPromptSubmit hook reads `.ditto/local/handoff/` without the user naming a
-   * file, injects the bodies here, then archives them — so a handoff is picked
-   * up exactly once and never accumulates.
-   */
-  handoffBodies?: string[];
   /** Advisory note when the active work item is ambiguous and must be resolved by the user. */
   advisory?: string;
   /**
@@ -149,10 +144,6 @@ export function charterProjection(ctx: CharterContext = {}): string {
       .filter(Boolean)
       .join(', ');
     lines.push('', detail ? `${head} (${detail})` : head);
-  }
-  if (ctx.handoffBodies && ctx.handoffBodies.length > 0) {
-    lines.push('', '== Pending handoff (auto-loaded from .ditto/local/handoff/, now archived) ==');
-    for (const body of ctx.handoffBodies) lines.push('', body);
   }
   if (ctx.pendingHandoff) lines.push(`Pending handoff/re-entry: ${ctx.pendingHandoff}`);
   if (ctx.placeholderAcceptanceCriteria) lines.push('', `⚠ ${PLACEHOLDER_AC_ADVISORY}`);

@@ -24,9 +24,10 @@ describe('charterProjection (D8)', () => {
 
   test('base prime directive reflects the agent-judged, agent-registered work-item model', () => {
     const out = charterProjection();
-    // The hook does not blindly auto-create on every prompt; the agent decides.
-    expect(out).toContain('does not blindly auto-create a work item on every prompt');
-    expect(out).toContain('1st-pass judgment');
+    // The hook does not auto-create on every prompt; the agent decides (compressed
+    // wording, wi_260708700 — the anchors survive, the verbose how-to does not).
+    expect(out).toContain('never auto-creates one');
+    expect(out.toLowerCase()).toContain('you judge');
     // Creation is agent-driven (the agent runs the command), not user-manual.
     expect(out).toContain('register it YOURSELF');
     expect(out).toContain('ditto work start');
@@ -45,12 +46,12 @@ describe('charterProjection (D8)', () => {
   test('prime directive carries weight-routing guidance (small/reversible → light)', () => {
     const out = charterProjection();
     expect(out).toContain('Route by weight');
-    expect(out).toContain('lightweight path');
-    expect(out).toContain('ditto work set-criteria');
-    expect(out).toContain('deep-interview + autopilot');
+    expect(out).toContain('small/reversible → light'); // light path routing
+    expect(out).toContain('ditto work set-criteria'); // light path entry command
+    expect(out).toContain('/ditto:deep-interview'); // heavy path entry
     expect(out).toContain('advisory');
     expect(out.toLowerCase()).toContain('you judge');
-    expect(out).toContain('Declared risk defaults to the heavy path');
+    expect(out).toContain('declared risk → heavy'); // declared risk defaults heavy
   });
 
   // wi_2606290xm: only two standard paths exist; the ad-hoc/console-TDD third
@@ -59,7 +60,7 @@ describe('charterProjection (D8)', () => {
   test('prime directive forbids the ad-hoc third path (only two standard paths)', () => {
     const out = charterProjection();
     expect(out).toContain('TWO standard paths only');
-    expect(out).toContain('NEVER make ad-hoc');
+    expect(out).toContain('Ad-hoc/console-TDD editing outside a work item');
     expect(out).toContain('FORBIDDEN');
     expect(out).toContain('TDD is HOW you implement inside a path');
     // The path *choice* must remain agent-judged (no regression on routing tone).

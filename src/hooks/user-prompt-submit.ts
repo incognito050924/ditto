@@ -283,41 +283,20 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
 
   const ctx: CharterContext = {};
 
-  // Active handoff 자동 로드 (wi_260605wf3): 파일명을 명시하지 않아도 본문을
-  // 컨텍스트로 주입한 뒤 archive 로 옮긴다 → 정확히 1회 픽업, active 누적 0.
-  // fail-open: handoff 읽기/이동 실패가 프롬프트 훅을 막지 않는다.
-  //
-  // ac-1 (wi_260626r3f): a worktree session shares the main .ditto/local, so the
-  // old "consume EVERY active handoff" let a concurrent session steal a sibling
-  // work item's handoff (silent, unrecoverable). Scope the pickup:
-  //  - session bound to a work item → inject+consume ONLY that work item's handoff.
-  //  - unbound + EXACTLY one active handoff → consume it (single-session back-compat).
-  //  - unbound + multiple → consume none (ambiguous; a sibling session owns one).
+  // Handoff bodies are NO LONGER auto-injected (wi_260708700). Auto-load
+  // (wi_260605wf3) had no efficacy in practice and dumped the verbatim body into
+  // context on every resume turn. Handoffs now stay active for MANUAL load (a
+  // follow-up read mechanism); the once-per-prompt tick only runs GC:
+  //  - sweepStaleActive (wi_2606289nt): archive a handoff no one picked up past
+  //    the retention limit, so it can never linger forever.
+  //  - SessionPointerStore.sweepStale (WS-HND-T3, wi_260706kdx): retire stale
+  //    session pointers so a reused session id never re-binds to a dead work item.
+  // fail-open: a GC error must not break the prompt hook.
   try {
-    const hstore = new HandoffStore(input.repoRoot);
-    const boundId = resolved.workItem?.id;
-    if (boundId) {
-      const own = await hstore.consumeFor(boundId);
-      if (own) ctx.handoffBodies = [own.body];
-    } else {
-      const active = await hstore.listActive();
-      const sole = active.length === 1 ? active[0] : undefined;
-      if (sole) {
-        ctx.handoffBodies = [sole.body];
-        await hstore.consumeFor(sole.handoff.work_item_id);
-      }
-    }
-    // stale active sweep (wi_2606289nt): a handoff no session ever picked up,
-    // once past the retention limit, is MOVED into archive so it never re-injects
-    // into an unrelated session's context. Observational, in the same fail-open
-    // try/catch — a sweep error must not break the prompt hook.
-    await hstore.sweepStaleActive();
-    // Sibling GC (WS-HND-T3, wi_260706kdx): retire stale session pointers on the
-    // same once-per-prompt tick so a reused session id never re-binds to a
-    // long-dead work item. Same fail-open envelope — never breaks the prompt hook.
+    await new HandoffStore(input.repoRoot).sweepStaleActive();
     await new SessionPointerStore(input.repoRoot).sweepStale();
   } catch {
-    // handoff 자동 로드/sweep 실패는 무시 (관측적, non-blocking)
+    // sweep 실패는 무시 (관측적, non-blocking)
   }
 
   const item = resolved.workItem;

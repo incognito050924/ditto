@@ -541,12 +541,13 @@ describe('userPromptSubmitHandler', () => {
     });
   });
 
-  // wi_260605wf3 — active handoff 를 파일명 명시 없이 자동으로 읽어 컨텍스트에
-  // 주입하고, 주입 직후 archive 로 옮겨 정확히 1회만 픽업한다(누적 0).
-  describe('active handoff auto-load', () => {
-    async function seedActiveHandoff(currentState: string): Promise<void> {
-      const items = new WorkItemStore(repo);
-      const wi = await items.create({
+  // wi_260708700 — handoff auto-load REMOVED. Auto-load (wi_260605wf3) had no
+  // efficacy and dumped the verbatim body into context on every resume turn. A
+  // handoff is now neither injected nor consumed on prompt; it stays active for
+  // MANUAL load (a follow-up read mechanism). Only the stale sweep (below) GCs it.
+  describe('handoff is NOT auto-loaded (manual load only)', () => {
+    async function seedActiveHandoff(currentState: string): Promise<{ id: string }> {
+      const wi = await new WorkItemStore(repo).create({
         title: 'prev',
         source_request: 'do the prior thing',
         goal: 'g',
@@ -560,85 +561,21 @@ describe('userPromptSubmitHandler', () => {
           nextFirstCheck: 'run bun test',
         }),
       );
+      return wi;
     }
 
-    test('injects the active handoff body without the user naming a file', async () => {
-      await seedActiveHandoff('N2 implement midway, ac-1 pending');
+    test('an active handoff is neither injected into context nor consumed', async () => {
+      const wi = await seedActiveHandoff('body-marker-N2');
+      await new SessionPointerStore(repo).set('sess-ho', wi.id); // bound to its OWN handoff
       const ctx = additionalContext(
         (await run({ session_id: 'sess-ho', prompt: '계속 해줘' })).stdout,
       );
-      expect(ctx).toContain('Pending handoff (auto-loaded');
-      expect(ctx).toContain('N2 implement midway, ac-1 pending'); // 본문이 주입됨
-    });
-
-    test('archives on pickup — a second prompt no longer sees it (no accumulation)', async () => {
-      await seedActiveHandoff('one-shot body marker');
-      await run({ session_id: 'sess-ho2', prompt: '계속' });
-      expect(await new HandoffStore(repo).listActive()).toHaveLength(0);
-      const ctx2 = additionalContext((await run({ session_id: 'sess-ho2', prompt: '또' })).stdout);
-      expect(ctx2).not.toContain('one-shot body marker');
-    });
-
-    // wi_260626r3f ac-1: a worktree session shares the main .ditto/local, so the
-    // OLD all-handoffs pickup let a concurrent session steal a sibling's handoff.
-    // A session BOUND to a work item now consumes only that work item's handoff.
-    async function seedHandoffFor(wi: { id: string }, currentState: string): Promise<void> {
-      const item = await new WorkItemStore(repo).get(wi.id);
-      await new HandoffStore(repo).write(
-        buildHandoff({ workItem: item, fromContext: 'prev', currentState, nextFirstCheck: 'c' }),
-      );
-    }
-    async function makeWI(title: string): Promise<{ id: string }> {
-      return new WorkItemStore(repo).create({
-        title,
-        source_request: 'r',
-        goal: 'g',
-        acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
-      });
-    }
-
-    test('bound sessions each consume only their own handoff (no cross-pickup)', async () => {
-      const a = await makeWI('A');
-      const b = await makeWI('B');
-      await seedHandoffFor(a, 'A-state-marker');
-      await seedHandoffFor(b, 'B-state-marker');
-      await new SessionPointerStore(repo).set('sess-A', a.id);
-      await new SessionPointerStore(repo).set('sess-B', b.id);
+      expect(ctx).not.toContain('Pending handoff (auto-loaded');
+      expect(ctx).not.toContain('body-marker-N2'); // body NOT injected
+      // NOT consumed — stays active so a manual mechanism can still load it.
       const hs = new HandoffStore(repo);
-      // session A's first prompt: injects ONLY A's handoff, leaves B's active
-      const ctxA = additionalContext((await run({ session_id: 'sess-A', prompt: 'go' })).stdout);
-      expect(ctxA).toContain('A-state-marker');
-      expect(ctxA).not.toContain('B-state-marker');
-      expect(await hs.exists(a.id)).toBe(false); // A consumed
-      expect(await hs.exists(b.id)).toBe(true); // B NOT stolen
-      // session B still gets its own
-      const ctxB = additionalContext((await run({ session_id: 'sess-B', prompt: 'go' })).stdout);
-      expect(ctxB).toContain('B-state-marker');
-      expect(await hs.exists(b.id)).toBe(false);
-    });
-
-    test('bound session with no own handoff leaves a sibling handoff untouched', async () => {
-      const a = await makeWI('A');
-      const b = await makeWI('B');
-      await seedHandoffFor(b, 'B-only-marker');
-      await new SessionPointerStore(repo).set('sess-A', a.id);
-      const ctxA = additionalContext((await run({ session_id: 'sess-A', prompt: 'go' })).stdout);
-      expect(ctxA).not.toContain('B-only-marker');
-      expect(await new HandoffStore(repo).exists(b.id)).toBe(true);
-    });
-
-    test('unbound session with multiple active handoffs consumes none (concurrency-safe)', async () => {
-      const a = await makeWI('A');
-      const b = await makeWI('B');
-      await seedHandoffFor(a, 'A-state-marker');
-      await seedHandoffFor(b, 'B-state-marker');
-      // unbound session (no pointer)
-      const ctx = additionalContext((await run({ session_id: 'sess-none', prompt: 'go' })).stdout);
-      expect(ctx).not.toContain('A-state-marker');
-      expect(ctx).not.toContain('B-state-marker');
-      const hs = new HandoffStore(repo);
-      expect(await hs.exists(a.id)).toBe(true);
-      expect(await hs.exists(b.id)).toBe(true);
+      expect(await hs.exists(wi.id)).toBe(true);
+      expect(await hs.listActive()).toHaveLength(1);
     });
   });
 
