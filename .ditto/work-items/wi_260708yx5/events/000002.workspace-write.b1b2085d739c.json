@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708yx5",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "b1b2085d739cfc02169f7dc9cf45f7455fa28cd628bd56cddb8c0ae83e22b3a3",
+  "ts": "2026-07-08T09:25:31.535Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c F=reports/design/autopilot-test-execution-gaps.md; test $(grep -cE \"^### P[0-9]\" \"$F\") -ge 6 && grep -q \"\\[확정\" \"$F\" && grep -q \"\\[추론\" \"$F\" && grep -qE \"autopilot-(graph|loop)\\.ts:[0-9]\" \"$F\" && grep -q \"console.txt\" \"$F\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

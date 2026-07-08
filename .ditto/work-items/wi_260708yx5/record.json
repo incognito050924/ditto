@@ -1,0 +1,67 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260708yx5",
+  "title": "autopilot 테스트 실행 결함 진단 시드 문서",
+  "source_request": "우선 문제점에 대해서 정리해서 문서로 만들어줘. 이걸로 나중에 바로 오케스트레이션 개선과 TDD 에 대한 빈 부분 보강할 수 있도록 말이야",
+  "goal": "autopilot 테스트 실행 결함을 근거와 함께 정리한 진단 문서를 reports/design/autopilot-test-execution-gaps.md 로 만들어 향후 오케스트레이션·TDD 개선 WI의 시드로 쓴다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "파일 reports/design/autopilot-test-execution-gaps.md 가 생성되고 비어있지 않다(줄 수 > 80)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c test $(wc -l < reports/design/autopilot-test-execution-gaps.md) -gt 80",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "문서가 결함을 6개 이상 번호매김 섹션으로 담고 각 섹션이 근거(file:line 또는 console.txt Lnn 문자열)와 [확정] 또는 [추론] 라벨을 포함한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c F=reports/design/autopilot-test-execution-gaps.md; test $(grep -cE \"^### P[0-9]\" \"$F\") -ge 6 && grep -q \"\\[확정\" \"$F\" && grep -q \"\\[추론\" \"$F\" && grep -qE \"autopilot-(graph|loop)\\.ts:[0-9]\" \"$F\" && grep -q \"console.txt\" \"$F\"",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "문서에 'boxwood' 문자열과 portal-backend 실 DB 사례가 포함된 실증 섹션이 있다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c F=reports/design/autopilot-test-execution-gaps.md; grep -q boxwood \"$F\" && grep -q portal-backend \"$F\" && grep -q MariaDB \"$F\"",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "문서에 '개선 방향'과 '열린 결정' 제목 섹션이 각각 1개 이상 존재한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c F=reports/design/autopilot-test-execution-gaps.md; grep -qE \"^## 5\\. 개선 방향\" \"$F\" && grep -qE \"^## 6\\. 열린 결정\" \"$F\"",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-08T09:18:37.841Z",
+  "updated_at": "2026-07-08T09:25:39.039Z",
+  "closed_at": "2026-07-08T09:25:39.037Z"
+}

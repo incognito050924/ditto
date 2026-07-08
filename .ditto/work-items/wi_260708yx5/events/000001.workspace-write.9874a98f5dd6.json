@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708yx5",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "9874a98f5dd6971a7e1d2e45274ae11803b11333b70b66a8b405df692f4eb308",
+  "ts": "2026-07-08T09:25:31.300Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c test $(wc -l < reports/design/autopilot-test-execution-gaps.md) -gt 80",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
