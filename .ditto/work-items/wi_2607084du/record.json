@@ -1,0 +1,47 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607084du",
+  "title": "leaseScopeRelPath POSIX 정규화 (Windows)",
+  "source_request": "Windows 갭: leaseScopeRelPath가 relative()를 그대로 반환하는데 Windows에선 \\ 구분자라, scopeRefMatches(POSIX / 가정)가 under-match. cp7/#2 worktree fix가 Windows에서 실효하려면 POSIX 정규화 필요. toPosixSeparators 재사용.",
+  "goal": "leaseScopeRelPath를 POSIX로 정규화 — Windows(\\ 구분자)에서 scope 게이트가 매칭되게",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "leaseScopeRelPath가 path.win32 의미로 호출될 때 백슬래시 구분자를 슬래시로 정규화한 repo-relative 경로를 반환한다 — 유닛 테스트가 확인한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/lease-scope-rel-path.test.ts -t Windows",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "POSIX 환경의 기존 worktree lease·forbidden scope 게이트 동작은 불변으로 통과한다 (무회귀)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/pre-tool-use.test.ts tests/hooks/lease-scope-rel-path.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/hooks/pre-tool-use.ts",
+    "tests/hooks/lease-scope-rel-path.test.ts",
+    "bin/ditto"
+  ],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-08T09:14:29.606Z",
+  "updated_at": "2026-07-08T09:17:09.399Z",
+  "closed_at": "2026-07-08T09:17:09.398Z"
+}

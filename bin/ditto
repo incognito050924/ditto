@@ -44500,7 +44500,7 @@ var preCompactHandler = async (input) => {
 // src/hooks/pre-tool-use.ts
 import { homedir as homedir9, tmpdir } from "os";
 import { join as join69 } from "path";
-import { isAbsolute as isAbsolute14, relative as relative19, resolve as resolve18 } from "path";
+import { isAbsolute as isAbsolute14, relative as relative19, resolve as resolve18, sep as sep9 } from "path";
 
 // src/acg/scope/resolve.ts
 function stripModuleExt2(p2) {
@@ -44903,11 +44903,15 @@ function fileScopeContains(scope, repoRelPath) {
   return scope.some((s2) => scopeRefMatches(/[*?[\]]/.test(s2) ? { kind: "glob", ref: s2 } : { kind: "path", ref: s2 }, repoRelPath));
 }
 var TESTS_ALLOW_NODE_KINDS = new Set(["implement", "fix", "refactor"]);
-function leaseScopeRelPath(repoRoot, filePath) {
-  const resolved = resolve18(repoRoot, filePath);
-  const worktree = parseWorktreePath(resolved);
+function leaseScopeRelPath(repoRoot, filePath, pathImpl = {
+  resolve: resolve18,
+  relative: relative19,
+  sep: sep9
+}) {
+  const resolved = pathImpl.resolve(repoRoot, filePath);
+  const worktree = parseWorktreePath(resolved, pathImpl.sep);
   const scopeRoot = worktree ? localDir(worktree.workspace, "worktrees", worktree.workItemId) : repoRoot;
-  return relative19(scopeRoot, resolved);
+  return toPosixSeparators(pathImpl.relative(scopeRoot, resolved), pathImpl.sep);
 }
 async function checkAutopilotLease(input, filePath) {
   if (isOutsideRepo(input.repoRoot, filePath) && isSystemTmpPath(filePath))
@@ -51645,7 +51649,7 @@ init_common();
 init_fs();
 init_git();
 import { stat as stat11, writeFile as writeFile5 } from "fs/promises";
-import { dirname as dirname17, join as join85, relative as relative22, resolve as resolve23, sep as sep9 } from "path";
+import { dirname as dirname17, join as join85, relative as relative22, resolve as resolve23, sep as sep10 } from "path";
 init_work_item_store();
 init_worktree();
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
@@ -51666,7 +51670,7 @@ class RunWithRuntimeError extends Error {
   }
 }
 function repoRelative2(repoRoot, path) {
-  return relative22(repoRoot, path).split(sep9).join("/");
+  return relative22(repoRoot, path).split(sep10).join("/");
 }
 function resolveRepoCwd(repoRoot, cwd) {
   const parsed = relativePath.safeParse(cwd);
@@ -51675,7 +51679,7 @@ function resolveRepoCwd(repoRoot, cwd) {
   }
   const resolvedRoot = resolve23(repoRoot);
   const resolvedCwd = resolve23(join85(repoRoot, cwd));
-  if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep9}`)) {
+  if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep10}`)) {
     throw new RunWithUsageError(`cwd escapes repo root: ${cwd}`);
   }
   return parsed.data;
@@ -52763,10 +52767,10 @@ function ensureGitignored(deps) {
 `).map((l2) => l2.trim());
   if (lines.includes(GITIGNORE_ENTRY))
     return false;
-  const sep10 = current === "" || current.endsWith(`
+  const sep11 = current === "" || current.endsWith(`
 `) ? "" : `
 `;
-  deps.writeGitignore(`${current}${sep10}
+  deps.writeGitignore(`${current}${sep11}
 # ditto memory: \uBCC4\uB3C4 \uC800\uC7A5\uC18C\uB85C \uBD84\uB9AC\uB428(\uC911\uBCF5 \uAD00\uB9AC \uBC29\uC9C0)
 ${GITIGNORE_ENTRY}
 `);
@@ -54701,4 +54705,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=0f1a53985a47e966350fd7b6fe04df7c23b2e90526b8c2d80b5ed60836f5f960
+//# ditto-src-stamp=64a8f5d9a9fd0d73e821f7e838053f195bab042a68cd574561c7c368307dc644

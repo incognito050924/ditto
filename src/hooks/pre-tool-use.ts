@@ -1,6 +1,6 @@
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { parseJvmCodeqlCommand, runInternalPackagesGuard } from '~/acg/internal-packages';
 import { matchForbiddenScope, scopeRefMatches } from '~/acg/scope/resolve';
 import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
@@ -9,7 +9,7 @@ import { ChangeContractStore } from '~/core/change-contract-store';
 import { localDir } from '~/core/ditto-paths';
 import { atomicWriteText, ensureDir, readArchitectureSpec } from '~/core/fs';
 import { SessionPointerStore } from '~/core/session-pointer';
-import { parseWorktreePath } from '~/core/worktree';
+import { parseWorktreePath, toPosixSeparators } from '~/core/worktree';
 import { type AcgArchitectureSpec, acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import { mutatedPaths, parseApplyPatchPaths } from './envelope';
 import type { HookHandler, HookInput } from './runtime';
@@ -641,14 +641,28 @@ const TESTS_ALLOW_NODE_KINDS: ReadonlySet<string> = new Set(['implement', 'fix',
  * DITTO_SKIP_HOOKS=1 workarounds). Relativize against the worktree root instead, so the
  * path is the same repo-relative form the file_scope uses. Non-worktree paths are
  * unchanged (parseWorktreePath → null), so there is no regression outside worktrees.
+ *
+ * WINDOWS (wi_2607084du): the result is normalized to POSIX `/` separators, because the
+ * downstream `scopeRefMatches` compares against `/`-separated scope refs — `relative()`
+ * yields `\` on Windows, which would make every scope UNDER-MATCH (whitelist false-block,
+ * blacklist under-enforce). `pathImpl` is injectable ONLY so the Windows path semantics
+ * (`path.win32`) are testable on a POSIX host; production always uses `node:path`.
  */
-function leaseScopeRelPath(repoRoot: string, filePath: string): string {
-  const resolved = resolve(repoRoot, filePath);
-  const worktree = parseWorktreePath(resolved);
+export function leaseScopeRelPath(
+  repoRoot: string,
+  filePath: string,
+  pathImpl: { resolve: typeof resolve; relative: typeof relative; sep: string } = {
+    resolve,
+    relative,
+    sep,
+  },
+): string {
+  const resolved = pathImpl.resolve(repoRoot, filePath);
+  const worktree = parseWorktreePath(resolved, pathImpl.sep);
   const scopeRoot = worktree
     ? localDir(worktree.workspace, 'worktrees', worktree.workItemId)
     : repoRoot;
-  return relative(scopeRoot, resolved);
+  return toPosixSeparators(pathImpl.relative(scopeRoot, resolved), pathImpl.sep);
 }
 
 /**
