@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607075vc",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "d8c24e2ccc9417df26c831e2b7544f964b486b8b60228794067c9190b5d7825a",
+  "ts": "2026-07-08T08:11:31.661Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/prism-cli.test.ts -t trivial-streak divergence is reachable",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

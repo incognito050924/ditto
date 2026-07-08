@@ -1,0 +1,48 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260707cp7",
+  "title": "bug: autopilot lease-gate PreToolUse 훅이 worktree 경로를 main-repo file_scope에 대해 오해석해 worktree 모든 경로의 Write/Edit를 차단 → 두 implementer 모두 DITTO_SKIP_HOOKS=1 우회로 in-scope 쓰기 수행. worktree 기반 WI에 대해 lease 게이트",
+  "source_request": "Discovered while working on wi_260707oi1: autopilot lease-gate PreToolUse 훅이 worktree 경로를 main-repo file_scope에 대해 오해석해 worktree 모든 경로의 Write/Edit를 차단 → 두 implementer 모두 DITTO_SKIP_HOOKS=1 우회로 in-scope 쓰기 수행. worktree 기반 WI에 대해 lease 게이트가 실질적 containment를 제공하지 못함. 수정: 훅의 worktree-상대 경로 해석.",
+  "goal": "Fix: autopilot lease-gate PreToolUse 훅이 worktree 경로를 main-repo file_scope에 대해 오해석해 worktree 모든 경로의 Write/Edit를 차단 → 두 implementer 모두 DITTO_SKIP_HOOKS=1 우회로 in-scope 쓰기 수행. worktree 기반 WI에 대해 lease 게이트가 실질적 containment를 제공하지 못함. 수정: 훅의 worktree-상대 경로 해석.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "autopilot lease-gate 하에서 lease file_scope(src/core/)에 드는 worktree 편집 경로(<ws>/.ditto/local/worktrees/<wi>/src/core/x.ts)는 preToolUseHandler가 허용(exit 0)한다 — worktree 경로 prefix 때문에 오차단하지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/pre-tool-use.test.ts -t worktree edit INSIDE the lease scope is allowed",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "lease file_scope 밖(scope=src/core/, 편집 .ditto/local/worktrees/<wi>/src/hooks/x.ts)의 worktree 편집은 여전히 차단(exit 2)한다 — fix가 over-allow하지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/pre-tool-use.test.ts -t worktree edit OUTSIDE the lease scope still blocks",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/hooks/pre-tool-use.ts",
+    "tests/hooks/pre-tool-use.test.ts",
+    "bin/ditto"
+  ],
+  "worktrees": [],
+  "discovered_by": "wi_260707oi1",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-07T15:57:20.562Z",
+  "updated_at": "2026-07-08T08:20:45.691Z",
+  "closed_at": "2026-07-08T08:20:45.690Z"
+}

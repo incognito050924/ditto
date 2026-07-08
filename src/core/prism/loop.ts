@@ -5,6 +5,12 @@ import {
   type PrismRoundSignature,
   detectDivergence,
 } from './engine';
+import {
+  type OpponentSeamConfig,
+  type OpponentSeamOutcome,
+  engageDialecticCritique,
+  engageIndependentDissent,
+} from './opponent';
 import type { PrismStore } from './store';
 
 /**
@@ -68,4 +74,41 @@ export async function runDivergenceRound(
   }
 
   return { verdict };
+}
+
+/**
+ * Model-assist opponent drivers (wi_260708tzs, node tzs-opponent) — the store I/O
+ * boundary that WIRES the pure opponent seam (opponent.ts) into the prism loop, so a
+ * production caller (the prism CLI) can actually invoke it (no dead wire). This is the
+ * impure half (mirrors runDivergenceRound above): opponent.ts computes the record-back
+ * over an in-memory map; these drivers own the Run-tier persistence.
+ *
+ * OBJ-2 single-writer contract: each driver reads the map ONCE and writes it back in
+ * EXACTLY ONE `store.writeMap` (a full-replace — a racing second writer would clobber).
+ * The seam awaits its host-delegated calls SEQUENTIALLY, so there is never a concurrent
+ * fan-out of writeMap. The Run-tier issue-map annotation the write persists IS the
+ * durable, measurable trace of the guard firing (OBJ-4) — recorded WITHOUT touching the
+ * committed-base decisions tier (OFF-LIMITS, wi_260708cdl) and WITHOUT a new
+ * prismDecisionKind enum value (OBJ-5).
+ */
+export async function runOpponentCritiqueRound(
+  store: PrismStore,
+  workItemId: string,
+  config: OpponentSeamConfig,
+): Promise<OpponentSeamOutcome> {
+  const prism = await store.getMap(workItemId);
+  const outcome = await engageDialecticCritique(prism, config);
+  await store.writeMap(outcome.prism);
+  return outcome;
+}
+
+export async function runOpponentDissentRound(
+  store: PrismStore,
+  workItemId: string,
+  config: OpponentSeamConfig,
+): Promise<OpponentSeamOutcome> {
+  const prism = await store.getMap(workItemId);
+  const outcome = await engageIndependentDissent(prism, config);
+  await store.writeMap(outcome.prism);
+  return outcome;
 }

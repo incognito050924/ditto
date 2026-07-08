@@ -1,13 +1,15 @@
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { parseJvmCodeqlCommand, runInternalPackagesGuard } from '~/acg/internal-packages';
 import { matchForbiddenScope, scopeRefMatches } from '~/acg/scope/resolve';
 import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { ChangeContractStore } from '~/core/change-contract-store';
+import { localDir } from '~/core/ditto-paths';
 import { atomicWriteText, ensureDir, readArchitectureSpec } from '~/core/fs';
 import { SessionPointerStore } from '~/core/session-pointer';
+import { parseWorktreePath, toPosixSeparators } from '~/core/worktree';
 import { type AcgArchitectureSpec, acgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 import { mutatedPaths, parseApplyPatchPaths } from './envelope';
 import type { HookHandler, HookInput } from './runtime';
@@ -553,7 +555,11 @@ async function checkForbiddenScope(
   const contract = await new ChangeContractStore(input.repoRoot).read(workItemId);
   if (!contract) return undefined;
 
-  const repoRel = relative(input.repoRoot, resolve(input.repoRoot, filePath));
+  // Worktree-aware (wi_2607085ow): this gate shares the lease-gate's scope comparison,
+  // so it needs the same worktree-root relativization — else a worktree edit's
+  // `.ditto/local/worktrees/<wi>/` prefix makes the whitelist FALSE-BLOCK and the
+  // blacklist UNDER-ENFORCE (a forbidden path slips through).
+  const repoRel = leaseScopeRelPath(input.repoRoot, filePath);
   const archSpec = await loadArchSpec(input.repoRoot);
 
   // whitelist (cleanup profile): only allowed_scope is editable; 그외 blocks.
@@ -625,6 +631,41 @@ function fileScopeContains(scope: string[], repoRelPath: string): boolean {
 const TESTS_ALLOW_NODE_KINDS: ReadonlySet<string> = new Set(['implement', 'fix', 'refactor']);
 
 /**
+ * Repo-relative path for an autopilot scope comparison, WORKTREE-AWARE — shared by the
+ * lease-gate (wi_260707cp7) AND the ChangeContract forbidden/whitelist gate (wi_2607085ow).
+ * A per-work-item run worktree checks out at `<ws>/.ditto/local/worktrees/<wi>/`,
+ * mirroring the repo tree, but the session roots at the OWNING workspace `<ws>`
+ * (findRepoRoot). So an absolute worktree edit path relativized against `<ws>` carries
+ * a `.ditto/local/worktrees/<wi>/` prefix that matches NO lease file_scope (which is
+ * plain repo-relative) — false-blocking every worktree write (the bug forced
+ * DITTO_SKIP_HOOKS=1 workarounds). Relativize against the worktree root instead, so the
+ * path is the same repo-relative form the file_scope uses. Non-worktree paths are
+ * unchanged (parseWorktreePath → null), so there is no regression outside worktrees.
+ *
+ * WINDOWS (wi_2607084du): the result is normalized to POSIX `/` separators, because the
+ * downstream `scopeRefMatches` compares against `/`-separated scope refs — `relative()`
+ * yields `\` on Windows, which would make every scope UNDER-MATCH (whitelist false-block,
+ * blacklist under-enforce). `pathImpl` is injectable ONLY so the Windows path semantics
+ * (`path.win32`) are testable on a POSIX host; production always uses `node:path`.
+ */
+export function leaseScopeRelPath(
+  repoRoot: string,
+  filePath: string,
+  pathImpl: { resolve: typeof resolve; relative: typeof relative; sep: string } = {
+    resolve,
+    relative,
+    sep,
+  },
+): string {
+  const resolved = pathImpl.resolve(repoRoot, filePath);
+  const worktree = parseWorktreePath(resolved, pathImpl.sep);
+  const scopeRoot = worktree
+    ? localDir(worktree.workspace, 'worktrees', worktree.workItemId)
+    : repoRoot;
+  return toPosixSeparators(pathImpl.relative(scopeRoot, resolved), pathImpl.sep);
+}
+
+/**
  * Allow-list lease check. Returns a block when the edit is OUTSIDE every active
  * lease's file_scope under an autopilot graph; undefined (ALLOW) otherwise. All
  * preconditions fail OPEN (no session / no active WI / no graph / no non-terminal
@@ -671,7 +712,7 @@ async function checkAutopilotLease(
   // (wi_260610iex — the dogfooding run blocked legitimate new artifact paths).
   if (leases.some((l) => l.scope_source === 'derived')) return undefined;
 
-  const repoRel = relative(input.repoRoot, resolve(input.repoRoot, filePath));
+  const repoRel = leaseScopeRelPath(input.repoRoot, filePath);
   const inScope = leases.some((l) => fileScopeContains(l.file_scope, repoRel));
   if (inScope) return undefined; // allow-list hit
 
@@ -864,7 +905,16 @@ function bashWriteTargets(cmd: string): string[] {
   // in a typed command, so an index wrapped in it never collides with text.
   const P = String.fromCharCode(1);
   const spans: string[] = [];
-  const skeleton = cmd.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (q) => {
+  // Heredoc BODIES are DATA, not shell syntax (wi_260708ye6): a `>` inside a commit
+  // message passed via `git commit -F - <<'EOF' … EOF` is prose, and an angle-bracket
+  // placeholder like `<id>` is not an input+output redirect — both live FPs that
+  // blocked legitimate commits. Drop the body (keep the OPENER line, which can carry a
+  // real redirect) before the scan, mirroring the quoted-span handling below.
+  const deheredoc = cmd.replace(
+    /(<<-?\s*(['"]?)([A-Za-z_]\w*)\2[^\n]*)\n[\s\S]*?\n[ \t]*\3(?=\s|$)/g,
+    '$1',
+  );
+  const skeleton = deheredoc.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (q) => {
     spans.push(q.slice(1, -1));
     return `${P}${spans.length - 1}${P}`;
   });

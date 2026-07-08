@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708cdl",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "efbbc47faf71de4201294968d0e394a332e172621d96f5d5f2ab488ed070a947",
+  "ts": "2026-07-08T08:40:18.397Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/prism-store.test.ts -t records land under",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

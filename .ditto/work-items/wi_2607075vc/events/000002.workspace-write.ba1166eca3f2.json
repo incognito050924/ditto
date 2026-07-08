@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607075vc",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "ba1166eca3f278c38cabf5778148f09f2cc7468e17cdbc9a6c6007e456470c0e",
+  "ts": "2026-07-08T08:11:32.208Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/prism-cli.test.ts -t does NOT falsely trigger",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

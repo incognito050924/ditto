@@ -1,0 +1,49 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260708cdl",
+  "title": "bug: prism store가 decision(prism-decisions.jsonl)·backlog(prism-backlog-split.json)을 committed base .ditto/work-items/<wi>/에 씀(store.ts committedWorkItemDir) — 그러나 main이 들여온 check-committed-base-run-a",
+  "source_request": "Discovered while working on wi_260707oi1: prism store가 decision(prism-decisions.jsonl)·backlog(prism-backlog-split.json)을 committed base .ditto/work-items/<wi>/에 씀(store.ts committedWorkItemDir) — 그러나 main이 들여온 check-committed-base-run-artifact 가드는 record.json+events/만 허용, 나머지는 Run/개인 산출물로 커밋 차단. 병합 시 표면화(prism 013436d 시절 store vs main의 강화된 가드). ADR-20260628 decisive-class + ADR-20260706 Record/Run: 승인·결정급은 Record(durable)여야 맞지만 committed 채널은 events/여야 함. 수정: prism decision/backlog을 events/로 접거나 .ditto/local로. prism 사용 후 매 커밋이 이 가드에 막힘.",
+  "goal": "Fix: prism store가 decision(prism-decisions.jsonl)·backlog(prism-backlog-split.json)을 committed base .ditto/work-items/<wi>/에 씀(store.ts committedWorkItemDir) — 그러나 main이 들여온 check-committed-base-run-artifact 가드는 record.json+events/만 허용, 나머지는 Run/개인 산출물로 커밋 차단. 병합 시 표면화(prism 013436d 시절 store vs main의 강화된 가드). ADR-20260628 decisive-class + ADR-20260706 Record/Run: 승인·결정급은 Record(durable)여야 맞지만 committed 채널은 events/여야 함. 수정: prism decision/backlog을 events/로 접거나 .ditto/local로. prism 사용 후 매 커밋이 이 가드에 막힘.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "appendDecision·writeBacklogSplit이 prism-decisions.jsonl·prism-backlog-split.json을 .ditto/local/work-items/<id>/prism/ (Run tier)에 생성하고 committed base(.ditto/work-items/<id>/)에는 생성하지 않는다 — prism-store round-trip 테스트가 0 fail로 통과한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-store.test.ts -t records land under",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "prism decision 기록 후 check-committed-base-run-artifact 가드가 위반 0으로 종료(exit 0)한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/prism-store.test.ts -t committed-base guard reports zero",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/prism/store.ts",
+    "tests/core/prism-store.test.ts",
+    "tests/cli/prism-cli.test.ts",
+    "bin/ditto"
+  ],
+  "worktrees": [],
+  "discovered_by": "wi_260707oi1",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-08T04:30:26.423Z",
+  "updated_at": "2026-07-08T08:40:31.341Z",
+  "closed_at": "2026-07-08T08:40:31.340Z"
+}

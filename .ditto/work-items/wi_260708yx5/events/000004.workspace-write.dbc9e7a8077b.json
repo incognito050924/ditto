@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708yx5",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "dbc9e7a8077b7a778b49c8504903238c7afdb7eefa7f7be9a63a2fe20d9119b0",
+  "ts": "2026-07-08T09:25:31.987Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c F=reports/design/autopilot-test-execution-gaps.md; grep -qE \"^## 5\\. 개선 방향\" \"$F\" && grep -qE \"^## 6\\. 열린 결정\" \"$F\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260708yut",
+  "title": "prism 모델-보조 심화 (B6 VoI · A1 의미적 완전성)",
+  "source_request": "prism 과소수렴 가드 후속 심화 (연구 §8-B 모델-보조). 선행 wi_260708tzs(커밋 22f3978)에서 결정적 A(완전성 seed·unevaluated close 게이트·재앵커·prism tree) + B4/B5(dialectic/Codex opponent 배선)는 done·검증완료. 이 WI는 이월된 2건.  [B6 VoI/optimal-stopping 원리적 종결기준] '한 질문 더가 값진가'를 기대정보이득 대 비용으로 판정(연구 §4·§8-B). 선결: prism 노드별 잔여 불확실성·비용 정량화 — 현재 prism은 확률 미보유이고 결정적 프록시(closePrismNode의 evidence-added floor, engine.ts)만 있음. 착수 전 답할 것: 노드 불확실성을 싸게 정량화 가능한가(결정적 프록시 vs LLM 크레던스)? 연구 §9 전이갭(N=2, '설계 패턴이지 plug-in 공식 아님').  [A1 의미적 완전성 (특징짓기 vs 달성)] 현재 criticalTermination의 seedUncoveredFragments + deriveFragmentMappings(engine.ts)는 '명시-매핑 부재'만 잡음(결정적 string match, some()-단일키워드 len>=2 in label/close_reason). gap: 노드가 조각을 '다룬다'고 매핑됐으나 실제론 특징짓기만 하고 달성 안 한 경우는 결정적으로 못 잡음 → 모델 판정 필요(연구 §9 미해결4). residual(현재): deriveFragmentMappings 관대성 → 긴 조각에서 false-coverage 여지(under-seed 방향이라 over-think 불변식엔 안전).  [권위] reports/research/prism-epistemology-research.md(§8 시퀀스·§9 미해결), reports/design/prism-convergence-quality-gaps.md, 코드 SoT: src/core/prism/*(engine·opponent·loop·store·backlog)·src/cli/commands/prism.ts·src/schemas/prism.ts, 테스트 tests/core/prism-*.test.ts.  [경로] heavy — deep-interview로 B6 불확실성 정량화 설계 + A1 semantic critic 설계를 확정(둘 다 모델-보조·비용 국소화가 관건) → autopilot.  [reuse] 기존 dialectic 스킬/dialectic-opponent·Codex opponent(far-field refute 사용처), coverage-manager의 completeness critic(loop-until-dry) — 신규 구축 아니라 배선 우선.  [빌드/gotcha] src 변경 후 bun run build:bin; committed base는 record.json+events만(prism decision/backlog은 Run tier, wi_260708cdl); tsc/LSP는 아티팩트·bun test가 진실.",
+  "goal": "prism 모델-보조 심화 — 연구 §8-B의 B6(VoI/optimal-stopping 종결기준)와 A1 의미적 완전성(모델 판정: 특징짓기 vs 달성)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true
+  },
+  "follows": "wi_260708tzs",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-08T09:20:56.163Z",
+  "updated_at": "2026-07-08T09:21:08.779Z"
+}

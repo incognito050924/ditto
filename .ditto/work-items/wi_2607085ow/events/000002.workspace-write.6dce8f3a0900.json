@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607085ow",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "6dce8f3a0900cc63d6f2ad5c4d862968e9de177d93057733feae36af5191c84d",
+  "ts": "2026-07-08T09:01:14.948Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/hooks/pre-tool-use.test.ts -t forbidden_scope is enforced for a worktree edit",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
