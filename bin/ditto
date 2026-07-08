@@ -25417,6 +25417,26 @@ function resolveBarrierCommand(recipe2, repoRelDir) {
     return recipe2.barrier_test_command;
   return recipe2.repos?.find((r3) => norm(r3.dir) === dir)?.barrier_test_command ?? recipe2.barrier_test_command;
 }
+function affectedBarrierDirs(changedFiles, recipe2) {
+  const norm = (d2) => d2.replace(/^\.\//, "").replace(/\/+$/, "");
+  const repoDirs = (recipe2.repos ?? []).map((r3) => norm(r3.dir)).filter((d2) => d2 !== "" && d2 !== ".");
+  const dirs = new Set;
+  for (const raw of changedFiles) {
+    const file = norm(raw);
+    const owner = repoDirs.filter((d2) => file === d2 || file.startsWith(`${d2}/`)).sort((a2, b2) => b2.length - a2.length)[0];
+    dirs.add(owner ?? "");
+  }
+  if (dirs.size === 0)
+    dirs.add("");
+  return [...dirs];
+}
+function planBarrierRuns(recipe2, changedFiles, workspaceRoot) {
+  return affectedBarrierDirs(changedFiles, recipe2).map((dir) => ({
+    dir,
+    command: resolveBarrierCommand(recipe2, dir),
+    cwd: dir === "" ? workspaceRoot : join29(workspaceRoot, dir)
+  }));
+}
 function barrierGreenEvidence(command) {
   return {
     kind: "command",
@@ -25424,8 +25444,12 @@ function barrierGreenEvidence(command) {
     summary: `settled-tree test barrier ran GREEN (exit 0): ${command}`
   };
 }
+function describeBarrierRun(run2) {
+  const where = run2.dir === "" ? "root" : run2.dir;
+  return `\`${run2.command ?? "(no command)"}\` [${where}]`;
+}
 async function executeTestBarrier(args) {
-  const { aps, workItemId: workItemId2, node: node2, caps, command, runner, cwd, now } = args;
+  const { aps, workItemId: workItemId2, node: node2, caps, runs, runner, now } = args;
   await aps.updateNode(workItemId2, node2.id, (n2) => ({
     ...n2,
     status: nodeTransition(n2.status, "dispatch")
@@ -25444,63 +25468,76 @@ async function executeTestBarrier(args) {
     });
     return { action: "barrier", node_id: node2.id, disposition, reason };
   };
-  if (command === undefined) {
-    return proceedDegraded("degrade", `settled-tree test barrier ${node2.id}: no barrier_test_command resolved (absent / non-code work item) \u2014 tests unverified, proceeding without a claimed pass (ADR-0018)`);
+  const results = [];
+  for (const run2 of runs) {
+    const outcome = run2.command === undefined ? { kind: "missing" } : await runner(run2.command, run2.cwd);
+    results.push({ run: run2, outcome });
   }
-  const outcome = await runner(command, cwd);
-  switch (outcome.kind) {
-    case "passed": {
+  const failed = results.find((r3) => r3.outcome.kind === "failed");
+  if (failed) {
+    const exitCode = failed.outcome.exitCode;
+    const where = describeBarrierRun(failed.run);
+    const { decision } = decideOnFailure("fixable", node2.attempts, caps);
+    if (decision === "retry") {
       await aps.updateNode(workItemId2, node2.id, (n2) => ({
         ...n2,
-        status: nodeTransition(n2.status, "pass"),
-        evidence_refs: [...n2.evidence_refs, barrierGreenEvidence(command)]
+        status: nodeTransition(n2.status, "retry"),
+        attempts: { ...n2.attempts, fix: n2.attempts.fix + 1 }
       }));
-      return {
-        action: "barrier",
-        node_id: node2.id,
-        disposition: "green",
-        reason: `settled-tree test barrier ${node2.id}: \`${command}\` ran GREEN (exit 0)`
-      };
-    }
-    case "unrunnable":
-      return proceedDegraded("degrade", `settled-tree test barrier ${node2.id}: \`${command}\` is unrunnable (${outcome.reason}) \u2014 tests unverified, proceeding without a claimed pass (ADR-0018)`);
-    case "timeout":
-      return proceedDegraded("timeout", `settled-tree test barrier ${node2.id}: \`${command}\` did not finish within ${outcome.timeoutMs}ms (killed) \u2014 tests unverified, proceeding without a claimed pass (never an infinite stall)`);
-    case "failed": {
-      const { decision } = decideOnFailure("fixable", node2.attempts, caps);
-      if (decision === "retry") {
-        await aps.updateNode(workItemId2, node2.id, (n2) => ({
-          ...n2,
-          status: nodeTransition(n2.status, "retry"),
-          attempts: { ...n2.attempts, fix: n2.attempts.fix + 1 }
-        }));
-        const reason2 = `settled-tree test barrier ${node2.id}: \`${command}\` is RED (exit ${outcome.exitCode}) \u2014 retry ${node2.attempts.fix + 1}/${caps.fix_per_node}`;
-        await aps.appendDecision(workItemId2, {
-          ts: now.toISOString(),
-          node_id: node2.id,
-          failure_class: "fixable",
-          decision: "retry",
-          reason: reason2,
-          attempts: { ...node2.attempts, fix: node2.attempts.fix + 1 }
-        });
-        return { action: "barrier", node_id: node2.id, disposition: "red_retry", reason: reason2 };
-      }
-      await aps.updateNode(workItemId2, node2.id, (n2) => ({
-        ...n2,
-        status: nodeTransition(n2.status, "fail")
-      }));
-      const reason = `settled-tree test barrier ${node2.id}: \`${command}\` still RED (exit ${outcome.exitCode}) after ${node2.attempts.fix} retries (cap ${caps.fix_per_node}) \u2014 the suite failed, blocking completion (a persistent red barrier is a user-owned decision)`;
+      const reason2 = `settled-tree test barrier ${node2.id}: ${where} is RED (exit ${exitCode}) \u2014 retry ${node2.attempts.fix + 1}/${caps.fix_per_node}`;
       await aps.appendDecision(workItemId2, {
         ts: now.toISOString(),
         node_id: node2.id,
-        failure_class: "user_decision_needed",
-        decision: "escalate",
-        reason,
-        attempts: node2.attempts
+        failure_class: "fixable",
+        decision: "retry",
+        reason: reason2,
+        attempts: { ...node2.attempts, fix: node2.attempts.fix + 1 }
       });
-      return { action: "barrier", node_id: node2.id, disposition: "red_failed", reason };
+      return { action: "barrier", node_id: node2.id, disposition: "red_retry", reason: reason2 };
     }
+    await aps.updateNode(workItemId2, node2.id, (n2) => ({
+      ...n2,
+      status: nodeTransition(n2.status, "fail")
+    }));
+    const reason = `settled-tree test barrier ${node2.id}: ${where} still RED (exit ${exitCode}) after ${node2.attempts.fix} retries (cap ${caps.fix_per_node}) \u2014 the suite failed, blocking completion (a persistent red barrier is a user-owned decision)`;
+    await aps.appendDecision(workItemId2, {
+      ts: now.toISOString(),
+      node_id: node2.id,
+      failure_class: "user_decision_needed",
+      decision: "escalate",
+      reason,
+      attempts: node2.attempts
+    });
+    return { action: "barrier", node_id: node2.id, disposition: "red_failed", reason };
   }
+  const problems = results.filter((r3) => r3.outcome.kind === "unrunnable" || r3.outcome.kind === "timeout" || r3.outcome.kind === "missing");
+  if (problems.length > 0) {
+    const disposition = problems.every((r3) => r3.outcome.kind === "timeout") ? "timeout" : "degrade";
+    const detail = problems.map((r3) => {
+      const where = describeBarrierRun(r3.run);
+      if (r3.outcome.kind === "timeout") {
+        return `${where} did not finish within ${r3.outcome.timeoutMs}ms (killed)`;
+      }
+      if (r3.outcome.kind === "unrunnable")
+        return `${where} is unrunnable (${r3.outcome.reason})`;
+      return `${where} resolved no barrier_test_command`;
+    }).join("; ");
+    return proceedDegraded(disposition, `settled-tree test barrier ${node2.id}: ${detail} \u2014 tests unverified, proceeding without a claimed pass (ADR-0018)`);
+  }
+  await aps.updateNode(workItemId2, node2.id, (n2) => ({
+    ...n2,
+    status: nodeTransition(n2.status, "pass"),
+    evidence_refs: [
+      ...n2.evidence_refs,
+      ...results.map((r3) => barrierGreenEvidence(r3.run.command))
+    ]
+  }));
+  return {
+    action: "barrier",
+    node_id: node2.id,
+    disposition: "green",
+    reason: `settled-tree test barrier ${node2.id}: ${results.map((r3) => describeBarrierRun(r3.run)).join("; ")} ran GREEN (exit 0)`
+  };
 }
 async function nextNode(repoRoot, workItemId2) {
   const aps = new AutopilotStore(repoRoot);
@@ -25627,9 +25664,8 @@ async function nextNode(repoRoot, workItemId2) {
       workItemId: workItemId2,
       node: chosen,
       caps: graph.caps,
-      command: resolveBarrierCommand(recipe2, ""),
+      runs: planBarrierRuns(recipe2, workItem2.changed_files, repoRoot),
       runner: runTestCommand,
-      cwd: repoRoot,
       now: new Date
     });
   }
@@ -55358,4 +55394,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=325c7feeaa1302fce04ff203dadb36c81334705bde16564491f8816056f1ca7b
+//# ditto-src-stamp=b5719561f4439087cd7b937f76614d6f511ecf85fdab0d5375d9313f1ac95544

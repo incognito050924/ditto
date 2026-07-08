@@ -82,7 +82,7 @@ import {
 } from './retro-measure';
 import { RetroMetricLedger } from './retro-metric-ledger';
 import { computeSpecDigest } from './spec-doc';
-import { type TestRunner, runTestCommand } from './test-runner';
+import { type TestRunOutcome, type TestRunner, runTestCommand } from './test-runner';
 import { WorkItemStore } from './work-item-store';
 
 /**
@@ -732,6 +732,61 @@ export function resolveBarrierCommand(recipe: Recipe, repoRelDir: string): strin
   );
 }
 
+/**
+ * One affected sub-repo's barrier run: the resolved command + the absolute cwd it runs in.
+ * `dir` is the repo-relative sub-repo dir (`''` = the workspace root). `command` is
+ * `undefined` when that dir resolves no barrier command (degrade — the run proves nothing).
+ */
+export interface BarrierRun {
+  dir: string;
+  command: string | undefined;
+  cwd: string;
+}
+
+/**
+ * Map a work item's changed files to the DISTINCT set of affected sub-repo dirs (wi_260708g3l).
+ * A feature WI in a multi-repo workspace commonly touches several sub-repos at once (frontend +
+ * backend), so the barrier must run each affected sub-repo's command — not just the root's.
+ * Each file maps to the DEEPEST matching `repos[].dir` prefix (nested repos win over their
+ * parent); a file under no declared sub-repo maps to ROOT (`''`). Distinct, first-seen order.
+ * NO changed files (empty / non-code WI) ⇒ ROOT only, byte-identical to the single-run path.
+ */
+export function affectedBarrierDirs(changedFiles: readonly string[], recipe: Recipe): string[] {
+  const norm = (d: string): string => d.replace(/^\.\//, '').replace(/\/+$/, '');
+  const repoDirs = (recipe.repos ?? [])
+    .map((r) => norm(r.dir))
+    .filter((d) => d !== '' && d !== '.');
+  const dirs = new Set<string>();
+  for (const raw of changedFiles) {
+    const file = norm(raw);
+    const owner = repoDirs
+      .filter((d) => file === d || file.startsWith(`${d}/`))
+      .sort((a, b) => b.length - a.length)[0]; // deepest (longest) matching prefix wins
+    dirs.add(owner ?? '');
+  }
+  if (dirs.size === 0) dirs.add(''); // no changed files → ROOT barrier still runs once
+  return [...dirs];
+}
+
+/**
+ * Plan the barrier runs for a work item: one {@link BarrierRun} per affected sub-repo dir,
+ * each carrying its resolved command and the absolute cwd it runs in (workspace root joined
+ * with the dir). Sub-repos live UNDER the workspace root (ADR-20260626), so `runTestCommand`
+ * with `cwd = <workspaceRoot>/<dir>` is EXEC inside the session root — no cross-repo subagent,
+ * no write outside the root (ADR-0011).
+ */
+export function planBarrierRuns(
+  recipe: Recipe,
+  changedFiles: readonly string[],
+  workspaceRoot: string,
+): BarrierRun[] {
+  return affectedBarrierDirs(changedFiles, recipe).map((dir) => ({
+    dir,
+    command: resolveBarrierCommand(recipe, dir),
+    cwd: dir === '' ? workspaceRoot : join(workspaceRoot, dir),
+  }));
+}
+
 /** A settled-tree-barrier command evidence ref (the `command`-kind proof `barrierRanGreen` reads). */
 function barrierGreenEvidence(
   command: string,
@@ -743,37 +798,50 @@ function barrierGreenEvidence(
   };
 }
 
+/** Human-readable label for a barrier run in a decision/reason line (`command [dir]`). */
+function describeBarrierRun(run: BarrierRun): string {
+  const where = run.dir === '' ? 'root' : run.dir;
+  return `\`${run.command ?? '(no command)'}\` [${where}]`;
+}
+
 /**
- * Execute the settled-tree test BARRIER in-process (wi_260708ds9 ac-2/ac-5/ac-6). The
- * verdict is DETERMINISTIC — derived from the command's EXIT CODE via {@link TestRunner},
- * never an LLM's read (this WI exists to stop false-green). Owns the full transition:
- * dispatch (pending → running) → run → terminal. Disposition routing:
+ * Execute the settled-tree test BARRIER in-process (wi_260708ds9 ac-2/ac-5/ac-6; multi-repo
+ * wi_260708g3l). The verdict is DETERMINISTIC — derived from each command's EXIT CODE via
+ * {@link TestRunner}, never an LLM's read (this WI exists to stop false-green). Owns the full
+ * transition: dispatch (pending → running) → run → terminal.
  *
- *  - GREEN (exit 0)                → node `passed` WITH a `command`-kind evidence ref, so
- *    the completion seam's `barrierRanGreen` sees proven-green. No decision entry (a green
- *    run is not churn — the evidence ref is the audit record).
- *  - RED (ran, non-zero)          → bounded auto-retry (reuses `decideOnFailure`/`caps`,
- *    the SAME fixable budget the loop uses): under the cap → `retry` (running → pending,
- *    `attempts.fix++`, `red_retry`); at the cap → `fail` (running → `failed`, `red_failed`)
- *    → all_passed=false → decisive. Each is logged auditably (retry / escalate decision).
- *  - DEGRADE (unrunnable: 126/127 / spawn-throw, OR no command resolved) → INVERTS push-gate
- *    (ADR-0018): the node PROCEEDS (`passed`) but carries NO command evidence, so the
- *    completion seam records the tests-never-ran gap (≠pass, never a claimed pass). Logged
- *    as a `surface` (blocked_external) decision.
- *  - TIMEOUT/HANG                 → same proceed-degrade path (never an infinite stall),
- *    logged distinctly (`timeout`).
+ * A multi-repo workspace WI commonly touches SEVERAL sub-repos at once, so the barrier runs
+ * EACH affected sub-repo's command (one {@link BarrierRun} per {@link planBarrierRuns} entry)
+ * and collapses the N results WORST-WINS into the ONE barrier node outcome the completion seam
+ * already understands:
+ *
+ *  - GREEN — ALL runs passed (exit 0) → node `passed` WITH a `command`-kind evidence ref per
+ *    affected sub-repo (the audit trail), so the completion seam's `barrierRanGreen` sees
+ *    proven-green. No decision entry (a green run is not churn).
+ *  - RED — ANY run ran non-zero → bounded auto-retry (reuses `decideOnFailure`/`caps`, the
+ *    SAME fixable budget the loop uses): under the cap → `retry` (running → pending,
+ *    `attempts.fix++`, `red_retry`), re-running EVERY affected sub-repo next poll; at the cap
+ *    → `fail` (running → `failed`, `red_failed`) → all_passed=false. Logged auditably.
+ *  - DEGRADE — no run failed but ANY is unrunnable (126/127 / spawn-throw) OR a sub-repo
+ *    resolved NO command → INVERTS push-gate (ADR-0018): the node PROCEEDS (`passed`) but
+ *    carries NO command evidence, so the completion seam records the tests-never-ran gap
+ *    (≠pass, never a claimed pass). Logged as a `surface` (blocked_external) decision.
+ *  - TIMEOUT/HANG — same proceed-degrade path (never an infinite stall); when every problem
+ *    run is a timeout the disposition is logged distinctly (`timeout`).
+ *
+ * Single-repo (root-only) behavior is preserved exactly: a length-1 `runs` produces the same
+ * one status transition + evidence recording as before.
  */
 export async function executeTestBarrier(args: {
   aps: AutopilotStore;
   workItemId: string;
   node: AutopilotNode;
   caps: Autopilot['caps'];
-  command: string | undefined;
+  runs: BarrierRun[];
   runner: TestRunner;
-  cwd: string;
   now: Date;
 }): Promise<Extract<NextNodeResult, { action: 'barrier' }>> {
-  const { aps, workItemId, node, caps, command, runner, cwd, now } = args;
+  const { aps, workItemId, node, caps, runs, runner, now } = args;
   // Dispatch pending → running (the explicit transition table), same as every owner path.
   await aps.updateNode(workItemId, node.id, (n) => ({
     ...n,
@@ -800,77 +868,106 @@ export async function executeTestBarrier(args: {
     return { action: 'barrier', node_id: node.id, disposition, reason };
   };
 
-  if (command === undefined) {
-    return proceedDegraded(
-      'degrade',
-      `settled-tree test barrier ${node.id}: no barrier_test_command resolved (absent / non-code work item) — tests unverified, proceeding without a claimed pass (ADR-0018)`,
-    );
+  // Run each affected sub-repo's barrier SEQUENTIALLY (one at a time — never flood the host
+  // with N concurrent suites). A dir with no resolved command is a synthetic `missing`
+  // terminal (degrade), the same proceed-without-claim path an absent root command hits today.
+  type RunResult = { run: BarrierRun; outcome: TestRunOutcome | { kind: 'missing' } };
+  const results: RunResult[] = [];
+  for (const run of runs) {
+    const outcome: TestRunOutcome | { kind: 'missing' } =
+      run.command === undefined ? { kind: 'missing' } : await runner(run.command, run.cwd);
+    results.push({ run, outcome });
   }
 
-  const outcome = await runner(command, cwd);
-  switch (outcome.kind) {
-    case 'passed': {
-      // GREEN — pass WITH command evidence (proven-green for the completion seam).
+  // WORST-WINS collapse. RED (any run ran non-zero) dominates — a failed suite blocks completion.
+  const failed = results.find(
+    (r): r is { run: BarrierRun; outcome: Extract<TestRunOutcome, { kind: 'failed' }> } =>
+      r.outcome.kind === 'failed',
+  );
+  if (failed) {
+    // RED — bounded auto-retry via the SAME fixable budget the loop uses (retry while
+    // fix < caps.fix_per_node, else the escalate branch fails the node terminally).
+    const exitCode = failed.outcome.exitCode;
+    const where = describeBarrierRun(failed.run);
+    const { decision } = decideOnFailure('fixable', node.attempts, caps);
+    if (decision === 'retry') {
       await aps.updateNode(workItemId, node.id, (n) => ({
         ...n,
-        status: nodeTransition(n.status, 'pass'),
-        evidence_refs: [...n.evidence_refs, barrierGreenEvidence(command)],
+        status: nodeTransition(n.status, 'retry'),
+        attempts: { ...n.attempts, fix: n.attempts.fix + 1 },
       }));
-      return {
-        action: 'barrier',
-        node_id: node.id,
-        disposition: 'green',
-        reason: `settled-tree test barrier ${node.id}: \`${command}\` ran GREEN (exit 0)`,
-      };
-    }
-    case 'unrunnable':
-      return proceedDegraded(
-        'degrade',
-        `settled-tree test barrier ${node.id}: \`${command}\` is unrunnable (${outcome.reason}) — tests unverified, proceeding without a claimed pass (ADR-0018)`,
-      );
-    case 'timeout':
-      return proceedDegraded(
-        'timeout',
-        `settled-tree test barrier ${node.id}: \`${command}\` did not finish within ${outcome.timeoutMs}ms (killed) — tests unverified, proceeding without a claimed pass (never an infinite stall)`,
-      );
-    case 'failed': {
-      // RED — bounded auto-retry via the SAME fixable budget the loop uses (retry while
-      // fix < caps.fix_per_node, else the escalate branch fails the node terminally).
-      const { decision } = decideOnFailure('fixable', node.attempts, caps);
-      if (decision === 'retry') {
-        await aps.updateNode(workItemId, node.id, (n) => ({
-          ...n,
-          status: nodeTransition(n.status, 'retry'),
-          attempts: { ...n.attempts, fix: n.attempts.fix + 1 },
-        }));
-        const reason = `settled-tree test barrier ${node.id}: \`${command}\` is RED (exit ${outcome.exitCode}) — retry ${node.attempts.fix + 1}/${caps.fix_per_node}`;
-        await aps.appendDecision(workItemId, {
-          ts: now.toISOString(),
-          node_id: node.id,
-          failure_class: 'fixable',
-          decision: 'retry',
-          reason,
-          attempts: { ...node.attempts, fix: node.attempts.fix + 1 },
-        });
-        return { action: 'barrier', node_id: node.id, disposition: 'red_retry', reason };
-      }
-      // Persistent RED after N retries → failed (terminal) → all_passed=false → decisive.
-      await aps.updateNode(workItemId, node.id, (n) => ({
-        ...n,
-        status: nodeTransition(n.status, 'fail'),
-      }));
-      const reason = `settled-tree test barrier ${node.id}: \`${command}\` still RED (exit ${outcome.exitCode}) after ${node.attempts.fix} retries (cap ${caps.fix_per_node}) — the suite failed, blocking completion (a persistent red barrier is a user-owned decision)`;
+      const reason = `settled-tree test barrier ${node.id}: ${where} is RED (exit ${exitCode}) — retry ${node.attempts.fix + 1}/${caps.fix_per_node}`;
       await aps.appendDecision(workItemId, {
         ts: now.toISOString(),
         node_id: node.id,
-        failure_class: 'user_decision_needed',
-        decision: 'escalate',
+        failure_class: 'fixable',
+        decision: 'retry',
         reason,
-        attempts: node.attempts,
+        attempts: { ...node.attempts, fix: node.attempts.fix + 1 },
       });
-      return { action: 'barrier', node_id: node.id, disposition: 'red_failed', reason };
+      return { action: 'barrier', node_id: node.id, disposition: 'red_retry', reason };
     }
+    // Persistent RED after N retries → failed (terminal) → all_passed=false → decisive.
+    await aps.updateNode(workItemId, node.id, (n) => ({
+      ...n,
+      status: nodeTransition(n.status, 'fail'),
+    }));
+    const reason = `settled-tree test barrier ${node.id}: ${where} still RED (exit ${exitCode}) after ${node.attempts.fix} retries (cap ${caps.fix_per_node}) — the suite failed, blocking completion (a persistent red barrier is a user-owned decision)`;
+    await aps.appendDecision(workItemId, {
+      ts: now.toISOString(),
+      node_id: node.id,
+      failure_class: 'user_decision_needed',
+      decision: 'escalate',
+      reason,
+      attempts: node.attempts,
+    });
+    return { action: 'barrier', node_id: node.id, disposition: 'red_failed', reason };
   }
+
+  // No run failed. Any unrunnable / timeout / missing-command run → DEGRADE (proceed, no
+  // command evidence): the barrier never proved green, so completion floors ≠pass (ADR-0018).
+  const problems = results.filter(
+    (r) =>
+      r.outcome.kind === 'unrunnable' ||
+      r.outcome.kind === 'timeout' ||
+      r.outcome.kind === 'missing',
+  );
+  if (problems.length > 0) {
+    // When EVERY problem is a timeout, log it distinctly; else it is a plain degrade.
+    const disposition = problems.every((r) => r.outcome.kind === 'timeout') ? 'timeout' : 'degrade';
+    const detail = problems
+      .map((r) => {
+        const where = describeBarrierRun(r.run);
+        if (r.outcome.kind === 'timeout') {
+          return `${where} did not finish within ${r.outcome.timeoutMs}ms (killed)`;
+        }
+        if (r.outcome.kind === 'unrunnable') return `${where} is unrunnable (${r.outcome.reason})`;
+        return `${where} resolved no barrier_test_command`;
+      })
+      .join('; ');
+    return proceedDegraded(
+      disposition,
+      `settled-tree test barrier ${node.id}: ${detail} — tests unverified, proceeding without a claimed pass (ADR-0018)`,
+    );
+  }
+
+  // GREEN — every affected sub-repo passed. One command-kind evidence ref per run (proven-green
+  // for the completion seam + a full per-sub-repo audit trail).
+  await aps.updateNode(workItemId, node.id, (n) => ({
+    ...n,
+    status: nodeTransition(n.status, 'pass'),
+    evidence_refs: [
+      ...n.evidence_refs,
+      // Every run passed here, so `run.command` is defined (a missing command is a `problem`).
+      ...results.map((r) => barrierGreenEvidence(r.run.command as string)),
+    ],
+  }));
+  return {
+    action: 'barrier',
+    node_id: node.id,
+    disposition: 'green',
+    reason: `settled-tree test barrier ${node.id}: ${results.map((r) => describeBarrierRun(r.run)).join('; ')} ran GREEN (exit 0)`,
+  };
 }
 
 export async function nextNode(repoRoot: string, workItemId: string): Promise<NextNodeResult> {
@@ -1107,12 +1204,14 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   }
 
   // A settled-tree `test` BARRIER (wi_260708ds9) is a DETERMINISTIC engine step run
-  // IN-PROCESS — resolve the recipe barrier command and RUN it (exit code → verdict),
+  // IN-PROCESS — resolve the recipe barrier command(s) and RUN them (exit code → verdict),
   // never spawn an LLM tester (an LLM could rationalize a red result into a green claim —
   // the false-green this WI closes). Intercepted by KIND before the driver→cleanup branch
   // below: the barrier's repointed owner is `driver`, so it would otherwise be treated as
-  // cleanup; keying on kind also catches a legacy `tester`-owned barrier. The command is
-  // resolved at the session-rooted workspace root (repoRelDir=''); ABSENT ⇒ degrade.
+  // cleanup; keying on kind also catches a legacy `tester`-owned barrier. Multi-repo
+  // (wi_260708g3l): the WI's changed_files pick the AFFECTED sub-repos, so the barrier runs
+  // EACH affected sub-repo's command under the workspace root (root-only WI ⇒ ONE root run,
+  // identical to before); ABSENT ⇒ degrade.
   if (chosen.kind === 'test') {
     const recipe = await loadResolvedRecipe(repoRoot, undefined, () => {});
     return executeTestBarrier({
@@ -1120,9 +1219,8 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
       workItemId,
       node: chosen,
       caps: graph.caps,
-      command: resolveBarrierCommand(recipe, ''),
+      runs: planBarrierRuns(recipe, workItem.changed_files, repoRoot),
       runner: runTestCommand,
-      cwd: repoRoot,
       now: new Date(),
     });
   }

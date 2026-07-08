@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708g3l",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "b1213636d72cfc8c5e42a42c77c5c0b6627b1188f30c7732ea1b4cd75a2b6feb",
+  "ts": "2026-07-08T17:13:14.994Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c grep -qiE \"root-only|root barrier|ONE root\" tests/core/autopilot-barrier-multirepo.test.ts && bun test tests/core/autopilot-barrier-multirepo.test.ts >/dev/null 2>&1",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

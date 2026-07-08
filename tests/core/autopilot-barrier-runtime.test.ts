@@ -126,9 +126,8 @@ describe('executeTestBarrier — deterministic exit-code → node disposition', 
       workItemId: WI,
       node: await barrierNode(),
       caps: (await aps.get(WI)).caps,
-      command: 'bun test',
+      runs: [{ dir: '', command: 'bun test', cwd: repo }],
       runner: passRunner,
-      cwd: repo,
       now: NOW,
     });
     expect(res.disposition).toBe('green');
@@ -145,9 +144,8 @@ describe('executeTestBarrier — deterministic exit-code → node disposition', 
       workItemId: WI,
       node: await barrierNode(),
       caps: (await aps.get(WI)).caps,
-      command: 'nope',
+      runs: [{ dir: '', command: 'nope', cwd: repo }],
       runner: unrunnableRunner,
-      cwd: repo,
       now: NOW,
     });
     expect(res.disposition).toBe('degrade');
@@ -168,9 +166,8 @@ describe('executeTestBarrier — deterministic exit-code → node disposition', 
       workItemId: WI,
       node: await barrierNode(),
       caps: (await aps.get(WI)).caps,
-      command: 'sleep 999',
+      runs: [{ dir: '', command: 'sleep 999', cwd: repo }],
       runner: timeoutRunner,
-      cwd: repo,
       now: NOW,
     });
     expect(res.disposition).toBe('timeout');
@@ -187,9 +184,8 @@ describe('executeTestBarrier — deterministic exit-code → node disposition', 
       workItemId: WI,
       node: await barrierNode(),
       caps: (await aps.get(WI)).caps,
-      command: undefined,
+      runs: [{ dir: '', command: undefined, cwd: repo }],
       runner: failRunner, // never consulted — no command to run
-      cwd: repo,
       now: NOW,
     });
     expect(res.disposition).toBe('degrade');
@@ -210,9 +206,8 @@ describe('executeTestBarrier — deterministic exit-code → node disposition', 
         workItemId: WI,
         node: barrierOf(g),
         caps: g.caps,
-        command: 'bun test',
+        runs: [{ dir: '', command: 'bun test', cwd: repo }],
         runner: failRunner,
-        cwd: repo,
         now: NOW,
       });
       dispositions.push(res.disposition);
@@ -256,9 +251,8 @@ describe('executeTestBarrier feeds the completion seam (execution → final verd
       workItemId: WI,
       node: barrierOf(g0),
       caps: g0.caps,
-      command: 'bun test',
+      runs: [{ dir: '', command: 'bun test', cwd: repo }],
       runner: passRunner,
-      cwd: repo,
       now: NOW,
     });
     const c = assembleCompletionFromGraph(await aps.get(WI), workItemWith(['ac-1']), { now: NOW });
@@ -275,9 +269,8 @@ describe('executeTestBarrier feeds the completion seam (execution → final verd
       workItemId: WI,
       node: barrierOf(g0),
       caps: g0.caps,
-      command: 'nope',
+      runs: [{ dir: '', command: 'nope', cwd: repo }],
       runner: unrunnableRunner,
-      cwd: repo,
       now: NOW,
     });
     const c = assembleCompletionFromGraph(await aps.get(WI), workItemWith(['ac-1']), { now: NOW });
