@@ -17,7 +17,7 @@ import { bootstrapAutopilot } from './autopilot-bootstrap';
 import { nextCoverageNode, recordCoverageRound } from './coverage-loop';
 import { serializePlanDialog } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
-import { loadFarFieldTaxonomy } from './coverage-taxonomy';
+import { loadFarFieldTaxonomy, warnMalformedTaxonomy } from './coverage-taxonomy';
 import { type GateResult, type RiskAxes, deriveClosureMode, interviewReadinessGate } from './gates';
 import { IntentStore } from './intent-store';
 import { InterviewStore } from './interview-store';
@@ -79,7 +79,7 @@ export async function startInterview(
   // rides `notes` so the interviewer sees the probing question and the projected
   // cov-dim node inherits it as its label (projectInterviewDimensions).
   const seededDimensions = input.seedUserIntentDimensions
-    ? (await loadFarFieldTaxonomy(repoRoot))
+    ? (await loadFarFieldTaxonomy(repoRoot, () => warnMalformedTaxonomy(repoRoot)))
         .filter((c) => c.disposition === 'user-intent')
         .map((c) => ({
           id: c.id,

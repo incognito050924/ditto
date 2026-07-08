@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MINIMAL_INCREMENT_SELF_CHECK, charterProjection } from '~/core/charter';
@@ -8,14 +8,17 @@ import {
   CATEGORY_NODE_PREFIX,
   FAR_FIELD_ROUTED_OUT,
   FAR_FIELD_TAXONOMY_FLOOR,
+  applyTaxonomyMutation,
   farFieldCategoriesEnabled,
   farFieldCoverageNodes,
   farFieldCoverageReport,
   farFieldLenses,
   loadFarFieldTaxonomy,
   resolveTaxonomy,
+  warnMalformedTaxonomy,
 } from '~/core/coverage-taxonomy';
-import type { CoverageMap } from '~/schemas/coverage';
+import { startInterview } from '~/core/interview-driver';
+import { type CoverageMap, coverageTaxonomyConfig } from '~/schemas/coverage';
 
 // wi_260622vjo §6-floor — the always-on far-field category FLOOR. Each category is
 // a probing QUESTION (a lens the sweep must answer for the change's scope), not a
@@ -582,5 +585,192 @@ describe('far-field relevance gate — pre-closed skip (wi_260625l0v §3·§5)',
     const nodes = farFieldCoverageNodes('refactor README', 'cov-root', taxo);
     const cats = nodes.filter((n) => n.id.startsWith(CATEGORY_NODE_PREFIX));
     expect(cats.every((c) => c.state === 'open')).toBe(true);
+  });
+});
+
+// wi_260707phi (ac-2/ac-3/ac-4) — taxonomy write-back. A mutation (add / disable /
+// re-route) is applied to .ditto/coverage-taxonomy.json fail-CLOSED: the next config
+// is zod-validated BEFORE the write, so a malformed candidate never lands; unrelated
+// (unknown) keys survive the round-trip (.passthrough); re-applying the same mutation
+// is byte-stable (idempotent); disable records its justification in disabled_reasons.
+describe('taxonomy write-back (wi_260707phi ac-2/ac-3/ac-4)', () => {
+  test('add→disable round-trip is byte-stable (idempotent) and preserves unknown keys (ac-2)', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-tax-wb-'));
+    try {
+      await mkdir(join(repo, '.ditto'), { recursive: true });
+      const file = join(repo, '.ditto', 'coverage-taxonomy.json');
+      // seed a config carrying an unknown key a newer ditto version might have written
+      await writeFile(
+        file,
+        `${JSON.stringify(
+          { future_field: { note: 'unknown to this schema' }, disabled: ['authentication'] },
+          null,
+          2,
+        )}\n`,
+      );
+
+      await applyTaxonomyMutation(repo, {
+        kind: 'add',
+        id: 'tenancy',
+        lens: '이 변경이 테넌트 경계를 넘나?',
+      });
+      await applyTaxonomyMutation(repo, {
+        kind: 'disable',
+        id: 'time-clock',
+        reason: '이 제품은 시간 의존 로직이 없음',
+      });
+      const first = await readFile(file, 'utf8');
+
+      // re-apply the SAME two mutations → identical bytes (idempotent, ac-2)
+      await applyTaxonomyMutation(repo, {
+        kind: 'add',
+        id: 'tenancy',
+        lens: '이 변경이 테넌트 경계를 넘나?',
+      });
+      await applyTaxonomyMutation(repo, {
+        kind: 'disable',
+        id: 'time-clock',
+        reason: '이 제품은 시간 의존 로직이 없음',
+      });
+      const second = await readFile(file, 'utf8');
+      expect(second).toBe(first);
+
+      const parsed = JSON.parse(first);
+      // unknown key survived the parse→mutate→serialize round-trip (.passthrough)
+      expect(parsed.future_field).toEqual({ note: 'unknown to this schema' });
+      // disabled stays a bare id[] (no union-widen), no duplicate id
+      expect(parsed.disabled).toEqual(['authentication', 'time-clock']);
+      // add did not duplicate the tenancy entry
+      expect(parsed.added.filter((a: { id: string }) => a.id === 'tenancy')).toHaveLength(1);
+      // and the whole config still validates against the schema
+      expect(coverageTaxonomyConfig.safeParse(parsed).success).toBe(true);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('disable records its justification in disabled_reasons (ac-4)', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-tax-wb-'));
+    try {
+      await mkdir(join(repo, '.ditto'), { recursive: true });
+      await applyTaxonomyMutation(repo, {
+        kind: 'disable',
+        id: 'injection',
+        reason: '이 서비스는 신뢰 경계에서 인터프리터로 들어가는 경로가 없음',
+      });
+      const parsed = JSON.parse(
+        await readFile(join(repo, '.ditto', 'coverage-taxonomy.json'), 'utf8'),
+      );
+      expect(parsed.disabled).toContain('injection');
+      expect(parsed.disabled_reasons.injection).toBe(
+        '이 서비스는 신뢰 경계에서 인터프리터로 들어가는 경로가 없음',
+      );
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('re-route records a floor-category disposition override (dispositions map)', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-tax-wb-'));
+    try {
+      await mkdir(join(repo, '.ditto'), { recursive: true });
+      await applyTaxonomyMutation(repo, {
+        kind: 'reroute',
+        id: 'auditing',
+        disposition: 'user-intent',
+      });
+      const parsed = JSON.parse(
+        await readFile(join(repo, '.ditto', 'coverage-taxonomy.json'), 'utf8'),
+      );
+      expect(parsed.dispositions.auditing).toBe('user-intent');
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('a malformed candidate is rejected fail-closed — NO file is written (ac-3)', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-tax-wb-'));
+    try {
+      await mkdir(join(repo, '.ditto'), { recursive: true });
+      const file = join(repo, '.ditto', 'coverage-taxonomy.json');
+      // no config exists yet; an add with an empty lens violates lens.min(1)
+      await expect(
+        applyTaxonomyMutation(repo, { kind: 'add', id: 'x', lens: '' }),
+      ).rejects.toThrow();
+      // fail-closed: nothing landed
+      expect(await Bun.file(file).exists()).toBe(false);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('a malformed candidate never overwrites an existing valid config (ac-3)', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-tax-wb-'));
+    try {
+      await mkdir(join(repo, '.ditto'), { recursive: true });
+      const file = join(repo, '.ditto', 'coverage-taxonomy.json');
+      await applyTaxonomyMutation(repo, {
+        kind: 'disable',
+        id: 'time-clock',
+        reason: '이 제품은 시간 의존 로직이 없음',
+      });
+      const before = await readFile(file, 'utf8');
+      await expect(
+        applyTaxonomyMutation(repo, { kind: 'add', id: 'y', lens: '' }),
+      ).rejects.toThrow();
+      // the prior valid config is untouched
+      expect(await readFile(file, 'utf8')).toBe(before);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+});
+
+// wi_260707phi (ac-3 read side) — the two real callers of loadFarFieldTaxonomy
+// (coverage-loop.nextCoverageNode, interview-driver.startInterview) wire an
+// onMalformed callback that SURFACES a warning, so a malformed tier-② override
+// fails open to the floor WITH a signal, never silently (dead-wire class, fixed 3x).
+describe('malformed-taxonomy warning wiring (wi_260707phi ac-3)', () => {
+  test('warnMalformedTaxonomy surfaces a console warning naming the config file', () => {
+    const original = console.warn;
+    const seen: string[] = [];
+    console.warn = (...args: unknown[]) => {
+      seen.push(args.map(String).join(' '));
+    };
+    try {
+      warnMalformedTaxonomy('/tmp/some-repo');
+    } finally {
+      console.warn = original;
+    }
+    expect(seen.length).toBe(1);
+    expect(seen[0]).toContain('coverage-taxonomy.json');
+  });
+
+  test('startInterview wires the warning LIVE — a malformed config warns AND still fails open to the floor', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-tax-iv-'));
+    try {
+      await mkdir(join(repo, '.ditto'), { recursive: true });
+      await writeFile(join(repo, '.ditto', 'coverage-taxonomy.json'), '{ not json');
+      const original = console.warn;
+      const seen: string[] = [];
+      console.warn = (...args: unknown[]) => {
+        seen.push(args.map(String).join(' '));
+      };
+      let state: Awaited<ReturnType<typeof startInterview>>;
+      try {
+        state = await startInterview(repo, {
+          workItemId: 'wi_taxbad01',
+          seedUserIntentDimensions: true,
+        });
+      } finally {
+        console.warn = original;
+      }
+      // the wire is LIVE: the malformed config produced a warning (not silent)
+      expect(seen.some((m) => m.includes('coverage-taxonomy.json'))).toBe(true);
+      // fail-open preserved: floor user-intent categories still seeded as dimensions
+      expect(state.dimensions.length).toBeGreaterThan(0);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
   });
 });

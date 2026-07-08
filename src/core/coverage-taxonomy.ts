@@ -18,6 +18,7 @@ import { type CoverageTaxonomyConfig, coverageTaxonomyConfig } from '~/schemas/c
 import type { CoverageDisposition, CoverageMap, CoverageNode } from '~/schemas/coverage';
 import { MINIMAL_INCREMENT_SELF_CHECK } from './charter';
 import { dittoDir } from './ditto-paths';
+import { SchemaValidationError, atomicWriteText } from './fs';
 
 export interface FarFieldCategory {
   /** Stable id (kebab) — used for tier-② config enable/disable and skip records. */
@@ -292,6 +293,118 @@ export async function loadFarFieldTaxonomy(
     onMalformed?.();
     return [...FAR_FIELD_TAXONOMY_FLOOR];
   }
+}
+
+/**
+ * Default `onMalformed` for the taxonomy readers (ac-3, wi_260707phi): surface a
+ * warning so a malformed tier-② override fails open to the floor WITH a signal,
+ * never silently. The core engine is otherwise I/O-silent, but a malformed project
+ * config that quietly reverts to the built-in floor is exactly the zero-signal
+ * fail-open the read side must not do — the two live readers
+ * (coverage-loop.nextCoverageNode, interview-driver.startInterview) wire this.
+ */
+export function warnMalformedTaxonomy(repoRoot: string): void {
+  console.warn(
+    `ditto: malformed ${dittoDir(repoRoot)}/coverage-taxonomy.json — ignoring the tier-② taxonomy override and falling back to the built-in far-field floor (fix the file to re-enable it)`,
+  );
+}
+
+/**
+ * One write-back mutation over the tier-② taxonomy config (ac-2/ac-3/ac-4): add a
+ * project category, disable a floor category (with a recorded reason), or re-route a
+ * floor category's disposition. Applied to `.ditto/coverage-taxonomy.json`.
+ */
+export type TaxonomyMutation =
+  | { kind: 'add'; id: string; lens: string; disposition?: CoverageDisposition }
+  | { kind: 'disable'; id: string; reason: string }
+  | { kind: 'reroute'; id: string; disposition: CoverageDisposition };
+
+/** Result of a successful write-back — the path written and the validated config. */
+export interface TaxonomyWriteResult {
+  path: string;
+  config: CoverageTaxonomyConfig;
+}
+
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Read the current tier-② config as a RAW object (not the resolved taxonomy) so a
+ * write-back can shallow-merge onto it and preserve keys this schema version does not
+ * know (.passthrough round-trip, ac-2). Absent → an empty object (a fresh config). A
+ * non-JSON or non-object file throws a surfaced error rather than being silently
+ * clobbered — the write-back is fail-closed on a corrupt existing file too.
+ */
+async function readRawTaxonomyConfig(path: string): Promise<Record<string, unknown>> {
+  const file = Bun.file(path);
+  if (!(await file.exists())) return {};
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await file.text());
+  } catch (err) {
+    throw new SchemaValidationError(path, err);
+  }
+  if (!isPlainRecord(raw)) {
+    throw new SchemaValidationError(
+      path,
+      new Error('coverage-taxonomy.json must be a JSON object'),
+    );
+  }
+  return raw;
+}
+
+/**
+ * Apply a mutation to a RAW config object, returning the next raw object. Pure —
+ * shallow-merges onto a copy so unknown keys survive (ac-2) and each mutation is
+ * idempotent: add upserts the entry by id (no duplicate), disable de-dups the id and
+ * (re)sets its reason, reroute (re)sets the disposition. Re-applying the same mutation
+ * yields the same object → a byte-stable serialization (ac-2).
+ */
+function mutateRawConfig(
+  current: Record<string, unknown>,
+  mutation: TaxonomyMutation,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...current };
+  if (mutation.kind === 'add') {
+    const existing = Array.isArray(next.added) ? (next.added as Record<string, unknown>[]) : [];
+    const entry: Record<string, unknown> = {
+      id: mutation.id,
+      lens: mutation.lens,
+      ...(mutation.disposition ? { disposition: mutation.disposition } : {}),
+    };
+    const idx = existing.findIndex((e) => isPlainRecord(e) && e.id === mutation.id);
+    next.added = idx >= 0 ? existing.map((e, i) => (i === idx ? entry : e)) : [...existing, entry];
+  } else if (mutation.kind === 'disable') {
+    const disabled = Array.isArray(next.disabled) ? (next.disabled as string[]) : [];
+    next.disabled = disabled.includes(mutation.id) ? disabled : [...disabled, mutation.id];
+    const reasons = isPlainRecord(next.disabled_reasons) ? next.disabled_reasons : {};
+    next.disabled_reasons = { ...reasons, [mutation.id]: mutation.reason };
+  } else {
+    const dispositions = isPlainRecord(next.dispositions) ? next.dispositions : {};
+    next.dispositions = { ...dispositions, [mutation.id]: mutation.disposition };
+  }
+  return next;
+}
+
+/**
+ * Apply a write-back mutation to the tier-② taxonomy config (`.ditto/coverage-taxonomy.json`).
+ * Fail-CLOSED (ac-3): the next config is built, zod-validated with `coverageTaxonomyConfig`,
+ * and ONLY written on success — a malformed candidate throws and never lands, leaving any
+ * prior valid config untouched. Unknown keys survive (ac-2, .passthrough); the write is
+ * atomic (fs.atomicWriteText). Idempotent: re-applying the same mutation is byte-stable.
+ */
+export async function applyTaxonomyMutation(
+  repoRoot: string,
+  mutation: TaxonomyMutation,
+): Promise<TaxonomyWriteResult> {
+  const path = `${dittoDir(repoRoot)}/coverage-taxonomy.json`;
+  const current = await readRawTaxonomyConfig(path);
+  const next = mutateRawConfig(current, mutation);
+  const parsed = coverageTaxonomyConfig.safeParse(next);
+  if (!parsed.success) throw new SchemaValidationError(path, parsed.error);
+  await atomicWriteText(path, `${JSON.stringify(next, null, 2)}\n`);
+  return { path, config: parsed.data };
 }
 
 /** Coverage-node id prefix for a seeded far-field category (§8-2). */

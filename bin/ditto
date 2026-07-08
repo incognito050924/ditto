@@ -22421,6 +22421,7 @@ function charterProjection(ctx = {}) {
 
 // src/core/coverage-taxonomy.ts
 init_ditto_paths();
+init_fs();
 var FAR_FIELD_TAXONOMY_FLOOR = [
   {
     id: "authentication",
@@ -22585,6 +22586,9 @@ async function loadFarFieldTaxonomy(repoRoot, onMalformed) {
     onMalformed?.();
     return [...FAR_FIELD_TAXONOMY_FLOOR];
   }
+}
+function warnMalformedTaxonomy(repoRoot) {
+  console.warn(`ditto: malformed ${dittoDir(repoRoot)}/coverage-taxonomy.json \u2014 ignoring the tier-\u2461 taxonomy override and falling back to the built-in far-field floor (fix the file to re-enable it)`);
 }
 var CATEGORY_NODE_PREFIX = "cov-cat-";
 function farFieldCoverageNodes(intent, rootId = "cov-root", taxonomy = FAR_FIELD_TAXONOMY_FLOOR, verdicts = []) {
@@ -26568,7 +26572,7 @@ async function originalIntent(repoRoot, workItemId2) {
 async function nextCoverageNode(args) {
   const { repoRoot, workItemId: workItemId2 } = args;
   const store = new CoverageStore(repoRoot);
-  const taxonomy = await loadFarFieldTaxonomy(repoRoot);
+  const taxonomy = await loadFarFieldTaxonomy(repoRoot, () => warnMalformedTaxonomy(repoRoot));
   let map;
   if (await store.exists(workItemId2)) {
     map = await store.getMap(workItemId2);
@@ -36451,7 +36455,7 @@ var DRY_FLOOR = 0.12;
 async function startInterview(repoRoot, input) {
   const now = (input.now ?? new Date).toISOString();
   const generators = input.generators ?? DEFAULT_GENERATORS;
-  const seededDimensions = input.seedUserIntentDimensions ? (await loadFarFieldTaxonomy(repoRoot)).filter((c3) => c3.disposition === "user-intent").map((c3) => ({
+  const seededDimensions = input.seedUserIntentDimensions ? (await loadFarFieldTaxonomy(repoRoot, () => warnMalformedTaxonomy(repoRoot))).filter((c3) => c3.disposition === "user-intent").map((c3) => ({
     id: c3.id,
     critical: false,
     state: "unknown",
@@ -54108,4 +54112,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=3063c9c99b5a1c032dc16016eeed7e040d9abc8109bee1ea7b34284d64cc8501
+//# ditto-src-stamp=cdfccac8c9e4604d4dbd0e560eecbff6208f78505ff84a1376473cbcc2d2b635

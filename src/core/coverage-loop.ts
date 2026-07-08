@@ -40,6 +40,7 @@ import {
   farFieldCoverageNodes,
   farFieldLenses,
   loadFarFieldTaxonomy,
+  warnMalformedTaxonomy,
 } from './coverage-taxonomy';
 import { localDir } from './ditto-paths';
 import { atomicWriteText, readJson, writeJson } from './fs';
@@ -293,7 +294,7 @@ export async function nextCoverageNode(args: {
   // ac-10: resolve the project's tier-② taxonomy (floor + .ditto/coverage-taxonomy.json)
   // once; it drives both the seeded category nodes and the injected lenses. Absent/
   // malformed config → the code floor (fail-open).
-  const taxonomy = await loadFarFieldTaxonomy(repoRoot);
+  const taxonomy = await loadFarFieldTaxonomy(repoRoot, () => warnMalformedTaxonomy(repoRoot));
   let map: CoverageMap;
   if (await store.exists(workItemId)) {
     map = await store.getMap(workItemId);
