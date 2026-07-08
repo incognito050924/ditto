@@ -50435,17 +50435,17 @@ function fragmentKeywords(text) {
   return text.split(/[\s,.;:!?\u00B7\u2014\u2026()[\]{}"'`/\\]+/).map((t3) => t3.trim()).filter((t3) => t3.length >= 2);
 }
 function deriveFragmentMappings(fragments, prism) {
-  const nodeTexts = prism.tree.nodes.map((n3) => ({
+  const nodeTokens = prism.tree.nodes.map((n3) => ({
     id: n3.id,
-    text: `${n3.label} ${n3.close_reason ?? ""}`
+    tokens: new Set(fragmentKeywords(`${n3.label} ${n3.close_reason ?? ""}`))
   }));
   const mappings = [];
   for (const frag of fragments) {
     const keywords = fragmentKeywords(frag.text);
     if (keywords.length === 0)
       continue;
-    for (const node2 of nodeTexts) {
-      if (keywords.some((kw) => node2.text.includes(kw))) {
+    for (const node2 of nodeTokens) {
+      if (keywords.some((kw) => node2.tokens.has(kw))) {
         mappings.push({ fragment_id: frag.id, node_id: node2.id });
       }
     }
@@ -55393,4 +55393,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=eea8018de27f4411a49d39899eff9eb9bb1b8fe658711b24a6d0f0f977acab7e
+//# ditto-src-stamp=b36e42f5401e396fe01b2bc680e16036c0836045eb048f9e0c1f8661ecb0550a

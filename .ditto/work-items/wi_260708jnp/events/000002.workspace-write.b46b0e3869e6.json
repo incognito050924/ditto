@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708jnp",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "b46b0e3869e6214731cce91a6758a7b44b6b0a0bf3c2ced6e329adcc158ef6db",
+  "ts": "2026-07-08T22:46:45.319Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/prism-engine.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

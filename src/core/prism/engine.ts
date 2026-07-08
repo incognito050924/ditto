@@ -389,27 +389,34 @@ function fragmentKeywords(text: string): string[] {
 }
 
 /**
- * Derive the explicit node→fragment mappings STRING-LEVEL (no model call): a fragment
- * is mapped to a node when the node's `label` or `close_reason` contains a distinctive
- * keyword from the fragment. A fragment addressed by zero node stays unmapped, so
+ * Derive the explicit node→fragment mappings TOKEN-LEVEL (no model call): a fragment
+ * is mapped to a node when a distinctive keyword of the fragment appears as a WHOLE
+ * TOKEN of the node's `label` or `close_reason` (tokenized by the SAME splitter as the
+ * fragment). A fragment addressed by zero node stays unmapped, so
  * `seedUncoveredFragments` surfaces it as a gap. This is exactly the intent's
  * deterministic scope ("explicit-mapping-absence ONLY") — no semantic achieve-vs-
  * characterize judgment (that stays the model's job, out of scope). Pure.
+ *
+ * wi_260708jnp: was `node.text.includes(kw)` (substring), which false-mapped a keyword
+ * that is only a word-INTERNAL substring of an unrelated node token (e.g. keyword `id`
+ * "matching" `provider`), silently marking a genuinely-uncovered fragment as covered so
+ * its gap was never seeded. Whole-token set membership removes that bleed while keeping
+ * the same model-free determinism (token equality is as model-free as substring).
  */
 export function deriveFragmentMappings(
   fragments: readonly IntentFragment[],
   prism: PrismIssueMap,
 ): FragmentMapping[] {
-  const nodeTexts = prism.tree.nodes.map((n) => ({
+  const nodeTokens = prism.tree.nodes.map((n) => ({
     id: n.id,
-    text: `${n.label} ${n.close_reason ?? ''}`,
+    tokens: new Set(fragmentKeywords(`${n.label} ${n.close_reason ?? ''}`)),
   }));
   const mappings: FragmentMapping[] = [];
   for (const frag of fragments) {
     const keywords = fragmentKeywords(frag.text);
     if (keywords.length === 0) continue;
-    for (const node of nodeTexts) {
-      if (keywords.some((kw) => node.text.includes(kw))) {
+    for (const node of nodeTokens) {
+      if (keywords.some((kw) => node.tokens.has(kw))) {
         mappings.push({ fragment_id: frag.id, node_id: node.id });
       }
     }

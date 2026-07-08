@@ -339,6 +339,49 @@ describe('deriveFragmentMappings — string-level explicit mapping (ac-2)', () =
   });
 });
 
+// ── follow-up #1 (wi_260708jnp): token set-membership, not substring includes ──
+// The prior impl matched via `node.text.includes(kw)`, so a keyword that is only a
+// word-INTERNAL substring of an unrelated node token produced a false mapping (the
+// fragment looked "covered" and was never seeded as a gap). The fix tokenizes the
+// node text with the SAME splitter and tests set membership.
+describe('deriveFragmentMappings — token match, no word-internal false-coverage (wi_260708jnp)', () => {
+  test('a keyword that is only a substring INSIDE an unrelated node token does NOT map', () => {
+    // keyword 'id' is a substring of 'provider' but NOT a standalone token of the node.
+    const frags = [{ id: 'goal', text: 'id 매핑 취소' }];
+    const p = prism([node('prism_x0000001', 'provider 라우팅 계층')]);
+    const m = deriveFragmentMappings(frags, p);
+    // 'id' must not match 'provider'; '매핑'/'취소' are absent → no mapping at all.
+    expect(m).toEqual([]);
+  });
+
+  test('an exact whole-token match still maps (no regression)', () => {
+    const frags = [{ id: 'goal', text: 'id 매핑 취소' }];
+    // node carries 'id' as a standalone token → legitimate coverage.
+    const p = prism([node('prism_x0000002', 'id 매핑 로직')]);
+    const m = deriveFragmentMappings(frags, p);
+    expect(m).toContainEqual({ fragment_id: 'goal', node_id: 'prism_x0000002' });
+  });
+
+  test('close_reason tokens also count (whole-token), still no substring bleed', () => {
+    const frags = [{ id: 'goal', text: '결제 취소' }];
+    const covered = {
+      ...node('prism_x0000003', '무관', 'resolved'),
+      close_reason: '결제 취소 처리',
+    };
+    const bleed = node('prism_x0000004', '취소불가정책'); // '취소' is a substring, not a token
+    const p = prism([covered, bleed]);
+    const m = deriveFragmentMappings(frags, p);
+    expect(m).toContainEqual({ fragment_id: 'goal', node_id: 'prism_x0000003' });
+    expect(m.some((x) => x.node_id === 'prism_x0000004')).toBe(false);
+  });
+
+  test('no token match anywhere → empty mappings', () => {
+    const frags = [{ id: 'goal', text: '완전히 무관한 조각' }];
+    const p = prism([node('prism_x0000005', 'provider 라우팅')]);
+    expect(deriveFragmentMappings(frags, p)).toEqual([]);
+  });
+});
+
 // ── ac-3 · label-only progress summary ───────────────────────────────────────
 
 describe('renderProgressSummary — label-only, no id/axis/schema leak (ac-3)', () => {
