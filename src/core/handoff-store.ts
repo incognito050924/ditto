@@ -284,6 +284,38 @@ export class HandoffStore {
   }
 
   /**
+   * The latest handoff for this work item for MANUAL reading (wi_260708xgo,
+   * `ditto work handoff <id> --show`) — the active handoff if present, else the
+   * most recent archived copy, else null. Read-only: unlike consumeFor it never
+   * moves or deletes anything, so `--show` can be run repeatedly.
+   */
+  async readLatest(workItemId: string): Promise<ActiveHandoff | null> {
+    const active = await this.getActive(workItemId);
+    if (active) return active;
+    const archiveDir = join(this.dir(), 'archive');
+    let names: string[];
+    try {
+      names = await readdir(archiveDir);
+    } catch {
+      return null; // no archive dir → nothing
+    }
+    const prefix = `${workItemId}__`;
+    // Archive names are `<wi>__<stamp>.md`; the stamp sorts lexically, so the
+    // last entry is the most recent archived handoff.
+    const latest = names
+      .filter((n) => n.startsWith(prefix) && n.endsWith('.md'))
+      .sort()
+      .at(-1);
+    if (!latest) return null;
+    try {
+      const { handoff, body } = parseHandoffFile(await Bun.file(join(archiveDir, latest)).text());
+      return { handoff, body, path: `.ditto/local/handoff/archive/${latest}` };
+    } catch {
+      return null; // malformed archived file → nothing to show (fail-open)
+    }
+  }
+
+  /**
    * Move JUST this work item's active handoff into archive and return it (or
    * null when there is none). The scoped counterpart of consume — a concurrent
    * worktree session sharing this .ditto/local must never archive a sibling's

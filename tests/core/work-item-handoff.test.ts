@@ -59,7 +59,7 @@ describe('writeWorkItemHandoff', () => {
     expect(handoffText).not.toContain('ditto work resume');
   });
 
-  test('partial path: status=partial, re_entry set, resume in handoff.md', async () => {
+  test('partial path: status=partial, re_entry set, resume hint in handoff.md', async () => {
     const created = await store.create(makeInput());
     // ac-1 stays unverified → final_verdict=partial
     const result = await writeWorkItemHandoff(workDir, store, created.id);
@@ -67,10 +67,14 @@ describe('writeWorkItemHandoff', () => {
     const updated = await store.get(created.id);
     expect(updated.status).toBe('partial');
     expect(updated.re_entry).toBeDefined();
+    // wi_260708xgo: the re_entry command points to a REAL command — the manual
+    // handoff read — not the non-existent `ditto work resume`.
+    expect(updated.re_entry?.command).toBe(`ditto work handoff ${created.id} --show`);
     const handoffText = await Bun.file(result.handoffPath).text();
     // partial → active handoff; re_entry 명령은 open_threads 로 운반된다.
     expect(handoffText).toContain('## 열린 스레드');
-    expect(handoffText).toContain('ditto work resume');
+    expect(handoffText).toContain(`ditto work handoff ${created.id} --show`);
+    expect(handoffText).not.toContain('ditto work resume');
   });
 
   test('changed_files: when work item has runs/evidence but no diff base, unverified entry is added in-scope', async () => {

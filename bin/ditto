@@ -23430,6 +23430,28 @@ class HandoffStore {
       return null;
     }
   }
+  async readLatest(workItemId2) {
+    const active = await this.getActive(workItemId2);
+    if (active)
+      return active;
+    const archiveDir = join23(this.dir(), "archive");
+    let names;
+    try {
+      names = await readdir9(archiveDir);
+    } catch {
+      return null;
+    }
+    const prefix = `${workItemId2}__`;
+    const latest = names.filter((n2) => n2.startsWith(prefix) && n2.endsWith(".md")).sort().at(-1);
+    if (!latest)
+      return null;
+    try {
+      const { handoff: handoff2, body } = parseHandoffFile(await Bun.file(join23(archiveDir, latest)).text());
+      return { handoff: handoff2, body, path: `.ditto/local/handoff/archive/${latest}` };
+    } catch {
+      return null;
+    }
+  }
   async consumeFor(workItemId2, now = new Date) {
     const active = await this.getActive(workItemId2);
     if (active === null)
@@ -29315,7 +29337,7 @@ async function writeWorkItemHandoff(repoRoot, store, workId, options = {}, now =
   }
   const completion = buildCompletion2(item, now.toISOString(), merged, options.declaredBy ?? "main", unverifiedExtras, prior, graphAcceptance);
   const effectiveReEntry = completion.final_verdict === "pass" ? undefined : item.re_entry ?? {
-    command: `ditto work resume ${item.id}`,
+    command: `ditto work handoff ${item.id} --show`,
     fresh_evidence_needed: ["\uBBF8pass acceptance\uC5D0 \uB300\uD55C \uAC80\uC99D \uACB0\uACFC"]
   };
   await writeJson(completionPath, completionContract, completion);
@@ -30476,6 +30498,11 @@ var workHandoff = defineCommand({
       description: "Agent role that declares this completion (who judged): main|planner|implementer|verifier|reviewer|researcher|synthesizer. Default main.",
       default: "main"
     },
+    show: {
+      type: "boolean",
+      description: "Read and print the EXISTING handoff (active, else latest archived) instead of generating one \u2014 the manual handoff load. Read-only; never regenerates.",
+      default: false
+    },
     output: {
       type: "string",
       description: "Output format: human|json",
@@ -30489,6 +30516,25 @@ var workHandoff = defineCommand({
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (args.show) {
+      const repoRoot2 = await resolveRepoRootForCreate();
+      const found = await new HandoffStore(repoRoot2).readLatest(args.workId);
+      if (!found) {
+        if (format === "json")
+          writeJson2({ work_item_id: args.workId, handoff: null });
+        else
+          writeHuman(`No handoff found for ${args.workId}.`);
+        return;
+      }
+      if (format === "json") {
+        writeJson2({ work_item_id: args.workId, path: found.path, body: found.body });
+      } else {
+        writeHuman(`Handoff for ${args.workId} (${found.path}):
+`);
+        writeHuman(found.body);
+      }
       return;
     }
     const declaredBy = declarerRole.safeParse(args["declared-by"]);
@@ -55396,4 +55442,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=a1e2b625b65af1b5761d9b69ef245f4ca109db55a4ca1ab072f2cc860687cc30
+//# ditto-src-stamp=ea1f8d9c445911d815297607f66d2ae45e64b73d4f0d05a13f87d2d4dc8a0178

@@ -276,7 +276,10 @@ export async function writeWorkItemHandoff(
     completion.final_verdict === 'pass'
       ? undefined
       : (item.re_entry ?? {
-          command: `ditto work resume ${item.id}`,
+          // wi_260708xgo: point at a REAL command — the manual handoff read — not
+          // the non-existent `ditto work resume`. (Session resume itself is by
+          // naming the work item id in a prompt; this hint surfaces the context.)
+          command: `ditto work handoff ${item.id} --show`,
           fresh_evidence_needed: ['미pass acceptance에 대한 검증 결과'],
         });
   await writeJson(completionPath, completionContract, completion);

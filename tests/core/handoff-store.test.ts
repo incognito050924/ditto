@@ -74,6 +74,27 @@ describe('HandoffStore', () => {
     expect(got?.body).toContain('mid');
   });
 
+  // wi_260708xgo: manual handoff read — active if present, else the latest
+  // archived copy, else null. Read-only (never consumes/moves).
+  test('readLatest returns the active handoff, else the latest archived, else null', async () => {
+    const wi = await workItem();
+    const store = new HandoffStore(repo);
+    expect(await store.readLatest(wi.id)).toBeNull();
+    await store.write(
+      buildHandoff({
+        workItem: wi,
+        fromContext: 'c',
+        currentState: 'ACTIVE-marker',
+        nextFirstCheck: 'c',
+      }),
+    );
+    expect((await store.readLatest(wi.id))?.body).toContain('ACTIVE-marker');
+    // move active → archive; readLatest now falls back to the archived copy
+    await store.consumeFor(wi.id);
+    expect(await store.getActive(wi.id)).toBeNull();
+    expect((await store.readLatest(wi.id))?.body).toContain('ACTIVE-marker');
+  });
+
   test('consumeFor archives only the named work item, leaving siblings active', async () => {
     const a = await workItem();
     const b = await new WorkItemStore(repo).create({
