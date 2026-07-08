@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { committedWorkItemDir, localDir } from '~/core/ditto-paths';
+import { localDir } from '~/core/ditto-paths';
 import { ensureDir, readJson, writeJson } from '~/core/fs';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
@@ -14,14 +14,20 @@ import { type PrismBacklogSplit, prismBacklogSplit } from './backlog';
 /**
  * PrismStore — persistence for the prism issue map (wi_260707oi1).
  *
- * Two tiers (design decision 3):
- *  - Run tier (`.ditto/local/work-items/<id>/prism/issue-map.json`): the exploratory
- *    issue-map DRAFT. Single-writer, full-replace (intent-store.ts pattern) — every
- *    node-state transition must have already passed through the addNode/closeNode
- *    pure functions before it is handed here; the store never edits map fields.
- *  - Record tier (`.ditto/work-items/<id>/prism-decisions.jsonl`): the decision-grade,
- *    durable log (approval / unknown-close / skip / early-exit / notified) that must
- *    survive a Run-tier wipe.
+ * ALL prism state is Run tier (`.ditto/local/work-items/<id>/prism/`), the exploratory
+ * execution trail of a draft that PRECEDES the committed WI (DI-3):
+ *  - `issue-map.json`: the exploratory DRAFT. Single-writer, full-replace
+ *    (intent-store.ts pattern) — every node-state transition must have already passed
+ *    through the addNode/closeNode pure functions before it is handed here; the store
+ *    never edits map fields.
+ *  - `prism-decisions.jsonl` + `prism-backlog-split.json`: the draft's decision-grade
+ *    trail (approval / unknown-close / skip / early-exit / notified / backlog split).
+ *
+ * These are NOT Record tier. The committed Record base (`.ditto/work-items/<id>/`) holds
+ * `record.json` + `events/` ONLY (ADR-20260706); the `check-committed-base-run-artifact`
+ * guard enforces it. Prism decisions are same-session execution trail (like intent.json /
+ * runs / graph), consumed only within the prism draft — not shared project memory — so
+ * they belong in the discardable Run tier, never the committed base (wi_260708cdl).
  *
  * The VALUE trail reuses the preserved question-round sink (WorkItemStore
  * `appendQuestionRoundLine` / `readQuestionRounds`) so `ditto doctor intent-quality`
@@ -44,11 +50,11 @@ export class PrismStore {
   }
 
   private decisionsPath(workItemId: string): string {
-    return join(committedWorkItemDir(this.repoRoot, workItemId), 'prism-decisions.jsonl');
+    return join(this.dir(workItemId), 'prism-decisions.jsonl');
   }
 
   private backlogSplitPath(workItemId: string): string {
-    return join(committedWorkItemDir(this.repoRoot, workItemId), 'prism-backlog-split.json');
+    return join(this.dir(workItemId), 'prism-backlog-split.json');
   }
 
   async exists(workItemId: string): Promise<boolean> {
@@ -65,11 +71,11 @@ export class PrismStore {
     return writeJson(this.mapPath(map.work_item_id), prismIssueMap, map);
   }
 
-  /** Append one decision-grade record to the durable Record-tier log. */
+  /** Append one decision-grade record to the Run-tier prism decision trail. */
   async appendDecision(decision: PrismDecision): Promise<PrismDecision> {
     const validated = prismDecision.parse(decision);
     const path = this.decisionsPath(validated.work_item_id);
-    await ensureDir(committedWorkItemDir(this.repoRoot, validated.work_item_id));
+    await ensureDir(this.dir(validated.work_item_id));
     const file = Bun.file(path);
     const existing = (await file.exists()) ? await file.text() : '';
     const prefix = existing.length === 0 || existing.endsWith('\n') ? existing : `${existing}\n`;
@@ -87,13 +93,14 @@ export class PrismStore {
   }
 
   /**
-   * ac-8 backlog-split record (Record tier, durable). Holds the proposal items, the
-   * one-time approval (once approved), and the per-item back-link ledger. Record tier
-   * so the approval evidence + materialization ledger survive a Run-tier wipe.
-   * Single-writer, schema-validated full-replace (mirrors writeMap).
+   * ac-8 backlog-split record (Run tier). Holds the proposal items, the one-time
+   * approval (once approved), and the per-item back-link ledger. Same-session prism
+   * draft trail — consumed during materialization, not shared project memory (the
+   * materialized child WIs are the durable, committed outcome). Single-writer,
+   * schema-validated full-replace (mirrors writeMap).
    */
   async writeBacklogSplit(split: PrismBacklogSplit): Promise<PrismBacklogSplit> {
-    await ensureDir(committedWorkItemDir(this.repoRoot, split.work_item_id));
+    await ensureDir(this.dir(split.work_item_id));
     return writeJson(this.backlogSplitPath(split.work_item_id), prismBacklogSplit, split);
   }
 

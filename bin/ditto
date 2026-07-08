@@ -36977,10 +36977,10 @@ class PrismStore {
     return join56(this.dir(workItemId2), "issue-map.json");
   }
   decisionsPath(workItemId2) {
-    return join56(committedWorkItemDir(this.repoRoot, workItemId2), "prism-decisions.jsonl");
+    return join56(this.dir(workItemId2), "prism-decisions.jsonl");
   }
   backlogSplitPath(workItemId2) {
-    return join56(committedWorkItemDir(this.repoRoot, workItemId2), "prism-backlog-split.json");
+    return join56(this.dir(workItemId2), "prism-backlog-split.json");
   }
   async exists(workItemId2) {
     return Bun.file(this.mapPath(workItemId2)).exists();
@@ -36995,7 +36995,7 @@ class PrismStore {
   async appendDecision(decision) {
     const validated = prismDecision.parse(decision);
     const path = this.decisionsPath(validated.work_item_id);
-    await ensureDir(committedWorkItemDir(this.repoRoot, validated.work_item_id));
+    await ensureDir(this.dir(validated.work_item_id));
     const file = Bun.file(path);
     const existing = await file.exists() ? await file.text() : "";
     const prefix = existing.length === 0 || existing.endsWith(`
@@ -37013,7 +37013,7 @@ class PrismStore {
 `).filter((l2) => l2.trim().length > 0).map((l2) => prismDecision.parse(JSON.parse(l2)));
   }
   async writeBacklogSplit(split) {
-    await ensureDir(committedWorkItemDir(this.repoRoot, split.work_item_id));
+    await ensureDir(this.dir(split.work_item_id));
     return writeJson(this.backlogSplitPath(split.work_item_id), prismBacklogSplit, split);
   }
   async readBacklogSplit(workItemId2) {
@@ -54700,4 +54700,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=96545e24c612f298d1a1f15b1080ed94b9168c3eeeb4e63e87bcf6b1c1a89ff7
+//# ditto-src-stamp=c480ab3360fa9bf6c38de415f17538db7bf1d7550fba7203162713772617e466

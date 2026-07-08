@@ -47,7 +47,9 @@ function seed(label: string, extra: string[] = []): { node_id: string } {
 
 /** Read the durable Record-tier decision KINDS actually persisted for WI. */
 async function decisionKinds(): Promise<string[]> {
-  const path = join(dir, '.ditto', 'work-items', WI, 'prism-decisions.jsonl');
+  // Run tier (wi_260708cdl): prism decisions live under .ditto/local/.../prism/,
+  // never the committed base (which is record.json + events/ only).
+  const path = join(dir, '.ditto', 'local', 'work-items', WI, 'prism', 'prism-decisions.jsonl');
   try {
     const text = await readFile(path, 'utf8');
     return text

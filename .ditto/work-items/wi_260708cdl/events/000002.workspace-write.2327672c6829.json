@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708cdl",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "2327672c68295b7b65b7719da5cf278edc6fdf85ad461967784633b13581d824",
+  "ts": "2026-07-08T08:40:18.694Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/prism-store.test.ts -t committed-base guard reports zero",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
