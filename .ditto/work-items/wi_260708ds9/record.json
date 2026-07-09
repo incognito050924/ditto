@@ -415,7 +415,8 @@
     {
       "kind": "idea",
       "note": "#1 값싼 guidance fix 2개(구조적 강제는 ADR-20260708 변경조건상 incident 전 보류=수용): ①seed purpose 'full test suite'→'unit/mock subset' 모순 수정(autopilot-bootstrap.ts:98) ②recipe caveat에 fail-safe 탈출구(안전 서브셋 못 만들면 비워둬라→degrade, push_gate 복사 금지)(recipe.ts:60-67). 리포트 §4: reports/design/barrier-test-tier-followup-investigation.md",
-      "severity": "medium"
+      "severity": "medium",
+      "resolved": true
     },
     {
       "kind": "idea",
@@ -425,7 +426,8 @@
     {
       "kind": "idea",
       "note": "멀티-repo root-drag degrade(safe 방향·값 침식): 혼합 변경이 root 파일(package.json·docs·lockfile)을 root('')로 귀속(autopilot-loop.ts:754-769)→root 명령 없으면 sub-repo 전부 green이어도 배리어 전체 degrade. root 파일 변경 거의 불가피→멀티-repo 만성 degrade. 수정=root 무명령+≥1 sub-repo면 root run skip. 리포트 §5: reports/design/barrier-test-tier-followup-investigation.md",
-      "severity": "low"
+      "severity": "low",
+      "resolved": true
     }
   ],
   "follows": "wi_260708yx5",
@@ -440,6 +442,6 @@
   "handoff_path": ".ditto/local/handoff/wi_260708ds9.md",
   "started_at_sha": "4558e864f2be4b273bc879f9cc03814a464b684e",
   "created_at": "2026-07-08T09:30:11.274Z",
-  "updated_at": "2026-07-09T01:22:15.483Z",
+  "updated_at": "2026-07-09T01:58:40.339Z",
   "closed_at": "2026-07-08T15:03:22.222Z"
 }
