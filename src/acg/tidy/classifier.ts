@@ -127,9 +127,21 @@ export async function writeTidyClassification(
 /**
  * Collect a diff-stat from git (`git diff --numstat base...head`) and tag each
  * path as code/non-code. The git adapter for {@link classifyTidyEntry}.
+ *
+ * `pathspec` (optional) scopes the diff to the given repo-relative paths via a
+ * trailing `-- <paths...>`. When it is non-empty the diff-stat contains ONLY those
+ * paths, so a concurrent session's committed files (outside the scope) never enter
+ * the stat and never spawn a spurious refactor node (wi_260709ft1). When it is
+ * absent or empty the git args are byte-identical to the legacy unscoped diff.
  */
-export function collectTidyDiffStat(repoRoot: string, base: string, head = 'HEAD'): TidyDiffStat {
-  const out = Bun.spawnSync(['git', 'diff', '--numstat', `${base}...${head}`], {
+export function collectTidyDiffStat(
+  repoRoot: string,
+  base: string,
+  head = 'HEAD',
+  pathspec?: string[],
+): TidyDiffStat {
+  const scope = pathspec && pathspec.length > 0 ? ['--', ...pathspec] : [];
+  const out = Bun.spawnSync(['git', 'diff', '--numstat', `${base}...${head}`, ...scope], {
     cwd: repoRoot,
     stdout: 'pipe',
     stderr: 'pipe',

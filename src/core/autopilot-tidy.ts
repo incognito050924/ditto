@@ -45,6 +45,18 @@ export interface TidyPlan {
  * The id prefix is derived from the implement node id (`<impl>t`) so the generated
  * ids do not collide with the base graph or a sibling implement node's tidy stage.
  */
+/**
+ * Derive the pathspec that scopes the tidy diff to THIS work item's own change
+ * surface: the deduped union of the plan's declared `change_surface` and the work
+ * item's `changed_files`. Passing this to `collectTidyDiffStat` keeps another
+ * session's committed files (absent from the surface) out of the diff-stat, so
+ * they never spawn a spurious refactor node (wi_260709ft1). An empty union yields
+ * `[]`, which `collectTidyDiffStat` treats as the unscoped legacy fallback.
+ */
+export function deriveTidyScope(changeSurface: string[], changedFiles: string[]): string[] {
+  return [...new Set([...changeSurface, ...changedFiles])];
+}
+
 export function planTidyOnImplementPass(input: TidyPlanInput): TidyPlan {
   const classification = classifyTidyEntry(input.diffStat);
   if (classification.decision === 'SKIP') {

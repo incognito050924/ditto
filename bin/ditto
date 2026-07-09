@@ -21130,8 +21130,9 @@ async function writeTidyClassification(repoRoot, workItemId2, classification) {
   await writeJson(path, tidyClassification, classification);
   return path;
 }
-function collectTidyDiffStat(repoRoot, base, head = "HEAD") {
-  const out = Bun.spawnSync(["git", "diff", "--numstat", `${base}...${head}`], {
+function collectTidyDiffStat(repoRoot, base, head = "HEAD", pathspec) {
+  const scope = pathspec && pathspec.length > 0 ? ["--", ...pathspec] : [];
+  const out = Bun.spawnSync(["git", "diff", "--numstat", `${base}...${head}`, ...scope], {
     cwd: repoRoot,
     stdout: "pipe",
     stderr: "pipe"
@@ -22270,6 +22271,9 @@ function buildTidySubgraph(input) {
 }
 
 // src/core/autopilot-tidy.ts
+function deriveTidyScope(changeSurface, changedFiles) {
+  return [...new Set([...changeSurface, ...changedFiles])];
+}
 function planTidyOnImplementPass(input) {
   const classification = classifyTidyEntry(input.diffStat);
   if (classification.decision === "SKIP") {
@@ -25811,8 +25815,9 @@ var recordResultPayload = exports_external.object({
 }).describe("One node result \u2014 caller judgment that the deterministic floor then enforces");
 async function spliceTidyStage(repoRoot, workItemId2, implementNode, aps) {
   const wi = await new WorkItemStore(repoRoot).get(workItemId2);
-  const diffStat = wi.started_at_sha ? collectTidyDiffStat(repoRoot, wi.started_at_sha) : { files: [] };
   const graph = await aps.get(workItemId2);
+  const scope = deriveTidyScope(graph.approval_gate.change_surface ?? [], wi.changed_files);
+  const diffStat = wi.started_at_sha ? collectTidyDiffStat(repoRoot, wi.started_at_sha, "HEAD", scope.length > 0 ? scope : undefined) : { files: [] };
   const plan = planTidyOnImplementPass({
     implementNodeId: implementNode.id,
     diffStat,
@@ -55613,4 +55618,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=ee146be36a66a2bcda5a36f3476b2097206d187738dd9f83341ead62b8fb0ef6
+//# ditto-src-stamp=0add6713a85de524801c21f3fae358207f1ad515ff4c9346aae92a0fc8a6651c
