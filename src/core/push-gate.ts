@@ -1,4 +1,4 @@
-import type { Recipe, RecipePushGate } from '~/schemas/recipe';
+import type { Recipe, RecipeE2eGate, RecipePushGate } from '~/schemas/recipe';
 
 /**
  * Push-gate core (wi_260629i9c) — PURE, no I/O. The CLI/hook layer reads git
@@ -9,23 +9,52 @@ import type { Recipe, RecipePushGate } from '~/schemas/recipe';
 const ZERO_SHA = /^0{40}$/;
 
 /**
- * Parse git pre-push stdin into the remote BRANCH names being pushed. Git feeds
- * the hook one line per ref: `<local ref> <local sha> <remote ref> <remote sha>`.
- * - A deletion (local sha all-zero) is skipped — it pushes no commits to test.
- * - Only `refs/heads/<branch>` remote refs yield a branch; tags/other refs are
- *   ignored (the gate is about branch pushes). A slashed branch name is kept whole.
+ * One pushed ref, as parsed from a git pre-push stdin line
+ * `<local ref> <local sha> <remote ref> <remote sha>` (wi_2607095fz). Unlike
+ * `parsePushedBranches` (which discards everything but the branch name), this keeps
+ * the WHOLE quad — the e2e-gate needs `localSha` to read CI evidence for the EXACT
+ * commit being pushed on each ref. `branch` is the `refs/heads/<name>` name, or null
+ * for a tag / non-branch ref (the gate is about branch pushes).
  */
-export function parsePushedBranches(stdin: string): string[] {
-  const out: string[] = [];
+export interface PushedRef {
+  localRef: string;
+  localSha: string;
+  remoteRef: string;
+  remoteSha: string;
+  /** The `refs/heads/<name>` branch, or null for a tag / non-branch ref. */
+  branch: string | null;
+}
+
+/**
+ * Parse git pre-push stdin into the pushed refs. Git feeds the hook one line per ref:
+ * `<local ref> <local sha> <remote ref> <remote sha>`.
+ * - A deletion (local sha all-zero) is skipped — it pushes no commits to gate.
+ * - Only `refs/heads/<branch>` remote refs yield a `branch`; tags/other refs carry
+ *   `branch: null` (still surfaced, so a caller can see the tag push). A slashed
+ *   branch name is kept whole.
+ */
+export function parsePushedRefs(stdin: string): PushedRef[] {
+  const out: PushedRef[] = [];
   for (const line of stdin.split('\n')) {
     const parts = line.trim().split(/\s+/);
     if (parts.length < 4) continue;
-    const localSha = parts[1] ?? '';
-    if (ZERO_SHA.test(localSha)) continue; // branch deletion — nothing to test
-    const branch = (parts[2] ?? '').match(/^refs\/heads\/(.+)$/)?.[1];
-    if (branch) out.push(branch);
+    const [localRef, localSha, remoteRef, remoteSha] = parts as [string, string, string, string];
+    if (ZERO_SHA.test(localSha)) continue; // ref deletion — nothing to gate
+    const branch = remoteRef.match(/^refs\/heads\/(.+)$/)?.[1] ?? null;
+    out.push({ localRef, localSha, remoteRef, remoteSha, branch });
   }
   return out;
+}
+
+/**
+ * The remote BRANCH names being pushed — the legacy push-gate view, now DERIVED from
+ * `parsePushedRefs` (one parser, no duplicate). Behavior is unchanged: deletions are
+ * skipped and only `refs/heads/<branch>` refs contribute a name (tags dropped).
+ */
+export function parsePushedBranches(stdin: string): string[] {
+  return parsePushedRefs(stdin)
+    .map((r) => r.branch)
+    .filter((b): b is string => b !== null);
 }
 
 export type PushGateDecision =
@@ -86,4 +115,18 @@ export function resolvePushGate(recipe: Recipe, repoRelDir: string): RecipePushG
   const dir = normDir(repoRelDir);
   if (dir === '' || dir === '.') return recipe.push_gate;
   return recipe.repos?.find((r) => normDir(r.dir) === dir)?.push_gate;
+}
+
+/**
+ * Resolve the `e2e_gate` for ONE repo inside a workspace manifest — the CI-evidence
+ * gate's mirror of `resolvePushGate` (wi_2607095fz). Same per-repo addressing: the
+ * ROOT repo (`.` / `''`) → the top-level `e2e_gate`; a nested repo matches a
+ * `repos[].dir` → that entry's `e2e_gate`. An unknown dir, or a repo declared without
+ * an e2e gate, yields undefined (gate inactive there — THE unconfigured signal the
+ * engine degrades on, never inferred from journey/evidence presence).
+ */
+export function resolveE2eGate(recipe: Recipe, repoRelDir: string): RecipeE2eGate | undefined {
+  const dir = normDir(repoRelDir);
+  if (dir === '' || dir === '.') return recipe.e2e_gate;
+  return recipe.repos?.find((r) => normDir(r.dir) === dir)?.e2e_gate;
 }

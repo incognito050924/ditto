@@ -1,0 +1,60 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607095fz",
+  "seq": 8,
+  "actor": "workspace-write",
+  "event_id": "472c521a16a852dd86751085de46eabfbe40a6a86a078274f543a094eb8d9008",
+  "ts": "2026-07-09T08:38:00.884Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-6",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607095fz/coverage.json",
+        "summary": "20 categories swept+closed, 3 justified-skipped, dry-terminated (K=2), 19 grounded far-field findings"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607095fz/intent.json",
+        "summary": "frozen IntentContract (goal, in/out scope, ac-1..6)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607095fz/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "full suite 4445 pass, 11 skip, 0 fail (exit 0); biome exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "4445 pass (+13), 0 fail"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607095fz/reviewer-output.json",
+        "summary": "approve verdict, 0 high-risk"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "4445 pass, 0 fail"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "full suite 4445 pass / 0 fail, run twice identical"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "4445 pass, 11 skip, 0 fail (exit 0)"
+      }
+    ]
+  }
+}

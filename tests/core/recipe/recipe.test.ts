@@ -275,6 +275,136 @@ describe('parseRecipe — barrier_test_command (unit-subset barrier, wi_260708ds
   });
 });
 
+describe('parseRecipe — e2e_gate block (CI-evidence push gate, wi_2607095fz ac-1)', () => {
+  // Symmetric with push_gate: an absent e2e_gate = inactive; a PRESENT gate is
+  // fully specified (>=1 protected branch + a REQUIRED evidence block) so a
+  // half-declared gate FAILS rather than silently doing nothing. Evidence source
+  // is an ENUM (portable across CI providers), the token is credential-free
+  // (envRef only — no literal secret enters the recipe).
+
+  test('valid e2e_gate parses, evidence defaults applied', () => {
+    const text = [
+      'e2e_gate:',
+      '  protected_branches:',
+      '    - main',
+      '  evidence:',
+      '    source: github-checks',
+    ].join('\n');
+    const r = parseRecipe(text);
+    expect(r.ok).toBe(true);
+    if (r.ok)
+      expect(r.recipe.e2e_gate).toEqual({
+        protected_branches: ['main'],
+        evidence: { source: 'github-checks', check_name_template: 'e2e/{journey}' },
+      });
+  });
+
+  test('minimal evidence ({}) fills source + check_name_template defaults', () => {
+    const parsed = recipe.safeParse({ e2e_gate: { protected_branches: ['main'], evidence: {} } });
+    expect(parsed.success).toBe(true);
+    if (parsed.success)
+      expect(parsed.data.e2e_gate?.evidence).toEqual({
+        source: 'github-checks',
+        check_name_template: 'e2e/{journey}',
+      });
+  });
+
+  // half-declared: empty protected_branches → fail min(1).
+  test('e2e_gate with empty protected_branches → fail', () => {
+    expect(
+      recipe.safeParse({
+        e2e_gate: { protected_branches: [], evidence: { source: 'github-checks' } },
+      }).success,
+    ).toBe(false);
+  });
+
+  // half-declared: missing evidence block → fail (evidence is REQUIRED).
+  test('e2e_gate missing evidence block → fail', () => {
+    expect(recipe.safeParse({ e2e_gate: { protected_branches: ['main'] } }).success).toBe(false);
+  });
+
+  // source is an ENUM, not a string — an unsupported provider FAILS validation.
+  test('unsupported evidence source (gitlab-ci) → fail', () => {
+    expect(
+      recipe.safeParse({
+        e2e_gate: { protected_branches: ['main'], evidence: { source: 'gitlab-ci' } },
+      }).success,
+    ).toBe(false);
+  });
+
+  // .strict() on evidence — an unknown field fails loud (e.g. a literal token slot).
+  test('unknown evidence field → fail (.strict)', () => {
+    expect(
+      recipe.safeParse({
+        e2e_gate: {
+          protected_branches: ['main'],
+          evidence: { source: 'github-checks', secret_token: 'x' },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  // repo is owner/name (default derived from git remote at RUNTIME, not in the schema).
+  test('evidence repo owner/name parses; a bare name fails', () => {
+    expect(
+      recipe.safeParse({
+        e2e_gate: { protected_branches: ['main'], evidence: { repo: 'ecoletree/ditto' } },
+      }).success,
+    ).toBe(true);
+    expect(
+      recipe.safeParse({
+        e2e_gate: { protected_branches: ['main'], evidence: { repo: 'ditto' } },
+      }).success,
+    ).toBe(false);
+  });
+
+  // credential-free: token is an envRef; a literal-looking credential FAILS (envRef
+  // governs the shape — env:VAR | secret:VAR only, never a literal secret).
+  test('token as envRef parses; a literal token FAILS (envRef governs shape)', () => {
+    expect(
+      recipe.safeParse({
+        e2e_gate: {
+          protected_branches: ['main'],
+          evidence: { source: 'github-checks', token: 'env:GH_TOKEN' },
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      recipe.safeParse({
+        e2e_gate: {
+          protected_branches: ['main'],
+          evidence: { source: 'github-checks', token: 'ghp_literalSecretValue123' },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  // per-repo symmetric with push_gate — a sub-repo declares its own e2e_gate.
+  test('per-repo repos[].e2e_gate parses and is retained', () => {
+    const text = [
+      'repos:',
+      '  - dir: frontend',
+      '    e2e_gate:',
+      '      protected_branches: [main]',
+      '      evidence: { source: github-checks, check_name_template: "e2e/{journey}" }',
+    ].join('\n');
+    const r = parseRecipe(text);
+    expect(r.ok).toBe(true);
+    if (r.ok)
+      expect(r.recipe.repos?.[0]?.e2e_gate).toEqual({
+        protected_branches: ['main'],
+        evidence: { source: 'github-checks', check_name_template: 'e2e/{journey}' },
+      });
+  });
+
+  // absent → undefined (gate inactive), override-only like every recipe block.
+  test('absent e2e_gate → undefined (gate inactive)', () => {
+    const r = parseRecipe('host: codex\n');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.recipe.e2e_gate).toBeUndefined();
+  });
+});
+
 describe('parseRecipe — backlog block (github project; schema pre-reflected, wi_260629i9c)', () => {
   // Reuses dittoConfigGithub (no duplicate SoT). Migration of the existing per-dev
   // github config + ADR-20260628 reconcile is a SEPARATE WI — only the shape lands now.

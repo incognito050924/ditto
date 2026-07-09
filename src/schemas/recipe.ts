@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { nodeOwner } from './autopilot';
 import { dittoConfigGithub } from './ditto-config';
+import { envRef } from './journey-dsl';
 
 /**
  * `recipe.yaml` schema — a headless declaration of the four `ditto setup` wizard
@@ -84,6 +85,48 @@ export const recipeBarrierTestCommand = z
   .describe('Side-effect-free unit-subset barrier command (distinct from push_gate.test_command)');
 
 /**
+ * E2E CI-evidence source — WHERE a protected-branch push reads its E2E pass/fail
+ * from (wi_2607095fz). PORTABLE by construction: `source` is an ENUM, so an
+ * unsupported provider (e.g. `gitlab-ci`) FAILS validation rather than flowing
+ * through as dead config the gate cannot honor. `.strict()` so a typo'd/unknown
+ * field (e.g. a literal-token slot) fails loud instead of being silently dropped.
+ *
+ * CREDENTIAL-FREE: `token` is an `envRef` (env:VAR | secret:VAR) — never a literal
+ * secret in the recipe. `repo` is `owner/name`; when ABSENT it is derived from the
+ * git remote at RUNTIME (the schema carries no default here — the engine resolves
+ * it, so a recipe copied between repos does not pin the wrong coordinate).
+ */
+export const recipeE2eEvidence = z
+  .object({
+    source: z.enum(['github-checks']).default('github-checks'),
+    repo: z
+      .string()
+      .regex(/^[^/\s]+\/[^/\s]+$/, 'repo must be owner/name')
+      .optional(),
+    check_name_template: z.string().min(1).default('e2e/{journey}'),
+    token: envRef.optional(),
+  })
+  .strict()
+  .describe('E2E CI-evidence source (portable enum + credential-free envRef token)');
+
+/**
+ * E2E push gate — declares which branches require a passing E2E CI run (read from
+ * a portable evidence source) before a push is allowed (wi_2607095fz). DISTINCT
+ * from `push_gate` (which runs a local test_command): this gate reads CI evidence.
+ * Like every recipe block it is OVERRIDE-ONLY — an absent `e2e_gate` means the gate
+ * is inactive. When present it is FULLY specified: at least one protected branch
+ * (`.min(1)`) AND a required `evidence` block, so a half-declared gate fails
+ * validation rather than silently doing nothing. Declarable at BOTH the top level
+ * (ROOT repo) and inside each `repos[]` entry — PER-REPO symmetric with `push_gate`.
+ */
+export const recipeE2eGate = z
+  .object({
+    protected_branches: z.array(z.string().min(1)).min(1),
+    evidence: recipeE2eEvidence,
+  })
+  .describe('E2E CI-evidence push gate (protected branches + portable evidence source)');
+
+/**
  * One nested repo (sub-repo or submodule) of a multi-repo workspace, keyed by its
  * `dir` relative to this recipe's location. Carries that repo's own config — for
  * now its `push_gate` and `barrier_test_command` (room to grow per-repo settings
@@ -101,6 +144,7 @@ export const recipeRepoEntry = z
     url: z.string().min(1).optional(),
     push_gate: recipePushGate.optional(),
     barrier_test_command: recipeBarrierTestCommand.optional(),
+    e2e_gate: recipeE2eGate.optional(),
   })
   .describe('A nested repo of the workspace (by dir, optional url) with its own config');
 
@@ -125,6 +169,9 @@ export const recipe = z
     // still floors, the safe default). Only affects the no-command DEGRADE path — a
     // barrier that RUNS and FAILS still fails.
     barrier_opt_out: z.boolean().optional(),
+    // E2E CI-evidence push gate for the ROOT repo. Per-repo symmetric field lives
+    // in repos[]. Distinct from push_gate (local test_command) — see recipeE2eGate.
+    e2e_gate: recipeE2eGate.optional(),
     repos: z.array(recipeRepoEntry).optional(),
     // GitHub backlog (Project + status mapping). REUSES dittoConfigGithub (one SoT,
     // no duplicate). The shape lands now; migrating the existing per-developer github
@@ -138,3 +185,5 @@ export type RecipeAgentLink = z.infer<typeof recipeAgentLink>;
 export type RecipePushGate = z.infer<typeof recipePushGate>;
 export type RecipeRepoEntry = z.infer<typeof recipeRepoEntry>;
 export type RecipeBarrierTestCommand = z.infer<typeof recipeBarrierTestCommand>;
+export type RecipeE2eEvidence = z.infer<typeof recipeE2eEvidence>;
+export type RecipeE2eGate = z.infer<typeof recipeE2eGate>;

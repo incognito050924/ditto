@@ -427,6 +427,9 @@ export const setupCommand = defineCommand({
               // Install the pre-push gate hook when the recipe declares a push_gate
               // for the ROOT repo (ac-5). resolvePushGate(recipe, '') === recipe.push_gate.
               ...(resolvedRecipe.push_gate ? { pushGate: resolvedRecipe.push_gate } : {}),
+              // …or an e2e_gate (wi_2607095fz): the ONE hook drives both at runtime, so an
+              // e2e_gate-only recipe is not left hook-less (the dead-wire gotcha).
+              ...(resolvedRecipe.e2e_gate ? { e2eGate: true } : {}),
               ...(includesCodex(h)
                 ? { pluginRoot: await resolveCodexPluginRoot(resourcesDir, projectRoot) }
                 : {}),

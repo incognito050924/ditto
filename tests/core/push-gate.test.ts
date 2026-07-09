@@ -4,7 +4,9 @@ import { type ExecPushGateInput, execPushGate } from '~/cli/commands/push-gate';
 import {
   isRepoDeclared,
   parsePushedBranches,
+  parsePushedRefs,
   pushGateDecision,
+  resolveE2eGate,
   resolvePushGate,
 } from '~/core/push-gate';
 import { runTestCommand } from '~/core/test-runner';
@@ -40,6 +42,92 @@ describe('parsePushedBranches — git pre-push stdin (<local ref> <local sha> <r
   test('empty / blank stdin → no branches', () => {
     expect(parsePushedBranches('')).toEqual([]);
     expect(parsePushedBranches('\n  \n')).toEqual([]);
+  });
+});
+
+describe('parsePushedRefs — surfaces the FULL ref quad incl. localSha (wi_2607095fz)', () => {
+  test('a branch push → the quad with branch name + localSha exposed', () => {
+    expect(parsePushedRefs('refs/heads/main abc123 refs/heads/main def456\n')).toEqual([
+      {
+        localRef: 'refs/heads/main',
+        localSha: 'abc123',
+        remoteRef: 'refs/heads/main',
+        remoteSha: 'def456',
+        branch: 'main',
+      },
+    ]);
+  });
+
+  test('a tag push → included with branch=null (only refs/heads yields a branch)', () => {
+    expect(parsePushedRefs('refs/tags/v1 aaa refs/tags/v1 bbb\n')).toEqual([
+      {
+        localRef: 'refs/tags/v1',
+        localSha: 'aaa',
+        remoteRef: 'refs/tags/v1',
+        remoteSha: 'bbb',
+        branch: null,
+      },
+    ]);
+  });
+
+  test('a deletion (zero local sha) is skipped — nothing pushed to gate', () => {
+    expect(parsePushedRefs(`(delete) ${Z} refs/heads/old ${Z}\n`)).toEqual([]);
+  });
+
+  test('multi-ref push → each ref carries its OWN localSha (finding 1)', () => {
+    const refs = parsePushedRefs(
+      'refs/heads/main shaA refs/heads/main x\nrefs/heads/release shaB refs/heads/release y\n',
+    );
+    expect(refs.map((r) => [r.branch, r.localSha])).toEqual([
+      ['main', 'shaA'],
+      ['release', 'shaB'],
+    ]);
+  });
+
+  test('parsePushedBranches is DERIVED — its behavior is unchanged (finding: same branch list)', () => {
+    const stdin =
+      'refs/heads/main a refs/heads/main b\nrefs/tags/v1 c refs/tags/v1 d\nrefs/heads/feature e refs/heads/feature f\n';
+    // Only refs/heads names, in order, tags dropped — identical to the legacy path.
+    expect(parsePushedBranches(stdin)).toEqual(['main', 'feature']);
+    // And it equals the derivation the impl uses.
+    expect(parsePushedBranches(stdin)).toEqual(
+      parsePushedRefs(stdin)
+        .map((r) => r.branch)
+        .filter((b): b is string => b !== null),
+    );
+  });
+});
+
+describe("resolveE2eGate — pick a repo's e2e_gate from the workspace manifest (mirror of resolvePushGate)", () => {
+  const evidence = { source: 'github-checks' as const, check_name_template: 'e2e/{journey}' };
+  const manifest = {
+    e2e_gate: { protected_branches: ['main'], evidence },
+    repos: [
+      { dir: 'frontend', e2e_gate: { protected_branches: ['release'], evidence } },
+      { dir: 'docs' }, // declared but no e2e_gate
+    ],
+  };
+
+  test('root repo ("." or "") → top-level e2e_gate', () => {
+    expect(resolveE2eGate(manifest, '.')).toEqual(manifest.e2e_gate);
+    expect(resolveE2eGate(manifest, '')).toEqual(manifest.e2e_gate);
+  });
+
+  test('sub-repo by dir → its own e2e_gate (normalizes ./ and trailing slash)', () => {
+    expect(resolveE2eGate(manifest, 'frontend')).toEqual(manifest.repos[0].e2e_gate);
+    expect(resolveE2eGate(manifest, './frontend/')).toEqual(manifest.repos[0].e2e_gate);
+  });
+
+  test('sub-repo declared without an e2e_gate → undefined (inactive)', () => {
+    expect(resolveE2eGate(manifest, 'docs')).toBeUndefined();
+  });
+
+  test('unknown dir → undefined', () => {
+    expect(resolveE2eGate(manifest, 'nope')).toBeUndefined();
+  });
+
+  test('no repos + non-root dir → undefined', () => {
+    expect(resolveE2eGate({ e2e_gate: manifest.e2e_gate }, 'frontend')).toBeUndefined();
   });
 });
 

@@ -3,34 +3,381 @@
   "id": "wi_2607095fz",
   "title": "통합 검증 표면 부재 — 배리어 재프레이밍이 통합을 밀어낸 '다른 곳'이 실제로 비어있는 문제 (설계 결정, deep-interview급)",
   "source_request": "[8] barrier 후속 (wi_260708ds9). 배경: 배리어 재프레이밍(ADR-20260708 D3)이 '단위=배리어, 통합=push-gate/CI/ditto:e2e(다른 곳)'라 선언했으나, boxwood에선 그 셋이 전부 백엔드 통합을 안 돌린다(push-gate 비활성·백엔드 CI는 -DskipTests/docker build·e2e는 브라우저만) → 자동 통합 검증이 부재(위험을 옮긴 게 아니라 비어있음). 단위-only 배리어는 통합-only 노드간 깨짐(JPA/SQL 방언/트랜잭션/실 HTTP 배선)에 구조상 silent. 완충: 완료가 per-AC oracle AND라 통합 AC에 통합-요구 oracle을 붙이면 정직히 unverified로 floor(autopilot-complete.ts). 그러나 통합 행동을 단위-dischargeable oracle에 매핑하면 masked green — 이건 진단 P4(oracle tiering)의 몫인데 배리어 WI가 미해결로 남김. 추가: push_gate.test_command도 caveat 없이 같은 무강제 free-form이면서 통합을 돌리도록 기대됨(비대칭). 결정 필요 방향 3: (A) oracle-tiering 강제 — 통합 AC는 통합 증거를 요구하도록 planner/design 게이트, (B) push-gate 안전화 — 통합 실행 위치의 안전·caveat·격리, (C) 별도 integration 러너 배선. SoT=reports/design/barrier-test-tier-followup-investigation.md §3 + 진단 reports/design/autopilot-test-execution-gaps.md P4. 이미 완료된 형제: [5]P0 worktree cwd·[6]배리어 opt-out·[7]guidance·[9]root-drag. [1]구조적 강제는 ADR상 보류 수용. deep-interview로 착수 권장.",
-  "goal": "통합 검증 표면 부재 — 배리어 재프레이밍이 통합을 밀어낸 '다른 곳'이 실제로 비어있는 문제 (설계 결정, deep-interview급)",
+  "goal": "push-gate를 통합/E2E 검증 표면으로 확장한다 — E2E를 프로젝트 레이어 자산으로 격상하고, 보호/릴리즈 브랜치 push 시 게이트-필수 E2E 집합의 '지금 push하는 커밋에 대응하는' 최신 CI 통과 증거를 로컬 pre-push가 확인해 통과/차단한다. 비가역/고비용 E2E는 저자가 명시 제외하며(커밋되어 visible), 게이트가 관여하지 않는다.",
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "TBD — derive observable criteria during interview/planning",
-      "verdict": "unverified",
-      "evidence": []
+      "statement": "recipe 스키마가 E2E 게이트 설정을 받는다 — 대상 보호/릴리즈 브랜치 집합 + 블록리스트 멤버십(등록 journey 기본 필수, 명시 제외 목록). 반쯤 선언된 설정은 zod 검증 실패한다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/coverage.json",
+          "summary": "20 categories swept+closed, 3 justified-skipped, dry-terminated (K=2), 19 grounded far-field findings"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/intent.json",
+          "summary": "frozen IntentContract (goal, in/out scope, ac-1..6)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607095fz/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4391 pass, 11 skip, 0 fail (exit 0)"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/recipe.ts",
+          "summary": "e2e_gate wired L147 (top-level) + L174 (repos[])"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/recipe/recipe.test.ts",
+          "summary": "55 pass / 0 fail (9 red before impl)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4445 pass / 0 fail, run twice identical"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/recipe/recipe.test.ts",
+          "summary": "55 pass/0 fail"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "journey를 게이트-제외(비가역/고비용)로 표시하는 커밋되는 per-journey 속성이 존재하고, 저자가 설정 가능하며 git-tracked다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/coverage.json",
+          "summary": "20 categories swept+closed, 3 justified-skipped, dry-terminated (K=2), 19 grounded far-field findings"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/intent.json",
+          "summary": "frozen IntentContract (goal, in/out scope, ac-1..6)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607095fz/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4391 pass, 11 skip, 0 fail (exit 0)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/journey-dsl.test.ts",
+          "summary": "19 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4445 pass / 0 fail, run twice identical"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/schemas/journey-dsl.test.ts",
+          "summary": "19 pass/0 fail"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "보호/릴리즈 브랜치 push 시 push-gate가 게이트-필수 E2E 집합에 대해 push되는 정확한 커밋/트리에 대응하는 CI 통과 증거가 있으면 통과, 없거나 stale/실패면 fail-closed 차단하며, 제외 journey는 무시(pass-through)한다 — 세 케이스가 각각 관측된다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/coverage.json",
+          "summary": "20 categories swept+closed, 3 justified-skipped, dry-terminated (K=2), 19 grounded far-field findings"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/intent.json",
+          "summary": "frozen IntentContract (goal, in/out scope, ac-1..6)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607095fz/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "note",
+          "summary": "Design contract for evidence-channel: live gh check-runs read (unforgeable), commit-sha keying, inverted fail-closed polarity, EvidenceSource portable seam, journey nested-gate + non-strict-toplevel compat, cache-sequencing, hook-install fix. 13/13 findings resolved with file:line. Saved to scratchpad design-contract."
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/coverage.json",
+          "summary": "19 findings the design resolves"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4391 pass, 11 skip, 0 fail (exit 0)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/e2e/evidence-source.ts",
+          "summary": "new portable CI-evidence source, inverted-polarity fail-closed"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4432 pass (+41), 11 skip, 0 fail (exit 0)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/e2e/e2e-gate.test.ts",
+          "summary": "26 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4445 pass, 11 skip, 0 fail (exit 0); biome exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/push-gate.test.ts",
+          "summary": "45 pass / 0 fail; source-reached + cache-no-bypass tests"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/reviewer-output.json",
+          "summary": "approve verdict, 0 high-risk"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4445 pass, 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4445 pass / 0 fail, run twice identical"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/e2e/e2e-gate.test.ts && bun test tests/cli/push-gate.test.ts",
+          "summary": "26/0 + 45/0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "비-보호 브랜치 push, E2E 게이트 미설정, 대상 journey 0건은 통과(degrade)하고, DITTO_SKIP_HOOKS가 승인된 탈출구로 동작한다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/coverage.json",
+          "summary": "20 categories swept+closed, 3 justified-skipped, dry-terminated (K=2), 19 grounded far-field findings"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/intent.json",
+          "summary": "frozen IntentContract (goal, in/out scope, ac-1..6)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607095fz/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4432 pass (+41), 11 skip, 0 fail (exit 0)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/e2e/e2e-gate.test.ts",
+          "summary": "degrade cases green"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4445 pass, 11 skip, 0 fail (exit 0); biome exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4445 pass / 0 fail, run twice identical"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/e2e/e2e-gate.test.ts",
+          "summary": "degrade+skip cases green"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "CI 증거 채널이 이식적이다 — 특정 호스트/CI에 하드 의존하지 않고, 채널/증거 부재를 fail-closed로 처리한다(ADR-0016/0018 정합).",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/coverage.json",
+          "summary": "20 categories swept+closed, 3 justified-skipped, dry-terminated (K=2), 19 grounded far-field findings"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/intent.json",
+          "summary": "frozen IntentContract (goal, in/out scope, ac-1..6)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607095fz/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "note",
+          "summary": "Design contract for evidence-channel: live gh check-runs read (unforgeable), commit-sha keying, inverted fail-closed polarity, EvidenceSource portable seam, journey nested-gate + non-strict-toplevel compat, cache-sequencing, hook-install fix. 13/13 findings resolved with file:line. Saved to scratchpad design-contract."
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/coverage.json",
+          "summary": "19 findings the design resolves"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4391 pass, 11 skip, 0 fail (exit 0)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/e2e/evidence-source.ts",
+          "summary": "new portable CI-evidence source, inverted-polarity fail-closed"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/e2e/evidence-source.test.ts",
+          "summary": "16 pass / 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/reviewer-output.json",
+          "summary": "approve verdict, 0 high-risk"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4445 pass, 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4445 pass / 0 fail, run twice identical"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/e2e/evidence-source.test.ts",
+          "summary": "16 pass/0 fail"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "기존 unit test_command push-gate 동작이 회귀 없이 보존된다(전체 스위트 green).",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/coverage.json",
+          "summary": "20 categories swept+closed, 3 justified-skipped, dry-terminated (K=2), 19 grounded far-field findings"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/intent.json",
+          "summary": "frozen IntentContract (goal, in/out scope, ac-1..6)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607095fz/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4445 pass, 11 skip, 0 fail (exit 0); biome exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4445 pass (+13), 0 fail"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607095fz/reviewer-output.json",
+          "summary": "approve verdict, 0 high-risk"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4445 pass, 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite 4445 pass / 0 fail, run twice identical"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4445 pass, 11 skip, 0 fail (exit 0)"
+        }
+      ]
     }
   ],
-  "status": "partial",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [
     ".ditto/local/work-items/wi_2607095fz/completion.json",
     ".ditto/local/work-items/wi_2607095fz/work-item.json",
     ".ditto/work-items/wi_260708ds9/record.json",
-    ".ditto/work-items/wi_2607095fz/"
+    ".ditto/work-items/wi_2607095fz/",
+    "src/schemas/recipe.ts",
+    "tests/core/recipe/recipe.test.ts",
+    "src/schemas/journey-dsl.ts",
+    "tests/schemas/journey-dsl.test.ts",
+    "src/core/e2e/evidence-source.ts",
+    "tests/core/e2e/evidence-source.test.ts",
+    "src/core/git-tree.ts",
+    "src/core/e2e/e2e-gate.ts",
+    "src/core/push-gate.ts",
+    "tests/core/git-tree.test.ts",
+    "tests/core/e2e/e2e-gate.test.ts",
+    "tests/core/push-gate.test.ts",
+    "src/cli/commands/push-gate.ts",
+    "src/core/setup.ts",
+    "src/cli/commands/setup.ts",
+    "tests/cli/push-gate.test.ts"
   ],
   "worktrees": [],
   "risks": [],
   "re_entry": {
-    "command": "ditto work handoff wi_2607095fz --show",
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_2607095fz",
     "fresh_evidence_needed": [
-      "미pass acceptance에 대한 검증 결과"
+      "land aborted — 14 working-tree path(s) outside the declared change_surface: .: .ditto/knowledge/CONTEXT.md, .ditto/knowledge/adr/ADR-20260709-e2e-evidence-gate-anti-forgery.md, .ditto/knowledge/glossary.json, .ditto/knowledge/knowledge.json, .ditto/work-items/wi_2607095fz/events/000002.workspace-write.b1ffb2860cfd.json, .ditto/work-items/wi_2607095fz/events/000003.workspace-write.e72d0964dae4.json, .ditto/work-items/wi_2607095fz/events/000004.workspace-write.441be4780b2a.json, .ditto/work-items/wi_2607095fz/events/000005.workspace-write.f5960d1c091a.json, .ditto/work-items/wi_2607095fz/events/000006.workspace-write.523d771f55a8.json, .ditto/work-items/wi_2607095fz/events/000007.workspace-write.fe2da7172a7a.json, .ditto/work-items/wi_2607095fz/events/000008.workspace-write.472c521a16a8.json, .ditto/work-items/wi_2607095fz/events/000009.workspace-write.37b762d4fbb2.json, .ditto/work-items/wi_2607095fz/record.json, CLAUDE.md. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
     ]
   },
   "runs": [],
   "handoff_path": ".ditto/local/handoff/wi_2607095fz.md",
+  "started_at_sha": "f7b8ca32fee8cec049b3e42cb3535e2422478bd1",
   "created_at": "2026-07-09T02:47:28.377Z",
-  "updated_at": "2026-07-09T02:47:28.588Z"
+  "updated_at": "2026-07-09T08:53:30.458Z",
+  "closed_at": "2026-07-09T08:53:30.456Z"
 }

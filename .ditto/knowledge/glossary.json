@@ -1,8 +1,62 @@
 {
   "schema_version": "0.1.0",
   "project_name": "ditto",
-  "updated_at": "2026-07-06T00:00:00+09:00",
+  "updated_at": "2026-07-09T00:00:00+09:00",
   "entries": [
+    {
+      "term": "e2e_gate",
+      "aliases": [
+        "E2E CI-evidence gate",
+        "E2E evidence gate",
+        "CI-evidence gate"
+      ],
+      "definition": "recipe의 E2E CI-증거 push-gate 블록(recipeE2eGate). protected/release 브랜치 push 시, pushed 커밋 sha의 CI E2E check-run이 통과했는지를 라이브로 확인하고 아니면 fail-closed BLOCK한다. {protected_branches, evidence{source(enum: github-checks)·repo?·check_name_template·token(envRef)}}. push_gate(로컬 test_command 실행)와 구별된다 — e2e_gate는 CI 증거를 읽는다. 부재=비활성(degrade-PASS). allow-신호는 서버-권위 라이브 read여야 하고 커밋 산출물이 아니다(위조 방지). 결정 근거는 ADR-20260709-e2e-evidence-gate-anti-forgery.",
+      "examples": [
+        "recipe.yaml e2e_gate: {protected_branches: [main], evidence: {source: github-checks}}"
+      ],
+      "not_to_be_confused_with": [
+        "push_gate (로컬 test_command 전체-스위트 가드)",
+        "barrier_test_command (autopilot 유닛/목 barrier)"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-07-09T00:00:00+09:00"
+    },
+    {
+      "term": "EvidenceSource",
+      "aliases": [
+        "evidence source",
+        "CI-evidence source"
+      ],
+      "definition": "E2E CI-증거 게이트가 증거를 읽는 포터블 seam(src/core/e2e/evidence-source.ts). github-checks가 built-in 구현으로, 정확한 커밋 sha의 check-run을 한 번의 배치 read로 가져온다. host-agnostic(ADR-0016) — GitLab 등 non-GitHub CI는 이 built-in을 건드리지 않고 EvidenceSource를 구현하면 된다. 모든 실패({ok:false}: auth·timeout·rate-limit·perm·absent·malformed·unparseable)는 게이트를 BLOCK한다(fail-closed). 결정 근거는 ADR-20260709-e2e-evidence-gate-anti-forgery.",
+      "examples": [
+        "githubChecksSource() — built-in github-checks 구현"
+      ],
+      "not_to_be_confused_with": [
+        "evidence (주장을 뒷받침하는 참조)",
+        "memory source (memory ingest 출처)"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-07-09T00:00:00+09:00"
+    },
+    {
+      "term": "gate-exclude (journey)",
+      "aliases": [
+        "journey gate.exclude",
+        "gate.exclude"
+      ],
+      "definition": "journey를 E2E 게이트의 mandatory 집합에서 빼는 커밋된 per-journey opt-out. journey front-matter의 gate{exclude, exclude_reason}(journeyGate)로 저자가 직접 선언한다 — journey는 git-tracked repo 자산이라 저자 self-service이고, exclude=true는 비어있지 않은 exclude_reason을 필수로 요구한다(조용한 opt-out 금지). 멤버십은 blocklist다: journey는 exclude 안 하면 mandatory. policy(어떤 journey 제외)는 커밋에 담아도 안전하다 — 완화가 git-visible diff이기 때문(allow-신호와 달리 위조 위험 없음). 결정 근거는 ADR-20260709-e2e-evidence-gate-anti-forgery.",
+      "examples": [
+        "journey front-matter: gate: {exclude: true, exclude_reason: \"수동 QA로 대체\"}"
+      ],
+      "not_to_be_confused_with": [
+        "e2e_gate (recipe의 게이트 설정 블록)"
+      ],
+      "status": "agreed",
+      "forbidden_abbreviations": [],
+      "agreed_at": "2026-07-09T00:00:00+09:00"
+    },
     {
       "term": "autopilot",
       "aliases": [],

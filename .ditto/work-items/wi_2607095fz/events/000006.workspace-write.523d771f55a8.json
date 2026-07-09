@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607095fz",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "523d771f55a83e36f9036f11e1b8737eb8545fb65a909ef8b3ebf2aac102b302",
+  "ts": "2026-07-09T08:38:00.882Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607095fz/coverage.json",
+        "summary": "20 categories swept+closed, 3 justified-skipped, dry-terminated (K=2), 19 grounded far-field findings"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607095fz/intent.json",
+        "summary": "frozen IntentContract (goal, in/out scope, ac-1..6)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607095fz/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "full suite 4432 pass (+41), 11 skip, 0 fail (exit 0)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/e2e/e2e-gate.test.ts",
+        "summary": "degrade cases green"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "full suite 4445 pass, 11 skip, 0 fail (exit 0); biome exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "full suite 4445 pass / 0 fail, run twice identical"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/e2e/e2e-gate.test.ts",
+        "summary": "degrade+skip cases green"
+      }
+    ]
+  }
+}

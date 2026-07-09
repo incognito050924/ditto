@@ -1,17 +1,23 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  type E2eGateWiring,
   type ExecPushGateInput,
   type RunTest,
   execPushGate,
+  loadJourneyEntries,
   maybeRecordGreenForGate,
 } from '~/cli/commands/push-gate';
+import type { JourneyEntry } from '~/core/e2e/e2e-gate';
+import type { EvidenceQueryResult, EvidenceSource } from '~/core/e2e/evidence-source';
 import { type GreenCache, greenCachePath } from '~/core/push-gate-cache';
-import type { RecipePushGate } from '~/schemas/recipe';
+import { PUSH_GATE_HOOK_MARKER, setup } from '~/core/setup';
+import type { RecipeE2eGate, RecipePushGate } from '~/schemas/recipe';
 
 // ───────────────────────────────────────────────────────────────────────────
 // UNIT — execPushGate policy (decision → exit code), runTest injected so the
@@ -440,5 +446,255 @@ describe('maybeRecordGreenForGate (cross-tool producer, ac-4)', () => {
   test('a FAILING run (exit ≠ 0) never records', async () => {
     await maybeRecordGreenForGate(dir, 'bun test', 1);
     expect(readCache().trees).toEqual([]);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// UNIT — the E2E CI-evidence gate wired into execPushGate (wi_2607095fz). The
+// EvidenceSource is INJECTED (a fake — no network), so the disposition, the
+// cache-sequencing invariant (finding 7), and the "source is REACHED on the
+// protected-push path" (not dead-wired) are all deterministic here.
+// ───────────────────────────────────────────────────────────────────────────
+describe('execPushGate — E2E CI-evidence gate (wi_2607095fz)', () => {
+  const e2eGateCfg: RecipeE2eGate = {
+    protected_branches: ['main'],
+    evidence: { source: 'github-checks', check_name_template: 'e2e/{journey}' },
+  };
+  const LOGIN: JourneyEntry = { id: 'jrn-login', name: 'Login', excluded: false };
+
+  /** A fake source that records the shas it was queried with and returns a fixed result. */
+  function spySource(result: EvidenceQueryResult, calls: string[]): EvidenceSource {
+    return {
+      fetchCommitEvidence(_coord, sha) {
+        calls.push(sha);
+        return result;
+      },
+    };
+  }
+  /** A source that MUST NOT be consulted (throws) — proves the path short-circuits before it. */
+  const throwingSource: EvidenceSource = {
+    fetchCommitEvidence() {
+      throw new Error('evidence source must not be consulted on this path');
+    },
+  };
+  const allSuccess: EvidenceQueryResult = {
+    ok: true,
+    sha: 'a',
+    checks: [{ name: 'e2e/jrn-login', status: 'completed', conclusion: 'success', head_sha: 'a' }],
+  };
+
+  function e2e(over: Partial<E2eGateWiring> = {}): E2eGateWiring {
+    return {
+      e2eGate: e2eGateCfg,
+      journeys: [LOGIN],
+      repoCoord: { repo: 'owner/name' },
+      source: throwingSource,
+      protectedBranches: ['main'],
+      ...over,
+    };
+  }
+
+  test('1. protected push + all mandatory checks success → ALLOW; source REACHED with the pushed sha', async () => {
+    const calls: string[] = [];
+    const r = await execPushGate(
+      input({ runTest: passes, e2e: e2e({ source: spySource(allSuccess, calls) }) }),
+    );
+    expect(r.exitCode).toBe(0);
+    // The wiring is LIVE, not dead: the injected source was queried for the exact
+    // commit sha in the pushed ref (PUSH_MAIN's localSha is `a`).
+    expect(calls).toContain('a');
+  });
+
+  test('2. a mandatory journey check missing → BLOCK with the per-journey message', async () => {
+    const missing: EvidenceQueryResult = { ok: true, sha: 'a', checks: [] };
+    const calls: string[] = [];
+    const r = await execPushGate(
+      input({ runTest: passes, e2e: e2e({ source: spySource(missing, calls) }) }),
+    );
+    expect(r.exitCode).not.toBe(0);
+    expect(r.message ?? '').toContain('jrn-login');
+    expect(r.message ?? '').toMatch(/DITTO_SKIP_HOOKS/);
+    expect(calls).toContain('a'); // the read happened
+  });
+
+  test('3. a gate.exclude journey is ignored → e2e passes (source never consulted)', async () => {
+    // The only journey is excluded → 0 mandatory → engine degrades to PASS before any
+    // fetch. throwingSource proves no read happens; the unit gate alone decides.
+    const r = await execPushGate(
+      input({ runTest: passes, e2e: e2e({ journeys: [{ ...LOGIN, excluded: true }] }) }),
+    );
+    expect(r.exitCode).toBe(0);
+  });
+
+  test('4. finding 7 (cache-sequencing): a green unit-cache hit does NOT bypass e2e — evidence absent still BLOCKS', async () => {
+    // The tree hash is in the green cache, so the UNIT gate would short-circuit (skip,
+    // runTest never). But e2e is evaluated FIRST and its evidence is unavailable → the
+    // push BLOCKS. This is THE proof the cache can never let a doomed-on-e2e push through.
+    const absent: EvidenceQueryResult = { ok: false, reason: 'source_absent' };
+    const calls: string[] = [];
+    const r = await execPushGate(
+      input({
+        runTest: never, // the unit run must never be reached; the block precedes it
+        treeState: { tree: 'abc', clean: true },
+        greenCache: {
+          trees: [{ tree: 'abc', recorded_at: '2026-07-09T00:00:00.000Z', command: 'bun test' }],
+        },
+        e2e: e2e({ source: spySource(absent, calls) }),
+      }),
+    );
+    expect(r.exitCode).not.toBe(0);
+    expect(calls).toContain('a'); // e2e was evaluated (read attempted) BEFORE the cache
+  });
+
+  test('5. e2e_gate undefined → unit-only behavior unchanged; source never consulted', async () => {
+    // Unit gate fails → block, purely on the unit path. e2e undefined → engine PASSes
+    // before any fetch (ac-4 backward compat). throwingSource proves no e2e read.
+    const r = await execPushGate(
+      input({ runTest: fails, e2e: e2e({ e2eGate: undefined, protectedBranches: [] }) }),
+    );
+    expect(r.exitCode).not.toBe(0);
+  });
+
+  test('6. non-protected branch push → e2e not evaluated (no read), unit-only', async () => {
+    const r = await execPushGate(input({ stdin: PUSH_FEATURE, runTest: never, e2e: e2e() }));
+    expect(r.exitCode).toBe(0); // feature not in ['main'] for either gate → allow
+  });
+
+  test('7. DITTO_SKIP_HOOKS=1 bypasses BOTH gates (e2e source never consulted)', async () => {
+    const r = await execPushGate(
+      input({ env: { DITTO_SKIP_HOOKS: '1' }, runTest: never, e2e: e2e() }),
+    );
+    expect(r.exitCode).toBe(0);
+  });
+
+  test('8. evidence source unavailable (ok:false auth/timeout) → BLOCK (fail-closed), even with a passing unit gate', async () => {
+    const timeout: EvidenceQueryResult = { ok: false, reason: 'timeout' };
+    const r = await execPushGate(
+      input({ runTest: passes, e2e: e2e({ source: spySource(timeout, []) }) }),
+    );
+    expect(r.exitCode).not.toBe(0);
+    expect(r.message ?? '').toMatch(/DITTO_SKIP_HOOKS/);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// UNIT — loadJourneyEntries (Task 3): journey membership from disk. gate.exclude
+// maps to `excluded`; a MALFORMED journey becomes `unparseable` (never dropped) so
+// it BLOCKS when not excluded; no journeys dir → empty list.
+// ───────────────────────────────────────────────────────────────────────────
+describe('loadJourneyEntries — journey membership from disk (findings 6/10)', () => {
+  function journeyDoc(id: string, name: string, opts: { exclude?: boolean } = {}): string {
+    const gate = opts.exclude ? ['gate:', '  exclude: true', '  exclude_reason: retired flow'] : [];
+    return [
+      '---',
+      'ditto_journey: v2',
+      `id: ${id}`,
+      `name: ${name}`,
+      `description: ${name} coverage`,
+      'surfaces:',
+      '  - "page:/x"',
+      `implementation_intent: verify ${name}`,
+      ...gate,
+      '---',
+      '',
+      '1. [s1] does something',
+      '',
+    ].join('\n');
+  }
+
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'ditto-journeys-'));
+    await mkdir(join(dir, 'e2e', 'journeys'), { recursive: true });
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('maps gate.exclude, keeps mandatory, flags a malformed journey unparseable (never dropped)', async () => {
+    const jd = join(dir, 'e2e', 'journeys');
+    await writeFile(join(jd, 'login.journey.md'), journeyDoc('jrn-login', 'Login'));
+    await writeFile(
+      join(jd, 'legacy.journey.md'),
+      journeyDoc('jrn-legacy', 'Legacy', { exclude: true }),
+    );
+    await writeFile(join(jd, 'broken.journey.md'), 'not a journey — no front matter');
+
+    const byId = Object.fromEntries(loadJourneyEntries(dir).map((e) => [e.id, e]));
+    expect(byId['jrn-login']?.excluded).toBe(false);
+    expect(byId['jrn-legacy']?.excluded).toBe(true);
+    // malformed → unparseable + NOT excluded (so it BLOCKS), keyed by the filename slug.
+    expect(byId.broken?.unparseable).toBe(true);
+    expect(byId.broken?.excluded).toBe(false);
+  });
+
+  test('no journeys dir → empty list (engine then degrades on 0 mandatory)', () => {
+    expect(loadJourneyEntries(join(tmpdir(), 'ditto-no-such-dir-zzz-9271'))).toEqual([]);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// SETUP hook install (Task 2 — the dead-wire gotcha): an e2e_gate-only project
+// (no push_gate) must ALSO get the pre-push hook, else the gate never fires.
+// ───────────────────────────────────────────────────────────────────────────
+describe('setup() installs the pre-push hook for an e2e_gate-only project (Task 2)', () => {
+  test('e2eGate option (no pushGate) → hook installed', async () => {
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'ditto-e2ehook-res-'));
+    const projectRoot = await mkdtemp(join(tmpdir(), 'ditto-e2ehook-proj-'));
+    const homeDir = await mkdtemp(join(tmpdir(), 'ditto-e2ehook-home-'));
+    execFileSync('git', ['init', '-q', '.'], { cwd: projectRoot });
+    try {
+      const result = await setup({
+        resourcesDir,
+        projectRoot,
+        homeDir,
+        now: new Date('2026-07-09T00:00:00.000Z'),
+        host: 'claude-code',
+        e2eGate: true, // e2e_gate present, NO push_gate
+        hookTemplatePath: join(process.cwd(), 'resources', 'hooks', 'pre-push'),
+      });
+      expect(result.pushGateHook?.status).toBe('installed');
+      const hookPath = join(projectRoot, '.git', 'hooks', 'pre-push');
+      expect(await readFile(hookPath, 'utf8')).toContain(PUSH_GATE_HOOK_MARKER);
+    } finally {
+      await rm(resourcesDir, { recursive: true, force: true });
+      await rm(projectRoot, { recursive: true, force: true });
+      await rm(homeDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// INTEGRATION — the REAL `ditto push-gate` run handler reaches the e2e gate on
+// the runtime path (NOT dead-wired). Deterministic + NETWORK-FREE: a malformed
+// mandatory journey BLOCKS inside verifyE2eEvidence BEFORE any CI fetch, so no gh
+// spawn is needed. The recipe has NO push_gate — the ONLY thing that can block is
+// the e2e gate, so a block proves the handler wired e2e end-to-end.
+// ───────────────────────────────────────────────────────────────────────────
+describe('ditto push-gate (integration) — e2e gate reached on the runtime path', () => {
+  const E2E_RECIPE =
+    'e2e_gate:\n  protected_branches:\n    - main\n  evidence:\n    repo: owner/name\n';
+
+  async function seedMalformedJourney() {
+    const jd = join(workDir, 'e2e', 'journeys');
+    await mkdir(jd, { recursive: true });
+    // No front-matter → loadJourneyEntries marks it unparseable (never dropped).
+    await writeFile(join(jd, 'broken.journey.md'), 'not a journey — no front matter\n');
+  }
+
+  test('protected push + e2e_gate + a malformed mandatory journey → BLOCK (fail-closed, no network)', async () => {
+    await writeRecipe(E2E_RECIPE);
+    await seedMalformedJourney();
+    const r = runGate(PUSH_MAIN);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/e2e/i);
+    expect(r.stderr).toMatch(/DITTO_SKIP_HOOKS/);
+  });
+
+  test('non-protected push + same e2e_gate → exit 0 (gate evaluated, does not fire off main)', async () => {
+    await writeRecipe(E2E_RECIPE);
+    await seedMalformedJourney();
+    const r = runGate(PUSH_FEATURE);
+    expect(r.exitCode).toBe(0);
   });
 });

@@ -332,7 +332,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=964d13941da733fffabb2b00566a13151eed7ca6dccb29126439ade830c506e6 -->
+<!-- ditto:knowledge:start sha256=855e69f00e7cd21f751dcecd81b0d25b166427884f4044d312df00258a3d0aa6 -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -344,6 +344,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 ## Glossary terms
 - ADR
 - DITTO 기능 4축
+- EvidenceSource
 - Journey DSL
 - Record (work-item tier)
 - Run (work-item tier)
@@ -361,9 +362,11 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - doctor
 - drifted_sources
 - dual host
+- e2e_gate
 - evidence
 - first-terminal-wins
 - follow-up materialization
+- gate-exclude (journey)
 - handoff
 - host adapter
 - internal_packages
@@ -427,5 +430,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-20260630-recipe-backlog-seed-model · accepted · recipe.backlog → 개인 github config bootstrap-once seed — ADR-20260628 정합 + out-of-scope
 - ADR-20260702-e2e-official-test-agents · accepted · 공식 Playwright test-generator를 주 DSL→spec 변환기로 · e2e-scripter는 무브라우저 강등 fallback (ADR-0014 D1/D2 메커니즘 정련, D4 보존)
 - ADR-20260706-work-item-record-run-split · accepted · work-item 상태를 Record(공유·커밋)와 Run(개인·폐기가능) 2-tier로 분할 — ADR-0012 D1 부분 supersede
+- ADR-20260708-autopilot-test-tier-boundary · accepted · autopilot 테스트 barrier = 유닛/목 tier 전용 — 완료 게이트로서 per-AC oracle과 AND, 통합/E2E는 범위 밖(push-gate·CI·e2e 소관)
+- ADR-20260709-e2e-evidence-gate-anti-forgery · accepted · E2E CI-증거 push-gate의 위조불가 경계 — allow-신호는 서버-권위 라이브 read(커밋 산출물 아님)·fail-closed 극성·sha-보존 워크플로 전제
 
 <!-- ditto:knowledge:end -->

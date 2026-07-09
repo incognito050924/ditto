@@ -11,9 +11,14 @@ import { relativePath } from './common';
  * front-matter so the DSL→plan adapter can project it; the markdown BODY stays
  * structural-only (step ids, `블록:` calls, `## 케이스` table) — body semantics
  * remain human-authored, never machine-interpreted (design boundary, ADR-0014).
- * Every object is `.strict()` so a typo'd or unknown field fails loud rather
- * than being silently dropped. Credentials are NEVER literal: they are env/secret
- * references only (envRef), resolved at run time — no secret enters the DSL.
+ * Every NESTED object is `.strict()` so a typo'd field inside rich context fails
+ * loud rather than being silently dropped. The TOP-LEVEL front-matter is
+ * intentionally NON-strict (forward-compat, wi_2607095fz finding 10): an OLD
+ * ditto bundle reading a NEWER journey with an unknown top-level key STRIPS it
+ * instead of hard-throwing (which would poison every e2e op on that journey) —
+ * mirrors the ditto-config non-strict-parent-strips-unknowns fix; additive fields
+ * are carried without a DSL version bump. Credentials are NEVER literal: they are
+ * env/secret references only (envRef), resolved at run time — no secret enters the DSL.
  */
 
 const kebab = '[a-z0-9]+(?:-[a-z0-9]+)*';
@@ -106,6 +111,30 @@ export const journeySeed = z
   .strict()
   .describe('Data-seeding context for the journey');
 
+// Per-journey gate control (ac-2, wi_2607095fz): an author can EXCLUDE a journey
+// from the e2e gate directly in its committed front-matter (journeys are
+// git-tracked repo assets → author self-service, no out-of-band config). exclude
+// defaults false (not-excluded); when set true it REQUIRES a non-empty reason so
+// an opt-out is never silent. Kept `.strict()` (nested object) so a typo'd key
+// inside gate fails loud — see the top-level non-strict decision below.
+export const journeyGate = z
+  .object({
+    exclude: z
+      .boolean()
+      .default(false)
+      .describe('Exclude this journey from the e2e gate (default false = not excluded)'),
+    exclude_reason: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Why the journey is excluded (required when exclude=true)'),
+  })
+  .strict()
+  .refine((g) => !g.exclude || (g.exclude_reason?.length ?? 0) > 0, {
+    message: 'gate.exclude=true requires a non-empty gate.exclude_reason',
+  })
+  .describe('Per-journey e2e-gate control (author-settable exclude + reason)');
+
 export const journeyFrontMatter = z
   .object({
     ditto_journey: z
@@ -137,8 +166,8 @@ export const journeyFrontMatter = z
       .default([])
       .describe('Block ids (blocks/<id>.block.md) this journey composes'),
     flaky_history: z.array(flakyHistoryEntry).default([]).describe('Recorded flaky occurrences'),
+    gate: journeyGate.optional().describe('Per-journey e2e-gate control (author-settable exclude)'),
   })
-  .strict()
   .describe('Front-matter of an e2e/journeys/<slug>.journey.md file (DSL v2)');
 
 export type JourneyFrontMatter = z.infer<typeof journeyFrontMatter>;

@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607095fz",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "e72d0964dae4ff9ce3946bc856c8fa6bafe83aab129e4fbed2eb60968c3613e4",
+  "ts": "2026-07-09T08:38:00.878Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607095fz/coverage.json",
+        "summary": "20 categories swept+closed, 3 justified-skipped, dry-terminated (K=2), 19 grounded far-field findings"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607095fz/intent.json",
+        "summary": "frozen IntentContract (goal, in/out scope, ac-1..6)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607095fz/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "full suite 4391 pass, 11 skip, 0 fail (exit 0)"
+      },
+      {
+        "kind": "file",
+        "path": "src/schemas/recipe.ts",
+        "summary": "e2e_gate wired L147 (top-level) + L174 (repos[])"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/recipe/recipe.test.ts",
+        "summary": "55 pass / 0 fail (9 red before impl)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "full suite 4445 pass / 0 fail, run twice identical"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/recipe/recipe.test.ts",
+        "summary": "55 pass/0 fail"
+      }
+    ]
+  }
+}

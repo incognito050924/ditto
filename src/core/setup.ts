@@ -39,6 +39,15 @@ export interface SetupOptions {
    * no recipe is present) leaves git hooks untouched.
    */
   pushGate?: RecipePushGate;
+  /**
+   * When the resolved recipe declares an `e2e_gate` (wi_2607095fz) — even with NO
+   * push_gate — install the SAME pre-push hook. The installed hook pipes stdin into
+   * `ditto push-gate`, which resolves BOTH the local test_command gate and the e2e
+   * CI-evidence gate at runtime. Without this an e2e_gate-ONLY project would get no
+   * hook and the gate would never fire (a dead-wire). Absent → contributes nothing;
+   * the hook installs iff `pushGate` OR `e2eGate` is present.
+   */
+  e2eGate?: boolean;
   /** Override the bundled hook template; defaults to `<resourcesDir>/../hooks/pre-push`. */
   hookTemplatePath?: string;
 }
@@ -628,13 +637,17 @@ export async function setup(opts: SetupOptions): Promise<SetupResult> {
       })
     : null;
 
-  // Push-gate hook stage (ac-5): install only when the recipe declared a push_gate.
-  const pushGateHook = opts.pushGate
-    ? await installPushGateHook({
-        projectRoot,
-        hookTemplatePath: opts.hookTemplatePath ?? defaultHookTemplatePath(resourcesDir),
-      })
-    : null;
+  // Push-gate hook stage (ac-5 + wi_2607095fz): install when the recipe declared a
+  // push_gate OR an e2e_gate — the ONE installed hook pipes stdin into `ditto push-gate`,
+  // which drives BOTH gates at runtime, so an e2e_gate-only project is not left without a
+  // hook (a dead-wire).
+  const pushGateHook =
+    opts.pushGate || opts.e2eGate
+      ? await installPushGateHook({
+          projectRoot,
+          hookTemplatePath: opts.hookTemplatePath ?? defaultHookTemplatePath(resourcesDir),
+        })
+      : null;
 
   return { resources, scaffold, allowlistPath, allowlistApplied, codex, pushGateHook };
 }

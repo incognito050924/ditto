@@ -84,10 +84,15 @@ describe('journeyFrontMatter (DSL v2)', () => {
     ).toBe(false);
   });
 
-  test('rejects an unknown/extra front-matter field (.strict())', () => {
-    expect(journeyFrontMatter.safeParse({ ...minimalJourney(), bogus_field: 'x' }).success).toBe(
-      false,
-    );
+  // Forward-compat (ac-2, finding 10): top-level front-matter is intentionally
+  // NON-strict so an OLD ditto bundle reading a NEWER journey with an unknown
+  // top-level key STRIPS it instead of hard-throwing (which would poison every
+  // e2e op on that journey). This REPLACES the former deliberate top-level
+  // .strict() reject — an intended behavior change to carry future additive fields.
+  test('strips an unknown/extra top-level front-matter field (forward-compat, not strict)', () => {
+    const res = journeyFrontMatter.safeParse({ ...minimalJourney(), future_field: 'x' });
+    expect(res.success).toBe(true);
+    expect(res.success && 'future_field' in res.data).toBe(false);
   });
 
   test('rejects a mistyped field (constraints must be an array)', () => {
@@ -118,6 +123,48 @@ describe('journeyFrontMatter (DSL v2)', () => {
     ).toBe(false);
     expect(
       journeyFrontMatter.safeParse({ ...minimalJourney(), surfaces: ['api:/api/orders'] }).success,
+    ).toBe(false);
+  });
+});
+
+describe('journeyFrontMatter gate — committed per-journey exclude (ac-2)', () => {
+  test('parses a gate that excludes with a non-empty reason', () => {
+    const parsed = journeyFrontMatter.parse({
+      ...minimalJourney(),
+      gate: { exclude: true, exclude_reason: 'irreversible payment' },
+    });
+    expect(parsed.gate?.exclude).toBe(true);
+    expect(parsed.gate?.exclude_reason).toBe('irreversible payment');
+  });
+
+  test('rejects exclude=true without an exclude_reason (.refine)', () => {
+    expect(
+      journeyFrontMatter.safeParse({ ...minimalJourney(), gate: { exclude: true } }).success,
+    ).toBe(false);
+  });
+
+  test('absent gate parses (gate optional); present-but-empty gate defaults exclude=false', () => {
+    const absent = journeyFrontMatter.parse(minimalJourney());
+    expect(absent.gate).toBeUndefined();
+    const present = journeyFrontMatter.parse({ ...minimalJourney(), gate: {} });
+    expect(present.gate?.exclude).toBe(false);
+  });
+
+  test('rejects an unknown key INSIDE the gate object (nested strictness retained)', () => {
+    expect(
+      journeyFrontMatter.safeParse({ ...minimalJourney(), gate: { exclude: false, bogus: 1 } })
+        .success,
+    ).toBe(false);
+  });
+
+  // Top-level relaxation must NOT leak into nested objects: a typo inside a rich
+  // nested object (auth/seed/edge_cases/…) still fails loud (nested .strict() kept).
+  test('rejects an unknown key inside a nested auth object (nested strictness retained)', () => {
+    expect(
+      journeyFrontMatter.safeParse({
+        ...minimalJourney(),
+        auth: { credentials: {}, bogus_nested: 'x' },
+      }).success,
     ).toBe(false);
   });
 });

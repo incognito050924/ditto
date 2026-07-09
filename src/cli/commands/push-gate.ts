@@ -1,12 +1,22 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, parse, relative, resolve } from 'node:path';
+import { dirname, join, parse, relative, resolve } from 'node:path';
 import { defineCommand } from 'citty';
+import { type E2eGateOutcome, type JourneyEntry, verifyE2eEvidence } from '~/core/e2e/e2e-gate';
+import {
+  type EvidenceSource,
+  type RepoCoord,
+  githubChecksSource,
+} from '~/core/e2e/evidence-source';
+import { parseJourneyDoc } from '~/core/e2e/journey-dsl';
 import { isAtOrAboveHome, resolveRepoRootForCreate } from '~/core/fs';
+import { computeTreeState, gitOut } from '~/core/git-tree';
 import {
   isRepoDeclared,
   parsePushedBranches,
+  parsePushedRefs,
   pushGateDecision,
+  resolveE2eGate,
   resolvePushGate,
 } from '~/core/push-gate';
 import {
@@ -20,7 +30,7 @@ import {
 import { loadResolvedRecipe } from '~/core/recipe/load';
 import { type TestRunOutcome, type TestRunner, runTestCommand } from '~/core/test-runner';
 import { KILL_SWITCH } from '~/hooks/runtime';
-import type { RecipePushGate } from '~/schemas/recipe';
+import type { RecipeE2eGate, RecipePushGate } from '~/schemas/recipe';
 
 /**
  * `ditto push-gate` (wi_260629i9c) — the recipe-driven git pre-push gate. The
@@ -44,6 +54,27 @@ export type PushTestOutcome = TestRunOutcome;
 /** Run the gate's test command in `cwd` and report the outcome. Injectable for tests. */
 export type RunTest = TestRunner;
 
+/**
+ * The e2e CI-evidence gate's runtime wiring (wi_2607095fz) — everything
+ * `verifyE2eEvidence` needs, resolved by the CLI `run` handler (or injected by a test
+ * with a fake `source`). Kept an OPTIONAL sub-input so the pre-e2e callers (and the
+ * unit tests that predate e2e) are unchanged: absent → the e2e conjunct is skipped
+ * entirely (PASS). The engine itself degrades to PASS when `e2eGate` is undefined or no
+ * protected branch is pushed, so passing this ≠ the gate firing.
+ */
+export interface E2eGateWiring {
+  /** The resolved `e2e_gate` for THIS repo (undefined → unconfigured → degrade-PASS). */
+  e2eGate: RecipeE2eGate | undefined;
+  /** On-disk journey membership (built by `loadJourneyEntries`). */
+  journeys: JourneyEntry[];
+  /** Repo coordinate + credential-free token for the live evidence read. */
+  repoCoord: RepoCoord;
+  /** The live CI-evidence source (default `githubChecksSource()`; tests inject a fake). */
+  source: EvidenceSource;
+  /** Branch names that gate (from `e2eGate.protected_branches`; `*` protects every branch). */
+  protectedBranches: string[];
+}
+
 export interface ExecPushGateInput {
   /** Raw git pre-push stdin (`<localref> <localsha> <remoteref> <remotesha>` lines). */
   stdin: string;
@@ -64,6 +95,12 @@ export interface ExecPushGateInput {
   treeState?: TreeState;
   greenCache?: GreenCache;
   recordGreen?: (tree: string, command: string) => void;
+  /**
+   * E2E CI-evidence gate wiring (wi_2607095fz). Absent → the e2e conjunct is skipped
+   * (PASS, backward-compat with pre-e2e callers). When present, the e2e disposition is
+   * evaluated INDEPENDENTLY of the unit `test_command` gate and BOTH must allow.
+   */
+  e2e?: E2eGateWiring;
 }
 
 export interface ExecPushGateResult {
@@ -77,18 +114,24 @@ const GUIDANCE = 'Push a non-protected branch, or set DITTO_SKIP_HOOKS=1 to bypa
 
 /**
  * Decide the pre-push gate's exit code. PURE except for the injected `runTest`
- * (the gate's only side effect — spawning the test command).
+ * (the unit gate's spawn) and `e2e.source` (the live CI-evidence read). The final
+ * allow is `unit_ok AND e2e_ok` — two INDEPENDENT conjuncts.
  *
  * Precedence:
- *  1. `DITTO_SKIP_HOOKS` set → allow (exit 0), even over a malformed recipe or a
- *     failing test — it is the sanctioned escape hatch.
+ *  1. `DITTO_SKIP_HOOKS` set → allow (exit 0), before BOTH gates — the sanctioned hatch.
  *  2. Malformed recipe → BLOCK. A recipe file existed but is unparseable, so we
  *     cannot tell which branches are protected; failing closed beats silently
  *     allowing a push that should have been gated.
- *  3. No protected branch in the push (non-protected, or absent gate) → allow.
- *  4. Protected push → run the gate's test command: passed → allow; failed →
- *     block; unrunnable (runner absent) → BLOCK with guidance; timeout (hang past
- *     the wall clock) → BLOCK. Every non-pass terminal fails closed.
+ *  3. E2E CI-evidence gate FIRST (finding 7 — cache-sequencing). It is a cheap
+ *     (~≤30s) live read, so evaluating it before the ~200s unit suite fails a doomed
+ *     push fast. It is evaluated INDEPENDENTLY of the unit gate and its green-tree
+ *     cache: a cached-green UNIT tree must NEVER bypass e2e. An absent `e2e` wiring,
+ *     an unconfigured `e2e_gate`, or a non-protected push → PASS (ac-4 backward compat).
+ *     Any block short-circuits (fail fast) with the per-journey message.
+ *  4. Unit gate: no protected branch in the push (non-protected, or absent gate) →
+ *     the unit conjunct is satisfied → allow (e2e already passed above). A protected
+ *     push runs the gate's test command: passed → allow; failed → block; unrunnable
+ *     (runner absent) → BLOCK with guidance; timeout → BLOCK. Every non-pass fails closed.
  */
 export async function execPushGate(inp: ExecPushGateInput): Promise<ExecPushGateResult> {
   if (inp.env[KILL_SWITCH]) return { exitCode: 0 };
@@ -98,12 +141,32 @@ export async function execPushGate(inp: ExecPushGateInput): Promise<ExecPushGate
       message: `push-gate: recipe.yaml is malformed — cannot evaluate the push gate, blocking. ${GUIDANCE}`,
     };
   }
+
+  // 3. E2E CI-evidence gate — evaluated FIRST and INDEPENDENTLY (see the doc). The
+  //    engine returns PASS for an unconfigured gate / non-protected push, so a
+  //    push_gate-only or gate-less repo is unaffected. A block here precedes both the
+  //    green-cache short-circuit and the unit suite — the cache can never bypass it.
+  if (inp.e2e) {
+    const e2e = verifyE2eEvidence({
+      pushedRefs: parsePushedRefs(inp.stdin),
+      e2eGate: inp.e2e.e2eGate,
+      journeys: inp.e2e.journeys,
+      repoCoord: inp.e2e.repoCoord,
+      source: inp.e2e.source,
+      protectedBranches: inp.e2e.protectedBranches,
+    });
+    if (e2e.decision === 'block') return { exitCode: 1, message: formatE2eBlock(e2e) };
+  }
+
+  // 4. Unit `test_command` gate — an INDEPENDENT conjunct, unchanged in isolation.
   const decision = pushGateDecision(parsePushedBranches(inp.stdin), inp.gate);
   if (!decision.run) return { exitCode: 0 };
 
   // Green-tree cache (wi_260706d0i): a CLEAN tree whose exact hash already passed
   // this gate's command needs no re-run. A dirty tree or an unknown hash falls
   // through to the full run — the skip can never be reached without an exact match.
+  // Because e2e was evaluated in step 3, this hit only short-circuits the redundant
+  // UNIT run; it can no longer bypass the e2e gate (finding 7).
   if (inp.treeState && inp.greenCache && shouldSkipGate(inp.treeState, inp.greenCache)) {
     return {
       exitCode: 0,
@@ -143,6 +206,26 @@ export async function execPushGate(inp: ExecPushGateInput): Promise<ExecPushGate
         message: `push-gate: \`${decision.test_command}\` timed out after ${outcome.timeoutMs}ms — blocking. ${GUIDANCE}`,
       };
   }
+}
+
+/**
+ * Render an e2e BLOCK for stderr (finding 13). When checks were actually read, one
+ * line per failing mandatory journey names its id, human name, the check status, the
+ * CI check looked for, and the exact pushed sha; a non-per-journey block (evidence
+ * unavailable / unparseable journey) carries only `reason`. Always ends with the shared
+ * escape-hatch GUIDANCE — the caller exits non-zero (fail-closed).
+ */
+function formatE2eBlock(outcome: E2eGateOutcome): string {
+  const lines = ['push-gate: e2e CI-evidence gate blocked the push.'];
+  if (outcome.reason) lines.push(`  reason: ${outcome.reason}`);
+  for (const b of outcome.blocked ?? []) {
+    const at = b.sha ? ` @ ${b.sha}` : '';
+    lines.push(
+      `  journey ${b.journeyId} (${b.journeyName}): ${b.status} — check "${b.checkName}"${at}`,
+    );
+  }
+  lines.push(GUIDANCE);
+  return lines.join('\n');
 }
 
 /**
@@ -219,32 +302,65 @@ export async function resolvePushGateRoot(
   return { recipeRoot, repoRelDir: relative(recipeRoot, start) };
 }
 
-/** Run a git subcommand in `cwd`, returning trimmed stdout or null on any failure. */
-function gitOut(gitArgs: string[], cwd: string): string | null {
+/**
+ * Build the gate-membership view of every `e2e/journeys/*.journey.md` under `root`
+ * (Task 3, findings 6/10). Each file is loaded + validated: `excluded` reflects its
+ * `gate.exclude === true` opt-out; a file that FAILS to parse/validate becomes
+ * `{ unparseable: true, excluded: false }` (keyed by its filename slug) so a malformed
+ * NON-excluded journey BLOCKS the push — malformed ≠ absent, it is never silently
+ * dropped from the mandatory set. No journeys dir → an empty list (the engine then
+ * degrades to PASS on zero mandatory journeys). Exported so the CLI `run` handler and
+ * tests share ONE loader.
+ */
+export function loadJourneyEntries(root: string): JourneyEntry[] {
+  const journeysDir = join(root, 'e2e', 'journeys');
+  let files: string[];
   try {
-    const p = Bun.spawnSync(['git', ...gitArgs], {
-      cwd,
-      stdout: 'pipe',
-      stderr: 'ignore',
-      stdin: 'ignore',
-    });
-    if (p.exitCode !== 0) return null;
-    return (p.stdout?.toString() ?? '').trim();
+    files = readdirSync(journeysDir).filter((n) => n.endsWith('.journey.md'));
   } catch {
-    return null;
+    return []; // no journeys dir → no mandatory journeys
   }
+  const entries: JourneyEntry[] = [];
+  for (const file of files) {
+    const slug = file.replace(/\.journey\.md$/, '');
+    let parsed: ReturnType<typeof parseJourneyDoc>;
+    try {
+      parsed = parseJourneyDoc(readFileSync(join(journeysDir, file), 'utf8'));
+    } catch {
+      // Unreadable file → malformed (blocks when not excluded), never dropped.
+      entries.push({ id: slug, name: slug, excluded: false, unparseable: true });
+      continue;
+    }
+    if (!parsed.ok) {
+      entries.push({ id: slug, name: slug, excluded: false, unparseable: true });
+      continue;
+    }
+    entries.push({
+      id: parsed.frontMatter.id,
+      name: parsed.frontMatter.name,
+      excluded: parsed.frontMatter.gate?.exclude === true,
+    });
+  }
+  return entries;
+}
+
+/** Parse `owner/name` from a git remote URL (ssh or https form), or undefined. */
+function parseRepoFromRemote(url: string | null): string | undefined {
+  if (!url) return undefined;
+  const m = /[:/]([^/:]+)\/([^/]+?)(?:\.git)?\/?$/.exec(url.trim());
+  return m ? `${m[1]}/${m[2]}` : undefined;
 }
 
 /**
- * Compute the tree identity of the push (HEAD's tree hash) + whether the working
- * tree is clean. Returns undefined when there is no HEAD (unborn branch) or git is
- * unavailable — the caller then never skips (fail-safe: run the full gate).
+ * Resolve an `env:VAR` / `secret:VAR` reference (recipe `evidence.token`) to its runtime
+ * value from `process.env`, or undefined. CREDENTIAL-FREE (finding 11): the recipe carries
+ * only the ref, never a literal secret; an absent/empty value → undefined → the evidence
+ * source falls back to gh ambient auth (GH_TOKEN / keyring).
  */
-function computeTreeState(cwd: string): TreeState | undefined {
-  const tree = gitOut(['rev-parse', 'HEAD^{tree}'], cwd);
-  if (!tree) return undefined;
-  const status = gitOut(['status', '--porcelain'], cwd);
-  return { tree, clean: status === '' };
+function resolveEnvRef(ref: string | undefined): string | undefined {
+  if (!ref) return undefined;
+  const value = process.env[ref.replace(/^(env|secret):/, '')];
+  return value === '' ? undefined : value;
 }
 
 /** Read the green-tree cache; an absent/corrupt file reads as empty (never a false skip). */
@@ -337,10 +453,27 @@ export const pushGateCommand = defineCommand({
       malformedRecipe = true;
     });
     const gate = resolvePushGate(recipe, repoRelDir);
+    const e2eGate = resolveE2eGate(recipe, repoRelDir);
     // Green-tree cache is keyed off THIS repo's git tree (cwd), stored under the
     // trusted recipe root's `.ditto/local/` so worktrees of one workspace share it.
     const treeState = computeTreeState(cwd);
     const greenCache = readGreenCache(recipeRoot);
+    // E2E CI-evidence gate wiring (wi_2607095fz): resolve the repo coordinate (recipe
+    // `evidence.repo`, else derived from `origin`), the credential-free token (envRef →
+    // process.env), the live GitHub-checks source, and the on-disk journey membership.
+    // Always wired — verifyE2eEvidence degrades to PASS when e2eGate is undefined, so a
+    // push_gate-only or gate-less repo is unaffected while an e2e_gate repo IS gated.
+    const repo =
+      e2eGate?.evidence.repo ?? parseRepoFromRemote(gitOut(['remote', 'get-url', 'origin'], cwd));
+    const token = resolveEnvRef(e2eGate?.evidence.token);
+    const repoCoord: RepoCoord = { repo: repo ?? '', ...(token !== undefined ? { token } : {}) };
+    const e2e: E2eGateWiring = {
+      e2eGate,
+      journeys: loadJourneyEntries(recipeRoot),
+      repoCoord,
+      source: githubChecksSource(),
+      protectedBranches: e2eGate?.protected_branches ?? [],
+    };
     const result = await execPushGate({
       stdin,
       gate,
@@ -351,6 +484,7 @@ export const pushGateCommand = defineCommand({
       ...(treeState ? { treeState } : {}),
       greenCache,
       recordGreen: makeRecordGreen(recipeRoot, greenCache),
+      e2e,
     });
     if (result.message) process.stderr.write(`${result.message}\n`);
     process.exit(result.exitCode);
