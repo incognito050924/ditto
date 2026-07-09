@@ -410,7 +410,8 @@
     {
       "kind": "idea",
       "note": "P1 배리어 DORMANT: ditto·boxwood 둘 다 barrier_test_command 미선언→매 완료 degrade(final≠pass). resolveBarrierCommand는 push_gate로 fallback 안 함(autopilot-loop.ts:725-733). ditto는 'bun test' 1줄로 켜나 P0(worktree) 선결 필요. 리포트 §2: reports/design/barrier-test-tier-followup-investigation.md",
-      "severity": "medium"
+      "severity": "medium",
+      "resolved": true
     },
     {
       "kind": "idea",
@@ -421,7 +422,8 @@
     {
       "kind": "idea",
       "note": "통합 검증 표면 부재(설계 결정, deep-interview급): '통합=push-gate/CI/e2e'가 boxwood에선 셋 다 백엔드 통합 안 돌림→자동 통합 검증 부재. 단위-only 배리어는 통합-only 노드간 깨짐에 silent(완료 per-AC oracle AND라 통합 AC엔 통합-요구 oracle 필요; 진단 P4 미해결). push-gate 명령은 caveat 없이 같은 무강제 gap. oracle-tiering 강제/push-gate 안전화/별도 integration 러너 중 결정 필요. 리포트 §3: reports/design/barrier-test-tier-followup-investigation.md",
-      "severity": "medium"
+      "severity": "medium",
+      "resolved": true
     },
     {
       "kind": "idea",
@@ -442,6 +444,6 @@
   "handoff_path": ".ditto/local/handoff/wi_260708ds9.md",
   "started_at_sha": "4558e864f2be4b273bc879f9cc03814a464b684e",
   "created_at": "2026-07-08T09:30:11.274Z",
-  "updated_at": "2026-07-09T01:58:40.339Z",
+  "updated_at": "2026-07-09T02:47:28.732Z",
   "closed_at": "2026-07-08T15:03:22.222Z"
 }

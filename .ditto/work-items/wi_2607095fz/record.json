@@ -1,0 +1,36 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607095fz",
+  "title": "통합 검증 표면 부재 — 배리어 재프레이밍이 통합을 밀어낸 '다른 곳'이 실제로 비어있는 문제 (설계 결정, deep-interview급)",
+  "source_request": "[8] barrier 후속 (wi_260708ds9). 배경: 배리어 재프레이밍(ADR-20260708 D3)이 '단위=배리어, 통합=push-gate/CI/ditto:e2e(다른 곳)'라 선언했으나, boxwood에선 그 셋이 전부 백엔드 통합을 안 돌린다(push-gate 비활성·백엔드 CI는 -DskipTests/docker build·e2e는 브라우저만) → 자동 통합 검증이 부재(위험을 옮긴 게 아니라 비어있음). 단위-only 배리어는 통합-only 노드간 깨짐(JPA/SQL 방언/트랜잭션/실 HTTP 배선)에 구조상 silent. 완충: 완료가 per-AC oracle AND라 통합 AC에 통합-요구 oracle을 붙이면 정직히 unverified로 floor(autopilot-complete.ts). 그러나 통합 행동을 단위-dischargeable oracle에 매핑하면 masked green — 이건 진단 P4(oracle tiering)의 몫인데 배리어 WI가 미해결로 남김. 추가: push_gate.test_command도 caveat 없이 같은 무강제 free-form이면서 통합을 돌리도록 기대됨(비대칭). 결정 필요 방향 3: (A) oracle-tiering 강제 — 통합 AC는 통합 증거를 요구하도록 planner/design 게이트, (B) push-gate 안전화 — 통합 실행 위치의 안전·caveat·격리, (C) 별도 integration 러너 배선. SoT=reports/design/barrier-test-tier-followup-investigation.md §3 + 진단 reports/design/autopilot-test-execution-gaps.md P4. 이미 완료된 형제: [5]P0 worktree cwd·[6]배리어 opt-out·[7]guidance·[9]root-drag. [1]구조적 강제는 ADR상 보류 수용. deep-interview로 착수 권장.",
+  "goal": "통합 검증 표면 부재 — 배리어 재프레이밍이 통합을 밀어낸 '다른 곳'이 실제로 비어있는 문제 (설계 결정, deep-interview급)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "partial",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/local/work-items/wi_2607095fz/completion.json",
+    ".ditto/local/work-items/wi_2607095fz/work-item.json",
+    ".ditto/work-items/wi_260708ds9/record.json",
+    ".ditto/work-items/wi_2607095fz/"
+  ],
+  "worktrees": [],
+  "risks": [],
+  "re_entry": {
+    "command": "ditto work handoff wi_2607095fz --show",
+    "fresh_evidence_needed": [
+      "미pass acceptance에 대한 검증 결과"
+    ]
+  },
+  "runs": [],
+  "handoff_path": ".ditto/local/handoff/wi_2607095fz.md",
+  "created_at": "2026-07-09T02:47:28.377Z",
+  "updated_at": "2026-07-09T02:47:28.588Z"
+}
