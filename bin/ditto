@@ -37159,6 +37159,13 @@ var interviewDissent = exports_external.object({
   text: exports_external.string().optional(),
   acknowledged: exports_external.boolean().default(false)
 }).describe("Intent-layer opponent dissent recorded on a dimension (wi_260709mqt)");
+var interviewDissentVerdict = exports_external.object({
+  dimension_id: exports_external.string().min(1).describe("The interview dimension this dissent is recorded on"),
+  text: exports_external.string().min(1).describe("The opponent\u2019s sharper-intent judgment text (host-produced, ADR-0001)")
+}).describe("One host-delegated intent-dissent verdict consumed by dissent-record");
+var interviewDissentVerdicts = exports_external.object({
+  verdicts: exports_external.array(interviewDissentVerdict).min(1).describe("The intent-dissent verdicts to record (at least one)")
+}).describe("The --json payload for `ditto deep-interview dissent-record`");
 var interviewDimension = exports_external.object({
   id: exports_external.string().min(1),
   critical: exports_external.boolean().default(false),
@@ -38094,6 +38101,41 @@ async function acknowledgeIntentDissent(repoRoot, workItemId2, dimensionId, now)
     dimensions: state.dimensions.map((d2) => d2.id === dimensionId && d2.dissent !== undefined ? { ...d2, dissent: { ...d2.dissent, acknowledged: true } } : d2)
   });
 }
+async function recordIntentDissent(repoRoot, workItemId2, verdicts, now) {
+  const store = new InterviewStore(repoRoot);
+  const state = await store.get(workItemId2);
+  const byId = new Map(state.dimensions.map((d2) => [d2.id, d2]));
+  const foreign = [...new Set(verdicts.map((v2) => v2.dimension_id).filter((id) => !byId.has(id)))];
+  if (foreign.length > 0) {
+    return { status: "foreign", foreign };
+  }
+  const updates = new Map;
+  const engaged = [];
+  const degraded = [];
+  for (const v2 of verdicts) {
+    const dim = byId.get(v2.dimension_id);
+    if (dim === undefined)
+      continue;
+    const outcome = v2.text.trim().length > 0 ? {
+      status: "engaged",
+      verdict: "revise",
+      impact: dim.critical ? "high" : "low",
+      text: v2.text.trim(),
+      acknowledged: false
+    } : { status: "host_absent", acknowledged: false };
+    updates.set(v2.dimension_id, mergeDissent(dim.dissent, outcome));
+    (outcome.status === "engaged" ? engaged : degraded).push(v2.dimension_id);
+  }
+  const next = await store.write({
+    ...state,
+    updated_at: (now ?? new Date).toISOString(),
+    dimensions: state.dimensions.map((d2) => {
+      const u3 = updates.get(d2.id);
+      return u3 !== undefined ? { ...d2, dissent: u3 } : d2;
+    })
+  });
+  return { status: "recorded", state: next, engaged, degraded };
+}
 async function projectInterviewDimensions(repoRoot, workItemId2, opponentConfig) {
   const interviewStore = new InterviewStore(repoRoot);
   const state = await interviewStore.get(workItemId2);
@@ -38564,6 +38606,10 @@ var BARE_MODEL_POLICY = {
   opponent_fallback: [],
   synthesizer: "claude-opus"
 };
+async function readWorkItemIntent(repoRoot, workItemId2) {
+  const item = await new WorkItemStore(repoRoot).get(workItemId2);
+  return item.source_request.trim().length > 0 ? item.source_request : item.goal;
+}
 function parseJsonArg(raw) {
   try {
     return JSON.parse(raw);
@@ -38832,7 +38878,7 @@ var finalizeCmd = defineCommand({
         return;
       }
       if (result2.status === "blocked_by_dissent") {
-        writeError("intent-dissent opponent flagged a critical dimension (wi_260709mqt): the opponent found a " + "stronger/more-accurate reading of the intent. Review each dissent, then acknowledge it " + "(ditto deep-interview acknowledge-dissent --work-item <wi> --dimension <id>) and re-run finalize:");
+        writeError("intent-dissent opponent flagged a critical dimension: the opponent found a " + "stronger/more-accurate reading of the intent. Review each dissent, then acknowledge it " + "(ditto deep-interview acknowledge-dissent --work-item <wi> --dimension <id>) and re-run finalize:");
         for (const b2 of result2.blocking)
           writeError(`  - [${b2.dimension}] ${b2.text}`);
         process.exit(RUNTIME_ERROR_EXIT);
@@ -38897,7 +38943,7 @@ var projectCoverageCmd = defineCommand({
         currentHost: "claude-code",
         isAvailable: () => ({ available: false, reason: "runtime" }),
         delegate: async () => null,
-        intent: ""
+        intent: await readWorkItemIntent(repoRoot, args.workItem)
       };
       const result2 = await projectInterviewDimensions(repoRoot, args.workItem, opponentConfig);
       const closed = result2.map.nodes.filter((n2) => n2.state !== "open").length;
@@ -39046,6 +39092,120 @@ var checkQuestionCmd = defineCommand({
       process.exit(RUNTIME_ERROR_EXIT);
   }
 });
+var dissentBriefsCmd = defineCommand({
+  meta: {
+    name: "dissent-briefs",
+    description: "Emit intent-dissent opponent briefs for the critical dimensions \u2014 no model call (ADR-0001)."
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const state = await new InterviewStore(repoRoot).get(args.workItem);
+      const intent = await readWorkItemIntent(repoRoot, args.workItem);
+      const targets = state.dimensions.filter((d2) => d2.critical).map((d2) => ({ dimension_id: d2.id, label: d2.notes || d2.id, intent }));
+      if (format === "json") {
+        writeJson2({ work_item_id: args.workItem, dissent_targets: targets });
+      } else {
+        writeHuman(`dissent-briefs: ${targets.length} critical dimension(s) for ${args.workItem}`);
+        for (const t2 of targets)
+          writeHuman(`  - [${t2.dimension_id}] ${t2.label}`);
+      }
+    } catch (err) {
+      writeError(`dissent-briefs failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var dissentRecordCmd = defineCommand({
+  meta: {
+    name: "dissent-record",
+    description: "Record host-delegated intent-dissent verdicts onto critical dimensions \u2014 validated + fail-closed on foreign dimension ids (ADR-0018)."
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    json: {
+      type: "string",
+      description: "Verdict payload JSON {verdicts:[{dimension_id,text}]}",
+      required: true
+    },
+    briefed: {
+      type: "string",
+      description: "Optional comma-separated briefed dimension ids \u2014 surfaces unanswered concerns"
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw;
+    try {
+      raw = parseJsonArg(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = interviewDissentVerdicts.safeParse(raw);
+    if (!parsed.success) {
+      writeError("--json failed schema validation:");
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const result2 = await recordIntentDissent(repoRoot, args.workItem, parsed.data.verdicts);
+      if (result2.status === "foreign") {
+        writeError(`dissent-record: verdict dimension_id(s) absent from interview state \u2014 refusing orphan record (ADR-0018): ${result2.foreign.join(", ")}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const briefed = (args.briefed ?? "").split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+      const answered = new Set(parsed.data.verdicts.map((v2) => v2.dimension_id));
+      const unanswered = briefed.filter((id) => !answered.has(id));
+      if (format === "json") {
+        writeJson2({
+          work_item_id: args.workItem,
+          engaged: result2.engaged,
+          degraded: result2.degraded,
+          unanswered
+        });
+        return;
+      }
+      writeHuman(`dissent-record: ${result2.engaged.length}\uAC74 \uAE30\uB85D(engaged), ${result2.degraded.length}\uAC74 \uAC15\uB4F1.`);
+      if (result2.engaged.length > 0)
+        writeHuman(`  engaged: ${result2.engaged.join(", ")}`);
+      if (result2.degraded.length > 0) {
+        writeHuman(`  degraded(host_absent): ${result2.degraded.join(", ")}`);
+      }
+      if (unanswered.length > 0)
+        writeHuman(`  \uBE0C\uB9AC\uD551\uB410\uC73C\uB098 \uBBF8\uC751\uB2F5: ${unanswered.join(", ")}`);
+    } catch (err) {
+      writeError(`dissent-record failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var acknowledgeDissentCmd = defineCommand({
   meta: {
     name: "acknowledge-dissent",
@@ -39149,7 +39309,7 @@ var finalizeFromDocCmd = defineCommand({
         return;
       }
       if (result2.status === "blocked_by_dissent") {
-        writeError("intent-dissent opponent flagged a critical dimension (wi_260709mqt): acknowledge each dissent " + "(ditto deep-interview acknowledge-dissent) and re-run:");
+        writeError("intent-dissent opponent flagged a critical dimension: acknowledge each dissent " + "(ditto deep-interview acknowledge-dissent) and re-run:");
         for (const b2 of result2.blocking)
           writeError(`  - [${b2.dimension}] ${b2.text}`);
         process.exit(RUNTIME_ERROR_EXIT);
@@ -39187,6 +39347,8 @@ var deepInterviewCommand = defineCommand({
     "check-readiness": checkReadinessCmd,
     "project-coverage": projectCoverageCmd,
     premortem: premortemCmd,
+    "dissent-briefs": dissentBriefsCmd,
+    "dissent-record": dissentRecordCmd,
     "acknowledge-dissent": acknowledgeDissentCmd,
     finalize: finalizeCmd,
     "finalize-from-doc": finalizeFromDocCmd
@@ -55795,4 +55957,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=5aa2e6a30b42d6107e01c0cb4b6cb9cf711ac1c20e85da6aa5e3ded1a70a5ba6
+//# ditto-src-stamp=a925455b3a9b5e5cafc25c015771ad7915933492f2ff15fa00fa56965419750a

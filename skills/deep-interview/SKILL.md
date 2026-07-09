@@ -140,6 +140,61 @@ ditto deep-interview check-readiness --work-item <wi> --output json
 
 If `cap_reached=true` but the gate is still blocked, do NOT pretend success. Record the remaining ambiguity as `hypothesis`-labelled assumptions and either continue past the cap (with explicit justification) or hand off (`/ditto:handoff`) and stop.
 
+### 5.5 Intent-dissent opponent seam (before finalize, host-delegated)
+
+Before locking the interview, put each **critical** dimension's intent under independent
+adversarial pressure: an opponent re-derives the ORIGINAL intent from scratch and judges
+whether the user's stated intent is mis-stated — returning a **sharper (more accurate, never
+bigger)** reading. The model judgment happens in the **host layer** (a spawned
+`intent-dissent-opponent` agent), never inside the CLI (ADR-0001). The CLIs only emit the
+briefs and consume/validate/persist the verdicts — the pass-in-JSON idiom that mirrors prism's
+opponent seam.
+
+```bash
+# 1) emit the briefs — NO model call. One target per critical dimension, each carrying its
+#    dimension id + label + the ORIGINAL intent (WI Record source_request/goal):
+ditto deep-interview dissent-briefs --work-item <wi> --output json
+```
+
+For each `dissent_targets[]` entry, **spawn one `intent-dissent-opponent` agent** (the host
+layer, ADR-0001) with ONLY that brief — never the interview transcript (session-blind
+independence). Each returns `{verdict: accept|revise|reject, impact, text}`. Assemble the
+verdicts JSON, carrying back **only the real dissents** — `revise` / `reject` with the sharper
+text. An `accept` (the stated intent is already the most accurate reading) is NOT a dissent:
+omit it, there is nothing to reconcile.
+
+```jsonc
+{ "verdicts": [
+  { "dimension_id": "<critical dim>", "text": "<sharper, same-intent restatement>" }
+] }
+```
+
+```bash
+# 2) feed the dissents back — validated + fail-closed, persisted in ONE write:
+ditto deep-interview dissent-record --work-item <wi> --json '<verdicts>' --briefed "<id>,<id>"
+```
+
+Discipline:
+
+- **No model call in the CLI.** `dissent-briefs` / `dissent-record` never invoke a provider;
+  the judgment lives in the spawned opponent agents (ADR-0001).
+- **Anti-inflation.** The opponent returns a sharper version of the SAME intent, never a bigger
+  one (the brief carries the `INTENT_DISSENT_CONSTRAINT`). A dissent that enlarges the ask is
+  out of contract — do not record it.
+- **Fail-closed on foreign dimensions.** A verdict whose `dimension_id` is not an interview
+  dimension is **rejected** (never an orphan dissent the finalize gate can't map); a malformed
+  payload is a usage error and writes nothing; an empty verdict text degrades to `host_absent`,
+  never a false `engaged`.
+- **The dissent gates finalize.** A recorded `revise`/`reject` on a critical dimension is a
+  high-impact block: `finalize` returns `blocked_by_dissent` until the user reviews it and
+  acknowledges it (`ditto deep-interview acknowledge-dissent --work-item <wi> --dimension <id>`),
+  then re-runs finalize. This is the same durable `dimension.dissent` record the projection
+  path writes — reading it, not re-invoking the opponent, keeps the gate stable across retries.
+- **Honest degrade (ADR-0018).** If the host cannot spawn the opponent, do NOT fabricate a
+  verdict or fake an accept: skip the record for that dimension (no engaged dissent → finalize
+  is not blocked by an absent opponent) and note the degradation. Absence must not block intent
+  realization — but it is never dressed up as a clean run.
+
 ### 6. Finalize
 
 Synthesize the intent fields and lock the interview:

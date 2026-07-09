@@ -38,7 +38,7 @@ describe('Codex host surface — build:codex-plugin', () => {
     // M4: agent projection emitted into the build artifact.
     const agentsDir = join(OUT, '.codex', 'agents');
     const tomls = readdirSync(agentsDir).filter((f) => f.endsWith('.toml'));
-    expect(tomls.length).toBe(20);
+    expect(tomls.length).toBe(21);
     expect(tomls).toContain('reviewer.toml');
   });
 

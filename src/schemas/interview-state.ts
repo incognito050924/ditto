@@ -43,6 +43,35 @@ export const interviewDissent = z
 
 export type InterviewDissent = z.infer<typeof interviewDissent>;
 
+// Host-delegated intent-dissent verdicts fed to `ditto deep-interview dissent-record`
+// (wi_260709x5w, pass-in-JSON seam mirroring prismOpponentVerdicts). The model judgment
+// happens in the spawned intent-dissent-opponent agent (ADR-0001); the CLI only consumes
+// the structured output. `dimension_id` and `text` are non-empty by schema (first defense);
+// the fail-closed dimension-membership guard + the whitespace-text→host_absent degrade live
+// in the driver/CLI, since the schema cannot see the interview state.
+export const interviewDissentVerdict = z
+  .object({
+    dimension_id: z.string().min(1).describe('The interview dimension this dissent is recorded on'),
+    text: z
+      .string()
+      .min(1)
+      .describe('The opponent’s sharper-intent judgment text (host-produced, ADR-0001)'),
+  })
+  .describe('One host-delegated intent-dissent verdict consumed by dissent-record');
+
+export type InterviewDissentVerdict = z.infer<typeof interviewDissentVerdict>;
+
+export const interviewDissentVerdicts = z
+  .object({
+    verdicts: z
+      .array(interviewDissentVerdict)
+      .min(1)
+      .describe('The intent-dissent verdicts to record (at least one)'),
+  })
+  .describe('The --json payload for `ditto deep-interview dissent-record`');
+
+export type InterviewDissentVerdicts = z.infer<typeof interviewDissentVerdicts>;
+
 export const interviewDimension = z
   .object({
     id: z.string().min(1),

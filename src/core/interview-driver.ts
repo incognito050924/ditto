@@ -582,6 +582,66 @@ export async function acknowledgeIntentDissent(
 }
 
 /**
+ * Record host-delegated intent-dissent verdicts onto interview-state (wi_260709x5w). The
+ * `dissent-record` CLI's record-back primitive — mirrors prism `opponent-record`'s in-memory
+ * fold, but onto `interviewDimension.dissent` instead of the prism map. Copy-adapts the
+ * ENGAGED branch of {@link engageIntentDissent} (interview-dissent.ts): a non-empty (trimmed)
+ * text becomes an engaged `revise` dissent whose `impact` keys off `dimension.critical`
+ * (`high` on a critical dim → the finalize block trigger); a whitespace-only text degrades to
+ * `host_absent` (ADR-0018, never a false engaged stamp). {@link mergeDissent} keeps a prior
+ * engaged high-impact unacknowledged block sticky. Fail-closed: any verdict whose
+ * `dimension_id` ∉ state.dimensions returns `{status:'foreign'}` and writes NOTHING (never an
+ * orphan dissent the finalize gate can't map). EXACTLY ONE write (single-writer), mirroring
+ * {@link acknowledgeIntentDissent}'s persist pattern.
+ */
+export type RecordIntentDissentResult =
+  | { status: 'recorded'; state: InterviewState; engaged: string[]; degraded: string[] }
+  | { status: 'foreign'; foreign: string[] };
+
+export async function recordIntentDissent(
+  repoRoot: string,
+  workItemId: string,
+  verdicts: Array<{ dimension_id: string; text: string }>,
+  now?: Date,
+): Promise<RecordIntentDissentResult> {
+  const store = new InterviewStore(repoRoot);
+  const state = await store.get(workItemId);
+  const byId = new Map(state.dimensions.map((d) => [d.id, d]));
+  const foreign = [...new Set(verdicts.map((v) => v.dimension_id).filter((id) => !byId.has(id)))];
+  if (foreign.length > 0) {
+    return { status: 'foreign', foreign };
+  }
+  const updates = new Map<string, InterviewDissent>();
+  const engaged: string[] = [];
+  const degraded: string[] = [];
+  for (const v of verdicts) {
+    const dim = byId.get(v.dimension_id);
+    if (dim === undefined) continue; // unreachable — the foreign guard above already exited.
+    const outcome: InterviewDissent =
+      v.text.trim().length > 0
+        ? {
+            status: 'engaged',
+            verdict: 'revise',
+            impact: dim.critical ? 'high' : 'low',
+            text: v.text.trim(),
+            acknowledged: false,
+          }
+        : { status: 'host_absent', acknowledged: false };
+    updates.set(v.dimension_id, mergeDissent(dim.dissent, outcome));
+    (outcome.status === 'engaged' ? engaged : degraded).push(v.dimension_id);
+  }
+  const next = await store.write({
+    ...state,
+    updated_at: (now ?? new Date()).toISOString(),
+    dimensions: state.dimensions.map((d) => {
+      const u = updates.get(d.id);
+      return u !== undefined ? { ...d, dissent: u } : d;
+    }),
+  });
+  return { status: 'recorded', state: next, engaged, degraded };
+}
+
+/**
  * Project the Deep Interview `dimensions` onto the coverage tree and drive the
  * SHARED pre-mortem coverage engine for the INTENT stage (premortem-coverage §3.2,
  * §6.3, §9). This does NOT fork a second engine: it reuses `nextCoverageNode`

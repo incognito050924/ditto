@@ -9,14 +9,17 @@ import {
   projectInterviewDimensions,
   promotePremortem,
   promotePremortemPayload,
+  recordIntentDissent,
   recordTurn,
   recordTurnPayload,
   startInterview,
 } from '~/core/interview-driver';
+import { InterviewStore } from '~/core/interview-store';
 import { finalizeFromDesignDoc } from '~/core/prism/finalize';
 import type { OpponentSeamConfig } from '~/core/prism/opponent';
 import { questionContextCandidate, validateQuestionContext } from '~/core/question-context';
 import { WorkItemStore } from '~/core/work-item-store';
+import { interviewDissentVerdicts } from '~/schemas/interview-state';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -37,6 +40,17 @@ const BARE_MODEL_POLICY: OpponentSeamConfig['policy'] = {
   opponent_fallback: [],
   synthesizer: 'claude-opus',
 };
+
+/**
+ * The ORIGINAL intent text the intent-dissent opponent judges (wi_260709x5w). Sourced from
+ * the work item Record (`source_request` preferred, `goal` fallback) — during the interview
+ * intent.json does not yet exist (it is written at finalize), so the WI Record is the only
+ * durable intent surface. Both fields are schema-required non-empty, so this always resolves.
+ */
+async function readWorkItemIntent(repoRoot: string, workItemId: string): Promise<string> {
+  const item = await new WorkItemStore(repoRoot).get(workItemId);
+  return item.source_request.trim().length > 0 ? item.source_request : item.goal;
+}
 
 function parseJsonArg(raw: string): unknown {
   try {
@@ -346,7 +360,7 @@ const finalizeCmd = defineCommand({
       }
       if (result.status === 'blocked_by_dissent') {
         writeError(
-          'intent-dissent opponent flagged a critical dimension (wi_260709mqt): the opponent found a ' +
+          'intent-dissent opponent flagged a critical dimension: the opponent found a ' +
             'stronger/more-accurate reading of the intent. Review each dissent, then acknowledge it ' +
             '(ditto deep-interview acknowledge-dissent --work-item <wi> --dimension <id>) and re-run finalize:',
         );
@@ -438,7 +452,11 @@ const projectCoverageCmd = defineCommand({
         currentHost: 'claude-code',
         isAvailable: () => ({ available: false, reason: 'runtime' }),
         delegate: async () => null,
-        intent: '',
+        // wi_260709x5w: source the ORIGINAL intent from the WI Record (source_request/goal)
+        // instead of the previous empty '' — so a wired host-delegated opponent never gets a
+        // blank intent brief. The bare CLI still degrades to host_absent (isAvailable false),
+        // but the intent is now correct for the SKILL's host-delegated path.
+        intent: await readWorkItemIntent(repoRoot, args.workItem),
       };
       const result = await projectInterviewDimensions(repoRoot, args.workItem, opponentConfig);
       const closed = result.map.nodes.filter((n) => n.state !== 'open').length;
@@ -602,6 +620,144 @@ const checkQuestionCmd = defineCommand({
   },
 });
 
+// wi_260709x5w: the intent-dissent opponent's LIVE briefs emit — mirror of prism
+// `opponent-briefs`. Enumerates the critical dimensions the host must run the opponent
+// against, each carrying its id + label + the ORIGINAL intent (WI Record). NO model call
+// (ADR-0001); the host spawns intent-dissent-opponent agents and feeds verdicts back through
+// `dissent-record`.
+const dissentBriefsCmd = defineCommand({
+  meta: {
+    name: 'dissent-briefs',
+    description:
+      'Emit intent-dissent opponent briefs for the critical dimensions — no model call (ADR-0001).',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const state = await new InterviewStore(repoRoot).get(args.workItem);
+      const intent = await readWorkItemIntent(repoRoot, args.workItem);
+      // Localization (cost): only CRITICAL dimensions face the opponent — same critical-only
+      // scope the driver's projection uses (interview-driver §engageIntentDissent caller).
+      const targets = state.dimensions
+        .filter((d) => d.critical)
+        .map((d) => ({ dimension_id: d.id, label: d.notes || d.id, intent }));
+      if (format === 'json') {
+        writeJson({ work_item_id: args.workItem, dissent_targets: targets });
+      } else {
+        writeHuman(`dissent-briefs: ${targets.length} critical dimension(s) for ${args.workItem}`);
+        for (const t of targets) writeHuman(`  - [${t.dimension_id}] ${t.label}`);
+      }
+    } catch (err) {
+      writeError(`dissent-briefs failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+// wi_260709x5w: consume the host's intent-dissent verdict JSON and persist the record-back
+// onto interview-state — mirror of prism `opponent-record`. Pass-in-JSON: JSON.parse in
+// try/catch → USAGE_ERROR, then a zod safeParse (first defense), then the driver's
+// single-write fold (recordIntentDissent). Fail-closed: a verdict whose dimension_id ∉ the
+// interview dimensions is REJECTED (never an orphan dissent); an empty (whitespace) text
+// degrades to host_absent, never a false engaged stamp (ADR-0018). `--briefed` surfaces
+// briefed-but-unanswered dimensions so a dropped opponent judgment is visible.
+const dissentRecordCmd = defineCommand({
+  meta: {
+    name: 'dissent-record',
+    description:
+      'Record host-delegated intent-dissent verdicts onto critical dimensions — validated + fail-closed on foreign dimension ids (ADR-0018).',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    json: {
+      type: 'string',
+      description: 'Verdict payload JSON {verdicts:[{dimension_id,text}]}',
+      required: true,
+    },
+    briefed: {
+      type: 'string',
+      description: 'Optional comma-separated briefed dimension ids — surfaces unanswered concerns',
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw: unknown;
+    try {
+      raw = parseJsonArg(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = interviewDissentVerdicts.safeParse(raw);
+    if (!parsed.success) {
+      writeError('--json failed schema validation:');
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const result = await recordIntentDissent(repoRoot, args.workItem, parsed.data.verdicts);
+      if (result.status === 'foreign') {
+        writeError(
+          `dissent-record: verdict dimension_id(s) absent from interview state — refusing orphan record (ADR-0018): ${result.foreign.join(', ')}`,
+        );
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const briefed = (args.briefed ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      const answered = new Set(parsed.data.verdicts.map((v) => v.dimension_id));
+      const unanswered = briefed.filter((id) => !answered.has(id));
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.workItem,
+          engaged: result.engaged,
+          degraded: result.degraded,
+          unanswered,
+        });
+        return;
+      }
+      writeHuman(
+        `dissent-record: ${result.engaged.length}건 기록(engaged), ${result.degraded.length}건 강등.`,
+      );
+      if (result.engaged.length > 0) writeHuman(`  engaged: ${result.engaged.join(', ')}`);
+      if (result.degraded.length > 0) {
+        writeHuman(`  degraded(host_absent): ${result.degraded.join(', ')}`);
+      }
+      if (unanswered.length > 0) writeHuman(`  브리핑됐으나 미응답: ${unanswered.join(', ')}`);
+    } catch (err) {
+      writeError(`dissent-record failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 // wi_260709mqt ac-3: the minimal unblock seam for the finalize dissent gate. After the
 // intent-dissent opponent blocks finalize on a critical high-impact dissent, the user
 // reviews it and acknowledges it here (re-confirmation), then re-runs finalize.
@@ -716,7 +872,7 @@ const finalizeFromDocCmd = defineCommand({
       }
       if (result.status === 'blocked_by_dissent') {
         writeError(
-          'intent-dissent opponent flagged a critical dimension (wi_260709mqt): acknowledge each dissent ' +
+          'intent-dissent opponent flagged a critical dimension: acknowledge each dissent ' +
             '(ditto deep-interview acknowledge-dissent) and re-run:',
         );
         for (const b of result.blocking) writeError(`  - [${b.dimension}] ${b.text}`);
@@ -759,6 +915,8 @@ export const deepInterviewCommand = defineCommand({
     'check-readiness': checkReadinessCmd,
     'project-coverage': projectCoverageCmd,
     premortem: premortemCmd,
+    'dissent-briefs': dissentBriefsCmd,
+    'dissent-record': dissentRecordCmd,
     'acknowledge-dissent': acknowledgeDissentCmd,
     finalize: finalizeCmd,
     'finalize-from-doc': finalizeFromDocCmd,
