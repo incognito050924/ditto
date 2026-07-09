@@ -104,8 +104,12 @@ describe('intent-stage coverage projection drives the SHARED engine to disk (ac-
     expect(ids).toContain('cov-root');
     expect(ids).toContain('cov-dim-data-scope');
     expect(ids).toContain('cov-dim-ui-surface');
-    // resolved dimension closed (false-green gate admitted it: leaf, subtree dry).
-    expect(map.nodes.find((n) => n.id === 'cov-dim-data-scope')?.state).toBe('resolved');
+    // wi_260709mqt: data-scope is CRITICAL and this 2-arg projection passes no opponent
+    // config → the intent-dissent opponent degrades to host_absent (ADR-0018). An honest
+    // degrade deferral-closes the critical dim (out_of_scope) rather than faking a
+    // resolved-with-opponent_ran close (the old blanket fake neutrality). It is still a
+    // CLOSED (non-open) node, so it leaves the sweep and appears under 닫힌 항목 below.
+    expect(map.nodes.find((n) => n.id === 'cov-dim-data-scope')?.state).toBe('out_of_scope');
     // partial dimension stays open.
     expect(map.nodes.find((n) => n.id === 'cov-dim-ui-surface')?.state).toBe('open');
     // root stays open while a child is open (false-green invariant, §3.2).

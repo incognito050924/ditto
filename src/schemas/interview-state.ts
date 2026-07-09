@@ -24,6 +24,25 @@ export const answerSelfReport = z
     'User self-report of decision-ability after answering (presentation-sufficiency signal)',
   );
 
+// Intent-layer dissent recorded on a dimension by the deep-interview opponent seam
+// (wi_260709mqt). Optional on the dimension so pre-existing interview-state.json parse
+// unchanged (same pattern as user_confirmation / review_status). `status` distinguishes
+// a REAL engaged opponent judgment from an ADR-0018 host_absent degrade — never a fake
+// pass. `impact:'high'` on a critical dimension is the finalize block trigger until the
+// user acknowledges it; the whole record is a durable snapshot so resume/retry reads the
+// same verdict without re-invoking the (non-deterministic) opponent.
+export const interviewDissent = z
+  .object({
+    status: z.enum(['engaged', 'host_absent']),
+    verdict: z.enum(['accept', 'revise', 'reject']).optional(),
+    impact: z.enum(['low', 'high']).optional(),
+    text: z.string().optional(),
+    acknowledged: z.boolean().default(false),
+  })
+  .describe('Intent-layer opponent dissent recorded on a dimension (wi_260709mqt)');
+
+export type InterviewDissent = z.infer<typeof interviewDissent>;
+
 export const interviewDimension = z
   .object({
     id: z.string().min(1),
@@ -32,8 +51,13 @@ export const interviewDimension = z
     ambiguity: z.number().min(0).max(1),
     resolved_by: z.array(z.string()).default([]),
     notes: z.string().default(''),
+    // Intent-dissent record-back (wi_260709mqt). Fully optional — absent for every
+    // pre-existing state and for non-critical dimensions the opponent never faces.
+    dissent: interviewDissent.optional(),
   })
   .describe('One ambiguity dimension tracked during the interview');
+
+export type InterviewDimension = z.infer<typeof interviewDimension>;
 
 export const interviewQuestion = z
   .object({

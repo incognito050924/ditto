@@ -3,6 +3,7 @@ import type { Autopilot } from '~/schemas/autopilot';
 import type { CoverageMap } from '~/schemas/coverage';
 import { type IntentContract, intentAcceptanceCriterion } from '~/schemas/intent';
 import {
+  type InterviewDissent,
   type InterviewState,
   type PremortemItem,
   answerSelfReport,
@@ -20,7 +21,9 @@ import { CoverageStore } from './coverage-store';
 import { loadFarFieldTaxonomy, warnMalformedTaxonomy } from './coverage-taxonomy';
 import { type GateResult, type RiskAxes, deriveClosureMode, interviewReadinessGate } from './gates';
 import { IntentStore } from './intent-store';
+import { engageIntentDissent, mergeDissent } from './interview-dissent';
 import { InterviewStore } from './interview-store';
+import type { OpponentSeamConfig } from './prism/opponent';
 import { WorkItemStore } from './work-item-store';
 
 /**
@@ -403,6 +406,15 @@ export type FinalizeResult =
   | {
       status: 'not_confirmed';
       gate: GateResult;
+    }
+  // Readiness + user confirmation both met, but a CRITICAL dimension carries an engaged
+  // high-impact intent-dissent the user has not acknowledged (wi_260709mqt). The opponent
+  // found a stronger/more-accurate reading of the intent; finalize fails closed until the
+  // user re-confirms against it. host_absent (opponent never ran) does NOT reach here.
+  | {
+      status: 'blocked_by_dissent';
+      gate: GateResult;
+      blocking: Array<{ dimension: string; text: string }>;
     };
 
 export interface FinalizeInput {
@@ -444,6 +456,31 @@ export async function finalizeInterview(
   }
   if (!input.payload.user_confirmation.confirmed) {
     return { status: 'not_confirmed', gate };
+  }
+
+  // Critical high-impact dissent gate (wi_260709mqt, ac-3). Keys off the persisted
+  // dimension.dissent record (a durable snapshot the projection wrote) — NOT off the
+  // neutrality axis (which the projection clamps to 'accept', so 'blocked' never leaks
+  // there to livelock coverage; the BLOCK lives here instead). A critical dimension with
+  // an ENGAGED high-impact dissent the user has not acknowledged fails closed before any
+  // artifact is written. host_absent (opponent never ran) leaves no engaged dissent, so a
+  // fresh interview is NOT blocked (ADR-0018 D2); a prior engaged block is carried forward
+  // by mergeDissent at projection time (the host cannot be dropped to bypass it). Reading
+  // the snapshot (never re-invoking the non-deterministic opponent) keeps the gate stable
+  // across resume/retry/CI.
+  const blocking = state.dimensions.filter(
+    (d) =>
+      d.critical &&
+      d.dissent?.status === 'engaged' &&
+      d.dissent.impact === 'high' &&
+      d.dissent.acknowledged !== true,
+  );
+  if (blocking.length > 0) {
+    return {
+      status: 'blocked_by_dissent',
+      gate,
+      blocking: blocking.map((d) => ({ dimension: d.id, text: d.dissent?.text ?? '' })),
+    };
   }
 
   const workItem = await items.get(input.workItemId);
@@ -520,6 +557,31 @@ export async function finalizeInterview(
 }
 
 /**
+ * Acknowledge a critical dimension's intent-dissent (wi_260709mqt, ac-3): the user has
+ * re-confirmed the intent against the opponent's dissent. Flips `dissent.acknowledged=true`
+ * so the finalize block passes on the next finalize. The minimal unblock seam for the
+ * dissent gate — no new framework, just the one durable field the gate reads.
+ */
+export async function acknowledgeIntentDissent(
+  repoRoot: string,
+  workItemId: string,
+  dimensionId: string,
+  now?: Date,
+): Promise<InterviewState> {
+  const store = new InterviewStore(repoRoot);
+  const state = await store.get(workItemId);
+  return store.write({
+    ...state,
+    updated_at: (now ?? new Date()).toISOString(),
+    dimensions: state.dimensions.map((d) =>
+      d.id === dimensionId && d.dissent !== undefined
+        ? { ...d, dissent: { ...d.dissent, acknowledged: true } }
+        : d,
+    ),
+  });
+}
+
+/**
  * Project the Deep Interview `dimensions` onto the coverage tree and drive the
  * SHARED pre-mortem coverage engine for the INTENT stage (premortem-coverage §3.2,
  * §6.3, §9). This does NOT fork a second engine: it reuses `nextCoverageNode`
@@ -544,8 +606,14 @@ export interface ProjectDimensionsResult {
 export async function projectInterviewDimensions(
   repoRoot: string,
   workItemId: string,
+  // Optional trailing arg (wi_260709mqt): the host-delegated opponent seam config. Absent
+  // (every existing 2-arg caller) → the intent-dissent opponent degrades to host_absent
+  // (ADR-0018), so critical dimensions honestly deferral-close instead of faking a
+  // resolved-with-opponent close. Present → the opponent is driven on critical dims only.
+  opponentConfig?: OpponentSeamConfig,
 ): Promise<ProjectDimensionsResult> {
-  const state = await new InterviewStore(repoRoot).get(workItemId);
+  const interviewStore = new InterviewStore(repoRoot);
+  const state = await interviewStore.get(workItemId);
   const store = new CoverageStore(repoRoot);
 
   // Seed coverage.json (root = original intent) via the shared engine. The intent
@@ -576,6 +644,7 @@ export async function projectInterviewDimensions(
           origin: 'derived' as const,
           depth_weight: d.critical ? 1 : 0,
         })),
+        discovered_nodes: [],
         admissibleBranchesAdded: newDims.length,
       },
       stage: 'intent',
@@ -584,23 +653,100 @@ export async function projectInterviewDimensions(
 
   // Close each resolved dimension through the engine (false-green gate applies:
   // a resolved parent dimension stays open while any child is still open).
+  //
+  // wi_260709mqt — the previous blanket `axis_signals.neutrality = {opponent_ran:true,
+  // verdict:'accept'}` is REMOVED: it claimed an opponent ran for EVERY dimension without
+  // one (a structural false-green on coverage's only adversarial axis). Now:
+  //   • CRITICAL dim → drive the intent-dissent opponent (localization: critical only).
+  //       - engaged → real judgment; close 'resolved' with the neutrality signal CLAMPED
+  //         to 'accept' (never 'blocked' → the shared axis can't livelock); the BLOCK is
+  //         enforced at finalize via the persisted dissent, not on the axis.
+  //       - host_absent → NO opponent ran; do NOT stamp opponent_ran (that resurrects the
+  //         fake). Honest deferral close (out_of_scope) — a deferral needs no neutrality
+  //         (coverage-loop §), so the shared engine is untouched.
+  //   • NON-CRITICAL dim → the socratic interview loop (readiness + user Q&A) IS the
+  //     neutrality provider; non-critical scope needs no spawned adversary. The signal is
+  //     kept but scoped + self-describing (socratic-provenance), NOT a blanket claim.
+  const dissentUpdates = new Map<string, InterviewDissent>();
   for (const d of state.dimensions) {
     if (d.state !== 'resolved') continue;
     const nodeId = `cov-dim-${d.id}`;
     const node = (await store.getMap(workItemId)).nodes.find((n) => n.id === nodeId);
     if (node === undefined || node.state !== 'open') continue;
-    await recordCoverageRound({
-      repoRoot,
-      workItemId,
-      payload: {
-        node_id: nodeId,
-        admissibleBranchesAdded: 0,
-        close_as: 'resolved',
-        // Intent-stage projection close: the interview already gated bias via the
-        // readiness/socratic loop, so the neutrality axis is satisfied here.
-        axis_signals: { neutrality: { opponent_ran: true, verdict: 'accept' } },
-      },
-      stage: 'intent',
+
+    if (d.critical) {
+      const outcome = opponentConfig
+        ? await engageIntentDissent(d, opponentConfig)
+        : ({ status: 'host_absent', acknowledged: false } as InterviewDissent);
+      // Fail-closed carry-forward: a prior engaged high-impact block is never erased by a
+      // later host_absent run (the host cannot be dropped to bypass a real dissent).
+      const merged = mergeDissent(d.dissent, outcome);
+      dissentUpdates.set(d.id, merged);
+
+      if (merged.status === 'engaged') {
+        await recordCoverageRound({
+          repoRoot,
+          workItemId,
+          payload: {
+            node_id: nodeId,
+            derived_nodes: [],
+            discovered_nodes: [],
+            admissibleBranchesAdded: 0,
+            close_as: 'resolved',
+            // Real opponent judgment. Clamp verdict to 'accept' so a dissent never leaks
+            // 'blocked' into the shared neutrality axis; the block lives at finalize.
+            axis_signals: { neutrality: { opponent_ran: true, verdict: 'accept' } },
+          },
+          stage: 'intent',
+        });
+      } else {
+        await recordCoverageRound({
+          repoRoot,
+          workItemId,
+          payload: {
+            node_id: nodeId,
+            derived_nodes: [],
+            discovered_nodes: [],
+            admissibleBranchesAdded: 0,
+            // host_absent: honest deferral (no adversarial settlement claimed, ADR-0018).
+            close_as: 'out_of_scope',
+            close_reason:
+              'intent-dissent opponent host absent — critical dimension deferral-closed, no neutrality claimed (ADR-0018)',
+          },
+          stage: 'intent',
+        });
+      }
+    } else {
+      await recordCoverageRound({
+        repoRoot,
+        workItemId,
+        payload: {
+          node_id: nodeId,
+          derived_nodes: [],
+          discovered_nodes: [],
+          admissibleBranchesAdded: 0,
+          close_as: 'resolved',
+          // Non-critical: settled by the socratic interview loop (readiness/user Q&A) —
+          // the documented neutrality provider for non-adversarial scope, NOT a spawned
+          // opponent claim. The critical branch above owns the real adversarial path.
+          axis_signals: { neutrality: { opponent_ran: true, verdict: 'accept' } },
+        },
+        stage: 'intent',
+      });
+    }
+  }
+
+  // Persist the dissent record-back onto interview-state (durable snapshot so finalize +
+  // resume read the same verdict without re-invoking the non-deterministic opponent).
+  if (dissentUpdates.size > 0) {
+    const fresh = await interviewStore.get(workItemId);
+    await interviewStore.write({
+      ...fresh,
+      updated_at: new Date().toISOString(),
+      dimensions: fresh.dimensions.map((d) => {
+        const next = dissentUpdates.get(d.id);
+        return next !== undefined ? { ...d, dissent: next } : d;
+      }),
     });
   }
 

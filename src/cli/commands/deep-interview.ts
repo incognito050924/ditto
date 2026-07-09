@@ -2,6 +2,7 @@ import { defineCommand } from 'citty';
 import { readDeepInterviewConfigDefaults } from '~/core/ditto-config';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
+  acknowledgeIntentDissent,
   checkReadiness,
   finalizeInterview,
   finalizePayload,
@@ -13,6 +14,7 @@ import {
   startInterview,
 } from '~/core/interview-driver';
 import { finalizeFromDesignDoc } from '~/core/prism/finalize';
+import type { OpponentSeamConfig } from '~/core/prism/opponent';
 import { questionContextCandidate, validateQuestionContext } from '~/core/question-context';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
@@ -24,6 +26,17 @@ import {
   writeJson,
 } from '../util';
 import { autoClaimOnInProgressEdge, buildClaimWiring } from './work';
+
+// Opponent model policy for the bare CLI (dialecticInput.model_policy defaults): Codex
+// preferred, claude-opus synthesizer. opponent-router resolves the candidate order; the
+// actual invocation is host-delegated (ADR-0001) and absent in the bare CLI, so the seam
+// degrades to host_absent (ADR-0018). Mirrors prism.ts BARE_MODEL_POLICY.
+const BARE_MODEL_POLICY: OpponentSeamConfig['policy'] = {
+  producer: 'current-host',
+  opponent_preferred: 'codex',
+  opponent_fallback: [],
+  synthesizer: 'claude-opus',
+};
 
 function parseJsonArg(raw: string): unknown {
   try {
@@ -331,6 +344,16 @@ const finalizeCmd = defineCommand({
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
+      if (result.status === 'blocked_by_dissent') {
+        writeError(
+          'intent-dissent opponent flagged a critical dimension (wi_260709mqt): the opponent found a ' +
+            'stronger/more-accurate reading of the intent. Review each dissent, then acknowledge it ' +
+            '(ditto deep-interview acknowledge-dissent --work-item <wi> --dimension <id>) and re-run finalize:',
+        );
+        for (const b of result.blocking) writeError(`  - [${b.dimension}] ${b.text}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
       // wi_2606287v9 (#5) ac-2 / n8-review F1: fire the claim ONCE on the in_progress
       // edge that core bootstrapAutopilot just produced — the SAME n6 helper the CLI
       // `ditto autopilot bootstrap` path fires (autopilot.ts), so both entry points are
@@ -406,7 +429,18 @@ const projectCoverageCmd = defineCommand({
     }
     const repoRoot = await resolveRepoRootForCreate();
     try {
-      const result = await projectInterviewDimensions(repoRoot, args.workItem);
+      // wi_260709mqt: wire the intent-dissent opponent config. The bare CLI cannot spawn a
+      // provider (ADR-0001) — its `isAvailable` is false and `delegate` returns null — so the
+      // seam degrades to host_absent (ADR-0018) and critical dims deferral-close honestly.
+      // The real host-delegated invocation is wired by the SKILL, mirroring prism's bare CLI.
+      const opponentConfig: OpponentSeamConfig = {
+        policy: BARE_MODEL_POLICY,
+        currentHost: 'claude-code',
+        isAvailable: () => ({ available: false, reason: 'runtime' }),
+        delegate: async () => null,
+        intent: '',
+      };
+      const result = await projectInterviewDimensions(repoRoot, args.workItem, opponentConfig);
       const closed = result.map.nodes.filter((n) => n.state !== 'open').length;
       if (format === 'json') {
         writeJson({
@@ -568,6 +602,56 @@ const checkQuestionCmd = defineCommand({
   },
 });
 
+// wi_260709mqt ac-3: the minimal unblock seam for the finalize dissent gate. After the
+// intent-dissent opponent blocks finalize on a critical high-impact dissent, the user
+// reviews it and acknowledges it here (re-confirmation), then re-runs finalize.
+const acknowledgeDissentCmd = defineCommand({
+  meta: {
+    name: 'acknowledge-dissent',
+    description:
+      "Acknowledge a critical dimension's intent-dissent (user re-confirmation) so finalize passes",
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    dimension: { type: 'string', description: 'Dimension id carrying the dissent', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const state = await acknowledgeIntentDissent(repoRoot, args.workItem, args.dimension);
+      const dim = state.dimensions.find((d) => d.id === args.dimension);
+      if (dim === undefined) {
+        writeError(`dimension ${args.dimension} not found for ${args.workItem}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.workItem,
+          dimension: args.dimension,
+          acknowledged: dim.dissent?.acknowledged ?? false,
+        });
+      } else {
+        writeHuman(
+          `Acknowledged dissent on ${args.dimension} (${args.workItem}) — re-run finalize`,
+        );
+      }
+    } catch (err) {
+      writeError(`acknowledge-dissent failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 const finalizeFromDocCmd = defineCommand({
   meta: {
     name: 'finalize-from-doc',
@@ -630,6 +714,15 @@ const finalizeFromDocCmd = defineCommand({
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
+      if (result.status === 'blocked_by_dissent') {
+        writeError(
+          'intent-dissent opponent flagged a critical dimension (wi_260709mqt): acknowledge each dissent ' +
+            '(ditto deep-interview acknowledge-dissent) and re-run:',
+        );
+        for (const b of result.blocking) writeError(`  - [${b.dimension}] ${b.text}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
       if (format === 'json') {
         writeJson({
           work_item_id: result.intent.work_item_id,
@@ -666,6 +759,7 @@ export const deepInterviewCommand = defineCommand({
     'check-readiness': checkReadinessCmd,
     'project-coverage': projectCoverageCmd,
     premortem: premortemCmd,
+    'acknowledge-dissent': acknowledgeDissentCmd,
     finalize: finalizeCmd,
     'finalize-from-doc': finalizeFromDocCmd,
   },

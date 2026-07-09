@@ -3,15 +3,37 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AutopilotStore } from '~/core/autopilot-store';
+import { CoverageStore } from '~/core/coverage-store';
 import { IntentStore } from '~/core/intent-store';
 import {
+  type FinalizePayload,
+  acknowledgeIntentDissent,
   checkReadiness,
   finalizeInterview,
+  projectInterviewDimensions,
   recordTurn,
   startInterview,
 } from '~/core/interview-driver';
 import { InterviewStore } from '~/core/interview-store';
+import type { OpponentSeamConfig } from '~/core/prism/opponent';
 import { WorkItemStore } from '~/core/work-item-store';
+
+const BARE_POLICY: OpponentSeamConfig['policy'] = {
+  producer: 'current-host',
+  opponent_preferred: 'codex',
+  opponent_fallback: [],
+  synthesizer: 'claude-opus',
+};
+function opponentConfig(over: Partial<OpponentSeamConfig>): OpponentSeamConfig {
+  return {
+    policy: BARE_POLICY,
+    currentHost: 'claude-code',
+    isAvailable: () => ({ available: true }),
+    delegate: async () => null,
+    intent: 'original intent',
+    ...over,
+  };
+}
 
 let repo: string;
 let wiId: string;
@@ -681,6 +703,185 @@ describe('finalizeInterview', () => {
     expect(state.user_confirmation?.confirmed).toBe(true);
     expect(state.user_confirmation?.statement).toBe('네, 이 의도가 제가 원한 것입니다');
     expect(state.user_confirmation?.confirmed_at).toBeDefined();
+  });
+});
+
+// wi_260709mqt: intent-layer dissent opponent + honest neutrality axis.
+describe('projectInterviewDimensions — intent dissent opponent + honest neutrality (ac-2)', () => {
+  async function driveCriticalResolved(): Promise<void> {
+    await startInterview(repo, { workItemId: wiId });
+    await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: {
+          id: 'd-crit',
+          critical: true,
+          state: 'resolved',
+          ambiguity: 0,
+          notes: 'the critical scope',
+        },
+        question: { text: 'scope?', why_matters: 'load-bearing', info_gain_estimate: 'high' },
+        answer: { text: 'only local files', kind: 'user' },
+        readiness_score: 0.85,
+      },
+    });
+  }
+
+  test('host_absent on a CRITICAL dim → honest deferral close (NOT resolved-with-fake-opponent_ran)', async () => {
+    await driveCriticalResolved();
+    // no opponent config → host_absent degrade.
+    await projectInterviewDimensions(repo, wiId);
+    const node = (await new CoverageStore(repo).getMap(wiId)).nodes.find(
+      (n) => n.id === 'cov-dim-d-crit',
+    );
+    // honest degrade: a critical dim with no opponent is deferral-closed, never a fake
+    // resolved close that claims an opponent ran.
+    expect(node?.state).toBe('out_of_scope');
+    // the dissent record-back is persisted (host_absent, self-describing).
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.dimensions.find((d) => d.id === 'd-crit')?.dissent?.status).toBe('host_absent');
+  });
+
+  test('engaged opponent on a CRITICAL dim → resolved close + dissent persisted (high impact)', async () => {
+    await driveCriticalResolved();
+    const cfg = opponentConfig({ delegate: async () => 'the intent is stated too broadly' });
+    await projectInterviewDimensions(repo, wiId, cfg);
+    const node = (await new CoverageStore(repo).getMap(wiId)).nodes.find(
+      (n) => n.id === 'cov-dim-d-crit',
+    );
+    // real opponent judgment → resolved close (neutrality clamped to accept so the shared
+    // coverage axis never sees 'blocked').
+    expect(node?.state).toBe('resolved');
+    const state = await new InterviewStore(repo).get(wiId);
+    const dissent = state.dimensions.find((d) => d.id === 'd-crit')?.dissent;
+    expect(dissent?.status).toBe('engaged');
+    expect(dissent?.impact).toBe('high');
+    expect(dissent?.text).toContain('too broadly');
+  });
+
+  test('non-critical resolved dim still closes as resolved (socratic-provenance neutrality)', async () => {
+    await startInterview(repo, { workItemId: wiId });
+    await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd-min', critical: false, state: 'resolved', ambiguity: 0, notes: 'x' },
+        question: { text: 'minor?', why_matters: 'cosmetic', info_gain_estimate: 'low' },
+        answer: { text: 'default', kind: 'user' },
+      },
+    });
+    await projectInterviewDimensions(repo, wiId);
+    const node = (await new CoverageStore(repo).getMap(wiId)).nodes.find(
+      (n) => n.id === 'cov-dim-d-min',
+    );
+    expect(node?.state).toBe('resolved');
+  });
+});
+
+describe('finalizeInterview — critical high-impact dissent gate (ac-3)', () => {
+  async function driveReadyWithDissent(dissent: unknown): Promise<void> {
+    await startInterview(repo, { workItemId: wiId });
+    await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
+        question: { text: 'shape?', why_matters: 'response', info_gain_estimate: 'high' },
+        answer: { text: 'integer', kind: 'user' },
+        readiness_score: 0.85,
+      },
+    });
+    const store = new InterviewStore(repo);
+    const state = await store.get(wiId);
+    await store.write({
+      ...state,
+      dimensions: state.dimensions.map((d) =>
+        d.id === 'd-shape' ? { ...d, dissent: dissent as never } : d,
+      ),
+    });
+  }
+  const payload: FinalizePayload = {
+    goal: 'g',
+    in_scope: [],
+    out_of_scope: [],
+    acceptance_criteria: [
+      {
+        id: 'ac-1',
+        statement: 'returns integer 0..100',
+        verdict: 'unverified' as const,
+        evidence: [],
+        evidence_required: ['test'],
+      },
+    ],
+    unknowns: [],
+    follow_up_candidates: [],
+    question_policy: 'ask_only_if_user_only_can_answer' as const,
+    risk: { non_local: false, irreversible: false, unaudited: false },
+    user_confirmation: { confirmed: true, statement: '맞아요' },
+  };
+
+  test('engaged high-impact unacknowledged dissent → blocked_by_dissent, no artifact', async () => {
+    await driveReadyWithDissent({
+      status: 'engaged',
+      verdict: 'revise',
+      impact: 'high',
+      text: 'the intent is too broad',
+      acknowledged: false,
+    });
+    const result = await finalizeInterview(repo, { workItemId: wiId, payload });
+    expect(result.status).toBe('blocked_by_dissent');
+    if (result.status === 'blocked_by_dissent') {
+      expect(result.blocking[0]?.dimension).toBe('d-shape');
+      expect(result.blocking[0]?.text).toContain('too broad');
+    }
+    expect(await new IntentStore(repo).exists(wiId)).toBe(false);
+    expect(await new AutopilotStore(repo).exists(wiId)).toBe(false);
+  });
+
+  test('acknowledged high-impact dissent → finalizes (user re-confirmed)', async () => {
+    await driveReadyWithDissent({
+      status: 'engaged',
+      verdict: 'revise',
+      impact: 'high',
+      text: 'the intent is too broad',
+      acknowledged: true,
+    });
+    const result = await finalizeInterview(repo, { workItemId: wiId, payload });
+    expect(result.status).toBe('finalized');
+  });
+
+  test('host_absent (no dissent / opponent never ran) → NOT blocked, finalizes (ADR-0018 D2)', async () => {
+    await driveReadyWithDissent({ status: 'host_absent', acknowledged: false });
+    const result = await finalizeInterview(repo, { workItemId: wiId, payload });
+    expect(result.status).toBe('finalized');
+  });
+
+  test('a dimension with NO dissent at all does not block', async () => {
+    await startInterview(repo, { workItemId: wiId });
+    await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
+        question: { text: 'shape?', why_matters: 'response', info_gain_estimate: 'high' },
+        answer: { text: 'integer', kind: 'user' },
+        readiness_score: 0.85,
+      },
+    });
+    const result = await finalizeInterview(repo, { workItemId: wiId, payload });
+    expect(result.status).toBe('finalized');
+  });
+
+  test('acknowledgeIntentDissent flips the gate from blocked to finalized', async () => {
+    await driveReadyWithDissent({
+      status: 'engaged',
+      verdict: 'revise',
+      impact: 'high',
+      text: 'too broad',
+      acknowledged: false,
+    });
+    const blocked = await finalizeInterview(repo, { workItemId: wiId, payload });
+    expect(blocked.status).toBe('blocked_by_dissent');
+    await acknowledgeIntentDissent(repo, wiId, 'd-shape');
+    const after = await finalizeInterview(repo, { workItemId: wiId, payload });
+    expect(after.status).toBe('finalized');
   });
 });
 
