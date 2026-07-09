@@ -20405,7 +20405,7 @@ function seedTestBarrier(nodes) {
     id: "test-barrier",
     kind: "test",
     owner: kindToOwner("test"),
-    purpose: "Run the full test suite as a settled-tree barrier after the implement wave settles",
+    purpose: "Run the scope-local unit/mock test subset as a settled-tree barrier after the implement wave settles",
     status: "pending",
     depends_on: frontier,
     acceptance_refs: [],
@@ -25452,12 +25452,15 @@ function affectedBarrierDirs(changedFiles, recipe2) {
 }
 function planBarrierRuns(recipe2, changedFiles, workspaceRoot, worktrees = []) {
   const norm = (d2) => d2.replace(/^\.\//, "").replace(/\/+$/, "");
-  return affectedBarrierDirs(changedFiles, recipe2).map((dir) => {
+  const runs = affectedBarrierDirs(changedFiles, recipe2).map((dir) => {
     const repoKey = dir === "" ? "." : dir;
     const wt = worktrees.find((w2) => norm(w2.owning_repo) === repoKey);
     const cwd = wt ? join29(workspaceRoot, wt.worktree_path) : dir === "" ? workspaceRoot : join29(workspaceRoot, dir);
     return { dir, command: resolveBarrierCommand(recipe2, dir), cwd };
   });
+  if (runs.length > 1)
+    return runs.filter((r3) => !(r3.dir === "" && r3.command === undefined));
+  return runs;
 }
 function barrierGreenEvidence(command) {
   return {
@@ -55618,4 +55621,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=0add6713a85de524801c21f3fae358207f1ad515ff4c9346aae92a0fc8a6651c
+//# ditto-src-stamp=057c84875ed102a73d7ee3fa1fe149661c4b8ff932a62824ecaa7a46e34688fc

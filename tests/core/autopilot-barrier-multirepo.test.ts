@@ -373,3 +373,121 @@ describe('executeTestBarrier — per-sub-repo runs, worst-wins into ONE barrier 
     expect(calls).toEqual([{ command: 'root test', cwd: repo }]);
   });
 });
+
+// ── wi_260709h98: root-drag degrade. A multi-repo aggregator declares sub-repo barrier
+// units but NO root unit; incidental root-level files (root package.json, lockfile, docs,
+// .ditto/…) map to ROOT (''), whose no-command `missing` run worst-wins DEGRADEs the WHOLE
+// barrier even when every declared sub-repo suite ran green. The fix EXCLUDES that root run
+// iff it has no command AND there is ≥1 other run — but KEEPS it when root is the only
+// affected dir (nothing-to-test honesty must survive). ──
+describe('executeTestBarrier — root-drag degrade (root no command, incidental root files)', () => {
+  let repo: string;
+  const WI = 'wi_barrierrootdrag';
+
+  const seedBarrierOnly = async (): Promise<AutopilotNode> => {
+    const g = graphWith(
+      [node({ id: 'BAR', kind: 'test', owner: 'driver', status: 'pending' })],
+      WI,
+    );
+    await new AutopilotStore(repo).write(WI, g);
+    const b = g.nodes.find((n) => n.kind === 'test');
+    if (!b) throw new Error('no barrier');
+    return b;
+  };
+  const barrierNode = async (): Promise<AutopilotNode> => {
+    const b = (await new AutopilotStore(repo).get(WI)).nodes.find((n) => n.kind === 'test');
+    if (!b) throw new Error('no barrier');
+    return b;
+  };
+  const hasCommandEvidence = async (): Promise<boolean> =>
+    (await barrierNode()).evidence_refs.some((e) => e.kind === 'command');
+
+  beforeEach(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'ditto-barrier-rootdrag-'));
+  });
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true });
+  });
+
+  // (a) sub-repos + an incidental root file, root has NO command → the '' no-command run is
+  // DROPPED (not executed, not counted). Both sub-repo runs pass → GREEN WITH command
+  // evidence (no root-drag missing-degrade). ac-1.
+  test('sub-repos + incidental root file (root no command) → GREEN over sub-repos, root run dropped', async () => {
+    const bar = await seedBarrierOnly();
+    const aps = new AutopilotStore(repo);
+    const calls: Array<{ command: string; cwd: string }> = [];
+    const rec = recipeSchema.parse({
+      repos: [
+        { dir: 'frontend', barrier_test_command: 'fe test' },
+        { dir: 'backend', barrier_test_command: 'be test' },
+      ],
+    });
+    const res = await executeTestBarrier({
+      aps,
+      workItemId: WI,
+      node: bar,
+      caps: (await aps.get(WI)).caps,
+      runs: planBarrierRuns(rec, ['frontend/a.ts', 'backend/b.ts', 'package.json'], repo),
+      runner: recordingRunner({}, calls),
+      now: NOW,
+    });
+    expect(res.disposition).toBe('green');
+    expect(await hasCommandEvidence()).toBe(true);
+    // the root '' run (no command) is neither executed nor counted.
+    expect(calls).toEqual([
+      { command: 'fe test', cwd: join(repo, 'frontend') },
+      { command: 'be test', cwd: join(repo, 'backend') },
+    ]);
+  });
+
+  // (b) HONESTY: root has no command AND the ONLY affected dir is root (a lone root file, no
+  // sub-repo) → the skip must NOT fire (no other run) → DEGRADE (missing) exactly as today,
+  // so a genuinely-untestable change still floors final_verdict≠pass. ac-2.
+  test('root-only change + root no command → still DEGRADES (skip does not fire)', async () => {
+    const bar = await seedBarrierOnly();
+    const aps = new AutopilotStore(repo);
+    const rec = recipeSchema.parse({
+      repos: [
+        { dir: 'frontend', barrier_test_command: 'fe test' },
+        { dir: 'backend', barrier_test_command: 'be test' },
+      ],
+    });
+    const res = await executeTestBarrier({
+      aps,
+      workItemId: WI,
+      node: bar,
+      caps: (await aps.get(WI)).caps,
+      runs: planBarrierRuns(rec, ['README.md'], repo),
+      runner: recordingRunner({}, []),
+      now: NOW,
+    });
+    expect(res.disposition).toBe('degrade');
+    expect((await barrierNode()).status).toBe('passed');
+    expect(await hasCommandEvidence()).toBe(false);
+  });
+
+  // (c) root no command + a sub-repo file + an incidental root file, and the sub-repo run
+  // FAILS → the barrier is RED (worst-wins over the SURVIVING sub-repo run; the root '' run
+  // is still excluded, so it neither rescues nor degrades the verdict).
+  test('sub-repo fails + incidental root file (root no command) → RED over surviving sub-repo run', async () => {
+    const bar = await seedBarrierOnly();
+    const aps = new AutopilotStore(repo);
+    const calls: Array<{ command: string; cwd: string }> = [];
+    const rec = recipeSchema.parse({
+      repos: [{ dir: 'frontend', barrier_test_command: 'fe test' }],
+    });
+    const res = await executeTestBarrier({
+      aps,
+      workItemId: WI,
+      node: bar,
+      caps: (await aps.get(WI)).caps,
+      runs: planBarrierRuns(rec, ['frontend/a.ts', 'package.json'], repo),
+      runner: recordingRunner({ 'fe test': { kind: 'failed', exitCode: 1 } }, calls),
+      now: NOW,
+    });
+    expect(res.disposition).toBe('red_retry');
+    expect(await hasCommandEvidence()).toBe(false);
+    // only the surviving sub-repo run executed; the root '' run was dropped.
+    expect(calls).toEqual([{ command: 'fe test', cwd: join(repo, 'frontend') }]);
+  });
+});

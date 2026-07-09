@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709h98",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "d7bb2f78ccd90939f19bcd99601f3640701302263a9b05dfcce6ffc943c2ccfc",
+  "ts": "2026-07-09T01:57:10.037Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-barrier-multirepo.test.ts tests/core/autopilot-barrier-runtime.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -793,7 +793,7 @@ export function planBarrierRuns(
   worktrees: readonly WorkItemWorktree[] = [],
 ): BarrierRun[] {
   const norm = (d: string): string => d.replace(/^\.\//, '').replace(/\/+$/, '');
-  return affectedBarrierDirs(changedFiles, recipe).map((dir) => {
+  const runs = affectedBarrierDirs(changedFiles, recipe).map((dir) => {
     // owning_repo is '.' for the workspace root, else the (normalized) sub-repo dir.
     const repoKey = dir === '' ? '.' : dir;
     const wt = worktrees.find((w) => norm(w.owning_repo) === repoKey);
@@ -804,6 +804,19 @@ export function planBarrierRuns(
         : join(workspaceRoot, dir);
     return { dir, command: resolveBarrierCommand(recipe, dir), cwd };
   });
+  // ROOT-DRAG DEGRADE (wi_260709h98). A multi-repo aggregator declares its sub-repo barrier
+  // units but NO root unit, so incidental root-level files (root package.json, lockfile,
+  // docs, docker-compose, .ditto/…) map to ROOT ('') → a no-command `missing` run that
+  // worst-wins DEGRADEs the WHOLE barrier even when every declared sub-repo suite ran green.
+  // Since such root files are near-unavoidable, the barrier is chronically unverified there.
+  // Drop the '' run IFF it resolves no command AND there is ≥1 other (sub-repo) run: the user
+  // declared sub-repo units, not a root unit, so incidental root files are not a
+  // barrier-tested unit here. HONESTY GUARD: when ROOT is the ONLY affected dir and has no
+  // command (`runs.length === 1`), KEEP it (missing → DEGRADE) so a genuinely-untestable
+  // change still floors final_verdict≠pass (nothing-to-test honesty, ADR-0018). A sub-repo
+  // with no command still degrades — it IS a declared unit; only the ROOT '' run is skipped.
+  if (runs.length > 1) return runs.filter((r) => !(r.dir === '' && r.command === undefined));
+  return runs;
 }
 
 /** A settled-tree-barrier command evidence ref (the `command`-kind proof `barrierRanGreen` reads). */

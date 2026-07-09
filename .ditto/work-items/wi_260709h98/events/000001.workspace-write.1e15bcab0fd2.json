@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709h98",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "1e15bcab0fd21e0aed587bddd483a25c8bd730c880af32d82d305412114fe221",
+  "ts": "2026-07-09T01:57:09.246Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c bun test tests/core/autopilot-barrier-multirepo.test.ts 2>&1 | grep -q \" 0 fail\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
