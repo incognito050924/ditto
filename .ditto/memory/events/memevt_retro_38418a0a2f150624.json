@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_38418a0a2f150624",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] The default-gated membership model could be conceptually inverted (default pass-through), silently un-gating registered journeys — but that enforcement-completeness failure is swept under #authorization, not a product authz-model review.\n[residual] A CI evidence payload or fail-closed stderr could embed a CI-log excerpt with incidental user data — but only IF the evidence module ingests free-form CI log bodies (explicitly bounded out by the structured-evidence-only invariant); credential leakage in that channel is under secret-exposure (kept relevant). Non-secret PII in a CI-log excerpt would escape both pii-leak and the credential-scoped secret-exposure — mitigated by the structured-evidence-only bound in AC-5.\n[residual] If a future evidence source were pointed at a system holding regulated data, cache retention/erasure could matter — but nothing in this change reaches such data.\n[close_reason] git pre-push gate for an internal dev tool; introduces no product access-control model — no principals/roles/tenants/ownership. 'Membership=blocklist' is a per-journey gate-policy attribute (a committed journey-dsl field), not an RBAC/ABAC/ReBAC/ACL/tenant model. The self-exemption/inverted-default enforcement failure is routed to #authorization (kept relevant).\n[close_reason] The gate operates only on git tree/commit hashes, journey ids, and CI pass/fail metadata; it collects, logs, or transmits no personal or user data. Journey credentials are env/secret-indirected (journey-dsl envRef), never literal. The new evidence module consumes STRUCTURED evidence, not raw CI log bodies.\n[close_reason] Local dev-tool push gate over CI-evidence metadata; no personal/regulated data subject, and no consent/retention/deletion/cross-border-transfer surface anywhere in the touched files. Cached evidence under .ditto/local is tree-hash + pass/fail only. Audit obligation on the allow/block decision belongs to #auditing (kept relevant).\n[intent_drift] H3: intent AC id(s) missing from completion (scope shrink): ac-2, ac-3, ac-4, ac-5, ac-6",
+  "created_at": "2026-07-09T08:37:47.704Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}
