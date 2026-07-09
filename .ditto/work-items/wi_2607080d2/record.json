@@ -7,12 +7,42 @@
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "TBD — derive observable criteria during interview/planning",
-      "verdict": "unverified",
-      "evidence": []
+      "statement": "worktree 메타([{owning_repo,worktree_path}])를 가진 WI 입력에서 배리어가 spawn하는 각 테스트 명령이 받는 cwd가 그 repo의 worktree_path 절대경로(join(repoRoot,worktree_path))와 일치한다 — mock-exec 유닛 테스트가 cwd 인자를 assert(root '.' 및 sub-repo 각각)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "sh -c bun test tests/core/autopilot-barrier-multirepo.test.ts -t \"worktree\" 2>&1 | grep -q \" 0 fail\"",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "worktree 메타가 없거나 해당 repo에 항목이 없는 WI 입력에서 배리어 명령의 cwd가 repoRoot(root) 또는 join(repoRoot,dir)(sub-repo)와 일치한다 — 기존 비-worktree 동작 회귀 방지, mock-exec 유닛 테스트가 cwd를 assert",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "sh -c grep -qiE \"worktree cwd resolution\" tests/core/autopilot-barrier-multirepo.test.ts && bun test tests/core/autopilot-barrier-multirepo.test.ts >/dev/null 2>&1",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "nextNode 배리어 브랜치가 workItem.worktrees를 planBarrierRuns에 넘기는 배선이 있고, bun test tests/core/autopilot-barrier-multirepo.test.ts와 tests/core/autopilot-barrier-runtime.test.ts가 exit 0로 통과한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "sh -c grep -q \"worktrees\" src/core/autopilot-loop.ts && bun test tests/core/autopilot-barrier-multirepo.test.ts tests/core/autopilot-barrier-runtime.test.ts >/dev/null 2>&1",
+          "summary": "exit 0"
+        }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
@@ -21,5 +51,6 @@
   "risks": [],
   "runs": [],
   "created_at": "2026-07-08T18:20:06.127Z",
-  "updated_at": "2026-07-08T18:20:06.127Z"
+  "updated_at": "2026-07-09T01:22:15.335Z",
+  "closed_at": "2026-07-09T01:22:15.334Z"
 }

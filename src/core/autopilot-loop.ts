@@ -13,7 +13,7 @@ import { decisionConflict, decisionConflictCarrier } from '~/schemas/decision-co
 import { directionForkCarrier, directionForkCondition } from '~/schemas/direction-fork-carrier';
 import { ownerReturnEnvelope } from '~/schemas/owner-return-envelope';
 import type { Recipe } from '~/schemas/recipe';
-import { type AcOracle, acOracle } from '~/schemas/work-item';
+import { type AcOracle, type WorkItemWorktree, acOracle } from '~/schemas/work-item';
 import { ActiveNodeLeaseStore } from './active-node-lease';
 import { loadVariantCatalog, selectVariantCandidates } from './agent-variants';
 import { assembleCompletionFromGraph } from './autopilot-complete';
@@ -770,21 +770,40 @@ export function affectedBarrierDirs(changedFiles: readonly string[], recipe: Rec
 
 /**
  * Plan the barrier runs for a work item: one {@link BarrierRun} per affected sub-repo dir,
- * each carrying its resolved command and the absolute cwd it runs in (workspace root joined
- * with the dir). Sub-repos live UNDER the workspace root (ADR-20260626), so `runTestCommand`
- * with `cwd = <workspaceRoot>/<dir>` is EXEC inside the session root — no cross-repo subagent,
- * no write outside the root (ADR-0011).
+ * each carrying its resolved command and the absolute cwd it runs in. Sub-repos live UNDER
+ * the workspace root (ADR-20260626), so `runTestCommand` with a cwd inside `<workspaceRoot>`
+ * is EXEC inside the session root — no cross-repo subagent, no write outside the root
+ * (ADR-0011).
+ *
+ * WORKTREE cwd (wi_2607080d2): when the WI has a worktree, the EDITED code lives in that
+ * worktree, NOT at `<workspaceRoot>`. `findRepoRoot` re-roots a worktree session back to
+ * `<ws>` (fs.ts: it must, so `.ditto/knowledge` reads hit the single source), so a barrier
+ * that naively resolved `join(<ws>, dir)` would test the UNEDITED settled tree → stale-green
+ * (false-green) or spurious red. The reliable checkout path is the WI record's `worktrees[]`
+ * (`worktree_path` is relative to `<ws>`), keyed by `owning_repo` (`'.'` for root, the
+ * sub-repo name for a nested sub-repo — the SAME bare directory name `detectSubRepos` writes
+ * and `affectedBarrierDirs` normalizes to). When a dir has a matching worktree entry the run
+ * uses that checkout; otherwise it keeps the pre-fix `<ws>` / `<ws>/dir` cwd, so a
+ * non-worktree WI (empty/absent meta, or a dir with no matching entry) is byte-identical.
  */
 export function planBarrierRuns(
   recipe: Recipe,
   changedFiles: readonly string[],
   workspaceRoot: string,
+  worktrees: readonly WorkItemWorktree[] = [],
 ): BarrierRun[] {
-  return affectedBarrierDirs(changedFiles, recipe).map((dir) => ({
-    dir,
-    command: resolveBarrierCommand(recipe, dir),
-    cwd: dir === '' ? workspaceRoot : join(workspaceRoot, dir),
-  }));
+  const norm = (d: string): string => d.replace(/^\.\//, '').replace(/\/+$/, '');
+  return affectedBarrierDirs(changedFiles, recipe).map((dir) => {
+    // owning_repo is '.' for the workspace root, else the (normalized) sub-repo dir.
+    const repoKey = dir === '' ? '.' : dir;
+    const wt = worktrees.find((w) => norm(w.owning_repo) === repoKey);
+    const cwd = wt
+      ? join(workspaceRoot, wt.worktree_path)
+      : dir === ''
+        ? workspaceRoot
+        : join(workspaceRoot, dir);
+    return { dir, command: resolveBarrierCommand(recipe, dir), cwd };
+  });
 }
 
 /** A settled-tree-barrier command evidence ref (the `command`-kind proof `barrierRanGreen` reads). */
@@ -1219,7 +1238,7 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
       workItemId,
       node: chosen,
       caps: graph.caps,
-      runs: planBarrierRuns(recipe, workItem.changed_files, repoRoot),
+      runs: planBarrierRuns(recipe, workItem.changed_files, repoRoot, workItem.worktrees),
       runner: runTestCommand,
       now: new Date(),
     });

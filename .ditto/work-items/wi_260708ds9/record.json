@@ -404,7 +404,8 @@
       "note": "P0 worktree × 배리어 cwd = stale-green(false-green 클래스). 배리어 cwd가 findRepoRoot 재-루팅으로 main 체크아웃 <ws>를 가리키나(fs.ts:62-63·autopilot-loop.ts:783-787,1222) WI 편집은 worktree(.ditto/local/worktrees/<wi>/)에 있음(pre-tool-use.ts:636-643) → 편집 안 된 코드 테스트 → stale-green/헛-RED. latent(명령 미선언+worktree opt-in)이나 ditto가 worktree 활성 사용 중이라 배리어 명령 선언 순간 live. 수정=배리어 cwd worktree-aware. 리포트 §1: reports/design/barrier-test-tier-followup-investigation.md",
       "severity": "medium",
       "self_caused": true,
-      "materialized_wi": "wi_2607080d2"
+      "materialized_wi": "wi_2607080d2",
+      "resolved": true
     },
     {
       "kind": "idea",
@@ -439,6 +440,6 @@
   "handoff_path": ".ditto/local/handoff/wi_260708ds9.md",
   "started_at_sha": "4558e864f2be4b273bc879f9cc03814a464b684e",
   "created_at": "2026-07-08T09:30:11.274Z",
-  "updated_at": "2026-07-08T18:20:06.726Z",
+  "updated_at": "2026-07-09T01:22:15.483Z",
   "closed_at": "2026-07-08T15:03:22.222Z"
 }

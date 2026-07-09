@@ -128,6 +128,86 @@ describe('planBarrierRuns (affected dir → command + cwd under the workspace ro
   });
 });
 
+// ── planBarrierRuns with worktree meta (wi_2607080d2): the barrier must test the
+// EDITED code, which lives in the WI's worktree — NOT the re-rooted workspace <ws>
+// (findRepoRoot re-roots a worktree session back to <ws>, so join(<ws>, dir) would
+// test the UNEDITED settled tree → stale-green). The reliable worktree path is the
+// WI record's `worktrees[]`, keyed by owning_repo. ──
+describe('planBarrierRuns (worktree cwd resolution)', () => {
+  const wt = (owning_repo: string, worktree_path: string) => ({
+    owning_repo,
+    worktree_path,
+    branch: 'ditto/wi_x',
+  });
+
+  // (a) root worktree meta + a root-level changed file → cwd is the worktree checkout,
+  // NOT the workspace root. ac-1.
+  test('root worktree meta → root run cwd is the worktree path (not the re-rooted <ws>)', () => {
+    const rec = recipeSchema.parse({ barrier_test_command: 'root test' });
+    const runs = planBarrierRuns(rec, ['src/x.ts'], '/ws', [
+      wt('.', '.ditto/local/worktrees/wi_x'),
+    ]);
+    expect(runs).toEqual([
+      { dir: '', command: 'root test', cwd: join('/ws', '.ditto/local/worktrees/wi_x') },
+    ]);
+  });
+
+  // (b) NO worktree meta → byte-identical to the pre-fix behavior (cwd = <ws> / <ws>/dir).
+  // Passing an empty array must equal omitting the argument. ac-2 regression.
+  test('no worktree meta → cwd is the workspace root / <ws>/dir (byte-identical)', () => {
+    const rec = recipeSchema.parse({
+      barrier_test_command: 'root test',
+      repos: [{ dir: 'backend', barrier_test_command: 'be test' }],
+    });
+    const files = ['src/x.ts', 'backend/b.ts'];
+    const expected = [
+      { dir: '', command: 'root test', cwd: '/ws' },
+      { dir: 'backend', command: 'be test', cwd: join('/ws', 'backend') },
+    ];
+    expect(planBarrierRuns(rec, files, '/ws', [])).toEqual(expected);
+    // Omitting the arg (legacy call sites) must be identical to passing [].
+    expect(planBarrierRuns(rec, files, '/ws')).toEqual(expected);
+  });
+
+  // (b') a worktree meta with NO entry matching an affected dir → that dir falls back
+  // to the old cwd (only the matching repo's cwd is repointed). ac-2 regression.
+  test('worktree meta without a matching entry → that dir keeps the <ws>/dir cwd', () => {
+    const rec = recipeSchema.parse({
+      barrier_test_command: 'root test',
+      repos: [{ dir: 'backend', barrier_test_command: 'be test' }],
+    });
+    // Only the root has a worktree entry; the backend sub-repo has none.
+    const runs = planBarrierRuns(rec, ['src/x.ts', 'backend/b.ts'], '/ws', [
+      wt('.', '.ditto/local/worktrees/wi_x'),
+    ]);
+    expect(runs).toEqual([
+      { dir: '', command: 'root test', cwd: join('/ws', '.ditto/local/worktrees/wi_x') },
+      { dir: 'backend', command: 'be test', cwd: join('/ws', 'backend') },
+    ]);
+  });
+
+  // (c) multi-repo WI with root + sub-repo worktree entries + changed files in both →
+  // each run's cwd is its OWN nested worktree checkout. ac-1 multi.
+  test('multi-repo: root + sub worktree entries → each run cwd is its own worktree checkout', () => {
+    const rec = recipeSchema.parse({
+      barrier_test_command: 'root test',
+      repos: [{ dir: 'backend', barrier_test_command: 'be test' }],
+    });
+    const runs = planBarrierRuns(rec, ['src/x.ts', 'backend/b.ts'], '/ws', [
+      wt('.', '.ditto/local/worktrees/wi_x'),
+      wt('backend', '.ditto/local/worktrees/wi_x/backend'),
+    ]);
+    expect(runs).toEqual([
+      { dir: '', command: 'root test', cwd: join('/ws', '.ditto/local/worktrees/wi_x') },
+      {
+        dir: 'backend',
+        command: 'be test',
+        cwd: join('/ws', '.ditto/local/worktrees/wi_x/backend'),
+      },
+    ]);
+  });
+});
+
 // ── executeTestBarrier: N runs → ONE worst-wins barrier node outcome ──
 describe('executeTestBarrier — per-sub-repo runs, worst-wins into ONE barrier node', () => {
   let repo: string;

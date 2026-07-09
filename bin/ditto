@@ -25446,12 +25446,14 @@ function affectedBarrierDirs(changedFiles, recipe2) {
     dirs.add("");
   return [...dirs];
 }
-function planBarrierRuns(recipe2, changedFiles, workspaceRoot) {
-  return affectedBarrierDirs(changedFiles, recipe2).map((dir) => ({
-    dir,
-    command: resolveBarrierCommand(recipe2, dir),
-    cwd: dir === "" ? workspaceRoot : join29(workspaceRoot, dir)
-  }));
+function planBarrierRuns(recipe2, changedFiles, workspaceRoot, worktrees = []) {
+  const norm = (d2) => d2.replace(/^\.\//, "").replace(/\/+$/, "");
+  return affectedBarrierDirs(changedFiles, recipe2).map((dir) => {
+    const repoKey = dir === "" ? "." : dir;
+    const wt = worktrees.find((w2) => norm(w2.owning_repo) === repoKey);
+    const cwd = wt ? join29(workspaceRoot, wt.worktree_path) : dir === "" ? workspaceRoot : join29(workspaceRoot, dir);
+    return { dir, command: resolveBarrierCommand(recipe2, dir), cwd };
+  });
 }
 function barrierGreenEvidence(command) {
   return {
@@ -25680,7 +25682,7 @@ async function nextNode(repoRoot, workItemId2) {
       workItemId: workItemId2,
       node: chosen,
       caps: graph.caps,
-      runs: planBarrierRuns(recipe2, workItem2.changed_files, repoRoot),
+      runs: planBarrierRuns(recipe2, workItem2.changed_files, repoRoot, workItem2.worktrees),
       runner: runTestCommand,
       now: new Date
     });
@@ -55611,4 +55613,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=2b4727e42b72565f1b995eec049a81cc9e5f7a159cb5cc0f570c450b87ba4ea1
+//# ditto-src-stamp=ee146be36a66a2bcda5a36f3476b2097206d187738dd9f83341ead62b8fb0ef6

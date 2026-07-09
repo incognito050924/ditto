@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607080d2",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "ec89ed7c3da26dac1ad68f59b32baa27e97da6493fb1e9c0f9f9d24a839fe6cd",
+  "ts": "2026-07-09T01:21:48.663Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c grep -qiE \"worktree cwd resolution\" tests/core/autopilot-barrier-multirepo.test.ts && bun test tests/core/autopilot-barrier-multirepo.test.ts >/dev/null 2>&1",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
