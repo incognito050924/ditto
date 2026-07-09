@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260709lf5",
+  "title": "배리어 #1 guidance fix 2개 — seed purpose 'full test suite' 모순 수정 + recipe caveat fa",
+  "source_request": "후속 [7]: #1 구조적 강제 수용 대신 값싼 guidance 개선 2개(seed purpose·recipe caveat)",
+  "goal": "배리어 #1 guidance fix 2개 — seed purpose 'full test suite' 모순 수정 + recipe caveat fail-safe 탈출구 (비코드 문구)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "src/core/autopilot-bootstrap.ts의 배리어 seed 노드 purpose 문자열에 'full test suite'가 더 이상 포함되지 않고 unit 또는 mock 서브셋 취지의 문구가 포함됨을 grep로 확인한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "sh -c ! grep -q \"Run the full test suite as a settled-tree\" src/core/autopilot-bootstrap.ts && grep -q \"unit/mock\" src/core/autopilot-bootstrap.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "src/schemas/recipe.ts의 barrier_test_command describe 문구에 이 필드를 비워두면 배리어가 degrade한다는 fail-safe 안내와 push_gate.test_command를 복사하지 말라는 경고 문구가 포함됨을 grep로 확인한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "sh -c grep -q \"FAIL-SAFE ESCAPE\" src/schemas/recipe.ts && grep -qi \"NEVER copy .push_gate.test_command\" src/schemas/recipe.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "bun test tests/core/recipe/recipe.test.ts 및 tests/core/autopilot-bootstrap.test.ts가 exit 0로 통과한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/recipe/recipe.test.ts tests/core/autopilot-bootstrap.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-09T01:45:30.677Z",
+  "updated_at": "2026-07-09T01:47:57.641Z",
+  "closed_at": "2026-07-09T01:47:57.641Z"
+}

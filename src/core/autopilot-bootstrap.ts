@@ -95,7 +95,8 @@ function seedTestBarrier(nodes: AutopilotNode[]): AutopilotNode[] {
     id: 'test-barrier',
     kind: 'test',
     owner: kindToOwner('test'),
-    purpose: 'Run the full test suite as a settled-tree barrier after the implement wave settles',
+    purpose:
+      'Run the scope-local unit/mock test subset as a settled-tree barrier after the implement wave settles',
     status: 'pending',
     depends_on: frontier,
     acceptance_refs: [],

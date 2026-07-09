@@ -66,6 +66,12 @@ export const recipePushGate = z
  * tests (no live DB, no network, no shared fixtures). A barrier that hits real
  * infra can corrupt shared state under parallel node execution.
  *
+ * FAIL-SAFE ESCAPE: if you cannot express a side-effect-free unit subset for your
+ * stack, LEAVE THIS ABSENT — the barrier then DEGRADES to tests-unverified (honest)
+ * rather than running an unsafe suite. NEVER copy `push_gate.test_command` here:
+ * that is the push-time FULL suite and would re-introduce the shared-infra hazard
+ * on EVERY completion (the barrier fires far more often than a push).
+ *
  * Like every recipe field it is OVERRIDE-ONLY (recipe.ts:8-13): ABSENT drives a
  * runtime DEGRADE (the barrier has no command to run — not a validation failure).
  * Present-but-empty fails `min(1)`. It is declarable at BOTH the top level (ROOT
