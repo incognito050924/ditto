@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709sq3",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "192a0bdac048ecf032de5bdd626db533fe99f58c425e68a71c3b0b9b0a4cb0f6",
+  "ts": "2026-07-09T02:39:12.619Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c bun test tests/core/autopilot-complete.test.ts 2>&1 | grep -q \" 0 fail\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

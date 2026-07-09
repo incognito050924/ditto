@@ -20958,11 +20958,11 @@ function unresolvedAgentResolvableRiskRecords(decisions, graph) {
 function barrierRanGreen(node) {
   return node.status === "passed" && node.evidence_refs.some((e2) => e2.kind === "command");
 }
-function testBarrierUnverified(graph) {
+function testBarrierUnverified(graph, barrierOptOut = false) {
   const barriers = graph.nodes.filter((n2) => n2.kind === "test");
   if (barriers.length === 0)
     return [];
-  return barriers.filter((b2) => !barrierRanGreen(b2)).map((b2) => ({
+  return barriers.filter((b2) => !barrierRanGreen(b2)).filter((b2) => !(barrierOptOut && b2.status === "passed")).map((b2) => ({
     item: `settled-tree test barrier ${b2.id}`,
     reason: b2.status === "failed" ? `the settled-tree test barrier (${b2.id}) is RED \u2014 the suite failed, so acceptance-criteria closure is not proven` : `the settled-tree test barrier (${b2.id}) did not run GREEN (degraded / not executed / non-terminal) \u2014 the suite never proved green, so acceptance-criteria closure is unverified (ADR-0018: proceed but never claim pass)`,
     out_of_scope: false,
@@ -20981,7 +20981,7 @@ function assembleCompletionFromGraph(graph, workItem2, opts = {}) {
     ...opts.remainingRisks ?? [],
     ...nonTerminal.length > 0 ? [`non-terminal graph nodes (work unfinished): ${nonTerminal.map((n2) => n2.id).join(", ")}`] : []
   ];
-  const barrierUnverified = testBarrierUnverified(graph);
+  const barrierUnverified = testBarrierUnverified(graph, opts.barrierOptOut ?? false);
   const built = buildCompletion({
     workItem: workItem2,
     declaredBy: "verifier",
@@ -24728,6 +24728,7 @@ var recipe = exports_external.object({
   memory: recipeMemoryMode.optional(),
   push_gate: recipePushGate.optional(),
   barrier_test_command: recipeBarrierTestCommand.optional(),
+  barrier_opt_out: exports_external.boolean().optional(),
   repos: exports_external.array(recipeRepoEntry).optional(),
   backlog: dittoConfigGithub.optional()
 }).describe("Headless ditto setup recipe (recipe.yaml)");
@@ -32071,9 +32072,11 @@ var autopilotComplete = defineCommand({
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
+      const recipe2 = await loadResolvedRecipe(repoRoot, undefined, () => {});
       const completion = assembleCompletionFromGraph(graph, workItem2, {
         ...args.summary ? { summary: args.summary } : {},
-        decisions
+        decisions,
+        barrierOptOut: recipe2.barrier_opt_out ?? false
       });
       const intentStore = new IntentStore(repoRoot);
       if (completion.final_verdict === "pass" && await intentStore.exists(args.workItem)) {
@@ -55621,4 +55624,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=057c84875ed102a73d7ee3fa1fe149661c4b8ff932a62824ecaa7a46e34688fc
+//# ditto-src-stamp=541a36b33d77f67b82037d50fec6a305e2abd23238fc17647367968be0d105f7

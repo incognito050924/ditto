@@ -116,6 +116,15 @@ export const recipe = z
     // Barrier unit-subset command for the ROOT repo. Per-repo symmetric field lives
     // in repos[]. See recipeBarrierTestCommand for the side-effect-free caveat.
     barrier_test_command: recipeBarrierTestCommand.optional(),
+    // Explicit barrier OPT-OUT. When true, an absent/no-command barrier is treated as
+    // NOT-APPLICABLE (excluded from the completion verdict) instead of flooring
+    // final_verdict to unverified — for a project that INTENTIONALLY relies on
+    // push_gate/CI rather than an in-loop barrier (e.g. a uniform in-process suite
+    // where a barrier subset would just duplicate the push gate). Distinguishes
+    // "deliberately no barrier" (this flag) from "forgot to declare one" (absent →
+    // still floors, the safe default). Only affects the no-command DEGRADE path — a
+    // barrier that RUNS and FAILS still fails.
+    barrier_opt_out: z.boolean().optional(),
     repos: z.array(recipeRepoEntry).optional(),
     // GitHub backlog (Project + status mapping). REUSES dittoConfigGithub (one SoT,
     // no duplicate). The shape lands now; migrating the existing per-developer github

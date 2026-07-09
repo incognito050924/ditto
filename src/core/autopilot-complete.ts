@@ -382,24 +382,44 @@ function barrierRanGreen(node: AutopilotNode): boolean {
   return node.status === 'passed' && node.evidence_refs.some((e) => e.kind === 'command');
 }
 
-function testBarrierUnverified(graph: Autopilot): NonNullable<CompletionInput['unverified']> {
+/**
+ * wi_260709sq3: the recipe `barrier_opt_out` opt-out. When true, an absent/no-command
+ * DEGRADED barrier (passed as a node WITHOUT command evidence — it could not execute the
+ * suite) is NOT-APPLICABLE: its `unverified` entry is SUPPRESSED, so `deriveFinalVerdict`
+ * lets the ACs alone decide (a project that intentionally relies on push_gate/CI is not
+ * chronically floored). The opt-out affects ONLY the no-command DEGRADE path — it never
+ * suppresses a barrier that RAN and is `failed` (`status==='failed'`, a REAL failure) nor
+ * a non-terminal barrier, so it can never convert a barrier failure into a pass
+ * (false-green guard). Absent/false ⇒ the FLOOR default (a merely-absent barrier still
+ * floors — the safe default catches "forgot to declare one").
+ */
+function testBarrierUnverified(
+  graph: Autopilot,
+  barrierOptOut = false,
+): NonNullable<CompletionInput['unverified']> {
   const barriers = graph.nodes.filter((n) => n.kind === 'test');
   if (barriers.length === 0) return []; // structural absence → grandfather (ac-1 part e)
-  return barriers
-    .filter((b) => !barrierRanGreen(b))
-    .map((b) => ({
-      item: `settled-tree test barrier ${b.id}`,
-      reason:
-        b.status === 'failed'
-          ? `the settled-tree test barrier (${b.id}) is RED — the suite failed, so acceptance-criteria closure is not proven`
-          : `the settled-tree test barrier (${b.id}) did not run GREEN (degraded / not executed / non-terminal) — the suite never proved green, so acceptance-criteria closure is unverified (ADR-0018: proceed but never claim pass)`,
-      // IN-SCOPE (out_of_scope:false) so deriveFinalVerdict floors final_verdict≠pass.
-      out_of_scope: false,
-      // Tool/host-blocked class: the suite could not be proven green. The gate reads
-      // this label; grounding points at the barrier node.
-      resolvability: 'blocked_external' as const,
-      grounding: b.id,
-    }));
+  return (
+    barriers
+      .filter((b) => !barrierRanGreen(b))
+      // Opt-out suppresses ONLY the no-command DEGRADE (passed WITHOUT command evidence);
+      // a `failed` (RED) or non-terminal barrier is never suppressed. After the
+      // `!barrierRanGreen` filter, `status==='passed'` ⟺ passed-without-command = degrade.
+      .filter((b) => !(barrierOptOut && b.status === 'passed'))
+      .map((b) => ({
+        item: `settled-tree test barrier ${b.id}`,
+        reason:
+          b.status === 'failed'
+            ? `the settled-tree test barrier (${b.id}) is RED — the suite failed, so acceptance-criteria closure is not proven`
+            : `the settled-tree test barrier (${b.id}) did not run GREEN (degraded / not executed / non-terminal) — the suite never proved green, so acceptance-criteria closure is unverified (ADR-0018: proceed but never claim pass)`,
+        // IN-SCOPE (out_of_scope:false) so deriveFinalVerdict floors final_verdict≠pass.
+        out_of_scope: false,
+        // Tool/host-blocked class: the suite could not be proven green. The gate reads
+        // this label; grounding points at the barrier node.
+        resolvability: 'blocked_external' as const,
+        grounding: b.id,
+      }))
+  );
 }
 
 export interface AssembleOptions {
@@ -413,6 +433,14 @@ export interface AssembleOptions {
    * Absent ⇒ no records emitted (legacy completion shape, backward compat).
    */
   decisions?: readonly AutopilotDecision[];
+  /**
+   * wi_260709sq3: the resolved recipe `barrier_opt_out` flag. When true, an
+   * absent/no-command DEGRADED test barrier is NOT-APPLICABLE (its floor `unverified`
+   * is suppressed) so the ACs alone decide. Omitted ⇒ false ⇒ today's FLOOR default
+   * (backward-compatible: existing callers/tests are unaffected). Only the no-command
+   * degrade is suppressed — a barrier that RAN and FAILED still floors.
+   */
+  barrierOptOut?: boolean;
   now?: Date;
 }
 
@@ -447,7 +475,7 @@ export function assembleCompletionFromGraph(
   // disposition into the final verdict via an IN-SCOPE unverified entry. Empty on a
   // green barrier OR structural absence (legacy grandfather) → byte-identical to the
   // no-barrier completion.
-  const barrierUnverified = testBarrierUnverified(graph);
+  const barrierUnverified = testBarrierUnverified(graph, opts.barrierOptOut ?? false);
   const built = buildCompletion({
     workItem,
     declaredBy: 'verifier',

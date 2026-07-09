@@ -905,3 +905,75 @@ describe('ac-3 producer: an unresolved auto-resolvable risk lands in remaining_r
     expect(c.remaining_risk_records).toBeUndefined();
   });
 });
+
+// ── wi_260709sq3: recipe `barrier_opt_out` → completion seam ─────────────────
+// The settled-tree test barrier FLOORS final_verdict below pass when a `test`
+// barrier is present but not GREEN (degraded: passed WITHOUT command evidence).
+// That floor is the safe default (catches "forgot to declare one"). `barrier_opt_out`
+// is the EXPLICIT opt-out: a project that intentionally relies on push_gate/CI marks
+// a merely-absent/no-command barrier NOT-APPLICABLE, so the ACs alone decide. The
+// opt-out affects ONLY the no-command DEGRADE path — it never converts a barrier that
+// RAN and FAILED into a pass (false-green guard).
+describe('assembleCompletionFromGraph (recipe barrier_opt_out: degraded-barrier not-applicable opt-out)', () => {
+  // The "all AC pass" leg: a verify node closing ac-1 with real evidence.
+  const passingAc1 = () =>
+    node({
+      id: 'V1',
+      kind: 'verify',
+      acceptance_refs: ['ac-1'],
+      evidence_refs: [ev('verify.log')],
+    });
+
+  // A DEGRADED barrier: passed as a node but carrying NO command-kind evidence
+  // (the suite could not run) — the current FLOOR trigger.
+  const degradedBarrier = () =>
+    node({
+      id: 'BARRIER',
+      kind: 'test',
+      owner: 'tester',
+      acceptance_refs: [],
+      status: 'passed',
+      evidence_refs: [],
+    });
+
+  test('ac-2: opt_out=true + DEGRADED barrier + all AC pass → final_verdict=pass, NO barrier unverified injected', () => {
+    const graph = graphWith([passingAc1(), degradedBarrier()]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+      now: NOW,
+      barrierOptOut: true,
+    });
+    expect(c.acceptance.find((a) => a.criterion_id === 'ac-1')?.verdict).toBe('pass');
+    expect(c.unverified.some((u) => u.item.includes('BARRIER'))).toBe(false);
+    expect(c.final_verdict).toBe('pass');
+  });
+
+  test('ac-3: opt_out omitted (false) + same DEGRADED barrier → in-scope barrier unverified injected, final_verdict=unverified (floor preserved)', () => {
+    const graph = graphWith([passingAc1(), degradedBarrier()]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), { now: NOW });
+    const inScope = c.unverified.filter((u) => !u.out_of_scope);
+    expect(inScope.some((u) => u.item.includes('BARRIER'))).toBe(true);
+    expect(c.final_verdict).toBe('unverified');
+  });
+
+  test('ac-4: opt_out=true + barrier that RAN and FAILED (command evidence, status failed) → completion reflects the failure (final_verdict≠pass, in-scope barrier unverified); opt-out did NOT rescue it', () => {
+    const graph = graphWith([
+      passingAc1(),
+      node({
+        id: 'BARRIER',
+        kind: 'test',
+        owner: 'tester',
+        acceptance_refs: [],
+        status: 'failed',
+        evidence_refs: [cmdEv('bun test')],
+      }),
+    ]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+      now: NOW,
+      barrierOptOut: true,
+    });
+    // A REAL barrier failure is untouched by the opt-out (only the no-command degrade
+    // is suppressed): final_verdict is floored off pass and the RED barrier is recorded.
+    expect(c.final_verdict).not.toBe('pass');
+    expect(c.unverified.some((u) => !u.out_of_scope && u.item.includes('BARRIER'))).toBe(true);
+  });
+});

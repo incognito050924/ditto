@@ -46,6 +46,7 @@ import { applyBoardStatusOption, reflectAutopilotTermination } from '~/core/gith
 import { IntentStore } from '~/core/intent-store';
 import { type LandResult, landCommit } from '~/core/land-commit';
 import { type MeasurementReport, measureHallucination } from '~/core/memory-measure';
+import { loadResolvedRecipe } from '~/core/recipe/load';
 import { WorkItemStore, blockingFollowUp } from '~/core/work-item-store';
 import type { NodeProposal } from '~/schemas/autopilot';
 import { coverageRoundPayload } from '~/schemas/coverage';
@@ -435,12 +436,18 @@ const autopilotComplete = defineCommand({
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
+      // wi_260709sq3: resolve the effective recipe (same source as the loop's barrier
+      // command resolution) so its `barrier_opt_out` flag reaches the completion seam.
+      // When true, an absent/no-command DEGRADED barrier is NOT-APPLICABLE (not floored);
+      // absent/false ⇒ today's FLOOR default. A barrier that RAN and FAILED still floors.
+      const recipe = await loadResolvedRecipe(repoRoot, undefined, () => {});
       const completion = assembleCompletionFromGraph(graph, workItem, {
         ...(args.summary ? { summary: args.summary } : {}),
         // ac-3 producer: thread the ledger so an UNRESOLVED agent_resolvable risk
         // (auto-routed but its re-verify did not converge) lands in
         // remaining_risk_records and the Stop gate can block on it (no silent leak).
         decisions,
+        barrierOptOut: recipe.barrier_opt_out ?? false,
       });
       // false-green 차단 (wi_260624xb8 ac-2): completion은 AC를 work-item에서
       // 읽으므로, intent.json이 work-item보다 많은 AC를 선언했는데 동기화가 안 된
