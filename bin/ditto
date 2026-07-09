@@ -37206,8 +37206,20 @@ var premortemItem = exports_external.object({
   reversibility: exports_external.enum(["reversible", "hard", "irreversible"]),
   early_signal: exports_external.string().default("").describe("What you would observe if this risk is materializing"),
   promoted_to: exports_external.enum(["ac", "out_of_scope", "user_owned_decision", "none"]).describe("Where a critical item was promoted (\xA75 \uC2B9\uACA9 \uADDC\uCE59)"),
-  ref: exports_external.string().default("").describe("Pointer to the AC / out_of_scope[i] / question id")
+  ref: exports_external.string().default("").describe("Pointer to the AC / out_of_scope[i] / question id"),
+  maps_to: exports_external.array(exports_external.string().min(1)).min(1).optional().describe("Oracle-link: original-intent fragment | file:line | ADR the risk binds to"),
+  refutation: exports_external.object({
+    status: exports_external.enum(["engaged", "host_absent"]),
+    text: exports_external.string().optional().describe("The opponent\u2019s refutation judgment (host-produced)")
+  }).optional().describe("Lightweight opponent refutation on a high-blast item (host-delegated)")
 }).describe("One pre-mortem risk item with its promotion outcome (deep-interview \xA75)");
+var premortemRefutationVerdict = exports_external.object({
+  index: exports_external.number().int().min(0).describe("Index into interview-state.premortem the refutation targets"),
+  text: exports_external.string().min(1).describe("The opponent\u2019s refutation judgment (host-produced, ADR-0001)")
+}).describe("One host-delegated pre-mortem refutation verdict consumed by premortem-refute-record");
+var premortemRefutationVerdicts = exports_external.object({
+  verdicts: exports_external.array(premortemRefutationVerdict).min(1).describe("The pre-mortem refutation verdicts to record (at least one)")
+}).describe("The --json payload for `ditto deep-interview premortem-refute-record`");
 var userConfirmation = exports_external.object({
   confirmed: exports_external.boolean().describe("The user confirmed the synthesized intent matches their understanding"),
   statement: exports_external.string().default("").describe("The user's own words confirming; required (non-empty) when confirmed=true"),
@@ -38262,6 +38274,9 @@ var promotePremortemPayload = exports_external.object({
 function requiresPromotion(item) {
   return item.reversibility === "irreversible" || item.blast_radius === "high" || item.blast_radius === "critical";
 }
+function isHighBlast(item) {
+  return item.blast_radius === "high" || item.blast_radius === "critical";
+}
 async function promotePremortem(repoRoot, workItemId2, payload, now) {
   const store = new InterviewStore(repoRoot);
   const state = await store.get(workItemId2);
@@ -38273,6 +38288,36 @@ async function promotePremortem(repoRoot, workItemId2, payload, now) {
     premortem: [...state.premortem, ...payload.items]
   });
   return { state: written, unpromoted };
+}
+async function recordPremortemRefutation(repoRoot, workItemId2, verdicts, now) {
+  const store = new InterviewStore(repoRoot);
+  const state = await store.get(workItemId2);
+  const foreign = [
+    ...new Set(verdicts.map((v2) => v2.index).filter((i2) => {
+      const item = state.premortem[i2];
+      return item === undefined || !isHighBlast(item);
+    }))
+  ];
+  if (foreign.length > 0) {
+    return { status: "foreign", foreign };
+  }
+  const updates = new Map;
+  const engaged = [];
+  const degraded = [];
+  for (const v2 of verdicts) {
+    const outcome = v2.text.trim().length > 0 ? { status: "engaged", text: v2.text.trim() } : { status: "host_absent" };
+    updates.set(v2.index, outcome);
+    (outcome.status === "engaged" ? engaged : degraded).push(v2.index);
+  }
+  const written = await store.write({
+    ...state,
+    updated_at: (now ?? new Date).toISOString(),
+    premortem: state.premortem.map((item, i2) => {
+      const u3 = updates.get(i2);
+      return u3 !== undefined ? { ...item, refutation: u3 } : item;
+    })
+  });
+  return { status: "recorded", state: written, engaged, degraded };
 }
 
 // src/core/prism/finalize.ts
@@ -39206,6 +39251,74 @@ var dissentRecordCmd = defineCommand({
     }
   }
 });
+var premortemRefuteRecordCmd = defineCommand({
+  meta: {
+    name: "premortem-refute-record",
+    description: "Record host-delegated pre-mortem refutations onto blast_radius>=high items \u2014 validated + fail-closed on foreign/out-of-range/non-high-blast index (ADR-0018)."
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    json: {
+      type: "string",
+      description: "Verdict payload JSON {verdicts:[{index,text}]}",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw;
+    try {
+      raw = parseJsonArg(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = premortemRefutationVerdicts.safeParse(raw);
+    if (!parsed.success) {
+      writeError("--json failed schema validation:");
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const result2 = await recordPremortemRefutation(repoRoot, args.workItem, parsed.data.verdicts);
+      if (result2.status === "foreign") {
+        writeError(`premortem-refute-record: verdict index(es) out of range or not blast_radius>=high \u2014 refusing record (\xA717 localization, ADR-0018): ${result2.foreign.join(", ")}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (format === "json") {
+        writeJson2({
+          work_item_id: args.workItem,
+          engaged: result2.engaged,
+          degraded: result2.degraded
+        });
+        return;
+      }
+      writeHuman(`premortem-refute-record: ${result2.engaged.length}\uAC74 \uAE30\uB85D(engaged), ${result2.degraded.length}\uAC74 \uAC15\uB4F1.`);
+      if (result2.engaged.length > 0)
+        writeHuman(`  engaged(index): ${result2.engaged.join(", ")}`);
+      if (result2.degraded.length > 0) {
+        writeHuman(`  degraded(host_absent, index): ${result2.degraded.join(", ")}`);
+      }
+    } catch (err) {
+      writeError(`premortem-refute-record failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var acknowledgeDissentCmd = defineCommand({
   meta: {
     name: "acknowledge-dissent",
@@ -39349,6 +39462,7 @@ var deepInterviewCommand = defineCommand({
     premortem: premortemCmd,
     "dissent-briefs": dissentBriefsCmd,
     "dissent-record": dissentRecordCmd,
+    "premortem-refute-record": premortemRefuteRecordCmd,
     "acknowledge-dissent": acknowledgeDissentCmd,
     finalize: finalizeCmd,
     "finalize-from-doc": finalizeFromDocCmd
@@ -55957,4 +56071,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=a925455b3a9b5e5cafc25c015771ad7915933492f2ff15fa00fa56965419750a
+//# ditto-src-stamp=356f0f39f0fa1edfa68f08f02a10b1094dff8cf7ab3b1ea72b9a77eaab51d753

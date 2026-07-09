@@ -877,6 +877,11 @@ function requiresPromotion(item: PremortemItem): boolean {
   );
 }
 
+/** blast_radius>=high — the §17 localization: ONLY these items face the lightweight opponent. */
+function isHighBlast(item: PremortemItem): boolean {
+  return item.blast_radius === 'high' || item.blast_radius === 'critical';
+}
+
 /**
  * Pre-mortem 승격 (deep-interview §5 — previously unimplemented per coverage §9).
  * Records the surfaced pre-mortem items into interview-state.json and enforces
@@ -904,4 +909,63 @@ export async function promotePremortem(
     premortem: [...state.premortem, ...payload.items],
   });
   return { state: written, unpromoted };
+}
+
+/**
+ * Record host-delegated pre-mortem refutation verdicts onto interview-state (wi_260709d3m,
+ * #17 AC-2). The `premortem-refute-record` CLI's record-back primitive — the premortem twin
+ * of {@link recordIntentDissent}: a non-empty (trimmed) text becomes an `engaged` refutation;
+ * a whitespace-only text degrades to `host_absent` (ADR-0018, never a false engaged stamp).
+ *
+ * Fail-closed (writes NOTHING when any verdict is foreign): a verdict whose `index` is out of
+ * range OR points at a NON-high-blast item is rejected. The high-blast guard makes the §17
+ * localization ("blast_radius>=high 항목에 한해 opponent") provable at the write boundary — a
+ * mis-wired caller cannot silently attach a refutation to a trivial item. EXACTLY ONE write
+ * (single-writer), mirroring {@link recordIntentDissent}'s persist pattern.
+ */
+export type RecordPremortemRefutationResult =
+  | { status: 'recorded'; state: InterviewState; engaged: number[]; degraded: number[] }
+  | { status: 'foreign'; foreign: number[] };
+
+export async function recordPremortemRefutation(
+  repoRoot: string,
+  workItemId: string,
+  verdicts: Array<{ index: number; text: string }>,
+  now?: Date,
+): Promise<RecordPremortemRefutationResult> {
+  const store = new InterviewStore(repoRoot);
+  const state = await store.get(workItemId);
+  const foreign = [
+    ...new Set(
+      verdicts
+        .map((v) => v.index)
+        .filter((i) => {
+          const item = state.premortem[i];
+          return item === undefined || !isHighBlast(item);
+        }),
+    ),
+  ];
+  if (foreign.length > 0) {
+    return { status: 'foreign', foreign };
+  }
+  const updates = new Map<number, PremortemItem['refutation']>();
+  const engaged: number[] = [];
+  const degraded: number[] = [];
+  for (const v of verdicts) {
+    const outcome: PremortemItem['refutation'] =
+      v.text.trim().length > 0
+        ? { status: 'engaged', text: v.text.trim() }
+        : { status: 'host_absent' };
+    updates.set(v.index, outcome);
+    (outcome.status === 'engaged' ? engaged : degraded).push(v.index);
+  }
+  const written = await store.write({
+    ...state,
+    updated_at: (now ?? new Date()).toISOString(),
+    premortem: state.premortem.map((item, i) => {
+      const u = updates.get(i);
+      return u !== undefined ? { ...item, refutation: u } : item;
+    }),
+  });
+  return { status: 'recorded', state: written, engaged, degraded };
 }

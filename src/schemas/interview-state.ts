@@ -178,10 +178,66 @@ export const premortemItem = z
       .enum(['ac', 'out_of_scope', 'user_owned_decision', 'none'])
       .describe('Where a critical item was promoted (§5 승격 규칙)'),
     ref: z.string().default('').describe('Pointer to the AC / out_of_scope[i] / question id'),
+    // Oracle-link (wi_260709d3m, #17 AC-1). Evidence the promoted risk binds to —
+    // original-intent fragment id | file:line | ADR — a scaled-down version of coverage's
+    // anti-SLOP axis (a risk with no oracle is taste). OPTIONAL: when the risk cannot be
+    // bound to an oracle it stays prose (never forced), so the §5 promotion rule and its
+    // fail-closed gate are unchanged. Pre-existing interview-state.json parse unaffected.
+    maps_to: z
+      .array(z.string().min(1))
+      .min(1)
+      .optional()
+      .describe('Oracle-link: original-intent fragment | file:line | ADR the risk binds to'),
+    // Lightweight opponent refutation (wi_260709d3m, #17 AC-2). Recorded ONLY on a
+    // blast_radius>=high item — a single host-delegated "is this risk real / already
+    // mitigated?" pass. `status` distinguishes a REAL engaged judgment from an ADR-0018
+    // host_absent degrade (never a fake pass). OPTIONAL so pre-existing items and every
+    // low-blast item parse unchanged. Folded by `recordPremortemRefutation` / the
+    // `premortem-refute-record` CLI, never written inline (host runs the opponent, ADR-0001).
+    refutation: z
+      .object({
+        status: z.enum(['engaged', 'host_absent']),
+        text: z.string().optional().describe('The opponent’s refutation judgment (host-produced)'),
+      })
+      .optional()
+      .describe('Lightweight opponent refutation on a high-blast item (host-delegated)'),
   })
   .describe('One pre-mortem risk item with its promotion outcome (deep-interview §5)');
 
 export type PremortemItem = z.infer<typeof premortemItem>;
+
+// Host-delegated pre-mortem refutation verdicts fed to `ditto deep-interview
+// premortem-refute-record` (wi_260709d3m, #17 AC-2 — mirrors interviewDissentVerdict). The
+// model judgment happens in the spawned opponent agent (ADR-0001); the CLI only consumes the
+// structured output. `index` targets a recorded premortem item; the fail-closed
+// range/high-blast-membership guard + the whitespace-text→host_absent degrade live in the
+// driver/CLI, since the schema cannot see the interview state.
+export const premortemRefutationVerdict = z
+  .object({
+    index: z
+      .number()
+      .int()
+      .min(0)
+      .describe('Index into interview-state.premortem the refutation targets'),
+    text: z
+      .string()
+      .min(1)
+      .describe('The opponent’s refutation judgment (host-produced, ADR-0001)'),
+  })
+  .describe('One host-delegated pre-mortem refutation verdict consumed by premortem-refute-record');
+
+export type PremortemRefutationVerdict = z.infer<typeof premortemRefutationVerdict>;
+
+export const premortemRefutationVerdicts = z
+  .object({
+    verdicts: z
+      .array(premortemRefutationVerdict)
+      .min(1)
+      .describe('The pre-mortem refutation verdicts to record (at least one)'),
+  })
+  .describe('The --json payload for `ditto deep-interview premortem-refute-record`');
+
+export type PremortemRefutationVerdicts = z.infer<typeof premortemRefutationVerdicts>;
 
 // 축1 종료 = readiness 게이트(1차, 시스템) ∧ 사용자 확인(2차, 휴먼). The second
 // condition: the user confirmed the synthesized intent matches their understanding.

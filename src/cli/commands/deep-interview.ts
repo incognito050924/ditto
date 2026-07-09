@@ -10,6 +10,7 @@ import {
   promotePremortem,
   promotePremortemPayload,
   recordIntentDissent,
+  recordPremortemRefutation,
   recordTurn,
   recordTurnPayload,
   startInterview,
@@ -19,7 +20,7 @@ import { finalizeFromDesignDoc } from '~/core/prism/finalize';
 import type { OpponentSeamConfig } from '~/core/prism/opponent';
 import { questionContextCandidate, validateQuestionContext } from '~/core/question-context';
 import { WorkItemStore } from '~/core/work-item-store';
-import { interviewDissentVerdicts } from '~/schemas/interview-state';
+import { interviewDissentVerdicts, premortemRefutationVerdicts } from '~/schemas/interview-state';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -758,6 +759,88 @@ const dissentRecordCmd = defineCommand({
   },
 });
 
+// wi_260709d3m (#17 AC-2): consume the host's pre-mortem refutation verdict JSON and persist
+// the record-back onto interview-state.premortem — premortem twin of `dissent-record`.
+// Pass-in-JSON: JSON.parse in try/catch → USAGE_ERROR, then a zod safeParse (first defense),
+// then the driver's single-write fold (recordPremortemRefutation). Fail-closed: a verdict
+// whose index is out of range OR points at a NON-high-blast item is REJECTED (never a
+// refutation on a trivial item — the §17 localization guard); an empty (whitespace) text
+// degrades to host_absent, never a false engaged stamp (ADR-0018).
+const premortemRefuteRecordCmd = defineCommand({
+  meta: {
+    name: 'premortem-refute-record',
+    description:
+      'Record host-delegated pre-mortem refutations onto blast_radius>=high items — validated + fail-closed on foreign/out-of-range/non-high-blast index (ADR-0018).',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    json: {
+      type: 'string',
+      description: 'Verdict payload JSON {verdicts:[{index,text}]}',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw: unknown;
+    try {
+      raw = parseJsonArg(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = premortemRefutationVerdicts.safeParse(raw);
+    if (!parsed.success) {
+      writeError('--json failed schema validation:');
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const result = await recordPremortemRefutation(repoRoot, args.workItem, parsed.data.verdicts);
+      if (result.status === 'foreign') {
+        writeError(
+          `premortem-refute-record: verdict index(es) out of range or not blast_radius>=high — refusing record (§17 localization, ADR-0018): ${result.foreign.join(', ')}`,
+        );
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.workItem,
+          engaged: result.engaged,
+          degraded: result.degraded,
+        });
+        return;
+      }
+      writeHuman(
+        `premortem-refute-record: ${result.engaged.length}건 기록(engaged), ${result.degraded.length}건 강등.`,
+      );
+      if (result.engaged.length > 0) writeHuman(`  engaged(index): ${result.engaged.join(', ')}`);
+      if (result.degraded.length > 0) {
+        writeHuman(`  degraded(host_absent, index): ${result.degraded.join(', ')}`);
+      }
+    } catch (err) {
+      writeError(
+        `premortem-refute-record failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 // wi_260709mqt ac-3: the minimal unblock seam for the finalize dissent gate. After the
 // intent-dissent opponent blocks finalize on a critical high-impact dissent, the user
 // reviews it and acknowledges it here (re-confirmation), then re-runs finalize.
@@ -917,6 +1000,7 @@ export const deepInterviewCommand = defineCommand({
     premortem: premortemCmd,
     'dissent-briefs': dissentBriefsCmd,
     'dissent-record': dissentRecordCmd,
+    'premortem-refute-record': premortemRefuteRecordCmd,
     'acknowledge-dissent': acknowledgeDissentCmd,
     finalize: finalizeCmd,
     'finalize-from-doc': finalizeFromDocCmd,

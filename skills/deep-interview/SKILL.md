@@ -127,6 +127,27 @@ For each candidate acceptance criterion, run a pre-mortem **internally** (your o
 - `unknowns` (we cannot decide yet — block on it), or
 - A user-owned decision (charter `⚠` advisory if surfaced via QuestionGate).
 
+Record the promoted items with `ditto deep-interview premortem --work-item <wi> --json '{"items":[…]}'` (the `§5` gate fails closed if an irreversible / high-blast item is left `promoted_to:"none"`).
+
+**Oracle-link (optional, `maps_to`).** When a promoted item's risk can be bound to concrete evidence, carry it in `maps_to`: an original-intent fragment id, a `file:line`, or an `ADR-…` — a scaled-down version of coverage's anti-SLOP axis (a risk with no oracle is taste). This is **optional and never forced**: if the risk cannot be honestly bound to an oracle, leave `maps_to` off and keep it prose — do not fabricate an oracle. The `§5` promotion rule is unchanged either way.
+
+**Lightweight opponent on the most dangerous few (`blast_radius>=high` only).** After promotion, put each recorded `blast_radius` `high`/`critical` item under ONE independent adversarial pass — never a blanket sweep (the category-complete pre-mortem sweep belongs to the autopilot PLAN stage; do not duplicate it here). The model judgment happens in the **host layer** (a spawned `dialectic-opponent`), never in the CLI (ADR-0001):
+
+```bash
+# For each recorded premortem item with blast_radius>=high, spawn ONE dialectic-opponent
+# with a minimal brief: the item's scenario + the ORIGINAL intent. Ask it exactly:
+#   "Is this risk real, or already mitigated by what the change already does?"
+# Then fold the refutation back onto the item BY ITS INDEX in interview-state.premortem:
+ditto deep-interview premortem-refute-record --work-item <wi> \
+  --json '{"verdicts":[{"index":0,"text":"<is-it-real / already-mitigated judgment>"}]}'
+```
+
+Discipline (same contract as the intent-dissent seam):
+
+- **`blast_radius>=high` only.** `premortem-refute-record` **rejects** a verdict whose `index` is out of range OR points at a non-high-blast item (the localization is enforced at the write boundary, not merely advised) — a malformed payload is a usage error and writes nothing.
+- **Honest degrade (ADR-0018).** No opponent host, or an empty/whitespace verdict text, records `host_absent` — never a false `engaged` "the risk was refuted" stamp. A `host_absent` item still stands as a promoted risk.
+- **Low priority.** This is a cheap hardening of the few highest-blast risks, not a gate: the interview does not block on it. If the opponent refutes a risk as already-mitigated, that is a signal to reconsider its promotion — not an automatic demotion.
+
 ### 5. Check readiness
 
 ```

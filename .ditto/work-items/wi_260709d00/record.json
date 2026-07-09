@@ -12,17 +12,26 @@
       "evidence": []
     }
   ],
-  "status": "draft",
+  "status": "partial",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
   "worktrees": [],
+  "follows": "wi_260709e4c",
   "github_issue": {
     "repo": "incognito050924/ditto",
     "number": 14
   },
   "risks": [],
+  "re_entry": {
+    "command": "/ditto:deep-interview wi_260709d00 (heavy path: full 인터뷰 → autopilot 구현)",
+    "fresh_evidence_needed": [
+      "종료 계약=OR 확정(marginal_gain floor OR K회 연속 novelty-0 중 하나 마르면 종료",
+      "opponent가 OR-가산exit로 독립 수렴, dissent engaged 기록됨)",
+      "잔여=interview-driver.ts에 novelty-소진 축 코드 배선(coverage recordDryRound 패턴)+계약 주석+단위테스트+회귀0"
+    ]
+  },
   "runs": [],
   "created_at": "2026-07-09T07:43:45.577Z",
-  "updated_at": "2026-07-09T07:43:45.588Z"
+  "updated_at": "2026-07-09T08:55:22.124Z"
 }
