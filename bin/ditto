@@ -37657,6 +37657,14 @@ var prismDecision = exports_external.object({
   residual_risk: exports_external.string().optional().describe("Surviving risk, when the decision leaves one"),
   recorded_at: isoDateTime
 }).describe("One append-only decision-grade prism record (Record tier)");
+var prismOpponentVerdict = exports_external.object({
+  concern: exports_external.enum(["critique", "dissent", "semantic"]).describe("Which seam field this verdict records back into (critique|dissent|semantic)"),
+  node_id: exports_external.string().min(1).describe("The prism node this verdict is recorded on"),
+  text: exports_external.string().min(1).describe("The opponent\u2019s judgment text (host-produced, ADR-0001)")
+}).describe("One host-delegated opponent verdict consumed by opponent-record");
+var prismOpponentVerdicts = exports_external.object({
+  verdicts: exports_external.array(prismOpponentVerdict).min(1).describe("The opponent verdicts to record (at least one)")
+}).describe("The --json payload for `ditto prism opponent-record`");
 
 // src/core/prism/store.ts
 init_question_round();
@@ -50815,6 +50823,13 @@ async function engageIndependentDissent(prism, config) {
     skipped_by_cap: 0
   };
 }
+function semanticCriticTargets(prism, fragments) {
+  return deriveFragmentMappings(fragments, prism);
+}
+function recordSemanticCritique(prism, nodeId2, outcome) {
+  const patch = outcome.status === "engaged" ? { semantic_critique: outcome.text, semantic_status: "engaged" } : { semantic_status: "host_absent" };
+  return upsertEvaluation2(prism, nodeId2, patch);
+}
 
 // src/core/prism/loop.ts
 async function runDivergenceRound(store, input) {
@@ -51513,6 +51528,158 @@ var prismOpponentCommand = defineCommand({
     }
   }
 });
+function briefTargetLabel(prism, nodeId2) {
+  return prism.tree.nodes.find((n3) => n3.id === nodeId2)?.label ?? nodeId2;
+}
+var prismOpponentBriefsCommand = defineCommand({
+  meta: {
+    name: "opponent-briefs",
+    description: "Emit structured opponent briefs (critique/dissent/semantic targets) for the host to judge \u2014 no model call (ADR-0001)."
+  },
+  args: {
+    wi: { type: "string", description: "Work item id (wi_*)" }
+  },
+  run: async ({ args }) => {
+    if (!args.wi) {
+      writeError("prism opponent-briefs requires --wi <wi_*>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new PrismStore(repoRoot);
+    try {
+      if (!await store.exists(args.wi)) {
+        writeError(`prism opponent-briefs: no issue map for ${args.wi} \u2014 seed one first`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const prism = await store.getMap(args.wi);
+      const intent = await readOriginalIntent(repoRoot, args.wi) ?? "";
+      const fragments = await readIntentFragments(repoRoot, args.wi);
+      const target = (nodeId2) => ({
+        node_id: nodeId2,
+        label: briefTargetLabel(prism, nodeId2),
+        intent
+      });
+      writeJson2({
+        work_item_id: args.wi,
+        critique_targets: flaggedCriticalNodeIds(prism).map(target),
+        dissent_anchor: target(prism.tree.root_id),
+        semantic_targets: semanticCriticTargets(prism, fragments).map((m4) => ({
+          ...target(m4.node_id),
+          fragment_id: m4.fragment_id
+        }))
+      });
+    } catch (err) {
+      writeError(`prism opponent-briefs failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+function recordVerdict(prism, verdict2, outcome) {
+  switch (verdict2.concern) {
+    case "critique":
+      return recordOpponentCritique(prism, verdict2.node_id, outcome);
+    case "dissent":
+      return recordOpponentDissent(prism, verdict2.node_id, outcome);
+    case "semantic":
+      return recordSemanticCritique(prism, verdict2.node_id, outcome);
+  }
+}
+var prismOpponentRecordCommand = defineCommand({
+  meta: {
+    name: "opponent-record",
+    description: "Record host-delegated opponent verdicts (critique/dissent/semantic) into the prism map \u2014 validated + fail-closed on foreign node ids (ADR-0018)."
+  },
+  args: {
+    wi: { type: "string", description: "Work item id (wi_*)" },
+    json: {
+      type: "string",
+      description: "Verdict payload JSON {verdicts:[{concern,node_id,text}]}"
+    },
+    briefed: {
+      type: "string",
+      description: "Optional comma-separated briefed node ids \u2014 surfaces unanswered concerns (M3)"
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.wi || !args.json) {
+      writeError("prism opponent-record requires --wi <wi_*> and --json <verdicts>");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw;
+    try {
+      raw = JSON.parse(args.json);
+    } catch (err) {
+      writeError(`--json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = prismOpponentVerdicts.safeParse(raw);
+    if (!parsed.success) {
+      writeError("--json failed schema validation:");
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new PrismStore(repoRoot);
+    try {
+      if (!await store.exists(args.wi)) {
+        writeError(`prism opponent-record: no issue map for ${args.wi} \u2014 seed one first`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const prism = await store.getMap(args.wi);
+      const known = new Set(prism.tree.nodes.map((n3) => n3.id));
+      const foreign = parsed.data.verdicts.map((v2) => v2.node_id).filter((id) => !known.has(id));
+      if (foreign.length > 0) {
+        writeError(`prism opponent-record: verdict node_id(s) absent from tree \u2014 refusing orphan record (ADR-0018): ${[...new Set(foreign)].join(", ")}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      let next = prism;
+      const engaged = [];
+      const degraded = [];
+      for (const v2 of parsed.data.verdicts) {
+        const outcome = v2.text.trim().length > 0 ? { status: "engaged", text: v2.text } : { status: "host_absent" };
+        next = recordVerdict(next, v2, outcome);
+        (outcome.status === "engaged" ? engaged : degraded).push(v2.node_id);
+      }
+      await store.writeMap(next);
+      const briefed = (args.briefed ?? "").split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+      const answered = new Set(parsed.data.verdicts.map((v2) => v2.node_id));
+      const unanswered = briefed.filter((id) => !answered.has(id));
+      if (format === "json") {
+        writeJson2({ work_item_id: args.wi, engaged, degraded, unanswered });
+        return;
+      }
+      writeHuman(`opponent-record: ${engaged.length}\uAC74 \uAE30\uB85D(engaged), ${degraded.length}\uAC74 \uAC15\uB4F1.`);
+      if (engaged.length > 0)
+        writeHuman(`  engaged: ${engaged.join(", ")}`);
+      if (degraded.length > 0)
+        writeHuman(`  degraded(host_absent): ${degraded.join(", ")}`);
+      if (unanswered.length > 0) {
+        writeHuman(`  \uBE0C\uB9AC\uD551\uB410\uC73C\uB098 \uBBF8\uC751\uB2F5: ${unanswered.join(", ")}`);
+      }
+    } catch (err) {
+      writeError(`prism opponent-record failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var prismDocCommand = defineCommand({
   meta: {
     name: "doc",
@@ -51757,6 +51924,8 @@ var prismCommand = defineCommand({
     status: prismStatusCommand,
     tree: prismTreeCommand,
     opponent: prismOpponentCommand,
+    "opponent-briefs": prismOpponentBriefsCommand,
+    "opponent-record": prismOpponentRecordCommand,
     doc: prismDocCommand,
     backlog: prismBacklogCommand
   }
@@ -55442,4 +55611,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=ea1f8d9c445911d815297607f66d2ae45e64b73d4f0d05a13f87d2d4dc8a0178
+//# ditto-src-stamp=2b4727e42b72565f1b995eec049a81cc9e5f7a159cb5cc0f570c450b87ba4ea1

@@ -177,6 +177,52 @@ confirmation statement (human). A bare call without `--statement` is not
 confirmation and is rejected. Still-open issues survive into the pre-mortem seed
 (carried into `intent.unknowns`), so plan-stage coverage sees them.
 
+### 7. Opponent seam — devil's-advocate critique, dissent, semantic (host-delegated)
+
+The prism map's argumentation can be sharpened by a real opponent: a devil's-advocate
+**critique** over the A2-flagged critical nodes, an independent **dissent** re-derived
+from the original intent at the anchor, and an A1 **semantic** achieve-vs-characterize
+judgment on the covered (fragment,node) pairs. The model judgment happens in the
+**host layer** (spawned opponent agents), never inside the CLI (ADR-0001). The two CLIs
+only emit the briefs and consume/validate/persist the structured verdicts — the
+pass-in-JSON idiom (mirrors `autopilot coverage-next --relevance`).
+
+```bash
+# 1) emit the structured briefs — NO model call. Three groups (critique_targets,
+#    dissent_anchor, semantic_targets), each target carrying node id + label + intent:
+ditto prism opponent-briefs --wi <wi>
+```
+
+The main agent then **spawns one opponent agent per concern** (the host layer, ADR-0001)
+to produce the judgment text against each brief, and assembles the verdicts as JSON:
+
+```jsonc
+{ "verdicts": [
+  { "concern": "critique", "node_id": "<flagged node>", "text": "…critique + refutation…" },
+  { "concern": "dissent",  "node_id": "<anchor>",       "text": "…independent 2nd view…" },
+  { "concern": "semantic", "node_id": "<covered node>", "text": "…achieved / only characterized…" }
+] }
+```
+
+```bash
+# 2) feed the verdicts back — validated + fail-closed, then persisted in ONE write:
+ditto prism opponent-record --wi <wi> --json '<verdicts>' --briefed "<id>,<id>,…"
+```
+
+Discipline:
+
+- **No model call in the CLI.** `opponent-briefs` and `opponent-record` never invoke a
+  provider; the judgment lives in the spawned host agents (ADR-0001).
+- **Fail-closed on foreign nodes.** A verdict whose `node_id` is not in the tree is
+  **rejected** — never recorded as an orphan evaluation the tree render can't show
+  (ADR-0018 never-silent). A malformed payload is a usage error and leaves the map
+  unchanged; an empty verdict text degrades to `host_absent`, never a false `engaged`.
+- **`--briefed` closes the loop.** Passing the briefed node ids surfaces any briefed
+  concern that came back unanswered, so a dropped opponent judgment is visible.
+- The bare `ditto prism opponent` command stays the no-host degrade path (it stamps
+  `host_absent` when no delegate is wired); `opponent-briefs`/`opponent-record` are the
+  additive host-delegated path beside it.
+
 ## Divergence discipline (ac-10)
 
 The interview must not spin. Three meaningless-divergence shapes are detected

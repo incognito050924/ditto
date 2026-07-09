@@ -13,6 +13,8 @@ import { join } from 'node:path';
  */
 const cliEntry = join(process.cwd(), 'src/cli/index.ts');
 const WI = 'wi_prismcli01';
+/** Mirror of src/cli/util.ts USAGE_ERROR_EXIT (sysexits EX_USAGE). */
+const USAGE_ERROR_EXIT = 65;
 
 let dir: string;
 
@@ -530,5 +532,182 @@ describe('ditto prism opponent — model-assist seam is genuinely invoked (ac-5/
     const anchor = map.tree.root_id;
     const evalRec = map?.evaluations?.find((e: { node_id: string }) => e.node_id === anchor);
     expect(evalRec?.opponent_status).toBe('host_absent');
+  });
+});
+
+// ── opponent-briefs / opponent-record — the host-delegated pass-in-JSON seam ──
+// A prism fixture with (a) a critique target (A2-flagged critical node), (b) the
+// dissent anchor (tree root), (c) a semantic target (a node whose label token-maps an
+// intent fragment). `intentText` is the ORIGINAL intent every brief target carries.
+const intentText = '결제 재시도 정책을 설계한다 — 원문 의도 텍스트';
+
+/** Seed the shared fixture; returns the flagged/semantic node id + the tree root id. */
+async function seedOpponentFixture(): Promise<{ nodeId: string; rootId: string }> {
+  // goal='재시도 정책 확정' + in_scope shares tokens with the node label below → the
+  // node is a semantic (fragment,node) target via deriveFragmentMappings.
+  await writeIntent(intentText, ['결제 재시도 정책 로직']);
+  const node = seed('결제 재시도 정책', ['--critical']);
+  // A critical resolved-close WITHOUT the A2 gate inputs stamps the node `unevaluated`
+  // → it becomes a flaggedCriticalNodeIds critique target.
+  spawnDitto([
+    'prism',
+    'close',
+    '--wi',
+    WI,
+    '--node',
+    node.node_id,
+    '--state',
+    'resolved',
+    '--reason',
+    'x',
+  ]);
+  const map = await readIssueMap();
+  return { nodeId: node.node_id, rootId: map.tree.root_id };
+}
+
+describe('ditto prism opponent-briefs — structured briefs, no model call (ac-1)', () => {
+  test('emits critique/dissent/semantic groups each carrying node id + label + intent', async () => {
+    const { nodeId, rootId } = await seedOpponentFixture();
+    const res = spawnDitto(['prism', 'opponent-briefs', '--wi', WI]);
+    expect(res.exitCode).toBe(0);
+    const briefs = JSON.parse(res.stdout);
+    // critique_targets includes the A2-flagged critical node, with its label + intent.
+    const critiqueIds = briefs.critique_targets.map((t: { node_id: string }) => t.node_id);
+    expect(critiqueIds).toContain(nodeId);
+    const critique = briefs.critique_targets.find((t: { node_id: string }) => t.node_id === nodeId);
+    expect(critique.label).toBe('결제 재시도 정책');
+    expect(critique.intent).toBe(intentText);
+    // dissent_anchor is the tree root, carrying the intent.
+    expect(briefs.dissent_anchor.node_id).toBe(rootId);
+    expect(briefs.dissent_anchor.intent).toBe(intentText);
+    // semantic_targets includes the token-mapped node.
+    const semanticIds = briefs.semantic_targets.map((t: { node_id: string }) => t.node_id);
+    expect(semanticIds).toContain(nodeId);
+  });
+});
+
+describe('ditto prism opponent-record — consume verdict JSON, round-trip (ac-2)', () => {
+  test('a well-formed 3-concern verdict lands critique/dissent/semantic + status=engaged', async () => {
+    const { nodeId, rootId } = await seedOpponentFixture();
+    const verdicts = JSON.stringify({
+      verdicts: [
+        { concern: 'critique', node_id: nodeId, text: '이 노드의 정당화가 약합니다 (반증 시도)' },
+        { concern: 'dissent', node_id: rootId, text: '원문 의도로부터 독립적 재판단' },
+        { concern: 'semantic', node_id: nodeId, text: '특성화에 그침 — 달성 아님' },
+      ],
+    });
+    const res = spawnDitto([
+      'prism',
+      'opponent-record',
+      '--wi',
+      WI,
+      '--json',
+      verdicts,
+      '--output',
+      'json',
+    ]);
+    expect(res.exitCode).toBe(0);
+    const payload = JSON.parse(res.stdout);
+    expect(payload.engaged).toContain(nodeId);
+    expect(payload.engaged).toContain(rootId);
+    // Re-read round-trips all three fields with status=engaged.
+    const map = await readIssueMap();
+    const nodeRec = map.evaluations.find((e: { node_id: string }) => e.node_id === nodeId);
+    expect(nodeRec.opponent_critique).toBe('이 노드의 정당화가 약합니다 (반증 시도)');
+    expect(nodeRec.opponent_status).toBe('engaged');
+    expect(nodeRec.semantic_critique).toBe('특성화에 그침 — 달성 아님');
+    expect(nodeRec.semantic_status).toBe('engaged');
+    const rootRec = map.evaluations.find((e: { node_id: string }) => e.node_id === rootId);
+    expect(rootRec.opponent_dissent).toBe('원문 의도로부터 독립적 재판단');
+    expect(rootRec.opponent_status).toBe('engaged');
+  });
+
+  test('M1: malformed --json (bad shape) → USAGE_ERROR, map unchanged', async () => {
+    const { nodeId } = await seedOpponentFixture();
+    const before = await readIssueMap();
+    // Bad concern enum + missing text → schema rejects.
+    const res = spawnDitto([
+      'prism',
+      'opponent-record',
+      '--wi',
+      WI,
+      '--json',
+      JSON.stringify({ verdicts: [{ concern: 'bogus', node_id: nodeId }] }),
+    ]);
+    expect(res.exitCode).toBe(USAGE_ERROR_EXIT);
+    const after = await readIssueMap();
+    // No mutation — the map is byte-identical to before the rejected record.
+    expect(after).toEqual(before);
+  });
+
+  test('M1: non-JSON --json → USAGE_ERROR', async () => {
+    await seedOpponentFixture();
+    const res = spawnDitto(['prism', 'opponent-record', '--wi', WI, '--json', 'not json at all']);
+    expect(res.exitCode).toBe(USAGE_ERROR_EXIT);
+  });
+
+  test('M2: a verdict node_id absent from tree.nodes → fail-closed, NO orphan persisted', async () => {
+    await seedOpponentFixture();
+    const before = await readIssueMap();
+    const foreign = 'prism_foreignnode_deadbeef';
+    const res = spawnDitto([
+      'prism',
+      'opponent-record',
+      '--wi',
+      WI,
+      '--json',
+      JSON.stringify({ verdicts: [{ concern: 'critique', node_id: foreign, text: '유령 평가' }] }),
+    ]);
+    expect(res.exitCode).not.toBe(0);
+    expect(res.stderr).toContain(foreign);
+    const after = await readIssueMap();
+    // Fail-closed: map untouched, no orphan evaluation for the foreign id.
+    expect(after).toEqual(before);
+    const orphan = after.evaluations.find((e: { node_id: string }) => e.node_id === foreign);
+    expect(orphan).toBeUndefined();
+  });
+
+  test('M2: a concern with empty text is NOT stamped engaged (degrades host_absent)', async () => {
+    const { nodeId } = await seedOpponentFixture();
+    const res = spawnDitto([
+      'prism',
+      'opponent-record',
+      '--wi',
+      WI,
+      '--json',
+      // Whitespace passes the min(1) schema but is empty → must degrade, not engage.
+      JSON.stringify({ verdicts: [{ concern: 'critique', node_id: nodeId, text: '   ' }] }),
+      '--output',
+      'json',
+    ]);
+    expect(res.exitCode).toBe(0);
+    const payload = JSON.parse(res.stdout);
+    expect(payload.engaged).not.toContain(nodeId);
+    expect(payload.degraded).toContain(nodeId);
+    const map = await readIssueMap();
+    const rec = map.evaluations.find((e: { node_id: string }) => e.node_id === nodeId);
+    expect(rec.opponent_status).toBe('host_absent');
+    expect(rec.opponent_critique).toBeUndefined();
+  });
+
+  test('M3: --briefed surfaces briefed-but-unanswered concerns', async () => {
+    const { nodeId, rootId } = await seedOpponentFixture();
+    // Brief two targets but answer only the critique one.
+    const res = spawnDitto([
+      'prism',
+      'opponent-record',
+      '--wi',
+      WI,
+      '--json',
+      JSON.stringify({ verdicts: [{ concern: 'critique', node_id: nodeId, text: '답변' }] }),
+      '--briefed',
+      `${nodeId},${rootId}`,
+      '--output',
+      'json',
+    ]);
+    expect(res.exitCode).toBe(0);
+    const payload = JSON.parse(res.stdout);
+    expect(payload.unanswered).toContain(rootId);
+    expect(payload.unanswered).not.toContain(nodeId);
   });
 });

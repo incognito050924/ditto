@@ -195,3 +195,37 @@ export const prismDecision = z
 
 export type PrismDecisionKind = z.infer<typeof prismDecisionKind>;
 export type PrismDecision = z.infer<typeof prismDecision>;
+
+// ── opponent-record verdict payload (wi_260708faa, pass-in-JSON seam) ──────────
+
+/**
+ * One host-delegated opponent verdict fed to `ditto prism opponent-record` (ADR-0001:
+ * the model judgment happens in the spawned opponent agent, the CLI only consumes the
+ * structured output — mirroring the coverage-relevance pass-in-JSON precedent).
+ * `concern` routes the record-back field (critique→opponent_critique, dissent→
+ * opponent_dissent, semantic→semantic_critique). `node_id` and `text` are non-empty by
+ * schema (M1 first-defense); the fail-closed tree-membership guard + the empty-text→
+ * host_absent degrade (M2) live in the CLI, since the schema cannot see the tree.
+ */
+export const prismOpponentVerdict = z
+  .object({
+    concern: z
+      .enum(['critique', 'dissent', 'semantic'])
+      .describe('Which seam field this verdict records back into (critique|dissent|semantic)'),
+    node_id: z.string().min(1).describe('The prism node this verdict is recorded on'),
+    text: z.string().min(1).describe('The opponent’s judgment text (host-produced, ADR-0001)'),
+  })
+  .describe('One host-delegated opponent verdict consumed by opponent-record');
+
+export type PrismOpponentVerdict = z.infer<typeof prismOpponentVerdict>;
+
+export const prismOpponentVerdicts = z
+  .object({
+    verdicts: z
+      .array(prismOpponentVerdict)
+      .min(1)
+      .describe('The opponent verdicts to record (at least one)'),
+  })
+  .describe('The --json payload for `ditto prism opponent-record`');
+
+export type PrismOpponentVerdicts = z.infer<typeof prismOpponentVerdicts>;

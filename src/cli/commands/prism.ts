@@ -31,11 +31,25 @@ import {
   runOpponentCritiqueRound,
   runOpponentDissentRound,
 } from '~/core/prism/loop';
-import type { DialecticHost, OpponentSeamConfig } from '~/core/prism/opponent';
+import {
+  type DialecticHost,
+  type OpponentOutcome,
+  type OpponentSeamConfig,
+  flaggedCriticalNodeIds,
+  recordOpponentCritique,
+  recordOpponentDissent,
+  recordSemanticCritique,
+  semanticCriticTargets,
+} from '~/core/prism/opponent';
 import { PrismStore, deriveNovelty } from '~/core/prism/store';
 import { WorkItemStore } from '~/core/work-item-store';
 import type { CoverageNode } from '~/schemas/coverage';
-import type { PrismIssueMap, PrismNodeEvaluation } from '~/schemas/prism';
+import {
+  type PrismIssueMap,
+  type PrismNodeEvaluation,
+  type PrismOpponentVerdict,
+  prismOpponentVerdicts,
+} from '~/schemas/prism';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -837,6 +851,213 @@ const prismOpponentCommand = defineCommand({
   },
 });
 
+/** Node label for a brief target, falling back to the id when the node is missing. */
+function briefTargetLabel(prism: PrismIssueMap, nodeId: string): string {
+  return prism.tree.nodes.find((n) => n.id === nodeId)?.label ?? nodeId;
+}
+
+/**
+ * `ditto prism opponent-briefs` — emit the structured briefs the host layer needs to
+ * spawn opponent agents (ADR-0001: NO model call here). Three groups, each target
+ * carrying its node id + label + the ORIGINAL intent text: critique_targets (the
+ * A2-flagged critical nodes), dissent_anchor (the tree root — the intent frame), and
+ * semantic_targets (the covered (fragment,node) pairs). The host runs the judgment; the
+ * verdicts flow back through `opponent-record`.
+ */
+const prismOpponentBriefsCommand = defineCommand({
+  meta: {
+    name: 'opponent-briefs',
+    description:
+      'Emit structured opponent briefs (critique/dissent/semantic targets) for the host to judge — no model call (ADR-0001).',
+  },
+  args: {
+    wi: { type: 'string', description: 'Work item id (wi_*)' },
+  },
+  run: async ({ args }) => {
+    if (!args.wi) {
+      writeError('prism opponent-briefs requires --wi <wi_*>');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new PrismStore(repoRoot);
+    try {
+      if (!(await store.exists(args.wi))) {
+        writeError(`prism opponent-briefs: no issue map for ${args.wi} — seed one first`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const prism = await store.getMap(args.wi);
+      const intent = (await readOriginalIntent(repoRoot, args.wi)) ?? '';
+      const fragments = await readIntentFragments(repoRoot, args.wi);
+      const target = (nodeId: string) => ({
+        node_id: nodeId,
+        label: briefTargetLabel(prism, nodeId),
+        intent,
+      });
+      writeJson({
+        work_item_id: args.wi,
+        // ac-5 critique: the A2-flagged critical nodes (unevaluated ∧ critical).
+        critique_targets: flaggedCriticalNodeIds(prism).map(target),
+        // ac-6 dissent: the tree root — the original-intent frame.
+        dissent_anchor: target(prism.tree.root_id),
+        // A1 semantic: the covered (fragment,node) pairs, carrying the mapped fragment.
+        semantic_targets: semanticCriticTargets(prism, fragments).map((m) => ({
+          ...target(m.node_id),
+          fragment_id: m.fragment_id,
+        })),
+      });
+    } catch (err) {
+      writeError(
+        `prism opponent-briefs failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/** The concern→record-primitive routing (per-surface, mirrors the seam's own record-back). */
+function recordVerdict(
+  prism: PrismIssueMap,
+  verdict: PrismOpponentVerdict,
+  outcome: OpponentOutcome,
+): PrismIssueMap {
+  switch (verdict.concern) {
+    case 'critique':
+      return recordOpponentCritique(prism, verdict.node_id, outcome);
+    case 'dissent':
+      return recordOpponentDissent(prism, verdict.node_id, outcome);
+    case 'semantic':
+      return recordSemanticCritique(prism, verdict.node_id, outcome);
+  }
+}
+
+/**
+ * `ditto prism opponent-record` — consume the host's verdict JSON and persist the
+ * record-back through the existing seam primitives (ADR-0001: no model call). The
+ * pass-in-JSON precedent (autopilot coverage-next --relevance): JSON.parse in try/catch
+ * → USAGE_ERROR, then a zod safeParse (M1), then an in-memory fold + EXACTLY ONE
+ * writeMap (OBJ-2 single-writer, mirrors loop.ts).
+ *
+ * Hardening — this is the FIRST path feeding EXTERNAL node_ids into upsertEvaluation
+ * (which appends unconditionally with no tree-membership guard):
+ *  - M1: safeParse rejects a malformed payload → USAGE_ERROR, map UNCHANGED.
+ *  - M2: any verdict whose node_id ∉ tree.nodes → fail-closed, NO orphan upsert
+ *    (ADR-0018 never-silent). An empty (whitespace) text degrades to host_absent,
+ *    never a false `engaged` stamp.
+ *  - M3: echo the recorded engaged/degraded ids; with --briefed, surface the briefed
+ *    concerns that went unanswered.
+ */
+const prismOpponentRecordCommand = defineCommand({
+  meta: {
+    name: 'opponent-record',
+    description:
+      'Record host-delegated opponent verdicts (critique/dissent/semantic) into the prism map — validated + fail-closed on foreign node ids (ADR-0018).',
+  },
+  args: {
+    wi: { type: 'string', description: 'Work item id (wi_*)' },
+    json: {
+      type: 'string',
+      description: 'Verdict payload JSON {verdicts:[{concern,node_id,text}]}',
+    },
+    briefed: {
+      type: 'string',
+      description: 'Optional comma-separated briefed node ids — surfaces unanswered concerns (M3)',
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    if (!args.wi || !args.json) {
+      writeError('prism opponent-record requires --wi <wi_*> and --json <verdicts>');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    // Pass-in-JSON: parse then safeParse (M1). Either failure → USAGE_ERROR, no write.
+    let raw: unknown;
+    try {
+      raw = JSON.parse(args.json);
+    } catch (err) {
+      writeError(`--json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = prismOpponentVerdicts.safeParse(raw);
+    if (!parsed.success) {
+      writeError('--json failed schema validation:');
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new PrismStore(repoRoot);
+    try {
+      if (!(await store.exists(args.wi))) {
+        writeError(`prism opponent-record: no issue map for ${args.wi} — seed one first`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      const prism = await store.getMap(args.wi);
+      // M2: fail-closed on any verdict node_id not in the tree — NEVER upsert an orphan
+      // evaluation the tree render can't show (ADR-0018 never-silent verdict loss).
+      const known = new Set(prism.tree.nodes.map((n) => n.id));
+      const foreign = parsed.data.verdicts.map((v) => v.node_id).filter((id) => !known.has(id));
+      if (foreign.length > 0) {
+        writeError(
+          `prism opponent-record: verdict node_id(s) absent from tree — refusing orphan record (ADR-0018): ${[...new Set(foreign)].join(', ')}`,
+        );
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      // In-memory fold: an empty (whitespace) text degrades to host_absent (M2) — never a
+      // false engaged stamp. Then EXACTLY ONE writeMap (OBJ-2 single-writer).
+      let next = prism;
+      const engaged: string[] = [];
+      const degraded: string[] = [];
+      for (const v of parsed.data.verdicts) {
+        const outcome: OpponentOutcome =
+          v.text.trim().length > 0
+            ? { status: 'engaged', text: v.text }
+            : { status: 'host_absent' };
+        next = recordVerdict(next, v, outcome);
+        (outcome.status === 'engaged' ? engaged : degraded).push(v.node_id);
+      }
+      await store.writeMap(next);
+      // M3: surface briefed-but-unanswered concerns when the briefed set is supplied.
+      const briefed = (args.briefed ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      const answered = new Set(parsed.data.verdicts.map((v) => v.node_id));
+      const unanswered = briefed.filter((id) => !answered.has(id));
+      if (format === 'json') {
+        writeJson({ work_item_id: args.wi, engaged, degraded, unanswered });
+        return;
+      }
+      writeHuman(`opponent-record: ${engaged.length}건 기록(engaged), ${degraded.length}건 강등.`);
+      if (engaged.length > 0) writeHuman(`  engaged: ${engaged.join(', ')}`);
+      if (degraded.length > 0) writeHuman(`  degraded(host_absent): ${degraded.join(', ')}`);
+      if (unanswered.length > 0) {
+        writeHuman(`  브리핑됐으나 미응답: ${unanswered.join(', ')}`);
+      }
+    } catch (err) {
+      writeError(
+        `prism opponent-record failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 /**
  * `ditto prism doc` — emit the human-readable `.ditto/specs` design document from a refined
  * design-doc payload (JSON), through the fail-closed gate (`emitDesignDoc`): containment on the
@@ -1111,6 +1332,8 @@ export const prismCommand = defineCommand({
     status: prismStatusCommand,
     tree: prismTreeCommand,
     opponent: prismOpponentCommand,
+    'opponent-briefs': prismOpponentBriefsCommand,
+    'opponent-record': prismOpponentRecordCommand,
     doc: prismDocCommand,
     backlog: prismBacklogCommand,
   },
