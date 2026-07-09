@@ -1,0 +1,59 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708faa",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "f13167688a32da5fd6c6814e08ef6b2d79ba315bb37100587ca90a954fc2fc37",
+  "ts": "2026-07-09T00:42:35.408Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260708faa/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/prism-cli.test.ts tests/integration/prism-opponent-orchestration.test.ts",
+        "summary": "driver fresh re-run → 29 pass/0 fail, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "git diff --stat",
+        "summary": "5 files, 481 insertions, only planned change surface (prism.ts/schemas/prism.ts/SKILL.md/prism-cli.test.ts + new integration test)"
+      },
+      {
+        "kind": "file",
+        "path": "src/cli/commands/prism.ts",
+        "lines": {
+          "start": 989,
+          "end": 1046
+        },
+        "summary": "M1 safeParse:989; M2 foreign fail-closed:1007-1017; single writeMap:1029; M3 echo/unanswered:1030-1046"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/prism-cli.test.ts tests/integration/prism-opponent-orchestration.test.ts",
+        "summary": "exit 0, 29 pass/0 fail"
+      },
+      {
+        "kind": "command",
+        "command": "git diff --stat -- src/core/prism/opponent.ts",
+        "summary": "EMPTY — ac-4 seam untouched"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/prism-opponent.test.ts",
+        "summary": "exit 0, 16 pass/0 fail — seam regress-free"
+      },
+      {
+        "kind": "command",
+        "command": "bun run build:bin",
+        "summary": "exit 0 — bin/ditto rebuilt (402 modules)"
+      }
+    ]
+  }
+}
