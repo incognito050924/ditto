@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709e4c",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "a0fc02c8ec3d824cdf60a8a986da6d85a46ad79d133acf866acdccb9d219f5b9",
+  "ts": "2026-07-09T08:35:11.159Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "python3 -c s=open('.ditto/work-items/wi_260709e4c/dissent-localization-measurement.md').read(); assert '현행 critical-only 유지' in s and '변경하지 않는다' in s and 'revise=5' in s, 'decision/citation missing'; print('ac-3 ok: keep-decision cites distribution, no code change')",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709e4c",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "08e5f9704857af70262add8df551b66b1101d792f882619b5077708d20a420ce",
+  "ts": "2026-07-09T08:35:11.050Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "python3 -c s=open('.ditto/work-items/wi_260709e4c/dissent-localization-measurement.md').read(); assert 'revise=5, accept=0, reject=0' in s and 'high=3, low=2' in s, 'distribution missing'; assert s.count('| revise |')>=5, 'need 5 data rows'; print('ac-2 ok: 5 data points + distribution recorded')",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
