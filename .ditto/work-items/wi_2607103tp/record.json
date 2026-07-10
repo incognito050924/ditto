@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607103tp",
+  "title": "bug: phantom-red 게이트 언어-중립화 (ac-3 Part A만) — 새 세션 deep-interview로 착수. dialectic-review verdict=revise 수렴 설계(자체완결). 결함 2건: (1) 커플링/false-BLOCK — autopilot-loop.ts:2462가 bun test <path>를 사용자 파일에 실행 → 비-",
+  "source_request": "Discovered while working on wi_2607105qy: phantom-red 게이트 언어-중립화 (ac-3 Part A만) — 새 세션 deep-interview로 착수. dialectic-review verdict=revise 수렴 설계(자체완결). 결함 2건: (1) 커플링/false-BLOCK — autopilot-loop.ts:2462가 bun test <path>를 사용자 파일에 실행 → 비-bun 파일에 bun exit-0이면 classifyAuthoredRed=ran_green→BLOCK, 출력이 LOAD_ERROR_MARKERS 충돌하면 compile_import_red→BLOCK (Opponent 실행확인: go 단일 _test.go는 sibling impl 없어 build-fail→BLOCK). '항상 조용히 degrade'는 오진, 실제는 잘못된 차단. (2) degrade가 완료 verdict를 floor 안 함 — phantom-red degrade는 node outcome 미변경(loop:2467)인데 배리어는 degrade 시 final_verdict를 floor(autopilot-complete.ts:388) → 비-bun 스택서 ac-3가 미검증인데 pass로 닫힘(false-green). 최소수정(분류 프레임워크 B1/B2/B3 전부 기각 — speculative+go/rust false-block): M1 runOne을 barrier_test_command 러너에서 파생 주입(파생 불가할 때만 authored_test_command 신설, 4번째 필드 중복 회피), ditto 자기 bun 기본값은 ditto recipe.yaml로 이동, 부재→degrade. M2 분류 설정 없음 — 단일 exit-code로 임의 러너 assertion↔compile 분리 불가 인정, bun 마커 유지·나머지 러너 indeterminate→degrade(never block). M3(핵심) degrade가 unverified[] 주입해 final_verdict floor(testBarrierUnverified 미러), opt-out 대칭. M4 visible 마커는 M3 floor에 종속. ac-3 불변식 재정의: 'definite phantom은 절대 degrade로 약화 안 됨'(이미 성립·test-runner.ts:109-111) AND 'vet불가/부재 러너는 degrade+floor, 조용한 pass 아님'. 범위: ac-3 Part A만(Part B frozen 무결성은 이미 언어-중립·해당없음). 재-close 전 ≥2 스택 fixture 필수(단일-스택 fixture가 70→3 회귀 가린 선례): (a) bun block-on-phantom+present-on-real-red, (b) 패키지단위 비-bun(go/rust) degrade 안전(false-block 없음)+floor, (c) 커플링 회귀 no-false-block. 열린 결정: ①코어 bun 기본값 제거 후 ditto recipe.yaml 이전이 자기 phantom-red 회귀 없음 증명 ②opt-out 플래그 barrier_opt_out 재사용 vs 전용 신설(기본=전용). 출처=wi_2607105qy done 후 사용자 지적(dogfood-only 아닌 사용자 프로젝트 적합)→dialectic 3역할 검토.",
+  "goal": "Fix: phantom-red 게이트 언어-중립화 (ac-3 Part A만) — 새 세션 deep-interview로 착수. dialectic-review verdict=revise 수렴 설계(자체완결). 결함 2건: (1) 커플링/false-BLOCK — autopilot-loop.ts:2462가 bun test <path>를 사용자 파일에 실행 → 비-bun 파일에 bun exit-0이면 classifyAuthoredRed=ran_green→BLOCK, 출력이 LOAD_ERROR_MARKERS 충돌하면 compile_import_red→BLOCK (Opponent 실행확인: go 단일 _test.go는 sibling impl 없어 build-fail→BLOCK). '항상 조용히 degrade'는 오진, 실제는 잘못된 차단. (2) degrade가 완료 verdict를 floor 안 함 — phantom-red degrade는 node outcome 미변경(loop:2467)인데 배리어는 degrade 시 final_verdict를 floor(autopilot-complete.ts:388) → 비-bun 스택서 ac-3가 미검증인데 pass로 닫힘(false-green). 최소수정(분류 프레임워크 B1/B2/B3 전부 기각 — speculative+go/rust false-block): M1 runOne을 barrier_test_command 러너에서 파생 주입(파생 불가할 때만 authored_test_command 신설, 4번째 필드 중복 회피), ditto 자기 bun 기본값은 ditto recipe.yaml로 이동, 부재→degrade. M2 분류 설정 없음 — 단일 exit-code로 임의 러너 assertion↔compile 분리 불가 인정, bun 마커 유지·나머지 러너 indeterminate→degrade(never block). M3(핵심) degrade가 unverified[] 주입해 final_verdict floor(testBarrierUnverified 미러), opt-out 대칭. M4 visible 마커는 M3 floor에 종속. ac-3 불변식 재정의: 'definite phantom은 절대 degrade로 약화 안 됨'(이미 성립·test-runner.ts:109-111) AND 'vet불가/부재 러너는 degrade+floor, 조용한 pass 아님'. 범위: ac-3 Part A만(Part B frozen 무결성은 이미 언어-중립·해당없음). 재-close 전 ≥2 스택 fixture 필수(단일-스택 fixture가 70→3 회귀 가린 선례): (a) bun block-on-phantom+present-on-real-red, (b) 패키지단위 비-bun(go/rust) degrade 안전(false-block 없음)+floor, (c) 커플링 회귀 no-false-block. 열린 결정: ①코어 bun 기본값 제거 후 ditto recipe.yaml 이전이 자기 phantom-red 회귀 없음 증명 ②opt-out 플래그 barrier_opt_out 재사용 vs 전용 신설(기본=전용). 출처=wi_2607105qy done 후 사용자 지적(dogfood-only 아닌 사용자 프로젝트 적합)→dialectic 3역할 검토.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "discovered_by": "wi_2607105qy",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-10T19:04:55.066Z",
+  "updated_at": "2026-07-10T19:04:55.066Z"
+}
