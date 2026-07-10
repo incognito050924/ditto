@@ -380,8 +380,13 @@ export function buildIntentFragments(intent: {
   return fragments;
 }
 
-/** Distinctive tokens of a fragment — whitespace/punct-split words of length ≥ 2. */
-function fragmentKeywords(text: string): string[] {
+/**
+ * Distinctive tokens of a fragment — whitespace/punct-split words of length ≥ 2.
+ * Exported so the deep-interview intent-layer semantic critic (wi_260709hzg, #15) reuses
+ * the SAME tokenizer — the wi_260708jnp whole-token-match lesson lives here, and re-deriving
+ * it would fork that lesson. The intent-layer mapper does whole-token membership on this set.
+ */
+export function fragmentKeywords(text: string): string[] {
   return text
     .split(/[\s,.;:!?·—…()[\]{}"'`/\\]+/)
     .map((t) => t.trim())

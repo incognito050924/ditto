@@ -37166,6 +37166,13 @@ var interviewDissentVerdict = exports_external.object({
 var interviewDissentVerdicts = exports_external.object({
   verdicts: exports_external.array(interviewDissentVerdict).min(1).describe("The intent-dissent verdicts to record (at least one)")
 }).describe("The --json payload for `ditto deep-interview dissent-record`");
+var interviewSemanticVerdict = exports_external.object({
+  dimension_id: exports_external.string().min(1).describe("The covered dimension this critique is recorded on"),
+  text: exports_external.string().min(1).describe("The achieve-vs-characterize judgment (host-produced, ADR-0001)")
+}).describe("One host-delegated A1 semantic-critic verdict consumed by semantic-record");
+var interviewSemanticVerdicts = exports_external.object({
+  verdicts: exports_external.array(interviewSemanticVerdict).min(1).describe("The A1 semantic-critic verdicts to record (at least one)")
+}).describe("The --json payload for `ditto deep-interview semantic-record`");
 var interviewDimension = exports_external.object({
   id: exports_external.string().min(1),
   critical: exports_external.boolean().default(false),
@@ -37173,7 +37180,9 @@ var interviewDimension = exports_external.object({
   ambiguity: exports_external.number().min(0).max(1),
   resolved_by: exports_external.array(exports_external.string()).default([]),
   notes: exports_external.string().default(""),
-  dissent: interviewDissent.optional()
+  dissent: interviewDissent.optional(),
+  semantic_status: exports_external.enum(["engaged", "host_absent"]).optional().describe("A1 semantic-critic seam status; host_absent on degrade (ADR-0018), advisory"),
+  semantic_critique: exports_external.string().optional().describe("A1 achieve-vs-characterize judgment on a covered (fragment,dimension) pair")
 }).describe("One ambiguity dimension tracked during the interview");
 var interviewQuestion = exports_external.object({
   id: exports_external.string().min(1),
@@ -38319,6 +38328,69 @@ async function recordPremortemRefutation(repoRoot, workItemId2, verdicts, now) {
   });
   return { status: "recorded", state: written, engaged, degraded };
 }
+function deriveIntentFragments(intentText) {
+  return intentText.split(/[\n.;!?]+/).map((s2) => s2.trim()).filter((s2) => s2.length > 0).map((text, i2) => ({ id: `frag[${i2}]`, text }));
+}
+function deriveDimensionMappings(fragments, dimensions) {
+  const dimTokens = dimensions.filter((d2) => d2.state === "resolved").map((d2) => ({ id: d2.id, tokens: new Set(fragmentKeywords(d2.notes)) }));
+  const mappings = [];
+  for (const frag of fragments) {
+    const keywords = fragmentKeywords(frag.text);
+    if (keywords.length === 0)
+      continue;
+    for (const dim of dimTokens) {
+      if (keywords.some((kw) => dim.tokens.has(kw))) {
+        mappings.push({ fragment_id: frag.id, dimension_id: dim.id });
+      }
+    }
+  }
+  return mappings;
+}
+function selectIntentSemanticTargets(fragments, dimensions, cap = OPPONENT_FANOUT_CAP) {
+  const byId = new Map(dimensions.map((d2) => [d2.id, d2]));
+  const mappings = deriveDimensionMappings(fragments, dimensions);
+  const fragText = new Map(fragments.map((f3) => [f3.id, f3.text]));
+  const all = mappings.map((m2) => ({
+    fragment_id: m2.fragment_id,
+    fragment_text: fragText.get(m2.fragment_id) ?? "",
+    dimension_id: m2.dimension_id,
+    label: byId.get(m2.dimension_id)?.notes || m2.dimension_id
+  }));
+  return { targets: all.slice(0, cap), skipped_by_cap: Math.max(0, all.length - cap) };
+}
+async function recordIntentSemanticCritique(repoRoot, workItemId2, verdicts, now) {
+  const store = new InterviewStore(repoRoot);
+  const state = await store.get(workItemId2);
+  const byId = new Map(state.dimensions.map((d2) => [d2.id, d2]));
+  const foreign = [...new Set(verdicts.map((v2) => v2.dimension_id).filter((id) => !byId.has(id)))];
+  if (foreign.length > 0) {
+    return { status: "foreign", foreign };
+  }
+  const updates = new Map;
+  const engaged = [];
+  const degraded = [];
+  for (const v2 of verdicts) {
+    if (v2.text.trim().length > 0) {
+      updates.set(v2.dimension_id, {
+        semantic_status: "engaged",
+        semantic_critique: v2.text.trim()
+      });
+      engaged.push(v2.dimension_id);
+    } else {
+      updates.set(v2.dimension_id, { semantic_status: "host_absent" });
+      degraded.push(v2.dimension_id);
+    }
+  }
+  const written = await store.write({
+    ...state,
+    updated_at: (now ?? new Date).toISOString(),
+    dimensions: state.dimensions.map((d2) => {
+      const u3 = updates.get(d2.id);
+      return u3 !== undefined ? { ...d2, ...u3 } : d2;
+    })
+  });
+  return { status: "recorded", state: written, engaged, degraded };
+}
 
 // src/core/prism/finalize.ts
 import { readFile as readFile12 } from "fs/promises";
@@ -39173,6 +39245,116 @@ var dissentBriefsCmd = defineCommand({
     }
   }
 });
+var semanticTargetsCmd = defineCommand({
+  meta: {
+    name: "semantic-targets",
+    description: "Emit A1 achieve-vs-characterize critic targets for covered (fragment,dimension) pairs \u2014 no model call, capped (ADR-0001)."
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const state = await new InterviewStore(repoRoot).get(args.workItem);
+      const intent = await readWorkItemIntent(repoRoot, args.workItem);
+      const fragments = deriveIntentFragments(intent);
+      const { targets, skipped_by_cap } = selectIntentSemanticTargets(fragments, state.dimensions);
+      if (format === "json") {
+        writeJson2({
+          work_item_id: args.workItem,
+          intent,
+          semantic_targets: targets,
+          skipped_by_cap
+        });
+      } else {
+        writeHuman(`semantic-targets: ${targets.length} covered pair(s) for ${args.workItem}${skipped_by_cap > 0 ? ` (+${skipped_by_cap} over cap)` : ""}`);
+        for (const t2 of targets)
+          writeHuman(`  - [${t2.dimension_id}] ${t2.label} \u21D0 ${t2.fragment_id}`);
+      }
+    } catch (err) {
+      writeError(`semantic-targets failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+var semanticRecordCmd = defineCommand({
+  meta: {
+    name: "semantic-record",
+    description: "Record host-delegated A1 semantic critiques onto covered dimensions (advisory, non-blocking) \u2014 validated + fail-closed on foreign dimension ids (ADR-0018)."
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    json: {
+      type: "string",
+      description: "Verdict payload JSON {verdicts:[{dimension_id,text}]}",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw;
+    try {
+      raw = parseJsonArg(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = interviewSemanticVerdicts.safeParse(raw);
+    if (!parsed.success) {
+      writeError("--json failed schema validation:");
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const result2 = await recordIntentSemanticCritique(repoRoot, args.workItem, parsed.data.verdicts);
+      if (result2.status === "foreign") {
+        writeError(`semantic-record: verdict dimension_id(s) absent from interview state \u2014 refusing orphan critique (ADR-0018): ${result2.foreign.join(", ")}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (format === "json") {
+        writeJson2({
+          work_item_id: args.workItem,
+          engaged: result2.engaged,
+          degraded: result2.degraded
+        });
+        return;
+      }
+      writeHuman(`semantic-record: ${result2.engaged.length}\uAC74 \uAE30\uB85D(engaged), ${result2.degraded.length}\uAC74 \uAC15\uB4F1. (advisory \u2014 finalize \uBE44\uCC28\uB2E8)`);
+      if (result2.engaged.length > 0)
+        writeHuman(`  engaged: ${result2.engaged.join(", ")}`);
+      if (result2.degraded.length > 0) {
+        writeHuman(`  degraded(host_absent): ${result2.degraded.join(", ")}`);
+      }
+    } catch (err) {
+      writeError(`semantic-record failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var dissentRecordCmd = defineCommand({
   meta: {
     name: "dissent-record",
@@ -39463,6 +39645,8 @@ var deepInterviewCommand = defineCommand({
     "dissent-briefs": dissentBriefsCmd,
     "dissent-record": dissentRecordCmd,
     "premortem-refute-record": premortemRefuteRecordCmd,
+    "semantic-targets": semanticTargetsCmd,
+    "semantic-record": semanticRecordCmd,
     "acknowledge-dissent": acknowledgeDissentCmd,
     finalize: finalizeCmd,
     "finalize-from-doc": finalizeFromDocCmd
@@ -56071,4 +56255,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=356f0f39f0fa1edfa68f08f02a10b1094dff8cf7ab3b1ea72b9a77eaab51d753
+//# ditto-src-stamp=b18eb6dbea729dc87663e670fc727fc4e17ba074c200f724b6326a421d2b77a5
