@@ -1,0 +1,32 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607105au",
+  "title": "coverage taxonomy에 autonomy-liveness 카테고리 추가 (#19 follow-up)",
+  "source_request": "wi_260710tjd 완전성-critic 제안: 무인 autopilot 루프의 progress/liveness 렌즈를 far-field 카테고리로 추가",
+  "goal": "coverage taxonomy에 autonomy-liveness 카테고리 추가 (#19 follow-up)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "`ditto coverage list --output json`의 entries 배열에 id='autonomy-liveness'인 항목이 정확히 1개 존재하고 그 lens 필드 길이가 0보다 크다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c ./bin/ditto coverage list --output json | python3 -c \"import sys,json; e=[x for x in json.load(sys.stdin)['entries'] if x['id']=='autonomy-liveness']; assert len(e)==1 and len(e[0]['lens'])>0; print('ac-1 OK: 1 autonomy-liveness, lens', len(e[0]['lens']))\"",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "follows": "wi_260710tjd",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-10T13:28:02.743Z",
+  "updated_at": "2026-07-10T13:28:35.388Z",
+  "closed_at": "2026-07-10T13:28:35.387Z"
+}

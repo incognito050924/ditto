@@ -1,0 +1,9 @@
+{
+  "added": [
+    {
+      "id": "autonomy-liveness",
+      "lens": "무인(unattended) autopilot 루프가 이 변경 뒤에도 항상 자력으로 terminal 상태에 도달하는가 — 새/강화된 완료·종료 게이트가 monotonically 'block'으로 굳어 livelock·deadlock(무한 no-progress park)에 빠지거나, 그 대안으로 절차 결정을 사용자에게 떠넘겨(transference·no-auto-pick 위반) 종료하지는 않는가? (concurrency-ordering의 safety가 아니라 progress/liveness + 자율 경계)",
+      "disposition": "code-verify"
+    }
+  ]
+}
