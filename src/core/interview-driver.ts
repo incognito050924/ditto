@@ -3,6 +3,7 @@ import type { Autopilot } from '~/schemas/autopilot';
 import type { CoverageMap } from '~/schemas/coverage';
 import { type IntentContract, intentAcceptanceCriterion } from '~/schemas/intent';
 import {
+  type InterviewDimension,
   type InterviewDissent,
   type InterviewState,
   type PremortemItem,
@@ -23,7 +24,8 @@ import { type GateResult, type RiskAxes, deriveClosureMode, interviewReadinessGa
 import { IntentStore } from './intent-store';
 import { engageIntentDissent, mergeDissent } from './interview-dissent';
 import { InterviewStore } from './interview-store';
-import type { OpponentSeamConfig } from './prism/opponent';
+import { type IntentFragment, fragmentKeywords } from './prism/engine';
+import { OPPONENT_FANOUT_CAP, type OpponentSeamConfig } from './prism/opponent';
 import { WorkItemStore } from './work-item-store';
 
 /**
@@ -965,6 +967,151 @@ export async function recordPremortemRefutation(
     premortem: state.premortem.map((item, i) => {
       const u = updates.get(i);
       return u !== undefined ? { ...item, refutation: u } : item;
+    }),
+  });
+  return { status: 'recorded', state: written, engaged, degraded };
+}
+
+// ── A1 achieve-vs-characterize semantic critic (intent layer, wi_260709hzg #15) ──
+//
+// Port of prism's A1 (src/core/prism/opponent.ts engageSemanticCritique + engine.ts
+// deriveFragmentMappings) from the RISK/plan layer to the INTENT layer. Two deterministic
+// primitives here (fragment decomposition + fragment↔dimension mapping) feed the host, which
+// runs the model critic per covered pair; the verdict folds back via
+// {@link recordIntentSemanticCritique}. ADVISORY and NON-blocking — the readiness gate
+// (gates.ts interviewReadinessGate) never reads `dimension.semantic_*`, so a `characterize`
+// verdict surfaces the intent-fulfilment gap without hard-blocking the loop (prism A1 alike).
+
+/**
+ * Split the original intent text (WI Record source_request / goal) into deterministic clause
+ * fragments with stable ids (`frag[0]`, `frag[1]`, …). Splits on newlines and sentence
+ * terminators; blank clauses are dropped (a blank fragment can never be "achieved" by a
+ * dimension). Pure — the intent-layer analogue of prism's `buildIntentFragments`, which
+ * decomposes structured {goal, in_scope}; here the interview-time intent is a single free-text
+ * request, so we clause-split it instead.
+ */
+export function deriveIntentFragments(intentText: string): IntentFragment[] {
+  return intentText
+    .split(/[\n.;!?]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((text, i) => ({ id: `frag[${i}]`, text }));
+}
+
+/** One covered (fragment, dimension) pair — the intent-layer twin of prism's FragmentMapping. */
+export interface DimensionMapping {
+  fragment_id: string;
+  dimension_id: string;
+}
+
+/**
+ * Deterministic fragment↔dimension mapping (no model call). A fragment maps to a RESOLVED
+ * dimension when a distinctive keyword of the fragment appears as a WHOLE TOKEN of the
+ * dimension's `notes` — reusing prism's exact {@link fragmentKeywords} tokenizer so the
+ * wi_260708jnp whole-token lesson (a keyword must not match a word-INTERNAL substring, e.g.
+ * `core` in `score`) is honored, not re-derived. Only `resolved` dimensions are covered — an
+ * open/partial dimension has no achieve-vs-characterize claim to critique yet. Pure.
+ */
+export function deriveDimensionMappings(
+  fragments: readonly IntentFragment[],
+  dimensions: readonly InterviewDimension[],
+): DimensionMapping[] {
+  const dimTokens = dimensions
+    .filter((d) => d.state === 'resolved')
+    .map((d) => ({ id: d.id, tokens: new Set(fragmentKeywords(d.notes)) }));
+  const mappings: DimensionMapping[] = [];
+  for (const frag of fragments) {
+    const keywords = fragmentKeywords(frag.text);
+    if (keywords.length === 0) continue;
+    for (const dim of dimTokens) {
+      if (keywords.some((kw) => dim.tokens.has(kw))) {
+        mappings.push({ fragment_id: frag.id, dimension_id: dim.id });
+      }
+    }
+  }
+  return mappings;
+}
+
+/** One target the host critiques — a covered pair carrying the fragment text + dimension label. */
+export interface IntentSemanticTarget {
+  fragment_id: string;
+  fragment_text: string;
+  dimension_id: string;
+  label: string;
+}
+
+/**
+ * Select the covered (fragment, dimension) pairs to critique this run, applying the per-run
+ * {@link OPPONENT_FANOUT_CAP} ceiling (reused so intent-layer cost stays bounded exactly like
+ * prism's A1). Returns the capped targets + the count left for a later run. Pure.
+ */
+export function selectIntentSemanticTargets(
+  fragments: readonly IntentFragment[],
+  dimensions: readonly InterviewDimension[],
+  cap: number = OPPONENT_FANOUT_CAP,
+): { targets: IntentSemanticTarget[]; skipped_by_cap: number } {
+  const byId = new Map(dimensions.map((d) => [d.id, d]));
+  const mappings = deriveDimensionMappings(fragments, dimensions);
+  const fragText = new Map(fragments.map((f) => [f.id, f.text]));
+  const all = mappings.map((m) => ({
+    fragment_id: m.fragment_id,
+    fragment_text: fragText.get(m.fragment_id) ?? '',
+    dimension_id: m.dimension_id,
+    label: byId.get(m.dimension_id)?.notes || m.dimension_id,
+  }));
+  return { targets: all.slice(0, cap), skipped_by_cap: Math.max(0, all.length - cap) };
+}
+
+/**
+ * Record host-delegated A1 semantic-critic verdicts onto interview-state (wi_260709hzg #15).
+ * The `semantic-record` CLI's record-back primitive — mirrors {@link recordIntentDissent} but
+ * writes the SEPARATE advisory `semantic_status`/`semantic_critique` fields (never `dissent`,
+ * so per-seam degrade attribution stays clean). A non-empty (trimmed) text → `engaged`; a
+ * whitespace-only text → `host_absent` (ADR-0018, never a false engaged stamp). Fail-closed:
+ * any verdict whose `dimension_id` ∉ state.dimensions returns `{status:'foreign'}` and writes
+ * NOTHING. EXACTLY ONE write (single-writer). ADVISORY — nothing this writes gates finalize.
+ */
+export type RecordIntentSemanticResult =
+  | { status: 'recorded'; state: InterviewState; engaged: string[]; degraded: string[] }
+  | { status: 'foreign'; foreign: string[] };
+
+export async function recordIntentSemanticCritique(
+  repoRoot: string,
+  workItemId: string,
+  verdicts: Array<{ dimension_id: string; text: string }>,
+  now?: Date,
+): Promise<RecordIntentSemanticResult> {
+  const store = new InterviewStore(repoRoot);
+  const state = await store.get(workItemId);
+  const byId = new Map(state.dimensions.map((d) => [d.id, d]));
+  const foreign = [...new Set(verdicts.map((v) => v.dimension_id).filter((id) => !byId.has(id)))];
+  if (foreign.length > 0) {
+    return { status: 'foreign', foreign };
+  }
+  const updates = new Map<
+    string,
+    Pick<InterviewDimension, 'semantic_status' | 'semantic_critique'>
+  >();
+  const engaged: string[] = [];
+  const degraded: string[] = [];
+  for (const v of verdicts) {
+    if (v.text.trim().length > 0) {
+      updates.set(v.dimension_id, {
+        semantic_status: 'engaged',
+        semantic_critique: v.text.trim(),
+      });
+      engaged.push(v.dimension_id);
+    } else {
+      updates.set(v.dimension_id, { semantic_status: 'host_absent' });
+      degraded.push(v.dimension_id);
+    }
+  }
+  const written = await store.write({
+    ...state,
+    updated_at: (now ?? new Date()).toISOString(),
+    dimensions: state.dimensions.map((d) => {
+      const u = updates.get(d.id);
+      return u !== undefined ? { ...d, ...u } : d;
     }),
   });
   return { status: 'recorded', state: written, engaged, degraded };

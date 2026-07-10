@@ -4,15 +4,18 @@ import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   acknowledgeIntentDissent,
   checkReadiness,
+  deriveIntentFragments,
   finalizeInterview,
   finalizePayload,
   projectInterviewDimensions,
   promotePremortem,
   promotePremortemPayload,
   recordIntentDissent,
+  recordIntentSemanticCritique,
   recordPremortemRefutation,
   recordTurn,
   recordTurnPayload,
+  selectIntentSemanticTargets,
   startInterview,
 } from '~/core/interview-driver';
 import { InterviewStore } from '~/core/interview-store';
@@ -20,7 +23,11 @@ import { finalizeFromDesignDoc } from '~/core/prism/finalize';
 import type { OpponentSeamConfig } from '~/core/prism/opponent';
 import { questionContextCandidate, validateQuestionContext } from '~/core/question-context';
 import { WorkItemStore } from '~/core/work-item-store';
-import { interviewDissentVerdicts, premortemRefutationVerdicts } from '~/schemas/interview-state';
+import {
+  interviewDissentVerdicts,
+  interviewSemanticVerdicts,
+  premortemRefutationVerdicts,
+} from '~/schemas/interview-state';
 import {
   RUNTIME_ERROR_EXIT,
   USAGE_ERROR_EXIT,
@@ -667,6 +674,141 @@ const dissentBriefsCmd = defineCommand({
   },
 });
 
+// wi_260709hzg (#15): A1 semantic-critic targets — the deterministic HALF of the intent-layer
+// achieve-vs-characterize critic (mirror of `dissent-briefs`). Decomposes the ORIGINAL intent
+// (WI Record) into fragments, maps each RESOLVED dimension by whole-token match (fragmentKeywords,
+// wi_260708jnp lesson), and emits the covered (fragment,dimension) pairs — capped at FANOUT_CAP.
+// NO model call (ADR-0001); the host spawns a semantic critic per pair and feeds verdicts back
+// through `semantic-record`. ADVISORY only — nothing here gates readiness/finalize.
+const semanticTargetsCmd = defineCommand({
+  meta: {
+    name: 'semantic-targets',
+    description:
+      'Emit A1 achieve-vs-characterize critic targets for covered (fragment,dimension) pairs — no model call, capped (ADR-0001).',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const state = await new InterviewStore(repoRoot).get(args.workItem);
+      const intent = await readWorkItemIntent(repoRoot, args.workItem);
+      const fragments = deriveIntentFragments(intent);
+      const { targets, skipped_by_cap } = selectIntentSemanticTargets(fragments, state.dimensions);
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.workItem,
+          intent,
+          semantic_targets: targets,
+          skipped_by_cap,
+        });
+      } else {
+        writeHuman(
+          `semantic-targets: ${targets.length} covered pair(s) for ${args.workItem}${skipped_by_cap > 0 ? ` (+${skipped_by_cap} over cap)` : ''}`,
+        );
+        for (const t of targets)
+          writeHuman(`  - [${t.dimension_id}] ${t.label} ⇐ ${t.fragment_id}`);
+      }
+    } catch (err) {
+      writeError(`semantic-targets failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+// wi_260709hzg (#15): consume the host's A1 semantic-critic verdict JSON and persist the
+// record-back onto the SEPARATE advisory `dimension.semantic_*` fields — mirror of
+// `dissent-record`. Pass-in-JSON: JSON.parse→USAGE_ERROR, zod safeParse, then the driver's
+// single-write fold (recordIntentSemanticCritique). Fail-closed: a verdict whose dimension_id ∉
+// the interview dimensions is REJECTED (never an orphan critique); an empty (whitespace) text
+// degrades to host_absent (ADR-0018). ADVISORY — this NEVER blocks finalize (non-blocking A1).
+const semanticRecordCmd = defineCommand({
+  meta: {
+    name: 'semantic-record',
+    description:
+      'Record host-delegated A1 semantic critiques onto covered dimensions (advisory, non-blocking) — validated + fail-closed on foreign dimension ids (ADR-0018).',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    json: {
+      type: 'string',
+      description: 'Verdict payload JSON {verdicts:[{dimension_id,text}]}',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw: unknown;
+    try {
+      raw = parseJsonArg(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = interviewSemanticVerdicts.safeParse(raw);
+    if (!parsed.success) {
+      writeError('--json failed schema validation:');
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const result = await recordIntentSemanticCritique(
+        repoRoot,
+        args.workItem,
+        parsed.data.verdicts,
+      );
+      if (result.status === 'foreign') {
+        writeError(
+          `semantic-record: verdict dimension_id(s) absent from interview state — refusing orphan critique (ADR-0018): ${result.foreign.join(', ')}`,
+        );
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.workItem,
+          engaged: result.engaged,
+          degraded: result.degraded,
+        });
+        return;
+      }
+      writeHuman(
+        `semantic-record: ${result.engaged.length}건 기록(engaged), ${result.degraded.length}건 강등. (advisory — finalize 비차단)`,
+      );
+      if (result.engaged.length > 0) writeHuman(`  engaged: ${result.engaged.join(', ')}`);
+      if (result.degraded.length > 0) {
+        writeHuman(`  degraded(host_absent): ${result.degraded.join(', ')}`);
+      }
+    } catch (err) {
+      writeError(`semantic-record failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 // wi_260709x5w: consume the host's intent-dissent verdict JSON and persist the record-back
 // onto interview-state — mirror of prism `opponent-record`. Pass-in-JSON: JSON.parse in
 // try/catch → USAGE_ERROR, then a zod safeParse (first defense), then the driver's
@@ -1001,6 +1143,8 @@ export const deepInterviewCommand = defineCommand({
     'dissent-briefs': dissentBriefsCmd,
     'dissent-record': dissentRecordCmd,
     'premortem-refute-record': premortemRefuteRecordCmd,
+    'semantic-targets': semanticTargetsCmd,
+    'semantic-record': semanticRecordCmd,
     'acknowledge-dissent': acknowledgeDissentCmd,
     finalize: finalizeCmd,
     'finalize-from-doc': finalizeFromDocCmd,

@@ -216,6 +216,40 @@ Discipline:
   is not blocked by an absent opponent) and note the degradation. Absence must not block intent
   realization — but it is never dressed up as a clean run.
 
+### 5.6 A1 achieve-vs-characterize semantic critic (advisory, NON-blocking)
+
+A dimension marked `resolved` means its question got an answer — NOT that the answer actually
+**achieves** the original intent's HOW versus only **characterizing** it. This optional pass
+surfaces that intent-fulfilment gap. It is **ADVISORY**: it writes a SEPARATE
+`dimension.semantic_*` field pair that the readiness gate and `finalize` never read, so it can
+never hard-block the loop (the intent-layer port of prism's non-blocking A1). Do NOT gate on it.
+
+```bash
+# 1) emit the covered (fragment,dimension) targets — NO model call. The intent is decomposed into
+#    fragments and mapped to RESOLVED dimensions by whole-token match (deterministic); capped:
+ditto deep-interview semantic-targets --work-item <wi> --output json
+```
+
+For each `semantic_targets[]` pair, **spawn one semantic critic** (host layer, ADR-0001) with the
+fragment text + the dimension label, asking exactly: **"Does this dimension ACHIEVE the fragment,
+or only CHARACTERIZE it?"** Carry back only the `characterize` verdicts (an `achieve` is clean —
+there is nothing to surface). Assemble the verdicts and fold them back:
+
+```bash
+# 2) record the critiques — validated + fail-closed, advisory (finalize is NOT blocked):
+ditto deep-interview semantic-record --work-item <wi> --json '{"verdicts":[{"dimension_id":"<id>","text":"<achieve-vs-characterize judgment>"}]}'
+```
+
+Discipline:
+
+- **Covered pairs only.** `semantic-targets` fires only where a fragment whole-token-matches a
+  resolved dimension's notes — the same token-match discipline as the completeness check (a
+  keyword must not match a word-internal substring). Uncovered dimensions get no critique.
+- **Advisory, never a gate.** A `characterize` verdict is a signal to reconsider whether the
+  dimension truly resolved the intent — NOT an automatic block. Readiness/finalize ignore it.
+- **Fail-closed + honest degrade.** A verdict whose `dimension_id` is not a dimension is rejected;
+  a whitespace verdict records `host_absent` (ADR-0018), never a fake `engaged`. No host → skip.
+
 ### 6. Finalize
 
 Synthesize the intent fields and lock the interview:

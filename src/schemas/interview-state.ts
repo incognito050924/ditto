@@ -72,6 +72,34 @@ export const interviewDissentVerdicts = z
 
 export type InterviewDissentVerdicts = z.infer<typeof interviewDissentVerdicts>;
 
+// Host-delegated A1 semantic-critic verdicts fed to `ditto deep-interview semantic-record`
+// (wi_260709hzg, #15 — mirrors interviewDissentVerdict). The achieve-vs-characterize judgment
+// happens in the spawned semantic-critic agent (ADR-0001); the CLI only consumes the
+// structured output. `dimension_id` targets a covered dimension; the fail-closed
+// membership guard + the whitespace-text→host_absent degrade live in the driver/CLI.
+export const interviewSemanticVerdict = z
+  .object({
+    dimension_id: z.string().min(1).describe('The covered dimension this critique is recorded on'),
+    text: z
+      .string()
+      .min(1)
+      .describe('The achieve-vs-characterize judgment (host-produced, ADR-0001)'),
+  })
+  .describe('One host-delegated A1 semantic-critic verdict consumed by semantic-record');
+
+export type InterviewSemanticVerdict = z.infer<typeof interviewSemanticVerdict>;
+
+export const interviewSemanticVerdicts = z
+  .object({
+    verdicts: z
+      .array(interviewSemanticVerdict)
+      .min(1)
+      .describe('The A1 semantic-critic verdicts to record (at least one)'),
+  })
+  .describe('The --json payload for `ditto deep-interview semantic-record`');
+
+export type InterviewSemanticVerdicts = z.infer<typeof interviewSemanticVerdicts>;
+
 export const interviewDimension = z
   .object({
     id: z.string().min(1),
@@ -83,6 +111,21 @@ export const interviewDimension = z
     // Intent-dissent record-back (wi_260709mqt). Fully optional — absent for every
     // pre-existing state and for non-critical dimensions the opponent never faces.
     dissent: interviewDissent.optional(),
+    // A1 achieve-vs-characterize semantic critic (wi_260709hzg, #15) — the intent-layer
+    // port of prism's A1. ADVISORY and NON-blocking: the readiness gate never reads these
+    // fields, so a `characterize`-only verdict surfaces the intent-fulfilment gap WITHOUT
+    // blocking the interview loop (prism A1 is likewise non-blocking). A SEPARATE field pair
+    // from `dissent` so per-seam degrade attribution never mixes. `semantic_status`
+    // distinguishes a real engaged judgment from an ADR-0018 host_absent degrade. Both
+    // optional so pre-existing state and every uncovered dimension parse unchanged.
+    semantic_status: z
+      .enum(['engaged', 'host_absent'])
+      .optional()
+      .describe('A1 semantic-critic seam status; host_absent on degrade (ADR-0018), advisory'),
+    semantic_critique: z
+      .string()
+      .optional()
+      .describe('A1 achieve-vs-characterize judgment on a covered (fragment,dimension) pair'),
   })
   .describe('One ambiguity dimension tracked during the interview');
 
