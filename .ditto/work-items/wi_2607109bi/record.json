@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607109bi",
+  "title": "bug: degraded test-barrier(barrier_test_command 부재→ADR-0018 degrade) 노드가 terminal로 전이되지 못하고 'running'에 잔류 → WI가 done인데도 Stop 훅 autopilotForcesContinuation이 거짓 'runnable node/keep going' nag. 재현: barri",
+  "source_request": "Discovered while working on wi_260710tjd: degraded test-barrier(barrier_test_command 부재→ADR-0018 degrade) 노드가 terminal로 전이되지 못하고 'running'에 잔류 → WI가 done인데도 Stop 훅 autopilotForcesContinuation이 거짓 'runnable node/keep going' nag. 재현: barrier_test_command 없는 recipe로 autopilot 완주→work done→Stop 훅이 계속 exit2. 기대: degrade한 배리어는 terminal(passed 또는 degraded-terminal)로 전이돼야 함. 범위: autopilot 배리어 degrade 경로(#19 미터치).",
+  "goal": "Fix: degraded test-barrier(barrier_test_command 부재→ADR-0018 degrade) 노드가 terminal로 전이되지 못하고 'running'에 잔류 → WI가 done인데도 Stop 훅 autopilotForcesContinuation이 거짓 'runnable node/keep going' nag. 재현: barrier_test_command 없는 recipe로 autopilot 완주→work done→Stop 훅이 계속 exit2. 기대: degrade한 배리어는 terminal(passed 또는 degraded-terminal)로 전이돼야 함. 범위: autopilot 배리어 degrade 경로(#19 미터치).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "discovered_by": "wi_260710tjd",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-10T13:37:02.875Z",
+  "updated_at": "2026-07-10T13:37:02.875Z"
+}
