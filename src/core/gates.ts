@@ -386,6 +386,49 @@ export function oracleSatisfaction(
   ]);
 }
 
+// ── frozen-test integrity (wi_2607105qy ac-3 Part B; closes the dynamic_test hole) ─
+
+/** One entry of the frozen red-test manifest committed into the approval gate's test_spec. */
+export interface FrozenTestEntry {
+  criterion_id: string;
+  test_path: string;
+  /** The content hash captured at freeze (test-author pass). Absent ⇒ unbound (degraded). */
+  frozen_hash?: string;
+}
+
+/**
+ * Frozen-test integrity (ADR-0024 freeze reuse; SAME diff = reject shape as
+ * assertOracleFrozen). After approval the authored red tests are FROZEN — the implement
+ * node may ONLY turn them green, never weaken or delete them. This binds completion to the
+ * SPECIFIC frozen test: for each BOUND entry (one carrying a `frozen_hash`), a current
+ * content hash that is MISSING (the test was deleted) or DIFFERENT (it was weakened/edited)
+ * is REJECTED — closing the vacuous-green hole where a `dynamic_test` AC would otherwise
+ * close on ANY evidence even after its proving test was gutted. An UNBOUND entry (no
+ * frozen_hash, e.g. the file was unreadable at freeze) contributes no binding and is
+ * skipped — degrade, never a false reject (ADR-0018). Pure: `currentHash(path)` is injected
+ * so the check needs no filesystem.
+ */
+export function assertFrozenTestsIntact(
+  entries: readonly FrozenTestEntry[],
+  currentHash: (test_path: string) => string | undefined,
+): GateResult {
+  const reasons: string[] = [];
+  for (const e of entries) {
+    if (e.frozen_hash === undefined) continue; // unbound — degrade, not a reject
+    const now = currentHash(e.test_path);
+    if (now === undefined) {
+      reasons.push(
+        `frozen red test ${e.test_path} (${e.criterion_id}) was DELETED — a frozen test cannot be removed, only turned green (no vacuous green)`,
+      );
+    } else if (now !== e.frozen_hash) {
+      reasons.push(
+        `frozen red test ${e.test_path} (${e.criterion_id}) was WEAKENED/changed after freeze — a frozen test cannot be edited, only turned green (no vacuous green)`,
+      );
+    }
+  }
+  return gate(reasons);
+}
+
 // ── positive per-AC attestation (ac-6; gate↔score: ONE derived-verdict input) ──
 
 /** Positive attestation state for one AC, derived ONLY from its already-derived verdict. */

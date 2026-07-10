@@ -1,0 +1,30 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607105qy",
+  "seq": 19,
+  "actor": "workspace-write",
+  "event_id": "978cd21e90257188477c4017c25d562d3fa584a6260acb88d0f6991dca8c3077",
+  "ts": "2026-07-10T18:33:21.160Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-7",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "full suite regression: 4506 pass / 17 skip / 6 fail (6 pre-existing/unrelated; no other failure => no regression)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-approval-test-spec.test.ts tests/core/autopilot-authoring-node.test.ts tests/core/authored-red-discrimination.test.ts tests/core/frozen-test-integrity.test.ts tests/core/autopilot-approval-artifact.test.ts tests/core/intent-single-unit-invariant.test.ts tests/core/autopilot-loop.test.ts",
+        "summary": "AC tests: 143 pass / 0 fail"
+      },
+      {
+        "kind": "file",
+        "path": "agents/implementer.md",
+        "summary": "two-stage authoring/consumer model + mandated red-test background comment convention"
+      }
+    ]
+  }
+}

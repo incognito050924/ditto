@@ -1,11 +1,17 @@
-import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { collectTidyDiffStat, writeTidyClassification } from '~/acg/tidy/classifier';
 import { atomicWriteText, ensureDir, writeJson } from '~/core/fs';
 import { type Diagnostic, getDiagnostics, resolveServer } from '~/core/lsp/client';
 import { lspLanguageForPath } from '~/core/provision/lsp-detect';
-import { type Autopilot, type AutopilotNode, nodeProposal } from '~/schemas/autopilot';
+import {
+  type Autopilot,
+  type AutopilotNode,
+  nodeProposal,
+  planTestSpec,
+} from '~/schemas/autopilot';
 import { evidenceRef, relativePath, verdict } from '~/schemas/common';
 import { resolvability } from '~/schemas/completion-contract';
 import { isFarFieldEscape } from '~/schemas/coverage';
@@ -16,6 +22,12 @@ import type { Recipe } from '~/schemas/recipe';
 import { type AcOracle, type WorkItemWorktree, acOracle } from '~/schemas/work-item';
 import { ActiveNodeLeaseStore } from './active-node-lease';
 import { loadVariantCatalog, selectVariantCandidates } from './agent-variants';
+import {
+  authoredTestPaths,
+  hasAuthoredTestSpec,
+  renderApprovalArtifact,
+} from './autopilot-approval';
+import { seedTestAuthorNode } from './autopilot-bootstrap';
 import { assembleCompletionFromGraph } from './autopilot-complete';
 import {
   type ForwardTrigger,
@@ -58,6 +70,7 @@ import { assertOracleFrozen, producePlanGate, validateAcOracle } from './coverag
 import { CoverageStore } from './coverage-store';
 import { localDir } from './ditto-paths';
 import {
+  assertFrozenTestsIntact,
   decisionConflictRequiresApproval,
   highRiskAssumption,
   intentDriftGate,
@@ -82,7 +95,14 @@ import {
 } from './retro-measure';
 import { RetroMetricLedger } from './retro-metric-ledger';
 import { computeSpecDigest } from './spec-doc';
-import { type TestRunOutcome, type TestRunner, runTestCommand } from './test-runner';
+import {
+  type CaptureResult,
+  type TestRunOutcome,
+  type TestRunner,
+  captureTestCommand,
+  phantomRedGate,
+  runTestCommand,
+} from './test-runner';
 import { WorkItemStore } from './work-item-store';
 
 /**
@@ -201,7 +221,10 @@ export type NextNodeResult =
       context_pressure?: ContextPressureSignal;
       report_directive?: ReportDirective;
     }
-  | { action: 'present_plan'; reason: string }
+  // `artifact_path` (wi_2607105qy N2 ac-4/ac-6): present ONLY when the gate carries an
+  // authored test_spec — the repo-relative path of the rendered approval artifact the user
+  // opens to review the red tests before approving. Absent for a plain (no-test_spec) plan.
+  | { action: 'present_plan'; reason: string; artifact_path?: string }
   | { action: 'rollback'; reason: string; rolled_back_node_ids: string[] }
   | { action: 'waiting'; reason: string }
   // A `driver`-owned node (cleanup): deterministic engine step, no LLM to spawn.
@@ -1013,7 +1036,27 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   if (graph.approval_gate.status === 'rejected') {
     const rb = rollbackOnRejection(graph);
     const rolledBack = graph.nodes.filter((n) => n.status === 'running').map((n) => n.id);
-    await aps.write(workItemId, { ...graph, nodes: rb.nodes });
+    // ac-3 Part C — rejection cleanup lifecycle. The authored red tests were written
+    // speculatively BEFORE the plan was approved; a rejection must (i) DELETE those files
+    // so no orphan tests linger, (ii) reset any passed `test-author` node so a re-plan
+    // re-authors fresh (no passed-author stale cascade), and (iii) clear the now-invalid
+    // frozen manifest off the gate. Best-effort file removal (a missing file is fine —
+    // the goal state is "gone"). rollbackOnRejection already rolled running nodes back.
+    const authoredPaths = authoredTestPaths(graph.approval_gate);
+    for (const p of authoredPaths) {
+      await rm(join(repoRoot, p), { force: true }).catch(() => {});
+    }
+    const nodes = rb.nodes.map((n) =>
+      n.kind === 'test-author' && n.status === 'passed'
+        ? { ...n, status: nodeTransition('passed', 'reopen') }
+        : n,
+    );
+    let approval_gate = graph.approval_gate;
+    if (authoredPaths.length > 0 && graph.approval_gate.plan_brief) {
+      const { test_spec: _drop, ...brief } = graph.approval_gate.plan_brief;
+      approval_gate = { ...graph.approval_gate, plan_brief: brief };
+    }
+    await aps.write(workItemId, { ...graph, approval_gate, nodes });
     return { action: 'rollback', reason: rb.reason, rolled_back_node_ids: rolledBack };
   }
 
@@ -1146,7 +1189,10 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
     // never a wave member — excluded by KIND so a legacy `tester`-owned barrier is caught
     // too, not just the repointed `driver`-owned one.
     n.kind !== 'test' &&
-    (!isMutatingNode(n) || gate.allowed);
+    // Authoring carve-out (wi_2607105qy N2, piece 5): a `test-author` node writes its
+    // red test files PRE-approval, so it is exempt from the mutation gate — kind-scoped
+    // (ONLY this kind), so no blanket pre-approval mutation hole opens.
+    (!isMutatingNode(n) || gate.allowed || n.kind === 'test-author');
   // F1 conservative cap (the unknown-scope fallback): a mutating node WITHOUT a
   // declared `file_scope` falls back to the shared workItem.changed_files (often
   // empty at implement time), so the file-overlap gate can't actually keep two
@@ -1291,8 +1337,25 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   }
 
   // Approval gate applies only before a mutating node (contract §5.3). Reuses the
-  // `gate` computed above for the wave-eligibility check (same `graph`).
-  if (isMutatingNode(chosen) && !gate.allowed) {
+  // `gate` computed above for the wave-eligibility check (same `graph`). Authoring
+  // carve-out (wi_2607105qy N2, piece 5): the `test-author` node authors its red test
+  // files BEFORE the gate opens, so it is exempt — kind-scoped so only this node kind
+  // may mutate pre-approval (its file_scope is the red test files), never a blanket hole.
+  if (isMutatingNode(chosen) && !gate.allowed && chosen.kind !== 'test-author') {
+    // Approval-artifact renderer (wi_2607105qy N2 ac-4/ac-6). When the gate carries an
+    // authored test_spec, render the human-readable approval artifact to the PREDICTABLE
+    // `.ditto/local/work-items/<wi>/approval/` path (per-developer Run tier — never a
+    // temp/scratch folder) and surface that path so the user can open + review + approve
+    // the red tests. A plain plan (no test_spec) presents the gate reason unchanged.
+    if (hasAuthoredTestSpec(graph.approval_gate)) {
+      const acById = new Map(workItem.acceptance_criteria.map((ac) => [ac.id, ac.statement]));
+      const markdown = renderApprovalArtifact(graph.approval_gate, acById);
+      const approvalDir = localDir(repoRoot, 'work-items', workItemId, 'approval');
+      await ensureDir(approvalDir);
+      await atomicWriteText(join(approvalDir, 'plan-approval.md'), markdown);
+      const artifactRel = `.ditto/local/work-items/${workItemId}/approval/plan-approval.md`;
+      return { action: 'present_plan', reason: gate.reason, artifact_path: artifactRel };
+    }
     return { action: 'present_plan', reason: gate.reason };
   }
 
@@ -1433,6 +1496,11 @@ export const recordResultPayload = z
         interface_changes: z.array(z.string()).default([]),
         dod: z.array(z.string()).default([]),
         test_scenarios: z.array(z.string()).default([]),
+        // Executable-DoD test spec (wi_2607105qy). The design/planner node returns the
+        // authored red-test refs + test-backed/oracle-only split it produced; the loop
+        // must carry it through to the persisted gate (DoD ac-1 — no silent strip). Same
+        // shared schema as the persisted gate; optional so a legacy payload round-trips.
+        test_spec: planTestSpec.optional(),
         tier_inputs: z.object({
           changedFileCount: z.number().int().nonnegative(),
           interfaceChanged: z.boolean(),
@@ -1450,6 +1518,14 @@ export const recordResultPayload = z
           'contentful design pass it populates approval_gate.{plan_brief,change_surface,status} ' +
           'via producePlanGate (brief hard-gate, §7.2). Ignored for non-design nodes.',
       ),
+    // Pre-approval authoring stage output (wi_2607105qy N2, piece 3). A `test-author`
+    // node returns the executable-DoD test spec it produced — the authored red-test refs
+    // (test_backed[{criterion_id,test_path}]) + the oracle_only split. On a contentful
+    // test-author pass the loop MERGES it into approval_gate.plan_brief.test_spec (the
+    // slot the persisted gate + producePlanGate passthrough already carry, DoD ac-1), so
+    // the approval screen references the authored tests. Optional + additive: absent /
+    // non-test-author nodes leave the gate untouched (backward compat).
+    test_spec: planTestSpec.optional(),
     decision_conflicts: z
       .array(decisionConflict)
       .optional()
@@ -1625,6 +1701,13 @@ export interface RecordResultInput {
   workItemId: string;
   payload: RecordResultPayload;
   now?: Date;
+  /**
+   * ac-3 Part A: the capture runner the phantom-red gate runs each authored red test
+   * through, injected for unit-testability. Absent ⇒ the production default runs the
+   * single authored test file via `captureTestCommand` under the repo root. Its failure
+   * to run (bun absent, etc.) degrades to unverified — never a hard block (ADR-0018).
+   */
+  authoredRedRunOne?: (test_path: string) => Promise<CaptureResult>;
 }
 
 export interface RecordResultOutcome {
@@ -2144,6 +2227,24 @@ async function directPostDecisions(repoRoot: string, workItemId: string): Promis
   }
 }
 
+/**
+ * ac-3 Part B: the content hash of an authored red test, for the freeze manifest. sha256
+ * over the file bytes; `undefined` when the file cannot be read (contributes no binding —
+ * the integrity check treats a hashless entry as unbound, never a false pass; ADR-0018).
+ * The SAME algorithm the completion-time integrity check re-computes over the current file.
+ */
+export async function hashAuthoredTest(
+  repoRoot: string,
+  testPath: string,
+): Promise<string | undefined> {
+  try {
+    const bytes = await readFile(join(repoRoot, testPath));
+    return createHash('sha256').update(bytes).digest('hex');
+  } catch {
+    return undefined;
+  }
+}
+
 export async function recordResult(
   repoRoot: string,
   input: RecordResultInput,
@@ -2337,6 +2438,64 @@ async function recordResultCore(
       outcome = 'fail';
       failureClass = 'fixable';
       guardReason = acGuard.reason;
+    }
+  }
+
+  // ac-3 Part A — phantom-red HARD gate. A `test-author` pass claims it wrote red tests
+  // that fail on the AC ASSERTION. Before the approval gate can present them, RUN each
+  // authored test through the DISTINCT capture+discriminate path (the barrier stays
+  // exit-code-pure) and confirm the red is an assertion-red, NOT a compile/import phantom
+  // (which proves nothing). A definite phantom (compile/import red, or a supposed-red that
+  // actually passes) downgrades this pass to a fixable failure — the node re-authors, so
+  // implement (which depends_on it) never becomes ready and the gate never presents a
+  // phantom plan. An UNCAPTURABLE / unclassifiable run degrades to a proceed (the merge
+  // below still writes the spec; ADR-0018 — tool absence never hard-blocks). Presence-
+  // gated on `test-author` + a non-empty test_backed set (legacy paths untouched).
+  if (
+    contentful &&
+    outcome === 'pass' &&
+    node.kind === 'test-author' &&
+    (input.payload.test_spec?.test_backed?.length ?? 0) > 0
+  ) {
+    const runOne =
+      input.authoredRedRunOne ??
+      ((p: string) => captureTestCommand(`bun test ${JSON.stringify(p)}`, repoRoot));
+    const phantom = await phantomRedGate({
+      tests: input.payload.test_spec?.test_backed ?? [],
+      runOne,
+    });
+    if (phantom.verdict === 'block') {
+      contentful = false;
+      outcome = 'fail';
+      failureClass = 'fixable';
+      guardReason = `phantom-red: an authored red test does not fail on its AC assertion — ${phantom.reasons.join('; ')}`;
+    }
+  }
+
+  // ac-3 Part B — FROZEN-test integrity. After approval the authored red tests are FROZEN:
+  // a mutating node (implement/fix/refactor) may only turn them GREEN, never weaken or
+  // delete them. On such a pass, re-hash each bound frozen test (the manifest committed
+  // into the approval gate's test_spec at the test-author freeze) and reject the pass if
+  // any was deleted or edited (assertFrozenTestsIntact — diff/missing = reject). This binds
+  // the in-loop pass authority to the SPECIFIC frozen test, closing the vacuous-green hole
+  // (a `dynamic_test` AC closing on any evidence after its proving test was gutted). The
+  // authoring node itself is exempt (it AUTHORS the tests); an UNBOUND entry (no captured
+  // hash) contributes no binding (degrade, never a false reject — ADR-0018).
+  if (contentful && outcome === 'pass' && isMutatingNode(node) && node.kind !== 'test-author') {
+    const frozen = graph.approval_gate.plan_brief?.test_spec?.test_backed ?? [];
+    const bound = frozen.filter((t) => t.frozen_hash !== undefined);
+    if (bound.length > 0) {
+      const currentByPath = new Map<string, string | undefined>();
+      for (const t of bound) {
+        currentByPath.set(t.test_path, await hashAuthoredTest(repoRoot, t.test_path));
+      }
+      const intact = assertFrozenTestsIntact(bound, (p) => currentByPath.get(p));
+      if (!intact.pass) {
+        contentful = false;
+        outcome = 'fail';
+        failureClass = 'fixable';
+        guardReason = `frozen-test integrity: ${intact.reasons.join('; ')}`;
+      }
     }
   }
 
@@ -2806,6 +2965,41 @@ async function recordResultCore(
         await aps.removeNodes(input.workItemId, supersededNodeIds);
       }
     }
+    // Pre-approval authoring stage (wi_2607105qy N2, piece 3). A contentful
+    // `test-author` pass MERGES the executable-DoD test_spec it produced into the
+    // EXISTING approval_gate.plan_brief.test_spec — the design node already produced
+    // the brief (this authoring node runs AFTER design, BEFORE approval), so this only
+    // adds the authored-test refs onto it (test-backed + oracle-only split). Merge, not
+    // overwrite: the brief body (interface_changes/dod/test_scenarios) is preserved. When
+    // no brief exists yet (non-standard chain) a minimal one carrying only test_spec is
+    // written. Presence-gated: absent test_spec / non-test-author ⇒ gate untouched.
+    if (node.kind === 'test-author' && input.payload.test_spec !== undefined) {
+      const current = await aps.get(input.workItemId);
+      const existing = current.approval_gate.plan_brief ?? {
+        interface_changes: [],
+        dod: [],
+        test_scenarios: [],
+      };
+      // ac-3 Part B (freeze): capture a content-hash MANIFEST of each authored red test
+      // and commit it atomically into the persisted test_spec. Completion binds to this
+      // hash — a later delete/weaken of a frozen test is then rejected (no vacuous green).
+      // A test file that cannot be read contributes no hash (degrade: the integrity check
+      // treats a hashless entry as unbound, never a false pass — ADR-0018).
+      const spec = input.payload.test_spec;
+      const test_backed = await Promise.all(
+        spec.test_backed.map(async (t) => {
+          const h = await hashAuthoredTest(repoRoot, t.test_path);
+          return h ? { ...t, frozen_hash: h } : t;
+        }),
+      );
+      await aps.write(input.workItemId, {
+        ...current,
+        approval_gate: {
+          ...current.approval_gate,
+          plan_brief: { ...existing, test_spec: { ...spec, test_backed } },
+        },
+      });
+    }
     // Plan-stage coverage wiring (premortem-coverage §3.1/§7.2/§12 — the
     // design→review seam). A contentful `design` (planner) pass that ran the
     // pre-mortem coverage sweep carries the brief it produced. The deterministic
@@ -2898,6 +3092,17 @@ async function recordResultCore(
         irreversible: declaredRisk.irreversible ?? false,
         unaudited: declaredRisk.unaudited ?? false,
       });
+      // wi_2607105qy N2 (ac-5 + seed-timing). Read the POST-ASSIGNMENT oracle state over
+      // the in-play AC set: an in-play AC now carrying a `dynamic_test` oracle means a red
+      // test must be authored, so (i) the plan may NOT auto-waive past the approval gate
+      // (hasAuthoredTestSpec → forcePending below) and (ii) a `test-author` node is re-seeded
+      // after this pass settles. `workItem` above was read AFTER the assignment write, so it
+      // reflects the design node's just-assigned oracles (both design-assigned AND any the
+      // spec-compiled intent carried from bootstrap).
+      const inPlayRefs = new Set(node.acceptance_refs);
+      const dynamicTestInPlay = workItem.acceptance_criteria.some(
+        (ac) => inPlayRefs.has(ac.id) && ac.oracle?.verification_method === 'dynamic_test',
+      );
       const patch = producePlanGate({
         changeSurface: pb.change_surface,
         brief: {
@@ -2910,6 +3115,7 @@ async function recordResultCore(
         oracleAssignmentIncomplete,
         purposePreserving,
         highRisk,
+        hasAuthoredTestSpec: dynamicTestInPlay,
       });
       const current = await aps.get(input.workItemId);
       await aps.write(input.workItemId, {
@@ -2967,6 +3173,34 @@ async function recordResultCore(
           },
         ]);
         if (retroNode) await aps.addNodes(input.workItemId, [retroNode], allowedAcceptanceIds);
+      }
+      // wi_2607105qy N2 seed-timing re-seed. In the live deep-interview→design flow the
+      // DESIGN node assigns oracles AFTER bootstrap, so the bootstrap `seedTestAuthorNode`
+      // (which reads intent-AC oracles at bootstrap) never fires. Re-seed HERE — after the
+      // design pass assigned oracles and promotion/supersede settled (the retro-bootstrap
+      // analogue): if an in-play AC now carries a `dynamic_test` oracle and no test-author
+      // node exists yet, splice one gating the implement frontier. `seedTestAuthorNode`
+      // rewires the implement deps onto the new author (the same pure bootstrap logic), so
+      // the write below persists both the added node and the rewiring. When no dynamic_test
+      // oracle is in play but oracle assignment IS complete (ac-5 graceful degrade — after
+      // assignment, not on a vacuous unassigned state), record a degrade LOGGING marker: no
+      // authoring node fires, the plan-approval flow proceeds unchanged.
+      if (dynamicTestInPlay) {
+        const beforeReseed = await aps.get(input.workItemId);
+        const reseeded = seedTestAuthorNode(beforeReseed.nodes, true);
+        if (reseeded.length > beforeReseed.nodes.length) {
+          await aps.write(input.workItemId, { ...beforeReseed, nodes: reseeded });
+        }
+      } else if (assignments.length > 0 && !oracleAssignmentIncomplete) {
+        await aps.appendDecision(input.workItemId, {
+          ts: (input.now ?? new Date()).toISOString(),
+          node_id: node.id,
+          decision: 'surface',
+          resolvability: 'accepted_tradeoff',
+          reason:
+            'authoring-stage-degraded: oracle assignment complete with zero dynamic_test ACs — ' +
+            'no red test to author, degrading to the plain plan-approval flow',
+        });
       }
     }
     await aps.updateNode(input.workItemId, node.id, (n) => ({

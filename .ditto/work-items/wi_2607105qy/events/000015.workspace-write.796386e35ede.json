@@ -1,0 +1,40 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607105qy",
+  "seq": 15,
+  "actor": "workspace-write",
+  "event_id": "796386e35edeb17e02ee8d9338b5ce7a660d3da07ea07ce4b9072a94bb64fd16",
+  "ts": "2026-07-10T18:33:21.156Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607105qy/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "full suite regression: 4506 pass / 17 skip / 6 fail (6 pre-existing/unrelated; no other failure => no regression)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-approval-test-spec.test.ts tests/core/autopilot-authoring-node.test.ts tests/core/authored-red-discrimination.test.ts tests/core/frozen-test-integrity.test.ts tests/core/autopilot-approval-artifact.test.ts tests/core/intent-single-unit-invariant.test.ts tests/core/autopilot-loop.test.ts",
+        "summary": "AC tests: 143 pass / 0 fail"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/frozen-test-integrity.test.ts tests/core/authored-red-discrimination.test.ts",
+        "summary": "green: delete=>reject, hash-diff=>reject, compile/import phantom+vacuous-green=>BLOCK, indeterminate=>degrade"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/test-runner.ts",
+        "summary": "runTestCommand exit-code-only stdout 'inherit' unchanged; captureTestCommand separate piped path"
+      }
+    ]
+  }
+}

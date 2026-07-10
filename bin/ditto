@@ -15520,7 +15520,7 @@ var init_cleanup_store = __esm(() => {
 
 // src/core/cleanup-archive.ts
 import { execFileSync as execFileSync4 } from "child_process";
-import { mkdir as mkdir7, rm, stat as stat7 } from "fs/promises";
+import { mkdir as mkdir7, rm as rm2, stat as stat7 } from "fs/promises";
 import { dirname as dirname11, isAbsolute as isAbsolute7, join as join38, resolve as resolve10 } from "path";
 function runDir(repoRoot, runId2) {
   return localDir(repoRoot, "cleanup", runId2);
@@ -15543,13 +15543,13 @@ async function archiveRun(repoRoot, runId2) {
   await assertRunExists(repoRoot, runId2);
   const zip = archiveZipPath(repoRoot, runId2);
   await mkdir7(dirname11(zip), { recursive: true });
-  await rm(zip, { force: true });
+  await rm2(zip, { force: true });
   execFileSync4("zip", ["-r", "-q", "-y", zip, runId2], {
     cwd: localDir(repoRoot, "cleanup"),
     stdio: ["ignore", "ignore", "pipe"]
   });
   const folder = runDir(repoRoot, runId2);
-  await rm(folder, { recursive: true, force: true });
+  await rm2(folder, { recursive: true, force: true });
   return { run_id: runId2, zip_path: zip, removed_run_dir: folder };
 }
 function deleteApprovalGate(confirm) {
@@ -15566,7 +15566,7 @@ async function deleteRun(repoRoot, runId2, confirm) {
   if (!gate2.allowed)
     throw new CleanupDeleteRefusedError(gate2.reason);
   const folder = runDir(repoRoot, runId2);
-  await rm(folder, { recursive: true, force: true });
+  await rm2(folder, { recursive: true, force: true });
   return { run_id: runId2, removed_run_dir: folder };
 }
 function subRepoAbs(repoRoot, owningRepo) {
@@ -19088,6 +19088,48 @@ function applyRejection(gate, reason) {
   const evidence_refs = reason ? [...gate.evidence_refs, { kind: "note", summary: reason }] : gate.evidence_refs;
   return { ...gate, status: "rejected", evidence_refs };
 }
+function hasAuthoredTestSpec(gate) {
+  return gate.plan_brief?.test_spec !== undefined;
+}
+function authoredTestPaths(gate) {
+  return (gate.plan_brief?.test_spec?.test_backed ?? []).map((t2) => t2.test_path);
+}
+function renderApprovalArtifact(gate, acById) {
+  const spec = gate.plan_brief?.test_spec;
+  const testBacked = spec?.test_backed ?? [];
+  const oracleOnly = spec?.oracle_only ?? [];
+  const statementFor = (id) => acById.get(id) ?? "(statement unavailable)";
+  const lines = [];
+  lines.push("# Plan approval \u2014 authored red tests");
+  lines.push("");
+  lines.push("Review the failing (red) tests authored for this plan BEFORE approving. Each " + "test-backed AC below is guaranteed by an executable red test; approving FREEZES those " + "tests (the implementation may not weaken or delete them). Oracle-only ACs carry no " + "executable test and are judged by review/inspection.");
+  lines.push("");
+  lines.push("## Test-backed ACs (executable red test guarantees them)");
+  if (testBacked.length === 0) {
+    lines.push("(none)");
+  } else {
+    for (const t2 of testBacked) {
+      lines.push(`- ${t2.criterion_id}: ${statementFor(t2.criterion_id)}`);
+      lines.push(`  - authored test: ${t2.test_path}`);
+      if (t2.frozen_hash)
+        lines.push(`  - frozen_hash: ${t2.frozen_hash}`);
+      lines.push(`  - attestation: this test asserts ${t2.criterion_id}'s declared contract ("${statementFor(t2.criterion_id)}") and nothing beyond it \u2014 no internal-call or signature assertions.`);
+    }
+  }
+  lines.push("");
+  lines.push("## Oracle-only ACs (static / soft_judgment \u2014 no executable test)");
+  if (oracleOnly.length === 0) {
+    lines.push("(none)");
+  } else {
+    for (const id of oracleOnly) {
+      lines.push(`- ${id}: ${statementFor(id)}`);
+      lines.push("  - verified by review/inspection (no executable red test guarantees it)");
+    }
+  }
+  lines.push("");
+  return lines.join(`
+`);
+}
 
 // src/core/autopilot-graph.ts
 var KIND_TO_OWNER = {
@@ -19105,7 +19147,8 @@ var KIND_TO_OWNER = {
   retro: "retrospective",
   cleanup: "driver",
   "e2e-author": "main-session",
-  test: "driver"
+  test: "driver",
+  "test-author": "implementer"
 };
 function kindToOwner(kind) {
   return KIND_TO_OWNER[kind];
@@ -19333,7 +19376,8 @@ var nodeKind = exports_external.enum([
   "retro",
   "cleanup",
   "e2e-author",
-  "test"
+  "test",
+  "test-author"
 ]).describe("Kind of work a node represents");
 var nodeOwner = exports_external.enum([
   "researcher",
@@ -19390,6 +19434,15 @@ var nodeProposal = exports_external.object({
   agent_hint: exports_external.string().optional(),
   file_scope: exports_external.array(relativePath).optional()
 }).describe("Intent-level node a planner emits (A-3). The mechanical fields (owner/status/" + "attempts/evidence) are derived on promotion via proposalsToNodes; the integrity " + "gate (validateNodeAddition) then guards the splice.");
+var planTestSpec = exports_external.object({
+  test_backed: exports_external.array(exports_external.object({
+    criterion_id: exports_external.string().min(1),
+    test_path: relativePath,
+    frozen_hash: exports_external.string().min(1).optional()
+  })).default([]),
+  oracle_only: exports_external.array(exports_external.string().min(1)).default([]),
+  artifact_path: relativePath.optional()
+}).describe("Executable-DoD test spec: authored red-test refs + test-backed/oracle-only split");
 var autopilot = exports_external.object({
   schema_version: schemaVersion,
   autopilot_id: autopilotId,
@@ -19407,7 +19460,8 @@ var autopilot = exports_external.object({
     plan_brief: exports_external.object({
       interface_changes: exports_external.array(exports_external.string().min(1)).default([]),
       dod: exports_external.array(exports_external.string().min(1)).default([]),
-      test_scenarios: exports_external.array(exports_external.string().min(1)).default([])
+      test_scenarios: exports_external.array(exports_external.string().min(1)).default([]),
+      test_spec: planTestSpec.optional()
     }).optional()
   }),
   nodes: exports_external.array(autopilotNode).default([]),
@@ -19893,14 +19947,15 @@ function tierBriefApproval(tier) {
 }
 function producePlanGate(input) {
   const tier = selectCoverageTier(input.tierInputs);
-  const forcePending = input.requireApproval || input.oracleAssignmentIncomplete || input.highRisk;
+  const forcePending = input.requireApproval || input.oracleAssignmentIncomplete || input.highRisk || input.hasAuthoredTestSpec;
   return {
     status: forcePending ? "pending" : input.purposePreserving ? "not_required" : tierBriefApproval(tier),
     change_surface: [...input.changeSurface],
     plan_brief: {
       interface_changes: [...input.brief.interface_changes],
       dod: [...input.brief.dod],
-      test_scenarios: [...input.brief.test_scenarios]
+      test_scenarios: [...input.brief.test_scenarios],
+      ...input.brief.test_spec !== undefined ? { test_spec: input.brief.test_spec } : {}
     }
   };
 }
@@ -20127,6 +20182,20 @@ function oracleSatisfaction(acId, oracle, closingEvidence) {
   return gate([
     `${acId}: ${oracle.verification_method} oracle unsatisfied (no closing evidence meets the oracle; not closed to pass)`
   ]);
+}
+function assertFrozenTestsIntact(entries, currentHash) {
+  const reasons = [];
+  for (const e2 of entries) {
+    if (e2.frozen_hash === undefined)
+      continue;
+    const now = currentHash(e2.test_path);
+    if (now === undefined) {
+      reasons.push(`frozen red test ${e2.test_path} (${e2.criterion_id}) was DELETED \u2014 a frozen test cannot be removed, only turned green (no vacuous green)`);
+    } else if (now !== e2.frozen_hash) {
+      reasons.push(`frozen red test ${e2.test_path} (${e2.criterion_id}) was WEAKENED/changed after freeze \u2014 a frozen test cannot be edited, only turned green (no vacuous green)`);
+    }
+  }
+  return gate(reasons);
 }
 var ATTESTATION_OF = {
   pass: "verified-by-evidence",
@@ -20402,6 +20471,31 @@ function seedE2eAuthorNode(nodes) {
   const rewired = nodes.map((n2) => n2.id !== design.id && n2.depends_on.includes(design.id) ? { ...n2, depends_on: n2.depends_on.map((d2) => d2 === design.id ? e2eAuthorId : d2) } : n2);
   return rewired.flatMap((n2) => n2.id === design.id ? [n2, e2eAuthor] : [n2]);
 }
+function seedTestAuthorNode(nodes, hasDynamicTestOracle) {
+  if (!hasDynamicTestOracle)
+    return nodes;
+  const design = nodes.find((n2) => n2.kind === "design");
+  if (!design)
+    return nodes;
+  const authorId = `${design.id}-test-author`;
+  if (nodes.some((n2) => n2.id === authorId))
+    return nodes;
+  const e2eAuthor = nodes.find((n2) => n2.kind === "e2e-author");
+  const predecessorId = e2eAuthor ? e2eAuthor.id : design.id;
+  const author = {
+    id: authorId,
+    kind: "test-author",
+    owner: kindToOwner("test-author"),
+    purpose: "Author the failing (red) unit/mock test for each dynamic_test AC before the approval gate opens",
+    status: "pending",
+    depends_on: [predecessorId],
+    acceptance_refs: [],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 }
+  };
+  const rewired = nodes.map((n2) => n2.id !== predecessorId && n2.id !== authorId && n2.depends_on.includes(predecessorId) ? { ...n2, depends_on: n2.depends_on.map((d2) => d2 === predecessorId ? authorId : d2) } : n2);
+  return rewired.flatMap((n2) => n2.id === predecessorId ? [n2, author] : [n2]);
+}
 function seedTestBarrier(nodes) {
   if (nodes.some((n2) => n2.kind === "test"))
     return nodes;
@@ -20477,7 +20571,9 @@ async function bootstrapAutopilot(repoRoot, input) {
   const acceptanceIds = input.intent.acceptance_criteria.map((c3) => c3.id);
   const seededNodes = (input.generateNodes ?? defaultNodeGenerator)(acceptanceIds);
   const withE2e = input.e2eOptIn ? seedE2eAuthorNode(seededNodes) : seededNodes;
-  const nodes = seedTestBarrier(withE2e);
+  const hasDynamicTestOracle = input.intent.acceptance_criteria.some((ac) => ac.oracle?.verification_method === "dynamic_test");
+  const withAuthor = seedTestAuthorNode(withE2e, hasDynamicTestOracle);
+  const nodes = seedTestBarrier(withAuthor);
   const graph = {
     schema_version: "0.1.0",
     autopilot_id: autopilotId2,
@@ -21127,7 +21223,8 @@ function projectDirectionDecisions(decisions) {
 
 // src/core/autopilot-loop.ts
 init_zod();
-import { readFile as readFile3 } from "fs/promises";
+import { createHash as createHash7 } from "crypto";
+import { readFile as readFile3, rm } from "fs/promises";
 import { join as join29 } from "path";
 
 // src/acg/tidy/classifier.ts
@@ -25187,6 +25284,96 @@ function compileSpecDoc(markdown) {
 
 // src/core/test-runner.ts
 var DEFAULT_BARRIER_TIMEOUT_MS = 10 * 60 * 1000;
+var LOAD_ERROR_MARKERS = [
+  /Cannot find module/i,
+  /Cannot find package/i,
+  /Could not resolve/i,
+  /error: Failed to (load|resolve)/i,
+  /SyntaxError/i,
+  /Transform failed/i,
+  /Parse error/i
+];
+var ASSERTION_MARKERS = [/\(fail\)/, /error: expect\(/i, /Expected:/];
+function classifyAuthoredRed(outcome, captured) {
+  if (outcome.kind === "passed")
+    return "ran_green";
+  if (outcome.kind !== "failed")
+    return "indeterminate";
+  if (LOAD_ERROR_MARKERS.some((re) => re.test(captured)))
+    return "compile_import_red";
+  if (ASSERTION_MARKERS.some((re) => re.test(captured)))
+    return "assertion_red";
+  return "indeterminate";
+}
+async function phantomRedGate(args) {
+  const perTest = await Promise.all(args.tests.map(async ({ criterion_id, test_path }) => {
+    const { outcome, captured } = await args.runOne(test_path);
+    return { criterion_id, test_path, classification: classifyAuthoredRed(outcome, captured) };
+  }));
+  const phantoms = perTest.filter((t2) => t2.classification === "compile_import_red" || t2.classification === "ran_green");
+  if (phantoms.length > 0) {
+    return {
+      verdict: "block",
+      perTest,
+      reasons: phantoms.map((t2) => `${t2.test_path} (${t2.criterion_id}) is a phantom red: ${t2.classification} \u2014 it did not fail on the AC assertion; re-author before the gate opens`)
+    };
+  }
+  const indeterminate = perTest.filter((t2) => t2.classification === "indeterminate");
+  if (indeterminate.length > 0 || perTest.length === 0) {
+    return {
+      verdict: "degrade",
+      perTest,
+      reasons: perTest.length === 0 ? ["no authored test to confirm \u2014 proceeding unverified (ADR-0018)"] : indeterminate.map((t2) => `${t2.test_path} (${t2.criterion_id}) could not be deterministically confirmed as assertion-red \u2014 proceeding unverified (ADR-0018)`)
+    };
+  }
+  return { verdict: "present", perTest, reasons: [] };
+}
+var captureTestCommand = async (command, cwd, opts = {}) => {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_BARRIER_TIMEOUT_MS;
+  let proc;
+  try {
+    proc = Bun.spawn(["sh", "-c", command], {
+      cwd,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe"
+    });
+  } catch (err) {
+    return {
+      outcome: { kind: "unrunnable", reason: err instanceof Error ? err.message : String(err) },
+      captured: ""
+    };
+  }
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    proc.kill(9);
+  }, timeoutMs);
+  try {
+    const [stdout3, stderr2, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited
+    ]);
+    const captured = `${stdout3}${stderr2}`;
+    if (timedOut)
+      return { outcome: { kind: "timeout", timeoutMs }, captured };
+    if (code === 0)
+      return { outcome: { kind: "passed" }, captured };
+    if (code === 126 || code === 127) {
+      return {
+        outcome: {
+          kind: "unrunnable",
+          reason: `test command not found or not executable (exit ${code})`
+        },
+        captured
+      };
+    }
+    return { outcome: { kind: "failed", exitCode: code }, captured };
+  } finally {
+    clearTimeout(timer);
+  }
+};
 var runTestCommand = async (command, cwd, opts = {}) => {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_BARRIER_TIMEOUT_MS;
   let proc;
@@ -25606,7 +25793,17 @@ async function nextNode(repoRoot, workItemId2) {
   if (graph.approval_gate.status === "rejected") {
     const rb = rollbackOnRejection(graph);
     const rolledBack = graph.nodes.filter((n2) => n2.status === "running").map((n2) => n2.id);
-    await aps.write(workItemId2, { ...graph, nodes: rb.nodes });
+    const authoredPaths = authoredTestPaths(graph.approval_gate);
+    for (const p of authoredPaths) {
+      await rm(join29(repoRoot, p), { force: true }).catch(() => {});
+    }
+    const nodes = rb.nodes.map((n2) => n2.kind === "test-author" && n2.status === "passed" ? { ...n2, status: nodeTransition("passed", "reopen") } : n2);
+    let approval_gate = graph.approval_gate;
+    if (authoredPaths.length > 0 && graph.approval_gate.plan_brief) {
+      const { test_spec: _drop, ...brief } = graph.approval_gate.plan_brief;
+      approval_gate = { ...graph.approval_gate, plan_brief: brief };
+    }
+    await aps.write(workItemId2, { ...graph, approval_gate, nodes });
     return { action: "rollback", reason: rb.reason, rolled_back_node_ids: rolledBack };
   }
   const staleSpec = await specDigestStale(repoRoot, workItemId2);
@@ -25670,7 +25867,7 @@ async function nextNode(repoRoot, workItemId2) {
     return { action: "waiting", reason: "all ready nodes deferred by the file-overlap gate" };
   }
   const gate2 = mutationGate(graph);
-  const isWaveEligible = (n2) => n2.owner !== "driver" && n2.owner !== "main-session" && n2.kind !== "test" && (!isMutatingNode(n2) || gate2.allowed);
+  const isWaveEligible = (n2) => n2.owner !== "driver" && n2.owner !== "main-session" && n2.kind !== "test" && (!isMutatingNode(n2) || gate2.allowed || n2.kind === "test-author");
   let unknownMutatingAdmitted = false;
   const waveEligible = admitted.filter((n2) => {
     if (!isWaveEligible(n2))
@@ -25752,7 +25949,16 @@ async function nextNode(repoRoot, workItemId2) {
       reason: `main-session step (${chosen.kind}): run the ditto:e2e-author skill inline (user dialogue), then record-result`
     };
   }
-  if (isMutatingNode(chosen) && !gate2.allowed) {
+  if (isMutatingNode(chosen) && !gate2.allowed && chosen.kind !== "test-author") {
+    if (hasAuthoredTestSpec(graph.approval_gate)) {
+      const acById = new Map(workItem2.acceptance_criteria.map((ac) => [ac.id, ac.statement]));
+      const markdown = renderApprovalArtifact(graph.approval_gate, acById);
+      const approvalDir = localDir(repoRoot, "work-items", workItemId2, "approval");
+      await ensureDir(approvalDir);
+      await atomicWriteText(join29(approvalDir, "plan-approval.md"), markdown);
+      const artifactRel = `.ditto/local/work-items/${workItemId2}/approval/plan-approval.md`;
+      return { action: "present_plan", reason: gate2.reason, artifact_path: artifactRel };
+    }
     return { action: "present_plan", reason: gate2.reason };
   }
   await aps.updateNode(workItemId2, chosen.id, (n2) => ({
@@ -25802,6 +26008,7 @@ var recordResultPayload = exports_external.object({
     interface_changes: exports_external.array(exports_external.string()).default([]),
     dod: exports_external.array(exports_external.string()).default([]),
     test_scenarios: exports_external.array(exports_external.string()).default([]),
+    test_spec: planTestSpec.optional(),
     tier_inputs: exports_external.object({
       changedFileCount: exports_external.number().int().nonnegative(),
       interfaceChanged: exports_external.boolean(),
@@ -25813,6 +26020,7 @@ var recordResultPayload = exports_external.object({
       large: exports_external.boolean()
     })
   }).optional().describe("A plan-stage (design/planner) node's pre-mortem coverage brief + tier inputs. On a " + "contentful design pass it populates approval_gate.{plan_brief,change_surface,status} " + "via producePlanGate (brief hard-gate, \xA77.2). Ignored for non-design nodes."),
+  test_spec: planTestSpec.optional(),
   decision_conflicts: exports_external.array(decisionConflict).optional().describe("The planner's declared ADR conflicts (ADR-0020 D3 producer). On a contentful design " + "pass a non-empty list is written to the decision-conflict carrier so an intent " + "conflict front-loads the approval gate (prevention) and the Stop hook re-checks it " + "(catch). Absent/empty \u21D2 no carrier written (backward compat). Ignored for non-design."),
   ac_oracles: exports_external.array(exports_external.object({
     criterion_id: exports_external.string().min(1),
@@ -26068,6 +26276,14 @@ async function directPostDecisions(repoRoot, workItemId2) {
     }, workItemId2);
   } catch {}
 }
+async function hashAuthoredTest(repoRoot, testPath) {
+  try {
+    const bytes = await readFile3(join29(repoRoot, testPath));
+    return createHash7("sha256").update(bytes).digest("hex");
+  } catch {
+    return;
+  }
+}
 async function recordResult(repoRoot, input) {
   const outcome = await recordResultCore(repoRoot, input);
   await directPostDecisions(repoRoot, input.workItemId);
@@ -26167,6 +26383,36 @@ async function recordResultCore(repoRoot, input) {
       outcome = "fail";
       failureClass = "fixable";
       guardReason = acGuard.reason;
+    }
+  }
+  if (contentful && outcome === "pass" && node2.kind === "test-author" && (input.payload.test_spec?.test_backed?.length ?? 0) > 0) {
+    const runOne = input.authoredRedRunOne ?? ((p) => captureTestCommand(`bun test ${JSON.stringify(p)}`, repoRoot));
+    const phantom = await phantomRedGate({
+      tests: input.payload.test_spec?.test_backed ?? [],
+      runOne
+    });
+    if (phantom.verdict === "block") {
+      contentful = false;
+      outcome = "fail";
+      failureClass = "fixable";
+      guardReason = `phantom-red: an authored red test does not fail on its AC assertion \u2014 ${phantom.reasons.join("; ")}`;
+    }
+  }
+  if (contentful && outcome === "pass" && isMutatingNode(node2) && node2.kind !== "test-author") {
+    const frozen = graph.approval_gate.plan_brief?.test_spec?.test_backed ?? [];
+    const bound = frozen.filter((t2) => t2.frozen_hash !== undefined);
+    if (bound.length > 0) {
+      const currentByPath = new Map;
+      for (const t2 of bound) {
+        currentByPath.set(t2.test_path, await hashAuthoredTest(repoRoot, t2.test_path));
+      }
+      const intact = assertFrozenTestsIntact(bound, (p) => currentByPath.get(p));
+      if (!intact.pass) {
+        contentful = false;
+        outcome = "fail";
+        failureClass = "fixable";
+        guardReason = `frozen-test integrity: ${intact.reasons.join("; ")}`;
+      }
     }
   }
   if (contentful && outcome === "pass" && node2.kind !== "design") {
@@ -26451,6 +26697,26 @@ async function recordResultCore(repoRoot, input) {
         await aps.removeNodes(input.workItemId, supersededNodeIds);
       }
     }
+    if (node2.kind === "test-author" && input.payload.test_spec !== undefined) {
+      const current = await aps.get(input.workItemId);
+      const existing = current.approval_gate.plan_brief ?? {
+        interface_changes: [],
+        dod: [],
+        test_scenarios: []
+      };
+      const spec = input.payload.test_spec;
+      const test_backed = await Promise.all(spec.test_backed.map(async (t2) => {
+        const h2 = await hashAuthoredTest(repoRoot, t2.test_path);
+        return h2 ? { ...t2, frozen_hash: h2 } : t2;
+      }));
+      await aps.write(input.workItemId, {
+        ...current,
+        approval_gate: {
+          ...current.approval_gate,
+          plan_brief: { ...existing, test_spec: { ...spec, test_backed } }
+        }
+      });
+    }
     let designEvidenceRefs;
     if (node2.kind === "design" && input.payload.plan_brief !== undefined) {
       const pb = input.payload.plan_brief;
@@ -26495,6 +26761,8 @@ async function recordResultCore(repoRoot, input) {
         irreversible: declaredRisk2.irreversible ?? false,
         unaudited: declaredRisk2.unaudited ?? false
       });
+      const inPlayRefs = new Set(node2.acceptance_refs);
+      const dynamicTestInPlay = workItem2.acceptance_criteria.some((ac) => inPlayRefs.has(ac.id) && ac.oracle?.verification_method === "dynamic_test");
       const patch = producePlanGate({
         changeSurface: pb.change_surface,
         brief: {
@@ -26506,7 +26774,8 @@ async function recordResultCore(repoRoot, input) {
         requireApproval,
         oracleAssignmentIncomplete,
         purposePreserving,
-        highRisk
+        highRisk,
+        hasAuthoredTestSpec: dynamicTestInPlay
       });
       const current = await aps.get(input.workItemId);
       await aps.write(input.workItemId, {
@@ -26549,6 +26818,21 @@ async function recordResultCore(repoRoot, input) {
         ]);
         if (retroNode)
           await aps.addNodes(input.workItemId, [retroNode], allowedAcceptanceIds);
+      }
+      if (dynamicTestInPlay) {
+        const beforeReseed = await aps.get(input.workItemId);
+        const reseeded = seedTestAuthorNode(beforeReseed.nodes, true);
+        if (reseeded.length > beforeReseed.nodes.length) {
+          await aps.write(input.workItemId, { ...beforeReseed, nodes: reseeded });
+        }
+      } else if (assignments.length > 0 && !oracleAssignmentIncomplete) {
+        await aps.appendDecision(input.workItemId, {
+          ts: (input.now ?? new Date).toISOString(),
+          node_id: node2.id,
+          decision: "surface",
+          resolvability: "accepted_tradeoff",
+          reason: "authoring-stage-degraded: oracle assignment complete with zero dynamic_test ACs \u2014 " + "no red test to author, degrading to the plain plan-approval flow"
+        });
       }
     }
     await aps.updateNode(input.workItemId, node2.id, (n2) => ({
@@ -27589,7 +27873,7 @@ import { mkdir as mkdir5, readFile as readFile7 } from "fs/promises";
 import { join as join32 } from "path";
 
 // src/core/e2e/browser.ts
-import { createHash as createHash7 } from "crypto";
+import { createHash as createHash8 } from "crypto";
 import { mkdir as mkdir4, readFile as readFile5, readdir as readdir13, writeFile as writeFile3 } from "fs/promises";
 import { homedir as homedir6 } from "os";
 import { dirname as dirname10, join as join31, relative as relative9, sep as sep5 } from "path";
@@ -27730,7 +28014,7 @@ function repoRelative(repoRoot, path) {
 }
 async function sha256OfFile(path) {
   const bytes = await readFile5(path);
-  return createHash7("sha256").update(bytes).digest("hex");
+  return createHash8("sha256").update(bytes).digest("hex");
 }
 async function probePlaywright(repoRoot) {
   let proc;
@@ -27891,7 +28175,7 @@ async function withBrowserGuard(repoRoot, action, options = {}) {
 }
 
 // src/core/e2e/journey-digest.ts
-import { createHash as createHash8 } from "crypto";
+import { createHash as createHash9 } from "crypto";
 import { readFile as readFile6, readdir as readdir14 } from "fs/promises";
 init_dist2();
 init_shared();
@@ -28011,7 +28295,7 @@ function parseBlockDoc(text) {
 
 // src/core/e2e/journey-digest.ts
 function sha256Hex2(bytes) {
-  return createHash8("sha256").update(bytes).digest("hex");
+  return createHash9("sha256").update(bytes).digest("hex");
 }
 function canonicalDigestText(text) {
   const split = splitFrontMatter(text);
@@ -29193,10 +29477,10 @@ function unclaim(deps, input) {
       notices: ["No linked GitHub issue on the work item \u2014 unclaim skipped."]
     };
   }
-  const rm2 = deps.client.issueRemoveAssignee(gi.repo, gi.number, SELF_ASSIGNEE);
-  const assigneeRemoved = rm2.ok;
-  if (!rm2.ok)
-    notices.push(`Unclaim degraded (${rm2.reason}) \u2014 @me assignee not removed.`);
+  const rm3 = deps.client.issueRemoveAssignee(gi.repo, gi.number, SELF_ASSIGNEE);
+  const assigneeRemoved = rm3.ok;
+  if (!rm3.ok)
+    notices.push(`Unclaim degraded (${rm3.reason}) \u2014 @me assignee not removed.`);
   const commentBody = `## ditto: claim released
 
 ${input.reason ?? "Claim released \u2014 the issue is free for takeover."}`;
@@ -29911,11 +30195,11 @@ async function releaseClaimOnTerminal(store, workId, wiring) {
     return { released: false, notices: [] };
   }
   const notices = [];
-  const rm2 = wiring.client.issueRemoveAssignee(gi.repo, gi.number, "@me");
-  if (!rm2.ok)
-    notices.push(`Terminal claim release degraded (${rm2.reason}) \u2014 @me left assigned.`);
+  const rm3 = wiring.client.issueRemoveAssignee(gi.repo, gi.number, "@me");
+  if (!rm3.ok)
+    notices.push(`Terminal claim release degraded (${rm3.reason}) \u2014 @me left assigned.`);
   await persistClaimRelease(store, workId, gi);
-  return { released: rm2.ok, notices };
+  return { released: rm3.ok, notices };
 }
 function writeStartClaimHuman(claimRes, status) {
   if (!claimRes) {
@@ -33347,7 +33631,7 @@ init_fs();
 import { join as join44 } from "path";
 
 // src/core/instruction-bridge.ts
-import { createHash as createHash9 } from "crypto";
+import { createHash as createHash10 } from "crypto";
 import { join as join43 } from "path";
 var MANAGED_END = "<!-- ditto:managed:end -->";
 var MANAGED_BLOCK_RE_G = /<!--\s*ditto:managed:start\s+source=([^\s]+)\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:managed:end\s*-->/g;
@@ -33361,7 +33645,7 @@ function normalizeInstructionText(text) {
 `);
 }
 function normalizedSha256(text) {
-  return createHash9("sha256").update(normalizeInstructionText(text)).digest("hex");
+  return createHash10("sha256").update(normalizeInstructionText(text)).digest("hex");
 }
 function sourceFromSurface(surface) {
   if (surface.role !== "source") {
@@ -35923,7 +36207,7 @@ async function runCodeqlReviewToLedger(input, deps) {
 init_ditto_paths();
 
 // src/core/evidence-store.ts
-import { createHash as createHash10 } from "crypto";
+import { createHash as createHash11 } from "crypto";
 import { join as join52 } from "path";
 
 // src/schemas/evidence-log.ts
@@ -36018,7 +36302,7 @@ class EvidenceStore {
   }
 }
 function sha256Hex3(content) {
-  const hash = createHash10("sha256");
+  const hash = createHash11("sha256");
   hash.update(content);
   return hash.digest("hex");
 }
@@ -40002,7 +40286,7 @@ import { existsSync as existsSync8, readFileSync as readFileSync4 } from "fs";
 import { join as join62 } from "path";
 
 // src/core/build-stamp.ts
-import { createHash as createHash11 } from "crypto";
+import { createHash as createHash12 } from "crypto";
 import { readFileSync as readFileSync3, readdirSync } from "fs";
 import { join as join61 } from "path";
 var STAMP_PREFIX = "//# ditto-src-stamp=";
@@ -40019,7 +40303,7 @@ function listSourceFiles(repoRoot, rel = "src") {
   return out.sort();
 }
 function computeSourceStamp(repoRoot) {
-  const h2 = createHash11("sha256");
+  const h2 = createHash12("sha256");
   for (const rel of listSourceFiles(repoRoot)) {
     h2.update(rel);
     h2.update("\x00");
@@ -47231,7 +47515,7 @@ import { resolve as resolve20 } from "path";
 
 // src/core/mode-doctor.ts
 import { spawnSync } from "child_process";
-import { createHash as createHash12 } from "crypto";
+import { createHash as createHash13 } from "crypto";
 import { existsSync as existsSync9, readFileSync as readFileSync5, readdirSync as readdirSync2 } from "fs";
 import { homedir as homedir10 } from "os";
 import { dirname as dirname15, join as join71, resolve as resolve19 } from "path";
@@ -47330,7 +47614,7 @@ function computeSurfaceStamp(root) {
   for (const d2 of SURFACE_DIRS)
     listSurfaceFiles(root, d2, files);
   files.sort();
-  const h3 = createHash12("sha256");
+  const h3 = createHash13("sha256");
   for (const rel of files) {
     h3.update(rel);
     h3.update("\x00");
@@ -47467,7 +47751,7 @@ var sessionStartHandler = async (input) => {
 };
 
 // src/hooks/stop.ts
-import { createHash as createHash13 } from "crypto";
+import { createHash as createHash14 } from "crypto";
 import { existsSync as existsSync10 } from "fs";
 import { readFile as readFile17, readdir as readdir22 } from "fs/promises";
 import { join as join72 } from "path";
@@ -47940,7 +48224,7 @@ function fitnessInputFingerprint(repoRoot) {
     const diff = captureGitDiff(repoRoot);
     const files = listChangedFiles(repoRoot).filter((p2) => !p2.startsWith(".ditto/")).join(`
 `);
-    return createHash13("sha256").update(`${head}
+    return createHash14("sha256").update(`${head}
 ${files}
 ${diff}`).digest("hex");
   } catch {
@@ -53897,7 +54181,7 @@ function applySemanticVerdict(seed, v2) {
 
 // src/acg/semantic/signature-codeql.ts
 import { existsSync as existsSync11 } from "fs";
-import { rm as rm2 } from "fs/promises";
+import { rm as rm3 } from "fs/promises";
 import { join as join86 } from "path";
 init_ditto_paths();
 init_git();
@@ -54062,7 +54346,7 @@ async function scanSignatureChanges(input, deps) {
     }, deps);
     return diffSignatureMaps(before, after);
   } finally {
-    await rm2(afterDir, { recursive: true, force: true });
+    await rm3(afterDir, { recursive: true, force: true });
   }
 }
 
@@ -54633,7 +54917,7 @@ function defaultRegistry() {
 // src/core/setup.ts
 init_fs();
 import { execFileSync as execFileSync6 } from "child_process";
-import { chmod, cp, readFile as readFile20, rename as rename5, rm as rm3, writeFile as writeFile6 } from "fs/promises";
+import { chmod, cp, readFile as readFile20, rename as rename5, rm as rm4, writeFile as writeFile6 } from "fs/promises";
 import { basename as basename6, dirname as dirname18, isAbsolute as isAbsolute16, join as join90, resolve as resolve24 } from "path";
 init_shared();
 
@@ -54837,7 +55121,7 @@ async function installCodexSurface(opts) {
   if (resolve24(pluginRoot) === resolve24(installedPluginDir)) {
     throw new Error(`codex plugin source is already the installed plugin directory: ${installedPluginDir}`);
   }
-  await rm3(installedPluginDir, { recursive: true, force: true });
+  await rm4(installedPluginDir, { recursive: true, force: true });
   await ensureDir(join90(projectRoot, ".agents", "plugins"));
   await cp(pluginRoot, installedPluginDir, { recursive: true });
   await rewriteCodexInstalledReferences(installedPluginDir);
@@ -55488,7 +55772,7 @@ var setupCommand = defineCommand({
 });
 
 // src/cli/commands/teardown.ts
-import { rm as rm5 } from "fs/promises";
+import { rm as rm6 } from "fs/promises";
 import { homedir as homedir14 } from "os";
 import { join as join94, resolve as resolve27 } from "path";
 init_fs();
@@ -55496,7 +55780,7 @@ init_fs();
 // src/core/teardown.ts
 init_fs();
 init_shared();
-import { copyFile as copyFile2, readFile as readFile21, rm as rm4 } from "fs/promises";
+import { copyFile as copyFile2, readFile as readFile21, rm as rm5 } from "fs/promises";
 import { join as join93 } from "path";
 var BACKUP_SUFFIX2 = ".ditto_bak";
 async function teardown(opts) {
@@ -55530,10 +55814,10 @@ async function uninstallPushGateHook(opts) {
   }
   if (await fileExists(backupPath)) {
     await copyFile2(backupPath, hookPath);
-    await rm4(backupPath, { force: true });
+    await rm5(backupPath, { force: true });
     return { status: "restored-prior", hookPath, backupPath };
   }
-  await rm4(hookPath, { force: true });
+  await rm5(hookPath, { force: true });
   return { status: "removed", hookPath, backupPath: null };
 }
 async function teardownFile(destPath) {
@@ -55608,7 +55892,7 @@ var teardownCommand = defineCommand({
       const purge = await shouldPurge(Boolean(args.purge));
       if (purge) {
         const dittoDir2 = join94(projectRoot, ".ditto");
-        await rm5(dittoDir2, { recursive: true, force: true });
+        await rm6(dittoDir2, { recursive: true, force: true });
         writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ PURGED (${dittoDir2})`);
       } else {
         writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ kept`);
@@ -55764,7 +56048,7 @@ init_fs();
 init_shared();
 import { execFileSync as execFileSync7 } from "child_process";
 import { existsSync as existsSync15, lstatSync, realpathSync as realpathSync2 } from "fs";
-import { readFile as readFile22, readdir as readdir27, rm as rm6, writeFile as writeFile7 } from "fs/promises";
+import { readFile as readFile22, readdir as readdir27, rm as rm7, writeFile as writeFile7 } from "fs/promises";
 import { basename as basename7, dirname as dirname21, isAbsolute as isAbsolute17, join as join95, relative as relative23, resolve as resolve28 } from "path";
 var LOCAL_CLONE_ENV_FLAG = "DITTO_ALLOW_LOCAL_CLONE";
 function localTransportAllowed(env2 = process.env) {
@@ -55919,7 +56203,7 @@ async function cloneRepoEntry(inp) {
       stdio: ["ignore", "ignore", "pipe"]
     });
   } catch (err) {
-    await rm6(target, { recursive: true, force: true });
+    await rm7(target, { recursive: true, force: true });
     return { dir, url, status: "failed", reason: scrub(err) };
   }
   await addToParentGitignore(workspaceRoot, dir);
@@ -56019,8 +56303,8 @@ async function driveWorktrees(deps, options) {
   const mergeAndRemove = async (member) => {
     const mergeRes = await deps.merge(repoRoot, member);
     if (mergeRes.allMerged) {
-      const rm7 = await deps.removeWorktrees(repoRoot, member);
-      return { member_id: member, disposition: "driven-done", removed: rm7.removed.length > 0 };
+      const rm8 = await deps.removeWorktrees(repoRoot, member);
+      return { member_id: member, disposition: "driven-done", removed: rm8.removed.length > 0 };
     }
     const firstUnmerged = mergeRes.outcomes.find((o4) => o4.status !== "merged");
     return {
@@ -56387,4 +56671,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=09c4cffe7e2672bc8808a5a8b19159a61f2febf2eb132fe5b55166ef924601ff
+//# ditto-src-stamp=729bfcb9f271a929707fe3c3db49735f33a454073b3624a38ffce93a989c6802

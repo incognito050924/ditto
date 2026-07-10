@@ -1,3 +1,4 @@
+import type { PlanTestSpec } from '~/schemas/autopilot';
 import type { CoverageMap, CoverageNode } from '~/schemas/coverage';
 import type { DialecticVerdict } from '~/schemas/dialectic';
 import type { SelfAnswerAttempt } from '~/schemas/question-gate';
@@ -570,7 +571,16 @@ export function tierBriefApproval(tier: CoverageTier): 'not_required' | 'pending
  */
 export interface PlanGateInput {
   changeSurface: string[];
-  brief: { interface_changes: string[]; dod: string[]; test_scenarios: string[] };
+  brief: {
+    interface_changes: string[];
+    dod: string[];
+    test_scenarios: string[];
+    // Executable-DoD test spec (wi_2607105qy). Optional — a caller that does not run
+    // the pre-approval authoring stage omits it; when present it is passed THROUGH to
+    // the patch so the persisted gate carries it (DoD ac-1 — this transform is the
+    // third silent-strip site, alongside the payload and persisted schemas).
+    test_spec?: PlanTestSpec;
+  };
   tierInputs: TierSelectionInput;
   /**
    * Force `status='pending'` regardless of tier — the deterministic front-load of an
@@ -615,12 +625,29 @@ export interface PlanGateInput {
    * backward-compatible: absent ⇒ not forced.
    */
   highRisk?: boolean;
+  /**
+   * Force `status='pending'` when the plan carries (or will carry) an AUTHORED red-test
+   * spec (wi_2607105qy N2 ac-5). The pre-approval authoring stage freezes those tests at
+   * user approval; a light-tier auto-waive to `not_required` would FREEZE the tests with
+   * no human review, bypassing the very approval this feature exists for. So a plan with a
+   * dynamic_test oracle in play cannot auto-waive — the user must open the approval artifact
+   * and approve. Caller computes it (the design-pass site: any in-play AC with a
+   * `dynamic_test` oracle). Optional + backward-compatible: absent ⇒ not forced.
+   */
+  hasAuthoredTestSpec?: boolean;
 }
 
 export interface PlanGatePatch {
   status: 'pending' | 'not_required';
   change_surface: string[];
-  plan_brief: { interface_changes: string[]; dod: string[]; test_scenarios: string[] };
+  plan_brief: {
+    interface_changes: string[];
+    dod: string[];
+    test_scenarios: string[];
+    // Passed through from the input brief when present (wi_2607105qy, DoD ac-1). Absent
+    // ⇒ omitted from the patch (backward compat with a caller that authored no tests).
+    test_spec?: PlanTestSpec;
+  };
 }
 
 export function producePlanGate(input: PlanGateInput): PlanGatePatch {
@@ -629,7 +656,11 @@ export function producePlanGate(input: PlanGateInput): PlanGatePatch {
   // conflict / oracle gap / high-risk change may not auto-waive. Only a NON-forced,
   // purpose-preserving plan clears to not_required (the §2 livelock fix); otherwise
   // fall back to the tier (backward compatible when both new flags are absent).
-  const forcePending = input.requireApproval || input.oracleAssignmentIncomplete || input.highRisk;
+  const forcePending =
+    input.requireApproval ||
+    input.oracleAssignmentIncomplete ||
+    input.highRisk ||
+    input.hasAuthoredTestSpec;
   return {
     status: forcePending
       ? 'pending'
@@ -641,6 +672,10 @@ export function producePlanGate(input: PlanGateInput): PlanGatePatch {
       interface_changes: [...input.brief.interface_changes],
       dod: [...input.brief.dod],
       test_scenarios: [...input.brief.test_scenarios],
+      // wi_2607105qy DoD ac-1: carry the authored-test spec through the transform so the
+      // persisted gate keeps it (no middle-transform strip). Spread only when present so
+      // an absent spec leaves the field off the patch (backward compat).
+      ...(input.brief.test_spec !== undefined ? { test_spec: input.brief.test_spec } : {}),
     },
   };
 }

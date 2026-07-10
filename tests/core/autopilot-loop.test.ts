@@ -1265,9 +1265,11 @@ describe('recordResult design oracle assignment (ADR-0024 ac-2: per-AC verificat
       maps_to: 'docs/decision.md',
       direction: 'backward',
     });
-    // every in-play AC got an oracle → presence-check passes → light tier auto-waives.
+    // every in-play AC got an oracle, but ac-1's is a `dynamic_test` oracle: a red test
+    // must be authored, so the plan may NOT auto-waive (wi_2607105qy N2 ac-5 — a frozen
+    // approval is owed) even though the tier alone is light.
     const g = await aps.get(WI);
-    expect(g.approval_gate.status).toBe('not_required');
+    expect(g.approval_gate.status).toBe('pending');
   });
 
   test('(b) presence-check keeps the plan stage from closing when an in-play AC lacks an oracle', async () => {
@@ -1486,7 +1488,9 @@ describe('recordResult design oracle assignment (ADR-0024 ac-2: per-AC verificat
     const w = await wis.get(WI);
     expect(w.acceptance_criteria.find((a) => a.id === 'ac-1')?.oracle).toEqual(frozen);
     const g = await aps.get(WI);
-    expect(g.approval_gate.status).toBe('not_required');
+    // both in-play ACs carry a `dynamic_test` oracle ⇒ red tests must be authored ⇒ the
+    // plan may NOT auto-waive (wi_2607105qy N2 ac-5 — a frozen approval is owed).
+    expect(g.approval_gate.status).toBe('pending');
   });
 });
 

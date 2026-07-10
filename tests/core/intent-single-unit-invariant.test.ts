@@ -105,6 +105,10 @@ describe('(a) no slice/phase work-unit exists between work-item and autopilot no
     'cleanup',
     'e2e-author',
     'test',
+    // Pre-approval red-test authoring stage (wi_2607105qy N2) — a legitimate typed-node
+    // kind, NOT a slice/phase intermediate (it authors red tests for one AC set within
+    // the SAME whole-work-item boundary), so it belongs in the sanctioned vocabulary.
+    'test-author',
   ];
 
   test('the typed-node vocabulary (nodeKind) declares NO slice/phase unit', () => {

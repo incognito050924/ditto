@@ -33,6 +33,14 @@ const KIND_TO_OWNER: Record<AutopilotNode['kind'], AutopilotNode['owner']> = {
   // `tester` owner + OWNER_TOOLS.tester entry the plumbing added are now vestigial but
   // kept — `tester` is still in the nodeOwner enum, so OWNER_TOOLS must stay total.)
   test: 'driver',
+  // `test-author` (pre-approval red-test authoring, wi_2607105qy) maps to the
+  // `implementer` owner: it is a spawnable MUTATING owner (Edit/Write) that authors
+  // the failing red tests. Reusing `implementer` (rather than a new owner) keeps the
+  // OWNER_TOOLS/nodeOwner totals unchanged — the distinctness that matters lives on the
+  // KIND, which drives the barrier hold, seedTestBarrier no-op guard, and the approval
+  // carve-out. The per-node delegation packet (test-author vs implement) tells the same
+  // owner which stage it is running.
+  'test-author': 'implementer',
 };
 
 export function kindToOwner(kind: AutopilotNode['kind']): AutopilotNode['owner'] {

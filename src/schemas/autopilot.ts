@@ -42,6 +42,15 @@ export const nodeKind = z
     // OUT of the per-AC fold; its GREEN/RED/degrade disposition is AND'd into the
     // final verdict by the completion seam (autopilot-complete), never a per-AC one.
     'test',
+    // `test-author` is the pre-approval red-test AUTHORING STAGE (wi_2607105qy N2): a
+    // spawnable MUTATING node (owner `implementer`) that, for each `dynamic_test` AC,
+    // authors a failing (red) unit test BEFORE the approval gate opens and populates
+    // `approval_gate.plan_brief.test_spec.test_backed`. A DISTINCT kind (NOT reusing
+    // `test`, the read-only settled-tree barrier) so it is never held by the barrier
+    // hold nor no-op'd by seedTestBarrier, and so the approval carve-out can key on it
+    // (only this kind writes test files pre-approval). Carries acceptance_refs:[] — it
+    // authors, it judges no criterion (the retro/e2e-author seed convention).
+    'test-author',
   ])
   .describe('Kind of work a node represents');
 
@@ -173,6 +182,41 @@ export const nodeProposal = z
       'gate (validateNodeAddition) then guards the splice.',
   );
 
+// Executable Definition-of-Done test spec (wi_2607105qy). The pre-approval authoring
+// stage records, per `dynamic_test` AC, the authored (red) unit test it wrote, and
+// distinguishes those test-backed ACs from oracle-only (static_scan/soft_judgment) ACs
+// so the approval screen renders the two differently (ac-4). Declared as a SHARED schema
+// so the persisted gate, the record-result payload, and the PlanGate patch all carry the
+// SAME shape — a value set upstream is never silently stripped before the persisted gate
+// (DoD ac-1). Every field is optional/`.default()`-ed and the whole `test_spec` is itself
+// optional on `plan_brief`, so an in-flight autopilot.json written before this regime
+// parses + approves identically (DoD ac-2 backward-compat).
+export const planTestSpec = z
+  .object({
+    // ac-1: per `dynamic_test` AC, the authored red unit test referenced from the brief.
+    test_backed: z
+      .array(
+        z.object({
+          criterion_id: z.string().min(1),
+          test_path: relativePath,
+          // ac-3 Part B (frozen-test integrity): the content hash of the authored red
+          // test captured at freeze time (test-author pass) and committed atomically
+          // into autopilot.json. Completion binds to it — a later delete/weaken of the
+          // frozen test (hash gone / changed) is rejected (no vacuous green). Optional +
+          // additive: a legacy/degraded spec without it round-trips unchanged.
+          frozen_hash: z.string().min(1).optional(),
+        }),
+      )
+      .default([]),
+    // ac-4: the oracle-only (static_scan/soft_judgment) ACs — not guaranteed by an
+    // executed test, so the approval screen lists them apart from the test-backed set.
+    oracle_only: z.array(z.string().min(1)).default([]),
+    // ac-6: the predictable rendered-artifact path the gate message points the user at
+    // (`.ditto/local/work-items/<wi>/approval/…`, never a temp folder).
+    artifact_path: relativePath.optional(),
+  })
+  .describe('Executable-DoD test spec: authored red-test refs + test-backed/oracle-only split');
+
 export const autopilot = z
   .object({
     schema_version: schemaVersion,
@@ -206,6 +250,9 @@ export const autopilot = z
           interface_changes: z.array(z.string().min(1)).default([]),
           dod: z.array(z.string().min(1)).default([]),
           test_scenarios: z.array(z.string().min(1)).default([]),
+          // Executable-DoD test spec (wi_2607105qy). Optional + additive: a legacy
+          // plan_brief without it parses + approves unchanged (DoD ac-2).
+          test_spec: planTestSpec.optional(),
         })
         .optional(),
     }),
@@ -256,3 +303,4 @@ export const autopilot = z
 export type Autopilot = z.infer<typeof autopilot>;
 export type AutopilotNode = z.infer<typeof autopilotNode>;
 export type NodeProposal = z.infer<typeof nodeProposal>;
+export type PlanTestSpec = z.infer<typeof planTestSpec>;

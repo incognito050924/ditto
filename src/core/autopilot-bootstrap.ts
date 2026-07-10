@@ -70,6 +70,54 @@ function seedE2eAuthorNode(nodes: AutopilotNode[]): AutopilotNode[] {
 }
 
 /**
+ * Splice a `test-author` node into the pre-approval slot BETWEEN the design→e2e-author
+ * anchor and the implement it gates (wi_2607105qy N2). Ordering:
+ * design → [e2e-author] → test-author → implement → verify. The authoring node depends
+ * on whatever currently precedes implement (the e2e-author if `seedE2eAuthorNode` ran,
+ * else design), and every node that depended DIRECTLY on that predecessor (the implement)
+ * is re-pointed onto the authoring node — so authoring gates implement. Modeled on
+ * `seedE2eAuthorNode`: carries acceptance_refs:[] (it authors, it judges no criterion),
+ * idempotent, and a no-op when there is no design anchor.
+ *
+ * GATED on `hasDynamicTestOracle` (ac-5 degrade precondition): only a work item with ≥1
+ * `dynamic_test`-oracle AC gets an authoring node — with no dynamic_test AC there is no
+ * red test to author, so no node is seeded (design→implement chain unchanged).
+ */
+export function seedTestAuthorNode(
+  nodes: AutopilotNode[],
+  hasDynamicTestOracle: boolean,
+): AutopilotNode[] {
+  if (!hasDynamicTestOracle) return nodes;
+  const design = nodes.find((n) => n.kind === 'design');
+  if (!design) return nodes;
+  const authorId = `${design.id}-test-author`;
+  if (nodes.some((n) => n.id === authorId)) return nodes;
+  // Slot AFTER the e2e-author if it was seeded (so order stays
+  // design → e2e-author → test-author), else directly after design.
+  const e2eAuthor = nodes.find((n) => n.kind === 'e2e-author');
+  const predecessorId = e2eAuthor ? e2eAuthor.id : design.id;
+  const author: AutopilotNode = {
+    id: authorId,
+    kind: 'test-author',
+    owner: kindToOwner('test-author'),
+    purpose:
+      'Author the failing (red) unit/mock test for each dynamic_test AC before the approval gate opens',
+    status: 'pending',
+    depends_on: [predecessorId],
+    acceptance_refs: [],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  };
+  const rewired = nodes.map((n) =>
+    n.id !== predecessorId && n.id !== authorId && n.depends_on.includes(predecessorId)
+      ? { ...n, depends_on: n.depends_on.map((d) => (d === predecessorId ? authorId : d)) }
+      : n,
+  );
+  // Insert the authoring node right after its predecessor (positional clarity).
+  return rewired.flatMap((n) => (n.id === predecessorId ? [n, author] : [n]));
+}
+
+/**
  * Seed the settled-tree TEST BARRIER (wi_260708ds9 ac-1) — the analogue of
  * `seedE2eAuthorNode`, applied UNCONDITIONALLY so every new graph gets a barrier
  * (its ABSENCE, not its presence, is the pre-barrier legacy grandfather signal the
@@ -199,10 +247,19 @@ export async function bootstrapAutopilot(
 
   const seededNodes = (input.generateNodes ?? defaultNodeGenerator)(acceptanceIds);
   const withE2e = input.e2eOptIn ? seedE2eAuthorNode(seededNodes) : seededNodes;
+  // Pre-approval red-test authoring stage (wi_2607105qy N2): seeded BETWEEN the
+  // design/e2e-author anchor and implement, but ONLY when ≥1 in-play AC carries a
+  // `dynamic_test` oracle (ac-5 degrade precondition — nothing to author otherwise).
+  // Applied AFTER e2e-author so the order is design → e2e-author → test-author →
+  // implement, and BEFORE the barrier so the barrier still anchors on the implement node.
+  const hasDynamicTestOracle = input.intent.acceptance_criteria.some(
+    (ac) => ac.oracle?.verification_method === 'dynamic_test',
+  );
+  const withAuthor = seedTestAuthorNode(withE2e, hasDynamicTestOracle);
   // Settled-tree test barrier (ac-1 part b): seeded unconditionally on the implement
   // frontier. Applied AFTER e2e-author (which sits between design and implement) so
   // the two seams never conflict — the barrier only anchors on implement nodes.
-  const nodes = seedTestBarrier(withE2e);
+  const nodes = seedTestBarrier(withAuthor);
 
   const graph: Autopilot = {
     schema_version: '0.1.0',
