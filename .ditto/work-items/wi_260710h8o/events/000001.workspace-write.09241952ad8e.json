@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260710h8o",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "09241952ad8ec24cc9f5b735ebf9036314ea1e0310d5230624a843cd5335272f",
+  "ts": "2026-07-10T08:57:42.567Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c grep -rq '\"semantic_status\": \"engaged\"' /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/d417d8ef-a682-4d91-9031-74d1e41dbffc/scratchpad/measure-repo/.ditto/local/work-items && grep -rq '\"status\": \"engaged\"' /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/d417d8ef-a682-4d91-9031-74d1e41dbffc/scratchpad/measure-repo/.ditto/local/work-items && echo OK",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

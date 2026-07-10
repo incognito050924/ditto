@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260710h8o",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "aa8d03efd58922f29e961814d9718e98a9766b6dfb357af908d0c6bb38c69ab0",
+  "ts": "2026-07-10T08:57:42.759Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c test -f .ditto/work-items/wi_260710h8o/wiring-decision.md && grep -q '현행유지' .ditto/work-items/wi_260710h8o/wiring-decision.md && grep -c '현행유지' .ditto/work-items/wi_260710h8o/wiring-decision.md | grep -qE '[2-9]|[0-9]{2}' && echo OK",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

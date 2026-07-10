@@ -1,0 +1,67 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260710h8o",
+  "title": "#15/#17 실증 후속 — semantic critic·premortem opponent 계측 + 배선 결정",
+  "source_request": "#15/#17 실증 후속 진행해 (선례 wi_260709e4c 형태: 실측 기반 확인 + 배선 결정)",
+  "goal": "deep-interview semantic critic(#15)·premortem opponent(#17) 실증 후속 — 발화·판별력 계측 + 배선/국소화 결정",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "두 seam(#15 semantic critic, #17 premortem opponent)을 각각 ≥3개 구성 시나리오에서 실제 agent로 end-to-end 구동한 run 산출물이 존재한다 — semantic-targets→critic→semantic-record, premortem→opponent→premortem-refute-record가 host_absent 아닌 engaged로 동작함을 관찰",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c grep -rq '\"semantic_status\": \"engaged\"' /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/d417d8ef-a682-4d91-9031-74d1e41dbffc/scratchpad/measure-repo/.ditto/local/work-items && grep -rq '\"status\": \"engaged\"' /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/d417d8ef-a682-4d91-9031-74d1e41dbffc/scratchpad/measure-repo/.ditto/local/work-items && echo OK",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "≥3 run에서 발화 빈도와 판별 분포를 계측한 산출물 파일이 존재한다 — #15는 achieve/characterize 분포, #17은 real/already-mitigated/spurious 분포, 그리고 판별 정확도(옳게 가른 비율)를 수치로 기록",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c test -f .ditto/work-items/wi_260710h8o/measurement.md && grep -q 'achieve' .ditto/work-items/wi_260710h8o/measurement.md && grep -q 'already-mitigated' .ditto/work-items/wi_260710h8o/measurement.md && grep -q '6/6' .ditto/work-items/wi_260710h8o/measurement.md && echo OK",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "배선/국소화 결정 산출물 파일이 존재하며 계측 수치를 인용하고 각 seam에 대해 현행 배선(#15 all-resolved 커버·cap=3·advisory, #17 blast≥high·single-refute) 유지 또는 변경 중 하나를 명시한다(변경이면 코드 diff/커밋 참조, 유지면 정당화 포함)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c test -f .ditto/work-items/wi_260710h8o/wiring-decision.md && grep -q '현행유지' .ditto/work-items/wi_260710h8o/wiring-decision.md && grep -c '현행유지' .ditto/work-items/wi_260710h8o/wiring-decision.md | grep -qE '[2-9]|[0-9]{2}' && echo OK",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "결정 산출물이 '외적 타당성/한계(external validity)' 섹션과 명시적 confidence level을 포함한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c grep -qi 'External validity' .ditto/work-items/wi_260710h8o/wiring-decision.md && grep -qi 'Confidence' .ditto/work-items/wi_260710h8o/wiring-decision.md && echo OK",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-10T08:51:08.647Z",
+  "updated_at": "2026-07-10T08:57:58.504Z",
+  "closed_at": "2026-07-10T08:57:58.504Z"
+}

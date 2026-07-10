@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260710h8o",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "c79c0a7bb6494a1dc1d24834b1c9d20c94457342dc3d0c59182bd05b1500d6c6",
+  "ts": "2026-07-10T08:57:42.854Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c grep -qi 'External validity' .ditto/work-items/wi_260710h8o/wiring-decision.md && grep -qi 'Confidence' .ditto/work-items/wi_260710h8o/wiring-decision.md && echo OK",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
