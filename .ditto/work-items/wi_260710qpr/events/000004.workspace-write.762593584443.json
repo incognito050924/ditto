@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260710qpr",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "762593584443b6fcc5d2518f7c22560010b6c726d4a6d473f22f1cfca7b8a19c",
+  "ts": "2026-07-10T10:19:56.164Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c bun test 2>&1 | tail -3 | grep -qE '0 fail' && echo ALLGREEN",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

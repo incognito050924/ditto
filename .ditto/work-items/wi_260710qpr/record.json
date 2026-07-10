@@ -1,0 +1,71 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260710qpr",
+  "title": "wi_260707loq 후속(재검증): autopilot 자율성 계약 잔여 2건 — ac-2 emit 경로 · handoff parity (supersedes #12)",
+  "source_request": "wi_260707loq 후속(재검증): autopilot 자율성 계약 잔여 2건 — ac-2 emit 경로 · handoff parity (supersedes #12)\n\n`wi_260707loq`(autopilot 무중단 자율성 계약) 회고 잔여 중 **HEAD `0d45b0c` 기준 재검증에서 여전히 실재하는 2건**만 이관 (#12 close). 로컬 아티팩트는 per-machine·gitignored라 소실 — 이 이슈가 durable SoT다. 커밋된 심볼로 자립 기술.\n\n**재검증에서 제외된 항목** (더 이상 실재 아님):\n- ac-6 e2e opt-in *seeding* — **해소**. green 실증: `tests/cli/autopilot-bootstrap-e2e-cli.test.ts:96` (`ditto autopilot bootstrap --e2e` → design/implement 사이 `N1-e2e-author` seed). 진입 dialogue 실행만 얇은 잔여(에이전트 실행 계열, 코드 테스트 대상 아님).\n- no-intent.json degenerate-run livelock — 정상경로 미재현(코드로 판정 불가), 드롭.\n\n---\n\n### 1. ac-2 direction-fork STOP carrier — 프로덕션 emit 경로 부재\n**현재(0d45b0c):** Stop hook이 `direction-fork.json` carrier를 읽어 P1 yield / P5 fail-closed 한다 — reader `src/hooks/stop.ts:781-785`(read), `:827-831`(P1 yield), `:865-867`(P5 force). writer는 `src/core/autopilot-loop.ts:2214-2228`(`recordResultCore`가 carrier persist), 입력 스키마 필드 `:1584`.\n**갭:** **어떤 프로덕션 owner도 `direction_fork_stop`를 emit하지 않는다** — `agents/`·`skills/`·`dist/`·`src/` grep 0건, 오직 `tests/`만 payload 생성. genuine 3조건 stop-fork가 실런에서 P1 yield를 발화하는 end-to-end 미실증(픽스처만 발화).\n**Done:** owner(구현/루프)가 genuine 3조건 fork에서 `direction_fork_stop`를 내보내는 실경로 추가 + 실런에서 Stop이 yield함을 실증하는 테스트.\n\n### 2. deriveAcVerdicts handoff-parity\n**현재(0d45b0c):** 시그니처 `src/core/autopilot-complete.ts:205-210` = `(graph, acIds, oracles?, criteria?)`. complete 경로는 4-arg `:461` `deriveAcVerdicts(graph, acIds, oracles, criteria)`. 그러나 `src/core/work-item-handoff.ts:259`는 3-arg `deriveAcVerdicts(graph, acIds, oracles)` — `criteria`(fresh-verify supersession) 누락.\n**갭:** handoff 재개 문서가 complete보다 staler 노드 판정 노출. 방향은 보수적(criteria는 stale→pass 상향만 가능, never false-green)이라 **비긴급**.\n**Done:** handoff 호출부에 criteria map 전달해 complete와 parity, 또는 의도적 divergence 문서화.",
+  "goal": "wi_260707loq 후속(재검증): autopilot 자율성 계약 잔여 2건 — ac-2 emit 경로 · handoff parity (supersedes #12)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "autopilot 오케스트레이션 드라이버 지침(SKILL.md step3)에 genuine 3조건 direction fork(해소 불가) 시 record-result로 direction_fork_stop를 emit하라는 producer 지침 문구가 존재한다 (grep으로 확인)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c grep -q 'Direction-fork STOP (P1 producer)' skills/autopilot/SKILL.md && grep -q 'direction_fork_stop' skills/autopilot/SKILL.md && echo FOUND",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "통합 테스트가 recordResult(direction_fork_stop 3조건)→direction-fork.json carrier→실제 stopHandler exit 0(P1 yield) 전 사슬을 실증하고 통과한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/direction-fork-stop-integration.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "work-item-handoff의 deriveAcVerdicts가 criteria를 전달해 complete와 verdict parity를 이루는 테스트가 통과한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/work-item-handoff.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "bun test 전체 스위트가 0 fail로 통과한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c bun test 2>&1 | tail -3 | grep -qE '0 fail' && echo ALLGREEN",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 20
+  },
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-10T10:08:29.885Z",
+  "updated_at": "2026-07-10T10:20:23.819Z",
+  "closed_at": "2026-07-10T10:20:23.819Z"
+}
