@@ -283,11 +283,13 @@
   "follow_ups": [
     {
       "kind": "idea",
-      "note": "coverage taxonomy 제안: 'autonomy-liveness' 카테고리 신설 검토 (ditto coverage discover --confirm). 무인 autopilot 루프가 항상 자력 terminal 도달하는가 — 강화된 완료 게이트의 livelock/deadlock vs transference(no-auto-pick 위반). concurrency(safety)/failure-recovery(error)와 구별되는 progress/liveness 렌즈. 근거: autopilot-complete.ts:367,456·coverage-manager.ts:594·deriveNonPassStatus. 이번 #19의 구체 liveness risk는 failure-recovery/boundary-edge/cross-feature sweep으로 이미 포착·ac-1 제약 반영됨 — 이건 taxonomy 명명 갭만 남은 것."
+      "note": "coverage taxonomy 제안: 'autonomy-liveness' 카테고리 신설 검토 (ditto coverage discover --confirm). 무인 autopilot 루프가 항상 자력 terminal 도달하는가 — 강화된 완료 게이트의 livelock/deadlock vs transference(no-auto-pick 위반). concurrency(safety)/failure-recovery(error)와 구별되는 progress/liveness 렌즈. 근거: autopilot-complete.ts:367,456·coverage-manager.ts:594·deriveNonPassStatus. 이번 #19의 구체 liveness risk는 failure-recovery/boundary-edge/cross-feature sweep으로 이미 포착·ac-1 제약 반영됨 — 이건 taxonomy 명명 갭만 남은 것.",
+      "resolved": true
     },
     {
       "kind": "idea",
-      "note": "ditto 자체 recipe에 barrier_test_command 미설정 → autopilot test-barrier가 degrade(unverified, ADR-0018)해 whole-suite green을 자동 증명 못 함(이번엔 수동 bun test로 4463 pass 확인). 자기호스팅 recipe에 barrier_test_command='bun test' 설정 검토(ADR-20260708 test-tier 배리어)."
+      "note": "ditto 자체 recipe에 barrier_test_command 미설정 → autopilot test-barrier가 degrade(unverified, ADR-0018)해 whole-suite green을 자동 증명 못 함(이번엔 수동 bun test로 4463 pass 확인). 자기호스팅 recipe에 barrier_test_command='bun test' 설정 검토(ADR-20260708 test-tier 배리어).",
+      "resolved": true
     }
   ],
   "github_issue": {
@@ -304,6 +306,6 @@
   "runs": [],
   "started_at_sha": "a3e37bfd1773a7fa2177c7021841518e388352d4",
   "created_at": "2026-07-10T10:15:36.327Z",
-  "updated_at": "2026-07-10T13:00:46.366Z",
+  "updated_at": "2026-07-10T13:29:49.367Z",
   "closed_at": "2026-07-10T13:00:17.775Z"
 }
