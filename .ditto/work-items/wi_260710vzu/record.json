@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260710vzu",
+  "title": "bug: autopilot cap-model이 대형 under-decomposed implement 노드의 '증분-성공, 계속'을 처리 못 함. 성공적 TDD 증분을 fixable로 기록하면 fix_per_node 소진→다음 fixable이 곧바로 escalate(switch 레버는 wrong_approach 전용이라 미사용)→노드 terminal fail",
+  "source_request": "Discovered while working on wi_2607105qy: autopilot cap-model이 대형 under-decomposed implement 노드의 '증분-성공, 계속'을 처리 못 함. 성공적 TDD 증분을 fixable로 기록하면 fix_per_node 소진→다음 fixable이 곧바로 escalate(switch 레버는 wrong_approach 전용이라 미사용)→노드 terminal fail. 이후 next-node가 clean blocked가 아니라 waiting으로 stuck(의존 노드가 실패 노드에 막힘), 그리고 autopilot complete가 노드 실패를 그 노드의 모든 acceptance_ref로 over-cascade해 검증된 per-AC 진척을 fail로 소거. 복구는 수동 재무장(attempts 리셋)으로만 가능. 근본: (a) 대형 implement를 planner가 subgraph로 분해하거나, (b) 증분-성공을 재시도-cap과 분리하는 outcome이 필요, (c) 노드 terminal-fail의 AC over-cascade를 downstream verify 증거로 완화. wi_2607105qy N2에서 실제 발생(4증분).",
+  "goal": "Fix: autopilot cap-model이 대형 under-decomposed implement 노드의 '증분-성공, 계속'을 처리 못 함. 성공적 TDD 증분을 fixable로 기록하면 fix_per_node 소진→다음 fixable이 곧바로 escalate(switch 레버는 wrong_approach 전용이라 미사용)→노드 terminal fail. 이후 next-node가 clean blocked가 아니라 waiting으로 stuck(의존 노드가 실패 노드에 막힘), 그리고 autopilot complete가 노드 실패를 그 노드의 모든 acceptance_ref로 over-cascade해 검증된 per-AC 진척을 fail로 소거. 복구는 수동 재무장(attempts 리셋)으로만 가능. 근본: (a) 대형 implement를 planner가 subgraph로 분해하거나, (b) 증분-성공을 재시도-cap과 분리하는 outcome이 필요, (c) 노드 terminal-fail의 AC over-cascade를 downstream verify 증거로 완화. wi_2607105qy N2에서 실제 발생(4증분).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "discovered_by": "wi_2607105qy",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-10T18:38:24.473Z",
+  "updated_at": "2026-07-10T18:38:24.473Z"
+}

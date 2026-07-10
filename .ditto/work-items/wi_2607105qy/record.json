@@ -195,7 +195,7 @@
       ]
     }
   ],
-  "status": "blocked",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [
@@ -245,6 +245,20 @@
       "kind": "bug",
       "note": "risk flag가 approval-gate를 pending으로 만들지 못함: 'ditto work start --issue X --risk non_local,irreversible'로 생성한 work item의 declared_risk가 None으로 저장됨(deep-interview finalize의 risk도 intent.json에 null). producePlanGate(autopilot-loop.ts:2896)의 highRisk는 workItem.declared_risk를 읽으므로 highRisk=false→forcePending false→approval_gate가 not_required로 auto-waive→heavy/irreversible 작업이 사용자 승인 없이 implement로 dispatch됨(N2 running). 재현: work start --risk 후 declared_risk 확인=None. 영향: 모든 heavy 작업의 계획 승인 게이트 무력화. wi_2607105qy에서 work-item.json declared_risk 수동 설정 + approval_gate.status=pending 편집으로 우회함. 근본 수정 필요: start --risk와 finalize risk가 declared_risk에 반영되도록.",
       "materialized_wi": "wi_260710y87"
+    },
+    {
+      "kind": "bug",
+      "note": "autopilot cap-model이 대형 under-decomposed implement 노드의 '증분-성공, 계속'을 처리 못 함. 성공적 TDD 증분을 fixable로 기록하면 fix_per_node 소진→다음 fixable이 곧바로 escalate(switch 레버는 wrong_approach 전용이라 미사용)→노드 terminal fail. 이후 next-node가 clean blocked가 아니라 waiting으로 stuck(의존 노드가 실패 노드에 막힘), 그리고 autopilot complete가 노드 실패를 그 노드의 모든 acceptance_ref로 over-cascade해 검증된 per-AC 진척을 fail로 소거. 복구는 수동 재무장(attempts 리셋)으로만 가능. 근본: (a) 대형 implement를 planner가 subgraph로 분해하거나, (b) 증분-성공을 재시도-cap과 분리하는 outcome이 필요, (c) 노드 terminal-fail의 AC over-cascade를 downstream verify 증거로 완화. wi_2607105qy N2에서 실제 발생(4증분).",
+      "materialized_wi": "wi_260710vzu"
+    },
+    {
+      "kind": "bug",
+      "note": "frozen-test 무결성이 in-loop mutating-pass 권한(implement/fix/refactor)에만 바인딩됨. 마지막 mutating pass 이후의 frozen breach(예: out-of-band 편집)가 ditto autopilot complete에서 재검사되지 않음 — autopilot-complete.ts가 wi_2607105qy change_surface 밖이라 completion-boundary flooring 미배선. assertFrozenTestsIntact를 completion 조립 경로에도 방어적으로 재검사 필요(defense-in-depth).",
+      "materialized_wi": "wi_260710l33"
+    },
+    {
+      "kind": "idea",
+      "note": "in-loop frozen guard(byte-identical content-hash)가 frozen 테스트를 재포맷하는 정당한 tidy/refactor pass도 거부함(freeze=byte-identical). Tidy First 단계와의 상호작용 확인 필요 — frozen 테스트에 대한 순수 포맷 변경을 허용할지(AST-동등 비교) 아니면 tidy를 authoring 전으로 강제할지 결정."
     }
   ],
   "github_issue": {
@@ -263,5 +277,6 @@
   "handoff_path": ".ditto/local/handoff/wi_2607105qy.md",
   "started_at_sha": "4507b5ba9b0982efa09df0a99be979dd273987ac",
   "created_at": "2026-07-10T13:57:26.200Z",
-  "updated_at": "2026-07-10T18:33:21.722Z"
+  "updated_at": "2026-07-10T18:38:24.679Z",
+  "closed_at": "2026-07-10T18:37:23.833Z"
 }

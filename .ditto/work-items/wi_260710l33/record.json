@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260710l33",
+  "title": "bug: frozen-test 무결성이 in-loop mutating-pass 권한(implement/fix/refactor)에만 바인딩됨. 마지막 mutating pass 이후의 frozen breach(예: out-of-band 편집)가 ditto autopilot complete에서 재검사되지 않음 — autopilot-complete.ts가 wi_2",
+  "source_request": "Discovered while working on wi_2607105qy: frozen-test 무결성이 in-loop mutating-pass 권한(implement/fix/refactor)에만 바인딩됨. 마지막 mutating pass 이후의 frozen breach(예: out-of-band 편집)가 ditto autopilot complete에서 재검사되지 않음 — autopilot-complete.ts가 wi_2607105qy change_surface 밖이라 completion-boundary flooring 미배선. assertFrozenTestsIntact를 completion 조립 경로에도 방어적으로 재검사 필요(defense-in-depth).",
+  "goal": "Fix: frozen-test 무결성이 in-loop mutating-pass 권한(implement/fix/refactor)에만 바인딩됨. 마지막 mutating pass 이후의 frozen breach(예: out-of-band 편집)가 ditto autopilot complete에서 재검사되지 않음 — autopilot-complete.ts가 wi_2607105qy change_surface 밖이라 completion-boundary flooring 미배선. assertFrozenTestsIntact를 completion 조립 경로에도 방어적으로 재검사 필요(defense-in-depth).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "discovered_by": "wi_2607105qy",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-10T18:38:24.574Z",
+  "updated_at": "2026-07-10T18:38:24.574Z"
+}
