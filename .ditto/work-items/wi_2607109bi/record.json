@@ -12,7 +12,7 @@
       "evidence": []
     }
   ],
-  "status": "draft",
+  "status": "abandoned",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
@@ -21,5 +21,6 @@
   "risks": [],
   "runs": [],
   "created_at": "2026-07-10T13:37:02.875Z",
-  "updated_at": "2026-07-10T13:37:02.875Z"
+  "updated_at": "2026-07-10T13:48:06.944Z",
+  "closed_at": "2026-07-10T13:48:06.942Z"
 }
