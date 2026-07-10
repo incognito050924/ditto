@@ -1,0 +1,50 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709mqt",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "f2cf3d6d7de4667851b71ba693832fde402e962d5839461a435b335955266677",
+  "ts": "2026-07-09T04:17:55.266Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260709mqt/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/interview-dissent.test.ts tests/core/interview-driver.test.ts tests/integration/intent-coverage-drive.test.ts",
+        "summary": "53 pass / 0 fail (exit 0)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "전체 4369 pass / 6 fail; baseline stash 4351 pass / 6 fail — 동일 6 pre-existing surface-drift, 신규 회귀 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run build:bin",
+        "summary": "exit 0 (bin/ditto 2.13MB, 403 modules)"
+      },
+      {
+        "kind": "command",
+        "command": "npx tsc --noEmit",
+        "summary": "468 with changes vs 470 baseline; touched production src(interview-state/dissent/driver/deep-interview) 0 errors"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/interview-dissent.test.ts",
+        "summary": "null-host/engaged-high/non-critical-low/empty→host_absent/throw→host_absent 케이스 통과"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/interview-dissent.ts",
+        "summary": "engageIntentDissent: critical만 impact=high, null selection→host_absent(delegate 미호출), delegate throw try/catch→host_absent; prism resolveOpponentSelection/OpponentBrief/OpponentSeamConfig import-재사용; provider spawn 0"
+      }
+    ]
+  }
+}

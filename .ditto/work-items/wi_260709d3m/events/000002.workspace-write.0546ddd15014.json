@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709d3m",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "0546ddd1501477b12361c73bfbd6356c4347fafe8560bc29fb45905b401bfe5c",
+  "ts": "2026-07-09T09:02:22.597Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/deep-interview-premortem-refute.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

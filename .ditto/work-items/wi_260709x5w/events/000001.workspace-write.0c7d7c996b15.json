@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709x5w",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "0c7d7c996b15fd27fd8f7a32424ab6c41d524040dd82ca72e9edac091c26881b",
+  "ts": "2026-07-09T05:35:39.676Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c test -f agents/intent-dissent-opponent.md && grep -qi \"anti-inflation\\|더 정확\\|sharper\\|dissent\" agents/intent-dissent-opponent.md",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

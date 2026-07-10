@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709x5w",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "e16c12bd5fd3d953c57a3fea18a192ff8c88296b9248420b4db9bf34247bb8a6",
+  "ts": "2026-07-09T05:36:09.722Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/71ff1b47-0a7b-4581-86bd-11ac3268eb8d/scratchpad/ac3_repro.sh",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

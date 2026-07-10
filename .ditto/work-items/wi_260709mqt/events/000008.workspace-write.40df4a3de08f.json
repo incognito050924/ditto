@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709mqt",
+  "seq": 8,
+  "actor": "workspace-write",
+  "event_id": "40df4a3de08f0e06b66caaa8dafcbd6978d33550a86527780d87610e7abfa911",
+  "ts": "2026-07-09T04:17:55.268Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260709mqt/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/interview-dissent.test.ts tests/core/interview-driver.test.ts tests/integration/intent-coverage-drive.test.ts",
+        "summary": "53 pass / 0 fail (exit 0)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "전체 4369 pass / 6 fail; baseline stash 4351 pass / 6 fail — 동일 6 pre-existing surface-drift, 신규 회귀 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run build:bin",
+        "summary": "exit 0 (bin/ditto 2.13MB, 403 modules)"
+      },
+      {
+        "kind": "command",
+        "command": "npx tsc --noEmit",
+        "summary": "468 with changes vs 470 baseline; touched production src(interview-state/dissent/driver/deep-interview) 0 errors"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (full) + git stash 대조",
+        "summary": "4369 vs 4351 pass, 양쪽 6 pre-existing fail, 신규 회귀 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run build:bin",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "interviewState.safeParse(legacy no-dissent)",
+        "summary": "success:true, dissent=undefined — backward-compat 확인; dissent 전부 optional/.default"
+      }
+    ]
+  }
+}

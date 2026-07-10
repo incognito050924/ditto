@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709d3m",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "f945702cc4b90795672459cd685c8bd14ef312ff28b48d6d1820b73b2352b8c2",
+  "ts": "2026-07-09T09:02:21.599Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/premortem-enhance.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

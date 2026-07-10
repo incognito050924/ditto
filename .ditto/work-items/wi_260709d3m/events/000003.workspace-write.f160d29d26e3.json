@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709d3m",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "f160d29d26e3642b4c241ced8de108f53bdf06f104c2168bee417ee792aa3bde",
+  "ts": "2026-07-09T09:02:22.748Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/integration/intent-coverage-drive.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

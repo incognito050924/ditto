@@ -1,0 +1,68 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260709x5w",
+  "title": "bug: dissent opponent 라이브 배선 미완(ships dormant): engageIntentDissent seam은 존재하나 라이브에서 opponent를 실제 발화시키는 경로가 없음 — dissent-opponent agent 없음, deep-interview SKILL에 driver-spawn 절차 없음, CLI(deep-interview",
+  "source_request": "Discovered while working on wi_260709mqt: dissent opponent 라이브 배선 미완(ships dormant): engageIntentDissent seam은 존재하나 라이브에서 opponent를 실제 발화시키는 경로가 없음 — dissent-opponent agent 없음, deep-interview SKILL에 driver-spawn 절차 없음, CLI(deep-interview.ts:436-442)는 항상 delegate=null/isAvailable=false → 프로덕션에서 영영 host_absent. 코드 주석(deep-interview.ts:435 'SKILL이 배선')은 사실 아님. 필요: dissent-opponent agent + SKILL driver-spawn(brief-emit→host spawn→pass-in) + CLI 결과 주입 인터페이스 + 라이브 실증(opponent 발화·dissent 기록·게이트 차단 관찰)으로 #13 잔여 종결.",
+  "goal": "Fix: dissent opponent 라이브 배선 미완(ships dormant): engageIntentDissent seam은 존재하나 라이브에서 opponent를 실제 발화시키는 경로가 없음 — dissent-opponent agent 없음, deep-interview SKILL에 driver-spawn 절차 없음, CLI(deep-interview.ts:436-442)는 항상 delegate=null/isAvailable=false → 프로덕션에서 영영 host_absent. 코드 주석(deep-interview.ts:435 'SKILL이 배선')은 사실 아님. 필요: dissent-opponent agent + SKILL driver-spawn(brief-emit→host spawn→pass-in) + CLI 결과 주입 인터페이스 + 라이브 실증(opponent 발화·dissent 기록·게이트 차단 관찰)으로 #13 잔여 종결.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "dissent-opponent agent 파일이 agents/ 스캔에 존재하고, critical dimension 원본 의도를 독립 재도출해 verdict(accept|revise|reject)·impact(low|high)·재진술 text를 반환하는 계약을 갖는다(파일 확인 + 계약 테스트)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c test -f agents/intent-dissent-opponent.md && grep -qi \"anti-inflation\\|더 정확\\|sharper\\|dissent\" agents/intent-dissent-opponent.md",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "CLI deep-interview에 opponent 결과 pass-in-JSON 파라미터가 존재해, 결과 주입 시 engageIntentDissent가 engaged 경로로 dissent를 기록하고 미주입 시 host_absent로 강등됨이 단위 테스트로 확인된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/deep-interview-dissent.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "라이브 실증 — 실제 deep-interview run에서 host가 SKILL 절차로 opponent를 spawn해 critical dimension에 opponent가 발화(host_absent 아님)하고 high-impact dissent가 기록되며 finalize가 blocked_by_dissent로 차단됨이 run 산출물/로그로 관찰된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/71ff1b47-0a7b-4581-86bd-11ac3268eb8d/scratchpad/ac3_repro.sh",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "기존 deep-interview 테스트 회귀 0, 전체 bun test 실패 0, bun run build:bin exit 0",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c bun run build:bin && bun test",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "discovered_by": "wi_260709mqt",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-09T04:54:19.104Z",
+  "updated_at": "2026-07-09T05:38:37.905Z",
+  "closed_at": "2026-07-09T05:38:37.904Z"
+}
