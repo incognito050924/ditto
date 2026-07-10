@@ -29790,6 +29790,14 @@ async function claimWorkItem(store, workId, wiring) {
   const res = await runClaim(store, workId, current, wiring);
   return { ...res, promotedToInProgress };
 }
+async function maybeClaimOnStart(store, workId, opts, wiring) {
+  if (!opts.claim)
+    return null;
+  const item = await store.get(workId);
+  if (!item.github_issue)
+    return null;
+  return claimWorkItem(store, workId, wiring);
+}
 async function autoClaimOnInProgressEdge(store, workId, prevStatus, next, wiring) {
   if (prevStatus === "in_progress" || next.status !== "in_progress") {
     return { fired: false, occupancy: "skipped", notices: [], warnings: [] };
@@ -29874,6 +29882,20 @@ async function releaseClaimOnTerminal(store, workId, wiring) {
   await persistClaimRelease(store, workId, gi);
   return { released: rm2.ok, notices };
 }
+function writeStartClaimHuman(claimRes, status) {
+  if (!claimRes) {
+    writeHuman(`  status: ${status} (not started \u2014 drop --no-claim, or run \`ditto work claim\`)`);
+    return;
+  }
+  if (claimRes.promotedToInProgress)
+    writeHuman("  status: in_progress (\uCC29\uC218)");
+  if (claimRes.fired)
+    writeHuman("  GitHub: claimed the linked issue (assigned @me, board \u2192 in progress).");
+  for (const w2 of claimRes.warnings)
+    writeHuman(`  ${w2}`);
+  for (const n2 of claimRes.notices)
+    writeHuman(`  ${n2}`);
+}
 var workStart = defineCommand({
   meta: {
     name: "start",
@@ -29925,6 +29947,11 @@ var workStart = defineCommand({
       description: "Also create the work item branch+worktree(s) (like `ditto worktree create`)",
       default: false
     },
+    claim: {
+      type: "boolean",
+      description: "With --issue: on start, claim the linked issue (assign @me, board \u2192 in-progress, WI \u2192 in_progress). Default on \u2014 starting IS \uCC29\uC218. Use --no-claim to pull/link without starting yet.",
+      default: true
+    },
     output: {
       type: "string",
       description: "Output format: human|json",
@@ -29953,25 +29980,42 @@ var workStart = defineCommand({
       const ghConfig = await readGithubConfig(repoRoot);
       const result2 = await pullIssue({ client: createGhClient(), store, sessionRepo, config: ghConfig }, coord);
       switch (result2.kind) {
-        case "created":
+        case "created": {
+          const claimRes = args.claim ? await maybeClaimOnStart(store, result2.id, { claim: true }, await buildClaimWiring(repoRoot)) : null;
+          const status = (await store.get(result2.id)).status;
           if (format === "json") {
             writeJson2({
               work_item_id: result2.id,
               path: `.ditto/local/work-items/${result2.id}/work-item.json`,
-              github_issue: { repo: coord.repo, number: coord.number }
+              github_issue: { repo: coord.repo, number: coord.number },
+              status,
+              claimed: claimRes?.fired ?? false,
+              ...claimRes ? { claim_notices: [...claimRes.warnings, ...claimRes.notices] } : {}
             });
           } else {
             writeHuman(`Created work item ${result2.id} from ${coord.repo}#${coord.number}`);
             writeHuman(`  path: ${repoRoot}/.ditto/local/work-items/${result2.id}/work-item.json`);
+            writeStartClaimHuman(claimRes, status);
           }
           return;
-        case "existing":
+        }
+        case "existing": {
+          const claimRes = args.claim ? await maybeClaimOnStart(store, result2.id, { claim: true }, await buildClaimWiring(repoRoot)) : null;
+          const status = (await store.get(result2.id)).status;
           if (format === "json") {
-            writeJson2({ work_item_id: result2.id, already_linked: true });
+            writeJson2({
+              work_item_id: result2.id,
+              already_linked: true,
+              status,
+              claimed: claimRes?.fired ?? false,
+              ...claimRes ? { claim_notices: [...claimRes.warnings, ...claimRes.notices] } : {}
+            });
           } else {
             writeHuman(`${coord.repo}#${coord.number} is already linked to ${result2.id} \u2014 no duplicate created.`);
+            writeStartClaimHuman(claimRes, status);
           }
           return;
+        }
         case "cross_repo":
           writeError(`cross-repo: ${coord.repo}#${coord.number} is not the session's rooted repo (${result2.sessionRepo ?? "unknown"}). Execution is blocked here (ADR-0011 session-rooting). Issue: "${result2.title}". Link it to an existing work item with: ditto work link-issue <wi> ${coord.repo}#${coord.number}`);
           process.exit(USAGE_ERROR_EXIT);
@@ -56280,4 +56324,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=d958c437ffed464f5686aef9051ddc63cd33d9262c8d3e4c49b0a428c6ffb0e2
+//# ditto-src-stamp=012021cfd2f4aba2985482da322a15895ebac19ef479710561f025b0ac8cd118

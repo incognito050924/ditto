@@ -706,6 +706,28 @@ export async function claimWorkItem(
 }
 
 /**
+ * wi_260710otc: fire the claim on `work start` (백로그 착수) — the act of STARTING is the
+ * 착수 의사. Gated on both the claim flag (default on; `--no-claim` opts out to pull-but-
+ * don't-start-yet) AND a linked github_issue: without a link there is nothing to claim on
+ * GitHub, so an unlinked plain `work start` must stay draft (never silently promoted). When
+ * both hold it delegates to claimWorkItem (promote draft→in_progress + assign @me + board),
+ * so a start on one machine is visible to others through GitHub — the only shared channel,
+ * since local work-items/config are per-machine (ADR-0012). Returns null when it does not
+ * fire (flag off or no link). Never throws (claimWorkItem owns gh degradation).
+ */
+export async function maybeClaimOnStart(
+  store: WorkItemStore,
+  workId: string,
+  opts: { claim: boolean },
+  wiring: ClaimWiring,
+): Promise<(ClaimWiringResult & { promotedToInProgress: boolean }) | null> {
+  if (!opts.claim) return null;
+  const item = await store.get(workId);
+  if (!item.github_issue) return null;
+  return claimWorkItem(store, workId, wiring);
+}
+
+/**
  * ac-2: fire the claim ONCE on the non-in_progress → in_progress edge. `prevStatus` is
  * captured BEFORE the transition; `next` is the just-written WI. Off-edge (prev already
  * in_progress, or next not in_progress) ⇒ no gh call. On a reopen edge (terminal →
@@ -858,6 +880,23 @@ export async function releaseClaimOnTerminal(
   return { released: rm.ok, notices };
 }
 
+/** Human-format the start-claim (착수) outcome for `work start --issue`. null = not claimed
+ *  (--no-claim, or the flag off): the WI stays draft and we point at how to start later. */
+function writeStartClaimHuman(
+  claimRes: (ClaimWiringResult & { promotedToInProgress: boolean }) | null,
+  status: WorkItem['status'],
+): void {
+  if (!claimRes) {
+    writeHuman(`  status: ${status} (not started — drop --no-claim, or run \`ditto work claim\`)`);
+    return;
+  }
+  if (claimRes.promotedToInProgress) writeHuman('  status: in_progress (착수)');
+  if (claimRes.fired)
+    writeHuman('  GitHub: claimed the linked issue (assigned @me, board → in progress).');
+  for (const w of claimRes.warnings) writeHuman(`  ${w}`);
+  for (const n of claimRes.notices) writeHuman(`  ${n}`);
+}
+
 const workStart = defineCommand({
   meta: {
     name: 'start',
@@ -914,6 +953,12 @@ const workStart = defineCommand({
       description: 'Also create the work item branch+worktree(s) (like `ditto worktree create`)',
       default: false,
     },
+    claim: {
+      type: 'boolean',
+      description:
+        'With --issue: on start, claim the linked issue (assign @me, board → in-progress, WI → in_progress). Default on — starting IS 착수. Use --no-claim to pull/link without starting yet.',
+      default: true,
+    },
     output: {
       type: 'string',
       description: 'Output format: human|json',
@@ -952,27 +997,61 @@ const workStart = defineCommand({
         coord,
       );
       switch (result.kind) {
-        case 'created':
+        case 'created': {
+          // wi_260710otc: starting a pulled backlog issue IS 착수 — claim it (assign @me,
+          // board → in-progress, WI → in_progress) so the start is visible to other machines
+          // through GitHub. --no-claim opts out (pull/link only). gh failure = notice, not throw.
+          const claimRes = args.claim
+            ? await maybeClaimOnStart(
+                store,
+                result.id,
+                { claim: true },
+                await buildClaimWiring(repoRoot),
+              )
+            : null;
+          const status = (await store.get(result.id)).status;
           if (format === 'json') {
             writeJson({
               work_item_id: result.id,
               path: `.ditto/local/work-items/${result.id}/work-item.json`,
               github_issue: { repo: coord.repo, number: coord.number },
+              status,
+              claimed: claimRes?.fired ?? false,
+              ...(claimRes ? { claim_notices: [...claimRes.warnings, ...claimRes.notices] } : {}),
             });
           } else {
             writeHuman(`Created work item ${result.id} from ${coord.repo}#${coord.number}`);
             writeHuman(`  path: ${repoRoot}/.ditto/local/work-items/${result.id}/work-item.json`);
+            writeStartClaimHuman(claimRes, status);
           }
           return;
-        case 'existing':
+        }
+        case 'existing': {
+          const claimRes = args.claim
+            ? await maybeClaimOnStart(
+                store,
+                result.id,
+                { claim: true },
+                await buildClaimWiring(repoRoot),
+              )
+            : null;
+          const status = (await store.get(result.id)).status;
           if (format === 'json') {
-            writeJson({ work_item_id: result.id, already_linked: true });
+            writeJson({
+              work_item_id: result.id,
+              already_linked: true,
+              status,
+              claimed: claimRes?.fired ?? false,
+              ...(claimRes ? { claim_notices: [...claimRes.warnings, ...claimRes.notices] } : {}),
+            });
           } else {
             writeHuman(
               `${coord.repo}#${coord.number} is already linked to ${result.id} — no duplicate created.`,
             );
+            writeStartClaimHuman(claimRes, status);
           }
           return;
+        }
         case 'cross_repo':
           // Fail-closed on execution; link/display allowed (ADR-0011, ac-13).
           writeError(
