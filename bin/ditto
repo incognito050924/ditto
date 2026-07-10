@@ -37200,7 +37200,8 @@ var interviewQuestion = exports_external.object({
   answer_kind: exports_external.enum(["user", "assumption"]).optional(),
   answer_self_report: answerSelfReport.optional().describe("User self-report of decision-ability after answering (presentation-sufficiency signal)"),
   ambiguity_delta: exports_external.number().optional(),
-  marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal")
+  marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal"),
+  novelty: exports_external.boolean().optional().describe("Whether this round added admissible novelty (deterministic; angle-exhaustion axis)")
 }).describe("One asked question with its self-answer attempts and outcome");
 var interviewAssumption = exports_external.object({
   statement: exports_external.string().min(1),
@@ -37916,7 +37917,8 @@ var recordTurnPayload = exports_external.object({
     background: exports_external.string().min(1).optional(),
     grounding: exports_external.string().min(1).optional(),
     self_answer_attempts: exports_external.array(selfAnswerAttempt).optional(),
-    marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal")
+    marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal"),
+    novelty: exports_external.boolean().optional().describe("Whether this round added admissible novelty (angle-exhaustion axis)")
   }).describe("The asked question and why it matters"),
   answer: exports_external.object({
     text: exports_external.string().min(1),
@@ -37967,6 +37969,7 @@ async function recordTurn(repoRoot, input) {
     ...question.background !== undefined ? { background: question.background } : {},
     ...question.grounding !== undefined ? { grounding: question.grounding } : {},
     ...question.marginal_gain !== undefined ? { marginal_gain: question.marginal_gain } : {},
+    ...question.novelty !== undefined ? { novelty: question.novelty } : {},
     ...answer ? {
       answer: answer.text,
       answer_kind: answer.kind,
@@ -38003,9 +38006,12 @@ async function recordTurn(repoRoot, input) {
   const gateResult = interviewReadinessGate(updated);
   const capReached = updated.exit.questions_asked >= updated.exit.question_cap;
   updated.readiness.gate = gateResult.pass ? "ready" : "blocked";
+  const noveltyDryCounter = updated.questions.reduce((counter, q2) => recordDryRound(counter, { admissibleBranchesAdded: q2.novelty === false ? 0 : 1 }), 0);
+  const valueDry = question.marginal_gain !== undefined && question.marginal_gain < DRY_FLOOR;
+  const angleDry = noveltyDryCounter >= DEFAULT_DRY_K;
   if (capReached && updated.status === "active") {
     updated.exit.reason = "cap_reached";
-  } else if (question.marginal_gain !== undefined && question.marginal_gain < DRY_FLOOR && !gateResult.pass && updated.status === "active") {
+  } else if ((valueDry || angleDry) && !gateResult.pass && updated.status === "active") {
     updated.exit.reason = "diminishing_returns";
   }
   updated.exit.closure_mode = deriveClosureMode(updated.exit.reason, gateResult.pass);
@@ -56255,4 +56261,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=b18eb6dbea729dc87663e670fc727fc4e17ba074c200f724b6326a421d2b77a5
+//# ditto-src-stamp=bcfdfe1ef06889c2e9277b95ca8c33cc11663598414871015941c3be9503fbe0

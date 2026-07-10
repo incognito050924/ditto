@@ -92,14 +92,14 @@ Do NOT generate questions inline in your accumulated context: your interview nar
 
    4. **Record the turn** with `record-turn`, carrying the full context: `question.user_explanation`, `question.background`/`question.grounding` (when present), `question.self_answer_attempts` (the sources you checked in step 1 — so "why we ask you" is backed by "what we already checked"), and — for a `critical` question — the `question.review_status` from step 2. Fold the answer back via the same turn's `answer`, and capture the user's decision-ability via `answer.self_report` (`confident`|`partial`|`unsure`) — the self-report half of the success bar. Set `question.marginal_gain` to the round's score-gated marginal information gain.
 
-5. **Dry → propose ending.** If the round is `dry` (no candidate cleared the threshold) — equivalently, the recorded `marginal_gain` falls below the dry floor — the driver records `exit.reason=diminishing_returns` and you propose ending the interview. Ending is a *proposal*, not a close: finalize (§6) still requires the readiness gate ∧ user confirmation to pass — never bypass the gate just because a round went dry.
+5. **Dry → propose ending.** A round is dry on EITHER of two complementary axes (OR): **value-dry** — the recorded `marginal_gain` falls below the dry floor; or **angle-dry** — `novelty` exhausted, i.e. K consecutive rounds (K=2) added no admissible novelty. When either fires and the gate is still blocked, the driver records `exit.reason=diminishing_returns` and you propose ending. Ending is a *proposal*, not a close: finalize (§6) still requires the readiness gate ∧ user confirmation to pass — never bypass the gate just because a round went dry.
 
 Record each turn with:
 
 ```
 ditto deep-interview record-turn --work-item <wi> --json '{
   "dimension": {"id": "d-<short-id>", "critical": true, "state": "partial", "ambiguity": 0.6, "notes": ""},
-  "question": {"text": "…?", "why_matters": "…", "info_gain_estimate": "high", "marginal_gain": 0.4,
+  "question": {"text": "…?", "why_matters": "…", "info_gain_estimate": "high", "marginal_gain": 0.4, "novelty": true,
     "user_explanation": "<plain why-we-ask + what-your-answer-decides, user language>",
     "background": "<optional deeper context for 더 보기>",
     "grounding": "<file:line | doc — evidence behind the question>",
@@ -115,6 +115,7 @@ ditto deep-interview record-turn --work-item <wi> --json '{
 - `answer.kind` is `"user"` when the user answered, `"assumption"` when you record an explicit `hypothesis`-labelled assumption because the user deferred / cannot answer now. Assumptions land in `assumptions[]` ledger; they do not pretend to be answers.
 - **A `critical` dimension cannot be closed by your own assumption.** If `answer.kind="assumption"` on a critical dimension, the gate keeps it unresolved (the state is demoted to `partial`) — an agent's guess must not pass as the user's answer. The only exception is an *explicit user delegation* ("you decide"): record it as `{"kind": "assumption", "delegated": true}`, which is allowed to resolve the critical dimension. Default (`delegated` absent) = your guess = cannot close a critical.
 - `marginal_gain` (optional, 0..1) is the round's score-gated marginal information gain from the gate. A round whose value falls below the dry floor flips `exit.reason` to `diminishing_returns` (ending becomes a proposal; the finalize gate still applies).
+- `novelty` (optional, boolean) is whether this round added admissible novelty — the same deterministic signal the gate loop records as `questionRound.novelty` (derived from the prism divergence verdict). Carry it honestly: K consecutive `false` rounds is the **angle-exhaustion** dry axis, complementary to `marginal_gain`'s value axis (either closes; `novelty:true` or an absent field resets the counter, so unmeasured rounds never force an early close). Set it whenever you have the gate's novelty verdict.
 - `readiness_score` is your honest estimate after the turn; the deterministic floor caps it so high self-reports cannot escape unresolved-critical reality.
 - `question.user_explanation` / `background` / `grounding` are the presentation-contract context (carried from the gate-selected candidate); `question.self_answer_attempts` is the §6.2 ledger of sources you checked before asking. `question.review_status` (`reviewed` | `unverified-degraded`, critical questions only — step 2's outcome) is the session-blind review record; absent on non-critical questions. `answer.self_report` (`confident`|`partial`|`unsure`) records whether the user had enough context to decide — the observable sufficiency signal. All optional in the schema (old state parses unchanged), but `user_explanation` is required to clear `check-question`.
 

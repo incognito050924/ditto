@@ -190,6 +190,17 @@ export const interviewQuestion = z
       .describe(
         'Score-gated marginal information gain of this round; low value across a round is the dry signal',
       ),
+    // wi_260709d00 (#14): did THIS round add admissible novelty? The angle-exhaustion twin of
+    // marginal_gain's value-exhaustion — carried per turn (like marginal_gain) so the driver
+    // reconstructs the novelty dry-counter deterministically from disk (no stored counter).
+    // Additive-optional: legacy state (field absent) parses unchanged and never triggers early
+    // termination (fail-open). Same boolean the gate loop records as questionRound.novelty.
+    novelty: z
+      .boolean()
+      .optional()
+      .describe(
+        'Whether this round added admissible novelty (deterministic; angle-exhaustion axis)',
+      ),
   })
   .describe('One asked question with its self-answer attempts and outcome');
 

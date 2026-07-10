@@ -17,7 +17,7 @@ import {
 import { selfAnswerAttempt } from '~/schemas/question-gate';
 import { bootstrapAutopilot } from './autopilot-bootstrap';
 import { nextCoverageNode, recordCoverageRound } from './coverage-loop';
-import { serializePlanDialog } from './coverage-manager';
+import { DEFAULT_DRY_K, recordDryRound, serializePlanDialog } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
 import { loadFarFieldTaxonomy, warnMalformedTaxonomy } from './coverage-taxonomy';
 import { type GateResult, type RiskAxes, deriveClosureMode, interviewReadinessGate } from './gates';
@@ -163,6 +163,13 @@ export const recordTurnPayload = z
           .describe(
             'Score-gated marginal information gain of this round; low value across a round is the dry signal',
           ),
+        // wi_260709d00 (#14): did this round add admissible novelty? The angle-exhaustion
+        // signal, carried per turn exactly like marginal_gain; the driver folds it into the
+        // deterministic novelty dry-counter for the termination decision.
+        novelty: z
+          .boolean()
+          .optional()
+          .describe('Whether this round added admissible novelty (angle-exhaustion axis)'),
       })
       .describe('The asked question and why it matters'),
     answer: z
@@ -261,6 +268,7 @@ export async function recordTurn(
     ...(question.background !== undefined ? { background: question.background } : {}),
     ...(question.grounding !== undefined ? { grounding: question.grounding } : {}),
     ...(question.marginal_gain !== undefined ? { marginal_gain: question.marginal_gain } : {}),
+    ...(question.novelty !== undefined ? { novelty: question.novelty } : {}),
     ...(answer
       ? {
           answer: answer.text,
@@ -317,18 +325,26 @@ export async function recordTurn(
   const gateResult = interviewReadinessGate(updated);
   const capReached = updated.exit.questions_asked >= updated.exit.question_cap;
   updated.readiness.gate = gateResult.pass ? 'ready' : 'blocked';
+  // Two COMPLEMENTARY dry axes signal diminishing returns (wi_260709d00 #14), combined by
+  // OR — close when EITHER is exhausted, never make closing harder (this is a user loop):
+  //   • value-dry: this round's score-gated marginal_gain fell below the dry floor.
+  //   • angle-dry: novelty exhausted — K consecutive rounds added no admissible novelty.
+  // The novelty dry-counter is RECONSTRUCTED deterministically from disk (the recorded
+  // questions[].novelty sequence) via coverage's recordDryRound — no stored cumulative
+  // counter (same principle as coverage). A round with novelty!==false (true OR absent)
+  // resets the counter, so legacy/unmeasured rounds never force an early close (fail-open).
+  const noveltyDryCounter = updated.questions.reduce(
+    (counter, q) =>
+      recordDryRound(counter, { admissibleBranchesAdded: q.novelty === false ? 0 : 1 }),
+    0,
+  );
+  const valueDry = question.marginal_gain !== undefined && question.marginal_gain < DRY_FLOOR;
+  const angleDry = noveltyDryCounter >= DEFAULT_DRY_K;
   if (capReached && updated.status === 'active') {
     updated.exit.reason = 'cap_reached';
-  } else if (
-    // dry round: this round's score-gated marginal_gain fell below the dry floor and
-    // the gate is still blocked. Exclusive with cap_reached (cap wins, set above).
-    // Termination is *suggested* via exit.reason; finalize still requires
-    // readiness ∧ user confirmation (the gate is not bypassed here).
-    question.marginal_gain !== undefined &&
-    question.marginal_gain < DRY_FLOOR &&
-    !gateResult.pass &&
-    updated.status === 'active'
-  ) {
+  } else if ((valueDry || angleDry) && !gateResult.pass && updated.status === 'active') {
+    // Exclusive with cap_reached (cap wins, set above). Termination is *suggested* via
+    // exit.reason; finalize still requires readiness ∧ user confirmation (gate not bypassed).
     updated.exit.reason = 'diminishing_returns';
   }
   // Keep closure_mode consistent with the current (reason, gate): a cap hit

@@ -955,3 +955,78 @@ describe('recordTurn — question context fields (ac-1/ac-4/ac-5, wi_260622ph8)'
     expect(q?.answer_self_report).toBe('confident');
   });
 });
+
+// wi_260709d00 (#14): novelty-exhaustion termination axis, wired IN PARALLEL (OR) with the
+// marginal_gain dry floor. The novelty dry-counter is reconstructed deterministically from
+// interview-state.questions[].novelty (no stored cumulative counter) — reusing coverage's
+// recordDryRound/DEFAULT_DRY_K. A round with an UNRESOLVED critical dimension keeps the gate
+// blocked, so exit.reason can flip; the default (non-terminal) exit.reason is 'readiness_met'.
+describe('recordTurn — novelty-exhaustion termination (wi_260709d00 #14)', () => {
+  // Push K novelty:false rounds, each keeping a critical dimension unresolved (gate blocked).
+  async function pushRounds(
+    novelties: Array<boolean | undefined>,
+    marginalGain?: number,
+  ): Promise<void> {
+    await startInterview(repo, { workItemId: wiId, questionCap: 20 });
+    for (let i = 0; i < novelties.length; i++) {
+      await recordTurn(repo, {
+        workItemId: wiId,
+        payload: {
+          dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
+          question: {
+            text: `q${i}?`,
+            why_matters: 'x',
+            info_gain_estimate: 'low',
+            ...(novelties[i] !== undefined ? { novelty: novelties[i] } : {}),
+            ...(marginalGain !== undefined ? { marginal_gain: marginalGain } : {}),
+          },
+        },
+      });
+    }
+  }
+
+  test('novelty is persisted on the appended question', async () => {
+    await pushRounds([false]);
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.questions[0]?.novelty).toBe(false);
+  });
+
+  test('K consecutive novelty:false + gate blocked → diminishing_returns (marginal_gain absent)', async () => {
+    // No marginal_gain at all → the ONLY dry signal is novelty exhaustion.
+    await pushRounds([false, false]);
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.readiness.gate).toBe('blocked');
+    expect(state.exit.reason).toBe('diminishing_returns');
+  });
+
+  test('a single novelty:false round is NOT yet dry (K=2)', async () => {
+    await pushRounds([false]);
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.exit.reason).toBe('readiness_met'); // default, not terminated
+  });
+
+  test('novelty:true keeps it open — marginal_gain alone (absent) does not close', async () => {
+    await pushRounds([true, true, true]);
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.exit.reason).toBe('readiness_met');
+  });
+
+  test('a novelty:true resets the dry counter (false,true,false → counter 1 < K)', async () => {
+    await pushRounds([false, true, false]);
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.exit.reason).toBe('readiness_met');
+  });
+
+  test('absent novelty (legacy rounds) never triggers novelty termination (fail-open)', async () => {
+    await pushRounds([undefined, undefined, undefined]);
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.exit.reason).toBe('readiness_met');
+  });
+
+  test('marginal_gain axis still closes independently even when novelty is fresh (OR contract)', async () => {
+    // novelty:true (angle NOT dry) but marginal_gain below floor → value-dry still closes.
+    await pushRounds([true], 0.02);
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.exit.reason).toBe('diminishing_returns');
+  });
+});

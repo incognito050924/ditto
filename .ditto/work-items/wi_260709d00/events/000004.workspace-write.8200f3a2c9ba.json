@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709d00",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "8200f3a2c9bad38a00a8d5482853331ee05461bb803cf0017e7a9387f5deff35",
+  "ts": "2026-07-10T07:29:28.037Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/interview-driver.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

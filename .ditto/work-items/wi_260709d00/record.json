@@ -7,12 +7,54 @@
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "TBD — derive observable criteria during interview/planning",
-      "verdict": "unverified",
-      "evidence": []
+      "statement": "recordTurn 종료 판정에 novelty-소진 축을 marginal_gain과 병행(OR) 추가한다 — gate blocked & active에서 (marginal_gain<DRY_FLOOR) OR (novelty dry-counter≥K)면 exit.reason=diminishing_returns, coverage recordDryRound·DEFAULT_DRY_K(=2) 재사용",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "novelty dry-counter는 stored 누적 필드 없이 interview-state.questions[].novelty에서 결정적 disk 재구성된다 — novelty===false만 카운터 증가, true/undefined는 리셋(fail-open: 미측정 라운드는 조기 종료 유발 안 함)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "관계 계약 고정 — novelty가 계속 true/absent면 marginal_gain 단독 종료 거동 불변이고, novelty가 K회 연속 false면 gate-blocked에서 종료된다(주석+단위 테스트로 OR 계약 명시)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "기존 deep-interview 종료 테스트(cap_reached·diminishing_returns·marginal_gain) 회귀 0·전체 bun test 실패 0·두 host plugin 재빌드",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0"
+        }
+      ]
     }
   ],
-  "status": "partial",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
@@ -33,5 +75,6 @@
   },
   "runs": [],
   "created_at": "2026-07-09T07:43:45.577Z",
-  "updated_at": "2026-07-09T08:55:22.124Z"
+  "updated_at": "2026-07-10T07:31:33.360Z",
+  "closed_at": "2026-07-10T07:31:33.359Z"
 }
