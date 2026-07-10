@@ -416,6 +416,61 @@ describe('writeWorkItemHandoff', () => {
     );
   });
 
+  test('graph + fresh criterion pass: handoff threads criteria and AGREES with complete (supersedes stale node verdict)', async () => {
+    const created = await store.create(makeInput());
+    // A fresh, evidence-backed `ditto verify` pass recorded on the work-item AC
+    // AFTER the run — the supersession source `assembleCompletionFromGraph` threads
+    // into deriveAcVerdicts via its 4th `criteria` arg.
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1'
+          ? {
+              ...c,
+              verdict: 'pass' as const,
+              evidence: [{ kind: 'command' as const, command: 'bun test' }],
+            }
+          : c,
+      ),
+    }));
+    // The graph node addressing ac-1 FAILED — a stale non-pass that, WITHOUT the
+    // fresh criterion, drags the derived verdict to fail.
+    const graph = autopilot.parse({
+      schema_version: '0.1.0',
+      autopilot_id: 'orch_criteriatest',
+      work_item_id: created.id,
+      root_goal: 'goal',
+      approval_gate: { status: 'not_required', source: 'small_reversible_policy' },
+      nodes: [
+        {
+          id: 'N3',
+          kind: 'verify',
+          owner: 'verifier',
+          purpose: 'verify ac-1',
+          status: 'failed',
+          acceptance_refs: ['ac-1'],
+          evidence_refs: [{ kind: 'note', summary: 'earlier failure' }],
+        },
+      ],
+      caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 },
+      continue_policy: {},
+      stop_conditions: [],
+    });
+    await new AutopilotStore(workDir).write(created.id, graph);
+
+    // complete threads `criteria` → the fresh evidence-backed pass supersedes the
+    // failed node → pass.
+    const fromComplete = assembleCompletionFromGraph(graph, await store.get(created.id));
+    expect(fromComplete.acceptance.find((a) => a.criterion_id === 'ac-1')?.verdict).toBe('pass');
+
+    // The handoff path MUST thread the SAME criteria or it shows a staler (fail)
+    // verdict than complete.
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    expect(result.completion.acceptance.map((a) => a.verdict)).toEqual(
+      fromComplete.acceptance.map((a) => a.verdict),
+    );
+  });
+
   test('no graph: handoff still uses work-item AC verdicts (unchanged fallback)', async () => {
     const created = await store.create(makeInput());
     // ac-1 stays unverified, no graph → fallback path → partial (regression guard).

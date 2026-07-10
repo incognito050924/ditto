@@ -256,7 +256,12 @@ export async function writeWorkItemHandoff(
     // Thread each AC's oracle (ADR-0024 §3) — the SAME source as `assembleCompletionFromGraph`
     // so the two completion paths AGREE on oracle-gated verdicts (no gate↔score gap).
     const oracles = new Map(item.acceptance_criteria.map((c) => [c.id, c.oracle]));
-    graphAcceptance = deriveAcVerdicts(graph, acIds, oracles).map((v) => ({
+    // Thread each AC's own criterion state so a fresh evidence-backed `ditto verify`
+    // pass recorded after the run supersedes a stale node verdict — parity with
+    // `assembleCompletionFromGraph` (autopilot-complete.ts), which passes this 4th
+    // arg. Without it the handoff resume doc shows a staler verdict than complete.
+    const criteria = new Map(item.acceptance_criteria.map((c) => [c.id, c]));
+    graphAcceptance = deriveAcVerdicts(graph, acIds, oracles, criteria).map((v) => ({
       criterion_id: v.criterion_id,
       verdict: v.verdict,
       evidence: v.evidence ?? [],
