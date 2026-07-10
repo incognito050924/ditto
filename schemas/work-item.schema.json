@@ -356,6 +356,12 @@
               "resolved": {
                 "type": "boolean",
                 "description": "True once the follow-up has been addressed"
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "description": "Advisory pick-up ordering rank (1=first…5=last); display-only, drives nothing"
               }
             },
             "required": [

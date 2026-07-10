@@ -5,25 +5,43 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -13302,7 +13320,8 @@ var init_work_item = __esm(() => {
     severity: severityLevel.optional(),
     self_caused: exports_external.boolean().optional().describe("True if this regression was introduced by the source work item itself"),
     materialized_wi: workItemId.optional().describe("The tracked work item this bug was materialized into (kind=bug only)"),
-    resolved: exports_external.boolean().optional().describe("True once the follow-up has been addressed")
+    resolved: exports_external.boolean().optional().describe("True once the follow-up has been addressed"),
+    priority: exports_external.number().int().min(1).max(5).optional().describe("Advisory pick-up ordering rank (1=first\u20265=last); display-only, drives nothing")
   }).describe("A discovered follow-up (bug/idea) captured on the work item");
   declaredRisk = exports_external.object({
     non_local: exports_external.boolean().optional(),
@@ -20080,6 +20099,13 @@ function riskRecordBlockers(records, acceptanceIds) {
   }));
   return resolvabilityBlockers(asUnverified, acceptanceIds);
 }
+function passCloseResidualBlockers(completion, acceptanceIds) {
+  const label = (b2, surface) => b2.userDecision ? `${surface} deferred_needs_user_ok \u2014 ${b2.item}: ${b2.reason}` : `${surface} blocks pass-close \u2014 ${b2.item}: ${b2.reason}`;
+  return [
+    ...resolvabilityBlockers(completion.unverified, acceptanceIds).map((b2) => label(b2, "residual")),
+    ...riskRecordBlockers(completion.remaining_risk_records, acceptanceIds).map((b2) => label(b2, "residual-risk record"))
+  ];
+}
 var STATIC_SCAN_KINDS = new Set([
   "file",
   "artifact",
@@ -20996,10 +21022,19 @@ function testBarrierUnverified(graph, barrierOptOut = false) {
     grounding: b2.id
   }));
 }
+function loopStuckBlocked(graph) {
+  if (selectReadyNodes(graph.nodes).length > 0)
+    return false;
+  if (graph.nodes.some((n2) => n2.status === "running"))
+    return false;
+  return graph.nodes.some((n2) => n2.status === "blocked");
+}
 function deriveNonPassStatus(graph, acceptance, finalVerdict) {
   if (finalVerdict === "pass")
     return;
-  if (!allNodesTerminal(graph))
+  const terminal = allNodesTerminal(graph);
+  const stuck = !terminal && loopStuckBlocked(graph);
+  if (!terminal && !stuck)
     return;
   const parked = acceptance.filter((a2) => a2.verdict === "unverified" || a2.verdict === "fail");
   if (parked.length === 0)
@@ -21007,8 +21042,8 @@ function deriveNonPassStatus(graph, acceptance, finalVerdict) {
   const parkedIds = parked.map((a2) => a2.criterion_id).join(", ");
   const progressed = acceptance.some((a2) => a2.verdict === "pass");
   return {
-    state: progressed ? "partial" : "blocked",
-    reason: `autopilot terminated non-pass with ${parked.length} criterion/criteria not reaching pass: ${parkedIds}`,
+    state: stuck || !progressed ? "blocked" : "partial",
+    reason: stuck ? `autopilot cannot proceed (graph blocked, no runnable node) with ${parked.length} criterion/criteria not reaching pass: ${parkedIds}` : `autopilot terminated non-pass with ${parked.length} criterion/criteria not reaching pass: ${parkedIds}`,
     grounding: `parked acceptance criteria: ${parkedIds}`
   };
 }
@@ -30885,6 +30920,12 @@ var workDone = defineCommand({
         process.exit(USAGE_ERROR_EXIT);
         return;
       }
+      const residualBlockers = passCloseResidualBlockers(completion, item.acceptance_criteria.map((c3) => c3.id));
+      if (residualBlockers.length > 0) {
+        writeError(`work ${args.workId} cannot close: ${residualBlockers.length} in-scope agent-owned residual(s) block a pass-close \u2014 ${residualBlockers.join("; ")}. Resolve/ground each (or move it out of scope), then re-run.`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
       await store.update(args.workId, (cur) => mirrorAcceptanceVerdicts(cur, completion));
       const closed = await store.close(args.workId, "done");
       const closeIssue = args["close-issue"] === true;
@@ -30982,6 +31023,11 @@ var workFollowUp = defineCommand({
       type: "boolean",
       description: "Mark a regression introduced by this work item itself",
       default: false
+    },
+    priority: {
+      type: "string",
+      description: "Advisory pick-up ordering rank 1-5 (1=surfaced first); display-only, drives nothing (no-auto-pick)",
+      required: false
     },
     batch: {
       type: "boolean",
@@ -31162,6 +31208,16 @@ var workFollowUp = defineCommand({
       severity2 = parsed.data;
     }
     const selfCaused = args["self-caused"] === true;
+    let priority;
+    if (args.priority !== undefined) {
+      const raw = String(args.priority).trim();
+      if (!/^\d+$/.test(raw) || Number(raw) < 1 || Number(raw) > 5) {
+        writeError(`--priority must be an integer 1-5 (advisory pick-up rank, 1=first); got "${args.priority}"`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      priority = Number(raw);
+    }
     try {
       const source = await store.get(args.workId);
       let materializedWi;
@@ -31187,7 +31243,8 @@ var workFollowUp = defineCommand({
         note,
         ...severity2 ? { severity: severity2 } : {},
         ...selfCaused ? { self_caused: true } : {},
-        ...materializedWi ? { materialized_wi: materializedWi } : {}
+        ...materializedWi ? { materialized_wi: materializedWi } : {},
+        ...priority !== undefined ? { priority } : {}
       };
       const updated = await store.update(args.workId, (cur) => ({
         ...cur,
@@ -32154,6 +32211,12 @@ var autopilotComplete = defineCommand({
             process.exit(RUNTIME_ERROR_EXIT);
             return;
           }
+          const residualBlockers = passCloseResidualBlockers(completion, workItem2.acceptance_criteria.map((c3) => c3.id));
+          if (residualBlockers.length > 0) {
+            writeError(`complete: ${args.workItem} verified pass but cannot auto-close \u2014 ${residualBlockers.length} in-scope agent-owned residual(s): ${residualBlockers.join("; ")}. Resolve/ground each (or move it out of scope), then re-run.`);
+            process.exit(RUNTIME_ERROR_EXIT);
+            return;
+          }
           const landMessage = `ditto land ${args.workItem}: ${workItem2.title}`;
           land = await landCommit(repoRoot, workItem2.changed_files, landMessage);
           if (land.status === "committed" || land.status === "noop") {
@@ -32202,7 +32265,7 @@ var autopilotComplete = defineCommand({
       const attestation = attestCompletion(completion);
       const autoHandling = projectAutoHandling(decisions);
       const directionDecisions = projectDirectionDecisions(decisions);
-      const followUpsToPickUp = (workItem2.follow_ups ?? []).filter((f3) => !f3.resolved && f3.materialized_wi).map((f3) => ({ work_item_id: f3.materialized_wi, note: f3.note }));
+      const followUpsToPickUp = (workItem2.follow_ups ?? []).filter((f3) => !f3.resolved && f3.materialized_wi).sort((a2, b2) => (a2.priority ?? Number.POSITIVE_INFINITY) - (b2.priority ?? Number.POSITIVE_INFINITY)).map((f3) => ({ work_item_id: f3.materialized_wi, note: f3.note }));
       if (format === "json") {
         writeJson2({
           work_item_id: args.workItem,
@@ -56324,4 +56387,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=012021cfd2f4aba2985482da322a15895ebac19ef479710561f025b0ac8cd118
+//# ditto-src-stamp=09c4cffe7e2672bc8808a5a8b19159a61f2febf2eb132fe5b55166ef924601ff

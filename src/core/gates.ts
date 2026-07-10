@@ -301,6 +301,41 @@ export function riskRecordBlockers(
   return resolvabilityBlockers(asUnverified, acceptanceIds);
 }
 
+/**
+ * ac-1 (wi_260710tjd) TERMINATION-COMPLETENESS gate for the terminal-flip close
+ * paths (`work done`, `autopilot complete`). Those paths flip the WI to `done`
+ * BEFORE the Stop hook can enforce the residual gates — the flip trips the Stop
+ * NON_TERMINAL guard, so a Stop-hook-only wire is bypassed (the "완료-판정 채널 갭",
+ * cf. wi_260710676/#18). This runs the SAME IN-SCOPE AGENT-OWNED residual classifiers
+ * the Stop hook already uses — `resolvabilityBlockers` over `unverified[]` and
+ * `riskRecordBlockers` over `remaining_risk_records[]` — so a pass-close that SILENTLY
+ * drops an agent-owned residual is blocked on the close path too. ONE label space, no
+ * new field / second classifier (R11): pure reuse of the two classifiers above.
+ *
+ * It targets the SILENT SHRINK, not every recorded note: out-of-scope / candidate
+ * follow-ups live on NEITHER surface (they are the loop's `batch_escalate`/materialized
+ * ledger, not `unverified[]`/`remaining_risk_records[]`), so capture≠drive (ADR-20260627)
+ * is preserved; a resolvability-absent, non-AC-referencing note releases (the default
+ * release path). `non_pass_status` is a NO-OP on pass and is NOT this gate's escape
+ * valve — a pass with a parked agent_resolvable residual must resolve/ground it. Returns
+ * one formatted reason per blocker (empty ⇒ clean close).
+ */
+export function passCloseResidualBlockers(
+  completion: CompletionContract,
+  acceptanceIds: readonly string[],
+): string[] {
+  const label = (b: ResolvabilityBlocker, surface: string): string =>
+    b.userDecision
+      ? `${surface} deferred_needs_user_ok — ${b.item}: ${b.reason}`
+      : `${surface} blocks pass-close — ${b.item}: ${b.reason}`;
+  return [
+    ...resolvabilityBlockers(completion.unverified, acceptanceIds).map((b) => label(b, 'residual')),
+    ...riskRecordBlockers(completion.remaining_risk_records, acceptanceIds).map((b) =>
+      label(b, 'residual-risk record'),
+    ),
+  ];
+}
+
 // ── per-AC oracle satisfaction (ADR-0024 §3 ③ JUDGE; consumed by deriveAcVerdicts) ─
 
 /**

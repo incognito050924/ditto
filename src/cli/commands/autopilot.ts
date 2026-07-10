@@ -40,7 +40,11 @@ import { dittoDir } from '~/core/ditto-paths';
 import { checkE2eCompletionGate } from '~/core/e2e/completion-gate';
 import { detectWebSurfaceChange } from '~/core/e2e/web-surface';
 import { resolveRepoRootForCreate } from '~/core/fs';
-import { intentDriftGate, interfaceBaselineDriftGate } from '~/core/gates';
+import {
+  intentDriftGate,
+  interfaceBaselineDriftGate,
+  passCloseResidualBlockers,
+} from '~/core/gates';
 import { createGhClient } from '~/core/gh-client';
 import { applyBoardStatusOption, reflectAutopilotTermination } from '~/core/github-reflection';
 import { IntentStore } from '~/core/intent-store';
@@ -520,6 +524,26 @@ const autopilotComplete = defineCommand({
             process.exit(RUNTIME_ERROR_EXIT);
             return;
           }
+          // ac-1 (wi_260710tjd) TERMINATION-COMPLETENESS gate. Before the done-flip,
+          // run the SAME in-scope agent-owned residual classifiers the Stop hook uses:
+          // a verified pass whose completion still carries an UNDISPOSED agent_resolvable
+          // residual (unverified[]/remaining_risk_records[]) must NOT flip to done here
+          // (the flip would bypass the Stop NON_TERMINAL guard). Out-of-scope/candidate
+          // follow-ups are on neither surface (capture≠drive, ADR-20260627), so they
+          // never block; blocking fires BEFORE land, so nothing is committed.
+          const residualBlockers = passCloseResidualBlockers(
+            completion,
+            workItem.acceptance_criteria.map((c) => c.id),
+          );
+          if (residualBlockers.length > 0) {
+            writeError(
+              `complete: ${args.workItem} verified pass but cannot auto-close — ${residualBlockers.length} in-scope agent-owned residual(s): ${residualBlockers.join(
+                '; ',
+              )}. Resolve/ground each (or move it out of scope), then re-run.`,
+            );
+            process.exit(RUNTIME_ERROR_EXIT);
+            return;
+          }
           // Deterministic commit message from the WI id + title — never LLM-authored
           // free text (ac-5: the land step stays deterministic, push-free).
           const landMessage = `ditto land ${args.workItem}: ${workItem.title}`;
@@ -640,6 +664,16 @@ const autopilotComplete = defineCommand({
       // command so the user doesn't have to hunt for the id. READ-ONLY — no auto-drive.
       const followUpsToPickUp = (workItem.follow_ups ?? [])
         .filter((f) => !f.resolved && f.materialized_wi)
+        // ac-2 (wi_260710tjd): order by the ADVISORY `priority` (lower rank first);
+        // a follow-up without a priority sorts LAST. Coalesce undefined to +Infinity
+        // to avoid the NaN that `a.priority - b.priority` would yield. Array.sort is
+        // stable, so equal/both-undefined ranks keep insertion order. Ordering ONLY —
+        // priority drives nothing (no-auto-pick, ADR-20260627); the shape below is
+        // unchanged, so priority never leaks into the pick-up drive surface.
+        .sort(
+          (a, b) =>
+            (a.priority ?? Number.POSITIVE_INFINITY) - (b.priority ?? Number.POSITIVE_INFINITY),
+        )
         .map((f) => ({ work_item_id: f.materialized_wi as string, note: f.note }));
       if (format === 'json') {
         writeJson({

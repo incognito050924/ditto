@@ -1047,4 +1047,39 @@ describe('assembleCompletionFromGraph → non_pass_status (wi_260710676, #18)', 
     expect(c.non_pass_status).toBeUndefined();
     expect(nonPassTerminationGate(c).pass).toBe(true);
   });
+
+  // ac-1 (wi_260710tjd) blocked-graph deadlock fix. The settle guard formerly required
+  // `allNodesTerminal`, so a NON-terminal graph the loop cannot advance (no ready node,
+  // nothing running, ≥1 blocked node — the loop's action:'blocked') got NO declaration,
+  // and the Stop gate then DEADLOCKED it (parked criteria, no non_pass_status, yet the
+  // loop can make no further progress). Broaden the guard to mirror action:'blocked'.
+  test('BLOCKED graph (non-terminal, no runnable node) → derives non_pass_status state=blocked; gate passes (no deadlock)', () => {
+    // ac-1 passed WITH evidence → pass; N2 BLOCKED (escalated, user-owned) addressing
+    // ac-2 → parked. The graph is NON-terminal (N2 blocked) yet nothing is runnable.
+    const graph = graphWith([
+      node({ id: 'N1', acceptance_refs: ['ac-1'], status: 'passed', evidence_refs: [ev('t.log')] }),
+      node({ id: 'N2', acceptance_refs: ['ac-2'], status: 'blocked' }),
+    ]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1', 'ac-2']), { now: NOW });
+    expect(c.final_verdict).not.toBe('pass');
+    expect(c.non_pass_status).toBeDefined();
+    // The loop is stuck → the honest disposition is `blocked` (mirrors the loop's
+    // disposition:'blocked'), even though ac-1 reached pass.
+    expect(c.non_pass_status?.state).toBe('blocked');
+    expect(c.non_pass_status?.grounding).toContain('ac-2');
+    expect(nonPassTerminationGate(c).pass).toBe(true);
+  });
+
+  // A non-terminal graph with a still-RUNNING node is NOT stuck (transient progress) —
+  // the guard must keep returning undefined so the gate keeps blocking a no-progress
+  // park (ac-5 protection). Guards the broadening against over-firing.
+  test('non-terminal graph with a RUNNING node (not stuck) → still NO non_pass_status (gate blocks)', () => {
+    const graph = graphWith([
+      node({ id: 'N1', acceptance_refs: ['ac-1'], status: 'passed', evidence_refs: [ev('t.log')] }),
+      node({ id: 'N2', acceptance_refs: ['ac-2'], status: 'running' }),
+    ]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1', 'ac-2']), { now: NOW });
+    expect(c.non_pass_status).toBeUndefined();
+    expect(nonPassTerminationGate(c).pass).toBe(false);
+  });
 });

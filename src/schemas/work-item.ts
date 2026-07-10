@@ -174,6 +174,17 @@ export const followUp = z
       .optional()
       .describe('The tracked work item this bug was materialized into (kind=bug only)'),
     resolved: z.boolean().optional().describe('True once the follow-up has been addressed'),
+    // ac-2 (wi_260710tjd): OPTIONAL, ADVISORY display-ordering rank. 1 = surfaced
+    // first (most urgent) … 5 = last; mirrors the 5-level severityLevel discipline.
+    // It ONLY orders the follow_ups_to_pick_up surfacing — it drives NOTHING
+    // (no-auto-pick preserved, ADR-20260627); no node-selection or drive path reads it.
+    priority: z
+      .number()
+      .int()
+      .min(1)
+      .max(5)
+      .optional()
+      .describe('Advisory pick-up ordering rank (1=first…5=last); display-only, drives nothing'),
   })
   .describe('A discovered follow-up (bug/idea) captured on the work item');
 

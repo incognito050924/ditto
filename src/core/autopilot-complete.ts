@@ -2,6 +2,7 @@ import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { AcOracle, AcceptanceCriterion, WorkItem } from '~/schemas/work-item';
 import { allNodesTerminal } from './autopilot-driver';
+import { selectReadyNodes } from './autopilot-graph';
 import { type AutopilotDecision, synthesizeDecisionId } from './autopilot-store';
 import { type CompletionInput, buildCompletion } from './completion-store';
 import { type AcAttestation, attestAcVerdicts, oracleSatisfaction } from './gates';
@@ -459,22 +460,44 @@ export interface AssembleOptions {
  * the gate already passes.
  *
  * `state`: `partial` when ≥1 AC reached pass (progress made), else `blocked` (nothing
- * achieved). `grounding` names the parked criterion ids — the oracle the gate points at.
+ * achieved). A STUCK graph is `blocked` regardless of progress (see below). `grounding`
+ * names the parked criterion ids — the oracle the gate points at.
+ *
+ * ac-1 (wi_260710tjd) blocked-graph deadlock fix: the settle guard is "the loop can
+ * make no further progress", NOT "every node passed/failed". A NON-terminal graph the
+ * loop cannot advance — no ready node, nothing running, ≥1 blocked node (the loop's
+ * `action:'blocked'` condition, autopilot-loop.ts) — is a stuck run and gets an honest
+ * `state:'blocked'` declaration, so the Stop gate lets it TERMINATE instead of
+ * deadlocking (parked criteria + no declaration + no runnable node). A still-runnable /
+ * running graph is NOT stuck and still gets NO declaration (ac-5 no-progress protection).
  */
+function loopStuckBlocked(graph: Autopilot): boolean {
+  if (selectReadyNodes(graph.nodes).length > 0) return false; // still a runnable node
+  if (graph.nodes.some((n) => n.status === 'running')) return false; // transient progress
+  return graph.nodes.some((n) => n.status === 'blocked'); // stuck on a blocked node
+}
+
 function deriveNonPassStatus(
   graph: Autopilot,
   acceptance: CompletionContract['acceptance'],
   finalVerdict: CompletionContract['final_verdict'],
 ): NonNullable<CompletionContract['non_pass_status']> | undefined {
   if (finalVerdict === 'pass') return undefined;
-  if (!allNodesTerminal(graph)) return undefined;
+  const terminal = allNodesTerminal(graph);
+  const stuck = !terminal && loopStuckBlocked(graph);
+  if (!terminal && !stuck) return undefined;
   const parked = acceptance.filter((a) => a.verdict === 'unverified' || a.verdict === 'fail');
   if (parked.length === 0) return undefined;
   const parkedIds = parked.map((a) => a.criterion_id).join(', ');
   const progressed = acceptance.some((a) => a.verdict === 'pass');
+  // A stuck (blocked) graph is `blocked` even if some AC reached pass — the loop cannot
+  // proceed (mirrors the loop's disposition:'blocked'); a cleanly-settled terminal graph
+  // is `partial` when progress was made, else `blocked`.
   return {
-    state: progressed ? 'partial' : 'blocked',
-    reason: `autopilot terminated non-pass with ${parked.length} criterion/criteria not reaching pass: ${parkedIds}`,
+    state: stuck || !progressed ? 'blocked' : 'partial',
+    reason: stuck
+      ? `autopilot cannot proceed (graph blocked, no runnable node) with ${parked.length} criterion/criteria not reaching pass: ${parkedIds}`
+      : `autopilot terminated non-pass with ${parked.length} criterion/criteria not reaching pass: ${parkedIds}`,
     grounding: `parked acceptance criteria: ${parkedIds}`,
   };
 }

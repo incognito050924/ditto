@@ -1,0 +1,304 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260710tjd",
+  "title": "오케스트레이션 설계 개선 — 임의 슬라이싱·동적 작업단위·종료 완전성·후속 우선순위 (supersedes #10)",
+  "source_request": "오케스트레이션 설계 개선 — 임의 슬라이싱·동적 작업단위·종료 완전성·후속 우선순위 (supersedes #10)\n\n#10에서 이관 (#10 close). autopilot·경량 오케스트레이션의 **설계-층 방향성** 개선 의도. 구현 태스크가 아니라 의도 정리(deep-interview)가 선행돼야 하는 항목들이다. 기존 ADR과 정합 확인 필요.\n\n### 1. 임의 슬라이스 분할 금지\nautopilot 및 경량 오케스트레이션이 하나의 의도를 임의로 슬라이스로 쪼개 실행하지 않도록 수정.\n\n### 2. 동적 작업 단위(task) 개념 도입 검토\n하나의 의도 안에서 동적으로 여러 작업 단위가 생길 수 있음을 수용하는 단위. → 기존 `ADR-20260706`(work-item Record/Run 2-tier), work item 개념과 정합 필요.\n\n### 3. 종료 완전성 게이트\n작업 종료 시 후속 및 남은 위험 등이 **모두 처리돼야 끝나도록** 수정. 잔여가 쌓이면 지시할 때마다 의도가 옅어지거나 묻히고, 오히려 이를 신경 쓰는 사용자 인지 비용이 크게 늘어남.\n\n### 4. 후속/잔여 작업 우선순위·순서는 *생성 시점에* 결정\n후속·잔여는 생성되는 시점에 바로 우선순위/순서를 결정하는 게 합리적 — 작업한 에이전트 당사자가 가장 잘 알고 사용자는 알기 어려움. → 기존 `ADR-20260627`(autopilot 후속 자율성 경계: materialize≠drive, no-auto-pick 불변식), follow-up materialization과 정합 필요.\n\n---\n**성격**: 설계 결정 (heavy / deep-interview). 되돌리기 어려운 오케스트레이션 동작 변경 포함 — 착수 전 의도 정리 필수.\n**관련 ADR**: ADR-20260627 (autopilot 후속 자율성), ADR-20260706 (work-item Record/Run split).",
+  "goal": "autopilot·경량 오케스트레이션이 하나의 의도를 슬라이스/phase로 쪼개거나 조용히 축소·방치하지 못하게 한다: 종료를 완전성 게이트로 강화(모든 잔여에 명시적 처분, 조용한 누락 0, 무인 완주 보존), 후속 생성 시점에 advisory 우선순위 기록, 동적 task 단위는 기존 단위에 매핑(새 계층 없음). ADR-20260627(materialize≠drive/no-auto-pick) 유지.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "autopilot complete 또는 work done이 final_verdict=pass로 닫을 때, 명시적 처분이 없는 잔여(미추적 materialized 후속·미해소 residual 등)가 있으면 조용히 done되지 않고 차단되거나 non_pass_status 정직 선언과 함께만 닫힌다. 처분으로 물질화+추적 또는 선언을 인정해 무인 완주가 데드락되지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/work-items/wi_260710tjd/coverage.json",
+          "summary": "6축 coverage sweep: 13 relevant swept + 10 grounded-skip + 1 taxonomy 제안"
+        },
+        {
+          "kind": "note",
+          "summary": "sweep 수렴 제약: ac-1 EXTEND(2차 classifier 금지)·in-scope agent-owned 한정(capture≠drive)·presence-keyed grandfather·양쪽 경로+WRITER 배선·blocked-graph 데드락 해소·게이트 배치·경량 면제"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710tjd/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/gates.test.ts tests/core/autopilot-complete.test.ts tests/cli/termination-completeness-cli.test.ts",
+          "summary": "scope-local 186 pass/0 fail exit 0 (wired-path block + blocked-graph + legacy + lightweight)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (5 sibling consumer files)",
+          "summary": "blast-radius 160 pass/0 fail"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/work-items/wi_260710tjd/reviewer-output.json",
+          "summary": "reviewer verdict pass, 0 behavior-risk findings, dead-wiring ruled out with file:line"
+        },
+        {
+          "kind": "command",
+          "command": "ditto acg-review",
+          "summary": "acg-review.json: 2 files, 0 high-risk without evidence"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/termination-completeness-cli.test.ts tests/core/gates.test.ts tests/core/autopilot-complete.test.ts",
+          "summary": "ac-1 186 pass/0 fail exit 0 (wired both close paths)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-follow-up-priority.test.ts tests/cli/autopilot-complete-flip-cli.test.ts",
+          "summary": "ac-2 13 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/intent-single-unit-invariant.test.ts",
+          "summary": "ac-3 10 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full suite)",
+          "summary": "4463 pass/0 fail/11 skip/4474 tests — no regression"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/knowledge/adr/ADR-20260710-intent-single-unit-and-termination-completeness.md",
+          "summary": "ac-4 ADR 4결정+정합 confirmed"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "후속 물질화 시 followUp이 생성 에이전트가 매긴 advisory 우선순위 필드를 담고, follow_ups_to_pick_up 표면화가 그 순위로 정렬된다. 이 필드는 어떤 경로에서도 자동 구동을 유발하지 않는다(no-auto-pick 불변식 테스트 유지)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/work-items/wi_260710tjd/coverage.json",
+          "summary": "6축 coverage sweep: 13 relevant swept + 10 grounded-skip + 1 taxonomy 제안"
+        },
+        {
+          "kind": "note",
+          "summary": "sweep 수렴 제약: ac-1 EXTEND(2차 classifier 금지)·in-scope agent-owned 한정(capture≠drive)·presence-keyed grandfather·양쪽 경로+WRITER 배선·blocked-graph 데드락 해소·게이트 배치·경량 면제"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710tjd/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-follow-up-priority.test.ts tests/cli/autopilot-complete-flip-cli.test.ts tests/cli/work-follow-up.test.ts tests/cli/work-follow-up-batch.test.ts",
+          "summary": "scope-local suite exit 0, 32 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit -p tsconfig.json | grep work-follow-up-priority",
+          "summary": "no matches — 4 TS2532 errors gone"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/work-items/wi_260710tjd/reviewer-output.json",
+          "summary": "reviewer verdict pass, 0 behavior-risk findings, dead-wiring ruled out with file:line"
+        },
+        {
+          "kind": "command",
+          "command": "ditto acg-review",
+          "summary": "acg-review.json: 2 files, 0 high-risk without evidence"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/termination-completeness-cli.test.ts tests/core/gates.test.ts tests/core/autopilot-complete.test.ts",
+          "summary": "ac-1 186 pass/0 fail exit 0 (wired both close paths)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-follow-up-priority.test.ts tests/cli/autopilot-complete-flip-cli.test.ts",
+          "summary": "ac-2 13 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/intent-single-unit-invariant.test.ts",
+          "summary": "ac-3 10 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full suite)",
+          "summary": "4463 pass/0 fail/11 skip/4474 tests — no regression"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/knowledge/adr/ADR-20260710-intent-single-unit-and-termination-completeness.md",
+          "summary": "ac-4 ADR 4결정+정합 confirmed"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "오케스트레이션이 하나의 의도를 슬라이스/phase 단위로 쪼개 부분 승인·부분 착수하지 않으며 그런 단위가 스키마·흐름에 존재하지 않는다. in-scope 일의 untracked 후속 조용한 강등 또는 합의된 AC보다 적게 전달하는 종료가 표면화/차단된다. 정당한 typed 노드 그래프는 오탐되지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/work-items/wi_260710tjd/coverage.json",
+          "summary": "6축 coverage sweep: 13 relevant swept + 10 grounded-skip + 1 taxonomy 제안"
+        },
+        {
+          "kind": "note",
+          "summary": "sweep 수렴 제약: ac-1 EXTEND(2차 classifier 금지)·in-scope agent-owned 한정(capture≠drive)·presence-keyed grandfather·양쪽 경로+WRITER 배선·blocked-graph 데드락 해소·게이트 배치·경량 면제"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710tjd/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/intent-single-unit-invariant.test.ts",
+          "summary": "10 pass/0 fail exit 0 (slice/phase absence + underdelivery-caught + fan-out-not-flagged)"
+        },
+        {
+          "kind": "command",
+          "command": "inject 'phase' into nodeKind → bun test -t '(a)' → 3 RED → git checkout restore",
+          "summary": "discrimination proof: lock fires on the regression it guards"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/work-items/wi_260710tjd/reviewer-output.json",
+          "summary": "reviewer verdict pass, 0 behavior-risk findings, dead-wiring ruled out with file:line"
+        },
+        {
+          "kind": "command",
+          "command": "ditto acg-review",
+          "summary": "acg-review.json: 2 files, 0 high-risk without evidence"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/termination-completeness-cli.test.ts tests/core/gates.test.ts tests/core/autopilot-complete.test.ts",
+          "summary": "ac-1 186 pass/0 fail exit 0 (wired both close paths)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-follow-up-priority.test.ts tests/cli/autopilot-complete-flip-cli.test.ts",
+          "summary": "ac-2 13 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/intent-single-unit-invariant.test.ts",
+          "summary": "ac-3 10 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full suite)",
+          "summary": "4463 pass/0 fail/11 skip/4474 tests — no regression"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/knowledge/adr/ADR-20260710-intent-single-unit-and-termination-completeness.md",
+          "summary": "ac-4 ADR 4결정+정합 confirmed"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "위 결정(방향 A·우선순위 advisory·동적 task 단위=기존 단위 매핑·슬라이스/phase 단위 부재)이 ADR로 기록되고 ADR-20260627과의 정합(supersede 아님)이 명시된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/work-items/wi_260710tjd/coverage.json",
+          "summary": "6축 coverage sweep: 13 relevant swept + 10 grounded-skip + 1 taxonomy 제안"
+        },
+        {
+          "kind": "note",
+          "summary": "sweep 수렴 제약: ac-1 EXTEND(2차 classifier 금지)·in-scope agent-owned 한정(capture≠drive)·presence-keyed grandfather·양쪽 경로+WRITER 배선·blocked-graph 데드락 해소·게이트 배치·경량 면제"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710tjd/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/knowledge/adr/ADR-20260710-intent-single-unit-and-termination-completeness.md",
+          "summary": "ADR 4결정+코드인용+ADR-20260627 보존/Direction B 기각+ADR-20260706 정합+변경조건"
+        },
+        {
+          "kind": "command",
+          "command": "ditto bridge knowledge",
+          "summary": "CLAUDE.md projection regenerated deterministically, drift resolved"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/termination-completeness-cli.test.ts tests/core/gates.test.ts tests/core/autopilot-complete.test.ts",
+          "summary": "ac-1 186 pass/0 fail exit 0 (wired both close paths)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-follow-up-priority.test.ts tests/cli/autopilot-complete-flip-cli.test.ts",
+          "summary": "ac-2 13 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/intent-single-unit-invariant.test.ts",
+          "summary": "ac-3 10 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full suite)",
+          "summary": "4463 pass/0 fail/11 skip/4474 tests — no regression"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/knowledge/adr/ADR-20260710-intent-single-unit-and-termination-completeness.md",
+          "summary": "ac-4 ADR 4결정+정합 confirmed"
+        }
+      ]
+    }
+  ],
+  "status": "blocked",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/schemas/work-item.ts",
+    "schemas/work-item.schema.json",
+    "src/cli/commands/work.ts",
+    "src/cli/commands/autopilot.ts",
+    "tests/cli/work-follow-up-priority.test.ts",
+    "tests/cli/autopilot-complete-flip-cli.test.ts",
+    "src/core/gates.ts",
+    "src/core/autopilot-complete.ts",
+    "tests/cli/termination-completeness-cli.test.ts",
+    "tests/core/gates.test.ts",
+    "tests/core/autopilot-complete.test.ts",
+    "tests/core/intent-single-unit-invariant.test.ts",
+    ".ditto/knowledge/adr/ADR-20260710-intent-single-unit-and-termination-completeness.md",
+    "CLAUDE.md"
+  ],
+  "worktrees": [],
+  "follow_ups": [
+    {
+      "kind": "idea",
+      "note": "coverage taxonomy 제안: 'autonomy-liveness' 카테고리 신설 검토 (ditto coverage discover --confirm). 무인 autopilot 루프가 항상 자력 terminal 도달하는가 — 강화된 완료 게이트의 livelock/deadlock vs transference(no-auto-pick 위반). concurrency(safety)/failure-recovery(error)와 구별되는 progress/liveness 렌즈. 근거: autopilot-complete.ts:367,456·coverage-manager.ts:594·deriveNonPassStatus. 이번 #19의 구체 liveness risk는 failure-recovery/boundary-edge/cross-feature sweep으로 이미 포착·ac-1 제약 반영됨 — 이건 taxonomy 명명 갭만 남은 것."
+    }
+  ],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 19
+  },
+  "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260710tjd",
+    "fresh_evidence_needed": [
+      "land aborted — 8 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_260710tjd/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260710tjd/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260710tjd/events/000002.workspace-write.dbe2acd101da.json, .ditto/work-items/wi_260710tjd/events/000003.workspace-write.2131edb0b70e.json, .ditto/work-items/wi_260710tjd/events/000004.workspace-write.08c184ba1028.json, .ditto/work-items/wi_260710tjd/events/000005.workspace-write.328b004dfe4e.json, .ditto/work-items/wi_260710tjd/events/000006.workspace-write.de05ad34bbb2.json, .ditto/work-items/wi_260710tjd/record.json. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
+  "runs": [],
+  "started_at_sha": "a3e37bfd1773a7fa2177c7021841518e388352d4",
+  "created_at": "2026-07-10T10:15:36.327Z",
+  "updated_at": "2026-07-10T12:57:13.901Z"
+}

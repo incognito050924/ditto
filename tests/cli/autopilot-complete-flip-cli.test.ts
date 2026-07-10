@@ -253,4 +253,71 @@ describe('ditto autopilot complete — follow-ups to pick up (D4-a)', () => {
     const out = JSON.parse(res.stdout.slice(res.stdout.indexOf('{')));
     expect(out.follow_ups_to_pick_up).toEqual([]);
   });
+
+  // ac-2 (wi_260710tjd): the ADVISORY `priority` orders the pick-up surfacing.
+  // Lower rank = surfaced first; a follow-up WITHOUT priority sorts LAST (never a
+  // NaN-induced scramble). Ordering only — it drives nothing (no-auto-pick).
+  async function seedWithPriorities(): Promise<void> {
+    await write('work-item.json', {
+      schema_version: '0.1.0',
+      id: WI,
+      title: 'flip cli',
+      source_request: 'add a thing',
+      goal: 'the thing works',
+      acceptance_criteria: [
+        { id: 'ac-1', statement: 'ac-1 holds', verdict: 'unverified', evidence: [] },
+      ],
+      status: 'in_progress',
+      owner_profile: 'workspace-write',
+      child_ids: [],
+      changed_files: ['src/x.ts'],
+      risks: [],
+      runs: [],
+      // insertion order deliberately NOT priority order; one entry has no priority.
+      follow_ups: [
+        { kind: 'bug', note: 'rank three', materialized_wi: 'wi_rankthree', priority: 3 },
+        { kind: 'bug', note: 'rank one', materialized_wi: 'wi_rankone01', priority: 1 },
+        { kind: 'bug', note: 'no rank', materialized_wi: 'wi_norank001' },
+        { kind: 'bug', note: 'rank two', materialized_wi: 'wi_ranktwo01', priority: 2 },
+      ],
+      created_at: '2026-06-06T00:00:00.000Z',
+      updated_at: '2026-06-06T00:00:00.000Z',
+    });
+  }
+
+  test('follow_ups_to_pick_up is ordered by advisory priority, undefined LAST', async () => {
+    await seedWithPriorities();
+    await seedGraph(true);
+    await stageChangedFile();
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    expect(res.exitCode).toBe(0);
+    const out = JSON.parse(res.stdout.slice(res.stdout.indexOf('{')));
+    expect(out.follow_ups_to_pick_up.map((f: { work_item_id: string }) => f.work_item_id)).toEqual([
+      'wi_rankone01', // priority 1
+      'wi_ranktwo01', // priority 2
+      'wi_rankthree', // priority 3
+      'wi_norank001', // undefined → last
+    ]);
+  });
+
+  // no-auto-pick invariant (ADR-20260627): priority is display/ordering metadata
+  // ONLY. Sorting the surface must not leak `priority` into the pick-up drive
+  // shape, and must not change the completion outcome (no follow-up is auto-driven
+  // — materialize != drive). Same {work_item_id, note} shape, just reordered.
+  test('priority drives nothing: pick-up shape stays {work_item_id, note}, outcome unchanged', async () => {
+    await seedWithPriorities();
+    await seedGraph(true);
+    await stageChangedFile();
+    const res = spawnDitto(['autopilot', 'complete', '--workItem', WI, '--output', 'json']);
+    const out = JSON.parse(res.stdout.slice(res.stdout.indexOf('{')));
+    // outcome is decided by the completion gate, NOT by any follow-up priority.
+    expect(out.auto_close?.outcome).toBe('flipped');
+    // the drive surface exposes ONLY {work_item_id, note} — priority is never a
+    // drive signal, so it must not appear on the pick-up entries.
+    for (const f of out.follow_ups_to_pick_up as Array<Record<string, unknown>>) {
+      expect(Object.keys(f).sort()).toEqual(['note', 'work_item_id']);
+      expect(f.priority).toBeUndefined();
+    }
+    expect(out.follow_ups_to_pick_up).toHaveLength(4);
+  });
 });

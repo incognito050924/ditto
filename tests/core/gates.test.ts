@@ -22,6 +22,7 @@ import {
   knowledgeUpdateGate,
   landGate,
   nonPassTerminationGate,
+  passCloseResidualBlockers,
   resolvabilityBlockers,
   riskRecordBlockers,
   safeDefaultable,
@@ -966,6 +967,80 @@ describe('nonPassTerminationGate (ac-1: non-pass termination, CORE R1 leak)', ()
       final_verdict: 'partial',
     });
     expect(nonPassTerminationGate(c).pass).toBe(true);
+  });
+});
+
+// ac-1 (wi_260710tjd) TERMINATION-COMPLETENESS gate for the terminal-flip close paths.
+// Pure classifier reuse (R11): resolvabilityBlockers over unverified[] + riskRecordBlockers
+// over remaining_risk_records[]. Targets the SILENT SHRINK (in-scope agent-owned residual
+// dropped on an otherwise-pass), preserves the release path (out-of-scope / disposed).
+describe('passCloseResidualBlockers (ac-1: pass-close termination-completeness)', () => {
+  const passBase = {
+    schema_version: '0.1.0',
+    work_item_id: 'wi_260710tjd',
+    declared_by: 'verifier',
+    declared_at: '2026-07-10T00:00:00Z',
+    summary: 'pass',
+    acceptance: [{ criterion_id: 'ac-1', verdict: 'pass' as const }],
+    final_verdict: 'pass' as const,
+  };
+
+  test('an agent_resolvable residual in unverified[] BLOCKS a pass-close (out_of_scope does not excuse it)', () => {
+    const c = completionContract.parse({
+      ...passBase,
+      unverified: [
+        {
+          item: 'refactor the helper the fix duplicated',
+          reason: 'agent could resolve it',
+          out_of_scope: true,
+          resolvability: 'agent_resolvable',
+        },
+      ],
+    });
+    const r = passCloseResidualBlockers(c, ['ac-1']);
+    expect(r.length).toBe(1);
+    expect(r[0]).toContain('residual blocks pass-close');
+  });
+
+  test('an agent_resolvable remaining_risk_records entry BLOCKS a pass-close', () => {
+    const c = completionContract.parse({
+      ...passBase,
+      remaining_risk_records: [
+        { risk: 'unhandled edge case the loop flagged', resolvability: 'agent_resolvable' },
+      ],
+    });
+    const r = passCloseResidualBlockers(c, ['ac-1']);
+    expect(r.length).toBe(1);
+    expect(r[0]).toContain('residual-risk record blocks pass-close');
+  });
+
+  test('a resolvability-absent, non-AC-referencing out-of-scope note does NOT block (release path preserved)', () => {
+    const c = completionContract.parse({
+      ...passBase,
+      unverified: [
+        { item: 'a nice idea for a follow-up', reason: 'captured for later', out_of_scope: true },
+      ],
+    });
+    expect(passCloseResidualBlockers(c, ['ac-1'])).toEqual([]);
+  });
+
+  test('a grounded blocked_external residual-risk record RELEASES (default-deny satisfied by grounding)', () => {
+    const c = completionContract.parse({
+      ...passBase,
+      remaining_risk_records: [
+        {
+          risk: 'blocked by a missing optional analyzer',
+          resolvability: 'blocked_external',
+          grounding: 'ADR-0018 graceful-degrade: codeql absent',
+        },
+      ],
+    });
+    expect(passCloseResidualBlockers(c, ['ac-1'])).toEqual([]);
+  });
+
+  test('a clean pass (no unverified[], no remaining_risk_records) → no blockers', () => {
+    const c = completionContract.parse({ ...passBase });
+    expect(passCloseResidualBlockers(c, ['ac-1'])).toEqual([]);
   });
 });
 

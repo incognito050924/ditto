@@ -15,7 +15,12 @@ import {
 } from '~/core/completion-store';
 import { readGithubConfig } from '~/core/ditto-config';
 import { resolveRepoRootForCreate } from '~/core/fs';
-import { acceptanceTestable, completionEvidenceGate, completionGate } from '~/core/gates';
+import {
+  acceptanceTestable,
+  completionEvidenceGate,
+  completionGate,
+  passCloseResidualBlockers,
+} from '~/core/gates';
 import {
   type GhClient,
   type GhDegradation,
@@ -2198,6 +2203,26 @@ const workDone = defineCommand({
         process.exit(USAGE_ERROR_EXIT);
         return;
       }
+      // ac-1 (wi_260710tjd) TERMINATION-COMPLETENESS gate. `work done` flips the WI to
+      // done below, BEFORE the Stop hook can enforce the residual gates (the flip trips
+      // the Stop NON_TERMINAL guard, so a Stop-hook-only wire is bypassed). Run the SAME
+      // in-scope agent-owned residual classifiers here so a pass-close that SILENTLY
+      // parks an agent_resolvable residual (unverified[]/remaining_risk_records[]) is
+      // blocked. Out-of-scope/candidate follow-ups are on neither surface (capture≠drive),
+      // so they never block; a clean pass closes normally (no deadlock).
+      const residualBlockers = passCloseResidualBlockers(
+        completion,
+        item.acceptance_criteria.map((c) => c.id),
+      );
+      if (residualBlockers.length > 0) {
+        writeError(
+          `work ${args.workId} cannot close: ${residualBlockers.length} in-scope agent-owned residual(s) block a pass-close — ${residualBlockers.join(
+            '; ',
+          )}. Resolve/ground each (or move it out of scope), then re-run.`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
       // wi_260627273: mirror the completion's per-AC verdicts + evidence back onto
       // the work item BEFORE the close flip, so `work status`/`push-ready` read the
       // verified state instead of the stale `unverified` the criteria were created
@@ -2322,6 +2347,12 @@ const workFollowUp = defineCommand({
       type: 'boolean',
       description: 'Mark a regression introduced by this work item itself',
       default: false,
+    },
+    priority: {
+      type: 'string',
+      description:
+        'Advisory pick-up ordering rank 1-5 (1=surfaced first); display-only, drives nothing (no-auto-pick)',
+      required: false,
     },
     batch: {
       type: 'boolean',
@@ -2566,6 +2597,21 @@ const workFollowUp = defineCommand({
       severity = parsed.data;
     }
     const selfCaused = args['self-caused'] === true;
+    // ac-2: advisory pick-up ordering rank. Validate at parse time (1-5, mirrors the
+    // schema's followUp.priority range) so a bad value is a usage error, not a
+    // silently-dropped write. Display-only — it drives nothing (no-auto-pick).
+    let priority: FollowUp['priority'];
+    if (args.priority !== undefined) {
+      const raw = String(args.priority).trim();
+      if (!/^\d+$/.test(raw) || Number(raw) < 1 || Number(raw) > 5) {
+        writeError(
+          `--priority must be an integer 1-5 (advisory pick-up rank, 1=first); got "${args.priority}"`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      priority = Number(raw);
+    }
     try {
       const source = await store.get(args.workId); // clear error if the source is unknown
       // (B) A bug is real, tracked work: materialize it into its OWN work item,
@@ -2595,6 +2641,7 @@ const workFollowUp = defineCommand({
         ...(severity ? { severity } : {}),
         ...(selfCaused ? { self_caused: true } : {}),
         ...(materializedWi ? { materialized_wi: materializedWi } : {}),
+        ...(priority !== undefined ? { priority } : {}),
       };
       const updated = await store.update(args.workId, (cur) => ({
         ...cur,
