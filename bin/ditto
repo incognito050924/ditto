@@ -5,25 +5,43 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -20557,6 +20575,50 @@ async function runCleanup(repoRoot, input) {
   return { status: "passed", node_id: node.id, plan: plan.worktrees, removed, skipped };
 }
 
+// src/core/autopilot-driver.ts
+function mutationGate(graph) {
+  const gate2 = graph.approval_gate;
+  const briefRegimeActive = gate2.change_surface !== undefined;
+  const designPassed = (graph.nodes ?? []).some((n2) => n2.kind === "design" && n2.status === "passed");
+  if (designPassed && !briefRegimeActive && gate2.status === "approved" && gate2.source === null) {
+    return {
+      allowed: false,
+      action: "present_plan",
+      reason: "design passed, change_surface absent, and approval has no authorizer (source=null): produce the brief before mutating"
+    };
+  }
+  if (briefRegimeActive && gate2.status === "approved" && gate2.plan_brief === undefined) {
+    return {
+      allowed: false,
+      action: "present_plan",
+      reason: "plan approved but plan_brief is absent: produce the brief before mutating"
+    };
+  }
+  switch (gate2.status) {
+    case "approved":
+    case "not_required":
+      return { allowed: true, action: "proceed", reason: `approval=${gate2.status}` };
+    case "pending":
+      return {
+        allowed: false,
+        action: "present_plan",
+        reason: "approval pending: present the plan and stop before mutating"
+      };
+    case "rejected":
+      return { allowed: false, action: "blocked", reason: "plan was rejected" };
+  }
+}
+function rollbackOnRejection(graph) {
+  if (graph.approval_gate.status !== "rejected") {
+    throw new Error(`rollbackOnRejection requires approval_gate.status='rejected', got '${graph.approval_gate.status}'`);
+  }
+  const nodes = graph.nodes.map((n2) => n2.status === "running" ? { ...n2, status: nodeTransition("running", "rollback") } : n2);
+  return { nodes, stopped: true, reason: "plan rejected: rolled back in-flight nodes" };
+}
+function allNodesTerminal(graph) {
+  return graph.nodes.every((n2) => n2.kind === "retro" || n2.status === "passed" || n2.status === "failed");
+}
+
 // src/schemas/completion-contract.ts
 init_zod();
 init_common();
@@ -20952,6 +21014,22 @@ function testBarrierUnverified(graph, barrierOptOut = false) {
     grounding: b2.id
   }));
 }
+function deriveNonPassStatus(graph, acceptance, finalVerdict) {
+  if (finalVerdict === "pass")
+    return;
+  if (!allNodesTerminal(graph))
+    return;
+  const parked = acceptance.filter((a2) => a2.verdict === "unverified" || a2.verdict === "fail");
+  if (parked.length === 0)
+    return;
+  const parkedIds = parked.map((a2) => a2.criterion_id).join(", ");
+  const progressed = acceptance.some((a2) => a2.verdict === "pass");
+  return {
+    state: progressed ? "partial" : "blocked",
+    reason: `autopilot terminated non-pass with ${parked.length} criterion/criteria not reaching pass: ${parkedIds}`,
+    grounding: `parked acceptance criteria: ${parkedIds}`
+  };
+}
 function assembleCompletionFromGraph(graph, workItem2, opts = {}) {
   const acIds = workItem2.acceptance_criteria.map((c3) => c3.id);
   const oracles = new Map(workItem2.acceptance_criteria.map((c3) => [c3.id, c3.oracle]));
@@ -20974,7 +21052,9 @@ function assembleCompletionFromGraph(graph, workItem2, opts = {}) {
     ...opts.now ? { now: opts.now } : {}
   });
   const riskRecords = opts.decisions ? unresolvedAgentResolvableRiskRecords(opts.decisions, graph) : [];
-  return riskRecords.length > 0 ? { ...built, remaining_risk_records: riskRecords } : built;
+  const withRecords = riskRecords.length > 0 ? { ...built, remaining_risk_records: riskRecords } : built;
+  const nonPassStatus = deriveNonPassStatus(graph, withRecords.acceptance, withRecords.final_verdict);
+  return nonPassStatus ? { ...withRecords, non_pass_status: nonPassStatus } : withRecords;
 }
 function attestCompletion(completion) {
   return attestAcVerdicts(completion.acceptance.map((a2) => ({
@@ -22186,50 +22266,6 @@ function decideOnFailure(failureClass, attempts, caps) {
     case "user_decision_needed":
       return { decision: "escalate", cap_exceeded: false };
   }
-}
-
-// src/core/autopilot-driver.ts
-function mutationGate(graph) {
-  const gate2 = graph.approval_gate;
-  const briefRegimeActive = gate2.change_surface !== undefined;
-  const designPassed = (graph.nodes ?? []).some((n2) => n2.kind === "design" && n2.status === "passed");
-  if (designPassed && !briefRegimeActive && gate2.status === "approved" && gate2.source === null) {
-    return {
-      allowed: false,
-      action: "present_plan",
-      reason: "design passed, change_surface absent, and approval has no authorizer (source=null): produce the brief before mutating"
-    };
-  }
-  if (briefRegimeActive && gate2.status === "approved" && gate2.plan_brief === undefined) {
-    return {
-      allowed: false,
-      action: "present_plan",
-      reason: "plan approved but plan_brief is absent: produce the brief before mutating"
-    };
-  }
-  switch (gate2.status) {
-    case "approved":
-    case "not_required":
-      return { allowed: true, action: "proceed", reason: `approval=${gate2.status}` };
-    case "pending":
-      return {
-        allowed: false,
-        action: "present_plan",
-        reason: "approval pending: present the plan and stop before mutating"
-      };
-    case "rejected":
-      return { allowed: false, action: "blocked", reason: "plan was rejected" };
-  }
-}
-function rollbackOnRejection(graph) {
-  if (graph.approval_gate.status !== "rejected") {
-    throw new Error(`rollbackOnRejection requires approval_gate.status='rejected', got '${graph.approval_gate.status}'`);
-  }
-  const nodes = graph.nodes.map((n2) => n2.status === "running" ? { ...n2, status: nodeTransition("running", "rollback") } : n2);
-  return { nodes, stopped: true, reason: "plan rejected: rolled back in-flight nodes" };
-}
-function allNodesTerminal(graph) {
-  return graph.nodes.every((n2) => n2.kind === "retro" || n2.status === "passed" || n2.status === "failed");
 }
 
 // src/acg/tidy/subgraph.ts
@@ -56261,4 +56297,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=bcfdfe1ef06889c2e9277b95ca8c33cc11663598414871015941c3be9503fbe0
+//# ditto-src-stamp=cf7cd9cc44be785da1a89c861c4439677574e85172738b52ca1b8d6dd79a11ad

@@ -7,7 +7,7 @@ import {
   projectDirectionDecisions,
 } from '~/core/autopilot-complete';
 import { type AutopilotDecision, synthesizeDecisionId } from '~/core/autopilot-store';
-import { attestAcVerdicts } from '~/core/gates';
+import { attestAcVerdicts, nonPassTerminationGate } from '~/core/gates';
 import { type Autopilot, type AutopilotNode, autopilot } from '~/schemas/autopilot';
 import type { WorkItem } from '~/schemas/work-item';
 
@@ -975,5 +975,76 @@ describe('assembleCompletionFromGraph (recipe barrier_opt_out: degraded-barrier 
     // is suppressed): final_verdict is floored off pass and the RED barrier is recorded.
     expect(c.final_verdict).not.toBe('pass');
     expect(c.unverified.some((u) => !u.out_of_scope && u.item.includes('BARRIER'))).toBe(true);
+  });
+});
+
+// wi_260710676 (#18): the MISSING writer for `completion.non_pass_status`. The Stop
+// gate `nonPassTerminationGate` unlocks an honest non-pass termination only when the
+// completion carries a `non_pass_status` declaration — but no code ever wrote it, so
+// an autopilot that honestly finished non-pass was blocked at the gate and needed a
+// manual completion.json edit. The autopilot completion writer is the honest-terminate
+// author: it derives the declaration when (and only when) the graph is FULLY TERMINAL
+// and a criterion is parked (unverified/fail). A still-unfinished graph gets no
+// declaration, so the gate keeps blocking a no-progress park (ac-5 protection intact).
+describe('assembleCompletionFromGraph → non_pass_status (wi_260710676, #18)', () => {
+  test('fully-terminal non-pass with a parked unverified AC → derives non_pass_status; gate passes; state=partial (progress made)', () => {
+    // ac-1 passed WITH evidence → pass; ac-2 has no addressing node → unverified.
+    // Every node terminal → the run honestly finished non-pass.
+    const graph = graphWith([
+      node({ id: 'N1', acceptance_refs: ['ac-1'], status: 'passed', evidence_refs: [ev('t.log')] }),
+    ]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1', 'ac-2']), { now: NOW });
+    expect(c.final_verdict).not.toBe('pass');
+    expect(c.non_pass_status).toBeDefined();
+    expect(c.non_pass_status?.state).toBe('partial'); // ac-1 passed = progress
+    expect(c.non_pass_status?.reason.length).toBeGreaterThan(0);
+    expect(c.non_pass_status?.grounding).toContain('ac-2'); // grounded in the parked id
+    expect(nonPassTerminationGate(c).pass).toBe(true);
+  });
+
+  test('fully-terminal non-pass with NO passed AC → state=blocked (nothing achieved)', () => {
+    // A single passed node addressing no AC keeps the graph terminal while both ACs
+    // stay unverified (no addressing verification) → zero progress.
+    const graph = graphWith([node({ id: 'N1', acceptance_refs: [], status: 'passed' })]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1', 'ac-2']), { now: NOW });
+    expect(c.final_verdict).not.toBe('pass');
+    expect(c.non_pass_status?.state).toBe('blocked');
+    expect(nonPassTerminationGate(c).pass).toBe(true);
+  });
+
+  test('UNFINISHED graph (a non-terminal node) → NO non_pass_status; gate still BLOCKS (ac-5 no-progress protection preserved)', () => {
+    const graph = graphWith([
+      node({ id: 'N1', acceptance_refs: ['ac-1'], status: 'passed', evidence_refs: [ev('t.log')] }),
+      node({ id: 'N2', acceptance_refs: [], status: 'running' }), // non-terminal: work unfinished
+    ]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1', 'ac-2']), { now: NOW });
+    expect(c.final_verdict).not.toBe('pass');
+    expect(c.non_pass_status).toBeUndefined();
+    expect(nonPassTerminationGate(c).pass).toBe(false);
+  });
+
+  test('a pass completion carries NO non_pass_status (byte-identical to before)', () => {
+    const graph = graphWith([
+      node({ id: 'N1', acceptance_refs: ['ac-1'], status: 'passed', evidence_refs: [ev('t.log')] }),
+    ]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), { now: NOW });
+    expect(c.final_verdict).toBe('pass');
+    expect(c.non_pass_status).toBeUndefined();
+  });
+
+  test('non-pass whose only non-pass AC is a declared partial (no unverified/fail) → NO non_pass_status (partial is an honest signal, nothing parked)', () => {
+    const graph = graphWith([
+      node({
+        id: 'N1',
+        acceptance_refs: ['ac-1'],
+        status: 'passed',
+        evidence_refs: [ev('t.log')],
+        ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'partial' }],
+      }),
+    ]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), { now: NOW });
+    expect(c.final_verdict).toBe('partial');
+    expect(c.non_pass_status).toBeUndefined();
+    expect(nonPassTerminationGate(c).pass).toBe(true);
   });
 });

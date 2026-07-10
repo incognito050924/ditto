@@ -1,6 +1,7 @@
 import type { Autopilot, AutopilotNode } from '~/schemas/autopilot';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { AcOracle, AcceptanceCriterion, WorkItem } from '~/schemas/work-item';
+import { allNodesTerminal } from './autopilot-driver';
 import { type AutopilotDecision, synthesizeDecisionId } from './autopilot-store';
 import { type CompletionInput, buildCompletion } from './completion-store';
 import { type AcAttestation, attestAcVerdicts, oracleSatisfaction } from './gates';
@@ -444,6 +445,40 @@ export interface AssembleOptions {
   now?: Date;
 }
 
+/**
+ * wi_260710676 (#18): the honest-terminate WRITER for `completion.non_pass_status`.
+ * The Stop gate `nonPassTerminationGate` (gates.ts) lets a non-pass completion
+ * terminate ONLY when it carries this declaration — but no code ever wrote it, so an
+ * autopilot that honestly finished non-pass was blocked at its own gate and needed a
+ * manual `completion.json` edit. Derive it from the SAME state the gate reads (the
+ * parked = unverified/fail acceptance set), but ONLY when the graph has genuinely
+ * SETTLED (`allNodesTerminal`, retro-exempt — the loop's own done condition). An
+ * unfinished graph gets no declaration, so the gate keeps BLOCKING a no-progress park
+ * (the exact protection the gate exists for — ADR-20260626 D2). Nothing parked (every
+ * non-pass AC is a declared `partial`, an honest signal) → no declaration either, and
+ * the gate already passes.
+ *
+ * `state`: `partial` when ≥1 AC reached pass (progress made), else `blocked` (nothing
+ * achieved). `grounding` names the parked criterion ids — the oracle the gate points at.
+ */
+function deriveNonPassStatus(
+  graph: Autopilot,
+  acceptance: CompletionContract['acceptance'],
+  finalVerdict: CompletionContract['final_verdict'],
+): NonNullable<CompletionContract['non_pass_status']> | undefined {
+  if (finalVerdict === 'pass') return undefined;
+  if (!allNodesTerminal(graph)) return undefined;
+  const parked = acceptance.filter((a) => a.verdict === 'unverified' || a.verdict === 'fail');
+  if (parked.length === 0) return undefined;
+  const parkedIds = parked.map((a) => a.criterion_id).join(', ');
+  const progressed = acceptance.some((a) => a.verdict === 'pass');
+  return {
+    state: progressed ? 'partial' : 'blocked',
+    reason: `autopilot terminated non-pass with ${parked.length} criterion/criteria not reaching pass: ${parkedIds}`,
+    grounding: `parked acceptance criteria: ${parkedIds}`,
+  };
+}
+
 export function assembleCompletionFromGraph(
   graph: Autopilot,
   workItem: WorkItem,
@@ -491,7 +526,16 @@ export function assembleCompletionFromGraph(
   const riskRecords = opts.decisions
     ? unresolvedAgentResolvableRiskRecords(opts.decisions, graph)
     : [];
-  return riskRecords.length > 0 ? { ...built, remaining_risk_records: riskRecords } : built;
+  const withRecords =
+    riskRecords.length > 0 ? { ...built, remaining_risk_records: riskRecords } : built;
+  // wi_260710676 (#18): attach the honest non-pass declaration so a settled non-pass
+  // run terminates at the Stop gate instead of demanding a manual completion.json edit.
+  const nonPassStatus = deriveNonPassStatus(
+    graph,
+    withRecords.acceptance,
+    withRecords.final_verdict,
+  );
+  return nonPassStatus ? { ...withRecords, non_pass_status: nonPassStatus } : withRecords;
 }
 
 /**
