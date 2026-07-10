@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260710otc",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "e88701887f844dc87f3964b901a57e56993e46e04a2c30cb281dcc676a94cb21",
+  "ts": "2026-07-10T10:56:26.586Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/work-start-claim.test.ts -t ac-3",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
