@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607082xk",
+  "seq": 1,
+  "actor": "read-only",
+  "event_id": "f6b9849ad97d20fde6317757df41c7a2133a3b5d8215c24c0e78970cea7db8d2",
+  "ts": "2026-07-11T15:16:53.675Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "test -f reports/design/orchestration-primitives-ditto-applicability.md",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

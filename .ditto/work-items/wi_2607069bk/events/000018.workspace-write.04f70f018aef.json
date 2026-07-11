@@ -1,0 +1,70 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607069bk",
+  "seq": 18,
+  "actor": "workspace-write",
+  "event_id": "04f70f018aefaf65ec9b8144edffa3a9f32437990db0e82496988213e07793bc",
+  "ts": "2026-07-11T15:26:02.133Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-9",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": "reports/design/ws0-t0-record-run-split-detailed-design.md",
+        "summary": "v2 상세설계 + §10 pre-mortem 반영 + §10.1 far-field 2 branch"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607069bk/coverage.json",
+        "summary": "plan-stage coverage: 18 resolved/5 skipped/root resolved/terminated"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/work-item-record-reduce.test.ts tests/core/work-item-store.test.ts tests/schemas/work-item-event.test.ts",
+        "summary": "driver fresh re-run: 68 pass / 0 fail, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "subagent full suite: 3917 pass / 17 skip / 0 fail (324 files, 143s)"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/work-item-store.ts",
+        "summary": "dual-base exists/list/archive + ensureMigrated (lazy-migrate, first line of update) + reconcile (enumerate/count/surface unparseable events, no repair); archive(D2) relocates committed Record git-tracked to .ditto/work-items-archive/<label>/<id>"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607069bk/reviewer-output.json",
+        "summary": "7 findings all low/info, 0 blocking; verdict ACCEPT"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607069bk/acg-review.json",
+        "summary": "10 files, 0 high-risk without evidence — Stop gate satisfied"
+      },
+      {
+        "kind": "command",
+        "command": "reviewer fresh isolated test evidence (targeted suites + store)",
+        "summary": "104 pass / 0 fail, 0 regression"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests (verifier, 10min timeout)",
+        "summary": "3922 pass / 17 skip / 0 fail, exit 0, ~144s (ac-10 capstone)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run check:committed-base + bun run lint",
+        "summary": "both exit 0 (leak 0, biome 673 files clean)"
+      },
+      {
+        "kind": "command",
+        "command": "real WI wi_260706hu0 create + git ls-files --cached",
+        "summary": "record.json + 2 events/*.json exposed, git check-ignore exit 1 (ac-1)"
+      }
+    ]
+  }
+}

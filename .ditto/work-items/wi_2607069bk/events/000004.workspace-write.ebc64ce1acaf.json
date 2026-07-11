@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607069bk",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "ebc64ce1acaf13721b135d07385b7ba5595c77efe6a66976a92cd5122f7bc4f5",
+  "ts": "2026-07-11T15:22:16.448Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c bun test tests/core/work-item-record-reduce.test.ts tests/core/work-item-handoff.test.ts 2>&1 | grep -q '0 fail'",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

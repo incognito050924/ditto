@@ -1,0 +1,100 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607069bk",
+  "seq": 10,
+  "actor": "workspace-write",
+  "event_id": "8effc6124a63d0bab4a2fc0ac86683ced6e6f5f9922ee288feb199bfb024c5c2",
+  "ts": "2026-07-11T15:26:02.122Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": "reports/design/ws0-t0-record-run-split-detailed-design.md",
+        "summary": "v2 상세설계 + §10 pre-mortem 반영 + §10.1 far-field 2 branch"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607069bk/coverage.json",
+        "summary": "plan-stage coverage: 18 resolved/5 skipped/root resolved/terminated"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/work-item-record-reduce.test.ts",
+        "summary": "RED 10 fail/2 pass → GREEN 12 pass/0 fail"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "FULL fresh 3916 pass / 11 skip / 0 fail (exit 0)"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/work-item-store.ts",
+        "summary": "reduceWorkItem + event store + API-preserving create/get/update"
+      },
+      {
+        "kind": "command",
+        "command": "bun run scripts/check-committed-base-run-artifact.ts (planted 3 strays)",
+        "summary": "exit 1, names autopilot.json/intent.json/evidence/run.log offenders"
+      },
+      {
+        "kind": "command",
+        "command": "bun run scripts/check-committed-base-run-artifact.ts (clean tree)",
+        "summary": "exit 0, leak 0"
+      },
+      {
+        "kind": "command",
+        "command": "git check-ignore -v .ditto/work-items/wi_2607069bk/record.json",
+        "summary": "exit 1 = NOT ignored (ac-1: Record exposed to git)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run lint (biome src tests scripts)",
+        "summary": "exit 0, 673 files"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/init-scaffold.test.ts tests/scripts",
+        "summary": "30 pass / 0 fail"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests (verifier, 10min timeout)",
+        "summary": "3922 pass / 17 skip / 0 fail, exit 0, ~144s (ac-10 capstone)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run check:committed-base + bun run lint",
+        "summary": "both exit 0 (leak 0, biome 673 files clean)"
+      },
+      {
+        "kind": "command",
+        "command": "real WI wi_260706hu0 create + git ls-files --cached",
+        "summary": "record.json + 2 events/*.json exposed, git check-ignore exit 1 (ac-1)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/knowledge/adr/ADR-20260706-work-item-record-run-split.md",
+        "summary": "new ADR (6387 bytes, accepted): Record/Run 2-tier + per-event log + first-terminal-wins + R7 version-floor"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/knowledge/adr/ADR-0012-three-tier-isolation-storage-deploy.md",
+        "summary": "D1 partial-supersede annotation (work-item=all-local part → ADR-20260706)"
+      },
+      {
+        "kind": "command",
+        "command": "ditto knowledge adr-check",
+        "summary": "OK (filename format + id uniqueness consistent)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/knowledge/glossary.json",
+        "summary": "+Record/Run/first-terminal-wins terms; evidence_required(Record) vs source_digest(Run) baked in"
+      }
+    ]
+  }
+}

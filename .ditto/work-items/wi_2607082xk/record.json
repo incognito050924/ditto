@@ -7,12 +7,24 @@
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "TBD — derive observable criteria during interview/planning",
-      "verdict": "unverified",
-      "evidence": []
+      "statement": "파일 reports/design/orchestration-primitives-ditto-applicability.md가 존재하고 autopilot·deep-interview·coverage·classify·dialectic·prism 6개 표면 문자열을 모두 포함한다(grep -q 검증)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c grep -qi autopilot reports/design/orchestration-primitives-ditto-applicability.md && grep -qi deep-interview reports/design/orchestration-primitives-ditto-applicability.md && grep -qi prism reports/design/orchestration-primitives-ditto-applicability.md",
+          "summary": "exit 0"
+        }
+      ],
+      "superseded": [
+        {
+          "statement": "TBD — derive observable criteria during interview/planning",
+          "reason": "read-only 조사 item — placeholder TBD를 산출물(조사 리포트) 존재로 관찰 가능하게 확정"
+        }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "done",
   "owner_profile": "read-only",
   "child_ids": [],
   "changed_files": [],
@@ -42,5 +54,6 @@
   "risks": [],
   "runs": [],
   "created_at": "2026-07-08T07:23:26.734Z",
-  "updated_at": "2026-07-08T09:46:07.275Z"
+  "updated_at": "2026-07-11T15:17:34.253Z",
+  "closed_at": "2026-07-11T15:17:34.253Z"
 }
