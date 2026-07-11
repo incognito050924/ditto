@@ -12,7 +12,7 @@
       "evidence": []
     }
   ],
-  "status": "partial",
+  "status": "abandoned",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [
@@ -32,5 +32,6 @@
   "runs": [],
   "handoff_path": ".ditto/local/handoff/wi_2607095fz.md",
   "created_at": "2026-07-09T02:47:28.377Z",
-  "updated_at": "2026-07-09T02:47:28.588Z"
+  "updated_at": "2026-07-11T16:26:37.026Z",
+  "closed_at": "2026-07-11T16:26:37.025Z"
 }
