@@ -7,12 +7,42 @@
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "TBD — derive observable criteria during interview/planning",
-      "verdict": "unverified",
-      "evidence": []
+      "statement": "assembleCompletionFromGraph에 currentTestHash를 주입하고 bound frozen manifest 항목의 현재 해시가 삭제/변경된 그래프를 넣으면, IN-SCOPE unverified 항목이 노출되고 final_verdict가 pass로 닫히지 못하도록 차단된다 (barrier·다른 floor 없는 그래프에서 단독 검증, exit 판정)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-complete.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "모든 bound frozen test가 intact이거나 currentTestHash를 주입하지 않으면 frozen-breach floor가 unverified 항목을 하나도 생성하지 않는다 (no-op, 기존 completion과 동일 출력)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-complete.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "CLI ditto autopilot complete가 frozen manifest를 실제 파일에서 재해싱해 currentTestHash를 주입하여, 마지막 mutating pass 이후의 out-of-band breach가 completion 조립에서 차단됨을 재현한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/autopilot-complete-frozen-breach.test.ts",
+          "summary": "exit 0"
+        }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
@@ -21,5 +51,6 @@
   "risks": [],
   "runs": [],
   "created_at": "2026-07-10T18:38:24.574Z",
-  "updated_at": "2026-07-10T18:38:24.574Z"
+  "updated_at": "2026-07-11T15:35:11.185Z",
+  "closed_at": "2026-07-11T15:35:11.184Z"
 }

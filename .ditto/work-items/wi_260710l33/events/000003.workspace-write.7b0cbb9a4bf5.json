@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260710l33",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "7b0cbb9a4bf5e5652660df286bbbbc3174037cb2c0d439331280f0552507bb35",
+  "ts": "2026-07-11T15:34:11.510Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/autopilot-complete-frozen-breach.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
