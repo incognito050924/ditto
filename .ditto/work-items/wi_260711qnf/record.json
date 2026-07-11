@@ -7,12 +7,30 @@
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "TBD — derive observable criteria during interview/planning",
-      "verdict": "unverified",
-      "evidence": []
+      "statement": "tests/core/autopilot-loop.test.ts에 통합 테스트 1개가 추가되어, recordResult로 fixable-fail을 cap까지 반복 호출해 implement 노드를 terminal failed로 실제 생산하고(그래프에 status='failed' 리터럴 주입 없이 recordResult 반환 status가 'failed'), 이어 nextNode 반환이 action='blocked'이고 doomed pending downstream 노드의 status가 'blocked'로 전이되며, 이어 assembleCompletionFromGraph 결과가 final_verdict≠'pass'이고 non_pass_status.state='blocked'임을 단일 테스트에서 assert하고 통과한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop.test.ts -t recordResult produces failed via the fix cap",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "bun test tests/core/autopilot-loop.test.ts 전체가 0 fail로 green이다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop.test.ts",
+          "summary": "exit 0"
+        }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
@@ -21,5 +39,6 @@
   "risks": [],
   "runs": [],
   "created_at": "2026-07-11T13:07:48.812Z",
-  "updated_at": "2026-07-11T13:07:48.812Z"
+  "updated_at": "2026-07-11T14:32:27.102Z",
+  "closed_at": "2026-07-11T14:32:27.101Z"
 }

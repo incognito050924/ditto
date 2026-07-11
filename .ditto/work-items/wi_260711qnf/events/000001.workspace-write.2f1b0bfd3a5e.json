@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260711qnf",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "2f1b0bfd3a5e1b0f9e5b3293f9dcd608c8bbf70e7488be91b8192cfb2b6d967b",
+  "ts": "2026-07-11T14:32:16.056Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-loop.test.ts -t recordResult produces failed via the fix cap",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

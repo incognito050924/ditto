@@ -423,6 +423,80 @@ describe('nextNode terminal surfacing (작은 고정: §6.8 done disposition + A
   });
 });
 
+// wi_260711qnf (wi_260710vzu #23 ac-3 잔여 검증 공백): the three units — recordResult
+// cap-exhaustion → `failed` (decideOnFailure/escalate), nextNode `pendingDoomedByFailure`
+// → `pending→block`, and completion `deriveNonPassStatus` → `blocked` non-pass — are each
+// unit-covered SEPARATELY, but the LIVE chain that produces `failed` and then lands the
+// doomed downstream on `blocked` in one flow was never exercised (the doomed tests above
+// FABRICATE the `failed` status with a literal `status:'failed'` seed). This forces that
+// live path: recordResult ACTUALLY produces the terminal `failed` (no injected status) by
+// exhausting the fix cap through the real dispatch↔record alternation the loop runs, then
+// nextNode blocks the real doomed downstream, then completion closes it blocked.
+describe('LIVE cap-exhaust → doomed-block → blocked-close chain (wi_260711qnf: no fabricated failed)', () => {
+  test('recordResult produces failed via the fix cap → nextNode blocks downstream → completion closes blocked', async () => {
+    // N1 passed, N2 (implement) pending & ready, N3 (verify) pending on N2. caps.fix_per_node = 2.
+    // No node carries a literal `failed` — the terminal `failed` is PRODUCED below.
+    await seed(
+      graph({
+        nodes: buildInitialNodes(['ac-1']).map((n) =>
+          n.id === 'N1' ? { ...n, status: 'passed' as const } : n,
+        ),
+      }),
+    );
+    const failN2 = () =>
+      recordResult(repo, {
+        workItemId: WI,
+        now: NOW,
+        payload: {
+          node_id: 'N2',
+          result_text: 'implement failed: the same compile error persists after the fix attempt',
+          outcome: 'fail' as const,
+          failure_class: 'fixable' as const,
+        },
+      });
+
+    // Live alternation: dispatch (pending→running) then record a fixable fail, exactly as the
+    // loop runs. The first two fails are under the cap → `retry` (running→pending); the fix
+    // budget (2) is consumed by the increment on each.
+    await nextNode(repo, WI); // dispatch N2 → running
+    let r = await failN2();
+    expect(r.decision).toBe('retry');
+    expect(r.status).toBe('pending');
+
+    await nextNode(repo, WI); // re-dispatch N2 → running
+    r = await failN2();
+    expect(r.decision).toBe('retry');
+    expect(r.status).toBe('pending');
+
+    // Guard: N2 is still non-terminal right before the cap-exhausting fail — the `failed`
+    // below is produced by recordResult, not a pre-seeded literal.
+    const preFail = await aps.get(WI);
+    expect(preFail.nodes.find((n) => n.id === 'N2')?.status).not.toBe('failed');
+
+    await nextNode(repo, WI); // re-dispatch N2 → running
+    r = await failN2(); // fix cap (2) reached → escalate → terminal failed
+    expect(r.decision).toBe('escalate');
+    expect(r.cap_exceeded).toBe(true);
+    expect(r.status).toBe('failed');
+
+    // Live doomed-block: nextNode sees the produced `failed` N2, computes N3 as doomed
+    // (pending on a terminal-failed dep), and transitions it pending→blocked.
+    const blockedRes = await nextNode(repo, WI);
+    expect(blockedRes.action).toBe('blocked');
+    if (blockedRes.action !== 'blocked') throw new Error('expected blocked');
+    expect(blockedRes.blocked_node_ids).toEqual(['N3']);
+    const settled = await aps.get(WI);
+    expect(settled.nodes.find((n) => n.id === 'N2')?.status).toBe('failed');
+    expect(settled.nodes.find((n) => n.id === 'N3')?.status).toBe('blocked');
+
+    // Live completion: the settled (failed + blocked) graph closes as an honest non-pass.
+    const workItem = await wis.get(WI);
+    const completion = assembleCompletionFromGraph(settled, workItem, { now: NOW });
+    expect(completion.final_verdict).not.toBe('pass');
+    expect(completion.non_pass_status?.state).toBe('blocked');
+  });
+});
+
 describe('recordResult (loop step 6: G7 guard → classify → decide → persist)', () => {
   async function dispatchN1(g = graph()): Promise<void> {
     await seed(g);
