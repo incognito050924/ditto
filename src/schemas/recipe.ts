@@ -84,6 +84,19 @@ export const recipeBarrierTestCommand = z
   .describe('Side-effect-free unit-subset barrier command (distinct from push_gate.test_command)');
 
 /**
+ * Per-file runner SOURCE for the pre-approval phantom-red gate (wi_2607103tp ac-1). The
+ * phantom-red gate runs each authored red test through `<this> "<test_path>"`; when absent
+ * it falls back to `barrier_test_command`. Kept DISTINCT from `barrier_test_command`
+ * precisely so a project that opts OUT of the settled-tree barrier (or never arms one) can
+ * still feed phantom-red discrimination without ARMING the barrier — the barrier resolves
+ * from `barrier_test_command` alone, so this field never turns a no-barrier project into one.
+ */
+export const recipeAuthoredTestCommand = z
+  .string()
+  .min(1)
+  .describe('Phantom-red per-file authored-red runner source; falls back to barrier_test_command');
+
+/**
  * One nested repo (sub-repo or submodule) of a multi-repo workspace, keyed by its
  * `dir` relative to this recipe's location. Carries that repo's own config — for
  * now its `push_gate` and `barrier_test_command` (room to grow per-repo settings
@@ -101,6 +114,7 @@ export const recipeRepoEntry = z
     url: z.string().min(1).optional(),
     push_gate: recipePushGate.optional(),
     barrier_test_command: recipeBarrierTestCommand.optional(),
+    authored_test_command: recipeAuthoredTestCommand.optional(),
   })
   .describe('A nested repo of the workspace (by dir, optional url) with its own config');
 
@@ -116,6 +130,10 @@ export const recipe = z
     // Barrier unit-subset command for the ROOT repo. Per-repo symmetric field lives
     // in repos[]. See recipeBarrierTestCommand for the side-effect-free caveat.
     barrier_test_command: recipeBarrierTestCommand.optional(),
+    // Phantom-red per-file authored-red runner source (wi_2607103tp ac-1). Falls back to
+    // barrier_test_command; DISTINCT from it so a project can feed phantom-red without
+    // arming the settled-tree barrier. See recipeAuthoredTestCommand.
+    authored_test_command: recipeAuthoredTestCommand.optional(),
     // Explicit barrier OPT-OUT. When true, an absent/no-command barrier is treated as
     // NOT-APPLICABLE (excluded from the completion verdict) instead of flooring
     // final_verdict to unverified — for a project that INTENTIONALLY relies on
@@ -125,6 +143,15 @@ export const recipe = z
     // still floors, the safe default). Only affects the no-command DEGRADE path — a
     // barrier that RUNS and FAILS still fails.
     barrier_opt_out: z.boolean().optional(),
+    // Explicit PHANTOM-RED OPT-OUT (wi_2607103tp ac-3 / M3). When true, a recorded
+    // phantom-red DEGRADE (the pre-approval authored-red could not be deterministically
+    // confirmed as an assertion-red — indeterminate) is treated as NOT-APPLICABLE instead
+    // of flooring final_verdict off pass. DEDICATED and SEPARATE from barrier_opt_out on
+    // purpose: barrier_opt_out is scoped to the settled-tree barrier's no-command degrade,
+    // so reusing it here would silently suppress a genuine bun-side phantom-red degrade
+    // (a real false-green risk). A project on a non-bun stack that intentionally accepts
+    // indeterminate phantom-red sets THIS flag; absent → still floors (the safe default).
+    phantom_red_opt_out: z.boolean().optional(),
     repos: z.array(recipeRepoEntry).optional(),
     // GitHub backlog (Project + status mapping). REUSES dittoConfigGithub (one SoT,
     // no duplicate). The shape lands now; migrating the existing per-developer github

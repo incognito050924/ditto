@@ -16,3 +16,10 @@ push_gate:
 # 배리어는 not-applicable로 둔다(명령 부재를 degrade-floor가 아니라 해당없음으로 처리).
 # 이는 의도적 opt-out이며, 그냥 미선언(=floor, 안전 기본값)과 구별된다.
 barrier_opt_out: true
+
+# authored_test_command: pre-approval phantom-red 게이트가 authored red 테스트를
+# 파일 단위로 실행할 때 쓰는 러너(wi_2607103tp ac-1). ditto 자신은 bun 스택이므로
+# "bun test"를 준다. barrier_test_command와 의도적으로 분리돼 있어, 이 필드는
+# phantom-red만 구동할 뿐 settled-tree 배리어를 무장(arm)하지 않는다 — barrier는
+# barrier_test_command에서만 해석되며 여기 미선언 상태를 유지한다(위 opt-out과 정합).
+authored_test_command: "bun test"

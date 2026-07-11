@@ -424,6 +424,46 @@ function testBarrierUnverified(
   );
 }
 
+/**
+ * wi_2607103tp ac-3 (M3): the phantom-red DEGRADE floor — the pre-approval mirror of
+ * `testBarrierUnverified`. The phantom-red gate (autopilot-loop.ts) can return a
+ * `degrade` verdict when an authored red test could not be deterministically confirmed
+ * as an assertion-red (e.g. a non-bun runner — indeterminate). A degrade never fails
+ * the `test-author` node (only `block` does), so without this floor a stack whose ACs
+ * all fold to pass would be SILENTLY passed (false-green). The loop records that degrade
+ * as a `note` evidence_ref carrying the `phantom-red-degrade` marker on the passed
+ * `test-author` node; this scans for it and injects an IN-SCOPE `unverified` entry so
+ * `deriveFinalVerdict` floors `final_verdict ≠ pass`. `phantomRedOptOut` (the DEDICATED
+ * recipe `phantom_red_opt_out`, NOT `barrier_opt_out`) suppresses the floor. Absent/false
+ * ⇒ the FLOOR default. Empty when no such degrade was recorded → byte-identical to the
+ * no-degrade completion.
+ */
+const PHANTOM_RED_DEGRADE_MARKER = 'phantom-red-degrade';
+function phantomRedUnverified(
+  graph: Autopilot,
+  phantomRedOptOut = false,
+): NonNullable<CompletionInput['unverified']> {
+  if (phantomRedOptOut) return [];
+  return graph.nodes
+    .filter(
+      (n) =>
+        n.status === 'passed' &&
+        n.kind === 'test-author' &&
+        n.evidence_refs.some(
+          (e) => e.kind === 'note' && (e.summary ?? '').includes(PHANTOM_RED_DEGRADE_MARKER),
+        ),
+    )
+    .map((n) => ({
+      item: `phantom-red degrade on test-author node ${n.id}`,
+      reason: `the authored phantom-red for test-author node ${n.id} DEGRADED (indeterminate — could not be deterministically confirmed as an assertion-red), so acceptance-criteria closure is unverified (ADR-0018: proceed but never claim pass)`,
+      // IN-SCOPE (out_of_scope:false) so deriveFinalVerdict floors final_verdict≠pass.
+      out_of_scope: false,
+      // Tool/host-blocked class: the red could not be proven; grounding points at the node.
+      resolvability: 'blocked_external' as const,
+      grounding: n.id,
+    }));
+}
+
 export interface AssembleOptions {
   /** Operator/verifier narrative; a terse default is derived when omitted. */
   summary?: string;
@@ -443,6 +483,15 @@ export interface AssembleOptions {
    * degrade is suppressed — a barrier that RAN and FAILED still floors.
    */
   barrierOptOut?: boolean;
+  /**
+   * wi_2607103tp ac-3 (M3): the resolved recipe `phantom_red_opt_out` flag — DEDICATED
+   * to the phantom-red degrade floor, INDEPENDENT of `barrierOptOut`. When true, a
+   * recorded phantom-red DEGRADE is NOT-APPLICABLE (its floor `unverified` is suppressed)
+   * so the ACs alone decide. Kept separate because `barrier_opt_out` is scoped to the
+   * settled-tree barrier's no-command degrade; reusing it would silently suppress a
+   * genuine bun-side phantom-red degrade. Omitted ⇒ false ⇒ the FLOOR default.
+   */
+  phantomRedOptOut?: boolean;
   now?: Date;
 }
 
@@ -534,13 +583,17 @@ export function assembleCompletionFromGraph(
   // green barrier OR structural absence (legacy grandfather) → byte-identical to the
   // no-barrier completion.
   const barrierUnverified = testBarrierUnverified(graph, opts.barrierOptOut ?? false);
+  // wi_2607103tp ac-3 (M3): the phantom-red degrade floor, merged alongside the barrier
+  // floor (independent opt-out). Both are IN-SCOPE unverified entries that floor the verdict.
+  const phantomUnverified = phantomRedUnverified(graph, opts.phantomRedOptOut ?? false);
+  const floorUnverified = [...barrierUnverified, ...phantomUnverified];
   const built = buildCompletion({
     workItem,
     declaredBy: 'verifier',
     summary,
     verdicts,
     ...(remainingRisks.length > 0 ? { remainingRisks } : {}),
-    ...(barrierUnverified.length > 0 ? { unverified: barrierUnverified } : {}),
+    ...(floorUnverified.length > 0 ? { unverified: floorUnverified } : {}),
     ...(opts.now ? { now: opts.now } : {}),
   });
   // ac-3 producer: project unresolved agent_resolvable risks from the ledger into the

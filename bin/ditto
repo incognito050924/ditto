@@ -21118,6 +21118,18 @@ function testBarrierUnverified(graph, barrierOptOut = false) {
     grounding: b2.id
   }));
 }
+var PHANTOM_RED_DEGRADE_MARKER = "phantom-red-degrade";
+function phantomRedUnverified(graph, phantomRedOptOut = false) {
+  if (phantomRedOptOut)
+    return [];
+  return graph.nodes.filter((n2) => n2.status === "passed" && n2.kind === "test-author" && n2.evidence_refs.some((e2) => e2.kind === "note" && (e2.summary ?? "").includes(PHANTOM_RED_DEGRADE_MARKER))).map((n2) => ({
+    item: `phantom-red degrade on test-author node ${n2.id}`,
+    reason: `the authored phantom-red for test-author node ${n2.id} DEGRADED (indeterminate \u2014 could not be deterministically confirmed as an assertion-red), so acceptance-criteria closure is unverified (ADR-0018: proceed but never claim pass)`,
+    out_of_scope: false,
+    resolvability: "blocked_external",
+    grounding: n2.id
+  }));
+}
 function loopStuckBlocked(graph) {
   if (selectReadyNodes(graph.nodes).length > 0)
     return false;
@@ -21155,13 +21167,15 @@ function assembleCompletionFromGraph(graph, workItem2, opts = {}) {
     ...nonTerminal.length > 0 ? [`non-terminal graph nodes (work unfinished): ${nonTerminal.map((n2) => n2.id).join(", ")}`] : []
   ];
   const barrierUnverified = testBarrierUnverified(graph, opts.barrierOptOut ?? false);
+  const phantomUnverified = phantomRedUnverified(graph, opts.phantomRedOptOut ?? false);
+  const floorUnverified = [...barrierUnverified, ...phantomUnverified];
   const built = buildCompletion({
     workItem: workItem2,
     declaredBy: "verifier",
     summary,
     verdicts,
     ...remainingRisks.length > 0 ? { remainingRisks } : {},
-    ...barrierUnverified.length > 0 ? { unverified: barrierUnverified } : {},
+    ...floorUnverified.length > 0 ? { unverified: floorUnverified } : {},
     ...opts.now ? { now: opts.now } : {}
   });
   const riskRecords = opts.decisions ? unresolvedAgentResolvableRiskRecords(opts.decisions, graph) : [];
@@ -24847,11 +24861,13 @@ var recipePushGate = exports_external.object({
   test_command: exports_external.string().min(1)
 }).describe("Push gate: branches whose push requires test_command to pass");
 var recipeBarrierTestCommand = exports_external.string().min(1).describe("Side-effect-free unit-subset barrier command (distinct from push_gate.test_command)");
+var recipeAuthoredTestCommand = exports_external.string().min(1).describe("Phantom-red per-file authored-red runner source; falls back to barrier_test_command");
 var recipeRepoEntry = exports_external.object({
   dir: exports_external.string().min(1),
   url: exports_external.string().min(1).optional(),
   push_gate: recipePushGate.optional(),
-  barrier_test_command: recipeBarrierTestCommand.optional()
+  barrier_test_command: recipeBarrierTestCommand.optional(),
+  authored_test_command: recipeAuthoredTestCommand.optional()
 }).describe("A nested repo of the workspace (by dir, optional url) with its own config");
 var recipe = exports_external.object({
   host: recipeHost.optional(),
@@ -24860,7 +24876,9 @@ var recipe = exports_external.object({
   memory: recipeMemoryMode.optional(),
   push_gate: recipePushGate.optional(),
   barrier_test_command: recipeBarrierTestCommand.optional(),
+  authored_test_command: recipeAuthoredTestCommand.optional(),
   barrier_opt_out: exports_external.boolean().optional(),
+  phantom_red_opt_out: exports_external.boolean().optional(),
   repos: exports_external.array(recipeRepoEntry).optional(),
   backlog: dittoConfigGithub.optional()
 }).describe("Headless ditto setup recipe (recipe.yaml)");
@@ -25294,9 +25312,11 @@ var LOAD_ERROR_MARKERS = [
   /Parse error/i
 ];
 var ASSERTION_MARKERS = [/\(fail\)/, /error: expect\(/i, /Expected:/];
-function classifyAuthoredRed(outcome, captured) {
+function classifyAuthoredRed(outcome, captured, runnerIsBunShaped = true) {
   if (outcome.kind === "passed")
     return "ran_green";
+  if (!runnerIsBunShaped)
+    return "indeterminate";
   if (outcome.kind !== "failed")
     return "indeterminate";
   if (LOAD_ERROR_MARKERS.some((re) => re.test(captured)))
@@ -25306,9 +25326,14 @@ function classifyAuthoredRed(outcome, captured) {
   return "indeterminate";
 }
 async function phantomRedGate(args) {
+  const runnerIsBunShaped = args.runnerIsBunShaped ?? true;
   const perTest = await Promise.all(args.tests.map(async ({ criterion_id, test_path }) => {
     const { outcome, captured } = await args.runOne(test_path);
-    return { criterion_id, test_path, classification: classifyAuthoredRed(outcome, captured) };
+    return {
+      criterion_id,
+      test_path,
+      classification: classifyAuthoredRed(outcome, captured, runnerIsBunShaped)
+    };
   }));
   const phantoms = perTest.filter((t2) => t2.classification === "compile_import_red" || t2.classification === "ran_green");
   if (phantoms.length > 0) {
@@ -25327,6 +25352,12 @@ async function phantomRedGate(args) {
     };
   }
   return { verdict: "present", perTest, reasons: [] };
+}
+function buildAuthoredRedRunCommand(recipe2, testPath) {
+  const base = recipe2.authored_test_command ?? recipe2.barrier_test_command;
+  if (base === undefined)
+    return;
+  return `${base} ${JSON.stringify(testPath)}`;
 }
 var captureTestCommand = async (command, cwd, opts = {}) => {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_BARRIER_TIMEOUT_MS;
@@ -26386,16 +26417,37 @@ async function recordResultCore(repoRoot, input) {
     }
   }
   if (contentful && outcome === "pass" && node2.kind === "test-author" && (input.payload.test_spec?.test_backed?.length ?? 0) > 0) {
-    const runOne = input.authoredRedRunOne ?? ((p) => captureTestCommand(`bun test ${JSON.stringify(p)}`, repoRoot));
+    const authoredRecipe = await loadResolvedRecipe(repoRoot, undefined, () => {});
+    const runnerBase = authoredRecipe.authored_test_command ?? authoredRecipe.barrier_test_command;
+    const runnerIsBunShaped = runnerBase === undefined || runnerBase === "bun" || runnerBase.startsWith("bun ");
+    const runOne = input.authoredRedRunOne ?? ((p) => {
+      const command = buildAuthoredRedRunCommand(authoredRecipe, p);
+      return command === undefined ? Promise.resolve({
+        outcome: {
+          kind: "unrunnable",
+          reason: "no authored/barrier test command in recipe"
+        },
+        captured: ""
+      }) : captureTestCommand(command, repoRoot);
+    });
     const phantom = await phantomRedGate({
       tests: input.payload.test_spec?.test_backed ?? [],
-      runOne
+      runOne,
+      runnerIsBunShaped
     });
     if (phantom.verdict === "block") {
       contentful = false;
       outcome = "fail";
       failureClass = "fixable";
       guardReason = `phantom-red: an authored red test does not fail on its AC assertion \u2014 ${phantom.reasons.join("; ")}`;
+    } else if (phantom.verdict === "degrade") {
+      input.payload.evidence_refs = [
+        ...input.payload.evidence_refs ?? [],
+        {
+          kind: "note",
+          summary: `phantom-red-degrade: authored red test could not be deterministically confirmed as assertion-red (indeterminate) \u2014 ADR-0018 proceed unverified \u2014 ${phantom.reasons.join("; ")}`
+        }
+      ];
     }
   }
   if (contentful && outcome === "pass" && isMutatingNode(node2) && node2.kind !== "test-author") {
@@ -32462,7 +32514,8 @@ var autopilotComplete = defineCommand({
       const completion = assembleCompletionFromGraph(graph, workItem2, {
         ...args.summary ? { summary: args.summary } : {},
         decisions,
-        barrierOptOut: recipe2.barrier_opt_out ?? false
+        barrierOptOut: recipe2.barrier_opt_out ?? false,
+        phantomRedOptOut: recipe2.phantom_red_opt_out ?? false
       });
       const intentStore = new IntentStore(repoRoot);
       if (completion.final_verdict === "pass" && await intentStore.exists(args.workItem)) {
@@ -56671,4 +56724,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=729bfcb9f271a929707fe3c3db49735f33a454073b3624a38ffce93a989c6802
+//# ditto-src-stamp=c73259afde62f894565c8d91e9aab9f70b0e3011c6553f887f8c557c521a8457

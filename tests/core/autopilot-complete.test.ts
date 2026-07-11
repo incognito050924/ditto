@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { AssembleOptions } from '~/core/autopilot-complete';
 import {
   assembleCompletionFromGraph,
   attestCompletion,
@@ -8,6 +9,7 @@ import {
 } from '~/core/autopilot-complete';
 import { type AutopilotDecision, synthesizeDecisionId } from '~/core/autopilot-store';
 import { attestAcVerdicts, nonPassTerminationGate } from '~/core/gates';
+import { type CaptureResult, phantomRedGate } from '~/core/test-runner';
 import { type Autopilot, type AutopilotNode, autopilot } from '~/schemas/autopilot';
 import type { WorkItem } from '~/schemas/work-item';
 
@@ -978,6 +980,107 @@ describe('assembleCompletionFromGraph (recipe barrier_opt_out: degraded-barrier 
   });
 });
 
+// ── wi_2607103tp ac-3 (M3): phantom-red DEGRADE → completion floor ───────────
+// WHY THIS BLOCK EXISTS: the pre-approval phantom-red gate can return a `degrade`
+// verdict (indeterminate — e.g. a non-bun runner whose authored red could not be
+// deterministically confirmed as an assertion-red). Today that degrade leaves the
+// test-author node's outcome UNTOUCHED (autopilot-loop.ts: only `block` fails the
+// node), so a non-bun stack whose ACs all fold to pass is SILENTLY passed
+// (false-green) — the exact bug ac-3 closes.
+//
+// The fix MIRRORS `testBarrierUnverified` (the settled-tree barrier floor): a
+// recorded phantom-red degrade must inject an IN-SCOPE `unverified[]` entry so
+// `deriveFinalVerdict` floors `final_verdict ≠ pass`. A DEDICATED recipe flag
+// `phantom_red_opt_out: true` (NOT `barrier_opt_out`) suppresses that floor.
+//
+// SIGNAL CONTRACT (the frozen shape s3i records + reads — chosen to need NO schema
+// migration and to mirror how the barrier floor reads node fields): a `test-author`
+// node that PASSED (a degrade never fails the node) carries a `note`-kind
+// evidence_ref whose summary contains the marker `phantom-red-degrade`. The
+// completion floor scans passed `test-author` nodes for that marker and injects the
+// in-scope unverified entry (grounded in the node id), suppressed by
+// `phantomRedOptOut` (the resolved `recipe.phantom_red_opt_out`, threaded through
+// AssembleOptions exactly as `barrierOptOut` threads `recipe.barrier_opt_out`).
+//
+// These tests use NO `kind:'test'` barrier node, so the ONLY thing that can hold
+// `final_verdict` off pass is the phantom-red floor under test — an isolated red.
+describe('assembleCompletionFromGraph (wi_2607103tp ac-3 / M3: phantom-red degrade floors completion)', () => {
+  const PHANTOM_RED_DEGRADE_MARKER = 'phantom-red-degrade';
+
+  // The "all AC pass" leg — a verify node closing ac-1 with real evidence, so WITHOUT
+  // the phantom-red floor final_verdict would be `pass`.
+  const passingAc1 = () =>
+    node({
+      id: 'V1',
+      kind: 'verify',
+      acceptance_refs: ['ac-1'],
+      evidence_refs: [ev('verify.log')],
+    });
+
+  // A `test-author` node that PASSED but recorded a phantom-red DEGRADE (the authored
+  // red could not be deterministically confirmed as assertion-red — indeterminate).
+  const phantomRedDegradedAuthor = () =>
+    node({
+      id: 'AUTHOR',
+      kind: 'test-author',
+      owner: 'implementer',
+      acceptance_refs: [],
+      status: 'passed',
+      evidence_refs: [
+        {
+          kind: 'note',
+          summary: `${PHANTOM_RED_DEGRADE_MARKER}: authored red test tests/authored-ac1.test.ts could not be deterministically confirmed as assertion-red (indeterminate) — ADR-0018 proceed unverified`,
+        },
+      ],
+    });
+
+  const namesPhantom = (u: { item: string; reason: string }) =>
+    /phantom.?red/i.test(`${u.item} ${u.reason}`);
+
+  test('FLOOR: a passed test-author node that recorded a phantom-red DEGRADE floors final_verdict off pass with an IN-SCOPE unverified entry naming it (no barrier present)', () => {
+    const graph = graphWith([passingAc1(), phantomRedDegradedAuthor()]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), { now: NOW });
+    // ac-1 itself passes with evidence: the ONLY thing that can keep final_verdict off
+    // pass is the phantom-red degrade floor (there is no `test` barrier node here).
+    expect(c.acceptance.find((a) => a.criterion_id === 'ac-1')?.verdict).toBe('pass');
+    const inScope = c.unverified.filter((u) => !u.out_of_scope);
+    expect(inScope.some(namesPhantom)).toBe(true);
+    expect(c.final_verdict).not.toBe('pass');
+  });
+
+  test('OPT-OUT: the DEDICATED phantom_red_opt_out flag SUPPRESSES the floor (ACs alone decide → pass); the SAME degrade without the flag still floors', () => {
+    const graph = graphWith([passingAc1(), phantomRedDegradedAuthor()]);
+    // Baseline leg — WITHOUT the opt-out the degrade floors. This leg is RED today (the
+    // floor does not exist yet), which is exactly the ac-3 FLOOR behavior s3i must add.
+    const floored = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), { now: NOW });
+    expect(floored.final_verdict).not.toBe('pass');
+    // With the DEDICATED phantom_red_opt_out (threaded as `phantomRedOptOut`, mirroring
+    // `barrierOptOut`), the SAME degrade is NOT-APPLICABLE: no floor, no injected entry.
+    // Cast the options literal so the file COMPILES before s3i adds `phantomRedOptOut`
+    // to AssembleOptions (the `as` suppresses excess-property checking) — the failure is
+    // an assertion about final_verdict, never a type/compile error.
+    const suppressed = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+      now: NOW,
+      phantomRedOptOut: true,
+    } as AssembleOptions);
+    expect(suppressed.final_verdict).toBe('pass');
+    expect(suppressed.unverified.filter((u) => !u.out_of_scope).some(namesPhantom)).toBe(false);
+  });
+
+  test('OPT-OUT is DEDICATED: reusing barrier_opt_out (barrierOptOut) does NOT suppress the phantom-red floor', () => {
+    // The design requires a SEPARATE flag — barrier_opt_out governs the settled-tree
+    // barrier, not the phantom-red degrade. Passing barrierOptOut must leave the
+    // phantom-red floor in place (final_verdict still floored).
+    const graph = graphWith([passingAc1(), phantomRedDegradedAuthor()]);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+      now: NOW,
+      barrierOptOut: true,
+    });
+    expect(c.final_verdict).not.toBe('pass');
+    expect(c.unverified.filter((u) => !u.out_of_scope).some(namesPhantom)).toBe(true);
+  });
+});
+
 // wi_260710676 (#18): the MISSING writer for `completion.non_pass_status`. The Stop
 // gate `nonPassTerminationGate` unlocks an honest non-pass termination only when the
 // completion carries a `non_pass_status` declaration — but no code ever wrote it, so
@@ -1081,5 +1184,140 @@ describe('assembleCompletionFromGraph → non_pass_status (wi_260710676, #18)', 
     const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1', 'ac-2']), { now: NOW });
     expect(c.non_pass_status).toBeUndefined();
     expect(nonPassTerminationGate(c).pass).toBe(false);
+  });
+});
+
+// ── wi_2607103tp ac-5: EXPLICIT ≥2-STACK phantom-red end-to-end fixture ───────
+// WHY THIS FIXTURE EXISTS (the 70→3 lesson): a single-stack green can hide a
+// cross-stack regression. The per-slice unit tests already cover each hop in
+// isolation (buildAuthoredRedRunCommand command derivation; classifyAuthoredRed
+// RUNNER-AWARE; the phantomRedGate block/present/degrade fold; the ac-3/M3 floor
+// with a SYNTHETIC degrade note). What none of them does is tie the FULL chain —
+// runner shape → classifyAuthoredRed → phantomRedGate verdict → (non-bun)
+// completion floor — for BOTH a bun-shaped and a non-bun-shaped stack IN ONE
+// PLACE. That consolidation is the genuine gap: it makes a bun-only pass unable to
+// mask the non-bun false-block/false-green this WI fixes, because the SAME fixture
+// exercises both stacks end-to-end. The non-bun FLOOR leg is chained from the REAL
+// gate output (the phantom-red-degrade note is built from `phantom.reasons` exactly
+// as autopilot-loop.ts:2509-2515 records it), so the degrade the gate emits is the
+// very signal the completion floor consumes — not a hand-written synthetic.
+//
+// Mock `runOne` + synthetic graph only (ADR-20260708 unit/mock tier — NO real
+// go/rust/python toolchain is spawned; the "non-bun stack" is modeled purely by
+// `runnerIsBunShaped:false` + representative captured output).
+describe('wi_2607103tp ac-5: ≥2-STACK phantom-red end-to-end (bun + non-bun), one fixture — no single-stack blind spot', () => {
+  const failed = (captured: string): CaptureResult => ({
+    outcome: { kind: 'failed', exitCode: 1 },
+    captured,
+  });
+  // A genuine bun assertion-red (the AC assertion itself failed).
+  const BUN_ASSERTION_RED = failed(
+    '(fail) t > x\n error: expect(received).toBe(expected)\n 0 pass\n 1 fail',
+  );
+  // A bun compile/import red — a PHANTOM (loaded-as-nothing, never reached the assertion).
+  const BUN_COMPILE_RED = failed("error: Cannot find module './handler'\n 0 pass\n 0 fail");
+  // A NON-bun runner whose chatter COINCIDENTALLY contains bun-shaped markers
+  // ("Cannot find module", "SyntaxError"). On a bun runner this would BLOCK; on a
+  // non-bun runner it must DEGRADE, never false-block a legitimately-authored red.
+  const NONBUN_BUNSHAPED_OUTPUT = failed(
+    [
+      '# example.com/pkg',
+      './handler_test.go:7:2: cannot find module providing package ./handler',
+      'SyntaxError-lookalike chatter from a foreign toolchain',
+      'FAIL    example.com/pkg [build failed]',
+    ].join('\n'),
+  );
+  const one = (cap: CaptureResult) => async (_p: string) => cap;
+  const namesPhantom = (u: { item: string; reason: string }) =>
+    /phantom.?red/i.test(`${u.item} ${u.reason}`);
+
+  describe('BUN stack (runnerIsBunShaped=true) through phantomRedGate', () => {
+    test('bun-block leg: a bun compile/import red ⇒ verdict block (definite phantom blocks)', async () => {
+      const res = await phantomRedGate({
+        tests: [{ criterion_id: 'ac-1', test_path: 'tests/authored-ac1.test.ts' }],
+        runOne: one(BUN_COMPILE_RED),
+        runnerIsBunShaped: true,
+      });
+      expect(res.verdict).toBe('block');
+    });
+
+    test('bun-present leg: a genuine bun assertion-red ⇒ verdict present (a real red is allowed through)', async () => {
+      const res = await phantomRedGate({
+        tests: [{ criterion_id: 'ac-1', test_path: 'tests/authored-ac1.test.ts' }],
+        runOne: one(BUN_ASSERTION_RED),
+        runnerIsBunShaped: true,
+      });
+      expect(res.verdict).toBe('present');
+      expect(res.perTest[0]?.classification).toBe('assertion_red');
+    });
+  });
+
+  describe('NON-bun stack (runnerIsBunShaped=false) through phantomRedGate → degrade → completion floor', () => {
+    test('non-bun-degrade leg: bun-marker-shaped chatter on a non-bun runner ⇒ verdict degrade (NOT block — the false-block this WI fixes)', async () => {
+      const res = await phantomRedGate({
+        tests: [{ criterion_id: 'ac-1', test_path: 'tests/authored_ac1_test.go' }],
+        runOne: one(NONBUN_BUNSHAPED_OUTPUT),
+        runnerIsBunShaped: false,
+      });
+      expect(res.verdict).toBe('degrade');
+      expect(res.perTest[0]?.classification).toBe('indeterminate');
+    });
+
+    // Chain the SAME degrade the gate just produced into the completion floor: build the
+    // test-author node's phantom-red-degrade note from `phantom.reasons` EXACTLY as the loop
+    // records it (autopilot-loop.ts:2509-2515), so this is a true end-to-end tie, not a
+    // hand-written synthetic. ac-1 itself passes with evidence, so the ONLY thing that can
+    // keep final_verdict off pass is the phantom-red floor under test (no `test` barrier here).
+    const degradedAuthorFrom = (phantom: { reasons: string[] }) =>
+      node({
+        id: 'AUTHOR',
+        kind: 'test-author',
+        owner: 'implementer',
+        acceptance_refs: [],
+        status: 'passed',
+        evidence_refs: [
+          {
+            kind: 'note',
+            summary: `phantom-red-degrade: authored red test could not be deterministically confirmed as assertion-red (indeterminate) — ADR-0018 proceed unverified — ${phantom.reasons.join('; ')}`,
+          },
+        ],
+      });
+    const passingAc1 = () =>
+      node({
+        id: 'V1',
+        kind: 'verify',
+        acceptance_refs: ['ac-1'],
+        evidence_refs: [ev('verify.log')],
+      });
+
+    test('non-bun-floor leg: the gate degrade floors completion (final_verdict≠pass, in-scope phantom-red unverified); phantom_red_opt_out suppresses it, barrier_opt_out does NOT', async () => {
+      const phantom = await phantomRedGate({
+        tests: [{ criterion_id: 'ac-1', test_path: 'tests/authored_ac1_test.go' }],
+        runOne: one(NONBUN_BUNSHAPED_OUTPUT),
+        runnerIsBunShaped: false,
+      });
+      expect(phantom.verdict).toBe('degrade');
+      const graph = graphWith([passingAc1(), degradedAuthorFrom(phantom)]);
+
+      // Floor: ac-1 passes, but the chained degrade holds final_verdict off pass.
+      const floored = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), { now: NOW });
+      expect(floored.acceptance.find((a) => a.criterion_id === 'ac-1')?.verdict).toBe('pass');
+      expect(floored.unverified.filter((u) => !u.out_of_scope).some(namesPhantom)).toBe(true);
+      expect(floored.final_verdict).not.toBe('pass');
+
+      // DEDICATED opt-out suppresses the floor (ACs alone decide → pass).
+      const suppressed = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+        now: NOW,
+        phantomRedOptOut: true,
+      });
+      expect(suppressed.final_verdict).toBe('pass');
+
+      // barrier_opt_out is a DIFFERENT seam — it must NOT suppress the phantom-red floor.
+      const barrierOnly = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+        now: NOW,
+        barrierOptOut: true,
+      });
+      expect(barrierOnly.final_verdict).not.toBe('pass');
+    });
   });
 });

@@ -452,6 +452,9 @@ const autopilotComplete = defineCommand({
         // remaining_risk_records and the Stop gate can block on it (no silent leak).
         decisions,
         barrierOptOut: recipe.barrier_opt_out ?? false,
+        // wi_2607103tp ac-3 (M3): DEDICATED phantom-red opt-out (independent of
+        // barrier_opt_out) reaches the completion floor the same way.
+        phantomRedOptOut: recipe.phantom_red_opt_out ?? false,
       });
       // false-green 차단 (wi_260624xb8 ac-2): completion은 AC를 work-item에서
       // 읽으므로, intent.json이 work-item보다 많은 AC를 선언했는데 동기화가 안 된

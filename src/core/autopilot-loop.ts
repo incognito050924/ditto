@@ -99,6 +99,7 @@ import {
   type CaptureResult,
   type TestRunOutcome,
   type TestRunner,
+  buildAuthoredRedRunCommand,
   captureTestCommand,
   phantomRedGate,
   runTestCommand,
@@ -2457,18 +2458,61 @@ async function recordResultCore(
     node.kind === 'test-author' &&
     (input.payload.test_spec?.test_backed?.length ?? 0) > 0
   ) {
+    // Per-file runner DERIVED from recipe config (wi_2607103tp ac-1) — NOT hardcoded `bun test`,
+    // which leaked the bun dogfood stack into arbitrary user projects. Base =
+    // `authored_test_command ?? barrier_test_command`; when neither is declared the derived
+    // command is `undefined` and runOne returns `unrunnable` → phantomRedGate DEGRADES to
+    // indeterminate (proceed unverified, ADR-0018) — never a hardcoded bun fallback.
+    const authoredRecipe = await loadResolvedRecipe(repoRoot, undefined, () => {});
+    // RUNNER-AWARE (wi_2607103tp ac-2): the bun-shaped phantom markers may only be trusted when
+    // the resolved runner IS bun. Derive from the SAME base command buildAuthoredRedRunCommand
+    // uses (`authored_test_command ?? barrier_test_command`). An UNKNOWN/absent runner ⇒ assume
+    // the bun dogfood default (true), matching classifyAuthoredRed's `runnerIsBunShaped = true`
+    // default; only a POSITIVELY-resolved non-bun command (e.g. `pytest`, `go test`) degrades the
+    // markers to indeterminate so ac-2 false-blocks are prevented on a non-bun stack (ADR-0018).
+    const runnerBase = authoredRecipe.authored_test_command ?? authoredRecipe.barrier_test_command;
+    const runnerIsBunShaped =
+      runnerBase === undefined || runnerBase === 'bun' || runnerBase.startsWith('bun ');
     const runOne =
       input.authoredRedRunOne ??
-      ((p: string) => captureTestCommand(`bun test ${JSON.stringify(p)}`, repoRoot));
+      ((p: string) => {
+        const command = buildAuthoredRedRunCommand(authoredRecipe, p);
+        return command === undefined
+          ? Promise.resolve({
+              outcome: {
+                kind: 'unrunnable' as const,
+                reason: 'no authored/barrier test command in recipe',
+              },
+              captured: '',
+            })
+          : captureTestCommand(command, repoRoot);
+      });
     const phantom = await phantomRedGate({
       tests: input.payload.test_spec?.test_backed ?? [],
       runOne,
+      runnerIsBunShaped,
     });
     if (phantom.verdict === 'block') {
       contentful = false;
       outcome = 'fail';
       failureClass = 'fixable';
       guardReason = `phantom-red: an authored red test does not fail on its AC assertion — ${phantom.reasons.join('; ')}`;
+    } else if (phantom.verdict === 'degrade') {
+      // wi_2607103tp ac-3 (M3): an INDETERMINATE phantom-red (the authored red could
+      // not be deterministically confirmed as an assertion-red — e.g. a non-bun runner)
+      // must NOT fail the node (only `block` does — the pass outcome stays UNTOUCHED),
+      // but it also must not be silently passed (false-green). Record a `note`-kind
+      // evidence_ref carrying the `phantom-red-degrade` marker so the completion floor
+      // (phantomRedUnverified, autopilot-complete.ts) reads it and floors final_verdict
+      // off pass — mirroring how the settled-tree barrier degrade floors via
+      // testBarrierUnverified. The pass-write below persists input.payload.evidence_refs.
+      input.payload.evidence_refs = [
+        ...(input.payload.evidence_refs ?? []),
+        {
+          kind: 'note',
+          summary: `phantom-red-degrade: authored red test could not be deterministically confirmed as assertion-red (indeterminate) — ADR-0018 proceed unverified — ${phantom.reasons.join('; ')}`,
+        },
+      ];
     }
   }
 

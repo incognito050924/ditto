@@ -17,6 +17,8 @@
  *                                                 degrades-to-unverified, never blocks).
  *  - `timeout`    killed past the wall clock    → DEGRADE/surface (never an infinite stall).
  */
+import type { Recipe } from '~/schemas/recipe';
+
 export type TestRunOutcome =
   | { kind: 'passed' }
   | { kind: 'failed'; exitCode: number }
@@ -85,9 +87,23 @@ const ASSERTION_MARKERS: readonly RegExp[] = [/\(fail\)/, /error: expect\(/i, /E
  * PURE discriminator. Compile/import markers are checked FIRST (a file that failed to
  * load never truly ran, even if later text looks assertion-like), then assertion markers.
  * Anything else → `indeterminate` (degrade, never a false block).
+ *
+ * RUNNER-AWARE (wi_2607103tp ac-2): the LOAD_ERROR/ASSERTION markers are BUN-SHAPED, so they
+ * may only be consulted when `runnerIsBunShaped === true`. On a non-bun runner a coincidental
+ * bun-shaped phrase (a Go build "cannot find module", a pytest "SyntaxError") must NOT be read
+ * as a phantom — a `failed`/`unrunnable`/`timeout` degrades to `indeterminate` (we cannot tell
+ * assertion-red from compile-red on a foreign stack; ADR-0018 — degrade, never false-block). A
+ * `passed` outcome stays `ran_green` regardless of runner (a supposed-red that passed is vacuous
+ * either way). When `runnerIsBunShaped === true` the original bun behavior is preserved exactly,
+ * so a DEFINITE bun phantom still folds to `block` (ac-3 invariant — awareness never weakens it).
  */
-export function classifyAuthoredRed(outcome: TestRunOutcome, captured: string): AuthoredRedClass {
+export function classifyAuthoredRed(
+  outcome: TestRunOutcome,
+  captured: string,
+  runnerIsBunShaped = true,
+): AuthoredRedClass {
   if (outcome.kind === 'passed') return 'ran_green';
+  if (!runnerIsBunShaped) return 'indeterminate'; // non-bun: bun-shaped markers do not apply
   if (outcome.kind !== 'failed') return 'indeterminate'; // unrunnable | timeout
   if (LOAD_ERROR_MARKERS.some((re) => re.test(captured))) return 'compile_import_red';
   if (ASSERTION_MARKERS.some((re) => re.test(captured))) return 'assertion_red';
@@ -116,11 +132,21 @@ export interface PhantomRedResult {
 export async function phantomRedGate(args: {
   tests: readonly { criterion_id: string; test_path: string }[];
   runOne: (test_path: string) => Promise<CaptureResult>;
+  // RUNNER-AWARE (wi_2607103tp ac-2): the caller computes this ONCE from the resolved base
+  // command. When the runner is not bun-shaped the bun markers do not apply, so every test
+  // folds to `indeterminate` → the whole gate DEGRADES end-to-end (never a false block).
+  // Defaults to bun-shaped for legacy callers (the dogfood stack), preserving existing behavior.
+  runnerIsBunShaped?: boolean;
 }): Promise<PhantomRedResult> {
+  const runnerIsBunShaped = args.runnerIsBunShaped ?? true;
   const perTest = await Promise.all(
     args.tests.map(async ({ criterion_id, test_path }) => {
       const { outcome, captured } = await args.runOne(test_path);
-      return { criterion_id, test_path, classification: classifyAuthoredRed(outcome, captured) };
+      return {
+        criterion_id,
+        test_path,
+        classification: classifyAuthoredRed(outcome, captured, runnerIsBunShaped),
+      };
     }),
   );
   const phantoms = perTest.filter(
@@ -159,6 +185,26 @@ export async function phantomRedGate(args: {
  * separate so the barrier runner stays exit-code-pure (no output-reading in the barrier's
  * pass/fail judgment). Never throws — a spawn failure is `unrunnable`.
  */
+/**
+ * Build the per-file runner command the pre-approval phantom-red gate uses (wi_2607103tp ac-1).
+ * DERIVES the base from recipe config — `authored_test_command ?? barrier_test_command` — and
+ * appends the test path with the SAME `${JSON.stringify(testPath)}` quoting the inline code in
+ * autopilot-loop.ts used (injection-safe: the path is a single shell-quoted argument). This
+ * replaces the previously HARDCODED `bun test <path>`, so the phantom-red gate runs the project's
+ * OWN test runner (pytest, `go test`, …) instead of leaking the bun dogfood stack into arbitrary
+ * user projects. When NEITHER field is present the base is `undefined` → returns `undefined` so
+ * the caller DEGRADES (never emits a malformed `undefined "<path>"` command); the phantom-red
+ * gate treats an unrunnable/absent path as indeterminate → degrade (ADR-0018).
+ */
+export function buildAuthoredRedRunCommand(
+  recipe: Pick<Recipe, 'authored_test_command' | 'barrier_test_command'>,
+  testPath: string,
+): string | undefined {
+  const base = recipe.authored_test_command ?? recipe.barrier_test_command;
+  if (base === undefined) return undefined;
+  return `${base} ${JSON.stringify(testPath)}`;
+}
+
 export const captureTestCommand = async (
   command: string,
   cwd: string,
