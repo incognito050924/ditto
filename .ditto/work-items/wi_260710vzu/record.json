@@ -668,6 +668,22 @@
     "agents/planner.md"
   ],
   "worktrees": [],
+  "follow_ups": [
+    {
+      "kind": "bug",
+      "note": "검증 공백(fail-safe, false-green 아님): over-cascade 완화 supersededByFixBackedReverify(src/core/autopilot-complete.ts:248-255)가 reverify 노드 m이 실패 노드 n에 dependsOnNode(m,n) 전이 의존할 것을 요구. planner가 fix/reverify를 실패 verify 노드가 아니라 implement 노드에 배선하면 수렴한 AC의 이전 fail이 supersede 안 돼 final_verdict=pass를 거부(과엄격 — 수동 ditto verify --criterion으로 복구 가능, 이 run에서 실제 겪음). 이 비표준 배선 그래프 형태를 덮는 회귀 테스트 없음. wi_260710vzu #23 ac-4 잔여.",
+      "severity": "low",
+      "materialized_wi": "wi_2607114zt",
+      "priority": 4
+    },
+    {
+      "kind": "bug",
+      "note": "검증 공백(로직은 유닛 커버, 라이브 미실행): terminal-failed 의존 pending downstream→clean blocked 착지(pendingDoomedByFailure src/core/autopilot-graph.ts + nextNode src/core/autopilot-loop.ts + deriveNonPassStatus src/core/autopilot-complete.ts)는 유닛 테스트로 커버되나, 실제 autopilot이 노드를 cap-소진→failed로 만들고 loop가 라이브로 downstream을 blocked 전이하는 end-to-end run은 미실행(self-hosting: autopilot 자신을 고쳐 같은 run 검증 불가, 이 run은 전 노드 attempts.fix=0). 다음 실제 cap-소진 heavy run에서 관측하거나 통합 테스트로 라이브 경로 강제. wi_260710vzu #23 ac-3 잔여.",
+      "severity": "low",
+      "materialized_wi": "wi_260711qnf",
+      "priority": 3
+    }
+  ],
   "discovered_by": "wi_2607105qy",
   "risks": [],
   "re_entry": {
@@ -708,6 +724,6 @@
     "reports/design/palimpsest-ditto-convergence-design.md"
   ],
   "created_at": "2026-07-10T18:38:24.473Z",
-  "updated_at": "2026-07-11T07:53:28.536Z",
+  "updated_at": "2026-07-11T13:07:48.820Z",
   "closed_at": "2026-07-11T07:53:28.533Z"
 }
