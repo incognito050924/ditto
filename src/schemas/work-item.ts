@@ -326,6 +326,13 @@ export const workItem = z
       .describe(
         'Git HEAD sha at the time this work item transitioned draft → in_progress; used as default base for handoff diff collection',
       ),
+    // wi_260710s4j: untracked (`??`) paths already present in the working tree at the
+    // draft → in_progress edge — a one-shot baseline of FOREIGN dirt that predated the
+    // run, so autopilot's later `changed_files` accounting can exclude it. Captured EDGE-
+    // only (no lazy backfill, unlike started_at_sha) and omitted when git is unavailable.
+    // Additive + OPTIONAL: a legacy work-item.json omits it and parses unchanged; no
+    // schema_version bump (same idiom as changed_files / started_at_sha).
+    started_untracked_baseline: z.array(relativePath).optional(),
     created_at: isoDateTime,
     updated_at: isoDateTime,
     closed_at: isoDateTime.optional(),

@@ -727,10 +727,19 @@ async function pressureAttachments(
  * node (AC1), so reviewer/verifier/security do not each re-run git. fail-open: the
  * underlying git helpers never throw, so a review node always gets a surface (empty
  * when there is nothing to diff) and never needs to run git itself.
+ *
+ * `baseline` (wi_260710s4j) = the run's `started_untracked_baseline` (untracked dirt
+ * that predated the run). Those paths are EXCLUDED from the surface by EXACT-SET
+ * membership (a prefix sibling like `foobar/x.ts` is NOT over-excluded by `foo/`),
+ * so foreign pre-existing dirt never leaks into the review packet. Absent baseline
+ * ⇒ no exclusion (fail-open).
  */
-function collectChangeSurface(repoRoot: string): ChangeSurface {
+function collectChangeSurface(repoRoot: string, baseline?: string[]): ChangeSurface {
+  const excluded = new Set(baseline ?? []);
   return {
-    changed_files: listChangedFiles(repoRoot, { excludeDittoRuns: true }),
+    changed_files: listChangedFiles(repoRoot, { excludeDittoRuns: true }).filter(
+      (p) => !excluded.has(p),
+    ),
     diff: captureGitDiff(repoRoot),
   };
 }
@@ -1220,7 +1229,7 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
     // AC1: compute the change surface ONCE for the whole wave (not per review node)
     // when any admitted node is a review owner; non-review nodes pass undefined.
     const waveReviewSurface = waveEligible.some((n) => isReviewOwner(n.owner))
-      ? collectChangeSurface(repoRoot)
+      ? collectChangeSurface(repoRoot, workItem.started_untracked_baseline)
       : undefined;
     const spawns: WaveSpawn[] = [];
     for (const node of waveEligible) {
@@ -1399,7 +1408,9 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
     chosen.kind === 'retro' ? await collectRetroContext(repoRoot, workItemId, graph) : undefined;
   // AC1: a review-owner node gets the change surface pre-computed once; every other
   // owner passes undefined (packet byte-for-byte the no-surface path).
-  const changeSurface = isReviewOwner(chosen.owner) ? collectChangeSurface(repoRoot) : undefined;
+  const changeSurface = isReviewOwner(chosen.owner)
+    ? collectChangeSurface(repoRoot, workItem.started_untracked_baseline)
+    : undefined;
   // WS3 (ac-1/ac-3/ac-5): attach the disk-derived pressure signal + edge-triggered
   // report directive to this advancing action; absent below threshold, never halts.
   const attachments = await pressureAttachments(repoRoot, workItemId, graph);
@@ -3262,13 +3273,33 @@ async function recordResultCore(
     // pass) and dedup-preserves existing order.
     const reported = input.payload.changed_files ?? [];
     if (reported.length > 0) {
+      // Baseline exclusion (wi_260710s4j): drop untracked paths that predated the
+      // run (`started_untracked_baseline`) from the owner-reported set BEFORE the
+      // union — foreign dirt the owner accidentally reported must not land in the
+      // WI's changed_files. EXACT-SET membership (a prefix sibling like
+      // `foobar/x.ts` survives `foo/`); absent baseline ⇒ no exclusion (fail-open).
+      const wiBefore = await new WorkItemStore(repoRoot).get(input.workItemId);
+      const baseline = new Set(wiBefore.started_untracked_baseline ?? []);
+      const excluded = reported.filter((p) => baseline.has(p));
+      const filtered = reported.filter((p) => !baseline.has(p));
       await new WorkItemStore(repoRoot).update(input.workItemId, (w) => {
         const existing = new Set(w.changed_files);
-        const additions = reported.filter((p) => !existing.has(p));
+        const additions = filtered.filter((p) => !existing.has(p));
         return additions.length > 0
           ? { ...w, changed_files: [...w.changed_files, ...additions] }
           : w;
       });
+      // SURFACE the excluded set (audit trail): dropping foreign dirt is not a
+      // silent black box — a durable decision references each excluded path.
+      if (excluded.length > 0) {
+        await aps.appendDecision(input.workItemId, {
+          ts: (input.now ?? new Date()).toISOString(),
+          node_id: node.id,
+          decision: 'surface',
+          resolvability: 'accepted_tradeoff',
+          reason: `changed_files baseline exclusion: dropped pre-existing untracked path(s) foreign to this run (reported by the owner): ${excluded.join(', ')}`,
+        });
+      }
     }
     // Edit-then-diagnostics ADVISORY gate (ac-2): on a contentful mutating pass,
     // surface LSP error diagnostics over the just-reported changed_files BEFORE

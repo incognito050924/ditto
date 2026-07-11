@@ -14,6 +14,7 @@ import {
 } from '~/schemas/work-item';
 import { committedWorkItemDir, dittoDir, localDir } from './ditto-paths';
 import { atomicWriteText, ensureDir, readJson, writeJson } from './fs';
+import { listChangedFiles } from './git';
 import { generateId } from './id';
 
 /**
@@ -770,7 +771,22 @@ export class WorkItemStore {
         withSha = { ...next, started_at_sha: sha };
       }
     }
-    const withTouched = { ...withSha, updated_at: new Date().toISOString() };
+    // started_untracked_baseline capture (wi_260710s4j):
+    //   TRUE draft→in_progress edge ONLY — deliberately NOT the started_at_sha backfill
+    //   predicate, which also fires on an already-in_progress legacy item and would
+    //   lazily capture the run's OWN untracked output as if it were pre-existing dirt
+    //   (silent under-commit). Untracked-only baseline of foreign dirt present at run
+    //   start. git unavailable → omit the field (fail-open: exclude nothing downstream).
+    let withBaseline: WorkItem = withSha;
+    if (current.status !== 'in_progress' && next.status === 'in_progress') {
+      if (tryGitHeadSha(this.repoRoot) !== null) {
+        withBaseline = {
+          ...withSha,
+          started_untracked_baseline: listChangedFiles(this.repoRoot, { untrackedOnly: true }),
+        };
+      }
+    }
+    const withTouched = { ...withBaseline, updated_at: new Date().toISOString() };
     // Validate BEFORE any write so a schema-breaking mutation throws with disk
     // untouched (e.g. status=blocked without re_entry).
     const validated = workItem.parse(withTouched);

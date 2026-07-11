@@ -12887,11 +12887,38 @@ function captureGitState(cwd) {
   } catch {}
   return { head, branch, dirty, untracked_count };
 }
+function dequotePorcelainPath(raw) {
+  if (!(raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2))
+    return raw;
+  const inner = raw.slice(1, -1);
+  const bytes = [];
+  const cEscapes = { n: 10, t: 9, r: 13, '"': 34, "\\": 92 };
+  for (let i2 = 0;i2 < inner.length; i2++) {
+    const ch = inner[i2] ?? "";
+    if (ch === "\\") {
+      const next = inner[i2 + 1] ?? "";
+      if (next >= "0" && next <= "7") {
+        bytes.push(Number.parseInt(inner.slice(i2 + 1, i2 + 4), 8));
+        i2 += 3;
+      } else {
+        bytes.push(cEscapes[next] ?? next.charCodeAt(0));
+        i2 += 1;
+      }
+    } else {
+      bytes.push(ch.charCodeAt(0));
+    }
+  }
+  return Buffer.from(bytes).toString("utf8");
+}
 function listChangedFiles(cwd, options = {}) {
   try {
     const status = execFileSync("git", ["status", "--porcelain"], { cwd, encoding: "utf8" });
-    return status.split(`
-`).filter((line) => line.length > 0).map((line) => line.slice(3).trim()).filter((path) => path.length > 0).filter((path) => !options.excludeDittoRuns || !path.startsWith(".ditto/local/runs/")).sort();
+    const lines = status.split(`
+`).filter((line) => line.length > 0);
+    if (options.untrackedOnly) {
+      return lines.filter((line) => line.startsWith("??")).map((line) => dequotePorcelainPath(line.slice(3))).filter((path) => path.length > 0).filter((path) => !options.excludeDittoRuns || !path.startsWith(".ditto/local/runs/")).sort();
+    }
+    return lines.map((line) => line.slice(3).trim()).filter((path) => path.length > 0).filter((path) => !options.excludeDittoRuns || !path.startsWith(".ditto/local/runs/")).sort();
   } catch {
     return [];
   }
@@ -13368,6 +13395,7 @@ var init_work_item = __esm(() => {
     handoff_path: relativePath.optional(),
     language_overrides: relativePath.optional().describe("Path to language.md if this work item modifies the glossary"),
     started_at_sha: gitSha40.optional().describe("Git HEAD sha at the time this work item transitioned draft \u2192 in_progress; used as default base for handoff diff collection"),
+    started_untracked_baseline: exports_external.array(relativePath).optional(),
     created_at: isoDateTime,
     updated_at: isoDateTime,
     closed_at: isoDateTime.optional()
@@ -13922,7 +13950,16 @@ class WorkItemStore {
         withSha = { ...next, started_at_sha: sha };
       }
     }
-    const withTouched = { ...withSha, updated_at: new Date().toISOString() };
+    let withBaseline = withSha;
+    if (current.status !== "in_progress" && next.status === "in_progress") {
+      if (tryGitHeadSha(this.repoRoot) !== null) {
+        withBaseline = {
+          ...withSha,
+          started_untracked_baseline: listChangedFiles(this.repoRoot, { untrackedOnly: true })
+        };
+      }
+    }
+    const withTouched = { ...withBaseline, updated_at: new Date().toISOString() };
     const validated = workItem.parse(withTouched);
     await this.emitTransitionEvents(id, current, validated);
     await writeJson(this.recordPath(id), workItem, recordGithubIssueForWrite(validated, rawRecord));
@@ -14204,6 +14241,7 @@ var init_work_item_store = __esm(() => {
   init_work_item();
   init_ditto_paths();
   init_fs();
+  init_git();
   init_id();
   TERMINAL_STEM_STATUSES = ["done", "abandoned"];
   DONE_BLOCKING_SEVERITIES = ["high", "critical"];
@@ -25678,9 +25716,10 @@ async function pressureAttachments(repoRoot, workItemId2, graph) {
   const directive = await maybeFireReportDirective(repoRoot, workItemId2, graph, reading);
   return { context_pressure: reading, ...directive ? { report_directive: directive } : {} };
 }
-function collectChangeSurface(repoRoot) {
+function collectChangeSurface(repoRoot, baseline) {
+  const excluded = new Set(baseline ?? []);
   return {
-    changed_files: listChangedFiles(repoRoot, { excludeDittoRuns: true }),
+    changed_files: listChangedFiles(repoRoot, { excludeDittoRuns: true }).filter((p) => !excluded.has(p)),
     diff: captureGitDiff(repoRoot)
   };
 }
@@ -25916,7 +25955,7 @@ async function nextNode(repoRoot, workItemId2) {
   const now = new Date;
   if (waveEligible.length >= 2) {
     const catalog2 = await loadVariantCatalog(repoRoot);
-    const waveReviewSurface = waveEligible.some((n2) => isReviewOwner(n2.owner)) ? collectChangeSurface(repoRoot) : undefined;
+    const waveReviewSurface = waveEligible.some((n2) => isReviewOwner(n2.owner)) ? collectChangeSurface(repoRoot, workItem2.started_untracked_baseline) : undefined;
     const spawns = [];
     for (const node2 of waveEligible) {
       await aps.updateNode(workItemId2, node2.id, (n2) => ({
@@ -26007,7 +26046,7 @@ async function nextNode(repoRoot, workItemId2) {
   const candidates = selectVariantCandidates(catalog, chosen.owner, scopeOf(chosen), chosen.agent_hint, { scopeDeclared: chosen.file_scope !== undefined });
   const memory = await warmStartMemoryContext(repoRoot, chosen, workItem2, { now });
   const retro = chosen.kind === "retro" ? await collectRetroContext(repoRoot, workItemId2, graph) : undefined;
-  const changeSurface = isReviewOwner(chosen.owner) ? collectChangeSurface(repoRoot) : undefined;
+  const changeSurface = isReviewOwner(chosen.owner) ? collectChangeSurface(repoRoot, workItem2.started_untracked_baseline) : undefined;
   const attachments = await pressureAttachments(repoRoot, workItemId2, graph);
   return {
     action: "spawn",
@@ -26895,11 +26934,24 @@ async function recordResultCore(repoRoot, input) {
     }));
     const reported = input.payload.changed_files ?? [];
     if (reported.length > 0) {
+      const wiBefore = await new WorkItemStore(repoRoot).get(input.workItemId);
+      const baseline = new Set(wiBefore.started_untracked_baseline ?? []);
+      const excluded = reported.filter((p) => baseline.has(p));
+      const filtered = reported.filter((p) => !baseline.has(p));
       await new WorkItemStore(repoRoot).update(input.workItemId, (w2) => {
         const existing = new Set(w2.changed_files);
-        const additions = reported.filter((p) => !existing.has(p));
+        const additions = filtered.filter((p) => !existing.has(p));
         return additions.length > 0 ? { ...w2, changed_files: [...w2.changed_files, ...additions] } : w2;
       });
+      if (excluded.length > 0) {
+        await aps.appendDecision(input.workItemId, {
+          ts: (input.now ?? new Date).toISOString(),
+          node_id: node2.id,
+          decision: "surface",
+          resolvability: "accepted_tradeoff",
+          reason: `changed_files baseline exclusion: dropped pre-existing untracked path(s) foreign to this run (reported by the owner): ${excluded.join(", ")}`
+        });
+      }
     }
     let lspAdvisory;
     if (isMutatingNode(node2) && reported.length > 0) {
@@ -56724,4 +56776,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=c73259afde62f894565c8d91e9aab9f70b0e3011c6553f887f8c557c521a8457
+//# ditto-src-stamp=57144cbb4ce01111aeb99a4e33660af2f2a1f1e84017f915414d4b76de8bfb98

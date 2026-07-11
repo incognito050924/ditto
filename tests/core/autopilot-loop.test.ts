@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +9,7 @@ import { AutopilotStore, isDecisivePost } from '~/core/autopilot-store';
 import { CoverageStore } from '~/core/coverage-store';
 import { localDir } from '~/core/ditto-paths';
 import { directionForkGate } from '~/core/gates';
+import * as gitModule from '~/core/git';
 import { IntentStore } from '~/core/intent-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import type { Autopilot } from '~/schemas/autopilot';
@@ -563,6 +564,145 @@ describe('recordResult changed_files union (#1: owner reports → work-item accu
     });
     const wi = await wis.get(WI);
     expect(wi.changed_files).toEqual(['src/x.ts']);
+  });
+});
+
+// wi_260710s4j (n2 frozen-red): autopilot `changed_files` over-includes FOREIGN
+// untracked dirt that predated the run. The fix stores an untracked baseline on the WI
+// (`started_untracked_baseline`) at run start and EXCLUDES those paths from both the
+// owner-reported union (recordResult :3263) and the pre-computed review change_surface
+// (collectChangeSurface :731). Exclusion is EXACT-SET (a prefix sibling is NOT
+// over-excluded), fail-open when the baseline is absent, keeps post-start paths, and
+// SURFACES the excluded set (audit, not silent). These drive the not-yet-existing field
+// + exclusion logic.
+describe('changed_files baseline exclusion (wi_260710s4j)', () => {
+  async function dispatchN1(): Promise<void> {
+    await seed(graph());
+    await nextNode(repo, WI); // N1 -> running
+  }
+
+  test('(a) union excludes baseline paths EXACT-SET; a prefix sibling is preserved', async () => {
+    // Baseline captured at run start = a FOREIGN untracked dir `foo/`. `foobar/x.ts`
+    // shares the `foo` PREFIX but is NOT in the baseline, so exact-set exclusion keeps
+    // it; `src/real.ts` is genuine post-start work and is also kept. Only `foo/` drops.
+    await wis.update(WI, (w) => ({
+      ...w,
+      changed_files: [],
+      started_untracked_baseline: ['foo/'],
+    }));
+    await dispatchN1();
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text:
+          'implemented the change; touched a real work file and a prefix-sibling dir, but foreign baseline dirt (foo/) leaked into the reported set',
+        outcome: 'pass',
+        changed_files: ['foo/', 'foobar/x.ts', 'src/real.ts'],
+      },
+    });
+    const wi = await wis.get(WI);
+    // `foo/` (baseline) excluded; the prefix sibling `foobar/x.ts` and real work kept.
+    expect(wi.changed_files).toEqual(['foobar/x.ts', 'src/real.ts']);
+  });
+
+  test('(b) the pre-computed review change_surface excludes baseline paths', async () => {
+    // git reports both the baseline dirt (`foo/`) and a real work file; the WI baseline
+    // pins `foo/`. The review-owner packet's change_surface must drop `foo/`, keep real.
+    const spy = spyOn(gitModule, 'listChangedFiles').mockReturnValue(['foo/', 'src/real.ts']);
+    // `repo` is not a git work tree; silence captureGitDiff's git-usage stderr noise.
+    const diffSpy = spyOn(gitModule, 'captureGitDiff').mockReturnValue('');
+    try {
+      await wis.update(WI, (w) => ({ ...w, started_untracked_baseline: ['foo/'] }));
+      const reviewNode = {
+        id: 'N3',
+        kind: 'review' as const,
+        owner: 'reviewer' as const,
+        purpose: 'review the change',
+        status: 'pending' as const,
+        depends_on: [] as string[],
+        acceptance_refs: ['ac-1'],
+        evidence_refs: [],
+        attempts: { fix: 0, switch: 0 },
+      };
+      await seed(graph({ nodes: [reviewNode] }));
+      const res = await nextNode(repo, WI);
+      if (res.action !== 'spawn') throw new Error('expected spawn');
+      const surface = res.packet.context.change_surface;
+      expect(surface?.changed_files).not.toContain('foo/');
+      expect(surface?.changed_files).toContain('src/real.ts');
+    } finally {
+      spy.mockRestore();
+      diffSpy.mockRestore();
+    }
+  });
+
+  test('(c) baseline ABSENT ⇒ no exclusion (fail-open, reported passes through)', async () => {
+    // Boundary guard: with no baseline, every reported path survives the union (the
+    // exclusion must never over-fire when there is nothing to exclude from).
+    await wis.update(WI, (w) => ({ ...w, changed_files: [] }));
+    await dispatchN1();
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text: 'implemented; no baseline recorded so nothing should be filtered',
+        outcome: 'pass',
+        changed_files: ['foo/', 'src/real.ts'],
+      },
+    });
+    const wi = await wis.get(WI);
+    expect(wi.changed_files).toEqual(['foo/', 'src/real.ts']);
+  });
+
+  test('(d) a path first appearing AFTER run start is not excluded (preserved)', async () => {
+    // The baseline pins `foo/`; `src/new-after-start.ts` was created during the run and
+    // is NOT in the baseline, so it must survive the union untouched.
+    await wis.update(WI, (w) => ({
+      ...w,
+      changed_files: [],
+      started_untracked_baseline: ['foo/'],
+    }));
+    await dispatchN1();
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text: 'implemented; a brand-new file appeared during the run and is real work',
+        outcome: 'pass',
+        changed_files: ['src/new-after-start.ts'],
+      },
+    });
+    const wi = await wis.get(WI);
+    expect(wi.changed_files).toContain('src/new-after-start.ts');
+  });
+
+  test('(e) the excluded baseline set is SURFACED (audit trail), not silently dropped', async () => {
+    // Dropping foreign dirt must be observable — a durable decision references the
+    // excluded path, so the accounting is not a silent black box.
+    await wis.update(WI, (w) => ({
+      ...w,
+      changed_files: [],
+      started_untracked_baseline: ['foo/'],
+    }));
+    await dispatchN1();
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text:
+          'implemented; foreign baseline dirt (foo/) was reported and should be excluded',
+        outcome: 'pass',
+        changed_files: ['foo/', 'src/real.ts'],
+      },
+    });
+    const decisions = await aps.readDecisions(WI);
+    const surfaced = decisions.some((d) => JSON.stringify(d).includes('foo/'));
+    expect(surfaced).toBe(true);
   });
 });
 

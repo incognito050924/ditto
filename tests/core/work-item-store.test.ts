@@ -344,6 +344,88 @@ describe('WorkItemStore started_at_sha hook', () => {
   });
 });
 
+// wi_260710s4j (n2 frozen-red): at the draft→in_progress edge the store captures a
+// one-shot UNTRACKED baseline (`started_untracked_baseline`) onto the committed Record
+// (record.json), so autopilot's later `changed_files` accounting can exclude foreign
+// untracked dirt that predated the run. Distinct predicate from started_at_sha: it is
+// EDGE-only (no lazy legacy backfill), untracked-only, and omitted when git yields
+// nothing (fail-open). These drive the not-yet-existing field + capture hook.
+describe('WorkItemStore started_untracked_baseline capture (wi_260710s4j)', () => {
+  test('draft → in_progress captures the untracked baseline once, persisted to record.json', async () => {
+    initGitRepo(workDir);
+    const created = await store.create(sampleInput());
+    // A FOREIGN untracked file already lying in the tree at run start.
+    await Bun.write(join(workDir, 'foreign.txt'), 'pre-existing dirt');
+    const updated = await store.update(created.id, (cur) => ({
+      ...cur,
+      status: 'in_progress' as const,
+    }));
+    // The baseline exists and captured the foreign untracked path.
+    const baseline = (updated as { started_untracked_baseline?: string[] })
+      .started_untracked_baseline;
+    expect(baseline).toBeDefined();
+    expect(baseline).toContain('foreign.txt');
+    // Persisted onto the committed Record (record.json), not only the in-memory view.
+    const recordPath = join(workDir, '.ditto', 'work-items', created.id, 'record.json');
+    const persisted = JSON.parse(await Bun.file(recordPath).text());
+    expect(persisted.started_untracked_baseline).toContain('foreign.txt');
+  });
+
+  test('the baseline is untracked-only — a tracked-but-modified file is excluded', async () => {
+    initGitRepo(workDir);
+    // A committed (tracked) file, later modified → dirty but NOT untracked.
+    await Bun.write(join(workDir, 'tracked.txt'), 'v1');
+    Bun.spawnSync(['git', 'add', 'tracked.txt'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '-q', '-m', 'add tracked'], { cwd: workDir, stdout: 'pipe' });
+    await Bun.write(join(workDir, 'tracked.txt'), 'v2'); // tracked-dirty
+    await Bun.write(join(workDir, 'foreign.txt'), 'untracked dirt'); // untracked
+    const created = await store.create(sampleInput());
+    const updated = await store.update(created.id, (cur) => ({
+      ...cur,
+      status: 'in_progress' as const,
+    }));
+    const baseline =
+      (updated as { started_untracked_baseline?: string[] }).started_untracked_baseline ?? [];
+    expect(baseline).toContain('foreign.txt');
+    expect(baseline).not.toContain('tracked.txt');
+  });
+
+  test('captured only at the draft → in_progress edge — a later update does not re-capture', async () => {
+    initGitRepo(workDir);
+    const created = await store.create(sampleInput());
+    await Bun.write(join(workDir, 'foreign-at-start.txt'), 'dirt present at run start');
+    const started = await store.update(created.id, (cur) => ({
+      ...cur,
+      status: 'in_progress' as const,
+    }));
+    const baselineAtStart =
+      (started as { started_untracked_baseline?: string[] }).started_untracked_baseline ?? [];
+    expect(baselineAtStart).toContain('foreign-at-start.txt');
+    // A NEW untracked file appears AFTER the run started, then an unrelated in_progress
+    // → in_progress update fires. Unlike started_at_sha's legacy backfill, the baseline
+    // is edge-only: it must NOT re-capture the newly-appeared path.
+    await Bun.write(join(workDir, 'appeared-after.txt'), 'post-start dirt');
+    const later = await store.update(created.id, (cur) => ({ ...cur, title: 'renamed' }));
+    const baselineLater =
+      (later as { started_untracked_baseline?: string[] }).started_untracked_baseline ?? [];
+    expect(baselineLater).toContain('foreign-at-start.txt');
+    expect(baselineLater).not.toContain('appeared-after.txt');
+  });
+
+  test('outside a git repo the baseline is omitted (fail-open, not an empty array)', async () => {
+    // Boundary guard: no git → capture degrades to omission, never a throw or a stored
+    // empty array (absent baseline = fail-open "exclude nothing" downstream).
+    const created = await store.create(sampleInput());
+    const updated = await store.update(created.id, (cur) => ({
+      ...cur,
+      status: 'in_progress' as const,
+    }));
+    expect(
+      (updated as { started_untracked_baseline?: string[] }).started_untracked_baseline,
+    ).toBeUndefined();
+  });
+});
+
 describe('WorkItemStore.close', () => {
   test('abandon sets status=abandoned + closed_at', async () => {
     const created = await store.create(sampleInput());
