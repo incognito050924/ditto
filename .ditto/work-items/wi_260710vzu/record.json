@@ -3,23 +3,514 @@
   "id": "wi_260710vzu",
   "title": "bug: autopilot cap-model이 대형 under-decomposed implement 노드의 '증분-성공, 계속'을 처리 못 함. 성공적 TDD 증분을 fixable로 기록하면 fix_per_node 소진→다음 fixable이 곧바로 escalate(switch 레버는 wrong_approach 전용이라 미사용)→노드 terminal fail",
   "source_request": "Discovered while working on wi_2607105qy: autopilot cap-model이 대형 under-decomposed implement 노드의 '증분-성공, 계속'을 처리 못 함. 성공적 TDD 증분을 fixable로 기록하면 fix_per_node 소진→다음 fixable이 곧바로 escalate(switch 레버는 wrong_approach 전용이라 미사용)→노드 terminal fail. 이후 next-node가 clean blocked가 아니라 waiting으로 stuck(의존 노드가 실패 노드에 막힘), 그리고 autopilot complete가 노드 실패를 그 노드의 모든 acceptance_ref로 over-cascade해 검증된 per-AC 진척을 fail로 소거. 복구는 수동 재무장(attempts 리셋)으로만 가능. 근본: (a) 대형 implement를 planner가 subgraph로 분해하거나, (b) 증분-성공을 재시도-cap과 분리하는 outcome이 필요, (c) 노드 terminal-fail의 AC over-cascade를 downstream verify 증거로 완화. wi_2607105qy N2에서 실제 발생(4증분).",
-  "goal": "Fix: autopilot cap-model이 대형 under-decomposed implement 노드의 '증분-성공, 계속'을 처리 못 함. 성공적 TDD 증분을 fixable로 기록하면 fix_per_node 소진→다음 fixable이 곧바로 escalate(switch 레버는 wrong_approach 전용이라 미사용)→노드 terminal fail. 이후 next-node가 clean blocked가 아니라 waiting으로 stuck(의존 노드가 실패 노드에 막힘), 그리고 autopilot complete가 노드 실패를 그 노드의 모든 acceptance_ref로 over-cascade해 검증된 per-AC 진척을 fail로 소거. 복구는 수동 재무장(attempts 리셋)으로만 가능. 근본: (a) 대형 implement를 planner가 subgraph로 분해하거나, (b) 증분-성공을 재시도-cap과 분리하는 outcome이 필요, (c) 노드 terminal-fail의 AC over-cascade를 downstream verify 증거로 완화. wi_2607105qy N2에서 실제 발생(4증분).",
+  "goal": "autopilot cap-model이 대형 implement 노드의 성공적 TDD 증분을 fixable 실패로 오기록해 terminal fail·downstream waiting-stuck·per-AC over-cascade를 일으키는 버그를, 세 층위(분류/그래프/종료)에서 근원적으로 고친다. 종료-안전(무한루프 불가)과 false-green 무회귀(ordering 보호)를 불변식으로 보존한다.",
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "TBD — derive observable criteria during interview/planning",
-      "verdict": "unverified",
-      "evidence": []
+      "statement": "대형 implement 노드가 진척(직전 dispatch 대비 red→green 전환 테스트 수 strict 증가)을 만드는 재-dispatch를 반복해도 fix cap을 소진하지 않고 terminal fail로 escalate되지 않는다 — 즉 성공적 증분이 fixable 실패로 오기록되지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710vzu/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710vzu/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "진척 없는(새 green 0) 재-dispatch는 여전히 fix cap을 소진하고, red 테스트 수가 progress 오라클의 상한이 되어 무한 재-dispatch가 불가능하다; barrier(settled-tree) 재시도 경로의 attempts.fix 회계는 변경되지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710vzu/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710vzu/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop.test.ts tests/core/autopilot-test-barrier.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "terminal-fail 노드에 의존하는 downstream이 무한 waiting이 아니라 blocked 상태로 착지해, 무인 완료가 정직한 non-pass로 끝난다(사용자를 기다리며 멈추지 않는다)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710vzu/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710vzu/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-graph.test.ts tests/core/autopilot-loop.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "terminal-fail 노드의 per-AC fail-drop(over-cascade 완화)은 ordering-gated 증거(V가 failed 노드의 downstream 또는 fix-backed)일 때만 일어나고, 임의의 parallel/earlier sibling pass는 later genuine fail을 가리지 못한다(worst()+ordering false-green 보호 보존); fail→pass 세탁이 D1 종료 게이트(deriveNonPassStatus)를 우회하지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710vzu/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710vzu/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-complete.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "planner가 대형/복잡 implement 작업을 단일 통짜 노드가 아니라 typed-node fan-out으로 분해하며, 같은 frozen root_goal+AC id-set을 보존하고 slice/phase tier를 도입하지 않으며 completionBoundary=entire_work_item을 유지한다(intent-single-unit-invariant.test.ts가 green으로 남는다)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710vzu/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260710vzu/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/intent-single-unit-invariant.test.ts tests/core/autopilot-graph.test.ts",
+          "summary": "exit 0"
+        }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "blocked",
   "owner_profile": "workspace-write",
   "child_ids": [],
-  "changed_files": [],
+  "changed_files": [
+    "src/core/autopilot-complete.ts",
+    "tests/core/autopilot-complete.test.ts",
+    "src/schemas/autopilot.ts",
+    "src/core/autopilot-loop.ts",
+    "tests/core/autopilot-loop.test.ts",
+    "src/core/autopilot-graph.ts",
+    "tests/core/autopilot-graph.test.ts",
+    "agents/planner.md"
+  ],
   "worktrees": [],
   "discovered_by": "wi_2607105qy",
   "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260710vzu",
+    "fresh_evidence_needed": [
+      "land aborted — 82 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_26062227h/events/000000.workspace-write.8096952847b5.json, .ditto/work-items/wi_26062227h/events/000001.workspace-write.156fc8a60318.json, .ditto/work-items/wi_26062227h/events/000002.workspace-write.2f1461c077f0.json, .ditto/work-items/wi_26062227h/events/000003.workspace-write.e3b8a6dd498c.json, .ditto/work-items/wi_26062227h/events/000004.workspace-write.85506a66f33b.json, .ditto/work-items/wi_26062227h/events/000005.workspace-write.10839af1b0cf.json, .ditto/work-items/wi_26062227h/record.json, .ditto/work-items/wi_260706aka/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260706aka/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260706aka/events/000002.workspace-write.f6144f82eae6.json, .ditto/work-items/wi_260706aka/events/000003.workspace-write.44d4ea0add69.json, .ditto/work-items/wi_260706aka/events/000004.workspace-write.81ca2c5e4f02.json, .ditto/work-items/wi_260706aka/events/000005.workspace-write.762cd40ce772.json, .ditto/work-items/wi_260706aka/events/000006.workspace-write.8c2429d7201b.json, .ditto/work-items/wi_260706aka/events/000007.workspace-write.de8b586b55f3.json, .ditto/work-items/wi_260706aka/events/000008.workspace-write.9ca996a1341d.json, .ditto/work-items/wi_260706aka/events/000009.workspace-write.e4724a31e425.json, .ditto/work-items/wi_260706aka/record.json, .ditto/work-items/wi_260706d0i/events/000000.workspace-write.939021107f6c.json, .ditto/work-items/wi_260706d0i/record.json, .ditto/work-items/wi_260706tu6/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260706tu6/events/000001.workspace-write.f3f10706ee95.json, .ditto/work-items/wi_260706tu6/record.json, .ditto/work-items/wi_2607083ch/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607083ch/events/000001.workspace-write.ecb4f22736cd.json, .ditto/work-items/wi_2607083ch/events/000002.workspace-write.6987ff2df0eb.json, .ditto/work-items/wi_2607083ch/events/000003.workspace-write.9ced3369f539.json, .ditto/work-items/wi_2607083ch/events/000004.workspace-write.0971cc3facde.json, .ditto/work-items/wi_2607083ch/record.json, .ditto/work-items/wi_260708700/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708700/events/000001.workspace-write.20262cda9cea.json, .ditto/work-items/wi_260708700/events/000002.workspace-write.d30a19a4ed08.json, .ditto/work-items/wi_260708700/events/000003.workspace-write.9ced3369f539.json, .ditto/work-items/wi_260708700/events/000004.workspace-write.5ba66cbdf53a.json, .ditto/work-items/wi_260708700/record.json, .ditto/work-items/wi_260708e1x/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708e1x/events/000001.workspace-write.b6e05c4e419f.json, .ditto/work-items/wi_260708e1x/events/000002.workspace-write.479ef70041cc.json, .ditto/work-items/wi_260708e1x/record.json, .ditto/work-items/wi_260708xgo/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708xgo/events/000001.workspace-write.74cc633dca6e.json, .ditto/work-items/wi_260708xgo/events/000002.workspace-write.a89fc0dbc3c1.json, .ditto/work-items/wi_260708xgo/events/000003.workspace-write.9ced3369f539.json, .ditto/work-items/wi_260708xgo/events/000004.workspace-write.b1a1cdb16e7d.json, .ditto/work-items/wi_260708xgo/record.json, .ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json, .ditto/work-items/wi_260709ft1/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260709ft1/events/000001.workspace-write.ad8d984eea64.json, .ditto/work-items/wi_260709ft1/events/000002.workspace-write.92cee662b9d6.json, .ditto/work-items/wi_260709ft1/events/000003.workspace-write.55d9b7d5086b.json, .ditto/work-items/wi_260709ft1/events/000004.workspace-write.c01ad576a99f.json, .ditto/work-items/wi_260709ft1/events/000005.workspace-write.571c6f91f1b5.json, .ditto/work-items/wi_260709ft1/record.json, .ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json, .ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json, .ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json, .ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json, .ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json, .ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json, .ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json, .ditto/work-items/wi_2607103tp/record.json, .ditto/work-items/wi_260710vzu/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260710vzu/events/000002.workspace-write.b1f25feed9e6.json, .ditto/work-items/wi_260710vzu/events/000003.workspace-write.b133efd84e45.json, .ditto/work-items/wi_260710vzu/events/000004.workspace-write.343538ca3370.json, .ditto/work-items/wi_260710vzu/events/000005.workspace-write.3ba733adbbf9.json, .ditto/work-items/wi_260710vzu/events/000006.workspace-write.1db0a1ba1ea7.json, .ditto/work-items/wi_260710vzu/events/000007.workspace-write.7eb9ace39b79.json, .ditto/work-items/wi_260710vzu/events/000008.workspace-write.9db9bdbad41a.json, .ditto/work-items/wi_260710vzu/events/000009.workspace-write.08b7ed569a0e.json, .ditto/work-items/wi_260710vzu/events/000010.workspace-write.acca83730e4b.json, .ditto/work-items/wi_260710vzu/events/000011.workspace-write.ab983649e8d1.json, .ditto/work-items/wi_260710vzu/events/000012.workspace-write.75eb2852644f.json, .ditto/work-items/wi_260710vzu/events/000013.workspace-write.fafe100a98b4.json, .ditto/work-items/wi_260710vzu/events/000014.workspace-write.8b7328039a16.json, .ditto/work-items/wi_260710vzu/events/000015.workspace-write.c55ae648e640.json, .ditto/work-items/wi_260710vzu/events/000016.workspace-write.a80748d2f248.json, .ditto/work-items/wi_260710vzu/record.json, .ditto/work-items/wi_260710y87/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260710y87/record.json, reports/design/palimpsest-ditto-convergence-design.md. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
   "runs": [],
+  "started_at_sha": "98f01dac6deb68f8bb15c54e1852d7c212cd3d2a",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_0f73eda3d072c65f.json",
+    ".ditto/memory/events/memevt_retro_1b433672b43e2cb5.json",
+    ".ditto/memory/events/memevt_retro_62f202a1d05d560d.json",
+    ".ditto/memory/events/memevt_retro_7a96c4f594622c56.json",
+    ".ditto/memory/events/memevt_retro_7f36a4a36bdf815f.json",
+    ".ditto/memory/events/memevt_retro_8f6249074e837c8b.json",
+    ".ditto/memory/events/memevt_retro_a05bc4fb34660aef.json",
+    ".ditto/work-items/wi_26062227h/",
+    ".ditto/work-items/wi_260706aka/",
+    ".ditto/work-items/wi_260706d0i/",
+    ".ditto/work-items/wi_260706tu6/",
+    ".ditto/work-items/wi_2607083ch/",
+    ".ditto/work-items/wi_260708700/",
+    ".ditto/work-items/wi_260708e1x/",
+    ".ditto/work-items/wi_260708xgo/",
+    ".ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json",
+    ".ditto/work-items/wi_260709ft1/",
+    ".ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json",
+    ".ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json",
+    ".ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json",
+    ".ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json",
+    ".ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json",
+    ".ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json",
+    ".ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json",
+    ".ditto/work-items/wi_260710y87/",
+    "reports/design/palimpsest-ditto-convergence-design.md"
+  ],
   "created_at": "2026-07-10T18:38:24.473Z",
-  "updated_at": "2026-07-10T18:38:24.473Z"
+  "updated_at": "2026-07-11T07:50:52.312Z"
 }

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
+import { assembleCompletionFromGraph } from '~/core/autopilot-complete';
 import { buildInitialNodes } from '~/core/autopilot-graph';
 import { nextNode, recordResult } from '~/core/autopilot-loop';
 import { AutopilotStore, isDecisivePost } from '~/core/autopilot-store';
@@ -326,6 +327,67 @@ describe('nextNode terminal surfacing (작은 고정: §6.8 done disposition + A
     expect(res.action).toBe('waiting');
   });
 
+  // wi_260710vzu ac-3: a cap-exhausted node lands terminal `failed`; a `failed` dep can
+  // never become `passed`, so its still-pending downstream can never be ready. Without
+  // the fix nextNode falls through to an INFINITE `waiting` (stalling for a user who is
+  // not coming). The doomed downstream must be transitioned to `blocked` so the loop
+  // lands cleanly on `blocked` (an honest non-pass), and `complete` can then close.
+  test('failed node + pending downstream → action=blocked (not waiting) and downstream is blocked', async () => {
+    // N1 passed, N2 (implement) cap-exhausted → failed, N3 (verify) pending on N2 → doomed.
+    await seed(
+      graph({
+        nodes: buildInitialNodes(['ac-1']).map((n) => {
+          if (n.id === 'N1') return { ...n, status: 'passed' as const };
+          if (n.id === 'N2') return { ...n, status: 'failed' as const };
+          return n; // N3 stays pending
+        }),
+      }),
+    );
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('blocked');
+    if (res.action !== 'blocked') throw new Error('expected blocked');
+    expect(res.blocked_node_ids).toEqual(['N3']);
+    // the doomed downstream is persisted as `blocked` (the legal pending→block transition)
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'N3')?.status).toBe('blocked');
+  });
+
+  test('after the doomed-downstream block, completion closes as an honest non-pass (blocked)', async () => {
+    await seed(
+      graph({
+        nodes: buildInitialNodes(['ac-1']).map((n) => {
+          if (n.id === 'N1') return { ...n, status: 'passed' as const };
+          if (n.id === 'N2') return { ...n, status: 'failed' as const };
+          return n;
+        }),
+      }),
+    );
+    await nextNode(repo, WI); // transitions N3 pending → blocked, persists
+    // completion reads the settled graph: a blocked node with nothing runnable is stuck,
+    // so deriveNonPassStatus emits an honest `blocked` non_pass_status (the run can close).
+    const after = await aps.get(WI);
+    const workItem = await wis.get(WI);
+    const completion = assembleCompletionFromGraph(after, workItem, { now: NOW });
+    expect(completion.final_verdict).not.toBe('pass');
+    expect(completion.non_pass_status?.state).toBe('blocked');
+  });
+
+  // Guard the MUST NOT: a node legitimately waiting on pending/running deps (no failed
+  // ancestor) is NEVER over-blocked into `blocked` — it stays a transient `waiting`.
+  test('legitimate waiting (pending dep, no failed ancestor) is NOT blocked', async () => {
+    await seed(
+      graph({
+        nodes: buildInitialNodes(['ac-1']).map((n) =>
+          n.id === 'N1' ? { ...n, status: 'running' as const } : n,
+        ),
+      }),
+    );
+    const res = await nextNode(repo, WI);
+    expect(res.action).toBe('waiting');
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'N3')?.status).toBe('pending');
+  });
+
   // AC1: a review-owner node receives the change surface (diff + changed files)
   // PRE-COMPUTED ONCE by the loop, so reviewer/verifier/security do not each re-run
   // git. Mechanical fact only — does not touch verdict independence (§4-9).
@@ -511,6 +573,167 @@ describe('recordResult (loop step 6: G7 guard → classify → decide → persis
       err = e;
     }
     expect((err as Error)?.message).toContain('not running');
+  });
+});
+
+// wi_260710vzu (ac-1/ac-2): a large oracled node reporting fixable-fail while STILL
+// making progress (its cumulative oracle-satisfied green set strictly grows) is
+// re-dispatched as a CONTINUATION — it does NOT consume the fix budget nor escalate to
+// terminal fail. A stuck (no-growth) node still burns the fix cap and terminates via the
+// backstop. Green is oracle-derived (dynamic_test = satisfied by any closing evidence).
+describe('recordResult partial-progress continuation (wi_260710vzu: incremental success ≠ failure)', () => {
+  const AC_IDS = ['ac-1', 'ac-2', 'ac-3'] as const;
+  // A single implement node covering three dynamic_test ACs.
+  function implementNode() {
+    return {
+      id: 'N1',
+      kind: 'implement' as const,
+      owner: 'implementer' as const,
+      purpose: 'make the frozen red tests green',
+      status: 'running' as const,
+      depends_on: [] as string[],
+      acceptance_refs: [...AC_IDS],
+      evidence_refs: [],
+      attempts: { fix: 0, switch: 0 },
+    };
+  }
+  async function oracledSeed(): Promise<void> {
+    // Give every AC a dynamic_test oracle so the green set is oracle-derivable.
+    await wis.update(WI, (w) => ({
+      ...w,
+      acceptance_criteria: AC_IDS.map((id) => ({
+        id,
+        statement: `${id} behavior`,
+        verdict: 'unverified' as const,
+        evidence: [],
+        oracle: {
+          verification_method: 'dynamic_test' as const,
+          maps_to: id,
+          direction: 'forward' as const,
+        },
+      })),
+    }));
+    await seed(graph({ nodes: [implementNode()] }));
+  }
+  async function rearm(): Promise<void> {
+    await aps.updateNode(WI, 'N1', (n) => ({ ...n, status: 'running' }));
+  }
+  // A fail payload marking `green` ACs pass (with evidence) and the rest fail (no evidence).
+  function failPayload(green: readonly string[]) {
+    return {
+      node_id: 'N1',
+      result_text: `Ran bun test: turned ${green.join(', ') || 'no'} AC test(s) green this round; the rest still red. Continuing.`,
+      outcome: 'fail' as const,
+      failure_class: 'fixable' as const,
+      ac_verdicts: AC_IDS.map((id) =>
+        green.includes(id)
+          ? {
+              criterion_id: id,
+              verdict: 'pass' as const,
+              evidence_refs: [
+                { kind: 'command' as const, path: `bun test ${id}`, summary: 'green' },
+              ],
+            }
+          : { criterion_id: id, verdict: 'fail' as const },
+      ),
+    };
+  }
+
+  test('ac-1: progressing re-dispatches do NOT consume the fix cap nor escalate (green set grows)', async () => {
+    await oracledSeed();
+    // fix_per_node = 2 (bootstrap default). WITHOUT continuation, the 3rd fixable fail
+    // would escalate to terminal `failed`. With growth it must never consume a fix.
+    const r1 = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: failPayload(['ac-1']),
+    });
+    expect(r1.outcome).toBe('fail');
+    expect(r1.decision).toBe('retry');
+    expect(r1.status).toBe('pending');
+    expect(r1.cap_exceeded).toBe(false);
+    expect(r1.reason).toContain('progress-continuation');
+
+    await rearm();
+    const r2 = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: failPayload(['ac-1', 'ac-2']),
+    });
+    expect(r2.decision).toBe('retry');
+    expect(r2.status).toBe('pending');
+
+    await rearm();
+    const r3 = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: failPayload(['ac-1', 'ac-2', 'ac-3']),
+    });
+    expect(r3.decision).toBe('retry');
+    expect(r3.status).toBe('pending');
+
+    const after = await aps.get(WI);
+    const n1 = after.nodes.find((n) => n.id === 'N1');
+    expect(n1?.status).toBe('pending'); // never terminal-failed across 3 progressing rounds
+    expect(n1?.attempts.fix).toBe(0); // the fix budget was NEVER consumed
+  });
+
+  test('ac-2: a no-progress re-dispatch consumes the fix cap and terminates via the backstop', async () => {
+    await oracledSeed();
+    // Round 1 (first dispatch): forced non-halt, no fix consumed.
+    const r1 = await recordResult(repo, { workItemId: WI, now: NOW, payload: failPayload([]) });
+    expect(r1.decision).toBe('retry');
+    expect((await aps.get(WI)).nodes.find((n) => n.id === 'N1')?.attempts.fix).toBe(0);
+
+    // Rounds 2..: no green ever → no strict growth → normal fail-path consumes the fix cap.
+    await rearm();
+    await recordResult(repo, { workItemId: WI, now: NOW, payload: failPayload([]) });
+    expect((await aps.get(WI)).nodes.find((n) => n.id === 'N1')?.attempts.fix).toBe(1);
+
+    await rearm();
+    await recordResult(repo, { workItemId: WI, now: NOW, payload: failPayload([]) });
+    expect((await aps.get(WI)).nodes.find((n) => n.id === 'N1')?.attempts.fix).toBe(2);
+
+    await rearm();
+    const rEsc = await recordResult(repo, { workItemId: WI, now: NOW, payload: failPayload([]) });
+    // fix cap (2) reached → escalate → terminal failed (the backstop guarantees termination).
+    expect(rEsc.decision).toBe('escalate');
+    expect(rEsc.cap_exceeded).toBe(true);
+    expect(rEsc.status).toBe('failed');
+  });
+
+  test('a green→red regression is NOT progress — it falls through to consume the fix cap', async () => {
+    await oracledSeed();
+    // Round 1: ac-1 + ac-2 green (first dispatch, non-halt, fix 0).
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: failPayload(['ac-1', 'ac-2']),
+    });
+    expect((await aps.get(WI)).nodes.find((n) => n.id === 'N1')?.attempts.fix).toBe(0);
+    // Round 2: ac-2 regressed to red (only ac-1 green now). Not a superset of {ac-1,ac-2}
+    // → NOT strict growth → normal fail-path consumes a fix.
+    await rearm();
+    await recordResult(repo, { workItemId: WI, now: NOW, payload: failPayload(['ac-1']) });
+    expect((await aps.get(WI)).nodes.find((n) => n.id === 'N1')?.attempts.fix).toBe(1);
+  });
+
+  test('a non-oracled node uses the legacy fail-path unchanged (presence-gated)', async () => {
+    // No oracle on any AC → the continuation block no-ops; a fixable fail consumes a fix
+    // exactly as before (the existing fail-path contract).
+    await seed(graph({ nodes: [{ ...implementNode(), acceptance_refs: ['ac-1'] }] }));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N1',
+        result_text: 'still failing with the same local error after the fix attempt',
+        outcome: 'fail',
+        failure_class: 'fixable',
+      },
+    });
+    expect(res.decision).toBe('retry');
+    expect((await aps.get(WI)).nodes.find((n) => n.id === 'N1')?.attempts.fix).toBe(1);
   });
 });
 

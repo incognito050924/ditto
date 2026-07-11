@@ -286,6 +286,18 @@ export const autopilot = z
       // regression (the default materializes on parse, as those caps already do).
       // NOT a tier-②/config-overridable surface (out of scope, R12).
       no_progress_rounds: z.number().int().positive().default(3),
+      // wi_260710vzu (ac-1/ac-2): safety backstop for the partial-but-progressing
+      // CONTINUATION reclassification. A node that keeps reporting fixable-fail while
+      // its cumulative oracle-satisfied green set STILL grows is re-dispatched without
+      // burning the fix budget — but termination must NOT depend on that progress
+      // signal (a green→red regression makes the green set non-monotone). This caps the
+      // total continuation re-dispatches of one node so, once reached, the node falls
+      // back to the fix-cap fail-path (the real termination guarantee) even while
+      // "progressing". Bounded-by-|ACs| already limits strict-growth continuations; this
+      // is the independent floor (green-set reasoning is belt, this is suspenders). Same
+      // additive `.default` idiom as the caps above (legacy autopilot.json parses
+      // unchanged, no schema_version bump).
+      progress_continuation_cap: z.number().int().positive().default(24),
     }),
     continue_policy: z.object({
       continue_after_approval: z.boolean().default(true),

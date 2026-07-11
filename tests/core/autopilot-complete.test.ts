@@ -287,6 +287,110 @@ describe('deriveAcVerdicts (evidence-gated: pass only with evidence; never auto-
     expect(v?.verdict).toBe('fail');
   });
 
+  // ac-4 (wi_260710vzu) — the fix-backed drop must be ORDERING-GATED per failed node,
+  // not a global "some pass is fix-backed" boolean. These pin down that an EARLIER
+  // fix-backed re-verify cannot launder a LATER genuine fail (false-green), while the
+  // legitimate downstream convergence still supersedes.
+  describe('fix-backed supersession is ordering-gated per failed node (ac-4)', () => {
+    // FALSE-GREEN REPRO: N3 fails ac-1, N4 fix + N5 re-verify legitimately supersede it,
+    // but N6 discovers a NEW genuine fail AFTER the re-verify (downstream of N5) that NO
+    // fix addresses. A global supersedingFix boolean would drop N6's fail too → pass.
+    // The AC must stay fail: no fix-backed pass is downstream of N6.
+    test('a LATER genuine fail after a fix-backed re-verify is NOT laundered to pass', () => {
+      const graph = graphWith([
+        node({ id: 'N3', kind: 'verify', acceptance_refs: ['ac-1'], status: 'failed' }),
+        node({ id: 'N4', kind: 'fix', owner: 'implementer', status: 'passed', depends_on: ['N3'] }),
+        node({
+          id: 'N5',
+          kind: 'verify',
+          acceptance_refs: ['ac-1'],
+          status: 'passed',
+          depends_on: ['N4'],
+          evidence_refs: [ev('reverify.log')],
+        }),
+        // NEW genuine failure discovered AFTER the re-verify — no fix addresses it.
+        node({
+          id: 'N6',
+          kind: 'verify',
+          acceptance_refs: ['ac-1'],
+          status: 'failed',
+          depends_on: ['N5'],
+        }),
+      ]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('fail');
+    });
+
+    // The fail→pass wash must not slip the AC past the D1 termination gate: a laundered
+    // pass would empty the parked set deriveNonPassStatus reads and let the run claim a
+    // clean pass. Assert the completion stays non-pass AND carries the honest declaration.
+    test('the un-laundered later fail keeps the completion non-pass and grounds non_pass_status (D1 gate not bypassed)', () => {
+      const graph = graphWith([
+        node({ id: 'N3', kind: 'verify', acceptance_refs: ['ac-1'], status: 'failed' }),
+        node({ id: 'N4', kind: 'fix', owner: 'implementer', status: 'passed', depends_on: ['N3'] }),
+        node({
+          id: 'N5',
+          kind: 'verify',
+          acceptance_refs: ['ac-1'],
+          status: 'passed',
+          depends_on: ['N4'],
+          evidence_refs: [ev('reverify.log')],
+        }),
+        node({
+          id: 'N6',
+          kind: 'verify',
+          acceptance_refs: ['ac-1'],
+          status: 'failed',
+          depends_on: ['N5'],
+        }),
+      ]);
+      const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), { now: NOW });
+      expect(c.final_verdict).not.toBe('pass');
+      expect(c.non_pass_status).toBeDefined();
+      expect(c.non_pass_status?.grounding).toContain('ac-1');
+    });
+
+    // ORDERING-OK: a parallel/earlier fix-backed pass that is NOT downstream of the
+    // failed node cannot supersede it either — the drop needs V to depend on the fail.
+    test('a fix-backed pass NOT downstream of the failed node cannot supersede it', () => {
+      const graph = graphWith([
+        // N6 fails ac-1 and does not sit behind the N3→N4→N5 convergence chain.
+        node({ id: 'N6', kind: 'verify', acceptance_refs: ['ac-1'], status: 'failed' }),
+        node({ id: 'N3', kind: 'verify', acceptance_refs: ['ac-1'], status: 'failed' }),
+        node({ id: 'N4', kind: 'fix', owner: 'implementer', status: 'passed', depends_on: ['N3'] }),
+        node({
+          id: 'N5',
+          kind: 'verify',
+          acceptance_refs: ['ac-1'],
+          status: 'passed',
+          depends_on: ['N4'],
+          evidence_refs: [ev('reverify.log')],
+        }),
+      ]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('fail'); // N6's fail is not downstream of any fix-backed pass
+    });
+
+    // ORDERING-OK positive: the legitimate downstream convergence still supersedes — a
+    // fix-backed re-verify that DOES transitively depend on the failed node drops it.
+    test('a fix-backed re-verify downstream of the failed node still supersedes it → pass', () => {
+      const graph = graphWith([
+        node({ id: 'N3', kind: 'verify', acceptance_refs: ['ac-1'], status: 'failed' }),
+        node({ id: 'N4', kind: 'fix', owner: 'implementer', status: 'passed', depends_on: ['N3'] }),
+        node({
+          id: 'N5',
+          kind: 'verify',
+          acceptance_refs: ['ac-1'],
+          status: 'passed',
+          depends_on: ['N4'],
+          evidence_refs: [ev('reverify.log')],
+        }),
+      ]);
+      const [v] = deriveAcVerdicts(graph, ['ac-1']);
+      expect(v?.verdict).toBe('pass');
+    });
+  });
+
   // gotcha #3 / wi_260610idf: an IMPLEMENTATION node's evidence-less pass is a
   // structural unverified — not a judgment. When a DOWNSTREAM addressing node
   // (one that transitively depends on it) passed the same AC with evidence, the

@@ -5,6 +5,7 @@ import {
   fileOverlapGate,
   kindToOwner,
   nodeTransition,
+  pendingDoomedByFailure,
   proposalsToNodes,
   selectReadyNodes,
   validateNodeAddition,
@@ -290,6 +291,69 @@ describe('validateNodeAddition (A-1: integrity gate for node-add)', () => {
   });
 });
 
+// ── wi_260710vzu ac-5: large-implement typed-node FAN-OUT is accepted by the ──────
+// promotion gate under AC-id-set CONSERVATION (ADR-20260710 D4 sanctioned fan-out).
+// VERIFY + LOCK over already-correct behavior — this asserts the EXISTING
+// `validateNodeAddition` acceptance-ref check (allowedAcceptanceIds) governs a MULTI-
+// node implement fan-out, not just the single-node case the tests above cover. No new
+// gate is introduced; the fan-out lock reuses the same `acceptance_ref not in intent`
+// guard. The discriminator that keeps this a SANCTIONED fan-out (not a forbidden
+// slice/phase split): every fan-out node lives under the SAME frozen intent AC id-set,
+// each carries a DISJOINT file_scope, and their union stays ⊆ the frozen set — the same
+// goal, the same approval unit, no per-slice user approval.
+describe('validateNodeAddition — large-implement typed-node fan-out (wi_260710vzu ac-5)', () => {
+  const fanoutNode = (id: string, refs: string[], file_scope: string[]): AutopilotNode => ({
+    id,
+    kind: 'implement',
+    owner: 'implementer',
+    purpose: `implement ${refs.join(',')}`,
+    status: 'pending',
+    depends_on: ['N1'], // all fan out from the design/plan node of the seed
+    acceptance_refs: refs,
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+    file_scope,
+  });
+
+  test('accepts a MULTI-node implement fan-out whose refs stay ⊆ the frozen intent set (disjoint scopes)', () => {
+    const existing = buildInitialNodes(['ac-1', 'ac-2', 'ac-3']);
+    const frozen = new Set(['ac-1', 'ac-2', 'ac-3']);
+    // One large implement decomposed into three typed implement nodes, each a
+    // separate code surface (disjoint file_scope), under the ONE frozen AC id-set.
+    const fanout = [
+      fanoutNode('F1', ['ac-1'], ['agents/planner.md']),
+      fanoutNode('F2', ['ac-2'], ['src/core/autopilot-graph.ts']),
+      fanoutNode('F3', ['ac-3'], ['src/schemas/autopilot.ts']),
+    ];
+    expect(() => validateNodeAddition(existing, fanout, frozen)).not.toThrow();
+  });
+
+  test('rejects the WHOLE fan-out batch when ONE fan-out node invents an AC ref outside the frozen set (scope grow)', () => {
+    const existing = buildInitialNodes(['ac-1', 'ac-2']);
+    const frozen = new Set(['ac-1', 'ac-2']);
+    const fanout = [
+      fanoutNode('F1', ['ac-1'], ['agents/planner.md']),
+      fanoutNode('F2', ['ac-9'], ['src/core/autopilot-graph.ts']), // invented → scope grow
+    ];
+    expect(() => validateNodeAddition(existing, fanout, frozen)).toThrow(
+      /acceptance_ref not in intent/,
+    );
+  });
+
+  test('the fan-out is many nodes but conserves the union of refs ⊆ the frozen AC id-set (no invented id)', () => {
+    // Structural corroboration of the discriminator: MORE nodes, SAME AC id universe.
+    const frozen = new Set(['ac-1', 'ac-2', 'ac-3']);
+    const fanout = [
+      fanoutNode('F1', ['ac-1'], ['a.ts']),
+      fanoutNode('F2', ['ac-2'], ['b.ts']),
+      fanoutNode('F3', ['ac-3'], ['c.ts']),
+    ];
+    expect(fanout.length).toBeGreaterThan(1);
+    const union = new Set(fanout.flatMap((n) => n.acceptance_refs));
+    for (const id of union) expect(frozen.has(id)).toBe(true);
+  });
+});
+
 describe('proposalsToNodes (A-3: intent-level proposal → full node)', () => {
   test('fills owner (kindToOwner), status, attempts and evidence from a proposal', () => {
     const nodes = proposalsToNodes([
@@ -415,5 +479,52 @@ describe('nodeTransition (G3: explicit transition table, not implicit rules)', (
     expect(() => nodeTransition('passed', 'fail')).toThrow();
     expect(() => nodeTransition('pending', 'pass')).toThrow();
     expect(() => nodeTransition('passed', 'rollback')).toThrow();
+  });
+});
+
+describe('pendingDoomedByFailure (wi_260710vzu ac-3: pending downstream of a terminal-failed dep)', () => {
+  const mk = (
+    id: string,
+    status: AutopilotNode['status'],
+    depends_on: string[],
+  ): AutopilotNode => ({
+    id,
+    kind: 'implement',
+    owner: 'implementer',
+    purpose: 'n',
+    status,
+    depends_on,
+    acceptance_refs: ['ac-1'],
+    evidence_refs: [],
+    attempts: { fix: 0, switch: 0 },
+  });
+
+  test('a pending node that directly depends on a failed node is doomed', () => {
+    // N2 (cap-exhausted) is terminal-failed; N3 pending depends on it. N3 can never be
+    // ready (isNodeReady needs every dep passed; failed never passes) → doomed.
+    const nodes = [mk('N2', 'failed', []), mk('N3', 'pending', ['N2'])];
+    expect(pendingDoomedByFailure(nodes)).toEqual(['N3']);
+  });
+
+  test('doom propagates transitively down the dependency chain', () => {
+    // N2 failed → N3 (dep N2) doomed → N4 (dep N3) doomed. Both pending, both returned.
+    const nodes = [
+      mk('N2', 'failed', []),
+      mk('N3', 'pending', ['N2']),
+      mk('N4', 'pending', ['N3']),
+    ];
+    expect(pendingDoomedByFailure(nodes)).toEqual(['N3', 'N4']);
+  });
+
+  test('a node legitimately waiting on a pending/running dep is NOT doomed (no over-block)', () => {
+    // No failed node anywhere: N2 pending on running N1 is legitimate waiting, not doom.
+    const nodes = [mk('N1', 'running', []), mk('N2', 'pending', ['N1'])];
+    expect(pendingDoomedByFailure(nodes)).toEqual([]);
+  });
+
+  test('a failed node with NO pending dependents dooms nothing', () => {
+    // N2 failed but nothing depends on it; N3 waits only on passed N1 → legit ready path.
+    const nodes = [mk('N1', 'passed', []), mk('N2', 'failed', []), mk('N3', 'pending', ['N1'])];
+    expect(pendingDoomedByFailure(nodes)).toEqual([]);
   });
 });

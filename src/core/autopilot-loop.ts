@@ -56,6 +56,7 @@ import { allNodesTerminal, mutationGate, rollbackOnRejection } from './autopilot
 import {
   fileOverlapGate,
   nodeTransition,
+  pendingDoomedByFailure,
   promotedImplementFrontier,
   proposalsToNodes,
   selectReadyNodes,
@@ -1037,7 +1038,7 @@ export async function executeTestBarrier(args: {
 
 export async function nextNode(repoRoot: string, workItemId: string): Promise<NextNodeResult> {
   const aps = new AutopilotStore(repoRoot);
-  const graph = await aps.get(workItemId);
+  let graph = await aps.get(workItemId);
 
   // A rejected plan invalidates everything: undo speculative (running) work and
   // stop. Idempotent — a second call finds no running nodes and rolls back none.
@@ -1081,6 +1082,38 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
   // serializes any same-scope wave). v0 runs one owner at a time.
   const ready = selectReadyNodes(graph.nodes);
   if (ready.length === 0) {
+    // wi_260710vzu ac-3: a cap-exhausted node lands terminal `failed`, and a `failed`
+    // dep never reaches `passed` (its only out-edges are dispatch/rollback per
+    // NODE_TRANSITIONS, and `selectReadyNodes` never re-dispatches a terminal node). So its
+    // still-`pending` transitive dependents can never be ready — they are DOOMED, and would
+    // otherwise fall through to an infinite `waiting` (stalling for a user who is not
+    // coming). Transition them `pending --block--> blocked` (a legal transition) so the
+    // loop lands cleanly on `blocked` — an honest non-pass the blocked-surface below
+    // reports and completion (`loopStuckBlocked`/`deriveNonPassStatus`) can close. Only
+    // failure-doomed pending nodes are touched; a node waiting on pending/running deps
+    // is never over-blocked. Naturally idempotent: once blocked it is no longer pending,
+    // so a re-poll finds none. Records an explicit user-owned escalation per node
+    // (charter §4-10) so the surface reports WHY, not just the id.
+    const doomed = pendingDoomedByFailure(graph.nodes);
+    if (doomed.length > 0) {
+      const doomedSet = new Set(doomed);
+      const nodes = graph.nodes.map((n) =>
+        doomedSet.has(n.id) ? { ...n, status: nodeTransition('pending', 'block') } : n,
+      );
+      graph = { ...graph, nodes };
+      await aps.write(workItemId, graph);
+      const nowIso = new Date().toISOString();
+      for (const id of doomed) {
+        await aps.appendDecision(workItemId, {
+          ts: nowIso,
+          node_id: id,
+          failure_class: 'user_decision_needed',
+          decision: 'escalate',
+          reason:
+            'blocked: a dependency terminally failed (cap exhausted) and can never pass, so this node can never become ready — a user-owned decision on the failed upstream is owed',
+        });
+      }
+    }
     // Terminal: every node passed/failed. Surface the completion disposition —
     // graph done is not acceptance closing (§6.8); completion judges with evidence.
     if (allNodesTerminal(graph)) {
@@ -1952,6 +1985,17 @@ async function planRequiresDecisionApproval(
 // one K counter.
 const ORACLE_UNSATISFIED_MARKER = 'oracle-unsatisfied';
 
+// wi_260710vzu (ac-1/ac-2): marker for a partial-but-progressing CONTINUATION
+// decision — a fixable-fail re-dispatch of a node whose cumulative green set is
+// still growing (an incremental success is a continuation, not a failure). DISTINCT
+// from ORACLE_UNSATISFIED_MARKER so it never touches the same-oracle K counter
+// (`sameOracleFailureCount`) or any failure accounting; it is a `retry` decision
+// that does NOT consume the fix budget. Its `criterion_ids` carry the round's green
+// set so the NEXT round derives the cumulative prior-green union from the append-only
+// decision log (the one SoT — never a driver-trusted stored counter, never owner
+// self-report).
+const PROGRESS_CONTINUATION_MARKER = 'progress-continuation';
+
 /** Decision-log reason line a same-oracle failure records (carries the AC id, K-countable). */
 function oracleUnsatisfiedReason(unmet: string[]): string {
   return `${ORACLE_UNSATISFIED_MARKER}: ${unmet.join('; ')}`;
@@ -2032,6 +2076,78 @@ function unmetOracles(
     }
   }
   return { criterionIds, reasons };
+}
+
+/**
+ * wi_260710vzu (ac-1) — the ORACLE-DERIVED green set of a node this round: the in-play
+ * ACs whose oracle is SATISFIED by the node's recorded closing evidence. Reuses the SAME
+ * `oracleSatisfaction` the completion judge (`nodeVerdictFor`) and the in-loop downgrade
+ * (`unmetOracles`) run — NOT the owner's self-reported verdict (a `pass` verdict with no
+ * closing evidence is NOT green). Presence-gated: an in-play AC with no oracle contributes
+ * nothing (it cannot be oracle-satisfied). The mirror of `unmetOracles`, returning the MET
+ * set instead of the unmet set.
+ */
+function oracleSatisfiedCriteria(
+  node: AutopilotNode,
+  payload: RecordResultPayload,
+  oracleById: Map<string, AcOracle | undefined>,
+): Set<string> {
+  const inPlay = new Set(node.acceptance_refs);
+  const topLevel = payload.evidence_refs ?? [];
+  const verdicts = payload.ac_verdicts ?? [];
+  // Which ACs did the node claim pass? Same rule as `unmetOracles`: a judging payload
+  // uses ac_verdicts; a payload without per-AC verdicts implicitly claims its in-play refs.
+  const claimed =
+    verdicts.length > 0
+      ? verdicts.filter((v) => v.verdict === 'pass').map((v) => v.criterion_id)
+      : [...inPlay];
+  const green = new Set<string>();
+  for (const acId of claimed) {
+    if (!inPlay.has(acId)) continue;
+    const oracle = oracleById.get(acId);
+    if (oracle === undefined) continue; // presence-gated: no oracle → not oracle-green
+    const perAc = verdicts
+      .filter((v) => v.criterion_id === acId)
+      .flatMap((v) => v.evidence_refs ?? []);
+    const closing = [...topLevel, ...perAc];
+    if (oracleSatisfaction(acId, oracle, closing).pass) green.add(acId);
+  }
+  return green;
+}
+
+/**
+ * wi_260710vzu (ac-1) — the CUMULATIVE green set for a node, read from the append-only
+ * decision log: the union of every `criterion_ids` recorded on a prior
+ * PROGRESS_CONTINUATION_MARKER decision for this node. This is the `green_{t-1}` the
+ * strict-growth test (`green_{t-1} ⊊ green_t`) compares against — derived from the log
+ * (the SoT), never a stored counter, never re-parsed from free text (mirrors how
+ * `sameOracleFailureCount` reads the structured `criterion_ids`).
+ */
+function cumulativeGreenCriteria(
+  decisions: { node_id: string; reason: string; criterion_ids?: string[] }[],
+  nodeId: string,
+): Set<string> {
+  const green = new Set<string>();
+  for (const d of decisions) {
+    if (d.node_id !== nodeId) continue;
+    if (!d.reason.startsWith(PROGRESS_CONTINUATION_MARKER)) continue;
+    for (const id of d.criterion_ids ?? []) green.add(id);
+  }
+  return green;
+}
+
+/**
+ * wi_260710vzu (ac-2) — how many CONTINUATION re-dispatches this node has already taken,
+ * counted from the append-only decision log (the safety backstop `progress_continuation_cap`
+ * bounds it against, so termination never depends on the progress signal itself).
+ */
+function continuationCount(
+  decisions: { node_id: string; reason: string }[],
+  nodeId: string,
+): number {
+  return decisions.filter(
+    (d) => d.node_id === nodeId && d.reason.startsWith(PROGRESS_CONTINUATION_MARKER),
+  ).length;
 }
 
 /**
@@ -3433,6 +3549,88 @@ async function recordResultCore(
       promoted_node_ids: [],
       superseded_node_ids: [],
     };
+  }
+
+  // wi_260710vzu (ac-1/ac-2) — partial-but-progressing CONTINUATION. A large oracled
+  // node that reports a fixable-fail while STILL making progress (its cumulative
+  // oracle-satisfied green set strictly grew since the last dispatch) is re-dispatched
+  // WITHOUT burning the fix budget: an incremental success is a continuation, not a
+  // failure. This maps the classification boundary — it does NOT add a new outcome enum
+  // and does NOT enter decideOnFailure/the fix cap. Presence-gated on in-play oracled ACs
+  // (a node with none uses the legacy fail-path unchanged — every existing fail test).
+  //
+  // Progress = STRICT set-growth of the green set (green_{t-1} ⊊ green_t), NOT a per-round
+  // delta count: a delta is gameable (break-refix of the same test, or two different tests
+  // trading places), whereas a bounded-by-|ACs| growing SET cannot loop forever. The green
+  // signal is oracle-derived (`oracleSatisfiedCriteria` → the completion judge), carried in
+  // the append-only decision log — never owner self-report.
+  //
+  // Termination NEVER depends on this progress signal (a green→red regression makes the set
+  // non-monotone): it is guaranteed UPSTREAM + INDEPENDENT by the fix cap (the fall-through
+  // below), the graph-wide loop_rounds, the per-AC oracle_failures_to_block, PLUS the
+  // `progress_continuation_cap` floor. Barrier (settled-tree) `attempts.fix` accounting is
+  // untouched — this runs only on the record-result fail-path, not the barrier (ac-2).
+  //
+  // Entry guard (#8): the halt-vs-continue decision ENGAGES only with still-red ACs AND a
+  // prior dispatch; red-0 / first-dispatch are forced non-halt. The `progress_continuation_cap`
+  // bounds ALL continuation paths so an all-green-yet-fail loop cannot spin forever.
+  if (contentful && outcome === 'fail' && failureClass === 'fixable') {
+    const wiForGreen = await new WorkItemStore(repoRoot).get(input.workItemId);
+    const oracleById = new Map<string, AcOracle | undefined>(
+      wiForGreen.acceptance_criteria.map((c) => [c.id, c.oracle]),
+    );
+    const inPlayOracled = node.acceptance_refs.filter((id) => oracleById.get(id) !== undefined);
+    if (inPlayOracled.length > 0) {
+      const currentGreen = oracleSatisfiedCriteria(node, input.payload, oracleById);
+      const red = inPlayOracled.filter((id) => !currentGreen.has(id));
+      const decisions = await aps.readDecisions(input.workItemId);
+      const priorGreen = cumulativeGreenCriteria(decisions, node.id);
+      const priorDispatch = decisions.some((d) => d.node_id === node.id);
+      const continuations = continuationCount(decisions, node.id);
+      // priorGreen ⊊ currentGreen — currentGreen contains every prior-green AC (no
+      // regression) AND at least one new one (strict growth). A regression (a prior-green
+      // AC now unmet) is NOT a superset → not progress → falls through to consume the fix cap.
+      const strictGrowth =
+        [...priorGreen].every((id) => currentGreen.has(id)) && currentGreen.size > priorGreen.size;
+      const withinCap = continuations < graph.caps.progress_continuation_cap;
+      // #8 forced non-halt (red-0 / first-dispatch) OR the engaged progress case (strict growth).
+      const nonHalt = red.length === 0 || !priorDispatch;
+      if (withinCap && (nonHalt || strictGrowth)) {
+        const greenList = [...currentGreen].sort();
+        const priorList = [...priorGreen].sort();
+        const greenStr = greenList.join(', ') || '∅';
+        const priorStr = priorList.join(', ') || '∅';
+        const reason = `${PROGRESS_CONTINUATION_MARKER} node ${node.id}: oracle-green {${greenStr}} (was {${priorStr}}), ${red.length} AC(s) still red — re-dispatch WITHOUT consuming the fix budget (incremental success is a continuation, not a failure)`;
+        // retry → pending WITHOUT incrementing attempts.fix (the fix budget is preserved).
+        await aps.updateNode(input.workItemId, node.id, (n) => ({
+          ...n,
+          status: nodeTransition(n.status, 'retry'),
+        }));
+        await aps.appendDecision(input.workItemId, {
+          ts: (input.now ?? new Date()).toISOString(),
+          node_id: node.id,
+          failure_class: 'fixable',
+          decision: 'retry',
+          reason,
+          attempts: node.attempts, // UNCHANGED — continuation does not consume the fix cap
+          criterion_ids: greenList,
+        });
+        return {
+          node_id: node.id,
+          status: 'pending',
+          outcome: 'fail',
+          guard_contentful: true,
+          decision: 'retry',
+          failure_class: 'fixable',
+          cap_exceeded: false,
+          reason,
+          promoted_node_ids: [],
+          superseded_node_ids: [],
+        };
+      }
+      // else: no strict growth (or the continuation cap is reached) — fall through to the
+      // normal fail-path below, which consumes the fix budget (the termination backstop).
+    }
   }
 
   // outcome === 'fail': map the (caller-supplied or guard-forced) class through

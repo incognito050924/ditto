@@ -19259,6 +19259,13 @@ function computeDownstream(nodes, forkNodeId) {
   const byId = new Map(nodes.map((n2) => [n2.id, n2]));
   return nodes.filter((n2) => n2.id !== forkNodeId && dependsOnNode(n2, forkNodeId, byId)).map((n2) => n2.id);
 }
+function pendingDoomedByFailure(nodes) {
+  const failed = nodes.filter((n2) => n2.status === "failed");
+  if (failed.length === 0)
+    return [];
+  const byId = new Map(nodes.map((n2) => [n2.id, n2]));
+  return nodes.filter((n2) => n2.status === "pending" && failed.some((f3) => dependsOnNode(n2, f3.id, byId))).map((n2) => n2.id);
+}
 function fileOverlapGate(wave) {
   const claimed = new Set;
   const dispatch = [];
@@ -19509,7 +19516,8 @@ var autopilot = exports_external.object({
     converge_rounds: exports_external.number().int().positive().default(3),
     oracle_failures_to_block: exports_external.number().int().positive().default(3),
     loop_rounds: exports_external.number().int().positive().default(12),
-    no_progress_rounds: exports_external.number().int().positive().default(3)
+    no_progress_rounds: exports_external.number().int().positive().default(3),
+    progress_continuation_cap: exports_external.number().int().positive().default(24)
   }),
   continue_policy: exports_external.object({
     continue_after_approval: exports_external.boolean().default(true),
@@ -21089,15 +21097,18 @@ function deriveAcVerdicts(graph, acIds, oracles, criteria) {
         notes: "no node addressed this criterion"
       };
     }
-    const supersedingFix = addressing.some((n2) => nodeVerdictFor(n2, acId, oracle).verdict === "pass" && dependsOnPassedFix(n2, byId));
+    const supersededByFixBackedReverify = (n2) => addressing.some((m2) => m2 !== n2 && nodeVerdictFor(m2, acId, oracle).verdict === "pass" && dependsOnPassedFix(m2, byId) && dependsOnNode2(m2, n2.id, byId));
     let verdict2 = "pass";
     let notes;
     let folded = false;
     let structuralSuperseded = false;
+    let fixSuperseded = false;
     for (const n2 of addressing) {
       const nv = nodeVerdictFor(n2, acId, oracle);
-      if ((nv.verdict === "fail" || nv.verdict === "partial") && supersedingFix)
+      if ((nv.verdict === "fail" || nv.verdict === "partial") && supersededByFixBackedReverify(n2)) {
+        fixSuperseded = true;
         continue;
+      }
       if (nv.verdict === "unverified" && isStructuralUnverified(n2, acId) && addressing.some((m2) => m2 !== n2 && nodeVerdictFor(m2, acId, oracle).verdict === "pass" && (n2.kind === "design" || dependsOnNode2(m2, n2.id, byId)))) {
         structuralSuperseded = true;
         continue;
@@ -21109,8 +21120,8 @@ function deriveAcVerdicts(graph, acIds, oracles, criteria) {
         folded = true;
       }
     }
-    if (supersedingFix && verdict2 === "pass") {
-      notes = `earlier non-pass superseded by a re-verify behind a passed fix (${acId})`;
+    if (fixSuperseded && verdict2 === "pass") {
+      notes = `earlier non-pass superseded by a fix-backed re-verify downstream of it (${acId})`;
     } else if (structuralSuperseded && verdict2 === "pass") {
       notes = `evidence-less implementation pass covered by a downstream verified pass (${acId})`;
     }
@@ -25859,7 +25870,7 @@ async function executeTestBarrier(args) {
 }
 async function nextNode(repoRoot, workItemId2) {
   const aps = new AutopilotStore(repoRoot);
-  const graph = await aps.get(workItemId2);
+  let graph = await aps.get(workItemId2);
   if (graph.approval_gate.status === "rejected") {
     const rb = rollbackOnRejection(graph);
     const rolledBack = graph.nodes.filter((n2) => n2.status === "running").map((n2) => n2.id);
@@ -25881,6 +25892,23 @@ async function nextNode(repoRoot, workItemId2) {
     return staleSpec;
   const ready = selectReadyNodes(graph.nodes);
   if (ready.length === 0) {
+    const doomed = pendingDoomedByFailure(graph.nodes);
+    if (doomed.length > 0) {
+      const doomedSet = new Set(doomed);
+      const nodes = graph.nodes.map((n2) => doomedSet.has(n2.id) ? { ...n2, status: nodeTransition("pending", "block") } : n2);
+      graph = { ...graph, nodes };
+      await aps.write(workItemId2, graph);
+      const nowIso = new Date().toISOString();
+      for (const id of doomed) {
+        await aps.appendDecision(workItemId2, {
+          ts: nowIso,
+          node_id: id,
+          failure_class: "user_decision_needed",
+          decision: "escalate",
+          reason: "blocked: a dependency terminally failed (cap exhausted) and can never pass, so this node can never become ready \u2014 a user-owned decision on the failed upstream is owed"
+        });
+      }
+    }
     if (allNodesTerminal(graph)) {
       const all_passed = graph.nodes.every((n2) => n2.kind === "retro" || n2.status === "passed");
       const decisions = await aps.readDecisions(workItemId2);
@@ -26207,6 +26235,7 @@ async function planRequiresDecisionApproval(repoRoot, workItemId2) {
   }
 }
 var ORACLE_UNSATISFIED_MARKER = "oracle-unsatisfied";
+var PROGRESS_CONTINUATION_MARKER = "progress-continuation";
 function oracleUnsatisfiedReason(unmet) {
   return `${ORACLE_UNSATISFIED_MARKER}: ${unmet.join("; ")}`;
 }
@@ -26244,6 +26273,40 @@ function unmetOracles(node2, payload, oracleById) {
     }
   }
   return { criterionIds, reasons };
+}
+function oracleSatisfiedCriteria(node2, payload, oracleById) {
+  const inPlay = new Set(node2.acceptance_refs);
+  const topLevel = payload.evidence_refs ?? [];
+  const verdicts = payload.ac_verdicts ?? [];
+  const claimed = verdicts.length > 0 ? verdicts.filter((v2) => v2.verdict === "pass").map((v2) => v2.criterion_id) : [...inPlay];
+  const green = new Set;
+  for (const acId of claimed) {
+    if (!inPlay.has(acId))
+      continue;
+    const oracle = oracleById.get(acId);
+    if (oracle === undefined)
+      continue;
+    const perAc = verdicts.filter((v2) => v2.criterion_id === acId).flatMap((v2) => v2.evidence_refs ?? []);
+    const closing = [...topLevel, ...perAc];
+    if (oracleSatisfaction(acId, oracle, closing).pass)
+      green.add(acId);
+  }
+  return green;
+}
+function cumulativeGreenCriteria(decisions, nodeId) {
+  const green = new Set;
+  for (const d2 of decisions) {
+    if (d2.node_id !== nodeId)
+      continue;
+    if (!d2.reason.startsWith(PROGRESS_CONTINUATION_MARKER))
+      continue;
+    for (const id of d2.criterion_ids ?? [])
+      green.add(id);
+  }
+  return green;
+}
+function continuationCount(decisions, nodeId) {
+  return decisions.filter((d2) => d2.node_id === nodeId && d2.reason.startsWith(PROGRESS_CONTINUATION_MARKER)).length;
 }
 async function recordLoopTermination(aps, workItemId2, decisions, spec) {
   const lastTermination = decisions.filter((d2) => d2.decision === "loop_terminated").at(-1);
@@ -27028,6 +27091,54 @@ async function recordResultCore(repoRoot, input) {
       promoted_node_ids: [],
       superseded_node_ids: []
     };
+  }
+  if (contentful && outcome === "fail" && failureClass === "fixable") {
+    const wiForGreen = await new WorkItemStore(repoRoot).get(input.workItemId);
+    const oracleById = new Map(wiForGreen.acceptance_criteria.map((c3) => [c3.id, c3.oracle]));
+    const inPlayOracled = node2.acceptance_refs.filter((id) => oracleById.get(id) !== undefined);
+    if (inPlayOracled.length > 0) {
+      const currentGreen = oracleSatisfiedCriteria(node2, input.payload, oracleById);
+      const red = inPlayOracled.filter((id) => !currentGreen.has(id));
+      const decisions = await aps.readDecisions(input.workItemId);
+      const priorGreen = cumulativeGreenCriteria(decisions, node2.id);
+      const priorDispatch = decisions.some((d2) => d2.node_id === node2.id);
+      const continuations = continuationCount(decisions, node2.id);
+      const strictGrowth = [...priorGreen].every((id) => currentGreen.has(id)) && currentGreen.size > priorGreen.size;
+      const withinCap = continuations < graph.caps.progress_continuation_cap;
+      const nonHalt = red.length === 0 || !priorDispatch;
+      if (withinCap && (nonHalt || strictGrowth)) {
+        const greenList = [...currentGreen].sort();
+        const priorList = [...priorGreen].sort();
+        const greenStr = greenList.join(", ") || "\u2205";
+        const priorStr = priorList.join(", ") || "\u2205";
+        const reason = `${PROGRESS_CONTINUATION_MARKER} node ${node2.id}: oracle-green {${greenStr}} (was {${priorStr}}), ${red.length} AC(s) still red \u2014 re-dispatch WITHOUT consuming the fix budget (incremental success is a continuation, not a failure)`;
+        await aps.updateNode(input.workItemId, node2.id, (n2) => ({
+          ...n2,
+          status: nodeTransition(n2.status, "retry")
+        }));
+        await aps.appendDecision(input.workItemId, {
+          ts: (input.now ?? new Date).toISOString(),
+          node_id: node2.id,
+          failure_class: "fixable",
+          decision: "retry",
+          reason,
+          attempts: node2.attempts,
+          criterion_ids: greenList
+        });
+        return {
+          node_id: node2.id,
+          status: "pending",
+          outcome: "fail",
+          guard_contentful: true,
+          decision: "retry",
+          failure_class: "fixable",
+          cap_exceeded: false,
+          reason,
+          promoted_node_ids: [],
+          superseded_node_ids: []
+        };
+      }
+    }
   }
   const klass = failureClass;
   const { decision, cap_exceeded } = decideOnFailure(klass, node2.attempts, graph.caps);
@@ -56776,4 +56887,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=57144cbb4ce01111aeb99a4e33660af2f2a1f1e84017f915414d4b76de8bfb98
+//# ditto-src-stamp=e5a7ccf1fe46e2005dde93e72a4928af5d4e10808dfa0633fa3e86a64293929c

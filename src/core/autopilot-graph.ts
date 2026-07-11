@@ -201,6 +201,28 @@ export function computeDownstream(nodes: AutopilotNode[], forkNodeId: string): s
 }
 
 /**
+ * Pending nodes DOOMED by a terminal-`failed` dependency (wi_260710vzu ac-3). A node
+ * is ready only when EVERY dependency has `passed` (`isNodeReady`); a `failed` node's
+ * only out-edges are dispatch/rollback (NODE_TRANSITIONS), and the autonomous loop never
+ * re-dispatches a terminal node (`selectReadyNodes` picks `pending` only), so a `failed`
+ * dependency never reaches `passed`. Thus any still-`pending` node that transitively
+ * depends on a `failed` node can never be ready — it is DOOMED, not legitimately waiting. Returns those ids so the
+ * loop can transition them `pending --block--> blocked`, turning an otherwise-infinite
+ * `waiting` into a clean `blocked` landing (an honest non-pass) instead of stalling for
+ * a user who is not coming. A node waiting only on pending/running deps (no `failed`
+ * ancestor) is NOT returned — legitimate waiting is never over-blocked. Output
+ * preserves input node order.
+ */
+export function pendingDoomedByFailure(nodes: AutopilotNode[]): string[] {
+  const failed = nodes.filter((n) => n.status === 'failed');
+  if (failed.length === 0) return [];
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  return nodes
+    .filter((n) => n.status === 'pending' && failed.some((f) => dependsOnNode(n, f.id, byId)))
+    .map((n) => n.id);
+}
+
+/**
  * file-overlap serialization gate (W4-1). Two owners that write the same file
  * must not run concurrently or they clobber each other. Greedily admit nodes
  * whose `file_scope` is disjoint from every already-admitted node's scope;

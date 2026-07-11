@@ -235,20 +235,39 @@ export function deriveAcVerdicts(
     // converged). A pass that is NOT behind a fix cannot supersede — so an unfixed
     // fail/partial still wins (no false-green). After supersession, fold the
     // survivors with worst().
-    const supersedingFix = addressing.some(
-      (n) => nodeVerdictFor(n, acId, oracle).verdict === 'pass' && dependsOnPassedFix(n, byId),
-    );
+    //
+    // ac-4 (wi_260710vzu): the drop is ORDERING-GATED PER failed node — a passing
+    // node `m` supersedes `n`'s non-pass ONLY when `m` (i) transitively depends on a
+    // passed fix AND (ii) transitively depends on `n` itself, so `m` demonstrably ran
+    // AFTER `n`'s failure and behind the fix that addresses it. A GLOBAL "some pass is
+    // fix-backed" boolean is unsound: an EARLIER fix-backed pass would launder a LATER
+    // genuine fail discovered downstream of it (false-green). Fail-safe / over-block:
+    // any non-pass with no fix-backed pass downstream of it sticks, so a fail→pass wash
+    // cannot empty the parked set deriveNonPassStatus reads → the D1 termination gate is
+    // never bypassed. Reuses dependsOnPassedFix + dependsOnNode (no new ordering logic).
+    const supersededByFixBackedReverify = (n: AutopilotNode): boolean =>
+      addressing.some(
+        (m) =>
+          m !== n &&
+          nodeVerdictFor(m, acId, oracle).verdict === 'pass' &&
+          dependsOnPassedFix(m, byId) &&
+          dependsOnNode(m, n.id, byId),
+      );
 
     let verdict: Verdict = 'pass';
     let notes: string | undefined;
     let folded = false;
     let structuralSuperseded = false;
+    let fixSuperseded = false;
     for (const n of addressing) {
       const nv = nodeVerdictFor(n, acId, oracle);
-      // A non-pass (fail OR partial) that a later fix-backed re-verify supersedes
-      // is dropped from the fold — a pre-fix verification snapshot, like an earlier
-      // fail, must not drag down an AC the fix-backed re-verify has since passed.
-      if ((nv.verdict === 'fail' || nv.verdict === 'partial') && supersedingFix) continue;
+      // A non-pass (fail OR partial) that a fix-backed re-verify DOWNSTREAM of this node
+      // supersedes is dropped from the fold — a pre-fix verification snapshot, like an
+      // earlier fail, must not drag down an AC the fix-backed re-verify has since passed.
+      if ((nv.verdict === 'fail' || nv.verdict === 'partial') && supersededByFixBackedReverify(n)) {
+        fixSuperseded = true;
+        continue;
+      }
       // gotcha #3 (wi_260610idf): an implementation node's evidence-less pass is
       // a STRUCTURAL unverified, not a judgment. When another addressing node
       // DOWNSTREAM of it (transitively depends on it) passed this AC with
@@ -284,8 +303,8 @@ export function deriveAcVerdicts(
         folded = true;
       }
     }
-    if (supersedingFix && verdict === 'pass') {
-      notes = `earlier non-pass superseded by a re-verify behind a passed fix (${acId})`;
+    if (fixSuperseded && verdict === 'pass') {
+      notes = `earlier non-pass superseded by a fix-backed re-verify downstream of it (${acId})`;
     } else if (structuralSuperseded && verdict === 'pass') {
       notes = `evidence-less implementation pass covered by a downstream verified pass (${acId})`;
     }
