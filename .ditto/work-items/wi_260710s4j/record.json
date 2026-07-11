@@ -222,6 +222,11 @@
   ],
   "worktrees": [],
   "discovered_by": "wi_2607105qy",
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 22,
+    "project_item_id": "PVTI_lAHOAT55Bc4Bb3Q0zgyeG18"
+  },
   "risks": [],
   "re_entry": {
     "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260710s4j",
@@ -231,7 +236,38 @@
   },
   "runs": [],
   "started_at_sha": "4c1ca2b178a46309a8edfe3c7cb44c3bc9a56e8d",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_0f73eda3d072c65f.json",
+    ".ditto/memory/events/memevt_retro_1b433672b43e2cb5.json",
+    ".ditto/memory/events/memevt_retro_62f202a1d05d560d.json",
+    ".ditto/memory/events/memevt_retro_7a96c4f594622c56.json",
+    ".ditto/memory/events/memevt_retro_7f36a4a36bdf815f.json",
+    ".ditto/memory/events/memevt_retro_8f6249074e837c8b.json",
+    ".ditto/memory/events/memevt_retro_a05bc4fb34660aef.json",
+    ".ditto/work-items/wi_26062227h/",
+    ".ditto/work-items/wi_260706aka/",
+    ".ditto/work-items/wi_260706d0i/",
+    ".ditto/work-items/wi_260706tu6/",
+    ".ditto/work-items/wi_2607083ch/",
+    ".ditto/work-items/wi_260708700/",
+    ".ditto/work-items/wi_260708e1x/",
+    ".ditto/work-items/wi_260708xgo/",
+    ".ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json",
+    ".ditto/work-items/wi_260709ft1/",
+    ".ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json",
+    ".ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json",
+    ".ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json",
+    ".ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json",
+    ".ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json",
+    ".ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json",
+    ".ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json",
+    ".ditto/work-items/wi_260710s4j/events/000010.workspace-write.1f475a87c55e.json",
+    ".ditto/work-items/wi_260710s4j/events/000011.workspace-write.1f234302fcfd.json",
+    ".ditto/work-items/wi_260710y87/",
+    "reports/design/palimpsest-ditto-convergence-design.md"
+  ],
   "created_at": "2026-07-10T18:42:27.987Z",
-  "updated_at": "2026-07-11T05:39:33.914Z",
-  "closed_at": "2026-07-11T05:39:33.912Z"
+  "updated_at": "2026-07-11T05:48:15.412Z",
+  "closed_at": "2026-07-11T05:48:15.411Z"
 }
