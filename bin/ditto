@@ -38696,6 +38696,16 @@ var finalizePayload = exports_external.object({
   approved_source: exports_external.enum(["approved_spec", "issue", "prd", "user"]).optional(),
   user_confirmation: userConfirmation
 }).describe("Intent fields synthesized after the interview is ready");
+function declaredRiskFromAxes(risk) {
+  const flags = {};
+  if (risk.non_local)
+    flags.non_local = true;
+  if (risk.irreversible)
+    flags.irreversible = true;
+  if (risk.unaudited)
+    flags.unaudited = true;
+  return Object.keys(flags).length > 0 ? flags : undefined;
+}
 async function finalizeInterview(repoRoot, input) {
   const interviewStoreInstance = new InterviewStore(repoRoot);
   const intentStore = new IntentStore(repoRoot);
@@ -38731,6 +38741,7 @@ async function finalizeInterview(repoRoot, input) {
     ...input.sourceDigest ? { source_digest: input.sourceDigest } : {}
   };
   const writtenIntent = await intentStore.write(intent);
+  const declaredRisk2 = declaredRiskFromAxes(input.payload.risk);
   await items.update(input.workItemId, (current) => ({
     ...current,
     acceptance_criteria: input.payload.acceptance_criteria.map((ac) => ({
@@ -38739,7 +38750,8 @@ async function finalizeInterview(repoRoot, input) {
       verdict: ac.verdict,
       evidence: ac.evidence
     })),
-    goal: input.payload.goal
+    goal: input.payload.goal,
+    ...declaredRisk2 !== undefined ? { declared_risk: declaredRisk2 } : {}
   }));
   const nowIso = (input.now ?? new Date).toISOString();
   await interviewStoreInstance.write({
@@ -56914,4 +56926,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=ee8e3e0bcb19dacf8b7554837880eb6ee8741e79244c5f12c2613977d282b9d6
+//# ditto-src-stamp=bac4c23894994c9b6cc4fe3952dbf6e3dd793769737f112e23671c37a5527c7e

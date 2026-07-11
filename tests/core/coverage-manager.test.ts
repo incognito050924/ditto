@@ -800,6 +800,14 @@ describe('producePlanGate — intent ADR conflict front-loads approval (ADR-0020
   test('requireApproval forces pending even for an otherwise auto-waivable light tier', () => {
     expect(producePlanGate({ ...lightInputs, requireApproval: true }).status).toBe('pending');
   });
+
+  // wi_260710y87 ac-3: a declared high-risk plan may NOT auto-waive. This is the last
+  // link of the reported failure chain (interview risk → declared_risk → highRisk →
+  // forcePending → pending); pins the regression where a purpose-preserving light-tier
+  // plan silently waived a high-risk change past the approval gate.
+  test('highRisk forces pending even for an otherwise auto-waivable light tier', () => {
+    expect(producePlanGate({ ...lightInputs, highRisk: true }).status).toBe('pending');
+  });
 });
 
 // ADR-0024 ac-5 (wi_260623uap inc-1, blueprint §4 anti-SLOP): an assigned oracle

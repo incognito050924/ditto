@@ -15,6 +15,7 @@ import {
   userConfirmation,
 } from '~/schemas/interview-state';
 import { selfAnswerAttempt } from '~/schemas/question-gate';
+import type { WorkItem } from '~/schemas/work-item';
 import { bootstrapAutopilot } from './autopilot-bootstrap';
 import { nextCoverageNode, recordCoverageRound } from './coverage-loop';
 import { DEFAULT_DRY_K, recordDryRound, serializePlanDialog } from './coverage-manager';
@@ -450,6 +451,20 @@ export interface FinalizeInput {
 }
 
 /**
+ * Reduce a full RiskAxes (all three booleans, defaulted) to the sparse
+ * `declared_risk` shape the work item stores — only the TRUE flags, or `undefined`
+ * when none is set. Same semantics as `work start --risk ""` (records nothing), so
+ * an all-false interview risk never falsely trips the high-risk gate.
+ */
+function declaredRiskFromAxes(risk: RiskAxes): WorkItem['declared_risk'] {
+  const flags: NonNullable<WorkItem['declared_risk']> = {};
+  if (risk.non_local) flags.non_local = true;
+  if (risk.irreversible) flags.irreversible = true;
+  if (risk.unaudited) flags.unaudited = true;
+  return Object.keys(flags).length > 0 ? flags : undefined;
+}
+
+/**
  * Finalize: gate the interview, write intent.json, mirror the AC into the work
  * item, and (per AC-3) call bootstrapAutopilot in the same in-process call so
  * one ditto-deep-interview-finalize invocation produces both intent.json AND
@@ -523,6 +538,15 @@ export async function finalizeInterview(
   // Mirror AC into the work item — work item is authoritative for status, but
   // acceptance_criteria stays consistent with intent.acceptance_criteria so
   // completionGate cross-checks still align.
+  // wi_260710y87: risk declared through the interview (payload.risk) is the heavy
+  // path's own risk-capture channel, and declared_risk is the ONE persisted risk
+  // signal every gate reads — the loop's producePlanGate highRisk (autopilot-loop.ts),
+  // the Stop hook risk yield, the lightweight-close override gate, the heavy-path
+  // nudge. Without persisting it here, bootstrap's INITIAL pending gate gets re-computed
+  // from an empty declared_risk in the loop and auto-waives a high-risk plan to
+  // not_required. Persist only the TRUE flags (same idiom as `work start --risk ""` →
+  // records nothing), so an all-false risk leaves declared_risk unset.
+  const declaredRisk = declaredRiskFromAxes(input.payload.risk);
   await items.update(input.workItemId, (current) => ({
     ...current,
     acceptance_criteria: input.payload.acceptance_criteria.map((ac) => ({
@@ -532,6 +556,7 @@ export async function finalizeInterview(
       evidence: ac.evidence,
     })),
     goal: input.payload.goal,
+    ...(declaredRisk !== undefined ? { declared_risk: declaredRisk } : {}),
   }));
 
   // Mark interview converged and record the user confirmation as durable evidence

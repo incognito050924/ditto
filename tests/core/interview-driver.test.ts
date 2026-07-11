@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { CoverageStore } from '~/core/coverage-store';
+import { highRiskAssumption } from '~/core/gates';
 import { IntentStore } from '~/core/intent-store';
 import {
   type FinalizePayload,
@@ -646,6 +647,50 @@ describe('finalizeInterview', () => {
     expect(result.status).toBe('not_confirmed');
     expect(await new IntentStore(repo).exists(wiId)).toBe(false);
     expect(await new AutopilotStore(repo).exists(wiId)).toBe(false);
+  });
+
+  // wi_260710y87 ac-1/ac-3: risk declared through the interview (payload.risk) is the
+  // heavy path's own risk-capture channel. It must land in the work item's declared_risk
+  // so the loop's producePlanGate (which reads workItem.declared_risk, autopilot-loop.ts)
+  // computes highRisk=true and keeps the plan approval gate pending — instead of
+  // auto-waiving a high-risk plan to not_required. Only the TRUE flags are persisted.
+  test('high-risk finalize persists payload.risk true-flags into work item declared_risk', async () => {
+    await driveToReady();
+    const result = await finalizeInterview(repo, {
+      workItemId: wiId,
+      payload: readyPayload({
+        risk: { non_local: false, irreversible: true, unaudited: false },
+        user_confirmation: { confirmed: true, statement: '되돌리기 어려운 변경, 승인 필요' },
+      }),
+    });
+    expect(result.status).toBe('finalized');
+    const workItem = await new WorkItemStore(repo).get(wiId);
+    expect(workItem.declared_risk).toEqual({ irreversible: true });
+    // ac-3 proxy: highRiskAssumption over the persisted declared_risk (the exact input
+    // producePlanGate feeds highRiskAssumption at autopilot-loop.ts) is true.
+    expect(
+      highRiskAssumption({
+        non_local: workItem.declared_risk?.non_local ?? false,
+        irreversible: workItem.declared_risk?.irreversible ?? false,
+        unaudited: workItem.declared_risk?.unaudited ?? false,
+      }),
+    ).toBe(true);
+  });
+
+  // wi_260710y87 ac-2: an all-false risk records nothing (same idiom as `work start
+  // --risk ""`), so a low-risk WI is not falsely tripped into the high-risk gate.
+  test('all-false finalize leaves declared_risk unset', async () => {
+    await driveToReady();
+    const result = await finalizeInterview(repo, {
+      workItemId: wiId,
+      payload: readyPayload({
+        risk: { non_local: false, irreversible: false, unaudited: false },
+        user_confirmation: { confirmed: true, statement: '저위험, 그대로 진행' },
+      }),
+    });
+    expect(result.status).toBe('finalized');
+    const workItem = await new WorkItemStore(repo).get(wiId);
+    expect(workItem.declared_risk).toBeUndefined();
   });
 
   // n3 dry termination sets exit.reason='diminishing_returns' but MUST NOT bypass
