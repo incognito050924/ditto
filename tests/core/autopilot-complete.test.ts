@@ -389,6 +389,121 @@ describe('deriveAcVerdicts (evidence-gated: pass only with evidence; never auto-
       const [v] = deriveAcVerdicts(graph, ['ac-1']);
       expect(v?.verdict).toBe('pass');
     });
+
+    // wi_2607114zt (wi_260710vzu #23 ac-4 잔여 검증 공백): the ordering gate above requires the
+    // fix-backed re-verify `m` to transitively depend on the FAILED node `n` itself
+    // (dependsOnNode(m, n)). When a planner wires the fix/reverify chain to the IMPLEMENT node
+    // rather than the failed VERIFY node, `m` reaches a passed fix but NOT the failed verify, so
+    // the converged AC's earlier fail is NOT superseded — an OVER-STRICT (fail-safe) non-pass, not
+    // a false-green. This graph SHAPE — legitimate convergence bypassing the failed verify via the
+    // implement node — had no regression test. It is recoverable via a fresh `ditto verify
+    // --criterion` (the evidence-backed criterion supersede below), which is what the discovering
+    // run actually did. These pin the fail-safe direction AND its escape hatch.
+    describe('fix/reverify wired to the implement node (not the failed verify) → over-strict, not false-green (wi_2607114zt)', () => {
+      // N1 implement (passed, structural), N2 verify FAILED ac-1, N3 fix depends on N1 (the
+      // NON-STANDARD wiring — bypasses N2), N4 re-verify passes ac-1 behind the fix. N4 reaches a
+      // passed fix (dependsOnPassedFix) but NOT N2 (dependsOnNode(N4, N2) === false).
+      const implWiredGraph = () =>
+        graphWith([
+          node({ id: 'N1', kind: 'implement', owner: 'implementer', acceptance_refs: ['ac-1'] }),
+          node({
+            id: 'N2',
+            kind: 'verify',
+            acceptance_refs: ['ac-1'],
+            status: 'passed',
+            evidence_refs: [ev('verify.log')],
+            ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'fail' }],
+          }),
+          node({
+            id: 'N3',
+            kind: 'fix',
+            owner: 'implementer',
+            status: 'passed',
+            depends_on: ['N1'],
+          }),
+          node({
+            id: 'N4',
+            kind: 'verify',
+            acceptance_refs: ['ac-1'],
+            status: 'passed',
+            depends_on: ['N3'],
+            evidence_refs: [ev('reverify.log')],
+          }),
+        ]);
+
+      test('implement-wired fix/reverify leaves the AC non-pass (over-strict, fail-safe) and final_verdict≠pass', () => {
+        const graph = implWiredGraph();
+        const [v] = deriveAcVerdicts(graph, ['ac-1']);
+        // N4 is fix-backed and passes, but is NOT downstream of N2 → N2's fail is not superseded.
+        expect(v?.verdict).toBe('fail');
+        const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), { now: NOW });
+        expect(c.final_verdict).not.toBe('pass');
+      });
+
+      test('CONTRAST: the SAME chain also wired to the failed verify node (N3 depends on N1+N2) DOES supersede → pass', () => {
+        // ONLY the fix's edge set changes: N3 now depends on N1 AND N2 (routing the chain THROUGH
+        // the failed verify), so dependsOnNode(N4, N2) === true → the legitimate convergence
+        // supersedes N2's fail. (N1 stays reachable too, so its structural unverified is still
+        // covered.) Isolates the variable: the over-strictness above is the WIRING that bypasses
+        // the failed verify, nothing else in the graph.
+        const graph = graphWith([
+          node({ id: 'N1', kind: 'implement', owner: 'implementer', acceptance_refs: ['ac-1'] }),
+          node({
+            id: 'N2',
+            kind: 'verify',
+            acceptance_refs: ['ac-1'],
+            status: 'passed',
+            evidence_refs: [ev('verify.log')],
+            ac_verdicts: [{ criterion_id: 'ac-1', verdict: 'fail' }],
+          }),
+          node({
+            id: 'N3',
+            kind: 'fix',
+            owner: 'implementer',
+            status: 'passed',
+            depends_on: ['N1', 'N2'],
+          }),
+          node({
+            id: 'N4',
+            kind: 'verify',
+            acceptance_refs: ['ac-1'],
+            status: 'passed',
+            depends_on: ['N3'],
+            evidence_refs: [ev('reverify.log')],
+          }),
+        ]);
+        const [v] = deriveAcVerdicts(graph, ['ac-1']);
+        expect(v?.verdict).toBe('pass');
+      });
+
+      test('recovery: a fresh evidence-backed criterion pass (ditto verify --criterion) supersedes the over-strict non-pass → pass', () => {
+        const graph = implWiredGraph();
+        // The sanctioned manual recovery: `ditto verify --criterion` records a command-kind
+        // evidence-backed criterion pass, strictly fresher than the graph, which supersedes the
+        // stale node fail (false-green guard intact: only command-kind evidence qualifies).
+        const criteria = new Map([
+          ['ac-1', { verdict: 'pass' as const, evidence: [cmdEv('bun test')] }],
+        ]);
+        const [v] = deriveAcVerdicts(graph, ['ac-1'], undefined, criteria);
+        expect(v?.verdict).toBe('pass');
+
+        const wi = {
+          id: 'wi_completetest',
+          changed_files: ['src/x.ts'],
+          goal: 'the goal',
+          acceptance_criteria: [
+            {
+              id: 'ac-1',
+              statement: 'ac-1 is met',
+              verdict: 'pass',
+              evidence: [cmdEv('bun test')],
+            },
+          ],
+        } as unknown as WorkItem;
+        const c = assembleCompletionFromGraph(graph, wi, { now: NOW });
+        expect(c.final_verdict).toBe('pass');
+      });
+    });
   });
 
   // gotcha #3 / wi_260610idf: an IMPLEMENTATION node's evidence-less pass is a
