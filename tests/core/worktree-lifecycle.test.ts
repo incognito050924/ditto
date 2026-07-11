@@ -9,6 +9,7 @@ import { WorkItemStore } from '~/core/work-item-store';
 import {
   createWorktreeForWorkItem,
   listRunWorktrees,
+  mergeWorktreesForWorkItem,
   parseWorktreePath,
   removeWorktreesForWorkItem,
   toPosixSeparators,
@@ -190,6 +191,30 @@ describe('removeWorktreesForWorkItem (ac-2 safety)', () => {
     expect(res.blocked).toEqual([]);
     expect(listRunWorktrees(repo)).toEqual([]);
     expect((await wis.get(WI)).worktrees).toEqual([]);
+  });
+});
+
+describe('mergeWorktreesForWorkItem — conflict reason', () => {
+  test('a real merge conflict carries a non-empty reason with git conflict detail', async () => {
+    await createWorktreeForWorkItem(repo, WI);
+    const wtAbs = join(repo, '.ditto', 'local', 'worktrees', WI);
+    // Branch changes README one way…
+    await writeFile(join(wtAbs, 'README.md'), 'branch-side change\n', 'utf8');
+    git(wtAbs, ['add', 'README.md']);
+    git(wtAbs, ['commit', '-q', '-m', 'branch edits README']);
+    // …the base checkout changes the SAME line another way → merge must conflict.
+    await writeFile(join(repo, 'README.md'), 'base-side change\n', 'utf8');
+    git(repo, ['add', 'README.md']);
+    git(repo, ['commit', '-q', '-m', 'base edits README']);
+
+    const res = await mergeWorktreesForWorkItem(repo, WI);
+    expect(res.allMerged).toBe(false);
+    const outcome = res.outcomes.find((o) => o.status === 'conflicted');
+    expect(outcome).toBeDefined();
+    // git writes CONFLICT text to STDOUT, not stderr — the reason must still be populated.
+    expect(outcome?.reason ?? '').not.toBe('');
+    expect(outcome?.reason).toContain('CONFLICT');
+    expect(outcome?.reason).toContain('README.md');
   });
 });
 

@@ -14627,15 +14627,17 @@ function mergeBranchIntoBase(ownerCwd, branch) {
   try {
     execFileSync2("git", ["merge", "--no-edit", "--", branch], {
       cwd: ownerCwd,
-      stdio: ["ignore", "ignore", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"]
     });
     return { status: "merged" };
   } catch (err) {
     try {
       execFileSync2("git", ["merge", "--abort"], { cwd: ownerCwd });
     } catch {}
-    const stderr = err.stderr?.toString() ?? (err instanceof Error ? err.message : String(err));
-    return { status: "conflicted", reason: stderr.trim() };
+    const e2 = err;
+    const reason = [e2.stdout?.toString(), e2.stderr?.toString()].map((s2) => s2?.trim()).filter((s2) => Boolean(s2)).join(`
+`).trim() || (err instanceof Error ? err.message : String(err));
+    return { status: "conflicted", reason };
   }
 }
 async function mergeWorktreesForWorkItem(repoRoot, workItemId2) {
@@ -56926,4 +56928,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=bac4c23894994c9b6cc4fe3952dbf6e3dd793769737f112e23671c37a5527c7e
+//# ditto-src-stamp=d0680341a43b236258d3081e9a1149d036acd1bf3c17769fb18a5fc33662ec2c

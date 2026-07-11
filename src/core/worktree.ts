@@ -623,7 +623,8 @@ export interface WorktreeMergeResult {
  *    merge is a no-op → `merged` (idempotent; safe to re-run on resume).
  *  - Otherwise `git merge --no-edit -- <branch>` (`--` ends option parsing). A clean
  *    fast-forward/3-way → `merged`; a conflict → `git merge --abort` (best effort) then
- *    `conflicted` carrying the raw git stderr (the caller scrubs it). NEVER rebase.
+ *    `conflicted` carrying the raw git output — stdout (where the CONFLICT lines are)
+ *    plus stderr (the caller scrubs it). NEVER rebase.
  */
 function mergeBranchIntoBase(
   ownerCwd: string,
@@ -643,7 +644,7 @@ function mergeBranchIntoBase(
   try {
     execFileSync('git', ['merge', '--no-edit', '--', branch], {
       cwd: ownerCwd,
-      stdio: ['ignore', 'ignore', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
     return { status: 'merged' };
   } catch (err) {
@@ -652,10 +653,16 @@ function mergeBranchIntoBase(
     } catch {
       // best effort: nothing to abort, or git unavailable — fall through to report
     }
-    const stderr =
-      (err as { stderr?: Buffer | string }).stderr?.toString() ??
-      (err instanceof Error ? err.message : String(err));
-    return { status: 'conflicted', reason: stderr.trim() };
+    // git writes the CONFLICT (content) lines to STDOUT, not stderr — capture both
+    // so the human-readable reason is never blank on a real conflict.
+    const e = err as { stdout?: Buffer | string; stderr?: Buffer | string };
+    const reason =
+      [e.stdout?.toString(), e.stderr?.toString()]
+        .map((s) => s?.trim())
+        .filter((s): s is string => Boolean(s))
+        .join('\n')
+        .trim() || (err instanceof Error ? err.message : String(err));
+    return { status: 'conflicted', reason };
   }
 }
 
