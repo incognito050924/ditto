@@ -11,7 +11,12 @@ import {
   projectDirectionDecisions,
 } from '~/core/autopilot-complete';
 import { computeDownstream, kindToOwner, proposalsToNodes } from '~/core/autopilot-graph';
-import { nextNode, recordResult, recordResultPayload } from '~/core/autopilot-loop';
+import {
+  hashAuthoredTest,
+  nextNode,
+  recordResult,
+  recordResultPayload,
+} from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
 import {
   checkCiteGate,
@@ -445,6 +450,17 @@ const autopilotComplete = defineCommand({
       // When true, an absent/no-command DEGRADED barrier is NOT-APPLICABLE (not floored);
       // absent/false ⇒ today's FLOOR default. A barrier that RAN and FAILED still floors.
       const recipe = await loadResolvedRecipe(repoRoot, undefined, () => {});
+      // wi_260710l33 (#24): re-hash the FROZEN manifest on disk NOW so the completion
+      // assembly can re-check frozen-test integrity at the boundary — catching a frozen
+      // red test breached OUT-OF-BAND after the last mutating pass (the in-loop check
+      // only fires on a mutating pass). Mirrors the loop's currentByPath build
+      // (autopilot-loop.ts). Bound entries only (no captured hash ⇒ no binding, degrade).
+      const frozenManifest = graph.approval_gate.plan_brief?.test_spec?.test_backed ?? [];
+      const frozenHashByPath = new Map<string, string | undefined>();
+      for (const t of frozenManifest) {
+        if (t.frozen_hash === undefined) continue;
+        frozenHashByPath.set(t.test_path, await hashAuthoredTest(repoRoot, t.test_path));
+      }
       const completion = assembleCompletionFromGraph(graph, workItem, {
         ...(args.summary ? { summary: args.summary } : {}),
         // ac-3 producer: thread the ledger so an UNRESOLVED agent_resolvable risk
@@ -455,6 +471,9 @@ const autopilotComplete = defineCommand({
         // wi_2607103tp ac-3 (M3): DEDICATED phantom-red opt-out (independent of
         // barrier_opt_out) reaches the completion floor the same way.
         phantomRedOptOut: recipe.phantom_red_opt_out ?? false,
+        // wi_260710l33 (#24): inject the on-disk frozen-test hashes so the assembly's
+        // frozen-breach floor runs. Inert when the manifest is empty/unbound.
+        currentTestHash: (p) => frozenHashByPath.get(p),
       });
       // false-green 차단 (wi_260624xb8 ac-2): completion은 AC를 work-item에서
       // 읽으므로, intent.json이 work-item보다 많은 AC를 선언했는데 동기화가 안 된

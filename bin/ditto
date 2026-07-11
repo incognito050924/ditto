@@ -21179,6 +21179,24 @@ function phantomRedUnverified(graph, phantomRedOptOut = false) {
     grounding: n2.id
   }));
 }
+function frozenBreachUnverified(graph, currentHash) {
+  if (!currentHash)
+    return [];
+  const manifest = graph.approval_gate.plan_brief?.test_spec?.test_backed ?? [];
+  const bound = manifest.filter((t2) => t2.frozen_hash !== undefined);
+  if (bound.length === 0)
+    return [];
+  const intact = assertFrozenTestsIntact(bound, currentHash);
+  if (intact.pass)
+    return [];
+  return intact.reasons.map((reason) => ({
+    item: "frozen-test integrity (completion boundary)",
+    reason: `${reason} (re-checked at completion assembly \u2014 a breach after the last mutating pass reopens the vacuous-green hole; ADR-0018: proceed but never claim pass)`,
+    out_of_scope: false,
+    resolvability: "agent_resolvable",
+    grounding: "approval_gate.plan_brief.test_spec.test_backed"
+  }));
+}
 function loopStuckBlocked(graph) {
   if (selectReadyNodes(graph.nodes).length > 0)
     return false;
@@ -21217,7 +21235,8 @@ function assembleCompletionFromGraph(graph, workItem2, opts = {}) {
   ];
   const barrierUnverified = testBarrierUnverified(graph, opts.barrierOptOut ?? false);
   const phantomUnverified = phantomRedUnverified(graph, opts.phantomRedOptOut ?? false);
-  const floorUnverified = [...barrierUnverified, ...phantomUnverified];
+  const frozenUnverified = frozenBreachUnverified(graph, opts.currentTestHash);
+  const floorUnverified = [...barrierUnverified, ...phantomUnverified, ...frozenUnverified];
   const built = buildCompletion({
     workItem: workItem2,
     declaredBy: "verifier",
@@ -32674,11 +32693,19 @@ var autopilotComplete = defineCommand({
         return;
       }
       const recipe2 = await loadResolvedRecipe(repoRoot, undefined, () => {});
+      const frozenManifest = graph.approval_gate.plan_brief?.test_spec?.test_backed ?? [];
+      const frozenHashByPath = new Map;
+      for (const t2 of frozenManifest) {
+        if (t2.frozen_hash === undefined)
+          continue;
+        frozenHashByPath.set(t2.test_path, await hashAuthoredTest(repoRoot, t2.test_path));
+      }
       const completion = assembleCompletionFromGraph(graph, workItem2, {
         ...args.summary ? { summary: args.summary } : {},
         decisions,
         barrierOptOut: recipe2.barrier_opt_out ?? false,
-        phantomRedOptOut: recipe2.phantom_red_opt_out ?? false
+        phantomRedOptOut: recipe2.phantom_red_opt_out ?? false,
+        currentTestHash: (p) => frozenHashByPath.get(p)
       });
       const intentStore = new IntentStore(repoRoot);
       if (completion.final_verdict === "pass" && await intentStore.exists(args.workItem)) {
@@ -56887,4 +56914,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=e5a7ccf1fe46e2005dde93e72a4928af5d4e10808dfa0633fa3e86a64293929c
+//# ditto-src-stamp=ee8e3e0bcb19dacf8b7554837880eb6ee8741e79244c5f12c2613977d282b9d6

@@ -1300,6 +1300,118 @@ describe('assembleCompletionFromGraph (wi_2607103tp ac-3 / M3: phantom-red degra
   });
 });
 
+// wi_260710l33 (#24): the completion-boundary FROZEN-test breach floor. Frozen-test
+// integrity (assertFrozenTestsIntact) was bound ONLY to in-loop mutating passes
+// (autopilot-loop.ts). A frozen red test breached OUT-OF-BAND after the last mutating
+// pass (deleted / edited by a later read-only pass or a separate session) was never
+// re-checked at completion assembly — so a `dynamic_test` AC that closed green could
+// have its proving test gutted and `final_verdict=pass` would still slip through
+// (vacuous-green reopened at the completion boundary). This floor re-runs the frozen
+// integrity check at assembly (currentTestHash injected — same purity as the loop's
+// check) and injects an IN-SCOPE unverified entry per breach, mirroring the barrier /
+// phantom-red floors. Absent injection ⇒ no-op (byte-identical, backward compat).
+describe('assembleCompletionFromGraph (wi_260710l33 / #24: completion-boundary frozen-breach floor)', () => {
+  // A graph whose approval gate carries a FROZEN manifest (test-author freeze), plus a
+  // verify node closing ac-1 with real evidence — so WITHOUT the frozen floor
+  // final_verdict would be `pass`. No `test` barrier node → the frozen floor is the ONLY
+  // thing that can hold final_verdict off pass.
+  const FROZEN_PATH = 'tests/authored-ac1.test.ts';
+  const FROZEN_HASH = 'HASH_FROZEN_A';
+  const graphWithFrozen = (frozen_hash?: string): Autopilot =>
+    autopilot.parse({
+      schema_version: '0.1.0',
+      autopilot_id: 'orch_frozentest',
+      work_item_id: 'wi_completetest',
+      root_goal: 'goal',
+      approval_gate: {
+        status: 'approved',
+        source: 'approved_spec',
+        plan_brief: {
+          test_spec: {
+            test_backed: [
+              {
+                criterion_id: 'ac-1',
+                test_path: FROZEN_PATH,
+                ...(frozen_hash ? { frozen_hash } : {}),
+              },
+            ],
+          },
+        },
+      },
+      nodes: [
+        node({
+          id: 'V1',
+          kind: 'verify',
+          acceptance_refs: ['ac-1'],
+          evidence_refs: [ev('verify.log')],
+        }),
+      ],
+      caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 },
+      continue_policy: {},
+      stop_conditions: [],
+    });
+
+  const namesFrozen = (u: { item: string; reason: string }) =>
+    /frozen/i.test(`${u.item} ${u.reason}`);
+
+  test('FLOOR: a DELETED frozen test (current hash undefined) injects an IN-SCOPE unverified entry naming it and floors final_verdict off pass', () => {
+    const graph = graphWithFrozen(FROZEN_HASH);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+      now: NOW,
+      currentTestHash: () => undefined, // the frozen test was DELETED out-of-band
+    } as AssembleOptions);
+    // ac-1 itself passes with evidence: the ONLY thing that can keep final_verdict off
+    // pass is the frozen-breach floor (there is no `test` barrier node here).
+    expect(c.acceptance.find((a) => a.criterion_id === 'ac-1')?.verdict).toBe('pass');
+    const inScope = c.unverified.filter((u) => !u.out_of_scope);
+    expect(inScope.some(namesFrozen)).toBe(true);
+    expect(inScope.some((u) => `${u.item} ${u.reason}`.includes(FROZEN_PATH))).toBe(true);
+    expect(c.final_verdict).not.toBe('pass');
+  });
+
+  test('FLOOR: a WEAKENED frozen test (current hash differs) also floors final_verdict off pass', () => {
+    const graph = graphWithFrozen(FROZEN_HASH);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+      now: NOW,
+      currentTestHash: () => 'HASH_DIFFERENT', // edited/weakened after freeze
+    } as AssembleOptions);
+    expect(c.final_verdict).not.toBe('pass');
+    expect(c.unverified.filter((u) => !u.out_of_scope).some(namesFrozen)).toBe(true);
+  });
+
+  test('INTACT: an unchanged frozen test (current hash == frozen hash) injects NO floor entry → ACs alone decide (pass)', () => {
+    const graph = graphWithFrozen(FROZEN_HASH);
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+      now: NOW,
+      currentTestHash: () => FROZEN_HASH,
+    } as AssembleOptions);
+    expect(c.final_verdict).toBe('pass');
+    expect(c.unverified.filter((u) => !u.out_of_scope).some(namesFrozen)).toBe(false);
+  });
+
+  test('UNBOUND: a manifest entry with no frozen_hash contributes no binding (degrade, never a false reject) even when the file is gone', () => {
+    const graph = graphWithFrozen(undefined); // frozen_hash absent → unbound
+    const c = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+      now: NOW,
+      currentTestHash: () => undefined,
+    } as AssembleOptions);
+    expect(c.final_verdict).toBe('pass');
+    expect(c.unverified.filter((u) => !u.out_of_scope).some(namesFrozen)).toBe(false);
+  });
+
+  test('NO-OP: without currentTestHash injection the floor is inert — byte-identical to the no-frozen completion (backward compat)', () => {
+    const graph = graphWithFrozen(FROZEN_HASH);
+    const withoutInjection = assembleCompletionFromGraph(graph, workItemWith(['ac-1']), {
+      now: NOW,
+    });
+    // No injection ⇒ the floor cannot run (no filesystem/hash source) ⇒ no entry, pass.
+    expect(withoutInjection.final_verdict).toBe('pass');
+    expect(withoutInjection.unverified.filter((u) => !u.out_of_scope).some(namesFrozen)).toBe(
+      false,
+    );
+  });
+});
+
 // wi_260710676 (#18): the MISSING writer for `completion.non_pass_status`. The Stop
 // gate `nonPassTerminationGate` unlocks an honest non-pass termination only when the
 // completion carries a `non_pass_status` declaration — but no code ever wrote it, so

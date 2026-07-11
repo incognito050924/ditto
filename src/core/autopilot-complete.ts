@@ -5,7 +5,13 @@ import { allNodesTerminal } from './autopilot-driver';
 import { selectReadyNodes } from './autopilot-graph';
 import { type AutopilotDecision, synthesizeDecisionId } from './autopilot-store';
 import { type CompletionInput, buildCompletion } from './completion-store';
-import { type AcAttestation, attestAcVerdicts, oracleSatisfaction } from './gates';
+import {
+  type AcAttestation,
+  type FrozenTestEntry,
+  assertFrozenTestsIntact,
+  attestAcVerdicts,
+  oracleSatisfaction,
+} from './gates';
 
 /** Per-AC oracle lookup threaded into the closure decision (ADR-0024 §3 ③ JUDGE). */
 type OracleMap = ReadonlyMap<string, AcOracle | undefined>;
@@ -483,6 +489,52 @@ function phantomRedUnverified(
     }));
 }
 
+/**
+ * wi_260710l33 (#24): the completion-boundary FROZEN-test breach floor — the
+ * defense-in-depth mirror of the in-loop `assertFrozenTestsIntact` check
+ * (autopilot-loop.ts). That in-loop check binds frozen integrity ONLY to a mutating
+ * pass (implement/fix/refactor); a frozen red test breached OUT-OF-BAND *after* the
+ * last mutating pass (deleted or edited by a later read-only pass or a separate
+ * session) is never re-checked, so a `dynamic_test` AC that closed green could have
+ * its proving test gutted while completion still folds to `final_verdict=pass`
+ * (vacuous-green reopened at the boundary).
+ *
+ * This re-runs the SAME frozen integrity check at assembly against the frozen manifest
+ * committed into the approval gate's `test_spec` (`test_backed`). `currentHash` is
+ * INJECTED (same purity as the loop's check — the CLI re-hashes the files on disk), so
+ * the function stays pure and unit-testable. Each BOUND entry (one carrying a
+ * `frozen_hash`) whose current hash is MISSING (deleted) or DIFFERENT (weakened) yields
+ * an IN-SCOPE `unverified` entry so `deriveFinalVerdict` floors `final_verdict ≠ pass`,
+ * mirroring the barrier / phantom-red floors. An UNBOUND entry contributes no binding
+ * (degrade, never a false reject — ADR-0018).
+ *
+ * `currentHash` ABSENT (no injection) ⇒ the floor cannot read the filesystem, so it is
+ * INERT: empty output, byte-identical to the no-frozen completion. This keeps the
+ * metrics-only assembly (autopilot-loop.ts) and every legacy caller unchanged — only
+ * the CLI `autopilot complete` path (which injects the on-disk hashes) enforces it.
+ */
+function frozenBreachUnverified(
+  graph: Autopilot,
+  currentHash?: (test_path: string) => string | undefined,
+): NonNullable<CompletionInput['unverified']> {
+  if (!currentHash) return []; // no filesystem source injected ⇒ inert (backward compat)
+  const manifest: readonly FrozenTestEntry[] =
+    graph.approval_gate.plan_brief?.test_spec?.test_backed ?? [];
+  const bound = manifest.filter((t) => t.frozen_hash !== undefined);
+  if (bound.length === 0) return [];
+  const intact = assertFrozenTestsIntact(bound, currentHash);
+  if (intact.pass) return [];
+  return intact.reasons.map((reason) => ({
+    item: 'frozen-test integrity (completion boundary)',
+    reason: `${reason} (re-checked at completion assembly — a breach after the last mutating pass reopens the vacuous-green hole; ADR-0018: proceed but never claim pass)`,
+    // IN-SCOPE (out_of_scope:false) so deriveFinalVerdict floors final_verdict≠pass.
+    out_of_scope: false,
+    // agent-fixable: the frozen test must be restored (un-gut) or the AC re-derived.
+    resolvability: 'agent_resolvable' as const,
+    grounding: 'approval_gate.plan_brief.test_spec.test_backed',
+  }));
+}
+
 export interface AssembleOptions {
   /** Operator/verifier narrative; a terse default is derived when omitted. */
   summary?: string;
@@ -511,6 +563,16 @@ export interface AssembleOptions {
    * genuine bun-side phantom-red degrade. Omitted ⇒ false ⇒ the FLOOR default.
    */
   phantomRedOptOut?: boolean;
+  /**
+   * wi_260710l33 (#24): re-hash lookup for the completion-boundary frozen-breach floor.
+   * The CLI `autopilot complete` injects a function that reads each frozen test's CURRENT
+   * on-disk content hash (mirroring the loop's `hashAuthoredTest`), so the assembly can
+   * re-run `assertFrozenTestsIntact` against the frozen manifest and floor final_verdict
+   * off pass if a frozen red test was breached AFTER the last mutating pass. Omitted ⇒
+   * the floor is INERT (no filesystem source) ⇒ byte-identical to the legacy completion,
+   * so the metrics-only assembly and every existing caller/test are unaffected.
+   */
+  currentTestHash?: (test_path: string) => string | undefined;
   now?: Date;
 }
 
@@ -605,7 +667,12 @@ export function assembleCompletionFromGraph(
   // wi_2607103tp ac-3 (M3): the phantom-red degrade floor, merged alongside the barrier
   // floor (independent opt-out). Both are IN-SCOPE unverified entries that floor the verdict.
   const phantomUnverified = phantomRedUnverified(graph, opts.phantomRedOptOut ?? false);
-  const floorUnverified = [...barrierUnverified, ...phantomUnverified];
+  // wi_260710l33 (#24): the completion-boundary frozen-breach floor, merged alongside the
+  // barrier / phantom-red floors. Inert unless the caller injects `currentTestHash` (the
+  // CLI re-hashes the frozen tests on disk) — so a legacy/metrics-only assembly is
+  // byte-identical. IN-SCOPE unverified ⇒ deriveFinalVerdict floors final_verdict≠pass.
+  const frozenUnverified = frozenBreachUnverified(graph, opts.currentTestHash);
+  const floorUnverified = [...barrierUnverified, ...phantomUnverified, ...frozenUnverified];
   const built = buildCompletion({
     workItem,
     declaredBy: 'verifier',
