@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260710y87",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "879a8796c9fb0b683d3a5fd9a81f80471f3bffd6941b73974d7575868326b253",
+  "ts": "2026-07-11T16:42:51.397Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/interview-driver.test.ts -t high-risk finalize persists",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

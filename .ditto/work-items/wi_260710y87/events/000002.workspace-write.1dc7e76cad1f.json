@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260710y87",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "1dc7e76cad1ffb11686d4b4ceb3cadb9d12971e1b97928b8be49c3c4c6067817",
+  "ts": "2026-07-11T16:42:51.084Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/interview-driver.test.ts -t all-false finalize leaves declared_risk unset",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
