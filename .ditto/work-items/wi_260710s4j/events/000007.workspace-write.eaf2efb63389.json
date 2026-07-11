@@ -1,0 +1,30 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260710s4j",
+  "seq": 7,
+  "actor": "workspace-write",
+  "event_id": "eaf2efb633890f95a8b04c61bc5a37eda990b6d26b75c76604f78ae932f38c5f",
+  "ts": "2026-07-11T05:35:17.151Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-6",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260710s4j/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "DITTO_SKIP_HOOKS=1 bun test src tests",
+        "summary": "4539 pass / 0 fail / 17 skip — 회귀 0"
+      },
+      {
+        "kind": "command",
+        "command": "DITTO_SKIP_HOOKS=1 bun test tests/core/git.test.ts tests/core/work-item-store.test.ts tests/core/autopilot-loop.test.ts",
+        "summary": "127 pass / 0 fail / exit 0"
+      }
+    ]
+  }
+}

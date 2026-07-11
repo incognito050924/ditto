@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260710s4j",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "12ec53a7964d37e916ce9d5ce35da8753e41664b4670d376d6a0d3148ae8230f",
+  "ts": "2026-07-11T05:35:17.146Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260710s4j/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "DITTO_SKIP_HOOKS=1 bun test tests/core/git.test.ts tests/core/work-item-store.test.ts tests/core/autopilot-loop.test.ts",
+        "summary": "118 pass / 9 fail / exit 1 — 9 driving RED confirmed"
+      },
+      {
+        "kind": "command",
+        "command": "DITTO_SKIP_HOOKS=1 bun test tests/core/git.test.ts tests/core/work-item-store.test.ts",
+        "summary": "40 pass / 0 fail (was 34/6 RED)"
+      },
+      {
+        "kind": "command",
+        "command": "DITTO_SKIP_HOOKS=1 bun test tests/schemas",
+        "summary": "320 pass / 0 fail — optional-additive 회귀없음"
+      },
+      {
+        "kind": "command",
+        "command": "DITTO_SKIP_HOOKS=1 bun test src tests",
+        "summary": "4539 pass / 0 fail / 17 skip — 회귀 0"
+      },
+      {
+        "kind": "command",
+        "command": "DITTO_SKIP_HOOKS=1 bun test tests/core/git.test.ts tests/core/work-item-store.test.ts tests/core/autopilot-loop.test.ts",
+        "summary": "127 pass / 0 fail / exit 0"
+      }
+    ]
+  }
+}
