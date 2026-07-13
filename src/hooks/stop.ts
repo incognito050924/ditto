@@ -898,7 +898,15 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     const g = convergenceGate(conv.data);
     if (!g.pass) reasons.push(...g.reasons);
   }
-  if (pilot.status === 'ok' && autopilotForcesContinuation(pilot.data)) {
+  // A terminal (done/abandoned) or autopilot_exempt work item is already closed by
+  // an explicit decision — an orphaned graph left with a runnable node must not
+  // re-force continuation (wi_260713w0g). Mirrors the (B) bypass gate guards.
+  if (
+    pilot.status === 'ok' &&
+    autopilotForcesContinuation(pilot.data) &&
+    NON_TERMINAL_STATUSES.includes(workItem.status) &&
+    workItem.autopilot_exempt !== true
+  ) {
     reasons.push('autopilot has runnable node(s); the work item is not complete yet');
   }
   // (B) plan→autopilot transition gate (中, wi_260615xby). A non-trivial work item

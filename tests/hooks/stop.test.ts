@@ -303,6 +303,24 @@ describe('stopHandler', () => {
     expect((await run({ stop_hook_active: false })).exitCode).toBe(2);
   });
 
+  // wi_260713w0g: an ABANDONED work item whose autopilot graph was left with a
+  // runnable node (an orphaned graph from a mid-run abandon) must NOT keep forcing
+  // continuation — the item is already closed by explicit decision. The
+  // runnable-node gate must honor terminal status, mirroring the (B) bypass gate.
+  test('terminal (abandoned) + autopilot with a runnable node => exit 0 (no re-force on orphaned graph)', async () => {
+    await store.update(wiId, (c) => ({ ...c, status: 'abandoned' }));
+    await writeArtifact('autopilot.json', autopilot({ nodes: [node({ status: 'running' })] }));
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  // wi_260713w0g: the explicit escape hatch — an autopilot_exempt item closes on
+  // completion alone, so a leftover runnable node must not force continuation.
+  test('autopilot_exempt + autopilot with a runnable node => exit 0', async () => {
+    await store.update(wiId, (c) => ({ ...c, autopilot_exempt: true }));
+    await writeArtifact('autopilot.json', autopilot({ nodes: [node({ status: 'running' })] }));
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
   test('all three ledgers absent + NON_TERMINAL work item => exit 2 (§M1.4 strong-block 2026-05-31)', async () => {
     // Default work item from beforeEach is status=draft → NON_TERMINAL.
     const out = await run({ stop_hook_active: false });
