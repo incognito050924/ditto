@@ -5,25 +5,43 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -13051,6 +13069,7 @@ var init_question_round = __esm(() => {
     user_explanation: exports_external.string().optional(),
     background: exports_external.string().optional(),
     grounding: exports_external.string().optional(),
+    recommended_answer: exports_external.string().optional(),
     scores: questionScore,
     rationale: exports_external.string().optional().describe("Why selected (present on selected questions)")
   }).describe("One candidate question with its gate score");
@@ -19654,6 +19673,323 @@ function parseDecisionsIncremental(path, text) {
 // src/core/question-context.ts
 init_zod();
 
+// src/core/prism/engine.ts
+function severityOf(prism, nodeId) {
+  return prism.severities.find((s2) => s2.node_id === nodeId)?.severity ?? "noncritical";
+}
+function assignSeverity(prism, nodeId, severity2, reason) {
+  if (!prism.tree.nodes.some((n2) => n2.id === nodeId)) {
+    return { ok: false, reasons: [`unknown prism node id: ${nodeId}`] };
+  }
+  const current = severityOf(prism, nodeId);
+  const isDemotion = current === "critical" && severity2 === "noncritical";
+  if (isDemotion && (reason === undefined || reason.trim().length === 0)) {
+    return {
+      ok: false,
+      reasons: [
+        `critical\u2192noncritical demotion of ${nodeId} requires an explicit reason (MODEL-2 \u2014 a severity demotion is decision-grade, never silent)`
+      ]
+    };
+  }
+  const others = prism.severities.filter((s2) => s2.node_id !== nodeId);
+  const assignment = {
+    node_id: nodeId,
+    severity: severity2,
+    ...isDemotion ? { demotion_reason: reason } : {}
+  };
+  return { ok: true, prism: { ...prism, severities: [...others, assignment] }, reasons: [] };
+}
+function evaluationOf(prism, nodeId) {
+  return (prism.evaluations ?? []).find((e2) => e2.node_id === nodeId);
+}
+function upsertEvaluation(prism, nodeId, patch) {
+  const existing = prism.evaluations ?? [];
+  const current = existing.find((e2) => e2.node_id === nodeId);
+  const others = existing.filter((e2) => e2.node_id !== nodeId);
+  const merged = { ...current ?? {}, ...patch, node_id: nodeId };
+  return { ...prism, evaluations: [...others, merged] };
+}
+function evidenceAddedForNode(prism, nodeId) {
+  const node = prism.tree.nodes.find((n2) => n2.id === nodeId);
+  if (node !== undefined && node.children.length > 0)
+    return true;
+  const evalRec = evaluationOf(prism, nodeId);
+  const critique = evalRec?.opponent_critique;
+  const dissent = evalRec?.opponent_dissent;
+  return critique !== undefined && critique.trim().length > 0 || dissent !== undefined && dissent.trim().length > 0;
+}
+function isUnknownCloseState(state) {
+  return state === "out_of_scope" || state === "user_owned";
+}
+function closePrismNode(prism, nodeId, state, reason, residualRisk) {
+  const gate = coverageClosureGate(prism.tree, nodeId, state);
+  if (!gate.pass)
+    return { ok: false, reasons: gate.reasons };
+  const isCritical = severityOf(prism, nodeId) === "critical";
+  const noResidual = residualRisk === undefined || residualRisk.trim().length === 0;
+  if (isCritical && isUnknownCloseState(state) && noResidual) {
+    return {
+      ok: false,
+      reasons: [
+        `unknown-close (${state}) of critical node ${nodeId} requires a recorded residual_risk \u2014 a no-residual "\uBAA8\uB984-\uB2EB\uAE30" of critical scope is rejected and never counts as critical resolution (MODEL-1)`
+      ]
+    };
+  }
+  if (isCritical && state === "resolved") {
+    const evalRec = evaluationOf(prism, nodeId);
+    const missing = [];
+    const hasReason = evalRec?.justifying_reason !== undefined && evalRec.justifying_reason.trim().length > 0;
+    if (!hasReason)
+      missing.push("a non-empty justifying_reason");
+    if (evalRec?.refutation_attempted !== true) {
+      missing.push("an attempted refutation (refutation_attempted)");
+    }
+    if (!evidenceAddedForNode(prism, nodeId)) {
+      missing.push("added grounding this round \u2014 a child decomposition or a recorded opponent artifact, not a self-authored reason alone (OBJ-1)");
+    }
+    if (missing.length > 0) {
+      return {
+        ok: false,
+        prism: upsertEvaluation(prism, nodeId, { evaluation: "unevaluated" }),
+        reasons: [
+          `resolved-close of critical node ${nodeId} requires ${missing.join(", ")} \u2014 the close is rejected and the node is stamped prism-level unevaluated (A2, ac-1; homomorphic with the MODEL-1 residual gate)`
+        ]
+      };
+    }
+  }
+  const tree = closeNode(prism.tree, nodeId, state, reason, residualRisk);
+  const closed = { ...prism, tree };
+  const next = isCritical && state === "resolved" ? upsertEvaluation(closed, nodeId, { evaluation: "justified" }) : closed;
+  return { ok: true, prism: next, reasons: [] };
+}
+function isCriticalResolved(node, evaluation) {
+  if (evaluation === "unevaluated")
+    return false;
+  if (node.state === "open")
+    return false;
+  if (node.state === "resolved")
+    return true;
+  return node.residual_risk !== undefined && node.residual_risk.trim().length > 0;
+}
+function criticalTermination(prism) {
+  if (prism.tree.nodes.length === 0) {
+    return {
+      terminated: false,
+      reason: "empty map \u2014 no scope explored yet (B1 vacuous-truth guard)"
+    };
+  }
+  const criticalIds = new Set(prism.severities.filter((s2) => s2.severity === "critical").map((s2) => s2.node_id));
+  const criticalNodes = prism.tree.nodes.filter((n2) => criticalIds.has(n2.id));
+  if (criticalNodes.length === 0) {
+    return {
+      terminated: false,
+      reason: "no critical nodes \u2014 termination/notification does NOT fire on a 0-critical map (B1 vacuous-truth guard)"
+    };
+  }
+  const unresolved = criticalNodes.filter((n2) => !isCriticalResolved(n2, evaluationOf(prism, n2.id)?.evaluation));
+  if (unresolved.length > 0) {
+    return {
+      terminated: false,
+      reason: `${unresolved.length} critical node(s) still unresolved`
+    };
+  }
+  return {
+    terminated: true,
+    reason: "every critical node resolved (non-critical scope may survive \u2014 the user decides)"
+  };
+}
+function completenessSeedId(fragmentId) {
+  return `prism_seed_${fragmentId}`;
+}
+var COMPLETENESS_SEED_DEPTH_WEIGHT = 0.5;
+function seedUncoveredFragments(prism, fragments, mappings) {
+  const nodeIds = new Set(prism.tree.nodes.map((n2) => n2.id));
+  const covered = new Set(mappings.filter((m2) => nodeIds.has(m2.node_id)).map((m2) => m2.fragment_id));
+  const rootExists = nodeIds.has(prism.tree.root_id);
+  let tree = prism.tree;
+  const seededFragmentIds = [];
+  for (const frag of fragments) {
+    if (covered.has(frag.id))
+      continue;
+    const seedId = completenessSeedId(frag.id);
+    if (nodeIds.has(seedId))
+      continue;
+    tree = addNode(tree, {
+      id: seedId,
+      parent_id: rootExists ? prism.tree.root_id : null,
+      label: frag.text,
+      origin: "discovered",
+      depth_weight: COMPLETENESS_SEED_DEPTH_WEIGHT,
+      state: "open",
+      children: []
+    });
+    nodeIds.add(seedId);
+    seededFragmentIds.push(frag.id);
+  }
+  return {
+    prism: { ...prism, tree },
+    seededFragmentIds,
+    reason: seededFragmentIds.length === 0 ? "every original-intent fragment is addressed by \u22651 node \u2014 no completeness gap" : `seeded ${seededFragmentIds.length} uncovered original-intent fragment(s) as noncritical surface node(s) \u2014 gap surfaced, termination not hard-blocked (ac-2)`
+  };
+}
+function buildIntentFragments(intent) {
+  const fragments = [];
+  const goal = intent.goal?.trim();
+  if (goal)
+    fragments.push({ id: "goal", text: goal });
+  (intent.in_scope ?? []).forEach((raw, i2) => {
+    const text = raw.trim();
+    if (text)
+      fragments.push({ id: `in_scope[${i2}]`, text });
+  });
+  return fragments;
+}
+function fragmentKeywords(text) {
+  return text.split(/[\s,.;:!?\u00B7\u2014\u2026()[\]{}"'`/\\]+/).map((t2) => t2.trim()).filter((t2) => t2.length >= 2);
+}
+function deriveFragmentMappings(fragments, prism) {
+  const nodeTokens = prism.tree.nodes.map((n2) => ({
+    id: n2.id,
+    tokens: new Set(fragmentKeywords(`${n2.label} ${n2.close_reason ?? ""}`))
+  }));
+  const mappings = [];
+  for (const frag of fragments) {
+    const keywords = fragmentKeywords(frag.text);
+    if (keywords.length === 0)
+      continue;
+    for (const node of nodeTokens) {
+      if (keywords.some((kw) => node.tokens.has(kw))) {
+        mappings.push({ fragment_id: frag.id, node_id: node.id });
+      }
+    }
+  }
+  return mappings;
+}
+var MINIMAL_LAUNCH_MESSAGE = "\uD575\uC2EC\uC73C\uB85C \uAF2D \uC815\uD574\uC57C \uD560 \uAC83\uC740 \uBAA8\uB450 \uC815\uB9AC\uB410\uC5B4\uC694. \uC9C0\uAE08 \uCD5C\uC18C\uD55C\uC73C\uB85C \uCC29\uC218\uD560 \uC218 \uC788\uC5B4\uC694. (\uB0A8\uC740 \uD56D\uBAA9\uC740 \uCC29\uC218\uD558\uBA74\uC11C \uC815\uD574\uB3C4 \uB429\uB2C8\uB2E4.)";
+var REANCHOR_PROMPT = '\uCC29\uC218 \uC804\uC5D0 \uC6D0\uB798 \uC758\uB3C4\uB97C \uB2E4\uC2DC \uBD05\uB2C8\uB2E4 \u2014 \uC544\uB798 \uC6D0\uBB38\uC744 \uC2E4\uC81C\uB85C "\uB2EC\uC131"\uD588\uB294\uC9C0, \uC544\uB2C8\uBA74 "\uD2B9\uC9D5\uB9CC \uC11C\uC220"\uD558\uACE0 \uB118\uC5B4\uAC14\uB294\uC9C0 \uD655\uC778\uD558\uC138\uC694.';
+function buildReAnchor(originalIntent) {
+  return `${REANCHOR_PROMPT}
+
+${originalIntent.trim()}`;
+}
+function resolveLaunchNotification(prism, now, originalIntent) {
+  const { terminated } = criticalTermination(prism);
+  const alreadyNotified = prism.notified_at !== undefined;
+  if (terminated) {
+    if (alreadyNotified)
+      return { prism, notify: false, retracted: false };
+    const hasIntent = originalIntent !== undefined && originalIntent.trim().length > 0;
+    return {
+      prism: { ...prism, notified_at: now.toISOString() },
+      notify: true,
+      retracted: false,
+      message: MINIMAL_LAUNCH_MESSAGE,
+      ...hasIntent ? { reAnchor: buildReAnchor(originalIntent) } : {}
+    };
+  }
+  if (alreadyNotified) {
+    const { notified_at: _dropped, ...rest } = prism;
+    return { prism: rest, notify: false, retracted: true };
+  }
+  return { prism, notify: false, retracted: false };
+}
+function renderProgressSummary(prism) {
+  return prism.tree.nodes.filter((n2) => n2.state === "open" && n2.id !== prism.tree.root_id).map((n2) => n2.label);
+}
+function normalizeSignature(signature) {
+  return signature.trim().toLowerCase().replace(/\s+/g, " ");
+}
+var TRIVIAL_STREAK_CAP = 3;
+function detectDivergence(round, history) {
+  if (round.challenge) {
+    if (round.challenge.new_evidence) {
+      return {
+        diverged: false,
+        action: "challenge-node",
+        reason: `challenge to decided ${round.challenge.decided_id} carries NEW evidence \u2014 admit as a visible challenge node (once)`
+      };
+    }
+    return {
+      diverged: true,
+      kind: "decided_conflict_no_evidence",
+      action: "cap-stop",
+      reason: `re-challenge to decided ${round.challenge.decided_id} with no new evidence \u2014 flagged divergence (visibly suppressed, not silent)`
+    };
+  }
+  if (round.question) {
+    const key = normalizeSignature(round.question.signature);
+    if (history.some((h2) => normalizeSignature(h2.signature) === key)) {
+      return {
+        diverged: true,
+        kind: "repeat_question",
+        action: "cap-stop",
+        reason: "near-duplicate of an earlier question \u2014 repeated with no new signal (\uCCC7\uBC14\uD034)"
+      };
+    }
+    if (round.question.trivial) {
+      let streak = 1;
+      for (let i2 = history.length - 1;i2 >= 0; i2--) {
+        if (history[i2]?.trivial)
+          streak += 1;
+        else
+          break;
+      }
+      if (streak >= TRIVIAL_STREAK_CAP) {
+        return {
+          diverged: true,
+          kind: "trivial_streak",
+          action: "cap-stop",
+          reason: `${streak} consecutive trivial questions \u2014 flagged divergence`
+        };
+      }
+    }
+  }
+  return { diverged: false, action: "continue", reason: "no divergence signal" };
+}
+var PRISM_CAPS = {
+  callsPerNode: 8,
+  treeNodeCount: 60,
+  totalRounds: 40
+};
+function runPrismRounds(rounds, caps = PRISM_CAPS, start = {}) {
+  let usage = {
+    callsThisNode: start.callsThisNode ?? 0,
+    treeNodeCount: start.treeNodeCount ?? 0,
+    roundsRun: start.roundsRun ?? 0
+  };
+  const history = [];
+  const divergences = [];
+  for (const round of rounds) {
+    const cap = capStatus(caps, usage);
+    if (cap.capped) {
+      return {
+        roundsRun: usage.roundsRun,
+        treeNodeCount: usage.treeNodeCount,
+        halted: true,
+        escalation: cap.reasons,
+        divergences
+      };
+    }
+    if (round.question || round.challenge) {
+      divergences.push(detectDivergence(round, history));
+      if (round.question)
+        history.push(round.question);
+    }
+    usage = {
+      ...usage,
+      treeNodeCount: usage.treeNodeCount + (round.addedNodeCount ?? 0),
+      roundsRun: usage.roundsRun + 1
+    };
+  }
+  return {
+    roundsRun: usage.roundsRun,
+    treeNodeCount: usage.treeNodeCount,
+    halted: false,
+    escalation: [],
+    divergences
+  };
+}
+
 // src/schemas/question-gate.ts
 init_zod();
 init_common();
@@ -19678,6 +20014,7 @@ var questionContextCandidate = exports_external.object({
   text: exports_external.string().min(1),
   why_matters: exports_external.string().min(1),
   user_explanation: exports_external.string().optional(),
+  recommended_answer: exports_external.string().optional(),
   background: exports_external.string().optional(),
   grounding: exports_external.string().optional(),
   self_answer_attempts: exports_external.array(selfAnswerAttempt).optional()
@@ -19734,6 +20071,12 @@ function validateQuestionContext(candidate) {
       reason: "a plain-language why-we-ask + what-the-answer-decides (user language, no raw code/jargon) is required before asking the user"
     });
   }
+  if (isBlank(candidate.recommended_answer)) {
+    violations.push({
+      field: "recommended_answer",
+      reason: "a suggested answer (the agent\u2019s recommended default, in user language) is required before asking the user"
+    });
+  }
   if (isBlank(candidate.why_matters)) {
     violations.push({
       field: "why_matters",
@@ -19752,9 +20095,132 @@ function validateQuestionContext(candidate) {
   }
   return { ok: violations.length === 0, violations };
 }
+var INFO_GAIN_RANK = { high: 3, medium: 2, low: 1 };
+function selectSingleFire(candidates) {
+  let best;
+  for (const c3 of candidates) {
+    if (best === undefined || INFO_GAIN_RANK[c3.info_gain_estimate] > INFO_GAIN_RANK[best.info_gain_estimate]) {
+      best = c3;
+    }
+  }
+  return best === undefined ? [] : [best];
+}
 var OPTION_DESCRIPTION_BUDGET = 160;
 function needsBriefing(rendered, limit = OPTION_DESCRIPTION_BUDGET) {
   return Buffer.byteLength(rendered, "utf8") > limit;
+}
+function isBranchSeam(input) {
+  if (input.latestJudgment === undefined)
+    return false;
+  if (input.latestJudgment.opened)
+    return false;
+  const resolved = new Set(input.resolvedIds);
+  const hasPendingValueBranch = input.edges.some((e2) => !resolved.has(e2.to));
+  if (hasPendingValueBranch)
+    return false;
+  return true;
+}
+function orderByContinuity(items, edges) {
+  if (items.length === 0)
+    return [];
+  const index = new Map(items.map((it, i2) => [it.id, i2]));
+  const parent = new Map(items.map((it) => [it.id, it.id]));
+  const find = (x2) => {
+    let root = x2;
+    while (parent.get(root) !== root)
+      root = parent.get(root);
+    let cur = x2;
+    while (parent.get(cur) !== root) {
+      const next = parent.get(cur);
+      parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  };
+  const union = (a2, b2) => {
+    const ra = find(a2);
+    const rb = find(b2);
+    if (ra !== rb)
+      parent.set(ra, rb);
+  };
+  for (const e2 of edges) {
+    if (index.has(e2.from) && index.has(e2.to))
+      union(e2.from, e2.to);
+  }
+  const components = new Map;
+  const componentOrder = [];
+  for (const it of items) {
+    const root = find(it.id);
+    let bucket = components.get(root);
+    if (bucket === undefined) {
+      bucket = [];
+      components.set(root, bucket);
+      componentOrder.push(root);
+    }
+    bucket.push(it);
+  }
+  const orderWithin = (members) => {
+    if (members.length <= 1)
+      return members;
+    const memberIds = new Set(members.map((m2) => m2.id));
+    const indegree = new Map(members.map((m2) => [m2.id, 0]));
+    const outgoing = new Map(members.map((m2) => [m2.id, []]));
+    for (const e2 of edges) {
+      if (memberIds.has(e2.from) && memberIds.has(e2.to)) {
+        indegree.set(e2.to, (indegree.get(e2.to) ?? 0) + 1);
+        outgoing.get(e2.from).push(e2.to);
+      }
+    }
+    const byId = new Map(members.map((m2) => [m2.id, m2]));
+    const ready = members.filter((m2) => (indegree.get(m2.id) ?? 0) === 0).map((m2) => m2.id);
+    const out = [];
+    const emitted = new Set;
+    while (ready.length > 0) {
+      const id = ready.shift();
+      if (emitted.has(id))
+        continue;
+      emitted.add(id);
+      out.push(byId.get(id));
+      for (const to of outgoing.get(id).slice().sort((a2, b2) => (index.get(a2) ?? 0) - (index.get(b2) ?? 0))) {
+        indegree.set(to, (indegree.get(to) ?? 0) - 1);
+        if ((indegree.get(to) ?? 0) === 0)
+          ready.push(to);
+      }
+    }
+    for (const m2 of members)
+      if (!emitted.has(m2.id))
+        out.push(m2);
+    return out;
+  };
+  const tokensOf = (members) => new Set(members.flatMap((m2) => fragmentKeywords(m2.text)));
+  const remaining = new Set(componentOrder);
+  const result2 = [];
+  let current = componentOrder[0];
+  while (true) {
+    remaining.delete(current);
+    const members = orderWithin(components.get(current));
+    result2.push(...members);
+    if (remaining.size === 0)
+      break;
+    const currentTokens = tokensOf(members);
+    let bestRoot;
+    let bestOverlap = -1;
+    for (const root of componentOrder) {
+      if (!remaining.has(root))
+        continue;
+      const candTokens = tokensOf(components.get(root));
+      let overlap = 0;
+      for (const t2 of candTokens)
+        if (currentTokens.has(t2))
+          overlap += 1;
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        bestRoot = root;
+      }
+    }
+    current = bestRoot;
+  }
+  return result2;
 }
 
 // src/core/coverage-manager.ts
@@ -37752,6 +38218,7 @@ var decisionConflictCommand = defineCommand({
 });
 
 // src/cli/commands/deep-interview.ts
+init_zod();
 init_fs();
 
 // src/core/interview-driver.ts
@@ -37862,6 +38329,10 @@ var interviewDimension = exports_external.object({
   semantic_status: exports_external.enum(["engaged", "host_absent"]).optional().describe("A1 semantic-critic seam status; host_absent on degrade (ADR-0018), advisory"),
   semantic_critique: exports_external.string().optional().describe("A1 achieve-vs-characterize judgment on a covered (fragment,dimension) pair")
 }).describe("One ambiguity dimension tracked during the interview");
+var interviewBranchEdge = exports_external.object({
+  from: exports_external.string().min(1).describe("Source dimension/question id whose answer opened the dependent decision"),
+  to: exports_external.string().min(1).describe("Target dependent dimension/question id the answer opened")
+}).describe("One dependency edge (source\u2192target) in the branch-walking reference graph (wi_260713cx4)");
 var interviewQuestion = exports_external.object({
   id: exports_external.string().min(1),
   asked_at: isoDateTime,
@@ -37871,6 +38342,7 @@ var interviewQuestion = exports_external.object({
   info_gain_estimate: infoGain,
   self_answer_attempts: exports_external.array(selfAnswerAttempt).default([]),
   user_explanation: exports_external.string().min(1).optional().describe("Plain-language why-we-ask + what-the-answer-decides \u2014 user language, no raw code/jargon (default-shown)"),
+  recommended_answer: exports_external.string().min(1).optional().describe("The agent\u2019s suggested default answer (user language) carried with the question"),
   background: exports_external.string().min(1).optional().describe('Deeper context for progressive disclosure ("more") \u2014 optional expansion beyond user_explanation'),
   grounding: exports_external.string().min(1).optional().describe("Evidence the question stems from (file:line | doc | domain) \u2014 the source behind why-we-ask"),
   review_status: exports_external.enum(["reviewed", "unverified-degraded"]).optional().describe("Session-blind context-review outcome (critical questions only)"),
@@ -37879,7 +38351,12 @@ var interviewQuestion = exports_external.object({
   answer_self_report: answerSelfReport.optional().describe("User self-report of decision-ability after answering (presentation-sufficiency signal)"),
   ambiguity_delta: exports_external.number().optional(),
   marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal"),
-  novelty: exports_external.boolean().optional().describe("Whether this round added admissible novelty (deterministic; angle-exhaustion axis)")
+  novelty: exports_external.boolean().optional().describe("Whether this round added admissible novelty (deterministic; angle-exhaustion axis)"),
+  branch_edges: exports_external.array(interviewBranchEdge).optional().describe("Dependency edges this turn opened (positive pole); the driver guards integrity"),
+  branch_judgment: exports_external.object({
+    opened: exports_external.boolean().describe("Did this turn open a value-bearing dependent decision (branch)? false = seam marker (opened nothing further)"),
+    why: exports_external.string().min(1).optional().describe("WHY of the branch-open / value-exhaustion judgment (audit trace, termination rationale)")
+  }).optional().describe("Per-turn branch-open / value-exhaustion judgment ledger (reconstructible from disk)")
 }).describe("One asked question with its self-answer attempts and outcome");
 var interviewAssumption = exports_external.object({
   statement: exports_external.string().min(1),
@@ -38013,323 +38490,6 @@ function selectOpponent(candidates, isAvailable) {
       preferredReason = availability.reason ?? "runtime";
   }
   throw new NoOpponentAvailableError(`no available opponent among ${candidates.length} candidate(s): ${candidates.map((c3) => c3.token).join(", ")}`);
-}
-
-// src/core/prism/engine.ts
-function severityOf(prism, nodeId2) {
-  return prism.severities.find((s2) => s2.node_id === nodeId2)?.severity ?? "noncritical";
-}
-function assignSeverity(prism, nodeId2, severity2, reason) {
-  if (!prism.tree.nodes.some((n2) => n2.id === nodeId2)) {
-    return { ok: false, reasons: [`unknown prism node id: ${nodeId2}`] };
-  }
-  const current = severityOf(prism, nodeId2);
-  const isDemotion = current === "critical" && severity2 === "noncritical";
-  if (isDemotion && (reason === undefined || reason.trim().length === 0)) {
-    return {
-      ok: false,
-      reasons: [
-        `critical\u2192noncritical demotion of ${nodeId2} requires an explicit reason (MODEL-2 \u2014 a severity demotion is decision-grade, never silent)`
-      ]
-    };
-  }
-  const others = prism.severities.filter((s2) => s2.node_id !== nodeId2);
-  const assignment = {
-    node_id: nodeId2,
-    severity: severity2,
-    ...isDemotion ? { demotion_reason: reason } : {}
-  };
-  return { ok: true, prism: { ...prism, severities: [...others, assignment] }, reasons: [] };
-}
-function evaluationOf(prism, nodeId2) {
-  return (prism.evaluations ?? []).find((e2) => e2.node_id === nodeId2);
-}
-function upsertEvaluation(prism, nodeId2, patch) {
-  const existing = prism.evaluations ?? [];
-  const current = existing.find((e2) => e2.node_id === nodeId2);
-  const others = existing.filter((e2) => e2.node_id !== nodeId2);
-  const merged = { ...current ?? {}, ...patch, node_id: nodeId2 };
-  return { ...prism, evaluations: [...others, merged] };
-}
-function evidenceAddedForNode(prism, nodeId2) {
-  const node2 = prism.tree.nodes.find((n2) => n2.id === nodeId2);
-  if (node2 !== undefined && node2.children.length > 0)
-    return true;
-  const evalRec = evaluationOf(prism, nodeId2);
-  const critique = evalRec?.opponent_critique;
-  const dissent = evalRec?.opponent_dissent;
-  return critique !== undefined && critique.trim().length > 0 || dissent !== undefined && dissent.trim().length > 0;
-}
-function isUnknownCloseState(state) {
-  return state === "out_of_scope" || state === "user_owned";
-}
-function closePrismNode(prism, nodeId2, state, reason, residualRisk) {
-  const gate2 = coverageClosureGate(prism.tree, nodeId2, state);
-  if (!gate2.pass)
-    return { ok: false, reasons: gate2.reasons };
-  const isCritical = severityOf(prism, nodeId2) === "critical";
-  const noResidual = residualRisk === undefined || residualRisk.trim().length === 0;
-  if (isCritical && isUnknownCloseState(state) && noResidual) {
-    return {
-      ok: false,
-      reasons: [
-        `unknown-close (${state}) of critical node ${nodeId2} requires a recorded residual_risk \u2014 a no-residual "\uBAA8\uB984-\uB2EB\uAE30" of critical scope is rejected and never counts as critical resolution (MODEL-1)`
-      ]
-    };
-  }
-  if (isCritical && state === "resolved") {
-    const evalRec = evaluationOf(prism, nodeId2);
-    const missing = [];
-    const hasReason = evalRec?.justifying_reason !== undefined && evalRec.justifying_reason.trim().length > 0;
-    if (!hasReason)
-      missing.push("a non-empty justifying_reason");
-    if (evalRec?.refutation_attempted !== true) {
-      missing.push("an attempted refutation (refutation_attempted)");
-    }
-    if (!evidenceAddedForNode(prism, nodeId2)) {
-      missing.push("added grounding this round \u2014 a child decomposition or a recorded opponent artifact, not a self-authored reason alone (OBJ-1)");
-    }
-    if (missing.length > 0) {
-      return {
-        ok: false,
-        prism: upsertEvaluation(prism, nodeId2, { evaluation: "unevaluated" }),
-        reasons: [
-          `resolved-close of critical node ${nodeId2} requires ${missing.join(", ")} \u2014 the close is rejected and the node is stamped prism-level unevaluated (A2, ac-1; homomorphic with the MODEL-1 residual gate)`
-        ]
-      };
-    }
-  }
-  const tree = closeNode(prism.tree, nodeId2, state, reason, residualRisk);
-  const closed = { ...prism, tree };
-  const next = isCritical && state === "resolved" ? upsertEvaluation(closed, nodeId2, { evaluation: "justified" }) : closed;
-  return { ok: true, prism: next, reasons: [] };
-}
-function isCriticalResolved(node2, evaluation) {
-  if (evaluation === "unevaluated")
-    return false;
-  if (node2.state === "open")
-    return false;
-  if (node2.state === "resolved")
-    return true;
-  return node2.residual_risk !== undefined && node2.residual_risk.trim().length > 0;
-}
-function criticalTermination(prism) {
-  if (prism.tree.nodes.length === 0) {
-    return {
-      terminated: false,
-      reason: "empty map \u2014 no scope explored yet (B1 vacuous-truth guard)"
-    };
-  }
-  const criticalIds = new Set(prism.severities.filter((s2) => s2.severity === "critical").map((s2) => s2.node_id));
-  const criticalNodes = prism.tree.nodes.filter((n2) => criticalIds.has(n2.id));
-  if (criticalNodes.length === 0) {
-    return {
-      terminated: false,
-      reason: "no critical nodes \u2014 termination/notification does NOT fire on a 0-critical map (B1 vacuous-truth guard)"
-    };
-  }
-  const unresolved = criticalNodes.filter((n2) => !isCriticalResolved(n2, evaluationOf(prism, n2.id)?.evaluation));
-  if (unresolved.length > 0) {
-    return {
-      terminated: false,
-      reason: `${unresolved.length} critical node(s) still unresolved`
-    };
-  }
-  return {
-    terminated: true,
-    reason: "every critical node resolved (non-critical scope may survive \u2014 the user decides)"
-  };
-}
-function completenessSeedId(fragmentId) {
-  return `prism_seed_${fragmentId}`;
-}
-var COMPLETENESS_SEED_DEPTH_WEIGHT = 0.5;
-function seedUncoveredFragments(prism, fragments, mappings) {
-  const nodeIds = new Set(prism.tree.nodes.map((n2) => n2.id));
-  const covered = new Set(mappings.filter((m2) => nodeIds.has(m2.node_id)).map((m2) => m2.fragment_id));
-  const rootExists = nodeIds.has(prism.tree.root_id);
-  let tree = prism.tree;
-  const seededFragmentIds = [];
-  for (const frag of fragments) {
-    if (covered.has(frag.id))
-      continue;
-    const seedId = completenessSeedId(frag.id);
-    if (nodeIds.has(seedId))
-      continue;
-    tree = addNode(tree, {
-      id: seedId,
-      parent_id: rootExists ? prism.tree.root_id : null,
-      label: frag.text,
-      origin: "discovered",
-      depth_weight: COMPLETENESS_SEED_DEPTH_WEIGHT,
-      state: "open",
-      children: []
-    });
-    nodeIds.add(seedId);
-    seededFragmentIds.push(frag.id);
-  }
-  return {
-    prism: { ...prism, tree },
-    seededFragmentIds,
-    reason: seededFragmentIds.length === 0 ? "every original-intent fragment is addressed by \u22651 node \u2014 no completeness gap" : `seeded ${seededFragmentIds.length} uncovered original-intent fragment(s) as noncritical surface node(s) \u2014 gap surfaced, termination not hard-blocked (ac-2)`
-  };
-}
-function buildIntentFragments(intent) {
-  const fragments = [];
-  const goal = intent.goal?.trim();
-  if (goal)
-    fragments.push({ id: "goal", text: goal });
-  (intent.in_scope ?? []).forEach((raw, i2) => {
-    const text = raw.trim();
-    if (text)
-      fragments.push({ id: `in_scope[${i2}]`, text });
-  });
-  return fragments;
-}
-function fragmentKeywords(text) {
-  return text.split(/[\s,.;:!?\u00B7\u2014\u2026()[\]{}"'`/\\]+/).map((t2) => t2.trim()).filter((t2) => t2.length >= 2);
-}
-function deriveFragmentMappings(fragments, prism) {
-  const nodeTokens = prism.tree.nodes.map((n2) => ({
-    id: n2.id,
-    tokens: new Set(fragmentKeywords(`${n2.label} ${n2.close_reason ?? ""}`))
-  }));
-  const mappings = [];
-  for (const frag of fragments) {
-    const keywords = fragmentKeywords(frag.text);
-    if (keywords.length === 0)
-      continue;
-    for (const node2 of nodeTokens) {
-      if (keywords.some((kw) => node2.tokens.has(kw))) {
-        mappings.push({ fragment_id: frag.id, node_id: node2.id });
-      }
-    }
-  }
-  return mappings;
-}
-var MINIMAL_LAUNCH_MESSAGE = "\uD575\uC2EC\uC73C\uB85C \uAF2D \uC815\uD574\uC57C \uD560 \uAC83\uC740 \uBAA8\uB450 \uC815\uB9AC\uB410\uC5B4\uC694. \uC9C0\uAE08 \uCD5C\uC18C\uD55C\uC73C\uB85C \uCC29\uC218\uD560 \uC218 \uC788\uC5B4\uC694. (\uB0A8\uC740 \uD56D\uBAA9\uC740 \uCC29\uC218\uD558\uBA74\uC11C \uC815\uD574\uB3C4 \uB429\uB2C8\uB2E4.)";
-var REANCHOR_PROMPT = '\uCC29\uC218 \uC804\uC5D0 \uC6D0\uB798 \uC758\uB3C4\uB97C \uB2E4\uC2DC \uBD05\uB2C8\uB2E4 \u2014 \uC544\uB798 \uC6D0\uBB38\uC744 \uC2E4\uC81C\uB85C "\uB2EC\uC131"\uD588\uB294\uC9C0, \uC544\uB2C8\uBA74 "\uD2B9\uC9D5\uB9CC \uC11C\uC220"\uD558\uACE0 \uB118\uC5B4\uAC14\uB294\uC9C0 \uD655\uC778\uD558\uC138\uC694.';
-function buildReAnchor(originalIntent2) {
-  return `${REANCHOR_PROMPT}
-
-${originalIntent2.trim()}`;
-}
-function resolveLaunchNotification(prism, now, originalIntent2) {
-  const { terminated } = criticalTermination(prism);
-  const alreadyNotified = prism.notified_at !== undefined;
-  if (terminated) {
-    if (alreadyNotified)
-      return { prism, notify: false, retracted: false };
-    const hasIntent = originalIntent2 !== undefined && originalIntent2.trim().length > 0;
-    return {
-      prism: { ...prism, notified_at: now.toISOString() },
-      notify: true,
-      retracted: false,
-      message: MINIMAL_LAUNCH_MESSAGE,
-      ...hasIntent ? { reAnchor: buildReAnchor(originalIntent2) } : {}
-    };
-  }
-  if (alreadyNotified) {
-    const { notified_at: _dropped, ...rest } = prism;
-    return { prism: rest, notify: false, retracted: true };
-  }
-  return { prism, notify: false, retracted: false };
-}
-function renderProgressSummary(prism) {
-  return prism.tree.nodes.filter((n2) => n2.state === "open" && n2.id !== prism.tree.root_id).map((n2) => n2.label);
-}
-function normalizeSignature(signature) {
-  return signature.trim().toLowerCase().replace(/\s+/g, " ");
-}
-var TRIVIAL_STREAK_CAP = 3;
-function detectDivergence(round, history) {
-  if (round.challenge) {
-    if (round.challenge.new_evidence) {
-      return {
-        diverged: false,
-        action: "challenge-node",
-        reason: `challenge to decided ${round.challenge.decided_id} carries NEW evidence \u2014 admit as a visible challenge node (once)`
-      };
-    }
-    return {
-      diverged: true,
-      kind: "decided_conflict_no_evidence",
-      action: "cap-stop",
-      reason: `re-challenge to decided ${round.challenge.decided_id} with no new evidence \u2014 flagged divergence (visibly suppressed, not silent)`
-    };
-  }
-  if (round.question) {
-    const key = normalizeSignature(round.question.signature);
-    if (history.some((h2) => normalizeSignature(h2.signature) === key)) {
-      return {
-        diverged: true,
-        kind: "repeat_question",
-        action: "cap-stop",
-        reason: "near-duplicate of an earlier question \u2014 repeated with no new signal (\uCCC7\uBC14\uD034)"
-      };
-    }
-    if (round.question.trivial) {
-      let streak = 1;
-      for (let i2 = history.length - 1;i2 >= 0; i2--) {
-        if (history[i2]?.trivial)
-          streak += 1;
-        else
-          break;
-      }
-      if (streak >= TRIVIAL_STREAK_CAP) {
-        return {
-          diverged: true,
-          kind: "trivial_streak",
-          action: "cap-stop",
-          reason: `${streak} consecutive trivial questions \u2014 flagged divergence`
-        };
-      }
-    }
-  }
-  return { diverged: false, action: "continue", reason: "no divergence signal" };
-}
-var PRISM_CAPS = {
-  callsPerNode: 8,
-  treeNodeCount: 60,
-  totalRounds: 40
-};
-function runPrismRounds(rounds, caps = PRISM_CAPS, start = {}) {
-  let usage = {
-    callsThisNode: start.callsThisNode ?? 0,
-    treeNodeCount: start.treeNodeCount ?? 0,
-    roundsRun: start.roundsRun ?? 0
-  };
-  const history = [];
-  const divergences = [];
-  for (const round of rounds) {
-    const cap = capStatus(caps, usage);
-    if (cap.capped) {
-      return {
-        roundsRun: usage.roundsRun,
-        treeNodeCount: usage.treeNodeCount,
-        halted: true,
-        escalation: cap.reasons,
-        divergences
-      };
-    }
-    if (round.question || round.challenge) {
-      divergences.push(detectDivergence(round, history));
-      if (round.question)
-        history.push(round.question);
-    }
-    usage = {
-      ...usage,
-      treeNodeCount: usage.treeNodeCount + (round.addedNodeCount ?? 0),
-      roundsRun: usage.roundsRun + 1
-    };
-  }
-  return {
-    roundsRun: usage.roundsRun,
-    treeNodeCount: usage.treeNodeCount,
-    halted: false,
-    escalation: [],
-    divergences
-  };
 }
 
 // src/core/prism/opponent.ts
@@ -38592,11 +38752,14 @@ var recordTurnPayload = exports_external.object({
     why_matters: exports_external.string().min(1),
     info_gain_estimate: infoGain,
     user_explanation: exports_external.string().min(1).optional(),
+    recommended_answer: exports_external.string().min(1).optional(),
     background: exports_external.string().min(1).optional(),
     grounding: exports_external.string().min(1).optional(),
     self_answer_attempts: exports_external.array(selfAnswerAttempt).optional(),
     marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal"),
-    novelty: exports_external.boolean().optional().describe("Whether this round added admissible novelty (angle-exhaustion axis)")
+    novelty: exports_external.boolean().optional().describe("Whether this round added admissible novelty (angle-exhaustion axis)"),
+    branch_edges: exports_external.array(interviewBranchEdge).optional(),
+    branch_judgment: exports_external.object({ opened: exports_external.boolean(), why: exports_external.string().min(1).optional() }).optional()
   }).describe("The asked question and why it matters"),
   answer: exports_external.object({
     text: exports_external.string().min(1),
@@ -38607,6 +38770,85 @@ var recordTurnPayload = exports_external.object({
   }).optional(),
   readiness_score: exports_external.number().min(0).max(1).optional().describe("LLM self-reported readiness after this turn (floor-capped by the gate)")
 }).describe("One interview turn \u2014 dimension upsert + question append + optional answer");
+function aggregateBranchEdges(state) {
+  return state.questions.flatMap((q2) => q2.branch_edges ?? []);
+}
+function branchResolvedIds(state) {
+  return [
+    ...state.dimensions.filter((d2) => d2.state === "resolved").map((d2) => d2.id),
+    ...state.questions.filter((q2) => q2.answer !== undefined).map((q2) => q2.id)
+  ];
+}
+function guardBranchEdges(edges, knownIds) {
+  const kept = [];
+  const adj = new Map;
+  const reaches = (start, target) => {
+    const stack = [start];
+    const seen = new Set;
+    while (stack.length > 0) {
+      const node2 = stack.pop();
+      if (node2 === target)
+        return true;
+      if (seen.has(node2))
+        continue;
+      seen.add(node2);
+      for (const next of adj.get(node2) ?? [])
+        stack.push(next);
+    }
+    return false;
+  };
+  for (const e2 of edges) {
+    if (e2.from === e2.to)
+      continue;
+    if (!knownIds.has(e2.from) || !knownIds.has(e2.to))
+      continue;
+    if (reaches(e2.to, e2.from))
+      continue;
+    kept.push(e2);
+    let out = adj.get(e2.from);
+    if (out === undefined) {
+      out = new Set;
+      adj.set(e2.from, out);
+    }
+    out.add(e2.to);
+  }
+  return kept;
+}
+function isValueExhausted(state) {
+  try {
+    const knownIds = new Set([
+      ...state.dimensions.map((d2) => d2.id),
+      ...state.questions.map((q2) => q2.id)
+    ]);
+    const edges = guardBranchEdges(aggregateBranchEdges(state), knownIds);
+    const lj = state.questions[state.questions.length - 1]?.branch_judgment;
+    const seam = isBranchSeam({
+      edges,
+      resolvedIds: branchResolvedIds(state),
+      latestJudgment: lj !== undefined ? { opened: lj.opened, ...lj.why !== undefined ? { why: lj.why } : {} } : undefined
+    });
+    if (!seam)
+      return false;
+    const seamDry = state.questions.reduce((counter, q2) => recordDryRound(counter, {
+      admissibleBranchesAdded: q2.branch_judgment?.opened === false ? 0 : 1
+    }), 0);
+    return seamDry >= DEFAULT_DRY_K;
+  } catch {
+    return false;
+  }
+}
+function orderPendingBranchWork(state) {
+  const knownIds = new Set([
+    ...state.dimensions.map((d2) => d2.id),
+    ...state.questions.map((q2) => q2.id)
+  ]);
+  const edges = guardBranchEdges(aggregateBranchEdges(state), knownIds);
+  const pending = state.dimensions.filter((d2) => d2.state !== "resolved").map((d2) => ({ id: d2.id, text: d2.notes || d2.id }));
+  const ordered = orderByContinuity(pending, edges);
+  const branchTargets = new Set(edges.map((e2) => e2.to));
+  const criticalBranchesOpen = state.dimensions.filter((d2) => d2.critical && d2.state !== "resolved" && branchTargets.has(d2.id)).map((d2) => d2.id);
+  return { ordered, criticalBranchesOpen };
+}
 async function recordTurn(repoRoot, input) {
   const store = new InterviewStore(repoRoot);
   const current = await store.get(input.workItemId);
@@ -38615,7 +38857,8 @@ async function recordTurn(repoRoot, input) {
   const surfaceVerdict = validateQuestionContext({
     text: question.text,
     why_matters: question.why_matters,
-    user_explanation: question.user_explanation
+    user_explanation: question.user_explanation,
+    recommended_answer: question.recommended_answer
   });
   const leakedIdentifiers = [
     ...findUnexplainedIdentifiers(question.text),
@@ -38658,10 +38901,18 @@ async function recordTurn(repoRoot, input) {
     info_gain_estimate: question.info_gain_estimate,
     self_answer_attempts: question.self_answer_attempts ?? [],
     ...question.user_explanation !== undefined ? { user_explanation: question.user_explanation } : {},
+    ...question.recommended_answer !== undefined ? { recommended_answer: question.recommended_answer } : {},
     ...question.background !== undefined ? { background: question.background } : {},
     ...question.grounding !== undefined ? { grounding: question.grounding } : {},
     ...question.marginal_gain !== undefined ? { marginal_gain: question.marginal_gain } : {},
     ...question.novelty !== undefined ? { novelty: question.novelty } : {},
+    ...question.branch_edges !== undefined ? { branch_edges: question.branch_edges } : {},
+    ...question.branch_judgment !== undefined ? {
+      branch_judgment: {
+        opened: question.branch_judgment.opened,
+        ...question.branch_judgment.why !== undefined ? { why: question.branch_judgment.why } : {}
+      }
+    } : {},
     ...answer ? {
       answer: answer.text,
       answer_kind: answer.kind,
@@ -38701,9 +38952,10 @@ async function recordTurn(repoRoot, input) {
   const noveltyDryCounter = updated.questions.reduce((counter, q2) => recordDryRound(counter, { admissibleBranchesAdded: q2.novelty === false ? 0 : 1 }), 0);
   const valueDry = question.marginal_gain !== undefined && question.marginal_gain < DRY_FLOOR;
   const angleDry = noveltyDryCounter >= DEFAULT_DRY_K;
+  const valueExhausted = isValueExhausted(updated);
   if (capReached && updated.status === "active") {
     updated.exit.reason = "cap_reached";
-  } else if ((valueDry || angleDry) && !gateResult.pass && updated.status === "active") {
+  } else if ((valueDry || angleDry || valueExhausted) && !gateResult.pass && updated.status === "active") {
     updated.exit.reason = "diminishing_returns";
   }
   updated.exit.closure_mode = deriveClosureMode(updated.exit.reason, gateResult.pass);
@@ -39899,7 +40151,7 @@ var checkQuestionCmd = defineCommand({
   args: {
     json: {
       type: "string",
-      description: "Question candidate JSON: {text, why_matters, user_explanation, background?, grounding?, self_answer_attempts?}",
+      description: "Question candidate JSON: {text, why_matters, user_explanation, recommended_answer, background?, grounding?, self_answer_attempts?}",
       required: true
     },
     output: { type: "string", description: "Output format: human|json", default: "human" }
@@ -39943,6 +40195,57 @@ var checkQuestionCmd = defineCommand({
     }
     if (!verdict2.ok)
       process.exit(RUNTIME_ERROR_EXIT);
+  }
+});
+var singleFireCandidate = exports_external.object({ info_gain_estimate: infoGain }).passthrough().describe("A gate-selected candidate carrying its info_gain_estimate (other fields pass through)");
+var selectSingleCmd = defineCommand({
+  meta: {
+    name: "select-single",
+    description: "Collapse the gate-selected candidates to the single deterministic top-1 (highest info_gain) before asking"
+  },
+  args: {
+    json: {
+      type: "string",
+      description: "JSON array of gate-selected candidates, each carrying info_gain_estimate",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw;
+    try {
+      raw = parseJsonArg(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = exports_external.array(singleFireCandidate).safeParse(raw);
+    if (!parsed.success) {
+      writeError("--json failed schema validation:");
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const selected = selectSingleFire(parsed.data);
+    const chosen = selected[0];
+    if (format === "json") {
+      writeJson2({ selected });
+    } else if (chosen === undefined) {
+      writeHuman("select-single: no candidate (empty selection)");
+    } else {
+      writeHuman(`select-single: 1 candidate (info_gain=${chosen.info_gain_estimate})`);
+    }
   }
 });
 var dissentBriefsCmd = defineCommand({
@@ -40280,6 +40583,48 @@ var acknowledgeDissentCmd = defineCommand({
     }
   }
 });
+var branchOrderCmd = defineCommand({
+  meta: {
+    name: "branch-order",
+    description: "Return the pending interview work in continuity order (branch walked contiguously) + open critical branch targets \u2014 pure read, no state write"
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const state = await new InterviewStore(repoRoot).get(args.workItem);
+      const { ordered, criticalBranchesOpen } = orderPendingBranchWork(state);
+      if (format === "json") {
+        writeJson2({
+          work_item_id: args.workItem,
+          ordered,
+          critical_branches_open: criticalBranchesOpen
+        });
+      } else {
+        writeHuman(`branch-order: ${ordered.length} pending item(s) for ${args.workItem}`);
+        for (const it of ordered)
+          writeHuman(`  - [${it.id}] ${it.text}`);
+        if (criticalBranchesOpen.length > 0) {
+          writeHuman(`  open critical branch(es): ${criticalBranchesOpen.join(", ")}`);
+        }
+      }
+    } catch (err) {
+      writeError(`branch-order failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var finalizeFromDocCmd = defineCommand({
   meta: {
     name: "finalize-from-doc",
@@ -40375,6 +40720,8 @@ var deepInterviewCommand = defineCommand({
     start: startCmd,
     "record-turn": recordTurnCmd,
     "check-question": checkQuestionCmd,
+    "select-single": selectSingleCmd,
+    "branch-order": branchOrderCmd,
     "check-readiness": checkReadinessCmd,
     "project-coverage": projectCoverageCmd,
     premortem: premortemCmd,
@@ -57207,4 +57554,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=a42c2eccc437461d185037a6c4201f2932ac109c59abf4b5fc3be18565f00ed9
+//# ditto-src-stamp=7c6d7113c690bbbb277cc7f2f44d4fb65929b5951c14b7739d62f6d33da98993

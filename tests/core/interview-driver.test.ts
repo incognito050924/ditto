@@ -11,6 +11,8 @@ import {
   acknowledgeIntentDissent,
   checkReadiness,
   finalizeInterview,
+  guardBranchEdges,
+  orderPendingBranchWork,
   projectInterviewDimensions,
   recordTurn,
   startInterview,
@@ -1391,5 +1393,285 @@ describe('recordTurn — question-surface reject before persist (ac-1)', () => {
     });
     expect(state.questions.length).toBe(1);
     expect(state.questions[0]?.answer).toContain('ac-1');
+  });
+});
+
+// wi_260713cx4 (#27): branch-walking wired into the driver. An answer that OPENS a
+// dependent decision records branch_edges + a per-turn branch_judgment; value-exhaustion
+// (all value branches spent + seam re-survey dry) becomes a governing close signal,
+// EMITTED as the existing 'diminishing_returns' (no new enum). cap stays the unconditional
+// numeric ceiling; seam under-detection fails OPEN to the cap backstop; malformed edges are
+// rejected by the driver's fail-closed referential-integrity guard.
+describe('recordTurn — branch-walking (wi_260713cx4 #27)', () => {
+  // Push branch rounds: each turn keeps a critical dimension unresolved (gate blocked) and
+  // carries an explicit per-turn branch_judgment (opened marks whether a further value branch
+  // was opened). No marginal_gain / novelty so the ONLY dry signal is seam value-exhaustion.
+  async function pushBranchRounds(
+    opened: Array<boolean | undefined>,
+    opts: { questionCap?: number; edges?: Array<{ from: string; to: string }> } = {},
+  ): Promise<void> {
+    await startInterview(repo, { workItemId: wiId, questionCap: opts.questionCap ?? 20 });
+    for (let i = 0; i < opened.length; i++) {
+      await recordTurn(repo, {
+        workItemId: wiId,
+        payload: {
+          dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
+          question: {
+            user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+            recommended_answer: '추천 답변 예시입니다.',
+            text: `q${i}?`,
+            why_matters: 'x',
+            info_gain_estimate: 'low',
+            ...(opts.edges !== undefined ? { branch_edges: opts.edges } : {}),
+            ...(opened[i] !== undefined
+              ? { branch_judgment: { opened: opened[i] as boolean } }
+              : {}),
+          },
+        },
+      });
+    }
+  }
+
+  test('record-turn persists branch_edges + branch_judgment on the appended question', async () => {
+    await startInterview(repo, { workItemId: wiId, questionCap: 8 });
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
+          text: 'q?',
+          why_matters: 'x',
+          info_gain_estimate: 'high',
+          branch_edges: [{ from: 'd1', to: 'd2' }],
+          branch_judgment: { opened: true, why: 'the pricing answer opened a currency decision' },
+        },
+      },
+    });
+    expect(state.questions[0]?.branch_edges).toEqual([{ from: 'd1', to: 'd2' }]);
+    expect(state.questions[0]?.branch_judgment?.opened).toBe(true);
+    expect(state.questions[0]?.branch_judgment?.why).toContain('currency');
+  });
+
+  test('branch fields survive an existing-dimension re-upsert turn (no silent stale)', async () => {
+    await startInterview(repo, { workItemId: wiId, questionCap: 8 });
+    // turn 1 creates d1
+    await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: 'n' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
+          text: 'q0?',
+          why_matters: 'x',
+          info_gain_estimate: 'low',
+        },
+      },
+    });
+    // turn 2 RE-UPSERTS d1 (existing-dimension merge path) AND carries fresh branch fields.
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd1', critical: false, state: 'resolved', ambiguity: 0.1, notes: 'n' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
+          text: 'q1?',
+          why_matters: 'x',
+          info_gain_estimate: 'low',
+          branch_edges: [{ from: 'd1', to: 'd9' }],
+          branch_judgment: { opened: false, why: 'no further branch' },
+        },
+      },
+    });
+    // The re-upsert applied the dimension update (state resolved) AND persisted the turn's
+    // branch fields on the appended question — neither is staled.
+    expect(state.dimensions.find((d) => d.id === 'd1')?.state).toBe('resolved');
+    expect(state.questions[1]?.branch_edges).toEqual([{ from: 'd1', to: 'd9' }]);
+    expect(state.questions[1]?.branch_judgment?.opened).toBe(false);
+  });
+
+  test('guardBranchEdges rejects dangling / self / cycle edges (fail-closed integrity)', () => {
+    const known = new Set(['d1', 'd2', 'd3']);
+    // dangling: to ∉ known → dropped
+    expect(guardBranchEdges([{ from: 'd1', to: 'dX' }], known)).toEqual([]);
+    expect(guardBranchEdges([{ from: 'dY', to: 'd2' }], known)).toEqual([]);
+    // self-edge → dropped
+    expect(guardBranchEdges([{ from: 'd1', to: 'd1' }], known)).toEqual([]);
+    // cycle: d1→d2 kept, d2→d1 forms a cycle → dropped (only the DAG subset survives)
+    expect(
+      guardBranchEdges(
+        [
+          { from: 'd1', to: 'd2' },
+          { from: 'd2', to: 'd1' },
+        ],
+        known,
+      ),
+    ).toEqual([{ from: 'd1', to: 'd2' }]);
+    // valid DAG passes through
+    expect(
+      guardBranchEdges(
+        [
+          { from: 'd1', to: 'd2' },
+          { from: 'd2', to: 'd3' },
+        ],
+        known,
+      ),
+    ).toEqual([
+      { from: 'd1', to: 'd2' },
+      { from: 'd2', to: 'd3' },
+    ]);
+  });
+
+  test('orderPendingBranchWork keeps a value-bearing critical branch (never starved)', async () => {
+    await startInterview(repo, { workItemId: wiId, questionCap: 8 });
+    // d-crit (critical, branch TARGET of d-src) stays open; d-breadth is fresh breadth.
+    await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: {
+          id: 'd-src',
+          critical: false,
+          state: 'partial',
+          ambiguity: 0.5,
+          notes: 'source',
+        },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
+          text: 'q0?',
+          why_matters: 'x',
+          info_gain_estimate: 'low',
+          branch_edges: [{ from: 'd-src', to: 'd-crit' }],
+          branch_judgment: { opened: true },
+        },
+      },
+    });
+    await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: {
+          id: 'd-crit',
+          critical: true,
+          state: 'partial',
+          ambiguity: 0.5,
+          notes: 'critical branch',
+        },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
+          text: 'q1?',
+          why_matters: 'x',
+          info_gain_estimate: 'low',
+        },
+      },
+    });
+    await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: {
+          id: 'd-breadth',
+          critical: false,
+          state: 'partial',
+          ambiguity: 0.5,
+          notes: 'breadth',
+        },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
+          text: 'q2?',
+          why_matters: 'x',
+          info_gain_estimate: 'low',
+        },
+      },
+    });
+    const state = await new InterviewStore(repo).get(wiId);
+    const order = orderPendingBranchWork(state);
+    // order-not-drop: every open dimension survives ordering (breadth never starves the branch).
+    expect(order.ordered.map((o) => o.id).sort()).toEqual(['d-breadth', 'd-crit', 'd-src']);
+    // the open critical branch target is reported as gating closure.
+    expect(order.criticalBranchesOpen).toEqual(['d-crit']);
+  });
+
+  test('value-exhaustion (K seam rounds, gate blocked) → diminishing_returns (not a new reason)', async () => {
+    await pushBranchRounds([false, false]); // 2 consecutive seam (opened=false) rounds, K=2
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.readiness.gate).toBe('blocked');
+    expect(state.exit.reason).toBe('diminishing_returns');
+  });
+
+  test('a single seam round is NOT yet value-exhausted (K=2)', async () => {
+    await pushBranchRounds([false]);
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.exit.reason).toBe('readiness_met');
+  });
+
+  test('seam under-detection (no branch_judgment) fails OPEN — no early close', async () => {
+    await pushBranchRounds([undefined, undefined, undefined]);
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.exit.reason).toBe('readiness_met');
+  });
+
+  test('an opened=true round resets the seam-dry counter (false,true,false → not exhausted)', async () => {
+    await pushBranchRounds([false, true, false]);
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.exit.reason).toBe('readiness_met');
+  });
+
+  test('a still-pending value branch (unresolved edge target) blocks value-exhaustion', async () => {
+    await startInterview(repo, { workItemId: wiId, questionCap: 20 });
+    // turn 1 creates the branch TARGET dimension d-open-target (a REAL, unresolved decision) and
+    // opens an edge to it; it stays open through the seam rounds → a pending value branch remains.
+    await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: {
+          id: 'd-open-target',
+          critical: false,
+          state: 'partial',
+          ambiguity: 0.5,
+          notes: 'dependent decision still open',
+        },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
+          text: 'q-open?',
+          why_matters: 'x',
+          info_gain_estimate: 'low',
+          branch_edges: [{ from: 'd-crit', to: 'd-open-target' }],
+          branch_judgment: { opened: true },
+        },
+      },
+    });
+    // two seam rounds on d-crit — but d-open-target (edge target) never resolves.
+    for (let i = 0; i < 2; i++) {
+      await recordTurn(repo, {
+        workItemId: wiId,
+        payload: {
+          dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
+          question: {
+            user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+            recommended_answer: '추천 답변 예시입니다.',
+            text: `q${i}?`,
+            why_matters: 'x',
+            info_gain_estimate: 'low',
+            branch_judgment: { opened: false },
+          },
+        },
+      });
+    }
+    const state = await new InterviewStore(repo).get(wiId);
+    // pending value branch (unresolved edge target) → isBranchSeam false → no value-exhaustion.
+    expect(state.exit.reason).toBe('readiness_met');
+  });
+
+  test('cap wins over value-exhaustion (both true on the same turn)', async () => {
+    // questionCap=2: two seam rounds hit BOTH the cap AND value-exhaustion; cap must win.
+    await pushBranchRounds([false, false], { questionCap: 2 });
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.exit.questions_asked).toBe(2);
+    expect(state.exit.reason).toBe('cap_reached');
   });
 });

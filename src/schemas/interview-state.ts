@@ -131,6 +131,28 @@ export const interviewDimension = z
 
 export type InterviewDimension = z.infer<typeof interviewDimension>;
 
+// Branch-walking dependency edge (wi_260713cx4, #27 — impl-schema, branch-walking feature).
+// The FIRST reference graph in interview-state: every pre-existing ref is a single-target id
+// (e.g. dimension_id), this is a source→target EDGE. Recorded when an answer OPENS a dependent
+// decision — `from` = the answered dimension/question, `to` = the dependent decision it opened.
+// SHAPE ONLY, per this file's two-tier discipline: zod validates non-emptiness; the fail-closed
+// referential-integrity guard (target ∈ dimension/question ids, no self-edge, acyclic — or
+// no-edge fail-open) lives in the driver (mirroring the dissent/premortem membership guards at
+// :47-63), NOT here, since the schema cannot see the surrounding interview state.
+export const interviewBranchEdge = z
+  .object({
+    from: z
+      .string()
+      .min(1)
+      .describe('Source dimension/question id whose answer opened the dependent decision'),
+    to: z.string().min(1).describe('Target dependent dimension/question id the answer opened'),
+  })
+  .describe(
+    'One dependency edge (source→target) in the branch-walking reference graph (wi_260713cx4)',
+  );
+
+export type InterviewBranchEdge = z.infer<typeof interviewBranchEdge>;
+
 export const interviewQuestion = z
   .object({
     id: z.string().min(1),
@@ -207,6 +229,44 @@ export const interviewQuestion = z
       .optional()
       .describe(
         'Whether this round added admissible novelty (deterministic; angle-exhaustion axis)',
+      ),
+    // Branch-walking edges opened by THIS turn's answer (wi_260713cx4, #27) — the (a) positive
+    // pole. Additive-optional: legacy state (field absent) parses unchanged and contributes no
+    // edges (fail-open — a missing graph never drives termination). Each element is a source→target
+    // interviewBranchEdge; the driver aggregates every question's branch_edges into the reference
+    // graph and runs its fail-closed membership + acyclicity guard BEFORE the edges influence the
+    // branch-walk / termination decision (referential integrity is not shape, so not enforced here).
+    branch_edges: z
+      .array(interviewBranchEdge)
+      .optional()
+      .describe('Dependency edges this turn opened (positive pole); the driver guards integrity'),
+    // Per-turn value-exhaustion / branch-open judgment (wi_260713cx4, #27) — the (b) seam marker +
+    // (d) audit ledger. Mirrors the novelty / marginal_gain per-turn pattern so the driver
+    // reconstructs the seam-dry decision deterministically from disk (no stored counter).
+    // `opened=false` IS the seam marker: this turn opened NO further value-bearing dependent
+    // decision (the did-not-open NEGATIVE case, persisted for auditable trace, not silently
+    // dropped). `why` carries the WHY of the judgment / termination rationale. Additive-optional:
+    // absent on legacy state and never forces early termination (fail-open). Value-exhaustion
+    // termination REUSES exit.reason 'diminishing_returns'; this field is the distinguishing
+    // detail, NOT a new enum value.
+    branch_judgment: z
+      .object({
+        opened: z
+          .boolean()
+          .describe(
+            'Did this turn open a value-bearing dependent decision (branch)? false = seam marker (opened nothing further)',
+          ),
+        why: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            'WHY of the branch-open / value-exhaustion judgment (audit trace, termination rationale)',
+          ),
+      })
+      .optional()
+      .describe(
+        'Per-turn branch-open / value-exhaustion judgment ledger (reconstructible from disk)',
       ),
   })
   .describe('One asked question with its self-answer attempts and outcome');

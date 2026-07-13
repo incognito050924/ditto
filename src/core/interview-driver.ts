@@ -3,6 +3,7 @@ import type { Autopilot } from '~/schemas/autopilot';
 import type { CoverageMap } from '~/schemas/coverage';
 import { type IntentContract, intentAcceptanceCriterion } from '~/schemas/intent';
 import {
+  type InterviewBranchEdge,
   type InterviewDimension,
   type InterviewDissent,
   type InterviewState,
@@ -10,6 +11,7 @@ import {
   answerSelfReport,
   dimensionState,
   infoGain,
+  interviewBranchEdge,
   interviewQuestion,
   premortemItem,
   userConfirmation,
@@ -27,7 +29,13 @@ import { engageIntentDissent, mergeDissent } from './interview-dissent';
 import { InterviewStore } from './interview-store';
 import { type IntentFragment, fragmentKeywords } from './prism/engine';
 import { OPPONENT_FANOUT_CAP, type OpponentSeamConfig } from './prism/opponent';
-import { findUnexplainedIdentifiers, validateQuestionContext } from './question-context';
+import {
+  type OrderableItem,
+  findUnexplainedIdentifiers,
+  isBranchSeam,
+  orderByContinuity,
+  validateQuestionContext,
+} from './question-context';
 import { WorkItemStore } from './work-item-store';
 
 /**
@@ -176,6 +184,17 @@ export const recordTurnPayload = z
           .boolean()
           .optional()
           .describe('Whether this round added admissible novelty (angle-exhaustion axis)'),
+        // Branch-walking (wi_260713cx4, #27, ac-1). The DRIVER — holding the transcript — is
+        // the only origin of a branch follow-up; the blind breadth generator stays
+        // transcript-free (ac-2). `branch_edges` = dependency edges this answer opened
+        // (positive pole); `branch_judgment` = the per-turn seam marker + audit trace (opened
+        // + why). Both additive-optional so existing callers parse unchanged. The driver runs
+        // its fail-closed referential-integrity guard on the aggregated edges before they
+        // influence termination (shape ≠ integrity — zod cannot see the interview state).
+        branch_edges: z.array(interviewBranchEdge).optional(),
+        branch_judgment: z
+          .object({ opened: z.boolean(), why: z.string().min(1).optional() })
+          .optional(),
       })
       .describe('The asked question and why it matters'),
     answer: z
@@ -206,6 +225,145 @@ export interface RecordTurnInput {
   workItemId: string;
   payload: RecordTurnPayload;
   now?: Date;
+}
+
+// ── Branch-walking reference graph (wi_260713cx4, #27) ───────────────────────────
+//
+// The branch dependency graph is the FIRST reference graph in interview-state. It is
+// reconstructed from disk (each turn's questions[].branch_edges), never stored as a
+// mutable aggregate — same principle as the novelty dry-counter.
+
+/** All branch edges opened across the interview (aggregated from every turn, append-only). */
+function aggregateBranchEdges(state: InterviewState): InterviewBranchEdge[] {
+  return state.questions.flatMap((q) => q.branch_edges ?? []);
+}
+
+/** ids of decisions already addressed — resolved dimensions + answered questions. */
+function branchResolvedIds(state: InterviewState): string[] {
+  return [
+    ...state.dimensions.filter((d) => d.state === 'resolved').map((d) => d.id),
+    ...state.questions.filter((q) => q.answer !== undefined).map((q) => q.id),
+  ];
+}
+
+/**
+ * Fail-closed referential-integrity guard for the branch reference graph (input-validation
+ * constraint) — mirrors the dissent/premortem membership guards (interview-state.ts:47-63):
+ * zod validates edge SHAPE only; referential integrity (target ∈ known ids, no self-edge,
+ * acyclic) is not shape and must be enforced HERE, before an edge influences termination.
+ * Pure and TOTAL (never throws): an offending edge is DROPPED (fail-open to no-edge), so a
+ * malformed graph degrades to fewer edges, never a crash or an early close. Returns the valid
+ * DAG subset in input order.
+ */
+export function guardBranchEdges(
+  edges: readonly InterviewBranchEdge[],
+  knownIds: ReadonlySet<string>,
+): InterviewBranchEdge[] {
+  const kept: InterviewBranchEdge[] = [];
+  // Adjacency over already-kept edges; a new from→to is a cycle iff `from` is reachable from `to`.
+  const adj = new Map<string, Set<string>>();
+  const reaches = (start: string, target: string): boolean => {
+    const stack = [start];
+    const seen = new Set<string>();
+    while (stack.length > 0) {
+      const node = stack.pop() as string;
+      if (node === target) return true;
+      if (seen.has(node)) continue;
+      seen.add(node);
+      for (const next of adj.get(node) ?? []) stack.push(next);
+    }
+    return false;
+  };
+  for (const e of edges) {
+    if (e.from === e.to) continue; // self-edge → reject
+    if (!knownIds.has(e.from) || !knownIds.has(e.to)) continue; // dangling endpoint → reject
+    if (reaches(e.to, e.from)) continue; // would close a cycle → reject
+    kept.push(e);
+    let out = adj.get(e.from);
+    if (out === undefined) {
+      out = new Set();
+      adj.set(e.from, out);
+    }
+    out.add(e.to);
+  }
+  return kept;
+}
+
+/**
+ * Value-exhaustion signal (ac-6): all value branches spent (isBranchSeam) AND the seam
+ * re-survey has been dry for K rounds (recordDryRound over the per-turn branch_judgment
+ * sequence). This is the GOVERNING close signal for branch-walking, but it is subordinate to
+ * the cap (checked first in recordTurn) and emitted as the existing 'diminishing_returns'
+ * reason — never a new enum value. FAIL-OPEN and TOTAL: any integrity error, under-detection,
+ * or missing judgment yields `false`, so control falls through to the unconditional cap
+ * backstop — under-detection must never cause an early close.
+ */
+function isValueExhausted(state: InterviewState): boolean {
+  try {
+    const knownIds = new Set<string>([
+      ...state.dimensions.map((d) => d.id),
+      ...state.questions.map((q) => q.id),
+    ]);
+    const edges = guardBranchEdges(aggregateBranchEdges(state), knownIds);
+    const lj = state.questions[state.questions.length - 1]?.branch_judgment;
+    const seam = isBranchSeam({
+      edges,
+      resolvedIds: branchResolvedIds(state),
+      latestJudgment:
+        lj !== undefined
+          ? { opened: lj.opened, ...(lj.why !== undefined ? { why: lj.why } : {}) }
+          : undefined,
+    });
+    if (!seam) return false;
+    // Seam-dry counter reconstructed from disk (REUSING recordDryRound, not a hand-rolled
+    // parallel counter): a turn that OPENED a branch resets; a seam turn (opened===false) is a
+    // dry round; a missing judgment (opened===undefined) resets → legacy rounds never accrue
+    // dry (fail-open). K = DEFAULT_DRY_K, shared with the coverage/novelty axes.
+    const seamDry = state.questions.reduce(
+      (counter, q) =>
+        recordDryRound(counter, {
+          admissibleBranchesAdded: q.branch_judgment?.opened === false ? 0 : 1,
+        }),
+      0,
+    );
+    return seamDry >= DEFAULT_DRY_K;
+  } catch {
+    return false; // fail-open: any error → NOT value-exhausted → cap backstop governs.
+  }
+}
+
+/** The ordered pending branch work + the open critical branches that gate closure. */
+export interface BranchWorkOrder {
+  /** Pending (unresolved) dimensions in continuity order — a branch walked contiguously. */
+  ordered: OrderableItem[];
+  /** Open critical branch targets: value-bearing branches that MUST NOT be starved. */
+  criticalBranchesOpen: string[];
+}
+
+/**
+ * Order the pending interview work so a branch is WALKED CONTIGUOUSLY (orderByContinuity) with
+ * region transitions only at a seam — and enforce order-NOT-drop (ac-3): a value-bearing
+ * critical branch may be reordered/deferred but is NEVER dropped by breadth candidates
+ * (orderByContinuity is a permutation — every pending item survives). `criticalBranchesOpen`
+ * is the "cannot reach shared-understanding while such a branch is open" signal: while it is
+ * non-empty, the edge target stays unresolved so isBranchSeam returns false and
+ * value-exhaustion cannot fire — the branch is never silently starved. Pure.
+ */
+export function orderPendingBranchWork(state: InterviewState): BranchWorkOrder {
+  const knownIds = new Set<string>([
+    ...state.dimensions.map((d) => d.id),
+    ...state.questions.map((q) => q.id),
+  ]);
+  const edges = guardBranchEdges(aggregateBranchEdges(state), knownIds);
+  const pending: OrderableItem[] = state.dimensions
+    .filter((d) => d.state !== 'resolved')
+    .map((d) => ({ id: d.id, text: d.notes || d.id }));
+  const ordered = orderByContinuity(pending, edges);
+  const branchTargets = new Set(edges.map((e) => e.to));
+  const criticalBranchesOpen = state.dimensions
+    .filter((d) => d.critical && d.state !== 'resolved' && branchTargets.has(d.id))
+    .map((d) => d.id);
+  return { ordered, criticalBranchesOpen };
 }
 
 export async function recordTurn(
@@ -307,6 +465,22 @@ export async function recordTurn(
     ...(question.grounding !== undefined ? { grounding: question.grounding } : {}),
     ...(question.marginal_gain !== undefined ? { marginal_gain: question.marginal_gain } : {}),
     ...(question.novelty !== undefined ? { novelty: question.novelty } : {}),
+    // Branch-walking (wi_260713cx4, #27): persist this turn's opened edges + seam judgment on
+    // the append-only question. Append-only placement (not a mutable dimension field) is what
+    // structurally prevents the mid-interview stale the whitelist-merge guards against — each
+    // turn records its own fresh branch state; the driver reconstructs the reference graph +
+    // seam-dry decision from disk (same principle as novelty / marginal_gain).
+    ...(question.branch_edges !== undefined ? { branch_edges: question.branch_edges } : {}),
+    ...(question.branch_judgment !== undefined
+      ? {
+          branch_judgment: {
+            opened: question.branch_judgment.opened,
+            ...(question.branch_judgment.why !== undefined
+              ? { why: question.branch_judgment.why }
+              : {}),
+          },
+        }
+      : {}),
     ...(answer
       ? {
           answer: answer.text,
@@ -378,9 +552,21 @@ export async function recordTurn(
   );
   const valueDry = question.marginal_gain !== undefined && question.marginal_gain < DRY_FLOOR;
   const angleDry = noveltyDryCounter >= DEFAULT_DRY_K;
+  // Branch-walking value-exhaustion (wi_260713cx4, #27, ac-6): a THIRD dry axis, OR'd in like
+  // the others. All value branches spent (isBranchSeam) AND the seam re-survey dry for K rounds
+  // → the branch tree is walked out. FAIL-OPEN by construction (isValueExhausted returns false
+  // on any under-detection / error), so it can only ADD a close, never force one against the
+  // cap backstop. Emitted as the EXISTING 'diminishing_returns' — no new enum value.
+  const valueExhausted = isValueExhausted(updated);
   if (capReached && updated.status === 'active') {
+    // cap is the UNCONDITIONAL numeric ceiling — checked FIRST so it WINS over value-exhaustion
+    // and the dry axes (autonomy-liveness fail-closed terminator).
     updated.exit.reason = 'cap_reached';
-  } else if ((valueDry || angleDry) && !gateResult.pass && updated.status === 'active') {
+  } else if (
+    (valueDry || angleDry || valueExhausted) &&
+    !gateResult.pass &&
+    updated.status === 'active'
+  ) {
     // Exclusive with cap_reached (cap wins, set above). Termination is *suggested* via
     // exit.reason; finalize still requires readiness ∧ user confirmation (gate not bypassed).
     updated.exit.reason = 'diminishing_returns';

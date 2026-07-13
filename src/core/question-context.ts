@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { fragmentKeywords } from '~/core/prism/engine';
+import type { InterviewBranchEdge } from '~/schemas/interview-state';
 import { selfAnswerAttempt } from '~/schemas/question-gate';
 
 /**
@@ -253,4 +255,170 @@ export function resolveReviewDecision(input: {
     return { status: 'unverified-degraded', reason: 'cap-exhausted' };
   }
   return { status: 'regenerate', attempt: input.regenerations + 1 };
+}
+
+// --- ac-4 (wi_260713cx4, #27): branch-walking seam-detection --------------------
+//
+// A SEAM is where the current branch opens no further value-bearing dependent decision —
+// the branch is exhausted, which is what licenses a blind full re-survey. This is the
+// DRIVER-side judgment (the blind breadth generator stays transcript-free, ac-2). It reads
+// the reference graph the driver aggregated from each turn's `branch_edges` (already
+// integrity-guarded upstream) plus the latest turn's `branch_judgment`.
+//
+// FAIL-OPEN is the load-bearing property (failure-recovery / boundary-edge): `true` (seam →
+// dry) is returned ONLY on a positive, corroborated signal. Any ambiguity or under-detection
+// returns `false` (NOT a seam), so control falls through to the UNCONDITIONAL cap backstop —
+// under-detection must never cause an early close. Concretely, a seam requires ALL of:
+//   1. a per-turn judgment was actually recorded (undefined = detection didn't run → fail-open),
+//   2. that judgment's `opened === false` (the schema's seam marker: this turn opened nothing),
+//   3. no deferred value branch is still pending — every edge target (`to`) is already resolved.
+// If any earlier-opened branch target remains unaddressed, a value branch still remains → not dry.
+export interface BranchSeamInput {
+  /** The aggregated reference graph (from→to edges), already integrity-guarded by the driver. */
+  edges: readonly InterviewBranchEdge[];
+  /** ids of dimensions/questions already answered/resolved (addressed decisions). */
+  resolvedIds: readonly string[];
+  /** The latest turn's per-turn branch judgment; `undefined` when the turn recorded none. */
+  latestJudgment?: { opened: boolean; why?: string } | undefined;
+}
+
+export function isBranchSeam(input: BranchSeamInput): boolean {
+  // (1) fail-open: no per-turn judgment recorded → detection didn't run / ambiguous → NOT dry.
+  if (input.latestJudgment === undefined) return false;
+  // (2) fail-open: the latest turn positively opened a further value branch → still walking.
+  if (input.latestJudgment.opened) return false;
+  // (3) a deferred value branch still pending (its target unaddressed) → NOT a seam.
+  const resolved = new Set(input.resolvedIds);
+  const hasPendingValueBranch = input.edges.some((e) => !resolved.has(e.to));
+  if (hasPendingValueBranch) return false;
+  // opened=false AND no pending value branch remains → SEAM (branch exhausted).
+  return true;
+}
+
+// --- ac-5 (wi_260713cx4, #27): branch-walking continuity-ordering ---------------
+//
+// Order the pending questions/dimensions (branch follow-ups + fresh breadth) so a branch is
+// WALKED CONTIGUOUSLY and region transitions happen only at a seam (after a whole branch is
+// done), preferring topical adjacency to minimize context-switch cost. Pure and deterministic.
+//
+//  - A "branch" = the pending items connected (transitively, direction-ignored) by the
+//    dependency edges. Items in the same branch are emitted together.
+//  - Within a branch, order by dependency: `from` before `to` (topological). The driver
+//    guards acyclicity upstream; any residual cycle degrades to stable input order.
+//  - Between branches (the region switch, only ever at a branch boundary) pick greedily the
+//    next branch with the most shared whole-token keywords with the just-finished branch —
+//    reusing prism's `fragmentKeywords` whole-token tokenizer (wi_260708jnp "core in score"
+//    lesson: never a word-internal substring match). Ties break by stable input order.
+export interface OrderableItem {
+  id: string;
+  /** Topical text (label / notes / question) used for adjacency scoring. */
+  text: string;
+}
+
+export function orderByContinuity(
+  items: readonly OrderableItem[],
+  edges: readonly InterviewBranchEdge[],
+): OrderableItem[] {
+  if (items.length === 0) return [];
+  const index = new Map(items.map((it, i) => [it.id, i]));
+
+  // Union-find over pending ids, joined by edges whose BOTH endpoints are pending items.
+  const parent = new Map<string, string>(items.map((it) => [it.id, it.id]));
+  const find = (x: string): string => {
+    let root = x;
+    while (parent.get(root) !== root) root = parent.get(root) as string;
+    let cur = x;
+    while (parent.get(cur) !== root) {
+      const next = parent.get(cur) as string;
+      parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  };
+  const union = (a: string, b: string): void => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+  for (const e of edges) {
+    if (index.has(e.from) && index.has(e.to)) union(e.from, e.to);
+  }
+
+  // Group items by component, preserving first-appearance order for the component and members.
+  const components = new Map<string, OrderableItem[]>();
+  const componentOrder: string[] = [];
+  for (const it of items) {
+    const root = find(it.id);
+    let bucket = components.get(root);
+    if (bucket === undefined) {
+      bucket = [];
+      components.set(root, bucket);
+      componentOrder.push(root);
+    }
+    bucket.push(it);
+  }
+
+  // Order members within a component by dependency (from before to); stable on input order.
+  const orderWithin = (members: OrderableItem[]): OrderableItem[] => {
+    if (members.length <= 1) return members;
+    const memberIds = new Set(members.map((m) => m.id));
+    const indegree = new Map(members.map((m) => [m.id, 0]));
+    const outgoing = new Map<string, string[]>(members.map((m) => [m.id, []]));
+    for (const e of edges) {
+      if (memberIds.has(e.from) && memberIds.has(e.to)) {
+        indegree.set(e.to, (indegree.get(e.to) ?? 0) + 1);
+        (outgoing.get(e.from) as string[]).push(e.to);
+      }
+    }
+    const byId = new Map(members.map((m) => [m.id, m]));
+    // Ready = indegree 0, drained in stable input order (Kahn's algorithm).
+    const ready = members.filter((m) => (indegree.get(m.id) ?? 0) === 0).map((m) => m.id);
+    const out: OrderableItem[] = [];
+    const emitted = new Set<string>();
+    while (ready.length > 0) {
+      const id = ready.shift() as string;
+      if (emitted.has(id)) continue;
+      emitted.add(id);
+      out.push(byId.get(id) as OrderableItem);
+      for (const to of (outgoing.get(id) as string[])
+        .slice()
+        .sort((a, b) => (index.get(a) ?? 0) - (index.get(b) ?? 0))) {
+        indegree.set(to, (indegree.get(to) ?? 0) - 1);
+        if ((indegree.get(to) ?? 0) === 0) ready.push(to);
+      }
+    }
+    // Degrade (residual cycle): append any not-yet-emitted members in stable input order.
+    for (const m of members) if (!emitted.has(m.id)) out.push(m);
+    return out;
+  };
+
+  const tokensOf = (members: OrderableItem[]): Set<string> =>
+    new Set(members.flatMap((m) => fragmentKeywords(m.text)));
+
+  // Walk components: start at the first (input-order) component, then greedily pick the next
+  // by max whole-token overlap with the just-placed one; ties by stable input order.
+  const remaining = new Set(componentOrder);
+  const result: OrderableItem[] = [];
+  let current = componentOrder[0] as string;
+  while (true) {
+    remaining.delete(current);
+    const members = orderWithin(components.get(current) as OrderableItem[]);
+    result.push(...members);
+    if (remaining.size === 0) break;
+    const currentTokens = tokensOf(members);
+    let bestRoot: string | undefined;
+    let bestOverlap = -1;
+    for (const root of componentOrder) {
+      if (!remaining.has(root)) continue;
+      const candTokens = tokensOf(components.get(root) as OrderableItem[]);
+      let overlap = 0;
+      for (const t of candTokens) if (currentTokens.has(t)) overlap += 1;
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        bestRoot = root;
+      }
+    }
+    current = bestRoot as string;
+  }
+  return result;
 }

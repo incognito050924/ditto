@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import {
   OPTION_DESCRIPTION_BUDGET,
   REVIEW_REGENERATE_CAP,
+  isBranchSeam,
   needsBriefing,
+  orderByContinuity,
   resolveReviewDecision,
   routeForReview,
   selectSingleFire,
@@ -267,5 +269,103 @@ describe('review routing + regeneration cap (ac-4, D2)', () => {
     });
     expect(d).toEqual({ status: 'unverified-degraded', reason: 'cap-exhausted' });
     expect(REVIEW_REGENERATE_CAP).toBe(2);
+  });
+});
+
+// ac-4 (wi_260713cx4, #27, branch-walking): seam-detection. The DRIVER-side judgment of
+// whether the current branch is at a SEAM — it opens no further value-bearing dependent
+// decision (branch exhausted). A seam is what licenses a blind full re-survey. This must
+// FAIL-OPEN: any ambiguity / under-detection reports NOT-a-seam (falls through to the
+// unconditional cap backstop), because under-detection must never cause an early close.
+// The seam marker is the per-turn `branch_judgment.opened === false`; a still-pending
+// `to` target in the reference graph means a deferred value branch remains → NOT a seam.
+describe('isBranchSeam (ac-4, branch-walking seam-detection, fail-open)', () => {
+  test('seam detected: latest turn opened nothing AND no value branch remains', () => {
+    // opened=false is the seam marker; every edge target is already resolved → dry.
+    expect(
+      isBranchSeam({
+        edges: [{ from: 'auth', to: 'hash' }],
+        resolvedIds: ['auth', 'hash'],
+        latestJudgment: { opened: false },
+      }),
+    ).toBe(true);
+  });
+
+  test('seam detected: no edges at all AND the turn positively opened nothing', () => {
+    expect(isBranchSeam({ edges: [], resolvedIds: [], latestJudgment: { opened: false } })).toBe(
+      true,
+    );
+  });
+
+  test('NOT a seam (fail-open): a deferred value branch remains (target unaddressed)', () => {
+    // opened=false this turn, but an EARLIER-opened branch (`hash`) is still pending.
+    expect(
+      isBranchSeam({
+        edges: [{ from: 'auth', to: 'hash' }],
+        resolvedIds: ['auth'],
+        latestJudgment: { opened: false },
+      }),
+    ).toBe(false);
+  });
+
+  test('NOT a seam: the latest turn opened a further value branch', () => {
+    expect(
+      isBranchSeam({
+        edges: [{ from: 'auth', to: 'hash' }],
+        resolvedIds: ['auth', 'hash'],
+        latestJudgment: { opened: true },
+      }),
+    ).toBe(false);
+  });
+
+  test('NOT a seam (fail-open): no per-turn judgment recorded (under-detected / ambiguous)', () => {
+    // Missing branch_judgment = detection did not run → must NOT report dry (cap backstop).
+    expect(isBranchSeam({ edges: [], resolvedIds: [], latestJudgment: undefined })).toBe(false);
+  });
+});
+
+// ac-5 (wi_260713cx4, #27, branch-walking): continuity-ordering. Given the pending
+// questions/dimensions (branch follow-ups + fresh breadth), order them so a branch is
+// walked CONTIGUOUSLY (dependency-connected items emitted together, `from` before `to`)
+// and region transitions happen only at a seam (after a whole branch is done), preferring
+// topical adjacency (shared whole-token keywords, reusing the fragmentKeywords tokenizer)
+// so context-switch cost is minimized.
+describe('orderByContinuity (ac-5, branch-walking continuity-ordering)', () => {
+  test('walks a branch contiguously, then switches region by topical adjacency', () => {
+    // Branch: auth-a → auth-b (dependency edge). Two fresh-breadth singletons: a
+    // topically-adjacent one (session, shares "login") and an unrelated one (billing).
+    // Input order interleaves them to prove ordering is by structure, not input order.
+    const items = [
+      { id: 'auth-a', text: 'password login' },
+      { id: 'billing', text: 'invoice payment' },
+      { id: 'auth-b', text: 'password hashing' },
+      { id: 'session', text: 'session token login' },
+    ];
+    const edges = [{ from: 'auth-a', to: 'auth-b' }];
+    const ordered = orderByContinuity(items, edges).map((i) => i.id);
+
+    // branch walked contiguously and in dependency order (from before to)
+    const ia = ordered.indexOf('auth-a');
+    const ib = ordered.indexOf('auth-b');
+    expect(ib).toBe(ia + 1);
+
+    // region switch after the branch goes to the topically-adjacent singleton first
+    expect(ordered.indexOf('session')).toBeLessThan(ordered.indexOf('billing'));
+    // full expected deterministic order
+    expect(ordered).toEqual(['auth-a', 'auth-b', 'session', 'billing']);
+  });
+
+  test('preserves every item exactly once (no drop, no dup)', () => {
+    const items = [
+      { id: 'x', text: 'alpha' },
+      { id: 'y', text: 'beta' },
+      { id: 'z', text: 'gamma' },
+    ];
+    const ordered = orderByContinuity(items, []).map((i) => i.id);
+    expect(ordered.sort()).toEqual(['x', 'y', 'z']);
+  });
+
+  test('empty input → empty output', () => {
+    expect(orderByContinuity([], [])).toEqual([]);
   });
 });

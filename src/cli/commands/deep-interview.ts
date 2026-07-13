@@ -8,6 +8,7 @@ import {
   deriveIntentFragments,
   finalizeInterview,
   finalizePayload,
+  orderPendingBranchWork,
   projectInterviewDimensions,
   promotePremortem,
   promotePremortemPayload,
@@ -1105,6 +1106,60 @@ const acknowledgeDissentCmd = defineCommand({
   },
 });
 
+// The branch-walking continuity seam (wi_260713cx4, #27, ac-4/ac-5). The branch loop is
+// SKILL-driven; to decide "what to ask next" DETERMINISTICALLY the driver runs THIS to get the
+// pending work in continuity order (a branch walked contiguously, region transitions only at a
+// seam) plus the open critical branch targets that must not be starved. This is the runtime call
+// site for the pure `orderPendingBranchWork` (guard edges → orderByContinuity → criticalBranchesOpen),
+// so the reducer is no longer an orphan — mirroring select-single's ROLE for single-fire.
+//
+// A PURE READ: it reads interview-state (like dissent-briefs/semantic-targets) and NEVER writes.
+// It does not duplicate record-turn/check-readiness: those surface readiness + exit_reason (the
+// value-exhaustion CLOSE signal, already folded into exit_reason=diminishing_returns), while this
+// surfaces the ORDER + the anti-starvation view neither returns.
+const branchOrderCmd = defineCommand({
+  meta: {
+    name: 'branch-order',
+    description:
+      'Return the pending interview work in continuity order (branch walked contiguously) + open critical branch targets — pure read, no state write',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const state = await new InterviewStore(repoRoot).get(args.workItem);
+      const { ordered, criticalBranchesOpen } = orderPendingBranchWork(state);
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.workItem,
+          ordered,
+          critical_branches_open: criticalBranchesOpen,
+        });
+      } else {
+        writeHuman(`branch-order: ${ordered.length} pending item(s) for ${args.workItem}`);
+        for (const it of ordered) writeHuman(`  - [${it.id}] ${it.text}`);
+        if (criticalBranchesOpen.length > 0) {
+          writeHuman(`  open critical branch(es): ${criticalBranchesOpen.join(', ')}`);
+        }
+      }
+    } catch (err) {
+      writeError(`branch-order failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
 const finalizeFromDocCmd = defineCommand({
   meta: {
     name: 'finalize-from-doc',
@@ -1210,6 +1265,7 @@ export const deepInterviewCommand = defineCommand({
     'record-turn': recordTurnCmd,
     'check-question': checkQuestionCmd,
     'select-single': selectSingleCmd,
+    'branch-order': branchOrderCmd,
     'check-readiness': checkReadinessCmd,
     'project-coverage': projectCoverageCmd,
     premortem: premortemCmd,
