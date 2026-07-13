@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607132m8",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "5dcaef8d479831f351d619a10c7147cba4ec7117a0df5926ed62b99ea8774927",
+  "ts": "2026-07-13T09:12:13.589Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-complete.test.ts -t never false-greens its target AC",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

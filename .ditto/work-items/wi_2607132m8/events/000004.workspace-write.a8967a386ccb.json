@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607132m8",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "a8967a386ccb34f3a170cafb0bf37f2ab2c82989d555f0587e97e5a3ff554427",
+  "ts": "2026-07-13T09:12:14.045Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c grep -q \"test-author → implement\" skills/autopilot/SKILL.md && grep -q \"authored test_spec\" skills/autopilot/SKILL.md && grep -q \"surface that path to the user\" skills/autopilot/SKILL.md",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

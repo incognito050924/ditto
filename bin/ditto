@@ -5,25 +5,43 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -22301,19 +22319,24 @@ function isReviewOwner(owner) {
 var PLANNER_GENERATE_DIRECTIVE = "Emit a `generated_nodes` subgraph: pick the \xA72.2 lifecycle stages this task " + "actually needs (research\xB7design\xB7implement\xB7review\xB7verify\xB7\u2026), each node " + "{id, kind, purpose, depends_on, acceptance_refs, file_scope} mapped to its " + "acceptance criteria; scale to task size (small tasks stay minimal \u2014 do not " + "force a stage). For each MUTATING node declare `file_scope` (the repo-relative " + "paths it will edit) as precisely and DISJOINTLY as you can: non-overlapping " + "scopes let independent mutators run in parallel, while leaving it off forces the " + "engine to serialize that node conservatively (one scope-unknown mutator at a " + "time). Omit it ONLY when the scope is genuinely unknown \u2014 never guess a scope " + "that might overlap another node (a wrong disjoint claim risks a clobber).";
 var CITE_OR_ABSTAIN_DIRECTIVE = "Consult the governing decisions in context.memory.decision_briefs: cite the " + "ones you relied on (follow them or justify any deviation), and if none apply " + "to this task, state that explicitly (cite-or-abstain).";
 var RED_FIRST_DIRECTIVE = "Red-first discipline (code-behavior AC): write the failing test that asserts " + "this criterion FIRST and run it; confirm it fails on the AC assertion itself, " + "not on a compile/import error (no phantom red), then make the smallest change " + "to turn it green. Report both the red run and the green run (command + exit code).";
+var AUTHORING_DIRECTIVE = "Authoring stage (pre-approval red tests): for EACH dynamic_test acceptance criterion in " + "context.acceptance, author ONE failing (red) unit/mock test that asserts that criterion, run " + "it, and confirm it fails on the AC assertion itself \u2014 not on a compile/import error (no " + "phantom red). STOP there: leave the test RED for the approval gate. Do NOT write the " + "implementation or make it green \u2014 a later implement node does that. Each test MUST carry a " + "background comment: which AC clause it encodes, the behavior it asserts, and the edge cases " + "it pins, so the user can judge under/over-assertion when approving.";
 var SCOPE_LOCAL_UNIT_DIRECTIVE = "Scope-local unit tests (mid-wave): run ONLY the mock-unit tests for your own " + "file_scope \u2014 do NOT run the full or cross-module suite while other implementers may " + "be editing in parallel. The whole-suite GREEN is proven ONCE after the wave settles by " + "the deterministic settled-tree test barrier, not by you. Report the command + exit code " + "of your scoped unit run.";
 function isRedFirstImplement(owner, acceptance) {
   return owner === "implementer" && acceptance.some((a2) => a2.oracle?.verification_method === "dynamic_test");
 }
 function buildDelegationPacket(node, workItem2, variantCandidates = [], fileScope = workItem2.changed_files, memoryContext, retroContext, changeSurface) {
   const isPlanner = node.owner === "planner";
-  const acceptance = node.acceptance_refs.flatMap((id) => {
-    const ac = workItem2.acceptance_criteria?.find((c3) => c3.id === id);
-    if (!ac)
-      return [];
-    return [{ id: ac.id, statement: ac.statement, ...ac.oracle ? { oracle: ac.oracle } : {} }];
+  const isTestAuthor = node.kind === "test-author";
+  const resolveAc = (ac) => ({
+    id: ac.id,
+    statement: ac.statement,
+    ...ac.oracle ? { oracle: ac.oracle } : {}
   });
-  const doneWhen = acceptance.length > 0 ? `acceptance criteria satisfied with evidence: ${acceptance.map((a2) => {
+  const acceptance = isTestAuthor ? (workItem2.acceptance_criteria ?? []).filter((c3) => c3.oracle?.verification_method === "dynamic_test").map(resolveAc) : node.acceptance_refs.flatMap((id) => {
+    const ac = workItem2.acceptance_criteria?.find((c3) => c3.id === id);
+    return ac ? [resolveAc(ac)] : [];
+  });
+  const doneWhen = isTestAuthor ? acceptance.length > 0 ? `a failing (red) unit/mock test authored (and left RED for the approval gate) for each dynamic_test AC: ${acceptance.map((a2) => `${a2.id} \u2014 ${a2.statement}`).join("; ")}` : node.purpose : acceptance.length > 0 ? `acceptance criteria satisfied with evidence: ${acceptance.map((a2) => {
     const how = a2.oracle ? ` [oracle: ${a2.oracle.verification_method}]` : "";
     return `${a2.id} \u2014 ${a2.statement}${how}`;
   }).join("; ")}` : node.acceptance_refs.length > 0 ? `acceptance criteria satisfied with evidence: ${node.acceptance_refs.join(", ")}` : node.purpose;
@@ -22326,7 +22349,8 @@ function buildDelegationPacket(node, workItem2, variantCandidates = [], fileScop
       "Work only from this packet.",
       "Return a single result with evidence (command + exit code, file:line).",
       ...isPlanner ? [PLANNER_GENERATE_DIRECTIVE] : [],
-      ...isRedFirstImplement(node.owner, acceptance) ? [RED_FIRST_DIRECTIVE] : [],
+      ...isTestAuthor && acceptance.length > 0 ? [AUTHORING_DIRECTIVE] : [],
+      ...!isTestAuthor && isRedFirstImplement(node.owner, acceptance) ? [RED_FIRST_DIRECTIVE] : [],
       ...node.owner === "implementer" ? [SCOPE_LOCAL_UNIT_DIRECTIVE] : [],
       ...memoryContext?.decisions?.length || memoryContext?.decision_briefs?.length ? [CITE_OR_ABSTAIN_DIRECTIVE] : [],
       `Stop when done_when is met: ${doneWhen}.`
@@ -57118,4 +57142,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=112b5493dee3a7c891926b4ad960f3d91cdc0b61028454fc0f9e4ec379fc94b5
+//# ditto-src-stamp=73d21064aa2dbba161a27ee03d5b4620f676e66f9f2532223b3f8f2fcb90ed3e

@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607132m8",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "fefbf3e79fe1cce4f28719db4364216a32d9b327e8d838c42f913ac389ddbb7f",
+  "ts": "2026-07-13T09:12:13.829Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-dispatch.test.ts -t no dynamic_test AC",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

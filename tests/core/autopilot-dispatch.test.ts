@@ -461,3 +461,96 @@ describe('guardMutatingEvidence (G7 확장: mutating pass needs changed_files)',
     expect(guardMutatingEvidence('implementer', 'fail', []).contentful).toBe(true);
   });
 });
+
+// #21 follow-up (wi_2607132m8): the pre-approval `test-author` node is seeded with
+// acceptance_refs:[] (so it stays OUT of the deriveAcVerdicts per-AC fold), which left
+// its delegation packet with an EMPTY context.acceptance — the authoring owner was asked
+// to "author a red test for each dynamic_test AC" without being handed those ACs. These
+// assert the packet now BRIEFS the authoring owner in-packet from the work item's
+// dynamic_test criteria, via a channel decoupled from acceptance_refs (still []).
+describe('buildDelegationPacket test-author authoring briefing (#21, wi_2607132m8)', () => {
+  const AUTHORING = 'Authoring stage (pre-approval red tests)';
+  const RED_FIRST = 'Red-first discipline (code-behavior AC)';
+  const mkTestAuthor = (): AutopilotNode => ({
+    id: 'design-test-author',
+    kind: 'test-author',
+    owner: 'implementer', // kindToOwner('test-author') === 'implementer'
+    purpose:
+      'Author the failing (red) unit/mock test for each dynamic_test AC before the approval gate opens',
+    status: 'pending',
+    depends_on: ['design'],
+    acceptance_refs: [], // deliberate: keeps the node out of the per-AC verdict fold
+    evidence_refs: [],
+    ac_verdicts: [],
+    attempts: { fix: 0, switch: 0 },
+  });
+  const dynamicOracle = {
+    verification_method: 'dynamic_test' as const,
+    maps_to: 'ac-1',
+    direction: 'forward' as const,
+  };
+  const wiMixed = (): WorkItem =>
+    ({
+      id: 'wi_authoring',
+      changed_files: ['src/x.ts'],
+      acceptance_criteria: [
+        { id: 'ac-1', statement: 'login rejects an empty password', oracle: dynamicOracle },
+        {
+          id: 'ac-2',
+          statement: 'the audit doc is updated',
+          oracle: { verification_method: 'static_scan', maps_to: 'ac-2', direction: 'forward' },
+        },
+        {
+          id: 'ac-3',
+          statement: 'the message reads calm',
+          oracle: { verification_method: 'soft_judgment', maps_to: 'ac-3', direction: 'forward' },
+        },
+      ],
+    }) as unknown as WorkItem;
+
+  // ac-1: the authoring owner is briefed IN-PACKET with EXACTLY the dynamic_test ACs
+  // (id + statement + oracle) — never the static/soft ACs, which are not authoring targets.
+  test('briefs context.acceptance with exactly the dynamic_test ACs', () => {
+    const p = buildDelegationPacket(mkTestAuthor(), wiMixed());
+    expect(p.context.acceptance).toEqual([
+      { id: 'ac-1', statement: 'login rejects an empty password', oracle: dynamicOracle },
+    ]);
+  });
+
+  // ac-1: an authoring directive (author red, STOP — not implement-to-green) is present,
+  // and the implement-only RED_FIRST ("make the smallest change to turn it green") is NOT,
+  // since the authoring node must leave the test red for the approval gate.
+  test('carries the authoring directive and suppresses the implement-to-green RED_FIRST', () => {
+    const p = buildDelegationPacket(mkTestAuthor(), wiMixed());
+    expect(p.must_do.some((m) => m.includes(AUTHORING))).toBe(true);
+    expect(p.must_do.some((m) => m.includes(RED_FIRST))).toBe(false);
+    // done_when must not tell the authoring owner to SATISFY the ACs (i.e. make them green).
+    expect(p.context.done_when.toLowerCase()).not.toContain('satisfied with evidence');
+  });
+
+  // ac-2 guard (packet side): briefing is decoupled from the verdict fold — the packet's
+  // acceptance_refs stays [] even though context.acceptance is now populated.
+  test('acceptance_refs stays [] (briefing decoupled from the per-AC verdict fold)', () => {
+    const p = buildDelegationPacket(mkTestAuthor(), wiMixed());
+    expect(p.context.acceptance_refs).toEqual([]);
+  });
+
+  // ac-3: a work item with NO dynamic_test AC degrades — empty authoring acceptance and
+  // no authoring directive (the design-pass re-seed also skips the node in this case).
+  test('no dynamic_test AC ⇒ empty authoring acceptance and no authoring directive', () => {
+    const wiNoDynamic = {
+      id: 'wi_nodynamic',
+      changed_files: ['src/x.ts'],
+      acceptance_criteria: [
+        {
+          id: 'ac-1',
+          statement: 'the audit doc is updated',
+          oracle: { verification_method: 'static_scan', maps_to: 'ac-1', direction: 'forward' },
+        },
+      ],
+    } as unknown as WorkItem;
+    const p = buildDelegationPacket(mkTestAuthor(), wiNoDynamic);
+    expect(p.context.acceptance).toEqual([]);
+    expect(p.must_do.some((m) => m.includes(AUTHORING))).toBe(false);
+  });
+});

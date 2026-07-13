@@ -183,6 +183,23 @@ const RED_FIRST_DIRECTIVE =
   'to turn it green. Report both the red run and the green run (command + exit code).';
 
 /**
+ * Pre-approval AUTHORING directive (#21, wi_2607132m8) for the `test-author` node. Distinct
+ * from RED_FIRST: the authoring node writes the failing test and STOPS at red for the approval
+ * gate — it must NOT implement the change or make the test green (a later implement node does
+ * that). Its targets are the dynamic_test ACs the loop briefs in `context.acceptance` (resolved
+ * directly from the work item, because the node's own acceptance_refs stays [] to keep it out of
+ * the deriveAcVerdicts per-AC fold).
+ */
+const AUTHORING_DIRECTIVE =
+  'Authoring stage (pre-approval red tests): for EACH dynamic_test acceptance criterion in ' +
+  'context.acceptance, author ONE failing (red) unit/mock test that asserts that criterion, run ' +
+  'it, and confirm it fails on the AC assertion itself — not on a compile/import error (no ' +
+  'phantom red). STOP there: leave the test RED for the approval gate. Do NOT write the ' +
+  'implementation or make it green — a later implement node does that. Each test MUST carry a ' +
+  'background comment: which AC clause it encodes, the behavior it asserts, and the edge cases ' +
+  'it pins, so the user can judge under/over-assertion when approving.';
+
+/**
  * Scope-local-unit directive (wi_260708ds9 ac-2). The implementer full-suite pressure is
  * NOT in this packet — it is the GLOBAL CHARTER ('매 단계 전체 테스트 실행') the subagent
  * inherits. Mid-wave, though, running the FULL/cross suite is wrong: other implementers may
@@ -243,20 +260,44 @@ export function buildDelegationPacket(
   changeSurface?: ChangeSurface,
 ): DelegationPacket {
   const isPlanner = node.owner === 'planner';
-  // ADR-0024 ac-3 (② DELIVER): resolve each addressed AC id to its statement +
-  // assigned oracle so the implementer receives what to satisfy + how it is judged,
-  // not just the id (the intent-loss point). PURE & SYNCHRONOUS: read only from the
-  // passed workItem — no store calls, no async. Order follows node.acceptance_refs;
-  // ids with no matching criterion are skipped (legacy / mis-pointed refs).
-  const acceptance: ResolvedAcceptance[] = node.acceptance_refs.flatMap((id) => {
-    const ac = workItem.acceptance_criteria?.find((c) => c.id === id);
-    if (!ac) return [];
-    return [{ id: ac.id, statement: ac.statement, ...(ac.oracle ? { oracle: ac.oracle } : {}) }];
+  // The pre-approval `test-author` node (#21) authors a red test for each dynamic_test AC and
+  // STOPS at red for the approval gate — it does not implement to green. It carries
+  // acceptance_refs:[] so it never becomes a per-AC addressing node in deriveAcVerdicts (no
+  // false-green), which means it cannot be briefed from its own refs. It is briefed DIRECTLY
+  // from the work item's dynamic_test criteria: the exact targets it must author a failing test
+  // for. Every other node resolves its acceptance from its own acceptance_refs.
+  const isTestAuthor = node.kind === 'test-author';
+  const resolveAc = (ac: {
+    id: string;
+    statement: string;
+    oracle?: AcOracle | undefined;
+  }): ResolvedAcceptance => ({
+    id: ac.id,
+    statement: ac.statement,
+    ...(ac.oracle ? { oracle: ac.oracle } : {}),
   });
-  // Human-readable so the agent knows what + how-judged (not just ids). Falls back
-  // to the bare-id form when no criterion resolved (no statements to show).
-  const doneWhen =
-    acceptance.length > 0
+  // ADR-0024 ac-3 (② DELIVER): resolve each addressed AC id to its statement + assigned oracle
+  // so the owner receives what to satisfy + how it is judged, not just the id (the intent-loss
+  // point). PURE & SYNCHRONOUS: read only from the passed workItem — no store calls, no async.
+  const acceptance: ResolvedAcceptance[] = isTestAuthor
+    ? (workItem.acceptance_criteria ?? [])
+        .filter((c) => c.oracle?.verification_method === 'dynamic_test')
+        .map(resolveAc)
+    : node.acceptance_refs.flatMap((id) => {
+        const ac = workItem.acceptance_criteria?.find((c) => c.id === id);
+        return ac ? [resolveAc(ac)] : [];
+      });
+  // Human-readable so the agent knows what + how-judged (not just ids). The test-author node
+  // gets an AUTHORING done_when (author a red test and stop) — NOT the "satisfied with evidence"
+  // framing, which would wrongly tell it to make the tests green. Falls back to the bare-id form
+  // when no criterion resolved (no statements to show).
+  const doneWhen = isTestAuthor
+    ? acceptance.length > 0
+      ? `a failing (red) unit/mock test authored (and left RED for the approval gate) for each dynamic_test AC: ${acceptance
+          .map((a) => `${a.id} — ${a.statement}`)
+          .join('; ')}`
+      : node.purpose
+    : acceptance.length > 0
       ? `acceptance criteria satisfied with evidence: ${acceptance
           .map((a) => {
             const how = a.oracle ? ` [oracle: ${a.oracle.verification_method}]` : '';
@@ -279,7 +320,13 @@ export function buildDelegationPacket(
       'Work only from this packet.',
       'Return a single result with evidence (command + exit code, file:line).',
       ...(isPlanner ? [PLANNER_GENERATE_DIRECTIVE] : []),
-      ...(isRedFirstImplement(node.owner, acceptance) ? [RED_FIRST_DIRECTIVE] : []),
+      // The test-author node gets the AUTHORING directive (author red, stop for approval) — but
+      // ONLY when it actually has dynamic_test targets to author for; a test-author node with no
+      // dynamic_test AC degrades to no directive (never a vacuous authoring instruction). The
+      // implement-only RED_FIRST ("then make it green") is SUPPRESSED for it so the packet never
+      // tells the authoring node to green its own tests before the gate.
+      ...(isTestAuthor && acceptance.length > 0 ? [AUTHORING_DIRECTIVE] : []),
+      ...(!isTestAuthor && isRedFirstImplement(node.owner, acceptance) ? [RED_FIRST_DIRECTIVE] : []),
       // ac-2 (additive): an implementer runs only its own scope's mock-unit tests mid-wave;
       // the full-suite GREEN is proven once by the settled-tree barrier, not per-node.
       ...(node.owner === 'implementer' ? [SCOPE_LOCAL_UNIT_DIRECTIVE] : []),

@@ -136,6 +136,29 @@ describe('deriveAcVerdicts (evidence-gated: pass only with evidence; never auto-
     expect(v?.verdict).toBe('fail');
   });
 
+  // #21 follow-up (wi_2607132m8) ac-2 — false-green guard for the authoring-briefing change.
+  // Briefing the pre-approval test-author owner with the dynamic_test ACs (buildDelegationPacket)
+  // must NOT turn the node into a per-AC addressing node. The node keeps acceptance_refs:[]
+  // (seedTestAuthorNode), so a PASSED test-author node — which only authored a STILL-RED test —
+  // contributes NO verdict and can never raise its target AC to pass; the implement node that
+  // greens the test is the addressing node. Were the briefing wired through acceptance_refs
+  // instead, this AC would false-green to pass off the authoring node alone.
+  test('a passed test-author node (acceptance_refs:[]) never false-greens its target AC', () => {
+    const graph = graphWith([
+      node({
+        id: 'design-test-author',
+        kind: 'test-author',
+        owner: 'implementer',
+        status: 'passed',
+        acceptance_refs: [], // seeded empty: stays OUT of the per-AC fold
+        evidence_refs: [ev('authored-red.log')],
+      }),
+    ]);
+    const [v] = deriveAcVerdicts(graph, ['ac-1']);
+    expect(v?.verdict).not.toBe('pass');
+    expect(v?.verdict).toBe('unverified'); // no addressing node ⇒ the AC is not yet satisfied
+  });
+
   // The fold only ever LOWERS: an explicit pass cannot upgrade an evidence-less
   // structural unverified (the evidence gate still holds; claim ≠ proof).
   test('an explicit pass cannot raise a verdict above the evidence-gated structural floor', () => {
