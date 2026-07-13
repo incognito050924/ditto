@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713j6x",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "30ed082eee00b2041ab846ede92338bd4e7b6edeae0b725d51fdb10149a3b669",
+  "ts": "2026-07-13T22:30:15.687Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-tidy-wiring.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

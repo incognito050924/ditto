@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713j6x",
+  "seq": 7,
+  "actor": "workspace-write",
+  "event_id": "1fbf612543a898c5d8be397995a0b3852c0ccacaea4b86ba6d801d84b232d898",
+  "ts": "2026-07-13T22:33:36.060Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
