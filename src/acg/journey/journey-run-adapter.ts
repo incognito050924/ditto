@@ -10,7 +10,7 @@ import type { E2EJourney } from '~/schemas/e2e-journey';
  * this ONLY READS the e2eJourney type — e2eJourney is never mutated and its
  * schema additions (journey_id/work_item_id) are optional (acc-b).
  *
- * Binding rules (20-contracts §0.2 JourneyRun←e2eJourney; v0-plan WU-5):
+ * Binding rules (JourneyRun←e2eJourney):
  *  - result pass  → outcome pass
  *  - result fail  → outcome fail
  *  - result blocked → outcome skipped (a blocked run did not execute; acc-a)

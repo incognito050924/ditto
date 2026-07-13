@@ -36,7 +36,7 @@ export const acceptanceVerdict = z
     criterion_id: z.string().min(1),
     verdict: verdict,
     // `evidence`는 기존 bare evidenceRef 배열(legacy, 폐기하지 않음).
-    // `evidence_records`는 freshness/portability로 감싼 sidecar(설계서 §6.7 line 698).
+    // `evidence_records`는 freshness/portability로 감싼 sidecar.
     // optional + default [] 이므로 기존 completion 은 마이그레이션 없이 그대로 유효하다.
     evidence: z.array(evidenceRef).default([]),
     evidence_records: z

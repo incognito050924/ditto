@@ -2,13 +2,13 @@ import type { AcgAffectedNode, AcgImpactGraph } from '~/schemas/acg-impact-graph
 import { acgImpactGraph } from '~/schemas/acg-impact-graph';
 
 /**
- * ImpactGraph producer — governance core (단계3, 10-methodology.md §3).
+ * ImpactGraph producer — governance core.
  *
  * The *analyzer* (symbol → caller/type/export graph) is the BINDING's job and is
- * language-specific (10-methodology.md:82); it is injected. This module owns the
+ * language-specific; it is injected. This module owns the
  * language-agnostic GOVERNANCE invariant the spec actually gates on:
  *
- *   default-deny (20-contracts.md:212, OBJ-15/17): a USER-EXPOSED change must
+ *   default-deny: a USER-EXPOSED change must
  *   either map to a JourneySpec.id (a ui_surface/user_journey affected node) OR
  *   emit `unresolved: journey_unknown`. A user-exposed diff with neither cannot
  *   pass — under-recording impact must not slip through in silence.
@@ -68,7 +68,7 @@ export function buildImpactGraph(
         kind: 'journey_unknown',
         path: input.changeTarget,
         reason:
-          'user-exposed change with no JourneySpec mapping; a human must map the journey or declare no journey impact (default-deny, 20-contracts §2)',
+          'user-exposed change with no JourneySpec mapping; a human must map the journey or declare no journey impact (default-deny)',
       });
     }
   }

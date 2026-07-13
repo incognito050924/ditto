@@ -3,7 +3,7 @@ import { acgChangeEnvelope } from './acg-common';
 import { acgFitnessVerdictReproducibility } from './acg-fitness-verdict';
 
 /**
- * ACG SemanticCompatibility (20-contracts §4) — separates type compatibility
+ * ACG SemanticCompatibility — separates type compatibility
  * from meaning compatibility. The split verdict (type_safe vs semantic_safe) is
  * the point: "type-safe" and "semantically safe" are different judgments.
  */

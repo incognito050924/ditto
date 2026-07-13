@@ -13,7 +13,7 @@ export const acgJourneyStatus = z
   .describe('Journey lifecycle status (spec_first → awaiting_validation → validated | superseded)');
 
 /**
- * ACG JourneySpec (20-contracts §2.5) — first-class spec of a user journey. A
+ * ACG JourneySpec — first-class spec of a user journey. A
  * per-repo catalog (like ArchitectureSpec); ImpactGraph/ReviewGraph/JourneyRun
  * reference it by `id`. A journey is a flow, not a file (OBJ-20).
  */

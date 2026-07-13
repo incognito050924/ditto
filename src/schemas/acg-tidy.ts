@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * ACG Tidy artifacts (80-plan §3, WU-1). The ⓪ entry classifier persists its
+ * ACG Tidy artifacts. The ⓪ entry classifier persists its
  * SKIP/ENTER verdict so the decision is auditable (G3 — 축소는 드러낸다).
  */
 export const tidyClassification = z

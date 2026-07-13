@@ -1,5 +1,5 @@
 /**
- * Unit-scoped refactor decision (80-plan §9/§4.4, WU-4). This is the STANDING-code
+ * Unit-scoped refactor decision. This is the STANDING-code
  * counterpart to the change-scoped Tidy gating: the user names an architecture unit,
  * the unit is resolved to a file set (see `~/acg/scope/unit-resolve`), and we measure
  * the unit's ABSOLUTE fitness debt at baseline = HEAD (a snapshot violation COUNT, not

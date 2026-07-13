@@ -8,7 +8,7 @@ import { type AcgImpactGraph, acgImpactGraph } from '~/schemas/acg-impact-graph'
 import { USAGE_ERROR_EXIT, parseOutputFormat, writeError, writeHuman, writeJson } from '../util';
 
 /**
- * `ditto change-map` — Change Map 텍스트 정본 렌더러 (50-change-map §2.1).
+ * `ditto change-map` — Change Map 텍스트 정본 렌더러.
  *
  * read-only producer. `.ditto/local/work-items/<wi>/`의 change-contract.json(필수)·
  * impact-graph.json(선택)·acg-review.json(선택)을 읽어 §2.1 텍스트(human) 또는
@@ -17,7 +17,7 @@ import { USAGE_ERROR_EXIT, parseOutputFormat, writeError, writeHuman, writeJson 
 export const changeMapCommand = defineCommand({
   meta: {
     name: 'change-map',
-    description: 'Render the Change Map text notation for a work item (50-change-map §2.1)',
+    description: 'Render the Change Map text notation for a work item',
   },
   args: {
     'work-item': { type: 'string', description: 'Work item id', required: true },

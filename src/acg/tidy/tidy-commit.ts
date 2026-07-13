@@ -1,5 +1,5 @@
 /**
- * ⑧ Tidy commit (80-plan §6/§8, ADR-0017 D8). When a tidy item meets the §4.4
+ * ⑧ Tidy commit (ADR-0017 D8). When a tidy item meets the §4.4
  * bar, the structural change is committed AUTOMATICALLY — but only on an ISOLATED
  * branch and NEVER pushed. Local commits are reversible (git reset/revert), so
  * with push forbidden the irreversibility risk is low; pushing is intentionally

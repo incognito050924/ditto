@@ -43,7 +43,7 @@ export function classifyPromptAdvisory(prompt: string): 'question' | 'execution'
  * when the prompt is question-shaped AND mentions concrete code-locatable
  * surface (file/path/function/error/test/log). Conservative on purpose:
  * single-word boundaries only, and the result is advisory — the LLM is not
- * required to follow it. Aligns with plan §11 "advisory only, no keyword gate".
+ * required to follow it. Aligns with "advisory only, no keyword gate".
  */
 const CODEBASE_ANSWERABLE_PATTERNS = [
   /\bfile\b/i,
@@ -107,7 +107,7 @@ export function duplicateSearch(
  * An explicit work-item id the user named in the prompt (e.g. "resume wi_…"),
  * lowercased, or undefined. This is the EXPLICIT resume signal the ask-advisory
  * tells the user to give; binding on it is a user action, NOT an arbitrary
- * auto-pick, so the single-active no-auto-pick invariant (plan §3 F3) holds.
+ * auto-pick, so the single-active no-auto-pick invariant holds.
  */
 /**
  * A resume-intent keyword that, alongside a wi_ id, marks the mention as an
@@ -138,7 +138,7 @@ export interface ActiveResolution {
 }
 
 /**
- * Resolve the single active work item for a session (plan §3 F3).
+ * Resolve the single active work item for a session.
  *  - pointer present → load it (pointer wins even if other drafts exist)
  *  - pointer absent + open work items exist → ASK which to resume (never auto-pick)
  *  - pointer absent + no open work items → GUIDE only (no auto-create, no pointer):

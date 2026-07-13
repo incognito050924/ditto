@@ -1,5 +1,5 @@
 /**
- * ⓪ Tidy entry classifier (80-plan §3, WU-1) — decide whether a just-made change
+ * ⓪ Tidy entry classifier — decide whether a just-made change
  * needs a Tidy pass. DETERMINISTIC diff-stat heuristic ONLY: code-touch + size /
  * file-count thresholds.
  *

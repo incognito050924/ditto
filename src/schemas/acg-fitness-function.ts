@@ -3,12 +3,12 @@ import { acgProducedBy } from './acg-common';
 import { isoDateTime, schemaVersion, workItemId } from './common';
 
 /**
- * ACG FitnessFunction (20-contracts §6) — the genuinely new core. A property the
+ * ACG FitnessFunction — the genuinely new core. A property the
  * codebase must keep over time, as an executable predicate evaluated per-change
  * + periodically. AssuranceSnapshot is the time series of these evaluations.
  *
  * NOTE: schema defined in v0 (WU-1); the *runner/scheduler* that executes it is
- * out of v0 scope (v0-plan §2, Q4/OBJ-41).
+ * out of v0 scope.
  */
 
 export const acgFitnessKind = z.enum([

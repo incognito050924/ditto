@@ -22,7 +22,7 @@ export class EvidenceStore {
   }
 
   // evidence-index.json은 work-item 루트에 둔다(evidence/ 하위 아님) — gitignore 대상인
-  // raw evidence/ 와 달리 커밋 가능한 ledger다(설계서 §8 layout).
+  // raw evidence/ 와 달리 커밋 가능한 ledger다.
   private evidenceIndexPath(workItemId: string): string {
     return join(this.workItemDir(workItemId), 'evidence-index.json');
   }

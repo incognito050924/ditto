@@ -2,16 +2,16 @@ import { z } from 'zod';
 import { relativePath, schemaVersion, sha256, workItemId } from './common';
 
 /**
- * E2EJourneyContract (설계서 §6 line 145, §10 "E2E 테스트 설계 (post-v0)").
+ * E2EJourneyContract.
  *
  * Real-browser user-journey verification — distinct from code-level tests. The
- * executor is direct Playwright/Chromium (not MCP, §10). Artifacts (screenshots,
+ * executor is direct Playwright/Chromium (not MCP). Artifacts (screenshots,
  * trace, console, network) live under `.ditto/local/runs/<id>/` (gitignored raw) and
  * are referenced here by path + optional sha256 — never embedded.
  *
  * v0 status: *design-locked contract*. The `playwright-e2e` agent / `/ditto:e2e`
- * skill / actual browser capture are post-v0 (M5) runtime (설계서 §0/§10; M1.5b
- * asserts the agent absent in v0).
+ * skill / actual browser capture are post-v0 (M5) runtime; the agent is absent in
+ * v0.
  */
 
 export const e2eResult = z
@@ -90,7 +90,7 @@ export const e2eJourney = z
       .min(1)
       .nullable()
       .default(null)
-      .describe('Reproduction steps; required when result=fail (설계서 §10 "실패 시 재현 절차")'),
+      .describe('Reproduction steps; required when result=fail'),
   })
   .superRefine((value, ctx) => {
     if (value.result === 'fail' && value.reproduction === null) {

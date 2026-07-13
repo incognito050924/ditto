@@ -1,5 +1,5 @@
 /**
- * ② Tidy scope contract (80-plan §2/§7, WU-1) — build the cleanup-profile
+ * ② Tidy scope contract — build the cleanup-profile
  * ChangeContract: allowed_scope = the just-made diff, forbidden_scope = 그외.
  * Enforced as a WHITELIST (scope_mode) so PreToolUse blocks any edit outside the
  * diff. Opt-in scope_mode keeps existing (blacklist) contracts unchanged.

@@ -1,5 +1,5 @@
 /**
- * Assurance drift — AssuranceSnapshot 시계열을 SLOP 추세로 투영(단계8, 10-methodology §8).
+ * Assurance drift — AssuranceSnapshot 시계열을 SLOP 추세로 투영.
  *
  * FitnessFunction이 술어라면 AssuranceSnapshot은 그 평가 이력이고, drift는 그 위에서 파생된다
  * (스키마 주석). 한 변경(work item)이 만든 SLOP은 개별로는 게이트를 통과해도, 변경을 가로질러

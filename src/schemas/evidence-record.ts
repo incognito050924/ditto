@@ -12,12 +12,11 @@ export const portability = z
   );
 
 /**
- * Sidecar that wraps an `evidenceRef` with freshness/portability metadata
- * (설계서 §6.7 line 633-645). The point is to separate "증거가 있다" from "이
+ * Sidecar that wraps an `evidenceRef` with freshness/portability metadata.
+ * The point is to separate "증거가 있다" from "이
  * clone/세션에서 raw를 열 수 있다": a record can be judgeable from its summary /
  * sha256 / exit_code / key_lines even when the raw artifact is absent. The
- * underlying `evidenceRef` schema is reused verbatim — never widened here
- * (설계서 line 629).
+ * underlying `evidenceRef` schema is reused verbatim — never widened here.
  */
 export const evidenceRecord = z
   .object({
@@ -72,8 +71,8 @@ export const evidenceRecord = z
   .describe('Evidence freshness/portability sidecar wrapping an evidenceRef');
 
 /**
- * Committable evidence ledger written to `.ditto/local/work-items/<id>/evidence-index.json`
- * (설계서 §8 layout). Append-only set of EvidenceRecords. Unlike the raw
+ * Committable evidence ledger written to `.ditto/local/work-items/<id>/evidence-index.json`.
+ * Append-only set of EvidenceRecords. Unlike the raw
  * `evidence/` directory (gitignored), this file is committed so other
  * clones/sessions can judge completion from metadata alone.
  */

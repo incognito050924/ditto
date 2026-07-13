@@ -3,7 +3,7 @@ import type { AcgAffectedNode, AcgImpactGraph } from '~/schemas/acg-impact-graph
 import type { AcgReviewFile, AcgReviewGraph } from '~/schemas/acg-review-graph';
 
 /**
- * Change Map 텍스트 렌더러 (50-change-map §2.1 정본).
+ * Change Map 텍스트 렌더러.
  *
  * read-only producer: ChangeContract(필수)·ImpactGraph(선택)·ReviewGraph(선택)을
  * §2.1b EBNF의 단일 change_node 텍스트로 그린다. 토큰은 스키마 enum과 정확히 일치한다.
@@ -131,7 +131,7 @@ const RISK_CLASSDEF: Record<Risk, string> = {
 };
 
 /**
- * Change Map Mermaid 렌더러 (50-change-map §3, 파생). render()와 같은 입력에서:
+ * Change Map Mermaid 렌더러 (파생). render()와 같은 입력에서:
  *   ◆ 변경 노드 = 위험색 중심 노드,
  *   → impact(affected) = 실선 + `<kind> <증거뱃지>` 라벨,
  *   ✕ forbid(forbidden_scope) = 점선(red) + forbid 스타일,

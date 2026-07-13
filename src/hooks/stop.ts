@@ -306,7 +306,7 @@ export function autopilotBypassForcesContinuation(
  * identity). Low/medium-risk files never block here, and a high-risk file WITH
  * evidence passes — only un-evidenced high-risk changes block.
  *
- * Why evidence-absence, not the `unresolved` flag: per 20-contracts §5 the
+ * Why evidence-absence, not the `unresolved` flag: the
  * `unresolved` marker maps from reviewer-output `unverified[]` (and the adapter
  * fixes those at risk=low), so `high ∧ unresolved` is never produced and would
  * make this gate inert. Keying on "high-risk without evidence" is what makes the
@@ -356,7 +356,7 @@ export function impactForcesContinuation(graph: AcgImpactGraph): string[] {
 
 /**
  * Does a SemanticCompatibility (단계6) force continuation? Type safety ≠ meaning
- * safety (20-contracts §4); the verdict gates 단계6 통과/차단 (§4 line 489, line 730).
+ * safety; the verdict gates 단계6 통과/차단.
  * Two verdicts block, mirroring the default-deny of the impact/journey gates and
  * DITTO's "completion is gated by evidence":
  *   - `semantic_safe: 'no'` WITHOUT `intended_breaking` → an UNINTENDED meaning

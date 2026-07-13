@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { evidenceRef, isoDateTime, relativePath, schemaVersion } from './common';
 
 /**
- * KnowledgeContract (설계서 §6 line 144, §8 layout `.ditto/knowledge/`).
+ * KnowledgeContract.
  *
  * Durable project knowledge: terms, repeated learnings, reusable patterns. The
  * ubiquitous-language glossary keeps its own schema (`glossary.ts`); this record
@@ -17,8 +17,7 @@ import { evidenceRef, isoDateTime, relativePath, schemaVersion } from './common'
  *
  * v0 status: this is a *design-locked contract* — the schema is registered, but
  * the KnowledgeCurator agent / `/ditto:knowledge-update` skill / CLAUDE.md
- * projection are post-v0 (M6) runtime (설계서 §0; M1.5b asserts the agent absent
- * in v0).
+ * projection are post-v0 (M6) runtime; the agent is absent in v0.
  */
 
 export const knowledgePattern = z

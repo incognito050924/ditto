@@ -16,7 +16,7 @@ import {
 } from '../util';
 
 /**
- * `ditto review --scope <unit>` (80-plan §9, WU-5) — UNIT-scoped consistency/security
+ * `ditto review --scope <unit>` — UNIT-scoped consistency/security
  * audit of STANDING code (baseline = HEAD), the WHOLE unit, NOT a work-item diff. The
  * unit-scoped SIBLING of `ditto acg-review` (work-item scoped). The user names an
  * architecture unit (`all | component:<name> | layer:<name> | api | <glob>`); it is

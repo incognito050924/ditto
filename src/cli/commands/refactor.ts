@@ -14,7 +14,7 @@ import {
 } from '../util';
 
 /**
- * `ditto refactor --scope <unit>` (80-plan §9, WU-4) — UNIT-scoped, behavior-preserving
+ * `ditto refactor --scope <unit>` — UNIT-scoped, behavior-preserving
  * tidy of STANDING code (baseline = HEAD), NOT a merge-base diff. The user names an
  * architecture unit (`all | component:<name> | layer:<name> | api | <glob>`); it is
  * resolved to a standing-code file set via the SHARED resolver (`~/acg/scope/unit-resolve`,

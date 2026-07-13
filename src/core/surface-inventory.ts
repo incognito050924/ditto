@@ -35,7 +35,7 @@ async function loadExpected(
     throw new Error(`surface catalog is malformed JSON: ${path}`);
   }
   if (raw === null) {
-    // Absent catalog is a false-green trap (M1.6, plan §3): the inventory has
+    // Absent catalog is a false-green trap: the inventory has
     // nothing to compare actual surfaces against, which would silently pass on a
     // catalog deletion. Fail loudly — symmetric with the present-but-empty case.
     throw new Error(`surface catalog is missing: ${path}`);

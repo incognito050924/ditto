@@ -2,9 +2,9 @@ import { z } from 'zod';
 import { acgChangeEnvelope } from './acg-common';
 
 /**
- * ACG JourneyRun (20-contracts §2.5 / §0.2) — executed-journey evidence artifact.
+ * ACG JourneyRun — executed-journey evidence artifact.
  *
- * DITTO binding (D4, v0-plan §3): realized via DITTO `e2eJourney`. result
+ * DITTO binding: realized via DITTO `e2eJourney`. result
  * pass/fail/blocked maps to outcome pass/fail/skipped (blocked→skipped); `flaky`
  * is a spec outcome the current e2eJourney does NOT produce (its result enum
  * lacks it) — kept here for spec completeness, mapped only once e2e adds

@@ -4,7 +4,7 @@ import type { AcgImpactGraph } from '~/schemas/acg-impact-graph';
 import type { AcgReviewGraph } from '~/schemas/acg-review-graph';
 import { render } from './render';
 
-// 50-change-map §2.1 텍스트 정본 렌더러. 라인 형식·enum 토큰·ReviewGraph 폴백을 검증한다.
+// 텍스트 정본 렌더러. 라인 형식·enum 토큰·ReviewGraph 폴백을 검증한다.
 
 const contract = (overrides: Partial<AcgChangeContract> = {}): AcgChangeContract => ({
   schema_version: '0.1.0',

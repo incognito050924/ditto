@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { acgCatalogEnvelope } from './acg-common';
 
 /**
- * ACG ArchitectureSpec (20-contracts §3) — Clean Architecture's Dependency Rule
+ * ACG ArchitectureSpec — Clean Architecture's Dependency Rule
  * fixed as a machine-checkable, per-repo declaration. A catalog artifact built
  * once and reused; consumed by the boundary gate (out of v0 scope) and fitness.
  */

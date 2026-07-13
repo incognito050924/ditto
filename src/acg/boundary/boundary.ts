@@ -1,12 +1,12 @@
 import type { AcgArchitectureSpec } from '~/schemas/acg-architecture-spec';
 
 /**
- * Boundary gate core (단계6, 10-methodology.md §6 — "boundary 위반 0").
+ * Boundary gate core ("boundary 위반 0").
  *
  * Clean Architecture's Dependency Rule, machine-checked: given the dependency
  * edges a change introduces, flag those that violate the ArchitectureSpec —
  *   (a) forbidden_dependencies: a from-glob → to-glob edge that is declared
- *       forbidden (fully spec-grounded; from/to are path globs, 20-contracts §3);
+ *       forbidden (fully spec-grounded; from/to are path globs);
  *   (b) layers.can_call: an edge whose source layer may not call the target
  *       layer. A file's layer is the layers-key that appears as a path segment
  *       (boxwood convention: …/controller/… ⇒ controller). When neither end maps

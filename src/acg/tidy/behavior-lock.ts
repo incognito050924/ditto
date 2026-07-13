@@ -1,5 +1,5 @@
 /**
- * ① L1 behavior lock (80-plan §4, WU-1) — the floor of the equivalence-evidence
+ * ① L1 behavior lock — the floor of the equivalence-evidence
  * ladder. Before a Tidy item may start, its changed region must be witnessed by a
  * characterization that actually executes it.
  *

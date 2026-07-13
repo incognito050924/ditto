@@ -1523,7 +1523,7 @@ export const recordResultPayload = z
       .boolean()
       .optional()
       .describe(
-        'Tidy failure policy (80-plan §8, WU-3 ac-4). On a `refactor` (tidy) node FAIL, ' +
+        'Tidy failure policy. On a `refactor` (tidy) node FAIL, ' +
           'true means the tidy pass uncovered a real defect in the implementation. The ' +
           'engine then returns the implement node the tidy stage roots on to pending — it ' +
           'does NOT fix the bug here and does NOT retry the tidy node in place (the fix ' +
@@ -3434,7 +3434,7 @@ async function recordResultCore(
       const surfaced = await surfaceLspDiagnostics(repoRoot, input.workItemId, reported);
       if (surfaced.length > 0) lspAdvisory = surfaced;
     }
-    // Tidy stage wiring (80-plan §8/§10, WU-3 ac-1): a green `implement` pass
+    // Tidy stage wiring: a green `implement` pass
     // triggers the ⓪ classifier on the just-made diff (base = work item
     // started_at_sha … HEAD). On ENTER the ④/⑦ tidy subgraph is spliced through
     // the SAME addNodes path as planner generated_nodes. Fail-open by design — no
@@ -3508,7 +3508,7 @@ async function recordResultCore(
     };
   }
 
-  // Tidy bug-found policy (80-plan §8, WU-3 ac-4). A `refactor` (tidy) node that
+  // Tidy bug-found policy. A `refactor` (tidy) node that
   // FAILS because it uncovered a real defect in the implementation does NOT get
   // fixed or retried in place — the fix belongs to the implement node. Return the
   // implement node the tidy stage roots on to pending (so it, and a fresh tidy

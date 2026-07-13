@@ -1,5 +1,5 @@
 /**
- * Autopilot Tidy wiring (80-plan §8/§10, WU-3) — the runtime seam that turns the
+ * Autopilot Tidy wiring — the runtime seam that turns the
  * already-built tidy primitives into a stage on the autopilot loop. When an
  * `implement` node goes green, the ⓪ classifier (`classifyTidyEntry`) decides
  * SKIP/ENTER from the just-made diff-stat; on ENTER the ④/⑦ tidy subgraph

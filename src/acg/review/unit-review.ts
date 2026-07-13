@@ -1,5 +1,5 @@
 /**
- * Unit-scoped review planning + aggregation (80-plan §9, WU-5). The STANDING-code
+ * Unit-scoped review planning + aggregation. The STANDING-code
  * counterpart to the work-item-scoped `ditto acg-review`: the user names an
  * architecture unit, it is resolved to a file set via the SHARED resolver
  * (`~/acg/scope/unit-resolve`, also used by WU-4 `ditto refactor`), and this module

@@ -93,7 +93,7 @@ const NODE_TRANSITIONS: Record<
   },
   failed: { dispatch: 'running', rollback: 'pending' }, // retry re-dispatches
   blocked: { dispatch: 'running' }, // unblocked → re-dispatch
-  // `reopen` re-opens a passed node (80-plan §8, WU-3 ac-4): when a tidy pass
+  // `reopen` re-opens a passed node: when a tidy pass
   // uncovers a real defect in the implementation, the implement node is returned
   // to pending so it (and a fresh tidy stage) re-runs — the only legal way out of
   // the otherwise-terminal `passed` state.

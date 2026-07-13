@@ -18,7 +18,7 @@ type WorkItemStatus = z.infer<typeof workItemStatus>;
  * Deterministic gates (M0.4). Pure functions, no LLM calls (D5: 결정론 1차).
  * Each gate takes already-recorded fields and returns PASS/FAIL with reasons.
  * Admissibility/testability *judgement* lives in the LLM layer (M3); these
- * gates only read what was written (plan §2 M0.4).
+ * gates only read what was written.
  */
 export interface GateResult {
   pass: boolean;

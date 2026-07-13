@@ -3,7 +3,7 @@ import { acgProducedBy, uniqueStringSet } from './acg-common';
 import { isoDateTime, schemaVersion, workItemId } from './common';
 
 /**
- * ACG AssuranceSnapshot (20-contracts §6.5) — the time-series unit of the
+ * ACG AssuranceSnapshot — the time-series unit of the
  * Assurance Graph. FitnessFunction is the predicate; this is its evaluation
  * history. Drift (pass-rate slope, violation trend) is derived over these.
  *

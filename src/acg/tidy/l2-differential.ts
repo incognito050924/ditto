@@ -1,5 +1,5 @@
 /**
- * ② L2 old↔new differential (80-plan §4.2–4.4, WU-2c) — a NEW framework: a RELATIVE
+ * ② L2 old↔new differential — a NEW framework: a RELATIVE
  * oracle that asserts `old(x) ≡ new(x)` on the same input set. It does NOT need the
  * "correct" output — only whether old and new AGREE — so it detects the regressions a
  * refactor introduces (over-fitting, wrong internal call). No record/replay/intercept

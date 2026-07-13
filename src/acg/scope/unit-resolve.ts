@@ -1,5 +1,5 @@
 /**
- * Unit scope resolver (80-plan §9, WU-4) — maps an architecture UNIT to a
+ * Unit scope resolver — maps an architecture UNIT to a
  * STANDING-code file set (baseline = HEAD), NOT a merge-base diff. This is the
  * SHARED resolver: WU-4 (`ditto refactor`) and WU-5 (`ditto review`) both resolve
  * `all | component:<name> | layer:<name> | api | <glob>` through this module so the

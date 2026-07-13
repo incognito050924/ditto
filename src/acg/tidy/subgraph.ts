@@ -1,5 +1,5 @@
 /**
- * ④ + ⑦ Tidy subgraph (80-plan §8, WU-3). The "tidy stage": when the ⓪ classifier
+ * ④ + ⑦ Tidy subgraph. The "tidy stage": when the ⓪ classifier
  * returns ENTER after an implement node goes green, the planner/driver appends this
  * subgraph — one parallel cleanup node per file batch, then a DoD-replay verify.
  *

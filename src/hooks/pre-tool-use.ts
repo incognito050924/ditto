@@ -535,7 +535,7 @@ async function loadArchSpec(repoRoot: string): Promise<AcgArchitectureSpec | und
 
 /**
  * Enforce the current work item ChangeContract's scope on an edit.
- * - whitelist mode (cleanup profile, 80-plan §7): edit MUST fall inside
+ * - whitelist mode (cleanup profile): edit MUST fall inside
  *   allowed_scope; everything else blocks (allowed=diff, forbidden=그외). Secrets
  *   are already blocked upstream, so an allowed file is permitted.
  * - blacklist mode (default, existing behaviour): only forbidden_scope blocks.

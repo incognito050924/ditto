@@ -2,10 +2,10 @@ import { z } from 'zod';
 import { acgEvidenceKind } from './acg-common';
 
 /**
- * ACG ReviewGraph (20-contracts §5) — Review by Exception. Risk-classifies the
+ * ACG ReviewGraph — Review by Exception. Risk-classifies the
  * change and produces the minimal set a human must judge.
  *
- * DITTO binding (D3, v0-plan §3): this is realized as an `acg_review` EXTENSION
+ * DITTO binding: this is realized as an `acg_review` EXTENSION
  * OBJECT attached to reviewer-output — NOT a standalone wire artifact. It carries
  * no own envelope; it rides reviewer-output's schema_version/id/work_item_id.
  */

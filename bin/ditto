@@ -17677,7 +17677,7 @@ init_zod();
 // src/schemas/acg-common.ts
 init_zod();
 init_common();
-var acgEvidenceKind = exports_external.enum(["test", "build", "log", "diff", "screen", "manual", "e2e"]).describe("ACG acceptance/evidence kind; binds to DITTO evidenceRef.kind per 20-contracts \xA70.2");
+var acgEvidenceKind = exports_external.enum(["test", "build", "log", "diff", "screen", "manual", "e2e"]).describe("ACG acceptance/evidence kind; binds to DITTO evidenceRef.kind");
 var acgProducedBy = exports_external.enum(["agent", "user"]).describe("Who produced this ACG artifact");
 function acgChangeEnvelope(kind) {
   return {
@@ -26133,7 +26133,7 @@ var recordResultPayload = exports_external.object({
   reason: exports_external.string().optional().describe("2\u20133 line rationale recorded in the decision log"),
   generated_nodes: exports_external.array(nodeProposal).optional().describe("Subgraph this node generated (A-3). Promoted to the graph via addNodes on a " + "contentful pass; a planner/design node uses this to grow the graph past the seed."),
   has_findings: exports_external.boolean().optional().describe("Reviewer/security verdict that findings remain (A-2). On a contentful review- or " + "security-node pass, true splices a forward fix+re-check round (\xA72.4) under the " + "convergence budget, false/absent closes the loop. Ignored for other node kinds."),
-  tidy_bug_found: exports_external.boolean().optional().describe("Tidy failure policy (80-plan \xA78, WU-3 ac-4). On a `refactor` (tidy) node FAIL, " + "true means the tidy pass uncovered a real defect in the implementation. The " + "engine then returns the implement node the tidy stage roots on to pending \u2014 it " + "does NOT fix the bug here and does NOT retry the tidy node in place (the fix " + "belongs to the implement node). Ignored for non-refactor nodes / on pass."),
+  tidy_bug_found: exports_external.boolean().optional().describe("Tidy failure policy. On a `refactor` (tidy) node FAIL, " + "true means the tidy pass uncovered a real defect in the implementation. The " + "engine then returns the implement node the tidy stage roots on to pending \u2014 it " + "does NOT fix the bug here and does NOT retry the tidy node in place (the fix " + "belongs to the implement node). Ignored for non-refactor nodes / on pass."),
   plan_brief: exports_external.object({
     change_surface: exports_external.array(relativePath),
     interface_changes: exports_external.array(exports_external.string()).default([]),
@@ -28165,7 +28165,7 @@ var e2eJourney = exports_external.object({
   assertions: exports_external.array(e2eAssertion).default([]),
   result: e2eResult,
   artifacts: e2eArtifacts.default({}),
-  reproduction: exports_external.string().min(1).nullable().default(null).describe('Reproduction steps; required when result=fail (\uC124\uACC4\uC11C \xA710 "\uC2E4\uD328 \uC2DC \uC7AC\uD604 \uC808\uCC28")')
+  reproduction: exports_external.string().min(1).nullable().default(null).describe("Reproduction steps; required when result=fail")
 }).superRefine((value, ctx) => {
   if (value.result === "fail" && value.reproduction === null) {
     ctx.addIssue({
@@ -34492,7 +34492,7 @@ var acgChangeContract = exports_external.object({
   purpose: exports_external.string().min(1).describe("The result the change pursues (intent, not code)"),
   allowed_scope: exports_external.array(acgScopeRef).default([]).describe("Frame condition: only paths/symbols here may be modified"),
   forbidden_scope: exports_external.array(acgScopeRef).min(1).describe("Must stay untouched. Non-empty \u2014 an empty forbid = unbounded change"),
-  scope_mode: exports_external.enum(["blacklist", "whitelist"]).default("blacklist").describe("blacklist (default, existing behaviour): only forbidden_scope blocks edits. " + "whitelist (cleanup profile, 80-plan \xA77): edits MUST fall inside allowed_scope; " + "everything else blocks (allowed=diff, forbidden=\uADF8\uC678). Opt-in so existing contracts are unchanged."),
+  scope_mode: exports_external.enum(["blacklist", "whitelist"]).default("blacklist").describe("blacklist (default, existing behaviour): only forbidden_scope blocks edits. " + "whitelist (cleanup profile): edits MUST fall inside allowed_scope; " + "everything else blocks (allowed=diff, forbidden=\uADF8\uC678). Opt-in so existing contracts are unchanged."),
   invariants: exports_external.array(acgInvariant).default([]),
   acceptance: exports_external.array(acgAcceptanceCriterion).min(1),
   decision_ref: exports_external.string().nullable().default(null).describe("ADR/decision id. Required when risk_default \u2265 medium (stage-2 gate)"),
@@ -35463,7 +35463,7 @@ var acgImpactGraph = exports_external.object({
 var changeMapCommand = defineCommand({
   meta: {
     name: "change-map",
-    description: "Render the Change Map text notation for a work item (50-change-map \xA72.1)"
+    description: "Render the Change Map text notation for a work item"
   },
   args: {
     "work-item": { type: "string", description: "Work item id", required: true },
@@ -49259,7 +49259,7 @@ function buildImpactGraph(input, analysis) {
       unresolved.push({
         kind: "journey_unknown",
         path: input.changeTarget,
-        reason: "user-exposed change with no JourneySpec mapping; a human must map the journey or declare no journey impact (default-deny, 20-contracts \xA72)"
+        reason: "user-exposed change with no JourneySpec mapping; a human must map the journey or declare no journey impact (default-deny)"
       });
     }
   }
@@ -57207,4 +57207,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=61814ee5be74231d866954bb7e9d1d45f0b69dcbb8431278657cfa41f3190798
+//# ditto-src-stamp=88d41ecc3502eaeb288e2fd5f04b687498b72f2bf02449a6611c31ff703bce37

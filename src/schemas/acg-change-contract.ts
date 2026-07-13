@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { acgChangeEnvelope, acgEvidenceKind } from './acg-common';
 
 /**
- * ACG ChangeContract (20-contracts §1) — Design by Contract applied to a change.
+ * ACG ChangeContract — Design by Contract applied to a change.
  * The variable-time projection of IntentContract; a thin work-item sidecar.
  */
 
@@ -47,7 +47,7 @@ export const acgChangeContract = z
       .default('blacklist')
       .describe(
         'blacklist (default, existing behaviour): only forbidden_scope blocks edits. ' +
-          'whitelist (cleanup profile, 80-plan §7): edits MUST fall inside allowed_scope; ' +
+          'whitelist (cleanup profile): edits MUST fall inside allowed_scope; ' +
           'everything else blocks (allowed=diff, forbidden=그외). Opt-in so existing contracts are unchanged.',
       ),
     invariants: z.array(acgInvariant).default([]),
@@ -60,7 +60,7 @@ export const acgChangeContract = z
     risk_default: z.enum(['low', 'medium', 'high']).default('low'),
   })
   .superRefine((value, ctx) => {
-    // Stage-2 gate (10-methodology §2 / 20-contracts §1): medium+ risk needs a decision_ref.
+    // Stage-2 gate: medium+ risk needs a decision_ref.
     if (value.risk_default !== 'low' && !value.decision_ref) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

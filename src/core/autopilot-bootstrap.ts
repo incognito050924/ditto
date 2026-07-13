@@ -245,7 +245,7 @@ export async function bootstrapAutopilot(
   });
   // Build nodes from the *intent* AC (the readied set the gate validated), not
   // the work item AC (which may still hold draft placeholders from earlier
-  // UserPromptSubmit). plan §4 M2.1b — gate ↔ score consistency.
+  // UserPromptSubmit). Gate ↔ score consistency.
   const acceptanceIds = input.intent.acceptance_criteria.map((c) => c.id);
 
   const seededNodes = (input.generateNodes ?? defaultNodeGenerator)(acceptanceIds);

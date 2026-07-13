@@ -6,7 +6,7 @@ import { localDir } from './ditto-paths';
 import { ensureDir, readJson, writeJson } from './fs';
 
 /**
- * Single-active invariant (plan §3 F3): one `session_id → work_item_id` pointer
+ * Single-active invariant: one `session_id → work_item_id` pointer
  * is the single source for "the active work item this session". UserPromptSubmit
  * and Stop read the SAME pointer so they always agree on which work item is live.
  * Stored at `.ditto/local/sessions/<session_id>.json`.

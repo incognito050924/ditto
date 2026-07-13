@@ -326,7 +326,7 @@ select p
 /**
  * 한 언어 바인딩의 관계쿼리 3종. 결과 형식(impact: p,ln,k / edge: from,to /
  * symbol-decl: p)은 언어 무관이고, 쿼리 본문만 언어별로 다르다 — "바인딩이 분석기를
- * 꽂는다"(10-methodology §6)의 실현체. 새 언어 바인딩은 여기 한 항목만 추가한다.
+ * 꽂는다"의 실현체. 새 언어 바인딩은 여기 한 항목만 추가한다.
  */
 export interface RelationQueryTemplates {
   /** `{{SYMBOL}}`·`{{FILE}}` 치환. impact 영향집합(value/type/decl). */

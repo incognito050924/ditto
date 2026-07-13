@@ -10,7 +10,7 @@ import type { ReviewerOutput } from '~/schemas/reviewer-output';
  * acg_review object is a SEPARATE artifact; reviewer-output is never mutated and
  * its schema is untouched.
  *
- * Binding rules (20-contracts §0.2 ReviewGraph←reviewer-output table):
+ * Binding rules (ReviewGraph←reviewer-output table):
  *  - finding.file        → files[].path
  *  - finding.severity    → files[].risk (critical/high→high, medium→medium, info/low→low)
  *  - finding.reason      → files[].risk_reason
@@ -19,7 +19,7 @@ import type { ReviewerOutput } from '~/schemas/reviewer-output';
  *  - human_review_set    → derived view: files where risk==='high' OR unresolved===true
  */
 
-/** finding.severity → ACG risk (20-contracts §5 위험도 규칙). */
+/** finding.severity → ACG risk (위험도 규칙). */
 function severityToRisk(
   severity: ReviewerOutput['findings'][number]['severity'],
 ): AcgReviewFile['risk'] {

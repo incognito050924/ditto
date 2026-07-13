@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { acgChangeEnvelope } from './acg-common';
 
 /**
- * ACG ImpactGraph (20-contracts §2) — change-impact propagation classified by
+ * ACG ImpactGraph — change-impact propagation classified by
  * node kind. Statically unresolved impact is recorded in `unresolved`, never
  * hidden. journey nodes are addressed by journey_id (a flow), not a file path.
  */
