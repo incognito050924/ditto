@@ -63,7 +63,7 @@ describe('collectCompletionCoverageReport', () => {
         readCompletion: async () => null,
       }),
     );
-    const row = report.rows[0];
+    const row = report.rows[0] as (typeof report.rows)[number];
     expect(row.work_item_id).toBe('wi_aaaaaaaa');
     expect(row.has_completion).toBe(false);
     expect(row.total_acceptance).toBe(0);
@@ -85,7 +85,7 @@ describe('collectCompletionCoverageReport', () => {
           ]),
       }),
     );
-    const row = report.rows[0];
+    const row = report.rows[0] as (typeof report.rows)[number];
     expect(row.has_completion).toBe(true);
     expect(row.total_acceptance).toBe(4);
     expect(row.closed_acceptance).toBe(2);
@@ -103,7 +103,7 @@ describe('collectCompletionCoverageReport', () => {
           ]),
       }),
     );
-    const row = report.rows[0];
+    const row = report.rows[0] as (typeof report.rows)[number];
     expect(row.total_acceptance).toBe(2);
     expect(row.closed_acceptance).toBe(1); // only the evidence-backed pass
     expect(row.coverage).toBe(0.5);
@@ -127,7 +127,7 @@ describe('collectCompletionCoverageReport', () => {
         readCompletion: async () => withRecord,
       }),
     );
-    expect(report.rows[0].closed_acceptance).toBe(1);
+    expect((report.rows[0] as (typeof report.rows)[number]).closed_acceptance).toBe(1);
   });
 
   test('isUnitOnlyclosure: command-only evidence flags a unit-only closure', () => {
@@ -160,7 +160,7 @@ describe('collectCompletionCoverageReport', () => {
       evidence: [{ kind: 'command' as const, command: 'bun test' }],
       evidence_records: [{ kind: 'artifact' as const, path: '.ditto/local/runs/wi/coverage.json' }],
     };
-    expect(isUnitOnlyClosure(ac)).toBe(false);
+    expect(isUnitOnlyClosure(ac as unknown as Parameters<typeof isUnitOnlyClosure>[0])).toBe(false);
   });
 
   test('isUnitOnlyClosure: a non-pass AC is never flagged (only closed ACs matter)', () => {

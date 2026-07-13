@@ -439,5 +439,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-20260706-work-item-record-run-split · accepted · work-item 상태를 Record(공유·커밋)와 Run(개인·폐기가능) 2-tier로 분할 — ADR-0012 D1 부분 supersede
 - ADR-20260708-autopilot-test-tier-boundary · accepted · autopilot 테스트 barrier = 유닛/목 tier 전용 — 완료 게이트로서 per-AC oracle과 AND, 통합/E2E는 범위 밖(push-gate·CI·e2e 소관)
 - ADR-20260710-intent-single-unit-and-termination-completeness · accepted · 종료 완전성 게이트 + 하나의 의도=하나의 단위 불변식 — pass-close에서 in-scope agent-owned 잔여 무단 축소 차단·slice/phase 단위 부재 (ADR-20260627 materialize≠drive 보존, ADR-20260706 정합)
+- ADR-20260713-directive-fidelity-banner-gate · accepted · 사용자향이면서 동작 지시인 배너(charter projection·모드 배너) 리라이트는 operative-cue 충실도로 게이트 — 가독성만으로는 불충분 (imperative·prohibition·threshold·gate·exit cue의 힘+극성 before→after 보존, 가독성 oracle과 AND)
 
 <!-- ditto:knowledge:end -->

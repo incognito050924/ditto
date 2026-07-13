@@ -156,8 +156,8 @@ export function collectTidyDiffStat(
     const [addedRaw, removedRaw, ...rest] = t.split('\t');
     const path = rest.join('\t');
     if (path.length === 0) continue;
-    const added = addedRaw === '-' ? 0 : Number.parseInt(addedRaw, 10) || 0;
-    const removed = removedRaw === '-' ? 0 : Number.parseInt(removedRaw, 10) || 0;
+    const added = addedRaw === '-' ? 0 : Number.parseInt(addedRaw ?? '', 10) || 0;
+    const removed = removedRaw === '-' ? 0 : Number.parseInt(removedRaw ?? '', 10) || 0;
     files.push({ path, added, removed, isCode: isCodePath(path) });
   }
   return { files };

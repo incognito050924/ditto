@@ -30,7 +30,7 @@ const SKILLS = [
 function frontmatter(text: string): Record<string, unknown> {
   const m = text.match(/^---\n([\s\S]*?)\n---/);
   if (!m) throw new Error('no YAML frontmatter');
-  return parseYaml(m[1]) as Record<string, unknown>;
+  return parseYaml(m[1] as string) as Record<string, unknown>;
 }
 
 describe('Claude host surface — skills', () => {
@@ -38,7 +38,7 @@ describe('Claude host surface — skills', () => {
     expect(SKILLS.length).toBe(11);
   });
 
-  test.each(SKILLS)('skills/%s/SKILL.md exists with a valid frontmatter', (name) => {
+  test.each([...SKILLS])('skills/%s/SKILL.md exists with a valid frontmatter', (name) => {
     const path = join(REPO, 'skills', name, 'SKILL.md');
     expect(existsSync(path)).toBe(true);
     const fm = frontmatter(readFileSync(path, 'utf8'));

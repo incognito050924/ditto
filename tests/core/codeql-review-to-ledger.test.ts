@@ -41,7 +41,7 @@ describe('assembleReviewerOutput', () => {
     expect(parsed.kind).toBe('security-reviewer');
     expect(parsed.reviewer).toBe('codeql');
     expect(parsed.different_provider_than_generator).toBe(false);
-    expect(parsed.findings[0].severity).toBe('high');
+    expect((parsed.findings[0] as (typeof parsed.findings)[number]).severity).toBe('high');
   });
 
   test('only low/note findings → verdict partial', () => {
@@ -176,17 +176,19 @@ describe('runCodeqlReviewToLedger', () => {
 
     // The persisted ledger is schema-valid AND trips the real Stop gate.
     expect(cap.ledgers).toHaveLength(1);
-    const graph = acgReviewGraph.parse(cap.ledgers[0].graph);
+    const graph = acgReviewGraph.parse((cap.ledgers[0] as (typeof cap.ledgers)[number]).graph);
     const reasons = acgReviewForcesContinuation(graph);
     expect(reasons).toHaveLength(1);
     expect(reasons[0]).toContain('src/exec.ts');
     // reviewer-output persisted too (audit trail).
-    expect(cap.outputs[0].output.verdict).toBe('fail');
+    expect((cap.outputs[0] as (typeof cap.outputs)[number]).output.verdict).toBe('fail');
     // dataflow DoD: the taint finding yields one verifiable proposition.
     expect(res.dataflowDoDs).toHaveLength(1);
-    expect(res.dataflowDoDs[0].oracle).toBe('src/a.ts:1 → src/exec.ts:42');
+    expect((res.dataflowDoDs[0] as (typeof res.dataflowDoDs)[number]).oracle).toBe(
+      'src/a.ts:1 → src/exec.ts:42',
+    );
     expect(cap.dods).toHaveLength(1);
-    expect(cap.dods[0].dods).toHaveLength(1);
+    expect((cap.dods[0] as (typeof cap.dods)[number]).dods).toHaveLength(1);
   });
 
   test('clean analysis produces no dataflow DoDs and persists none', async () => {
@@ -223,7 +225,7 @@ describe('runCodeqlReviewToLedger', () => {
     expect(res.gated).toBe(false);
     expect(res.verdict).toBe('pass');
     expect(res.highRiskWithoutEvidence).toBe(0);
-    const graph = acgReviewGraph.parse(cap.ledgers[0].graph);
+    const graph = acgReviewGraph.parse((cap.ledgers[0] as (typeof cap.ledgers)[number]).graph);
     expect(acgReviewForcesContinuation(graph)).toHaveLength(0);
   });
 });

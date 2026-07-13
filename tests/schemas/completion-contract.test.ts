@@ -21,7 +21,7 @@ describe('completionContract unverified.resolvability', () => {
       unverified: [{ item: 'edge case x', reason: 'no harness', out_of_scope: true }],
     };
     const parsed = completionContract.parse(claim);
-    const u = parsed.unverified[0];
+    const u = parsed.unverified[0] as (typeof parsed.unverified)[number];
     expect(u.item).toBe('edge case x');
     expect(u.resolvability).toBeUndefined();
     expect(u.grounding).toBeUndefined();
@@ -39,7 +39,7 @@ describe('completionContract unverified.resolvability', () => {
         unverified: [{ item: 'i', reason: 'r', out_of_scope: true, resolvability: cls }],
       };
       const parsed = completionContract.parse(claim);
-      expect(parsed.unverified[0].resolvability).toBe(cls);
+      expect((parsed.unverified[0] as (typeof parsed.unverified)[number]).resolvability).toBe(cls);
     }
   });
 
@@ -65,7 +65,9 @@ describe('completionContract unverified.resolvability', () => {
       ],
     };
     const parsed = completionContract.parse(claim);
-    expect(parsed.unverified[0].grounding).toBe('ADR-0006 / left-pad@1.3.0');
+    expect((parsed.unverified[0] as (typeof parsed.unverified)[number]).grounding).toBe(
+      'ADR-0006 / left-pad@1.3.0',
+    );
   });
 
   test('grounding rejects an empty string', () => {

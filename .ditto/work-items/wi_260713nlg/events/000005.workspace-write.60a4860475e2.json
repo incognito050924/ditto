@@ -1,0 +1,35 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713nlg",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "60a4860475e218acdd677a61788f8d7202f37a66302d11c5a1c5e2fedf8d89a9",
+  "ts": "2026-07-13T08:37:43.041Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260713nlg/coverage.json",
+        "summary": "pre-mortem coverage sweep: 13 out_of_scope, 12 resolved"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260713nlg/plan-dialog.md",
+        "summary": "plan dialog + coverage findings"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/question-context.test.ts tests/core/coverage-manager.test.ts",
+        "summary": "green 92 pass/0 fail exit 0; red-first 90/2fail on AC assertion"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/question-context.test.ts tests/core/coverage-manager.test.ts",
+        "summary": "21/0 + 71/0 exit0; .length-regression simulation confirms discriminator"
+      }
+    ]
+  }
+}

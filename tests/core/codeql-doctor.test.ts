@@ -50,7 +50,7 @@ describe('classifyCodeqlTarget — fail-closed findings', () => {
       cliAvailable: true,
     });
     expect(findings.map((f) => f.kind)).toContain('compiled-language-build-unverified');
-    expect(findings[0].severity).toBe('high');
+    expect((findings[0] as (typeof findings)[number]).severity).toBe('high');
   });
 
   test('compiled language WITH build verification passes', () => {

@@ -31,6 +31,11 @@ const failures: Record<Exclude<GhDegradeReason, never>, GhExecResult> = {
     stdout: '',
     stderr: 'HTTP 403: Resource not accessible by integration',
   },
+  rate_limited: {
+    exitCode: 1,
+    stdout: '',
+    stderr: 'HTTP 403: API rate limit exceeded for user',
+  },
   unknown_command: {
     exitCode: 1,
     stdout: '',

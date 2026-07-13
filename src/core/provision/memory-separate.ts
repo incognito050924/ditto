@@ -120,7 +120,7 @@ export function defaultMemorySeparateDeps(repoRoot: string): MemorySeparateDeps 
     repoRoot,
     run: async (cmd, args, cwd) => {
       const proc = Bun.spawn([cmd, ...args], {
-        cwd,
+        ...(cwd !== undefined ? { cwd } : {}),
         stdout: 'ignore',
         stderr: 'pipe',
         stdin: 'ignore',

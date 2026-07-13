@@ -88,7 +88,7 @@ export async function select(
   const ans = (await io.ask(`번호 (Enter=${defaultIdx + 1}): `)).trim();
   if (ans === '') return defaultValue;
   const n = Number.parseInt(ans, 10);
-  if (Number.isInteger(n) && n >= 1 && n <= options.length) return options[n - 1].value;
+  if (Number.isInteger(n) && n >= 1 && n <= options.length) return (options[n - 1] as Option).value;
   return defaultValue;
 }
 

@@ -44,17 +44,30 @@ export const CHARTER_SELF_CHECKS: readonly CharterSelfCheck[] = [MINIMAL_INCREME
 // verbose command-lists/how-to that already live in CLAUDE.md/WORKFLOW/skills.
 // The minimal-increment self-check is projected VERBATIM (it is a cross-
 // referenced SoT — see MINIMAL_INCREMENT_SELF_CHECK) and stays uncompressed.
+//
+// Reworded to plain, picture-forming Korean (wi_260713nlg): these lines are
+// runtime LLM INSTRUCTION injected every turn, not display copy, so the reword
+// preserves EVERY operative cue with equal force and polarity (every imperative,
+// the forbidden ad-hoc-editing prohibition, the small/reversible→light vs
+// ambiguous/irreversible/multi-surface/declared-risk→heavy routing threshold,
+// the evidence completion gate). User feedback (wi_260713nlg iter): DITTO-
+// internal-only identifiers (final_verdict / IntentContract / QuestionGate) are
+// NOT surfaced raw in the banner text — they are expressed in plain Korean. The
+// only kept name anchor is 'prime directive' (a conformance test pins it). The
+// opaque "금지된 세 번째 길" metaphor is replaced with a self-explanatory
+// prohibition. Commands the user types stay literal; "acceptance criterion / AC"
+// and "autopilot" are user-facing general terms and stay.
 const PRIME_DIRECTIVE = [
-  'DITTO prime directive:',
-  '- Preserve the original request (IntentContract): do not grow scope, nor shrink/split it without user approval.',
-  '- Every codebase change runs under a work item via TWO standard paths only — heavy (/ditto:deep-interview → autopilot) or light (ditto work set-criteria → verify → done). Ad-hoc/console-TDD editing outside a work item is a FORBIDDEN third path; TDD is HOW you implement inside a path, not a substitute.',
-  '- YOU judge whether a request needs a work item, and which path (Route by weight, advisory): small/reversible → light; ambiguous/irreversible/multi-surface or declared risk → heavy. The hook never auto-creates one; when warranted, register it YOURSELF: `ditto work start`.',
-  '- Ask only what only the user can answer (QuestionGate); self-answer the rest from code/docs/web.',
-  '- Completion is evidence-gated: every acceptance criterion closed with evidence before final_verdict=pass; the whole work item is the bar, not a checkpoint.',
+  'DITTO 기본 지침(prime directive):',
+  '- 원래 요청을 그대로 지킨다: 사용자 승인 없이 범위를 넓히지도, 줄이거나 쪼개지도 않는다.',
+  '- 코드베이스를 바꾸는 모든 작업은 work item 안에서, 딱 두 갈래 표준 경로로만 진행한다 — 무거운 경로(`/ditto:deep-interview` → autopilot) 또는 가벼운 경로(`ditto work set-criteria` → `ditto verify` → `ditto work done`). 이 두 경로 밖에서 work item 없이 즉흥적으로 코드를 고치는 것(콘솔에서 바로 TDD로 편집)은 허용되지 않는다. TDD는 경로 안에서 구현하는 방법이지, 경로를 대신하는 수단이 아니다.',
+  '- 이 요청에 work item이 필요한지, 그리고 어느 경로로 갈지는 네가 판단한다(무게로 라우팅, 권고): 작고 되돌릴 수 있으면 → 가벼운 경로; 모호하거나 되돌릴 수 없거나 여러 표면에 걸치거나 위험이 선언되면 → 무거운 경로. 훅은 절대 자동으로 만들지 않는다. 필요하다고 보면 네가 직접 등록한다: `ditto work start`.',
+  '- 사용자만 답할 수 있는 것만 묻는다. 나머지는 코드·문서·웹에서 스스로 답한다.',
+  '- 완료는 증거로만 인정된다: 완료(통과)로 판정하기 전에 모든 acceptance criterion을 증거와 함께 닫는다. 기준은 work item 전체이지 중간 체크포인트가 아니다.',
   // Executable self-check routed into the charter (wi_260706n4w): projected
   // verbatim from CHARTER_SELF_CHECKS so the check that left the far-field sweep
   // stays enforced every turn, not archived as documentation.
-  ...CHARTER_SELF_CHECKS.map((c) => `- Self-check (${c.id}): ${c.question}`),
+  ...CHARTER_SELF_CHECKS.map((c) => `- 스스로 점검(${c.id}): ${c.question}`),
 ].join('\n');
 
 /**
@@ -74,10 +87,10 @@ export const PLACEHOLDER_AC_STATEMENT =
  * when warranted, registers the work item itself by running the command.
  */
 const WORK_ITEM_GUIDE_ADVISORY =
-  'No active work item. Make the 1st-pass judgment yourself: if this request produces an artifact or makes an irreversible codebase change, it should become a work item (simple tasks, handoff, git ops are exceptions). If so, confirm the intent with the user, then register it YOURSELF by running `ditto work start "<goal>" --request "<verbatim request>"` — you create it automatically, the user does not type the command. Otherwise just proceed as normal work.';
+  '활성 work item이 없다. 1차 판단을 네가 직접 한다: 이 요청이 산출물을 만들거나 되돌릴 수 없는 코드베이스 변경을 일으킨다면 work item으로 등록해야 한다(간단한 작업·핸드오프·git 조작은 예외). 그렇다면 사용자와 의도를 확인한 뒤, 네가 직접 `ditto work start "<목표>" --request "<요청 원문>"`을 실행해 등록한다 — 사용자가 명령을 입력하는 게 아니라 네가 자동으로 만든다. 아니면 평소처럼 진행한다.';
 
 const PLACEHOLDER_AC_ADVISORY =
-  'acceptance criteria are placeholders — narrow them via /ditto:deep-interview before acting (IntentContract)';
+  'acceptance criteria가 아직 자리표시자다 — 행동하기 전에 /ditto:deep-interview로 구체화하라';
 
 /**
  * Stronger nudge surfaced when the placeholder situation coincides with an
@@ -85,7 +98,7 @@ const PLACEHOLDER_AC_ADVISORY =
  * concrete next command. Recommended but not enforced — the hook is advisory.
  */
 const DEEP_INTERVIEW_DIRECTIVE =
-  'Run /ditto:deep-interview now — placeholder acceptance criteria + execution intent detected. Recommended for complex/irreversible work; may be skipped if the request is small or reversible. Lightweight path for a simple/reversible task: `ditto work set-criteria` → `ditto verify` → `ditto work done` (no deep-interview/autopilot). (IntentContract entry).';
+  '지금 /ditto:deep-interview를 실행하라 — acceptance criteria가 아직 자리표시자이고 실행 의도가 감지됐다. 복잡하거나 되돌릴 수 없는 작업에는 권장한다; 요청이 작거나 되돌릴 수 있으면 건너뛰어도 된다. 간단하고 되돌릴 수 있는 작업의 가벼운 경로: `ditto work set-criteria` → `ditto verify` → `ditto work done`(deep-interview·autopilot 없이).';
 
 /**
  * Soft nudge attached to a question-shaped prompt that looks answerable from
@@ -93,7 +106,7 @@ const DEEP_INTERVIEW_DIRECTIVE =
  * the LLM is not required to follow it, but the heuristic surfaces the option.
  */
 const SELF_ANSWER_HINT =
-  'self-answer from code/docs/web first before asking — this prompt looks answerable without user input (QuestionGate).';
+  '묻기 전에 코드·문서·웹에서 먼저 스스로 답하라 — 이 프롬프트는 사용자 입력 없이도 답할 수 있어 보인다.';
 
 export interface CharterContext {
   workItemId?: string;

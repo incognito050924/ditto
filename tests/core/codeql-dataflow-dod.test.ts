@@ -45,7 +45,7 @@ describe('toDataflowDoDs', () => {
   test('mixed list → only dataflow findings yield propositions', () => {
     const dods = toDataflowDoDs([taintFinding, structuralFinding]);
     expect(dods).toHaveLength(1);
-    expect(dods[0].rule_id).toBe('js/command-line-injection');
+    expect((dods[0] as (typeof dods)[number]).rule_id).toBe('js/command-line-injection');
   });
 
   test('empty list → empty', () => {

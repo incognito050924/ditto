@@ -171,7 +171,9 @@ describe('acceptanceCriterion.evidence_required (wi_2607069bk §1.2 Finding E)',
 
   test('a legacy work-item.json (AC without evidence_required) parses; evidence_required is omitted (optional)', () => {
     const wi = workItem.parse(workItemLiteral());
-    expect(wi.acceptance_criteria[0].evidence_required).toBeUndefined();
+    expect(
+      (wi.acceptance_criteria[0] as (typeof wi.acceptance_criteria)[number]).evidence_required,
+    ).toBeUndefined();
   });
 
   test('rejects an unknown evidence_required kind', () => {

@@ -73,7 +73,7 @@ function recordingDeps(results: ExecutedRun[]): { deps: ExecutedDeps; calls: num
   return {
     deps: {
       runOnce: async () => {
-        const r = results[Math.min(state.calls, results.length - 1)];
+        const r = results[Math.min(state.calls, results.length - 1)] as (typeof results)[number];
         state.calls++;
         return r;
       },

@@ -9,6 +9,7 @@ import {
   prismIssueMap,
 } from '~/schemas/prism';
 import { type QuestionRound, questionRound } from '~/schemas/question-round';
+import { assertSelectedPresentationContract } from '../question-round';
 import { type PrismBacklogSplit, prismBacklogSplit } from './backlog';
 import type { DivergenceVerdict } from './engine';
 
@@ -133,6 +134,9 @@ export class PrismStore {
    */
   async appendValueRound(workItemId: string, round: QuestionRound): Promise<QuestionRound> {
     const validated = questionRound.parse(round);
+    // Same presentation contract as record-turn / recordRound: reject an
+    // under-contextualized user-reaching selected question BEFORE persisting (ac-1).
+    assertSelectedPresentationContract(validated.selected);
     await this.workItems.appendQuestionRoundLine(workItemId, JSON.stringify(validated));
     return validated;
   }

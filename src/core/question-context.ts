@@ -150,23 +150,28 @@ export function validateQuestionContext(
 
 // --- ac-5 (D4): briefing threshold -------------------------------------------
 //
-// Budget for an AskUserQuestion option `description` (the rendered text the user reads
-// against each choice). No host-documented hard char limit was found in this repo or
-// the bundled skills/docs as of 2026-06; this is a CONSERVATIVE default chosen so a
-// long explanation triggers a separate briefing rather than overflowing the compact
-// option UI. Revise if the host publishes an exact limit. (D4: "못 찾으면 보수적 기본값+주석".)
+// Budget for an AskUserQuestion option `description`, measured in UTF-8 BYTES because
+// the host truncates the description by bytes, not UTF-16 code units — so a Korean
+// (3-bytes/syllable) explanation that looks short by char count still overflows and
+// must brief. No host-documented hard limit was found in this repo or the bundled
+// skills/docs as of 2026-06; this is a CONSERVATIVE default (D4: "못 찾으면 보수적
+// 기본값+주석"). Kept at 160 BYTES rather than raised to preserve a char-capacity: since
+// the root cause is byte truncation, the smaller (byte) budget is the safe side —
+// it errs toward briefing rather than risking a silently truncated option. Revise if
+// the host publishes an exact byte limit.
 export const OPTION_DESCRIPTION_BUDGET = 160;
 
 /**
  * True when the rendered option description is too long to fit the option UI and the
  * user should be briefed first. `rendered` = user_explanation (falling back to text).
- * Pure and limit-agnostic (the caller may pass any limit).
+ * Measured in UTF-8 bytes to match the host's byte-based truncation. Pure and
+ * limit-agnostic (the caller may pass any limit, interpreted as a byte budget).
  */
 export function needsBriefing(
   rendered: string,
   limit: number = OPTION_DESCRIPTION_BUDGET,
 ): boolean {
-  return rendered.length > limit;
+  return Buffer.byteLength(rendered, 'utf8') > limit;
 }
 
 // --- ac-4 (D2): reviewer routing + regeneration cap (judgment logic only) -----

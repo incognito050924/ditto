@@ -78,6 +78,7 @@ function parseFrontmatter(text: string): Frontmatter {
     const m = /^([A-Za-z_]+):\s*(.*)$/.exec(line);
     if (!m) continue;
     const [, key, value] = m;
+    if (value === undefined) continue;
     if (key === 'name') out.name = value.trim();
     else if (key === 'description') out.description = value.trim();
     else if (key === 'tools') {

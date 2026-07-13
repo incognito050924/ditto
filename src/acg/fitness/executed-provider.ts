@@ -59,7 +59,7 @@ export function decideExecutedOutcome(
     };
   }
   const signatures = new Set(ok.map(signature));
-  if (signatures.size === 1) return { violationIds: ok[0].violationIds };
+  if (signatures.size === 1) return { violationIds: (ok[0] as (typeof ok)[number]).violationIds };
   // flaky: non-errored attempts disagree.
   if (flakePolicy === 'quarantine') {
     return {
@@ -105,7 +105,7 @@ async function defaultRunOnce(
       }, opts.timeoutMs)
     : undefined;
   try {
-    const out = await new Response(proc.stdout).text();
+    const out = await new Response(proc.stdout as ReadableStream<Uint8Array>).text();
     const exitCode = await proc.exited;
     if (timedOut) {
       return { errored: true, reason: `timeout after ${opts.timeoutMs}ms`, violationIds: [] };
@@ -155,7 +155,11 @@ export function executedProvider(
       const runs: ExecutedRun[] = [];
       for (let i = 0; i < attemptsN; i++) {
         runs.push(
-          await deps.runOnce(fn.evaluator.spec, { timeoutMs, repoRoot, requiresCleanBuild }),
+          await deps.runOnce(fn.evaluator.spec, {
+            repoRoot,
+            ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+            ...(requiresCleanBuild !== undefined ? { requiresCleanBuild } : {}),
+          }),
         );
       }
       return decideExecutedOutcome(runs, flake);

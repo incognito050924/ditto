@@ -140,6 +140,28 @@ describe('needsBriefing (ac-5, D4)', () => {
     expect(needsBriefing('abcde', 4)).toBe(true);
     expect(needsBriefing('', 0)).toBe(false);
   });
+
+  // ac-2 (byte budget): the host truncates the option `description` by UTF-8 BYTES,
+  // not UTF-16 code units. So the budget must be measured in bytes — otherwise a
+  // Korean (3-bytes/syllable) context that LOOKS short in char count silently
+  // overflows the host's byte-truncation limit and never briefs. This is the
+  // byte-vs-char DISCRIMINATOR: the ASCII 'x'.repeat boundary test above cannot tell
+  // the two apart (1 byte == 1 code unit for ASCII).
+  test('DISCRIMINATOR: a Korean string under the char budget but over the BYTE budget briefs', () => {
+    const s = '가'.repeat(60); // 60 UTF-16 code units, 180 UTF-8 bytes
+    // char logic (rendered.length) would say false — under the 160 budget …
+    expect(s.length).toBeLessThanOrEqual(OPTION_DESCRIPTION_BUDGET);
+    // … but the host truncates by bytes, and 180 bytes > 160 → must brief.
+    expect(Buffer.byteLength(s, 'utf8')).toBeGreaterThan(OPTION_DESCRIPTION_BUDGET);
+    expect(needsBriefing(s)).toBe(true);
+  });
+
+  test('paired just-under: a Korean string within the BYTE budget does NOT brief', () => {
+    const s = '가'.repeat(50); // 50 code units, 150 UTF-8 bytes ≤ 160
+    expect(s.length).toBeLessThan(OPTION_DESCRIPTION_BUDGET);
+    expect(Buffer.byteLength(s, 'utf8')).toBeLessThanOrEqual(OPTION_DESCRIPTION_BUDGET);
+    expect(needsBriefing(s)).toBe(false);
+  });
 });
 
 // ac-4 (D2): critical questions route to the session-blind reviewer; the per-question

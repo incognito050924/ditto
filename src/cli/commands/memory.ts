@@ -1179,6 +1179,9 @@ const memoryProposeFinding = defineCommand({
         return;
       }
       const record = ledger.records[index];
+      if (record === undefined) {
+        throw new Error(`invariant: --index ${index} within bounds (checked above)`);
+      }
       // confidence_kind=INFERRED: an agent-captured finding is a guess grounded
       // in evidence, never a fact (ac-3·ac-4). The laundering guard in
       // proposeEvent would downgrade EXTRACTED anyway; we set it explicitly.

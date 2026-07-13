@@ -183,8 +183,8 @@ describe('bootstrapAutopilot', () => {
     const e2e = result.graph.nodes.find((n) => n.kind === 'e2e-author');
     const implement = result.graph.nodes.find((n) => n.kind === 'implement');
     expect(e2e?.owner).toBe('main-session');
-    expect(e2e?.depends_on).toEqual([design?.id]);
-    expect(implement?.depends_on).toEqual([e2e?.id]);
+    expect(e2e?.depends_on).toEqual([(design as NonNullable<typeof design>).id]);
+    expect(implement?.depends_on).toEqual([(e2e as NonNullable<typeof e2e>).id]);
   });
 
   test('e2eOptIn off (default) seeds no e2e-author node (autonomous run has no main-session step)', async () => {
@@ -215,6 +215,7 @@ describe('bootstrapAutopilot', () => {
           depends_on: ['N3'],
           acceptance_refs: acceptanceIds,
           evidence_refs: [],
+          ac_verdicts: [],
           attempts: { fix: 0, switch: 0 },
         },
       ];

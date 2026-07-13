@@ -57,6 +57,7 @@ function seedE2eAuthorNode(nodes: AutopilotNode[]): AutopilotNode[] {
     status: 'pending',
     depends_on: [design.id],
     acceptance_refs: [],
+    ac_verdicts: [],
     evidence_refs: [],
     attempts: { fix: 0, switch: 0 },
   };
@@ -105,6 +106,7 @@ export function seedTestAuthorNode(
     status: 'pending',
     depends_on: [predecessorId],
     acceptance_refs: [],
+    ac_verdicts: [],
     evidence_refs: [],
     attempts: { fix: 0, switch: 0 },
   };
@@ -148,6 +150,7 @@ function seedTestBarrier(nodes: AutopilotNode[]): AutopilotNode[] {
     status: 'pending',
     depends_on: frontier,
     acceptance_refs: [],
+    ac_verdicts: [],
     evidence_refs: [],
     attempts: { fix: 0, switch: 0 },
   };
@@ -270,7 +273,15 @@ export async function bootstrapAutopilot(
     completion_boundary: 'entire_work_item',
     approval_gate: approvalGate(input),
     nodes,
-    caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 },
+    caps: {
+      fix_per_node: 2,
+      switch_per_node: 1,
+      converge_rounds: 3,
+      oracle_failures_to_block: 3,
+      loop_rounds: 12,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24,
+    },
     continue_policy: {
       continue_after_approval: true,
       continue_after_checkpoint: true,

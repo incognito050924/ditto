@@ -610,7 +610,7 @@ describe('M3.5 — dialectic runtime (OpponentModelRouter + admissibility + Stop
         target_artifact: 'src/api.ts',
         question: 'q',
         constraints: { max_rounds: 3 },
-      },
+      } as Dialectic['input'],
       synthesizer: reviseSynth(['add empty-input guard']),
     });
     expect(dialecticForcesContinuation(d).length).toBeGreaterThan(0);
@@ -629,7 +629,7 @@ describe('M3.5 — dialectic runtime (OpponentModelRouter + admissibility + Stop
         target_artifact: 'src/api.ts',
         question: 'q',
         constraints: { max_rounds: 3 },
-      },
+      } as Dialectic['input'],
       synthesizer: reviseSynth(['x']),
     });
     expect(dialecticForcesContinuation(d)).toEqual([]);

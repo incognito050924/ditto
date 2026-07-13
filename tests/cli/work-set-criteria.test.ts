@@ -51,11 +51,21 @@ describe('ditto work set-criteria', () => {
     expect(r.exitCode).toBe(0);
     const item = await new WorkItemStore(dir).get(wid);
     expect(item.acceptance_criteria).toHaveLength(2);
-    expect(item.acceptance_criteria[0].id).toBe('ac-1');
-    expect(item.acceptance_criteria[0].statement).toBe('the command returns 0');
-    expect(item.acceptance_criteria[0].verdict).toBe('unverified');
-    expect(item.acceptance_criteria[1].id).toBe('ac-2');
-    expect(item.acceptance_criteria[1].statement).toBe('the output contains ok');
+    expect((item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).id).toBe(
+      'ac-1',
+    );
+    expect(
+      (item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).statement,
+    ).toBe('the command returns 0');
+    expect((item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).verdict).toBe(
+      'unverified',
+    );
+    expect((item.acceptance_criteria[1] as (typeof item.acceptance_criteria)[number]).id).toBe(
+      'ac-2',
+    );
+    expect(
+      (item.acceptance_criteria[1] as (typeof item.acceptance_criteria)[number]).statement,
+    ).toBe('the output contains ok');
   });
 
   test('C: a non-observable statement in the batch rejects the whole set; no partial write', async () => {
@@ -72,7 +82,9 @@ describe('ditto work set-criteria', () => {
     // No partial write: the placeholder is untouched (single original ac-1).
     const item = await new WorkItemStore(dir).get(wid);
     expect(item.acceptance_criteria).toHaveLength(1);
-    expect(item.acceptance_criteria[0].statement).toBe(PLACEHOLDER_AC_STATEMENT);
+    expect(
+      (item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).statement,
+    ).toBe(PLACEHOLDER_AC_STATEMENT);
   });
 
   // Grade ac-1 to `pass` via a real verify command, returning the work item id.
@@ -94,8 +106,12 @@ describe('ditto work set-criteria', () => {
     // Unchanged: the graded ac-1 survives.
     const item = await new WorkItemStore(dir).get(wid);
     expect(item.acceptance_criteria).toHaveLength(1);
-    expect(item.acceptance_criteria[0].statement).toBe('the command returns 0');
-    expect(item.acceptance_criteria[0].verdict).toBe('pass');
+    expect(
+      (item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).statement,
+    ).toBe('the command returns 0');
+    expect((item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).verdict).toBe(
+      'pass',
+    );
   });
 
   test('E: --supersede --reason overwrites and preserves prior statement + reason', async () => {
@@ -112,11 +128,15 @@ describe('ditto work set-criteria', () => {
     ]);
     expect(r.exitCode).toBe(0);
     const item = await new WorkItemStore(dir).get(wid);
-    expect(item.acceptance_criteria[0].statement).toBe('the output contains ok');
-    expect(item.acceptance_criteria[0].verdict).toBe('unverified'); // fresh, re-verify required
-    expect(item.acceptance_criteria[0].superseded).toEqual([
-      { statement: 'the command returns 0', reason: 'scope changed by user' },
-    ]);
+    expect(
+      (item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).statement,
+    ).toBe('the output contains ok');
+    expect((item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).verdict).toBe(
+      'unverified',
+    ); // fresh, re-verify required
+    expect(
+      (item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).superseded,
+    ).toEqual([{ statement: 'the command returns 0', reason: 'scope changed by user' }]);
   });
 
   test('E: --supersede without --reason is a usage error (no write)', async () => {
@@ -132,7 +152,9 @@ describe('ditto work set-criteria', () => {
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toMatch(/reason/i);
     const item = await new WorkItemStore(dir).get(wid);
-    expect(item.acceptance_criteria[0].statement).toBe('the command returns 0'); // unchanged
+    expect(
+      (item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).statement,
+    ).toBe('the command returns 0'); // unchanged
   });
 
   test('E: leftover graded criteria beyond the new count are preserved on supersede', async () => {
@@ -164,7 +186,8 @@ describe('ditto work set-criteria', () => {
     expect(r.exitCode).toBe(0);
     const item = await new WorkItemStore(dir).get(wid);
     expect(item.acceptance_criteria).toHaveLength(1);
-    const preserved = item.acceptance_criteria[0].superseded ?? [];
+    const preserved =
+      (item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).superseded ?? [];
     expect(preserved.map((p: { statement: string }) => p.statement)).toEqual([
       'the command returns 0',
       'the output contains ok',

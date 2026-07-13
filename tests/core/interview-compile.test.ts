@@ -73,7 +73,12 @@ async function driveToReady(): Promise<void> {
     workItemId: wiId,
     payload: {
       dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
-      question: { text: 'shape?', why_matters: 'response', info_gain_estimate: 'high' },
+      question: {
+        text: 'shape?',
+        why_matters: 'response',
+        user_explanation: '응답 값의 형태를 무엇으로 정할지 사용자 언어로 확인하는 질문입니다.',
+        info_gain_estimate: 'high',
+      },
       answer: { text: 'integer 0..100', kind: 'user' },
       readiness_score: 0.85,
     },
@@ -337,7 +342,7 @@ describe('prism risk nodes → pre-mortem seed (design point 4a)', () => {
         ],
       },
       severities: [],
-    });
+    } as unknown as Parameters<PrismStore['writeMap']>[0]);
     const result = await finalizeFromDesignDoc(repo, {
       workItemId: wiId,
       userConfirmation: { confirmed: true, statement: '확정' },

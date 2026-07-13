@@ -126,10 +126,14 @@ const DOGFOOD_HINT = 'bun run dogfood';
  */
 export function formatModeBanner(report: ModeReport, opts: { inDittoRepo: boolean }): ModeBanner {
   if (!opts.inDittoRepo) return { warn: false, text: '' };
+  // Reworded to plain Korean (wi_260713nlg), keeping every operative cue: the
+  // dogfood-mode confirmation, the STALE warning ("here edits do NOT take
+  // effect"), and — the load-bearing instruction — EXIT and RE-ENTER with
+  // `bun run dogfood [--host codex]`. Commands stay literal.
   if (report.sessionMode === 'dev') {
     return {
       warn: false,
-      text: '✓ ditto dogfood mode — this session runs the working-tree build.',
+      text: '✓ ditto dogfood 모드 — 이 세션은 작업 트리(working tree) 빌드로 돈다.',
     };
   }
   if (report.sessionMode === 'installed') {
@@ -137,12 +141,12 @@ export function formatModeBanner(report: ModeReport, opts: { inDittoRepo: boolea
     if (!report.installed.fresh) {
       return {
         warn: true,
-        text: `⚠ ditto: this session loaded the INSTALLED plugin (v${v}), STALE vs your working tree — your edits will NOT take effect here. For ditto development, exit and re-enter with: ${DOGFOOD_HINT} [--host codex]`,
+        text: `⚠ ditto: 이 세션은 설치된(INSTALLED) 플러그인(v${v})을 불러왔고, 작업 트리보다 오래됐다(STALE) — 여기서 한 편집은 반영되지 않는다. ditto를 개발하려면 세션을 나갔다가 이 명령으로 다시 들어오라: ${DOGFOOD_HINT} [--host codex]`,
       };
     }
     return {
       warn: false,
-      text: `ditto: this session loaded the installed plugin (v${v}). For live edits to ditto, enter with: ${DOGFOOD_HINT} [--host codex]`,
+      text: `ditto: 이 세션은 설치된 플러그인(v${v})을 불러왔다. ditto를 실시간으로 편집하려면 이 명령으로 들어오라: ${DOGFOOD_HINT} [--host codex]`,
     };
   }
   return { warn: false, text: '' };

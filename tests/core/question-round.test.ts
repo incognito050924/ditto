@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PrismStore } from '~/core/prism/store';
 import { recordRound, recordRoundPayload } from '~/core/question-round';
 import { WorkItemStore } from '~/core/work-item-store';
 import { type QuestionRound, questionRound, questionRoundPayload } from '~/schemas/question-round';
@@ -157,5 +158,90 @@ describe('recordRound (증분 3 — 점수 영속 sink)', () => {
         payload: recordRoundPayload.parse({ round: 1, dry: true }),
       }),
     ).rejects.toThrow();
+  });
+});
+
+// ac-1 (impl-ac1-prism): the record-turn presentation contract must ALSO gate the
+// prism-equivalent WRITE path (PrismStore.appendValueRound). Over each user-reaching
+// selected question (its text + user_explanation) the sink rejects, BEFORE persisting,
+// on (a) a missing user_explanation or (b) an un-glossed internal identifier leaked on
+// the user face — and the reject message serializes the violation (field/reason +
+// leaked identifier), not a bare "rejected". why_matters / the raw all_scored trail are
+// out of this user-reaching surface. Rounds are constructed DIRECTLY against the sink:
+// the current prism callers (prism.ts) build text-free scalar rounds, so this is a
+// defensive backstop for future text-carrying callers, not reachable through them today.
+describe('presentation contract on the prism-equivalent write path (ac-1)', () => {
+  let repo: string;
+  let wiId: string;
+  let store: PrismStore;
+  const ctxScore = { consensus: 2, quality: 0.8, necessity: 0.7, answer_value: 0.9 };
+
+  const round = (selected: unknown[]): QuestionRound =>
+    questionRound.parse({
+      ts: '2026-07-13T00:00:00.000Z',
+      work_item_id: wiId,
+      round: 1,
+      dry: false,
+      selected,
+      all_scored: [],
+      generator_count: 2,
+    });
+
+  beforeEach(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'ditto-qr-prism-'));
+    const wi = await new WorkItemStore(repo).create({
+      title: 'demo',
+      source_request: 'demo',
+      goal: 'demo',
+      acceptance_criteria: [{ id: 'ac-1', statement: 'TBD', verdict: 'unverified', evidence: [] }],
+    });
+    wiId = wi.id;
+    store = new PrismStore(repo);
+  });
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true });
+  });
+
+  test('appendValueRound rejects a selected question missing user_explanation, before persist', async () => {
+    const bad = round([
+      { text: 'Should we enforce auth here too?', property: 'blind-spot', scores: ctxScore },
+    ]);
+    await expect(store.appendValueRound(wiId, bad)).rejects.toThrow(/user_explanation/);
+    expect(await store.readValueRounds(wiId)).toHaveLength(0);
+  });
+
+  test('appendValueRound rejects an un-glossed internal identifier in selected text (message names it)', async () => {
+    const bad = round([
+      {
+        text: 'Does prism_ab12 apply?',
+        user_explanation: 'We need to know whether that node belongs to this change.',
+        property: 'blind-spot',
+        scores: ctxScore,
+      },
+    ]);
+    let err: Error | undefined;
+    try {
+      await store.appendValueRound(wiId, bad);
+    } catch (e) {
+      err = e as Error;
+    }
+    expect(err).toBeDefined();
+    expect(err?.message).toContain('prism_ab12');
+    expect(await store.readValueRounds(wiId)).toHaveLength(0);
+  });
+
+  test('appendValueRound persists a clean, fully-contextualized selected round', async () => {
+    const clean = round([
+      {
+        text: 'Should we require a login before checkout?',
+        user_explanation: 'This decides whether guests can buy — it changes the whole flow.',
+        why_matters: 'auth scope changes the contract',
+        property: 'blind-spot',
+        scores: ctxScore,
+      },
+    ]);
+    const persisted = await store.appendValueRound(wiId, clean);
+    expect(persisted.selected[0]?.user_explanation).toContain('guests');
+    expect(await store.readValueRounds(wiId)).toHaveLength(1);
   });
 });

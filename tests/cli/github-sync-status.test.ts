@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { syncStatusMaps } from '~/cli/commands/github';
-import { createFakeGhClient } from '~/core/gh-client';
+import { type GhDegradeReason, createFakeGhClient } from '~/core/gh-client';
 import type { DittoConfigGithub } from '~/schemas/ditto-config';
 
 // The user's live board: Backlog, Ready, In progress (47fc9ee4), In review, Done
@@ -117,7 +117,7 @@ describe('syncStatusMaps - overwrite (re-sync) mode', () => {
 describe('syncStatusMaps - safety', () => {
   test('C3c: gh fetch degraded → abort, ok:false (no write candidate produced)', () => {
     const { client } = createFakeGhClient({
-      degrade: { ok: false, reason: 'gh_unavailable', detail: 'network' },
+      degrade: { ok: false, reason: 'gh_unavailable' as GhDegradeReason, detail: 'network' },
     });
     const out = syncStatusMaps(client, baseConfig(), { mode: 'overwrite' });
     expect(out.ok).toBe(false);

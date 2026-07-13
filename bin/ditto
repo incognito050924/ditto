@@ -5,43 +5,25 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-function __accessProp(key) {
-  return this[key];
-}
-var __toESMCache_node;
-var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
-  var canCache = mod != null && typeof mod === "object";
-  if (canCache) {
-    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
-    var cached = cache.get(mod);
-    if (cached)
-      return cached;
-  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: __accessProp.bind(mod, key),
+        get: () => mod[key],
         enumerable: true
       });
-  if (canCache)
-    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
-var __returnValue = (v) => v;
-function __exportSetter(name, newValue) {
-  this[name] = __returnValue.bind(null, newValue);
-}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: __exportSetter.bind(all, name)
+      set: (newValue) => all[name] = () => newValue
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -18949,7 +18931,7 @@ var architectureCommand = defineCommand({
       run: async ({ args }) => {
         let format;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -18990,7 +18972,7 @@ var architectureCommand = defineCommand({
       run: async ({ args }) => {
         let format;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -19061,15 +19043,21 @@ var architectureCommand = defineCommand({
       run: async ({ args }) => {
         let format;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
           return;
         }
         const entries = [
-          ...csv(args.glob).map((value) => ({ type: "glob", value })),
-          ...csv(args.path).map((value) => ({ type: "path", value }))
+          ...csv(args.glob).map((value) => ({
+            type: "glob",
+            value
+          })),
+          ...csv(args.path).map((value) => ({
+            type: "path",
+            value
+          }))
         ];
         if (entries.length === 0) {
           writeError("internal-packages: provide at least one --glob or --path value");
@@ -19295,6 +19283,7 @@ function buildInitialNodes(acceptanceIds) {
     depends_on,
     acceptance_refs,
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 }
   });
   return [
@@ -19313,6 +19302,7 @@ function proposalsToNodes(proposals) {
     depends_on: p.depends_on,
     acceptance_refs: p.acceptance_refs,
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
     ...p.agent_hint !== undefined ? { agent_hint: p.agent_hint } : {},
     ...p.file_scope !== undefined ? { file_scope: p.file_scope } : {}
@@ -19764,7 +19754,7 @@ function validateQuestionContext(candidate) {
 }
 var OPTION_DESCRIPTION_BUDGET = 160;
 function needsBriefing(rendered, limit = OPTION_DESCRIPTION_BUDGET) {
-  return rendered.length > limit;
+  return Buffer.byteLength(rendered, "utf8") > limit;
 }
 
 // src/core/coverage-manager.ts
@@ -20514,6 +20504,7 @@ function seedE2eAuthorNode(nodes) {
     status: "pending",
     depends_on: [design.id],
     acceptance_refs: [],
+    ac_verdicts: [],
     evidence_refs: [],
     attempts: { fix: 0, switch: 0 }
   };
@@ -20539,6 +20530,7 @@ function seedTestAuthorNode(nodes, hasDynamicTestOracle) {
     status: "pending",
     depends_on: [predecessorId],
     acceptance_refs: [],
+    ac_verdicts: [],
     evidence_refs: [],
     attempts: { fix: 0, switch: 0 }
   };
@@ -20560,6 +20552,7 @@ function seedTestBarrier(nodes) {
     status: "pending",
     depends_on: frontier,
     acceptance_refs: [],
+    ac_verdicts: [],
     evidence_refs: [],
     attempts: { fix: 0, switch: 0 }
   };
@@ -20632,7 +20625,15 @@ async function bootstrapAutopilot(repoRoot, input) {
     completion_boundary: "entire_work_item",
     approval_gate: approvalGate(input),
     nodes,
-    caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 },
+    caps: {
+      fix_per_node: 2,
+      switch_per_node: 1,
+      converge_rounds: 3,
+      oracle_failures_to_block: 3,
+      loop_rounds: 12,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24
+    },
     continue_policy: {
       continue_after_approval: true,
       continue_after_checkpoint: true,
@@ -20922,6 +20923,7 @@ function buildCompletion(input) {
       criterion_id: c3.id,
       verdict: provided?.verdict ?? "unverified",
       evidence: provided?.evidence ?? [],
+      evidence_records: [],
       ...provided?.notes ? { notes: provided.notes } : {}
     };
   });
@@ -20955,7 +20957,7 @@ function assembleCompletionFromWorkItem(workItem2, opts) {
       verdict: c3.verdict,
       evidence: c3.evidence
     })),
-    now: opts.now
+    ...opts.now !== undefined ? { now: opts.now } : {}
   });
 }
 function mirrorAcceptanceVerdicts(workItem2, completion) {
@@ -21411,8 +21413,8 @@ function collectTidyDiffStat(repoRoot, base, head = "HEAD", pathspec) {
     const path = rest.join("\t");
     if (path.length === 0)
       continue;
-    const added = addedRaw === "-" ? 0 : Number.parseInt(addedRaw, 10) || 0;
-    const removed = removedRaw === "-" ? 0 : Number.parseInt(removedRaw, 10) || 0;
+    const added = addedRaw === "-" ? 0 : Number.parseInt(addedRaw ?? "", 10) || 0;
+    const removed = removedRaw === "-" ? 0 : Number.parseInt(removedRaw ?? "", 10) || 0;
     files.push({ path, added, removed, isCode: isCodePath(path) });
   }
   return { files };
@@ -22234,6 +22236,7 @@ function mkNode(id, kind, purpose, depends_on, acceptance_refs) {
     depends_on,
     acceptance_refs,
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 }
   };
 }
@@ -22483,6 +22486,7 @@ var node = (id, kind, purpose, depends_on, acceptance_refs, file_scope) => ({
   depends_on,
   acceptance_refs,
   evidence_refs: [],
+  ac_verdicts: [],
   attempts: { fix: 0, switch: 0 },
   ...file_scope !== undefined ? { file_scope } : {}
 });
@@ -22530,8 +22534,9 @@ function isUnitOnlyClosure(ac) {
   const refs = [...ac.evidence ?? [], ...ac.evidence_records ?? []];
   if (refs.length === 0)
     return false;
-  const hasCommand = refs.some((e2) => e2.kind === "command");
-  const hasRuntimeOrArtifact = refs.some((e2) => e2.kind === "file" || e2.kind === "artifact");
+  const kindOf = (e2) => e2.kind;
+  const hasCommand = refs.some((e2) => kindOf(e2) === "command");
+  const hasRuntimeOrArtifact = refs.some((e2) => kindOf(e2) === "file" || kindOf(e2) === "artifact");
   return hasCommand && !hasRuntimeOrArtifact;
 }
 function countUnitOnlyClosures(completion) {
@@ -22652,20 +22657,20 @@ var MINIMAL_INCREMENT_SELF_CHECK = {
 };
 var CHARTER_SELF_CHECKS = [MINIMAL_INCREMENT_SELF_CHECK];
 var PRIME_DIRECTIVE = [
-  "DITTO prime directive:",
-  "- Preserve the original request (IntentContract): do not grow scope, nor shrink/split it without user approval.",
-  "- Every codebase change runs under a work item via TWO standard paths only \u2014 heavy (/ditto:deep-interview \u2192 autopilot) or light (ditto work set-criteria \u2192 verify \u2192 done). Ad-hoc/console-TDD editing outside a work item is a FORBIDDEN third path; TDD is HOW you implement inside a path, not a substitute.",
-  "- YOU judge whether a request needs a work item, and which path (Route by weight, advisory): small/reversible \u2192 light; ambiguous/irreversible/multi-surface or declared risk \u2192 heavy. The hook never auto-creates one; when warranted, register it YOURSELF: `ditto work start`.",
-  "- Ask only what only the user can answer (QuestionGate); self-answer the rest from code/docs/web.",
-  "- Completion is evidence-gated: every acceptance criterion closed with evidence before final_verdict=pass; the whole work item is the bar, not a checkpoint.",
-  ...CHARTER_SELF_CHECKS.map((c3) => `- Self-check (${c3.id}): ${c3.question}`)
+  "DITTO \uAE30\uBCF8 \uC9C0\uCE68(prime directive):",
+  "- \uC6D0\uB798 \uC694\uCCAD\uC744 \uADF8\uB300\uB85C \uC9C0\uD0A8\uB2E4: \uC0AC\uC6A9\uC790 \uC2B9\uC778 \uC5C6\uC774 \uBC94\uC704\uB97C \uB113\uD788\uC9C0\uB3C4, \uC904\uC774\uAC70\uB098 \uCABC\uAC1C\uC9C0\uB3C4 \uC54A\uB294\uB2E4.",
+  "- \uCF54\uB4DC\uBCA0\uC774\uC2A4\uB97C \uBC14\uAFB8\uB294 \uBAA8\uB4E0 \uC791\uC5C5\uC740 work item \uC548\uC5D0\uC11C, \uB531 \uB450 \uAC08\uB798 \uD45C\uC900 \uACBD\uB85C\uB85C\uB9CC \uC9C4\uD589\uD55C\uB2E4 \u2014 \uBB34\uAC70\uC6B4 \uACBD\uB85C(`/ditto:deep-interview` \u2192 autopilot) \uB610\uB294 \uAC00\uBCBC\uC6B4 \uACBD\uB85C(`ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done`). \uC774 \uB450 \uACBD\uB85C \uBC16\uC5D0\uC11C work item \uC5C6\uC774 \uC989\uD765\uC801\uC73C\uB85C \uCF54\uB4DC\uB97C \uACE0\uCE58\uB294 \uAC83(\uCF58\uC194\uC5D0\uC11C \uBC14\uB85C TDD\uB85C \uD3B8\uC9D1)\uC740 \uD5C8\uC6A9\uB418\uC9C0 \uC54A\uB294\uB2E4. TDD\uB294 \uACBD\uB85C \uC548\uC5D0\uC11C \uAD6C\uD604\uD558\uB294 \uBC29\uBC95\uC774\uC9C0, \uACBD\uB85C\uB97C \uB300\uC2E0\uD558\uB294 \uC218\uB2E8\uC774 \uC544\uB2C8\uB2E4.",
+  "- \uC774 \uC694\uCCAD\uC5D0 work item\uC774 \uD544\uC694\uD55C\uC9C0, \uADF8\uB9AC\uACE0 \uC5B4\uB290 \uACBD\uB85C\uB85C \uAC08\uC9C0\uB294 \uB124\uAC00 \uD310\uB2E8\uD55C\uB2E4(\uBB34\uAC8C\uB85C \uB77C\uC6B0\uD305, \uAD8C\uACE0): \uC791\uACE0 \uB418\uB3CC\uB9B4 \uC218 \uC788\uC73C\uBA74 \u2192 \uAC00\uBCBC\uC6B4 \uACBD\uB85C; \uBAA8\uD638\uD558\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uAC70\uB098 \uC5EC\uB7EC \uD45C\uBA74\uC5D0 \uAC78\uCE58\uAC70\uB098 \uC704\uD5D8\uC774 \uC120\uC5B8\uB418\uBA74 \u2192 \uBB34\uAC70\uC6B4 \uACBD\uB85C. \uD6C5\uC740 \uC808\uB300 \uC790\uB3D9\uC73C\uB85C \uB9CC\uB4E4\uC9C0 \uC54A\uB294\uB2E4. \uD544\uC694\uD558\uB2E4\uACE0 \uBCF4\uBA74 \uB124\uAC00 \uC9C1\uC811 \uB4F1\uB85D\uD55C\uB2E4: `ditto work start`.",
+  "- \uC0AC\uC6A9\uC790\uB9CC \uB2F5\uD560 \uC218 \uC788\uB294 \uAC83\uB9CC \uBB3B\uB294\uB2E4. \uB098\uBA38\uC9C0\uB294 \uCF54\uB4DC\xB7\uBB38\uC11C\xB7\uC6F9\uC5D0\uC11C \uC2A4\uC2A4\uB85C \uB2F5\uD55C\uB2E4.",
+  "- \uC644\uB8CC\uB294 \uC99D\uAC70\uB85C\uB9CC \uC778\uC815\uB41C\uB2E4: \uC644\uB8CC(\uD1B5\uACFC)\uB85C \uD310\uC815\uD558\uAE30 \uC804\uC5D0 \uBAA8\uB4E0 acceptance criterion\uC744 \uC99D\uAC70\uC640 \uD568\uAED8 \uB2EB\uB294\uB2E4. \uAE30\uC900\uC740 work item \uC804\uCCB4\uC774\uC9C0 \uC911\uAC04 \uCCB4\uD06C\uD3EC\uC778\uD2B8\uAC00 \uC544\uB2C8\uB2E4.",
+  ...CHARTER_SELF_CHECKS.map((c3) => `- \uC2A4\uC2A4\uB85C \uC810\uAC80(${c3.id}): ${c3.question}`)
 ].join(`
 `);
 var PLACEHOLDER_AC_STATEMENT = "TBD \u2014 derive observable criteria during interview/planning";
-var WORK_ITEM_GUIDE_ADVISORY = 'No active work item. Make the 1st-pass judgment yourself: if this request produces an artifact or makes an irreversible codebase change, it should become a work item (simple tasks, handoff, git ops are exceptions). If so, confirm the intent with the user, then register it YOURSELF by running `ditto work start "<goal>" --request "<verbatim request>"` \u2014 you create it automatically, the user does not type the command. Otherwise just proceed as normal work.';
-var PLACEHOLDER_AC_ADVISORY = "acceptance criteria are placeholders \u2014 narrow them via /ditto:deep-interview before acting (IntentContract)";
-var DEEP_INTERVIEW_DIRECTIVE = "Run /ditto:deep-interview now \u2014 placeholder acceptance criteria + execution intent detected. Recommended for complex/irreversible work; may be skipped if the request is small or reversible. Lightweight path for a simple/reversible task: `ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done` (no deep-interview/autopilot). (IntentContract entry).";
-var SELF_ANSWER_HINT = "self-answer from code/docs/web first before asking \u2014 this prompt looks answerable without user input (QuestionGate).";
+var WORK_ITEM_GUIDE_ADVISORY = '\uD65C\uC131 work item\uC774 \uC5C6\uB2E4. 1\uCC28 \uD310\uB2E8\uC744 \uB124\uAC00 \uC9C1\uC811 \uD55C\uB2E4: \uC774 \uC694\uCCAD\uC774 \uC0B0\uCD9C\uBB3C\uC744 \uB9CC\uB4E4\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uB294 \uCF54\uB4DC\uBCA0\uC774\uC2A4 \uBCC0\uACBD\uC744 \uC77C\uC73C\uD0A8\uB2E4\uBA74 work item\uC73C\uB85C \uB4F1\uB85D\uD574\uC57C \uD55C\uB2E4(\uAC04\uB2E8\uD55C \uC791\uC5C5\xB7\uD578\uB4DC\uC624\uD504\xB7git \uC870\uC791\uC740 \uC608\uC678). \uADF8\uB807\uB2E4\uBA74 \uC0AC\uC6A9\uC790\uC640 \uC758\uB3C4\uB97C \uD655\uC778\uD55C \uB4A4, \uB124\uAC00 \uC9C1\uC811 `ditto work start "<\uBAA9\uD45C>" --request "<\uC694\uCCAD \uC6D0\uBB38>"`\uC744 \uC2E4\uD589\uD574 \uB4F1\uB85D\uD55C\uB2E4 \u2014 \uC0AC\uC6A9\uC790\uAC00 \uBA85\uB839\uC744 \uC785\uB825\uD558\uB294 \uAC8C \uC544\uB2C8\uB77C \uB124\uAC00 \uC790\uB3D9\uC73C\uB85C \uB9CC\uB4E0\uB2E4. \uC544\uB2C8\uBA74 \uD3C9\uC18C\uCC98\uB7FC \uC9C4\uD589\uD55C\uB2E4.';
+var PLACEHOLDER_AC_ADVISORY = "acceptance criteria\uAC00 \uC544\uC9C1 \uC790\uB9AC\uD45C\uC2DC\uC790\uB2E4 \u2014 \uD589\uB3D9\uD558\uAE30 \uC804\uC5D0 /ditto:deep-interview\uB85C \uAD6C\uCCB4\uD654\uD558\uB77C";
+var DEEP_INTERVIEW_DIRECTIVE = "\uC9C0\uAE08 /ditto:deep-interview\uB97C \uC2E4\uD589\uD558\uB77C \u2014 acceptance criteria\uAC00 \uC544\uC9C1 \uC790\uB9AC\uD45C\uC2DC\uC790\uC774\uACE0 \uC2E4\uD589 \uC758\uB3C4\uAC00 \uAC10\uC9C0\uB410\uB2E4. \uBCF5\uC7A1\uD558\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uB294 \uC791\uC5C5\uC5D0\uB294 \uAD8C\uC7A5\uD55C\uB2E4; \uC694\uCCAD\uC774 \uC791\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC788\uC73C\uBA74 \uAC74\uB108\uB6F0\uC5B4\uB3C4 \uB41C\uB2E4. \uAC04\uB2E8\uD558\uACE0 \uB418\uB3CC\uB9B4 \uC218 \uC788\uB294 \uC791\uC5C5\uC758 \uAC00\uBCBC\uC6B4 \uACBD\uB85C: `ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done`(deep-interview\xB7autopilot \uC5C6\uC774).";
+var SELF_ANSWER_HINT = "\uBB3B\uAE30 \uC804\uC5D0 \uCF54\uB4DC\xB7\uBB38\uC11C\xB7\uC6F9\uC5D0\uC11C \uBA3C\uC800 \uC2A4\uC2A4\uB85C \uB2F5\uD558\uB77C \u2014 \uC774 \uD504\uB86C\uD504\uD2B8\uB294 \uC0AC\uC6A9\uC790 \uC785\uB825 \uC5C6\uC774\uB3C4 \uB2F5\uD560 \uC218 \uC788\uC5B4 \uBCF4\uC778\uB2E4.";
 function charterProjection(ctx = {}) {
   const lines = [PRIME_DIRECTIVE];
   if (ctx.workItemId) {
@@ -27653,10 +27658,14 @@ async function nextCoverageNode(args) {
       crossCuttingConstraints: lenses
     })
   }));
+  const first = wave[0];
+  if (first === undefined) {
+    throw new Error("invariant: wave is non-empty (ready frontier checked above)");
+  }
   return {
     action: "interrogate",
-    node: wave[0].node,
-    judgeInput: wave[0].judgeInput,
+    node: first.node,
+    judgeInput: first.judgeInput,
     wave,
     tier,
     sweepAngles,
@@ -33808,7 +33817,7 @@ var boundaryCommand = defineCommand({
       run: async ({ args }) => {
         let format;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -33818,13 +33827,13 @@ var boundaryCommand = defineCommand({
           const repoRoot = await resolveRepoRootForCreate();
           let spec;
           try {
-            spec = await readArchitectureSpec(args.spec, acgArchitectureSpec);
+            spec = await readArchitectureSpec(String(args.spec), acgArchitectureSpec);
           } catch (err) {
             writeError(`boundary check: cannot read a valid ArchitectureSpec from ${args.spec}: ${err instanceof Error ? err.message : String(err)}`);
             process.exit(USAGE_ERROR_EXIT);
             return;
           }
-          const changedFiles = args.file.split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+          const changedFiles = String(args.file).split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
           const language = args.language ?? "javascript";
           const sourceRoot = args["source-root"] ?? join42(repoRoot, "src");
           const guard = await runInternalPackagesGuard({
@@ -33852,7 +33861,7 @@ var boundaryCommand = defineCommand({
           const edges = await edgeAnalyzer.edges({ changedFiles, sourceRoot });
           const violations = checkBoundary(spec, edges);
           if (violations.length > 0 && !args["no-ledger"]) {
-            await new AcgReviewStore(repoRoot).write(args["work-item"], violationsToReviewGraph(violations));
+            await new AcgReviewStore(repoRoot).write(String(args["work-item"]), violationsToReviewGraph(violations));
           }
           if (format === "json") {
             writeJson2({
@@ -36286,7 +36295,7 @@ async function inspectCodeqlTarget(input, deps) {
     languages,
     unsupported,
     cliAvailable,
-    buildVerified: input.buildVerified
+    ...input.buildVerified !== undefined ? { buildVerified: input.buildVerified } : {}
   });
   return {
     source_root: input.sourceRoot,
@@ -36375,8 +36384,12 @@ function codeqlSeverity(level) {
 function dataflowSummary(f3) {
   if (f3.dataflow.length === 0)
     return "";
-  const ends = [f3.dataflow[0], f3.dataflow[f3.dataflow.length - 1]];
-  return ` (source ${ends[0].file}:${ends[0].startLine ?? "?"} \u2192 sink ${ends[1].file}:${ends[1].startLine ?? "?"}, ${f3.dataflow.length} steps)`;
+  const source = f3.dataflow[0];
+  const sink = f3.dataflow[f3.dataflow.length - 1];
+  if (source === undefined || sink === undefined) {
+    throw new Error("invariant: dataflow is non-empty (length checked above)");
+  }
+  return ` (source ${source.file}:${source.startLine ?? "?"} \u2192 sink ${sink.file}:${sink.startLine ?? "?"}, ${f3.dataflow.length} steps)`;
 }
 function toReviewerFinding(f3) {
   return {
@@ -36415,7 +36428,10 @@ function doctorBlocks(report) {
   return report.findings.some((f3) => f3.severity === "high");
 }
 async function runCodeqlReviewToLedger(input, deps) {
-  const doctor = await inspectCodeqlTarget({ sourceRoot: input.sourceRoot, buildVerified: input.buildVerified }, deps);
+  const doctor = await inspectCodeqlTarget({
+    sourceRoot: input.sourceRoot,
+    ...input.buildVerified !== undefined ? { buildVerified: input.buildVerified } : {}
+  }, deps);
   if (doctorBlocks(doctor)) {
     return {
       gated: true,
@@ -38596,6 +38612,20 @@ async function recordTurn(repoRoot, input) {
   const current = await store.get(input.workItemId);
   const nowIso = (input.now ?? new Date).toISOString();
   const { dimension: rawDimension, question, answer, readiness_score } = input.payload;
+  const surfaceVerdict = validateQuestionContext({
+    text: question.text,
+    why_matters: question.why_matters,
+    user_explanation: question.user_explanation
+  });
+  const leakedIdentifiers = [
+    ...findUnexplainedIdentifiers(question.text),
+    ...findUnexplainedIdentifiers(question.user_explanation)
+  ];
+  if (!surfaceVerdict.ok || leakedIdentifiers.length > 0) {
+    const violations = surfaceVerdict.violations.map((v2) => `${v2.field}: ${v2.reason}`).join("; ");
+    const leaked = leakedIdentifiers.length > 0 ? ` | leaked identifiers: ${[...new Set(leakedIdentifiers)].join(", ")}` : "";
+    throw new Error(`record-turn rejected: question surface failed the presentation contract before persist \u2014 violations: ${violations}${leaked}`);
+  }
   const existingDim = current.dimensions.find((d2) => d2.id === rawDimension.id);
   const isCritical = rawDimension.critical || existingDim?.critical || false;
   const isAgentGuess = answer?.kind === "assumption" && answer.delegated !== true;
@@ -39135,6 +39165,31 @@ var prismOpponentVerdicts = exports_external.object({
 // src/core/prism/store.ts
 init_question_round();
 
+// src/core/question-round.ts
+init_question_round();
+init_work_item_store();
+var ROUND_SURFACE_FIELDS = new Set(["user_explanation", "unexplained_identifier"]);
+function assertSelectedPresentationContract(selected) {
+  const lines = [];
+  selected.forEach((q2, i2) => {
+    const verdict2 = validateQuestionContext({
+      text: q2.text,
+      why_matters: q2.why_matters ?? "",
+      user_explanation: q2.user_explanation
+    });
+    for (const v2 of verdict2.violations) {
+      if (ROUND_SURFACE_FIELDS.has(v2.field)) {
+        lines.push(`  - selected[${i2}] "${q2.text.slice(0, 80)}" ${v2.field}: ${v2.reason}`);
+      }
+    }
+  });
+  if (lines.length > 0) {
+    throw new Error(`question round rejected \u2014 user-reaching selected question(s) violate the presentation contract; not persisted:
+${lines.join(`
+`)}`);
+  }
+}
+
 // src/core/prism/backlog.ts
 init_zod();
 init_common();
@@ -39339,6 +39394,7 @@ class PrismStore {
   }
   async appendValueRound(workItemId2, round) {
     const validated = questionRound.parse(round);
+    assertSelectedPresentationContract(validated.selected);
     await this.workItems.appendQuestionRoundLine(workItemId2, JSON.stringify(validated));
     return validated;
   }
@@ -46131,7 +46187,7 @@ async function runFitness(functions, ctx, provider) {
 
 // src/acg/fitness/codeql-provider.ts
 function codeqlFindingToViolation(f4) {
-  return { rule: f4.ruleId, path: f4.file ?? undefined };
+  return { rule: f4.ruleId, ...f4.file != null ? { path: f4.file } : {} };
 }
 function sarifFindingsToViolationIds(findings) {
   return [...new Set(findings.map((f4) => normalizeViolationIdentity(codeqlFindingToViolation(f4))))];
@@ -46448,7 +46504,11 @@ function executedProvider(repoRoot, deps = realDeps) {
       const requiresCleanBuild = exec2.requires_clean_build;
       const runs = [];
       for (let i3 = 0;i3 < attemptsN; i3++) {
-        runs.push(await deps.runOnce(fn.evaluator.spec, { timeoutMs, repoRoot, requiresCleanBuild }));
+        runs.push(await deps.runOnce(fn.evaluator.spec, {
+          repoRoot,
+          ...timeoutMs !== undefined ? { timeoutMs } : {},
+          ...requiresCleanBuild !== undefined ? { requiresCleanBuild } : {}
+        }));
       }
       return decideExecutedOutcome(runs, flake);
     }
@@ -46519,7 +46579,7 @@ var fitnessCommand = defineCommand({
       run: async ({ args }) => {
         let format;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -46538,7 +46598,7 @@ var fitnessCommand = defineCommand({
               return;
             }
           } else {
-            const stored = await new FitnessFunctionStore(repoRoot).read(args["work-item"]);
+            const stored = await new FitnessFunctionStore(repoRoot).read(String(args["work-item"]));
             if (stored === null) {
               writeError(`fitness run: no --from and no stored fitness-functions.json for ${args["work-item"]} (run \`ditto change-contract\` first, or pass --from)`);
               process.exit(USAGE_ERROR_EXIT);
@@ -46548,17 +46608,17 @@ var fitnessCommand = defineCommand({
           }
           const ctx = {
             trigger: args.trigger === "periodic" ? "periodic" : "per_change",
-            period: args.period,
-            changeRef: args["work-item"],
-            risk: args.risk,
-            riskKnown: args["risk-known"],
+            ...args.period !== undefined ? { period: args.period } : {},
+            changeRef: String(args["work-item"]),
+            ...args.risk !== undefined ? { risk: args.risk } : {},
+            riskKnown: args["risk-known"] === true,
             producedAt: new Date().toISOString()
           };
           const verdictsPath2 = typeof args.verdicts === "string" ? args.verdicts : undefined;
           const provider = args.execute ? executingProvider(repoRoot, verdictsPath2) : verdictsPath2 ? compositeProvider(repoRoot, verdictsPath2) : commandProvider(repoRoot);
           const snapshot = await runFitness(functions, ctx, provider);
-          const path = localDir(repoRoot, "work-items", args["work-item"], "assurance-snapshot.json");
-          await ensureDir(localDir(repoRoot, "work-items", args["work-item"]));
+          const path = localDir(repoRoot, "work-items", String(args["work-item"]), "assurance-snapshot.json");
+          await ensureDir(localDir(repoRoot, "work-items", String(args["work-item"])));
           await writeJson(path, acgAssuranceSnapshot, snapshot);
           const failed = snapshot.results.filter((r4) => r4.outcome === "fail").length;
           if (format === "json") {
@@ -46599,7 +46659,7 @@ var fitnessCommand = defineCommand({
       run: async ({ args }) => {
         let format;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -46608,7 +46668,7 @@ var fitnessCommand = defineCommand({
         try {
           const repoRoot = await resolveRepoRootForCreate();
           const report = computeDrift(await loadAssuranceSnapshots(repoRoot));
-          const minNew = Number.parseInt(args["min-new-violations"] ?? "0", 10);
+          const minNew = Number.parseInt(String(args["min-new-violations"] ?? "0"), 10);
           const assessment = args.gate ? assessDrift(report, Number.isNaN(minNew) ? 0 : minNew) : null;
           if (format === "json") {
             writeJson2(assessment ? {
@@ -47915,7 +47975,7 @@ function formatModeBanner(report, opts) {
   if (report.sessionMode === "dev") {
     return {
       warn: false,
-      text: "\u2713 ditto dogfood mode \u2014 this session runs the working-tree build."
+      text: "\u2713 ditto dogfood \uBAA8\uB4DC \u2014 \uC774 \uC138\uC158\uC740 \uC791\uC5C5 \uD2B8\uB9AC(working tree) \uBE4C\uB4DC\uB85C \uB3C8\uB2E4."
     };
   }
   if (report.sessionMode === "installed") {
@@ -47923,12 +47983,12 @@ function formatModeBanner(report, opts) {
     if (!report.installed.fresh) {
       return {
         warn: true,
-        text: `\u26A0 ditto: this session loaded the INSTALLED plugin (v${v2}), STALE vs your working tree \u2014 your edits will NOT take effect here. For ditto development, exit and re-enter with: ${DOGFOOD_HINT} [--host codex]`
+        text: `\u26A0 ditto: \uC774 \uC138\uC158\uC740 \uC124\uCE58\uB41C(INSTALLED) \uD50C\uB7EC\uADF8\uC778(v${v2})\uC744 \uBD88\uB7EC\uC654\uACE0, \uC791\uC5C5 \uD2B8\uB9AC\uBCF4\uB2E4 \uC624\uB798\uB410\uB2E4(STALE) \u2014 \uC5EC\uAE30\uC11C \uD55C \uD3B8\uC9D1\uC740 \uBC18\uC601\uB418\uC9C0 \uC54A\uB294\uB2E4. ditto\uB97C \uAC1C\uBC1C\uD558\uB824\uBA74 \uC138\uC158\uC744 \uB098\uAC14\uB2E4\uAC00 \uC774 \uBA85\uB839\uC73C\uB85C \uB2E4\uC2DC \uB4E4\uC5B4\uC624\uB77C: ${DOGFOOD_HINT} [--host codex]`
       };
     }
     return {
       warn: false,
-      text: `ditto: this session loaded the installed plugin (v${v2}). For live edits to ditto, enter with: ${DOGFOOD_HINT} [--host codex]`
+      text: `ditto: \uC774 \uC138\uC158\uC740 \uC124\uCE58\uB41C \uD50C\uB7EC\uADF8\uC778(v${v2})\uC744 \uBD88\uB7EC\uC654\uB2E4. ditto\uB97C \uC2E4\uC2DC\uAC04\uC73C\uB85C \uD3B8\uC9D1\uD558\uB824\uBA74 \uC774 \uBA85\uB839\uC73C\uB85C \uB4E4\uC5B4\uC624\uB77C: ${DOGFOOD_HINT} [--host codex]`
     };
   }
   return { warn: false, text: "" };
@@ -50577,7 +50637,8 @@ async function ingestGlossary(repoRoot, sourceStore, eventStore, now, revision, 
       confidence_kind: "EXTRACTED",
       sensitivity: "internal",
       approved_by: "bootstrap",
-      decided_at: now
+      decided_at: now,
+      governs: []
     };
     await appendEventGraceful(eventStore, event, result2);
   }
@@ -50645,7 +50706,8 @@ async function ingestHandoffs(repoRoot, sourceStore, eventStore, now, revision, 
       confidence_kind: "EXTRACTED",
       sensitivity: "internal",
       approved_by: "bootstrap",
-      decided_at: now
+      decided_at: now,
+      governs: []
     };
     await appendEventGraceful(eventStore, event, result2);
   }
@@ -51830,6 +51892,9 @@ var memoryProposeFinding = defineCommand({
         return;
       }
       const record = ledger.records[index];
+      if (record === undefined) {
+        throw new Error(`invariant: --index ${index} within bounds (checked above)`);
+      }
       const written = await proposeEvent(repoRoot, {
         event_type: "observation",
         text: findingText(record),
@@ -55261,7 +55326,7 @@ function defaultMemorySeparateDeps(repoRoot) {
     repoRoot,
     run: async (cmd, args, cwd) => {
       const proc = Bun.spawn([cmd, ...args], {
-        cwd,
+        ...cwd !== undefined ? { cwd } : {},
         stdout: "ignore",
         stderr: "pipe",
         stdin: "ignore"
@@ -57142,4 +57207,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=73d21064aa2dbba161a27ee03d5b4620f676e66f9f2532223b3f8f2fcb90ed3e
+//# ditto-src-stamp=19cad0db8a3af81231440516c168c17e9b7daf59c71b61f533472220417df14c

@@ -81,7 +81,9 @@ describe('ac-3 A: declared_risk recording', () => {
     const item = await new WorkItemStore(dir).get(wid);
     expect(item.declared_risk).toEqual({ unaudited: true });
     // criteria still set (ac-1 behavior unchanged)
-    expect(item.acceptance_criteria[0].statement).toBe('the command returns 0');
+    expect(
+      (item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).statement,
+    ).toBe('the command returns 0');
   });
 
   test('an unknown risk token is a usage error (no silent typo)', () => {
@@ -212,6 +214,8 @@ describe('ac-3 D: work promote (in-place heavy upgrade)', () => {
       'the command returns 0',
       'the output contains ok',
     ]);
-    expect(after.acceptance_criteria[0].verdict).toBe('pass');
+    expect(
+      (after.acceptance_criteria[0] as (typeof after.acceptance_criteria)[number]).verdict,
+    ).toBe('pass');
   });
 });

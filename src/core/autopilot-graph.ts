@@ -276,6 +276,7 @@ export function buildInitialNodes(acceptanceIds: string[]): AutopilotNode[] {
     depends_on,
     acceptance_refs,
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
   });
 
@@ -303,6 +304,7 @@ export function proposalsToNodes(proposals: NodeProposal[]): AutopilotNode[] {
     depends_on: p.depends_on,
     acceptance_refs: p.acceptance_refs,
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
     // Carry the optional planner variant hint through promotion (omit when absent
     // so the field stays undefined rather than an explicit `undefined`).

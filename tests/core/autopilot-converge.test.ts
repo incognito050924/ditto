@@ -16,6 +16,7 @@ const reviewNode: AutopilotNode = {
   depends_on: ['N2'],
   acceptance_refs: ['ac-1', 'ac-2'],
   evidence_refs: [],
+  ac_verdicts: [],
   attempts: { fix: 0, switch: 0 },
 };
 
@@ -39,7 +40,7 @@ describe('planForwardReexpansion (§2.4 forward re-expansion · §4.3 two-layer 
     // depends on the fix. Every new id is fresh, every edge points backward in
     // time (to an already-existing node), so the merged graph stays acyclic.
     expect(fix?.depends_on).toEqual(['N3']);
-    expect(review?.depends_on).toEqual([fix?.id]);
+    expect(review?.depends_on).toEqual([(fix as NonNullable<typeof fix>).id]);
     expect(fix?.id).not.toBe('N3');
     expect(review?.id).not.toBe('N3');
     // carries the same acceptance refs so the loop keeps targeting the same AC.
@@ -95,7 +96,7 @@ describe('planForwardReexpansion parameterized triggers (ONE planner, three forw
       expect(recheck?.owner).toBe('verifier');
       // forward-only edges (fix→seed, recheck→fix); every id fresh ⇒ acyclic.
       expect(fix?.depends_on).toEqual(['N3']);
-      expect(recheck?.depends_on).toEqual([fix?.id]);
+      expect(recheck?.depends_on).toEqual([(fix as NonNullable<typeof fix>).id]);
       expect(fix?.id).not.toBe('N3');
       expect(recheck?.id).not.toBe('N3');
       expect(recheck?.acceptance_refs).toEqual(['ac-1', 'ac-2']);

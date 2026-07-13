@@ -27,7 +27,15 @@ function graph(): Autopilot {
       evidence_refs: [],
     },
     nodes: buildInitialNodes(['ac-1']),
-    caps: { fix_per_node: 2, switch_per_node: 1 },
+    caps: {
+      fix_per_node: 2,
+      switch_per_node: 1,
+      converge_rounds: 3,
+      oracle_failures_to_block: 3,
+      loop_rounds: 12,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24,
+    },
     continue_policy: {
       continue_after_approval: true,
       continue_after_checkpoint: true,
@@ -104,6 +112,7 @@ describe('AutopilotStore', () => {
     acceptance_refs: [],
     evidence_refs: [],
     attempts: { fix: 0, switch: 0 },
+    ac_verdicts: [],
   });
 
   test('addNodes appends and persists via the store (3 → 4 nodes)', async () => {

@@ -166,7 +166,7 @@ describe('wi_260628p46 project_item_id population', () => {
 
   test('resolveProjectItemId returns null when gh degrades (best-effort, no throw)', () => {
     const client = createFakeGhClient({
-      degrade: { ok: false, reason: 'unauth', detail: 'x' },
+      degrade: { ok: false, reason: 'unauthenticated', detail: 'x' },
     }).client;
     expect(resolveProjectItemId({ client, config: cfg() }, 1)).toBeNull();
   });

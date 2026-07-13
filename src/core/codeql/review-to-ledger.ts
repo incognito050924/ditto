@@ -70,7 +70,10 @@ export async function runCodeqlReviewToLedger(
 ): Promise<CodeqlReviewToLedgerResult> {
   // 1. Doctor 先行 (fail-closed): never feed a BLOCKING gate from an untrusted run.
   const doctor = await inspectCodeqlTarget(
-    { sourceRoot: input.sourceRoot, buildVerified: input.buildVerified },
+    {
+      sourceRoot: input.sourceRoot,
+      ...(input.buildVerified !== undefined ? { buildVerified: input.buildVerified } : {}),
+    },
     deps,
   );
   if (doctorBlocks(doctor)) {

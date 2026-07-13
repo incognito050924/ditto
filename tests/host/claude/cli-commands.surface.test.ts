@@ -31,9 +31,10 @@ const TOP_LEVEL = [
 
 describe('Claude host surface — user CLI commands', () => {
   test.each(TOP_LEVEL)('`ditto %s` is a registered command with a description', (name, cmd) => {
-    expect(cmd.meta?.name).toBe(name);
-    expect(typeof cmd.meta?.description).toBe('string');
-    expect((cmd.meta?.description as string).length).toBeGreaterThan(0);
+    const meta = cmd.meta as { name?: string; description?: string } | undefined;
+    expect(meta?.name).toBe(name);
+    expect(typeof meta?.description).toBe('string');
+    expect((meta?.description as string).length).toBeGreaterThan(0);
   });
 
   test('`ditto work` exposes the start/status/handoff/done/abandon/reopen/promote/follow-up/stem/chain/claim/unclaim/push-ready/archive/set-criteria/link-issue/mirror-hierarchy/sync-issue subcommands the user types', () => {

@@ -159,7 +159,7 @@ describe('(b) bootstrap seeds a settled-tree barrier depending on the implement 
     const g = await bootstrapped();
     const barrier = g.nodes.find((n) => n.kind === 'test');
     const implement = g.nodes.find((n) => n.kind === 'implement');
-    expect(barrier?.depends_on).toEqual([implement?.id]);
+    expect(barrier?.depends_on).toEqual([(implement as NonNullable<typeof implement>).id]);
   });
 });
 

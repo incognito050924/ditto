@@ -46,7 +46,7 @@ describe('checkBoundary', () => {
       { from: 'automation-engine/run.ts', to: 'portal-backend/api.ts' },
     ]);
     expect(v).toHaveLength(1);
-    expect(v[0].rule).toBe('forbidden_dependency');
+    expect((v[0] as (typeof v)[number]).rule).toBe('forbidden_dependency');
   });
 
   test('allowed edge → no violation', () => {

@@ -145,7 +145,10 @@ describe('setup command', () => {
   });
 
   test('accepts the target project as a positional argument after options', () => {
-    const args = parseArgs(['--host', 'codex', '/tmp/ditto-target'], setupCommand.args ?? {});
+    const args = parseArgs(
+      ['--host', 'codex', '/tmp/ditto-target'],
+      (setupCommand.args ?? {}) as Parameters<typeof parseArgs>[1],
+    );
 
     expect(args.host).toBe('codex');
     expect(args.target).toBe('/tmp/ditto-target');

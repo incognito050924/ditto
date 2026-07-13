@@ -94,10 +94,12 @@ describe('seeding the authoring node (piece 2)', () => {
     const author = result.graph.nodes.find((n) => n.kind === 'test-author');
     const implement = result.graph.nodes.find((n) => n.kind === 'implement');
     expect(author?.owner).toBe('implementer');
-    expect(author?.depends_on).toEqual([design?.id]);
-    expect(implement?.depends_on).toEqual([author?.id]);
+    expect(author?.depends_on).toEqual([(design as NonNullable<typeof design>).id]);
+    expect(implement?.depends_on).toEqual([(author as NonNullable<typeof author>).id]);
     // A barrier still anchors on the implement node (unaffected by the new kind).
-    expect(result.graph.nodes.find((n) => n.kind === 'test')?.depends_on).toEqual([implement?.id]);
+    expect(result.graph.nodes.find((n) => n.kind === 'test')?.depends_on).toEqual([
+      (implement as NonNullable<typeof implement>).id,
+    ]);
   });
 
   test('no dynamic_test AC ⇒ NO authoring node (ac-5 degrade precondition)', async () => {
@@ -133,8 +135,8 @@ describe('seeding the authoring node (piece 2)', () => {
     const e2e = result.graph.nodes.find((n) => n.kind === 'e2e-author');
     const author = result.graph.nodes.find((n) => n.kind === 'test-author');
     const implement = result.graph.nodes.find((n) => n.kind === 'implement');
-    expect(author?.depends_on).toEqual([e2e?.id]);
-    expect(implement?.depends_on).toEqual([author?.id]);
+    expect(author?.depends_on).toEqual([(e2e as NonNullable<typeof e2e>).id]);
+    expect(implement?.depends_on).toEqual([(author as NonNullable<typeof author>).id]);
   });
 });
 
@@ -255,7 +257,15 @@ function authorGraph(): Autopilot {
         attempts: { fix: 0, switch: 0 },
       },
     ],
-    caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 },
+    caps: {
+      fix_per_node: 2,
+      switch_per_node: 1,
+      converge_rounds: 3,
+      oracle_failures_to_block: 3,
+      loop_rounds: 12,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24,
+    },
     continue_policy: {
       continue_after_approval: true,
       continue_after_checkpoint: true,

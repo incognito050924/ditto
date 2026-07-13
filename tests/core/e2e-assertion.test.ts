@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 // The capture runner's assertion grammar lives in a plain ESM module so it is
 // importable both by the node runner (playwright-runner.mjs) and by bun tests.
+// assertion.mjs is plain JS (JSDoc-typed) with no emitted declarations and allowJs
+// is off, so tsc cannot resolve its types (TS7016). Runtime import is unaffected.
+// @ts-expect-error -- no declaration file for the plain-ESM .mjs module (allowJs off)
 import { classifyAssertion, summarizeResult } from '~/core/e2e/assertion.mjs';
 
 describe('classifyAssertion (checkable predicate vs unverifiable NL)', () => {
