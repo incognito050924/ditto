@@ -1799,20 +1799,25 @@ async function spliceTidyStage(
   workItemId: string,
   implementNode: AutopilotNode,
   aps: AutopilotStore,
+  nodeChangedFiles: string[],
 ): Promise<string[]> {
   const wi = await new WorkItemStore(repoRoot).get(workItemId);
   const graph = await aps.get(workItemId);
-  // Scope the tidy diff to THIS work item's own declared change surface so a
-  // concurrent/prior session's commits between started_at_sha and HEAD never leak
-  // into the diff-stat and spawn spurious refactor nodes (wi_260709ft1). Empty
-  // union ⇒ undefined ⇒ unscoped legacy fallback preserved.
-  const scope = deriveTidyScope(graph.approval_gate.change_surface ?? [], wi.changed_files);
-  // The just-made diff is base…HEAD where base = the work item's started_at_sha.
-  // Absent base ⇒ empty diff-stat ⇒ classifier SKIPs (collectTidyDiffStat returns
-  // {files: []} when git fails, so no separate guard is needed here).
-  const diffStat = wi.started_at_sha
-    ? collectTidyDiffStat(repoRoot, wi.started_at_sha, 'HEAD', scope.length > 0 ? scope : undefined)
-    : { files: [] };
+  // #34 (wi_260713j6x): scope the tidy diff to what THIS implement node actually
+  // changed (its own reported changed_files), NOT the WI-cumulative changed_files.
+  // Cumulative scoping re-tidied files an earlier node already handled (redundant
+  // subchains reappearing on every later node). The node's own set is also its
+  // declared surface, so a concurrent/prior session's commits in base..HEAD stay out
+  // of the diff-stat (wi_260709ft1 preserved). change_surface is intentionally dropped
+  // — being WI-wide it would re-widen the scope and reintroduce the reappearance.
+  const scope = deriveTidyScope([], nodeChangedFiles);
+  // The just-made diff is base…HEAD (base = started_at_sha), restricted to `scope`.
+  // No base OR nothing this node changed ⇒ empty diff-stat ⇒ classifier SKIPs. An empty
+  // scope must NOT fall through to the unscoped diff — that re-includes foreign commits.
+  const diffStat =
+    wi.started_at_sha && scope.length > 0
+      ? collectTidyDiffStat(repoRoot, wi.started_at_sha, 'HEAD', scope)
+      : { files: [] };
   const plan = planTidyOnImplementPass({
     implementNodeId: implementNode.id,
     diffStat,
@@ -3442,7 +3447,7 @@ async function recordResultCore(
     // (provider/precondition absence degrades, never hard-blocks: §4.4 / OBJ-02).
     // The classifier verdict is persisted as an artifact regardless (G3).
     if (node.kind === 'implement') {
-      const tidyPromoted = await spliceTidyStage(repoRoot, input.workItemId, node, aps);
+      const tidyPromoted = await spliceTidyStage(repoRoot, input.workItemId, node, aps, reported);
       promotedNodeIds = [...promotedNodeIds, ...tidyPromoted];
     }
     // Retro absorption (ADR-0024 Decision 4, ac-5): a contentful `retro` PASS

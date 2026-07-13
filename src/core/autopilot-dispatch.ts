@@ -420,6 +420,12 @@ export function guardMutatingEvidence(
   outcome: 'pass' | 'fail',
   changedFiles: string[],
 ): ChildResultGuard {
+  // #34 (wi_260713j6x): a `refactorer` (Tidy-First) node legitimately has NOTHING to
+  // tidy — no-tidy is a valid outcome, never a phantom mutation. Exempt it from the
+  // zero-change floor so a no-op tidy closes cleanly (else its treplay verify, which
+  // depends_on it, deadlocks). This does NOT weaken the floor for `implementer` (or any
+  // other mutating owner): a no-op there is still a claim-without-proof and stays fixable.
+  if (owner === 'refactorer') return { contentful: true };
   if (outcome === 'pass' && isMutatingOwner(owner) && changedFiles.length === 0) {
     return {
       contentful: false,

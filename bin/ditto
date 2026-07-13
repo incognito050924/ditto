@@ -5,25 +5,43 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -22840,6 +22858,8 @@ function guardChildResult(text) {
   return { contentful: true };
 }
 function guardMutatingEvidence(owner, outcome, changedFiles) {
+  if (owner === "refactorer")
+    return { contentful: true };
   if (outcome === "pass" && isMutatingOwner(owner) && changedFiles.length === 0) {
     return {
       contentful: false,
@@ -26639,11 +26659,11 @@ var recordResultPayload = exports_external.object({
     });
   }
 }).describe("One node result \u2014 caller judgment that the deterministic floor then enforces");
-async function spliceTidyStage(repoRoot, workItemId2, implementNode, aps) {
+async function spliceTidyStage(repoRoot, workItemId2, implementNode, aps, nodeChangedFiles) {
   const wi = await new WorkItemStore(repoRoot).get(workItemId2);
   const graph = await aps.get(workItemId2);
-  const scope = deriveTidyScope(graph.approval_gate.change_surface ?? [], wi.changed_files);
-  const diffStat = wi.started_at_sha ? collectTidyDiffStat(repoRoot, wi.started_at_sha, "HEAD", scope.length > 0 ? scope : undefined) : { files: [] };
+  const scope = deriveTidyScope([], nodeChangedFiles);
+  const diffStat = wi.started_at_sha && scope.length > 0 ? collectTidyDiffStat(repoRoot, wi.started_at_sha, "HEAD", scope) : { files: [] };
   const plan = planTidyOnImplementPass({
     implementNodeId: implementNode.id,
     diffStat,
@@ -27504,7 +27524,7 @@ async function recordResultCore(repoRoot, input) {
         lspAdvisory = surfaced;
     }
     if (node2.kind === "implement") {
-      const tidyPromoted = await spliceTidyStage(repoRoot, input.workItemId, node2, aps);
+      const tidyPromoted = await spliceTidyStage(repoRoot, input.workItemId, node2, aps, reported);
       promotedNodeIds = [...promotedNodeIds, ...tidyPromoted];
     }
     if (node2.kind === "retro") {
@@ -30235,7 +30255,8 @@ function pickBaseRef(repoRoot, candidates) {
   }
   return null;
 }
-function collectChangedFiles(repoRoot, base, head) {
+function collectChangedFiles(repoRoot, base, head, baseline = []) {
+  const excluded = new Set(baseline);
   const set = new Set;
   if (base !== null) {
     const headSpec = head ?? "HEAD";
@@ -30269,7 +30290,7 @@ function collectChangedFiles(repoRoot, base, head) {
       }
     }
   }
-  return Array.from(set).filter((p) => !p.startsWith("/") && !p.includes(".."));
+  return Array.from(set).filter((p) => !p.startsWith("/") && !p.includes("..") && !excluded.has(p));
 }
 function buildCompletion2(item, declaredAt, changedFiles, declaredBy, unverifiedExtras = [], prior, graphAcceptance) {
   const acceptance = graphAcceptance ?? item.acceptance_criteria.map((ac) => ({
@@ -30326,7 +30347,7 @@ async function writeWorkItemHandoff(repoRoot, store, workId, options = {}, now =
     }
     headUsed = verifiedHead;
   }
-  const collected = collectChangedFiles(repoRoot, baseUsed, headUsed);
+  const collected = collectChangedFiles(repoRoot, baseUsed, headUsed, item.started_untracked_baseline);
   const unverifiedExtras = [];
   if (collected.length === 0 && (item.runs.length > 0 || item.acceptance_criteria.some((a2) => a2.evidence.length > 0))) {
     unverifiedExtras.push({
@@ -57536,4 +57557,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=ac0d8355eedcb702f4c30a3bceacefca7db8d31d698309d25cc19e72ac48bc6d
+//# ditto-src-stamp=bb06a07dd3f344d9f604408d52d0e9c5a641b7958bb78eba290bc2f4613c7983

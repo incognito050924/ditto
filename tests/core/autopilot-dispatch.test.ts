@@ -451,16 +451,24 @@ describe('buildDelegationPacket per-node file_scope (V2)', () => {
 });
 
 describe('guardMutatingEvidence (G7 확장: mutating pass needs changed_files)', () => {
-  test('a mutating node claiming pass with zero changed_files is non-contentful (fixable)', () => {
+  test('a non-tidy mutating node claiming pass with zero changed_files is non-contentful (fixable)', () => {
+    // implementer no-op pass = phantom mutation (claim ≠ proof) — still rejected.
     expect(guardMutatingEvidence('implementer', 'pass', [])).toMatchObject({
       contentful: false,
       failure_class: 'fixable',
     });
-    expect(guardMutatingEvidence('refactorer', 'pass', [])).toMatchObject({ contentful: false });
+  });
+
+  // #34 (wi_260713j6x): a refactorer (Tidy-First) node legitimately has NOTHING to
+  // tidy — no-tidy is a valid outcome, not a phantom mutation. A zero-change refactor
+  // pass must close cleanly (else the tidy subchain deadlocks its treplay verify).
+  test('a refactorer claiming pass with zero changed_files is contentful (no-op tidy is valid)', () => {
+    expect(guardMutatingEvidence('refactorer', 'pass', []).contentful).toBe(true);
   });
 
   test('a mutating pass that carries changed_files is contentful', () => {
     expect(guardMutatingEvidence('implementer', 'pass', ['src/x.ts']).contentful).toBe(true);
+    expect(guardMutatingEvidence('refactorer', 'pass', ['src/x.ts']).contentful).toBe(true);
   });
 
   test('a non-mutating node (read-only owner) is never blocked by this guard', () => {

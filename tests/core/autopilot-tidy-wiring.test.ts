@@ -341,6 +341,104 @@ describe('recordResult tidy failure policy (WU-3 ac-4: bug found → implement n
   });
 });
 
+// #34 (wi_260713j6x): the tidy stage must scope to the JUST-PASSED implement node's
+// OWN reported changed_files, not the WI-cumulative changed_files. Otherwise an earlier
+// node's files reappear in a later node's tidy subchain (redundant re-tidy).
+describe('recordResult tidy stage per-node scoping (#34 ac-1/ac-2)', () => {
+  const bigTs = (n: string) =>
+    `${Array.from({ length: 30 }, (_, i) => `export const ${n}${i} = ${i};`).join('\n')}\n`;
+
+  test('scopes the tidy subchain to the node’s own changed_files, not WI-cumulative (no earlier-node file reappears)', async () => {
+    // Two code files land in base..HEAD; the WI has BOTH in its cumulative changed_files
+    // (an earlier implement node already touched early.ts), but THIS pass reports only late.ts.
+    await writeFile(join(repo, 'early.ts'), bigTs('early'));
+    await writeFile(join(repo, 'late.ts'), bigTs('late'));
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-q', '-m', 'two impl nodes']);
+    await wis.update(WI, (w) => ({ ...w, changed_files: ['early.ts', 'late.ts'] }));
+
+    await aps.write(WI, graph(runningImplement()));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N2',
+        result_text: 'Implemented late.ts; DoD green, suite green, exit 0.',
+        outcome: 'pass',
+        changed_files: ['late.ts'],
+      },
+    });
+    expect(res.status).toBe('passed');
+
+    const after = await aps.get(WI);
+    const refactorScopes = after.nodes
+      .filter((n) => n.kind === 'refactor')
+      .flatMap((n) => n.file_scope ?? []);
+    // Only THIS node's file is tidied; the earlier node's file does not reappear.
+    expect(refactorScopes).toEqual(['late.ts']);
+    expect(refactorScopes).not.toContain('early.ts');
+  });
+
+  test('a concurrent/prior session’s committed file (not in the node’s changed_files) is not tidied (wi_260709ft1 preserved)', async () => {
+    // src.ts is this node's file; foreign.ts is another session's commit in base..HEAD.
+    await writeFile(join(repo, 'src.ts'), bigTs('src'));
+    await writeFile(join(repo, 'foreign.ts'), bigTs('foreign'));
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-q', '-m', 'mine + foreign']);
+    await wis.update(WI, (w) => ({ ...w, changed_files: ['src.ts'] }));
+
+    await aps.write(WI, graph(runningImplement()));
+    await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N2',
+        result_text: 'Implemented src.ts; DoD green, suite green, exit 0.',
+        outcome: 'pass',
+        changed_files: ['src.ts'],
+      },
+    });
+
+    const after = await aps.get(WI);
+    const refactorScopes = after.nodes
+      .filter((n) => n.kind === 'refactor')
+      .flatMap((n) => n.file_scope ?? []);
+    expect(refactorScopes).toEqual(['src.ts']);
+    expect(refactorScopes).not.toContain('foreign.ts');
+  });
+});
+
+// #34 (wi_260713j6x): a refactor node with NOTHING to tidy (zero changes) must close
+// cleanly — no-tidy is a valid Tidy-First outcome — so its treplay verify can proceed.
+describe('recordResult refactor no-op close (#34 ac-3)', () => {
+  test('a refactor node reporting pass with zero changed_files closes as passed and frees its treplay', async () => {
+    await aps.write(WI, graph(tidyGraph()));
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'N2tc1',
+        result_text:
+          'Reviewed src.ts for tidy opportunities; nothing to tidy (already clean). No edits.',
+        outcome: 'pass',
+        changed_files: [],
+      },
+    });
+    expect(res.status).toBe('passed');
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === 'N2tc1')?.status).toBe('passed');
+    // The treplay verify (depends_on N2tc1) is now ready to dispatch.
+    const next = await nextNode(repo, WI);
+    const readyIds =
+      next.action === 'spawn_wave'
+        ? next.spawns.map((s) => s.node_id)
+        : next.action === 'spawn'
+          ? [next.node_id]
+          : [];
+    expect(readyIds).toContain('N2treplay');
+  });
+});
+
 describe('tidy DoD replay (WU-3 ac-3: replay node carries the DoD + reports fitness-delta/replay green)', () => {
   /** Graph: implement+cleanup passed, tidy replay verify running, ready to record. */
   function replayReadyGraph(): Autopilot['nodes'] {
