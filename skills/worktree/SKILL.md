@@ -9,9 +9,11 @@ Run more than one feature at the same time on a single machine. Each work item g
 
 ## When to use
 
-- Recommended **only for genuinely independent features**. Worktree isolation lets two efforts touch the repo at once, but if both edit the **same files**, the conflict stays hidden until merge and surfaces late. For overlapping work, prefer one sequential branch.
+Reach for a worktree only for **genuinely independent** features — ones that touch different files. Worktree isolation lets two efforts touch the repo at once, but when both edit the **same files** the conflict stays hidden until merge and surfaces late, so overlapping work belongs on one sequential branch instead.
 
 ## Workflow
+
+Each step lists the observable **done when** that closes it.
 
 ### 1. Start a work item with its worktree in one step
 
@@ -19,19 +21,15 @@ Run more than one feature at the same time on a single machine. Each work item g
 ditto work start "<goal>" --request "<verbatim user request>" --worktree
 ```
 
-Creates the work item, then the branch `ditto/<wi>` and its worktree at `.ditto/local/worktrees/<wi>`, and prints a `cd` hint. Multi-repo workspaces nest one sub-repo worktree per repo inside the workspace worktree.
+Creates the work item, then the branch `ditto/<wi>` and its worktree at `.ditto/local/worktrees/<wi>`, and prints a `cd` hint. Multi-repo workspaces nest one sub-repo worktree per repo inside the workspace worktree. For a work item that already exists, use `ditto worktree create <wi>`.
 
-For a work item that already exists:
-
-```
-ditto worktree create <wi>
-```
+**Done when** the `cd` hint prints and the worktree path exists.
 
 ### 2. Open a session inside the worktree
 
-`cd` to the printed path and start a Claude Code / Codex session **there**. The session auto-binds to that work item **when the cwd is a real work-item worktree path and that work item still exists in the main workspace** — then you do not mention the work item in the prompt. If the path does not match (e.g. the work item was removed, or the cwd is not actually inside `…/worktrees/<wi>`), SessionStart prints a one-line advisory and you bind manually (name the `wi_…` in your first prompt). There is no command that launches the session for you; `cd` then start it manually.
+`cd` to the printed path and start a Claude Code / Codex session **there** — you launch it yourself, since no command launches it for you. The session auto-binds to that work item **when the cwd is a real work-item worktree path and that work item still exists in the main workspace** — then the prompt need not name the work item. If the path does not match (the work item was removed, or the cwd is not actually inside `…/worktrees/<wi>`), SessionStart prints a one-line advisory; bind manually by naming the `wi_…` in your first prompt. The worktree session shares the main workspace's `.ditto/local` state (work items, autopilot, sessions), so autopilot for that work item drives from inside its worktree.
 
-The worktree session shares the main workspace's `.ditto/local` state (work items, autopilot, sessions), so you can drive autopilot for that work item from inside its worktree.
+**Done when** the session is bound to the intended `wi_…` (auto-bound, or named manually after the advisory).
 
 ### 3. See what is in flight
 
@@ -41,9 +39,13 @@ ditto worktree list
 
 Lists every per-work-item worktree with its work item, branch, path, and git state — `clean`/`dirty` and `+ahead/-behind` against its base. `ditto work status <wi>` also shows the work item's linked worktree(s).
 
+**Done when** the in-flight worktrees and their clean/dirty state are listed.
+
 ### 4. Work concurrently
 
 Each worktree is isolated by its own branch and its own files, so two worktrees can be worked on — and run autopilot — at the same time. The shared `.git` is protected by locking (DITTO's lock plus git's own). When dogfooding, each worktree loads the `ditto` built from its own source.
+
+**Done when** each concurrent effort runs against its own worktree without touching another's files.
 
 ### 5. Clean up
 
@@ -51,34 +53,16 @@ Each worktree is isolated by its own branch and its own files, so two worktrees 
 ditto worktree remove <wi>
 ```
 
-Refuses (blocks) when the worktree is dirty or unmerged, protecting unsaved work. To remove anyway and discard that work, pass explicit approval:
+Blocks when the worktree is dirty or unmerged, protecting unsaved work. To remove anyway and discard that work, authorize it explicitly:
 
 ```
 ditto worktree remove <wi> --force
 ```
 
-Merging and pushing are yours to do — DITTO does not auto-coordinate merges.
+Merging and pushing stay yours — DITTO does not auto-coordinate merges, so you merge and push.
 
-## Out of scope
+**Done when** `ditto worktree list` no longer shows the removed worktree.
 
-- No central dashboard beyond `ditto worktree list`.
-- No automatic merge coordination — you merge and push.
-- No automatic session launch — `cd` and start the session yourself.
-- No cross-workspace worktrees — worktrees belong to the one workspace.
+## Boundaries and known limits
 
-## Known limits
-
-Honest edges of the current implementation:
-
-- **Korean-only guidance strings.** Some user-facing hints (e.g. the `cd … 후 거기서 세션을 열면 자동으로 …` binding hint) are Korean only, not localized.
-- **Lock deadline is a hard failure.** A worktree operation waits up to 30s for DITTO's lock; under heavy contention overlapping a long operation it throws past that deadline rather than queueing. No corruption results — the operation simply fails and can be retried.
-- **`ditto worktree list` cost is unmeasured at scale.** Listing calls one git subprocess per work-item worktree (dirty + ahead/behind), so cost grows linearly with work items. With hundreds of work items the cost is untested.
-- **`ditto worktree remove --force` is all-or-nothing per work item.** Force applies to *every* worktree the work item owns; in a multi-repo workspace it will force-delete the clean sub-repo worktrees alongside the dirty ones. There is no per-worktree force.
-- **Sub-repo detection is shallow.** Multi-repo nesting detects only the direct child directories of the workspace root that contain a `.git`. Deeper nesting and git submodules are not detected.
-- **Concurrent edits to the same file are out of scope.** Worktree isolation hides a same-file conflict until merge; it surfaces late.
-
-Unverified (no fresh evidence):
-
-- Real Windows runtime — only the code paths and `path.win32` handling exist.
-- Two *live* autopilots running concurrently at the OS level — only synthetic tests.
-- The host's SessionStart cwd payload contract that drives auto-binding.
+The tool's scope stops at `ditto worktree list` (no central dashboard), same-workspace worktrees only, and manual merge / push / session launch. The honest edges of the current implementation — force-removal granularity, the lock deadline, shallow sub-repo detection, Korean-only hint strings, and what is still unverified — live in `references/known-limits.md`. Read it before relying on `--force` in a multi-repo workspace or running two live autopilots at once.

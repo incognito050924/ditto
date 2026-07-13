@@ -19,7 +19,7 @@ How (graph structure, driver loop, failure classification, approval gate, schema
 - Loop persistence is enforced by the Stop hook (M1.4), not by this skill.
 
 ## ReAct loop
-Run this loop until a stop condition holds. The two CLI step commands own the deterministic mechanics (select, approval gate, packet build, the G7 content-free floor, failure-decision policy, transition table, persistence) so this skill never re-describes them; your job is the *judgment* (which result passed, fixable vs wrong approach, when to escalate). Re-read nothing into context across rounds — the commands read `autopilot.json` each call.
+Run this loop until a stop condition holds. The two CLI step commands own the deterministic mechanics (select, approval gate, packet build, the G7 content-free floor, failure-decision policy, transition table, persistence) so this skill never re-describes them; your job is the *judgment* (which result passed, fixable vs wrong approach, when to escalate). The commands read `autopilot.json` each call, so each round reconstructs state from disk rather than carrying it in context.
 
 1. **Ask for the next step.** Run `ditto autopilot next-node --workItem <wi> --output json`. It re-reads the graph, consumes the approval gate (only a mutating/implementer node is gated; design/research may run before approval), selects the next ready node through the file-overlap gate, **dispatches it (pending → running, persisted)**, and returns one `action`:
    - `spawn` → `{node_id, owner, packet}`: go to step 2.

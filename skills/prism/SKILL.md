@@ -12,32 +12,31 @@ intent — *before* implementation — through one loop:
 1. **Interview the ambiguity** into a small issue map (what actually has to be decided).
 2. **Emit a human-readable design document** (isomorphic to `.ditto/specs`) that a
    person and DITTO can both read.
-3. **Split** the confirmed design into per-item work-item drafts — but only on the
-   user's explicit approval.
+3. **Split** the confirmed design into per-item work-item drafts — only on the user's
+   explicit approval.
 4. **Compile** the confirmed document into `intent.json` **through deep-interview's
    single writer**, digest-bound so a later edit of a decision section is caught.
 
 The mechanism lives in code: `src/core/prism/*` and `ditto prism …` /
 `ditto deep-interview finalize-from-doc`. This skill is the user-facing contract over
-it. Prism is the intent-refinement surface; it does not implement or review code —
-that is autopilot / `/ditto:verify` downstream.
+it. Prism refines intent; it does not implement or review code — that is autopilot /
+`/ditto:verify` downstream.
 
 ## When to enter
 
 Reach for prism when a **code change** is on the table but the *intent* is not yet
 sharp enough to build:
 
-- The request is fuzzy and you cannot yet write a single observable acceptance
-  criterion.
+- The request is fuzzy and you cannot yet write a single observable acceptance criterion.
 - One request clearly hides several changes that should become separate work items.
 - The user wants a **design document** before code, or says "설계부터 / 정리하고 가자 /
   think this through first".
 - Two or more materially different implementations are plausible and the difference
   is product-visible.
 
-For a small, reversible, already-clear request, do **not** enter prism — take the
-lightweight path (`ditto work set-criteria` → `ditto verify` → `ditto work done`).
-Prism is for refinement, not ceremony.
+For a small, reversible, already-clear request, take the lightweight path instead
+(`ditto work set-criteria` → `ditto verify` → `ditto work done`). Prism is for
+refinement, not ceremony.
 
 ## The loop, stage by stage
 
@@ -52,9 +51,6 @@ ditto prism seed --wi <wi> --label "로그인 실패 시 잠금 정책" --critic
 ditto prism seed --wi <wi> --label "비밀번호 재설정 메일 문구"
 ```
 
-Growth is **cap-enforced**: a node/round/tree cap HIT stops the loop and escalates —
-a cap is never treated as "done" (see *Divergence discipline* below).
-
 Resolve or defer an issue through the close gate:
 
 ```bash
@@ -65,24 +61,27 @@ ditto prism close --wi <wi> --node <node> --state user_owned \
 ```
 
 A no-residual "모름-닫기" of a critical issue is **rejected** — it must not silently
-count as critical resolution.
+count as critical resolution. Growth is cap-enforced (see *Divergence discipline*).
 
-> `close` needs a node reference, so it is a driver/operator command — its node
+> `close` takes a node reference, so it is a driver/operator command — its node
 > references never reach the user's screen. The two views the *user* reads are
 > `summary` and `status`, and those are label-only (below).
+
+**Done when** every launch-gating issue is on the map and each is resolved/deferred
+through the close gate — or a cap HIT has stopped the loop for escalation (a cap is
+never "done").
 
 ### 2. Read the remaining scope — everyday language, no internal identifiers (ac-3)
 
 `ditto prism summary` is the user-facing progress view. It prints **only** the
-plain-language titles of what is still open. It never leaks a node id, a severity
-enum, a coverage axis name, or a schema field — the user reads scope, not internals.
+plain-language titles of what is still open — never a node id, severity enum, coverage
+axis name, or schema field. The user reads scope, not internals.
 
 ```bash
 ditto prism summary --wi <wi>
 ```
 
-A user-facing sample (this is exactly the shape the skill promises — plain titles
-only, nothing else):
+A user-facing sample (exactly the shape the skill promises — plain titles only):
 
 ```
 아직 정할 항목:
@@ -91,16 +90,19 @@ only, nothing else):
 ```
 
 When nothing is open it prints `남은 항목이 없어요.` — still no internals. Any
-user-facing line you write yourself must obey the same rule: describe the *thing*,
-never its id. (Enforced in code by `renderProgressSummary`, which emits labels only,
-and by the second-defense identifier scan.)
+user-facing line you write yourself obeys the same rule: describe the *thing*, never
+its id. (Enforced in code by `renderProgressSummary`, which emits labels only, and by
+the second-defense identifier scan.)
+
+**Done when** `summary` shows the open plain-language titles (or `남은 항목이 없어요.`)
+with zero internals leaked.
 
 ### 3. Minimal-launch notice — one-shot console, never a question hook (ac-4)
 
-When **every critical** issue is resolved and only **non-critical** issues remain,
-the user can start now. `ditto prism status` announces this **once**, as a plain
-console line — it is a notification, **not** an interactive question hook, and it is
-never re-announced (a durable one-shot):
+When **every critical** issue is resolved and only **non-critical** issues remain, the
+user can start now. `ditto prism status` announces this **once**, as a plain console
+line — a notification, not an interactive question hook, and never re-announced (a
+durable one-shot):
 
 ```bash
 ditto prism status --wi <wi>
@@ -112,23 +114,24 @@ The one-time user-facing line is:
 핵심으로 꼭 정해야 할 것은 모두 정리됐어요. 지금 최소한으로 착수할 수 있어요. (남은 항목은 착수하면서 정해도 됩니다.)
 ```
 
-Discipline:
+Discipline (co-located rules for the notice):
 
-- **Console, never a prompt.** The notice does not block on the user, does not ask a
-  question, and uses no AskUserQuestion / interactive hook. The user is *informed* that
-  launch is reachable; they are not interrogated about it.
-- **Once, then silent.** After the announcement it is not repeated on the next
-  `status`.
-- **Retract on regression.** If a new or reopened critical issue appears, the prior
-  notice is retracted, so re-reaching minimal launch announces again. A 0-critical or
-  empty map never fires the notice (vacuous-truth guard).
+- **Console, not a prompt.** The notice informs the user that launch is reachable; it
+  does not block, ask, or use any AskUserQuestion / interactive hook.
+- **Once, then silent.** After the announcement it is not repeated on the next `status`.
+- **Retract on regression.** A new or reopened critical issue retracts the prior notice,
+  so re-reaching minimal launch announces again. A 0-critical or empty map never fires
+  the notice (vacuous-truth guard).
+
+**Done when** all critical issues are resolved and `status` has emitted the one-time
+line (or correctly stayed silent under the vacuous-truth guard).
 
 ### 4. Emit the design document
 
 Once the map is refined, emit the human-readable design document from a refined
-payload. It ships through a fail-closed gate: the output path is contained to the
-repo, factual claims must carry grounding (a `file:line`, a link, an ADR id, or a
-memory pointer) or the emit is rejected, and raw code/transcript blocks are refused —
+payload. It ships through a fail-closed gate: the output path is contained to the repo,
+every factual claim carries grounding (a `file:line`, a link, an ADR id, or a memory
+pointer) or the emit is rejected, and raw code/transcript blocks are refused —
 **summary + link only, never transcription**.
 
 ```bash
@@ -138,8 +141,11 @@ ditto prism doc --wi <wi> --input <payload.json>
 ditto prism doc --wi <wi> --input <payload.json> --allow-ungrounded
 ```
 
-Default output path is `.ditto/specs/<wi>-design.md`. See *Design document template*
-below for the sections.
+Default output path is `.ditto/specs/<wi>-design.md`. For the section list and the
+digest-bound compile-input sections, see `references/design-doc-template.md`.
+
+**Done when** `doc` writes `.ditto/specs/<wi>-design.md` past the gate — every factual
+claim grounded (or explicitly `--allow-ungrounded`), no raw blocks.
 
 ### 5. Split into work items — approval-gated
 
@@ -155,16 +161,16 @@ ditto prism backlog propose --wi <wi> --input <split-payload.json>
 ditto prism backlog materialize --wi <wi> --statement "<사용자 원문 승인>"
 ```
 
-Materialize creates **drafts only** — no intent, no auto-start. The split never
-drives itself; the user picks what to run next.
+**Done when** the proposal is presented and, only on the user's verbatim `--statement`,
+materialized into per-item drafts — no intent, no auto-start (the user picks what to
+run next).
 
 ### 6. Compile the confirmed design into intent
 
-Confirmation compiles the design document into `intent.json` **through
-deep-interview's single writer** (`finalize-from-doc` delegates to
-`finalizeInterview` — it never writes intent itself), and binds the result to the
-document by digest. A later edit of a decision section (요약·목표·비목표·완료 조건·위험)
-then trips the autopilot freshness gate.
+Confirmation compiles the design document into `intent.json` **through deep-interview's
+single writer** (`finalize-from-doc` delegates to `finalizeInterview` — it never writes
+intent itself), and binds the result to the document by digest. A later edit of a
+decision section (요약·목표·비목표·완료 조건·위험) then trips the autopilot freshness gate.
 
 ```bash
 ditto deep-interview finalize-from-doc --work-item <wi> --statement "<사용자 원문 확정>"
@@ -173,109 +179,49 @@ ditto deep-interview finalize-from-doc --work-item <wi> --doc <path> --statement
 ```
 
 The confirmation gate is an **AND**: the readiness gate (system) ∧ the user's own
-confirmation statement (human). A bare call without `--statement` is not
-confirmation and is rejected. Still-open issues survive into the pre-mortem seed
-(carried into `intent.unknowns`), so plan-stage coverage sees them.
+confirmation statement (human). A bare call without `--statement` is rejected. Still-open
+issues survive into the pre-mortem seed (carried into `intent.unknowns`), so plan-stage
+coverage sees them.
 
-### 7. Opponent seam — devil's-advocate critique, dissent, semantic (host-delegated)
+**Done when** the AND-gate passes and `intent.json` is written via the single writer,
+digest-bound to the confirmed document.
 
-The prism map's argumentation can be sharpened by a real opponent: a devil's-advocate
-**critique** over the A2-flagged critical nodes, an independent **dissent** re-derived
-from the original intent at the anchor, and an A1 **semantic** achieve-vs-characterize
-judgment on the covered (fragment,node) pairs. The model judgment happens in the
-**host layer** (spawned opponent agents), never inside the CLI (ADR-0001). The two CLIs
-only emit the briefs and consume/validate/persist the structured verdicts — the
-pass-in-JSON idiom (mirrors `autopilot coverage-next --relevance`).
+### Optional — sharpen with an opponent (host-delegated)
 
-```bash
-# 1) emit the structured briefs — NO model call. Three groups (critique_targets,
-#    dissent_anchor, semantic_targets), each target carrying node id + label + intent:
-ditto prism opponent-briefs --wi <wi>
-```
-
-The main agent then **spawns one opponent agent per concern** (the host layer, ADR-0001)
-to produce the judgment text against each brief, and assembles the verdicts as JSON:
-
-```jsonc
-{ "verdicts": [
-  { "concern": "critique", "node_id": "<flagged node>", "text": "…critique + refutation…" },
-  { "concern": "dissent",  "node_id": "<anchor>",       "text": "…independent 2nd view…" },
-  { "concern": "semantic", "node_id": "<covered node>", "text": "…achieved / only characterized…" }
-] }
-```
-
-```bash
-# 2) feed the verdicts back — validated + fail-closed, then persisted in ONE write:
-ditto prism opponent-record --wi <wi> --json '<verdicts>' --briefed "<id>,<id>,…"
-```
-
-Discipline:
-
-- **No model call in the CLI.** `opponent-briefs` and `opponent-record` never invoke a
-  provider; the judgment lives in the spawned host agents (ADR-0001).
-- **Fail-closed on foreign nodes.** A verdict whose `node_id` is not in the tree is
-  **rejected** — never recorded as an orphan evaluation the tree render can't show
-  (ADR-0018 never-silent). A malformed payload is a usage error and leaves the map
-  unchanged; an empty verdict text degrades to `host_absent`, never a false `engaged`.
-- **`--briefed` closes the loop.** Passing the briefed node ids surfaces any briefed
-  concern that came back unanswered, so a dropped opponent judgment is visible.
-- The bare `ditto prism opponent` command stays the no-host degrade path (it stamps
-  `host_absent` when no delegate is wired); `opponent-briefs`/`opponent-record` are the
-  additive host-delegated path beside it.
+To pressure-test the map with a devil's-advocate **critique**, an independent
+**dissent**, and an achieve-vs-characterize **semantic** judgment, run the host-delegated
+opponent seam: `references/opponent-seam.md`. The bare `ditto prism opponent` stays the
+no-host degrade path beside it.
 
 ## Divergence discipline (ac-10)
 
-The interview must not spin. Three meaningless-divergence shapes are detected
-**deterministically** (no model call) and never silently suppressed:
+The interview must converge, not spin. Three meaningless-divergence shapes are detected
+**deterministically** (no model call) and recorded as decision-grade events
+(`early_exit` / `challenge_admit`) — never silently suppressed:
 
-- **쳇바퀴 (repeat_question)** — a near-duplicate of an earlier question (no new signal).
+- **쳇바퀴 (`repeat_question`)** — a near-duplicate of an earlier question (no new signal).
 - **Trivial streak** — three consecutive trivial questions.
-- **Decided-conflict without evidence** — re-challenging an already-decided item with
-  no new grounding.
+- **Decided-conflict without evidence** — re-challenging an already-decided item with no
+  new grounding.
 
-A re-challenge that DOES bring new evidence is admissible once — it is admitted as a
-**visible** challenge item, not dropped. Every divergence verdict is recorded as a
-decision-grade event (`early_exit` / `challenge_admit`); nothing is suppressed in
-silence. On top of this, the loop invokes the real caps (calls-per-node, tree-node
-count, total rounds) before each round; a cap HIT **stops and escalates** — a cap is
+A re-challenge that DOES bring new evidence is admitted **once**, as a visible
+`challenge_admit` item (not dropped). Before each round the loop also invokes the real
+caps (calls-per-node, tree-node count, total rounds); a cap HIT **stops and escalates** —
 never "converged" or "success".
 
-## Design document template
+## Hard rules (the invariants)
 
-The document is isomorphic to the `.ditto/specs` template (headings pulled from the
-shared spec sections, so it never drifts). It carries these sections:
-
-1. **Feature** — the name.
-2. **Summary** — what this change is, in prose. *(compile-input, digest-bound)*
-3. **Background** — codebase/project facts, each a summary with a grounding pointer
-   (never raw transcription).
-4. **Goals** — what success is, in the user's terms. *(compile-input, digest-bound)*
-5. **Non-goals** — explicitly out of scope. *(compile-input, digest-bound)*
-6. **Acceptance criteria** — observable `| id | 완료 조건 | evidence |` rows.
-   *(compile-input, digest-bound)*
-7. **Risks** — `| 위험 | 처리 | 플래그 |`. *(compile-input, digest-bound)*
-8. **Impact** — affected surfaces, each grounded.
-9. **Interview log** — a short summary of the refinement (summary, not transcript).
-
-The five compile-input sections (요약·목표·비목표·완료 조건·위험) must be non-empty;
-they are what the preserved digest binds, so the compiled intent stays tied to the
-exact confirmed document.
-
-## Hard rules
-
-- **User output is everyday language.** Never surface a node id, severity enum,
-  coverage axis name, or schema field to the user — describe the thing, not its
-  identifier (ac-3).
-- **Launch is announced, not asked.** The minimal-launch notice is a one-time console
-  line; never an interactive question hook, never repeated, retracted on regression
-  (ac-4).
+- **User output is everyday language.** Never surface a node id, severity enum, coverage
+  axis name, or schema field to the user — describe the thing, not its identifier (ac-3).
+- **Launch is announced, not asked.** The minimal-launch notice is a one-time console line;
+  never an interactive question hook, never repeated, retracted on regression (ac-4).
 - **A cap is not success.** A node/round/tree cap or a flagged divergence STOPS and
   escalates; it is never reported as converged (ac-10).
-- **Nothing materializes without the user's words.** A split proposal and the
-  intent compile both require the user's own verbatim `--statement`; a bare call is
-  not approval/confirmation.
-- **Facts are grounded, never transcribed.** A factual claim in the design document
-  needs a grounding reference; raw code/transcript blocks are refused (summary + link).
+- **Nothing materializes without the user's words.** A split proposal and the intent
+  compile both require the user's own verbatim `--statement`; a bare call is not
+  approval/confirmation.
+- **Facts are grounded, never transcribed.** A factual claim in the design document needs a
+  grounding reference; raw code/transcript blocks are refused (summary + link).
 - **One writer for intent.** The compile goes through `finalize-from-doc` →
   `finalizeInterview`; prism never writes `intent.json` on a second path.
 
