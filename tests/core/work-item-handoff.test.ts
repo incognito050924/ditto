@@ -252,6 +252,68 @@ describe('writeWorkItemHandoff', () => {
     }
   });
 
+  // #36 (wi_260713u4k): foreign untracked dirt that predated the run
+  // (`started_untracked_baseline`) must NOT re-enter changed_files at work-done.
+  // The record-result union already excludes it, but the terminal handoff re-derives
+  // changed_files from `git status` and used to over-include it, overwriting the WI.
+  test('changed_files: excludes started_untracked_baseline foreign untracked dirt at work-done', async () => {
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.email', 't@t'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.name', 't'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '--allow-empty', '-q', '-m', 'init'], {
+      cwd: workDir,
+      stdout: 'pipe',
+    });
+    // Foreign dirt present at session start: a plain file AND a wholly-untracked dir
+    // (git status --porcelain collapses the latter to `foreign-dir/`).
+    await Bun.write(join(workDir, 'foreign-dirt.txt'), 'x\n');
+    await Bun.write(join(workDir, 'foreign-dir', 'a.txt'), 'x\n');
+    // In-scope untracked work NOT in the baseline — must be preserved. `foo-sibling.txt`
+    // is a prefix sibling of the (hypothetical) `foo/` baseline dir and must survive.
+    await Bun.write(join(workDir, 'in-scope.txt'), 'y\n');
+
+    const created = await store.create(makeInput());
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      started_untracked_baseline: ['foreign-dirt.txt', 'foreign-dir/'],
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
+      ),
+    }));
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    expect(result.completion.changed_files).not.toContain('foreign-dirt.txt');
+    expect(result.completion.changed_files).not.toContain('foreign-dir/');
+    // in-scope untracked work survives; over-exclusion of a non-baseline path is a bug.
+    expect(result.completion.changed_files).toContain('in-scope.txt');
+    // the overwrite of the WI's changed_files must also be clean.
+    const updated = await store.get(created.id);
+    expect(updated.changed_files).not.toContain('foreign-dirt.txt');
+    expect(updated.changed_files).not.toContain('foreign-dir/');
+    expect(updated.changed_files).toContain('in-scope.txt');
+  });
+
+  // fail-open: absent/empty baseline ⇒ no exclusion (legacy WI unchanged).
+  test('changed_files: empty/absent started_untracked_baseline applies no exclusion (fail-open)', async () => {
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.email', 't@t'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'config', 'user.name', 't'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '--allow-empty', '-q', '-m', 'init'], {
+      cwd: workDir,
+      stdout: 'pipe',
+    });
+    await Bun.write(join(workDir, 'foreign-dirt.txt'), 'x\n');
+    const created = await store.create(makeInput());
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
+      ),
+    }));
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    // No baseline ⇒ the path is still collected exactly as before the fix.
+    expect(result.completion.changed_files).toContain('foreign-dirt.txt');
+  });
+
   test('re-handoff preserves a prior completion.json verifications/remaining_risks/summary (same verdict)', async () => {
     const created = await store.create(makeInput());
     await store.update(created.id, (cur) => ({

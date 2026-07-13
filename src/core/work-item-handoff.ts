@@ -68,7 +68,19 @@ export function pickBaseRef(repoRoot: string, candidates: string[]): string | nu
  * working tree status is *not* mixed in — the caller is asking about a frozen
  * commit range. Returns repo-relative paths with duplicates removed.
  */
-function collectChangedFiles(repoRoot: string, base: string | null, head: string | null): string[] {
+function collectChangedFiles(
+  repoRoot: string,
+  base: string | null,
+  head: string | null,
+  // #36 (wi_260713u4k): the run's `started_untracked_baseline` — untracked (`??`) dirt
+  // that predated this run (captured at the draft → in_progress edge, wi_260710s4j).
+  // Excluded from the terminal collect by EXACT-SET membership (same idiom as the loop's
+  // record-result union / collectChangeSurface), so foreign pre-existing dirt does not
+  // re-enter changed_files at work-done and overwrite the clean union. A prefix sibling
+  // (`foobar/x` vs the `foo/` baseline dir) is NOT over-excluded. Absent ⇒ no exclusion.
+  baseline: readonly string[] = [],
+): string[] {
+  const excluded = new Set(baseline);
   const set = new Set<string>();
   if (base !== null) {
     const headSpec = head ?? 'HEAD';
@@ -103,8 +115,9 @@ function collectChangedFiles(repoRoot: string, base: string | null, head: string
       }
     }
   }
-  // Filter out paths that escape the repo or are absolute
-  return Array.from(set).filter((p) => !p.startsWith('/') && !p.includes('..'));
+  // Filter out paths that escape the repo or are absolute, and drop foreign
+  // pre-existing untracked dirt (started_untracked_baseline, exact-set).
+  return Array.from(set).filter((p) => !p.startsWith('/') && !p.includes('..') && !excluded.has(p));
 }
 
 function buildCompletion(
@@ -202,7 +215,12 @@ export async function writeWorkItemHandoff(
     }
     headUsed = verifiedHead;
   }
-  const collected = collectChangedFiles(repoRoot, baseUsed, headUsed);
+  const collected = collectChangedFiles(
+    repoRoot,
+    baseUsed,
+    headUsed,
+    item.started_untracked_baseline,
+  );
   // "changed_files not recorded" 판정은 git이 실제로 본 변경(collected) 기준.
   // self-artifact union은 그 판정과 별개로 항상 일어남.
   const unverifiedExtras: { item: string; reason: string; out_of_scope: boolean }[] = [];
