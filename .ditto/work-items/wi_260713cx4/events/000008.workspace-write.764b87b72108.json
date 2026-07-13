@@ -1,0 +1,64 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713cx4",
+  "seq": 8,
+  "actor": "workspace-write",
+  "event_id": "764b87b721088dc3fc1a71dfc923d61640b0bba5fe06a9efe0bccb96b6226885",
+  "ts": "2026-07-13T17:35:50.527Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260713cx4/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/question-context.test.ts",
+        "summary": "red 4 fail/32 pass → green 36 pass/0 fail, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/deep-interview-seam.test.ts",
+        "summary": "red 1 pass/2 fail → green 3 pass/0 fail, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "note",
+        "summary": "before→after 11-operative-cue inventory: all present, same force, same polarity; 2 reinforced (cap-wins, threshold-lowering ban). No imperative/prohibition/gate/exit cue dropped/weakened/reversed."
+      },
+      {
+        "kind": "command",
+        "command": "git diff --stat skills/deep-interview/SKILL.md",
+        "summary": "1 file, +12/-3 additive"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/interview-driver.test.ts",
+        "summary": "66 pass/0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/question-context.test.ts",
+        "summary": "36 pass/0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

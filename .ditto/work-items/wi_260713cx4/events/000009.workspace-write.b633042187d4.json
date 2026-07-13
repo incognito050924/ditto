@@ -1,0 +1,59 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713cx4",
+  "seq": 9,
+  "actor": "workspace-write",
+  "event_id": "b633042187d4ecdaaf3f476785e0edab465131adfdea8eae7a7398972f7874aa",
+  "ts": "2026-07-13T17:35:50.528Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-6",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260713cx4/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/interview-driver.test.ts",
+        "summary": "red (guardBranchEdges not found) → green 66 pass/0 fail, 10 new branch-walking tests incl cap-wins-over-value-exhaustion + seam-underdetect-failopen + malformed-edge-reject"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bunx biome check interview-driver.ts test",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "note",
+        "summary": "before→after 11-operative-cue inventory: all present, same force, same polarity; 2 reinforced (cap-wins, threshold-lowering ban). No imperative/prohibition/gate/exit cue dropped/weakened/reversed."
+      },
+      {
+        "kind": "command",
+        "command": "git diff --stat skills/deep-interview/SKILL.md",
+        "summary": "1 file, +12/-3 additive"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/interview-driver.test.ts",
+        "summary": "66 pass/0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/question-context.test.ts",
+        "summary": "36 pass/0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
