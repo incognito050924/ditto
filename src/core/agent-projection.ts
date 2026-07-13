@@ -3,8 +3,7 @@ import { listFiles, readTextIfExists } from './hosts/shared';
 
 /**
  * Project Claude Code agents (`agents/*.md`, Markdown + YAML frontmatter) into
- * Codex custom agents (`.codex/agents/<name>.toml`). Dual-host plan M4
- * (reports/design/dual-host-surface-adapter-plan.md §M4).
+ * Codex custom agents (`.codex/agents/<name>.toml`). Dual-host plan M4.
  *
  * Codex custom agents require three fields: `name`, `description`,
  * `developer_instructions` (https://developers.openai.com/codex/subagents).

@@ -18,7 +18,7 @@ import { evidenceRef, isoDateTime, relativePath, schemaVersion } from './common'
  * v0 status: this is a *design-locked contract* — the schema is registered, but
  * the KnowledgeCurator agent / `/ditto:knowledge-update` skill / CLAUDE.md
  * projection are post-v0 (M6) runtime (설계서 §0; M1.5b asserts the agent absent
- * in v0). See `reports/design/contracts/knowledge-contract.md`.
+ * in v0).
  */
 
 export const knowledgePattern = z

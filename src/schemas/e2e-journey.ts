@@ -11,7 +11,7 @@ import { relativePath, schemaVersion, sha256, workItemId } from './common';
  *
  * v0 status: *design-locked contract*. The `playwright-e2e` agent / `/ditto:e2e`
  * skill / actual browser capture are post-v0 (M5) runtime (설계서 §0/§10; M1.5b
- * asserts the agent absent in v0). See `reports/design/contracts/e2e-journey-contract.md`.
+ * asserts the agent absent in v0).
  */
 
 export const e2eResult = z

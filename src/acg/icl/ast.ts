@@ -1,7 +1,7 @@
 /**
  * ICL (Intent-Change Language) AST types.
  *
- * Mirrors the EBNF in reports/design/agentic-governance/30-intent-change-dsl.md §2.
+ * Mirrors the ICL EBNF grammar (§2).
  * The parser builds these nodes; compile.ts maps them onto ACG schemas (§3).
  *
  * Scope boundary (D6): this AST covers ICL program structure only. It does not

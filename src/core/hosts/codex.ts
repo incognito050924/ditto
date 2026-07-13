@@ -104,8 +104,8 @@ export const codexHostAdapter: HostAdapter = {
 
   capabilities: {
     // The lifecycle events mirror Claude's names because Codex adopted the same
-    // hook protocol (reports/design/dual-host-codex-fact-verification.md F2/F3);
-    // the codex scanner registers exactly these from the shared hooks/hooks.json,
+    // hook protocol; the codex scanner registers exactly these from the shared
+    // hooks/hooks.json,
     // so declared == registered (capability-inventory hook drift = 0). The first 5
     // were smoke-verified at M2. [VERIFY] SessionStart inherits the adopted protocol
     // but its codex firing is not yet smoke-verified — declared here for dual-host

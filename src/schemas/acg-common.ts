@@ -3,7 +3,7 @@ import { isoDateTime, schemaVersion, workItemId } from './common';
 
 /**
  * ACG (Agentic Change Governance) shared schema pieces — the DITTO *binding* of
- * the ACG spec layer (reports/design/agentic-governance/20-contracts.md §0).
+ * the ACG spec layer (20-contracts §0).
  *
  * Binding decisions (v0-implementation-plan.md §3):
  *  - D1 envelope is DITTO-native: schema_version + work_item_id + a `kind`
