@@ -198,6 +198,7 @@ describe('M2.1b — autopilot 그래프 bootstrap (intent → graph → approval
         question: {
           text: 'shape?',
           why_matters: 'response contract',
+          user_explanation: '응답 값의 형태를 무엇으로 정할지 사용자 언어로 확인하는 질문입니다.',
           info_gain_estimate: 'high',
         },
         answer: { text: 'integer 0..100', kind: 'user' },

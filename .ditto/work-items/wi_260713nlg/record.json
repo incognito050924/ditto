@@ -1,0 +1,157 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260713nlg",
+  "title": "harness: ditto 전반 사용자 대면 언어 — 평이화 + ubiquitous language(사람↔에이전트 공유 이해)를 최우선 가치로",
+  "source_request": "grilling 계열과 deep-interview 비교에서 출발 → ditto 사용자 출력이 직역된 기술서적처럼 읽혀 머릿속에 그림이 안 그려진다는 문제 제기. '넓게 적용해줘. ditto 전반으로.' + ditto의 ubiquitous language 개념 결합. 핵심 논지: ditto는 에이전트와 사람이 대화형으로 문제를 푸는 인터페이스이고, 문제 해결 성패는 서로의 이해 수준이 동일할 때 가장 높다. 오해 없는 대화 = 서로 쓰는 단어·문장의 의미와 이해 수준이 동일해야 함. 이것이 하네스에서 가장 중요한 가치이고 다른 기능은 그 위에 얹히는 가치다.",
+  "goal": "ditto 사용자 대면 대화 표면의 토대를 세운다: 표현 계약(사용자 언어로 써라, 설명 없는 내부 식별자 금지)을 코드가 강제하고, 깨진 문자(모지바케)를 바이트 수준에서 구조적으로 차단하며, 매 턴 배너 3종을 사람이 즉시 그림을 그릴 수 있는 평이한 한국어로 다시 쓴다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "record-turn write path(및 prism 등가 경로)가 질문 표면(question.text + user_explanation)에 대해 표현 계약을 강제한다: user_explanation 누락 또는 설명 없는 내부 식별자(wi_/ac-/노드id/스키마필드) 유출 시 거부. answer.text·dimension.notes는 검사 대상 아님 — 이들에 식별자가 있어도 정상 턴은 통과(오탐 음성 테스트로 보장). red→green.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260713nlg/coverage.json",
+          "summary": "pre-mortem coverage sweep: 13 out_of_scope, 12 resolved"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260713nlg/plan-dialog.md",
+          "summary": "plan dialog + coverage findings"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts",
+          "summary": "52 pass/0 fail exit 0; red-first 2 fail on AC assertion"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/question-round.test.ts",
+          "summary": "13 pass/0 fail exit 0; red-first 11/2fail; tsc clean on changed files"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/interview-driver.test.ts tests/core/question-round.test.ts",
+          "summary": "52/0 + 13/0 exit0; 5 clauses incl false-negative guard + prism leak"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "option 설명이 바이트 예산(Buffer.byteLength utf8 기준)을 초과하면 본문 브리핑으로 강제 이동하고 AskUserQuestion에는 예산 이하만 넘어간다 — .length(UTF-16 코드유닛)가 아니라 바이트로 재어 한글 다중바이트 텍스트가 호스트 바이트 절단으로 깨지지 않는다. 초과→브리핑 경로 테스트.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260713nlg/coverage.json",
+          "summary": "pre-mortem coverage sweep: 13 out_of_scope, 12 resolved"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260713nlg/plan-dialog.md",
+          "summary": "plan dialog + coverage findings"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/question-context.test.ts tests/core/coverage-manager.test.ts",
+          "summary": "green 92 pass/0 fail exit 0; red-first 90/2fail on AC assertion"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/question-context.test.ts tests/core/coverage-manager.test.ts",
+          "summary": "21/0 + 71/0 exit0; .length-regression simulation confirms discriminator"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "매 턴 배너 3종(prime-directive, work-item 경고, SessionStart)이 평이한 한국어 + 합의 어휘로 재작성되고, 자동 검사(스냅샷 고정 + 설명없는 약칭 0 + 가독성 자가채점: 음차 영어용어 수·문장 길이·한 문장 한 뜻)를 통과하며, 닫기 전 사용자가 before/after를 읽고 그림이 그려진다/의미가 통한다를 최소 1회 확인한다(자동 검사=재현 보조, 사람 확인=완료 판정). 상시 게이트 아님, 이 작업 완료에 한해 1회.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260713nlg/coverage.json",
+          "summary": "pre-mortem coverage sweep: 13 out_of_scope, 12 resolved"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260713nlg/plan-dialog.md",
+          "summary": "plan dialog + coverage findings"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/charter.test.ts tests/core/mode-doctor.test.ts tests/host/claude/hooks-envelope.surface.test.ts tests/host/codex/hooks-envelope.surface.test.ts tests/conformance/m1.conformance.test.ts",
+          "summary": "107 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/user-prompt-submit.test.ts",
+          "summary": "52 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "4616 pass/0 fail exit0 (full suite, post-feedback settled tree)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/charter.test.ts tests/core/mode-doctor.test.ts",
+          "summary": "cue-fidelity + snapshot + abbrev==0 green"
+        },
+        {
+          "kind": "note",
+          "summary": "User 1-time confirmation: 확인 — 이제 된다 (after 2-round review; operative cues preserved per reviewer before/after table)"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/local/work-items/wi_260713nlg/completion.json",
+    ".ditto/local/work-items/wi_260713nlg/work-item.json",
+    ".ditto/work-items/wi_2607130ld/",
+    ".ditto/work-items/wi_260713nlg/",
+    "src/core/question-context.ts",
+    "tests/core/question-context.test.ts",
+    "tests/core/coverage-manager.test.ts",
+    "src/core/interview-driver.ts",
+    "tests/core/interview-driver.test.ts",
+    "src/core/question-round.ts",
+    "src/core/prism/store.ts",
+    "tests/core/question-round.test.ts",
+    "src/core/charter.ts",
+    "src/core/mode-doctor.ts",
+    "tests/core/charter.test.ts",
+    "tests/core/mode-doctor.test.ts",
+    "tests/conformance/m1.conformance.test.ts",
+    "tests/hooks/user-prompt-submit.test.ts"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true
+  },
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 25
+  },
+  "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260713nlg",
+    "fresh_evidence_needed": [
+      "land aborted — 17 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_2607130ld/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607130ld/record.json, .ditto/work-items/wi_260713nlg/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713nlg/events/000001.workspace-write.b6e05c4e419f.json, .ditto/work-items/wi_260713nlg/events/000002.workspace-write.b1ffb2860cfd.json, .ditto/work-items/wi_260713nlg/events/000003.workspace-write.14b882310ed7.json, .ditto/work-items/wi_260713nlg/events/000004.workspace-write.979c3aac91d6.json, .ditto/work-items/wi_260713nlg/events/000005.workspace-write.60a4860475e2.json, .ditto/work-items/wi_260713nlg/events/000006.workspace-write.5d45a3c564ca.json, .ditto/work-items/wi_260713nlg/events/000007.workspace-write.f408047b6223.json, .ditto/work-items/wi_260713nlg/record.json, tests/cli/deep-interview-claim.test.ts, tests/cli/deep-interview-dissent.test.ts, tests/cli/deep-interview-semantic.test.ts, tests/conformance/m2.conformance.test.ts, tests/core/interview-compile.test.ts, tests/integration/intent-coverage-drive.test.ts. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
+  "runs": [],
+  "handoff_path": ".ditto/local/handoff/wi_260713nlg.md",
+  "started_at_sha": "a0dd457f41b48d35e0e374f95ae3665645be5fe4",
+  "started_untracked_baseline": [
+    ".ditto/work-items/wi_2607130ld/",
+    ".ditto/work-items/wi_260713nlg/"
+  ],
+  "created_at": "2026-07-13T04:54:51.421Z",
+  "updated_at": "2026-07-13T08:44:06.317Z",
+  "closed_at": "2026-07-13T08:44:06.316Z"
+}

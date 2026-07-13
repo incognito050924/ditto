@@ -156,6 +156,49 @@ describe('formatModeBanner — the SessionStart entry guard', () => {
     const b = formatModeBanner(reportWith({ sessionMode: 'dev' }), { inDittoRepo: false });
     expect(b.text).toBe('');
   });
+
+  // ── wi_260713nlg: plain-Korean reword — directive-fidelity for the SessionStart
+  // banner. It is runtime instruction, so the reword keeps every operative cue:
+  // the STALE warning, "edits do NOT take effect here", and the load-bearing
+  // EXIT-and-RE-ENTER-with-`bun run dogfood` instruction. Commands stay literal.
+  describe('plain-Korean reword (wi_260713nlg)', () => {
+    test('dev banner keeps the dogfood/working-tree cue', () => {
+      const b = formatModeBanner(reportWith({ sessionMode: 'dev' }), { inDittoRepo: true });
+      expect(b.text).toContain('dogfood');
+      expect(b.text).toContain('작업 트리'); // working tree
+    });
+
+    test('stale-installed banner keeps STALE + no-effect + exit/re-enter instruction', () => {
+      const b = formatModeBanner(
+        reportWith({
+          sessionMode: 'installed',
+          installed: { present: true, version: '0.1.0', fresh: false },
+        }),
+        { inDittoRepo: true },
+      );
+      expect(b.warn).toBe(true);
+      expect(b.text).toContain('오래됐다(STALE)'); // stale vs working tree
+      expect(b.text).toContain('반영되지 않는다'); // edits will NOT take effect here
+      expect(b.text).toContain('세션을 나갔다가'); // EXIT
+      expect(b.text).toContain('다시 들어오라'); // RE-ENTER
+      expect(b.text).toContain('bun run dogfood'); // the concrete command
+      expect(b.text).toContain('--host codex');
+      expect(b.text).toContain('v0.1.0'); // installed version cue
+    });
+
+    test('fresh-installed banner still advises live-edit entry via bun run dogfood', () => {
+      const b = formatModeBanner(
+        reportWith({
+          sessionMode: 'installed',
+          installed: { present: true, version: '0.1.0', fresh: true },
+        }),
+        { inDittoRepo: true },
+      );
+      expect(b.warn).toBe(false);
+      expect(b.text).toContain('실시간으로 편집'); // for live edits
+      expect(b.text).toContain('bun run dogfood');
+    });
+  });
 });
 
 describe('formatModeHuman — the `ditto mode` readout', () => {

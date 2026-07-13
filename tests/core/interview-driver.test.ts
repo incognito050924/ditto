@@ -96,6 +96,7 @@ describe('recordTurn', () => {
           notes: '',
         },
         question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
           text: 'How is the score computed?',
           why_matters: 'Determines the response shape and edge cases.',
           info_gain_estimate: 'high',
@@ -114,14 +115,24 @@ describe('recordTurn', () => {
       workItemId: wiId,
       payload: {
         dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
-        question: { text: 'q1?', why_matters: 'because', info_gain_estimate: 'medium' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'q1?',
+          why_matters: 'because',
+          info_gain_estimate: 'medium',
+        },
       },
     });
     const state = await recordTurn(repo, {
       workItemId: wiId,
       payload: {
         dimension: { id: 'd1', critical: false, state: 'resolved', ambiguity: 0.1, notes: '' },
-        question: { text: 'q2?', why_matters: 'follow-up', info_gain_estimate: 'low' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'q2?',
+          why_matters: 'follow-up',
+          info_gain_estimate: 'low',
+        },
         answer: { text: 'use bcrypt', kind: 'user' },
       },
     });
@@ -136,7 +147,12 @@ describe('recordTurn', () => {
       workItemId: wiId,
       payload: {
         dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.4, notes: '' },
-        question: { text: 'q1?', why_matters: 'unknown', info_gain_estimate: 'medium' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'q1?',
+          why_matters: 'unknown',
+          info_gain_estimate: 'medium',
+        },
         answer: { text: 'assume bcrypt-12', kind: 'assumption' },
       },
     });
@@ -153,7 +169,12 @@ describe('recordTurn', () => {
       workItemId: wiId,
       payload: {
         dimension: { id: 'd-crit', critical: true, state: 'resolved', ambiguity: 0.2, notes: '' },
-        question: { text: 'critical?', why_matters: 'load-bearing', info_gain_estimate: 'high' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'critical?',
+          why_matters: 'load-bearing',
+          info_gain_estimate: 'high',
+        },
         answer: { text: 'agent guesses bcrypt-12', kind: 'assumption' },
       },
     });
@@ -170,7 +191,12 @@ describe('recordTurn', () => {
       workItemId: wiId,
       payload: {
         dimension: { id: 'd-crit', critical: true, state: 'resolved', ambiguity: 0.2, notes: '' },
-        question: { text: 'critical?', why_matters: 'load-bearing', info_gain_estimate: 'high' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'critical?',
+          why_matters: 'load-bearing',
+          info_gain_estimate: 'high',
+        },
         answer: { text: 'user said: you decide', kind: 'assumption', delegated: true },
       },
     });
@@ -183,7 +209,12 @@ describe('recordTurn', () => {
       workItemId: wiId,
       payload: {
         dimension: { id: 'd-min', critical: false, state: 'resolved', ambiguity: 0.2, notes: '' },
-        question: { text: 'minor?', why_matters: 'cosmetic', info_gain_estimate: 'low' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'minor?',
+          why_matters: 'cosmetic',
+          info_gain_estimate: 'low',
+        },
         answer: { text: 'assume default', kind: 'assumption' },
       },
     });
@@ -196,6 +227,7 @@ describe('recordTurn', () => {
       payload: {
         dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
         question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
           text: 'q1?',
           why_matters: 'because',
           info_gain_estimate: 'low',
@@ -211,7 +243,12 @@ describe('recordTurn', () => {
       workItemId: wiId,
       payload: {
         dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
-        question: { text: 'q1?', why_matters: 'because', info_gain_estimate: 'medium' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'q1?',
+          why_matters: 'because',
+          info_gain_estimate: 'medium',
+        },
       },
     });
     expect(state.questions.length).toBe(1);
@@ -224,7 +261,12 @@ describe('recordTurn', () => {
         workItemId: wiId,
         payload: {
           dimension: { id: `d${i}`, critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
-          question: { text: `q${i}?`, why_matters: 'x', info_gain_estimate: 'medium' },
+          question: {
+            user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+            text: `q${i}?`,
+            why_matters: 'x',
+            info_gain_estimate: 'medium',
+          },
         },
       });
     }
@@ -241,6 +283,7 @@ describe('recordTurn', () => {
       payload: {
         dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
         question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
           text: 'q?',
           why_matters: 'x',
           info_gain_estimate: 'low',
@@ -263,7 +306,12 @@ describe('recordTurn', () => {
         workItemId: wiId,
         payload: {
           dimension: { id: `d${i}`, critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
-          question: { text: `q${i}?`, why_matters: 'x', info_gain_estimate: 'low' },
+          question: {
+            user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+            text: `q${i}?`,
+            why_matters: 'x',
+            info_gain_estimate: 'low',
+          },
         },
       });
     }
@@ -272,6 +320,7 @@ describe('recordTurn', () => {
       payload: {
         dimension: { id: 'd2', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
         question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
           text: 'q2?',
           why_matters: 'x',
           info_gain_estimate: 'low',
@@ -289,6 +338,7 @@ describe('recordTurn', () => {
       payload: {
         dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
         question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
           text: 'q?',
           why_matters: 'x',
           info_gain_estimate: 'high',
@@ -308,6 +358,7 @@ describe('recordTurn', () => {
       payload: {
         dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
         question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
           text: 'q?',
           why_matters: 'x',
           info_gain_estimate: 'low',
@@ -388,7 +439,12 @@ describe('startInterview seeds user-intent dimensions (기제 C, wi_260706n4w)',
       workItemId: wiId,
       payload: {
         dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
-        question: { text: 'shape?', why_matters: 'response', info_gain_estimate: 'high' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'shape?',
+          why_matters: 'response',
+          info_gain_estimate: 'high',
+        },
         answer: { text: 'integer', kind: 'user' },
         readiness_score: 0.85,
       },
@@ -435,7 +491,12 @@ describe('checkReadiness', () => {
           ambiguity: 0.6,
           notes: '',
         },
-        question: { text: 'critical?', why_matters: 'load-bearing', info_gain_estimate: 'high' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'critical?',
+          why_matters: 'load-bearing',
+          info_gain_estimate: 'high',
+        },
         readiness_score: 0.95,
       },
     });
@@ -455,7 +516,12 @@ describe('checkReadiness', () => {
           ambiguity: 0.05,
           notes: '',
         },
-        question: { text: 'critical?', why_matters: 'load-bearing', info_gain_estimate: 'high' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'critical?',
+          why_matters: 'load-bearing',
+          info_gain_estimate: 'high',
+        },
         answer: { text: 'agreed on 0..100 integer', kind: 'user' },
         readiness_score: 0.85,
       },
@@ -473,7 +539,12 @@ describe('finalizeInterview', () => {
       workItemId: wiId,
       payload: {
         dimension: { id: 'd-x', critical: true, state: 'partial', ambiguity: 0.4, notes: '' },
-        question: { text: 'q?', why_matters: 'm', info_gain_estimate: 'high' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'q?',
+          why_matters: 'm',
+          info_gain_estimate: 'high',
+        },
       },
     });
     const result = await finalizeInterview(repo, {
@@ -509,7 +580,12 @@ describe('finalizeInterview', () => {
       workItemId: wiId,
       payload: {
         dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
-        question: { text: 'shape?', why_matters: 'response', info_gain_estimate: 'high' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'shape?',
+          why_matters: 'response',
+          info_gain_estimate: 'high',
+        },
         answer: { text: 'integer 0..100', kind: 'user' },
         readiness_score: 0.85,
       },
@@ -566,7 +642,12 @@ describe('finalizeInterview', () => {
       workItemId: wiId,
       payload: {
         dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
-        question: { text: 'shape?', why_matters: 'response', info_gain_estimate: 'high' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'shape?',
+          why_matters: 'response',
+          info_gain_estimate: 'high',
+        },
         answer: { text: 'integer', kind: 'user' },
         readiness_score: 0.85,
       },
@@ -612,7 +693,12 @@ describe('finalizeInterview', () => {
       workItemId: wiId,
       payload: {
         dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
-        question: { text: 'shape?', why_matters: 'response', info_gain_estimate: 'high' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'shape?',
+          why_matters: 'response',
+          info_gain_estimate: 'high',
+        },
         answer: { text: 'integer', kind: 'user' },
         readiness_score: 0.85,
       },
@@ -702,7 +788,13 @@ describe('finalizeInterview', () => {
       workItemId: wiId,
       payload: {
         dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
-        question: { text: 'q?', why_matters: 'm', info_gain_estimate: 'low', marginal_gain: 0.02 },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'q?',
+          why_matters: 'm',
+          info_gain_estimate: 'low',
+          marginal_gain: 0.02,
+        },
       },
     });
     expect(turned.exit.reason).toBe('diminishing_returns');
@@ -765,7 +857,12 @@ describe('projectInterviewDimensions — intent dissent opponent + honest neutra
           ambiguity: 0,
           notes: 'the critical scope',
         },
-        question: { text: 'scope?', why_matters: 'load-bearing', info_gain_estimate: 'high' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'scope?',
+          why_matters: 'load-bearing',
+          info_gain_estimate: 'high',
+        },
         answer: { text: 'only local files', kind: 'user' },
         readiness_score: 0.85,
       },
@@ -810,7 +907,12 @@ describe('projectInterviewDimensions — intent dissent opponent + honest neutra
       workItemId: wiId,
       payload: {
         dimension: { id: 'd-min', critical: false, state: 'resolved', ambiguity: 0, notes: 'x' },
-        question: { text: 'minor?', why_matters: 'cosmetic', info_gain_estimate: 'low' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'minor?',
+          why_matters: 'cosmetic',
+          info_gain_estimate: 'low',
+        },
         answer: { text: 'default', kind: 'user' },
       },
     });
@@ -829,7 +931,12 @@ describe('finalizeInterview — critical high-impact dissent gate (ac-3)', () =>
       workItemId: wiId,
       payload: {
         dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
-        question: { text: 'shape?', why_matters: 'response', info_gain_estimate: 'high' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'shape?',
+          why_matters: 'response',
+          info_gain_estimate: 'high',
+        },
         answer: { text: 'integer', kind: 'user' },
         readiness_score: 0.85,
       },
@@ -905,7 +1012,12 @@ describe('finalizeInterview — critical high-impact dissent gate (ac-3)', () =>
       workItemId: wiId,
       payload: {
         dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
-        question: { text: 'shape?', why_matters: 'response', info_gain_estimate: 'high' },
+        question: {
+          user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          text: 'shape?',
+          why_matters: 'response',
+          info_gain_estimate: 'high',
+        },
         answer: { text: 'integer', kind: 'user' },
         readiness_score: 0.85,
       },
@@ -1019,6 +1131,7 @@ describe('recordTurn — novelty-exhaustion termination (wi_260709d00 #14)', () 
         payload: {
           dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
           question: {
+            user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
             text: `q${i}?`,
             why_matters: 'x',
             info_gain_estimate: 'low',
@@ -1073,5 +1186,106 @@ describe('recordTurn — novelty-exhaustion termination (wi_260709d00 #14)', () 
     await pushRounds([true], 0.02);
     const state = await new InterviewStore(repo).get(wiId);
     expect(state.exit.reason).toBe('diminishing_returns');
+  });
+});
+
+// ac-1 (impl-ac1-recordturn): the recordTurn WRITE path rejects a bad question surface
+// BEFORE persist, wiring the EXISTING pure validators (validateQuestionContext +
+// findUnexplainedIdentifiers, question-context.ts) into the write path. A "bad" turn is
+// one whose USER-REACHING face (question.text + question.user_explanation) is missing its
+// plain-language gloss OR leaks an un-glossed internal identifier. SCOPE LIMIT (pinned by
+// the false-negative guard below): ONLY the question surface is checked — answer.text and
+// dimension.notes legitimately carry internal vocabulary (wi_/ac-) and must pass. The
+// reject Error must NAME what tripped it (missing field / leaked identifier), never a bare
+// "rejected", so the caller can fix the exact surface.
+describe('recordTurn — question-surface reject before persist (ac-1)', () => {
+  beforeEach(async () => {
+    await startInterview(repo, { workItemId: wiId, questionCap: 8 });
+  });
+
+  // clause 1: user_explanation is the user-reaching gloss; a turn without it is a bad
+  // turn and must be rejected before persist, with the message naming the missing field.
+  test('missing/blank user_explanation → throws, message names user_explanation, nothing persisted', async () => {
+    await expect(
+      recordTurn(repo, {
+        workItemId: wiId,
+        payload: {
+          dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
+          question: {
+            text: '점수는 어떻게 계산하나요?',
+            why_matters: '응답 형태를 정합니다.',
+            info_gain_estimate: 'high',
+          },
+        },
+      }),
+    ).rejects.toThrow(/user_explanation/);
+    // rejected BEFORE the store.write — no question was appended.
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.questions.length).toBe(0);
+  });
+
+  // clause 2: an internal identifier leaked on the user-reaching face (question.text)
+  // without a gloss must be rejected, and the message must NAME the leaked identifier.
+  test('question.text leaks an unglossed identifier → throws, message names the identifier', async () => {
+    await expect(
+      recordTurn(repo, {
+        workItemId: wiId,
+        payload: {
+          dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
+          question: {
+            text: 'ac-1을 먼저 진행할까요?',
+            why_matters: '순서를 정합니다.',
+            info_gain_estimate: 'high',
+            user_explanation: '어떤 항목을 먼저 다룰지 정하는 질문이에요.',
+          },
+        },
+      }),
+    ).rejects.toThrow(/ac-1/);
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.questions.length).toBe(0);
+  });
+
+  // clause 3: a fully-contextualized turn (clean text + present user_explanation) persists.
+  test('fully-contextualized normal turn → persists (no throw)', async () => {
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
+        question: {
+          text: '점수는 정수인가요?',
+          why_matters: '응답 형식을 정합니다.',
+          info_gain_estimate: 'high',
+          user_explanation: '응답을 정수로 줄지 소수로 줄지 정하는 질문이에요.',
+        },
+      },
+    });
+    expect(state.questions.length).toBe(1);
+  });
+
+  // FALSE-NEGATIVE GUARD (scope limit): identifiers in dimension.notes / answer.text —
+  // which legitimately carry wi_/ac- vocabulary — must NOT trip the reject; only the
+  // question surface is checked. If this over-rejected, the scope limit would be violated.
+  test('identifiers in dimension.notes / answer.text but clean question surface → ACCEPTED', async () => {
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: {
+          id: 'd1',
+          critical: false,
+          state: 'resolved',
+          ambiguity: 0.2,
+          notes: 'wi_260713nlg 관련 차원',
+        },
+        question: {
+          text: '이 항목을 먼저 다룰까요?',
+          why_matters: '작업 순서를 정합니다.',
+          info_gain_estimate: 'high',
+          user_explanation: '무엇을 먼저 처리할지 정하는 질문이에요.',
+        },
+        answer: { text: 'ac-1 먼저 진행해 주세요', kind: 'user' },
+      },
+    });
+    expect(state.questions.length).toBe(1);
+    expect(state.questions[0]?.answer).toContain('ac-1');
   });
 });

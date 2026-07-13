@@ -1,0 +1,49 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713nlg",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "5d45a3c564cadc1c6e732186ff0321a637fa0e52ba4aa0d6e3c2b5f511009185",
+  "ts": "2026-07-13T08:37:43.042Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260713nlg/coverage.json",
+        "summary": "pre-mortem coverage sweep: 13 out_of_scope, 12 resolved"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260713nlg/plan-dialog.md",
+        "summary": "plan dialog + coverage findings"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/charter.test.ts tests/core/mode-doctor.test.ts tests/host/claude/hooks-envelope.surface.test.ts tests/host/codex/hooks-envelope.surface.test.ts tests/conformance/m1.conformance.test.ts",
+        "summary": "107 pass/0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/hooks/user-prompt-submit.test.ts",
+        "summary": "52 pass/0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "4616 pass/0 fail exit0 (full suite, post-feedback settled tree)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/charter.test.ts tests/core/mode-doctor.test.ts",
+        "summary": "cue-fidelity + snapshot + abbrev==0 green"
+      },
+      {
+        "kind": "note",
+        "summary": "User 1-time confirmation: 확인 — 이제 된다 (after 2-round review; operative cues preserved per reviewer before/after table)"
+      }
+    ]
+  }
+}
