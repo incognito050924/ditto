@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713z3g",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "c1bc1ca86d386b1de0c12039469b2de07190b57375afff8986f4f8c1957dfdf3",
+  "ts": "2026-07-13T09:16:31.072Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c f=skills/ditto-skill-creator/references/writing-great-artifacts.md; test -f \"$f\" && for t in predictability \"leading word\" \"completion criterion\" no-op negation co-location \"mattpocock/skills\"; do grep -qi \"$t\" \"$f\" || { echo \"missing $t\"; exit 1; }; done && echo AC1_PASS",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

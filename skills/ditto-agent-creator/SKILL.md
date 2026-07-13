@@ -5,45 +5,41 @@ description: Author a new ditto autopilot owner subagent (agents/<name>.md) that
 
 # ditto agent creator
 
-Create a new **autopilot owner subagent** for this repo. ditto's core role is agent orchestration, so its agents are not generic Claude Code subagents — they all share one strict convention so autopilot can delegate to any of them and collect evidence uniformly. This skill encodes that convention so a generated agent is consistent with `implementer`/`researcher`/`reviewer`/`verifier` out of the box, and proves it with a contract test.
+Author a new **autopilot owner subagent** for this repo. ditto's core role is orchestration, so its agents are not generic subagents — they share one strict convention so autopilot can delegate to any of them and collect evidence uniformly. This skill encodes that convention (and proves it with a contract test) so a new agent is consistent with `implementer`/`researcher`/`reviewer`/`verifier` out of the box.
 
-## When to create a subagent (and when NOT to)
+Author for **predictability** — the same process every run. An agent body is a prompt-context artifact like a skill, so the shared craft in `../ditto-skill-creator/references/writing-great-artifacts.md` governs it too (leading words, completion criteria, pruning, prompt-the-positive); `references/ditto-agent-conventions.md` maps that craft onto the agent surface. When a habit here and the craft pull against each other, the craft wins — except for the functional contract below, which is not style.
 
-Create one when there is a **repeated, self-contained worker** whose verbose work should stay out of the main context and return only a summary — exactly autopilot's owner pattern. Do **not** create one for: a quick local change, work that needs frequent back-and-forth, or several phases sharing one big context (those belong in the main conversation). If the need is reusable *knowledge/workflow* rather than an isolated worker, make a skill with `ditto-skill-creator` instead. Don't pre-build shallow single-use agents.
+## When to create a subagent
+
+Create one for a **repeated, self-contained worker** whose verbose work should stay out of the main context and return only a summary — autopilot's owner pattern. For a quick local change, work that needs frequent back-and-forth, or several phases sharing one context, stay in the main conversation; for reusable knowledge/workflow, make a skill with `ditto-skill-creator`.
 
 ## Procedure
 
-1. **Capture intent.** What single responsibility does this owner have? Is it read-only (research/review/verify) or mutating (implement/refactor)? Which acceptance-criterion oracle does it serve?
+1. **Capture intent** — done when you can name the owner's single responsibility, whether it is read-only or mutating, and the acceptance-criterion oracle it serves.
 2. **Pick least-privilege tools** from the role → tools table below.
-3. **Draft `agents/<name>.md`** from the template in `references/owner-subagent-template.md` (copy it, fill the role specifics). Keep the shared convention intact.
-4. **Validate** against the convention:
+3. **Draft** `agents/<name>.md` from `references/owner-subagent-template.md`, keeping the convention markers intact.
+4. **Validate** — done when the contract test reports OK:
    ```bash
    node skills/ditto-agent-creator/scripts/validate-agent.mjs agents/<name>.md
    ```
-   Fix every ERROR. (Or add it to `tests/skills/validate-agent.test.ts` and run `bun test tests/skills/validate-agent.test.ts`.)
-5. **Rebuild both hosts** (dual-host, ADR-0016): `bun run build:plugin && bun run build:codex-plugin`. The build copies `agents/` verbatim into `dist/plugin/agents/` and the Codex plugin — author under `agents/` and rebuild, no registry to edit.
+5. **Rebuild both hosts** — done when both builds exit 0: `bun run build:plugin && bun run build:codex-plugin`. `agents/` is the source of truth, copied verbatim into both host plugins (dual-host, ADR-0016).
 
-## The ditto owner-subagent convention (what the contract test enforces)
+## The owner-subagent convention (functional contract — the test enforces it)
 
-Every owner agent body must carry these, because autopilot depends on them:
+Autopilot depends on these, so keep every one:
 
-- **Delegation packet** — the agent receives a 6-section packet (TASK · EXPECTED OUTCOME · REQUIRED TOOLS · MUST DO · MUST NOT DO · CONTEXT, incl. `file_scope`/`done_when`) and works only from it.
-- **Context Isolation** — it does **not** see the driver's hypotheses, other nodes' results, or the broader plan. State this explicitly so the agent doesn't invent shared context it wasn't given.
-- **owner-return envelope** — it returns the structured envelope (schema `src/schemas/owner-return-envelope.ts`, gated by `guardOwnerEnvelope`): `summary` (the ONLY slot loaded into the orchestrator's context — a pointer-index, not the body) · `verbatim_detail` (lossless detail, no size cap) · `conclusion` · `verdict` · `evidence[]` · `uncertainty[]` · `owner_kind`. A bare summary with neither `verbatim_detail` nor `artifact_location` is rejected.
-- **Four decisive classes** — loading `summary` alone must lose NONE of: intent · decisions · irreversible-risks · uncertainty. `uncertainty[]` has a slot; place the other three in `verbatim_detail` and flag them in `summary`.
-- **Contract** section — a short closing list restating read-only vs mutating, minimum-viable change, and the evidence to return.
+- **Delegation packet** — the agent works only from a 6-section packet (TASK · EXPECTED OUTCOME · REQUIRED TOOLS · MUST DO · MUST NOT DO · CONTEXT, incl. `file_scope`/`done_when`).
+- **Context Isolation** — it never sees the driver's hypotheses, other nodes' results, or the plan; state this so it doesn't invent shared context.
+- **owner-return envelope** — it returns the structured envelope (`src/schemas/owner-return-envelope.ts`): `summary` is the only slot the orchestrator loads, so the four decisive classes (intent · decisions · irreversible-risks · uncertainty) must survive in `summary` (flagged) + `verbatim_detail` (full). Field detail lives in `references/ditto-agent-conventions.md`.
+- **Contract section** — a short closing list restating read-only vs mutating, the minimum-viable change, and the evidence to return.
 
 ## Role → least-privilege tools
 
 | Role kind | Typical tools | Mutates? |
 |---|---|---|
-| research / review / verify / judge | `Read, Grep, Glob` (+ `Bash` to run evidence, +`WebSearch, WebFetch` for research) | No — must NOT list `Edit`/`Write` |
-| implement / refactor (owner) | `Read, Grep, Glob, Edit, Write, Bash` | Yes — the only owners permitted to mutate |
+| research / review / verify / judge | `Read, Grep, Glob` (+ `Bash` for evidence, +`WebSearch, WebFetch` for research) | No — lists no `Edit`/`Write` |
+| implement / refactor (owner) | `Read, Grep, Glob, Edit, Write, Bash` | Yes — the only owners that mutate |
 
-A read-only agent (its description says "read-only") that lists `Edit`/`Write` is a least-privilege violation — the contract test fails it. Omitting `tools` entirely inherits ALL tools and is also rejected.
+Grant exactly the tools the job needs: a read-only role listing `Edit`/`Write`, or an omitted `tools` line (which inherits everything), fails the contract test.
 
-See `references/owner-subagent-template.md` for the fill-in-the-blanks template and `references/ditto-agent-conventions.md` for rationale + source pointers.
-
-## Anti-patterns to avoid
-
-Inheriting all tools (omitting `tools`) · granting mutation to a read-only role · collapsing `verbatim_detail` into `summary` (loses the decisive classes) · referencing the driver's plan/other nodes (breaks Context Isolation) · adding unrequested defensive code or extra features inside the agent's job · shipping to only one host build.
+See `references/owner-subagent-template.md` for the fill-in template and `references/ditto-agent-conventions.md` for the craft mapping, rationale, and sources.

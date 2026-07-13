@@ -19,6 +19,30 @@ import { readFileSync } from 'node:fs';
 const RESERVED = ['anthropic', 'claude'];
 const MUTATING_TOOLS = ['Edit', 'Write', 'NotebookEdit'];
 
+// Advisory craft heuristics (warnings, never errors) from the shared authoring
+// craft — ../ditto-skill-creator/references/writing-great-artifacts.md. Phrase-
+// targeted, not density-based: owner subagents legitimately carry many
+// `MUST NOT`/read-only guardrails, so we flag only specific *filler* smells, never
+// bare `don't`/`never` (the sanctioned guardrail form).
+const NOOP_FILLER =
+  /\b(be thorough|be careful|be sure to|make sure to|please note|it is important to|remember to|be diligent)\b/i;
+const NEGATION_FILLER =
+  /\b(?:(?:don'?t|do not) (?:forget|worry|hesitate)|try not to|needless to say|it goes without saying)\b/i;
+
+/** Low-noise "prune / prompt-the-positive" nudges for an agent body. */
+export function craftWarnings(body) {
+  const w = [];
+  if (NOOP_FILLER.test(body))
+    w.push(
+      'no-op filler (e.g. "be thorough"/"make sure to") — the model already does this; cut it or use a stronger leading word',
+    );
+  if (NEGATION_FILLER.test(body))
+    w.push(
+      'filler negation (e.g. "don\'t forget") — prompt the positive; reserve MUST NOT for hard guardrails',
+    );
+  return w;
+}
+
 function splitFrontmatter(text) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
   if (!m) return null;
@@ -92,6 +116,8 @@ export function validateAgent(text) {
     );
   if (!/packet/i.test(body))
     warnings.push('body does not mention the delegation packet (TASK·EXPECTED OUTCOME·…·CONTEXT)');
+
+  warnings.push(...craftWarnings(body));
 
   return { ok: errors.length === 0, errors, warnings };
 }

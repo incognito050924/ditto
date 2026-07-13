@@ -1,0 +1,79 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260713z3g",
+  "title": "writing-great-skills 크래프트를 저작용 스킬에 반영",
+  "source_request": "https://github.com/mattpocock/skills/tree/main/skills/productivity/writing-great-skills 의 유용한 내용 반영. 옵션 전부(reference 흡수+SKILL.md 포인터+validator 경고+SKILL.md 재구조화) 및 ditto-agent-creator 등 저작용 스킬에도 같은 개념 반영.",
+  "goal": "저작용 스킬(ditto-skill-creator·ditto-agent-creator)이 writing-great-skills의 크래프트를 따르게 반영하고, 공용 크래프트는 SoT 1곳에 두며 validator 경고까지 배선한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "새 파일 skills/ditto-skill-creator/references/writing-great-artifacts.md 가 존재하고 predictability·leading word·completion criterion·no-op·negation·co-location 용어를 모두 포함하며 mattpocock/skills 출처를 인용한다(grep 확인)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c f=skills/ditto-skill-creator/references/writing-great-artifacts.md; test -f \"$f\" && for t in predictability \"leading word\" \"completion criterion\" no-op negation co-location \"mattpocock/skills\"; do grep -qi \"$t\" \"$f\" || { echo \"missing $t\"; exit 1; }; done && echo AC1_PASS",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "두 creator SKILL.md 파일 각각이 문자열 leading word·completion criterion·negation·writing-great-artifacts 를 모두 포함한다(grep -l 로 두 파일 다 매치)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c for s in skills/ditto-skill-creator/SKILL.md skills/ditto-agent-creator/SKILL.md; do for t in \"leading word\" \"completion criterion\" negation writing-great-artifacts; do grep -qi \"$t\" \"$s\" || { echo \"missing $t in $s\"; exit 1; }; done; done && echo AC2_PASS",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "ditto-skill-conventions.md 는 model-invoked 섹션을 포함하고 ditto-agent-conventions.md 는 writing-great-artifacts 포인터를 포함하며 공용 크래프트 본문 단락은 conventions 두 파일에 중복 포함되지 않는다(grep 확인)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c grep -qi model-invoked skills/ditto-skill-creator/references/ditto-skill-conventions.md && grep -qi writing-great-artifacts skills/ditto-agent-creator/references/ditto-agent-conventions.md && [ \"$(grep -rl \"names the elephant\" skills/*/references/ | wc -l | tr -d \" \")\" = \"1\" ] && echo AC3_PASS",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "validate-skill.mjs 와 validate-agent.mjs 가 no-op-filler·negation-steering 경고를 내며 bad 샘플에서 warning>0·good 샘플과 기존 배포 스킬/에이전트에서 error=0 (bun test tests/skills/validate-skill.test.ts tests/skills/validate-agent.test.ts 통과)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/skills/validate-skill.test.ts tests/skills/validate-agent.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "bun run build:plugin 과 bun run build:codex-plugin 이 exit 0 으로 성공한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c bun run build:plugin && bun run build:codex-plugin",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-13T09:08:31.941Z",
+  "updated_at": "2026-07-13T09:16:42.702Z",
+  "closed_at": "2026-07-13T09:16:42.701Z"
+}

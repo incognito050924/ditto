@@ -69,6 +69,36 @@ Emit the owner-return envelope (summary, verbatim_detail).
     );
   });
 
+  test('no-op filler and filler-negation are advisory warnings, not errors', () => {
+    const filler = `---
+name: filler-agent
+description: Reviews code. Read-only; returns findings, no mutations.
+tools: Read, Grep, Glob
+---
+
+You are an autopilot owner subagent (Context Isolation).
+Emit the owner-return envelope (summary, verbatim_detail).
+Be thorough and make sure to review. Don't forget the edge cases.
+## Contract
+- Read-only: never mutate files.
+`;
+    const r = validateAgent(filler);
+    expect(r.warnings.some((w: string) => /no-op filler/i.test(w))).toBe(true);
+    expect(r.warnings.some((w: string) => /negation/i.test(w))).toBe(true);
+    // advisory: filler must not become an error on an otherwise-conforming body
+    expect(r.errors.some((e: string) => /filler|no-op|negation/i.test(e))).toBe(false);
+  });
+
+  test('existing conforming agents raise no craft filler warnings', () => {
+    for (const p of ['agents/implementer.md', 'agents/researcher.md']) {
+      const r = validateAgent(readFileSync(p, 'utf8'));
+      expect(
+        r.warnings.some((w: string) => /no-op filler|negation/i.test(w)),
+        p,
+      ).toBe(false);
+    }
+  });
+
   test('the agent-creator skill itself documents these checks (smoke)', () => {
     const skill = readFileSync('skills/ditto-agent-creator/SKILL.md', 'utf8');
     expect(skill).toMatch(/owner-return envelope/);

@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713ze1",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "299a5f73c74b8a10f665b6152ac9fb47360cab80b761157d5ec05e2500223248",
+  "ts": "2026-07-13T09:31:27.688Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c grep -qi Precedence skills/ditto-skill-creator/references/writing-great-artifacts.md && grep -qi \"functional contract\" skills/ditto-skill-creator/references/writing-great-artifacts.md && [ \"$(grep -rl \"names the elephant\" skills/*/references/ | wc -l | tr -d \" \")\" = \"1\" ] && grep -qF writing-great-artifacts skills/ditto-skill-creator/references/ditto-skill-conventions.md && grep -qF writing-great-artifacts skills/ditto-agent-creator/references/ditto-agent-conventions.md && echo AC3_PASS",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

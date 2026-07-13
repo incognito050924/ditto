@@ -1,0 +1,79 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260713ze1",
+  "title": "두 creator 스킬을 크래프트 기준으로 재설계(빼기 위주)",
+  "source_request": "단순히 좋은 점 끼얹기가 아니라, 기존 스킬에서 불필요한 것을 지우고 지금 도입한 기준(writing-great-skills)에 맞게 재설계. 범위=두 creator+ref/validator/test. 값이 충돌/효과감소하면 writing-great-skills 우선(단 기능 계약은 예외).",
+  "goal": "두 creator 스킬(ditto-skill-creator·ditto-agent-creator)을 writing-great-skills 크래프트에 맞게 재설계해 self-reference 중복·sprawl·negation 목록을 걷어내고, 충돌 시 크래프트 우선 원칙을 SoT에 못박는다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "두 creator SKILL.md 각각 본문 라인 수가 재설계 전보다 줄고 문자열 'The craft — write for predictability' 와 'the parts that matter' 와 'Anti-patterns to avoid' 를 더는 포함하지 않으며 writing-great-artifacts 포인터는 유지한다(wc -l 비교 + grep)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c a=$(wc -l < skills/ditto-skill-creator/SKILL.md); b=$(wc -l < skills/ditto-agent-creator/SKILL.md); [ \"$a\" -lt 67 ] && [ \"$b\" -lt 57 ] && ! grep -qF \"the parts that matter\" skills/ditto-skill-creator/SKILL.md && ! grep -qF \"Anti-patterns to avoid\" skills/ditto-skill-creator/SKILL.md && ! grep -qF \"Anti-patterns to avoid\" skills/ditto-agent-creator/SKILL.md && grep -qF writing-great-artifacts skills/ditto-skill-creator/SKILL.md && grep -qF writing-great-artifacts skills/ditto-agent-creator/SKILL.md && echo \"AC1_PASS ($a/$b lines)\"",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "재설계된 두 SKILL.md 본문을 각자 validator에 통과시키면 craftWarnings(no-op filler·filler negation) 가 0 이다(dogfood: 기준을 가르치는 스킬이 스스로 그 기준을 지킴)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c for s in skills/ditto-skill-creator/SKILL.md skills/ditto-agent-creator/SKILL.md; do node skills/ditto-skill-creator/scripts/validate-skill.mjs \"$s\" 2>&1 | grep -iqE \"no-op filler|filler negation\" && { echo \"craft warning on $s\"; exit 1; }; done; echo AC2_PASS_dogfood",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "writing-great-artifacts.md 가 precedence 노트(충돌 시 크래프트 우선·owner-return envelope 등 기능 계약은 예외)를 포함하고 두 conventions 파일은 일반 크래프트 원칙을 재서술하지 않고 크래프트 포인터만 둔다(grep)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c grep -qi Precedence skills/ditto-skill-creator/references/writing-great-artifacts.md && grep -qi \"functional contract\" skills/ditto-skill-creator/references/writing-great-artifacts.md && [ \"$(grep -rl \"names the elephant\" skills/*/references/ | wc -l | tr -d \" \")\" = \"1\" ] && grep -qF writing-great-artifacts skills/ditto-skill-creator/references/ditto-skill-conventions.md && grep -qF writing-great-artifacts skills/ditto-agent-creator/references/ditto-agent-conventions.md && echo AC3_PASS",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "agent-creator SKILL.md 는 재설계 후에도 'owner-return envelope'·'Context Isolation'·'Contract' 문자열과 role→tools 표를 유지한다(기능 계약 보존, grep)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c s=skills/ditto-agent-creator/SKILL.md; grep -qF \"owner-return envelope\" \"$s\" && grep -qF \"Context Isolation\" \"$s\" && grep -qF \"Contract\" \"$s\" && grep -qF \"least-privilege\" \"$s\" && grep -qE \"^\\| research / review\" \"$s\" && echo AC4_PASS",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "bun test tests/skills/validate-skill.test.ts tests/skills/validate-agent.test.ts 통과 AND bun run build:plugin 과 bun run build:codex-plugin 이 exit 0",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c bun test tests/skills/validate-skill.test.ts tests/skills/validate-agent.test.ts && bun run build:plugin && bun run build:codex-plugin",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-13T09:26:46.406Z",
+  "updated_at": "2026-07-13T09:31:41.992Z",
+  "closed_at": "2026-07-13T09:31:41.990Z"
+}

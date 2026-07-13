@@ -57,6 +57,22 @@ describe('validateSkill — contract test', () => {
     expect(r.warnings.some((w: string) => /third person/i.test(w))).toBe(true);
   });
 
+  test('no-op filler and filler-negation are advisory warnings, not errors', () => {
+    const bad = GOOD.replace(
+      'Body that follows progressive disclosure.',
+      "Be thorough and make sure to check everything. Don't forget the edge cases.",
+    );
+    const r = validateSkill(bad);
+    expect(r.ok).toBe(true); // advisory only — never blocks
+    expect(r.warnings.some((w: string) => /no-op filler/i.test(w))).toBe(true);
+    expect(r.warnings.some((w: string) => /negation/i.test(w))).toBe(true);
+  });
+
+  test('the good sample raises no craft filler warnings', () => {
+    const r = validateSkill(GOOD);
+    expect(r.warnings.some((w: string) => /no-op filler|negation/i.test(w))).toBe(false);
+  });
+
   test('the two skills authored by this work item pass', async () => {
     const { readFileSync } = await import('node:fs');
     for (const p of [

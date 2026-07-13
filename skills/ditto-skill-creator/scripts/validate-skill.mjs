@@ -13,6 +13,29 @@ import { readFileSync } from 'node:fs';
 
 const RESERVED = ['anthropic', 'claude'];
 
+// Advisory craft heuristics (warnings, never errors) from the shared authoring
+// craft — references/writing-great-artifacts.md. Deliberately phrase-targeted, not
+// density-based: prose legitimately carries prohibitions (guardrails), so we flag
+// only specific *filler* smells, never bare `don't`/`never`.
+const NOOP_FILLER =
+  /\b(be thorough|be careful|be sure to|make sure to|please note|it is important to|remember to|be diligent)\b/i;
+const NEGATION_FILLER =
+  /\b(?:(?:don'?t|do not) (?:forget|worry|hesitate)|try not to|needless to say|it goes without saying)\b/i;
+
+/** Low-noise "prune / prompt-the-positive" nudges for an artifact body. */
+export function craftWarnings(body) {
+  const w = [];
+  if (NOOP_FILLER.test(body))
+    w.push(
+      'no-op filler (e.g. "be thorough"/"make sure to") — the model already does this; cut it or use a stronger leading word',
+    );
+  if (NEGATION_FILLER.test(body))
+    w.push(
+      'filler negation (e.g. "don\'t forget") — prompt the positive: state the target behaviour instead of the ban',
+    );
+  return w;
+}
+
 /** Parse the leading `---`-delimited YAML-ish frontmatter. Returns null if absent. */
 function splitFrontmatter(text) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
@@ -73,6 +96,8 @@ export function validateSkill(text) {
   const bodyLines = body.split(/\r?\n/).length;
   if (bodyLines > 500)
     warnings.push(`SKILL.md body is ${bodyLines} lines — keep under ~500; split into references/`);
+
+  warnings.push(...craftWarnings(body));
 
   return { ok: errors.length === 0, errors, warnings };
 }

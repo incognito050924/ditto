@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713ze1",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "ab4513309e21eac795ea9c4d220cc4af94a1a75218b4b044a864d5d972565fca",
+  "ts": "2026-07-13T09:31:37.752Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c s=skills/ditto-agent-creator/SKILL.md; grep -qF \"owner-return envelope\" \"$s\" && grep -qF \"Context Isolation\" \"$s\" && grep -qF \"Contract\" \"$s\" && grep -qF \"least-privilege\" \"$s\" && grep -qE \"^\\| research / review\" \"$s\" && echo AC4_PASS",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

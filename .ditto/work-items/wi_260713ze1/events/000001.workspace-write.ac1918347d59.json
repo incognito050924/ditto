@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713ze1",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "ac1918347d59f25aa7f87c57bccb5499ff1a354de08ad8d4aaa5a6264c8f090b",
+  "ts": "2026-07-13T09:31:27.127Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c a=$(wc -l < skills/ditto-skill-creator/SKILL.md); b=$(wc -l < skills/ditto-agent-creator/SKILL.md); [ \"$a\" -lt 67 ] && [ \"$b\" -lt 57 ] && ! grep -qF \"the parts that matter\" skills/ditto-skill-creator/SKILL.md && ! grep -qF \"Anti-patterns to avoid\" skills/ditto-skill-creator/SKILL.md && ! grep -qF \"Anti-patterns to avoid\" skills/ditto-agent-creator/SKILL.md && grep -qF writing-great-artifacts skills/ditto-skill-creator/SKILL.md && grep -qF writing-great-artifacts skills/ditto-agent-creator/SKILL.md && echo \"AC1_PASS ($a/$b lines)\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
