@@ -326,7 +326,9 @@ export function buildDelegationPacket(
       // implement-only RED_FIRST ("then make it green") is SUPPRESSED for it so the packet never
       // tells the authoring node to green its own tests before the gate.
       ...(isTestAuthor && acceptance.length > 0 ? [AUTHORING_DIRECTIVE] : []),
-      ...(!isTestAuthor && isRedFirstImplement(node.owner, acceptance) ? [RED_FIRST_DIRECTIVE] : []),
+      ...(!isTestAuthor && isRedFirstImplement(node.owner, acceptance)
+        ? [RED_FIRST_DIRECTIVE]
+        : []),
       // ac-2 (additive): an implementer runs only its own scope's mock-unit tests mid-wave;
       // the full-suite GREEN is proven once by the settled-tree barrier, not per-node.
       ...(node.owner === 'implementer' ? [SCOPE_LOCAL_UNIT_DIRECTIVE] : []),

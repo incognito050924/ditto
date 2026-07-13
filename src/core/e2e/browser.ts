@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { z } from 'zod';
 import { type E2EJourney, e2eJourney } from '~/schemas/e2e-journey';
 import { localDir } from '../ditto-paths';
 import { fileExists } from '../hosts/shared';
@@ -68,7 +69,7 @@ async function resolvePlaywrightCore(): Promise<string | null> {
   }
   const versions = entries
     .filter((e) => /^playwright-core@\d+\.\d+\.\d+$/.test(e))
-    .sort((a, b) => compareSemver(b.split('@')[1], a.split('@')[1]));
+    .sort((a, b) => compareSemver(b.split('@')[1] as string, a.split('@')[1] as string));
   for (const v of versions) {
     const mjs = join(cacheDir, v, 'index.mjs');
     if (await fileExists(mjs)) return mjs;
@@ -181,7 +182,7 @@ export function buildJourney(input: {
   journey: string;
   url: string;
   steps: E2EJourney['steps'];
-  assertions: E2EJourney['assertions'];
+  assertions: NonNullable<z.input<typeof e2eJourney>['assertions']>;
   result: E2EJourney['result'];
   artifacts?: E2EJourney['artifacts'];
   reproduction?: string | null;

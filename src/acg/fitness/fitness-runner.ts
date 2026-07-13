@@ -1,5 +1,7 @@
-import type { AcgAssuranceSnapshot, AcgSnapshotResult } from '~/schemas/acg-assurance-snapshot';
+import type { AcgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
 import { acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
+
+type AcgSnapshotResult = AcgAssuranceSnapshot['results'][number];
 import type { AcgFitnessFunction } from '~/schemas/acg-fitness-function';
 
 /**

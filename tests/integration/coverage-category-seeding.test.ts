@@ -72,8 +72,8 @@ describe('category seeding (wi_260622vjo §8-2)', () => {
       expect(item.judgeInput.node.id).toBe(item.node.id);
     }
     // backward-compat: the single node/judgeInput equal wave[0].
-    expect(first.node.id).toBe(first.wave[0].node.id);
-    expect(first.judgeInput.node.id).toBe(first.wave[0].node.id);
+    expect(first.node.id).toBe((first.wave[0] as (typeof first.wave)[number]).node.id);
+    expect(first.judgeInput.node.id).toBe((first.wave[0] as (typeof first.wave)[number]).node.id);
   });
 
   test('default (no seedCategories) keeps the existing root-only tree (ac-7)', async () => {
@@ -207,7 +207,13 @@ describe('justified category skip (wi_260622vjo §8-2 / ac-2)', () => {
     const r = await recordCoverageRound({
       repoRoot: repo,
       workItemId: WI,
-      payload: { node_id: AUTH, admissibleBranchesAdded: 0, close_as: 'out_of_scope' },
+      payload: {
+        node_id: AUTH,
+        admissibleBranchesAdded: 0,
+        close_as: 'out_of_scope',
+        derived_nodes: [],
+        discovered_nodes: [],
+      },
     });
     expect(r.terminated).toBe(false);
     if (r.terminated) return;
@@ -234,6 +240,8 @@ describe('justified category skip (wi_260622vjo §8-2 / ac-2)', () => {
         // gate); supply one so this close_reason-recording assertion still reaches a
         // closed node. The residual_risk record itself is asserted separately below.
         residual_risk: '잔여: 인증 가정이 외부 우회 경로에서 깨질 수 있음',
+        derived_nodes: [],
+        discovered_nodes: [],
       },
     });
     expect(r.terminated).toBe(false);
@@ -255,6 +263,8 @@ describe('justified category skip (wi_260622vjo §8-2 / ac-2)', () => {
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         axis_signals: { neutrality: { opponent_ran: true, verdict: 'accept' } },
+        derived_nodes: [],
+        discovered_nodes: [],
       },
     });
     expect(r.terminated).toBe(false);
@@ -283,6 +293,8 @@ describe('surviving-risk on a skipped category (residual_risk)', () => {
         admissibleBranchesAdded: 0,
         close_as: 'out_of_scope',
         close_reason: REASON,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
     });
     expect(r.terminated).toBe(false);
@@ -306,6 +318,8 @@ describe('surviving-risk on a skipped category (residual_risk)', () => {
         close_as: 'out_of_scope',
         close_reason: REASON,
         residual_risk: RISK,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
     });
     expect(r.terminated).toBe(false);
@@ -328,6 +342,8 @@ describe('surviving-risk on a skipped category (residual_risk)', () => {
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         axis_signals: { neutrality: { opponent_ran: true, verdict: 'accept' } },
+        derived_nodes: [],
+        discovered_nodes: [],
       },
     });
     expect(r.terminated).toBe(false);

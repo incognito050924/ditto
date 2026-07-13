@@ -119,6 +119,7 @@ function mkNode(
     depends_on,
     acceptance_refs,
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
   };
 }

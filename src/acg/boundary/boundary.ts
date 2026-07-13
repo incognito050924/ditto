@@ -35,7 +35,7 @@ export interface BoundaryViolation {
 export function globToRegExp(glob: string): RegExp {
   let out = '';
   for (let i = 0; i < glob.length; i++) {
-    const c = glob[i];
+    const c = glob[i] as string;
     if (c === '*') {
       if (glob[i + 1] === '*') {
         out += '.*';

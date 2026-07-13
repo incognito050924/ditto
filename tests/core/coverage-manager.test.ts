@@ -587,6 +587,33 @@ describe('coverage Manager — over-budget user Q&A context briefs first (§6, a
     expect(md.indexOf('컨텍스트 브리핑')).toBeLessThan(md.indexOf('GATE-Q-MARKER'));
   });
 
+  test('DISCRIMINATOR: a Korean context under the CHAR budget but over the BYTE budget briefs first', () => {
+    // 60 Korean syllables = 60 UTF-16 code units (≤ 160 char budget) but 180 UTF-8
+    // bytes (> 160). The host truncates by bytes, so this must route to a briefing.
+    // Char-length routing would wrongly ride it inline; byte routing briefs it.
+    const koreanContext = `배경 ${'상세'.repeat(28)} 결정됨`; // ~60 chars, ~180 bytes
+    const md = serializePlanDialog({
+      workItemId: 'wi_brief_bytes',
+      userQa: [
+        {
+          question: 'BYTE-GATE-Q 어느 경로로?',
+          why_matters: 'decides routing',
+          answer: 'A',
+          context: koreanContext,
+        },
+      ],
+      selfAnswers: [],
+      assumptions: [],
+      closedItems: [],
+      openItems: [],
+    });
+    expect(koreanContext.length).toBeLessThanOrEqual(160); // under char budget
+    expect(Buffer.byteLength(koreanContext, 'utf8')).toBeGreaterThan(160); // over byte budget
+    expect(md).toContain('컨텍스트 브리핑');
+    expect(md).toContain(koreanContext);
+    expect(md.indexOf('컨텍스트 브리핑')).toBeLessThan(md.indexOf('BYTE-GATE-Q'));
+  });
+
   test('a context within the budget rides inline with the question — no briefing section', () => {
     const shortContext = '배경: 라우팅 결정 / 해결결과: A 선택';
     const md = serializePlanDialog({

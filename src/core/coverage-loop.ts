@@ -391,10 +391,14 @@ export async function nextCoverageNode(args: {
       crossCuttingConstraints: lenses,
     }),
   }));
+  const first = wave[0];
+  if (first === undefined) {
+    throw new Error('invariant: wave is non-empty (ready frontier checked above)');
+  }
   return {
     action: 'interrogate',
-    node: wave[0].node,
-    judgeInput: wave[0].judgeInput,
+    node: first.node,
+    judgeInput: first.judgeInput,
     wave,
     tier,
     sweepAngles,

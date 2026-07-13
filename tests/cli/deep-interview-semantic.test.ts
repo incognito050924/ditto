@@ -61,7 +61,13 @@ describe('deep-interview semantic critic CLI (wi_260709hzg #15)', () => {
           ambiguity: 0.05,
           notes: 'what score does the endpoint return',
         },
-        question: { text: 'range?', why_matters: 'shape', info_gain_estimate: 'high' },
+        question: {
+          text: 'range?',
+          why_matters: 'shape',
+          user_explanation:
+            '점수가 가질 수 있는 값의 범위를 무엇으로 정할지 사용자 언어로 확인하는 질문입니다.',
+          info_gain_estimate: 'high',
+        },
         answer: { text: 'integer 0..100', kind: 'user' },
         readiness_score: 0.85,
       }),

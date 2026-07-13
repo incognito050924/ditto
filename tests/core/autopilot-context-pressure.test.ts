@@ -31,7 +31,7 @@ function node(id: string, over: Partial<AutopilotNode> = {}): AutopilotNode {
     evidence_refs: [],
     attempts: { fix: 0, switch: 0 },
     ...over,
-  };
+  } as AutopilotNode;
 }
 
 function graph(nodes: AutopilotNode[]): Autopilot {
@@ -50,7 +50,15 @@ function graph(nodes: AutopilotNode[]): Autopilot {
       evidence_refs: [],
     },
     nodes,
-    caps: { fix_per_node: 2, switch_per_node: 1 },
+    caps: {
+      fix_per_node: 2,
+      switch_per_node: 1,
+      converge_rounds: 3,
+      oracle_failures_to_block: 3,
+      loop_rounds: 12,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24,
+    },
     continue_policy: {
       continue_after_approval: true,
       continue_after_checkpoint: true,

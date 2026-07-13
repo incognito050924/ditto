@@ -112,7 +112,13 @@ describe('CodeqlImpactAnalyzer — CSV raw_kind → AcgAffectedNode 분류', () 
       '"src/b.spec.ts",7,"import"\n' +
       '"src/lib.ts",1,"decl"';
     const analyzer = new CodeqlImpactAnalyzer(
-      { symbol: 'foo', language: 'javascript', repoRoot: '/r', cacheDir: '/r/.cache' },
+      {
+        symbol: 'foo',
+        declFile: 'src/a.ts',
+        language: 'javascript',
+        repoRoot: '/r',
+        cacheDir: '/r/.cache',
+      },
       mockDeps(csv),
     );
     const res = await analyzer.analyze({ changeTarget: 'foo', sourceRoot: '/r' });

@@ -60,7 +60,7 @@ export function resolveServerPath(spec: LspSpec, deps: LspServerDeps): string | 
 
 /** 전제 중 빠진 것의 이름들(probe[0]을 which로 확인). */
 function missingPrereqs(spec: LspSpec, deps: LspServerDeps): string[] {
-  return spec.prereqs.filter((p) => deps.which(p.probe[0]) === null).map((p) => p.name);
+  return spec.prereqs.filter((p) => deps.which(p.probe[0] as string) === null).map((p) => p.name);
 }
 
 /** 한 LSP 서버를 설치한다(opt-in, fail-soft). */

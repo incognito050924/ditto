@@ -436,7 +436,7 @@ describe('runWithProvider', () => {
     expect(result.exit_code).toBe(0);
     const manifest = await new RunStore(dir).get(result.run_id);
     expect(manifest.verifications).toHaveLength(1);
-    const entry = manifest.verifications[0];
+    const entry = manifest.verifications[0] as (typeof manifest.verifications)[number];
     expect(entry.command).toBe('pwd');
     expect(entry.exit_code).toBe(0);
     expect(entry.output_path).toBe(`.ditto/local/runs/${result.run_id}/verify.log`);
@@ -469,9 +469,15 @@ describe('runWithProvider', () => {
     expect(result.exit_code).toBe(0);
     const manifest = await new RunStore(dir).get(result.run_id);
     expect(manifest.verifications).toHaveLength(1);
-    expect(manifest.verifications[0].command).toBe('false');
-    expect(manifest.verifications[0].exit_code).not.toBe(0);
-    expect(manifest.verifications[0].notes).toBeUndefined();
+    expect((manifest.verifications[0] as (typeof manifest.verifications)[number]).command).toBe(
+      'false',
+    );
+    expect(
+      (manifest.verifications[0] as (typeof manifest.verifications)[number]).exit_code,
+    ).not.toBe(0);
+    expect(
+      (manifest.verifications[0] as (typeof manifest.verifications)[number]).notes,
+    ).toBeUndefined();
 
     const updatedItem = await new WorkItemStore(dir).get(item.id);
     expect(updatedItem.runs).toContain(result.run_id);
@@ -497,8 +503,12 @@ describe('runWithProvider', () => {
     expect(result.exit_code).toBe(0);
     const manifest = await new RunStore(dir).get(result.run_id);
     expect(manifest.verifications).toHaveLength(1);
-    expect(manifest.verifications[0].exit_code).toBe(-1);
-    expect(manifest.verifications[0].notes ?? '').toContain('verify spawn failed');
+    expect((manifest.verifications[0] as (typeof manifest.verifications)[number]).exit_code).toBe(
+      -1,
+    );
+    expect(
+      (manifest.verifications[0] as (typeof manifest.verifications)[number]).notes ?? '',
+    ).toContain('verify spawn failed');
 
     const updatedItem = await new WorkItemStore(dir).get(item.id);
     expect(updatedItem.runs).toContain(result.run_id);

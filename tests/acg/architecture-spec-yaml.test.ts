@@ -61,8 +61,12 @@ describe('parseArchitectureSpecText', () => {
     const spec = acgArchitectureSpec.parse(
       parseArchitectureSpecText(YAML_TEXT, '.acg/architecture.yaml'),
     );
-    expect(spec.layers.controller.can_call).toEqual(['service']);
-    expect(spec.forbidden_dependencies[0].from).toBe('automation-engine/**');
+    expect((spec.layers.controller as NonNullable<typeof spec.layers.controller>).can_call).toEqual(
+      ['service'],
+    );
+    expect(
+      (spec.forbidden_dependencies[0] as (typeof spec.forbidden_dependencies)[number]).from,
+    ).toBe('automation-engine/**');
     expect(spec.conventions?.formatter?.cmd).toBe('ktlintFormat --check');
   });
 
@@ -75,7 +79,8 @@ describe('parseArchitectureSpecText', () => {
 
   test('JSON 본문은 .json 외 확장자에서도 JSON.parse 경로로 읽힌다', () => {
     const parsed = parseArchitectureSpecText(JSON_TEXT, 'architecture.json');
-    expect(acgArchitectureSpec.parse(parsed).layers.repository.can_call).toEqual([]);
+    const layers = acgArchitectureSpec.parse(parsed).layers;
+    expect((layers.repository as NonNullable<typeof layers.repository>).can_call).toEqual([]);
   });
 
   test('internal_packages — 미지정 시 기본 빈 배열, 타입드 엔트리(glob/path) 보존', () => {
@@ -85,7 +90,9 @@ describe('parseArchitectureSpecText', () => {
       { type: 'path', value: '**/libs/*.jar' },
     ];
     const withInternal = acgArchitectureSpec.parse({ ...SPEC_OBJECT, internal_packages: entries });
-    expect(withInternal.internal_packages).toEqual(entries);
+    expect(withInternal.internal_packages).toEqual(
+      entries as typeof withInternal.internal_packages,
+    );
   });
 
   test('internal_packages — 잘못된 type은 거부', () => {

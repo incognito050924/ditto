@@ -1043,7 +1043,7 @@ describe('ditto memory capture (data-dependent case, wi_260621r2m)', () => {
     expect(scan.exitCode).toBe(0);
     const added: string[] = JSON.parse(scan.stdout).added;
     expect(added.length).toBeGreaterThanOrEqual(1);
-    return added[0];
+    return added[0] as string;
   }
 
   // ac-1: capture → INFERRED + pending + ≥1 code source. The agent claims a fact

@@ -351,14 +351,14 @@ describe('userPromptSubmitHandler', () => {
     const out = await run({ session_id: 'sess-ph', prompt: 'do the thing' });
     expect(out.exitCode).toBe(0);
     const ctx = additionalContext(out.stdout);
-    expect(ctx).toContain('acceptance criteria are placeholders');
+    expect(ctx).toContain('acceptance criteria가 아직 자리표시자다');
     expect(ctx).toContain('/ditto:deep-interview');
   });
 
   test('empty-state guide does NOT auto-create, so no placeholder advisory', async () => {
     const out = await run({ session_id: 'sess-noph', prompt: 'do the thing' });
     expect(out.exitCode).toBe(0);
-    expect(additionalContext(out.stdout)).not.toContain('acceptance criteria are placeholders');
+    expect(additionalContext(out.stdout)).not.toContain('acceptance criteria가 아직 자리표시자다');
   });
 
   test('work item with at least one real AC does NOT emit placeholder advisory', async () => {
@@ -374,7 +374,7 @@ describe('userPromptSubmitHandler', () => {
     await new SessionPointerStore(repo).set('sess-real', created.id);
     const out = await run({ session_id: 'sess-real', prompt: 'continue' });
     expect(out.exitCode).toBe(0);
-    expect(additionalContext(out.stdout)).not.toContain('acceptance criteria are placeholders');
+    expect(additionalContext(out.stdout)).not.toContain('acceptance criteria가 아직 자리표시자다');
   });
 
   test('mixed AC (one placeholder + one real) does NOT emit placeholder advisory', async () => {
@@ -396,7 +396,7 @@ describe('userPromptSubmitHandler', () => {
     await new SessionPointerStore(repo).set('sess-mix', created.id);
     const out = await run({ session_id: 'sess-mix', prompt: 'continue' });
     expect(out.exitCode).toBe(0);
-    expect(additionalContext(out.stdout)).not.toContain('acceptance criteria are placeholders');
+    expect(additionalContext(out.stdout)).not.toContain('acceptance criteria가 아직 자리표시자다');
   });
 
   // §AC-1 deep-interview directive matrix (4 cases) — only the conjunction
@@ -425,7 +425,7 @@ describe('userPromptSubmitHandler', () => {
       await seedPlaceholderOnly('sess-dir-1');
       const out = await run({ session_id: 'sess-dir-1', prompt: 'build a password endpoint' });
       const ctx = additionalContext(out.stdout);
-      expect(ctx).toContain('Run /ditto:deep-interview now');
+      expect(ctx).toContain('지금 /ditto:deep-interview를 실행하라');
     });
 
     test('placeholder-only + question prompt → directive NOT injected', async () => {
@@ -435,7 +435,7 @@ describe('userPromptSubmitHandler', () => {
         prompt: 'what does the bridge command do?',
       });
       const ctx = additionalContext(out.stdout);
-      expect(ctx).not.toContain('Run /ditto:deep-interview now');
+      expect(ctx).not.toContain('지금 /ditto:deep-interview를 실행하라');
     });
 
     test('real AC + execution prompt → directive NOT injected', async () => {
@@ -450,7 +450,7 @@ describe('userPromptSubmitHandler', () => {
       });
       await new SessionPointerStore(repo).set('sess-dir-3', created.id);
       const out = await run({ session_id: 'sess-dir-3', prompt: 'implement the endpoint' });
-      expect(additionalContext(out.stdout)).not.toContain('Run /ditto:deep-interview now');
+      expect(additionalContext(out.stdout)).not.toContain('지금 /ditto:deep-interview를 실행하라');
     });
 
     test('real AC + question prompt → directive NOT injected', async () => {
@@ -465,7 +465,7 @@ describe('userPromptSubmitHandler', () => {
       });
       await new SessionPointerStore(repo).set('sess-dir-4', created.id);
       const out = await run({ session_id: 'sess-dir-4', prompt: 'what is the goal?' });
-      expect(additionalContext(out.stdout)).not.toContain('Run /ditto:deep-interview now');
+      expect(additionalContext(out.stdout)).not.toContain('지금 /ditto:deep-interview를 실행하라');
     });
   });
 
@@ -497,26 +497,26 @@ describe('userPromptSubmitHandler', () => {
       // but a declared_risk flag keeps the heavy nudge alive.
       await seedRealCriteria('sess-risk-1', { declared_risk: { irreversible: true } });
       const out = await run({ session_id: 'sess-risk-1', prompt: 'implement the migration' });
-      expect(additionalContext(out.stdout)).toContain('Run /ditto:deep-interview now');
+      expect(additionalContext(out.stdout)).toContain('지금 /ditto:deep-interview를 실행하라');
     });
 
     test('real criteria + declared risk + QUESTION prompt → directive NOT injected (conjunction preserved)', async () => {
       await seedRealCriteria('sess-risk-2', { declared_risk: { irreversible: true } });
       const out = await run({ session_id: 'sess-risk-2', prompt: 'what does the migration do?' });
-      expect(additionalContext(out.stdout)).not.toContain('Run /ditto:deep-interview now');
+      expect(additionalContext(out.stdout)).not.toContain('지금 /ditto:deep-interview를 실행하라');
     });
 
     test('real criteria, NO risk + execution → directive NOT injected (no false heavy)', async () => {
       await seedRealCriteria('sess-risk-3');
       const out = await run({ session_id: 'sess-risk-3', prompt: 'implement the endpoint' });
-      expect(additionalContext(out.stdout)).not.toContain('Run /ditto:deep-interview now');
+      expect(additionalContext(out.stdout)).not.toContain('지금 /ditto:deep-interview를 실행하라');
     });
 
     test('promoted_to_heavy marker + real criteria + execution → nudges heavy', async () => {
       const id = await seedRealCriteria('sess-risk-4');
       await new WorkItemStore(repo).update(id, (cur) => ({ ...cur, promoted_to_heavy: true }));
       const out = await run({ session_id: 'sess-risk-4', prompt: 'continue the work' });
-      expect(additionalContext(out.stdout)).toContain('Run /ditto:deep-interview now');
+      expect(additionalContext(out.stdout)).toContain('지금 /ditto:deep-interview를 실행하라');
     });
 
     test('intent.json with non-empty unknowns + real criteria + execution → nudges heavy', async () => {
@@ -542,7 +542,7 @@ describe('userPromptSubmitHandler', () => {
         question_policy: 'ask_only_if_user_only_can_answer',
       });
       const out = await run({ session_id: 'sess-risk-5', prompt: 'continue the work' });
-      expect(additionalContext(out.stdout)).toContain('Run /ditto:deep-interview now');
+      expect(additionalContext(out.stdout)).toContain('지금 /ditto:deep-interview를 실행하라');
     });
   });
 
@@ -553,12 +553,16 @@ describe('userPromptSubmitHandler', () => {
         session_id: 'sess-qg-1',
         prompt: 'what does the function handleRequest in src/api.ts do?',
       });
-      expect(additionalContext(out.stdout)).toContain('self-answer from code/docs/web first');
+      expect(additionalContext(out.stdout)).toContain(
+        '묻기 전에 코드·문서·웹에서 먼저 스스로 답하라',
+      );
     });
 
     test('question prompt with no code surface → no self-answer hint', async () => {
       const out = await run({ session_id: 'sess-qg-2', prompt: 'what should we name it?' });
-      expect(additionalContext(out.stdout)).not.toContain('self-answer from code/docs/web first');
+      expect(additionalContext(out.stdout)).not.toContain(
+        '묻기 전에 코드·문서·웹에서 먼저 스스로 답하라',
+      );
     });
 
     test('execution prompt mentioning code surface → no self-answer hint (only question-shaped)', async () => {
@@ -566,7 +570,9 @@ describe('userPromptSubmitHandler', () => {
         session_id: 'sess-qg-3',
         prompt: 'fix the error in src/api.ts',
       });
-      expect(additionalContext(out.stdout)).not.toContain('self-answer from code/docs/web first');
+      expect(additionalContext(out.stdout)).not.toContain(
+        '묻기 전에 코드·문서·웹에서 먼저 스스로 답하라',
+      );
     });
   });
 

@@ -115,10 +115,10 @@ export function selectOpponent(
   if (candidates.length === 0) {
     throw new NoOpponentAvailableError('no opponent candidates resolved from model_policy');
   }
-  const preferred = candidates[0];
+  const preferred = candidates[0] as OpponentCandidate;
   let preferredReason: FallbackReason = 'none';
   for (let i = 0; i < candidates.length; i++) {
-    const candidate = candidates[i];
+    const candidate = candidates[i] as OpponentCandidate;
     const availability = isAvailable(candidate);
     if (availability.available) {
       if (i === 0) {

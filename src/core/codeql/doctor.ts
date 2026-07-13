@@ -171,7 +171,7 @@ export async function inspectCodeqlTarget(
     languages,
     unsupported,
     cliAvailable,
-    buildVerified: input.buildVerified,
+    ...(input.buildVerified !== undefined ? { buildVerified: input.buildVerified } : {}),
   });
   return {
     source_root: input.sourceRoot,

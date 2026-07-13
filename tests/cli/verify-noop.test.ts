@@ -50,7 +50,9 @@ describe('ditto verify — no-op rejection', () => {
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toMatch(/no-op/i);
     const item = await new WorkItemStore(dir).get(wi.id);
-    expect(item.acceptance_criteria[0].verdict).toBe('unverified');
+    expect((item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).verdict).toBe(
+      'unverified',
+    );
   });
 
   test('D: a real command still grades the criterion pass', async () => {
@@ -59,6 +61,8 @@ describe('ditto verify — no-op rejection', () => {
     const r = ditto(['verify', wi.id, '--criterion', 'ac-1', '--', 'cat', wiPath]);
     expect(r.exitCode).toBe(0);
     const item = await new WorkItemStore(dir).get(wi.id);
-    expect(item.acceptance_criteria[0].verdict).toBe('pass');
+    expect((item.acceptance_criteria[0] as (typeof item.acceptance_criteria)[number]).verdict).toBe(
+      'pass',
+    );
   });
 });

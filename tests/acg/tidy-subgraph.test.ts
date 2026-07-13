@@ -12,6 +12,7 @@ const implementNode: AutopilotNode = {
   depends_on: ['N1'],
   acceptance_refs: ['ac-1'],
   evidence_refs: [],
+  ac_verdicts: [],
   attempts: { fix: 0, switch: 0 },
 };
 

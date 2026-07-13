@@ -84,14 +84,14 @@ export const architectureCommand = defineCommand({
       run: async ({ args }) => {
         let format: ReturnType<typeof parseOutputFormat>;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
           return;
         }
         const repoRoot = await resolveRepoRootForCreate();
-        const sourceRoot = args['source-root'] ?? join(repoRoot, 'src');
+        const sourceRoot = (args['source-root'] as string | undefined) ?? join(repoRoot, 'src');
         const edgeAnalyzer = new CodeqlEdgeAnalyzer(
           { language: 'javascript', repoRoot, cacheDir: codeqlCacheDir(repoRoot, 'javascript') },
           makeRelationDeps(),
@@ -138,7 +138,7 @@ export const architectureCommand = defineCommand({
       run: async ({ args }) => {
         let format: ReturnType<typeof parseOutputFormat>;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -146,7 +146,7 @@ export const architectureCommand = defineCommand({
         }
         let forbidden: ForbiddenDependency[];
         try {
-          forbidden = parseForbidden(asArray(args.forbid));
+          forbidden = parseForbidden(asArray(args.forbid as string | string[] | undefined));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -154,7 +154,8 @@ export const architectureCommand = defineCommand({
         }
         try {
           const repoRoot = await resolveRepoRootForCreate();
-          const specPath = args.spec ?? join(repoRoot, '.ditto', 'architecture-spec.json');
+          const specPath =
+            (args.spec as string | undefined) ?? join(repoRoot, '.ditto', 'architecture-spec.json');
           let candidate: ReturnType<typeof acgArchitectureSpec.parse>;
           try {
             candidate = await readArchitectureSpec(specPath, acgArchitectureSpec);
@@ -220,15 +221,21 @@ export const architectureCommand = defineCommand({
       run: async ({ args }) => {
         let format: ReturnType<typeof parseOutputFormat>;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
           return;
         }
         const entries: AcgInternalPackage[] = [
-          ...csv(args.glob).map((value) => ({ type: 'glob' as const, value })),
-          ...csv(args.path).map((value) => ({ type: 'path' as const, value })),
+          ...csv(args.glob as string | undefined).map((value) => ({
+            type: 'glob' as const,
+            value,
+          })),
+          ...csv(args.path as string | undefined).map((value) => ({
+            type: 'path' as const,
+            value,
+          })),
         ];
         if (entries.length === 0) {
           writeError('internal-packages: provide at least one --glob or --path value');
@@ -237,7 +244,8 @@ export const architectureCommand = defineCommand({
         }
         try {
           const repoRoot = await resolveRepoRootForCreate();
-          const specPath = args.spec ?? join(repoRoot, '.ditto', 'architecture-spec.json');
+          const specPath =
+            (args.spec as string | undefined) ?? join(repoRoot, '.ditto', 'architecture-spec.json');
           // 기존 스펙이 있으면 보존하며 internal_packages만 교체, 없으면 최소 스펙 생성.
           let existing: ReturnType<typeof acgArchitectureSpec.parse> | undefined;
           try {

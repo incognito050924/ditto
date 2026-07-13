@@ -67,6 +67,8 @@ describe('intent-stage coverage projection drives the SHARED engine to disk (ac-
         question: {
           text: 'Which data does this touch?',
           why_matters: 'blast radius depends on it',
+          user_explanation:
+            '이 작업이 어떤 데이터에 닿는지 확인해 영향 범위를 사용자 언어로 정하는 질문입니다.',
           info_gain_estimate: 'high',
         },
         answer: { text: 'only local runtime files', kind: 'user' },
@@ -87,6 +89,8 @@ describe('intent-stage coverage projection drives the SHARED engine to disk (ac-
         question: {
           text: 'Any UI surface?',
           why_matters: 'changes the test plan',
+          user_explanation:
+            '사용자 화면(UI) 변경이 있는지 확인해 테스트 계획을 사용자 언어로 정하는 질문입니다.',
           info_gain_estimate: 'medium',
         },
         readiness_score: 0.6,
@@ -139,7 +143,12 @@ describe('intent-stage coverage projection drives the SHARED engine to disk (ac-
       now: NOW,
       payload: {
         dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: 'd1' },
-        question: { text: 'q?', why_matters: 'w', info_gain_estimate: 'low' },
+        question: {
+          text: 'q?',
+          why_matters: 'w',
+          user_explanation: '무엇을 결정하는 질문인지 사용자 언어로 설명합니다.',
+          info_gain_estimate: 'low',
+        },
       },
     });
     await projectInterviewDimensions(repo, WI);
@@ -193,6 +202,8 @@ describe('intent-stage coverage projection drives the SHARED engine to disk (ac-
         question: {
           text: '누가 접근 가능해야 하나요?',
           why_matters: '인가 모델이 의도를 결정',
+          user_explanation:
+            '누가 이 기능에 접근할 수 있어야 하는지 확인해 인가 모델을 사용자 언어로 정하는 질문입니다.',
           info_gain_estimate: 'high',
         },
         answer: { text: '소유자 단일 사용자만', kind: 'user' },

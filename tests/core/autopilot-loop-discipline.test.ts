@@ -34,7 +34,15 @@ function graph(overrides: Partial<Autopilot> = {}): Autopilot {
       evidence_refs: [],
     },
     nodes: buildInitialNodes(['ac-1']),
-    caps: { fix_per_node: 2, switch_per_node: 1 },
+    caps: {
+      fix_per_node: 2,
+      switch_per_node: 1,
+      converge_rounds: 3,
+      oracle_failures_to_block: 3,
+      loop_rounds: 12,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24,
+    },
     continue_policy: {
       continue_after_approval: true,
       continue_after_checkpoint: true,
@@ -90,7 +98,7 @@ async function assignOracle(
 // A single judging (verify) node `V`, running, that closes ac-1. Mechanism 3
 // gates JUDGING nodes (verify/review/security) — a `design` node ASSIGNS oracles
 // and is exempt, so the discipline tests use a verify node, not the seed N1=design.
-function verifyNode(status: 'pending' | 'running' = 'running') {
+function verifyNode(status: 'pending' | 'running' | 'passed' = 'running') {
   return {
     id: 'V',
     kind: 'verify' as const,
@@ -100,6 +108,7 @@ function verifyNode(status: 'pending' | 'running' = 'running') {
     depends_on: [] as string[],
     acceptance_refs: ['ac-1'],
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
   };
 }
@@ -197,6 +206,7 @@ describe('wi_2606274be: envelope owner_kind must match the dispatched node owner
       depends_on: [] as string[],
       acceptance_refs: ['ac-1'],
       evidence_refs: [],
+      ac_verdicts: [],
       attempts: { fix: 0, switch: 0 },
     };
   }
@@ -216,6 +226,8 @@ describe('wi_2606274be: envelope owner_kind must match the dispatched node owner
         envelope: {
           summary: 'did the thing',
           conclusion: 'done',
+          evidence: [],
+          uncertainty: [],
           verdict: 'pass',
           owner_kind: 'retrospective',
         },
@@ -308,7 +320,15 @@ describe('M5 same-oracle K failures → blocked (K counter separate from attempt
     await aps.write(WI, {
       ...graph({
         nodes: [verifyNode('running')],
-        caps: { fix_per_node: 2, switch_per_node: 1, oracle_failures_to_block: 1 },
+        caps: {
+          fix_per_node: 2,
+          switch_per_node: 1,
+          oracle_failures_to_block: 1,
+          converge_rounds: 3,
+          loop_rounds: 12,
+          no_progress_rounds: 3,
+          progress_continuation_cap: 24,
+        },
       }),
       work_item_id: WI,
     });
@@ -351,6 +371,7 @@ describe('M5 per-AC (criterion) K counter — a multi-AC node does NOT conflate 
       depends_on: [] as string[],
       acceptance_refs: ['ac-1', 'ac-2'],
       evidence_refs: [],
+      ac_verdicts: [],
       attempts: { fix: 0, switch: 0 },
     };
   }
@@ -370,7 +391,15 @@ describe('M5 per-AC (criterion) K counter — a multi-AC node does NOT conflate 
     await aps.write(WI, {
       ...graph({
         nodes: [multiAcVerifyNode('running')],
-        caps: { fix_per_node: 9, switch_per_node: 9, oracle_failures_to_block: k },
+        caps: {
+          fix_per_node: 9,
+          switch_per_node: 9,
+          oracle_failures_to_block: k,
+          converge_rounds: 3,
+          loop_rounds: 12,
+          no_progress_rounds: 3,
+          progress_continuation_cap: 24,
+        },
       }),
       work_item_id: WI,
     });
@@ -444,7 +473,15 @@ describe('M5 per-AC (criterion) K counter — a multi-AC node does NOT conflate 
     await aps.write(WI, {
       ...graph({
         nodes: [verifyNode('running')],
-        caps: { fix_per_node: 9, switch_per_node: 9, oracle_failures_to_block: K },
+        caps: {
+          fix_per_node: 9,
+          switch_per_node: 9,
+          oracle_failures_to_block: K,
+          converge_rounds: 3,
+          loop_rounds: 12,
+          no_progress_rounds: 3,
+          progress_continuation_cap: 24,
+        },
       }),
       work_item_id: WI,
     });
@@ -487,7 +524,15 @@ describe('M5 per-AC (criterion) K counter — a multi-AC node does NOT conflate 
     await aps.write(WI, {
       ...graph({
         nodes: [verifyNode('running')],
-        caps: { fix_per_node: 9, switch_per_node: 9, oracle_failures_to_block: K },
+        caps: {
+          fix_per_node: 9,
+          switch_per_node: 9,
+          oracle_failures_to_block: K,
+          converge_rounds: 3,
+          loop_rounds: 12,
+          no_progress_rounds: 3,
+          progress_continuation_cap: 24,
+        },
       }),
       work_item_id: WI,
     });
@@ -535,7 +580,15 @@ describe('M5 per-AC (criterion) K counter — a multi-AC node does NOT conflate 
     await aps.write(WI, {
       ...graph({
         nodes: [verifyNode('running')],
-        caps: { fix_per_node: 9, switch_per_node: 9, oracle_failures_to_block: K },
+        caps: {
+          fix_per_node: 9,
+          switch_per_node: 9,
+          oracle_failures_to_block: K,
+          converge_rounds: 3,
+          loop_rounds: 12,
+          no_progress_rounds: 3,
+          progress_continuation_cap: 24,
+        },
       }),
       work_item_id: WI,
     });
@@ -581,6 +634,7 @@ describe('M4 wrong-fixpoint reopen (oracle closed yet evidence mismatch → reop
       depends_on: [] as string[],
       acceptance_refs: ['ac-1'],
       evidence_refs: [{ kind: 'file' as const, path: 'src/x.ts', summary: 'edit' }],
+      ac_verdicts: [],
       attempts: { fix: 0, switch: 0 },
     };
   }
@@ -672,7 +726,15 @@ describe('M4 wrong-fixpoint reopen (oracle closed yet evidence mismatch → reop
     await aps.write(WI, {
       ...graph({
         nodes: [passedNode('P'), verifyNode('running')],
-        caps: { fix_per_node: 2, switch_per_node: 1, oracle_failures_to_block: 1 },
+        caps: {
+          fix_per_node: 2,
+          switch_per_node: 1,
+          oracle_failures_to_block: 1,
+          converge_rounds: 3,
+          loop_rounds: 12,
+          no_progress_rounds: 3,
+          progress_continuation_cap: 24,
+        },
       }),
       work_item_id: WI,
     });
@@ -717,6 +779,7 @@ describe('M2 loop-level iteration cap (graph-derived total forward rounds; cap �
       depends_on: [] as string[],
       acceptance_refs: ['ac-1'],
       evidence_refs: [],
+      ac_verdicts: [],
       attempts: { fix: 0, switch: 0 },
     };
   }
@@ -735,6 +798,9 @@ describe('M2 loop-level iteration cap (graph-derived total forward rounds; cap �
           switch_per_node: 1,
           converge_rounds: 99,
           loop_rounds: 2,
+          oracle_failures_to_block: 3,
+          no_progress_rounds: 3,
+          progress_continuation_cap: 24,
         },
       }),
       work_item_id: WI,
@@ -761,7 +827,15 @@ describe('M2 loop-level iteration cap (graph-derived total forward rounds; cap �
     await aps.write(WI, {
       ...graph({
         nodes: [tail],
-        caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 99, loop_rounds: 5 },
+        caps: {
+          fix_per_node: 2,
+          switch_per_node: 1,
+          converge_rounds: 99,
+          loop_rounds: 5,
+          oracle_failures_to_block: 3,
+          no_progress_rounds: 3,
+          progress_continuation_cap: 24,
+        },
       }),
       work_item_id: WI,
     });
@@ -839,6 +913,7 @@ describe('ADR-0024 Decision 4 — retro is NON-BLOCKING for completion/terminali
       depends_on: [] as string[],
       acceptance_refs: [] as string[],
       evidence_refs: [],
+      ac_verdicts: [],
       attempts: { fix: 0, switch: 0 },
     };
   }
@@ -923,7 +998,7 @@ describe('ADR-0024 Decision 7 — loop termination is an EXPLICIT recorded decis
     expect(recs.length).toBe(1);
     expect(recs[0]?.disposition).toBe('converged');
     // recorded disposition matches the returned (computed) one — one SoT, no drift.
-    expect(recs[0]?.disposition).toBe(res.disposition);
+    expect(recs[0]?.disposition).toBe(res.disposition as 'converged' | 'capped' | undefined);
     expect((recs[0]?.reason ?? '').length).toBeGreaterThan(0);
   });
 
@@ -1043,6 +1118,7 @@ describe('ADR-0024 Decision 7 — loop termination is an EXPLICIT recorded decis
       depends_on: [] as string[],
       acceptance_refs: [] as string[],
       evidence_refs: [],
+      ac_verdicts: [],
       attempts: { fix: 0, switch: 0 },
     };
     await aps.write(WI, { ...graph({ nodes: [...allPassed(), retro] }), work_item_id: WI });
@@ -1570,6 +1646,8 @@ describe('T1 ac-5 / R5 / R2 — no-progress floor, optional-tool surface, loop-c
           no_progress_rounds: 1,
           converge_rounds: 99,
           loop_rounds: 99,
+          oracle_failures_to_block: 3,
+          progress_continuation_cap: 24,
         },
       }),
       work_item_id: WI,
@@ -1645,6 +1723,8 @@ describe('T1 ac-5 / R5 / R2 — no-progress floor, optional-tool surface, loop-c
           no_progress_rounds: 99,
           converge_rounds: 99,
           loop_rounds: 2,
+          oracle_failures_to_block: 3,
+          progress_continuation_cap: 24,
         },
       }),
       work_item_id: WI,

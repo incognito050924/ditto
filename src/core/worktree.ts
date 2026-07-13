@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import type { Dirent } from 'node:fs';
 import { realpathSync } from 'node:fs';
 import { mkdir, readFile, readdir, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
@@ -161,7 +162,7 @@ function detectBaseBranch(cwd: string): string {
  * repo's own metadata is never mistaken for a sub-repo. Sorted for determinism.
  */
 async function detectSubRepos(repoRoot: string): Promise<string[]> {
-  let entries: Awaited<ReturnType<typeof readdir>>;
+  let entries: Dirent<string>[];
   try {
     entries = await readdir(repoRoot, { withFileTypes: true });
   } catch {

@@ -37,8 +37,8 @@ describe('redactForPlan', () => {
 
     expect(text).toBe('token=<secret:API_KEY>');
     expect(redactions).toHaveLength(1);
-    expect(redactions[0].field).toBe('API_KEY');
-    expect(redactions[0].ref).toBe('<secret:API_KEY>');
+    expect((redactions[0] as (typeof redactions)[number]).field).toBe('API_KEY');
+    expect((redactions[0] as (typeof redactions)[number]).ref).toBe('<secret:API_KEY>');
   });
 
   test('non-secret text passes through unchanged', () => {

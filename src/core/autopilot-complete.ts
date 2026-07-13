@@ -518,8 +518,8 @@ function frozenBreachUnverified(
   currentHash?: (test_path: string) => string | undefined,
 ): NonNullable<CompletionInput['unverified']> {
   if (!currentHash) return []; // no filesystem source injected ⇒ inert (backward compat)
-  const manifest: readonly FrozenTestEntry[] =
-    graph.approval_gate.plan_brief?.test_spec?.test_backed ?? [];
+  const manifest = (graph.approval_gate.plan_brief?.test_spec?.test_backed ??
+    []) as readonly FrozenTestEntry[];
   const bound = manifest.filter((t) => t.frozen_hash !== undefined);
   if (bound.length === 0) return [];
   const intact = assertFrozenTestsIntact(bound, currentHash);

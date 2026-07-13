@@ -41,7 +41,15 @@ function graph(overrides: Partial<Autopilot> = {}): Autopilot {
       evidence_refs: [],
     },
     nodes: buildInitialNodes(['ac-1']),
-    caps: { fix_per_node: 2, switch_per_node: 1 },
+    caps: {
+      fix_per_node: 2,
+      switch_per_node: 1,
+      converge_rounds: 3,
+      oracle_failures_to_block: 3,
+      loop_rounds: 12,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24,
+    },
     continue_policy: {
       continue_after_approval: true,
       continue_after_checkpoint: true,
@@ -95,6 +103,8 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         axis_signals: passingSignals,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
     });
     expect(r.terminated).toBe(false); // dry counter 1 < K=2 → not yet terminated
@@ -140,6 +150,7 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
             depth_weight: 0,
           },
         ],
+        discovered_nodes: [],
         admissibleBranchesAdded: 1,
       },
     });
@@ -160,6 +171,8 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         axis_signals: passingSignals,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
     });
     expect(r.terminated).toBe(false);
@@ -175,6 +188,8 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         axis_signals: passingSignals,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
       brief: {
         interface_changes: ['add CoverageStore'],
@@ -194,7 +209,12 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
       r = await recordCoverageRound({
         repoRoot: repo,
         workItemId: WI,
-        payload: { node_id: 'cov-root', admissibleBranchesAdded: 0 },
+        payload: {
+          node_id: 'cov-root',
+          admissibleBranchesAdded: 0,
+          derived_nodes: [],
+          discovered_nodes: [],
+        },
         brief: {
           interface_changes: ['add CoverageStore'],
           dod: ['coverage.json on disk'],
@@ -237,6 +257,8 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
         close_as: 'resolved',
         // Opponent did not run → neutrality axis rejects the close.
         axis_signals: { neutrality: { opponent_ran: false, verdict: 'accept' } },
+        derived_nodes: [],
+        discovered_nodes: [],
       },
     });
     expect(r.terminated).toBe(false);
@@ -263,6 +285,8 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         // axis_signals omitted entirely → neutrality is absent.
+        derived_nodes: [],
+        discovered_nodes: [],
       },
     });
     expect(r.terminated).toBe(false);
@@ -283,6 +307,8 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         axis_signals: passingSignals,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
     });
     expect(r.terminated).toBe(false);
@@ -302,6 +328,8 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         axis_signals: passingSignals,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
       brief: { interface_changes: ['x'], dod: ['y'], test_scenarios: ['z'] },
     });
@@ -310,7 +338,12 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
       r = await recordCoverageRound({
         repoRoot: repo,
         workItemId: WI,
-        payload: { node_id: 'cov-root', admissibleBranchesAdded: 0 },
+        payload: {
+          node_id: 'cov-root',
+          admissibleBranchesAdded: 0,
+          derived_nodes: [],
+          discovered_nodes: [],
+        },
         brief: { interface_changes: ['x'], dod: ['y'], test_scenarios: ['z'] },
       });
     }
@@ -345,6 +378,7 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
             depth_weight: 0,
           },
         ],
+        discovered_nodes: [],
         admissibleBranchesAdded: 1,
       },
     });
@@ -359,6 +393,8 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
         close_as: 'out_of_scope',
         close_reason: SKIP,
         residual_risk: RISK,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
     });
     expect(r.terminated).toBe(false);
@@ -373,6 +409,8 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         axis_signals: passingSignals,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
       brief: { interface_changes: ['x'], dod: ['y'], test_scenarios: ['z'] },
     });
@@ -380,7 +418,12 @@ describe('coverage loop drives a plan-stage sweep to disk (ac-3 runtime)', () =>
       r = await recordCoverageRound({
         repoRoot: repo,
         workItemId: WI,
-        payload: { node_id: 'cov-root', admissibleBranchesAdded: 0 },
+        payload: {
+          node_id: 'cov-root',
+          admissibleBranchesAdded: 0,
+          derived_nodes: [],
+          discovered_nodes: [],
+        },
         brief: { interface_changes: ['x'], dod: ['y'], test_scenarios: ['z'] },
       });
     }

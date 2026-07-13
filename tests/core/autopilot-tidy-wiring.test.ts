@@ -38,7 +38,15 @@ function graph(nodes: Autopilot['nodes']): Autopilot {
       evidence_refs: [],
     },
     nodes,
-    caps: { fix_per_node: 2, switch_per_node: 1 },
+    caps: {
+      fix_per_node: 2,
+      switch_per_node: 1,
+      converge_rounds: 3,
+      oracle_failures_to_block: 3,
+      loop_rounds: 12,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24,
+    },
     continue_policy: {
       continue_after_approval: true,
       continue_after_checkpoint: true,
@@ -264,7 +272,15 @@ describe('recordResult tidy failure policy (WU-3 ac-4: bug found → implement n
     // caps out (the policy retries while attempts.fix < cap and escalates at ==).
     // Three dispatched failures, no 4th attempt.
     const g = graph(tidyGraph());
-    g.caps = { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 };
+    g.caps = {
+      fix_per_node: 2,
+      switch_per_node: 1,
+      converge_rounds: 3,
+      oracle_failures_to_block: 3,
+      loop_rounds: 12,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24,
+    };
     await aps.write(WI, g);
 
     const failTidy = async () => {

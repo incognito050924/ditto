@@ -1,3 +1,4 @@
+import type { Dirent } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import type { EdgeAnalyzer } from '~/acg/boundary/boundary';
@@ -53,7 +54,7 @@ export function buildCandidateSpec(obs: ArchObservation, producedAt: string): Ac
 }
 
 async function walkTsFiles(repoRoot: string, dir: string, acc: string[]): Promise<void> {
-  let entries: Awaited<ReturnType<typeof readdir>>;
+  let entries: Dirent<string>[];
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch {

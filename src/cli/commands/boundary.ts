@@ -84,7 +84,7 @@ export const boundaryCommand = defineCommand({
       run: async ({ args }) => {
         let format: ReturnType<typeof parseOutputFormat>;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -94,7 +94,7 @@ export const boundaryCommand = defineCommand({
           const repoRoot = await resolveRepoRootForCreate();
           let spec: ReturnType<typeof acgArchitectureSpec.parse>;
           try {
-            spec = await readArchitectureSpec(args.spec, acgArchitectureSpec);
+            spec = await readArchitectureSpec(String(args.spec), acgArchitectureSpec);
           } catch (err) {
             writeError(
               `boundary check: cannot read a valid ArchitectureSpec from ${args.spec}: ${
@@ -104,12 +104,12 @@ export const boundaryCommand = defineCommand({
             process.exit(USAGE_ERROR_EXIT);
             return;
           }
-          const changedFiles = args.file
+          const changedFiles = String(args.file)
             .split(',')
             .map((s) => s.trim())
             .filter((s) => s.length > 0);
           const language = (args.language ?? 'javascript') as CodeqlLanguage;
-          const sourceRoot = args['source-root'] ?? join(repoRoot, 'src');
+          const sourceRoot = (args['source-root'] as string | undefined) ?? join(repoRoot, 'src');
           // JVM 가드: 로컬 JAR이 있는데 internal_packages 선언에 누락이 있으면 차단(형제모듈
           // 경계/영향이 침묵 손실되지 않게), 그 외 미선언은 경고 후 진행.
           const guard = await runInternalPackagesGuard({
@@ -125,7 +125,7 @@ export const boundaryCommand = defineCommand({
           if (guard.decision === 'warn') {
             writeError(`internal_packages guard (warning): ${guard.reason}`);
           }
-          const buildCommand = args['build-command'];
+          const buildCommand = args['build-command'] as string | undefined;
           const buildMode: BuildMode | undefined =
             !buildCommand && language === 'java' ? 'none' : undefined;
           const edgeAnalyzer = new CodeqlEdgeAnalyzer(
@@ -143,7 +143,7 @@ export const boundaryCommand = defineCommand({
 
           if (violations.length > 0 && !args['no-ledger']) {
             await new AcgReviewStore(repoRoot).write(
-              args['work-item'],
+              String(args['work-item']),
               violationsToReviewGraph(violations),
             );
           }

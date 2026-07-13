@@ -70,11 +70,15 @@ describe('landCommit — grouping (ac-1)', () => {
     expect(res.status).toBe('committed');
     expect(res.commits.length).toBe(2);
     const byRepo = Object.fromEntries(res.commits.map((c) => [c.repo, c]));
-    expect(committedPaths(repo, byRepo['.'].sha)).toEqual(['app.ts']);
-    expect(committedPaths(sub, byRepo.sub.sha)).toEqual(['lib.ts']);
+    expect(committedPaths(repo, (byRepo['.'] as (typeof res.commits)[number]).sha)).toEqual([
+      'app.ts',
+    ]);
+    expect(committedPaths(sub, (byRepo.sub as (typeof res.commits)[number]).sha)).toEqual([
+      'lib.ts',
+    ]);
     // each commit is on its own branch (revertable), not orphaned
-    expect(head(repo)).toBe(byRepo['.'].sha);
-    expect(head(sub)).toBe(byRepo.sub.sha);
+    expect(head(repo)).toBe((byRepo['.'] as (typeof res.commits)[number]).sha);
+    expect(head(sub)).toBe((byRepo.sub as (typeof res.commits)[number]).sha);
   });
 });
 
@@ -88,7 +92,9 @@ describe('landCommit — run-artifact exclusion (ac-1)', () => {
 
     expect(res.status).toBe('committed');
     expect(res.commits.length).toBe(1);
-    expect(committedPaths(repo, res.commits[0].sha)).toEqual(['app.ts']);
+    expect(committedPaths(repo, (res.commits[0] as (typeof res.commits)[number]).sha)).toEqual([
+      'app.ts',
+    ]);
   });
 });
 
@@ -157,7 +163,9 @@ describe('landCommit — re-run idempotence + partial reconcile (ac-1)', () => {
     expect(res.status).toBe('committed');
     expect(res.commits.map((c) => c.repo)).toEqual(['sub']);
     expect(head(repo)).toBe(rootHead); // root untouched (already committed)
-    expect(committedPaths(sub, res.commits[0].sha)).toEqual(['lib.ts']);
+    expect(committedPaths(sub, (res.commits[0] as (typeof res.commits)[number]).sha)).toEqual([
+      'lib.ts',
+    ]);
   });
 });
 
@@ -217,7 +225,7 @@ describe('shared commitPerSubRepo reuse (Tidy First extraction)', () => {
     const res = commitCleanup(repo, index, 'cleanup: remove doc');
 
     expect(res.commits.length).toBe(1);
-    expect(res.commits[0].repo).toBe('.');
+    expect((res.commits[0] as (typeof res.commits)[number]).repo).toBe('.');
     // doc.md no longer tracked at HEAD
     const tracked = git(repo, ['ls-files']).split('\n');
     expect(tracked).not.toContain('doc.md');
@@ -260,7 +268,9 @@ describe('landCommit — gitignored filter + run-byproduct absorption (wi_260627
     expect(res.status).toBe('committed');
     expect(res.commits.length).toBe(1);
     // the gitignored path is NOT in the commit; only the real change landed
-    expect(committedPaths(repo, res.commits[0].sha)).toEqual(['app.ts']);
+    expect(committedPaths(repo, (res.commits[0] as (typeof res.commits)[number]).sha)).toEqual([
+      'app.ts',
+    ]);
   });
 
   test('ac-2: a tracked-dirty `.ditto/memory/` byproduct is absorbed into the land commit', async () => {

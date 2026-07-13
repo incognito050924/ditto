@@ -2558,7 +2558,11 @@ async function recordResultCore(
   if (contentful && outcome === 'pass') {
     const acGuard = guardAcClosingEvidence({
       outcome: input.payload.outcome,
-      ac_verdicts: input.payload.ac_verdicts ?? [],
+      ac_verdicts: (input.payload.ac_verdicts ?? []) as {
+        criterion_id: string;
+        verdict: string;
+        evidence_refs?: unknown[];
+      }[],
       evidence_refs: input.payload.evidence_refs ?? [],
     });
     if (!acGuard.contentful) {
@@ -2660,7 +2664,10 @@ async function recordResultCore(
       for (const t of bound) {
         currentByPath.set(t.test_path, await hashAuthoredTest(repoRoot, t.test_path));
       }
-      const intact = assertFrozenTestsIntact(bound, (p) => currentByPath.get(p));
+      const intact = assertFrozenTestsIntact(
+        bound as { criterion_id: string; test_path: string; frozen_hash?: string }[],
+        (p) => currentByPath.get(p),
+      );
       if (!intact.pass) {
         contentful = false;
         outcome = 'fail';

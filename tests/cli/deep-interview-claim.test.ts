@@ -4,7 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type ClaimWiring, autoClaimOnInProgressEdge } from '~/cli/commands/work';
 import { type RecordedGhCall, createFakeGhClient } from '~/core/gh-client';
-import { finalizeInterview, recordTurn, startInterview } from '~/core/interview-driver';
+import {
+  type FinalizePayload,
+  finalizeInterview,
+  recordTurn,
+  startInterview,
+} from '~/core/interview-driver';
 import { WorkItemStore } from '~/core/work-item-store';
 import type { DittoConfigGithub } from '~/schemas/ditto-config';
 
@@ -41,7 +46,7 @@ function wiring(client: ClaimWiring['client']): ClaimWiring {
 
 const count = (calls: RecordedGhCall[], m: string) => calls.filter((c) => c.method === m).length;
 
-const PAYLOAD = {
+const PAYLOAD: FinalizePayload = {
   goal: 'returns integer score 0..100 for a password',
   in_scope: ['POST /password-strength'],
   out_of_scope: [],
@@ -67,7 +72,12 @@ async function driveToReady(repo: string, wiId: string): Promise<void> {
     workItemId: wiId,
     payload: {
       dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
-      question: { text: 'shape?', why_matters: 'response', info_gain_estimate: 'high' },
+      question: {
+        text: 'shape?',
+        why_matters: 'response',
+        user_explanation: '응답 값의 형태를 무엇으로 정할지 사용자 언어로 확인하는 질문입니다.',
+        info_gain_estimate: 'high',
+      },
       answer: { text: 'integer 0..100', kind: 'user' },
       readiness_score: 0.85,
     },

@@ -27,6 +27,7 @@ import { engageIntentDissent, mergeDissent } from './interview-dissent';
 import { InterviewStore } from './interview-store';
 import { type IntentFragment, fragmentKeywords } from './prism/engine';
 import { OPPONENT_FANOUT_CAP, type OpponentSeamConfig } from './prism/opponent';
+import { findUnexplainedIdentifiers, validateQuestionContext } from './question-context';
 import { WorkItemStore } from './work-item-store';
 
 /**
@@ -211,6 +212,34 @@ export async function recordTurn(
   const current = await store.get(input.workItemId);
   const nowIso = (input.now ?? new Date()).toISOString();
   const { dimension: rawDimension, question, answer, readiness_score } = input.payload;
+
+  // ac-1: presentation-contract gate on the WRITE path. Reject a bad turn BEFORE persist by
+  // running the existing pure validators (question-context.ts) on the USER-REACHING face
+  // ONLY — question.text + question.user_explanation. A missing/blank user_explanation
+  // (validateQuestionContext) or an un-glossed internal identifier surfaced to the user
+  // (findUnexplainedIdentifiers) is a bad turn. SCOPE: answer.text and dimension.notes are
+  // NOT checked — they legitimately carry internal vocabulary (wi_/ac-). The thrown Error
+  // NAMES what tripped it (violation field+reason AND the leaked identifiers), never a bare
+  // "rejected", so the caller can fix the exact surface.
+  const surfaceVerdict = validateQuestionContext({
+    text: question.text,
+    why_matters: question.why_matters,
+    user_explanation: question.user_explanation,
+  });
+  const leakedIdentifiers = [
+    ...findUnexplainedIdentifiers(question.text),
+    ...findUnexplainedIdentifiers(question.user_explanation),
+  ];
+  if (!surfaceVerdict.ok || leakedIdentifiers.length > 0) {
+    const violations = surfaceVerdict.violations.map((v) => `${v.field}: ${v.reason}`).join('; ');
+    const leaked =
+      leakedIdentifiers.length > 0
+        ? ` | leaked identifiers: ${[...new Set(leakedIdentifiers)].join(', ')}`
+        : '';
+    throw new Error(
+      `record-turn rejected: question surface failed the presentation contract before persist — violations: ${violations}${leaked}`,
+    );
+  }
 
   // Soundness invariant (deep-interview readiness gate): an agent-guessed answer
   // — assumption-kind and NOT user-delegated — must not close a CRITICAL dimension

@@ -18,6 +18,7 @@ const contract = (overrides: Partial<AcgChangeContract> = {}): AcgChangeContract
     { kind: 'path', ref: 'src/kafka-adapter.ts' },
     { kind: 'symbol', ref: 'TenantContext' },
   ],
+  scope_mode: 'blacklist',
   invariants: [],
   acceptance: [{ criterion: '재시도 간격 1s,2s,4s', evidence_kind: 'test' }],
   decision_ref: null,

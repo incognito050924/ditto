@@ -53,6 +53,7 @@ export function buildCompletion(input: CompletionInput): CompletionContract {
       criterion_id: c.id,
       verdict: provided?.verdict ?? ('unverified' as Verdict),
       evidence: provided?.evidence ?? [],
+      evidence_records: [],
       ...(provided?.notes ? { notes: provided.notes } : {}),
     };
   });
@@ -105,7 +106,7 @@ export function assembleCompletionFromWorkItem(
       verdict: c.verdict,
       evidence: c.evidence,
     })),
-    now: opts.now,
+    ...(opts.now !== undefined ? { now: opts.now } : {}),
   });
 }
 

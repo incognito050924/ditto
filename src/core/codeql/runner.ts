@@ -64,7 +64,7 @@ export interface CreateArgsInput {
   sourceRoot: string;
   buildMode: BuildMode;
   /** buildMode='manual'일 때 실행할 빌드 명령. */
-  buildCommand?: string;
+  buildCommand?: string | undefined;
 }
 
 /** `codeql database create ...` 인자를 구성한다(순수). */
@@ -94,9 +94,9 @@ export interface AnalyzeArgsInput {
   suite: string;
   sarifOut: string;
   /** 병렬 스레드. 0 = 코어 수만큼(부록3). */
-  threads?: number;
+  threads?: number | undefined;
   /** pack 미설치 시 query pack을 자동 다운로드(표준 suite 스펙 사용 시 필요). */
-  download?: boolean;
+  download?: boolean | undefined;
 }
 
 /** `codeql database analyze ...` 인자를 구성한다(순수). */

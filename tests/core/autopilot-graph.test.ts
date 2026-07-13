@@ -64,6 +64,7 @@ describe('selectReadyNodes (the candidate concurrent wave)', () => {
       depends_on: ['N1'],
       acceptance_refs: ['ac-1'],
       evidence_refs: [],
+      ac_verdicts: [],
       attempts: { fix: 0, switch: 0 },
     };
     const nodes = [...passed, g1];
@@ -94,6 +95,7 @@ describe('selectReadyNodes (the candidate concurrent wave)', () => {
         depends_on: [],
         acceptance_refs: ['ac-1'],
         evidence_refs: [],
+        ac_verdicts: [],
         attempts: { fix: 0, switch: 0 },
       },
       {
@@ -105,6 +107,7 @@ describe('selectReadyNodes (the candidate concurrent wave)', () => {
         depends_on: ['N7'],
         acceptance_refs: ['ac-1'],
         evidence_refs: [],
+        ac_verdicts: [],
         attempts: { fix: 0, switch: 0 },
       },
       {
@@ -116,6 +119,7 @@ describe('selectReadyNodes (the candidate concurrent wave)', () => {
         depends_on: ['N9'],
         acceptance_refs: ['ac-1'],
         evidence_refs: [],
+        ac_verdicts: [],
         attempts: { fix: 0, switch: 0 },
       },
     ];
@@ -171,6 +175,7 @@ describe('validateNodeAddition (A-1: integrity gate for node-add)', () => {
     depends_on,
     acceptance_refs: [],
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
   });
 
@@ -311,6 +316,7 @@ describe('validateNodeAddition — large-implement typed-node fan-out (wi_260710
     depends_on: ['N1'], // all fan out from the design/plan node of the seed
     acceptance_refs: refs,
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
     file_scope,
   });
@@ -420,6 +426,7 @@ describe('computeDownstream (ac-5: transitive DEPENDENTS of a fork node — reve
     depends_on,
     acceptance_refs: ['ac-1'],
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
   });
 
@@ -496,6 +503,7 @@ describe('pendingDoomedByFailure (wi_260710vzu ac-3: pending downstream of a ter
     depends_on,
     acceptance_refs: ['ac-1'],
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
   });
 

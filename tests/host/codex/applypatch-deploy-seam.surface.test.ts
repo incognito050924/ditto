@@ -71,7 +71,7 @@ afterEach(async () => {
  * no CLAUDE_PROJECT_DIR, kill-switch stripped. NO `--host` is added by the test.
  */
 function runDeployed(event: 'PreToolUse' | 'PostToolUse', payload: Record<string, unknown>) {
-  const env = { ...process.env, CLAUDE_PLUGIN_ROOT: OUT };
+  const env: Record<string, string | undefined> = { ...process.env, CLAUDE_PLUGIN_ROOT: OUT };
   env.CLAUDE_PROJECT_DIR = undefined;
   env.DITTO_SKIP_HOOKS = undefined;
   return Bun.spawnSync(['sh', '-c', deployedCommand(event)], {

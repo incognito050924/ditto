@@ -47,6 +47,11 @@ export function e2eResultToOutcome(
       return 'pass';
     case 'fail':
       return 'fail';
+    case 'unverified':
+      // Drift repair: e2eResult later gained 'unverified' ("ran, but ≥1 assertion
+      // was not mechanically checkable"). Like 'blocked', it produced no clean
+      // pass/fail, so it maps to the neutral 'skipped' outcome.
+      return 'skipped';
     case 'blocked':
       return 'skipped';
   }

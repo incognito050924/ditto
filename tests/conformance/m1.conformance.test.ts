@@ -200,7 +200,7 @@ describe('M1.3 — UserPromptSubmit hook 최소 동작 (단일 active invariant)
       env: {},
     });
     const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
-    expect(ctx).toContain('acceptance criteria are placeholders');
+    expect(ctx).toContain('acceptance criteria가 아직 자리표시자다'); // reworded to Korean (wi_260713nlg)
     expect(ctx).toContain('/ditto:deep-interview');
   });
 
@@ -226,7 +226,7 @@ describe('M1.3 — UserPromptSubmit hook 최소 동작 (단일 active invariant)
       env: {},
     });
     const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
-    expect(ctx).not.toContain('acceptance criteria are placeholders');
+    expect(ctx).not.toContain('acceptance criteria가 아직 자리표시자다'); // reworded to Korean (wi_260713nlg)
   });
 
   // 새 모델(manual-create): 자동 생성이 없으므로 directive 는 *로드된* placeholder-only
@@ -256,15 +256,15 @@ describe('M1.3 — UserPromptSubmit hook 최소 동작 (단일 active invariant)
     await seedPlaceholderOnly('s-dir');
     const out = await runWith('s-dir', 'build the password endpoint');
     const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
-    expect(ctx).toContain('Run /ditto:deep-interview now');
-    expect(ctx).toContain('IntentContract entry');
+    expect(ctx).toContain('지금 /ditto:deep-interview를 실행하라'); // reworded to Korean (wi_260713nlg)
+    expect(ctx).toContain('가벼운 경로'); // light-path fallback still surfaced (internal name anchor dropped, wi_260713nlg iter)
   });
 
   test('placeholder-only + question prompt → directive NOT injected (보수성)', async () => {
     await seedPlaceholderOnly('s-dir-q');
     const out = await runWith('s-dir-q', 'what does the bridge command do?');
     const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
-    expect(ctx).not.toContain('Run /ditto:deep-interview now');
+    expect(ctx).not.toContain('지금 /ditto:deep-interview를 실행하라'); // reworded to Korean (wi_260713nlg)
   });
 
   test('question + codebase-locatable prompt → QuestionGate self-answer hint (§AC-5, wi_v04intent_autopilot_entry 2026-06-01)', async () => {
@@ -272,14 +272,14 @@ describe('M1.3 — UserPromptSubmit hook 최소 동작 (단일 active invariant)
       prompt: 'what does the function handleRequest in src/api.ts do?',
     });
     const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
-    expect(ctx).toContain('self-answer from code/docs/web first');
-    expect(ctx).toContain('QuestionGate');
+    expect(ctx).toContain('코드·문서·웹에서 먼저 스스로 답하라'); // reworded to Korean (wi_260713nlg)
+    expect(ctx).toContain('사용자 입력 없이도 답할 수 있어'); // self-answer cue (internal name anchor dropped, wi_260713nlg iter)
   });
 
   test('question without codebase mention → no QuestionGate hint (false-positive 차단)', async () => {
     const out = await run({ prompt: 'what should we name it?' });
     const ctx = JSON.parse(out.stdout ?? '{}').hookSpecificOutput.additionalContext as string;
-    expect(ctx).not.toContain('self-answer from code/docs/web first');
+    expect(ctx).not.toContain('코드·문서·웹에서 먼저 스스로 답하라'); // reworded to Korean (wi_260713nlg)
   });
 });
 
@@ -455,7 +455,7 @@ describe('M1.5 — skill skeleton 6 표면 + 노출 정책', () => {
   const front = (name: string): string => {
     const text = readText(`skills/${name}/SKILL.md`);
     const m = text.match(/^---\n([\s\S]*?)\n---/);
-    return m ? m[1] : '';
+    return m?.[1] ?? '';
   };
 
   test('v0 skill 6 표면 SKILL.md 전부 존재', () => {

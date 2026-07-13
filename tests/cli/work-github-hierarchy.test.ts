@@ -44,7 +44,7 @@ function hierFake(opts: { graphql?: GhResult<unknown>; issueView?: GhResult<unkn
     projectFieldList: () => STUB_DEGRADE,
     projectItemList: () => STUB_DEGRADE,
     apiGraphql: () => opts.graphql ?? STUB_DEGRADE,
-  } as GhClient;
+  } as unknown as GhClient;
 }
 
 async function makeLinkedWi(titleSuffix: string, issueNumber: number): Promise<string> {

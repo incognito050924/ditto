@@ -56,7 +56,7 @@ describe('issueRemoveAssignee (ac-7) — unclaim removes @me ONLY', () => {
     expect(r).toEqual({ ok: true, value: undefined });
     expect(calls).toEqual([['issue', 'edit', '5', '-R', 'owner/repo', '--remove-assignee', '@me']]);
     // Guard the @me-only invariant: no --add-assignee, the removed token is exactly @me.
-    const argv = calls[0];
+    const argv = calls[0] as (typeof calls)[number];
     expect(argv).not.toContain('--add-assignee');
     const removeIdx = argv.indexOf('--remove-assignee');
     expect(argv[removeIdx + 1]).toBe('@me');
@@ -72,9 +72,11 @@ describe('issueView read-back includes assignees (ac-3)', () => {
     });
     const client = createGhClient(exec);
     client.issueView('owner/repo', 5);
-    const jsonFlagIdx = calls[0].indexOf('--json');
+    const jsonFlagIdx = (calls[0] as (typeof calls)[number]).indexOf('--json');
     expect(jsonFlagIdx).toBeGreaterThanOrEqual(0);
-    expect(calls[0][jsonFlagIdx + 1].split(',')).toContain('assignees');
+    expect(((calls[0] as (typeof calls)[number])[jsonFlagIdx + 1] as string).split(',')).toContain(
+      'assignees',
+    );
   });
 });
 
