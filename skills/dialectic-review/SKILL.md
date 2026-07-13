@@ -6,5 +6,5 @@ argument-hint: "[target-artifact]"
 
 # Dialectic Review (alias)
 
-A thin alias for `/ditto:dialectic --mode review`: run the `dialectic` skill with `--mode review` against the target artifact. Role structure, model routing, and the output schema are identical — see `skills/dialectic/SKILL.md` (and `reports/design/contracts/dialectic-deliberation-contract.md`).
+A thin alias for `/ditto:dialectic --mode review`: run the `dialectic` skill with `--mode review` against the target artifact. Role structure, model routing, and the output schema are identical — see the `dialectic` skill.
 </content>

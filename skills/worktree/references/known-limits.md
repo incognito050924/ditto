@@ -1,6 +1,6 @@
 # Worktree — known limits and unverified edges
 
-Honest edges of the current implementation. The core workflow is in `../SKILL.md`; consult this file only when you hit one of these edges.
+Honest edges of the current implementation. Consult this file only when you hit one of these edges; the core workflow is in the skill body.
 
 ## Known limits
 
@@ -9,7 +9,7 @@ Honest edges of the current implementation. The core workflow is in `../SKILL.md
 - **`ditto worktree list` cost is unmeasured at scale.** Listing calls one git subprocess per work-item worktree (dirty + ahead/behind), so cost grows linearly with work items. With hundreds of work items the cost is untested.
 - **`ditto worktree remove --force` is all-or-nothing per work item.** Force applies to *every* worktree the work item owns; in a multi-repo workspace it will force-delete the clean sub-repo worktrees alongside the dirty ones. There is no per-worktree force.
 - **Sub-repo detection is shallow.** Multi-repo nesting detects only the direct child directories of the workspace root that contain a `.git`. Deeper nesting and git submodules are not detected.
-- **Same-file concurrent edits are out of scope.** Worktree isolation hides a same-file conflict until merge, where it surfaces late (this is why `../SKILL.md` restricts worktrees to genuinely independent features).
+- **Same-file concurrent edits are out of scope.** Worktree isolation hides a same-file conflict until merge, where it surfaces late — which is why worktrees are restricted to genuinely independent features.
 
 ## Unverified (no fresh evidence)
 

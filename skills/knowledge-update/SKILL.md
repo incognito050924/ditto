@@ -8,8 +8,6 @@ argument-hint: "[work-item-id]"
 
 Curate one durable-knowledge update for a work item and produce a single schema-valid `knowledgeRecord` grounded in what was actually agreed or decided. This is the runtime for an autopilot `nodeKind=knowledge` node (owner `knowledge-curator`, mapped in `autopilot-graph.ts` `KIND_TO_OWNER`). One update per invocation — one record, no code mutation.
 
-The contract detail (record structure, glossary ownership, ADR cross-field, runtime-log separation) lives in `reports/design/contracts/knowledge-contract.md`.
-
 ## Procedure (driver)
 
 Run as the main agent; spawn the curation as its own 1-level Task.

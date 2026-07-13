@@ -8,7 +8,7 @@ user-invocable: false
 
 The orchestrator (main agent) drives the work item's node graph to completion. The driver runs on the main agent — it is never a subagent, because a subagent cannot spawn the stage subagents this loop needs (D3).
 
-How (graph structure, driver loop, failure classification, approval gate, schema) is owned by `reports/design/contracts/autopilot-contract.md`.
+How (graph structure, driver loop, failure classification, approval gate, schema) is owned by the code — the `ditto autopilot` step commands, `AutopilotStore` (`src/core/autopilot-store.ts`), and the schema (`src/schemas/autopilot.ts`) — not by this skill.
 
 ## Identity (invariants)
 - Orchestrator, not implementer: select / spawn / classify / evaluate — never generate content.

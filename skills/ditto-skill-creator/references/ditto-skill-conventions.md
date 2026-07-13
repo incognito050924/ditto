@@ -74,8 +74,5 @@ ditto conventions + build seam.
 
 ## Sources
 
-- https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices
-- https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview
-- https://code.claude.com/docs/en/features-overview (skill vs subagent vs MCP vs hook vs CLAUDE.md)
-- https://github.com/anthropics/claude-code (plugins/plugin-dev/skills/skill-development/SKILL.md)
+- Anthropic Agent Skills best-practices + overview; Claude Code features-overview (skill vs subagent vs MCP vs hook vs CLAUDE.md); Claude Code plugin skill-development guide.
 - Repo: `scripts/build-plugin.mjs`, `scripts/build-codex-plugin.mjs`, ADR-0016 (dual-host).

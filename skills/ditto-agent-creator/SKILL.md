@@ -7,7 +7,7 @@ description: Author a new ditto autopilot owner subagent (agents/<name>.md) that
 
 Author a new **autopilot owner subagent** for this repo. ditto's core role is orchestration, so its agents are not generic subagents — they share one strict convention so autopilot can delegate to any of them and collect evidence uniformly. This skill encodes that convention (and proves it with a contract test) so a new agent is consistent with `implementer`/`researcher`/`reviewer`/`verifier` out of the box.
 
-Author for **predictability** — the same process every run. An agent body is a prompt-context artifact like a skill, so the shared craft in `../ditto-skill-creator/references/writing-great-artifacts.md` governs it too (leading words, completion criteria, pruning, prompt-the-positive); `references/ditto-agent-conventions.md` maps that craft onto the agent surface. When a habit here and the craft pull against each other, the craft wins — except for the functional contract below, which is not style.
+Author for **predictability** — the same process every run. An agent body is a prompt-context artifact like a skill, so the shared craft in `references/writing-great-artifacts.md` governs it too (leading words, completion criteria, pruning, prompt-the-positive); `references/ditto-agent-conventions.md` maps that craft onto the agent surface. When a habit here and the craft pull against each other, the craft wins — except for the functional contract below, which is not style.
 
 ## When to create a subagent
 

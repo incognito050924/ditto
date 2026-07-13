@@ -8,7 +8,7 @@ Why ditto owner subagents look the way they do, with pointers to the authority
 The general craft of writing a prompt-context artifact — predictability, the
 steps-vs-reference ladder, completion criteria, leading words, pruning, and the
 failure modes — is authored once in
-`../ditto-skill-creator/references/writing-great-artifacts.md` and applies to agent
+`references/writing-great-artifacts.md` and applies to agent
 bodies too (single source of truth, not restated here; on conflict its Precedence
 rule wins, save for the functional contracts below). Two mappings onto this surface
 are worth naming: an agent's `done_when` plus the owner-return contentfulness guard

@@ -33,7 +33,7 @@ ditto (TypeScript) never calls an LLM, so the work splits in two:
      [--categories design,report,...] [--aggressiveness 1-5] [--concurrency N] [--auto-cleanup] \
      --output json
    ```
-   Returns `{params, candidates[], excluded_protected[]}`. Each candidate carries `{path, owning_repo, tracked, signals[]}`. The protected set (CLAUDE.md/AGENTS.md/README, `.ditto/knowledge`, `reports/design`, `reports/contracts`) comes back already excluded — leave it out.
+   Returns `{params, candidates[], excluded_protected[]}`. Each candidate carries `{path, owning_repo, tracked, signals[]}`. The protected set (CLAUDE.md/AGENTS.md/README, `.ditto/knowledge`, and the design/contract doc trees — the full list is `isProtectedPath` in `src/core/cleanup-store.ts`) comes back already excluded — leave it out.
    **Done when** you hold the candidate list + the `params` snapshot.
 
 2. **Create the run** with the params snapshot scan returned:

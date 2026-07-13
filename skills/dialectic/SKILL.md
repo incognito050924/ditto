@@ -8,7 +8,7 @@ argument-hint: "--mode <create|review|decision|proposal|document|final-answer>"
 
 Separate three roles so a single model cannot mark its own homework. The `--mode` only changes what the three roles work on and produce; the role structure and output schema are constant.
 
-Contract detail — role separation, host-aware model/context routing, round policy, admissibility link, schema — is owned by `reports/design/contracts/dialectic-deliberation-contract.md`.
+Contract detail — role separation, host-aware model/context routing, round policy, admissibility link, schema — is owned by the code: the dialectic schema (`src/schemas/dialectic.ts`) and the opponent router (`src/core/opponent-router.ts`).
 
 ## Roles
 - **Producer** — states the best argument for the draft + a concrete proposal, with evidence, assumptions, known limits.
@@ -16,7 +16,7 @@ Contract detail — role separation, host-aware model/context routing, round pol
 - **Synthesizer** — verdict (`accept|revise|reject|blocked`) + agreed final position; a rejection carries as much grounding as a raise.
 
 ## Procedure (driver)
-Run as the main agent and spawn each role as its own Task (1-level) — the roles are **separate spawns even within one turn**, never three voices simulated in one prompt (dialectic-contract §2). The driver constructs packets and spawns; it does not produce any role's content (autopilot-contract §3.4). Invoke this at **high-impact `review`/`design` nodes** (autopilot-contract §2.2 — review owner = reviewer, high-impact 산출물 = dialectic 3역), not on every node.
+Run as the main agent and spawn each role as its own Task (1-level) — the roles are **separate spawns even within one turn**, never three voices simulated in one prompt. The driver constructs packets and spawns; it does not produce any role's content. Invoke this at **high-impact `review`/`design` nodes** (review owner = reviewer, high-impact 산출물 = dialectic 3역), not on every node.
 
 **Parallel vs sequential:** Producer and Opponent are data-independent — the Opponent reads the original `target_artifact` + its oracles, NOT the Producer's text (steps 2–3 both take only `input`). For a small / low-stakes artifact you MAY spawn them in PARALLEL (one message, two Task calls) and join at the Synthesizer, removing a serial leg while preserving separate-context isolation; for a large or contested one keep them sequential so the Opponent can attack the Producer's strongest framing. The Synthesizer always runs last (it needs both outputs).
 

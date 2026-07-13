@@ -8,8 +8,6 @@ argument-hint: "[work-item-id] [journey-url]"
 
 Run one browser user journey end-to-end and produce a single `e2eJourney` artifact whose `result` is grounded in observed evidence (screenshot/trace/console/network) — or `blocked` when no browser is available. This is the runtime for an autopilot `nodeKind=e2e` node (owner `playwright-e2e`, mapped in `autopilot-graph.ts` `KIND_TO_OWNER`).
 
-Contract detail — schema cross-fields, artifact policy, MCP exclusion, autopilot/evidence integration — is owned by `reports/design/contracts/e2e-journey-contract.md`.
-
 ## Procedure (driver)
 Run as the main agent; spawn the journey as its own Task (1-level). One journey per invocation, direct URL only (no multi-journey, no MCP, no dev-server orchestration).
 

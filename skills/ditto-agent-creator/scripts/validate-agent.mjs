@@ -20,7 +20,7 @@ const RESERVED = ['anthropic', 'claude'];
 const MUTATING_TOOLS = ['Edit', 'Write', 'NotebookEdit'];
 
 // Advisory craft heuristics (warnings, never errors) from the shared authoring
-// craft — ../ditto-skill-creator/references/writing-great-artifacts.md. Phrase-
+// craft — references/writing-great-artifacts.md. Phrase-
 // targeted, not density-based: owner subagents legitimately carry many
 // `MUST NOT`/read-only guardrails, so we flag only specific *filler* smells, never
 // bare `don't`/`never` (the sanctioned guardrail form).

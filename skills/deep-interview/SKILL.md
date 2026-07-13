@@ -8,7 +8,7 @@ argument-hint: "[work-item-id]"
 
 Resolve the *intent-level* ambiguity of a request to the degree needed — no more — and surface hard-to-reverse risk early with a pre-mortem. Plan-level adversarial checking is `/ditto:dialectic`, not here.
 
-The contract (thresholds, schema, gate) is owned by `reports/design/contracts/deep-interview-contract.md` and `src/schemas/interview-state.ts`. Mechanism is in code: `ditto deep-interview {start,record-turn,check-readiness,finalize}` enforces the schema and the state machine.
+The contract (thresholds, schema, gate) is owned by `src/schemas/interview-state.ts`. Mechanism is in code: `ditto deep-interview {start,record-turn,check-readiness,finalize}` enforces the schema and the state machine.
 
 Detail for the three optional host-delegated adversarial passes (§4 pre-mortem opponent, §5.5 intent-dissent, §5.6 semantic critic) lives in `references/adversarial-seams.md` — open it when you reach those steps.
 
