@@ -7,12 +7,54 @@
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "TBD — derive observable criteria during interview/planning",
-      "verdict": "unverified",
-      "evidence": []
+      "statement": "the pre-approval authored-red runner is derived from the recipe (authored_test_command, falling back to barrier_test_command) instead of a hardcoded bun test path, and an absent runner returns a degrade outcome rather than arming a hardcoded bun barrier",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/authored-red-discrimination.test.ts -t per-file runner derives from recipe",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "classifyAuthoredRed applies bun phantom markers only when the runner is bun-shaped and returns indeterminate (degrade, never block) for any non-bun or unknown runner so a package-level non-bun (go or rust) stack is never false-blocked",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/authored-red-discrimination.test.ts -t RUNNER-AWARE",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "a recorded phantom-red degrade injects an in-scope unverified entry that floors the completion final_verdict off pass (mirroring testBarrierUnverified) gated by a dedicated phantom_red_opt_out, while a definite phantom (compile/import or vacuous-green) still returns a block verdict",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-complete.test.ts tests/core/authored-red-discrimination.test.ts -t M3",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "the two-stack unit fixtures return the required outcomes — a bun stack returns block on a phantom red and returns present on a real assertion-red, a non-bun package stack returns degrade with no false-block and the completion floor returns unverified, and the coupling regression returns no false-block",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-complete.test.ts tests/core/authored-red-discrimination.test.ts",
+          "summary": "exit 0"
+        }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
@@ -21,5 +63,6 @@
   "risks": [],
   "runs": [],
   "created_at": "2026-07-10T19:04:55.066Z",
-  "updated_at": "2026-07-10T19:04:55.066Z"
+  "updated_at": "2026-07-13T09:11:03.234Z",
+  "closed_at": "2026-07-13T09:11:03.233Z"
 }

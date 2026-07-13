@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607103tp",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "2afb6c4d6f84624d3f8d82f0712cc667889ad6d3b68badb5bb75e558105db941",
+  "ts": "2026-07-13T09:10:42.500Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/authored-red-discrimination.test.ts -t per-file runner derives from recipe",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

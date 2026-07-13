@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607103tp",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "cef32d3dc622fd567f64594357f0218999754482199c3f7db6732c6111200410",
+  "ts": "2026-07-13T09:10:43.052Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-complete.test.ts tests/core/authored-red-discrimination.test.ts -t M3",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

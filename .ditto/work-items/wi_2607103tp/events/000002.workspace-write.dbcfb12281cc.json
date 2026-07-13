@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607103tp",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "dbcfb12281cc9de14bd86629d4e4c0ec8c8d823ced9423ab250a9bc98ee0bc22",
+  "ts": "2026-07-13T09:10:42.736Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/authored-red-discrimination.test.ts -t RUNNER-AWARE",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
