@@ -56951,7 +56951,7 @@ var worktreeCommand = defineCommand({
 var main = defineCommand({
   meta: {
     name: "ditto",
-    version: "0.9.1",
+    version: "0.9.2",
     description: "Coding agent work orchestration layer"
   },
   subCommands: {
@@ -56999,4 +56999,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=e3d591e0b75863e814c38f4ba341757c1c9e6eb835aeeff74ceb984f4f708313
+//# ditto-src-stamp=a86774da2427f2012b0b63a42a2c91d0708ffad634b76418e57a6676e205c445

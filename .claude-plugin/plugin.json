@@ -1,6 +1,6 @@
 {
   "name": "ditto",
   "description": "Autonomous work-orchestration harness: deep interview, autopilot graph, dialectic review, and convergence gates for coding agents.",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "author": { "name": "ecoletree" }
 }
