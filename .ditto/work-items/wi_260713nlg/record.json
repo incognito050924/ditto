@@ -112,7 +112,6 @@
   "changed_files": [
     ".ditto/local/work-items/wi_260713nlg/completion.json",
     ".ditto/local/work-items/wi_260713nlg/work-item.json",
-    ".ditto/work-items/wi_2607130ld/",
     ".ditto/work-items/wi_260713nlg/",
     "src/core/question-context.ts",
     "tests/core/question-context.test.ts",
