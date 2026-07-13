@@ -5,6 +5,7 @@
  * 확장자→언어 매핑은 소비자마다 다르므로(분석 엔진 taxonomy vs LSP 서버 정체성) 여기엔 두지
  * 않는다 — 이 모듈은 "어떤 확장자가 몇 개"까지만 책임진다.
  */
+import type { Dirent } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -23,7 +24,7 @@ export const EXCLUDED_DIR = new Set([
 
 /** dir 하위를 재귀 순회하며 확장자(소문자, 점 제외)별 파일 수를 counts에 누적한다. */
 export async function walkExtensions(dir: string, counts: Record<string, number>): Promise<void> {
-  let entries: Awaited<ReturnType<typeof readdir>>;
+  let entries: Dirent<string>[];
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch {

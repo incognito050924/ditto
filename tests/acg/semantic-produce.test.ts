@@ -157,7 +157,7 @@ describe('semantic_safe=yes adequacy tag (WU-2(b), OBJ-11)', () => {
       compatibility: 'additive',
       modelVersion: 'claude-opus-4-8',
       characterizationTestRef: 'tests/user.test.ts::x',
-      ...(adequacy ? { characterizationAdequacy: adequacy } : {}),
+      ...(adequacy ? { characterizationAdequacy: adequacy as 'l1_met' | 'l2_passed' } : {}),
     });
 
   test('agent yes with characterization but adequacy=none is rejected (ref existence insufficient)', () => {

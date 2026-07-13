@@ -420,7 +420,9 @@ describe('far-field disposition routing (wi_260706n4w ac-2/ac-3)', () => {
 
   test('every floor category declares a static disposition (ac-2)', () => {
     for (const c of floor) {
-      expect(['code-verify', 'user-intent', 'runtime-post-impl']).toContain(c.disposition);
+      expect(['code-verify', 'user-intent', 'runtime-post-impl']).toContain(
+        c.disposition as NonNullable<typeof c.disposition>,
+      );
     }
   });
 

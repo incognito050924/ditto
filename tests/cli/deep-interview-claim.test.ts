@@ -4,7 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type ClaimWiring, autoClaimOnInProgressEdge } from '~/cli/commands/work';
 import { type RecordedGhCall, createFakeGhClient } from '~/core/gh-client';
-import { finalizeInterview, recordTurn, startInterview } from '~/core/interview-driver';
+import {
+  type FinalizePayload,
+  finalizeInterview,
+  recordTurn,
+  startInterview,
+} from '~/core/interview-driver';
 import { WorkItemStore } from '~/core/work-item-store';
 import type { DittoConfigGithub } from '~/schemas/ditto-config';
 
@@ -41,7 +46,7 @@ function wiring(client: ClaimWiring['client']): ClaimWiring {
 
 const count = (calls: RecordedGhCall[], m: string) => calls.filter((c) => c.method === m).length;
 
-const PAYLOAD = {
+const PAYLOAD: FinalizePayload = {
   goal: 'returns integer score 0..100 for a password',
   in_scope: ['POST /password-strength'],
   out_of_scope: [],

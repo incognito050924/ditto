@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713a4c",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "fd51a25d3a7158a1be47a48269ae5e74a2011e5eed2ac9f186b9e0fe84cf1a80",
+  "ts": "2026-07-13T10:11:59.703Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -71,9 +71,9 @@ describe('installCodeqlCli', () => {
     expect(result.status).toBe('installed');
     expect(result.binary).toBe('/home/u/.local/bin/codeql');
     // curl → unzip → ln 순서로 실행 (unzip 성공 시 tar 폴백 없음)
-    expect(calls[0][0]).toBe('curl');
-    expect(calls[1][0]).toBe('unzip');
-    expect(calls[2][0]).toBe('ln');
+    expect((calls[0] as (typeof calls)[number])[0]).toBe('curl');
+    expect((calls[1] as (typeof calls)[number])[0]).toBe('unzip');
+    expect((calls[2] as (typeof calls)[number])[0]).toBe('ln');
     expect(calls.some((c) => c.some((a) => a.includes('codeql-osx64.zip')))).toBe(true);
   });
 

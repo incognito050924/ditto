@@ -65,6 +65,8 @@ describe('depth dial — termination timing follows the tier (§8-4)', () => {
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         axis_signals: passingNeutrality,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
       tierInputs: lightTier,
     });
@@ -82,6 +84,8 @@ describe('depth dial — termination timing follows the tier (§8-4)', () => {
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         axis_signals: passingNeutrality,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
       // no tierInputs → standard, K=2
     });
@@ -130,6 +134,8 @@ describe('intensity override at entry (wi_260622vjo ac-4)', () => {
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         axis_signals: passingNeutrality,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
       intensity: 'light', // override → K=1 (vs the standard default K=2)
     });
@@ -146,6 +152,8 @@ describe('intensity override at entry (wi_260622vjo ac-4)', () => {
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         axis_signals: passingNeutrality,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
       tierInputs: lightTier, // would derive light (K=1) on its own…
       intensity: 'full', // …but the explicit override wins → K=3, not yet dry after 1 round
@@ -176,6 +184,8 @@ describe('intensity override at entry (wi_260622vjo ac-4)', () => {
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
         axis_signals: passingNeutrality,
+        derived_nodes: [],
+        discovered_nodes: [],
       },
     });
     expect(r.terminated).toBe(true);

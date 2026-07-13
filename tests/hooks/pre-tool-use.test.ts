@@ -707,7 +707,15 @@ describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease a
           attempts: { fix: 0, switch: 0 },
         },
       ],
-      caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 },
+      caps: {
+        fix_per_node: 2,
+        switch_per_node: 1,
+        converge_rounds: 3,
+        oracle_failures_to_block: 3,
+        loop_rounds: 12,
+        no_progress_rounds: 3,
+        progress_continuation_cap: 24,
+      },
       continue_policy: {
         continue_after_approval: true,
         continue_after_checkpoint: true,
@@ -744,6 +752,7 @@ describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease a
         node_id: 'N1',
         work_item_id: WI,
         file_scope: opts.leaseScope,
+        scope_source: 'declared',
         created_at: new Date().toISOString(), // live node (>24h would be reaped: WS-HND-T3)
       });
     }

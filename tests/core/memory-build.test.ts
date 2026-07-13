@@ -291,7 +291,7 @@ describe('mergeIrFragments — bare-name endpoint resolution', () => {
             // extractor referenced endpoints by display name, not canonical id
             from: 'Logging Service',
             to: 'Async Buffer',
-            edge_type: 'DEPENDS_ON',
+            edge_type: 'RELATED_TO',
             confidence_kind: 'INFERRED',
             confidence_score: 0.8,
             source_id: 'src_111111111111',

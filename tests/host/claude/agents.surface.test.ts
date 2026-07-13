@@ -40,7 +40,7 @@ const AGENTS = [
 function frontmatter(text: string): Record<string, unknown> {
   const m = text.match(/^---\n([\s\S]*?)\n---/);
   if (!m) throw new Error('no YAML frontmatter');
-  return parseYaml(m[1]) as Record<string, unknown>;
+  return parseYaml(m[1] as string) as Record<string, unknown>;
 }
 
 describe('Claude host surface — agents', () => {
@@ -52,7 +52,7 @@ describe('Claude host surface — agents', () => {
     expect(onDisk).toEqual([...AGENTS].sort());
   });
 
-  test.each(AGENTS)('agents/%s.md has name/description/tools frontmatter', (name) => {
+  test.each([...AGENTS])('agents/%s.md has name/description/tools frontmatter', (name) => {
     const fm = frontmatter(readFileSync(join(AGENTS_DIR, `${name}.md`), 'utf8'));
     expect(fm.name).toBe(name);
     expect(typeof fm.description).toBe('string');
@@ -71,10 +71,13 @@ describe('Claude host surface — agents', () => {
   // wi_260620njg — agents must write runtime output under the canonical tier-③
   // path `.ditto/local/work-items/` (ADR-0012), never the legacy pre-isolation
   // `.ditto/work-items/` which is NOT gitignored and pollutes the tracked tree.
-  test.each(AGENTS)('agents/%s.md never instructs the legacy non-local work-items path', (name) => {
-    const text = readFileSync(join(AGENTS_DIR, `${name}.md`), 'utf8');
-    // Strip the canonical path, then any remaining `.ditto/work-items/` is the legacy leak.
-    const residual = text.split('.ditto/local/work-items/').join('');
-    expect(residual).not.toContain('.ditto/work-items/');
-  });
+  test.each([...AGENTS])(
+    'agents/%s.md never instructs the legacy non-local work-items path',
+    (name) => {
+      const text = readFileSync(join(AGENTS_DIR, `${name}.md`), 'utf8');
+      // Strip the canonical path, then any remaining `.ditto/work-items/` is the legacy leak.
+      const residual = text.split('.ditto/local/work-items/').join('');
+      expect(residual).not.toContain('.ditto/work-items/');
+    },
+  );
 });

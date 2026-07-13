@@ -42,8 +42,12 @@ function oracleOf(f: CodeqlFinding): string {
 /** dataflow 경로를 사람이 읽는 source→sink 요약으로. */
 function dataflowSummary(f: CodeqlFinding): string {
   if (f.dataflow.length === 0) return '';
-  const ends = [f.dataflow[0], f.dataflow[f.dataflow.length - 1]];
-  return ` (source ${ends[0].file}:${ends[0].startLine ?? '?'} → sink ${ends[1].file}:${ends[1].startLine ?? '?'}, ${f.dataflow.length} steps)`;
+  const source = f.dataflow[0];
+  const sink = f.dataflow[f.dataflow.length - 1];
+  if (source === undefined || sink === undefined) {
+    throw new Error('invariant: dataflow is non-empty (length checked above)');
+  }
+  return ` (source ${source.file}:${source.startLine ?? '?'} → sink ${sink.file}:${sink.startLine ?? '?'}, ${f.dataflow.length} steps)`;
 }
 
 /** (a) CodeQL finding → reviewer-output finding. */

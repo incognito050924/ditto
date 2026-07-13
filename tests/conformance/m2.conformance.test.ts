@@ -287,7 +287,7 @@ describe('M2.3 — plan approval gate (status 소비만, risk 재판정 안 함)
         approved_by: null,
         evidence_refs: [],
       },
-    }) as Autopilot;
+    }) as unknown as Autopilot;
 
   test('pending → 차단 + present_plan', () => {
     const g = mutationGate(graphWith('pending'));
@@ -323,6 +323,7 @@ describe('M2.4 — 노드 dispatch(6-section packet) + 실패 분류', () => {
     depends_on: [],
     acceptance_refs: ['AC-1'],
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
     ...over,
   });
@@ -348,7 +349,15 @@ describe('M2.4 — 노드 dispatch(6-section packet) + 실패 분류', () => {
   });
 
   test('decideOnFailure: fixable<cap→retry, cap 도달→escalate+cap_exceeded', () => {
-    const caps = { fix_per_node: 2, switch_per_node: 1 };
+    const caps = {
+      fix_per_node: 2,
+      switch_per_node: 1,
+      converge_rounds: 3,
+      oracle_failures_to_block: 3,
+      loop_rounds: 12,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24,
+    };
     expect(decideOnFailure('fixable', { fix: 0, switch: 0 }, caps)).toEqual({
       decision: 'retry',
       cap_exceeded: false,
@@ -360,7 +369,15 @@ describe('M2.4 — 노드 dispatch(6-section packet) + 실패 분류', () => {
   });
 
   test('decideOnFailure: wrong_approach→switch, cap 도달→escalate; external/user_decision→escalate', () => {
-    const caps = { fix_per_node: 2, switch_per_node: 1 };
+    const caps = {
+      fix_per_node: 2,
+      switch_per_node: 1,
+      converge_rounds: 3,
+      oracle_failures_to_block: 3,
+      loop_rounds: 12,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24,
+    };
     expect(decideOnFailure('wrong_approach', { fix: 0, switch: 0 }, caps).decision).toBe(
       'switch_approach',
     );

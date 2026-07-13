@@ -41,6 +41,7 @@ describe('builder ↔ doctor algorithm sync', () => {
   test('scripts/build-bin.mjs sourceStamp equals computeSourceStamp over the real repo', async () => {
     // The two implementations are duplicated (mjs cannot import TS); this pins
     // them byte-for-byte — if one changes alone, the drift guard itself drifts.
+    // @ts-expect-error -- no declaration file for the plain-ESM .mjs module (allowJs off)
     const { sourceStamp } = await import('../../scripts/build-bin.mjs');
     expect(sourceStamp()).toBe(computeSourceStamp(process.cwd()));
   });

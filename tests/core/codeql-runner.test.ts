@@ -154,8 +154,8 @@ describe('runCodeqlAnalysis', () => {
     expect(result.fromCache).toBe(false);
     expect(result.buildMode).toBe('none');
     expect(calls).toHaveLength(2);
-    expect(calls[0].slice(0, 2)).toEqual(['database', 'create']);
-    expect(calls[1].slice(0, 2)).toEqual(['database', 'analyze']);
+    expect((calls[0] as (typeof calls)[number]).slice(0, 2)).toEqual(['database', 'create']);
+    expect((calls[1] as (typeof calls)[number]).slice(0, 2)).toEqual(['database', 'analyze']);
   });
 
   test('throws when database create fails (non-zero exit)', async () => {

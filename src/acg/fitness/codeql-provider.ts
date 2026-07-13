@@ -20,7 +20,7 @@ import { type RawViolation, normalizeViolationIdentity } from './fitness-runner'
 
 /** A CodeQL finding as the fitness runner's RawViolation (rule + path; no line). */
 export function codeqlFindingToViolation(f: CodeqlFinding): RawViolation {
-  return { rule: f.ruleId, path: f.file ?? undefined };
+  return { rule: f.ruleId, ...(f.file != null ? { path: f.file } : {}) };
 }
 
 /** CodeqlFinding[] → the deduplicated normalized violation-identity set. */

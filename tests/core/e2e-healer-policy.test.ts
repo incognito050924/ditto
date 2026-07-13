@@ -35,9 +35,13 @@ describe('filterHealPatch', () => {
     expect(result.allowed).not.toContain('toContainText');
     // exactly the assertion hunk is rejected, with a reason naming the forbidden token
     expect(result.rejected).toHaveLength(1);
-    expect(result.rejected[0].text).toContain('toContainText');
+    expect((result.rejected[0] as (typeof result.rejected)[number]).text).toContain(
+      'toContainText',
+    );
     expect(
-      result.rejected[0].reasons.some((r) => r.includes('expect') || r.includes('toContain')),
+      (result.rejected[0] as (typeof result.rejected)[number]).reasons.some(
+        (r) => r.includes('expect') || r.includes('toContain'),
+      ),
     ).toBe(true);
   });
 
@@ -52,7 +56,11 @@ describe('filterHealPatch', () => {
     const skipResult = filterHealPatch(skipDiff);
     expect(skipResult.allowed).toBe('');
     expect(skipResult.rejected).toHaveLength(1);
-    expect(skipResult.rejected[0].reasons.some((r) => r.includes('skip'))).toBe(true);
+    expect(
+      (skipResult.rejected[0] as (typeof skipResult.rejected)[number]).reasons.some((r) =>
+        r.includes('skip'),
+      ),
+    ).toBe(true);
 
     const fixmeDiff = [
       '--- a/e2e/generated/x.spec.ts',

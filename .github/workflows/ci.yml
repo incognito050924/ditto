@@ -1,7 +1,8 @@
 name: CI
 
-# push(main)와 모든 PR에서 biome lint 게이트를 강제한다.
+# push(main)와 모든 PR에서 biome lint + tsc typecheck 게이트를 강제한다.
 # pre-commit hook(.githooks)은 로컬·우회 가능 방어선, 이 CI는 서버 측 강제 방어선이다.
+# typecheck(tsc --noEmit)는 환경 독립이라 게이트로 넣는다 — 타입 드리프트 재발 방지 (wi_260713a4c).
 # bun test 는 환경의존 테스트(citty help 출력이 bun 버전에 민감, run-with-cli-forward 등)가
 # CI에서 깨져 아직 게이트에 넣지 않는다 — 테스트 CI 독립화는 별도 과제.
 on:
@@ -18,5 +19,7 @@ jobs:
       - run: bun install
       - name: Lint (biome)
         run: bun run lint
+      - name: Typecheck (tsc)
+        run: bun run typecheck
       - name: ADR guard (grep-able ADR enforcement)
         run: bun run adr:guard

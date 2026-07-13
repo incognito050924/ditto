@@ -704,7 +704,7 @@ describe('finalizeInterview', () => {
       },
     });
   }
-  const readyPayload = (over: Record<string, unknown>) => ({
+  const readyPayload = (over: Partial<FinalizePayload>): FinalizePayload => ({
     goal: 'returns integer 0..100',
     in_scope: [],
     out_of_scope: [],
@@ -721,6 +721,7 @@ describe('finalizeInterview', () => {
     follow_up_candidates: [],
     question_policy: 'ask_only_if_user_only_can_answer' as const,
     risk: { non_local: false, irreversible: false, unaudited: false },
+    user_confirmation: { confirmed: false, statement: '' },
     ...over,
   });
 

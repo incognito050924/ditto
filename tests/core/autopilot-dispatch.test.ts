@@ -25,7 +25,15 @@ const workItem = {
   changed_files: ['src/password.ts'],
 } as unknown as WorkItem;
 
-const caps = { fix_per_node: 2, switch_per_node: 1 };
+const caps = {
+  fix_per_node: 2,
+  switch_per_node: 1,
+  converge_rounds: 3,
+  oracle_failures_to_block: 3,
+  loop_rounds: 12,
+  no_progress_rounds: 3,
+  progress_continuation_cap: 24,
+};
 
 describe('buildDelegationPacket (6-section, Context Isolation)', () => {
   test('carries task, scope, done_when, and isolation guard', () => {
@@ -205,6 +213,7 @@ describe('buildDelegationPacket (6-section, Context Isolation)', () => {
     depends_on: [],
     acceptance_refs: ['ac-1'],
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
   });
 
@@ -255,6 +264,7 @@ describe('buildDelegationPacket red-first directive (ac-1)', () => {
     depends_on: [],
     acceptance_refs: ['ac-1'],
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
   });
   const wiWith = (oracleMethod?: string): WorkItem =>
@@ -316,6 +326,7 @@ describe('buildDelegationPacket scope-local-unit directive (ac-2)', () => {
     depends_on: [],
     acceptance_refs: ['ac-1'],
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
   });
   const wiWith = (oracleMethod?: string): WorkItem =>

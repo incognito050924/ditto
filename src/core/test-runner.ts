@@ -232,8 +232,8 @@ export const captureTestCommand = async (
   }, timeoutMs);
   try {
     const [stdout, stderr, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
+      new Response(proc.stdout as ReadableStream).text(),
+      new Response(proc.stderr as ReadableStream).text(),
       proc.exited,
     ]);
     const captured = `${stdout}${stderr}`;

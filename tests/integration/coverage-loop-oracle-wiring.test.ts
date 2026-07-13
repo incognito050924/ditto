@@ -85,6 +85,8 @@ describe('coverage-round oracle wiring (ac-1 runtime path)', () => {
         node_id: 'cov-cat-boundary-edge',
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
+        derived_nodes: [],
+        discovered_nodes: [],
         axis_signals: passingSignals,
       },
       oracleClaims: [
@@ -119,6 +121,8 @@ describe('runtime tier enforcement (ac-1)', () => {
         node_id: 'cov-cat-injection',
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
+        derived_nodes: [],
+        discovered_nodes: [],
         axis_signals: passingSignals,
       },
       oracleClaims: [
@@ -155,6 +159,8 @@ describe('runtime tier enforcement (ac-1)', () => {
         node_id: 'cov-cat-boundary-edge',
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
+        derived_nodes: [],
+        discovered_nodes: [],
         axis_signals: passingSignals,
       },
       oracleClaims: [
@@ -184,6 +190,8 @@ describe('fail-open degradations + routing (ac-7 / ADR-0018)', () => {
         node_id: 'cov-cat-injection',
         admissibleBranchesAdded: 0,
         close_as: 'resolved',
+        derived_nodes: [],
+        discovered_nodes: [],
         axis_signals: passingSignals,
       },
       oracleClaims: [
@@ -210,7 +218,12 @@ describe('fail-open degradations + routing (ac-7 / ADR-0018)', () => {
     const r = await recordCoverageRound({
       repoRoot: repo,
       workItemId: WI,
-      payload: { node_id: 'cov-cat-authorization-model', admissibleBranchesAdded: 0 },
+      payload: {
+        node_id: 'cov-cat-authorization-model',
+        admissibleBranchesAdded: 0,
+        derived_nodes: [],
+        discovered_nodes: [],
+      },
       oracleClaims: [
         {
           claim_id: 'clm-explicit-ui',
@@ -234,7 +247,12 @@ describe('fail-open degradations + routing (ac-7 / ADR-0018)', () => {
     const r = await recordCoverageRound({
       repoRoot: repo,
       workItemId: WI,
-      payload: { node_id: 'cov-cat-boundary-edge', admissibleBranchesAdded: 0 },
+      payload: {
+        node_id: 'cov-cat-boundary-edge',
+        admissibleBranchesAdded: 0,
+        derived_nodes: [],
+        discovered_nodes: [],
+      },
     });
     expect(r.terminated).toBe(false);
     const exists = await Bun.file(
@@ -250,7 +268,12 @@ describe('sidecar merge semantics across rounds', () => {
       recordCoverageRound({
         repoRoot: repo,
         workItemId: WI,
-        payload: { node_id: 'cov-cat-boundary-edge', admissibleBranchesAdded: 0 },
+        payload: {
+          node_id: 'cov-cat-boundary-edge',
+          admissibleBranchesAdded: 0,
+          derived_nodes: [],
+          discovered_nodes: [],
+        },
         oracleClaims: [
           {
             claim_id: claimId,

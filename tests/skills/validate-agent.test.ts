@@ -6,13 +6,13 @@ import { validateAgent } from '../../skills/ditto-agent-creator/scripts/validate
 describe('validateAgent — ditto owner-subagent contract test', () => {
   test('the existing implementer.md conforms', () => {
     const r = validateAgent(readFileSync('agents/implementer.md', 'utf8'));
-    expect(r.errors, r.errors.join('; ')).toEqual([]);
+    expect(r.errors as unknown[], r.errors.join('; ')).toEqual([]);
     expect(r.ok).toBe(true);
   });
 
   test('the existing researcher.md (read-only) conforms', () => {
     const r = validateAgent(readFileSync('agents/researcher.md', 'utf8'));
-    expect(r.errors, r.errors.join('; ')).toEqual([]);
+    expect(r.errors as unknown[], r.errors.join('; ')).toEqual([]);
     expect(r.ok).toBe(true);
   });
 

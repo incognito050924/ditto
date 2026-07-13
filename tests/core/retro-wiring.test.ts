@@ -50,6 +50,8 @@ function graph(nodes: AutopilotNode[], overrides: Partial<Autopilot> = {}): Auto
       converge_rounds: 3,
       oracle_failures_to_block: 3,
       loop_rounds: 6,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24,
     },
     continue_policy: {
       continue_after_approval: true,

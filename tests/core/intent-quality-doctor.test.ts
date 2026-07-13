@@ -111,7 +111,7 @@ describe('collectIntentQualityReport', () => {
         readMetrics: async () => [driftMetric(['H1']), driftMetric(['H2'])],
       }),
     );
-    const row = report.rows[0];
+    const row = report.rows[0] as (typeof report.rows)[number];
     expect(row.questions_asked).toBe(5);
     expect(row.closure_mode).toBe('mutual_agreement');
     expect(row.readiness_score).toBe(0.7);
@@ -131,7 +131,7 @@ describe('collectIntentQualityReport', () => {
         readAutopilot: async () => autopilot(['implement']),
       }),
     );
-    const row = report.rows[0];
+    const row = report.rows[0] as (typeof report.rows)[number];
     expect(row.questions_asked).toBeNull();
     expect(row.closure_mode).toBeNull();
     expect(row.readiness_score).toBeNull();
@@ -176,11 +176,15 @@ describe('collectIntentQualityReport', () => {
           summary('wi_bbbbbbbb'),
           summary('wi_cccccccc'),
         ],
-        readInterview: async (id) => interview({ questions_asked: q[id] }),
+        readInterview: async (id) => interview({ questions_asked: q[id] as number }),
         readMetrics: async (id) => drift[id] ?? [],
       }),
     );
-    const [low, mid, high] = report.correlation;
+    const [low, mid, high] = report.correlation as [
+      (typeof report.correlation)[number],
+      (typeof report.correlation)[number],
+      (typeof report.correlation)[number],
+    ];
     expect(low.quantile).toBe('low');
     expect(low.questions_range).toEqual([1, 1]);
     expect(low.avg_post_cost).toBe(3);
@@ -215,7 +219,7 @@ describe('collectIntentQualityReport', () => {
         ],
       }),
     );
-    const row = report.rows[0];
+    const row = report.rows[0] as (typeof report.rows)[number];
     expect(row.question_rounds).toBe(2);
     expect(row.question_selected).toBe(2);
     expect(row.question_dry_rounds).toBe(0);
@@ -232,16 +236,18 @@ describe('collectIntentQualityReport', () => {
         ],
       }),
     );
-    expect(withDry.rows[0].question_rounds).toBe(1);
-    expect(withDry.rows[0].question_dry_rounds).toBe(1);
-    expect(withDry.rows[0].question_selected).toBe(0);
-    expect(withDry.rows[0].question_mean_answer_value).toBeNull();
+    expect((withDry.rows[0] as (typeof withDry.rows)[number]).question_rounds).toBe(1);
+    expect((withDry.rows[0] as (typeof withDry.rows)[number]).question_dry_rounds).toBe(1);
+    expect((withDry.rows[0] as (typeof withDry.rows)[number]).question_selected).toBe(0);
+    expect(
+      (withDry.rows[0] as (typeof withDry.rows)[number]).question_mean_answer_value,
+    ).toBeNull();
 
     const absent = await collectIntentQualityReport(
       deps({ listWorkItems: async () => [summary('wi_bbbbbbbb')] }),
     );
-    expect(absent.rows[0].question_rounds).toBe(0);
-    expect(absent.rows[0].question_mean_answer_value).toBeNull();
+    expect((absent.rows[0] as (typeof absent.rows)[number]).question_rounds).toBe(0);
+    expect((absent.rows[0] as (typeof absent.rows)[number]).question_mean_answer_value).toBeNull();
     expect(absent.totals.total_question_rounds).toBe(0);
   });
 });

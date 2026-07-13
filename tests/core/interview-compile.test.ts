@@ -342,7 +342,7 @@ describe('prism risk nodes → pre-mortem seed (design point 4a)', () => {
         ],
       },
       severities: [],
-    });
+    } as unknown as Parameters<PrismStore['writeMap']>[0]);
     const result = await finalizeFromDesignDoc(repo, {
       workItemId: wiId,
       userConfirmation: { confirmed: true, statement: '확정' },

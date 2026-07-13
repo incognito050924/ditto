@@ -455,7 +455,7 @@ describe('M1.5 — skill skeleton 6 표면 + 노출 정책', () => {
   const front = (name: string): string => {
     const text = readText(`skills/${name}/SKILL.md`);
     const m = text.match(/^---\n([\s\S]*?)\n---/);
-    return m ? m[1] : '';
+    return m?.[1] ?? '';
   };
 
   test('v0 skill 6 표면 SKILL.md 전부 존재', () => {

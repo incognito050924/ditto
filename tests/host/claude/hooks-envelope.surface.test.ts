@@ -36,7 +36,10 @@ afterEach(async () => {
 // dev habit when running the suite) must not silently bypass it — mirrors the Codex
 // sibling fixture (applypatch-safety.surface.test.ts).
 function runHook(event: string, payload: unknown) {
-  const env = { ...process.env, CLAUDE_PROJECT_DIR: projectDir };
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    CLAUDE_PROJECT_DIR: projectDir,
+  };
   env.DITTO_SKIP_HOOKS = undefined;
   return Bun.spawnSync(['bun', 'run', CLI, 'hook', event], {
     stdin: Buffer.from(JSON.stringify(payload)),

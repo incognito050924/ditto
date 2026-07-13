@@ -73,7 +73,10 @@ const absence = (pattern: string, scope_path: string): OracleClaim => ({
 });
 
 const evaluate = (claim: OracleClaim, category_id?: string) =>
-  evaluateOracleClaim({ claim_id: 'c1', category_id, claim }, repoRoot);
+  evaluateOracleClaim(
+    { claim_id: 'c1', ...(category_id !== undefined ? { category_id } : {}), claim },
+    repoRoot,
+  );
 
 describe('absence mode — exit 3-way branch (ac-1)', () => {
   test('pattern truly absent in scope → exit 1 → confirmed', () => {

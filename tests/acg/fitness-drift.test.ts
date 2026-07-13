@@ -52,7 +52,7 @@ describe('computeDrift — function_id별 시계열 추세', () => {
       snap('2026-06-05T00:00:00.000Z', [{ function_id: 'ff', outcome: 'pass', violations: 2 }]),
       snap('2026-06-01T00:00:00.000Z', [{ function_id: 'ff', outcome: 'pass', violations: 5 }]),
     ]);
-    const ff = r.functions[0];
+    const ff = r.functions[0] as (typeof r.functions)[number];
     expect(ff.points.map((p) => p.at)).toEqual([
       '2026-06-01T00:00:00.000Z',
       '2026-06-05T00:00:00.000Z',
@@ -65,11 +65,13 @@ describe('computeDrift — function_id별 시계열 추세', () => {
       snap('2026-06-01T00:00:00.000Z', [{ function_id: 'a', outcome: 'pass', violations: 2 }]),
       snap('2026-06-02T00:00:00.000Z', [{ function_id: 'a', outcome: 'pass', violations: 2 }]),
     ]);
-    expect(flat.functions[0].direction).toBe('flat');
+    expect((flat.functions[0] as (typeof flat.functions)[number]).direction).toBe('flat');
     const insufficient = computeDrift([
       snap('2026-06-01T00:00:00.000Z', [{ function_id: 'b', outcome: 'pass', violations: 2 }]),
     ]);
-    expect(insufficient.functions[0].direction).toBe('insufficient');
+    expect((insufficient.functions[0] as (typeof insufficient.functions)[number]).direction).toBe(
+      'insufficient',
+    );
   });
 
   test('정렬: rising이 falling보다 먼저', () => {
@@ -145,7 +147,7 @@ describe('loadAssuranceSnapshots — work-item 디렉터리 스캔', () => {
       await writeFile(join(dir(b.id), 'assurance-snapshot.json'), '{ not valid'); // malformed → skip
       const snaps = await loadAssuranceSnapshots(repo);
       expect(snaps).toHaveLength(1);
-      expect(snaps[0].change_ref).toBe(a.id);
+      expect((snaps[0] as (typeof snaps)[number]).change_ref).toBe(a.id);
     } finally {
       await rm(repo, { recursive: true, force: true });
     }

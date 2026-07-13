@@ -84,8 +84,10 @@ describe('ac-4 A: follow-up capture slot', () => {
     expect(r.exitCode).toBe(0);
     const item = await new WorkItemStore(dir).get(wid);
     expect(item.follow_ups).toHaveLength(1);
-    expect(item.follow_ups?.[0].kind).toBe('idea');
-    expect(item.follow_ups?.[0].note).toBe('extract a shared parser later');
+    expect((item.follow_ups?.[0] as NonNullable<typeof item.follow_ups>[number]).kind).toBe('idea');
+    expect((item.follow_ups?.[0] as NonNullable<typeof item.follow_ups>[number]).note).toBe(
+      'extract a shared parser later',
+    );
   });
 
   test('--kind bug --severity high --self-caused records the full entry shape', async () => {
@@ -154,7 +156,9 @@ describe('ac-4 B: bug materialization', () => {
 
     // the source follow-up entry records the materialized WI id
     const source = await new WorkItemStore(dir).get(wid);
-    expect(source.follow_ups?.[0].materialized_wi).toBe(newWid);
+    expect(
+      (source.follow_ups?.[0] as NonNullable<typeof source.follow_ups>[number]).materialized_wi,
+    ).toBe(newWid);
 
     // the new WI carries the provenance link (distinct from parent_id)
     const created = await new WorkItemStore(dir).get(newWid);
@@ -181,7 +185,9 @@ describe('ac-4 B: bug materialization', () => {
     const after = (await new WorkItemStore(dir).list()).length;
     expect(after).toBe(before); // no new WI
     const item = await new WorkItemStore(dir).get(wid);
-    expect(item.follow_ups?.[0].materialized_wi).toBeUndefined();
+    expect(
+      (item.follow_ups?.[0] as NonNullable<typeof item.follow_ups>[number]).materialized_wi,
+    ).toBeUndefined();
   });
 });
 
@@ -309,7 +315,9 @@ describe('ac-4 D: --resolve clears the done block', () => {
     const res = ditto(['work', 'follow-up', wid, '--resolve', '1', '--output', 'json']);
     expect(res.exitCode).toBe(0);
     const item = await new WorkItemStore(dir).get(wid);
-    expect(item.follow_ups?.[0].resolved).toBe(true);
+    expect((item.follow_ups?.[0] as NonNullable<typeof item.follow_ups>[number]).resolved).toBe(
+      true,
+    );
     // now done is no longer blocked
     expect(ditto(['work', 'done', wid, '--output', 'json']).exitCode).toBe(0);
     expect((await new WorkItemStore(dir).get(wid)).status).toBe('done');
@@ -339,7 +347,9 @@ describe('ac-4 D: --resolve clears the done block', () => {
     expect(nan.stderr).toMatch(/integer|index|1-based/i);
     // no write: the follow-up is still unresolved
     const item = await new WorkItemStore(dir).get(wid);
-    expect(item.follow_ups?.[0].resolved).not.toBe(true);
+    expect((item.follow_ups?.[0] as NonNullable<typeof item.follow_ups>[number]).resolved).not.toBe(
+      true,
+    );
   });
 
   test('--resolve combined with --kind/--note is a usage error (one mode per invocation)', async () => {
@@ -351,6 +361,8 @@ describe('ac-4 D: --resolve clears the done block', () => {
     // no new follow-up appended (still just the idea), and it was not resolved
     const item = await new WorkItemStore(dir).get(wid);
     expect(item.follow_ups).toHaveLength(1);
-    expect(item.follow_ups?.[0].resolved).not.toBe(true);
+    expect((item.follow_ups?.[0] as NonNullable<typeof item.follow_ups>[number]).resolved).not.toBe(
+      true,
+    );
   });
 });

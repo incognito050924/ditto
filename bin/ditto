@@ -18931,7 +18931,7 @@ var architectureCommand = defineCommand({
       run: async ({ args }) => {
         let format;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -18972,7 +18972,7 @@ var architectureCommand = defineCommand({
       run: async ({ args }) => {
         let format;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -19043,15 +19043,21 @@ var architectureCommand = defineCommand({
       run: async ({ args }) => {
         let format;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
           return;
         }
         const entries = [
-          ...csv(args.glob).map((value) => ({ type: "glob", value })),
-          ...csv(args.path).map((value) => ({ type: "path", value }))
+          ...csv(args.glob).map((value) => ({
+            type: "glob",
+            value
+          })),
+          ...csv(args.path).map((value) => ({
+            type: "path",
+            value
+          }))
         ];
         if (entries.length === 0) {
           writeError("internal-packages: provide at least one --glob or --path value");
@@ -19277,6 +19283,7 @@ function buildInitialNodes(acceptanceIds) {
     depends_on,
     acceptance_refs,
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 }
   });
   return [
@@ -19295,6 +19302,7 @@ function proposalsToNodes(proposals) {
     depends_on: p.depends_on,
     acceptance_refs: p.acceptance_refs,
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
     ...p.agent_hint !== undefined ? { agent_hint: p.agent_hint } : {},
     ...p.file_scope !== undefined ? { file_scope: p.file_scope } : {}
@@ -20496,6 +20504,7 @@ function seedE2eAuthorNode(nodes) {
     status: "pending",
     depends_on: [design.id],
     acceptance_refs: [],
+    ac_verdicts: [],
     evidence_refs: [],
     attempts: { fix: 0, switch: 0 }
   };
@@ -20521,6 +20530,7 @@ function seedTestAuthorNode(nodes, hasDynamicTestOracle) {
     status: "pending",
     depends_on: [predecessorId],
     acceptance_refs: [],
+    ac_verdicts: [],
     evidence_refs: [],
     attempts: { fix: 0, switch: 0 }
   };
@@ -20542,6 +20552,7 @@ function seedTestBarrier(nodes) {
     status: "pending",
     depends_on: frontier,
     acceptance_refs: [],
+    ac_verdicts: [],
     evidence_refs: [],
     attempts: { fix: 0, switch: 0 }
   };
@@ -20614,7 +20625,15 @@ async function bootstrapAutopilot(repoRoot, input) {
     completion_boundary: "entire_work_item",
     approval_gate: approvalGate(input),
     nodes,
-    caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: 3 },
+    caps: {
+      fix_per_node: 2,
+      switch_per_node: 1,
+      converge_rounds: 3,
+      oracle_failures_to_block: 3,
+      loop_rounds: 12,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24
+    },
     continue_policy: {
       continue_after_approval: true,
       continue_after_checkpoint: true,
@@ -20904,6 +20923,7 @@ function buildCompletion(input) {
       criterion_id: c3.id,
       verdict: provided?.verdict ?? "unverified",
       evidence: provided?.evidence ?? [],
+      evidence_records: [],
       ...provided?.notes ? { notes: provided.notes } : {}
     };
   });
@@ -20937,7 +20957,7 @@ function assembleCompletionFromWorkItem(workItem2, opts) {
       verdict: c3.verdict,
       evidence: c3.evidence
     })),
-    now: opts.now
+    ...opts.now !== undefined ? { now: opts.now } : {}
   });
 }
 function mirrorAcceptanceVerdicts(workItem2, completion) {
@@ -21393,8 +21413,8 @@ function collectTidyDiffStat(repoRoot, base, head = "HEAD", pathspec) {
     const path = rest.join("\t");
     if (path.length === 0)
       continue;
-    const added = addedRaw === "-" ? 0 : Number.parseInt(addedRaw, 10) || 0;
-    const removed = removedRaw === "-" ? 0 : Number.parseInt(removedRaw, 10) || 0;
+    const added = addedRaw === "-" ? 0 : Number.parseInt(addedRaw ?? "", 10) || 0;
+    const removed = removedRaw === "-" ? 0 : Number.parseInt(removedRaw ?? "", 10) || 0;
     files.push({ path, added, removed, isCode: isCodePath(path) });
   }
   return { files };
@@ -22216,6 +22236,7 @@ function mkNode(id, kind, purpose, depends_on, acceptance_refs) {
     depends_on,
     acceptance_refs,
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 }
   };
 }
@@ -22459,6 +22480,7 @@ var node = (id, kind, purpose, depends_on, acceptance_refs, file_scope) => ({
   depends_on,
   acceptance_refs,
   evidence_refs: [],
+  ac_verdicts: [],
   attempts: { fix: 0, switch: 0 },
   ...file_scope !== undefined ? { file_scope } : {}
 });
@@ -22506,8 +22528,9 @@ function isUnitOnlyClosure(ac) {
   const refs = [...ac.evidence ?? [], ...ac.evidence_records ?? []];
   if (refs.length === 0)
     return false;
-  const hasCommand = refs.some((e2) => e2.kind === "command");
-  const hasRuntimeOrArtifact = refs.some((e2) => e2.kind === "file" || e2.kind === "artifact");
+  const kindOf = (e2) => e2.kind;
+  const hasCommand = refs.some((e2) => kindOf(e2) === "command");
+  const hasRuntimeOrArtifact = refs.some((e2) => kindOf(e2) === "file" || kindOf(e2) === "artifact");
   return hasCommand && !hasRuntimeOrArtifact;
 }
 function countUnitOnlyClosures(completion) {
@@ -27629,10 +27652,14 @@ async function nextCoverageNode(args) {
       crossCuttingConstraints: lenses
     })
   }));
+  const first = wave[0];
+  if (first === undefined) {
+    throw new Error("invariant: wave is non-empty (ready frontier checked above)");
+  }
   return {
     action: "interrogate",
-    node: wave[0].node,
-    judgeInput: wave[0].judgeInput,
+    node: first.node,
+    judgeInput: first.judgeInput,
     wave,
     tier,
     sweepAngles,
@@ -33784,7 +33811,7 @@ var boundaryCommand = defineCommand({
       run: async ({ args }) => {
         let format;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -33794,13 +33821,13 @@ var boundaryCommand = defineCommand({
           const repoRoot = await resolveRepoRootForCreate();
           let spec;
           try {
-            spec = await readArchitectureSpec(args.spec, acgArchitectureSpec);
+            spec = await readArchitectureSpec(String(args.spec), acgArchitectureSpec);
           } catch (err) {
             writeError(`boundary check: cannot read a valid ArchitectureSpec from ${args.spec}: ${err instanceof Error ? err.message : String(err)}`);
             process.exit(USAGE_ERROR_EXIT);
             return;
           }
-          const changedFiles = args.file.split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+          const changedFiles = String(args.file).split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
           const language = args.language ?? "javascript";
           const sourceRoot = args["source-root"] ?? join42(repoRoot, "src");
           const guard = await runInternalPackagesGuard({
@@ -33828,7 +33855,7 @@ var boundaryCommand = defineCommand({
           const edges = await edgeAnalyzer.edges({ changedFiles, sourceRoot });
           const violations = checkBoundary(spec, edges);
           if (violations.length > 0 && !args["no-ledger"]) {
-            await new AcgReviewStore(repoRoot).write(args["work-item"], violationsToReviewGraph(violations));
+            await new AcgReviewStore(repoRoot).write(String(args["work-item"]), violationsToReviewGraph(violations));
           }
           if (format === "json") {
             writeJson2({
@@ -36262,7 +36289,7 @@ async function inspectCodeqlTarget(input, deps) {
     languages,
     unsupported,
     cliAvailable,
-    buildVerified: input.buildVerified
+    ...input.buildVerified !== undefined ? { buildVerified: input.buildVerified } : {}
   });
   return {
     source_root: input.sourceRoot,
@@ -36351,8 +36378,12 @@ function codeqlSeverity(level) {
 function dataflowSummary(f3) {
   if (f3.dataflow.length === 0)
     return "";
-  const ends = [f3.dataflow[0], f3.dataflow[f3.dataflow.length - 1]];
-  return ` (source ${ends[0].file}:${ends[0].startLine ?? "?"} \u2192 sink ${ends[1].file}:${ends[1].startLine ?? "?"}, ${f3.dataflow.length} steps)`;
+  const source = f3.dataflow[0];
+  const sink = f3.dataflow[f3.dataflow.length - 1];
+  if (source === undefined || sink === undefined) {
+    throw new Error("invariant: dataflow is non-empty (length checked above)");
+  }
+  return ` (source ${source.file}:${source.startLine ?? "?"} \u2192 sink ${sink.file}:${sink.startLine ?? "?"}, ${f3.dataflow.length} steps)`;
 }
 function toReviewerFinding(f3) {
   return {
@@ -36391,7 +36422,10 @@ function doctorBlocks(report) {
   return report.findings.some((f3) => f3.severity === "high");
 }
 async function runCodeqlReviewToLedger(input, deps) {
-  const doctor = await inspectCodeqlTarget({ sourceRoot: input.sourceRoot, buildVerified: input.buildVerified }, deps);
+  const doctor = await inspectCodeqlTarget({
+    sourceRoot: input.sourceRoot,
+    ...input.buildVerified !== undefined ? { buildVerified: input.buildVerified } : {}
+  }, deps);
   if (doctorBlocks(doctor)) {
     return {
       gated: true,
@@ -46147,7 +46181,7 @@ async function runFitness(functions, ctx, provider) {
 
 // src/acg/fitness/codeql-provider.ts
 function codeqlFindingToViolation(f4) {
-  return { rule: f4.ruleId, path: f4.file ?? undefined };
+  return { rule: f4.ruleId, ...f4.file != null ? { path: f4.file } : {} };
 }
 function sarifFindingsToViolationIds(findings) {
   return [...new Set(findings.map((f4) => normalizeViolationIdentity(codeqlFindingToViolation(f4))))];
@@ -46464,7 +46498,11 @@ function executedProvider(repoRoot, deps = realDeps) {
       const requiresCleanBuild = exec2.requires_clean_build;
       const runs = [];
       for (let i3 = 0;i3 < attemptsN; i3++) {
-        runs.push(await deps.runOnce(fn.evaluator.spec, { timeoutMs, repoRoot, requiresCleanBuild }));
+        runs.push(await deps.runOnce(fn.evaluator.spec, {
+          repoRoot,
+          ...timeoutMs !== undefined ? { timeoutMs } : {},
+          ...requiresCleanBuild !== undefined ? { requiresCleanBuild } : {}
+        }));
       }
       return decideExecutedOutcome(runs, flake);
     }
@@ -46535,7 +46573,7 @@ var fitnessCommand = defineCommand({
       run: async ({ args }) => {
         let format;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -46554,7 +46592,7 @@ var fitnessCommand = defineCommand({
               return;
             }
           } else {
-            const stored = await new FitnessFunctionStore(repoRoot).read(args["work-item"]);
+            const stored = await new FitnessFunctionStore(repoRoot).read(String(args["work-item"]));
             if (stored === null) {
               writeError(`fitness run: no --from and no stored fitness-functions.json for ${args["work-item"]} (run \`ditto change-contract\` first, or pass --from)`);
               process.exit(USAGE_ERROR_EXIT);
@@ -46564,17 +46602,17 @@ var fitnessCommand = defineCommand({
           }
           const ctx = {
             trigger: args.trigger === "periodic" ? "periodic" : "per_change",
-            period: args.period,
-            changeRef: args["work-item"],
-            risk: args.risk,
-            riskKnown: args["risk-known"],
+            ...args.period !== undefined ? { period: args.period } : {},
+            changeRef: String(args["work-item"]),
+            ...args.risk !== undefined ? { risk: args.risk } : {},
+            riskKnown: args["risk-known"] === true,
             producedAt: new Date().toISOString()
           };
           const verdictsPath2 = typeof args.verdicts === "string" ? args.verdicts : undefined;
           const provider = args.execute ? executingProvider(repoRoot, verdictsPath2) : verdictsPath2 ? compositeProvider(repoRoot, verdictsPath2) : commandProvider(repoRoot);
           const snapshot = await runFitness(functions, ctx, provider);
-          const path = localDir(repoRoot, "work-items", args["work-item"], "assurance-snapshot.json");
-          await ensureDir(localDir(repoRoot, "work-items", args["work-item"]));
+          const path = localDir(repoRoot, "work-items", String(args["work-item"]), "assurance-snapshot.json");
+          await ensureDir(localDir(repoRoot, "work-items", String(args["work-item"])));
           await writeJson(path, acgAssuranceSnapshot, snapshot);
           const failed = snapshot.results.filter((r4) => r4.outcome === "fail").length;
           if (format === "json") {
@@ -46615,7 +46653,7 @@ var fitnessCommand = defineCommand({
       run: async ({ args }) => {
         let format;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -46624,7 +46662,7 @@ var fitnessCommand = defineCommand({
         try {
           const repoRoot = await resolveRepoRootForCreate();
           const report = computeDrift(await loadAssuranceSnapshots(repoRoot));
-          const minNew = Number.parseInt(args["min-new-violations"] ?? "0", 10);
+          const minNew = Number.parseInt(String(args["min-new-violations"] ?? "0"), 10);
           const assessment = args.gate ? assessDrift(report, Number.isNaN(minNew) ? 0 : minNew) : null;
           if (format === "json") {
             writeJson2(assessment ? {
@@ -50593,7 +50631,8 @@ async function ingestGlossary(repoRoot, sourceStore, eventStore, now, revision, 
       confidence_kind: "EXTRACTED",
       sensitivity: "internal",
       approved_by: "bootstrap",
-      decided_at: now
+      decided_at: now,
+      governs: []
     };
     await appendEventGraceful(eventStore, event, result2);
   }
@@ -50661,7 +50700,8 @@ async function ingestHandoffs(repoRoot, sourceStore, eventStore, now, revision, 
       confidence_kind: "EXTRACTED",
       sensitivity: "internal",
       approved_by: "bootstrap",
-      decided_at: now
+      decided_at: now,
+      governs: []
     };
     await appendEventGraceful(eventStore, event, result2);
   }
@@ -51846,6 +51886,9 @@ var memoryProposeFinding = defineCommand({
         return;
       }
       const record = ledger.records[index];
+      if (record === undefined) {
+        throw new Error(`invariant: --index ${index} within bounds (checked above)`);
+      }
       const written = await proposeEvent(repoRoot, {
         event_type: "observation",
         text: findingText(record),
@@ -55277,7 +55320,7 @@ function defaultMemorySeparateDeps(repoRoot) {
     repoRoot,
     run: async (cmd, args, cwd) => {
       const proc = Bun.spawn([cmd, ...args], {
-        cwd,
+        ...cwd !== undefined ? { cwd } : {},
         stdout: "ignore",
         stderr: "pipe",
         stdin: "ignore"
@@ -57158,4 +57201,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=a0adcbbb9338e60b3e780d5e7765330e49b77bf46211cc074c9d4881fbd1b7ba
+//# ditto-src-stamp=8ec9591eb32940ad9398bb3c9e07ba01fb1d8418c5d30e9a431e93c7df2fffe1

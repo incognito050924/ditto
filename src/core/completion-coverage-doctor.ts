@@ -46,8 +46,9 @@ export function isUnitOnlyClosure(ac: CompletionContract['acceptance'][number]):
   if (ac.verdict !== 'pass') return false;
   const refs = [...(ac.evidence ?? []), ...(ac.evidence_records ?? [])];
   if (refs.length === 0) return false;
-  const hasCommand = refs.some((e) => e.kind === 'command');
-  const hasRuntimeOrArtifact = refs.some((e) => e.kind === 'file' || e.kind === 'artifact');
+  const kindOf = (e: (typeof refs)[number]): string | undefined => (e as { kind?: string }).kind;
+  const hasCommand = refs.some((e) => kindOf(e) === 'command');
+  const hasRuntimeOrArtifact = refs.some((e) => kindOf(e) === 'file' || kindOf(e) === 'artifact');
   return hasCommand && !hasRuntimeOrArtifact;
 }
 

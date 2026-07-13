@@ -337,6 +337,7 @@ async function ingestGlossary(
       sensitivity: 'internal',
       approved_by: 'bootstrap',
       decided_at: now,
+      governs: [],
     };
     await appendEventGraceful(eventStore, event, result);
   }
@@ -417,6 +418,7 @@ async function ingestHandoffs(
       sensitivity: 'internal',
       approved_by: 'bootstrap',
       decided_at: now,
+      governs: [],
     };
     await appendEventGraceful(eventStore, event, result);
   }

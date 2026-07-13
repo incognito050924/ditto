@@ -66,7 +66,7 @@ describe('parseSarif', () => {
   test('extracts finding identity, primary location, and message', () => {
     const findings = parseSarif(COMMAND_INJECTION_SARIF);
     expect(findings).toHaveLength(1);
-    const f = findings[0];
+    const f = findings[0] as (typeof findings)[number];
     expect(f.ruleId).toBe('js/command-line-injection');
     expect(f.level).toBe('error');
     expect(f.file).toBe('src/exec.ts');
@@ -75,7 +75,7 @@ describe('parseSarif', () => {
   });
 
   test('flattens codeFlow into an ordered source→sink dataflow path', () => {
-    const [f] = parseSarif(COMMAND_INJECTION_SARIF);
+    const f = parseSarif(COMMAND_INJECTION_SARIF)[0] as ReturnType<typeof parseSarif>[number];
     expect(f.dataflow).toEqual([
       { file: 'src/route.ts', startLine: 10, message: 'req.query.cmd' },
       { file: 'src/middleware.ts', startLine: 7, message: 'forwarded value' },
@@ -86,7 +86,7 @@ describe('parseSarif', () => {
   test('accepts a JSON string as well as a parsed object', () => {
     const findings = parseSarif(JSON.stringify(COMMAND_INJECTION_SARIF));
     expect(findings).toHaveLength(1);
-    expect(findings[0].ruleId).toBe('js/command-line-injection');
+    expect((findings[0] as (typeof findings)[number]).ruleId).toBe('js/command-line-injection');
   });
 
   test('returns empty for a clean run with no results', () => {
@@ -111,9 +111,9 @@ describe('parseSarif', () => {
         },
       ],
     });
-    expect(findings[0].dataflow).toEqual([]);
-    expect(findings[0].level).toBeNull();
-    expect(findings[0].file).toBe('a.ts');
+    expect((findings[0] as (typeof findings)[number]).dataflow).toEqual([]);
+    expect((findings[0] as (typeof findings)[number]).level).toBeNull();
+    expect((findings[0] as (typeof findings)[number]).file).toBe('a.ts');
   });
 
   test('throws on malformed SARIF (runs not an array)', () => {

@@ -94,7 +94,7 @@ describe('runCodeqlReview', () => {
     expect(evidence.work_item_id).toBe('wi_codeql_test');
 
     expect(appended).toHaveLength(1);
-    const rec = appended[0].record as {
+    const rec = (appended[0] as (typeof appended)[number]).record as {
       ref: { kind: string; path: string; sha256: string; summary: string };
       freshness: string;
       portability: string;
@@ -114,7 +114,7 @@ describe('runCodeqlReview', () => {
   test('key_lines summarize findings as judgeable excerpts without the raw artifact', async () => {
     const { deps, appended } = reviewDeps({ sarif: SARIF_WITH_FINDING });
     await runCodeqlReview(baseInput, deps);
-    const rec = appended[0].record as {
+    const rec = (appended[0] as (typeof appended)[number]).record as {
       ref: { kind: string; path: string; sha256: string; summary: string };
       freshness: string;
       portability: string;
@@ -130,7 +130,7 @@ describe('runCodeqlReview', () => {
     });
     const { result } = await runCodeqlReview(baseInput, deps);
     expect(result.findings).toHaveLength(0);
-    const rec = appended[0].record as {
+    const rec = (appended[0] as (typeof appended)[number]).record as {
       ref: { kind: string; path: string; sha256: string; summary: string };
       freshness: string;
       portability: string;

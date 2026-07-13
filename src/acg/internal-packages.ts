@@ -8,6 +8,7 @@
  *
  * 정책(사용자 합의): 로컬 JAR이 있는데 선언에 누락이 있으면 차단, 그 외 미선언은 경고.
  */
+import type { Dirent } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { globToRegExp } from '~/acg/boundary/boundary';
@@ -119,7 +120,7 @@ export async function scanLocalJars(root: string, maxDepth = 6): Promise<string[
   const out: string[] = [];
   async function walk(dir: string, depth: number): Promise<void> {
     if (depth > maxDepth) return;
-    let entries: Awaited<ReturnType<typeof readdir>>;
+    let entries: Dirent<string>[];
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {
@@ -189,5 +190,5 @@ export function parseJvmCodeqlCommand(cmd: string): { sourceRoot?: string } | un
   const lang = cmd.match(/--language[=\s]+(\w+)/);
   if (!lang || (lang[1] !== 'java' && lang[1] !== 'kotlin')) return undefined;
   const sr = cmd.match(/--source-root[=\s]+(\S+)/);
-  return sr ? { sourceRoot: sr[1] } : {};
+  return sr ? { sourceRoot: sr[1] as string } : {};
 }

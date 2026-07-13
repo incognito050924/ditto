@@ -39,7 +39,15 @@ function graph(overrides: Partial<Autopilot> = {}): Autopilot {
       evidence_refs: [],
     },
     nodes: buildInitialNodes(['ac-1']),
-    caps: { fix_per_node: 2, switch_per_node: 1 },
+    caps: {
+      fix_per_node: 2,
+      switch_per_node: 1,
+      converge_rounds: 3,
+      oracle_failures_to_block: 3,
+      loop_rounds: 12,
+      no_progress_rounds: 3,
+      progress_continuation_cap: 24,
+    },
     continue_policy: {
       continue_after_approval: true,
       continue_after_checkpoint: true,
@@ -296,6 +304,7 @@ describe('nextNode terminal surfacing (작은 고정: §6.8 done disposition + A
       depends_on: [] as string[],
       acceptance_refs: ['ac-1'],
       evidence_refs: [],
+      ac_verdicts: [],
       attempts: { fix: 0, switch: 0 },
     };
     await seed(graph({ nodes: [blockedReview] }));
@@ -401,6 +410,7 @@ describe('nextNode terminal surfacing (작은 고정: §6.8 done disposition + A
       depends_on: [] as string[],
       acceptance_refs: ['ac-1'],
       evidence_refs: [],
+      ac_verdicts: [],
       attempts: { fix: 0, switch: 0 },
     };
     await seed(graph({ nodes: [reviewNode] }));
@@ -668,6 +678,7 @@ describe('recordResult partial-progress continuation (wi_260710vzu: incremental 
       depends_on: [] as string[],
       acceptance_refs: [...AC_IDS],
       evidence_refs: [],
+      ac_verdicts: [],
       attempts: { fix: 0, switch: 0 },
     };
   }
@@ -921,6 +932,7 @@ describe('changed_files baseline exclusion (wi_260710s4j)', () => {
         depends_on: [] as string[],
         acceptance_refs: ['ac-1'],
         evidence_refs: [],
+        ac_verdicts: [],
         attempts: { fix: 0, switch: 0 },
       };
       await seed(graph({ nodes: [reviewNode] }));
@@ -1184,6 +1196,7 @@ describe('recordResult node promotion (A-3: planner 콘텐츠 승격 — addNode
           depends_on: [],
           acceptance_refs: ['ac-1'],
           evidence_refs: [],
+          ac_verdicts: [],
           attempts: { fix: 0, switch: 0 },
         },
       ],
@@ -1312,6 +1325,7 @@ describe('recordResult plan-stage coverage wiring (premortem-coverage §7.2/§12
           depends_on: [],
           acceptance_refs: ['ac-1'],
           evidence_refs: [],
+          ac_verdicts: [],
           attempts: { fix: 0, switch: 0 },
         },
       ],
@@ -1609,6 +1623,7 @@ describe('recordResult design oracle assignment (ADR-0024 ac-2: per-AC verificat
           // both ACs are in play (the design node covers them)
           acceptance_refs: ['ac-1', 'ac-2'],
           evidence_refs: [],
+          ac_verdicts: [],
           attempts: { fix: 0, switch: 0 },
         },
       ],
@@ -1944,10 +1959,19 @@ describe('recordResult forward re-expansion (A-2: review findings → fix+review
           depends_on: [],
           acceptance_refs: ['ac-1'],
           evidence_refs: [],
+          ac_verdicts: [],
           attempts: { fix: 0, switch: 0 },
         },
       ],
-      caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: converge },
+      caps: {
+        fix_per_node: 2,
+        switch_per_node: 1,
+        converge_rounds: converge,
+        oracle_failures_to_block: 3,
+        loop_rounds: 12,
+        no_progress_rounds: 3,
+        progress_continuation_cap: 24,
+      },
     });
 
   const findingsResult =
@@ -2040,6 +2064,7 @@ describe('recordResult forward re-expansion (A-2: review findings → fix+review
             depends_on: [],
             acceptance_refs: ['ac-1'],
             evidence_refs: [],
+            ac_verdicts: [],
             attempts: { fix: 0, switch: 0 },
           },
         ],
@@ -2072,10 +2097,19 @@ describe('recordResult forward re-expansion (A-2: review findings → fix+review
           depends_on: [],
           acceptance_refs: ['ac-1'],
           evidence_refs: [],
+          ac_verdicts: [],
           attempts: { fix: 0, switch: 0 },
         },
       ],
-      caps: { fix_per_node: 2, switch_per_node: 1, converge_rounds: converge },
+      caps: {
+        fix_per_node: 2,
+        switch_per_node: 1,
+        converge_rounds: converge,
+        oracle_failures_to_block: 3,
+        loop_rounds: 12,
+        no_progress_rounds: 3,
+        progress_continuation_cap: 24,
+      },
     });
 
   test('security with findings splices a fix + security re-check (same lane, not generic review)', async () => {
@@ -2156,6 +2190,7 @@ describe('nextNode parallel wave (ac-3: spawn the whole file-overlap-admitted wa
     depends_on,
     acceptance_refs: ['ac-1'],
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
   });
 
@@ -2221,6 +2256,7 @@ describe('nextNode parallel wave (ac-3: spawn the whole file-overlap-admitted wa
             depends_on: [],
             acceptance_refs: [],
             evidence_refs: [],
+            ac_verdicts: [],
             attempts: { fix: 0, switch: 0 },
           },
           node('R2', 'research', 'researcher'),
@@ -2306,6 +2342,7 @@ describe('nextNode per-node file_scope + cross-call overlap (B2 ac-2/ac-3)', () 
     depends_on: [] as string[],
     acceptance_refs: ['ac-1'],
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
     ...(file_scope !== undefined ? { file_scope } : {}),
   });
@@ -2449,6 +2486,7 @@ describe('nextNode main-session (e2e-author) node — wi_260610p9h g5', () => {
     depends_on: [] as string[],
     acceptance_refs: [] as string[],
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
   });
   const research = (id: string) => ({
@@ -2460,6 +2498,7 @@ describe('nextNode main-session (e2e-author) node — wi_260610p9h g5', () => {
     depends_on: [] as string[],
     acceptance_refs: ['ac-1'],
     evidence_refs: [],
+    ac_verdicts: [],
     attempts: { fix: 0, switch: 0 },
   });
 
@@ -2527,6 +2566,7 @@ describe('recordResult ac-closing evidence guard (n2: pass with pass-verdict but
           depends_on: [],
           acceptance_refs: ['ac-1'],
           evidence_refs: [],
+          ac_verdicts: [],
           attempts: { fix: 0, switch: 0 },
         },
       ],

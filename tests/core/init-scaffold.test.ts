@@ -52,7 +52,7 @@ describe('initScaffold', () => {
       expect(parsed.entries).toEqual([]);
       expect(parsed.updated_at).toBe(NOW.toISOString());
       // project_name derives from the target dir basename.
-      expect(parsed.project_name).toBe(join(repo).split('/').pop());
+      expect(parsed.project_name).toBe(join(repo).split('/').pop() as string);
 
       expect(await fileExists(join(repo, '.ditto', 'knowledge', 'CONTEXT.md'))).toBe(true);
       const gitignore = await readFile(join(repo, '.ditto', '.gitignore'), 'utf8');

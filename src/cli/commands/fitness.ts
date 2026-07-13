@@ -65,7 +65,7 @@ export const fitnessCommand = defineCommand({
       run: async ({ args }) => {
         let format: ReturnType<typeof parseOutputFormat>;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -88,7 +88,7 @@ export const fitnessCommand = defineCommand({
               return;
             }
           } else {
-            const stored = await new FitnessFunctionStore(repoRoot).read(args['work-item']);
+            const stored = await new FitnessFunctionStore(repoRoot).read(String(args['work-item']));
             if (stored === null) {
               writeError(
                 `fitness run: no --from and no stored fitness-functions.json for ${args['work-item']} (run \`ditto change-contract\` first, or pass --from)`,
@@ -100,10 +100,14 @@ export const fitnessCommand = defineCommand({
           }
           const ctx: FitnessContext = {
             trigger: args.trigger === 'periodic' ? 'periodic' : 'per_change',
-            period: args.period as FitnessContext['period'],
-            changeRef: args['work-item'],
-            risk: args.risk as FitnessContext['risk'],
-            riskKnown: args['risk-known'],
+            ...(args.period !== undefined
+              ? { period: args.period as NonNullable<FitnessContext['period']> }
+              : {}),
+            changeRef: String(args['work-item']),
+            ...(args.risk !== undefined
+              ? { risk: args.risk as NonNullable<FitnessContext['risk']> }
+              : {}),
+            riskKnown: args['risk-known'] === true,
             producedAt: new Date().toISOString(),
           };
           const verdictsPath = typeof args.verdicts === 'string' ? args.verdicts : undefined;
@@ -118,10 +122,10 @@ export const fitnessCommand = defineCommand({
           const path = localDir(
             repoRoot,
             'work-items',
-            args['work-item'],
+            String(args['work-item']),
             'assurance-snapshot.json',
           );
-          await ensureDir(localDir(repoRoot, 'work-items', args['work-item']));
+          await ensureDir(localDir(repoRoot, 'work-items', String(args['work-item'])));
           await writeJsonFile(path, acgAssuranceSnapshot, snapshot);
 
           const failed = snapshot.results.filter((r) => r.outcome === 'fail').length;
@@ -167,7 +171,7 @@ export const fitnessCommand = defineCommand({
       run: async ({ args }) => {
         let format: ReturnType<typeof parseOutputFormat>;
         try {
-          format = parseOutputFormat(args.output);
+          format = parseOutputFormat(String(args.output));
         } catch (err) {
           writeError(err instanceof Error ? err.message : String(err));
           process.exit(USAGE_ERROR_EXIT);
@@ -176,7 +180,7 @@ export const fitnessCommand = defineCommand({
         try {
           const repoRoot = await resolveRepoRootForCreate();
           const report = computeDrift(await loadAssuranceSnapshots(repoRoot));
-          const minNew = Number.parseInt(args['min-new-violations'] ?? '0', 10);
+          const minNew = Number.parseInt(String(args['min-new-violations'] ?? '0'), 10);
           const assessment = args.gate
             ? assessDrift(report, Number.isNaN(minNew) ? 0 : minNew)
             : null;

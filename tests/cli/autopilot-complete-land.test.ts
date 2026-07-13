@@ -161,14 +161,14 @@ describe('ditto autopilot complete — verified→landed flip-after-land (ac-1/a
     const land = out.land as { status: string; commits: { repo: string; sha: string }[] };
     expect(land.status).toBe('committed');
     expect(land.commits.length).toBe(1);
-    expect(land.commits[0].repo).toBe('.');
+    expect((land.commits[0] as (typeof land.commits)[number]).repo).toBe('.');
     // the flip happened AFTER a successful land
     expect((out.auto_close as { outcome: string; status: string }).outcome).toBe('flipped');
     expect((out.auto_close as { status: string }).status).toBe('done');
     expect((await readWorkItem()).status).toBe('done');
     // a real, git-revertable commit landed (HEAD advanced to the reported sha)
     expect(head()).not.toBe(before);
-    expect(head()).toBe(land.commits[0].sha);
+    expect(head()).toBe((land.commits[0] as (typeof land.commits)[number]).sha);
     // ...and src.ts is now tracked (committed), not dangling in the working tree
     expect(git(['ls-files']).split('\n')).toContain('src.ts');
   });
