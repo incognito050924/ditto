@@ -7,7 +7,7 @@ import { type RiskAxes, deterministicFloor, safeDefaultable } from './gates';
 import { needsBriefing } from './question-context';
 
 /**
- * Deterministic coverage Manager (premortem-coverage-contract §4.1·§4.5·§5).
+ * Deterministic coverage Manager.
  *
  * The Manager is CODE, not an LLM — isomorphic to the autopilot driver's
  * structural selection (`autopilot-graph.ts`). It owns the coverage tree and

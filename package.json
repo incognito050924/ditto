@@ -27,6 +27,7 @@
     "check:test-isolation": "bun run scripts/check-test-isolation.ts",
     "check:npx-dist": "bun run scripts/check-npx-distribution.ts",
     "check:committed-base": "bun run scripts/check-committed-base-run-artifact.ts",
+    "check:no-design-doc-refs": "bun run scripts/check-no-design-doc-refs.ts",
     "schemas:export": "bun run scripts/export-schemas.ts",
     "surfaces:gen": "bun run scripts/gen-surfaces.ts"
   },

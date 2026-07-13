@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { isoDateTime, schemaVersion, workItemId } from './common';
 
-// Pre-mortem coverage engine — dynamic-growth scope tree (premortem-coverage-contract §3.1·§3.2).
+// Pre-mortem coverage engine — dynamic-growth scope tree.
 // The tree grows append-only as interrogation proceeds; origin records how each node entered
 // (seed = initial decomposition, derived = from an answer, discovered = completeness-critic).
 

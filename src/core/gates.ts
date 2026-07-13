@@ -1064,7 +1064,7 @@ export function directionForkGate(
 
 /**
  * Drift ENFORCEMENT against the frozen temporal baseline the pre-mortem coverage
- * engine produces (premortem-coverage-contract §2 시간정합, contract §2 l.62). The
+ * engine produces (axis-2 시간정합). The
  * engine only PRODUCES the baseline (`approval_gate.change_surface` set by
  * `producePlanGate`) and DETECTS divergence; the reviewer/verifier stage is where
  * that baseline is consumed to flag an unconsented interface/scope change. This

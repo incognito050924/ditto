@@ -23,3 +23,5 @@ jobs:
         run: bun run typecheck
       - name: ADR guard (grep-able ADR enforcement)
         run: bun run adr:guard
+      - name: No design-doc refs (charter §4-11 — code must not cite drift-prone design/contract docs)
+        run: bun run check:no-design-doc-refs

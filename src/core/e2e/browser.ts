@@ -21,7 +21,7 @@ function runnerScriptPath(): string {
 }
 
 /**
- * E2E browser thin layer (e2e-journey-contract §3/§4). The M5 runtime
+ * E2E browser thin layer. The M5 runtime
  * that the `playwright-e2e` agent / `/ditto:e2e` skill use to drive ONE direct-URL
  * journey with Playwright/Chromium and capture artifacts under `.ditto/local/runs/<id>/`.
  *
