@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_2ca7b5c84ab04bc4",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] opponent delegate가 host 세션 인증을 전제하나 이 변경은 인증 로직을 도입/변경하지 않음\n[residual] 게이트 우회(false-green finalize)는 cross-feature/failure-recovery에서 sweep됨, authz 상승 아님\n[residual] 제품 authz 모델은 다른 곳에서 도입돼야 관련됨\n[residual] 동일 work item에 대한 동시 deep-interview 세션 interleave는 이 변경 이전부터 존재하는 조건이지 새로 생기지 않음\n[residual] 없음 — volume 악용은 노출된 공유 표면을 요구하나 이 변경은 그것을 만들지 않음\n[residual] 사용자 free-text가 opponent brief에 들어가 LLM verdict를 self-steer할 수 있으나 제3자 injection 벡터 아님; returned verdict 검증은 input-validation에서\n[residual] 변경 자체에서 발생하는 규제 노출 없음; 사용자 입력 규제 콘텐츠는 이 변경이 도입/규율하는 속성 아님\n[residual] 스키마 필드만 있고 consumer 로직 없는 half-shipped 상태 가능하나 둘이 같은 additive 변경으로 함께 배포되고 필드는 안전 default\n[residual] dissent record가 나중에 ordering용 timestamp를 갖게 되면 clock skew 오정렬 가능하나 이 변경은 time 기반 비교를 추가하지 않음\n[close_reason] touched files에 credential/session/login 경로 없음; opponent는 host-provided delegate 콜백\n[close_reason] 접근제어/권한 체크 미접촉; finalize dissent 게이트는 워크플로 정합성 제어이지 권한 경계 아님\n[close_reason] 단일사용자 로컬 인터뷰 루프, multi-actor authz 모델 없음\n[close_reason] projection 루프와 opponent 호출은 단일 인터랙티브 세션 내 순차 await; coverage-round는 append-only single-writer(ADR-20260628); 새 병렬성/공유가변 레이스 없음\n[close_reason] 외부 노출/멀티테넌트 표면 없음; flood/replay/scrape할 네트워크 endpoint 없는 로컬 CLI\n[close_reason] 인터프리터로 가는 신뢰불가 입력 없음; delegate는 구조화 OpponentBrief 객체를 받지 조립된 명령 문자열 아님; 입력원은 사용자 자신\n[close_reason] 규제 데이터 클래스/컴플라이언스 표면 미접촉; 로컬 파일 위 내부 dev-tooling 오케스트레이션\n[close_reason] staged-rollout/feature-flag/migration 미접촉; additive 변경(신규 모듈+optional-default 필드+CLI 배선)이 표준 plugin build(ADR-0022)로 배포\n[close_reason] clock 의존 로직(TTL/expiry/timeout ordering/timezone) 미도입; freshness 게이트는 digest 기반이지 clock 기반 아님; timestamp는 메타데이터만",
+  "created_at": "2026-07-09T04:17:18.579Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

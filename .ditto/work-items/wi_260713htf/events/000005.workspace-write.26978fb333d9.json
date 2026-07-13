@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713htf",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "26978fb333d9d74d1b81042c8a2f86f61c1a9861f34d86ab161346d45deed8a2",
+  "ts": "2026-07-13T02:27:20.436Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/release.test.ts -t subcommand registered",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

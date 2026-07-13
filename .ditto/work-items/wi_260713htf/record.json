@@ -1,0 +1,79 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260713htf",
+  "title": "ditto release 서브커맨드 (dogfood 전용 배포 오케스트레이션)",
+  "source_request": "dogfooding에서만 사용가능하도록 배포를 스킬이나 cli로 만들어줘. 매번 설명하는것도 힘들고, 제대로 된건지 확인도 어려우니까. → CLI 서브커맨드 ditto release로 결정(스킬은 배포 플러그인에서 제외 불가). 기본 push, --no-push/--dry-run escape.",
+  "goal": "dogfood 저장소에서만 동작하는 단일 명령 ditto release로 배포(bump·build·commit·tag·push·검증)를 재현 가능하게 실행한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "release 게이트 순수함수가 소스저장소 아님(isSourceRepo=false) 입력에서 거부 사유 문자열을 반환한다 (거부 개수 == 1)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/release.test.ts -t refuses outside",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "release 게이트 순수함수가 dirty 트리(dirty=true, dryRun=false) 입력에서 거부 사유를 반환하고 dryRun=true에서는 dirty여도 거부 개수 == 0",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/release.test.ts -t dirty",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "ditto release가 소스저장소 밖(cwd=비-ditto temp)에서 실행 시 exit code != 0",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/release.test.ts -t mutates nothing",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "ditto release <bump> --dry-run 실행 후 package.json version 문자열 변경 개수 == 0 이고 exit code == 0",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/release.test.ts -t leaves package.json version unchanged",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "ditto release --help exit code == 0 (서브커맨드 등록됨)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/release.test.ts -t subcommand registered",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-13T02:24:17.066Z",
+  "updated_at": "2026-07-13T02:29:16.430Z",
+  "closed_at": "2026-07-13T02:29:16.430Z"
+}

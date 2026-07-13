@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713hjz",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "a646a814239ace8948e19851b5c4d60beccc176004ceaa3e1178e6ab3268e260",
+  "ts": "2026-07-13T02:07:25.595Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/doctor/capability.test.ts -t target has no hooks",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713htf",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "f984066edead58301a49e227aa950a71e4a6ba6af131b3edbec84249686926a5",
+  "ts": "2026-07-13T02:27:19.368Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/release.test.ts -t refuses outside",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
