@@ -59,6 +59,7 @@ async function codexPluginNeedsUserAction(repoRoot: string): Promise<string[] | 
 export async function collectCapabilityInventory(
   adapters: HostAdapter[],
   repoRoot: string,
+  pluginRoot?: string,
 ): Promise<{
   hosts: HostCapabilityReport[];
   finding_count: number;
@@ -85,7 +86,7 @@ export async function collectCapabilityInventory(
     // hook drift: declared hooks vs. hook events actually registered. Reuse the
     // surface inventory (single source of truth: hooks.json via scanPluginRoot);
     // do not re-read hooks.json directly.
-    const inventory = await adapter.loadSurfaceInventory(repoRoot);
+    const inventory = await adapter.loadSurfaceInventory(repoRoot, pluginRoot);
     const registered = inventory.localSurfaces
       .filter((entry) => entry.kind === 'hook')
       .map((entry) => entry.id);

@@ -37,6 +37,7 @@ import { checkInstructionsForHosts } from '~/core/instruction-bridge';
 import { collectIntentQualityReport, defaultIntentQualityDeps } from '~/core/intent-quality-doctor';
 import { collectMcpInventory } from '~/core/mcp-inventory';
 import { collectPermissionFindings } from '~/core/permission-inventory';
+import { defaultPluginRootDeps, locatedStatus, resolvePluginRoot } from '~/core/plugin-root';
 import {
   type MetricTrend,
   RetroMetricLedger,
@@ -323,10 +324,27 @@ const capabilityCommand = defineCommand({
     try {
       const { format, adapters } = parseCommon(args);
       const repoRoot = await resolveRepoRootForCreate();
-      const report = await collectCapabilityInventory(adapters, repoRoot);
+      // claude-code hook parity is checked against the plugin's own hooks.json,
+      // which lives at the plugin root — not the session target. Discover it so a
+      // consumer install (target ships no hooks.json) is not falsely flagged.
+      const resolution = resolvePluginRoot(defaultPluginRootDeps());
+      const located = resolution !== null;
+      const report = await collectCapabilityInventory(adapters, repoRoot, resolution?.root);
+      // When the plugin root was not located, claude-code hook parity ran against a
+      // fallback root that ships no plugin surface — those declared-not-registered
+      // findings are unverifiable, not confirmed drift. Segregate them so a healthy-
+      // but-unlocatable install exits 0 (unverified), not 1 (drift).
+      const unverifiable = (finding: (typeof report.findings)[number]): boolean =>
+        !located &&
+        finding.host === 'claude-code' &&
+        finding.kind === 'declared_hook_not_registered';
+      const driftFindings = report.findings.filter((f) => !unverifiable(f));
+      const suppressed = report.findings.length - driftFindings.length;
+      const status: 'ok' | 'drift' | 'unverified' =
+        driftFindings.length > 0 ? 'drift' : suppressed > 0 ? 'unverified' : 'ok';
       if (format === 'json') {
         writeJson({
-          status: report.finding_count === 0 ? 'ok' : 'drift',
+          status,
           hosts: report.hosts.map((host) => ({
             host: host.host,
             capabilities: host.capabilities,
@@ -334,14 +352,18 @@ const capabilityCommand = defineCommand({
           })),
           findings: report.findings,
         });
-      } else if (report.finding_count === 0) {
+      } else if (status === 'ok') {
         writeHuman(`capability: ok (${report.hosts.length} hosts)`);
+      } else if (status === 'unverified') {
+        writeHuman(
+          'capability: unverified — could not locate the ditto plugin root; claude-code hook parity not checked (set CLAUDE_PLUGIN_ROOT or run from the plugin cache)',
+        );
       } else {
-        for (const finding of report.findings) {
+        for (const finding of driftFindings) {
           writeHuman(`${finding.host}\t${finding.kind}\t${finding.capability}\t${finding.message}`);
         }
       }
-      exitForFindings(report.finding_count, args.advisory);
+      exitForFindings(driftFindings.length, args.advisory);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(exitCodeForError(err));
@@ -436,9 +458,12 @@ const distributionCommand = defineCommand({
       const format = parseOutputFormat(args.output);
       const targetRoot = await resolveRepoRootForCreate();
       // Under session-rooting (ADR-0011 D2) the session is rooted at the target;
-      // the plugin lives at ${CLAUDE_PLUGIN_ROOT}. Fall back to targetRoot when the
-      // env is unset (self-host / co-located layout), preserving prior behavior.
-      const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? targetRoot;
+      // the plugin's own surface lives elsewhere. Discover it (env → self-locate →
+      // registry); fall back to targetRoot when unlocatable, but remember that so a
+      // "missing surface" finding degrades to `unverified`, not a false DRIFT.
+      const resolution = resolvePluginRoot(defaultPluginRootDeps());
+      const located = resolution !== null;
+      const pluginRoot = resolution?.root ?? targetRoot;
       if (args.fix === true) {
         // Reuse the SAME detection (allowlisted check) — repair only the allowlist.
         const checks = collectDistributionChecks(defaultDistributionDeps(targetRoot, pluginRoot));
@@ -446,16 +471,22 @@ const distributionCommand = defineCommand({
         return; // --fix never raises a drift exit
       }
       const report = collectDistributionReport(defaultDistributionDeps(targetRoot, pluginRoot));
+      const status = locatedStatus(report.finding_count, located);
       if (format === 'json') {
         writeJson({
-          status: report.finding_count === 0 ? 'ok' : 'drift',
+          status,
           plugin_root: pluginRoot,
+          plugin_root_source: resolution?.source ?? null,
           target_root: targetRoot,
           checks: report.checks,
           axes: report.axes,
         });
       } else if (report.finding_count === 0) {
         writeHuman('distribution: ok — all substrate-axis deployment contracts satisfied');
+      } else if (status === 'unverified') {
+        writeHuman(
+          'distribution: unverified — could not locate the ditto plugin root; run inside the plugin (CLAUDE_PLUGIN_ROOT set) or from the plugin cache',
+        );
       } else {
         for (const axis of report.axes) {
           const mark = axis.satisfied ? 'ok' : 'DRIFT';
@@ -464,7 +495,8 @@ const distributionCommand = defineCommand({
           );
         }
       }
-      exitForFindings(report.finding_count, args.advisory);
+      // Only a located plugin root yields confirmed drift; unverified exits 0.
+      exitForFindings(located ? report.finding_count : 0, args.advisory);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(exitCodeForError(err));

@@ -182,7 +182,9 @@ export const codexHostAdapter: HostAdapter = {
     return { host: 'codex', servers, unavailable };
   },
 
-  async loadSurfaceInventory(repoRoot): Promise<SurfaceInventory> {
+  async loadSurfaceInventory(repoRoot, _pluginRoot): Promise<SurfaceInventory> {
+    // `_pluginRoot` is ignored: Codex discovers its own plugin roots below
+    // (repo + personal `~/.agents/plugins`), so it never needs the caller's hint.
     // Official Codex plugin discovery is `$REPO/.agents/plugins/marketplace.json`
     // (+ personal `~/.agents/plugins/marketplace.json` + legacy
     // `$REPO/.claude-plugin/marketplace.json`), NOT a `.codex/plugins` directory.

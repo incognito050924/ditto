@@ -136,7 +136,13 @@ export interface HostAdapter {
   loadInstructions(repoRoot: string): Promise<InstructionSurface>;
   loadPermissions(repoRoot: string): Promise<PermissionInventory[]>;
   loadMcpServers(repoRoot: string): Promise<McpInventory>;
-  loadSurfaceInventory(repoRoot: string): Promise<SurfaceInventory>;
+  /**
+   * `pluginRoot` (when given) is where the plugin's own shipped surface lives —
+   * distinct from `repoRoot` (the session target) under a consumer install. Hosts
+   * that discover their plugin roots independently (codex) may ignore it; defaults
+   * to `repoRoot` so co-located (dogfood) layouts are unchanged.
+   */
+  loadSurfaceInventory(repoRoot: string, pluginRoot?: string): Promise<SurfaceInventory>;
   spawnRun?(input: HostRunInput): Promise<HostRunProcess>;
 }
 

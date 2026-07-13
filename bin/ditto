@@ -5,43 +5,25 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-function __accessProp(key) {
-  return this[key];
-}
-var __toESMCache_node;
-var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
-  var canCache = mod != null && typeof mod === "object";
-  if (canCache) {
-    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
-    var cached = cache.get(mod);
-    if (cached)
-      return cached;
-  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: __accessProp.bind(mod, key),
+        get: () => mod[key],
         enumerable: true
       });
-  if (canCache)
-    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
-var __returnValue = (v) => v;
-function __exportSetter(name, newValue) {
-  this[name] = __returnValue.bind(null, newValue);
-}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: __exportSetter.bind(all, name)
+      set: (newValue) => all[name] = () => newValue
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -17415,7 +17397,8 @@ var claudeCodeHostAdapter = {
     } catch {}
     return { host: "claude-code", servers, unavailable };
   },
-  async loadSurfaceInventory(repoRoot) {
+  async loadSurfaceInventory(repoRoot, pluginRoot) {
+    const shippedRoot = pluginRoot ?? repoRoot;
     const homeSurfaces = (await listDirectories(join3(homedir(), ".claude", "skills"))).map((entry) => ({
       host: "claude-code",
       kind: "skill",
@@ -17441,7 +17424,7 @@ var claudeCodeHostAdapter = {
         id: entry.id.replace(/\.md$/, ""),
         path: entry.path
       })),
-      ...await scanPluginRoot(repoRoot)
+      ...await scanPluginRoot(shippedRoot)
     ];
     return { host: "claude-code", localSurfaces, homeSurfaces, unavailable: [] };
   },
@@ -17613,7 +17596,7 @@ var codexHostAdapter = {
     }
     return { host: "codex", servers, unavailable };
   },
-  async loadSurfaceInventory(repoRoot) {
+  async loadSurfaceInventory(repoRoot, _pluginRoot) {
     const localSurfaces = [];
     for (const root of await codexPluginRoots(repoRoot)) {
       localSurfaces.push(...await scanCodexPluginRoot(root));
@@ -40327,8 +40310,8 @@ var deepInterviewCommand = defineCommand({
 });
 
 // src/cli/commands/doctor.ts
-import { homedir as homedir8 } from "os";
-import { join as join64 } from "path";
+import { homedir as homedir9 } from "os";
+import { join as join65 } from "path";
 
 // src/core/capability-inventory.ts
 init_shared();
@@ -40341,7 +40324,7 @@ async function codexPluginNeedsUserAction(repoRoot) {
   const commands = Array.isArray(raw.commands) ? raw.commands.filter((command) => typeof command === "string") : [];
   return commands;
 }
-async function collectCapabilityInventory(adapters, repoRoot) {
+async function collectCapabilityInventory(adapters, repoRoot, pluginRoot) {
   const hosts = [];
   const findings = [];
   for (const adapter of adapters) {
@@ -40356,7 +40339,7 @@ async function collectCapabilityInventory(adapters, repoRoot) {
         });
       }
     }
-    const inventory = await adapter.loadSurfaceInventory(repoRoot);
+    const inventory = await adapter.loadSurfaceInventory(repoRoot, pluginRoot);
     const registered = inventory.localSurfaces.filter((entry) => entry.kind === "hook").map((entry) => entry.id);
     const declared = caps.hooks;
     const registeredSet = new Set(registered);
@@ -41170,6 +41153,80 @@ function findingsFromPermissionInventory(inv) {
 async function collectPermissionFindings(adapters, repoRoot) {
   const inventoryArrays = await Promise.all(adapters.map((adapter) => adapter.loadPermissions(repoRoot)));
   return inventoryArrays.flat().flatMap(findingsFromPermissionInventory);
+}
+
+// src/core/plugin-root.ts
+import { existsSync as existsSync9, readFileSync as readFileSync5 } from "fs";
+import { homedir as homedir8 } from "os";
+import { dirname as dirname12, join as join64 } from "path";
+import { fileURLToPath as fileURLToPath2 } from "url";
+var PLUGIN_MANIFEST = [".claude-plugin", "plugin.json"];
+function isPluginRoot(dir, exists) {
+  return exists(join64(dir, ...PLUGIN_MANIFEST));
+}
+function selfLocate(start, exists) {
+  let dir = start;
+  for (;; ) {
+    if (isPluginRoot(dir, exists))
+      return dir;
+    const parent = dirname12(dir);
+    if (parent === dir)
+      return null;
+    dir = parent;
+  }
+}
+function fromRegistry(raw, exists) {
+  if (!raw || typeof raw !== "object")
+    return null;
+  const plugins = raw.plugins;
+  if (!plugins || typeof plugins !== "object")
+    return null;
+  for (const [key, entries] of Object.entries(plugins)) {
+    if (!key.startsWith("ditto@"))
+      continue;
+    if (!Array.isArray(entries))
+      continue;
+    for (const entry of entries) {
+      const installPath = entry?.installPath;
+      if (typeof installPath === "string" && isPluginRoot(installPath, exists)) {
+        return installPath;
+      }
+    }
+  }
+  return null;
+}
+function resolvePluginRoot(deps) {
+  const env2 = deps.getEnv("CLAUDE_PLUGIN_ROOT");
+  if (env2 && env2.length > 0)
+    return { root: env2, source: "env" };
+  const located = selfLocate(deps.startDir, deps.exists);
+  if (located)
+    return { root: located, source: "self-locate" };
+  const registered = fromRegistry(deps.readInstalledPlugins(), deps.exists);
+  if (registered)
+    return { root: registered, source: "registry" };
+  return null;
+}
+function locatedStatus(findingCount, located) {
+  if (findingCount === 0)
+    return "ok";
+  return located ? "drift" : "unverified";
+}
+function defaultPluginRootDeps() {
+  return {
+    getEnv: (key) => process.env[key],
+    startDir: dirname12(fileURLToPath2(import.meta.url)),
+    exists: (p) => existsSync9(p),
+    readInstalledPlugins: () => {
+      try {
+        const path = join64(homedir8(), ".claude", "plugins", "installed_plugins.json");
+        const text = readFileSync5(path, "utf8").trim();
+        return text ? JSON.parse(text) : null;
+      } catch {
+        return null;
+      }
+    }
+  };
 }
 
 // src/core/surface-inventory.ts
@@ -42853,7 +42910,7 @@ function exitForFindings(count, advisory) {
     process.exit(DRIFT_EXIT2);
 }
 async function runFix(repoRoot, items) {
-  const deps = defaultDoctorFixDeps(repoRoot, homedir8());
+  const deps = defaultDoctorFixDeps(repoRoot, homedir9());
   const io = createStdioPromptIO();
   try {
     const result2 = await applyDoctorFixes({
@@ -42879,7 +42936,7 @@ function planAllowlistFixes(allowlisted2, repoRoot) {
     {
       kind: "allowlist",
       reversible: true,
-      targetPath: join64(repoRoot, ".claude", "settings.json"),
+      targetPath: join65(repoRoot, ".claude", "settings.json"),
       describe: "add Bash(ditto:*) to project .claude/settings.json allow"
     }
   ];
@@ -42888,7 +42945,7 @@ function planVariantFixes(orphans, repoRoot) {
   return orphans.map((name) => ({
     kind: "register-variant",
     reversible: true,
-    targetPath: join64(repoRoot, ".claude", "agents", `${name}.md`),
+    targetPath: join65(repoRoot, ".claude", "agents", `${name}.md`),
     variantName: name,
     describe: `register orphan variant ${name} into .claude/agents`
   }));
@@ -42920,7 +42977,7 @@ var instructionsCommand = defineCommand({
       const repoRoot = await resolveRepoRootForCreate();
       const report = await checkInstructionsForHosts(hosts, repoRoot);
       if (args.fix === true) {
-        await runFix(repoRoot, planInstructionFixes(report.findings, homedir8()));
+        await runFix(repoRoot, planInstructionFixes(report.findings, homedir9()));
         return;
       }
       if (format === "json") {
@@ -43063,10 +43120,16 @@ var capabilityCommand = defineCommand({
     try {
       const { format, adapters } = parseCommon(args);
       const repoRoot = await resolveRepoRootForCreate();
-      const report = await collectCapabilityInventory(adapters, repoRoot);
+      const resolution = resolvePluginRoot(defaultPluginRootDeps());
+      const located = resolution !== null;
+      const report = await collectCapabilityInventory(adapters, repoRoot, resolution?.root);
+      const unverifiable = (finding2) => !located && finding2.host === "claude-code" && finding2.kind === "declared_hook_not_registered";
+      const driftFindings = report.findings.filter((f4) => !unverifiable(f4));
+      const suppressed = report.findings.length - driftFindings.length;
+      const status = driftFindings.length > 0 ? "drift" : suppressed > 0 ? "unverified" : "ok";
       if (format === "json") {
         writeJson2({
-          status: report.finding_count === 0 ? "ok" : "drift",
+          status,
           hosts: report.hosts.map((host) => ({
             host: host.host,
             capabilities: host.capabilities,
@@ -43074,14 +43137,16 @@ var capabilityCommand = defineCommand({
           })),
           findings: report.findings
         });
-      } else if (report.finding_count === 0) {
+      } else if (status === "ok") {
         writeHuman(`capability: ok (${report.hosts.length} hosts)`);
+      } else if (status === "unverified") {
+        writeHuman("capability: unverified \u2014 could not locate the ditto plugin root; claude-code hook parity not checked (set CLAUDE_PLUGIN_ROOT or run from the plugin cache)");
       } else {
-        for (const finding2 of report.findings) {
+        for (const finding2 of driftFindings) {
           writeHuman(`${finding2.host}	${finding2.kind}	${finding2.capability}	${finding2.message}`);
         }
       }
-      exitForFindings(report.finding_count, args.advisory);
+      exitForFindings(driftFindings.length, args.advisory);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(exitCodeForError(err));
@@ -43130,7 +43195,7 @@ var codeqlCommand2 = defineCommand({
         return;
       }
       const repoRoot = await resolveRepoRootForCreate();
-      const sourceRoot = args["source-root"] ?? join64(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join65(repoRoot, "src");
       const report = await inspectCodeqlTarget({ sourceRoot, buildVerified: args["build-verified"] }, defaultDoctorDeps);
       if (format === "json") {
         writeJson2({
@@ -43170,30 +43235,36 @@ var distributionCommand = defineCommand({
     try {
       const format = parseOutputFormat(args.output);
       const targetRoot = await resolveRepoRootForCreate();
-      const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? targetRoot;
+      const resolution = resolvePluginRoot(defaultPluginRootDeps());
+      const located = resolution !== null;
+      const pluginRoot = resolution?.root ?? targetRoot;
       if (args.fix === true) {
         const checks = collectDistributionChecks(defaultDistributionDeps(targetRoot, pluginRoot));
         await runFix(targetRoot, planAllowlistFixes(checks.allowlisted, targetRoot));
         return;
       }
       const report = collectDistributionReport(defaultDistributionDeps(targetRoot, pluginRoot));
+      const status = locatedStatus(report.finding_count, located);
       if (format === "json") {
         writeJson2({
-          status: report.finding_count === 0 ? "ok" : "drift",
+          status,
           plugin_root: pluginRoot,
+          plugin_root_source: resolution?.source ?? null,
           target_root: targetRoot,
           checks: report.checks,
           axes: report.axes
         });
       } else if (report.finding_count === 0) {
         writeHuman("distribution: ok \u2014 all substrate-axis deployment contracts satisfied");
+      } else if (status === "unverified") {
+        writeHuman("distribution: unverified \u2014 could not locate the ditto plugin root; run inside the plugin (CLAUDE_PLUGIN_ROOT set) or from the plugin cache");
       } else {
         for (const axis of report.axes) {
           const mark = axis.satisfied ? "ok" : "DRIFT";
           writeHuman(`${axis.axis}	${mark}	${axis.contract}${axis.missing.length > 0 ? ` (missing: ${axis.missing.join(", ")})` : ""}`);
         }
       }
-      exitForFindings(report.finding_count, args.advisory);
+      exitForFindings(located ? report.finding_count : 0, args.advisory);
     } catch (err) {
       writeError(err instanceof Error ? err.message : String(err));
       process.exit(exitCodeForError(err));
@@ -43503,7 +43574,7 @@ var doctorCommand = defineCommand({
 
 // src/cli/commands/e2e.ts
 import { mkdir as mkdir9, readFile as readFile16, readdir as readdir20 } from "fs/promises";
-import { basename as basename4, dirname as dirname14, isAbsolute as isAbsolute11, join as join68, relative as relative18, resolve as resolve15, sep as sep8 } from "path";
+import { basename as basename4, dirname as dirname15, isAbsolute as isAbsolute11, join as join69, relative as relative18, resolve as resolve15, sep as sep8 } from "path";
 init_zod();
 init_ditto_paths();
 
@@ -43852,7 +43923,7 @@ function checkStepConformance(input) {
 // src/core/e2e/failure-verdict.ts
 init_dist2();
 import { readFile as readFile14 } from "fs/promises";
-import { join as join65 } from "path";
+import { join as join66 } from "path";
 
 // src/schemas/e2e-failure-verdict.ts
 init_zod();
@@ -43871,7 +43942,7 @@ init_ditto_paths();
 init_fs();
 init_shared();
 function verdictsPath(repoRoot, workItemId2) {
-  return join65(localDir(repoRoot, "work-items", workItemId2), "e2e-verdicts.jsonl");
+  return join66(localDir(repoRoot, "work-items", workItemId2), "e2e-verdicts.jsonl");
 }
 async function appendFailureVerdict(repoRoot, workItemId2, verdict2) {
   const parsed = e2eFailureVerdict.parse(verdict2);
@@ -43938,12 +44009,12 @@ ${split.body}`);
 
 // src/core/e2e/generator.ts
 init_ditto_paths();
-import { join as join66 } from "path";
+import { join as join67 } from "path";
 
 // src/core/e2e/init-agents.ts
 init_zod();
 init_fs();
-import { dirname as dirname12 } from "path";
+import { dirname as dirname13 } from "path";
 var DITTO_AGENT_MARKER = "<!-- ditto:playwright-agent v1 -->";
 var PLAN_FORMAT_VERSION = "v1";
 var PLAYWRIGHT_MIN_VERSION = {
@@ -44053,7 +44124,7 @@ async function writeMergedMcpJson(mcpPath, freshServer = PLAYWRIGHT_TEST_MCP_SER
   const existing = exists ? await seam.readText(mcpPath) : null;
   const merged = mergeMcpServers(existing, freshServer);
   const backupPath = exists ? await seam.backupOnce(mcpPath) : null;
-  await seam.ensureDir(dirname12(mcpPath));
+  await seam.ensureDir(dirname13(mcpPath));
   await seam.writeText(mcpPath, `${JSON.stringify(merged, null, 2)}
 `);
   return { mcpPath, backupPath, servers: Object.keys(merged.mcpServers) };
@@ -44061,7 +44132,7 @@ async function writeMergedMcpJson(mcpPath, freshServer = PLAYWRIGHT_TEST_MCP_SER
 async function scaffoldIfAbsent(path, content, seam = nodeFsSeam) {
   if (await seam.exists(path))
     return "skipped-exists";
-  await seam.ensureDir(dirname12(path));
+  await seam.ensureDir(dirname13(path));
   await seam.writeText(path, content);
   return "created";
 }
@@ -44086,7 +44157,7 @@ function detectVersionSkew(record, expectedPlanFormat = PLAN_FORMAT_VERSION) {
 }
 async function writeE2eAgentsRecord(path, record, seam = nodeFsSeam) {
   const validated = e2eAgentsRecordSchema.parse(record);
-  await seam.ensureDir(dirname12(path));
+  await seam.ensureDir(dirname13(path));
   await seam.writeText(path, `${JSON.stringify(validated, null, 2)}
 `);
 }
@@ -44240,7 +44311,7 @@ async function safe(fn, onError) {
 async function probeGenerator(repoRoot, host, seams = {}) {
   const probeBrowser = seams.probeBrowser ?? probePlaywright;
   const readVersion = seams.readPlaywrightVersion ?? defaultReadPlaywrightVersion;
-  const readAgents = seams.readAgentsRecord ?? ((root) => readE2eAgentsRecord(join66(localDir(root), "e2e-agents.json")));
+  const readAgents = seams.readAgentsRecord ?? ((root) => readE2eAgentsRecord(join67(localDir(root), "e2e-agents.json")));
   const probeMcp = seams.probeMcp ?? (async () => true);
   const probe = await safe(() => probeBrowser(repoRoot), {
     available: false,
@@ -44328,7 +44399,7 @@ async function runGenerator(input, seams) {
 
 // src/core/e2e/lifecycle.ts
 import { readFile as readFile15, readdir as readdir19, unlink as unlink3 } from "fs/promises";
-import { basename as basename3, dirname as dirname13, isAbsolute as isAbsolute10, join as join67, relative as relative17, resolve as resolve14, sep as sep7 } from "path";
+import { basename as basename3, dirname as dirname14, isAbsolute as isAbsolute10, join as join68, relative as relative17, resolve as resolve14, sep as sep7 } from "path";
 
 // src/schemas/e2e-lifecycle.ts
 init_zod();
@@ -44348,7 +44419,7 @@ var e2eLifecycleDecision = exports_external.object({
 init_ditto_paths();
 init_fs();
 function lifecycleLedgerPath(repoRoot, workItemId2) {
-  return workItemId2 === undefined ? localDir(repoRoot, "e2e-lifecycle.jsonl") : join67(localDir(repoRoot, "work-items", workItemId2), "e2e-lifecycle.jsonl");
+  return workItemId2 === undefined ? localDir(repoRoot, "e2e-lifecycle.jsonl") : join68(localDir(repoRoot, "work-items", workItemId2), "e2e-lifecycle.jsonl");
 }
 async function appendDecision(path, decision) {
   const parsed = e2eLifecycleDecision.parse(decision);
@@ -44396,8 +44467,8 @@ async function runLifecycleAction(repoRoot, req) {
     return { ok: false, refusal: `journey DSL \uD30C\uC2F1 \uC2E4\uD328: ${parsed.error}` };
   }
   const slug = journeyName.slice(0, -".journey.md".length);
-  const generatedDir = resolve14(dirname13(journeyAbs), "..", "generated");
-  const specAbs = join67(generatedDir, `${slug}.spec.ts`);
+  const generatedDir = resolve14(dirname14(journeyAbs), "..", "generated");
+  const specAbs = join68(generatedDir, `${slug}.spec.ts`);
   const rel = (abs) => toPosix2(relative17(repoRoot, abs));
   const specText = await readOrNull(specAbs);
   if (specText === null) {
@@ -44412,8 +44483,8 @@ async function runLifecycleAction(repoRoot, req) {
       refusal: `${rel(specAbs)}\uB294 @ditto-generated \uB9C8\uCEE4\uAC00 \uC5C6\uB294 \uC218\uB3D9 \uD30C\uC77C \u2014 \uC218\uBA85\uC8FC\uAE30 \uC9D1\uD589\uC740 DSL \uD30C\uC0DD \uD14C\uC2A4\uD2B8\uC5D0\uB9CC \uC801\uC6A9\uB41C\uB2E4`
     };
   }
-  const supportDir = join67(generatedDir, "support");
-  const helperOf = (blockId) => join67(supportDir, `${blockId}.block.ts`);
+  const supportDir = join68(generatedDir, "support");
+  const helperOf = (blockId) => join68(supportDir, `${blockId}.block.ts`);
   for (const blockId of parsed.frontMatter.uses_blocks) {
     const helperText = await readOrNull(helperOf(blockId));
     if (helperText !== null && !isDittoGenerated(helperText)) {
@@ -44460,10 +44531,10 @@ async function runLifecycleAction(repoRoot, req) {
       refusal: `${rel(specAbs)} \uD5E4\uB354\uAC00 \uC774 journey\uB97C \uAC00\uB9AC\uD0A4\uC9C0 \uC54A\uB294\uB2E4 (@ditto-journey ${headerJourney ?? "\uC5C6\uC74C"} / @ditto-source ${headerSource ?? "\uC5C6\uC74C"} \u2260 ${journeyId} \xB7 ${rel(journeyAbs)}) \u2014 \uC0AD\uC81C \uAC70\uBD80`
     };
   }
-  const journeysDir = dirname13(journeyAbs);
+  const journeysDir = dirname14(journeyAbs);
   const referencedElsewhere = new Set;
   for (const name of (await readdir19(journeysDir)).filter((n3) => n3.endsWith(".journey.md"))) {
-    const otherAbs = join67(journeysDir, name);
+    const otherAbs = join68(journeysDir, name);
     if (otherAbs === journeyAbs)
       continue;
     const other = await readOrNull(otherAbs);
@@ -44845,7 +44916,7 @@ var e2eRun = defineCommand({
       const result2 = await runJourney(repoRoot, args.runId, parsed.data);
       const runDir2 = localDir(repoRoot, "runs", args.runId);
       await mkdir9(runDir2, { recursive: true });
-      await atomicWriteText(join68(runDir2, "journey.json"), `${JSON.stringify(result2.journey, null, 2)}
+      await atomicWriteText(join69(runDir2, "journey.json"), `${JSON.stringify(result2.journey, null, 2)}
 `);
       if (format === "json") {
         writeJson2(result2);
@@ -44925,8 +44996,8 @@ var e2eConformance = defineCommand({
     try {
       const journeyAbs = resolve15(args.journey);
       const generatedAbs = resolve15(args.generated);
-      const blocksDir = resolve15(args["blocks-dir"] ?? join68(dirname14(journeyAbs), "blocks"));
-      const supportDir = resolve15(args["support-dir"] ?? join68(dirname14(generatedAbs), "support"));
+      const blocksDir = resolve15(args["blocks-dir"] ?? join69(dirname15(journeyAbs), "blocks"));
+      const supportDir = resolve15(args["support-dir"] ?? join69(dirname15(generatedAbs), "support"));
       const journeyText = await readFile16(journeyAbs, "utf8");
       const generatedText = await readFile16(generatedAbs, "utf8");
       const blockTexts = {};
@@ -44934,7 +45005,7 @@ var e2eConformance = defineCommand({
         for (const name of await readdir20(blocksDir)) {
           if (!name.endsWith(".block.md"))
             continue;
-          blockTexts[name.slice(0, -".block.md".length)] = await readFile16(join68(blocksDir, name), "utf8");
+          blockTexts[name.slice(0, -".block.md".length)] = await readFile16(join69(blocksDir, name), "utf8");
         }
       } catch {}
       const supportTexts = [];
@@ -44942,7 +45013,7 @@ var e2eConformance = defineCommand({
         for (const name of await readdir20(supportDir)) {
           if (!name.endsWith(".ts"))
             continue;
-          supportTexts.push(await readFile16(join68(supportDir, name), "utf8"));
+          supportTexts.push(await readFile16(join69(supportDir, name), "utf8"));
         }
       } catch {}
       const report = checkStepConformance({ journeyText, blockTexts, generatedText, supportTexts });
@@ -44957,8 +45028,8 @@ var e2eConformance = defineCommand({
         for (const blockId of parsedJourney.frontMatter.uses_blocks) {
           if (blockTexts[blockId] === undefined)
             continue;
-          const helperAbs = join68(supportDir, `${blockId}.block.ts`);
-          const blockMdAbs = join68(blocksDir, `${blockId}.block.md`);
+          const helperAbs = join69(supportDir, `${blockId}.block.ts`);
+          const blockMdAbs = join69(blocksDir, `${blockId}.block.md`);
           const verdict2 = await detectStale(blockMdAbs, helperAbs, repoRel(blockMdAbs));
           if (verdict2.stale)
             stale.push(`support/${blockId}.block.ts: ${verdict2.reason}`);
@@ -45032,12 +45103,12 @@ var e2eVerifyGenerated = defineCommand({
 });
 async function loadJourneyNames(repoRoot) {
   const names = {};
-  const journeysDir = join68(repoRoot, "e2e", "journeys");
+  const journeysDir = join69(repoRoot, "e2e", "journeys");
   try {
     for (const name of await readdir20(journeysDir)) {
       if (!name.endsWith(".journey.md"))
         continue;
-      const parsed = parseJourneyDoc(await readFile16(join68(journeysDir, name), "utf8"));
+      const parsed = parseJourneyDoc(await readFile16(join69(journeysDir, name), "utf8"));
       if (parsed.ok)
         names[parsed.frontMatter.id] = parsed.frontMatter.name;
     }
@@ -45064,7 +45135,7 @@ var e2eFailureReport = defineCommand({
     }
     try {
       const repoRoot = await resolveRepoRootForCreate();
-      const reportPath = join68(localDir(repoRoot, "runs", args.runId), "playwright-report.json");
+      const reportPath = join69(localDir(repoRoot, "runs", args.runId), "playwright-report.json");
       const reportFile = Bun.file(reportPath);
       if (!await reportFile.exists()) {
         writeError(`no playwright-report.json for run ${args.runId} \u2014 run \`ditto e2e verify-generated --runId ${args.runId} --files <specs>\` first`);
@@ -45419,10 +45490,10 @@ function slugFromJourney(journeyPath) {
 }
 async function loadBlockBodies(journeyAbs, useBlocks) {
   const out = {};
-  const blocksDir = join68(dirname14(journeyAbs), "blocks");
+  const blocksDir = join69(dirname15(journeyAbs), "blocks");
   for (const id of useBlocks) {
     try {
-      const text = await readFile16(join68(blocksDir, `${id}.block.md`), "utf8");
+      const text = await readFile16(join69(blocksDir, `${id}.block.md`), "utf8");
       out[id] = { body: splitFrontMatter(text)?.body ?? text };
     } catch {}
   }
@@ -45634,7 +45705,7 @@ var e2eGenerate = defineCommand({
       const mapDocRel = `specs/${slug}.assertion-map.md`;
       await atomicWriteText(resolve15(repoRoot, mapDocRel), renderAssertionMapDoc(amap));
       if (args["work-item"] !== undefined) {
-        await atomicWriteText(join68(localDir(repoRoot, "work-items", wi), "e2e-assertion-map.json"), `${JSON.stringify(amap, null, 2)}
+        await atomicWriteText(join69(localDir(repoRoot, "work-items", wi), "e2e-assertion-map.json"), `${JSON.stringify(amap, null, 2)}
 `);
       }
       const gate2 = assertionMapGate(amap);
@@ -45728,7 +45799,7 @@ var e2eMapping = defineCommand({
       const docRel = `specs/${slug}.assertion-map.md`;
       await atomicWriteText(resolve15(repoRoot, docRel), renderAssertionMapDoc(amap));
       if (args["work-item"] !== undefined) {
-        await atomicWriteText(join68(localDir(repoRoot, "work-items", wi), "e2e-assertion-map.json"), `${JSON.stringify(amap, null, 2)}
+        await atomicWriteText(join69(localDir(repoRoot, "work-items", wi), "e2e-assertion-map.json"), `${JSON.stringify(amap, null, 2)}
 `);
       }
       const gate2 = assertionMapGate(amap);
@@ -45848,7 +45919,7 @@ var e2eInitAgents = defineCommand({
         mcpServers = merged.servers;
       }
       const record = buildE2eAgentsRecord({ playwrightVersion, loop });
-      await writeE2eAgentsRecord(join68(localDir(repoRoot), "e2e-agents.json"), record);
+      await writeE2eAgentsRecord(join69(localDir(repoRoot), "e2e-agents.json"), record);
       if (gate2.warn)
         writeError(gate2.warn);
       if (format === "json") {
@@ -46964,7 +47035,7 @@ init_common();
 init_ditto_paths();
 init_fs();
 import { readdir as readdir21, stat as stat10, unlink as unlink4 } from "fs/promises";
-import { join as join69 } from "path";
+import { join as join70 } from "path";
 var sessionPointer = exports_external.object({
   schema_version: exports_external.literal("0.1.0"),
   session_id: exports_external.string().min(1),
@@ -46986,7 +47057,7 @@ class SessionPointerStore {
     return localDir(this.repoRoot, "sessions");
   }
   path(sessionId) {
-    return join69(this.dir(), `${safeSessionId(sessionId)}.json`);
+    return join70(this.dir(), `${safeSessionId(sessionId)}.json`);
   }
   async get(sessionId) {
     try {
@@ -47021,7 +47092,7 @@ class SessionPointerStore {
     for (const name of names) {
       if (!name.endsWith(".json"))
         continue;
-      const path = join69(this.dir(), name);
+      const path = join70(this.dir(), name);
       let mtimeMs;
       try {
         mtimeMs = (await stat10(path)).mtimeMs;
@@ -47178,8 +47249,8 @@ var preCompactHandler = async (input) => {
 };
 
 // src/hooks/pre-tool-use.ts
-import { homedir as homedir9, tmpdir } from "os";
-import { join as join70 } from "path";
+import { homedir as homedir10, tmpdir } from "os";
+import { join as join71 } from "path";
 import { isAbsolute as isAbsolute14, relative as relative19, resolve as resolve18, sep as sep9 } from "path";
 
 // src/acg/scope/resolve.ts
@@ -47397,7 +47468,7 @@ function isOutsideRepo(repoRoot, filePath) {
   return rel.startsWith("..") || isAbsolute14(rel);
 }
 function isClaudeMemoryPath(repoRoot, filePath) {
-  const home = process.env.HOME ?? homedir9();
+  const home = process.env.HOME ?? homedir10();
   if (!home)
     return false;
   const slug = resolve18(repoRoot).replace(/[^a-zA-Z0-9]/g, "-");
@@ -47568,9 +47639,9 @@ function autopilotBypassActive(input) {
   return env2.DITTO_AUTOPILOT_BYPASS === "1" || process.env.DITTO_AUTOPILOT_BYPASS === "1";
 }
 async function appendBypassRecord(repoRoot, entry) {
-  const dir = join70(repoRoot, ".ditto");
+  const dir = join71(repoRoot, ".ditto");
   await ensureDir(dir);
-  const path = join70(dir, "autopilot-bypass.jsonl");
+  const path = join71(dir, "autopilot-bypass.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -47773,9 +47844,9 @@ import { resolve as resolve20 } from "path";
 // src/core/mode-doctor.ts
 import { spawnSync } from "child_process";
 import { createHash as createHash13 } from "crypto";
-import { existsSync as existsSync9, readFileSync as readFileSync5, readdirSync as readdirSync2 } from "fs";
-import { homedir as homedir10 } from "os";
-import { dirname as dirname15, join as join71, resolve as resolve19 } from "path";
+import { existsSync as existsSync10, readFileSync as readFileSync6, readdirSync as readdirSync2 } from "fs";
+import { homedir as homedir11 } from "os";
+import { dirname as dirname16, join as join72, resolve as resolve19 } from "path";
 function classifySession(pluginRoot, repoRoot) {
   if (pluginRoot === null)
     return "unknown";
@@ -47855,8 +47926,8 @@ function formatModeHuman(report, inDittoRepo) {
 }
 var SURFACE_DIRS = ["agents", "skills", "hooks"];
 function listSurfaceFiles(root, rel, out) {
-  const dir = join71(root, rel);
-  if (!existsSync9(dir))
+  const dir = join72(root, rel);
+  if (!existsSync10(dir))
     return;
   for (const e2 of readdirSync2(dir, { withFileTypes: true })) {
     const childRel = `${rel}/${e2.name}`;
@@ -47875,49 +47946,49 @@ function computeSurfaceStamp(root) {
   for (const rel of files) {
     h3.update(rel);
     h3.update("\x00");
-    h3.update(readFileSync5(join71(root, rel)));
+    h3.update(readFileSync6(join72(root, rel)));
     h3.update("\x00");
   }
   return h3.digest("hex");
 }
 function isDittoSourceRepo(repoRoot) {
-  const pkgPath = join71(repoRoot, "package.json");
-  if (!existsSync9(pkgPath))
+  const pkgPath = join72(repoRoot, "package.json");
+  if (!existsSync10(pkgPath))
     return false;
   try {
-    const pkg = JSON.parse(readFileSync5(pkgPath, "utf8"));
-    return pkg.name === "ditto" && existsSync9(join71(repoRoot, "src", "cli", "index.ts"));
+    const pkg = JSON.parse(readFileSync6(pkgPath, "utf8"));
+    return pkg.name === "ditto" && existsSync10(join72(repoRoot, "src", "cli", "index.ts"));
   } catch {
     return false;
   }
 }
-function resolvePluginRoot(env2, argv1) {
+function resolvePluginRoot2(env2, argv1) {
   if (env2.CLAUDE_PLUGIN_ROOT)
     return env2.CLAUDE_PLUGIN_ROOT;
   if (argv1 === undefined)
     return null;
   if (argv1.replace(/\\/g, "/").endsWith("/bin/ditto")) {
-    return resolve19(dirname15(argv1), "..");
+    return resolve19(dirname16(argv1), "..");
   }
   return null;
 }
 function readInstalledIdentity(home) {
-  const base = join71(home, ".claude", "plugins", "cache", "ditto-local", "ditto");
+  const base = join72(home, ".claude", "plugins", "cache", "ditto-local", "ditto");
   const absent = { present: false, version: null, srcStamp: null, surfaceStamp: null };
-  if (!existsSync9(base))
+  if (!existsSync10(base))
     return absent;
   const versions = readdirSync2(base, { withFileTypes: true }).filter((e2) => e2.isDirectory() || e2.isSymbolicLink()).map((e2) => e2.name).sort();
   const version = versions[versions.length - 1];
   if (!version)
     return absent;
-  const dir = join71(base, version);
+  const dir = join72(base, version);
   let srcStamp = null;
   try {
-    srcStamp = readEmbeddedStamp(readFileSync5(join71(dir, "bin", "ditto"), "utf8"));
+    srcStamp = readEmbeddedStamp(readFileSync6(join72(dir, "bin", "ditto"), "utf8"));
   } catch {
     srcStamp = null;
   }
-  const surfaceStamp = existsSync9(dir) ? computeSurfaceStamp(dir) : null;
+  const surfaceStamp = existsSync10(dir) ? computeSurfaceStamp(dir) : null;
   return { present: true, version, srcStamp, surfaceStamp };
 }
 function gitState2(repoRoot) {
@@ -47933,8 +48004,8 @@ function gitState2(repoRoot) {
 function collectModeReport(repoRoot, opts = {}) {
   const env2 = opts.env ?? process.env;
   const argv1 = opts.argv1 ?? process.argv[1];
-  const home = opts.home ?? homedir10();
-  const pluginRoot = resolvePluginRoot(env2, argv1);
+  const home = opts.home ?? homedir11();
+  const pluginRoot = resolvePluginRoot2(env2, argv1);
   const inDittoRepo = isDittoSourceRepo(repoRoot);
   if (!inDittoRepo) {
     return {
@@ -48009,9 +48080,9 @@ var sessionStartHandler = async (input) => {
 
 // src/hooks/stop.ts
 import { createHash as createHash14 } from "crypto";
-import { existsSync as existsSync10 } from "fs";
+import { existsSync as existsSync11 } from "fs";
 import { readFile as readFile17, readdir as readdir22 } from "fs/promises";
-import { join as join72 } from "path";
+import { join as join73 } from "path";
 init_ditto_paths();
 init_fs();
 init_git();
@@ -48182,7 +48253,7 @@ var knowledgeGateCarrier = exports_external.object({
 }).describe("Persisted inputs to knowledgeUpdateGate, written by the knowledge node");
 
 // src/hooks/semantic-nudge.ts
-import { readFileSync as readFileSync6 } from "fs";
+import { readFileSync as readFileSync7 } from "fs";
 
 // src/acg/semantic/scan-observation.ts
 function workItemBaseCandidates(workItem2) {
@@ -48277,7 +48348,7 @@ function computeSemanticNudge(repoRoot, workItem2, opts) {
 function freshObservationChangeCount(repoRoot, workItemId2, base) {
   try {
     const path = localDir(repoRoot, "work-items", workItemId2, "semantic-scan-observation.json");
-    const parsed = acgSemanticScanObservation.safeParse(JSON.parse(readFileSync6(path, "utf8")));
+    const parsed = acgSemanticScanObservation.safeParse(JSON.parse(readFileSync7(path, "utf8")));
     if (!parsed.success)
       return null;
     const fingerprintNow = computeScanFingerprint(gitRevParse(repoRoot, base), diffVsRef(repoRoot, base));
@@ -48319,7 +48390,7 @@ function dialecticForcesContinuation(d2, repoRoot) {
     }
     if (admissible && repoRoot !== undefined) {
       const anchor = fileAnchorPath(obj.maps_to);
-      if (anchor !== undefined && !existsSync10(join72(repoRoot, anchor))) {
+      if (anchor !== undefined && !existsSync11(join73(repoRoot, anchor))) {
         reasons.push(`dialectic ${d2.review_id}: objection maps_to '${obj.maps_to}' does not resolve to an existing file \u2014 backward-finding oracle unverifiable/stale`);
       }
     }
@@ -48350,7 +48421,7 @@ async function readArtifact(path, schema, name) {
   }
 }
 async function readDialecticLedgers(dir) {
-  const reviewsDir = join72(dir, "reviews");
+  const reviewsDir = join73(dir, "reviews");
   let names;
   try {
     names = await readdir22(reviewsDir);
@@ -48360,7 +48431,7 @@ async function readDialecticLedgers(dir) {
   const files = names.filter((n3) => /^dialectic-.*\.json$/.test(n3)).sort();
   const items = [];
   for (const name of files) {
-    const read = await readArtifact(join72(reviewsDir, name), dialectic, `reviews/${name}`);
+    const read = await readArtifact(join73(reviewsDir, name), dialectic, `reviews/${name}`);
     if (read.status === "malformed")
       return { status: "malformed", name: read.name };
     if (read.status === "ok")
@@ -48493,8 +48564,8 @@ async function maybeRunFitness(repoRoot, workItemId2, dir) {
     const fns = await new FitnessFunctionStore(repoRoot).read(workItemId2);
     if (!fns || fns.length === 0)
       return;
-    const snapshotPath = join72(dir, "assurance-snapshot.json");
-    const fingerprintPath = join72(dir, "fitness-input-fingerprint");
+    const snapshotPath = join73(dir, "assurance-snapshot.json");
+    const fingerprintPath = join73(dir, "fitness-input-fingerprint");
     const fingerprint = fitnessInputFingerprint(repoRoot);
     if (fingerprint !== null && await Bun.file(snapshotPath).exists() && await Bun.file(fingerprintPath).exists() && (await Bun.file(fingerprintPath).text()).trim() === fingerprint) {
       return;
@@ -48505,7 +48576,7 @@ async function maybeRunFitness(repoRoot, workItemId2, dir) {
       riskKnown: false,
       producedAt: new Date().toISOString()
     };
-    const verdictsPath2 = join72(dir, "fitness-verdicts.json");
+    const verdictsPath2 = join73(dir, "fitness-verdicts.json");
     const provider = await Bun.file(verdictsPath2).exists() ? compositeProvider(repoRoot, verdictsPath2) : commandProvider(repoRoot);
     const snapshot = await runFitness(fns, ctx, provider);
     await ensureDir(dir);
@@ -48594,18 +48665,18 @@ var stopHandler = async (input) => {
   }
   const dir = localDir(input.repoRoot, "work-items", pointer);
   await maybeRunFitness(input.repoRoot, pointer, dir);
-  const completion = await readArtifact(join72(dir, "completion.json"), completionContract, "completion.json");
-  const conv = await readArtifact(join72(dir, "convergence.json"), convergence, "convergence.json");
-  const pilot = await readArtifact(join72(dir, "autopilot.json"), autopilot, "autopilot.json");
-  const intent = await readArtifact(join72(dir, "intent.json"), intentContract, "intent.json");
+  const completion = await readArtifact(join73(dir, "completion.json"), completionContract, "completion.json");
+  const conv = await readArtifact(join73(dir, "convergence.json"), convergence, "convergence.json");
+  const pilot = await readArtifact(join73(dir, "autopilot.json"), autopilot, "autopilot.json");
+  const intent = await readArtifact(join73(dir, "intent.json"), intentContract, "intent.json");
   const dialectics = await readDialecticLedgers(dir);
-  const acgReview = await readArtifact(join72(dir, "acg-review.json"), acgReviewGraph, "acg-review.json");
-  const assurance = await readArtifact(join72(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json");
-  const impact = await readArtifact(join72(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json");
-  const semantic = await readArtifact(join72(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
-  const knowledge = await readArtifact(join72(dir, "knowledge-gate.json"), knowledgeGateCarrier, "knowledge-gate.json");
-  const decisionConflicts = await readArtifact(join72(dir, "decision-conflict.json"), decisionConflictCarrier, "decision-conflict.json");
-  const directionFork = await readArtifact(join72(dir, "direction-fork.json"), directionForkCarrier, "direction-fork.json");
+  const acgReview = await readArtifact(join73(dir, "acg-review.json"), acgReviewGraph, "acg-review.json");
+  const assurance = await readArtifact(join73(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json");
+  const impact = await readArtifact(join73(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json");
+  const semantic = await readArtifact(join73(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
+  const knowledge = await readArtifact(join73(dir, "knowledge-gate.json"), knowledgeGateCarrier, "knowledge-gate.json");
+  const decisionConflicts = await readArtifact(join73(dir, "decision-conflict.json"), decisionConflictCarrier, "decision-conflict.json");
+  const directionFork = await readArtifact(join73(dir, "direction-fork.json"), directionForkCarrier, "direction-fork.json");
   const malformed = [
     completion,
     conv,
@@ -48752,7 +48823,7 @@ ${advisoryBlock}${attestationBlock}`
 };
 
 // src/hooks/user-prompt-submit.ts
-import { join as join73 } from "path";
+import { join as join74 } from "path";
 init_ditto_paths();
 init_fs();
 init_work_item_store();
@@ -48873,7 +48944,7 @@ function pendingHandoffHint(item) {
 async function logClassification(repoRoot, entry) {
   const dir = localDir(repoRoot, "logs");
   await ensureDir(dir);
-  const path = join73(dir, "user-prompt.jsonl");
+  const path = join74(dir, "user-prompt.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -48990,10 +49061,10 @@ var hookCommand = defineCommand({
 });
 
 // src/cli/commands/impact.ts
-import { join as join75 } from "path";
+import { join as join76 } from "path";
 
 // src/acg/impact/codeql-analyzer.ts
-import { join as join74 } from "path";
+import { join as join75 } from "path";
 function isTestFile(path, language) {
   if (language === "java") {
     return path.includes("/test/") || /(Test|Tests|IT)\.java$/.test(path);
@@ -49022,8 +49093,8 @@ class CodeqlImpactAnalyzer {
       repoRoot: this.target.repoRoot,
       sourceRoot: input.sourceRoot,
       language: this.target.language,
-      dbPath: join74(this.target.cacheDir, "db"),
-      workDir: join74(this.target.cacheDir, `q-impact-${this.target.symbol}`),
+      dbPath: join75(this.target.cacheDir, "db"),
+      workDir: join75(this.target.cacheDir, `q-impact-${this.target.symbol}`),
       query: renderQuery(relationQueries(this.target.language).impact, this.target.symbol, this.target.declFile),
       ...this.target.buildMode ? { buildMode: this.target.buildMode } : {},
       ...this.target.buildCommand ? { buildCommand: this.target.buildCommand } : {},
@@ -49059,8 +49130,8 @@ class CodeqlImpactAnalyzer {
       repoRoot: this.target.repoRoot,
       sourceRoot,
       language: this.target.language,
-      dbPath: join74(this.target.cacheDir, "db"),
-      workDir: join74(this.target.cacheDir, "q-xrepo"),
+      dbPath: join75(this.target.cacheDir, "db"),
+      workDir: join75(this.target.cacheDir, "q-xrepo"),
       query: relationQueries(this.target.language).unresolved,
       ...this.target.buildMode ? { buildMode: this.target.buildMode } : {},
       ...this.target.buildCommand ? { buildCommand: this.target.buildCommand } : {},
@@ -49174,7 +49245,7 @@ var impactCommand = defineCommand({
     const changeType = args["change-type"] ?? "signature";
     try {
       const repoRoot = await resolveRepoRootForCreate();
-      const sourceRoot = args["source-root"] ?? join75(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join76(repoRoot, "src");
       const language = args.language ?? "javascript";
       const buildCommand = args["build-command"];
       const buildMode = !buildCommand && language === "java" ? "none" : undefined;
@@ -49236,7 +49307,7 @@ import { resolve as resolve21 } from "path";
 init_fs();
 
 // src/core/init-scaffold.ts
-import { basename as basename5, join as join76 } from "path";
+import { basename as basename5, join as join77 } from "path";
 
 // src/schemas/glossary.ts
 init_zod();
@@ -49265,15 +49336,15 @@ var glossary = exports_external.object({
 init_fs();
 init_shared();
 var SCAFFOLD_DIRS = [
-  join76("local", "work-items"),
-  join76("local", "runs"),
-  join76("local", "handoff"),
-  join76("local", "sessions"),
-  join76("local", "logs"),
-  join76("local", "cache"),
+  join77("local", "work-items"),
+  join77("local", "runs"),
+  join77("local", "handoff"),
+  join77("local", "sessions"),
+  join77("local", "logs"),
+  join77("local", "cache"),
   "agents",
   "knowledge",
-  join76("knowledge", "adr")
+  join77("knowledge", "adr")
 ];
 var DITTO_GITIGNORE = `# DITTO per-developer runtime \u2014 volatile, not for version control.
 # Managed by \`ditto init\`; safe to edit.
@@ -49310,18 +49381,18 @@ async function seedFileIfAbsent(absPath, relPath, write, created, skipped) {
   return true;
 }
 async function initScaffold(repoRoot, now) {
-  const dittoDir2 = join76(repoRoot, ".ditto");
+  const dittoDir2 = join77(repoRoot, ".ditto");
   const createdDirs = [];
   const createdFiles = [];
   const skippedFiles = [];
-  const glossaryAbs = join76(dittoDir2, "knowledge", "glossary.json");
+  const glossaryAbs = join77(dittoDir2, "knowledge", "glossary.json");
   const alreadyInitialized = await fileExists(glossaryAbs);
   await ensureDirTracked(dittoDir2, ".ditto", createdDirs);
   for (const sub of SCAFFOLD_DIRS) {
-    await ensureDirTracked(join76(dittoDir2, sub), join76(".ditto", sub), createdDirs);
+    await ensureDirTracked(join77(dittoDir2, sub), join77(".ditto", sub), createdDirs);
   }
   const projectName = basename5(repoRoot) || "project";
-  await seedFileIfAbsent(glossaryAbs, join76(".ditto", "knowledge", "glossary.json"), () => writeJson(glossaryAbs, glossary, {
+  await seedFileIfAbsent(glossaryAbs, join77(".ditto", "knowledge", "glossary.json"), () => writeJson(glossaryAbs, glossary, {
     schema_version: "0.1.0",
     project_name: projectName,
     updated_at: now.toISOString(),
@@ -49329,10 +49400,10 @@ async function initScaffold(repoRoot, now) {
   }).then(() => {
     return;
   }), createdFiles, skippedFiles);
-  const contextAbs = join76(dittoDir2, "knowledge", "CONTEXT.md");
-  await seedFileIfAbsent(contextAbs, join76(".ditto", "knowledge", "CONTEXT.md"), () => atomicWriteText(contextAbs, emptyContext(projectName)), createdFiles, skippedFiles);
-  const gitignoreAbs = join76(dittoDir2, ".gitignore");
-  await seedFileIfAbsent(gitignoreAbs, join76(".ditto", ".gitignore"), () => atomicWriteText(gitignoreAbs, DITTO_GITIGNORE), createdFiles, skippedFiles);
+  const contextAbs = join77(dittoDir2, "knowledge", "CONTEXT.md");
+  await seedFileIfAbsent(contextAbs, join77(".ditto", "knowledge", "CONTEXT.md"), () => atomicWriteText(contextAbs, emptyContext(projectName)), createdFiles, skippedFiles);
+  const gitignoreAbs = join77(dittoDir2, ".gitignore");
+  await seedFileIfAbsent(gitignoreAbs, join77(".ditto", ".gitignore"), () => atomicWriteText(gitignoreAbs, DITTO_GITIGNORE), createdFiles, skippedFiles);
   return { repoRoot, createdDirs, createdFiles, skippedFiles, alreadyInitialized };
 }
 
@@ -49430,7 +49501,7 @@ ${body}
 }
 // src/core/journey-authoring/store.ts
 import { readdir as readdir23 } from "fs/promises";
-import { join as join77 } from "path";
+import { join as join78 } from "path";
 
 // src/schemas/acg-journey-spec.ts
 init_zod();
@@ -49527,10 +49598,10 @@ class JourneyAuthoringStore {
     return localDir(this.repoRoot, "stories");
   }
   journeyPath(id) {
-    return join77(this.journeysDir(), `${id}.json`);
+    return join78(this.journeysDir(), `${id}.json`);
   }
   storyPath(id) {
-    return join77(this.storiesDir(), `${id}.json`);
+    return join78(this.storiesDir(), `${id}.json`);
   }
   async getJourney(id) {
     if (!await Bun.file(this.journeyPath(id)).exists())
@@ -49568,12 +49639,12 @@ class JourneyAuthoringStore {
     }
     const out = [];
     for (const name of names) {
-      out.push(await readJson(join77(dir, name), schema));
+      out.push(await readJson(join78(dir, name), schema));
     }
     return out;
   }
   sessionPath(workItemId2) {
-    return join77(localDir(this.repoRoot, "work-items", workItemId2), "journey-authoring-state.json");
+    return join78(localDir(this.repoRoot, "work-items", workItemId2), "journey-authoring-state.json");
   }
   async sessionExists(workItemId2) {
     return Bun.file(this.sessionPath(workItemId2)).exists();
@@ -49587,7 +49658,7 @@ class JourneyAuthoringStore {
   }
 }
 // src/core/journey-authoring/session.ts
-import { join as join78 } from "path";
+import { join as join79 } from "path";
 init_fs();
 init_shared();
 class IdConflictError extends Error {
@@ -49689,7 +49760,7 @@ async function finalizeAuthoring(repoRoot, input) {
         reason: `already owned by ${existing.story_id ?? "(journey-only)"}`
       });
     }
-    const dslPath = join78(repoRoot, "e2e", "journeys", `${dslSlug(spec.id)}.journey.md`);
+    const dslPath = join79(repoRoot, "e2e", "journeys", `${dslSlug(spec.id)}.journey.md`);
     if (await fileExists(dslPath)) {
       const existingText = await Bun.file(dslPath).text();
       const parsed = parseJourneyDoc(existingText);
@@ -49709,8 +49780,8 @@ async function finalizeAuthoring(repoRoot, input) {
   const dslPaths = [];
   for (const { spec, dsl } of built) {
     writtenJourneys.push(await store.writeJourney(spec));
-    const rel = join78("e2e", "journeys", `${dslSlug(spec.id)}.journey.md`);
-    await atomicWriteText(join78(repoRoot, rel), dsl);
+    const rel = join79("e2e", "journeys", `${dslSlug(spec.id)}.journey.md`);
+    await atomicWriteText(join79(repoRoot, rel), dsl);
     dslPaths.push(rel);
   }
   const superseded = [];
@@ -50030,7 +50101,7 @@ var journeyAuthorCommand = defineCommand({
 
 // src/cli/commands/knowledge.ts
 import { readdir as readdir24, writeFile as writeFile4 } from "fs/promises";
-import { join as join79 } from "path";
+import { join as join80 } from "path";
 init_zod();
 init_fs();
 init_shared();
@@ -50137,7 +50208,7 @@ async function createAdrSkeleton(opts) {
     throw new Error(`invalid --slug "${opts.slug}"; expected lowercase alphanumeric words joined by single hyphens (e.g. my-feature)`);
   }
   const id = `ADR-${ymdCompact(now)}-${opts.slug}`;
-  const path = join79(opts.repoRoot, ".ditto", "knowledge", "adr", `${id}.md`);
+  const path = join80(opts.repoRoot, ".ditto", "knowledge", "adr", `${id}.md`);
   if (await fileExists(path)) {
     throw new Error(`refusing to overwrite existing ADR: ${path}`);
   }
@@ -50145,7 +50216,7 @@ async function createAdrSkeleton(opts) {
   return { id, path };
 }
 async function checkAdrConsistency(repoRoot) {
-  const adrDir = join79(repoRoot, ".ditto", "knowledge", "adr");
+  const adrDir = join80(repoRoot, ".ditto", "knowledge", "adr");
   const violations = [];
   let files = [];
   try {
@@ -50257,7 +50328,7 @@ var knowledgeCommand = defineCommand({
 // src/cli/commands/memory.ts
 import { randomBytes as randomBytes3 } from "crypto";
 import { readFile as readFile19, readdir as readdir26 } from "fs/promises";
-import { isAbsolute as isAbsolute15, join as join81 } from "path";
+import { isAbsolute as isAbsolute15, join as join82 } from "path";
 init_ditto_paths();
 init_fs();
 init_git();
@@ -50268,7 +50339,7 @@ init_ditto_paths();
 init_memory_scan();
 init_memory_store();
 import { readFile as readFile18, readdir as readdir25 } from "fs/promises";
-import { join as join80, relative as relative20 } from "path";
+import { join as join81, relative as relative20 } from "path";
 function bootstrapEventId(key) {
   return `memevt_${sha256Hex(key).slice(0, 12)}`;
 }
@@ -50379,7 +50450,7 @@ async function listMarkdown(dir) {
   } catch {
     return [];
   }
-  return entries.filter((n3) => n3.endsWith(".md")).sort().map((n3) => join80(dir, n3));
+  return entries.filter((n3) => n3.endsWith(".md")).sort().map((n3) => join81(dir, n3));
 }
 async function bootstrapIngest(repoRoot, options = {}) {
   const now = (options.now ?? new Date).toISOString();
@@ -50395,7 +50466,7 @@ async function bootstrapIngest(repoRoot, options = {}) {
 }
 async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head) {
   const result2 = emptyResult();
-  const dir = join80(dittoDir(repoRoot), "knowledge", "adr");
+  const dir = join81(dittoDir(repoRoot), "knowledge", "adr");
   for (const abs of await listMarkdown(dir)) {
     const body = await readFile18(abs, "utf8");
     const rel = relative20(repoRoot, abs);
@@ -50435,7 +50506,7 @@ async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head
 }
 async function ingestGlossary(repoRoot, sourceStore, eventStore, now, revision, head) {
   const result2 = emptyResult();
-  const abs = join80(dittoDir(repoRoot), "knowledge", "glossary.json");
+  const abs = join81(dittoDir(repoRoot), "knowledge", "glossary.json");
   let raw;
   try {
     raw = await readFile18(abs, "utf8");
@@ -51079,7 +51150,7 @@ var memoryBuild = defineCommand({
     }
     try {
       if (args.fragments) {
-        const path = isAbsolute15(args.fragments) ? args.fragments : join81(repoRoot, args.fragments);
+        const path = isAbsolute15(args.fragments) ? args.fragments : join82(repoRoot, args.fragments);
         const raw = await readFile19(path, "utf8");
         const parsed = irFragmentsSchema.safeParse(JSON.parse(raw));
         if (!parsed.success) {
@@ -51120,7 +51191,7 @@ var memoryBuild = defineCommand({
         const path = s2.source.path;
         if (!path)
           continue;
-        const abs = isAbsolute15(path) ? path : join81(repoRoot, path);
+        const abs = isAbsolute15(path) ? path : join82(repoRoot, path);
         files.push({
           source_id: s2.source.source_id,
           path,
@@ -51877,7 +51948,7 @@ var memoryMeasure = defineCommand({
       return;
     }
     const repoRoot = await resolveRepoRootForCreate();
-    const adrDir = join81(dittoDir(repoRoot), "knowledge", "adr");
+    const adrDir = join82(dittoDir(repoRoot), "knowledge", "adr");
     let names;
     try {
       names = (await readdir26(adrDir)).filter((n3) => n3.endsWith(".md")).sort();
@@ -51892,9 +51963,9 @@ var memoryMeasure = defineCommand({
       return;
     }
     try {
-      const adrs = await Promise.all(names.map(async (n3) => ({ id: n3, body: await readFile19(join81(adrDir, n3), "utf8") })));
+      const adrs = await Promise.all(names.map(async (n3) => ({ id: n3, body: await readFile19(join82(adrDir, n3), "utf8") })));
       const candidateFiles = (args.against ?? "").split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
-      const candidates = await Promise.all(candidateFiles.map((f4) => readFile19(isAbsolute15(f4) ? f4 : join81(repoRoot, f4), "utf8")));
+      const candidates = await Promise.all(candidateFiles.map((f4) => readFile19(isAbsolute15(f4) ? f4 : join82(repoRoot, f4), "utf8")));
       const report = measureHallucination(adrs, candidates);
       if (format === "json") {
         writeJson2(report);
@@ -53249,9 +53320,9 @@ var prismCommand = defineCommand({
 });
 
 // src/cli/commands/push-gate.ts
-import { mkdirSync, readFileSync as readFileSync7, writeFileSync } from "fs";
-import { homedir as homedir11 } from "os";
-import { dirname as dirname16, parse as parse4, relative as relative21, resolve as resolve22 } from "path";
+import { mkdirSync, readFileSync as readFileSync8, writeFileSync } from "fs";
+import { homedir as homedir12 } from "os";
+import { dirname as dirname17, parse as parse4, relative as relative21, resolve as resolve22 } from "path";
 init_fs();
 
 // src/core/push-gate.ts
@@ -53298,7 +53369,7 @@ function resolvePushGate(recipe2, repoRelDir) {
 }
 
 // src/core/push-gate-cache.ts
-import { join as join82 } from "path";
+import { join as join83 } from "path";
 var MAX_GREEN_TREES = 20;
 function shouldSkipGate(state, cache) {
   if (!state.clean)
@@ -53314,7 +53385,7 @@ function addGreenTree(cache, tree, command, recordedAt) {
   return { trees: kept.slice(-MAX_GREEN_TREES) };
 }
 function greenCachePath(cwd) {
-  return join82(cwd, ".ditto", "local", "push-gate-green.json");
+  return join83(cwd, ".ditto", "local", "push-gate-green.json");
 }
 
 // src/cli/commands/push-gate.ts
@@ -53363,7 +53434,7 @@ async function execPushGate(inp) {
 }
 var PUSH_GATE_TIMEOUT_MS = 10 * 60 * 1000;
 var defaultRunTest = (testCommand, cwd) => runTestCommand(testCommand, cwd, { timeoutMs: PUSH_GATE_TIMEOUT_MS });
-async function resolvePushGateRoot(cwd, explicitRoot, homeDir = homedir11()) {
+async function resolvePushGateRoot(cwd, explicitRoot, homeDir = homedir12()) {
   const start = resolve22(cwd);
   if (explicitRoot !== undefined && explicitRoot !== "") {
     const recipeRoot2 = resolve22(explicitRoot);
@@ -53371,7 +53442,7 @@ async function resolvePushGateRoot(cwd, explicitRoot, homeDir = homedir11()) {
   }
   const home = resolve22(homeDir);
   const fsRoot = parse4(start).root;
-  let current = dirname16(start);
+  let current = dirname17(start);
   while (true) {
     if (isAtOrAboveHome(relative21(current, home)))
       break;
@@ -53381,7 +53452,7 @@ async function resolvePushGateRoot(cwd, explicitRoot, homeDir = homedir11()) {
     }
     if (current === fsRoot)
       break;
-    current = dirname16(current);
+    current = dirname17(current);
   }
   const recipeRoot = await resolveRepoRootForCreate(start, homeDir);
   return { recipeRoot, repoRelDir: relative21(recipeRoot, start) };
@@ -53410,7 +53481,7 @@ function computeTreeState(cwd) {
 }
 function readGreenCache(cwd) {
   try {
-    const parsed = JSON.parse(readFileSync7(greenCachePath(cwd), "utf8"));
+    const parsed = JSON.parse(readFileSync8(greenCachePath(cwd), "utf8"));
     if (parsed && typeof parsed === "object" && Array.isArray(parsed.trees)) {
       return parsed;
     }
@@ -53422,7 +53493,7 @@ function makeRecordGreen(cwd, cache) {
     try {
       const next = addGreenTree(cache, tree, command, new Date().toISOString());
       const path = greenCachePath(cwd);
-      mkdirSync(dirname16(path), { recursive: true });
+      mkdirSync(dirname17(path), { recursive: true });
       writeFileSync(path, `${JSON.stringify(next, null, 2)}
 `);
     } catch {}
@@ -53493,7 +53564,7 @@ var pushGateCommand = defineCommand({
 });
 
 // src/cli/commands/refactor.ts
-import { join as join83 } from "path";
+import { join as join84 } from "path";
 
 // src/acg/scope/unit-resolve.ts
 var API_LAYERS = ["controller", "controllers", "route", "routes"];
@@ -53619,7 +53690,7 @@ function trackedSrcFiles(repoRoot) {
 `).map((s2) => s2.trim()).filter((s2) => s2.length > 0 && /\.[cm]?tsx?$/.test(s2) && !/\.(test|spec)\./.test(s2));
 }
 async function loadArchSpec2(repoRoot) {
-  const specPath = join83(repoRoot, ".ditto", "architecture-spec.json");
+  const specPath = join84(repoRoot, ".ditto", "architecture-spec.json");
   try {
     return await readArchitectureSpec(specPath, acgArchitectureSpec);
   } catch {
@@ -53690,7 +53761,7 @@ var refactorCommand = defineCommand({
 });
 
 // src/cli/commands/review.ts
-import { join as join84 } from "path";
+import { join as join85 } from "path";
 
 // src/acg/review/unit-review.ts
 var REVIEW_ROLES = ["code-reviewer", "security-reviewer"];
@@ -53749,7 +53820,7 @@ function trackedSrcFiles2(repoRoot) {
 `).map((s2) => s2.trim()).filter((s2) => s2.length > 0 && /\.[cm]?tsx?$/.test(s2) && !/\.(test|spec)\./.test(s2));
 }
 async function loadArchSpec3(repoRoot) {
-  const specPath = join84(repoRoot, ".ditto", "architecture-spec.json");
+  const specPath = join85(repoRoot, ".ditto", "architecture-spec.json");
   try {
     return await readArchitectureSpec(specPath, acgArchitectureSpec);
   } catch {
@@ -53872,7 +53943,7 @@ init_common();
 init_fs();
 init_git();
 import { stat as stat11, writeFile as writeFile5 } from "fs/promises";
-import { dirname as dirname17, join as join85, relative as relative22, resolve as resolve23, sep as sep10 } from "path";
+import { dirname as dirname18, join as join86, relative as relative22, resolve as resolve23, sep as sep10 } from "path";
 init_work_item_store();
 init_worktree();
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
@@ -53901,7 +53972,7 @@ function resolveRepoCwd(repoRoot, cwd) {
     throw new RunWithUsageError(`invalid cwd: ${parsed.error.issues[0]?.message}`);
   }
   const resolvedRoot = resolve23(repoRoot);
-  const resolvedCwd = resolve23(join85(repoRoot, cwd));
+  const resolvedCwd = resolve23(join86(repoRoot, cwd));
   if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep10}`)) {
     throw new RunWithUsageError(`cwd escapes repo root: ${cwd}`);
   }
@@ -53946,7 +54017,7 @@ function parseRunnableProvider(provider) {
   throw new RunWithUsageError(`provider ${provider} is schema-valid but not runnable in v0.3`);
 }
 async function streamToFile(stream, path) {
-  await ensureDir(dirname17(path));
+  await ensureDir(dirname18(path));
   const bytes = await new Response(stream).arrayBuffer();
   await writeFile5(path, new Uint8Array(bytes));
 }
@@ -54104,7 +54175,7 @@ async function runVerifyStep(repoRoot, runRoot, runStore, runId2, rawCommand) {
   const tokens2 = command.split(/\s+/).filter(Boolean);
   const logAbsolute = runStore.pathFor(runId2, "verify.log");
   const logRelative = repoRelative2(repoRoot, logAbsolute);
-  await ensureDir(dirname17(logAbsolute));
+  await ensureDir(dirname18(logAbsolute));
   if (tokens2.length === 0) {
     await writeFile5(logAbsolute, "", "utf8");
     const entry2 = {
@@ -54437,9 +54508,9 @@ function applySemanticVerdict(seed, v2) {
 }
 
 // src/acg/semantic/signature-codeql.ts
-import { existsSync as existsSync11 } from "fs";
+import { existsSync as existsSync12 } from "fs";
 import { rm as rm3 } from "fs/promises";
-import { join as join86 } from "path";
+import { join as join87 } from "path";
 init_ditto_paths();
 init_git();
 var SIGNATURE_QUERY_JS = `/**
@@ -54569,20 +54640,20 @@ async function extractSignatures(input, deps) {
 async function scanSignatureChanges(input, deps) {
   const baseSha = gitRevParse(input.repoRoot, input.baseRef);
   const cacheBase = localDir(input.repoRoot, "cache", "codeql");
-  const baseCache = join86(cacheBase, `${baseSha}-${input.language}`);
-  const baseDb = join86(baseCache, "db");
-  const needWorktree = !existsSync11(baseDb);
-  const worktree = join86(cacheBase, "worktrees", `${baseSha}-${input.language}`);
+  const baseCache = join87(cacheBase, `${baseSha}-${input.language}`);
+  const baseDb = join87(baseCache, "db");
+  const needWorktree = !existsSync12(baseDb);
+  const worktree = join87(cacheBase, "worktrees", `${baseSha}-${input.language}`);
   if (needWorktree)
     addDetachedWorktree(input.repoRoot, worktree, baseSha);
   let before;
   try {
     before = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join86(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
+      sourceRoot: join87(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
       language: input.language,
       dbPath: baseDb,
-      workDir: join86(baseCache, "q-sig"),
+      workDir: join87(baseCache, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -54590,14 +54661,14 @@ async function scanSignatureChanges(input, deps) {
     if (needWorktree)
       removeWorktree(input.repoRoot, worktree);
   }
-  const afterDir = join86(cacheBase, `after-${process.pid}-${input.language}`);
+  const afterDir = join87(cacheBase, `after-${process.pid}-${input.language}`);
   try {
     const after = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join86(input.repoRoot, input.sourceRootRel),
+      sourceRoot: join87(input.repoRoot, input.sourceRootRel),
       language: input.language,
-      dbPath: join86(afterDir, "db"),
-      workDir: join86(afterDir, "q-sig"),
+      dbPath: join87(afterDir, "db"),
+      workDir: join87(afterDir, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -54972,16 +55043,16 @@ var semanticCommand = defineCommand({
 });
 
 // src/cli/commands/setup.ts
-import { homedir as homedir13 } from "os";
-import { dirname as dirname20, join as join92, resolve as resolve26 } from "path";
+import { homedir as homedir14 } from "os";
+import { dirname as dirname21, join as join93, resolve as resolve26 } from "path";
 init_fs();
 init_shared();
 
 // src/core/provision/memory-separate.ts
-import { existsSync as existsSync12, readFileSync as readFileSync8, writeFileSync as writeFileSync2 } from "fs";
+import { existsSync as existsSync13, readFileSync as readFileSync9, writeFileSync as writeFileSync2 } from "fs";
 import { join as pathJoin } from "path";
 var GITIGNORE_ENTRY = ".ditto/memory/";
-function join87(...parts) {
+function join88(...parts) {
   return parts.join("/");
 }
 function ensureGitignored(deps) {
@@ -55005,7 +55076,7 @@ var submoduleManual = (memoryDir) => [
   "# \uADF8\uB2E4\uC74C \uBD80\uBAA8\uC5D0\uC11C: git rm -r --cached .ditto/memory && git submodule add <URL> .ditto/memory"
 ];
 async function separateMemoryRepo(deps, mode = "gitignore") {
-  const memoryDir = join87(deps.repoRoot, ".ditto", "memory");
+  const memoryDir = join88(deps.repoRoot, ".ditto", "memory");
   if (!deps.pathExists(memoryDir)) {
     return {
       status: "failed",
@@ -55019,7 +55090,7 @@ async function separateMemoryRepo(deps, mode = "gitignore") {
       manual: submoduleManual(memoryDir)
     };
   }
-  const alreadyRepo = deps.pathExists(join87(memoryDir, ".git"));
+  const alreadyRepo = deps.pathExists(join88(memoryDir, ".git"));
   if (!alreadyRepo) {
     const r4 = await deps.run("git", ["init"], memoryDir);
     if (r4.exit_code !== 0) {
@@ -55059,25 +55130,25 @@ function defaultMemorySeparateDeps(repoRoot) {
       ]);
       return { exit_code, stderr: stderr2 };
     },
-    pathExists: (p2) => existsSync12(p2),
-    readGitignore: () => existsSync12(gitignorePath) ? readFileSync8(gitignorePath, "utf8") : "",
+    pathExists: (p2) => existsSync13(p2),
+    readGitignore: () => existsSync13(gitignorePath) ? readFileSync9(gitignorePath, "utf8") : "",
     writeGitignore: (content) => writeFileSync2(gitignorePath, content, "utf8")
   };
 }
 
 // src/core/provision/playwright.ts
-import { existsSync as existsSync13, readdirSync as readdirSync3 } from "fs";
-import { homedir as homedir12, platform as osPlatform } from "os";
-import { join as join88 } from "path";
+import { existsSync as existsSync14, readdirSync as readdirSync3 } from "fs";
+import { homedir as homedir13, platform as osPlatform } from "os";
+import { join as join89 } from "path";
 function playwrightCacheRoot(os = osPlatform()) {
   if (os === "win32")
-    return join88(homedir12(), "AppData", "Local", "ms-playwright");
+    return join89(homedir13(), "AppData", "Local", "ms-playwright");
   if (os === "darwin")
-    return join88(homedir12(), "Library", "Caches", "ms-playwright");
-  return join88(homedir12(), ".cache", "ms-playwright");
+    return join89(homedir13(), "Library", "Caches", "ms-playwright");
+  return join89(homedir13(), ".cache", "ms-playwright");
 }
 function bunCacheDir() {
-  return join88(process.env.BUN_INSTALL ?? join88(homedir12(), ".bun"), "install", "cache");
+  return join89(process.env.BUN_INSTALL ?? join89(homedir13(), ".bun"), "install", "cache");
 }
 function detectPlaywright(deps) {
   const core = deps.listDir(deps.bunCache).some((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2));
@@ -55121,7 +55192,7 @@ var defaultPlaywrightDeps = {
   bunCache: bunCacheDir(),
   listDir: (dir) => {
     try {
-      return existsSync13(dir) ? readdirSync3(dir) : [];
+      return existsSync14(dir) ? readdirSync3(dir) : [];
     } catch {
       return [];
     }
@@ -55175,12 +55246,12 @@ function defaultRegistry() {
 init_fs();
 import { execFileSync as execFileSync6 } from "child_process";
 import { chmod, cp, readFile as readFile20, rename as rename5, rm as rm4, writeFile as writeFile6 } from "fs/promises";
-import { basename as basename6, dirname as dirname18, isAbsolute as isAbsolute16, join as join90, resolve as resolve24 } from "path";
+import { basename as basename6, dirname as dirname19, isAbsolute as isAbsolute16, join as join91, resolve as resolve24 } from "path";
 init_shared();
 
 // src/core/resource-routing.ts
 import { readdirSync as readdirSync4 } from "fs";
-import { join as join89 } from "path";
+import { join as join90 } from "path";
 var GLOBAL_PREFIX = "GLOBAL_";
 function routeResource(filename, ctx) {
   if (filename.startsWith(GLOBAL_PREFIX)) {
@@ -55188,13 +55259,13 @@ function routeResource(filename, ctx) {
     return {
       scope: "global",
       destName,
-      destPath: join89(ctx.homeDir, ".claude", destName)
+      destPath: join90(ctx.homeDir, ".claude", destName)
     };
   }
   return {
     scope: "project",
     destName: filename,
-    destPath: join89(ctx.projectRoot, filename)
+    destPath: join90(ctx.projectRoot, filename)
   };
 }
 function discoverResources(resourcesDir) {
@@ -55208,7 +55279,7 @@ function discoverResources(resourcesDir) {
 // src/core/setup.ts
 var CODEX_MARKETPLACE_NAME = "ditto-local";
 var CODEX_PLUGIN_NAME = "ditto";
-var CODEX_PLUGIN_DEST_REL = join90(".agents", "plugins", CODEX_PLUGIN_NAME);
+var CODEX_PLUGIN_DEST_REL = join91(".agents", "plugins", CODEX_PLUGIN_NAME);
 var CODEX_BIN_NAME = "ditto";
 function setupHosts(host) {
   if (host === "codex")
@@ -55233,14 +55304,14 @@ function resourceDecisions(resourcesDir, projectRoot, homeDir, codexHome, hosts)
           host: "codex",
           filename,
           scope: "project",
-          destPath: join90(projectRoot, "AGENTS.md")
+          destPath: join91(projectRoot, "AGENTS.md")
         });
       } else if (filename === "GLOBAL_AGENTS.md") {
         out.push({
           host: "codex",
           filename,
           scope: "global",
-          destPath: join90(codexHome, "AGENTS.md")
+          destPath: join91(codexHome, "AGENTS.md")
         });
       }
     }
@@ -55295,23 +55366,23 @@ async function writeCodexMarketplace(path) {
 `);
 }
 async function installCodexAgents(pluginRoot, projectRoot) {
-  const srcDir = join90(pluginRoot, ".codex", "agents");
+  const srcDir = join91(pluginRoot, ".codex", "agents");
   if (!await fileExists(srcDir)) {
     throw new Error(`codex custom agents not found at ${srcDir}; run build:codex-plugin first`);
   }
-  const destDir = join90(projectRoot, ".codex", "agents");
+  const destDir = join91(projectRoot, ".codex", "agents");
   await ensureDir(destDir);
   let count = 0;
   for (const file of await listFiles(srcDir)) {
     if (!file.id.endsWith(".toml"))
       continue;
-    await cp(file.path, join90(destDir, file.id));
+    await cp(file.path, join91(destDir, file.id));
     count += 1;
   }
   return count;
 }
 function codexDittoCommand(installedPluginDir) {
-  return `"${join90(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
+  return `"${join91(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
 }
 function rewriteCodexDittoReferences(text, dittoCommand) {
   return text.replace(/"\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?"/g, dittoCommand).replace(/\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?/g, dittoCommand).replace(/`ditto(?=\s)/g, `\`${dittoCommand}`);
@@ -55333,26 +55404,26 @@ async function rewriteCodexAgentTomlFile(path, dittoCommand) {
 }
 async function rewriteCodexInstalledReferences(installedPluginDir) {
   const dittoCommand = codexDittoCommand(installedPluginDir);
-  for (const dir of await listDirectories(join90(installedPluginDir, "skills"))) {
-    const skillPath = join90(dir.path, "SKILL.md");
+  for (const dir of await listDirectories(join91(installedPluginDir, "skills"))) {
+    const skillPath = join91(dir.path, "SKILL.md");
     if (await fileExists(skillPath))
       await rewriteCodexTextFile(skillPath, dittoCommand);
   }
-  for (const file of await listFiles(join90(installedPluginDir, ".codex", "agents"))) {
+  for (const file of await listFiles(join91(installedPluginDir, ".codex", "agents"))) {
     if (file.id.endsWith(".toml"))
       await rewriteCodexAgentTomlFile(file.path, dittoCommand);
   }
 }
 async function writeCodexSurfaceCatalog(projectRoot) {
-  const surfaceCatalogPath = join90(projectRoot, ".ditto", "local", "surfaces.codex.json");
-  await ensureDir(join90(projectRoot, ".ditto", "local"));
+  const surfaceCatalogPath = join91(projectRoot, ".ditto", "local", "surfaces.codex.json");
+  await ensureDir(join91(projectRoot, ".ditto", "local"));
   const catalog = await generateSurfaceCatalog([codexHostAdapter], projectRoot, "surfaces.codex.json");
   await atomicWriteText(surfaceCatalogPath, `${JSON.stringify(catalog, null, 2)}
 `);
   return surfaceCatalogPath;
 }
 async function writeCodexPluginStatus(projectRoot) {
-  const statusPath = join90(projectRoot, ".ditto", "local", "codex-plugin-status.json");
+  const statusPath = join91(projectRoot, ".ditto", "local", "codex-plugin-status.json");
   const enableCommands = [
     `codex plugin marketplace add ${JSON.stringify(projectRoot)}`,
     `codex plugin add ${CODEX_PLUGIN_NAME}@${CODEX_MARKETPLACE_NAME}`
@@ -55370,19 +55441,19 @@ async function writeCodexPluginStatus(projectRoot) {
 }
 async function installCodexSurface(opts) {
   const { pluginRoot, projectRoot } = opts;
-  const manifestPath = join90(pluginRoot, ".codex-plugin", "plugin.json");
+  const manifestPath = join91(pluginRoot, ".codex-plugin", "plugin.json");
   if (!await fileExists(manifestPath)) {
     throw new Error(`codex plugin manifest not found at ${manifestPath}; run build:codex-plugin first`);
   }
-  const installedPluginDir = join90(projectRoot, CODEX_PLUGIN_DEST_REL);
+  const installedPluginDir = join91(projectRoot, CODEX_PLUGIN_DEST_REL);
   if (resolve24(pluginRoot) === resolve24(installedPluginDir)) {
     throw new Error(`codex plugin source is already the installed plugin directory: ${installedPluginDir}`);
   }
   await rm4(installedPluginDir, { recursive: true, force: true });
-  await ensureDir(join90(projectRoot, ".agents", "plugins"));
+  await ensureDir(join91(projectRoot, ".agents", "plugins"));
   await cp(pluginRoot, installedPluginDir, { recursive: true });
   await rewriteCodexInstalledReferences(installedPluginDir);
-  const marketplacePath = join90(projectRoot, ".agents", "plugins", "marketplace.json");
+  const marketplacePath = join91(projectRoot, ".agents", "plugins", "marketplace.json");
   await writeCodexMarketplace(marketplacePath);
   const agentsInstalled = await installCodexAgents(installedPluginDir, projectRoot);
   const surfaceCatalogPath = await writeCodexSurfaceCatalog(projectRoot);
@@ -55395,7 +55466,7 @@ async function installCodexSurface(opts) {
     statusPath,
     pluginLoadStatus: "needs_user_action",
     enableCommands,
-    agentsDir: join90(projectRoot, ".codex", "agents"),
+    agentsDir: join91(projectRoot, ".codex", "agents"),
     agentsInstalled
   };
 }
@@ -55410,7 +55481,7 @@ async function installResource(decision, resourcesDir) {
   if (name === "AGENTS.md") {
     const existed = await fileExists(decision.destPath);
     if (!existed) {
-      const body2 = await readFile20(join90(resourcesDir, decision.filename), "utf8");
+      const body2 = await readFile20(join91(resourcesDir, decision.filename), "utf8");
       await atomicWriteText(decision.destPath, body2);
       return { ...common, status: "written", backupPath: null };
     }
@@ -55424,8 +55495,8 @@ async function installResource(decision, resourcesDir) {
     return { ...common, status: "kept", backupPath: null };
   }
   if (name === "CLAUDE.md") {
-    const sourcePath = join90(dirname18(decision.destPath), "AGENTS.md");
-    const projectionBody = await fileExists(sourcePath) ? await readFile20(sourcePath, "utf8") : await readFile20(join90(resourcesDir, decision.filename), "utf8");
+    const sourcePath = join91(dirname19(decision.destPath), "AGENTS.md");
+    const projectionBody = await fileExists(sourcePath) ? await readFile20(sourcePath, "utf8") : await readFile20(join91(resourcesDir, decision.filename), "utf8");
     const applied2 = await applyManagedFile(decision.destPath, projectionBody, "AGENTS.md");
     return {
       ...common,
@@ -55433,7 +55504,7 @@ async function installResource(decision, resourcesDir) {
       backupPath: applied2.kind === "ok" ? applied2.backupPath : null
     };
   }
-  const body = await readFile20(join90(resourcesDir, decision.filename), "utf8");
+  const body = await readFile20(join91(resourcesDir, decision.filename), "utf8");
   const applied = await applyManagedFile(decision.destPath, body, decision.filename);
   return {
     ...common,
@@ -55444,7 +55515,7 @@ async function installResource(decision, resourcesDir) {
 var PUSH_GATE_HOOK_MARKER = "ditto:managed:pre-push";
 var PUSH_GATE_HOOK_BACKUP_SUFFIX = ".ditto-backup";
 function defaultHookTemplatePath(resourcesDir) {
-  return join90(dirname18(resourcesDir), "hooks", "pre-push");
+  return join91(dirname19(resourcesDir), "hooks", "pre-push");
 }
 function customHooksPath(cwd) {
   try {
@@ -55464,7 +55535,7 @@ function gitHooksDir(cwd) {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"]
   }).trim();
-  return isAbsolute16(p2) ? p2 : join90(cwd, p2);
+  return isAbsolute16(p2) ? p2 : join91(cwd, p2);
 }
 async function installPushGateHook(opts) {
   const { projectRoot, hookTemplatePath } = opts;
@@ -55488,7 +55559,7 @@ async function installPushGateHook(opts) {
       message: `${projectRoot} is not a git repository \u2014 a pre-push hook cannot be installed. Run \`git init\` (or \`ditto setup\` from inside the repo), then re-run setup.`
     };
   }
-  const hookPath = join90(hooksDir, "pre-push");
+  const hookPath = join91(hooksDir, "pre-push");
   const backupPath = `${hookPath}${PUSH_GATE_HOOK_BACKUP_SUFFIX}`;
   const template = bakeWorkspaceRoot(await readFile20(hookTemplatePath, "utf8"), opts.workspaceRoot);
   await ensureDir(hooksDir);
@@ -55528,7 +55599,7 @@ async function writeHookFile(hookPath, body) {
 }
 async function setup(opts) {
   const { resourcesDir, projectRoot, homeDir, now } = opts;
-  const codexHome = opts.codexHome ?? join90(homeDir, ".codex");
+  const codexHome = opts.codexHome ?? join91(homeDir, ".codex");
   const hosts = setupHosts(opts.host);
   const decisions = resourceDecisions(resourcesDir, projectRoot, homeDir, codexHome, hosts);
   const ordered = [
@@ -55540,7 +55611,7 @@ async function setup(opts) {
     resources.push(await installResource(decision, resourcesDir));
   }
   const scaffold = await initScaffold(projectRoot, now);
-  const allowlistPath = join90(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join91(projectRoot, ".claude", "settings.json");
   const allowlistApplied = hosts.has("claude-code");
   if (allowlistApplied)
     await allowlistSettingsFile(allowlistPath);
@@ -55556,25 +55627,25 @@ async function setup(opts) {
 }
 
 // src/cli/resources.ts
-import { existsSync as existsSync14 } from "fs";
-import { dirname as dirname19, join as join91, resolve as resolve25 } from "path";
-import { fileURLToPath as fileURLToPath2 } from "url";
+import { existsSync as existsSync15 } from "fs";
+import { dirname as dirname20, join as join92, resolve as resolve25 } from "path";
+import { fileURLToPath as fileURLToPath3 } from "url";
 function resolveResourcesDir(from) {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
-    return join91(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
+    return join92(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
   }
-  const start = from ?? dirname19(fileURLToPath2(import.meta.url));
+  const start = from ?? dirname20(fileURLToPath3(import.meta.url));
   let dir = start;
   for (;; ) {
-    const candidate = join91(dir, "resources", "managed");
-    if (existsSync14(candidate))
+    const candidate = join92(dir, "resources", "managed");
+    if (existsSync15(candidate))
       return candidate;
-    const parent = dirname19(dir);
+    const parent = dirname20(dir);
     if (parent === dir)
       break;
     dir = parent;
   }
-  return join91(resolve25(start, "..", ".."), "resources", "managed");
+  return join92(resolve25(start, "..", ".."), "resources", "managed");
 }
 
 // src/cli/wizard/agent-link-step.ts
@@ -55790,16 +55861,16 @@ function includesCodex(host) {
 }
 async function resolveCodexPluginRoot(resourcesDir, projectRoot) {
   const currentPluginRoot = resolve26(resourcesDir, "..", "..");
-  const sibling = join92(dirname20(currentPluginRoot), "codex-plugin");
-  if (await fileExists(join92(sibling, ".codex-plugin", "plugin.json")))
+  const sibling = join93(dirname21(currentPluginRoot), "codex-plugin");
+  if (await fileExists(join93(sibling, ".codex-plugin", "plugin.json")))
     return sibling;
-  const currentDist = join92(currentPluginRoot, "dist", "codex-plugin");
-  if (await fileExists(join92(currentDist, ".codex-plugin", "plugin.json")))
+  const currentDist = join93(currentPluginRoot, "dist", "codex-plugin");
+  if (await fileExists(join93(currentDist, ".codex-plugin", "plugin.json")))
     return currentDist;
-  const projectDist = join92(projectRoot, "dist", "codex-plugin");
-  if (await fileExists(join92(projectDist, ".codex-plugin", "plugin.json")))
+  const projectDist = join93(projectRoot, "dist", "codex-plugin");
+  if (await fileExists(join93(projectDist, ".codex-plugin", "plugin.json")))
     return projectDist;
-  if (await fileExists(join92(currentPluginRoot, ".codex", "agents")))
+  if (await fileExists(join93(currentPluginRoot, ".codex", "agents")))
     return currentPluginRoot;
   return currentPluginRoot;
 }
@@ -55853,7 +55924,7 @@ async function runWizard(resourcesDir, projectRoot) {
       setup: async (host) => setup({
         resourcesDir,
         projectRoot,
-        homeDir: homedir13(),
+        homeDir: homedir14(),
         ...process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {},
         now: new Date,
         host,
@@ -55950,7 +56021,7 @@ var setupCommand = defineCommand({
           setup: async (h3) => setup({
             resourcesDir,
             projectRoot,
-            homeDir: homedir13(),
+            homeDir: homedir14(),
             ...process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {},
             now: new Date,
             host: h3,
@@ -55996,7 +56067,7 @@ var setupCommand = defineCommand({
       const result2 = await setup({
         resourcesDir,
         projectRoot,
-        homeDir: homedir13(),
+        homeDir: homedir14(),
         ...process.env.CODEX_HOME ? { codexHome: process.env.CODEX_HOME } : {},
         now: new Date,
         host,
@@ -56030,15 +56101,15 @@ var setupCommand = defineCommand({
 
 // src/cli/commands/teardown.ts
 import { rm as rm6 } from "fs/promises";
-import { homedir as homedir14 } from "os";
-import { join as join94, resolve as resolve27 } from "path";
+import { homedir as homedir15 } from "os";
+import { join as join95, resolve as resolve27 } from "path";
 init_fs();
 
 // src/core/teardown.ts
 init_fs();
 init_shared();
 import { copyFile as copyFile2, readFile as readFile21, rm as rm5 } from "fs/promises";
-import { join as join93 } from "path";
+import { join as join94 } from "path";
 var BACKUP_SUFFIX2 = ".ditto_bak";
 async function teardown(opts) {
   const { resourcesDir, projectRoot, homeDir } = opts;
@@ -56048,7 +56119,7 @@ async function teardown(opts) {
     const action = await teardownFile(decision.destPath);
     files.push({ filename, scope: decision.scope, destPath: decision.destPath, action });
   }
-  const allowlistPath = join93(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join94(projectRoot, ".claude", "settings.json");
   await unallowlistSettingsFile(allowlistPath);
   const pushGateHook = await uninstallPushGateHook({ projectRoot });
   return { files, allowlistPath, pushGateHook };
@@ -56060,7 +56131,7 @@ async function uninstallPushGateHook(opts) {
   } catch {
     return { status: "left-untouched", hookPath: "", backupPath: null };
   }
-  const hookPath = join93(hooksDir, "pre-push");
+  const hookPath = join94(hooksDir, "pre-push");
   const backupPath = `${hookPath}${PUSH_GATE_HOOK_BACKUP_SUFFIX}`;
   if (!await fileExists(hookPath)) {
     return { status: "left-untouched", hookPath, backupPath: null };
@@ -56134,7 +56205,7 @@ var teardownCommand = defineCommand({
         writeHuman(`uninstall: skipped (self-host \u2014 target IS the ditto repo at ${projectRoot})`);
         return;
       }
-      const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir14() });
+      const result2 = await teardown({ resourcesDir, projectRoot, homeDir: homedir15() });
       if (result2.files.length === 0) {
         writeError(`uninstall failed: no managed resources found at ${resourcesDir}`);
         process.exit(RUNTIME_ERROR_EXIT);
@@ -56148,7 +56219,7 @@ var teardownCommand = defineCommand({
       }
       const purge = await shouldPurge(Boolean(args.purge));
       if (purge) {
-        const dittoDir2 = join94(projectRoot, ".ditto");
+        const dittoDir2 = join95(projectRoot, ".ditto");
         await rm6(dittoDir2, { recursive: true, force: true });
         writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ PURGED (${dittoDir2})`);
       } else {
@@ -56304,9 +56375,9 @@ init_fs();
 // src/core/workspace/clone.ts
 init_shared();
 import { execFileSync as execFileSync7 } from "child_process";
-import { existsSync as existsSync15, lstatSync, realpathSync as realpathSync2 } from "fs";
+import { existsSync as existsSync16, lstatSync, realpathSync as realpathSync2 } from "fs";
 import { readFile as readFile22, readdir as readdir27, rm as rm7, writeFile as writeFile7 } from "fs/promises";
-import { basename as basename7, dirname as dirname21, isAbsolute as isAbsolute17, join as join95, relative as relative23, resolve as resolve28 } from "path";
+import { basename as basename7, dirname as dirname22, isAbsolute as isAbsolute17, join as join96, relative as relative23, resolve as resolve28 } from "path";
 var LOCAL_CLONE_ENV_FLAG = "DITTO_ALLOW_LOCAL_CLONE";
 function localTransportAllowed(env2 = process.env) {
   return env2[LOCAL_CLONE_ENV_FLAG] === "1";
@@ -56339,14 +56410,14 @@ function escapesRoot(rel) {
 function realpathNearestExisting(p2) {
   let cur = resolve28(p2);
   const tail = [];
-  while (!existsSync15(cur)) {
-    const parent = dirname21(cur);
+  while (!existsSync16(cur)) {
+    const parent = dirname22(cur);
     if (parent === cur)
-      return join95(realpathSync2(cur), ...tail);
+      return join96(realpathSync2(cur), ...tail);
     tail.unshift(basename7(cur));
     cur = parent;
   }
-  return tail.length === 0 ? realpathSync2(cur) : join95(realpathSync2(cur), ...tail);
+  return tail.length === 0 ? realpathSync2(cur) : join96(realpathSync2(cur), ...tail);
 }
 function resolveContainedDir(workspaceRoot, dir) {
   const root = resolve28(workspaceRoot);
@@ -56407,7 +56478,7 @@ async function installRootGateHook(target, workspaceRoot, hookTemplatePath) {
   return r4.status;
 }
 async function addToParentGitignore(workspaceRoot, dir) {
-  const giPath = join95(workspaceRoot, ".gitignore");
+  const giPath = join96(workspaceRoot, ".gitignore");
   const entry = `${dir.replace(/\/+$/, "")}/`;
   const bare = dir.replace(/\/+$/, "");
   let cur = "";
@@ -56549,7 +56620,7 @@ init_work_item_store();
 init_worktree();
 
 // src/core/worktree-drive.ts
-import { join as join96 } from "path";
+import { join as join97 } from "path";
 var TERMINAL_STATUSES4 = ["done", "abandoned"];
 var DEFAULT_MAX_DEPTH2 = 20;
 async function driveWorktrees(deps, options) {
@@ -56602,7 +56673,7 @@ async function driveWorktrees(deps, options) {
       continue;
     }
     drivenCount++;
-    const res = await deps.driveMember(join96(repoRoot, ws.worktree_path), member);
+    const res = await deps.driveMember(join97(repoRoot, ws.worktree_path), member);
     if (res.outcome !== "done") {
       ledger.push({
         member_id: member,
@@ -56928,4 +56999,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=74e35ace9642cdf38f3c3ecdde4e57eb3c714c3ed928b3afb5cb4263c48cfc87
+//# ditto-src-stamp=e3d591e0b75863e814c38f4ba341757c1c9e6eb835aeeff74ceb984f4f708313

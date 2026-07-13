@@ -82,9 +82,63 @@ describe('doctor capability', () => {
   });
 });
 
+// Consumer scenario: the session target ships no hooks.json (the plugin surface
+// lives in the plugin cache). With the plugin root pinned via CLAUDE_PLUGIN_ROOT,
+// hook parity is checked there — all 6 declared hooks register → no drift, exit 0.
+// This is the exact false-positive the fix removes.
+describe('doctor capability (consumer install: hooks live at the plugin root)', () => {
+  let target: string;
+  let plugin: string;
+
+  const ALL_SIX = [
+    'SessionStart',
+    'UserPromptSubmit',
+    'Stop',
+    'PreCompact',
+    'PostToolUse',
+    'PreToolUse',
+  ];
+
+  beforeEach(async () => {
+    target = await mkdtemp(join(tmpdir(), 'ditto-cap-target-'));
+    plugin = await mkdtemp(join(tmpdir(), 'ditto-cap-plugin-'));
+    await mkdir(join(plugin, 'hooks'), { recursive: true });
+    const hooks = Object.fromEntries(ALL_SIX.map((e) => [e, hookEntry(`bun run ${e}.ts`)]));
+    await writeFile(join(plugin, 'hooks', 'hooks.json'), JSON.stringify({ hooks }));
+  });
+
+  afterEach(async () => {
+    await rm(target, { recursive: true, force: true });
+    await rm(plugin, { recursive: true, force: true });
+  });
+
+  test('ac-2: target has no hooks.json but plugin root registers all 6 → ok, exit 0', () => {
+    const proc = Bun.spawnSync(
+      ['bun', 'run', cli, 'doctor', 'capability', '--host', 'claude-code', '--output', 'json'],
+      {
+        cwd: target,
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env: { ...process.env, CLAUDE_PLUGIN_ROOT: plugin },
+      },
+    );
+    const json = JSON.parse(proc.stdout.toString());
+    const drift = json.findings.filter(
+      (f: { kind: string; host: string }) =>
+        f.host === 'claude-code' && f.kind === 'declared_hook_not_registered',
+    );
+    expect(drift).toEqual([]);
+    expect(json.status).toBe('ok');
+    expect(proc.exitCode).toBe(0);
+  });
+});
+
 // Fail-side proven at the exact CLI surface users invoke (mirrors
-// tests/doctor/surface.test.ts): a temp repo whose hooks/hooks.json drifts from
+// tests/doctor/surface.test.ts): a plugin root whose hooks/hooks.json drifts from
 // claude-code's hardcoded declared set must make the command exit non-zero.
+// `CLAUDE_PLUGIN_ROOT` pins the plugin root to the temp dir — hook parity is
+// checked against the plugin's own hooks.json (the plugin root), not the session
+// target, so the drift fixture must live at that pinned root.
 describe('doctor capability (fail-closed at CLI surface)', () => {
   let dir: string;
   let home: string;
@@ -94,7 +148,7 @@ describe('doctor capability (fail-closed at CLI surface)', () => {
       cwd: dir,
       stdout: 'pipe',
       stderr: 'pipe',
-      env: { ...process.env, HOME: home },
+      env: { ...process.env, HOME: home, CLAUDE_PLUGIN_ROOT: dir },
     });
   }
 

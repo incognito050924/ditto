@@ -245,7 +245,11 @@ export const claudeCodeHostAdapter: HostAdapter = {
     return { host: 'claude-code', servers, unavailable };
   },
 
-  async loadSurfaceInventory(repoRoot): Promise<SurfaceInventory> {
+  async loadSurfaceInventory(repoRoot, pluginRoot): Promise<SurfaceInventory> {
+    // The plugin's shipped surface (skills/agents/commands/hooks/manifest) lives
+    // at the plugin root; the project-local .claude/agents+commands live at the
+    // session target. They coincide in a dogfood checkout (pluginRoot omitted).
+    const shippedRoot = pluginRoot ?? repoRoot;
     const homeSurfaces: SurfaceEntry[] = (
       await listDirectories(join(homedir(), '.claude', 'skills'))
     ).map((entry) => ({
@@ -277,7 +281,7 @@ export const claudeCodeHostAdapter: HostAdapter = {
           id: entry.id.replace(/\.md$/, ''),
           path: entry.path,
         })),
-      ...(await scanPluginRoot(repoRoot)),
+      ...(await scanPluginRoot(shippedRoot)),
     ];
     return { host: 'claude-code', localSurfaces, homeSurfaces, unavailable: [] };
   },
