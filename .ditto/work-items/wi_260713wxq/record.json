@@ -1,0 +1,78 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260713wxq",
+  "title": "[harness] autopilot scope-guard가 mid-run 사용자-리뷰 재편집을 막아 bypass 강제 (wi_260713tsw)",
+  "source_request": "[harness] autopilot scope-guard가 mid-run 사용자-리뷰 재편집을 막아 bypass 강제 (wi_260713tsw)\n\nwi_260713nlg autopilot 중 발견. 로컬 work item wi_260713tsw로 조사 완료(handoff: .ditto/local/handoff/wi_260713tsw.md). **수정은 별도 승인 단위.**\n\n## 증상\npassed impl 노드를 사용자 피드백으로 재편집할 때 PreToolUse scope guard가 Edit/Write 차단 → implementer가 DITTO_AUTOPILOT_BYPASS로 우회.\n\n## 원인 (조사 완료, file:line)\n- 가드 checkAutopilotLease(src/hooks/pre-tool-use.ts:675-748)는 running 노드 lease만 union. passed 노드는 terminal 시 lease 제거(autopilot-loop.ts:2430).\n- verify/review 노드의 file_scope:[] (빈 declared, undefined 아님) → scope_source='declared' → fail-open(:713) 미발동 → 빈 allow-list 차단.\n- passed impl 노드를 user-feedback로 reopen하는 경로 부재.\n- 직교 hole: Bash 쓰기는 lease-gate 밖(pre-tool-use.ts:767-822).\n\n## 권장 수정 (순서)\n1. (선호) 기존 reopen 전이(autopilot-graph.ts:100)로 passed impl 노드를 user-feedback 시 pending 재개 → fresh lease 재인가. bounded 필요(K-cap). ADR-20260710·ADR-20260627 안에서 same-unit 재-dispatch.\n2. read-only owner 빈 declared scope를 fail-open 처리 / []→omit 정규화(autopilot-graph.ts:311).\n3. review 페이즈에 passed mutating 노드 scope union(최소선호).\n\n## 부수 학습\ngenerated_nodes 저작 시 read-only 노드는 file_scope를 [] 아니라 omit해야 fail-open 정상 작동.",
+  "goal": "Fix the autopilot mid-run scope-guard bug (#31): a passed `implement` node can be reopened on explicit user feedback so the re-edit runs under a fresh active-node lease (auto re-implement) instead of forcing DITTO_AUTOPILOT_BYPASS, and the PreToolUse guard stops treating a read-only node's empty write-set lease as a deny-all — all within the frozen acceptance-criteria graph as one approval unit.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "An active-node lease with an empty file_scope no longer causes checkAutopilotLease to block an edit (empty write-set is excluded from the enforcement set), while a concurrently-active mutating node's non-empty declared file_scope is still enforced — an out-of-scope edit under that mutating node still blocks.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "A user-action CLI entrypoint reopens a passed implement node (passed->pending) and re-dispatch re-grants a fresh active-node lease scoped to that node, so the re-edit passes the guard without DITTO_AUTOPILOT_BYPASS; the reopen is not produced by an autonomous record-result payload flag.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "The reopened implement node re-dispatches its implement owner with the user's feedback carried into the delegation packet (auto re-implement).",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "Reopening a passed implement node re-arms every transitive downstream verify/review node to pending (re-verify) without destructive teardown/regeneration (node ids preserved), and the completion verdict reflects the fresh re-verification — a pre-reopen stale downstream pass can no longer close an acceptance criterion over the re-mutated node (no false-green).",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "Reopen is available only while the graph has a non-terminal node (the mid-run guard-block window); a reopen attempt on a fully-terminal graph is refused as out of scope.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-6",
+      "statement": "Reopen conserves the frozen acceptance-criteria id-set via the existing intentDriftGate/purposePreserving invariant; it cannot add or alter acceptance criteria.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-7",
+      "statement": "Repeated reopens of the same node are bounded by a per-node reopen cap; at the cap the node stops and reports instead of reopening again.",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-8",
+      "statement": "The full bun test suite is green with zero regressions, and bun run build:plugin and bun run build:codex-plugin both exit 0.",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "in_progress",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true
+  },
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 31
+  },
+  "risks": [],
+  "runs": [],
+  "started_at_sha": "1b9b5399040ac24e245a5bfc19b88898307a52fa",
+  "started_untracked_baseline": [
+    ".ditto/work-items/wi_2607139n3/",
+    ".ditto/work-items/wi_260713wxq/"
+  ],
+  "created_at": "2026-07-13T10:37:11.798Z",
+  "updated_at": "2026-07-13T11:31:09.611Z"
+}
