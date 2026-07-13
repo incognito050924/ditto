@@ -18,6 +18,7 @@ import {
 import { InterviewStore } from '~/core/interview-store';
 import type { OpponentSeamConfig } from '~/core/prism/opponent';
 import { WorkItemStore } from '~/core/work-item-store';
+import { interviewQuestion } from '~/schemas/interview-state';
 
 const BARE_POLICY: OpponentSeamConfig['policy'] = {
   producer: 'current-host',
@@ -97,6 +98,7 @@ describe('recordTurn', () => {
         },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'How is the score computed?',
           why_matters: 'Determines the response shape and edge cases.',
           info_gain_estimate: 'high',
@@ -117,6 +119,7 @@ describe('recordTurn', () => {
         dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'q1?',
           why_matters: 'because',
           info_gain_estimate: 'medium',
@@ -129,6 +132,7 @@ describe('recordTurn', () => {
         dimension: { id: 'd1', critical: false, state: 'resolved', ambiguity: 0.1, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'q2?',
           why_matters: 'follow-up',
           info_gain_estimate: 'low',
@@ -149,6 +153,7 @@ describe('recordTurn', () => {
         dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.4, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'q1?',
           why_matters: 'unknown',
           info_gain_estimate: 'medium',
@@ -171,6 +176,7 @@ describe('recordTurn', () => {
         dimension: { id: 'd-crit', critical: true, state: 'resolved', ambiguity: 0.2, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'critical?',
           why_matters: 'load-bearing',
           info_gain_estimate: 'high',
@@ -193,6 +199,7 @@ describe('recordTurn', () => {
         dimension: { id: 'd-crit', critical: true, state: 'resolved', ambiguity: 0.2, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'critical?',
           why_matters: 'load-bearing',
           info_gain_estimate: 'high',
@@ -211,6 +218,7 @@ describe('recordTurn', () => {
         dimension: { id: 'd-min', critical: false, state: 'resolved', ambiguity: 0.2, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'minor?',
           why_matters: 'cosmetic',
           info_gain_estimate: 'low',
@@ -228,6 +236,7 @@ describe('recordTurn', () => {
         dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'q1?',
           why_matters: 'because',
           info_gain_estimate: 'low',
@@ -245,6 +254,7 @@ describe('recordTurn', () => {
         dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'q1?',
           why_matters: 'because',
           info_gain_estimate: 'medium',
@@ -263,6 +273,7 @@ describe('recordTurn', () => {
           dimension: { id: `d${i}`, critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
           question: {
             user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+            recommended_answer: '추천 답변 예시입니다.',
             text: `q${i}?`,
             why_matters: 'x',
             info_gain_estimate: 'medium',
@@ -284,6 +295,7 @@ describe('recordTurn', () => {
         dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'q?',
           why_matters: 'x',
           info_gain_estimate: 'low',
@@ -308,6 +320,7 @@ describe('recordTurn', () => {
           dimension: { id: `d${i}`, critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
           question: {
             user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+            recommended_answer: '추천 답변 예시입니다.',
             text: `q${i}?`,
             why_matters: 'x',
             info_gain_estimate: 'low',
@@ -321,6 +334,7 @@ describe('recordTurn', () => {
         dimension: { id: 'd2', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'q2?',
           why_matters: 'x',
           info_gain_estimate: 'low',
@@ -339,6 +353,7 @@ describe('recordTurn', () => {
         dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'q?',
           why_matters: 'x',
           info_gain_estimate: 'high',
@@ -359,6 +374,7 @@ describe('recordTurn', () => {
         dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'q?',
           why_matters: 'x',
           info_gain_estimate: 'low',
@@ -441,6 +457,7 @@ describe('startInterview seeds user-intent dimensions (기제 C, wi_260706n4w)',
         dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'shape?',
           why_matters: 'response',
           info_gain_estimate: 'high',
@@ -493,6 +510,7 @@ describe('checkReadiness', () => {
         },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'critical?',
           why_matters: 'load-bearing',
           info_gain_estimate: 'high',
@@ -518,6 +536,7 @@ describe('checkReadiness', () => {
         },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'critical?',
           why_matters: 'load-bearing',
           info_gain_estimate: 'high',
@@ -541,6 +560,7 @@ describe('finalizeInterview', () => {
         dimension: { id: 'd-x', critical: true, state: 'partial', ambiguity: 0.4, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'q?',
           why_matters: 'm',
           info_gain_estimate: 'high',
@@ -582,6 +602,7 @@ describe('finalizeInterview', () => {
         dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'shape?',
           why_matters: 'response',
           info_gain_estimate: 'high',
@@ -644,6 +665,7 @@ describe('finalizeInterview', () => {
         dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'shape?',
           why_matters: 'response',
           info_gain_estimate: 'high',
@@ -695,6 +717,7 @@ describe('finalizeInterview', () => {
         dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'shape?',
           why_matters: 'response',
           info_gain_estimate: 'high',
@@ -791,6 +814,7 @@ describe('finalizeInterview', () => {
         dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'q?',
           why_matters: 'm',
           info_gain_estimate: 'low',
@@ -860,6 +884,7 @@ describe('projectInterviewDimensions — intent dissent opponent + honest neutra
         },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'scope?',
           why_matters: 'load-bearing',
           info_gain_estimate: 'high',
@@ -910,6 +935,7 @@ describe('projectInterviewDimensions — intent dissent opponent + honest neutra
         dimension: { id: 'd-min', critical: false, state: 'resolved', ambiguity: 0, notes: 'x' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'minor?',
           why_matters: 'cosmetic',
           info_gain_estimate: 'low',
@@ -934,6 +960,7 @@ describe('finalizeInterview — critical high-impact dissent gate (ac-3)', () =>
         dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'shape?',
           why_matters: 'response',
           info_gain_estimate: 'high',
@@ -1015,6 +1042,7 @@ describe('finalizeInterview — critical high-impact dissent gate (ac-3)', () =>
         dimension: { id: 'd-shape', critical: true, state: 'resolved', ambiguity: 0.05, notes: '' },
         question: {
           user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천 답변 예시입니다.',
           text: 'shape?',
           why_matters: 'response',
           info_gain_estimate: 'high',
@@ -1097,6 +1125,7 @@ describe('recordTurn — question context fields (ac-1/ac-4/ac-5, wi_260622ph8)'
           why_matters: 'Determines the storage format.',
           info_gain_estimate: 'high',
           user_explanation: '비밀번호를 어떻게 안전하게 저장할지 정하는 질문이에요.',
+          recommended_answer: '추천 답변 예시입니다.',
           background: '저장 후 바꾸기 어려워 처음에 정해야 합니다.',
           grounding: 'src/auth/store.ts:42',
           self_answer_attempts: [{ source: 'code', result: '코드에 정책이 없어 확인 불가' }],
@@ -1133,6 +1162,7 @@ describe('recordTurn — novelty-exhaustion termination (wi_260709d00 #14)', () 
           dimension: { id: 'd-crit', critical: true, state: 'partial', ambiguity: 0.5, notes: '' },
           question: {
             user_explanation: '이 질문이 무엇을 결정하는지 사용자 언어로 설명합니다.',
+            recommended_answer: '추천 답변 예시입니다.',
             text: `q${i}?`,
             why_matters: 'x',
             info_gain_estimate: 'low',
@@ -1190,6 +1220,76 @@ describe('recordTurn — novelty-exhaustion termination (wi_260709d00 #14)', () 
   });
 });
 
+// ac-3 (impl-di-recommended-answer): recommended_answer is ADDITIVE-OPTIONAL on the persisted
+// interviewQuestion schema — a legacy question object WITHOUT the field still parses, and a
+// WITH-field object retains it. Legacy interview-state.json lines must not break.
+describe('interviewQuestion schema — recommended_answer additive-optional (ac-3)', () => {
+  const legacy = {
+    id: 'q001',
+    asked_at: '2026-07-13T00:00:00.000Z',
+    dimension: 'd1',
+    question: 'q?',
+    why_matters: 'x',
+    info_gain_estimate: 'high' as const,
+  };
+
+  test('a legacy interviewQuestion WITHOUT recommended_answer still parses', () => {
+    const q = interviewQuestion.parse(legacy);
+    expect(q.recommended_answer).toBeUndefined();
+    expect(q.id).toBe('q001');
+  });
+
+  test('recommended_answer is retained when present', () => {
+    const q = interviewQuestion.parse({ ...legacy, recommended_answer: 'bcrypt를 추천합니다.' });
+    expect(q.recommended_answer).toBe('bcrypt를 추천합니다.');
+  });
+});
+
+// ac-1/ac-3 (impl-di-recommended-answer): the recordTurn write path threads recommended_answer
+// into the check-question gate AND the persisted question. A turn missing recommended_answer is
+// rejected before persist (message names the field); a turn carrying it persists the field.
+describe('recordTurn — recommended_answer gate + persistence (ac-1/ac-3)', () => {
+  beforeEach(async () => {
+    await startInterview(repo, { workItemId: wiId, questionCap: 8 });
+  });
+
+  test('missing recommended_answer → throws, message names recommended_answer, nothing persisted', async () => {
+    await expect(
+      recordTurn(repo, {
+        workItemId: wiId,
+        payload: {
+          dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
+          question: {
+            text: '점수는 어떻게 계산하나요?',
+            why_matters: '응답 형태를 정합니다.',
+            info_gain_estimate: 'high',
+            user_explanation: '응답을 어떻게 계산할지 정하는 질문이에요.',
+          },
+        },
+      }),
+    ).rejects.toThrow(/recommended_answer/);
+    const state = await new InterviewStore(repo).get(wiId);
+    expect(state.questions.length).toBe(0);
+  });
+
+  test('recommended_answer present → persisted on the appended question', async () => {
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
+        question: {
+          text: '점수는 정수인가요?',
+          why_matters: '응답 형식을 정합니다.',
+          info_gain_estimate: 'high',
+          user_explanation: '응답을 정수로 줄지 정하는 질문이에요.',
+          recommended_answer: '정수 0-100을 추천합니다.',
+        },
+      },
+    });
+    expect(state.questions[0]?.recommended_answer).toBe('정수 0-100을 추천합니다.');
+  });
+});
+
 // ac-1 (impl-ac1-recordturn): the recordTurn WRITE path rejects a bad question surface
 // BEFORE persist, wiring the EXISTING pure validators (validateQuestionContext +
 // findUnexplainedIdentifiers, question-context.ts) into the write path. A "bad" turn is
@@ -1238,6 +1338,7 @@ describe('recordTurn — question-surface reject before persist (ac-1)', () => {
             why_matters: '순서를 정합니다.',
             info_gain_estimate: 'high',
             user_explanation: '어떤 항목을 먼저 다룰지 정하는 질문이에요.',
+            recommended_answer: '추천 답변 예시입니다.',
           },
         },
       }),
@@ -1257,6 +1358,7 @@ describe('recordTurn — question-surface reject before persist (ac-1)', () => {
           why_matters: '응답 형식을 정합니다.',
           info_gain_estimate: 'high',
           user_explanation: '응답을 정수로 줄지 소수로 줄지 정하는 질문이에요.',
+          recommended_answer: '추천 답변 예시입니다.',
         },
       },
     });
@@ -1282,6 +1384,7 @@ describe('recordTurn — question-surface reject before persist (ac-1)', () => {
           why_matters: '작업 순서를 정합니다.',
           info_gain_estimate: 'high',
           user_explanation: '무엇을 먼저 처리할지 정하는 질문이에요.',
+          recommended_answer: '추천 답변 예시입니다.',
         },
         answer: { text: 'ac-1 먼저 진행해 주세요', kind: 'user' },
       },

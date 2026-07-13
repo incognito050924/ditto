@@ -51,6 +51,11 @@ export const scoredQuestion = z
     user_explanation: z.string().optional(),
     background: z.string().optional(),
     grounding: z.string().optional(),
+    // Recommended-answer context (impl-di-recommended-answer, ac-3). ADDITIVE-OPTIONAL so the
+    // raw score trail (all_scored) and every pre-existing question-rounds.jsonl line stay valid.
+    // The deep-interview pre-ask gate (`ditto deep-interview check-question`) hard-requires it on
+    // SELECTED (user-reaching) questions, mirroring user_explanation. Benign here for prism (ac-4).
+    recommended_answer: z.string().optional(),
     scores: questionScore,
     rationale: z.string().optional().describe('Why selected (present on selected questions)'),
   })

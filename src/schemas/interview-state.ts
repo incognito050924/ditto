@@ -151,6 +151,13 @@ export const interviewQuestion = z
       .describe(
         'Plain-language why-we-ask + what-the-answer-decides — user language, no raw code/jargon (default-shown)',
       ),
+    // recommended_answer (impl-di-recommended-answer, ac-3). ADDITIVE-OPTIONAL so pre-existing
+    // interview-state.json parse unchanged; the check-question gate hard-requires it before ask.
+    recommended_answer: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('The agent’s suggested default answer (user language) carried with the question'),
     background: z
       .string()
       .min(1)

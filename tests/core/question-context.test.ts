@@ -5,6 +5,7 @@ import {
   needsBriefing,
   resolveReviewDecision,
   routeForReview,
+  selectSingleFire,
   validateQuestionContext,
 } from '~/core/question-context';
 
@@ -16,6 +17,7 @@ describe('validateQuestionContext (ac-2, wi_260622ph8)', () => {
     text: '비밀번호 해시는 무엇을 쓸까요?',
     why_matters: '저장 형식과 마이그레이션을 좌우합니다.',
     user_explanation: '비밀번호를 안전하게 저장하는 방식을 정하는 질문이에요.',
+    recommended_answer: 'bcrypt(cost 12)를 추천합니다.',
     background: '한 번 정하면 바꾸기 어렵습니다.',
     grounding: 'src/auth/store.ts:42',
     self_answer_attempts: [{ source: 'code' as const, result: '코드에 정책 없음' }],
@@ -45,8 +47,39 @@ describe('validateQuestionContext (ac-2, wi_260622ph8)', () => {
       text: 'q?',
       why_matters: '결정에 영향',
       user_explanation: '왜 묻는지 쉬운 말 설명',
+      recommended_answer: '추천하는 기본 답',
     });
     expect(v.ok).toBe(true);
+  });
+});
+
+// ac-1 (impl-di-recommended-answer): recommended_answer is hard-required at the check-question
+// gate — EXACTLY mirroring user_explanation (optional in the schema, gate-required by
+// validateQuestionContext). A candidate missing/blank recommended_answer is rejected; one that
+// carries it passes. Precedent: user_explanation is `.optional()` yet gate-required.
+describe('validateQuestionContext requires recommended_answer (ac-1)', () => {
+  const base = {
+    text: '비밀번호 해시는 무엇을 쓸까요?',
+    why_matters: '저장 형식을 좌우합니다.',
+    user_explanation: '비밀번호를 안전하게 저장하는 방식을 정하는 질문이에요.',
+  };
+
+  test('rejects a candidate missing recommended_answer', () => {
+    const v = validateQuestionContext(base);
+    expect(v.ok).toBe(false);
+    expect(v.violations.map((x) => x.field)).toContain('recommended_answer');
+  });
+
+  test('rejects an empty/whitespace recommended_answer', () => {
+    const v = validateQuestionContext({ ...base, recommended_answer: '   ' });
+    expect(v.ok).toBe(false);
+    expect(v.violations.map((x) => x.field)).toContain('recommended_answer');
+  });
+
+  test('passes when recommended_answer is present', () => {
+    const v = validateQuestionContext({ ...base, recommended_answer: 'bcrypt를 추천합니다.' });
+    expect(v.ok).toBe(true);
+    expect(v.violations.map((x) => x.field)).not.toContain('recommended_answer');
   });
 });
 
@@ -58,6 +91,7 @@ describe('validateQuestionContext identifier gloss (ac-1, D1)', () => {
   const base = {
     why_matters: '결과에 영향을 줍니다.',
     user_explanation: '왜 묻는지 쉬운 말로 설명하는 문장이에요.',
+    recommended_answer: '추천하는 기본 답이에요.',
   };
 
   test('(a) rejects an unexplained ac-1 in the question text', () => {
@@ -117,8 +151,46 @@ describe('validateQuestionContext identifier gloss (ac-1, D1)', () => {
       text: '비밀번호 저장 방식을 bcrypt로 할까요 argon2로 할까요?',
       why_matters: '저장 형식을 좌우합니다.',
       user_explanation: '암호를 안전하게 저장하는 방법을 정하는 질문이에요.',
+      recommended_answer: 'bcrypt를 추천합니다.',
     });
     expect(v.ok).toBe(true);
+  });
+});
+
+// ac-2 (impl-di-recommended-answer): the deep-interview single-fire selector returns AT
+// MOST ONE candidate — the top-1 by info_gain_estimate (high > medium > low). info_gain is
+// a 3-value enum so TIES ARE ROUTINE; the tiebreak is deterministic — stable INPUT ORDER
+// (first candidate among equals wins). Pure and unit-testable; lives on the deep-interview
+// path only (NOT the shared question-round schema — that stays multi-select for prism).
+describe('selectSingleFire (ac-2, deep-interview top-1 single-fire)', () => {
+  test('3 above-threshold candidates → exactly the highest info_gain', () => {
+    const out = selectSingleFire([
+      { id: 'a', info_gain_estimate: 'medium' as const },
+      { id: 'b', info_gain_estimate: 'high' as const },
+      { id: 'c', info_gain_estimate: 'low' as const },
+    ]);
+    expect(out.length).toBe(1);
+    expect(out[0]?.id).toBe('b');
+  });
+
+  test('all-tied → deterministic: the FIRST candidate in input order wins', () => {
+    const out = selectSingleFire([
+      { id: 'x', info_gain_estimate: 'medium' as const },
+      { id: 'y', info_gain_estimate: 'medium' as const },
+      { id: 'z', info_gain_estimate: 'medium' as const },
+    ]);
+    expect(out.length).toBe(1);
+    expect(out[0]?.id).toBe('x');
+  });
+
+  test('empty input → empty result', () => {
+    expect(selectSingleFire([])).toEqual([]);
+  });
+
+  test('single candidate → that one', () => {
+    const out = selectSingleFire([{ id: 'solo', info_gain_estimate: 'low' as const }]);
+    expect(out.length).toBe(1);
+    expect(out[0]?.id).toBe('solo');
   });
 });
 

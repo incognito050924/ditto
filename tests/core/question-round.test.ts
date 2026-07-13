@@ -5,7 +5,12 @@ import { join } from 'node:path';
 import { PrismStore } from '~/core/prism/store';
 import { recordRound, recordRoundPayload } from '~/core/question-round';
 import { WorkItemStore } from '~/core/work-item-store';
-import { type QuestionRound, questionRound, questionRoundPayload } from '~/schemas/question-round';
+import {
+  type QuestionRound,
+  questionRound,
+  questionRoundPayload,
+  scoredQuestion,
+} from '~/schemas/question-round';
 
 const VALID_SCORE = { consensus: 2, quality: 0.8, necessity: 0.7, answer_value: 0.9 };
 
@@ -73,6 +78,60 @@ describe('question-round schema (증분 3 — 점수 영속 sink)', () => {
   test('invariant: dry=false requires at least one selected', () => {
     const bad = questionRoundPayload.safeParse({ round: 1, dry: false, selected: [] });
     expect(bad.success).toBe(false);
+  });
+
+  // ac-3 (impl-di-recommended-answer): recommended_answer is ADDITIVE-OPTIONAL on the SHARED
+  // scoredQuestion schema — a WITH-field object retains it, and a legacy WITHOUT-field object
+  // (every pre-existing all_scored / question-rounds.jsonl line) still parses. ac-4 boundary:
+  // this shared schema is consumed by prism, so the field must be a benign optional prism
+  // ignores — NEVER a single-fire limit (that lives on the deep-interview path only).
+  test('ac-3: scoredQuestion retains recommended_answer when present', () => {
+    const q = scoredQuestion.parse({
+      text: 'q?',
+      property: 'blind-spot',
+      scores: VALID_SCORE,
+      recommended_answer: '추천 답변 예시',
+    });
+    expect(q.recommended_answer).toBe('추천 답변 예시');
+  });
+
+  test('ac-3: a legacy scoredQuestion WITHOUT recommended_answer still parses', () => {
+    const q = scoredQuestion.parse({ text: 'q?', property: 'blind-spot', scores: VALID_SCORE });
+    expect(q.recommended_answer).toBeUndefined();
+    expect(q.text).toBe('q?');
+  });
+
+  // ac-4 (prism boundary): the shared question-round module carries NO single-fire selector —
+  // the top-1 reduction is deep-interview-only. This asserts the boundary by absence.
+  test('ac-4: the shared question-round schema exports no single-fire selector', async () => {
+    const mod = (await import('~/schemas/question-round')) as Record<string, unknown>;
+    expect(mod.selectSingleFire).toBeUndefined();
+  });
+
+  // ac-3: a persisted question-rounds.jsonl line whose selected question WITHOUT
+  // recommended_answer still parses (legacy), and one WITH it retains the field.
+  test('ac-3: a question-rounds.jsonl line carries recommended_answer through selected', () => {
+    const legacy = questionRound.parse({
+      ts: '2026-07-13T00:00:00.000Z',
+      work_item_id: 'wi_260713mmi',
+      round: 1,
+      dry: false,
+      selected: [{ text: 'q?', property: 'blind-spot', scores: VALID_SCORE }],
+      all_scored: [],
+    });
+    expect(legacy.selected[0]?.recommended_answer).toBeUndefined();
+
+    const withField = questionRound.parse({
+      ts: '2026-07-13T00:00:00.000Z',
+      work_item_id: 'wi_260713mmi',
+      round: 1,
+      dry: false,
+      selected: [
+        { text: 'q?', property: 'blind-spot', scores: VALID_SCORE, recommended_answer: '추천 답' },
+      ],
+      all_scored: [],
+    });
+    expect(withField.selected[0]?.recommended_answer).toBe('추천 답');
   });
 
   test('the persisted line schema additionally requires ts + work_item_id', () => {

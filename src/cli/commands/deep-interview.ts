@@ -1,4 +1,5 @@
 import { defineCommand } from 'citty';
+import { z } from 'zod';
 import { readDeepInterviewConfigDefaults } from '~/core/ditto-config';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
@@ -21,9 +22,14 @@ import {
 import { InterviewStore } from '~/core/interview-store';
 import { finalizeFromDesignDoc } from '~/core/prism/finalize';
 import type { OpponentSeamConfig } from '~/core/prism/opponent';
-import { questionContextCandidate, validateQuestionContext } from '~/core/question-context';
+import {
+  questionContextCandidate,
+  selectSingleFire,
+  validateQuestionContext,
+} from '~/core/question-context';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
+  infoGain,
   interviewDissentVerdicts,
   interviewSemanticVerdicts,
   premortemRefutationVerdicts,
@@ -581,7 +587,7 @@ const checkQuestionCmd = defineCommand({
     json: {
       type: 'string',
       description:
-        'Question candidate JSON: {text, why_matters, user_explanation, background?, grounding?, self_answer_attempts?}',
+        'Question candidate JSON: {text, why_matters, user_explanation, recommended_answer, background?, grounding?, self_answer_attempts?}',
       required: true,
     },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
@@ -625,6 +631,72 @@ const checkQuestionCmd = defineCommand({
     }
     // Non-zero exit on rejection so the SKILL/driver can branch (regenerate) on it.
     if (!verdict.ok) process.exit(RUNTIME_ERROR_EXIT);
+  },
+});
+
+// The deep-interview single-fire enforcement seam (impl-di-recommended-answer, ac-2).
+// After the gate selects candidates, the SKILL runs THIS to collapse them to AT MOST ONE
+// question — the deterministic `selectSingleFire` top-1 (highest info_gain_estimate;
+// ties keep stable input order). This is the runtime call site that makes the single-fire
+// cap "결정적 함수로 강제": the pure reducer is no longer an orphan, the CLI is its seam.
+// Input is a minimal candidate list (each carries info_gain_estimate); all other fields
+// pass through untouched so the chosen candidate is returned whole.
+const singleFireCandidate = z
+  .object({ info_gain_estimate: infoGain })
+  .passthrough()
+  .describe(
+    'A gate-selected candidate carrying its info_gain_estimate (other fields pass through)',
+  );
+
+const selectSingleCmd = defineCommand({
+  meta: {
+    name: 'select-single',
+    description:
+      'Collapse the gate-selected candidates to the single deterministic top-1 (highest info_gain) before asking',
+  },
+  args: {
+    json: {
+      type: 'string',
+      description: 'JSON array of gate-selected candidates, each carrying info_gain_estimate',
+      required: true,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    let raw: unknown;
+    try {
+      raw = parseJsonArg(args.json);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const parsed = z.array(singleFireCandidate).safeParse(raw);
+    if (!parsed.success) {
+      writeError('--json failed schema validation:');
+      for (const issue of parsed.error.issues) {
+        writeError(`  - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
+      }
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const selected = selectSingleFire(parsed.data);
+    const chosen = selected[0];
+    if (format === 'json') {
+      writeJson({ selected });
+    } else if (chosen === undefined) {
+      writeHuman('select-single: no candidate (empty selection)');
+    } else {
+      writeHuman(`select-single: 1 candidate (info_gain=${chosen.info_gain_estimate})`);
+    }
   },
 });
 
@@ -1137,6 +1209,7 @@ export const deepInterviewCommand = defineCommand({
     start: startCmd,
     'record-turn': recordTurnCmd,
     'check-question': checkQuestionCmd,
+    'select-single': selectSingleCmd,
     'check-readiness': checkReadinessCmd,
     'project-coverage': projectCoverageCmd,
     premortem: premortemCmd,

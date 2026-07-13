@@ -66,6 +66,7 @@ describe('deep-interview semantic critic CLI (wi_260709hzg #15)', () => {
           why_matters: 'shape',
           user_explanation:
             '점수가 가질 수 있는 값의 범위를 무엇으로 정할지 사용자 언어로 확인하는 질문입니다.',
+          recommended_answer: '추천: 0..100 정수 — 점수 범위로 가장 단순하고 명확합니다.',
           info_gain_estimate: 'high',
         },
         answer: { text: 'integer 0..100', kind: 'user' },

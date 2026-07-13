@@ -69,6 +69,7 @@ describe('intent-stage coverage projection drives the SHARED engine to disk (ac-
           why_matters: 'blast radius depends on it',
           user_explanation:
             '이 작업이 어떤 데이터에 닿는지 확인해 영향 범위를 사용자 언어로 정하는 질문입니다.',
+          recommended_answer: '추천: 로컬 런타임 파일만 — 영향 범위가 가장 좁아 안전합니다.',
           info_gain_estimate: 'high',
         },
         answer: { text: 'only local runtime files', kind: 'user' },
@@ -91,6 +92,7 @@ describe('intent-stage coverage projection drives the SHARED engine to disk (ac-
           why_matters: 'changes the test plan',
           user_explanation:
             '사용자 화면(UI) 변경이 있는지 확인해 테스트 계획을 사용자 언어로 정하는 질문입니다.',
+          recommended_answer: '추천: CLI 표면만 — 기존 패턴을 따르며 테스트가 단순합니다.',
           info_gain_estimate: 'medium',
         },
         readiness_score: 0.6,
@@ -147,6 +149,7 @@ describe('intent-stage coverage projection drives the SHARED engine to disk (ac-
           text: 'q?',
           why_matters: 'w',
           user_explanation: '무엇을 결정하는 질문인지 사용자 언어로 설명합니다.',
+          recommended_answer: '추천: 기본값 유지 — 현재 요청 범위에 충분합니다.',
           info_gain_estimate: 'low',
         },
       },
@@ -204,6 +207,7 @@ describe('intent-stage coverage projection drives the SHARED engine to disk (ac-
           why_matters: '인가 모델이 의도를 결정',
           user_explanation:
             '누가 이 기능에 접근할 수 있어야 하는지 확인해 인가 모델을 사용자 언어로 정하는 질문입니다.',
+          recommended_answer: '추천: 소유자 단일 사용자만 — 인가 모델이 가장 단순합니다.',
           info_gain_estimate: 'high',
         },
         answer: { text: '소유자 단일 사용자만', kind: 'user' },

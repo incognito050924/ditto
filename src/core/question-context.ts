@@ -23,6 +23,10 @@ export const questionContextCandidate = z
     text: z.string().min(1),
     why_matters: z.string().min(1),
     user_explanation: z.string().optional(),
+    // recommended_answer (impl-di-recommended-answer, ac-1). `.optional()` in the schema but
+    // hard-required by validateQuestionContext below — same optional-schema / gate-required
+    // treatment as user_explanation, so a question is never ASKED without a suggested answer.
+    recommended_answer: z.string().optional(),
     background: z.string().optional(),
     grounding: z.string().optional(),
     self_answer_attempts: z.array(selfAnswerAttempt).optional(),
@@ -126,6 +130,13 @@ export function validateQuestionContext(
         'a plain-language why-we-ask + what-the-answer-decides (user language, no raw code/jargon) is required before asking the user',
     });
   }
+  if (isBlank(candidate.recommended_answer)) {
+    violations.push({
+      field: 'recommended_answer',
+      reason:
+        'a suggested answer (the agent’s recommended default, in user language) is required before asking the user',
+    });
+  }
   if (isBlank(candidate.why_matters)) {
     violations.push({
       field: 'why_matters',
@@ -146,6 +157,32 @@ export function validateQuestionContext(
     });
   }
   return { ok: violations.length === 0, violations };
+}
+
+// --- ac-2 (impl-di-recommended-answer): deep-interview single-fire selector ---
+//
+// Deterministic top-1 reduction for the DEEP-INTERVIEW path only. Returns AT MOST ONE
+// candidate: the highest `info_gain_estimate` (the infoGain enum ranks high > medium > low;
+// src/schemas/interview-state.ts:14). info_gain is a 3-value enum, so TIES ARE ROUTINE — the
+// tiebreak MUST be deterministic: stable INPUT ORDER (first candidate among equals wins,
+// enforced by the STRICT `>` below). Empty → empty; single → that one. Pure and unit-testable.
+// This limit lives on the deep-interview path ONLY — it is deliberately NOT added to the
+// shared question-round `scoredQuestion` schema (consumed by prism, which stays multi-select).
+const INFO_GAIN_RANK: Record<'high' | 'medium' | 'low', number> = { high: 3, medium: 2, low: 1 };
+
+export function selectSingleFire<T extends { info_gain_estimate: 'high' | 'medium' | 'low' }>(
+  candidates: readonly T[],
+): T[] {
+  let best: T | undefined;
+  for (const c of candidates) {
+    if (
+      best === undefined ||
+      INFO_GAIN_RANK[c.info_gain_estimate] > INFO_GAIN_RANK[best.info_gain_estimate]
+    ) {
+      best = c;
+    }
+  }
+  return best === undefined ? [] : [best];
 }
 
 // --- ac-5 (D4): briefing threshold -------------------------------------------

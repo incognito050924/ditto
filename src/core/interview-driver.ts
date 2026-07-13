@@ -151,6 +151,10 @@ export const recordTurnPayload = z
         // existing callers parse unchanged; the gate (check-question) enforces
         // user_explanation before a question is asked.
         user_explanation: z.string().min(1).optional(),
+        // recommended_answer (impl-di-recommended-answer, ac-1/ac-3). Optional on the payload
+        // so callers parse unchanged; the check-question gate (validateQuestionContext, run on
+        // the write path below) hard-requires it before a question is asked.
+        recommended_answer: z.string().min(1).optional(),
         background: z.string().min(1).optional(),
         grounding: z.string().min(1).optional(),
         // Sources the agent checked before asking (§6.2). The driver persists these
@@ -225,6 +229,7 @@ export async function recordTurn(
     text: question.text,
     why_matters: question.why_matters,
     user_explanation: question.user_explanation,
+    recommended_answer: question.recommended_answer,
   });
   const leakedIdentifiers = [
     ...findUnexplainedIdentifiers(question.text),
@@ -294,6 +299,9 @@ export async function recordTurn(
     // Presentation-contract context carried with the question (wi_260622ph8).
     ...(question.user_explanation !== undefined
       ? { user_explanation: question.user_explanation }
+      : {}),
+    ...(question.recommended_answer !== undefined
+      ? { recommended_answer: question.recommended_answer }
       : {}),
     ...(question.background !== undefined ? { background: question.background } : {}),
     ...(question.grounding !== undefined ? { grounding: question.grounding } : {}),

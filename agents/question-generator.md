@@ -46,11 +46,12 @@ The driver relays two dials each round (`generator_effort` + `granularity`). Obe
 The user must be able to *decide* on each question without already knowing what you know. So every candidate carries, alongside the raw question, the comprehensible context the driver will show:
 
 - **`user_explanation`** — a plain-language **why we ask + what your answer decides**, written in the *user's* language. Translate, don't dump: no raw code, no `file:line`, no internal jargon (axis names, `[from-code]` tags, schema fields). This is shown by default, so it must be self-sufficient yet brief — enough to decide, no curse-of-knowledge.
+- **`recommended_answer`** — your **current interpretation** offered for the user to *correct*: a plain-language "내가 답한다면 이렇게 + 그 이유" in the *user's* language, same translate-don't-dump discipline as `user_explanation`. This is anti-anchoring framing (charter §4-12: while intent is still FORMING, a recommendation must INVITE correction, never anchor the user's own intent). Phrase it as "이렇게 읽었는데 — 틀리면 바로잡아 주세요", NOT "이걸 고르세요": a candidate answer to react against, not a directive. Emit one on **every** candidate.
 - **`background`** — *optional* deeper context for progressive disclosure (the "more" the user can expand): the fuller explanation, prior art, or trade-off a non-expert might need. Keep `user_explanation` short by moving depth here, not by omitting it.
   - **Carry codebase background, not just session vocabulary.** When the question hinges on the existing system, the context must orient a reader who shares none of this session's narrative — what the relevant code/architecture *is* and why it constrains the choice — not merely restate session-coined terms or identifiers as if known. This is a quality bar, not a volume one: one sentence of real "here is what this part of the codebase does" beats a paragraph of session jargon. A fresh, session-blind reader is the test — if they could not decide from the context as written, it has curse-of-knowledge, not enough words.
 - **`grounding`** stays the *evidence* (`file:line`/doc/domain) behind the question — it backs `user_explanation`; it is not a substitute for it.
 
-The deep-interview driver gates each selected candidate with `ditto deep-interview check-question` and will **reject one missing `user_explanation`** (it won't be asked). A question the user can't act on is not a finished candidate.
+The deep-interview driver gates each selected candidate with `ditto deep-interview check-question` and will **reject one missing `user_explanation` OR `recommended_answer`** (it won't be asked). A question the user can't act on — or that offers no interpretation to correct — is not a finished candidate.
 
 ## You return
 A flat list of candidates. Each candidate:
@@ -60,6 +61,7 @@ A flat list of candidates. Each candidate:
   "property": "blind-spot" | "expansion" | "orientation",
   "why_matters": "<what changes in the spec depending on the answer>",
   "user_explanation": "<plain-language why-we-ask + what-your-answer-decides, in the user's language — no raw code/jargon (shown by default)>",
+  "recommended_answer": "<your current interpretation for the user to correct — '내가 답한다면 이렇게 + 이유', user's language; invites correction, not 'pick this'>",
   "background": "<optional deeper context for progressive disclosure ('more') — depth a non-expert may need>",
   "grounding": "<file:line | doc | domain — optional evidence backing the question>" }
 ```

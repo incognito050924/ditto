@@ -77,6 +77,7 @@ async function driveToReady(): Promise<void> {
         text: 'shape?',
         why_matters: 'response',
         user_explanation: '응답 값의 형태를 무엇으로 정할지 사용자 언어로 확인하는 질문입니다.',
+        recommended_answer: '추천: 0..100 정수 — 점수 표현으로 가장 단순하고 명확합니다.',
         info_gain_estimate: 'high',
       },
       answer: { text: 'integer 0..100', kind: 'user' },
