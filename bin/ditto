@@ -53760,8 +53760,126 @@ var refactorCommand = defineCommand({
   }
 });
 
-// src/cli/commands/review.ts
+// src/cli/commands/release.ts
+import { readFileSync as readFileSync9 } from "fs";
 import { join as join85 } from "path";
+init_fs();
+var GH_SOURCE = "incognito050924/ditto";
+function releaseGateError(input) {
+  if (!input.isSourceRepo) {
+    return "ditto release runs only in the ditto source repo (dogfood); refused \u2014 a consumer install must never cut a release";
+  }
+  if (!input.dryRun && input.dirty) {
+    return "working tree has uncommitted changes \u2014 commit or stash them first, so the release commit is version-only";
+  }
+  return null;
+}
+function run2(cmd, cmdArgs, repoRoot) {
+  const proc = Bun.spawnSync([cmd, ...cmdArgs], {
+    cwd: repoRoot,
+    stdout: "inherit",
+    stderr: "inherit",
+    stdin: "inherit"
+  });
+  return proc.exitCode ?? 1;
+}
+function isDirty2(repoRoot) {
+  const proc = Bun.spawnSync(["git", "status", "--porcelain"], {
+    cwd: repoRoot,
+    stdout: "pipe",
+    stderr: "pipe"
+  });
+  return proc.stdout.toString().trim().length > 0;
+}
+function readVersion(repoRoot) {
+  const pkg = JSON.parse(readFileSync9(join85(repoRoot, "package.json"), "utf8"));
+  return pkg.version ?? "";
+}
+var releaseCommand = defineCommand({
+  meta: {
+    name: "release",
+    description: "Dogfood-only: cut a release (version bump + rebuilt bundle + commit + tag) and push it. Refused outside the ditto source repo."
+  },
+  args: {
+    bump: {
+      type: "positional",
+      required: true,
+      description: "Version bump: major | minor | patch | X.Y.Z"
+    },
+    "dry-run": { type: "boolean", default: false, description: "Print the plan; change nothing" },
+    "no-push": {
+      type: "boolean",
+      default: false,
+      description: "Stop after commit + tag; do not push (push is the default)"
+    },
+    output: { type: "string", default: "human", description: "Output format: human|json" }
+  },
+  run: async ({ args }) => {
+    try {
+      const format = parseOutputFormat(args.output);
+      const repoRoot = await resolveRepoRootForCreate();
+      const dryRun = args["dry-run"] === true;
+      const noPush = args["no-push"] === true;
+      const gateError = releaseGateError({
+        isSourceRepo: isDittoSourceRepo(repoRoot),
+        dirty: isDirty2(repoRoot),
+        dryRun
+      });
+      if (gateError) {
+        writeError(`release refused: ${gateError}`);
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      const releaseArgs = ["scripts/release.mjs", args.bump, ...dryRun ? ["--dry-run"] : []];
+      const releaseStatus = run2("node", releaseArgs, repoRoot);
+      if (releaseStatus !== 0) {
+        writeError(`release: scripts/release.mjs exited ${releaseStatus}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+      }
+      if (dryRun) {
+        if (format === "json")
+          writeJson2({ status: "dry-run", pushed: false });
+        else
+          writeHuman("release: dry-run complete \u2014 nothing changed");
+        return;
+      }
+      const version = readVersion(repoRoot);
+      const tag = `v${version}`;
+      let pushed = false;
+      if (!noPush) {
+        const pushStatus = run2("git", ["push"], repoRoot);
+        const tagStatus = pushStatus === 0 ? run2("git", ["push", "origin", tag], repoRoot) : 1;
+        pushed = pushStatus === 0 && tagStatus === 0;
+        if (!pushed) {
+          writeError(`release: v${version} committed + tagged locally, but push failed (push-gate or network). Re-run: git push && git push origin ${tag}`);
+          process.exit(RUNTIME_ERROR_EXIT);
+        }
+      }
+      if (format === "json") {
+        writeJson2({ status: "released", version, tag, pushed });
+      } else {
+        writeHuman(`release: v${version} ${pushed ? "released + pushed" : "committed + tagged (not pushed)"} (tag ${tag})`);
+        if (pushed) {
+          writeHuman("consumers update \u2014 one command:");
+          writeHuman(`  npx github:${GH_SOURCE} update`);
+          writeHuman("or in a Claude Code session:");
+          writeHuman("  claude plugin marketplace update ditto-local  \u2192  /plugin update");
+        } else {
+          writeHuman(`push when ready:  git push && git push origin ${tag}`);
+        }
+      }
+    } catch (err) {
+      if (err instanceof InvalidOutputFormatError) {
+        writeError(err.message);
+        process.exit(USAGE_ERROR_EXIT);
+      }
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
+
+// src/cli/commands/review.ts
+import { join as join86 } from "path";
 
 // src/acg/review/unit-review.ts
 var REVIEW_ROLES = ["code-reviewer", "security-reviewer"];
@@ -53820,7 +53938,7 @@ function trackedSrcFiles2(repoRoot) {
 `).map((s2) => s2.trim()).filter((s2) => s2.length > 0 && /\.[cm]?tsx?$/.test(s2) && !/\.(test|spec)\./.test(s2));
 }
 async function loadArchSpec3(repoRoot) {
-  const specPath = join85(repoRoot, ".ditto", "architecture-spec.json");
+  const specPath = join86(repoRoot, ".ditto", "architecture-spec.json");
   try {
     return await readArchitectureSpec(specPath, acgArchitectureSpec);
   } catch {
@@ -53943,7 +54061,7 @@ init_common();
 init_fs();
 init_git();
 import { stat as stat11, writeFile as writeFile5 } from "fs/promises";
-import { dirname as dirname18, join as join86, relative as relative22, resolve as resolve23, sep as sep10 } from "path";
+import { dirname as dirname18, join as join87, relative as relative22, resolve as resolve23, sep as sep10 } from "path";
 init_work_item_store();
 init_worktree();
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
@@ -53972,7 +54090,7 @@ function resolveRepoCwd(repoRoot, cwd) {
     throw new RunWithUsageError(`invalid cwd: ${parsed.error.issues[0]?.message}`);
   }
   const resolvedRoot = resolve23(repoRoot);
-  const resolvedCwd = resolve23(join86(repoRoot, cwd));
+  const resolvedCwd = resolve23(join87(repoRoot, cwd));
   if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep10}`)) {
     throw new RunWithUsageError(`cwd escapes repo root: ${cwd}`);
   }
@@ -54510,7 +54628,7 @@ function applySemanticVerdict(seed, v2) {
 // src/acg/semantic/signature-codeql.ts
 import { existsSync as existsSync12 } from "fs";
 import { rm as rm3 } from "fs/promises";
-import { join as join87 } from "path";
+import { join as join88 } from "path";
 init_ditto_paths();
 init_git();
 var SIGNATURE_QUERY_JS = `/**
@@ -54624,7 +54742,7 @@ function diffSignatureMaps(before, after) {
   return changes;
 }
 async function extractSignatures(input, deps) {
-  const run2 = {
+  const run3 = {
     repoRoot: input.repoRoot,
     sourceRoot: input.sourceRoot,
     language: input.language,
@@ -54635,25 +54753,25 @@ async function extractSignatures(input, deps) {
     ...input.buildCommand ? { buildCommand: input.buildCommand } : {},
     ...input.binary ? { binary: input.binary } : {}
   };
-  return rowsToSignatureMap(await runRelationQuery(run2, deps));
+  return rowsToSignatureMap(await runRelationQuery(run3, deps));
 }
 async function scanSignatureChanges(input, deps) {
   const baseSha = gitRevParse(input.repoRoot, input.baseRef);
   const cacheBase = localDir(input.repoRoot, "cache", "codeql");
-  const baseCache = join87(cacheBase, `${baseSha}-${input.language}`);
-  const baseDb = join87(baseCache, "db");
+  const baseCache = join88(cacheBase, `${baseSha}-${input.language}`);
+  const baseDb = join88(baseCache, "db");
   const needWorktree = !existsSync12(baseDb);
-  const worktree = join87(cacheBase, "worktrees", `${baseSha}-${input.language}`);
+  const worktree = join88(cacheBase, "worktrees", `${baseSha}-${input.language}`);
   if (needWorktree)
     addDetachedWorktree(input.repoRoot, worktree, baseSha);
   let before;
   try {
     before = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join87(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
+      sourceRoot: join88(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
       language: input.language,
       dbPath: baseDb,
-      workDir: join87(baseCache, "q-sig"),
+      workDir: join88(baseCache, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -54661,14 +54779,14 @@ async function scanSignatureChanges(input, deps) {
     if (needWorktree)
       removeWorktree(input.repoRoot, worktree);
   }
-  const afterDir = join87(cacheBase, `after-${process.pid}-${input.language}`);
+  const afterDir = join88(cacheBase, `after-${process.pid}-${input.language}`);
   try {
     const after = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join87(input.repoRoot, input.sourceRootRel),
+      sourceRoot: join88(input.repoRoot, input.sourceRootRel),
       language: input.language,
-      dbPath: join87(afterDir, "db"),
-      workDir: join87(afterDir, "q-sig"),
+      dbPath: join88(afterDir, "db"),
+      workDir: join88(afterDir, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -55044,15 +55162,15 @@ var semanticCommand = defineCommand({
 
 // src/cli/commands/setup.ts
 import { homedir as homedir14 } from "os";
-import { dirname as dirname21, join as join93, resolve as resolve26 } from "path";
+import { dirname as dirname21, join as join94, resolve as resolve26 } from "path";
 init_fs();
 init_shared();
 
 // src/core/provision/memory-separate.ts
-import { existsSync as existsSync13, readFileSync as readFileSync9, writeFileSync as writeFileSync2 } from "fs";
+import { existsSync as existsSync13, readFileSync as readFileSync10, writeFileSync as writeFileSync2 } from "fs";
 import { join as pathJoin } from "path";
 var GITIGNORE_ENTRY = ".ditto/memory/";
-function join88(...parts) {
+function join89(...parts) {
   return parts.join("/");
 }
 function ensureGitignored(deps) {
@@ -55076,7 +55194,7 @@ var submoduleManual = (memoryDir) => [
   "# \uADF8\uB2E4\uC74C \uBD80\uBAA8\uC5D0\uC11C: git rm -r --cached .ditto/memory && git submodule add <URL> .ditto/memory"
 ];
 async function separateMemoryRepo(deps, mode = "gitignore") {
-  const memoryDir = join88(deps.repoRoot, ".ditto", "memory");
+  const memoryDir = join89(deps.repoRoot, ".ditto", "memory");
   if (!deps.pathExists(memoryDir)) {
     return {
       status: "failed",
@@ -55090,7 +55208,7 @@ async function separateMemoryRepo(deps, mode = "gitignore") {
       manual: submoduleManual(memoryDir)
     };
   }
-  const alreadyRepo = deps.pathExists(join88(memoryDir, ".git"));
+  const alreadyRepo = deps.pathExists(join89(memoryDir, ".git"));
   if (!alreadyRepo) {
     const r4 = await deps.run("git", ["init"], memoryDir);
     if (r4.exit_code !== 0) {
@@ -55131,7 +55249,7 @@ function defaultMemorySeparateDeps(repoRoot) {
       return { exit_code, stderr: stderr2 };
     },
     pathExists: (p2) => existsSync13(p2),
-    readGitignore: () => existsSync13(gitignorePath) ? readFileSync9(gitignorePath, "utf8") : "",
+    readGitignore: () => existsSync13(gitignorePath) ? readFileSync10(gitignorePath, "utf8") : "",
     writeGitignore: (content) => writeFileSync2(gitignorePath, content, "utf8")
   };
 }
@@ -55139,16 +55257,16 @@ function defaultMemorySeparateDeps(repoRoot) {
 // src/core/provision/playwright.ts
 import { existsSync as existsSync14, readdirSync as readdirSync3 } from "fs";
 import { homedir as homedir13, platform as osPlatform } from "os";
-import { join as join89 } from "path";
+import { join as join90 } from "path";
 function playwrightCacheRoot(os = osPlatform()) {
   if (os === "win32")
-    return join89(homedir13(), "AppData", "Local", "ms-playwright");
+    return join90(homedir13(), "AppData", "Local", "ms-playwright");
   if (os === "darwin")
-    return join89(homedir13(), "Library", "Caches", "ms-playwright");
-  return join89(homedir13(), ".cache", "ms-playwright");
+    return join90(homedir13(), "Library", "Caches", "ms-playwright");
+  return join90(homedir13(), ".cache", "ms-playwright");
 }
 function bunCacheDir() {
-  return join89(process.env.BUN_INSTALL ?? join89(homedir13(), ".bun"), "install", "cache");
+  return join90(process.env.BUN_INSTALL ?? join90(homedir13(), ".bun"), "install", "cache");
 }
 function detectPlaywright(deps) {
   const core = deps.listDir(deps.bunCache).some((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2));
@@ -55246,12 +55364,12 @@ function defaultRegistry() {
 init_fs();
 import { execFileSync as execFileSync6 } from "child_process";
 import { chmod, cp, readFile as readFile20, rename as rename5, rm as rm4, writeFile as writeFile6 } from "fs/promises";
-import { basename as basename6, dirname as dirname19, isAbsolute as isAbsolute16, join as join91, resolve as resolve24 } from "path";
+import { basename as basename6, dirname as dirname19, isAbsolute as isAbsolute16, join as join92, resolve as resolve24 } from "path";
 init_shared();
 
 // src/core/resource-routing.ts
 import { readdirSync as readdirSync4 } from "fs";
-import { join as join90 } from "path";
+import { join as join91 } from "path";
 var GLOBAL_PREFIX = "GLOBAL_";
 function routeResource(filename, ctx) {
   if (filename.startsWith(GLOBAL_PREFIX)) {
@@ -55259,13 +55377,13 @@ function routeResource(filename, ctx) {
     return {
       scope: "global",
       destName,
-      destPath: join90(ctx.homeDir, ".claude", destName)
+      destPath: join91(ctx.homeDir, ".claude", destName)
     };
   }
   return {
     scope: "project",
     destName: filename,
-    destPath: join90(ctx.projectRoot, filename)
+    destPath: join91(ctx.projectRoot, filename)
   };
 }
 function discoverResources(resourcesDir) {
@@ -55279,7 +55397,7 @@ function discoverResources(resourcesDir) {
 // src/core/setup.ts
 var CODEX_MARKETPLACE_NAME = "ditto-local";
 var CODEX_PLUGIN_NAME = "ditto";
-var CODEX_PLUGIN_DEST_REL = join91(".agents", "plugins", CODEX_PLUGIN_NAME);
+var CODEX_PLUGIN_DEST_REL = join92(".agents", "plugins", CODEX_PLUGIN_NAME);
 var CODEX_BIN_NAME = "ditto";
 function setupHosts(host) {
   if (host === "codex")
@@ -55304,14 +55422,14 @@ function resourceDecisions(resourcesDir, projectRoot, homeDir, codexHome, hosts)
           host: "codex",
           filename,
           scope: "project",
-          destPath: join91(projectRoot, "AGENTS.md")
+          destPath: join92(projectRoot, "AGENTS.md")
         });
       } else if (filename === "GLOBAL_AGENTS.md") {
         out.push({
           host: "codex",
           filename,
           scope: "global",
-          destPath: join91(codexHome, "AGENTS.md")
+          destPath: join92(codexHome, "AGENTS.md")
         });
       }
     }
@@ -55366,23 +55484,23 @@ async function writeCodexMarketplace(path) {
 `);
 }
 async function installCodexAgents(pluginRoot, projectRoot) {
-  const srcDir = join91(pluginRoot, ".codex", "agents");
+  const srcDir = join92(pluginRoot, ".codex", "agents");
   if (!await fileExists(srcDir)) {
     throw new Error(`codex custom agents not found at ${srcDir}; run build:codex-plugin first`);
   }
-  const destDir = join91(projectRoot, ".codex", "agents");
+  const destDir = join92(projectRoot, ".codex", "agents");
   await ensureDir(destDir);
   let count = 0;
   for (const file of await listFiles(srcDir)) {
     if (!file.id.endsWith(".toml"))
       continue;
-    await cp(file.path, join91(destDir, file.id));
+    await cp(file.path, join92(destDir, file.id));
     count += 1;
   }
   return count;
 }
 function codexDittoCommand(installedPluginDir) {
-  return `"${join91(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
+  return `"${join92(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
 }
 function rewriteCodexDittoReferences(text, dittoCommand) {
   return text.replace(/"\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?"/g, dittoCommand).replace(/\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?/g, dittoCommand).replace(/`ditto(?=\s)/g, `\`${dittoCommand}`);
@@ -55404,26 +55522,26 @@ async function rewriteCodexAgentTomlFile(path, dittoCommand) {
 }
 async function rewriteCodexInstalledReferences(installedPluginDir) {
   const dittoCommand = codexDittoCommand(installedPluginDir);
-  for (const dir of await listDirectories(join91(installedPluginDir, "skills"))) {
-    const skillPath = join91(dir.path, "SKILL.md");
+  for (const dir of await listDirectories(join92(installedPluginDir, "skills"))) {
+    const skillPath = join92(dir.path, "SKILL.md");
     if (await fileExists(skillPath))
       await rewriteCodexTextFile(skillPath, dittoCommand);
   }
-  for (const file of await listFiles(join91(installedPluginDir, ".codex", "agents"))) {
+  for (const file of await listFiles(join92(installedPluginDir, ".codex", "agents"))) {
     if (file.id.endsWith(".toml"))
       await rewriteCodexAgentTomlFile(file.path, dittoCommand);
   }
 }
 async function writeCodexSurfaceCatalog(projectRoot) {
-  const surfaceCatalogPath = join91(projectRoot, ".ditto", "local", "surfaces.codex.json");
-  await ensureDir(join91(projectRoot, ".ditto", "local"));
+  const surfaceCatalogPath = join92(projectRoot, ".ditto", "local", "surfaces.codex.json");
+  await ensureDir(join92(projectRoot, ".ditto", "local"));
   const catalog = await generateSurfaceCatalog([codexHostAdapter], projectRoot, "surfaces.codex.json");
   await atomicWriteText(surfaceCatalogPath, `${JSON.stringify(catalog, null, 2)}
 `);
   return surfaceCatalogPath;
 }
 async function writeCodexPluginStatus(projectRoot) {
-  const statusPath = join91(projectRoot, ".ditto", "local", "codex-plugin-status.json");
+  const statusPath = join92(projectRoot, ".ditto", "local", "codex-plugin-status.json");
   const enableCommands = [
     `codex plugin marketplace add ${JSON.stringify(projectRoot)}`,
     `codex plugin add ${CODEX_PLUGIN_NAME}@${CODEX_MARKETPLACE_NAME}`
@@ -55441,19 +55559,19 @@ async function writeCodexPluginStatus(projectRoot) {
 }
 async function installCodexSurface(opts) {
   const { pluginRoot, projectRoot } = opts;
-  const manifestPath = join91(pluginRoot, ".codex-plugin", "plugin.json");
+  const manifestPath = join92(pluginRoot, ".codex-plugin", "plugin.json");
   if (!await fileExists(manifestPath)) {
     throw new Error(`codex plugin manifest not found at ${manifestPath}; run build:codex-plugin first`);
   }
-  const installedPluginDir = join91(projectRoot, CODEX_PLUGIN_DEST_REL);
+  const installedPluginDir = join92(projectRoot, CODEX_PLUGIN_DEST_REL);
   if (resolve24(pluginRoot) === resolve24(installedPluginDir)) {
     throw new Error(`codex plugin source is already the installed plugin directory: ${installedPluginDir}`);
   }
   await rm4(installedPluginDir, { recursive: true, force: true });
-  await ensureDir(join91(projectRoot, ".agents", "plugins"));
+  await ensureDir(join92(projectRoot, ".agents", "plugins"));
   await cp(pluginRoot, installedPluginDir, { recursive: true });
   await rewriteCodexInstalledReferences(installedPluginDir);
-  const marketplacePath = join91(projectRoot, ".agents", "plugins", "marketplace.json");
+  const marketplacePath = join92(projectRoot, ".agents", "plugins", "marketplace.json");
   await writeCodexMarketplace(marketplacePath);
   const agentsInstalled = await installCodexAgents(installedPluginDir, projectRoot);
   const surfaceCatalogPath = await writeCodexSurfaceCatalog(projectRoot);
@@ -55466,7 +55584,7 @@ async function installCodexSurface(opts) {
     statusPath,
     pluginLoadStatus: "needs_user_action",
     enableCommands,
-    agentsDir: join91(projectRoot, ".codex", "agents"),
+    agentsDir: join92(projectRoot, ".codex", "agents"),
     agentsInstalled
   };
 }
@@ -55481,7 +55599,7 @@ async function installResource(decision, resourcesDir) {
   if (name === "AGENTS.md") {
     const existed = await fileExists(decision.destPath);
     if (!existed) {
-      const body2 = await readFile20(join91(resourcesDir, decision.filename), "utf8");
+      const body2 = await readFile20(join92(resourcesDir, decision.filename), "utf8");
       await atomicWriteText(decision.destPath, body2);
       return { ...common, status: "written", backupPath: null };
     }
@@ -55495,8 +55613,8 @@ async function installResource(decision, resourcesDir) {
     return { ...common, status: "kept", backupPath: null };
   }
   if (name === "CLAUDE.md") {
-    const sourcePath = join91(dirname19(decision.destPath), "AGENTS.md");
-    const projectionBody = await fileExists(sourcePath) ? await readFile20(sourcePath, "utf8") : await readFile20(join91(resourcesDir, decision.filename), "utf8");
+    const sourcePath = join92(dirname19(decision.destPath), "AGENTS.md");
+    const projectionBody = await fileExists(sourcePath) ? await readFile20(sourcePath, "utf8") : await readFile20(join92(resourcesDir, decision.filename), "utf8");
     const applied2 = await applyManagedFile(decision.destPath, projectionBody, "AGENTS.md");
     return {
       ...common,
@@ -55504,7 +55622,7 @@ async function installResource(decision, resourcesDir) {
       backupPath: applied2.kind === "ok" ? applied2.backupPath : null
     };
   }
-  const body = await readFile20(join91(resourcesDir, decision.filename), "utf8");
+  const body = await readFile20(join92(resourcesDir, decision.filename), "utf8");
   const applied = await applyManagedFile(decision.destPath, body, decision.filename);
   return {
     ...common,
@@ -55515,7 +55633,7 @@ async function installResource(decision, resourcesDir) {
 var PUSH_GATE_HOOK_MARKER = "ditto:managed:pre-push";
 var PUSH_GATE_HOOK_BACKUP_SUFFIX = ".ditto-backup";
 function defaultHookTemplatePath(resourcesDir) {
-  return join91(dirname19(resourcesDir), "hooks", "pre-push");
+  return join92(dirname19(resourcesDir), "hooks", "pre-push");
 }
 function customHooksPath(cwd) {
   try {
@@ -55535,7 +55653,7 @@ function gitHooksDir(cwd) {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"]
   }).trim();
-  return isAbsolute16(p2) ? p2 : join91(cwd, p2);
+  return isAbsolute16(p2) ? p2 : join92(cwd, p2);
 }
 async function installPushGateHook(opts) {
   const { projectRoot, hookTemplatePath } = opts;
@@ -55559,7 +55677,7 @@ async function installPushGateHook(opts) {
       message: `${projectRoot} is not a git repository \u2014 a pre-push hook cannot be installed. Run \`git init\` (or \`ditto setup\` from inside the repo), then re-run setup.`
     };
   }
-  const hookPath = join91(hooksDir, "pre-push");
+  const hookPath = join92(hooksDir, "pre-push");
   const backupPath = `${hookPath}${PUSH_GATE_HOOK_BACKUP_SUFFIX}`;
   const template = bakeWorkspaceRoot(await readFile20(hookTemplatePath, "utf8"), opts.workspaceRoot);
   await ensureDir(hooksDir);
@@ -55599,7 +55717,7 @@ async function writeHookFile(hookPath, body) {
 }
 async function setup(opts) {
   const { resourcesDir, projectRoot, homeDir, now } = opts;
-  const codexHome = opts.codexHome ?? join91(homeDir, ".codex");
+  const codexHome = opts.codexHome ?? join92(homeDir, ".codex");
   const hosts = setupHosts(opts.host);
   const decisions = resourceDecisions(resourcesDir, projectRoot, homeDir, codexHome, hosts);
   const ordered = [
@@ -55611,7 +55729,7 @@ async function setup(opts) {
     resources.push(await installResource(decision, resourcesDir));
   }
   const scaffold = await initScaffold(projectRoot, now);
-  const allowlistPath = join91(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join92(projectRoot, ".claude", "settings.json");
   const allowlistApplied = hosts.has("claude-code");
   if (allowlistApplied)
     await allowlistSettingsFile(allowlistPath);
@@ -55628,16 +55746,16 @@ async function setup(opts) {
 
 // src/cli/resources.ts
 import { existsSync as existsSync15 } from "fs";
-import { dirname as dirname20, join as join92, resolve as resolve25 } from "path";
+import { dirname as dirname20, join as join93, resolve as resolve25 } from "path";
 import { fileURLToPath as fileURLToPath3 } from "url";
 function resolveResourcesDir(from) {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
-    return join92(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
+    return join93(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
   }
   const start = from ?? dirname20(fileURLToPath3(import.meta.url));
   let dir = start;
   for (;; ) {
-    const candidate = join92(dir, "resources", "managed");
+    const candidate = join93(dir, "resources", "managed");
     if (existsSync15(candidate))
       return candidate;
     const parent = dirname20(dir);
@@ -55645,7 +55763,7 @@ function resolveResourcesDir(from) {
       break;
     dir = parent;
   }
-  return join92(resolve25(start, "..", ".."), "resources", "managed");
+  return join93(resolve25(start, "..", ".."), "resources", "managed");
 }
 
 // src/cli/wizard/agent-link-step.ts
@@ -55861,16 +55979,16 @@ function includesCodex(host) {
 }
 async function resolveCodexPluginRoot(resourcesDir, projectRoot) {
   const currentPluginRoot = resolve26(resourcesDir, "..", "..");
-  const sibling = join93(dirname21(currentPluginRoot), "codex-plugin");
-  if (await fileExists(join93(sibling, ".codex-plugin", "plugin.json")))
+  const sibling = join94(dirname21(currentPluginRoot), "codex-plugin");
+  if (await fileExists(join94(sibling, ".codex-plugin", "plugin.json")))
     return sibling;
-  const currentDist = join93(currentPluginRoot, "dist", "codex-plugin");
-  if (await fileExists(join93(currentDist, ".codex-plugin", "plugin.json")))
+  const currentDist = join94(currentPluginRoot, "dist", "codex-plugin");
+  if (await fileExists(join94(currentDist, ".codex-plugin", "plugin.json")))
     return currentDist;
-  const projectDist = join93(projectRoot, "dist", "codex-plugin");
-  if (await fileExists(join93(projectDist, ".codex-plugin", "plugin.json")))
+  const projectDist = join94(projectRoot, "dist", "codex-plugin");
+  if (await fileExists(join94(projectDist, ".codex-plugin", "plugin.json")))
     return projectDist;
-  if (await fileExists(join93(currentPluginRoot, ".codex", "agents")))
+  if (await fileExists(join94(currentPluginRoot, ".codex", "agents")))
     return currentPluginRoot;
   return currentPluginRoot;
 }
@@ -56102,14 +56220,14 @@ var setupCommand = defineCommand({
 // src/cli/commands/teardown.ts
 import { rm as rm6 } from "fs/promises";
 import { homedir as homedir15 } from "os";
-import { join as join95, resolve as resolve27 } from "path";
+import { join as join96, resolve as resolve27 } from "path";
 init_fs();
 
 // src/core/teardown.ts
 init_fs();
 init_shared();
 import { copyFile as copyFile2, readFile as readFile21, rm as rm5 } from "fs/promises";
-import { join as join94 } from "path";
+import { join as join95 } from "path";
 var BACKUP_SUFFIX2 = ".ditto_bak";
 async function teardown(opts) {
   const { resourcesDir, projectRoot, homeDir } = opts;
@@ -56119,7 +56237,7 @@ async function teardown(opts) {
     const action = await teardownFile(decision.destPath);
     files.push({ filename, scope: decision.scope, destPath: decision.destPath, action });
   }
-  const allowlistPath = join94(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join95(projectRoot, ".claude", "settings.json");
   await unallowlistSettingsFile(allowlistPath);
   const pushGateHook = await uninstallPushGateHook({ projectRoot });
   return { files, allowlistPath, pushGateHook };
@@ -56131,7 +56249,7 @@ async function uninstallPushGateHook(opts) {
   } catch {
     return { status: "left-untouched", hookPath: "", backupPath: null };
   }
-  const hookPath = join94(hooksDir, "pre-push");
+  const hookPath = join95(hooksDir, "pre-push");
   const backupPath = `${hookPath}${PUSH_GATE_HOOK_BACKUP_SUFFIX}`;
   if (!await fileExists(hookPath)) {
     return { status: "left-untouched", hookPath, backupPath: null };
@@ -56219,7 +56337,7 @@ var teardownCommand = defineCommand({
       }
       const purge = await shouldPurge(Boolean(args.purge));
       if (purge) {
-        const dittoDir2 = join95(projectRoot, ".ditto");
+        const dittoDir2 = join96(projectRoot, ".ditto");
         await rm6(dittoDir2, { recursive: true, force: true });
         writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ PURGED (${dittoDir2})`);
       } else {
@@ -56377,7 +56495,7 @@ init_shared();
 import { execFileSync as execFileSync7 } from "child_process";
 import { existsSync as existsSync16, lstatSync, realpathSync as realpathSync2 } from "fs";
 import { readFile as readFile22, readdir as readdir27, rm as rm7, writeFile as writeFile7 } from "fs/promises";
-import { basename as basename7, dirname as dirname22, isAbsolute as isAbsolute17, join as join96, relative as relative23, resolve as resolve28 } from "path";
+import { basename as basename7, dirname as dirname22, isAbsolute as isAbsolute17, join as join97, relative as relative23, resolve as resolve28 } from "path";
 var LOCAL_CLONE_ENV_FLAG = "DITTO_ALLOW_LOCAL_CLONE";
 function localTransportAllowed(env2 = process.env) {
   return env2[LOCAL_CLONE_ENV_FLAG] === "1";
@@ -56413,11 +56531,11 @@ function realpathNearestExisting(p2) {
   while (!existsSync16(cur)) {
     const parent = dirname22(cur);
     if (parent === cur)
-      return join96(realpathSync2(cur), ...tail);
+      return join97(realpathSync2(cur), ...tail);
     tail.unshift(basename7(cur));
     cur = parent;
   }
-  return tail.length === 0 ? realpathSync2(cur) : join96(realpathSync2(cur), ...tail);
+  return tail.length === 0 ? realpathSync2(cur) : join97(realpathSync2(cur), ...tail);
 }
 function resolveContainedDir(workspaceRoot, dir) {
   const root = resolve28(workspaceRoot);
@@ -56478,7 +56596,7 @@ async function installRootGateHook(target, workspaceRoot, hookTemplatePath) {
   return r4.status;
 }
 async function addToParentGitignore(workspaceRoot, dir) {
-  const giPath = join96(workspaceRoot, ".gitignore");
+  const giPath = join97(workspaceRoot, ".gitignore");
   const entry = `${dir.replace(/\/+$/, "")}/`;
   const bare = dir.replace(/\/+$/, "");
   let cur = "";
@@ -56620,7 +56738,7 @@ init_work_item_store();
 init_worktree();
 
 // src/core/worktree-drive.ts
-import { join as join97 } from "path";
+import { join as join98 } from "path";
 var TERMINAL_STATUSES4 = ["done", "abandoned"];
 var DEFAULT_MAX_DEPTH2 = 20;
 async function driveWorktrees(deps, options) {
@@ -56673,7 +56791,7 @@ async function driveWorktrees(deps, options) {
       continue;
     }
     drivenCount++;
-    const res = await deps.driveMember(join97(repoRoot, ws.worktree_path), member);
+    const res = await deps.driveMember(join98(repoRoot, ws.worktree_path), member);
     if (res.outcome !== "done") {
       ledger.push({
         member_id: member,
@@ -56992,6 +57110,7 @@ var main = defineCommand({
     cleanup: cleanupCommand,
     semantic: semanticCommand,
     refactor: refactorCommand,
+    release: releaseCommand,
     review: reviewCommand
   }
 });
@@ -56999,4 +57118,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=a86774da2427f2012b0b63a42a2c91d0708ffad634b76418e57a6676e205c445
+//# ditto-src-stamp=bab2bcdbaaea8b55d06228b28af3a0effc00dc1d2541a1df875c6eb393bd3fa9

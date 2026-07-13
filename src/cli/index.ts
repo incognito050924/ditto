@@ -28,6 +28,7 @@ import { modeCommand } from './commands/mode';
 import { prismCommand } from './commands/prism';
 import { pushGateCommand } from './commands/push-gate';
 import { refactorCommand } from './commands/refactor';
+import { releaseCommand } from './commands/release';
 import { reviewCommand } from './commands/review';
 import { runCommand } from './commands/run';
 import { semanticCommand } from './commands/semantic';
@@ -82,6 +83,7 @@ const main = defineCommand({
     cleanup: cleanupCommand,
     semantic: semanticCommand,
     refactor: refactorCommand,
+    release: releaseCommand,
     review: reviewCommand,
   },
 });
