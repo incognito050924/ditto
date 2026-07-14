@@ -1,0 +1,115 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607147jb",
+  "title": "[tidy] 보드 매처 계층 역전 해소 — boardItemMatchesRepoNumber를 저수준 모듈로 (wi_260714usn/#33 후속)",
+  "source_request": "[tidy] 보드 매처 계층 역전 해소 — boardItemMatchesRepoNumber를 저수준 모듈로 (wi_260714usn/#33 후속)\n\n#33(wi_260714usn) repo-aware 보드 매칭 수정에서 생긴 구조 잔재. **동작 변경 아님(Tidy First).**\n\n## 현상\n`src/core/github-reflection.ts`가 `src/cli/commands/work.ts`의 `boardItemMatchesRepoNumber`를 import한다 — 코드베이스 유일한 `src/core → src/cli` import이며 `work.ts`가 `reflectTermination`을 되import하는 함수-레벨 순환.\n\n## 근거\n- 런타임은 안전(양쪽 call-time 참조·hoisted 선언, tsc 0·전체 테스트 통과). 동작 위험 아님.\n- 계층 역전(core가 cli에 의존)이라 유지보수 smell. reviewer·retrospective 모두 지목.\n- in-run tidy 분류기는 codeFiles:0으로 SKIP(오분류)해 자동 물질화 안 됨 → 명시 후속.\n\n## 수정 방향\n`boardItemMatchesRepoNumber`(+ 순수 헬퍼 `parseRemoteUrlToRepo`/`sameRepoCoord`/`canonicalizeRepo` 중 이 매처 전용인 것)를 저수준 좌표 모듈(예: `src/core/github-coord.ts`)로 이전. `work.ts`·`github-reflection.ts` 모두 아래로 import → 역전·순환 제거.\n\n## 검증\n전후 전체 테스트 GREEN(동등성), `grep 'cli/commands/work' src/core` = 0(역전 제거 입증), tsc 0.",
+  "goal": "[tidy] 보드 매처 계층 역전 해소 — boardItemMatchesRepoNumber를 저수준 모듈로 (wi_260714usn/#33 후속)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "grep -rn 'cli/commands/work' src/core/ 가 0건을 반환한다 (src/core→src/cli 계층 역전·함수레벨 순환 제거)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c ! grep -rq \"cli/commands/work\" src/core/",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts 가 이전과 동일하게 전부 통과한다 (동작 보존·동등성)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "bun x tsc --noEmit 가 exit 0 이다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun x tsc --noEmit",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 41,
+    "project_item_id": "PVTI_lAHOAT55Bc4Bb3Q0zgy19Zc"
+  },
+  "risks": [],
+  "runs": [],
+  "started_at_sha": "f3128af1774723cc4551842ca564303d83df540d",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_0f73eda3d072c65f.json",
+    ".ditto/memory/events/memevt_retro_1b433672b43e2cb5.json",
+    ".ditto/memory/events/memevt_retro_3b6b75dbeda10ded.json",
+    ".ditto/memory/events/memevt_retro_551a25ad2bc435f7.json",
+    ".ditto/memory/events/memevt_retro_62f202a1d05d560d.json",
+    ".ditto/memory/events/memevt_retro_7a96c4f594622c56.json",
+    ".ditto/memory/events/memevt_retro_7f36a4a36bdf815f.json",
+    ".ditto/memory/events/memevt_retro_8f6249074e837c8b.json",
+    ".ditto/memory/events/memevt_retro_a05bc4fb34660aef.json",
+    ".ditto/memory/events/memevt_retro_a13e919c2d107ce4.json",
+    ".ditto/memory/events/memevt_retro_c9542e8cf30dae39.json",
+    ".ditto/work-items/wi_26062227h/",
+    ".ditto/work-items/wi_260624a6d/",
+    ".ditto/work-items/wi_260625mrf/",
+    ".ditto/work-items/wi_2606276nc/",
+    ".ditto/work-items/wi_260628sx5/",
+    ".ditto/work-items/wi_260706aka/",
+    ".ditto/work-items/wi_260706d0i/",
+    ".ditto/work-items/wi_260706tu6/",
+    ".ditto/work-items/wi_2607083ch/",
+    ".ditto/work-items/wi_260708700/",
+    ".ditto/work-items/wi_260708e1x/",
+    ".ditto/work-items/wi_260708xgo/",
+    ".ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json",
+    ".ditto/work-items/wi_260709ft1/",
+    ".ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json",
+    ".ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json",
+    ".ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json",
+    ".ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json",
+    ".ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json",
+    ".ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json",
+    ".ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json",
+    ".ditto/work-items/wi_260711dp9/",
+    ".ditto/work-items/wi_2607141uq/",
+    ".ditto/work-items/wi_2607147jb/",
+    ".ditto/work-items/wi_260714f4p/",
+    ".ditto/work-items/wi_260714m9w/",
+    ".ditto/work-items/wi_260714mfx/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_260714mfx/events/000002.workspace-write.80d66f889ea4.json",
+    ".ditto/work-items/wi_260714mfx/events/000003.workspace-write.01aef73c6fe3.json",
+    ".ditto/work-items/wi_260714mfx/events/000004.workspace-write.dac67e4daa67.json",
+    ".ditto/work-items/wi_260714mfx/events/000005.workspace-write.8d9ac1584c57.json",
+    ".ditto/work-items/wi_260714mfx/events/000006.workspace-write.f3cc40446f90.json",
+    ".ditto/work-items/wi_260714mfx/events/000007.workspace-write.8eebea1786fa.json",
+    ".ditto/work-items/wi_260714mfx/events/000008.workspace-write.66a58e722d8a.json",
+    ".ditto/work-items/wi_260714mfx/events/000009.workspace-write.37b762d4fbb2.json",
+    ".ditto/work-items/wi_260714mfx/events/000010.workspace-write.c14c2df01108.json",
+    ".ditto/work-items/wi_260714mfx/events/000011.workspace-write.0b3321b9a0e6.json",
+    ".ditto/work-items/wi_260714pjs/",
+    ".ditto/work-items/wi_260714pls/",
+    "reports/design/palimpsest-ditto-convergence-design.md"
+  ],
+  "created_at": "2026-07-14T23:03:57.933Z",
+  "updated_at": "2026-07-14T23:11:08.342Z",
+  "closed_at": "2026-07-14T23:11:08.341Z"
+}

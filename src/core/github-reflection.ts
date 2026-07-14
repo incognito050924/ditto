@@ -1,8 +1,8 @@
-import { boardItemMatchesRepoNumber } from '~/cli/commands/work';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { DittoConfigGithub } from '~/schemas/ditto-config';
 import type { WorkItem } from '~/schemas/work-item';
 import type { GhClient } from './gh-client';
+import { boardItemMatchesRepoNumber } from './github-coord';
 import { buildPublicSafeSummary } from './github-redaction';
 
 /**
