@@ -9,6 +9,7 @@ import {
   prismIssueMap,
 } from '~/schemas/prism';
 import { type QuestionRound, questionRound } from '~/schemas/question-round';
+import { loadGlossaryVocab, warnMalformedGlossary } from '../knowledge-bridge';
 import { assertSelectedPresentationContract } from '../question-round';
 import { type PrismBacklogSplit, prismBacklogSplit } from './backlog';
 import type { DivergenceVerdict } from './engine';
@@ -136,7 +137,14 @@ export class PrismStore {
     const validated = questionRound.parse(round);
     // Same presentation contract as record-turn / recordRound: reject an
     // under-contextualized user-reaching selected question BEFORE persisting (ac-1).
-    assertSelectedPresentationContract(validated.selected);
+    // Resolve the glossary opaque-vocab (forbidden_abbreviations) ONCE at this consumer
+    // site (wi_260714aaq, #29) and pass it, mirroring interview-driver.ts recordTurn — so
+    // the prism selected face enforces the glossary half, not just the hardcoded floor. A
+    // bad glossary fails open to floor-only WITH a warning (never silent, never a crash).
+    const opaqueVocab = await loadGlossaryVocab(this.repoRoot, () =>
+      warnMalformedGlossary(this.repoRoot),
+    );
+    assertSelectedPresentationContract(validated.selected, opaqueVocab);
     await this.workItems.appendQuestionRoundLine(workItemId, JSON.stringify(validated));
     return validated;
   }

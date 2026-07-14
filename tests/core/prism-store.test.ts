@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { committedWorkItemDir, localDir } from '~/core/ditto-paths';
@@ -122,6 +122,80 @@ describe('PrismStore — per-round novelty persistence (wi_260708yut ac-4)', () 
       const rounds = await store.readValueRounds(wi);
       expect(rounds.length).toBe(1);
       expect(rounds[0]?.novelty).toBeUndefined();
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+});
+
+// wi_260714aaq (#29) — the CONSUMER path for the prism/selected user-facing question
+// face: appendValueRound must resolve the glossary opaque-vocab (forbidden_abbreviations)
+// at RUNTIME and apply it, exactly as interview-driver.ts recordTurn does for the
+// deep-interview face. This is the differential proof that the glossary is genuinely READ
+// (not a dead default-[] param): a forbidden_abbreviation that is NOT in the hardcoded
+// OPAQUE_VOCAB_FLOOR (`zqx`) surfaced un-glossed on a selected question must REJECT the
+// round when the glossary carries it, and PASS when no glossary is present. If the wiring
+// were removed (back to the default []), the reject case would false-green.
+describe('PrismStore — appendValueRound reads the glossary opaque-vocab at runtime (wi_260714aaq #29)', () => {
+  async function makeRepo(forbidden: string[] | null): Promise<string> {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-prism-vocab-'));
+    if (forbidden !== null) {
+      await mkdir(join(repo, '.ditto', 'knowledge'), { recursive: true });
+      await writeFile(
+        join(repo, '.ditto', 'knowledge', 'glossary.json'),
+        JSON.stringify({
+          schema_version: '0.1.0',
+          project_name: 'test',
+          updated_at: '2026-07-14T00:00:00+09:00',
+          entries: [
+            { term: 'x-term', aliases: [], definition: 'd', forbidden_abbreviations: forbidden },
+          ],
+        }),
+      );
+    }
+    return repo;
+  }
+
+  // A NON-dry round whose selected question surfaces `zqx` un-glossed on its user face.
+  // user_explanation is present + gloss-free, so the ONLY violation that can trip is the
+  // opaque-vocab leak of `zqx` — which is glossary-sourced, not in the hardcoded floor.
+  const round = (wi: string): QuestionRound => ({
+    ts: '2026-07-14T00:00:00.000Z',
+    work_item_id: wi,
+    round: 1,
+    section: 'prism-issue-map',
+    generator_count: 1,
+    dry: false,
+    selected: [
+      {
+        text: 'zqx를 어떻게 정할까요?',
+        property: 'orientation',
+        user_explanation: '왜 묻는지 쉬운 말로 설명하는 문장이에요.',
+        scores: { consensus: 1, quality: 0.9, necessity: 0.9, answer_value: 0.9 },
+      },
+    ],
+    all_scored: [],
+  });
+
+  test('rejects a selected question surfacing a glossary forbidden_abbreviation un-glossed', async () => {
+    const repo = await makeRepo(['zqx']);
+    const wi = 'wi_aaqstore01';
+    try {
+      await expect(new PrismStore(repo).appendValueRound(wi, round(wi))).rejects.toThrow();
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('does NOT reject the same question when no glossary is present (flag is glossary-sourced)', async () => {
+    const repo = await makeRepo(null);
+    const wi = 'wi_aaqstore02';
+    try {
+      const store = new PrismStore(repo);
+      await store.appendValueRound(wi, round(wi));
+      const rounds = await store.readValueRounds(wi);
+      expect(rounds.length).toBe(1);
+      expect(rounds[0]?.selected[0]?.text).toBe('zqx를 어떻게 정할까요?');
     } finally {
       await rm(repo, { recursive: true, force: true });
     }

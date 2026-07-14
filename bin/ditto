@@ -39811,7 +39811,8 @@ class PrismStore {
   }
   async appendValueRound(workItemId2, round) {
     const validated = questionRound.parse(round);
-    assertSelectedPresentationContract(validated.selected);
+    const opaqueVocab = await loadGlossaryVocab(this.repoRoot, () => warnMalformedGlossary(this.repoRoot));
+    assertSelectedPresentationContract(validated.selected, opaqueVocab);
     await this.workItems.appendQuestionRoundLine(workItemId2, JSON.stringify(validated));
     return validated;
   }
@@ -57688,4 +57689,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=575039fab254c3ebf017cc965535323a1186714cb22fef237a10ee66dd0a9e16
+//# ditto-src-stamp=fc5f490cf500ff3d42b2c88067490ff88be7c35b44caa9d94385e97b05c87bbd

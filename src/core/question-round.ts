@@ -28,8 +28,9 @@ const ROUND_SURFACE_FIELDS = new Set(['user_explanation', 'unexplained_identifie
 // wi_260714aaq (#29): `opaqueVocab` = the caller-resolved glossary forbidden_abbreviations,
 // unioned with the detector's hardcoded floor. The hardcoded floor is enforced here
 // UNCONDITIONALLY (validateQuestionContext applies it even for the default []), so the prism
-// selected face already rejects floor opaque-vocab; the glossary half is threaded through for
-// the caller (PrismStore, which holds repoRoot) to resolve via `loadGlossaryVocab`.
+// selected face always rejects floor opaque-vocab. The glossary half is now resolved by the
+// caller (PrismStore.appendValueRound, which holds repoRoot) via `loadGlossaryVocab` and
+// passed in here — mirroring interview-driver.ts recordTurn.
 export function assertSelectedPresentationContract(
   selected: readonly ScoredQuestion[],
   opaqueVocab: readonly string[] = [],
