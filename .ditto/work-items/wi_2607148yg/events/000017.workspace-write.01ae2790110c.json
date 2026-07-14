@@ -1,0 +1,50 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607148yg",
+  "seq": 17,
+  "actor": "workspace-write",
+  "event_id": "01ae2790110cd7391fd3c2a766b3ed7da6172ed45d56a7f62f0fa8eac2359153",
+  "ts": "2026-07-14T10:15:44.244Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-store.test.ts tests/core/handoff-store.test.ts",
+        "summary": "exit 0, 43 pass / 0 fail (red proven first)"
+      },
+      {
+        "kind": "command",
+        "command": "npx tsc --noEmit -p tsconfig.json",
+        "summary": "exit 0, clean"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/gates.test.ts",
+        "summary": "exit 0, 126 pass / 0 fail (red-first)"
+      },
+      {
+        "kind": "command",
+        "command": "npx tsc --noEmit && bun run lint",
+        "summary": "both exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/handoff-store.test.ts tests/core/work-item-handoff.test.ts",
+        "summary": "exit 0, 45 pass / 0 fail (red-first proven)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/gates.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

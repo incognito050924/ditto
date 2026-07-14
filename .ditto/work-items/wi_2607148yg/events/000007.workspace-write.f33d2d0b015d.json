@@ -1,0 +1,30 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607148yg",
+  "seq": 7,
+  "actor": "workspace-write",
+  "event_id": "f33d2d0b015d616dbe04bea9c71d49c61efc51a92fad34d33bd536f66573e501",
+  "ts": "2026-07-14T10:11:02.210Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-6",
+    "verdict": "fail",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck (tsc --noEmit)",
+        "summary": "driver-run: exit 0, 0 errors (LSP ts2379 was a stale mid-edit snapshot)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-loop-discipline.test.ts tests/core/autopilot-converge.test.ts",
+        "summary": "driver-run: 79 pass / 0 fail"
+      }
+    ]
+  }
+}

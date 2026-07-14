@@ -1,0 +1,441 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607148yg",
+  "title": "autopilot 후속·잔여 무재고 완수 계약 — 결함 발견분 구동 + 2 fail-handoff + 내부결정 투명공개 (charter §범위 amend, ADR-20260627·20260710 supersede)",
+  "source_request": "autopilot 또는 간략 경로의 autopilot에서 또 문제 발생: (1) 잔여·후속을 계속 양산하고 \"의도적으로 남긴 후속\"이라 포장해 사용자에게 책임 떠넘김. (2) 진정한 후속이라도 언급 외 아무 행동 안 함(백로그/Work Item으로 영속화 안 하면 무가치). 수정 방향: 후속·잔여를 남기는 것 절대 불허. 단 (a)정초 계획·방향이 반대가 되거나 충돌로 진행 불가하면 실패로 만들고 사용자에게 인계 후 지시받기, (b)보안·시스템·프로젝트·기능설계 의도에 반하거나 위협하는 결정이 필요하면 실패로 만들고 인계. 그 외에는 끝까지 자율 수행 후 내부 결정(후보 목록+근거 상세)을 사용자와 회고문서에 투명 공개. 간소화 경로도 동일. [후속 확정] 발견된 결함(버그)은 못 본 척 금지—물질화+구동해서 고침(발견분까지 구동=B). 미요청 기능은 YAGNI로 안 지음. 지나가다 발견한 버그 방치는 사용자가 원하는 바 아님.",
+  "goal": "autopilot과 간략 경로가 후속·잔여를 조용히 남기지 않고 끝까지 완수한다. 실행 중 발견한 실동작 버그는 자기 work item으로 물질화하고 같은 run에서 done까지 체인 구동해 고치되(각자 자기 커밋), 잠복버그·기술부채·무관한 기존 실패는 백로그로 물질화만 하며 미요청 기능은 짓지 않는다. 실패·인계는 오직 (1)정초 계획·방향 반전 또는 진행불가, (2)보안·시스템·프로젝트·기능설계 의도 위협 두 경우뿐이고, 확장이 진전없는 반복/예산 한계에 닿으면 fail-handoff로 승격한다. 그 외 모든 내부 결정은 후보+근거로 종료 요약과 회고에 투명 공개한다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "autopilot이 실행 중 재현되는 실동작 버그를 발견하면 그것을 자기 work item으로 물질화하고 같은 run에서 done까지 구동하여 고친다 (그냥 언급/표면화로 끝내지 않는다)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-store.test.ts tests/core/handoff-store.test.ts",
+          "summary": "exit 0, 43 pass / 0 fail (red proven first)"
+        },
+        {
+          "kind": "command",
+          "command": "npx tsc --noEmit -p tsconfig.json",
+          "summary": "exit 0, clean"
+        },
+        {
+          "kind": "command",
+          "command": "bun run typecheck (tsc --noEmit)",
+          "summary": "driver-run: exit 0, 0 errors (LSP ts2379 was a stale mid-edit snapshot)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts tests/core/autopilot-converge.test.ts",
+          "summary": "driver-run: 79 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "결함 분류가 보수적이다 — 재현되는 실동작 버그만 구동 대상이고, 잠복버그(현재 무피해)·기술부채·이번 변경과 무관한 기존 테스트 실패는 구동하지 않고 백로그로 물질화만 한다 (불확실하면 구동하지 않음)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run typecheck (tsc --noEmit)",
+          "summary": "driver-run: exit 0, 0 errors (LSP ts2379 was a stale mid-edit snapshot)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts tests/core/autopilot-converge.test.ts",
+          "summary": "driver-run: 79 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-converge.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "파생 결함 수정은 자기 커밋/work item으로 land하며 원 work item의 커밋·diff에 섞이지 않는다 (두 의도가 한 커밋에 뭉치지 않음)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run typecheck (tsc --noEmit)",
+          "summary": "driver-run: exit 0, 0 errors (LSP ts2379 was a stale mid-edit snapshot)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts tests/core/autopilot-converge.test.ts",
+          "summary": "driver-run: 79 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "조건(b)(보안·시스템·프로젝트·기능설계 의도에 반하거나 위협하는 결정)이 필요하면 autopilot은 자동 구동하지 않고 fail-closed로 blocked handoff한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-store.test.ts tests/core/handoff-store.test.ts",
+          "summary": "exit 0, 43 pass / 0 fail (red proven first)"
+        },
+        {
+          "kind": "command",
+          "command": "npx tsc --noEmit -p tsconfig.json",
+          "summary": "exit 0, clean"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/gates.test.ts",
+          "summary": "exit 0, 126 pass / 0 fail (red-first)"
+        },
+        {
+          "kind": "command",
+          "command": "npx tsc --noEmit && bun run lint",
+          "summary": "both exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/handoff-store.test.ts tests/core/work-item-handoff.test.ts",
+          "summary": "exit 0, 45 pass / 0 fail (red-first proven)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/gates.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "결함 클래스용 supersede가 비-결함(아이디어/기능) 후속에는 적용되지 않는다 — no-auto-pick·single-active-pointer 불변식이 그대로 유지된다 (기존 관련 테스트 green 유지)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run typecheck (tsc --noEmit)",
+          "summary": "driver-run: exit 0, 0 errors (LSP ts2379 was a stale mid-edit snapshot)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts tests/core/autopilot-converge.test.ts",
+          "summary": "driver-run: 79 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "연쇄 확장이 진전없는 반복/기존 라운드 예산 한계에 닿으면 무리한 확장 대신 fail-handoff로 승격하며, 원 요청 AC가 증거로 모두 닫혔으면 원 작업은 완료 land하고 못 끝낸 파생 결함은 백로그로 이월+보고한다 (종료가 보장된다)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run typecheck (tsc --noEmit)",
+          "summary": "driver-run: exit 0, 0 errors (LSP ts2379 was a stale mid-edit snapshot)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts tests/core/autopilot-converge.test.ts",
+          "summary": "driver-run: 79 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-7",
+      "statement": "fail·사용자 인계는 오직 두 조건(방향 반전·진행불가 / 조건(b))에서만 발생하고, 그 외에는 멈추지 않고 자율 완수한다 (절차 결정을 사용자에게 떠넘기는 중간 멈춤이 없다)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/gates.test.ts",
+          "summary": "exit 0, 126 pass / 0 fail (red-first)"
+        },
+        {
+          "kind": "command",
+          "command": "npx tsc --noEmit && bun run lint",
+          "summary": "both exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run typecheck (tsc --noEmit)",
+          "summary": "driver-run: exit 0, 0 errors (LSP ts2379 was a stale mid-edit snapshot)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts tests/core/autopilot-converge.test.ts",
+          "summary": "driver-run: 79 pass / 0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/gates.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-8",
+      "statement": "모든 내부 자율 결정이 후보 목록+근거로 종료 요약과 회고에 공개되며, 결정이 없었으면 '결정 없음'이 명시된다 (조용한 누락이 없다)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-store.test.ts tests/core/handoff-store.test.ts",
+          "summary": "exit 0, 43 pass / 0 fail (red proven first)"
+        },
+        {
+          "kind": "command",
+          "command": "npx tsc --noEmit -p tsconfig.json",
+          "summary": "exit 0, clean"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-complete.test.ts tests/core/autopilot-complete-oracle.test.ts",
+          "summary": "exit 0, 97 pass / 0 fail (red-first)"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test discovered-defect-close-cli + decision-disclosure-cli + regression suites",
+          "summary": "exit 0, 4 new + 37 regression pass / 0 fail (red-first)"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit && bun run lint",
+          "summary": "both exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-complete.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-9",
+      "statement": "실패 인계 산출물에 사용자가 내려야 할 결정(구체 선택지 + agent 현재 해석) 블록이 포함되고, 워크스페이스는 커밋되지 않은 상태로 남는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-store.test.ts tests/core/handoff-store.test.ts",
+          "summary": "exit 0, 43 pass / 0 fail (red proven first)"
+        },
+        {
+          "kind": "command",
+          "command": "npx tsc --noEmit -p tsconfig.json",
+          "summary": "exit 0, clean"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/handoff-store.test.ts tests/core/work-item-handoff.test.ts",
+          "summary": "exit 0, 45 pass / 0 fail (red-first proven)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/handoff-store.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-10",
+      "statement": "간략 경로(work done)는 발견된 결함이 work item으로 물질화·표면화되지 않으면 close를 차단하고, 물질화되면 close를 허용한다 (구동은 하지 않으며 하드블록도 아니다)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/gates.test.ts",
+          "summary": "exit 0, 126 pass / 0 fail (red-first)"
+        },
+        {
+          "kind": "command",
+          "command": "npx tsc --noEmit && bun run lint",
+          "summary": "both exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test discovered-defect-close-cli + decision-disclosure-cli + regression suites",
+          "summary": "exit 0, 4 new + 37 regression pass / 0 fail (red-first)"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit && bun run lint",
+          "summary": "both exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/discovered-defect-close-cli.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-11",
+      "statement": "charter.ts:62가 결함 클래스에 한해 amend되고, ADR-20260627·ADR-20260710을 supersede/amend하는 신규 ADR이 기록·프로젝션되어 결정 충돌이 ADR-0020에 따라 투명히 드러난다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/charter.test.ts",
+          "summary": "red 2 fail → green 15 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun run typecheck && bun run adr:check && bun run adr:guard",
+          "summary": "all exit 0 (adr-check OK, adr-guard 위반 0)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/charter.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/autopilot-store.ts",
+    "src/schemas/completion-contract.ts",
+    "src/schemas/handoff.ts",
+    "tests/core/autopilot-store.test.ts",
+    "tests/core/handoff-store.test.ts",
+    "src/core/handoff-store.ts",
+    "tests/core/work-item-handoff.test.ts",
+    "src/core/gates.ts",
+    "tests/core/gates.test.ts",
+    "src/core/autopilot-complete.ts",
+    "tests/core/autopilot-complete.test.ts",
+    "src/cli/commands/work.ts",
+    "src/cli/commands/autopilot.ts",
+    "tests/cli/discovered-defect-close-cli.test.ts",
+    "tests/cli/decision-disclosure-cli.test.ts",
+    "src/core/autopilot-loop.ts",
+    "src/core/autopilot-converge.ts",
+    "tests/core/autopilot-loop-discipline.test.ts",
+    "tests/core/autopilot-converge.test.ts",
+    "src/core/charter.ts",
+    "tests/core/charter.test.ts",
+    ".ditto/knowledge/adr/ADR-20260714-autopilot-defect-class-drive-carveout.md",
+    ".ditto/knowledge/adr/ADR-20260627-autopilot-followup-autonomy-boundary.md",
+    ".ditto/knowledge/adr/ADR-20260710-intent-single-unit-and-termination-completeness.md",
+    "CLAUDE.md"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true,
+    "irreversible": true
+  },
+  "follow_ups": [
+    {
+      "kind": "bug",
+      "note": "결함 disclosure 정확도 edge 2건 (n2-review 발견, 저심각): (2) 한 노드가 N>1 drive-eligible 결함을 한 번에 보고하면 N개 child WI가 물질화되지만 defect_fix splice는 하나만 돌면서 defect_chain_driven 결정은 결함마다 append돼 — N-1개가 실제 구동 없이 'chain-driven to done'으로 과대 공개됨(단일결함 경로는 정상). (3) cap-hit 경로에서 child WI는 물질화되나 escalate 결정이 그 id를 인용하지 않아 discovered_by 백링크로만 추적 가능(투명성 gap). 둘 다 11개 AC의 단일결함 계약 밖 edge, code-evident·untested.",
+      "severity": "low",
+      "self_caused": true,
+      "materialized_wi": "wi_260714mfx",
+      "priority": 3
+    }
+  ],
+  "risks": [],
+  "runs": [],
+  "started_at_sha": "f635e05a65511004c5fdce34b214a91d413cc974",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_d41f5ed3e9adb43b.json",
+    ".ditto/memory/events/memevt_retro_dbe82b9da75d5241.json",
+    ".ditto/work-items/wi_2607130ld/",
+    ".ditto/work-items/wi_2607130oc/",
+    ".ditto/work-items/wi_26071389d/",
+    ".ditto/work-items/wi_2607138pr/",
+    ".ditto/work-items/wi_260713be4/",
+    ".ditto/work-items/wi_260713bo1/",
+    ".ditto/work-items/wi_260713kyb/",
+    ".ditto/work-items/wi_260713tsw/",
+    ".ditto/work-items/wi_260713w0g/",
+    ".ditto/work-items/wi_2607148yg/"
+  ],
+  "created_at": "2026-07-14T07:30:31.272Z",
+  "updated_at": "2026-07-14T10:17:51.985Z",
+  "closed_at": "2026-07-14T10:17:51.983Z"
+}

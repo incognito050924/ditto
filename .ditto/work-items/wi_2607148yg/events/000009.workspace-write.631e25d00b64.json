@@ -1,0 +1,50 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607148yg",
+  "seq": 9,
+  "actor": "workspace-write",
+  "event_id": "631e25d00b6476e0037dc4e1624aa8e43ffd8fc8cd0b47444e5ab97bf25feeff",
+  "ts": "2026-07-14T10:11:02.211Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-8",
+    "verdict": "fail",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-store.test.ts tests/core/handoff-store.test.ts",
+        "summary": "exit 0, 43 pass / 0 fail (red proven first)"
+      },
+      {
+        "kind": "command",
+        "command": "npx tsc --noEmit -p tsconfig.json",
+        "summary": "exit 0, clean"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-complete.test.ts tests/core/autopilot-complete-oracle.test.ts",
+        "summary": "exit 0, 97 pass / 0 fail (red-first)"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test discovered-defect-close-cli + decision-disclosure-cli + regression suites",
+        "summary": "exit 0, 4 new + 37 regression pass / 0 fail (red-first)"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit && bun run lint",
+        "summary": "both exit 0"
+      }
+    ]
+  }
+}

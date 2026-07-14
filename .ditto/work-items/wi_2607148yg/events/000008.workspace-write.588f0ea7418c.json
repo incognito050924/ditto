@@ -1,0 +1,40 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607148yg",
+  "seq": 8,
+  "actor": "workspace-write",
+  "event_id": "588f0ea7418cdc81e5d6ffa515bc6354284cb2b90e046c20a5f82fdfa2ec8dd8",
+  "ts": "2026-07-14T10:11:02.210Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-7",
+    "verdict": "fail",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607148yg/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/gates.test.ts",
+        "summary": "exit 0, 126 pass / 0 fail (red-first)"
+      },
+      {
+        "kind": "command",
+        "command": "npx tsc --noEmit && bun run lint",
+        "summary": "both exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck (tsc --noEmit)",
+        "summary": "driver-run: exit 0, 0 errors (LSP ts2379 was a stale mid-edit snapshot)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-loop-discipline.test.ts tests/core/autopilot-converge.test.ts",
+        "summary": "driver-run: 79 pass / 0 fail"
+      }
+    ]
+  }
+}
