@@ -1079,7 +1079,9 @@ export function intentDriftGate(a: IntentChainArtifacts): IntentDriftResult {
   }
   const wiDropped = missingFrom(intentAcIds, wiAcIds);
   if (wiDropped.length > 0) {
-    reasons.push(`H1: 작업 항목에서 빠진 원 의도 완료 조건 id(scope shrink): ${wiDropped.join(', ')}`);
+    reasons.push(
+      `H1: 작업 항목에서 빠진 원 의도 완료 조건 id(scope shrink): ${wiDropped.join(', ')}`,
+    );
   }
 
   // ── H2 intent → autopilot ──
@@ -1094,7 +1096,9 @@ export function intentDriftGate(a: IntentChainArtifacts): IntentDriftResult {
   }
   const uncovered = missingFrom(intentAcIds, covered);
   if (uncovered.length > 0) {
-    reasons.push(`H2: 어떤 노드도 다루지 않는 원 의도 완료 조건 id(scope shrink): ${uncovered.join(', ')}`);
+    reasons.push(
+      `H2: 어떤 노드도 다루지 않는 원 의도 완료 조건 id(scope shrink): ${uncovered.join(', ')}`,
+    );
   }
   const invented = missingFrom(covered, intentAcIds);
   if (invented.length > 0) {
@@ -1111,7 +1115,9 @@ export function intentDriftGate(a: IntentChainArtifacts): IntentDriftResult {
     }
     const compDropped = missingFrom(intentAcIds, compIds);
     if (compDropped.length > 0) {
-      reasons.push(`H3: 완료본에서 빠진 원 의도 완료 조건 id(scope shrink): ${compDropped.join(', ')}`);
+      reasons.push(
+        `H3: 완료본에서 빠진 원 의도 완료 조건 id(scope shrink): ${compDropped.join(', ')}`,
+      );
     }
   }
 
@@ -1248,10 +1254,14 @@ export function interfaceBaselineDriftGate(
   const removed = baseline.filter((b) => !current.includes(b));
   const reasons: string[] = [];
   if (added.length > 0) {
-    reasons.push(`고정 기준선 대비 인터페이스/범위 추가됨 — 미승인 확장(grow): ${added.join(', ')}`);
+    reasons.push(
+      `고정 기준선 대비 인터페이스/범위 추가됨 — 미승인 확장(grow): ${added.join(', ')}`,
+    );
   }
   if (removed.length > 0) {
-    reasons.push(`고정 기준선 대비 인터페이스/범위 제거됨 — 미승인 축소(shrink): ${removed.join(', ')}`);
+    reasons.push(
+      `고정 기준선 대비 인터페이스/범위 제거됨 — 미승인 축소(shrink): ${removed.join(', ')}`,
+    );
   }
   return gate(reasons);
 }
