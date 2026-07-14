@@ -2157,4 +2157,90 @@ describe('wi_2607148yg discovered real-behavior defects (materialize + chain-dri
     // the generic escalate reason must not embed a defect child wi_ id (contamination guard).
     expect(escalate?.reason).not.toMatch(/wi_[a-z0-9]+/);
   });
+
+  // ── wi_260714pjs: condition_b sibling starvation ──────────────────────────
+  // When N>1 drive-eligible defects are reported and ANY of them carries an ADVERSE
+  // condition_b, the run fail-closes (blocked/escalate) — but EVERY drive-eligible
+  // defect (the condition_b one AND its non-condition_b siblings) must still be
+  // materialized and disclosed so nothing is silently dropped from the ledger.
+
+  test('pjs-1 N>1 drive-eligible with one condition_b → surface(discovered_defect) recorded for ALL, each reason carries its materialized child wi_ id', async () => {
+    await aps.write(WI, { ...graph({ nodes: [implementNode()] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Two reproduced defects; one fix needs a security-adverse decision.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        discovered_defects: [
+          { item: 'plain reproduced sibling defect', reproduced: true },
+          {
+            item: 'reproduced defect whose fix weakens auth',
+            reproduced: true,
+            condition_b: [
+              { domain: 'security', adverse: true, basis: 'fix would relax an auth check' },
+            ],
+          },
+        ],
+      },
+    });
+    // fail-closed block (see pjs-2), but NOTHING dropped: both drive-eligible defects surfaced.
+    expect(res.status).toBe('blocked');
+    const decisions = await aps.readDecisions(WI);
+    // NONE driven — the block prevents the auto-drive.
+    expect(decisions.some((d) => d.decision === 'defect_chain_driven')).toBe(false);
+    const surfaced = decisions.filter(
+      (d) => d.decision === 'surface' && d.resolvability === 'discovered_defect',
+    );
+    // BOTH drive-eligible defects (incl. the condition_b one) are disclosed — the fix for the
+    // sibling-starvation bug (the condition_b defect + its siblings were silently dropped).
+    expect(surfaced).toHaveLength(2);
+    const joined = surfaced.map((s) => s.reason).join('\n');
+    expect(joined).toContain('plain reproduced sibling defect');
+    expect(joined).toContain('reproduced defect whose fix weakens auth');
+    // each disclosure carries a REAL materialized back-linked child work item (lossless channel).
+    for (const s of surfaced) {
+      const child = childWiFromReason(s.reason ?? '');
+      if (!child) throw new Error('expected a materialized child wi id in each surface reason');
+      expect(await wis.exists(child)).toBe(true);
+      expect((await wis.get(child)).discovered_by).toBe(WI);
+    }
+  });
+
+  test('pjs-2 same scenario → record-result stays fail-closed: blocked / escalate / user_decision_needed', async () => {
+    await aps.write(WI, { ...graph({ nodes: [implementNode()] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Two reproduced defects; one fix needs a security-adverse decision.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        discovered_defects: [
+          { item: 'plain reproduced sibling defect', reproduced: true },
+          {
+            item: 'reproduced defect whose fix weakens auth',
+            reproduced: true,
+            condition_b: [
+              { domain: 'security', adverse: true, basis: 'fix would relax an auth check' },
+            ],
+          },
+        ],
+      },
+    });
+    // the condition_b block semantics are preserved unchanged.
+    expect(res.status).toBe('blocked');
+    expect(res.decision).toBe('escalate');
+    expect(res.failure_class).toBe('user_decision_needed');
+    expect(res.promoted_node_ids).toEqual([]);
+    expect(res.reason.toLowerCase()).toContain('condition-b');
+    const decisions = await aps.readDecisions(WI);
+    expect(decisions.some((d) => d.failure_class === 'user_decision_needed')).toBe(true);
+    expect(decisions.some((d) => d.decision === 'escalate')).toBe(true);
+  });
 });

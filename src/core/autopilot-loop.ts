@@ -3343,6 +3343,20 @@ async function recordResultCore(
           reason: `discovered defect materialized to backlog ONLY — not a reproduced current-harm bug (conservative, ac-2), so persisted into its own back-linked work item (${materializedWi}, discovered_by ${input.workItemId}) but NOT driven: ${d.item}`,
         });
       }
+      // (ac-1/ac-3/ac-6, wi_260714pjs) materialize EVERY drive-eligible defect FIRST — into its
+      // OWN back-linked work item (a persisted Record — see materializeDiscoveredDefect, which
+      // starts no new run so there is NO N×loop_rounds runaway). This runs BEFORE the condition-b
+      // block so that a fail-closed handoff still materializes+discloses ALL drive-eligible defects
+      // (the condition-b one AND its non-condition-b siblings), instead of silently dropping them
+      // (wi_260714pjs sibling-starvation fix). The map is REUSED by both the condition-b disclosure
+      // and the drive path below — materialization happens exactly once.
+      const groundingByDefect = new Map<(typeof driveEligible)[number], string>();
+      for (const d of driveEligible) {
+        groundingByDefect.set(
+          d,
+          await materializeDiscoveredDefect(repoRoot, input.workItemId, d.item, now),
+        );
+      }
       // (ac-4/ac-7) condition-b dominates the drive: any drive-eligible defect whose fix
       // needs an ADVERSE protected-axis decision ⇒ fail-closed block, do NOT auto-drive.
       const conditionBDefect = driveEligible.find((d) =>
@@ -3356,6 +3370,21 @@ async function recordResultCore(
           ? `condition-b required — fixing the discovered defect needs a security/system/project/feature-design ADVERSE decision; fail-closed handoff instead of auto-drive (ac-4/ac-7): ${conditionBDefect.item}`
           : `discovered defect fix — non-fail reason, continuing: ${conditionBDefect.item}`;
         if (isFailHandoffReason(handoffReason)) {
+          // (wi_260714pjs) BEFORE the block returns, disclose EVERY drive-eligible defect as
+          // materialize-only so nothing is dropped: the blocked run hands the user's decision the
+          // full ledger of what was found (the condition-b defect AND its drive-eligible siblings),
+          // each with its REAL child wi_ grounding (lossless channel). None is driven (the block
+          // prevents the auto-drive) — they are materialized pending the user's condition-b decision.
+          for (const d of driveEligible) {
+            const materializedWi = groundingByDefect.get(d);
+            await aps.appendDecision(input.workItemId, {
+              ts: now.toISOString(),
+              node_id: node.id,
+              decision: 'surface',
+              resolvability: 'discovered_defect',
+              reason: `reproduced real-behavior defect materialized into its own back-linked work item (${materializedWi}, discovered_by ${input.workItemId}) but NOT driven — the run is fail-closed on a condition-b handoff, so this defect is materialize-only pending the user's ADVERSE-decision (wi_260714pjs): ${d.item}`,
+            });
+          }
           await aps.updateNode(input.workItemId, node.id, (n) => ({
             ...n,
             status: nodeTransition(n.status, 'block'),
@@ -3382,19 +3411,11 @@ async function recordResultCore(
           };
         }
       }
-      // (ac-1/ac-3/ac-6) drive: ACTUALLY materialize each reproduced defect into its OWN
-      // back-linked work item (a persisted Record — see materializeDiscoveredDefect, which
-      // starts no new run so there is NO N×loop_rounds runaway), THEN chain-drive its FIX in
-      // the SAME graph so the drive shares the run's loop_rounds budget (a `defect_fix`
-      // splice, not a fresh WI graph). The fix lands as its OWN node/commit (ac-3).
+      // (ac-1/ac-3/ac-6) drive: the reproduced defects are already materialized (groundingByDefect
+      // above); chain-drive their FIX in the SAME graph so the drive shares the run's loop_rounds
+      // budget (a `defect_fix` splice, not a fresh WI graph). The fix lands as its OWN node/commit
+      // (ac-3).
       if (driveEligible.length > 0) {
-        const groundingByDefect = new Map<(typeof driveEligible)[number], string>();
-        for (const d of driveEligible) {
-          groundingByDefect.set(
-            d,
-            await materializeDiscoveredDefect(repoRoot, input.workItemId, d.item, now),
-          );
-        }
         const outcome = await applyAutoResolveSplice({
           aps,
           workItemId: input.workItemId,
