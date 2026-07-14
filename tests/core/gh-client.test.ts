@@ -48,6 +48,29 @@ describe('issueAddAssignee (ac-1) — claim via gh issue edit --add-assignee', (
   });
 });
 
+describe('projectItemList — passes --limit to defeat gh default 30-item truncation', () => {
+  // Regression (wi_260714pls / issue #39): gh `project item-list` defaults to
+  // --limit 30. Without an explicit --limit, an issue past board position 30 is
+  // absent from the payload, so resolveProjectItemId returns null and the claim
+  // board-move is silently skipped ("no project_item_id"). The argv MUST carry a
+  // --limit large enough that the default cap can never hide an item.
+  test('emits `--limit <n>` with n > 30', () => {
+    const { exec, calls } = recordingExec({
+      exitCode: 0,
+      stdout: JSON.stringify({ items: [] }),
+      stderr: '',
+    });
+    const client = createGhClient(exec);
+    client.projectItemList('owner', 2);
+    const argv = calls[0] as (typeof calls)[number];
+    const limitIdx = argv.indexOf('--limit');
+    expect(limitIdx).toBeGreaterThanOrEqual(0);
+    const limit = Number(argv[limitIdx + 1]);
+    expect(Number.isInteger(limit)).toBe(true);
+    expect(limit).toBeGreaterThan(30);
+  });
+});
+
 describe('issueRemoveAssignee (ac-7) — unclaim removes @me ONLY', () => {
   test('emits `--remove-assignee @me` and nothing that clears other assignees', () => {
     const { exec, calls } = recordingExec(ok0);

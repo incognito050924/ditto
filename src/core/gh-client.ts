@@ -23,6 +23,11 @@ import { execFileSync } from 'node:child_process';
 /** Default per-call timeout; a network hang must not stall the caller (pre-mortem). */
 export const DEFAULT_GH_TIMEOUT_MS = 30_000;
 
+/** `gh project item-list --limit` bound. gh defaults to 30; this bound is well
+ *  above any realistic board size so the whole board is fetched in one call and
+ *  no item is silently truncated (issue #39). gh paginates internally up to it. */
+export const PROJECT_ITEM_LIST_LIMIT = 1000;
+
 export type GhDegradeReason =
   | 'absent' // gh binary not found (ENOENT)
   | 'unauthenticated' // not logged in
@@ -280,7 +285,22 @@ export function createGhClient(
     projectItemList: (owner, projectNumber) =>
       runJson(
         exec,
-        ['project', 'item-list', String(projectNumber), '--owner', owner, '--format', 'json'],
+        [
+          'project',
+          'item-list',
+          String(projectNumber),
+          '--owner',
+          owner,
+          '--format',
+          'json',
+          // gh `project item-list` defaults to --limit 30; without an explicit
+          // limit an issue past board position 30 is dropped from the payload, so
+          // resolveProjectItemId returns null and the claim board-move is silently
+          // skipped. gh paginates internally up to --limit, so a bound well above
+          // any realistic board size fetches the whole board in one call.
+          '--limit',
+          String(PROJECT_ITEM_LIST_LIMIT),
+        ],
         timeoutMs,
       ),
     projectView: (owner, projectNumber) =>
