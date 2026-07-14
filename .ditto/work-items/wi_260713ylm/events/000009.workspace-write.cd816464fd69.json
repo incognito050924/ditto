@@ -1,0 +1,103 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713ylm",
+  "seq": 9,
+  "actor": "workspace-write",
+  "event_id": "cd816464fd69456474bcf08965c42ff5c118afb54a9a07ec46725a19963800cc",
+  "ts": "2026-07-14T01:59:29.094Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": "src/core/setup.ts",
+        "lines": {
+          "start": 369,
+          "end": 401
+        },
+        "summary": "AGENTS.md create-if-missing 분기 + CLAUDE.md 투영(=AGENTS.md 미러)"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/managed-resource.ts",
+        "lines": {
+          "start": 69,
+          "end": 77
+        },
+        "summary": "buildManagedBlock sha(managedBody) vs embed bodyWithBreak 불일치"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/bridge-sync.ts",
+        "lines": {
+          "start": 27,
+          "end": 40
+        },
+        "summary": "divergent managedBlock builder (newline discipline 상이)"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/instruction-bridge.ts",
+        "lines": {
+          "start": 96,
+          "end": 107
+        },
+        "summary": "normalizeInstructionText — 시스템 인식/비교 관례(CRLF→LF)"
+      },
+      {
+        "kind": "file",
+        "path": "scripts/build-plugin.mjs",
+        "lines": {
+          "start": 43,
+          "end": 45
+        },
+        "summary": "syncManagedResources — AGENTS/CLAUDE.md 재생성(스냅샷 캡처 없음)"
+      },
+      {
+        "kind": "artifact",
+        "path": ".ditto/local/runs/wi_260713ylm/plan-dialog.md",
+        "summary": "plan-stage coverage sweep dialog(15 렌즈, 3 branch)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260713ylm/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/setup.test.ts tests/core/charter-region.test.ts",
+        "summary": "exit 0, 26 pass, 105 assertions"
+      },
+      {
+        "kind": "command",
+        "command": "tsc --noEmit",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/charter-region.ts",
+        "summary": "marker-less longest-leading-prefix normalized 인식 프리미티브"
+      },
+      {
+        "kind": "file",
+        "path": "tests/core/setup.test.ts",
+        "summary": "refresh-before-projection: projection mirrors new charter"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/charter-region.test.ts tests/core/setup.test.ts tests/core/teardown.test.ts tests/core/managed-resource.test.ts tests/core/bridge-sync.test.ts",
+        "summary": "60 pass / 0 fail, exit 0"
+      },
+      {
+        "kind": "note",
+        "summary": "CLI e2e fresh+upgrade+idempotent: doctor findings [] 전부"
+      },
+      {
+        "kind": "note",
+        "summary": "CLI e2e: doctor instructions findings [], markerSha==actualSha==sourceSha, CLAUDE 1/1, AGENTS raw"
+      }
+    ]
+  }
+}

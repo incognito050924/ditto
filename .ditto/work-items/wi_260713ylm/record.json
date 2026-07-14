@@ -1,0 +1,739 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260713ylm",
+  "title": "charter auto-refresh 메커니즘 (B 후속)",
+  "source_request": "[B 후속 — 새 세션에서 이어감] 확정 의도: charter 갱신이 기존 설치 프로젝트에도 닿게 하되(현재 AGENTS.md create-if-missing이라 안 닿음) 사용자가 쓴 자기 규칙과 충돌하지 않게. 열린 결정=설계(재도출 금지, 아래 제약 반영):\n[adversarial 커버리지 리뷰 결과 — wi_260713kyb에서 managed-block-on-AGENTS.md 설계는 기각됨]\n(1) AGENTS.md=raw 원본 불변식은 shipped 테스트에 박힘: tests/core/setup.test.ts:128-140,150-168,352-392 (setup이 wrapped AGENTS.md를 raw로 heal하는 마이그레이션 보유; 주석 'wrapping the source would break the doctor mirror'). raw→block은 이 마이그레이션을 뒤집어 테스트 깨짐.\n(2) upsertManagedBlock은 비어있지 않은 raw charter에 append → 첫 업그레이드 시 charter 중복(old bundled vs user content 구분 불가).\n(3) CLAUDE.md write 경로(setup.ts:390-401)가 마커 든 AGENTS.md 전체를 투영 → double-wrap → doctor drift(content_mismatch/multiple_markers).\n[블록 방향 유지 시 필요한 수정] CLAUDE.md write를 extractCharterBody 투영으로; heal-to-raw(setup.ts:376-388)+그 테스트 삭제/반전; raw→block 마이그레이션 recognize-replace(append 아님); 마커충돌(64-hex lookalike) 테스트; buildManagedBlock trailing-newline vs extractCharterBody→normalizedSha256 round-trip 증명.\n[대안(opponent 제시)] AGENTS.md는 raw 유지, refresh seam을 CLAUDE.md 투영(이미 managed block)에만 둠 → 기존 테스트·doctor 불변식 전부 보존. 단 AGENTS.md(codex)는 stale로 남아 dual-host 갱신 갭 — 이게 목표를 충족하는지 검토 필요.\n[열린 판단] 두 설계의 트레이드오프 + '이 복잡도(불변식 rework)가 advisory 가치에 비례하나' 자체를 다시 무게 달 것.",
+  "goal": "ditto setup 재실행(update 경로)에서 기존 설치 프로젝트의 stale ditto charter를 최신 번들 charter로 auto-apply 갱신한다. 갱신은 AGENTS.md의 ditto-소유 charter 영역에만 적용하되 영속 마커를 두지 않고, 온디스크 charter 영역이 알려진 예전 번들 charter 스냅샷과 exact-match일 때만 교체하며 사용자가 직접 쓴 규칙은 보존한다. 사용자가 charter 영역을 편집해 exact-match 인식이 실패하면 덮어쓰지 않고 skip + 짧은 알림을 낸다. CLAUDE.md는 AGENTS.md의 투영이라 AGENTS.md가 최신이 되면 자동으로 따라오고, 이 단일 seam이 두 호스트(Claude Code=CLAUDE.md, Codex=AGENTS.md)를 동시에 커버한다. 함께: buildManagedBlock의 marker sha(managedBody)와 임베드 body(bodyWithBreak) 불일치 버그를 수정한다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "번들 charter가 바뀐 뒤 기존 설치 프로젝트에서 ditto setup을 재실행하면, AGENTS.md의 ditto charter 영역이 exact-match로 인식되는 경우 최신 번들 charter로 교체된다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/setup.ts",
+          "lines": {
+            "start": 369,
+            "end": 401
+          },
+          "summary": "AGENTS.md create-if-missing 분기 + CLAUDE.md 투영(=AGENTS.md 미러)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/managed-resource.ts",
+          "lines": {
+            "start": 69,
+            "end": 77
+          },
+          "summary": "buildManagedBlock sha(managedBody) vs embed bodyWithBreak 불일치"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/bridge-sync.ts",
+          "lines": {
+            "start": 27,
+            "end": 40
+          },
+          "summary": "divergent managedBlock builder (newline discipline 상이)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/instruction-bridge.ts",
+          "lines": {
+            "start": 96,
+            "end": 107
+          },
+          "summary": "normalizeInstructionText — 시스템 인식/비교 관례(CRLF→LF)"
+        },
+        {
+          "kind": "file",
+          "path": "scripts/build-plugin.mjs",
+          "lines": {
+            "start": 43,
+            "end": 45
+          },
+          "summary": "syncManagedResources — AGENTS/CLAUDE.md 재생성(스냅샷 캡처 없음)"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/runs/wi_260713ylm/plan-dialog.md",
+          "summary": "plan-stage coverage sweep dialog(15 렌즈, 3 branch)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260713ylm/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/setup.test.ts tests/core/charter-region.test.ts",
+          "summary": "exit 0, 26 pass, 105 assertions"
+        },
+        {
+          "kind": "command",
+          "command": "tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/charter-region.ts",
+          "summary": "marker-less longest-leading-prefix normalized 인식 프리미티브"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/setup.test.ts tests/core/charter-region.test.ts",
+          "summary": "exit 0, 26 pass — N→N+1 replace 테스트 포함"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/charter-region.test.ts tests/core/setup.test.ts tests/core/teardown.test.ts tests/core/managed-resource.test.ts tests/core/bridge-sync.test.ts",
+          "summary": "60 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "note",
+          "summary": "CLI e2e fresh+upgrade+idempotent: doctor findings [] 전부"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/charter-region.test.ts tests/core/setup.test.ts",
+          "summary": "pass; setup ac-1/ac-2 N->N+1 status refreshed"
+        },
+        {
+          "kind": "note",
+          "summary": "CLI e2e upgrade: (charter refreshed), AGENTS.md head=실제 번들 charter"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "ditto charter 영역 밖에 사용자가 직접 쓴 규칙은 refresh 전후로 byte-identical하게 보존된다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/setup.ts",
+          "lines": {
+            "start": 369,
+            "end": 401
+          },
+          "summary": "AGENTS.md create-if-missing 분기 + CLAUDE.md 투영(=AGENTS.md 미러)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/managed-resource.ts",
+          "lines": {
+            "start": 69,
+            "end": 77
+          },
+          "summary": "buildManagedBlock sha(managedBody) vs embed bodyWithBreak 불일치"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/bridge-sync.ts",
+          "lines": {
+            "start": 27,
+            "end": 40
+          },
+          "summary": "divergent managedBlock builder (newline discipline 상이)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/instruction-bridge.ts",
+          "lines": {
+            "start": 96,
+            "end": 107
+          },
+          "summary": "normalizeInstructionText — 시스템 인식/비교 관례(CRLF→LF)"
+        },
+        {
+          "kind": "file",
+          "path": "scripts/build-plugin.mjs",
+          "lines": {
+            "start": 43,
+            "end": 45
+          },
+          "summary": "syncManagedResources — AGENTS/CLAUDE.md 재생성(스냅샷 캡처 없음)"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/runs/wi_260713ylm/plan-dialog.md",
+          "summary": "plan-stage coverage sweep dialog(15 렌즈, 3 branch)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260713ylm/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/setup.test.ts tests/core/charter-region.test.ts",
+          "summary": "exit 0, 26 pass, 105 assertions"
+        },
+        {
+          "kind": "command",
+          "command": "tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/charter-region.ts",
+          "summary": "marker-less longest-leading-prefix normalized 인식 프리미티브"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/setup.test.ts",
+          "summary": "ac-1/ac-2 replace + suffix 보존 assertion"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/charter-region.test.ts tests/core/setup.test.ts tests/core/teardown.test.ts tests/core/managed-resource.test.ts tests/core/bridge-sync.test.ts",
+          "summary": "60 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "note",
+          "summary": "CLI e2e fresh+upgrade+idempotent: doctor findings [] 전부"
+        },
+        {
+          "kind": "note",
+          "summary": "CLI e2e: ENDS_WITH_USER_TAIL True, backup가 prior 원본 verbatim 보존"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "사용자가 charter 영역을 수정해 exact-match 인식이 실패하면 AGENTS.md를 덮어쓰지 않고 skip하며 '갱신 못 함' 알림을 낸다(사용자 규칙/수정 유실 0). 인식은 근사매칭이 아니라 exact-match만 사용한다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/setup.ts",
+          "lines": {
+            "start": 369,
+            "end": 401
+          },
+          "summary": "AGENTS.md create-if-missing 분기 + CLAUDE.md 투영(=AGENTS.md 미러)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/managed-resource.ts",
+          "lines": {
+            "start": 69,
+            "end": 77
+          },
+          "summary": "buildManagedBlock sha(managedBody) vs embed bodyWithBreak 불일치"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/bridge-sync.ts",
+          "lines": {
+            "start": 27,
+            "end": 40
+          },
+          "summary": "divergent managedBlock builder (newline discipline 상이)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/instruction-bridge.ts",
+          "lines": {
+            "start": 96,
+            "end": 107
+          },
+          "summary": "normalizeInstructionText — 시스템 인식/비교 관례(CRLF→LF)"
+        },
+        {
+          "kind": "file",
+          "path": "scripts/build-plugin.mjs",
+          "lines": {
+            "start": 43,
+            "end": 45
+          },
+          "summary": "syncManagedResources — AGENTS/CLAUDE.md 재생성(스냅샷 캡처 없음)"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/runs/wi_260713ylm/plan-dialog.md",
+          "summary": "plan-stage coverage sweep dialog(15 렌즈, 3 branch)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260713ylm/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/setup.test.ts tests/core/charter-region.test.ts",
+          "summary": "exit 0, 26 pass, 105 assertions"
+        },
+        {
+          "kind": "command",
+          "command": "tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/charter-region.ts",
+          "summary": "marker-less longest-leading-prefix normalized 인식 프리미티브"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/charter-region.test.ts",
+          "summary": "user-edited → unrecognized; CRLF no-false-skip"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/charter-region.test.ts tests/core/setup.test.ts tests/core/teardown.test.ts tests/core/managed-resource.test.ts tests/core/bridge-sync.test.ts",
+          "summary": "60 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "note",
+          "summary": "CLI e2e fresh+upgrade+idempotent: doctor findings [] 전부"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/setup.test.ts",
+          "summary": "ac-3 status unrecognized + notice length 1 + no backup; CRLF up-to-date zero notices"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "refresh 후 fresh 설치와 업그레이드된 설치 양쪽에서 ditto doctor finding이 0이고 CLAUDE.md는 최신 AGENTS.md의 유효한 mirror다(nested marker/double-wrap 없음). 같은 실행에서 AGENTS.md refresh가 CLAUDE.md 투영보다 먼저 일어난다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/setup.ts",
+          "lines": {
+            "start": 369,
+            "end": 401
+          },
+          "summary": "AGENTS.md create-if-missing 분기 + CLAUDE.md 투영(=AGENTS.md 미러)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/managed-resource.ts",
+          "lines": {
+            "start": 69,
+            "end": 77
+          },
+          "summary": "buildManagedBlock sha(managedBody) vs embed bodyWithBreak 불일치"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/bridge-sync.ts",
+          "lines": {
+            "start": 27,
+            "end": 40
+          },
+          "summary": "divergent managedBlock builder (newline discipline 상이)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/instruction-bridge.ts",
+          "lines": {
+            "start": 96,
+            "end": 107
+          },
+          "summary": "normalizeInstructionText — 시스템 인식/비교 관례(CRLF→LF)"
+        },
+        {
+          "kind": "file",
+          "path": "scripts/build-plugin.mjs",
+          "lines": {
+            "start": 43,
+            "end": 45
+          },
+          "summary": "syncManagedResources — AGENTS/CLAUDE.md 재생성(스냅샷 캡처 없음)"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/runs/wi_260713ylm/plan-dialog.md",
+          "summary": "plan-stage coverage sweep dialog(15 렌즈, 3 branch)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260713ylm/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/setup.test.ts tests/core/charter-region.test.ts",
+          "summary": "exit 0, 26 pass, 105 assertions"
+        },
+        {
+          "kind": "command",
+          "command": "tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/charter-region.ts",
+          "summary": "marker-less longest-leading-prefix normalized 인식 프리미티브"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/setup.test.ts",
+          "summary": "refresh-before-projection: projection mirrors new charter"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/charter-region.test.ts tests/core/setup.test.ts tests/core/teardown.test.ts tests/core/managed-resource.test.ts tests/core/bridge-sync.test.ts",
+          "summary": "60 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "note",
+          "summary": "CLI e2e fresh+upgrade+idempotent: doctor findings [] 전부"
+        },
+        {
+          "kind": "note",
+          "summary": "CLI e2e: doctor instructions findings [], markerSha==actualSha==sourceSha, CLAUDE 1/1, AGENTS raw"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "setup을 반복 실행해도 멱등이다 — 내용/sha 안정, 파일 증식 없음.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/setup.ts",
+          "lines": {
+            "start": 369,
+            "end": 401
+          },
+          "summary": "AGENTS.md create-if-missing 분기 + CLAUDE.md 투영(=AGENTS.md 미러)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/managed-resource.ts",
+          "lines": {
+            "start": 69,
+            "end": 77
+          },
+          "summary": "buildManagedBlock sha(managedBody) vs embed bodyWithBreak 불일치"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/bridge-sync.ts",
+          "lines": {
+            "start": 27,
+            "end": 40
+          },
+          "summary": "divergent managedBlock builder (newline discipline 상이)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/instruction-bridge.ts",
+          "lines": {
+            "start": 96,
+            "end": 107
+          },
+          "summary": "normalizeInstructionText — 시스템 인식/비교 관례(CRLF→LF)"
+        },
+        {
+          "kind": "file",
+          "path": "scripts/build-plugin.mjs",
+          "lines": {
+            "start": 43,
+            "end": 45
+          },
+          "summary": "syncManagedResources — AGENTS/CLAUDE.md 재생성(스냅샷 캡처 없음)"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/runs/wi_260713ylm/plan-dialog.md",
+          "summary": "plan-stage coverage sweep dialog(15 렌즈, 3 branch)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260713ylm/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/setup.test.ts tests/core/charter-region.test.ts",
+          "summary": "exit 0, 26 pass, 105 assertions"
+        },
+        {
+          "kind": "command",
+          "command": "tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/charter-region.ts",
+          "summary": "marker-less longest-leading-prefix normalized 인식 프리미티브"
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/setup.test.ts",
+          "summary": "silent no-op + idempotent re-run 테스트"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/charter-region.test.ts tests/core/setup.test.ts tests/core/teardown.test.ts tests/core/managed-resource.test.ts tests/core/bridge-sync.test.ts",
+          "summary": "60 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "note",
+          "summary": "CLI e2e fresh+upgrade+idempotent: doctor findings [] 전부"
+        },
+        {
+          "kind": "note",
+          "summary": "CLI e2e: 2·3회 재실행 동일 sha, charter up to date 무알림, .ditto_bak 1"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "teardown이 exact-match로 인식되는 ditto charter 영역만 AGENTS.md에서 깨끗이 제거하고, 인식 불가한 영역이나 사용자 규칙은 보존한다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/setup.ts",
+          "lines": {
+            "start": 369,
+            "end": 401
+          },
+          "summary": "AGENTS.md create-if-missing 분기 + CLAUDE.md 투영(=AGENTS.md 미러)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/managed-resource.ts",
+          "lines": {
+            "start": 69,
+            "end": 77
+          },
+          "summary": "buildManagedBlock sha(managedBody) vs embed bodyWithBreak 불일치"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/bridge-sync.ts",
+          "lines": {
+            "start": 27,
+            "end": 40
+          },
+          "summary": "divergent managedBlock builder (newline discipline 상이)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/instruction-bridge.ts",
+          "lines": {
+            "start": 96,
+            "end": 107
+          },
+          "summary": "normalizeInstructionText — 시스템 인식/비교 관례(CRLF→LF)"
+        },
+        {
+          "kind": "file",
+          "path": "scripts/build-plugin.mjs",
+          "lines": {
+            "start": 43,
+            "end": 45
+          },
+          "summary": "syncManagedResources — AGENTS/CLAUDE.md 재생성(스냅샷 캡처 없음)"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/runs/wi_260713ylm/plan-dialog.md",
+          "summary": "plan-stage coverage sweep dialog(15 렌즈, 3 branch)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260713ylm/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/teardown.ts",
+          "summary": "teardownCharterSource — refreshCharterRegion 재사용(refresh-to-empty)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/teardown.test.ts",
+          "summary": "exit 0, 11 pass — recognized 제거 + unrecognized 보존"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core",
+          "summary": "2590 pass, 1 skip, 0 fail (회귀 없음)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/charter-region.test.ts tests/core/setup.test.ts tests/core/teardown.test.ts tests/core/managed-resource.test.ts tests/core/bridge-sync.test.ts",
+          "summary": "60 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "note",
+          "summary": "CLI e2e fresh+upgrade+idempotent: doctor findings [] 전부"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/teardown.test.ts",
+          "summary": "5 AGENTS.md region 케이스 pass"
+        }
+      ]
+    },
+    {
+      "id": "ac-7",
+      "statement": "buildManagedBlock이 stamp하는 marker sha가 실제 임베드된 body와 일치한다 — trailing-newline 유무와 무관하게 writer가 stamp한 sha == reader가 recompute한 sha(round-trip). bridge-sync.managedBlock과 newline discipline이 정합해 어느 builder가 마지막에 써도 doctor 판정이 일관된다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/setup.ts",
+          "lines": {
+            "start": 369,
+            "end": 401
+          },
+          "summary": "AGENTS.md create-if-missing 분기 + CLAUDE.md 투영(=AGENTS.md 미러)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/managed-resource.ts",
+          "lines": {
+            "start": 69,
+            "end": 77
+          },
+          "summary": "buildManagedBlock sha(managedBody) vs embed bodyWithBreak 불일치"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/bridge-sync.ts",
+          "lines": {
+            "start": 27,
+            "end": 40
+          },
+          "summary": "divergent managedBlock builder (newline discipline 상이)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/instruction-bridge.ts",
+          "lines": {
+            "start": 96,
+            "end": 107
+          },
+          "summary": "normalizeInstructionText — 시스템 인식/비교 관례(CRLF→LF)"
+        },
+        {
+          "kind": "file",
+          "path": "scripts/build-plugin.mjs",
+          "lines": {
+            "start": 43,
+            "end": 45
+          },
+          "summary": "syncManagedResources — AGENTS/CLAUDE.md 재생성(스냅샷 캡처 없음)"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/runs/wi_260713ylm/plan-dialog.md",
+          "summary": "plan-stage coverage sweep dialog(15 렌즈, 3 branch)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260713ylm/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/managed-resource.ts",
+          "summary": "sha over bodyWithBreak (임베드 body)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/bridge-sync.ts",
+          "summary": "divergent builder 제거, buildManagedBlock 위임"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/managed-resource.test.ts tests/core/bridge-sync.test.ts",
+          "summary": "exit 0, 23 pass (incl non-trailing-newline round-trip both builders)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/{bridge-sync,charter-region,doctor-fix,instruction-bridge,managed-resource,setup,teardown}.test.ts",
+          "summary": "exit 0, 69 pass"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/charter-region.test.ts tests/core/setup.test.ts tests/core/teardown.test.ts tests/core/managed-resource.test.ts tests/core/bridge-sync.test.ts",
+          "summary": "60 pass / 0 fail, exit 0"
+        },
+        {
+          "kind": "note",
+          "summary": "CLI e2e fresh+upgrade+idempotent: doctor findings [] 전부"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/managed-resource.test.ts tests/core/bridge-sync.test.ts",
+          "summary": "non-trailing-newline round-trip 두 builder pass"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/local/work-items/wi_260713ylm/completion.json",
+    ".ditto/local/work-items/wi_260713ylm/work-item.json",
+    ".ditto/work-items/wi_2607130ld/",
+    ".ditto/work-items/wi_2607130oc/",
+    ".ditto/work-items/wi_26071389d/",
+    ".ditto/work-items/wi_2607138pr/",
+    ".ditto/work-items/wi_260713be4/",
+    ".ditto/work-items/wi_260713bo1/",
+    ".ditto/work-items/wi_260713kyb/",
+    ".ditto/work-items/wi_260713tsw/",
+    ".ditto/work-items/wi_260713w0g/",
+    ".ditto/work-items/wi_260713ylm/",
+    "src/core/managed-resource.ts",
+    "src/core/bridge-sync.ts",
+    "tests/core/managed-resource.test.ts",
+    "tests/core/bridge-sync.test.ts",
+    "src/core/charter-region.ts",
+    "src/core/setup.ts",
+    "src/cli/commands/setup.ts",
+    "scripts/build-plugin.mjs",
+    "scripts/build-codex-plugin.mjs",
+    "resources/managed/charter-manifest.json",
+    "tests/core/charter-region.test.ts",
+    "tests/core/setup.test.ts",
+    "src/core/teardown.ts",
+    "tests/core/teardown.test.ts"
+  ],
+  "worktrees": [],
+  "autopilot_exempt": true,
+  "declared_risk": {
+    "non_local": true
+  },
+  "follows": "wi_26071389d",
+  "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260713ylm",
+    "fresh_evidence_needed": [
+      "land aborted — 72 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_2607130ld/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607130ld/record.json, .ditto/work-items/wi_2607130oc/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607130oc/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_2607130oc/events/000002.workspace-write.3ed6a2cd8aca.json, .ditto/work-items/wi_2607130oc/events/000003.workspace-write.7388b14cbddc.json, .ditto/work-items/wi_2607130oc/events/000004.workspace-write.6034daaeaa33.json, .ditto/work-items/wi_2607130oc/events/000005.workspace-write.ec4ed759cc75.json, .ditto/work-items/wi_2607130oc/events/000006.workspace-write.69c47b255e09.json, .ditto/work-items/wi_2607130oc/record.json, .ditto/work-items/wi_26071389d/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_26071389d/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_26071389d/events/000002.workspace-write.745d477797fa.json, .ditto/work-items/wi_26071389d/events/000003.workspace-write.48cbc7f13879.json, .ditto/work-items/wi_26071389d/events/000004.workspace-write.71a59e762eef.json, .ditto/work-items/wi_26071389d/events/000005.workspace-write.c98e330c7d24.json, .ditto/work-items/wi_26071389d/events/000006.workspace-write.1d4a9e51bfd9.json, .ditto/work-items/wi_26071389d/record.json, .ditto/work-items/wi_2607138pr/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607138pr/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_2607138pr/events/000002.workspace-write.886a35a07b28.json, .ditto/work-items/wi_2607138pr/events/000003.workspace-write.952789b0dfa4.json, .ditto/work-items/wi_2607138pr/events/000004.workspace-write.9b80d1421a1d.json, .ditto/work-items/wi_2607138pr/events/000005.workspace-write.02d1bc21e71f.json, .ditto/work-items/wi_2607138pr/events/000006.workspace-write.92a85e525a94.json, .ditto/work-items/wi_2607138pr/events/000007.workspace-write.754980ac2685.json, .ditto/work-items/wi_2607138pr/record.json, .ditto/work-items/wi_260713be4/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713be4/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260713be4/events/000002.workspace-write.67eaae88477f.json, .ditto/work-items/wi_260713be4/events/000003.workspace-write.f05f5a6b6ecc.json, .ditto/work-items/wi_260713be4/events/000004.workspace-write.abbb6a5075e1.json, .ditto/work-items/wi_260713be4/events/000005.workspace-write.ca8f709a3d72.json, .ditto/work-items/wi_260713be4/record.json, .ditto/work-items/wi_260713bo1/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713bo1/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260713bo1/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260713bo1/events/000003.workspace-write.bd0ab762e187.json, .ditto/work-items/wi_260713bo1/events/000004.workspace-write.ae52d2961e0a.json, .ditto/work-items/wi_260713bo1/events/000005.workspace-write.ce0c15d2eab5.json, .ditto/work-items/wi_260713bo1/events/000006.workspace-write.0b8dddd3a42f.json, .ditto/work-items/wi_260713bo1/events/000007.workspace-write.ac4f70291432.json, .ditto/work-items/wi_260713bo1/record.json, .ditto/work-items/wi_260713kyb/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713kyb/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260713kyb/events/000002.workspace-write.90cf1b24a3d9.json, .ditto/work-items/wi_260713kyb/record.json, .ditto/work-items/wi_260713tsw/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713tsw/events/000001.workspace-write.b6e05c4e419f.json, .ditto/work-items/wi_260713tsw/record.json, .ditto/work-items/wi_260713w0g/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713w0g/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260713w0g/events/000002.workspace-write.a608710a213e.json, .ditto/work-items/wi_260713w0g/events/000003.workspace-write.40a853809739.json, .ditto/work-items/wi_260713w0g/events/000004.workspace-write.9571c04e1eb2.json, .ditto/work-items/wi_260713w0g/events/000005.workspace-write.cba10747e468.json, .ditto/work-items/wi_260713w0g/record.json, .ditto/work-items/wi_260713ylm/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713ylm/events/000001.workspace-write.b6e05c4e419f.json, .ditto/work-items/wi_260713ylm/events/000002.workspace-write.b1ffb2860cfd.json, .ditto/work-items/wi_260713ylm/events/000003.workspace-write.42b0e0e958d2.json, .ditto/work-items/wi_260713ylm/events/000004.workspace-write.080885aefb01.json, .ditto/work-items/wi_260713ylm/events/000005.workspace-write.711a9610a8d9.json, .ditto/work-items/wi_260713ylm/events/000006.workspace-write.321a1cc8e4c8.json, .ditto/work-items/wi_260713ylm/events/000007.workspace-write.d6392f2b1a52.json, .ditto/work-items/wi_260713ylm/events/000008.workspace-write.149e13850acf.json, .ditto/work-items/wi_260713ylm/events/000009.workspace-write.cd816464fd69.json, .ditto/work-items/wi_260713ylm/events/000010.workspace-write.5cca308db85c.json, .ditto/work-items/wi_260713ylm/events/000011.workspace-write.a5ba28b1abe0.json, .ditto/work-items/wi_260713ylm/events/000012.workspace-write.985272996176.json, .ditto/work-items/wi_260713ylm/events/000013.workspace-write.6f653cfbc889.json, .ditto/work-items/wi_260713ylm/record.json. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
+  "runs": [],
+  "handoff_path": ".ditto/local/handoff/wi_260713ylm.md",
+  "started_at_sha": "b323fffbae6c8e9a4520e8eea7bd24a073df9b1a",
+  "started_untracked_baseline": [
+    ".ditto/work-items/wi_2607130ld/",
+    ".ditto/work-items/wi_2607130oc/",
+    ".ditto/work-items/wi_26071389d/",
+    ".ditto/work-items/wi_2607138pr/",
+    ".ditto/work-items/wi_260713be4/",
+    ".ditto/work-items/wi_260713bo1/",
+    ".ditto/work-items/wi_260713kyb/",
+    ".ditto/work-items/wi_260713tsw/",
+    ".ditto/work-items/wi_260713w0g/",
+    ".ditto/work-items/wi_260713ylm/"
+  ],
+  "created_at": "2026-07-13T16:40:55.860Z",
+  "updated_at": "2026-07-14T02:05:21.925Z",
+  "closed_at": "2026-07-14T02:02:58.313Z"
+}
