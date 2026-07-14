@@ -67,7 +67,15 @@ describe('repo .ditto self-validation', () => {
   test('every work-items/<id>/work-item.json conforms to schema', async () => {
     const dirs = await listWorkItemDirs();
     for (const dir of dirs) {
-      const data = await loadJson(join(dir, 'work-item.json'));
+      const jsonPath = join(dir, 'work-item.json');
+      // ADR-20260706 Record/Run split: a Run-tier-only local dir holds evidence/,
+      // autopilot.json, etc. but NO work-item.json — the authoritative record lives
+      // in the committed tier (.ditto/work-items/<id>/record.json, validated by the
+      // work-item-store/event tests). Its absence here is legitimate, not
+      // malformation, so skip it (matches the "if present" guard the sibling
+      // validations use). A PRESENT-but-malformed work-item.json still fails below.
+      if (!(await Bun.file(jsonPath).exists())) continue;
+      const data = await loadJson(jsonPath);
       const parsed = workItem.parse(data);
       const dirId = dir.split('/').at(-1);
       expect(parsed.id).toBe(dirId ?? '');
