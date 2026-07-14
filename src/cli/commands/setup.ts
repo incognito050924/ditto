@@ -16,7 +16,7 @@ import {
 } from '~/core/provision/memory-separate';
 import { type ProvisionerRegistry, defaultRegistry } from '~/core/provision/provisioner';
 import { loadResolvedRecipe } from '~/core/recipe/load';
-import { type SetupHost, type SetupResult, setup } from '~/core/setup';
+import { type ResourceOutcome, type SetupHost, type SetupResult, setup } from '~/core/setup';
 import type { DittoConfigGithub } from '~/schemas/ditto-config';
 import type { Recipe } from '~/schemas/recipe';
 import { resolveResourcesDir } from '../resources';
@@ -178,6 +178,21 @@ export async function runRecipeSetup(
   return { host, setup: setupResult, tools, agents, memory, githubSeed };
 }
 
+/**
+ * "couldn't refresh" notice lines for any AGENTS.md whose ditto-charter region was
+ * user-edited (status `unrecognized`) — setup left it untouched rather than clobber
+ * the edit. The already-current no-op (`up-to-date`) produces NO notice. Surfaced in
+ * every setup print path (recipe / non-interactive / wizard).
+ */
+export function charterRefreshNotices(resources: ResourceOutcome[]): string[] {
+  return resources
+    .filter((r) => r.status === 'unrecognized')
+    .map(
+      (r) =>
+        `charter refresh: ${r.destPath}의 ditto 차터 영역이 수정되어 있어 새로고침을 건너뜀 — 파일은 그대로 두었습니다. 최신 차터를 직접 반영하거나 원본 차터로 되돌린 뒤 다시 setup을 실행하세요.`,
+    );
+}
+
 function parseSetupHost(value: unknown): SetupHost {
   if (value === undefined || value === null || value === '') return 'claude-code';
   if (value === 'claude-code' || value === 'codex' || value === 'both') return value;
@@ -312,6 +327,7 @@ async function runWizard(resourcesDir: string, projectRoot: string): Promise<voi
         result.setup.allowlistApplied ? result.setup.allowlistPath : 'skipped'
       }`,
     );
+    for (const line of charterRefreshNotices(result.setup.resources)) writeHuman(line);
     writeHuman('tools:');
     for (const o of result.provision.outcomes) writeHuman(`  ${o.action}\t${o.message}`);
     if (result.provision.unservicedLanguages.length > 0) {
@@ -449,6 +465,7 @@ export const setupCommand = defineCommand({
             summary.setup.allowlistApplied ? summary.setup.allowlistPath : 'skipped'
           }`,
         );
+        for (const line of charterRefreshNotices(summary.setup.resources)) writeHuman(line);
         if (summary.tools.length > 0) {
           writeHuman('tools:');
           for (const o of summary.tools) writeHuman(`  ${o.action}\t${o.message}`);
@@ -511,10 +528,17 @@ export const setupCommand = defineCommand({
             ? 'SKIPPED (corrupted markers)'
             : r.status === 'kept'
               ? `→ ${r.destPath} (kept existing source)`
-              : `→ ${r.destPath}`;
+              : r.status === 'refreshed'
+                ? `→ ${r.destPath} (charter refreshed)`
+                : r.status === 'up-to-date'
+                  ? `→ ${r.destPath} (charter up to date)`
+                  : r.status === 'unrecognized'
+                    ? `→ ${r.destPath} (charter kept — unrecognized, see notice)`
+                    : `→ ${r.destPath}`;
         const bak = r.backupPath ? ` (backup ${r.backupPath})` : '';
         writeHuman(`  ${r.filename} [${r.host}/${r.scope}] ${tag}${bak}`);
       }
+      for (const line of charterRefreshNotices(result.resources)) writeHuman(line);
       if (result.codex) {
         writeHuman(`  codex marketplace → ${result.codex.marketplacePath}`);
         writeHuman(`  codex plugin copy → ${result.codex.installedPluginDir}`);

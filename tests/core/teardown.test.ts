@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileExists } from '~/core/hosts/shared';
+import { normalizedSha256 } from '~/core/instruction-bridge';
 import { buildManagedBlock } from '~/core/managed-resource';
 import { ALLOW_RULE } from '~/core/settings-allowlist';
 import { setup } from '~/core/setup';
@@ -131,6 +132,107 @@ describe('teardown', () => {
       const final = JSON.parse(await readFile(settingsPath, 'utf8'));
       expect(final.permissions.allow).not.toContain(ALLOW_RULE);
       expect(final.permissions.allow).toContain('Bash(git:*)');
+    } finally {
+      await cleanup(d);
+    }
+  });
+
+  // ---- raw AGENTS.md ditto-charter region teardown (marker-less, exact-match) ----
+  // These write a bundled AGENTS.md charter + a charter-manifest.json into resourcesDir
+  // so teardown can recognize the leading ditto region by normalized sha and remove it.
+  async function bundleCharter(d: Dirs, charter: string, manifestShas: string[]): Promise<void> {
+    await writeFile(join(d.resourcesDir, 'AGENTS.md'), charter);
+    await writeFile(
+      join(d.resourcesDir, 'charter-manifest.json'),
+      `${JSON.stringify({ shas: manifestShas }, null, 2)}\n`,
+    );
+  }
+
+  test('AGENTS.md: removes the exact-match charter region, keeps trailing user rules byte-identical', async () => {
+    const d = await freshDirs();
+    try {
+      const charter = 'DITTO Agent Behavior Charter\nrule one\nrule two\n';
+      // Manifest empty → recognition relies on the current bundled charter sha (union).
+      await bundleCharter(d, charter, []);
+      const agentsPath = join(d.projectRoot, 'AGENTS.md');
+      const userRules = '\n# My Project Rules\nkeep me exactly\n';
+      await writeFile(agentsPath, charter + userRules);
+
+      const result = await teardown(d);
+
+      expect(await readFile(agentsPath, 'utf8')).toBe(userRules);
+      expect(result.files.find((f) => f.filename === 'AGENTS.md')?.action).toBe('stripped');
+    } finally {
+      await cleanup(d);
+    }
+  });
+
+  test('AGENTS.md: recognizes a PRIOR charter version via the manifest and removes it', async () => {
+    const d = await freshDirs();
+    try {
+      const priorCharter = 'DITTO Agent Behavior Charter v1\nold rule\n';
+      const currentCharter = 'DITTO Agent Behavior Charter v2\nnew rule\nmore\n';
+      // Bundle ships the CURRENT charter; the manifest carries the PRIOR sha.
+      await bundleCharter(d, currentCharter, [normalizedSha256(priorCharter)]);
+      const agentsPath = join(d.projectRoot, 'AGENTS.md');
+      const userRules = '# User section\nretain\n';
+      // On disk the project still has the PRIOR charter region + user rules.
+      await writeFile(agentsPath, priorCharter + userRules);
+
+      const result = await teardown(d);
+
+      expect(await readFile(agentsPath, 'utf8')).toBe(userRules);
+      expect(result.files.find((f) => f.filename === 'AGENTS.md')?.action).toBe('stripped');
+    } finally {
+      await cleanup(d);
+    }
+  });
+
+  test('AGENTS.md: user-edited (unrecognized) region is preserved, not removed', async () => {
+    const d = await freshDirs();
+    try {
+      const charter = 'DITTO Agent Behavior Charter\nrule one\nrule two\n';
+      await bundleCharter(d, charter, []);
+      const agentsPath = join(d.projectRoot, 'AGENTS.md');
+      // The user edited the charter body: no leading prefix matches a known sha.
+      const edited = 'DITTO Agent Behavior Charter\nrule one EDITED\nrule two\n# mine\nkeep\n';
+      await writeFile(agentsPath, edited);
+
+      const result = await teardown(d);
+
+      expect(await readFile(agentsPath, 'utf8')).toBe(edited);
+      expect(result.files.find((f) => f.filename === 'AGENTS.md')?.action).toBe('left-untouched');
+    } finally {
+      await cleanup(d);
+    }
+  });
+
+  test('AGENTS.md: a file that is exactly a known charter (no user rules) is emptied', async () => {
+    const d = await freshDirs();
+    try {
+      const charter = 'DITTO Agent Behavior Charter\nrule one\nrule two\n';
+      await bundleCharter(d, charter, []);
+      const agentsPath = join(d.projectRoot, 'AGENTS.md');
+      await writeFile(agentsPath, charter);
+
+      const result = await teardown(d);
+
+      expect(await readFile(agentsPath, 'utf8')).toBe('');
+      expect(result.files.find((f) => f.filename === 'AGENTS.md')?.action).toBe('stripped');
+    } finally {
+      await cleanup(d);
+    }
+  });
+
+  test('AGENTS.md: charter-manifest.json is never treated as a project file to tear down', async () => {
+    const d = await freshDirs();
+    try {
+      const charter = 'DITTO Agent Behavior Charter\nrule one\n';
+      await bundleCharter(d, charter, []);
+
+      const result = await teardown(d);
+
+      expect(result.files.some((f) => f.filename === 'charter-manifest.json')).toBe(false);
     } finally {
       await cleanup(d);
     }

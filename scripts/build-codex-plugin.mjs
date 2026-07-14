@@ -35,10 +35,34 @@ import {
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { projectAgent } from '../src/core/agent-projection.ts';
+import { normalizedSha256 } from '../src/core/instruction-bridge.ts';
 import { buildBinInto, syncManagedResources } from './build-bin.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(REPO, 'dist', 'codex-plugin');
+
+// Charter recognition data (marker-less AGENTS.md refresh). Append the CURRENT
+// canonical charter's normalized sha to resources/managed/charter-manifest.json
+// BEFORE syncManagedResources() regenerates the managed resources, so the committed
+// manifest accumulates every shipped version and an N→N+1 upgrade recognizes the
+// prior charter. This build runs under bun, so it reuses the real runtime
+// normalizedSha256 (no duplicated normalization) for a build-time == runtime sha.
+function appendCharterManifest() {
+  const sha = normalizedSha256(readFileSync(join(REPO, 'AGENTS.md'), 'utf8'));
+  const manifestPath = join(REPO, 'resources', 'managed', 'charter-manifest.json');
+  let shas = [];
+  if (existsSync(manifestPath)) {
+    try {
+      const parsed = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      if (Array.isArray(parsed.shas)) shas = parsed.shas.filter((s) => typeof s === 'string');
+    } catch {
+      // Malformed manifest → start fresh from the current sha (recognition degrades
+      // to "current only"; no crash on a hand-corrupted asset).
+    }
+  }
+  if (!shas.includes(sha)) shas.push(sha);
+  writeFileSync(manifestPath, `${JSON.stringify({ shas }, null, 2)}\n`);
+}
 
 // Codex surface dirs. No agents/commands/marketplace: those are Claude-host
 // constructs (plan C4/C6). skills + hooks are declared in the manifest.
@@ -100,7 +124,9 @@ function projectAgents() {
 }
 
 function main() {
-  // 0. Regenerate committed managed resources from the canonical charter.
+  // 0. Record the current charter sha into the recognition manifest BEFORE
+  //    regenerating the managed resources from the canonical charter.
+  appendCharterManifest();
   syncManagedResources();
 
   // 1. Fresh output tree (only dist/codex-plugin — never dist/plugin).

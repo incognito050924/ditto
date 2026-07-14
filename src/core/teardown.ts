@@ -1,11 +1,18 @@
 import { copyFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { refreshCharterRegion } from './charter-region';
 import { atomicWriteText } from './fs';
-import { fileExists } from './hosts/shared';
+import { fileExists, readJsonIfExists } from './hosts/shared';
+import { normalizedSha256 } from './instruction-bridge';
 import { stripManagedBlock } from './managed-resource';
 import { type RoutingScope, discoverResources, routeResource } from './resource-routing';
 import { unallowlistSettingsFile } from './settings-allowlist';
-import { PUSH_GATE_HOOK_BACKUP_SUFFIX, PUSH_GATE_HOOK_MARKER, gitHooksDir } from './setup';
+import {
+  CHARTER_MANIFEST_FILENAME,
+  PUSH_GATE_HOOK_BACKUP_SUFFIX,
+  PUSH_GATE_HOOK_MARKER,
+  gitHooksDir,
+} from './setup';
 
 /**
  * Pure `ditto teardown` core: the inverse of `ditto setup`. Targets the SAME
@@ -33,6 +40,9 @@ export type TeardownAction = 'stripped' | 'restored-from-backup' | 'left-untouch
 
 const BACKUP_SUFFIX = '.ditto_bak';
 
+/** The canonical, host-agnostic RAW charter source (no persistent ditto marker). */
+const CANONICAL_CHARTER_FILENAME = 'AGENTS.md';
+
 export interface FileTeardownOutcome {
   filename: string;
   scope: RoutingScope;
@@ -56,9 +66,17 @@ export async function teardown(opts: TeardownOptions): Promise<TeardownResult> {
   const { resourcesDir, projectRoot, homeDir } = opts;
 
   const files: FileTeardownOutcome[] = [];
-  for (const filename of discoverResources(resourcesDir)) {
+  // The charter manifest is recognition data, never installed into the project (setup
+  // filters it from routing), so teardown must not treat it as a project file to undo.
+  const resources = discoverResources(resourcesDir).filter((f) => f !== CHARTER_MANIFEST_FILENAME);
+  for (const filename of resources) {
     const decision = routeResource(filename, { projectRoot, homeDir });
-    const action = await teardownFile(decision.destPath);
+    // AGENTS.md is the canonical RAW charter source (no managed marker), so the generic
+    // marker-strip is a no-op on it. Undo it via marker-less charter-region recognition.
+    const action =
+      filename === CANONICAL_CHARTER_FILENAME
+        ? await teardownCharterSource(decision.destPath, resourcesDir)
+        : await teardownFile(decision.destPath);
     files.push({ filename, scope: decision.scope, destPath: decision.destPath, action });
   }
 
@@ -146,6 +164,51 @@ async function teardownFile(destPath: string): Promise<TeardownAction> {
   if (await Bun.file(bakPath).exists()) {
     await copyFile(bakPath, destPath);
     return 'restored-from-backup';
+  }
+  return 'left-untouched';
+}
+
+/**
+ * Load the normalized charter shas from the bundled `charter-manifest.json` (current +
+ * prior versions). Missing/malformed manifest → `[]`, degrading to current-bundle-only
+ * recognition. Mirrors setup's private loader over the same committed recognition asset.
+ */
+async function loadCharterShas(resourcesDir: string): Promise<string[]> {
+  const raw = await readJsonIfExists(join(resourcesDir, CHARTER_MANIFEST_FILENAME));
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return [];
+  const shas = (raw as { shas?: unknown }).shas;
+  if (!Array.isArray(shas)) return [];
+  return shas.filter((s): s is string => typeof s === 'string');
+}
+
+/**
+ * Undo the marker-less ditto-charter region of the canonical raw AGENTS.md. Teardown is
+ * refresh-to-EMPTY: recognize the LEADING region whose normalized sha matches a known
+ * charter version (current bundle OR a manifest-listed prior), then replace it with an
+ * empty body so the recognized region is removed and any trailing user rules are kept
+ * byte-identical. Symmetric to refresh's skip-on-doubt: an unrecognized (user-edited)
+ * region — or no recognized region — is left exactly as-is (never destroyed).
+ */
+async function teardownCharterSource(
+  destPath: string,
+  resourcesDir: string,
+): Promise<TeardownAction> {
+  if (!(await Bun.file(destPath).exists())) return 'left-untouched';
+
+  const current = await readFile(destPath, 'utf8');
+  const bundlePath = join(resourcesDir, CANONICAL_CHARTER_FILENAME);
+  const bundledCharter = (await fileExists(bundlePath)) ? await readFile(bundlePath, 'utf8') : '';
+  // Recognize against every known charter version: the manifest priors plus the current
+  // bundle's own sha (unioned in, mirroring setup's recognition set).
+  const knownShas = [...(await loadCharterShas(resourcesDir)), normalizedSha256(bundledCharter)];
+
+  // An empty replacement turns refresh's region-replace into a region-REMOVE: `replaced`
+  // returns `'' + trailingUserRules`. `unrecognized`/`up-to-date` (nothing removable) →
+  // leave the file untouched.
+  const outcome = refreshCharterRegion({ current, bundledCharter: '', knownShas });
+  if (outcome.kind === 'replaced') {
+    await atomicWriteText(destPath, outcome.content);
+    return 'stripped';
   }
   return 'left-untouched';
 }

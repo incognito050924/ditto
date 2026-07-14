@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { chmod, cp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import type { RecipePushGate } from '~/schemas/recipe';
+import { refreshCharterRegion } from './charter-region';
 import { atomicWriteText, ensureDir } from './fs';
 import { codexHostAdapter } from './hosts/codex';
 import { fileExists, listDirectories, listFiles, readJsonIfExists } from './hosts/shared';
@@ -45,13 +46,27 @@ export interface SetupOptions {
 
 export type SetupHost = 'claude-code' | 'codex' | 'both';
 
+/**
+ * Bundled recognition data for the marker-less AGENTS.md charter refresh: the set
+ * of normalized shas of every shipped charter version. Lives inside
+ * `resources/managed/` as a committed asset but is EXCLUDED from install routing
+ * (it is recognition data, not an instruction resource).
+ */
+export const CHARTER_MANIFEST_FILENAME = 'charter-manifest.json';
+
 /** Outcome of installing one bundled resource. */
 export interface ResourceOutcome {
   host: 'claude-code' | 'codex';
   filename: string;
   scope: RoutingScope;
   destPath: string;
-  status: 'written' | 'kept' | 'corrupted';
+  /**
+   * `refreshed`/`up-to-date`/`unrecognized` are the AGENTS.md charter-refresh
+   * outcomes: an existing charter region was replaced with the newer bundle,
+   * already matched the current bundle (silent no-op), or was user-edited and left
+   * untouched (surfaces a "couldn't refresh" notice).
+   */
+  status: 'written' | 'kept' | 'corrupted' | 'refreshed' | 'up-to-date' | 'unrecognized';
   backupPath: string | null;
 }
 
@@ -100,6 +115,19 @@ const CODEX_PLUGIN_DEST_REL = join('.agents', 'plugins', CODEX_PLUGIN_NAME);
 // uses the sibling `ditto.cmd` launcher) — there is no per-OS `ditto.exe`.
 const CODEX_BIN_NAME = 'ditto';
 
+/**
+ * Load the normalized charter shas from the bundled `charter-manifest.json`. Missing
+ * or malformed manifest → `[]` (no recognized priors), so a fresh install and any
+ * target lacking the manifest degrade gracefully to create-if-missing behavior.
+ */
+async function loadCharterShas(resourcesDir: string): Promise<string[]> {
+  const raw = await readJsonIfExists(join(resourcesDir, CHARTER_MANIFEST_FILENAME));
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return [];
+  const shas = (raw as { shas?: unknown }).shas;
+  if (!Array.isArray(shas)) return [];
+  return shas.filter((s): s is string => typeof s === 'string');
+}
+
 function setupHosts(host: SetupHost | undefined): Set<'claude-code' | 'codex'> {
   if (host === 'codex') return new Set(['codex']);
   if (host === 'both') return new Set(['claude-code', 'codex']);
@@ -114,7 +142,9 @@ function resourceDecisions(
   hosts: Set<'claude-code' | 'codex'>,
 ): ResourceInstallDecision[] {
   const out: ResourceInstallDecision[] = [];
-  const files = discoverResources(resourcesDir);
+  // The charter manifest is recognition data, not an installable resource — keep it
+  // out of routing so it is never written into the target project.
+  const files = discoverResources(resourcesDir).filter((f) => f !== CHARTER_MANIFEST_FILENAME);
 
   if (hosts.has('claude-code')) {
     for (const filename of files) {
@@ -357,6 +387,7 @@ async function installCodexSurface(opts: {
 async function installResource(
   decision: ResourceInstallDecision,
   resourcesDir: string,
+  charterShas: string[],
 ): Promise<ResourceOutcome> {
   const common = {
     host: decision.host,
@@ -367,10 +398,10 @@ async function installResource(
   const name = basename(decision.destPath);
 
   if (name === 'AGENTS.md') {
+    const bundledCharter = await readFile(join(resourcesDir, decision.filename), 'utf8');
     const existed = await fileExists(decision.destPath);
     if (!existed) {
-      const body = await readFile(join(resourcesDir, decision.filename), 'utf8');
-      await atomicWriteText(decision.destPath, body);
+      await atomicWriteText(decision.destPath, bundledCharter);
       return { ...common, status: 'written', backupPath: null };
     }
     // AGENTS.md is the canonical RAW source. An older version wrapped it in a
@@ -383,6 +414,20 @@ async function installResource(
       const backupPath = await writeBackupOnce(decision.destPath);
       await atomicWriteText(decision.destPath, unwrapped);
       return { ...common, status: 'written', backupPath };
+    }
+    // Marker-less charter refresh — canonical project source only. GLOBAL_AGENTS.md
+    // is a separate charter the manifest does not track, so it keeps create-if-
+    // missing / kept semantics (never a false "couldn't refresh" notice).
+    if (decision.filename === 'AGENTS.md') {
+      const refresh = refreshCharterRegion({ current, bundledCharter, knownShas: charterShas });
+      if (refresh.kind === 'replaced') {
+        const backupPath = await writeBackupOnce(decision.destPath);
+        await atomicWriteText(decision.destPath, refresh.content);
+        return { ...common, status: 'refreshed', backupPath };
+      }
+      // up-to-date → silent no-op; unrecognized → skip (a user-edited region), the
+      // CLI surfaces the "couldn't refresh" notice from this status.
+      return { ...common, status: refresh.kind, backupPath: null };
     }
     return { ...common, status: 'kept', backupPath: null };
   }
@@ -610,9 +655,10 @@ export async function setup(opts: SetupOptions): Promise<SetupResult> {
     ...decisions.filter((d) => basename(d.destPath) === 'CLAUDE.md'),
   ];
 
+  const charterShas = await loadCharterShas(resourcesDir);
   const resources: ResourceOutcome[] = [];
   for (const decision of ordered) {
-    resources.push(await installResource(decision, resourcesDir));
+    resources.push(await installResource(decision, resourcesDir, charterShas));
   }
 
   const scaffold = await initScaffold(projectRoot, now);

@@ -16,6 +16,7 @@
 //   ① product (this dist/plugin) ② project-global (.ditto/knowledge,agents)
 //   ③ per-developer (.ditto/local) — only ① is the deploy unit.
 
+import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,6 +24,42 @@ import { buildBinInto, syncManagedResources } from './build-bin.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(REPO, 'dist', 'plugin');
+
+// Charter recognition data (marker-less AGENTS.md refresh). Append the CURRENT
+// canonical charter's normalized sha to resources/managed/charter-manifest.json
+// BEFORE syncManagedResources() regenerates resources/managed/{AGENTS,CLAUDE}.md,
+// so the committed manifest accumulates every shipped version and an N→N+1 upgrade
+// recognizes the prior charter. `ditto setup` reads this manifest at install time.
+//
+// The normalization MUST stay in sync with normalizeInstructionText /
+// normalizedSha256 in src/core/instruction-bridge.ts (CRLF→LF, strip per-line
+// trailing spaces) so a build-time sha matches the runtime recognition sha.
+function normalizedCharterSha(text) {
+  const normalized = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+$/g, ''))
+    .join('\n');
+  return createHash('sha256').update(normalized).digest('hex');
+}
+
+export function appendCharterManifest() {
+  const sha = normalizedCharterSha(readFileSync(join(REPO, 'AGENTS.md'), 'utf8'));
+  const manifestPath = join(REPO, 'resources', 'managed', 'charter-manifest.json');
+  let shas = [];
+  if (existsSync(manifestPath)) {
+    try {
+      const parsed = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      if (Array.isArray(parsed.shas)) shas = parsed.shas.filter((s) => typeof s === 'string');
+    } catch {
+      // Malformed manifest → start fresh from the current sha (recognition degrades
+      // to "current only"; no crash on a hand-corrupted asset).
+    }
+  }
+  if (!shas.includes(sha)) shas.push(sha);
+  writeFileSync(manifestPath, `${JSON.stringify({ shas }, null, 2)}\n`);
+}
 
 // Product surface dirs that always ship. `commands` is conditional (absent today).
 // `resources` must ship: `ditto setup` resolves resources/managed under the
@@ -40,8 +77,10 @@ function copyInto(rel) {
 }
 
 function main() {
-  // 0. Regenerate committed managed resources from the canonical charter
-  //    (repo-root AGENTS.md) so resources/managed/{AGENTS,CLAUDE}.md never drift.
+  // 0. Record the current charter sha into the recognition manifest BEFORE
+  //    regenerating the managed resources, then regenerate resources/managed/
+  //    {AGENTS,CLAUDE}.md from the canonical charter so they never drift.
+  appendCharterManifest();
   syncManagedResources();
 
   // 1. Fresh output tree.

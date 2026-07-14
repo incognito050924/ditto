@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
+import { charterRefreshNotices } from '~/cli/commands/setup';
 import { fileExists } from '~/core/hosts/shared';
 import {
   checkCodexInstructions,
@@ -10,6 +11,7 @@ import {
   loadProjection,
   loadSource,
 } from '~/core/instruction-bridge';
+import { normalizedSha256 } from '~/core/instruction-bridge';
 import { buildManagedBlock } from '~/core/managed-resource';
 import { ALLOW_RULE } from '~/core/settings-allowlist';
 import { setup } from '~/core/setup';
@@ -343,6 +345,139 @@ describe('setup', () => {
       ).rejects.toThrow('codex plugin source is already the installed plugin directory');
 
       expect(await readFile(join(installedPluginDir, 'keep.txt'), 'utf8')).toBe('must survive\n');
+    } finally {
+      await cleanup(d);
+    }
+  });
+});
+
+describe('setup — AGENTS.md charter refresh (marker-less)', () => {
+  const PRIOR = '# Charter v1\n\n## rule\nold body\n';
+  const CURRENT = '# Charter v2\n\n## rule\nnew body\n## rule 2\nmore\n';
+
+  // Seed a fresh env with a CURRENT bundled charter + a manifest listing PRIOR's sha.
+  async function refreshDirs(seedAgents: string): Promise<Dirs> {
+    const d = await freshDirs();
+    await writeFile(join(d.resourcesDir, 'AGENTS.md'), CURRENT);
+    await writeFile(
+      join(d.resourcesDir, 'charter-manifest.json'),
+      JSON.stringify({ shas: [normalizedSha256(PRIOR)] }),
+    );
+    await writeFile(join(d.projectRoot, 'AGENTS.md'), seedAgents);
+    return d;
+  }
+
+  test('ac-1/ac-2: N→N+1 replaces a recognized prior charter, user rules byte-identical', async () => {
+    const userRules = '\n# MY RULES\n- keep me exactly\n';
+    const d = await refreshDirs(PRIOR + userRules);
+    try {
+      const result = await setup({ ...d, now: NOW });
+
+      const agents = await readFile(join(d.projectRoot, 'AGENTS.md'), 'utf8');
+      // region swapped to the new charter, trailing user rules preserved verbatim
+      expect(agents).toBe(CURRENT + userRules);
+      expect(agents.endsWith(userRules)).toBe(true);
+
+      const outcome = result.resources.find((r) => r.filename === 'AGENTS.md');
+      expect(outcome?.status).toBe('refreshed');
+      // original backed up once
+      const bak = await readFile(join(d.projectRoot, 'AGENTS.md.ditto_bak'), 'utf8');
+      expect(bak).toBe(PRIOR + userRules);
+    } finally {
+      await cleanup(d);
+    }
+  });
+
+  test('ac-4: refresh happens BEFORE the CLAUDE.md projection (projection mirrors new charter)', async () => {
+    const d = await refreshDirs(PRIOR);
+    try {
+      await setup({ ...d, now: NOW });
+      const agents = await readFile(join(d.projectRoot, 'AGENTS.md'), 'utf8');
+      expect(agents).toBe(CURRENT);
+      // CLAUDE.md projection is doctor-clean against the REFRESHED source, proving the
+      // AGENTS.md refresh ran before the projection read it.
+      const source = await loadSource(d.projectRoot);
+      const projection = await loadProjection(d.projectRoot);
+      expect(compareClaudeProjection(source, projection)).toEqual([]);
+    } finally {
+      await cleanup(d);
+    }
+  });
+
+  test('ac-3: a user-edited region is unrecognized → skipped + notice, file untouched', async () => {
+    const edited = '# Charter v1\n\n## rule\nUSER EDITED THIS LINE\n';
+    const d = await refreshDirs(edited);
+    try {
+      const result = await setup({ ...d, now: NOW });
+      const agents = await readFile(join(d.projectRoot, 'AGENTS.md'), 'utf8');
+      expect(agents).toBe(edited); // never clobbered
+      const outcome = result.resources.find((r) => r.filename === 'AGENTS.md');
+      expect(outcome?.status).toBe('unrecognized');
+      // no backup written (we did not touch the file)
+      expect(await fileExists(join(d.projectRoot, 'AGENTS.md.ditto_bak'))).toBe(false);
+      // the "couldn't refresh" notice surfaces
+      expect(charterRefreshNotices(result.resources)).toHaveLength(1);
+    } finally {
+      await cleanup(d);
+    }
+  });
+
+  test('ac-5: region == current bundle → silent no-op (no notice, no backup)', async () => {
+    const d = await refreshDirs(CURRENT);
+    try {
+      const result = await setup({ ...d, now: NOW });
+      const agents = await readFile(join(d.projectRoot, 'AGENTS.md'), 'utf8');
+      expect(agents).toBe(CURRENT);
+      const outcome = result.resources.find((r) => r.filename === 'AGENTS.md');
+      expect(outcome?.status).toBe('up-to-date');
+      expect(charterRefreshNotices(result.resources)).toEqual([]);
+      expect(await fileExists(join(d.projectRoot, 'AGENTS.md.ditto_bak'))).toBe(false);
+    } finally {
+      await cleanup(d);
+    }
+  });
+
+  test('ac-3: CRLF variant of the current charter is recognized (no false skip)', async () => {
+    const crlf = CURRENT.replace(/\n/g, '\r\n');
+    const d = await refreshDirs(crlf);
+    try {
+      const result = await setup({ ...d, now: NOW });
+      const agents = await readFile(join(d.projectRoot, 'AGENTS.md'), 'utf8');
+      expect(agents).toBe(crlf); // no-op keeps the on-disk bytes (incl. CRLF)
+      const outcome = result.resources.find((r) => r.filename === 'AGENTS.md');
+      expect(outcome?.status).toBe('up-to-date');
+      expect(charterRefreshNotices(result.resources)).toEqual([]);
+    } finally {
+      await cleanup(d);
+    }
+  });
+
+  test('ac-5: idempotent — re-run after a refresh is a stable no-op, one backup', async () => {
+    const userRules = '\n# U\nkeep\n';
+    const d = await refreshDirs(PRIOR + userRules);
+    try {
+      await setup({ ...d, now: NOW });
+      const afterFirst = await readFile(join(d.projectRoot, 'AGENTS.md'), 'utf8');
+
+      const result2 = await setup({ ...d, now: NOW });
+      const afterSecond = await readFile(join(d.projectRoot, 'AGENTS.md'), 'utf8');
+      expect(afterSecond).toBe(afterFirst); // stable content, no growth
+      const outcome = result2.resources.find((r) => r.filename === 'AGENTS.md');
+      expect(outcome?.status).toBe('up-to-date');
+      // backup still the FIRST original, not re-taken
+      const bak = await readFile(join(d.projectRoot, 'AGENTS.md.ditto_bak'), 'utf8');
+      expect(bak).toBe(PRIOR + userRules);
+    } finally {
+      await cleanup(d);
+    }
+  });
+
+  test('the charter manifest is recognition data, never installed into the project', async () => {
+    const d = await refreshDirs(PRIOR);
+    try {
+      const result = await setup({ ...d, now: NOW });
+      expect(await fileExists(join(d.projectRoot, 'charter-manifest.json'))).toBe(false);
+      expect(result.resources.some((r) => r.filename === 'charter-manifest.json')).toBe(false);
     } finally {
       await cleanup(d);
     }
