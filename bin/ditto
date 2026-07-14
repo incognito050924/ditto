@@ -31886,6 +31886,11 @@ var workHandoff = defineCommand({
       description: "Read and print the EXISTING handoff (active, else latest archived) instead of generating one \u2014 the manual handoff load. Read-only; never regenerates.",
       default: false
     },
+    remote: {
+      type: "boolean",
+      description: "Also commit the handoff to the work branch (.ditto/handoff/, git-tracked, delivered to a fetch/checkout recipient) \u2014 the committed-remote tier. Never pushes (push is a separate user-gated act).",
+      default: false
+    },
     output: {
       type: "string",
       description: "Output format: human|json",
@@ -31944,6 +31949,26 @@ var workHandoff = defineCommand({
         }
         throw err;
       }
+      let remote;
+      if (args.remote === true) {
+        const hstore = new HandoffStore(repoRoot);
+        const latest = await hstore.readLatest(args.workId);
+        if (!latest) {
+          writeError(`work handoff --remote: no handoff body found for ${args.workId} to commit`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        try {
+          remote = await hstore.writeRemote(latest.handoff);
+        } catch (err) {
+          if (err instanceof HandoffRemoteWriteError) {
+            writeError(`work handoff --remote refused: ${err.message}`);
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          throw err;
+        }
+      }
       if (format === "json") {
         writeJson2({
           work_item_id: args.workId,
@@ -31951,7 +31976,15 @@ var workHandoff = defineCommand({
           handoff_path: result2.handoffPath,
           completion_path: result2.completionPath,
           base_used: result2.baseUsed,
-          changed_files: result2.collectedChangedFiles
+          changed_files: result2.collectedChangedFiles,
+          ...remote ? {
+            remote: true,
+            path: remote.rel,
+            branch: remote.branch,
+            commit: remote.commit,
+            author: remote.author,
+            stem: remote.stem
+          } : {}
         });
       } else {
         writeHuman(`Handoff for ${args.workId}`);
@@ -31960,6 +31993,10 @@ var workHandoff = defineCommand({
         writeHuman(`  changed_files:  ${result2.collectedChangedFiles.length}`);
         writeHuman(`  handoff:        ${result2.handoffPath}`);
         writeHuman(`  completion.json: ${result2.completionPath}`);
+        if (remote) {
+          writeHuman(`  remote:         ${remote.rel} (git-tracked on ${remote.branch}, delivered on checkout \u2014 NOT pushed)`);
+          writeHuman(`  pick up:        ditto handoff list  \u2192  ditto handoff consume ${remote.stem}`);
+        }
       }
     } catch (err) {
       writeError(`work handoff failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -58282,4 +58319,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=3ae4dba3ab860f0c340649dd602b3e342c6bd724d49beeaa0a95d379614a2d3f
+//# ditto-src-stamp=16497df91bdbc23b0dc7ce6e62473a7f3a43fef30567b000a6bbe5d1ff025879

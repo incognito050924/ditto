@@ -4,7 +4,12 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import * as fsp from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HandoffStore, buildHandoff, buildSessionHandoff } from '~/core/handoff-store';
+import {
+  HandoffRemoteWriteError,
+  HandoffStore,
+  buildHandoff,
+  buildSessionHandoff,
+} from '~/core/handoff-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import { handoff as handoffSchema } from '~/schemas/handoff';
 
@@ -497,6 +502,113 @@ describe('HandoffStore — scope union, session + remote channel', () => {
     const tracked = out(git(['ls-files', '.ditto/handoff/']));
     expect(tracked).toContain(`${wi.id}__alice.md`);
     expect(tracked).toContain(`${wi.id}__bob.md`);
+  });
+
+  // ac-1 (index.lock retry serialization): `runGit` in handoff-store.ts retries a
+  // git exec that fails on a locked index (`.git/index.lock`) — two concurrent
+  // producers serialize instead of one failing. This covers the retry loop
+  // (maxAttempts=5, lock detected by /index\.lock/ on stderr) which is what lets the
+  // concurrent-writer safety of ac-1 hold when both authors race the same index.
+  //
+  // Mocked at the exec boundary (Bun.spawnSync — the only seam `runGit` uses): the
+  // FIRST `git add` attempt returns a synthetic index.lock failure, the retry falls
+  // through to real git and succeeds. Assert writeRemote RETRIES (2 add attempts) and
+  // the file still lands committed — a transient lock does not fail the write.
+  test('ac-1: writeRemote retries a transient index.lock and still commits (no fail)', async () => {
+    const wi = await workItem();
+    initGitRepo(`ditto/${wi.id}`);
+    const store = new HandoffStore(repo);
+    const h = buildHandoff({
+      workItem: wi,
+      fromContext: 'ctx',
+      currentState: 'retry-state',
+      nextFirstCheck: 'c',
+    });
+
+    const realSpawnSync = Bun.spawnSync.bind(Bun);
+    let addAttempts = 0;
+    const spy = spyOn(Bun, 'spawnSync').mockImplementation(((cmd: unknown, opts: unknown) => {
+      if (Array.isArray(cmd) && cmd[1] === 'add') {
+        addAttempts += 1;
+        if (addAttempts === 1) {
+          // transient locked index — git's real message (matched by /index\.lock/)
+          return {
+            exitCode: 128,
+            stdout: Buffer.from(''),
+            stderr: Buffer.from(
+              `fatal: Unable to create '${join(repo, '.git/index.lock')}': File exists.`,
+            ),
+          };
+        }
+      }
+      // biome-ignore lint/suspicious/noExplicitAny: pass-through to the real exec boundary
+      return realSpawnSync(cmd as any, opts as any);
+      // biome-ignore lint/suspicious/noExplicitAny: bun spyOn signature is loose here
+    }) as any);
+
+    let res: Awaited<ReturnType<HandoffStore['writeRemote']>>;
+    try {
+      res = await store.writeRemote(h, { author: 'alice' });
+    } finally {
+      spy.mockRestore();
+    }
+    // it retried exactly once: attempt 1 = synthetic lock, attempt 2 = real success.
+    expect(addAttempts).toBe(2);
+    // and the write completed — the file is committed/tracked despite the transient lock.
+    expect(out(git(['ls-files', res.rel]))).toBe(res.rel);
+    expect(await Bun.file(join(repo, res.rel)).text()).toContain('retry-state');
+  });
+
+  // ac-1 (exhaustion): if the index.lock NEVER clears, the retry budget is exhausted
+  // (maxAttempts=5) and writeRemote SURFACES the failure (HandoffRemoteWriteError,
+  // code 'add_failed') — it does NOT silently proceed or lose the handoff. The worst
+  // case for a concurrent writer is a surfaced, retriable error, never an overwrite.
+  test('ac-1: writeRemote surfaces the error when the index.lock never clears (no silent proceed)', async () => {
+    const wi = await workItem();
+    initGitRepo(`ditto/${wi.id}`);
+    const store = new HandoffStore(repo);
+    const h = buildHandoff({
+      workItem: wi,
+      fromContext: 'ctx',
+      currentState: 'stuck-state',
+      nextFirstCheck: 'c',
+    });
+
+    const realSpawnSync = Bun.spawnSync.bind(Bun);
+    let addAttempts = 0;
+    const spy = spyOn(Bun, 'spawnSync').mockImplementation(((cmd: unknown, opts: unknown) => {
+      if (Array.isArray(cmd) && cmd[1] === 'add') {
+        addAttempts += 1;
+        // the lock NEVER clears — every attempt fails on index.lock
+        return {
+          exitCode: 128,
+          stdout: Buffer.from(''),
+          stderr: Buffer.from(
+            `fatal: Unable to create '${join(repo, '.git/index.lock')}': File exists.`,
+          ),
+        };
+      }
+      // biome-ignore lint/suspicious/noExplicitAny: pass-through to the real exec boundary
+      return realSpawnSync(cmd as any, opts as any);
+      // biome-ignore lint/suspicious/noExplicitAny: bun spyOn signature is loose here
+    }) as any);
+
+    let caught: unknown;
+    try {
+      await store.writeRemote(h, { author: 'alice' });
+    } catch (err) {
+      caught = err;
+    } finally {
+      spy.mockRestore();
+    }
+    // surfaced, not swallowed: a typed retriable error (never a silent no-op)
+    expect(caught).toBeInstanceOf(HandoffRemoteWriteError);
+    expect((caught as HandoffRemoteWriteError).code).toBe('add_failed');
+    // it burned the FULL retry budget (maxAttempts=5) before surfacing — proof it
+    // retried the lock rather than giving up on the first failure.
+    expect(addAttempts).toBe(5);
+    // and nothing was committed — the handoff was not lost or half-landed.
+    expect(out(git(['ls-files', '.ditto/handoff/']))).toBe('');
   });
 
   // ac-4 guard: refuse to commit to whatever branch happens to be checked out — a
