@@ -1992,6 +1992,19 @@ export interface RecordResultInput {
    * to run (bun absent, etc.) degrades to unverified — never a hard block (ADR-0018).
    */
   authoredRedRunOne?: (test_path: string) => Promise<CaptureResult>;
+  /**
+   * wi_260714f4p: the discovered-defect materialization function, injected for
+   * unit-testability. Absent ⇒ the production default (materializeDiscoveredDefect →
+   * WorkItemStore.create). A test injects a variant that throws for a specific defect to
+   * exercise the best-effort per-defect failure-disclosure path — a `create` throw must
+   * NOT abort the materialize loop nor escape recordResultCore leaving orphan Records.
+   */
+  materializeDefect?: (
+    repoRoot: string,
+    originWorkItemId: string,
+    item: string,
+    now: Date,
+  ) => Promise<string>;
 }
 
 export interface RecordResultOutcome {
@@ -3320,6 +3333,7 @@ async function recordResultCore(
     const discoveredDefects = input.payload.discovered_defects ?? [];
     if (discoveredDefects.length > 0) {
       const now = input.now ?? new Date();
+      const materialize = input.materializeDefect ?? materializeDiscoveredDefect;
       const driveEligible = discoveredDefects.filter(
         (d) => classifyDiscoveredDefect(d) === 'drive',
       );
@@ -3329,12 +3343,22 @@ async function recordResultCore(
       // grounding (lossless channel) — never driven. The real id is what the close gate can
       // resolve, so a fabricated string can no longer masquerade as materialization.
       for (const d of backlogOnly) {
-        const materializedWi = await materializeDiscoveredDefect(
-          repoRoot,
-          input.workItemId,
-          d.item,
-          now,
-        );
+        // (wi_260714f4p) same best-effort guard as the drive loop below — a `create` throw for
+        // one backlog defect must NOT escape recordResultCore (identical vulnerability). On a
+        // throw, disclose the FAILURE so it is not silently dropped, then continue.
+        let materializedWi: string;
+        try {
+          materializedWi = await materialize(repoRoot, input.workItemId, d.item, now);
+        } catch (err) {
+          await aps.appendDecision(input.workItemId, {
+            ts: now.toISOString(),
+            node_id: node.id,
+            decision: 'surface',
+            resolvability: 'discovered_defect',
+            reason: `discovered defect (backlog-only) could NOT be materialized into its own back-linked work item — WorkItemStore.create failed (${err instanceof Error ? err.message : String(err)}); disclosed as a materialization FAILURE so it is not silently dropped (wi_260714f4p): ${d.item}`,
+          });
+          continue;
+        }
         await aps.appendDecision(input.workItemId, {
           ts: now.toISOString(),
           node_id: node.id,
@@ -3351,11 +3375,27 @@ async function recordResultCore(
       // (wi_260714pjs sibling-starvation fix). The map is REUSED by both the condition-b disclosure
       // and the drive path below — materialization happens exactly once.
       const groundingByDefect = new Map<(typeof driveEligible)[number], string>();
+      // (wi_260714f4p) best-effort per-defect: a `create` throw for ONE defect must NOT
+      // abort the loop (dropping the rest with ZERO disclosures) nor escape recordResultCore
+      // leaving the node mid-flight + orphan Records. On a throw, CATCH it and disclose the
+      // FAILURE (item text + error message) so nothing is silently dropped, then continue.
+      // Only successfully-materialized defects flow to the downstream disclosure loops
+      // (materializedDriveEligible) — a failed one is disclosed here EXACTLY once and is not
+      // re-disclosed as materialize-only (it has no child wi_ to attest).
+      const materializedDriveEligible: (typeof driveEligible)[number][] = [];
       for (const d of driveEligible) {
-        groundingByDefect.set(
-          d,
-          await materializeDiscoveredDefect(repoRoot, input.workItemId, d.item, now),
-        );
+        try {
+          groundingByDefect.set(d, await materialize(repoRoot, input.workItemId, d.item, now));
+          materializedDriveEligible.push(d);
+        } catch (err) {
+          await aps.appendDecision(input.workItemId, {
+            ts: now.toISOString(),
+            node_id: node.id,
+            decision: 'surface',
+            resolvability: 'discovered_defect',
+            reason: `reproduced real-behavior defect could NOT be materialized into its own back-linked work item — WorkItemStore.create failed (${err instanceof Error ? err.message : String(err)}); disclosed as a materialization FAILURE so it is not silently dropped (wi_260714f4p): ${d.item}`,
+          });
+        }
       }
       // (ac-4/ac-7) condition-b dominates the drive: any drive-eligible defect whose fix
       // needs an ADVERSE protected-axis decision ⇒ fail-closed block, do NOT auto-drive.
@@ -3375,7 +3415,9 @@ async function recordResultCore(
           // full ledger of what was found (the condition-b defect AND its drive-eligible siblings),
           // each with its REAL child wi_ grounding (lossless channel). None is driven (the block
           // prevents the auto-drive) — they are materialized pending the user's condition-b decision.
-          for (const d of driveEligible) {
+          // Only successfully-materialized defects (wi_260714f4p): a create-failed one already got
+          // its own failure disclosure above and has no child wi_ to attest here.
+          for (const d of materializedDriveEligible) {
             const materializedWi = groundingByDefect.get(d);
             await aps.appendDecision(input.workItemId, {
               ts: now.toISOString(),
@@ -3441,7 +3483,9 @@ async function recordResultCore(
         // NOT drive (escalate at the shared cap, or a surface-block with empty promoted), ALL N
         // are surface-only; the SAME outcome the splice produced is returned (no new block).
         const driven = outcome.status === 'passed' && outcome.promoted_node_ids.length > 0;
-        for (const [i, d] of driveEligible.entries()) {
+        // Only successfully-materialized defects (wi_260714f4p) — a create-failed one already
+        // got its failure disclosure above and must not be re-disclosed as materialize-only.
+        for (const [i, d] of materializedDriveEligible.entries()) {
           const materializedWi = groundingByDefect.get(d);
           if (driven && i === 0) {
             await aps.appendDecision(input.workItemId, {

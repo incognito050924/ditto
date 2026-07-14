@@ -2243,4 +2243,113 @@ describe('wi_2607148yg discovered real-behavior defects (materialize + chain-dri
     expect(decisions.some((d) => d.failure_class === 'user_decision_needed')).toBe(true);
     expect(decisions.some((d) => d.decision === 'escalate')).toBe(true);
   });
+
+  // ── wi_260714f4p: best-effort materialization (silent partial-materialization) ──
+  // The drive-eligible materialize loop calls WorkItemStore.create per defect with NO
+  // try/catch. If create THROWS mid-loop, earlier defects are persisted, the rest are
+  // never created, ZERO disclosures are appended, and the exception escapes
+  // recordResultCore leaving the node mid-flight — a silent partial failure with orphan
+  // Records. The fix makes the loop resilient: EVERY drive-eligible defect ends with
+  // EITHER a materialized child + its normal disclosure OR a failure-disclosure.
+  const INJECTED_CREATE_ERR = 'injected disk write failure';
+  const materializeFailingFor =
+    (failItem: string) =>
+    async (
+      repoRoot: string,
+      originWorkItemId: string,
+      item: string,
+      now: Date,
+    ): Promise<string> => {
+      if (item === failItem) throw new Error(INJECTED_CREATE_ERR);
+      const child = await new WorkItemStore(repoRoot).create(
+        {
+          title: `defect: ${item}`.slice(0, 200),
+          source_request: `Discovered mid-run while working on ${originWorkItemId}: ${item}`,
+          goal: `Fix: ${item}`,
+          acceptance_criteria: [
+            { id: 'ac-1', statement: 'fix the defect', verdict: 'unverified', evidence: [] },
+          ],
+          discovered_by: originWorkItemId,
+        },
+        now,
+      );
+      return child.id;
+    };
+
+  test('f4p-1 a create throw for ONE drive-eligible defect does NOT escape — the others still materialize, the failed one gets a surface(discovered_defect) failure disclosure (no silent drop)', async () => {
+    await aps.write(WI, { ...graph({ nodes: [implementNode()] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      materializeDefect: materializeFailingFor('the create-failing defect'),
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Three reproduced defects; the disk write fails for the middle one.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        discovered_defects: [
+          { item: 'first ok defect', reproduced: true },
+          { item: 'the create-failing defect', reproduced: true },
+          { item: 'third ok defect', reproduced: true },
+        ],
+      },
+    });
+    // recordResultCore did NOT throw — the loop absorbed the create failure.
+    expect(res.status).toBe('passed');
+    const decisions = await aps.readDecisions(WI);
+    const disclosures = decisions.filter((d) => d.resolvability === 'discovered_defect');
+    // every drive-eligible defect is accounted for: 2 materialized + 1 failure = 3 disclosures.
+    expect(disclosures).toHaveLength(3);
+    // the failed defect is disclosed as a materialization FAILURE (item text + error), NOT dropped.
+    const failure = disclosures.find((d) => d.reason.includes('the create-failing defect'));
+    expect(failure).toBeDefined();
+    expect(failure?.decision).toBe('surface');
+    expect(failure?.reason).toContain(INJECTED_CREATE_ERR);
+    expect(failure?.reason.toLowerCase()).toContain('could not be materialized');
+    // it carries NO child wi_ (there is none — create failed).
+    expect(childWiFromReason(failure?.reason ?? '')).toBeUndefined();
+    // the OTHER two defects still materialized into REAL back-linked child work items.
+    const okDisclosures = disclosures.filter((d) => d !== failure);
+    expect(okDisclosures).toHaveLength(2);
+    for (const d of okDisclosures) {
+      const child = childWiFromReason(d.reason ?? '');
+      if (!child) throw new Error('expected a materialized child wi id for a non-failing defect');
+      expect(await wis.exists(child)).toBe(true);
+      expect((await wis.get(child)).discovered_by).toBe(WI);
+    }
+    // the failed defect is disclosed EXACTLY once (not re-disclosed as materialize-only).
+    expect(disclosures.filter((d) => d.reason.includes('the create-failing defect'))).toHaveLength(
+      1,
+    );
+  });
+
+  test('f4p-2 3 drive-eligible defects all create-successfully → exactly 3 discovered_defect disclosures, each reason child wi_ exists', async () => {
+    await aps.write(WI, { ...graph({ nodes: [implementNode()] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Three reproduced defects, all materialize successfully.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        discovered_defects: [
+          { item: 'defect one', reproduced: true },
+          { item: 'defect two', reproduced: true },
+          { item: 'defect three', reproduced: true },
+        ],
+      },
+    });
+    expect(res.status).toBe('passed');
+    const decisions = await aps.readDecisions(WI);
+    const disclosures = decisions.filter((d) => d.resolvability === 'discovered_defect');
+    expect(disclosures).toHaveLength(3);
+    for (const d of disclosures) {
+      const child = childWiFromReason(d.reason ?? '');
+      if (!child) throw new Error('expected a materialized child wi id in each disclosure reason');
+      expect(await wis.exists(child)).toBe(true);
+    }
+  });
 });
