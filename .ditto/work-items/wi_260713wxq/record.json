@@ -535,10 +535,19 @@
   "runs": [],
   "started_at_sha": "1b9b5399040ac24e245a5bfc19b88898307a52fa",
   "started_untracked_baseline": [
-    ".ditto/work-items/wi_2607139n3/",
-    ".ditto/work-items/wi_260713wxq/"
+    ".ditto/memory/events/memevt_retro_d41f5ed3e9adb43b.json",
+    ".ditto/memory/events/memevt_retro_dbe82b9da75d5241.json",
+    ".ditto/work-items/wi_2607130ld/",
+    ".ditto/work-items/wi_2607130oc/",
+    ".ditto/work-items/wi_26071389d/",
+    ".ditto/work-items/wi_2607138pr/",
+    ".ditto/work-items/wi_260713be4/",
+    ".ditto/work-items/wi_260713bo1/",
+    ".ditto/work-items/wi_260713kyb/",
+    ".ditto/work-items/wi_260713tsw/",
+    ".ditto/work-items/wi_260713w0g/"
   ],
   "created_at": "2026-07-13T10:37:11.798Z",
-  "updated_at": "2026-07-14T06:30:42.156Z",
-  "closed_at": "2026-07-14T06:30:42.155Z"
+  "updated_at": "2026-07-14T06:43:55.100Z",
+  "closed_at": "2026-07-14T06:43:55.099Z"
 }
