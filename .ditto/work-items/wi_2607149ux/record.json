@@ -1,0 +1,37 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607149ux",
+  "title": "changed_files baseline 외래 untracked 배제 누수 수정",
+  "source_request": "바로 처리해 — collectChangedFiles가 started_untracked_baseline의 외래 untracked(work-item Record 디렉터리 형태)를 배제하지 못해 wi_260713ylm의 changed_files에 다른 work item 9개의 Record 디렉터리가 새어든 버그를 고친다.",
+  "goal": "종료 시점(work done/autopilot complete)에 work item의 changed_files를 git status로 수집하는 collector가 started_untracked_baseline의 외래 untracked 경로(work-item Record 디렉터리 .ditto/work-items/wi_*/ 형태 포함)를 배제해, 다른 work item의 산출물이 이 work item의 changed_files에 새어들지 않는다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "baseline(started_untracked_baseline)에 있는 외래 untracked 경로는 종료 시 changed_files 수집에서 배제된다 — 재현 케이스에서 baseline의 .ditto/work-items/wi_x/ 디렉터리가 수집 결과에 나타나지 않는다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "이 work item이 실제 수정한 파일과 baseline 밖 신규 파일은 계속 포함된다(과잉 배제·prefix sibling 오배제 없음)",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "전체 테스트 스위트가 회귀 없이 통과한다",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "abandoned",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-14T02:18:10.413Z",
+  "updated_at": "2026-07-14T02:29:43.389Z",
+  "closed_at": "2026-07-14T02:29:43.389Z"
+}
