@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607133lb",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "40a8061adb6dee202971b238c68541a8b41703b4e028226ec4a71e6475c0b180",
+  "ts": "2026-07-13T11:26:40.536Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c test -f skills/ditto-agent-creator/references/writing-great-artifacts.md && ! grep -rq 'ditto-skill-creator/references/writing-great-artifacts' skills/ditto-agent-creator/ && echo AC2_PASS_own_copy_no_crossptr",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

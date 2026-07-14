@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607133lb",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "05683e364d9d8003aa9fef7db50dea6e636be9f4324c85a8b833fd1e18462b18",
+  "ts": "2026-07-13T11:26:40.370Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c h=$(grep -rnE 'reports/|\\.\\./' skills/ 2>/dev/null | grep -v Binary); [ -z \"$h\" ] && echo AC1_PASS_no_external_refs || { echo \"$h\"; exit 1; }",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
