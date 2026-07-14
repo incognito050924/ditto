@@ -273,7 +273,8 @@
     {
       "kind": "idea",
       "note": "prism/selected 질문 면 glossary-half 배선: question-round.ts assertSelectedPresentationContract의 opaqueVocab param이 유일 caller prism/store.ts:139(이번 file_scope 밖)에서 미주입 → prism 면은 하드코딩 floor만 강제하고 glossary forbidden_abbreviations는 미강제. question-round.ts:31-32 주석이 PrismStore가 loadGlossaryVocab로 해소한다고 주장하나 실제로는 안 함(주석-코드 drift). 후속: store.ts:139에서 loadGlossaryVocab(this.repoRoot) 주입 or 주석 화해. AC 무관(ac-1은 recordTurn에 정박·배선·테스트됨).",
-      "severity": "low"
+      "severity": "low",
+      "resolved": true
     }
   ],
   "github_issue": {
@@ -284,15 +285,15 @@
   "re_entry": {
     "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260714aaq",
     "fresh_evidence_needed": [
-      "land aborted — 8 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_260714aaq/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260714aaq/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260714aaq/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260714aaq/events/000003.workspace-write.5d9b45b45e83.json, .ditto/work-items/wi_260714aaq/events/000004.workspace-write.3f9a740447f8.json, .ditto/work-items/wi_260714aaq/events/000005.workspace-write.4b2070cd11d1.json, .ditto/work-items/wi_260714aaq/events/000006.workspace-write.1c108fab97a1.json, .ditto/work-items/wi_260714aaq/record.json. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+      "land aborted — 2 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_260714aaq/events/000010.workspace-write.1f475a87c55e.json, .ditto/work-items/wi_260714aaq/record.json. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
     ]
   },
   "runs": [],
   "started_at_sha": "3eb55b81401796f3c5cfad688066a4f2afd00d54",
   "started_untracked_baseline": [
-    ".ditto/work-items/wi_260714aaq/"
+    ".ditto/memory/events/memevt_retro_f329321a6c0ea039.json"
   ],
   "created_at": "2026-07-14T00:10:22.184Z",
-  "updated_at": "2026-07-14T02:14:52.773Z",
-  "closed_at": "2026-07-14T02:13:41.981Z"
+  "updated_at": "2026-07-14T02:41:34.156Z",
+  "closed_at": "2026-07-14T02:41:34.154Z"
 }
