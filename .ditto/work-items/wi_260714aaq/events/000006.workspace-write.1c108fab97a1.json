@@ -1,0 +1,40 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714aaq",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "1c108fab97a1a9cd9fd7037cf8007273b2213626787b9dfd33300cc2d1b9a0c5",
+  "ts": "2026-07-14T02:12:47.626Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260714aaq/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/question-context.test.ts tests/core/charter.test.ts",
+        "summary": "68 pass/0 fail"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "4697 pass/11 skip/0 fail across 370 files exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck",
+        "summary": "tsc --noEmit exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "mutation probe: break loadGlossaryVocab injection at interview-driver.ts:391 then -t 'consumer path'",
+        "summary": "1 fail (positive no longer rejects) → restore → 2 pass; proves not false-green"
+      }
+    ]
+  }
+}

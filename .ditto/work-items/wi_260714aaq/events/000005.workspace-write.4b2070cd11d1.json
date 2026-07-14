@@ -1,0 +1,80 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714aaq",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "4b2070cd11d1194e96b8bb4a3fe164c2f26fea89a133d7871a913d2cca992738",
+  "ts": "2026-07-14T02:12:47.625Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260714aaq/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/question-context.test.ts",
+        "summary": "RED-first: 7 fail/42 pass — genuine AC assertions (Received:[]/did-not-throw/resolved)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/question-context.test.ts tests/core/charter.test.ts",
+        "summary": "GREEN scoped: 68 pass/0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "BARRIER ac-4: 4697 pass/0 fail/4708 across 370 files exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck",
+        "summary": "tsc --noEmit exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bunx biome check <6 files>",
+        "summary": "clean"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck",
+        "summary": "exit 0 tsc clean (await diagnostic not reproduced)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "4697 pass / 11 skip / 0 fail across 370 files exit 0"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260714aaq/reviewer-output.json",
+        "summary": "reviewer verdict=pass, 1 low non-blocking finding"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/question-context.test.ts tests/core/charter.test.ts",
+        "summary": "68 pass/0 fail"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "4697 pass/11 skip/0 fail across 370 files exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck",
+        "summary": "tsc --noEmit exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "mutation probe: break loadGlossaryVocab injection at interview-driver.ts:391 then -t 'consumer path'",
+        "summary": "1 fail (positive no longer rejects) → restore → 2 pass; proves not false-green"
+      }
+    ]
+  }
+}
